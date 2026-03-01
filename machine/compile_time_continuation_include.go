@@ -27,6 +27,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 const (
@@ -36,7 +37,7 @@ const (
 
 func findFile(p *CompileTimeContinuation, ctctx CompileTimeCallContext, path string) (fs.File, string, error) {
 	if path == "" {
-		return nil, "", values.WrapForeignErrorf(values.ErrFileNotFound, "include: empty filename")
+		return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "include: empty filename")
 	}
 
 	stack := p.env.LoadPathStack()
@@ -87,7 +88,7 @@ func (p *CompileTimeContinuation) CompileInclude(ctctx CompileTimeCallContext, e
 func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContext, expr syntax.SyntaxValue, _ bool) error {
 	rest, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "include: expected a list of filenames, got %T", expr)
+		return werr.WrapForeignErrorf(werr.ErrNotAPair, "include: expected a list of filenames, got %T", expr)
 	}
 	for !syntax.IsSyntaxEmptyList(rest) {
 		// Get the file name
@@ -95,7 +96,7 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 		next := car
 		fn, ok := next.Unwrap().(*values.String)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAPair, "include: expected a string but got a %T", next)
+			return werr.WrapForeignErrorf(werr.ErrNotAPair, "include: expected a string but got a %T", next)
 		}
 
 		// Process file in closure to ensure defer runs after each iteration
@@ -103,7 +104,7 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 			// Find and open the file
 			file, filePath, err := findFile(p, ctctx, fn.Value)
 			if err != nil {
-				return values.WrapForeignErrorf(err, "include")
+				return werr.WrapForeignErrorf(err, "include")
 			}
 			defer file.Close() //nolint:errcheck
 
@@ -129,7 +130,7 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 					if errors.Is(readErr, io.EOF) {
 						break
 					}
-					return values.WrapForeignErrorf(readErr, "include: error reading %q", fn.Value)
+					return werr.WrapForeignErrorf(readErr, "include: error reading %q", fn.Value)
 				}
 				forms = append(forms, stx)
 			}
@@ -153,7 +154,7 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 			if syntax.IsSyntaxEmptyList(cdr) {
 				break
 			}
-			return values.WrapForeignErrorf(values.ErrNotAPair, "include: expected a list, got %T", cdr)
+			return werr.WrapForeignErrorf(werr.ErrNotAPair, "include: expected a list, got %T", cdr)
 		}
 		rest = nextPair
 	}
@@ -172,7 +173,7 @@ func (p *CompileTimeContinuation) processFormsWithLetrecSemantics(ctctx CompileT
 	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env)
 	expandedForms, err := expander.ExpandBodyWithDefineSyntax(forms)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "include: error expanding forms from %q", filename)
+		return werr.WrapForeignErrorf(err, "include: error expanding forms from %q", filename)
 	}
 
 	// Pre-declare all define bindings for letrec* semantics
@@ -184,7 +185,7 @@ func (p *CompileTimeContinuation) processFormsWithLetrecSemantics(ctctx CompileT
 	for _, expanded := range expandedForms {
 		compileErr := p.CompileExpression(ctctx, expanded)
 		if compileErr != nil {
-			return values.WrapForeignErrorf(compileErr, "include: error compiling form from %q", filename)
+			return werr.WrapForeignErrorf(compileErr, "include: error compiling form from %q", filename)
 		}
 	}
 

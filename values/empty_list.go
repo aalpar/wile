@@ -14,7 +14,11 @@
 
 package values
 
-import "context"
+import (
+	"context"
+
+	"github.com/aalpar/wile/werr"
+)
 
 // emptyListType is the dedicated type for the empty list ().
 // It implements Tuple but is not *Pair, enforcing (pair? '()) -> #f
@@ -74,12 +78,12 @@ func (emptyListType) AsVector() *Vector {
 	return NewVector()
 }
 
-// Car panics with ErrNotAPair. R7RS: (car '()) is an error.
+// Car panics with werr.ErrNotAPair. R7RS: (car '()) is an error.
 func (emptyListType) Car() Value {
-	panic(ErrNotAPair)
+	panic(werr.ErrNotAPair)
 }
 
-// Cdr panics with ErrNotAPair. R7RS: (cdr '()) is an error.
+// Cdr panics with werr.ErrNotAPair. R7RS: (cdr '()) is an error.
 func (emptyListType) Cdr() Value {
-	panic(ErrNotAPair)
+	panic(werr.ErrNotAPair)
 }

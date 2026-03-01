@@ -17,7 +17,7 @@ package security
 import (
 	"context"
 
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 type contextKey struct{}
@@ -46,5 +46,5 @@ func Check(ctx context.Context, req AccessRequest) error {
 	if err == nil {
 		return nil
 	}
-	return values.WrapForeignErrorf(err, "%s %s %q", req.Action, req.Resource, req.Target)
+	return werr.WrapForeignErrorf(err, "%s %s %q", req.Action, req.Resource, req.Target)
 }

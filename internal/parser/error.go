@@ -19,12 +19,13 @@ import (
 
 	"github.com/aalpar/wile/internal/tokenizer"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 var (
 	// ErrUnknownTokenType is returned when the parser encounters an unrecognized token.
-	ErrUnknownTokenType = values.NewStaticError("unknown token type")
-	ErrAlreadyClosed    = values.NewStaticError("parser already closed")
+	ErrUnknownTokenType = werr.NewStaticError("unknown token type")
+	ErrAlreadyClosed    = werr.NewStaticError("parser already closed")
 )
 
 // ParserError represents an error that occurred during parsing.

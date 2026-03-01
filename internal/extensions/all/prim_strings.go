@@ -26,6 +26,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 var (
@@ -51,7 +52,7 @@ func PrimStringCopyTo(mc *machine.MachineContext) error {
 	toArg := mc.Arg(0)
 	rest := mc.Arg(1)
 
-	to, err := helpers.RequireType[*values.String](toArg, values.ErrNotAString, "string-copy!")
+	to, err := helpers.RequireType[*values.String](toArg, werr.ErrNotAString, "string-copy!")
 	if err != nil {
 		return err
 	}
@@ -59,13 +60,13 @@ func PrimStringCopyTo(mc *machine.MachineContext) error {
 	// Extract required arguments: at from
 	tuple, ok := rest.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "string-copy!: improper argument list")
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "string-copy!: improper argument list")
 	}
 	if tuple.IsEmptyList() {
-		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "string-copy!: expected at least 3 arguments")
+		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "string-copy!: expected at least 3 arguments")
 	}
 
-	atVal, err := helpers.RequireType[*values.Integer](tuple.Car(), values.ErrNotANumber, "string-copy!")
+	atVal, err := helpers.RequireType[*values.Integer](tuple.Car(), werr.ErrNotANumber, "string-copy!")
 	if err != nil {
 		return err
 	}
@@ -73,13 +74,13 @@ func PrimStringCopyTo(mc *machine.MachineContext) error {
 
 	tuple2, ok := tuple.Cdr().(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "string-copy!: improper argument list")
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "string-copy!: improper argument list")
 	}
 	if tuple2.IsEmptyList() {
-		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "string-copy!: expected at least 3 arguments")
+		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "string-copy!: expected at least 3 arguments")
 	}
 
-	from, err := helpers.RequireType[*values.String](tuple2.Car(), values.ErrNotAString, "string-copy!")
+	from, err := helpers.RequireType[*values.String](tuple2.Car(), werr.ErrNotAString, "string-copy!")
 	if err != nil {
 		return err
 	}
@@ -93,7 +94,7 @@ func PrimStringCopyTo(mc *machine.MachineContext) error {
 	toLen := to.Len()
 	copyLen := end - start
 	if at < 0 || at+copyLen > toLen {
-		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "string-copy!: destination index out of bounds")
+		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "string-copy!: destination index out of bounds")
 	}
 
 	// Perform the copy
@@ -114,7 +115,7 @@ func PrimStringCopyTo(mc *machine.MachineContext) error {
 // PrimStringFill implements the string-fill! primitive.
 // R7RS §6.7: (string-fill! string fill [start [end]])
 func PrimStringFill(mc *machine.MachineContext) error {
-	s, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-fill!")
+	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string-fill!")
 	if err != nil {
 		return err
 	}
@@ -123,13 +124,13 @@ func PrimStringFill(mc *machine.MachineContext) error {
 	// Extract required argument: fill
 	tuple, ok := rest.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "string-fill!: improper argument list")
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "string-fill!: improper argument list")
 	}
 	if tuple.IsEmptyList() {
-		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "string-fill!: expected at least 2 arguments")
+		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "string-fill!: expected at least 2 arguments")
 	}
 
-	char, err := helpers.RequireType[*values.Character](tuple.Car(), values.ErrNotACharacter, "string-fill!")
+	char, err := helpers.RequireType[*values.Character](tuple.Car(), werr.ErrNotACharacter, "string-fill!")
 	if err != nil {
 		return err
 	}
@@ -156,13 +157,13 @@ func PrimStringMap(mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 	stringsVal := mc.Arg(1)
 
-	mcls, err := helpers.RequireType[machine.Closure](proc, values.ErrNotAProcedure, "string-map")
+	mcls, err := helpers.RequireType[machine.Closure](proc, werr.ErrNotAProcedure, "string-map")
 	if err != nil {
 		return err
 	}
 
 	if values.IsEmptyList(stringsVal) {
-		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "string-map: expected at least one string")
+		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "string-map: expected at least one string")
 	}
 
 	strs, runeSlices, minLen, err := helpers.CollectStrings(stringsVal, "string-map")
@@ -170,7 +171,7 @@ func PrimStringMap(mc *machine.MachineContext) error {
 		return err
 	}
 	if len(strs) == 0 {
-		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "string-map: expected at least one string")
+		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "string-map: expected at least one string")
 	}
 
 	result := make([]rune, minLen)
@@ -195,7 +196,7 @@ func PrimStringMap(mc *machine.MachineContext) error {
 		resultVal := sub.GetValue()
 		char, ok := resultVal.(*values.Character)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotACharacter, "string-map: procedure must return a character but got %T", resultVal)
+			return werr.WrapForeignErrorf(werr.ErrNotACharacter, "string-map: procedure must return a character but got %T", resultVal)
 		}
 		result[i] = char.Value
 	}
@@ -210,13 +211,13 @@ func PrimStringForEach(mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 	stringsVal := mc.Arg(1)
 
-	mcls, err := helpers.RequireType[machine.Closure](proc, values.ErrNotAProcedure, "string-for-each")
+	mcls, err := helpers.RequireType[machine.Closure](proc, werr.ErrNotAProcedure, "string-for-each")
 	if err != nil {
 		return err
 	}
 
 	if values.IsEmptyList(stringsVal) {
-		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "string-for-each: expected at least one string")
+		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "string-for-each: expected at least one string")
 	}
 
 	strs, runeSlices, minLen, err := helpers.CollectStrings(stringsVal, "string-for-each")
@@ -224,7 +225,7 @@ func PrimStringForEach(mc *machine.MachineContext) error {
 		return err
 	}
 	if len(strs) == 0 {
-		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "string-for-each: expected at least one string")
+		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "string-for-each: expected at least one string")
 	}
 
 	sub := mc.NewSubContext()
@@ -276,7 +277,7 @@ func makeStringCiComparePrimitive(name string, cmp func(string, string) bool) ma
 // arg 0 as a String, applies a cases.Caser, and returns a new mutable string.
 func makeStringCaser(name string, makeCaser func() cases.Caser) machine.ForeignFunction {
 	return func(mc *machine.MachineContext) error {
-		str, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, name)
+		str, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, name)
 		if err != nil {
 			return err
 		}

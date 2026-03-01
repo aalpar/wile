@@ -20,6 +20,7 @@ import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // Apply registers all primitives and runs init functions on an environment.
@@ -105,7 +106,7 @@ func registerRuntimePrimitive(env *environment.EnvironmentFrame, spec PrimitiveS
 
 	err := env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "error registering %s", spec.Name)
+		return werr.WrapForeignErrorf(err, "error registering %s", spec.Name)
 	}
 	return nil
 }
@@ -116,7 +117,7 @@ func registerGlobalValue(env *environment.EnvironmentFrame, name string, value v
 
 	err := env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), value)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "error registering global value %s", name)
+		return werr.WrapForeignErrorf(err, "error registering global value %s", name)
 	}
 	return nil
 }
@@ -135,7 +136,7 @@ func registerExpandTimePrimitive(env *environment.EnvironmentFrame, spec Primiti
 
 	err := expandEnv.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "error registering expand-time primitive %s", spec.Name)
+		return werr.WrapForeignErrorf(err, "error registering expand-time primitive %s", spec.Name)
 	}
 	return nil
 }

@@ -23,6 +23,7 @@ import (
 
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // GlobalIndex identifies a global binding by its symbol key.
@@ -236,7 +237,7 @@ func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Val
 	i, ok := ge.keys[*gi.Index]
 	if !ok {
 		p.mu.Unlock()
-		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such global binding %q", gi.Index)
+		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such global binding %q", gi.Index)
 	}
 	ge.bindings[i].value = v
 	p.mu.Unlock()
@@ -303,8 +304,8 @@ func (p *GlobalEnvironmentFrame) EqualTo(o values.Value) bool {
 // Panics if topLevel is nil.
 func (p *GlobalEnvironmentFrame) InternSymbol(q *values.Symbol) *values.Symbol {
 	if p.topLevel == nil {
-		panic(values.WrapForeignErrorf(
-			values.ErrMissingTopLevelEnvironment,
+		panic(werr.WrapForeignErrorf(
+			werr.ErrMissingTopLevelEnvironment,
 			"InternSymbol called on GlobalEnvironmentFrame without TopLevelEnvironment",
 		))
 	}
@@ -318,8 +319,8 @@ func (p *GlobalEnvironmentFrame) InternSymbol(q *values.Symbol) *values.Symbol {
 // Panics if topLevel is nil.
 func (p *GlobalEnvironmentFrame) InternSyntax(k values.Value, v syntax.SyntaxValue) syntax.SyntaxValue {
 	if p.topLevel == nil {
-		panic(values.WrapForeignErrorf(
-			values.ErrMissingTopLevelEnvironment,
+		panic(werr.WrapForeignErrorf(
+			werr.ErrMissingTopLevelEnvironment,
 			"InternSyntax called on GlobalEnvironmentFrame without TopLevelEnvironment",
 		))
 	}
@@ -333,8 +334,8 @@ func (p *GlobalEnvironmentFrame) InternSyntax(k values.Value, v syntax.SyntaxVal
 // Panics if topLevel is nil.
 func (p *GlobalEnvironmentFrame) LibraryRegistry() any {
 	if p.topLevel == nil {
-		panic(values.WrapForeignErrorf(
-			values.ErrMissingTopLevelEnvironment,
+		panic(werr.WrapForeignErrorf(
+			werr.ErrMissingTopLevelEnvironment,
 			"LibraryRegistry called on GlobalEnvironmentFrame without TopLevelEnvironment",
 		))
 	}
@@ -347,8 +348,8 @@ func (p *GlobalEnvironmentFrame) LibraryRegistry() any {
 // Panics if topLevel is nil.
 func (p *GlobalEnvironmentFrame) SetLibraryRegistry(registry any) {
 	if p.topLevel == nil {
-		panic(values.WrapForeignErrorf(
-			values.ErrMissingTopLevelEnvironment,
+		panic(werr.WrapForeignErrorf(
+			werr.ErrMissingTopLevelEnvironment,
 			"SetLibraryRegistry called on GlobalEnvironmentFrame without TopLevelEnvironment",
 		))
 	}

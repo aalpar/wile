@@ -16,6 +16,8 @@ package values
 
 import (
 	"math/big"
+
+	"github.com/aalpar/wile/werr"
 )
 
 var (
@@ -181,7 +183,7 @@ func (p *Rational) Multiply(o Number) Number {
 // Divide returns the quotient of two numbers.
 func (p *Rational) Divide(o Number) Number {
 	if o.IsZero() && o.IsExact() {
-		panic(ErrDivisionByZero)
+		panic(werr.ErrDivisionByZero)
 	}
 	v, ok := o.(*Rational)
 	if ok {

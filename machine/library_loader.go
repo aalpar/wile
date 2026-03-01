@@ -35,7 +35,7 @@ import (
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/security"
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // LoadLibrary loads a library by name, compiling and executing it if not already loaded.
@@ -52,11 +52,11 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 	// Get the library registry from the environment
 	registryAny := env.LibraryRegistry()
 	if registryAny == nil {
-		return nil, values.WrapForeignErrorf(values.ErrLibraryConfiguration, "load-library: no library registry configured")
+		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration, "load-library: no library registry configured")
 	}
 	registry, ok := registryAny.(*LibraryRegistry)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrLibraryConfiguration, "load-library: invalid library registry type")
+		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration, "load-library: invalid library registry type")
 	}
 
 	// Already loaded?
@@ -67,7 +67,7 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 
 	// Cycle detection
 	if registry.IsLoading(name) {
-		return nil, values.WrapForeignErrorf(values.ErrCircularDependency,
+		return nil, werr.WrapForeignErrorf(werr.ErrCircularDependency,
 			"circular dependency detected while loading %s", name.SchemeString())
 	}
 	registry.StartLoading(name)
@@ -80,7 +80,7 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 		// ResolveFile didn't find it — fall back to FindLibraryFile
 		filePath, err = registry.FindLibraryFile(name)
 		if err != nil {
-			return nil, values.WrapForeignErrorf(err,
+			return nil, werr.WrapForeignErrorf(err,
 				"could not find library %s", name.SchemeString())
 		}
 	}
@@ -97,14 +97,14 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 	// Load the library from file
 	lib, err = loadLibraryFromFile(ctx, filePath, name, env)
 	if err != nil {
-		return nil, values.WrapForeignErrorf(err,
+		return nil, werr.WrapForeignErrorf(err,
 			"error loading library %s from %s", name.SchemeString(), filePath)
 	}
 
 	// Register the library
 	err = registry.Register(lib)
 	if err != nil {
-		return nil, values.WrapForeignErrorf(err,
+		return nil, werr.WrapForeignErrorf(err,
 			"error registering library %s", name.SchemeString())
 	}
 
@@ -116,7 +116,7 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 	// Open the file
 	file, err := os.Open(filePath)
 	if err != nil {
-		return nil, values.WrapForeignErrorf(err, "could not open file")
+		return nil, werr.WrapForeignErrorf(err, "could not open file")
 	}
 	defer file.Close() //nolint:errcheck
 
@@ -135,11 +135,11 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 	// but shares the TopLevelEnvironment for symbol interning.
 	factory := callerEnv.TopLevelEnv().LibraryEnvFactory()
 	if factory == nil {
-		return nil, values.WrapForeignErrorf(values.ErrLibraryConfiguration, "LibraryEnvFactory not configured")
+		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration, "LibraryEnvFactory not configured")
 	}
 	libEnv, err := factory(ctx, callerEnv, expectedName.Parts)
 	if err != nil {
-		return nil, values.WrapForeignErrorf(err, "could not create library environment")
+		return nil, werr.WrapForeignErrorf(err, "could not create library environment")
 	}
 
 	// Share the library registry with the new environment
@@ -154,26 +154,26 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 	stx, err := p.ReadSyntax(ctx)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			return nil, values.WrapForeignErrorf(values.ErrLibraryFormMalformed, "library file is empty")
+			return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "library file is empty")
 		}
-		return nil, values.WrapForeignErrorf(err, "could not parse library file")
+		return nil, werr.WrapForeignErrorf(err, "could not parse library file")
 	}
 
 	// Verify it's a define-library form
 	pair, ok := stx.(*syntax.SyntaxPair)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrLibraryFormMalformed, "expected define-library form, got %T", stx)
+		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "expected define-library form, got %T", stx)
 	}
 
 	carStx := pair.SyntaxCar()
 	carSym, ok := carStx.(*syntax.SyntaxSymbol)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrLibraryFormMalformed, "expected define-library, got %T", carStx)
+		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "expected define-library, got %T", carStx)
 	}
 
 	symName := carSym.Sym.Key
 	if symName != "define-library" && symName != "library" {
-		return nil, values.WrapForeignErrorf(values.ErrLibraryFormMalformed, "expected define-library, got %s", symName)
+		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "expected define-library, got %s", symName)
 	}
 
 	// Compile and execute the library
@@ -193,7 +193,7 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 	// Expand the form
 	expanded, err := NewExpanderTimeContinuation(ctx, libEnv).ExpandExpression(stx)
 	if err != nil {
-		return nil, values.WrapForeignErrorf(err, "error expanding library")
+		return nil, werr.WrapForeignErrorf(err, "error expanding library")
 	}
 
 	// Compile the form
@@ -209,16 +209,16 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 
 	err = compiler.CompileExpression(cctx, expanded)
 	if err != nil {
-		return nil, values.WrapForeignErrorf(err, "error compiling library")
+		return nil, werr.WrapForeignErrorf(err, "error compiling library")
 	}
 
 	if compiledLib == nil {
-		return nil, values.WrapForeignErrorf(values.ErrLibraryConfiguration, "library was not produced by compilation")
+		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration, "library was not produced by compilation")
 	}
 
 	// Verify the library name matches what was expected
 	if compiledLib.Name.Key() != expectedName.Key() {
-		return nil, values.WrapForeignErrorf(values.ErrLibraryNameMismatch, "library name mismatch: expected %s, got %s",
+		return nil, werr.WrapForeignErrorf(werr.ErrLibraryNameMismatch, "library name mismatch: expected %s, got %s",
 			expectedName.SchemeString(), compiledLib.Name.SchemeString())
 	}
 
@@ -229,7 +229,7 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 		mc := NewMachineContext(ctx, cont)
 		err := mc.Run()
 		if err != nil {
-			return nil, values.WrapForeignErrorf(err, "error executing library")
+			return nil, werr.WrapForeignErrorf(err, "error executing library")
 		}
 	}
 

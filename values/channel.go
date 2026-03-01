@@ -19,6 +19,8 @@ import (
 	"reflect"
 	"sync"
 	"sync/atomic"
+
+	"github.com/aalpar/wile/werr"
 )
 
 var (
@@ -26,9 +28,6 @@ var (
 
 	// Channel ID counter
 	channelIDCounter uint64
-
-	// ErrChannelClosed is returned when operating on a closed channel
-	ErrChannelClosed = NewStaticError("channel is closed")
 )
 
 // Channel represents a Go channel exposed to Scheme
@@ -69,7 +68,7 @@ func (p *Channel) Send(v Value) error {
 	p.mu.RLock()
 	if p.closed {
 		p.mu.RUnlock()
-		return ErrChannelClosed
+		return werr.ErrChannelClosed
 	}
 	ch := p.ch
 	p.mu.RUnlock()
@@ -84,7 +83,7 @@ func (p *Channel) TrySend(v Value) (bool, error) {
 	p.mu.RLock()
 	if p.closed {
 		p.mu.RUnlock()
-		return false, ErrChannelClosed
+		return false, werr.ErrChannelClosed
 	}
 	ch := p.ch
 	p.mu.RUnlock()
@@ -138,7 +137,7 @@ func (p *Channel) Close() error {
 	defer p.mu.Unlock()
 
 	if p.closed {
-		return ErrChannelClosed
+		return werr.ErrChannelClosed
 	}
 	p.closed = true
 	close(p.ch)

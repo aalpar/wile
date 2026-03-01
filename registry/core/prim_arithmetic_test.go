@@ -22,6 +22,7 @@ import (
 	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -1225,7 +1226,7 @@ func TestDivisionByZero_ReturnsError(t *testing.T) {
 		t.Run(tc.Name, func(t *testing.T) {
 			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
-			qt.Assert(t, errors.Is(err, values.ErrDivisionByZero), qt.IsTrue)
+			qt.Assert(t, errors.Is(err, werr.ErrDivisionByZero), qt.IsTrue)
 		})
 	}
 }
@@ -1249,7 +1250,7 @@ func TestQuotientDivisionByZeroSentinel(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNotNil)
-			qt.Assert(t, errors.Is(err, values.ErrDivisionByZero), qt.IsTrue)
+			qt.Assert(t, errors.Is(err, werr.ErrDivisionByZero), qt.IsTrue)
 			qt.Assert(t, err, qt.ErrorMatches, `(?s).*division by zero.*`)
 		})
 	}

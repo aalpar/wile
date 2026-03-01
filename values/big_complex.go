@@ -17,6 +17,8 @@ package values
 import (
 	"math"
 	"math/big"
+
+	"github.com/aalpar/wile/werr"
 )
 
 var (
@@ -67,7 +69,7 @@ func validateBigComplexPart(n Number) {
 	case *BigInteger, *BigFloat, *Rational:
 		return
 	default:
-		panic(ErrNotANumber)
+		panic(werr.ErrNotANumber)
 	}
 }
 
@@ -110,7 +112,7 @@ func toBigFloat(n Number) *BigFloat {
 	case *Float:
 		return NewBigFloatFromFloat64(v.Value)
 	}
-	panic(ErrNotANumber)
+	panic(werr.ErrNotANumber)
 }
 
 // maybeSimplify returns a real number if imag is zero, otherwise returns BigComplex.
@@ -135,7 +137,7 @@ func promoteToBigComplexPart(n Number) Number {
 	case *Float:
 		return NewBigFloatFromFloat64(v.Value)
 	}
-	panic(ErrNotANumber)
+	panic(werr.ErrNotANumber)
 }
 
 // Kind returns the numeric kind for dispatch table indexing.
@@ -247,7 +249,7 @@ func (p *BigComplex) Multiply(o Number) Number {
 // R7RS §6.2.2 Exactness: exact / exact = exact, exact / inexact = inexact.
 func (p *BigComplex) Divide(o Number) Number {
 	if o.IsZero() && o.IsExact() {
-		panic(ErrDivisionByZero)
+		panic(werr.ErrDivisionByZero)
 	}
 	return bigComplexDivide[o.Kind()](p, o)
 }
@@ -368,7 +370,7 @@ func toExactPart(n Number) Number {
 		}
 		return q
 	}
-	panic(ErrNotANumber)
+	panic(werr.ErrNotANumber)
 }
 
 // ToInexact converts this BigComplex to an inexact representation.

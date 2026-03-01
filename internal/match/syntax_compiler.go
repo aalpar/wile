@@ -51,14 +51,14 @@ import (
 	"fmt"
 
 	"github.com/aalpar/wile/internal/syntax"
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 var (
 	// ErrUnknownOpCode is returned when an unknown bytecode is encountered.
-	ErrUnknownOpCode = values.ErrUnknownOpCode
+	ErrUnknownOpCode = werr.ErrUnknownOpCode
 	// ErrNotAMatch is returned when the input does not match the pattern.
-	ErrNotAMatch = values.ErrNotAMatch
+	ErrNotAMatch = werr.ErrNotAMatch
 )
 
 type syntaxCompilerStackEntry struct {

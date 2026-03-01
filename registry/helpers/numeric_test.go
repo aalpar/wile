@@ -23,6 +23,7 @@ import (
 
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 )
 
 // ── binOps used by tests ─────────────────────────────────────────────
@@ -158,17 +159,17 @@ func TestNumericFoldVariadic_Errors(t *testing.T) {
 		{
 			"non-list arg",
 			values.NewInteger(42),
-			values.ErrNotAList,
+			werr.ErrNotAList,
 		},
 		{
 			"non-number first element",
 			values.List(values.NewString("bad")),
-			values.ErrNotANumber,
+			werr.ErrNotANumber,
 		},
 		{
 			"non-number in rest",
 			values.List(values.NewInteger(1), values.NewString("bad")),
-			values.ErrNotANumber,
+			werr.ErrNotANumber,
 		},
 	}
 
@@ -275,25 +276,25 @@ func TestNumericFoldWithFirst_Errors(t *testing.T) {
 			"first arg not a number",
 			values.NewString("bad"),
 			values.EmptyList,
-			values.ErrNotANumber,
+			werr.ErrNotANumber,
 		},
 		{
 			"rest not a list",
 			values.NewInteger(1),
 			values.NewInteger(2),
-			values.ErrNotAList,
+			werr.ErrNotAList,
 		},
 		{
 			"non-number in rest car",
 			values.NewInteger(1),
 			values.List(values.NewString("bad")),
-			values.ErrNotANumber,
+			werr.ErrNotANumber,
 		},
 		{
 			"non-number in rest tail",
 			values.NewInteger(10),
 			values.List(values.NewInteger(3), values.NewString("bad")),
-			values.ErrNotANumber,
+			werr.ErrNotANumber,
 		},
 	}
 
@@ -401,19 +402,19 @@ func TestNumericChainCompare_Errors(t *testing.T) {
 			"first arg not a number",
 			values.NewString("bad"),
 			values.EmptyList,
-			values.ErrNotANumber,
+			werr.ErrNotANumber,
 		},
 		{
 			"rest not a list",
 			values.NewInteger(1),
 			values.NewInteger(2),
-			values.ErrNotAList,
+			werr.ErrNotAList,
 		},
 		{
 			"non-number in rest",
 			values.NewInteger(1),
 			values.List(values.NewString("bad")),
-			values.ErrNotANumber,
+			werr.ErrNotANumber,
 		},
 	}
 
@@ -498,7 +499,7 @@ func TestNumericChainCompareReal_ComplexRejection(t *testing.T) {
 			mc := makeMC(tc.arg0, tc.arg1)
 			err := NumericChainCompareReal(mc, "test", lessThanFails)
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, values.ErrNotANumber), qt.IsTrue)
+			c.Assert(errors.Is(err, werr.ErrNotANumber), qt.IsTrue)
 		})
 	}
 }
@@ -641,19 +642,19 @@ func TestNumericExtremum_Errors(t *testing.T) {
 			"first arg not a number",
 			values.NewString("bad"),
 			values.EmptyList,
-			values.ErrNotANumber,
+			werr.ErrNotANumber,
 		},
 		{
 			"rest not a list",
 			values.NewInteger(1),
 			values.NewInteger(2),
-			values.ErrNotAList,
+			werr.ErrNotAList,
 		},
 		{
 			"non-number in rest",
 			values.NewInteger(1),
 			values.List(values.NewString("bad")),
-			values.ErrNotANumber,
+			werr.ErrNotANumber,
 		},
 	}
 

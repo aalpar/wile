@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/frankban/quicktest/qtsuite"
@@ -159,7 +160,7 @@ func TestNewSyntaxObject_DoubleWrapPanicSentinels(t *testing.T) {
 				if !ok {
 					t.Fatalf("panic value is not error: %T", r)
 				}
-				if !errors.Is(err, values.ErrCannotDoubleSyntaxWrap) {
+				if !errors.Is(err, werr.ErrCannotDoubleSyntaxWrap) {
 					t.Errorf("expected sentinel ErrCannotDoubleSyntaxWrap, got: %v", err)
 				}
 			}()

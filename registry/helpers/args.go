@@ -19,6 +19,7 @@ import (
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // RequireArg extracts mc.Arg(index) and asserts it has concrete type T.
@@ -36,7 +37,7 @@ func RequireType[T any](v values.Value, sentinel error, name string) (T, error) 
 	result, ok := v.(T)
 	if !ok {
 		var zero T
-		return zero, values.WrapForeignErrorf(sentinel, "%s: expected %s but got %T",
+		return zero, werr.WrapForeignErrorf(sentinel, "%s: expected %s but got %T",
 			name, strings.TrimPrefix(sentinel.Error(), "not "), v)
 	}
 	return result, nil
@@ -55,12 +56,12 @@ func ParseOptionalStartEnd(rest values.Value, defaultEnd int64, name string) (in
 
 	tuple, ok := rest.(values.Tuple)
 	if !ok {
-		return 0, 0, values.WrapForeignErrorf(values.ErrNotAList, "%s: improper argument list", name)
+		return 0, 0, werr.WrapForeignErrorf(werr.ErrNotAList, "%s: improper argument list", name)
 	}
 
 	startVal, ok := tuple.Car().(*values.Integer)
 	if !ok {
-		return 0, 0, values.WrapForeignErrorf(values.ErrNotAnInteger, "%s: start must be an integer but got %T", name, tuple.Car())
+		return 0, 0, werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: start must be an integer but got %T", name, tuple.Car())
 	}
 	start = startVal.Value
 
@@ -68,11 +69,11 @@ func ParseOptionalStartEnd(rest values.Value, defaultEnd int64, name string) (in
 	if !values.IsEmptyList(cdr) {
 		tuple2, ok := cdr.(values.Tuple)
 		if !ok {
-			return 0, 0, values.WrapForeignErrorf(values.ErrNotAList, "%s: improper argument list", name)
+			return 0, 0, werr.WrapForeignErrorf(werr.ErrNotAList, "%s: improper argument list", name)
 		}
 		endVal, ok := tuple2.Car().(*values.Integer)
 		if !ok {
-			return 0, 0, values.WrapForeignErrorf(values.ErrNotAnInteger, "%s: end must be an integer but got %T", name, tuple2.Car())
+			return 0, 0, werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: end must be an integer but got %T", name, tuple2.Car())
 		}
 		end = endVal.Value
 	}
@@ -84,7 +85,7 @@ func ParseOptionalStartEnd(rest values.Value, defaultEnd int64, name string) (in
 // Returns a wrapped ErrIndexOutOfRange error if the index is out of bounds.
 func CheckIndexBounds(idx int64, length int, name string) error {
 	if idx < 0 || idx >= int64(length) {
-		return values.WrapForeignErrorf(values.ErrIndexOutOfRange,
+		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
 			"%s: index %d out of bounds for length %d", name, idx, length)
 	}
 	return nil
@@ -98,7 +99,7 @@ func RequireIndex(mc *machine.MachineContext, argIdx int, length int, name strin
 	k := mc.Arg(argIdx)
 	idx, ok := values.ExactInteger(k)
 	if !ok {
-		return 0, values.WrapForeignErrorf(values.ErrNotAnInteger,
+		return 0, werr.WrapForeignErrorf(werr.ErrNotAnInteger,
 			"%s: expected an exact integer index but got %s", name, k.SchemeString())
 	}
 	err := CheckIndexBounds(idx, length, name)
@@ -112,7 +113,7 @@ func RequireIndex(mc *machine.MachineContext, argIdx int, length int, name strin
 // Returns a wrapped ErrIndexOutOfRange error if any bound is violated.
 func ValidateStartEnd(start, end, length int64, name string) error {
 	if start < 0 || end > length || start > end {
-		return values.WrapForeignErrorf(values.ErrIndexOutOfRange,
+		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
 			"%s: invalid indices start=%d end=%d for length %d", name, start, end, length)
 	}
 	return nil

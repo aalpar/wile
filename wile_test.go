@@ -24,7 +24,7 @@ import (
 
 	"github.com/aalpar/wile/extensions/exceptions"
 	"github.com/aalpar/wile/registry"
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -941,7 +941,7 @@ func TestDefaultCallDepth(t *testing.T) {
 
 	// Uses (+ 1 ...) to prevent TCO so the continuation stack grows.
 	_, err = eng.Eval(ctx, "(letrec ((f (lambda (n) (+ 1 (f n))))) (f 0))")
-	c.Assert(errors.Is(err, values.ErrCallDepthExceeded), qt.IsTrue)
+	c.Assert(errors.Is(err, werr.ErrCallDepthExceeded), qt.IsTrue)
 }
 
 func TestWithoutCore(t *testing.T) {
@@ -995,7 +995,7 @@ func TestWithMaxCallDepth(t *testing.T) {
 			code:        "(let loop ((n 20000)) (if (= n 0) 0 (+ 1 (loop (- n 1)))))",
 			depth:       100,
 			wantErr:     true,
-			errSentinel: values.ErrCallDepthExceeded,
+			errSentinel: werr.ErrCallDepthExceeded,
 		},
 		{
 			name:    "recursion within limit succeeds",

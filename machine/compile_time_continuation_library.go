@@ -25,6 +25,7 @@ import (
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // compileLibraryBegin compiles a library begin body with letrec* semantics.
@@ -42,7 +43,7 @@ import (
 //  2. Compilation pass: Pre-declare define bindings, then compile all expressions
 func (p *CompileTimeContinuation) compileLibraryBegin(ctctx CompileTimeCallContext, expr *syntax.SyntaxPair) error {
 	if !expr.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "expected a list of expressions, got %T", expr)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "expected a list of expressions, got %T", expr)
 	}
 
 	// Collect forms into a slice
@@ -52,14 +53,14 @@ func (p *CompileTimeContinuation) compileLibraryBegin(ctctx CompileTimeCallConte
 		return nil
 	})
 	if err != nil {
-		return values.WrapForeignErrorf(err, "failed to collect library body forms")
+		return werr.WrapForeignErrorf(err, "failed to collect library body forms")
 	}
 
 	// Pass 1: Expand all forms, compiling define-syntax as encountered
 	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env)
 	expandedForms, err := expander.ExpandBodyWithDefineSyntax(forms)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "library: error expanding forms")
+		return werr.WrapForeignErrorf(err, "library: error expanding forms")
 	}
 
 	// Pre-declare all define bindings for letrec* semantics
@@ -75,7 +76,7 @@ func (p *CompileTimeContinuation) compileLibraryBegin(ctctx CompileTimeCallConte
 		}
 		compileErr := p.CompileExpression(ctctx0, expanded)
 		if compileErr != nil {
-			return values.WrapForeignErrorf(compileErr, "library: error compiling form")
+			return werr.WrapForeignErrorf(compileErr, "library: error compiling form")
 		}
 	}
 
@@ -102,14 +103,14 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 	// expr is ((lib-name) <declaration> ...) - args after 'define-library' keyword
 	rest, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "define-library: expected library name and declarations")
+		return werr.WrapForeignErrorf(werr.ErrNotAPair, "define-library: expected library name and declarations")
 	}
 
 	// Parse library name: (lib-name) is a list of identifiers
 	libNameExpr := rest.SyntaxCar()
 	libName, err := parseLibraryName(ctctx.ctx, libNameExpr)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "define-library: invalid library name")
+		return werr.WrapForeignErrorf(err, "define-library: invalid library name")
 	}
 
 	// Create isolated library environment with primitives
@@ -119,7 +120,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 	if factory != nil {
 		libEnv, err = factory(ctctx.ctx, p.env, libName.Parts)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "define-library: could not create library environment")
+			return werr.WrapForeignErrorf(err, "define-library: could not create library environment")
 		}
 		// Share the library registry with the new environment so nested imports work
 		libEnv.SetLibraryRegistry(p.env.LibraryRegistry())
@@ -144,7 +145,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 
 	decls, ok := declsExpr.(*syntax.SyntaxPair)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "define-library: expected list of declarations")
+		return werr.WrapForeignErrorf(werr.ErrNotAPair, "define-library: expected list of declarations")
 	}
 
 	// Create a compiler for the library environment
@@ -156,7 +157,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 		return libCompiler.processLibraryDeclaration(ctctx, lib, decl)
 	})
 	if err != nil {
-		return values.WrapForeignErrorf(err, "define-library: error processing declarations")
+		return werr.WrapForeignErrorf(err, "define-library: error processing declarations")
 	}
 
 	// Peephole optimization on the library template.
@@ -178,14 +179,14 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 func (p *CompileTimeContinuation) processLibraryDeclaration(ctctx CompileTimeCallContext, lib *CompiledLibrary, decl syntax.SyntaxValue) error {
 	declPair, ok := decl.(*syntax.SyntaxPair)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "library declaration must be a list")
+		return werr.WrapForeignErrorf(werr.ErrNotAPair, "library declaration must be a list")
 	}
 
 	// Get the declaration keyword
 	keywordExpr := declPair.SyntaxCar()
 	keywordSym, ok := keywordExpr.(*syntax.SyntaxSymbol)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "library declaration must start with symbol")
+		return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "library declaration must start with symbol")
 	}
 
 	keyword := keywordSym.Unwrap().(*values.Symbol).Key
@@ -205,7 +206,7 @@ func (p *CompileTimeContinuation) processLibraryDeclaration(ctctx CompileTimeCal
 			if syntax.IsSyntaxEmptyList(argsExpr) {
 				return nil // empty begin is valid
 			}
-			return values.WrapForeignErrorf(values.ErrNotAPair, "begin: expected list of expressions")
+			return werr.WrapForeignErrorf(werr.ErrNotAPair, "begin: expected list of expressions")
 		}
 		return p.compileLibraryBegin(ctctx, beginPair)
 	case "include":
@@ -217,7 +218,7 @@ func (p *CompileTimeContinuation) processLibraryDeclaration(ctctx CompileTimeCal
 	case "cond-expand":
 		return p.processCondExpand(ctctx, lib, argsExpr)
 	default:
-		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "unknown library declaration: %s", keyword)
+		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unknown library declaration: %s", keyword)
 	}
 }
 
@@ -229,7 +230,7 @@ func (p *CompileTimeContinuation) processLibraryExport(ctx context.Context, lib 
 
 	argsPair, ok := args.(*syntax.SyntaxPair)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "export: expected list of export specs")
+		return werr.WrapForeignErrorf(werr.ErrNotAPair, "export: expected list of export specs")
 	}
 
 	_, err := syntax.SyntaxForEach(ctx, argsPair, func(_ context.Context, _ int, _ bool, spec syntax.SyntaxValue) error {
@@ -259,31 +260,31 @@ func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
 		carExpr := s.SyntaxCar()
 		carSym, ok := carExpr.(*syntax.SyntaxSymbol)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "export: expected symbol")
+			return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "export: expected symbol")
 		}
 
 		if carSym.Unwrap().(*values.Symbol).Key == "rename" {
 			// (rename internal external)
 			cdrExpr, ok := s.SyntaxCdr().(*syntax.SyntaxPair)
 			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAPair, "export rename: expected internal and external names")
+				return werr.WrapForeignErrorf(werr.ErrNotAPair, "export rename: expected internal and external names")
 			}
 
 			internalExpr := cdrExpr.SyntaxCar()
 			internalSym, ok := internalExpr.(*syntax.SyntaxSymbol)
 			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "export rename: internal name must be symbol")
+				return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "export rename: internal name must be symbol")
 			}
 
 			cdrCdr, ok := cdrExpr.SyntaxCdr().(*syntax.SyntaxPair)
 			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAPair, "export rename: expected external name")
+				return werr.WrapForeignErrorf(werr.ErrNotAPair, "export rename: expected external name")
 			}
 
 			externalExpr := cdrCdr.SyntaxCar()
 			externalSym, ok := externalExpr.(*syntax.SyntaxSymbol)
 			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "export rename: external name must be symbol")
+				return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "export rename: external name must be symbol")
 			}
 
 			internalName := internalSym.Unwrap().(*values.Symbol).Key
@@ -292,10 +293,10 @@ func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
 			return nil
 		}
 
-		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "export: invalid spec form")
+		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "export: invalid spec form")
 
 	default:
-		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "export: expected symbol or rename form")
+		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "export: expected symbol or rename form")
 	}
 }
 
@@ -307,7 +308,7 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 
 	argsPair, ok := args.(*syntax.SyntaxPair)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "import: expected list of import sets")
+		return werr.WrapForeignErrorf(werr.ErrNotAPair, "import: expected list of import sets")
 	}
 
 	// Process each import set
@@ -321,14 +322,14 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 		// Note: p.env is the library's environment, which has the registry via SetLibraryRegistry
 		importedLib, err := LoadLibrary(ctx, importSet.LibraryName, p.env)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "import: failed to load library %s",
+			return werr.WrapForeignErrorf(err, "import: failed to load library %s",
 				importSet.LibraryName.SchemeString())
 		}
 
 		// Apply import modifiers to get final bindings
 		bindings, err := importSet.ApplyToExports(importedLib)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "import: error applying modifiers for %s",
+			return werr.WrapForeignErrorf(err, "import: error applying modifiers for %s",
 				importSet.LibraryName.SchemeString())
 		}
 
@@ -361,7 +362,7 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 				}
 			}
 			if importedBinding == nil {
-				return values.WrapForeignErrorf(values.ErrNoSuchBinding, "import: %s exports %q but binding not found",
+				return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "import: %s exports %q but binding not found",
 					importSet.LibraryName.SchemeString(), internalName)
 			}
 
@@ -372,7 +373,7 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 			if globalIdx != nil {
 				err := lib.Env.SetOwnGlobalValue(globalIdx, importedBinding.Value())
 				if err != nil {
-					return values.WrapForeignErrorf(err, "import: failed to set binding for %s", localName)
+					return werr.WrapForeignErrorf(err, "import: failed to set binding for %s", localName)
 				}
 			}
 
@@ -411,7 +412,7 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 func parseImportSet(ctx context.Context, expr syntax.SyntaxValue) (*ImportSet, error) {
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "import set must be a list")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "import set must be a list")
 	}
 
 	// Check if first element is a modifier keyword
@@ -450,7 +451,7 @@ func parseImportSet(ctx context.Context, expr syntax.SyntaxValue) (*ImportSet, e
 func parseImportSetOnly(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
 	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "only: expected import-set and identifiers")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "only: expected import-set and identifiers")
 	}
 
 	// Get nested import set
@@ -476,7 +477,7 @@ func parseImportSetOnly(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSe
 func parseImportSetExcept(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
 	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "except: expected import-set and identifiers")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "except: expected import-set and identifiers")
 	}
 
 	// Get nested import set
@@ -501,7 +502,7 @@ func parseImportSetExcept(ctx context.Context, pair *syntax.SyntaxPair) (*Import
 func parseImportSetPrefix(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
 	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "prefix: expected import-set and prefix")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "prefix: expected import-set and prefix")
 	}
 
 	// Get nested import set
@@ -514,13 +515,13 @@ func parseImportSetPrefix(ctx context.Context, pair *syntax.SyntaxPair) (*Import
 	// Get prefix
 	prefixPair, ok := cdrExpr.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "prefix: expected prefix identifier")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "prefix: expected prefix identifier")
 	}
 
 	prefixExpr := prefixPair.SyntaxCar()
 	prefixSym, ok := prefixExpr.(*syntax.SyntaxSymbol)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "prefix: prefix must be a symbol")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "prefix: prefix must be a symbol")
 	}
 
 	importSet.Prefix = prefixSym.Unwrap().(*values.Symbol).Key
@@ -531,7 +532,7 @@ func parseImportSetPrefix(ctx context.Context, pair *syntax.SyntaxPair) (*Import
 func parseImportSetRename(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
 	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "rename: expected import-set and rename pairs")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "rename: expected import-set and rename pairs")
 	}
 
 	// Get nested import set
@@ -549,30 +550,30 @@ func parseImportSetRename(ctx context.Context, pair *syntax.SyntaxPair) (*Import
 
 	renamesPair, ok := renamesExpr.(*syntax.SyntaxPair)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "rename: expected list of rename pairs")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "rename: expected list of rename pairs")
 	}
 
 	_, err = syntax.SyntaxForEach(ctx, renamesPair, func(_ context.Context, _ int, _ bool, renamePairExpr syntax.SyntaxValue) error {
 		renamePair, ok := renamePairExpr.(*syntax.SyntaxPair)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAPair, "rename: expected (old new) pair")
+			return werr.WrapForeignErrorf(werr.ErrNotAPair, "rename: expected (old new) pair")
 		}
 
 		oldExpr := renamePair.SyntaxCar()
 		oldSym, ok := oldExpr.(*syntax.SyntaxSymbol)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "rename: old name must be symbol")
+			return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "rename: old name must be symbol")
 		}
 
 		newPair, ok := renamePair.SyntaxCdr().(*syntax.SyntaxPair)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAPair, "rename: expected new name")
+			return werr.WrapForeignErrorf(werr.ErrNotAPair, "rename: expected new name")
 		}
 
 		newExpr := newPair.SyntaxCar()
 		newSym, ok := newExpr.(*syntax.SyntaxSymbol)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "rename: new name must be symbol")
+			return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "rename: new name must be symbol")
 		}
 
 		oldName := oldSym.Unwrap().(*values.Symbol).Key
@@ -589,7 +590,7 @@ func parseImportSetRename(ctx context.Context, pair *syntax.SyntaxPair) (*Import
 func parseImportSetForSyntax(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
 	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "for-syntax: expected import-set")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "for-syntax: expected import-set")
 	}
 
 	// Get nested import set
@@ -609,7 +610,7 @@ func parseImportSetForSyntax(ctx context.Context, pair *syntax.SyntaxPair) (*Imp
 func parseImportSetForTemplate(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
 	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "for-template: expected import-set")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "for-template: expected import-set")
 	}
 
 	// Get nested import set
@@ -629,20 +630,20 @@ func parseImportSetForTemplate(ctx context.Context, pair *syntax.SyntaxPair) (*I
 func parseImportSetForMeta(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
 	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "for-meta: expected phase level and import-set")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "for-meta: expected phase level and import-set")
 	}
 
 	// Get phase level (integer)
 	phaseExpr := cdrExpr.SyntaxCar()
 	phaseInt, ok := phaseExpr.Unwrap().(*values.Integer)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotAnInteger, "for-meta: expected integer phase level")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAnInteger, "for-meta: expected integer phase level")
 	}
 
 	// Get nested import set
 	importSetPair, ok := cdrExpr.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "for-meta: expected import-set after phase level")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "for-meta: expected import-set after phase level")
 	}
 
 	nestedExpr := importSetPair.SyntaxCar()
@@ -664,14 +665,14 @@ func parseIdentifierList(ctx context.Context, expr syntax.SyntaxValue) ([]string
 
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "expected list of identifiers")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "expected list of identifiers")
 	}
 
 	var ids []string
 	_, err := syntax.SyntaxForEach(ctx, pair, func(_ context.Context, _ int, _ bool, idExpr syntax.SyntaxValue) error {
 		idSym, ok := idExpr.(*syntax.SyntaxSymbol)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "expected identifier symbol")
+			return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "expected identifier symbol")
 		}
 		ids = append(ids, idSym.Unwrap().(*values.Symbol).Key)
 		return nil
@@ -686,7 +687,7 @@ func parseIdentifierList(ctx context.Context, expr syntax.SyntaxValue) ([]string
 func parseLibraryName(ctx context.Context, expr syntax.SyntaxValue) (LibraryName, error) {
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
-		return LibraryName{}, values.WrapForeignErrorf(values.ErrNotAPair, "library name must be a list")
+		return LibraryName{}, werr.WrapForeignErrorf(werr.ErrNotAPair, "library name must be a list")
 	}
 
 	var parts []string
@@ -702,13 +703,13 @@ func parseLibraryName(ctx context.Context, expr syntax.SyntaxValue) (LibraryName
 			parts = append(parts, fmt.Sprintf("%d", num.Value))
 			return nil
 		}
-		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "library name part must be identifier or integer")
+		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "library name part must be identifier or integer")
 	})
 	if err != nil {
 		return LibraryName{}, err
 	}
 	if len(parts) == 0 {
-		return LibraryName{}, values.WrapForeignErrorf(values.ErrInvalidSyntax, "library name cannot be empty")
+		return LibraryName{}, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "library name cannot be empty")
 	}
 	return NewLibraryName(parts...), nil
 }
@@ -731,7 +732,7 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 
 	importSets, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "import: expected list of import sets")
+		return werr.WrapForeignErrorf(werr.ErrNotAPair, "import: expected list of import sets")
 	}
 
 	// Process each import set
@@ -744,14 +745,14 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 		// Load the library
 		lib, err := LoadLibrary(ctx, importSet.LibraryName, p.env)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "import: failed to load library %s",
+			return werr.WrapForeignErrorf(err, "import: failed to load library %s",
 				importSet.LibraryName.SchemeString())
 		}
 
 		// Apply import modifiers (only, except, prefix, rename) to get final bindings
 		bindings, err := importSet.ApplyToExports(lib)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "import: error applying modifiers for %s",
+			return werr.WrapForeignErrorf(err, "import: error applying modifiers for %s",
 				importSet.LibraryName.SchemeString())
 		}
 
@@ -760,17 +761,17 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 		// Copy bindings to the target phase
 		err = CopyLibraryBindingsToEnvAtPhase(lib, bindings, p.env, importSet.PhaseShift)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "import: error copying bindings from %s",
+			return werr.WrapForeignErrorf(err, "import: error copying bindings from %s",
 				importSet.LibraryName.SchemeString())
 		}
 
 		return nil
 	})
 	if err != nil {
-		return values.WrapForeignErrorf(err, "import: error processing import sets")
+		return werr.WrapForeignErrorf(err, "import: error processing import sets")
 	}
 	if !syntax.IsSyntaxEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "import: unexpected return value")
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "import: unexpected return value")
 	}
 	return nil
 }
@@ -779,7 +780,7 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 //
 // This is only valid within a library definition. At top-level, it's an error.
 func (p *CompileTimeContinuation) CompileExport(_ CompileTimeCallContext, _ syntax.SyntaxValue) error {
-	return values.WrapForeignErrorf(values.ErrInvalidSyntax, "export: only valid within define-library")
+	return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "export: only valid within define-library")
 }
 
 // CompileDefineSyntax handles (define-syntax keyword transformer-expr).
@@ -813,36 +814,36 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 	// expr is (keyword transformer-expr) - the args after 'define-syntax' has been stripped
 	argsPair, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotASyntaxPair, "define-syntax: expected keyword and transformer")
+		return werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "define-syntax: expected keyword and transformer")
 	}
 	// Get the keyword to bind
 	keywordStx := argsPair.SyntaxCar()
 	if keywordStx == nil {
-		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "define-syntax: missing keyword")
+		return werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-syntax: missing keyword")
 	}
 	keywordSym, ok := keywordStx.(*syntax.SyntaxSymbol)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "define-syntax: keyword must be a symbol")
+		return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "define-syntax: keyword must be a symbol")
 	}
 	keyword := keywordSym.Unwrap().(*values.Symbol)
 	// Get the transformer expression
 	transformerCdr := argsPair.Cdr()
 	if transformerCdr == nil {
-		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "define-syntax: missing transformer expression")
+		return werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-syntax: missing transformer expression")
 	}
 	transformerPair, ok := transformerCdr.(*syntax.SyntaxPair)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotASyntaxPair, "define-syntax: expected transformer expression")
+		return werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "define-syntax: expected transformer expression")
 	}
 	transformerExpr := transformerPair.SyntaxCar()
 	if transformerExpr == nil {
-		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "define-syntax: missing transformer expression")
+		return werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-syntax: missing transformer expression")
 	}
 
 	// Compile the transformer (supports syntax-rules and lambda)
 	closure, err := compileTransformerToMachineClosure(ctctx.ctx, p.env, transformerExpr)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "could not compile transformer")
+		return werr.WrapForeignErrorf(err, "could not compile transformer")
 	}
 
 	// Store the transformer in the expand phase environment with BindingTypeSyntax
@@ -886,12 +887,12 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 //	  (else (display "other")))
 func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	if syntax.IsSyntaxEmptyList(expr) {
-		return values.WrapForeignErrorf(values.ErrNoMatchingClause, "cond-expand: no clauses")
+		return werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no clauses")
 	}
 
 	argsPair, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "cond-expand: expected list of clauses")
+		return werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: expected list of clauses")
 	}
 
 	// Get the library registry for checking library availability
@@ -910,7 +911,7 @@ func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext
 
 		clausePair, ok := clause.(*syntax.SyntaxPair)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAPair, "cond-expand: clause must be a list")
+			return werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: clause must be a list")
 		}
 
 		// Get the feature requirement (car of clause)
@@ -918,7 +919,7 @@ func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext
 		// Parse and evaluate the feature requirement
 		req, err := parseFeatureRequirement(ctctx.ctx, reqExpr)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "cond-expand: invalid feature requirement")
+			return werr.WrapForeignErrorf(err, "cond-expand: invalid feature requirement")
 		}
 
 		if req.IsSatisfied(registry) {
@@ -932,7 +933,7 @@ func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext
 	}
 
 	if matchedClause == nil {
-		return values.WrapForeignErrorf(values.ErrNoMatchingClause, "cond-expand: no matching clause")
+		return werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no matching clause")
 	}
 
 	// Compile the expressions in the matched clause
@@ -949,7 +950,7 @@ func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext
 
 	bodyPair, ok := bodyExpr.(*syntax.SyntaxPair)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "cond-expand: expected list of expressions")
+		return werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: expected list of expressions")
 	}
 
 	// Expand and compile each body expression
@@ -958,7 +959,7 @@ func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext
 		// Expand the expression
 		expanded, expandErr := NewExpanderTimeContinuation(ctctx.ctx, p.env).ExpandExpression(expr)
 		if expandErr != nil {
-			return values.WrapForeignErrorf(expandErr, "cond-expand: error expanding body expression")
+			return werr.WrapForeignErrorf(expandErr, "cond-expand: error expanding body expression")
 		}
 
 		// Compile the expanded expression
@@ -977,12 +978,12 @@ func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext
 // The first clause whose feature requirement is satisfied has its declarations processed.
 func (p *CompileTimeContinuation) processCondExpand(ctctx CompileTimeCallContext, lib *CompiledLibrary, args syntax.SyntaxValue) error {
 	if syntax.IsSyntaxEmptyList(args) {
-		return values.WrapForeignErrorf(values.ErrNoMatchingClause, "cond-expand: no clauses")
+		return werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no clauses")
 	}
 
 	argsPair, ok := args.(*syntax.SyntaxPair)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "cond-expand: expected list of clauses")
+		return werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: expected list of clauses")
 	}
 
 	// Get the library registry for checking library availability
@@ -1001,7 +1002,7 @@ func (p *CompileTimeContinuation) processCondExpand(ctctx CompileTimeCallContext
 
 		clausePair, ok := clause.(*syntax.SyntaxPair)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAPair, "cond-expand: clause must be a list")
+			return werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: clause must be a list")
 		}
 
 		// Get the feature requirement (car of clause)
@@ -1009,7 +1010,7 @@ func (p *CompileTimeContinuation) processCondExpand(ctctx CompileTimeCallContext
 		// Parse and evaluate the feature requirement
 		req, err := parseFeatureRequirement(ctctx.ctx, reqExpr)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "cond-expand: invalid feature requirement")
+			return werr.WrapForeignErrorf(err, "cond-expand: invalid feature requirement")
 		}
 
 		if req.IsSatisfied(registry) {
@@ -1023,7 +1024,7 @@ func (p *CompileTimeContinuation) processCondExpand(ctctx CompileTimeCallContext
 	}
 
 	if matchedClause == nil {
-		return values.WrapForeignErrorf(values.ErrNoMatchingClause, "cond-expand: no matching clause")
+		return werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no matching clause")
 	}
 
 	// Process the declarations in the matched clause
@@ -1035,7 +1036,7 @@ func (p *CompileTimeContinuation) processCondExpand(ctctx CompileTimeCallContext
 
 	declsPair, ok := declsExpr.(*syntax.SyntaxPair)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "cond-expand: expected list of declarations")
+		return werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: expected list of declarations")
 	}
 
 	// Process each declaration
@@ -1064,13 +1065,13 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 
 	case *syntax.SyntaxPair:
 		if syntax.IsSyntaxEmptyList(v) {
-			return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "empty feature requirement")
+			return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "empty feature requirement")
 		}
 
 		carExpr := v.SyntaxCar()
 		carSym, ok := carExpr.(*syntax.SyntaxSymbol)
 		if !ok {
-			return nil, values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "feature requirement must start with symbol")
+			return nil, werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "feature requirement must start with symbol")
 		}
 
 		keyword := carSym.Unwrap().(*values.Symbol).Key
@@ -1080,12 +1081,12 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 			// (library <library-name>)
 			argsPair, ok := argsExpr.(*syntax.SyntaxPair)
 			if !ok || syntax.IsSyntaxEmptyList(argsPair) {
-				return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "library: expected library name")
+				return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "library: expected library name")
 			}
 			libNameExpr := argsPair.SyntaxCar()
 			libName, err := parseLibraryName(ctx, libNameExpr)
 			if err != nil {
-				return nil, values.WrapForeignErrorf(err, "library: invalid library name")
+				return nil, werr.WrapForeignErrorf(err, "library: invalid library name")
 			}
 			return NewLibraryRequirement(libName), nil
 
@@ -1093,7 +1094,7 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 			// (and <req> ...)
 			reqs, err := parseFeatureRequirementList(ctx, argsExpr)
 			if err != nil {
-				return nil, values.WrapForeignErrorf(err, "and: invalid requirements")
+				return nil, werr.WrapForeignErrorf(err, "and: invalid requirements")
 			}
 			return NewAndRequirement(reqs...), nil
 
@@ -1101,7 +1102,7 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 			// (or <req> ...)
 			reqs, err := parseFeatureRequirementList(ctx, argsExpr)
 			if err != nil {
-				return nil, values.WrapForeignErrorf(err, "or: invalid requirements")
+				return nil, werr.WrapForeignErrorf(err, "or: invalid requirements")
 			}
 			return NewOrRequirement(reqs...), nil
 
@@ -1109,21 +1110,21 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 			// (not <req>)
 			argsPair, ok := argsExpr.(*syntax.SyntaxPair)
 			if !ok || syntax.IsSyntaxEmptyList(argsPair) {
-				return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "not: expected one requirement")
+				return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "not: expected one requirement")
 			}
 			reqExpr := argsPair.SyntaxCar()
 			req, err := parseFeatureRequirement(ctx, reqExpr)
 			if err != nil {
-				return nil, values.WrapForeignErrorf(err, "not: invalid requirement")
+				return nil, werr.WrapForeignErrorf(err, "not: invalid requirement")
 			}
 			return NewNotRequirement(req), nil
 
 		default:
-			return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "unknown feature requirement keyword: %s", keyword)
+			return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unknown feature requirement keyword: %s", keyword)
 		}
 
 	default:
-		return nil, values.WrapForeignErrorf(values.ErrInvalidArgument, "invalid feature requirement type: %T", expr)
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument, "invalid feature requirement type: %T", expr)
 	}
 }
 
@@ -1135,7 +1136,7 @@ func parseFeatureRequirementList(ctx context.Context, expr syntax.SyntaxValue) (
 
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotAPair, "expected list of requirements")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "expected list of requirements")
 	}
 
 	var reqs []FeatureRequirement
@@ -1162,23 +1163,23 @@ func (p *CompileTimeContinuation) processIncludeLibraryDeclarations(ctctx Compil
 
 	argsPair, ok := args.(*syntax.SyntaxPair)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "include-library-declarations: expected list of filenames")
+		return werr.WrapForeignErrorf(werr.ErrNotAPair, "include-library-declarations: expected list of filenames")
 	}
 
 	// Process each filename
 	_, err := syntax.SyntaxForEach(ctctx.ctx, argsPair, func(ctx context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
 		fn, ok := v.Unwrap().(*values.String)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAString, "include-library-declarations: expected string filename")
+			return werr.WrapForeignErrorf(werr.ErrNotAString, "include-library-declarations: expected string filename")
 		}
 
 		// Find and open the file
 		file, filePath, err := findFile(p, ctctx, fn.Value)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "include-library-declarations: failed to find file %q", fn.Value)
+			return werr.WrapForeignErrorf(err, "include-library-declarations: failed to find file %q", fn.Value)
 		}
 		if file == nil {
-			return values.WrapForeignErrorf(values.ErrFileNotFound, "include-library-declarations: file not found: %q", fn.Value)
+			return werr.WrapForeignErrorf(werr.ErrFileNotFound, "include-library-declarations: file not found: %q", fn.Value)
 		}
 		defer file.Close() //nolint:errcheck
 
@@ -1193,13 +1194,13 @@ func (p *CompileTimeContinuation) processIncludeLibraryDeclarations(ctctx Compil
 				if errors.Is(readErr, io.EOF) {
 					break
 				}
-				return values.WrapForeignErrorf(readErr, "include-library-declarations: error reading %q", fn.Value)
+				return werr.WrapForeignErrorf(readErr, "include-library-declarations: error reading %q", fn.Value)
 			}
 
 			// Process the form as a library declaration
 			err := p.processLibraryDeclaration(ctctx, lib, stx)
 			if err != nil {
-				return values.WrapForeignErrorf(err, "include-library-declarations: error processing declaration from %q", fn.Value)
+				return werr.WrapForeignErrorf(err, "include-library-declarations: error processing declaration from %q", fn.Value)
 			}
 		}
 

@@ -14,7 +14,11 @@
 
 package values
 
-import "io"
+import (
+	"io"
+
+	"github.com/aalpar/wile/werr"
+)
 
 // portBase tracks the closed state of a port and optionally holds
 // an io.Closer for the underlying stream. Concrete port types embed
@@ -58,11 +62,11 @@ func (b *portBase) setCloser(v any) {
 	}
 }
 
-// guardClosed returns ErrPortClosed if the port is closed.
+// guardClosed returns werr.ErrPortClosed if the port is closed.
 // I/O methods call this at the top to reject operations on closed ports.
 func (b *portBase) guardClosed() error {
 	if b.closed {
-		return ErrPortClosed
+		return werr.ErrPortClosed
 	}
 	return nil
 }

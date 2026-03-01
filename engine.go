@@ -29,10 +29,11 @@ import (
 	"github.com/aalpar/wile/registry/core"
 	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // ErrEngineClosed is returned when Close is called on an already-closed engine.
-var ErrEngineClosed = values.NewStaticError("engine is closed")
+var ErrEngineClosed = werr.NewStaticError("engine is closed")
 
 // DefaultMaxCallDepth is the default call depth limit for new engines.
 // At ~500 bytes per frame, 10000 frames ≈ 5MB. Use WithMaxCallDepth(0)
@@ -93,7 +94,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		if !cfg.skipCore {
 			err := core.AddToRegistry(reg)
 			if err != nil {
-				return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, err, "register core primitives")
+				return nil, werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "register core primitives")
 			}
 		}
 	}
@@ -104,7 +105,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		startIdx := reg.PrimitiveCount()
 		err := ext.AddToRegistry(reg)
 		if err != nil {
-			return nil, values.WrapForeignErrorWithCause(values.ErrEngineInit, err, "register extension %q", ext.Name())
+			return nil, werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "register extension %q", ext.Name())
 		}
 		endIdx := reg.PrimitiveCount()
 		var namer registry.LibraryNamer
@@ -157,7 +158,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		topLevel.SetLibraryEnvFactory(func(ctx context.Context, callerEnv *environment.EnvironmentFrame, _ []string) (*environment.EnvironmentFrame, error) {
 			callerTopLevel := callerEnv.TopLevelEnv()
 			if callerTopLevel == nil {
-				return nil, values.WrapForeignErrorf(values.ErrEngineInit, "library env factory: caller has no TopLevelEnvironment")
+				return nil, werr.WrapForeignErrorf(werr.ErrEngineInit, "library env factory: caller has no TopLevelEnvironment")
 			}
 
 			libEnv := callerTopLevel.NewChildRuntime()
@@ -443,14 +444,14 @@ func registerExtensionLibraries(reg *registry.Registry, env *environment.Environ
 			parts = []string{"wile", snap.name}
 		}
 		if len(parts) == 0 {
-			return values.WrapForeignErrorf(
-				values.ErrEngineInit,
+			return werr.WrapForeignErrorf(
+				werr.ErrEngineInit,
 				"invalid library name for extension %q: no name parts", snap.name,
 			)
 		}
 		if slices.Contains(parts, "") {
-			return values.WrapForeignErrorf(
-				values.ErrEngineInit,
+			return werr.WrapForeignErrorf(
+				werr.ErrEngineInit,
 				"invalid library name for extension %q: empty name part", snap.name,
 			)
 		}
@@ -462,7 +463,7 @@ func registerExtensionLibraries(reg *registry.Registry, env *environment.Environ
 		}
 		regErr := libReg.Register(lib)
 		if regErr != nil {
-			return values.WrapForeignErrorWithCause(values.ErrEngineInit, regErr, "failed to register extension library")
+			return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, regErr, "failed to register extension library")
 		}
 	}
 	return nil
@@ -474,22 +475,22 @@ func registerExtensionLibraries(reg *registry.Registry, env *environment.Environ
 func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.Registry, macroSources []string) error {
 	err := reg.Apply(ctx, env)
 	if err != nil {
-		return values.WrapForeignErrorWithCause(values.ErrEngineInit, err, "apply registry")
+		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "apply registry")
 	}
 
 	err = machine.RegisterSyntaxCompilers(env)
 	if err != nil {
-		return values.WrapForeignErrorWithCause(values.ErrEngineInit, err, "register syntax compilers")
+		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "register syntax compilers")
 	}
 
 	err = machine.RegisterPrimitiveExpanders(env)
 	if err != nil {
-		return values.WrapForeignErrorWithCause(values.ErrEngineInit, err, "register primitive expanders")
+		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "register primitive expanders")
 	}
 
 	err = loadBootstrapMacros(ctx, env, macroSources)
 	if err != nil {
-		return values.WrapForeignErrorWithCause(values.ErrEngineInit, err, "load bootstrap macros")
+		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "load bootstrap macros")
 	}
 	return nil
 }
@@ -676,7 +677,7 @@ func (p *Engine) PopLoadPath() {
 // Calling Close on an already-closed engine returns ErrEngineClosed.
 func (p *Engine) Close() error {
 	if p.closed {
-		return values.WrapForeignErrorf(ErrEngineClosed, "engine: already closed")
+		return werr.WrapForeignErrorf(ErrEngineClosed, "engine: already closed")
 	}
 	p.closed = true
 

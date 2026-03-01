@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // syntaxEmptyListType is the dedicated type for the syntax empty list ().
@@ -87,22 +88,22 @@ func (*syntaxEmptyListType) AsVector() *values.Vector {
 
 // Car panics with ErrNotAPair. R7RS: (car '()) is an error.
 func (*syntaxEmptyListType) Car() values.Value {
-	panic(values.ErrNotAPair)
+	panic(werr.ErrNotAPair)
 }
 
 // Cdr panics with ErrNotAPair. R7RS: (cdr '()) is an error.
 func (*syntaxEmptyListType) Cdr() values.Value {
-	panic(values.ErrNotAPair)
+	panic(werr.ErrNotAPair)
 }
 
 // SyntaxCar panics with ErrNotAPair.
 func (*syntaxEmptyListType) SyntaxCar() SyntaxValue {
-	panic(values.ErrNotAPair)
+	panic(werr.ErrNotAPair)
 }
 
 // SyntaxCdr panics with ErrNotAPair.
 func (*syntaxEmptyListType) SyntaxCdr() SyntaxValue {
-	panic(values.ErrNotAPair)
+	panic(werr.ErrNotAPair)
 }
 
 // SyntaxForEach is a no-op on the empty list.

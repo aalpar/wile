@@ -41,6 +41,7 @@ import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // localScopesProvider is an interface for getting local scopes from a free ID resolution.
@@ -175,7 +176,7 @@ func (p *SyntaxMatcher) MatchWithBindingChecker(ctx context.Context, input synta
 	// Ensure input is a pair
 	inputPair, ok := input.(*syntax.SyntaxPair)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "MatchWithBindingChecker: pattern matching requires a pair")
+		return werr.WrapForeignErrorf(werr.ErrNotAPair, "MatchWithBindingChecker: pattern matching requires a pair")
 	}
 
 	// Create literal matcher function that uses the binding checker
@@ -237,7 +238,7 @@ type ExpandOptions struct {
 // Pass a zero-value ExpandOptions{} for expansion without hygiene.
 func (p *SyntaxMatcher) Expand(template syntax.SyntaxValue, opts ExpandOptions) (syntax.SyntaxValue, error) {
 	if len(p.matcher.captureStack) == 0 {
-		return nil, values.WrapForeignErrorf(values.ErrNoCaptureContext, "Expand: no captures available for template expansion")
+		return nil, werr.WrapForeignErrorf(werr.ErrNoCaptureContext, "Expand: no captures available for template expansion")
 	}
 
 	// Perform syntax-preserving expansion with scope comparison
@@ -708,7 +709,7 @@ func CompileSyntaxPatternWithLiterals(ctx context.Context, pattern syntax.Syntax
 	// Pattern must be a syntax pair
 	pair, ok := pattern.(*syntax.SyntaxPair)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotAList, "CompileSyntaxPatternWithLiterals: pattern must be a list")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "CompileSyntaxPatternWithLiterals: pattern must be a list")
 	}
 
 	// Compile using compiler with custom ellipsis and literals

@@ -25,6 +25,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // ensureInexactDecimal ensures a float string has a decimal point, even in
@@ -49,7 +50,7 @@ func PrimExp(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	z, err := helpers.ToComplex128(o)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "exp: %v", err)
+		return werr.WrapForeignErrorf(err, "exp: %v", err)
 	}
 	mc.SetValue(helpers.ComplexOrFloat(cmplx.Exp(z)))
 	return nil
@@ -61,18 +62,18 @@ func PrimLog(mc *machine.MachineContext) error {
 	rest := mc.Arg(1)
 	z, err := helpers.ToComplex128(o)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "log: %v", err)
+		return werr.WrapForeignErrorf(err, "log: %v", err)
 	}
 	if values.IsEmptyList(rest) {
 		mc.SetValue(helpers.ComplexOrFloat(cmplx.Log(z)))
 	} else {
 		baseArg, ok := rest.(values.Tuple)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "log: expected a list for rest arguments")
+			return werr.WrapForeignErrorf(werr.ErrNotAList, "log: expected a list for rest arguments")
 		}
 		base, err := helpers.ToComplex128(baseArg.Car())
 		if err != nil {
-			return values.WrapForeignErrorf(err, "log: %v", err)
+			return werr.WrapForeignErrorf(err, "log: %v", err)
 		}
 		mc.SetValue(helpers.ComplexOrFloat(cmplx.Log(z) / cmplx.Log(base)))
 	}
@@ -84,7 +85,7 @@ func PrimSin(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	z, err := helpers.ToComplex128(o)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "sin: %v", err)
+		return werr.WrapForeignErrorf(err, "sin: %v", err)
 	}
 	mc.SetValue(helpers.ComplexOrFloat(cmplx.Sin(z)))
 	return nil
@@ -95,7 +96,7 @@ func PrimCos(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	z, err := helpers.ToComplex128(o)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "cos: %v", err)
+		return werr.WrapForeignErrorf(err, "cos: %v", err)
 	}
 	mc.SetValue(helpers.ComplexOrFloat(cmplx.Cos(z)))
 	return nil
@@ -106,7 +107,7 @@ func PrimTan(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	z, err := helpers.ToComplex128(o)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "tan: %v", err)
+		return werr.WrapForeignErrorf(err, "tan: %v", err)
 	}
 	mc.SetValue(helpers.ComplexOrFloat(cmplx.Tan(z)))
 	return nil
@@ -117,7 +118,7 @@ func PrimAsin(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	z, err := helpers.ToComplex128(o)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "asin: %v", err)
+		return werr.WrapForeignErrorf(err, "asin: %v", err)
 	}
 	mc.SetValue(helpers.ComplexOrFloat(cmplx.Asin(z)))
 	return nil
@@ -128,7 +129,7 @@ func PrimAcos(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	z, err := helpers.ToComplex128(o)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "acos: %v", err)
+		return werr.WrapForeignErrorf(err, "acos: %v", err)
 	}
 	mc.SetValue(helpers.ComplexOrFloat(cmplx.Acos(z)))
 	return nil
@@ -142,21 +143,21 @@ func PrimAtan(mc *machine.MachineContext) error {
 	if values.IsEmptyList(rest) {
 		z, err := helpers.ToComplex128(o)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "atan: %v", err)
+			return werr.WrapForeignErrorf(err, "atan: %v", err)
 		}
 		mc.SetValue(helpers.ComplexOrFloat(cmplx.Atan(z)))
 	} else {
 		y, err := helpers.ToFloat64(o)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "atan: %v", err)
+			return werr.WrapForeignErrorf(err, "atan: %v", err)
 		}
 		xArg, ok := rest.(values.Tuple)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "atan: expected a list for rest arguments")
+			return werr.WrapForeignErrorf(werr.ErrNotAList, "atan: expected a list for rest arguments")
 		}
 		x, err := helpers.ToFloat64(xArg.Car())
 		if err != nil {
-			return values.WrapForeignErrorf(err, "atan: %v", err)
+			return werr.WrapForeignErrorf(err, "atan: %v", err)
 		}
 		mc.SetValue(values.NewFloat(math.Atan2(y, x)))
 	}
@@ -253,7 +254,7 @@ func PrimSqrt(mc *machine.MachineContext) error {
 		imagF := v.ImagAsBigFloat().Float64()
 		mc.SetValue(values.NewComplex(complexSqrtR7RS(complex(realF, imagF))))
 	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "sqrt: expected a number but got %T", o)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "sqrt: expected a number but got %T", o)
 	}
 	return nil
 }
@@ -287,11 +288,11 @@ func PrimExpt(mc *machine.MachineContext) error {
 	exp := mc.Arg(1)
 	baseNum, ok := base.(values.Number)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "expt: expected a number but got %T", base)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "expt: expected a number but got %T", base)
 	}
 	expNum, ok := exp.(values.Number)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "expt: expected a number but got %T", exp)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "expt: expected a number but got %T", exp)
 	}
 
 	expInt, ok := expNum.(*values.Integer)
@@ -446,7 +447,7 @@ func PrimSquare(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	n, ok := o.(values.Number)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "square: expected a number but got %T", o)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "square: expected a number but got %T", o)
 	}
 	mc.SetValue(n.Multiply(n))
 	return nil
@@ -480,7 +481,7 @@ func makeRealNumberPrimitive(op realNumberOp) func(*machine.MachineContext) erro
 		case *values.Rational:
 			mc.SetValue(op.rationalOp(v))
 		default:
-			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a real number but got %T", op.name, o)
+			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a real number but got %T", op.name, o)
 		}
 		return nil
 	}
@@ -545,7 +546,7 @@ func PrimFloorDiv(mc *machine.MachineContext) error {
 	}
 
 	if n1 == 0 {
-		return values.WrapForeignErrorf(values.ErrDivisionByZero, "floor/: division by zero")
+		return werr.WrapForeignErrorf(werr.ErrDivisionByZero, "floor/: division by zero")
 	}
 
 	q := math.Floor(n0 / n1)
@@ -576,7 +577,7 @@ func PrimFloorQuotient(mc *machine.MachineContext) error {
 	}
 
 	if n1 == 0 {
-		return values.WrapForeignErrorf(values.ErrDivisionByZero, "floor-quotient: division by zero")
+		return werr.WrapForeignErrorf(werr.ErrDivisionByZero, "floor-quotient: division by zero")
 	}
 
 	q := math.Floor(n0 / n1)
@@ -606,7 +607,7 @@ func PrimFloorRemainder(mc *machine.MachineContext) error {
 	}
 
 	if n1 == 0 {
-		return values.WrapForeignErrorf(values.ErrDivisionByZero, "floor-remainder: division by zero")
+		return werr.WrapForeignErrorf(werr.ErrDivisionByZero, "floor-remainder: division by zero")
 	}
 
 	q := math.Floor(n0 / n1)
@@ -638,7 +639,7 @@ func PrimTruncateDiv(mc *machine.MachineContext) error {
 	}
 
 	if n1 == 0 {
-		return values.WrapForeignErrorf(values.ErrDivisionByZero, "truncate/: division by zero")
+		return werr.WrapForeignErrorf(werr.ErrDivisionByZero, "truncate/: division by zero")
 	}
 
 	q := math.Trunc(n0 / n1)
@@ -669,7 +670,7 @@ func PrimTruncateQuotient(mc *machine.MachineContext) error {
 	}
 
 	if n1 == 0 {
-		return values.WrapForeignErrorf(values.ErrDivisionByZero, "truncate-quotient: division by zero")
+		return werr.WrapForeignErrorf(werr.ErrDivisionByZero, "truncate-quotient: division by zero")
 	}
 
 	q := math.Trunc(n0 / n1)
@@ -699,7 +700,7 @@ func PrimTruncateRemainder(mc *machine.MachineContext) error {
 	}
 
 	if n1 == 0 {
-		return values.WrapForeignErrorf(values.ErrDivisionByZero, "truncate-remainder: division by zero")
+		return werr.WrapForeignErrorf(werr.ErrDivisionByZero, "truncate-remainder: division by zero")
 	}
 
 	q := math.Trunc(n0 / n1)
@@ -717,7 +718,7 @@ func PrimTruncateRemainder(mc *machine.MachineContext) error {
 func PrimFiniteQ(mc *machine.MachineContext) error {
 	n, ok := mc.Arg(0).(values.Number)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "finite?: expected a number but got %T", mc.Arg(0))
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "finite?: expected a number but got %T", mc.Arg(0))
 	}
 	mc.SetValue(values.BoolToBoolean(n.IsFinite()))
 	return nil
@@ -727,7 +728,7 @@ func PrimFiniteQ(mc *machine.MachineContext) error {
 func PrimInfiniteQ(mc *machine.MachineContext) error {
 	n, ok := mc.Arg(0).(values.Number)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "infinite?: expected a number but got %T", mc.Arg(0))
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "infinite?: expected a number but got %T", mc.Arg(0))
 	}
 	mc.SetValue(values.BoolToBoolean(!n.IsFinite() && !n.IsNaN()))
 	return nil
@@ -737,7 +738,7 @@ func PrimInfiniteQ(mc *machine.MachineContext) error {
 func PrimNanQ(mc *machine.MachineContext) error {
 	n, ok := mc.Arg(0).(values.Number)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "nan?: expected a number but got %T", mc.Arg(0))
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "nan?: expected a number but got %T", mc.Arg(0))
 	}
 	mc.SetValue(values.BoolToBoolean(n.IsNaN()))
 	return nil
@@ -760,7 +761,7 @@ func PrimNumerator(mc *machine.MachineContext) error {
 		// R7RS §6.2.6: inexact input → inexact output
 		r := new(big.Rat).SetFloat64(v.Value)
 		if r == nil {
-			return values.WrapForeignErrorf(values.ErrInvalidArgument, "numerator: cannot get numerator of infinity or NaN")
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "numerator: cannot get numerator of infinity or NaN")
 		}
 		num := r.Num()
 		f, _ := new(big.Float).SetInt(num).Float64()
@@ -770,13 +771,13 @@ func PrimNumerator(mc *machine.MachineContext) error {
 		// R7RS §6.2.6: inexact input → inexact output
 		r, _ := v.BigFloatValue().Rat(nil)
 		if r == nil {
-			return values.WrapForeignErrorf(values.ErrInvalidArgument, "numerator: cannot get numerator of infinity or NaN")
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "numerator: cannot get numerator of infinity or NaN")
 		}
 		num := r.Num()
 		f := new(big.Float).SetInt(num)
 		mc.SetValue(values.NewBigFloat(f))
 	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "numerator: expected a rational number but got %T", o)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "numerator: expected a rational number but got %T", o)
 	}
 	return nil
 }
@@ -798,7 +799,7 @@ func PrimDenominator(mc *machine.MachineContext) error {
 		// R7RS §6.2.6: inexact input → inexact output
 		r := new(big.Rat).SetFloat64(v.Value)
 		if r == nil {
-			return values.WrapForeignErrorf(values.ErrInvalidArgument, "denominator: cannot get denominator of infinity or NaN")
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "denominator: cannot get denominator of infinity or NaN")
 		}
 		denom := r.Denom()
 		f, _ := new(big.Float).SetInt(denom).Float64()
@@ -808,13 +809,13 @@ func PrimDenominator(mc *machine.MachineContext) error {
 		// R7RS §6.2.6: inexact input → inexact output
 		r, _ := v.BigFloatValue().Rat(nil)
 		if r == nil {
-			return values.WrapForeignErrorf(values.ErrInvalidArgument, "denominator: cannot get denominator of infinity or NaN")
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "denominator: cannot get denominator of infinity or NaN")
 		}
 		denom := r.Denom()
 		f := new(big.Float).SetInt(denom)
 		mc.SetValue(values.NewBigFloat(f))
 	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "denominator: expected a rational number but got %T", o)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "denominator: expected a rational number but got %T", o)
 	}
 	return nil
 }
@@ -837,11 +838,11 @@ func PrimRationalize(mc *machine.MachineContext) error {
 	case *values.Float:
 		x = new(big.Rat).SetFloat64(v.Value)
 		if x == nil {
-			return values.WrapForeignErrorf(values.ErrInvalidArgument, "rationalize: x cannot be infinity or NaN")
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "rationalize: x cannot be infinity or NaN")
 		}
 		xExact = false
 	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "rationalize: expected a real number for x but got %T", xArg)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "rationalize: expected a real number for x but got %T", xArg)
 	}
 
 	switch v := yArg.(type) {
@@ -854,11 +855,11 @@ func PrimRationalize(mc *machine.MachineContext) error {
 	case *values.Float:
 		y = new(big.Rat).SetFloat64(v.Value)
 		if y == nil {
-			return values.WrapForeignErrorf(values.ErrInvalidArgument, "rationalize: y cannot be infinity or NaN")
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "rationalize: y cannot be infinity or NaN")
 		}
 		yExact = false
 	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "rationalize: expected a real number for y but got %T", yArg)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "rationalize: expected a real number for y but got %T", yArg)
 	}
 
 	if y.Sign() < 0 {
@@ -951,7 +952,7 @@ func PrimExactIntegerSqrt(mc *machine.MachineContext) error {
 	switch v := o.(type) {
 	case *values.Integer:
 		if v.Value < 0 {
-			return values.WrapForeignErrorf(values.ErrInvalidArgument, "exact-integer-sqrt: expected a non-negative integer")
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "exact-integer-sqrt: expected a non-negative integer")
 		}
 		s := int64(math.Sqrt(float64(v.Value)))
 		for s*s > v.Value {
@@ -966,7 +967,7 @@ func PrimExactIntegerSqrt(mc *machine.MachineContext) error {
 
 	case *values.BigInteger:
 		if v.BigInt().Sign() < 0 {
-			return values.WrapForeignErrorf(values.ErrInvalidArgument, "exact-integer-sqrt: expected a non-negative integer")
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "exact-integer-sqrt: expected a non-negative integer")
 		}
 		// Use big.Int.Sqrt which computes floor(sqrt(n))
 		s := new(big.Int).Sqrt(v.BigInt())
@@ -977,7 +978,7 @@ func PrimExactIntegerSqrt(mc *machine.MachineContext) error {
 		return nil
 
 	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "exact-integer-sqrt: expected an exact integer but got %T", o)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "exact-integer-sqrt: expected an exact integer but got %T", o)
 	}
 }
 
@@ -991,18 +992,18 @@ func PrimMakeRectangular(mc *machine.MachineContext) error {
 	rNum, rOk := r.(values.Number)
 	iNum, iOk := i.(values.Number)
 	if !rOk {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "make-rectangular: expected a real number but got %T", r)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "make-rectangular: expected a real number but got %T", r)
 	}
 	if !iOk {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "make-rectangular: expected a real number but got %T", i)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "make-rectangular: expected a real number but got %T", i)
 	}
 
 	// Reject complex numbers - make-rectangular requires real number arguments
 	if !isRealNumber(r) {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "make-rectangular: expected a real number but got complex %T", r)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "make-rectangular: expected a real number but got complex %T", r)
 	}
 	if !isRealNumber(i) {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "make-rectangular: expected a real number but got complex %T", i)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "make-rectangular: expected a real number but got complex %T", i)
 	}
 
 	bothExact := values.ExactnessOf(rNum) == values.Exact && values.ExactnessOf(iNum) == values.Exact
@@ -1052,7 +1053,7 @@ func PrimMakeRectangular(mc *machine.MachineContext) error {
 	case *values.BigInteger:
 		realPart, _ = new(big.Float).SetInt(v.BigInt()).Float64()
 	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "make-rectangular: expected a real number but got %T", r)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "make-rectangular: expected a real number but got %T", r)
 	}
 	switch v := i.(type) {
 	case *values.Integer:
@@ -1064,7 +1065,7 @@ func PrimMakeRectangular(mc *machine.MachineContext) error {
 	case *values.BigInteger:
 		imagPart, _ = new(big.Float).SetInt(v.BigInt()).Float64()
 	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "make-rectangular: expected a real number but got %T", i)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "make-rectangular: expected a real number but got %T", i)
 	}
 	mc.SetValue(values.NewComplexFromParts(realPart, imagPart))
 	return nil
@@ -1155,7 +1156,7 @@ func toBigComplexPart(v values.Value, name string) (values.Number, error) {
 	case *values.Rational:
 		return values.NewBigFloatFromString(n.Rat().FloatString(256)), nil
 	default:
-		return nil, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a real number but got %T", name, v)
+		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a real number but got %T", name, v)
 	}
 }
 
@@ -1172,7 +1173,7 @@ func PrimMakePolar(mc *machine.MachineContext) error {
 	case *values.Rational:
 		mag = v.Float64()
 	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "make-polar: expected a real number but got %T", r)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "make-polar: expected a real number but got %T", r)
 	}
 	switch v := theta.(type) {
 	case *values.Integer:
@@ -1182,7 +1183,7 @@ func PrimMakePolar(mc *machine.MachineContext) error {
 	case *values.Rational:
 		angle = v.Float64()
 	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "make-polar: expected a real number but got %T", theta)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "make-polar: expected a real number but got %T", theta)
 	}
 	realPart := mag * math.Cos(angle)
 	imagPart := mag * math.Sin(angle)
@@ -1202,7 +1203,7 @@ func PrimRealPart(mc *machine.MachineContext) error {
 	case *values.Integer, *values.BigInteger, *values.Float, *values.BigFloat, *values.Rational:
 		mc.SetValue(o)
 	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "real-part: expected a number but got %T", o)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "real-part: expected a number but got %T", o)
 	}
 	return nil
 }
@@ -1221,7 +1222,7 @@ func PrimImagPart(mc *machine.MachineContext) error {
 	case *values.Float, *values.BigFloat:
 		mc.SetValue(values.NewFloat(0.0))
 	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "imag-part: expected a number but got %T", o)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "imag-part: expected a number but got %T", o)
 	}
 	return nil
 }
@@ -1252,7 +1253,7 @@ func PrimMagnitude(mc *machine.MachineContext) error {
 	case *values.Rational:
 		mc.SetValue(v.Abs())
 	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "magnitude: expected a number but got %T", o)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "magnitude: expected a number but got %T", o)
 	}
 	return nil
 }
@@ -1299,7 +1300,7 @@ func PrimAngle(mc *machine.MachineContext) error {
 			mc.SetValue(values.NewFloat(math.Pi))
 		}
 	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "angle: expected a number but got %T", o)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "angle: expected a number but got %T", o)
 	}
 	return nil
 }
@@ -1314,11 +1315,11 @@ func PrimNumberToString(mc *machine.MachineContext) error {
 		if ok && !pr.IsEmptyList() {
 			r, ok := pr.Car().(*values.Integer)
 			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotANumber, "number->string: expected an integer radix but got %T", pr.Car())
+				return werr.WrapForeignErrorf(werr.ErrNotANumber, "number->string: expected an integer radix but got %T", pr.Car())
 			}
 			radix = int(r.Value)
 			if radix != 2 && radix != 8 && radix != 10 && radix != 16 {
-				return values.WrapForeignErrorf(values.ErrInvalidArgument, "number->string: radix must be 2, 8, 10, or 16")
+				return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "number->string: radix must be 2, 8, 10, or 16")
 			}
 		}
 	}
@@ -1349,7 +1350,7 @@ func PrimNumberToString(mc *machine.MachineContext) error {
 	case *values.BigFloat:
 		mc.SetValue(values.NewString(v.SchemeString()))
 	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "number->string: expected a number but got %T", n)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "number->string: expected a number but got %T", n)
 	}
 	return nil
 }
@@ -1368,7 +1369,7 @@ func PrimStringToNumber(mc *machine.MachineContext) error {
 	rest := mc.Arg(1)
 	str, ok := s.(*values.String)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "string->number: expected a string but got %T", s)
+		return werr.WrapForeignErrorf(werr.ErrNotAString, "string->number: expected a string but got %T", s)
 	}
 	radix := 10
 	if !values.IsEmptyList(rest) {
@@ -1376,7 +1377,7 @@ func PrimStringToNumber(mc *machine.MachineContext) error {
 		if ok && !pr.IsEmptyList() {
 			r, ok := pr.Car().(*values.Integer)
 			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotANumber, "string->number: expected an integer radix but got %T", pr.Car())
+				return werr.WrapForeignErrorf(werr.ErrNotANumber, "string->number: expected an integer radix but got %T", pr.Car())
 			}
 			radix = int(r.Value)
 		}

@@ -14,12 +14,12 @@
 
 package security
 
-import "errors"
+import "github.com/aalpar/wile/werr"
 
 // ErrAccessDenied is the sentinel error returned when an Authorizer
 // denies an operation. Use errors.Is to check for it; the error may
 // be wrapped with additional context by callers.
-var ErrAccessDenied = errors.New("access denied")
+var ErrAccessDenied = werr.NewStaticError("access denied")
 
 // Authorizer decides whether an operation is allowed. Implementations
 // must be safe for concurrent use.

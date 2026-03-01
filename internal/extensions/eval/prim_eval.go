@@ -29,6 +29,7 @@ import (
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // PrimEval implements the (eval) primitive.
@@ -40,7 +41,7 @@ func PrimEval(mc *machine.MachineContext) error {
 	// Get the environment frame from the TopLevelEnvironment
 	topLevelEnv, ok := envSpec.(*environment.TopLevelEnvironment)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrInvalidArgument, "eval: expected an environment specifier but got %T", envSpec)
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "eval: expected an environment specifier but got %T", envSpec)
 	}
 
 	env := topLevelEnv.Runtime()
@@ -52,7 +53,7 @@ func PrimEval(mc *machine.MachineContext) error {
 	// Expand the expression
 	expanded, err := machine.NewExpanderTimeContinuation(mc.Context(), env).ExpandExpression(stx)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "eval: expansion error")
+		return werr.WrapForeignErrorf(err, "eval: expansion error")
 	}
 
 	// Compile the expression
@@ -60,7 +61,7 @@ func PrimEval(mc *machine.MachineContext) error {
 	cctx := machine.NewCompileTimeCallContext(mc.Context(), false, true)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "eval: compilation error")
+		return werr.WrapForeignErrorf(err, "eval: compilation error")
 	}
 
 	// Run the compiled code in a sub-context
@@ -82,7 +83,7 @@ func PrimEval(mc *machine.MachineContext) error {
 // Loads and evaluates a Scheme source file.
 func PrimLoad(mc *machine.MachineContext) error {
 	filenameVal := mc.Arg(0)
-	filename, err := helpers.RequireType[*values.String](filenameVal, values.ErrNotAString, "load")
+	filename, err := helpers.RequireType[*values.String](filenameVal, werr.ErrNotAString, "load")
 	if err != nil {
 		return err
 	}
@@ -94,12 +95,12 @@ func PrimLoad(mc *machine.MachineContext) error {
 	stack := env.LoadPathStack()
 	cwd, err := os.Getwd()
 	if err != nil {
-		return values.WrapForeignErrorf(err, "load: cannot get current directory")
+		return werr.WrapForeignErrorf(err, "load: cannot get current directory")
 	}
 
 	absPath, err := environment.ResolveFile(stack, filename.Value, []string{cwd})
 	if err != nil {
-		return values.WrapForeignErrorf(err, "load")
+		return werr.WrapForeignErrorf(err, "load")
 	}
 
 	err = security.Check(mc.Context(), security.AccessRequest{
@@ -114,7 +115,7 @@ func PrimLoad(mc *machine.MachineContext) error {
 	// Open the file
 	f, err := os.Open(absPath)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "load: cannot open file %s", absPath)
+		return werr.WrapForeignErrorf(err, "load: cannot open file %s", absPath)
 	}
 	defer f.Close() //nolint:errcheck
 
@@ -137,13 +138,13 @@ func PrimLoad(mc *machine.MachineContext) error {
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			return values.WrapForeignErrorf(err, "load: parse error in %s", filename.Value)
+			return werr.WrapForeignErrorf(err, "load: parse error in %s", filename.Value)
 		}
 
 		// Expand the expression
 		expanded, err := machine.NewExpanderTimeContinuation(mc.Context(), env).ExpandExpression(stx)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "load: expansion error in %s", filename.Value)
+			return werr.WrapForeignErrorf(err, "load: expansion error in %s", filename.Value)
 		}
 
 		// Compile the expression
@@ -151,7 +152,7 @@ func PrimLoad(mc *machine.MachineContext) error {
 		cctx := machine.NewCompileTimeCallContext(mc.Context(), false, true)
 		err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "load: compilation error in %s", filename.Value)
+			return werr.WrapForeignErrorf(err, "load: compilation error in %s", filename.Value)
 		}
 
 		// Run the compiled code
@@ -162,7 +163,7 @@ func PrimLoad(mc *machine.MachineContext) error {
 		sub.SetThread(mc.Thread())
 		err = sub.Run()
 		if err != nil {
-			return values.WrapForeignErrorf(err, "load: runtime error in %s", filename.Value)
+			return werr.WrapForeignErrorf(err, "load: runtime error in %s", filename.Value)
 		}
 
 		lastValue = sub.GetValue()
@@ -232,7 +233,7 @@ func PrimCurrentLoadDepth(mc *machine.MachineContext) error {
 // Returns R5RS env.
 func PrimSchemeReportEnvironment(mc *machine.MachineContext) error {
 	version := mc.Arg(0)
-	versionInt, err := helpers.RequireType[*values.Integer](version, values.ErrNotAnInteger, "scheme-report-environment")
+	versionInt, err := helpers.RequireType[*values.Integer](version, werr.ErrNotAnInteger, "scheme-report-environment")
 	if err != nil {
 		return err
 	}
@@ -250,7 +251,7 @@ func PrimSchemeReportEnvironment(mc *machine.MachineContext) error {
 		mc.SetValue(newTopLevel)
 		return nil
 	default:
-		return values.WrapForeignErrorf(values.ErrInvalidArgument, "scheme-report-environment: unsupported version, expected 5 or 7")
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "scheme-report-environment: unsupported version, expected 5 or 7")
 	}
 }
 
@@ -258,7 +259,7 @@ func PrimSchemeReportEnvironment(mc *machine.MachineContext) error {
 // Returns an empty R5RS environment with no bindings.
 func PrimNullEnvironment(mc *machine.MachineContext) error {
 	version := mc.Arg(0)
-	versionInt, err := helpers.RequireType[*values.Integer](version, values.ErrNotAnInteger, "null-environment")
+	versionInt, err := helpers.RequireType[*values.Integer](version, werr.ErrNotAnInteger, "null-environment")
 	if err != nil {
 		return err
 	}
@@ -274,7 +275,7 @@ func PrimNullEnvironment(mc *machine.MachineContext) error {
 		mc.SetValue(newTopLevel)
 		return nil
 	default:
-		return values.WrapForeignErrorf(values.ErrInvalidArgument, "null-environment: unsupported version, expected 5 or 7")
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "null-environment: unsupported version, expected 5 or 7")
 	}
 }
 
@@ -306,7 +307,7 @@ func PrimEnvironment(mc *machine.MachineContext) error {
 
 	args, ok := argsVal.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrInvalidArgument, "environment: expected list of import specs, got %T", argsVal)
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "environment: expected list of import specs, got %T", argsVal)
 	}
 
 	// Process each import spec
@@ -314,27 +315,27 @@ func PrimEnvironment(mc *machine.MachineContext) error {
 		// Parse the import set from datum
 		importSet, err := machine.ParseImportSetFromDatum(mc.Context(), specVal)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "environment: invalid import spec")
+			return werr.WrapForeignErrorf(err, "environment: invalid import spec")
 		}
 
 		// Load the library (uses callerEnv for registry access)
 		lib, err := machine.LoadLibrary(mc.Context(), importSet.LibraryName, callerEnv)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "environment: failed to load %s",
+			return werr.WrapForeignErrorf(err, "environment: failed to load %s",
 				importSet.LibraryName.SchemeString())
 		}
 
 		// Apply modifiers (only, except, prefix, rename)
 		bindings, err := importSet.ApplyToExports(lib)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "environment: error in import set for %s",
+			return werr.WrapForeignErrorf(err, "environment: error in import set for %s",
 				importSet.LibraryName.SchemeString())
 		}
 
 		// Copy bindings to new environment at the specified phase
 		err = machine.CopyLibraryBindingsToEnvAtPhase(lib, bindings, newEnv, importSet.PhaseShift)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "environment: error copying bindings from %s",
+			return werr.WrapForeignErrorf(err, "environment: error copying bindings from %s",
 				importSet.LibraryName.SchemeString())
 		}
 
@@ -344,7 +345,7 @@ func PrimEnvironment(mc *machine.MachineContext) error {
 		return err
 	}
 	if !values.IsEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "environment: improper import spec list")
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "environment: improper import spec list")
 	}
 
 	mc.SetValue(newTopLevel)
@@ -359,7 +360,7 @@ func PrimExpand(mc *machine.MachineContext) error {
 
 	syntaxVal, ok := stx.(syntax.SyntaxValue)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotASyntaxObject, "expand: expected syntax object")
+		return werr.WrapForeignErrorf(werr.ErrNotASyntaxObject, "expand: expected syntax object")
 	}
 
 	// Check if we're in an expansion context
@@ -368,7 +369,7 @@ func PrimExpand(mc *machine.MachineContext) error {
 		// In expansion phase - use current context
 		expanded, err := expanderCtx.Expand(syntaxVal)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "expand: expansion failed")
+			return werr.WrapForeignErrorf(err, "expand: expansion failed")
 		}
 		mc.SetValue(expanded)
 		return nil
@@ -379,7 +380,7 @@ func PrimExpand(mc *machine.MachineContext) error {
 	expander := machine.NewExpanderTimeContinuation(mc.Context(), env)
 	expanded, err := expander.ExpandExpression(syntaxVal)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "expand: expansion failed")
+		return werr.WrapForeignErrorf(err, "expand: expansion failed")
 	}
 	mc.SetValue(expanded)
 	return nil
@@ -394,7 +395,7 @@ func PrimExpandOnce(mc *machine.MachineContext) error {
 
 	syntaxVal, ok := stx.(syntax.SyntaxValue)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotASyntaxObject, "expand-once: expected syntax object")
+		return werr.WrapForeignErrorf(werr.ErrNotASyntaxObject, "expand-once: expected syntax object")
 	}
 
 	// Check if we're in an expansion context
@@ -403,7 +404,7 @@ func PrimExpandOnce(mc *machine.MachineContext) error {
 		// In expansion phase - use current context
 		expanded, didExpand, err := expanderCtx.ExpandOnce(syntaxVal)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "expand-once: expansion failed")
+			return werr.WrapForeignErrorf(err, "expand-once: expansion failed")
 		}
 		mc.SetValues(expanded, values.BoolToBoolean(didExpand))
 		return nil
@@ -414,7 +415,7 @@ func PrimExpandOnce(mc *machine.MachineContext) error {
 	expander := machine.NewExpanderTimeContinuation(mc.Context(), env)
 	expanded, didExpand, err := expander.ExpandOnce(syntaxVal)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "expand-once: expansion failed")
+		return werr.WrapForeignErrorf(err, "expand-once: expansion failed")
 	}
 	mc.SetValues(expanded, values.BoolToBoolean(didExpand))
 	return nil
@@ -452,7 +453,7 @@ func PrimCompile(mc *machine.MachineContext) error {
 	// Step 1: Expand the syntax object
 	expanded, err := machine.NewExpanderTimeContinuation(mc.Context(), env).ExpandExpression(syntaxVal)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "compile: expansion failed")
+		return werr.WrapForeignErrorf(err, "compile: expansion failed")
 	}
 
 	// Step 2: Compile to bytecode template
@@ -461,7 +462,7 @@ func PrimCompile(mc *machine.MachineContext) error {
 	cctx := machine.NewCompileTimeCallContext(mc.Context(), false, true)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "compile: compilation failed")
+		return werr.WrapForeignErrorf(err, "compile: compilation failed")
 	}
 
 	// Add return operation so the thunk properly returns its value
@@ -491,12 +492,12 @@ func PrimSyntaxLocalValue(mc *machine.MachineContext) error {
 
 	syntaxSym, ok := id.(*syntax.SyntaxSymbol)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "syntax-local-value: expected identifier")
+		return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "syntax-local-value: expected identifier")
 	}
 
 	expanderCtx := mc.ExpanderContext()
 	if expanderCtx == nil {
-		return values.WrapForeignErrorf(values.ErrNoCaptureContext, "syntax-local-value: not in expansion context")
+		return werr.WrapForeignErrorf(werr.ErrNoCaptureContext, "syntax-local-value: not in expansion context")
 	}
 
 	// Look up in expand phase
@@ -506,7 +507,7 @@ func PrimSyntaxLocalValue(mc *machine.MachineContext) error {
 
 	binding := expandEnv.GetBindingWithScopes(sym, syntaxSym.Scopes())
 	if binding == nil {
-		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "syntax-local-value: no binding for %s", sym.Key)
+		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "syntax-local-value: no binding for %s", sym.Key)
 	}
 
 	val := binding.Value()
@@ -560,12 +561,12 @@ func PrimSyntaxLocalIntroduce(mc *machine.MachineContext) error {
 
 	syntaxVal, ok := stx.(syntax.SyntaxValue)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotASyntaxObject, "syntax-local-introduce: expected syntax object")
+		return werr.WrapForeignErrorf(werr.ErrNotASyntaxObject, "syntax-local-introduce: expected syntax object")
 	}
 
 	expanderCtx := mc.ExpanderContext()
 	if expanderCtx == nil {
-		return values.WrapForeignErrorf(values.ErrNoCaptureContext, "syntax-local-introduce: not in expansion context")
+		return werr.WrapForeignErrorf(werr.ErrNoCaptureContext, "syntax-local-introduce: not in expansion context")
 	}
 
 	introScope := expanderCtx.IntroductionScope()
@@ -606,12 +607,12 @@ func PrimSyntaxLocalIdentifierAsBinding(mc *machine.MachineContext) error {
 
 	syntaxSym, ok := id.(*syntax.SyntaxSymbol)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "syntax-local-identifier-as-binding: expected identifier")
+		return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "syntax-local-identifier-as-binding: expected identifier")
 	}
 
 	expanderCtx := mc.ExpanderContext()
 	if expanderCtx == nil {
-		return values.WrapForeignErrorf(values.ErrNoCaptureContext, "syntax-local-identifier-as-binding: not in expansion context")
+		return werr.WrapForeignErrorf(werr.ErrNoCaptureContext, "syntax-local-identifier-as-binding: not in expansion context")
 	}
 
 	useSiteScope := expanderCtx.UseSiteScope()

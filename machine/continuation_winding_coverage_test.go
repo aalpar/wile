@@ -26,6 +26,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -794,7 +795,7 @@ func TestRunWithEscapeHandling_OtherError(t *testing.T) {
 	env := newFullRuntimeEnv(t)
 
 	fn := func(mc *machine.MachineContext) error {
-		return values.NewForeignErrorf("custom test error")
+		return werr.NewForeignErrorf("custom test error")
 	}
 
 	tpl := machine.NewNativeTemplate(0, 0, false)

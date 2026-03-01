@@ -18,6 +18,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // PrimBox implements the box primitive.
@@ -37,7 +38,7 @@ var PrimBoxQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 // PrimUnbox implements the unbox primitive.
 // Returns the value contained in a box.
 func PrimUnbox(mc *machine.MachineContext) error {
-	b, err := helpers.RequireArg[*values.Box](mc, 0, values.ErrNotABox, "unbox")
+	b, err := helpers.RequireArg[*values.Box](mc, 0, werr.ErrNotABox, "unbox")
 	if err != nil {
 		return err
 	}
@@ -48,7 +49,7 @@ func PrimUnbox(mc *machine.MachineContext) error {
 // PrimSetBox implements the set-box! primitive.
 // Sets the value contained in a box.
 func PrimSetBox(mc *machine.MachineContext) error {
-	b, err := helpers.RequireArg[*values.Box](mc, 0, values.ErrNotABox, "set-box!")
+	b, err := helpers.RequireArg[*values.Box](mc, 0, werr.ErrNotABox, "set-box!")
 	if err != nil {
 		return err
 	}

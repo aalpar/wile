@@ -14,7 +14,11 @@
 
 package values
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/aalpar/wile/werr"
+)
 
 var (
 	_ Value    = (*Byte)(nil)
@@ -62,10 +66,10 @@ func (p *Byte) SchemeString() string {
 }
 
 // ValidateByteValue checks that an integer is in the byte range [0, 255].
-// Returns a wrapped ErrNotAByte error if the value is out of range.
+// Returns a wrapped werr.ErrNotAByte error if the value is out of range.
 func ValidateByteValue(v *Integer, name string, desc string) error {
 	if v.Value < 0 || v.Value > 255 {
-		return WrapForeignErrorf(ErrNotAByte,
+		return werr.WrapForeignErrorf(werr.ErrNotAByte,
 			"%s: %s must be a byte (0-255)", name, desc)
 	}
 	return nil

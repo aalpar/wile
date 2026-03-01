@@ -19,6 +19,7 @@ import (
 	"math/big"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // ToComplex128 converts a Scheme number to a Go complex128.
@@ -46,7 +47,7 @@ func ToComplex128(v values.Value) (complex128, error) {
 		i := n.ImagAsBigFloat().Float64()
 		return complex(r, i), nil
 	default:
-		return 0, values.WrapForeignErrorf(values.ErrNotANumber, "expected a number but got %T", v)
+		return 0, werr.WrapForeignErrorf(werr.ErrNotANumber, "expected a number but got %T", v)
 	}
 }
 
@@ -84,7 +85,7 @@ func ToFloat64(v values.Value) (float64, error) {
 		f, _ := n.Rat().Float64()
 		return f, nil
 	default:
-		return 0, values.WrapForeignErrorf(values.ErrNotANumber, "expected a real number but got %T", v)
+		return 0, werr.WrapForeignErrorf(werr.ErrNotANumber, "expected a real number but got %T", v)
 	}
 }
 
@@ -108,6 +109,6 @@ func ExtractReal(v values.Value, name string) (float64, bool, error) {
 		f, _ := n.BigFloatValue().Float64()
 		return f, false, nil
 	default:
-		return 0, false, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a real number but got %T", name, v)
+		return 0, false, werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a real number but got %T", name, v)
 	}
 }

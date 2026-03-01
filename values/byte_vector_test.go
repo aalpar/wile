@@ -22,6 +22,7 @@ import (
 
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 )
 
 func TestByteVector_SchemeString(t *testing.T) {
@@ -234,7 +235,7 @@ func TestNewByteVectorFromIntegers_Overflow(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := values.NewByteVectorFromIntegers(tc.ints...)
 			qt.Assert(t, err, qt.IsNotNil)
-			qt.Assert(t, errors.Is(err, values.ErrNotAByte), qt.IsTrue)
+			qt.Assert(t, errors.Is(err, werr.ErrNotAByte), qt.IsTrue)
 		})
 	}
 }

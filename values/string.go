@@ -17,6 +17,8 @@ package values
 import (
 	"fmt"
 	"sync"
+
+	"github.com/aalpar/wile/werr"
 )
 
 var (
@@ -126,7 +128,7 @@ func (p *String) IsImmutable() bool {
 // when mutation is attempted on immutable strings.
 func (p *String) SetChar(k int, char rune) error {
 	if p.immutable {
-		return WrapForeignErrorf(ErrImmutableString, "cannot modify immutable string")
+		return werr.WrapForeignErrorf(werr.ErrImmutableString, "cannot modify immutable string")
 	}
 	runes := []rune(p.Value)
 	runes[k] = char
@@ -139,7 +141,7 @@ func (p *String) SetChar(k int, char rune) error {
 // R7RS §6.7: (string-fill! string fill [start [end]])
 func (p *String) Fill(char rune, start, end int) error {
 	if p.immutable {
-		return WrapForeignErrorf(ErrImmutableString, "cannot modify immutable string")
+		return werr.WrapForeignErrorf(werr.ErrImmutableString, "cannot modify immutable string")
 	}
 	runes := []rune(p.Value)
 	for i := start; i < end; i++ {
@@ -174,7 +176,7 @@ func (p *String) Get(i int) Value {
 // R7RS §6.7: (string-set! string k char) stores char in element k.
 func (p *String) Set(i int, v Value) error {
 	if p.immutable {
-		return WrapForeignErrorf(ErrImmutableString, "cannot modify immutable string")
+		return werr.WrapForeignErrorf(werr.ErrImmutableString, "cannot modify immutable string")
 	}
 	return p.SetChar(i, v.(*Character).Value)
 }
@@ -188,7 +190,7 @@ func (p *String) Runes() []rune {
 // Returns an error if the string is immutable.
 func (p *String) SetValue(s string) error {
 	if p.immutable {
-		return WrapForeignErrorf(ErrImmutableString, "cannot modify immutable string")
+		return werr.WrapForeignErrorf(werr.ErrImmutableString, "cannot modify immutable string")
 	}
 	p.Value = s
 	return nil

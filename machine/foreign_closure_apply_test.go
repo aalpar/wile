@@ -6,6 +6,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -68,7 +69,7 @@ func TestApplyForeign_ArityError(t *testing.T) {
 func TestApplyForeign_PanicRecovery(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	fn := func(mc *MachineContext) error {
-		panic(values.WrapForeignErrorf(values.ErrDivisionByZero, "test panic"))
+		panic(werr.WrapForeignErrorf(werr.ErrDivisionByZero, "test panic"))
 	}
 	cls := newTestForeignClosure(env, 0, false, fn)
 

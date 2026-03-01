@@ -91,7 +91,7 @@ Cross-references to overlapping findings are noted where relevant.
 
 ---
 
-### N7 [Priority: Low] — security/ package uses errors.New/fmt.Errorf
+### N7 [Priority: Low] [COMPLETE] — security/ package uses errors.New/fmt.Errorf
 
 **Where**: `security/authorizer.go:22` (`errors.New`), `security/filesystem_root.go:54,59` (`fmt.Errorf`)
 **What**: The security package defines `ErrAccessDenied` with `errors.New` instead of `values.NewStaticError`, and wraps it with `fmt.Errorf` instead of `values.WrapForeignErrorf`.

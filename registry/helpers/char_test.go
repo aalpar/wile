@@ -22,6 +22,7 @@ import (
 
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 )
 
 func charLT(a, b rune) bool {
@@ -121,7 +122,7 @@ func TestCharCompare_Errors(t *testing.T) {
 			mc := makeMC(tc.a, tc.b)
 			err := CharCompare(mc, "test", charLT)
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, values.ErrNotACharacter), qt.IsTrue)
+			c.Assert(errors.Is(err, werr.ErrNotACharacter), qt.IsTrue)
 		})
 	}
 }
@@ -217,7 +218,7 @@ func TestCharCompareVariadic_Errors(t *testing.T) {
 			mc := makeMC(tc.arg0, tc.arg1)
 			err := CharCompareVariadic(mc, "test", charLT)
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, values.ErrNotACharacter), qt.IsTrue)
+			c.Assert(errors.Is(err, werr.ErrNotACharacter), qt.IsTrue)
 		})
 	}
 }

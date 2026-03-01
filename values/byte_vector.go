@@ -14,6 +14,8 @@
 
 package values
 
+import "github.com/aalpar/wile/werr"
+
 var (
 	_ Value     = (*ByteVector)(nil)
 	_ Indexable = (*ByteVector)(nil)
@@ -78,7 +80,7 @@ func (p *ByteVector) Get(i int) Value {
 func (p *ByteVector) Set(i int, value Value) error {
 	x, ok := value.(*Byte)
 	if !ok {
-		return WrapForeignErrorf(ErrNotAByte, "bytevector element must be a byte")
+		return werr.WrapForeignErrorf(werr.ErrNotAByte, "bytevector element must be a byte")
 	}
 	(*p)[i] = x
 	return nil

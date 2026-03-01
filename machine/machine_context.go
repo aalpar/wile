@@ -22,12 +22,13 @@ import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // errHalt is the internal VM sentinel returned by OperationRestoreContinuation
 // when mc.cont == nil (i.e., no more frames to pop — execution is complete).
 // Run() catches this and returns nil, so callers never see it.
-var errHalt = values.NewStaticError("machine halt: no more operations to run")
+var errHalt = werr.NewStaticError("machine halt: no more operations to run")
 
 // contextCheckMask gates how often the VM loop checks ctx.Done().
 // Amortized batch checking: a non-blocking select is cheap (~15ns) but
@@ -37,11 +38,11 @@ var errHalt = values.NewStaticError("machine halt: no more operations to run")
 // See BIBLIOGRAPHY.md "Amortized Batch Checking".
 const contextCheckMask = 1023
 
-var ErrMachineDoNotAdvancePC = values.NewStaticError("machine do not advance PC: operation did not advance program counter")
+var ErrMachineDoNotAdvancePC = werr.NewStaticError("machine do not advance PC: operation did not advance program counter")
 
-var ErrInvalidLiteralIndex = values.NewStaticError("invalid literal index")
-var ErrInvalidGlobalIndex = values.NewStaticError("literal is not a global index")
-var ErrBindingNotFound = values.NewStaticError("binding not found")
+var ErrInvalidLiteralIndex = werr.NewStaticError("invalid literal index")
+var ErrInvalidGlobalIndex = werr.NewStaticError("literal is not a global index")
+var ErrBindingNotFound = werr.NewStaticError("binding not found")
 
 // immediateReturnTemplate is an empty NativeTemplate used for callables that
 // complete their work during Apply (e.g., Parameter get/set). Setting this as
@@ -316,7 +317,7 @@ func (p *MachineContext) PopContinuation() (*MachineContinuation, error) {
 	p.callDepth--
 	if p.callDepth < 0 {
 		p.callDepth = 0
-		return nil, values.WrapForeignErrorf(values.ErrContinuationUnderflow,
+		return nil, werr.WrapForeignErrorf(werr.ErrContinuationUnderflow,
 			"callDepth underflow in PopContinuation")
 	}
 	q := p.cont
@@ -344,7 +345,7 @@ func (p *MachineContext) SaveContinuation(off int) error {
 	p.callDepth++
 	if p.maxCallDepth > 0 && uint64(p.callDepth) > p.maxCallDepth {
 		p.callDepth--
-		return values.WrapForeignErrorf(values.ErrCallDepthExceeded,
+		return werr.WrapForeignErrorf(werr.ErrCallDepthExceeded,
 			"call depth %d exceeds limit %d", p.callDepth+1, p.maxCallDepth)
 	}
 	p.counters.ContinuationsSaved++
@@ -372,11 +373,11 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	// that avoiding the copy overhead is worthwhile.
 	if !tpl.IsVariadic() {
 		if len(vs) != l {
-			return nil, values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "expected %d arguments, got %d", l, len(vs))
+			return nil, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "expected %d arguments, got %d", l, len(vs))
 		}
 	} else {
 		if len(vs) < l-1 {
-			return nil, values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "expected at least %d arguments, got %d", l-1, len(vs))
+			return nil, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "expected at least %d arguments, got %d", l-1, len(vs))
 		}
 	}
 
@@ -438,12 +439,12 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	// Arity check (same logic as Apply).
 	if !fcls.isVariadic {
 		if len(vs) != l {
-			return nil, values.WrapForeignErrorf(values.ErrWrongNumberOfArguments,
+			return nil, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
 				"expected %d arguments, got %d", l, len(vs))
 		}
 	} else {
 		if len(vs) < l-1 {
-			return nil, values.WrapForeignErrorf(values.ErrWrongNumberOfArguments,
+			return nil, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
 				"expected at least %d arguments, got %d", l-1, len(vs))
 		}
 	}
@@ -483,7 +484,7 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 		case error:
 			err = v
 		default:
-			err = values.WrapForeignErrorf(values.ErrPanicRecovery, "foreign function call: %v", v)
+			err = werr.WrapForeignErrorf(werr.ErrPanicRecovery, "foreign function call: %v", v)
 		}
 		rmc = nil
 		rerr = goErrorToSchemeException(p, err)
@@ -555,7 +556,7 @@ func (p *MachineContext) buildRestArg(vs []values.Value, start int) values.Tuple
 func (p *MachineContext) ApplyCaseLambda(clcls *CaseLambdaClosure, vs ...values.Value) (*MachineContext, error) {
 	mcls, ok := clcls.FindMatchingClause(len(vs))
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "no matching clause in case-lambda for %d arguments", len(vs))
+		return nil, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "no matching clause in case-lambda for %d arguments", len(vs))
 	}
 	return p.Apply(mcls, vs...)
 }
@@ -575,7 +576,7 @@ func (p *MachineContext) ApplyCaseLambda(clcls *CaseLambdaClosure, vs ...values.
 // NewMachineContext or NewSubContext).
 func (p *MachineContext) ApplyCallable(callable values.Value, args ...values.Value) (*MachineContext, error) {
 	if callable == nil {
-		return p, values.WrapForeignErrorf(values.ErrNotAProcedure,
+		return p, werr.WrapForeignErrorf(werr.ErrNotAProcedure,
 			"application: cannot apply nil value")
 	}
 	switch cls := callable.(type) {
@@ -590,7 +591,7 @@ func (p *MachineContext) ApplyCallable(callable values.Value, args ...values.Val
 	case *ComposableContinuation:
 		return p.applyComposableContinuation(cls, args)
 	default:
-		return p, values.WrapForeignErrorf(values.ErrNotAProcedure,
+		return p, werr.WrapForeignErrorf(werr.ErrNotAProcedure,
 			"application: expected a procedure, got %s", callable.SchemeString())
 	}
 }
@@ -664,7 +665,7 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 
 	// Reject cross-thread composable continuation invocation
 	if p.threadID != cc.threadID {
-		return p, values.WrapForeignErrorf(values.ErrCrossThreadContinuation,
+		return p, werr.WrapForeignErrorf(werr.ErrCrossThreadContinuation,
 			"composable continuation: captured in thread %d, invoked from thread %d",
 			cc.threadID, p.threadID)
 	}
@@ -673,7 +674,7 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 	// nil != non-nil: captured outside, invoked inside (or vice versa).
 	// ptr-A != ptr-B: captured inside barrier A, invoked inside barrier B.
 	if cc.BarrierValid() != p.barrierValid {
-		return p, values.WrapForeignErrorf(values.ErrContinuationBarrier,
+		return p, werr.WrapForeignErrorf(werr.ErrContinuationBarrier,
 			"composable continuation: cannot cross continuation barrier")
 	}
 
@@ -791,7 +792,7 @@ func (p *MachineContext) Run() error {
 		case OpPopEnv:
 			parent := mc.env.Parent()
 			if parent == nil {
-				return values.WrapForeignErrorf(values.ErrNilParentEnvironment,
+				return werr.WrapForeignErrorf(werr.ErrNilParentEnvironment,
 					"PopEnv: cannot pop top-level environment")
 			}
 			mc.env = parent
@@ -819,7 +820,7 @@ func (p *MachineContext) Run() error {
 			}
 			tup, ok := v.(values.Tuple)
 			if !ok {
-				return applyCallableError(mc, values.WrapForeignErrorf(values.ErrNotAList,
+				return applyCallableError(mc, werr.WrapForeignErrorf(werr.ErrNotAList,
 					"apply: final argument must be a list, got %s", v.SchemeString()))
 			}
 			sentinel, err := tup.ForEach(mc.ctx, func(_ context.Context, _ int, _ bool, elem values.Value) error {
@@ -830,7 +831,7 @@ func (p *MachineContext) Run() error {
 				return applyCallableError(mc, err)
 			}
 			if !values.IsEmptyList(sentinel) {
-				return applyCallableError(mc, values.WrapForeignErrorf(values.ErrNotAList,
+				return applyCallableError(mc, werr.WrapForeignErrorf(werr.ErrNotAList,
 					"apply: final argument is an improper list"))
 			}
 			mc.pc++
@@ -953,12 +954,12 @@ func (p *MachineContext) Run() error {
 		case OpMakeClosure:
 			compiletimeEnv, ok := mc.evals.Pop().(*environment.EnvironmentFrame)
 			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotALocalEnvironmentFrame,
+				return werr.WrapForeignErrorf(werr.ErrNotALocalEnvironmentFrame,
 					"MakeClosure: expected environment frame on stack")
 			}
 			tpl, ok := mc.evals.Pop().(*NativeTemplate)
 			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAMachineTemplate,
+				return werr.WrapForeignErrorf(werr.ErrNotAMachineTemplate,
 					"MakeClosure: expected native template on stack")
 			}
 			runtimeEnv := environment.NewEnvironmentFrameWithParent(
@@ -996,7 +997,7 @@ func (p *MachineContext) Run() error {
 			}
 
 		default:
-			return values.WrapForeignErrorf(values.ErrUnknownOpCode,
+			return werr.WrapForeignErrorf(werr.ErrUnknownOpCode,
 				"unimplemented opcode: %s", instr.Op)
 		}
 	}
@@ -1557,7 +1558,7 @@ func (p *MachineContext) RunWithEscapeHandling() error {
 		if errors.As(err, &abortErr) {
 			prompt, found := p.FindPrompt(abortErr.Tag)
 			if !found {
-				return values.WrapForeignErrorf(values.ErrInvalidArgument, "abort-current-continuation: no prompt found for tag %s", abortErr.Tag.SchemeString())
+				return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "abort-current-continuation: no prompt found for tag %s", abortErr.Tag.SchemeString())
 			}
 
 			// Unwind dynamic-wind from current to prompt's winding depth.

@@ -23,6 +23,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 )
 
 // ── SequenceLength ───────────────────────────────────────────────────
@@ -55,7 +56,7 @@ func TestSequenceLength_Vector(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			mc := makeMC(tc.vec)
-			err := SequenceLength[*values.Vector](mc, values.ErrNotAVector, "vector-length")
+			err := SequenceLength[*values.Vector](mc, werr.ErrNotAVector, "vector-length")
 			c.Assert(err, qt.IsNil)
 			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
@@ -85,7 +86,7 @@ func TestSequenceLength_ByteVector(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			mc := makeMC(tc.bv)
-			err := SequenceLength[*values.ByteVector](mc, values.ErrNotAByteVector, "bytevector-length")
+			err := SequenceLength[*values.ByteVector](mc, werr.ErrNotAByteVector, "bytevector-length")
 			c.Assert(err, qt.IsNil)
 			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
@@ -103,19 +104,19 @@ func TestSequenceLength_Errors(t *testing.T) {
 		{
 			"not a vector",
 			values.NewInteger(42),
-			values.ErrNotAVector,
+			werr.ErrNotAVector,
 		},
 		{
 			"string not a vector",
 			values.NewString("hello"),
-			values.ErrNotAVector,
+			werr.ErrNotAVector,
 		},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			mc := makeMC(tc.arg)
-			err := SequenceLength[*values.Vector](mc, values.ErrNotAVector, "vector-length")
+			err := SequenceLength[*values.Vector](mc, werr.ErrNotAVector, "vector-length")
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(errors.Is(err, tc.sentinel), qt.IsTrue)
 		})
@@ -146,7 +147,7 @@ func TestSequenceRef_Vector(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			mc := makeMC(vec, tc.idx)
-			err := SequenceRef[*values.Vector](mc, values.ErrNotAVector, "vector-ref", vectorGet)
+			err := SequenceRef[*values.Vector](mc, werr.ErrNotAVector, "vector-ref", vectorGet)
 			c.Assert(err, qt.IsNil)
 			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
@@ -168,32 +169,32 @@ func TestSequenceRef_Errors(t *testing.T) {
 			"not a vector",
 			values.NewInteger(42),
 			values.NewInteger(0),
-			values.ErrNotAVector,
+			werr.ErrNotAVector,
 		},
 		{
 			"index out of range positive",
 			vec,
 			values.NewInteger(5),
-			values.ErrIndexOutOfRange,
+			werr.ErrIndexOutOfRange,
 		},
 		{
 			"index out of range negative",
 			vec,
 			values.NewInteger(-1),
-			values.ErrIndexOutOfRange,
+			werr.ErrIndexOutOfRange,
 		},
 		{
 			"index not an integer",
 			vec,
 			values.NewString("0"),
-			values.ErrNotAnInteger,
+			werr.ErrNotAnInteger,
 		},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			mc := makeMC(tc.arg0, tc.arg1)
-			err := SequenceRef[*values.Vector](mc, values.ErrNotAVector, "vector-ref", vectorGet)
+			err := SequenceRef[*values.Vector](mc, werr.ErrNotAVector, "vector-ref", vectorGet)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(errors.Is(err, tc.sentinel), qt.IsTrue,
 				qt.Commentf("expected %v, got %v", tc.sentinel, err))
@@ -238,7 +239,7 @@ func TestSequenceSet_Vector(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			vec := values.NewVector(tc.initial...)
 			mc := makeMC(vec, values.NewInteger(tc.idx), tc.newVal)
-			err := SequenceSet[*values.Vector](mc, values.ErrNotAVector, "vector-set!", vectorSet)
+			err := SequenceSet[*values.Vector](mc, werr.ErrNotAVector, "vector-set!", vectorSet)
 			c.Assert(err, qt.IsNil)
 			c.Assert(mc.GetValue(), qt.Equals, values.Void)
 			c.Assert(vec.Get(int(tc.idx)), valuestest.SchemeEquals, tc.wantAt)
@@ -263,28 +264,28 @@ func TestSequenceSet_Errors(t *testing.T) {
 			values.NewInteger(42),
 			values.NewInteger(0),
 			values.NewString("x"),
-			values.ErrNotAVector,
+			werr.ErrNotAVector,
 		},
 		{
 			"index out of range",
 			vec,
 			values.NewInteger(5),
 			values.NewString("x"),
-			values.ErrIndexOutOfRange,
+			werr.ErrIndexOutOfRange,
 		},
 		{
 			"index negative",
 			vec,
 			values.NewInteger(-1),
 			values.NewString("x"),
-			values.ErrIndexOutOfRange,
+			werr.ErrIndexOutOfRange,
 		},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			mc := makeMC(tc.arg0, tc.arg1, tc.arg2)
-			err := SequenceSet[*values.Vector](mc, values.ErrNotAVector, "vector-set!", vectorSet)
+			err := SequenceSet[*values.Vector](mc, werr.ErrNotAVector, "vector-set!", vectorSet)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(errors.Is(err, tc.sentinel), qt.IsTrue,
 				qt.Commentf("expected %v, got %v", tc.sentinel, err))

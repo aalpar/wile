@@ -18,12 +18,13 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // PrimCharToInteger implements the (char->integer) primitive.
 // Returns the Unicode code point of the character as an integer.
 func PrimCharToInteger(mc *machine.MachineContext) error {
-	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "char->integer")
+	ch, err := helpers.RequireArg[*values.Character](mc, 0, werr.ErrNotACharacter, "char->integer")
 	if err != nil {
 		return err
 	}
@@ -37,13 +38,13 @@ func PrimCharToInteger(mc *machine.MachineContext) error {
 // R7RS §6.6: The argument must be a valid Unicode scalar value,
 // i.e., an integer in [0, #xD7FF] ∪ [#xE000, #x10FFFF].
 func PrimIntegerToChar(mc *machine.MachineContext) error {
-	n, err := helpers.RequireArg[*values.Integer](mc, 0, values.ErrNotANumber, "integer->char")
+	n, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotANumber, "integer->char")
 	if err != nil {
 		return err
 	}
 	v := n.Value
 	if v < 0 || v > 0x10FFFF || (v >= 0xD800 && v <= 0xDFFF) {
-		return values.WrapForeignErrorf(values.ErrInvalidArgument, "integer->char: value %d is not a valid Unicode scalar value", v)
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "integer->char: value %d is not a valid Unicode scalar value", v)
 	}
 	mc.SetValue(values.NewCharacter(rune(v)))
 	return nil

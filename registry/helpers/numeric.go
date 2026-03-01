@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // NumericFoldVariadic is a helper for variadic arithmetic operations (+ and *).
@@ -38,12 +39,12 @@ func NumericFoldVariadic(
 	}
 	pr, ok := o.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, o)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list but got %T", name, o)
 	}
 	o = pr.Car()
 	nbr, ok := o.(values.Number)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, o)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, o)
 	}
 	rest, ok := pr.Cdr().(values.Tuple)
 	if !ok {
@@ -55,7 +56,7 @@ func NumericFoldVariadic(
 	if ok {
 		v, ok := val.(values.Number)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, val)
+			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, val)
 		}
 		mc.SetValue(binOp(nbr, v))
 		return nil
@@ -67,16 +68,16 @@ func NumericFoldVariadic(
 	v, err := rest.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, o values.Value) error {
 		v, ok := o.(values.Number)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, o)
+			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, o)
 		}
 		acc = binOp(acc, v)
 		return nil
 	})
 	if err != nil {
-		return values.WrapForeignErrorf(err, "%s: error processing arguments", name)
+		return werr.WrapForeignErrorf(err, "%s: error processing arguments", name)
 	}
 	if !values.IsEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %s", name, v.SchemeString())
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list but got %s", name, v.SchemeString())
 	}
 	mc.SetValue(acc)
 	return nil
@@ -93,7 +94,7 @@ func NumericFoldWithFirst(
 	o0 := mc.Arg(0)
 	nbr0, ok := o0.(values.Number)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, o0)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, o0)
 	}
 	o1 := mc.Arg(1)
 	if values.IsEmptyList(o1) {
@@ -102,12 +103,12 @@ func NumericFoldWithFirst(
 	}
 	pr, ok := o1.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, o1)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list but got %T", name, o1)
 	}
 	o2 := pr.Car()
 	nbr2, ok := o2.(values.Number)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, o2)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, o2)
 	}
 	result := binOp(nbr0, nbr2)
 	if values.IsEmptyList(pr.Cdr()) {
@@ -126,16 +127,16 @@ func NumericFoldWithFirst(
 	v, err := rest.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, o values.Value) error {
 		v, ok := o.(values.Number)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, o)
+			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, o)
 		}
 		acc = binOp(acc, v)
 		return nil
 	})
 	if err != nil {
-		return values.WrapForeignErrorf(err, "%s: error processing arguments", name)
+		return werr.WrapForeignErrorf(err, "%s: error processing arguments", name)
 	}
 	if !values.IsEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %s", name, v.SchemeString())
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list but got %s", name, v.SchemeString())
 	}
 	mc.SetValue(acc)
 	return nil
@@ -152,7 +153,7 @@ func NumericChainCompare(
 	o0 := mc.Arg(0)
 	prev, ok := o0.(values.Number)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, o0)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, o0)
 	}
 	rest := mc.Arg(1)
 	if values.IsEmptyList(rest) {
@@ -161,14 +162,14 @@ func NumericChainCompare(
 	}
 	pr, ok := rest.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, rest)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list but got %T", name, rest)
 	}
 	// Fast path: single-element rest list (the common 2-argument case).
 	val, ok := values.Single(pr)
 	if ok {
 		curr, ok := val.(values.Number)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, val)
+			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, val)
 		}
 		mc.SetValue(values.BoolToBoolean(!fails(prev, curr)))
 		return nil
@@ -176,15 +177,15 @@ func NumericChainCompare(
 	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
 		curr, ok := v.(values.Number)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, v)
+			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, v)
 		}
 		if fails(prev, curr) {
-			return values.ErrCannotCompare
+			return werr.ErrCannotCompare
 		}
 		prev = curr
 		return nil
 	})
-	if errors.Is(err, values.ErrCannotCompare) {
+	if errors.Is(err, werr.ErrCannotCompare) {
 		mc.SetValue(values.FalseValue)
 		return nil
 	}
@@ -192,7 +193,7 @@ func NumericChainCompare(
 		return err
 	}
 	if !values.IsEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a proper list", name)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a proper list", name)
 	}
 	mc.SetValue(values.TrueValue)
 	return nil
@@ -234,10 +235,10 @@ func NumericChainCompareReal(
 				if ok {
 					curr, ok := val.(values.Number)
 					if !ok {
-						return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, val)
+						return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, val)
 					}
 					if isNonRealComplex(prev) || isNonRealComplex(curr) {
-						return values.WrapForeignErrorf(values.ErrNotANumber, "%s: requires real arguments", name)
+						return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: requires real arguments", name)
 					}
 					mc.SetValue(values.BoolToBoolean(!fails(prev, curr)))
 					return nil
@@ -249,8 +250,8 @@ func NumericChainCompareReal(
 	var complexErr error
 	err := NumericChainCompare(mc, name, func(prev, curr values.Number) bool {
 		if isNonRealComplex(prev) || isNonRealComplex(curr) {
-			complexErr = values.WrapForeignErrorf(
-				values.ErrNotANumber, "%s: requires real arguments", name,
+			complexErr = werr.WrapForeignErrorf(
+				werr.ErrNotANumber, "%s: requires real arguments", name,
 			)
 			return true
 		}
@@ -274,7 +275,7 @@ func NumericExtremum(
 	first := mc.Arg(0)
 	best, ok := first.(values.Number)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, first)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, first)
 	}
 
 	// Track if any argument is inexact
@@ -293,14 +294,14 @@ func NumericExtremum(
 	}
 	pr, ok := rest.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, rest)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list but got %T", name, rest)
 	}
 	// Fast path: single-element rest list (the common 2-argument case).
 	val, ok := values.Single(pr)
 	if ok {
 		curr, ok := val.(values.Number)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, val)
+			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, val)
 		}
 		if !curr.IsExact() {
 			hasInexact = true
@@ -320,7 +321,7 @@ func NumericExtremum(
 	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
 		curr, ok := v.(values.Number)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a number but got %T", name, v)
+			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, v)
 		}
 
 		if !curr.IsExact() {
@@ -343,7 +344,7 @@ func NumericExtremum(
 		return err
 	}
 	if !values.IsEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "%s: not a proper list", name)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: not a proper list", name)
 	}
 
 	// If NaN was found, return it directly

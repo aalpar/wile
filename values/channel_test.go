@@ -24,6 +24,7 @@ import (
 
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 )
 
 // --- Channel primitive tests ---
@@ -112,7 +113,7 @@ func TestChannel_DoubleClose(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	err = ch.Close()
-	qt.Assert(t, errors.Is(err, values.ErrChannelClosed), qt.IsTrue)
+	qt.Assert(t, errors.Is(err, werr.ErrChannelClosed), qt.IsTrue)
 }
 
 func TestChannel_SendAfterClose(t *testing.T) {
@@ -120,7 +121,7 @@ func TestChannel_SendAfterClose(t *testing.T) {
 	_ = ch.Close()
 
 	err := ch.Send(values.NewInteger(1))
-	qt.Assert(t, errors.Is(err, values.ErrChannelClosed), qt.IsTrue)
+	qt.Assert(t, errors.Is(err, werr.ErrChannelClosed), qt.IsTrue)
 }
 
 func TestChannel_TrySendAfterClose(t *testing.T) {
@@ -128,7 +129,7 @@ func TestChannel_TrySendAfterClose(t *testing.T) {
 	_ = ch.Close()
 
 	_, err := ch.TrySend(values.NewInteger(1))
-	qt.Assert(t, errors.Is(err, values.ErrChannelClosed), qt.IsTrue)
+	qt.Assert(t, errors.Is(err, werr.ErrChannelClosed), qt.IsTrue)
 }
 
 func TestChannel_TryReceiveAfterClose(t *testing.T) {

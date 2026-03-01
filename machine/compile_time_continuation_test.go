@@ -29,6 +29,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -2312,13 +2313,13 @@ func TestInternSymbolsInValue_CircularDatumLabel(t *testing.T) {
 	t.Run("circular cdr", func(t *testing.T) {
 		_, err := evalSchemeString("'#0=(a . #0#)")
 		qt.Assert(t, err, qt.IsNotNil)
-		qt.Assert(t, err, qt.ErrorIs, values.ErrInvalidSyntax)
+		qt.Assert(t, err, qt.ErrorIs, werr.ErrInvalidSyntax)
 	})
 
 	t.Run("circular car", func(t *testing.T) {
 		_, err := evalSchemeString("'#0=(#0# . b)")
 		qt.Assert(t, err, qt.IsNotNil)
-		qt.Assert(t, err, qt.ErrorIs, values.ErrInvalidSyntax)
+		qt.Assert(t, err, qt.ErrorIs, werr.ErrInvalidSyntax)
 	})
 
 	t.Run("non-circular datum label", func(t *testing.T) {
@@ -2353,11 +2354,11 @@ func TestInternSymbolsInValue_CircularDatumLabel(t *testing.T) {
 		// Here we just verify each quote independently errors.
 		_, err := evalSchemeString("'#1=(a . #1#)")
 		qt.Assert(t, err, qt.IsNotNil)
-		qt.Assert(t, err, qt.ErrorIs, values.ErrInvalidSyntax)
+		qt.Assert(t, err, qt.ErrorIs, werr.ErrInvalidSyntax)
 
 		_, err = evalSchemeString("'#2=(a . #2#)")
 		qt.Assert(t, err, qt.IsNotNil)
-		qt.Assert(t, err, qt.ErrorIs, values.ErrInvalidSyntax)
+		qt.Assert(t, err, qt.ErrorIs, werr.ErrInvalidSyntax)
 	})
 
 	t.Run("vector datum label with self-reference", func(t *testing.T) {
