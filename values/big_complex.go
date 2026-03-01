@@ -137,8 +137,6 @@ func promoteToBigComplexPart(n Number) Number {
 	panic(ErrNotANumber)
 }
 
-// Add returns the sum of this BigComplex and another number.
-//
 // Kind returns the numeric kind for dispatch table indexing.
 func (p *BigComplex) Kind() NumericKind {
 	return KindBigComplex
