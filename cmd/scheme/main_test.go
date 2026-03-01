@@ -727,6 +727,121 @@ func TestRunFilePopulatesLoadPathStack(t *testing.T) {
 	})
 }
 
+// ---------------------------------------------------------------------------
+// Phase 7: -e/--eval expression evaluation tests
+// ---------------------------------------------------------------------------
+
+func TestRunEval(t *testing.T) {
+	tcs := []struct {
+		name   string
+		args   []string
+		stdout string
+	}{
+		{
+			name:   "single expression",
+			args:   []string{"-q", "-e", "(+ 1 2)"},
+			stdout: "3\n",
+		},
+		{
+			name:   "multiple -e flags joined",
+			args:   []string{"-q", "-e", "(define x 10)", "-e", "(+ x 20)"},
+			stdout: "30\n",
+		},
+		{
+			name:   "void result produces no output",
+			args:   []string{"-q", "-e", "(define z 42)"},
+			stdout: "",
+		},
+		{
+			name:   "display side effect",
+			args:   []string{"-q", "-e", `(display "hello")(newline)`},
+			stdout: "hello\n",
+		},
+		{
+			name:   "multiple expressions in single -e",
+			args:   []string{"-q", "-e", "(define a 3)(define b 4)(+ a b)"},
+			stdout: "7\n",
+		},
+		{
+			name:   "string result",
+			args:   []string{"-q", "-e", `(string-append "foo" "bar")`},
+			stdout: "\"foobar\"\n",
+		},
+		{
+			name:   "boolean result",
+			args:   []string{"-q", "-e", "(< 1 2)"},
+			stdout: "#t\n",
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			result := runCLI(t, tc.args...)
+			c.Assert(result.exitCode, qt.Equals, 0, qt.Commentf("stderr: %s", result.stderr))
+			c.Assert(result.stdout, qt.Equals, tc.stdout)
+		})
+	}
+}
+
+func TestRunEvalWithFile(t *testing.T) {
+	t.Run("file defines, -e uses", func(t *testing.T) {
+		c := qt.New(t)
+		path := writeTempScheme(t, "(define setup-val 99)")
+		result := runCLI(t, "-q", "-f", path, "-e", "(+ setup-val 1)")
+		c.Assert(result.exitCode, qt.Equals, 0, qt.Commentf("stderr: %s", result.stderr))
+		c.Assert(result.stdout, qt.Equals, "100\n")
+	})
+
+	t.Run("file loads silently when -e present", func(t *testing.T) {
+		c := qt.New(t)
+		// With -e present, even the last file goes through Load (silent),
+		// not runFile (which would print the result).
+		path := writeTempScheme(t, "(+ 1 2)")
+		result := runCLI(t, "-q", "-f", path, "-e", "(+ 3 4)")
+		c.Assert(result.exitCode, qt.Equals, 0, qt.Commentf("stderr: %s", result.stderr))
+		// Only the -e result should appear, not the file's result
+		c.Assert(result.stdout, qt.Equals, "7\n")
+	})
+
+	t.Run("multiple files then -e", func(t *testing.T) {
+		c := qt.New(t)
+		file1 := writeTempScheme(t, "(define a 10)")
+		file2 := writeTempScheme(t, "(define b 20)")
+		result := runCLI(t, "-q", "-f", file1, "-f", file2, "-e", "(+ a b)")
+		c.Assert(result.exitCode, qt.Equals, 0, qt.Commentf("stderr: %s", result.stderr))
+		c.Assert(result.stdout, qt.Equals, "30\n")
+	})
+}
+
+func TestRunEvalErrors(t *testing.T) {
+	tcs := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "parse error",
+			args: []string{"-q", "-e", "(+ 1 . 2 . 3)"},
+		},
+		{
+			name: "undefined variable",
+			args: []string{"-q", "-e", "(+ no-such-var 1)"},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			result := runCLI(t, tc.args...)
+			c.Assert(result.exitCode, qt.Not(qt.Equals), 0)
+			c.Assert(
+				strings.Contains(result.stderr, "Error:"), qt.IsTrue,
+				qt.Commentf("stderr: %q", result.stderr),
+			)
+		})
+	}
+}
+
 func TestResolveVersionPartialLdflags(t *testing.T) {
 	oldSHA := BuildSHA
 	oldVer := BuildVersion
