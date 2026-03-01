@@ -692,7 +692,10 @@ func (p *CompileTimeContinuation) CompileValidatedQuote(_ CompileTimeCallContext
 	// This ensures symbol identity (eq?) works correctly across compilation boundaries per R7RS 6.5:
 	// "Two symbols are identical (in the sense of eq?) if and only if their names are spelled the same way."
 	unwrapped := v.Datum.UnwrapAll()
-	interned := p.internSymbolsInValue(unwrapped)
+	interned, err := p.internSymbolsInValue(unwrapped)
+	if err != nil {
+		return err
+	}
 	litIdx := p.template.MaybeAppendLiteral(interned)
 	p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
 	return nil

@@ -31,7 +31,10 @@ func (p *CompileTimeContinuation) compileQuasiquoteDatum(ctctx CompileTimeCallCo
 	// Optimization: if no runtime evaluation needed, emit as literal
 	if !p.quasiquoteNeedsRuntime(datum, depth) {
 		// Intern symbols to ensure eq? identity per R7RS 6.5
-		val := p.internSymbolsInValue(datum.UnwrapAll())
+		val, err := p.internSymbolsInValue(datum.UnwrapAll())
+		if err != nil {
+			return err
+		}
 		li := p.template.MaybeAppendLiteral(val)
 		p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(li))
 		return nil

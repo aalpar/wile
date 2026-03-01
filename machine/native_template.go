@@ -415,16 +415,20 @@ func (p *NativeTemplate) deduplicateVector(v *values.Vector) *values.Vector {
 	return newElements
 }
 
-// deduplicatePair deduplicates all elements in the given pair
-// using the template's literal pool.
-// Returns a new pair if any elements were changed, or the original pair otherwise.
-// TODO: optimize for the common case where no elements change.  consider in place modification?
-func (p *NativeTemplate) deduplicatePair(v *values.Pair) *values.Pair {
+// deduplicatePairWithVisited deduplicates all elements in the given pair
+// using the template's literal pool, with cycle detection for defense in depth.
+// Circular structures are rejected at compile time by internSymbolsInValue,
+// but this guard prevents infinite recursion if one slips through.
+func (p *NativeTemplate) deduplicatePairWithVisited(v *values.Pair, visited map[*values.Pair]bool) *values.Pair {
 	if v == nil {
 		return nil
 	}
-	car := p.DeduplicateLiteral(v.Car())
-	cdr := p.DeduplicateLiteral(v.Cdr())
+	if visited[v] {
+		return v
+	}
+	visited[v] = true
+	car := p.deduplicateLiteralWithVisited(v.Car(), visited)
+	cdr := p.deduplicateLiteralWithVisited(v.Cdr(), visited)
 	// No changes, return original pair
 	// this avoids unnecessary pointer changes in the caller
 	if car == v.Car() && cdr == v.Cdr() {
@@ -433,20 +437,24 @@ func (p *NativeTemplate) deduplicatePair(v *values.Pair) *values.Pair {
 	return values.NewCons(car, cdr)
 }
 
-// DeduplicateLiteral deduplicates the given value using the template's literal pool.
-// For composite values (pairs and vectors), all elements are deduplicated recursively.
-// Returns the deduplicated value.
-func (p *NativeTemplate) DeduplicateLiteral(v values.Value) values.Value {
+func (p *NativeTemplate) deduplicateLiteralWithVisited(v values.Value, visited map[*values.Pair]bool) values.Value {
 	switch val := v.(type) {
 	case *values.Symbol, *values.Integer:
 		return p.deduplicateLiteral(val)
 	case *values.Pair:
-		return p.deduplicatePair(val)
+		return p.deduplicatePairWithVisited(val, visited)
 	case *values.Vector:
 		return p.deduplicateVector(val)
 	default:
 		return v
 	}
+}
+
+// DeduplicateLiteral deduplicates the given value using the template's literal pool.
+// For composite values (pairs and vectors), all elements are deduplicated recursively.
+// Returns the deduplicated value.
+func (p *NativeTemplate) DeduplicateLiteral(v values.Value) values.Value {
+	return p.deduplicateLiteralWithVisited(v, make(map[*values.Pair]bool))
 }
 
 // AppendCachedBinding adds a *Binding to the cached bindings array,

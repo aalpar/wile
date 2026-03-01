@@ -349,39 +349,65 @@ func (p *CompileTimeContinuation) CompileExpression(ctctx CompileTimeCallContext
 // internSymbolsInValue recursively interns all symbols in a value using the environment.
 // This ensures symbol identity (eq?) works correctly across compilation boundaries per R7RS 6.5:
 // "Two symbols are identical (in the sense of eq?) if and only if their names are spelled the same way."
-func (p *CompileTimeContinuation) internSymbolsInValue(v values.Value) values.Value {
+// Returns an error if the value contains circular pair structures (from datum labels).
+func (p *CompileTimeContinuation) internSymbolsInValue(v values.Value) (values.Value, error) {
+	return p.internSymbolsInValueWithVisited(v, nil)
+}
+
+func (p *CompileTimeContinuation) internSymbolsInValueWithVisited(
+	v values.Value, visited map[*values.Pair]bool,
+) (values.Value, error) {
 	switch val := v.(type) {
 	case *values.Symbol:
-		return p.env.InternSymbol(val)
+		return p.env.InternSymbol(val), nil
 	case *values.Pair:
 		if val == nil {
-			return nil
+			return nil, nil
 		}
-		car := p.internSymbolsInValue(val.Car())
-		cdr := p.internSymbolsInValue(val.Cdr())
+		if visited == nil {
+			visited = make(map[*values.Pair]bool)
+		}
+		if visited[val] {
+			return nil, values.WrapForeignErrorf(
+				values.ErrInvalidSyntax,
+				"compile: circular datum label in quoted literal",
+			)
+		}
+		visited[val] = true
+		car, err := p.internSymbolsInValueWithVisited(val.Car(), visited)
+		if err != nil {
+			return nil, err
+		}
+		cdr, err := p.internSymbolsInValueWithVisited(val.Cdr(), visited)
+		if err != nil {
+			return nil, err
+		}
 		if car == val.Car() && cdr == val.Cdr() {
-			return val
+			return val, nil
 		}
-		return values.NewCons(car, cdr)
+		return values.NewCons(car, cdr), nil
 	case *values.Vector:
 		if val == nil || len(*val) == 0 {
-			return val
+			return val, nil
 		}
 		changed := false
 		newElements := make([]values.Value, len(*val))
 		for i, elem := range *val {
-			interned := p.internSymbolsInValue(elem)
+			interned, err := p.internSymbolsInValueWithVisited(elem, visited)
+			if err != nil {
+				return nil, err
+			}
 			newElements[i] = interned
 			if interned != elem {
 				changed = true
 			}
 		}
 		if !changed {
-			return val
+			return val, nil
 		}
-		return values.NewVector(newElements...)
+		return values.NewVector(newElements...), nil
 	default:
-		return v
+		return v, nil
 	}
 }
 
@@ -397,7 +423,10 @@ func (p *CompileTimeContinuation) CompileSelfEvaluating(_ CompileTimeCallContext
 	// Intern symbols to ensure eq? identity per R7RS 6.5
 	// Use UnwrapAll() to fully unwrap syntax values (including vector elements)
 	// so that equal? comparisons work correctly on literal vectors.
-	val := p.internSymbolsInValue(expr.UnwrapAll())
+	val, err := p.internSymbolsInValue(expr.UnwrapAll())
+	if err != nil {
+		return err
+	}
 	li := p.template.MaybeAppendLiteral(val)
 	p.AppendOperations(
 		NewOperationLoadLiteralByLiteralIndexImmediate(li),

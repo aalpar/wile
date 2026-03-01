@@ -233,30 +233,58 @@ func (p *Pair) IsVoid() bool {
 }
 
 // SchemeString returns the Scheme representation of the Pair.
+// Handles circular structures (from datum labels or set-cdr!/set-car!)
+// by emitting "..." when a cycle is detected.
 func (p *Pair) SchemeString() string {
 	if p.IsVoid() {
 		return "#<void>"
 	}
+	visited := make(map[*Pair]bool)
+	return p.schemeStringWithVisited(visited)
+}
+
+func (p *Pair) schemeStringWithVisited(visited map[*Pair]bool) string {
+	if visited[p] {
+		return "..."
+	}
+	visited[p] = true
+
 	q := &strings.Builder{}
 	q.WriteString("(")
-	cdr, _ := p.ForEach(context.TODO(), func(_ context.Context, i int, _ bool, v Value) error {
+	pr := p
+	i := 0
+	for pr != nil {
 		if i > 0 {
 			q.WriteString(" ")
 		}
-		if IsVoid(v) {
+		car := pr[0]
+		if IsVoid(car) {
 			q.WriteString("#<void>")
+		} else if carPair, ok := car.(*Pair); ok && carPair != nil {
+			q.WriteString(carPair.schemeStringWithVisited(visited))
 		} else {
-			q.WriteString(v.SchemeString())
+			q.WriteString(car.SchemeString())
 		}
-		return nil
-	})
-	if !IsEmptyList(cdr) {
-		q.WriteString(" . ")
-		if IsVoid(cdr) {
-			q.WriteString("#<void>")
-		} else {
-			q.WriteString(cdr.SchemeString())
+		cdrPair, ok := pr[1].(*Pair)
+		if !ok || cdrPair == nil {
+			// Non-pair cdr, nil *Pair (void), or empty list
+			if !IsEmptyList(pr[1]) {
+				q.WriteString(" . ")
+				if IsVoid(pr[1]) {
+					q.WriteString("#<void>")
+				} else {
+					q.WriteString(pr[1].SchemeString())
+				}
+			}
+			break
 		}
+		if visited[cdrPair] {
+			q.WriteString(" . ...")
+			break
+		}
+		visited[cdrPair] = true
+		pr = cdrPair
+		i++
 	}
 	q.WriteString(")")
 	return q.String()
@@ -277,22 +305,51 @@ func stringValue(o Value) string {
 }
 
 // String returns the string representation of the Pair.
+// Handles circular structures (from datum labels or set-cdr!/set-car!)
+// by emitting "..." when a cycle is detected.
 func (p *Pair) String() string {
 	if p.IsVoid() {
 		return ""
 	}
+	visited := make(map[*Pair]bool)
+	return p.stringWithVisited(visited)
+}
+
+func (p *Pair) stringWithVisited(visited map[*Pair]bool) string {
+	if visited[p] {
+		return "..."
+	}
+	visited[p] = true
+
 	q := &strings.Builder{}
 	q.WriteString("(")
-	cdr, _ := p.ForEach(context.TODO(), func(_ context.Context, i int, _ bool, v Value) error {
+	pr := p
+	i := 0
+	for pr != nil {
 		if i > 0 {
 			q.WriteString(" ")
 		}
-		q.WriteString(stringValue(v))
-		return nil
-	})
-	if !IsEmptyList(cdr) {
-		q.WriteString(" . ")
-		q.WriteString(stringValue(cdr))
+		car := pr[0]
+		if carPair, ok := car.(*Pair); ok && carPair != nil {
+			q.WriteString(carPair.stringWithVisited(visited))
+		} else {
+			q.WriteString(stringValue(car))
+		}
+		cdrPair, ok := pr[1].(*Pair)
+		if !ok || cdrPair == nil {
+			if !IsEmptyList(pr[1]) {
+				q.WriteString(" . ")
+				q.WriteString(stringValue(pr[1]))
+			}
+			break
+		}
+		if visited[cdrPair] {
+			q.WriteString(" . ...")
+			break
+		}
+		visited[cdrPair] = true
+		pr = cdrPair
+		i++
 	}
 	q.WriteString(")")
 	return q.String()
