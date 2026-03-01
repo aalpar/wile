@@ -9,7 +9,7 @@ Prior reviews: Structural (complete, remediated), Signals (complete, remediated)
 
 ## Executive Summary
 
-The codebase is architecturally sound — bytecode VM, correct continuation chain, proper hygiene model, clean package layering. The debt is organizational, not foundational. Of the 14 original findings: 10 are complete or resolved (F1, F2, F3, F4, F5, F6, F7, F8, F9, F14), 1 retracted (F13), 2 deferred by design (F10, F11), leaving 1 actionable item: F12 (subsystem benchmarks).
+The codebase is architecturally sound — bytecode VM, correct continuation chain, proper hygiene model, clean package layering. The debt is organizational, not foundational. Of the 14 original findings: 10 are complete or resolved (F1, F2, F3, F4, F5, F6, F7, F8, F9, F14), 1 retracted (F13), 2 deferred by design (F10, F11), leaving 1 actionable item: F12 (subsystem benchmarks). All Parts of F2 verified complete (Part A: opcode checklist, Part B: invokeTransformerClosure helper).
 
 ---
 
@@ -138,7 +138,7 @@ Once Phase 2 proves the pattern, extend to Subtract, Multiply, Divide, LessThan,
 
 ---
 
-### F2 [Priority: High] [PARTIAL] — Extension friction: adding a callable type = 3+ files, adding an opcode = 7+ files
+### F2 [Priority: High] [COMPLETE] — Extension friction: adding a callable type = 3+ files, adding an opcode = 7+ files
 
 **Where**: `machine/machine_context.go` (ApplyCallable, Run), `machine/expander_time_continuation.go` (transformer dispatch), `machine/native_template.go` (operationToInstruction/instructionToOperation), `machine/compile_validated.go`, `machine/opcode.go`
 
