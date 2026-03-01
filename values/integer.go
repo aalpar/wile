@@ -18,6 +18,8 @@ import (
 	"math"
 	"math/big"
 	"strconv"
+
+	"github.com/aalpar/wile/werr"
 )
 
 var (
@@ -255,7 +257,7 @@ func (p *Integer) Multiply(o Number) Number {
 // exact / inexact = inexact (Float or Complex).
 func (p *Integer) Divide(o Number) Number {
 	if o.IsZero() && o.IsExact() {
-		panic(ErrDivisionByZero)
+		panic(werr.ErrDivisionByZero)
 	}
 	v, ok := o.(*Integer)
 	if ok {

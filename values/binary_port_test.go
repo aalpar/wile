@@ -24,6 +24,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // --- BinaryInputPort ---
@@ -74,13 +75,13 @@ func TestBinaryInputPort_Close(t *testing.T) {
 
 	// Operations after close return ErrPortClosed
 	_, err = port.ReadByte()
-	qt.Assert(t, errors.Is(err, values.ErrPortClosed), qt.IsTrue)
+	qt.Assert(t, errors.Is(err, werr.ErrPortClosed), qt.IsTrue)
 
 	err = port.UnreadByte()
-	qt.Assert(t, errors.Is(err, values.ErrPortClosed), qt.IsTrue)
+	qt.Assert(t, errors.Is(err, werr.ErrPortClosed), qt.IsTrue)
 
 	_, err = port.Read(make([]byte, 1))
-	qt.Assert(t, errors.Is(err, values.ErrPortClosed), qt.IsTrue)
+	qt.Assert(t, errors.Is(err, werr.ErrPortClosed), qt.IsTrue)
 }
 
 func TestBinaryInputPort_CloseWithCloser(t *testing.T) {
@@ -156,13 +157,13 @@ func TestBinaryOutputPort_Close(t *testing.T) {
 
 	// Operations after close return ErrPortClosed
 	err = port.WriteByte(1)
-	qt.Assert(t, errors.Is(err, values.ErrPortClosed), qt.IsTrue)
+	qt.Assert(t, errors.Is(err, werr.ErrPortClosed), qt.IsTrue)
 
 	_, err = port.Write([]byte{1})
-	qt.Assert(t, errors.Is(err, values.ErrPortClosed), qt.IsTrue)
+	qt.Assert(t, errors.Is(err, werr.ErrPortClosed), qt.IsTrue)
 
 	err = port.Flush()
-	qt.Assert(t, errors.Is(err, values.ErrPortClosed), qt.IsTrue)
+	qt.Assert(t, errors.Is(err, werr.ErrPortClosed), qt.IsTrue)
 }
 
 func TestBinaryOutputPort_IsVoid(t *testing.T) {

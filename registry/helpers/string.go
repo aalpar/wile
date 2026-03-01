@@ -17,6 +17,7 @@ package helpers
 import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // StringCompare is a helper for string comparison primitives.
@@ -26,11 +27,11 @@ func StringCompare(mc *machine.MachineContext, name string, cmp func(a, b string
 	s2 := mc.Arg(1)
 	str1, ok := s1.(*values.String)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "%s: expected a string but got %T", name, s1)
+		return werr.WrapForeignErrorf(werr.ErrNotAString, "%s: expected a string but got %T", name, s1)
 	}
 	str2, ok := s2.(*values.String)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString, "%s: expected a string but got %T", name, s2)
+		return werr.WrapForeignErrorf(werr.ErrNotAString, "%s: expected a string but got %T", name, s2)
 	}
 	mc.SetValue(values.BoolToBoolean(cmp(str1.Value, str2.Value)))
 	return nil
@@ -48,6 +49,6 @@ func StringCompareVariadic(mc *machine.MachineContext, name string, cmp func(a, 
 			return s.Value
 		},
 		cmp,
-		values.ErrNotAString,
+		werr.ErrNotAString,
 		"a string")
 }

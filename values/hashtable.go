@@ -17,6 +17,8 @@ package values
 import (
 	"sort"
 	"strings"
+
+	"github.com/aalpar/wile/werr"
 )
 
 var _ Value = (*Hashtable)(nil)
@@ -119,22 +121,22 @@ func (p *Hashtable) get(key Hashable) (Value, bool) {
 
 // Get retrieves the value associated with key.
 // Returns the value and whether the key was found.
-// Returns ErrInvalidArgument if the key does not implement Hashable.
+// Returns werr.ErrInvalidArgument if the key does not implement Hashable.
 func (p *Hashtable) Get(key Value) (Value, bool, error) {
 	hk, ok := key.(Hashable)
 	if !ok {
-		return nil, false, WrapForeignErrorf(ErrInvalidArgument, "hashtable: key is not hashable: %s", key.SchemeString())
+		return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument, "hashtable: key is not hashable: %s", key.SchemeString())
 	}
 	val, found := p.get(hk)
 	return val, found, nil
 }
 
 // Set associates key with val in the hash table.
-// Returns ErrInvalidArgument if the key does not implement Hashable.
+// Returns werr.ErrInvalidArgument if the key does not implement Hashable.
 func (p *Hashtable) Set(key Value, val Value) error {
 	hk, ok := key.(Hashable)
 	if !ok {
-		return WrapForeignErrorf(ErrInvalidArgument, "hashtable: key is not hashable: %s", key.SchemeString())
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "hashtable: key is not hashable: %s", key.SchemeString())
 	}
 	h := hk.HashCode()
 	bucket := p.buckets[h]
@@ -150,22 +152,22 @@ func (p *Hashtable) Set(key Value, val Value) error {
 }
 
 // HasKey returns whether the key exists in the hash table.
-// Returns ErrInvalidArgument if the key does not implement Hashable.
+// Returns werr.ErrInvalidArgument if the key does not implement Hashable.
 func (p *Hashtable) HasKey(key Value) (bool, error) {
 	hk, ok := key.(Hashable)
 	if !ok {
-		return false, WrapForeignErrorf(ErrInvalidArgument, "hashtable: key is not hashable: %s", key.SchemeString())
+		return false, werr.WrapForeignErrorf(werr.ErrInvalidArgument, "hashtable: key is not hashable: %s", key.SchemeString())
 	}
 	_, found := p.get(hk)
 	return found, nil
 }
 
 // Delete removes the entry for key from the hash table.
-// Returns ErrInvalidArgument if the key does not implement Hashable.
+// Returns werr.ErrInvalidArgument if the key does not implement Hashable.
 func (p *Hashtable) Delete(key Value) error {
 	hk, ok := key.(Hashable)
 	if !ok {
-		return WrapForeignErrorf(ErrInvalidArgument, "hashtable: key is not hashable: %s", key.SchemeString())
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "hashtable: key is not hashable: %s", key.SchemeString())
 	}
 	h := hk.HashCode()
 	bucket := p.buckets[h]

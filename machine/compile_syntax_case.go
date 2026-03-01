@@ -22,6 +22,7 @@ import (
 	"github.com/aalpar/wile/internal/match"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // CompileSyntaxCase compiles the (syntax-case expr (literal ...) clause ...) form.
@@ -56,7 +57,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 	// Get the rest ((literals) clause ...)
 	rest, ok := argsPair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok || rest.IsEmptyList() {
-		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "syntax-case: expected literals list and clauses")
+		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-case: expected literals list and clauses")
 	}
 
 	// Extract literals list (CAR of rest)
@@ -70,7 +71,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 			// Use extractLiteralsWithSyntax to enable scope-aware literal matching
 			err := extractLiteralsWithSyntax(ctctx.ctx, literalsPair, nil, literalSyntax, match.DefaultEllipsis)
 			if err != nil {
-				return values.WrapForeignErrorf(err, "syntax-case: invalid literals list")
+				return werr.WrapForeignErrorf(err, "syntax-case: invalid literals list")
 			}
 		}
 	}
@@ -78,13 +79,13 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 	// Get clauses (CDR of rest)
 	clausesCdr, ok := rest.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok || clausesCdr.IsEmptyList() {
-		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "syntax-case: expected at least one clause")
+		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-case: expected at least one clause")
 	}
 
 	// Compile the input expression (leaves value in value register)
 	err = p.CompileExpression(ctctx.NotInTail(), inputExpr)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "syntax-case: error compiling input expression")
+		return werr.WrapForeignErrorf(err, "syntax-case: error compiling input expression")
 	}
 
 	// Store input in global for clause matching (not on eval stack to avoid interference with body procedure calls)
@@ -98,7 +99,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 	v, err := clausesCdr.SyntaxForEach(ctctx.ctx, func(_ context.Context, i int, hasNext bool, clauseVal syntax.SyntaxValue) error {
 		clausePair, ok := clauseVal.(*syntax.SyntaxPair)
 		if !ok || clausePair.IsEmptyList() {
-			return values.WrapForeignErrorf(values.ErrInvalidSyntax, "syntax-case: clause must be a list")
+			return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-case: clause must be a list")
 		}
 
 		// Extract pattern
@@ -107,7 +108,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 		// Get the rest (body or fender + body)
 		clauseRest, ok := clausePair.SyntaxCdr().(*syntax.SyntaxPair)
 		if !ok || clauseRest.IsEmptyList() {
-			return values.WrapForeignErrorf(values.ErrInvalidSyntax, "syntax-case: expected body in clause")
+			return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-case: expected body in clause")
 		}
 
 		// Determine if there's a fender
@@ -129,7 +130,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 		// Compile the clause
 		err := p.compileSyntaxCaseClause(ctctx, pattern, fender, body, literalSyntax, clauseIndex, &successJumps, &failJumps)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "syntax-case: error compiling clause %d", clauseIndex+1)
+			return werr.WrapForeignErrorf(err, "syntax-case: error compiling clause %d", clauseIndex+1)
 		}
 
 		clauseIndex++
@@ -139,7 +140,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 		return err
 	}
 	if !syntax.IsSyntaxEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "syntax-case: expected proper list of clauses")
+		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-case: expected proper list of clauses")
 	}
 
 	// Add error operation for when no clause matches
@@ -239,11 +240,11 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 		// Expand the fender first
 		expandedFender, err := bodyExpander.ExpandExpression(fender)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "error expanding fender")
+			return werr.WrapForeignErrorf(err, "error expanding fender")
 		}
 		err = bodyCompiler.CompileExpression(ctctx.NotInTail(), expandedFender)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "error compiling fender")
+			return werr.WrapForeignErrorf(err, "error compiling fender")
 		}
 
 		// Branch on false fender to cleanup block (reads value register directly)
@@ -254,11 +255,11 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	// Expand and compile the body
 	expandedBody, err := bodyExpander.ExpandExpression(body)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "error expanding body")
+		return werr.WrapForeignErrorf(err, "error expanding body")
 	}
 	err = bodyCompiler.CompileExpression(ctctx, expandedBody)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "error compiling body")
+		return werr.WrapForeignErrorf(err, "error compiling body")
 	}
 
 	// Jump to end on success

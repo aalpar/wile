@@ -30,6 +30,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/internal/tokenizer"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 const (
@@ -740,7 +741,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	cur := p.curr()
 	switch cur.Type() {
 	case tokenizer.TokenizerStateCons:
-		return nil, p.cur, NewParserErrorWithWrap(values.ErrNotACons, p.cur, "unexpected '.' token")
+		return nil, p.cur, NewParserErrorWithWrap(werr.ErrNotACons, p.cur, "unexpected '.' token")
 	case tokenizer.TokenizerStateLabelAssignment:
 		// R7RS §2.4: #n=<datum> defines datum label n
 		// For circular/shared structures, we must register the container before reading its contents
@@ -891,7 +892,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 					return nil, p.cur, NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",
 						p.delimiterString(opener), p.delimiterString(p.cur.Type()))
 				}
-				return nil, p.cur, NewParserErrorWithWrapf(values.ErrNotACloseParen, p.cur, "expected %s after dotted pair, got %s",
+				return nil, p.cur, NewParserErrorWithWrapf(werr.ErrNotACloseParen, p.cur, "expected %s after dotted pair, got %s",
 					p.delimiterString(expectedClose), p.cur.String())
 			}
 			pr0.SetCdr(pr)
@@ -947,10 +948,10 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		i, ok := stx.Unwrap().(*values.Integer)
 		for {
 			if !ok {
-				return nil, p.cur, NewParserErrorWithWrapf(values.ErrNotAnInteger, p.cur, "expected unsigned byte integer in byte vector, got %T", stx.Unwrap())
+				return nil, p.cur, NewParserErrorWithWrapf(werr.ErrNotAnInteger, p.cur, "expected unsigned byte integer in byte vector, got %T", stx.Unwrap())
 			}
 			if i.Value < 0 || i.Value > 255 {
-				return nil, p.cur, NewParserErrorWithWrapf(values.ErrNotAByte, p.cur, "byte value out of range (0-255): %d", i.Value)
+				return nil, p.cur, NewParserErrorWithWrapf(werr.ErrNotAByte, p.cur, "byte value out of range (0-255): %d", i.Value)
 			}
 			*q0 = append(*q0, values.NewByte(uint8(i.Value)))
 			p.cur, p.err = p.toks.Next()
@@ -1279,7 +1280,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		case "vertical-tab":
 			q0 = values.NewCharacter(RuneVerticalTab)
 		default:
-			return nil, nil, NewParserErrorWithWrapf(values.ErrUnknownCharacterMnemonic, p.cur, "unknown character mnemonic: %s", s)
+			return nil, nil, NewParserErrorWithWrapf(werr.ErrUnknownCharacterMnemonic, p.cur, "unknown character mnemonic: %s", s)
 		}
 		q = p.wrapSyntax(q0, p.cur)
 		return q, p.cur, nil
@@ -1467,7 +1468,7 @@ func parseExactPart(s string) (values.Number, error) {
 		r := new(big.Rat)
 		_, ok := r.SetString(s)
 		if !ok {
-			return nil, values.WrapForeignErrorf(values.ErrInvalidFormat, "parseDecimalInteger: invalid rational: %s", s)
+			return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "parseDecimalInteger: invalid rational: %s", s)
 		}
 		return values.NewRationalFromRat(r), nil
 	}
@@ -1476,7 +1477,7 @@ func parseExactPart(s string) (values.Number, error) {
 	i := new(big.Int)
 	_, ok := i.SetString(s, 10)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrInvalidFormat, "parseDecimalInteger: invalid integer: %s", s)
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "parseDecimalInteger: invalid integer: %s", s)
 	}
 	return values.NewBigInteger(i), nil
 }
@@ -1596,7 +1597,7 @@ func parseFloatOrInfnan(s string) (float64, error) {
 			return 0, err
 		}
 		if den == 0 {
-			return 0, values.WrapForeignErrorf(values.ErrDivisionByZero, "parseFloatOrInfnan: division by zero in rational")
+			return 0, werr.WrapForeignErrorf(werr.ErrDivisionByZero, "parseFloatOrInfnan: division by zero in rational")
 		}
 		return num / den, nil
 	}
@@ -1682,7 +1683,7 @@ func (p *Parser) makeExact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	val := stx.Unwrap()
 	num, ok := val.(values.Number)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotANumber, "makeExact: value is not numeric")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber, "makeExact: value is not numeric")
 	}
 
 	var exactNum values.Value
@@ -1694,7 +1695,7 @@ func (p *Parser) makeExact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 		// Convert float to exact
 		f := v.Value
 		if math.IsNaN(f) || math.IsInf(f, 0) {
-			return nil, values.WrapForeignErrorf(values.ErrExactnessConversion, "makeExact: cannot convert inf or nan to exact")
+			return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeExact: cannot convert inf or nan to exact")
 		}
 		// Check if it's a whole number
 		if f == math.Trunc(f) && f >= math.MinInt64 && f <= math.MaxInt64 {
@@ -1708,7 +1709,7 @@ func (p *Parser) makeExact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 		// Convert BigFloat to exact
 		bf := v.BigFloatValue()
 		if bf.IsInf() {
-			return nil, values.WrapForeignErrorf(values.ErrExactnessConversion, "makeExact: cannot convert inf to exact")
+			return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeExact: cannot convert inf to exact")
 		}
 		// Try to convert to integer first
 		if bf.IsInt() {
@@ -1724,7 +1725,7 @@ func (p *Parser) makeExact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 		re := v.Real()
 		im := v.Imag()
 		if math.IsNaN(re) || math.IsNaN(im) || math.IsInf(re, 0) || math.IsInf(im, 0) {
-			return nil, values.WrapForeignErrorf(values.ErrExactnessConversion, "makeExact: cannot convert complex with inf or nan to exact")
+			return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeExact: cannot convert complex with inf or nan to exact")
 		}
 		reRat := new(big.Rat).SetFloat64(re)
 		imRat := new(big.Rat).SetFloat64(im)
@@ -1736,10 +1737,10 @@ func (p *Parser) makeExact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 		if v.IsExact() {
 			exactNum = v
 		} else {
-			return nil, values.WrapForeignErrorf(values.ErrExactnessConversion, "makeExact: cannot convert inexact BigComplex to exact")
+			return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeExact: cannot convert inexact BigComplex to exact")
 		}
 	default:
-		return nil, values.WrapForeignErrorf(values.ErrExactnessConversion, "makeExact: unsupported number type")
+		return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeExact: unsupported number type")
 	}
 
 	// Re-wrap with the same syntax context
@@ -1776,7 +1777,7 @@ func (p *Parser) makeInexact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error)
 	val := stx.Unwrap()
 	num, ok := val.(values.Number)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotANumber, "makeInexact: value is not numeric")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber, "makeInexact: value is not numeric")
 	}
 
 	var inexactNum values.Value
@@ -1801,7 +1802,7 @@ func (p *Parser) makeInexact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error)
 		imFloat := v.ImagAsBigFloat().Float64()
 		inexactNum = values.NewComplexFromParts(reFloat, imFloat)
 	default:
-		return nil, values.WrapForeignErrorf(values.ErrExactnessConversion, "makeInexact: unsupported number type")
+		return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "makeInexact: unsupported number type")
 	}
 
 	return p.rewrapSyntax(stx, inexactNum), nil

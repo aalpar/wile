@@ -18,6 +18,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // PrimEqQ implements the eq? predicate for object identity.
@@ -71,7 +72,7 @@ func PrimBooleanEq(mc *machine.MachineContext) error {
 	return helpers.ChainEquality(mc, "boolean=?",
 		func(v values.Value) error {
 			if v != values.TrueValue && v != values.FalseValue {
-				return values.WrapForeignErrorf(values.ErrNotABoolean, "boolean=?: expected a boolean but got %T", v)
+				return werr.WrapForeignErrorf(werr.ErrNotABoolean, "boolean=?: expected a boolean but got %T", v)
 			}
 			return nil
 		},
@@ -87,7 +88,7 @@ func PrimBooleanEq(mc *machine.MachineContext) error {
 func PrimSymbolEq(mc *machine.MachineContext) error {
 	return helpers.ChainEquality(mc, "symbol=?",
 		func(v values.Value) error {
-			_, err := helpers.RequireType[*values.Symbol](v, values.ErrNotASymbol, "symbol=?")
+			_, err := helpers.RequireType[*values.Symbol](v, werr.ErrNotASymbol, "symbol=?")
 			return err
 		},
 		func(a, b values.Value) bool {

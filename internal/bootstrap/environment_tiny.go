@@ -48,7 +48,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/registry/core"
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // allExtensions returns all available extensions for the full runtime environment.
@@ -73,39 +73,39 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 	reg := registry.NewRegistry()
 	err := core.AddToRegistry(reg)
 	if err != nil {
-		return nil, values.WrapForeignErrorf(err, "error adding core to registry")
+		return nil, werr.WrapForeignErrorf(err, "error adding core to registry")
 	}
 
 	// Add all extensions
 	for _, ext := range allExtensions {
 		err := ext.AddToRegistry(reg)
 		if err != nil {
-			return nil, values.WrapForeignErrorf(err, "error adding extension %s to registry", ext.Name())
+			return nil, werr.WrapForeignErrorf(err, "error adding extension %s to registry", ext.Name())
 		}
 	}
 
 	// Apply registry to environment
 	err = reg.Apply(ctx, env)
 	if err != nil {
-		return nil, values.WrapForeignErrorf(err, "error applying registry to environment")
+		return nil, werr.WrapForeignErrorf(err, "error applying registry to environment")
 	}
 
 	// Register syntax compilers in the compile environment
 	err = machine.RegisterSyntaxCompilers(env)
 	if err != nil {
-		return nil, values.WrapForeignErrorf(err, "error registering syntax compilers")
+		return nil, werr.WrapForeignErrorf(err, "error registering syntax compilers")
 	}
 
 	// Register primitive expanders in the expand environment
 	err = machine.RegisterPrimitiveExpanders(env)
 	if err != nil {
-		return nil, values.WrapForeignErrorf(err, "error registering primitive expanders")
+		return nil, werr.WrapForeignErrorf(err, "error registering primitive expanders")
 	}
 
 	// Load bootstrap macros from registry
 	err = loadBootstrapMacros(ctx, env, reg.MacroSources())
 	if err != nil {
-		return nil, values.WrapForeignErrorf(err, "error loading bootstrap macros")
+		return nil, werr.WrapForeignErrorf(err, "error loading bootstrap macros")
 	}
 
 	return reg, nil
@@ -170,7 +170,7 @@ func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.Envi
 	// Get caller's TopLevelEnvironment
 	callerTopLevel := callerEnv.TopLevelEnv()
 	if callerTopLevel == nil {
-		return nil, values.WrapForeignErrorf(values.ErrMissingTopLevelEnvironment, "caller environment has no TopLevelEnvironment")
+		return nil, werr.WrapForeignErrorf(werr.ErrMissingTopLevelEnvironment, "caller environment has no TopLevelEnvironment")
 	}
 
 	// Create a new environment that shares the TopLevelEnvironment
@@ -205,13 +205,13 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 				break
 			}
 			if err != nil {
-				return values.WrapForeignErrorf(err, "error parsing bootstrap macros")
+				return werr.WrapForeignErrorf(err, "error parsing bootstrap macros")
 			}
 
 			// Expand the syntax
 			expanded, err := machine.NewExpanderTimeContinuation(ctx, env).ExpandExpression(stx)
 			if err != nil {
-				return values.WrapForeignErrorf(err, "error expanding bootstrap macro")
+				return werr.WrapForeignErrorf(err, "error expanding bootstrap macro")
 			}
 
 			// Compile and run
@@ -220,14 +220,14 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 			cctx := machine.NewCompileTimeCallContext(ctx, false, true)
 			err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 			if err != nil {
-				return values.WrapForeignErrorf(err, "error compiling bootstrap macro")
+				return werr.WrapForeignErrorf(err, "error compiling bootstrap macro")
 			}
 
 			cont := machine.NewMachineContinuation(nil, tpl, env)
 			mc := machine.NewMachineContext(ctx, cont)
 			err = mc.Run()
 			if err != nil {
-				return values.WrapForeignErrorf(err, "error running bootstrap macro")
+				return werr.WrapForeignErrorf(err, "error running bootstrap macro")
 			}
 		}
 	}

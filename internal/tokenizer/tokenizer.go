@@ -53,7 +53,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/aalpar/wile/internal/syntax"
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // Error messages returned by the tokenizer.
@@ -87,8 +87,8 @@ const (
 
 // ErrNotAnUnsignedByteMarker is returned when parsing fails on an unsigned byte marker.
 var (
-	ErrNotAnUnsignedByteMarker = values.NewStaticError("not an unsigned byte marker")
-	ErrNotALiteral             = values.NewStaticError("not a literal")
+	ErrNotAnUnsignedByteMarker = werr.NewStaticError("not an unsigned byte marker")
+	ErrNotALiteral             = werr.NewStaticError("not a literal")
 )
 
 // TokenizerState represents the type of token recognized by the tokenizer.

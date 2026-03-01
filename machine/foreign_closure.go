@@ -5,6 +5,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // ForeignFunction is the signature for Go-implemented Scheme primitives.
@@ -18,8 +19,8 @@ type ForeignFunction func(mc *MachineContext) error
 // the source location and stack trace at the point where the error occurred.
 func goErrorToSchemeException(mc *MachineContext, err error) error {
 	kind := values.NativeErrorKindGeneric
-	var fileErr *values.ForeignFileError
-	var readErr *values.ForeignReadError
+	var fileErr *werr.ForeignFileError
+	var readErr *werr.ForeignReadError
 	if errors.As(err, &fileErr) {
 		kind = values.NativeErrorKindFile
 	} else if errors.As(err, &readErr) {

@@ -18,6 +18,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // PrimMakeParameter implements the (make-parameter) primitive.
@@ -41,7 +42,7 @@ func PrimMakeParameter(mc *machine.MachineContext) error {
 			// Validate converter is a procedure
 			converterCls, ok = pr.Car().(machine.Closure)
 			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAProcedure, "make-parameter: converter must be a procedure")
+				return werr.WrapForeignErrorf(werr.ErrNotAProcedure, "make-parameter: converter must be a procedure")
 			}
 
 			// Apply converter to initial value
@@ -49,11 +50,11 @@ func PrimMakeParameter(mc *machine.MachineContext) error {
 			defer machine.ReleaseSubContext(sub)
 			_, err := sub.ApplyCallable(converterCls, init)
 			if err != nil {
-				return values.WrapForeignErrorf(err, "make-parameter: failed to apply converter")
+				return werr.WrapForeignErrorf(err, "make-parameter: failed to apply converter")
 			}
 			err = sub.Run()
 			if err != nil {
-				return values.WrapForeignErrorf(err, "make-parameter: converter error")
+				return werr.WrapForeignErrorf(err, "make-parameter: converter error")
 			}
 			init = sub.GetValue()
 		}
@@ -71,7 +72,7 @@ func PrimMakeParameter(mc *machine.MachineContext) error {
 //
 // This is an internal primitive — not part of the public API.
 func PrimParameterRawSet(mc *machine.MachineContext) error {
-	param, err := helpers.RequireArg[*machine.Parameter](mc, 0, values.ErrNotAParameter, "%parameter-raw-set!")
+	param, err := helpers.RequireArg[*machine.Parameter](mc, 0, werr.ErrNotAParameter, "%parameter-raw-set!")
 	if err != nil {
 		return err
 	}

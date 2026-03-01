@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // ListToVector is a helper that converts a list argument to a vector.
@@ -31,7 +32,7 @@ func ListToVector(mc *machine.MachineContext, name string) error {
 	}
 	pr, ok := o.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, o)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list but got %T", name, o)
 	}
 	var elems values.Vector
 	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
@@ -42,7 +43,7 @@ func ListToVector(mc *machine.MachineContext, name string) error {
 		return err
 	}
 	if !values.IsEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a proper list", name)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a proper list", name)
 	}
 	mc.SetValue(values.NewVector(elems...))
 	return nil
@@ -57,11 +58,11 @@ func CollectVectors(rest values.Value, name string) ([]*values.Vector, int, erro
 	for !values.IsEmptyList(current) {
 		tuple, ok := current.(values.Tuple)
 		if !ok {
-			return nil, 0, values.WrapForeignErrorf(values.ErrNotAList, "%s: improper argument list", name)
+			return nil, 0, werr.WrapForeignErrorf(werr.ErrNotAList, "%s: improper argument list", name)
 		}
 		v, ok := tuple.Car().(*values.Vector)
 		if !ok {
-			return nil, 0, values.WrapForeignErrorf(values.ErrNotAVector, "%s: expected a vector but got %T", name, tuple.Car())
+			return nil, 0, werr.WrapForeignErrorf(werr.ErrNotAVector, "%s: expected a vector but got %T", name, tuple.Car())
 		}
 		vectors = append(vectors, v)
 		current = tuple.Cdr()
@@ -88,9 +89,9 @@ func CollectStrings(rest values.Value, name string) ([]*values.String, [][]rune,
 	for !values.IsEmptyList(current) {
 		tuple, ok := current.(values.Tuple)
 		if !ok {
-			return nil, nil, 0, values.WrapForeignErrorf(values.ErrNotAList, "%s: improper argument list", name)
+			return nil, nil, 0, werr.WrapForeignErrorf(werr.ErrNotAList, "%s: improper argument list", name)
 		}
-		s, err := RequireType[*values.String](tuple.Car(), values.ErrNotAString, name)
+		s, err := RequireType[*values.String](tuple.Car(), werr.ErrNotAString, name)
 		if err != nil {
 			return nil, nil, 0, err
 		}
@@ -124,7 +125,7 @@ func MemberLookup(
 	for !values.IsEmptyList(lst) {
 		pr, ok := lst.(values.Tuple)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, lst)
+			return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list but got %T", name, lst)
 		}
 		if eq(pr.Car(), obj) {
 			mc.SetValue(pr)
@@ -151,27 +152,27 @@ func AssocLookup(
 	}
 	pr, ok := alist.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, alist)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list but got %T", name, alist)
 	}
 	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
 		entry, ok := elem.(values.Tuple)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAPair, "%s: expected a pair in alist but got %T", name, elem)
+			return werr.WrapForeignErrorf(werr.ErrNotAPair, "%s: expected a pair in alist but got %T", name, elem)
 		}
 		if eq(entry.Car(), obj) {
 			mc.SetValue(entry)
-			return values.ErrStopIteration
+			return werr.ErrStopIteration
 		}
 		return nil
 	})
-	if errors.Is(err, values.ErrStopIteration) {
+	if errors.Is(err, werr.ErrStopIteration) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
 	if !values.IsEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a proper list", name)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a proper list", name)
 	}
 	mc.SetValue(values.FalseValue)
 	return nil

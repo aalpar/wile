@@ -22,6 +22,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // PrimString implements the string primitive.
@@ -33,11 +34,11 @@ func PrimString(mc *machine.MachineContext) error {
 	for !values.IsEmptyList(args) {
 		tuple, ok := args.(values.Tuple)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "string: expected a list of characters")
+			return werr.WrapForeignErrorf(werr.ErrNotAList, "string: expected a list of characters")
 		}
 		ch, ok := tuple.Car().(*values.Character)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotACharacter, "string: expected a character but got %T", tuple.Car())
+			return werr.WrapForeignErrorf(werr.ErrNotACharacter, "string: expected a character but got %T", tuple.Car())
 		}
 		sb.WriteRune(ch.Value)
 		args = tuple.Cdr()
@@ -52,12 +53,12 @@ func PrimString(mc *machine.MachineContext) error {
 // (make-string k) creates a string of k unspecified characters.
 // (make-string k char) creates a string of k copies of char.
 func PrimMakeString(mc *machine.MachineContext) error {
-	kInt, err := helpers.RequireArg[*values.Integer](mc, 0, values.ErrNotAnInteger, "make-string")
+	kInt, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotAnInteger, "make-string")
 	if err != nil {
 		return err
 	}
 	if kInt.Value < 0 {
-		return values.WrapForeignErrorf(values.ErrInvalidArgument, "make-string: length must be non-negative")
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "make-string: length must be non-negative")
 	}
 
 	fillChar := rune(0) // default fill character (NUL)
@@ -65,7 +66,7 @@ func PrimMakeString(mc *machine.MachineContext) error {
 	if ok {
 		ch, ok := v.(*values.Character)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotACharacter, "make-string: expected a character but got %T", v)
+			return werr.WrapForeignErrorf(werr.ErrNotACharacter, "make-string: expected a character but got %T", v)
 		}
 		fillChar = ch.Value
 	}
@@ -79,7 +80,7 @@ func PrimMakeString(mc *machine.MachineContext) error {
 // PrimStringLength implements string-length.
 // Returns the number of characters (runes) in the string.
 func PrimStringLength(mc *machine.MachineContext) error {
-	s, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-length")
+	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string-length")
 	if err != nil {
 		return err
 	}
@@ -90,7 +91,7 @@ func PrimStringLength(mc *machine.MachineContext) error {
 // PrimStringRef implements the string-ref primitive.
 // Returns the character at the given index in the string.
 func PrimStringRef(mc *machine.MachineContext) error {
-	s, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-ref")
+	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string-ref")
 	if err != nil {
 		return err
 	}
@@ -107,11 +108,11 @@ func PrimStringRef(mc *machine.MachineContext) error {
 // Stores char in element k of string.
 // R7RS §6.7: (string-set! string k char)
 func PrimStringSet(mc *machine.MachineContext) error {
-	s, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-set!")
+	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string-set!")
 	if err != nil {
 		return err
 	}
-	char, err := helpers.RequireArg[*values.Character](mc, 2, values.ErrNotACharacter, "string-set!")
+	char, err := helpers.RequireArg[*values.Character](mc, 2, werr.ErrNotACharacter, "string-set!")
 	if err != nil {
 		return err
 	}
@@ -134,7 +135,7 @@ func PrimStringSet(mc *machine.MachineContext) error {
 // R7RS §6.7: (string->list string [start [end]])
 // Converts a string (or substring) to a list of characters.
 func PrimStringToList(mc *machine.MachineContext) error {
-	s, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string->list")
+	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string->list")
 	if err != nil {
 		return err
 	}
@@ -166,13 +167,13 @@ func PrimListToString(mc *machine.MachineContext) error {
 	}
 	tuple, ok := o.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "list->string: expected a list but got %T", o)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "list->string: expected a list but got %T", o)
 	}
 	var runes []rune
 	v, err := tuple.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
 		ch, ok := v.(*values.Character)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotACharacter, "list->string: expected a character but got %T", v)
+			return werr.WrapForeignErrorf(werr.ErrNotACharacter, "list->string: expected a character but got %T", v)
 		}
 		runes = append(runes, ch.Value)
 		return nil
@@ -181,7 +182,7 @@ func PrimListToString(mc *machine.MachineContext) error {
 		return err
 	}
 	if !values.IsEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "list->string: expected a proper list")
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "list->string: expected a proper list")
 	}
 	// R7RS §6.7: list->string returns a newly allocated mutable string
 	mc.SetValue(values.NewMutableString(string(runes)))
@@ -192,7 +193,7 @@ func PrimListToString(mc *machine.MachineContext) error {
 // Converts a symbol to an immutable string.
 // R7RS §6.5: The string returned by symbol->string is immutable.
 func PrimSymbolToString(mc *machine.MachineContext) error {
-	sym, err := helpers.RequireArg[*values.Symbol](mc, 0, values.ErrNotASymbol, "symbol->string")
+	sym, err := helpers.RequireArg[*values.Symbol](mc, 0, werr.ErrNotASymbol, "symbol->string")
 	if err != nil {
 		return err
 	}
@@ -203,7 +204,7 @@ func PrimSymbolToString(mc *machine.MachineContext) error {
 // PrimStringToSymbol implements the string->symbol primitive.
 // Converts a string to an interned symbol.
 func PrimStringToSymbol(mc *machine.MachineContext) error {
-	s, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string->symbol")
+	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string->symbol")
 	if err != nil {
 		return err
 	}
@@ -226,13 +227,13 @@ func PrimStringAppend(mc *machine.MachineContext) error {
 	}
 	tuple, ok := o.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "string-append: expected a list but got %T", o)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "string-append: expected a list but got %T", o)
 	}
 	var sb strings.Builder
 	v, err := tuple.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
 		s, ok := v.(*values.String)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAString, "string-append: expected a string but got %T", v)
+			return werr.WrapForeignErrorf(werr.ErrNotAString, "string-append: expected a string but got %T", v)
 		}
 		sb.WriteString(s.Value)
 		return nil
@@ -241,7 +242,7 @@ func PrimStringAppend(mc *machine.MachineContext) error {
 		return err
 	}
 	if !values.IsEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "string-append: not a proper list")
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "string-append: not a proper list")
 	}
 	// R7RS §6.7: string-append returns a newly allocated mutable string
 	mc.SetValue(values.NewMutableString(sb.String()))
@@ -251,15 +252,15 @@ func PrimStringAppend(mc *machine.MachineContext) error {
 // PrimSubstring implements the substring primitive.
 // Returns a substring between the given start and end indices.
 func PrimSubstring(mc *machine.MachineContext) error {
-	s, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "substring")
+	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "substring")
 	if err != nil {
 		return err
 	}
-	startIdx, err := helpers.RequireArg[*values.Integer](mc, 1, values.ErrNotANumber, "substring")
+	startIdx, err := helpers.RequireArg[*values.Integer](mc, 1, werr.ErrNotANumber, "substring")
 	if err != nil {
 		return err
 	}
-	endIdx, err := helpers.RequireArg[*values.Integer](mc, 2, values.ErrNotANumber, "substring")
+	endIdx, err := helpers.RequireArg[*values.Integer](mc, 2, werr.ErrNotANumber, "substring")
 	if err != nil {
 		return err
 	}
@@ -278,7 +279,7 @@ func PrimSubstring(mc *machine.MachineContext) error {
 // Returns a newly allocated copy of the given string (or substring).
 // The returned string is mutable and distinct from the original.
 func PrimStringCopy(mc *machine.MachineContext) error {
-	str, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "string-copy")
+	str, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string-copy")
 	if err != nil {
 		return err
 	}

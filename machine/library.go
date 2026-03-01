@@ -39,6 +39,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // LibraryName represents an R7RS library name like (scheme base) or (my lib).
@@ -224,7 +225,7 @@ func (p *LibraryRegistry) Register(lib *CompiledLibrary) error {
 	key := lib.Name.Key()
 	_, exists := p.libraries[key]
 	if exists {
-		return values.WrapForeignErrorf(values.ErrDuplicateBinding, "register: library %s already registered", lib.Name.SchemeString())
+		return werr.WrapForeignErrorf(werr.ErrDuplicateBinding, "register: library %s already registered", lib.Name.SchemeString())
 	}
 	p.libraries[key] = lib
 	return nil
@@ -274,7 +275,7 @@ func (p *LibraryRegistry) FindLibraryFile(name LibraryName) (string, error) {
 		}
 	}
 
-	return "", values.WrapForeignErrorf(values.ErrLibraryNotFound, "findLibraryFile: library %s not found in search paths: %v",
+	return "", werr.WrapForeignErrorf(werr.ErrLibraryNotFound, "findLibraryFile: library %s not found in search paths: %v",
 		name.SchemeString(), p.searchPaths)
 }
 
@@ -322,7 +323,7 @@ func (p *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[string]string, err
 		for _, name := range p.Only {
 			_, ok := result[name]
 			if !ok {
-				return nil, values.WrapForeignErrorf(values.ErrUnexportedIdentifier, "applyToExports: identifier %q not exported by %s",
+				return nil, werr.WrapForeignErrorf(werr.ErrUnexportedIdentifier, "applyToExports: identifier %q not exported by %s",
 					name, lib.Name.SchemeString())
 			}
 			filtered[name] = name
@@ -335,7 +336,7 @@ func (p *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[string]string, err
 		for _, name := range p.Except {
 			_, ok := result[name]
 			if !ok {
-				return nil, values.WrapForeignErrorf(values.ErrUnexportedIdentifier, "applyToExports: identifier %q not exported by %s",
+				return nil, werr.WrapForeignErrorf(werr.ErrUnexportedIdentifier, "applyToExports: identifier %q not exported by %s",
 					name, lib.Name.SchemeString())
 			}
 			delete(result, name)
@@ -421,7 +422,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 			}
 		}
 		if libBinding == nil {
-			return values.WrapForeignErrorf(values.ErrNoSuchBinding, "library %s exports %q but binding not found",
+			return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "library %s exports %q but binding not found",
 				lib.Name.SchemeString(), internalName)
 		}
 
@@ -433,7 +434,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 		if globalIdx != nil {
 			err := phaseEnv.SetOwnGlobalValue(globalIdx, libBinding.Value())
 			if err != nil {
-				return values.WrapForeignErrorf(err, "failed to set binding for %s at phase %d", localName, targetPhase)
+				return werr.WrapForeignErrorf(err, "failed to set binding for %s at phase %d", localName, targetPhase)
 			}
 		}
 

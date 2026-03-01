@@ -18,6 +18,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // PrimCons implements the cons primitive.
@@ -34,12 +35,12 @@ func PrimCons(mc *machine.MachineContext) error {
 //
 // R7RS §6.4: It is an error to take the car of the empty list.
 func PrimCar(mc *machine.MachineContext) error {
-	v, err := helpers.RequireArg[values.Tuple](mc, 0, values.ErrNotAPair, "car")
+	v, err := helpers.RequireArg[values.Tuple](mc, 0, werr.ErrNotAPair, "car")
 	if err != nil {
 		return err
 	}
 	if v.IsEmptyList() {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "car: cannot take car of empty list")
+		return werr.WrapForeignErrorf(werr.ErrNotAPair, "car: cannot take car of empty list")
 	}
 	mc.SetValue(v.Car())
 	return nil
@@ -50,12 +51,12 @@ func PrimCar(mc *machine.MachineContext) error {
 //
 // R7RS §6.4: It is an error to take the cdr of the empty list.
 func PrimCdr(mc *machine.MachineContext) error {
-	v, err := helpers.RequireArg[values.Tuple](mc, 0, values.ErrNotAPair, "cdr")
+	v, err := helpers.RequireArg[values.Tuple](mc, 0, werr.ErrNotAPair, "cdr")
 	if err != nil {
 		return err
 	}
 	if v.IsEmptyList() {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "cdr: cannot take cdr of empty list")
+		return werr.WrapForeignErrorf(werr.ErrNotAPair, "cdr: cannot take cdr of empty list")
 	}
 	mc.SetValue(v.Cdr())
 	return nil
@@ -63,7 +64,7 @@ func PrimCdr(mc *machine.MachineContext) error {
 
 // PrimSetCar implements the set-car! primitive.
 func PrimSetCar(mc *machine.MachineContext) error {
-	p, err := helpers.RequireArg[*values.Pair](mc, 0, values.ErrNotAPair, "set-car!")
+	p, err := helpers.RequireArg[*values.Pair](mc, 0, werr.ErrNotAPair, "set-car!")
 	if err != nil {
 		return err
 	}
@@ -75,7 +76,7 @@ func PrimSetCar(mc *machine.MachineContext) error {
 
 // PrimSetCdr implements the set-cdr! primitive.
 func PrimSetCdr(mc *machine.MachineContext) error {
-	p, err := helpers.RequireArg[*values.Pair](mc, 0, values.ErrNotAPair, "set-cdr!")
+	p, err := helpers.RequireArg[*values.Pair](mc, 0, werr.ErrNotAPair, "set-cdr!")
 	if err != nil {
 		return err
 	}
@@ -96,10 +97,10 @@ func cxrHelper(name string, ops string, o values.Value) (values.Value, error) {
 	for i := len(ops) - 1; i >= 0; i-- {
 		p, ok := v.(values.Tuple)
 		if !ok {
-			return nil, values.WrapForeignErrorf(values.ErrNotAPair, "%s: expected a pair but got %T", name, v)
+			return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "%s: expected a pair but got %T", name, v)
 		}
 		if p.IsEmptyList() {
-			return nil, values.WrapForeignErrorf(values.ErrNotAPair, "%s: cannot take car/cdr of empty list", name)
+			return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "%s: cannot take car/cdr of empty list", name)
 		}
 		if ops[i] == 'a' {
 			v = p.Car()

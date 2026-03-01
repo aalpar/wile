@@ -22,6 +22,7 @@ import (
 
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 )
 
 func strLT(a, b string) bool {
@@ -128,7 +129,7 @@ func TestStringCompare_Errors(t *testing.T) {
 			mc := makeMC(tc.a, tc.b)
 			err := StringCompare(mc, "test", strLT)
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, values.ErrNotAString), qt.IsTrue)
+			c.Assert(errors.Is(err, werr.ErrNotAString), qt.IsTrue)
 		})
 	}
 }
@@ -224,7 +225,7 @@ func TestStringCompareVariadic_Errors(t *testing.T) {
 			mc := makeMC(tc.arg0, tc.arg1)
 			err := StringCompareVariadic(mc, "test", strLT)
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, values.ErrNotAString), qt.IsTrue)
+			c.Assert(errors.Is(err, werr.ErrNotAString), qt.IsTrue)
 		})
 	}
 }

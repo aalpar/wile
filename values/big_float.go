@@ -17,6 +17,8 @@ package values
 import (
 	"math"
 	"math/big"
+
+	"github.com/aalpar/wile/werr"
 )
 
 var (
@@ -223,7 +225,7 @@ func (p *BigFloat) Divide(o Number) Number {
 	}
 	if o.IsZero() {
 		if o.IsExact() {
-			panic(ErrDivisionByZero)
+			panic(werr.ErrDivisionByZero)
 		}
 		// Inexact zero: IEEE 754 semantics — ±Inf or NaN
 		if p.nan || p.IsZero() {
@@ -316,7 +318,7 @@ func (p *BigFloat) IsNaN() bool {
 // R7RS §6.2.6: (exact +inf.0) and (exact +nan.0) are errors.
 func (p *BigFloat) ToExact() Number {
 	if p.nan || p.value.IsInf() {
-		panic(WrapForeignErrorf(ErrExactnessConversion, "cannot convert non-finite BigFloat to exact"))
+		panic(werr.WrapForeignErrorf(werr.ErrExactnessConversion, "cannot convert non-finite BigFloat to exact"))
 	}
 	r, _ := p.value.Rat(nil)
 	if r == nil {

@@ -18,6 +18,8 @@ import (
 	"math"
 	"math/big"
 	"sync"
+
+	"github.com/aalpar/wile/werr"
 )
 
 // promotionTable maps (kindA, kindB) → resultKind, the least upper bound (LUB)
@@ -255,7 +257,7 @@ func Promote(n Number, target NumericKind) Number {
 	}
 	fn := promoter[src][target]
 	if fn == nil {
-		panic(ErrNotANumber)
+		panic(werr.ErrNotANumber)
 	}
 	return fn(n)
 }
@@ -288,7 +290,7 @@ func numberToFloat64(n Number) float64 {
 	case *BigComplex:
 		return toBigFloat(v.real).Float64()
 	}
-	panic(ErrNotANumber)
+	panic(werr.ErrNotANumber)
 }
 
 // numberToComplex128 converts any Number to complex128 for the IEEE 754
@@ -313,7 +315,7 @@ func numberToComplex128(n Number) complex128 {
 	case *BigComplex:
 		return complex(toBigFloat(v.real).Float64(), toBigFloat(v.imag).Float64())
 	}
-	panic(ErrNotANumber)
+	panic(werr.ErrNotANumber)
 }
 
 // cmpFloat64 compares two float64 values, returning -1, 0, or 1.

@@ -23,6 +23,7 @@ import (
 
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 )
 
 func TestFloat_SchemeString(t *testing.T) {
@@ -258,11 +259,11 @@ func TestFloat_ToExact_NonFinite(t *testing.T) {
 					t.Fatal("expected panic for non-finite float")
 				}
 				// Verify it's a ForeignError wrapping ErrExactnessConversion
-				fe, ok := r.(*values.ForeignError)
+				fe, ok := r.(*werr.ForeignError)
 				if !ok {
 					t.Fatalf("expected ForeignError, got %T: %v", r, r)
 				}
-				if !errors.Is(fe, values.ErrExactnessConversion) {
+				if !errors.Is(fe, werr.ErrExactnessConversion) {
 					t.Fatalf("expected error wrapping ErrExactnessConversion, got: %v", fe)
 				}
 			}()

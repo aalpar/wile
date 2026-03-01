@@ -21,7 +21,7 @@ import (
 
 	"github.com/aalpar/wile/extensions/files"
 	"github.com/aalpar/wile/security"
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -73,6 +73,6 @@ func TestErrorChain_CallDepthExceeded(t *testing.T) {
 		t.Fatalf("expected *RuntimeError, got %T: %v", err, err)
 	}
 
-	c.Assert(errors.Is(err, values.ErrCallDepthExceeded), qt.IsTrue,
+	c.Assert(errors.Is(err, werr.ErrCallDepthExceeded), qt.IsTrue,
 		qt.Commentf("errors.Is chain broken; full error: %v", err))
 }

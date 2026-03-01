@@ -20,6 +20,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/internal/validate"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // compile_validated.go handles compilation of core Scheme forms that go through
@@ -122,7 +123,7 @@ func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext,
 		// Exhaustiveness check: all ValidatedExpr types should be handled above.
 		// This error indicates a new validated type was added without updating
 		// this switch statement.
-		return values.WrapForeignErrorf(values.ErrInvalidArgument, "unknown validated expression type: %T", expr)
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "unknown validated expression type: %T", expr)
 	}
 }
 
@@ -426,8 +427,8 @@ func (p *CompileTimeContinuation) compileClosureBody(
 
 			_, ok := lenv.EnsureLocalBinding(param, environment.BindingTypeVariable)
 			if !ok {
-				return 0, 0, values.WrapForeignErrorf(
-					values.ErrDuplicateBinding,
+				return 0, 0, werr.WrapForeignErrorf(
+					werr.ErrDuplicateBinding,
 					"duplicate parameter %q in %s", param.Key, errContext,
 				)
 			}
@@ -568,7 +569,7 @@ func bindRestParameter(v validate.ValidatedBodyAndParams, p *CompileTimeContinua
 	_, ok := lenv.EnsureLocalBinding(rest, environment.BindingTypeVariable)
 	if !ok {
 		// Rest parameter name conflicts with a required parameter (e.g., (lambda (x . x) ...))
-		return values.WrapForeignErrorf(values.ErrDuplicateBinding, "duplicate rest parameter %q in lambda", rest.Key)
+		return werr.WrapForeignErrorf(werr.ErrDuplicateBinding, "duplicate rest parameter %q in lambda", rest.Key)
 	}
 
 	// Preserve hygiene scopes for the rest parameter, same as required parameters.
@@ -651,7 +652,7 @@ func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallC
 	// Use scope-aware binding resolution for validation
 	binding := p.env.GetBindingWithScopes(sym, symbolScopes)
 	if binding == nil {
-		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such binding %q with compatible scopes for set!", sym.Key)
+		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes for set!", sym.Key)
 	}
 
 	// Check if it's a local binding
@@ -674,7 +675,7 @@ func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallC
 		// Must be global
 		gi := p.env.GetGlobalIndex(sym)
 		if gi == nil {
-			return values.WrapForeignErrorf(values.ErrNoSuchBinding, "internal error: binding found but no index for %q", sym.Key)
+			return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "internal error: binding found but no index for %q", sym.Key)
 		}
 		liti := p.template.MaybeAppendLiteral(gi)
 		p.AppendOperations(

@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 type Stack values.Vector
@@ -39,7 +40,7 @@ func (p *Stack) Push(v values.Value) {
 // on top. See BIBLIOGRAPHY.md "Stack-Based Virtual Machines".
 func (p *Stack) Pull() values.Value {
 	if len(*p) == 0 {
-		panic(values.ErrStackUnderflow)
+		panic(werr.ErrStackUnderflow)
 	}
 	q := (*p)[0]
 	copy((*p), (*p)[1:])
@@ -51,7 +52,7 @@ func (p *Stack) Pull() values.Value {
 func (p *Stack) Pop() values.Value {
 	l := len(*p)
 	if l == 0 {
-		panic(values.ErrStackUnderflow)
+		panic(werr.ErrStackUnderflow)
 	}
 	v := (*p)[l-1]
 	*p = (*p)[:l-1]
@@ -64,10 +65,10 @@ func (p *Stack) Pop() values.Value {
 func (p *Stack) PopN(n int) []values.Value {
 	l := len(*p)
 	if n < 0 {
-		panic(values.WrapForeignErrorf(values.ErrStackUnderflow, "PopN: negative count %d", n))
+		panic(werr.WrapForeignErrorf(werr.ErrStackUnderflow, "PopN: negative count %d", n))
 	}
 	if n > l {
-		panic(values.WrapForeignErrorf(values.ErrStackUnderflow, "PopN: requested %d elements from stack of length %d", n, l))
+		panic(werr.WrapForeignErrorf(werr.ErrStackUnderflow, "PopN: requested %d elements from stack of length %d", n, l))
 	}
 	if n == 0 {
 		return nil
@@ -119,7 +120,7 @@ func (p *Stack) PopAll() []values.Value {
 func (p Stack) PeekK(i int) values.Value {
 	l := len(p)
 	if i < 0 || i >= l {
-		panic(values.WrapForeignErrorf(values.ErrStackUnderflow, "PeekK: index %d out of range for stack of length %d", i, l))
+		panic(werr.WrapForeignErrorf(werr.ErrStackUnderflow, "PeekK: index %d out of range for stack of length %d", i, l))
 	}
 	v := (p)[l-(i+1)]
 	return v

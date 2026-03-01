@@ -15,9 +15,10 @@
 package security
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/aalpar/wile/werr"
 )
 
 // FilesystemRoot returns an Authorizer that restricts file and code
@@ -51,12 +52,12 @@ func (p *filesystemRootAuthorizer) Authorize(req AccessRequest) error {
 	}
 	absTarget, err := filepath.Abs(req.Target)
 	if err != nil {
-		return fmt.Errorf("resolve %q: %w", req.Target, ErrAccessDenied)
+		return werr.WrapForeignErrorf(ErrAccessDenied, "resolve %q", req.Target)
 	}
 	// Target is allowed if it equals the root dir itself or is under it.
 	targetWithSep := absTarget + string(filepath.Separator)
 	if !strings.HasPrefix(targetWithSep, p.root) {
-		return fmt.Errorf("path %q outside root %q: %w", absTarget, strings.TrimSuffix(p.root, string(filepath.Separator)), ErrAccessDenied)
+		return werr.WrapForeignErrorf(ErrAccessDenied, "path %q outside root %q", absTarget, strings.TrimSuffix(p.root, string(filepath.Separator)))
 	}
 	return nil
 }

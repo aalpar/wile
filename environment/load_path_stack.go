@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // LoadPathStack tracks the stack of files currently being loaded.
@@ -51,7 +51,7 @@ func NewLoadPathStack() *LoadPathStack {
 // is not an absolute path.
 func (s *LoadPathStack) Push(absPath string) error {
 	if !filepath.IsAbs(absPath) {
-		return values.WrapForeignErrorf(values.ErrInvalidLoadPath, "path must be absolute: %s", absPath)
+		return werr.WrapForeignErrorf(werr.ErrInvalidLoadPath, "path must be absolute: %s", absPath)
 	}
 
 	s.mu.Lock()

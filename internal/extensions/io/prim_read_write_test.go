@@ -28,6 +28,7 @@ import (
 	extio "github.com/aalpar/wile/internal/extensions/io"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // TestConcurrentMapAccess_T1 verifies that concurrent access to Tokenizers
@@ -1181,7 +1182,7 @@ func TestWriteU8_ByteRangeSentinel(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := engine.Eval(context.Background(), tc.code)
 			qt.Assert(t, err, qt.IsNotNil)
-			qt.Assert(t, errors.Is(err, values.ErrNotAByte), qt.IsTrue)
+			qt.Assert(t, errors.Is(err, werr.ErrNotAByte), qt.IsTrue)
 		})
 	}
 }

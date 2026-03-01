@@ -18,6 +18,8 @@ import (
 	"math"
 	"math/big"
 	"strconv"
+
+	"github.com/aalpar/wile/werr"
 )
 
 var (
@@ -151,7 +153,7 @@ func (p *Float) Multiply(o Number) Number {
 // Divide returns the quotient of this float and another number.
 func (p *Float) Divide(o Number) Number {
 	if o.IsZero() && o.IsExact() {
-		panic(ErrDivisionByZero)
+		panic(werr.ErrDivisionByZero)
 	}
 	v, ok := o.(*Float)
 	if ok {

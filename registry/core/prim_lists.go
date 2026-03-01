@@ -21,6 +21,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // PrimList implements the (list) primitive.
@@ -48,7 +49,7 @@ func PrimList(mc *machine.MachineContext) error {
 
 // PrimMakeList implements the Scheme make-list primitive.
 func PrimMakeList(mc *machine.MachineContext) error {
-	k, err := helpers.RequireArg[*values.Integer](mc, 0, values.ErrNotAnInteger, "make-list")
+	k, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotAnInteger, "make-list")
 	if err != nil {
 		return err
 	}
@@ -56,7 +57,7 @@ func PrimMakeList(mc *machine.MachineContext) error {
 
 	count := int(k.Value)
 	if count < 0 {
-		return values.WrapForeignErrorf(values.ErrInvalidArgument, "make-list: k must be non-negative")
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "make-list: k must be non-negative")
 	}
 
 	// Default fill value is unspecified; we use #f
@@ -108,7 +109,7 @@ func PrimAppend(mc *machine.MachineContext) error {
 	}
 	args, ok := o.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "append: expected a list but got %T", o)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "append: expected a list but got %T", o)
 	}
 
 	// Collect all argument lists into a vector for random access (right-to-left processing)
@@ -118,10 +119,10 @@ func PrimAppend(mc *machine.MachineContext) error {
 		return nil
 	})
 	if err != nil {
-		return values.WrapForeignErrorf(err, "append: error processing arguments: %s", args.SchemeString())
+		return werr.WrapForeignErrorf(err, "append: error processing arguments: %s", args.SchemeString())
 	}
 	if !values.IsEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "append: expected proper list of arguments")
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "append: expected proper list of arguments")
 	}
 	// Build result from right to left
 	var result values.Value = values.EmptyList
@@ -138,7 +139,7 @@ func PrimAppend(mc *machine.MachineContext) error {
 		}
 		pr, ok := lst.(values.Tuple)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "append: expected list but got %T", lst)
+			return werr.WrapForeignErrorf(werr.ErrNotAList, "append: expected list but got %T", lst)
 		}
 		// Collect list elements into a vector for reverse-order access.
 		// We use a vector because lists only support forward traversal, but we need
@@ -151,10 +152,10 @@ func PrimAppend(mc *machine.MachineContext) error {
 			return nil
 		})
 		if err != nil {
-			return values.WrapForeignErrorf(err, "append: error processing list: %s", pr.SchemeString())
+			return werr.WrapForeignErrorf(err, "append: error processing list: %s", pr.SchemeString())
 		}
 		if !values.IsEmptyList(v) {
-			return values.WrapForeignErrorf(values.ErrNotAList, "append: expected proper list but got improper list")
+			return werr.WrapForeignErrorf(werr.ErrNotAList, "append: expected proper list but got improper list")
 		}
 		// Prepend elements in reverse order: iterate backward through vector,
 		// consing each element onto result. This reconstructs the original order.
@@ -176,7 +177,7 @@ func PrimReverse(mc *machine.MachineContext) error {
 	}
 	pr, ok := o.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "reverse: expected a list but got %T", o)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "reverse: expected a list but got %T", o)
 	}
 	var result values.Value = values.EmptyList
 	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
@@ -187,7 +188,7 @@ func PrimReverse(mc *machine.MachineContext) error {
 		return err
 	}
 	if !values.IsEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "reverse: expected a proper list")
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "reverse: expected a proper list")
 	}
 	mc.SetValue(result)
 	return nil
@@ -203,7 +204,7 @@ func PrimLength(mc *machine.MachineContext) error {
 	}
 	pr, ok := o.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "length: expected a list but got %T", o)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "length: expected a list but got %T", o)
 	}
 	count := int64(0)
 	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, _ values.Value) error {
@@ -214,7 +215,7 @@ func PrimLength(mc *machine.MachineContext) error {
 		return err
 	}
 	if !values.IsEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "length: expected a proper list")
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "length: expected a proper list")
 	}
 	mc.SetValue(values.NewInteger(count))
 	return nil
@@ -228,26 +229,26 @@ func PrimListRef(mc *machine.MachineContext) error {
 	k := mc.Arg(1)
 	idx, ok := values.ExactInteger(k)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "list-ref: expected an exact integer index but got %T", k)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "list-ref: expected an exact integer index but got %T", k)
 	}
 	if idx < 0 {
-		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "list-ref: index must be non-negative")
+		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "list-ref: index must be non-negative")
 	}
 	if values.IsEmptyList(o) {
-		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "list-ref: index out of bounds for empty list")
+		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "list-ref: index out of bounds for empty list")
 	}
 	pr, ok := o.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "list-ref: expected a list but got %T", o)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "list-ref: expected a list but got %T", o)
 	}
 	for range idx {
 		next := pr.Cdr()
 		if values.IsEmptyList(next) {
-			return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "list-ref: index out of bounds")
+			return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "list-ref: index out of bounds")
 		}
 		pr, ok = next.(values.Tuple)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "list-ref: expected a list but got %T", next)
+			return werr.WrapForeignErrorf(werr.ErrNotAList, "list-ref: expected a list but got %T", next)
 		}
 	}
 	mc.SetValue(pr.Car())
@@ -257,7 +258,7 @@ func PrimListRef(mc *machine.MachineContext) error {
 // PrimListSet implements the Scheme list-set! primitive.
 // R7RS §6.4: The index must be an exact non-negative integer.
 func PrimListSet(mc *machine.MachineContext) error {
-	p, err := helpers.RequireArg[*values.Pair](mc, 0, values.ErrNotAList, "list-set!")
+	p, err := helpers.RequireArg[*values.Pair](mc, 0, werr.ErrNotAList, "list-set!")
 	if err != nil {
 		return err
 	}
@@ -266,11 +267,11 @@ func PrimListSet(mc *machine.MachineContext) error {
 
 	idx, ok := values.ExactInteger(idxVal)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "list-set!: expected an exact integer index but got %T", idxVal)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "list-set!: expected an exact integer index but got %T", idxVal)
 	}
 	k := int(idx)
 	if k < 0 {
-		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "list-set!: index must be non-negative")
+		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "list-set!: index must be non-negative")
 	}
 
 	current := p
@@ -278,7 +279,7 @@ func PrimListSet(mc *machine.MachineContext) error {
 		cdr := current.Cdr()
 		next, ok := cdr.(*values.Pair)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "list-set!: index out of range")
+			return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "list-set!: index out of range")
 		}
 		current = next
 	}
@@ -296,10 +297,10 @@ func PrimListTail(mc *machine.MachineContext) error {
 	k := mc.Arg(1)
 	idx, ok := values.ExactInteger(k)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "list-tail: expected an exact integer index but got %T", k)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "list-tail: expected an exact integer index but got %T", k)
 	}
 	if idx < 0 {
-		return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "list-tail: index must be non-negative")
+		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "list-tail: index must be non-negative")
 	}
 	if idx == 0 {
 		mc.SetValue(o)
@@ -307,7 +308,7 @@ func PrimListTail(mc *machine.MachineContext) error {
 	}
 	pr, ok := o.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "list-tail: expected a list but got %T", o)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "list-tail: expected a list but got %T", o)
 	}
 	for i := range idx {
 		next := pr.Cdr()
@@ -316,7 +317,7 @@ func PrimListTail(mc *machine.MachineContext) error {
 				mc.SetValue(values.EmptyList)
 				return nil
 			}
-			return values.WrapForeignErrorf(values.ErrIndexOutOfRange, "list-tail: index out of bounds")
+			return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "list-tail: index out of bounds")
 		}
 		pr, ok = next.(values.Tuple)
 		if !ok {
@@ -324,7 +325,7 @@ func PrimListTail(mc *machine.MachineContext) error {
 				mc.SetValue(next)
 				return nil
 			}
-			return values.WrapForeignErrorf(values.ErrNotAList, "list-tail: expected a list but got %T", next)
+			return werr.WrapForeignErrorf(werr.ErrNotAList, "list-tail: expected a list but got %T", next)
 		}
 	}
 	mc.SetValue(pr)
@@ -358,11 +359,11 @@ func PrimMember(mc *machine.MachineContext) error {
 	if !values.IsEmptyList(rest) {
 		tuple, ok := rest.(values.Tuple)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "member: improper argument list")
+			return werr.WrapForeignErrorf(werr.ErrNotAList, "member: improper argument list")
 		}
 		cmp, ok := tuple.Car().(values.Callable)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAProcedure, "member: expected a procedure for compare but got %T", tuple.Car())
+			return werr.WrapForeignErrorf(werr.ErrNotAProcedure, "member: expected a procedure for compare but got %T", tuple.Car())
 		}
 		compareCls = cmp
 	}
@@ -372,7 +373,7 @@ func PrimMember(mc *machine.MachineContext) error {
 		for !values.IsEmptyList(lst) {
 			pr, ok := lst.(values.Tuple)
 			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAList, "member: expected a list but got %T", lst)
+				return werr.WrapForeignErrorf(werr.ErrNotAList, "member: expected a list but got %T", lst)
 			}
 			if values.EqualTo(pr.Car(), obj) {
 				mc.SetValue(pr)
@@ -390,7 +391,7 @@ func PrimMember(mc *machine.MachineContext) error {
 	for !values.IsEmptyList(lst) {
 		pr, ok := lst.(values.Tuple)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "member: expected a list but got %T", lst)
+			return werr.WrapForeignErrorf(werr.ErrNotAList, "member: expected a list but got %T", lst)
 		}
 
 		// Call compare procedure with (obj, element)
@@ -438,11 +439,11 @@ func PrimAssoc(mc *machine.MachineContext) error {
 	if !values.IsEmptyList(rest) {
 		tuple, ok := rest.(values.Tuple)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "assoc: improper argument list")
+			return werr.WrapForeignErrorf(werr.ErrNotAList, "assoc: improper argument list")
 		}
 		cmp, ok := tuple.Car().(values.Callable)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAProcedure, "assoc: expected a procedure for compare but got %T", tuple.Car())
+			return werr.WrapForeignErrorf(werr.ErrNotAProcedure, "assoc: expected a procedure for compare but got %T", tuple.Car())
 		}
 		compareCls = cmp
 	}
@@ -460,7 +461,7 @@ func PrimAssoc(mc *machine.MachineContext) error {
 
 	pr, ok := alist.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "assoc: expected a list but got %T", alist)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "assoc: expected a list but got %T", alist)
 	}
 
 	// Use custom compare procedure
@@ -469,7 +470,7 @@ func PrimAssoc(mc *machine.MachineContext) error {
 	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
 		entry, ok := elem.(values.Tuple)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAPair, "assoc: expected a pair in alist but got %T", elem)
+			return werr.WrapForeignErrorf(werr.ErrNotAPair, "assoc: expected a pair in alist but got %T", elem)
 		}
 
 		// Call compare procedure with (obj, car of entry)
@@ -486,18 +487,18 @@ func PrimAssoc(mc *machine.MachineContext) error {
 		result := sub.GetValue()
 		if values.ValueToBool(result) {
 			mc.SetValue(entry)
-			return values.ErrStopIteration
+			return werr.ErrStopIteration
 		}
 		return nil
 	})
-	if errors.Is(err, values.ErrStopIteration) {
+	if errors.Is(err, werr.ErrStopIteration) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
 	if !values.IsEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "assoc: expected a proper list")
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "assoc: expected a proper list")
 	}
 	mc.SetValue(values.FalseValue)
 	return nil

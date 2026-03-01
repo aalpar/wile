@@ -21,6 +21,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // PrimWithExceptionHandler implements the with-exception-handler primitive.
@@ -29,12 +30,12 @@ import (
 func PrimWithExceptionHandler(mc *machine.MachineContext) error {
 	handler, ok := mc.Arg(0).(values.Callable)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure,
+		return werr.WrapForeignErrorf(werr.ErrNotAProcedure,
 			"with-exception-handler: handler must be a procedure")
 	}
 	thunk, ok := mc.Arg(1).(values.Callable)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure,
+		return werr.WrapForeignErrorf(werr.ErrNotAProcedure,
 			"with-exception-handler: thunk must be a procedure")
 	}
 
@@ -163,7 +164,7 @@ func handleException(mc *machine.MachineContext, excErr *machine.ErrExceptionEsc
 
 		// Non-continuable exception - handler should not return
 		if !excErr.Continuable {
-			return values.WrapForeignErrorf(values.ErrNonContinuableException, "exception handler returned from non-continuable exception")
+			return werr.WrapForeignErrorf(werr.ErrNonContinuableException, "exception handler returned from non-continuable exception")
 		}
 
 		// Continuable: resume execution from the captured continuation
@@ -246,7 +247,7 @@ func PrimError(mc *machine.MachineContext) error {
 
 	msgStr, ok := message.(*values.String)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAString,
+		return werr.WrapForeignErrorf(werr.ErrNotAString,
 			"error: message must be a string but got %T", message)
 	}
 
@@ -257,7 +258,7 @@ func PrimError(mc *machine.MachineContext) error {
 		return nil
 	})
 	if err != nil {
-		return values.WrapForeignErrorf(err, "error: invalid irritants list")
+		return werr.WrapForeignErrorf(err, "error: invalid irritants list")
 	}
 
 	// Create error object and raise it
@@ -286,7 +287,7 @@ func PrimErrorObjectQ(mc *machine.MachineContext) error {
 // PrimErrorObjectMessage implements the error-object-message accessor.
 // Returns the message string from an error object.
 func PrimErrorObjectMessage(mc *machine.MachineContext) error {
-	errObj, err := helpers.RequireArg[*values.NativeError](mc, 0, values.ErrNotANativeError, "error-object-message")
+	errObj, err := helpers.RequireArg[*values.NativeError](mc, 0, werr.ErrNotANativeError, "error-object-message")
 	if err != nil {
 		return err
 	}
@@ -297,7 +298,7 @@ func PrimErrorObjectMessage(mc *machine.MachineContext) error {
 // PrimErrorObjectIrritants implements the error-object-irritants accessor.
 // Returns the list of irritant objects from an error object.
 func PrimErrorObjectIrritants(mc *machine.MachineContext) error {
-	errObj, err := helpers.RequireArg[*values.NativeError](mc, 0, values.ErrNotANativeError, "error-object-irritants")
+	errObj, err := helpers.RequireArg[*values.NativeError](mc, 0, werr.ErrNotANativeError, "error-object-irritants")
 	if err != nil {
 		return err
 	}

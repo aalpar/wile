@@ -20,6 +20,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/aalpar/wile/werr"
 )
 
 // Thread state symbol singletons.
@@ -62,15 +64,6 @@ var (
 
 	// Thread ID counter
 	threadIDCounter uint64
-
-	// ErrJoinTimeout is returned when thread-join! times out
-	ErrJoinTimeout = NewStaticError("thread-join!: timeout")
-
-	// ErrThreadAlreadyStarted is returned when starting an already-started thread
-	ErrThreadAlreadyStarted = NewStaticError("thread-start!: thread already started")
-
-	// ErrCrossThreadContinuation is returned when invoking continuation from different thread
-	ErrCrossThreadContinuation = NewStaticError("cannot invoke continuation from different thread")
 )
 
 // ThreadState represents the state of a thread
@@ -217,11 +210,11 @@ func (p *Thread) Start(parentCtx context.Context) error {
 	p.mu.Lock()
 	if p.state != ThreadNew {
 		p.mu.Unlock()
-		return ErrThreadAlreadyStarted
+		return werr.ErrThreadAlreadyStarted
 	}
 	if p.RunFunc == nil {
 		p.mu.Unlock()
-		return WrapForeignErrorf(ErrInvalidArgument, "thread-start!: no run function set")
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "thread-start!: no run function set")
 	}
 
 	p.state = ThreadRunnable
@@ -246,9 +239,9 @@ func (p *Thread) Start(parentCtx context.Context) error {
 				p.state = ThreadTerminated
 				switch v := r.(type) {
 				case error:
-					p.exception = WrapForeignErrorWithCause(ErrThreadPanic, v, "thread %q: panic recovery", p.name)
+					p.exception = werr.WrapForeignErrorWithCause(werr.ErrThreadPanic, v, "thread %q: panic recovery", p.name)
 				default:
-					p.exception = WrapForeignErrorf(ErrThreadPanic, "thread %q: panic recovery: %v", p.name, r)
+					p.exception = werr.WrapForeignErrorf(werr.ErrThreadPanic, "thread %q: panic recovery: %v", p.name, r)
 				}
 				p.mu.Unlock()
 			}
@@ -279,7 +272,7 @@ func (p *Thread) Join(timeout *time.Duration) (Value, error) {
 		case <-p.done:
 			// Thread completed
 		case <-time.After(*timeout):
-			return nil, ErrJoinTimeout
+			return nil, werr.ErrJoinTimeout
 		}
 	}
 

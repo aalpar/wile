@@ -19,6 +19,7 @@ import (
 
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // evalWhenBehavior categorizes what an eval-when phase name triggers.
@@ -100,7 +101,7 @@ func (p *CompileTimeContinuation) CompileEvalWhen(ctctx CompileTimeCallContext, 
 	}
 	bodyPair, ok := bodyCdr.(*syntax.SyntaxPair)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotASyntaxPair, "eval-when: expected body expressions")
+		return werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "eval-when: expected body expressions")
 	}
 
 	// If expand phase, evaluate at compile time
@@ -140,7 +141,7 @@ func (p *CompileTimeContinuation) parseEvalWhenPhases(ctx context.Context, phase
 	}
 	phasesPair, ok := phasesExpr.(*syntax.SyntaxPair)
 	if !ok {
-		return 0, values.WrapForeignErrorf(values.ErrNotASyntaxPair, "eval-when: phase list must be a list")
+		return 0, werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "eval-when: phase list must be a list")
 	}
 
 	// Iterate through phase symbols
@@ -148,13 +149,13 @@ func (p *CompileTimeContinuation) parseEvalWhenPhases(ctx context.Context, phase
 	v, err := current.SyntaxForEach(ctx, func(_ context.Context, _ int, _ bool, phaseVal syntax.SyntaxValue) error {
 		phaseSym, ok := phaseVal.(*syntax.SyntaxSymbol)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "eval-when: phase must be a symbol")
+			return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "eval-when: phase must be a symbol")
 		}
 
 		phaseName := phaseSym.Sym.Key
 		b, ok := evalWhenPhaseTable[phaseName]
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrInvalidArgument, "eval-when: unknown phase %q", phaseName)
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "eval-when: unknown phase %q", phaseName)
 		}
 		behavior |= b
 		return nil
@@ -163,7 +164,7 @@ func (p *CompileTimeContinuation) parseEvalWhenPhases(ctx context.Context, phase
 		return 0, err
 	}
 	if !syntax.IsSyntaxEmptyList(v) {
-		return 0, values.WrapForeignErrorf(values.ErrNotAList, "eval-when: improper phase list")
+		return 0, werr.WrapForeignErrorf(werr.ErrNotAList, "eval-when: improper phase list")
 	}
 	return behavior, nil
 }
@@ -198,10 +199,10 @@ func (p *CompileTimeContinuation) evalWhenCompileForRuntime(ctctx CompileTimeCal
 		return nil
 	})
 	if err != nil {
-		return values.WrapForeignErrorf(err, "eval-when: error processing body expressions")
+		return werr.WrapForeignErrorf(err, "eval-when: error processing body expressions")
 	}
 	if !syntax.IsSyntaxEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "eval-when: improper body expressions list")
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "eval-when: improper body expressions list")
 	}
 
 	// Compile each expression, only the last one in tail position
@@ -211,7 +212,7 @@ func (p *CompileTimeContinuation) evalWhenCompileForRuntime(ctctx CompileTimeCal
 		// Expand the expression
 		expandedExpr, err := expander.ExpandExpression(stxVal)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "eval-when: expansion failed")
+			return werr.WrapForeignErrorf(err, "eval-when: expansion failed")
 		}
 
 		// Create context - only last expression can be in tail position
@@ -223,7 +224,7 @@ func (p *CompileTimeContinuation) evalWhenCompileForRuntime(ctctx CompileTimeCal
 		// Compile the expression
 		err = p.CompileExpression(exprCcnt, expandedExpr)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "eval-when: compilation failed")
+			return werr.WrapForeignErrorf(err, "eval-when: compilation failed")
 		}
 
 		// Pop intermediate results (except for the last one)

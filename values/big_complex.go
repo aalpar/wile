@@ -17,6 +17,8 @@ package values
 import (
 	"math"
 	"math/big"
+
+	"github.com/aalpar/wile/werr"
 )
 
 var (
@@ -67,7 +69,7 @@ func validateBigComplexPart(n Number) {
 	case *BigInteger, *BigFloat, *Rational:
 		return
 	default:
-		panic(ErrNotANumber)
+		panic(werr.ErrNotANumber)
 	}
 }
 
@@ -103,7 +105,7 @@ func toBigFloat(n Number) *BigFloat {
 		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(v.Rat())
 		return &BigFloat{value: bf}
 	}
-	panic(ErrNotANumber)
+	panic(werr.ErrNotANumber)
 }
 
 // maybeSimplify returns a real number if imag is zero, otherwise returns BigComplex.
@@ -128,7 +130,7 @@ func promoteToBigComplexPart(n Number) Number {
 	case *Float:
 		return NewBigFloatFromFloat64(v.Value)
 	}
-	panic(ErrNotANumber)
+	panic(werr.ErrNotANumber)
 }
 
 // addParts adds two BigComplex-compatible parts.
@@ -160,7 +162,7 @@ func addParts(a, b Number) Number {
 	case *BigFloat:
 		return va.Add(toBigFloat(b))
 	}
-	panic(ErrNotANumber)
+	panic(werr.ErrNotANumber)
 }
 
 // subtractParts subtracts two BigComplex-compatible parts.
@@ -192,7 +194,7 @@ func subtractParts(a, b Number) Number {
 	case *BigFloat:
 		return va.Subtract(toBigFloat(b))
 	}
-	panic(ErrNotANumber)
+	panic(werr.ErrNotANumber)
 }
 
 // multiplyParts multiplies two BigComplex-compatible parts.
@@ -219,7 +221,7 @@ func multiplyParts(a, b Number) Number {
 	case *BigFloat:
 		return va.Multiply(toBigFloat(b))
 	}
-	panic(ErrNotANumber)
+	panic(werr.ErrNotANumber)
 }
 
 // divideParts divides two BigComplex-compatible parts, preserving exactness when possible.
@@ -248,7 +250,7 @@ func divideParts(a, b Number) Number {
 	case *BigFloat:
 		return va.Divide(toBigFloat(b))
 	}
-	panic(ErrNotANumber)
+	panic(werr.ErrNotANumber)
 }
 
 // Add returns the sum of this BigComplex and another number.
@@ -362,7 +364,7 @@ func (p *BigComplex) Multiply(o Number) Number {
 // R7RS §6.2.2 Exactness: exact / exact = exact, exact / inexact = inexact.
 func (p *BigComplex) Divide(o Number) Number {
 	if o.IsZero() && o.IsExact() {
-		panic(ErrDivisionByZero)
+		panic(werr.ErrDivisionByZero)
 	}
 	return bigComplexDivide[o.Kind()](p, o)
 }
@@ -382,7 +384,7 @@ func negatePart(n Number) Number {
 	case *Rational:
 		return v.Negate()
 	}
-	panic(ErrNotANumber)
+	panic(werr.ErrNotANumber)
 }
 
 // IsZero returns true if both real and imaginary parts are zero.
@@ -496,7 +498,7 @@ func toExactPart(n Number) Number {
 		}
 		return q
 	}
-	panic(ErrNotANumber)
+	panic(werr.ErrNotANumber)
 }
 
 // ToInexact converts this BigComplex to an inexact representation.

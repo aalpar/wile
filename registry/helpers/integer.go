@@ -22,6 +22,7 @@ import (
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // FoldOp represents the type of fold operation for integers.
@@ -64,19 +65,19 @@ func extractIntegerArg(v values.Value, name string) (int64, bool, error) {
 	case *values.Float:
 		// Check if the float represents an integer
 		if math.IsNaN(n.Value) || math.IsInf(n.Value, 0) {
-			return 0, false, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, n.Value)
+			return 0, false, werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %v", name, n.Value)
 		}
 		if n.Value != math.Trunc(n.Value) {
-			return 0, false, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, n.Value)
+			return 0, false, werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %v", name, n.Value)
 		}
 		return int64(n.Value), true, nil
 	default:
-		return 0, false, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %T", name, v)
+		return 0, false, werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %T", name, v)
 	}
 }
 
 // errNeedsBigInt is a sentinel error indicating we need to use the big.Int path.
-var errNeedsBigInt = values.NewStaticError("needs big int")
+var errNeedsBigInt = werr.NewStaticError("needs big int")
 
 // IntegerFold is a helper for integer fold operations (gcd, lcm).
 // Takes rest args at index 0, applies absolute value, then folds with combiner.
@@ -105,7 +106,7 @@ func IntegerFold(
 	}
 	pr, ok := o.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list but got %T", name, o)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list but got %T", name, o)
 	}
 
 	// First pass: check types and detect if we need big.Int path
@@ -125,14 +126,14 @@ func IntegerFold(
 		case *values.Float:
 			// Check if it represents an integer
 			if math.IsNaN(v.Value) || math.IsInf(v.Value, 0) {
-				return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, v.Value)
+				return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %v", name, v.Value)
 			}
 			if v.Value != math.Trunc(v.Value) {
-				return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, v.Value)
+				return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %v", name, v.Value)
 			}
 			hasInexact = true
 		default:
-			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %T", name, current.Car())
+			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %T", name, current.Car())
 		}
 		cdr := current.Cdr()
 		if values.IsEmptyList(cdr) {
@@ -191,7 +192,7 @@ func IntegerFold(
 		return err
 	}
 	if !values.IsEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "%s: not a proper list", name)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: not a proper list", name)
 	}
 	if hasInexact {
 		mc.SetValue(values.NewFloat(float64(result)))
@@ -222,7 +223,7 @@ func integerFoldBig(
 		// Float should have been validated as integer in caller
 		result = big.NewInt(int64(v.Value))
 	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %T", name, pr.Car())
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %T", name, pr.Car())
 	}
 	result.Abs(result)
 
@@ -248,7 +249,7 @@ func integerFoldBig(
 			// Float should have been validated as integer in caller
 			val = big.NewInt(int64(n.Value))
 		default:
-			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %T", name, next)
+			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %T", name, next)
 		}
 		val.Abs(val)
 
@@ -271,7 +272,7 @@ func integerFoldBig(
 		return err
 	}
 	if !values.IsEmptyList(v) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "%s: not a proper list", name)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: not a proper list", name)
 	}
 
 	// Return result with appropriate exactness
@@ -298,10 +299,10 @@ func ExtractInteger(v values.Value, name string) (int64, *big.Int, bool, error) 
 	case *values.Float:
 		// Check if it's an integer value
 		if math.IsInf(n.Value, 0) || math.IsNaN(n.Value) {
-			return 0, nil, false, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, n.Value)
+			return 0, nil, false, werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %v", name, n.Value)
 		}
 		if math.Floor(n.Value) != n.Value {
-			return 0, nil, false, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, n.Value)
+			return 0, nil, false, werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %v", name, n.Value)
 		}
 		// Check if it fits in int64
 		if n.Value >= -9223372036854775808 && n.Value <= 9223372036854775807 {
@@ -312,7 +313,7 @@ func ExtractInteger(v values.Value, name string) (int64, *big.Int, bool, error) 
 		bi, _ := bf.Int(nil)
 		return 0, bi, true, nil
 	default:
-		return 0, nil, false, values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %T", name, v)
+		return 0, nil, false, werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %T", name, v)
 	}
 }
 

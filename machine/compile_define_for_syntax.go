@@ -18,6 +18,7 @@ import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // CompileDefineForSyntax handles (define-for-syntax name expr) or
@@ -44,14 +45,14 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	// Get the first element - either a symbol (simple define) or a pair (function define)
 	first := argsPair.SyntaxCar()
 	if first == nil {
-		return values.WrapForeignErrorf(values.ErrUnexpectedNil, "define-for-syntax: missing name")
+		return werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-for-syntax: missing name")
 	}
 
 	// Get the rest (value expression or body)
 	restVal := argsPair.SyntaxCdr()
 	restPair, ok := restVal.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(restPair) {
-		return values.WrapForeignErrorf(values.ErrNotASyntaxPair, "define-for-syntax: missing expression")
+		return werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "define-for-syntax: missing expression")
 	}
 
 	var nameSym *values.Symbol
@@ -64,7 +65,7 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 		nameStx := firstPair.SyntaxCar()
 		nameSyntaxSym, ok := nameStx.(*syntax.SyntaxSymbol)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "define-for-syntax: function name must be a symbol")
+			return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "define-for-syntax: function name must be a symbol")
 		}
 		nameSym = nameSyntaxSym.Unwrap().(*values.Symbol)
 
@@ -77,7 +78,7 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 		// Simple definition: (define-for-syntax name expr)
 		nameSyntaxSym, ok := first.(*syntax.SyntaxSymbol)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "define-for-syntax: name must be a symbol")
+			return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "define-for-syntax: name must be a symbol")
 		}
 		nameSym = nameSyntaxSym.Unwrap().(*values.Symbol)
 
@@ -103,7 +104,7 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	if globalIndex != nil {
 		err = expandEnv.SetOwnGlobalValue(globalIndex, result)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "define-for-syntax: failed to store value")
+			return werr.WrapForeignErrorf(err, "define-for-syntax: failed to store value")
 		}
 	}
 

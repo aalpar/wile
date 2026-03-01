@@ -27,6 +27,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 )
 
 // makeMC constructs a MachineContext with the given values as local bindings.
@@ -232,7 +233,7 @@ func TestExtractInteger(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				_, _, _, err := ExtractInteger(tc.input, "test")
 				c.Assert(err, qt.IsNotNil)
-				c.Assert(errors.Is(err, values.ErrNotANumber), qt.IsTrue)
+				c.Assert(errors.Is(err, werr.ErrNotANumber), qt.IsTrue)
 			})
 		}
 	})
@@ -532,67 +533,67 @@ func TestIntegerFold_Errors(t *testing.T) {
 			"gcd non-integer argument string",
 			FoldOpGCD, 0,
 			values.List(values.NewString("hello")),
-			values.ErrNotANumber,
+			werr.ErrNotANumber,
 		},
 		{
 			"lcm non-integer argument boolean",
 			FoldOpLCM, 1,
 			values.List(values.TrueValue),
-			values.ErrNotANumber,
+			werr.ErrNotANumber,
 		},
 		{
 			"gcd non-integer float NaN",
 			FoldOpGCD, 0,
 			values.List(values.NewFloat(math.NaN())),
-			values.ErrNotANumber,
+			werr.ErrNotANumber,
 		},
 		{
 			"gcd non-integer float +Inf",
 			FoldOpGCD, 0,
 			values.List(values.NewFloat(math.Inf(1))),
-			values.ErrNotANumber,
+			werr.ErrNotANumber,
 		},
 		{
 			"gcd non-integer float -Inf",
 			FoldOpGCD, 0,
 			values.List(values.NewFloat(math.Inf(-1))),
-			values.ErrNotANumber,
+			werr.ErrNotANumber,
 		},
 		{
 			"gcd non-integer float 3.5",
 			FoldOpGCD, 0,
 			values.List(values.NewFloat(3.5)),
-			values.ErrNotANumber,
+			werr.ErrNotANumber,
 		},
 		{
 			"lcm non-integer float 2.7",
 			FoldOpLCM, 1,
 			values.List(values.NewFloat(2.7)),
-			values.ErrNotANumber,
+			werr.ErrNotANumber,
 		},
 		{
 			"gcd non-list argument",
 			FoldOpGCD, 0,
 			values.NewInteger(42),
-			values.ErrNotAList,
+			werr.ErrNotAList,
 		},
 		{
 			"lcm non-list argument",
 			FoldOpLCM, 1,
 			values.NewString("hello"),
-			values.ErrNotAList,
+			werr.ErrNotAList,
 		},
 		{
 			"gcd mixed valid and invalid",
 			FoldOpGCD, 0,
 			values.List(values.NewInteger(12), values.NewString("bad")),
-			values.ErrNotANumber,
+			werr.ErrNotANumber,
 		},
 		{
 			"lcm NaN after valid integer",
 			FoldOpLCM, 1,
 			values.List(values.NewInteger(4), values.NewFloat(math.NaN())),
-			values.ErrNotANumber,
+			werr.ErrNotANumber,
 		},
 	}
 

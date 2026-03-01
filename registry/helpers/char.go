@@ -17,6 +17,7 @@ package helpers
 import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // variadicCompare is a generic helper for variadic comparison primitives.
@@ -33,7 +34,7 @@ func variadicCompare[T any, V values.Value](
 	first := mc.Arg(0)
 	val1, ok := extract(first)
 	if !ok {
-		return values.WrapForeignErrorf(errType, "%s: expected %s but got %T", name, typeName, first)
+		return werr.WrapForeignErrorf(errType, "%s: expected %s but got %T", name, typeName, first)
 	}
 
 	rest := mc.Arg(1)
@@ -42,11 +43,11 @@ func variadicCompare[T any, V values.Value](
 	for !values.IsEmptyList(rest) {
 		pair, ok := rest.(values.Tuple)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "%s: expected a list", name)
+			return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list", name)
 		}
 		val, ok := extract(pair.Car())
 		if !ok {
-			return values.WrapForeignErrorf(errType, "%s: expected %s but got %T", name, typeName, pair.Car())
+			return werr.WrapForeignErrorf(errType, "%s: expected %s but got %T", name, typeName, pair.Car())
 		}
 		current := getValue(val)
 		if !cmp(prev, current) {
@@ -68,11 +69,11 @@ func CharCompare(mc *machine.MachineContext, name string, cmp func(a, b rune) bo
 	c2 := mc.Arg(1)
 	ch1, ok := c1.(*values.Character)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotACharacter, "%s: expected a character but got %T", name, c1)
+		return werr.WrapForeignErrorf(werr.ErrNotACharacter, "%s: expected a character but got %T", name, c1)
 	}
 	ch2, ok := c2.(*values.Character)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotACharacter, "%s: expected a character but got %T", name, c2)
+		return werr.WrapForeignErrorf(werr.ErrNotACharacter, "%s: expected a character but got %T", name, c2)
 	}
 	mc.SetValue(values.BoolToBoolean(cmp(ch1.Value, ch2.Value)))
 	return nil
@@ -90,6 +91,6 @@ func CharCompareVariadic(mc *machine.MachineContext, name string, cmp func(a, b 
 			return c.Value
 		},
 		cmp,
-		values.ErrNotACharacter,
+		werr.ErrNotACharacter,
 		"a character")
 }

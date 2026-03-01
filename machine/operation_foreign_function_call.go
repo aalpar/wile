@@ -18,6 +18,7 @@ import (
 	"errors"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // OperationForeignFunctionCall executes a Go function within the VM loop.
@@ -38,7 +39,7 @@ func NewOperationForeignFunctionCall(ffn ForeignFunction) *OperationForeignFunct
 
 func (p *OperationForeignFunctionCall) Apply(mc *MachineContext) (rmc *MachineContext, rerr error) {
 	if p.Function == nil {
-		return nil, values.WrapForeignErrorf(values.ErrUnexpectedNil, "foreign function is nil")
+		return nil, werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "foreign function is nil")
 	}
 	defer func() {
 		r := recover()
@@ -50,7 +51,7 @@ func (p *OperationForeignFunctionCall) Apply(mc *MachineContext) (rmc *MachineCo
 		case error:
 			err = v
 		default:
-			err = values.WrapForeignErrorf(values.ErrPanicRecovery, "foreign function call: %v", v)
+			err = werr.WrapForeignErrorf(werr.ErrPanicRecovery, "foreign function call: %v", v)
 		}
 		rmc = nil
 		rerr = goErrorToSchemeException(mc, err)
