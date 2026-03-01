@@ -39,6 +39,10 @@ const contextCheckMask = 1023
 
 var ErrMachineDoNotAdvancePC = values.NewStaticError("machine do not advance PC: operation did not advance program counter")
 
+var ErrInvalidLiteralIndex = values.NewStaticError("invalid literal index")
+var ErrInvalidGlobalIndex = values.NewStaticError("literal is not a global index")
+var ErrBindingNotFound = values.NewStaticError("binding not found")
+
 // immediateReturnTemplate is an empty NativeTemplate used for callables that
 // complete their work during Apply (e.g., Parameter get/set). Setting this as
 // the template causes Run() to return nil immediately (0 operations).
