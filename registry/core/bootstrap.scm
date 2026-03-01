@@ -138,6 +138,10 @@
      (%make-lazy-promise (lambda () expression)))))
 
 ;; Parameters (dynamic binding)
+;; Note: the after-thunk uses %parameter-raw-set! instead of (p old) to restore
+;; the previous value without re-applying the converter. Using (p old) would
+;; double-convert: old was already converted when captured, so applying the
+;; converter again produces wrong results (e.g. (* 2 already-doubled-value)).
 (define-syntax parameterize
   (syntax-rules ()
     ((parameterize () body ...)
@@ -149,7 +153,7 @@
        (dynamic-wind
          (lambda () (p new))
          (lambda () (parameterize (rest ...) body ...))
-         (lambda () (p old)))))))
+         (lambda () (%parameter-raw-set! p old)))))))
 
 ;; Exception handling (R7RS guard macro)
 (define-syntax guard

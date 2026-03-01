@@ -24,21 +24,31 @@ import (
 
 func TestCharacter_SchemeString(t *testing.T) {
 	tcs := []struct {
-		in  values.Value
-		out string
+		name string
+		in   rune
+		out  string
 	}{
-		{
-			in:  values.NewCharacter('='),
-			out: `#\=`,
-		},
-		{
-			in:  values.NewCharacter('>'),
-			out: `#\>`,
-		},
+		// Graphic ASCII characters
+		{"equals", '=', `#\=`},
+		{"greater-than", '>', `#\>`},
+		{"letter A", 'A', `#\A`},
+		// R7RS §6.6 named characters (all 9)
+		{"alarm", '\a', `#\alarm`},
+		{"backspace", '\b', `#\backspace`},
+		{"delete", 0x7F, `#\delete`},
+		{"escape", 0x1B, `#\escape`},
+		{"newline", '\n', `#\newline`},
+		{"null", 0x00, `#\null`},
+		{"return", '\r', `#\return`},
+		{"space", ' ', `#\space`},
+		{"tab", '\t', `#\tab`},
+		// Non-graphic, non-named → hex escape for round-trip safety
+		{"SOH", 0x01, `#\x1`},
+		{"SOH hex 2", 0x1F, `#\x1F`},
 	}
 	for _, tc := range tcs {
-		t.Run("", func(t *testing.T) {
-			qt.Assert(t, tc.in.SchemeString(), qt.Equals, tc.out)
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, values.NewCharacter(tc.in).SchemeString(), qt.Equals, tc.out)
 		})
 	}
 }

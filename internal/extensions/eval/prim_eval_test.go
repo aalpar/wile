@@ -168,6 +168,13 @@ func TestSchemeReportEnvironment(t *testing.T) {
 	t.Run("wrong argument count", func(t *testing.T) {
 		evalExpectError(t, engine, `(scheme-report-environment)`)
 	})
+
+	// C4: scheme-report-environment must be distinct from interaction-environment.
+	// Before the fix, both returned the same TopLevelEnv object.
+	t.Run("distinct from interaction-environment", func(t *testing.T) {
+		result := eval(t, engine, `(eq? (interaction-environment) (scheme-report-environment 5))`)
+		c.Assert(result.Internal(), qt.Equals, values.FalseValue)
+	})
 }
 
 func TestNullEnvironment(t *testing.T) {

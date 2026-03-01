@@ -24,6 +24,10 @@ func addParameters(r *registry.Registry) error {
 			Doc: "Creates a new parameter with an initial value and optional converter.", ParamNames: []string{"init", "converter"}, Category: "parameters"},
 		{Name: "parameter?", ParamCount: 1, Impl: PrimParameterQ,
 			Doc: "Returns #t if obj is a parameter.", ParamNames: []string{"obj"}, Category: "parameters"},
+		// Internal primitive: bypasses converter when restoring a parameter in parameterize.
+		// Not part of the public R7RS API.
+		{Name: "%parameter-raw-set!", ParamCount: 2, Impl: PrimParameterRawSet,
+			Doc: "Sets a parameter's internal value directly, bypassing the converter.", ParamNames: []string{"param", "val"}, Category: "parameters"},
 	}, registry.PhaseRuntime)
 
 	return nil

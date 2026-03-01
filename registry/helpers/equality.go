@@ -49,6 +49,12 @@ func Eqv(a, b values.Value) bool {
 	case *values.BigFloat:
 		vb, ok := b.(*values.BigFloat)
 		if ok {
+			// NaN is not equal to anything, including itself (IEEE 754).
+			// BigFloat stores NaN as a flag with a zero *big.Float; Cmp would
+			// incorrectly return 0 (equal) without this guard.
+			if va.IsNaN() || vb.IsNaN() {
+				return false
+			}
 			return va.BigFloatValue().Cmp(vb.BigFloatValue()) == 0
 		}
 	case *values.Rational:

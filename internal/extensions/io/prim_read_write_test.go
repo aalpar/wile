@@ -161,7 +161,7 @@ func TestReadStringAllocationLimit(t *testing.T) {
 	}{
 		// Below limit: should succeed
 		{"k equals zero",
-			`(eof-object? (read-string 0 (open-input-string "hello")))`,
+			`(equal? (read-string 0 (open-input-string "hello")) "")`,
 			values.TrueValue},
 		{"k equals one",
 			`(equal? (read-string 1 (open-input-string "hello")) "h")`,
@@ -1034,8 +1034,8 @@ func TestReadStringCoverage(t *testing.T) {
 		{"fewer than k chars",
 			`(equal? (read-string 10 (open-input-string "hi")) "hi")`,
 			values.TrueValue},
-		{"k equals zero returns eof",
-			`(eof-object? (read-string 0 (open-input-string "hello")))`,
+		{"k equals zero returns empty string",
+			`(equal? (read-string 0 (open-input-string "hello")) "")`,
 			values.TrueValue},
 		{"empty port returns eof",
 			`(eof-object? (read-string 5 (open-input-string "")))`,
@@ -1423,6 +1423,58 @@ func TestBinaryPortNoArgError(t *testing.T) {
 	for _, tc := range errs {
 		t.Run(tc.name, func(t *testing.T) {
 			evalExpectError(t, engine, tc.code)
+		})
+	}
+}
+
+// =============================================================================
+// C5: read-bytevector / read-bytevector! return full data, not short reads
+// =============================================================================
+
+func TestReadBytevectorFullRead(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// Partial read at EOF: request more bytes than available, get what's there.
+		// Before the io.ReadFull fix, a short internal buffer could return fewer bytes.
+		{"read-bytevector partial at EOF",
+			`(let* ((data (make-bytevector 100 42))
+			        (port (open-input-bytevector data))
+			        (result (read-bytevector 200 port)))
+			   (bytevector-length result))`,
+			values.NewInteger(100)},
+		// Exact read: request exactly the available bytes.
+		{"read-bytevector exact",
+			`(let* ((data (make-bytevector 50 7))
+			        (port (open-input-bytevector data))
+			        (result (read-bytevector 50 port)))
+			   (bytevector-length result))`,
+			values.NewInteger(50)},
+		// After partial read, next read returns EOF.
+		{"read-bytevector then EOF",
+			`(let* ((data (make-bytevector 5 1))
+			        (port (open-input-bytevector data)))
+			   (read-bytevector 5 port)
+			   (eof-object? (read-bytevector 1 port)))`,
+			values.TrueValue},
+		// L4: read-string 0 returns "" not eof-object (R7RS §6.13.2).
+		{"read-string 0 returns empty string",
+			`(equal? (read-string 0 (open-input-string "hello")) "")`,
+			values.TrueValue},
+		{"read-string 0 on empty port",
+			`(equal? (read-string 0 (open-input-string "")) "")`,
+			values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal().EqualTo(tc.want), qt.IsTrue,
+				qt.Commentf("got %v, want %v", result.Internal().SchemeString(), tc.want.SchemeString()))
 		})
 	}
 }

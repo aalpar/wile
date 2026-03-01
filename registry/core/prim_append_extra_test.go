@@ -31,12 +31,12 @@ func TestBytevectorAppendExtra(t *testing.T) {
 		{
 			name:   "bytevector-append two bytevectors",
 			code:   `(bytevector-append (bytevector 1 2) (bytevector 3 4))`,
-			expect: "#u8( 1 2 3 4 )",
+			expect: "#u8(1 2 3 4)",
 		},
 		{
 			name:   "bytevector-append three args",
 			code:   `(bytevector-append (bytevector 1) (bytevector 2) (bytevector 3))`,
-			expect: "#u8( 1 2 3 )",
+			expect: "#u8(1 2 3)",
 		},
 		{
 			name:   "bytevector-append single empty",
@@ -51,7 +51,7 @@ func TestBytevectorAppendExtra(t *testing.T) {
 		{
 			name:   "bytevector-append single arg",
 			code:   `(bytevector-append (bytevector 1 2 3))`,
-			expect: "#u8( 1 2 3 )",
+			expect: "#u8(1 2 3)",
 		},
 	}
 	for _, tc := range tcs {

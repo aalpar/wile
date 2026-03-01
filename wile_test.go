@@ -208,12 +208,12 @@ func TestNewVector(t *testing.T) {
 
 	t.Run("with elements", func(t *testing.T) {
 		v := NewVector(NewInteger(1), NewString("two"), NewBoolean(true))
-		c.Assert(v.SchemeString(), qt.Equals, `#( 1 "two" #t )`)
+		c.Assert(v.SchemeString(), qt.Equals, `#(1 "two" #t)`)
 	})
 
 	t.Run("single element", func(t *testing.T) {
 		v := NewVector(NewFloat(3.14))
-		c.Assert(v.SchemeString(), qt.Equals, "#( 3.14 )")
+		c.Assert(v.SchemeString(), qt.Equals, "#(3.14)")
 	})
 }
 

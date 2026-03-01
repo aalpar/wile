@@ -32,7 +32,7 @@ func TestBytevectorCopyBang(t *testing.T) {
 			            (from (bytevector 1 2 3)))
 			         (bytevector-copy! to 0 from)
 			         to)`,
-			expectedOutput: "#u8( 1 2 3 0 0 )",
+			expectedOutput: "#u8(1 2 3 0 0)",
 		},
 		{
 			name: "copy with offset",
@@ -40,7 +40,7 @@ func TestBytevectorCopyBang(t *testing.T) {
 			            (from (bytevector 1 2 3)))
 			         (bytevector-copy! to 2 from)
 			         to)`,
-			expectedOutput: "#u8( 0 0 1 2 3 )",
+			expectedOutput: "#u8(0 0 1 2 3)",
 		},
 		{
 			name: "copy with start and end",
@@ -48,7 +48,7 @@ func TestBytevectorCopyBang(t *testing.T) {
 			            (from (bytevector 1 2 3 4 5)))
 			         (bytevector-copy! to 1 from 1 3)
 			         to)`,
-			expectedOutput: "#u8( 0 2 3 0 0 )",
+			expectedOutput: "#u8(0 2 3 0 0)",
 		},
 		{
 			name: "copy entire bytevector to beginning",
@@ -56,7 +56,7 @@ func TestBytevectorCopyBang(t *testing.T) {
 			            (from (bytevector 10 20 30 40)))
 			         (bytevector-copy! to 0 from)
 			         to)`,
-			expectedOutput: "#u8( 10 20 30 40 )",
+			expectedOutput: "#u8(10 20 30 40)",
 		},
 		{
 			name: "copy single byte",
@@ -64,7 +64,7 @@ func TestBytevectorCopyBang(t *testing.T) {
 			            (from (bytevector 42)))
 			         (bytevector-copy! to 1 from)
 			         to)`,
-			expectedOutput: "#u8( 0 42 0 )",
+			expectedOutput: "#u8(0 42 0)",
 		},
 		{
 			name: "copy with start only",
@@ -72,7 +72,7 @@ func TestBytevectorCopyBang(t *testing.T) {
 			            (from (bytevector 10 20 30 40)))
 			         (bytevector-copy! to 0 from 2)
 			         to)`,
-			expectedOutput: "#u8( 30 40 0 0 )",
+			expectedOutput: "#u8(30 40 0 0)",
 		},
 		{
 			name: "copy to end of destination",
@@ -80,7 +80,7 @@ func TestBytevectorCopyBang(t *testing.T) {
 			            (from (bytevector 100 200)))
 			         (bytevector-copy! to 3 from)
 			         to)`,
-			expectedOutput: "#u8( 0 0 0 100 200 )",
+			expectedOutput: "#u8(0 0 0 100 200)",
 		},
 		{
 			name: "copy zero bytes with start equals end",
@@ -88,14 +88,14 @@ func TestBytevectorCopyBang(t *testing.T) {
 			            (from (bytevector 1 2 3)))
 			         (bytevector-copy! to 0 from 1 1)
 			         to)`,
-			expectedOutput: "#u8( 0 0 0 )",
+			expectedOutput: "#u8(0 0 0)",
 		},
 		{
 			name: "copy overlapping regions same bytevector",
 			code: `(let ((bv (bytevector 1 2 3 4 5)))
 			         (bytevector-copy! bv 2 bv 0 3)
 			         bv)`,
-			expectedOutput: "#u8( 1 2 1 2 3 )",
+			expectedOutput: "#u8(1 2 1 2 3)",
 		},
 		{
 			name: "copy with middle section",
@@ -103,7 +103,7 @@ func TestBytevectorCopyBang(t *testing.T) {
 			            (from (bytevector 10 20 30 40 50)))
 			         (bytevector-copy! to 1 from 1 4)
 			         to)`,
-			expectedOutput: "#u8( 0 20 30 40 0 0 )",
+			expectedOutput: "#u8(0 20 30 40 0 0)",
 		},
 	}
 

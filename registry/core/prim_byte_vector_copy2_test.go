@@ -26,19 +26,19 @@ import (
 func TestBytevectorCopyFullCopy(t *testing.T) {
 	result, err := runSchemeCode(t, `(bytevector-copy (bytevector 1 2 3 4 5))`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result.SchemeString(), qt.Equals, "#u8( 1 2 3 4 5 )")
+	qt.Assert(t, result.SchemeString(), qt.Equals, "#u8(1 2 3 4 5)")
 }
 
 func TestBytevectorCopyWithStart(t *testing.T) {
 	result, err := runSchemeCode(t, `(bytevector-copy (bytevector 1 2 3 4 5) 2)`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result.SchemeString(), qt.Equals, "#u8( 3 4 5 )")
+	qt.Assert(t, result.SchemeString(), qt.Equals, "#u8(3 4 5)")
 }
 
 func TestBytevectorCopyWithStartAndEnd(t *testing.T) {
 	result, err := runSchemeCode(t, `(bytevector-copy (bytevector 1 2 3 4 5) 1 3)`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result.SchemeString(), qt.Equals, "#u8( 2 3 )")
+	qt.Assert(t, result.SchemeString(), qt.Equals, "#u8(2 3)")
 }
 
 func TestBytevectorCopyEmptyBytevector(t *testing.T) {
@@ -50,7 +50,7 @@ func TestBytevectorCopyEmptyBytevector(t *testing.T) {
 func TestBytevectorCopyStartZero(t *testing.T) {
 	result, err := runSchemeCode(t, `(bytevector-copy (bytevector 1 2 3 4 5) 0)`)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result.SchemeString(), qt.Equals, "#u8( 1 2 3 4 5 )")
+	qt.Assert(t, result.SchemeString(), qt.Equals, "#u8(1 2 3 4 5)")
 }
 
 func TestBytevectorCopyStartAtEnd(t *testing.T) {

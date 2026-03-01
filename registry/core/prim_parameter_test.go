@@ -493,3 +493,63 @@ func TestCurrentPortParameters(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// C1: parameterize with converter must not double-apply converter on restore
+// =============================================================================
+
+func TestParameterizeConverterNoDoubleApply(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		// C1: After parameterize exits, the parameter must restore to the value
+		// that was captured before entry — NOT re-convert it.
+		// make-parameter applies the converter to init, storing 20.
+		// parameterize captures old=20, sets p=10 (converted to 20 inside), then
+		// restores. The restore must set p=20, not converter(20)=40.
+		{
+			name: "restore does not double-apply converter",
+			code: `(let ((p (make-parameter 10 (lambda (x) (* x 2)))))
+			   (parameterize ((p 5))
+			     'ok)
+			   (p))`,
+			out: values.NewInteger(20),
+		},
+		// Identity converter: restoring with no converter is always correct.
+		{
+			name: "no converter - parameterize restores correctly",
+			code: `(let ((p (make-parameter 10)))
+			   (parameterize ((p 5))
+			     'ok)
+			   (p))`,
+			out: values.NewInteger(10),
+		},
+		// Value inside parameterize is converter(new), not new.
+		{
+			name: "inside body sees converted value",
+			code: `(let ((p (make-parameter 10 (lambda (x) (* x 2)))))
+			   (parameterize ((p 3))
+			     (p)))`,
+			out: values.NewInteger(6),
+		},
+		// Original value is preserved across nested parameterize.
+		{
+			name: "nested parameterize restores correctly",
+			code: `(let ((p (make-parameter 1 (lambda (x) (* x 2)))))
+			   (parameterize ((p 3))
+			     (parameterize ((p 5))
+			       'inner))
+			   (p))`,
+			out: values.NewInteger(2),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
+		})
+	}
+}
