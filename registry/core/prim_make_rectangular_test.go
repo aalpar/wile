@@ -15,6 +15,7 @@
 package core_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/aalpar/wile/registry/testhelpers"
@@ -53,6 +54,36 @@ func TestMakeRectangularComprehensive(t *testing.T) {
 			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
+func TestMakeRectangularResultTypes(t *testing.T) {
+	tcs := []struct {
+		name     string
+		code     string
+		wantType string
+	}{
+		// Inexact floats → native Complex (complex128)
+		{name: "floats produce Complex", code: `(make-rectangular 2.0 1.0)`, wantType: "*values.Complex"},
+		{name: "mixed int/float produces Complex", code: `(make-rectangular 3 4.0)`, wantType: "*values.Complex"},
+		{name: "mixed float/int produces Complex", code: `(make-rectangular 3.0 4)`, wantType: "*values.Complex"},
+
+		// Exact integers → BigComplex
+		{name: "integers produce BigComplex", code: `(make-rectangular 3 4)`, wantType: "*values.BigComplex"},
+
+		// Exact rationals → BigComplex
+		{name: "rationals produce BigComplex", code: `(make-rectangular 1/2 3/4)`, wantType: "*values.BigComplex"},
+
+		// Mixed exact types → BigComplex
+		{name: "int/rational produces BigComplex", code: `(make-rectangular 3 1/2)`, wantType: "*values.BigComplex"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			gotType := fmt.Sprintf("%T", result)
+			qt.Assert(t, gotType, qt.Equals, tc.wantType)
 		})
 	}
 }
