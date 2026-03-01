@@ -122,6 +122,20 @@ func TestBigComplex_Division(t *testing.T) {
 		values.NewBigIntegerFromInt64(0),
 	)
 	c.Assert(func() { bc1.Divide(zero) }, qt.PanicMatches, "division by zero")
+
+	// Division where zero parts produce *Integer intermediates via
+	// multiplyResultForZero. (0+1i)/(0+1i): bc=0*0=Integer(0),
+	// ad=0*1=Integer(0), so numerImag = Integer(0).Subtract(Integer(0))
+	// = Integer(0). This Integer(0) reaches toBigFloat, which must handle
+	// *Integer without panicking.
+	bcPureImag := values.NewBigComplexFromBigIntegers(
+		values.NewBigIntegerFromInt64(0),
+		values.NewBigIntegerFromInt64(1),
+	)
+	quotImag := bcPureImag.Divide(bcPureImag)
+	c.Assert(quotImag, qt.IsNotNil)
+	// (0+1i)/(0+1i) = (0+1)/(0+1) + (0-0)i/(0+1) = 1+0i → simplifies to BigFloat(1)
+	c.Assert(quotImag.(*values.BigFloat).Float64(), qt.Equals, 1.0)
 }
 
 func TestBigComplex_MixedArithmetic(t *testing.T) {
