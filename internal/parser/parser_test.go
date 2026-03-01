@@ -3052,3 +3052,126 @@ func TestParser_FoldCase(t *testing.T) {
 		})
 	}
 }
+
+// TestRadixExactnessPrefix verifies R7RS §7.1.1: prefix ordering (#x#e10 and #e#x10)
+// must both work. Previously, #x#e10 was failing because the MarkerBase16 case
+// did not handle a following exactness marker.
+func TestRadixExactnessPrefix(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewTopLevelEnvironment().Runtime()
+	tcs := []struct {
+		name string
+		in   string
+		want values.Value
+	}{
+		// #e#x order (always worked)
+		{"#e#x10 exact hex 16", "#e#x10", values.NewInteger(16)},
+		{"#i#x10 inexact hex 16.0", "#i#x10", values.NewFloat(16.0)},
+		{"#e#b101 exact binary 5", "#e#b101", values.NewInteger(5)},
+		{"#i#b101 inexact binary 5.0", "#i#b101", values.NewFloat(5.0)},
+		{"#e#o17 exact octal 15", "#e#o17", values.NewInteger(15)},
+		{"#i#o17 inexact octal 15.0", "#i#o17", values.NewFloat(15.0)},
+		// #x#e order (was broken before this fix)
+		{"#x#e10 exact hex 16", "#x#e10", values.NewInteger(16)},
+		{"#x#i10 inexact hex 16.0", "#x#i10", values.NewFloat(16.0)},
+		{"#b#e101 exact binary 5", "#b#e101", values.NewInteger(5)},
+		{"#b#i101 inexact binary 5.0", "#b#i101", values.NewFloat(5.0)},
+		{"#o#e17 exact octal 15", "#o#e17", values.NewInteger(15)},
+		{"#o#i17 inexact octal 15.0", "#o#i17", values.NewFloat(15.0)},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			p := NewParser(env, true, strings.NewReader(tc.in))
+			sv, err := p.ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNil, qt.Commentf("input: %q", tc.in))
+			c.Assert(sv.Unwrap(), valuestest.SchemeEquals, tc.want)
+		})
+	}
+}
+
+// TestParseSpecialFloat verifies the public ParseSpecialFloat function.
+func TestParseSpecialFloat(t *testing.T) {
+	c := qt.New(t)
+	tcs := []struct {
+		in     string
+		wantOK bool
+		isInf  bool
+		isNaN  bool
+		posInf bool
+	}{
+		{"+inf.0", true, true, false, true},
+		{"-inf.0", true, true, false, false},
+		{"+nan.0", true, false, true, false},
+		{"-nan.0", true, false, true, false},
+		{"3.14", false, false, false, false},
+		{"", false, false, false, false},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.in, func(t *testing.T) {
+			f, ok := ParseSpecialFloat(tc.in)
+			c.Assert(ok, qt.Equals, tc.wantOK, qt.Commentf("input: %q", tc.in))
+			if !ok {
+				return
+			}
+			if tc.isInf {
+				c.Assert(f.IsFinite(), qt.IsFalse)
+				c.Assert(f.IsNaN(), qt.IsFalse)
+				if tc.posInf {
+					c.Assert(f.IsPositive(), qt.IsTrue)
+				} else {
+					c.Assert(f.IsNegative(), qt.IsTrue)
+				}
+			}
+			if tc.isNaN {
+				c.Assert(f.IsNaN(), qt.IsTrue)
+			}
+		})
+	}
+}
+
+// TestParseImaginaryStringNumber verifies ParseImaginaryStringNumber.
+func TestParseImaginaryStringNumber(t *testing.T) {
+	c := qt.New(t)
+	tcs := []struct {
+		in     string
+		wantOK bool
+	}{
+		{"+i", true},
+		{"-i", true},
+		{"+3i", true},
+		{"-2.5i", true},
+		{"+inf.0i", true},
+		{"-nan.0i", true},
+		{"3+4i", false}, // full complex, not pure imaginary
+		{"abc", false},
+		{"", false},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.in, func(t *testing.T) {
+			_, ok := ParseImaginaryStringNumber(tc.in)
+			c.Assert(ok, qt.Equals, tc.wantOK, qt.Commentf("input: %q", tc.in))
+		})
+	}
+}
+
+// TestParseComplexStringNumber verifies ParseComplexStringNumber.
+func TestParseComplexStringNumber(t *testing.T) {
+	c := qt.New(t)
+	tcs := []struct {
+		in     string
+		wantOK bool
+	}{
+		{"3+4i", true},
+		{"-1.5+2.5i", true},
+		{"1+inf.0i", true},
+		{"+i", false}, // pure imaginary, no real separator
+		{"abc", false},
+		{"", false},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.in, func(t *testing.T) {
+			_, ok := ParseComplexStringNumber(tc.in)
+			c.Assert(ok, qt.Equals, tc.wantOK, qt.Commentf("input: %q", tc.in))
+		})
+	}
+}

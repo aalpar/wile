@@ -254,7 +254,7 @@ func (p *Integer) Multiply(o Number) Number {
 // R7RS §6.2.2 Exactness: exact / exact = exact (Integer or Rational),
 // exact / inexact = inexact (Float or Complex).
 func (p *Integer) Divide(o Number) Number {
-	if o.IsZero() {
+	if o.IsZero() && o.IsExact() {
 		panic(ErrDivisionByZero)
 	}
 	v, ok := o.(*Integer)

@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -172,9 +173,45 @@ func PrimSqrt(mc *machine.MachineContext) error {
 	switch v := o.(type) {
 	case *values.Integer:
 		if v.Value < 0 {
+			// Check for negative perfect square: result is exact imaginary
+			absVal := -v.Value
+			root, ok := exactIntegerSqrt(absVal)
+			if ok {
+				mc.SetValue(values.NewBigComplex(values.NewBigIntegerFromInt64(0), values.NewBigIntegerFromInt64(root)))
+				return nil
+			}
 			mc.SetValue(values.NewComplex(cmplx.Sqrt(complex(float64(v.Value), 0))))
 		} else {
+			// Check for perfect square: result is exact integer
+			root, ok := exactIntegerSqrt(v.Value)
+			if ok {
+				mc.SetValue(values.NewInteger(root))
+				return nil
+			}
 			mc.SetValue(values.NewFloat(math.Sqrt(float64(v.Value))))
+		}
+	case *values.BigInteger:
+		bi := v.BigInt()
+		root := new(big.Int).Sqrt(new(big.Int).Abs(bi))
+		check := new(big.Int).Mul(root, root)
+		absBI := new(big.Int).Abs(bi)
+		if check.Cmp(absBI) == 0 {
+			// Perfect square BigInteger
+			if bi.Sign() < 0 {
+				mc.SetValue(values.NewBigComplex(
+					values.NewBigInteger(new(big.Int)),
+					values.NewBigInteger(root),
+				))
+			} else {
+				mc.SetValue(values.NewBigInteger(root))
+			}
+			return nil
+		}
+		f := new(big.Float).SetInt(bi)
+		if bi.Sign() < 0 {
+			mc.SetValue(values.NewComplex(cmplx.Sqrt(complex(numberToFloat64(v), 0))))
+		} else {
+			mc.SetValue(values.NewBigFloat(new(big.Float).Sqrt(f)))
 		}
 	case *values.Float:
 		if v.Value < 0 {
@@ -183,6 +220,25 @@ func PrimSqrt(mc *machine.MachineContext) error {
 			mc.SetValue(values.NewFloat(math.Sqrt(v.Value)))
 		}
 	case *values.Rational:
+		// Check if numerator and denominator are both perfect squares
+		num := v.Num()
+		denom := v.Denom()
+		numAbs := new(big.Int).Abs(num)
+		numRoot := new(big.Int).Sqrt(numAbs)
+		denomRoot := new(big.Int).Sqrt(denom)
+		if new(big.Int).Mul(numRoot, numRoot).Cmp(numAbs) == 0 &&
+			new(big.Int).Mul(denomRoot, denomRoot).Cmp(denom) == 0 {
+			// Perfect square rational
+			if num.Sign() < 0 {
+				mc.SetValue(values.NewBigComplex(
+					values.NewBigInteger(new(big.Int)),
+					values.NewRationalFromBigInt(numRoot, denomRoot),
+				))
+			} else {
+				mc.SetValue(values.NewRationalFromBigInt(numRoot, denomRoot))
+			}
+			return nil
+		}
 		f := v.Float64()
 		if f < 0 {
 			mc.SetValue(values.NewComplex(cmplx.Sqrt(complex(f, 0))))
@@ -1029,6 +1085,47 @@ func toExactBigComplexPart(n values.Number) values.Number {
 	}
 }
 
+// exactIntegerSqrt checks if n (non-negative) is a perfect square.
+// For n <= 2^53 the float64 sqrt is exact; for larger values we verify
+// that root*root == n. Returns (root, true) on success.
+func exactIntegerSqrt(n int64) (int64, bool) {
+	if n == 0 {
+		return 0, true
+	}
+	root := int64(math.Sqrt(float64(n)))
+	// Correct for float64 rounding near the boundary of large integers
+	for root*root > n {
+		root--
+	}
+	for (root+1)*(root+1) <= n {
+		root++
+	}
+	if root*root == n {
+		return root, true
+	}
+	return 0, false
+}
+
+// numberToFloat64 converts any real Number to float64 for fallback computations.
+func numberToFloat64(n values.Number) float64 {
+	switch v := n.(type) {
+	case *values.Integer:
+		return float64(v.Value)
+	case *values.BigInteger:
+		f, _ := new(big.Float).SetInt(v.BigInt()).Float64()
+		return f
+	case *values.Float:
+		return v.Value
+	case *values.BigFloat:
+		f, _ := v.BigFloatValue().Float64()
+		return f
+	case *values.Rational:
+		return v.Float64()
+	default:
+		return math.NaN()
+	}
+}
+
 // isRealNumber returns true if the value is a real number (not complex).
 // Real numbers include Integer, BigInteger, Float, BigFloat, and Rational.
 // Complex and BigComplex are only considered real if their imaginary part is zero.
@@ -1101,17 +1198,9 @@ func PrimRealPart(mc *machine.MachineContext) error {
 		mc.SetValue(c.RealPart())
 		return nil
 	}
-	switch v := o.(type) {
-	case *values.Integer:
-		mc.SetValue(values.NewFloat(float64(v.Value)))
-	case *values.BigInteger:
-		mc.SetValue(v)
-	case *values.Float:
-		mc.SetValue(v)
-	case *values.BigFloat:
-		mc.SetValue(v)
-	case *values.Rational:
-		mc.SetValue(values.NewFloat(v.Float64()))
+	switch o.(type) {
+	case *values.Integer, *values.BigInteger, *values.Float, *values.BigFloat, *values.Rational:
+		mc.SetValue(o)
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "real-part: expected a number but got %T", o)
 	}
@@ -1127,12 +1216,10 @@ func PrimImagPart(mc *machine.MachineContext) error {
 		return nil
 	}
 	switch o.(type) {
-	case *values.Integer, *values.Float, *values.Rational:
-		mc.SetValue(values.NewFloat(0))
-	case *values.BigInteger:
-		mc.SetValue(values.NewBigIntegerFromInt64(0))
-	case *values.BigFloat:
-		mc.SetValue(values.NewBigFloatFromFloat64(0))
+	case *values.Integer, *values.BigInteger, *values.Rational:
+		mc.SetValue(values.NewInteger(0))
+	case *values.Float, *values.BigFloat:
+		mc.SetValue(values.NewFloat(0.0))
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "imag-part: expected a number but got %T", o)
 	}
@@ -1151,13 +1238,9 @@ func PrimMagnitude(mc *machine.MachineContext) error {
 		imagF := v.ImagAsBigFloat().Float64()
 		mc.SetValue(values.NewFloat(cmplx.Abs(complex(realF, imagF))))
 	case *values.Integer:
-		mc.SetValue(values.NewFloat(math.Abs(float64(v.Value))))
+		mc.SetValue(v.Abs())
 	case *values.BigInteger:
-		bi := v.BigInt()
-		if bi.Sign() < 0 {
-			bi = new(big.Int).Neg(bi)
-		}
-		mc.SetValue(values.NewBigFloat(new(big.Float).SetInt(bi)))
+		mc.SetValue(v.Abs())
 	case *values.Float:
 		mc.SetValue(values.NewFloat(math.Abs(v.Value)))
 	case *values.BigFloat:
@@ -1167,7 +1250,7 @@ func PrimMagnitude(mc *machine.MachineContext) error {
 		}
 		mc.SetValue(values.NewBigFloat(bf))
 	case *values.Rational:
-		mc.SetValue(values.NewFloat(math.Abs(v.Float64())))
+		mc.SetValue(v.Abs())
 	default:
 		return values.WrapForeignErrorf(values.ErrNotANumber, "magnitude: expected a number but got %T", o)
 	}
@@ -1262,7 +1345,7 @@ func PrimNumberToString(mc *machine.MachineContext) error {
 	case *values.BigComplex:
 		mc.SetValue(values.NewString(v.SchemeString()))
 	case *values.BigInteger:
-		mc.SetValue(values.NewString(v.SchemeString()))
+		mc.SetValue(values.NewString(v.BigInt().Text(radix)))
 	case *values.BigFloat:
 		mc.SetValue(values.NewString(v.SchemeString()))
 	default:
@@ -1353,9 +1436,30 @@ func PrimStringToNumber(mc *machine.MachineContext) error {
 
 // parseStringToNumber parses a numeric string in the given radix.
 // Returns nil if the string is not a valid number.
+// R7RS §6.2.7: handles integers, rationals, floats, complex, and special values.
 func parseStringToNumber(input string, radix int) values.Value {
 	if len(input) == 0 {
 		return nil
+	}
+
+	// Special float values (+inf.0, -inf.0, +nan.0, -nan.0) are always decimal.
+	sf, ok := parser.ParseSpecialFloat(input)
+	if ok {
+		return sf
+	}
+
+	// Complex and imaginary numbers (only for radix 10).
+	if radix == 10 && len(input) > 1 && (input[len(input)-1] == 'i' || input[len(input)-1] == 'I') {
+		// Try pure imaginary first (no real part separator).
+		n, imagOK := parser.ParseImaginaryStringNumber(input)
+		if imagOK {
+			return n
+		}
+		// Try full complex (real + imaginary parts).
+		n, complexOK := parser.ParseComplexStringNumber(input)
+		if complexOK {
+			return n
+		}
 	}
 
 	// Try integer first.
@@ -1366,8 +1470,8 @@ func parseStringToNumber(input string, radix int) values.Value {
 
 	// Try big integer for overflow.
 	bi := new(big.Int)
-	_, ok := bi.SetString(input, radix)
-	if ok {
+	_, bigOK := bi.SetString(input, radix)
+	if bigOK {
 		return values.NewBigInteger(bi)
 	}
 

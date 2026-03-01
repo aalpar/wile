@@ -84,7 +84,7 @@ func TestSafeEngine_AllowsSafe(t *testing.T) {
 		// io
 		{"display (io)", `(let ((p (open-output-string))) (display 42 p) (get-output-string p))`, `"42"`},
 		// math
-		{"sqrt (math)", "(sqrt 4)", "2.0"},
+		{"sqrt (math)", "(sqrt 4)", "2"},
 		// exceptions — raise + guard
 		{"guard (exceptions)", "(guard (e (#t e)) (raise 42))", "42"},
 		// all-safe: records
@@ -140,7 +140,7 @@ func TestWithoutCore_PlusExtension(t *testing.T) {
 	// math extension primitives should work
 	result, err := engine.Eval(ctx, "(sqrt 9)")
 	c.Assert(err, qt.IsNil)
-	c.Assert(result.SchemeString(), qt.Equals, "3.0")
+	c.Assert(result.SchemeString(), qt.Equals, "3")
 
 	// core primitives should be absent
 	_, err = engine.Eval(ctx, "(+ 1 2)")

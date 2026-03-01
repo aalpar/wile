@@ -770,3 +770,148 @@ func TestExptAdditionalCases(t *testing.T) {
 		})
 	}
 }
+
+// TestSqrtExactness verifies R7RS §6.2.6: sqrt returns exact for perfect squares.
+func TestSqrtExactness(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"sqrt 4 is exact 2", `(exact? (sqrt 4))`, values.TrueValue},
+		{"sqrt 4 is 2", `(= (sqrt 4) 2)`, values.TrueValue},
+		{"sqrt 9 is exact 3", `(exact? (sqrt 9))`, values.TrueValue},
+		{"sqrt 0 is exact 0", `(exact? (sqrt 0))`, values.TrueValue},
+		{"sqrt 1/4 is exact", `(exact? (sqrt 1/4))`, values.TrueValue},
+		{"sqrt 1/4 is 1/2", `(= (sqrt 1/4) 1/2)`, values.TrueValue},
+		{"sqrt 9/4 is 3/2", `(= (sqrt 9/4) 3/2)`, values.TrueValue},
+		{"sqrt -4 is exact", `(exact? (sqrt -4))`, values.TrueValue},
+		{"sqrt -4 real is 0", `(= (real-part (sqrt -4)) 0)`, values.TrueValue},
+		{"sqrt -4 imag is 2", `(= (imag-part (sqrt -4)) 2)`, values.TrueValue},
+		{"sqrt 2 is inexact", `(inexact? (sqrt 2))`, values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestNumberToStringRadix verifies R7RS §6.2.7: number->string respects radix for BigInteger.
+func TestNumberToStringRadix(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"bigint hex", `(number->string (expt 2 64) 16)`, values.NewString("10000000000000000")},
+		{"bigint binary", `(number->string (expt 2 10) 2)`, values.NewString("10000000000")},
+		{"bigint octal", `(number->string (expt 2 9) 8)`, values.NewString("1000")},
+		{"bigint decimal explicit", `(number->string (expt 2 10) 10)`, values.NewString("1024")},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestRealPartExactness verifies R7RS §6.2.6: real-part returns the number
+// itself for non-complex reals, preserving exactness.
+func TestRealPartExactness(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"real-part of integer is exact", `(exact? (real-part 5))`, values.TrueValue},
+		{"real-part of integer is self", `(= (real-part 5) 5)`, values.TrueValue},
+		{"real-part of rational is exact", `(exact? (real-part 3/4))`, values.TrueValue},
+		{"real-part of rational is self", `(= (real-part 3/4) 3/4)`, values.TrueValue},
+		{"real-part of float is inexact", `(inexact? (real-part 5.0))`, values.TrueValue},
+		{"imag-part of integer is exact 0", `(exact? (imag-part 5))`, values.TrueValue},
+		{"imag-part of integer is 0", `(= (imag-part 5) 0)`, values.TrueValue},
+		{"imag-part of float is inexact 0", `(inexact? (imag-part 5.0))`, values.TrueValue},
+		{"magnitude of integer is exact", `(exact? (magnitude 5))`, values.TrueValue},
+		{"magnitude of negative integer is exact", `(exact? (magnitude -5))`, values.TrueValue},
+		{"magnitude of integer abs", `(= (magnitude -5) 5)`, values.TrueValue},
+		{"magnitude of rational is exact", `(exact? (magnitude -3/4))`, values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestSqrtBigInteger verifies sqrt behavior on BigInteger inputs.
+func TestSqrtBigInteger(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// BigInteger perfect square → exact BigInteger result
+		{"bigint sqrt perfect square", `(exact? (sqrt (expt 2 100)))`, values.TrueValue},
+		{"bigint sqrt value correct", `(= (sqrt (expt 2 100)) (expt 2 50))`, values.TrueValue},
+		// BigInteger non-perfect-square → inexact result
+		{"bigint sqrt non-perfect", `(inexact? (sqrt (+ (expt 2 100) 1)))`, values.TrueValue},
+		// Negative BigInteger perfect square → exact BigComplex
+		{"bigint neg sqrt exact", `(exact? (sqrt (* -1 (expt 2 100))))`, values.TrueValue},
+		{"bigint neg sqrt real is 0", `(= (real-part (sqrt (* -1 (expt 2 100)))) 0)`, values.TrueValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestStringToNumberComplex verifies R7RS §6.2.7: string->number handles
+// complex literals and special float values.
+func TestStringToNumberComplex(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		// Special floats
+		{`+inf.0`, `(infinite? (string->number "+inf.0"))`, values.TrueValue},
+		{`-inf.0`, `(infinite? (string->number "-inf.0"))`, values.TrueValue},
+		{`+inf.0 positive`, `(positive? (string->number "+inf.0"))`, values.TrueValue},
+		{`-inf.0 negative`, `(negative? (string->number "-inf.0"))`, values.TrueValue},
+		{`+nan.0`, `(nan? (string->number "+nan.0"))`, values.TrueValue},
+		// Complex numbers
+		{`3+4i exact`, `(exact? (string->number "3+4i"))`, values.TrueValue},
+		{`3+4i real`, `(= (real-part (string->number "3+4i")) 3)`, values.TrueValue},
+		{`3+4i imag`, `(= (imag-part (string->number "3+4i")) 4)`, values.TrueValue},
+		{`+i`, `(= (string->number "+i") +i)`, values.TrueValue},
+		{`-i`, `(= (string->number "-i") -i)`, values.TrueValue},
+		{`0+i`, `(= (string->number "0+i") +i)`, values.TrueValue},
+		{`inexact complex`, `(inexact? (string->number "1.5+2.5i"))`, values.TrueValue},
+		{`imag inf`, `(infinite? (imag-part (string->number "1+inf.0i")))`, values.TrueValue},
+		// #f on invalid
+		{`invalid`, `(string->number "abc")`, values.FalseValue},
+		{`bare i`, `(string->number "i")`, values.FalseValue},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}

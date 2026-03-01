@@ -321,10 +321,17 @@ func TestBigInteger_DivisionByZero(t *testing.T) {
 func TestBigFloat_DivisionByZero(t *testing.T) {
 	c := qt.New(t)
 
+	// Division by exact zero panics.
 	bf := values.NewBigFloatFromFloat64(100.0)
-	zero := values.NewBigFloatFromFloat64(0.0)
+	exactZero := values.NewBigIntegerFromInt64(0)
+	c.Assert(func() { bf.Divide(exactZero) }, qt.PanicMatches, "division by zero")
 
-	c.Assert(func() { bf.Divide(zero) }, qt.PanicMatches, "division by zero")
+	// Division by inexact zero returns +Inf per IEEE 754 / R7RS §6.2.6.
+	inexactZero := values.NewBigFloatFromFloat64(0.0)
+	result := bf.Divide(inexactZero)
+	rf, ok := result.(*values.BigFloat)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(rf.BigFloatValue().IsInf(), qt.IsTrue)
 }
 
 func TestBigInteger_IsVoid(t *testing.T) {

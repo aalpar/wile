@@ -967,7 +967,7 @@ func TestWithSafeExtensions(t *testing.T) {
 	// Safe primitives present
 	result, err := engine.Eval(ctx, "(sqrt 4)")
 	c.Assert(err, qt.IsNil)
-	c.Assert(result.SchemeString(), qt.Equals, "2.0")
+	c.Assert(result.SchemeString(), qt.Equals, "2")
 
 	// Privileged primitives absent
 	_, err = engine.Eval(ctx, `(open-input-file "x")`)

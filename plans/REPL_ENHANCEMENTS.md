@@ -1,7 +1,7 @@
 # REPL Enhancements: Meta-Commands, Autocomplete, Pager
 
 **Date:** 2026-02-26
-**Status:** Approved
+**Status:** Implemented (see `plans/2026-02-26-repl-enhancements.md`)
 
 ## Summary
 
