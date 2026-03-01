@@ -27,6 +27,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax/syntaxtest"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -275,15 +276,15 @@ func TestParser_Read(t *testing.T) {
 		},
 		{
 			in:  "#u8( 256 )",
-			err: values.ErrNotAByte,
+			err: werr.ErrNotAByte,
 		},
 		{
 			in:  "#u8( -1 )",
-			err: values.ErrNotAByte,
+			err: werr.ErrNotAByte,
 		},
 		{
 			in:  "#u8( 10 300 )",
-			err: values.ErrNotAByte,
+			err: werr.ErrNotAByte,
 		},
 		{
 			in:     "( 10 . 20 )",
@@ -291,7 +292,7 @@ func TestParser_Read(t *testing.T) {
 		},
 		{
 			in:  ". 20",
-			err: values.ErrNotACons,
+			err: werr.ErrNotACons,
 		},
 		{
 			in:     ".20",
@@ -1038,7 +1039,7 @@ func TestParserError(t *testing.T) {
 	c.Assert(err1.Unwrap(), qt.IsNil)
 
 	// Test NewTokenizerErrorWithWrap
-	innerErr := values.NewForeignErrorf("inner error")
+	innerErr := werr.NewForeignErrorf("inner error")
 	err2 := NewParserErrorWithWrap(innerErr, nil, "wrapped error")
 	c.Assert(err2.Error(), qt.Equals, "wrapped error")
 	c.Assert(err2.Unwrap(), qt.Equals, innerErr)

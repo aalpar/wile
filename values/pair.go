@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/aalpar/wile/werr"
 )
 
 var (
@@ -113,7 +115,7 @@ func (p *Pair) IsList() bool {
 // and sets the last cdr to vs.
 func (p *Pair) Append(vs Value) Value {
 	if !p.IsList() {
-		panic(ErrNotAList)
+		panic(werr.ErrNotAList)
 	}
 	if IsEmptyList(vs) {
 		return p
@@ -143,7 +145,7 @@ func (p *Pair) Append(vs Value) Value {
 		var ok bool
 		q, ok = cdr.(*Pair)
 		if !ok {
-			panic(ErrNotAList)
+			panic(werr.ErrNotAList)
 		}
 	}
 
@@ -210,7 +212,7 @@ func Must(v Value, err error) {
 		panic(err)
 	}
 	if !IsEmptyList(v) {
-		panic(ErrNotAList)
+		panic(werr.ErrNotAList)
 	}
 }
 

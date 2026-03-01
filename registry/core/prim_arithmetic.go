@@ -21,6 +21,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // PrimAdd implements the + primitive.
@@ -161,14 +162,14 @@ func PrimNumGe(mc *machine.MachineContext) error {
 // PrimAbs implements the abs primitive.
 // R7RS §6.2.6: abs is only defined for real numbers.
 func PrimAbs(mc *machine.MachineContext) error {
-	n, err := helpers.RequireArg[values.Number](mc, 0, values.ErrNotANumber, "abs")
+	n, err := helpers.RequireArg[values.Number](mc, 0, werr.ErrNotANumber, "abs")
 	if err != nil {
 		return err
 	}
 	// Reject complex numbers (abs is only defined for real numbers)
 	_, isComplex := n.(values.ComplexNumber)
 	if isComplex {
-		return values.WrapForeignErrorf(values.ErrNotAReal, "abs: argument must be a real number, got complex")
+		return werr.WrapForeignErrorf(werr.ErrNotAReal, "abs: argument must be a real number, got complex")
 	}
 	mc.SetValue(n.Abs())
 	return nil
@@ -222,7 +223,7 @@ func integerDivisionOp(
 			b1 = big.NewInt(v1)
 		}
 		if b1.Sign() == 0 {
-			return values.WrapForeignErrorf(values.ErrDivisionByZero, "%s: division by zero", name)
+			return werr.WrapForeignErrorf(werr.ErrDivisionByZero, "%s: division by zero", name)
 		}
 		result := bigOp(new(big.Int), b0, b1)
 		if inexact {
@@ -236,7 +237,7 @@ func integerDivisionOp(
 
 	// Regular integer case
 	if v1 == 0 {
-		return values.WrapForeignErrorf(values.ErrDivisionByZero, "%s: division by zero", name)
+		return werr.WrapForeignErrorf(werr.ErrDivisionByZero, "%s: division by zero", name)
 	}
 	result := regularOp(v0, v1)
 	if inexact {
@@ -325,7 +326,7 @@ func PrimLcm(mc *machine.MachineContext) error {
 // R7RS §6.2.6: The exact procedure returns an exact representation
 // of z that is numerically closest to the argument.
 func PrimExact(mc *machine.MachineContext) error {
-	n, err := helpers.RequireArg[values.Number](mc, 0, values.ErrNotANumber, "exact")
+	n, err := helpers.RequireArg[values.Number](mc, 0, werr.ErrNotANumber, "exact")
 	if err != nil {
 		return err
 	}
@@ -339,7 +340,7 @@ func PrimExact(mc *machine.MachineContext) error {
 // R7RS §6.2.6: The inexact procedure returns an inexact representation
 // of z that is numerically closest to the argument.
 func PrimInexact(mc *machine.MachineContext) error {
-	n, err := helpers.RequireArg[values.Number](mc, 0, values.ErrNotANumber, "inexact")
+	n, err := helpers.RequireArg[values.Number](mc, 0, werr.ErrNotANumber, "inexact")
 	if err != nil {
 		return err
 	}

@@ -23,6 +23,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // charCiCompareSpecs defines the five R7RS §6.6 case-insensitive character comparison
@@ -83,7 +84,7 @@ func simpleCaseFold(r rune) rune {
 // R7RS §6.6: Returns the numeric value (0-9) of a character that is a decimal digit
 // according to Unicode, or #f if it is not a decimal digit.
 func PrimDigitValue(mc *machine.MachineContext) error {
-	ch, err := helpers.RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, "digit-value")
+	ch, err := helpers.RequireArg[*values.Character](mc, 0, werr.ErrNotACharacter, "digit-value")
 	if err != nil {
 		return err
 	}

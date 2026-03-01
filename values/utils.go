@@ -20,6 +20,8 @@ import (
 	"encoding/base32"
 	"fmt"
 	"strings"
+
+	"github.com/aalpar/wile/werr"
 )
 
 // byteCnt is the number of bytes used for generating temporary variable names.
@@ -242,8 +244,8 @@ func NewTemporaryVariableName() *Symbol {
 	bs := make([]byte, byteCnt)
 	_, err := rand.Read(bs)
 	if err != nil {
-		panic(WrapForeignErrorf(
-			ErrRandomGenerationFailed,
+		panic(werr.WrapForeignErrorf(
+			werr.ErrRandomGenerationFailed,
 			"error reading random stream: %v",
 			err,
 		))

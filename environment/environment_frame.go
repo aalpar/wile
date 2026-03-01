@@ -17,6 +17,7 @@ package environment
 import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // EnvironmentFrame represents an environment frame in the hierarchy.
@@ -139,8 +140,8 @@ func NewEnvironmentFrame(local *LocalEnvironmentFrame, global *GlobalEnvironment
 // Panics if parent is nil - use NewTopLevelEnvironmentFrame() instead.
 func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *EnvironmentFrame) *EnvironmentFrame {
 	if parent == nil {
-		panic(values.WrapForeignErrorf(
-			values.ErrNilParentEnvironment,
+		panic(werr.WrapForeignErrorf(
+			werr.ErrNilParentEnvironment,
 			"NewEnvironmentFrameWithParent called with nil parent - use NewTopLevelEnvironmentFrame() instead",
 		))
 	}
@@ -164,8 +165,8 @@ func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *Environ
 func (p *EnvironmentFrame) NewApplyFrame() *EnvironmentFrame {
 	parent := p.parent
 	if parent == nil {
-		panic(values.WrapForeignErrorf(
-			values.ErrNilParentEnvironment,
+		panic(werr.WrapForeignErrorf(
+			werr.ErrNilParentEnvironment,
 			"NewApplyFrame called on frame with nil parent - closure environments must have a parent",
 		))
 	}
@@ -186,8 +187,8 @@ func (p *EnvironmentFrame) NewApplyFrame() *EnvironmentFrame {
 func (p *EnvironmentFrame) InitApplyFrame(dst *EnvironmentFrame) {
 	parent := p.parent
 	if parent == nil {
-		panic(values.WrapForeignErrorf(
-			values.ErrNilParentEnvironment,
+		panic(werr.WrapForeignErrorf(
+			werr.ErrNilParentEnvironment,
 			"InitApplyFrame called on frame with nil parent - closure environments must have a parent",
 		))
 	}
@@ -222,8 +223,8 @@ func (p *EnvironmentFrame) TopLevel() *EnvironmentFrame {
 func (p *EnvironmentFrame) AtPhase(phase int) *EnvironmentFrame {
 	topLevel := p.TopLevel()
 	if topLevel.phases == nil {
-		panic(values.WrapForeignErrorf(
-			values.ErrMissingPhaseRegistry,
+		panic(werr.WrapForeignErrorf(
+			werr.ErrMissingPhaseRegistry,
 			"AtPhase called on environment without PhaseRegistry - use NewTopLevelEnvironment()",
 		))
 	}
@@ -642,7 +643,7 @@ func (p *EnvironmentFrame) SetLocalValue(li *LocalIndex, v values.Value) error {
 		j++
 	}
 	if !env.hasLocal() {
-		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such local binding %q", li)
+		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such local binding %q", li)
 	}
 	env.local.bindings[li[0]].value = v
 	return nil
@@ -655,12 +656,12 @@ func (p *EnvironmentFrame) SetLocalValueBySlotDepth(slot, depth int, v values.Va
 	env := p
 	for range depth {
 		if env == nil {
-			return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such local binding %d:%d", slot, depth)
+			return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such local binding %d:%d", slot, depth)
 		}
 		env = env.parent
 	}
 	if env == nil || !env.hasLocal() {
-		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such local binding %d:%d", slot, depth)
+		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such local binding %d:%d", slot, depth)
 	}
 	env.local.bindings[slot].value = v
 	return nil
@@ -784,8 +785,8 @@ func (p *EnvironmentFrame) EqualTo(value values.Value) bool {
 // Panics if topLevel is nil (legacy environments no longer supported).
 func (p *EnvironmentFrame) InternSymbol(q *values.Symbol) *values.Symbol {
 	if p.topLevel == nil {
-		panic(values.WrapForeignErrorf(
-			values.ErrMissingTopLevelEnvironment,
+		panic(werr.WrapForeignErrorf(
+			werr.ErrMissingTopLevelEnvironment,
 			"InternSymbol called on environment without TopLevelEnvironment - use NewTopLevelEnvironment()",
 		))
 	}
@@ -803,8 +804,8 @@ func (p *EnvironmentFrame) TopLevelEnv() *TopLevelEnvironment {
 // Panics if topLevel is nil (legacy environments no longer supported).
 func (p *EnvironmentFrame) InternSyntax(k values.Value, v syntax.SyntaxValue) syntax.SyntaxValue {
 	if p.topLevel == nil {
-		panic(values.WrapForeignErrorf(
-			values.ErrMissingTopLevelEnvironment,
+		panic(werr.WrapForeignErrorf(
+			werr.ErrMissingTopLevelEnvironment,
 			"InternSyntax called on environment without TopLevelEnvironment - use NewTopLevelEnvironment()",
 		))
 	}

@@ -22,6 +22,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 func TestToComplex128(t *testing.T) {
@@ -134,7 +135,7 @@ func TestToComplex128_Errors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := ToComplex128(tc.input)
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, values.ErrNotANumber), qt.IsTrue)
+			c.Assert(errors.Is(err, werr.ErrNotANumber), qt.IsTrue)
 		})
 	}
 }
@@ -322,7 +323,7 @@ func TestToFloat64_Errors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := ToFloat64(tc.input)
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, values.ErrNotANumber), qt.IsTrue)
+			c.Assert(errors.Is(err, werr.ErrNotANumber), qt.IsTrue)
 		})
 	}
 }
@@ -408,7 +409,7 @@ func TestExtractReal_Errors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, _, err := ExtractReal(tc.input, "test-op")
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, values.ErrNotANumber), qt.IsTrue)
+			c.Assert(errors.Is(err, werr.ErrNotANumber), qt.IsTrue)
 		})
 	}
 }

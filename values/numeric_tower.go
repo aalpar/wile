@@ -17,6 +17,8 @@ package values
 import (
 	"math"
 	"math/big"
+
+	"github.com/aalpar/wile/werr"
 )
 
 // multiplyResultForZero returns the correct result when one operand is zero
@@ -46,7 +48,7 @@ func floatToExact(f float64) Number {
 	// R7RS requires raising an error for (exact +inf.0) and (exact +nan.0).
 	r := new(big.Rat).SetFloat64(f)
 	if r == nil {
-		panic(WrapForeignErrorf(ErrExactnessConversion, "cannot convert non-finite float to exact"))
+		panic(werr.WrapForeignErrorf(werr.ErrExactnessConversion, "cannot convert non-finite float to exact"))
 	}
 	if r.IsInt() {
 		num := r.Num()
@@ -130,7 +132,7 @@ func ExactnessOf(n Number) Exactness {
 		}
 		return Inexact
 	}
-	panic(ErrNotANumber)
+	panic(werr.ErrNotANumber)
 }
 
 // IntegerEqualsFloat compares an exact integer to an inexact float.

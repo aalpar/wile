@@ -19,6 +19,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // PrimEnvironmentQ implements the (environment?) predicate.
@@ -45,7 +46,7 @@ func PrimEnvironmentBoundNames(mc *machine.MachineContext) error {
 
 	topLevelEnv, ok := envVal.(*environment.TopLevelEnvironment)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrInvalidArgument, "environment-bound-names: expected an environment but got %T", envVal)
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "environment-bound-names: expected an environment but got %T", envVal)
 	}
 
 	env := topLevelEnv.Runtime()
@@ -68,12 +69,12 @@ func PrimEnvironmentRef(mc *machine.MachineContext) error {
 	envVal := mc.Arg(0)
 	symVal := mc.Arg(1)
 
-	topLevelEnv, err := helpers.RequireType[*environment.TopLevelEnvironment](envVal, values.ErrInvalidArgument, "environment-ref")
+	topLevelEnv, err := helpers.RequireType[*environment.TopLevelEnvironment](envVal, werr.ErrInvalidArgument, "environment-ref")
 	if err != nil {
 		return err
 	}
 
-	sym, err := helpers.RequireType[*values.Symbol](symVal, values.ErrNotASymbol, "environment-ref")
+	sym, err := helpers.RequireType[*values.Symbol](symVal, werr.ErrNotASymbol, "environment-ref")
 	if err != nil {
 		return err
 	}
@@ -82,7 +83,7 @@ func PrimEnvironmentRef(mc *machine.MachineContext) error {
 	sym = env.InternSymbol(sym)
 	binding := env.GetBinding(sym)
 	if binding == nil {
-		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "environment-ref: unbound symbol %s", sym.Key)
+		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "environment-ref: unbound symbol %s", sym.Key)
 	}
 
 	mc.SetValue(binding.Value())
@@ -96,12 +97,12 @@ func PrimEnvironmentBoundQ(mc *machine.MachineContext) error {
 	envVal := mc.Arg(0)
 	symVal := mc.Arg(1)
 
-	topLevelEnv, err := helpers.RequireType[*environment.TopLevelEnvironment](envVal, values.ErrInvalidArgument, "environment-bound?")
+	topLevelEnv, err := helpers.RequireType[*environment.TopLevelEnvironment](envVal, werr.ErrInvalidArgument, "environment-bound?")
 	if err != nil {
 		return err
 	}
 
-	sym, err := helpers.RequireType[*values.Symbol](symVal, values.ErrNotASymbol, "environment-bound?")
+	sym, err := helpers.RequireType[*values.Symbol](symVal, werr.ErrNotASymbol, "environment-bound?")
 	if err != nil {
 		return err
 	}

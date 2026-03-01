@@ -24,6 +24,7 @@ import (
 
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 )
 
 func TestThread_NewThread(t *testing.T) {
@@ -88,7 +89,7 @@ func TestThread_StartAlreadyStarted(t *testing.T) {
 	<-th.Done()
 
 	err = th.Start(context.Background())
-	qt.Assert(t, errors.Is(err, values.ErrThreadAlreadyStarted), qt.IsTrue)
+	qt.Assert(t, errors.Is(err, werr.ErrThreadAlreadyStarted), qt.IsTrue)
 }
 
 func TestThread_IsVoid(t *testing.T) {

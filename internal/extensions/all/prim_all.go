@@ -23,6 +23,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // =============================================================================
@@ -35,14 +36,14 @@ func PrimMakeRecordType(mc *machine.MachineContext) error {
 	nameArg := mc.Arg(0)
 	fieldNamesArg := mc.Arg(1)
 
-	name, err := helpers.RequireType[*values.Symbol](nameArg, values.ErrNotASymbol, "make-record-type")
+	name, err := helpers.RequireType[*values.Symbol](nameArg, werr.ErrNotASymbol, "make-record-type")
 	if err != nil {
 		return err
 	}
 
 	fieldNames, err := listToSymbols(mc.Context(), fieldNamesArg)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "make-record-type: field-names")
+		return werr.WrapForeignErrorf(err, "make-record-type: field-names")
 	}
 
 	rt := values.NewRecordType(name, fieldNames)
@@ -65,7 +66,7 @@ var PrimIsRecord = helpers.MakeTypePredicate(func(o values.Value) bool {
 // PrimRecordType implements the (record-type record) primitive.
 // Returns the record type of a record instance.
 func PrimRecordType(mc *machine.MachineContext) error {
-	rec, err := helpers.RequireArg[*values.Record](mc, 0, values.ErrNotARecord, "record-type")
+	rec, err := helpers.RequireArg[*values.Record](mc, 0, werr.ErrNotARecord, "record-type")
 	if err != nil {
 		return err
 	}
@@ -79,14 +80,14 @@ func PrimRecordConstructor(mc *machine.MachineContext) error {
 	rtArg := mc.Arg(0)
 	fieldTagsArg := mc.Arg(1)
 
-	rt, err := helpers.RequireType[*values.RecordType](rtArg, values.ErrNotARecordType, "record-constructor")
+	rt, err := helpers.RequireType[*values.RecordType](rtArg, werr.ErrNotARecordType, "record-constructor")
 	if err != nil {
 		return err
 	}
 
 	constructorFields, err := listToSymbols(mc.Context(), fieldTagsArg)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "record-constructor: field-tags")
+		return werr.WrapForeignErrorf(err, "record-constructor: field-tags")
 	}
 
 	// Compute indices mapping constructor args to record fields
@@ -94,7 +95,7 @@ func PrimRecordConstructor(mc *machine.MachineContext) error {
 	for i, sym := range constructorFields {
 		idx := rt.FieldIndex(sym)
 		if idx < 0 {
-			return values.WrapForeignErrorf(values.ErrNoSuchBinding, "record-constructor: unknown field %s", sym.SchemeString())
+			return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "record-constructor: unknown field %s", sym.SchemeString())
 		}
 		argIndices[i] = idx
 	}
@@ -108,7 +109,7 @@ func PrimRecordConstructor(mc *machine.MachineContext) error {
 // PrimRecordPredicate implements the (record-predicate rt) primitive.
 // Returns a predicate procedure for the record type.
 func PrimRecordPredicate(mc *machine.MachineContext) error {
-	rt, err := helpers.RequireArg[*values.RecordType](mc, 0, values.ErrNotARecordType, "record-predicate")
+	rt, err := helpers.RequireArg[*values.RecordType](mc, 0, werr.ErrNotARecordType, "record-predicate")
 	if err != nil {
 		return err
 	}
@@ -123,19 +124,19 @@ func PrimRecordPredicate(mc *machine.MachineContext) error {
 func PrimRecordAccessor(mc *machine.MachineContext) error {
 	fieldTagArg := mc.Arg(1)
 
-	rt, err := helpers.RequireArg[*values.RecordType](mc, 0, values.ErrNotARecordType, "record-accessor")
+	rt, err := helpers.RequireArg[*values.RecordType](mc, 0, werr.ErrNotARecordType, "record-accessor")
 	if err != nil {
 		return err
 	}
 
-	fieldTag, err := helpers.RequireType[*values.Symbol](fieldTagArg, values.ErrNotASymbol, "record-accessor")
+	fieldTag, err := helpers.RequireType[*values.Symbol](fieldTagArg, werr.ErrNotASymbol, "record-accessor")
 	if err != nil {
 		return err
 	}
 
 	idx := rt.FieldIndex(fieldTag)
 	if idx < 0 {
-		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "record-accessor: unknown field %s", fieldTag.SchemeString())
+		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "record-accessor: unknown field %s", fieldTag.SchemeString())
 	}
 
 	closure := newRecordAccessorClosure(mc.EnvironmentFrame().TopLevel(), rt, idx)
@@ -148,19 +149,19 @@ func PrimRecordAccessor(mc *machine.MachineContext) error {
 func PrimRecordModifier(mc *machine.MachineContext) error {
 	fieldTagArg := mc.Arg(1)
 
-	rt, err := helpers.RequireArg[*values.RecordType](mc, 0, values.ErrNotARecordType, "record-modifier")
+	rt, err := helpers.RequireArg[*values.RecordType](mc, 0, werr.ErrNotARecordType, "record-modifier")
 	if err != nil {
 		return err
 	}
 
-	fieldTag, err := helpers.RequireType[*values.Symbol](fieldTagArg, values.ErrNotASymbol, "record-modifier")
+	fieldTag, err := helpers.RequireType[*values.Symbol](fieldTagArg, werr.ErrNotASymbol, "record-modifier")
 	if err != nil {
 		return err
 	}
 
 	idx := rt.FieldIndex(fieldTag)
 	if idx < 0 {
-		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "record-modifier: unknown field %s", fieldTag.SchemeString())
+		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "record-modifier: unknown field %s", fieldTag.SchemeString())
 	}
 
 	closure := newRecordModifierClosure(mc.EnvironmentFrame().TopLevel(), rt, idx)
@@ -174,7 +175,7 @@ func listToSymbols(ctx context.Context, v values.Value) ([]*values.Symbol, error
 	_, err := values.ForEach(ctx, v, func(_ context.Context, _ int, _ bool, elem values.Value) error {
 		sym, ok := elem.(*values.Symbol)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotASymbol, "expected a symbol but got %T", elem)
+			return werr.WrapForeignErrorf(werr.ErrNotASymbol, "expected a symbol but got %T", elem)
 		}
 		result = append(result, sym)
 		return nil
@@ -223,10 +224,10 @@ func newRecordAccessorClosure(env *environment.EnvironmentFrame, rt *values.Reco
 		obj := innerMC.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
 		rec, ok := obj.(*values.Record)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotARecord, "record accessor: expected a record but got %T", obj)
+			return werr.WrapForeignErrorf(werr.ErrNotARecord, "record accessor: expected a record but got %T", obj)
 		}
 		if rec.RecordType() != rt {
-			return values.WrapForeignErrorf(values.ErrTypeConversion, "record accessor: record type mismatch")
+			return werr.WrapForeignErrorf(werr.ErrTypeConversion, "record accessor: record type mismatch")
 		}
 		innerMC.SetValue(rec.Field(fieldIdx))
 		return nil
@@ -241,10 +242,10 @@ func newRecordModifierClosure(env *environment.EnvironmentFrame, rt *values.Reco
 		val := innerMC.EnvironmentFrame().GetLocalBindingByIndex(1).Value()
 		rec, ok := obj.(*values.Record)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotARecord, "record modifier: expected a record but got %T", obj)
+			return werr.WrapForeignErrorf(werr.ErrNotARecord, "record modifier: expected a record but got %T", obj)
 		}
 		if rec.RecordType() != rt {
-			return values.WrapForeignErrorf(values.ErrTypeConversion, "record modifier: record type mismatch")
+			return werr.WrapForeignErrorf(werr.ErrTypeConversion, "record modifier: record type mismatch")
 		}
 		rec.SetField(fieldIdx, val)
 		innerMC.SetValue(values.Void)
@@ -352,7 +353,7 @@ func PrimForce(mc *machine.MachineContext) error {
 func PrimMakeLazyPromise(mc *machine.MachineContext) error {
 	thunk, ok := mc.Arg(0).(values.Callable)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure,
+		return werr.WrapForeignErrorf(werr.ErrNotAProcedure,
 			"%%make-lazy-promise: thunk must be a procedure")
 	}
 	mc.SetValue(values.NewPromise(thunk))

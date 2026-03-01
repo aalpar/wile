@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // ResolveFile finds a file by trying resolution strategies in order:
@@ -27,7 +27,7 @@ func ResolveFile(stack *LoadPathStack, path string, fallbackDirs []string) (stri
 		if err == nil {
 			return path, nil
 		}
-		return "", values.WrapForeignErrorf(values.ErrFileNotFound, "file %q not found (absolute path)", path)
+		return "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "file %q not found (absolute path)", path)
 	}
 
 	var searched []string
@@ -41,7 +41,7 @@ func ResolveFile(stack *LoadPathStack, path string, fallbackDirs []string) (stri
 			if err == nil {
 				absPath, err := filepath.Abs(candidate)
 				if err != nil {
-					return "", values.WrapForeignErrorf(err, "failed to get absolute path for %q", candidate)
+					return "", werr.WrapForeignErrorf(err, "failed to get absolute path for %q", candidate)
 				}
 				return absPath, nil
 			}
@@ -59,7 +59,7 @@ func ResolveFile(stack *LoadPathStack, path string, fallbackDirs []string) (stri
 		if err == nil {
 			absPath, err := filepath.Abs(candidate)
 			if err != nil {
-				return "", values.WrapForeignErrorf(err, "failed to get absolute path for %q", candidate)
+				return "", werr.WrapForeignErrorf(err, "failed to get absolute path for %q", candidate)
 			}
 			return absPath, nil
 		}
@@ -68,7 +68,7 @@ func ResolveFile(stack *LoadPathStack, path string, fallbackDirs []string) (stri
 
 	// Not found - report all searched paths
 	if len(searched) == 0 {
-		return "", values.WrapForeignErrorf(values.ErrFileNotFound, "file %q not found (no search paths available)", path)
+		return "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "file %q not found (no search paths available)", path)
 	}
 
 	searchedList := strings.Join(searched, ", ")
@@ -77,5 +77,5 @@ func ResolveFile(stack *LoadPathStack, path string, fallbackDirs []string) (stri
 		hint = " (load from a file context or set search paths)"
 	}
 
-	return "", values.WrapForeignErrorf(values.ErrFileNotFound, "file %q not found; searched: %s%s", path, searchedList, hint)
+	return "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "file %q not found; searched: %s%s", path, searchedList, hint)
 }

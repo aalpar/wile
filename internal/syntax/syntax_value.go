@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 var (
@@ -93,14 +94,14 @@ type SyntaxObject struct {
 func NewSyntaxObject(v values.Value, sctx *SourceContext) *SyntaxObject {
 	switch v.(type) {
 	case *SyntaxObject, *SyntaxVector, *SyntaxPair, *SyntaxSymbol: // prevent double-wrapping
-		panic(values.WrapForeignErrorf(
-			values.ErrCannotDoubleSyntaxWrap,
+		panic(werr.WrapForeignErrorf(
+			werr.ErrCannotDoubleSyntaxWrap,
 			"cannot wrap a %T in another SyntaxObject",
 			v,
 		))
 	case *values.Vector, *values.Pair, *values.Symbol: // special types for these - SyntaxVector, SyntaxPair, SyntaxSymbol
-		panic(values.WrapForeignErrorf(
-			values.ErrCannotDoubleSyntaxWrap,
+		panic(werr.WrapForeignErrorf(
+			werr.ErrCannotDoubleSyntaxWrap,
 			"cannot wrap a %T in another SyntaxObject",
 			v,
 		))

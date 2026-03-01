@@ -20,6 +20,8 @@ import (
 	"math/cmplx"
 	"strconv"
 	"strings"
+
+	"github.com/aalpar/wile/werr"
 )
 
 var (
@@ -146,7 +148,7 @@ func (p *Complex) Multiply(o Number) Number {
 // Divide returns the quotient of this complex number and another number.
 func (p *Complex) Divide(o Number) Number {
 	if o.IsZero() && o.IsExact() {
-		panic(ErrDivisionByZero)
+		panic(werr.ErrDivisionByZero)
 	}
 	v, ok := o.(*Complex)
 	if ok {

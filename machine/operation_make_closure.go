@@ -17,6 +17,7 @@ package machine
 import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 type OperationMakeClosure struct {
@@ -32,11 +33,11 @@ func NewOperationMakeClosure() *OperationMakeClosure {
 func (p *OperationMakeClosure) Apply(mc *MachineContext) (*MachineContext, error) {
 	compiletimeEnv, ok := mc.evals.Pop().(*environment.EnvironmentFrame)
 	if !ok {
-		return mc, values.WrapForeignErrorf(values.ErrNotALocalEnvironmentFrame, "MakeClosure: expected environment frame on stack")
+		return mc, werr.WrapForeignErrorf(werr.ErrNotALocalEnvironmentFrame, "MakeClosure: expected environment frame on stack")
 	}
 	tpl, ok := mc.evals.Pop().(*NativeTemplate)
 	if !ok {
-		return mc, values.WrapForeignErrorf(values.ErrNotAMachineTemplate, "MakeClosure: expected native template on stack")
+		return mc, werr.WrapForeignErrorf(werr.ErrNotAMachineTemplate, "MakeClosure: expected native template on stack")
 	}
 	// Create runtime environment with compile-time local structure
 	// but RUNTIME parent chain. This is critical for:

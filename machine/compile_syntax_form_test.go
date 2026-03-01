@@ -21,7 +21,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -55,7 +55,7 @@ func TestCompileSyntax_Error_NoArgs(t *testing.T) {
 	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "syntax")
-	c.Assert(errors.Is(err, values.ErrInvalidSyntax), qt.IsTrue)
+	c.Assert(errors.Is(err, werr.ErrInvalidSyntax), qt.IsTrue)
 }
 
 func TestCompileSyntax_Error_TooManyArgs(t *testing.T) {
@@ -74,7 +74,7 @@ func TestCompileSyntax_Error_TooManyArgs(t *testing.T) {
 	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "syntax")
-	c.Assert(errors.Is(err, values.ErrInvalidSyntax), qt.IsTrue)
+	c.Assert(errors.Is(err, werr.ErrInvalidSyntax), qt.IsTrue)
 }
 
 func TestTemplateContainsEllipsis_NoEllipsis(t *testing.T) {

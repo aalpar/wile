@@ -25,6 +25,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -82,12 +83,12 @@ func TestExpandExpression_List(t *testing.T) {
 		// The full form is pushed as a single item onto the eval stack
 		form, ok := mc.env.GetLocalBindingByIndex(0).Value().(syntax.SyntaxValue)
 		if !ok {
-			return values.ErrNotASyntaxValue
+			return werr.ErrNotASyntaxValue
 		}
 		// Extract car (symbol) and cdr (arguments)
 		pair, ok := form.(*syntax.SyntaxPair)
 		if !ok {
-			return values.ErrNotASyntaxList
+			return werr.ErrNotASyntaxList
 		}
 		_ = pair.Car() // macro name 'bar', not used in result
 		args := pair.Cdr().(*syntax.SyntaxPair)

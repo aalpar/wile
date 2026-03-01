@@ -21,6 +21,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // Type predicates using the helper factory
@@ -177,14 +178,14 @@ func PrimRationalQ(mc *machine.MachineContext) error {
 //
 // R7RS §6.2.6: Returns #t if the number is exact, #f otherwise.
 var PrimExactQ = helpers.MakeNumericPredicate[values.Number](
-	"exact?", values.ErrNotANumber, values.Number.IsExact,
+	"exact?", werr.ErrNotANumber, values.Number.IsExact,
 )
 
 // PrimInexactQ implements the inexact? predicate.
 //
 // R7RS §6.2.6: Returns #t if the number is inexact, #f otherwise.
 var PrimInexactQ = helpers.MakeNumericPredicate[values.Number](
-	"inexact?", values.ErrNotANumber, func(n values.Number) bool {
+	"inexact?", werr.ErrNotANumber, func(n values.Number) bool {
 		return !n.IsExact()
 	},
 )
@@ -205,7 +206,7 @@ func PrimExactIntegerQ(mc *machine.MachineContext) error {
 // PrimZeroQ implements the zero? predicate.
 // Returns #t if the number is zero, #f otherwise.
 var PrimZeroQ = helpers.MakeNumericPredicate[values.Number](
-	"zero?", values.ErrNotANumber, values.Number.IsZero,
+	"zero?", werr.ErrNotANumber, values.Number.IsZero,
 )
 
 // PrimPositiveQ implements the positive? predicate.
@@ -234,7 +235,7 @@ func realSignPredicate(mc *machine.MachineContext, name string, test func(values
 	}
 	r, ok := o.(values.RealNumber)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected a real number but got %T", name, mc.Arg(0))
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a real number but got %T", name, mc.Arg(0))
 	}
 	mc.SetValue(values.BoolToBoolean(test(r)))
 	return nil
@@ -257,10 +258,10 @@ func parityCheck(
 	case *values.Float:
 		// Must be an integer value (no fractional part)
 		if math.IsInf(v.Value, 0) || math.IsNaN(v.Value) {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, v.Value)
+			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %v", name, v.Value)
 		}
 		if math.Floor(v.Value) != v.Value {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, v.Value)
+			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %v", name, v.Value)
 		}
 		// Convert to big.Int for reliable parity check on large floats
 		bf := new(big.Float).SetFloat64(v.Value)
@@ -269,12 +270,12 @@ func parityCheck(
 	case *values.BigFloat:
 		// Must be an integer value
 		if !v.BigFloatValue().IsInt() {
-			return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %v", name, v.BigFloatValue())
+			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %v", name, v.BigFloatValue())
 		}
 		bi, _ := v.BigFloatValue().Int(nil)
 		mc.SetValue(values.BoolToBoolean(bigTest(bi)))
 	default:
-		return values.WrapForeignErrorf(values.ErrNotANumber, "%s: expected an integer but got %T", name, o)
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %T", name, o)
 	}
 	return nil
 }

@@ -17,6 +17,7 @@ package helpers
 import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // MakeTypePredicate creates a type predicate primitive function.
@@ -54,7 +55,7 @@ func MakeNumericPredicate[T any](
 // arg 0 as a Character and applies a boolean test on the rune value.
 func MakeCharPredicate(name string, test func(rune) bool) machine.ForeignFunction {
 	return func(mc *machine.MachineContext) error {
-		ch, err := RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, name)
+		ch, err := RequireArg[*values.Character](mc, 0, werr.ErrNotACharacter, name)
 		if err != nil {
 			return err
 		}
@@ -67,7 +68,7 @@ func MakeCharPredicate(name string, test func(rune) bool) machine.ForeignFunctio
 // arg 0 as a Character, applies a rune transformation, and returns a new Character.
 func MakeCharTransform(name string, transform func(rune) rune) machine.ForeignFunction {
 	return func(mc *machine.MachineContext) error {
-		ch, err := RequireArg[*values.Character](mc, 0, values.ErrNotACharacter, name)
+		ch, err := RequireArg[*values.Character](mc, 0, werr.ErrNotACharacter, name)
 		if err != nil {
 			return err
 		}
@@ -105,7 +106,7 @@ func ChainEquality(
 	for !values.IsEmptyList(current) {
 		tuple, ok := current.(values.Tuple)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "%s: improper argument list", name)
+			return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: improper argument list", name)
 		}
 		arg := tuple.Car()
 		err := typeCheck(arg)

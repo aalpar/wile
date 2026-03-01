@@ -8,7 +8,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 func TestLoadPathStack_EmptyStack(t *testing.T) {
@@ -103,7 +103,7 @@ func TestLoadPathStack_PushRelativePathReturnsError(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			err := stack.Push(tc.path)
 			c.Assert(err, qt.IsNotNil, qt.Commentf("Push(%q) should return error", tc.path))
-			c.Assert(errors.Is(err, values.ErrInvalidLoadPath), qt.IsTrue)
+			c.Assert(errors.Is(err, werr.ErrInvalidLoadPath), qt.IsTrue)
 		})
 	}
 }

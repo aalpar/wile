@@ -23,6 +23,7 @@ import (
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // Pre-computed reflect types for interface detection.
@@ -72,15 +73,15 @@ func analyzeReturnShape(fnType reflect.Type, errPrefix string) (returnShape, err
 		return returnShape{valueType: fnType.Out(0)}, nil
 	case 2:
 		if fnType.Out(1) != errorType {
-			return returnShape{}, values.WrapForeignErrorf(
-				values.ErrFFIRegistration,
+			return returnShape{}, werr.WrapForeignErrorf(
+				werr.ErrFFIRegistration,
 				"%s: second return value must be error, got %s", errPrefix, fnType.Out(1),
 			)
 		}
 		return returnShape{hasError: true, valueType: fnType.Out(0)}, nil
 	default:
-		return returnShape{}, values.WrapForeignErrorf(
-			values.ErrFFIRegistration,
+		return returnShape{}, werr.WrapForeignErrorf(
+			werr.ErrFFIRegistration,
 			"%s: too many return values (%d), maximum is 2", errPrefix, numOut,
 		)
 	}
@@ -136,7 +137,7 @@ type ffiSpec struct {
 // callback for later invocation or calling it from another goroutine is
 // unsafe — the closure captures VM state that is not goroutine-safe.
 //
-// Returns an error wrapping [values.ErrFFIRegistration] if fn is not a function or uses unsupported types.
+// Returns an error wrapping [werr.ErrFFIRegistration] if fn is not a function or uses unsupported types.
 func (p *Engine) RegisterFunc(name string, fn any) error {
 	spec, err := buildFFISpec(name, fn)
 	if err != nil {
@@ -176,7 +177,7 @@ func (p *Engine) RegisterFuncs(funcs map[string]any) error {
 func buildFFISpec(name string, fn any) (*ffiSpec, error) {
 	fnType := reflect.TypeOf(fn)
 	if fnType == nil || fnType.Kind() != reflect.Func {
-		return nil, values.WrapForeignErrorf(values.ErrFFIRegistration, "RegisterFunc %q: not a function", name)
+		return nil, werr.WrapForeignErrorf(werr.ErrFFIRegistration, "RegisterFunc %q: not a function", name)
 	}
 
 	spec := &ffiSpec{
@@ -195,8 +196,8 @@ func buildFFISpec(name string, fn any) (*ffiSpec, error) {
 	// Validate no context.Context in non-first position.
 	for i := paramStart; i < fnType.NumIn(); i++ {
 		if fnType.In(i) == contextType {
-			return nil, values.WrapForeignErrorf(
-				values.ErrFFIRegistration,
+			return nil, werr.WrapForeignErrorf(
+				werr.ErrFFIRegistration,
 				"RegisterFunc %q: context.Context must be first parameter", name,
 			)
 		}
@@ -290,8 +291,8 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 				return reflect.Value{}, fmtArgError(name, pos, "integer", v)
 			}
 			if n < math.MinInt || n > math.MaxInt {
-				return reflect.Value{}, values.WrapForeignErrorf(
-					values.ErrTypeConversion,
+				return reflect.Value{}, werr.WrapForeignErrorf(
+					werr.ErrTypeConversion,
 					"%s: argument %d: integer %d overflows int", name, pos, n,
 				)
 			}
@@ -353,8 +354,8 @@ func makeArgConverter(name string, pos int, t reflect.Type) (argConverter, error
 		return makeCallbackArgConverter(name, pos, t)
 
 	default:
-		return nil, values.WrapForeignErrorf(
-			values.ErrFFIRegistration,
+		return nil, werr.WrapForeignErrorf(
+			werr.ErrFFIRegistration,
 			"RegisterFunc %q: unsupported parameter type at position %d: %s", name, pos, t,
 		)
 	}
@@ -413,8 +414,8 @@ func makeMapArgConverter(name string, pos int, t reflect.Type) (argConverter, er
 
 	// Validate key type at registration time.
 	if !isSupportedMapKeyType(keyType) {
-		return nil, values.WrapForeignErrorf(
-			values.ErrFFIRegistration,
+		return nil, werr.WrapForeignErrorf(
+			werr.ErrFFIRegistration,
 			"RegisterFunc %q: unsupported map key type at position %d: %s (must be string, int64, int, or bool)", name, pos, keyType,
 		)
 	}
@@ -501,15 +502,15 @@ func makeStructArgConverter(name string, pos int, t reflect.Type) (argConverter,
 		_, walkErr := values.ForEach(mc.Context(), v, func(_ context.Context, _ int, _ bool, elem values.Value) error {
 			entry, ok := elem.(values.Tuple)
 			if !ok {
-				return values.WrapForeignErrorf(
-					values.ErrTypeConversion,
+				return werr.WrapForeignErrorf(
+					werr.ErrTypeConversion,
 					"%s: argument %d: expected alist pair, got %s", name, pos, elem.SchemeString(),
 				)
 			}
 			sym, ok := entry.Car().(*values.Symbol)
 			if !ok {
-				return values.WrapForeignErrorf(
-					values.ErrTypeConversion,
+				return werr.WrapForeignErrorf(
+					werr.ErrTypeConversion,
 					"%s: argument %d: alist key must be a symbol, got %s", name, pos, entry.Car().SchemeString(),
 				)
 			}
@@ -552,8 +553,8 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverte
 	for i := range numIn {
 		conv, err := makeRetConverter(name, t.In(i))
 		if err != nil {
-			return nil, values.WrapForeignErrorf(
-				values.ErrFFIRegistration,
+			return nil, werr.WrapForeignErrorf(
+				werr.ErrFFIRegistration,
 				"RegisterFunc %q: unsupported callback parameter type at position %d: %s", name, pos, t.In(i),
 			)
 		}
@@ -587,8 +588,8 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverte
 		case *machine.MachineClosure, *machine.CaseLambdaClosure, *machine.Parameter:
 			// valid callback procedure
 		default:
-			return reflect.Value{}, values.WrapForeignErrorf(
-				values.ErrNotAProcedure,
+			return reflect.Value{}, werr.WrapForeignErrorf(
+				werr.ErrNotAProcedure,
 				"%s: argument %d: expected procedure, got %s", name, pos, v.SchemeString(),
 			)
 		}
@@ -635,8 +636,8 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverte
 // If the Go func type includes an error return, the error is returned normally.
 // Otherwise, the error is panicked (standard Go pattern for unrecoverable callback failures).
 func callbackErrorResult(funcType reflect.Type, hasErrorReturn bool, err error) []reflect.Value {
-	wrapped := values.WrapForeignErrorWithCause(
-		values.ErrFFICallbackError, err,
+	wrapped := werr.WrapForeignErrorWithCause(
+		werr.ErrFFICallbackError, err,
 		"callback invocation failed",
 	)
 	if hasErrorReturn {
@@ -668,8 +669,8 @@ func callbackSuccessResult(
 	if resultConv != nil {
 		converted, convErr := resultConv(mc, schemeResult)
 		if convErr != nil {
-			wrapped := values.WrapForeignErrorWithCause(
-				values.ErrCallbackResultConversion, convErr,
+			wrapped := werr.WrapForeignErrorWithCause(
+				werr.ErrCallbackResultConversion, convErr,
 				"callback result conversion failed",
 			)
 			if hasErrorReturn {
@@ -736,8 +737,8 @@ func callbackParameterResult(
 		param.SetValue(newVal)
 		return callbackSuccessResult(mc, funcType, resultConv, hasErrorReturn, values.Void)
 	default:
-		paramErr := values.WrapForeignErrorf(
-			values.ErrWrongNumberOfArguments,
+		paramErr := werr.WrapForeignErrorf(
+			werr.ErrWrongNumberOfArguments,
 			"parameter callback: expected 0 or 1 arguments, got %d", len(args),
 		)
 		return callbackErrorResult(funcType, hasErrorReturn, paramErr)
@@ -798,8 +799,8 @@ func makeRetConverter(name string, t reflect.Type) (retConverter, error) {
 		return makeStructRetConverter(name, t)
 
 	default:
-		return nil, values.WrapForeignErrorf(
-			values.ErrFFIRegistration,
+		return nil, werr.WrapForeignErrorf(
+			werr.ErrFFIRegistration,
 			"RegisterFunc %q: unsupported return type: %s", name, t,
 		)
 	}
@@ -841,8 +842,8 @@ func makeSliceRetConverter(name string, t reflect.Type) (retConverter, error) {
 func makeMapRetConverter(name string, t reflect.Type) (retConverter, error) {
 	keyType := t.Key()
 	if !isSupportedMapKeyType(keyType) {
-		return nil, values.WrapForeignErrorf(
-			values.ErrFFIRegistration,
+		return nil, werr.WrapForeignErrorf(
+			werr.ErrFFIRegistration,
 			"RegisterFunc %q: unsupported map key type in return: %s (must be string, int64, int, or bool)", name, keyType,
 		)
 	}
@@ -867,8 +868,8 @@ func makeMapRetConverter(name string, t reflect.Type) (retConverter, error) {
 			schemeVal := valConv(iter.Value())
 			setErr := ht.Set(schemeKey, schemeVal)
 			if setErr != nil {
-				panic(values.WrapForeignErrorWithCause(
-					values.ErrHashtableInsertionFailed, setErr,
+				panic(werr.WrapForeignErrorWithCause(
+					werr.ErrHashtableInsertionFailed, setErr,
 					"RegisterFunc %q: map return conversion failed inserting key %v",
 					name, iter.Key(),
 				))
@@ -923,7 +924,7 @@ func (s *ffiSpec) makeWrapper() ForeignFunction {
 			}
 			err, ok := r.(error)
 			if ok {
-				var fe *values.ForeignError
+				var fe *werr.ForeignError
 				if errors.As(err, &fe) {
 					returnErr = err
 					return
@@ -1019,8 +1020,8 @@ func (s *ffiSpec) makeWrapper() ForeignFunction {
 
 // fmtArgError creates a type conversion error for argument mismatches.
 func fmtArgError(name string, pos int, expected string, got values.Value) error {
-	return values.WrapForeignErrorf(
-		values.ErrTypeConversion,
+	return werr.WrapForeignErrorf(
+		werr.ErrTypeConversion,
 		"%s: argument %d: expected %s, got %s",
 		name, pos, expected, got.SchemeString(),
 	)

@@ -19,6 +19,7 @@ import (
 
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // CompileQuasisyntax compiles the (quasisyntax template) form.
@@ -35,7 +36,7 @@ func (p *CompileTimeContinuation) CompileQuasisyntax(ctctx CompileTimeCallContex
 	// So expr = (template)
 	argsPair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || argsPair.IsEmptyList() {
-		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "quasisyntax: expected exactly one argument")
+		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "quasisyntax: expected exactly one argument")
 	}
 
 	// Get the template (CAR of the args list)
@@ -43,7 +44,7 @@ func (p *CompileTimeContinuation) CompileQuasisyntax(ctctx CompileTimeCallContex
 
 	// Check no extra arguments
 	if !syntax.IsSyntaxEmptyList(argsPair.SyntaxCdr()) {
-		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "quasisyntax: expected exactly one argument")
+		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "quasisyntax: expected exactly one argument")
 	}
 
 	// Compile the quasisyntax template at depth 1
@@ -270,7 +271,7 @@ func (p *CompileTimeContinuation) expandQuasisyntaxList(ctx context.Context, pai
 		return nil
 	})
 	if err != nil {
-		panic(values.WrapForeignErrorf(err, "quasisyntax: error scanning list at %s", srcCtx.SchemeString()))
+		panic(werr.WrapForeignErrorf(err, "quasisyntax: error scanning list at %s", srcCtx.SchemeString()))
 	}
 	// Note: For improper lists, the tail won't be an empty list.
 	// That's fine - improper lists can't have splices in their tail anyway.
@@ -356,10 +357,10 @@ func (p *CompileTimeContinuation) expandQuasisyntaxList(ctx context.Context, pai
 
 // CompileUnsyntax errors - unsyntax outside of quasisyntax
 func (p *CompileTimeContinuation) CompileUnsyntax(_ CompileTimeCallContext, _ syntax.SyntaxValue) error {
-	return values.WrapForeignErrorf(values.ErrInvalidSyntax, "unsyntax: not in quasisyntax context")
+	return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unsyntax: not in quasisyntax context")
 }
 
 // CompileUnsyntaxSplicing errors - unsyntax-splicing outside of quasisyntax
 func (p *CompileTimeContinuation) CompileUnsyntaxSplicing(_ CompileTimeCallContext, _ syntax.SyntaxValue) error {
-	return values.WrapForeignErrorf(values.ErrInvalidSyntax, "unsyntax-splicing: not in quasisyntax context")
+	return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unsyntax-splicing: not in quasisyntax context")
 }

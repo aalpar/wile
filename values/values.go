@@ -295,7 +295,7 @@ type ByteVectorExtractor interface {
 // # Error signaling
 //
 // Arithmetic methods signal errors by panicking with a static sentinel error
-// (e.g., ErrDivisionByZero, ErrNotANumber). This follows the same convention
+// (e.g., werr.ErrDivisionByZero, werr.ErrNotANumber). This follows the same convention
 // used by Go's math/big package, where (*big.Int).Div, (*big.Int).QuoRem,
 // and (*big.Float).Quo all panic on division by zero, and mirrors Go's own
 // runtime behavior for built-in integer division.

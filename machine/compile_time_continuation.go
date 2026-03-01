@@ -21,6 +21,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/internal/validate"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // CompileTimeContinuation is a continuation used during the compilation phase
@@ -49,7 +50,7 @@ func NewCompiletimeContinuation(tpl *NativeTemplate, env *environment.Environmen
 func formArgs(expr syntax.SyntaxValue, formName, usage string) (*syntax.SyntaxPair, error) {
 	argsPair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(argsPair) {
-		return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "%s: expected %s", formName, usage)
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "%s: expected %s", formName, usage)
 	}
 	return argsPair, nil
 }
@@ -63,7 +64,7 @@ func formSingleArg(expr syntax.SyntaxValue, formName string) (syntax.SyntaxValue
 	}
 	arg := argsPair.SyntaxCar()
 	if !syntax.IsSyntaxEmptyList(argsPair.SyntaxCdr()) {
-		return nil, values.WrapForeignErrorf(values.ErrInvalidSyntax, "%s: expected exactly one argument", formName)
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "%s: expected exactly one argument", formName)
 	}
 	return arg, nil
 }
@@ -127,7 +128,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 		// Try global binding
 		gi := p.env.GetGlobalIndex(sym)
 		if gi == nil {
-			return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such local or global binding %q", sym.Key)
+			return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such local or global binding %q", sym.Key)
 		}
 
 		bd := p.env.GetGlobalBinding(gi)
@@ -161,7 +162,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	globalBinding := p.env.GetBindingWithScopes(sym, symbolScopes)
 	if globalBinding == nil {
 		// No binding found that matches the scopes
-		return values.WrapForeignErrorf(values.ErrNoSuchBinding, "no such binding %q with compatible scopes", sym.Key)
+		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes", sym.Key)
 	}
 
 	// It must be a global binding (since local lookup failed).
@@ -196,21 +197,21 @@ func (p *CompileTimeContinuation) CompileSyntaxPrimitive(ctctx CompileTimeCallCo
 	// Not a primitive - caller should treat as procedure call.
 	// Core forms (define, lambda, quote, quasiquote, if, set!, begin) are handled
 	// by compileValidated* methods and never reach here.
-	return false, values.WrapForeignErrorf(values.ErrNotAPrimitive, "compileSyntaxCompilerCall: no syntax compiler for form")
+	return false, werr.WrapForeignErrorf(werr.ErrNotAPrimitive, "compileSyntaxCompilerCall: no syntax compiler for form")
 }
 
 // CompileMeta compiles a meta expression.
 func (p *CompileTimeContinuation) CompileMeta(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	rest, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "%T is not a pair", expr)
+		return werr.WrapForeignErrorf(werr.ErrNotAPair, "%T is not a pair", expr)
 	}
 	// Get the expand environment and compile expressions in it
 	metaEnv := p.env.Expand()
 	metaCont := NewCompiletimeContinuation(p.template, metaEnv)
 	err := metaCont.compileExpressionList(ctctx, rest)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "failed to compile meta")
+		return werr.WrapForeignErrorf(err, "failed to compile meta")
 	}
 	return nil
 }
@@ -219,7 +220,7 @@ func (p *CompileTimeContinuation) compileProcedureArgumentList(ctctx CompileTime
 	tail, err := syntax.SyntaxForEach(ctctx.ctx, args, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
 		err := p.CompileExpression(ctctx.NotInTail(), v)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "failed to compile procedure argument list")
+			return werr.WrapForeignErrorf(err, "failed to compile procedure argument list")
 		}
 		p.AppendOperations(
 			NewOperationPush(),
@@ -227,17 +228,17 @@ func (p *CompileTimeContinuation) compileProcedureArgumentList(ctctx CompileTime
 		return nil
 	})
 	if err != nil {
-		return values.WrapForeignErrorf(err, "failed to compile procedure argument list")
+		return werr.WrapForeignErrorf(err, "failed to compile procedure argument list")
 	}
 	if !syntax.IsSyntaxEmptyList(tail) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "expected a list of arguments, got %T", tail)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "expected a list of arguments, got %T", tail)
 	}
 	return nil
 }
 
 func (p *CompileTimeContinuation) compileExpressionList(ctctx CompileTimeCallContext, expr *syntax.SyntaxPair) error {
 	if !expr.IsList() {
-		return values.WrapForeignErrorf(values.ErrNotAList, "expected a list of expressions, got %T", expr)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "expected a list of expressions, got %T", expr)
 	}
 	tail, err := syntax.SyntaxForEach(ctctx.ctx, expr, func(_ context.Context, _ int, hasNext bool, v syntax.SyntaxValue) error {
 		ctctx0 := ctctx
@@ -246,15 +247,15 @@ func (p *CompileTimeContinuation) compileExpressionList(ctctx CompileTimeCallCon
 		}
 		err := p.CompileExpression(ctctx0, v)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "failed to compile expression list")
+			return werr.WrapForeignErrorf(err, "failed to compile expression list")
 		}
 		return nil
 	})
 	if err != nil {
-		return values.WrapForeignErrorf(err, "failed to compile expression list")
+		return werr.WrapForeignErrorf(err, "failed to compile expression list")
 	}
 	if !syntax.IsSyntaxEmptyList(tail) {
-		return values.WrapForeignErrorf(values.ErrNotAList, "expected expression list, got %T", tail)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "expected expression list, got %T", tail)
 	}
 	return nil
 }
@@ -277,7 +278,7 @@ func (p *CompileTimeContinuation) CompileProcedureCall(ctctx CompileTimeCallCont
 
 	err := p.CompileExpression(ctctx.NotInTail(), initial)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "failed to compile expression")
+		return werr.WrapForeignErrorf(err, "failed to compile expression")
 	}
 	p.AppendOperations(
 		NewOperationPush(),
@@ -285,7 +286,7 @@ func (p *CompileTimeContinuation) CompileProcedureCall(ctctx CompileTimeCallCont
 	// compile as a procedure call
 	err = p.compileProcedureArgumentList(ctctx, expr)
 	if err != nil {
-		return values.WrapForeignErrorf(err, "failed to compile expression list")
+		return werr.WrapForeignErrorf(err, "failed to compile expression list")
 	}
 	p.AppendOperations(
 		NewOperationPull(),
@@ -304,7 +305,7 @@ func (p *CompileTimeContinuation) CompileProcedureCall(ctctx CompileTimeCallCont
 func (p *CompileTimeContinuation) CompilePrimitiveOrProcedureCall(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	stx0pr, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAPair, "expected a pair for procedure call, got %T", expr)
+		return werr.WrapForeignErrorf(werr.ErrNotAPair, "expected a pair for procedure call, got %T", expr)
 	}
 	initial := stx0pr.SyntaxCar()
 	stx1cdr := stx0pr.SyntaxCdr()
@@ -315,12 +316,12 @@ func (p *CompileTimeContinuation) CompilePrimitiveOrProcedureCall(ctctx CompileT
 			return p.CompileProcedureCall(ctctx, v, stx1cdr)
 		}
 		if err != nil {
-			return values.WrapForeignErrorf(err, "failed to compile primitive or call")
+			return werr.WrapForeignErrorf(err, "failed to compile primitive or call")
 		}
 	case *syntax.SyntaxPair:
 		err := p.CompileProcedureCall(ctctx, v, stx1cdr)
 		if err != nil {
-			return values.WrapForeignErrorf(err, "failed to compile expression")
+			return werr.WrapForeignErrorf(err, "failed to compile expression")
 		}
 		return nil
 	}
@@ -340,7 +341,7 @@ func (p *CompileTimeContinuation) CompileExpression(ctctx CompileTimeCallContext
 	// of special forms (R7RS §4.2.2)
 	result := validate.ValidateExpression(ctctx.ctx, p.env, expr)
 	if !result.Ok() {
-		return values.WrapForeignErrorf(values.ErrInvalidSyntax, "%s", result.Error())
+		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "%s", result.Error())
 	}
 	// Compile the validated form
 	return p.compileValidated(ctctx, result.Expr)
@@ -368,8 +369,8 @@ func (p *CompileTimeContinuation) internSymbolsInValueWithVisited(
 			visited = make(map[*values.Pair]bool)
 		}
 		if visited[val] {
-			return nil, values.WrapForeignErrorf(
-				values.ErrInvalidSyntax,
+			return nil, werr.WrapForeignErrorf(
+				werr.ErrInvalidSyntax,
 				"compile: circular datum label in quoted literal",
 			)
 		}

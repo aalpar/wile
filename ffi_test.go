@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile"
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -75,7 +75,7 @@ func TestRegisterFuncValidation(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected error")
 			}
-			if !errors.Is(err, values.ErrFFIRegistration) {
+			if !errors.Is(err, werr.ErrFFIRegistration) {
 				t.Fatalf("expected ErrFFIRegistration, got %T: %v", err, err)
 			}
 		})
@@ -1049,7 +1049,7 @@ func TestRegisterFuncCallbackErrorSentinels(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 	// The FFI sentinel should be in the error chain.
-	if !errors.Is(evalErr, values.ErrFFICallbackError) {
+	if !errors.Is(evalErr, werr.ErrFFICallbackError) {
 		t.Errorf("expected errors.Is(err, ErrFFICallbackError) = true, got false\nerror: %v", evalErr)
 	}
 	// The error message should contain the original error's context.
@@ -1079,7 +1079,7 @@ func TestRegisterFuncCallbackPanicToError(t *testing.T) {
 	if evalErr == nil {
 		t.Fatal("expected error from callback panic, got nil")
 	}
-	if !errors.Is(evalErr, values.ErrFFICallbackError) {
+	if !errors.Is(evalErr, werr.ErrFFICallbackError) {
 		t.Errorf("expected errors.Is(err, ErrFFICallbackError) = true, got false\nerror: %v", evalErr)
 	}
 	if !strings.Contains(evalErr.Error(), "division by zero") {
@@ -1106,7 +1106,7 @@ func TestRegisterFuncCallbackResultConversionPanicToError(t *testing.T) {
 	if evalErr == nil {
 		t.Fatal("expected error from callback result conversion, got nil")
 	}
-	if !errors.Is(evalErr, values.ErrCallbackResultConversion) {
+	if !errors.Is(evalErr, werr.ErrCallbackResultConversion) {
 		t.Errorf("expected errors.Is(err, ErrCallbackResultConversion) = true, got false\nerror: %v", evalErr)
 	}
 }
@@ -1311,7 +1311,7 @@ func TestRegisterFuncsFailFast(t *testing.T) {
 		t.Fatal("expected error from RegisterFuncs with non-function value")
 	}
 
-	if !errors.Is(err, values.ErrFFIRegistration) {
+	if !errors.Is(err, werr.ErrFFIRegistration) {
 		t.Fatalf("expected ErrFFIRegistration, got %T: %v", err, err)
 	}
 	if !strings.Contains(err.Error(), "bad") {

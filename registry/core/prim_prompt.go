@@ -20,6 +20,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // PrimMakeContinuationPromptTag creates a new continuation prompt tag.
@@ -33,11 +34,11 @@ func PrimMakeContinuationPromptTag(mc *machine.MachineContext) error {
 	if !values.IsEmptyList(restVal) {
 		tuple, ok := restVal.(values.Tuple)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "make-continuation-prompt-tag: bad argument list")
+			return werr.WrapForeignErrorf(werr.ErrNotAList, "make-continuation-prompt-tag: bad argument list")
 		}
 		sym, ok := tuple.Car().(*values.Symbol)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotASymbol, "make-continuation-prompt-tag: expected a symbol, got %T", tuple.Car())
+			return werr.WrapForeignErrorf(werr.ErrNotASymbol, "make-continuation-prompt-tag: expected a symbol, got %T", tuple.Car())
 		}
 		name = sym.Key
 	}
@@ -71,12 +72,12 @@ func PrimCallWithContinuationPrompt(mc *machine.MachineContext) error {
 	tagVal := mc.Arg(1)
 	handlerVal := mc.Arg(2)
 
-	thunkCls, err := helpers.RequireType[machine.Closure](thunk, values.ErrNotAProcedure, "call-with-continuation-prompt")
+	thunkCls, err := helpers.RequireType[machine.Closure](thunk, werr.ErrNotAProcedure, "call-with-continuation-prompt")
 	if err != nil {
 		return err
 	}
 
-	tag, err := helpers.RequireType[*machine.PromptTag](tagVal, values.ErrNotAPromptTag, "call-with-continuation-prompt")
+	tag, err := helpers.RequireType[*machine.PromptTag](tagVal, werr.ErrNotAPromptTag, "call-with-continuation-prompt")
 	if err != nil {
 		return err
 	}
@@ -84,7 +85,7 @@ func PrimCallWithContinuationPrompt(mc *machine.MachineContext) error {
 	var handlerCls machine.Closure
 	if handlerVal != values.FalseValue {
 		var handlerErr error
-		handlerCls, handlerErr = helpers.RequireType[machine.Closure](handlerVal, values.ErrNotAProcedure, "call-with-continuation-prompt")
+		handlerCls, handlerErr = helpers.RequireType[machine.Closure](handlerVal, werr.ErrNotAProcedure, "call-with-continuation-prompt")
 		if handlerErr != nil {
 			return handlerErr
 		}
@@ -157,7 +158,7 @@ func PrimCallWithContinuationPrompt(mc *machine.MachineContext) error {
 // Returns an ErrPromptAbort that propagates up through Run() to the
 // enclosing call-with-continuation-prompt or RunWithEscapeHandling.
 func PrimAbortCurrentContinuation(mc *machine.MachineContext) error {
-	tag, err := helpers.RequireArg[*machine.PromptTag](mc, 0, values.ErrNotAPromptTag, "abort-current-continuation")
+	tag, err := helpers.RequireArg[*machine.PromptTag](mc, 0, werr.ErrNotAPromptTag, "abort-current-continuation")
 	if err != nil {
 		return err
 	}
@@ -169,7 +170,7 @@ func PrimAbortCurrentContinuation(mc *machine.MachineContext) error {
 		for !values.IsEmptyList(current) {
 			tuple, ok := current.(values.Tuple)
 			if !ok {
-				return values.WrapForeignErrorf(values.ErrNotAList, "abort-current-continuation: improper argument list")
+				return werr.WrapForeignErrorf(werr.ErrNotAList, "abort-current-continuation: improper argument list")
 			}
 			abortValues = append(abortValues, tuple.Car())
 			current = tuple.Cdr()
@@ -196,12 +197,12 @@ func PrimCallWithComposableContinuation(mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 	tagVal := mc.Arg(1)
 
-	procCls, err := helpers.RequireType[machine.Closure](proc, values.ErrNotAProcedure, "call-with-composable-continuation")
+	procCls, err := helpers.RequireType[machine.Closure](proc, werr.ErrNotAProcedure, "call-with-composable-continuation")
 	if err != nil {
 		return err
 	}
 
-	tag, err := helpers.RequireType[*machine.PromptTag](tagVal, values.ErrNotAPromptTag, "call-with-composable-continuation")
+	tag, err := helpers.RequireType[*machine.PromptTag](tagVal, werr.ErrNotAPromptTag, "call-with-composable-continuation")
 	if err != nil {
 		return err
 	}
@@ -209,7 +210,7 @@ func PrimCallWithComposableContinuation(mc *machine.MachineContext) error {
 	// Find the prompt in the continuation chain or on the context itself.
 	prompt, found := mc.FindPrompt(tag)
 	if !found {
-		return values.WrapForeignErrorf(values.ErrNotAPromptTag, "call-with-composable-continuation: no prompt found for tag %s", tag.SchemeString())
+		return werr.WrapForeignErrorf(werr.ErrNotAPromptTag, "call-with-composable-continuation: no prompt found for tag %s", tag.SchemeString())
 	}
 
 	// Slice the continuation chain from mc.cont to the prompt.

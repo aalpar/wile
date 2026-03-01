@@ -21,6 +21,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -615,7 +616,7 @@ func TestEnvironmentFrame_PanicSentinels(t *testing.T) {
 			func() {
 				NewEnvironmentFrameWithParent(nil, nil)
 			},
-			values.ErrNilParentEnvironment,
+			werr.ErrNilParentEnvironment,
 		},
 		{
 			"AtPhase without PhaseRegistry panics with ErrMissingPhaseRegistry",
@@ -623,7 +624,7 @@ func TestEnvironmentFrame_PanicSentinels(t *testing.T) {
 				env := NewEnvironmentFrame(nil, NewGlobalEnvironmentFrame())
 				env.AtPhase(0)
 			},
-			values.ErrMissingPhaseRegistry,
+			werr.ErrMissingPhaseRegistry,
 		},
 		{
 			"InternSyntax without TopLevel panics with ErrMissingTopLevelEnvironment",
@@ -631,7 +632,7 @@ func TestEnvironmentFrame_PanicSentinels(t *testing.T) {
 				env := NewEnvironmentFrame(nil, NewGlobalEnvironmentFrame())
 				env.InternSyntax(values.NewInteger(1), nil)
 			},
-			values.ErrMissingTopLevelEnvironment,
+			werr.ErrMissingTopLevelEnvironment,
 		},
 	}
 	for _, tc := range tcs {
@@ -830,7 +831,7 @@ func TestInitApplyFrame_PanicsOnNilParent(t *testing.T) {
 		qt.Assert(t, r, qt.IsNotNil)
 		err, ok := r.(error)
 		qt.Assert(t, ok, qt.IsTrue)
-		qt.Assert(t, errors.Is(err, values.ErrNilParentEnvironment), qt.IsTrue)
+		qt.Assert(t, errors.Is(err, werr.ErrNilParentEnvironment), qt.IsTrue)
 	}()
 	src.InitApplyFrame(&dst)
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // ProgramStartTime is used for current-jiffy to measure elapsed time.
@@ -115,7 +116,7 @@ func PrimEmergencyExit(mc *machine.MachineContext) error {
 // PrimGetEnvironmentVariable implements the (get-environment-variable) primitive.
 // Gets environment variable value.
 func PrimGetEnvironmentVariable(mc *machine.MachineContext) error {
-	name, err := helpers.RequireArg[*values.String](mc, 0, values.ErrNotAString, "get-environment-variable")
+	name, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "get-environment-variable")
 	if err != nil {
 		return err
 	}

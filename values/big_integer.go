@@ -16,6 +16,8 @@ package values
 
 import (
 	"math/big"
+
+	"github.com/aalpar/wile/werr"
 )
 
 var (
@@ -215,7 +217,7 @@ func (p *BigInteger) Multiply(o Number) Number {
 // exact / inexact = inexact (Float or Complex).
 func (p *BigInteger) Divide(o Number) Number {
 	if o.IsZero() && o.IsExact() {
-		panic(ErrDivisionByZero)
+		panic(werr.ErrDivisionByZero)
 	}
 	v, ok := o.(*BigInteger)
 	if ok {

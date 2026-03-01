@@ -26,6 +26,7 @@ import (
 	"github.com/aalpar/wile/internal/tokenizer"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -876,13 +877,13 @@ func TestParserError_Is(t *testing.T) {
 	tok := makeTestToken("x")
 	pe := NewParserError(tok, "msg")
 	c.Assert(pe.Is(&ParserError{}), qt.IsTrue)
-	c.Assert(pe.Is(values.ErrNotAnInteger), qt.IsFalse)
+	c.Assert(pe.Is(werr.ErrNotAnInteger), qt.IsFalse)
 }
 
 func TestParserError_Unwrap(t *testing.T) {
 	c := qt.New(t)
 	tok := makeTestToken("x")
-	inner := values.ErrNotAnInteger
+	inner := werr.ErrNotAnInteger
 	pe := NewParserErrorWithWrap(inner, tok, "wrapping")
 	c.Assert(pe.Unwrap(), qt.Equals, inner)
 
@@ -896,9 +897,9 @@ func TestParserErrorf(t *testing.T) {
 	pe := NewParserErrorf(tok, "got %d items", 5)
 	c.Assert(pe.Error(), qt.Equals, "got 5 items")
 
-	pe2 := NewParserErrorWithWrapf(values.ErrNotAnInteger, tok, "wrap %s", "test")
+	pe2 := NewParserErrorWithWrapf(werr.ErrNotAnInteger, tok, "wrap %s", "test")
 	c.Assert(pe2.Error(), qt.Equals, "wrap test")
-	c.Assert(pe2.Unwrap(), qt.Equals, values.ErrNotAnInteger)
+	c.Assert(pe2.Unwrap(), qt.Equals, werr.ErrNotAnInteger)
 }
 
 // ---------------------------------------------------------------------------

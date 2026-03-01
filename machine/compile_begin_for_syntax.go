@@ -16,7 +16,7 @@ package machine
 
 import (
 	"github.com/aalpar/wile/internal/syntax"
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // CompileBeginForSyntax handles (begin-for-syntax expr ...).
@@ -35,7 +35,7 @@ func (p *CompileTimeContinuation) CompileBeginForSyntax(ctctx CompileTimeCallCon
 	}
 	exprPair, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotASyntaxPair, "begin-for-syntax: expected expressions")
+		return werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "begin-for-syntax: expected expressions")
 	}
 
 	return p.executeFormsAtCompileTime(ctctx, "begin-for-syntax", exprPair)

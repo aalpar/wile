@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -48,7 +49,7 @@ func TestSchemeEqualsEdgeCases(t *testing.T) {
 	})
 
 	t.Run("got is error want is error different types", func(t *testing.T) {
-		gotErr := values.WrapForeignErrorf(values.ErrNotANumber, "test")
+		gotErr := werr.WrapForeignErrorf(werr.ErrNotANumber, "test")
 		wantErr := errors.New("test")
 		var noteKeys []string
 		note := func(key string, value any) {

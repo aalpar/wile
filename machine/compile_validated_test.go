@@ -24,6 +24,7 @@ import (
 	"github.com/aalpar/wile/internal/validate"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -217,7 +218,7 @@ func TestCompileValidated_UnknownExprType(t *testing.T) {
 	err := ctc.compileValidated(ctctx, mock)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err, qt.ErrorMatches, `unknown validated expression type: \*machine\.mockValidatedExpr: invalid argument`)
-	c.Assert(errors.Is(err, values.ErrInvalidArgument), qt.IsTrue)
+	c.Assert(errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue)
 }
 
 // mockValidatedExpr implements validate.ValidatedExpr for testing the

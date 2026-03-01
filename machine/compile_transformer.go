@@ -20,6 +20,7 @@ import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // compileTransformerToMachineClosure compiles a define-syntax transformer expression
@@ -38,27 +39,27 @@ func compileTransformerToMachineClosure(
 ) (*MachineClosure, error) {
 	transformerPair, ok := transformerExpr.(*syntax.SyntaxPair)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotASyntaxPair, "define-syntax: transformer must be a list")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "define-syntax: transformer must be a list")
 	}
 
 	car := transformerPair.SyntaxCar()
 	if car == nil {
-		return nil, values.WrapForeignErrorf(values.ErrUnexpectedNil, "define-syntax: transformer has empty car")
+		return nil, werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-syntax: transformer has empty car")
 	}
 
 	sym, ok := car.(*syntax.SyntaxSymbol)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrUnexpectedTransformer, "define-syntax: transformer must start with a symbol")
+		return nil, werr.WrapForeignErrorf(werr.ErrUnexpectedTransformer, "define-syntax: transformer must start with a symbol")
 	}
 
 	symVal := sym.Unwrap()
 	if symVal == nil {
-		return nil, values.WrapForeignErrorf(values.ErrUnexpectedNil, "define-syntax: transformer symbol is nil")
+		return nil, werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-syntax: transformer symbol is nil")
 	}
 
 	symbol, ok := symVal.(*values.Symbol)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrUnexpectedTransformer, "define-syntax: transformer must start with a symbol")
+		return nil, werr.WrapForeignErrorf(werr.ErrUnexpectedTransformer, "define-syntax: transformer must start with a symbol")
 	}
 
 	switch symbol.Key {
@@ -69,7 +70,7 @@ func compileTransformerToMachineClosure(
 		return compileAndEvalLambdaTransformer(ctx, env, transformerPair)
 
 	default:
-		return nil, values.WrapForeignErrorf(values.ErrUnexpectedTransformer, "define-syntax: unsupported transformer type %q (expected syntax-rules or lambda)", symbol.Key)
+		return nil, werr.WrapForeignErrorf(werr.ErrUnexpectedTransformer, "define-syntax: unsupported transformer type %q (expected syntax-rules or lambda)", symbol.Key)
 	}
 }
 
@@ -82,27 +83,27 @@ func compileAndEvalLambdaTransformer(ctx context.Context, env *environment.Envir
 
 	expandedExpr, err := NewExpanderTimeContinuation(ctx, expandEnv).ExpandExpression(lambdaExpr)
 	if err != nil {
-		return nil, values.WrapForeignErrorf(err, "error expanding transformer")
+		return nil, werr.WrapForeignErrorf(err, "error expanding transformer")
 	}
 
 	cctx := NewCompileTimeCallContext(ctx, false, true)
 	compiler := NewCompiletimeContinuation(tpl, expandEnv)
 	err = compiler.CompileExpression(cctx, expandedExpr)
 	if err != nil {
-		return nil, values.WrapForeignErrorf(err, "error compiling transformer")
+		return nil, werr.WrapForeignErrorf(err, "error compiling transformer")
 	}
 
 	cont := NewMachineContinuation(nil, tpl, expandEnv)
 	mc := NewMachineContext(ctx, cont)
 	err = mc.Run()
 	if err != nil {
-		return nil, values.WrapForeignErrorf(err, "error evaluating transformer")
+		return nil, werr.WrapForeignErrorf(err, "error evaluating transformer")
 	}
 
 	result := mc.GetValue()
 	closure, ok := result.(*MachineClosure)
 	if !ok {
-		return nil, values.WrapForeignErrorf(values.ErrNotAProcedure, "define-syntax: transformer must evaluate to a procedure, got %T", result)
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAProcedure, "define-syntax: transformer must evaluate to a procedure, got %T", result)
 	}
 
 	return closure, nil

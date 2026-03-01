@@ -22,6 +22,7 @@ import (
 
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 )
 
 // ── ListToVector ─────────────────────────────────────────────────────
@@ -77,7 +78,7 @@ func TestListToVector_Errors(t *testing.T) {
 		{
 			"not a list",
 			values.NewInteger(42),
-			values.ErrNotAList,
+			werr.ErrNotAList,
 		},
 	}
 
@@ -149,7 +150,7 @@ func TestCollectVectors_Errors(t *testing.T) {
 		{
 			"non-vector element",
 			values.List(values.NewInteger(1)),
-			values.ErrNotAVector,
+			werr.ErrNotAVector,
 		},
 		{
 			"mixed vector and non-vector",
@@ -157,7 +158,7 @@ func TestCollectVectors_Errors(t *testing.T) {
 				values.NewVector(values.NewInteger(1)),
 				values.NewString("bad"),
 			),
-			values.ErrNotAVector,
+			werr.ErrNotAVector,
 		},
 	}
 
@@ -215,12 +216,12 @@ func TestCollectStrings_Errors(t *testing.T) {
 		{
 			"non-string element",
 			values.List(values.NewInteger(1)),
-			values.ErrNotAString,
+			werr.ErrNotAString,
 		},
 		{
 			"mixed string and non-string",
 			values.List(values.NewString("ok"), values.NewInteger(1)),
-			values.ErrNotAString,
+			werr.ErrNotAString,
 		},
 	}
 
@@ -300,7 +301,7 @@ func TestMemberLookup_Errors(t *testing.T) {
 			"list not a list",
 			values.NewInteger(1),
 			values.NewInteger(42),
-			values.ErrNotAList,
+			werr.ErrNotAList,
 		},
 	}
 
@@ -396,13 +397,13 @@ func TestAssocLookup_Errors(t *testing.T) {
 			"alist not a list",
 			values.NewInteger(1),
 			values.NewInteger(42),
-			values.ErrNotAList,
+			werr.ErrNotAList,
 		},
 		{
 			"alist entry not a pair",
 			values.NewInteger(1),
 			values.List(values.NewInteger(99)),
-			values.ErrNotAPair,
+			werr.ErrNotAPair,
 		},
 	}
 

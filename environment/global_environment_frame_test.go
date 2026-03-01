@@ -21,6 +21,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -295,7 +296,7 @@ func TestGlobalEnvironmentFrame_PanicSentinels(t *testing.T) {
 				if !ok {
 					t.Fatalf("panic value is not error: %T", r)
 				}
-				if !errors.Is(err, values.ErrMissingTopLevelEnvironment) {
+				if !errors.Is(err, werr.ErrMissingTopLevelEnvironment) {
 					t.Errorf("expected sentinel ErrMissingTopLevelEnvironment, got: %v", err)
 				}
 			}()

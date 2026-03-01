@@ -22,6 +22,7 @@ import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -165,7 +166,7 @@ func TestPopContinuation_Underflow(t *testing.T) {
 
 	// Popping from an empty continuation chain must return an error, not panic.
 	_, err := mc.PopContinuation()
-	c.Assert(errors.Is(err, values.ErrContinuationUnderflow), qt.IsTrue)
+	c.Assert(errors.Is(err, werr.ErrContinuationUnderflow), qt.IsTrue)
 }
 
 func TestMachineContext_SetValues_GetValues(t *testing.T) {
@@ -403,7 +404,7 @@ func TestMachineContext_Apply_FixedArityTooManyArgs(t *testing.T) {
 
 	_, err := mc.Apply(cls, values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, errors.Is(err, values.ErrWrongNumberOfArguments), qt.IsTrue)
+	qt.Assert(t, errors.Is(err, werr.ErrWrongNumberOfArguments), qt.IsTrue)
 	qt.Assert(t, err.Error(), qt.Contains, "expected 2 arguments, got 3")
 }
 
@@ -601,7 +602,7 @@ func TestMachineContext_Apply_ErrorsWrapSentinel(t *testing.T) {
 
 			_, err := mc.Apply(cls, tc.args...)
 			qt.Assert(t, err, qt.IsNotNil)
-			qt.Assert(t, errors.Is(err, values.ErrWrongNumberOfArguments), qt.IsTrue)
+			qt.Assert(t, errors.Is(err, werr.ErrWrongNumberOfArguments), qt.IsTrue)
 		})
 	}
 }
@@ -653,7 +654,7 @@ func TestMachineContext_ApplyCaseLambda_NoMatchErrorSentinel(t *testing.T) {
 
 	_, err := mc.ApplyCaseLambda(caseLambda, values.NewInteger(1))
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, errors.Is(err, values.ErrWrongNumberOfArguments), qt.IsTrue)
+	qt.Assert(t, errors.Is(err, werr.ErrWrongNumberOfArguments), qt.IsTrue)
 }
 
 func TestNewMachineContextFromMachineClosure(t *testing.T) {
@@ -706,7 +707,7 @@ func TestMachineContext_WrapError(t *testing.T) {
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
-	cause := values.NewForeignErrorf("original error")
+	cause := werr.NewForeignErrorf("original error")
 	err := mc.WrapError(cause, "wrapped message")
 
 	qt.Assert(t, err, qt.IsNotNil)
@@ -720,7 +721,7 @@ func TestMachineContext_WrapError_EmptyMessage(t *testing.T) {
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
-	cause := values.NewForeignErrorf("original error")
+	cause := werr.NewForeignErrorf("original error")
 	err := mc.WrapError(cause, "")
 
 	qt.Assert(t, err, qt.IsNotNil)
@@ -1048,7 +1049,7 @@ func TestApplyCallable_NonCallable(t *testing.T) {
 			_, err := mc.ApplyCallable(tc.value)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(err.Error(), qt.Contains, "expected a procedure")
-			c.Assert(errors.Is(err, values.ErrNotAProcedure), qt.IsTrue)
+			c.Assert(errors.Is(err, werr.ErrNotAProcedure), qt.IsTrue)
 		})
 	}
 }
@@ -1062,7 +1063,7 @@ func TestApplyCallable_Nil(t *testing.T) {
 	_, err := mc.ApplyCallable(nil)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "cannot apply nil")
-	c.Assert(errors.Is(err, values.ErrNotAProcedure), qt.IsTrue)
+	c.Assert(errors.Is(err, werr.ErrNotAProcedure), qt.IsTrue)
 }
 
 // TestNewSubContext_InheritsExceptionHandler verifies that NewSubContext
@@ -1196,7 +1197,7 @@ func TestSaveContinuation_CallDepthTracking(t *testing.T) {
 				if lastErr == nil {
 					t.Fatal("expected error, got nil")
 				}
-				if !errors.Is(lastErr, values.ErrCallDepthExceeded) {
+				if !errors.Is(lastErr, werr.ErrCallDepthExceeded) {
 					t.Fatalf("expected ErrCallDepthExceeded, got: %v", lastErr)
 				}
 			} else if lastErr != nil {
@@ -1245,7 +1246,7 @@ func TestPopContinuation_DecrementsCallDepth(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error at depth limit, got nil")
 	}
-	if !errors.Is(err, values.ErrCallDepthExceeded) {
+	if !errors.Is(err, werr.ErrCallDepthExceeded) {
 		t.Fatalf("expected ErrCallDepthExceeded, got: %v", err)
 	}
 }
@@ -1380,7 +1381,7 @@ func TestRunDispatch_UnimplementedOpcode(t *testing.T) {
 
 	err := mc.Run()
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(errors.Is(err, values.ErrUnknownOpCode), qt.IsTrue)
+	c.Assert(errors.Is(err, werr.ErrUnknownOpCode), qt.IsTrue)
 }
 
 func TestRunDispatch_IntegerPathMultipleOps(t *testing.T) {
@@ -1546,7 +1547,7 @@ func TestRunDispatch_OpPopEnv_TopLevel(t *testing.T) {
 
 	err := mc.Run()
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(errors.Is(err, values.ErrNilParentEnvironment), qt.IsTrue)
+	c.Assert(errors.Is(err, werr.ErrNilParentEnvironment), qt.IsTrue)
 }
 
 func TestRunDispatch_OpRestoreContinuation_NilCont(t *testing.T) {
@@ -2089,7 +2090,7 @@ func TestRunDispatch_OpMakeClosure_BadTemplate(t *testing.T) {
 
 	err := mc.Run()
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(errors.Is(err, values.ErrNotAMachineTemplate), qt.IsTrue)
+	c.Assert(errors.Is(err, werr.ErrNotAMachineTemplate), qt.IsTrue)
 }
 
 func TestRunDispatch_OpMakeClosure_BadEnv(t *testing.T) {
@@ -2113,7 +2114,7 @@ func TestRunDispatch_OpMakeClosure_BadEnv(t *testing.T) {
 
 	err := mc.Run()
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(errors.Is(err, values.ErrNotALocalEnvironmentFrame), qt.IsTrue)
+	c.Assert(errors.Is(err, werr.ErrNotALocalEnvironmentFrame), qt.IsTrue)
 }
 
 // --- Wave 6: cached binding ops ---

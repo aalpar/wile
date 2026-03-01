@@ -22,6 +22,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // PrimApply implements the apply primitive.
@@ -34,7 +35,7 @@ func PrimApply(mc *machine.MachineContext) error {
 	// restVal is a list containing (arg1 ... args) where args is the final list
 	restTuple, ok := restVal.(values.Tuple)
 	if !ok || values.IsEmptyList(restVal) {
-		return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments, "apply: expected at least one argument list")
+		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "apply: expected at least one argument list")
 	}
 
 	// Collect all elements from rest except the last one, which is the final args list
@@ -51,7 +52,7 @@ func PrimApply(mc *machine.MachineContext) error {
 		prefixArgs = append(prefixArgs, car)
 		restTuple, ok = cdr.(values.Tuple)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "apply: improper rest argument list")
+			return werr.WrapForeignErrorf(werr.ErrNotAList, "apply: improper rest argument list")
 		}
 	}
 
@@ -59,7 +60,7 @@ func PrimApply(mc *machine.MachineContext) error {
 	if !values.IsEmptyList(finalList) {
 		finalTuple, ok := finalList.(values.Tuple)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "apply: final argument must be a list but got %T", finalList)
+			return werr.WrapForeignErrorf(werr.ErrNotAList, "apply: final argument must be a list but got %T", finalList)
 		}
 		v, err := finalTuple.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
 			prefixArgs = append(prefixArgs, elem)
@@ -69,7 +70,7 @@ func PrimApply(mc *machine.MachineContext) error {
 			return err
 		}
 		if !values.IsEmptyList(v) {
-			return values.WrapForeignErrorf(values.ErrNotAList, "apply: final argument is an improper list")
+			return werr.WrapForeignErrorf(werr.ErrNotAList, "apply: final argument is an improper list")
 		}
 	}
 
@@ -116,7 +117,7 @@ func PrimApply(mc *machine.MachineContext) error {
 func PrimCallCC(mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 
-	mcls, err := helpers.RequireType[machine.Closure](proc, values.ErrNotAProcedure, "call/cc")
+	mcls, err := helpers.RequireType[machine.Closure](proc, werr.ErrNotAProcedure, "call/cc")
 	if err != nil {
 		return err
 	}
@@ -199,7 +200,7 @@ func newComposeAbortEscapeClosure(
 	fn := func(innerMC *machine.MachineContext) error {
 		// Reject cross-thread continuation invocation
 		if innerMC.ThreadID() != capturingThreadID {
-			return values.WrapForeignErrorf(values.ErrCrossThreadContinuation,
+			return werr.WrapForeignErrorf(werr.ErrCrossThreadContinuation,
 				"call/cc: continuation captured in thread %d, invoked from thread %d",
 				capturingThreadID, innerMC.ThreadID())
 		}
@@ -207,7 +208,7 @@ func newComposeAbortEscapeClosure(
 		// nil != non-nil: captured outside, invoked inside (or vice versa).
 		// ptr-A != ptr-B: captured inside barrier A, invoked inside barrier B.
 		if capturingBarrierValid != innerMC.BarrierValid() {
-			return values.WrapForeignErrorf(values.ErrContinuationBarrier,
+			return werr.WrapForeignErrorf(werr.ErrContinuationBarrier,
 				"call/cc: continuation cannot cross continuation barrier")
 		}
 		// Get the value passed to the continuation (from the closure's argument)
@@ -252,17 +253,17 @@ func PrimDynamicWind(mc *machine.MachineContext) error {
 
 	beforeCls, ok := before.(machine.Closure)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "dynamic-wind: before must be a procedure, got %T", before)
+		return werr.WrapForeignErrorf(werr.ErrNotAProcedure, "dynamic-wind: before must be a procedure, got %T", before)
 	}
 
 	thunkCls, ok := thunk.(machine.Closure)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "dynamic-wind: thunk must be a procedure, got %T", thunk)
+		return werr.WrapForeignErrorf(werr.ErrNotAProcedure, "dynamic-wind: thunk must be a procedure, got %T", thunk)
 	}
 
 	afterCls, ok := after.(machine.Closure)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAProcedure, "dynamic-wind: after must be a procedure, got %T", after)
+		return werr.WrapForeignErrorf(werr.ErrNotAProcedure, "dynamic-wind: after must be a procedure, got %T", after)
 	}
 
 	// Create a new winding frame
@@ -347,7 +348,7 @@ func PrimValues(mc *machine.MachineContext) error {
 	for !values.IsEmptyList(current) {
 		tuple, ok := current.(values.Tuple)
 		if !ok {
-			return values.WrapForeignErrorf(values.ErrNotAList, "values: improper argument list")
+			return werr.WrapForeignErrorf(werr.ErrNotAList, "values: improper argument list")
 		}
 		vals = append(vals, tuple.Car())
 		current = tuple.Cdr()
@@ -363,12 +364,12 @@ func PrimCallWithValues(mc *machine.MachineContext) error {
 	producer := mc.Arg(0)
 	consumer := mc.Arg(1)
 
-	producerCls, err := helpers.RequireType[machine.Closure](producer, values.ErrNotAProcedure, "call-with-values")
+	producerCls, err := helpers.RequireType[machine.Closure](producer, werr.ErrNotAProcedure, "call-with-values")
 	if err != nil {
 		return err
 	}
 
-	consumerCls, err := helpers.RequireType[machine.Closure](consumer, values.ErrNotAProcedure, "call-with-values")
+	consumerCls, err := helpers.RequireType[machine.Closure](consumer, werr.ErrNotAProcedure, "call-with-values")
 	if err != nil {
 		return err
 	}

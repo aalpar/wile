@@ -20,7 +20,7 @@ import (
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // PrimCallWithExit implements (call-with-exit proc).
@@ -39,7 +39,7 @@ import (
 func PrimCallWithExit(mc *machine.MachineContext) error {
 	proc := mc.Arg(0)
 
-	procCls, err := helpers.RequireType[machine.Closure](proc, values.ErrNotAProcedure, "call-with-exit")
+	procCls, err := helpers.RequireType[machine.Closure](proc, werr.ErrNotAProcedure, "call-with-exit")
 	if err != nil {
 		return err
 	}
@@ -54,11 +54,11 @@ func PrimCallWithExit(mc *machine.MachineContext) error {
 	// exit procedure gets the "outside dynamic extent" error, which is more informative.
 	exitFn := func(innerMC *machine.MachineContext) error {
 		if !valid.Load() {
-			return values.WrapForeignErrorf(values.ErrExpiredEscape,
+			return werr.WrapForeignErrorf(werr.ErrExpiredEscape,
 				"call-with-exit: exit procedure called outside dynamic extent")
 		}
 		if innerMC.ThreadID() != capturingThreadID {
-			return values.WrapForeignErrorf(values.ErrCrossThreadContinuation,
+			return werr.WrapForeignErrorf(werr.ErrCrossThreadContinuation,
 				"call-with-exit: exit procedure called from different thread")
 		}
 		val := innerMC.Arg(0)

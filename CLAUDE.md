@@ -62,10 +62,10 @@ Finish codebase reading and exploration before the session ends. If a plan is to
 2. **Execution**: Bytecode VM with explicit PC loop (`MachineContext.Run()` in `machine_context.go`), separate eval stack — NOT tree-walking interpreter
 3. **Continuations**: Explicit `MachineContinuation` linked list — NOT Go call stack; enables `call/cc`, dynamic-wind, delimited continuations
 4. **Pipeline**: `Tokenizer → Parser → Expander → Compiler → VM` (string → tokens → SyntaxValue → bytecode → execution)
-5. **Packages (public)**: `wile/` (Engine, embedding API), `values/` (Scheme types), `registry/` (primitives/extensions), `security/` (authorization), `extensions/` (public extensions)
+5. **Packages (public)**: `wile/` (Engine, embedding API), `values/` (Scheme types), `werr/` (error infrastructure), `registry/` (primitives/extensions), `security/` (authorization), `extensions/` (public extensions)
 6. **Packages (internal)**: `machine/` (VM/compiler/expander), `environment/` (bindings/scopes), `internal/{tokenizer,parser,syntax,match,repl,bootstrap,validate,schemeutil,forms}`
 7. **Values**: Go heap objects managed by Go GC — pure Go, no CGo, no custom allocator
-8. **Error handling**: Sentinel + wrap pattern — `values.NewStaticError` for sentinels, `values.WrapForeignErrorf` for context; never `fmt.Errorf`
+8. **Error handling**: Sentinel + wrap pattern — `werr.NewStaticError` for sentinels, `werr.WrapForeignErrorf` for context; never `fmt.Errorf`
 9. **Hygiene**: Identifiers carry scope sets, resolution checks `bindingScopes ⊆ useScopes`; free template identifiers skip intro scope
 10. **Concurrency**: Engine not thread-safe (one per goroutine); SRFI-18 threads within Engine safe (VM manages coordination)
 11. **Security**: Two-layer sandboxing — extension-level (opt-in via `WithExtension()`) and fine-grained authorization (`security.Authorizer` interface with `security.Check()` gating)
@@ -83,11 +83,11 @@ Entry: `engine.go` → `Engine.Eval()` or `Engine.Compile()` + `Engine.Run()`
 ### Package Layering
 
 ```
-values/ → environment/ → internal/{tokenizer,parser,syntax,schemeutil,validate,match,bootstrap,extensions,forms,repl}
+werr/ → values/ → environment/ → internal/{tokenizer,parser,syntax,schemeutil,validate,match,bootstrap,extensions,forms,repl}
   → machine/ → security/ → registry/ → extensions/ → wile/ (root)
 ```
 
-Public API (embedders): `wile/`, `values/`, `registry/`, `security/`, `extensions/*`. Internal: `internal/*`. Machine: public but rarely used directly.
+Public API (embedders): `wile/`, `values/`, `werr/`, `registry/`, `security/`, `extensions/*`. Internal: `internal/*`. Machine: public but rarely used directly.
 
 ### Security Model
 
@@ -127,7 +127,7 @@ These names save mental space: `p` is always the receiver, `q` is always the res
 
 ### Error Handling (summary)
 
-Two-layer convention: **sentinel + wrap**. Use `values.NewStaticError` for sentinels, `values.WrapForeignErrorf` at return sites. Never use bare `errors.New` or `fmt.Errorf` in production code. Always use `errors.Is`/`errors.As`, never `==`/`!=`.
+Two-layer convention: **sentinel + wrap**. Use `werr.NewStaticError` for sentinels, `werr.WrapForeignErrorf` at return sites. Never use bare `errors.New` or `fmt.Errorf` in production code. Always use `errors.Is`/`errors.As`, never `==`/`!=`.
 
 ### Type Switches: Interfaces vs Concrete Types
 

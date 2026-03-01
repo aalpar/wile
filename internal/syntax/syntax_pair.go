@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 var (
@@ -147,7 +148,7 @@ func (p *SyntaxPair) IsList() bool {
 // Append appends a value to the end of the list.
 func (p *SyntaxPair) Append(vs values.Value) values.Value {
 	if p.IsVoid() {
-		panic(values.ErrNotAList)
+		panic(werr.ErrNotAList)
 	}
 	if values.IsEmptyList(vs) {
 		return p
@@ -164,11 +165,11 @@ func (p *SyntaxPair) Append(vs values.Value) values.Value {
 		}
 	}
 	if q.IsVoid() {
-		panic(values.ErrNotAList)
+		panic(werr.ErrNotAList)
 	}
 	vs0, ok := vs.(SyntaxValue)
 	if !ok {
-		panic(values.ErrNotASyntaxValue)
+		panic(werr.ErrNotASyntaxValue)
 	}
 	q.SetCdr(vs0)
 	return p
@@ -177,7 +178,7 @@ func (p *SyntaxPair) Append(vs values.Value) values.Value {
 // SyntaxAppend appends a syntax value to the end of the list.
 func (p *SyntaxPair) SyntaxAppend(vs SyntaxValue) SyntaxValue {
 	if p.IsVoid() {
-		panic(values.ErrNotAList)
+		panic(werr.ErrNotAList)
 	}
 	if values.IsEmptyList(vs) {
 		return p
@@ -194,7 +195,7 @@ func (p *SyntaxPair) SyntaxAppend(vs SyntaxValue) SyntaxValue {
 		}
 	}
 	if q.IsVoid() {
-		panic(values.ErrNotAList)
+		panic(werr.ErrNotAList)
 	}
 	q.SetCdr(vs)
 	return p
@@ -208,7 +209,7 @@ func (p *SyntaxPair) Length() int {
 		return nil
 	})
 	if !IsSyntaxEmptyList(r) {
-		panic(values.ErrNotAList)
+		panic(werr.ErrNotAList)
 	}
 	return q
 }
@@ -334,7 +335,7 @@ func (p *SyntaxPair) AsVector() *values.Vector {
 		panic(err)
 	}
 	if !values.IsEmptyList(cdr) {
-		panic(values.ErrNotAList)
+		panic(werr.ErrNotAList)
 	}
 	return values.NewVector(vs...)
 }
@@ -353,7 +354,7 @@ func (p *SyntaxPair) AsSyntaxVector() *SyntaxVector {
 		return nil
 	})
 	if !IsSyntaxEmptyList(cdr) {
-		panic(values.ErrNotASyntaxList)
+		panic(werr.ErrNotASyntaxList)
 	}
 	return NewSyntaxVector(p.sourceContext, vs...)
 }

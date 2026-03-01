@@ -20,6 +20,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 func TestNativeError_EqualTo(t *testing.T) {
@@ -55,7 +56,7 @@ func TestNewErrorObjectWithCauseAndKind(t *testing.T) {
 	}
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {
-			cause := values.ExportNewForeignError("underlying error")
+			cause := werr.NewForeignErrorf("underlying error")
 			err := values.NewErrorObjectWithCauseAndKind("msg", cause, tt.kind)
 			c.Assert(err.Kind(), qt.Equals, tt.kind)
 			c.Assert(err.IsFileError(), qt.Equals, tt.file)

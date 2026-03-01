@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // compileQuasiquoteDatum compiles a quasiquoted datum at the given nesting depth.
@@ -266,14 +267,14 @@ func (p *CompileTimeContinuation) expandQuasiquoteList(ctx context.Context, pair
 			if ok {
 				if carSymName == "unquote-splicing" && depth == 1 {
 					hasSplice = true
-					return values.ErrStopIteration
+					return werr.ErrStopIteration
 				}
 			}
 		}
 		return nil
 	})
-	if err != nil && !errors.Is(err, values.ErrStopIteration) {
-		panic(values.WrapForeignErrorf(err, "quasiquote: error scanning list at %s", srcCtx.SchemeString()))
+	if err != nil && !errors.Is(err, werr.ErrStopIteration) {
+		panic(werr.WrapForeignErrorf(err, "quasiquote: error scanning list at %s", srcCtx.SchemeString()))
 	}
 	if !hasSplice {
 		// Simple case: (list elem1 elem2 ...)
@@ -560,10 +561,10 @@ func (p *CompileTimeContinuation) getSymbolName(v syntax.SyntaxValue) (string, b
 
 // CompileUnquote errors - unquote outside of quasiquote
 func (p *CompileTimeContinuation) CompileUnquote(_ CompileTimeCallContext, _ syntax.SyntaxValue) error {
-	return values.WrapForeignErrorf(values.ErrInvalidSyntax, "unquote: not in quasiquote context")
+	return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unquote: not in quasiquote context")
 }
 
 // CompileUnquoteSplicing errors - unquote-splicing outside of quasiquote
 func (p *CompileTimeContinuation) CompileUnquoteSplicing(_ CompileTimeCallContext, _ syntax.SyntaxValue) error {
-	return values.WrapForeignErrorf(values.ErrInvalidSyntax, "unquote-splicing: not in quasiquote context")
+	return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unquote-splicing: not in quasiquote context")
 }

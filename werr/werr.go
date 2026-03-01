@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package values
+package werr
 
 import (
 	"errors"
@@ -154,6 +154,14 @@ var (
 	// Utility errors (keep as panic)
 	ErrRandomGenerationFailed = NewStaticError("random generation failed")
 	ErrInvalidLoadPath        = NewStaticError("invalid load path")
+
+	// Channel errors
+	ErrChannelClosed = NewStaticError("channel is closed")
+
+	// Thread errors
+	ErrJoinTimeout             = NewStaticError("thread-join!: timeout")
+	ErrThreadAlreadyStarted    = NewStaticError("thread-start!: thread already started")
+	ErrCrossThreadContinuation = NewStaticError("cannot invoke continuation from different thread")
 )
 
 // StaticError is a sentinel error type for programmatic matching via errors.Is.
@@ -317,8 +325,8 @@ func WrapForeignReadErrorf(err error, msg string, vs ...any) *ForeignReadError {
 	return q
 }
 
-// newForeignReadErrorf creates a new read error with a formatted message.
-func newForeignReadErrorf(msg string, vs ...any) *ForeignReadError {
+// NewForeignReadErrorf creates a new read error with a formatted message.
+func NewForeignReadErrorf(msg string, vs ...any) *ForeignReadError {
 	q := &ForeignReadError{
 		ForeignError: NewForeignErrorf(msg, vs...),
 	}

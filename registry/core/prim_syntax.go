@@ -21,6 +21,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // gensymCounter is used to generate unique symbol names
@@ -76,7 +77,7 @@ func PrimDatumToSyntax(mc *machine.MachineContext) error {
 			if ok {
 				sctx = templateStx.SourceContext()
 			} else {
-				return values.WrapForeignErrorf(values.ErrInvalidArgument, "datum->syntax: template-id must be an identifier, syntax object, or #f")
+				return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "datum->syntax: template-id must be an identifier, syntax object, or #f")
 			}
 		}
 	}
@@ -129,7 +130,7 @@ func PrimGenerateTemporaries(mc *machine.MachineContext) error {
 	// H7 FIX: Check that argument is a list before type assertion
 	tuple, ok := arg.(values.Tuple)
 	if !ok {
-		return values.WrapForeignErrorf(values.ErrNotAList,
+		return werr.WrapForeignErrorf(werr.ErrNotAList,
 			"generate-temporaries: expected a list but got %T", arg)
 	}
 
@@ -157,11 +158,11 @@ func PrimBoundIdentifierEqualQ(mc *machine.MachineContext) error {
 
 	id0, ok0 := o0.(*syntax.SyntaxSymbol)
 	if !ok0 {
-		return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "bound-identifier=?: argument 1 is not an identifier")
+		return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "bound-identifier=?: argument 1 is not an identifier")
 	}
 	id1, ok1 := o1.(*syntax.SyntaxSymbol)
 	if !ok1 {
-		return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "bound-identifier=?: argument 2 is not an identifier")
+		return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "bound-identifier=?: argument 2 is not an identifier")
 	}
 
 	// Same name?
@@ -187,11 +188,11 @@ func PrimFreeIdentifierEqualQ(mc *machine.MachineContext) error {
 
 	id0, ok0 := o0.(*syntax.SyntaxSymbol)
 	if !ok0 {
-		return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "free-identifier=?: argument 1 is not an identifier")
+		return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "free-identifier=?: argument 1 is not an identifier")
 	}
 	id1, ok1 := o1.(*syntax.SyntaxSymbol)
 	if !ok1 {
-		return values.WrapForeignErrorf(values.ErrNotASyntaxSymbol, "free-identifier=?: argument 2 is not an identifier")
+		return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "free-identifier=?: argument 2 is not an identifier")
 	}
 
 	env := mc.EnvironmentFrame()

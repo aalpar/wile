@@ -23,6 +23,7 @@ import (
 
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 )
 
 // ── MakeTypePredicate ────────────────────────────────────────────────
@@ -63,7 +64,7 @@ func TestMakeNumericPredicate(t *testing.T) {
 
 	isExact := MakeNumericPredicate[values.Number](
 		"exact?",
-		values.ErrNotANumber,
+		werr.ErrNotANumber,
 		func(n values.Number) bool {
 			return n.IsExact()
 		},
@@ -94,7 +95,7 @@ func TestMakeNumericPredicate_Errors(t *testing.T) {
 
 	isExact := MakeNumericPredicate[values.Number](
 		"exact?",
-		values.ErrNotANumber,
+		werr.ErrNotANumber,
 		func(n values.Number) bool {
 			return n.IsExact()
 		},
@@ -114,7 +115,7 @@ func TestMakeNumericPredicate_Errors(t *testing.T) {
 			mc := makeMC(tc.arg)
 			err := isExact(mc)
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, values.ErrNotANumber), qt.IsTrue)
+			c.Assert(errors.Is(err, werr.ErrNotANumber), qt.IsTrue)
 		})
 	}
 }
@@ -154,7 +155,7 @@ func TestMakeCharPredicate_Errors(t *testing.T) {
 	mc := makeMC(values.NewInteger(42))
 	err := isUpper(mc)
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(errors.Is(err, values.ErrNotACharacter), qt.IsTrue)
+	c.Assert(errors.Is(err, werr.ErrNotACharacter), qt.IsTrue)
 }
 
 // ── MakeCharTransform ────────────────────────────────────────────────
@@ -192,7 +193,7 @@ func TestMakeCharTransform_Errors(t *testing.T) {
 	mc := makeMC(values.NewString("not a char"))
 	err := toUpper(mc)
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(errors.Is(err, values.ErrNotACharacter), qt.IsTrue)
+	c.Assert(errors.Is(err, werr.ErrNotACharacter), qt.IsTrue)
 }
 
 // ── ChainEquality ────────────────────────────────────────────────────
@@ -201,7 +202,7 @@ func boolTypeCheck(v values.Value) error {
 	if v == values.TrueValue || v == values.FalseValue {
 		return nil
 	}
-	return values.WrapForeignErrorf(values.ErrNotANumber, "boolean=?: expected a boolean but got %T", v)
+	return werr.WrapForeignErrorf(werr.ErrNotANumber, "boolean=?: expected a boolean but got %T", v)
 }
 
 func boolEquals(a, b values.Value) bool {
