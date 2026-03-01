@@ -69,7 +69,7 @@ func validateBigComplexPart(n Number) {
 	case *BigInteger, *BigFloat, *Rational:
 		return
 	default:
-		panic(werr.ErrNotANumber)
+		panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "validateBigComplexPart: unsupported part type %T", n))
 	}
 }
 
@@ -112,7 +112,7 @@ func toBigFloat(n Number) *BigFloat {
 	case *Float:
 		return NewBigFloatFromFloat64(v.Value)
 	}
-	panic(werr.ErrNotANumber)
+	panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "toBigFloat: unsupported type %T", n))
 }
 
 // maybeSimplify returns a real number if imag is zero, otherwise returns BigComplex.
@@ -137,7 +137,7 @@ func promoteToBigComplexPart(n Number) Number {
 	case *Float:
 		return NewBigFloatFromFloat64(v.Value)
 	}
-	panic(werr.ErrNotANumber)
+	panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "promoteToBigComplexPart: unsupported type %T", n))
 }
 
 // Kind returns the numeric kind for dispatch table indexing.
@@ -249,7 +249,7 @@ func (p *BigComplex) Multiply(o Number) Number {
 // R7RS §6.2.2 Exactness: exact / exact = exact, exact / inexact = inexact.
 func (p *BigComplex) Divide(o Number) Number {
 	if o.IsZero() && o.IsExact() {
-		panic(werr.ErrDivisionByZero)
+		panic(werr.WrapForeignErrorf(werr.ErrDivisionByZero, "BigComplex.Divide: exact zero divisor"))
 	}
 	return bigComplexDivide[o.Kind()](p, o)
 }
@@ -370,7 +370,7 @@ func toExactPart(n Number) Number {
 		}
 		return q
 	}
-	panic(werr.ErrNotANumber)
+	panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "toExactPart: unsupported type %T", n))
 }
 
 // ToInexact converts this BigComplex to an inexact representation.

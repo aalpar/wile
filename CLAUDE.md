@@ -22,6 +22,7 @@ These are exact patterns. Do not improvise or substitute alternatives.
 | Creating plans in random locations | Creating plans in `plans/` | Plans live at repo root |
 | `if x := f(); x != nil {` | `x := f()` then `if x != nil {` | No compound if-assignments |
 | `func foo() int { return x }` | Multi-line function body | **NEVER** write single-line function definitions |
+| `panic(werr.ErrFoo)` | `panic(werr.WrapForeignErrorf(werr.ErrFoo, "site: what failed"))` | **NEVER** panic with raw errors — always wrap with location context |
 
 replace:
 ```

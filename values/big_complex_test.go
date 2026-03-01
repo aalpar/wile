@@ -121,7 +121,7 @@ func TestBigComplex_Division(t *testing.T) {
 		values.NewBigIntegerFromInt64(0),
 		values.NewBigIntegerFromInt64(0),
 	)
-	c.Assert(func() { bc1.Divide(zero) }, qt.PanicMatches, "division by zero")
+	c.Assert(func() { bc1.Divide(zero) }, qt.PanicMatches, ".*division by zero")
 
 	// Division where zero parts produce *Integer intermediates via
 	// multiplyResultForZero. (0+1i)/(0+1i): bc=0*0=Integer(0),
