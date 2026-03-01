@@ -52,7 +52,7 @@ func (p *filesystemRootAuthorizer) Authorize(req AccessRequest) error {
 	}
 	absTarget, err := filepath.Abs(req.Target)
 	if err != nil {
-		return werr.WrapForeignErrorf(ErrAccessDenied, "resolve %q", req.Target)
+		return werr.WrapForeignErrorWithCause(ErrAccessDenied, err, "resolve %q", req.Target)
 	}
 	// Target is allowed if it equals the root dir itself or is under it.
 	targetWithSep := absTarget + string(filepath.Separator)
