@@ -221,3 +221,14 @@ type ValidatedDynamicWind struct {
 	Thunk  ValidatedExpr
 	After  ValidatedExpr
 }
+
+// ValidatedApply represents (apply proc arg1 ... args)
+//
+// R7RS §6.10: apply calls proc with the elements of the list
+// (append (list arg1 ...) args) as arguments.
+type ValidatedApply struct {
+	validatedBase
+	Proc       ValidatedExpr
+	PrefixArgs []ValidatedExpr
+	FinalList  ValidatedExpr
+}

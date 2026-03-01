@@ -892,3 +892,66 @@ func (p *CompileTimeContinuation) CompileValidatedDynamicWind(ctctx CompileTimeC
 
 	return nil
 }
+
+// CompileValidatedApply compiles a validated (apply proc arg1 ... args) form.
+//
+// R7RS §6.10: apply calls proc with the arguments arg1 ... concatenated
+// with the elements of args (the final argument, which must be a list).
+//
+// Bytecode (non-tail):
+//
+//	SaveContinuation →after
+//	<compile proc>          PUSH
+//	<compile arg1>          PUSH
+//	...
+//	<compile argN>          PUSH
+//	<compile finalList>              ; value = finalList
+//	OpUnpackListToStack              ; stack: [proc, arg1, ..., argN, x1, x2, ...]
+//	Pull                             ; value = proc
+//	Apply                            ; calls proc(arg1, ..., argN, x1, x2, ...)
+//	after:
+//
+// Tail position: same without SaveContinuation/patch.
+func (p *CompileTimeContinuation) CompileValidatedApply(ctctx CompileTimeCallContext, v *validate.ValidatedApply) error {
+	var saveContinuationIndex int
+	if !ctctx.inTail {
+		saveContinuationIndex = p.emitPatchableSaveContinuation()
+	}
+
+	// Compile proc and push to stack
+	err := p.compileValidated(ctctx.NotInTail(), v.Proc)
+	if err != nil {
+		return err
+	}
+	p.AppendOperations(NewOperationPush())
+
+	// Compile prefix args and push each
+	for _, arg := range v.PrefixArgs {
+		err = p.compileValidated(ctctx.NotInTail(), arg)
+		if err != nil {
+			return err
+		}
+		p.AppendOperations(NewOperationPush())
+	}
+
+	// Compile final list (stays in value register)
+	err = p.compileValidated(ctctx.NotInTail(), v.FinalList)
+	if err != nil {
+		return err
+	}
+
+	// Flatten the list onto the eval stack
+	p.AppendOperations(NewOperationUnpackListToStack())
+
+	// Pull proc from bottom of stack, then apply
+	p.AppendOperations(
+		NewOperationPull(),
+		NewOperationApply(),
+	)
+
+	if !ctctx.inTail {
+		p.patchSaveContinuationOffset(saveContinuationIndex)
+	}
+
+	return nil
+}

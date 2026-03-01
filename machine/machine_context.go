@@ -807,6 +807,30 @@ func (p *MachineContext) Run() error {
 			}
 			mc = result
 
+		case OpUnpackListToStack:
+			v := mc.GetValue()
+			if values.IsEmptyList(v) {
+				mc.pc++
+				continue
+			}
+			tup, ok := v.(values.Tuple)
+			if !ok {
+				return values.WrapForeignErrorf(values.ErrNotAList,
+					"apply: final argument must be a list, got %s", v.SchemeString())
+			}
+			sentinel, err := tup.ForEach(mc.ctx, func(_ context.Context, _ int, _ bool, elem values.Value) error {
+				mc.evals.Push(elem)
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			if !values.IsEmptyList(sentinel) {
+				return values.WrapForeignErrorf(values.ErrNotAList,
+					"apply: final argument is an improper list")
+			}
+			mc.pc++
+
 		case OpRestoreContinuation:
 			if mc.cont == nil {
 				return nil

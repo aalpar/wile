@@ -1270,3 +1270,86 @@ func TestValidateSyntaxRulesEdgeCases(t *testing.T) {
 	))
 	c.Assert(result4.Ok(), qt.IsFalse)
 }
+
+// TestValidateApply tests the apply form validator
+func TestValidateApply(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          values.Value
+		wantOk         bool
+		prefixArgCount int
+	}{
+		{
+			name: "minimal apply (proc and list)",
+			input: values.List(
+				values.NewSymbol("apply"),
+				values.NewSymbol("f"),
+				values.NewSymbol("args"),
+			),
+			wantOk:         true,
+			prefixArgCount: 0,
+		},
+		{
+			name: "apply with one prefix arg",
+			input: values.List(
+				values.NewSymbol("apply"),
+				values.NewSymbol("+"),
+				values.NewInteger(1),
+				values.NewSymbol("rest"),
+			),
+			wantOk:         true,
+			prefixArgCount: 1,
+		},
+		{
+			name: "apply with multiple prefix args",
+			input: values.List(
+				values.NewSymbol("apply"),
+				values.NewSymbol("f"),
+				values.NewInteger(1),
+				values.NewInteger(2),
+				values.NewInteger(3),
+				values.NewSymbol("rest"),
+			),
+			wantOk:         true,
+			prefixArgCount: 3,
+		},
+		{
+			name: "apply with nested proc expression",
+			input: values.List(
+				values.NewSymbol("apply"),
+				values.List(values.NewSymbol("lambda"), values.NewSymbol("x"), values.NewSymbol("x")),
+				values.NewSymbol("args"),
+			),
+			wantOk:         true,
+			prefixArgCount: 0,
+		},
+		{
+			name:   "apply missing final list",
+			input:  values.List(values.NewSymbol("apply"), values.NewSymbol("f")),
+			wantOk: false,
+		},
+		{
+			name:   "apply with no arguments",
+			input:  values.List(values.NewSymbol("apply")),
+			wantOk: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			result := ValidateExpression(context.TODO(), nil, makeSyntax(tt.input))
+			if tt.wantOk {
+				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
+				apply, ok := result.Expr.(*ValidatedApply)
+				c.Assert(ok, qt.IsTrue)
+				c.Assert(apply.Proc, qt.IsNotNil)
+				c.Assert(apply.FinalList, qt.IsNotNil)
+				c.Assert(len(apply.PrefixArgs), qt.Equals, tt.prefixArgCount)
+			} else {
+				c.Assert(result.Ok(), qt.IsFalse)
+				c.Assert(len(result.Errors), qt.Not(qt.Equals), 0)
+			}
+		})
+	}
+}

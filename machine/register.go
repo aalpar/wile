@@ -49,6 +49,9 @@ func init() {
 	registerTypedCompiler("dynamic-wind", func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, v *validate.ValidatedDynamicWind) error {
 		return ctc.CompileValidatedDynamicWind(ctctx, v)
 	})
+	registerTypedCompiler("apply", func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, v *validate.ValidatedApply) error {
+		return ctc.CompileValidatedApply(ctctx, v)
+	})
 
 	// Register compilers for extension forms (Tier 2 - syntax passthrough)
 	// These extract syntax from ValidatedLiteral and compile it

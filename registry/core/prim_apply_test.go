@@ -16,6 +16,7 @@ package core_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
@@ -210,6 +211,85 @@ func TestApplyErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := runSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
+
+// TestApplyTailRecursion_NoStackOverflow is the H1 acceptance test:
+// apply in tail position must not grow the Go stack.
+// Before compiled apply, Go stack overflow occurred at ~300K iterations
+// because PrimApply created a new sub-context per call. With compiled apply,
+// tail-position apply emits OpUnpackListToStack + Pull + Apply bytecode,
+// running in constant Go stack space.
+func TestApplyTailRecursion_NoStackOverflow(t *testing.T) {
+	code := `
+		(begin
+			(define (f n)
+				(if (zero? n)
+					'done
+					(apply f (list (- n 1)))))
+			(f 1000000))
+	`
+	result, err := runSchemeCodeWithTimeout(t, code, 30*time.Second)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("done"))
+}
+
+// TestCompiledApply tests correctness of the compiled apply path.
+// These cases exercise paths not covered by TestApplyComprehensive:
+// non-tail position, first-class apply, and call/cc interaction.
+func TestCompiledApply(t *testing.T) {
+	tcs := []schemeCodeTestCase{
+		{
+			name:     "non-tail position",
+			code:     `(+ 1 (apply + '(2 3)))`,
+			expected: values.NewInteger(6),
+		},
+		{
+			name:     "first-class apply",
+			code:     `(let ((a apply)) (a + '(1 2)))`,
+			expected: values.NewInteger(3),
+		},
+		{
+			name:     "apply with call/cc",
+			code:     `(call-with-current-continuation (lambda (k) (apply k '(42))))`,
+			expected: values.NewInteger(42),
+		},
+		{
+			name:     "apply in tail position of lambda",
+			code:     `((lambda (x y) (apply + (list x y))) 10 20)`,
+			expected: values.NewInteger(30),
+		},
+		{
+			name:     "apply chain",
+			code:     `(apply apply (list apply (list + '(1 2 3))))`,
+			expected: values.NewInteger(6),
+		},
+		{
+			name:     "apply with rest args lambda",
+			code:     `(apply (lambda (x . rest) rest) '(1 2 3))`,
+			expected: values.List(values.NewInteger(2), values.NewInteger(3)),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := runSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+		})
+	}
+}
+
+// TestCompiledApply_Errors tests error conditions for the compiled apply path.
+func TestCompiledApply_Errors(t *testing.T) {
+	tcs := []schemeCodeErrorTestCase{
+		{name: "improper list", code: `(apply + '(1 . 2))`},
+		{name: "non-list final arg", code: `(apply + 42)`},
+		{name: "non-procedure", code: `(apply 42 '(1 2))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			runSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
