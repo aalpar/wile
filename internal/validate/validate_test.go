@@ -1324,12 +1324,12 @@ func TestValidateApply(t *testing.T) {
 			prefixArgCount: 0,
 		},
 		{
-			name:   "apply missing final list",
+			name:   "apply missing final list is compile error",
 			input:  values.List(values.NewSymbol("apply"), values.NewSymbol("f")),
 			wantOk: false,
 		},
 		{
-			name:   "apply with no arguments",
+			name:   "apply with no arguments is compile error",
 			input:  values.List(values.NewSymbol("apply")),
 			wantOk: false,
 		},
@@ -1339,17 +1339,17 @@ func TestValidateApply(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
 			result := ValidateExpression(context.TODO(), nil, makeSyntax(tt.input))
-			if tt.wantOk {
-				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
-				apply, ok := result.Expr.(*ValidatedApply)
-				c.Assert(ok, qt.IsTrue)
-				c.Assert(apply.Proc, qt.IsNotNil)
-				c.Assert(apply.FinalList, qt.IsNotNil)
-				c.Assert(len(apply.PrefixArgs), qt.Equals, tt.prefixArgCount)
-			} else {
+			if !tt.wantOk {
 				c.Assert(result.Ok(), qt.IsFalse)
 				c.Assert(len(result.Errors), qt.Not(qt.Equals), 0)
+				return
 			}
+			c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
+			apply, ok := result.Expr.(*ValidatedApply)
+			c.Assert(ok, qt.IsTrue)
+			c.Assert(apply.Proc, qt.IsNotNil)
+			c.Assert(apply.FinalList, qt.IsNotNil)
+			c.Assert(len(apply.PrefixArgs), qt.Equals, tt.prefixArgCount)
 		})
 	}
 }

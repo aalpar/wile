@@ -25,7 +25,7 @@ import (
 //
 // R7RS 6.10: apply calls proc with the arguments arg1 ... concatenated
 // with the elements of args. At least two arguments are required (proc
-// and the final list).
+// and the final list). Under-arity is a static error.
 func validateApply(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result *ValidationResult) ValidatedExpr {
 	source, elements, ok := formPrologue(pair, "apply", 2, -1, result)
 	if !ok {
