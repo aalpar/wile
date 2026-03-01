@@ -485,6 +485,16 @@ func TestOperationSyntaxRulesTransformMethods(t *testing.T) {
 	qt.Assert(t, op.EqualTo(NewOperationPush()), qt.IsFalse)
 }
 
+// TestOperationUnpackListToStack_EqualTo tests that two instances are equal
+// and that a different operation type is not equal.
+func TestOperationUnpackListToStack_EqualTo(t *testing.T) {
+	op1 := NewOperationUnpackListToStack()
+	op2 := NewOperationUnpackListToStack()
+
+	qt.Assert(t, op1.EqualTo(op2), qt.IsTrue)
+	qt.Assert(t, op1.EqualTo(NewOperationPush()), qt.IsFalse)
+}
+
 // TestOperationEqualToNilCases tests EqualTo methods with nil cases
 func TestOperationEqualToNilCases(t *testing.T) {
 	// Test LoadLocalByLocalIndexImmediate nil cases

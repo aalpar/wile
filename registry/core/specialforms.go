@@ -43,6 +43,8 @@ var compileTimeBindings = []string{
 	"syntax-error",
 	// R7RS §6.10: dynamic-wind for control flow with cleanup handlers
 	"dynamic-wind",
+	// R7RS §6.10: apply for procedure application with argument list
+	"apply",
 	// Auxiliary syntax (R7RS §4.2.1, §4.2.5)
 	// These are literals used in syntax-rules patterns for cond and case
 	"else",

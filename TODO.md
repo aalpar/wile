@@ -238,3 +238,72 @@ Other
 - [x] **`PairBlock` type for `[]Pair`**: Named type in `values/` with `LinkWith` method, used in `List()` and `buildRestArg()`.
 - [ ] Validator prologue deduplication: 19 validators in `internal/validate/validate_*.go` repeat the same `collectList` + `improper` check + arity guard prologue (~4 lines each). Extract to `validateFormPrologue()` helper.
 - [ ] Optional fill argument extraction: 3 `make-*` primitives (`PrimMakeVector`, `PrimMakeBytevector`, `PrimMakeString`) independently extract optional fill arguments with slightly different patterns. Share a helper.
+
+  - L7 (char-ready?/u8-ready? always #t) — documented semantic difference, conservative-safe
+  - E1 (datum-label circular literals crash) — parser/compiler scope, separate effort
+  - H1 (apply in tail position grows Go stack) — VM architecture change, separate effort
+
+Comment 2 — guard body drops multiple values
+
+Verified. Line 187 in bootstrap.scm:
+
+(let ((result (begin e1 e2 ...)))
+  (guard-k (lambda () result)))
+
+If the body returns multiple values, let captures only the first. Copilot's suggested call-with-values / apply values fix is correct.
+
+However: R7RS §7.3's own reference implementation has the same limitation — it also uses let. So this is a known spec-level issue, not a regression you introduced. Worth fixing, but arguably a separate concern from the re-raise dynamic extent fix (M3) this PR targets.
+
+Comment 1 — PR scope mismatch (vector patterns bundled with phase 6 fixes)
+
+Fair observation. The PR has two logically independent commits: 7162307 (guard/eval) and 4f72d7b (vector patterns). Whether to split is your call — the commits are already clean and separate, so it's low-risk either way.
+
+  ---
+  Copilot PR #367 Review Assessment
+
+  Copilot found one theme across 6 comments: the visited-map approach conflates "seen before" with "in a cycle." Five comments are variations of this; one is a test quality issue.
+
+  The real bug: internSymbolsInValueWithVisited (Comment #3)
+
+  Valid. Medium severity.
+
+  internSymbolsInValueWithVisited uses a permanent visited set. This means shared-but-acyclic datum label structures like '(#0=(a) #0#) — where the same pair appears twice but without a cycle — would be incorrectly
+   rejected as circular. The first visit to (a) marks it; the second encounter errors.
+
+  The fix is a stack-based set: mark on entry, unmark on exit. Or use a two-state map (inProgress vs done).
+
+  Low-impact observations: SchemeString / String (Comments #1, #2, #4)
+
+  Technically correct but cosmetically irrelevant.
+
+  Yes, SchemeString()/String() would print ... for shared-but-acyclic structures (e.g., (cons s s) where both slots point to the same pair). But:
+
+  - These are Go-side debug methods, not R7RS output primitives
+  - R7RS write/display use SchemeWriter (values/scheme_writer.go), which already does correct two-pass datum-label output
+  - The purpose of this change was crash prevention (terminate on cycles), not R7RS-correct shared-structure notation
+  - Adding stack-based unwind here would increase complexity for a method whose contract is "don't crash"
+
+  I'd add the shared-structure test Copilot suggested (it documents the behavior), but not change the algorithm — ... on shared structures in a debug method is acceptable.
+
+  Theoretical: deduplicatePairWithVisited (Comment #5)
+
+  Valid logic, but currently unreachable. Shared acyclic pairs can only appear via datum labels, and internSymbolsInValue runs first. If you fix Comment #3 to allow shared DAGs through, then this needs the
+  memoization fix too. Otherwise it's dead code analysis.
+
+  Good catch: missing test assertion (Comment #6)
+
+  Valid. Should fix. The #0=#(a #0#) subtest discards the error and only checks "no crash." It should assert err != nil and errors.Is(err, values.ErrInvalidSyntax).
+
+  ---
+  Recommended actions
+
+  ┌─────────────┬──────────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────┐
+  │  Priority   │                       What                       │                                Why                                │
+  ├─────────────┼──────────────────────────────────────────────────┼───────────────────────────────────────────────────────────────────┤
+  │ Defer       │ #1/#2/#4 — SchemeString/String shared handling   │ Cosmetic for Go debug output; SchemeWriter handles R7RS correctly │
+  └─────────────┴──────────────────────────────────────────────────┴───────────────────────────────────────────────────────────────────┘
+
+  Question for you: Do you want to fix #3 + #6 on this PR, or merge as-is and track #3 as a follow-up? The shared acyclic datum label pattern (#0=(a) (#0#)) is legal R7RS but exotic — if your test suite doesn't use
+   it, the bug is latent.
+
+

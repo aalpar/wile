@@ -33,6 +33,8 @@ When investigating R7RS conformance issues:
 | `PRECISION-GUARANTEES.md` | Precision loss policy: tier model, known bugs, proposed PrecisionMode setting | Reference |
 | `R7RS-CONFORMANCE-REVIEW.md` | Full R7RS-small conformance audit: 5 critical, 6 high, 8 medium, 7 low findings across all spec sections | Reference |
 | `R7RS-PORT-IO-CONFORMANCE.md` | Detailed port/IO conformance report with bufio analysis | Reference |
+| `R7RS-CONFORMANCE-FIXES.md` | Phased conformance fixes (C2, C3, L6, etc.) excluding H1, E1, L7 | Plan |
+| `H1-APPLY-TAIL-POSITION.md` | apply as compile-time special form: OpUnpackListToStack + OpApply for proper tail recursion | Design approved |
 
 ## Before Starting Work
 

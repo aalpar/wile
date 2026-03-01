@@ -134,6 +134,8 @@ func instructionToOperation(instr Instruction) Operation {
 		return NewOperationPopEnv()
 	case OpApply:
 		return NewOperationApply()
+	case OpUnpackListToStack:
+		return NewOperationUnpackListToStack()
 	case OpRestoreContinuation:
 		return NewOperationRestoreContinuation()
 
@@ -258,6 +260,8 @@ func operationToInstruction(op Operation) (Instruction, bool) {
 		return Instruction{Op: OpPopEnv}, true
 	case *OperationApply:
 		return Instruction{Op: OpApply}, true
+	case *OperationUnpackListToStack:
+		return Instruction{Op: OpUnpackListToStack}, true
 	case *OperationRestoreContinuation:
 		return Instruction{Op: OpRestoreContinuation}, true
 

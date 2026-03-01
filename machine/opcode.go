@@ -40,6 +40,7 @@ const (
 	OpDrop
 	OpPopEnv
 	OpApply
+	OpUnpackListToStack
 	OpRestoreContinuation
 
 	// Wave 2: single-operand operations (Arg = offset, index, or depth)
@@ -89,6 +90,7 @@ var opcodeNames = [opCount]string{
 	OpDrop:                "Drop",
 	OpPopEnv:              "PopEnv",
 	OpApply:               "Apply",
+	OpUnpackListToStack:   "UnpackListToStack",
 	OpRestoreContinuation: "RestoreContinuation",
 	OpBranchOnFalseValue:  "BranchOnFalseValue",
 	OpBranch:              "Branch",
