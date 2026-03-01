@@ -866,22 +866,9 @@ func (p *MachineContext) Run() error {
 			mc.pc++
 
 		case OpLoadGlobal:
-			o := mc.template.literals[instr.Arg]
-			if o == nil {
-				return mc.Error(fmt.Sprintf("literal index %v does not exist", instr.Arg))
-			}
-			gi, ok := o.(*environment.GlobalIndex)
-			if !ok {
-				return mc.Error(fmt.Sprintf("literal %v is not a global index", o))
-			}
-			var bd *environment.Binding
-			if gi.Env != nil {
-				bd = gi.Env.GetOwnGlobalBinding(gi)
-			} else {
-				bd = mc.env.GetGlobalBinding(gi)
-			}
-			if bd == nil {
-				return mc.Error(fmt.Sprintf("no such global binding for %s", gi.SchemeString()))
+			bd, err := mc.resolveGlobalBinding(instr)
+			if err != nil {
+				return err
 			}
 			mc.SetValue(bd.Value())
 			mc.pc++
@@ -889,11 +876,13 @@ func (p *MachineContext) Run() error {
 		case OpStoreGlobal:
 			o := mc.template.literals[instr.Arg]
 			if o == nil {
-				return mc.Error(fmt.Sprintf("literal index %v does not exist", instr.Arg))
+				return mc.WrapError(ErrInvalidLiteralIndex,
+					fmt.Sprintf("literal index %v does not exist", instr.Arg))
 			}
 			gi, ok := o.(*environment.GlobalIndex)
 			if !ok {
-				return mc.Error(fmt.Sprintf("literal %v is not a global index", o))
+				return mc.WrapError(ErrInvalidGlobalIndex,
+					fmt.Sprintf("literal %v is not a global index", o))
 			}
 			val := mc.evals.Pop()
 			var err error
@@ -914,10 +903,9 @@ func (p *MachineContext) Run() error {
 		// --- Wave 3: two-operand operations (bit-packed slot|depth) ---
 
 		case OpLoadLocal:
-			slot, depth := DecodeLocalIndex(instr.Arg)
-			bd := mc.env.GetLocalBindingBySlotDepth(slot, depth)
-			if bd == nil {
-				return mc.Error(fmt.Sprintf("no such local binding %d:%d", slot, depth))
+			bd, err := mc.resolveLocalBinding(instr)
+			if err != nil {
+				return err
 			}
 			mc.SetValue(bd.Value())
 			mc.pc++
@@ -937,31 +925,17 @@ func (p *MachineContext) Run() error {
 			mc.pc++
 
 		case OpPushGlobal:
-			o := mc.template.literals[instr.Arg]
-			if o == nil {
-				return mc.Error(fmt.Sprintf("literal index %v does not exist", instr.Arg))
-			}
-			gi, ok := o.(*environment.GlobalIndex)
-			if !ok {
-				return mc.Error(fmt.Sprintf("literal %v is not a global index", o))
-			}
-			var bd *environment.Binding
-			if gi.Env != nil {
-				bd = gi.Env.GetOwnGlobalBinding(gi)
-			} else {
-				bd = mc.env.GetGlobalBinding(gi)
-			}
-			if bd == nil {
-				return mc.Error(fmt.Sprintf("no such global binding for %s", gi.SchemeString()))
+			bd, err := mc.resolveGlobalBinding(instr)
+			if err != nil {
+				return err
 			}
 			mc.evals.Push(bd.Value())
 			mc.pc++
 
 		case OpPushLocal:
-			slot, depth := DecodeLocalIndex(instr.Arg)
-			bd := mc.env.GetLocalBindingBySlotDepth(slot, depth)
-			if bd == nil {
-				return mc.Error(fmt.Sprintf("no such local binding %d:%d", slot, depth))
+			bd, err := mc.resolveLocalBinding(instr)
+			if err != nil {
+				return err
 			}
 			mc.evals.Push(bd.Value())
 			mc.pc++
@@ -1241,6 +1215,46 @@ func countFrames(cont *MachineContinuation) int {
 		cont = cont.parent
 	}
 	return count
+}
+
+// resolveGlobalBinding extracts the GlobalIndex from the instruction's literal
+// and resolves it to a binding. Returns ErrInvalidLiteralIndex if the literal
+// is nil, ErrInvalidGlobalIndex if it's not a *GlobalIndex, or
+// ErrBindingNotFound if the binding doesn't exist.
+func (p *MachineContext) resolveGlobalBinding(instr Instruction) (*environment.Binding, error) {
+	o := p.template.literals[instr.Arg]
+	if o == nil {
+		return nil, p.WrapError(ErrInvalidLiteralIndex,
+			fmt.Sprintf("literal index %v does not exist", instr.Arg))
+	}
+	gi, ok := o.(*environment.GlobalIndex)
+	if !ok {
+		return nil, p.WrapError(ErrInvalidGlobalIndex,
+			fmt.Sprintf("literal %v is not a global index", o))
+	}
+	var bd *environment.Binding
+	if gi.Env != nil {
+		bd = gi.Env.GetOwnGlobalBinding(gi)
+	} else {
+		bd = p.env.GetGlobalBinding(gi)
+	}
+	if bd == nil {
+		return nil, p.WrapError(ErrBindingNotFound,
+			fmt.Sprintf("no such global binding for %s", gi.SchemeString()))
+	}
+	return bd, nil
+}
+
+// resolveLocalBinding decodes the slot/depth from the instruction and resolves
+// the local binding. Returns ErrBindingNotFound if the binding doesn't exist.
+func (p *MachineContext) resolveLocalBinding(instr Instruction) (*environment.Binding, error) {
+	slot, depth := DecodeLocalIndex(instr.Arg)
+	bd := p.env.GetLocalBindingBySlotDepth(slot, depth)
+	if bd == nil {
+		return nil, p.WrapError(ErrBindingNotFound,
+			fmt.Sprintf("no such local binding %d:%d", slot, depth))
+	}
+	return bd, nil
 }
 
 // Error creates a SchemeError with the current source location and stack trace.
