@@ -483,6 +483,43 @@ func TestCompileVectorPattern(t *testing.T) {
 		c.Assert(bytecodeEqual(compiler.codes, expected), qt.IsTrue,
 			qt.Commentf("got %v, want %v", compiler.codes, expected))
 	})
+
+	c.Run("ellipsis applied to vector subpattern", func(c *qt.C) {
+		// Pattern: (foo #(x y) ...)
+		// Ellipsis repeats the entire vector subpattern.
+		pattern := testSyntaxList(
+			testSyntaxSym("foo"),
+			testSyntaxVec(testSyntaxSym("x"), testSyntaxSym("y")),
+			testSyntaxSym("..."),
+		)
+		variables := map[string]struct{}{"x": {}, "y": {}}
+		compiler := NewSyntaxCompiler()
+		compiler.variables = variables
+		compiler.Compile(context.TODO(), pattern) //nolint:errcheck
+
+		expected := []SyntaxCommand{
+			ByteCodeCompareCar{Value: testSyntaxSym("foo")}, // 0
+			ByteCodeVisitCdr{},                 // 1
+			ByteCodeSkipIfEmpty{Offset: 9},     // 2 → 11
+			ByteCodePushContext{EllipsisID: 0}, // 3
+			ByteCodeVisitCarAsVector{},         // 4
+			ByteCodeCaptureCar{Binding: "x"},   // 5
+			ByteCodeVisitCdr{},                 // 6
+			ByteCodeCaptureCar{Binding: "y"},   // 7
+			ByteCodeDone{},                     // 8
+			ByteCodePopContext{EllipsisID: 0},  // 9
+			ByteCodeJump{Offset: -8},           // 10 → 2
+			ByteCodeDone{},                     // 11
+		}
+		c.Assert(bytecodeEqual(compiler.codes, expected), qt.IsTrue,
+			qt.Commentf("got %v, want %v", compiler.codes, expected))
+
+		// Verify ellipsis captures both variables
+		c.Assert(compiler.ellipsisVars[0], qt.ContentEquals, map[string]struct{}{
+			"x": {},
+			"y": {},
+		})
+	})
 }
 
 func TestExecuteVectorPattern(t *testing.T) {
@@ -577,5 +614,60 @@ func TestExecuteVectorPattern(t *testing.T) {
 		matcher2 := NewMatcher(map[string]struct{}{}, compiler.codes)
 		err = matcher2.MatchSyntax(context.Background(), target2)
 		c.Assert(err, qt.Equals, ErrNotAMatch)
+	})
+
+	c.Run("ellipsis applied to vector subpattern", func(c *qt.C) {
+		// Pattern: (foo #(x y) ...), Input: (foo #(1 2) #(3 4))
+		pattern := testSyntaxList(
+			testSyntaxSym("foo"),
+			testSyntaxVec(testSyntaxSym("x"), testSyntaxSym("y")),
+			testSyntaxSym("..."),
+		)
+		variables := map[string]struct{}{"x": {}, "y": {}}
+		compiler := NewSyntaxCompiler()
+		compiler.variables = variables
+		compiler.Compile(context.TODO(), pattern) //nolint:errcheck
+
+		target := testSyntaxList(
+			testSyntaxSym("foo"),
+			testSyntaxVec(testSyntaxInt(1), testSyntaxInt(2)),
+			testSyntaxVec(testSyntaxInt(3), testSyntaxInt(4)),
+		)
+		matcher := NewMatcherWithEllipsisVars(variables, compiler.codes, compiler.ellipsisVars)
+		err := matcher.MatchSyntax(context.Background(), target)
+		c.Assert(err, qt.IsNil)
+
+		children := matcher.captureStack[0].children[0]
+		c.Assert(len(children), qt.Equals, 2)
+		c.Assert(syntaxValuesEqualForMatch(children[0].bindings["x"], testSyntaxInt(1)), qt.IsTrue,
+			qt.Commentf("iter 0: x = %v", children[0].bindings["x"]))
+		c.Assert(syntaxValuesEqualForMatch(children[0].bindings["y"], testSyntaxInt(2)), qt.IsTrue,
+			qt.Commentf("iter 0: y = %v", children[0].bindings["y"]))
+		c.Assert(syntaxValuesEqualForMatch(children[1].bindings["x"], testSyntaxInt(3)), qt.IsTrue,
+			qt.Commentf("iter 1: x = %v", children[1].bindings["x"]))
+		c.Assert(syntaxValuesEqualForMatch(children[1].bindings["y"], testSyntaxInt(4)), qt.IsTrue,
+			qt.Commentf("iter 1: y = %v", children[1].bindings["y"]))
+	})
+
+	c.Run("ellipsis applied to vector - zero repetitions", func(c *qt.C) {
+		// Pattern: (foo #(x y) ...), Input: (foo) — zero vectors
+		pattern := testSyntaxList(
+			testSyntaxSym("foo"),
+			testSyntaxVec(testSyntaxSym("x"), testSyntaxSym("y")),
+			testSyntaxSym("..."),
+		)
+		variables := map[string]struct{}{"x": {}, "y": {}}
+		compiler := NewSyntaxCompiler()
+		compiler.variables = variables
+		compiler.Compile(context.TODO(), pattern) //nolint:errcheck
+
+		target := testSyntaxList(testSyntaxSym("foo"))
+		matcher := NewMatcherWithEllipsisVars(variables, compiler.codes, compiler.ellipsisVars)
+		err := matcher.MatchSyntax(context.Background(), target)
+		c.Assert(err, qt.IsNil)
+
+		// Zero repetitions: no children
+		children := matcher.captureStack[0].children[0]
+		c.Assert(len(children), qt.Equals, 0)
 	})
 }

@@ -264,7 +264,7 @@ func compileVectorElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry,
 	vis.analysis.Merge(localAnalysis)
 
 	stack[l-1].pr, _ = stack[l-1].pr.SyntaxCdr().(*syntax.SyntaxPair)
-	stack[l-1].lastElement = element
+	stack[l-1].lastElement = chain
 	stack[l-1].lastElementStart = elementStart
 
 	// Push converted chain for nested processing
