@@ -9,7 +9,7 @@ Prior reviews: Structural (complete, remediated), Signals (complete, remediated)
 
 ## Executive Summary
 
-The codebase is architecturally sound — bytecode VM, correct continuation chain, proper hygiene model, clean package layering. The debt is organizational, not foundational. Of the 14 original findings: 8 are complete or resolved (F1, F2, F3, F5, F6, F7, F8, F9, F14), 1 retracted (F13), 2 deferred by design (F10, F11), leaving 2 actionable items: F4 (test helper consolidation) and F12 (subsystem benchmarks).
+The codebase is architecturally sound — bytecode VM, correct continuation chain, proper hygiene model, clean package layering. The debt is organizational, not foundational. Of the 14 original findings: 9 are complete or resolved (F1, F2, F3, F5, F6, F7, F8, F9, F14), 1 retracted (F13), 2 deferred by design (F10, F11), leaving 2 actionable items: F4 (test helper consolidation) and F12 (subsystem benchmarks).
 
 ---
 
