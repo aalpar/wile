@@ -9,7 +9,7 @@ Prior reviews: Structural (complete, remediated), Signals (complete, remediated)
 
 ## Executive Summary
 
-The codebase is architecturally sound — bytecode VM, correct continuation chain, proper hygiene model, clean package layering. The debt is organizational, not foundational. Of the 14 original findings: 9 are complete or resolved (F1, F2, F3, F5, F6, F7, F8, F9, F14), 1 retracted (F13), 2 deferred by design (F10, F11), leaving 2 actionable items: F4 (test helper consolidation) and F12 (subsystem benchmarks).
+The codebase is architecturally sound — bytecode VM, correct continuation chain, proper hygiene model, clean package layering. The debt is organizational, not foundational. Of the 14 original findings: 10 are complete or resolved (F1, F2, F3, F4, F5, F6, F7, F8, F9, F14), 1 retracted (F13), 2 deferred by design (F10, F11), leaving 1 actionable item: F12 (subsystem benchmarks).
 
 ---
 
@@ -268,7 +268,7 @@ Read the BigComplex struct to find the field names for real/imaginary parts (lik
 
 ---
 
-### F4 [Priority: Medium] — Test helper duplication: registry/core vs registry/testhelpers
+### F4 [Priority: Medium] [COMPLETE] — Test helper duplication: registry/core vs registry/testhelpers
 
 **Where**: `registry/core/test_helpers_test.go` (212 lines), `registry/testhelpers/helpers.go` (131 lines)
 **What**: The core package maintains a local copy of the test helper API (`runSchemeCode`, `runSchemeCodeExpectTrue/False/Error`, `schemeCodeTestCase`) that duplicates the exported `registry/testhelpers` package. The local version adds `runSchemeCodeWithEnv` and `runSchemeCodeWithEnvAndContext` which don't exist in the exported package. 130+ test files in `registry/core/` import the local version.
@@ -733,15 +733,13 @@ make test && make lint
 
 ## State of the Code (updated 2026-03-01)
 
-The Wile codebase is well-architected with clean package layering, consistent error handling conventions (sentinel + wrap), and comprehensive test coverage for core semantics. The structural, signals, and tech debt reviews have remediated the most critical issues. Of the 14 original findings: **9 complete/resolved** (F1, F2, F3, F5, F6, F7, F8, F9, F14), **1 retracted** (F13), **2 deferred by design** (F10 god-object, F11 internal extensions), leaving **2 actionable items**.
+The Wile codebase is well-architected with clean package layering, consistent error handling conventions (sentinel + wrap), and comprehensive test coverage for core semantics. The structural, signals, and tech debt reviews have remediated the most critical issues. Of the 14 original findings: **10 complete/resolved** (F1, F2, F3, F4, F5, F6, F7, F8, F9, F14), **1 retracted** (F13), **2 deferred by design** (F10 god-object, F11 internal extensions), leaving **1 actionable item**.
 
 The F6/F7 "coverage gap" findings were artifacts of measuring by file count ratio rather than Go statement coverage — actual coverage is 86.4% and 95.2% respectively. No correctness issues remain.
 
 ## Remaining Actionable Items
 
-1. **F4: Test helper consolidation** [S effort] — `registry/core/test_helpers_test.go` still exists with local helpers. ~112 test files use the local version instead of the exported `registry/testhelpers` package. Mechanical sed/replace operation.
-
-2. **F12: Subsystem benchmarks** [S effort] — No dedicated benchmarks exist for `machine/` (VM dispatch), `internal/tokenizer/`, or `registry/core/` (primitive call overhead). High-level Gabriel suite catches macro regressions but can't isolate micro-level ones.
+1. **F12: Subsystem benchmarks** [S effort] — No dedicated benchmarks exist for `machine/` (VM dispatch), `internal/tokenizer/`, or `registry/core/` (primitive call overhead). High-level Gabriel suite catches macro regressions but can't isolate micro-level ones.
 
 ## Verification Log
 
@@ -753,7 +751,7 @@ Completion verification: 2026-03-01. All claimed completion statuses confirmed a
 | F1 | COMPLETE | ✓ 2026-03-01 | `values/promotion.go` exists. Dispatch generators referenced in all 7 type files + `promotion_test.go`. |
 | F2 | COMPLETE | ✓ 2026-03-01 | Part A: opcode checklist at `opcode.go:22`. Part B: `invokeTransformerClosure()` in `expander_time_continuation.go` unifies both dispatch sites. |
 | F3 | COMPLETE | ✓ 2026-03-01 | `Complex.HashCode()` at `complex.go:321`. `BigComplex.HashCode()` at `big_complex.go:635`. |
-| F4 | Open | ✓ 2026-03-01 | `test_helpers_test.go` still exists. Local `runSchemeCode` at line 64. Not consolidated. |
+| F4 | COMPLETE | ✓ 2026-03-01 | `test_helpers_test.go` deleted. All ~112 test files migrated to `registry/testhelpers`. PR #372. |
 | F5 | COMPLETE | ✓ 2026-03-01 | Single `test-scheme` at Makefile:133. No duplicate. |
 | F6 | RESOLVED | ✓ 2026-03-01 | Statement coverage: **86.4%**. Original 13% was file count ratio, not Go coverage. |
 | F7 | RESOLVED | ✓ 2026-03-01 | Statement coverage: **95.2%**. Original 29% was file count ratio, not Go coverage. |

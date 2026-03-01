@@ -25,7 +25,7 @@ When investigating R7RS conformance issues:
 | `2026-02-26-repl-enhancements.md` | Step-by-step implementation plan for REPL_ENHANCEMENTS | Complete |
 | `SIGNALS_REVIEW.md` | Six-lens signals analysis: mode transitions, feedback loops, saturation, temporal coupling, cross-talk, signal integrity | Complete (PR #361) |
 | `SIGNALS_REMEDIATION.md` | Implementation plan for SIGNALS_REVIEW findings P1–P6 + P4b | Complete (PR #361) |
-| `TECH_DEBT_REVIEW.md` | Staff-engineer debt assessment: 14 findings. 9 complete/resolved, 1 retracted, 2 deferred. 2 remaining: F4 test helpers, F12 benchmarks | Reference (mostly complete) |
+| `TECH_DEBT_REVIEW.md` | Staff-engineer debt assessment: 14 findings. 10 complete/resolved, 1 retracted, 2 deferred. 1 remaining: F12 benchmarks | Reference (mostly complete) |
 | `STAFF_ENGINEER_REVIEW.md` | Net-new debt findings beyond TECH_DEBT_REVIEW: N1 VM opcode dedup, N2 VM error pattern | Reference (open) |
 | `362-BIGCOMPLEX-INFNAN-GUARD.md` | Fix: BigFloat Inf/NaN-capable, BigComplex guard patched for Float×BigComplex case (#362) | Complete (PR #363) — approach differs from plan; see status block at top of file |
 | `2026-02-27-crosscheck-design.md` | Design doc for crosscheck plugin (parallel cross-purpose agents) | Complete (implemented) |
