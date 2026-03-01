@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -61,7 +62,7 @@ func TestFiniteQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})
@@ -102,7 +103,7 @@ func TestInfiniteQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})
@@ -138,7 +139,7 @@ func TestNanQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})
@@ -179,7 +180,7 @@ func TestNegativeQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})
@@ -220,7 +221,7 @@ func TestPositiveQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})
@@ -266,7 +267,7 @@ func TestRationalQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})

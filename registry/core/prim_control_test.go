@@ -23,6 +23,7 @@ import (
 	"github.com/aalpar/wile/internal/bootstrap"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -89,7 +90,7 @@ func TestCallCC(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -155,7 +156,7 @@ func TestCallCCWithHigherOrderFunctions(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -249,7 +250,7 @@ func TestMapMultipleLists(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -302,7 +303,7 @@ func TestForEachMultipleLists(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := runProgramAST(t, tc.prog)
+			_, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 		})
 	}
@@ -366,7 +367,7 @@ func TestApplyMultipleArgs(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -402,7 +403,7 @@ func TestValues(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -491,7 +492,7 @@ func TestCallWithValues(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -584,7 +585,7 @@ func TestDynamicWind(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -635,7 +636,7 @@ func TestDynamicWindEscape(t *testing.T) {
 }
 
 func TestDynamicWindBasic(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((result '()))
 			(dynamic-wind
 				(lambda () (set! result (cons 'before result)))
@@ -648,65 +649,65 @@ func TestDynamicWindBasic(t *testing.T) {
 }
 
 func TestCallWithValuesExtended(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "call-with-values single value",
-			code:     `(call-with-values (lambda () 42) (lambda (x) x))`,
-			expected: values.NewInteger(42),
+			Name:     "call-with-values single value",
+			Code:     `(call-with-values (lambda () 42) (lambda (x) x))`,
+			Expected: values.NewInteger(42),
 		},
 		{
-			name:     "call-with-values two values",
-			code:     `(call-with-values (lambda () (values 1 2)) (lambda (x y) (+ x y)))`,
-			expected: values.NewInteger(3),
+			Name:     "call-with-values two values",
+			Code:     `(call-with-values (lambda () (values 1 2)) (lambda (x y) (+ x y)))`,
+			Expected: values.NewInteger(3),
 		},
 		{
-			name:     "call-with-values returning no values",
-			code:     `(call-with-values (lambda () (values)) (lambda () 'done))`,
-			expected: values.NewSymbol("done"),
+			Name:     "call-with-values returning no values",
+			Code:     `(call-with-values (lambda () (values)) (lambda () 'done))`,
+			Expected: values.NewSymbol("done"),
 		},
 		{
-			name:     "call-with-values returning three values",
-			code:     `(call-with-values (lambda () (values 1 2 3)) (lambda (a b c) (+ a b c)))`,
-			expected: values.NewInteger(6),
+			Name:     "call-with-values returning three values",
+			Code:     `(call-with-values (lambda () (values 1 2 3)) (lambda (a b c) (+ a b c)))`,
+			Expected: values.NewInteger(6),
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestCallCCMultiInvoke(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name: "continuation invoked after call/cc returns",
-			code: `(let ((k-saved #f))
+			Name: "continuation invoked after call/cc returns",
+			Code: `(let ((k-saved #f))
 				(let ((result (call/cc (lambda (k) (set! k-saved k) 1))))
 					(if (= result 1)
 						(k-saved 2)
 						result)))`,
-			expected: values.NewInteger(2),
+			Expected: values.NewInteger(2),
 		},
 		{
-			name: "continuation invoked multiple times",
-			code: `(let ((k-saved #f) (count 0))
+			Name: "continuation invoked multiple times",
+			Code: `(let ((k-saved #f) (count 0))
 				(let ((result (call/cc (lambda (k) (set! k-saved k) 'first))))
 					(set! count (+ count 1))
 					(if (< count 3)
 						(k-saved count)
 						count)))`,
-			expected: values.NewInteger(3),
+			Expected: values.NewInteger(3),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -731,12 +732,12 @@ func TestCallCCMultiInvoke(t *testing.T) {
 // a call/cc inside map's callback includes the rest of the map iteration
 // and the outer computation.
 func TestCallCCSubContextReentry(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
 			// Re-entering a continuation captured inside map should
 			// resume the map iteration from that element onward.
-			name: "map continuation re-entry resumes iteration",
-			code: `(let ((k #f))
+			Name: "map continuation re-entry resumes iteration",
+			Code: `(let ((k #f))
 				(let ((result
 					(map (lambda (x)
 						(if (and (= x 2) (not k))
@@ -751,7 +752,7 @@ func TestCallCCSubContextReentry(t *testing.T) {
 			// When re-entered with 999: map callback for x=2 returns 999,
 			// map continues to x=3 producing 30, map returns (10 999 30).
 			// Outer let rebinds result, k is now #f, returns result.
-			expected: values.List(
+			Expected: values.List(
 				values.NewInteger(10),
 				values.NewInteger(999),
 				values.NewInteger(30)),
@@ -759,8 +760,8 @@ func TestCallCCSubContextReentry(t *testing.T) {
 		{
 			// Re-entering a continuation captured inside for-each should
 			// resume the for-each iteration for remaining elements.
-			name: "for-each continuation re-entry resumes iteration",
-			code: `(let ((k #f) (count 0))
+			Name: "for-each continuation re-entry resumes iteration",
+			Code: `(let ((k #f) (count 0))
 				(for-each (lambda (x)
 					(set! count (+ count 1))
 					(if (and (= x 2) (not k))
@@ -776,130 +777,130 @@ func TestCallCCSubContextReentry(t *testing.T) {
 			// call/cc returns #f, k is not captured again (k is truthy).
 			// for-each continues to x=3: count becomes 4.
 			// k was cleared, returns count = 4.
-			expected: values.NewInteger(4),
+			Expected: values.NewInteger(4),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCodeWithTimeout(t, tc.code, 5*time.Second)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCodeWithTimeout(t, tc.Code, 5*time.Second)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestDynamicWindExceptionInThunks(t *testing.T) {
-	errorTcs := []schemeCodeErrorTestCase{
-		{name: "exception in before thunk", code: `(dynamic-wind (lambda () (error "before-fail")) (lambda () 1) (lambda () 2))`},
-		{name: "exception in after thunk", code: `(dynamic-wind (lambda () #f) (lambda () 42) (lambda () (error "after-fail")))`},
+	errorTcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "exception in before thunk", Code: `(dynamic-wind (lambda () (error "before-fail")) (lambda () 1) (lambda () 2))`},
+		{Name: "exception in after thunk", Code: `(dynamic-wind (lambda () #f) (lambda () 42) (lambda () (error "after-fail")))`},
 	}
 	for _, tc := range errorTcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
 
-	successTcs := []schemeCodeTestCase{
+	successTcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name: "after thunk runs on body exception",
-			code: `(let ((after-ran #f))
+			Name: "after thunk runs on body exception",
+			Code: `(let ((after-ran #f))
 				(guard (e (#t after-ran))
 					(dynamic-wind
 						(lambda () #f)
 						(lambda () (error "body-fail"))
 						(lambda () (set! after-ran #t)))))`,
-			expected: values.TrueValue,
+			Expected: values.TrueValue,
 		},
 	}
 	for _, tc := range successTcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestApplyExtended(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "apply with prefix args",
-			code:     `(apply + 1 2 '(3 4))`,
-			expected: values.NewInteger(10),
+			Name:     "apply with prefix args",
+			Code:     `(apply + 1 2 '(3 4))`,
+			Expected: values.NewInteger(10),
 		},
 		{
-			name:     "apply with empty list",
-			code:     `(apply + '())`,
-			expected: values.NewInteger(0),
+			Name:     "apply with empty list",
+			Code:     `(apply + '())`,
+			Expected: values.NewInteger(0),
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestApply_Errors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "improper list as final argument", code: `(apply + '(1 . 2))`},
-		{name: "non-list as final argument", code: `(apply + 42)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "improper list as final argument", Code: `(apply + '(1 . 2))`},
+		{Name: "non-list as final argument", Code: `(apply + 42)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			testhelpers.RunSchemeCodeExpectError(t, tc.Code)
 		})
 	}
 }
 
 func TestMap_Errors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "exception in mapped procedure", code: `(map (lambda (x) (if (= x 2) (error "boom") x)) '(1 2 3))`},
-		{name: "improper list argument", code: `(map (lambda (x) x) '(1 . 2))`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "exception in mapped procedure", Code: `(map (lambda (x) (if (= x 2) (error "boom") x)) '(1 2 3))`},
+		{Name: "improper list argument", Code: `(map (lambda (x) x) '(1 . 2))`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			testhelpers.RunSchemeCodeExpectError(t, tc.Code)
 		})
 	}
 }
 
 func TestForEachExtended(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name: "unequal length lists stops at shortest",
-			code: `(let ((count 0))
+			Name: "unequal length lists stops at shortest",
+			Code: `(let ((count 0))
 				(for-each (lambda (x y) (set! count (+ count 1))) '(1 2 3) '(10 20))
 				count)`,
-			expected: values.NewInteger(2),
+			Expected: values.NewInteger(2),
 		},
 		{
-			name:     "return value is void",
-			code:     `(for-each (lambda (x) x) '(1 2 3))`,
-			expected: values.Void,
+			Name:     "return value is void",
+			Code:     `(for-each (lambda (x) x) '(1 2 3))`,
+			Expected: values.Void,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestCallWithValues_Errors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "exception in producer", code: `(call-with-values (lambda () (error "fail")) (lambda (x) x))`},
-		{name: "exception in consumer", code: `(call-with-values (lambda () 42) (lambda (x) (error "fail")))`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "exception in producer", Code: `(call-with-values (lambda () (error "fail")) (lambda (x) x))`},
+		{Name: "exception in consumer", Code: `(call-with-values (lambda () 42) (lambda (x) (error "fail")))`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			testhelpers.RunSchemeCodeExpectError(t, tc.Code)
 		})
 	}
 }
@@ -1031,7 +1032,7 @@ func TestCallCCCoroutines(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCodeWithTimeout(t, tc.code, tc.timeout)
+			result, err := testhelpers.RunSchemeCodeWithTimeout(t, tc.code, tc.timeout)
 			qt.Assert(t, err, qt.IsNil)
 			tc.check(t, result)
 		})
@@ -1069,7 +1070,7 @@ func TestApplyWithParameter(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			c.Assert(err, qt.IsNil)
 			c.Assert(result, valuestest.SchemeEquals, tc.want)
 		})

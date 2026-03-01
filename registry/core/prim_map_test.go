@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -26,78 +27,78 @@ import (
 // map Tests (R7RS §6.4 - Mapping over lists)
 
 func TestMapComprehensive(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Single list
-		{name: "map double", code: `(map (lambda (x) (* x 2)) '(1 2 3))`, expected: values.List(values.NewInteger(2), values.NewInteger(4), values.NewInteger(6))},
-		{name: "map identity", code: `(map (lambda (x) x) '(a b c))`, expected: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"))},
-		{name: "map empty list", code: `(map (lambda (x) x) '())`, expected: values.EmptyList},
+		{Name: "map double", Code: `(map (lambda (x) (* x 2)) '(1 2 3))`, Expected: values.List(values.NewInteger(2), values.NewInteger(4), values.NewInteger(6))},
+		{Name: "map identity", Code: `(map (lambda (x) x) '(a b c))`, Expected: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"))},
+		{Name: "map empty list", Code: `(map (lambda (x) x) '())`, Expected: values.EmptyList},
 
 		// Multiple lists
-		{name: "map + two lists", code: `(map + '(1 2 3) '(10 20 30))`, expected: values.List(values.NewInteger(11), values.NewInteger(22), values.NewInteger(33))},
-		{name: "map - two lists", code: `(map - '(10 20 30) '(1 2 3))`, expected: values.List(values.NewInteger(9), values.NewInteger(18), values.NewInteger(27))},
-		{name: "map three lists", code: `(map + '(1 2) '(10 20) '(100 200))`, expected: values.List(values.NewInteger(111), values.NewInteger(222))},
+		{Name: "map + two lists", Code: `(map + '(1 2 3) '(10 20 30))`, Expected: values.List(values.NewInteger(11), values.NewInteger(22), values.NewInteger(33))},
+		{Name: "map - two lists", Code: `(map - '(10 20 30) '(1 2 3))`, Expected: values.List(values.NewInteger(9), values.NewInteger(18), values.NewInteger(27))},
+		{Name: "map three lists", Code: `(map + '(1 2) '(10 20) '(100 200))`, Expected: values.List(values.NewInteger(111), values.NewInteger(222))},
 
 		// Map with list constructor
-		{name: "map list", code: `(map list '(a b) '(1 2))`, expected: values.List(values.List(values.NewSymbol("a"), values.NewInteger(1)), values.List(values.NewSymbol("b"), values.NewInteger(2)))},
+		{Name: "map list", Code: `(map list '(a b) '(1 2))`, Expected: values.List(values.List(values.NewSymbol("a"), values.NewInteger(1)), values.List(values.NewSymbol("b"), values.NewInteger(2)))},
 
 		// Map with cons
-		{name: "map cons", code: `(map cons '(a b c) '(1 2 3))`, expected: values.List(values.NewCons(values.NewSymbol("a"), values.NewInteger(1)), values.NewCons(values.NewSymbol("b"), values.NewInteger(2)), values.NewCons(values.NewSymbol("c"), values.NewInteger(3)))},
+		{Name: "map cons", Code: `(map cons '(a b c) '(1 2 3))`, Expected: values.List(values.NewCons(values.NewSymbol("a"), values.NewInteger(1)), values.NewCons(values.NewSymbol("b"), values.NewInteger(2)), values.NewCons(values.NewSymbol("c"), values.NewInteger(3)))},
 
 		// Unequal lengths - stops at shortest
-		{name: "unequal lengths", code: `(map + '(1 2 3) '(10 20))`, expected: values.List(values.NewInteger(11), values.NewInteger(22))},
+		{Name: "unequal lengths", Code: `(map + '(1 2 3) '(10 20))`, Expected: values.List(values.NewInteger(11), values.NewInteger(22))},
 
 		// Single element list
-		{name: "single element list", code: `(map (lambda (x) (* x 10)) '(5))`, expected: values.List(values.NewInteger(50))},
+		{Name: "single element list", Code: `(map (lambda (x) (* x 10)) '(5))`, Expected: values.List(values.NewInteger(50))},
 
 		// Four lists
-		{name: "four lists", code: `(map list '(a b) '(1 2) '(x y) '(#t #f))`,
-			expected: values.List(
+		{Name: "four lists", Code: `(map list '(a b) '(1 2) '(x y) '(#t #f))`,
+			Expected: values.List(
 				values.List(values.NewSymbol("a"), values.NewInteger(1), values.NewSymbol("x"), values.TrueValue),
 				values.List(values.NewSymbol("b"), values.NewInteger(2), values.NewSymbol("y"), values.FalseValue))},
 
 		// Order verified via accumulation
-		{name: "order verified via accumulation", code: `(let ((order '())) (map (lambda (x) (set! order (cons x order)) x) '(1 2 3)) order)`,
-			expected: values.List(values.NewInteger(3), values.NewInteger(2), values.NewInteger(1))},
+		{Name: "order verified via accumulation", Code: `(let ((order '())) (map (lambda (x) (set! order (cons x order)) x) '(1 2 3)) order)`,
+			Expected: values.List(values.NewInteger(3), values.NewInteger(2), values.NewInteger(1))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestMapErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "map non-procedure", code: `(map 5 '(1 2 3))`},
-		{name: "map with non-list", code: `(map + 5)`},
-		{name: "error propagation", code: `(map (lambda (x) (error "boom")) '(1))`},
-		{name: "improper list as single argument", code: `(map + '(1 2 . 3))`},
-		{name: "improper list as second argument", code: `(map + '(1 2) '(3 . 4))`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "map non-procedure", Code: `(map 5 '(1 2 3))`},
+		{Name: "map with non-list", Code: `(map + 5)`},
+		{Name: "error propagation", Code: `(map (lambda (x) (error "boom")) '(1))`},
+		{Name: "improper list as single argument", Code: `(map + '(1 2 . 3))`},
+		{Name: "improper list as second argument", Code: `(map + '(1 2) '(3 . 4))`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
 }
 
 func TestMapExceptionGuard(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name: "guard catches exception mid-iteration",
-			code: `(guard (e (#t 'caught))
+			Name: "guard catches exception mid-iteration",
+			Code: `(guard (e (#t 'caught))
 				(map (lambda (x) (if (= x 3) (error "mid-map") x)) '(1 2 3 4 5)))`,
-			expected: values.NewSymbol("caught"),
+			Expected: values.NewSymbol("caught"),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }

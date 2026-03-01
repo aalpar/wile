@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -26,45 +27,45 @@ import (
 // call-with-values Tests (R7RS §6.4 - Multiple values)
 
 func TestCallWithValuesComprehensive(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Single value
-		{name: "single value", code: `(call-with-values (lambda () 42) (lambda (x) x))`, expected: values.NewInteger(42)},
+		{Name: "single value", Code: `(call-with-values (lambda () 42) (lambda (x) x))`, Expected: values.NewInteger(42)},
 
 		// Multiple values
-		{name: "two values", code: `(call-with-values (lambda () (values 1 2)) (lambda (a b) (+ a b)))`, expected: values.NewInteger(3)},
-		{name: "three values", code: `(call-with-values (lambda () (values 1 2 3)) (lambda (a b c) (* a b c)))`, expected: values.NewInteger(6)},
-		{name: "five values", code: `(call-with-values (lambda () (values 1 2 3 4 5)) (lambda (a b c d e) (+ a b c d e)))`, expected: values.NewInteger(15)},
+		{Name: "two values", Code: `(call-with-values (lambda () (values 1 2)) (lambda (a b) (+ a b)))`, Expected: values.NewInteger(3)},
+		{Name: "three values", Code: `(call-with-values (lambda () (values 1 2 3)) (lambda (a b c) (* a b c)))`, Expected: values.NewInteger(6)},
+		{Name: "five values", Code: `(call-with-values (lambda () (values 1 2 3 4 5)) (lambda (a b c d e) (+ a b c d e)))`, Expected: values.NewInteger(15)},
 
 		// Zero values
-		{name: "zero values", code: `(call-with-values (lambda () (values)) (lambda () 'done))`, expected: values.NewSymbol("done")},
+		{Name: "zero values", Code: `(call-with-values (lambda () (values)) (lambda () 'done))`, Expected: values.NewSymbol("done")},
 
 		// Consumer uses list
-		{name: "consumer builds list", code: `(call-with-values (lambda () (values 'a 'b 'c)) list)`, expected: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"))},
+		{Name: "consumer builds list", Code: `(call-with-values (lambda () (values 'a 'b 'c)) list)`, Expected: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"))},
 
 		// Values from arithmetic
-		{name: "floor/ values", code: `(call-with-values (lambda () (floor/ 13 4)) (lambda (q r) (+ (* q 10) r)))`, expected: values.NewInteger(31)},
+		{Name: "floor/ values", Code: `(call-with-values (lambda () (floor/ 13 4)) (lambda (q r) (+ (* q 10) r)))`, Expected: values.NewInteger(31)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestCallWithValuesErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "producer not procedure", code: `(call-with-values 5 (lambda (x) x))`},
-		{name: "consumer not procedure", code: `(call-with-values (lambda () 1) 5)`},
-		{name: "arity mismatch", code: `(call-with-values (lambda () (values 1 2)) (lambda (x) x))`},
-		{name: "exception in producer", code: `(call-with-values (lambda () (error "boom")) list)`},
-		{name: "exception in consumer", code: `(call-with-values (lambda () (values 1 2)) (lambda (x y) (error "boom")))`},
-		{name: "arity mismatch three to two", code: `(call-with-values (lambda () (values 1 2 3)) (lambda (x y) (+ x y)))`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "producer not procedure", Code: `(call-with-values 5 (lambda (x) x))`},
+		{Name: "consumer not procedure", Code: `(call-with-values (lambda () 1) 5)`},
+		{Name: "arity mismatch", Code: `(call-with-values (lambda () (values 1 2)) (lambda (x) x))`},
+		{Name: "exception in producer", Code: `(call-with-values (lambda () (error "boom")) list)`},
+		{Name: "exception in consumer", Code: `(call-with-values (lambda () (values 1 2)) (lambda (x y) (error "boom")))`},
+		{Name: "arity mismatch three to two", Code: `(call-with-values (lambda () (values 1 2 3)) (lambda (x y) (+ x y)))`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}

@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -61,7 +62,7 @@ func TestConditionVariableQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -70,34 +71,34 @@ func TestConditionVariableQ(t *testing.T) {
 
 func TestMakeConditionVariable(t *testing.T) {
 	// make-condition-variable should return a condition-variable
-	result, err := runSchemeCode(t, "(condition-variable? (make-condition-variable))")
+	result, err := testhelpers.RunSchemeCode(t, "(condition-variable? (make-condition-variable))")
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestMakeConditionVariableWithName(t *testing.T) {
 	code := `(condition-variable-name (make-condition-variable "test-cv"))`
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewString("test-cv"))
 }
 
 func TestConditionVariableName(t *testing.T) {
 	code := `(condition-variable-name (make-condition-variable "my-cv"))`
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewString("my-cv"))
 }
 
 func TestConditionVariableNameError(t *testing.T) {
-	_, err := runSchemeCode(t, "(condition-variable-name 42)")
+	_, err := testhelpers.RunSchemeCode(t, "(condition-variable-name 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestConditionVariableSpecific(t *testing.T) {
 	// Initially condition-variable-specific returns void
 	code := `(void? (condition-variable-specific (make-condition-variable)))`
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
@@ -108,18 +109,18 @@ func TestConditionVariableSpecificSet(t *testing.T) {
 			(condition-variable-specific-set! cv 'my-data)
 			(condition-variable-specific cv))
 	`
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("my-data"))
 }
 
 func TestConditionVariableSpecificError(t *testing.T) {
-	_, err := runSchemeCode(t, "(condition-variable-specific 42)")
+	_, err := testhelpers.RunSchemeCode(t, "(condition-variable-specific 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestConditionVariableSpecificSetError(t *testing.T) {
-	_, err := runSchemeCode(t, "(condition-variable-specific-set! 42 'data)")
+	_, err := testhelpers.RunSchemeCode(t, "(condition-variable-specific-set! 42 'data)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
@@ -129,13 +130,13 @@ func TestConditionVariableSignal(t *testing.T) {
 		(let ((cv (make-condition-variable)))
 			(condition-variable-signal! cv))
 	`
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.IsVoid(), qt.IsTrue)
 }
 
 func TestConditionVariableSignalError(t *testing.T) {
-	_, err := runSchemeCode(t, "(condition-variable-signal! 42)")
+	_, err := testhelpers.RunSchemeCode(t, "(condition-variable-signal! 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
@@ -145,12 +146,12 @@ func TestConditionVariableBroadcast(t *testing.T) {
 		(let ((cv (make-condition-variable)))
 			(condition-variable-broadcast! cv))
 	`
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.IsVoid(), qt.IsTrue)
 }
 
 func TestConditionVariableBroadcastError(t *testing.T) {
-	_, err := runSchemeCode(t, "(condition-variable-broadcast! 42)")
+	_, err := testhelpers.RunSchemeCode(t, "(condition-variable-broadcast! 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }

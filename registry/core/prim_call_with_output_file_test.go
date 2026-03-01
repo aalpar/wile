@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -47,7 +48,7 @@ func TestCallWithOutputFile(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+			_, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 
 			content, err := os.ReadFile(tmpfile)
@@ -69,26 +70,26 @@ func TestCallWithOutputFileReturnsResult(t *testing.T) {
 			(display "test" p)
 			'done))`, tmpfile)
 
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("done"))
 }
 
 func TestCallWithOutputFileErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "wrong type for filename - integer",
-			code: `(call-with-output-file 42 (lambda (p) p))`,
+			Name: "wrong type for filename - integer",
+			Code: `(call-with-output-file 42 (lambda (p) p))`,
 		},
 		{
-			name: "wrong type for procedure - not a procedure",
-			code: `(call-with-output-file "/tmp/test.txt" "not-a-proc")`,
+			Name: "wrong type for procedure - not a procedure",
+			Code: `(call-with-output-file "/tmp/test.txt" "not-a-proc")`,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}

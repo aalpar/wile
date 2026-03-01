@@ -19,6 +19,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 )
@@ -155,7 +156,7 @@ func TestFloorDivComprehensive(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
@@ -178,7 +179,7 @@ func TestFloorDivIdentity(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, values.TrueValue)
 		})
@@ -201,7 +202,7 @@ func TestFloorDivRemainderSign(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, values.TrueValue)
 		})
@@ -213,43 +214,43 @@ func TestFloorDivRemainderSign(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestFloorQuotientComprehensive(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic cases
-		{name: "positive / positive exact", code: `(floor-quotient 12 4)`, expected: values.NewInteger(3)},
-		{name: "positive / positive with remainder", code: `(floor-quotient 10 3)`, expected: values.NewInteger(3)},
-		{name: "positive / positive small", code: `(floor-quotient 1 5)`, expected: values.NewInteger(0)},
+		{Name: "positive / positive exact", Code: `(floor-quotient 12 4)`, Expected: values.NewInteger(3)},
+		{Name: "positive / positive with remainder", Code: `(floor-quotient 10 3)`, Expected: values.NewInteger(3)},
+		{Name: "positive / positive small", Code: `(floor-quotient 1 5)`, Expected: values.NewInteger(0)},
 
 		// Negative dividend
-		{name: "negative / positive", code: `(floor-quotient -10 3)`, expected: values.NewInteger(-4)},
-		{name: "negative / positive exact", code: `(floor-quotient -12 4)`, expected: values.NewInteger(-3)},
+		{Name: "negative / positive", Code: `(floor-quotient -10 3)`, Expected: values.NewInteger(-4)},
+		{Name: "negative / positive exact", Code: `(floor-quotient -12 4)`, Expected: values.NewInteger(-3)},
 
 		// Negative divisor
-		{name: "positive / negative", code: `(floor-quotient 10 -3)`, expected: values.NewInteger(-4)},
-		{name: "positive / negative exact", code: `(floor-quotient 12 -4)`, expected: values.NewInteger(-3)},
+		{Name: "positive / negative", Code: `(floor-quotient 10 -3)`, Expected: values.NewInteger(-4)},
+		{Name: "positive / negative exact", Code: `(floor-quotient 12 -4)`, Expected: values.NewInteger(-3)},
 
 		// Both negative
-		{name: "negative / negative", code: `(floor-quotient -10 -3)`, expected: values.NewInteger(3)},
-		{name: "negative / negative exact", code: `(floor-quotient -12 -4)`, expected: values.NewInteger(3)},
+		{Name: "negative / negative", Code: `(floor-quotient -10 -3)`, Expected: values.NewInteger(3)},
+		{Name: "negative / negative exact", Code: `(floor-quotient -12 -4)`, Expected: values.NewInteger(3)},
 
 		// Zero dividend
-		{name: "zero / positive", code: `(floor-quotient 0 5)`, expected: values.NewInteger(0)},
-		{name: "zero / negative", code: `(floor-quotient 0 -5)`, expected: values.NewInteger(0)},
+		{Name: "zero / positive", Code: `(floor-quotient 0 5)`, Expected: values.NewInteger(0)},
+		{Name: "zero / negative", Code: `(floor-quotient 0 -5)`, Expected: values.NewInteger(0)},
 
 		// Large numbers
-		{name: "large values", code: `(floor-quotient 1000000 7)`, expected: values.NewInteger(142857)},
-		{name: "large negative dividend", code: `(floor-quotient -1000000 7)`, expected: values.NewInteger(-142858)},
+		{Name: "large values", Code: `(floor-quotient 1000000 7)`, Expected: values.NewInteger(142857)},
+		{Name: "large negative dividend", Code: `(floor-quotient -1000000 7)`, Expected: values.NewInteger(-142858)},
 
 		// Divide by 1 or -1
-		{name: "divide by 1", code: `(floor-quotient 42 1)`, expected: values.NewInteger(42)},
-		{name: "divide by -1", code: `(floor-quotient 42 -1)`, expected: values.NewInteger(-42)},
-		{name: "negative divide by -1", code: `(floor-quotient -42 -1)`, expected: values.NewInteger(42)},
+		{Name: "divide by 1", Code: `(floor-quotient 42 1)`, Expected: values.NewInteger(42)},
+		{Name: "divide by -1", Code: `(floor-quotient 42 -1)`, Expected: values.NewInteger(-42)},
+		{Name: "negative divide by -1", Code: `(floor-quotient -42 -1)`, Expected: values.NewInteger(42)},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -259,42 +260,42 @@ func TestFloorQuotientComprehensive(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestFloorRemainderComprehensive(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic cases
-		{name: "positive / positive exact", code: `(floor-remainder 12 4)`, expected: values.NewInteger(0)},
-		{name: "positive / positive with remainder", code: `(floor-remainder 10 3)`, expected: values.NewInteger(1)},
-		{name: "positive / positive small", code: `(floor-remainder 1 5)`, expected: values.NewInteger(1)},
+		{Name: "positive / positive exact", Code: `(floor-remainder 12 4)`, Expected: values.NewInteger(0)},
+		{Name: "positive / positive with remainder", Code: `(floor-remainder 10 3)`, Expected: values.NewInteger(1)},
+		{Name: "positive / positive small", Code: `(floor-remainder 1 5)`, Expected: values.NewInteger(1)},
 
 		// Negative dividend
-		{name: "negative / positive", code: `(floor-remainder -10 3)`, expected: values.NewInteger(2)},
-		{name: "negative / positive exact", code: `(floor-remainder -12 4)`, expected: values.NewInteger(0)},
+		{Name: "negative / positive", Code: `(floor-remainder -10 3)`, Expected: values.NewInteger(2)},
+		{Name: "negative / positive exact", Code: `(floor-remainder -12 4)`, Expected: values.NewInteger(0)},
 
 		// Negative divisor
-		{name: "positive / negative", code: `(floor-remainder 10 -3)`, expected: values.NewInteger(-2)},
-		{name: "positive / negative exact", code: `(floor-remainder 12 -4)`, expected: values.NewInteger(0)},
+		{Name: "positive / negative", Code: `(floor-remainder 10 -3)`, Expected: values.NewInteger(-2)},
+		{Name: "positive / negative exact", Code: `(floor-remainder 12 -4)`, Expected: values.NewInteger(0)},
 
 		// Both negative
-		{name: "negative / negative", code: `(floor-remainder -10 -3)`, expected: values.NewInteger(-1)},
-		{name: "negative / negative exact", code: `(floor-remainder -12 -4)`, expected: values.NewInteger(0)},
+		{Name: "negative / negative", Code: `(floor-remainder -10 -3)`, Expected: values.NewInteger(-1)},
+		{Name: "negative / negative exact", Code: `(floor-remainder -12 -4)`, Expected: values.NewInteger(0)},
 
 		// Zero dividend
-		{name: "zero / positive", code: `(floor-remainder 0 5)`, expected: values.NewInteger(0)},
-		{name: "zero / negative", code: `(floor-remainder 0 -5)`, expected: values.NewInteger(0)},
+		{Name: "zero / positive", Code: `(floor-remainder 0 5)`, Expected: values.NewInteger(0)},
+		{Name: "zero / negative", Code: `(floor-remainder 0 -5)`, Expected: values.NewInteger(0)},
 
 		// Large numbers
-		{name: "large values", code: `(floor-remainder 1000000 7)`, expected: values.NewInteger(1)},
-		{name: "large negative dividend", code: `(floor-remainder -1000000 7)`, expected: values.NewInteger(6)},
+		{Name: "large values", Code: `(floor-remainder 1000000 7)`, Expected: values.NewInteger(1)},
+		{Name: "large negative dividend", Code: `(floor-remainder -1000000 7)`, Expected: values.NewInteger(6)},
 
 		// Divide by 1 or -1
-		{name: "divide by 1", code: `(floor-remainder 42 1)`, expected: values.NewInteger(0)},
-		{name: "divide by -1", code: `(floor-remainder 42 -1)`, expected: values.NewInteger(0)},
+		{Name: "divide by 1", Code: `(floor-remainder 42 1)`, Expected: values.NewInteger(0)},
+		{Name: "divide by -1", Code: `(floor-remainder 42 -1)`, Expected: values.NewInteger(0)},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -411,7 +412,7 @@ func TestTruncateDivComprehensive(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
@@ -434,7 +435,7 @@ func TestTruncateDivIdentity(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, values.TrueValue)
 		})
@@ -457,7 +458,7 @@ func TestTruncateDivRemainderSign(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, values.TrueValue)
 		})
@@ -469,43 +470,43 @@ func TestTruncateDivRemainderSign(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestTruncateQuotientComprehensive(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic cases
-		{name: "positive / positive exact", code: `(truncate-quotient 12 4)`, expected: values.NewInteger(3)},
-		{name: "positive / positive with remainder", code: `(truncate-quotient 10 3)`, expected: values.NewInteger(3)},
-		{name: "positive / positive small", code: `(truncate-quotient 1 5)`, expected: values.NewInteger(0)},
+		{Name: "positive / positive exact", Code: `(truncate-quotient 12 4)`, Expected: values.NewInteger(3)},
+		{Name: "positive / positive with remainder", Code: `(truncate-quotient 10 3)`, Expected: values.NewInteger(3)},
+		{Name: "positive / positive small", Code: `(truncate-quotient 1 5)`, Expected: values.NewInteger(0)},
 
 		// Negative dividend
-		{name: "negative / positive", code: `(truncate-quotient -10 3)`, expected: values.NewInteger(-3)},
-		{name: "negative / positive exact", code: `(truncate-quotient -12 4)`, expected: values.NewInteger(-3)},
+		{Name: "negative / positive", Code: `(truncate-quotient -10 3)`, Expected: values.NewInteger(-3)},
+		{Name: "negative / positive exact", Code: `(truncate-quotient -12 4)`, Expected: values.NewInteger(-3)},
 
 		// Negative divisor
-		{name: "positive / negative", code: `(truncate-quotient 10 -3)`, expected: values.NewInteger(-3)},
-		{name: "positive / negative exact", code: `(truncate-quotient 12 -4)`, expected: values.NewInteger(-3)},
+		{Name: "positive / negative", Code: `(truncate-quotient 10 -3)`, Expected: values.NewInteger(-3)},
+		{Name: "positive / negative exact", Code: `(truncate-quotient 12 -4)`, Expected: values.NewInteger(-3)},
 
 		// Both negative
-		{name: "negative / negative", code: `(truncate-quotient -10 -3)`, expected: values.NewInteger(3)},
-		{name: "negative / negative exact", code: `(truncate-quotient -12 -4)`, expected: values.NewInteger(3)},
+		{Name: "negative / negative", Code: `(truncate-quotient -10 -3)`, Expected: values.NewInteger(3)},
+		{Name: "negative / negative exact", Code: `(truncate-quotient -12 -4)`, Expected: values.NewInteger(3)},
 
 		// Zero dividend
-		{name: "zero / positive", code: `(truncate-quotient 0 5)`, expected: values.NewInteger(0)},
-		{name: "zero / negative", code: `(truncate-quotient 0 -5)`, expected: values.NewInteger(0)},
+		{Name: "zero / positive", Code: `(truncate-quotient 0 5)`, Expected: values.NewInteger(0)},
+		{Name: "zero / negative", Code: `(truncate-quotient 0 -5)`, Expected: values.NewInteger(0)},
 
 		// Large numbers
-		{name: "large values", code: `(truncate-quotient 1000000 7)`, expected: values.NewInteger(142857)},
-		{name: "large negative dividend", code: `(truncate-quotient -1000000 7)`, expected: values.NewInteger(-142857)},
+		{Name: "large values", Code: `(truncate-quotient 1000000 7)`, Expected: values.NewInteger(142857)},
+		{Name: "large negative dividend", Code: `(truncate-quotient -1000000 7)`, Expected: values.NewInteger(-142857)},
 
 		// Divide by 1 or -1
-		{name: "divide by 1", code: `(truncate-quotient 42 1)`, expected: values.NewInteger(42)},
-		{name: "divide by -1", code: `(truncate-quotient 42 -1)`, expected: values.NewInteger(-42)},
-		{name: "negative divide by -1", code: `(truncate-quotient -42 -1)`, expected: values.NewInteger(42)},
+		{Name: "divide by 1", Code: `(truncate-quotient 42 1)`, Expected: values.NewInteger(42)},
+		{Name: "divide by -1", Code: `(truncate-quotient 42 -1)`, Expected: values.NewInteger(-42)},
+		{Name: "negative divide by -1", Code: `(truncate-quotient -42 -1)`, Expected: values.NewInteger(42)},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -515,42 +516,42 @@ func TestTruncateQuotientComprehensive(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestTruncateRemainderComprehensive(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic cases
-		{name: "positive / positive exact", code: `(truncate-remainder 12 4)`, expected: values.NewInteger(0)},
-		{name: "positive / positive with remainder", code: `(truncate-remainder 10 3)`, expected: values.NewInteger(1)},
-		{name: "positive / positive small", code: `(truncate-remainder 1 5)`, expected: values.NewInteger(1)},
+		{Name: "positive / positive exact", Code: `(truncate-remainder 12 4)`, Expected: values.NewInteger(0)},
+		{Name: "positive / positive with remainder", Code: `(truncate-remainder 10 3)`, Expected: values.NewInteger(1)},
+		{Name: "positive / positive small", Code: `(truncate-remainder 1 5)`, Expected: values.NewInteger(1)},
 
 		// Negative dividend
-		{name: "negative / positive", code: `(truncate-remainder -10 3)`, expected: values.NewInteger(-1)},
-		{name: "negative / positive exact", code: `(truncate-remainder -12 4)`, expected: values.NewInteger(0)},
+		{Name: "negative / positive", Code: `(truncate-remainder -10 3)`, Expected: values.NewInteger(-1)},
+		{Name: "negative / positive exact", Code: `(truncate-remainder -12 4)`, Expected: values.NewInteger(0)},
 
 		// Negative divisor
-		{name: "positive / negative", code: `(truncate-remainder 10 -3)`, expected: values.NewInteger(1)},
-		{name: "positive / negative exact", code: `(truncate-remainder 12 -4)`, expected: values.NewInteger(0)},
+		{Name: "positive / negative", Code: `(truncate-remainder 10 -3)`, Expected: values.NewInteger(1)},
+		{Name: "positive / negative exact", Code: `(truncate-remainder 12 -4)`, Expected: values.NewInteger(0)},
 
 		// Both negative
-		{name: "negative / negative", code: `(truncate-remainder -10 -3)`, expected: values.NewInteger(-1)},
-		{name: "negative / negative exact", code: `(truncate-remainder -12 -4)`, expected: values.NewInteger(0)},
+		{Name: "negative / negative", Code: `(truncate-remainder -10 -3)`, Expected: values.NewInteger(-1)},
+		{Name: "negative / negative exact", Code: `(truncate-remainder -12 -4)`, Expected: values.NewInteger(0)},
 
 		// Zero dividend
-		{name: "zero / positive", code: `(truncate-remainder 0 5)`, expected: values.NewInteger(0)},
-		{name: "zero / negative", code: `(truncate-remainder 0 -5)`, expected: values.NewInteger(0)},
+		{Name: "zero / positive", Code: `(truncate-remainder 0 5)`, Expected: values.NewInteger(0)},
+		{Name: "zero / negative", Code: `(truncate-remainder 0 -5)`, Expected: values.NewInteger(0)},
 
 		// Large numbers
-		{name: "large values", code: `(truncate-remainder 1000000 7)`, expected: values.NewInteger(1)},
-		{name: "large negative dividend", code: `(truncate-remainder -1000000 7)`, expected: values.NewInteger(-1)},
+		{Name: "large values", Code: `(truncate-remainder 1000000 7)`, Expected: values.NewInteger(1)},
+		{Name: "large negative dividend", Code: `(truncate-remainder -1000000 7)`, Expected: values.NewInteger(-1)},
 
 		// Divide by 1 or -1
-		{name: "divide by 1", code: `(truncate-remainder 42 1)`, expected: values.NewInteger(0)},
-		{name: "divide by -1", code: `(truncate-remainder 42 -1)`, expected: values.NewInteger(0)},
+		{Name: "divide by 1", Code: `(truncate-remainder 42 1)`, Expected: values.NewInteger(0)},
+		{Name: "divide by -1", Code: `(truncate-remainder 42 -1)`, Expected: values.NewInteger(0)},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -613,11 +614,11 @@ func TestFloorVsTruncateDifference(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			floorRes, err := runSchemeCode(t, tc.floorCode)
+			floorRes, err := testhelpers.RunSchemeCode(t, tc.floorCode)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, floorRes, valuestest.SchemeEquals, tc.floorResult)
 
-			truncRes, err := runSchemeCode(t, tc.truncateCode)
+			truncRes, err := testhelpers.RunSchemeCode(t, tc.truncateCode)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, truncRes, valuestest.SchemeEquals, tc.truncResult)
 
@@ -635,41 +636,41 @@ func TestFloorVsTruncateDifference(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestDivisionErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		// Division by zero
-		{name: "floor/ divide by zero", code: `(floor/ 10 0)`},
-		{name: "floor-quotient divide by zero", code: `(floor-quotient 10 0)`},
-		{name: "floor-remainder divide by zero", code: `(floor-remainder 10 0)`},
-		{name: "truncate/ divide by zero", code: `(truncate/ 10 0)`},
-		{name: "truncate-quotient divide by zero", code: `(truncate-quotient 10 0)`},
-		{name: "truncate-remainder divide by zero", code: `(truncate-remainder 10 0)`},
+		{Name: "floor/ divide by zero", Code: `(floor/ 10 0)`},
+		{Name: "floor-quotient divide by zero", Code: `(floor-quotient 10 0)`},
+		{Name: "floor-remainder divide by zero", Code: `(floor-remainder 10 0)`},
+		{Name: "truncate/ divide by zero", Code: `(truncate/ 10 0)`},
+		{Name: "truncate-quotient divide by zero", Code: `(truncate-quotient 10 0)`},
+		{Name: "truncate-remainder divide by zero", Code: `(truncate-remainder 10 0)`},
 
 		// Wrong type - first argument (strings, symbols, lists are invalid; floats/rationals are valid per R7RS)
-		{name: "floor/ string dividend", code: `(floor/ "10" 3)`},
-		{name: "floor/ symbol dividend", code: `(floor/ 'ten 3)`},
-		{name: "floor/ list dividend", code: `(floor/ '(10) 3)`},
+		{Name: "floor/ string dividend", Code: `(floor/ "10" 3)`},
+		{Name: "floor/ symbol dividend", Code: `(floor/ 'ten 3)`},
+		{Name: "floor/ list dividend", Code: `(floor/ '(10) 3)`},
 
-		{name: "truncate/ string dividend", code: `(truncate/ "10" 3)`},
-		{name: "truncate/ symbol dividend", code: `(truncate/ 'ten 3)`},
-		{name: "truncate/ list dividend", code: `(truncate/ '(10) 3)`},
+		{Name: "truncate/ string dividend", Code: `(truncate/ "10" 3)`},
+		{Name: "truncate/ symbol dividend", Code: `(truncate/ 'ten 3)`},
+		{Name: "truncate/ list dividend", Code: `(truncate/ '(10) 3)`},
 
 		// Wrong type - second argument
-		{name: "floor/ string divisor", code: `(floor/ 10 "3")`},
-		{name: "floor/ symbol divisor", code: `(floor/ 10 'three)`},
-		{name: "floor/ list divisor", code: `(floor/ 10 '(3))`},
+		{Name: "floor/ string divisor", Code: `(floor/ 10 "3")`},
+		{Name: "floor/ symbol divisor", Code: `(floor/ 10 'three)`},
+		{Name: "floor/ list divisor", Code: `(floor/ 10 '(3))`},
 
-		{name: "truncate/ string divisor", code: `(truncate/ 10 "3")`},
-		{name: "truncate/ symbol divisor", code: `(truncate/ 10 'three)`},
-		{name: "truncate/ list divisor", code: `(truncate/ 10 '(3))`},
+		{Name: "truncate/ string divisor", Code: `(truncate/ 10 "3")`},
+		{Name: "truncate/ symbol divisor", Code: `(truncate/ 10 'three)`},
+		{Name: "truncate/ list divisor", Code: `(truncate/ 10 '(3))`},
 
 		// Both arguments wrong type
-		{name: "floor/ both strings", code: `(floor/ "10" "3")`},
-		{name: "truncate/ both strings", code: `(truncate/ "10" "3")`},
+		{Name: "floor/ both strings", Code: `(floor/ "10" "3")`},
+		{Name: "truncate/ both strings", Code: `(truncate/ "10" "3")`},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -694,7 +695,7 @@ func TestModuloEqualsFloorRemainder(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, values.TrueValue)
 		})
@@ -716,7 +717,7 @@ func TestRemainderEqualsTruncateRemainder(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, values.TrueValue)
 		})
@@ -738,7 +739,7 @@ func TestQuotientEqualsTruncateQuotient(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, values.TrueValue)
 		})

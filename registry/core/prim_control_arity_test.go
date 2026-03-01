@@ -14,7 +14,11 @@
 
 package core_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/aalpar/wile/registry/testhelpers"
+)
 
 // TestControl_ArityErrors verifies that control primitives reject wrong
 // argument counts. The VM enforces arity automatically via
@@ -27,21 +31,21 @@ func TestControl_ArityErrors(t *testing.T) {
 	}
 	for _, name := range fixedArity1 {
 		t.Run(name+" zero args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+")")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+")")
 		})
 		t.Run(name+" two args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+" 1 2)")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+" 1 2)")
 		})
 	}
 
 	// Fixed 2 args: call-with-values
 	t.Run("call-with-values zero args", func(t *testing.T) {
-		runSchemeCodeExpectError(t, "(call-with-values)")
+		testhelpers.RunSchemeCodeExpectError(t, "(call-with-values)")
 	})
 	t.Run("call-with-values one arg", func(t *testing.T) {
-		runSchemeCodeExpectError(t, "(call-with-values 1)")
+		testhelpers.RunSchemeCodeExpectError(t, "(call-with-values 1)")
 	})
 	t.Run("call-with-values three args", func(t *testing.T) {
-		runSchemeCodeExpectError(t, "(call-with-values 1 2 3)")
+		testhelpers.RunSchemeCodeExpectError(t, "(call-with-values 1 2 3)")
 	})
 }

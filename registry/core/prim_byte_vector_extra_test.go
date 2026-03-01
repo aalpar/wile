@@ -17,6 +17,8 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
+
 	qt "github.com/frankban/quicktest"
 )
 
@@ -109,7 +111,7 @@ func TestBytevectorCopyBang(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result.SchemeString(), qt.Equals, tc.expectedOutput)
 		})
@@ -171,7 +173,7 @@ func TestBytevectorCopyBangErrors(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+			_, err := testhelpers.RunSchemeCode(t, tc.code)
 			if tc.expectError {
 				qt.Assert(t, err, qt.Not(qt.IsNil))
 			} else {
@@ -186,7 +188,7 @@ func TestBytevectorCopyBangReturnValue(t *testing.T) {
 	               (from (bytevector 1 2 3)))
 	          (bytevector-copy! to 0 from))`
 
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.IsVoid(), qt.IsTrue, qt.Commentf("bytevector-copy! should return void"))
 }

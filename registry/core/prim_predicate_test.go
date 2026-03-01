@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -198,7 +199,7 @@ func TestTypePredicates(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -278,7 +279,7 @@ func TestNumericPredicates(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})

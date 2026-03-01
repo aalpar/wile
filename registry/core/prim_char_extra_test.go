@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -53,7 +54,7 @@ func TestCharPredicate(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -89,7 +90,7 @@ func TestCharAlphabetic(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -125,7 +126,7 @@ func TestCharNumeric(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -166,7 +167,7 @@ func TestCharWhitespace(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -202,7 +203,7 @@ func TestCharUpperCase(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -238,7 +239,7 @@ func TestCharLowerCase(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -274,7 +275,7 @@ func TestCharUpcase(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -310,7 +311,7 @@ func TestCharDowncase(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -346,7 +347,7 @@ func TestCharFoldcase(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -387,7 +388,7 @@ func TestDigitValue(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -451,7 +452,7 @@ func TestCharFoldcaseUnicode(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -551,7 +552,7 @@ func TestDigitValueUnicode(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -679,7 +680,7 @@ func TestCharAlphabeticUnicode(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -758,7 +759,7 @@ func TestCharNumericUnicode(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -845,7 +846,7 @@ func TestCharWhitespaceUnicode(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -946,7 +947,7 @@ func TestCharUpperCaseUnicode(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -1047,7 +1048,7 @@ func TestCharLowerCaseUnicode(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -1109,7 +1110,7 @@ func TestCharCaseConversionTurkish(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -1174,7 +1175,7 @@ func TestCharCaseConversionGermanSS(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})

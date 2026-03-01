@@ -2,7 +2,11 @@
 
 ## Test Helpers
 
-`registry/core/test_helpers_test.go`: `runSchemeCode(t, code)`, `runSchemeCodeExpectError`, `runSchemeCodeExpectTrue`, `runSchemeCodeExpectFalse`, `runSchemeCodeWithTimeout`, `runSchemeCodeWithEnv`.
+`registry/testhelpers/`: All shared test helpers live here. Two files:
+- `helpers.go`: `RunSchemeCode`, `RunSchemeCodeWithTimeout`, `RunSchemeCodeWithContext`, `RunSchemeCodeExpectError`, `RunSchemeCodeExpectTrue`, `RunSchemeCodeExpectFalse`, `SchemeCodeTestCase`, `SchemeCodeErrorTestCase`
+- `pipeline_helpers.go`: `RunProgramAST`, `RunProgramASTWithEnv`, `RunSchemeCodeWithEnv`, `RunSchemeCodeWithEnvAndContext`
+
+All helpers use the internal pipeline (`bootstrap.NewTopLevelEnvironmentFrameTiny` → parser → expander → compiler → VM) with full extension coverage.
 
 Root tests (`wile_test.go`): `NewEngine()` directly. Assertions: `qt` (quicktest).
 
@@ -34,19 +38,14 @@ There are two standard table shapes in this project:
 **1. Success cases** — Scheme code that should produce a specific value:
 ```go
 func TestFoo(t *testing.T) {
-    c := qt.New(t)
-    engine := newEngine(t)
-    tcs := []struct {
-        name string
-        code string
-        want values.Value
-    }{
-        {"descriptive name", `(foo ...)`, values.TrueValue},
+    tcs := []testhelpers.SchemeCodeTestCase{
+        {Name: "descriptive name", Code: `(foo ...)`, Expected: values.TrueValue},
     }
     for _, tc := range tcs {
-        t.Run(tc.name, func(t *testing.T) {
-            result := runSchemeCode(t, tc.code)
-            c.Assert(result.Internal(), qt.Equals, tc.want)
+        t.Run(tc.Name, func(t *testing.T) {
+            result, err := testhelpers.RunSchemeCode(t, tc.Code)
+            qt.Assert(t, err, qt.IsNil)
+            qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
         })
     }
 }
@@ -55,17 +54,14 @@ func TestFoo(t *testing.T) {
 **2. Error cases** — Scheme code that should produce an error:
 ```go
 func TestFooErrors(t *testing.T) {
-    engine := newEngine(t)
-    tcs := []struct {
-        name string
-        code string
-    }{
-        {"wrong type", `(foo "not-a-number")`},
-        {"wrong arity", `(foo 1 2 3)`},
+    tcs := []testhelpers.SchemeCodeErrorTestCase{
+        {Name: "wrong type", Code: `(foo "not-a-number")`},
+        {Name: "wrong arity", Code: `(foo 1 2 3)`},
     }
     for _, tc := range tcs {
-        t.Run(tc.name, func(t *testing.T) {
-            runSchemeCodeExpectError(t, tc.code)
+        t.Run(tc.Name, func(t *testing.T) {
+            _, err := testhelpers.RunSchemeCode(t, tc.Code)
+            qt.Assert(t, err, qt.IsNotNil)
         })
     }
 }

@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -26,7 +27,7 @@ import (
 
 func TestDisplayVsWriteString(t *testing.T) {
 	// display should output without quotes
-	displayResult, err := runSchemeCode(t, `
+	displayResult, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(display "hello" p)
 			(get-output-string p))
@@ -37,7 +38,7 @@ func TestDisplayVsWriteString(t *testing.T) {
 	qt.Assert(t, displayStr.Value, qt.Equals, "hello")
 
 	// write should output with quotes
-	writeResult, err := runSchemeCode(t, `
+	writeResult, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(write "hello" p)
 			(get-output-string p))
@@ -50,7 +51,7 @@ func TestDisplayVsWriteString(t *testing.T) {
 
 func TestDisplayVsWriteCharacter(t *testing.T) {
 	// display should output the character directly
-	displayResult, err := runSchemeCode(t, `
+	displayResult, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(display #\A p)
 			(get-output-string p))
@@ -61,7 +62,7 @@ func TestDisplayVsWriteCharacter(t *testing.T) {
 	qt.Assert(t, displayStr.Value, qt.Equals, "A")
 
 	// write should output in character notation
-	writeResult, err := runSchemeCode(t, `
+	writeResult, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(write #\A p)
 			(get-output-string p))

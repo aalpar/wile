@@ -19,148 +19,106 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 )
 
 func TestHashtable_MakeAndPredicate(t *testing.T) {
 	c := qt.New(t)
-	tcs := []schemeCodeTestCase{
-		{"make-hashtable returns hashtable", `(hashtable? (make-hashtable))`, values.TrueValue},
-		{"integer is not hashtable", `(hashtable? 42)`, values.FalseValue},
-		{"string is not hashtable", `(hashtable? "hello")`, values.FalseValue},
-		{"pair is not hashtable", `(hashtable? '(1 2))`, values.FalseValue},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "make-hashtable returns hashtable", Code: `(hashtable? (make-hashtable))`, Expected: values.TrueValue},
+		{Name: "integer is not hashtable", Code: `(hashtable? 42)`, Expected: values.FalseValue},
+		{Name: "string is not hashtable", Code: `(hashtable? "hello")`, Expected: values.FalseValue},
+		{Name: "pair is not hashtable", Code: `(hashtable? '(1 2))`, Expected: values.FalseValue},
 	}
 	for _, tc := range tcs {
-		c.Run(tc.name, func(c *qt.C) {
-			result, err := runSchemeCode(t, tc.code)
+		c.Run(tc.Name, func(c *qt.C) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, valuestest.SchemeEquals, tc.expected)
+			c.Assert(result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestHashtable_SetAndRef(t *testing.T) {
 	c := qt.New(t)
-	tcs := []schemeCodeTestCase{
-		{
-			"set and ref round-trip",
-			`(let ((ht (make-hashtable)))
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "set and ref round-trip", Code: `(let ((ht (make-hashtable)))
 			   (hashtable-set! ht 'key 42)
-			   (hashtable-ref ht 'key))`,
-			values.NewInteger(42),
-		},
-		{
-			"ref with default on missing key",
-			`(let ((ht (make-hashtable)))
-			   (hashtable-ref ht 'missing 99))`,
-			values.NewInteger(99),
-		},
-		{
-			"integer key",
-			`(let ((ht (make-hashtable)))
+			   (hashtable-ref ht 'key))`, Expected: values.NewInteger(42)},
+		{Name: "ref with default on missing key", Code: `(let ((ht (make-hashtable)))
+			   (hashtable-ref ht 'missing 99))`, Expected: values.NewInteger(99)},
+		{Name: "integer key", Code: `(let ((ht (make-hashtable)))
 			   (hashtable-set! ht 1 "one")
-			   (hashtable-ref ht 1))`,
-			values.NewString("one"),
-		},
-		{
-			"string key",
-			`(let ((ht (make-hashtable)))
+			   (hashtable-ref ht 1))`, Expected: values.NewString("one")},
+		{Name: "string key", Code: `(let ((ht (make-hashtable)))
 			   (hashtable-set! ht "key" 100)
-			   (hashtable-ref ht "key"))`,
-			values.NewInteger(100),
-		},
-		{
-			"boolean key",
-			`(let ((ht (make-hashtable)))
+			   (hashtable-ref ht "key"))`, Expected: values.NewInteger(100)},
+		{Name: "boolean key", Code: `(let ((ht (make-hashtable)))
 			   (hashtable-set! ht #t "yes")
-			   (hashtable-ref ht #t))`,
-			values.NewString("yes"),
-		},
-		{
-			"overwrite existing key",
-			`(let ((ht (make-hashtable)))
+			   (hashtable-ref ht #t))`, Expected: values.NewString("yes")},
+		{Name: "overwrite existing key", Code: `(let ((ht (make-hashtable)))
 			   (hashtable-set! ht 'key 1)
 			   (hashtable-set! ht 'key 2)
-			   (hashtable-ref ht 'key))`,
-			values.NewInteger(2),
-		},
+			   (hashtable-ref ht 'key))`, Expected: values.NewInteger(2)},
 	}
 	for _, tc := range tcs {
-		c.Run(tc.name, func(c *qt.C) {
-			result, err := runSchemeCode(t, tc.code)
+		c.Run(tc.Name, func(c *qt.C) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, valuestest.SchemeEquals, tc.expected)
+			c.Assert(result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestHashtable_RefErrorOnMissing(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{
-			"ref errors on missing key without default",
-			`(let ((ht (make-hashtable)))
-			   (hashtable-ref ht 'missing))`,
-		},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "ref errors on missing key without default", Code: `(let ((ht (make-hashtable)))
+			   (hashtable-ref ht 'missing))`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			testhelpers.RunSchemeCodeExpectError(t, tc.Code)
 		})
 	}
 }
 
 func TestHashtable_Delete(t *testing.T) {
 	c := qt.New(t)
-	tcs := []schemeCodeTestCase{
-		{
-			"delete removes key",
-			`(let ((ht (make-hashtable)))
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "delete removes key", Code: `(let ((ht (make-hashtable)))
 			   (hashtable-set! ht 'key 42)
 			   (hashtable-delete! ht 'key)
-			   (hashtable-size ht))`,
-			values.NewInteger(0),
-		},
-		{
-			"delete non-existent key is no-op",
-			`(let ((ht (make-hashtable)))
+			   (hashtable-size ht))`, Expected: values.NewInteger(0)},
+		{Name: "delete non-existent key is no-op", Code: `(let ((ht (make-hashtable)))
 			   (hashtable-delete! ht 'missing)
-			   (hashtable-size ht))`,
-			values.NewInteger(0),
-		},
+			   (hashtable-size ht))`, Expected: values.NewInteger(0)},
 	}
 	for _, tc := range tcs {
-		c.Run(tc.name, func(c *qt.C) {
-			result, err := runSchemeCode(t, tc.code)
+		c.Run(tc.Name, func(c *qt.C) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, valuestest.SchemeEquals, tc.expected)
+			c.Assert(result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestHashtable_Size(t *testing.T) {
 	c := qt.New(t)
-	tcs := []schemeCodeTestCase{
-		{
-			"empty hashtable size",
-			`(hashtable-size (make-hashtable))`,
-			values.NewInteger(0),
-		},
-		{
-			"size after inserts",
-			`(let ((ht (make-hashtable)))
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "empty hashtable size", Code: `(hashtable-size (make-hashtable))`, Expected: values.NewInteger(0)},
+		{Name: "size after inserts", Code: `(let ((ht (make-hashtable)))
 			   (hashtable-set! ht 'a 1)
 			   (hashtable-set! ht 'b 2)
 			   (hashtable-set! ht 'c 3)
-			   (hashtable-size ht))`,
-			values.NewInteger(3),
-		},
+			   (hashtable-size ht))`, Expected: values.NewInteger(3)},
 	}
 	for _, tc := range tcs {
-		c.Run(tc.name, func(c *qt.C) {
-			result, err := runSchemeCode(t, tc.code)
+		c.Run(tc.Name, func(c *qt.C) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(result, valuestest.SchemeEquals, tc.expected)
+			c.Assert(result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -169,7 +127,7 @@ func TestHashtable_KeysAndValues(t *testing.T) {
 	c := qt.New(t)
 
 	// Keys returns a list of keys
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((ht (make-hashtable)))
 		  (hashtable-set! ht 'only 1)
 		  (car (hashtable-keys ht)))`)
@@ -177,7 +135,7 @@ func TestHashtable_KeysAndValues(t *testing.T) {
 	c.Assert(result, valuestest.SchemeEquals, values.NewSymbol("only"))
 
 	// Values returns a list of values
-	result, err = runSchemeCode(t, `
+	result, err = testhelpers.RunSchemeCode(t, `
 		(let ((ht (make-hashtable)))
 		  (hashtable-set! ht 'only 99)
 		  (car (hashtable-values ht)))`)
@@ -185,11 +143,11 @@ func TestHashtable_KeysAndValues(t *testing.T) {
 	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(99))
 
 	// Empty hashtable returns empty lists
-	result, err = runSchemeCode(t, `(null? (hashtable-keys (make-hashtable)))`)
+	result, err = testhelpers.RunSchemeCode(t, `(null? (hashtable-keys (make-hashtable)))`)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, valuestest.SchemeEquals, values.TrueValue)
 
-	result, err = runSchemeCode(t, `(null? (hashtable-values (make-hashtable)))`)
+	result, err = testhelpers.RunSchemeCode(t, `(null? (hashtable-values (make-hashtable)))`)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, valuestest.SchemeEquals, values.TrueValue)
 }
@@ -198,7 +156,7 @@ func TestHashtable_Copy(t *testing.T) {
 	c := qt.New(t)
 
 	// Copy is independent
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((ht (make-hashtable)))
 		  (hashtable-set! ht 'a 1)
 		  (let ((cp (hashtable-copy ht)))
@@ -208,7 +166,7 @@ func TestHashtable_Copy(t *testing.T) {
 	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(1))
 
 	// Copy preserves content
-	result, err = runSchemeCode(t, `
+	result, err = testhelpers.RunSchemeCode(t, `
 		(let ((ht (make-hashtable)))
 		  (hashtable-set! ht 'a 1)
 		  (let ((cp (hashtable-copy ht)))
@@ -219,7 +177,7 @@ func TestHashtable_Copy(t *testing.T) {
 
 func TestHashtable_Clear(t *testing.T) {
 	c := qt.New(t)
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((ht (make-hashtable)))
 		  (hashtable-set! ht 'a 1)
 		  (hashtable-set! ht 'b 2)
@@ -233,7 +191,7 @@ func TestHashtable_EqualQ(t *testing.T) {
 	c := qt.New(t)
 
 	// equal? on identical content
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((a (make-hashtable))
 		      (b (make-hashtable)))
 		  (hashtable-set! a 'x 1)
@@ -243,7 +201,7 @@ func TestHashtable_EqualQ(t *testing.T) {
 	c.Assert(result, valuestest.SchemeEquals, values.TrueValue)
 
 	// equal? on different content
-	result, err = runSchemeCode(t, `
+	result, err = testhelpers.RunSchemeCode(t, `
 		(let ((a (make-hashtable))
 		      (b (make-hashtable)))
 		  (hashtable-set! a 'x 1)
@@ -254,39 +212,33 @@ func TestHashtable_EqualQ(t *testing.T) {
 }
 
 func TestHashtable_TypeErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{"hashtable-ref on non-hashtable", `(hashtable-ref 42 'key)`},
-		{"hashtable-set! on non-hashtable", `(hashtable-set! 42 'key 1)`},
-		{"hashtable-delete! on non-hashtable", `(hashtable-delete! 42 'key)`},
-		{"hashtable-keys on non-hashtable", `(hashtable-keys 42)`},
-		{"hashtable-values on non-hashtable", `(hashtable-values 42)`},
-		{"hashtable-size on non-hashtable", `(hashtable-size 42)`},
-		{"hashtable-copy on non-hashtable", `(hashtable-copy 42)`},
-		{"hashtable-clear! on non-hashtable", `(hashtable-clear! 42)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "hashtable-ref on non-hashtable", Code: `(hashtable-ref 42 'key)`},
+		{Name: "hashtable-set! on non-hashtable", Code: `(hashtable-set! 42 'key 1)`},
+		{Name: "hashtable-delete! on non-hashtable", Code: `(hashtable-delete! 42 'key)`},
+		{Name: "hashtable-keys on non-hashtable", Code: `(hashtable-keys 42)`},
+		{Name: "hashtable-values on non-hashtable", Code: `(hashtable-values 42)`},
+		{Name: "hashtable-size on non-hashtable", Code: `(hashtable-size 42)`},
+		{Name: "hashtable-copy on non-hashtable", Code: `(hashtable-copy 42)`},
+		{Name: "hashtable-clear! on non-hashtable", Code: `(hashtable-clear! 42)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			testhelpers.RunSchemeCodeExpectError(t, tc.Code)
 		})
 	}
 }
 
 func TestHashtable_NonComparableKeyError(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{
-			"set with non-comparable key",
-			`(let ((ht (make-hashtable)))
-			   (hashtable-set! ht '(1 2) "val"))`,
-		},
-		{
-			"ref with non-comparable key",
-			`(let ((ht (make-hashtable)))
-			   (hashtable-ref ht '(1 2)))`,
-		},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "set with non-comparable key", Code: `(let ((ht (make-hashtable)))
+			   (hashtable-set! ht '(1 2) "val"))`},
+		{Name: "ref with non-comparable key", Code: `(let ((ht (make-hashtable)))
+			   (hashtable-ref ht '(1 2)))`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			testhelpers.RunSchemeCodeExpectError(t, tc.Code)
 		})
 	}
 }

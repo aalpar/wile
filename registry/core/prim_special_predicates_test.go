@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -66,7 +67,7 @@ func TestFiniteQWithRationalAndComplex(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})
@@ -107,7 +108,7 @@ func TestInfiniteQWithRationalAndComplex(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})
@@ -148,7 +149,7 @@ func TestNanQWithRationalAndComplex(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.Equals, tc.out)
 		})
@@ -177,7 +178,7 @@ func TestSpecialPredicates_TypeErrors(t *testing.T) {
 	for _, pred := range predicates {
 		for _, ba := range badArgs {
 			t.Run(pred+" "+ba.label, func(t *testing.T) {
-				runSchemeCodeExpectError(t, "("+pred+" "+ba.arg+")")
+				testhelpers.RunSchemeCodeExpectError(t, "("+pred+" "+ba.arg+")")
 			})
 		}
 	}
@@ -253,7 +254,7 @@ func TestRealPartWithVariousTypes(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})

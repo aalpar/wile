@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -65,7 +66,7 @@ func TestWithExceptionHandler(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -96,7 +97,7 @@ func TestWithExceptionHandlerContinuable(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -123,7 +124,7 @@ func TestWithExceptionHandlerNested(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -134,7 +135,7 @@ func TestWithExceptionHandlerNonContinuable(t *testing.T) {
 	// Non-continuable exceptions (from raise) require the handler to
 	// not return. If it returns, an error is raised.
 	// We test that raise is non-continuable by verifying the error.
-	_, err := runSchemeCode(t, `
+	_, err := testhelpers.RunSchemeCode(t, `
 		(with-exception-handler
 			(lambda (e) 'tried-to-return)
 			(lambda () (raise 'error)))
@@ -143,16 +144,16 @@ func TestWithExceptionHandlerNonContinuable(t *testing.T) {
 }
 
 func TestWithExceptionHandlerErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "thunk is not a procedure",
-			code: `(with-exception-handler (lambda (e) e) 42)`,
+			Name: "thunk is not a procedure",
+			Code: `(with-exception-handler (lambda (e) e) 42)`,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -165,7 +166,7 @@ func TestWithExceptionHandlerErrors(t *testing.T) {
 func TestRaise(t *testing.T) {
 	// raise creates a non-continuable exception
 	// The handler cannot return from a non-continuable exception
-	_, err := runSchemeCode(t, `
+	_, err := testhelpers.RunSchemeCode(t, `
 		(with-exception-handler
 			(lambda (e) e)
 			(lambda () (raise 'error)))
@@ -176,7 +177,7 @@ func TestRaise(t *testing.T) {
 
 func TestRaiseWithCallCC(t *testing.T) {
 	// Use call/cc to escape from non-continuable exception handler
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(call/cc
 			(lambda (escape)
 				(with-exception-handler
@@ -236,7 +237,7 @@ func TestRaiseContinuable(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -277,7 +278,7 @@ func TestError(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -286,7 +287,7 @@ func TestError(t *testing.T) {
 
 func TestErrorWithIrritants(t *testing.T) {
 	// Test error with irritants using call/cc to escape
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(call/cc
 			(lambda (escape)
 				(with-exception-handler
@@ -299,20 +300,20 @@ func TestErrorWithIrritants(t *testing.T) {
 }
 
 func TestErrorErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "error with non-string message",
-			code: `(error 42)`,
+			Name: "error with non-string message",
+			Code: `(error 42)`,
 		},
 		{
-			name: "error with symbol message",
-			code: `(error 'not-a-string)`,
+			Name: "error with symbol message",
+			Code: `(error 'not-a-string)`,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -376,7 +377,7 @@ func TestErrorObjectQ(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -415,7 +416,7 @@ func TestErrorObjectMessage(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -423,20 +424,20 @@ func TestErrorObjectMessage(t *testing.T) {
 }
 
 func TestErrorObjectMessageErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "error-object-message on integer",
-			code: `(error-object-message 42)`,
+			Name: "error-object-message on integer",
+			Code: `(error-object-message 42)`,
 		},
 		{
-			name: "error-object-message on string",
-			code: `(error-object-message "hello")`,
+			Name: "error-object-message on string",
+			Code: `(error-object-message "hello")`,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -483,7 +484,7 @@ func TestErrorObjectIrritants(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
@@ -491,24 +492,24 @@ func TestErrorObjectIrritants(t *testing.T) {
 }
 
 func TestErrorObjectIrritantsErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "error-object-irritants on integer",
-			code: `(error-object-irritants 42)`,
+			Name: "error-object-irritants on integer",
+			Code: `(error-object-irritants 42)`,
 		},
 		{
-			name: "error-object-irritants on string",
-			code: `(error-object-irritants "hello")`,
+			Name: "error-object-irritants on string",
+			Code: `(error-object-irritants "hello")`,
 		},
 		{
-			name: "error-object-irritants on list",
-			code: `(error-object-irritants '(1 2 3))`,
+			Name: "error-object-irritants on list",
+			Code: `(error-object-irritants '(1 2 3))`,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -542,7 +543,7 @@ func TestRaiseNonContinuableR7RS(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -583,7 +584,7 @@ func TestRaiseContinuableR7RS(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -660,7 +661,7 @@ func TestRaiseContinuableResumption(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -693,7 +694,7 @@ func TestExceptionHandlerChain(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -728,7 +729,7 @@ func TestErrorR7RS(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -814,7 +815,7 @@ func TestGuard(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -851,7 +852,7 @@ func TestGuardArrowClause(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -891,7 +892,7 @@ func TestGuardReraise(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -929,7 +930,7 @@ func TestGuardWithError(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -972,7 +973,7 @@ func TestGuardNested(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -1084,7 +1085,7 @@ func TestExceptionInHandler(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -1210,7 +1211,7 @@ func TestGuardDeeplyNested(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -1243,7 +1244,7 @@ func TestFileErrorPredicate(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -1276,7 +1277,7 @@ func TestReadErrorPredicate(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})

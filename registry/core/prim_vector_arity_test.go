@@ -14,7 +14,11 @@
 
 package core_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/aalpar/wile/registry/testhelpers"
+)
 
 // TestVectors_ArityErrors verifies that vector primitives reject wrong
 // argument counts. The VM enforces arity automatically via
@@ -42,7 +46,7 @@ func TestVectors_ArityErrors(t *testing.T) {
 	}
 	for _, tc := range fixedArityErrors {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 
@@ -58,7 +62,7 @@ func TestVectors_ArityErrors(t *testing.T) {
 	}
 	for _, name := range variadicMin1 {
 		t.Run(name+" zero args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+")")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+")")
 		})
 	}
 
@@ -74,7 +78,7 @@ func TestVectors_ArityErrors(t *testing.T) {
 	}
 	for _, tc := range variadicMin2Errors {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }

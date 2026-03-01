@@ -20,13 +20,14 @@ import (
 
 	"github.com/aalpar/wile/internal/bootstrap"
 	"github.com/aalpar/wile/internal/syntax"
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
 )
 
 func TestGenerateTemporaries_CorrectCount(t *testing.T) {
-	result, err := runSchemeCode(t, "(generate-temporaries '(a b c))")
+	result, err := testhelpers.RunSchemeCode(t, "(generate-temporaries '(a b c))")
 	qt.Assert(t, err, qt.IsNil)
 
 	pair, ok := result.(*values.Pair)
@@ -46,7 +47,7 @@ func TestGenerateTemporaries_CorrectCount(t *testing.T) {
 }
 
 func TestGenerateTemporaries_ReturnsSyntaxSymbols(t *testing.T) {
-	result, err := runSchemeCode(t, "(generate-temporaries '(x))")
+	result, err := testhelpers.RunSchemeCode(t, "(generate-temporaries '(x))")
 	qt.Assert(t, err, qt.IsNil)
 
 	pair, ok := result.(*values.Pair)
@@ -58,13 +59,13 @@ func TestGenerateTemporaries_ReturnsSyntaxSymbols(t *testing.T) {
 }
 
 func TestGenerateTemporaries_EmptyList(t *testing.T) {
-	result, err := runSchemeCode(t, "(generate-temporaries '())")
+	result, err := testhelpers.RunSchemeCode(t, "(generate-temporaries '())")
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, values.IsEmptyList(result), qt.IsTrue)
 }
 
 func TestGenerateTemporaries_AllUnique(t *testing.T) {
-	result, err := runSchemeCode(t, "(generate-temporaries '(a b c d e))")
+	result, err := testhelpers.RunSchemeCode(t, "(generate-temporaries '(a b c d e))")
 	qt.Assert(t, err, qt.IsNil)
 
 	// Collect all symbol names
@@ -86,10 +87,10 @@ func TestGenerateTemporaries_AllUnique(t *testing.T) {
 }
 
 func TestGenerateTemporaries_UniqueAcrossCalls(t *testing.T) {
-	result1, err := runSchemeCode(t, "(generate-temporaries '(a b))")
+	result1, err := testhelpers.RunSchemeCode(t, "(generate-temporaries '(a b))")
 	qt.Assert(t, err, qt.IsNil)
 
-	result2, err := runSchemeCode(t, "(generate-temporaries '(x y))")
+	result2, err := testhelpers.RunSchemeCode(t, "(generate-temporaries '(x y))")
 	qt.Assert(t, err, qt.IsNil)
 
 	// Collect names from both results
@@ -123,7 +124,7 @@ func TestGenerateTemporaries_UniqueAcrossCalls(t *testing.T) {
 }
 
 func TestGenerateTemporaries_GensymPrefix(t *testing.T) {
-	result, err := runSchemeCode(t, "(generate-temporaries '(a))")
+	result, err := testhelpers.RunSchemeCode(t, "(generate-temporaries '(a))")
 	qt.Assert(t, err, qt.IsNil)
 
 	pair := result.(*values.Pair)

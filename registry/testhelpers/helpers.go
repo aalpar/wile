@@ -13,6 +13,10 @@
 // limitations under the License.
 
 // Package testhelpers provides shared test infrastructure for Scheme primitive tests.
+//
+// All functions use the internal pipeline (parser → expander → compiler → VM)
+// with a full environment including all extensions. This matches the environment
+// available in the standalone scheme binary.
 package testhelpers
 
 import (
@@ -20,22 +24,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aalpar/wile"
+	"github.com/aalpar/wile/internal/bootstrap"
 	"github.com/aalpar/wile/values"
 )
 
-// RunSchemeCode parses and runs Scheme source code string using the default Engine.
+// RunSchemeCode parses and runs Scheme source code string using a fresh
+// environment with all core primitives and extensions loaded.
 func RunSchemeCode(t *testing.T, code string) (values.Value, error) {
 	t.Helper()
-	engine, err := wile.NewEngine(context.Background())
+	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
 	if err != nil {
 		return nil, err
 	}
-	result, err := engine.Eval(context.Background(), code)
-	if err != nil {
-		return nil, err
-	}
-	return unwrapValue(result), nil
+	return RunSchemeCodeWithEnv(t, env, code)
 }
 
 // SchemeCodeTestCase is the common struct for table-driven tests that run Scheme code
@@ -111,21 +112,9 @@ func RunSchemeCodeWithTimeout(t *testing.T, code string, timeout time.Duration) 
 // The context enables cancellation/timeout - the VM loop checks ctx.Done() on each iteration.
 func RunSchemeCodeWithContext(ctx context.Context, t *testing.T, code string) (values.Value, error) {
 	t.Helper()
-	engine, err := wile.NewEngine(context.Background())
+	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(ctx)
 	if err != nil {
 		return nil, err
 	}
-	result, err := engine.Eval(ctx, code)
-	if err != nil {
-		return nil, err
-	}
-	return unwrapValue(result), nil
-}
-
-// unwrapValue extracts the underlying values.Value from wile.Value.
-func unwrapValue(v wile.Value) values.Value {
-	if v == nil {
-		return nil
-	}
-	return v.Internal()
+	return RunSchemeCodeWithEnvAndContext(ctx, t, env, code)
 }

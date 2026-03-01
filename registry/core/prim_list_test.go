@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -28,18 +29,18 @@ import (
 // ============================================================================
 
 func TestCar(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"car of quoted list", `(car '(1 2 3))`, values.NewInteger(1)},
-		{"car of pair", `(car (cons 'a 'b))`, values.NewSymbol("a")},
-		{"car of single element list", `(car '(42))`, values.NewInteger(42)},
-		{"car of nested list", `(car '((1 2) (3 4)))`, values.List(values.NewInteger(1), values.NewInteger(2))},
-		{"car of list with mixed types", `(car '("hello" 1 #t))`, values.NewString("hello")},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "car of quoted list", Code: `(car '(1 2 3))`, Expected: values.NewInteger(1)},
+		{Name: "car of pair", Code: `(car (cons 'a 'b))`, Expected: values.NewSymbol("a")},
+		{Name: "car of single element list", Code: `(car '(42))`, Expected: values.NewInteger(42)},
+		{Name: "car of nested list", Code: `(car '((1 2) (3 4)))`, Expected: values.List(values.NewInteger(1), values.NewInteger(2))},
+		{Name: "car of list with mixed types", Code: `(car '("hello" 1 #t))`, Expected: values.NewString("hello")},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -58,24 +59,24 @@ func TestCar_Errors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
 
 func TestCdr(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"cdr of quoted list", `(cdr '(1 2 3))`, values.List(values.NewInteger(2), values.NewInteger(3))},
-		{"cdr of pair", `(cdr (cons 'a 'b))`, values.NewSymbol("b")},
-		{"cdr of single element list", `(cdr '(42))`, values.EmptyList},
-		{"cdr of two element list", `(cdr '(1 2))`, values.List(values.NewInteger(2))},
-		{"cdr of nested list", `(cdr '((1 2) (3 4)))`, values.List(values.List(values.NewInteger(3), values.NewInteger(4)))},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "cdr of quoted list", Code: `(cdr '(1 2 3))`, Expected: values.List(values.NewInteger(2), values.NewInteger(3))},
+		{Name: "cdr of pair", Code: `(cdr (cons 'a 'b))`, Expected: values.NewSymbol("b")},
+		{Name: "cdr of single element list", Code: `(cdr '(42))`, Expected: values.EmptyList},
+		{Name: "cdr of two element list", Code: `(cdr '(1 2))`, Expected: values.List(values.NewInteger(2))},
+		{Name: "cdr of nested list", Code: `(cdr '((1 2) (3 4)))`, Expected: values.List(values.List(values.NewInteger(3), values.NewInteger(4)))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -94,53 +95,51 @@ func TestCdr_Errors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
 
 func TestCons(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Building proper lists
-		{"cons two values", `(cons 1 2)`, values.NewCons(values.NewInteger(1), values.NewInteger(2))},
-		{"cons with empty list", `(cons 1 '())`, values.List(values.NewInteger(1))},
-		{"cons onto list", `(cons 1 '(2 3))`, values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))},
+		{Name: "cons two values", Code: `(cons 1 2)`, Expected: values.NewCons(values.NewInteger(1), values.NewInteger(2))},
+		{Name: "cons with empty list", Code: `(cons 1 '())`, Expected: values.List(values.NewInteger(1))},
+		{Name: "cons onto list", Code: `(cons 1 '(2 3))`, Expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))},
 
 		// Building improper lists
-		{"cons symbols", `(cons 'a 'b)`, values.NewCons(values.NewSymbol("a"), values.NewSymbol("b"))},
+		{Name: "cons symbols", Code: `(cons 'a 'b)`, Expected: values.NewCons(values.NewSymbol("a"), values.NewSymbol("b"))},
 
 		// Nested cons
-		{"nested cons", `(cons (cons 1 2) (cons 3 4))`,
-			values.NewCons(values.NewCons(values.NewInteger(1), values.NewInteger(2)),
-				values.NewCons(values.NewInteger(3), values.NewInteger(4)))},
+		{Name: "nested cons", Code: `(cons (cons 1 2) (cons 3 4))`, Expected: values.NewCons(values.NewCons(values.NewInteger(1), values.NewInteger(2)),
+			values.NewCons(values.NewInteger(3), values.NewInteger(4)))},
 
 		// Various types
-		{"cons string onto list", `(cons "hello" '())`, values.List(values.NewString("hello"))},
-		{"cons list onto list", `(cons '(1 2) '(3 4))`,
-			values.NewCons(values.List(values.NewInteger(1), values.NewInteger(2)),
-				values.List(values.NewInteger(3), values.NewInteger(4)))},
+		{Name: "cons string onto list", Code: `(cons "hello" '())`, Expected: values.List(values.NewString("hello"))},
+		{Name: "cons list onto list", Code: `(cons '(1 2) '(3 4))`, Expected: values.NewCons(values.List(values.NewInteger(1), values.NewInteger(2)),
+			values.List(values.NewInteger(3), values.NewInteger(4)))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestList(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"list with three elements", `(list 1 2 3)`, values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))},
-		{"list with no elements", `(list)`, values.EmptyList},
-		{"list with one element", `(list 'a)`, values.List(values.NewSymbol("a"))},
-		{"list with mixed types", `(list 1 "two" #t)`, values.List(values.NewInteger(1), values.NewString("two"), values.TrueValue)},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "list with three elements", Code: `(list 1 2 3)`, Expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))},
+		{Name: "list with no elements", Code: `(list)`, Expected: values.EmptyList},
+		{Name: "list with one element", Code: `(list 'a)`, Expected: values.List(values.NewSymbol("a"))},
+		{Name: "list with mixed types", Code: `(list 1 "two" #t)`, Expected: values.List(values.NewInteger(1), values.NewString("two"), values.TrueValue)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -150,51 +149,47 @@ func TestList(t *testing.T) {
 // ============================================================================
 
 func TestCar_ImproperList(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"car of dotted pair", `(car '(1 . 2))`, values.NewInteger(1)},
-		{"car of longer improper list", `(car '(a b . c))`, values.NewSymbol("a")},
-		{"car of nested improper pair", `(car '((1 . 2) 3))`,
-			values.NewCons(values.NewInteger(1), values.NewInteger(2))},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "car of dotted pair", Code: `(car '(1 . 2))`, Expected: values.NewInteger(1)},
+		{Name: "car of longer improper list", Code: `(car '(a b . c))`, Expected: values.NewSymbol("a")},
+		{Name: "car of nested improper pair", Code: `(car '((1 . 2) 3))`, Expected: values.NewCons(values.NewInteger(1), values.NewInteger(2))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestCdr_ImproperList(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"cdr of dotted pair", `(cdr '(1 . 2))`, values.NewInteger(2)},
-		{"cdr of longer improper list", `(cdr '(a b . c))`,
-			values.NewCons(values.NewSymbol("b"), values.NewSymbol("c"))},
-		{"cdr of two-element dotted", `(cdr '(x . y))`, values.NewSymbol("y")},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "cdr of dotted pair", Code: `(cdr '(1 . 2))`, Expected: values.NewInteger(2)},
+		{Name: "cdr of longer improper list", Code: `(cdr '(a b . c))`, Expected: values.NewCons(values.NewSymbol("b"), values.NewSymbol("c"))},
+		{Name: "cdr of two-element dotted", Code: `(cdr '(x . y))`, Expected: values.NewSymbol("y")},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestCons_ImproperList(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"cons onto improper list", `(cons 'a '(b . c))`,
-			values.NewCons(values.NewSymbol("a"),
-				values.NewCons(values.NewSymbol("b"), values.NewSymbol("c")))},
-		{"cons number onto dotted pair", `(cons 1 (cons 2 3))`,
-			values.NewCons(values.NewInteger(1),
-				values.NewCons(values.NewInteger(2), values.NewInteger(3)))},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "cons onto improper list", Code: `(cons 'a '(b . c))`, Expected: values.NewCons(values.NewSymbol("a"),
+			values.NewCons(values.NewSymbol("b"), values.NewSymbol("c")))},
+		{Name: "cons number onto dotted pair", Code: `(cons 1 (cons 2 3))`, Expected: values.NewCons(values.NewInteger(1),
+			values.NewCons(values.NewInteger(2), values.NewInteger(3)))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -204,35 +199,30 @@ func TestCons_ImproperList(t *testing.T) {
 // ============================================================================
 
 func TestSetCarBang_ImproperList(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"set-car! on dotted pair", `(let ((p (cons 1 2))) (set-car! p 10) p)`,
-			values.NewCons(values.NewInteger(10), values.NewInteger(2))},
-		{"set-car! preserves improper cdr", `(let ((p (cons 1 2))) (set-car! p 'x) (cdr p))`,
-			values.NewInteger(2)},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "set-car! on dotted pair", Code: `(let ((p (cons 1 2))) (set-car! p 10) p)`, Expected: values.NewCons(values.NewInteger(10), values.NewInteger(2))},
+		{Name: "set-car! preserves improper cdr", Code: `(let ((p (cons 1 2))) (set-car! p 'x) (cdr p))`, Expected: values.NewInteger(2)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestSetCdrBang_ImproperList(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"set-cdr! on dotted pair changes tail", `(let ((p (cons 1 2))) (set-cdr! p 3) p)`,
-			values.NewCons(values.NewInteger(1), values.NewInteger(3))},
-		{"set-cdr! converts improper to proper", `(let ((p (cons 1 2))) (set-cdr! p '()) p)`,
-			values.List(values.NewInteger(1))},
-		{"set-cdr! converts improper to different improper", `(let ((p (cons 1 2))) (set-cdr! p (cons 3 4)) p)`,
-			values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(3), values.NewInteger(4)))},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "set-cdr! on dotted pair changes tail", Code: `(let ((p (cons 1 2))) (set-cdr! p 3) p)`, Expected: values.NewCons(values.NewInteger(1), values.NewInteger(3))},
+		{Name: "set-cdr! converts improper to proper", Code: `(let ((p (cons 1 2))) (set-cdr! p '()) p)`, Expected: values.List(values.NewInteger(1))},
+		{Name: "set-cdr! converts improper to different improper", Code: `(let ((p (cons 1 2))) (set-cdr! p (cons 3 4)) p)`, Expected: values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(3), values.NewInteger(4)))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -242,15 +232,15 @@ func TestSetCdrBang_ImproperList(t *testing.T) {
 // ============================================================================
 
 func TestListRef_ImproperList(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"list-ref improper at index 0", `(list-ref '(a b . c) 0)`, values.NewSymbol("a")},
-		{"list-ref improper at index 1", `(list-ref '(a b . c) 1)`, values.NewSymbol("b")},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "list-ref improper at index 0", Code: `(list-ref '(a b . c) 0)`, Expected: values.NewSymbol("a")},
+		{Name: "list-ref improper at index 1", Code: `(list-ref '(a b . c) 1)`, Expected: values.NewSymbol("b")},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -264,7 +254,7 @@ func TestListRef_ImproperListErrors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
@@ -274,20 +264,17 @@ func TestListRef_ImproperListErrors(t *testing.T) {
 // ============================================================================
 
 func TestListTail_ImproperList(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"list-tail improper k=0", `(list-tail '(a b . c) 0)`,
-			values.NewCons(values.NewSymbol("a"),
-				values.NewCons(values.NewSymbol("b"), values.NewSymbol("c")))},
-		{"list-tail improper k=1", `(list-tail '(a b . c) 1)`,
-			values.NewCons(values.NewSymbol("b"), values.NewSymbol("c"))},
-		{"list-tail improper k=2 returns atom tail", `(list-tail '(a b . c) 2)`,
-			values.NewSymbol("c")},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "list-tail improper k=0", Code: `(list-tail '(a b . c) 0)`, Expected: values.NewCons(values.NewSymbol("a"),
+			values.NewCons(values.NewSymbol("b"), values.NewSymbol("c")))},
+		{Name: "list-tail improper k=1", Code: `(list-tail '(a b . c) 1)`, Expected: values.NewCons(values.NewSymbol("b"), values.NewSymbol("c"))},
+		{Name: "list-tail improper k=2 returns atom tail", Code: `(list-tail '(a b . c) 2)`, Expected: values.NewSymbol("c")},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -301,7 +288,7 @@ func TestListTail_ImproperListErrors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
@@ -311,17 +298,15 @@ func TestListTail_ImproperListErrors(t *testing.T) {
 // ============================================================================
 
 func TestListSetBang_ImproperList(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"list-set! improper at index 0", `(let ((lst (cons 'a (cons 'b 'c)))) (list-set! lst 0 'x) (car lst))`,
-			values.NewSymbol("x")},
-		{"list-set! improper at index 1", `(let ((lst (cons 'a (cons 'b 'c)))) (list-set! lst 1 'x) (cadr lst))`,
-			values.NewSymbol("x")},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "list-set! improper at index 0", Code: `(let ((lst (cons 'a (cons 'b 'c)))) (list-set! lst 0 'x) (car lst))`, Expected: values.NewSymbol("x")},
+		{Name: "list-set! improper at index 1", Code: `(let ((lst (cons 'a (cons 'b 'c)))) (list-set! lst 1 'x) (cadr lst))`, Expected: values.NewSymbol("x")},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -335,7 +320,7 @@ func TestListSetBang_ImproperListErrors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
@@ -345,15 +330,14 @@ func TestListSetBang_ImproperListErrors(t *testing.T) {
 // ============================================================================
 
 func TestMemq_ImproperList(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"memq finds element in improper list", `(memq 'b '(a b . c))`,
-			values.NewCons(values.NewSymbol("b"), values.NewSymbol("c"))},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "memq finds element in improper list", Code: `(memq 'b '(a b . c))`, Expected: values.NewCons(values.NewSymbol("b"), values.NewSymbol("c"))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -367,21 +351,20 @@ func TestMemq_ImproperListErrors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
 
 func TestMemv_ImproperList(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"memv finds integer in improper list", `(memv 2 '(1 2 . 3))`,
-			values.NewCons(values.NewInteger(2), values.NewInteger(3))},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "memv finds integer in improper list", Code: `(memv 2 '(1 2 . 3))`, Expected: values.NewCons(values.NewInteger(2), values.NewInteger(3))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -395,21 +378,20 @@ func TestMemv_ImproperListErrors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
 
 func TestMember_ImproperList(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"member finds element in improper list", `(member "b" '("a" "b" . "c"))`,
-			values.NewCons(values.NewString("b"), values.NewString("c"))},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "member finds element in improper list", Code: `(member "b" '("a" "b" . "c"))`, Expected: values.NewCons(values.NewString("b"), values.NewString("c"))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -423,7 +405,7 @@ func TestMember_ImproperListErrors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
@@ -433,17 +415,15 @@ func TestMember_ImproperListErrors(t *testing.T) {
 // ============================================================================
 
 func TestAssq_ImproperAlist(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"assq finds entry before improper tail", `(assq 'a '((a 1) (b 2) . c))`,
-			values.List(values.NewSymbol("a"), values.NewInteger(1))},
-		{"assq finds second entry before improper tail", `(assq 'b '((a 1) (b 2) . c))`,
-			values.List(values.NewSymbol("b"), values.NewInteger(2))},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "assq finds entry before improper tail", Code: `(assq 'a '((a 1) (b 2) . c))`, Expected: values.List(values.NewSymbol("a"), values.NewInteger(1))},
+		{Name: "assq finds second entry before improper tail", Code: `(assq 'b '((a 1) (b 2) . c))`, Expected: values.List(values.NewSymbol("b"), values.NewInteger(2))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -457,23 +437,21 @@ func TestAssq_ImproperAlistErrors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
 
 func TestAssv_ImproperAlist(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"assv finds entry before improper tail", `(assv 1 '((1 a) (2 b) . c))`,
-			values.List(values.NewInteger(1), values.NewSymbol("a"))},
-		{"assv finds second entry before improper tail", `(assv 2 '((1 a) (2 b) . c))`,
-			values.List(values.NewInteger(2), values.NewSymbol("b"))},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "assv finds entry before improper tail", Code: `(assv 1 '((1 a) (2 b) . c))`, Expected: values.List(values.NewInteger(1), values.NewSymbol("a"))},
+		{Name: "assv finds second entry before improper tail", Code: `(assv 2 '((1 a) (2 b) . c))`, Expected: values.List(values.NewInteger(2), values.NewSymbol("b"))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -487,23 +465,21 @@ func TestAssv_ImproperAlistErrors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
 
 func TestAssoc_ImproperAlist(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"assoc finds entry before improper tail", `(assoc "a" '(("a" 1) ("b" 2) . c))`,
-			values.List(values.NewString("a"), values.NewInteger(1))},
-		{"assoc finds second entry before improper tail", `(assoc "b" '(("a" 1) ("b" 2) . c))`,
-			values.List(values.NewString("b"), values.NewInteger(2))},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "assoc finds entry before improper tail", Code: `(assoc "a" '(("a" 1) ("b" 2) . c))`, Expected: values.List(values.NewString("a"), values.NewInteger(1))},
+		{Name: "assoc finds second entry before improper tail", Code: `(assoc "b" '(("a" 1) ("b" 2) . c))`, Expected: values.List(values.NewString("b"), values.NewInteger(2))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -517,7 +493,7 @@ func TestAssoc_ImproperAlistErrors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
@@ -537,7 +513,7 @@ func TestMemq_CircularList(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectTrue(t, tc.code)
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 		})
 	}
 }
@@ -553,7 +529,7 @@ func TestMemv_CircularList(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectTrue(t, tc.code)
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 		})
 	}
 }
@@ -569,7 +545,7 @@ func TestMember_CircularList(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectTrue(t, tc.code)
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 		})
 	}
 }
@@ -585,7 +561,7 @@ func TestAssq_CircularList(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectTrue(t, tc.code)
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 		})
 	}
 }
@@ -601,7 +577,7 @@ func TestAssv_CircularList(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectTrue(t, tc.code)
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 		})
 	}
 }
@@ -617,7 +593,7 @@ func TestAssoc_CircularList(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectTrue(t, tc.code)
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 		})
 	}
 }
@@ -643,7 +619,7 @@ func TestMemq_CircularListLasso(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectTrue(t, tc.code)
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 		})
 	}
 }
@@ -661,7 +637,7 @@ func TestMemv_CircularListLasso(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectTrue(t, tc.code)
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 		})
 	}
 }
@@ -679,7 +655,7 @@ func TestMember_CircularListLasso(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectTrue(t, tc.code)
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 		})
 	}
 }
@@ -699,7 +675,7 @@ func TestMemq_CircularListSmall(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectTrue(t, tc.code)
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 		})
 	}
 }
@@ -715,7 +691,7 @@ func TestMemv_CircularListSmall(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectTrue(t, tc.code)
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 		})
 	}
 }
@@ -731,7 +707,7 @@ func TestMember_CircularListSmall(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectTrue(t, tc.code)
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 		})
 	}
 }
@@ -753,7 +729,7 @@ func TestAssq_CircularAlistLasso(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectTrue(t, tc.code)
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 		})
 	}
 }
@@ -770,7 +746,7 @@ func TestAssv_CircularAlistLasso(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectTrue(t, tc.code)
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 		})
 	}
 }
@@ -787,7 +763,7 @@ func TestAssoc_CircularAlistLasso(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectTrue(t, tc.code)
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 		})
 	}
 }
@@ -807,7 +783,7 @@ func TestAssq_CircularAlistSmall(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectTrue(t, tc.code)
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 		})
 	}
 }
@@ -823,7 +799,7 @@ func TestAssv_CircularAlistSmall(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectTrue(t, tc.code)
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 		})
 	}
 }
@@ -839,7 +815,7 @@ func TestAssoc_CircularAlistSmall(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectTrue(t, tc.code)
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 		})
 	}
 }
@@ -870,7 +846,7 @@ func TestMember_CircularListCustomCompare(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectTrue(t, tc.code)
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 		})
 	}
 }
@@ -895,7 +871,7 @@ func TestAssoc_CircularAlistCustomCompare(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectTrue(t, tc.code)
+			testhelpers.RunSchemeCodeExpectTrue(t, tc.code)
 		})
 	}
 }
@@ -914,7 +890,7 @@ func TestAppend_ImproperListErrors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
@@ -924,16 +900,16 @@ func TestAppend_ImproperListErrors(t *testing.T) {
 // ============================================================================
 
 func TestCxR_ImproperList(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"cadr of improper list", `(cadr '(a b . c))`, values.NewSymbol("b")},
-		{"cddr of improper list returns atom", `(cddr '(a b . c))`, values.NewSymbol("c")},
-		{"cdar of nested improper", `(cdar '((1 . 2) 3))`, values.NewInteger(2)},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "cadr of improper list", Code: `(cadr '(a b . c))`, Expected: values.NewSymbol("b")},
+		{Name: "cddr of improper list returns atom", Code: `(cddr '(a b . c))`, Expected: values.NewSymbol("c")},
+		{Name: "cdar of nested improper", Code: `(cdar '((1 . 2) 3))`, Expected: values.NewInteger(2)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -948,7 +924,7 @@ func TestCxR_ImproperListErrors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
@@ -958,82 +934,82 @@ func TestCxR_ImproperListErrors(t *testing.T) {
 // ============================================================================
 
 func TestNullQ(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// True cases - only empty list returns #t
-		{"null? of empty list", `(null? '())`, values.TrueValue},
+		{Name: "null? of empty list", Code: `(null? '())`, Expected: values.TrueValue},
 
 		// False cases - everything else returns #f
-		{"null? of non-empty list", `(null? '(1 2 3))`, values.FalseValue},
-		{"null? of single element list", `(null? '(1))`, values.FalseValue},
-		{"null? of pair", `(null? (cons 1 2))`, values.FalseValue},
-		{"null? of integer", `(null? 42)`, values.FalseValue},
-		{"null? of string", `(null? "hello")`, values.FalseValue},
-		{"null? of symbol", `(null? 'foo)`, values.FalseValue},
-		{"null? of boolean true", `(null? #t)`, values.FalseValue},
-		{"null? of boolean false", `(null? #f)`, values.FalseValue},
-		{"null? of vector", `(null? #(1 2 3))`, values.FalseValue},
-		{"null? of character", `(null? #\a)`, values.FalseValue},
+		{Name: "null? of non-empty list", Code: `(null? '(1 2 3))`, Expected: values.FalseValue},
+		{Name: "null? of single element list", Code: `(null? '(1))`, Expected: values.FalseValue},
+		{Name: "null? of pair", Code: `(null? (cons 1 2))`, Expected: values.FalseValue},
+		{Name: "null? of integer", Code: `(null? 42)`, Expected: values.FalseValue},
+		{Name: "null? of string", Code: `(null? "hello")`, Expected: values.FalseValue},
+		{Name: "null? of symbol", Code: `(null? 'foo)`, Expected: values.FalseValue},
+		{Name: "null? of boolean true", Code: `(null? #t)`, Expected: values.FalseValue},
+		{Name: "null? of boolean false", Code: `(null? #f)`, Expected: values.FalseValue},
+		{Name: "null? of vector", Code: `(null? #(1 2 3))`, Expected: values.FalseValue},
+		{Name: "null? of character", Code: `(null? #\a)`, Expected: values.FalseValue},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestPairQ(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// True cases - pairs and non-empty lists
-		{"pair? of cons cell", `(pair? (cons 1 2))`, values.TrueValue},
-		{"pair? of non-empty list", `(pair? '(1 2 3))`, values.TrueValue},
-		{"pair? of single element list", `(pair? '(1))`, values.TrueValue},
-		{"pair? of nested list", `(pair? '((1 2) (3 4)))`, values.TrueValue},
-		{"pair? of improper list", `(pair? '(1 2 . 3))`, values.TrueValue},
+		{Name: "pair? of cons cell", Code: `(pair? (cons 1 2))`, Expected: values.TrueValue},
+		{Name: "pair? of non-empty list", Code: `(pair? '(1 2 3))`, Expected: values.TrueValue},
+		{Name: "pair? of single element list", Code: `(pair? '(1))`, Expected: values.TrueValue},
+		{Name: "pair? of nested list", Code: `(pair? '((1 2) (3 4)))`, Expected: values.TrueValue},
+		{Name: "pair? of improper list", Code: `(pair? '(1 2 . 3))`, Expected: values.TrueValue},
 
 		// False cases - empty list is NOT a pair
-		{"pair? of empty list", `(pair? '())`, values.FalseValue},
-		{"pair? of integer", `(pair? 42)`, values.FalseValue},
-		{"pair? of string", `(pair? "hello")`, values.FalseValue},
-		{"pair? of symbol", `(pair? 'foo)`, values.FalseValue},
-		{"pair? of boolean", `(pair? #t)`, values.FalseValue},
-		{"pair? of vector", `(pair? #(1 2 3))`, values.FalseValue},
-		{"pair? of character", `(pair? #\a)`, values.FalseValue},
+		{Name: "pair? of empty list", Code: `(pair? '())`, Expected: values.FalseValue},
+		{Name: "pair? of integer", Code: `(pair? 42)`, Expected: values.FalseValue},
+		{Name: "pair? of string", Code: `(pair? "hello")`, Expected: values.FalseValue},
+		{Name: "pair? of symbol", Code: `(pair? 'foo)`, Expected: values.FalseValue},
+		{Name: "pair? of boolean", Code: `(pair? #t)`, Expected: values.FalseValue},
+		{Name: "pair? of vector", Code: `(pair? #(1 2 3))`, Expected: values.FalseValue},
+		{Name: "pair? of character", Code: `(pair? #\a)`, Expected: values.FalseValue},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestListQ(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// True cases - proper lists
-		{"list? of empty list", `(list? '())`, values.TrueValue},
-		{"list? of single element list", `(list? '(1))`, values.TrueValue},
-		{"list? of multiple element list", `(list? '(1 2 3))`, values.TrueValue},
-		{"list? of nested list", `(list? '((1 2) (3 4)))`, values.TrueValue},
-		{"list? of list with mixed types", `(list? '(1 "two" #t))`, values.TrueValue},
+		{Name: "list? of empty list", Code: `(list? '())`, Expected: values.TrueValue},
+		{Name: "list? of single element list", Code: `(list? '(1))`, Expected: values.TrueValue},
+		{Name: "list? of multiple element list", Code: `(list? '(1 2 3))`, Expected: values.TrueValue},
+		{Name: "list? of nested list", Code: `(list? '((1 2) (3 4)))`, Expected: values.TrueValue},
+		{Name: "list? of list with mixed types", Code: `(list? '(1 "two" #t))`, Expected: values.TrueValue},
 
 		// False cases - improper lists and non-lists
-		{"list? of improper list", `(list? (cons 1 2))`, values.FalseValue},
-		{"list? of dotted list", `(list? '(1 2 . 3))`, values.FalseValue},
-		{"list? of integer", `(list? 42)`, values.FalseValue},
-		{"list? of string", `(list? "hello")`, values.FalseValue},
-		{"list? of symbol", `(list? 'foo)`, values.FalseValue},
-		{"list? of boolean", `(list? #t)`, values.FalseValue},
-		{"list? of vector", `(list? #(1 2 3))`, values.FalseValue},
-		{"list? of character", `(list? #\a)`, values.FalseValue},
+		{Name: "list? of improper list", Code: `(list? (cons 1 2))`, Expected: values.FalseValue},
+		{Name: "list? of dotted list", Code: `(list? '(1 2 . 3))`, Expected: values.FalseValue},
+		{Name: "list? of integer", Code: `(list? 42)`, Expected: values.FalseValue},
+		{Name: "list? of string", Code: `(list? "hello")`, Expected: values.FalseValue},
+		{Name: "list? of symbol", Code: `(list? 'foo)`, Expected: values.FalseValue},
+		{Name: "list? of boolean", Code: `(list? #t)`, Expected: values.FalseValue},
+		{Name: "list? of vector", Code: `(list? #(1 2 3))`, Expected: values.FalseValue},
+		{Name: "list? of character", Code: `(list? #\a)`, Expected: values.FalseValue},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -1043,20 +1019,18 @@ func TestListQ(t *testing.T) {
 // ============================================================================
 
 func TestSetCarBang(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"set-car! changes first element", `(let ((p (cons 1 2))) (set-car! p 10) (car p))`, values.NewInteger(10)},
-		{"set-car! on list", `(let ((lst (list 1 2 3))) (set-car! lst 10) lst)`,
-			values.List(values.NewInteger(10), values.NewInteger(2), values.NewInteger(3))},
-		{"set-car! with different type", `(let ((p (cons 1 2))) (set-car! p "hello") (car p))`, values.NewString("hello")},
-		{"set-car! preserves cdr", `(let ((p (cons 1 2))) (set-car! p 10) (cdr p))`, values.NewInteger(2)},
-		{"set-car! on nested list", `(let ((lst '((1 2) (3 4)))) (set-car! lst '(10 20)) (car lst))`,
-			values.List(values.NewInteger(10), values.NewInteger(20))},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "set-car! changes first element", Code: `(let ((p (cons 1 2))) (set-car! p 10) (car p))`, Expected: values.NewInteger(10)},
+		{Name: "set-car! on list", Code: `(let ((lst (list 1 2 3))) (set-car! lst 10) lst)`, Expected: values.List(values.NewInteger(10), values.NewInteger(2), values.NewInteger(3))},
+		{Name: "set-car! with different type", Code: `(let ((p (cons 1 2))) (set-car! p "hello") (car p))`, Expected: values.NewString("hello")},
+		{Name: "set-car! preserves cdr", Code: `(let ((p (cons 1 2))) (set-car! p 10) (cdr p))`, Expected: values.NewInteger(2)},
+		{Name: "set-car! on nested list", Code: `(let ((lst '((1 2) (3 4)))) (set-car! lst '(10 20)) (car lst))`, Expected: values.List(values.NewInteger(10), values.NewInteger(20))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -1072,27 +1046,24 @@ func TestSetCarBang_Errors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
 
 func TestSetCdrBang(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"set-cdr! changes cdr", `(let ((p (cons 1 2))) (set-cdr! p 20) (cdr p))`, values.NewInteger(20)},
-		{"set-cdr! on list shortens it", `(let ((lst (list 1 2 3))) (set-cdr! lst '()) lst)`,
-			values.List(values.NewInteger(1))},
-		{"set-cdr! extends list", `(let ((lst (list 1))) (set-cdr! lst '(2 3)) lst)`,
-			values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))},
-		{"set-cdr! preserves car", `(let ((p (cons 1 2))) (set-cdr! p 20) (car p))`, values.NewInteger(1)},
-		{"set-cdr! creates improper list", `(let ((lst (list 1 2))) (set-cdr! (cdr lst) 3) lst)`,
-			values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(2), values.NewInteger(3)))},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "set-cdr! changes cdr", Code: `(let ((p (cons 1 2))) (set-cdr! p 20) (cdr p))`, Expected: values.NewInteger(20)},
+		{Name: "set-cdr! on list shortens it", Code: `(let ((lst (list 1 2 3))) (set-cdr! lst '()) lst)`, Expected: values.List(values.NewInteger(1))},
+		{Name: "set-cdr! extends list", Code: `(let ((lst (list 1))) (set-cdr! lst '(2 3)) lst)`, Expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))},
+		{Name: "set-cdr! preserves car", Code: `(let ((p (cons 1 2))) (set-cdr! p 20) (car p))`, Expected: values.NewInteger(1)},
+		{Name: "set-cdr! creates improper list", Code: `(let ((lst (list 1 2))) (set-cdr! (cdr lst) 3) lst)`, Expected: values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(2), values.NewInteger(3)))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -1108,29 +1079,24 @@ func TestSetCdrBang_Errors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
 
 func TestListSetBang(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"list-set! at index 0", `(let ((lst (list 1 2 3))) (list-set! lst 0 10) lst)`,
-			values.List(values.NewInteger(10), values.NewInteger(2), values.NewInteger(3))},
-		{"list-set! at index 1", `(let ((lst (list 1 2 3))) (list-set! lst 1 20) lst)`,
-			values.List(values.NewInteger(1), values.NewInteger(20), values.NewInteger(3))},
-		{"list-set! at index 2", `(let ((lst (list 1 2 3))) (list-set! lst 2 30) lst)`,
-			values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(30))},
-		{"list-set! with string value", `(let ((lst (list 1 2 3))) (list-set! lst 1 "hello") lst)`,
-			values.List(values.NewInteger(1), values.NewString("hello"), values.NewInteger(3))},
-		{"list-set! with list value", `(let ((lst (list 1 2 3))) (list-set! lst 0 '(a b)) (car lst))`,
-			values.List(values.NewSymbol("a"), values.NewSymbol("b"))},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "list-set! at index 0", Code: `(let ((lst (list 1 2 3))) (list-set! lst 0 10) lst)`, Expected: values.List(values.NewInteger(10), values.NewInteger(2), values.NewInteger(3))},
+		{Name: "list-set! at index 1", Code: `(let ((lst (list 1 2 3))) (list-set! lst 1 20) lst)`, Expected: values.List(values.NewInteger(1), values.NewInteger(20), values.NewInteger(3))},
+		{Name: "list-set! at index 2", Code: `(let ((lst (list 1 2 3))) (list-set! lst 2 30) lst)`, Expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(30))},
+		{Name: "list-set! with string value", Code: `(let ((lst (list 1 2 3))) (list-set! lst 1 "hello") lst)`, Expected: values.List(values.NewInteger(1), values.NewString("hello"), values.NewInteger(3))},
+		{Name: "list-set! with list value", Code: `(let ((lst (list 1 2 3))) (list-set! lst 0 '(a b)) (car lst))`, Expected: values.List(values.NewSymbol("a"), values.NewSymbol("b"))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -1147,7 +1113,7 @@ func TestListSetBang_Errors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
@@ -1157,21 +1123,18 @@ func TestListSetBang_Errors(t *testing.T) {
 // ============================================================================
 
 func TestMakeList(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"make-list with fill", `(make-list 3 'a)`,
-			values.List(values.NewSymbol("a"), values.NewSymbol("a"), values.NewSymbol("a"))},
-		{"make-list with integer fill", `(make-list 4 0)`,
-			values.List(values.NewInteger(0), values.NewInteger(0), values.NewInteger(0), values.NewInteger(0))},
-		{"make-list single element", `(make-list 1 'x)`,
-			values.List(values.NewSymbol("x"))},
-		{"make-list zero length", `(make-list 0 'a)`, values.EmptyList},
-		{"make-list without fill", `(length (make-list 5))`, values.NewInteger(5)},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "make-list with fill", Code: `(make-list 3 'a)`, Expected: values.List(values.NewSymbol("a"), values.NewSymbol("a"), values.NewSymbol("a"))},
+		{Name: "make-list with integer fill", Code: `(make-list 4 0)`, Expected: values.List(values.NewInteger(0), values.NewInteger(0), values.NewInteger(0), values.NewInteger(0))},
+		{Name: "make-list single element", Code: `(make-list 1 'x)`, Expected: values.List(values.NewSymbol("x"))},
+		{Name: "make-list zero length", Code: `(make-list 0 'a)`, Expected: values.EmptyList},
+		{Name: "make-list without fill", Code: `(length (make-list 5))`, Expected: values.NewInteger(5)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -1186,44 +1149,36 @@ func TestMakeList_Errors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
 
 func TestAppend(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"append no arguments", `(append)`, values.EmptyList},
-		{"append single empty list", `(append '())`, values.EmptyList},
-		{"append single list", `(append '(1 2))`, values.List(values.NewInteger(1), values.NewInteger(2))},
-		{"append two lists", `(append '(1 2) '(3 4))`,
-			values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3), values.NewInteger(4))},
-		{"append three lists", `(append '(a) '(b) '(c))`,
-			values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"))},
-		{"append with empty list in middle", `(append '(1) '() '(2))`,
-			values.List(values.NewInteger(1), values.NewInteger(2))},
-		{"append with non-list as last argument", `(append '(1 2) 3)`,
-			values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(2), values.NewInteger(3)))},
-		{"append empty lists only", `(append '() '())`, values.EmptyList},
-		{"append nested lists", `(append '((1 2)) '((3 4)))`,
-			values.List(values.List(values.NewInteger(1), values.NewInteger(2)),
-				values.List(values.NewInteger(3), values.NewInteger(4)))},
-		{"append four lists", `(append '(1) '(2) '(3) '(4))`,
-			values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3), values.NewInteger(4))},
-		{"append lists with different types", `(append '(1 2) '("a" "b") '(#t #f))`,
-			values.List(values.NewInteger(1), values.NewInteger(2),
-				values.NewString("a"), values.NewString("b"),
-				values.TrueValue, values.FalseValue)},
-		{"append single element to list", `(append '(a b) 'c)`,
-			values.NewCons(values.NewSymbol("a"),
-				values.NewCons(values.NewSymbol("b"), values.NewSymbol("c")))},
-		{"append all empty", `(append '() '() '())`, values.EmptyList},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "append no arguments", Code: `(append)`, Expected: values.EmptyList},
+		{Name: "append single empty list", Code: `(append '())`, Expected: values.EmptyList},
+		{Name: "append single list", Code: `(append '(1 2))`, Expected: values.List(values.NewInteger(1), values.NewInteger(2))},
+		{Name: "append two lists", Code: `(append '(1 2) '(3 4))`, Expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3), values.NewInteger(4))},
+		{Name: "append three lists", Code: `(append '(a) '(b) '(c))`, Expected: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"))},
+		{Name: "append with empty list in middle", Code: `(append '(1) '() '(2))`, Expected: values.List(values.NewInteger(1), values.NewInteger(2))},
+		{Name: "append with non-list as last argument", Code: `(append '(1 2) 3)`, Expected: values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(2), values.NewInteger(3)))},
+		{Name: "append empty lists only", Code: `(append '() '())`, Expected: values.EmptyList},
+		{Name: "append nested lists", Code: `(append '((1 2)) '((3 4)))`, Expected: values.List(values.List(values.NewInteger(1), values.NewInteger(2)),
+			values.List(values.NewInteger(3), values.NewInteger(4)))},
+		{Name: "append four lists", Code: `(append '(1) '(2) '(3) '(4))`, Expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3), values.NewInteger(4))},
+		{Name: "append lists with different types", Code: `(append '(1 2) '("a" "b") '(#t #f))`, Expected: values.List(values.NewInteger(1), values.NewInteger(2),
+			values.NewString("a"), values.NewString("b"),
+			values.TrueValue, values.FalseValue)},
+		{Name: "append single element to list", Code: `(append '(a b) 'c)`, Expected: values.NewCons(values.NewSymbol("a"),
+			values.NewCons(values.NewSymbol("b"), values.NewSymbol("c")))},
+		{Name: "append all empty", Code: `(append '() '() '())`, Expected: values.EmptyList},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -1233,20 +1188,20 @@ func TestAppend(t *testing.T) {
 // ============================================================================
 
 func TestLength(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"length of three element list", `(length '(1 2 3))`, values.NewInteger(3)},
-		{"length of empty list", `(length '())`, values.NewInteger(0)},
-		{"length of single element list", `(length '(a))`, values.NewInteger(1)},
-		{"length of two element list", `(length '(a b))`, values.NewInteger(2)},
-		{"length of five element list", `(length '(1 2 3 4 5))`, values.NewInteger(5)},
-		{"length of nested list", `(length '((1 2) (3 4) (5 6)))`, values.NewInteger(3)},
-		{"length of list with mixed types", `(length '(1 "two" #t 'four))`, values.NewInteger(4)},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "length of three element list", Code: `(length '(1 2 3))`, Expected: values.NewInteger(3)},
+		{Name: "length of empty list", Code: `(length '())`, Expected: values.NewInteger(0)},
+		{Name: "length of single element list", Code: `(length '(a))`, Expected: values.NewInteger(1)},
+		{Name: "length of two element list", Code: `(length '(a b))`, Expected: values.NewInteger(2)},
+		{Name: "length of five element list", Code: `(length '(1 2 3 4 5))`, Expected: values.NewInteger(5)},
+		{Name: "length of nested list", Code: `(length '((1 2) (3 4) (5 6)))`, Expected: values.NewInteger(3)},
+		{Name: "length of list with mixed types", Code: `(length '(1 "two" #t 'four))`, Expected: values.NewInteger(4)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -1263,32 +1218,27 @@ func TestLength_Errors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
 
 func TestReverse(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"reverse list", `(reverse '(1 2 3))`,
-			values.List(values.NewInteger(3), values.NewInteger(2), values.NewInteger(1))},
-		{"reverse empty list", `(reverse '())`, values.EmptyList},
-		{"reverse single element", `(reverse '(a))`, values.List(values.NewSymbol("a"))},
-		{"reverse two elements", `(reverse '(a b))`,
-			values.List(values.NewSymbol("b"), values.NewSymbol("a"))},
-		{"reverse five elements", `(reverse '(1 2 3 4 5))`,
-			values.List(values.NewInteger(5), values.NewInteger(4), values.NewInteger(3), values.NewInteger(2), values.NewInteger(1))},
-		{"reverse nested lists", `(reverse '((1 2) (3 4)))`,
-			values.List(values.List(values.NewInteger(3), values.NewInteger(4)),
-				values.List(values.NewInteger(1), values.NewInteger(2)))},
-		{"reverse preserves nested structure", `(car (reverse '((1 2) (3 4))))`,
-			values.List(values.NewInteger(3), values.NewInteger(4))},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "reverse list", Code: `(reverse '(1 2 3))`, Expected: values.List(values.NewInteger(3), values.NewInteger(2), values.NewInteger(1))},
+		{Name: "reverse empty list", Code: `(reverse '())`, Expected: values.EmptyList},
+		{Name: "reverse single element", Code: `(reverse '(a))`, Expected: values.List(values.NewSymbol("a"))},
+		{Name: "reverse two elements", Code: `(reverse '(a b))`, Expected: values.List(values.NewSymbol("b"), values.NewSymbol("a"))},
+		{Name: "reverse five elements", Code: `(reverse '(1 2 3 4 5))`, Expected: values.List(values.NewInteger(5), values.NewInteger(4), values.NewInteger(3), values.NewInteger(2), values.NewInteger(1))},
+		{Name: "reverse nested lists", Code: `(reverse '((1 2) (3 4)))`, Expected: values.List(values.List(values.NewInteger(3), values.NewInteger(4)),
+			values.List(values.NewInteger(1), values.NewInteger(2)))},
+		{Name: "reverse preserves nested structure", Code: `(car (reverse '((1 2) (3 4))))`, Expected: values.List(values.NewInteger(3), values.NewInteger(4))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -1304,25 +1254,25 @@ func TestReverse_Errors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
 
 func TestListRef(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"list-ref first element", `(list-ref '(a b c) 0)`, values.NewSymbol("a")},
-		{"list-ref middle element", `(list-ref '(a b c) 1)`, values.NewSymbol("b")},
-		{"list-ref last element", `(list-ref '(a b c) 2)`, values.NewSymbol("c")},
-		{"list-ref nested element", `(list-ref '((a) (b) (c)) 1)`, values.List(values.NewSymbol("b"))},
-		{"list-ref in long list", `(list-ref '(1 2 3 4 5 6 7 8 9 10) 9)`, values.NewInteger(10)},
-		{"list-ref first of many", `(list-ref '(a b c d e) 0)`, values.NewSymbol("a")},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "list-ref first element", Code: `(list-ref '(a b c) 0)`, Expected: values.NewSymbol("a")},
+		{Name: "list-ref middle element", Code: `(list-ref '(a b c) 1)`, Expected: values.NewSymbol("b")},
+		{Name: "list-ref last element", Code: `(list-ref '(a b c) 2)`, Expected: values.NewSymbol("c")},
+		{Name: "list-ref nested element", Code: `(list-ref '((a) (b) (c)) 1)`, Expected: values.List(values.NewSymbol("b"))},
+		{Name: "list-ref in long list", Code: `(list-ref '(1 2 3 4 5 6 7 8 9 10) 9)`, Expected: values.NewInteger(10)},
+		{Name: "list-ref first of many", Code: `(list-ref '(a b c d e) 0)`, Expected: values.NewSymbol("a")},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -1340,29 +1290,25 @@ func TestListRef_Errors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
 
 func TestListTail(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{"list-tail from beginning", `(list-tail '(a b c) 0)`,
-			values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"))},
-		{"list-tail skip one", `(list-tail '(a b c) 1)`,
-			values.List(values.NewSymbol("b"), values.NewSymbol("c"))},
-		{"list-tail skip all", `(list-tail '(a b c) 3)`, values.EmptyList},
-		{"list-tail skip two", `(list-tail '(a b c d e) 2)`,
-			values.List(values.NewSymbol("c"), values.NewSymbol("d"), values.NewSymbol("e"))},
-		{"list-tail skip none", `(list-tail '(1 2) 0)`,
-			values.List(values.NewInteger(1), values.NewInteger(2))},
-		{"list-tail on empty list with k=0", `(list-tail '() 0)`, values.EmptyList},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "list-tail from beginning", Code: `(list-tail '(a b c) 0)`, Expected: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"))},
+		{Name: "list-tail skip one", Code: `(list-tail '(a b c) 1)`, Expected: values.List(values.NewSymbol("b"), values.NewSymbol("c"))},
+		{Name: "list-tail skip all", Code: `(list-tail '(a b c) 3)`, Expected: values.EmptyList},
+		{Name: "list-tail skip two", Code: `(list-tail '(a b c d e) 2)`, Expected: values.List(values.NewSymbol("c"), values.NewSymbol("d"), values.NewSymbol("e"))},
+		{Name: "list-tail skip none", Code: `(list-tail '(1 2) 0)`, Expected: values.List(values.NewInteger(1), values.NewInteger(2))},
+		{Name: "list-tail on empty list with k=0", Code: `(list-tail '() 0)`, Expected: values.EmptyList},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -1379,7 +1325,7 @@ func TestListTail_Errors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
@@ -1389,123 +1335,101 @@ func TestListTail_Errors(t *testing.T) {
 // ============================================================================
 
 func TestMemq(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// memq uses eq? (pointer equality) - works for booleans (singletons) and symbols (interned)
-		{"memq finds boolean", `(memq #t '(#f #t 1))`,
-			values.List(values.TrueValue, values.NewInteger(1))},
-		{"memq returns #f when not found", `(memq #t '(#f 1 2))`, values.FalseValue},
-		{"memq with empty list returns #f", `(memq #t '())`, values.FalseValue},
-		{"memq finds symbol", `(memq 'b '(a b c))`,
-			values.List(values.NewSymbol("b"), values.NewSymbol("c"))},
-		{"memq symbol not found", `(memq 'd '(a b c))`, values.FalseValue},
-		{"memq finds first occurrence", `(memq #t '(#f #f #t #t))`,
-			values.List(values.TrueValue, values.TrueValue)},
+		{Name: "memq finds boolean", Code: `(memq #t '(#f #t 1))`, Expected: values.List(values.TrueValue, values.NewInteger(1))},
+		{Name: "memq returns #f when not found", Code: `(memq #t '(#f 1 2))`, Expected: values.FalseValue},
+		{Name: "memq with empty list returns #f", Code: `(memq #t '())`, Expected: values.FalseValue},
+		{Name: "memq finds symbol", Code: `(memq 'b '(a b c))`, Expected: values.List(values.NewSymbol("b"), values.NewSymbol("c"))},
+		{Name: "memq symbol not found", Code: `(memq 'd '(a b c))`, Expected: values.FalseValue},
+		{Name: "memq finds first occurrence", Code: `(memq #t '(#f #f #t #t))`, Expected: values.List(values.TrueValue, values.TrueValue)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestMemv(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// memv uses eqv? - compares numbers and characters by value
-		{"memv finds integer", `(memv 2 '(1 2 3))`,
-			values.List(values.NewInteger(2), values.NewInteger(3))},
-		{"memv returns #f when not found", `(memv 4 '(1 2 3))`, values.FalseValue},
-		{"memv finds integer in list", `(memv 3 '(1 2 3 4 5))`,
-			values.List(values.NewInteger(3), values.NewInteger(4), values.NewInteger(5))},
-		{"memv integer not found", `(memv 10 '(1 2 3))`, values.FalseValue},
-		{"memv finds character", `(memv #\b '(#\a #\b #\c))`,
-			values.List(values.NewCharacter('b'), values.NewCharacter('c'))},
-		{"memv finds symbol", `(memv 'x '(a b x y z))`,
-			values.List(values.NewSymbol("x"), values.NewSymbol("y"), values.NewSymbol("z"))},
-		{"memv finds first element", `(memv 1 '(1 2 3))`,
-			values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))},
-		{"memv finds last element", `(memv 3 '(1 2 3))`,
-			values.List(values.NewInteger(3))},
+		{Name: "memv finds integer", Code: `(memv 2 '(1 2 3))`, Expected: values.List(values.NewInteger(2), values.NewInteger(3))},
+		{Name: "memv returns #f when not found", Code: `(memv 4 '(1 2 3))`, Expected: values.FalseValue},
+		{Name: "memv finds integer in list", Code: `(memv 3 '(1 2 3 4 5))`, Expected: values.List(values.NewInteger(3), values.NewInteger(4), values.NewInteger(5))},
+		{Name: "memv integer not found", Code: `(memv 10 '(1 2 3))`, Expected: values.FalseValue},
+		{Name: "memv finds character", Code: `(memv #\b '(#\a #\b #\c))`, Expected: values.List(values.NewCharacter('b'), values.NewCharacter('c'))},
+		{Name: "memv finds symbol", Code: `(memv 'x '(a b x y z))`, Expected: values.List(values.NewSymbol("x"), values.NewSymbol("y"), values.NewSymbol("z"))},
+		{Name: "memv finds first element", Code: `(memv 1 '(1 2 3))`, Expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))},
+		{Name: "memv finds last element", Code: `(memv 3 '(1 2 3))`, Expected: values.List(values.NewInteger(3))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestMember(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// member uses equal? - deep comparison
-		{"member finds list with equal?", `(member '(2) '((1) (2) (3)))`,
-			values.List(values.List(values.NewInteger(2)), values.List(values.NewInteger(3)))},
-		{"member finds string", `(member "hello" '("world" "hello" "foo"))`,
-			values.List(values.NewString("hello"), values.NewString("foo"))},
-		{"member returns #f when not found", `(member '(4) '((1) (2) (3)))`, values.FalseValue},
-		{"member string not found", `(member "bar" '("foo" "baz"))`, values.FalseValue},
-		{"member finds nested list", `(member '(2 3) '((1 2) (2 3) (3 4)))`,
-			values.List(values.List(values.NewInteger(2), values.NewInteger(3)),
-				values.List(values.NewInteger(3), values.NewInteger(4)))},
-		{"member finds integer", `(member 42 '(1 42 100))`,
-			values.List(values.NewInteger(42), values.NewInteger(100))},
-		{"member in empty list", `(member 'x '())`, values.FalseValue},
-		{"member finds character", `(member #\b '(#\a #\b #\c))`,
-			values.List(values.NewCharacter('b'), values.NewCharacter('c'))},
+		{Name: "member finds list with equal?", Code: `(member '(2) '((1) (2) (3)))`, Expected: values.List(values.List(values.NewInteger(2)), values.List(values.NewInteger(3)))},
+		{Name: "member finds string", Code: `(member "hello" '("world" "hello" "foo"))`, Expected: values.List(values.NewString("hello"), values.NewString("foo"))},
+		{Name: "member returns #f when not found", Code: `(member '(4) '((1) (2) (3)))`, Expected: values.FalseValue},
+		{Name: "member string not found", Code: `(member "bar" '("foo" "baz"))`, Expected: values.FalseValue},
+		{Name: "member finds nested list", Code: `(member '(2 3) '((1 2) (2 3) (3 4)))`, Expected: values.List(values.List(values.NewInteger(2), values.NewInteger(3)),
+			values.List(values.NewInteger(3), values.NewInteger(4)))},
+		{Name: "member finds integer", Code: `(member 42 '(1 42 100))`, Expected: values.List(values.NewInteger(42), values.NewInteger(100))},
+		{Name: "member in empty list", Code: `(member 'x '())`, Expected: values.FalseValue},
+		{Name: "member finds character", Code: `(member #\b '(#\a #\b #\c))`, Expected: values.List(values.NewCharacter('b'), values.NewCharacter('c'))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 // TestMemberWithCompare tests R7RS §6.4 optional compare procedure for member.
 func TestMemberWithCompare(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Custom compare using = for numeric comparison
-		{"member with = finds exact number", `(member 2.0 '(1 2 3) =)`,
-			values.List(values.NewInteger(2), values.NewInteger(3))},
-		{"member with = not found", `(member 5 '(1 2 3) =)`, values.FalseValue},
+		{Name: "member with = finds exact number", Code: `(member 2.0 '(1 2 3) =)`, Expected: values.List(values.NewInteger(2), values.NewInteger(3))},
+		{Name: "member with = not found", Code: `(member 5 '(1 2 3) =)`, Expected: values.FalseValue},
 
 		// Custom compare using string=?
-		{"member with string=?", `(member "B" '("a" "B" "c") string=?)`,
-			values.List(values.NewString("B"), values.NewString("c"))},
+		{Name: "member with string=?", Code: `(member "B" '("a" "B" "c") string=?)`, Expected: values.List(values.NewString("B"), values.NewString("c"))},
 
 		// Custom compare using string-ci=? for case-insensitive
-		{"member with string-ci=?", `(member "b" '("A" "B" "C") string-ci=?)`,
-			values.List(values.NewString("B"), values.NewString("C"))},
-		{"member with string-ci=? not found", `(member "d" '("A" "B" "C") string-ci=?)`,
-			values.FalseValue},
+		{Name: "member with string-ci=?", Code: `(member "b" '("A" "B" "C") string-ci=?)`, Expected: values.List(values.NewString("B"), values.NewString("C"))},
+		{Name: "member with string-ci=? not found", Code: `(member "d" '("A" "B" "C") string-ci=?)`, Expected: values.FalseValue},
 
 		// Custom compare with lambda - find number greater than obj
-		{"member with custom lambda", `(member 2 '(1 2 3 4) (lambda (obj elem) (> elem obj)))`,
-			values.List(values.NewInteger(3), values.NewInteger(4))},
+		{Name: "member with custom lambda", Code: `(member 2 '(1 2 3 4) (lambda (obj elem) (> elem obj)))`, Expected: values.List(values.NewInteger(3), values.NewInteger(4))},
 
 		// Custom compare - always false returns #f
-		{"member with always-false compare", `(member 'x '(a b c) (lambda (a b) #f))`,
-			values.FalseValue},
+		{Name: "member with always-false compare", Code: `(member 'x '(a b c) (lambda (a b) #f))`, Expected: values.FalseValue},
 
 		// Custom compare - always true returns first element
-		{"member with always-true compare", `(member 'x '(a b c) (lambda (a b) #t))`,
-			values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"))},
+		{Name: "member with always-true compare", Code: `(member 'x '(a b c) (lambda (a b) #t))`, Expected: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"))},
 
 		// Empty list with custom compare
-		{"member with compare in empty list", `(member 1 '() =)`, values.FalseValue},
+		{Name: "member with compare in empty list", Code: `(member 1 '() =)`, Expected: values.FalseValue},
 
 		// Compare using eq? explicitly
-		{"member with eq?", `(member 'b '(a b c) eq?)`,
-			values.List(values.NewSymbol("b"), values.NewSymbol("c"))},
+		{Name: "member with eq?", Code: `(member 'b '(a b c) eq?)`, Expected: values.List(values.NewSymbol("b"), values.NewSymbol("c"))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -1515,124 +1439,102 @@ func TestMemberWithCompare(t *testing.T) {
 // ============================================================================
 
 func TestAssq(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// assq uses eq? - works for booleans (singletons) and symbols (interned)
-		{"assq finds boolean key", `(assq #t '((#f 1) (#t 2)))`,
-			values.List(values.TrueValue, values.NewInteger(2))},
-		{"assq returns #f when not found", `(assq #t '((#f 1)))`, values.FalseValue},
-		{"assq with empty list returns #f", `(assq #t '())`, values.FalseValue},
-		{"assq finds symbol key", `(assq 'b '((a 1) (b 2) (c 3)))`,
-			values.List(values.NewSymbol("b"), values.NewInteger(2))},
-		{"assq symbol not found", `(assq 'd '((a 1) (b 2) (c 3)))`, values.FalseValue},
-		{"assq finds #f key", `(assq #f '((#t yes) (#f no)))`,
-			values.List(values.FalseValue, values.NewSymbol("no"))},
-		{"assq returns first match", `(assq 'a '((a 1) (a 2) (a 3)))`,
-			values.List(values.NewSymbol("a"), values.NewInteger(1))},
+		{Name: "assq finds boolean key", Code: `(assq #t '((#f 1) (#t 2)))`, Expected: values.List(values.TrueValue, values.NewInteger(2))},
+		{Name: "assq returns #f when not found", Code: `(assq #t '((#f 1)))`, Expected: values.FalseValue},
+		{Name: "assq with empty list returns #f", Code: `(assq #t '())`, Expected: values.FalseValue},
+		{Name: "assq finds symbol key", Code: `(assq 'b '((a 1) (b 2) (c 3)))`, Expected: values.List(values.NewSymbol("b"), values.NewInteger(2))},
+		{Name: "assq symbol not found", Code: `(assq 'd '((a 1) (b 2) (c 3)))`, Expected: values.FalseValue},
+		{Name: "assq finds #f key", Code: `(assq #f '((#t yes) (#f no)))`, Expected: values.List(values.FalseValue, values.NewSymbol("no"))},
+		{Name: "assq returns first match", Code: `(assq 'a '((a 1) (a 2) (a 3)))`, Expected: values.List(values.NewSymbol("a"), values.NewInteger(1))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestAssv(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// assv uses eqv? - compares numbers and characters by value
-		{"assv finds integer key", `(assv 2 '((1 a) (2 b) (3 c)))`,
-			values.List(values.NewInteger(2), values.NewSymbol("b"))},
-		{"assv returns #f when not found", `(assv 4 '((1 a) (2 b) (3 c)))`, values.FalseValue},
-		{"assv integer not found", `(assv 5 '((1 one) (2 two)))`, values.FalseValue},
-		{"assv finds character key", `(assv #\b '((#\a alpha) (#\b beta) (#\c gamma)))`,
-			values.List(values.NewCharacter('b'), values.NewSymbol("beta"))},
-		{"assv multiple entries", `(assv 0 '((0 zero) (1 one) (0 another-zero)))`,
-			values.List(values.NewInteger(0), values.NewSymbol("zero"))},
-		{"assv finds symbol key", `(assv 'x '((y why) (x ecks) (z zee)))`,
-			values.List(values.NewSymbol("x"), values.NewSymbol("ecks"))},
+		{Name: "assv finds integer key", Code: `(assv 2 '((1 a) (2 b) (3 c)))`, Expected: values.List(values.NewInteger(2), values.NewSymbol("b"))},
+		{Name: "assv returns #f when not found", Code: `(assv 4 '((1 a) (2 b) (3 c)))`, Expected: values.FalseValue},
+		{Name: "assv integer not found", Code: `(assv 5 '((1 one) (2 two)))`, Expected: values.FalseValue},
+		{Name: "assv finds character key", Code: `(assv #\b '((#\a alpha) (#\b beta) (#\c gamma)))`, Expected: values.List(values.NewCharacter('b'), values.NewSymbol("beta"))},
+		{Name: "assv multiple entries", Code: `(assv 0 '((0 zero) (1 one) (0 another-zero)))`, Expected: values.List(values.NewInteger(0), values.NewSymbol("zero"))},
+		{Name: "assv finds symbol key", Code: `(assv 'x '((y why) (x ecks) (z zee)))`, Expected: values.List(values.NewSymbol("x"), values.NewSymbol("ecks"))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestAssoc(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// assoc uses equal? - deep comparison
-		{"assoc finds list key with equal?", `(assoc '(1 2) '(((1 2) found) ((3 4) other)))`,
-			values.List(values.List(values.NewInteger(1), values.NewInteger(2)), values.NewSymbol("found"))},
-		{"assoc returns #f when not found", `(assoc '(5 6) '(((1 2) a) ((3 4) b)))`, values.FalseValue},
-		{"assoc with string key", `(assoc "hello" '(("hello" found) ("world" other)))`,
-			values.List(values.NewString("hello"), values.NewSymbol("found"))},
-		{"assoc finds string key", `(assoc "hello" '(("world" 1) ("hello" 2)))`,
-			values.List(values.NewString("hello"), values.NewInteger(2))},
-		{"assoc list not found", `(assoc '(5 6) '(((1 2) a) ((3 4) b)))`, values.FalseValue},
-		{"assoc in empty alist", `(assoc 'x '())`, values.FalseValue},
-		{"assoc finds integer key", `(assoc 42 '((1 a) (42 b) (100 c)))`,
-			values.List(values.NewInteger(42), values.NewSymbol("b"))},
-		{"assoc finds character key", `(assoc #\y '((#\a alpha) (#\y why)))`,
-			values.List(values.NewCharacter('y'), values.NewSymbol("why"))},
+		{Name: "assoc finds list key with equal?", Code: `(assoc '(1 2) '(((1 2) found) ((3 4) other)))`, Expected: values.List(values.List(values.NewInteger(1), values.NewInteger(2)), values.NewSymbol("found"))},
+		{Name: "assoc returns #f when not found", Code: `(assoc '(5 6) '(((1 2) a) ((3 4) b)))`, Expected: values.FalseValue},
+		{Name: "assoc with string key", Code: `(assoc "hello" '(("hello" found) ("world" other)))`, Expected: values.List(values.NewString("hello"), values.NewSymbol("found"))},
+		{Name: "assoc finds string key", Code: `(assoc "hello" '(("world" 1) ("hello" 2)))`, Expected: values.List(values.NewString("hello"), values.NewInteger(2))},
+		{Name: "assoc list not found", Code: `(assoc '(5 6) '(((1 2) a) ((3 4) b)))`, Expected: values.FalseValue},
+		{Name: "assoc in empty alist", Code: `(assoc 'x '())`, Expected: values.FalseValue},
+		{Name: "assoc finds integer key", Code: `(assoc 42 '((1 a) (42 b) (100 c)))`, Expected: values.List(values.NewInteger(42), values.NewSymbol("b"))},
+		{Name: "assoc finds character key", Code: `(assoc #\y '((#\a alpha) (#\y why)))`, Expected: values.List(values.NewCharacter('y'), values.NewSymbol("why"))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 // TestAssocWithCompare tests R7RS §6.4 optional compare procedure for assoc.
 func TestAssocWithCompare(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Custom compare using = for numeric comparison
-		{"assoc with = finds exact number", `(assoc 2.0 '((1 one) (2 two) (3 three)) =)`,
-			values.List(values.NewInteger(2), values.NewSymbol("two"))},
-		{"assoc with = not found", `(assoc 5 '((1 one) (2 two) (3 three)) =)`, values.FalseValue},
+		{Name: "assoc with = finds exact number", Code: `(assoc 2.0 '((1 one) (2 two) (3 three)) =)`, Expected: values.List(values.NewInteger(2), values.NewSymbol("two"))},
+		{Name: "assoc with = not found", Code: `(assoc 5 '((1 one) (2 two) (3 three)) =)`, Expected: values.FalseValue},
 
 		// Custom compare using string=?
-		{"assoc with string=?", `(assoc "B" '(("a" alpha) ("B" beta) ("c" gamma)) string=?)`,
-			values.List(values.NewString("B"), values.NewSymbol("beta"))},
+		{Name: "assoc with string=?", Code: `(assoc "B" '(("a" alpha) ("B" beta) ("c" gamma)) string=?)`, Expected: values.List(values.NewString("B"), values.NewSymbol("beta"))},
 
 		// Custom compare using string-ci=? for case-insensitive
-		{"assoc with string-ci=?", `(assoc "b" '(("A" alpha) ("B" beta) ("C" gamma)) string-ci=?)`,
-			values.List(values.NewString("B"), values.NewSymbol("beta"))},
-		{"assoc with string-ci=? not found", `(assoc "d" '(("A" alpha) ("B" beta)) string-ci=?)`,
-			values.FalseValue},
+		{Name: "assoc with string-ci=?", Code: `(assoc "b" '(("A" alpha) ("B" beta) ("C" gamma)) string-ci=?)`, Expected: values.List(values.NewString("B"), values.NewSymbol("beta"))},
+		{Name: "assoc with string-ci=? not found", Code: `(assoc "d" '(("A" alpha) ("B" beta)) string-ci=?)`, Expected: values.FalseValue},
 
 		// Custom compare with lambda - find key where car > obj
-		{"assoc with custom lambda", `(assoc 2 '((1 one) (2 two) (3 three) (4 four)) (lambda (obj key) (> key obj)))`,
-			values.List(values.NewInteger(3), values.NewSymbol("three"))},
+		{Name: "assoc with custom lambda", Code: `(assoc 2 '((1 one) (2 two) (3 three) (4 four)) (lambda (obj key) (> key obj)))`, Expected: values.List(values.NewInteger(3), values.NewSymbol("three"))},
 
 		// Custom compare - always false returns #f
-		{"assoc with always-false compare", `(assoc 'x '((a 1) (b 2) (c 3)) (lambda (a b) #f))`,
-			values.FalseValue},
+		{Name: "assoc with always-false compare", Code: `(assoc 'x '((a 1) (b 2) (c 3)) (lambda (a b) #f))`, Expected: values.FalseValue},
 
 		// Custom compare - always true returns first entry
-		{"assoc with always-true compare", `(assoc 'x '((a 1) (b 2) (c 3)) (lambda (a b) #t))`,
-			values.List(values.NewSymbol("a"), values.NewInteger(1))},
+		{Name: "assoc with always-true compare", Code: `(assoc 'x '((a 1) (b 2) (c 3)) (lambda (a b) #t))`, Expected: values.List(values.NewSymbol("a"), values.NewInteger(1))},
 
 		// Empty alist with custom compare
-		{"assoc with compare in empty alist", `(assoc 1 '() =)`, values.FalseValue},
+		{Name: "assoc with compare in empty alist", Code: `(assoc 1 '() =)`, Expected: values.FalseValue},
 
 		// Compare using eq? explicitly
-		{"assoc with eq?", `(assoc 'b '((a 1) (b 2) (c 3)) eq?)`,
-			values.List(values.NewSymbol("b"), values.NewInteger(2))},
+		{Name: "assoc with eq?", Code: `(assoc 'b '((a 1) (b 2) (c 3)) eq?)`, Expected: values.List(values.NewSymbol("b"), values.NewInteger(2))},
 
 		// More complex custom comparison - check if key starts with same letter
-		{"assoc with char comparison", `(assoc #\b '((#\a alpha) (#\b beta) (#\c gamma)) char=?)`,
-			values.List(values.NewCharacter('b'), values.NewSymbol("beta"))},
+		{Name: "assoc with char comparison", Code: `(assoc #\b '((#\a alpha) (#\b beta) (#\c gamma)) char=?)`, Expected: values.List(values.NewCharacter('b'), values.NewSymbol("beta"))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -1642,72 +1544,66 @@ func TestAssocWithCompare(t *testing.T) {
 // ============================================================================
 
 func TestListCopy(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic cases
-		{"list-copy empty list", `(list-copy '())`, values.EmptyList},
-		{"list-copy single element", `(list-copy '(1))`, values.List(values.NewInteger(1))},
-		{"list-copy multi element", `(list-copy '(1 2 3))`,
-			values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))},
-		{"list-copy nested lists", `(list-copy '((1 2) (3 4)))`,
-			values.List(values.List(values.NewInteger(1), values.NewInteger(2)),
-				values.List(values.NewInteger(3), values.NewInteger(4)))},
+		{Name: "list-copy empty list", Code: `(list-copy '())`, Expected: values.EmptyList},
+		{Name: "list-copy single element", Code: `(list-copy '(1))`, Expected: values.List(values.NewInteger(1))},
+		{Name: "list-copy multi element", Code: `(list-copy '(1 2 3))`, Expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))},
+		{Name: "list-copy nested lists", Code: `(list-copy '((1 2) (3 4)))`, Expected: values.List(values.List(values.NewInteger(1), values.NewInteger(2)),
+			values.List(values.NewInteger(3), values.NewInteger(4)))},
 
 		// Improper list
-		{"list-copy improper list", `(list-copy (cons 1 2))`,
-			values.NewCons(values.NewInteger(1), values.NewInteger(2))},
-		{"list-copy longer improper list", `(list-copy '(1 2 . 3))`,
-			values.NewCons(values.NewInteger(1),
-				values.NewCons(values.NewInteger(2), values.NewInteger(3)))},
+		{Name: "list-copy improper list", Code: `(list-copy (cons 1 2))`, Expected: values.NewCons(values.NewInteger(1), values.NewInteger(2))},
+		{Name: "list-copy longer improper list", Code: `(list-copy '(1 2 . 3))`, Expected: values.NewCons(values.NewInteger(1),
+			values.NewCons(values.NewInteger(2), values.NewInteger(3)))},
 
 		// Non-pair returns as-is per R7RS
-		{"list-copy integer", `(list-copy 42)`, values.NewInteger(42)},
-		{"list-copy string", `(list-copy "hello")`, values.NewString("hello")},
-		{"list-copy symbol", `(list-copy 'foo)`, values.NewSymbol("foo")},
-		{"list-copy boolean", `(list-copy #t)`, values.TrueValue},
+		{Name: "list-copy integer", Code: `(list-copy 42)`, Expected: values.NewInteger(42)},
+		{Name: "list-copy string", Code: `(list-copy "hello")`, Expected: values.NewString("hello")},
+		{Name: "list-copy symbol", Code: `(list-copy 'foo)`, Expected: values.NewSymbol("foo")},
+		{Name: "list-copy boolean", Code: `(list-copy #t)`, Expected: values.TrueValue},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestListCopy_SpineIndependence(t *testing.T) {
 	// Verify that mutating the copy's spine doesn't affect the original
-	tcs := []schemeCodeTestCase{
-		{"spine independence via set-cdr!", `
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "spine independence via set-cdr!", Code: `
 			(let ((orig (list 1 2 3)))
 			  (let ((copy (list-copy orig)))
 			    (set-cdr! copy '(99))
-			    (cadr orig)))`,
-			values.NewInteger(2)},
+			    (cadr orig)))`, Expected: values.NewInteger(2)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestListCopy_ElementSharing(t *testing.T) {
 	// Verify that car elements are shared (not deep copied)
-	tcs := []schemeCodeTestCase{
-		{"element sharing via eq?", `
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "element sharing via eq?", Code: `
 			(let ((inner (list 1 2)))
 			  (let ((orig (list inner 3)))
 			    (let ((copy (list-copy orig)))
-			      (eq? (car orig) (car copy)))))`,
-			values.TrueValue},
+			      (eq? (car orig) (car copy)))))`, Expected: values.TrueValue},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -1728,7 +1624,7 @@ func TestMemq_Errors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
@@ -1744,7 +1640,7 @@ func TestMemv_Errors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
@@ -1760,7 +1656,7 @@ func TestMember_Errors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
@@ -1780,7 +1676,7 @@ func TestAssq_Errors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
@@ -1796,7 +1692,7 @@ func TestAssv_Errors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
@@ -1812,7 +1708,7 @@ func TestAssoc_Errors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }
@@ -1832,7 +1728,7 @@ func TestAppend_Errors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 }

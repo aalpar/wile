@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -26,22 +27,22 @@ import (
 // TestExactnessAliases tests exact->inexact and inexact->exact R5RS aliases.
 // R7RS §6.2.6: These are R5RS compatibility aliases.
 func TestExactnessAliases(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// exact->inexact (alias for inexact)
-		{name: "exact->inexact on integer", code: `(exact->inexact 3)`, expected: values.NewFloat(3.0)},
-		{name: "exact->inexact on rational", code: `(exact->inexact 1/2)`, expected: values.NewFloat(0.5)},
-		{name: "exact->inexact on float passthrough", code: `(exact->inexact 3.0)`, expected: values.NewFloat(3.0)},
+		{Name: "exact->inexact on integer", Code: `(exact->inexact 3)`, Expected: values.NewFloat(3.0)},
+		{Name: "exact->inexact on rational", Code: `(exact->inexact 1/2)`, Expected: values.NewFloat(0.5)},
+		{Name: "exact->inexact on float passthrough", Code: `(exact->inexact 3.0)`, Expected: values.NewFloat(3.0)},
 
 		// inexact->exact (alias for exact)
-		{name: "inexact->exact on float 0.5", code: `(inexact->exact 0.5)`, expected: values.NewRational(1, 2)},
-		{name: "inexact->exact on integer float", code: `(inexact->exact 3.0)`, expected: values.NewInteger(3)},
-		{name: "inexact->exact on integer passthrough", code: `(inexact->exact 3)`, expected: values.NewInteger(3)},
+		{Name: "inexact->exact on float 0.5", Code: `(inexact->exact 0.5)`, Expected: values.NewRational(1, 2)},
+		{Name: "inexact->exact on integer float", Code: `(inexact->exact 3.0)`, Expected: values.NewInteger(3)},
+		{Name: "inexact->exact on integer passthrough", Code: `(inexact->exact 3)`, Expected: values.NewInteger(3)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -110,7 +111,7 @@ func TestStringLength(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -136,7 +137,7 @@ func TestStringRef(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -162,7 +163,7 @@ func TestSubstring(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -193,7 +194,7 @@ func TestStringAppend(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -219,7 +220,7 @@ func TestStringToList(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -248,7 +249,7 @@ func TestListToString(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -256,18 +257,18 @@ func TestListToString(t *testing.T) {
 }
 
 func TestListToStringUnicode(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "list->string unicode chars",
-			code:     `(list->string (list #\α #\β #\γ))`,
-			expected: values.NewString("αβγ"),
+			Name:     "list->string unicode chars",
+			Code:     `(list->string (list #\α #\β #\γ))`,
+			Expected: values.NewString("αβγ"),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -286,7 +287,7 @@ func TestStringToSymbol(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -294,55 +295,55 @@ func TestStringToSymbol(t *testing.T) {
 }
 
 func TestStringToSymbolEdgeCases(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "string->symbol empty string round-trip",
-			code:     `(symbol->string (string->symbol ""))`,
-			expected: values.NewString(""),
+			Name:     "string->symbol empty string round-trip",
+			Code:     `(symbol->string (string->symbol ""))`,
+			Expected: values.NewString(""),
 		},
 		{
-			name:     "string->symbol unicode round-trip",
-			code:     `(symbol->string (string->symbol "你好"))`,
-			expected: values.NewString("你好"),
+			Name:     "string->symbol unicode round-trip",
+			Code:     `(symbol->string (string->symbol "你好"))`,
+			Expected: values.NewString("你好"),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringSymbolRoundTrip(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "ASCII round-trip",
-			code:     `(symbol->string (string->symbol "hello"))`,
-			expected: values.NewString("hello"),
+			Name:     "ASCII round-trip",
+			Code:     `(symbol->string (string->symbol "hello"))`,
+			Expected: values.NewString("hello"),
 		},
 		{
-			name:     "empty round-trip",
-			code:     `(symbol->string (string->symbol ""))`,
-			expected: values.NewString(""),
+			Name:     "empty round-trip",
+			Code:     `(symbol->string (string->symbol ""))`,
+			Expected: values.NewString(""),
 		},
 		{
-			name:     "unicode round-trip",
-			code:     `(symbol->string (string->symbol "café"))`,
-			expected: values.NewString("café"),
+			Name:     "unicode round-trip",
+			Code:     `(symbol->string (string->symbol "café"))`,
+			Expected: values.NewString("café"),
 		},
 		{
-			name:     "Chinese round-trip",
-			code:     `(symbol->string (string->symbol "你好"))`,
-			expected: values.NewString("你好"),
+			Name:     "Chinese round-trip",
+			Code:     `(symbol->string (string->symbol "你好"))`,
+			Expected: values.NewString("你好"),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -362,7 +363,7 @@ func TestSymbolToString(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -370,23 +371,23 @@ func TestSymbolToString(t *testing.T) {
 }
 
 func TestSymbolToStringEdgeCases(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "symbol->string empty symbol",
-			code:     `(symbol->string (string->symbol ""))`,
-			expected: values.NewString(""),
+			Name:     "symbol->string empty symbol",
+			Code:     `(symbol->string (string->symbol ""))`,
+			Expected: values.NewString(""),
 		},
 		{
-			name:     "symbol->string unicode symbol",
-			code:     `(symbol->string (string->symbol "αβγ"))`,
-			expected: values.NewString("αβγ"),
+			Name:     "symbol->string unicode symbol",
+			Code:     `(symbol->string (string->symbol "αβγ"))`,
+			Expected: values.NewString("αβγ"),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -410,7 +411,7 @@ func TestNumberToString(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -436,7 +437,7 @@ func TestStringToNumber(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -468,7 +469,7 @@ func TestStringAppendExtended(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			s, ok := result.(*values.String)
 			qt.Assert(t, ok, qt.IsTrue)
@@ -478,379 +479,379 @@ func TestStringAppendExtended(t *testing.T) {
 }
 
 func TestStringAppendWithNonString(t *testing.T) {
-	_, err := runSchemeCode(t, `(string-append "hello" 42)`)
+	_, err := testhelpers.RunSchemeCode(t, `(string-append "hello" 42)`)
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestStringLengthExtended(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "string-length unicode",
-			code:     `(string-length "héllo")`,
-			expected: values.NewInteger(5),
+			Name:     "string-length unicode",
+			Code:     `(string-length "héllo")`,
+			Expected: values.NewInteger(5),
 		},
 		{
-			name:     "string-length single char",
-			code:     `(string-length "x")`,
-			expected: values.NewInteger(1),
+			Name:     "string-length single char",
+			Code:     `(string-length "x")`,
+			Expected: values.NewInteger(1),
 		},
 		{
-			name:     "string-length with spaces",
-			code:     `(string-length "hello world")`,
-			expected: values.NewInteger(11),
+			Name:     "string-length with spaces",
+			Code:     `(string-length "hello world")`,
+			Expected: values.NewInteger(11),
 		},
 		{
-			name:     "string-length with newline",
-			code:     `(string-length "line1\nline2")`,
-			expected: values.NewInteger(11),
+			Name:     "string-length with newline",
+			Code:     `(string-length "line1\nline2")`,
+			Expected: values.NewInteger(11),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringRefExtended(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "string-ref last char",
-			code:     `(string-ref "hello" 4)`,
-			expected: values.NewCharacter('o'),
+			Name:     "string-ref last char",
+			Code:     `(string-ref "hello" 4)`,
+			Expected: values.NewCharacter('o'),
 		},
 		{
-			name:     "string-ref space",
-			code:     `(string-ref "a b" 1)`,
-			expected: values.NewCharacter(' '),
+			Name:     "string-ref space",
+			Code:     `(string-ref "a b" 1)`,
+			Expected: values.NewCharacter(' '),
 		},
 		{
-			name:     "string-ref single char string",
-			code:     `(string-ref "x" 0)`,
-			expected: values.NewCharacter('x'),
+			Name:     "string-ref single char string",
+			Code:     `(string-ref "x" 0)`,
+			Expected: values.NewCharacter('x'),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringRefOutOfBounds(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "string-ref negative index",
-			code: `(string-ref "hello" -1)`,
+			Name: "string-ref negative index",
+			Code: `(string-ref "hello" -1)`,
 		},
 		{
-			name: "string-ref index too large",
-			code: `(string-ref "hello" 5)`,
+			Name: "string-ref index too large",
+			Code: `(string-ref "hello" 5)`,
 		},
 		{
-			name: "string-ref index on empty string",
-			code: `(string-ref "" 0)`,
+			Name: "string-ref index on empty string",
+			Code: `(string-ref "" 0)`,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
 }
 
 func TestSubstringExtended(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "substring full string",
-			code:     `(substring "hello" 0 5)`,
-			expected: values.NewString("hello"),
+			Name:     "substring full string",
+			Code:     `(substring "hello" 0 5)`,
+			Expected: values.NewString("hello"),
 		},
 		{
-			name:     "substring empty result",
-			code:     `(substring "hello" 2 2)`,
-			expected: values.NewString(""),
+			Name:     "substring empty result",
+			Code:     `(substring "hello" 2 2)`,
+			Expected: values.NewString(""),
 		},
 		{
-			name:     "substring single char",
-			code:     `(substring "hello" 1 2)`,
-			expected: values.NewString("e"),
+			Name:     "substring single char",
+			Code:     `(substring "hello" 1 2)`,
+			Expected: values.NewString("e"),
 		},
 		{
-			name:     "substring to end",
-			code:     `(substring "hello" 3 5)`,
-			expected: values.NewString("lo"),
+			Name:     "substring to end",
+			Code:     `(substring "hello" 3 5)`,
+			Expected: values.NewString("lo"),
 		},
 		{
-			name:     "substring from start",
-			code:     `(substring "hello" 0 3)`,
-			expected: values.NewString("hel"),
+			Name:     "substring from start",
+			Code:     `(substring "hello" 0 3)`,
+			Expected: values.NewString("hel"),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestSubstringErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "substring start > end",
-			code: `(substring "hello" 3 2)`,
+			Name: "substring start > end",
+			Code: `(substring "hello" 3 2)`,
 		},
 		{
-			name: "substring end too large",
-			code: `(substring "hello" 0 6)`,
+			Name: "substring end too large",
+			Code: `(substring "hello" 0 6)`,
 		},
 		{
-			name: "substring negative start",
-			code: `(substring "hello" -1 3)`,
+			Name: "substring negative start",
+			Code: `(substring "hello" -1 3)`,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
 }
 
 func TestMakeString(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "make-string with length only",
-			code:     `(string-length (make-string 5))`,
-			expected: values.NewInteger(5),
+			Name:     "make-string with length only",
+			Code:     `(string-length (make-string 5))`,
+			Expected: values.NewInteger(5),
 		},
 		{
-			name:     "make-string with fill char",
-			code:     `(make-string 3 #\a)`,
-			expected: values.NewString("aaa"),
+			Name:     "make-string with fill char",
+			Code:     `(make-string 3 #\a)`,
+			Expected: values.NewString("aaa"),
 		},
 		{
-			name:     "make-string zero length",
-			code:     `(make-string 0)`,
-			expected: values.NewString(""),
+			Name:     "make-string zero length",
+			Code:     `(make-string 0)`,
+			Expected: values.NewString(""),
 		},
 		{
-			name:     "make-string with space fill",
-			code:     `(make-string 4 #\space)`,
-			expected: values.NewString("    "),
+			Name:     "make-string with space fill",
+			Code:     `(make-string 4 #\space)`,
+			Expected: values.NewString("    "),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringCopy(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "string-copy full",
-			code:     `(string-copy "hello")`,
-			expected: values.NewString("hello"),
+			Name:     "string-copy full",
+			Code:     `(string-copy "hello")`,
+			Expected: values.NewString("hello"),
 		},
 		{
-			name:     "string-copy empty",
-			code:     `(string-copy "")`,
-			expected: values.NewString(""),
+			Name:     "string-copy empty",
+			Code:     `(string-copy "")`,
+			Expected: values.NewString(""),
 		},
 		// R7RS extended: (string-copy string start)
 		{
-			name:     "string-copy with start",
-			code:     `(string-copy "hello" 2)`,
-			expected: values.NewString("llo"),
+			Name:     "string-copy with start",
+			Code:     `(string-copy "hello" 2)`,
+			Expected: values.NewString("llo"),
 		},
 		{
-			name:     "string-copy with start at 0",
-			code:     `(string-copy "hello" 0)`,
-			expected: values.NewString("hello"),
+			Name:     "string-copy with start at 0",
+			Code:     `(string-copy "hello" 0)`,
+			Expected: values.NewString("hello"),
 		},
 		{
-			name:     "string-copy with start at end",
-			code:     `(string-copy "hello" 5)`,
-			expected: values.NewString(""),
+			Name:     "string-copy with start at end",
+			Code:     `(string-copy "hello" 5)`,
+			Expected: values.NewString(""),
 		},
 		// R7RS extended: (string-copy string start end)
 		{
-			name:     "string-copy with start and end",
-			code:     `(string-copy "hello" 1 4)`,
-			expected: values.NewString("ell"),
+			Name:     "string-copy with start and end",
+			Code:     `(string-copy "hello" 1 4)`,
+			Expected: values.NewString("ell"),
 		},
 		{
-			name:     "string-copy with start and end full",
-			code:     `(string-copy "hello" 0 5)`,
-			expected: values.NewString("hello"),
+			Name:     "string-copy with start and end full",
+			Code:     `(string-copy "hello" 0 5)`,
+			Expected: values.NewString("hello"),
 		},
 		{
-			name:     "string-copy with start equals end",
-			code:     `(string-copy "hello" 2 2)`,
-			expected: values.NewString(""),
+			Name:     "string-copy with start equals end",
+			Code:     `(string-copy "hello" 2 2)`,
+			Expected: values.NewString(""),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringCopyErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "string-copy with non-string", code: `(string-copy 42)`},
-		{name: "string-copy with non-integer start", code: `(string-copy "hello" "0")`},
-		{name: "string-copy with non-integer end", code: `(string-copy "hello" 0 "5")`},
-		{name: "string-copy with negative start", code: `(string-copy "hello" -1)`},
-		{name: "string-copy with end out of bounds", code: `(string-copy "hello" 0 6)`},
-		{name: "string-copy with start > end", code: `(string-copy "hello" 3 2)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "string-copy with non-string", Code: `(string-copy 42)`},
+		{Name: "string-copy with non-integer start", Code: `(string-copy "hello" "0")`},
+		{Name: "string-copy with non-integer end", Code: `(string-copy "hello" 0 "5")`},
+		{Name: "string-copy with negative start", Code: `(string-copy "hello" -1)`},
+		{Name: "string-copy with end out of bounds", Code: `(string-copy "hello" 0 6)`},
+		{Name: "string-copy with start > end", Code: `(string-copy "hello" 3 2)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
 }
 
 func TestStringCase(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// string-upcase
 		{
-			name:     "string-upcase lowercase",
-			code:     `(string-upcase "hello")`,
-			expected: values.NewString("HELLO"),
+			Name:     "string-upcase lowercase",
+			Code:     `(string-upcase "hello")`,
+			Expected: values.NewString("HELLO"),
 		},
 		{
-			name:     "string-upcase mixed",
-			code:     `(string-upcase "HeLLo")`,
-			expected: values.NewString("HELLO"),
+			Name:     "string-upcase mixed",
+			Code:     `(string-upcase "HeLLo")`,
+			Expected: values.NewString("HELLO"),
 		},
 		{
-			name:     "string-upcase empty",
-			code:     `(string-upcase "")`,
-			expected: values.NewString(""),
+			Name:     "string-upcase empty",
+			Code:     `(string-upcase "")`,
+			Expected: values.NewString(""),
 		},
 		{
-			name:     "string-upcase with numbers",
-			code:     `(string-upcase "abc123")`,
-			expected: values.NewString("ABC123"),
+			Name:     "string-upcase with numbers",
+			Code:     `(string-upcase "abc123")`,
+			Expected: values.NewString("ABC123"),
 		},
 		// string-downcase
 		{
-			name:     "string-downcase uppercase",
-			code:     `(string-downcase "HELLO")`,
-			expected: values.NewString("hello"),
+			Name:     "string-downcase uppercase",
+			Code:     `(string-downcase "HELLO")`,
+			Expected: values.NewString("hello"),
 		},
 		{
-			name:     "string-downcase mixed",
-			code:     `(string-downcase "HeLLo")`,
-			expected: values.NewString("hello"),
+			Name:     "string-downcase mixed",
+			Code:     `(string-downcase "HeLLo")`,
+			Expected: values.NewString("hello"),
 		},
 		{
-			name:     "string-downcase empty",
-			code:     `(string-downcase "")`,
-			expected: values.NewString(""),
+			Name:     "string-downcase empty",
+			Code:     `(string-downcase "")`,
+			Expected: values.NewString(""),
 		},
 		{
-			name:     "string-downcase with numbers",
-			code:     `(string-downcase "ABC123")`,
-			expected: values.NewString("abc123"),
+			Name:     "string-downcase with numbers",
+			Code:     `(string-downcase "ABC123")`,
+			Expected: values.NewString("abc123"),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringPredicate(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "string? with string",
-			code:     `(string? "hello")`,
-			expected: values.TrueValue,
+			Name:     "string? with string",
+			Code:     `(string? "hello")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string? with empty string",
-			code:     `(string? "")`,
-			expected: values.TrueValue,
+			Name:     "string? with empty string",
+			Code:     `(string? "")`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "string? with integer",
-			code:     `(string? 42)`,
-			expected: values.FalseValue,
+			Name:     "string? with integer",
+			Code:     `(string? 42)`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "string? with character",
-			code:     `(string? #\a)`,
-			expected: values.FalseValue,
+			Name:     "string? with character",
+			Code:     `(string? #\a)`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "string? with symbol",
-			code:     `(string? 'hello)`,
-			expected: values.FalseValue,
+			Name:     "string? with symbol",
+			Code:     `(string? 'hello)`,
+			Expected: values.FalseValue,
 		},
 		{
-			name:     "string? with list",
-			code:     `(string? '(1 2 3))`,
-			expected: values.FalseValue,
+			Name:     "string? with list",
+			Code:     `(string? '(1 2 3))`,
+			Expected: values.FalseValue,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringFoldcase(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "string-foldcase uppercase",
-			code:     `(string-foldcase "HELLO")`,
-			expected: values.NewString("hello"),
+			Name:     "string-foldcase uppercase",
+			Code:     `(string-foldcase "HELLO")`,
+			Expected: values.NewString("hello"),
 		},
 		{
-			name:     "string-foldcase mixed",
-			code:     `(string-foldcase "HeLLo")`,
-			expected: values.NewString("hello"),
+			Name:     "string-foldcase mixed",
+			Code:     `(string-foldcase "HeLLo")`,
+			Expected: values.NewString("hello"),
 		},
 		{
-			name:     "string-foldcase empty",
-			code:     `(string-foldcase "")`,
-			expected: values.NewString(""),
+			Name:     "string-foldcase empty",
+			Code:     `(string-foldcase "")`,
+			Expected: values.NewString(""),
 		},
 		{
-			name:     "string-foldcase with numbers",
-			code:     `(string-foldcase "ABC123")`,
-			expected: values.NewString("abc123"),
+			Name:     "string-foldcase with numbers",
+			Code:     `(string-foldcase "ABC123")`,
+			Expected: values.NewString("abc123"),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -859,79 +860,79 @@ func TestStringFoldcase(t *testing.T) {
 // Per R7RS §6.7, string-foldcase uses Unicode full case folding which can expand
 // characters (e.g., ß → ss, ẞ → ss).
 func TestStringFoldcaseUnicode(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// German sharp S - full case folding expands to "ss"
 		{
-			name:     "sharp s folds to ss",
-			code:     `(string-foldcase "ß")`,
-			expected: values.NewString("ss"),
+			Name:     "sharp s folds to ss",
+			Code:     `(string-foldcase "ß")`,
+			Expected: values.NewString("ss"),
 		},
 		{
-			name:     "capital sharp S folds to ss",
-			code:     `(string-foldcase "ẞ")`,
-			expected: values.NewString("ss"),
+			Name:     "capital sharp S folds to ss",
+			Code:     `(string-foldcase "ẞ")`,
+			Expected: values.NewString("ss"),
 		},
 		{
-			name:     "Straße becomes strasse",
-			code:     `(string-foldcase "Straße")`,
-			expected: values.NewString("strasse"),
+			Name:     "Straße becomes strasse",
+			Code:     `(string-foldcase "Straße")`,
+			Expected: values.NewString("strasse"),
 		},
 		{
-			name:     "STRASSE stays strasse",
-			code:     `(string-foldcase "STRASSE")`,
-			expected: values.NewString("strasse"),
+			Name:     "STRASSE stays strasse",
+			Code:     `(string-foldcase "STRASSE")`,
+			Expected: values.NewString("strasse"),
 		},
 		// Greek letters
 		{
-			name:     "Greek sigma",
-			code:     `(string-foldcase "ΣΕΛΛΑΣ")`,
-			expected: values.NewString("σελλασ"),
+			Name:     "Greek sigma",
+			Code:     `(string-foldcase "ΣΕΛΛΑΣ")`,
+			Expected: values.NewString("σελλασ"),
 		},
 		// Mixed Unicode and ASCII
 		{
-			name:     "mixed Unicode",
-			code:     `(string-foldcase "Große Stadt")`,
-			expected: values.NewString("grosse stadt"),
+			Name:     "mixed Unicode",
+			Code:     `(string-foldcase "Große Stadt")`,
+			Expected: values.NewString("grosse stadt"),
 		},
 		// Already lowercase stays same (except ß)
 		{
-			name:     "lowercase stays lowercase",
-			code:     `(string-foldcase "hello")`,
-			expected: values.NewString("hello"),
+			Name:     "lowercase stays lowercase",
+			Code:     `(string-foldcase "hello")`,
+			Expected: values.NewString("hello"),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringConstructor(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "string from chars",
-			code:     `(string #\h #\e #\l #\l #\o)`,
-			expected: values.NewString("hello"),
+			Name:     "string from chars",
+			Code:     `(string #\h #\e #\l #\l #\o)`,
+			Expected: values.NewString("hello"),
 		},
 		{
-			name:     "string single char",
-			code:     `(string #\a)`,
-			expected: values.NewString("a"),
+			Name:     "string single char",
+			Code:     `(string #\a)`,
+			Expected: values.NewString("a"),
 		},
 		{
-			name:     "string no args",
-			code:     `(string)`,
-			expected: values.NewString(""),
+			Name:     "string no args",
+			Code:     `(string)`,
+			Expected: values.NewString(""),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -939,80 +940,80 @@ func TestStringConstructor(t *testing.T) {
 // Unicode string tests
 
 func TestStringUnicode(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// string-length with Unicode
 		{
-			name:     "string-length with emoji",
-			code:     `(string-length "hello😀world")`, // emoji directly in string
-			expected: values.NewInteger(11),
+			Name:     "string-length with emoji",
+			Code:     `(string-length "hello😀world")`, // emoji directly in string
+			Expected: values.NewInteger(11),
 		},
 		{
-			name:     "string-length with Chinese",
-			code:     `(string-length "你好世界")`,
-			expected: values.NewInteger(4),
+			Name:     "string-length with Chinese",
+			Code:     `(string-length "你好世界")`,
+			Expected: values.NewInteger(4),
 		},
 		{
-			name:     "string-length with accented chars",
-			code:     `(string-length "café")`,
-			expected: values.NewInteger(4),
+			Name:     "string-length with accented chars",
+			Code:     `(string-length "café")`,
+			Expected: values.NewInteger(4),
 		},
 		// string-ref with Unicode
 		{
-			name:     "string-ref Chinese char",
-			code:     `(char->integer (string-ref "你好" 0))`,
-			expected: values.NewInteger(20320), // 你 = U+4F60
+			Name:     "string-ref Chinese char",
+			Code:     `(char->integer (string-ref "你好" 0))`,
+			Expected: values.NewInteger(20320), // 你 = U+4F60
 		},
 		{
-			name:     "string-ref second Chinese char",
-			code:     `(char->integer (string-ref "你好" 1))`,
-			expected: values.NewInteger(22909), // 好 = U+597D
+			Name:     "string-ref second Chinese char",
+			Code:     `(char->integer (string-ref "你好" 1))`,
+			Expected: values.NewInteger(22909), // 好 = U+597D
 		},
 		// substring with Unicode
 		{
-			name:     "substring with Chinese",
-			code:     `(substring "你好世界" 1 3)`,
-			expected: values.NewString("好世"),
+			Name:     "substring with Chinese",
+			Code:     `(substring "你好世界" 1 3)`,
+			Expected: values.NewString("好世"),
 		},
 		// string-upcase with Unicode
 		{
-			name:     "string-upcase with accented",
-			code:     `(string-upcase "café")`,
-			expected: values.NewString("CAFÉ"),
+			Name:     "string-upcase with accented",
+			Code:     `(string-upcase "café")`,
+			Expected: values.NewString("CAFÉ"),
 		},
 		{
-			name:     "string-upcase Greek",
-			code:     `(string-upcase "αβγ")`,
-			expected: values.NewString("ΑΒΓ"),
+			Name:     "string-upcase Greek",
+			Code:     `(string-upcase "αβγ")`,
+			Expected: values.NewString("ΑΒΓ"),
 		},
 		// string-downcase with Unicode
 		{
-			name:     "string-downcase with accented",
-			code:     `(string-downcase "CAFÉ")`,
-			expected: values.NewString("café"),
+			Name:     "string-downcase with accented",
+			Code:     `(string-downcase "CAFÉ")`,
+			Expected: values.NewString("café"),
 		},
 		{
-			name:     "string-downcase Greek",
-			code:     `(string-downcase "ΑΒΓ")`,
-			expected: values.NewString("αβγ"),
+			Name:     "string-downcase Greek",
+			Code:     `(string-downcase "ΑΒΓ")`,
+			Expected: values.NewString("αβγ"),
 		},
 		// string-append with Unicode
 		{
-			name:     "string-append with Chinese",
-			code:     `(string-append "你好" "世界")`,
-			expected: values.NewString("你好世界"),
+			Name:     "string-append with Chinese",
+			Code:     `(string-append "你好" "世界")`,
+			Expected: values.NewString("你好世界"),
 		},
 		// string->list with Unicode
 		{
-			name:     "string->list with Chinese length",
-			code:     `(length (string->list "你好"))`,
-			expected: values.NewInteger(2),
+			Name:     "string->list with Chinese length",
+			Code:     `(length (string->list "你好"))`,
+			Expected: values.NewInteger(2),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -1020,211 +1021,211 @@ func TestStringUnicode(t *testing.T) {
 // Error condition tests for string operations
 
 func TestStringErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		// string-length errors
 		{
-			name: "string-length with non-string",
-			code: `(string-length 42)`,
+			Name: "string-length with non-string",
+			Code: `(string-length 42)`,
 		},
 		{
-			name: "string-length with symbol",
-			code: `(string-length 'foo)`,
+			Name: "string-length with symbol",
+			Code: `(string-length 'foo)`,
 		},
 		// string-ref errors
 		{
-			name: "string-ref with non-string",
-			code: `(string-ref 42 0)`,
+			Name: "string-ref with non-string",
+			Code: `(string-ref 42 0)`,
 		},
 		{
-			name: "string-ref with non-integer index",
-			code: `(string-ref "hello" "0")`,
+			Name: "string-ref with non-integer index",
+			Code: `(string-ref "hello" "0")`,
 		},
 		// substring errors
 		{
-			name: "substring with non-string",
-			code: `(substring 42 0 1)`,
+			Name: "substring with non-string",
+			Code: `(substring 42 0 1)`,
 		},
 		{
-			name: "substring with non-integer start",
-			code: `(substring "hello" "0" 3)`,
+			Name: "substring with non-integer start",
+			Code: `(substring "hello" "0" 3)`,
 		},
 		{
-			name: "substring with non-integer end",
-			code: `(substring "hello" 0 "3")`,
+			Name: "substring with non-integer end",
+			Code: `(substring "hello" 0 "3")`,
 		},
 		// make-string errors
 		{
-			name: "make-string with non-integer length",
-			code: `(make-string "5")`,
+			Name: "make-string with non-integer length",
+			Code: `(make-string "5")`,
 		},
 		{
-			name: "make-string with negative length",
-			code: `(make-string -1)`,
+			Name: "make-string with negative length",
+			Code: `(make-string -1)`,
 		},
 		{
-			name: "make-string with non-char fill",
-			code: `(make-string 3 "a")`,
+			Name: "make-string with non-char fill",
+			Code: `(make-string 3 "a")`,
 		},
 		// string-copy errors
 		{
-			name: "string-copy with non-string",
-			code: `(string-copy 42)`,
+			Name: "string-copy with non-string",
+			Code: `(string-copy 42)`,
 		},
 		// string constructor errors
 		{
-			name: "string with non-char arg",
-			code: `(string #\a "b" #\c)`,
+			Name: "string with non-char arg",
+			Code: `(string #\a "b" #\c)`,
 		},
 		// string->list errors
 		{
-			name: "string->list with non-string",
-			code: `(string->list 42)`,
+			Name: "string->list with non-string",
+			Code: `(string->list 42)`,
 		},
 		// list->string errors
 		{
-			name: "list->string with non-list",
-			code: `(list->string "abc")`,
+			Name: "list->string with non-list",
+			Code: `(list->string "abc")`,
 		},
 		{
-			name: "list->string with non-char element",
-			code: `(list->string '(#\a "b" #\c))`,
+			Name: "list->string with non-char element",
+			Code: `(list->string '(#\a "b" #\c))`,
 		},
 		{
-			name: "list->string with improper list",
-			code: `(list->string '(#\a #\b . #\c))`,
+			Name: "list->string with improper list",
+			Code: `(list->string '(#\a #\b . #\c))`,
 		},
 		// string-upcase errors
 		{
-			name: "string-upcase with non-string",
-			code: `(string-upcase 42)`,
+			Name: "string-upcase with non-string",
+			Code: `(string-upcase 42)`,
 		},
 		// string-downcase errors
 		{
-			name: "string-downcase with non-string",
-			code: `(string-downcase 42)`,
+			Name: "string-downcase with non-string",
+			Code: `(string-downcase 42)`,
 		},
 		// string-foldcase errors
 		{
-			name: "string-foldcase with non-string",
-			code: `(string-foldcase 42)`,
+			Name: "string-foldcase with non-string",
+			Code: `(string-foldcase 42)`,
 		},
 		{
-			name: "string-foldcase with symbol",
-			code: `(string-foldcase 'foo)`,
+			Name: "string-foldcase with symbol",
+			Code: `(string-foldcase 'foo)`,
 		},
 		// string comparison errors
 		{
-			name: "string=? with non-string first arg",
-			code: `(string=? 42 "hello")`,
+			Name: "string=? with non-string first arg",
+			Code: `(string=? 42 "hello")`,
 		},
 		{
-			name: "string=? with non-string second arg",
-			code: `(string=? "hello" 42)`,
+			Name: "string=? with non-string second arg",
+			Code: `(string=? "hello" 42)`,
 		},
 		{
-			name: "string<? with non-string first arg",
-			code: `(string<? 42 "hello")`,
+			Name: "string<? with non-string first arg",
+			Code: `(string<? 42 "hello")`,
 		},
 		{
-			name: "string<? with non-string second arg",
-			code: `(string<? "hello" 42)`,
+			Name: "string<? with non-string second arg",
+			Code: `(string<? "hello" 42)`,
 		},
 		{
-			name: "string>? with non-string first arg",
-			code: `(string>? 42 "hello")`,
+			Name: "string>? with non-string first arg",
+			Code: `(string>? 42 "hello")`,
 		},
 		{
-			name: "string>? with non-string second arg",
-			code: `(string>? "hello" 42)`,
+			Name: "string>? with non-string second arg",
+			Code: `(string>? "hello" 42)`,
 		},
 		{
-			name: "string<=? with non-string first arg",
-			code: `(string<=? 42 "hello")`,
+			Name: "string<=? with non-string first arg",
+			Code: `(string<=? 42 "hello")`,
 		},
 		{
-			name: "string<=? with non-string second arg",
-			code: `(string<=? "hello" 42)`,
+			Name: "string<=? with non-string second arg",
+			Code: `(string<=? "hello" 42)`,
 		},
 		{
-			name: "string>=? with non-string first arg",
-			code: `(string>=? 42 "hello")`,
+			Name: "string>=? with non-string first arg",
+			Code: `(string>=? 42 "hello")`,
 		},
 		{
-			name: "string>=? with non-string second arg",
-			code: `(string>=? "hello" 42)`,
+			Name: "string>=? with non-string second arg",
+			Code: `(string>=? "hello" 42)`,
 		},
 		// string-ci comparison errors
 		{
-			name: "string-ci=? with non-string first arg",
-			code: `(string-ci=? 42 "hello")`,
+			Name: "string-ci=? with non-string first arg",
+			Code: `(string-ci=? 42 "hello")`,
 		},
 		{
-			name: "string-ci=? with non-string second arg",
-			code: `(string-ci=? "hello" 42)`,
+			Name: "string-ci=? with non-string second arg",
+			Code: `(string-ci=? "hello" 42)`,
 		},
 		{
-			name: "string-ci<? with non-string first arg",
-			code: `(string-ci<? 42 "hello")`,
+			Name: "string-ci<? with non-string first arg",
+			Code: `(string-ci<? 42 "hello")`,
 		},
 		{
-			name: "string-ci<? with non-string second arg",
-			code: `(string-ci<? "hello" 42)`,
+			Name: "string-ci<? with non-string second arg",
+			Code: `(string-ci<? "hello" 42)`,
 		},
 		{
-			name: "string-ci>? with non-string first arg",
-			code: `(string-ci>? 42 "hello")`,
+			Name: "string-ci>? with non-string first arg",
+			Code: `(string-ci>? 42 "hello")`,
 		},
 		{
-			name: "string-ci>? with non-string second arg",
-			code: `(string-ci>? "hello" 42)`,
+			Name: "string-ci>? with non-string second arg",
+			Code: `(string-ci>? "hello" 42)`,
 		},
 		{
-			name: "string-ci<=? with non-string first arg",
-			code: `(string-ci<=? 42 "hello")`,
+			Name: "string-ci<=? with non-string first arg",
+			Code: `(string-ci<=? 42 "hello")`,
 		},
 		{
-			name: "string-ci<=? with non-string second arg",
-			code: `(string-ci<=? "hello" 42)`,
+			Name: "string-ci<=? with non-string second arg",
+			Code: `(string-ci<=? "hello" 42)`,
 		},
 		{
-			name: "string-ci>=? with non-string first arg",
-			code: `(string-ci>=? 42 "hello")`,
+			Name: "string-ci>=? with non-string first arg",
+			Code: `(string-ci>=? 42 "hello")`,
 		},
 		{
-			name: "string-ci>=? with non-string second arg",
-			code: `(string-ci>=? "hello" 42)`,
+			Name: "string-ci>=? with non-string second arg",
+			Code: `(string-ci>=? "hello" 42)`,
 		},
 		// string->symbol errors
 		{
-			name: "string->symbol with non-string",
-			code: `(string->symbol 42)`,
+			Name: "string->symbol with non-string",
+			Code: `(string->symbol 42)`,
 		},
 		{
-			name: "string->symbol with symbol",
-			code: `(string->symbol 'foo)`,
+			Name: "string->symbol with symbol",
+			Code: `(string->symbol 'foo)`,
 		},
 		// symbol->string errors
 		{
-			name: "symbol->string with non-symbol",
-			code: `(symbol->string "foo")`,
+			Name: "symbol->string with non-symbol",
+			Code: `(symbol->string "foo")`,
 		},
 		{
-			name: "symbol->string with integer",
-			code: `(symbol->string 42)`,
+			Name: "symbol->string with integer",
+			Code: `(symbol->string 42)`,
 		},
 		// number->string errors
 		{
-			name: "number->string with non-number",
-			code: `(number->string "42")`,
+			Name: "number->string with non-number",
+			Code: `(number->string "42")`,
 		},
 		{
-			name: "number->string with symbol",
-			code: `(number->string 'foo)`,
+			Name: "number->string with symbol",
+			Code: `(number->string 'foo)`,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -1233,48 +1234,48 @@ func TestStringErrors(t *testing.T) {
 // Unicode character tests
 
 func TestCharUnicode(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// char->integer with Unicode
 		{
-			name:     "char->integer with Greek alpha",
-			code:     `(char->integer #\α)`,
-			expected: values.NewInteger(945), // α = U+03B1
+			Name:     "char->integer with Greek alpha",
+			Code:     `(char->integer #\α)`,
+			Expected: values.NewInteger(945), // α = U+03B1
 		},
 		// integer->char with Unicode
 		{
-			name:     "integer->char to Greek alpha",
-			code:     `(integer->char 945)`,
-			expected: values.NewCharacter('α'),
+			Name:     "integer->char to Greek alpha",
+			Code:     `(integer->char 945)`,
+			Expected: values.NewCharacter('α'),
 		},
 		// char-upcase with Unicode
 		{
-			name:     "char-upcase Greek",
-			code:     `(char-upcase #\α)`,
-			expected: values.NewCharacter('Α'),
+			Name:     "char-upcase Greek",
+			Code:     `(char-upcase #\α)`,
+			Expected: values.NewCharacter('Α'),
 		},
 		// char-downcase with Unicode
 		{
-			name:     "char-downcase Greek",
-			code:     `(char-downcase #\Α)`,
-			expected: values.NewCharacter('α'),
+			Name:     "char-downcase Greek",
+			Code:     `(char-downcase #\Α)`,
+			Expected: values.NewCharacter('α'),
 		},
 		// char-alphabetic? with Unicode
 		{
-			name:     "char-alphabetic? with Chinese",
-			code:     `(char-alphabetic? #\中)`,
-			expected: values.TrueValue,
+			Name:     "char-alphabetic? with Chinese",
+			Code:     `(char-alphabetic? #\中)`,
+			Expected: values.TrueValue,
 		},
 		{
-			name:     "char-alphabetic? with Greek",
-			code:     `(char-alphabetic? #\α)`,
-			expected: values.TrueValue,
+			Name:     "char-alphabetic? with Greek",
+			Code:     `(char-alphabetic? #\α)`,
+			Expected: values.TrueValue,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -1282,376 +1283,376 @@ func TestCharUnicode(t *testing.T) {
 // R7RS string mutation tests
 
 func TestStringSet(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "string-set! first char",
-			code:     `(let ((s (string-copy "hello"))) (string-set! s 0 #\H) s)`,
-			expected: values.NewString("Hello"),
+			Name:     "string-set! first char",
+			Code:     `(let ((s (string-copy "hello"))) (string-set! s 0 #\H) s)`,
+			Expected: values.NewString("Hello"),
 		},
 		{
-			name:     "string-set! last char",
-			code:     `(let ((s (string-copy "hello"))) (string-set! s 4 #\O) s)`,
-			expected: values.NewString("hellO"),
+			Name:     "string-set! last char",
+			Code:     `(let ((s (string-copy "hello"))) (string-set! s 4 #\O) s)`,
+			Expected: values.NewString("hellO"),
 		},
 		{
-			name:     "string-set! middle char",
-			code:     `(let ((s (string-copy "hello"))) (string-set! s 2 #\L) s)`,
-			expected: values.NewString("heLlo"),
+			Name:     "string-set! middle char",
+			Code:     `(let ((s (string-copy "hello"))) (string-set! s 2 #\L) s)`,
+			Expected: values.NewString("heLlo"),
 		},
 		{
-			name:     "string-set! returns void",
-			code:     `(let ((s (string-copy "hello"))) (string-set! s 0 #\H))`,
-			expected: values.Void,
+			Name:     "string-set! returns void",
+			Code:     `(let ((s (string-copy "hello"))) (string-set! s 0 #\H))`,
+			Expected: values.Void,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringSetErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "string-set! with non-string", code: `(string-set! 42 0 #\a)`},
-		{name: "string-set! with non-integer index", code: `(string-set! "hello" "0" #\a)`},
-		{name: "string-set! with non-character", code: `(string-set! "hello" 0 "a")`},
-		{name: "string-set! index out of bounds", code: `(string-set! "hello" 5 #\a)`},
-		{name: "string-set! negative index", code: `(string-set! "hello" -1 #\a)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "string-set! with non-string", Code: `(string-set! 42 0 #\a)`},
+		{Name: "string-set! with non-integer index", Code: `(string-set! "hello" "0" #\a)`},
+		{Name: "string-set! with non-character", Code: `(string-set! "hello" 0 "a")`},
+		{Name: "string-set! index out of bounds", Code: `(string-set! "hello" 5 #\a)`},
+		{Name: "string-set! negative index", Code: `(string-set! "hello" -1 #\a)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
 }
 
 func TestStringFill(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "string-fill! entire string",
-			code:     `(let ((s (string-copy "hello"))) (string-fill! s #\z) s)`,
-			expected: values.NewString("zzzzz"),
+			Name:     "string-fill! entire string",
+			Code:     `(let ((s (string-copy "hello"))) (string-fill! s #\z) s)`,
+			Expected: values.NewString("zzzzz"),
 		},
 		{
-			name:     "string-fill! with start",
-			code:     `(let ((s (string-copy "hello"))) (string-fill! s #\z 2) s)`,
-			expected: values.NewString("hezzz"),
+			Name:     "string-fill! with start",
+			Code:     `(let ((s (string-copy "hello"))) (string-fill! s #\z 2) s)`,
+			Expected: values.NewString("hezzz"),
 		},
 		{
-			name:     "string-fill! with start and end",
-			code:     `(let ((s (string-copy "hello"))) (string-fill! s #\z 1 4) s)`,
-			expected: values.NewString("hzzzo"),
+			Name:     "string-fill! with start and end",
+			Code:     `(let ((s (string-copy "hello"))) (string-fill! s #\z 1 4) s)`,
+			Expected: values.NewString("hzzzo"),
 		},
 		{
-			name:     "string-fill! returns void",
-			code:     `(let ((s (string-copy "hello"))) (string-fill! s #\z))`,
-			expected: values.Void,
+			Name:     "string-fill! returns void",
+			Code:     `(let ((s (string-copy "hello"))) (string-fill! s #\z))`,
+			Expected: values.Void,
 		},
 		{
-			name:     "string-fill! empty range",
-			code:     `(let ((s (string-copy "hello"))) (string-fill! s #\z 2 2) s)`,
-			expected: values.NewString("hello"),
+			Name:     "string-fill! empty range",
+			Code:     `(let ((s (string-copy "hello"))) (string-fill! s #\z 2 2) s)`,
+			Expected: values.NewString("hello"),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringFillErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "string-fill! with non-string", code: `(string-fill! 42 #\z)`},
-		{name: "string-fill! with non-character", code: `(string-fill! "hello" "x")`},
-		{name: "string-fill! start out of bounds", code: `(string-fill! "hello" #\z 6)`},
-		{name: "string-fill! end out of bounds", code: `(string-fill! "hello" #\z 0 6)`},
-		{name: "string-fill! start > end", code: `(string-fill! "hello" #\z 3 2)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "string-fill! with non-string", Code: `(string-fill! 42 #\z)`},
+		{Name: "string-fill! with non-character", Code: `(string-fill! "hello" "x")`},
+		{Name: "string-fill! start out of bounds", Code: `(string-fill! "hello" #\z 6)`},
+		{Name: "string-fill! end out of bounds", Code: `(string-fill! "hello" #\z 0 6)`},
+		{Name: "string-fill! start > end", Code: `(string-fill! "hello" #\z 3 2)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
 }
 
 func TestStringCopyTo(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "string-copy! basic",
-			code:     `(let ((to (string-copy "12345"))) (string-copy! to 0 "abc") to)`,
-			expected: values.NewString("abc45"),
+			Name:     "string-copy! basic",
+			Code:     `(let ((to (string-copy "12345"))) (string-copy! to 0 "abc") to)`,
+			Expected: values.NewString("abc45"),
 		},
 		{
-			name:     "string-copy! with offset",
-			code:     `(let ((to (string-copy "12345"))) (string-copy! to 2 "abc") to)`,
-			expected: values.NewString("12abc"),
+			Name:     "string-copy! with offset",
+			Code:     `(let ((to (string-copy "12345"))) (string-copy! to 2 "abc") to)`,
+			Expected: values.NewString("12abc"),
 		},
 		{
-			name:     "string-copy! with start",
-			code:     `(let ((to (string-copy "12345"))) (string-copy! to 0 "abcde" 2) to)`,
-			expected: values.NewString("cde45"),
+			Name:     "string-copy! with start",
+			Code:     `(let ((to (string-copy "12345"))) (string-copy! to 0 "abcde" 2) to)`,
+			Expected: values.NewString("cde45"),
 		},
 		{
-			name:     "string-copy! with start and end",
-			code:     `(let ((to (string-copy "12345"))) (string-copy! to 1 "abcde" 1 3) to)`,
-			expected: values.NewString("1bc45"),
+			Name:     "string-copy! with start and end",
+			Code:     `(let ((to (string-copy "12345"))) (string-copy! to 1 "abcde" 1 3) to)`,
+			Expected: values.NewString("1bc45"),
 		},
 		{
-			name:     "string-copy! returns void",
-			code:     `(let ((to (string-copy "12345"))) (string-copy! to 0 "abc"))`,
-			expected: values.Void,
+			Name:     "string-copy! returns void",
+			Code:     `(let ((to (string-copy "12345"))) (string-copy! to 0 "abc"))`,
+			Expected: values.Void,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringCopyToErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "string-copy! to non-string", code: `(string-copy! 42 0 "abc")`},
-		{name: "string-copy! at non-integer", code: `(string-copy! "12345" "0" "abc")`},
-		{name: "string-copy! from non-string", code: `(string-copy! "12345" 0 42)`},
-		{name: "string-copy! destination overflow", code: `(string-copy! "123" 2 "abcde")`},
-		{name: "string-copy! invalid source range", code: `(string-copy! "12345" 0 "abc" 2 1)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "string-copy! to non-string", Code: `(string-copy! 42 0 "abc")`},
+		{Name: "string-copy! at non-integer", Code: `(string-copy! "12345" "0" "abc")`},
+		{Name: "string-copy! from non-string", Code: `(string-copy! "12345" 0 42)`},
+		{Name: "string-copy! destination overflow", Code: `(string-copy! "123" 2 "abcde")`},
+		{Name: "string-copy! invalid source range", Code: `(string-copy! "12345" 0 "abc" 2 1)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
 }
 
 func TestStringMap(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "string-map single string",
-			code:     `(string-map char-upcase "hello")`,
-			expected: values.NewString("HELLO"),
+			Name:     "string-map single string",
+			Code:     `(string-map char-upcase "hello")`,
+			Expected: values.NewString("HELLO"),
 		},
 		{
-			name:     "string-map with lambda",
-			code:     `(string-map (lambda (c) (integer->char (+ 1 (char->integer c)))) "abc")`,
-			expected: values.NewString("bcd"),
+			Name:     "string-map with lambda",
+			Code:     `(string-map (lambda (c) (integer->char (+ 1 (char->integer c)))) "abc")`,
+			Expected: values.NewString("bcd"),
 		},
 		{
-			name:     "string-map empty string",
-			code:     `(string-map char-upcase "")`,
-			expected: values.NewString(""),
+			Name:     "string-map empty string",
+			Code:     `(string-map char-upcase "")`,
+			Expected: values.NewString(""),
 		},
 		{
-			name:     "string-map two strings",
-			code:     `(string-map (lambda (a b) (if (char<? a b) b a)) "abc" "bac")`,
-			expected: values.NewString("bbc"),
+			Name:     "string-map two strings",
+			Code:     `(string-map (lambda (a b) (if (char<? a b) b a)) "abc" "bac")`,
+			Expected: values.NewString("bbc"),
 		},
 		// Single char
 		{
-			name:     "string-map single char",
-			code:     `(string-map char-upcase "a")`,
-			expected: values.NewString("A"),
+			Name:     "string-map single char",
+			Code:     `(string-map char-upcase "a")`,
+			Expected: values.NewString("A"),
 		},
 		// Unequal lengths - stops at shortest
 		{
-			name:     "string-map unequal lengths",
-			code:     `(string-map (lambda (a b) a) "abcde" "xy")`,
-			expected: values.NewString("ab"),
+			Name:     "string-map unequal lengths",
+			Code:     `(string-map (lambda (a b) a) "abcde" "xy")`,
+			Expected: values.NewString("ab"),
 		},
 		// Three strings
 		{
-			name:     "string-map three strings",
-			code:     `(string-map (lambda (a b c) a) "abc" "def" "ghi")`,
-			expected: values.NewString("abc"),
+			Name:     "string-map three strings",
+			Code:     `(string-map (lambda (a b c) a) "abc" "def" "ghi")`,
+			Expected: values.NewString("abc"),
 		},
 		// Unicode identity
 		{
-			name:     "string-map Unicode identity",
-			code:     "(string-map (lambda (c) c) \"\u03b1\u03b2\u03b3\")",
-			expected: values.NewString("\u03b1\u03b2\u03b3"),
+			Name:     "string-map Unicode identity",
+			Code:     "(string-map (lambda (c) c) \"\u03b1\u03b2\u03b3\")",
+			Expected: values.NewString("\u03b1\u03b2\u03b3"),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringMapErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "string-map non-procedure", code: `(string-map 42 "hello")`},
-		{name: "string-map non-string", code: `(string-map char-upcase 42)`},
-		{name: "string-map proc returns non-char", code: `(string-map (lambda (c) 42) "hello")`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "string-map non-procedure", Code: `(string-map 42 "hello")`},
+		{Name: "string-map non-string", Code: `(string-map char-upcase 42)`},
+		{Name: "string-map proc returns non-char", Code: `(string-map (lambda (c) 42) "hello")`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
 }
 
 func TestStringForEach(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "string-for-each returns void",
-			code:     `(string-for-each (lambda (c) c) "hello")`,
-			expected: values.Void,
+			Name:     "string-for-each returns void",
+			Code:     `(string-for-each (lambda (c) c) "hello")`,
+			Expected: values.Void,
 		},
 		{
-			name:     "string-for-each with side effect",
-			code:     `(let ((count 0)) (string-for-each (lambda (c) (set! count (+ count 1))) "hello") count)`,
-			expected: values.NewInteger(5),
+			Name:     "string-for-each with side effect",
+			Code:     `(let ((count 0)) (string-for-each (lambda (c) (set! count (+ count 1))) "hello") count)`,
+			Expected: values.NewInteger(5),
 		},
 		{
-			name:     "string-for-each empty string",
-			code:     `(let ((count 0)) (string-for-each (lambda (c) (set! count (+ count 1))) "") count)`,
-			expected: values.NewInteger(0),
+			Name:     "string-for-each empty string",
+			Code:     `(let ((count 0)) (string-for-each (lambda (c) (set! count (+ count 1))) "") count)`,
+			Expected: values.NewInteger(0),
 		},
 		// Order verification
 		{
-			name:     "string-for-each order verification",
-			code:     `(let ((result '())) (string-for-each (lambda (c) (set! result (cons c result))) "abc") result)`,
-			expected: values.List(values.NewCharacter('c'), values.NewCharacter('b'), values.NewCharacter('a')),
+			Name:     "string-for-each order verification",
+			Code:     `(let ((result '())) (string-for-each (lambda (c) (set! result (cons c result))) "abc") result)`,
+			Expected: values.List(values.NewCharacter('c'), values.NewCharacter('b'), values.NewCharacter('a')),
 		},
 		// Two strings with side effects
 		{
-			name: "string-for-each two strings",
-			code: `(let ((result '())) (string-for-each (lambda (a b) (set! result (cons (list a b) result))) "ab" "xy") result)`,
-			expected: values.List(
+			Name: "string-for-each two strings",
+			Code: `(let ((result '())) (string-for-each (lambda (a b) (set! result (cons (list a b) result))) "ab" "xy") result)`,
+			Expected: values.List(
 				values.List(values.NewCharacter('b'), values.NewCharacter('y')),
 				values.List(values.NewCharacter('a'), values.NewCharacter('x'))),
 		},
 		// Unequal lengths - stops at shortest
 		{
-			name:     "string-for-each unequal lengths",
-			code:     `(let ((count 0)) (string-for-each (lambda (a b) (set! count (+ count 1))) "abcde" "xy") count)`,
-			expected: values.NewInteger(2),
+			Name:     "string-for-each unequal lengths",
+			Code:     `(let ((count 0)) (string-for-each (lambda (a b) (set! count (+ count 1))) "abcde" "xy") count)`,
+			Expected: values.NewInteger(2),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringForEachErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "string-for-each non-procedure", code: `(string-for-each 42 "hello")`},
-		{name: "string-for-each non-string", code: `(string-for-each (lambda (c) c) 42)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "string-for-each non-procedure", Code: `(string-for-each 42 "hello")`},
+		{Name: "string-for-each non-string", Code: `(string-for-each (lambda (c) c) 42)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
 }
 
 func TestStringToListOptional(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic (no optional args)
-		{name: "string->list full", code: `(string->list "hello")`,
-			expected: values.List(values.NewCharacter('h'), values.NewCharacter('e'), values.NewCharacter('l'), values.NewCharacter('l'), values.NewCharacter('o'))},
-		{name: "string->list empty", code: `(string->list "")`, expected: values.EmptyList},
+		{Name: "string->list full", Code: `(string->list "hello")`,
+			Expected: values.List(values.NewCharacter('h'), values.NewCharacter('e'), values.NewCharacter('l'), values.NewCharacter('l'), values.NewCharacter('o'))},
+		{Name: "string->list empty", Code: `(string->list "")`, Expected: values.EmptyList},
 		// With start argument
-		{name: "string->list with start", code: `(string->list "hello" 2)`,
-			expected: values.List(values.NewCharacter('l'), values.NewCharacter('l'), values.NewCharacter('o'))},
-		{name: "string->list with start at 0", code: `(string->list "hello" 0)`,
-			expected: values.List(values.NewCharacter('h'), values.NewCharacter('e'), values.NewCharacter('l'), values.NewCharacter('l'), values.NewCharacter('o'))},
-		{name: "string->list with start at end", code: `(string->list "hello" 5)`, expected: values.EmptyList},
+		{Name: "string->list with start", Code: `(string->list "hello" 2)`,
+			Expected: values.List(values.NewCharacter('l'), values.NewCharacter('l'), values.NewCharacter('o'))},
+		{Name: "string->list with start at 0", Code: `(string->list "hello" 0)`,
+			Expected: values.List(values.NewCharacter('h'), values.NewCharacter('e'), values.NewCharacter('l'), values.NewCharacter('l'), values.NewCharacter('o'))},
+		{Name: "string->list with start at end", Code: `(string->list "hello" 5)`, Expected: values.EmptyList},
 		// With start and end arguments
-		{name: "string->list with start and end", code: `(string->list "hello" 1 4)`,
-			expected: values.List(values.NewCharacter('e'), values.NewCharacter('l'), values.NewCharacter('l'))},
-		{name: "string->list with start and end full", code: `(string->list "hello" 0 5)`,
-			expected: values.List(values.NewCharacter('h'), values.NewCharacter('e'), values.NewCharacter('l'), values.NewCharacter('l'), values.NewCharacter('o'))},
-		{name: "string->list with start equals end", code: `(string->list "hello" 2 2)`, expected: values.EmptyList},
+		{Name: "string->list with start and end", Code: `(string->list "hello" 1 4)`,
+			Expected: values.List(values.NewCharacter('e'), values.NewCharacter('l'), values.NewCharacter('l'))},
+		{Name: "string->list with start and end full", Code: `(string->list "hello" 0 5)`,
+			Expected: values.List(values.NewCharacter('h'), values.NewCharacter('e'), values.NewCharacter('l'), values.NewCharacter('l'), values.NewCharacter('o'))},
+		{Name: "string->list with start equals end", Code: `(string->list "hello" 2 2)`, Expected: values.EmptyList},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringToListErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "string->list with non-string", code: `(string->list 42)`},
-		{name: "string->list with non-integer start", code: `(string->list "hello" "x")`},
-		{name: "string->list with non-integer end", code: `(string->list "hello" 0 "x")`},
-		{name: "string->list with negative start", code: `(string->list "hello" -1)`},
-		{name: "string->list with end out of bounds", code: `(string->list "hello" 0 10)`},
-		{name: "string->list with start > end", code: `(string->list "hello" 3 1)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "string->list with non-string", Code: `(string->list 42)`},
+		{Name: "string->list with non-integer start", Code: `(string->list "hello" "x")`},
+		{Name: "string->list with non-integer end", Code: `(string->list "hello" 0 "x")`},
+		{Name: "string->list with negative start", Code: `(string->list "hello" -1)`},
+		{Name: "string->list with end out of bounds", Code: `(string->list "hello" 0 10)`},
+		{Name: "string->list with start > end", Code: `(string->list "hello" 3 1)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
 }
 
 func TestStringSetImmutable(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "string-set! on literal",
-			code: `(string-set! "hello" 0 #\H)`,
+			Name: "string-set! on literal",
+			Code: `(string-set! "hello" 0 #\H)`,
 		},
 		{
-			name: "string-set! on symbol->string",
-			code: `(string-set! (symbol->string 'test) 0 #\x)`,
+			Name: "string-set! on symbol->string",
+			Code: `(string-set! (symbol->string 'test) 0 #\x)`,
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
 }
 
 func TestStringSetMutable(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "string-set! on string-copy",
-			code:     `(let ((s (string-copy "hello"))) (string-set! s 0 #\H) s)`,
-			expected: values.NewString("Hello"),
+			Name:     "string-set! on string-copy",
+			Code:     `(let ((s (string-copy "hello"))) (string-set! s 0 #\H) s)`,
+			Expected: values.NewString("Hello"),
 		},
 		{
-			name:     "string-set! on make-string",
-			code:     `(let ((s (make-string 5 #\a))) (string-set! s 2 #\x) s)`,
-			expected: values.NewString("aaxaa"),
+			Name:     "string-set! on make-string",
+			Code:     `(let ((s (make-string 5 #\a))) (string-set! s 2 #\x) s)`,
+			Expected: values.NewString("aaxaa"),
 		},
 		{
-			name:     "string-set! on list->string",
-			code:     `(let ((s (list->string '(#\h #\i)))) (string-set! s 0 #\H) s)`,
-			expected: values.NewString("Hi"),
+			Name:     "string-set! on list->string",
+			Code:     `(let ((s (list->string '(#\h #\i)))) (string-set! s 0 #\H) s)`,
+			Expected: values.NewString("Hi"),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }

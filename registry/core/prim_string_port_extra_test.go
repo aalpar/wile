@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -26,7 +27,7 @@ import (
 // String Port Tests (R7RS §6.13.1)
 
 func TestOpenInputStringReadMultiple(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "a b c")))
 			(list (read p) (read p) (read p)))
 	`)
@@ -40,7 +41,7 @@ func TestOpenInputStringReadMultiple(t *testing.T) {
 }
 
 func TestOpenInputStringWithNestedExpressions(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "(define x 10)")))
 			(read p))
 	`)
@@ -54,7 +55,7 @@ func TestOpenInputStringWithNestedExpressions(t *testing.T) {
 }
 
 func TestOpenOutputStringMultipleWrites(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(display "Hello" p)
 			(display ", " p)
@@ -68,7 +69,7 @@ func TestOpenOutputStringMultipleWrites(t *testing.T) {
 }
 
 func TestOpenOutputStringWithDifferentTypes(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(display "num: " p)
 			(display 42 p)

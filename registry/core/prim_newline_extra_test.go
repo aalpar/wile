@@ -19,13 +19,14 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 )
 
 // Newline Tests (R7RS §6.13.3)
 
 func TestNewlineWithExplicitPort(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(newline p)
 			(get-output-string p))
@@ -37,7 +38,7 @@ func TestNewlineWithExplicitPort(t *testing.T) {
 }
 
 func TestMultipleNewlines(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(newline p)
 			(newline p)

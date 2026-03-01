@@ -18,6 +18,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -30,61 +31,61 @@ import (
 
 func TestIntegerQ(t *testing.T) {
 	t.Run("integer? on exact integer", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(integer? 42)")
+		result, err := testhelpers.RunSchemeCode(t, "(integer? 42)")
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 	})
 
 	t.Run("integer? on inexact integer", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(integer? 3.0)")
+		result, err := testhelpers.RunSchemeCode(t, "(integer? 3.0)")
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 	})
 
 	t.Run("integer? on non-integer float", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(integer? 3.5)")
+		result, err := testhelpers.RunSchemeCode(t, "(integer? 3.5)")
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 	})
 
 	t.Run("integer? on non-integer rational", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(integer? 1/2)")
+		result, err := testhelpers.RunSchemeCode(t, "(integer? 1/2)")
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 	})
 
 	t.Run("integer? on integer rational", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(integer? 1/1)")
+		result, err := testhelpers.RunSchemeCode(t, "(integer? 1/1)")
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 	})
 
 	t.Run("integer? on complex with zero imaginary", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(integer? 3+0i)")
+		result, err := testhelpers.RunSchemeCode(t, "(integer? 3+0i)")
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 	})
 
 	t.Run("integer? on complex with non-zero imaginary", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(integer? 3+1i)")
+		result, err := testhelpers.RunSchemeCode(t, "(integer? 3+1i)")
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 	})
 
 	t.Run("integer? on negative integer", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(integer? -5)")
+		result, err := testhelpers.RunSchemeCode(t, "(integer? -5)")
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 	})
 
 	t.Run("integer? on zero", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(integer? 0)")
+		result, err := testhelpers.RunSchemeCode(t, "(integer? 0)")
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 	})
 
 	t.Run("integer? on non-number", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(integer? \"hello\")")
+		result, err := testhelpers.RunSchemeCode(t, "(integer? \"hello\")")
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 	})
@@ -97,7 +98,7 @@ func TestIntegerQ(t *testing.T) {
 func TestSqrtExtended(t *testing.T) {
 	t.Run("sqrt of perfect square", func(t *testing.T) {
 		// R7RS §6.2.6: sqrt of exact perfect square returns exact integer
-		result, err := runSchemeCode(t, "(sqrt 4)")
+		result, err := testhelpers.RunSchemeCode(t, "(sqrt 4)")
 		qt.Assert(t, err, qt.IsNil)
 		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -105,7 +106,7 @@ func TestSqrtExtended(t *testing.T) {
 	})
 
 	t.Run("sqrt of non-perfect square", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(sqrt 2.0)")
+		result, err := testhelpers.RunSchemeCode(t, "(sqrt 2.0)")
 		qt.Assert(t, err, qt.IsNil)
 		floatResult, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -114,7 +115,7 @@ func TestSqrtExtended(t *testing.T) {
 
 	t.Run("sqrt of negative number returns complex", func(t *testing.T) {
 		// R7RS §6.2.6: sqrt of exact negative perfect square returns exact BigComplex
-		result, err := runSchemeCode(t, "(sqrt -1)")
+		result, err := testhelpers.RunSchemeCode(t, "(sqrt -1)")
 		qt.Assert(t, err, qt.IsNil)
 		bcResult, ok := result.(*values.BigComplex)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -127,7 +128,7 @@ func TestSqrtExtended(t *testing.T) {
 	})
 
 	t.Run("sqrt of complex number", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(sqrt 1+0i)")
+		result, err := testhelpers.RunSchemeCode(t, "(sqrt 1+0i)")
 		qt.Assert(t, err, qt.IsNil)
 		complexResult, ok := result.(*values.Complex)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -137,7 +138,7 @@ func TestSqrtExtended(t *testing.T) {
 
 	t.Run("sqrt of zero", func(t *testing.T) {
 		// R7RS §6.2.6: sqrt of exact 0 returns exact 0
-		result, err := runSchemeCode(t, "(sqrt 0)")
+		result, err := testhelpers.RunSchemeCode(t, "(sqrt 0)")
 		qt.Assert(t, err, qt.IsNil)
 		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -146,7 +147,7 @@ func TestSqrtExtended(t *testing.T) {
 
 	t.Run("sqrt of rational", func(t *testing.T) {
 		// R7RS §6.2.6: sqrt of exact perfect-square rational returns exact rational
-		result, err := runSchemeCode(t, "(sqrt 1/4)")
+		result, err := testhelpers.RunSchemeCode(t, "(sqrt 1/4)")
 		qt.Assert(t, err, qt.IsNil)
 		rResult, ok := result.(*values.Rational)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -160,7 +161,7 @@ func TestSqrtExtended(t *testing.T) {
 
 func TestExptExtended(t *testing.T) {
 	t.Run("expt with positive integer exponent", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(expt 2 3)")
+		result, err := testhelpers.RunSchemeCode(t, "(expt 2 3)")
 		qt.Assert(t, err, qt.IsNil)
 		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -168,7 +169,7 @@ func TestExptExtended(t *testing.T) {
 	})
 
 	t.Run("expt with negative integer exponent", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(expt 2 -1)")
+		result, err := testhelpers.RunSchemeCode(t, "(expt 2 -1)")
 		qt.Assert(t, err, qt.IsNil)
 		// R7RS: exact inputs should give exact output
 		ratResult, ok := result.(*values.Rational)
@@ -177,7 +178,7 @@ func TestExptExtended(t *testing.T) {
 	})
 
 	t.Run("expt with float base", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(expt 2.0 3)")
+		result, err := testhelpers.RunSchemeCode(t, "(expt 2.0 3)")
 		qt.Assert(t, err, qt.IsNil)
 		floatResult, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -185,7 +186,7 @@ func TestExptExtended(t *testing.T) {
 	})
 
 	t.Run("expt with float exponent", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(expt 2 3.0)")
+		result, err := testhelpers.RunSchemeCode(t, "(expt 2 3.0)")
 		qt.Assert(t, err, qt.IsNil)
 		floatResult, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -193,7 +194,7 @@ func TestExptExtended(t *testing.T) {
 	})
 
 	t.Run("expt with complex base", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(expt 1+1i 2)")
+		result, err := testhelpers.RunSchemeCode(t, "(expt 1+1i 2)")
 		qt.Assert(t, err, qt.IsNil)
 		complexResult, ok := result.(*values.Complex)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -202,7 +203,7 @@ func TestExptExtended(t *testing.T) {
 	})
 
 	t.Run("expt with zero exponent", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(expt 5 0)")
+		result, err := testhelpers.RunSchemeCode(t, "(expt 5 0)")
 		qt.Assert(t, err, qt.IsNil)
 		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -210,7 +211,7 @@ func TestExptExtended(t *testing.T) {
 	})
 
 	t.Run("expt with rational base", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(expt 1/2 2)")
+		result, err := testhelpers.RunSchemeCode(t, "(expt 1/2 2)")
 		qt.Assert(t, err, qt.IsNil)
 		// R7RS: exact inputs should give exact output
 		ratResult, ok := result.(*values.Rational)
@@ -219,7 +220,7 @@ func TestExptExtended(t *testing.T) {
 	})
 
 	t.Run("expt with large exponent", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(expt 10 2)")
+		result, err := testhelpers.RunSchemeCode(t, "(expt 10 2)")
 		qt.Assert(t, err, qt.IsNil)
 		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -233,7 +234,7 @@ func TestExptExtended(t *testing.T) {
 
 func TestNumeratorExtended(t *testing.T) {
 	t.Run("numerator of rational", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(numerator 3/4)")
+		result, err := testhelpers.RunSchemeCode(t, "(numerator 3/4)")
 		qt.Assert(t, err, qt.IsNil)
 		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -241,7 +242,7 @@ func TestNumeratorExtended(t *testing.T) {
 	})
 
 	t.Run("numerator of integer", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(numerator 5)")
+		result, err := testhelpers.RunSchemeCode(t, "(numerator 5)")
 		qt.Assert(t, err, qt.IsNil)
 		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -250,7 +251,7 @@ func TestNumeratorExtended(t *testing.T) {
 
 	t.Run("numerator of float", func(t *testing.T) {
 		// R7RS §6.2.6: inexact input → inexact output
-		result, err := runSchemeCode(t, "(numerator 2.5)")
+		result, err := testhelpers.RunSchemeCode(t, "(numerator 2.5)")
 		qt.Assert(t, err, qt.IsNil)
 		floatResult, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -258,7 +259,7 @@ func TestNumeratorExtended(t *testing.T) {
 	})
 
 	t.Run("numerator of negative rational", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(numerator -3/4)")
+		result, err := testhelpers.RunSchemeCode(t, "(numerator -3/4)")
 		qt.Assert(t, err, qt.IsNil)
 		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -266,7 +267,7 @@ func TestNumeratorExtended(t *testing.T) {
 	})
 
 	t.Run("numerator of zero", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(numerator 0)")
+		result, err := testhelpers.RunSchemeCode(t, "(numerator 0)")
 		qt.Assert(t, err, qt.IsNil)
 		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -280,7 +281,7 @@ func TestNumeratorExtended(t *testing.T) {
 
 func TestDenominatorExtended(t *testing.T) {
 	t.Run("denominator of rational", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(denominator 3/4)")
+		result, err := testhelpers.RunSchemeCode(t, "(denominator 3/4)")
 		qt.Assert(t, err, qt.IsNil)
 		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -288,7 +289,7 @@ func TestDenominatorExtended(t *testing.T) {
 	})
 
 	t.Run("denominator of integer", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(denominator 5)")
+		result, err := testhelpers.RunSchemeCode(t, "(denominator 5)")
 		qt.Assert(t, err, qt.IsNil)
 		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -297,7 +298,7 @@ func TestDenominatorExtended(t *testing.T) {
 
 	t.Run("denominator of float", func(t *testing.T) {
 		// R7RS §6.2.6: inexact input → inexact output
-		result, err := runSchemeCode(t, "(denominator 2.5)")
+		result, err := testhelpers.RunSchemeCode(t, "(denominator 2.5)")
 		qt.Assert(t, err, qt.IsNil)
 		floatResult, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -305,7 +306,7 @@ func TestDenominatorExtended(t *testing.T) {
 	})
 
 	t.Run("denominator of negative rational", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(denominator -3/4)")
+		result, err := testhelpers.RunSchemeCode(t, "(denominator -3/4)")
 		qt.Assert(t, err, qt.IsNil)
 		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -313,7 +314,7 @@ func TestDenominatorExtended(t *testing.T) {
 	})
 
 	t.Run("denominator of integer zero", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(denominator 0)")
+		result, err := testhelpers.RunSchemeCode(t, "(denominator 0)")
 		qt.Assert(t, err, qt.IsNil)
 		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -321,7 +322,7 @@ func TestDenominatorExtended(t *testing.T) {
 	})
 
 	t.Run("denominator of simplified rational", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(denominator 2/4)")
+		result, err := testhelpers.RunSchemeCode(t, "(denominator 2/4)")
 		qt.Assert(t, err, qt.IsNil)
 		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -335,7 +336,7 @@ func TestDenominatorExtended(t *testing.T) {
 
 func TestNumberToStringExtended(t *testing.T) {
 	t.Run("number->string on integer", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(number->string 42)")
+		result, err := testhelpers.RunSchemeCode(t, "(number->string 42)")
 		qt.Assert(t, err, qt.IsNil)
 		strResult, ok := result.(*values.String)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -343,7 +344,7 @@ func TestNumberToStringExtended(t *testing.T) {
 	})
 
 	t.Run("number->string on hex", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(number->string 42 16)")
+		result, err := testhelpers.RunSchemeCode(t, "(number->string 42 16)")
 		qt.Assert(t, err, qt.IsNil)
 		strResult, ok := result.(*values.String)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -351,7 +352,7 @@ func TestNumberToStringExtended(t *testing.T) {
 	})
 
 	t.Run("number->string on binary", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(number->string 42 2)")
+		result, err := testhelpers.RunSchemeCode(t, "(number->string 42 2)")
 		qt.Assert(t, err, qt.IsNil)
 		strResult, ok := result.(*values.String)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -359,7 +360,7 @@ func TestNumberToStringExtended(t *testing.T) {
 	})
 
 	t.Run("number->string on octal", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(number->string 42 8)")
+		result, err := testhelpers.RunSchemeCode(t, "(number->string 42 8)")
 		qt.Assert(t, err, qt.IsNil)
 		strResult, ok := result.(*values.String)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -367,7 +368,7 @@ func TestNumberToStringExtended(t *testing.T) {
 	})
 
 	t.Run("number->string on float", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(number->string 3.14)")
+		result, err := testhelpers.RunSchemeCode(t, "(number->string 3.14)")
 		qt.Assert(t, err, qt.IsNil)
 		strResult, ok := result.(*values.String)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -375,7 +376,7 @@ func TestNumberToStringExtended(t *testing.T) {
 	})
 
 	t.Run("number->string on negative integer", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(number->string -42)")
+		result, err := testhelpers.RunSchemeCode(t, "(number->string -42)")
 		qt.Assert(t, err, qt.IsNil)
 		strResult, ok := result.(*values.String)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -383,7 +384,7 @@ func TestNumberToStringExtended(t *testing.T) {
 	})
 
 	t.Run("number->string on zero", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(number->string 0)")
+		result, err := testhelpers.RunSchemeCode(t, "(number->string 0)")
 		qt.Assert(t, err, qt.IsNil)
 		strResult, ok := result.(*values.String)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -391,7 +392,7 @@ func TestNumberToStringExtended(t *testing.T) {
 	})
 
 	t.Run("number->string on rational", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(number->string 1/2)")
+		result, err := testhelpers.RunSchemeCode(t, "(number->string 1/2)")
 		qt.Assert(t, err, qt.IsNil)
 		strResult, ok := result.(*values.String)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -399,7 +400,7 @@ func TestNumberToStringExtended(t *testing.T) {
 	})
 
 	t.Run("number->string on complex", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(number->string 1+2i)")
+		result, err := testhelpers.RunSchemeCode(t, "(number->string 1+2i)")
 		qt.Assert(t, err, qt.IsNil)
 		strResult, ok := result.(*values.String)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -413,7 +414,7 @@ func TestNumberToStringExtended(t *testing.T) {
 
 func TestStringToNumberExtended(t *testing.T) {
 	t.Run("string->number on integer string", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(string->number \"42\")")
+		result, err := testhelpers.RunSchemeCode(t, "(string->number \"42\")")
 		qt.Assert(t, err, qt.IsNil)
 		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -421,7 +422,7 @@ func TestStringToNumberExtended(t *testing.T) {
 	})
 
 	t.Run("string->number on hex string", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(string->number \"2a\" 16)")
+		result, err := testhelpers.RunSchemeCode(t, "(string->number \"2a\" 16)")
 		qt.Assert(t, err, qt.IsNil)
 		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -429,13 +430,13 @@ func TestStringToNumberExtended(t *testing.T) {
 	})
 
 	t.Run("string->number on invalid string", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(string->number \"xyz\")")
+		result, err := testhelpers.RunSchemeCode(t, "(string->number \"xyz\")")
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 	})
 
 	t.Run("string->number on float string", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(string->number \"3.14\")")
+		result, err := testhelpers.RunSchemeCode(t, "(string->number \"3.14\")")
 		qt.Assert(t, err, qt.IsNil)
 		floatResult, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -443,7 +444,7 @@ func TestStringToNumberExtended(t *testing.T) {
 	})
 
 	t.Run("string->number on negative integer string", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(string->number \"-42\")")
+		result, err := testhelpers.RunSchemeCode(t, "(string->number \"-42\")")
 		qt.Assert(t, err, qt.IsNil)
 		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -451,7 +452,7 @@ func TestStringToNumberExtended(t *testing.T) {
 	})
 
 	t.Run("string->number on zero string", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(string->number \"0\")")
+		result, err := testhelpers.RunSchemeCode(t, "(string->number \"0\")")
 		qt.Assert(t, err, qt.IsNil)
 		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -459,7 +460,7 @@ func TestStringToNumberExtended(t *testing.T) {
 	})
 
 	t.Run("string->number on binary string", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(string->number \"101010\" 2)")
+		result, err := testhelpers.RunSchemeCode(t, "(string->number \"101010\" 2)")
 		qt.Assert(t, err, qt.IsNil)
 		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -467,7 +468,7 @@ func TestStringToNumberExtended(t *testing.T) {
 	})
 
 	t.Run("string->number on octal string", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(string->number \"52\" 8)")
+		result, err := testhelpers.RunSchemeCode(t, "(string->number \"52\" 8)")
 		qt.Assert(t, err, qt.IsNil)
 		intResult, ok := result.(*values.Integer)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -475,13 +476,13 @@ func TestStringToNumberExtended(t *testing.T) {
 	})
 
 	t.Run("string->number on empty string", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(string->number \"\")")
+		result, err := testhelpers.RunSchemeCode(t, "(string->number \"\")")
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 	})
 
 	t.Run("string->number on negative float string", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(string->number \"-3.14\")")
+		result, err := testhelpers.RunSchemeCode(t, "(string->number \"-3.14\")")
 		qt.Assert(t, err, qt.IsNil)
 		floatResult, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -494,53 +495,53 @@ func TestStringToNumberExtended(t *testing.T) {
 // Exactness prefixes: #e (exact), #i (inexact).
 // Up to two prefixes (one radix + one exactness) in either order.
 func TestStringToNumber_Prefixes(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Radix prefixes
-		{name: "hex prefix", code: `(string->number "#x2a")`, expected: values.NewInteger(42)},
-		{name: "binary prefix", code: `(string->number "#b101010")`, expected: values.NewInteger(42)},
-		{name: "octal prefix", code: `(string->number "#o52")`, expected: values.NewInteger(42)},
-		{name: "decimal prefix", code: `(string->number "#d42")`, expected: values.NewInteger(42)},
+		{Name: "hex prefix", Code: `(string->number "#x2a")`, Expected: values.NewInteger(42)},
+		{Name: "binary prefix", Code: `(string->number "#b101010")`, Expected: values.NewInteger(42)},
+		{Name: "octal prefix", Code: `(string->number "#o52")`, Expected: values.NewInteger(42)},
+		{Name: "decimal prefix", Code: `(string->number "#d42")`, Expected: values.NewInteger(42)},
 
 		// Exactness prefixes
-		{name: "exact prefix on float", code: `(string->number "#e1.5")`, expected: values.NewRational(3, 2)},
-		{name: "exact prefix on integer float", code: `(string->number "#e3.0")`, expected: values.NewInteger(3)},
-		{name: "inexact prefix on integer", code: `(string->number "#i3")`, expected: values.NewFloat(3.0)},
-		{name: "inexact prefix on rational", code: `(string->number "#i1/2")`, expected: values.NewFloat(0.5)},
+		{Name: "exact prefix on float", Code: `(string->number "#e1.5")`, Expected: values.NewRational(3, 2)},
+		{Name: "exact prefix on integer float", Code: `(string->number "#e3.0")`, Expected: values.NewInteger(3)},
+		{Name: "inexact prefix on integer", Code: `(string->number "#i3")`, Expected: values.NewFloat(3.0)},
+		{Name: "inexact prefix on rational", Code: `(string->number "#i1/2")`, Expected: values.NewFloat(0.5)},
 
 		// Combined prefixes (both orders)
-		{name: "exact + hex", code: `(string->number "#e#x2a")`, expected: values.NewInteger(42)},
-		{name: "hex + exact", code: `(string->number "#x#e2a")`, expected: values.NewInteger(42)},
-		{name: "inexact + binary", code: `(string->number "#i#b101")`, expected: values.NewFloat(5.0)},
-		{name: "binary + inexact", code: `(string->number "#b#i101")`, expected: values.NewFloat(5.0)},
+		{Name: "exact + hex", Code: `(string->number "#e#x2a")`, Expected: values.NewInteger(42)},
+		{Name: "hex + exact", Code: `(string->number "#x#e2a")`, Expected: values.NewInteger(42)},
+		{Name: "inexact + binary", Code: `(string->number "#i#b101")`, Expected: values.NewFloat(5.0)},
+		{Name: "binary + inexact", Code: `(string->number "#b#i101")`, Expected: values.NewFloat(5.0)},
 
 		// Case insensitive prefixes
-		{name: "uppercase hex prefix", code: `(string->number "#X2A")`, expected: values.NewInteger(42)},
-		{name: "uppercase exact prefix", code: `(string->number "#E1.5")`, expected: values.NewRational(3, 2)},
+		{Name: "uppercase hex prefix", Code: `(string->number "#X2A")`, Expected: values.NewInteger(42)},
+		{Name: "uppercase exact prefix", Code: `(string->number "#E1.5")`, Expected: values.NewRational(3, 2)},
 
 		// Rational parsing
-		{name: "rational string", code: `(string->number "3/4")`, expected: values.NewRational(3, 4)},
-		{name: "rational simplification", code: `(string->number "10/2")`, expected: values.NewInteger(5)},
+		{Name: "rational string", Code: `(string->number "3/4")`, Expected: values.NewRational(3, 4)},
+		{Name: "rational simplification", Code: `(string->number "10/2")`, Expected: values.NewInteger(5)},
 
 		// Radix prefix overrides argument
-		{name: "prefix overrides arg radix", code: `(string->number "#x2a" 10)`, expected: values.NewInteger(42)},
+		{Name: "prefix overrides arg radix", Code: `(string->number "#x2a" 10)`, Expected: values.NewInteger(42)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 
 	// Invalid prefix tests — should return #f
 	t.Run("invalid prefix returns false", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(string->number "#q42")`)
+		result, err := testhelpers.RunSchemeCode(t, `(string->number "#q42")`)
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 	})
 
 	t.Run("empty after prefix returns false", func(t *testing.T) {
-		result, err := runSchemeCode(t, `(string->number "#x")`)
+		result, err := testhelpers.RunSchemeCode(t, `(string->number "#x")`)
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 	})
@@ -554,7 +555,7 @@ func TestStringToNumber_Prefixes(t *testing.T) {
 func TestNumeratorDenominator_Exactness(t *testing.T) {
 	// Inexact input → inexact output
 	t.Run("numerator of 0.5 is inexact", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(numerator 0.5)")
+		result, err := testhelpers.RunSchemeCode(t, "(numerator 0.5)")
 		qt.Assert(t, err, qt.IsNil)
 		floatResult, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -562,7 +563,7 @@ func TestNumeratorDenominator_Exactness(t *testing.T) {
 	})
 
 	t.Run("denominator of 0.5 is inexact", func(t *testing.T) {
-		result, err := runSchemeCode(t, "(denominator 0.5)")
+		result, err := testhelpers.RunSchemeCode(t, "(denominator 0.5)")
 		qt.Assert(t, err, qt.IsNil)
 		floatResult, ok := result.(*values.Float)
 		qt.Assert(t, ok, qt.IsTrue)
@@ -570,19 +571,19 @@ func TestNumeratorDenominator_Exactness(t *testing.T) {
 	})
 
 	t.Run("inexact? of numerator of 0.5", func(t *testing.T) {
-		runSchemeCodeExpectTrue(t, "(inexact? (numerator 0.5))")
+		testhelpers.RunSchemeCodeExpectTrue(t, "(inexact? (numerator 0.5))")
 	})
 
 	t.Run("inexact? of denominator of 0.5", func(t *testing.T) {
-		runSchemeCodeExpectTrue(t, "(inexact? (denominator 0.5))")
+		testhelpers.RunSchemeCodeExpectTrue(t, "(inexact? (denominator 0.5))")
 	})
 
 	// Exact input → exact output
 	t.Run("exact? of numerator of 3/4", func(t *testing.T) {
-		runSchemeCodeExpectTrue(t, "(exact? (numerator 3/4))")
+		testhelpers.RunSchemeCodeExpectTrue(t, "(exact? (numerator 3/4))")
 	})
 
 	t.Run("exact? of denominator of 3/4", func(t *testing.T) {
-		runSchemeCodeExpectTrue(t, "(exact? (denominator 3/4))")
+		testhelpers.RunSchemeCodeExpectTrue(t, "(exact? (denominator 3/4))")
 	})
 }

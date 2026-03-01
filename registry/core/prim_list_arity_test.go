@@ -14,7 +14,11 @@
 
 package core_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/aalpar/wile/registry/testhelpers"
+)
 
 // TestLists_ArityErrors verifies that list and pair primitives reject
 // wrong argument counts. The VM enforces arity automatically via
@@ -30,10 +34,10 @@ func TestLists_ArityErrors(t *testing.T) {
 	}
 	for _, name := range fixedArity1 {
 		t.Run(name+" zero args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+")")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+")")
 		})
 		t.Run(name+" two args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+" '(1) '(2))")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+" '(1) '(2))")
 		})
 	}
 
@@ -49,13 +53,13 @@ func TestLists_ArityErrors(t *testing.T) {
 	}
 	for _, name := range fixedArity2 {
 		t.Run(name+" zero args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+")")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+")")
 		})
 		t.Run(name+" one arg", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+" 1)")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+" 1)")
 		})
 		t.Run(name+" three args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+" 1 2 3)")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+" 1 2 3)")
 		})
 	}
 
@@ -71,7 +75,7 @@ func TestLists_ArityErrors(t *testing.T) {
 	}
 	for _, tc := range listSetErrors {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 
@@ -87,13 +91,13 @@ func TestLists_ArityErrors(t *testing.T) {
 	}
 	for _, tc := range variadicMin2Errors {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+			testhelpers.RunSchemeCodeExpectError(t, tc.code)
 		})
 	}
 
 	// Variadic with minimum 1 arg: make-list
 	t.Run("make-list zero args", func(t *testing.T) {
-		runSchemeCodeExpectError(t, "(make-list)")
+		testhelpers.RunSchemeCodeExpectError(t, "(make-list)")
 	})
 }
 
@@ -115,10 +119,10 @@ func TestCxR_ArityErrors(t *testing.T) {
 
 	for _, name := range cxrs {
 		t.Run(name+" zero args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+")")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+")")
 		})
 		t.Run(name+" two args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+" '(1) '(2))")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+" '(1) '(2))")
 		})
 	}
 }

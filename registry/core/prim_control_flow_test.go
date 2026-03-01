@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -26,25 +27,25 @@ import (
 // Combined Tests - Integration scenarios for control flow primitives
 
 func TestControlFlowCombinations(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// map with apply
 		{
-			name:     "map with apply",
-			code:     `(map (lambda (args) (apply + args)) '((1 2) (3 4) (5 6)))`,
-			expected: values.List(values.NewInteger(3), values.NewInteger(7), values.NewInteger(11)),
+			Name:     "map with apply",
+			Code:     `(map (lambda (args) (apply + args)) '((1 2) (3 4) (5 6)))`,
+			Expected: values.List(values.NewInteger(3), values.NewInteger(7), values.NewInteger(11)),
 		},
 
 		// call-with-values with map
 		{
-			name:     "call-with-values from division in map",
-			code:     `(map (lambda (n) (call-with-values (lambda () (floor/ n 3)) list)) '(10 11 12))`,
-			expected: values.List(values.List(values.NewInteger(3), values.NewInteger(1)), values.List(values.NewInteger(3), values.NewInteger(2)), values.List(values.NewInteger(4), values.NewInteger(0))),
+			Name:     "call-with-values from division in map",
+			Code:     `(map (lambda (n) (call-with-values (lambda () (floor/ n 3)) list)) '(10 11 12))`,
+			Expected: values.List(values.List(values.NewInteger(3), values.NewInteger(1)), values.List(values.NewInteger(3), values.NewInteger(2)), values.List(values.NewInteger(4), values.NewInteger(0))),
 		},
 
 		// dynamic-wind with map
 		{
-			name: "dynamic-wind inside map",
-			code: `(let ((count 0))
+			Name: "dynamic-wind inside map",
+			Code: `(let ((count 0))
 				(map (lambda (x)
 					(dynamic-wind
 						(lambda () (set! count (+ count 1)))
@@ -52,14 +53,14 @@ func TestControlFlowCombinations(t *testing.T) {
 						(lambda () #f)))
 					'(a b c))
 				count)`,
-			expected: values.NewInteger(3),
+			Expected: values.NewInteger(3),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }

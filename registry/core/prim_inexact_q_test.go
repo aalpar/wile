@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -24,24 +25,24 @@ import (
 )
 
 func TestInexactQ(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Inexact types
-		{name: "inexact? on float", code: `(inexact? 3.14)`, expected: values.TrueValue},
-		{name: "inexact? on inexact complex", code: `(inexact? 1.0+2.0i)`, expected: values.TrueValue},
-		{name: "inexact? on +inf.0", code: `(inexact? +inf.0)`, expected: values.TrueValue},
-		{name: "inexact? on +nan.0", code: `(inexact? +nan.0)`, expected: values.TrueValue},
+		{Name: "inexact? on float", Code: `(inexact? 3.14)`, Expected: values.TrueValue},
+		{Name: "inexact? on inexact complex", Code: `(inexact? 1.0+2.0i)`, Expected: values.TrueValue},
+		{Name: "inexact? on +inf.0", Code: `(inexact? +inf.0)`, Expected: values.TrueValue},
+		{Name: "inexact? on +nan.0", Code: `(inexact? +nan.0)`, Expected: values.TrueValue},
 
 		// Exact types
-		{name: "inexact? on integer", code: `(inexact? 42)`, expected: values.FalseValue},
-		{name: "inexact? on rational", code: `(inexact? 3/4)`, expected: values.FalseValue},
-		{name: "inexact? on biginteger", code: `(inexact? #z123456789012345678901234567890)`, expected: values.FalseValue},
-		{name: "inexact? on exact complex", code: `(inexact? 1+2i)`, expected: values.FalseValue},
+		{Name: "inexact? on integer", Code: `(inexact? 42)`, Expected: values.FalseValue},
+		{Name: "inexact? on rational", Code: `(inexact? 3/4)`, Expected: values.FalseValue},
+		{Name: "inexact? on biginteger", Code: `(inexact? #z123456789012345678901234567890)`, Expected: values.FalseValue},
+		{Name: "inexact? on exact complex", Code: `(inexact? 1+2i)`, Expected: values.FalseValue},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }

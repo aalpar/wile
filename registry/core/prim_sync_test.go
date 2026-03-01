@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -52,7 +53,7 @@ func TestWaitGroupQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -60,7 +61,7 @@ func TestWaitGroupQ(t *testing.T) {
 }
 
 func TestMakeWaitGroup(t *testing.T) {
-	result, err := runSchemeCode(t, "(wait-group? (make-wait-group))")
+	result, err := testhelpers.RunSchemeCode(t, "(wait-group? (make-wait-group))")
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
@@ -73,23 +74,23 @@ func TestWaitGroupAddDoneWait(t *testing.T) {
 			(wait-group-wait! wg)
 			#t)
 	`
-	result, err := runSchemeCodeWithTimeout(t, code, 5*time.Second)
+	result, err := testhelpers.RunSchemeCodeWithTimeout(t, code, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestWaitGroupAddError(t *testing.T) {
-	_, err := runSchemeCode(t, "(wait-group-add! 42 1)")
+	_, err := testhelpers.RunSchemeCode(t, "(wait-group-add! 42 1)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestWaitGroupDoneError(t *testing.T) {
-	_, err := runSchemeCode(t, "(wait-group-done! 42)")
+	_, err := testhelpers.RunSchemeCode(t, "(wait-group-done! 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestWaitGroupWaitError(t *testing.T) {
-	_, err := runSchemeCode(t, "(wait-group-wait! 42)")
+	_, err := testhelpers.RunSchemeCode(t, "(wait-group-wait! 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
@@ -121,7 +122,7 @@ func TestRWMutexQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -129,14 +130,14 @@ func TestRWMutexQ(t *testing.T) {
 }
 
 func TestMakeRWMutex(t *testing.T) {
-	result, err := runSchemeCode(t, "(rw-mutex? (make-rw-mutex))")
+	result, err := testhelpers.RunSchemeCode(t, "(rw-mutex? (make-rw-mutex))")
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestMakeRWMutexWithName(t *testing.T) {
 	// Just test that it doesn't error - RWMutex may not have name accessor
-	result, err := runSchemeCode(t, "(rw-mutex? (make-rw-mutex \"test\"))")
+	result, err := testhelpers.RunSchemeCode(t, "(rw-mutex? (make-rw-mutex \"test\"))")
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
@@ -148,7 +149,7 @@ func TestRWMutexReadLockUnlock(t *testing.T) {
 			(rw-mutex-read-unlock! rwm)
 			#t)
 	`
-	result, err := runSchemeCodeWithTimeout(t, code, 5*time.Second)
+	result, err := testhelpers.RunSchemeCodeWithTimeout(t, code, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
@@ -160,7 +161,7 @@ func TestRWMutexWriteLockUnlock(t *testing.T) {
 			(rw-mutex-write-unlock! rwm)
 			#t)
 	`
-	result, err := runSchemeCodeWithTimeout(t, code, 5*time.Second)
+	result, err := testhelpers.RunSchemeCodeWithTimeout(t, code, 5*time.Second)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
@@ -170,7 +171,7 @@ func TestRWMutexTryReadLock(t *testing.T) {
 		(let ((rwm (make-rw-mutex)))
 			(rw-mutex-try-read-lock! rwm))
 	`
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
@@ -180,38 +181,38 @@ func TestRWMutexTryWriteLock(t *testing.T) {
 		(let ((rwm (make-rw-mutex)))
 			(rw-mutex-try-write-lock! rwm))
 	`
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestRWMutexReadLockError(t *testing.T) {
-	_, err := runSchemeCode(t, "(rw-mutex-read-lock! 42)")
+	_, err := testhelpers.RunSchemeCode(t, "(rw-mutex-read-lock! 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestRWMutexReadUnlockError(t *testing.T) {
-	_, err := runSchemeCode(t, "(rw-mutex-read-unlock! 42)")
+	_, err := testhelpers.RunSchemeCode(t, "(rw-mutex-read-unlock! 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestRWMutexWriteLockError(t *testing.T) {
-	_, err := runSchemeCode(t, "(rw-mutex-write-lock! 42)")
+	_, err := testhelpers.RunSchemeCode(t, "(rw-mutex-write-lock! 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestRWMutexWriteUnlockError(t *testing.T) {
-	_, err := runSchemeCode(t, "(rw-mutex-write-unlock! 42)")
+	_, err := testhelpers.RunSchemeCode(t, "(rw-mutex-write-unlock! 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestRWMutexTryReadLockError(t *testing.T) {
-	_, err := runSchemeCode(t, "(rw-mutex-try-read-lock! 42)")
+	_, err := testhelpers.RunSchemeCode(t, "(rw-mutex-try-read-lock! 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestRWMutexTryWriteLockError(t *testing.T) {
-	_, err := runSchemeCode(t, "(rw-mutex-try-write-lock! 42)")
+	_, err := testhelpers.RunSchemeCode(t, "(rw-mutex-try-write-lock! 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
@@ -243,7 +244,7 @@ func TestOnceQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -251,7 +252,7 @@ func TestOnceQ(t *testing.T) {
 }
 
 func TestMakeOnce(t *testing.T) {
-	result, err := runSchemeCode(t, "(once? (make-once))")
+	result, err := testhelpers.RunSchemeCode(t, "(once? (make-once))")
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
@@ -262,7 +263,7 @@ func TestOnceDo(t *testing.T) {
 		(let ((o (make-once)))
 			(once-do! o (lambda () 'executed)))
 	`
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
@@ -274,13 +275,13 @@ func TestOnceDoOnlyOnce(t *testing.T) {
 			(once-do! o (lambda () 'first))
 			(once-do! o (lambda () 'second)))
 	`
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
 
 func TestOnceDoError(t *testing.T) {
-	_, err := runSchemeCode(t, "(once-do! 42 (lambda () 'x))")
+	_, err := testhelpers.RunSchemeCode(t, "(once-do! 42 (lambda () 'x))")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
@@ -307,7 +308,7 @@ func TestOnceDoneQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -315,7 +316,7 @@ func TestOnceDoneQ(t *testing.T) {
 }
 
 func TestOnceDoneQError(t *testing.T) {
-	_, err := runSchemeCode(t, "(once-done? 42)")
+	_, err := testhelpers.RunSchemeCode(t, "(once-done? 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
@@ -347,7 +348,7 @@ func TestAtomicQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -355,20 +356,20 @@ func TestAtomicQ(t *testing.T) {
 }
 
 func TestMakeAtomic(t *testing.T) {
-	result, err := runSchemeCode(t, "(atomic? (make-atomic 42))")
+	result, err := testhelpers.RunSchemeCode(t, "(atomic? (make-atomic 42))")
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestAtomicLoad(t *testing.T) {
 	code := "(atomic-load (make-atomic 42))"
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 func TestAtomicLoadError(t *testing.T) {
-	_, err := runSchemeCode(t, "(atomic-load 42)")
+	_, err := testhelpers.RunSchemeCode(t, "(atomic-load 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
@@ -378,13 +379,13 @@ func TestAtomicStore(t *testing.T) {
 			(atomic-store! a 100)
 			(atomic-load a))
 	`
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(100))
 }
 
 func TestAtomicStoreError(t *testing.T) {
-	_, err := runSchemeCode(t, "(atomic-store! 42 100)")
+	_, err := testhelpers.RunSchemeCode(t, "(atomic-store! 42 100)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
@@ -393,7 +394,7 @@ func TestAtomicSwap(t *testing.T) {
 		(let ((a (make-atomic 'old)))
 			(atomic-swap! a 'new))
 	`
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("old"))
 }
@@ -404,13 +405,13 @@ func TestAtomicSwapUpdatesValue(t *testing.T) {
 			(atomic-swap! a 'new)
 			(atomic-load a))
 	`
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("new"))
 }
 
 func TestAtomicSwapError(t *testing.T) {
-	_, err := runSchemeCode(t, "(atomic-swap! 42 'new)")
+	_, err := testhelpers.RunSchemeCode(t, "(atomic-swap! 42 'new)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
@@ -419,7 +420,7 @@ func TestAtomicCompareAndSwapSuccess(t *testing.T) {
 		(let ((a (make-atomic 'old)))
 			(atomic-compare-and-swap! a 'old 'new))
 	`
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
@@ -429,7 +430,7 @@ func TestAtomicCompareAndSwapFailure(t *testing.T) {
 		(let ((a (make-atomic 'old)))
 			(atomic-compare-and-swap! a 'wrong 'new))
 	`
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
@@ -440,7 +441,7 @@ func TestAtomicCompareAndSwapUpdatesOnSuccess(t *testing.T) {
 			(atomic-compare-and-swap! a 'old 'new)
 			(atomic-load a))
 	`
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("new"))
 }
@@ -451,13 +452,13 @@ func TestAtomicCompareAndSwapNoUpdateOnFailure(t *testing.T) {
 			(atomic-compare-and-swap! a 'wrong 'new)
 			(atomic-load a))
 	`
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("old"))
 }
 
 func TestAtomicCompareAndSwapError(t *testing.T) {
-	_, err := runSchemeCode(t, "(atomic-compare-and-swap! 42 'old 'new)")
+	_, err := testhelpers.RunSchemeCode(t, "(atomic-compare-and-swap! 42 'old 'new)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
@@ -490,7 +491,7 @@ func TestAtomicWithDifferentTypes(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})

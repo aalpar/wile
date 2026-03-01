@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -26,25 +27,25 @@ import (
 // values Tests (R7RS §6.4 - Return multiple values)
 
 func TestValuesComprehensive(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Single value (direct return)
-		{name: "single value", code: `(values 42)`, expected: values.NewInteger(42)},
+		{Name: "single value", Code: `(values 42)`, Expected: values.NewInteger(42)},
 
 		// Multiple values with call-with-values to capture
-		{name: "two values via cwv", code: `(call-with-values (lambda () (values 1 2)) +)`, expected: values.NewInteger(3)},
-		{name: "three values via cwv", code: `(call-with-values (lambda () (values 'a 'b 'c)) list)`, expected: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"))},
+		{Name: "two values via cwv", Code: `(call-with-values (lambda () (values 1 2)) +)`, Expected: values.NewInteger(3)},
+		{Name: "three values via cwv", Code: `(call-with-values (lambda () (values 'a 'b 'c)) list)`, Expected: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c"))},
 
 		// Zero values
-		{name: "zero values via cwv", code: `(call-with-values (lambda () (values)) (lambda () 'empty))`, expected: values.NewSymbol("empty")},
+		{Name: "zero values via cwv", Code: `(call-with-values (lambda () (values)) (lambda () 'empty))`, Expected: values.NewSymbol("empty")},
 
 		// Values of different types
-		{name: "mixed types", code: `(call-with-values (lambda () (values 1 "hello" 'sym)) list)`, expected: values.List(values.NewInteger(1), values.NewString("hello"), values.NewSymbol("sym"))},
+		{Name: "mixed types", Code: `(call-with-values (lambda () (values 1 "hello" 'sym)) list)`, Expected: values.List(values.NewInteger(1), values.NewString("hello"), values.NewSymbol("sym"))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }

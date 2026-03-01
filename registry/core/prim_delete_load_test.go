@@ -19,6 +19,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -33,7 +34,7 @@ func TestDeleteFile(t *testing.T) {
 	path := f.Name()
 
 	code := fmt.Sprintf(`(begin (delete-file %q) #t)`, path)
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 
@@ -44,13 +45,13 @@ func TestDeleteFile(t *testing.T) {
 
 func TestDeleteFileErrorWithNonexistentFile(t *testing.T) {
 	code := `(delete-file "/nonexistent/path/file-xyz-12345.txt")`
-	_, err := runSchemeCode(t, code)
+	_, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.Not(qt.IsNil), qt.Commentf("expected error when deleting nonexistent file"))
 }
 
 func TestDeleteFileErrorWithNonString(t *testing.T) {
 	code := `(delete-file 42)`
-	_, err := runSchemeCode(t, code)
+	_, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.Not(qt.IsNil), qt.Commentf("expected error when passing non-string"))
 }
 
@@ -62,7 +63,7 @@ func TestLoad(t *testing.T) {
 	defer os.Remove(f.Name()) //nolint:errcheck
 
 	code := fmt.Sprintf(`(load %q)`, f.Name())
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(42))
 }
@@ -75,7 +76,7 @@ func TestLoadWithMultipleExpressions(t *testing.T) {
 	defer os.Remove(f.Name())                              //nolint:errcheck
 
 	code := fmt.Sprintf(`(load %q)`, f.Name())
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	// Should return the value of the last expression
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(30))
@@ -89,7 +90,7 @@ func TestLoadReturnsLastValue(t *testing.T) {
 	defer os.Remove(f.Name()) //nolint:errcheck
 
 	code := fmt.Sprintf(`(load %q)`, f.Name())
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(3))
 }
@@ -101,7 +102,7 @@ func TestLoadWithEmptyFile(t *testing.T) {
 	defer os.Remove(f.Name()) //nolint:errcheck
 
 	code := fmt.Sprintf(`(load %q)`, f.Name())
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	// Empty file should return void
 	qt.Assert(t, result.IsVoid(), qt.IsTrue)
@@ -109,13 +110,13 @@ func TestLoadWithEmptyFile(t *testing.T) {
 
 func TestLoadErrorWithNonexistentFile(t *testing.T) {
 	code := `(load "/nonexistent/path/file-xyz-12345.scm")`
-	_, err := runSchemeCode(t, code)
+	_, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.Not(qt.IsNil), qt.Commentf("expected error when loading nonexistent file"))
 }
 
 func TestLoadErrorWithNonString(t *testing.T) {
 	code := `(load 42)`
-	_, err := runSchemeCode(t, code)
+	_, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.Not(qt.IsNil), qt.Commentf("expected error when passing non-string"))
 }
 
@@ -127,7 +128,7 @@ func TestLoadDefinesVariableInTopLevel(t *testing.T) {
 	defer os.Remove(f.Name())               //nolint:errcheck
 
 	code := fmt.Sprintf(`(load %q)`, f.Name())
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	// define returns void
 	qt.Assert(t, result.IsVoid(), qt.IsTrue)
@@ -142,7 +143,7 @@ func TestLoadAccessesTopLevelEnvironment(t *testing.T) {
 	defer os.Remove(f.Name())          //nolint:errcheck
 
 	code := fmt.Sprintf(`(begin (define global-var 32) (load %q))`, f.Name())
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(42))
 }

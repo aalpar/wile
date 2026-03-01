@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -27,45 +28,45 @@ import (
 // apply Tests (R7RS §6.4 - Function application)
 
 func TestApplyComprehensive(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// Basic apply
-		{name: "apply + to list", code: `(apply + '(1 2 3))`, expected: values.NewInteger(6)},
-		{name: "apply * to list", code: `(apply * '(2 3 4))`, expected: values.NewInteger(24)},
-		{name: "apply - to list", code: `(apply - '(10 3 2))`, expected: values.NewInteger(5)},
+		{Name: "apply + to list", Code: `(apply + '(1 2 3))`, Expected: values.NewInteger(6)},
+		{Name: "apply * to list", Code: `(apply * '(2 3 4))`, Expected: values.NewInteger(24)},
+		{Name: "apply - to list", Code: `(apply - '(10 3 2))`, Expected: values.NewInteger(5)},
 
 		// Apply with prefix arguments
-		{name: "apply with one prefix", code: `(apply + 1 '(2 3))`, expected: values.NewInteger(6)},
-		{name: "apply with two prefix", code: `(apply + 1 2 '(3 4))`, expected: values.NewInteger(10)},
-		{name: "apply with many prefix", code: `(apply + 1 2 3 4 '(5))`, expected: values.NewInteger(15)},
+		{Name: "apply with one prefix", Code: `(apply + 1 '(2 3))`, Expected: values.NewInteger(6)},
+		{Name: "apply with two prefix", Code: `(apply + 1 2 '(3 4))`, Expected: values.NewInteger(10)},
+		{Name: "apply with many prefix", Code: `(apply + 1 2 3 4 '(5))`, Expected: values.NewInteger(15)},
 
 		// Empty list
-		{name: "apply + to empty list", code: `(apply + '())`, expected: values.NewInteger(0)},
-		{name: "apply * to empty list", code: `(apply * '())`, expected: values.NewInteger(1)},
-		{name: "apply list to empty list", code: `(apply list '())`, expected: values.EmptyList},
+		{Name: "apply + to empty list", Code: `(apply + '())`, Expected: values.NewInteger(0)},
+		{Name: "apply * to empty list", Code: `(apply * '())`, Expected: values.NewInteger(1)},
+		{Name: "apply list to empty list", Code: `(apply list '())`, Expected: values.EmptyList},
 
 		// Apply with lambda
-		{name: "apply lambda", code: `(apply (lambda (x y) (+ x y)) '(3 4))`, expected: values.NewInteger(7)},
-		{name: "apply variadic lambda", code: `(apply (lambda args args) '(1 2 3))`, expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))},
+		{Name: "apply lambda", Code: `(apply (lambda (x y) (+ x y)) '(3 4))`, Expected: values.NewInteger(7)},
+		{Name: "apply variadic lambda", Code: `(apply (lambda args args) '(1 2 3))`, Expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))},
 
 		// Apply with cons
-		{name: "apply cons", code: `(apply cons '(1 2))`, expected: values.NewCons(values.NewInteger(1), values.NewInteger(2))},
-		{name: "apply car", code: `(apply car '((1 2 3)))`, expected: values.NewInteger(1)},
+		{Name: "apply cons", Code: `(apply cons '(1 2))`, Expected: values.NewCons(values.NewInteger(1), values.NewInteger(2))},
+		{Name: "apply car", Code: `(apply car '((1 2 3)))`, Expected: values.NewInteger(1)},
 
 		// case-lambda dispatch
-		{name: "case-lambda two args", code: `(apply (case-lambda ((x) x) ((x y) (+ x y))) '(3 4))`, expected: values.NewInteger(7)},
-		{name: "case-lambda one arg", code: `(apply (case-lambda ((x) x) ((x y) (+ x y))) '(42))`, expected: values.NewInteger(42)},
+		{Name: "case-lambda two args", Code: `(apply (case-lambda ((x) x) ((x y) (+ x y))) '(3 4))`, Expected: values.NewInteger(7)},
+		{Name: "case-lambda one arg", Code: `(apply (case-lambda ((x) x) ((x y) (+ x y))) '(42))`, Expected: values.NewInteger(42)},
 
 		// Nested apply
-		{name: "nested apply", code: `(apply apply (list + '(1 2 3)))`, expected: values.NewInteger(6)},
+		{Name: "nested apply", Code: `(apply apply (list + '(1 2 3)))`, Expected: values.NewInteger(6)},
 
 		// Build list with prefix args
-		{name: "build list with prefix", code: `(apply list 1 2 '(3 4 5))`, expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3), values.NewInteger(4), values.NewInteger(5))},
+		{Name: "build list with prefix", Code: `(apply list 1 2 '(3 4 5))`, Expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3), values.NewInteger(4), values.NewInteger(5))},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -73,40 +74,40 @@ func TestApplyComprehensive(t *testing.T) {
 // TestApplyMultipleValues tests that apply correctly propagates multiple values.
 // R7RS §6.4: apply should preserve multiple return values from the applied procedure.
 func TestApplyMultipleValues(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		// apply values should return multiple values
 		{
-			name:     "apply values with two args",
-			code:     `(call-with-values (lambda () (apply values '(1 2))) list)`,
-			expected: values.List(values.NewInteger(1), values.NewInteger(2)),
+			Name:     "apply values with two args",
+			Code:     `(call-with-values (lambda () (apply values '(1 2))) list)`,
+			Expected: values.List(values.NewInteger(1), values.NewInteger(2)),
 		},
 		{
-			name:     "apply values with three args",
-			code:     `(call-with-values (lambda () (apply values '(a b c))) list)`,
-			expected: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c")),
+			Name:     "apply values with three args",
+			Code:     `(call-with-values (lambda () (apply values '(a b c))) list)`,
+			Expected: values.List(values.NewSymbol("a"), values.NewSymbol("b"), values.NewSymbol("c")),
 		},
 		{
-			name:     "apply values with zero args",
-			code:     `(call-with-values (lambda () (apply values '())) (lambda () 'empty))`,
-			expected: values.NewSymbol("empty"),
+			Name:     "apply values with zero args",
+			Code:     `(call-with-values (lambda () (apply values '())) (lambda () 'empty))`,
+			Expected: values.NewSymbol("empty"),
 		},
 		{
-			name:     "apply values with one arg",
-			code:     `(call-with-values (lambda () (apply values '(42))) (lambda (x) x))`,
-			expected: values.NewInteger(42),
+			Name:     "apply values with one arg",
+			Code:     `(call-with-values (lambda () (apply values '(42))) (lambda (x) x))`,
+			Expected: values.NewInteger(42),
 		},
 		// apply a multi-value returning procedure
 		{
-			name:     "apply floor/ (multi-value)",
-			code:     `(call-with-values (lambda () (apply floor/ '(17 5))) list)`,
-			expected: values.List(values.NewInteger(3), values.NewInteger(2)),
+			Name:     "apply floor/ (multi-value)",
+			Code:     `(call-with-values (lambda () (apply floor/ '(17 5))) list)`,
+			Expected: values.List(values.NewInteger(3), values.NewInteger(2)),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -119,10 +120,10 @@ func TestApplyMultipleValues(t *testing.T) {
 // The outer call-with-continuation-prompt delimits the continuation so it only
 // captures the dynamic-wind section, preventing infinite re-invocation.
 func TestApplyWindingStackInheritance(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name: "baseline: call/cc directly in dynamic-wind",
-			code: `
+			Name: "baseline: call/cc directly in dynamic-wind",
+			Code: `
 			(let ((k #f)
 			      (before-count 0))
 			  (call-with-continuation-prompt
@@ -139,11 +140,11 @@ func TestApplyWindingStackInheritance(t *testing.T) {
 			    (default-continuation-prompt-tag)
 			    (lambda (v) v))
 			  before-count)`,
-			expected: values.NewInteger(2),
+			Expected: values.NewInteger(2),
 		},
 		{
-			name: "call/cc inside apply in dynamic-wind",
-			code: `
+			Name: "call/cc inside apply in dynamic-wind",
+			Code: `
 			(let ((k #f)
 			      (before-count 0))
 			  (call-with-continuation-prompt
@@ -163,11 +164,11 @@ func TestApplyWindingStackInheritance(t *testing.T) {
 			    (default-continuation-prompt-tag)
 			    (lambda (v) v))
 			  before-count)`,
-			expected: values.NewInteger(2),
+			Expected: values.NewInteger(2),
 		},
 		{
-			name: "call/cc inside call-with-values in dynamic-wind",
-			code: `
+			Name: "call/cc inside call-with-values in dynamic-wind",
+			Code: `
 			(let ((k #f)
 			      (before-count 0))
 			  (call-with-continuation-prompt
@@ -187,29 +188,29 @@ func TestApplyWindingStackInheritance(t *testing.T) {
 			    (default-continuation-prompt-tag)
 			    (lambda (v) v))
 			  before-count)`,
-			expected: values.NewInteger(2),
+			Expected: values.NewInteger(2),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestApplyErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "apply non-procedure", code: `(apply 5 '(1 2))`},
-		{name: "apply without list", code: `(apply + 1 2 3)`},
-		{name: "apply with improper list", code: `(apply + '(1 . 2))`},
-		{name: "too many args", code: `(apply (lambda (x y) (+ x y)) '(1 2 3))`},
-		{name: "too few args", code: `(apply (lambda (x y) (+ x y)) '(1))`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "apply non-procedure", Code: `(apply 5 '(1 2))`},
+		{Name: "apply without list", Code: `(apply + 1 2 3)`},
+		{Name: "apply with improper list", Code: `(apply + '(1 . 2))`},
+		{Name: "too many args", Code: `(apply (lambda (x y) (+ x y)) '(1 2 3))`},
+		{Name: "too few args", Code: `(apply (lambda (x y) (+ x y)) '(1))`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -230,7 +231,7 @@ func TestApplyTailRecursion_NoStackOverflow(t *testing.T) {
 					(apply f (list (- n 1)))))
 			(f 1000000))
 	`
-	result, err := runSchemeCodeWithTimeout(t, code, 30*time.Second)
+	result, err := testhelpers.RunSchemeCodeWithTimeout(t, code, 30*time.Second)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewSymbol("done"))
 }
@@ -239,57 +240,57 @@ func TestApplyTailRecursion_NoStackOverflow(t *testing.T) {
 // These cases exercise paths not covered by TestApplyComprehensive:
 // non-tail position, first-class apply, and call/cc interaction.
 func TestCompiledApply(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "non-tail position",
-			code:     `(+ 1 (apply + '(2 3)))`,
-			expected: values.NewInteger(6),
+			Name:     "non-tail position",
+			Code:     `(+ 1 (apply + '(2 3)))`,
+			Expected: values.NewInteger(6),
 		},
 		{
-			name:     "first-class apply",
-			code:     `(let ((a apply)) (a + '(1 2)))`,
-			expected: values.NewInteger(3),
+			Name:     "first-class apply",
+			Code:     `(let ((a apply)) (a + '(1 2)))`,
+			Expected: values.NewInteger(3),
 		},
 		{
-			name:     "apply with call/cc",
-			code:     `(call-with-current-continuation (lambda (k) (apply k '(42))))`,
-			expected: values.NewInteger(42),
+			Name:     "apply with call/cc",
+			Code:     `(call-with-current-continuation (lambda (k) (apply k '(42))))`,
+			Expected: values.NewInteger(42),
 		},
 		{
-			name:     "apply in tail position of lambda",
-			code:     `((lambda (x y) (apply + (list x y))) 10 20)`,
-			expected: values.NewInteger(30),
+			Name:     "apply in tail position of lambda",
+			Code:     `((lambda (x y) (apply + (list x y))) 10 20)`,
+			Expected: values.NewInteger(30),
 		},
 		{
-			name:     "apply chain",
-			code:     `(apply apply (list apply (list + '(1 2 3))))`,
-			expected: values.NewInteger(6),
+			Name:     "apply chain",
+			Code:     `(apply apply (list apply (list + '(1 2 3))))`,
+			Expected: values.NewInteger(6),
 		},
 		{
-			name:     "apply with rest args lambda",
-			code:     `(apply (lambda (x . rest) rest) '(1 2 3))`,
-			expected: values.List(values.NewInteger(2), values.NewInteger(3)),
+			Name:     "apply with rest args lambda",
+			Code:     `(apply (lambda (x . rest) rest) '(1 2 3))`,
+			Expected: values.List(values.NewInteger(2), values.NewInteger(3)),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 // TestCompiledApply_Errors tests error conditions for the compiled apply path.
 func TestCompiledApply_Errors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "improper list", code: `(apply + '(1 . 2))`},
-		{name: "non-list final arg", code: `(apply + 42)`},
-		{name: "non-procedure", code: `(apply 42 '(1 2))`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "improper list", Code: `(apply + '(1 . 2))`},
+		{Name: "non-list final arg", Code: `(apply + 42)`},
+		{Name: "non-procedure", Code: `(apply 42 '(1 2))`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			runSchemeCodeExpectError(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			testhelpers.RunSchemeCodeExpectError(t, tc.Code)
 		})
 	}
 }

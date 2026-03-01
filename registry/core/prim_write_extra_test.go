@@ -17,13 +17,14 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
 )
 
 func TestWriteWithStringOutputPort(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 		  (write "hello" p)
 		  (get-output-string p))
@@ -35,7 +36,7 @@ func TestWriteWithStringOutputPort(t *testing.T) {
 }
 
 func TestWriteWithSymbolOutputPort(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 		  (write 'hello p)
 		  (get-output-string p))
@@ -47,7 +48,7 @@ func TestWriteWithSymbolOutputPort(t *testing.T) {
 }
 
 func TestWriteWithListOutputPort(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 		  (write '(1 2 3) p)
 		  (get-output-string p))
@@ -59,7 +60,7 @@ func TestWriteWithListOutputPort(t *testing.T) {
 }
 
 func TestWriteCharWithOutputPort(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 		  (write-char #\A p)
 		  (get-output-string p))
@@ -71,7 +72,7 @@ func TestWriteCharWithOutputPort(t *testing.T) {
 }
 
 func TestNewlineWithOutputPort(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 		  (newline p)
 		  (get-output-string p))
@@ -83,7 +84,7 @@ func TestNewlineWithOutputPort(t *testing.T) {
 }
 
 func TestMultipleWriteCharsWithOutputPort(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 		  (write-char #\H p)
 		  (write-char #\i p)
@@ -96,7 +97,7 @@ func TestMultipleWriteCharsWithOutputPort(t *testing.T) {
 }
 
 func TestWriteWithInteger(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 		  (write 42 p)
 		  (get-output-string p))
@@ -108,7 +109,7 @@ func TestWriteWithInteger(t *testing.T) {
 }
 
 func TestWriteWithBoolean(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 		  (write #t p)
 		  (get-output-string p))
@@ -120,7 +121,7 @@ func TestWriteWithBoolean(t *testing.T) {
 }
 
 func TestWriteWithNestedList(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 		  (write '((a b) (c d)) p)
 		  (get-output-string p))
@@ -132,7 +133,7 @@ func TestWriteWithNestedList(t *testing.T) {
 }
 
 func TestWriteMixedOperationsToPort(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 		  (write "line1" p)
 		  (newline p)
@@ -150,7 +151,7 @@ func TestWriteMixedOperationsToPort(t *testing.T) {
 // WriteByte with Different wrt Types Tests (R7RS §6.13.3)
 
 func TestWriteWithRational(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(write 3/4 p)
 			(get-output-string p))
@@ -162,7 +163,7 @@ func TestWriteWithRational(t *testing.T) {
 }
 
 func TestWriteWithFloat(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(write 3.14 p)
 			(get-output-string p))
@@ -174,7 +175,7 @@ func TestWriteWithFloat(t *testing.T) {
 }
 
 func TestWriteWithComplex(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(write 1+2i p)
 			(get-output-string p))
@@ -186,7 +187,7 @@ func TestWriteWithComplex(t *testing.T) {
 }
 
 func TestWriteWithDottedPair(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-output-string)))
 			(write (cons 1 2) p)
 			(get-output-string p))

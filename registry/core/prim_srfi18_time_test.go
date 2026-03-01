@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -28,7 +29,7 @@ import (
 // ----------------------------------------------------------------------------
 
 func TestCurrentTime(t *testing.T) {
-	result, err := runSchemeCode(t, "(current-time)")
+	result, err := testhelpers.RunSchemeCode(t, "(current-time)")
 	qt.Assert(t, err, qt.IsNil)
 
 	// Should return a time object
@@ -70,7 +71,7 @@ func TestTimeQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -80,13 +81,13 @@ func TestTimeQ(t *testing.T) {
 func TestTimeToSeconds(t *testing.T) {
 	// time->seconds should return a positive number
 	code := "(> (time->seconds (current-time)) 0)"
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestTimeToSecondsReturnsFloat(t *testing.T) {
-	result, err := runSchemeCode(t, "(time->seconds (current-time))")
+	result, err := testhelpers.RunSchemeCode(t, "(time->seconds (current-time))")
 	qt.Assert(t, err, qt.IsNil)
 
 	// Should return a float
@@ -95,13 +96,13 @@ func TestTimeToSecondsReturnsFloat(t *testing.T) {
 }
 
 func TestTimeToSecondsError(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "time->seconds with integer", code: "(time->seconds 42)"},
-		{name: "time->seconds with string", code: `(time->seconds "now")`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "time->seconds with integer", Code: "(time->seconds 42)"},
+		{Name: "time->seconds with string", Code: `(time->seconds "now")`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -109,7 +110,7 @@ func TestTimeToSecondsError(t *testing.T) {
 
 func TestSecondsToTime(t *testing.T) {
 	// seconds->time should return a time object
-	result, err := runSchemeCode(t, "(seconds->time 1000000000)")
+	result, err := testhelpers.RunSchemeCode(t, "(seconds->time 1000000000)")
 	qt.Assert(t, err, qt.IsNil)
 
 	_, ok := result.(*values.Time)
@@ -118,7 +119,7 @@ func TestSecondsToTime(t *testing.T) {
 
 func TestSecondsToTimeWithFloat(t *testing.T) {
 	// Should work with floats
-	result, err := runSchemeCode(t, "(seconds->time 1000000000.5)")
+	result, err := testhelpers.RunSchemeCode(t, "(seconds->time 1000000000.5)")
 	qt.Assert(t, err, qt.IsNil)
 
 	_, ok := result.(*values.Time)
@@ -131,19 +132,19 @@ func TestSecondsToTimeRoundTrip(t *testing.T) {
 		(let ((secs 1500000000.5))
 			(< (abs (- (time->seconds (seconds->time secs)) secs)) 0.001))
 	`
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestSecondsToTimeError(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "seconds->time with string", code: `(seconds->time "1000")`},
-		{name: "seconds->time with symbol", code: "(seconds->time 'now)"},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "seconds->time with string", Code: `(seconds->time "1000")`},
+		{Name: "seconds->time with symbol", Code: "(seconds->time 'now)"},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -156,7 +157,7 @@ func TestCurrentTimeIncreasing(t *testing.T) {
 		      (t2 (current-time)))
 			(>= (time->seconds t2) (time->seconds t1)))
 	`
-	result, err := runSchemeCode(t, code)
+	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }

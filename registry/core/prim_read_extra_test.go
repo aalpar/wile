@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -26,7 +27,7 @@ import (
 // Read Variants Tests (R7RS §6.13.2)
 
 func TestReadWithExplicitPort(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "42")))
 			(read p))
 	`)
@@ -37,7 +38,7 @@ func TestReadWithExplicitPort(t *testing.T) {
 func TestReadSyntaxReturnsSyntaxObject(t *testing.T) {
 	// read-syntax should return a syntax object
 	// We verify by converting back to datum
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "foo")))
 			(let ((stx (read-syntax p)))
 				(syntax->datum stx)))
@@ -48,7 +49,7 @@ func TestReadSyntaxReturnsSyntaxObject(t *testing.T) {
 
 func TestReadEOFOnExhaustedPort(t *testing.T) {
 	// After reading all data, subsequent reads return eof-object
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "42")))
 			(read p)       ; consume the datum
 			(eof-object? (read p)))
@@ -59,7 +60,7 @@ func TestReadEOFOnExhaustedPort(t *testing.T) {
 
 func TestReadRepeatedEOF(t *testing.T) {
 	// Multiple reads past EOF all return eof-object
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "")))
 			(let ((a (read p))
 			      (b (read p)))
@@ -70,7 +71,7 @@ func TestReadRepeatedEOF(t *testing.T) {
 }
 
 func TestReadSyntaxEOFOnExhaustedPort(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "foo")))
 			(read-syntax p)
 			(eof-object? (read-syntax p)))
@@ -80,7 +81,7 @@ func TestReadSyntaxEOFOnExhaustedPort(t *testing.T) {
 }
 
 func TestReadTokenEOFOnExhaustedPort(t *testing.T) {
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "x")))
 			(read-token p)
 			(eof-object? (read-token p)))
@@ -93,7 +94,7 @@ func TestClosePortThenRead(t *testing.T) {
 	// After close-port, reading returns eof-object (the cached parser
 	// was evicted by close-port, and a fresh read on the closed port
 	// yields EOF immediately).
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "42")))
 			(close-port p)
 			(eof-object? (read p)))
@@ -104,7 +105,7 @@ func TestClosePortThenRead(t *testing.T) {
 
 func TestCallWithPortClosesOnReturn(t *testing.T) {
 	// call-with-port closes the port after proc returns
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "hello")))
 			(call-with-port p
 				(lambda (port) (read port)))
@@ -116,7 +117,7 @@ func TestCallWithPortClosesOnReturn(t *testing.T) {
 
 func TestReadTokenReturnsToken(t *testing.T) {
 	// read-token should return a token object or value
-	result, err := runSchemeCode(t, `
+	result, err := testhelpers.RunSchemeCode(t, `
 		(let ((p (open-input-string "hello")))
 			(let ((tok (read-token p)))
 				(not (eof-object? tok))))  ; should not be eof

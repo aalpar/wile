@@ -19,6 +19,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -64,7 +65,7 @@ func TestCallWithInputFile(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -72,25 +73,25 @@ func TestCallWithInputFile(t *testing.T) {
 }
 
 func TestCallWithInputFileErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "file not found",
-			code: `(call-with-input-file "/nonexistent/file/path.txt"
+			Name: "file not found",
+			Code: `(call-with-input-file "/nonexistent/file/path.txt"
 				(lambda (p) (read p)))`,
 		},
 		{
-			name: "wrong type for filename - integer",
-			code: `(call-with-input-file 42 (lambda (p) p))`,
+			Name: "wrong type for filename - integer",
+			Code: `(call-with-input-file 42 (lambda (p) p))`,
 		},
 		{
-			name: "wrong type for procedure - not a procedure",
-			code: `(call-with-input-file "/tmp/test.txt" 42)`,
+			Name: "wrong type for procedure - not a procedure",
+			Code: `(call-with-input-file "/tmp/test.txt" 42)`,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}

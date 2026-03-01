@@ -14,7 +14,11 @@
 
 package core_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/aalpar/wile/registry/testhelpers"
+)
 
 // TestEquality_ArityErrors verifies that equality and boolean primitives
 // reject wrong argument counts. The VM enforces arity automatically via
@@ -28,22 +32,22 @@ func TestEquality_ArityErrors(t *testing.T) {
 	}
 	for _, name := range fixedArity2 {
 		t.Run(name+" zero args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+")")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+")")
 		})
 		t.Run(name+" one arg", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+" 1)")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+" 1)")
 		})
 		t.Run(name+" three args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+" 1 2 3)")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+" 1 2 3)")
 		})
 	}
 
 	// Fixed 1 arg: not
 	t.Run("not zero args", func(t *testing.T) {
-		runSchemeCodeExpectError(t, "(not)")
+		testhelpers.RunSchemeCodeExpectError(t, "(not)")
 	})
 	t.Run("not two args", func(t *testing.T) {
-		runSchemeCodeExpectError(t, "(not 1 2)")
+		testhelpers.RunSchemeCodeExpectError(t, "(not 1 2)")
 	})
 
 	// Variadic with minimum 1 arg: boolean=?, symbol=?
@@ -53,7 +57,7 @@ func TestEquality_ArityErrors(t *testing.T) {
 	}
 	for _, name := range variadicMin1 {
 		t.Run(name+" zero args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+name+")")
+			testhelpers.RunSchemeCodeExpectError(t, "("+name+")")
 		})
 	}
 }

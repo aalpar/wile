@@ -18,6 +18,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -25,19 +26,19 @@ import (
 )
 
 func TestFileExistsWithExistingFile(t *testing.T) {
-	result, err := runSchemeCode(t, `(file-exists? "test_helpers_test.go")`)
+	result, err := testhelpers.RunSchemeCode(t, `(file-exists? "core_test.go")`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
 }
 
 func TestFileExistsWithNonexistentFile(t *testing.T) {
-	result, err := runSchemeCode(t, `(file-exists? "nonexistent-file-xyz.txt")`)
+	result, err := testhelpers.RunSchemeCode(t, `(file-exists? "nonexistent-file-xyz.txt")`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
 
 func TestGetEnvironmentVariableWithPATH(t *testing.T) {
-	result, err := runSchemeCode(t, `(get-environment-variable "PATH")`)
+	result, err := testhelpers.RunSchemeCode(t, `(get-environment-variable "PATH")`)
 	qt.Assert(t, err, qt.IsNil)
 
 	// PATH should exist and be a string
@@ -47,7 +48,7 @@ func TestGetEnvironmentVariableWithPATH(t *testing.T) {
 }
 
 func TestGetEnvironmentVariableWithNonexistentVar(t *testing.T) {
-	result, err := runSchemeCode(t, `(get-environment-variable "WILE_NONEXISTENT_VAR_12345")`)
+	result, err := testhelpers.RunSchemeCode(t, `(get-environment-variable "WILE_NONEXISTENT_VAR_12345")`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.FalseValue)
 }
@@ -56,13 +57,13 @@ func TestGetEnvironmentVariableWithTestVar(t *testing.T) {
 	os.Setenv("WILE_TEST_VAR", "test_value") //nolint:errcheck
 	defer os.Unsetenv("WILE_TEST_VAR")       //nolint:errcheck
 
-	result, err := runSchemeCode(t, `(get-environment-variable "WILE_TEST_VAR")`)
+	result, err := testhelpers.RunSchemeCode(t, `(get-environment-variable "WILE_TEST_VAR")`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewString("test_value"))
 }
 
 func TestGetEnvironmentVariablesReturnsAlist(t *testing.T) {
-	result, err := runSchemeCode(t, `(get-environment-variables)`)
+	result, err := testhelpers.RunSchemeCode(t, `(get-environment-variables)`)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Result should be a list (pair or empty list)
@@ -87,7 +88,7 @@ func TestGetEnvironmentVariablesReturnsAlist(t *testing.T) {
 }
 
 func TestCommandLineReturnsList(t *testing.T) {
-	result, err := runSchemeCode(t, `(command-line)`)
+	result, err := testhelpers.RunSchemeCode(t, `(command-line)`)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Result should be a list (pair or empty list)
@@ -105,11 +106,11 @@ func TestCommandLineReturnsList(t *testing.T) {
 }
 
 func TestGetEnvironmentVariableErrorWithNonString(t *testing.T) {
-	_, err := runSchemeCode(t, `(get-environment-variable 42)`)
+	_, err := testhelpers.RunSchemeCode(t, `(get-environment-variable 42)`)
 	qt.Assert(t, err, qt.Not(qt.IsNil), qt.Commentf("expected error when passing non-string"))
 }
 
 func TestFileExistsErrorWithNonString(t *testing.T) {
-	_, err := runSchemeCode(t, `(file-exists? 42)`)
+	_, err := testhelpers.RunSchemeCode(t, `(file-exists? 42)`)
 	qt.Assert(t, err, qt.Not(qt.IsNil), qt.Commentf("expected error when passing non-string"))
 }

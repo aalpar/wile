@@ -18,6 +18,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -97,7 +98,7 @@ func TestAngle(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 
 			resultFloat, ok := result.(*values.Float)
@@ -178,7 +179,7 @@ func TestMakePolar(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 
 			resultComplex, ok := result.(*values.Complex)
@@ -236,7 +237,7 @@ func TestMakePolarAngleRoundTrip(t *testing.T) {
 			// Create a complex number from polar coordinates
 			makePolarCode := "(make-polar " + floatToString(tc.magnitude) + " " + floatToString(tc.angle) + ")"
 			t.Logf("makePolarCode: %s", makePolarCode)
-			resultMakePolar, err := runSchemeCode(t, makePolarCode)
+			resultMakePolar, err := testhelpers.RunSchemeCode(t, makePolarCode)
 			qt.Assert(t, err, qt.IsNil)
 
 			resultComplex, ok := resultMakePolar.(*values.Complex)
@@ -244,7 +245,7 @@ func TestMakePolarAngleRoundTrip(t *testing.T) {
 
 			// Get the angle back
 			angleCode := "(angle " + resultComplex.SchemeString() + ")"
-			resultAngle, err := runSchemeCode(t, angleCode)
+			resultAngle, err := testhelpers.RunSchemeCode(t, angleCode)
 			qt.Assert(t, err, qt.IsNil)
 
 			resultAngleFloat, ok := resultAngle.(*values.Float)
@@ -257,7 +258,7 @@ func TestMakePolarAngleRoundTrip(t *testing.T) {
 
 			// Check that the magnitude matches (within tolerance)
 			magnitudeCode := "(magnitude " + resultComplex.SchemeString() + ")"
-			resultMagnitude, err := runSchemeCode(t, magnitudeCode)
+			resultMagnitude, err := testhelpers.RunSchemeCode(t, magnitudeCode)
 			qt.Assert(t, err, qt.IsNil)
 
 			resultMagnitudeFloat, ok := resultMagnitude.(*values.Float)
@@ -280,14 +281,14 @@ func floatToString(f float64) string {
 // ----------------------------------------------------------------------------
 
 func TestAngleErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "angle of string", code: `(angle "hello")`},
-		{name: "angle of symbol", code: `(angle 'foo)`},
-		{name: "angle of list", code: `(angle '(1 2 3))`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "angle of string", Code: `(angle "hello")`},
+		{Name: "angle of symbol", Code: `(angle 'foo)`},
+		{Name: "angle of list", Code: `(angle '(1 2 3))`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
@@ -298,15 +299,15 @@ func TestAngleErrors(t *testing.T) {
 // ----------------------------------------------------------------------------
 
 func TestMakePolarErrors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "make-polar string magnitude", code: `(make-polar "3" 0)`},
-		{name: "make-polar string angle", code: `(make-polar 3 "0")`},
-		{name: "make-polar symbol arg", code: `(make-polar 3 'zero)`},
-		{name: "make-polar complex magnitude", code: `(make-polar 1+2i 0)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "make-polar string magnitude", Code: `(make-polar "3" 0)`},
+		{Name: "make-polar string angle", Code: `(make-polar 3 "0")`},
+		{Name: "make-polar symbol arg", Code: `(make-polar 3 'zero)`},
+		{Name: "make-polar complex magnitude", Code: `(make-polar 1+2i 0)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}

@@ -18,6 +18,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -57,7 +58,7 @@ func TestBytevectorQ(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -98,7 +99,7 @@ func TestMakeBytevector(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -133,7 +134,7 @@ func TestBytevector(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -161,7 +162,7 @@ func TestBytevectorLength(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -198,7 +199,7 @@ func TestBytevectorU8Ref(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -235,7 +236,7 @@ func TestBytevectorU8Set(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -271,7 +272,7 @@ func TestBytevectorCopy(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -307,7 +308,7 @@ func TestBytevectorAppend(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -338,7 +339,7 @@ func TestUtf8ToString(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -374,7 +375,7 @@ func TestStringToUtf8(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -406,7 +407,7 @@ func TestBytevectorRoundTrip(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -414,20 +415,20 @@ func TestBytevectorRoundTrip(t *testing.T) {
 }
 
 func TestBytevectorU8RefSet(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "bytevector-u8-ref",
-			code: `(let ((bv (bytevector 1 2 3))) (bytevector-u8-ref bv 1))`,
+			Name: "bytevector-u8-ref",
+			Code: `(let ((bv (bytevector 1 2 3))) (bytevector-u8-ref bv 1))`,
 		},
 		{
-			name: "bytevector-u8-set!",
-			code: `(let ((bv (bytevector 1 2 3))) (bytevector-u8-set! bv 1 99) (bytevector-u8-ref bv 1))`,
+			Name: "bytevector-u8-set!",
+			Code: `(let ((bv (bytevector 1 2 3))) (bytevector-u8-set! bv 1 99) (bytevector-u8-ref bv 1))`,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.IsNotNil)
 		})
@@ -437,130 +438,130 @@ func TestBytevectorU8RefSet(t *testing.T) {
 // --- Error tests ---
 
 func TestMakeBytevector_Errors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "non-integer size", code: `(make-bytevector "a")`},
-		{name: "negative size", code: `(make-bytevector -1)`},
-		{name: "non-integer fill", code: `(make-bytevector 3 "x")`},
-		{name: "fill > 255", code: `(make-bytevector 3 256)`},
-		{name: "fill < 0", code: `(make-bytevector 3 -1)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "non-integer size", Code: `(make-bytevector "a")`},
+		{Name: "negative size", Code: `(make-bytevector -1)`},
+		{Name: "non-integer fill", Code: `(make-bytevector 3 "x")`},
+		{Name: "fill > 255", Code: `(make-bytevector 3 256)`},
+		{Name: "fill < 0", Code: `(make-bytevector 3 -1)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.Not(qt.IsNil))
 		})
 	}
 }
 
 func TestMakeBytevector_EdgeCases(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{name: "fill = 0 boundary", code: `(bytevector-u8-ref (make-bytevector 1 0) 0)`, expected: values.NewInteger(0)},
-		{name: "fill = 255 boundary", code: `(bytevector-u8-ref (make-bytevector 1 255) 0)`, expected: values.NewInteger(255)},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "fill = 0 boundary", Code: `(bytevector-u8-ref (make-bytevector 1 0) 0)`, Expected: values.NewInteger(0)},
+		{Name: "fill = 255 boundary", Code: `(bytevector-u8-ref (make-bytevector 1 255) 0)`, Expected: values.NewInteger(255)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestBytevector_Errors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "non-integer element", code: `(bytevector 1 "a" 3)`},
-		{name: "element > 255", code: `(bytevector 1 256 3)`},
-		{name: "element < 0", code: `(bytevector 1 -1 3)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "non-integer element", Code: `(bytevector 1 "a" 3)`},
+		{Name: "element > 255", Code: `(bytevector 1 256 3)`},
+		{Name: "element < 0", Code: `(bytevector 1 -1 3)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.Not(qt.IsNil))
 		})
 	}
 }
 
 func TestBytevector_EdgeCases(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{name: "boundary 0", code: `(bytevector-u8-ref (bytevector 0) 0)`, expected: values.NewInteger(0)},
-		{name: "boundary 255", code: `(bytevector-u8-ref (bytevector 255) 0)`, expected: values.NewInteger(255)},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "boundary 0", Code: `(bytevector-u8-ref (bytevector 0) 0)`, Expected: values.NewInteger(0)},
+		{Name: "boundary 255", Code: `(bytevector-u8-ref (bytevector 255) 0)`, Expected: values.NewInteger(255)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestBytevectorLength_Errors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "non-bytevector string", code: `(bytevector-length "hello")`},
-		{name: "non-bytevector integer", code: `(bytevector-length 42)`},
-		{name: "non-bytevector list", code: `(bytevector-length '(1 2 3))`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "non-bytevector string", Code: `(bytevector-length "hello")`},
+		{Name: "non-bytevector integer", Code: `(bytevector-length 42)`},
+		{Name: "non-bytevector list", Code: `(bytevector-length '(1 2 3))`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.Not(qt.IsNil))
 		})
 	}
 }
 
 func TestBytevectorU8Ref_Errors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "non-bytevector", code: `(bytevector-u8-ref "hello" 0)`},
-		{name: "non-integer index", code: `(bytevector-u8-ref (bytevector 1 2 3) "a")`},
-		{name: "negative index", code: `(bytevector-u8-ref (bytevector 1 2 3) -1)`},
-		{name: "index = length", code: `(bytevector-u8-ref (bytevector 1 2 3) 3)`},
-		{name: "index > length", code: `(bytevector-u8-ref (bytevector 1 2 3) 10)`},
-		{name: "empty bytevector", code: `(bytevector-u8-ref (bytevector) 0)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "non-bytevector", Code: `(bytevector-u8-ref "hello" 0)`},
+		{Name: "non-integer index", Code: `(bytevector-u8-ref (bytevector 1 2 3) "a")`},
+		{Name: "negative index", Code: `(bytevector-u8-ref (bytevector 1 2 3) -1)`},
+		{Name: "index = length", Code: `(bytevector-u8-ref (bytevector 1 2 3) 3)`},
+		{Name: "index > length", Code: `(bytevector-u8-ref (bytevector 1 2 3) 10)`},
+		{Name: "empty bytevector", Code: `(bytevector-u8-ref (bytevector) 0)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.Not(qt.IsNil))
 		})
 	}
 }
 
 func TestBytevectorU8Set_Errors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "non-bytevector", code: `(bytevector-u8-set! "hello" 0 1)`},
-		{name: "non-integer index", code: `(bytevector-u8-set! (bytevector 1 2 3) "a" 1)`},
-		{name: "negative index", code: `(bytevector-u8-set! (bytevector 1 2 3) -1 1)`},
-		{name: "index = length", code: `(bytevector-u8-set! (bytevector 1 2 3) 3 1)`},
-		{name: "non-integer value", code: `(bytevector-u8-set! (bytevector 1 2 3) 0 "a")`},
-		{name: "value > 255", code: `(bytevector-u8-set! (bytevector 1 2 3) 0 256)`},
-		{name: "value < 0", code: `(bytevector-u8-set! (bytevector 1 2 3) 0 -1)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "non-bytevector", Code: `(bytevector-u8-set! "hello" 0 1)`},
+		{Name: "non-integer index", Code: `(bytevector-u8-set! (bytevector 1 2 3) "a" 1)`},
+		{Name: "negative index", Code: `(bytevector-u8-set! (bytevector 1 2 3) -1 1)`},
+		{Name: "index = length", Code: `(bytevector-u8-set! (bytevector 1 2 3) 3 1)`},
+		{Name: "non-integer value", Code: `(bytevector-u8-set! (bytevector 1 2 3) 0 "a")`},
+		{Name: "value > 255", Code: `(bytevector-u8-set! (bytevector 1 2 3) 0 256)`},
+		{Name: "value < 0", Code: `(bytevector-u8-set! (bytevector 1 2 3) 0 -1)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.Not(qt.IsNil))
 		})
 	}
 }
 
 func TestBytevectorU8Set_EdgeCases(t *testing.T) {
-	tcs := []schemeCodeTestCase{
+	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			name:     "value = 0 boundary",
-			code:     `(let ((bv (bytevector 1 2 3))) (bytevector-u8-set! bv 0 0) (bytevector-u8-ref bv 0))`,
-			expected: values.NewInteger(0),
+			Name:     "value = 0 boundary",
+			Code:     `(let ((bv (bytevector 1 2 3))) (bytevector-u8-set! bv 0 0) (bytevector-u8-ref bv 0))`,
+			Expected: values.NewInteger(0),
 		},
 		{
-			name:     "value = 255 boundary",
-			code:     `(let ((bv (bytevector 1 2 3))) (bytevector-u8-set! bv 0 255) (bytevector-u8-ref bv 0))`,
-			expected: values.NewInteger(255),
+			Name:     "value = 255 boundary",
+			Code:     `(let ((bv (bytevector 1 2 3))) (bytevector-u8-set! bv 0 255) (bytevector-u8-ref bv 0))`,
+			Expected: values.NewInteger(255),
 		},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
@@ -579,7 +580,7 @@ func TestByteRangeValidation_Sentinel(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+			_, err := testhelpers.RunSchemeCode(t, tc.code)
 			qt.Assert(t, err, qt.IsNotNil)
 			qt.Assert(t, errors.Is(err, values.ErrNotAByte), qt.IsTrue)
 		})
@@ -587,127 +588,127 @@ func TestByteRangeValidation_Sentinel(t *testing.T) {
 }
 
 func TestBytevectorCopy_Errors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "non-bytevector", code: `(bytevector-copy "hello")`},
-		{name: "non-integer start", code: `(bytevector-copy (bytevector 1 2 3) "a")`},
-		{name: "negative start", code: `(bytevector-copy (bytevector 1 2 3) -1)`},
-		{name: "start > length", code: `(bytevector-copy (bytevector 1 2 3) 4)`},
-		{name: "non-integer end", code: `(bytevector-copy (bytevector 1 2 3) 0 "a")`},
-		{name: "end < start", code: `(bytevector-copy (bytevector 1 2 3) 2 1)`},
-		{name: "end > length", code: `(bytevector-copy (bytevector 1 2 3) 0 5)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "non-bytevector", Code: `(bytevector-copy "hello")`},
+		{Name: "non-integer start", Code: `(bytevector-copy (bytevector 1 2 3) "a")`},
+		{Name: "negative start", Code: `(bytevector-copy (bytevector 1 2 3) -1)`},
+		{Name: "start > length", Code: `(bytevector-copy (bytevector 1 2 3) 4)`},
+		{Name: "non-integer end", Code: `(bytevector-copy (bytevector 1 2 3) 0 "a")`},
+		{Name: "end < start", Code: `(bytevector-copy (bytevector 1 2 3) 2 1)`},
+		{Name: "end > length", Code: `(bytevector-copy (bytevector 1 2 3) 0 5)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.Not(qt.IsNil))
 		})
 	}
 }
 
 func TestBytevectorCopy_EdgeCases(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{name: "start = end empty", code: `(bytevector-length (bytevector-copy (bytevector 1 2 3) 1 1))`, expected: values.NewInteger(0)},
-		{name: "partial copy with start", code: `(bytevector-length (bytevector-copy (bytevector 1 2 3) 1))`, expected: values.NewInteger(2)},
-		{name: "partial copy start+end", code: `(bytevector-length (bytevector-copy (bytevector 1 2 3 4 5) 1 3))`, expected: values.NewInteger(2)},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "start = end empty", Code: `(bytevector-length (bytevector-copy (bytevector 1 2 3) 1 1))`, Expected: values.NewInteger(0)},
+		{Name: "partial copy with start", Code: `(bytevector-length (bytevector-copy (bytevector 1 2 3) 1))`, Expected: values.NewInteger(2)},
+		{Name: "partial copy start+end", Code: `(bytevector-length (bytevector-copy (bytevector 1 2 3 4 5) 1 3))`, Expected: values.NewInteger(2)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestBytevectorAppend_Errors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "non-bytevector element", code: `(bytevector-append (bytevector 1 2) "hello")`},
-		{name: "non-bytevector integer", code: `(bytevector-append 42)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "non-bytevector element", Code: `(bytevector-append (bytevector 1 2) "hello")`},
+		{Name: "non-bytevector integer", Code: `(bytevector-append 42)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.Not(qt.IsNil))
 		})
 	}
 }
 
 func TestBytevectorAppend_EdgeCases(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{name: "no arguments", code: `(bytevector-length (bytevector-append))`, expected: values.NewInteger(0)},
-		{name: "single argument", code: `(bytevector-length (bytevector-append (bytevector 1 2 3)))`, expected: values.NewInteger(3)},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "no arguments", Code: `(bytevector-length (bytevector-append))`, Expected: values.NewInteger(0)},
+		{Name: "single argument", Code: `(bytevector-length (bytevector-append (bytevector 1 2 3)))`, Expected: values.NewInteger(3)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestUtf8ToString_Errors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "non-bytevector", code: `(utf8->string "hello")`},
-		{name: "non-integer start", code: `(utf8->string (bytevector 65) "a")`},
-		{name: "negative start", code: `(utf8->string (bytevector 65) -1)`},
-		{name: "start > length", code: `(utf8->string (bytevector 65) 2)`},
-		{name: "end < start", code: `(utf8->string (bytevector 65 66 67) 2 1)`},
-		{name: "end > length", code: `(utf8->string (bytevector 65) 0 5)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "non-bytevector", Code: `(utf8->string "hello")`},
+		{Name: "non-integer start", Code: `(utf8->string (bytevector 65) "a")`},
+		{Name: "negative start", Code: `(utf8->string (bytevector 65) -1)`},
+		{Name: "start > length", Code: `(utf8->string (bytevector 65) 2)`},
+		{Name: "end < start", Code: `(utf8->string (bytevector 65 66 67) 2 1)`},
+		{Name: "end > length", Code: `(utf8->string (bytevector 65) 0 5)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.Not(qt.IsNil))
 		})
 	}
 }
 
 func TestUtf8ToString_EdgeCases(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{name: "with start", code: `(utf8->string (bytevector 65 66 67) 1)`, expected: values.NewString("BC")},
-		{name: "with start and end", code: `(utf8->string (bytevector 65 66 67) 1 2)`, expected: values.NewString("B")},
-		{name: "multi-byte UTF-8 lambda", code: `(utf8->string (bytevector 206 187))`, expected: values.NewString("λ")},
-		{name: "multi-byte round-trip", code: `(utf8->string (string->utf8 "λ"))`, expected: values.NewString("λ")},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "with start", Code: `(utf8->string (bytevector 65 66 67) 1)`, Expected: values.NewString("BC")},
+		{Name: "with start and end", Code: `(utf8->string (bytevector 65 66 67) 1 2)`, Expected: values.NewString("B")},
+		{Name: "multi-byte UTF-8 lambda", Code: `(utf8->string (bytevector 206 187))`, Expected: values.NewString("λ")},
+		{Name: "multi-byte round-trip", Code: `(utf8->string (string->utf8 "λ"))`, Expected: values.NewString("λ")},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }
 
 func TestStringToUtf8_Errors(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
-		{name: "non-string", code: `(string->utf8 42)`},
-		{name: "non-integer start", code: `(string->utf8 "hello" "a")`},
-		{name: "negative start", code: `(string->utf8 "hello" -1)`},
-		{name: "start > length", code: `(string->utf8 "hello" 10)`},
-		{name: "end < start", code: `(string->utf8 "hello" 3 1)`},
-		{name: "end > length", code: `(string->utf8 "hello" 0 10)`},
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "non-string", Code: `(string->utf8 42)`},
+		{Name: "non-integer start", Code: `(string->utf8 "hello" "a")`},
+		{Name: "negative start", Code: `(string->utf8 "hello" -1)`},
+		{Name: "start > length", Code: `(string->utf8 "hello" 10)`},
+		{Name: "end < start", Code: `(string->utf8 "hello" 3 1)`},
+		{Name: "end > length", Code: `(string->utf8 "hello" 0 10)`},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.Not(qt.IsNil))
 		})
 	}
 }
 
 func TestStringToUtf8_EdgeCases(t *testing.T) {
-	tcs := []schemeCodeTestCase{
-		{name: "with start", code: `(bytevector-length (string->utf8 "hello" 2))`, expected: values.NewInteger(3)},
-		{name: "with start and end", code: `(bytevector-length (string->utf8 "hello" 1 3))`, expected: values.NewInteger(2)},
-		{name: "multi-byte UTF-8 lambda", code: `(bytevector-length (string->utf8 "λ"))`, expected: values.NewInteger(2)},
-		{name: "multi-byte verify bytes", code: `(bytevector-u8-ref (string->utf8 "λ") 0)`, expected: values.NewInteger(206)},
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "with start", Code: `(bytevector-length (string->utf8 "hello" 2))`, Expected: values.NewInteger(3)},
+		{Name: "with start and end", Code: `(bytevector-length (string->utf8 "hello" 1 3))`, Expected: values.NewInteger(2)},
+		{Name: "multi-byte UTF-8 lambda", Code: `(bytevector-length (string->utf8 "λ"))`, Expected: values.NewInteger(2)},
+		{Name: "multi-byte verify bytes", Code: `(bytevector-u8-ref (string->utf8 "λ") 0)`, Expected: values.NewInteger(206)},
 	}
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
 		})
 	}
 }

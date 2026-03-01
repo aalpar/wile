@@ -14,7 +14,11 @@
 
 package core_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/aalpar/wile/registry/testhelpers"
+)
 
 // TestPredicates_ArityErrors verifies that all core predicates reject
 // wrong argument counts. The VM enforces arity automatically via
@@ -51,10 +55,10 @@ func TestPredicates_ArityErrors(t *testing.T) {
 
 	for _, pred := range predicates {
 		t.Run(pred+" zero args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+pred+")")
+			testhelpers.RunSchemeCodeExpectError(t, "("+pred+")")
 		})
 		t.Run(pred+" two args", func(t *testing.T) {
-			runSchemeCodeExpectError(t, "("+pred+" 1 2)")
+			testhelpers.RunSchemeCodeExpectError(t, "("+pred+" 1 2)")
 		})
 	}
 }

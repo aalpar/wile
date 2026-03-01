@@ -17,6 +17,7 @@ package core_test
 import (
 	"testing"
 
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -46,7 +47,7 @@ func TestRealPart(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -72,7 +73,7 @@ func TestImagPart(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -98,7 +99,7 @@ func TestMagnitude(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -124,7 +125,7 @@ func TestMakeRectangular(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -149,7 +150,7 @@ func TestNumerator(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -170,7 +171,7 @@ func TestDenominator(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := runProgramAST(t, tc.prog)
+			result, err := testhelpers.RunProgramAST(t, tc.prog)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
 		})
@@ -178,24 +179,24 @@ func TestDenominator(t *testing.T) {
 }
 
 func TestMakeRectangularExtended(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "make-rectangular with integers",
-			code: `(make-rectangular 3 4)`,
+			Name: "make-rectangular with integers",
+			Code: `(make-rectangular 3 4)`,
 		},
 		{
-			name: "make-rectangular with floats",
-			code: `(make-rectangular 3.0 4.0)`,
+			Name: "make-rectangular with floats",
+			Code: `(make-rectangular 3.0 4.0)`,
 		},
 		{
-			name: "make-rectangular with rationals",
-			code: `(make-rectangular 1/2 3/4)`,
+			Name: "make-rectangular with rationals",
+			Code: `(make-rectangular 1/2 3/4)`,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.IsNotNil)
 		})
@@ -203,20 +204,20 @@ func TestMakeRectangularExtended(t *testing.T) {
 }
 
 func TestMagnitudeExtended(t *testing.T) {
-	tcs := []schemeCodeErrorTestCase{
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{
-			name: "magnitude of rational",
-			code: `(magnitude 3/4)`,
+			Name: "magnitude of rational",
+			Code: `(magnitude 3/4)`,
 		},
 		{
-			name: "magnitude of negative",
-			code: `(magnitude -5)`,
+			Name: "magnitude of negative",
+			Code: `(magnitude -5)`,
 		},
 	}
 
 	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := runSchemeCode(t, tc.code)
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, qt.IsNotNil)
 		})

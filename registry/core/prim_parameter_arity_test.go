@@ -14,7 +14,11 @@
 
 package core_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/aalpar/wile/registry/testhelpers"
+)
 
 // TestParameters_ArityErrors verifies that parameter primitives reject
 // wrong argument counts. The VM enforces arity automatically via
@@ -22,14 +26,14 @@ import "testing"
 func TestParameters_ArityErrors(t *testing.T) {
 	// Fixed 1 arg: parameter?
 	t.Run("parameter? zero args", func(t *testing.T) {
-		runSchemeCodeExpectError(t, "(parameter?)")
+		testhelpers.RunSchemeCodeExpectError(t, "(parameter?)")
 	})
 	t.Run("parameter? two args", func(t *testing.T) {
-		runSchemeCodeExpectError(t, "(parameter? 1 2)")
+		testhelpers.RunSchemeCodeExpectError(t, "(parameter? 1 2)")
 	})
 
 	// Variadic with minimum 1 arg: make-parameter
 	t.Run("make-parameter zero args", func(t *testing.T) {
-		runSchemeCodeExpectError(t, "(make-parameter)")
+		testhelpers.RunSchemeCodeExpectError(t, "(make-parameter)")
 	})
 }
