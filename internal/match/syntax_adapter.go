@@ -592,6 +592,10 @@ func (p *SyntaxMatcher) findSyntaxVarsRecursive(template syntax.SyntaxValue, var
 			p.findSyntaxVarsRecursive(t.SyntaxCar(), vars)
 			p.findSyntaxVarsRecursive(t.SyntaxCdr(), vars)
 		}
+	case *syntax.SyntaxVector:
+		for _, elem := range t.Values {
+			p.findSyntaxVarsRecursive(elem, vars)
+		}
 	}
 }
 

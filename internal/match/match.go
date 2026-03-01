@@ -435,6 +435,42 @@ func (p *Matcher) MatchSyntaxWithLiterals(ctx context.Context, target *syntax.Sy
 			default:
 				return ErrNotAMatch
 			}
+		case ByteCodeRequireCarEmptyVector:
+			// R7RS §4.3.2: Empty vector pattern #() — car must be an empty vector.
+			entryPr := p.syntaxStack[lvs-1].pr
+			if syntax.IsSyntaxEmptyList(entryPr) {
+				return ErrNotAMatch
+			}
+			car := entryPr.SyntaxCar()
+			vec, ok := car.(*syntax.SyntaxVector)
+			if !ok || len(vec.Values) != 0 {
+				return ErrNotAMatch
+			}
+			// Advance to next element
+			cdr := entryPr.SyntaxCdr()
+			cdrPair, ok := cdr.(*syntax.SyntaxPair)
+			switch {
+			case ok:
+				p.syntaxStack[lvs-1] = syntaxPathEntry{pr: cdrPair}
+			case syntax.IsSyntaxEmptyList(cdr) || cdr == nil:
+				p.syntaxStack[lvs-1] = syntaxPathEntry{pr: syntax.SyntaxEmptyList}
+			default:
+				return ErrNotAMatch
+			}
+		case ByteCodeVisitCarAsVector:
+			// R7RS §4.3.2: Vector pattern — car must be a SyntaxVector.
+			// Convert its elements to a pair chain for pair-based matching.
+			if syntax.IsSyntaxEmptyList(p.syntaxStack[lvs-1].pr) {
+				return ErrNotAMatch
+			}
+			car := p.syntaxStack[lvs-1].pr.SyntaxCar()
+			vec, ok := car.(*syntax.SyntaxVector)
+			if !ok {
+				return ErrNotAMatch
+			}
+			chain := vectorToSyntaxPairChain(vec)
+			p.syntaxStack = append(p.syntaxStack, syntaxPathEntry{pr: chain})
+			lvs = len(p.syntaxStack)
 		default:
 			return ErrUnknownOpCode
 		}
@@ -556,4 +592,18 @@ func syntaxValuesEqualForMatch(a, b syntax.SyntaxValue) bool {
 
 	// For pairs and mixed types, use deep comparison
 	return values.EqualTo(a.UnwrapAll(), b.UnwrapAll())
+}
+
+// vectorToSyntaxPairChain converts a SyntaxVector's elements into a
+// SyntaxPair chain for pair-based matching. Empty vectors produce
+// SyntaxEmptyList.
+func vectorToSyntaxPairChain(vec *syntax.SyntaxVector) syntax.SyntaxTuple {
+	if len(vec.Values) == 0 {
+		return syntax.SyntaxEmptyList
+	}
+	var chain syntax.SyntaxValue = syntax.SyntaxEmptyList
+	for i := len(vec.Values) - 1; i >= 0; i-- {
+		chain = syntax.NewSyntaxCons(vec.Values[i], chain, vec.SourceContext())
+	}
+	return chain.(syntax.SyntaxTuple)
 }
