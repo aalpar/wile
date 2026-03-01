@@ -1730,6 +1730,93 @@ func TestRunDispatch_OpLoadGlobal_NoBinding(t *testing.T) {
 	c.Assert(err.Error(), qt.Contains, "no such global binding")
 }
 
+func TestRunDispatch_OpLoadGlobal_Sentinels(t *testing.T) {
+	t.Run("nil literal returns ErrInvalidLiteralIndex", func(t *testing.T) {
+		c := qt.New(t)
+		env := environment.NewTopLevelEnvironment().Runtime()
+		tpl := NewNativeTemplate(0, 0, false)
+		// Append a nil literal manually to simulate a corrupt literal slot.
+		tpl.literals = append(tpl.literals, nil)
+		tpl.AppendInstruction(Instruction{Op: OpLoadGlobal, Arg: 0})
+
+		cont := NewMachineContinuation(nil, tpl, env)
+		mc := NewMachineContext(context.Background(), cont)
+
+		err := mc.Run()
+		c.Assert(errors.Is(err, ErrInvalidLiteralIndex), qt.IsTrue)
+	})
+
+	t.Run("wrong type returns ErrInvalidGlobalIndex", func(t *testing.T) {
+		c := qt.New(t)
+		env := environment.NewTopLevelEnvironment().Runtime()
+		tpl := NewNativeTemplate(0, 0, false)
+		// Put a non-GlobalIndex value in the literal slot.
+		litIdx := tpl.MaybeAppendLiteral(values.NewInteger(1))
+		tpl.AppendInstruction(Instruction{Op: OpLoadGlobal, Arg: int32(litIdx)})
+
+		cont := NewMachineContinuation(nil, tpl, env)
+		mc := NewMachineContext(context.Background(), cont)
+
+		err := mc.Run()
+		c.Assert(errors.Is(err, ErrInvalidGlobalIndex), qt.IsTrue)
+	})
+
+	t.Run("missing binding returns ErrBindingNotFound", func(t *testing.T) {
+		c := qt.New(t)
+		env := environment.NewTopLevelEnvironment().Runtime()
+		gi := environment.NewGlobalIndex(values.NewSymbol("nonexistent"))
+
+		tpl := NewNativeTemplate(0, 0, false)
+		litIdx := tpl.MaybeAppendLiteral(gi)
+		tpl.AppendInstruction(Instruction{Op: OpLoadGlobal, Arg: int32(litIdx)})
+
+		cont := NewMachineContinuation(nil, tpl, env)
+		mc := NewMachineContext(context.Background(), cont)
+
+		err := mc.Run()
+		c.Assert(errors.Is(err, ErrBindingNotFound), qt.IsTrue)
+	})
+}
+
+func TestRunDispatch_OpStoreGlobal_Sentinels(t *testing.T) {
+	t.Run("missing binding returns ErrBindingNotFound", func(t *testing.T) {
+		c := qt.New(t)
+		env := environment.NewTopLevelEnvironment().Runtime()
+		gi := environment.NewGlobalIndex(values.NewSymbol("nonexistent"))
+
+		tpl := NewNativeTemplate(0, 0, false)
+		litVal := tpl.MaybeAppendLiteral(values.NewInteger(1))
+		litGI := tpl.MaybeAppendLiteral(gi)
+		tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(litVal)})
+		tpl.AppendInstruction(Instruction{Op: OpPush})
+		tpl.AppendInstruction(Instruction{Op: OpStoreGlobal, Arg: int32(litGI)})
+
+		cont := NewMachineContinuation(nil, tpl, env)
+		mc := NewMachineContext(context.Background(), cont)
+
+		err := mc.Run()
+		c.Assert(errors.Is(err, ErrBindingNotFound), qt.IsTrue)
+	})
+}
+
+func TestRunDispatch_OpLoadLocal_Sentinels(t *testing.T) {
+	t.Run("missing binding returns ErrBindingNotFound", func(t *testing.T) {
+		c := qt.New(t)
+		env := environment.NewTopLevelEnvironment().Runtime()
+		// depth=1 with no parent local frame — resolveLocalBinding returns nil.
+
+		tpl := NewNativeTemplate(0, 0, false)
+		li := environment.NewLocalIndex(0, 1)
+		tpl.AppendInstruction(Instruction{Op: OpLoadLocal, Arg: EncodeLocalIndex(li)})
+
+		cont := NewMachineContinuation(nil, tpl, env)
+		mc := NewMachineContext(context.Background(), cont)
+
+		err := mc.Run()
+		c.Assert(errors.Is(err, ErrBindingNotFound), qt.IsTrue)
+	})
+}
+
 func TestRunDispatch_OpStoreGlobal(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewTopLevelEnvironment().Runtime()

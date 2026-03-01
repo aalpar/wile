@@ -15,6 +15,8 @@
 package machine
 
 import (
+	"fmt"
+	"math"
 	"testing"
 
 	"github.com/aalpar/wile/values"
@@ -418,4 +420,70 @@ func TestNativeTemplate_Copy_PreservesNoCopyApply(t *testing.T) {
 
 	cpy := tpl.Copy()
 	qt.Assert(t, cpy.NoCopyApply(), qt.Equals, tpl.NoCopyApply())
+}
+
+func TestMaybeAppendLiteral_Dedup(t *testing.T) {
+	c := qt.New(t)
+	tmpl := NewNativeTemplate(0, 0, false)
+
+	// Same symbol should be deduplicated
+	idx1 := tmpl.MaybeAppendLiteral(values.NewSymbol("foo"))
+	idx2 := tmpl.MaybeAppendLiteral(values.NewSymbol("foo"))
+	c.Assert(idx1, qt.Equals, idx2)
+
+	// Different symbol should not
+	idx3 := tmpl.MaybeAppendLiteral(values.NewSymbol("bar"))
+	c.Assert(idx3, qt.Not(qt.Equals), idx1)
+
+	// Same integer should be deduplicated
+	idx4 := tmpl.MaybeAppendLiteral(values.NewInteger(42))
+	idx5 := tmpl.MaybeAppendLiteral(values.NewInteger(42))
+	c.Assert(idx4, qt.Equals, idx5)
+}
+
+func TestMaybeAppendLiteral_SignedZero(t *testing.T) {
+	c := qt.New(t)
+	tmpl := NewNativeTemplate(0, 0, false)
+
+	// +0.0 and -0.0 must NOT be deduplicated (IEEE 754)
+	idx1 := tmpl.MaybeAppendLiteral(values.NewFloat(0.0))
+	idx2 := tmpl.MaybeAppendLiteral(values.NewFloat(math.Copysign(0.0, -1)))
+	c.Assert(idx1, qt.Not(qt.Equals), idx2)
+}
+
+func TestMaybeAppendLiteral_DedupAfterCopy(t *testing.T) {
+	c := qt.New(t)
+	tmpl := NewNativeTemplate(0, 0, false)
+
+	// Add a symbol to the original template.
+	idx1 := tmpl.MaybeAppendLiteral(values.NewSymbol("foo"))
+
+	// Copy() clones literals but not literalIndex.
+	copied := tmpl.Copy()
+
+	// Appending the same symbol to the copy must find the existing literal,
+	// not create a duplicate.
+	idx2 := copied.MaybeAppendLiteral(values.NewSymbol("foo"))
+	c.Assert(idx2, qt.Equals, idx1)
+	c.Assert(len(copied.literals), qt.Equals, 1)
+}
+
+func BenchmarkMaybeAppendLiteral(b *testing.B) {
+	const n = 500
+	syms := make([]values.Value, n)
+	for i := range syms {
+		syms[i] = values.NewSymbol(fmt.Sprintf("sym_%d", i))
+	}
+
+	b.ResetTimer()
+	for range b.N {
+		tmpl := NewNativeTemplate(0, 0, false)
+		for _, s := range syms {
+			tmpl.MaybeAppendLiteral(s)
+		}
+		// Now dedup — each lookup should find existing
+		for _, s := range syms {
+			tmpl.MaybeAppendLiteral(s)
+		}
+	}
 }

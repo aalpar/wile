@@ -231,7 +231,13 @@ Other
 -----
 
 ### Other
-- [ ] MachineContext `Error` should be `Errorf`.  I cannot find an instance that does not use `fmt.Sprintf`.  Migrate `Error(` to `Errorf` that takes a `form` and a `args ...` paramter that feed into `fmt.Sprintf` inside `Errorf(`
+- [x] MachineContext `Error` should be `Errorf` — partially addressed: VM binding resolution errors now use sentinel+wrap via `WrapError`. Remaining `Error()` call sites are a separate concern (format string ergonomics, not sentinel compliance).
+
+### Tech Debt (from [plans/TECH_DEBT_REVIEW.md](plans/TECH_DEBT_REVIEW.md))
+
+- [ ] **F10: MachineContext decomposition** [Medium, Deferred]: 1586 lines, 71 methods, 10+ responsibilities. Extract `WindingStack`, `ContinuationChain`, `ExceptionHandler` into delegate types. Deferred until embedding API has consumers.
+- [ ] **F11: Promote internal extensions** [Low, Deferred]: `internal/extensions/{io,eval,all}` invisible to embedders. Promote to `extensions/{io,eval}/` when extension API stabilizes and external consumers exist.
+- [ ] **F12: Subsystem benchmarks** [Low]: No benchmarks for `machine/` (VM dispatch), `registry/core/` (primitives), or `internal/tokenizer/`. Add `BenchmarkVMDispatch`, `BenchmarkTokenize`, `BenchmarkPrimitiveCall`.
 
 ### Small Refactorings (P5)
 - [x] **Extract `ForeignClosure` type**: Extracted as distinct type with `Closure` interface, `applyForeign` direct-call path, `atomicBody` flag removed.

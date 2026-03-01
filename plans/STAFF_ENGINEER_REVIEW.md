@@ -15,7 +15,7 @@ Cross-references to overlapping findings are noted where relevant.
 
 ## New Findings
 
-### N1 [Priority: High] — Global binding access triplicated in VM loop
+### N1 [Priority: High] [COMPLETE] — Global binding access triplicated in VM loop
 
 **Where**: `machine/machine_context.go:840-856` (OpLoadGlobal), `:861-878` (OpStoreGlobal), `:911-927` (OpPushGlobal)
 **What**: Three opcodes repeat the identical sequence: extract literal → validate → type-assert to `*GlobalIndex` → conditional dispatch on `gi.Env != nil` → binding lookup → nil check → error. The only difference is the final action (SetValue vs Store vs evals.Push). Same duplication exists for locals (OpLoadLocal:888 vs OpPushLocal:932).
@@ -26,7 +26,7 @@ Cross-references to overlapping findings are noted where relevant.
 
 ---
 
-### N2 [Priority: Medium] — VM errors bypass sentinel+wrap pattern
+### N2 [Priority: Medium] [COMPLETE] — VM errors bypass sentinel+wrap pattern
 
 **Where**: `machine/machine_context.go` — 10 instances of `mc.Error(fmt.Sprintf(...))`
 **Evidence** (verified):
@@ -70,7 +70,7 @@ Cross-references to overlapping findings are noted where relevant.
 
 ---
 
-### N5 [Priority: Medium] — Literal deduplication is O(n²)
+### N5 [Priority: Medium] [COMPLETE] — Literal deduplication is O(n²)
 
 **Where**: `machine/native_template.go` — `AppendLiteralUnique()`
 **What**: Each literal addition does a linear scan of the existing pool via `lit.EqualTo(v)`. For a template with N unique literals, total work is O(N²).

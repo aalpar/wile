@@ -293,7 +293,7 @@ func TestEditPlan_AddLiteral_New(t *testing.T) {
 	tpl := NewEmptyNativeTemplate()
 	tpl.code = []Instruction{{Op: OpLoadVoid}}
 	tpl.sourceRefs = []uint16{0}
-	tpl.literals = MultipleValues{values.NewInteger(1)}
+	tpl.MaybeAppendLiteral(values.NewInteger(1))
 
 	plan := NewEditPlan(tpl)
 	idx := plan.AddLiteral(values.NewInteger(42))
@@ -306,7 +306,7 @@ func TestEditPlan_AddLiteral_Dedup(t *testing.T) {
 	tpl := NewEmptyNativeTemplate()
 	tpl.code = []Instruction{{Op: OpLoadVoid}}
 	tpl.sourceRefs = []uint16{0}
-	tpl.literals = MultipleValues{values.NewInteger(42)}
+	tpl.MaybeAppendLiteral(values.NewInteger(42))
 
 	plan := NewEditPlan(tpl)
 	idx := plan.AddLiteral(values.NewInteger(42))
