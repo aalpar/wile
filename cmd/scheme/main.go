@@ -44,6 +44,7 @@ import (
 )
 
 type Options struct {
+	Eval        []string `short:"e" long:"eval" description:"Evaluate Scheme expression (repeatable)"`
 	File        []string `short:"f" long:"file" description:"Scheme file(s) to load (can be repeated)"`
 	Interactive bool     `short:"i" long:"interactive" description:"Enter REPL after loading file(s)"`
 	LibraryPath string   `short:"L" long:"library-path" description:"Library search path (colon-separated, prepended to SCHEME_LIBRARY_PATH)"`
@@ -243,8 +244,11 @@ func main() {
 					_ = fd.Close()
 				}()
 				isLastFile := i == len(opts.File)-1
-				if opts.Interactive || !isLastFile {
-					// Load file silently (all files in interactive mode, or non-last files in batch mode)
+				if opts.Interactive || !isLastFile || len(opts.Eval) > 0 {
+					// Load file silently when:
+					// - interactive mode (all files loaded before REPL)
+					// - not the last file (earlier files are always silent)
+					// - -e expressions present (files are setup, -e is the main program)
 					err = runtime.Load(ctx, env, fd, fn)
 					if err != nil {
 						Failf(err)
@@ -257,8 +261,14 @@ func main() {
 			}(filename, descriptor)
 		}
 	}
-	// Only enter REPL if no files were provided OR interactive mode was requested
-	if len(opts.File) == 0 || opts.Interactive {
+
+	// Evaluate -e expressions after files are loaded
+	if len(opts.Eval) > 0 {
+		runEval(ctx, env, opts.Eval)
+	}
+
+	// Enter REPL if no files and no evals were provided, or interactive mode was requested
+	if (len(opts.File) == 0 && len(opts.Eval) == 0) || opts.Interactive {
 		setupSignals(opts.Quiet)
 		runREPL(ctx, env, primRegistry)
 	}
@@ -347,6 +357,54 @@ func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin *bufio.
 	}
 	mv, err2 := runtime.Run(ctx, tpl, env)
 	// Print result for normal completion; don't print void results
+	if err2 == nil {
+		if !mv.IsVoid() {
+			Printf("%s\n", mv.SchemeString())
+		}
+	} else {
+		Failf(err2)
+	}
+}
+
+// runEval evaluates expressions supplied via -e flags.
+// All expressions are parsed together, wrapped in a single (begin ...) form,
+// and compiled/run as one unit — same continuation semantics as file execution.
+func runEval(ctx context.Context, env *environment.EnvironmentFrame, exprs []string) {
+	combined := strings.Join(exprs, "\n")
+	fin := strings.NewReader(combined)
+	p := parser.NewParserWithFile(env, true, fin, "<eval>")
+
+	var stxExprs []syntax.SyntaxValue
+	stx, err := p.ReadSyntax(ctx)
+	for err == nil {
+		stxExprs = append(stxExprs, stx)
+		stx, err = p.ReadSyntax(ctx)
+	}
+	if !errors.Is(err, io.EOF) {
+		Failf(err)
+	}
+
+	if len(stxExprs) == 0 {
+		return
+	}
+
+	var programStx syntax.SyntaxValue
+	if len(stxExprs) == 1 {
+		programStx = stxExprs[0]
+	} else {
+		sctx := syntax.NewZeroValueSourceContext()
+		beginSym := syntax.NewSyntaxSymbol("begin", sctx)
+		allExprs := make([]syntax.SyntaxValue, 0, len(stxExprs)+1)
+		allExprs = append(allExprs, beginSym)
+		allExprs = append(allExprs, stxExprs...)
+		programStx = syntax.SyntaxList(sctx, allExprs...)
+	}
+
+	tpl, err2 := runtime.Compile(ctx, env, programStx)
+	if err2 != nil {
+		Failf(err2, "Cannot compile expression")
+	}
+	mv, err2 := runtime.Run(ctx, tpl, env)
 	if err2 == nil {
 		if !mv.IsVoid() {
 			Printf("%s\n", mv.SchemeString())

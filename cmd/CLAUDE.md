@@ -18,6 +18,7 @@ Wile follows standard GNU command-line option conventions. All flags use the `go
 
 | Short | Long | Type | Description |
 |-------|------|------|-------------|
+| `-e` | `--eval` | []string | Evaluate Scheme expression (repeatable) |
 | `-f` | `--file` | []string | Scheme file(s) to load (repeatable) |
 | `-i` | `--interactive` | bool | Enter REPL after loading file(s) |
 | `-L` | `--library-path` | string | Library search paths (colon-separated) |
