@@ -2305,3 +2305,99 @@ func TestCompileValidatedDefineFnDotted(t *testing.T) {
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 }
+
+// TestInternSymbolsInValue_CircularDatumLabel tests that circular datum labels
+// produce a compile error instead of crashing with a stack overflow.
+func TestInternSymbolsInValue_CircularDatumLabel(t *testing.T) {
+	t.Run("circular cdr", func(t *testing.T) {
+		_, err := evalSchemeString("'#0=(a . #0#)")
+		qt.Assert(t, err, qt.IsNotNil)
+		qt.Assert(t, err, qt.ErrorIs, values.ErrInvalidSyntax)
+	})
+
+	t.Run("circular car", func(t *testing.T) {
+		_, err := evalSchemeString("'#0=(#0# . b)")
+		qt.Assert(t, err, qt.IsNotNil)
+		qt.Assert(t, err, qt.ErrorIs, values.ErrInvalidSyntax)
+	})
+
+	t.Run("non-circular datum label", func(t *testing.T) {
+		result, err := evalSchemeString("'#0=(a b)")
+		qt.Assert(t, err, qt.IsNil)
+		expected := values.List(values.NewSymbol("a"), values.NewSymbol("b"))
+		qt.Assert(t, result, valuestest.SchemeEquals, expected)
+	})
+
+	t.Run("datum label reference", func(t *testing.T) {
+		result, err := evalSchemeString("'(#0=a #0#)")
+		qt.Assert(t, err, qt.IsNil)
+		expected := values.List(values.NewSymbol("a"), values.NewSymbol("a"))
+		qt.Assert(t, result, valuestest.SchemeEquals, expected)
+	})
+
+	t.Run("shared but acyclic datum label", func(t *testing.T) {
+		// #0=(a) referenced twice is shared but NOT circular.
+		// Must compile successfully, not be rejected as circular.
+		result, err := evalSchemeString("'(#0=(a) #0#)")
+		qt.Assert(t, err, qt.IsNil)
+		inner := values.List(values.NewSymbol("a"))
+		expected := values.List(inner, inner)
+		qt.Assert(t, result, valuestest.SchemeEquals, expected)
+	})
+
+	t.Run("equal on circular datum labels", func(t *testing.T) {
+		// Both quoted arguments contain circular datum labels.
+		// The first quote to be compiled triggers ErrInvalidSyntax.
+		// evalSchemeString doesn't have equal? registered, so we test
+		// through the full engine instead.
+		// Here we just verify each quote independently errors.
+		_, err := evalSchemeString("'#1=(a . #1#)")
+		qt.Assert(t, err, qt.IsNotNil)
+		qt.Assert(t, err, qt.ErrorIs, values.ErrInvalidSyntax)
+
+		_, err = evalSchemeString("'#2=(a . #2#)")
+		qt.Assert(t, err, qt.IsNotNil)
+		qt.Assert(t, err, qt.ErrorIs, values.ErrInvalidSyntax)
+	})
+
+	t.Run("vector datum label with self-reference", func(t *testing.T) {
+		// #0=#(a #0#) — the parser resolves the self-reference in the vector.
+		// This produces a circular vector (element 1 points to the vector itself).
+		// The compiler handles this without crashing.
+		_, err := evalSchemeString("'#0=#(a #0#)")
+		qt.Assert(t, err, qt.IsNil)
+	})
+}
+
+// TestDeduplicateLiteral_CircularPair tests that DeduplicateLiteral
+// terminates on circular pairs (defense in depth).
+func TestDeduplicateLiteral_CircularPair(t *testing.T) {
+	// Construct a circular pair: (a . <self>)
+	pair := values.NewCons(values.NewSymbol("a"), values.EmptyList)
+	pair.SetCdr(pair)
+
+	tpl := NewNativeTemplate(0, 0, false)
+	// Should not hang or crash — defense in depth returns the pair unchanged
+	result := tpl.DeduplicateLiteral(pair)
+	qt.Assert(t, result, qt.IsNotNil)
+}
+
+// TestDeduplicateLiteral_SharedAcyclicPair tests that DeduplicateLiteral
+// returns consistent results for shared-but-acyclic structures.
+// Both occurrences of the shared pair must get the same deduplicated result.
+func TestDeduplicateLiteral_SharedAcyclicPair(t *testing.T) {
+	// Construct shared structure: root = (shared . shared) where shared = (sym)
+	sym := values.NewSymbol("x")
+	shared := values.NewCons(sym, values.EmptyList)
+	root := values.NewCons(shared, shared)
+
+	tpl := NewNativeTemplate(0, 0, false)
+	// Pre-populate the literal pool with the symbol so deduplication
+	// actually produces a different pointer for the inner pair.
+	tpl.MaybeAppendLiteral(sym)
+
+	result := tpl.DeduplicateLiteral(root)
+	resultPair := result.(*values.Pair)
+	// Both car and cdr must point to the same deduplicated pair.
+	qt.Assert(t, resultPair.Car(), qt.Equals, resultPair.Cdr())
+}

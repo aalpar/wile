@@ -582,3 +582,63 @@ func TestPair_String(t *testing.T) {
 	s2 := p2.String()
 	qt.Assert(t, s2, qt.Equals, "(1 . 2)")
 }
+
+func TestPair_SchemeString_CircularCdr(t *testing.T) {
+	// (a . <self>) — simplest circular cdr
+	p := values.NewCons(values.NewSymbol("a"), values.EmptyList)
+	p.SetCdr(p)
+	got := p.SchemeString()
+	qt.Assert(t, got, qt.Equals, "(a . ...)")
+}
+
+func TestPair_SchemeString_CircularCar(t *testing.T) {
+	// (<self> . b)
+	p := values.NewCons(values.EmptyList, values.NewSymbol("b"))
+	p.SetCar(p)
+	got := p.SchemeString()
+	qt.Assert(t, got, qt.Equals, "(... . b)")
+}
+
+func TestPair_SchemeString_CircularMultiElement(t *testing.T) {
+	// (a b c . <head>) — circular list with multiple elements
+	c := values.NewCons(values.NewSymbol("c"), values.EmptyList)
+	b := values.NewCons(values.NewSymbol("b"), c)
+	a := values.NewCons(values.NewSymbol("a"), b)
+	c.SetCdr(a)
+	got := a.SchemeString()
+	qt.Assert(t, got, qt.Equals, "(a b c . ...)")
+}
+
+func TestPair_String_CircularCdr(t *testing.T) {
+	// Same test for String() which uses fmt.Stringer dispatch
+	p := values.NewCons(values.NewSymbol("a"), values.EmptyList)
+	p.SetCdr(p)
+	got := p.String()
+	qt.Assert(t, got, qt.Equals, "(a . ...)")
+}
+
+func TestPair_String_CircularCar(t *testing.T) {
+	p := values.NewCons(values.EmptyList, values.NewSymbol("b"))
+	p.SetCar(p)
+	got := p.String()
+	qt.Assert(t, got, qt.Equals, "(... . b)")
+}
+
+func TestPair_SchemeString_NonCircularRegression(t *testing.T) {
+	// Verify non-circular pairs produce identical output to before
+	tcs := []struct {
+		name string
+		pair *values.Pair
+		want string
+	}{
+		{"proper list", values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(2), values.EmptyList)), "(1 2)"},
+		{"improper pair", values.NewCons(values.NewInteger(1), values.NewInteger(2)), "(1 . 2)"},
+		{"nested", values.NewCons(values.NewCons(values.NewInteger(1), values.EmptyList), values.EmptyList), "((1))"},
+		{"single", values.NewCons(values.NewSymbol("x"), values.EmptyList), "(x)"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, tc.pair.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
