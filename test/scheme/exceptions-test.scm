@@ -103,7 +103,24 @@
           (lambda (e) (escape e))
           (lambda ()
             (guard (exn ((string? exn) 'was-string))
-              (raise 42))))))))
+              (raise 42)))))))
+
+  ;; R7RS §4.2.7: re-raise in original dynamic extent allows
+  ;; non-escaping outer handler (raise-continuable path)
+  (test '(caught 42)
+    (with-exception-handler
+      (lambda (e) (list 'caught e))
+      (lambda ()
+        (guard (inner ((symbol? inner) 'sym))
+          (raise 42)))))
+
+  ;; re-raise with non-escaping handler, string exception
+  (test '(handled oops)
+    (with-exception-handler
+      (lambda (e) (list 'handled e))
+      (lambda ()
+        (guard (exn ((number? exn) 'was-number))
+          (raise 'oops))))))
 
 ;; ── Guard: catches error objects ─────────────────────────────────
 

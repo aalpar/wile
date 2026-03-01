@@ -78,4 +78,14 @@
   (test #t (eval '(> (+ 1 (inexact (sin 0))) 0)
            (environment '(scheme base) '(scheme inexact)))))
 
+(test-group "eval preserves multiple return values"
+  (test '(1 2 3)
+    (call-with-values
+      (lambda () (eval '(values 1 2 3) (interaction-environment)))
+      list))
+  (test '(42)
+    (call-with-values
+      (lambda () (eval '(values 42) (interaction-environment)))
+      list)))
+
 (test-end)
