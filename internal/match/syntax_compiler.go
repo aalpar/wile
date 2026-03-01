@@ -190,6 +190,12 @@ func compileElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, eleme
 		return compilePairElement(vis, stack, pr, element, elementStart)
 	}
 
+	// Handle vector elements (R7RS §4.3.2)
+	vec, ok := element.(*syntax.SyntaxVector)
+	if ok {
+		return compileVectorElement(vis, stack, vec, element, elementStart)
+	}
+
 	// Handle symbol elements
 	sym, ok := element.(*syntax.SyntaxSymbol)
 	if ok {
@@ -228,6 +234,56 @@ func compilePairElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry, p
 		variables: map[string]struct{}{},
 	})
 	return stack, true
+}
+
+// compileVectorElement handles when the current element is a vector pattern.
+// R7RS §4.3.2: #(<pattern> ...) matches vectors. The vector is converted to
+// a SyntaxPair chain so pair-based compilation handles the contents.
+func compileVectorElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry,
+	vec *syntax.SyntaxVector, element syntax.SyntaxValue, elementStart int,
+) ([]syntaxCompilerStackEntry, bool) {
+	l := len(stack)
+
+	if len(vec.Values) == 0 {
+		// Empty vector pattern #() — verify input car is an empty vector.
+		// Analogous to RequireCarEmpty for empty list patterns.
+		vis.codes = append(vis.codes, ByteCodeRequireCarEmptyVector{})
+		stack[l-1].pr, _ = stack[l-1].pr.SyntaxCdr().(*syntax.SyntaxPair)
+		stack[l-1].lastElement = element
+		stack[l-1].lastElementStart = elementStart
+		return stack, true
+	}
+
+	// Non-empty vector — convert to pair chain for pair-based matching
+	vis.codes = append(vis.codes, ByteCodeVisitCarAsVector{})
+	chain := vectorElementsToPairChain(vec)
+
+	// Analyze the converted chain so pointer-based analysis works for
+	// ellipsis detection inside vector patterns.
+	localAnalysis := AnalyzePattern(chain, vis.variables)
+	vis.analysis.Merge(localAnalysis)
+
+	stack[l-1].pr, _ = stack[l-1].pr.SyntaxCdr().(*syntax.SyntaxPair)
+	stack[l-1].lastElement = chain
+	stack[l-1].lastElementStart = elementStart
+
+	// Push converted chain for nested processing
+	stack = append(stack, syntaxCompilerStackEntry{
+		pr:        chain,
+		variables: map[string]struct{}{},
+	})
+	return stack, true
+}
+
+// vectorElementsToPairChain converts a SyntaxVector's elements to a SyntaxPair
+// chain for pattern compilation. Used at compile time to reuse pair-based
+// compilation for vector pattern contents.
+func vectorElementsToPairChain(vec *syntax.SyntaxVector) *syntax.SyntaxPair {
+	var chain syntax.SyntaxValue = syntax.SyntaxEmptyList
+	for i := len(vec.Values) - 1; i >= 0; i-- {
+		chain = syntax.NewSyntaxCons(vec.Values[i], chain, vec.SourceContext())
+	}
+	return chain.(*syntax.SyntaxPair)
 }
 
 // compileSymbolElement handles symbol elements: ellipsis, wildcards, variables, and literals.
@@ -442,15 +498,17 @@ func emitEllipsisLoop(vis *SyntaxCompiler, ellipsisID int, patternCodes []Syntax
 	}
 }
 
-// isPairPattern checks if bytecode represents a pair pattern (VisitCar...Done).
-// Pair patterns auto-advance, so they don't need an explicit VisitCdr in loops.
+// isPairPattern checks if bytecode represents a descend pattern (VisitCar...Done
+// or VisitCarAsVector...Done). These auto-advance via handleByteCodeDone, so they
+// don't need an explicit VisitCdr in ellipsis loops.
 func isPairPattern(codes []SyntaxCommand) bool {
 	if len(codes) < 2 {
 		return false
 	}
 	_, startsWithVisitCar := codes[0].(ByteCodeVisitCar)
+	_, startsWithVisitVector := codes[0].(ByteCodeVisitCarAsVector)
 	_, endsWithDone := codes[len(codes)-1].(ByteCodeDone)
-	return startsWithVisitCar && endsWithDone
+	return (startsWithVisitCar || startsWithVisitVector) && endsWithDone
 }
 
 // advanceToNextElement handles CDR advancement after processing an element.

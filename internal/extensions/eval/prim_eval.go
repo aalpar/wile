@@ -74,7 +74,7 @@ func PrimEval(mc *machine.MachineContext) error {
 		return err
 	}
 
-	mc.SetValue(sub.GetValue())
+	mc.SetValues(sub.GetValues()...)
 	return nil
 }
 

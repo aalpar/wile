@@ -981,76 +981,360 @@ The same mechanism should be used by eval.
 
 ---
 
-## Phase 7: Macro Pattern Matching (M7, M8)
+## Phase 7: Vector Patterns in syntax-rules (M7)
 
-**Theme:** `syntax-rules` pattern matching gaps.
-**Effort:** High
-**PR scope:** `internal/match/` or `machine/expander_*.go`
+**Theme:** `syntax-rules` vector patterns.
+**Effort:** Medium (single new bytecode + 5 type-switch additions)
+**PR scope:** `internal/match/`, `machine/compile_syntax_rules.go`
 
-### M7: Vector patterns with pattern variables
+### M8 Resolution: Not a Bug
 
-**IMPORTANT CLARIFICATION:** R7RS §4.3.2 DOES define vector patterns:
-```
-<pattern> → #(<pattern> ...)
-           | #(<pattern> ... <pattern> <ellipsis> <pattern> ...)
-```
+M8 (dotted pair patterns) was investigated and found to be working correctly.
+The conformance review's test case was misleading:
 
-The current match package (`internal/match/`) only handles pair-based patterns.
-Its bytecode operations are all pair-oriented: `VisitCar`, `VisitCdr`, `CompareCar`,
-`CompareCdr`, `CaptureCar`, `CaptureCdr`. There is no vector-aware matching.
-
-**Fix approach (high effort):**
-1. Add vector-specific bytecode operations to `internal/match/`: `VisitVectorElement(i)`,
-   `CaptureVectorElement(i)`, `CompareVectorElement(i)`, `CheckVectorLength`
-2. Extend the pattern compiler (`internal/match/syntax_compiler.go`) to recognize
-   `SyntaxVector` patterns and emit vector bytecodes
-3. Extend the pattern matcher (`internal/match/match.go`) to execute vector bytecodes
-4. Handle ellipsis inside vectors: `#(x rest ...)` captures remaining elements
-
-**Question for Sonnet:** Before implementing, check how the expander handles vector
-patterns. Does the expander convert `#(x rest ...)` to a pair-based representation
-before passing to the matcher? If so, the fix may be in the expander's conversion,
-not the matcher itself. Look at `machine/expander_*.go` for vector pattern handling.
-
-### M8: Dotted pair patterns
-
-**Current code:** `internal/match/match.go:302-317` has `ByteCodeCaptureCdr` which
-handles improper list patterns. The test at `syntax_match_test.go:126-140` only tests
-`(a . rest)` matching `(1 . 2)` (an actual pair, not a proper list).
-
-**The reported bug:** `(rest-test a . b)` matching `(rest-test 1 2 3)` fails. This is
-a proper list being matched against an improper pattern. R7RS requires that `b` binds
-to `(2 3)` — the cdr of the cdr.
-
-**Question for Sonnet:** Test the exact reproduction:
 ```scheme
 (define-syntax rest-test
   (syntax-rules ()
     ((rest-test a . b) (list a b))))
 (rest-test 1 2 3)
 ```
-Verify the error. Then trace the match: the pattern `(rest-test a . b)` should compile
-to: match keyword `rest-test`, capture car as `a`, capture cdr as `b`. The cdr of
-`(1 2 3)` after matching `rest-test` and `1` would be `(2 3)`.
 
-The bytecode sequence should be:
-1. `CompareCar` keyword `rest-test` → advance to cdr `(1 2 3)` → `(a . b)` position
-2. Wait, this is wrong. The PATTERN is `(rest-test a . b)`. The pattern's car is
-   `rest-test`, cdr is `(a . b)`. But `(a . b)` is itself a pattern pair: car `a`,
-   cdr `b`. So the compilation should be:
-   - Visit car: compare with `rest-test`
-   - Visit cdr: `(a . b)` → Visit car: capture `a`, CaptureCdr: capture `b`
+`b` captures `(2 3)` correctly. The error is correct Scheme behavior: `(list 1 (2 3))`
+evaluates `(2 3)` as a form, calling `2` as a procedure. The template `(list a b)` places
+`b`'s captured syntax in evaluation position. Verified with quote, cons, and dotted templates.
 
-Check if the pattern compiler handles the case where `b` (in `(a . b)`) is a pattern
-variable rather than a subpattern.
+All dotted pair edge cases pass: `(dt . b)`, `(dt a . b)`, `(dt a b . c)`, empty rest `()`.
+
+### M7: Vector patterns with pattern variables
+
+**R7RS §4.3.2** defines vector patterns:
+```
+<pattern> → #(<pattern> ...)
+           | #(<pattern> ... <pattern> <ellipsis> <pattern> ...)
+```
+
+**Root cause**: Five functions lack `*syntax.SyntaxVector` handling:
+
+| Function | File | Impact |
+|----------|------|--------|
+| `collectPatternVariablesWithEllipsis` | `machine/compile_syntax_rules.go` | Variables inside vectors never discovered |
+| `collectFreeIdentifiersWithEllipsis` | `machine/compile_syntax_rules.go` | Free ids in vector templates missed |
+| `analyzeRecursive` | `internal/match/pattern_analyzer.go` | Analysis returns false for vectors |
+| `compileElement` | `internal/match/syntax_compiler.go` | Falls through to literal comparison |
+| `findSyntaxVarsRecursive` | `internal/match/syntax_adapter.go` | Template expansion misses vector vars |
+
+Template expansion already handles `SyntaxVector` (syntax_adapter.go:353-370). Only the
+pattern compilation and variable discovery paths are missing.
+
+**Reproduction** (confirmed):
+```scheme
+(define-syntax vec-first
+  (syntax-rules ()
+    ((vec-first #(x rest ...)) x)))
+(vec-first #(1 2 3))
+;; Error: syntax-rules: no matching clause for input
+```
+
+All vector patterns fail, including empty `#()` and literal-only `#(1 2)`.
+
+### Implementation Strategy: Vector-to-List Conversion
+
+**Add one new bytecode** `ByteCodeVisitCarAsVector` that:
+1. Checks the input car is a `*syntax.SyntaxVector`
+2. Converts its elements to a temporary `SyntaxPair` chain
+3. Pushes that chain onto the syntax stack
+
+All existing pair-based matching (CaptureCar, CompareCar, ellipsis loops, Done) then
+works unchanged for the vector's contents. This avoids adding N vector-specific bytecodes.
+
+At compile time, the `SyntaxVector` pattern is converted to a `SyntaxPair` and pushed
+onto the compiler stack with the same conversion. The compiler sees it as a regular list
+pattern after `ByteCodeVisitCarAsVector`.
+
+### Step-by-Step
+
+**Step 1: Variable discovery** (`machine/compile_syntax_rules.go`)
+
+Add `*syntax.SyntaxVector` case to `collectPatternVariablesWithEllipsis`:
+```go
+case *syntax.SyntaxVector:
+    for _, elem := range p.Values {
+        err := collectPatternVariablesWithEllipsis(elem, literalSyntax, false, variables, varSyntax, ellipsis)
+        if err != nil {
+            return err
+        }
+    }
+```
+
+Add `*syntax.SyntaxVector` case to `collectFreeIdentifiersWithEllipsis`:
+```go
+case *syntax.SyntaxVector:
+    for _, elem := range t.Values {
+        collectFreeIdentifiersWithEllipsis(env, elem, patternVars, freeIds, ellipsis)
+    }
+```
+
+**Step 2: Pattern analysis** (`internal/match/pattern_analyzer.go`)
+
+Add `*syntax.SyntaxVector` case to `analyzeRecursive`:
+```go
+case *syntax.SyntaxVector:
+    hasVars := false
+    for _, elem := range t.Values {
+        if analyzeRecursive(elem, variables, analysis) {
+            hasVars = true
+        }
+    }
+    return hasVars
+```
+
+Note: `PatternAnalysis` maps `*values.Pair` pointers, not `SyntaxValue`. Vector
+patterns are converted to pair chains at compile time, so the analysis map will use
+the converted pair pointers. The analysis for vector elements must be run AFTER
+conversion so the pointers align with what the compiler sees.
+
+**Step 3: New bytecode** (`internal/match/bytecode_navigate.go`)
+
+```go
+// ByteCodeVisitCarAsVector checks that the car of the current pair is a
+// SyntaxVector, converts its elements to a SyntaxPair chain, and pushes
+// the chain onto the syntax stack. This enables pair-based matching of
+// vector pattern contents.
+type ByteCodeVisitCarAsVector struct{}
+
+func (ByteCodeVisitCarAsVector) String() string {
+    return "VisitCarAsVector"
+}
+```
+
+**Step 4: Matcher execution** (`internal/match/match.go`)
+
+Add `ByteCodeVisitCarAsVector` case to the main switch in `MatchSyntaxWithLiterals`:
+```go
+case ByteCodeVisitCarAsVector:
+    if syntax.IsSyntaxEmptyList(p.syntaxStack[lvs-1].pr) {
+        return ErrNotAMatch
+    }
+    car := p.syntaxStack[lvs-1].pr.SyntaxCar()
+    vec, ok := car.(*syntax.SyntaxVector)
+    if !ok {
+        return ErrNotAMatch // Input is not a vector
+    }
+    // Convert vector elements to a SyntaxPair chain
+    chain := vectorToSyntaxPairChain(vec)
+    p.syntaxStack = append(p.syntaxStack, syntaxPathEntry{pr: chain})
+    lvs = len(p.syntaxStack)
+```
+
+Add helper:
+```go
+// vectorToSyntaxPairChain converts a SyntaxVector's elements into a
+// SyntaxPair chain for pair-based matching. Empty vectors produce
+// SyntaxEmptyList.
+func vectorToSyntaxPairChain(vec *syntax.SyntaxVector) syntax.SyntaxTuple {
+    if len(vec.Values) == 0 {
+        return syntax.SyntaxEmptyList
+    }
+    var chain syntax.SyntaxValue = syntax.SyntaxEmptyList
+    for i := len(vec.Values) - 1; i >= 0; i-- {
+        chain = syntax.NewSyntaxCons(vec.Values[i], chain, vec.SourceContext())
+    }
+    return chain.(syntax.SyntaxTuple)
+}
+```
+
+**Step 5: Pattern compiler** (`internal/match/syntax_compiler.go`)
+
+Add `*syntax.SyntaxVector` case to `compileElement` (after the `SyntaxPair` check):
+```go
+// Handle vector elements
+vec, ok := element.(*syntax.SyntaxVector)
+if ok {
+    return compileVectorElement(vis, stack, vec, element, elementStart)
+}
+```
+
+Add `compileVectorElement`:
+```go
+func compileVectorElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry,
+    vec *syntax.SyntaxVector, element syntax.SyntaxValue, elementStart int,
+) ([]syntaxCompilerStackEntry, bool) {
+    l := len(stack)
+
+    if len(vec.Values) == 0 {
+        // Empty vector pattern #() — verify input car is empty vector
+        vis.codes = append(vis.codes, ByteCodeVisitCarAsVector{})
+        vis.codes = append(vis.codes, ByteCodeDone{})
+        stack[l-1].pr, _ = stack[l-1].pr.SyntaxCdr().(*syntax.SyntaxPair)
+        stack[l-1].lastElement = element
+        stack[l-1].lastElementStart = elementStart
+        return stack, true
+    }
+
+    // Non-empty vector — convert to pair chain for pair-based matching
+    vis.codes = append(vis.codes, ByteCodeVisitCarAsVector{})
+    chain := vectorElementsToPairChain(vec)
+    stack[l-1].pr, _ = stack[l-1].pr.SyntaxCdr().(*syntax.SyntaxPair)
+    stack[l-1].lastElement = element
+    stack[l-1].lastElementStart = elementStart
+
+    // Push converted chain for nested processing
+    stack = append(stack, syntaxCompilerStackEntry{
+        pr:        chain,
+        variables: map[string]struct{}{},
+    })
+    return stack, true
+}
+
+// vectorElementsToPairChain converts a SyntaxVector's elements to a SyntaxPair
+// chain for pattern compilation. Used at compile time to reuse pair-based
+// compilation for vector pattern contents.
+func vectorElementsToPairChain(vec *syntax.SyntaxVector) *syntax.SyntaxPair {
+    var chain syntax.SyntaxValue = syntax.SyntaxEmptyList
+    for i := len(vec.Values) - 1; i >= 0; i-- {
+        chain = syntax.NewSyntaxCons(vec.Values[i], chain, vec.SourceContext())
+    }
+    return chain.(*syntax.SyntaxPair)
+}
+```
+
+**Step 6: Template variable discovery** (`internal/match/syntax_adapter.go`)
+
+Add `*syntax.SyntaxVector` case to `findSyntaxVarsRecursive`:
+```go
+case *syntax.SyntaxVector:
+    for _, elem := range t.Values {
+        p.findSyntaxVarsRecursive(elem, vars)
+    }
+```
+
+**Step 7: Pattern analysis for vector contents**
+
+**Problem**: `PatternAnalysis` uses `*syntax.SyntaxPair` pointer identity to map subtrees
+to their variable analysis. `compileVectorElement` creates fresh `SyntaxPair` chains from
+vector elements. The top-level `AnalyzePattern()` call (before `compile()`) doesn't see
+these chains because they don't exist yet.
+
+Without correct analysis, `previousElementHasVariables` returns `false` for elements
+preceding `...` inside a vector, and ellipsis compilation breaks — treating `...` as a
+literal instead of a repetition.
+
+**Solution**: In `compileVectorElement`, after converting the vector to a pair chain,
+run `AnalyzePattern(chain, vis.variables)` and merge the results into `vis.analysis`.
+The converted chain pairs are fresh allocations that won't collide with existing map keys.
+
+Add a `Merge` method to `PatternAnalysis`:
+
+```go
+// Merge incorporates analysis results from another PatternAnalysis.
+// Used when vector patterns are converted to pair chains at compile time,
+// creating fresh SyntaxPair nodes that need analysis entries.
+func (p *PatternAnalysis) Merge(other *PatternAnalysis) {
+    for k, v := range other.containsVariables {
+        p.containsVariables[k] = v
+    }
+    for k, v := range other.variablesInSubtree {
+        p.variablesInSubtree[k] = v
+    }
+}
+```
+
+Then in `compileVectorElement`:
+```go
+localAnalysis := AnalyzePattern(chain, vis.variables)
+vis.analysis.Merge(localAnalysis)
+```
+
+**Step 2's `analyzeRecursive` vector case** is still needed for the top-level analysis
+to correctly report that a vector-containing subtree has variables. The top-level pattern
+`(foo #(x y))` is a `SyntaxPair` whose car is `foo` and cdr is `(#(x y))`. When
+`analyzeRecursive` hits the `SyntaxVector` at the car of `(#(x y))`, it needs to return
+`true` so the parent pair is marked as containing variables. Without this, top-level
+analysis would say "no variables" for the entire `(#(x y))` subtree.
+
+The vector case in `analyzeRecursive` (Step 2) handles this. It doesn't need to create
+pair chains or store entries in the analysis maps — it just recurses into elements and
+returns whether any contain variables. The `Merge` in `compileVectorElement` handles the
+pair-chain-specific entries.
+
+### handleByteCodeDone and isPairPattern for vectors
+
+`handleByteCodeDone` pops the syntax stack and advances the parent. When a vector
+pattern's content finishes (Done emitted), the logic must handle the fact that the
+parent position was advanced by `compileVectorElement` (same as `compilePairElement`).
+No changes needed — the stack management is identical to nested pair patterns.
+
+`isPairPattern` (syntax_compiler.go) must also recognize `ByteCodeVisitCarAsVector`
+as a "descend" pattern, since `VisitCarAsVector` + `Done` auto-advances the parent
+just like `VisitCar` + `Done`. Without this, ellipsis loops containing nested vector
+patterns would emit a spurious `VisitCdr`:
+
+```go
+func isPairPattern(codes []SyntaxCommand) bool {
+    if len(codes) < 2 {
+        return false
+    }
+    _, startsWithVisitCar := codes[0].(ByteCodeVisitCar)
+    _, startsWithVisitVector := codes[0].(ByteCodeVisitCarAsVector)
+    _, endsWithDone := codes[len(codes)-1].(ByteCodeDone)
+    return (startsWithVisitCar || startsWithVisitVector) && endsWithDone
+}
+```
 
 ### Tests
 
-- `(vec-first #(1 2 3))` → `1`
-- `(vec-second #(1 2 3 4 5))` → `2`
-- `(vec-rest #(1 2 3))` → `(2 3)` (if ellipsis in vectors works)
-- `(rest-test 1 2 3)` → `(1 (2 3))`
-- `(rest-test 1)` → `(1 ())`
+**Go unit tests** (in `internal/match/`):
+
+1. `TestSyntaxCompiler_VectorPattern` — Compile `#(x y)`, verify `ByteCodeVisitCarAsVector`
+   emitted followed by `CaptureCar x`, `CaptureCar y`, `Done`, `Done`.
+2. `TestMatcher_VectorPattern` — Match `(foo #(1 2))` against `(foo #(x y))`, verify
+   bindings `x=1, y=2`.
+3. `TestMatcher_VectorPatternEmpty` — Match `(foo #())` against `(foo #())`.
+4. `TestMatcher_VectorPatternEllipsis` — Match `(foo #(1 2 3))` against `(foo #(x rest ...))`,
+   verify `x=1`, `rest` has ellipsis bindings `[2, 3]`.
+5. `TestMatcher_VectorPatternMismatch` — `(foo (1 2 3))` vs `(foo #(x y z))` → no match
+   (input is list, not vector).
+6. `TestMatcher_VectorPatternLiterals` — `(foo #(1 x))` with literal `1`, verify matching.
+
+**Integration tests** (Scheme):
+
+```scheme
+;; Basic vector pattern
+(define-syntax vec-first
+  (syntax-rules ()
+    ((vec-first #(x rest ...)) x)))
+(test "vec-first" 1 (vec-first #(1 2 3)))
+
+;; Vector with multiple captures
+(define-syntax vec-pair
+  (syntax-rules ()
+    ((vec-pair #(a b)) (list a b))))
+(test "vec-pair" '(1 2) (vec-pair #(1 2)))
+
+;; Empty vector pattern
+(define-syntax vec-empty
+  (syntax-rules ()
+    ((vec-empty #()) 'empty)))
+(test "vec-empty" 'empty (vec-empty #()))
+
+;; Vector with literal
+(define-syntax vec-tagged
+  (syntax-rules (point)
+    ((vec-tagged #(point x y)) (list x y))))
+(test "vec-tagged" '(3 4) (vec-tagged #(point 3 4)))
+
+;; Vector in template (already works, verify round-trip)
+(define-syntax make-vec
+  (syntax-rules ()
+    ((make-vec x y z) #(x y z))))
+(test "make-vec" #(1 2 3) (make-vec 1 2 3))
+
+;; Nested vector pattern
+(define-syntax vec-nested
+  (syntax-rules ()
+    ((vec-nested #(#(a b) c)) (list a b c))))
+(test "vec-nested" '(1 2 3) (vec-nested #(#(1 2) 3)))
+```
 
 ---
 
@@ -1148,7 +1432,7 @@ No fix needed for Float-Float NaN comparison.
 | 4 | H2, H3, H4, M1, M2, L1, L2 | Med–High | Numeric precision |
 | 5 | H5, L3 | Medium | Number parsing |
 | 6 | M3, M4, M5 | Med–High | Control & exceptions |
-| 7 | M7, M8 | High | Macro patterns |
+| 7 | M7 | Medium | Vector patterns (M8 not a bug) |
 | 8 | E2, E3 | Low | NaN edge cases |
 
 **Total:** 26 findings across 8 phases. Phases 1, 2, and 8 are quick wins.

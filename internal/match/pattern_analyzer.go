@@ -15,6 +15,8 @@
 package match
 
 import (
+	"maps"
+
 	"github.com/aalpar/wile/internal/syntax"
 )
 
@@ -78,6 +80,10 @@ func collectPatternVariablesWithEllipsis(v syntax.SyntaxValue, literals map[stri
 			// Rest of the pattern
 			collectPatternVariablesWithEllipsis(t.SyntaxCdr(), literals, false, variables, ellipsis)
 		}
+	case *syntax.SyntaxVector:
+		for _, elem := range t.Values {
+			collectPatternVariablesWithEllipsis(elem, literals, false, variables, ellipsis)
+		}
 	}
 }
 
@@ -139,9 +145,29 @@ func analyzeRecursive(v syntax.SyntaxValue, variables map[string]struct{}, analy
 			analysis.variablesInSubtree[t] = varsInSubtree
 		}
 		return hasVars
+	case *syntax.SyntaxVector:
+		// R7RS §4.3.2: #(<pattern> ...) — recurse into vector elements.
+		// Returns whether any element contains variables, but does NOT store
+		// entries in the analysis maps (those use *SyntaxPair keys). The
+		// converted pair chain entries are added via Merge in the compiler.
+		hasVars := false
+		for _, elem := range t.Values {
+			if analyzeRecursive(elem, variables, analysis) {
+				hasVars = true
+			}
+		}
+		return hasVars
 	default:
 		return false
 	}
+}
+
+// Merge incorporates analysis results from another PatternAnalysis.
+// Used when vector patterns are converted to pair chains at compile time,
+// creating fresh SyntaxPair nodes that need analysis entries.
+func (p *PatternAnalysis) Merge(other *PatternAnalysis) {
+	maps.Copy(p.containsVariables, other.containsVariables)
+	maps.Copy(p.variablesInSubtree, other.variablesInSubtree)
 }
 
 // ContainsVariables returns whether a subtree contains pattern variables

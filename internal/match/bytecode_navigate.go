@@ -35,6 +35,24 @@ func (ByteCodeDone) String() string {
 	return "Done"
 }
 
+// ByteCodeVisitCarAsVector checks that the car of the current pair is a
+// SyntaxVector, converts its elements to a SyntaxPair chain, and pushes
+// the chain onto the syntax stack. This enables pair-based matching of
+// vector pattern contents per R7RS §4.3.2.
+type ByteCodeVisitCarAsVector struct{}
+
+func (ByteCodeVisitCarAsVector) String() string {
+	return "VisitCarAsVector"
+}
+
+// ByteCodeRequireCarEmptyVector verifies that the car at the current position is an
+// empty SyntaxVector. Used for empty vector patterns #().
+type ByteCodeRequireCarEmptyVector struct{}
+
+func (ByteCodeRequireCarEmptyVector) String() string {
+	return "RequireCarEmptyVector"
+}
+
 // ByteCodeRequireCarEmpty verifies that the car at the current position is an empty list.
 //
 // Problem: Pattern () should only match input (). Without this check,

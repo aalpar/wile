@@ -155,34 +155,53 @@
          (lambda () (parameterize (rest ...) body ...))
          (lambda () (%parameter-raw-set! p old)))))))
 
-;; Exception handling (R7RS guard macro)
+;; Exception handling (R7RS §4.2.7 guard macro)
+;;
+;; Uses the double call/cc pattern from R7RS §7.3 so that when no clause
+;; matches, the exception is re-raised in the dynamic extent of the
+;; original raise (where the previous exception handler is current).
+;;
+;; - guard-k: escapes to the guard form's return site
+;; - handler-k: captures the handler's dynamic extent for re-raise
+;; - Both paths wrap their result in a thunk; the outer ((call/cc ...))
+;;   calls whichever thunk wins
 (define-syntax guard
   (syntax-rules ()
-    ((guard (var clause ...) body ...)
-     (call/cc
-       (lambda (guard-continuation)
-         (with-exception-handler
+    ((guard (var clause ...) e1 e2 ...)
+     ((call/cc
+        (lambda (guard-k)
+          (with-exception-handler
            (lambda (condition)
-             (guard-continuation
-               (let ((var condition))
-                 (guard-aux var clause ...))))
-           (lambda () body ...)))))))
+             ((call/cc
+                (lambda (handler-k)
+                  (guard-k
+                   (lambda ()
+                     (let ((var condition))
+                       (guard-aux
+                        (lambda ()
+                          (handler-k
+                           (lambda ()
+                             (raise-continuable condition))))
+                        var clause ...))))))))
+           (lambda ()
+             (let ((result (begin e1 e2 ...)))
+               (guard-k (lambda () result)))))))))))
 
 (define-syntax guard-aux
   (syntax-rules (else =>)
-    ((guard-aux var (else result ...))
+    ((guard-aux re-raise var (else result ...))
      (begin result ...))
-    ((guard-aux var (test => proc) clause ...)
+    ((guard-aux re-raise var (test => proc) clause ...)
      (let ((t test))
        (if t
            (proc t)
-           (guard-aux var clause ...))))
-    ((guard-aux var (test result ...) clause ...)
+           (guard-aux re-raise var clause ...))))
+    ((guard-aux re-raise var (test result ...) clause ...)
      (if test
          (begin result ...)
-         (guard-aux var clause ...)))
-    ((guard-aux var)
-     (raise var))))
+         (guard-aux re-raise var clause ...)))
+    ((guard-aux re-raise var)
+     (re-raise))))
 
 ;; Records (SRFI-9 / R7RS define-record-type)
 (define-syntax define-record-type

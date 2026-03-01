@@ -336,3 +336,103 @@ func TestMatchSyntax_EllipsisInMiddle(t *testing.T) {
 		c.Assert(syntaxValuesEqualForMatch(children[0].bindings["x"], testSyntaxInt(1)), qt.IsTrue)
 	})
 }
+
+func TestMatchSyntaxVectorPatterns(t *testing.T) {
+	c := qt.New(t)
+
+	c.Run("vector with two captures", func(c *qt.C) {
+		// Pattern: (foo #(x y)), matching (foo #(1 2))
+		// Bytecodes: CompareCar(foo), VisitCdr, VisitCarAsVector, CaptureCar(x), VisitCdr, CaptureCar(y), Done, Done
+		codes := []SyntaxCommand{
+			ByteCodeCompareCar{Value: testSyntaxSym("foo")},
+			ByteCodeVisitCdr{},
+			ByteCodeVisitCarAsVector{},
+			ByteCodeCaptureCar{Binding: "x"},
+			ByteCodeVisitCdr{},
+			ByteCodeCaptureCar{Binding: "y"},
+			ByteCodeDone{},
+			ByteCodeDone{},
+		}
+		vec := syntax.NewSyntaxVector(nil, testSyntaxInt(1), testSyntaxInt(2))
+		target := testSyntaxList(testSyntaxSym("foo"), vec)
+		variables := map[string]struct{}{"x": {}, "y": {}}
+		matcher := NewMatcher(variables, codes)
+
+		err := matcher.MatchSyntax(context.Background(), target)
+		c.Assert(err, qt.IsNil)
+
+		bindings := matcher.GetBindings()
+		c.Assert(syntaxValuesEqualForMatch(bindings["x"], testSyntaxInt(1)), qt.IsTrue)
+		c.Assert(syntaxValuesEqualForMatch(bindings["y"], testSyntaxInt(2)), qt.IsTrue)
+	})
+
+	c.Run("empty vector", func(c *qt.C) {
+		// Pattern: (foo #()), matching (foo #())
+		codes := []SyntaxCommand{
+			ByteCodeCompareCar{Value: testSyntaxSym("foo")},
+			ByteCodeVisitCdr{},
+			ByteCodeRequireCarEmptyVector{},
+			ByteCodeDone{},
+		}
+		vec := syntax.NewSyntaxVector(nil)
+		target := testSyntaxList(testSyntaxSym("foo"), vec)
+		matcher := NewMatcher(map[string]struct{}{}, codes)
+
+		err := matcher.MatchSyntax(context.Background(), target)
+		c.Assert(err, qt.IsNil)
+	})
+
+	c.Run("vector mismatch - list instead of vector", func(c *qt.C) {
+		// Pattern expects vector but input has list
+		codes := []SyntaxCommand{
+			ByteCodeVisitCarAsVector{},
+			ByteCodeCaptureCar{Binding: "x"},
+			ByteCodeDone{},
+			ByteCodeDone{},
+		}
+		target := testSyntaxList(testSyntaxList(testSyntaxInt(1)))
+		variables := map[string]struct{}{"x": {}}
+		matcher := NewMatcher(variables, codes)
+
+		err := matcher.MatchSyntax(context.Background(), target)
+		c.Assert(err, qt.Equals, ErrNotAMatch)
+	})
+
+	c.Run("vector with ellipsis capture", func(c *qt.C) {
+		// Pattern: (foo #(x rest ...)), matching (foo #(1 2 3))
+		// Bytecodes simulate ellipsis loop inside vector
+		ellipsisVars := map[int]map[string]struct{}{
+			0: {"rest": {}},
+		}
+		codes := []SyntaxCommand{
+			ByteCodeCompareCar{Value: testSyntaxSym("foo")}, // 0
+			ByteCodeVisitCdr{},                  // 1
+			ByteCodeVisitCarAsVector{},          // 2
+			ByteCodeCaptureCar{Binding: "x"},    // 3
+			ByteCodeVisitCdr{},                  // 4
+			ByteCodeSkipIfEmpty{Offset: 6},      // 5 -> 11
+			ByteCodePushContext{EllipsisID: 0},  // 6
+			ByteCodeCaptureCar{Binding: "rest"}, // 7
+			ByteCodeVisitCdr{},                  // 8
+			ByteCodePopContext{EllipsisID: 0},   // 9
+			ByteCodeJump{Offset: -5},            // 10 -> 5
+			ByteCodeDone{},                      // 11
+			ByteCodeDone{},                      // 12
+		}
+		vec := syntax.NewSyntaxVector(nil, testSyntaxInt(1), testSyntaxInt(2), testSyntaxInt(3))
+		target := testSyntaxList(testSyntaxSym("foo"), vec)
+		variables := map[string]struct{}{"x": {}, "rest": {}}
+		matcher := NewMatcherWithEllipsisVars(variables, codes, ellipsisVars)
+
+		err := matcher.MatchSyntax(context.Background(), target)
+		c.Assert(err, qt.IsNil)
+
+		bindings := matcher.GetBindings()
+		c.Assert(syntaxValuesEqualForMatch(bindings["x"], testSyntaxInt(1)), qt.IsTrue)
+
+		children := matcher.captureStack[0].children[0]
+		c.Assert(len(children), qt.Equals, 2)
+		c.Assert(syntaxValuesEqualForMatch(children[0].bindings["rest"], testSyntaxInt(2)), qt.IsTrue)
+		c.Assert(syntaxValuesEqualForMatch(children[1].bindings["rest"], testSyntaxInt(3)), qt.IsTrue)
+	})
+}

@@ -457,6 +457,12 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 			}
 		}
 
+	case *syntax.SyntaxVector:
+		// R7RS §4.3.2: recurse into vector elements for free identifiers
+		for _, elem := range t.Values {
+			collectFreeIdentifiersWithEllipsis(env, elem, patternVars, freeIds, ellipsis)
+		}
+
 	case *syntax.SyntaxObject:
 		// Self-evaluating literals don't contain identifiers
 		// Do nothing
@@ -533,6 +539,15 @@ func collectPatternVariablesWithEllipsis(pattern syntax.SyntaxValue, literalSynt
 				if err != nil {
 					return err
 				}
+			}
+		}
+
+	case *syntax.SyntaxVector:
+		// R7RS §4.3.2: #(<pattern> ...) — recurse into vector elements
+		for _, elem := range p.Values {
+			err := collectPatternVariablesWithEllipsis(elem, literalSyntax, false, variables, varSyntax, ellipsis)
+			if err != nil {
+				return err
 			}
 		}
 

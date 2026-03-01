@@ -421,4 +421,4 @@ Only reachable via BigFloat Inf arithmetic. Standard `+nan.0` (Float) works corr
 | 7 | C4: Environment separation | Medium | Security + sandboxing |
 | 8 | H3: Exact complex division | Medium | Rational arithmetic path |
 | 9 | H4: Inexact zero division | Low | IEEE 754 compliance |
-| 10 | M7/M8: Vector/dotted patterns | High | Pattern matcher rework |
+| 10 | M7: Vector patterns | Medium | One new bytecode + 5 type-switch additions (M8 not a bug) |
