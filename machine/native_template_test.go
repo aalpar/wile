@@ -451,6 +451,23 @@ func TestMaybeAppendLiteral_SignedZero(t *testing.T) {
 	c.Assert(idx1, qt.Not(qt.Equals), idx2)
 }
 
+func TestMaybeAppendLiteral_DedupAfterCopy(t *testing.T) {
+	c := qt.New(t)
+	tmpl := NewNativeTemplate(0, 0, false)
+
+	// Add a symbol to the original template.
+	idx1 := tmpl.MaybeAppendLiteral(values.NewSymbol("foo"))
+
+	// Copy() clones literals but not literalIndex.
+	copied := tmpl.Copy()
+
+	// Appending the same symbol to the copy must find the existing literal,
+	// not create a duplicate.
+	idx2 := copied.MaybeAppendLiteral(values.NewSymbol("foo"))
+	c.Assert(idx2, qt.Equals, idx1)
+	c.Assert(len(copied.literals), qt.Equals, 1)
+}
+
 func BenchmarkMaybeAppendLiteral(b *testing.B) {
 	const n = 500
 	syms := make([]values.Value, n)

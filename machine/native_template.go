@@ -360,18 +360,26 @@ func (p *NativeTemplate) MaybeAppendLiteral(v values.Value) LiteralIndex {
 	h, ok := v.(values.Hashable)
 	if ok {
 		hash := h.HashCode()
-		if p.literalIndex != nil {
-			for _, idx := range p.literalIndex[hash] {
-				if literalIdentical(p.literals[idx], v) {
-					return LiteralIndex(idx)
+		// Lazily build literalIndex from existing literals if it hasn't
+		// been initialized yet (e.g., after Copy() which clones literals
+		// but not the index).
+		if p.literalIndex == nil {
+			p.literalIndex = make(map[uint64][]int)
+			for i, lit := range p.literals {
+				hLit, okLit := lit.(values.Hashable)
+				if okLit {
+					litHash := hLit.HashCode()
+					p.literalIndex[litHash] = append(p.literalIndex[litHash], i)
 				}
+			}
+		}
+		for _, idx := range p.literalIndex[hash] {
+			if literalIdentical(p.literals[idx], v) {
+				return LiteralIndex(idx)
 			}
 		}
 		l := len(p.literals)
 		p.literals = append(p.literals, v)
-		if p.literalIndex == nil {
-			p.literalIndex = make(map[uint64][]int)
-		}
 		p.literalIndex[hash] = append(p.literalIndex[hash], l)
 		return LiteralIndex(l)
 	}

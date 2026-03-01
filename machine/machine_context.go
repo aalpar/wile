@@ -874,25 +874,19 @@ func (p *MachineContext) Run() error {
 			mc.pc++
 
 		case OpStoreGlobal:
-			o := mc.template.literals[instr.Arg]
-			if o == nil {
-				return mc.WrapError(ErrInvalidLiteralIndex,
-					fmt.Sprintf("literal index %v does not exist", instr.Arg))
-			}
-			gi, ok := o.(*environment.GlobalIndex)
-			if !ok {
-				return mc.WrapError(ErrInvalidGlobalIndex,
-					fmt.Sprintf("literal %v is not a global index", o))
+			gi, err := mc.resolveGlobalIndex(instr)
+			if err != nil {
+				return err
 			}
 			val := mc.evals.Pop()
-			var err error
 			if gi.Env != nil {
 				err = gi.Env.SetOwnGlobalValue(gi, val)
 			} else {
 				err = mc.env.GlobalEnvironment().SetOwnGlobalValue(gi, val)
 			}
 			if err != nil {
-				return mc.WrapError(err, fmt.Sprintf("no such global binding for %s", gi.SchemeString()))
+				return mc.WrapError(ErrBindingNotFound,
+					fmt.Sprintf("no such global binding for %s", gi.SchemeString()))
 			}
 			mc.pc++
 
@@ -1217,11 +1211,10 @@ func countFrames(cont *MachineContinuation) int {
 	return count
 }
 
-// resolveGlobalBinding extracts the GlobalIndex from the instruction's literal
-// and resolves it to a binding. Returns ErrInvalidLiteralIndex if the literal
-// is nil, ErrInvalidGlobalIndex if it's not a *GlobalIndex, or
-// ErrBindingNotFound if the binding doesn't exist.
-func (p *MachineContext) resolveGlobalBinding(instr Instruction) (*environment.Binding, error) {
+// resolveGlobalIndex extracts and validates the GlobalIndex from the
+// instruction's literal slot. Returns ErrInvalidLiteralIndex if the literal
+// is nil, or ErrInvalidGlobalIndex if it's not a *GlobalIndex.
+func (p *MachineContext) resolveGlobalIndex(instr Instruction) (*environment.GlobalIndex, error) {
 	o := p.template.literals[instr.Arg]
 	if o == nil {
 		return nil, p.WrapError(ErrInvalidLiteralIndex,
@@ -1231,6 +1224,18 @@ func (p *MachineContext) resolveGlobalBinding(instr Instruction) (*environment.B
 	if !ok {
 		return nil, p.WrapError(ErrInvalidGlobalIndex,
 			fmt.Sprintf("literal %v is not a global index", o))
+	}
+	return gi, nil
+}
+
+// resolveGlobalBinding extracts the GlobalIndex from the instruction's literal
+// and resolves it to a binding. Returns ErrInvalidLiteralIndex if the literal
+// is nil, ErrInvalidGlobalIndex if it's not a *GlobalIndex, or
+// ErrBindingNotFound if the binding doesn't exist.
+func (p *MachineContext) resolveGlobalBinding(instr Instruction) (*environment.Binding, error) {
+	gi, err := p.resolveGlobalIndex(instr)
+	if err != nil {
+		return nil, err
 	}
 	var bd *environment.Binding
 	if gi.Env != nil {
