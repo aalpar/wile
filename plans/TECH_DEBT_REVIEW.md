@@ -733,7 +733,7 @@ make test && make lint
 
 ## State of the Code (updated 2026-03-01)
 
-The Wile codebase is well-architected with clean package layering, consistent error handling conventions (sentinel + wrap), and comprehensive test coverage for core semantics. The structural, signals, and tech debt reviews have remediated the most critical issues. Of the 14 original findings: **8 complete/resolved** (F1, F3, F5, F6, F7, F8, F9, F14), **1 retracted** (F13), **2 deferred by design** (F10 god-object, F11 internal extensions), leaving **3 actionable items**.
+The Wile codebase is well-architected with clean package layering, consistent error handling conventions (sentinel + wrap), and comprehensive test coverage for core semantics. The structural, signals, and tech debt reviews have remediated the most critical issues. Of the 14 original findings: **9 complete/resolved** (F1, F2, F3, F5, F6, F7, F8, F9, F14), **1 retracted** (F13), **2 deferred by design** (F10 god-object, F11 internal extensions), leaving **2 actionable items**.
 
 The F6/F7 "coverage gap" findings were artifacts of measuring by file count ratio rather than Go statement coverage — actual coverage is 86.4% and 95.2% respectively. No correctness issues remain.
 
@@ -741,9 +741,7 @@ The F6/F7 "coverage gap" findings were artifacts of measuring by file count rati
 
 1. **F4: Test helper consolidation** [S effort] — `registry/core/test_helpers_test.go` still exists with local helpers. ~112 test files use the local version instead of the exported `registry/testhelpers` package. Mechanical sed/replace operation.
 
-2. **F2 Part B: Callable dispatch unification** [M effort] — Two expander dispatch sites for macro transformers still duplicate MachineClosure/ForeignClosure switching. A shared `invokeClosureAsTransformer` helper would consolidate them.
-
-3. **F12: Subsystem benchmarks** [S effort] — No dedicated benchmarks exist for `machine/` (VM dispatch), `internal/tokenizer/`, or `registry/core/` (primitive call overhead). High-level Gabriel suite catches macro regressions but can't isolate micro-level ones.
+2. **F12: Subsystem benchmarks** [S effort] — No dedicated benchmarks exist for `machine/` (VM dispatch), `internal/tokenizer/`, or `registry/core/` (primitive call overhead). High-level Gabriel suite catches macro regressions but can't isolate micro-level ones.
 
 ## Verification Log
 
@@ -753,7 +751,7 @@ Completion verification: 2026-03-01. All claimed completion statuses confirmed a
 | Finding | Status | Verified | Notes |
 |---------|--------|----------|-------|
 | F1 | COMPLETE | ✓ 2026-03-01 | `values/promotion.go` exists. Dispatch generators referenced in all 7 type files + `promotion_test.go`. |
-| F2 | PARTIAL | ✓ 2026-03-01 | Part A: opcode checklist at `opcode.go:22`. Part B: no `invokeClosureAsTransformer` — not started. |
+| F2 | COMPLETE | ✓ 2026-03-01 | Part A: opcode checklist at `opcode.go:22`. Part B: `invokeTransformerClosure()` in `expander_time_continuation.go` unifies both dispatch sites. |
 | F3 | COMPLETE | ✓ 2026-03-01 | `Complex.HashCode()` at `complex.go:321`. `BigComplex.HashCode()` at `big_complex.go:635`. |
 | F4 | Open | ✓ 2026-03-01 | `test_helpers_test.go` still exists. Local `runSchemeCode` at line 64. Not consolidated. |
 | F5 | COMPLETE | ✓ 2026-03-01 | Single `test-scheme` at Makefile:133. No duplicate. |
