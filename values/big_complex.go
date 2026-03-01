@@ -91,7 +91,9 @@ func (p *BigComplex) ImagAsBigFloat() *BigFloat {
 	return toBigFloat(p.imag)
 }
 
-// toBigFloat converts a BigInteger, Rational, or BigFloat to BigFloat.
+// toBigFloat converts a Number to BigFloat.
+// Handles all five types that can appear as BigComplex parts or intermediate
+// arithmetic results: BigFloat, BigInteger, Rational, Integer, and Float.
 func toBigFloat(n Number) *BigFloat {
 	switch v := n.(type) {
 	case *BigFloat:
@@ -102,6 +104,10 @@ func toBigFloat(n Number) *BigFloat {
 	case *Rational:
 		bf := new(big.Float).SetPrec(DefaultBigFloatPrecision).SetRat(v.Rat())
 		return &BigFloat{value: bf}
+	case *Integer:
+		return NewBigFloatFromFloat64(float64(v.Value))
+	case *Float:
+		return NewBigFloatFromFloat64(v.Value)
 	}
 	panic(ErrNotANumber)
 }
@@ -131,126 +137,6 @@ func promoteToBigComplexPart(n Number) Number {
 	panic(ErrNotANumber)
 }
 
-// addParts adds two BigComplex-compatible parts.
-// Inputs are promoted to BigComplex-compatible types (BigInteger, Rational,
-// or BigFloat) to handle results from multiplyParts that may return Integer
-// via the exact-zero multiplication optimization.
-func addParts(a, b Number) Number {
-	a = promoteToBigComplexPart(a)
-	b = promoteToBigComplexPart(b)
-	switch va := a.(type) {
-	case *BigInteger:
-		switch vb := b.(type) {
-		case *BigInteger:
-			return va.Add(vb)
-		case *Rational:
-			return vb.Add(va) // Rational + BigInteger = Rational
-		case *BigFloat:
-			return toBigFloat(va).Add(vb)
-		}
-	case *Rational:
-		switch vb := b.(type) {
-		case *Rational:
-			return va.Add(vb) // Rational + Rational = Rational
-		case *BigInteger:
-			return va.Add(vb) // Rational + BigInteger = Rational
-		case *BigFloat:
-			return toBigFloat(va).Add(vb) // Goes inexact
-		}
-	case *BigFloat:
-		return va.Add(toBigFloat(b))
-	}
-	panic(ErrNotANumber)
-}
-
-// subtractParts subtracts two BigComplex-compatible parts.
-// Inputs are promoted for the same reason as addParts.
-func subtractParts(a, b Number) Number {
-	a = promoteToBigComplexPart(a)
-	b = promoteToBigComplexPart(b)
-	switch va := a.(type) {
-	case *BigInteger:
-		switch vb := b.(type) {
-		case *BigInteger:
-			return va.Subtract(vb)
-		case *Rational:
-			// BigInteger - Rational: convert BigInteger to Rational
-			ra := NewRationalFromBigInt(va.value, big.NewInt(1))
-			return ra.Subtract(vb)
-		case *BigFloat:
-			return toBigFloat(va).Subtract(vb)
-		}
-	case *Rational:
-		switch vb := b.(type) {
-		case *Rational:
-			return va.Subtract(vb)
-		case *BigInteger:
-			return va.Subtract(vb)
-		case *BigFloat:
-			return toBigFloat(va).Subtract(vb)
-		}
-	case *BigFloat:
-		return va.Subtract(toBigFloat(b))
-	}
-	panic(ErrNotANumber)
-}
-
-// multiplyParts multiplies two BigComplex-compatible parts.
-func multiplyParts(a, b Number) Number {
-	switch va := a.(type) {
-	case *BigInteger:
-		switch vb := b.(type) {
-		case *BigInteger:
-			return va.Multiply(vb)
-		case *Rational:
-			return vb.Multiply(va) // Rational * BigInteger = Rational
-		case *BigFloat:
-			return toBigFloat(va).Multiply(vb)
-		}
-	case *Rational:
-		switch vb := b.(type) {
-		case *Rational:
-			return va.Multiply(vb)
-		case *BigInteger:
-			return va.Multiply(vb)
-		case *BigFloat:
-			return toBigFloat(va).Multiply(vb)
-		}
-	case *BigFloat:
-		return va.Multiply(toBigFloat(b))
-	}
-	panic(ErrNotANumber)
-}
-
-// divideParts divides two BigComplex-compatible parts, preserving exactness when possible.
-func divideParts(a, b Number) Number {
-	switch va := a.(type) {
-	case *BigInteger:
-		switch vb := b.(type) {
-		case *BigInteger:
-			return va.Divide(vb) // Returns Rational
-		case *Rational:
-			// BigInteger / Rational = BigInteger * (1/Rational) = Rational
-			ra := NewRationalFromBigInt(va.value, big.NewInt(1))
-			return ra.Divide(vb)
-		case *BigFloat:
-			return toBigFloat(va).Divide(vb)
-		}
-	case *Rational:
-		switch vb := b.(type) {
-		case *Rational:
-			return va.Divide(vb)
-		case *BigInteger:
-			return va.Divide(vb)
-		case *BigFloat:
-			return toBigFloat(va).Divide(vb)
-		}
-	case *BigFloat:
-		return va.Divide(toBigFloat(b))
-	}
-	panic(ErrNotANumber)
-}
-
 // Add returns the sum of this BigComplex and another number.
 //
 // Kind returns the numeric kind for dispatch table indexing.
@@ -271,15 +157,15 @@ var bigComplexDivide [numKinds]func(*BigComplex, Number) Number
 func init() {
 	bigComplexAdd = makeAddDispatch(KindBigComplex, func(p *BigComplex, o Number) Number {
 		v := o.(*BigComplex)
-		newReal := addParts(p.real, v.real)
-		newImag := addParts(p.imag, v.imag)
+		newReal := p.real.Add(v.real)
+		newImag := p.imag.Add(v.imag)
 		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
 	})
 
 	bigComplexSubtract = makeSubtractDispatch(KindBigComplex, func(p *BigComplex, o Number) Number {
 		v := o.(*BigComplex)
-		newReal := subtractParts(p.real, v.real)
-		newImag := subtractParts(p.imag, v.imag)
+		newReal := p.real.Subtract(v.real)
+		newImag := p.imag.Subtract(v.imag)
 		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
 	})
 
@@ -289,12 +175,12 @@ func init() {
 
 	bigComplexMultiply = makeMultiplyDispatch(KindBigComplex, func(p *BigComplex, o Number) Number {
 		v := o.(*BigComplex)
-		ac := multiplyParts(p.real, v.real)
-		bd := multiplyParts(p.imag, v.imag)
-		ad := multiplyParts(p.real, v.imag)
-		bc := multiplyParts(p.imag, v.real)
-		newReal := subtractParts(ac, bd)
-		newImag := addParts(ad, bc)
+		ac := p.real.Multiply(v.real)
+		bd := p.imag.Multiply(v.imag)
+		ad := p.real.Multiply(v.imag)
+		bc := p.imag.Multiply(v.real)
+		newReal := ac.Subtract(bd)
+		newImag := ad.Add(bc)
 		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
 	})
 
@@ -303,21 +189,21 @@ func init() {
 		// Scalar divisor (d=0): divide each part directly to preserve exactness.
 		// Scalars promoted from Integer/BigInteger/Rational arrive with BigInteger(0) imag.
 		if v.imag.IsZero() {
-			newReal := divideParts(p.real, v.real)
-			newImag := divideParts(p.imag, v.real)
+			newReal := p.real.Divide(v.real)
+			newImag := p.imag.Divide(v.real)
 			return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
 		}
 		// General case: (a+bi)/(c+di) = ((ac+bd) + (bc-ad)i) / (c²+d²)
-		ac := multiplyParts(p.real, v.real)
-		bd := multiplyParts(p.imag, v.imag)
-		bc := multiplyParts(p.imag, v.real)
-		ad := multiplyParts(p.real, v.imag)
-		cc := multiplyParts(v.real, v.real)
-		dd := multiplyParts(v.imag, v.imag)
+		ac := p.real.Multiply(v.real)
+		bd := p.imag.Multiply(v.imag)
+		bc := p.imag.Multiply(v.real)
+		ad := p.real.Multiply(v.imag)
+		cc := v.real.Multiply(v.real)
+		dd := v.imag.Multiply(v.imag)
 
-		numerReal := addParts(ac, bd)
-		numerImag := subtractParts(bc, ad)
-		denom := addParts(cc, dd)
+		numerReal := ac.Add(bd)
+		numerImag := bc.Subtract(ad)
+		denom := cc.Add(dd)
 
 		newReal := toBigFloat(numerReal).Divide(toBigFloat(denom))
 		newImag := toBigFloat(numerImag).Divide(toBigFloat(denom))
@@ -369,20 +255,7 @@ func (p *BigComplex) Divide(o Number) Number {
 
 // Negate returns the negation of this BigComplex.
 func (p *BigComplex) Negate() Number {
-	return NewBigComplex(negatePart(p.real), negatePart(p.imag))
-}
-
-// negatePart negates a BigComplex part (BigInteger, Rational, or BigFloat).
-func negatePart(n Number) Number {
-	switch v := n.(type) {
-	case *BigInteger:
-		return v.Negate()
-	case *BigFloat:
-		return v.Negate()
-	case *Rational:
-		return v.Negate()
-	}
-	panic(ErrNotANumber)
+	return NewBigComplex(p.real.Negate(), p.imag.Negate())
 }
 
 // IsZero returns true if both real and imaginary parts are zero.
@@ -560,7 +433,7 @@ func (p *BigComplex) Phase() *BigFloat {
 
 // Conjugate returns the complex conjugate (a-bi for a+bi).
 func (p *BigComplex) Conjugate() *BigComplex {
-	return NewBigComplex(p.real, negatePart(p.imag))
+	return NewBigComplex(p.real, p.imag.Negate())
 }
 
 // SchemeString returns the Scheme representation of this BigComplex.
