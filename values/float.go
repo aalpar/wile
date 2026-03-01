@@ -285,6 +285,9 @@ func (p *Float) EqualTo(v Value) bool {
 	case *Float:
 		return p.Value == other.Value
 	case *BigFloat:
+		if math.IsNaN(p.Value) || other.IsNaN() {
+			return false
+		}
 		vf := new(big.Float).SetFloat64(p.Value)
 		return vf.Cmp(other.BigFloatValue()) == 0
 	}
