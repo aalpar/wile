@@ -230,7 +230,7 @@ func TestValueConstructors_RoundTrip(t *testing.T) {
 		wantStr string
 	}{
 		{"rational arithmetic", NewRational(1, 3), "(+ x 1/3)", "2/3"},
-		{"complex arithmetic", NewComplex(1 + 2i), "(+ x 3+4i)", "4+6i"},
+		{"complex arithmetic", NewComplex(1 + 2i), "(+ x 3+4i)", "4.0+6.0i"},
 		{"vector-ref", NewVector(NewInteger(10), NewInteger(20), NewInteger(30)), "(vector-ref x 1)", "20"},
 		{"vector-length", NewVector(NewInteger(1), NewInteger(2)), "(vector-length x)", "2"},
 		{"big integer arithmetic", NewBigInteger(big.NewInt(1000000000000)), "(+ x 1)", "1000000000001"},

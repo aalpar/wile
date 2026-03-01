@@ -552,3 +552,28 @@ func TestBigFloat_FromFloat64NaN(t *testing.T) {
 	c.Assert(bf.IsNaN(), qt.IsTrue)
 	c.Assert(bf.SchemeString(), qt.Equals, "+nan.0")
 }
+
+func TestBigFloat_SchemeString_DecimalPoint(t *testing.T) {
+	c := qt.New(t)
+
+	tcs := []struct {
+		name string
+		val  float64
+		want string
+	}{
+		{"integer value", 2.0, "2.0"},
+		{"negative integer", -5.0, "-5.0"},
+		{"zero", 0.0, "0.0"},
+		{"fractional", 1.5, "1.5"},
+		{"large integer", 1000000.0, "1e+06"},
+		{"positive infinity", math.Inf(1), "+inf.0"},
+		{"negative infinity", math.Inf(-1), "-inf.0"},
+		{"NaN", math.NaN(), "+nan.0"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			bf := values.NewBigFloatFromFloat64(tc.val)
+			c.Assert(bf.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
