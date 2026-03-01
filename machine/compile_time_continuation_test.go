@@ -2335,6 +2335,16 @@ func TestInternSymbolsInValue_CircularDatumLabel(t *testing.T) {
 		qt.Assert(t, result, valuestest.SchemeEquals, expected)
 	})
 
+	t.Run("shared but acyclic datum label", func(t *testing.T) {
+		// #0=(a) referenced twice is shared but NOT circular.
+		// Must compile successfully, not be rejected as circular.
+		result, err := evalSchemeString("'(#0=(a) #0#)")
+		qt.Assert(t, err, qt.IsNil)
+		inner := values.List(values.NewSymbol("a"))
+		expected := values.List(inner, inner)
+		qt.Assert(t, result, valuestest.SchemeEquals, expected)
+	})
+
 	t.Run("equal on circular datum labels", func(t *testing.T) {
 		// Both quoted arguments contain circular datum labels.
 		// The first quote to be compiled triggers ErrInvalidSyntax.
@@ -2351,10 +2361,11 @@ func TestInternSymbolsInValue_CircularDatumLabel(t *testing.T) {
 	})
 
 	t.Run("vector datum label with self-reference", func(t *testing.T) {
-		// #0=#(a #0#) — the parser handles vectors after reading,
-		// so this is a forward reference that resolves gracefully.
-		// The key assertion is that it does not crash.
-		_, _ = evalSchemeString("'#0=#(a #0#)")
+		// #0=#(a #0#) — the parser resolves the self-reference in the vector.
+		// This produces a circular vector (element 1 points to the vector itself).
+		// The compiler handles this without crashing.
+		_, err := evalSchemeString("'#0=#(a #0#)")
+		qt.Assert(t, err, qt.IsNil)
 	})
 }
 

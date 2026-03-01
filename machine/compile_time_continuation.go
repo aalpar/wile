@@ -382,6 +382,7 @@ func (p *CompileTimeContinuation) internSymbolsInValueWithVisited(
 		if err != nil {
 			return nil, err
 		}
+		delete(visited, val)
 		if car == val.Car() && cdr == val.Cdr() {
 			return val, nil
 		}
