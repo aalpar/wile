@@ -45,6 +45,11 @@ type NativeTemplate struct {
 	// bypassing the runtime InternSymbol → RLock → map lookup path.
 	cachedBindings []*environment.Binding
 
+	// literalIndex maps hash codes to literal pool indices for O(1) amortized
+	// deduplication of Hashable values. Non-hashable values fall back to
+	// linear scan. Lazily initialized on first Hashable literal.
+	literalIndex map[uint64][]int
+
 	// Integer dispatch: all operations compiled to Instructions.
 	// Hot-path ops (Wave 1-3) are direct switch cases; complex ops
 	// (closures, macros, FFI) are in sideTable and dispatched via OpComplex.
@@ -345,11 +350,36 @@ func (p *NativeTemplate) MaybeAppendLiteral(v values.Value) LiteralIndex {
 	// chain is set at runtime by OperationMakeClosure, so structural
 	// equality doesn't capture lexical context.
 	_, isEnv := v.(*environment.EnvironmentFrame)
-	if !isEnv {
-		for i, l := range p.literals {
-			if literalIdentical(l, v) {
-				return LiteralIndex(i)
+	if isEnv {
+		l := len(p.literals)
+		p.literals = append(p.literals, v)
+		return LiteralIndex(l)
+	}
+
+	// Hash-indexed path for Hashable values (Symbol, Integer, String, etc.)
+	h, ok := v.(values.Hashable)
+	if ok {
+		hash := h.HashCode()
+		if p.literalIndex != nil {
+			for _, idx := range p.literalIndex[hash] {
+				if literalIdentical(p.literals[idx], v) {
+					return LiteralIndex(idx)
+				}
 			}
+		}
+		l := len(p.literals)
+		p.literals = append(p.literals, v)
+		if p.literalIndex == nil {
+			p.literalIndex = make(map[uint64][]int)
+		}
+		p.literalIndex[hash] = append(p.literalIndex[hash], l)
+		return LiteralIndex(l)
+	}
+
+	// Linear fallback for non-hashable values
+	for i, lit := range p.literals {
+		if literalIdentical(lit, v) {
+			return LiteralIndex(i)
 		}
 	}
 	l := len(p.literals)
