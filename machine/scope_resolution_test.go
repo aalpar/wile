@@ -200,6 +200,18 @@ func TestScopeResolution_LetShadowsMacro(t *testing.T) {
 			want: values.NewInteger(11),
 		},
 		{
+			// Shadowed name in operator position forces the expander to decide:
+			// macro invocation or procedure call? Must choose procedure call.
+			name: "let shadows and - callable in operator position",
+			code: "(let ((and (lambda (x y) (+ x y)))) (and 2 3))",
+			want: values.NewInteger(5),
+		},
+		{
+			name: "let shadows or - callable in operator position",
+			code: "(let ((or (lambda (x y) (if x x y)))) (or #f 42))",
+			want: values.NewInteger(42),
+		},
+		{
 			name: "macro still works when not shadowed - and",
 			code: "(let ((x 1)) (and #t #t))",
 			want: values.TrueValue,
@@ -336,6 +348,13 @@ func TestScopeResolution_SpecialFormShadowing(t *testing.T) {
 			name: "lambda parameter shadows if",
 			code: "((lambda (if) (+ if 1)) 10)",
 			want: values.NewInteger(11),
+		},
+		{
+			// Shadowed 'if' in operator position: validator must NOT dispatch
+			// to validateIf; must fall through to validateCall.
+			name: "let shadows if - callable in operator position",
+			code: "(let ((if (lambda (x y z) x))) (if 10 1 2))",
+			want: values.NewInteger(10),
 		},
 		{
 			name: "if still works when not shadowed",
