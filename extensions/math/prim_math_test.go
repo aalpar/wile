@@ -762,6 +762,11 @@ func TestExptAdditionalCases(t *testing.T) {
 		// Rational base, negative exponent (integer result: (expt 1/3 -1) = 3)
 		{"rational base neg exp to integer", `(= (expt 1/3 -1) 3)`, values.TrueValue},
 		{"rational base neg exp to rational", `(= (expt 2/3 -1) 3/2)`, values.TrueValue},
+		// Rational base with negative exponent > 1
+		{"expt 1/2 neg exp", `(= (expt 1/2 -2) 4)`, values.TrueValue},
+		{"expt 1/2 neg exp exact", `(exact? (expt 1/2 -2))`, values.TrueValue},
+		// Zero base with positive exponent
+		{"expt 0 positive", `(= (expt 0 5) 0)`, values.TrueValue},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

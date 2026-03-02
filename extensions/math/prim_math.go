@@ -282,6 +282,25 @@ func complexSqrtR7RS(z complex128) complex128 {
 	return cmplx.Sqrt(z)
 }
 
+var bigOne = big.NewInt(1)
+
+// exptExact computes (num/denom)^exp exactly.
+// For integer bases, pass denom as 1 (use bigOne).
+// Result is always simplified via values.Simplify.
+func exptExact(num, denom *big.Int, exp int64) values.Number {
+	if exp >= 0 {
+		e := big.NewInt(exp)
+		n := new(big.Int).Exp(num, e, nil)
+		d := new(big.Int).Exp(denom, e, nil)
+		return values.Simplify(values.NewRationalFromBigInt(n, d))
+	}
+	absE := big.NewInt(-exp)
+	// Invert: (num/denom)^(-e) = (denom^e)/(num^e)
+	n := new(big.Int).Exp(denom, absE, nil)
+	d := new(big.Int).Exp(num, absE, nil)
+	return values.Simplify(values.NewRationalFromBigInt(n, d))
+}
+
 // PrimExpt implements the (expt) primitive.
 func PrimExpt(mc *machine.MachineContext) error {
 	base := mc.Arg(0)
@@ -295,71 +314,21 @@ func PrimExpt(mc *machine.MachineContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotANumber, "expt: expected a number but got %T", exp)
 	}
 
-	expInt, ok := expNum.(*values.Integer)
+	e, ok := values.ExactInteger(expNum)
 	if ok {
-		e := expInt.Value
-
-		baseInt, ok := baseNum.(*values.Integer)
-		if ok {
-			if e >= 0 {
-				// Use big.Int to avoid overflow, then simplify if possible
-				baseBig := big.NewInt(baseInt.Value)
-				result := new(big.Int).Exp(baseBig, big.NewInt(e), nil)
-				// Try to fit in int64, otherwise return BigInteger
-				if result.IsInt64() {
-					mc.SetValue(values.NewInteger(result.Int64()))
-				} else {
-					mc.SetValue(values.NewBigInteger(result))
-				}
-				return nil
-			}
-			// Negative exponent: compute 1 / base^|e|
-			absE := -e
-			baseBig := big.NewInt(baseInt.Value)
-			denom := new(big.Int).Exp(baseBig, big.NewInt(absE), nil)
-			mc.SetValue(values.NewRationalFromBigInt(big.NewInt(1), denom))
+		switch b := baseNum.(type) {
+		case *values.Integer:
+			mc.SetValue(exptExact(big.NewInt(b.Value), bigOne, e))
+			return nil
+		case *values.BigInteger:
+			mc.SetValue(exptExact(b.BigInt(), bigOne, e))
+			return nil
+		case *values.Rational:
+			mc.SetValue(exptExact(b.Num(), b.Denom(), e))
 			return nil
 		}
-
-		baseBig, ok := baseNum.(*values.BigInteger)
-		if ok {
-			if e >= 0 {
-				result := new(big.Int).Exp(baseBig.BigInt(), big.NewInt(e), nil)
-				mc.SetValue(values.NewBigInteger(result))
-				return nil
-			}
-			absE := -e
-			denom := new(big.Int).Exp(baseBig.BigInt(), big.NewInt(absE), nil)
-			mc.SetValue(values.NewRationalFromBigInt(big.NewInt(1), denom))
-			return nil
-		}
-
-		baseRat, ok := baseNum.(*values.Rational)
-		if ok {
-			num := baseRat.Num()
-			denom := baseRat.Denom()
-			if e >= 0 {
-				numResult := new(big.Int).Exp(num, big.NewInt(e), nil)
-				denomResult := new(big.Int).Exp(denom, big.NewInt(e), nil)
-				result := values.NewRationalFromBigInt(numResult, denomResult)
-				if result.IsInteger() {
-					mc.SetValue(values.NewInteger(result.NumInt64()))
-					return nil
-				}
-				mc.SetValue(result)
-				return nil
-			}
-			absE := -e
-			numResult := new(big.Int).Exp(denom, big.NewInt(absE), nil)
-			denomResult := new(big.Int).Exp(num, big.NewInt(absE), nil)
-			result := values.NewRationalFromBigInt(numResult, denomResult)
-			if result.IsInteger() {
-				mc.SetValue(values.NewInteger(result.NumInt64()))
-				return nil
-			}
-			mc.SetValue(result)
-			return nil
-		}
+		// Non-exact base types (Float, Complex, etc.) fall through
+		// to inexact paths below.
 	}
 
 	switch b := baseNum.(type) {
@@ -400,20 +369,6 @@ func PrimExpt(mc *machine.MachineContext) error {
 			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(ef, 0))))
 		}
 	default:
-		// L17: Handle BigInteger ^ exact non-negative integer for exact result
-		baseBI, ok := baseNum.(*values.BigInteger)
-		if ok {
-			expInt, isInt := values.ExactInteger(expNum)
-			if isInt && expInt >= 0 {
-				// Use big.Int.Exp for exact integer exponentiation
-				result := new(big.Int).Exp(baseBI.BigInt(), big.NewInt(expInt), nil)
-				simplified := values.Simplify(values.NewBigInteger(result))
-				mc.SetValue(simplified)
-				return nil
-			}
-			// Fall through to float path for negative/fractional exponents
-		}
-
 		var bf float64
 		switch v := baseNum.(type) {
 		case *values.Integer:
