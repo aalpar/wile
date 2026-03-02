@@ -331,68 +331,23 @@ func PrimExpt(mc *machine.MachineContext) error {
 		// to inexact paths below.
 	}
 
-	switch b := baseNum.(type) {
-	case *values.Complex:
-		switch e := expNum.(type) {
-		case *values.Complex:
-			mc.SetValue(values.NewComplex(cmplx.Pow(b.Value, e.Value)))
-		case *values.Float:
-			mc.SetValue(values.NewComplex(cmplx.Pow(b.Value, complex(e.Value, 0))))
-		case *values.Integer:
-			mc.SetValue(values.NewComplex(cmplx.Pow(b.Value, complex(float64(e.Value), 0))))
-		case *values.Rational:
-			mc.SetValue(values.NewComplex(cmplx.Pow(b.Value, complex(e.Float64(), 0))))
-		case *values.BigComplex:
-			eReal := e.RealAsBigFloat().Float64()
-			eImag := e.ImagAsBigFloat().Float64()
-			mc.SetValue(values.NewComplex(cmplx.Pow(b.Value, complex(eReal, eImag))))
-		}
-	case *values.BigComplex:
-		bReal := b.RealAsBigFloat().Float64()
-		bImag := b.ImagAsBigFloat().Float64()
-		bComplex := complex(bReal, bImag)
-		switch e := expNum.(type) {
-		case *values.Complex:
-			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, e.Value)))
-		case *values.Float:
-			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(e.Value, 0))))
-		case *values.Integer:
-			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(float64(e.Value), 0))))
-		case *values.Rational:
-			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(e.Float64(), 0))))
-		case *values.BigComplex:
-			eReal := e.RealAsBigFloat().Float64()
-			eImag := e.ImagAsBigFloat().Float64()
-			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(eReal, eImag))))
-		case *values.BigInteger:
-			ef, _ := e.BigInt().Float64()
-			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(ef, 0))))
-		}
+	switch baseNum.(type) {
+	case *values.Complex, *values.BigComplex:
+		mc.SetValue(values.NewComplex(cmplx.Pow(
+			values.NumberToComplex128(baseNum),
+			values.NumberToComplex128(expNum))))
 	default:
-		var bf float64
-		switch v := baseNum.(type) {
-		case *values.Integer:
-			bf = float64(v.Value)
-		case *values.BigInteger:
-			bf, _ = new(big.Float).SetInt(v.BigInt()).Float64()
-		case *values.Float:
-			bf = v.Value
-		case *values.Rational:
-			bf = v.Float64()
-		}
-		var ef float64
-		switch v := expNum.(type) {
-		case *values.Integer:
-			ef = float64(v.Value)
-		case *values.Float:
-			ef = v.Value
-		case *values.Rational:
-			ef = v.Float64()
-		case *values.Complex:
-			mc.SetValue(values.NewComplex(cmplx.Pow(complex(bf, 0), v.Value)))
+		// Complex exponent with real base
+		switch expNum.(type) {
+		case *values.Complex, *values.BigComplex:
+			mc.SetValue(values.NewComplex(cmplx.Pow(
+				complex(values.NumberToFloat64(baseNum), 0),
+				values.NumberToComplex128(expNum))))
 			return nil
 		}
-		mc.SetValue(values.NewFloat(math.Pow(bf, ef)))
+		mc.SetValue(values.NewFloat(math.Pow(
+			values.NumberToFloat64(baseNum),
+			values.NumberToFloat64(expNum))))
 	}
 	return nil
 }

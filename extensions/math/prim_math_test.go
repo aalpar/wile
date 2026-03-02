@@ -767,6 +767,12 @@ func TestExptAdditionalCases(t *testing.T) {
 		{"expt 1/2 neg exp exact", `(exact? (expt 1/2 -2))`, values.TrueValue},
 		// Zero base with positive exponent
 		{"expt 0 positive", `(= (expt 0 5) 0)`, values.TrueValue},
+
+		// Complex exponentiation paths
+		{"complex base integer exp", `(< (magnitude (- (expt 1+1i 2) 0+2i)) 1e-10)`, values.TrueValue},
+		{"complex base float exp", `(number? (expt 1+1i 0.5))`, values.TrueValue},
+		{"bigcomplex base", `(number? (expt (make-rectangular 1 1) 2))`, values.TrueValue},
+		{"float base complex exp", `(number? (expt 2.0 1+1i))`, values.TrueValue},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
