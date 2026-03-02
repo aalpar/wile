@@ -662,7 +662,7 @@ func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallC
 		// Symbol has scopes (from macro expansion), use scope-aware lookup
 		li = p.env.GetLocalIndexWithScopes(sym, symbolScopes)
 	} else {
-		// Symbol has no scopes (from user code), use regular lookup
+		// Fast path: see CompileSymbol invariant — empty scopes implies no locals in scope.
 		li = p.env.GetLocalIndex(sym)
 	}
 

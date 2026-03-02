@@ -810,6 +810,10 @@ func (p *ExpanderTimeContinuation) expandLambdaForm(sym *syntax.SyntaxSymbol, ex
 	// This scope is added to both formals and body BEFORE any inner expansion,
 	// ensuring that pattern matching in inner macros (like cond) can correctly
 	// detect when identifiers (like =>) have been bound by this lambda.
+	//
+	// This also maintains the compiler's fast-path invariant: every symbol inside
+	// a local binding context has at least one scope (lambdaScope), so symbols
+	// with empty scopes can safely skip scope-aware resolution. See CompileSymbol.
 	lambdaScope := syntax.NewScope()
 
 	// Add lambda scope to formals and body
