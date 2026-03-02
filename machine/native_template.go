@@ -193,6 +193,13 @@ func instructionToOperation(instr Instruction) Operation {
 	case OpPullApply:
 		return NewOperationPull()
 
+	// --- Wave 7: direct foreign call operations ---
+	// Decomposed back to LoadCachedBinding for test assertions.
+	case OpCallForeignCached:
+		return NewOperationLoadCachedBinding(instr.Arg)
+	case OpCallForeignCachedTail:
+		return NewOperationLoadCachedBinding(instr.Arg)
+
 	// --- Wave 5: promoted complex operations ---
 	case OpMakeClosure:
 		return NewOperationMakeClosure()

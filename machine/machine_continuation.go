@@ -22,11 +22,42 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
+// inlineEvalsCap is the number of eval stack values stored directly in the
+// continuation struct. When the eval stack at save time has ≤ inlineEvalsCap
+// elements, values are copied into inlineEvals and the evals pointer is set
+// to nil, avoiding a stack pool acquire/release round-trip.
+//
+// The value 2 covers the common case: most SaveContinuation calls happen
+// before compiling sub-expression arguments, so the caller's stack holds
+// only prior intermediate results (typically 0-1 items for binary operators,
+// 2 for ternary). Profile data from fib(10) confirms save-time depths of
+// 0-1 account for >95% of continuations.
+const inlineEvalsCap = 2
+
 type MachineContinuation struct {
 	vmState
 	parent        *MachineContinuation
 	promptHandler Closure // Handler invoked on abort to this prompt
 	shared        bool    // true if this frame is part of a captured continuation chain
+	// Inline eval storage: when the eval stack at save time has ≤ inlineEvalsCap
+	// items, values are stored here and evals is set to nil (sentinel).
+	//
+	// INVARIANT: evals == nil ⟺ values are in inlineEvals[0:inlineEvalsLen].
+	//   SaveContinuation sets this when stack depth ≤ inlineEvalsCap.
+	//   RestoreAndRelease/Restore detect nil evals and reconstruct from inline slots.
+	//   releaseContinuation (pool reset) zeros the struct, clearing inline slots.
+	inlineEvalsLen uint8
+	inlineEvals    [inlineEvalsCap]values.Value
+}
+
+// restoreInlineEvals clears dst and pushes the inline eval values into it.
+// Used by Restore, RestoreAndRelease, and PopContinuation when a continuation
+// has inlined evals (evals == nil).
+func restoreInlineEvals(dst *Stack, cont *MachineContinuation) {
+	dst.Clear()
+	for i := uint8(0); i < cont.inlineEvalsLen; i++ {
+		dst.Push(cont.inlineEvals[i])
+	}
 }
 
 // NewMachineContinuation creates a new machine continuation with the given parent, template, environment frame, and initial values.
@@ -123,13 +154,17 @@ func (p *MachineContinuation) CallDepth() int {
 }
 
 func (p *MachineContinuation) Copy() *MachineContinuation {
+	var evalsCopy *Stack
+	if p.evals != nil {
+		evalsCopy = p.evals.Copy()
+	}
 	q := &MachineContinuation{
 		vmState: vmState{
 			env:          p.env,
 			template:     p.template,
 			singleValue:  p.singleValue,
 			multiValues:  slices.Clone(p.multiValues),
-			evals:        p.evals.Copy(),
+			evals:        evalsCopy,
 			pc:           p.pc,
 			windingStack: p.windingStack.Copy(),
 			promptTag:    p.promptTag,
@@ -139,8 +174,10 @@ func (p *MachineContinuation) Copy() *MachineContinuation {
 			// with the original frame. The copy does not own the env frame
 			// and must not release it back to the pool.
 		},
-		parent:        p.parent,
-		promptHandler: p.promptHandler,
+		parent:         p.parent,
+		promptHandler:  p.promptHandler,
+		inlineEvalsLen: p.inlineEvalsLen,
+		inlineEvals:    p.inlineEvals, // array copy (value semantics)
 	}
 	return q
 }
