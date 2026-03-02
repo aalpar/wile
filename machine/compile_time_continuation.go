@@ -113,8 +113,13 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	// codegen dispatch; the expander only needs a yes/no shadow check for a single binding.
 	symbolScopes := expr.Scopes()
 
-	// If the symbol has no scopes (e.g., from user code, not from macro expansion),
-	// use the regular binding resolution
+	// Fast path: if the symbol has no scopes, skip scope-aware resolution.
+	//
+	// Safety invariant: empty scopes implies no local bindings in scope.
+	// Every binding form that creates locals (lambda, and by extension let/let*/letrec)
+	// goes through expandLambdaForm, which adds a lambdaScope to all body identifiers
+	// BEFORE inner expansion. A symbol with empty scopes can therefore only appear at
+	// top level, where GetLocalIndex returns nil and falls through to globals.
 	if len(symbolScopes) == 0 {
 		// Try local binding first
 		li := p.env.GetLocalIndex(sym)

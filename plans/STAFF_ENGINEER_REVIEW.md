@@ -102,7 +102,7 @@ Cross-references to overlapping findings are noted where relevant.
 
 ---
 
-### N8 [Priority: Low] — Peephole optimizer opcode knowledge is fragile
+### N8 [Priority: Low] [COMPLETE] — Peephole optimizer opcode knowledge is fragile
 
 **Where**: `machine/peephole.go:56-63` — `writesValueRegister()`
 **What**: The optimizer manually enumerates load opcodes that write the value register. Adding a new load opcode and forgetting to update this list causes silent missed optimizations (dead LoadVoid not eliminated).
