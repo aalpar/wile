@@ -100,7 +100,7 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 		if ok {
 			// R7RS §4.2.2: Local variable bindings shadow special forms
 			// Check if there's a local variable binding that shadows this form
-			hasLocal := hasLocalVariableBinding(env, symVal, sym.Scopes())
+			hasLocal := env.HasLocalVariableBinding(symVal, sym.Scopes())
 			if hasLocal {
 				// Local variable shadows the special form - treat as procedure call
 				return validateCall(ctx, env, pair, result)
@@ -120,47 +120,6 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 
 	// Not a special form - it's a function call
 	return validateCall(ctx, env, pair, result)
-}
-
-// hasLocalVariableBinding checks if the symbol has a local variable binding
-// in the runtime environment that would shadow a special form.
-// R7RS §4.2.2: let bindings shadow outer bindings including special forms.
-func hasLocalVariableBinding(env *environment.EnvironmentFrame, sym *values.Symbol, scopes []*syntax.Scope) bool {
-	if env == nil {
-		return false
-	}
-
-	// Only check local bindings - global variables don't shadow special forms
-	li := env.GetLocalIndex(sym)
-	if li == nil {
-		return false
-	}
-
-	// Get the actual binding to check its type and scopes
-	binding := env.GetLocalBinding(li)
-	if binding == nil {
-		return false
-	}
-
-	// Only variable bindings shadow special forms
-	if binding.BindingType() != environment.BindingTypeVariable {
-		return false
-	}
-
-	// Check scope compatibility for hygiene
-	bindingScopes := binding.Scopes()
-	if len(bindingScopes) == 0 {
-		// Binding has no scopes (user code) - matches any use
-		return true
-	}
-
-	// Flatt's hygiene model: a reference matches a binding if the binding's
-	// scopes are a SUBSET of the reference's scopes. This ensures:
-	// - User's (if y) with scopes {let-scope, macro-scope} matches binding with {let-scope}
-	// - Macro template's (if ...) with scopes {macro-def-scope} does NOT match user's binding
-	//   because {let-scope} is not a subset of {macro-def-scope}
-	// ScopesMatch(useScopes, bindingScopes) checks bindingScopes ⊆ useScopes
-	return syntax.ScopesMatch(scopes, bindingScopes)
 }
 
 // collectList converts a syntax list to a slice of elements.

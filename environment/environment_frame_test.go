@@ -377,6 +377,91 @@ func TestEnvironmentFrame_GetBindingWithScopes(t *testing.T) {
 	qt.Assert(t, b2, qt.IsNil)
 }
 
+func TestEnvironmentFrame_HasLocalVariableBinding(t *testing.T) {
+	scope1 := syntax.NewScope()
+	scope2 := syntax.NewScope()
+
+	tcs := []struct {
+		name        string
+		bindingType BindingType
+		bindScopes  []*syntax.Scope
+		useScopes   []*syntax.Scope
+		want        bool
+		nilEnv      bool
+		noBinding   bool
+	}{
+		{
+			name:        "variable binding, no scopes on either side",
+			bindingType: BindingTypeVariable,
+			want:        true,
+		},
+		{
+			name:        "variable binding, no binding scopes matches any use scopes",
+			bindingType: BindingTypeVariable,
+			useScopes:   []*syntax.Scope{scope1},
+			want:        true,
+		},
+		{
+			name:        "variable binding, matching scopes",
+			bindingType: BindingTypeVariable,
+			bindScopes:  []*syntax.Scope{scope1},
+			useScopes:   []*syntax.Scope{scope1, scope2},
+			want:        true,
+		},
+		{
+			name:        "variable binding, non-matching scopes",
+			bindingType: BindingTypeVariable,
+			bindScopes:  []*syntax.Scope{scope1},
+			useScopes:   []*syntax.Scope{scope2},
+			want:        false,
+		},
+		{
+			name:        "syntax binding does not shadow",
+			bindingType: BindingTypeSyntax,
+			want:        false,
+		},
+		{
+			name:        "primitive binding does not shadow",
+			bindingType: BindingTypePrimitive,
+			want:        false,
+		},
+		{
+			name:   "nil env returns false",
+			nilEnv: true,
+			want:   false,
+		},
+		{
+			name:      "no binding returns false",
+			noBinding: true,
+			want:      false,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			sym := values.NewSymbol("x")
+
+			if tc.nilEnv {
+				var env *EnvironmentFrame
+				qt.Assert(t, env.HasLocalVariableBinding(sym, nil), qt.Equals, false)
+				return
+			}
+
+			env := NewTopLevelEnvironmentFrame()
+			env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
+
+			if tc.noBinding {
+				qt.Assert(t, env.HasLocalVariableBinding(sym, nil), qt.Equals, false)
+				return
+			}
+
+			_, _ = env.MaybeCreateLocalBindingWithScopes(sym, tc.bindingType, tc.bindScopes, nil)
+			got := env.HasLocalVariableBinding(sym, tc.useScopes)
+			qt.Assert(t, got, qt.Equals, tc.want)
+		})
+	}
+}
+
 func TestEnvironmentFrame_MaybeCreateLocalBindingWithScopes(t *testing.T) {
 	env := NewTopLevelEnvironmentFrame()
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)

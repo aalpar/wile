@@ -71,40 +71,10 @@ func (p *ExpanderTimeContinuation) Context() context.Context {
 	return p.ctx
 }
 
-// hasLocalVariableBinding checks if the symbol has a local variable binding
-// in the runtime environment that would shadow any macro definition.
+// hasLocalVariableBinding delegates to EnvironmentFrame.HasLocalVariableBinding.
 // R7RS §4.2.2: let bindings shadow outer bindings including macros.
-//
-// Both this path and the compiler's CompileSymbolReference (compile_time_continuation.go)
-// check bindingScopes ⊆ useScopes via syntax.ScopesMatch. This path checks a single
-// binding for shadowing; the compiler uses the environment's maximality algorithm
-// (GetLocalIndexWithScopes) to select the most specific binding for codegen dispatch.
 func (p *ExpanderTimeContinuation) hasLocalVariableBinding(sym *values.Symbol, scopes []*syntax.Scope) bool {
-	// Only check local bindings - global variables don't shadow macros
-	li := p.env.GetLocalIndex(sym)
-	if li == nil {
-		return false
-	}
-
-	// Get the actual binding to check its type and scopes
-	binding := p.env.GetLocalBinding(li)
-	if binding == nil {
-		return false
-	}
-
-	// Only variable bindings shadow macros
-	if binding.BindingType() != environment.BindingTypeVariable {
-		return false
-	}
-
-	// Check scope compatibility for hygiene
-	bindingScopes := binding.Scopes()
-	if len(bindingScopes) == 0 {
-		// Binding has no scopes (user code) - matches any use
-		return true
-	}
-
-	return syntax.ScopesMatch(scopes, bindingScopes)
+	return p.env.HasLocalVariableBinding(sym, scopes)
 }
 
 // ExpandExpression expands a syntax expression.

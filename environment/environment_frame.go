@@ -520,6 +520,37 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol) *LocalIndex {
 	return nil
 }
 
+// HasLocalVariableBinding reports whether sym has a local variable binding
+// compatible with the given scopes. This is the shared implementation used by
+// both the macro expander (to decide whether a local variable shadows a macro)
+// and the validator (to decide whether a local variable shadows a special form).
+//
+// The check implements Flatt's hygiene rule: a binding matches a reference when
+// bindingScopes ⊆ useScopes. Bindings with no scopes (user code) match any use.
+// Only BindingTypeVariable bindings are considered; syntax/primitive bindings
+// do not shadow.
+func (p *EnvironmentFrame) HasLocalVariableBinding(sym *values.Symbol, scopes []*syntax.Scope) bool {
+	if p == nil {
+		return false
+	}
+	li := p.GetLocalIndex(sym)
+	if li == nil {
+		return false
+	}
+	binding := p.GetLocalBinding(li)
+	if binding == nil {
+		return false
+	}
+	if binding.BindingType() != BindingTypeVariable {
+		return false
+	}
+	bindingScopes := binding.Scopes()
+	if len(bindingScopes) == 0 {
+		return true
+	}
+	return syntax.ScopesMatch(scopes, bindingScopes)
+}
+
 // GetLocalIndexWithScopes returns the LocalIndex of a local binding that
 // matches the given scopes.
 //
