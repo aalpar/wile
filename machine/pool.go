@@ -90,7 +90,7 @@ var envFramePool = registerPool(pools, NewPool("env_frame",
 		return &environment.EnvironmentFrame{}
 	},
 	func(f *environment.EnvironmentFrame) {
-		*f = environment.EnvironmentFrame{}
+		f.ResetForPool()
 	},
 ))
 
@@ -121,6 +121,30 @@ func ReleaseSubContext(mc *MachineContext) {
 	}
 	if mc.parentMC != nil {
 		mc.parentMC.counters.SubContextPoolReleases++
+	}
+	subContextPool.Release(mc)
+}
+
+// AcquireTopLevelContext returns a pooled MachineContext initialized for
+// top-level execution (no parent continuation). This eliminates the
+// intermediate MachineContinuation allocation that NewMachineContinuation +
+// NewMachineContext would otherwise perform when parent is nil.
+//
+// The caller MUST call ReleaseTopLevelContext after Run returns.
+func AcquireTopLevelContext(ctx context.Context, tpl *NativeTemplate, env *environment.EnvironmentFrame) *MachineContext {
+	mc := subContextPool.Acquire()
+	mc.ctx = ctx
+	mc.env = env
+	mc.template = tpl
+	mc.evals = acquireStack()
+	return mc
+}
+
+// ReleaseTopLevelContext zeros the MachineContext and returns it to the pool.
+// Exported because the primary call sites live in the root wile package (engine.go).
+func ReleaseTopLevelContext(mc *MachineContext) {
+	if mc == nil {
+		return
 	}
 	subContextPool.Release(mc)
 }
