@@ -153,7 +153,7 @@ var bigComplexAdd [numKinds]func(*BigComplex, Number) Number
 var bigComplexSubtract [numKinds]func(*BigComplex, Number) Number
 var bigComplexCompare [numKinds]func(*BigComplex, Number) int
 var bigComplexMultiply [numKinds]func(*BigComplex, Number) Number
-var bigComplexDivide [numKinds]func(*BigComplex, Number) Number
+var bigComplexDivide [numKinds]func(*BigComplex, Number) (Number, error)
 
 func init() {
 	bigComplexAdd = makeAddDispatch(KindBigComplex, func(p *BigComplex, o Number) Number {
@@ -185,14 +185,20 @@ func init() {
 		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
 	})
 
-	bigComplexDivide = makeDivideDispatch(KindBigComplex, func(p *BigComplex, o Number) Number {
+	bigComplexDivide = makeDivideDispatch(KindBigComplex, func(p *BigComplex, o Number) (Number, error) {
 		v := o.(*BigComplex)
 		// Scalar divisor (d=0): divide each part directly to preserve exactness.
 		// Scalars promoted from Integer/BigInteger/Rational arrive with BigInteger(0) imag.
 		if v.imag.IsZero() {
-			newReal := p.real.Divide(v.real)
-			newImag := p.imag.Divide(v.real)
-			return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
+			newReal, err := p.real.Divide(v.real)
+			if err != nil {
+				return nil, err
+			}
+			newImag, err := p.imag.Divide(v.real)
+			if err != nil {
+				return nil, err
+			}
+			return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag)), nil
 		}
 		// General case: (a+bi)/(c+di) = ((ac+bd) + (bc-ad)i) / (c²+d²)
 		ac := p.real.Multiply(v.real)
@@ -206,9 +212,15 @@ func init() {
 		numerImag := bc.Subtract(ad)
 		denom := cc.Add(dd)
 
-		newReal := toBigFloat(numerReal).Divide(toBigFloat(denom))
-		newImag := toBigFloat(numerImag).Divide(toBigFloat(denom))
-		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
+		newReal, err := toBigFloat(numerReal).Divide(toBigFloat(denom))
+		if err != nil {
+			return nil, err
+		}
+		newImag, err := toBigFloat(numerImag).Divide(toBigFloat(denom))
+		if err != nil {
+			return nil, err
+		}
+		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag)), nil
 	})
 }
 
@@ -247,9 +259,9 @@ func (p *BigComplex) Multiply(o Number) Number {
 //
 // R7RS §6.2.6: The / procedure returns the quotient of its arguments.
 // R7RS §6.2.2 Exactness: exact / exact = exact, exact / inexact = inexact.
-func (p *BigComplex) Divide(o Number) Number {
+func (p *BigComplex) Divide(o Number) (Number, error) {
 	if o.IsZero() && o.IsExact() {
-		panic(werr.WrapForeignErrorf(werr.ErrDivisionByZero, "BigComplex.Divide: exact zero divisor"))
+		return nil, werr.ErrDivisionByZero
 	}
 	return bigComplexDivide[o.Kind()](p, o)
 }
@@ -339,16 +351,22 @@ func isExactPart(n Number) bool {
 // R7RS §6.2.6: exact returns an exact representation of its argument.
 // If already exact, returns itself. Otherwise converts BigFloat parts to BigInteger
 // by truncating (may lose precision).
-func (p *BigComplex) ToExact() Number {
+func (p *BigComplex) ToExact() (Number, error) {
 	if p.IsExact() {
-		return p
+		return p, nil
 	}
-	realExact := toExactPart(p.real)
-	imagExact := toExactPart(p.imag)
+	realExact, err := toExactPart(p.real)
+	if err != nil {
+		return nil, err
+	}
+	imagExact, err := toExactPart(p.imag)
+	if err != nil {
+		return nil, err
+	}
 	if imagExact.IsZero() {
-		return realExact
+		return realExact, nil
 	}
-	return NewBigComplex(realExact, imagExact)
+	return NewBigComplex(realExact, imagExact), nil
 }
 
 // toExactPart converts a BigComplex part to a BigComplex-compatible exact type
@@ -358,17 +376,21 @@ func (p *BigComplex) ToExact() Number {
 // For BigFloat, converts via ToExact() then simplifies integer-valued rationals
 // (3/1 → 3). Simplify may return *Integer; we promote it back to *BigInteger
 // since NewBigComplex only accepts *BigInteger, *Rational, or *BigFloat.
-func toExactPart(n Number) Number {
+func toExactPart(n Number) (Number, error) {
 	switch v := n.(type) {
 	case *BigInteger, *Rational:
-		return v
+		return v, nil
 	case *BigFloat:
-		q := Simplify(v.ToExact())
+		exact, err := v.ToExact()
+		if err != nil {
+			return nil, err
+		}
+		q := Simplify(exact)
 		i, ok := q.(*Integer)
 		if ok {
-			return NewBigIntegerFromInt64(i.Value)
+			return NewBigIntegerFromInt64(i.Value), nil
 		}
-		return q
+		return q, nil
 	}
 	panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "toExactPart: unsupported type %T", n))
 }

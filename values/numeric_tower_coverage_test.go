@@ -70,6 +70,8 @@ type operationResult struct {
 	isNil    bool
 	panicked bool
 	panicMsg string
+	errored  bool
+	errMsg   string
 }
 
 // tryOperation safely executes an operation and captures the result
@@ -83,6 +85,30 @@ func tryOperation(op func() values.Number) (result operationResult) {
 	}()
 
 	res := op()
+	if res == nil {
+		result.isNil = true
+	} else {
+		result.success = true
+	}
+	return
+}
+
+// tryDivide safely executes a Divide operation that returns (Number, error).
+func tryDivide(op func() (values.Number, error)) (result operationResult) {
+	defer func() {
+		r := recover()
+		if r != nil {
+			result.panicked = true
+			result.panicMsg = fmt.Sprintf("%v", r)
+		}
+	}()
+
+	res, err := op()
+	if err != nil {
+		result.errored = true
+		result.errMsg = err.Error()
+		return
+	}
 	if res == nil {
 		result.isNil = true
 	} else {
@@ -183,7 +209,7 @@ func TestNumericTower_Divide(t *testing.T) {
 		for _, operand := range numbers {
 			name := fmt.Sprintf("%s/%s", receiver.name, operand.name)
 			t.Run(name, func(t *testing.T) {
-				result := tryOperation(func() values.Number {
+				result := tryDivide(func() (values.Number, error) {
 					return receiver.value.Divide(operand.value)
 				})
 
@@ -243,18 +269,20 @@ func TestNumericTower_DivideByZero(t *testing.T) {
 		for _, zero := range zeros {
 			name := fmt.Sprintf("%s/zero_%s", receiver.name, zero.name)
 			t.Run(name, func(t *testing.T) {
-				result := tryOperation(func() values.Number {
+				result := tryDivide(func() (values.Number, error) {
 					return receiver.value.Divide(zero.value)
 				})
 
-				// Division by zero should always panic, never return nil
+				// Division by exact zero should return error, never return nil
 				switch {
 				case result.isNil:
-					t.Logf("NIL (BUG) - should panic with ErrDivisionByZero")
+					t.Logf("NIL (BUG) - should error with ErrDivisionByZero")
 					nilCases = append(nilCases, name)
 				case result.panicked:
-					// Expected behavior
-					t.Logf("PANIC (correct): %s", result.panicMsg)
+					t.Errorf("PANIC (BUG - should return error): %s", result.panicMsg)
+				case result.errored:
+					// Expected behavior for exact zero divisor
+					t.Logf("ERROR (correct): %s", result.errMsg)
 				case result.success:
 					// This might happen for Float/BigFloat with IEEE infinity
 					t.Logf("SUCCESS (IEEE infinity?)")
@@ -516,7 +544,8 @@ func TestNumericTower_DivisionResultTypes(t *testing.T) {
 		for _, b := range operands {
 			key := a.name + "/" + b.name
 			t.Run(key, func(t *testing.T) {
-				result := a.value.Divide(b.value)
+				result, err := a.value.Divide(b.value)
+				c.Assert(err, qt.IsNil)
 				actualType := fmt.Sprintf("%T", result)
 				expectedType := expectedDiv[key]
 				c.Assert(actualType, qt.Equals, expectedType,
@@ -682,7 +711,13 @@ func TestNumericTower_CoverageMatrix(t *testing.T) {
 		{"Add", func(a, b values.Number) values.Number { return a.Add(b) }},
 		{"Sub", func(a, b values.Number) values.Number { return a.Subtract(b) }},
 		{"Mul", func(a, b values.Number) values.Number { return a.Multiply(b) }},
-		{"Div", func(a, b values.Number) values.Number { return a.Divide(b) }},
+		{"Div", func(a, b values.Number) values.Number {
+			q, err := a.Divide(b)
+			if err != nil {
+				panic(err)
+			}
+			return q
+		}},
 	}
 
 	for _, op := range operations {

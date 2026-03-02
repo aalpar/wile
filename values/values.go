@@ -300,22 +300,19 @@ type ByteVectorExtractor interface {
 // and (*big.Float).Quo all panic on division by zero, and mirrors Go's own
 // runtime behavior for built-in integer division.
 //
-// The panic convention is a deliberate design choice: arithmetic methods return
-// Number (not (Number, error)), keeping the interface algebraic and composable.
-// Callers that need error values should recover panics at their boundary.
-// The VM does this in applyForeign, which recovers panics
-// and converts them to Scheme exceptions catchable by guard and
-// with-exception-handler.
+// Divide returns (Number, error) so callers can propagate division-by-zero
+// without panic/recover. All other arithmetic methods remain single-return
+// because they cannot fail.
 type Number interface {
 	Value
 	Kind() NumericKind
 	Add(Number) Number
 	Subtract(Number) Number
 	Multiply(Number) Number
-	Divide(Number) Number
+	Divide(Number) (Number, error)
 	Negate() Number
 	Abs() Number
-	ToExact() Number
+	ToExact() (Number, error)
 	ToInexact() Number
 	IsZero() bool
 	IsExact() bool

@@ -132,7 +132,7 @@ var bigFloatSubtract [numKinds]func(*BigFloat, Number) Number
 var bigFloatLessThan [numKinds]func(*BigFloat, Number) bool
 var bigFloatCompare [numKinds]func(*BigFloat, Number) int
 var bigFloatMultiply [numKinds]func(*BigFloat, Number) Number
-var bigFloatDivide [numKinds]func(*BigFloat, Number) Number
+var bigFloatDivide [numKinds]func(*BigFloat, Number) (Number, error)
 
 func init() {
 	bigFloatAdd = makeAddDispatch(KindBigFloat, func(p *BigFloat, o Number) Number {
@@ -155,7 +155,7 @@ func init() {
 		return p.Multiply(o)
 	})
 
-	bigFloatDivide = makeDivideDispatch(KindBigFloat, func(p *BigFloat, o Number) Number {
+	bigFloatDivide = makeDivideDispatch(KindBigFloat, func(p *BigFloat, o Number) (Number, error) {
 		return p.Divide(o)
 	})
 }
@@ -219,25 +219,25 @@ func (p *BigFloat) Multiply(o Number) Number {
 }
 
 // Divide returns the quotient of this BigFloat and another number.
-func (p *BigFloat) Divide(o Number) Number {
+func (p *BigFloat) Divide(o Number) (Number, error) {
 	if p.nan || o.IsNaN() {
-		return NewBigFloatNaN()
+		return NewBigFloatNaN(), nil
 	}
 	if o.IsZero() {
 		if o.IsExact() {
-			panic(werr.ErrDivisionByZero)
+			return nil, werr.ErrDivisionByZero
 		}
 		// Inexact zero: IEEE 754 semantics — ±Inf or NaN
 		if p.nan || p.IsZero() {
-			return NewBigFloatNaN()
+			return NewBigFloatNaN(), nil
 		}
-		return NewBigFloat(new(big.Float).SetInf(p.value.Sign() < 0))
+		return NewBigFloat(new(big.Float).SetInf(p.value.Sign() < 0)), nil
 	}
 	v, ok := o.(*BigFloat)
 	if ok {
 		return recoverNaN(func() *BigFloat {
 			return &BigFloat{value: new(big.Float).Quo(p.value, v.value)}
-		})
+		}), nil
 	}
 	return bigFloatDivide[o.Kind()](p, o)
 }
@@ -316,15 +316,16 @@ func (p *BigFloat) IsNaN() bool {
 // ToExact converts this BigFloat to an exact Rational.
 //
 // R7RS §6.2.6: (exact +inf.0) and (exact +nan.0) are errors.
-func (p *BigFloat) ToExact() Number {
+func (p *BigFloat) ToExact() (Number, error) {
 	if p.nan || p.value.IsInf() {
-		panic(werr.WrapForeignErrorf(werr.ErrExactnessConversion, "cannot convert non-finite BigFloat to exact"))
+		return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion,
+			"cannot convert non-finite BigFloat to exact")
 	}
 	r, _ := p.value.Rat(nil)
 	if r == nil {
-		return NewRational(0, 1)
+		return NewRational(0, 1), nil
 	}
-	return NewRationalFromRat(r)
+	return NewRationalFromRat(r), nil
 }
 
 // ToInexact returns this BigFloat unchanged since it's already inexact.

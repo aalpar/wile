@@ -108,19 +108,23 @@ func TestRational_Multiply(t *testing.T) {
 func TestRational_Divide(t *testing.T) {
 	r1 := values.NewRational(1, 2)
 	r2 := values.NewRational(1, 3)
-	result := r1.Divide(r2)
+	result, err := r1.Divide(r2)
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewRational(3, 2))
 
 	i1 := values.NewInteger(2)
-	result = r1.Divide(i1)
+	result, err = r1.Divide(i1)
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewRational(1, 4))
 
 	f1 := values.NewFloat(2.0)
-	result = r1.Divide(f1)
+	result, err = r1.Divide(f1)
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(0.25))
 
 	c1 := values.NewComplex(complex(2, 0))
-	result = r1.Divide(c1)
+	result, err = r1.Divide(c1)
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewBigFloatFromFloat64(0.25))
 }
 

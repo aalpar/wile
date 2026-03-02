@@ -28,27 +28,27 @@ import (
 
 // ── binOps used by tests ─────────────────────────────────────────────
 
-func addOp(a, b values.Number) values.Number {
-	return a.Add(b)
+func addOp(a, b values.Number) (values.Number, error) {
+	return a.Add(b), nil
 }
 
-func mulOp(a, b values.Number) values.Number {
-	return a.Multiply(b)
+func mulOp(a, b values.Number) (values.Number, error) {
+	return a.Multiply(b), nil
 }
 
-func subOp(a, b values.Number) values.Number {
-	return a.Subtract(b)
+func subOp(a, b values.Number) (values.Number, error) {
+	return a.Subtract(b), nil
 }
 
-func negOp(v values.Number) values.Number {
-	return v.Negate()
+func negOp(v values.Number) (values.Number, error) {
+	return v.Negate(), nil
 }
 
-func divOp(a, b values.Number) values.Number {
+func divOp(a, b values.Number) (values.Number, error) {
 	return a.Divide(b)
 }
 
-func recipOp(v values.Number) values.Number {
+func recipOp(v values.Number) (values.Number, error) {
 	return values.NewInteger(1).Divide(v)
 }
 
@@ -61,7 +61,7 @@ func TestNumericFoldVariadic(t *testing.T) {
 		name     string
 		args     values.Value
 		identity values.Number
-		binOp    func(a, b values.Number) values.Number
+		binOp    func(a, b values.Number) (values.Number, error)
 		want     values.Value
 	}{
 		// Addition identity
@@ -193,8 +193,8 @@ func TestNumericFoldWithFirst(t *testing.T) {
 		name    string
 		arg0    values.Value // first arg
 		arg1    values.Value // rest list
-		unaryOp func(values.Number) values.Number
-		binOp   func(a, b values.Number) values.Number
+		unaryOp func(values.Number) (values.Number, error)
+		binOp   func(a, b values.Number) (values.Number, error)
 		want    values.Value
 	}{
 		// Unary negate: (- 5) => -5

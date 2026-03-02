@@ -58,7 +58,8 @@ func TestIntegerExactness(t *testing.T) {
 	c := qt.New(t)
 	i := values.NewInteger(5)
 
-	exact := i.ToExact()
+	exact, err := i.ToExact()
+	c.Assert(err, qt.IsNil)
 	c.Assert(exact, valuestest.SchemeEquals, i)
 
 	inexact := i.ToInexact()
@@ -148,7 +149,8 @@ func TestFloatExactness(t *testing.T) {
 	c := qt.New(t)
 
 	f := values.NewFloat(2.5)
-	exact := f.ToExact()
+	exact, err := f.ToExact()
+	c.Assert(err, qt.IsNil)
 	c.Assert(exact.IsExact(), qt.IsTrue)
 
 	inexact := f.ToInexact()
@@ -244,7 +246,8 @@ func TestComplexExactness(t *testing.T) {
 
 	z := values.NewComplexFromParts(2.0, 3.0)
 
-	exact := z.ToExact()
+	exact, err := z.ToExact()
+	c.Assert(err, qt.IsNil)
 	c.Assert(exact.IsExact(), qt.IsTrue)
 
 	inexact := z.ToInexact()
@@ -319,7 +322,8 @@ func TestRationalExactness(t *testing.T) {
 	c := qt.New(t)
 
 	r := values.NewRational(1, 3)
-	exact := r.ToExact()
+	exact, err := r.ToExact()
+	c.Assert(err, qt.IsNil)
 	c.Assert(exact, valuestest.SchemeEquals, r)
 
 	inexact := r.ToInexact()
@@ -455,19 +459,22 @@ func TestFloatToExactConversions(t *testing.T) {
 
 	// Float that is an integer -> BigInteger
 	intFloat := values.NewFloat(42.0)
-	exact := intFloat.ToExact()
+	exact, err := intFloat.ToExact()
+	c.Assert(err, qt.IsNil)
 	_, isBigInt := exact.(*values.BigInteger)
 	c.Assert(isBigInt, qt.IsTrue)
 
 	// Float that is not an integer -> Rational
 	fracFloat := values.NewFloat(0.5)
-	exactFrac := fracFloat.ToExact()
+	exactFrac, err := fracFloat.ToExact()
+	c.Assert(err, qt.IsNil)
 	_, isRat := exactFrac.(*values.Rational)
 	c.Assert(isRat, qt.IsTrue)
 
 	// Large float
 	largeFloat := values.NewFloat(1e18)
-	exactLarge := largeFloat.ToExact()
+	exactLarge, err := largeFloat.ToExact()
+	c.Assert(err, qt.IsNil)
 	c.Assert(exactLarge.IsExact(), qt.IsTrue)
 }
 

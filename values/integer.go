@@ -163,7 +163,7 @@ var integerSubtract [numKinds]func(*Integer, Number) Number
 var integerLessThan [numKinds]func(*Integer, Number) bool
 var integerCompare [numKinds]func(*Integer, Number) int
 var integerMultiply [numKinds]func(*Integer, Number) Number
-var integerDivide [numKinds]func(*Integer, Number) Number
+var integerDivide [numKinds]func(*Integer, Number) (Number, error)
 
 func init() {
 	integerAdd = makeAddDispatch(KindInteger, func(p *Integer, o Number) Number {
@@ -192,13 +192,13 @@ func init() {
 		return mulInt64(p.Value, o.(*Integer).Value)
 	})
 
-	integerDivide = makeDivideDispatch(KindInteger, func(p *Integer, o Number) Number {
+	integerDivide = makeDivideDispatch(KindInteger, func(p *Integer, o Number) (Number, error) {
 		v := o.(*Integer)
 		result := NewRational(p.Value, v.Value)
 		if result.IsInteger() {
-			return NewInteger(result.NumInt64())
+			return NewInteger(result.NumInt64()), nil
 		}
-		return result
+		return result, nil
 	})
 }
 
@@ -255,17 +255,17 @@ func (p *Integer) Multiply(o Number) Number {
 //
 // R7RS §6.2.2 Exactness: exact / exact = exact (Integer or Rational),
 // exact / inexact = inexact (Float or Complex).
-func (p *Integer) Divide(o Number) Number {
+func (p *Integer) Divide(o Number) (Number, error) {
 	if o.IsZero() && o.IsExact() {
-		panic(werr.ErrDivisionByZero)
+		return nil, werr.ErrDivisionByZero
 	}
 	v, ok := o.(*Integer)
 	if ok {
 		result := NewRational(p.Value, v.Value)
 		if result.IsInteger() {
-			return NewInteger(result.NumInt64())
+			return NewInteger(result.NumInt64()), nil
 		}
-		return result
+		return result, nil
 	}
 	return integerDivide[o.Kind()](p, o)
 }
@@ -304,8 +304,8 @@ func (p *Integer) Negate() Number {
 // ToExact returns this Integer unchanged since it is already exact.
 //
 // R7RS §6.2.6: exact returns an exact representation of its argument.
-func (p *Integer) ToExact() Number {
-	return p
+func (p *Integer) ToExact() (Number, error) {
+	return p, nil
 }
 
 // ToInexact converts this Integer to an inexact Float.

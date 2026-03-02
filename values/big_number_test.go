@@ -66,7 +66,8 @@ func TestBigInteger_Arithmetic(t *testing.T) {
 	c.Assert(prod.(*values.BigInteger).Int64(), qt.Equals, int64(5000))
 
 	// Divide (returns Rational for exact division)
-	quot := bi1.Divide(bi2)
+	quot, err := bi1.Divide(bi2)
+	c.Assert(err, qt.IsNil)
 	c.Assert(quot, qt.IsNotNil)
 
 	// Negate
@@ -117,7 +118,9 @@ func TestBigInteger_Conversions(t *testing.T) {
 	bi := values.NewBigIntegerFromInt64(42)
 
 	// ToExact should return itself
-	c.Assert(bi.ToExact(), valuestest.SchemeEquals, bi)
+	biExact, err := bi.ToExact()
+	c.Assert(err, qt.IsNil)
+	c.Assert(biExact, valuestest.SchemeEquals, bi)
 
 	// ToInexact should return Float
 	inexact := bi.ToInexact()
@@ -207,7 +210,8 @@ func TestBigFloat_Arithmetic(t *testing.T) {
 	c.Assert(prod.(*values.BigFloat).Float64(), qt.Equals, float64(5000.0))
 
 	// Divide
-	quot := bf1.Divide(bf2)
+	quot, err := bf1.Divide(bf2)
+	c.Assert(err, qt.IsNil)
 	c.Assert(quot.(*values.BigFloat).Float64(), qt.Equals, float64(2.0))
 
 	// Negate
@@ -261,7 +265,8 @@ func TestBigFloat_Conversions(t *testing.T) {
 	c.Assert(bf.ToInexact(), valuestest.SchemeEquals, bf)
 
 	// ToExact should return Rational
-	exact := bf.ToExact()
+	exact, err := bf.ToExact()
+	c.Assert(err, qt.IsNil)
 	_, ok := exact.(*values.Rational)
 	c.Assert(ok, qt.IsTrue)
 
@@ -315,20 +320,25 @@ func TestBigInteger_DivisionByZero(t *testing.T) {
 	bi := values.NewBigIntegerFromInt64(100)
 	zero := values.NewBigIntegerFromInt64(0)
 
-	c.Assert(func() { bi.Divide(zero) }, qt.PanicMatches, "division by zero")
+	_, err := bi.Divide(zero)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Matches, "division by zero")
 }
 
 func TestBigFloat_DivisionByZero(t *testing.T) {
 	c := qt.New(t)
 
-	// Division by exact zero panics.
+	// Division by exact zero returns error.
 	bf := values.NewBigFloatFromFloat64(100.0)
 	exactZero := values.NewBigIntegerFromInt64(0)
-	c.Assert(func() { bf.Divide(exactZero) }, qt.PanicMatches, "division by zero")
+	_, err := bf.Divide(exactZero)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Matches, "division by zero")
 
 	// Division by inexact zero returns +Inf per IEEE 754 / R7RS §6.2.6.
 	inexactZero := values.NewBigFloatFromFloat64(0.0)
-	result := bf.Divide(inexactZero)
+	result, err := bf.Divide(inexactZero)
+	c.Assert(err, qt.IsNil)
 	rf, ok := result.(*values.BigFloat)
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(rf.BigFloatValue().IsInf(), qt.IsTrue)
@@ -481,13 +491,16 @@ func TestBigFloat_ErrNaNRecovery(t *testing.T) {
 	negInf := values.NewBigFloat(new(big.Float).SetInf(true))
 	zero := values.NewBigFloatFromFloat64(0.0)
 
+	infDivInf, err := posInf.Divide(posInf)
+	c.Assert(err, qt.IsNil)
+
 	tcs := []struct {
 		name   string
 		result values.Number
 	}{
 		{"+inf + -inf = NaN", posInf.Add(negInf)},
 		{"0 * +inf = NaN", zero.Multiply(posInf)},
-		{"+inf / +inf = NaN", posInf.Divide(posInf)},
+		{"+inf / +inf = NaN", infDivInf},
 		{"+inf - +inf = NaN", posInf.Subtract(posInf)},
 		{"nan + 3 = NaN", values.NewBigFloatNaN().Add(values.NewBigFloatFromFloat64(3))},
 		{"3 + nan = NaN", values.NewBigFloatFromFloat64(3).Add(values.NewBigFloatNaN())},

@@ -71,7 +71,7 @@ var complexSubtract [numKinds]func(*Complex, Number) Number
 var complexLessThan [numKinds]func(*Complex, Number) bool
 var complexCompare [numKinds]func(*Complex, Number) int
 var complexMultiply [numKinds]func(*Complex, Number) Number
-var complexDivide [numKinds]func(*Complex, Number) Number
+var complexDivide [numKinds]func(*Complex, Number) (Number, error)
 
 func init() {
 	complexAdd = makeAddDispatch(KindComplex, func(p *Complex, o Number) Number {
@@ -100,8 +100,8 @@ func init() {
 		return NewComplex(p.Value * o.(*Complex).Value)
 	})
 
-	complexDivide = makeDivideDispatch(KindComplex, func(p *Complex, o Number) Number {
-		return NewComplex(p.Value / o.(*Complex).Value)
+	complexDivide = makeDivideDispatch(KindComplex, func(p *Complex, o Number) (Number, error) {
+		return NewComplex(p.Value / o.(*Complex).Value), nil
 	})
 }
 
@@ -146,13 +146,13 @@ func (p *Complex) Multiply(o Number) Number {
 }
 
 // Divide returns the quotient of this complex number and another number.
-func (p *Complex) Divide(o Number) Number {
+func (p *Complex) Divide(o Number) (Number, error) {
 	if o.IsZero() && o.IsExact() {
-		panic(werr.ErrDivisionByZero)
+		return nil, werr.ErrDivisionByZero
 	}
 	v, ok := o.(*Complex)
 	if ok {
-		return NewComplex(p.Value / v.Value)
+		return NewComplex(p.Value / v.Value), nil
 	}
 	return complexDivide[o.Kind()](p, o)
 }
@@ -189,10 +189,16 @@ func (p *Complex) Abs() Number {
 //
 // R7RS §6.2.6: exact returns an exact representation of its argument.
 // Both real and imaginary parts are converted to exact numbers.
-func (p *Complex) ToExact() Number {
-	realPart := floatToExact(real(p.Value))
-	imagPart := floatToExact(imag(p.Value))
-	return NewBigComplex(realPart, imagPart)
+func (p *Complex) ToExact() (Number, error) {
+	realPart, err := floatToExact(real(p.Value))
+	if err != nil {
+		return nil, err
+	}
+	imagPart, err := floatToExact(imag(p.Value))
+	if err != nil {
+		return nil, err
+	}
+	return NewBigComplex(realPart, imagPart), nil
 }
 
 // ToInexact returns this Complex unchanged since it is already inexact.

@@ -153,19 +153,23 @@ func TestFloat_Multiply(t *testing.T) {
 func TestFloat_Divide(t *testing.T) {
 	f1 := values.NewFloat(10.0)
 	f2 := values.NewFloat(2.0)
-	result := f1.Divide(f2)
+	result, err := f1.Divide(f2)
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(5.0))
 
 	i1 := values.NewInteger(4)
-	result = f1.Divide(i1)
+	result, err = f1.Divide(i1)
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(2.5))
 
 	r1 := values.NewRational(1, 2)
-	result = f1.Divide(r1)
+	result, err = f1.Divide(r1)
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(20.0))
 
 	c1 := values.NewComplex(complex(2, 0))
-	result = f1.Divide(c1)
+	result, err = f1.Divide(c1)
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(5, 0)))
 }
 
@@ -221,7 +225,8 @@ func TestFloat_ToExact(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			f := values.NewFloat(tc.input)
-			result := f.ToExact()
+			result, err := f.ToExact()
+			c.Assert(err, qt.IsNil)
 			c.Assert(result, valuestest.SchemeEquals, tc.want)
 		})
 	}
@@ -251,26 +256,11 @@ func TestFloat_ToExact_NonFinite(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			// This test will panic before the fix is applied.
-			// After the fix, ToExact should return an error (via panic with ForeignError).
-			defer func() {
-				r := recover()
-				if r == nil {
-					t.Fatal("expected panic for non-finite float")
-				}
-				// Verify it's a ForeignError wrapping ErrExactnessConversion
-				fe, ok := r.(*werr.ForeignError)
-				if !ok {
-					t.Fatalf("expected ForeignError, got %T: %v", r, r)
-				}
-				if !errors.Is(fe, werr.ErrExactnessConversion) {
-					t.Fatalf("expected error wrapping ErrExactnessConversion, got: %v", fe)
-				}
-			}()
-
+			c := qt.New(t)
 			f := values.NewFloat(tc.input)
-			// This should panic with a ForeignError
-			_ = f.ToExact()
+			_, err := f.ToExact()
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(errors.Is(err, werr.ErrExactnessConversion), qt.IsTrue)
 		})
 	}
 }

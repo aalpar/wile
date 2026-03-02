@@ -180,7 +180,8 @@ func TestBigIntegerArithmeticFloatPrecision(t *testing.T) {
 
 	t.Run("Divide: 2^54 / 2.0", func(t *testing.T) {
 		floatTwo := values.NewFloat(2.0)
-		result := bigInt.Divide(floatTwo)
+		result, err := bigInt.Divide(floatTwo)
+		c.Assert(err, qt.IsNil)
 		c.Assert(result, qt.Not(qt.IsNil))
 		// Result should be 2^53
 	})

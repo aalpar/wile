@@ -27,27 +27,39 @@ import (
 // PrimAdd implements the + primitive.
 func PrimAdd(mc *machine.MachineContext) error {
 	return helpers.NumericFoldVariadic(mc, "+", values.NewInteger(0),
-		func(acc, val values.Number) values.Number { return acc.Add(val) })
+		func(acc, val values.Number) (values.Number, error) {
+			return acc.Add(val), nil
+		})
 }
 
 // PrimSub implements the - primitive.
 func PrimSub(mc *machine.MachineContext) error {
 	return helpers.NumericFoldWithFirst(mc, "-",
-		func(val values.Number) values.Number { return values.NewInteger(0).Subtract(val) },
-		func(acc, val values.Number) values.Number { return acc.Subtract(val) })
+		func(val values.Number) (values.Number, error) {
+			return values.NewInteger(0).Subtract(val), nil
+		},
+		func(acc, val values.Number) (values.Number, error) {
+			return acc.Subtract(val), nil
+		})
 }
 
 // PrimMul implements the * primitive.
 func PrimMul(mc *machine.MachineContext) error {
 	return helpers.NumericFoldVariadic(mc, "*", values.NewInteger(1),
-		func(acc, val values.Number) values.Number { return acc.Multiply(val) })
+		func(acc, val values.Number) (values.Number, error) {
+			return acc.Multiply(val), nil
+		})
 }
 
 // PrimDiv implements the / primitive.
 func PrimDiv(mc *machine.MachineContext) error {
 	return helpers.NumericFoldWithFirst(mc, "/",
-		func(val values.Number) values.Number { return values.NewInteger(1).Divide(val) },
-		func(acc, val values.Number) values.Number { return acc.Divide(val) })
+		func(val values.Number) (values.Number, error) {
+			return values.NewInteger(1).Divide(val)
+		},
+		func(acc, val values.Number) (values.Number, error) {
+			return acc.Divide(val)
+		})
 }
 
 // numericEquals compares two numbers for equality.
@@ -330,7 +342,11 @@ func PrimExact(mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	mc.SetValue(n.ToExact())
+	result, err := n.ToExact()
+	if err != nil {
+		return err
+	}
+	mc.SetValue(result)
 	return nil
 }
 
