@@ -210,7 +210,7 @@ func PrimSqrt(mc *machine.MachineContext) error {
 		}
 		f := new(big.Float).SetInt(bi)
 		if bi.Sign() < 0 {
-			mc.SetValue(values.NewComplex(cmplx.Sqrt(complex(numberToFloat64(v), 0))))
+			mc.SetValue(values.NewComplex(cmplx.Sqrt(complex(values.NumberToFloat64(v), 0))))
 		} else {
 			mc.SetValue(values.NewBigFloat(new(big.Float).Sqrt(f)))
 		}
@@ -1105,26 +1105,6 @@ func exactIntegerSqrt(n int64) (int64, bool) {
 		return root, true
 	}
 	return 0, false
-}
-
-// numberToFloat64 converts any real Number to float64 for fallback computations.
-func numberToFloat64(n values.Number) float64 {
-	switch v := n.(type) {
-	case *values.Integer:
-		return float64(v.Value)
-	case *values.BigInteger:
-		f, _ := new(big.Float).SetInt(v.BigInt()).Float64()
-		return f
-	case *values.Float:
-		return v.Value
-	case *values.BigFloat:
-		f, _ := v.BigFloatValue().Float64()
-		return f
-	case *values.Rational:
-		return v.Float64()
-	default:
-		return math.NaN()
-	}
 }
 
 // isRealNumber returns true if the value is a real number (not complex).
