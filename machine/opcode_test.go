@@ -66,3 +66,14 @@ func TestOpcodeStringUnknown(t *testing.T) {
 	c := qt.New(t)
 	c.Assert(OpCode(9999).String(), qt.Equals, "Unknown")
 }
+
+// TestOpcodeTableComplete ensures every valid opcode has an entry in
+// opcodeTable. Adding a new OpCode constant without a table entry
+// causes this test to fail.
+func TestOpcodeTableComplete(t *testing.T) {
+	c := qt.New(t)
+	for op := OpCode(1); op < opCount; op++ {
+		c.Assert(opcodeTable[op].name, qt.Not(qt.Equals), "",
+			qt.Commentf("opcode %d has no name in opcodeTable", op))
+	}
+}

@@ -179,10 +179,9 @@ func buildEditRemap(edits []edit, codeLen int) []int {
 
 // isBranchOp returns true for opcodes whose Arg is a relative PC offset
 // that must be adjusted when instructions are removed or inserted.
+// Derived from opcodeTable metadata.
 func isBranchOp(op OpCode) bool {
-	return op == OpBranch ||
-		op == OpBranchOnFalseValue ||
-		op == OpSaveContinuation
+	return opcodeTable[op].isBranch
 }
 
 // fixSurvivingBranches adjusts branch offsets for original instructions

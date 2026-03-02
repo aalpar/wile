@@ -20,13 +20,13 @@ package machine
 // values use OpComplex with a side table index.
 //
 // Adding a new opcode requires changes in:
-//  1. opcode.go — add OpXxx constant and entry in opcodeNames
+//  1. opcode.go — add OpXxx constant and entry in opcodeTable (name + metadata flags)
 //  2. machine_context.go Run() — add dispatch case in the main switch
 //  3. native_template.go — add cases in both operationToInstruction() and instructionToOperation()
 //  4. operation_xxx.go — create new operation type (or add to existing file)
 //  5. compile_*.go — add compiler method to emit the new opcode
 //  6. Relevant _test.go files
-//  7. peephole.go — if the new op participates in fusion/chaining
+//  7. peephole.go — if the new op participates in fusion/chaining (e.g. loadToFusedPush)
 type OpCode uint16
 
 const (
@@ -79,42 +79,57 @@ const (
 	opCount
 )
 
-// opcodeNames maps each OpCode to its string representation.
+// opcodeInfo holds metadata for a single opcode. All opcode properties are
+// centralized here so that adding a new opcode requires updating exactly one
+// table entry rather than maintaining parallel arrays and predicates.
+type opcodeInfo struct {
+	name        string
+	writesValue bool // unconditionally writes value register without reading it first
+	isBranch    bool // Arg is a relative PC offset that needs fixup
+}
+
+// opcodeTable is the single source of truth for opcode metadata.
 // Indexed by OpCode value; must stay in sync with the const block above.
-var opcodeNames = [opCount]string{
-	OpInvalid:             "Invalid",
-	OpPush:                "Push",
-	OpPop:                 "Pop",
-	OpPull:                "Pull",
-	OpLoadVoid:            "LoadVoid",
-	OpDrop:                "Drop",
-	OpPopEnv:              "PopEnv",
-	OpApply:               "Apply",
-	OpUnpackListToStack:   "UnpackListToStack",
-	OpRestoreContinuation: "RestoreContinuation",
-	OpBranchOnFalseValue:  "BranchOnFalseValue",
-	OpBranch:              "Branch",
-	OpSaveContinuation:    "SaveContinuation",
-	OpLoadLiteral:         "LoadLiteral",
-	OpLoadGlobal:          "LoadGlobal",
-	OpStoreGlobal:         "StoreGlobal",
-	OpPeekK:               "PeekK",
-	OpLoadLocal:           "LoadLocal",
-	OpStoreLocal:          "StoreLocal",
-	OpPushLiteral:         "PushLiteral",
-	OpPushGlobal:          "PushGlobal",
-	OpPushLocal:           "PushLocal",
-	OpPullApply:           "PullApply",
-	OpMakeClosure:         "MakeClosure",
-	OpLoadCachedBinding:   "LoadCachedBinding",
-	OpPushCachedBinding:   "PushCachedBinding",
-	OpComplex:             "Complex",
+//
+// writesValue: opcode unconditionally overwrites the value register, making
+// a preceding LoadVoid dead. Only applies to original (non-fused) opcodes.
+//
+// isBranch: opcode's Arg is a relative PC offset that must be adjusted
+// when instructions are removed or inserted by the edit plan.
+var opcodeTable = [opCount]opcodeInfo{
+	OpInvalid:             {name: "Invalid"},
+	OpPush:                {name: "Push"},
+	OpPop:                 {name: "Pop", writesValue: true},
+	OpPull:                {name: "Pull", writesValue: true},
+	OpLoadVoid:            {name: "LoadVoid", writesValue: true},
+	OpDrop:                {name: "Drop"},
+	OpPopEnv:              {name: "PopEnv"},
+	OpApply:               {name: "Apply"},
+	OpUnpackListToStack:   {name: "UnpackListToStack"},
+	OpRestoreContinuation: {name: "RestoreContinuation"},
+	OpBranchOnFalseValue:  {name: "BranchOnFalseValue", isBranch: true},
+	OpBranch:              {name: "Branch", isBranch: true},
+	OpSaveContinuation:    {name: "SaveContinuation", isBranch: true},
+	OpLoadLiteral:         {name: "LoadLiteral", writesValue: true},
+	OpLoadGlobal:          {name: "LoadGlobal", writesValue: true},
+	OpStoreGlobal:         {name: "StoreGlobal"},
+	OpPeekK:               {name: "PeekK", writesValue: true},
+	OpLoadLocal:           {name: "LoadLocal", writesValue: true},
+	OpStoreLocal:          {name: "StoreLocal"},
+	OpPushLiteral:         {name: "PushLiteral"},
+	OpPushGlobal:          {name: "PushGlobal"},
+	OpPushLocal:           {name: "PushLocal"},
+	OpPullApply:           {name: "PullApply"},
+	OpMakeClosure:         {name: "MakeClosure", writesValue: true},
+	OpLoadCachedBinding:   {name: "LoadCachedBinding", writesValue: true},
+	OpPushCachedBinding:   {name: "PushCachedBinding"},
+	OpComplex:             {name: "Complex"},
 }
 
 // String returns the human-readable name of the opcode.
 func (op OpCode) String() string {
 	if op < opCount {
-		return opcodeNames[op]
+		return opcodeTable[op].name
 	}
 	return "Unknown"
 }

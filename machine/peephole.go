@@ -55,17 +55,9 @@ func (p *NativeTemplate) optimizeSubTemplates() {
 
 // writesValueRegister returns true for opcodes that unconditionally write
 // to the value register without reading it first, making a preceding
-// LoadVoid dead.
+// LoadVoid dead. Derived from opcodeTable metadata.
 func writesValueRegister(op OpCode) bool {
-	return op == OpLoadVoid ||
-		op == OpLoadLiteral ||
-		op == OpLoadGlobal ||
-		op == OpLoadLocal ||
-		op == OpLoadCachedBinding ||
-		op == OpPop ||
-		op == OpPull ||
-		op == OpPeekK ||
-		op == OpMakeClosure
+	return opcodeTable[op].writesValue
 }
 
 // markDeadLoadVoidEdits scans code[0..len-2] and adds Delete edits for
