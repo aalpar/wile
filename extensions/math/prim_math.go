@@ -294,7 +294,8 @@ func exptExact(num, denom *big.Int, exp int64) values.Number {
 		d := new(big.Int).Exp(denom, e, nil)
 		return values.Simplify(values.NewRationalFromBigInt(n, d))
 	}
-	absE := big.NewInt(-exp)
+	// Use big.Int.Abs to avoid int64 overflow when exp == math.MinInt64.
+	absE := new(big.Int).Abs(big.NewInt(exp))
 	// Invert: (num/denom)^(-e) = (denom^e)/(num^e)
 	n := new(big.Int).Exp(denom, absE, nil)
 	d := new(big.Int).Exp(num, absE, nil)

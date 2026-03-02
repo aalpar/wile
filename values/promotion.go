@@ -269,9 +269,11 @@ func isSpecialFloat(f *Float) bool {
 	return math.IsInf(f.Value, 0) || math.IsNaN(f.Value)
 }
 
-// NumberToFloat64 converts any Number to float64. Precision loss is acceptable
-// because the result is only used in the IEEE 754 Inf/NaN guard, where the
-// special value dominates the result regardless of the other operand's magnitude.
+// NumberToFloat64 converts any Number to a best-effort float64 approximation.
+// BigInteger, BigFloat, and Rational values lose precision in the conversion.
+// For Complex inputs, only the real component is returned; for BigComplex,
+// the real part is converted via toBigFloat. Callers must not rely on this
+// function to reject complex values.
 func NumberToFloat64(n Number) float64 {
 	switch v := n.(type) {
 	case *Integer:
@@ -293,11 +295,10 @@ func NumberToFloat64(n Number) float64 {
 	panic(werr.ErrNotANumber)
 }
 
-// NumberToComplex128 converts any Number to complex128 for the IEEE 754
-// Inf/NaN guard path in the Float×BigComplex case. Precision loss (Tier 4) is
-// acceptable because Inf/NaN dominates the result; the imaginary part of the
-// non-Float operand is extracted at float64 precision for the same reason.
-// See plans/PRECISION-GUARANTEES.md.
+// NumberToComplex128 converts any Number to complex128. BigFloat and
+// BigComplex values are reduced to float64/complex128 precision. This is
+// intended for paths where precision loss is acceptable, such as IEEE 754
+// Inf/NaN guards and inexact complex arithmetic in extensions.
 func NumberToComplex128(n Number) complex128 {
 	switch v := n.(type) {
 	case *Integer:
