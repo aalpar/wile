@@ -210,7 +210,7 @@ func PrimSqrt(mc *machine.MachineContext) error {
 		}
 		f := new(big.Float).SetInt(bi)
 		if bi.Sign() < 0 {
-			mc.SetValue(values.NewComplex(cmplx.Sqrt(complex(numberToFloat64(v), 0))))
+			mc.SetValue(values.NewComplex(cmplx.Sqrt(complex(values.NumberToFloat64(v), 0))))
 		} else {
 			mc.SetValue(values.NewBigFloat(new(big.Float).Sqrt(f)))
 		}
@@ -282,6 +282,26 @@ func complexSqrtR7RS(z complex128) complex128 {
 	return cmplx.Sqrt(z)
 }
 
+var bigOne = big.NewInt(1)
+
+// exptExact computes (num/denom)^exp exactly.
+// For integer bases, pass denom as 1 (use bigOne).
+// Result is always simplified via values.Simplify.
+func exptExact(num, denom *big.Int, exp int64) values.Number {
+	if exp >= 0 {
+		e := big.NewInt(exp)
+		n := new(big.Int).Exp(num, e, nil)
+		d := new(big.Int).Exp(denom, e, nil)
+		return values.Simplify(values.NewRationalFromBigInt(n, d))
+	}
+	// Use big.Int.Abs to avoid int64 overflow when exp == math.MinInt64.
+	absE := new(big.Int).Abs(big.NewInt(exp))
+	// Invert: (num/denom)^(-e) = (denom^e)/(num^e)
+	n := new(big.Int).Exp(denom, absE, nil)
+	d := new(big.Int).Exp(num, absE, nil)
+	return values.Simplify(values.NewRationalFromBigInt(n, d))
+}
+
 // PrimExpt implements the (expt) primitive.
 func PrimExpt(mc *machine.MachineContext) error {
 	base := mc.Arg(0)
@@ -295,149 +315,40 @@ func PrimExpt(mc *machine.MachineContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotANumber, "expt: expected a number but got %T", exp)
 	}
 
-	expInt, ok := expNum.(*values.Integer)
+	e, ok := values.ExactInteger(expNum)
 	if ok {
-		e := expInt.Value
-
-		baseInt, ok := baseNum.(*values.Integer)
-		if ok {
-			if e >= 0 {
-				// Use big.Int to avoid overflow, then simplify if possible
-				baseBig := big.NewInt(baseInt.Value)
-				result := new(big.Int).Exp(baseBig, big.NewInt(e), nil)
-				// Try to fit in int64, otherwise return BigInteger
-				if result.IsInt64() {
-					mc.SetValue(values.NewInteger(result.Int64()))
-				} else {
-					mc.SetValue(values.NewBigInteger(result))
-				}
-				return nil
-			}
-			// Negative exponent: compute 1 / base^|e|
-			absE := -e
-			baseBig := big.NewInt(baseInt.Value)
-			denom := new(big.Int).Exp(baseBig, big.NewInt(absE), nil)
-			mc.SetValue(values.NewRationalFromBigInt(big.NewInt(1), denom))
+		switch b := baseNum.(type) {
+		case *values.Integer:
+			mc.SetValue(exptExact(big.NewInt(b.Value), bigOne, e))
+			return nil
+		case *values.BigInteger:
+			mc.SetValue(exptExact(b.BigInt(), bigOne, e))
+			return nil
+		case *values.Rational:
+			mc.SetValue(exptExact(b.Num(), b.Denom(), e))
 			return nil
 		}
-
-		baseBig, ok := baseNum.(*values.BigInteger)
-		if ok {
-			if e >= 0 {
-				result := new(big.Int).Exp(baseBig.BigInt(), big.NewInt(e), nil)
-				mc.SetValue(values.NewBigInteger(result))
-				return nil
-			}
-			absE := -e
-			denom := new(big.Int).Exp(baseBig.BigInt(), big.NewInt(absE), nil)
-			mc.SetValue(values.NewRationalFromBigInt(big.NewInt(1), denom))
-			return nil
-		}
-
-		baseRat, ok := baseNum.(*values.Rational)
-		if ok {
-			num := baseRat.Num()
-			denom := baseRat.Denom()
-			if e >= 0 {
-				numResult := new(big.Int).Exp(num, big.NewInt(e), nil)
-				denomResult := new(big.Int).Exp(denom, big.NewInt(e), nil)
-				result := values.NewRationalFromBigInt(numResult, denomResult)
-				if result.IsInteger() {
-					mc.SetValue(values.NewInteger(result.NumInt64()))
-					return nil
-				}
-				mc.SetValue(result)
-				return nil
-			}
-			absE := -e
-			numResult := new(big.Int).Exp(denom, big.NewInt(absE), nil)
-			denomResult := new(big.Int).Exp(num, big.NewInt(absE), nil)
-			result := values.NewRationalFromBigInt(numResult, denomResult)
-			if result.IsInteger() {
-				mc.SetValue(values.NewInteger(result.NumInt64()))
-				return nil
-			}
-			mc.SetValue(result)
-			return nil
-		}
+		// Non-exact base types (Float, Complex, etc.) fall through
+		// to inexact paths below.
 	}
 
-	switch b := baseNum.(type) {
-	case *values.Complex:
-		switch e := expNum.(type) {
-		case *values.Complex:
-			mc.SetValue(values.NewComplex(cmplx.Pow(b.Value, e.Value)))
-		case *values.Float:
-			mc.SetValue(values.NewComplex(cmplx.Pow(b.Value, complex(e.Value, 0))))
-		case *values.Integer:
-			mc.SetValue(values.NewComplex(cmplx.Pow(b.Value, complex(float64(e.Value), 0))))
-		case *values.Rational:
-			mc.SetValue(values.NewComplex(cmplx.Pow(b.Value, complex(e.Float64(), 0))))
-		case *values.BigComplex:
-			eReal := e.RealAsBigFloat().Float64()
-			eImag := e.ImagAsBigFloat().Float64()
-			mc.SetValue(values.NewComplex(cmplx.Pow(b.Value, complex(eReal, eImag))))
-		}
-	case *values.BigComplex:
-		bReal := b.RealAsBigFloat().Float64()
-		bImag := b.ImagAsBigFloat().Float64()
-		bComplex := complex(bReal, bImag)
-		switch e := expNum.(type) {
-		case *values.Complex:
-			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, e.Value)))
-		case *values.Float:
-			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(e.Value, 0))))
-		case *values.Integer:
-			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(float64(e.Value), 0))))
-		case *values.Rational:
-			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(e.Float64(), 0))))
-		case *values.BigComplex:
-			eReal := e.RealAsBigFloat().Float64()
-			eImag := e.ImagAsBigFloat().Float64()
-			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(eReal, eImag))))
-		case *values.BigInteger:
-			ef, _ := e.BigInt().Float64()
-			mc.SetValue(values.NewComplex(cmplx.Pow(bComplex, complex(ef, 0))))
-		}
+	switch baseNum.(type) {
+	case *values.Complex, *values.BigComplex:
+		mc.SetValue(values.NewComplex(cmplx.Pow(
+			values.NumberToComplex128(baseNum),
+			values.NumberToComplex128(expNum))))
 	default:
-		// L17: Handle BigInteger ^ exact non-negative integer for exact result
-		baseBI, ok := baseNum.(*values.BigInteger)
-		if ok {
-			expInt, isInt := values.ExactInteger(expNum)
-			if isInt && expInt >= 0 {
-				// Use big.Int.Exp for exact integer exponentiation
-				result := new(big.Int).Exp(baseBI.BigInt(), big.NewInt(expInt), nil)
-				simplified := values.Simplify(values.NewBigInteger(result))
-				mc.SetValue(simplified)
-				return nil
-			}
-			// Fall through to float path for negative/fractional exponents
-		}
-
-		var bf float64
-		switch v := baseNum.(type) {
-		case *values.Integer:
-			bf = float64(v.Value)
-		case *values.BigInteger:
-			bf, _ = new(big.Float).SetInt(v.BigInt()).Float64()
-		case *values.Float:
-			bf = v.Value
-		case *values.Rational:
-			bf = v.Float64()
-		}
-		var ef float64
-		switch v := expNum.(type) {
-		case *values.Integer:
-			ef = float64(v.Value)
-		case *values.Float:
-			ef = v.Value
-		case *values.Rational:
-			ef = v.Float64()
-		case *values.Complex:
-			mc.SetValue(values.NewComplex(cmplx.Pow(complex(bf, 0), v.Value)))
+		// Complex exponent with real base
+		switch expNum.(type) {
+		case *values.Complex, *values.BigComplex:
+			mc.SetValue(values.NewComplex(cmplx.Pow(
+				complex(values.NumberToFloat64(baseNum), 0),
+				values.NumberToComplex128(expNum))))
 			return nil
 		}
-		mc.SetValue(values.NewFloat(math.Pow(bf, ef)))
+		mc.SetValue(values.NewFloat(math.Pow(
+			values.NumberToFloat64(baseNum),
+			values.NumberToFloat64(expNum))))
 	}
 	return nil
 }
@@ -1042,32 +953,9 @@ func PrimMakeRectangular(mc *machine.MachineContext) error {
 	}
 
 	// Use regular Complex for inexact numbers
-	var realPart, imagPart float64
-	switch v := r.(type) {
-	case *values.Integer:
-		realPart = float64(v.Value)
-	case *values.Float:
-		realPart = v.Value
-	case *values.Rational:
-		realPart = v.Float64()
-	case *values.BigInteger:
-		realPart, _ = new(big.Float).SetInt(v.BigInt()).Float64()
-	default:
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "make-rectangular: expected a real number but got %T", r)
-	}
-	switch v := i.(type) {
-	case *values.Integer:
-		imagPart = float64(v.Value)
-	case *values.Float:
-		imagPart = v.Value
-	case *values.Rational:
-		imagPart = v.Float64()
-	case *values.BigInteger:
-		imagPart, _ = new(big.Float).SetInt(v.BigInt()).Float64()
-	default:
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "make-rectangular: expected a real number but got %T", i)
-	}
-	mc.SetValue(values.NewComplexFromParts(realPart, imagPart))
+	mc.SetValue(values.NewComplexFromParts(
+		values.NumberToFloat64(rNum),
+		values.NumberToFloat64(iNum)))
 	return nil
 }
 
@@ -1105,26 +993,6 @@ func exactIntegerSqrt(n int64) (int64, bool) {
 		return root, true
 	}
 	return 0, false
-}
-
-// numberToFloat64 converts any real Number to float64 for fallback computations.
-func numberToFloat64(n values.Number) float64 {
-	switch v := n.(type) {
-	case *values.Integer:
-		return float64(v.Value)
-	case *values.BigInteger:
-		f, _ := new(big.Float).SetInt(v.BigInt()).Float64()
-		return f
-	case *values.Float:
-		return v.Value
-	case *values.BigFloat:
-		f, _ := v.BigFloatValue().Float64()
-		return f
-	case *values.Rational:
-		return v.Float64()
-	default:
-		return math.NaN()
-	}
 }
 
 // isRealNumber returns true if the value is a real number (not complex).

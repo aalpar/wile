@@ -60,7 +60,7 @@ Cross-references to overlapping findings are noted where relevant.
 
 ---
 
-### N4 [Priority: Medium] — PrimExpt: ~230-line function with nested type dispatch
+### N4 [Priority: Medium] [COMPLETE] — PrimExpt: ~230-line function with nested type dispatch
 
 **Where**: `extensions/math/prim_math.go:229+`
 **What**: `PrimExpt` handles integer/rational/float/complex exponentiation with nested type switches on both base and exponent. Manual type checking instead of `helpers.RequireArg[T]()`. Also `PrimMakeRectangular` (~100 lines) with similar patterns and repeated error messages (~8 instances of identical WrapForeignErrorf with only field name changes).
