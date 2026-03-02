@@ -16,28 +16,20 @@ package machine_test
 
 // Scope resolution divergence test suite.
 //
-// Three code paths implement Flatt's "bindingScopes ⊆ useScopes" scope
-// resolution, each for a different purpose:
+// Two code paths implement Flatt's "bindingScopes ⊆ useScopes" scope resolution:
 //
-//   Path 1 — Expander (machine/expander_time_continuation.go)
-//     hasLocalVariableBinding: decides whether a local variable shadows a macro.
-//     Checks binding-site scopes. If yes, ExpandSyntaxExpression skips macro lookup.
+//   Path 1 — Shadow detection (environment/environment_frame.go)
+//     HasLocalVariableBinding: shared by both the expander (macro shadow check)
+//     and the validator (special form shadow check). Checks binding-site scopes.
 //
-//   Path 2 — Validator (internal/validate/validate.go)
-//     hasLocalVariableBinding: decides whether a local variable shadows a special form.
-//     Nearly identical algorithm to the expander's. Used by validateForm dispatch.
-//
-//   Path 3 — Compiler (machine/compile_time_continuation.go)
+//   Path 2 — Compiler (machine/compile_time_continuation.go)
 //     CompileSymbol: dispatches between local/global/scoped code generation.
 //     Checks use-site scopes for fast-path, then uses GetLocalIndexWithScopes /
 //     GetBindingWithScopes for scope-aware lookup.
 //
-// A bug fix in one path but not the others causes silent divergence. These tests
+// A bug fix in one path but not the other causes silent divergence. These tests
 // exercise identical scope scenarios through the full expand → validate → compile
 // → run pipeline, catching divergence by checking runtime results.
-//
-// If the expander says "this local variable shadows the macro" but the validator
-// or compiler disagrees, the result is either a compile error or a wrong value.
 //
 // See plans/STAFF_ENGINEER_REVIEW.md N6.
 
@@ -103,10 +95,9 @@ func evalScopeSyntax(env *environment.EnvironmentFrame, sv syntax.SyntaxValue) (
 //
 // Path exercise:
 //
-//	Expander:  ExpandSymbol returns symbol unchanged (no macro lookup needed)
-//	Validator: validateExpr → ValidatedSymbol (no special form to shadow)
-//	Compiler:  CompileSymbol no-scope fast path (len(symbolScopes) == 0)
-//	           → GetLocalIndex / GetGlobalIndex
+//	Shadow:   HasLocalVariableBinding not reached (no special form / macro in head)
+//	Compiler: CompileSymbol no-scope fast path (len(symbolScopes) == 0)
+//	          → GetLocalIndex / GetGlobalIndex
 func TestScopeResolution_NoScopes(t *testing.T) {
 	tcs := []struct {
 		name  string
@@ -158,12 +149,10 @@ func TestScopeResolution_NoScopes(t *testing.T) {
 //
 // Path exercise:
 //
-//	Expander:  hasLocalVariableBinding returns true → ExpandSyntaxExpression
-//	           treats (and ...) as a regular procedure call, not a macro.
-//	Validator: hasLocalVariableBinding returns true → validateForm falls through
-//	           to validateCall instead of recognizing 'and' as a special form.
-//	Compiler:  CompileSymbol no-scope path → GetLocalIndex finds the let binding,
-//	           emits LoadLocal (not macro expansion output).
+//	Shadow:   HasLocalVariableBinding returns true → expander skips macro lookup,
+//	          validator falls through to validateCall.
+//	Compiler: CompileSymbol no-scope path → GetLocalIndex finds the let binding,
+//	          emits LoadLocal (not macro expansion output).
 //
 // Divergence detection: if the expander still expands 'and' as a macro while
 // the compiler resolves it as a local variable, the compiled code operates on
@@ -238,13 +227,10 @@ func TestScopeResolution_LetShadowsMacro(t *testing.T) {
 //
 // Path exercise:
 //
-//	Expander:  ExpandExpression adds intro scope to macro output; free identifiers
-//	           in the template skip intro scope. hasLocalVariableBinding checks
-//	           ScopesMatch for the macro-introduced binding.
-//	Validator: hasLocalVariableBinding checks scope compatibility for special
-//	           forms that appear in macro output.
-//	Compiler:  CompileSymbol scoped path (len(symbolScopes) > 0) →
-//	           GetLocalIndexWithScopes finds the correct scoped binding.
+//	Shadow:   HasLocalVariableBinding checks ScopesMatch for macro-introduced
+//	          bindings in both expander and validator contexts.
+//	Compiler: CompileSymbol scoped path (len(symbolScopes) > 0) →
+//	          GetLocalIndexWithScopes finds the correct scoped binding.
 //
 // Divergence detection: if the compiler's GetLocalIndexWithScopes disagrees with
 // the expander's ScopesMatch about which binding a scoped symbol refers to,
@@ -322,12 +308,10 @@ func TestScopeResolution_MacroHygiene(t *testing.T) {
 //
 // Path exercise:
 //
-//	Expander:  hasLocalVariableBinding returns true for the shadowed 'if' →
-//	           ExpandPrimitiveForm is NOT called; form is treated as a call.
-//	Validator: hasLocalVariableBinding returns true → validateForm does NOT
-//	           dispatch to validateIf; falls through to validateCall.
-//	Compiler:  CompileSymbol → GetLocalIndex finds the local binding; compiles
-//	           as a variable load, not as a conditional branch.
+//	Shadow:   HasLocalVariableBinding returns true → expander skips primitive
+//	          expansion, validator falls through to validateCall.
+//	Compiler: CompileSymbol → GetLocalIndex finds the local binding; compiles
+//	          as a variable load, not as a conditional branch.
 //
 // Divergence detection: if the validator still recognizes 'if' as a special
 // form while the expander treats it as a variable, the validator produces a
@@ -375,11 +359,10 @@ func TestScopeResolution_SpecialFormShadowing(t *testing.T) {
 //
 // Path exercise:
 //
-//	Expander:  Each macro invocation adds an intro scope. The second expansion
-//	           sees symbols with accumulated scopes from the first expansion.
-//	           hasLocalVariableBinding must handle growing scope sets.
-//	Compiler:  CompileSymbol scoped path → GetLocalIndexWithScopes must find
-//	           the maximally-specific binding among multiple scoped candidates.
+//	Shadow:   HasLocalVariableBinding must handle growing scope sets as each
+//	          macro invocation adds an intro scope.
+//	Compiler: CompileSymbol scoped path → GetLocalIndexWithScopes must find
+//	          the maximally-specific binding among multiple scoped candidates.
 //
 // Divergence detection: if scope set accumulation differs between the expander
 // (which adds scopes during expansion) and the compiler (which resolves during
@@ -447,11 +430,10 @@ func TestScopeResolution_NestedMacros(t *testing.T) {
 //
 // Path exercise:
 //
-//	Expander:  Free identifiers skip intro scope during template expansion.
-//	           They carry definition-time scopes / ResolvedBinding.
-//	Compiler:  CompileSymbol → ResolvedBinding path (lines 87-107) for
-//	           cross-scope references, or GetBindingWithScopes for global
-//	           bindings with scope metadata.
+//	Shadow:   HasLocalVariableBinding returns false (free identifiers resolve
+//	          to definition-time globals, not local variables).
+//	Compiler: CompileSymbol → ResolvedBinding path for cross-scope references,
+//	          or GetBindingWithScopes for global bindings with scope metadata.
 //
 // Divergence detection: if free identifier resolution differs between expander
 // (which sets ResolvedBinding) and compiler (which reads it), the macro
@@ -509,12 +491,10 @@ func TestScopeResolution_FreeIdentifiers(t *testing.T) {
 //
 // Path exercise:
 //
-//	Expander:  expandLetSyntaxImpl creates a child expand environment with the
-//	           let-syntax binding. Body expansion sees the new scope.
-//	Validator: hasLocalVariableBinding checks the binding created by let-syntax
-//	           body wrapping (lambda scope from begin wrapper).
-//	Compiler:  CompileSymbol resolves through the scoped environment created
-//	           during expansion.
+//	Shadow:   HasLocalVariableBinding checks the binding created by let-syntax
+//	          body wrapping (lambda scope from begin wrapper).
+//	Compiler: CompileSymbol resolves through the scoped environment created
+//	          during expansion.
 //
 // Divergence detection: if let-syntax scope handling differs between the
 // expander (which creates the scope) and the compiler (which resolves through
