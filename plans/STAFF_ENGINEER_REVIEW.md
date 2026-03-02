@@ -80,7 +80,7 @@ Cross-references to overlapping findings are noted where relevant.
 
 ---
 
-### N6 [Priority: Medium] — Compiler/expander parallel structure divergence risk
+### N6 [Priority: Medium] [COMPLETE] — Compiler/expander parallel structure divergence risk
 
 **Where**: `machine/compile_time_continuation.go` (454 lines + 2053 in include/library/quasiquote supplements), `machine/expander_time_continuation.go` (1526 lines)
 **What**: Both implement scope-aware binding resolution with nearly-parallel entry points (`CompileExpression`/`ExpandExpression`, `CompileSymbol`/`ExpandSymbol`). They share the Flatt model but for different purposes (codegen vs. macro expansion). CLAUDE.local.md acknowledges this.
