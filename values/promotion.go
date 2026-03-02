@@ -269,10 +269,10 @@ func isSpecialFloat(f *Float) bool {
 	return math.IsInf(f.Value, 0) || math.IsNaN(f.Value)
 }
 
-// numberToFloat64 converts any Number to float64. Precision loss is acceptable
+// NumberToFloat64 converts any Number to float64. Precision loss is acceptable
 // because the result is only used in the IEEE 754 Inf/NaN guard, where the
 // special value dominates the result regardless of the other operand's magnitude.
-func numberToFloat64(n Number) float64 {
+func NumberToFloat64(n Number) float64 {
 	switch v := n.(type) {
 	case *Integer:
 		return float64(v.Value)
@@ -293,12 +293,12 @@ func numberToFloat64(n Number) float64 {
 	panic(werr.ErrNotANumber)
 }
 
-// numberToComplex128 converts any Number to complex128 for the IEEE 754
+// NumberToComplex128 converts any Number to complex128 for the IEEE 754
 // Inf/NaN guard path in the Float×BigComplex case. Precision loss (Tier 4) is
 // acceptable because Inf/NaN dominates the result; the imaginary part of the
 // non-Float operand is extracted at float64 precision for the same reason.
 // See plans/PRECISION-GUARANTEES.md.
-func numberToComplex128(n Number) complex128 {
+func NumberToComplex128(n Number) complex128 {
 	switch v := n.(type) {
 	case *Integer:
 		return complex(float64(v.Value), 0)
@@ -375,13 +375,13 @@ func makeArithmeticDispatch[T Number](
 					if lubIsComplex {
 						// Return BigComplex so the imaginary part of the
 						// BigComplex operand is preserved (fix for #362).
-						z := complex128Op(numberToComplex128(p), numberToComplex128(o))
+						z := complex128Op(NumberToComplex128(p), NumberToComplex128(o))
 						return NewBigComplexFromBigFloats(
 							NewBigFloatFromFloat64(real(z)),
 							NewBigFloatFromFloat64(imag(z)),
 						)
 					}
-					return NewFloat(float64Op(numberToFloat64(p), numberToFloat64(o)))
+					return NewFloat(float64Op(NumberToFloat64(p), NumberToFloat64(o)))
 				}
 				return applyOp(promSrc(p), promDst(o))
 			}
@@ -391,13 +391,13 @@ func makeArithmeticDispatch[T Number](
 			table[dstKind] = func(p T, o Number) Number {
 				if isSpecialFloat(o.(*Float)) {
 					if lubIsComplex {
-						z := complex128Op(numberToComplex128(p), numberToComplex128(o))
+						z := complex128Op(NumberToComplex128(p), NumberToComplex128(o))
 						return NewBigComplexFromBigFloats(
 							NewBigFloatFromFloat64(real(z)),
 							NewBigFloatFromFloat64(imag(z)),
 						)
 					}
-					return NewFloat(float64Op(numberToFloat64(p), numberToFloat64(o)))
+					return NewFloat(float64Op(NumberToFloat64(p), NumberToFloat64(o)))
 				}
 				return applyOp(promSrc(p), promDst(o))
 			}
@@ -497,14 +497,14 @@ func makeLessThanDispatch[T Number](
 		case srcKind == KindFloat && lubNeedsGuard:
 			table[dstKind] = func(p T, o Number) bool {
 				if isSpecialFloat(any(p).(*Float)) {
-					return numberToFloat64(p) < numberToFloat64(o)
+					return NumberToFloat64(p) < NumberToFloat64(o)
 				}
 				return promSrc(p).LessThan(promDst(o))
 			}
 		case dstKind == KindFloat && lubNeedsGuard:
 			table[dstKind] = func(p T, o Number) bool {
 				if isSpecialFloat(o.(*Float)) {
-					return numberToFloat64(p) < numberToFloat64(o)
+					return NumberToFloat64(p) < NumberToFloat64(o)
 				}
 				return promSrc(p).LessThan(promDst(o))
 			}
@@ -544,14 +544,14 @@ func makeCompareDispatch[T Number](
 		case srcKind == KindFloat && lubNeedsGuard:
 			table[dstKind] = func(p T, o Number) int {
 				if isSpecialFloat(any(p).(*Float)) {
-					return cmpFloat64(numberToFloat64(p), numberToFloat64(o))
+					return cmpFloat64(NumberToFloat64(p), NumberToFloat64(o))
 				}
 				return promSrc(p).Compare(promDst(o))
 			}
 		case dstKind == KindFloat && lubNeedsGuard:
 			table[dstKind] = func(p T, o Number) int {
 				if isSpecialFloat(o.(*Float)) {
-					return cmpFloat64(numberToFloat64(p), numberToFloat64(o))
+					return cmpFloat64(NumberToFloat64(p), NumberToFloat64(o))
 				}
 				return promSrc(p).Compare(promDst(o))
 			}
