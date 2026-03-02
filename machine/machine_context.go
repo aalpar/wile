@@ -84,6 +84,16 @@ type MachineContext struct {
 // The context enables cancellation/timeout support in the VM loop.
 // For callers that don't need cancellation, pass context.Background().
 func NewMachineContext(ctx context.Context, cont *MachineContinuation) *MachineContext {
+	var evals *Stack
+	if cont.evals != nil {
+		evals = cont.evals // no copy needed: continuation is consumed once at context creation
+	} else {
+		// Inline evals: reconstruct a stack from the continuation's inline slots.
+		evals = NewStack()
+		for i := uint8(0); i < cont.inlineEvalsLen; i++ {
+			evals.Push(cont.inlineEvals[i])
+		}
+	}
 	q := &MachineContext{
 		ctx: ctx,
 		vmState: vmState{
@@ -91,7 +101,7 @@ func NewMachineContext(ctx context.Context, cont *MachineContinuation) *MachineC
 			template:    cont.template,    // not needed to copy, templates are immutable
 			singleValue: cont.singleValue, // must not copy the values, they are passed between contexts
 			multiValues: cont.multiValues,
-			evals:       cont.evals, // no copy needed: continuation is consumed once at context creation
+			evals:       evals,
 			pc:          cont.pc,
 		},
 		cont: cont.parent,
@@ -213,14 +223,8 @@ func (p *MachineContext) Arg(index int) values.Value {
 
 func (p *MachineContext) Restore(cont *MachineContinuation) {
 	p.counters.ContinuationsRestored++
-	p.counters.StackPoolReleases++
-	oldEvals := p.evals
 	p.env = cont.env
 	p.template = cont.template
-	// Must copy evals to avoid corrupting the continuation's saved stack.
-	// Without copying, modifications to p.evals after restoration would mutate
-	// cont.evals, breaking re-invocation of the continuation.
-	p.evals = cont.evals.Copy()
 	p.cont = cont.parent
 	p.pc = cont.pc
 	// Restore callDepth from the continuation's cached value.
@@ -234,8 +238,19 @@ func (p *MachineContext) Restore(cont *MachineContinuation) {
 	// the chain (e.g., SaveContinuation frames created before the composable
 	// continuation was invoked). Let GC collect it naturally.
 	p.envPooled = false
-	// Return the old evals stack to the pool.
-	releaseStack(oldEvals)
+
+	if cont.evals == nil {
+		// Inline: restore from inline slots, reuse mc.evals.
+		restoreInlineEvals(p.evals, cont)
+	} else {
+		// Must copy evals to avoid corrupting the continuation's saved stack.
+		// Without copying, modifications to p.evals after restoration would mutate
+		// cont.evals, breaking re-invocation of the continuation.
+		p.counters.StackPoolReleases++
+		oldEvals := p.evals
+		p.evals = cont.evals.Copy()
+		releaseStack(oldEvals)
+	}
 }
 
 // RestoreAndRelease is the fast path for normal function return. It transfers
@@ -256,7 +271,6 @@ func (p *MachineContext) Restore(cont *MachineContinuation) {
 func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 	p.counters.ContinuationsRestored++
 
-	oldEvals := p.evals
 	oldEnv := p.env
 	oldEnvPooled := p.envPooled
 
@@ -271,11 +285,18 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 		// the continuation. The restored env must not be released on future
 		// overwrites because the shared continuation may be re-invoked.
 		p.counters.SharedFrameRestores++
-		p.counters.StackPoolReleases++
-		p.evals = cont.evals.Copy()
+		if cont.evals == nil {
+			// Inline + shared: restore from inline slots, reuse mc.evals.
+			// Don't nil inline values — shared frame may be re-invoked.
+			restoreInlineEvals(p.evals, cont)
+		} else {
+			p.counters.StackPoolReleases++
+			oldEvals := p.evals
+			p.evals = cont.evals.Copy()
+			releaseStack(oldEvals)
+		}
 		// envPooled: shared continuation may be re-invoked; env must not be recycled.
 		p.envPooled = false
-		releaseStack(oldEvals)
 		if oldEnvPooled && oldEnv != p.env {
 			p.counters.EnvFramePoolReleases++
 			releaseEnvFrame(oldEnv)
@@ -284,12 +305,28 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 	}
 
 	// Unshared frame: transfer evals ownership and pool the frame.
-	p.counters.StackPoolReleases++
 	p.counters.ContinuationPoolReleases++
-	p.evals = cont.evals // transfer, not copy
-	// envPooled: restore caller's ownership state from saved continuation.
 	p.envPooled = cont.envPooled
-	releaseStack(oldEvals)
+
+	if cont.evals == nil {
+		// Inline + unshared: restore from inline slots, reuse mc.evals.
+		restoreInlineEvals(p.evals, cont)
+		// Break GC references in inline slots before pooling.
+		for i := uint8(0); i < cont.inlineEvalsLen; i++ {
+			cont.inlineEvals[i] = nil
+		}
+		cont.inlineEvalsLen = 0
+	} else {
+		// Standard path: transfer stack, release mc's old stack.
+		p.counters.StackPoolReleases++
+		oldEvals := p.evals
+		p.evals = cont.evals // transfer, not copy
+		releaseStack(oldEvals)
+		// Break the evals reference before pooling so the transferred stack
+		// (now p.evals) is not released again inside releaseContinuation.
+		cont.evals = nil
+	}
+
 	// Only release the old env if it differs from the restored env. When no
 	// Apply occurred between SaveContinuation and RestoreContinuation (e.g.,
 	// a foreign function call), oldEnv == cont.env and releasing would corrupt
@@ -298,10 +335,6 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 		p.counters.EnvFramePoolReleases++
 		releaseEnvFrame(oldEnv)
 	}
-
-	// Break the evals reference before pooling so the transferred stack
-	// (now p.evals) is not released again inside releaseContinuation.
-	cont.evals = nil
 	releaseContinuation(cont)
 }
 
@@ -323,7 +356,6 @@ func (p *MachineContext) PopContinuation() (*MachineContinuation, error) {
 	q := p.cont
 	p.template = q.template
 	p.env = q.env
-	p.evals = q.evals
 	p.cont = q.parent
 	p.pc = q.pc
 	p.singleValue = q.singleValue
@@ -331,6 +363,13 @@ func (p *MachineContext) PopContinuation() (*MachineContinuation, error) {
 	// envPooled: restore caller's ownership state. Caller (releaseContinuation
 	// in Run loop) handles release of the old env via the popped frame.
 	p.envPooled = q.envPooled
+
+	if q.evals == nil {
+		// Inline: restore from inline slots, reuse mc.evals.
+		restoreInlineEvals(p.evals, q)
+	} else {
+		p.evals = q.evals
+	}
 	return q, nil
 }
 
@@ -349,8 +388,26 @@ func (p *MachineContext) SaveContinuation(off int) error {
 			"call depth %d exceeds limit %d", p.callDepth+1, p.maxCallDepth)
 	}
 	p.counters.ContinuationsSaved++
-	p.cont = NewMachineContinuationFromMachineContext(p, off)
-	p.evals = acquireStack()
+
+	cont := NewMachineContinuationFromMachineContext(p, off)
+	// At this point cont.evals and p.evals alias the same Stack.
+	// Decide whether to inline the stack values into the continuation.
+	n := p.evals.Len()
+	if n <= inlineEvalsCap {
+		// Inline path: copy values into continuation's inline slots.
+		// Reuse mc's existing stack (just clear it for the callee).
+		cont.inlineEvalsLen = uint8(n)
+		for i := range n {
+			cont.inlineEvals[i] = (*p.evals)[i]
+		}
+		cont.evals = nil // sentinel: values are in inlineEvals
+		p.evals.Clear()  // clear for callee; retains backing array
+		p.counters.InlineEvalsSaved++
+	} else {
+		// Standard path: stack transferred to continuation, acquire new for mc.
+		p.evals = acquireStack()
+	}
+	p.cont = cont
 	return nil
 }
 
