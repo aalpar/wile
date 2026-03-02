@@ -1023,6 +1023,22 @@ func (p *MachineContext) Run() error {
 			mc.evals.Push(mc.template.cachedBindings[instr.Arg].Value())
 			mc.pc++
 
+		// --- Wave 7: direct foreign call operations ---
+
+		case OpCallForeignCached:
+			var err error
+			mc, err = callForeignCached(mc, instr, false)
+			if err != nil {
+				return err
+			}
+
+		case OpCallForeignCachedTail:
+			var err error
+			mc, err = callForeignCached(mc, instr, true)
+			if err != nil {
+				return err
+			}
+
 		// --- Fallback: complex operations via side table ---
 
 		case OpComplex:

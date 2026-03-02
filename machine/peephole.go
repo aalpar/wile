@@ -39,6 +39,10 @@ func (p *NativeTemplate) Optimize() {
 	fusePullApply(p.code, p.sourceRefs, plan)
 	plan.Apply()
 
+	plan2 := NewEditPlan(p)
+	fuseCallForeignCached(p, plan2)
+	plan2.Apply()
+
 	p.optimizeSubTemplates()
 }
 
@@ -135,4 +139,186 @@ func branchTargets(code []Instruction) []bool {
 		}
 	}
 	return targets
+}
+
+// isPushOp returns true for opcodes that push a value onto the eval stack
+// without side effects relevant to call fusion. Used by fuseCallForeignCached
+// to identify argument-pushing instructions between the callee load and apply.
+func isPushOp(op OpCode) bool {
+	switch op {
+	case OpPush, OpPushLiteral, OpPushGlobal, OpPushLocal, OpPushCachedBinding:
+		return true
+	default:
+		return false
+	}
+}
+
+// fuseCallForeignCached rewrites PushCachedBinding...PullApply sequences
+// into direct OpCallForeignCached / OpCallForeignCachedTail instructions
+// when the cached binding holds a *ForeignClosure. This eliminates the
+// Pull+Apply dispatch overhead for known-primitive calls.
+//
+// This runs as a second pass after fuseLoadPush and fusePullApply have
+// already been applied, so it matches post-fusion opcodes.
+//
+// Non-tail pattern (preceded by SaveContinuation):
+//
+//	code[i]     = SaveContinuation(off)
+//	code[i+1]   = PushCachedBinding(idx)   -- binding holds *ForeignClosure
+//	... 0+ Push-family ops ...
+//	code[i+off] = PullApply                -- SaveCont offset lands here
+//
+// Rewrite: delete SaveCont + PushCachedBinding, replace PullApply with
+// OpCallForeignCached(idx).
+//
+// Tail pattern (no preceding SaveContinuation):
+//
+//	code[i]   = PushCachedBinding(idx)     -- binding holds *ForeignClosure
+//	... 0+ Push-family ops ...
+//	code[j]   = PullApply
+//
+// Rewrite: delete PushCachedBinding, replace PullApply with
+// OpCallForeignCachedTail(idx).
+func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
+	code := tpl.code
+	if len(code) < 2 {
+		return
+	}
+	targets := branchTargets(code)
+
+	// Track PullApply indices already claimed by a fusion to prevent
+	// the same PullApply from being matched by both non-tail and tail
+	// patterns (e.g., when argument-pushing PushCachedBinding follows
+	// the callee PushCachedBinding that was already fused).
+	claimed := make(map[int]bool)
+
+	for i := range len(code) {
+		// Non-tail pattern: SaveContinuation + PushCachedBinding ... PullApply
+		if code[i].Op == OpSaveContinuation &&
+			i+1 < len(code) &&
+			code[i+1].Op == OpPushCachedBinding {
+			off := int(code[i].Arg)
+			pullIdx := i + off
+			bindingIdx := code[i+1].Arg
+
+			// SaveCont offset must land on PullApply within bounds.
+			if pullIdx < 0 || pullIdx >= len(code) || code[pullIdx].Op != OpPullApply {
+				continue
+			}
+
+			// Skip if this PullApply was already claimed.
+			if claimed[pullIdx] {
+				continue
+			}
+
+			// Verify the binding holds a *ForeignClosure.
+			if int(bindingIdx) >= len(tpl.cachedBindings) {
+				continue
+			}
+			_, ok := tpl.cachedBindings[bindingIdx].Value().(*ForeignClosure)
+			if !ok {
+				continue
+			}
+
+			// No branch target in the interior (i+1, pullIdx), exclusive
+			// of pullIdx itself — the SaveCont is expected to target it.
+			branchInInterior := false
+			for k := i + 1; k < pullIdx; k++ {
+				if targets[k] {
+					branchInInterior = true
+					break
+				}
+			}
+			if branchInInterior {
+				continue
+			}
+
+			// All instructions between PushCachedBinding and PullApply
+			// must be Push-family.
+			allPush := true
+			for k := i + 2; k < pullIdx; k++ {
+				if !isPushOp(code[k].Op) {
+					allPush = false
+					break
+				}
+			}
+			if !allPush {
+				continue
+			}
+
+			// Delete SaveCont + PushCachedBinding [i, i+2)
+			plan.Delete(i, i+2)
+			// Replace PullApply with OpCallForeignCached
+			plan.Replace(pullIdx, pullIdx+1,
+				[]Instruction{{Op: OpCallForeignCached, Arg: bindingIdx}},
+				tpl.sourceRefs[pullIdx],
+			)
+			claimed[pullIdx] = true
+			continue
+		}
+
+		// Tail pattern: PushCachedBinding (not preceded by SaveContinuation) ... PullApply
+		if code[i].Op == OpPushCachedBinding {
+			// The PushCachedBinding must be the callee (first push in the
+			// call sequence). If preceded by SaveContinuation, the non-tail
+			// pattern handles it. If preceded by a push op, this
+			// PushCachedBinding is an argument, not the callee — skip it.
+			if i > 0 && (code[i-1].Op == OpSaveContinuation || isPushOp(code[i-1].Op)) {
+				continue
+			}
+
+			bindingIdx := code[i].Arg
+
+			// Verify the binding holds a *ForeignClosure.
+			if int(bindingIdx) >= len(tpl.cachedBindings) {
+				continue
+			}
+			_, ok := tpl.cachedBindings[bindingIdx].Value().(*ForeignClosure)
+			if !ok {
+				continue
+			}
+
+			// Scan forward for PullApply, only allowing Push-family ops.
+			pullIdx := -1
+			for k := i + 1; k < len(code); k++ {
+				if code[k].Op == OpPullApply {
+					pullIdx = k
+					break
+				}
+				if !isPushOp(code[k].Op) {
+					break
+				}
+			}
+			if pullIdx < 0 {
+				continue
+			}
+
+			// Skip if this PullApply was already claimed.
+			if claimed[pullIdx] {
+				continue
+			}
+
+			// No branch target in range [i, pullIdx].
+			branchInInterior := false
+			for k := i; k <= pullIdx; k++ {
+				if targets[k] {
+					branchInInterior = true
+					break
+				}
+			}
+			if branchInInterior {
+				continue
+			}
+
+			// Delete PushCachedBinding [i, i+1)
+			plan.Delete(i, i+1)
+			// Replace PullApply with OpCallForeignCachedTail
+			plan.Replace(pullIdx, pullIdx+1,
+				[]Instruction{{Op: OpCallForeignCachedTail, Arg: bindingIdx}},
+				tpl.sourceRefs[pullIdx],
+			)
+			claimed[pullIdx] = true
+			continue
+		}
+	}
 }

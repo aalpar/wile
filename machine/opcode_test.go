@@ -50,6 +50,8 @@ func TestOpcodeConstants(t *testing.T) {
 		{OpPeekK, "PeekK"},
 		{OpLoadLocal, "LoadLocal"},
 		{OpStoreLocal, "StoreLocal"},
+		{OpCallForeignCached, "CallForeignCached"},
+		{OpCallForeignCachedTail, "CallForeignCachedTail"},
 		{OpComplex, "Complex"},
 	}
 

@@ -17,6 +17,7 @@ package machine
 import (
 	"testing"
 
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -712,5 +713,152 @@ func TestIsBranchOp(t *testing.T) {
 	nonBranches := []OpCode{OpPush, OpLoadVoid, OpApply, OpComplex, OpPullApply, OpMakeClosure}
 	for _, op := range nonBranches {
 		qt.Assert(t, isBranchOp(op), qt.IsFalse, qt.Commentf("%s", op))
+	}
+}
+
+func TestIsPushOp(t *testing.T) {
+	pushOps := []OpCode{OpPush, OpPushLiteral, OpPushGlobal, OpPushLocal, OpPushCachedBinding}
+	for _, op := range pushOps {
+		qt.Assert(t, isPushOp(op), qt.IsTrue, qt.Commentf("%s", op))
+	}
+
+	nonPushOps := []OpCode{OpPull, OpApply, OpLoadVoid, OpBranch, OpComplex, OpPullApply, OpLoadLocal}
+	for _, op := range nonPushOps {
+		qt.Assert(t, isPushOp(op), qt.IsFalse, qt.Commentf("%s", op))
+	}
+}
+
+// --- FuseCallForeignCached ---
+
+// makeForeignBinding creates a *Binding holding a *ForeignClosure suitable
+// for peephole tests. The closure's function body is a no-op.
+func makeForeignBinding() *environment.Binding {
+	env := environment.NewTopLevelEnvironment().Runtime()
+	fc := NewForeignClosure(env, 0, false, func(mc *MachineContext) error {
+		return nil
+	})
+	return environment.NewBinding(fc, environment.BindingTypeVariable)
+}
+
+// makeMachineClosureBinding creates a *Binding holding a *MachineClosure
+// (non-foreign) for negative tests.
+func makeMachineClosureBinding() *environment.Binding {
+	env := environment.NewTopLevelEnvironment().Runtime()
+	mc := NewClosureWithTemplate(NewNativeTemplate(0, 0, false), env)
+	return environment.NewBinding(mc, environment.BindingTypeVariable)
+}
+
+func TestFuseCallForeignCached(t *testing.T) {
+	foreignBinding := makeForeignBinding()
+	machineBinding := makeMachineClosureBinding()
+
+	tests := []struct {
+		name           string
+		code           []Instruction
+		cachedBindings []*environment.Binding
+		wantOps        []OpCode
+		wantArg        map[int]int32
+	}{
+		{
+			name: "non-tail: SaveCont + PushCachedBinding + PullApply",
+			// SaveCont(+2) PushCachedBinding(0) PullApply
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 2},
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{foreignBinding},
+			wantOps:        []OpCode{OpCallForeignCached},
+			wantArg:        map[int]int32{0: 0},
+		},
+		{
+			name: "non-tail with args: SaveCont + PushCachedBinding + PushLocal + PushLocal + PullApply",
+			// SaveCont(+4) PushCachedBinding(0) PushLocal(0) PushLocal(1) PullApply
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 4},
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPushLocal, Arg: 0},
+				{Op: OpPushLocal, Arg: 1},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{foreignBinding},
+			wantOps:        []OpCode{OpPushLocal, OpPushLocal, OpCallForeignCached},
+			wantArg:        map[int]int32{0: 0, 1: 1, 2: 0},
+		},
+		{
+			name: "tail: PushCachedBinding + PullApply",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{foreignBinding},
+			wantOps:        []OpCode{OpCallForeignCachedTail},
+			wantArg:        map[int]int32{0: 0},
+		},
+		{
+			name: "tail with args: PushCachedBinding + PushLocal + PullApply",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPushLocal, Arg: 0},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{foreignBinding},
+			wantOps:        []OpCode{OpPushLocal, OpCallForeignCachedTail},
+			wantArg:        map[int]int32{0: 0, 1: 0},
+		},
+		{
+			name: "no match: binding is MachineClosure",
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 2},
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{machineBinding},
+			wantOps:        []OpCode{OpSaveContinuation, OpPushCachedBinding, OpPullApply},
+			wantArg:        map[int]int32{0: 2},
+		},
+		{
+			name: "no match: branch target in interior",
+			// Branch targets PushCachedBinding, preventing fusion.
+			code: []Instruction{
+				{Op: OpBranch, Arg: 2},
+				{Op: OpSaveContinuation, Arg: 3},
+				{Op: OpPushCachedBinding, Arg: 0}, // branch target
+				{Op: OpPushLocal, Arg: 0},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{foreignBinding},
+			wantOps:        []OpCode{OpBranch, OpSaveContinuation, OpPushCachedBinding, OpPushLocal, OpPullApply},
+		},
+		{
+			name: "no match: SaveCont offset doesn't land on PullApply",
+			// SaveCont offset points to PushLocal, not PullApply.
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 2},
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPushLocal, Arg: 0},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{foreignBinding},
+			wantOps:        []OpCode{OpSaveContinuation, OpPushCachedBinding, OpPushLocal, OpPullApply},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tpl := NewEmptyNativeTemplate()
+			tpl.code = make([]Instruction, len(tt.code))
+			copy(tpl.code, tt.code)
+			tpl.sourceRefs = make([]uint16, len(tt.code))
+			tpl.cachedBindings = tt.cachedBindings
+
+			tpl.Optimize()
+
+			qt.Assert(t, opcodes(tpl), qt.DeepEquals, tt.wantOps)
+			for idx, expectedArg := range tt.wantArg {
+				qt.Assert(t, tpl.code[idx].Arg, qt.Equals, expectedArg,
+					qt.Commentf("instruction %d (%s)", idx, tpl.code[idx].Op))
+			}
+		})
 	}
 }
