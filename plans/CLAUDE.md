@@ -15,24 +15,11 @@ When investigating R7RS conformance issues:
 
 | File | Contents | Status |
 |------|----------|--------|
-| `PERFORMANCE.md` | Allocation optimization (completed fixes + remaining tiers), block-allocated pairs (complete), unified pool manager (complete), fused lexing research | Mixed |
-| `SECURITY.md` | Extension-level sandboxing model, authorization framework, opcode resource limits | Phases 1-6 done, rest proposed/design |
-| `MACRO_SYSTEM.md` | ER macro transformer, hygiene debugging design, macro expansion tracing | Proposed/Planned |
+| `PERFORMANCE.md` | Rest-arg cons elimination, fused lexing research | Open items remain |
+| `SECURITY.md` | Opcode resource limits | Phases 1-6 done, resource limits proposed |
+| `MACRO_SYSTEM.md` | ER macro transformer, hygiene debugging, macro expansion tracing | Proposed |
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |
-| `ARCHITECTURE.md` | Engine refactor (complete), dialect system, module decomposition, plugin shadowing, environment introspection | Mixed |
-| `TESTING.md` | Scheme test expansion (complete) | Complete |
-| `REPL_ENHANCEMENTS.md` | Meta-commands (,help, ,doc, ,edit), autocomplete, pager integration | Complete |
-| `SIGNALS_REVIEW.md` | Six-lens signals analysis: mode transitions, feedback loops, saturation, temporal coupling, cross-talk, signal integrity | Complete (PR #361) |
-| `SIGNALS_REMEDIATION.md` | Implementation plan for SIGNALS_REVIEW findings P1–P6 + P4b | Complete (PR #361) |
-| `TECH_DEBT_REVIEW.md` | Staff-engineer debt assessment: 14 findings. 10 complete/resolved, 1 retracted, 2 deferred. 1 remaining: F12 benchmarks | Reference (mostly complete) |
-| `STAFF_ENGINEER_REVIEW.md` | Net-new debt findings beyond TECH_DEBT_REVIEW: 8/9 complete (N1-N8). Open: N9 | Reference (open) |
-| `N4-EXPT-MAKE-RECTANGULAR-REFACTOR.md` | Refactor PrimExpt and PrimMakeRectangular: export conversions, extract exptExact, collapse type switches | Complete |
-| `362-BIGCOMPLEX-INFNAN-GUARD.md` | Fix: BigFloat Inf/NaN-capable, BigComplex guard patched for Float×BigComplex case (#362) | Complete (PR #363) — approach differs from plan; see status block at top of file |
-| `R7RS-CONFORMANCE-REVIEW.md` | Full R7RS-small conformance audit: 26 findings, all resolved (PRs #364–#368). L7 WONTFIX, M4/M8 not bugs. | Complete |
-| `R7RS-PORT-IO-CONFORMANCE.md` | Detailed port/IO conformance report with bufio analysis. All issues fixed except L7 (char-ready?/u8-ready?). | Complete |
-| `R7RS-CONFORMANCE-FIXES.md` | Phased conformance fixes: 26 findings across 8 phases (PRs #364–#369) | Complete |
-| `E1-DATUM-LABEL-CIRCULAR-LITERALS.md` | Fix: circular structure crashes in compiler (datum labels) + pair display | Complete |
-| `H1-APPLY-TAIL-POSITION.md` | apply as compile-time special form: OpUnpackListToStack + OpApply for proper tail recursion | Complete (PR #368) |
+| `ARCHITECTURE.md` | Dialect system, module decomposition, plugin shadowing | Open items remain |
 
 ## Before Starting Work
 

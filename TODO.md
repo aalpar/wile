@@ -235,9 +235,9 @@ Other
 
 ### Tech Debt (from [plans/TECH_DEBT_REVIEW.md](plans/TECH_DEBT_REVIEW.md))
 
-- [ ] **F10: MachineContext decomposition** [Medium, Deferred]: 1586 lines, 71 methods, 10+ responsibilities. Extract `WindingStack`, `ContinuationChain`, `ExceptionHandler` into delegate types. Deferred until embedding API has consumers.
-- [ ] **F11: Promote internal extensions** [Low, Deferred]: `internal/extensions/{io,eval,all}` invisible to embedders. Promote to `extensions/{io,eval}/` when extension API stabilizes and external consumers exist.
-- [ ] **F12: Subsystem benchmarks** [Low]: No benchmarks for `machine/` (VM dispatch), `registry/core/` (primitives), or `internal/tokenizer/`. Add `BenchmarkVMDispatch`, `BenchmarkTokenize`, `BenchmarkPrimitiveCall`.
+- [ ] **F10: MachineContext decomposition** [Medium, Postponed]: 1586 lines, 71 methods, 10+ responsibilities. Extract `WindingStack`, `ContinuationChain`, `ExceptionHandler` into delegate types. Postponed — requires stable method surface; do after other refactorings settle.
+- [ ] **F11: Promote internal extensions** [Low, Postponed]: `internal/extensions/{io,eval,all}` invisible to embedders. Promote to `extensions/{io,eval}/` when extension API stabilizes and external consumers exist.
+- [x] **F12: Subsystem benchmarks** [Low]: `machine/fib_bench_test.go`, `machine/apply_bench_test.go`, `registry/core/prim_bench_test.go`, `internal/tokenizer/tokenizer_bench_test.go`.
 
 ### Small Refactorings (P5)
 - [x] **Extract `ForeignClosure` type**: Extracted as distinct type with `Closure` interface, `applyForeign` direct-call path, `atomicBody` flag removed.
