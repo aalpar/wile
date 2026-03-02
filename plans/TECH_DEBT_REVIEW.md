@@ -617,7 +617,7 @@ When ready, the migration steps:
 
 ---
 
-### F12 [Priority: Low] — No benchmarks for machine/ (VM execution), registry/core/ (primitives), or internal/tokenizer/
+### F12 [Priority: Low] [COMPLETE] — No benchmarks for machine/ (VM execution), registry/core/ (primitives), or internal/tokenizer/
 
 **Where**: Benchmark files exist only in `values/`, `internal/parser/`, `environment/`, and root `wile_bench_test.go`
 **What**: The bytecode VM hot loop, primitive dispatch, and tokenizer — the three performance-critical subsystems — have no dedicated benchmarks. High-level benchmarks (Eval, ZebraPuzzle, Gabriel suite) exist but can't isolate regressions to specific subsystems.
