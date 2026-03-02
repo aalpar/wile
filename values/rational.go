@@ -107,7 +107,7 @@ var rationalSubtract [numKinds]func(*Rational, Number) Number
 var rationalLessThan [numKinds]func(*Rational, Number) bool
 var rationalCompare [numKinds]func(*Rational, Number) int
 var rationalMultiply [numKinds]func(*Rational, Number) Number
-var rationalDivide [numKinds]func(*Rational, Number) Number
+var rationalDivide [numKinds]func(*Rational, Number) (Number, error)
 
 func init() {
 	rationalAdd = makeAddDispatch(KindRational, func(p *Rational, o Number) Number {
@@ -133,9 +133,9 @@ func init() {
 		return &Rational{value: result}
 	})
 
-	rationalDivide = makeDivideDispatch(KindRational, func(p *Rational, o Number) Number {
+	rationalDivide = makeDivideDispatch(KindRational, func(p *Rational, o Number) (Number, error) {
 		result := new(big.Rat).Quo(p.value, o.(*Rational).value)
-		return &Rational{value: result}
+		return &Rational{value: result}, nil
 	})
 }
 
@@ -181,14 +181,14 @@ func (p *Rational) Multiply(o Number) Number {
 }
 
 // Divide returns the quotient of two numbers.
-func (p *Rational) Divide(o Number) Number {
+func (p *Rational) Divide(o Number) (Number, error) {
 	if o.IsZero() && o.IsExact() {
-		panic(werr.ErrDivisionByZero)
+		return nil, werr.ErrDivisionByZero
 	}
 	v, ok := o.(*Rational)
 	if ok {
 		result := new(big.Rat).Quo(p.value, v.value)
-		return &Rational{value: result}
+		return &Rational{value: result}, nil
 	}
 	return rationalDivide[o.Kind()](p, o)
 }
@@ -222,8 +222,8 @@ func (p *Rational) Abs() Number {
 // ToExact returns this Rational unchanged since it is already exact.
 //
 // R7RS §6.2.6: exact returns an exact representation of its argument.
-func (p *Rational) ToExact() Number {
-	return p
+func (p *Rational) ToExact() (Number, error) {
+	return p, nil
 }
 
 // ToInexact converts this Rational to an inexact BigFloat.

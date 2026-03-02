@@ -113,7 +113,7 @@ Cross-references to overlapping findings are noted where relevant.
 
 ---
 
-### N9 [Priority: Low] — Magic number boundaries undocumented
+### N9 [Priority: Low] [COMPLETE] — Magic number boundaries undocumented
 
 **Where**: `values/string.go:34` (`stringInternMaxLen = 64`), `values/integer.go:33-36` (`intCacheMin/Max = -32768/32767`)
 **What**: Performance-tuning constants lack documented rationale. 64 bytes for interning, int16 range for integer cache.

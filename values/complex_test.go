@@ -123,19 +123,23 @@ func TestComplex_Multiply(t *testing.T) {
 func TestComplex_Divide(t *testing.T) {
 	c1 := values.NewComplex(complex(4, 2))
 	c2 := values.NewComplex(complex(2, 0))
-	result := c1.Divide(c2)
+	result, err := c1.Divide(c2)
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(2, 1)))
 
 	i1 := values.NewInteger(2)
-	result = c1.Divide(i1)
+	result, err = c1.Divide(i1)
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(2, 1)))
 
 	f1 := values.NewFloat(2.0)
-	result = c1.Divide(f1)
+	result, err = c1.Divide(f1)
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(2, 1)))
 
 	r1 := values.NewRational(1, 2)
-	result = c1.Divide(r1)
+	result, err = c1.Divide(r1)
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewComplex(complex(8, 4)))
 }
 

@@ -108,7 +108,8 @@ func TestBigComplex_Division(t *testing.T) {
 		values.NewBigIntegerFromInt64(2),
 	)
 
-	quot := bc1.Divide(bc2)
+	quot, err := bc1.Divide(bc2)
+	c.Assert(err, qt.IsNil)
 	c.Assert(quot, qt.IsNotNil)
 	// Division always produces BigFloat parts
 	realPart := quot.(*values.BigComplex).RealAsBigFloat().Float64()
@@ -116,12 +117,14 @@ func TestBigComplex_Division(t *testing.T) {
 	c.Assert(math.Abs(realPart-2.2) < 0.0001, qt.IsTrue)
 	c.Assert(math.Abs(imagPart-(-0.4)) < 0.0001, qt.IsTrue)
 
-	// Division by zero panics
+	// Division by zero returns error
 	zero := values.NewBigComplexFromBigIntegers(
 		values.NewBigIntegerFromInt64(0),
 		values.NewBigIntegerFromInt64(0),
 	)
-	c.Assert(func() { bc1.Divide(zero) }, qt.PanicMatches, ".*division by zero")
+	_, err = bc1.Divide(zero)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Matches, ".*division by zero")
 
 	// Division where zero parts produce *Integer intermediates via
 	// multiplyResultForZero. (0+1i)/(0+1i): bc=0*0=Integer(0),
@@ -132,7 +135,8 @@ func TestBigComplex_Division(t *testing.T) {
 		values.NewBigIntegerFromInt64(0),
 		values.NewBigIntegerFromInt64(1),
 	)
-	quotImag := bcPureImag.Divide(bcPureImag)
+	quotImag, err := bcPureImag.Divide(bcPureImag)
+	c.Assert(err, qt.IsNil)
 	c.Assert(quotImag, qt.IsNotNil)
 	// (0+1i)/(0+1i) = (0+1)/(0+1) + (0-0)i/(0+1) = 1+0i → simplifies to BigFloat(1)
 	c.Assert(quotImag.(*values.BigFloat).Float64(), qt.Equals, 1.0)
@@ -200,7 +204,8 @@ func TestBigComplex_Exactness(t *testing.T) {
 	c.Assert(inexactFromExact.(*values.BigComplex).IsExact(), qt.IsFalse)
 
 	// ToExact
-	exactFromInexact := inexact.ToExact()
+	exactFromInexact, err := inexact.ToExact()
+	c.Assert(err, qt.IsNil)
 	c.Assert(exactFromInexact.(*values.BigComplex).IsExact(), qt.IsTrue)
 }
 
@@ -279,7 +284,8 @@ func TestBigComplex_ToExactFractionalParts(t *testing.T) {
 				values.NewBigFloatFromFloat64(tc.real),
 				values.NewBigFloatFromFloat64(tc.imag),
 			)
-			exact := bc.ToExact()
+			exact, err := bc.ToExact()
+			c.Assert(err, qt.IsNil)
 			c.Assert(exact.IsExact(), qt.IsTrue)
 
 			// If result simplifies to real (imag == 0), check the real value directly
@@ -601,7 +607,8 @@ func TestBigComplex_RationalWithScalar(t *testing.T) {
 	c.Assert(prod.(*values.BigComplex).IsExact(), qt.IsTrue)
 
 	// Divide by Rational: (3/2 + 1/2i) / (1/2) = (3 + 1i)
-	quot := bc.Divide(values.NewRational(1, 2))
+	quot, err := bc.Divide(values.NewRational(1, 2))
+	c.Assert(err, qt.IsNil)
 	c.Assert(quot.(*values.BigComplex).IsExact(), qt.IsTrue)
 	realPart = quot.(*values.BigComplex).Real().(*values.Rational)
 	imagPart := quot.(*values.BigComplex).Imag().(*values.Rational)

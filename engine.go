@@ -357,12 +357,12 @@ func (p *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, er
 func (p *Engine) callCallable(ctx context.Context, callable values.Callable, args []values.Value) (Value, error) {
 	ctx = p.withAuth(ctx)
 	tpl := machine.NewEmptyNativeTemplate()
-	cont := machine.NewMachineContinuation(nil, tpl, p.env)
-	mc := machine.NewMachineContext(ctx, cont)
+	mc := machine.AcquireTopLevelContext(ctx, tpl, p.env)
 	mc.SetMaxCallDepth(p.maxCallDepth)
 
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
+	defer machine.ReleaseTopLevelContext(mc)
 	_, err := sub.ApplyCallable(callable, args...)
 	if err != nil {
 		return nil, p.wrapRuntimeError(err)
@@ -525,15 +525,16 @@ func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*Comp
 
 func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, error) {
 	ctx = p.withAuth(ctx)
-	cont := machine.NewMachineContinuation(nil, cc.template, cc.env)
-	mc := machine.NewMachineContext(ctx, cont)
+	mc := machine.AcquireTopLevelContext(ctx, cc.template, cc.env)
 	mc.SetMaxCallDepth(p.maxCallDepth)
 	err := mc.RunWithEscapeHandling()
 	p.lastCounters = mc.Counters()
+	val := mc.GetValue()
+	machine.ReleaseTopLevelContext(mc)
 	if err != nil {
 		return nil, p.wrapRuntimeError(err)
 	}
-	return wrapValue(mc.GetValue()), nil
+	return wrapValue(val), nil
 }
 
 // LastCounters returns the VM performance counters from the most recent
@@ -594,9 +595,10 @@ func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame
 		return err
 	}
 
-	cont := machine.NewMachineContinuation(nil, tpl, env)
-	mc := machine.NewMachineContext(ctx, cont)
-	return mc.Run()
+	mc := machine.AcquireTopLevelContext(ctx, tpl, env)
+	err = mc.Run()
+	machine.ReleaseTopLevelContext(mc)
+	return err
 }
 
 // LoadPath Stack API

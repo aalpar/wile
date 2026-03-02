@@ -186,11 +186,21 @@ func (p *LocalEnvironmentFrame) copyInto(dst *LocalEnvironmentFrame) {
 
 // copyForApplyInto copies bindings into an existing destination frame,
 // marking both source and destination as sharing keys (CoW).
-// Used by EnvironmentFrame.NewApplyFrame().
+// Used by EnvironmentFrame.NewApplyFrame() and InitApplyFrame().
+//
+// When dst already has a bindings backing array with sufficient capacity
+// (the common case for pooled frames after warmup), the slice is resliced
+// instead of allocated. This eliminates the per-call make([]Binding, n)
+// that dominates allocation profiles in recursive workloads.
 func (p *LocalEnvironmentFrame) copyForApplyInto(dst *LocalEnvironmentFrame) {
 	dst.keys = p.keys
 	dst.keysShared = true
 	p.keysShared = true
-	dst.bindings = make([]Binding, len(p.bindings))
+	n := len(p.bindings)
+	if cap(dst.bindings) >= n {
+		dst.bindings = dst.bindings[:n]
+	} else {
+		dst.bindings = make([]Binding, n)
+	}
 	copy(dst.bindings, p.bindings)
 }

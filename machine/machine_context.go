@@ -433,7 +433,7 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 // applyForeign calls a foreign closure directly, bypassing the bytecode VM.
 // This is the fast path for Go-implemented primitives: arity check, bind args,
 // call the function, restore continuation. No template, no opcodes, no VM loop.
-func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) (rmc *MachineContext, rerr error) {
+func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) (*MachineContext, error) {
 	l := fcls.paramCount
 
 	// Arity check (same logic as Apply).
@@ -471,24 +471,6 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	p.env = env
 	// envPooled: closure's own env, not from pool.
 	p.envPooled = false
-
-	// Panic recovery: convert Go panics from the values package
-	// (division by zero, not-a-number, etc.) into Scheme exceptions.
-	defer func() {
-		r := recover()
-		if r == nil {
-			return
-		}
-		var err error
-		switch v := r.(type) {
-		case error:
-			err = v
-		default:
-			err = werr.WrapForeignErrorf(werr.ErrPanicRecovery, "foreign function call: %v", v)
-		}
-		rmc = nil
-		rerr = goErrorToSchemeException(p, err)
-	}()
 
 	p.counters.ForeignCalls++
 

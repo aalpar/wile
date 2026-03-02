@@ -78,7 +78,7 @@ var floatSubtract [numKinds]func(*Float, Number) Number
 var floatLessThan [numKinds]func(*Float, Number) bool
 var floatCompare [numKinds]func(*Float, Number) int
 var floatMultiply [numKinds]func(*Float, Number) Number
-var floatDivide [numKinds]func(*Float, Number) Number
+var floatDivide [numKinds]func(*Float, Number) (Number, error)
 
 func init() {
 	floatAdd = makeAddDispatch(KindFloat, func(p *Float, o Number) Number {
@@ -103,8 +103,8 @@ func init() {
 		return NewFloat(p.Value * o.(*Float).Value)
 	})
 
-	floatDivide = makeDivideDispatch(KindFloat, func(p *Float, o Number) Number {
-		return NewFloat(p.Value / o.(*Float).Value)
+	floatDivide = makeDivideDispatch(KindFloat, func(p *Float, o Number) (Number, error) {
+		return NewFloat(p.Value / o.(*Float).Value), nil
 	})
 }
 
@@ -151,13 +151,13 @@ func (p *Float) Multiply(o Number) Number {
 }
 
 // Divide returns the quotient of this float and another number.
-func (p *Float) Divide(o Number) Number {
+func (p *Float) Divide(o Number) (Number, error) {
 	if o.IsZero() && o.IsExact() {
-		panic(werr.ErrDivisionByZero)
+		return nil, werr.ErrDivisionByZero
 	}
 	v, ok := o.(*Float)
 	if ok {
-		return NewFloat(p.Value / v.Value)
+		return NewFloat(p.Value / v.Value), nil
 	}
 	return floatDivide[o.Kind()](p, o)
 }
@@ -185,7 +185,7 @@ func (p *Float) Abs() Number {
 //
 // R7RS §6.2.6: exact returns an exact representation of its argument.
 // Returns Integer if the float is integral, Rational otherwise.
-func (p *Float) ToExact() Number {
+func (p *Float) ToExact() (Number, error) {
 	return floatToExact(p.Value)
 }
 

@@ -43,21 +43,22 @@ func multiplyResultForZero(zero, other Number) Number {
 //
 // R7RS §6.2.6: (exact z) returns an exact representation of z.
 // R7RS says (exact +inf.0) and (exact +nan.0) should raise an error.
-func floatToExact(f float64) Number {
+func floatToExact(f float64) (Number, error) {
 	// big.Rat.SetFloat64 returns nil for infinity and NaN (non-finite values).
 	// R7RS requires raising an error for (exact +inf.0) and (exact +nan.0).
 	r := new(big.Rat).SetFloat64(f)
 	if r == nil {
-		panic(werr.WrapForeignErrorf(werr.ErrExactnessConversion, "cannot convert non-finite float to exact"))
+		return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion,
+			"cannot convert non-finite float to exact")
 	}
 	if r.IsInt() {
 		num := r.Num()
 		if num.IsInt64() {
-			return NewBigIntegerFromInt64(num.Int64())
+			return NewBigIntegerFromInt64(num.Int64()), nil
 		}
-		return NewBigInteger(new(big.Int).Set(num))
+		return NewBigInteger(new(big.Int).Set(num)), nil
 	}
-	return NewRationalFromRat(r)
+	return NewRationalFromRat(r), nil
 }
 
 // Simplify attempts to reduce a number to a simpler type without losing information.

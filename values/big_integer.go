@@ -126,7 +126,7 @@ var bigIntegerSubtract [numKinds]func(*BigInteger, Number) Number
 var bigIntegerLessThan [numKinds]func(*BigInteger, Number) bool
 var bigIntegerCompare [numKinds]func(*BigInteger, Number) int
 var bigIntegerMultiply [numKinds]func(*BigInteger, Number) Number
-var bigIntegerDivide [numKinds]func(*BigInteger, Number) Number
+var bigIntegerDivide [numKinds]func(*BigInteger, Number) (Number, error)
 
 func init() {
 	bigIntegerAdd = makeAddDispatch(KindBigInteger, func(p *BigInteger, o Number) Number {
@@ -149,13 +149,13 @@ func init() {
 		return &BigInteger{value: newBigIntFromOp((*big.Int).Mul, p.value, o.(*BigInteger).value)}
 	})
 
-	bigIntegerDivide = makeDivideDispatch(KindBigInteger, func(p *BigInteger, o Number) Number {
+	bigIntegerDivide = makeDivideDispatch(KindBigInteger, func(p *BigInteger, o Number) (Number, error) {
 		v := o.(*BigInteger)
 		quo, rem := new(big.Int).QuoRem(p.value, v.value, new(big.Int))
 		if rem.Sign() == 0 {
-			return &BigInteger{value: quo}
+			return &BigInteger{value: quo}, nil
 		}
-		return NewRationalFromBigInt(p.value, v.value)
+		return NewRationalFromBigInt(p.value, v.value), nil
 	})
 }
 
@@ -215,17 +215,17 @@ func (p *BigInteger) Multiply(o Number) Number {
 //
 // R7RS §6.2.2 Exactness: exact / exact = exact (BigInteger or Rational),
 // exact / inexact = inexact (Float or Complex).
-func (p *BigInteger) Divide(o Number) Number {
+func (p *BigInteger) Divide(o Number) (Number, error) {
 	if o.IsZero() && o.IsExact() {
-		panic(werr.ErrDivisionByZero)
+		return nil, werr.ErrDivisionByZero
 	}
 	v, ok := o.(*BigInteger)
 	if ok {
 		quo, rem := new(big.Int).QuoRem(p.value, v.value, new(big.Int))
 		if rem.Sign() == 0 {
-			return &BigInteger{value: quo}
+			return &BigInteger{value: quo}, nil
 		}
-		return NewRationalFromBigInt(p.value, v.value)
+		return NewRationalFromBigInt(p.value, v.value), nil
 	}
 	return bigIntegerDivide[o.Kind()](p, o)
 }
@@ -301,8 +301,8 @@ func (p *BigInteger) IsNaN() bool {
 //
 // R7RS §6.2.6: exact returns an exact representation of its argument.
 // Since BigInteger is already exact, it returns itself.
-func (p *BigInteger) ToExact() Number {
-	return p
+func (p *BigInteger) ToExact() (Number, error) {
+	return p, nil
 }
 
 // ToInexact returns this BigInteger converted to an inexact float.

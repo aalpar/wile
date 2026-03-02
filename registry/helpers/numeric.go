@@ -30,7 +30,7 @@ func NumericFoldVariadic(
 	mc *machine.MachineContext,
 	name string,
 	identity values.Number,
-	binOp func(acc, val values.Number) values.Number,
+	binOp func(acc, val values.Number) (values.Number, error),
 ) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
@@ -58,7 +58,11 @@ func NumericFoldVariadic(
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, val)
 		}
-		mc.SetValue(binOp(nbr, v))
+		result, err := binOp(nbr, v)
+		if err != nil {
+			return err
+		}
+		mc.SetValue(result)
 		return nil
 	}
 	// acc is a separate variable so that nbr (used on the 2-arg fast path
@@ -70,7 +74,11 @@ func NumericFoldVariadic(
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, o)
 		}
-		acc = binOp(acc, v)
+		var opErr error
+		acc, opErr = binOp(acc, v)
+		if opErr != nil {
+			return opErr
+		}
 		return nil
 	})
 	if err != nil {
@@ -88,8 +96,8 @@ func NumericFoldVariadic(
 func NumericFoldWithFirst(
 	mc *machine.MachineContext,
 	name string,
-	unaryOp func(val values.Number) values.Number,
-	binOp func(acc, val values.Number) values.Number,
+	unaryOp func(val values.Number) (values.Number, error),
+	binOp func(acc, val values.Number) (values.Number, error),
 ) error {
 	o0 := mc.Arg(0)
 	nbr0, ok := o0.(values.Number)
@@ -98,7 +106,11 @@ func NumericFoldWithFirst(
 	}
 	o1 := mc.Arg(1)
 	if values.IsEmptyList(o1) {
-		mc.SetValue(unaryOp(nbr0))
+		result, err := unaryOp(nbr0)
+		if err != nil {
+			return err
+		}
+		mc.SetValue(result)
 		return nil
 	}
 	pr, ok := o1.(values.Tuple)
@@ -110,7 +122,10 @@ func NumericFoldWithFirst(
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, o2)
 	}
-	result := binOp(nbr0, nbr2)
+	result, err := binOp(nbr0, nbr2)
+	if err != nil {
+		return err
+	}
 	if values.IsEmptyList(pr.Cdr()) {
 		mc.SetValue(result)
 		return nil
@@ -129,7 +144,11 @@ func NumericFoldWithFirst(
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, o)
 		}
-		acc = binOp(acc, v)
+		var opErr error
+		acc, opErr = binOp(acc, v)
+		if opErr != nil {
+			return opErr
+		}
 		return nil
 	})
 	if err != nil {

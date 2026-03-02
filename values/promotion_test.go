@@ -344,9 +344,15 @@ func TestFloatBigComplexGuard_ImaginaryPreserved(t *testing.T) {
 		},
 		{
 			// Inf / (3+4i) has non-zero imaginary; (3+4i) / Inf = 0 (real, not complex).
-			name:         "div +inf.0 / BigComplex(3+4i): correct complex division",
-			floatV:       NewFloat(math.Inf(1)),
-			op:           func(a, b Number) Number { return a.Divide(b) },
+			name:   "div +inf.0 / BigComplex(3+4i): correct complex division",
+			floatV: NewFloat(math.Inf(1)),
+			op: func(a, b Number) Number {
+				q, err := a.Divide(b)
+				if err != nil {
+					panic(err)
+				}
+				return q
+			},
 			realInf:      true,
 			skipReversed: true,
 		},

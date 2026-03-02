@@ -200,6 +200,24 @@ func (p *EnvironmentFrame) InitApplyFrame(dst *EnvironmentFrame) {
 	p.local.copyForApplyInto(&dst.local)
 }
 
+// ResetForPool clears the EnvironmentFrame for return to a sync.Pool while
+// preserving the local bindings backing array capacity. This mirrors the
+// Stack pool pattern: clear full capacity (so GC can collect referenced
+// values), zero the struct, then restore the slice header with len=0.
+//
+// After reset, the frame is a valid zero-value EnvironmentFrame whose
+// local.bindings has cap > 0 but len == 0. The next copyForApplyInto call
+// will reslice instead of allocating when cap >= n.
+func (p *EnvironmentFrame) ResetForPool() {
+	bindings := p.local.bindings
+	full := bindings[:cap(bindings)]
+	for i := range full {
+		full[i] = Binding{}
+	}
+	*p = EnvironmentFrame{}
+	p.local.bindings = full[:0]
+}
+
 // IsTopLevel returns true if this is the top-level environment frame (no parent).
 func (p *EnvironmentFrame) IsTopLevel() bool {
 	return p.parent == nil

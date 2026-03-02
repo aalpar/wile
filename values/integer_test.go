@@ -126,23 +126,28 @@ func TestInteger_Multiply(t *testing.T) {
 func TestInteger_Divide(t *testing.T) {
 	i1 := values.NewInteger(10)
 	i2 := values.NewInteger(2)
-	result := i1.Divide(i2)
+	result, err := i1.Divide(i2)
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(5))
 
 	i3 := values.NewInteger(3)
-	result = i1.Divide(i3)
+	result, err = i1.Divide(i3)
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewRational(10, 3))
 
 	f1 := values.NewFloat(2.0)
-	result = i1.Divide(f1)
+	result, err = i1.Divide(f1)
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewFloat(5.0))
 
 	r1 := values.NewRational(1, 2)
-	result = i1.Divide(r1)
+	result, err = i1.Divide(r1)
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewRational(20, 1))
 
 	c1 := values.NewComplex(complex(2, 0))
-	result = i1.Divide(c1)
+	result, err = i1.Divide(c1)
+	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewBigFloatFromFloat64(5))
 }
 

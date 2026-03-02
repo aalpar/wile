@@ -15,6 +15,7 @@
 package values
 
 import (
+	"fmt"
 	"math"
 	"math/big"
 	"sync"
@@ -238,6 +239,33 @@ func initPromoters() {
 			NewBigFloatFromFloat64(imag(p.Value)),
 		)
 	}
+
+	validatePromotionTable()
+}
+
+// validatePromotionTable asserts that every cross-type promotion path has a
+// non-nil promoter function. This is a startup assertion — if it fails, a
+// numeric type was added without completing its promotion entries. Panics at
+// program init, never at runtime.
+func validatePromotionTable() {
+	for src := range numKinds {
+		for dst := range numKinds {
+			if src == dst {
+				continue
+			}
+			lub := promotionTable[src][dst]
+			if promoter[src][lub] == nil {
+				panic(fmt.Sprintf(
+					"incomplete promotion table: promoter[%d][%d] is nil (src=%d dst=%d lub=%d)",
+					src, lub, src, dst, lub))
+			}
+			if promoter[dst][lub] == nil {
+				panic(fmt.Sprintf(
+					"incomplete promotion table: promoter[%d][%d] is nil (src=%d dst=%d lub=%d)",
+					dst, lub, src, dst, lub))
+			}
+		}
+	}
 }
 
 // PromotionResultKind returns the result type when operands of kindA and kindB
@@ -457,18 +485,67 @@ func makeMultiplyDispatch[T Number](srcKind NumericKind, sameTypeMul func(T, Num
 }
 
 // makeDivideDispatch generates a dispatch table for the Divide operation.
-func makeDivideDispatch[T Number](srcKind NumericKind, sameTypeDiv func(T, Number) Number) [numKinds]func(T, Number) Number {
-	return makeArithmeticDispatch(srcKind, sameTypeDiv,
-		func(a, b Number) Number {
-			return a.Divide(b)
-		},
-		func(a, b float64) float64 {
-			return a / b
-		},
-		func(a, b complex128) complex128 {
-			return a / b
-		},
-	)
+// Unlike the other arithmetic dispatchers, Divide returns (Number, error)
+// because division by exact zero is a runtime error, not a panic.
+func makeDivideDispatch[T Number](
+	srcKind NumericKind,
+	sameTypeDiv func(T, Number) (Number, error),
+) [numKinds]func(T, Number) (Number, error) {
+	ensurePromotionInit()
+	var table [numKinds]func(T, Number) (Number, error)
+	table[srcKind] = sameTypeDiv
+	for dstKind := range numKinds {
+		if dstKind == srcKind {
+			continue
+		}
+		lubKind := promotionTable[srcKind][dstKind]
+		promSrc := promoter[srcKind][lubKind]
+		promDst := promoter[dstKind][lubKind]
+
+		// IEEE 754 special-value guard: when Float is the receiver and the LUB
+		// goes beyond float64/complex128, short-circuit for Inf/NaN values.
+		lubNeedsGuard := lubKind != KindFloat && lubKind != KindComplex
+
+		switch {
+		case srcKind == KindFloat && lubNeedsGuard:
+			// Receiver is Float, might have Inf/NaN.
+			lubIsComplex := lubKind == KindBigComplex
+			table[dstKind] = func(p T, o Number) (Number, error) {
+				if isSpecialFloat(any(p).(*Float)) {
+					if lubIsComplex {
+						z := NumberToComplex128(p) / NumberToComplex128(o)
+						return NewBigComplexFromBigFloats(
+							NewBigFloatFromFloat64(real(z)),
+							NewBigFloatFromFloat64(imag(z)),
+						), nil
+					}
+					return NewFloat(NumberToFloat64(p) / NumberToFloat64(o)), nil
+				}
+				return promSrc(p).Divide(promDst(o))
+			}
+		case dstKind == KindFloat && lubNeedsGuard:
+			// Operand is Float, might have Inf/NaN.
+			lubIsComplex := lubKind == KindBigComplex
+			table[dstKind] = func(p T, o Number) (Number, error) {
+				if isSpecialFloat(o.(*Float)) {
+					if lubIsComplex {
+						z := NumberToComplex128(p) / NumberToComplex128(o)
+						return NewBigComplexFromBigFloats(
+							NewBigFloatFromFloat64(real(z)),
+							NewBigFloatFromFloat64(imag(z)),
+						), nil
+					}
+					return NewFloat(NumberToFloat64(p) / NumberToFloat64(o)), nil
+				}
+				return promSrc(p).Divide(promDst(o))
+			}
+		default:
+			table[dstKind] = func(p T, o Number) (Number, error) {
+				return promSrc(p).Divide(promDst(o))
+			}
+		}
+	}
+	return table
 }
 
 // makeLessThanDispatch generates a dispatch table for the LessThan operation.

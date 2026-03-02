@@ -6,7 +6,6 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
-	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -66,20 +65,7 @@ func TestApplyForeign_ArityError(t *testing.T) {
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
-func TestApplyForeign_PanicRecovery(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
-	fn := func(mc *MachineContext) error {
-		panic(werr.WrapForeignErrorf(werr.ErrDivisionByZero, "test panic"))
-	}
-	cls := newTestForeignClosure(env, 0, false, fn)
-
-	tpl := NewNativeTemplate(0, 0, false)
-	cont := NewMachineContinuation(nil, tpl, env)
-	mc := NewMachineContext(context.Background(), cont)
-
-	_, err := mc.applyForeign(cls)
-	qt.Assert(t, err, qt.IsNotNil)
-	// Should be converted to ErrExceptionEscape, not a raw panic
-	_, ok := err.(*ErrExceptionEscape)
-	qt.Assert(t, ok, qt.IsTrue)
-}
+// TestApplyForeign_PanicRecovery was removed: applyForeign no longer
+// recovers panics. Division-by-zero and exactness-conversion errors are
+// returned through normal error paths (Number.Divide and Number.ToExact
+// return errors). Foreign functions must not panic.
