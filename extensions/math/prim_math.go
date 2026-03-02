@@ -952,32 +952,9 @@ func PrimMakeRectangular(mc *machine.MachineContext) error {
 	}
 
 	// Use regular Complex for inexact numbers
-	var realPart, imagPart float64
-	switch v := r.(type) {
-	case *values.Integer:
-		realPart = float64(v.Value)
-	case *values.Float:
-		realPart = v.Value
-	case *values.Rational:
-		realPart = v.Float64()
-	case *values.BigInteger:
-		realPart, _ = new(big.Float).SetInt(v.BigInt()).Float64()
-	default:
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "make-rectangular: expected a real number but got %T", r)
-	}
-	switch v := i.(type) {
-	case *values.Integer:
-		imagPart = float64(v.Value)
-	case *values.Float:
-		imagPart = v.Value
-	case *values.Rational:
-		imagPart = v.Float64()
-	case *values.BigInteger:
-		imagPart, _ = new(big.Float).SetInt(v.BigInt()).Float64()
-	default:
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "make-rectangular: expected a real number but got %T", i)
-	}
-	mc.SetValue(values.NewComplexFromParts(realPart, imagPart))
+	mc.SetValue(values.NewComplexFromParts(
+		values.NumberToFloat64(rNum),
+		values.NumberToFloat64(iNum)))
 	return nil
 }
 
