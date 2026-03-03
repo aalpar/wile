@@ -18,15 +18,11 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 
 | Priority | Item | Category | Status | Notes |
 |----------|------|----------|--------|-------|
-| P1 | Unit testing library | Standard library | **Done** | 11 test files (3,187 lines) extracted from Go suite. `plans/TESTING.md` |
 | P1 | Stack.Drain — eliminate PopAll allocation in VM hot path | Performance | Not started | `PopAll` allocates a fresh `[]values.Value` on every function call (`OpApply`, `OpPullApply`). `Apply` only iterates the slice then discards it. Add a `Drain`/view method to let `Apply` read the stack backing array in-place, then clear. ~20 LOC, two call sites. |
 | P1 | Fused push opcodes | Performance | Not started | `PushLiteral`, `PushGlobal`, `PushLocal` — combine load+push into single opcodes to reduce dispatch overhead. Peephole optimizer emits fused ops. |
 | P2 | ArrayList — array-backed list representation | Performance | Not started | Contiguous `[]Value` slice alternative to `*Pair` chains. O(1) element access, better cache locality. Implements `Value` and `Tuple`. Prototype existed in abandoned branch (~358 LOC + 538 test). |
 | P2 | Numeric dispatch simplification | Performance | Not started | Replace `NumericKind` enum + `init()` dispatch tables with direct type switches in each numeric method. Deletes indirection layer (~-1400 net lines). Same behavior, fewer allocations. |
-| P2 | Sandboxing convenience API | Security | **Done** | `SafeExtensions()`, `WithSafeExtensions()`, `WithoutCore()`, registry filtering (`Without`, `WithoutCategory`, `WithoutBindings`), import observer, security classification docs. `plans/SECURITY.md` |
 | P2 | Opcode resource limits | Security | Design | Per-category limits for match/expand/continuation copy. Completes defense-in-depth for embedded use. `plans/SECURITY.md` |
-| P2 | Environment introspection | Feature | **Done** | 5 read-only primitives extracted to `extensions/introspection/`. Available in safe sandbox. |
-| P3 | Authorization Framework (6 phases) | Security | **Done** | K8s-style verb+resource for fine-grained sandboxing. `security/` package, built-in authorizers, engine integration, primitive gating, integration tests. `plans/SECURITY.md` |
 | P3 | ER macro transformer | Macro system | Not started | Unlocks Chibi library ecosystem. Matters after Go-side adoption creates demand for Scheme library porting. `plans/MACRO_SYSTEM.md` |
 | P3 | Module decomposition Phase 1 | Architecture | Not started | Decompose `internal/extensions/all/` into records, promises, core. Enables future module extraction. `plans/ARCHITECTURE.md` |
 | P3 | Network libraries | Standard library | Not started | TCP/UDP, HTTP, TLS, DNS. Required for real-world embedded use cases. |
@@ -73,25 +69,6 @@ Future Extensions
 
 ---
 
-### Authorization Framework (P3)
-
-Fine-grained access control for embedded engines running untrusted code. Kubernetes-style verb+resource model with a single `Authorizer` interface method, extensible by extensions without interface changes.
-
-**Note**: This addresses a speculative use case. No current users have requested sandboxing. Prioritize after achieving broader adoption (10+ active users embedding Wile).
-
-See `plans/SECURITY.md` for full design.
-
-| Phase | Description | Status |
-|-------|-------------|--------|
-| 1 | `security/` package — interface, context propagation, constants | **Done** |
-| 2 | Built-in authorizers (FilesystemRoot, ReadOnly, DenyAll, Composite) | **Done** |
-| 3 | Engine integration (`WithAuthorizer` option, ctx wrapping) | **Done** |
-| 4 | Gate runtime primitives (files, system, eval extensions) | **Done** |
-| 5 | Gate compile-time code loading (include, library import) | **Done** |
-| 6 | Integration tests | **Done** |
-
----
-
 ### Standard Libraries
 
 **Network Libraries (Racket-compatible)**
@@ -108,18 +85,7 @@ See `plans/SECURITY.md` for full design.
 - [ ] File system operations beyond R7RS (permissions, symlinks, stat)
 - [ ] Signal handling
 
-**Unit Testing Library** — Done (initial extraction)
-
-**What Exists**:
-- `(chibi test)` framework in `lib/chibi/test.scm`
-- Test infrastructure: `test/` directory with runner scripts
-- Automated test discovery (`*-test.scm` files)
-- CI integration (`make test-scheme`)
-- Cross-implementation testing support
-- 11 test files (3,187 lines) covering strings, characters, ports, numbers, exceptions, lazy evaluation, records, eval, control features, and macros
-- 915-test R7RS conformance suite in `integration/testdata/r7rs-tests.scm`
-
-**Future expansion**:
+**Unit Testing**:
 - [ ] Regression test files (`test/regression/`)
 - [ ] Library-specific tests (`lib/*/test/`)
 - [ ] New test cases for features not covered by Go test extraction
@@ -241,17 +207,10 @@ Three-tier feature flag system for controlling Wile behavior at different lifecy
 - [ ] Immutability enforcement: compile-time flags reject mutation attempts
 - [ ] Integration with R7RS `cond-expand` for feature-based conditional compilation in Scheme
 
-Other
------
-
-### Other
-- [x] MachineContext `Error` should be `Errorf` — partially addressed: VM binding resolution errors now use sentinel+wrap via `WrapError`. Remaining `Error()` call sites are a separate concern (format string ergonomics, not sentinel compliance).
-
 ### Tech Debt (from [plans/TECH_DEBT_REVIEW.md](plans/TECH_DEBT_REVIEW.md))
 
 - [ ] **F10: MachineContext decomposition** [Medium, Postponed]: 1586 lines, 71 methods, 10+ responsibilities. Extract `WindingStack`, `ContinuationChain`, `ExceptionHandler` into delegate types. Postponed — requires stable method surface; do after other refactorings settle.
 - [ ] **F11: Promote internal extensions** [Low, Postponed]: `internal/extensions/{io,eval,all}` invisible to embedders. Promote to `extensions/{io,eval}/` when extension API stabilizes and external consumers exist.
-- [x] **F12: Subsystem benchmarks** [Low]: `machine/fib_bench_test.go`, `machine/apply_bench_test.go`, `registry/core/prim_bench_test.go`, `internal/tokenizer/tokenizer_bench_test.go`.
 
 ### Tech Debt (from `private/*_TECH_DEBT_ASSESSMENT.md`)
 
@@ -284,8 +243,6 @@ Other
 - [ ] **Error sentinel grouping** [Low, S]: ~120 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.
 
 ### Small Refactorings (P5)
-- [x] **Extract `ForeignClosure` type**: Extracted as distinct type with `Closure` interface, `applyForeign` direct-call path, `atomicBody` flag removed.
-- [x] **`PairBlock` type for `[]Pair`**: Named type in `values/` with `LinkWith` method, used in `List()` and `buildRestArg()`.
 - [ ] Validator prologue deduplication: 19 validators in `internal/validate/validate_*.go` repeat the same `collectList` + `improper` check + arity guard prologue (~4 lines each). Extract to `validateFormPrologue()` helper.
 - [ ] Optional fill argument extraction: 3 `make-*` primitives (`PrimMakeVector`, `PrimMakeBytevector`, `PrimMakeString`) independently extract optional fill arguments with slightly different patterns. Share a helper.
 
