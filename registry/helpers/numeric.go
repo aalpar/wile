@@ -193,7 +193,7 @@ func NumericChainCompare(
 		mc.SetValue(values.BoolToBoolean(!fails(prev, curr)))
 		return nil
 	}
-	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
+	err := MustList(mc.Context(), pr, name, func(_ context.Context, _ int, _ bool, v values.Value) error {
 		curr, ok := v.(values.Number)
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, v)
@@ -210,9 +210,6 @@ func NumericChainCompare(
 	}
 	if err != nil {
 		return err
-	}
-	if !values.IsEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a proper list", name)
 	}
 	mc.SetValue(values.TrueValue)
 	return nil
@@ -337,7 +334,7 @@ func NumericExtremum(
 	}
 
 	foundNaN := false
-	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
+	err := MustList(mc.Context(), pr, name, func(_ context.Context, _ int, _ bool, v values.Value) error {
 		curr, ok := v.(values.Number)
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, v)
@@ -361,9 +358,6 @@ func NumericExtremum(
 	})
 	if err != nil {
 		return err
-	}
-	if !values.IsEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: not a proper list", name)
 	}
 
 	// If NaN was found, return it directly

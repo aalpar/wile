@@ -15,6 +15,7 @@
 package helpers
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -24,6 +25,79 @@ import (
 	"github.com/aalpar/wile/values/valuestest"
 	"github.com/aalpar/wile/werr"
 )
+
+// ── MustList ─────────────────────────────────────────────────────────
+
+func TestMustList(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	tcs := []struct {
+		name string
+		list values.Tuple
+		want []values.Value
+	}{
+		{
+			"empty list",
+			values.EmptyList,
+			nil,
+		},
+		{
+			"single element",
+			values.List(values.NewInteger(1)).(values.Tuple),
+			[]values.Value{values.NewInteger(1)},
+		},
+		{
+			"three elements",
+			values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)).(values.Tuple),
+			[]values.Value{values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			var got []values.Value
+			err := MustList(ctx, tc.list, "test", func(_ context.Context, _ int, _ bool, v values.Value) error {
+				got = append(got, v)
+				return nil
+			})
+			c.Assert(err, qt.IsNil)
+			c.Assert(len(got), qt.Equals, len(tc.want))
+			for i := range tc.want {
+				c.Assert(got[i], valuestest.SchemeEquals, tc.want[i])
+			}
+		})
+	}
+}
+
+func TestMustList_Errors(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	noop := func(_ context.Context, _ int, _ bool, _ values.Value) error {
+		return nil
+	}
+
+	tcs := []struct {
+		name     string
+		list     values.Tuple
+		sentinel error
+	}{
+		{
+			"improper list",
+			values.NewCons(values.NewInteger(1), values.NewInteger(2)),
+			werr.ErrNotAList,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			err := MustList(ctx, tc.list, "test", noop)
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(errors.Is(err, tc.sentinel), qt.IsTrue)
+		})
+	}
+}
 
 // ── ListToVector ─────────────────────────────────────────────────────
 
