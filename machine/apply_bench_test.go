@@ -104,6 +104,19 @@ func BenchmarkStackPushPopAll(b *testing.B) {
 	}
 }
 
+// BenchmarkStackPushDrain measures Push(2 values) + Drain (zero-allocation).
+func BenchmarkStackPushDrain(b *testing.B) {
+	one := values.NewInteger(1)
+	two := values.NewInteger(2)
+	s := NewStack()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		s.Push(one)
+		s.Push(two)
+		_ = s.Drain()
+	}
+}
+
 // BenchmarkTypeSwitch measures the cost of a type switch on values.Value
 // dispatching to *ForeignClosure (the common case for primitive calls).
 func BenchmarkTypeSwitch(b *testing.B) {

@@ -717,6 +717,12 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 			"composable continuation: cannot cross continuation barrier")
 	}
 
+	// Save the argument value before Restore releases the old eval stack.
+	// When the caller used Drain (zero-copy), args shares the stack's
+	// backing array. Restore recycles that stack to the pool, clearing
+	// the backing array and invalidating args.
+	val := args[0]
+
 	// Deep-copy the segment for safe re-invocation
 	segment := cc.Cont().DeepCopy()
 
@@ -731,7 +737,7 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 		// Empty composable continuation: captured at a tail-call site with no
 		// saved frames above it (e.g., call/cc inside a sub-context where
 		// the call was in tail position). Applying it just returns the value.
-		p.SetValue(args[0])
+		p.SetValue(val)
 		return p.returnImmediate(), nil
 	}
 
@@ -740,7 +746,7 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 
 	// Restore from the top of the segment (resume captured computation)
 	p.Restore(segment)
-	p.SetValue(args[0])
+	p.SetValue(val)
 	return p, nil
 }
 
@@ -841,9 +847,9 @@ func (p *MachineContext) Run() error {
 			mc.pc++
 
 		case OpApply:
-			vs := mc.evals.PopAll()
-			mc.counters.StackPopAlls++
-			mc.counters.StackElementsCopied += uint64(len(vs))
+			vs := mc.evals.Drain()
+			mc.counters.StackDrains++
+			mc.counters.StackElementsDrained += uint64(len(vs))
 			mc.counters.RecordStackDepth(len(vs))
 			result, err := mc.ApplyCallable(mc.GetValue(), vs...)
 			if err != nil {
@@ -978,9 +984,9 @@ func (p *MachineContext) Run() error {
 
 		case OpPullApply:
 			mc.SetValue(mc.evals.Pull())
-			vs := mc.evals.PopAll()
-			mc.counters.StackPopAlls++
-			mc.counters.StackElementsCopied += uint64(len(vs))
+			vs := mc.evals.Drain()
+			mc.counters.StackDrains++
+			mc.counters.StackElementsDrained += uint64(len(vs))
 			mc.counters.RecordStackDepth(len(vs))
 			result, err := mc.ApplyCallable(mc.GetValue(), vs...)
 			if err != nil {

@@ -204,7 +204,7 @@ Replace per-call `MachineContinuation` allocation with a contiguous stack of fra
 
 Use existing `VMCounters` to track:
 - `EnvsCopied` / `BindingsCopied` — measures impact of #2, #3
-- `StackPopAlls` / `StackElementsCopied` — measures impact of #1
+- `StackDrains` / `StackElementsDrained` — measures impact of #1
 - `NoCopyApplies` / `NoCopyBindingsSaved` — baseline for what's already saved
 
 Run benchmarks: `make bench-gabriel` for the 16-benchmark Gabriel suite. ZebraPuzzle (`go test -bench=BenchmarkZebraPuzzle`) for backtracking stress test. Profile with `go test -bench=X -cpuprofile` and `go test -bench=X -memprofile` for allocation analysis.

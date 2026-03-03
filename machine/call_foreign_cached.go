@@ -37,9 +37,9 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 		return callForeignCachedFallback(mc, callable, tail)
 	}
 
-	vs := mc.evals.PopAll()
-	mc.counters.StackPopAlls++
-	mc.counters.StackElementsCopied += uint64(len(vs))
+	vs := mc.evals.Drain()
+	mc.counters.StackDrains++
+	mc.counters.StackElementsDrained += uint64(len(vs))
 	mc.counters.RecordStackDepth(len(vs))
 
 	l := fcls.paramCount
@@ -105,9 +105,9 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 // set!). It reconstructs the original PullApply semantics: pop all args from
 // the eval stack and dispatch through the generic ApplyCallable path.
 func callForeignCachedFallback(mc *MachineContext, callable values.Value, tail bool) (*MachineContext, error) {
-	vs := mc.evals.PopAll()
-	mc.counters.StackPopAlls++
-	mc.counters.StackElementsCopied += uint64(len(vs))
+	vs := mc.evals.Drain()
+	mc.counters.StackDrains++
+	mc.counters.StackElementsDrained += uint64(len(vs))
 	mc.counters.RecordStackDepth(len(vs))
 
 	if !tail {

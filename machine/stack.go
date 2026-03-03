@@ -98,6 +98,24 @@ func (p *Stack) PushAll(vs []values.Value) {
 	*p = append(*p, vs...)
 }
 
+// Drain returns a view of all stack elements and resets the stack to empty.
+// The returned slice shares the stack's backing array — it is valid only
+// until the next mutation (Push, PushAll, or any append). Callers must
+// finish reading before any stack mutation.
+//
+// Unlike PopAll (which copies into a new slice), Drain is zero-allocation.
+// Use Drain when the caller consumes values immediately (e.g., binding
+// arguments in Apply); use PopAll when the caller needs to own the slice.
+func (p *Stack) Drain() []values.Value {
+	n := len(*p)
+	if n == 0 {
+		return nil
+	}
+	view := (*p)[:n:n]
+	*p = (*p)[:0]
+	return view
+}
+
 // PopAll removes and returns all values from the stack.
 // The caller gets exclusive ownership of the returned slice.
 // The stack retains its backing array for reuse (avoids re-allocation on
