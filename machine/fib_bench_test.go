@@ -130,6 +130,20 @@ func BenchmarkPopAll_2(b *testing.B) {
 	}
 }
 
+// BenchmarkDrain_2 measures Drain with 2 elements (zero-allocation).
+func BenchmarkDrain_2(b *testing.B) {
+	one := values.NewInteger(1)
+	two := values.NewInteger(2)
+	s := NewStack()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		s.Push(one)
+		s.Push(two)
+		_ = s.Drain()
+	}
+}
+
 // ---------- Pool acquire/release cycles ----------
 
 // BenchmarkStackPool measures acquire + release of an eval stack.

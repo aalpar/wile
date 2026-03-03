@@ -87,6 +87,52 @@ func TestStack_PopAll(t *testing.T) {
 	qt.Assert(t, qs[1], valuestest.SchemeEquals, values.NewInteger(20))
 }
 
+func TestStack_Drain(t *testing.T) {
+	q := NewStack()
+	q.Push(values.NewInteger(10))
+	q.Push(values.NewInteger(20))
+	vs := q.Drain()
+	qt.Assert(t, vs, qt.HasLen, 2)
+	qt.Assert(t, vs[0], valuestest.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, vs[1], valuestest.SchemeEquals, values.NewInteger(20))
+	qt.Assert(t, q.Len(), qt.Equals, 0)
+}
+
+func TestStack_DrainEmpty(t *testing.T) {
+	q := NewStack()
+	vs := q.Drain()
+	qt.Assert(t, vs == nil, qt.IsTrue)
+	qt.Assert(t, q.Len(), qt.Equals, 0)
+}
+
+func TestStack_DrainThenPush(t *testing.T) {
+	q := NewStack()
+	q.Push(values.NewInteger(1))
+	q.Push(values.NewInteger(2))
+
+	vs := q.Drain()
+	qt.Assert(t, vs, qt.HasLen, 2)
+
+	// Read the drained values BEFORE pushing (this is the contract).
+	qt.Assert(t, vs[0], valuestest.SchemeEquals, values.NewInteger(1))
+	qt.Assert(t, vs[1], valuestest.SchemeEquals, values.NewInteger(2))
+
+	// Push overwrites the backing array — view is now invalid.
+	q.Push(values.NewInteger(99))
+	qt.Assert(t, q.Len(), qt.Equals, 1)
+	qt.Assert(t, q.Pop(), valuestest.SchemeEquals, values.NewInteger(99))
+}
+
+func TestStack_DrainCapIsSealed(t *testing.T) {
+	// The returned view's cap equals its len, preventing accidental
+	// append from growing into the stack's backing array.
+	q := NewStack()
+	q.Push(values.NewInteger(1))
+	q.Push(values.NewInteger(2))
+	vs := q.Drain()
+	qt.Assert(t, cap(vs), qt.Equals, len(vs))
+}
+
 func TestStack_Pull(t *testing.T) {
 	q := NewStack()
 	q.Push(values.NewInteger(10))

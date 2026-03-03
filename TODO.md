@@ -20,16 +20,16 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 ## Bugs & Correctness
 
-- [ ] **Fix Tuple ForEach nil semantics** [Medium, S]: `pair.go:184` — nil `*Pair.ForEach` returns `Void`, not `EmptyList`. Violates interface contract ("returns the tail value (EmptyList for proper lists)"). Pin behavior with a test.
+- [x] **Fix Tuple ForEach nil semantics** [Medium, S]: `pair.go:184` — nil `*Pair.ForEach` returns `Void`, not `EmptyList`. Violates interface contract ("returns the tail value (EmptyList for proper lists)"). Pin behavior with a test.
 - [x] **Shared acyclic datum labels**: `internSymbolsInValueWithVisited` uses a permanent visited set, incorrectly rejecting shared-but-acyclic structures like `'(#0=(a) #0#)`. Fix: stack-based or two-state (inProgress/done) visited map. `deduplicatePairWithVisited` needs the same fix if shared DAGs are allowed through.
-- [ ] **guard body drops multiple values**: `(let ((result (begin e1 e2 ...))) ...)` captures only the first return value. R7RS §7.3's own reference implementation has the same limitation. Worth fixing but low priority.
+- [x] **guard body drops multiple values**: Fixed in PR #395 — guard body now uses `call-with-values` to capture and re-emit all values.
 - L7 (`char-ready?`/`u8-ready?` always `#t`) — documented semantic difference, no fix planned
 
 ---
 
 ## Performance
 
-- [ ] **Stack.Drain — eliminate PopAll allocation in VM hot path**: `PopAll` allocates a fresh `[]values.Value` on every function call (`OpApply`, `OpPullApply`). `Apply` only iterates the slice then discards it. Add a `Drain`/view method to let `Apply` read the stack backing array in-place, then clear. ~20 LOC, two call sites.
+- [x] **Stack.Drain — eliminate PopAll allocation in VM hot path**: `PopAll` allocates a fresh `[]values.Value` on every function call (`OpApply`, `OpPullApply`). `Apply` only iterates the slice then discards it. Add a `Drain`/view method to let `Apply` read the stack backing array in-place, then clear. ~20 LOC, two call sites.
 - [x] **Fused push opcodes**: `PushLiteral`, `PushGlobal`, `PushLocal` — combine load+push into single opcodes to reduce dispatch overhead. Peephole optimizer emits fused ops.
 - [ ] **Numeric dispatch simplification**: Replace `NumericKind` enum + `init()` dispatch tables with direct type switches in each numeric method. Deletes indirection layer (~-1400 net lines). Same behavior, fewer allocations.
 - [ ] **ArrayList — array-backed list representation**: Contiguous `[]Value` slice alternative to `*Pair` chains. O(1) element access, better cache locality. Implements `Value` and `Tuple`. Prototype existed in abandoned branch (~358 LOC + 538 test).
