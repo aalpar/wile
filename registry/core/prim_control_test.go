@@ -712,6 +712,37 @@ func TestCallCCMultiInvoke(t *testing.T) {
 	}
 }
 
+func TestCallCCMultipleValues(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name: "call/cc body returns multiple values",
+			Code: `(call-with-values
+				(lambda () (call/cc (lambda (k) (values 1 2 3))))
+				list)`,
+			Expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
+		},
+		{
+			Name: "continuation invoked with single value",
+			Code: `(call/cc (lambda (k) (k 42)))`,
+			Expected: values.NewInteger(42),
+		},
+		{
+			Name: "call/cc body returns zero values",
+			Code: `(call-with-values
+				(lambda () (call/cc (lambda (k) (values))))
+				(lambda () 'none))`,
+			Expected: values.NewSymbol("none"),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
 // TestCallCCSubContextReentry tests that continuations captured inside
 // Go-implemented primitives (map, for-each, call-with-values) that use
 // NewSubContext() can be re-entered and resume the full computation,

@@ -65,18 +65,23 @@ Replace:
 With:
 ```scheme
 (lambda ()
-  (call-with-values
-   (lambda () e1 e2 ...)
-   (lambda results
-     (guard-k (lambda () (apply values results)))))))
+  (let ((results (call-with-values (lambda () e1 e2 ...) list)))
+    (lambda () (apply values results)))))
 ```
+
+**Note:** The initial plan proposed `(lambda results (guard-k ...))` but the
+actual implementation avoids calling `guard-k` for the normal path. `guard-k`
+triggers `ErrPromptAbort` which bypasses all intermediate Go primitives
+(including any outer `call-with-values`). Returning the thunk directly lets
+multiple values flow through normal call-return semantics.
 
 ### Why this works
 
-- `call-with-values` captures all values produced by the body thunk into the
-  rest-arg list `results`.
-- `(apply values results)` re-emits them when the outer `((call/cc ...))` calls
-  the winning thunk.
+- `call-with-values` + `list` captures all values from the body into a list.
+- The thunk `(lambda () (apply values results))` re-emits them when the outer
+  `((call/cc ...))` calls the winning thunk.
+- The body thunk returns normally (no escape via `guard-k`), so nested
+  constructs like `call-with-values` work correctly around `guard`.
 - Zero values (`(values)`) → `results = ()` → `(apply values '())` → `(values)`. ✓
 - One value → `results = (v)` → `(apply values '(v))` → `v`. ✓
 - N values → forwarded intact. ✓
