@@ -651,4 +651,38 @@
           (lambda (e) (k 'caught))
           (lambda () (raise 'error)))))))
 
+;; ── Guard: multiple-value body ────────────────────────────────────
+
+(test-group "guard body multiple values"
+  ;; two values propagate through guard when no exception is raised
+  (define-values (a b)
+    (guard (exn (else (values -1 -1)))
+      (values 1 2)))
+  (test 1 a)
+  (test 2 b)
+
+  ;; zero values (unusual but must not error)
+  ;; Use call-with-values to consume the zero-value return.
+  (test #t
+    (call-with-values
+     (lambda ()
+       (guard (exn (else 'caught))
+         (values)))
+     (lambda () #t)))
+
+  ;; single value still works (regression)
+  (test 42
+    (guard (exn (else 'caught))
+      42))
+
+  ;; multiple values with multi-expression body (e1 e2 are sequenced,
+  ;; last expression produces multiple values)
+  (define-values (x y z)
+    (guard (exn (else (values -1 -1 -1)))
+      (define ignored 0)
+      (values 10 20 30)))
+  (test 10 x)
+  (test 20 y)
+  (test 30 z))
+
 (test-end)

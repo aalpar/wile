@@ -163,10 +163,10 @@ func PrimCallCC(mc *machine.MachineContext) error {
 		var abortErr *machine.ErrPromptAbort
 		if errors.As(err, &abortErr) && abortErr.Tag == machine.DefaultPromptTag {
 			// The escape closure ran the composable continuation to completion and
-			// aborted to DefaultPromptTag with the result. Extract the value here
+			// aborted to DefaultPromptTag with the result. Extract all values here
 			// so callers that don't use RunWithEscapeHandling (e.g., threads) work.
 			if len(abortErr.Values) > 0 {
-				mc.SetValue(abortErr.Values[0])
+				mc.SetValues(abortErr.Values...)
 			} else {
 				mc.SetValue(values.Void)
 			}
@@ -175,7 +175,7 @@ func PrimCallCC(mc *machine.MachineContext) error {
 		return err
 	}
 
-	mc.SetValue(sub.GetValue())
+	mc.SetValues(sub.GetValues()...)
 	return nil
 }
 
@@ -230,11 +230,14 @@ func newComposeAbortEscapeClosure(
 			return err
 		}
 
-		// Abort to DefaultPromptTag with the result.
+		// Abort to DefaultPromptTag with all values produced by the continuation.
 		// RunWithEscapeHandling catches this via the nil-prompt path.
+		// Using GetValues (not GetValue) preserves multiple values through
+		// the escape mechanism — required for guard's call-with-values pattern
+		// and for R7RS §6.10 multi-value continuation semantics.
 		return &machine.ErrPromptAbort{
 			Tag:    machine.DefaultPromptTag,
-			Values: []values.Value{sub.GetValue()},
+			Values: sub.GetValues(),
 		}
 	}
 	return machine.NewVMForeignClosure(env, 1, false, fn)

@@ -184,8 +184,8 @@
                              (raise-continuable condition))))
                         var clause ...))))))))
            (lambda ()
-             (let ((result (begin e1 e2 ...)))
-               (guard-k (lambda () result)))))))))))
+             (let ((results (call-with-values (lambda () e1 e2 ...) list)))
+               (lambda () (apply values results)))))))))))
 
 (define-syntax guard-aux
   (syntax-rules (else =>)

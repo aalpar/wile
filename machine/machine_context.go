@@ -1644,7 +1644,7 @@ func (p *MachineContext) RunWithEscapeHandling() error {
 				}
 			} else {
 				if len(abortErr.Values) > 0 {
-					p.SetValue(abortErr.Values[0])
+					p.SetValues(abortErr.Values...)
 				} else {
 					p.SetValue(values.Void)
 				}

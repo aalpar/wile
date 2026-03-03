@@ -1218,6 +1218,59 @@ func TestGuardDeeplyNested(t *testing.T) {
 	}
 }
 
+// TestGuardBodyMultipleValues verifies that guard propagates multiple values
+// from its body to the caller when no exception is raised.
+//
+// The R7RS §7.3 reference implementation uses (let ((result (begin e1 e2 ...))))
+// which loses multiple values: let expects exactly one value per binding, so
+// (values 1 2) in the body causes a wrong-argument-count error. This test
+// pins the correct behavior after the fix.
+func TestGuardBodyMultipleValues(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		out  values.Value
+	}{
+		{
+			name: "two values propagate when no exception raised",
+			code: `(call-with-values
+						(lambda () (guard (e (#f)) (values 1 2)))
+						list)`,
+			out: values.List(values.NewInteger(1), values.NewInteger(2)),
+		},
+		{
+			name: "three values propagate when no exception raised",
+			code: `(call-with-values
+						(lambda () (guard (e (#f)) (values 10 20 30)))
+						list)`,
+			out: values.List(values.NewInteger(10), values.NewInteger(20), values.NewInteger(30)),
+		},
+		{
+			name: "single value still works after fix",
+			code: `(guard (e (#f)) 42)`,
+			out:  values.NewInteger(42),
+		},
+		{
+			name: "multi-expression body last expr produces two values",
+			code: `(call-with-values
+						(lambda ()
+							(guard (e (#f))
+								(+ 1 0)
+								(values 'a 'b)))
+						list)`,
+			out: values.List(values.NewSymbol("a"), values.NewSymbol("b")),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.out)
+		})
+	}
+}
+
 // TestFileErrorPredicate tests the file-error? predicate (R7RS §6.11)
 func TestFileErrorPredicate(t *testing.T) {
 	tcs := []struct {
