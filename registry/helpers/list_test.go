@@ -44,12 +44,12 @@ func TestMustList(t *testing.T) {
 		},
 		{
 			"single element",
-			values.List(values.NewInteger(1)).(values.Tuple),
+			values.List(values.NewInteger(1)),
 			[]values.Value{values.NewInteger(1)},
 		},
 		{
 			"three elements",
-			values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)).(values.Tuple),
+			values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
 			[]values.Value{values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)},
 		},
 	}
