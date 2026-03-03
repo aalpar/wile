@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-02-26
+**Last Updated**: 2026-03-02
 
 ### Current Project Status
 
@@ -43,6 +43,20 @@ Items are ordered by priority: P1 (core adoption blockers), P2 (growth enablers)
 | P4 | POSIX API / SRFI-170 (10 phases) | Standard library | Not started | Comprehensive OS access |
 | P4 | Logging library | Standard library | Not started | Levels, structured output, handlers |
 | P4 | Event callbacks | Tooling | Not started | Hooks for expansion, compilation, debugging |
+| P5 | Duplicated import set parsing | Tech debt | Not started | `compile_time_continuation_library.go` vs `import_set_datum.go` — same R7RS §5.7 logic on different types. Bug-fix divergence risk. |
+| P5 | Split `compile_time_continuation_library.go` | Tech debt | Not started | 1,213 lines, 6+ concerns. Split into library forms, import parsing, letrec* body. |
+| P5 | Split `library.go` registry/bindings | Tech debt | Not started | 456 lines mixing registry ops and three-env auxiliary syntax lookup. |
+| P5 | Unify escape mechanisms | Tech debt | Not started | `ErrExitEscape` and `ErrPromptAbort` — parallel tagged-boundary paths. |
+| P5 | Fix Tuple ForEach nil semantics | Tech debt | Not started | Nil `*Pair.ForEach` returns `Void` not `EmptyList`. Latent correctness bug. |
+| P5 | Port type Value method boilerplate | Tech debt | Not started | 10+ port files duplicate `IsVoid`/`EqualTo`/`SchemeString`. |
+| P5 | Constructor telescoping in `match` | Tech debt | Not started | 8 constructor variants → options struct. |
+| P5 | I/O port extraction helper | Tech debt | Not started | 4 hand-unrolled port extraction functions → generic `extractPort[T]`. |
+| P5 | `forms` type erasure docs | Tech debt | Not started | `any` signatures undocumented; add contract doc comments. |
+| P5 | Tokenizer test consolidation | Tech debt | Not started | 14 test files named by coverage goals → behavior-oriented files. |
+| P5 | REPL deprecated wrappers | Tech debt | Not started | 3 deprecated delegations in `repl.go`. Delete if unused. |
+| P5 | Rename `AddSearchPath` | Tech debt | Not started | Prepends but name suggests append. |
+| P5 | Unify library/include paths | Tech debt | Not started | Inconsistent path resolution between `include` and library loading. |
+| P5 | Error sentinel grouping | Tech debt | Not started | ~120 sentinels in flat list. Reorganize if count grows. |
 | P5 | Fused lexing/parsing | Research | Research | Flap paper analysis. Actionable only after profiling confirms tokenizer is a bottleneck. `plans/PERFORMANCE.md` |
 | P5 | Feature flags (3-tier) | Runtime | Not started | Compile-time, runtime global, extension-defined. No demand signal yet. |
 | P5 | Scribble syntax (@-expressions) | Syntax | Not started | Racket-style text processing. No demand signal yet. |
@@ -238,6 +252,36 @@ Other
 - [ ] **F10: MachineContext decomposition** [Medium, Postponed]: 1586 lines, 71 methods, 10+ responsibilities. Extract `WindingStack`, `ContinuationChain`, `ExceptionHandler` into delegate types. Postponed — requires stable method surface; do after other refactorings settle.
 - [ ] **F11: Promote internal extensions** [Low, Postponed]: `internal/extensions/{io,eval,all}` invisible to embedders. Promote to `extensions/{io,eval}/` when extension API stabilizes and external consumers exist.
 - [x] **F12: Subsystem benchmarks** [Low]: `machine/fib_bench_test.go`, `machine/apply_bench_test.go`, `registry/core/prim_bench_test.go`, `internal/tokenizer/tokenizer_bench_test.go`.
+
+### Tech Debt (from `private/*_TECH_DEBT_ASSESSMENT.md`)
+
+**machine/ — High:**
+- [ ] **Duplicated import set parsing** [High, M]: `parseImportSet*` (8 functions on `syntax.SyntaxValue`) in `compile_time_continuation_library.go` mirrors `parseImportSet*FromDatum` (7 functions on `values.Tuple`) in `import_set_datum.go`. Same R7RS §5.7 modifier semantics, two implementations. Bug-fix divergence risk. Fix: common `Datum` interface both types satisfy.
+- [ ] **Split `compile_time_continuation_library.go`** [High, M]: 1,213 lines doing 6+ concerns (library forms, import parsing, export, cond-expand, letrec* body, phase-aware bindings). Split into `compile_library_forms.go`, `compile_import.go`, keep letrec* body in original.
+
+**machine/ — Medium:**
+- [ ] **Split `library.go` into registry + bindings** [Medium, S]: 456 lines mixing data structures, registry ops, export application, and three-environment auxiliary syntax lookup. Split into `library_registry.go` and `library_bindings.go`.
+- [ ] **Unify escape mechanisms** [Medium, M]: `ErrExitEscape` + `ExitTag` (`exit_escape.go`) and `ErrPromptAbort` + `PromptTag` (`prompt_abort.go`) are parallel paths for tagged-boundary return. Barrier/winding bug fixes must cover both. Evaluate whether `call-with-exit` can wrap the prompt abort mechanism.
+
+**machine/ — Low:**
+- [ ] **Rename `AddSearchPath` to `PrependSearchPath`** [Low, S]: `library.go:164` — prepends but name suggests append.
+- [ ] **Unify library/include path resolution** [Low, S]: `DefaultLibraryPaths` hardcodes `[".", "./lib"]`; `SCHEME_INCLUDE_PATH` only used by `include`/`include-ci`, not library loading. Inconsistent.
+
+**values/ — Medium:**
+- [ ] **Fix Tuple ForEach nil semantics** [Medium, S]: `pair.go:184` — nil `*Pair.ForEach` returns `Void`, not `EmptyList`. Violates interface contract ("returns the tail value (EmptyList for proper lists)"). Pin behavior with a test.
+- [ ] **Port type Value method boilerplate** [Medium, S]: 10+ port files duplicate `IsVoid`/`EqualTo`/`SchemeString`. `portBase` provides `Close`/`IsClosed` but not Value interface methods. Add `SchemeString`/`IsVoid` to `portBase`; `EqualTo` requires concrete assertions.
+
+**internal/ — Medium:**
+- [ ] **`forms` type erasure documentation** [Medium, S]: `ValidatorFunc`/`CompilerFunc` in `internal/forms/form_spec.go` use `any` to break circular imports. Deliberate choice but contract is undocumented. Add explicit doc comment on `FormSpec` specifying the concrete types each `any` parameter must satisfy.
+- [ ] **Constructor telescoping in `match`** [Medium, S]: 8 constructor variants (`NewSyntaxMatcher*` × 4, `CompileSyntaxPattern*` × 4) in `syntax_adapter.go`. Collapse to `NewSyntaxMatcher(config)` with a `SyntaxMatcherConfig` options struct.
+- [ ] **I/O port extraction helper** [Medium, S]: 4 functions in `internal/extensions/io/prim_read_write.go` (`getOptionalOutputPort`, `getOptionalInputPort`, `getRequiredBinaryInputPort`, `getRequiredBinaryOutputPort`) follow the same 5-step pattern, varying only in port type and error sentinel. Extract generic `extractPort[T]` parameterized on interface and sentinel.
+
+**internal/ — Low:**
+- [ ] **Tokenizer test file consolidation** [Low, M]: 14 test files, several named by coverage goals (`additional_coverage_test.go`, `final_coverage_test.go`). Consolidate into behavior-oriented files (`tokenizer_number_test.go`, `tokenizer_string_test.go`, etc.).
+- [ ] **REPL deprecated wrappers** [Low, S]: `internal/repl/repl.go:370-393` — `Compile`, `Run`, `Load` marked `Deprecated`, delegate to runtime package. Delete if no callers remain.
+
+**werr/ — Low:**
+- [ ] **Error sentinel grouping** [Low, S]: ~120 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.
 
 ### Small Refactorings (P5)
 - [x] **Extract `ForeignClosure` type**: Extracted as distinct type with `Closure` interface, `applyForeign` direct-call path, `atomicBody` flag removed.
