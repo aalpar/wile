@@ -21,7 +21,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 ## Bugs & Correctness
 
 - [ ] **Fix Tuple ForEach nil semantics** [Medium, S]: `pair.go:184` — nil `*Pair.ForEach` returns `Void`, not `EmptyList`. Violates interface contract ("returns the tail value (EmptyList for proper lists)"). Pin behavior with a test.
-- [ ] **Shared acyclic datum labels**: `internSymbolsInValueWithVisited` uses a permanent visited set, incorrectly rejecting shared-but-acyclic structures like `'(#0=(a) #0#)`. Fix: stack-based or two-state (inProgress/done) visited map. `deduplicatePairWithVisited` needs the same fix if shared DAGs are allowed through.
+- [x] **Shared acyclic datum labels**: `internSymbolsInValueWithVisited` uses a permanent visited set, incorrectly rejecting shared-but-acyclic structures like `'(#0=(a) #0#)`. Fix: stack-based or two-state (inProgress/done) visited map. `deduplicatePairWithVisited` needs the same fix if shared DAGs are allowed through.
 - [ ] **guard body drops multiple values**: `(let ((result (begin e1 e2 ...))) ...)` captures only the first return value. R7RS §7.3's own reference implementation has the same limitation. Worth fixing but low priority.
 - L7 (`char-ready?`/`u8-ready?` always `#t`) — documented semantic difference, no fix planned
 
@@ -30,7 +30,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 ## Performance
 
 - [ ] **Stack.Drain — eliminate PopAll allocation in VM hot path**: `PopAll` allocates a fresh `[]values.Value` on every function call (`OpApply`, `OpPullApply`). `Apply` only iterates the slice then discards it. Add a `Drain`/view method to let `Apply` read the stack backing array in-place, then clear. ~20 LOC, two call sites.
-- [ ] **Fused push opcodes**: `PushLiteral`, `PushGlobal`, `PushLocal` — combine load+push into single opcodes to reduce dispatch overhead. Peephole optimizer emits fused ops.
+- [x] **Fused push opcodes**: `PushLiteral`, `PushGlobal`, `PushLocal` — combine load+push into single opcodes to reduce dispatch overhead. Peephole optimizer emits fused ops.
 - [ ] **Numeric dispatch simplification**: Replace `NumericKind` enum + `init()` dispatch tables with direct type switches in each numeric method. Deletes indirection layer (~-1400 net lines). Same behavior, fewer allocations.
 - [ ] **ArrayList — array-backed list representation**: Contiguous `[]Value` slice alternative to `*Pair` chains. O(1) element access, better cache locality. Implements `Value` and `Tuple`. Prototype existed in abandoned branch (~358 LOC + 538 test).
 - [ ] **Rest-arg cons elimination and sync.Pool evaluation**: #1 allocator at 39.9%. `plans/PERFORMANCE.md`
@@ -54,7 +54,7 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 - [ ] **`forms` type erasure documentation** [Medium, S]: `ValidatorFunc`/`CompilerFunc` in `internal/forms/form_spec.go` use `any` to break circular imports. Deliberate choice but contract is undocumented. Add explicit doc comment on `FormSpec` specifying the concrete types each `any` parameter must satisfy.
 - [ ] **Constructor telescoping in `match`** [Medium, S]: 8 constructor variants (`NewSyntaxMatcher*` × 4, `CompileSyntaxPattern*` × 4) in `syntax_adapter.go`. Collapse to `NewSyntaxMatcher(config)` with a `SyntaxMatcherConfig` options struct.
 - [ ] **I/O port extraction helper** [Medium, S]: 4 functions in `internal/extensions/io/prim_read_write.go` (`getOptionalOutputPort`, `getOptionalInputPort`, `getRequiredBinaryInputPort`, `getRequiredBinaryOutputPort`) follow the same 5-step pattern, varying only in port type and error sentinel. Extract generic `extractPort[T]` parameterized on interface and sentinel.
-- [ ] **Validator prologue deduplication**: 19 validators in `internal/validate/validate_*.go` repeat the same `collectList` + `improper` check + arity guard prologue (~4 lines each). Extract to `validateFormPrologue()` helper.
+- [x] **Validator prologue deduplication**: 19 validators in `internal/validate/validate_*.go` repeat the same `collectList` + `improper` check + arity guard prologue (~4 lines each). Extract to `validateFormPrologue()` helper.
 - [ ] **Optional fill argument extraction**: 3 `make-*` primitives (`PrimMakeVector`, `PrimMakeBytevector`, `PrimMakeString`) independently extract optional fill arguments with slightly different patterns. Share a helper.
 
 ### Low Priority
