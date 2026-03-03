@@ -181,7 +181,7 @@ func (p *Pair) IsEmptyList() bool {
 // If the list ends with a non-empty cdr, that cdr is returned as the second return value.
 func (p *Pair) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) {
 	if p == nil {
-		return Void, nil
+		return EmptyList, nil
 	}
 	pr := p
 	i := 0
@@ -200,7 +200,7 @@ func (p *Pair) ForEach(ctx context.Context, fn ForEachFunc) (Value, error) {
 		pr = pr0
 		i++
 	}
-	return pr, nil
+	return EmptyList, nil
 }
 
 // Must panics if err is non-nil or v is not EmptyList.

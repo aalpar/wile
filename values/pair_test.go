@@ -15,6 +15,7 @@
 package values_test
 
 import (
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -234,11 +235,7 @@ func TestPair_Length(t *testing.T) {
 		out          int
 		panicMatches string
 	}{
-		{
-			in:           nil,
-			panicMatches: "not a list",
-			out:          -1,
-		},
+		{in: nil, out: 0},
 		{in: values.NewCons(values.NewInteger(10), values.EmptyList), out: 1},
 		{in: values.NewCons(values.NewCons(values.NewInteger(10), values.EmptyList), values.EmptyList), out: 1},
 		{in: values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.EmptyList)), out: 2},
@@ -639,6 +636,53 @@ func TestPair_SchemeString_NonCircularRegression(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			qt.Assert(t, tc.pair.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+func TestPair_ForEach(t *testing.T) {
+	ctx := context.TODO()
+
+	tcs := []struct {
+		name         string
+		input        *values.Pair
+		wantTail     values.Value
+		wantElements []values.Value
+	}{
+		{
+			name:         "nil receiver",
+			input:        (*values.Pair)(nil),
+			wantTail:     values.EmptyList,
+			wantElements: nil,
+		},
+		{
+			name:         "proper list",
+			input:        values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(2), values.EmptyList)),
+			wantTail:     values.EmptyList,
+			wantElements: []values.Value{values.NewInteger(1), values.NewInteger(2)},
+		},
+		{
+			name:         "improper list",
+			input:        values.NewCons(values.NewInteger(1), values.NewInteger(2)),
+			wantTail:     values.NewInteger(2),
+			wantElements: []values.Value{values.NewInteger(1)},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			var got []values.Value
+			tail, err := tc.input.ForEach(ctx, func(_ context.Context, _ int, _ bool, v values.Value) error {
+				got = append(got, v)
+				return nil
+			})
+			c.Assert(err, qt.IsNil)
+			c.Assert(tail, valuestest.SchemeEquals, tc.wantTail)
+			c.Assert(len(got), qt.Equals, len(tc.wantElements))
+			for i, want := range tc.wantElements {
+				c.Assert(got[i], valuestest.SchemeEquals, want)
+			}
 		})
 	}
 }

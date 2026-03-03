@@ -15,9 +15,11 @@
 package syntax
 
 import (
+	"context"
 	"testing"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -32,7 +34,7 @@ func TestSyntaxPair_SchemeString(t *testing.T) {
 		{NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(2), nil), SyntaxEmptyList, nil), nil), "#'(#'1 #'2)"},
 		{NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(2), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(3), nil), SyntaxEmptyList, nil), nil), nil), "#'(#'1 #'2 #'3)"},
 		{NewSyntaxCons(NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), NewSyntaxObject(values.NewInteger(2), nil), nil), SyntaxEmptyList, nil), "#'(#'(#'1 . #'2))"},
-		{NewSyntaxCons(NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), (*SyntaxPair)(nil), nil), SyntaxEmptyList, nil), "#'(#'(#'1 . #<syntax-void>))"},
+		{NewSyntaxCons(NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), (*SyntaxPair)(nil), nil), SyntaxEmptyList, nil), "#'(#'(#'1))"},
 	}
 
 	for _, tc := range tcs {
@@ -114,11 +116,7 @@ func TestSyntaxPair_Length(t *testing.T) {
 		out          int
 		panicMatches string
 	}{
-		{
-			in:           nil,
-			panicMatches: "not a list",
-			out:          -1,
-		},
+		{in: nil, out: 0},
 		{in: NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), SyntaxEmptyList, nil), out: 1},
 		{in: NewSyntaxCons(NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), SyntaxEmptyList, nil), SyntaxEmptyList, nil), out: 1},
 		{in: NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), SyntaxEmptyList, nil), nil), out: 2},
@@ -386,4 +384,26 @@ func TestSyntaxPair_Append(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSyntaxPair_ForEach_NilReceiver(t *testing.T) {
+	c := qt.New(t)
+	var p *SyntaxPair
+	tail, err := p.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, _ values.Value) error {
+		t.Fatal("callback should not be called on nil receiver")
+		return nil
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(tail, valuestest.SchemeEquals, values.EmptyList)
+}
+
+func TestSyntaxPair_SyntaxForEach_NilReceiver(t *testing.T) {
+	c := qt.New(t)
+	var p *SyntaxPair
+	tail, err := p.SyntaxForEach(context.TODO(), func(_ context.Context, _ int, _ bool, _ SyntaxValue) error {
+		t.Fatal("callback should not be called on nil receiver")
+		return nil
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(tail, qt.Equals, SyntaxEmptyList)
 }

@@ -230,7 +230,7 @@ func (p *SyntaxPair) IsVoid() bool {
 // ForEach iterates over the elements of the list.
 func (p *SyntaxPair) ForEach(ctx context.Context, fn values.ForEachFunc) (values.Value, error) {
 	if p == nil {
-		return values.Void, nil
+		return values.EmptyList, nil
 	}
 	pr := p
 	i := 0
@@ -247,13 +247,13 @@ func (p *SyntaxPair) ForEach(ctx context.Context, fn values.ForEachFunc) (values
 		pr = pr0
 		i++
 	}
-	return pr, nil
+	return values.EmptyList, nil
 }
 
 // SyntaxForEach iterates over the syntax elements of the list.
 func (p *SyntaxPair) SyntaxForEach(ctx context.Context, fn SyntaxForEachFunc) (SyntaxValue, error) {
 	if p == nil {
-		return SyntaxVoid, nil
+		return SyntaxEmptyList, nil
 	}
 	pr := p
 	i := 0
@@ -270,7 +270,7 @@ func (p *SyntaxPair) SyntaxForEach(ctx context.Context, fn SyntaxForEachFunc) (S
 		pr = pr0
 		i++
 	}
-	return pr, nil
+	return SyntaxEmptyList, nil
 }
 
 // IsPair returns true; SyntaxPair is always a pair.
