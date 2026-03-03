@@ -169,7 +169,7 @@ func IntegerFold(
 		}
 		return nil
 	}
-	v, err := restTuple.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, next values.Value) error {
+	err = MustList(mc.Context(), restTuple, name, func(_ context.Context, _ int, _ bool, next values.Value) error {
 		val, inexact, err := extractIntegerArg(next, name)
 		if err != nil {
 			return err
@@ -185,14 +185,11 @@ func IntegerFold(
 		result = combined
 		return nil
 	})
-	if err != nil {
-		if errors.Is(err, errNeedsBigInt) {
-			return integerFoldBig(mc, op, identity, pr, hasInexact)
-		}
-		return err
+	if errors.Is(err, errNeedsBigInt) {
+		return integerFoldBig(mc, op, identity, pr, hasInexact)
 	}
-	if !values.IsEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: not a proper list", name)
+	if err != nil {
+		return err
 	}
 	if hasInexact {
 		mc.SetValue(values.NewFloat(float64(result)))
@@ -238,7 +235,7 @@ func integerFoldBig(
 		return nil
 	}
 
-	v, err := restTuple.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, next values.Value) error {
+	err := MustList(mc.Context(), restTuple, name, func(_ context.Context, _ int, _ bool, next values.Value) error {
 		var val *big.Int
 		switch n := next.(type) {
 		case *values.Integer:
@@ -270,9 +267,6 @@ func integerFoldBig(
 	})
 	if err != nil {
 		return err
-	}
-	if !values.IsEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: not a proper list", name)
 	}
 
 	// Return result with appropriate exactness

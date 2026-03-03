@@ -23,6 +23,20 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
+// MustList calls fn on each element of t and returns ErrNotAList if the tail
+// is not an empty list (i.e., t is an improper list). If fn returns an error,
+// that error is returned unchanged.
+func MustList(ctx context.Context, t values.Tuple, name string, fn func(context.Context, int, bool, values.Value) error) error {
+	v, err := t.ForEach(ctx, fn)
+	if err != nil {
+		return err
+	}
+	if !values.IsEmptyList(v) {
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a proper list", name)
+	}
+	return nil
+}
+
 // ListToVector is a helper that converts a list argument to a vector.
 func ListToVector(mc *machine.MachineContext, name string) error {
 	o := mc.Arg(0)
@@ -35,15 +49,12 @@ func ListToVector(mc *machine.MachineContext, name string) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list but got %T", name, o)
 	}
 	var elems values.Vector
-	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
+	err := MustList(mc.Context(), pr, name, func(_ context.Context, _ int, _ bool, v values.Value) error {
 		elems = append(elems, v)
 		return nil
 	})
 	if err != nil {
 		return err
-	}
-	if !values.IsEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a proper list", name)
 	}
 	mc.SetValue(values.NewVector(elems...))
 	return nil
@@ -154,7 +165,7 @@ func AssocLookup(
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list but got %T", name, alist)
 	}
-	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
+	err := MustList(mc.Context(), pr, name, func(_ context.Context, _ int, _ bool, elem values.Value) error {
 		entry, ok := elem.(values.Tuple)
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotAPair, "%s: expected a pair in alist but got %T", name, elem)
@@ -170,9 +181,6 @@ func AssocLookup(
 	}
 	if err != nil {
 		return err
-	}
-	if !values.IsEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a proper list", name)
 	}
 	mc.SetValue(values.FalseValue)
 	return nil
