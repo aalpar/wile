@@ -722,8 +722,8 @@ func TestCallCCMultipleValues(t *testing.T) {
 			Expected: values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
 		},
 		{
-			Name: "continuation invoked with single value",
-			Code: `(call/cc (lambda (k) (k 42)))`,
+			Name:     "continuation invoked with single value",
+			Code:     `(call/cc (lambda (k) (k 42)))`,
 			Expected: values.NewInteger(42),
 		},
 		{
