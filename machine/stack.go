@@ -100,7 +100,8 @@ func (p *Stack) PushAll(vs []values.Value) {
 
 // Drain returns a view of all stack elements and resets the stack to empty.
 // The returned slice shares the stack's backing array — it is valid only
-// until the next Push call. Callers must finish reading before any push.
+// until the next mutation (Push, PushAll, or any append). Callers must
+// finish reading before any stack mutation.
 //
 // Unlike PopAll (which copies into a new slice), Drain is zero-allocation.
 // Use Drain when the caller consumes values immediately (e.g., binding
