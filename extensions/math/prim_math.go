@@ -45,16 +45,30 @@ func ensureInexactDecimal(s string) string {
 	return s
 }
 
-// PrimExp implements the (exp z) primitive.
-func PrimExp(mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	z, err := helpers.ToComplex128(o)
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "exp: %v", err)
+// makeComplexPrimitive returns a ForeignFunction that converts its argument
+// to complex128, applies fn, and returns the result (as Float when imaginary
+// part is zero, otherwise Complex). Used for the six unary transcendental
+// functions that share identical structure.
+func makeComplexPrimitive(name string, fn func(complex128) complex128) machine.ForeignFunction {
+	return func(mc *machine.MachineContext) error {
+		z, err := helpers.ToComplex128(mc.Arg(0))
+		if err != nil {
+			return werr.WrapForeignErrorf(err, "%s: %v", name, err)
+		}
+		mc.SetValue(helpers.ComplexOrFloat(fn(z)))
+		return nil
 	}
-	mc.SetValue(helpers.ComplexOrFloat(cmplx.Exp(z)))
-	return nil
 }
+
+// Unary transcendental primitives (R7RS §6.2.6).
+var (
+	PrimExp  = makeComplexPrimitive("exp", cmplx.Exp)
+	PrimSin  = makeComplexPrimitive("sin", cmplx.Sin)
+	PrimCos  = makeComplexPrimitive("cos", cmplx.Cos)
+	PrimTan  = makeComplexPrimitive("tan", cmplx.Tan)
+	PrimAsin = makeComplexPrimitive("asin", cmplx.Asin)
+	PrimAcos = makeComplexPrimitive("acos", cmplx.Acos)
+)
 
 // PrimLog implements the (log z) and (log z1 z2) primitives.
 func PrimLog(mc *machine.MachineContext) error {
@@ -77,61 +91,6 @@ func PrimLog(mc *machine.MachineContext) error {
 		}
 		mc.SetValue(helpers.ComplexOrFloat(cmplx.Log(z) / cmplx.Log(base)))
 	}
-	return nil
-}
-
-// PrimSin implements the (sin z) primitive.
-func PrimSin(mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	z, err := helpers.ToComplex128(o)
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "sin: %v", err)
-	}
-	mc.SetValue(helpers.ComplexOrFloat(cmplx.Sin(z)))
-	return nil
-}
-
-// PrimCos implements the (cos z) primitive.
-func PrimCos(mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	z, err := helpers.ToComplex128(o)
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "cos: %v", err)
-	}
-	mc.SetValue(helpers.ComplexOrFloat(cmplx.Cos(z)))
-	return nil
-}
-
-// PrimTan implements the (tan z) primitive.
-func PrimTan(mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	z, err := helpers.ToComplex128(o)
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "tan: %v", err)
-	}
-	mc.SetValue(helpers.ComplexOrFloat(cmplx.Tan(z)))
-	return nil
-}
-
-// PrimAsin implements the (asin z) primitive.
-func PrimAsin(mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	z, err := helpers.ToComplex128(o)
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "asin: %v", err)
-	}
-	mc.SetValue(helpers.ComplexOrFloat(cmplx.Asin(z)))
-	return nil
-}
-
-// PrimAcos implements the (acos z) primitive.
-func PrimAcos(mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	z, err := helpers.ToComplex128(o)
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "acos: %v", err)
-	}
-	mc.SetValue(helpers.ComplexOrFloat(cmplx.Acos(z)))
 	return nil
 }
 
