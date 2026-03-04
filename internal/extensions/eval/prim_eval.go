@@ -177,14 +177,7 @@ func PrimLoad(mc *machine.MachineContext) error {
 // Returns the absolute path of the file currently being loaded, or #f if
 // no file is being loaded (e.g., REPL).
 func PrimCurrentLoadPath(mc *machine.MachineContext) error {
-	env := mc.EnvironmentFrame().TopLevel()
-	stack := env.LoadPathStack()
-	if stack == nil {
-		mc.SetValue(values.FalseValue)
-		return nil
-	}
-
-	current := stack.Current()
+	current := mc.EnvironmentFrame().TopLevelEnv().LoadPathStack().Current()
 	if current == "" {
 		mc.SetValue(values.FalseValue)
 	} else {
@@ -197,14 +190,7 @@ func PrimCurrentLoadPath(mc *machine.MachineContext) error {
 // Returns the directory of the file currently being loaded, or #f if
 // no file is being loaded (e.g., REPL).
 func PrimCurrentLoadDirectory(mc *machine.MachineContext) error {
-	env := mc.EnvironmentFrame().TopLevel()
-	stack := env.LoadPathStack()
-	if stack == nil {
-		mc.SetValue(values.FalseValue)
-		return nil
-	}
-
-	currentDir := stack.CurrentDir()
+	currentDir := mc.EnvironmentFrame().TopLevelEnv().LoadPathStack().CurrentDir()
 	if currentDir == "" {
 		mc.SetValue(values.FalseValue)
 	} else {
@@ -214,17 +200,10 @@ func PrimCurrentLoadDirectory(mc *machine.MachineContext) error {
 }
 
 // PrimCurrentLoadDepth implements the (current-load-depth) primitive.
-// Returns the current load stack depth (number of nested loads), or #f if
-// no stack exists. Useful for debugging nested load chains.
+// Returns the current load stack depth (number of nested loads).
+// Returns 0 when not inside a load call.
 func PrimCurrentLoadDepth(mc *machine.MachineContext) error {
-	env := mc.EnvironmentFrame().TopLevel()
-	stack := env.LoadPathStack()
-	if stack == nil {
-		mc.SetValue(values.FalseValue)
-		return nil
-	}
-
-	depth := stack.Depth()
+	depth := mc.EnvironmentFrame().TopLevelEnv().LoadPathStack().Depth()
 	mc.SetValue(values.NewInteger(int64(depth)))
 	return nil
 }

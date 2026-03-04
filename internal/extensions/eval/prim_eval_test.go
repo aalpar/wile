@@ -548,3 +548,84 @@ func TestSyntaxLocalIdentifierAsBindingInMacro(t *testing.T) {
 		c.Assert(result.Internal(), qt.IsNotNil)
 	})
 }
+
+func TestCurrentLoadPath(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	dir := t.TempDir()
+
+	t.Run("returns #f outside load", func(t *testing.T) {
+		result := eval(t, engine, `(current-load-path)`)
+		c.Assert(result.Internal(), qt.Equals, values.FalseValue)
+	})
+
+	t.Run("returns absolute path during load", func(t *testing.T) {
+		path := writeTestFile(t, dir, "check-path.scm", `(current-load-path)`)
+		result := eval(t, engine, fmt.Sprintf(`(load %q)`, path))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewString(path))
+	})
+}
+
+func TestCurrentLoadDirectory(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	dir := t.TempDir()
+
+	t.Run("returns #f outside load", func(t *testing.T) {
+		result := eval(t, engine, `(current-load-directory)`)
+		c.Assert(result.Internal(), qt.Equals, values.FalseValue)
+	})
+
+	t.Run("returns directory during load", func(t *testing.T) {
+		writeTestFile(t, dir, "check-dir.scm", `(current-load-directory)`)
+		path := filepath.Join(dir, "check-dir.scm")
+		result := eval(t, engine, fmt.Sprintf(`(load %q)`, path))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewString(dir))
+	})
+}
+
+func TestCurrentLoadDepth(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	dir := t.TempDir()
+
+	t.Run("returns 0 outside load", func(t *testing.T) {
+		result := eval(t, engine, `(current-load-depth)`)
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(0))
+	})
+
+	t.Run("returns 1 during load", func(t *testing.T) {
+		writeTestFile(t, dir, "depth1.scm", `(current-load-depth)`)
+		path := filepath.Join(dir, "depth1.scm")
+		result := eval(t, engine, fmt.Sprintf(`(load %q)`, path))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(1))
+	})
+
+	t.Run("returns 2 during nested load", func(t *testing.T) {
+		writeTestFile(t, dir, "inner.scm", `(current-load-depth)`)
+		innerPath := filepath.Join(dir, "inner.scm")
+		writeTestFile(t, dir, "outer.scm", fmt.Sprintf(`(load %q)`, innerPath))
+		outerPath := filepath.Join(dir, "outer.scm")
+		result := eval(t, engine, fmt.Sprintf(`(load %q)`, outerPath))
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(2))
+	})
+}
+
+func TestEvalRuntimeError(t *testing.T) {
+	engine := newEngine(t)
+
+	t.Run("runtime error propagates", func(t *testing.T) {
+		// Division by zero triggers a runtime error inside the sub-context
+		evalExpectError(t, engine, `(eval '(/ 1 0) (interaction-environment))`)
+	})
+}
+
+func TestLoadRuntimeError(t *testing.T) {
+	engine := newEngine(t)
+	dir := t.TempDir()
+
+	t.Run("runtime error in loaded file propagates", func(t *testing.T) {
+		path := writeTestFile(t, dir, "runtime-err.scm", `(/ 1 0)`)
+		evalExpectError(t, engine, fmt.Sprintf(`(load %q)`, path))
+	})
+}
