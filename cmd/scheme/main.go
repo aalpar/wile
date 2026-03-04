@@ -356,13 +356,11 @@ func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin *bufio.
 		Failf(err2, "Cannot compile expression")
 	}
 	mv, err2 := runtime.Run(ctx, tpl, env)
-	// Print result for normal completion; don't print void results
-	if err2 == nil {
-		if !mv.IsVoid() {
-			Printf("%s\n", mv.SchemeString())
-		}
-	} else {
+	if err2 != nil {
 		Failf(err2)
+	}
+	if !mv.IsVoid() {
+		Printf("%s\n", mv.SchemeString())
 	}
 }
 
@@ -405,12 +403,11 @@ func runEval(ctx context.Context, env *environment.EnvironmentFrame, exprs []str
 		Failf(err2, "Cannot compile expression")
 	}
 	mv, err2 := runtime.Run(ctx, tpl, env)
-	if err2 == nil {
-		if !mv.IsVoid() {
-			Printf("%s\n", mv.SchemeString())
-		}
-	} else {
+	if err2 != nil {
 		Failf(err2)
+	}
+	if !mv.IsVoid() {
+		Printf("%s\n", mv.SchemeString())
 	}
 }
 

@@ -155,16 +155,14 @@ func (p *CompileTimeContinuation) compileWithSyntaxBody(ctctx CompileTimeCallCon
 			return err
 		}
 
-		if !isLast {
-			nextPair, ok := cdr.(*syntax.SyntaxPair)
-			if ok {
-				current = nextPair
-			} else {
-				break
-			}
-		} else {
+		if isLast {
 			break
 		}
+		nextPair, ok := cdr.(*syntax.SyntaxPair)
+		if !ok {
+			break
+		}
+		current = nextPair
 	}
 
 	return nil
