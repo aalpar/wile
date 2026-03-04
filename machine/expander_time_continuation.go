@@ -742,7 +742,7 @@ func (p *ExpanderTimeContinuation) expandImportForm(sym *syntax.SyntaxSymbol, ex
 
 	// Process each import set to load libraries and copy bindings
 	_, err := syntax.SyntaxForEach(p.ctx, importSets, func(_ context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
-		importSet, parseErr := parseImportSet(p.ctx, importSetExpr)
+		importSet, parseErr := ParseImportSetFromDatum(p.ctx, importSetExpr.UnwrapAll())
 		if parseErr != nil {
 			return parseErr
 		}

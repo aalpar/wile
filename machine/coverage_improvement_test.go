@@ -200,11 +200,8 @@ func TestParseImportSetExcept(t *testing.T) {
 	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
-	pair, ok := stx.(*syntax.SyntaxPair)
-	qt.Assert(t, ok, qt.IsTrue)
-
-	// Call parseImportSetExcept
-	importSet, err := parseImportSetExcept(context.Background(), pair)
+	// Call ParseImportSetFromDatum via UnwrapAll
+	importSet, err := ParseImportSetFromDatum(context.Background(), stx.UnwrapAll())
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, importSet, qt.IsNotNil)
 	qt.Assert(t, importSet.LibraryName, qt.IsNotNil)
@@ -223,11 +220,8 @@ func TestParseImportSetRename(t *testing.T) {
 	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
-	pair, ok := stx.(*syntax.SyntaxPair)
-	qt.Assert(t, ok, qt.IsTrue)
-
-	// Call parseImportSetRename
-	importSet, err := parseImportSetRename(context.Background(), pair)
+	// Call ParseImportSetFromDatum via UnwrapAll
+	importSet, err := ParseImportSetFromDatum(context.Background(), stx.UnwrapAll())
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, importSet, qt.IsNotNil)
 	qt.Assert(t, importSet.LibraryName, qt.IsNotNil)
