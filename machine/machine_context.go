@@ -541,13 +541,9 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 
 	err := fcls.fn(p)
 	if err != nil {
-		// Propagate prompt aborts, exit escapes, and exception escapes as-is.
+		// Propagate prompt aborts and exception escapes as-is.
 		var abortErr *ErrPromptAbort
 		if errors.As(err, &abortErr) {
-			return nil, err
-		}
-		var exitErr *ErrExitEscape
-		if errors.As(err, &exitErr) {
 			return nil, err
 		}
 		var excErr *ErrExceptionEscape

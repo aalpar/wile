@@ -84,7 +84,7 @@ func TestCallWithExit_Success(t *testing.T) {
 			Name: "exit through continuation barrier",
 			Code: `(call-with-exit (lambda (exit)
 			  (with-continuation-barrier (exit 42))))`,
-			Expected: values.NewInteger(42), // ErrExitEscape propagates through barriers
+			Expected: values.NewInteger(42), // upward-only escape, not blocked by barriers
 		},
 		{
 			Name: "exit from guard handler body",

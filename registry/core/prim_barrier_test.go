@@ -88,7 +88,7 @@ func TestWithContinuationBarrier_Success(t *testing.T) {
 			Name: "exit propagates through barrier from outside",
 			Code: `(call-with-exit (lambda (exit)
 			  (with-continuation-barrier (exit 42))))`,
-			Expected: values.NewInteger(42), // ErrExitEscape is upward-only, not blocked by barriers
+			Expected: values.NewInteger(42), // upward-only escape, not blocked by barriers
 		},
 		{
 			Name: "raise-continuable propagates through barrier",

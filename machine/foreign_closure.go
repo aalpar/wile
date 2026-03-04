@@ -39,7 +39,7 @@ func goErrorToSchemeException(mc *MachineContext, err error) error {
 // applyCallableError converts errors from ApplyCallable into Scheme
 // exceptions so they are catchable by guard and with-exception-handler.
 // Errors that are already Scheme-level control flow (exception escapes,
-// prompt aborts, exit escapes) pass through unchanged.
+// prompt aborts) pass through unchanged.
 func applyCallableError(mc *MachineContext, err error) error {
 	var excErr *ErrExceptionEscape
 	if errors.As(err, &excErr) {
@@ -47,10 +47,6 @@ func applyCallableError(mc *MachineContext, err error) error {
 	}
 	var abortErr *ErrPromptAbort
 	if errors.As(err, &abortErr) {
-		return err
-	}
-	var exitErr *ErrExitEscape
-	if errors.As(err, &exitErr) {
 		return err
 	}
 	return goErrorToSchemeException(mc, err)

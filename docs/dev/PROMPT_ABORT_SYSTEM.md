@@ -66,19 +66,22 @@ The error handling in `Apply()` has a strict priority order:
 // 2. ErrPromptAbort check (errors.As)
 //    → pass through unchanged
 //
-// 3. ErrExitEscape check (errors.As)
-//    → pass through unchanged (propagates to matching call-with-exit)
-//
-// 4. ErrExceptionEscape check (errors.As)
+// 3. ErrExceptionEscape check (errors.As)
 //    → pass through unchanged
 //
-// 5. any other Go error
+// 4. any other Go error
 //    → wrap via goErrorToSchemeException → ErrExceptionEscape
 ```
 
 Panic recovery is deferred, so it runs after all other checks. The priority
-of steps 2-3 over step 4 is critical: without it, prompt aborts and exit
-escapes would be wrapped as Scheme exceptions and never reach their handlers.
+of step 2 over step 3 is critical: without it, prompt aborts would be wrapped
+as Scheme exceptions and never reach their handlers.
+
+Note: `call-with-exit` uses `ErrPromptAbort` with a private `PromptTag`
+(created per invocation). The exit closure returns `ErrPromptAbort` which
+propagates through FFC unchanged and is caught by `PrimCallWithExit` in its
+sub-context via tag match. This unifies all continuation control flow under
+a single error type.
 
 ## RunWithEscapeHandling
 
