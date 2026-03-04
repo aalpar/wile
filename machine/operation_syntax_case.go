@@ -77,7 +77,7 @@ func (p *OperationSyntaxCaseMatch) Apply(mc *MachineContext) (*MachineContext, e
 	input := sc.input
 
 	// Create a matcher
-	matcher := match.NewSyntaxMatcherWithEllipsisVars(clause.patternVars, clause.bytecode, clause.ellipsisVars)
+	matcher := match.NewSyntaxMatcher(clause.patternVars, clause.bytecode, &match.SyntaxMatcherOpts{EllipsisVars: clause.ellipsisVars})
 
 	// Try to match
 	err := matcher.Match(mc.Context(), input)

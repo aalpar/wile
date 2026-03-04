@@ -331,14 +331,21 @@ func compileClauseWithEllipsisAndLiterals(
 	}
 	// Compile pattern to bytecode with ellipsis variable mapping and literals
 	// Literals are needed so the compiler knows to match _ literally if it's in the literals list
-	compiled, err := match.CompileSyntaxPatternWithLiterals(ctx, pattern, variables, literals, ellipsis)
+	compiled, err := match.CompileSyntaxPattern(ctx, pattern, variables, &match.CompilePatternOpts{
+		Literals:   literals,
+		EllipsisID: ellipsis,
+	})
 	if err != nil {
 		return nil, err
 	}
 
 	// Create matcher with ellipsis variable mapping, custom ellipsis, and literal syntax
 	// The literalSyntax enables scope-aware matching for auxiliary syntax hygiene
-	matcher := match.NewSyntaxMatcherWithLiterals(variables, compiled.Codes, compiled.EllipsisVars, ellipsis, literalSyntax)
+	matcher := match.NewSyntaxMatcher(variables, compiled.Codes, &match.SyntaxMatcherOpts{
+		EllipsisVars:  compiled.EllipsisVars,
+		EllipsisID:    ellipsis,
+		LiteralSyntax: literalSyntax,
+	})
 
 	// Collect free identifiers from template (identifiers that are NOT pattern variables)
 	// These should NOT get the intro scope during expansion, so they can resolve

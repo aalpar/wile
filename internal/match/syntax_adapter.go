@@ -111,39 +111,37 @@ type SyntaxMatcher struct {
 	bindingChecker BindingChecker                  // For R7RS binding lookup during matching
 }
 
-// NewSyntaxMatcher creates a new syntax-aware matcher with default ellipsis ("...").
-func NewSyntaxMatcher(variables map[string]struct{}, codes []SyntaxCommand) *SyntaxMatcher {
-	return NewSyntaxMatcherWithEllipsisVars(variables, codes, nil)
+// SyntaxMatcherOpts holds optional parameters for NewSyntaxMatcher.
+// A nil opts pointer means all defaults (no ellipsis vars, default "...", no literals).
+type SyntaxMatcherOpts struct {
+	EllipsisVars  map[int]map[string]struct{}
+	EllipsisID    string
+	LiteralSyntax map[string]*syntax.SyntaxSymbol
 }
 
-// NewSyntaxMatcherWithEllipsisVars creates a syntax-aware matcher with ellipsis variable mapping.
-// The ellipsisVars parameter maps each ellipsis ID to its captured pattern variables.
-// Uses the default ellipsis identifier ("...").
-func NewSyntaxMatcherWithEllipsisVars(variables map[string]struct{}, codes []SyntaxCommand, ellipsisVars map[int]map[string]struct{}) *SyntaxMatcher {
-	return NewSyntaxMatcherFull(variables, codes, ellipsisVars, DefaultEllipsis)
-}
-
-// NewSyntaxMatcherFull creates a syntax-aware matcher with all parameters including custom ellipsis.
-// The ellipsisID parameter specifies the identifier used for ellipsis patterns
-// (default is "..." per R7RS, but can be customized per R7RS §4.3.2).
-func NewSyntaxMatcherFull(variables map[string]struct{}, codes []SyntaxCommand, ellipsisVars map[int]map[string]struct{}, ellipsisID string) *SyntaxMatcher {
-	return NewSyntaxMatcherWithLiterals(variables, codes, ellipsisVars, ellipsisID, nil)
-}
-
-// NewSyntaxMatcherWithLiterals creates a syntax-aware matcher with literal syntax for hygiene.
-// The literalSyntax parameter maps literal names to their syntax symbols from the pattern.
-// This enables scope-aware literal matching: if an input symbol has a literal's name but
-// has been shadowed (has additional scopes), it won't match the pattern literal.
-// R7RS §4.3.2 requires this for auxiliary syntax like => and else in cond/case.
-func NewSyntaxMatcherWithLiterals(
+// NewSyntaxMatcher creates a syntax-aware matcher that wraps the core Matcher
+// with hygiene support. Pass nil opts for default behavior (default ellipsis "...",
+// no literal syntax).
+//
+// The literalSyntax in opts enables scope-aware literal matching: if an input symbol
+// has a literal's name but has been shadowed (has additional scopes), it won't match
+// the pattern literal. R7RS §4.3.2 requires this for auxiliary syntax like => and else.
+func NewSyntaxMatcher(
 	variables map[string]struct{},
 	codes []SyntaxCommand,
-	ellipsisVars map[int]map[string]struct{},
-	ellipsisID string,
-	literalSyntax map[string]*syntax.SyntaxSymbol,
+	opts *SyntaxMatcherOpts,
 ) *SyntaxMatcher {
-	if ellipsisID == "" {
-		ellipsisID = DefaultEllipsis
+	var (
+		ellipsisVars  map[int]map[string]struct{}
+		ellipsisID    = DefaultEllipsis
+		literalSyntax map[string]*syntax.SyntaxSymbol
+	)
+	if opts != nil {
+		ellipsisVars = opts.EllipsisVars
+		if opts.EllipsisID != "" {
+			ellipsisID = opts.EllipsisID
+		}
+		literalSyntax = opts.LiteralSyntax
 	}
 	return &SyntaxMatcher{
 		matcher:       NewMatcherFull(variables, codes, ellipsisVars, ellipsisID),
@@ -671,45 +669,37 @@ type CompiledPattern struct {
 	EllipsisID   string // The ellipsis identifier used during compilation
 }
 
-// CompileSyntaxPattern compiles a syntax pattern into bytecode.
-// This is a convenience function that unwraps syntax before compilation.
-// Uses the default ellipsis identifier ("...").
-func CompileSyntaxPattern(ctx context.Context, pattern syntax.SyntaxValue, variables map[string]struct{}) ([]SyntaxCommand, error) {
-	result, err := CompileSyntaxPatternFull(ctx, pattern, variables)
-	if err != nil {
-		return nil, err
-	}
-	return result.Codes, nil
+// CompilePatternOpts holds optional parameters for CompileSyntaxPattern.
+// A nil opts pointer means all defaults (no literals, default "...").
+type CompilePatternOpts struct {
+	Literals   map[string]struct{}
+	EllipsisID string
 }
 
-// CompileSyntaxPatternFull compiles a syntax pattern into bytecode with ellipsis variable mapping.
-// Returns a CompiledPattern containing both the bytecode and the ellipsis variable mapping.
-// Uses the default ellipsis identifier ("...").
-func CompileSyntaxPatternFull(ctx context.Context, pattern syntax.SyntaxValue, variables map[string]struct{}) (*CompiledPattern, error) {
-	return CompileSyntaxPatternWithEllipsis(ctx, pattern, variables, DefaultEllipsis)
-}
-
-// CompileSyntaxPatternWithEllipsis compiles a syntax pattern into bytecode with a custom ellipsis.
-// The ellipsisID parameter specifies the identifier used for ellipsis patterns
-// (default is "..." per R7RS, but can be customized per R7RS §4.3.2).
-func CompileSyntaxPatternWithEllipsis(ctx context.Context, pattern syntax.SyntaxValue, variables map[string]struct{}, ellipsisID string) (*CompiledPattern, error) {
-	return CompileSyntaxPatternWithLiterals(ctx, pattern, variables, nil, ellipsisID)
-}
-
-// CompileSyntaxPatternWithLiterals compiles a syntax pattern into bytecode with literals and custom ellipsis.
-// The literals parameter contains identifiers that should be matched literally (not as pattern variables).
-// The ellipsisID parameter specifies the identifier used for ellipsis patterns.
-// R7RS §4.3.2: The first subform of each pattern is the keyword of the macro being transformed;
-// it is not matched against the macro use being transformed.
-func CompileSyntaxPatternWithLiterals(ctx context.Context, pattern syntax.SyntaxValue, variables map[string]struct{}, literals map[string]struct{}, ellipsisID string) (*CompiledPattern, error) {
-	if ellipsisID == "" {
-		ellipsisID = DefaultEllipsis
+// CompileSyntaxPattern compiles a syntax pattern into bytecode with optional
+// literals and custom ellipsis. Pass nil opts for default behavior.
+//
+// R7RS §4.3.2: The first subform of each pattern is the keyword of the macro
+// being transformed; it is not matched against the macro use being transformed.
+func CompileSyntaxPattern(
+	ctx context.Context,
+	pattern syntax.SyntaxValue,
+	variables map[string]struct{},
+	opts *CompilePatternOpts,
+) (*CompiledPattern, error) {
+	ellipsisID := DefaultEllipsis
+	var literals map[string]struct{}
+	if opts != nil {
+		if opts.EllipsisID != "" {
+			ellipsisID = opts.EllipsisID
+		}
+		literals = opts.Literals
 	}
 
 	// Pattern must be a syntax pair
 	pair, ok := pattern.(*syntax.SyntaxPair)
 	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "CompileSyntaxPatternWithLiterals: pattern must be a list")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "CompileSyntaxPattern: pattern must be a list")
 	}
 
 	// Compile using compiler with custom ellipsis and literals

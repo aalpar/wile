@@ -183,7 +183,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	}
 
 	// Compile the pattern to bytecode
-	compiled, err := match.CompileSyntaxPatternFull(ctctx.ctx, pattern, patternVars)
+	compiled, err := match.CompileSyntaxPattern(ctctx.ctx, pattern, patternVars, nil)
 	if err != nil {
 		return err
 	}
