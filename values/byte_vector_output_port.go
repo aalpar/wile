@@ -16,7 +16,6 @@ package values
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 )
 
@@ -35,7 +34,10 @@ type ByteVectorOutputPort struct {
 
 // NewByteVectorOutputPort creates a new in-memory bytevector output port.
 func NewByteVectorOutputPort(wrt *bufio.Writer) *ByteVectorOutputPort {
-	return &ByteVectorOutputPort{wrt: wrt}
+	q := &ByteVectorOutputPort{wrt: wrt}
+	q.kind = portKindBytevectorOutput
+	q.datum = q.wrt
+	return q
 }
 
 // NewByteVectorOutputPortFromWriter creates a new in-memory bytevector output port.
@@ -43,6 +45,8 @@ func NewByteVectorOutputPortFromWriter(wrt io.Writer) *ByteVectorOutputPort {
 	q := &ByteVectorOutputPort{
 		wrt: bufio.NewWriter(wrt),
 	}
+	q.kind = portKindBytevectorOutput
+	q.datum = q.wrt
 	q.setCloser(wrt)
 	return q
 }
@@ -81,9 +85,4 @@ func (p *ByteVectorOutputPort) EqualTo(v Value) bool {
 		return p.wrt == other.wrt
 	}
 	return false
-}
-
-// SchemeString returns the Scheme representation of this port.
-func (p *ByteVectorOutputPort) SchemeString() string {
-	return fmt.Sprintf("<bytevector-output-port %p>", p.wrt)
 }

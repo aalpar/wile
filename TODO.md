@@ -48,9 +48,9 @@ Findings from codebase-wide structural review (2026-03-04).
 
 ### Medium Priority
 
-- [ ] **Split `library.go` into registry + bindings** [Medium, S]: 494 lines mixing data structures, registry ops, export application, and three-environment auxiliary syntax lookup. Split into `library_registry.go` and `library_bindings.go`.
-- [ ] **Unify escape mechanisms** [Medium, M]: `ErrExitEscape` + `ExitTag` (`exit_escape.go`) and `ErrPromptAbort` + `PromptTag` (`prompt_abort.go`) are parallel paths for tagged-boundary return. Barrier/winding bug fixes must cover both. Evaluate whether `call-with-exit` can wrap the prompt abort mechanism.
-- [ ] **Port type Value method boilerplate** [Medium, S]: 10+ port files duplicate `IsVoid`/`EqualTo`/`SchemeString`. `portBase` provides `Close`/`IsClosed` but not Value interface methods. Add `SchemeString`/`IsVoid` to `portBase`; `EqualTo` requires concrete assertions.
+- [x] **Split `library.go` into registry + bindings** [Medium, S]: Resolved in #417 — split into `library_registry.go` and `library_bindings.go`.
+- [x] **Unify escape mechanisms** [Medium, M]: Resolved in #418 — unified under `ErrPromptAbort`.
+- [x] **Port type Value method boilerplate** [Medium, S]: `SchemeString` consolidated into `portBase` via `kind`/`datum` fields set in each constructor. `IsVoid` stays per-type (nil-receiver on value-embedded struct panics before reaching promoted method). `EqualTo` stays per-type (requires concrete type assertion).
 - [ ] **`forms` type erasure documentation** [Medium, S]: `ValidatorFunc`/`CompilerFunc` in `internal/forms/form_spec.go` use `any` to break circular imports. Deliberate choice but contract is undocumented. Add explicit doc comment on `FormSpec` specifying the concrete types each `any` parameter must satisfy.
 - [ ] **Constructor telescoping in `match`** [Medium, S]: 8 constructor variants (`NewSyntaxMatcher*` × 4, `CompileSyntaxPattern*` × 4) in `syntax_adapter.go`. Collapse to `NewSyntaxMatcher(config)` with a `SyntaxMatcherConfig` options struct.
 - [ ] **I/O port extraction helper** [Medium, S]: 4 functions in `internal/extensions/io/prim_read_write.go` (`getOptionalOutputPort`, `getOptionalInputPort`, `getRequiredBinaryInputPort`, `getRequiredBinaryOutputPort`) follow the same 5-step pattern, varying only in port type and error sentinel. Extract generic `extractPort[T]` parameterized on interface and sentinel.

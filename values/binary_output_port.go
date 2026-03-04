@@ -16,7 +16,6 @@ package values
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 )
 
@@ -36,12 +35,17 @@ type BinaryOutputPort struct {
 
 // NewBinaryOutputPort creates a new binary output port wrapping the given buf.
 func NewBinaryOutputPort(wrt *bufio.Writer) *BinaryOutputPort {
-	return &BinaryOutputPort{wrt: wrt}
+	q := &BinaryOutputPort{wrt: wrt}
+	q.kind = portKindBinaryOutput
+	q.datum = q.wrt
+	return q
 }
 
 // NewBinaryOutputPortFromWriter creates a new input port reading from the given byte slice.
 func NewBinaryOutputPortFromWriter(writer io.Writer) *BinaryOutputPort {
 	q := &BinaryOutputPort{wrt: bufio.NewWriter(writer)}
+	q.kind = portKindBinaryOutput
+	q.datum = q.wrt
 	q.setCloser(writer)
 	return q
 }
@@ -83,9 +87,4 @@ func (p *BinaryOutputPort) EqualTo(v Value) bool {
 		return p.wrt == other.wrt
 	}
 	return false
-}
-
-// SchemeString returns the Scheme representation of the port.
-func (p *BinaryOutputPort) SchemeString() string {
-	return fmt.Sprintf("<binary-output-port %p>", p.wrt)
 }
