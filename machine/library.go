@@ -32,6 +32,7 @@ package machine
 //       (define (public-fn x) (private-fn x))))
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"sort"
@@ -388,6 +389,43 @@ func CopyLibraryBindingsToEnv(lib *CompiledLibrary, bindings map[string]string, 
 //     Syntax bindings go to targetPhase and targetPhase+1.
 //   - targetPhase < 0: For-template import. Bindings shifted to negative phase
 //     (used for generating code that will run at a lower phase).
+
+// ResolveAndInstallImportSet parses an import set datum, loads the library,
+// applies modifiers (only, except, prefix, rename), fires the import observer,
+// and copies the resulting bindings into env at the appropriate phase.
+//
+// This is the common path for top-level imports (both expander and compiler).
+// Library-internal imports (processLibraryImport) diverge at installation and
+// use their own loop.
+func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *environment.EnvironmentFrame) error {
+	importSet, err := ParseImportSetFromDatum(ctx, datum)
+	if err != nil {
+		return err
+	}
+
+	lib, err := LoadLibrary(ctx, importSet.LibraryName, env)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "import: failed to load library %s",
+			importSet.LibraryName.SchemeString())
+	}
+
+	bindings, err := importSet.ApplyToExports(lib)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "import: error applying modifiers for %s",
+			importSet.LibraryName.SchemeString())
+	}
+
+	fireImportObserver(env, lib, bindings, nil)
+
+	err = CopyLibraryBindingsToEnvAtPhase(lib, bindings, env, importSet.PhaseShift)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "import: error copying bindings from %s",
+			importSet.LibraryName.SchemeString())
+	}
+
+	return nil
+}
+
 func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]string, targetEnv *environment.EnvironmentFrame, targetPhase int) error {
 	// Source environments to search for exported bindings, in priority order.
 	// Phase 0 (runtime) holds variables, phase 1 (expand) holds syntax bindings

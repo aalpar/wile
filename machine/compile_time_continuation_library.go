@@ -415,35 +415,7 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 
 	// Process each import set
 	v, err := syntax.SyntaxForEach(ctctx.ctx, importSets, func(ctx context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
-		importSet, err := ParseImportSetFromDatum(ctx, importSetExpr.UnwrapAll())
-		if err != nil {
-			return err
-		}
-
-		// Load the library
-		lib, err := LoadLibrary(ctx, importSet.LibraryName, p.env)
-		if err != nil {
-			return werr.WrapForeignErrorf(err, "import: failed to load library %s",
-				importSet.LibraryName.SchemeString())
-		}
-
-		// Apply import modifiers (only, except, prefix, rename) to get final bindings
-		bindings, err := importSet.ApplyToExports(lib)
-		if err != nil {
-			return werr.WrapForeignErrorf(err, "import: error applying modifiers for %s",
-				importSet.LibraryName.SchemeString())
-		}
-
-		fireImportObserver(p.env, lib, bindings, nil)
-
-		// Copy bindings to the target phase
-		err = CopyLibraryBindingsToEnvAtPhase(lib, bindings, p.env, importSet.PhaseShift)
-		if err != nil {
-			return werr.WrapForeignErrorf(err, "import: error copying bindings from %s",
-				importSet.LibraryName.SchemeString())
-		}
-
-		return nil
+		return ResolveAndInstallImportSet(ctx, importSetExpr.UnwrapAll(), p.env)
 	})
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "import: error processing import sets")
@@ -551,6 +523,59 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 	return nil
 }
 
+// resolveCondExpandClause finds the first matching clause in a cond-expand form.
+// Handles validation, registry lookup, feature requirement parsing, and clause
+// matching. Returns the matched clause pair whose cdr contains the body forms.
+func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, args syntax.SyntaxValue) (*syntax.SyntaxPair, error) {
+	if syntax.IsSyntaxEmptyList(args) {
+		return nil, werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no clauses")
+	}
+
+	argsPair, ok := args.(*syntax.SyntaxPair)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: expected list of clauses")
+	}
+
+	var registry *LibraryRegistry
+	regAny := p.env.LibraryRegistry()
+	if regAny != nil {
+		registry, _ = regAny.(*LibraryRegistry)
+	}
+
+	var matchedClause syntax.SyntaxValue
+	_, err := syntax.SyntaxForEach(ctx, argsPair, func(_ context.Context, _ int, _ bool, clause syntax.SyntaxValue) error {
+		if matchedClause != nil {
+			return nil // Already found a match
+		}
+
+		clausePair, ok := clause.(*syntax.SyntaxPair)
+		if !ok {
+			return werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: clause must be a list")
+		}
+
+		reqExpr := clausePair.SyntaxCar()
+		req, err := parseFeatureRequirement(ctx, reqExpr)
+		if err != nil {
+			return werr.WrapForeignErrorf(err, "cond-expand: invalid feature requirement")
+		}
+
+		if req.IsSatisfied(registry) {
+			matchedClause = clausePair
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if matchedClause == nil {
+		return nil, werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no matching clause")
+	}
+
+	return matchedClause.(*syntax.SyntaxPair), nil
+}
+
 // CompileCondExpand compiles a cond-expand expression.
 // cond-expand is evaluated at compile-time and expands to the body of the first
 // clause whose feature requirement is satisfied.
@@ -564,58 +589,12 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 //	  (r7rs (display "R7RS"))
 //	  (else (display "other")))
 func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	if syntax.IsSyntaxEmptyList(expr) {
-		return werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no clauses")
-	}
-
-	argsPair, ok := expr.(*syntax.SyntaxPair)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: expected list of clauses")
-	}
-
-	// Get the library registry for checking library availability
-	var registry *LibraryRegistry
-	regAny := p.env.LibraryRegistry()
-	if regAny != nil {
-		registry, _ = regAny.(*LibraryRegistry)
-	}
-
-	// Find the first matching clause
-	var matchedClause syntax.SyntaxValue
-	_, err := syntax.SyntaxForEach(ctctx.ctx, argsPair, func(_ context.Context, _ int, _ bool, clause syntax.SyntaxValue) error {
-		if matchedClause != nil {
-			return nil // Already found a match
-		}
-
-		clausePair, ok := clause.(*syntax.SyntaxPair)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: clause must be a list")
-		}
-
-		// Get the feature requirement (car of clause)
-		reqExpr := clausePair.SyntaxCar()
-		// Parse and evaluate the feature requirement
-		req, err := parseFeatureRequirement(ctctx.ctx, reqExpr)
-		if err != nil {
-			return werr.WrapForeignErrorf(err, "cond-expand: invalid feature requirement")
-		}
-
-		if req.IsSatisfied(registry) {
-			matchedClause = clausePair
-		}
-
-		return nil
-	})
+	matchedPair, err := p.resolveCondExpandClause(ctctx.ctx, expr)
 	if err != nil {
 		return err
 	}
 
-	if matchedClause == nil {
-		return werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no matching clause")
-	}
-
 	// Compile the expressions in the matched clause
-	matchedPair := matchedClause.(*syntax.SyntaxPair)
 	bodyExpr := matchedPair.SyntaxCdr()
 	if syntax.IsSyntaxEmptyList(bodyExpr) {
 		// Empty body - emit void
@@ -655,58 +634,12 @@ func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext
 // Each clause is (<feature-requirement> <library-declaration> ...)
 // The first clause whose feature requirement is satisfied has its declarations processed.
 func (p *CompileTimeContinuation) processCondExpand(ctctx CompileTimeCallContext, lib *CompiledLibrary, args syntax.SyntaxValue) error {
-	if syntax.IsSyntaxEmptyList(args) {
-		return werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no clauses")
-	}
-
-	argsPair, ok := args.(*syntax.SyntaxPair)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: expected list of clauses")
-	}
-
-	// Get the library registry for checking library availability
-	var registry *LibraryRegistry
-	regAny := p.env.LibraryRegistry()
-	if regAny != nil {
-		registry, _ = regAny.(*LibraryRegistry)
-	}
-
-	// Iterate through clauses
-	var matchedClause syntax.SyntaxValue
-	_, err := syntax.SyntaxForEach(ctctx.ctx, argsPair, func(_ context.Context, _ int, _ bool, clause syntax.SyntaxValue) error {
-		if matchedClause != nil {
-			return nil // Already found a match
-		}
-
-		clausePair, ok := clause.(*syntax.SyntaxPair)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: clause must be a list")
-		}
-
-		// Get the feature requirement (car of clause)
-		reqExpr := clausePair.SyntaxCar()
-		// Parse and evaluate the feature requirement
-		req, err := parseFeatureRequirement(ctctx.ctx, reqExpr)
-		if err != nil {
-			return werr.WrapForeignErrorf(err, "cond-expand: invalid feature requirement")
-		}
-
-		if req.IsSatisfied(registry) {
-			matchedClause = clausePair
-		}
-
-		return nil
-	})
+	matchedPair, err := p.resolveCondExpandClause(ctctx.ctx, args)
 	if err != nil {
 		return err
 	}
 
-	if matchedClause == nil {
-		return werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no matching clause")
-	}
-
 	// Process the declarations in the matched clause
-	matchedPair := matchedClause.(*syntax.SyntaxPair)
 	declsExpr := matchedPair.SyntaxCdr()
 	if syntax.IsSyntaxEmptyList(declsExpr) {
 		return nil // Empty clause body is valid

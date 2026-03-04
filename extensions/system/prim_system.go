@@ -55,9 +55,11 @@ func PrimCommandLine(mc *machine.MachineContext) error {
 	return nil
 }
 
-// PrimExit implements the (exit) primitive.
-// Exits the program with an optional status code.
-func PrimExit(mc *machine.MachineContext) error {
+// exitWithCode implements the shared logic for exit and emergency-exit.
+// Both parse an optional status argument (#f → 1, integer → value, default → 0)
+// and call os.Exit. Currently identical; the distinction exists for R7RS
+// compliance (emergency-exit should skip cleanup, which is not yet implemented).
+func exitWithCode(mc *machine.MachineContext) error {
 	err := security.Check(mc.Context(), security.AccessRequest{
 		Resource: security.ResourceProcess,
 		Action:   security.ActionExit,
@@ -84,33 +86,16 @@ func PrimExit(mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimExit implements the (exit) primitive.
+// Exits the program with an optional status code.
+func PrimExit(mc *machine.MachineContext) error {
+	return exitWithCode(mc)
+}
+
 // PrimEmergencyExit implements the (emergency-exit) primitive.
 // Exits the program immediately without cleanup or finalization.
 func PrimEmergencyExit(mc *machine.MachineContext) error {
-	err := security.Check(mc.Context(), security.AccessRequest{
-		Resource: security.ResourceProcess,
-		Action:   security.ActionExit,
-	})
-	if err != nil {
-		return err
-	}
-	rest := mc.Arg(0)
-	code := 0
-	if !values.IsEmptyList(rest) {
-		pr, ok := rest.(values.Tuple)
-		if ok && !pr.IsEmptyList() {
-			switch v := pr.Car().(type) {
-			case *values.Integer:
-				code = int(v.Value)
-			case *values.Boolean:
-				if !v.Value {
-					code = 1
-				}
-			}
-		}
-	}
-	os.Exit(code)
-	return nil
+	return exitWithCode(mc)
 }
 
 // PrimGetEnvironmentVariable implements the (get-environment-variable) primitive.

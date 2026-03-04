@@ -261,13 +261,17 @@ func TestImportObserver(t *testing.T) {
 			myEvents = append(myEvents, evt)
 		}
 	}
-	c.Assert(len(myEvents), qt.Equals, 1)
+	// The observer fires twice per top-level import: once during expansion
+	// (to make macros available) and once during compilation. Both events
+	// carry identical data because LoadLibrary caches the library.
+	c.Assert(len(myEvents), qt.Equals, 2)
 
-	evt := myEvents[0]
-	c.Assert(evt.Library, qt.DeepEquals, []string{"mylib"})
-	c.Assert(evt.Exports, qt.DeepEquals, []string{"greet"})
-	c.Assert(evt.Imported, qt.DeepEquals, []string{"greet"})
-	c.Assert(evt.Importer, qt.IsNil) // top-level import
+	for _, evt := range myEvents {
+		c.Assert(evt.Library, qt.DeepEquals, []string{"mylib"})
+		c.Assert(evt.Exports, qt.DeepEquals, []string{"greet"})
+		c.Assert(evt.Imported, qt.DeepEquals, []string{"greet"})
+		c.Assert(evt.Importer, qt.IsNil) // top-level import
+	}
 }
 
 // TestImportObserver_OnlyModifier verifies that the Imported field reflects
@@ -302,11 +306,12 @@ func TestImportObserver_OnlyModifier(t *testing.T) {
 			myEvents = append(myEvents, evt)
 		}
 	}
-	c.Assert(len(myEvents), qt.Equals, 1)
+	c.Assert(len(myEvents), qt.Equals, 2)
 
-	evt := myEvents[0]
-	c.Assert(evt.Exports, qt.DeepEquals, []string{"alpha", "beta"})
-	c.Assert(evt.Imported, qt.DeepEquals, []string{"alpha"}) // only alpha was imported
+	for _, evt := range myEvents {
+		c.Assert(evt.Exports, qt.DeepEquals, []string{"alpha", "beta"})
+		c.Assert(evt.Imported, qt.DeepEquals, []string{"alpha"}) // only alpha was imported
+	}
 }
 
 // TestWithAuthorizer_FlowsToContext verifies that WithAuthorizer injects
