@@ -85,17 +85,21 @@ func ParseImportSetFromDatum(ctx context.Context, expr values.Value) (*ImportSet
 	if ok {
 		switch carSym.Key {
 		case "only":
-			return parseImportSetOnlyFromDatum(ctx, tuple)
+			return parseImportSetFilterFromDatum(ctx, "only", tuple, func(is *ImportSet, ids []string) {
+				is.Only = ids
+			})
 		case "except":
-			return parseImportSetExceptFromDatum(ctx, tuple)
+			return parseImportSetFilterFromDatum(ctx, "except", tuple, func(is *ImportSet, ids []string) {
+				is.Except = ids
+			})
 		case "prefix":
 			return parseImportSetPrefixFromDatum(ctx, tuple)
 		case "rename":
 			return parseImportSetRenameFromDatum(ctx, tuple)
 		case "for-syntax":
-			return parseImportSetForSyntaxFromDatum(ctx, tuple)
+			return parseImportSetPhaseShiftFromDatum(ctx, "for-syntax", tuple, 1)
 		case "for-template":
-			return parseImportSetForTemplateFromDatum(ctx, tuple)
+			return parseImportSetPhaseShiftFromDatum(ctx, "for-template", tuple, -1)
 		case "for-meta":
 			return parseImportSetForMetaFromDatum(ctx, tuple)
 		}
@@ -109,63 +113,36 @@ func ParseImportSetFromDatum(ctx context.Context, expr values.Value) (*ImportSet
 	return NewImportSet(libName), nil
 }
 
-// parseImportSetOnlyFromDatum parses (only <import-set> <id> ...)
-func parseImportSetOnlyFromDatum(ctx context.Context, tuple values.Tuple) (*ImportSet, error) {
+// parseImportSetFilterFromDatum parses (<keyword> <import-set> <id> ...) where
+// the keyword is "only" or "except". The apply callback sets the parsed
+// identifier list on the appropriate ImportSet field.
+func parseImportSetFilterFromDatum(
+	ctx context.Context, keyword string, tuple values.Tuple,
+	apply func(*ImportSet, []string),
+) (*ImportSet, error) {
 	cdr := tuple.Cdr()
 	if values.IsEmptyList(cdr) {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "only: expected import-set and identifiers")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected import-set and identifiers", keyword)
 	}
 
 	cdrTuple, ok := cdr.(values.Tuple)
 	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "only: expected a list")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list", keyword)
 	}
 
-	// Get nested import set
 	nestedExpr := cdrTuple.Car()
 	importSet, err := ParseImportSetFromDatum(ctx, nestedExpr)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get identifiers
 	idsExpr := cdrTuple.Cdr()
 	ids, err := parseIdentifierListFromDatum(ctx, idsExpr)
 	if err != nil {
 		return nil, err
 	}
 
-	importSet.Only = ids
-	return importSet, nil
-}
-
-// parseImportSetExceptFromDatum parses (except <import-set> <id> ...)
-func parseImportSetExceptFromDatum(ctx context.Context, tuple values.Tuple) (*ImportSet, error) {
-	cdr := tuple.Cdr()
-	if values.IsEmptyList(cdr) {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "except: expected import-set and identifiers")
-	}
-
-	cdrTuple, ok := cdr.(values.Tuple)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "except: expected a list")
-	}
-
-	// Get nested import set
-	nestedExpr := cdrTuple.Car()
-	importSet, err := ParseImportSetFromDatum(ctx, nestedExpr)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get identifiers
-	idsExpr := cdrTuple.Cdr()
-	ids, err := parseIdentifierListFromDatum(ctx, idsExpr)
-	if err != nil {
-		return nil, err
-	}
-
-	importSet.Except = ids
+	apply(importSet, ids)
 	return importSet, nil
 }
 
@@ -266,53 +243,27 @@ func parseImportSetRenameFromDatum(ctx context.Context, tuple values.Tuple) (*Im
 	return importSet, err
 }
 
-// parseImportSetForSyntaxFromDatum parses (for-syntax <import-set>)
-// Adds +1 to the phase shift of the nested import set.
-func parseImportSetForSyntaxFromDatum(ctx context.Context, tuple values.Tuple) (*ImportSet, error) {
+// parseImportSetPhaseShiftFromDatum parses (<keyword> <import-set>) and adds
+// delta to the nested import set's phase shift. Handles for-syntax (+1) and
+// for-template (-1).
+func parseImportSetPhaseShiftFromDatum(ctx context.Context, keyword string, tuple values.Tuple, delta int) (*ImportSet, error) {
 	cdr := tuple.Cdr()
 	if values.IsEmptyList(cdr) {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "for-syntax: expected import-set")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected import-set", keyword)
 	}
 
 	cdrTuple, ok := cdr.(values.Tuple)
 	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "for-syntax: expected a list")
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list", keyword)
 	}
 
-	// Get nested import set
 	nestedExpr := cdrTuple.Car()
 	importSet, err := ParseImportSetFromDatum(ctx, nestedExpr)
 	if err != nil {
 		return nil, err
 	}
 
-	// Add +1 to phase shift (composable)
-	importSet.PhaseShift++
-	return importSet, nil
-}
-
-// parseImportSetForTemplateFromDatum parses (for-template <import-set>)
-// Adds -1 to the phase shift of the nested import set.
-func parseImportSetForTemplateFromDatum(ctx context.Context, tuple values.Tuple) (*ImportSet, error) {
-	cdr := tuple.Cdr()
-	if values.IsEmptyList(cdr) {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "for-template: expected import-set")
-	}
-
-	cdrTuple, ok := cdr.(values.Tuple)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "for-template: expected a list")
-	}
-
-	// Get nested import set
-	nestedExpr := cdrTuple.Car()
-	importSet, err := ParseImportSetFromDatum(ctx, nestedExpr)
-	if err != nil {
-		return nil, err
-	}
-
-	// Add -1 to phase shift (composable)
-	importSet.PhaseShift--
+	importSet.PhaseShift += delta
 	return importSet, nil
 }
 
