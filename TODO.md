@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-03-03
+**Last Updated**: 2026-03-04
 
 ### Current Project Status
 
@@ -21,7 +21,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 ## Bugs & Correctness
 
 - L7 (`char-ready?`/`u8-ready?` always `#t`) — documented semantic difference, no fix planned
-- [x] **`WrapForeignFileError` double-prints error message** [High, S]: `werr/werr.go:307` included `err` in format string (`%v`), but `ForeignError.Error()` already appends `p.err.Error()`. Every file error was printed as `"op: file: msg: msg"`. Fixed: removed redundant `%v`.
+- [x] **`WrapForeignFileError` double-prints error message** [High, S]: Fixed in #408.
 
 ---
 
@@ -33,18 +33,17 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 
 Findings from codebase-wide structural review (2026-03-04).
 
-- [ ] **`ForeignError.stack` is dead state** [Medium, S]: `werr/werr.go:193` — 50-frame `[]uintptr` captured in every `ForeignError` constructor (lines 202, 216, 231, 245), never read by any code. ~400 bytes/error of heap waste. Either add a `FormatStack()` method and use it, or remove the field.
-- [ ] **Unexport `Promise.Thunk`/`.Result`** [Medium, S]: `values/promise.go:24-30` — both fields exported with XOR invariant (`Thunk==nil` ⟺ forced). 2 of 4 field combinations are semantically invalid. Add `Force(result Value)`, `IsForced() bool` methods; unexport fields.
-- [ ] **Delete dead `Indexable` interface** [Low, S]: `values/values.go:195-200` — declared, compile-time-checked by `*Vector`/`*ByteVector`/`*String`, but never used in any function signature or runtime type assertion. Code itself documents this at line 192.
-- [ ] **Delete dead `SourceLocation` interface** [Low, S]: `values/values.go:207-212` — declared with 4 methods. No concrete implementor in `values/`. Only referenced in declaration and one test file.
-- [ ] **`LocalEnvironmentFrame.Keys()` returns live internal map** [Medium, S]: `environment/local_environment_frame.go:59-61` — returns `p.keys` directly, enabling silent CoW invariant corruption. `GlobalEnvironmentFrame.Keys()` (line 159) correctly returns a defensive copy. Match that pattern.
+- [x] **`ForeignError.stack` is dead state** [Medium, S]: Fixed in #409 — removed unused 50-frame `[]uintptr` field.
+- [x] **Unexport `Promise.Thunk`/`.Result`** [Medium, S]: Fixed in #412 — fields unexported, accessor methods added.
+- [x] **Delete dead `Indexable` interface** [Low, S]: Fixed in #413 — interface and compile-time checks removed.
+- [x] **`LocalEnvironmentFrame.Keys()` returns live internal map** [Medium, S]: Fixed in #414 — returns defensive copy via `maps.Copy`, matching `GlobalEnvironmentFrame.Keys()`.
 - [ ] **`NewEnvironmentFrame` produces incomplete objects** [Low, S]: `environment/environment_frame.go:123-133` — creates frame with `phases: nil`, `topLevel: nil`. Calling `AtPhase()`/`InternSymbol()` panics. Either unexport or add prominent godoc warning.
-- [ ] **`SelectCase` booleans should be enum** [Low, S]: `values/channel.go:206-211` — `IsSend` + `IsDefault` encode 3-way choice in 2 bools. `{true, true}` is representable but invalid. Replace with `SelectCaseKind` enum.
+- [x] **`SelectCase` booleans should be enum** [Low, S]: Fixed — replaced `IsSend`+`IsDefault` bools with `SelectCaseKind` enum (`SelectReceive`, `SelectSend`, `SelectDefault`).
 
 ### High Priority
 
-- [x] **Duplicated import set parsing** [High, M]: Resolved in PR #397 — compile-time call sites now use `UnwrapAll()` + `ParseImportSetFromDatum`, deleting 10 duplicate functions (~320 lines).
-- [x] **Split `compile_time_continuation_library.go`** [High, M]: Split into `compile_library_forms.go`, `compile_import.go`, `compile_cond_expand.go`, `compile_define_syntax.go`; letrec* body remains in original.
+- [x] **Duplicated import set parsing** [High, M]: Resolved in #397.
+- [x] **Split `compile_time_continuation_library.go`** [High, M]: Resolved in #400.
 - [ ] **Deduplicate import-set processing loop** [Medium, S]: `expandImportForm`, `CompileImport`, and `processLibraryImport` share the same parse→load→apply→copy sequence (the first two are near-identical). Extract a shared helper for the common prefix. `processLibraryImport` diverges at the install step (manual binding copy vs `CopyLibraryBindingsToEnvAtPhase`).
 
 ### Medium Priority
@@ -63,7 +62,7 @@ Findings from codebase-wide structural review (2026-03-04).
 - [ ] **Unify library/include path resolution** [Low, S]: `DefaultLibraryPaths` hardcodes `[".", "./lib"]`; `SCHEME_INCLUDE_PATH` only used by `include`/`include-ci`, not library loading. Inconsistent.
 - [ ] **Tokenizer test file consolidation** [Low, M]: 14 test files, several named by coverage goals (`additional_coverage_test.go`, `final_coverage_test.go`). Consolidate into behavior-oriented files (`tokenizer_number_test.go`, `tokenizer_string_test.go`, etc.).
 - [ ] **REPL deprecated wrappers** [Low, S]: `internal/repl/repl.go:370-393` — `Compile`, `Run`, `Load` marked `Deprecated`, delegate to runtime package. Delete if no callers remain.
-- [ ] **Error sentinel grouping** [Low, S]: ~120 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.
+- [ ] **Error sentinel grouping** [Low, S]: ~103 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.
 
 ### Postponed
 

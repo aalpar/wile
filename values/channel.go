@@ -204,11 +204,19 @@ func (p *Channel) SchemeString() string {
 }
 
 // SelectCase represents a case in a channel select operation
+// SelectCaseKind distinguishes the three valid select case types.
+type SelectCaseKind int
+
+const (
+	SelectReceive SelectCaseKind = iota
+	SelectSend
+	SelectDefault
+)
+
 type SelectCase struct {
-	Channel   *Channel
-	Value     Value // for send operations
-	IsSend    bool
-	IsDefault bool
+	Channel *Channel
+	Value   Value // for send operations
+	Kind    SelectCaseKind
 }
 
 // ChannelSelect performs a select operation on multiple channels.
@@ -223,10 +231,10 @@ func ChannelSelect(cases []SelectCase) (idx int, val Value, ok bool) {
 	// Build native select cases
 	// First pass: try non-blocking operations before falling through to reflect.Select
 	for i, c := range cases {
-		if c.IsDefault {
+		if c.Kind == SelectDefault {
 			continue
 		}
-		if c.IsSend {
+		if c.Kind == SelectSend {
 			ok, _ := c.Channel.TrySend(c.Value)
 			if ok {
 				return i, nil, true
@@ -241,7 +249,7 @@ func ChannelSelect(cases []SelectCase) (idx int, val Value, ok bool) {
 
 	// Check for default case
 	for i, c := range cases {
-		if c.IsDefault {
+		if c.Kind == SelectDefault {
 			return i, nil, true
 		}
 	}
@@ -251,11 +259,11 @@ func ChannelSelect(cases []SelectCase) (idx int, val Value, ok bool) {
 	selectCases := make([]reflect.SelectCase, 0, len(cases))
 	originalIndices := make([]int, 0, len(cases))
 	for i, c := range cases {
-		if c.IsDefault {
+		if c.Kind == SelectDefault {
 			continue
 		}
 		var rc reflect.SelectCase
-		if c.IsSend {
+		if c.Kind == SelectSend {
 			rc = reflect.SelectCase{
 				Dir:  reflect.SelectSend,
 				Chan: reflect.ValueOf(c.Channel.ch),
@@ -280,7 +288,7 @@ func ChannelSelect(cases []SelectCase) (idx int, val Value, ok bool) {
 			// A send on a concurrently-closed channel panicked.
 			// Find the first closed send case and report it.
 			for i, c := range cases {
-				if c.IsSend && c.Channel.IsClosed() {
+				if c.Kind == SelectSend && c.Channel.IsClosed() {
 					idx = i
 					val = nil
 					ok = false
@@ -294,7 +302,7 @@ func ChannelSelect(cases []SelectCase) (idx int, val Value, ok bool) {
 
 	chosen, recv, recvOK := reflect.Select(selectCases)
 	idx = originalIndices[chosen]
-	if cases[idx].IsSend {
+	if cases[idx].Kind == SelectSend {
 		return idx, nil, true
 	}
 	if !recvOK {

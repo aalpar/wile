@@ -207,8 +207,8 @@ func TestChannelSelectReceive(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	cases := []values.SelectCase{
-		{Channel: ch1, IsSend: false},
-		{Channel: ch2, IsSend: false},
+		{Channel: ch1, Kind: values.SelectReceive},
+		{Channel: ch2, Kind: values.SelectReceive},
 	}
 
 	idx, val, ok := values.ChannelSelect(cases)
@@ -222,7 +222,7 @@ func TestChannelSelectSend(t *testing.T) {
 
 	ch := values.NewChannel(1)
 	cases := []values.SelectCase{
-		{Channel: ch, IsSend: true, Value: values.NewString("hello")},
+		{Channel: ch, Kind: values.SelectSend, Value: values.NewString("hello")},
 	}
 
 	idx, _, ok := values.ChannelSelect(cases)
@@ -240,8 +240,8 @@ func TestChannelSelectDefault(t *testing.T) {
 
 	ch := values.NewChannel(0) // unbuffered, nothing ready
 	cases := []values.SelectCase{
-		{Channel: ch, IsSend: false},
-		{IsDefault: true},
+		{Channel: ch, Kind: values.SelectReceive},
+		{Kind: values.SelectDefault},
 	}
 
 	idx, _, ok := values.ChannelSelect(cases)
@@ -254,7 +254,7 @@ func TestChannelSelectBlocking(t *testing.T) {
 
 	ch := values.NewChannel(0) // unbuffered
 	cases := []values.SelectCase{
-		{Channel: ch, IsSend: false},
+		{Channel: ch, Kind: values.SelectReceive},
 	}
 
 	// Send from another goroutine after a short delay
@@ -287,7 +287,7 @@ func TestChannelSelectClosedChannel(t *testing.T) {
 	_ = ch.Close()
 
 	cases := []values.SelectCase{
-		{Channel: ch, IsSend: false},
+		{Channel: ch, Kind: values.SelectReceive},
 	}
 
 	idx, _, ok := values.ChannelSelect(cases)
@@ -305,7 +305,7 @@ func TestChannelSelectSendToClosedChannel(t *testing.T) {
 	_ = ch.Close()
 
 	cases := []values.SelectCase{
-		{Channel: ch, IsSend: true, Value: values.NewInteger(2)},
+		{Channel: ch, Kind: values.SelectSend, Value: values.NewInteger(2)},
 	}
 
 	// Must not panic
