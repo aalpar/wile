@@ -38,7 +38,9 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 
 ### High Priority
 
+- [x] **Duplicated import set parsing** [High, M]: Resolved in PR #397 — compile-time call sites now use `UnwrapAll()` + `ParseImportSetFromDatum`, deleting 10 duplicate functions (~320 lines).
 - [x] **Split `compile_time_continuation_library.go`** [High, M]: Split into `compile_library_forms.go`, `compile_import.go`, `compile_cond_expand.go`, `compile_define_syntax.go`; letrec* body remains in original.
+- [ ] **Deduplicate import-set processing loop** [Medium, S]: `expandImportForm`, `CompileImport`, and `processLibraryImport` share the same parse→load→apply→copy sequence (the first two are near-identical). Extract a shared helper for the common prefix. `processLibraryImport` diverges at the install step (manual binding copy vs `CopyLibraryBindingsToEnvAtPhase`).
 
 ### Medium Priority
 

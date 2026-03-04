@@ -15,6 +15,7 @@
 package wile
 
 import (
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/extensions/exceptions"
 	"github.com/aalpar/wile/extensions/introspection"
 	"github.com/aalpar/wile/extensions/math"
@@ -28,6 +29,13 @@ import (
 // LibraryImportEvent records what happened when a library was imported.
 // See machine.LibraryImportEvent for field documentation.
 type LibraryImportEvent = machine.LibraryImportEvent
+
+// Phase constants for LibraryImportEvent.Phase.
+// Re-exported from environment for embedder convenience.
+const (
+	PhaseExpand  = environment.PhaseExpand
+	PhaseCompile = environment.PhaseCompile
+)
 
 type engineConfig struct {
 	registry       *registry.Registry
