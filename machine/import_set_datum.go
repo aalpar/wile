@@ -23,7 +23,8 @@ import (
 )
 
 // ParseLibraryNameFromDatum extracts a LibraryName from a datum list like (scheme base).
-// This is for runtime use by the 'environment' procedure.
+// Used at both runtime (by the 'environment' procedure) and compile time
+// (via UnwrapAll on syntax objects).
 func ParseLibraryNameFromDatum(ctx context.Context, expr values.Value) (LibraryName, error) {
 	if values.IsEmptyList(expr) {
 		return LibraryName{}, werr.WrapForeignErrorf(werr.ErrInvalidArgument, "library name cannot be empty")
