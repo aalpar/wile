@@ -116,12 +116,12 @@ func (p *CompiledLibrary) GetInternalName(externalName string) string {
 
 // LibraryImportEvent records what happened when a library was imported.
 type LibraryImportEvent struct {
-	Library    []string // imported library name parts, e.g., ["scheme", "base"]
-	SourceFile string   // path to .sld file (empty for synthetic libraries)
-	Exports    []string // all names exported by the library
-	Imported   []string // names that actually landed in the importer (after only/except/prefix/rename)
-	Importer   []string // importing library name (nil for top-level import)
-	Phase      int      // pipeline phase: environment.PhaseExpand or environment.PhaseCompile
+	Library    LibraryName // imported library name, e.g., (scheme base)
+	SourceFile string      // path to .sld file (empty for synthetic libraries)
+	Exports    []string    // all names exported by the library
+	Imported   []string    // names that actually landed in the importer (after only/except/prefix/rename)
+	Importer   LibraryName // importing library name (zero value for top-level import)
+	Phase      int         // pipeline phase: environment.PhaseExpand or environment.PhaseCompile
 }
 
 // LibraryImportObserver is called when a library is imported.
@@ -181,8 +181,8 @@ func (p *LibraryRegistry) ImportObserver() LibraryImportObserver {
 // fireImportObserver calls the import observer if one is set on the
 // registry stored in env. bindings maps local name -> external name
 // (as returned by ApplyToExports). importer is the importing library's
-// name parts, or nil for top-level imports.
-func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary, bindings map[string]string, importer []string, phase int) {
+// name, or zero value for top-level imports.
+func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary, bindings map[string]string, importer LibraryName, phase int) {
 	regAny := env.LibraryRegistry()
 	if regAny == nil {
 		return
@@ -204,21 +204,12 @@ func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary,
 	}
 	sort.Strings(imported)
 
-	libraryParts := make([]string, len(lib.Name.Parts))
-	copy(libraryParts, lib.Name.Parts)
-
-	var importerCopy []string
-	if importer != nil {
-		importerCopy = make([]string, len(importer))
-		copy(importerCopy, importer)
-	}
-
 	reg.importObserver(LibraryImportEvent{
-		Library:    libraryParts,
+		Library:    lib.Name,
 		SourceFile: lib.SourceFile,
 		Exports:    exports,
 		Imported:   imported,
-		Importer:   importerCopy,
+		Importer:   importer,
 		Phase:      phase,
 	})
 }
@@ -417,7 +408,7 @@ func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *en
 			importSet.LibraryName.SchemeString())
 	}
 
-	fireImportObserver(env, lib, bindings, nil, phase)
+	fireImportObserver(env, lib, bindings, LibraryName{}, phase)
 
 	err = CopyLibraryBindingsToEnvAtPhase(lib, bindings, env, importSet.PhaseShift)
 	if err != nil {

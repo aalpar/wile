@@ -90,7 +90,7 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 				importSet.LibraryName.SchemeString())
 		}
 
-		fireImportObserver(p.env, importedLib, bindings, lib.Name.Parts, environment.PhaseCompile)
+		fireImportObserver(p.env, importedLib, bindings, lib.Name, environment.PhaseCompile)
 
 		// Bind the imported names in the library's environment (lib.Env)
 		for localName, externalName := range bindings {

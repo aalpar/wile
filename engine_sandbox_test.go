@@ -257,7 +257,7 @@ func TestImportObserver(t *testing.T) {
 	// Filter to only the mylib event (bootstrap may trigger others)
 	var myEvents []LibraryImportEvent
 	for _, evt := range events {
-		if len(evt.Library) == 1 && evt.Library[0] == "mylib" {
+		if evt.Library.Key() == "mylib" {
 			myEvents = append(myEvents, evt)
 		}
 	}
@@ -267,10 +267,10 @@ func TestImportObserver(t *testing.T) {
 	c.Assert(len(myEvents), qt.Equals, 2)
 
 	for _, evt := range myEvents {
-		c.Assert(evt.Library, qt.DeepEquals, []string{"mylib"})
+		c.Assert(evt.Library.Parts, qt.DeepEquals, []string{"mylib"})
 		c.Assert(evt.Exports, qt.DeepEquals, []string{"greet"})
 		c.Assert(evt.Imported, qt.DeepEquals, []string{"greet"})
-		c.Assert(evt.Importer, qt.IsNil) // top-level import
+		c.Assert(evt.Importer.Parts, qt.IsNil) // top-level import
 	}
 }
 
@@ -302,7 +302,7 @@ func TestImportObserver_OnlyModifier(t *testing.T) {
 
 	var myEvents []LibraryImportEvent
 	for _, evt := range events {
-		if len(evt.Library) == 1 && evt.Library[0] == "twoexports" {
+		if evt.Library.Key() == "twoexports" {
 			myEvents = append(myEvents, evt)
 		}
 	}
