@@ -63,10 +63,6 @@ func (p *OperationForeignFunctionCall) Apply(mc *MachineContext) (rmc *MachineCo
 		if errors.As(err, &abortErr) {
 			return nil, err
 		}
-		var exitErr *ErrExitEscape
-		if errors.As(err, &exitErr) {
-			return nil, err
-		}
 		var excErr *ErrExceptionEscape
 		if errors.As(err, &excErr) {
 			return nil, err

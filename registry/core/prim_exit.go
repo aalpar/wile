@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
+	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
 
@@ -44,7 +45,7 @@ func PrimCallWithExit(mc *machine.MachineContext) error {
 		return err
 	}
 
-	tag := machine.NewExitTag()
+	tag := machine.NewPromptTag("exit")
 	valid := &atomic.Bool{}
 	valid.Store(true)
 	capturingThreadID := mc.ThreadID()
@@ -62,7 +63,10 @@ func PrimCallWithExit(mc *machine.MachineContext) error {
 				"call-with-exit: exit procedure called from different thread")
 		}
 		val := innerMC.Arg(0)
-		return machine.NewErrExitEscape(tag, val)
+		return &machine.ErrPromptAbort{
+			Tag:    tag,
+			Values: []values.Value{val},
+		}
 	}
 	exitClosure := machine.NewForeignClosure(mc.EnvironmentFrame().TopLevel(), 1, false, exitFn)
 
@@ -78,8 +82,8 @@ func PrimCallWithExit(mc *machine.MachineContext) error {
 	}
 	err = sub.Run()
 	if err != nil {
-		var exitErr *machine.ErrExitEscape
-		if errors.As(err, &exitErr) && exitErr.Tag() == tag {
+		var abortErr *machine.ErrPromptAbort
+		if errors.As(err, &abortErr) && abortErr.Tag == tag {
 			// Escape matched our tag. Invalidate the exit procedure, then unwind
 			// any dynamic-wind frames accumulated above our entry point.
 			valid.Store(false)
@@ -89,7 +93,7 @@ func PrimCallWithExit(mc *machine.MachineContext) error {
 					return unwindErr
 				}
 			}
-			mc.SetValue(exitErr.Value)
+			mc.SetValue(abortErr.Values[0])
 			return nil
 		}
 		return err

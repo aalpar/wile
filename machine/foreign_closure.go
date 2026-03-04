@@ -49,10 +49,6 @@ func applyCallableError(mc *MachineContext, err error) error {
 	if errors.As(err, &abortErr) {
 		return err
 	}
-	var exitErr *ErrExitEscape
-	if errors.As(err, &exitErr) {
-		return err
-	}
 	return goErrorToSchemeException(mc, err)
 }
 
