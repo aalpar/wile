@@ -390,30 +390,63 @@ func CopyLibraryBindingsToEnv(lib *CompiledLibrary, bindings map[string]string, 
 // This is the common path for top-level imports (both expander and compiler).
 // Library-internal imports (processLibraryImport) diverge at installation and
 // use their own loop.
-func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *environment.EnvironmentFrame, phase int) error {
+
+// ResolvedImportSet holds the result of parsing and loading an import set.
+// This is the shared prefix of all import processing: parse the import set
+// datum, load the named library, and apply modifiers (only, except, prefix,
+// rename) to produce the final binding map.
+type ResolvedImportSet struct {
+	ImportSet *ImportSet
+	Library   *CompiledLibrary
+	Bindings  map[string]string // localName -> externalName
+}
+
+// resolveImportSet parses an import set datum, loads the library, and applies
+// modifiers to produce the resolved binding map.
+//
+// The env parameter is used only for library loading (to find the library
+// registry and resolve paths). It is NOT the target for binding installation.
+func resolveImportSet(ctx context.Context, datum values.Value, env *environment.EnvironmentFrame) (*ResolvedImportSet, error) {
 	importSet, err := ParseImportSetFromDatum(ctx, datum)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	lib, err := LoadLibrary(ctx, importSet.LibraryName, env)
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "import: failed to load library %s",
+		return nil, werr.WrapForeignErrorf(err, "import: failed to load library %s",
 			importSet.LibraryName.SchemeString())
 	}
 
 	bindings, err := importSet.ApplyToExports(lib)
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "import: error applying modifiers for %s",
+		return nil, werr.WrapForeignErrorf(err, "import: error applying modifiers for %s",
 			importSet.LibraryName.SchemeString())
 	}
 
-	fireImportObserver(env, lib, bindings, LibraryName{}, phase)
+	return &ResolvedImportSet{
+		ImportSet: importSet,
+		Library:   lib,
+		Bindings:  bindings,
+	}, nil
+}
 
-	err = CopyLibraryBindingsToEnvAtPhase(lib, bindings, env, importSet.PhaseShift)
+// ResolveAndInstallImportSet resolves an import set and installs bindings into
+// env at the appropriate phase. Used for top-level imports (both expander and
+// compiler). Library-internal imports share the resolution step (resolveImportSet)
+// but use copyLibraryBindingsDirect for installation.
+func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *environment.EnvironmentFrame, phase int) error {
+	res, err := resolveImportSet(ctx, datum, env)
+	if err != nil {
+		return err
+	}
+
+	fireImportObserver(env, res.Library, res.Bindings, LibraryName{}, phase)
+
+	err = CopyLibraryBindingsToEnvAtPhase(res.Library, res.Bindings, env, res.ImportSet.PhaseShift)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "import: error copying bindings from %s",
-			importSet.LibraryName.SchemeString())
+			res.ImportSet.LibraryName.SchemeString())
 	}
 
 	return nil
@@ -480,6 +513,64 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 			propagateIdx := propagateEnv.GetGlobalIndex(propagateSym)
 			if propagateIdx != nil {
 				_ = propagateEnv.SetOwnGlobalValue(propagateIdx, libBinding.Value())
+			}
+		}
+	}
+	return nil
+}
+
+// copyLibraryBindingsDirect installs bindings from lib into targetEnv without
+// AtPhase routing. This is used for library-internal imports where targetEnv
+// is a child runtime frame whose AtPhase() would route to the parent's phase
+// registry rather than the library's own environment.
+//
+// Syntax bindings are additionally copied to targetEnv.Expand() so they are
+// available during macro expansion of the library body.
+func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string, targetEnv *environment.EnvironmentFrame) error {
+	for localName, externalName := range bindings {
+		internalName := lib.GetInternalName(externalName)
+		if internalName == "" {
+			internalName = externalName
+		}
+
+		// Search source environments in phase order: runtime, expand, compile.
+		libSym := lib.Env.InternSymbol(values.NewSymbol(internalName))
+		importedBinding := lib.Env.GetBinding(libSym)
+		if importedBinding == nil {
+			expandEnv := lib.Env.Expand()
+			if expandEnv != nil {
+				importedBinding = expandEnv.GetBinding(libSym)
+			}
+		}
+		if importedBinding == nil {
+			compileEnv := lib.Env.Compile()
+			if compileEnv != nil {
+				importedBinding = compileEnv.GetBinding(libSym)
+			}
+		}
+		if importedBinding == nil {
+			return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "import: %s exports %q but binding not found",
+				lib.Name.SchemeString(), internalName)
+		}
+
+		// Install in the target environment directly.
+		localSym := targetEnv.InternSymbol(values.NewSymbol(localName))
+		_, _ = targetEnv.MaybeCreateOwnGlobalBinding(localSym, importedBinding.BindingType())
+		globalIdx := targetEnv.GetGlobalIndex(localSym)
+		if globalIdx != nil {
+			err := targetEnv.SetOwnGlobalValue(globalIdx, importedBinding.Value())
+			if err != nil {
+				return werr.WrapForeignErrorf(err, "import: failed to set binding for %s", localName)
+			}
+		}
+
+		// Syntax bindings must also be available in the expand phase.
+		if importedBinding.BindingType() == environment.BindingTypeSyntax {
+			expandEnv := targetEnv.Expand()
+			_, _ = expandEnv.MaybeCreateOwnGlobalBinding(localSym, environment.BindingTypeSyntax)
+			expandIdx := expandEnv.GetGlobalIndex(localSym)
+			if expandIdx != nil {
+				_ = expandEnv.SetOwnGlobalValue(expandIdx, importedBinding.Value())
 			}
 		}
 	}

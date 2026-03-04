@@ -44,7 +44,7 @@ Findings from codebase-wide structural review (2026-03-04).
 
 - [x] **Duplicated import set parsing** [High, M]: Resolved in #397.
 - [x] **Split `compile_time_continuation_library.go`** [High, M]: Resolved in #400.
-- [ ] **Deduplicate import-set processing loop** [Medium, S]: `expandImportForm`, `CompileImport`, and `processLibraryImport` share the same parse→load→apply→copy sequence (the first two are near-identical). Extract a shared helper for the common prefix. `processLibraryImport` diverges at the install step (manual binding copy vs `CopyLibraryBindingsToEnvAtPhase`).
+- [x] **Deduplicate import-set processing loop** [Medium, S]: Extracted `resolveImportSet` (shared parse→load→apply prefix) and `copyLibraryBindingsDirect` (library-internal installation). `processLibraryImport` now calls both instead of inlining ~80 lines.
 
 ### Medium Priority
 
