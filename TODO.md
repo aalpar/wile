@@ -37,7 +37,7 @@ Findings from codebase-wide structural review (2026-03-04).
 - [x] **Unexport `Promise.Thunk`/`.Result`** [Medium, S]: Fixed in #412 — fields unexported, accessor methods added.
 - [x] **Delete dead `Indexable` interface** [Low, S]: Fixed in #413 — interface and compile-time checks removed.
 - [x] **`LocalEnvironmentFrame.Keys()` returns live internal map** [Medium, S]: Fixed in #414 — returns defensive copy via `maps.Copy`, matching `GlobalEnvironmentFrame.Keys()`.
-- [ ] **`NewEnvironmentFrame` produces incomplete objects** [Low, S]: `environment/environment_frame.go:123-133` — creates frame with `phases: nil`, `topLevel: nil`. Calling `AtPhase()`/`InternSymbol()` panics. Either unexport or add prominent godoc warning.
+- [x] **`NewEnvironmentFrame` produces incomplete objects** [Low, S]: Fixed in #422 — unexported constructor; all public paths now produce complete objects.
 - [x] **`SelectCase` booleans should be enum** [Low, S]: Fixed — replaced `IsSend`+`IsDefault` bools with `SelectCaseKind` enum (`SelectReceive`, `SelectSend`, `SelectDefault`).
 
 ### High Priority
