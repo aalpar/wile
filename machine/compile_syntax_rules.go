@@ -585,14 +585,13 @@ func extractLiteralsWithSyntax(ctx context.Context,
 
 		symVal := sym.Unwrap()
 		symbol, ok := symVal.(*values.Symbol)
-		if ok {
-			literals[symbol.Key] = struct{}{}
-			// Store syntax symbol for scope-aware matching if map provided
-			if literalSyntax != nil {
-				literalSyntax[symbol.Key] = sym
-			}
-		} else {
+		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotASymbol, "extractLiterals: literal must be a symbol")
+		}
+		literals[symbol.Key] = struct{}{}
+		// Store syntax symbol for scope-aware matching if map provided
+		if literalSyntax != nil {
+			literalSyntax[symbol.Key] = sym
 		}
 		return nil
 	})
