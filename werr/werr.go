@@ -304,7 +304,7 @@ type ForeignFileError struct {
 // WrapForeignFileError wraps an OS error with file context.
 func WrapForeignFileError(err error, op string, filename string) *ForeignFileError {
 	q := &ForeignFileError{
-		ForeignError: WrapForeignErrorf(err, "%s: %s: %v", op, filename, err),
+		ForeignError: WrapForeignErrorf(err, "%s: %s", op, filename),
 		Filename:     filename,
 		Op:           op,
 	}

@@ -21,12 +21,25 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 ## Bugs & Correctness
 
 - L7 (`char-ready?`/`u8-ready?` always `#t`) — documented semantic difference, no fix planned
+- [x] **`WrapForeignFileError` double-prints error message** [High, S]: `werr/werr.go:307` included `err` in format string (`%v`), but `ForeignError.Error()` already appends `p.err.Error()`. Every file error was printed as `"op: file: msg: msg"`. Fixed: removed redundant `%v`.
 
 ---
 
 ## Refactoring
 
 Ordered by dependency — items that unblock others or carry divergence risk come first. MachineContext decomposition is last (depends on other refactorings settling).
+
+### Type Design Cleanup
+
+Findings from codebase-wide structural review (2026-03-04).
+
+- [ ] **`ForeignError.stack` is dead state** [Medium, S]: `werr/werr.go:193` — 50-frame `[]uintptr` captured in every `ForeignError` constructor (lines 202, 216, 231, 245), never read by any code. ~400 bytes/error of heap waste. Either add a `FormatStack()` method and use it, or remove the field.
+- [ ] **Unexport `Promise.Thunk`/`.Result`** [Medium, S]: `values/promise.go:24-30` — both fields exported with XOR invariant (`Thunk==nil` ⟺ forced). 2 of 4 field combinations are semantically invalid. Add `Force(result Value)`, `IsForced() bool` methods; unexport fields.
+- [ ] **Delete dead `Indexable` interface** [Low, S]: `values/values.go:195-200` — declared, compile-time-checked by `*Vector`/`*ByteVector`/`*String`, but never used in any function signature or runtime type assertion. Code itself documents this at line 192.
+- [ ] **Delete dead `SourceLocation` interface** [Low, S]: `values/values.go:207-212` — declared with 4 methods. No concrete implementor in `values/`. Only referenced in declaration and one test file.
+- [ ] **`LocalEnvironmentFrame.Keys()` returns live internal map** [Medium, S]: `environment/local_environment_frame.go:59-61` — returns `p.keys` directly, enabling silent CoW invariant corruption. `GlobalEnvironmentFrame.Keys()` (line 159) correctly returns a defensive copy. Match that pattern.
+- [ ] **`NewEnvironmentFrame` produces incomplete objects** [Low, S]: `environment/environment_frame.go:123-133` — creates frame with `phases: nil`, `topLevel: nil`. Calling `AtPhase()`/`InternSymbol()` panics. Either unexport or add prominent godoc warning.
+- [ ] **`SelectCase` booleans should be enum** [Low, S]: `values/channel.go:206-211` — `IsSend` + `IsDefault` encode 3-way choice in 2 bools. `{true, true}` is representable but invalid. Replace with `SelectCaseKind` enum.
 
 ### High Priority
 
