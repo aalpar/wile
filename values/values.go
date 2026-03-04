@@ -186,20 +186,6 @@ type Tuple interface {
 // Indexable represents a fixed-size, random-access container of values.
 //
 // R7RS §6.3.6 (vectors), §6.3.7 (strings as character sequences), §6.4
-// (bytevectors): these types support O(1) element access by integer index.
-//
-// This interface is used for compile-time documentation and type grouping.
-// No runtime type assertions against Indexable exist in the codebase;
-// dispatch uses concrete types (*Vector, *ByteVector) directly.
-//
-// Implemented by: Vector, ByteVector.
-type Indexable interface {
-	Value
-	Length() int
-	Get(int) Value
-	Set(int, Value) error
-}
-
 // ---------------------------------------------------------------------------
 // SourceLocation — source positions
 // ---------------------------------------------------------------------------

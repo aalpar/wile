@@ -15,10 +15,7 @@
 // Package values provides Scheme runtime value types.
 package values
 
-var (
-	_ Value     = (*Vector)(nil)
-	_ Indexable = (*Vector)(nil)
-)
+var _ Value = (*Vector)(nil)
 
 // Vector represents an R7RS vector, a fixed-size mutable array of values.
 // Vectors are written as #(element ...) in Scheme syntax.
