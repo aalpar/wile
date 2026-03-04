@@ -36,8 +36,8 @@ Multiple PRs eliminated the remaining per-call allocations identified in the pos
 |-----|-----------|-----------|
 | Rest-arg buffer reuse | PR #333 | Reusable `PairBlock` on `MachineContext` for foreign variadic calls; -68% allocs, `values.List` eliminated from profile |
 | EnvironmentFrame pooling | PR #325, #386 | `Pool[T]` for env frames; pooled frames reused via `copyForApplyInto` with CoW keys |
-| Slim Binding struct | (binding.go) | `BindingMeta` extracted behind pointer — runtime copies move 32 bytes instead of 56 |
-| Binding copy memcpy | (local_environment_frame.go) | `copy(dst.bindings, p.bindings)` — single `memmove` replaces field-by-field loop |
+| Slim Binding struct | `environment/binding.go` | `BindingMeta` extracted behind pointer — runtime copies move 32 bytes instead of 56 |
+| Binding copy memcpy | `environment/local_environment_frame.go` | `copy(dst.bindings, p.bindings)` — single `memmove` replaces field-by-field loop |
 | Inline continuation evals | PR #387 | Skip stack pool round-trip for continuation evals |
 | Stack.Drain | PR #396 | Zero-copy view of eval stack eliminates `PopAll` allocation in hot path |
 
@@ -69,7 +69,7 @@ Multiple PRs eliminated the remaining per-call allocations identified in the pos
 
 ### Architectural Changes (Tier 3)
 
-#### Flat Closures (Display-Based Environments)
+#### 8. Flat Closures (Display-Based Environments)
 
 Current model: closures capture a linked list of EnvironmentFrame nodes. `NewApplyFrame` copies the leaf frame's bindings. Parent chain is shared.
 
