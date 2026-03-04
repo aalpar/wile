@@ -2045,8 +2045,8 @@ func TestSimpleToken_EqualTo(t *testing.T) {
 
 func TestTokenizerError_Is(t *testing.T) {
 	c := qt.New(t)
-	err1 := NewTokenizerError("test error", syntax.SourceIndexes{}, syntax.SourceIndexes{})
-	err2 := NewTokenizerError("another error", syntax.SourceIndexes{}, syntax.SourceIndexes{})
+	err1 := NewTokenizerError("test error")
+	err2 := NewTokenizerError("another error")
 
 	c.Assert(err1.Is(err2), qt.IsTrue)    // Both are TokenizerError
 	c.Assert(err1.Is(io.EOF), qt.IsFalse) // Not a TokenizerError
@@ -2056,18 +2056,18 @@ func TestTokenizerError_Unwrap(t *testing.T) {
 	c := qt.New(t)
 
 	// Error without wrap
-	err1 := NewTokenizerError("test", syntax.SourceIndexes{}, syntax.SourceIndexes{})
+	err1 := NewTokenizerError("test")
 	c.Assert(err1.Unwrap(), qt.IsNil)
 
 	// Error with wrap
 	wrapped := io.EOF
-	err2 := NewTokenizerErrorWithWrap(wrapped, "wrapped", syntax.SourceIndexes{}, syntax.SourceIndexes{})
+	err2 := NewTokenizerErrorWithWrap(wrapped, "wrapped")
 	c.Assert(err2.Unwrap(), qt.Equals, wrapped)
 }
 
 func TestTokenizerError_Error(t *testing.T) {
 	c := qt.New(t)
-	err := NewTokenizerError("my error message", syntax.SourceIndexes{}, syntax.SourceIndexes{})
+	err := NewTokenizerError("my error message")
 	c.Assert(err.Error(), qt.Equals, "my error message")
 }
 

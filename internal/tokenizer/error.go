@@ -14,39 +14,28 @@
 
 package tokenizer
 
-import (
-	"github.com/aalpar/wile/internal/syntax"
-)
-
 // ErrorCode represents a tokenizer error classification.
 type ErrorCode int
 
-// TokenizerError represents an error that occurred during tokenization,
-// with source location information.
+// TokenizerError represents an error that occurred during tokenization.
 type TokenizerError struct {
-	err   error
-	start syntax.SourceIndexes
-	end   syntax.SourceIndexes
-	mess  string
+	err  error
+	mess string
 }
 
-// NewTokenizerError creates a new tokenizer error with the given message and source location.
-func NewTokenizerError(mess string, start, end syntax.SourceIndexes) *TokenizerError {
+// NewTokenizerError creates a new tokenizer error with the given message.
+func NewTokenizerError(mess string) *TokenizerError {
 	q := &TokenizerError{
-		start: start,
-		end:   end,
-		mess:  mess,
+		mess: mess,
 	}
 	return q
 }
 
 // NewTokenizerErrorWithWrap creates a new tokenizer error that wraps another error.
-func NewTokenizerErrorWithWrap(err error, mess string, start, end syntax.SourceIndexes) *TokenizerError {
+func NewTokenizerErrorWithWrap(err error, mess string) *TokenizerError {
 	q := &TokenizerError{
-		err:   err,
-		start: start,
-		end:   end,
-		mess:  mess,
+		err:  err,
+		mess: mess,
 	}
 	return q
 }

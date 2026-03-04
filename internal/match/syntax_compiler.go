@@ -62,7 +62,6 @@ var (
 )
 
 type syntaxCompilerStackEntry struct {
-	mark             int                // position in instructions in which loops will return to
 	lastElementStart int                // position where the last element's bytecode starts
 	lastElement      syntax.SyntaxValue // the actual last element value for analysis lookup
 	pr               *syntax.SyntaxPair
@@ -521,7 +520,6 @@ func advanceToNextElement(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry, 
 		vis.codes = append(vis.codes, ByteCodeVisitCdr{})
 		entry.lastElementStart = elementStart
 		entry.lastElement = element
-		entry.mark = len(vis.codes)
 		entry.pr = cdrPair
 		return true
 	}
