@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-03-02
+**Last Updated**: 2026-03-03
 
 ### Current Project Status
 
@@ -20,17 +20,12 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 ## Bugs & Correctness
 
-- [x] **Fix Tuple ForEach nil semantics** [Medium, S]: `pair.go:184` — nil `*Pair.ForEach` returns `Void`, not `EmptyList`. Violates interface contract ("returns the tail value (EmptyList for proper lists)"). Pin behavior with a test.
-- [x] **Shared acyclic datum labels**: `internSymbolsInValueWithVisited` uses a permanent visited set, incorrectly rejecting shared-but-acyclic structures like `'(#0=(a) #0#)`. Fix: stack-based or two-state (inProgress/done) visited map. `deduplicatePairWithVisited` needs the same fix if shared DAGs are allowed through.
-- [x] **guard body drops multiple values**: Fixed in PR #395 — guard body now uses `call-with-values` to capture and re-emit all values.
 - L7 (`char-ready?`/`u8-ready?` always `#t`) — documented semantic difference, no fix planned
 
 ---
 
 ## Performance
 
-- [x] **Stack.Drain — eliminate PopAll allocation in VM hot path**: `PopAll` allocates a fresh `[]values.Value` on every function call (`OpApply`, `OpPullApply`). `Apply` only iterates the slice then discards it. Add a `Drain`/view method to let `Apply` read the stack backing array in-place, then clear. ~20 LOC, two call sites.
-- [x] **Fused push opcodes**: `PushLiteral`, `PushGlobal`, `PushLocal` — combine load+push into single opcodes to reduce dispatch overhead. Peephole optimizer emits fused ops.
 - [ ] **Numeric dispatch simplification**: Replace `NumericKind` enum + `init()` dispatch tables with direct type switches in each numeric method. Deletes indirection layer (~-1400 net lines). Same behavior, fewer allocations.
 - [ ] **ArrayList — array-backed list representation**: Contiguous `[]Value` slice alternative to `*Pair` chains. O(1) element access, better cache locality. Implements `Value` and `Tuple`. Prototype existed in abandoned branch (~358 LOC + 538 test).
 - [ ] **Rest-arg cons elimination and sync.Pool evaluation**: #1 allocator at 39.9%. `plans/PERFORMANCE.md`
@@ -43,18 +38,16 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 
 ### High Priority
 
-- [ ] **Duplicated import set parsing** [High, M]: `parseImportSet*` (8 functions on `syntax.SyntaxValue`) in `compile_time_continuation_library.go` mirrors `parseImportSet*FromDatum` (7 functions on `values.Tuple`) in `import_set_datum.go`. Same R7RS §5.7 modifier semantics, two implementations. Bug-fix divergence risk. Fix: common `Datum` interface both types satisfy.
-- [ ] **Split `compile_time_continuation_library.go`** [High, M]: 1,213 lines doing 6+ concerns (library forms, import parsing, export, cond-expand, letrec* body, phase-aware bindings). Split into `compile_library_forms.go`, `compile_import.go`, keep letrec* body in original. (Touches same file as import set parsing — do after or together.)
+- [x] **Split `compile_time_continuation_library.go`** [High, M]: Split into `compile_library_forms.go`, `compile_import.go`, `compile_cond_expand.go`, `compile_define_syntax.go`; letrec* body remains in original.
 
 ### Medium Priority
 
-- [ ] **Split `library.go` into registry + bindings** [Medium, S]: 456 lines mixing data structures, registry ops, export application, and three-environment auxiliary syntax lookup. Split into `library_registry.go` and `library_bindings.go`.
+- [ ] **Split `library.go` into registry + bindings** [Medium, S]: 494 lines mixing data structures, registry ops, export application, and three-environment auxiliary syntax lookup. Split into `library_registry.go` and `library_bindings.go`.
 - [ ] **Unify escape mechanisms** [Medium, M]: `ErrExitEscape` + `ExitTag` (`exit_escape.go`) and `ErrPromptAbort` + `PromptTag` (`prompt_abort.go`) are parallel paths for tagged-boundary return. Barrier/winding bug fixes must cover both. Evaluate whether `call-with-exit` can wrap the prompt abort mechanism.
 - [ ] **Port type Value method boilerplate** [Medium, S]: 10+ port files duplicate `IsVoid`/`EqualTo`/`SchemeString`. `portBase` provides `Close`/`IsClosed` but not Value interface methods. Add `SchemeString`/`IsVoid` to `portBase`; `EqualTo` requires concrete assertions.
 - [ ] **`forms` type erasure documentation** [Medium, S]: `ValidatorFunc`/`CompilerFunc` in `internal/forms/form_spec.go` use `any` to break circular imports. Deliberate choice but contract is undocumented. Add explicit doc comment on `FormSpec` specifying the concrete types each `any` parameter must satisfy.
 - [ ] **Constructor telescoping in `match`** [Medium, S]: 8 constructor variants (`NewSyntaxMatcher*` × 4, `CompileSyntaxPattern*` × 4) in `syntax_adapter.go`. Collapse to `NewSyntaxMatcher(config)` with a `SyntaxMatcherConfig` options struct.
 - [ ] **I/O port extraction helper** [Medium, S]: 4 functions in `internal/extensions/io/prim_read_write.go` (`getOptionalOutputPort`, `getOptionalInputPort`, `getRequiredBinaryInputPort`, `getRequiredBinaryOutputPort`) follow the same 5-step pattern, varying only in port type and error sentinel. Extract generic `extractPort[T]` parameterized on interface and sentinel.
-- [x] **Validator prologue deduplication**: 19 validators in `internal/validate/validate_*.go` repeat the same `collectList` + `improper` check + arity guard prologue (~4 lines each). Extract to `validateFormPrologue()` helper.
 - [ ] **Optional fill argument extraction**: 3 `make-*` primitives (`PrimMakeVector`, `PrimMakeBytevector`, `PrimMakeString`) independently extract optional fill arguments with slightly different patterns. Share a helper.
 
 ### Low Priority
@@ -67,7 +60,7 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 
 ### Postponed
 
-- [ ] **F10: MachineContext decomposition** [Medium, Postponed]: 1586 lines, 71 methods, 10+ responsibilities. Extract `WindingStack`, `ContinuationChain`, `ExceptionHandler` into delegate types. Postponed — requires stable method surface; do after other refactorings settle.
+- [ ] **F10: MachineContext decomposition** [Medium, Postponed]: 1671 lines, 71 methods, 10+ responsibilities. Extract `WindingStack`, `ContinuationChain`, `ExceptionHandler` into delegate types. Postponed — requires stable method surface; do after other refactorings settle.
 - [ ] **F11: Promote internal extensions** [Low, Postponed]: `internal/extensions/{io,eval,all}` invisible to embedders. Promote to `extensions/{io,eval}/` when extension API stabilizes and external consumers exist.
 
 ---
