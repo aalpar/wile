@@ -112,6 +112,20 @@ func TestLocalEnvironmentFrame_Keys(t *testing.T) {
 	qt.Assert(t, keys, qt.HasLen, 2)
 }
 
+func TestLocalEnvironmentFrame_Keys_DefensiveCopy(t *testing.T) {
+	le := NewLocalEnvironment(0)
+	sym1 := values.NewSymbol("var1")
+	le.EnsureLocalBinding(sym1, BindingTypeVariable)
+
+	keys := le.Keys()
+	// Mutating the returned map must not affect internal state.
+	bogus := values.NewSymbol("bogus")
+	keys[*bogus] = 99
+
+	qt.Assert(t, le.Keys(), qt.HasLen, 1)
+	qt.Assert(t, le.GetLocalIndex(bogus), qt.IsNil)
+}
+
 func TestLocalEnvironmentFrame_SchemeString(t *testing.T) {
 	le := NewLocalEnvironment(0)
 	str := le.SchemeString()
@@ -167,10 +181,8 @@ func TestCopyForApply_SharesKeys(t *testing.T) {
 
 	copied := le.CopyForApply()
 
-	// Keys map is the same pointer (shared, not cloned)
-	origKeys := le.Keys()
-	copyKeys := copied.Keys()
-	qt.Assert(t, reflect.ValueOf(copyKeys).Pointer(), qt.Equals, reflect.ValueOf(origKeys).Pointer())
+	// Internal keys map is shared (CoW); Keys() returns a defensive copy
+	qt.Assert(t, reflect.ValueOf(copied.keys).Pointer(), qt.Equals, reflect.ValueOf(le.keys).Pointer())
 }
 
 func TestCopyForApply_IndependentBindings(t *testing.T) {
@@ -233,8 +245,8 @@ func TestCopyInto_CopiesBindings(t *testing.T) {
 	qt.Assert(t, dst.bindings[0].Value(), valuestest.SchemeEquals, values.NewInteger(10))
 	qt.Assert(t, dst.bindings[1].Value(), valuestest.SchemeEquals, values.NewInteger(20))
 
-	// Keys are shared
-	qt.Assert(t, reflect.ValueOf(dst.keys).Pointer(), qt.Equals, reflect.ValueOf(le.Keys()).Pointer())
+	// Internal keys map is shared (CoW); Keys() returns a defensive copy
+	qt.Assert(t, reflect.ValueOf(dst.keys).Pointer(), qt.Equals, reflect.ValueOf(le.keys).Pointer())
 	qt.Assert(t, dst.keysShared, qt.IsTrue)
 
 	// Mutating dst does not affect source
