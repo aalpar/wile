@@ -164,19 +164,6 @@ func TestNewLibraryEnvironmentFrame_BootstrapMacrosAvailable(t *testing.T) {
 	}
 }
 
-// TestNewLibraryEnvironmentFrame_NilTopLevelEnvironment verifies that passing
-// an environment without a TopLevelEnvironment returns an error.
-func TestNewLibraryEnvironmentFrame_NilTopLevelEnvironment(t *testing.T) {
-	c := qt.New(t)
-	ctx := context.TODO()
-
-	// Create a bare environment frame with no TopLevelEnvironment
-	bareEnv := environment.NewEnvironmentFrame(nil, nil)
-
-	_, err := NewLibraryEnvironmentFrame(ctx, bareEnv, nil)
-	c.Assert(err, qt.IsNotNil)
-}
-
 // TestNewLibraryEnvironmentFrame_IndependentMutation verifies that defining
 // variables in the library environment does not affect the caller, and vice versa.
 func TestNewLibraryEnvironmentFrame_IndependentMutation(t *testing.T) {

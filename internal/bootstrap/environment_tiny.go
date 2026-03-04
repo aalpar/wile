@@ -167,14 +167,9 @@ func NewTopLevelWithRegistry(ctx context.Context) (*environment.EnvironmentFrame
 //   - TopLevelEnvironment (symbol and syntax interning)
 //   - LibraryRegistry (for nested imports)
 func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.EnvironmentFrame, _ []string) (*environment.EnvironmentFrame, error) {
-	// Get caller's TopLevelEnvironment
-	callerTopLevel := callerEnv.TopLevelEnv()
-	if callerTopLevel == nil {
-		return nil, werr.WrapForeignErrorf(werr.ErrMissingTopLevelEnvironment, "caller environment has no TopLevelEnvironment")
-	}
-
-	// Create a new environment that shares the TopLevelEnvironment
-	libEnv := callerTopLevel.NewChildRuntime()
+	// Create a new environment that shares the caller's TopLevelEnvironment
+	// (for symbol identity per R7RS §6.5) but with isolated bindings.
+	libEnv := callerEnv.TopLevelEnv().NewChildRuntime()
 
 	// Initialize with shared sequence
 	err := initializeEnvironment(ctx, libEnv)
