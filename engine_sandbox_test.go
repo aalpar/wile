@@ -306,6 +306,7 @@ func TestImportObserver_OnlyModifier(t *testing.T) {
 			myEvents = append(myEvents, evt)
 		}
 	}
+	// Observer fires at both expand and compile phases for top-level imports
 	c.Assert(len(myEvents), qt.Equals, 2)
 
 	for _, evt := range myEvents {
