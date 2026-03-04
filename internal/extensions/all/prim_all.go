@@ -119,54 +119,41 @@ func PrimRecordPredicate(mc *machine.MachineContext) error {
 	return nil
 }
 
-// PrimRecordAccessor implements the (record-accessor rt field-tag) primitive.
-// Returns an accessor procedure for the specified field.
-func PrimRecordAccessor(mc *machine.MachineContext) error {
-	fieldTagArg := mc.Arg(1)
-
-	rt, err := helpers.RequireArg[*values.RecordType](mc, 0, werr.ErrNotARecordType, "record-accessor")
+// resolveRecordField extracts a record type and field tag from the arguments,
+// validates the field exists, and returns the closure produced by makeClosure.
+func resolveRecordField(
+	mc *machine.MachineContext, name string,
+	makeClosure func(*environment.EnvironmentFrame, *values.RecordType, int) *machine.ForeignClosure,
+) error {
+	rt, err := helpers.RequireArg[*values.RecordType](mc, 0, werr.ErrNotARecordType, name)
 	if err != nil {
 		return err
 	}
 
-	fieldTag, err := helpers.RequireType[*values.Symbol](fieldTagArg, werr.ErrNotASymbol, "record-accessor")
+	fieldTag, err := helpers.RequireType[*values.Symbol](mc.Arg(1), werr.ErrNotASymbol, name)
 	if err != nil {
 		return err
 	}
 
 	idx := rt.FieldIndex(fieldTag)
 	if idx < 0 {
-		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "record-accessor: unknown field %s", fieldTag.SchemeString())
+		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "%s: unknown field %s", name, fieldTag.SchemeString())
 	}
 
-	closure := newRecordAccessorClosure(mc.EnvironmentFrame().TopLevel(), rt, idx)
-	mc.SetValue(closure)
+	mc.SetValue(makeClosure(mc.EnvironmentFrame().TopLevel(), rt, idx))
 	return nil
+}
+
+// PrimRecordAccessor implements the (record-accessor rt field-tag) primitive.
+// Returns an accessor procedure for the specified field.
+func PrimRecordAccessor(mc *machine.MachineContext) error {
+	return resolveRecordField(mc, "record-accessor", newRecordAccessorClosure)
 }
 
 // PrimRecordModifier implements the (record-modifier rt field-tag) primitive.
 // Returns a modifier procedure for the specified field.
 func PrimRecordModifier(mc *machine.MachineContext) error {
-	fieldTagArg := mc.Arg(1)
-
-	rt, err := helpers.RequireArg[*values.RecordType](mc, 0, werr.ErrNotARecordType, "record-modifier")
-	if err != nil {
-		return err
-	}
-
-	fieldTag, err := helpers.RequireType[*values.Symbol](fieldTagArg, werr.ErrNotASymbol, "record-modifier")
-	if err != nil {
-		return err
-	}
-
-	idx := rt.FieldIndex(fieldTag)
-	if idx < 0 {
-		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "record-modifier: unknown field %s", fieldTag.SchemeString())
-	}
-
-	closure := newRecordModifierClosure(mc.EnvironmentFrame().TopLevel(), rt, idx)
-	mc.SetValue(closure)
-	return nil
+	return resolveRecordField(mc, "record-modifier", newRecordModifierClosure)
 }
 
 // Helper: convert a Scheme list to a slice of symbols

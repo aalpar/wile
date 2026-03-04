@@ -24,96 +24,63 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-// PrimOpenInputFile implements the open-input-file primitive.
-// Opens a file for reading and returns an input port.
-func PrimOpenInputFile(mc *machine.MachineContext) error {
-	filename, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "open-input-file")
+// openFilePort implements the shared logic for open-{input,output}-file and
+// open-binary-{input,output}-file. It extracts the filename, checks security,
+// opens the file, and wraps it in a port via makePort.
+func openFilePort(
+	mc *machine.MachineContext, name string, action string,
+	opener func(string) (*os.File, error), makePort func(*os.File) values.Value,
+) error {
+	filename, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, name)
 	if err != nil {
 		return err
 	}
 	err = security.Check(mc.Context(), security.AccessRequest{
 		Resource: security.ResourceFile,
-		Action:   security.ActionRead,
+		Action:   action,
 		Target:   filename.Value,
 	})
 	if err != nil {
 		return err
 	}
-	file, err := os.Open(filename.Value)
+	file, err := opener(filename.Value)
 	if err != nil {
-		return werr.WrapForeignFileError(err, "open-input-file", filename.Value)
+		return werr.WrapForeignFileError(err, name, filename.Value)
 	}
-	mc.SetValue(values.NewCharacterInputPortFromReader(file))
+	mc.SetValue(makePort(file))
 	return nil
+}
+
+// PrimOpenInputFile implements the open-input-file primitive.
+// Opens a file for reading and returns an input port.
+func PrimOpenInputFile(mc *machine.MachineContext) error {
+	return openFilePort(mc, "open-input-file", security.ActionRead, os.Open, func(f *os.File) values.Value {
+		return values.NewCharacterInputPortFromReader(f)
+	})
 }
 
 // PrimOpenOutputFile implements the open-output-file primitive.
 // Opens a file for writing and returns an output port.
 func PrimOpenOutputFile(mc *machine.MachineContext) error {
-	filename, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "open-output-file")
-	if err != nil {
-		return err
-	}
-	err = security.Check(mc.Context(), security.AccessRequest{
-		Resource: security.ResourceFile,
-		Action:   security.ActionWrite,
-		Target:   filename.Value,
+	return openFilePort(mc, "open-output-file", security.ActionWrite, os.Create, func(f *os.File) values.Value {
+		return values.NewCharacterOutputPortFromWriter(f)
 	})
-	if err != nil {
-		return err
-	}
-	file, err := os.Create(filename.Value)
-	if err != nil {
-		return werr.WrapForeignFileError(err, "open-output-file", filename.Value)
-	}
-	mc.SetValue(values.NewCharacterOutputPortFromWriter(file))
-	return nil
 }
 
 // PrimOpenBinaryInputFile implements the open-binary-input-file primitive (R7RS).
 // Opens a file for binary reading and returns a binary input port.
 func PrimOpenBinaryInputFile(mc *machine.MachineContext) error {
-	filename, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "open-binary-input-file")
-	if err != nil {
-		return err
-	}
-	err = security.Check(mc.Context(), security.AccessRequest{
-		Resource: security.ResourceFile,
-		Action:   security.ActionRead,
-		Target:   filename.Value,
+	return openFilePort(mc, "open-binary-input-file", security.ActionRead, os.Open, func(f *os.File) values.Value {
+		return values.NewBinaryInputPortFromReader(f)
 	})
-	if err != nil {
-		return err
-	}
-	file, err := os.Open(filename.Value)
-	if err != nil {
-		return werr.WrapForeignFileError(err, "open-binary-input-file", filename.Value)
-	}
-	mc.SetValue(values.NewBinaryInputPortFromReader(file))
-	return nil
 }
 
 // PrimOpenBinaryOutputFile implements the open-binary-output-file primitive (R7RS).
 // Opens a file for binary writing and returns a binary output port.
 func PrimOpenBinaryOutputFile(mc *machine.MachineContext) error {
-	filename, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "open-binary-output-file")
-	if err != nil {
-		return err
-	}
-	err = security.Check(mc.Context(), security.AccessRequest{
-		Resource: security.ResourceFile,
-		Action:   security.ActionWrite,
-		Target:   filename.Value,
+	return openFilePort(mc, "open-binary-output-file", security.ActionWrite, os.Create, func(f *os.File) values.Value {
+		return values.NewBinaryOutputPortFromWriter(f)
 	})
-	if err != nil {
-		return err
-	}
-	file, err := os.Create(filename.Value)
-	if err != nil {
-		return werr.WrapForeignFileError(err, "open-binary-output-file", filename.Value)
-	}
-	mc.SetValue(values.NewBinaryOutputPortFromWriter(file))
-	return nil
 }
 
 // PrimFileExistsQ implements the (file-exists?) primitive.

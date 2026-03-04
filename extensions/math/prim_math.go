@@ -439,190 +439,100 @@ var PrimRound = makeRealNumberPrimitive(realNumberOp{
 	rationalOp: rationalToInteger(math.RoundToEven),
 })
 
-// PrimFloorDiv implements the (floor/) primitive.
-//
-// R7RS §6.2.6: Returns two values: floor quotient and floor remainder.
-// Works on any real numbers, returning exact results when both inputs are exact.
-func PrimFloorDiv(mc *machine.MachineContext) error {
-	o0 := mc.Arg(0)
-	o1 := mc.Arg(1)
+// divResult selects which values a real division primitive returns.
+type divResult int
 
-	n0, exact0, err := helpers.ExtractReal(o0, "floor/")
+const (
+	divBoth      divResult = iota // return quotient and remainder as multiple values
+	divQuotient                   // return quotient only
+	divRemainder                  // return remainder only
+)
+
+// realDivision implements the shared logic for floor and truncate division
+// families (R7RS §6.2.6). The roundFn parameter selects the rounding mode
+// (math.Floor or math.Trunc), and result selects which values to return.
+func realDivision(mc *machine.MachineContext, name string, roundFn func(float64) float64, result divResult) error {
+	n0, exact0, err := helpers.ExtractReal(mc.Arg(0), name)
 	if err != nil {
 		return err
 	}
-	n1, exact1, err := helpers.ExtractReal(o1, "floor/")
+	n1, exact1, err := helpers.ExtractReal(mc.Arg(1), name)
 	if err != nil {
 		return err
 	}
 
 	if n1 == 0 {
-		return werr.WrapForeignErrorf(werr.ErrDivisionByZero, "floor/: division by zero")
+		return werr.WrapForeignErrorf(werr.ErrDivisionByZero, "%s: division by zero", name)
 	}
 
-	q := math.Floor(n0 / n1)
-	r := n0 - q*n1
+	q := roundFn(n0 / n1)
+	exact := exact0 && exact1
 
-	if exact0 && exact1 {
-		mc.SetValues(values.NewInteger(int64(q)), values.NewInteger(int64(r)))
-	} else {
-		mc.SetValues(values.NewFloat(q), values.NewFloat(r))
+	switch result {
+	case divBoth:
+		r := n0 - q*n1
+		if exact {
+			mc.SetValues(values.NewInteger(int64(q)), values.NewInteger(int64(r)))
+		} else {
+			mc.SetValues(values.NewFloat(q), values.NewFloat(r))
+		}
+	case divQuotient:
+		if exact {
+			mc.SetValue(values.NewInteger(int64(q)))
+		} else {
+			mc.SetValue(values.NewFloat(q))
+		}
+	case divRemainder:
+		r := n0 - q*n1
+		if exact {
+			mc.SetValue(values.NewInteger(int64(r)))
+		} else {
+			mc.SetValue(values.NewFloat(r))
+		}
 	}
 	return nil
+}
+
+// PrimFloorDiv implements the (floor/) primitive.
+//
+// R7RS §6.2.6: Returns two values: floor quotient and floor remainder.
+func PrimFloorDiv(mc *machine.MachineContext) error {
+	return realDivision(mc, "floor/", math.Floor, divBoth)
 }
 
 // PrimFloorQuotient implements the (floor-quotient) primitive.
 //
 // R7RS §6.2.6: Returns the floor quotient for any real numbers.
 func PrimFloorQuotient(mc *machine.MachineContext) error {
-	o0 := mc.Arg(0)
-	o1 := mc.Arg(1)
-
-	n0, exact0, err := helpers.ExtractReal(o0, "floor-quotient")
-	if err != nil {
-		return err
-	}
-	n1, exact1, err := helpers.ExtractReal(o1, "floor-quotient")
-	if err != nil {
-		return err
-	}
-
-	if n1 == 0 {
-		return werr.WrapForeignErrorf(werr.ErrDivisionByZero, "floor-quotient: division by zero")
-	}
-
-	q := math.Floor(n0 / n1)
-
-	if exact0 && exact1 {
-		mc.SetValue(values.NewInteger(int64(q)))
-	} else {
-		mc.SetValue(values.NewFloat(q))
-	}
-	return nil
+	return realDivision(mc, "floor-quotient", math.Floor, divQuotient)
 }
 
 // PrimFloorRemainder implements the (floor-remainder) primitive.
 //
 // R7RS §6.2.6: Returns the floor remainder for any real numbers.
 func PrimFloorRemainder(mc *machine.MachineContext) error {
-	o0 := mc.Arg(0)
-	o1 := mc.Arg(1)
-
-	n0, exact0, err := helpers.ExtractReal(o0, "floor-remainder")
-	if err != nil {
-		return err
-	}
-	n1, exact1, err := helpers.ExtractReal(o1, "floor-remainder")
-	if err != nil {
-		return err
-	}
-
-	if n1 == 0 {
-		return werr.WrapForeignErrorf(werr.ErrDivisionByZero, "floor-remainder: division by zero")
-	}
-
-	q := math.Floor(n0 / n1)
-	r := n0 - q*n1
-
-	if exact0 && exact1 {
-		mc.SetValue(values.NewInteger(int64(r)))
-	} else {
-		mc.SetValue(values.NewFloat(r))
-	}
-	return nil
+	return realDivision(mc, "floor-remainder", math.Floor, divRemainder)
 }
 
 // PrimTruncateDiv implements the truncate/ primitive.
 //
 // R7RS §6.2.6: Returns two values: truncate quotient and truncate remainder.
-// Works on any real numbers, returning exact results when both inputs are exact.
 func PrimTruncateDiv(mc *machine.MachineContext) error {
-	o0 := mc.Arg(0)
-	o1 := mc.Arg(1)
-
-	n0, exact0, err := helpers.ExtractReal(o0, "truncate/")
-	if err != nil {
-		return err
-	}
-	n1, exact1, err := helpers.ExtractReal(o1, "truncate/")
-	if err != nil {
-		return err
-	}
-
-	if n1 == 0 {
-		return werr.WrapForeignErrorf(werr.ErrDivisionByZero, "truncate/: division by zero")
-	}
-
-	q := math.Trunc(n0 / n1)
-	r := n0 - q*n1
-
-	if exact0 && exact1 {
-		mc.SetValues(values.NewInteger(int64(q)), values.NewInteger(int64(r)))
-	} else {
-		mc.SetValues(values.NewFloat(q), values.NewFloat(r))
-	}
-	return nil
+	return realDivision(mc, "truncate/", math.Trunc, divBoth)
 }
 
 // PrimTruncateQuotient implements the truncate-quotient primitive.
 //
 // R7RS §6.2.6: Returns the truncate quotient for any real numbers.
 func PrimTruncateQuotient(mc *machine.MachineContext) error {
-	o0 := mc.Arg(0)
-	o1 := mc.Arg(1)
-
-	n0, exact0, err := helpers.ExtractReal(o0, "truncate-quotient")
-	if err != nil {
-		return err
-	}
-	n1, exact1, err := helpers.ExtractReal(o1, "truncate-quotient")
-	if err != nil {
-		return err
-	}
-
-	if n1 == 0 {
-		return werr.WrapForeignErrorf(werr.ErrDivisionByZero, "truncate-quotient: division by zero")
-	}
-
-	q := math.Trunc(n0 / n1)
-
-	if exact0 && exact1 {
-		mc.SetValue(values.NewInteger(int64(q)))
-	} else {
-		mc.SetValue(values.NewFloat(q))
-	}
-	return nil
+	return realDivision(mc, "truncate-quotient", math.Trunc, divQuotient)
 }
 
 // PrimTruncateRemainder implements the truncate-remainder primitive.
 //
 // R7RS §6.2.6: Returns the truncate remainder for any real numbers.
 func PrimTruncateRemainder(mc *machine.MachineContext) error {
-	o0 := mc.Arg(0)
-	o1 := mc.Arg(1)
-
-	n0, exact0, err := helpers.ExtractReal(o0, "truncate-remainder")
-	if err != nil {
-		return err
-	}
-	n1, exact1, err := helpers.ExtractReal(o1, "truncate-remainder")
-	if err != nil {
-		return err
-	}
-
-	if n1 == 0 {
-		return werr.WrapForeignErrorf(werr.ErrDivisionByZero, "truncate-remainder: division by zero")
-	}
-
-	q := math.Trunc(n0 / n1)
-	r := n0 - q*n1
-
-	if exact0 && exact1 {
-		mc.SetValue(values.NewInteger(int64(r)))
-	} else {
-		mc.SetValue(values.NewFloat(r))
-	}
-	return nil
+	return realDivision(mc, "truncate-remainder", math.Trunc, divRemainder)
 }
 
 // PrimFiniteQ implements the (finite?) primitive.
