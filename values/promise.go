@@ -23,18 +23,18 @@ var _ Value = (*Promise)(nil)
 // and the result is memoized; on subsequent forces, the memoized result
 // is returned.
 type Promise struct {
-	// Thunk is the procedure to evaluate.
-	// nil means the promise has been forced; Result is then valid.
-	Thunk Callable
-	// Result is the cached result (valid only when Thunk is nil)
-	Result Value
+	// thunk is the procedure to evaluate.
+	// nil means the promise has been forced; result is then valid.
+	thunk Callable
+	// result is the cached result (valid only when thunk is nil)
+	result Value
 }
 
 // NewPromise creates a new unforced promise with the given thunk.
 // The thunk should be a procedure that takes no arguments.
 func NewPromise(thunk Callable) *Promise {
 	return &Promise{
-		Thunk: thunk,
+		thunk: thunk,
 	}
 }
 
@@ -42,7 +42,7 @@ func NewPromise(thunk Callable) *Promise {
 // This is used by make-promise when given a non-promise value.
 func NewForcedPromise(value Value) *Promise {
 	return &Promise{
-		Result: value,
+		result: value,
 	}
 }
 
@@ -62,8 +62,34 @@ func (p *Promise) EqualTo(v Value) bool {
 
 // SchemeString returns the Scheme representation of the promise.
 func (p *Promise) SchemeString() string {
-	if p.Thunk == nil {
+	if p.thunk == nil {
 		return "#<promise (forced)>"
 	}
 	return "#<promise>"
+}
+
+// IsForced reports whether the promise has been forced.
+// A forced promise has a cached result and no thunk.
+func (p *Promise) IsForced() bool {
+	return p.thunk == nil
+}
+
+// CachedResult returns the memoized result of a forced promise.
+// Only valid when IsForced returns true.
+func (p *Promise) CachedResult() Value {
+	return p.result
+}
+
+// Thunk returns the unevaluated procedure.
+// Returns nil when the promise has been forced.
+func (p *Promise) Thunk() Callable {
+	return p.thunk
+}
+
+// Force transitions the promise from unforced to forced, caching
+// the given result and clearing the thunk. Subsequent calls to
+// IsForced return true and CachedResult returns the cached value.
+func (p *Promise) Force(result Value) {
+	p.result = result
+	p.thunk = nil
 }
