@@ -55,9 +55,12 @@ func (p *LocalEnvironmentFrame) SetBindings(v []Binding) {
 	p.bindings = v
 }
 
-// Keys returns the symbol-to-index mapping for this local environment.
+// Keys returns a copy of the symbol-to-index mapping for this local environment.
+// The returned map is safe to mutate without affecting internal state.
 func (p *LocalEnvironmentFrame) Keys() map[values.Symbol]int {
-	return p.keys
+	result := make(map[values.Symbol]int, len(p.keys))
+	maps.Copy(result, p.keys)
+	return result
 }
 
 // EnsureLocalBinding returns the local binding for the given key, creating it if
