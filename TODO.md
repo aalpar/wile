@@ -24,12 +24,6 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 ---
 
-## Performance
-
-- [ ] **Numeric dispatch simplification**: Replace `NumericKind` enum + `init()` dispatch tables with direct type switches in each numeric method. Deletes indirection layer (~-1400 net lines). Same behavior, fewer allocations.
-
----
-
 ## Refactoring
 
 Ordered by dependency — items that unblock others or carry divergence risk come first. MachineContext decomposition is last (depends on other refactorings settling).
