@@ -285,18 +285,18 @@ func executeThunk(mc *machine.MachineContext, thunk values.Callable) (values.Val
 // forcePromise forces a promise and returns its result.
 // This is the core recursive implementation of R7RS force semantics.
 func forcePromise(mc *machine.MachineContext, promise *values.Promise) (values.Value, error) {
-	if promise.Thunk == nil {
-		return promise.Result, nil
+	if promise.IsForced() {
+		return promise.CachedResult(), nil
 	}
 
-	result, err := executeThunk(mc, promise.Thunk)
+	result, err := executeThunk(mc, promise.Thunk())
 	if err != nil {
 		return nil, err
 	}
 
 	// Nested call may have already forced this promise
-	if promise.Thunk == nil {
-		return promise.Result, nil
+	if promise.IsForced() {
+		return promise.CachedResult(), nil
 	}
 
 	// Recursively force promise results (delay-force semantics)
@@ -308,8 +308,7 @@ func forcePromise(mc *machine.MachineContext, promise *values.Promise) (values.V
 		}
 	}
 
-	promise.Result = result
-	promise.Thunk = nil
+	promise.Force(result)
 	return result, nil
 }
 
