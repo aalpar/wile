@@ -16,7 +16,6 @@ package values
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 )
 
@@ -36,6 +35,8 @@ type CharacterOutputPort struct {
 // NewCharacterOutputPort creates a new character input port from an io.Reader.
 func NewCharacterOutputPort(wrt *bufio.Writer) *CharacterOutputPort {
 	q := &CharacterOutputPort{wrt: wrt}
+	q.kind = portKindCharacterOutput
+	q.datum = q.wrt
 	return q
 }
 
@@ -86,9 +87,4 @@ func (p *CharacterOutputPort) EqualTo(v Value) bool {
 		return p.wrt == other.wrt
 	}
 	return false
-}
-
-// SchemeString returns the Scheme representation of the port.
-func (p *CharacterOutputPort) SchemeString() string {
-	return fmt.Sprintf("<character-output-port %p>", p.wrt)
 }

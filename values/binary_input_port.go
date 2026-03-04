@@ -16,7 +16,6 @@ package values
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 )
 
@@ -35,12 +34,17 @@ type BinaryInputPort struct {
 
 // NewBinaryInputPort creates a new binary input port wrapping the given rdr.
 func NewBinaryInputPort(rdr *bufio.Reader) *BinaryInputPort {
-	return &BinaryInputPort{rdr: rdr}
+	q := &BinaryInputPort{rdr: rdr}
+	q.kind = portKindBinaryInput
+	q.datum = q.rdr
+	return q
 }
 
 // NewBinaryInputPortFromReader creates a new input port reading from the given byte slice.
 func NewBinaryInputPortFromReader(reader io.Reader) *BinaryInputPort {
 	q := &BinaryInputPort{rdr: bufio.NewReader(reader)}
+	q.kind = portKindBinaryInput
+	q.datum = q.rdr
 	q.setCloser(reader)
 	return q
 }
@@ -74,9 +78,4 @@ func (p *BinaryInputPort) EqualTo(v Value) bool {
 		return p.rdr == other.rdr
 	}
 	return false
-}
-
-// SchemeString returns the Scheme representation of the port.
-func (p *BinaryInputPort) SchemeString() string {
-	return fmt.Sprintf("<binary-input-port %p>", p.rdr)
 }

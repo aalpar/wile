@@ -16,7 +16,6 @@ package values
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 )
 
@@ -35,9 +34,12 @@ type StringInputPort struct {
 
 // NewStringInputPort creates a new string output port.
 func NewStringInputPort() *StringInputPort {
-	return &StringInputPort{
+	q := &StringInputPort{
 		buf: &bytes.Buffer{},
 	}
+	q.kind = portKindStringInput
+	q.datum = q.buf
+	return q
 }
 
 // NewStringInputPortWithBuffer creates a new string output port.
@@ -45,6 +47,8 @@ func NewStringInputPortWithBuffer(buffer *bytes.Buffer) *StringInputPort {
 	q := &StringInputPort{
 		buf: buffer,
 	}
+	q.kind = portKindStringInput
+	q.datum = q.buf
 	return q
 }
 
@@ -88,9 +92,4 @@ func (p *StringInputPort) EqualTo(v Value) bool {
 
 func (p *StringInputPort) String() string {
 	return p.buf.String()
-}
-
-// SchemeString returns the Scheme representation of the port.
-func (p *StringInputPort) SchemeString() string {
-	return fmt.Sprintf("<string-input-port %p>", p.buf)
 }

@@ -15,9 +15,25 @@
 package values
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/aalpar/wile/werr"
+)
+
+// Port kind constants for SchemeString display. Two concrete types
+// (ByteVectorOutputPort and ByteVectorBufferedOutputPort) share
+// portKindBytevectorOutput because they represent the same Scheme type.
+const (
+	portKindStringInput           = "string-input-port"
+	portKindStringOutput          = "string-output-port"
+	portKindCharacterInput        = "character-input-port"
+	portKindCharacterOutput       = "character-output-port"
+	portKindBinaryInput           = "binary-input-port"
+	portKindBinaryOutput          = "binary-output-port"
+	portKindBytevectorInput       = "bytevector-input-port"
+	portKindBytevectorOutput      = "bytevector-output-port"
+	portKindBytevectorInputOutput = "bytevector-input-output-port"
 )
 
 // portBase tracks the closed state of a port and optionally holds
@@ -32,6 +48,8 @@ import (
 type portBase struct {
 	closed bool
 	clsr   io.Closer
+	kind   string
+	datum  any
 }
 
 // IsClosed returns true if the port has been closed.
@@ -69,4 +87,9 @@ func (b *portBase) guardClosed() error {
 		return werr.ErrPortClosed
 	}
 	return nil
+}
+
+// SchemeString returns the Scheme external representation of the port.
+func (b *portBase) SchemeString() string {
+	return fmt.Sprintf("<%s %p>", b.kind, b.datum)
 }

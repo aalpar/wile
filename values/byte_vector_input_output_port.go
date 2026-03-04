@@ -16,7 +16,6 @@ package values
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 )
 
@@ -39,12 +38,18 @@ type ByteVectorInputOutputPort struct {
 
 // NewByteVectorInputOutputPortFromBuffer creates a new in-memory bytevector output port.
 func NewByteVectorInputOutputPortFromBuffer(buf *bytes.Buffer) *ByteVectorInputOutputPort {
-	return &ByteVectorInputOutputPort{buf: buf}
+	q := &ByteVectorInputOutputPort{buf: buf}
+	q.kind = portKindBytevectorInputOutput
+	q.datum = q.buf
+	return q
 }
 
 // NewByteVectorInputOutputPort creates a new in-memory bytevector output port.
 func NewByteVectorInputOutputPort() *ByteVectorInputOutputPort {
-	return &ByteVectorInputOutputPort{buf: &bytes.Buffer{}}
+	q := &ByteVectorInputOutputPort{buf: &bytes.Buffer{}}
+	q.kind = portKindBytevectorInputOutput
+	q.datum = q.buf
+	return q
 }
 
 func (p *ByteVectorInputOutputPort) Flush() error {
@@ -97,9 +102,4 @@ func (p *ByteVectorInputOutputPort) EqualTo(v Value) bool {
 		return p.buf == other.buf
 	}
 	return false
-}
-
-// SchemeString returns the Scheme representation of this port.
-func (p *ByteVectorInputOutputPort) SchemeString() string {
-	return fmt.Sprintf("<bytevector-input-output-port %p>", p.buf)
 }

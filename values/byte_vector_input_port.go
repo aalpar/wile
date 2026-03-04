@@ -16,7 +16,6 @@ package values
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 )
 
@@ -35,12 +34,17 @@ type ByteVectorInputPort struct {
 
 // NewByteVectorInputPort creates a new input port reading from the given byte slice.
 func NewByteVectorInputPort(reader *bufio.Reader) *ByteVectorInputPort {
-	return &ByteVectorInputPort{rdr: reader}
+	q := &ByteVectorInputPort{rdr: reader}
+	q.kind = portKindBytevectorInput
+	q.datum = q.rdr
+	return q
 }
 
 // NewByteVectorInputPortFromReader creates a new input port reading from the given byte slice.
 func NewByteVectorInputPortFromReader(reader io.Reader) *ByteVectorInputPort {
 	q := &ByteVectorInputPort{rdr: bufio.NewReader(reader)}
+	q.kind = portKindBytevectorInput
+	q.datum = q.rdr
 	q.setCloser(reader)
 	return q
 }
@@ -76,9 +80,4 @@ func (p *ByteVectorInputPort) EqualTo(v Value) bool {
 		return p.rdr == other.rdr
 	}
 	return false
-}
-
-// SchemeString returns the Scheme representation of this port.
-func (p *ByteVectorInputPort) SchemeString() string {
-	return fmt.Sprintf("<bytevector-input-port %p>", p.rdr)
 }
