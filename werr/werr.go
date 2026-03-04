@@ -17,7 +17,6 @@ package werr
 import (
 	"errors"
 	"fmt"
-	"runtime"
 )
 
 // Standard error values for type checking and runtime errors.
@@ -184,24 +183,18 @@ func (p *StaticError) Error() string {
 }
 
 // ForeignError is an error type for Go primitive implementations (functions
-// foreign to Scheme). It wraps an optional underlying error with a message
-// and captures a stack trace at the point of creation.
+// foreign to Scheme). It wraps an optional underlying error with a message.
 type ForeignError struct {
 	err     error // sentinel for errors.Is matching
 	cause   error // root cause from underlying operation
 	message string
-	stack   []uintptr // stack trace
 }
 
 // newForeignError creates a new foreign error with the given message.
 func newForeignError(msg string) *ForeignError {
-	pcs := [50]uintptr{}
-	n := runtime.Callers(1, pcs[:])
-	q := &ForeignError{
+	return &ForeignError{
 		message: msg,
-		stack:   pcs[:n],
 	}
-	return q
 }
 
 // NewForeignErrorf creates a new foreign error with a formatted message.
@@ -209,13 +202,9 @@ func NewForeignErrorf(msg string, vs ...any) *ForeignError {
 	if len(vs) == 0 {
 		return newForeignError(msg)
 	}
-	pcs := [50]uintptr{}
-	n := runtime.Callers(1, pcs[:])
-	q := &ForeignError{
+	return &ForeignError{
 		message: fmt.Sprintf(msg, vs...),
-		stack:   pcs[:n],
 	}
-	return q
 }
 
 // WrapForeignErrorf wraps an existing error with a formatted message.
@@ -223,12 +212,9 @@ func WrapForeignErrorf(err error, msg string, vs ...any) *ForeignError {
 	if err == nil {
 		return NewForeignErrorf(msg, vs...)
 	}
-	pcs := [50]uintptr{}
-	n := runtime.Callers(1, pcs[:])
 	return &ForeignError{
 		err:     err,
 		message: fmt.Sprintf(msg, vs...),
-		stack:   pcs[:n],
 	}
 }
 
@@ -236,13 +222,10 @@ func WrapForeignErrorf(err error, msg string, vs ...any) *ForeignError {
 // ForeignError. The sentinel is matched by errors.Is for programmatic
 // dispatch; the cause preserves the underlying failure for diagnostics.
 func WrapForeignErrorWithCause(sentinel, cause error, msg string, vs ...any) *ForeignError {
-	pcs := [50]uintptr{}
-	n := runtime.Callers(1, pcs[:])
 	return &ForeignError{
 		err:     sentinel,
 		cause:   cause,
 		message: fmt.Sprintf(msg, vs...),
-		stack:   pcs[:n],
 	}
 }
 
