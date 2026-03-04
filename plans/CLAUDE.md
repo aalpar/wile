@@ -15,7 +15,7 @@ When investigating R7RS conformance issues:
 
 | File | Contents | Status |
 |------|----------|--------|
-| `PERFORMANCE.md` | Rest-arg cons elimination, fused lexing research | Open items remain |
+| `PERFORMANCE.md` | Allocation history, fused lexing research, Tier 3 architectural changes | Tier 1-2 complete; Tier 3 + fused lexing open |
 | `SECURITY.md` | Opcode resource limits | Phases 1-6 done, resource limits proposed |
 | `MACRO_SYSTEM.md` | ER macro transformer, hygiene debugging, macro expansion tracing | Proposed |
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |

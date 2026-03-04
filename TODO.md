@@ -24,14 +24,6 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 ---
 
-## Performance
-
-- [ ] **Numeric dispatch simplification**: Replace `NumericKind` enum + `init()` dispatch tables with direct type switches in each numeric method. Deletes indirection layer (~-1400 net lines). Same behavior, fewer allocations.
-- [ ] **ArrayList — array-backed list representation**: Contiguous `[]Value` slice alternative to `*Pair` chains. O(1) element access, better cache locality. Implements `Value` and `Tuple`. Prototype existed in abandoned branch (~358 LOC + 538 test).
-- [ ] **Rest-arg cons elimination and sync.Pool evaluation**: #1 allocator at 39.9%. `plans/PERFORMANCE.md`
-
----
-
 ## Refactoring
 
 Ordered by dependency — items that unblock others or carry divergence risk come first. MachineContext decomposition is last (depends on other refactorings settling).
