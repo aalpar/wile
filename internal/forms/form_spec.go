@@ -41,6 +41,12 @@ type ValidatorFunc func(ctx context.Context, env any, pair any, result any) any
 type CompilerFunc func(ctc any, ctctx any, expr any) error
 
 // FormSpec defines how a special form is validated and compiled.
+//
+// Validate and Compile use type-erased signatures ([any]) to break circular
+// imports between forms, validate, and machine. Type safety is restored at
+// registration time: validate/register.go wraps typed validators into
+// [ValidatorFunc], and machine/register.go wraps typed compilers into
+// [CompilerFunc]. See those wrappers for the concrete type assertions.
 type FormSpec struct {
 	// Name is the keyword that triggers this form (e.g., "if", "lambda").
 	Name string
