@@ -741,14 +741,14 @@ func (p *ExpanderTimeContinuation) expandImportForm(sym *syntax.SyntaxSymbol, ex
 	}
 
 	// Process each import set to load libraries and copy bindings
-	_, err := syntax.SyntaxForEach(p.ctx, importSets, func(_ context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
-		importSet, parseErr := parseImportSet(p.ctx, importSetExpr)
+	_, err := syntax.SyntaxForEach(p.ctx, importSets, func(ctx context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
+		importSet, parseErr := ParseImportSetFromDatum(ctx, importSetExpr.UnwrapAll())
 		if parseErr != nil {
 			return parseErr
 		}
 
 		// Load the library
-		lib, loadErr := LoadLibrary(p.ctx, importSet.LibraryName, p.env)
+		lib, loadErr := LoadLibrary(ctx, importSet.LibraryName, p.env)
 		if loadErr != nil {
 			return werr.WrapForeignErrorf(loadErr, "import: failed to load library %s",
 				importSet.LibraryName.SchemeString())

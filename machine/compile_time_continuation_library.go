@@ -18,7 +18,6 @@ import (
 	"bufio"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 
 	"github.com/aalpar/wile/environment"
@@ -108,7 +107,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 
 	// Parse library name: (lib-name) is a list of identifiers
 	libNameExpr := rest.SyntaxCar()
-	libName, err := parseLibraryName(ctctx.ctx, libNameExpr)
+	libName, err := ParseLibraryNameFromDatum(ctctx.ctx, libNameExpr.UnwrapAll())
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "define-library: invalid library name")
 	}
@@ -313,7 +312,7 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 
 	// Process each import set
 	_, err := syntax.SyntaxForEach(ctctx.ctx, argsPair, func(ctx context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
-		importSet, err := parseImportSet(ctx, importSetExpr)
+		importSet, err := ParseImportSetFromDatum(ctx, importSetExpr.UnwrapAll())
 		if err != nil {
 			return err
 		}
@@ -393,327 +392,6 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 	return err
 }
 
-// parseImportSet parses an import set from syntax objects (compile-time).
-//
-// A parallel set of functions exists in import_set_datum.go operating on
-// plain values.Tuple for runtime datum parsing. The two families are
-// structurally identical but use different accessor methods due to the
-// syntax/datum phase boundary. Changes here should be mirrored there.
-//
-// Import sets can be:
-//   - (<library-name>)              : import all exports
-//   - (only <import-set> <id> ...)  : import only specified identifiers
-//   - (except <import-set> <id> ...): import all except specified
-//   - (prefix <import-set> <prefix>): add prefix to all imported names
-//   - (rename <import-set> (<old> <new>) ...): rename specific imports
-//   - (for-syntax <import-set>)     : import at phase +1 (macro expansion)
-//   - (for-template <import-set>)   : import at phase -1
-//   - (for-meta <n> <import-set>)   : import at phase +n
-func parseImportSet(ctx context.Context, expr syntax.SyntaxValue) (*ImportSet, error) {
-	pair, ok := expr.(*syntax.SyntaxPair)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "import set must be a list")
-	}
-
-	// Check if first element is a modifier keyword
-	carExpr := pair.SyntaxCar()
-	carSym, ok := carExpr.(*syntax.SyntaxSymbol)
-	if ok {
-		keyword := carSym.Unwrap().(*values.Symbol).Key
-
-		switch keyword {
-		case "only":
-			return parseImportSetOnly(ctx, pair)
-		case "except":
-			return parseImportSetExcept(ctx, pair)
-		case "prefix":
-			return parseImportSetPrefix(ctx, pair)
-		case "rename":
-			return parseImportSetRename(ctx, pair)
-		case "for-syntax":
-			return parseImportSetForSyntax(ctx, pair)
-		case "for-template":
-			return parseImportSetForTemplate(ctx, pair)
-		case "for-meta":
-			return parseImportSetForMeta(ctx, pair)
-		}
-	}
-
-	// Not a modifier, must be a library name
-	libName, err := parseLibraryName(ctx, expr)
-	if err != nil {
-		return nil, err
-	}
-	return NewImportSet(libName), nil
-}
-
-// parseImportSetOnly parses (only <import-set> <id> ...)
-func parseImportSetOnly(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
-	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "only: expected import-set and identifiers")
-	}
-
-	// Get nested import set
-	nestedExpr := cdrExpr.SyntaxCar()
-	importSet, err := parseImportSet(ctx, nestedExpr)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get identifiers
-	idsExpr := cdrExpr.SyntaxCdr()
-
-	ids, err := parseIdentifierList(ctx, idsExpr)
-	if err != nil {
-		return nil, err
-	}
-
-	importSet.Only = ids
-	return importSet, nil
-}
-
-// parseImportSetExcept parses (except <import-set> <id> ...)
-func parseImportSetExcept(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
-	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "except: expected import-set and identifiers")
-	}
-
-	// Get nested import set
-	nestedExpr := cdrExpr.SyntaxCar()
-	importSet, err := parseImportSet(ctx, nestedExpr)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get identifiers
-	idsExpr := cdrExpr.SyntaxCdr()
-	ids, err := parseIdentifierList(ctx, idsExpr)
-	if err != nil {
-		return nil, err
-	}
-
-	importSet.Except = ids
-	return importSet, nil
-}
-
-// parseImportSetPrefix parses (prefix <import-set> <prefix>)
-func parseImportSetPrefix(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
-	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "prefix: expected import-set and prefix")
-	}
-
-	// Get nested import set
-	nestedExpr := cdrExpr.SyntaxCar()
-	importSet, err := parseImportSet(ctx, nestedExpr)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get prefix
-	prefixPair, ok := cdrExpr.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "prefix: expected prefix identifier")
-	}
-
-	prefixExpr := prefixPair.SyntaxCar()
-	prefixSym, ok := prefixExpr.(*syntax.SyntaxSymbol)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "prefix: prefix must be a symbol")
-	}
-
-	importSet.Prefix = prefixSym.Unwrap().(*values.Symbol).Key
-	return importSet, nil
-}
-
-// parseImportSetRename parses (rename <import-set> (<old> <new>) ...)
-func parseImportSetRename(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
-	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "rename: expected import-set and rename pairs")
-	}
-
-	// Get nested import set
-	nestedExpr := cdrExpr.SyntaxCar()
-	importSet, err := parseImportSet(ctx, nestedExpr)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get rename pairs
-	renamesExpr := cdrExpr.SyntaxCdr()
-	if syntax.IsSyntaxEmptyList(renamesExpr) {
-		return importSet, nil
-	}
-
-	renamesPair, ok := renamesExpr.(*syntax.SyntaxPair)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "rename: expected list of rename pairs")
-	}
-
-	_, err = syntax.SyntaxForEach(ctx, renamesPair, func(_ context.Context, _ int, _ bool, renamePairExpr syntax.SyntaxValue) error {
-		renamePair, ok := renamePairExpr.(*syntax.SyntaxPair)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAPair, "rename: expected (old new) pair")
-		}
-
-		oldExpr := renamePair.SyntaxCar()
-		oldSym, ok := oldExpr.(*syntax.SyntaxSymbol)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "rename: old name must be symbol")
-		}
-
-		newPair, ok := renamePair.SyntaxCdr().(*syntax.SyntaxPair)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAPair, "rename: expected new name")
-		}
-
-		newExpr := newPair.SyntaxCar()
-		newSym, ok := newExpr.(*syntax.SyntaxSymbol)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "rename: new name must be symbol")
-		}
-
-		oldName := oldSym.Unwrap().(*values.Symbol).Key
-		newName := newSym.Unwrap().(*values.Symbol).Key
-		importSet.Renames[oldName] = newName
-		return nil
-	})
-
-	return importSet, err
-}
-
-// parseImportSetForSyntax parses (for-syntax <import-set>)
-// Adds +1 to the phase shift of the nested import set.
-func parseImportSetForSyntax(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
-	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "for-syntax: expected import-set")
-	}
-
-	// Get nested import set
-	nestedExpr := cdrExpr.SyntaxCar()
-	importSet, err := parseImportSet(ctx, nestedExpr)
-	if err != nil {
-		return nil, err
-	}
-
-	// Add +1 to phase shift (composable)
-	importSet.PhaseShift++
-	return importSet, nil
-}
-
-// parseImportSetForTemplate parses (for-template <import-set>)
-// Adds -1 to the phase shift of the nested import set.
-func parseImportSetForTemplate(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
-	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "for-template: expected import-set")
-	}
-
-	// Get nested import set
-	nestedExpr := cdrExpr.SyntaxCar()
-	importSet, err := parseImportSet(ctx, nestedExpr)
-	if err != nil {
-		return nil, err
-	}
-
-	// Add -1 to phase shift (composable)
-	importSet.PhaseShift--
-	return importSet, nil
-}
-
-// parseImportSetForMeta parses (for-meta <n> <import-set>)
-// Adds n to the phase shift of the nested import set.
-func parseImportSetForMeta(ctx context.Context, pair *syntax.SyntaxPair) (*ImportSet, error) {
-	cdrExpr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "for-meta: expected phase level and import-set")
-	}
-
-	// Get phase level (integer)
-	phaseExpr := cdrExpr.SyntaxCar()
-	phaseInt, ok := phaseExpr.Unwrap().(*values.Integer)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAnInteger, "for-meta: expected integer phase level")
-	}
-
-	// Get nested import set
-	importSetPair, ok := cdrExpr.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "for-meta: expected import-set after phase level")
-	}
-
-	nestedExpr := importSetPair.SyntaxCar()
-	importSet, err := parseImportSet(ctx, nestedExpr)
-	if err != nil {
-		return nil, err
-	}
-
-	// Add n to phase shift (composable)
-	importSet.PhaseShift += int(phaseInt.Value)
-	return importSet, nil
-}
-
-// parseIdentifierList parses a list of identifiers into a string slice.
-func parseIdentifierList(ctx context.Context, expr syntax.SyntaxValue) ([]string, error) {
-	if syntax.IsSyntaxEmptyList(expr) {
-		return nil, nil
-	}
-
-	pair, ok := expr.(*syntax.SyntaxPair)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "expected list of identifiers")
-	}
-
-	var ids []string
-	_, err := syntax.SyntaxForEach(ctx, pair, func(_ context.Context, _ int, _ bool, idExpr syntax.SyntaxValue) error {
-		idSym, ok := idExpr.(*syntax.SyntaxSymbol)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "expected identifier symbol")
-		}
-		ids = append(ids, idSym.Unwrap().(*values.Symbol).Key)
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return ids, nil
-}
-
-// parseLibraryName extracts a LibraryName from a syntax expression like (scheme base).
-func parseLibraryName(ctx context.Context, expr syntax.SyntaxValue) (LibraryName, error) {
-	pair, ok := expr.(*syntax.SyntaxPair)
-	if !ok {
-		return LibraryName{}, werr.WrapForeignErrorf(werr.ErrNotAPair, "library name must be a list")
-	}
-
-	var parts []string
-	_, err := syntax.SyntaxForEach(ctx, pair, func(_ context.Context, _ int, _ bool, partExpr syntax.SyntaxValue) error {
-		sym, ok := partExpr.(*syntax.SyntaxSymbol)
-		if ok {
-			parts = append(parts, sym.Unwrap().(*values.Symbol).Key)
-			return nil
-		}
-		// Could be a number (for versioned library names)
-		num, ok := partExpr.Unwrap().(*values.Integer)
-		if ok {
-			parts = append(parts, fmt.Sprintf("%d", num.Value))
-			return nil
-		}
-		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "library name part must be identifier or integer")
-	})
-	if err != nil {
-		return LibraryName{}, err
-	}
-	if len(parts) == 0 {
-		return LibraryName{}, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "library name cannot be empty")
-	}
-	return NewLibraryName(parts...), nil
-}
-
 // CompileImport handles top-level (import <import-set> ...).
 //
 // This is for top-level imports outside of a library definition.
@@ -737,7 +415,7 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 
 	// Process each import set
 	v, err := syntax.SyntaxForEach(ctctx.ctx, importSets, func(ctx context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
-		importSet, err := parseImportSet(ctx, importSetExpr)
+		importSet, err := ParseImportSetFromDatum(ctx, importSetExpr.UnwrapAll())
 		if err != nil {
 			return err
 		}
@@ -1084,7 +762,7 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 				return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "library: expected library name")
 			}
 			libNameExpr := argsPair.SyntaxCar()
-			libName, err := parseLibraryName(ctx, libNameExpr)
+			libName, err := ParseLibraryNameFromDatum(ctx, libNameExpr.UnwrapAll())
 			if err != nil {
 				return nil, werr.WrapForeignErrorf(err, "library: invalid library name")
 			}
