@@ -121,7 +121,11 @@ func NewTopLevelEnvironmentFrame() *EnvironmentFrame {
 
 // NewEnvironmentFrame creates a new environment frame with the given local and global environment frames.
 // The parent field is set to nil. This is typically used for isolated environments.
-func NewEnvironmentFrame(local *LocalEnvironmentFrame, global *GlobalEnvironmentFrame) *EnvironmentFrame {
+// newEnvironmentFrame creates an isolated environment frame without a
+// TopLevelEnvironment or PhaseRegistry. Calling AtPhase(), InternSymbol(), or
+// InternSyntax() on the result will panic. Use NewTopLevelEnvironment().Runtime()
+// for full environments or NewEnvironmentFrameWithParent() for child scopes.
+func newEnvironmentFrame(local *LocalEnvironmentFrame, global *GlobalEnvironmentFrame) *EnvironmentFrame {
 	q := &EnvironmentFrame{
 		global:     global,
 		phaseLevel: PhaseRuntime,

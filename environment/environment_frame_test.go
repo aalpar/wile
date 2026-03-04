@@ -26,7 +26,7 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-func TestNewEnvironmentFrame(t *testing.T) {
+func Test_newEnvironmentFrame(t *testing.T) {
 	q := NewTopLevelEnvironmentFrame()
 	qt.Assert(t, q, qt.Not(qt.IsNil))
 	qt.Assert(t, q.GlobalEnvironment(), qt.IsNotNil)
@@ -706,7 +706,7 @@ func TestEnvironmentFrame_PanicSentinels(t *testing.T) {
 		{
 			"AtPhase without PhaseRegistry panics with ErrMissingPhaseRegistry",
 			func() {
-				env := NewEnvironmentFrame(nil, NewGlobalEnvironmentFrame())
+				env := newEnvironmentFrame(nil, NewGlobalEnvironmentFrame())
 				env.AtPhase(0)
 			},
 			werr.ErrMissingPhaseRegistry,
@@ -714,7 +714,7 @@ func TestEnvironmentFrame_PanicSentinels(t *testing.T) {
 		{
 			"InternSyntax without TopLevel panics with ErrMissingTopLevelEnvironment",
 			func() {
-				env := NewEnvironmentFrame(nil, NewGlobalEnvironmentFrame())
+				env := newEnvironmentFrame(nil, NewGlobalEnvironmentFrame())
 				env.InternSyntax(values.NewInteger(1), nil)
 			},
 			werr.ErrMissingTopLevelEnvironment,
