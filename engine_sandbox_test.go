@@ -308,6 +308,8 @@ func TestImportObserver_OnlyModifier(t *testing.T) {
 	}
 	// Observer fires at both expand and compile phases for top-level imports
 	c.Assert(len(myEvents), qt.Equals, 2)
+	c.Assert(myEvents[0].Phase, qt.Equals, PhaseExpand)
+	c.Assert(myEvents[1].Phase, qt.Equals, PhaseCompile)
 
 	for _, evt := range myEvents {
 		c.Assert(evt.Exports, qt.DeepEquals, []string{"alpha", "beta"})

@@ -46,7 +46,7 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 
 	// Process each import set
 	v, err := syntax.SyntaxForEach(ctctx.ctx, importSets, func(ctx context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
-		return ResolveAndInstallImportSet(ctx, importSetExpr.UnwrapAll(), p.env)
+		return ResolveAndInstallImportSet(ctx, importSetExpr.UnwrapAll(), p.env, environment.PhaseCompile)
 	})
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "import: error processing import sets")
@@ -90,7 +90,7 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 				importSet.LibraryName.SchemeString())
 		}
 
-		fireImportObserver(p.env, importedLib, bindings, lib.Name.Parts)
+		fireImportObserver(p.env, importedLib, bindings, lib.Name.Parts, environment.PhaseCompile)
 
 		// Bind the imported names in the library's environment (lib.Env)
 		for localName, externalName := range bindings {

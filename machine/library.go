@@ -121,6 +121,7 @@ type LibraryImportEvent struct {
 	Exports    []string // all names exported by the library
 	Imported   []string // names that actually landed in the importer (after only/except/prefix/rename)
 	Importer   []string // importing library name (nil for top-level import)
+	Phase      int      // pipeline phase: environment.PhaseExpand or environment.PhaseCompile
 }
 
 // LibraryImportObserver is called when a library is imported.
@@ -181,7 +182,7 @@ func (p *LibraryRegistry) ImportObserver() LibraryImportObserver {
 // registry stored in env. bindings maps local name -> external name
 // (as returned by ApplyToExports). importer is the importing library's
 // name parts, or nil for top-level imports.
-func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary, bindings map[string]string, importer []string) {
+func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary, bindings map[string]string, importer []string, phase int) {
 	regAny := env.LibraryRegistry()
 	if regAny == nil {
 		return
@@ -218,6 +219,7 @@ func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary,
 		Exports:    exports,
 		Imported:   imported,
 		Importer:   importerCopy,
+		Phase:      phase,
 	})
 }
 
@@ -397,7 +399,7 @@ func CopyLibraryBindingsToEnv(lib *CompiledLibrary, bindings map[string]string, 
 // This is the common path for top-level imports (both expander and compiler).
 // Library-internal imports (processLibraryImport) diverge at installation and
 // use their own loop.
-func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *environment.EnvironmentFrame) error {
+func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *environment.EnvironmentFrame, phase int) error {
 	importSet, err := ParseImportSetFromDatum(ctx, datum)
 	if err != nil {
 		return err
@@ -415,7 +417,7 @@ func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *en
 			importSet.LibraryName.SchemeString())
 	}
 
-	fireImportObserver(env, lib, bindings, nil)
+	fireImportObserver(env, lib, bindings, nil, phase)
 
 	err = CopyLibraryBindingsToEnvAtPhase(lib, bindings, env, importSet.PhaseShift)
 	if err != nil {

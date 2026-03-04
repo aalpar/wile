@@ -269,8 +269,8 @@ Embedders that don't set it pay nothing (nil check before firing).
 - `LibraryImportEvent` struct and `LibraryImportObserver` callback type in `machine/library.go`
 - `SetImportObserver` / `ImportObserver` on `*LibraryRegistry`
 - `fireImportObserver` helper that extracts the registry from `env.LibraryRegistry()`, type-asserts, nil-checks, and fires
-- Observer fires at Site 1 (`processLibraryImport`, library-internal) and Site 2 (`CompileImport`, top-level)
-- NOT fired at Site 3 (`expandImportForm`) — the expander pre-loads libraries for macros, but the compiler is the definitive import site. Firing both would produce duplicate events for the same `(import ...)` form.
+- Observer fires at all three sites: Site 1 (`processLibraryImport`, library-internal, `PhaseCompile`), Site 2 (`CompileImport`, top-level, `PhaseCompile`), and Site 3 (`expandImportForm`, top-level, `PhaseExpand`)
+- For top-level `(import ...)`, the observer fires twice (once at expand, once at compile). The `Phase` field on `LibraryImportEvent` distinguishes them using `environment.PhaseExpand`/`environment.PhaseCompile` constants. For library-internal imports, it fires once (compile phase only).
 - `WithImportObserver` engine option in `options.go`; `LibraryImportEvent` type alias re-exported from `wile` package
 - Integration tests in `engine_sandbox_test.go`: basic observer, `(only ...)` modifier
 - Exports and Imported are sorted for deterministic observation
