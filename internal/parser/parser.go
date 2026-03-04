@@ -61,6 +61,21 @@ const (
 	RuneVerticalTab = rune('\v')
 )
 
+// mnemonicRunes maps R7RS character mnemonic names to their rune values.
+var mnemonicRunes = map[string]rune{
+	"alarm":        RuneAlarm,
+	"space":        RuneSpace,
+	"backspace":    RuneBackspace,
+	"form-feed":    RuneFormFeed,
+	"delete":       RuneRubout,
+	"escape":       RuneEscape,
+	"newline":      RuneNewline,
+	"null":         RuneNull,
+	"return":       RuneReturn,
+	"tab":          RuneTab,
+	"vertical-tab": RuneVerticalTab,
+}
+
 // Parser represents a R7RS compliant Scheme syntax parser.
 type Parser struct {
 	rdr         io.RuneReader // the rune reader
@@ -355,6 +370,241 @@ func (p *Parser) readQuoteForm(keyword string) (syntax.SyntaxValue, tokenizer.To
 	return result, p.cur, nil
 }
 
+// readLabelAssignment handles #n=<datum> — defining a datum label.
+// R7RS §2.4: For circular/shared structures, we pre-register the container
+// before reading its contents so back-references via #n# resolve correctly.
+func (p *Parser) readLabelAssignment() (syntax.SyntaxValue, tokenizer.Token, error) {
+	s := TrimPrefixFolded(p.cur.String(), "#")
+	is := strings.TrimSuffix(s, "=")
+	var i int64
+	i, p.err = strconv.ParseInt(is, 10, bits.UintSize)
+	if p.err != nil {
+		return nil, p.cur, p.err
+	}
+	labelNum := int(i)
+	if p.datumLabels == nil {
+		p.datumLabels = make(map[int]syntax.SyntaxValue)
+	}
+	assignTok := p.cur
+	p.cur, p.err = p.toks.Next()
+	if p.err != nil {
+		return nil, p.cur, p.err
+	}
+	// Check if the next token starts a compound structure (list or vector)
+	// For these, we pre-register a placeholder to support circular references
+	var v syntax.SyntaxValue
+	switch p.cur.Type() {
+	case tokenizer.TokenizerStateOpenParen, tokenizer.TokenizerStateOpenBracket:
+		// Pre-register an empty pair for potential circular references
+		opener := p.cur.Type()
+		placeholder := p.wrapSyntaxPair(nil, nil, p.cur)
+		p.datumLabels[labelNum] = placeholder
+		// Now read the list contents, which can reference this label
+		v, p.err = p.readLabeledList(placeholder, opener)
+		if p.err != nil {
+			return nil, p.cur, p.err
+		}
+	case tokenizer.TokenizerStateOpenVector:
+		// For vectors, read normally (circular vector references are rare)
+		v, _, p.err = p.readSyntax()
+		if p.err != nil {
+			return nil, p.cur, p.err
+		}
+		p.datumLabels[labelNum] = v
+	default:
+		// Non-compound datum: read normally and store
+		v, _, p.err = p.readSyntax()
+		if p.err != nil {
+			return nil, p.cur, p.err
+		}
+		p.datumLabels[labelNum] = v
+	}
+	q := p.wrapSyntaxDatumLabelAssignment(labelNum, v, assignTok)
+	return q, p.cur, nil
+}
+
+// readLabelReference handles #n# — referencing a previously defined datum label.
+func (p *Parser) readLabelReference() (syntax.SyntaxValue, tokenizer.Token, error) {
+	s := strings.Trim(p.cur.String(), "#")
+	var i int64
+	i, p.err = strconv.ParseInt(s, 10, bits.UintSize)
+	if p.err != nil {
+		return nil, p.cur, p.err
+	}
+	// Look up the datum in the label table
+	if p.datumLabels != nil {
+		labeled, ok := p.datumLabels[int(i)]
+		if ok {
+			// Return the actual datum, not a label reference
+			return labeled, p.cur, nil
+		}
+	}
+	// Label not found - return a SyntaxDatumLabel (will error at compile time)
+	q := p.wrapSyntaxDatumLabel(int(i), p.cur)
+	return q, p.cur, nil
+}
+
+// readDatumComment handles #; — reading and wrapping a datum comment.
+func (p *Parser) readDatumComment() (syntax.SyntaxValue, tokenizer.Token, error) {
+	beginTok := p.cur
+	// Skip the datum comment begin token
+	p.cur, p.err = p.toks.Next()
+	if p.err != nil {
+		return nil, p.cur, p.err
+	}
+	// Read the syntax value being commented
+	var v syntax.SyntaxValue
+	v, _, p.err = p.readSyntax()
+	if p.err != nil {
+		return nil, p.cur, p.err
+	}
+	// Use beginTok.String() for correct label, but p.cur for source context (matches old behavior)
+	q := p.wrapSyntaxDatumComment(beginTok.String(), v, p.cur)
+	return q, p.cur, nil
+}
+
+// readList reads a list form opened by ( or [.
+// Handles proper lists (a b c), improper lists (a b . c), and bracket matching.
+func (p *Parser) readList(opener tokenizer.TokenizerState) (syntax.SyntaxValue, tokenizer.Token, error) {
+	expectedClose := p.matchingClose(opener)
+	var pr syntax.SyntaxValue
+	pr = p.wrapSyntaxPair(nil, nil, p.cur)
+	p.cur, p.err = p.toks.Next()
+	if p.err != nil {
+		return nil, p.cur, p.err
+	}
+	q0 := pr
+	pr0 := p.wrapSyntaxPair(nil, nil, p.cur)
+	for !p.isListCloser(p.cur.Type()) && p.cur.Type() != tokenizer.TokenizerStateCons {
+		var v syntax.SyntaxValue
+		v, _, p.err = p.readSyntax()
+		if p.err != nil {
+			return nil, p.cur, p.err
+		}
+		// After skipping comments, we may have landed on a delimiter (close paren/bracket or cons)
+		// In that case, readSyntax returns nil and we should exit the loop
+		if v == nil {
+			break
+		}
+		pr0 = pr.(*syntax.SyntaxPair)
+		pr0.SetCar(v)
+		pr0.SetCdr(p.wrapSyntaxPair(nil, nil, p.cur))
+		pr = pr0.Cdr().(*syntax.SyntaxPair)
+		p.cur, p.err = p.toks.Next()
+		if p.err != nil {
+			return nil, p.cur, p.err
+		}
+	}
+	switch {
+	case p.cur.Type() == tokenizer.TokenizerStateCons:
+		// skip the '.' token
+		p.cur, p.err = p.toks.Next()
+		if p.err != nil {
+			return nil, p.cur, p.err
+		}
+		// read cdr value in improper list
+		var v syntax.SyntaxValue
+		v, _, p.err = p.readSyntax()
+		if p.err != nil {
+			return nil, p.cur, p.err
+		}
+		pr = v
+		p.cur, p.err = p.toks.Next()
+		if p.err != nil {
+			return nil, p.cur, p.err
+		}
+		// Check for bracket mismatch
+		if p.cur.Type() != expectedClose {
+			if p.isListCloser(p.cur.Type()) {
+				return nil, p.cur, NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",
+					p.delimiterString(opener), p.delimiterString(p.cur.Type()))
+			}
+			return nil, p.cur, NewParserErrorWithWrapf(werr.ErrNotACloseParen, p.cur, "expected %s after dotted pair, got %s",
+				p.delimiterString(expectedClose), p.cur.String())
+		}
+		pr0.SetCdr(pr)
+	case p.cur.Type() == expectedClose:
+		// Proper list terminated with matching delimiter
+		pr = p.wrapSyntaxEmptyList(p.cur)
+		pr0.SetCdr(pr)
+	case p.isListCloser(p.cur.Type()):
+		// Bracket mismatch
+		return nil, p.cur, NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",
+			p.delimiterString(opener), p.delimiterString(p.cur.Type()))
+	}
+	return q0, p.cur, nil
+}
+
+// readVector reads a vector form opened by #(.
+func (p *Parser) readVector() (syntax.SyntaxValue, tokenizer.Token, error) {
+	q := p.wrapSyntaxVector(nil, p.cur)
+	// Advance past #( token
+	p.cur, p.err = p.toks.Next()
+	if p.err != nil {
+		return nil, p.cur, p.err
+	}
+	// Read vector elements - match the list parsing pattern:
+	// check token type BEFORE reading, advance AFTER reading
+	for p.cur.Type() != tokenizer.TokenizerStateCloseParen {
+		var v syntax.SyntaxValue
+		v, _, p.err = p.readSyntax()
+		if p.err != nil {
+			return nil, p.cur, p.err
+		}
+		q.Values = append(q.Values, v)
+		// Advance to next element (or close paren)
+		p.cur, p.err = p.toks.Next()
+		if p.err != nil {
+			return nil, p.cur, p.err
+		}
+	}
+	return q, p.cur, nil
+}
+
+// readByteVector reads a byte vector form opened by #u8(.
+func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
+	q0 := values.NewByteVector()
+	p.cur, p.err = p.toks.Next()
+	if p.err != nil {
+		return nil, p.cur, p.err
+	}
+	var stx syntax.SyntaxValue
+	stx, _, p.err = p.readSyntax()
+	if p.err != nil {
+		return nil, p.cur, p.err
+	}
+	if p.curr().Type() == tokenizer.TokenizerStateCloseParen {
+		// Empty bytevector case: #u8()
+		return p.wrapSyntax(q0, p.cur), p.cur, nil
+	}
+	i, ok := stx.Unwrap().(*values.Integer)
+	for {
+		if !ok {
+			return nil, p.cur, NewParserErrorWithWrapf(werr.ErrNotAnInteger, p.cur, "expected unsigned byte integer in byte vector, got %T", stx.Unwrap())
+		}
+		if i.Value < 0 || i.Value > 255 {
+			return nil, p.cur, NewParserErrorWithWrapf(werr.ErrNotAByte, p.cur, "byte value out of range (0-255): %d", i.Value)
+		}
+		*q0 = append(*q0, values.NewByte(uint8(i.Value)))
+		p.cur, p.err = p.toks.Next()
+		if p.err != nil {
+			return nil, p.cur, p.err
+		}
+		stx, _, p.err = p.readSyntax()
+		if p.err != nil {
+			return nil, p.cur, p.err
+		}
+		if p.curr().Type() == tokenizer.TokenizerStateCloseParen {
+			break
+		}
+		i, ok = stx.Unwrap().(*values.Integer)
+	}
+	if p.err != nil {
+		return nil, p.cur, p.err
+	}
+	return p.wrapSyntax(q0, p.cur), p.cur, nil
+}
+
 func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	var q syntax.SyntaxValue
 
@@ -405,235 +655,23 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateCons:
 		return nil, p.cur, NewParserErrorWithWrap(werr.ErrNotACons, p.cur, "unexpected '.' token")
 	case tokenizer.TokenizerStateLabelAssignment:
-		// R7RS §2.4: #n=<datum> defines datum label n
-		// For circular/shared structures, we must register the container before reading its contents
-		s := TrimPrefixFolded(p.cur.String(), "#")
-		is := strings.TrimSuffix(s, "=")
-		var i int64
-		i, p.err = strconv.ParseInt(is, 10, bits.UintSize)
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		labelNum := int(i)
-		if p.datumLabels == nil {
-			p.datumLabels = make(map[int]syntax.SyntaxValue)
-		}
-		assignTok := p.cur
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		// Check if the next token starts a compound structure (list or vector)
-		// For these, we pre-register a placeholder to support circular references
-		var v syntax.SyntaxValue
-		switch p.cur.Type() {
-		case tokenizer.TokenizerStateOpenParen, tokenizer.TokenizerStateOpenBracket:
-			// Pre-register an empty pair for potential circular references
-			opener := p.cur.Type()
-			placeholder := p.wrapSyntaxPair(nil, nil, p.cur)
-			p.datumLabels[labelNum] = placeholder
-			// Now read the list contents, which can reference this label
-			v, p.err = p.readLabeledList(placeholder, opener)
-			if p.err != nil {
-				return nil, p.cur, p.err
-			}
-		case tokenizer.TokenizerStateOpenVector:
-			// For vectors, read normally (circular vector references are rare)
-			v, _, p.err = p.readSyntax()
-			if p.err != nil {
-				return nil, p.cur, p.err
-			}
-			p.datumLabels[labelNum] = v
-		default:
-			// Non-compound datum: read normally and store
-			v, _, p.err = p.readSyntax()
-			if p.err != nil {
-				return nil, p.cur, p.err
-			}
-			p.datumLabels[labelNum] = v
-		}
-		q0 := p.wrapSyntaxDatumLabelAssignment(labelNum, v, assignTok)
-		return q0, p.cur, nil
+		return p.readLabelAssignment()
 	case tokenizer.TokenizerStateLabelReference:
-		// R7RS §2.4: #n# references previously defined datum label n
-		s := strings.Trim(p.cur.String(), "#")
-		var i int64
-		i, p.err = strconv.ParseInt(s, 10, bits.UintSize)
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		// Look up the datum in the label table
-		if p.datumLabels != nil {
-			labeled, ok := p.datumLabels[int(i)]
-			if ok {
-				// Return the actual datum, not a label reference
-				return labeled, p.cur, nil
-			}
-		}
-		// Label not found - return a SyntaxDatumLabel (will error at compile time)
-		q = p.wrapSyntaxDatumLabel(int(i), p.cur)
-		return q, p.cur, nil
+		return p.readLabelReference()
 	case tokenizer.TokenizerStateDirective:
 		q = p.wrapSyntaxDirective(TrimPrefixFolded(p.cur.String(), "#!"), p.cur)
 		return q, p.cur, nil
-	case tokenizer.TokenizerStateLineCommentBody:
-		q = p.wrapSyntaxComment(p.cur.String(), p.cur)
-		return q, p.cur, nil
-	case tokenizer.TokenizerStateBlockCommentBody:
+	case tokenizer.TokenizerStateLineCommentBody, tokenizer.TokenizerStateBlockCommentBody:
 		q = p.wrapSyntaxComment(p.cur.String(), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateDatumCommentBegin:
-		beginTok := p.cur
-		// Skip the datum comment begin token
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		// Read the syntax value being commented
-		var v syntax.SyntaxValue
-		v, _, p.err = p.readSyntax()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		// Use beginTok.String() for correct label, but p.cur for source context (matches old behavior)
-		q = p.wrapSyntaxDatumComment(beginTok.String(), v, p.cur)
-		return q, p.cur, nil
+		return p.readDatumComment()
 	case tokenizer.TokenizerStateOpenParen, tokenizer.TokenizerStateOpenBracket:
-		// R7RS §2.1: ( and [ are equivalent for opening lists, but must match
-		opener := p.cur.Type()
-		expectedClose := p.matchingClose(opener)
-		var pr syntax.SyntaxValue
-		pr = p.wrapSyntaxPair(nil, nil, p.cur)
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q0 := pr
-		pr0 := p.wrapSyntaxPair(nil, nil, p.cur)
-		for !p.isListCloser(p.cur.Type()) && p.cur.Type() != tokenizer.TokenizerStateCons {
-			var v syntax.SyntaxValue
-			v, _, p.err = p.readSyntax()
-			if p.err != nil {
-				return nil, p.cur, p.err
-			}
-			// After skipping comments, we may have landed on a delimiter (close paren/bracket or cons)
-			// In that case, readSyntax returns nil and we should exit the loop
-			if v == nil {
-				break
-			}
-			pr0 = pr.(*syntax.SyntaxPair)
-			pr0.SetCar(v)
-			pr0.SetCdr(p.wrapSyntaxPair(nil, nil, p.cur))
-			pr = pr0.Cdr().(*syntax.SyntaxPair)
-			p.cur, p.err = p.toks.Next()
-			if p.err != nil {
-				return nil, p.cur, p.err
-			}
-		}
-		switch {
-		case p.cur.Type() == tokenizer.TokenizerStateCons:
-			// skip the '.' token
-			p.cur, p.err = p.toks.Next()
-			if p.err != nil {
-				return nil, p.cur, p.err
-			}
-			// read cdr value in improper list
-			var v syntax.SyntaxValue
-			v, _, p.err = p.readSyntax()
-			if p.err != nil {
-				return nil, p.cur, p.err
-			}
-			pr = v
-			p.cur, p.err = p.toks.Next()
-			if p.err != nil {
-				return nil, p.cur, p.err
-			}
-			// Check for bracket mismatch
-			if p.cur.Type() != expectedClose {
-				if p.isListCloser(p.cur.Type()) {
-					return nil, p.cur, NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",
-						p.delimiterString(opener), p.delimiterString(p.cur.Type()))
-				}
-				return nil, p.cur, NewParserErrorWithWrapf(werr.ErrNotACloseParen, p.cur, "expected %s after dotted pair, got %s",
-					p.delimiterString(expectedClose), p.cur.String())
-			}
-			pr0.SetCdr(pr)
-		case p.cur.Type() == expectedClose:
-			// Proper list terminated with matching delimiter
-			pr = p.wrapSyntaxEmptyList(p.cur)
-			pr0.SetCdr(pr)
-		case p.isListCloser(p.cur.Type()):
-			// Bracket mismatch
-			return nil, p.cur, NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",
-				p.delimiterString(opener), p.delimiterString(p.cur.Type()))
-		}
-		return q0, p.cur, nil
+		return p.readList(p.cur.Type())
 	case tokenizer.TokenizerStateOpenVector:
-		q0 := p.wrapSyntaxVector(nil, p.cur)
-		// Advance past #( token
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		// Read vector elements - match the list parsing pattern:
-		// check token type BEFORE reading, advance AFTER reading
-		for p.cur.Type() != tokenizer.TokenizerStateCloseParen {
-			var v syntax.SyntaxValue
-			v, _, p.err = p.readSyntax()
-			if p.err != nil {
-				return nil, p.cur, p.err
-			}
-			q0.Values = append(q0.Values, v)
-			// Advance to next element (or close paren)
-			p.cur, p.err = p.toks.Next()
-			if p.err != nil {
-				return nil, p.cur, p.err
-			}
-		}
-		return q0, p.cur, nil
+		return p.readVector()
 	case tokenizer.TokenizerStateOpenVectorUnsignedByteMarker:
-		var stx syntax.SyntaxValue
-		q0 := values.NewByteVector()
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		stx, _, p.err = p.readSyntax()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		if p.curr().Type() == tokenizer.TokenizerStateCloseParen {
-			// Empty bytevector case: #u8()
-			q = p.wrapSyntax(q0, p.cur)
-			return q, p.cur, nil
-		}
-		i, ok := stx.Unwrap().(*values.Integer)
-		for {
-			if !ok {
-				return nil, p.cur, NewParserErrorWithWrapf(werr.ErrNotAnInteger, p.cur, "expected unsigned byte integer in byte vector, got %T", stx.Unwrap())
-			}
-			if i.Value < 0 || i.Value > 255 {
-				return nil, p.cur, NewParserErrorWithWrapf(werr.ErrNotAByte, p.cur, "byte value out of range (0-255): %d", i.Value)
-			}
-			*q0 = append(*q0, values.NewByte(uint8(i.Value)))
-			p.cur, p.err = p.toks.Next()
-			if p.err != nil {
-				return nil, p.cur, p.err
-			}
-			stx, _, p.err = p.readSyntax()
-			if p.err != nil {
-				return nil, p.cur, p.err
-			}
-			if p.curr().Type() == tokenizer.TokenizerStateCloseParen {
-				break
-			}
-			i, ok = stx.Unwrap().(*values.Integer)
-		}
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q = p.wrapSyntax(q0, p.cur)
-		return q, p.cur, nil
+		return p.readByteVector()
 	case tokenizer.TokenizerStateUnquote:
 		return p.readQuoteForm(ConstUnquote)
 	case tokenizer.TokenizerStateQuasiquote:
@@ -667,49 +705,18 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedInteger, tokenizer.TokenizerStateSignedInteger:
 		return p.parseDecimalInteger()
-	case tokenizer.TokenizerStateUnsignedDecimalFraction:
-		// R7RS §7.1.1: # digit placeholders replaced with 0
+	case tokenizer.TokenizerStateUnsignedDecimalFraction, tokenizer.TokenizerStateSignedDecimalFraction:
 		var a float64
 		a, p.err = strconv.ParseFloat(normalizeExponentMarker(replaceHashDigits(p.cur.String())), 64)
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
-		q1 := values.NewFloat(a)
-		q = p.wrapSyntax(q1, p.cur)
-		return q, p.cur, nil
-	case tokenizer.TokenizerStateSignedDecimalFraction:
-		// Signed decimal fractions like "-3.24", "+3.24"
-		// R7RS §7.1.1: # digit placeholders replaced with 0
-		var a float64
-		a, p.err = strconv.ParseFloat(normalizeExponentMarker(replaceHashDigits(p.cur.String())), 64)
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q1 := values.NewFloat(a)
-		q = p.wrapSyntax(q1, p.cur)
+		q = p.wrapSyntax(values.NewFloat(a), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateSignedScientificNotation,
 		tokenizer.TokenizerStateUnsignedScientificNotation:
-		// Scientific notation like "1e10", "+2e-5", "100000e-4"
-		// Parser determines if result is integer or float
 		return p.parseScientificNotation()
-	case tokenizer.TokenizerStateUnsignedRationalFraction:
-		// Unsigned rational fractions like "3/4"
-		// R7RS §7.1.1: # placeholders → 0; presence forces inexact
-		var q1 values.Number
-		q1, p.err = p.parseRational(replaceHashDigits(p.cur.String()))
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		if p.cur.HasHashDigit() {
-			q = p.wrapSyntax(p.numberToInexact(q1), p.cur)
-		} else {
-			q = p.wrapSyntax(q1, p.cur)
-		}
-		return q, p.cur, nil
-	case tokenizer.TokenizerStateSignedRationalFraction:
-		// Signed rational fractions like "-1/2", "+3/4"
-		// R7RS §7.1.1: # placeholders → 0; presence forces inexact
+	case tokenizer.TokenizerStateUnsignedRationalFraction, tokenizer.TokenizerStateSignedRationalFraction:
 		var q1 values.Number
 		q1, p.err = p.parseRational(replaceHashDigits(p.cur.String()))
 		if p.err != nil {
@@ -722,20 +729,16 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		}
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateMarkerBase2:
-		// #b prefix — next token is optional exactness marker then base-2 number
 		return p.parseBaseWithExactness(2)
 	case tokenizer.TokenizerStateMarkerBase8:
-		// #o prefix — next token is optional exactness marker then base-8 number
 		return p.parseBaseWithExactness(8)
 	case tokenizer.TokenizerStateMarkerBase10:
-		// #d prefix - next token is base 10 integer
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
 			return nil, p.cur, p.err
 		}
 		return p.readSyntax()
 	case tokenizer.TokenizerStateMarkerBase16:
-		// #x prefix — next token is optional exactness marker then base-16 number
 		return p.parseBaseWithExactness(16)
 	case tokenizer.TokenizerStateSignedIntegerBase2, tokenizer.TokenizerStateUnsignedIntegerBase2:
 		return p.parseIntegerWithBase(2)
@@ -746,7 +749,6 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateSignedIntegerBase16, tokenizer.TokenizerStateUnsignedIntegerBase16:
 		return p.parseIntegerWithBase(16)
 	case tokenizer.TokenizerStateSignedInf:
-		// +inf.0 or -inf.0
 		s := p.cur.String()
 		var f float64
 		if strings.HasPrefix(s, "-") {
@@ -754,17 +756,12 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		} else {
 			f = math.Inf(1)
 		}
-		q1 := values.NewFloat(f)
-		q = p.wrapSyntax(q1, p.cur)
+		q = p.wrapSyntax(values.NewFloat(f), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateSignedNan:
-		// +nan.0 or -nan.0
-		q1 := values.NewFloat(math.NaN())
-		q = p.wrapSyntax(q1, p.cur)
+		q = p.wrapSyntax(values.NewFloat(math.NaN()), p.cur)
 		return q, p.cur, nil
-	case tokenizer.TokenizerStateSignedImaginary:
-		// Pure imaginary numbers like +3i, -2i, +i, -i
-		// R7RS §7.1.1: # placeholders → 0; presence forces inexact
+	case tokenizer.TokenizerStateSignedImaginary, tokenizer.TokenizerStateUnsignedImaginary:
 		var q1 values.Number
 		q1, p.err = p.parseImaginary(replaceHashDigits(p.cur.String()))
 		if p.err != nil {
@@ -775,8 +772,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		}
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
-	case tokenizer.TokenizerStateSignedImaginaryInf:
-		// +inf.0i or -inf.0i
+	case tokenizer.TokenizerStateSignedImaginaryInf, tokenizer.TokenizerStateUnsignedImaginaryInf:
 		s := p.cur.String()
 		var img float64
 		if strings.HasPrefix(s, "-") {
@@ -784,18 +780,12 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		} else {
 			img = math.Inf(1)
 		}
-		q1 := values.NewComplexFromParts(0, img)
-		q = p.wrapSyntax(q1, p.cur)
+		q = p.wrapSyntax(values.NewComplexFromParts(0, img), p.cur)
 		return q, p.cur, nil
-	case tokenizer.TokenizerStateSignedImaginaryNan:
-		// +nan.0i or -nan.0i
-		q1 := values.NewComplexFromParts(0, math.NaN())
-		q = p.wrapSyntax(q1, p.cur)
+	case tokenizer.TokenizerStateSignedImaginaryNan, tokenizer.TokenizerStateUnsignedImaginaryNan:
+		q = p.wrapSyntax(values.NewComplexFromParts(0, math.NaN()), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedComplex, tokenizer.TokenizerStateSignedComplex:
-		// Full complex numbers like 1+2i, 3-4i, 1.5+2.5i, +1+2i, -3-4i
-		// R7RS §6.2.2: Exact if both parts are integer/rational, inexact otherwise
-		// R7RS §7.1.1: # placeholders → 0; presence forces inexact
 		var q1 values.Number
 		q1, p.err = p.parseComplex(replaceHashDigits(p.cur.String()))
 		if p.err != nil {
@@ -807,8 +797,6 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedComplexPolar, tokenizer.TokenizerStateSignedComplexPolar:
-		// Polar complex numbers like 1@1.5708, +2@0.5, -3@1.0
-		// R7RS §7.1.1: # placeholders → 0
 		var q1 *values.Complex
 		q1, p.err = p.parsePolarComplex(replaceHashDigits(p.cur.String()))
 		if p.err != nil {
@@ -816,38 +804,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		}
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
-	case tokenizer.TokenizerStateUnsignedImaginary:
-		// Pure imaginary numbers (unsigned, typically after radix prefix)
-		// R7RS §7.1.1: # placeholders → 0; presence forces inexact
-		var q1 values.Number
-		q1, p.err = p.parseImaginary(replaceHashDigits(p.cur.String()))
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		if p.cur.HasHashDigit() {
-			q1 = p.numberToInexact(q1)
-		}
-		q = p.wrapSyntax(q1, p.cur)
-		return q, p.cur, nil
-	case tokenizer.TokenizerStateUnsignedImaginaryInf:
-		// Unsigned imaginary infinity (typically after radix prefix)
-		s := p.cur.String()
-		var img float64
-		if strings.HasPrefix(s, "-") {
-			img = math.Inf(-1)
-		} else {
-			img = math.Inf(1)
-		}
-		q1 := values.NewComplexFromParts(0, img)
-		q = p.wrapSyntax(q1, p.cur)
-		return q, p.cur, nil
-	case tokenizer.TokenizerStateUnsignedImaginaryNan:
-		// Unsigned imaginary NaN (typically after radix prefix)
-		q1 := values.NewComplexFromParts(0, math.NaN())
-		q = p.wrapSyntax(q1, p.cur)
-		return q, p.cur, nil
 	case tokenizer.TokenizerStateMarkerNumberExact:
-		// #e prefix - read the next number and convert to exact
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
 			return nil, p.cur, p.err
@@ -856,14 +813,12 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		if err != nil {
 			return nil, tok, err
 		}
-		// Convert to exact
 		exactVal, err := p.makeExact(q)
 		if err != nil {
 			return nil, tok, NewParserErrorf(tok, "cannot convert to exact: %v", err)
 		}
 		return exactVal, tok, nil
 	case tokenizer.TokenizerStateMarkerNumberInexact:
-		// #i prefix - read the next number and convert to inexact
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
 			return nil, p.cur, p.err
@@ -872,7 +827,6 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		if err != nil {
 			return nil, tok, err
 		}
-		// Convert to inexact
 		inexactVal, err := p.makeInexact(q)
 		if err != nil {
 			return nil, tok, NewParserErrorf(tok, "cannot convert to inexact: %v", err)
@@ -889,7 +843,6 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateBigIntegerBase2:
 		return p.parseBigIntegerWithBase(2)
 	case tokenizer.TokenizerStateBigFloat:
-		// #M prefix for arbitrary-precision float
 		s := TrimPrefixFolded(p.cur.String(), "#m")
 		s = TrimPrefixFolded(s, "#M")
 		q1 := values.NewBigFloatFromString(s)
@@ -899,12 +852,10 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateMarkerBooleanTrue:
-		q1 := values.TrueValue
-		q = p.wrapSyntax(q1, p.cur)
+		q = p.wrapSyntax(values.TrueValue, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateMarkerBooleanFalse:
-		q1 := values.FalseValue
-		q = p.wrapSyntax(q1, p.cur)
+		q = p.wrapSyntax(values.FalseValue, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateEmptyList:
 		q = p.wrapSyntaxEmptyList(p.cur)
@@ -912,39 +863,15 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateCharGraphic:
 		s := TrimPrefixFolded(p.cur.String(), values.PrefixCharacter)
 		rs := []rune(s)
-		q1 := values.NewCharacter(rs[0])
-		q = p.wrapSyntax(q1, p.cur)
+		q = p.wrapSyntax(values.NewCharacter(rs[0]), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateCharMnemonic:
-		var q0 *values.Character
 		s := TrimPrefixFolded(p.cur.String(), values.PrefixCharacter)
-		switch s {
-		case "alarm":
-			q0 = values.NewCharacter(RuneAlarm)
-		case "space":
-			q0 = values.NewCharacter(RuneSpace)
-		case "backspace":
-			q0 = values.NewCharacter(RuneBackspace)
-		case "form-feed":
-			q0 = values.NewCharacter(RuneFormFeed)
-		case "delete":
-			q0 = values.NewCharacter(RuneRubout)
-		case "escape":
-			q0 = values.NewCharacter(RuneEscape)
-		case "newline":
-			q0 = values.NewCharacter(RuneNewline)
-		case "null":
-			q0 = values.NewCharacter(RuneNull)
-		case "return":
-			q0 = values.NewCharacter(RuneReturn)
-		case "tab":
-			q0 = values.NewCharacter(RuneTab)
-		case "vertical-tab":
-			q0 = values.NewCharacter(RuneVerticalTab)
-		default:
+		r, ok := mnemonicRunes[s]
+		if !ok {
 			return nil, nil, NewParserErrorWithWrapf(werr.ErrUnknownCharacterMnemonic, p.cur, "unknown character mnemonic: %s", s)
 		}
-		q = p.wrapSyntax(q0, p.cur)
+		q = p.wrapSyntax(values.NewCharacter(r), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateCharHexEscape:
 		s := TrimPrefixFolded(p.cur.String(), "#\\x")
@@ -953,13 +880,10 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		if p.err != nil {
 			return nil, p.cur, NewParserErrorWithWrapf(p.err, p.cur, "invalid character hex escape: %s", s)
 		}
-		q1 := values.NewCharacter(rune(i))
-		q = p.wrapSyntax(q1, p.cur)
+		q = p.wrapSyntax(values.NewCharacter(rune(i)), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateString:
-		// Use wrt() to get the processed string (escapes converted, quotes stripped)
-		q1 := values.NewString(p.cur.Value())
-		q = p.wrapSyntax(q1, p.cur)
+		q = p.wrapSyntax(values.NewString(p.cur.Value()), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateCloseParen, tokenizer.TokenizerStateCloseBracket:
 		// Close delimiters return nil to signal end of compound form
