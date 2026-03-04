@@ -26,8 +26,8 @@ Delete `ExitTag`, `ErrExitEscape`, and all associated propagation checks.
 ### Delete
 
 - `machine/exit_escape.go` — `ExitTag`, `ErrExitEscape`, `NewErrExitEscape`, `NewExitTag`
-- `ErrExitEscape` check in `OperationForeignFunctionCall.Apply()` (lines 66-69)
-- `ErrExitEscape` check in `applyCallableError()` (`foreign_closure.go:52-55`)
+- `ErrExitEscape` check in `OperationForeignFunctionCall.Apply()`
+- `ErrExitEscape` check in `applyCallableError()` in `foreign_closure.go`
 
 ### Modify
 
