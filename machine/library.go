@@ -294,12 +294,12 @@ func (p *LibraryRegistry) FindLibraryFile(name LibraryName) (string, error) {
 //
 // Phase shifts compose additively: (for-syntax (for-syntax lib)) = phase +2
 type ImportSet struct {
-	LibraryName LibraryName       // Base library to import from
-	Only        []string          // If non-nil, only import these names
-	Except      []string          // If non-nil, import all except these
-	Prefix      string            // If non-empty, add this prefix to all names
-	Renames     map[string]string // old-name -> new-name
-	PhaseShift  int               // Phase offset: 0=runtime, 1=for-syntax, -1=for-template
+	LibraryName LibraryName         // Base library to import from
+	Only        map[string]struct{} // If non-nil, only import these names
+	Except      map[string]struct{} // If non-nil, import all except these
+	Prefix      string              // If non-empty, add this prefix to all names
+	Renames     map[string]string   // old-name -> new-name
+	PhaseShift  int                 // Phase offset: 0=runtime, 1=for-syntax, -1=for-template
 }
 
 // NewImportSet creates a new import set for a library.
@@ -323,7 +323,7 @@ func (p *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[string]string, err
 	// Apply 'only' filter
 	if p.Only != nil {
 		filtered := make(map[string]string)
-		for _, name := range p.Only {
+		for name := range p.Only {
 			_, ok := result[name]
 			if !ok {
 				return nil, werr.WrapForeignErrorf(werr.ErrUnexportedIdentifier, "applyToExports: identifier %q not exported by %s",
@@ -336,7 +336,7 @@ func (p *ImportSet) ApplyToExports(lib *CompiledLibrary) (map[string]string, err
 
 	// Apply 'except' filter
 	if p.Except != nil {
-		for _, name := range p.Except {
+		for name := range p.Except {
 			_, ok := result[name]
 			if !ok {
 				return nil, werr.WrapForeignErrorf(werr.ErrUnexportedIdentifier, "applyToExports: identifier %q not exported by %s",

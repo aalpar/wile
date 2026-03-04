@@ -129,7 +129,7 @@ func TestImportSet(t *testing.T) {
 
 	// Test 'only' filter
 	importSet2 := machine.NewImportSet(name)
-	importSet2.Only = []string{"bindSymbolWithScopes", "bar"}
+	importSet2.Only = map[string]struct{}{"bindSymbolWithScopes": {}, "bar": {}}
 	bindings2, err := importSet2.ApplyToExports(lib)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(bindings2), qt.Equals, 2)
@@ -138,7 +138,7 @@ func TestImportSet(t *testing.T) {
 
 	// Test 'except' filter
 	importSet3 := machine.NewImportSet(name)
-	importSet3.Except = []string{"baz"}
+	importSet3.Except = map[string]struct{}{"baz": {}}
 	bindings3, err := importSet3.ApplyToExports(lib)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(bindings3), qt.Equals, 2)
@@ -171,14 +171,14 @@ func TestImportSetErrors(t *testing.T) {
 
 	// Test 'only' with non-existent identifier
 	importSet := machine.NewImportSet(name)
-	importSet.Only = []string{"nonexistent"}
+	importSet.Only = map[string]struct{}{"nonexistent": {}}
 	_, err := importSet.ApplyToExports(lib)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "nonexistent")
 
 	// Test 'except' with non-existent identifier
 	importSet2 := machine.NewImportSet(name)
-	importSet2.Except = []string{"nonexistent"}
+	importSet2.Except = map[string]struct{}{"nonexistent": {}}
 	_, err2 := importSet2.ApplyToExports(lib)
 	c.Assert(err2, qt.IsNotNil)
 }
@@ -636,8 +636,8 @@ func TestLibraryNamePathConversion(t *testing.T) {
 func TestImportSetFields(t *testing.T) {
 	is := &machine.ImportSet{
 		LibraryName: machine.NewLibraryName("scheme", "base"),
-		Only:        []string{"car", "cdr"},
-		Except:      []string{"cons"},
+		Only:        map[string]struct{}{"car": {}, "cdr": {}},
+		Except:      map[string]struct{}{"cons": {}},
 		Prefix:      "my-",
 		Renames:     map[string]string{"old": "new"},
 	}
