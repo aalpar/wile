@@ -16,10 +16,7 @@ package values
 
 import "github.com/aalpar/wile/werr"
 
-var (
-	_ Value     = (*ByteVector)(nil)
-	_ Indexable = (*ByteVector)(nil)
-)
+var _ Value = (*ByteVector)(nil)
 
 // ByteVector represents a Scheme bytevector.
 type ByteVector []*Byte

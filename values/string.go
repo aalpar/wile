@@ -24,7 +24,6 @@ import (
 var (
 	_ Value        = (*String)(nil)
 	_ Hashable     = (*String)(nil)
-	_ Indexable    = (*String)(nil)
 	_ fmt.Stringer = (*String)(nil)
 )
 
