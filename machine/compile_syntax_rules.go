@@ -108,7 +108,6 @@ func (p *FreeIdResolution) GetHasLocalBinding() bool {
 // a fresh "intro scope" that marks all identifiers introduced by the macro.
 // This prevents variable capture between the macro and its use site.
 type SyntaxRulesClause struct {
-	pattern          syntax.SyntaxValue              // The pattern to match against input
 	template         syntax.SyntaxValue              // The template to expand on match (includes source context)
 	bytecode         []match.SyntaxCommand           // Compiled pattern bytecode
 	matcher          *match.SyntaxMatcher            // Pattern matcher instance
@@ -351,7 +350,6 @@ func compileClauseWithEllipsisAndLiterals(
 	collectFreeIdentifiersWithEllipsis(env, template, variables, freeIds, ellipsis)
 
 	return &SyntaxRulesClause{
-		pattern:          pattern,
 		template:         template,
 		bytecode:         compiled.Codes,
 		matcher:          matcher,

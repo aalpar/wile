@@ -36,22 +36,18 @@ type SimpleToken struct {
 	istart syntax.SourceIndexes
 	iend   syntax.SourceIndexes
 	typ    TokenizerState
-	sign   bool // Whether the token has an explicit sign (+ or -)
 	hash   bool // R7RS §7.1.1: whether # appeared as inexact digit placeholder
-	rad    int
 	src    string
 	val    string // Processed value (e.g., escape sequences converted)
 }
 
 // NewSimpleToken creates a new SimpleToken with the given type, source, value, and position.
-func NewSimpleToken(typ TokenizerState, src, val string, sti, eni *syntax.SourceIndexes, signed bool, rad int, hash bool) *SimpleToken {
+func NewSimpleToken(typ TokenizerState, src, val string, sti, eni *syntax.SourceIndexes, hash bool) *SimpleToken {
 	q := &SimpleToken{
 		istart: *sti,
 		iend:   *eni,
 		typ:    typ,
-		sign:   signed,
 		hash:   hash,
-		rad:    rad,
 		src:    src,
 		val:    val,
 	}

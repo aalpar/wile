@@ -274,7 +274,6 @@ type Tokenizer struct {
 	runeStart  syntax.SourceIndexes // start of the current rune tokenStartIndex  int // start of the current token
 	tokenStart syntax.SourceIndexes
 	tokenEnd   syntax.SourceIndexes // end of the current token
-	scratch    []rune
 	// used to build up token "value", which may differ from the raw text
 	value string
 	// raw source code text of the current token
@@ -284,9 +283,7 @@ type Tokenizer struct {
 	// signed indicates whether the current number token is signed (has + or -)
 	signed bool
 	// radix indicates the current number radix (base)
-	radix int
-	// strength indicates the number of bits in the floating point representation
-	strength   int
+	radix      int
 	blockDepth int  // nesting depth for block comments
 	ci         bool // case insensitive symbol mode
 	hashDigit  bool // R7RS §7.1.1: whether # appeared as inexact digit placeholder
@@ -396,7 +393,7 @@ func (p *Tokenizer) Next() (Token, error) {
 		src := p.text
 		val := p.value
 		// here p.err may be != nil due to read failure.  will be returned on next call to Next
-		q := NewSimpleToken(p.state, src, val, &p.tokenStart, &p.tokenEnd, p.signed, p.radix, p.hashDigit)
+		q := NewSimpleToken(p.state, src, val, &p.tokenStart, &p.tokenEnd, p.hashDigit)
 		return q, nil //nolint:staticcheck
 	}
 	return nil, p.err
@@ -435,7 +432,7 @@ func (p *Tokenizer) continueBlockComment() Token {
 						p.value = p.value[:len(p.value)-1]
 					}
 					p.term()
-					return NewSimpleToken(p.state, p.text, "", &p.tokenStart, &p.tokenEnd, p.signed, p.radix, false)
+					return NewSimpleToken(p.state, p.text, "", &p.tokenStart, &p.tokenEnd, false)
 				}
 				p.blockDepth--
 			}
@@ -446,7 +443,7 @@ func (p *Tokenizer) continueBlockComment() Token {
 	}
 	// EOF before closing - emit Body token, no End will follow
 	p.term()
-	return NewSimpleToken(p.state, p.text, "", &p.tokenStart, &p.tokenEnd, p.signed, p.radix, false)
+	return NewSimpleToken(p.state, p.text, "", &p.tokenStart, &p.tokenEnd, false)
 }
 
 // Reader returns the underlying RuneReader.
@@ -572,19 +569,19 @@ func (p *Tokenizer) read() {
 		return
 	default:
 		p.term()
-		p.err = NewTokenizerErrorWithWrap(p.err, MessageExpectingToken, p.tokenStart, p.tokenEnd)
+		p.err = NewTokenizerErrorWithWrap(p.err, MessageExpectingToken)
 		return
 	}
 }
 
 // validateCodePoint checks that a Unicode code point is within the valid range
 // (0 to 0x10FFFF) and is not a surrogate (0xD800-0xDFFF), per R7RS §6.7.
-func validateCodePoint(x int64, start, end syntax.SourceIndexes) error {
+func validateCodePoint(x int64) error {
 	if x > 0x10FFFF {
-		return NewTokenizerError(MessageCodePointExceedsUnicodeMaximum, start, end)
+		return NewTokenizerError(MessageCodePointExceedsUnicodeMaximum)
 	}
 	if x >= 0xD800 && x <= 0xDFFF {
-		return NewTokenizerError(MessageCodePointIsSurrogate, start, end)
+		return NewTokenizerError(MessageCodePointIsSurrogate)
 	}
 	return nil
 }
@@ -599,14 +596,14 @@ func (p *Tokenizer) readHexEscapeToken() {
 		return
 	}
 	if n == 0 {
-		p.err = NewTokenizerError(MessageExpectingHexDigit, p.tokenStart, p.tokenEnd)
+		p.err = NewTokenizerError(MessageExpectingHexDigit)
 		return
 	}
 	if p.cur != ';' {
-		p.err = NewTokenizerError(MessageExpectingHexSequenceTerminator, p.tokenStart, p.tokenEnd)
+		p.err = NewTokenizerError(MessageExpectingHexSequenceTerminator)
 		return
 	}
-	err := validateCodePoint(x, p.tokenStart, p.tokenEnd)
+	err := validateCodePoint(x)
 	if err != nil {
 		p.err = err
 		return
@@ -647,7 +644,7 @@ func (p *Tokenizer) readEscapeSequence() {
 	case p.curr() == '|': // \| (vertical bar) - R7RS §6.7
 		p.value += "|"
 	default:
-		p.err = NewTokenizerError(MessageExpectingEscape, p.tokenStart, p.tokenEnd)
+		p.err = NewTokenizerError(MessageExpectingEscape)
 		return
 	}
 	p.next()
@@ -665,7 +662,7 @@ func (p *Tokenizer) readDelimited(terminator rune, unterminatedMsg string) bool 
 			p.next()
 			if p.err != nil {
 				if errors.Is(p.err, io.EOF) {
-					p.err = NewTokenizerError(unterminatedMsg, p.tokenStart, p.tokenEnd)
+					p.err = NewTokenizerError(unterminatedMsg)
 				}
 				return false
 			}
@@ -679,7 +676,7 @@ func (p *Tokenizer) readDelimited(terminator rune, unterminatedMsg string) bool 
 		p.next()
 		if p.err != nil {
 			if errors.Is(p.err, io.EOF) {
-				p.err = NewTokenizerError(unterminatedMsg, p.tokenStart, p.tokenEnd)
+				p.err = NewTokenizerError(unterminatedMsg)
 			}
 			return false
 		}
@@ -715,7 +712,7 @@ func (p *Tokenizer) skipLineContinuation() {
 	}
 	// consume line ending
 	if !p.scanLineEnding() {
-		p.err = NewTokenizerError(MessageExpectingLineEnding, p.tokenStart, p.tokenEnd)
+		p.err = NewTokenizerError(MessageExpectingLineEnding)
 		return
 	}
 	// scanLineEnding() already advanced past the line ending
@@ -831,7 +828,7 @@ func (p *Tokenizer) readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrC
 		return
 
 	default:
-		p.err = NewTokenizerError("invalid character after #", p.tokenStart, p.tokenEnd)
+		p.err = NewTokenizerError("invalid character after #")
 		return
 	}
 }
@@ -970,10 +967,10 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 		p.state = TokenizerStateCharHexEscape
 		x, n := p.readUnsignedBaseNInteger(16, 0) //nolint:errcheck
 		if n == 0 {
-			p.err = NewTokenizerErrorWithWrap(p.err, MessageInvalidCharacterHexEscape, p.tokenStart, p.tokenEnd)
+			p.err = NewTokenizerErrorWithWrap(p.err, MessageInvalidCharacterHexEscape)
 			return utf8.RuneError
 		}
-		err := validateCodePoint(x, p.tokenStart, p.tokenEnd)
+		err := validateCodePoint(x)
 		if err != nil {
 			p.err = err
 			return utf8.RuneError
@@ -1024,7 +1021,7 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 		case strings.EqualFold(mnemonic, "form-feed"):
 			return '\f'
 		}
-		p.err = NewTokenizerError(MessageInvalidCharacterMnemonic, p.tokenStart, p.tokenEnd)
+		p.err = NewTokenizerError(MessageInvalidCharacterMnemonic)
 		return utf8.RuneError
 
 	case unicode.IsGraphic(p.curr()):
@@ -1033,7 +1030,7 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 		p.next()
 		return qrune
 	}
-	p.err = NewTokenizerError(MessageExpectingCharacterMnemonicOrHexEscape, p.tokenStart, p.tokenEnd)
+	p.err = NewTokenizerError(MessageExpectingCharacterMnemonicOrHexEscape)
 	return utf8.RuneError
 }
 
@@ -1045,14 +1042,14 @@ func (p *Tokenizer) readDirective() {
 	// drop the '!'
 	p.next()
 	if p.err != nil {
-		p.err = NewTokenizerError(MessageExpectingDirective, p.tokenStart, p.tokenEnd)
+		p.err = NewTokenizerError(MessageExpectingDirective)
 		return
 	}
 	// traditional identifier - letter followed by letter or number or dash
 	if isUnicodeLetter(p.curr()) {
 		p.next()
 	} else {
-		p.err = NewTokenizerError(MessageExpectingDirective, p.tokenStart, p.tokenEnd)
+		p.err = NewTokenizerError(MessageExpectingDirective)
 		return
 	}
 	// read letters, digits, dashes. this applies to directives like "fold-case"
@@ -1073,17 +1070,17 @@ func (p *Tokenizer) readSpecialNumber(s string, r int, mismatchErr string, onMis
 		if onMismatch != nil {
 			onMismatch()
 		} else {
-			p.err = NewTokenizerError(mismatchErr, p.tokenStart, p.tokenEnd)
+			p.err = NewTokenizerError(mismatchErr)
 			return
 		}
 	}
 	if !isDot(p.curr()) {
-		p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
+		p.err = NewTokenizerError(MessageExpectingDecimalFraction)
 		return
 	}
 	p.next()
 	if !isDigit(r, p.curr()) {
-		p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
+		p.err = NewTokenizerError(MessageExpectingDecimalFraction)
 		return
 	}
 	p.readUnsignedBaseNNumber(r) //nolint:errcheck
@@ -1149,7 +1146,7 @@ func (p *Tokenizer) readDiv(r int) {
 		return
 	}
 	if !isDigit(r, p.curr()) { // +10/10
-		p.err = NewTokenizerError(MessageExpectingNumber, p.tokenStart, p.tokenEnd)
+		p.err = NewTokenizerError(MessageExpectingNumber)
 		return
 	}
 	p.readDigitsAndHash(r)
@@ -1247,7 +1244,7 @@ func (p *Tokenizer) readSignedDecimalFractionOrExponentWithImaginary(r int) {
 	case p.readDotSubsequentSymbol():
 		// Symbol consumed; falls through to no-op digit/exponent reads below
 	case !isDigit(r, p.curr()):
-		p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
+		p.err = NewTokenizerError(MessageExpectingDecimalFraction)
 		return
 	default:
 		p.state = TokenizerStateSignedDecimalFraction
@@ -1321,7 +1318,7 @@ func (p *Tokenizer) readIntegerAndFraction(signed bool, r int) {
 			return
 		}
 		if !isImaginary(p.curr()) {
-			p.err = NewTokenizerError(MessageExpectingImaginary, p.tokenStart, p.tokenEnd)
+			p.err = NewTokenizerError(MessageExpectingImaginary)
 			return
 		}
 		p.next()
@@ -1434,7 +1431,7 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 		p.readIntegerAndFraction(false, r)
 		return
 	default:
-		p.err = NewTokenizerError(MessageExpectingNumber, p.tokenStart, p.tokenEnd)
+		p.err = NewTokenizerError(MessageExpectingNumber)
 		return
 	}
 }
@@ -1459,7 +1456,7 @@ func (p *Tokenizer) mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r in
 			return
 		}
 		if !p.readDotSubsequentSymbol() && !isDigit(r, p.curr()) {
-			p.err = NewTokenizerError(MessageExpectingDecimalFraction, p.tokenStart, p.tokenEnd)
+			p.err = NewTokenizerError(MessageExpectingDecimalFraction)
 			return
 		}
 		p.readDigitsAndHash(r)
@@ -1489,15 +1486,14 @@ func (p *Tokenizer) mayReadExponent(r int) {
 	if !isExtendedExponentMarker(p.curr()) {
 		return
 	}
-	var ok bool
-	ok, p.strength = exponentMarkerStrength(p.curr())
+	ok, _ := exponentMarkerStrength(p.curr())
 	if !ok {
-		p.err = NewTokenizerError(MessageExpectingExponentMarker, p.tokenStart, p.tokenEnd)
+		p.err = NewTokenizerError(MessageExpectingExponentMarker)
 		return
 	}
 	p.next() // consume exponent marker
 	if p.err != nil {
-		p.err = NewTokenizerErrorWithWrap(p.err, MessageExpectingExponentDigits, p.tokenStart, p.tokenEnd)
+		p.err = NewTokenizerErrorWithWrap(p.err, MessageExpectingExponentDigits)
 		return
 	}
 	// Don't return early on EOF - we need to check for required digits below
@@ -1505,14 +1501,14 @@ func (p *Tokenizer) mayReadExponent(r int) {
 	// Optional sign
 	p.mayConsumeSign()
 	if p.err != nil {
-		p.err = NewTokenizerErrorWithWrap(p.err, MessageExpectingExponentDigits, p.tokenStart, p.tokenEnd)
+		p.err = NewTokenizerErrorWithWrap(p.err, MessageExpectingExponentDigits)
 		return
 	}
 
 	// R7RS requires at least one digit after exponent marker (and optional sign)
 	// When p.err is set (including io.EOF), p.curr() returns RuneError which isDigit rejects
 	if !isDigit(r, p.curr()) {
-		p.err = NewTokenizerError(MessageExpectingExponentDigits, p.tokenStart, p.tokenEnd)
+		p.err = NewTokenizerError(MessageExpectingExponentDigits)
 		return
 	}
 	p.readUnsignedBaseNNumber(r) //nolint:errcheck
@@ -1638,7 +1634,7 @@ func (p *Tokenizer) mayReadPolarPart(r int) {
 			return
 		}
 	default:
-		p.err = NewTokenizerError(MessageExpectingNumber, p.tokenStart, p.tokenEnd)
+		p.err = NewTokenizerError(MessageExpectingNumber)
 		return
 	}
 
@@ -1686,7 +1682,7 @@ func (p *Tokenizer) readUnsignedBaseNInteger(r, maxn int) (int64, int) {
 	// always attempt to parse s, even on error
 	q, err = strconv.ParseInt(s.String(), r, 64)
 	if err != nil {
-		err = NewTokenizerErrorWithWrap(p.err, MessageCannotParseNumber, p.tokenStart, p.tokenEnd)
+		err = NewTokenizerErrorWithWrap(p.err, MessageCannotParseNumber)
 	}
 	if p.err == nil {
 		p.err = err
@@ -1864,7 +1860,6 @@ func (p *Tokenizer) reset() {
 // mark marks the current position as the beginning of a new token.
 func (p *Tokenizer) mark() {
 	p.value = p.value[:0]
-	p.scratch = p.scratch[:0]
 	p.text = p.text[:0]
 	p.tokenStart = p.runeStart
 	p.tokenEnd = p.runeStart
@@ -1888,7 +1883,7 @@ func (p *Tokenizer) readNextRune() {
 		p.cur = utf8.RuneError
 		p.err = io.EOF
 	} else if p.cur == utf8.RuneError {
-		p.err = NewTokenizerError(MessageRuneError, p.tokenStart, p.tokenEnd)
+		p.err = NewTokenizerError(MessageRuneError)
 	}
 }
 
