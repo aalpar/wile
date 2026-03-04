@@ -135,7 +135,7 @@ func TestFindSyntaxPatternVariables(t *testing.T) {
 
 	for _, tc := range tcs {
 		c.Run(tc.name, func(c *qt.C) {
-			sm := NewSyntaxMatcher(tc.variables, []SyntaxCommand{ByteCodeDone{}})
+			sm := NewSyntaxMatcher(tc.variables, []SyntaxCommand{ByteCodeDone{}}, nil)
 			result := sm.findSyntaxPatternVariables(tc.template)
 			c.Assert(result, qt.DeepEquals, tc.expected)
 		})
@@ -145,7 +145,7 @@ func TestFindSyntaxPatternVariables(t *testing.T) {
 func TestCapturedValueToSyntax(t *testing.T) {
 	c := qt.New(t)
 
-	sm := NewSyntaxMatcher(map[string]struct{}{}, []SyntaxCommand{ByteCodeDone{}})
+	sm := NewSyntaxMatcher(map[string]struct{}{}, []SyntaxCommand{ByteCodeDone{}}, nil)
 
 	tcs := []struct {
 		name       string
@@ -268,7 +268,7 @@ func TestSyntaxExpandSimpleSubstitution(t *testing.T) {
 				nil,
 			)
 
-			sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
+			sm := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
 			err = sm.Match(context.Background(), input)
 			c.Assert(err, qt.IsNil)
 
@@ -338,7 +338,7 @@ func TestSyntaxExpandWithIntroScope(t *testing.T) {
 				nil,
 			)
 
-			sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
+			sm := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
 			err = sm.Match(context.Background(), input)
 			c.Assert(err, qt.IsNil)
 
@@ -373,7 +373,7 @@ func TestSyntaxExpandPairTemplate(t *testing.T) {
 		nil,
 	)
 
-	sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
+	sm := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
 	err = sm.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
@@ -477,7 +477,7 @@ func TestSyntaxExpandEllipsis(t *testing.T) {
 				nil,
 			)
 
-			compiled, err := CompileSyntaxPatternFull(context.TODO(), pattern, variables)
+			compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
 			c.Assert(err, qt.IsNil)
 
 			// Build input: (_ val1 val2 ...)
@@ -485,7 +485,7 @@ func TestSyntaxExpandEllipsis(t *testing.T) {
 			inputElems = append(inputElems, tc.inputVal...)
 			input := testSyntaxList(inputElems...)
 
-			sm := NewSyntaxMatcherWithEllipsisVars(variables, compiled.Codes, compiled.EllipsisVars)
+			sm := NewSyntaxMatcher(variables, compiled.Codes, &SyntaxMatcherOpts{EllipsisVars: compiled.EllipsisVars})
 			err = sm.Match(context.Background(), input)
 			c.Assert(err, qt.IsNil)
 
@@ -506,7 +506,7 @@ func TestSyntaxExpandEllipsis(t *testing.T) {
 func TestSyntaxExpandNoContext(t *testing.T) {
 	c := qt.New(t)
 
-	sm := NewSyntaxMatcher(map[string]struct{}{}, []SyntaxCommand{})
+	sm := NewSyntaxMatcher(map[string]struct{}{}, []SyntaxCommand{}, nil)
 	template := syntax.NewSyntaxSymbol("x", nil)
 
 	_, err := sm.Expand(template, ExpandOptions{})
@@ -540,7 +540,7 @@ func TestSyntaxExpandPreservesPatternVarScopes(t *testing.T) {
 		nil,
 	)
 
-	sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
+	sm := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
 	err = sm.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
@@ -582,7 +582,7 @@ func TestSyntaxExpandScopeAwareSubstitution(t *testing.T) {
 		nil,
 	)
 
-	sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
+	sm := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
 	err = sm.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
@@ -621,7 +621,7 @@ func TestSyntaxExpandScopeAwareNoSubstitution(t *testing.T) {
 		nil,
 	)
 
-	sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
+	sm := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
 	err = sm.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
@@ -664,7 +664,7 @@ func TestSyntaxExpandEscapedTemplate(t *testing.T) {
 		nil,
 	)
 
-	sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
+	sm := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
 	err = sm.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
@@ -749,7 +749,7 @@ func TestSyntaxExpandVectorTemplate(t *testing.T) {
 		nil,
 	)
 
-	sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
+	sm := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
 	err = sm.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
@@ -797,7 +797,7 @@ func TestSyntaxExpandNilTemplate(t *testing.T) {
 		nil,
 	)
 
-	sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
+	sm := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
 	err = sm.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 

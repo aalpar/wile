@@ -98,7 +98,7 @@ func TestSyntaxMatcher_GetBindings(t *testing.T) {
 		ByteCodeDone{},
 	}
 	vars := map[string]struct{}{"x": {}}
-	m := NewSyntaxMatcher(vars, codes)
+	m := NewSyntaxMatcher(vars, codes, nil)
 
 	target := testSyntaxList(testSyntaxInt(99))
 	err := m.Match(context.Background(), target)

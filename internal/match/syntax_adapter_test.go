@@ -35,12 +35,12 @@ func TestSyntaxMatcher(t *testing.T) {
 			ByteCodeDone{},
 		}
 
-		matcher := NewSyntaxMatcher(variables, codes)
+		matcher := NewSyntaxMatcher(variables, codes, nil)
 		qt.Assert(t, matcher, qt.IsNotNil)
 		qt.Assert(t, matcher.matcher, qt.IsNotNil)
 	})
 
-	t.Run("NewSyntaxMatcherWithEllipsisVars", func(t *testing.T) {
+	t.Run("NewSyntaxMatcher with ellipsis vars", func(t *testing.T) {
 		variables := map[string]struct{}{
 			"x": {},
 		}
@@ -52,7 +52,7 @@ func TestSyntaxMatcher(t *testing.T) {
 			0: {"x": {}},
 		}
 
-		matcher := NewSyntaxMatcherWithEllipsisVars(variables, codes, ellipsisVars)
+		matcher := NewSyntaxMatcher(variables, codes, &SyntaxMatcherOpts{EllipsisVars: ellipsisVars})
 		qt.Assert(t, matcher, qt.IsNotNil)
 		qt.Assert(t, matcher.matcher.ellipsisVars, qt.DeepEquals, ellipsisVars)
 	})
@@ -86,7 +86,7 @@ func TestSyntaxMatcher(t *testing.T) {
 		)
 
 		// Match
-		matcher := NewSyntaxMatcher(compiler.variables, compiler.codes)
+		matcher := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
 		err = matcher.Match(context.Background(), input)
 		qt.Assert(t, err, qt.IsNil)
 
@@ -103,7 +103,7 @@ func TestSyntaxMatcher(t *testing.T) {
 			ByteCodeDone{},
 		}
 
-		matcher := NewSyntaxMatcher(variables, codes)
+		matcher := NewSyntaxMatcher(variables, codes, nil)
 		srcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
 		input := syntax.NewSyntaxObject(values.NewInteger(42), srcCtx)
 
@@ -138,7 +138,7 @@ func TestSyntaxMatcher(t *testing.T) {
 			srcCtx,
 		)
 
-		matcher := NewSyntaxMatcher(compiler.variables, compiler.codes)
+		matcher := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
 		err = matcher.Match(context.Background(), input)
 		qt.Assert(t, err, qt.IsNil)
 
@@ -170,13 +170,13 @@ func TestCompileSyntaxPattern(t *testing.T) {
 			"x": {},
 		}
 
-		codes, err := CompileSyntaxPattern(context.Background(), pattern, variables)
+		compiled, err := CompileSyntaxPattern(context.Background(), pattern, variables, nil)
 		qt.Assert(t, err, qt.IsNil)
-		qt.Assert(t, codes, qt.IsNotNil)
-		qt.Assert(t, len(codes) > 0, qt.IsTrue)
+		qt.Assert(t, compiled, qt.IsNotNil)
+		qt.Assert(t, len(compiled.Codes) > 0, qt.IsTrue)
 	})
 
-	t.Run("CompileSyntaxPatternFull", func(t *testing.T) {
+	t.Run("CompileSyntaxPattern with ellipsis", func(t *testing.T) {
 		srcCtx := syntax.NewSourceContext("", "", syntax.SourceIndexes{}, syntax.SourceIndexes{})
 		pattern := syntax.NewSyntaxCons(
 			syntax.NewSyntaxSymbol("let", srcCtx),
@@ -196,7 +196,7 @@ func TestCompileSyntaxPattern(t *testing.T) {
 			"x": {},
 		}
 
-		compiled, err := CompileSyntaxPatternFull(context.Background(), pattern, variables)
+		compiled, err := CompileSyntaxPattern(context.Background(), pattern, variables, nil)
 		qt.Assert(t, err, qt.IsNil)
 		qt.Assert(t, compiled, qt.IsNotNil)
 		qt.Assert(t, compiled.Codes, qt.IsNotNil)
@@ -209,10 +209,10 @@ func TestCompileSyntaxPattern(t *testing.T) {
 
 		variables := map[string]struct{}{}
 
-		codes, err := CompileSyntaxPattern(context.Background(), pattern, variables)
+		compiled, err := CompileSyntaxPattern(context.Background(), pattern, variables, nil)
 		qt.Assert(t, err, qt.IsNotNil)
 		qt.Assert(t, err.Error(), qt.Contains, "must be a list")
-		qt.Assert(t, codes, qt.IsNil)
+		qt.Assert(t, compiled, qt.IsNil)
 	})
 }
 
@@ -258,7 +258,7 @@ func TestExpandWithUseSite(t *testing.T) {
 	)
 
 	// Match
-	matcher := NewSyntaxMatcher(compiler.variables, compiler.codes)
+	matcher := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
 	err = matcher.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
@@ -347,7 +347,7 @@ func TestExpandWithUseSite_PreservesPatternVars(t *testing.T) {
 		inputSc,
 	)
 
-	matcher := NewSyntaxMatcher(compiler.variables, compiler.codes)
+	matcher := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
 	err = matcher.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
@@ -391,7 +391,7 @@ func TestExpandWithUseSite_NilUseSite(t *testing.T) {
 		inputSc,
 	)
 
-	matcher := NewSyntaxMatcher(compiler.variables, compiler.codes)
+	matcher := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
 	err = matcher.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
@@ -431,7 +431,7 @@ func TestExpandWithOrigin(t *testing.T) {
 		inputSc,
 	)
 
-	matcher := NewSyntaxMatcher(compiler.variables, compiler.codes)
+	matcher := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
 	err = matcher.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
@@ -478,7 +478,7 @@ func TestExpandWithOrigin_ChainedOrigins(t *testing.T) {
 		inputSc,
 	)
 
-	matcher := NewSyntaxMatcher(compiler.variables, compiler.codes)
+	matcher := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
 	err = matcher.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
@@ -576,7 +576,7 @@ func TestExpandWithOrigin_StructuralNodes(t *testing.T) {
 			nil,
 		)
 
-		sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
+		sm := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
 		err = sm.Match(context.Background(), input)
 		c.Assert(err, qt.IsNil)
 
@@ -615,7 +615,7 @@ func TestExpandWithOrigin_StructuralNodes(t *testing.T) {
 			nil,
 		)
 
-		sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
+		sm := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
 		err = sm.Match(context.Background(), input)
 		c.Assert(err, qt.IsNil)
 
@@ -653,7 +653,7 @@ func TestExpandWithOrigin_StructuralNodes(t *testing.T) {
 			nil,
 		)
 
-		compiled, err := CompileSyntaxPatternFull(context.TODO(), pattern, variables)
+		compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
 		c.Assert(err, qt.IsNil)
 
 		// Input: (_ 1 2)
@@ -663,7 +663,7 @@ func TestExpandWithOrigin_StructuralNodes(t *testing.T) {
 			syntax.NewSyntaxObject(values.NewInteger(2), nil),
 		)
 
-		sm := NewSyntaxMatcherWithEllipsisVars(variables, compiled.Codes, compiled.EllipsisVars)
+		sm := NewSyntaxMatcher(variables, compiled.Codes, &SyntaxMatcherOpts{EllipsisVars: compiled.EllipsisVars})
 		err = sm.Match(context.Background(), input)
 		c.Assert(err, qt.IsNil)
 
@@ -704,7 +704,7 @@ func TestExpandWithOrigin_StructuralNodes(t *testing.T) {
 			nil,
 		)
 
-		sm := NewSyntaxMatcher(compiler.variables, compiler.codes)
+		sm := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
 		err = sm.Match(context.Background(), input)
 		c.Assert(err, qt.IsNil)
 
@@ -758,7 +758,7 @@ func TestExpandWithOrigin_PreservesPatternVars(t *testing.T) {
 		inputSc,
 	)
 
-	matcher := NewSyntaxMatcher(compiler.variables, compiler.codes)
+	matcher := NewSyntaxMatcher(compiler.variables, compiler.codes, nil)
 	err = matcher.Match(context.Background(), input)
 	c.Assert(err, qt.IsNil)
 
@@ -854,7 +854,7 @@ func TestLiteralScopesMatchWithChecker(t *testing.T) {
 			literalSyntax := map[string]*syntax.SyntaxSymbol{
 				"=>": patternSym,
 			}
-			matcher := NewSyntaxMatcherWithLiterals(nil, nil, nil, "...", literalSyntax)
+			matcher := NewSyntaxMatcher(nil, nil, &SyntaxMatcherOpts{EllipsisID: "...", LiteralSyntax: literalSyntax})
 			matcher.bindingChecker = tt.bindingChecker
 
 			result := matcher.literalScopesMatchWithChecker(inputSym, patternSym)
