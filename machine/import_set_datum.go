@@ -85,11 +85,11 @@ func ParseImportSetFromDatum(ctx context.Context, expr values.Value) (*ImportSet
 	if ok {
 		switch carSym.Key {
 		case "only":
-			return parseImportSetFilterFromDatum(ctx, "only", tuple, func(is *ImportSet, ids []string) {
+			return parseImportSetFilterFromDatum(ctx, "only", tuple, func(is *ImportSet, ids map[string]struct{}) {
 				is.Only = ids
 			})
 		case "except":
-			return parseImportSetFilterFromDatum(ctx, "except", tuple, func(is *ImportSet, ids []string) {
+			return parseImportSetFilterFromDatum(ctx, "except", tuple, func(is *ImportSet, ids map[string]struct{}) {
 				is.Except = ids
 			})
 		case "prefix":
@@ -118,7 +118,7 @@ func ParseImportSetFromDatum(ctx context.Context, expr values.Value) (*ImportSet
 // identifier list on the appropriate ImportSet field.
 func parseImportSetFilterFromDatum(
 	ctx context.Context, keyword string, tuple values.Tuple,
-	apply func(*ImportSet, []string),
+	apply func(*ImportSet, map[string]struct{}),
 ) (*ImportSet, error) {
 	cdr := tuple.Cdr()
 	if values.IsEmptyList(cdr) {
@@ -309,8 +309,8 @@ func parseImportSetForMetaFromDatum(ctx context.Context, tuple values.Tuple) (*I
 	return importSet, nil
 }
 
-// parseIdentifierListFromDatum parses a list of identifiers into a string slice.
-func parseIdentifierListFromDatum(ctx context.Context, expr values.Value) ([]string, error) {
+// parseIdentifierListFromDatum parses a list of identifiers into a name set.
+func parseIdentifierListFromDatum(ctx context.Context, expr values.Value) (map[string]struct{}, error) {
 	if values.IsEmptyList(expr) {
 		return nil, nil
 	}
@@ -320,13 +320,13 @@ func parseIdentifierListFromDatum(ctx context.Context, expr values.Value) ([]str
 		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "expected list of identifiers")
 	}
 
-	var ids []string
-	_, err := tuple.ForEach(ctx, func(_ context.Context, i int, hasNext bool, idExpr values.Value) error {
+	ids := make(map[string]struct{})
+	_, err := tuple.ForEach(ctx, func(_ context.Context, _ int, _ bool, idExpr values.Value) error {
 		idSym, ok := idExpr.(*values.Symbol)
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotASymbol, "expected identifier symbol")
 		}
-		ids = append(ids, idSym.Key)
+		ids[idSym.Key] = struct{}{}
 		return nil
 	})
 	if err != nil {

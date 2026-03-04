@@ -106,7 +106,7 @@ func TestParseImportSetFromDatum_Only(t *testing.T) {
 	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
-	qt.Assert(t, result.Only, qt.DeepEquals, []string{"car", "cdr"})
+	qt.Assert(t, result.Only, qt.DeepEquals, map[string]struct{}{"car": {}, "cdr": {}})
 }
 
 func TestParseImportSetFromDatum_Except(t *testing.T) {
@@ -128,7 +128,7 @@ func TestParseImportSetFromDatum_Except(t *testing.T) {
 	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
-	qt.Assert(t, result.Except, qt.DeepEquals, []string{"car", "cdr"})
+	qt.Assert(t, result.Except, qt.DeepEquals, map[string]struct{}{"car": {}, "cdr": {}})
 }
 
 func TestParseImportSetFromDatum_Prefix(t *testing.T) {
@@ -207,7 +207,7 @@ func TestParseImportSetFromDatum_Nested(t *testing.T) {
 	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
-	qt.Assert(t, result.Only, qt.DeepEquals, []string{"car", "cdr"})
+	qt.Assert(t, result.Only, qt.DeepEquals, map[string]struct{}{"car": {}, "cdr": {}})
 	qt.Assert(t, result.Prefix, qt.Equals, "scheme:")
 }
 
@@ -381,7 +381,7 @@ func TestParseIdentifierListFromDatum(t *testing.T) {
 
 	result, err := parseIdentifierListFromDatum(context.Background(), list)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result, qt.DeepEquals, []string{"car", "cdr", "cons"})
+	qt.Assert(t, result, qt.DeepEquals, map[string]struct{}{"car": {}, "cdr": {}, "cons": {}})
 }
 
 func TestParseIdentifierListFromDatum_Empty(t *testing.T) {
@@ -543,7 +543,7 @@ func TestParseImportSetFromDatum_ForSyntaxWithOnly(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
 	qt.Assert(t, result.PhaseShift, qt.Equals, 1)
-	qt.Assert(t, result.Only, qt.DeepEquals, []string{"car", "cdr"})
+	qt.Assert(t, result.Only, qt.DeepEquals, map[string]struct{}{"car": {}, "cdr": {}})
 }
 
 func TestParseImportSetFromDatum_ForSyntax_InvalidFormat(t *testing.T) {
