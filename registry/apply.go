@@ -104,6 +104,7 @@ func registerRuntimePrimitive(env *environment.EnvironmentFrame, spec PrimitiveS
 		spec.IsVariadic,
 		spec.Impl,
 	)
+	closure.SetName(spec.Name)
 
 	err := env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
 	if err != nil {
@@ -134,6 +135,7 @@ func registerExpandTimePrimitive(env *environment.EnvironmentFrame, spec Primiti
 		spec.IsVariadic,
 		spec.Impl,
 	)
+	closure.SetName(spec.Name)
 
 	err := expandEnv.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
 	if err != nil {

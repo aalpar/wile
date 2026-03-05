@@ -62,6 +62,7 @@ type ForeignClosure struct {
 	env        *environment.EnvironmentFrame
 	paramCount int
 	isVariadic bool
+	name       string
 }
 
 func (p *ForeignClosure) closureMarker() {
@@ -81,6 +82,14 @@ func (p *ForeignClosure) ParameterCount() int {
 
 func (p *ForeignClosure) IsVariadic() bool {
 	return p.isVariadic
+}
+
+func (p *ForeignClosure) Name() string {
+	return p.name
+}
+
+func (p *ForeignClosure) SetName(name string) {
+	p.name = name
 }
 
 func (p *ForeignClosure) IsVoid() bool {

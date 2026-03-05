@@ -33,6 +33,7 @@ var Builder = registry.NewRegistryBuilder(
 	addLists,
 	addArithmetic,
 	addControl,
+	addReflection,
 	addVectors,
 	addStrings,
 	addCharacters,
