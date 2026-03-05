@@ -517,6 +517,7 @@ See [`docs/SANDBOXING.md`](docs/SANDBOXING.md) for the full security model, exte
 
 | Document | Description |
 |----------|-------------|
+| [`docs/SCHEME_REFERENCE.md`](docs/SCHEME_REFERENCE.md) | Complete Scheme language reference |
 | [`docs/SANDBOXING.md`](docs/SANDBOXING.md) | Sandboxing and security model |
 | [`docs/EXTENSIONS.md`](docs/EXTENSIONS.md) | Extension system architecture and authoring guide |
 | [`docs/EXTENSION_LIBRARIES.md`](docs/EXTENSION_LIBRARIES.md) | R7RS library integration for extensions |
