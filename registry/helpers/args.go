@@ -148,3 +148,14 @@ func ParseOptionalArg(rest values.Value) (values.Value, bool) {
 	}
 	return tuple.Car(), true
 }
+
+// OptionalArg extracts an optional typed argument from variadic rest args.
+// If no argument is present, defaultVal is returned. If present but not of
+// type T, an error using sentinel and name is returned.
+func OptionalArg[T any](rest values.Value, defaultVal T, sentinel error, name string) (T, error) {
+	v, ok := ParseOptionalArg(rest)
+	if !ok {
+		return defaultVal, nil
+	}
+	return RequireType[T](v, sentinel, name)
+}

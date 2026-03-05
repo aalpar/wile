@@ -33,19 +33,15 @@ func PrimMakeBytevector(mc *machine.MachineContext) error {
 	if size.Value < 0 {
 		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "make-bytevector: size must be non-negative")
 	}
-	var fill uint8
-	v, ok := helpers.ParseOptionalArg(mc.Arg(1))
-	if ok {
-		fillInt, ok := v.(*values.Integer)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "make-bytevector: fill must be an integer but got %T", v)
-		}
-		err := values.ValidateByteValue(fillInt, "make-bytevector", "fill")
-		if err != nil {
-			return err
-		}
-		fill = uint8(fillInt.Value)
+	fillInt, err := helpers.OptionalArg[*values.Integer](mc.Arg(1), values.NewInteger(0), werr.ErrNotAnInteger, "make-bytevector")
+	if err != nil {
+		return err
 	}
+	err = values.ValidateByteValue(fillInt, "make-bytevector", "fill")
+	if err != nil {
+		return err
+	}
+	fill := uint8(fillInt.Value)
 	bv := make(values.ByteVector, size.Value)
 	for i := range bv {
 		bv[i] = &values.Byte{Value: fill}

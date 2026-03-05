@@ -53,22 +53,14 @@ func PrimMakeList(mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	restVal := mc.Arg(1)
-
 	count := int(k.Value)
 	if count < 0 {
 		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "make-list: k must be non-negative")
 	}
-
-	// Default fill value is unspecified; we use #f
 	fill := values.Value(values.FalseValue)
-
-	// Check for optional fill argument
-	if !values.IsEmptyList(restVal) {
-		rest, ok := restVal.(values.Tuple)
-		if ok {
-			fill = rest.Car()
-		}
+	v, ok := helpers.ParseOptionalArg(mc.Arg(1))
+	if ok {
+		fill = v
 	}
 
 	elems := make([]values.Value, count)

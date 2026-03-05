@@ -97,6 +97,45 @@ func TestRequireType_Failure_NilValue(t *testing.T) {
 	c.Assert(errors.Is(err, werr.ErrNotAVector), qt.IsTrue)
 }
 
+func TestOptionalArg(t *testing.T) {
+	c := qt.New(t)
+	defaultInt := values.NewInteger(0)
+
+	tcs := []struct {
+		name    string
+		rest    values.Value
+		wantVal int64
+		wantErr error
+	}{
+		{
+			name:    "no argument returns default",
+			rest:    values.EmptyList,
+			wantVal: 0,
+		},
+		{
+			name:    "present and correct type",
+			rest:    &values.Pair{values.NewInteger(42), values.EmptyList},
+			wantVal: 42,
+		},
+		{
+			name:    "wrong type returns sentinel error",
+			rest:    &values.Pair{values.NewString("bad"), values.EmptyList},
+			wantErr: werr.ErrNotAnInteger,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := OptionalArg[*values.Integer](tc.rest, defaultInt, werr.ErrNotAnInteger, "test")
+			if tc.wantErr != nil {
+				c.Assert(errors.Is(err, tc.wantErr), qt.IsTrue)
+				return
+			}
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.Value, qt.Equals, tc.wantVal)
+		})
+	}
+}
+
 func TestRequireType_Failure_SentinelPreserved(t *testing.T) {
 	c := qt.New(t)
 	sentinels := []error{
