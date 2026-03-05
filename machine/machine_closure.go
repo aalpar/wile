@@ -41,6 +41,11 @@ func (p *MachineClosure) Template() *NativeTemplate {
 	return p.template
 }
 
+// Env returns the closure's captured environment.
+func (p *MachineClosure) Env() *environment.EnvironmentFrame {
+	return p.env
+}
+
 func (p *MachineClosure) Copy() *MachineClosure {
 	q := &MachineClosure{
 		env:      p.env.Copy(),
