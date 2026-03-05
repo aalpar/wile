@@ -28,6 +28,7 @@ result, _ := engine.Eval(ctx, "(* width height)")  // => 480000
 - [Architecture](#architecture)
 - [Hygiene Model](#hygiene-model)
 - [Types](#types)
+- [Sandboxing](#sandboxing)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
 
@@ -151,7 +152,7 @@ result, err := engine.Call(ctx, proc, wile.NewInteger(42))
 | `wile.True` / `wile.False` | Boolean constants |
 | `wile.NewVector(vals...)` | Vector |
 | `wile.NewList(vals...)` | Proper list |
-| `wile.Null` | Empty list `'()` |
+| `wile.EmptyList` | Empty list `'()` |
 | `wile.Void` | Void value |
 
 Additional constructors (e.g., `NewRationalFromBigInt`, `NewComplexFromParts`) are available in the [`values`](https://pkg.go.dev/github.com/aalpar/wile/values) package.
@@ -160,9 +161,14 @@ Additional constructors (e.g., `NewRationalFromBigInt`, `NewComplexFromParts`) a
 
 | Option | Description |
 |---|---|
-| `wile.WithRegistry(r)` | Use a custom registry instead of the default core primitives |
 | `wile.WithExtension(ext)` | Add a single extension |
 | `wile.WithExtensions(exts...)` | Add multiple extensions |
+| `wile.WithSafeExtensions()` | Add safe extension set (no filesystem, eval, system, threads) |
+| `wile.WithoutCore()` | Skip core primitives — bare engine with only explicit extensions |
+| `wile.WithLibraryPaths(paths...)` | Enable R7RS library system with search paths |
+| `wile.WithMaxCallDepth(n)` | Set maximum VM recursion depth |
+| `wile.WithAuthorizer(auth)` | Set fine-grained runtime authorization policy |
+| `wile.WithRegistry(r)` | Use a custom registry instead of the default core primitives |
 
 ## Quick Start
 
@@ -184,8 +190,8 @@ ls examples/
 ```
 
 **Explore**:
-- [**72 Examples**](examples/) — Basics, macros, concurrency, numeric tower, and more
-- [**Gabriel Benchmarks**](examples/benchmarks/) — 21 Scheme benchmarks for performance testing
+- [**75 Examples**](examples/) — Basics, macros, concurrency, numeric tower, and more
+- [**Gabriel Benchmarks**](examples/benchmarks/) — Scheme benchmarks for performance testing
 - [**Schelog**](examples/logic/schelog/) — Full Prolog-style logic programming embedded in Scheme
 - [**Embedding Guide**](examples/embedding/) — How to use Wile from Go
 
@@ -341,8 +347,27 @@ The REPL includes an integrated debugger. Commands start with `,`:
 
 | Library | Description |
 |---|---|
-| `(srfi 18)` | Multithreading (threads, mutexes, condition variables) |
+| `(srfi 1)` | List library (constructors, predicates, fold, search, set operations) |
 | `(chibi test)` | Minimal test framework (for R7RS test compatibility) |
+| `(chibi diff)` | Diff utilities |
+| `(chibi optional)` | Optional value handling |
+| `(chibi term ansi)` | ANSI terminal escape codes |
+
+### Extension Libraries
+
+When the library system is enabled (`WithLibraryPaths`), Go extensions are importable as `(wile <name>)`:
+
+| Library | Description |
+|---|---|
+| `(wile math)` | Transcendental functions, numeric utilities |
+| `(wile files)` | File I/O |
+| `(wile threads)` | SRFI-18 multithreading (threads, mutexes, condition variables) |
+| `(wile system)` | System interaction (environment, process) |
+| `(wile exceptions)` | Exception handling |
+| `(wile gointerop)` | Go interop primitives |
+| `(wile introspection)` | Reflection and introspection |
+
+See [`docs/EXTENSION_LIBRARIES.md`](docs/EXTENSION_LIBRARIES.md) for import syntax and modifiers.
 
 ## Architecture
 
@@ -363,10 +388,13 @@ Source → Tokenizer → Parser → Expander → Compiler → VM
 | [`wile`](https://pkg.go.dev/github.com/aalpar/wile) (root) | Public embedding API |
 | [`machine/`](https://pkg.go.dev/github.com/aalpar/wile/machine) | Virtual machine, compiler, macro expander |
 | [`values/`](https://pkg.go.dev/github.com/aalpar/wile/values) | Scheme value types (numbers, pairs, ports, threads, etc.) |
+| [`werr/`](https://pkg.go.dev/github.com/aalpar/wile/werr) | Error infrastructure (sentinel errors, contextual wrapping) |
 | [`environment/`](https://pkg.go.dev/github.com/aalpar/wile/environment) | Variable binding, scope chains, phase hierarchy |
 | [`registry/`](https://pkg.go.dev/github.com/aalpar/wile/registry) | Extension registration and primitives |
 | [`registry/core/`](https://pkg.go.dev/github.com/aalpar/wile/registry/core) | Essential primitives and bootstrap macros |
+| [`security/`](https://pkg.go.dev/github.com/aalpar/wile/security) | Fine-grained runtime authorization |
 | [`registry/helpers/`](https://pkg.go.dev/github.com/aalpar/wile/registry/helpers) | Shared utilities for primitive implementations |
+| [`extensions/`](https://pkg.go.dev/github.com/aalpar/wile/extensions) | Public extension packages (files, math, threads, system, etc.) |
 | [`runtime/`](https://pkg.go.dev/github.com/aalpar/wile/runtime) | Compile/Run API for embedding |
 | [`internal/syntax/`](internal/syntax/) | First-class syntax objects with scope sets |
 | [`internal/match/`](internal/match/) | Pattern matching engine for macros |
@@ -377,7 +405,7 @@ Source → Tokenizer → Parser → Expander → Compiler → VM
 | [`internal/schemeutil/`](internal/schemeutil/) | Scheme utility functions |
 | [`internal/repl/`](internal/repl/) | Interactive REPL with debugger |
 | [`internal/bootstrap/`](internal/bootstrap/) | Environment initialization |
-| [`internal/extensions/`](internal/extensions/) | Extension packages (io, files, math, threads, etc.) |
+| [`internal/extensions/`](internal/extensions/) | Internal extension wiring (io, eval, aggregate registration) |
 
 ### API Stability
 
@@ -385,7 +413,10 @@ The following packages form the public API and follow [Go module versioning](htt
 
 - **[`wile`](https://pkg.go.dev/github.com/aalpar/wile)** (root) — `Engine`, `RegisterFunc`, `Eval`/`Compile`/`Run`, error types
 - **[`values`](https://pkg.go.dev/github.com/aalpar/wile/values)** — Scheme value types, `Value` interface, numeric tower
+- **[`werr`](https://pkg.go.dev/github.com/aalpar/wile/werr)** — Sentinel errors, `WrapForeignErrorf`, error infrastructure
 - **[`registry`](https://pkg.go.dev/github.com/aalpar/wile/registry)** — `Registry`, `Extension`, `PrimitiveSpec`, phase constants
+- **[`security`](https://pkg.go.dev/github.com/aalpar/wile/security)** — `Authorizer`, `AccessRequest`, built-in authorizers
+- **[`extensions/*`](https://pkg.go.dev/github.com/aalpar/wile/extensions)** — Public extensions (files, math, threads, system, etc.)
 
 All other packages ([`machine/`](https://pkg.go.dev/github.com/aalpar/wile/machine), [`environment/`](https://pkg.go.dev/github.com/aalpar/wile/environment), [`internal/`](internal/)) are implementation details and may change without notice. The `machine` package is technically importable but is not covered by compatibility guarantees.
 
@@ -437,10 +468,55 @@ This prevents unintended variable capture in macros:
 | RWMutex | Go sync.RWMutex wrapper |
 | Atomic | Thread-safe mutable value |
 
+## Sandboxing
+
+Wile provides two-layer sandboxing for embedded engines. The layers are independent and composable.
+
+### Layer 1: Extension-based (compile-time)
+
+Primitives not loaded into the engine don't exist. Attempts to use them produce compile-time errors — there are no runtime checks to bypass.
+
+```go
+// Safe sandbox: no filesystem, eval, system, or threading
+engine, err := wile.NewEngine(ctx, wile.WithSafeExtensions())
+
+// Safe + specific privileged extensions
+engine, err := wile.NewEngine(ctx,
+    append(wile.SafeExtensions(),
+        wile.WithExtension(files.Extension),
+    )...,
+)
+```
+
+Library environments inherit the engine's registry, so restrictions propagate transitively to loaded libraries.
+
+### Layer 2: Fine-grained authorization (runtime)
+
+The `security.Authorizer` interface gates privileged operations with K8s-style resource+action vocabulary:
+
+```go
+engine, err := wile.NewEngine(ctx,
+    wile.WithSafeExtensions(),
+    wile.WithExtension(files.Extension),
+    wile.WithAuthorizer(security.All(
+        security.ReadOnly(),
+        security.FilesystemRoot("/app/data"),
+    )),
+)
+// Can read files under /app/data, nothing else
+```
+
+Built-in authorizers: `DenyAll()`, `ReadOnly()`, `FilesystemRoot(path)`, `All(authorizers...)` (AND-composition).
+
+See [`docs/SANDBOXING.md`](docs/SANDBOXING.md) for the full security model, extension classification, known gaps, and custom authorizer examples.
+
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
+| [`docs/SANDBOXING.md`](docs/SANDBOXING.md) | Sandboxing and security model |
+| [`docs/EXTENSIONS.md`](docs/EXTENSIONS.md) | Extension system architecture and authoring guide |
+| [`docs/EXTENSION_LIBRARIES.md`](docs/EXTENSION_LIBRARIES.md) | R7RS library integration for extensions |
 | [`PRIMITIVES.md`](PRIMITIVES.md) | Complete reference of types and primitives |
 | [`docs/design/DESIGN.md`](docs/design/DESIGN.md) | Macro system design |
 | [`docs/design/EMBEDDING.md`](docs/design/EMBEDDING.md) | Embedding API design |

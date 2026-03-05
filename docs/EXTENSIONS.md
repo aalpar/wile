@@ -476,6 +476,7 @@ Not importable by external code:
 | `WithLibraryPaths(paths...)` | Enable R7RS library system with optional search paths |
 | `WithRegistry(reg)` | Use a custom registry (skips core primitives) |
 | `WithMaxCallDepth(n)` | Set maximum VM recursion depth |
+| `WithAuthorizer(auth)` | Set fine-grained runtime authorization policy (see [`SANDBOXING.md`](SANDBOXING.md)) |
 
 `SafeExtensions()` is also available as a function returning `[]EngineOption`, useful when composing with other options via `append`.
 
