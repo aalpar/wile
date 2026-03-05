@@ -161,6 +161,9 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `let*-values` | Bind multiple values sequentially |
 | `define-values` | Define multiple values |
 | `do` | Iteration construct |
+| `map` | Apply procedure to each element of list(s) |
+| `for-each` | Apply procedure to each element for side effects |
+| `with-continuation-barrier` | Execute body with continuation re-entry barrier |
 
 ## Arithmetic
 
@@ -196,7 +199,6 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `vector?` | Test for vector |
 | `bytevector?` | Test for bytevector |
 | `char?` | Test for character |
-| `port?` | Test for port |
 | `list?` | Test for proper list |
 
 ## Numeric Type Predicates
@@ -347,6 +349,8 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `numerator` | Numerator of rational |
 | `denominator` | Denominator of rational |
 | `rationalize` | Find rational approximation |
+| `exact->inexact` | Convert to inexact (R5RS alias for `inexact`) |
+| `inexact->exact` | Convert to exact (R5RS alias for `exact`) |
 
 ## Transcendental Functions
 
@@ -541,8 +545,6 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `open-binary-output-file` | Open binary file for writing |
 | `call-with-input-file` | Call procedure with input file port |
 | `call-with-output-file` | Call procedure with output file port |
-| `with-input-from-file` | Execute with file as current input |
-| `with-output-to-file` | Execute with file as current output |
 | `file-exists?` | Test if file exists |
 | `delete-file` | Delete a file |
 
@@ -562,8 +564,6 @@ Complete list of supported types, primitives, and special forms in Wile.
 | Primitive | Description |
 |-----------|-------------|
 | `apply` | Apply procedure to argument list |
-| `map` | Apply procedure to each element |
-| `for-each` | Apply procedure for side effects |
 
 ## Continuations
 
@@ -588,7 +588,7 @@ Complete list of supported types, primitives, and special forms in Wile.
 | Primitive | Description |
 |-----------|-------------|
 | `call-with-exit` | Call procedure with one-shot escape continuation |
-| `with-continuation-barrier` | Prevent continuation re-entry across barrier |
+| `call-with-continuation-barrier` | Call thunk with continuation re-entry barrier |
 
 ## Multiple Values
 
@@ -655,10 +655,19 @@ Complete list of supported types, primitives, and special forms in Wile.
 | Primitive | Description |
 |-----------|-------------|
 | `eval` | Evaluate expression in environment |
-| `interaction-environment` | Get interactive environment |
 | `scheme-report-environment` | Get R5RS environment |
 | `null-environment` | Get minimal environment |
 | `environment` | Create environment from library specs |
+
+## Introspection
+
+| Primitive | Description |
+|-----------|-------------|
+| `interaction-environment` | Get interactive environment |
+| `environment?` | Test for environment object |
+| `environment-bound-names` | List all bound names in an environment |
+| `environment-ref` | Look up a binding by symbol in an environment |
+| `environment-bound?` | Test if a symbol is bound in an environment |
 
 ## Loading
 
