@@ -143,7 +143,7 @@ func PrimProcedureSourceLocation(mc *machine.MachineContext) error {
 	return nil
 }
 
-// closureBoundSymbols extracts the symbol names from a MachineClosure's
+// closureBoundSymbols extracts the bound symbols from a MachineClosure's
 // captured local environment.
 func closureBoundSymbols(cls *machine.MachineClosure) values.Value {
 	env := cls.Env()
