@@ -479,8 +479,11 @@ Primitives not loaded into the engine don't exist. Attempts to use them produce 
 ```go
 // Safe sandbox: no filesystem, eval, system, or threading
 engine, err := wile.NewEngine(ctx, wile.WithSafeExtensions())
+```
 
-// Safe + specific privileged extensions
+Compose with specific privileged extensions:
+
+```go
 engine, err := wile.NewEngine(ctx,
     append(wile.SafeExtensions(),
         wile.WithExtension(files.Extension),
