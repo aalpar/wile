@@ -21,7 +21,8 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 ## Bugs & Correctness
 
 - L7 (`char-ready?`/`u8-ready?` always `#t`) — documented semantic difference, no fix planned
-- [x] **`WrapForeignFileError` double-prints error message** [High, S]: Fixed in #408.
+- [x] **`guard` body drops multiple values** [Medium, S]: Fixed in #395 — body now uses `call-with-values` + `list` capture.
+- [x] **Tuple ForEach nil returns Void instead of EmptyList** [Medium, S]: Fixed in #394 — nil guards and loop exits now return `EmptyList`/`SyntaxEmptyList`.
 
 ---
 
@@ -29,30 +30,8 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 Ordered by dependency — items that unblock others or carry divergence risk come first. MachineContext decomposition is last (depends on other refactorings settling).
 
-### Type Design Cleanup
-
-Findings from codebase-wide structural review (2026-03-04).
-
-- [x] **`ForeignError.stack` is dead state** [Medium, S]: Fixed in #409 — removed unused 50-frame `[]uintptr` field.
-- [x] **Unexport `Promise.Thunk`/`.Result`** [Medium, S]: Fixed in #412 — fields unexported, accessor methods added.
-- [x] **Delete dead `Indexable` interface** [Low, S]: Fixed in #413 — interface and compile-time checks removed.
-- [x] **`LocalEnvironmentFrame.Keys()` returns live internal map** [Medium, S]: Fixed in #414 — returns defensive copy via `maps.Copy`, matching `GlobalEnvironmentFrame.Keys()`.
-- [x] **`NewEnvironmentFrame` produces incomplete objects** [Low, S]: Fixed in #422 — unexported constructor; all public paths now produce complete objects.
-- [x] **`SelectCase` booleans should be enum** [Low, S]: Fixed — replaced `IsSend`+`IsDefault` bools with `SelectCaseKind` enum (`SelectReceive`, `SelectSend`, `SelectDefault`).
-
-### High Priority
-
-- [x] **Duplicated import set parsing** [High, M]: Resolved in #397.
-- [x] **Split `compile_time_continuation_library.go`** [High, M]: Resolved in #400.
-- [x] **Deduplicate import-set processing loop** [Medium, S]: Extracted `resolveImportSet` (shared parse→load→apply prefix) and `copyLibraryBindingsDirect` (library-internal installation). `processLibraryImport` now calls both instead of inlining ~80 lines.
-
 ### Medium Priority
 
-- [x] **Split `library.go` into registry + bindings** [Medium, S]: Resolved in #417 — split into `library_registry.go` and `library_bindings.go`.
-- [x] **Unify escape mechanisms** [Medium, M]: Resolved in #418 — unified under `ErrPromptAbort`.
-- [x] **Port type Value method boilerplate** [Medium, S]: `SchemeString` consolidated into `portBase` via `kind`/`datum` fields set in each constructor. `IsVoid` stays per-type (nil-receiver on value-embedded struct panics before reaching promoted method). `EqualTo` stays per-type (requires concrete type assertion).
-- [x] **`forms` type erasure documentation** [Medium, S]: Added doc comment on `FormSpec` explaining type erasure design and pointing to registration-site wrappers that restore type safety.
-- [x] **Constructor telescoping in `match`** [Medium, S]: Resolved in #420 — collapsed into opts pattern.
 - [ ] **I/O port extraction helper** [Medium, S]: 4 functions in `internal/extensions/io/prim_read_write.go` (`getOptionalOutputPort`, `getOptionalInputPort`, `getRequiredBinaryInputPort`, `getRequiredBinaryOutputPort`) follow the same 5-step pattern, varying only in port type and error sentinel. Extract generic `extractPort[T]` parameterized on interface and sentinel.
 - [ ] **Optional fill argument extraction**: 3 `make-*` primitives (`PrimMakeVector`, `PrimMakeBytevector`, `PrimMakeString`) independently extract optional fill arguments with slightly different patterns. Share a helper.
 
