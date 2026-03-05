@@ -106,21 +106,25 @@ func resolveVersion() (version, sha string) {
 func initLibraryRegistry(_ context.Context) *machine.LibraryRegistry {
 	registry := machine.NewLibraryRegistry()
 
-	// Add environment variable paths (after defaults)
+	// Add environment variable paths (after defaults).
+	// Reverse-iterate so left-to-right order is preserved after prepending.
 	envPath := os.Getenv(SchemeLibraryPathEnv)
 	if envPath != "" {
-		for _, p := range strings.Split(envPath, string(os.PathListSeparator)) {
-			if p != "" {
-				registry.AddSearchPath(p)
+		parts := strings.Split(envPath, string(os.PathListSeparator))
+		for i := len(parts) - 1; i >= 0; i-- {
+			if parts[i] != "" {
+				registry.PrependSearchPath(parts[i])
 			}
 		}
 	}
 
-	// Add command line paths (highest priority, added last so they're first)
+	// Add command line paths (highest priority, added last so they're first).
+	// Reverse-iterate so left-to-right order is preserved after prepending.
 	if opts.LibraryPath != "" {
-		for _, p := range strings.Split(opts.LibraryPath, string(os.PathListSeparator)) {
-			if p != "" {
-				registry.AddSearchPath(p)
+		parts := strings.Split(opts.LibraryPath, string(os.PathListSeparator))
+		for i := len(parts) - 1; i >= 0; i-- {
+			if parts[i] != "" {
+				registry.PrependSearchPath(parts[i])
 			}
 		}
 	}

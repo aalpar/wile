@@ -137,9 +137,9 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		libReg := machine.NewLibraryRegistry()
 
 		// Prepend user paths in reverse order so first path has highest priority.
-		// AddSearchPath prepends, so reverse-iterating produces the correct order.
+		// PrependSearchPath prepends, so reverse-iterating produces the correct order.
 		for i := len(cfg.libraryPaths) - 1; i >= 0; i-- {
-			libReg.AddSearchPath(cfg.libraryPaths[i])
+			libReg.PrependSearchPath(cfg.libraryPaths[i])
 		}
 
 		if cfg.importObserver != nil {
