@@ -43,6 +43,7 @@ func findFile(p *CompileTimeContinuation, ctctx CompileTimeCallContext, path str
 	stack := p.env.LoadPathStack()
 
 	// Build fallback directories from all configured sources.
+	// Priority: library registry > SCHEME_INCLUDE_PATH > CWD.
 	var fallbackDirs []string
 
 	// Library registry search paths (shared with import).

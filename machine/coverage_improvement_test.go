@@ -381,6 +381,9 @@ func TestCompileInclude_LibraryRegistryPaths(t *testing.T) {
 	err = RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
+	// Clear SCHEME_INCLUDE_PATH so only the library registry path resolves the file.
+	t.Setenv("SCHEME_INCLUDE_PATH", "")
+
 	// Attach a library registry with tmpDir in its search paths.
 	reg := NewLibraryRegistry()
 	reg.PrependSearchPath(tmpDir)
