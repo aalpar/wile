@@ -318,9 +318,9 @@ func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
 }
 
 // Call invokes a Scheme procedure with arguments.
-// Supports all callable types: lambdas, case-lambdas, and parameters.
-// Composable continuations cannot be called from Go (they require the VM
-// winding stack) and return an error.
+// Supports lambdas, foreign closures, case-lambdas, and parameters.
+// Composable continuations cannot be called from Go
+// (they require the VM winding stack) and return an error.
 func (p *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, error) {
 	unwrappedArgs := make([]values.Value, len(args))
 	for i, arg := range args {
@@ -648,8 +648,7 @@ func (p *Engine) CurrentLoadDirectory() string {
 }
 
 // PushLoadPath pushes an absolute path onto the load path stack.
-// Returns an error if absPath is not absolute. When the library system
-// is not enabled (no WithLibraryPaths option), this is a silent no-op.
+// Returns an error if absPath is not absolute.
 //
 // Advanced embedders who need fine-grained control can use Push/Pop directly,
 // but most should use WithLoadPath for automatic cleanup.

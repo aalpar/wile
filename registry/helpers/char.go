@@ -62,8 +62,8 @@ func variadicCompare[T any, V values.Value](
 	return nil
 }
 
-// CharCompare is a helper for character comparison primitives.
-// It extracts two characters from local bindings and applies the comparator.
+// CharCompare is a helper for binary character comparison primitives.
+// It extracts two characters from the primitive's arguments and applies the comparator.
 func CharCompare(mc *machine.MachineContext, name string, cmp func(a, b rune) bool) error {
 	c1 := mc.Arg(0)
 	c2 := mc.Arg(1)

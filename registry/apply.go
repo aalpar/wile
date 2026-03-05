@@ -23,7 +23,8 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-// Apply registers all primitives and runs init functions on an environment.
+// Apply materializes registry contents into an environment: compile-time bindings,
+// runtime/expand-time primitives, global values, and init functions (in that order).
 func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()

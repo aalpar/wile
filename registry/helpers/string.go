@@ -20,8 +20,8 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-// StringCompare is a helper for string comparison primitives.
-// It extracts two strings from local bindings and applies the comparator.
+// StringCompare is a helper for binary string comparison primitives.
+// It extracts two strings from the primitive's arguments and applies the comparator.
 func StringCompare(mc *machine.MachineContext, name string, cmp func(a, b string) bool) error {
 	s1 := mc.Arg(0)
 	s2 := mc.Arg(1)

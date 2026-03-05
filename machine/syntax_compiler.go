@@ -20,8 +20,8 @@ import (
 )
 
 // SyntaxCompilerFunc is the type for compile-time special form handlers.
-// These functions handle syntax-directed compilation of special forms like
-// `define`, `lambda`, `if`, `quote`, etc.
+// These functions handle syntax-directed compilation of extension forms like
+// `syntax-case`, `import`, `define-syntax`, `include`, etc.
 //
 // Parameters:
 //   - ctc: The compile-time continuation (compiler state)

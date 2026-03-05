@@ -23,8 +23,8 @@ import (
 )
 
 // ToComplex128 converts a Scheme number to a Go complex128.
-// This supports all numeric types per R7RS: Integer, BigInteger, Float,
-// BigFloat, Rational, and Complex.
+// This supports all numeric types: Integer, BigInteger, Float,
+// BigFloat, Rational, Complex, and BigComplex.
 func ToComplex128(v values.Value) (complex128, error) {
 	switch n := v.(type) {
 	case *values.Integer:

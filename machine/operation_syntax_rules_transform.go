@@ -18,7 +18,7 @@ package machine
 //
 // This VM operation executes when a macro is invoked during expansion. It:
 //   1. Retrieves compiled clauses from the value register
-//   2. Pops the input form from the eval stack
+//   2. Reads the input form from local parameter 0 (the transformer's argument)
 //   3. Tries each pattern against the input (first match wins, per R7RS)
 //   4. Expands the matching template with captured bindings
 //   5. Adds an "intro scope" to the expansion for hygiene
@@ -87,7 +87,7 @@ func (p *envBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) *envi
 // OperationSyntaxRulesTransform is a VM operation that performs macro expansion.
 //
 // Execution context:
-//   - wrt register: contains clausesWrapper with compiled pattern/template pairs
+//   - Value register: contains clausesWrapper with compiled pattern/template pairs
 //   - Local parameter 0: contains the input form (the macro invocation)
 //
 // The operation is part of the transformer closure created by CompileSyntaxRules.

@@ -140,8 +140,7 @@ func PrimCallCC(mc *machine.MachineContext) error {
 		if err != nil {
 			return err
 		}
-		// No PC compensation needed: applyForeign does not post-increment pc
-		// (applyForeign does not post-increment pc).
+		// No PC compensation needed: applyForeign does not post-increment pc.
 		return nil
 	}
 
@@ -307,10 +306,10 @@ func PrimDynamicWind(mc *machine.MachineContext) error {
 	thunkErr := sub2.Run()
 	thunkResult := sub2.GetValues()
 
-	// 4. Pop frame from winding stack (exiting this dynamic extent)
+	// 5. Pop frame from winding stack (exiting this dynamic extent)
 	mc.PopWindingFrame()
 
-	// 5. Call after thunk (back to original dynamic extent)
+	// 6. Call after thunk (back to original dynamic extent)
 	sub3 := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub3)
 	sub3.SetWindingStack(mc.WindingStack())
@@ -323,7 +322,7 @@ func PrimDynamicWind(mc *machine.MachineContext) error {
 		return err
 	}
 
-	// 6. Handle thunk's result/error
+	// 7. Handle thunk's result/error
 	if thunkErr != nil {
 		return thunkErr
 	}

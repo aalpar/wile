@@ -19,8 +19,8 @@ import (
 )
 
 // compileTimeBindings are names that exist only at compile time.
-// These are handled specially by the compiler and should NOT have
-// their arguments expanded by the macro expander.
+// The expander recognizes these as primitive forms and dispatches to
+// registered primitive expanders rather than treating them as applications.
 var compileTimeBindings = []string{
 	"if",
 	"lambda",

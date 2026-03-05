@@ -81,7 +81,7 @@ func PrimMakeList(mc *machine.MachineContext) error {
 //  3. For each preceding list, collect its elements into a vector, then prepend
 //     them to the result in reverse order to preserve original ordering
 //
-// Why use a vector for intermediate storage (lines 1276-1290)?
+// Why use a vector for intermediate storage?
 // Lists are singly-linked and can only be efficiently traversed forward.
 // To prepend list elements while preserving order, we need to process them
 // in reverse. We collect elements into a vector (O(1) append), then iterate
