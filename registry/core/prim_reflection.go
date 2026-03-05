@@ -24,8 +24,8 @@ import (
 // Fixed arity -> integer, variadic -> (min . #f).
 func closureArity(paramCount int, isVariadic bool) values.Value {
 	if isVariadic {
-		min := values.NewInteger(int64(paramCount - 1))
-		return values.NewCons(min, values.FalseValue)
+		required := values.NewInteger(int64(paramCount - 1))
+		return values.NewCons(required, values.FalseValue)
 	}
 	return values.NewInteger(int64(paramCount))
 }
@@ -87,14 +87,15 @@ func PrimProcedureName(mc *machine.MachineContext) error {
 		}
 	case *machine.CaseLambdaClosure:
 		clauses := v.Clauses()
+		name := ""
 		if len(clauses) > 0 {
-			name := clauses[0].Template().Name()
-			if name != "" {
-				mc.SetValue(values.NewString(name))
-				return nil
-			}
+			name = clauses[0].Template().Name()
 		}
-		mc.SetValue(values.FalseValue)
+		if name == "" {
+			mc.SetValue(values.FalseValue)
+		} else {
+			mc.SetValue(values.NewString(name))
+		}
 	default:
 		mc.SetValue(values.FalseValue)
 	}
@@ -157,10 +158,12 @@ func closureBoundSymbols(cls *machine.MachineClosure) values.Value {
 	if len(keys) == 0 {
 		return values.EmptyList
 	}
+	// Symbols returned here are un-interned copies (addressable stack
+	// locals), so they will not be eq? to interned symbols. Callers
+	// should compare via symbol->string.
 	syms := make([]values.Value, 0, len(keys))
 	for sym := range keys {
-		s := sym
-		syms = append(syms, &s)
+		syms = append(syms, &sym)
 	}
 	return values.List(syms...)
 }
