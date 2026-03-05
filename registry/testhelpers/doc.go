@@ -14,7 +14,7 @@
 
 // Package testhelpers provides shared test infrastructure for Scheme primitive tests.
 //
-// Each helper creates a fresh [wile.Engine] internally, ensuring test isolation:
+// Each helper creates a fresh [environment.EnvironmentFrame] via bootstrap, ensuring test isolation:
 //
 //	result, err := testhelpers.RunSchemeCode(t, "(+ 1 2)")
 //	c.Assert(err, qt.IsNil)

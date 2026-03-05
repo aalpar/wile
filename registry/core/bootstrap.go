@@ -23,7 +23,7 @@ import (
 // bootstrapMacroSource contains essential derived expression forms.
 // These macros are required for standard Scheme to work.
 //
-// Source: go/registry/core/bootstrap.scm (embedded at compile-time)
+// Source: registry/core/bootstrap.scm (embedded at compile-time)
 //
 //go:embed bootstrap.scm
 var bootstrapMacroSource string

@@ -28,8 +28,8 @@ import (
 // OperationSyntaxCaseMatch performs pattern matching for syntax-case.
 //
 // Expects:
-//   - wrt register: syntaxCaseClause with compiled pattern
-//   - Top of eval stack: input syntax object
+//   - Value register: syntaxCaseClause with compiled pattern
+//   - Per-context syntaxCaseState.input: input syntax object (set by OperationStoreSyntaxCaseInput)
 //
 // Results:
 //   - If match succeeds: value register = #t, pattern bindings stored in context
@@ -266,7 +266,7 @@ func (p *OperationStoreSyntaxCaseInput) EqualTo(other values.Value) bool {
 	return sameType(p, v, ok)
 }
 
-// OperationClearSyntaxCaseInput clears the global syntax-case input.
+// OperationClearSyntaxCaseInput clears the per-context syntax-case state.
 // This is called at the end of a syntax-case form.
 type OperationClearSyntaxCaseInput struct {
 	OperationBase

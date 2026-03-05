@@ -26,7 +26,7 @@
 // # Virtual Machine
 //
 // The VM is a stack-based interpreter with:
-//   - [MachineContext]: execution state (value stack, environment, PC)
+//   - [MachineContext]: execution state (value register, eval stack, environment, PC)
 //   - [MachineContext.Run]: main interpreter loop
 //   - [NativeTemplate]: compiled bytecode container
 //   - [MachineClosure]: first-class procedure representation
