@@ -20,6 +20,9 @@ When investigating R7RS conformance issues:
 | `MACRO_SYSTEM.md` | ER macro transformer, hygiene debugging, macro expansion tracing | Proposed |
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |
 | `ARCHITECTURE.md` | Dialect system, module decomposition, plugin shadowing | Open items remain |
+| `FIX-GUARD-MULTIPLE-VALUES.md` | `guard` body drops multiple values — `call-with-values` fix | Draft |
+| `FIX-TUPLE-FOREACH-NIL.md` | Tuple ForEach nil returns Void instead of EmptyList | Draft |
+| `UNIFY-ESCAPE-MECHANISMS.md` | Unified `call-with-exit` and prompt/abort escape paths | Completed (#418) |
 
 ## Before Starting Work
 
