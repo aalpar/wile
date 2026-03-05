@@ -156,18 +156,19 @@ Engine behavior can be customized via functional options:
 | `WithSafeExtensions()` | Add the safe extension set (see Sandboxing below) |
 | `WithoutCore()` | Skip core primitives — bare engine with only explicit extensions |
 | `WithRegistry(r)` | Use a custom registry (skips automatic core registration) |
+| `WithAuthorizer(auth)` | Set fine-grained runtime authorization policy |
 
 Extensions implement `registry.Extension` and register primitives, macros, and compile-time definitions via `AddToRegistry`.
 
 ### Sandboxing
 
-Extensions are the primary sandboxing mechanism. Primitives not in the registry don't exist — there's no runtime check to bypass.
+Wile provides two independent sandboxing layers.
 
-`WithSafeExtensions()` adds only extensions with no ambient authority: io (in-memory ports, no filesystem), exceptions, math, and the safe subset of all (records, promises, strings, characters). Privileged extensions (files, eval, system) and context-dependent extensions (gointerop, threads) are excluded.
+**Layer 1: Extension-based (compile-time).** Primitives not in the registry don't exist — there's no runtime check to bypass. `WithSafeExtensions()` adds only extensions with no ambient authority: io (in-memory ports, no filesystem), exceptions, math, introspection, and the safe subset of all (records, promises, strings, characters). Privileged extensions (files, eval, system) and context-dependent extensions (gointerop, threads) are excluded. `WithoutCore()` goes further — it produces an engine with zero primitives. Library environments inherit the engine's registry, so restrictions propagate transitively to loaded libraries.
 
-`WithoutCore()` goes further — it produces an engine with zero primitives. Only extensions added via `WithExtension` are available. This is useful for building minimal purpose-specific engines.
+**Layer 2: Fine-grained authorization (runtime).** The `security.Authorizer` interface gates privileged operations at runtime using a K8s-style resource+action vocabulary (`file`, `code`, `env`, `process` x `read`, `write`, `delete`, `stat`, `load`, `exit`). Set via `WithAuthorizer(auth)`. Gate sites include file I/O, system calls, `eval`/`load`, `include`, and library loading. Without an authorizer, all operations are allowed (open by default). Built-in authorizers: `DenyAll()`, `ReadOnly()`, `FilesystemRoot(path)`, `All(authorizers...)`.
 
-Library environments inherit the engine's registry, so restrictions propagate transitively to loaded libraries. See `plans/SECURITY.md` for the full security model.
+The two layers complement each other: layer 1 removes entire categories of capability at zero runtime cost; layer 2 fine-tunes what remains. See [`docs/SANDBOXING.md`](../SANDBOXING.md) for the full security model.
 
 ## Design Decisions
 

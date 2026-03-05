@@ -107,16 +107,16 @@ This means:
 | Stack depth | Partially covered | `WithMaxCallDepth(n)` limits continuation stack depth. |
 | Goroutine exhaustion | Not covered (if threads extension loaded) | Don't load threads extension for untrusted code. |
 | Information flow | Not covered | A privileged library can pass capabilities (e.g., an open file handle) to unprivileged code via exported values. Preventing this requires an object-capability model. |
-| `include` / `include-ci` | Not fully covered | These are compile-time forms that read files. They are NOT gated by the files extension — they're part of the compiler. A future authorization framework (see `plans/SECURITY.md`) will gate these. |
+| `include` / `include-ci` | Covered by authorizer | These are compile-time forms that read files. They are NOT gated by the files extension — they're part of the compiler. However, they are gated by `security.Check` (resource `code`, action `load`), so an authorizer can restrict them. Without an authorizer, they are unrestricted. |
 
-### The `include` gap
+### The `include` note
 
-`(include "file.scm")` is a compile-time special form, not a runtime primitive. It reads a file from disk during compilation, regardless of whether the files extension is loaded. This is a known gap: sandboxed engines that compile untrusted code with `include` forms can read arbitrary files.
+`(include "file.scm")` is a compile-time special form, not a runtime primitive. It reads a file from disk during compilation, regardless of whether the files extension is loaded. However, `include` and library loading are gated by `security.Check` (resource `code`, action `load`), so a `WithAuthorizer` policy can restrict which files are loaded.
 
-**Mitigations**:
-- Don't compile untrusted source that may contain `include`. Pre-compile trusted code and run it with `Engine.Run`.
+Without an authorizer, `include` is unrestricted. If you are compiling untrusted source code, either:
+- Set a `WithAuthorizer` policy (e.g., `FilesystemRoot("/app/src")`) to restrict load paths.
+- Pre-compile trusted code and run it with `Engine.Run`.
 - Use OS-level filesystem restrictions (chroot, namespaces).
-- The planned authorization framework will add `Check()` calls to `include` processing.
 
 ## Testing
 

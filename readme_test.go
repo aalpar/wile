@@ -121,6 +121,8 @@ func assembleREADMESource(blocks []string) string {
 		`"log"`:                           true,
 		`"github.com/aalpar/wile"`:        true,
 		`"github.com/aalpar/wile/values"`: true,
+		`"github.com/aalpar/wile/extensions/files"`: true,
+		`"github.com/aalpar/wile/security"`:         true,
 	}
 
 	// Strip import lines from blocks and collect them.
@@ -154,6 +156,8 @@ func assembleREADMESource(blocks []string) string {
 	src.WriteString("\t_ = fmt.Println\n")
 	src.WriteString("\t_ = log.Fatal\n")
 	src.WriteString("\t_ = values.NewInteger\n")
+	src.WriteString("\t_ = files.Extension\n")
+	src.WriteString("\t_ = security.DenyAll\n")
 	src.WriteString("\t_ context.Context\n")
 	src.WriteString(")\n\n")
 
