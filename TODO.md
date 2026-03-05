@@ -37,8 +37,8 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 
 ### Low Priority
 
-- [ ] **Rename `AddSearchPath` to `PrependSearchPath`** [Low, S]: `library.go:164` — prepends but name suggests append.
-- [ ] **Unify library/include path resolution** [Low, S]: `DefaultLibraryPaths` hardcodes `[".", "./lib"]`; `SCHEME_INCLUDE_PATH` only used by `include`/`include-ci`, not library loading. Inconsistent.
+- [x] **Rename `AddSearchPath` to `PrependSearchPath`** [Low, S]: Renamed in library_registry.go and all call sites.
+- [x] **Unify library/include path resolution** [Low, S]: `findFile` now consults library registry search paths as fallback dirs, sharing the same paths as `import`.
 - [ ] **Tokenizer test file consolidation** [Low, M]: 14 test files, several named by coverage goals (`additional_coverage_test.go`, `final_coverage_test.go`). Consolidate into behavior-oriented files (`tokenizer_number_test.go`, `tokenizer_string_test.go`, etc.).
 - [ ] **REPL deprecated wrappers** [Low, S]: `internal/repl/repl.go:370-393` — `Compile`, `Run`, `Load` marked `Deprecated`, delegate to runtime package. Delete if no callers remain.
 - [ ] **Error sentinel grouping** [Low, S]: ~103 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.

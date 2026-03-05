@@ -41,12 +41,26 @@ func findFile(p *CompileTimeContinuation, ctctx CompileTimeCallContext, path str
 	}
 
 	stack := p.env.LoadPathStack()
-	includePath := os.Getenv(SchemeIncludePathEnv)
+
+	// Build fallback directories from all configured sources.
 	var fallbackDirs []string
-	if includePath != "" {
-		fallbackDirs = filepath.SplitList(includePath)
+
+	// Library registry search paths (shared with import).
+	regAny := p.env.LibraryRegistry()
+	if regAny != nil {
+		reg, ok := regAny.(*LibraryRegistry)
+		if ok {
+			fallbackDirs = append(fallbackDirs, reg.GetSearchPaths()...)
+		}
 	}
-	// CWD as final fallback (matches Chez source-directories default, Racket current-directory)
+
+	// SCHEME_INCLUDE_PATH env var (backward compatibility).
+	includePath := os.Getenv(SchemeIncludePathEnv)
+	if includePath != "" {
+		fallbackDirs = append(fallbackDirs, filepath.SplitList(includePath)...)
+	}
+
+	// CWD as final fallback (matches Chez source-directories default, Racket current-directory).
 	cwd, cwdErr := os.Getwd()
 	if cwdErr == nil {
 		fallbackDirs = append(fallbackDirs, cwd)

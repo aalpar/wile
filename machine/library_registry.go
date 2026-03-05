@@ -148,8 +148,8 @@ func (p *LibraryRegistry) GetSearchPaths() []string {
 	return p.searchPaths
 }
 
-// AddSearchPath adds a path to the beginning of the search path list.
-func (p *LibraryRegistry) AddSearchPath(path string) {
+// PrependSearchPath adds a path to the beginning of the search path list.
+func (p *LibraryRegistry) PrependSearchPath(path string) {
 	p.searchPaths = append([]string{path}, p.searchPaths...)
 }
 

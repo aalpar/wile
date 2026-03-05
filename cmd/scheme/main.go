@@ -111,7 +111,7 @@ func initLibraryRegistry(_ context.Context) *machine.LibraryRegistry {
 	if envPath != "" {
 		for _, p := range strings.Split(envPath, string(os.PathListSeparator)) {
 			if p != "" {
-				registry.AddSearchPath(p)
+				registry.PrependSearchPath(p)
 			}
 		}
 	}
@@ -120,7 +120,7 @@ func initLibraryRegistry(_ context.Context) *machine.LibraryRegistry {
 	if opts.LibraryPath != "" {
 		for _, p := range strings.Split(opts.LibraryPath, string(os.PathListSeparator)) {
 			if p != "" {
-				registry.AddSearchPath(p)
+				registry.PrependSearchPath(p)
 			}
 		}
 	}

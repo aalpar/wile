@@ -370,6 +370,33 @@ func TestCompileInclude(t *testing.T) {
 	qt.Assert(t, cont, qt.IsNotNil)
 }
 
+// TestCompileInclude_LibraryRegistryPaths tests that include resolves files
+// via the library registry's search paths (unified with import).
+func TestCompileInclude_LibraryRegistryPaths(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.WriteFile(filepath.Join(tmpDir, "lib-test.scm"), []byte("42"), 0o644)
+	qt.Assert(t, err, qt.IsNil)
+
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	err = RegisterSyntaxCompilers(env)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Attach a library registry with tmpDir in its search paths.
+	reg := NewLibraryRegistry()
+	reg.PrependSearchPath(tmpDir)
+	env.SetLibraryRegistry(reg)
+
+	sctx := syntax.NewZeroValueSourceContext()
+
+	prog := values.List(
+		values.NewSymbol("include"),
+		values.NewString("lib-test.scm"))
+
+	cont, err := newTopLevelThunk(schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog), env)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, cont, qt.IsNotNil)
+}
+
 // TestCompileIncludeCi tests include-ci compilation
 func TestCompileIncludeCi(t *testing.T) {
 	// Create a temporary file with Scheme code

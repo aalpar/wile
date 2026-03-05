@@ -81,8 +81,8 @@ func TestLibraryRegistry(t *testing.T) {
 	registry.SetSearchPaths([]string{"/custom/path"})
 	c.Assert(registry.GetSearchPaths(), qt.DeepEquals, []string{"/custom/path"})
 
-	// Test AddSearchPath (prepends)
-	registry.AddSearchPath("/another/path")
+	// Test PrependSearchPath (prepends)
+	registry.PrependSearchPath("/another/path")
 	c.Assert(registry.GetSearchPaths()[0], qt.Equals, "/another/path")
 }
 
