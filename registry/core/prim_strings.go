@@ -60,19 +60,13 @@ func PrimMakeString(mc *machine.MachineContext) error {
 	if kInt.Value < 0 {
 		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "make-string: length must be non-negative")
 	}
-
-	fillChar := rune(0) // default fill character (NUL)
-	v, ok := helpers.ParseOptionalArg(mc.Arg(1))
-	if ok {
-		ch, ok := v.(*values.Character)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotACharacter, "make-string: expected a character but got %T", v)
-		}
-		fillChar = ch.Value
+	ch, err := helpers.OptionalArg[*values.Character](mc.Arg(1), values.NewCharacter(0), werr.ErrNotACharacter, "make-string")
+	if err != nil {
+		return err
 	}
 
 	// Use NewMutableString since make-string returns a mutable string per R7RS §6.7
-	q := values.NewMutableString(strings.Repeat(string(fillChar), int(kInt.Value)))
+	q := values.NewMutableString(strings.Repeat(string(ch.Value), int(kInt.Value)))
 	mc.SetValue(q)
 	return nil
 }
