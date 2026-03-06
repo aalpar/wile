@@ -49,6 +49,56 @@ func getTestDataPath() string {
 	return filepath.Join(filepath.Dir(filename), "testdata")
 }
 
+// runSchemeTest runs a Scheme test file via the scheme binary and reports results.
+func runSchemeTest(t *testing.T, testFile string, timeout time.Duration, label string) {
+	t.Helper()
+
+	schemeBin := getSchemeBinary()
+	_, err := os.Stat(schemeBin)
+	if os.IsNotExist(err) {
+		t.Fatalf("scheme binary not found at %s - run 'make build' first", schemeBin)
+	}
+
+	testPath := filepath.Join(getTestDataPath(), testFile)
+	_, err = os.Stat(testPath)
+	if os.IsNotExist(err) {
+		t.Fatalf("test file not found at %s", testPath)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, schemeBin, "--file", testPath)
+	cmd.Env = append(os.Environ(), "SCHEME_LIBRARY_PATH="+getLibPath())
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err = cmd.Run()
+	output := stdout.String()
+	errOutput := stderr.String()
+
+	if ctx.Err() == context.DeadlineExceeded {
+		t.Fatalf("%s timed out\n\nOutput:\n%s\n\nStderr:\n%s", label, output, errOutput)
+	}
+
+	if err != nil {
+		exitErr, ok := err.(*exec.ExitError)
+		if ok {
+			summary := extractTestSummary(output)
+			t.Fatalf("%s failed with exit code %d\n\nSummary:\n%s\n\nFull Output:\n%s\n\nStderr:\n%s",
+				label, exitErr.ExitCode(), summary, output, errOutput)
+		}
+		t.Fatalf("failed to run %s: %v\n\nOutput:\n%s\n\nStderr:\n%s", label, err, output, errOutput)
+	}
+
+	summary := extractTestSummary(output)
+	if summary != "" {
+		t.Logf("%s passed:\n%s", label, summary)
+	}
+}
+
 // TestR7RSConformance runs the comprehensive R7RS test suite.
 // This test executes r7rs-tests.scm which tests all R7RS procedures and syntax.
 //
@@ -58,160 +108,19 @@ func getTestDataPath() string {
 //
 // The test suite uses (test-exit) which calls (exit 0) on success or (exit 1) on failure.
 func TestR7RSConformance(t *testing.T) {
-	// Check that the scheme binary exists
-	schemeBin := getSchemeBinary()
-	_, err := os.Stat(schemeBin)
-	if os.IsNotExist(err) {
-		t.Fatalf("scheme binary not found at %s - run 'make build' first", schemeBin)
-	}
-
-	testFile := filepath.Join(getTestDataPath(), "r7rs-tests.scm")
-	_, err = os.Stat(testFile)
-	if os.IsNotExist(err) {
-		t.Fatalf("test file not found at %s", testFile)
-	}
-
-	// Set up timeout context - R7RS tests may take a while
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-
-	// Build command with library path
-	cmd := exec.CommandContext(ctx, schemeBin, "--file", testFile)
-	cmd.Env = append(os.Environ(), "SCHEME_LIBRARY_PATH="+getLibPath())
-
-	// Capture output
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	// Run the test
-	err = cmd.Run()
-
-	// Get output for logging
-	output := stdout.String()
-	errOutput := stderr.String()
-
-	// Check for context timeout
-	if ctx.Err() == context.DeadlineExceeded {
-		t.Fatalf("R7RS test suite timed out after 5 minutes\n\nOutput:\n%s\n\nStderr:\n%s", output, errOutput)
-	}
-
-	// Check exit code
-	if err != nil {
-		exitErr, ok := err.(*exec.ExitError)
-		if ok {
-			// Test suite failed (exit code non-zero)
-			// Extract summary from output if available
-			summary := extractTestSummary(output)
-			t.Fatalf("R7RS test suite failed with exit code %d\n\nSummary:\n%s\n\nFull Output:\n%s\n\nStderr:\n%s",
-				exitErr.ExitCode(), summary, output, errOutput)
-		}
-		t.Fatalf("failed to run R7RS test suite: %v\n\nOutput:\n%s\n\nStderr:\n%s", err, output, errOutput)
-	}
-
-	// Success - optionally log the summary
-	summary := extractTestSummary(output)
-	if summary != "" {
-		t.Logf("R7RS test suite passed:\n%s", summary)
-	}
+	runSchemeTest(t, "r7rs-tests.scm", 5*time.Minute, "R7RS test suite")
 }
 
 // TestMicroKanren runs the microKanren integration tests.
 // Tests the (wile microkanren) library for unification, goals, and streams.
 func TestMicroKanren(t *testing.T) {
-	schemeBin := getSchemeBinary()
-	_, err := os.Stat(schemeBin)
-	if os.IsNotExist(err) {
-		t.Fatalf("scheme binary not found at %s - run 'make build' first", schemeBin)
-	}
-
-	testFile := filepath.Join(getTestDataPath(), "microkanren-tests.scm")
-	_, err = os.Stat(testFile)
-	if os.IsNotExist(err) {
-		t.Fatalf("test file not found at %s", testFile)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, schemeBin, "--file", testFile)
-	cmd.Env = append(os.Environ(), "SCHEME_LIBRARY_PATH="+getLibPath())
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err = cmd.Run()
-	output := stdout.String()
-	errOutput := stderr.String()
-
-	if ctx.Err() == context.DeadlineExceeded {
-		t.Fatalf("microKanren tests timed out\n\nOutput:\n%s\n\nStderr:\n%s", output, errOutput)
-	}
-
-	if err != nil {
-		exitErr, ok := err.(*exec.ExitError)
-		if ok {
-			summary := extractTestSummary(output)
-			t.Fatalf("microKanren tests failed with exit code %d\n\nSummary:\n%s\n\nFull Output:\n%s\n\nStderr:\n%s",
-				exitErr.ExitCode(), summary, output, errOutput)
-		}
-		t.Fatalf("failed to run microKanren tests: %v\n\nOutput:\n%s\n\nStderr:\n%s", err, output, errOutput)
-	}
-
-	summary := extractTestSummary(output)
-	if summary != "" {
-		t.Logf("microKanren tests passed:\n%s", summary)
-	}
+	runSchemeTest(t, "microkanren-tests.scm", 2*time.Minute, "microKanren tests")
 }
 
 // TestKanren runs the miniKanren macro layer integration tests.
 // Tests fresh, conde, run, run*, reification, and classic relations.
 func TestKanren(t *testing.T) {
-	schemeBin := getSchemeBinary()
-	_, err := os.Stat(schemeBin)
-	if os.IsNotExist(err) {
-		t.Fatalf("scheme binary not found at %s - run 'make build' first", schemeBin)
-	}
-
-	testFile := filepath.Join(getTestDataPath(), "kanren-tests.scm")
-	_, err = os.Stat(testFile)
-	if os.IsNotExist(err) {
-		t.Fatalf("test file not found at %s", testFile)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, schemeBin, "--file", testFile)
-	cmd.Env = append(os.Environ(), "SCHEME_LIBRARY_PATH="+getLibPath())
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err = cmd.Run()
-	output := stdout.String()
-	errOutput := stderr.String()
-
-	if ctx.Err() == context.DeadlineExceeded {
-		t.Fatalf("kanren tests timed out\n\nOutput:\n%s\n\nStderr:\n%s", output, errOutput)
-	}
-
-	if err != nil {
-		exitErr, ok := err.(*exec.ExitError)
-		if ok {
-			summary := extractTestSummary(output)
-			t.Fatalf("kanren tests failed with exit code %d\n\nSummary:\n%s\n\nFull Output:\n%s\n\nStderr:\n%s",
-				exitErr.ExitCode(), summary, output, errOutput)
-		}
-		t.Fatalf("failed to run kanren tests: %v\n\nOutput:\n%s\n\nStderr:\n%s", err, output, errOutput)
-	}
-
-	summary := extractTestSummary(output)
-	if summary != "" {
-		t.Logf("kanren tests passed:\n%s", summary)
-	}
+	runSchemeTest(t, "kanren-tests.scm", 2*time.Minute, "kanren tests")
 }
 
 // extractTestSummary extracts the test summary from chibi-test output.
