@@ -28,6 +28,27 @@ import (
 // Rule: if either operand is exact, return exact zero (Integer 0).
 // If both operands are inexact, return the zero operand unchanged.
 //
+// Abstract interpretation (Cousot & Cousot 1977). Exactness is tracked
+// in the two-point lattice {exact < inexact}.
+//
+//	α: Number → {exact, inexact}   (abstraction function)
+//	Transfer for most ops: α(a op b) = α(a) ⊔ α(b)  (join = inexact wins)
+//	Transfer for (* 0 x): α(result) = exact   if α(0)=exact ∨ α(x)=exact
+//
+//	The zero-absorbs rule is a strong update: the transfer function
+//	returns a more precise result than the naive join because the
+//	mathematical result (0) is known exactly.
+//
+//	Invariant: the strong update only applies when other is finite.
+//	  IEEE 754 requires 0 * inf = NaN, so the exact-zero rule does
+//	  not apply for non-finite operands.
+//	Constrains: all arithmetic dispatch closures (must respect
+//	  contagion), Simplify (must not change exactness class).
+//	Constrained by: promotion lattice (T must be monotone w.r.t.
+//	  the exactness ordering).
+//
+// See BIBLIOGRAPHY.md "Exactness as Abstract Interpretation".
+//
 // Callers must ensure `other` is finite before calling this function.
 // IEEE 754 requires 0 * inf = NaN and 0 * NaN = NaN, so the exact-zero
 // rule does not apply when the non-zero operand is infinite or NaN.

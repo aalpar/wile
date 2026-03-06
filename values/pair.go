@@ -32,6 +32,27 @@ var (
 )
 
 // Pair represents a Scheme cons cell.
+//
+// Initial algebra (Bird & de Moor 1997, Meijer et al. 1991). Proper
+// lists are the initial algebra of a polynomial functor.
+//
+//	List = μX. 1 + Value × X
+//
+//	Constructors:
+//	  nil  : 1 → List          = EmptyList (emptyListType, not *Pair)
+//	  cons : Value × List → List = NewCons(car, cdr)
+//
+//	Eliminator (catamorphism / fold):
+//	  ForEach(f) applies f to each car, returns tail
+//
+//	Invariant: EmptyList is a separate Go type from *Pair. This encodes
+//	  the two constructors as distinct injections: (pair? '()) → #f.
+//	Constrains: IsList (must terminate — uses Floyd cycle detection),
+//	  PairBlock (batch allocation optimization, does not change the algebra),
+//	  all list-processing primitives (must handle both constructors).
+//	Constrained by: Tuple interface (read-only view over both constructors).
+//
+// See BIBLIOGRAPHY.md "Lists as Initial Algebras".
 type Pair [2]Value
 
 // NewCons creates a new Pair with the given car and cdr Values.

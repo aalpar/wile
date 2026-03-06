@@ -21,6 +21,26 @@ import (
 
 var _ values.Callable = (*MachineClosure)(nil)
 
+// Linked closure (Church 1936, Landin 1964, Cardelli 1983). A closure is
+// a pair of compiled code and the lexical environment at definition time.
+//
+//	closure = ⟨λ, E⟩, where:
+//	  λ = template  — compiled bytecode (NativeTemplate)
+//	  E = env       — pointer to enclosing EnvironmentFrame
+//
+//	Access cost: O(1) creation (capture pointer), O(depth) free variable
+//	  lookup (traverse parent chain). Flat closures invert this trade-off.
+//
+//	Invariant: E is a live pointer into the frame chain, not a copy.
+//	  Mutations via set! are visible through the closure because the
+//	  closure shares the frame, not a snapshot.
+//	Constrains: OperationMakeClosure (must link E to runtime parent),
+//	  Apply (must copy E for non-noCopyApply calls to prevent aliasing),
+//	  computeNoCopyApply (escape analysis on E).
+//	Constrained by: de Bruijn addressing (free vars addressed by
+//	  slot,depth in E's chain), CESK model (E is the environment component).
+//
+// See BIBLIOGRAPHY.md "Linked Closure Representation".
 type MachineClosure struct {
 	env      *environment.EnvironmentFrame
 	template *NativeTemplate

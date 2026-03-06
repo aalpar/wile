@@ -95,6 +95,30 @@ func PrimApply(mc *machine.MachineContext) error {
 // R7RS §6.10: call-with-current-continuation packages the current continuation
 // as an "escape procedure" and passes it as an argument to proc.
 //
+// Curry-Howard: call/cc as Peirce's law (Griffin 1990).
+//
+//	call/cc : ((A → B) → A) → A
+//
+//	where f : (A → B) → A  is the user callback, and the escape
+//	continuation k : A → B has return type B (invoking k never returns
+//	to f — it aborts to the prompt).
+//
+//	Adding call/cc to a language = adding the law of excluded middle.
+//	This means certain program transformations (e.g., CPS conversion
+//	optimizations that assume intuitionistic control flow) are unsound
+//	in the presence of call/cc.
+//
+//	Invariant: the escape closure must abort to DefaultPromptTag after
+//	  applying the captured continuation. Without the abort, control
+//	  would return to f after k returns, violating the B return type.
+//	Constrains: ErrPromptAbort handling (must propagate through foreign
+//	  calls), RunWithEscapeHandling (top-level abort catcher).
+//	Constrained by: CESK model (K must be capturable data, not Go
+//	  stack), WindingStack (captured by value for dynamic-wind thunks),
+//	  threadID (cross-thread invocation rejected).
+//
+// See BIBLIOGRAPHY.md "call/cc as Peirce's Law".
+//
 // Implementation follows the Racket model: capture a composable continuation
 // (via SliceContinuationAt), build an escape closure that applies it then aborts.
 //

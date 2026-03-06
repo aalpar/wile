@@ -49,6 +49,25 @@ func (instr Instruction) String() string {
 // EncodeLocalIndex packs a LocalIndex's slot and depth into a single int32
 // for storage in Instruction.Arg. Slot occupies the low 16 bits; depth
 // occupies the high 16 bits. Both values must fit in int16 range (max 32767).
+//
+// De Bruijn indices (de Bruijn 1972). Variables are addressed by numeric
+// coordinates, eliminating name lookup at runtime.
+//
+//	addr(x) = (slot, depth), where:
+//	  depth = number of enclosing λ-binders from use to definition
+//	  slot  = index within the binding array at that depth
+//
+//	Encoding: Arg = (depth << 16) | (slot & 0xFFFF)
+//
+//	Invariant: the same variable always has the same (slot, depth)
+//	  regardless of its name. Alpha-equivalence is a non-issue at runtime.
+//	Constrains: GetLocalBindingBySlotDepth / SetLocalValueBySlotDepth
+//	  (runtime access walks depth parent pointers, indexes by slot),
+//	  linked closures (parent chain must match compile-time depth).
+//	Constrained by: resolveLocal (compile-time computation of depth
+//	  by walking the EnvironmentFrame parent chain).
+//
+// See BIBLIOGRAPHY.md "De Bruijn Indices / Lexical Addressing".
 func EncodeLocalIndex(li *environment.LocalIndex) int32 {
 	return int32(li.Up()<<16) | int32(li.Over()&0xFFFF)
 }

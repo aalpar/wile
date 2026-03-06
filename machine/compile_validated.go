@@ -735,6 +735,28 @@ func (p *CompileTimeContinuation) CompileValidatedBegin(ctctx CompileTimeCallCon
 }
 
 // compileValidatedCall compiles a validated function call (proc args...).
+//
+// Direct-style compilation (Dybvig 1987, Ch. 3). The compiler emits stack
+// operations for intermediate values instead of CPS or A-normal form.
+//
+//	(f x y) compiles to:
+//	  [if !tail: SaveContinuation]  — push σ onto K
+//	  <compile f>   Push            — S = [f]
+//	  <compile x>   Push            — S = [f, x]
+//	  <compile y>   Push            — S = [f, x, y]
+//	  Pull                          — value = f, S = [x, y]
+//	  Apply                         — call f with args from S
+//
+//	where tail = ctctx.inTail (tracked by value through recursive calls).
+//
+//	Invariant: tail calls emit no SaveContinuation. K does not grow.
+//	  This is what makes proper tail recursion work (Clinger 1998).
+//	Constrains: CESK transitions (non-tail pushes σ onto K, tail reuses K),
+//	  peephole optimizer (may fuse Pull+Apply → PullApply).
+//	Constrained by: CompileTimeCallContext.inTail (set by compileBody
+//	  for the last expression in a sequence).
+//
+// See BIBLIOGRAPHY.md "Direct-Style Compilation".
 func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallContext, v *validate.ValidatedCall) error {
 	var operationSaveContinuationIndex int
 	if !ctctx.inTail {

@@ -19,13 +19,31 @@ package machine
 // branch offsets to account for removed instructions, and compacts the code
 // and source reference arrays in parallel.
 //
+// Superinstruction formation (Ertl & Gregg 2003). Fusing adjacent
+// instructions reduces dispatch overhead in the Run() switch loop.
+//
+//	Fusions:
+//	  Load* + Push  → Push*       (eliminates 1 dispatch)
+//	  Pull + Apply  → PullApply   (eliminates 1 dispatch)
+//	  SaveCont + PushCachedBinding ... PullApply
+//	              → CallForeignCached  (eliminates ~5 dispatches)
+//
+//	Cost model: each fusion saves one (fetch opcode + switch branch).
+//	  In switch-dispatch interpreters, dispatch dominates execution time.
+//
+//	Invariant: fusions must not change observable semantics. Branch
+//	  offsets are recomputed after compaction.
+//	Constrains: Run() must implement fused opcodes with identical
+//	  semantics to the original sequence.
+//	Constrained by: must run BEFORE computeNoCopyApply — removing
+//	  OpSaveContinuation would change escape analysis results.
+//
+// See BIBLIOGRAPHY.md "Superinstruction Formation".
+//
 // After compacting its own code, Optimize recurses into any *NativeTemplate
 // values in the literals pool (lambda closures compiled as sub-templates).
 //
 // Idempotent: a second call finds nothing to remove.
-//
-// Must be called BEFORE computeNoCopyApply, since removing instructions
-// (e.g. OpSaveContinuation in future rules) could change escape analysis.
 func (p *NativeTemplate) Optimize() {
 	n := len(p.code)
 	if n == 0 {

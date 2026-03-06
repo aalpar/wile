@@ -341,6 +341,24 @@ func (p *NativeTemplate) NoCopyApply() bool {
 // computeNoCopyApply scans the compiled bytecode to determine whether
 // this template's bindings can escape the call. Sets noCopyApply = true
 // when neither OpSaveContinuation nor *OperationMakeClosure is present.
+//
+// Environment escape analysis (Appel 1992, §10.3). Determines whether E
+// can outlive the current call frame.
+//
+//	escapes(E) = ∃ instr ∈ code : instr.Op ∈ {SaveContinuation, MakeClosure}
+//	noCopyApply = ¬escapes(E)
+//
+//	where SaveContinuation captures E into K (continuation chain),
+//	and MakeClosure captures E as a closure parent.
+//
+//	Invariant: if noCopyApply is true, Apply reuses the closure's own
+//	  frame (no allocation). If false, Apply must copy the frame.
+//	Constrains: Apply (noCopy path vs copy path), envPooled flag
+//	  (noCopy frames are not poolable).
+//	Constrained by: Optimize (must run BEFORE this — fusions may remove
+//	  instructions that affect the scan result).
+//
+// See BIBLIOGRAPHY.md "Environment Escape Analysis".
 func (p *NativeTemplate) computeNoCopyApply() {
 	for _, instr := range p.code {
 		if instr.Op == OpSaveContinuation || instr.Op == OpMakeClosure {

@@ -6,6 +6,23 @@
 ;; These macros are loaded after all primitives are registered but before
 ;; any user code runs. They provide the standard R7RS binding forms, conditionals,
 ;; lazy evaluation, parameters, exceptions, records, and iteration.
+;;
+;; Lambda: The Ultimate Imperative (Steele & Sussman, AIM-353, 1976).
+;; Derived forms are defined as macros over core forms per R7RS §7.3.
+;;
+;;   (let ((x e) ...) body ...) ≡ ((lambda (x ...) body ...) e ...)
+;;
+;;   let IS lambda application. This is not syntactic sugar — it is
+;;   the formal identity from the Lambda Papers, made executable.
+;;
+;;   Invariant: every derived form must reduce to core forms only
+;;     (if, lambda, begin, define, set!, quote, dynamic-wind, case-lambda).
+;;   Constrains: all binding forms here (let*, letrec, letrec*) must
+;;     compose from lambda and set! without introducing new primitives.
+;;   Constrained by: with-binding-scope (Wile-specific form for Flatt 2016
+;;     scope creation), syntax-rules hygiene (intro scopes on expansion).
+;;
+;; See BIBLIOGRAPHY.md "The Lambda Papers".
 
 ;; Boolean operators
 (define-syntax and
