@@ -901,27 +901,18 @@ func toBigComplexPart(v values.Value, name string) (values.Number, error) {
 func PrimMakePolar(mc *machine.MachineContext) error {
 	r := mc.Arg(0)
 	theta := mc.Arg(1)
-	var mag, angle float64
-	switch v := r.(type) {
-	case *values.Integer:
-		mag = float64(v.Value)
-	case *values.Float:
-		mag = v.Value
-	case *values.Rational:
-		mag = v.Float64()
-	default:
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "make-polar: expected a real number but got %T", r)
+	rNum, rOk := r.(values.Number)
+	if !rOk || !isRealNumber(r) {
+		return werr.WrapForeignErrorf(werr.ErrNotANumber,
+			"make-polar: expected a real number but got %T", r)
 	}
-	switch v := theta.(type) {
-	case *values.Integer:
-		angle = float64(v.Value)
-	case *values.Float:
-		angle = v.Value
-	case *values.Rational:
-		angle = v.Float64()
-	default:
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "make-polar: expected a real number but got %T", theta)
+	tNum, tOk := theta.(values.Number)
+	if !tOk || !isRealNumber(theta) {
+		return werr.WrapForeignErrorf(werr.ErrNotANumber,
+			"make-polar: expected a real number but got %T", theta)
 	}
+	mag := values.NumberToFloat64(rNum)
+	angle := values.NumberToFloat64(tNum)
 	realPart := mag * math.Cos(angle)
 	imagPart := mag * math.Sin(angle)
 	mc.SetValue(values.NewComplexFromParts(realPart, imagPart))
