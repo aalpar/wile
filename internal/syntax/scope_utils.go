@@ -18,7 +18,32 @@ import "slices"
 
 // ScopesMatch checks if two sets of scopes are compatible for binding resolution.
 // This implements the core hygiene check using Flatt's "sets of scopes" model:
-// A reference matches a binding if the binding's scope set is a SUBSET of the reference's scope set.
+// A reference matches a binding if the binding's scope set is a SUBSET of the
+// reference's scope set.
+//
+// Powerset lattice P(S) (Flatt 2016, §3.2). Binding resolution is a
+// subset test on finite scope sets.
+//
+//	match(ref, bind) ⟺ bind.scopes ⊆ ref.scopes
+//	resolve(ref) = argmax { |s| : s ⊆ ref.scopes } over all bindings
+//
+//	where ref = useScopes, bind = bindingScopes,
+//	s = a candidate binding's scope set, |s| = scope count.
+//
+//	Operations on P(S):
+//	  AddScopeToSet    = join (union)
+//	  RemoveScopeFromSet = relative complement
+//	  FlipScopeInSet   = symmetric difference (XOR in Z/2Z^S)
+//
+//	Invariant: {} ⊆ X for all X — top-level bindings (empty scope set)
+//	  match every reference. The argmax selects the most specific binding.
+//	Constrains: GetLocalIndexWithScopes (implements resolve/argmax),
+//	  CompileSymbol (dispatches scoped vs unscoped lookup),
+//	  scopesCompatibleForSubstitution (bidirectional subset = set equality).
+//	Constrained by: NewScope (each macro invocation creates a fresh scope),
+//	  FlipScopeInSet (syntax-local-introduce toggles scope membership).
+//
+// See BIBLIOGRAPHY.md "Binding as Sets of Scopes".
 //
 // This ensures:
 // - Top-level bindings (empty scope set) match any reference: {} ⊆ X for all X

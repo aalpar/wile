@@ -23,6 +23,26 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
+// Join-semilattice (Davey & Priestley 2002). Numeric promotion is a
+// symmetric, associative, idempotent binary operation on NumericKind.
+//
+//	T(a,b) = T(b,a)             commutativity
+//	T(T(a,b),c) = T(a,T(b,c))  associativity
+//	T(a,a) = a                  idempotency
+//
+//	where T = promotionTable[a][b], a/b/c ∈ NumericKind.
+//	L = L_precision × L_complexity (product of two total orders).
+//
+//	Invariant: exactness is monotone w.r.t. T. If a is exact and b is
+//	  exact, T(a,b) must also be exact-capable. Exact types never route
+//	  through float64 (lossy). Enforced by initPromotionTable.
+//	Constrains: makeArithmeticDispatch (all 294 closures assume LUB
+//	  correctness), Simplify (demotes within same exactness class).
+//	Constrained by: Exactness lattice {exact < inexact} — the transfer
+//	  function for arithmetic must be monotone in this ordering.
+//
+// See BIBLIOGRAPHY.md "Numeric Promotion Lattice".
+//
 // promotionTable maps (kindA, kindB) → resultKind, the least upper bound (LUB)
 // in the numeric promotion lattice. The table is symmetric:
 // promotionTable[a][b] == promotionTable[b][a] for all a, b.

@@ -24,6 +24,27 @@ import (
 //
 // R7RS §6.10: dynamic-wind establishes a dynamic extent during which
 // the before and after thunks are called whenever control enters or exits.
+//
+// Continuation-wind interaction (Friedman & Haynes 1985, Clinger et al.
+// 1999). The winding stack W is separate from continuation chain K.
+//
+//	W = [w₁, w₂, ...wₙ] where wᵢ = (before_i, after_i, id_i)
+//
+//	On continuation invocation from Wsrc to Wtgt:
+//	  prefix = FindCommonWindingPrefix(Wsrc, Wtgt)
+//	  UnwindTo(prefix):  call after_n, after_{n-1}, ... (innermost first)
+//	  RewindTo(Wtgt):    call before_{prefix+1}, ... (outermost first)
+//
+//	Invariant: W is captured by value at call/cc time (copied into
+//	  ComposableContinuation), NOT stored per continuation frame.
+//	  W belongs to the dynamic extent, not the lexical continuation.
+//	Constrains: RestoreWithWindingFrom (must compute prefix and run
+//	  thunks in correct order), sub-contexts (must explicitly inherit W
+//	  via SetWindingStack or thunks are silently skipped).
+//	Constrained by: CESK model (W is NOT part of K — it is orthogonal
+//	  state). PushWind/PopWind opcodes maintain W during normal execution.
+//
+// See BIBLIOGRAPHY.md "Dynamic-Wind" and "Continuation-Wind Interaction".
 type DynamicWindFrame struct {
 	Before Closure // Called when entering this extent
 	After  Closure // Called when exiting this extent

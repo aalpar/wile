@@ -154,6 +154,24 @@ func WithAuthorizer(auth security.Authorizer) EngineOption {
 // interop, or threading access. Core primitives are still added by default
 // unless WithoutCore is also used.
 //
+// Principle of Least Authority (Saltzer & Schroeder 1975).
+//
+//	authority(engine) = ∪ { caps(ext) : ext ∈ extensions }
+//
+//	SafeExtensions() ⊂ AllExtensions() — the safe set excludes
+//	filesystem, eval, system, Go interop, and threading capabilities.
+//	WithoutCore() produces authority(engine) = ∅.
+//
+//	Invariant: absent capabilities produce compile-time errors, not
+//	  runtime checks. If a name has no binding, compilation fails.
+//	  No runtime check can be bypassed because no runtime check exists.
+//	Constrains: NewEngine (applies the registry), LibraryEnvFactory
+//	  (closes over registry — transitive confinement per Lampson 1973).
+//	Constrained by: Registry.Without/WithoutCategory (capability
+//	  attenuation — derived registries never gain authority).
+//
+// See BIBLIOGRAPHY.md "Saltzer & Schroeder".
+//
 // Example:
 //
 //	eng, err := wile.NewEngine(ctx,

@@ -107,6 +107,28 @@ func EqualTo(a, b Value) bool {
 
 // equalToDeep dispatches compound types to cycle-aware helpers,
 // and delegates everything else to a.EqualTo(b).
+//
+// Bisimulation equivalence (Milner 1989). equal? on cyclic structures
+// is the greatest fixpoint of the structural matching relation.
+//
+//	R = gfp(F) where F(R) = { (a,b) : structure(a) matches structure(b)
+//	                           under R for all sub-components }
+//
+//	visited : map[equalPairKey]bool implements the coinductive hypothesis.
+//	When (ptr(a), ptr(b)) ∈ visited, return true (optimistic assumption).
+//	This correctly computes gfp because the greatest fixpoint is the
+//	union of all consistent relations.
+//
+//	Invariant: visited keys are pointer pairs, not structural. Two
+//	  distinct objects with identical structure are compared structurally,
+//	  not short-circuited by visited.
+//	Constrains: pairEqualToDeep, vectorEqualToDeep (must propagate
+//	  visited through recursive calls).
+//	Constrained by: EqualTo (top-level entry creates the visited map),
+//	  Hashable contract (equal values must hash identically — the hash
+//	  function cannot depend on pointer identity).
+//
+// See BIBLIOGRAPHY.md "Bisimulation Equivalence for equal?".
 func equalToDeep(a, b Value, visited map[equalPairKey]bool) bool {
 	if a == nil || b == nil {
 		return a == b

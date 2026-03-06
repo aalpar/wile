@@ -23,6 +23,29 @@ import (
 // MachineContinuation. Both types embed this struct so that the shared field
 // set is documented in one place and impossible to get out of sync.
 //
+// CESK machine (Felleisen & Friedman 1987). VM state is a 4-tuple.
+//
+//	σ = (C, E, S, K), where:
+//	  C = (template, pc)  — control: which instruction to execute
+//	  E = env             — environment: lexical bindings (frame chain)
+//	  S = evals           — store: operand stack for intermediate values
+//	  K = cont            — kontinuation: linked list of saved states
+//
+//	Transitions:
+//	  Non-tail call: (C,E,S,K) → (C',E',∅, K·σ)   push frame onto K
+//	  Tail call:     (C,E,S,K) → (C',E',∅, K)      K unchanged
+//	  Return:        (_,_,_,K·σ) → σ                pop frame from K
+//
+//	Invariant: K is a heap-allocated linked list, never Go stack frames.
+//	  This is what makes call/cc possible — K is capturable data.
+//	Constrains: Apply (must produce correct K), SaveContinuation/Restore
+//	  (must preserve exactly the fields in σ), computeNoCopyApply
+//	  (decides whether E can be shared).
+//	Constrained by: de Bruijn addressing (E is indexed by slot,depth),
+//	  linked closures (MakeClosure captures E by pointer).
+//
+// See BIBLIOGRAPHY.md "CESK Abstract Machine".
+//
 // # Value register encoding
 //
 // The value register uses a split representation to avoid heap allocation on

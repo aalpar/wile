@@ -39,6 +39,24 @@ func (p *OperationMakeClosure) Apply(mc *MachineContext) (*MachineContext, error
 	if !ok {
 		return mc, werr.WrapForeignErrorf(werr.ErrNotAMachineTemplate, "MakeClosure: expected native template on stack")
 	}
+	// Linked closure (Cardelli 1983). Captures E by pointer, not by copy.
+	//
+	//   closure.env = NewFrame(compiletimeEnv.Local(), mc.env)
+	//
+	//   where compiletimeEnv.Local() provides the parameter structure
+	//   and mc.env becomes the parent for free variable access.
+	//
+	//   Invariant: the parent pointer must be the RUNTIME mc.env, not
+	//     the compile-time env. Compile-time frames hold placeholders;
+	//     runtime frames hold actual values.
+	//   Constrains: Apply (must copy this env for non-noCopyApply to
+	//     prevent aliasing across recursive calls), envPooled flag
+	//     (this env is not poolable — closure holds a live reference).
+	//   Constrained by: de Bruijn (depth in free-var access counts
+	//     parent hops through this chain), CESK model (E component).
+	//
+	// See BIBLIOGRAPHY.md "Linked Closure Representation".
+	//
 	// Create runtime environment with compile-time local structure
 	// but RUNTIME parent chain. This is critical for:
 	// 1. Nested lambdas: inner lambdas need to access outer params via parent chain
