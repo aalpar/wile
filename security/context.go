@@ -40,21 +40,23 @@ func FromContext(ctx context.Context) Authorizer {
 //
 // Reference monitor (Anderson 1972). Three properties must hold:
 //
-//	1. Always invoked:  every privileged path calls Check.
-//	2. Tamperproof:     Authorizer is in context.Context (immutable
-//	                    after engine construction via WithAuthorizer).
-//	3. Complete:        gate sites are enumerated — files, system, eval
-//	                    extensions, include, library import.
+//  1. Always invoked:  every privileged path calls Check.
 //
-//	req = AccessRequest{Resource, Action, Target}, where Resource ∈
-//	{file, code, env, process} and Action ∈ {read, write, delete, load, exit}.
+//  2. Tamperproof:     Authorizer is in context.Context (immutable
+//     after engine construction via WithAuthorizer).
 //
-//	Invariant: if no Authorizer is set (auth == nil), all operations are
-//	  allowed. This is "open by default" — sandboxing is opt-in.
-//	Constrains: all gate sites (must call Check before privileged ops).
-//	Constrained by: WithAuthorizer (injects auth into context at engine
-//	  construction), POLA (SafeExtensions eliminates capabilities at
-//	  compile time before Check is even reachable).
+//  3. Complete:        gate sites are enumerated — files, system, eval
+//     extensions, include, library import.
+//
+//     req = AccessRequest{Resource, Action, Target}, where Resource ∈
+//     {file, code, env, process} and Action ∈ {read, write, delete, load, exit}.
+//
+//     Invariant: if no Authorizer is set (auth == nil), all operations are
+//     allowed. This is "open by default" — sandboxing is opt-in.
+//     Constrains: all gate sites (must call Check before privileged ops).
+//     Constrained by: WithAuthorizer (injects auth into context at engine
+//     construction), POLA (SafeExtensions eliminates capabilities at
+//     compile time before Check is even reachable).
 //
 // See BIBLIOGRAPHY.md "Anderson".
 func Check(ctx context.Context, req AccessRequest) error {
