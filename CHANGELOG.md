@@ -7,6 +7,111 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-03-05
+
+### Added
+
+- Add security package — `security.Authorizer` interface with K8s-style Resource/Action vocabulary, `security.Check()` gating, and four built-in authorizers (`DenyAll`, `ReadOnly`, `FilesystemRoot`, `AllowAll`); wire into engine via `WithAuthorizer()` option
+- Gate privileged primitives (`eval`, `load`, filesystem, system) with `security.Check` for fine-grained runtime authorization
+- Add sandboxing convenience API — `SafeExtensions()` provides a zero-config safe sandbox excluding filesystem, eval, system, and thread extensions
+- Add REPL enhancements — tab completion (`SchemeCompleter`), primitive documentation (`DocProvider` + `,doc` meta-command), `,help`/`,edit` meta-commands, pager for long output
+- Add five reflection primitives — `procedure-name`, `procedure-arity`, `procedure-source`, `procedure-formals`, `procedure-body` (#427)
+- Add environment introspection primitives and extract to safe extension (`environment-bindings`, `environment-bound-names`, `environment-parent`)
+- Add `values.Callable` interface for type-safe procedure handling across closures, foreign functions, continuations, and parameter objects
+- Add `-e`/`--eval` CLI flag for command-line expression evaluation (#374)
+- Add `Pool[T]` generic pool and environment frame pooling (#325)
+- Thread source context into binding creation for improved error locations (#324)
+- Add `MaxCallDepth` (default 10000) for embedded safety — prevents runaway recursion from exhausting Go stack (#P3)
+- Add `SyntaxWalk` convenience wrapper in `internal/syntax`
+- Add registry filtering, library name in factory, and import observer for sandbox enforcement
+- Add peephole optimization pass for compiled bytecode — dead-code elimination, fused push/call opcodes, `LoadVoid` removal
+- Add `ForeignClosure` type for Go callbacks with proper bytecode-path recursion support
+- Add Scheme-domain test suites — strings, characters, ports, numbers, exceptions, lazy evaluation, records, eval, control flow, and macros
+- Add shebang support (`#!/usr/bin/env scheme`) and R7RS `(command-line)` argument access (#321)
+
+### Changed
+
+- Rename `AddSearchPath` to unified include/library path resolution API (#426)
+- Extract generic `OptionalArg[T]` for typed fill extraction, replacing ad-hoc optional parameter parsing (#425)
+- Extract generic port extraction helper, eliminating per-primitive port boilerplate (#424)
+- Unexport `NewEnvironmentFrame` — use `Pool[T]` allocation instead (#422)
+- Collapse match constructor telescopes into opts pattern, reducing `SyntaxMatcher` constructor complexity (#420)
+- Consolidate port `SchemeString` into `portBase`, eliminating per-port-type formatting duplication (#419)
+- Unify escape mechanisms under `ErrPromptAbort` — removes three redundant sentinel errors (#418)
+- Split `library.go` into bindings and registry files for focused concerns (#417)
+- Split `parser.go` into 4 concern-specific files (#404)
+- Split `compile_time_continuation_library.go` into 4 concern-specific files (#400)
+- Consolidate opcode metadata into single table — eliminates scattered switch statements (#384)
+- Eliminate hand-unrolled type dispatch in `PrimExpt` and `PrimMakeRectangular` (#382)
+- Eliminate `BigComplex` `*Parts` type-switch duplication (#378)
+- Extract error infrastructure into `werr/` package — separates error types from value types (#379)
+- VM binding helpers, error sentinels, and literal dedup O(1) (#377)
+- Consolidate test helpers into `registry/testhelpers` (#372)
+- Unify expander callable dispatch (#370)
+- Remove `ArrayList` type — convert all `NewCons` loops to block-allocated `List()` (#316)
+- Convert numeric dispatch to table-driven with same-type hot paths (#317)
+- Structural consolidation of compiler and expander internals (#319)
+- Table-drive `char-ci` and `string-ci` comparison primitives
+- Tighten `SyntaxSymbol.ResolvedBinding` from `any` to `ResolvedRef`
+- Remove `context.Context` from `ForeignFunction` signature — context propagated via VM, not per-call
+- Generate `Subtract`/`Multiply`/`Divide`/`LessThan`/`Compare` dispatch tables
+- Migrate `*wile.Error` to sentinel+wrap pattern (#320)
+- Change `vmState.callDepth` from `uint64` to `int`
+- Unexport `NewBoolean` — use `BoolToBoolean` instead
+- Remove 17 unused sentinel errors (#410)
+- Remove 8 write-only struct fields across tokenizer, match, machine (#411)
+- Remove dead `Indexable` interface (#413)
+- Unexport `Promise.Thunk`/`.Result`, add accessor methods (#412)
+
+### Fixed
+
+- Fix R7RS `syntax-rules` vector pattern matching — vector subpatterns with ellipsis now track element positions correctly
+- Fix R7RS `guard` re-raise dynamic extent — guard clauses now re-raise in the correct dynamic environment per R7RS §4.2.7
+- Fix `eval` multi-value propagation — `values` form results now propagate through `eval` correctly
+- Fix R7RS conformance across numeric tower, parser, I/O, display, and predicates (multiple passes)
+- Fix `BigFloat` Inf/NaN handling — `BigFloat` is now Inf/NaN-capable; rounding primitives (`floor`, `ceiling`, `truncate`, `round`) handle `BigFloat` correctly
+- Fix `BigComplex` predicates and preserve imaginary part when `Float(Inf/NaN)` operates with `BigComplex`
+- Fix `Complex.HashCode` crash on NaN/±Inf components
+- Fix `NaN` guard in `Float.EqualTo` for IEEE 754 compliance
+- Fix `BigFloat.SchemeString` — integer-valued BigFloats now append `.0` for correct inexact representation
+- Fix circular structure crash in compiler and pair display
+- Fix `apply` under-arity now caught at compile time
+- Fix shared acyclic datum labels — `deduplicatePair` memoized, `internSymbolsInValue` handles shared structures
+- Fix `guard` body not propagating multiple values (#395)
+- Fix `ForEach` nil guards — return `EmptyList` instead of `Void` for proper list termination
+- Fix `FilesystemRoot.Authorize` — preserve root cause error through path resolution
+- Fix import observer not firing during expand-phase imports (#398)
+- Fix `PopContinuation` underflow — convert panic to error return with distinct sentinel
+- Fix winding stack update — `unwindStackTo` now updates incrementally instead of slice aliasing
+- Fix `LoadPathStack` not populated from CLI file loading
+- Fix `call/cc` escapes not handled in `Engine.Call()` API (#328)
+- Fix recursive foreign closure dispatch — restore bytecode path (#335)
+- Fix arity errors not catchable by Scheme exception handlers (#339)
+- Fix `import-set` processing — deduplicate loop, use map-based name filtering (#406, #407, #416)
+- Fix `buildPCRemap` — dead positions now map forward correctly (#304)
+- Fix `ToFloat64` — now covers the full real numeric tower
+- Fix double-printed error in `WrapForeignFileError` (#408)
+- Fix `SelectCase` — replace bool pair with `SelectCaseKind` enum for clarity (#415)
+- Fix defensive copy from `LocalEnvironmentFrame.Keys()` (#414)
+- Eliminate all compound if-assignments per style guide (#403)
+
+### Performance
+
+- Compile `apply` as special form for proper tail recursion — `apply` in tail position now reuses the current frame (#H1)
+- Block-allocate pairs via `PairBlock` and add fused push/call opcodes (#311)
+- Add fused `PushLiteral`, `PushGlobal`, `PushLocal` opcodes — eliminate separate push+load instruction pairs (#308)
+- Add fused push/call opcodes and promote `MakeClosure` to inlined op (#309)
+- Inline continuation evals + direct-call opcode for primitives (#387)
+- `Stack.Drain` eliminates `PopAll` allocation in VM hot path (#396)
+- Reuse rest-arg buffer for foreign variadic calls (#333)
+- Move compile-time fields behind `BindingMeta` pointer — reduces per-binding runtime size (#314)
+- Replace field-by-field binding copy with `copy()` (#313)
+- Fix escape analysis artifacts in numeric fold helpers (#312)
+- Dead-`LoadVoid` elimination for all value-register writers (#307)
+- 2-argument fast path for numeric helpers
+- Enable `noCopyApply` for foreign closures
+- Environment frame pooling and number error returns (#386)
+
 ## [1.4.0] - 2026-02-20
 
 ### Added
@@ -254,7 +359,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CI builds all four OS/architecture combinations
 - R7RS conformance test suite running in CI
 
-[Unreleased]: https://github.com/aalpar/wile/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/aalpar/wile/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/aalpar/wile/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/aalpar/wile/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/aalpar/wile/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/aalpar/wile/compare/v1.1.0...v1.2.0
