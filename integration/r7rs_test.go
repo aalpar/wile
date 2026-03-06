@@ -116,6 +116,55 @@ func TestR7RSConformance(t *testing.T) {
 	}
 }
 
+// TestMicroKanren runs the microKanren integration tests.
+// Tests the (wile microkanren) library for unification, goals, and streams.
+func TestMicroKanren(t *testing.T) {
+	schemeBin := getSchemeBinary()
+	_, err := os.Stat(schemeBin)
+	if os.IsNotExist(err) {
+		t.Fatalf("scheme binary not found at %s - run 'make build' first", schemeBin)
+	}
+
+	testFile := filepath.Join(getTestDataPath(), "microkanren-tests.scm")
+	_, err = os.Stat(testFile)
+	if os.IsNotExist(err) {
+		t.Fatalf("test file not found at %s", testFile)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, schemeBin, "--file", testFile)
+	cmd.Env = append(os.Environ(), "SCHEME_LIBRARY_PATH="+getLibPath())
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err = cmd.Run()
+	output := stdout.String()
+	errOutput := stderr.String()
+
+	if ctx.Err() == context.DeadlineExceeded {
+		t.Fatalf("microKanren tests timed out\n\nOutput:\n%s\n\nStderr:\n%s", output, errOutput)
+	}
+
+	if err != nil {
+		exitErr, ok := err.(*exec.ExitError)
+		if ok {
+			summary := extractTestSummary(output)
+			t.Fatalf("microKanren tests failed with exit code %d\n\nSummary:\n%s\n\nFull Output:\n%s\n\nStderr:\n%s",
+				exitErr.ExitCode(), summary, output, errOutput)
+		}
+		t.Fatalf("failed to run microKanren tests: %v\n\nOutput:\n%s\n\nStderr:\n%s", err, output, errOutput)
+	}
+
+	summary := extractTestSummary(output)
+	if summary != "" {
+		t.Logf("microKanren tests passed:\n%s", summary)
+	}
+}
+
 // extractTestSummary extracts the test summary from chibi-test output.
 func extractTestSummary(output string) string {
 	// Look for "Test Summary:" section
