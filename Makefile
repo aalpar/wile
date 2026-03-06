@@ -179,6 +179,22 @@ bench-schelog: build
 		time $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) -q $(SCHELOG_LIBS) -f $(SCHELOG_DIR)/benchmark.scm; \
 	fi
 
+# Run the miniKanren benchmark suite (logic programming via R7RS libraries).
+# Three benchmarks: Zebra puzzle, appendo scaling, relational arithmetic.
+# Exercises unification, stream interleaving, and deep recursive goals.
+#   make bench-kanren
+KANREN_DIR=examples/logic/kanren
+
+.PHONY: bench-kanren
+bench-kanren: build
+	@if command -v gtime >/dev/null 2>&1; then \
+		SCHEME_LIBRARY_PATH=lib gtime -v $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_DIR)/benchmark.scm 2>&1; \
+	elif [ -x /usr/bin/time ]; then \
+		SCHEME_LIBRARY_PATH=lib /usr/bin/time -l $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_DIR)/benchmark.scm 2>&1; \
+	else \
+		SCHEME_LIBRARY_PATH=lib time $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_DIR)/benchmark.scm; \
+	fi
+
 # Run canonical Gabriel benchmark suite (16 benchmarks).
 # These benchmarks are comparable across Scheme implementations.
 # Saves timestamped CSV results to examples/benchmarks/canonical-results-*.csv.
