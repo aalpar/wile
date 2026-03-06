@@ -1,12 +1,12 @@
 # Sandboxing
 
-Wile's extension system provides capability-based sandboxing for embedded Scheme engines. Primitives not in the engine's registry don't exist — attempts to use them produce compile-time errors, not runtime checks that could be bypassed.
+Wile's extension system provides capability-based sandboxing for embedded Scheme engines (Rees, "A Security Kernel Based on the Lambda Calculus", 1996). Primitives not in the engine's registry don't exist — attempts to use them produce compile-time errors, not runtime checks that could be bypassed.
 
 ## How it works
 
 By default, `NewEngine(ctx)` includes only core primitives (arithmetic, pairs, lists, vectors, strings, characters, bytevectors, control flow, syntax, parameters). Extensions are opt-in via `WithExtension()`. If the filesystem extension isn't loaded, `open-input-file` is an unbound variable — the binding doesn't exist in the environment at all.
 
-This restriction is **transitive**: when the library system is enabled (`WithLibraryPaths`), library environments are created by a factory that closes over the engine's registry. A library loaded from a `.sld` file gets the same set of primitives as the engine that loaded it. There is no way for Scheme code to escalate privileges within a single engine.
+This restriction is **transitive**: when the library system is enabled (`WithLibraryPaths`), library environments are created by a factory that closes over the engine's registry. A library loaded from a `.sld` file gets the same set of primitives as the engine that loaded it. There is no way for Scheme code to escalate privileges within a single engine (Hardy, "The Confused Deputy", 1988).
 
 ## Extension security classification
 
@@ -24,7 +24,7 @@ This restriction is **transitive**: when the library system is enabled (`WithLib
 | **Context-dependent** | gointerop | `extensions/gointerop` | Go concurrency primitives: channels, wait groups, rw-mutexes, atomics, once. Resource exhaustion via unbounded object creation. No ambient authority. Safe for trusted code. |
 | **Context-dependent** | threads | `extensions/threads` | SRFI-18 threads, mutexes, condition variables. Resource exhaustion via unbounded thread creation. Safe for trusted code. |
 
-**Safe** means no ambient authority — no way to affect the host system. **Privileged** means the extension grants capabilities that untrusted code should not have. **Context-dependent** means the risk depends on the trust level of the code being executed.
+**Safe** means no ambient authority (Dennis & Van Horn 1966; Miller, "Robust Composition", 2006) — no way to affect the host system. **Privileged** means the extension grants capabilities that untrusted code should not have. **Context-dependent** means the risk depends on the trust level of the code being executed.
 
 ## API
 
@@ -127,6 +127,14 @@ Isolation invariants are verified in `engine_sandbox_test.go`:
 - `WithoutCore()` produces a bare engine
 - `WithoutCore()` + extension gives only that extension
 - Library propagation respects restrictions
+
+## References
+
+- Jack B. Dennis, Earl C. Van Horn, "Programming Semantics for Multiprogrammed Computations", CACM 1966. https://doi.org/10.1145/365230.365252
+- Norm Hardy, "The Confused Deputy", ACM SIGOPS 1988. https://doi.org/10.1145/54289.871709
+- Jonathan Rees, "A Security Kernel Based on the Lambda Calculus", MIT AI Memo 1564, 1996. https://dspace.mit.edu/handle/1721.1/5944
+- Mark S. Miller, "Robust Composition: Towards a Unified Approach to Access Control and Concurrency Control", PhD Dissertation, Johns Hopkins, 2006. http://www.erights.org/talks/thesis/
+- Mark S. Miller et al., "Caja: Safe active content in sanitized JavaScript", Google, 2008. https://research.google/pubs/pub32user/
 
 ## Related
 

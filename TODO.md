@@ -1,11 +1,11 @@
 TODO
 ----
 
-**Last Updated**: 2026-03-04
+**Last Updated**: 2026-03-06
 
 ### Current Project Status
 
-**Version**: v1.4.0 (released)
+**Version**: v1.5.0 (released)
 **Core Language**: R7RS-small complete with hygienic macros, composable continuations, numeric tower
 **Extensions**: 9 extension packages — 6 public (files, math, system, threads, exceptions, gointerop), 3 internal (io, eval, all); all importable as R7RS `(wile <name>)` libraries
 **Examples**: 73 examples across 12 categories, 21 Gabriel benchmarks, Schelog
@@ -50,6 +50,12 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 
 ---
 
+## Performance & CI
+
+- [x] **CI benchmark tracking** [CI, S]: Gabriel suite (16 benchmarks, 3 runs) runs in CI; results uploaded as 90-day artifacts. PR #430. Baseline regenerated from CI hardware in #431 — apparent 20% regression was a measurement environment mismatch (local vs CI hardware), not a code regression.
+
+---
+
 ## Features
 
 - [ ] **Opcode resource limits** [Security, Design]: Per-category limits for match/expand/continuation copy. Completes defense-in-depth for embedded use. `plans/SECURITY.md`
@@ -82,6 +88,6 @@ No demand signal. Speculative or research-only.
 - [ ] **Event callbacks** [Tooling]: Hooks for expansion, compilation, debugging. IDE integration, profiling.
 - [ ] **Feature flags (3-tier)** [Runtime]: Compile-time, runtime global, extension-defined. No demand signal yet.
 - [ ] **Scribble syntax (@-expressions)** [Syntax]: Racket-style text processing. No demand signal yet.
-- [ ] **Hashtable redesign** [Performance]: Replace bucket chaining with native Go map. Profile before committing.
+- [ ] **Hashtable SRFI compliance** [Standard library]: Current implementation is a custom API (10 primitives, fixed FNV-1a hash, fixed `EqualTo` comparison). Not R7RS-small (hashtables aren't in the spec) but doesn't conform to any SRFI either. Gaps vs SRFI-125: no custom hash/equality functions in constructor, no `hash-table-update!`, no `hash-table-fold`/`hash-table-map`, no immutable variant, no `hash-table->alist`/`alist->hash-table` conversion, naming uses `hashtable-*` not `hash-table-*`. Decide: target SRFI-125 (broader ecosystem compat) or keep custom API. Internal design issue: bucket chaining over `map[uint64][]entry` could be replaced with native Go map.
 - [ ] **Fused lexing/parsing** [Research]: Flap paper analysis. Actionable only after profiling confirms tokenizer is a bottleneck. `plans/PERFORMANCE.md`
 - [ ] **Unit testing expansion**: Regression test files (`test/regression/`), library-specific tests (`lib/*/test/`), new test cases for features not covered by Go test extraction.
