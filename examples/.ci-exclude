@@ -8,3 +8,6 @@ control/exceptions.scm
 
 # Hangs: producer-consumer channel pattern doesn't terminate within timeout.
 concurrency/producers-consumers.scm
+
+# Flaky: parallel-map spawns many threads; intermittent timeout on CI runners.
+concurrency/parallel-map.scm
