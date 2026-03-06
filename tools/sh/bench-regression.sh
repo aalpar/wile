@@ -116,4 +116,10 @@ END {
         printf "\nPASS: geo-mean change %.1f%% within threshold %s%%\n", geo_change, threshold
     }
 }
-' "$BASELINE" "$RESULTS_CSV"
+' "$BASELINE" "$RESULTS_CSV" || rc=$?
+
+# Clean up the temporary results CSV so it doesn't dirty the git tree
+# (GoReleaser refuses to release with untracked files).
+rm -f "$RESULTS_CSV"
+
+exit "${rc:-0}"
