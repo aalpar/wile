@@ -920,3 +920,95 @@ func TestInitApplyFrame_PanicsOnNilParent(t *testing.T) {
 	}()
 	src.InitApplyFrame(&dst)
 }
+
+func TestGetGlobalIndexAcrossPhases(t *testing.T) {
+	c := qt.New(t)
+
+	tle := NewTopLevelEnvironment()
+	env := tle.Runtime()
+
+	sym := values.NewSymbol("foo")
+	internedSym := env.InternSymbol(sym)
+
+	// Not found in any phase
+	gi := env.GetGlobalIndexAcrossPhases(sym)
+	c.Assert(gi, qt.IsNil)
+
+	// Add to runtime (phase 0) — should be found
+	env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
+	gi = env.GetGlobalIndexAcrossPhases(sym)
+	c.Assert(gi, qt.IsNotNil)
+	c.Assert(gi.Index, qt.Equals, internedSym)
+
+	// Add a different symbol to expand (phase 1) — should find it there
+	barSym := values.NewSymbol("bar")
+	internedBar := env.InternSymbol(barSym)
+	expandEnv := tle.Expand()
+	expandEnv.MaybeCreateOwnGlobalBinding(barSym, BindingTypeSyntax)
+	gi = env.GetGlobalIndexAcrossPhases(barSym)
+	c.Assert(gi, qt.IsNotNil)
+	c.Assert(gi.Index, qt.Equals, internedBar)
+
+	// Runtime takes priority over expand for same symbol
+	env.MaybeCreateOwnGlobalBinding(barSym, BindingTypeVariable)
+	gi = env.GetGlobalIndexAcrossPhases(barSym)
+	c.Assert(gi, qt.IsNotNil)
+	// After adding to runtime, runtime binding should be returned (priority order)
+	c.Assert(gi.Index, qt.Equals, internedBar)
+}
+
+func TestGetGlobalIndexFromLibraryScopes(t *testing.T) {
+	c := qt.New(t)
+
+	tle := NewTopLevelEnvironment()
+	userEnv := tle.Runtime()
+
+	// Create a library environment with its own bindings
+	libEnv := tle.NewChildRuntime()
+	helperSym := values.NewSymbol("helper-macro")
+	libEnv.MaybeCreateOwnGlobalBinding(helperSym, BindingTypeSyntax)
+
+	// Create and register a library scope
+	libScope := syntax.NewScope()
+	tle.RegisterLibraryScope(libScope, libEnv)
+
+	// Lookup with no scopes — returns nil
+	gi := userEnv.GetGlobalIndexFromLibraryScopes(helperSym, nil)
+	c.Assert(gi, qt.IsNil)
+
+	// Lookup with unrelated scope — returns nil
+	otherScope := syntax.NewScope()
+	gi = userEnv.GetGlobalIndexFromLibraryScopes(helperSym, []*syntax.Scope{otherScope})
+	c.Assert(gi, qt.IsNil)
+
+	// Lookup with the library scope — should find it
+	gi = userEnv.GetGlobalIndexFromLibraryScopes(helperSym, []*syntax.Scope{libScope})
+	c.Assert(gi, qt.IsNotNil)
+	c.Assert(gi.Index.Key, qt.Equals, "helper-macro")
+
+	// Lookup via child TLE (delegation)
+	childTLE := tle.NewChildTopLevelEnvironment()
+	childEnv := childTLE.Runtime()
+	gi = childEnv.GetGlobalIndexFromLibraryScopes(helperSym, []*syntax.Scope{libScope})
+	c.Assert(gi, qt.IsNotNil)
+	c.Assert(gi.Index.Key, qt.Equals, "helper-macro")
+}
+
+func TestGetGlobalIndexAcrossPhases_ExpandPhaseBinding(t *testing.T) {
+	c := qt.New(t)
+
+	tle := NewTopLevelEnvironment()
+	env := tle.Runtime()
+
+	// Only in expand phase (simulates define-syntax in a library)
+	macroSym := values.NewSymbol("my-macro")
+	expandEnv := tle.Expand()
+	expandEnv.MaybeCreateOwnGlobalBinding(macroSym, BindingTypeSyntax)
+
+	gi := env.GetGlobalIndexAcrossPhases(macroSym)
+	c.Assert(gi, qt.IsNotNil)
+
+	// Not in runtime
+	runtimeGi := env.GetGlobalIndex(macroSym)
+	c.Assert(runtimeGi, qt.IsNil)
+}

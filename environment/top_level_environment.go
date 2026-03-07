@@ -83,6 +83,13 @@ type TopLevelEnvironment struct {
 	// don't race on a shared function pointer.
 	libraryEnvFactory LibraryEnvFactory
 
+	// scopeRegistry maps library scopes to their defining environment frames.
+	// When a macro's free identifier carries a library scope, the compiler
+	// uses this registry to redirect binding lookup to the library's env.
+	// Protected by scopeRegistryMu for concurrent library compilation.
+	scopeRegistry   map[*syntax.Scope]*EnvironmentFrame
+	scopeRegistryMu sync.RWMutex
+
 	// runtime is the phase 0 (runtime) environment frame.
 	runtime *EnvironmentFrame
 }
@@ -94,6 +101,7 @@ func NewTopLevelEnvironment() *TopLevelEnvironment {
 		symbolInterns: make(map[values.Symbol]*values.Symbol),
 		syntaxInterns: make(map[values.Value]syntax.SyntaxValue),
 		loadPathStack: NewLoadPathStack(),
+		scopeRegistry: make(map[*syntax.Scope]*EnvironmentFrame),
 	}
 
 	// Create the runtime (phase 0) environment frame
@@ -254,6 +262,40 @@ func (p *TopLevelEnvironment) LoadPathStack() *LoadPathStack {
 		return p.parent.LoadPathStack()
 	}
 	return p.loadPathStack
+}
+
+// RegisterLibraryScope associates a library scope with its defining environment.
+// This enables cross-library macro hygiene: when a symbol carries a library
+// scope, the compiler can redirect binding lookup to the library's env.
+//
+// This function is thread-safe.
+func (p *TopLevelEnvironment) RegisterLibraryScope(scope *syntax.Scope, env *EnvironmentFrame) {
+	if scope == nil || env == nil {
+		return
+	}
+	// Delegate to root if this is a child environment
+	if p.parent != nil {
+		p.parent.RegisterLibraryScope(scope, env)
+		return
+	}
+	p.scopeRegistryMu.Lock()
+	defer p.scopeRegistryMu.Unlock()
+	p.scopeRegistry[scope] = env
+}
+
+// LookupLibraryEnv returns the environment associated with the given library
+// scope, or nil if not registered. This function is thread-safe.
+func (p *TopLevelEnvironment) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
+	if scope == nil {
+		return nil
+	}
+	// Delegate to root if this is a child environment
+	if p.parent != nil {
+		return p.parent.LookupLibraryEnv(scope)
+	}
+	p.scopeRegistryMu.RLock()
+	defer p.scopeRegistryMu.RUnlock()
+	return p.scopeRegistry[scope]
 }
 
 // NewChildTopLevelEnvironment creates a new TopLevelEnvironment whose symbol

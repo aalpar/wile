@@ -51,6 +51,7 @@ func (p *CompileTimeContinuation) compileLibraryBegin(ctctx CompileTimeCallConte
 
 	// Pass 1: Expand all forms, compiling define-syntax as encountered
 	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env)
+	expander.libraryScope = p.libraryScope
 	expandedForms, err := expander.ExpandBodyWithDefineSyntax(forms)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "library: error expanding forms")

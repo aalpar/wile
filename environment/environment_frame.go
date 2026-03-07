@@ -766,6 +766,55 @@ func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
 	return nil
 }
 
+// GetGlobalIndexAcrossPhases searches for a global binding across phases
+// (runtime → expand → compile) using read-only phase access. Returns the
+// first GlobalIndex found, or nil if not found in any phase.
+//
+// This is used during macro compilation to resolve free identifiers that may
+// be defined in any phase (e.g., define in runtime, define-syntax in expand).
+func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol) *GlobalIndex {
+	key = p.InternSymbol(key)
+	phases := p.phases
+	if phases == nil {
+		// No phase registry — try runtime only
+		return p.GetGlobalIndex(key)
+	}
+
+	// Search runtime (phase 0) first, then expand (1), then compile (2)
+	for _, phase := range [3]int{PhaseRuntime, PhaseExpand, PhaseCompile} {
+		phaseEnv := phases.Get(phase)
+		if phaseEnv == nil {
+			continue
+		}
+		gi := phaseEnv.GetGlobalIndex(key)
+		if gi != nil {
+			return gi
+		}
+	}
+	return nil
+}
+
+// GetGlobalIndexFromLibraryScopes searches for a binding by checking each
+// scope against the TLE's scope registry. For each scope that maps to a
+// library env, performs a cross-phase lookup in that library's env.
+// Returns the first match, or nil if no library binding is found.
+func (p *EnvironmentFrame) GetGlobalIndexFromLibraryScopes(key *values.Symbol, scopes []*syntax.Scope) *GlobalIndex {
+	if p.topLevel == nil || len(scopes) == 0 {
+		return nil
+	}
+	for _, scope := range scopes {
+		libEnv := p.topLevel.LookupLibraryEnv(scope)
+		if libEnv == nil {
+			continue
+		}
+		gi := libEnv.GetGlobalIndexAcrossPhases(key)
+		if gi != nil {
+			return gi
+		}
+	}
+	return nil
+}
+
 // SetOwnGlobalValue sets the value of the binding for the given GlobalIndex.
 // It returns an error if the binding does not exist.
 func (p *EnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Value) error {

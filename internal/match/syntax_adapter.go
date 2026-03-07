@@ -64,6 +64,13 @@ type hasLocalBindingProvider interface {
 	GetHasLocalBinding() bool
 }
 
+// libraryScopeProvider is an interface for getting the library scope from a free ID resolution.
+// When non-nil, the library scope is added to the identifier during expansion so the
+// compiler can redirect binding lookup to the library's environment.
+type libraryScopeProvider interface {
+	GetLibraryScope() *syntax.Scope
+}
+
 // BindingChecker is an interface for checking if a symbol has a lexical binding.
 // This is used for R7RS auxiliary syntax hygiene: literals like => and else
 // should not match when the identifier has been locally bound.
@@ -429,6 +436,26 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 		if ok {
 			globalBinding := gbp.GetGlobal()
 			if globalBinding != nil {
+				// Check if we have a library scope — if so, add it to the
+				// identifier so CompileSymbol can redirect to the library's env
+				// via the TLE scope registry. This replaces WithResolvedBinding
+				// for library-scoped bindings.
+				lscp, lscpOk := resolution.(libraryScopeProvider)
+				if lscpOk {
+					libScope := lscp.GetLibraryScope()
+					if libScope != nil {
+						symCtx := srcCtx
+						if srcCtx != nil && len(srcCtx.Scopes) > 0 {
+							symCtx = srcCtx.WithoutScopes()
+						}
+						newSym := syntax.NewSyntaxSymbol(symVal.Key, symCtx)
+						newSym = newSym.AddScope(libScope).(*syntax.SyntaxSymbol)
+						return newSym
+					}
+				}
+
+				// No library scope — fall back to WithResolvedBinding
+				// (backward compat for non-library macros or during transition)
 				symCtx := srcCtx
 				if srcCtx != nil && len(srcCtx.Scopes) > 0 {
 					symCtx = srcCtx.WithoutScopes()

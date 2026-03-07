@@ -55,6 +55,9 @@ import (
 type ExpanderTimeContinuation struct {
 	ctx context.Context
 	env *environment.EnvironmentFrame
+	// libraryScope is set when expanding inside a library body.
+	// Threaded to CompileSyntaxRules for cross-library macro hygiene.
+	libraryScope *syntax.Scope
 }
 
 // NewExpanderTimeContinuation creates a new ExpanderTimeContinuation.
@@ -272,7 +275,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 	// Create a rebinding scope for the let-syntax body.
 	// Rebinding scopes indicate that auxiliary syntax could be shadowed.
 	// This is used in literalScopesMatch to correctly reject shadowed literals.
-	letScope := syntax.NewRebindingScope()
+	letScope := syntax.NewRebindingScopeWithLabel("let-syntax")
 
 	// For letrec-syntax, pre-register all keywords so transformers can see each other
 	if recursive && !bindingsEmpty {
@@ -349,7 +352,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 		}
 
 		// Compile the syntax-rules transformer
-		closure, err := CompileSyntaxRules(p.ctx, p.env, transformerPairExpr)
+		closure, err := CompileSyntaxRules(p.ctx, p.env, transformerPairExpr, p.libraryScope)
 		if err != nil {
 			return nil, werr.WrapForeignErrorf(err, "%s: could not compile transformer for %s", formName, keyword.Key)
 		}
@@ -485,7 +488,7 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(_ *syntax.SyntaxSymbol
 	body := bodyPair.SyntaxCar()
 
 	// Create a fresh binding scope
-	bindingScope := syntax.NewScope()
+	bindingScope := syntax.NewScopeWithLabel("binding")
 
 	// Add the scope to the entire body
 	// This adds the scope to ALL identifiers in the body, including:
@@ -788,7 +791,7 @@ func (p *ExpanderTimeContinuation) expandLambdaForm(sym *syntax.SyntaxSymbol, ex
 	// This also maintains the compiler's fast-path invariant: every symbol inside
 	// a local binding context has at least one scope (lambdaScope), so symbols
 	// with empty scopes can safely skip scope-aware resolution. See CompileSymbol.
-	lambdaScope := syntax.NewScope()
+	lambdaScope := syntax.NewScopeWithLabel("lambda")
 
 	// Add lambda scope to formals and body
 	formalsStx := syntax.AddScopeToSyntax(formals, lambdaScope)
@@ -997,7 +1000,7 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 		// If define-syntax, compile it now for subsequent forms
 		if isSyntaxFormWithKeyword(expanded, "define-syntax") {
 			pair := expanded.(*syntax.SyntaxPair)
-			err = compileDefineSyntaxFromSyntax(p.ctx, p.env, pair)
+			err = compileDefineSyntaxFromSyntax(p.ctx, p.env, pair, p.libraryScope)
 			if err != nil {
 				return nil, err
 			}
@@ -1014,7 +1017,7 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 // The env parameter is used for free identifier resolution during compilation (so macros
 // can see local bindings like lambda parameters), while the actual macro binding is stored
 // in env.Expand() for lookup during expansion.
-func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.EnvironmentFrame, dsPair *syntax.SyntaxPair) error {
+func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.EnvironmentFrame, dsPair *syntax.SyntaxPair, libraryScope *syntax.Scope) error {
 	expandEnv := env.Expand()
 
 	// Extract: (define-syntax keyword transformer)
@@ -1038,7 +1041,7 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 	// Compile the transformer using the full environment for free identifier resolution
 	// This allows macros to see local bindings (e.g., lambda parameters, forward references)
 	// Supports both syntax-rules and lambda (procedural) transformers
-	closure, err := compileTransformerToMachineClosure(ctx, env, transformer)
+	closure, err := compileTransformerToMachineClosure(ctx, env, transformer, libraryScope)
 	if err != nil {
 		return err
 	}
@@ -1239,6 +1242,24 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 		if bnd != nil && !values.IsVoid(bnd) && bnd.BindingType() == environment.BindingTypeSyntax {
 			// This is a macro - invoke the transformer
 			return p.expandMacroInvocation(sym, expr, bnd)
+		}
+
+		// Library scope macro fallback: if the symbol carries a library scope,
+		// check the library env's expand phase for an unexported macro binding.
+		// This enables macros that reference unexported helper macros.
+		symbolScopes := sym.Scopes()
+		if p.env.TopLevelEnv() != nil && len(symbolScopes) > 0 {
+			for _, scope := range symbolScopes {
+				libEnv := p.env.TopLevelEnv().LookupLibraryEnv(scope)
+				if libEnv == nil {
+					continue
+				}
+				libExpandEnv := libEnv.Expand()
+				libBnd := libExpandEnv.GetBinding(sym0)
+				if libBnd != nil && !values.IsVoid(libBnd) && libBnd.BindingType() == environment.BindingTypeSyntax {
+					return p.expandMacroInvocation(sym, expr, libBnd)
+				}
+			}
 		}
 
 		// Not a macro - check if it's a primitive (quote, if, define-syntax, etc.)

@@ -62,6 +62,11 @@ type FreeIdResolution struct {
 	// scopes" from "no binding at all" - the former should NOT get intro scope added
 	// during expansion, while the latter might (for special forms).
 	HasLocalBinding bool
+	// LibScope is the library scope associated with this free identifier's binding.
+	// When non-nil, applyHygieneToSymbol adds this scope to the identifier
+	// instead of using WithResolvedBinding. This enables scope-based cross-library
+	// lookup via the TLE's scope registry.
+	LibScope *syntax.Scope
 }
 
 // GetLocalScopes returns the local binding's scopes, or nil if this is a global binding.
@@ -80,6 +85,16 @@ func (p *FreeIdResolution) GetGlobal() *environment.GlobalIndex {
 		return nil
 	}
 	return p.Global
+}
+
+// GetLibraryScope returns the library scope associated with this free identifier,
+// or nil if the containing macro was not compiled inside a library.
+// Implements the libraryScopeProvider interface for match package hygiene.
+func (p *FreeIdResolution) GetLibraryScope() *syntax.Scope {
+	if p == nil {
+		return nil
+	}
+	return p.LibScope
 }
 
 // GetHasLocalBinding returns true if a local binding was found at macro definition time.
@@ -161,7 +176,7 @@ func (p *clausesWrapper) SchemeString() string {
 //
 // The returned closure is stored in the environment with BindingTypeSyntax,
 // allowing the expander to recognize it as a macro transformer.
-func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, syntaxRulesForm syntax.SyntaxValue) (*MachineClosure, error) {
+func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, syntaxRulesForm syntax.SyntaxValue, libraryScope *syntax.Scope) (*MachineClosure, error) {
 	// syntaxRulesForm should be (syntax-rules (literals...) clause1 clause2 ...)
 	// or (syntax-rules <ellipsis> (literals...) clause1 clause2 ...)
 	formPair, ok := syntaxRulesForm.(*syntax.SyntaxPair)
@@ -285,7 +300,7 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 		// Compile the pattern with custom ellipsis
 		// Pass env so free identifiers can be resolved to their definition-time bindings
 		// Pass literalSyntax for scope-aware literal matching (hygiene)
-		compiledClause, err := compileClauseWithEllipsisAndLiterals(ctx, env, pattern, template, literals, literalSyntax, ellipsis)
+		compiledClause, err := compileClauseWithEllipsisAndLiterals(ctx, env, pattern, template, literals, literalSyntax, ellipsis, libraryScope)
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "syntax-rules: error compiling clause")
 		}
@@ -319,6 +334,7 @@ func compileClauseWithEllipsisAndLiterals(
 	literals map[string]struct{},
 	literalSyntax map[string]*syntax.SyntaxSymbol,
 	ellipsis string,
+	libraryScope *syntax.Scope,
 ) (*SyntaxRulesClause, error) {
 	// Determine pattern variables (anything not a literal, keyword, or ellipsis)
 	// Use literalSyntax for scope-aware literal matching (R7RS bound-identifier=? semantics)
@@ -354,7 +370,7 @@ func compileClauseWithEllipsisAndLiterals(
 	// - For global bindings: store GlobalIndex for cross-library hygiene
 	// - For local bindings: store scopes so the identifier resolves to definition-time binding
 	freeIds := make(map[string]*FreeIdResolution)
-	collectFreeIdentifiersWithEllipsis(env, template, variables, freeIds, ellipsis)
+	collectFreeIdentifiersWithEllipsis(env, template, variables, freeIds, ellipsis, libraryScope)
 
 	return &SyntaxRulesClause{
 		template:         template,
@@ -386,7 +402,7 @@ func compileClauseWithEllipsisAndLiterals(
 // Resolves each free identifier to either:
 // - LocalScopes (for local bindings) - enables hygiene for let-syntax capturing local vars
 // - GlobalIndex (for global bindings) - enables cross-library macro hygiene
-func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]*FreeIdResolution, ellipsis string) {
+func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]*FreeIdResolution, ellipsis string, libraryScope *syntax.Scope) {
 	switch t := template.(type) {
 	case *syntax.SyntaxSymbol:
 		sym := t.Unwrap()
@@ -419,12 +435,14 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 					}
 				}
 
-				// Fall back to global binding (for cross-library hygiene)
-				gi := env.GetGlobalIndex(internedSym)
+				// Use cross-phase lookup to find bindings in any phase
+				// (runtime for define, expand for define-syntax, compile for auxiliary syntax)
+				gi := env.GetGlobalIndexAcrossPhases(internedSym)
 				// Store the resolved GlobalIndex (may be nil if unbound, which is ok -
 				// unbound free identifiers like special forms will be handled normally)
 				freeIds[symVal.Key] = &FreeIdResolution{
-					Global: gi,
+					Global:   gi,
+					LibScope: libraryScope,
 				}
 			}
 		}
@@ -453,20 +471,20 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 			// Recurse into car
 			if car != nil {
 				carStx := car
-				collectFreeIdentifiersWithEllipsis(env, carStx, patternVars, freeIds, ellipsis)
+				collectFreeIdentifiersWithEllipsis(env, carStx, patternVars, freeIds, ellipsis, libraryScope)
 			}
 			// Recurse into cdr
 			cdr := t.SyntaxCdr()
 			if cdr != nil {
 				cdrStx := cdr
-				collectFreeIdentifiersWithEllipsis(env, cdrStx, patternVars, freeIds, ellipsis)
+				collectFreeIdentifiersWithEllipsis(env, cdrStx, patternVars, freeIds, ellipsis, libraryScope)
 			}
 		}
 
 	case *syntax.SyntaxVector:
 		// R7RS §4.3.2: recurse into vector elements for free identifiers
 		for _, elem := range t.Values {
-			collectFreeIdentifiersWithEllipsis(env, elem, patternVars, freeIds, ellipsis)
+			collectFreeIdentifiersWithEllipsis(env, elem, patternVars, freeIds, ellipsis, libraryScope)
 		}
 
 	case *syntax.SyntaxObject:

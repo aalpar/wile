@@ -8,8 +8,6 @@
     empty-state
     ;; miniKanren syntactic sugar
     fresh conde run run*
-    ;; Internal macros (exported for hygiene — used by fresh/conde/run)
-    zzz conj+ disj+
     ;; Reification
     reify reify-1st)
   (import (scheme base)
