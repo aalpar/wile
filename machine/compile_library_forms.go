@@ -75,6 +75,14 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 
 	lib := NewCompiledLibrary(libName, libEnv)
 
+	// Create a unique library scope for cross-library macro hygiene.
+	// When a macro defined in this library references an unexported binding,
+	// the library scope enables the compiler to redirect lookup to this
+	// library's environment via the TLE's scope registry.
+	libScope := syntax.NewScope()
+	lib.LibraryScope = libScope
+	libEnv.TopLevelEnv().RegisterLibraryScope(libScope, libEnv)
+
 	// Process library declarations
 	declsExpr := rest.SyntaxCdr()
 	// Handle empty declarations list (just (define-library (name)))
@@ -95,6 +103,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 	// Create a compiler for the library environment
 	libTemplate := NewNativeTemplate(0, 0, false)
 	libCompiler := NewCompiletimeContinuation(libTemplate, libEnv)
+	libCompiler.libraryScope = libScope
 
 	// Process each declaration
 	_, err = syntax.SyntaxForEach(ctctx.ctx, decls, func(_ context.Context, _ int, _ bool, decl syntax.SyntaxValue) error {

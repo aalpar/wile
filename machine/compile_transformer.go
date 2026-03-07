@@ -36,6 +36,7 @@ func compileTransformerToMachineClosure(
 	ctx context.Context,
 	env *environment.EnvironmentFrame,
 	transformerExpr syntax.SyntaxValue,
+	libraryScope *syntax.Scope,
 ) (*MachineClosure, error) {
 	transformerPair, ok := transformerExpr.(*syntax.SyntaxPair)
 	if !ok {
@@ -64,7 +65,7 @@ func compileTransformerToMachineClosure(
 
 	switch symbol.Key {
 	case "syntax-rules":
-		return CompileSyntaxRules(ctx, env, transformerPair)
+		return CompileSyntaxRules(ctx, env, transformerPair, libraryScope)
 
 	case "lambda":
 		return compileAndEvalLambdaTransformer(ctx, env, transformerPair)

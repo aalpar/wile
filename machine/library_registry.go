@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/werr"
 )
 
@@ -64,11 +65,12 @@ func (p LibraryName) ToFilePath() string {
 
 // CompiledLibrary holds a loaded and compiled library.
 type CompiledLibrary struct {
-	Name       LibraryName                   // Library name
-	Env        *environment.EnvironmentFrame // Library's private environment
-	Exports    map[string]string             // external-name -> internal-name
-	SourceFile string                        // Path to .sld file (for error messages)
-	Template   *NativeTemplate               // Compiled bytecode (for execution)
+	Name         LibraryName                   // Library name
+	Env          *environment.EnvironmentFrame // Library's private environment
+	Exports      map[string]string             // external-name -> internal-name
+	SourceFile   string                        // Path to .sld file (for error messages)
+	Template     *NativeTemplate               // Compiled bytecode (for execution)
+	LibraryScope *syntax.Scope                 // Unique scope for cross-library macro hygiene
 }
 
 // NewCompiledLibrary creates a new compiled library.

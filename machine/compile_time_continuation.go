@@ -31,6 +31,11 @@ type CompileTimeContinuation struct {
 	sourceStack []*syntax.SourceContext
 	// libraryCallback is called when a library is compiled (for LoadLibrary)
 	libraryCallback func(*CompiledLibrary)
+	// libraryScope is the unique scope for the library being compiled.
+	// Non-nil only when compiling inside a define-library body.
+	// Threaded to CompileSyntaxRules so free identifiers in macro templates
+	// can carry the library scope for cross-library hygiene.
+	libraryScope *syntax.Scope
 }
 
 // NewCompiletimeContinuation creates a new CompileTimeContinuation
@@ -79,7 +84,6 @@ func (p *CompileTimeContinuation) SetLibraryCallback(cb func(*CompiledLibrary)) 
 // CompileSymbol compiles a syntax symbol expression.
 func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, expr *syntax.SyntaxSymbol) error {
 	sym := p.env.InternSymbol(expr.Sym)
-
 	// Check for pre-resolved binding from macro expansion
 	// This handles cross-library hygiene: free identifiers in macro templates
 	// carry their definition-time GlobalIndex so they resolve correctly
@@ -163,21 +167,38 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 		return nil
 	}
 
-	// Check global binding with scope matching
-	globalBinding := p.env.GetBindingWithScopes(sym, symbolScopes)
-	if globalBinding == nil {
-		// No binding found that matches the scopes
-		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes", sym.Key)
+	// Library scope lookup takes priority over general scope matching.
+	// When a macro's free identifier carries a library scope, we redirect
+	// to the library's env via the TLE scope registry. This must come
+	// before GetBindingWithScopes because the outer expansion of
+	// define-library may create placeholder bindings with empty scopes
+	// in the caller env, which would falsely match any reference scopes.
+	libGI := p.env.GetGlobalIndexFromLibraryScopes(sym, symbolScopes)
+	if libGI != nil {
+		// Use runtime resolution via GlobalIndex so the binding value
+		// is read at execution time (after the library template runs).
+		i := p.template.MaybeAppendLiteral(libGI)
+		p.AppendOperations(
+			NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(i),
+		)
+		return nil
 	}
 
-	// It must be a global binding (since local lookup failed).
-	// globalBinding was found by GetBindingWithScopes — use it directly
-	// as a cached binding to skip runtime map/lock overhead.
-	idx := p.template.AppendCachedBinding(globalBinding)
-	p.AppendOperations(
-		NewOperationLoadCachedBinding(idx),
-	)
-	return nil
+	// Check global binding with scope matching
+	globalBinding := p.env.GetBindingWithScopes(sym, symbolScopes)
+	if globalBinding != nil {
+		// It must be a global binding (since local lookup failed).
+		// globalBinding was found by GetBindingWithScopes — use it directly
+		// as a cached binding to skip runtime map/lock overhead.
+		idx := p.template.AppendCachedBinding(globalBinding)
+		p.AppendOperations(
+			NewOperationLoadCachedBinding(idx),
+		)
+		return nil
+	}
+
+	// No binding found that matches the scopes
+	return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes", sym.Key)
 }
 
 // CompileSyntaxPrimitive compiles extension forms via the syntax compiler registry.

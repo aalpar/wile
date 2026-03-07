@@ -79,7 +79,7 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 	}
 
 	// Compile the transformer (supports syntax-rules and lambda)
-	closure, err := compileTransformerToMachineClosure(ctctx.ctx, p.env, transformerExpr)
+	closure, err := compileTransformerToMachineClosure(ctctx.ctx, p.env, transformerExpr, p.libraryScope)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "could not compile transformer")
 	}

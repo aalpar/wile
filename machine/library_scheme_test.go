@@ -350,3 +350,107 @@ func TestIndividualSchemeLibraries(t *testing.T) {
 		})
 	}
 }
+
+// compileAndRegisterLibrary is a test helper that compiles a library definition,
+// executes its template to populate bindings, and registers it in the registry.
+func compileAndRegisterLibrary(t *testing.T, env *environment.EnvironmentFrame, libCode string) *machine.CompiledLibrary {
+	t.Helper()
+	c := qt.New(t)
+
+	sv := parseSchemeExpr(t, env, libCode)
+	expanded, err := machine.NewExpanderTimeContinuation(context.Background(), env).ExpandExpression(sv)
+	c.Assert(err, qt.IsNil)
+
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	compiler := machine.NewCompiletimeContinuation(tpl, env)
+	var compiledLib *machine.CompiledLibrary
+	compiler.SetLibraryCallback(func(lib *machine.CompiledLibrary) {
+		compiledLib = lib
+	})
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, true)
+	err = compiler.CompileExpression(ctctx, expanded)
+	c.Assert(err, qt.IsNil)
+	c.Assert(compiledLib, qt.IsNotNil)
+
+	if compiledLib.Template != nil {
+		cont := machine.NewMachineContinuation(nil, compiledLib.Template, compiledLib.Env)
+		mc := machine.NewMachineContext(context.Background(), cont)
+		err = mc.Run()
+		c.Assert(err, qt.IsNil)
+	}
+
+	registryAny := env.LibraryRegistry()
+	registry := registryAny.(*machine.LibraryRegistry)
+	err = registry.Register(compiledLib)
+	c.Assert(err, qt.IsNil)
+
+	return compiledLib
+}
+
+// TestLibraryInternalMacroToMacroHygiene tests that an exported macro can
+// reference an unexported helper MACRO. This is the scenario from issue #433:
+// the helper macro's binding lives in the library's expand phase, invisible
+// to the use-site environment. Library scopes enable the compiler to redirect
+// lookup to the library env via the TLE scope registry.
+func TestLibraryInternalMacroToMacroHygiene(t *testing.T) {
+	c := qt.New(t)
+	env := setupSchemeLibraryTest(t)
+
+	libCode := `(define-library (test macro-to-macro)
+	  (export public-macro)
+	  (import (scheme base))
+	  (begin
+	    (define-syntax helper-macro
+	      (syntax-rules ()
+	        ((helper-macro x) (+ x 10))))
+	    (define-syntax public-macro
+	      (syntax-rules ()
+	        ((public-macro x) (helper-macro x))))))`
+
+	compileAndRegisterLibrary(t, env, libCode)
+
+	// Import into the caller environment
+	sv := parseSchemeExpr(t, env, `(import (test macro-to-macro))`)
+	_, err := compileAndRun(t, env, sv)
+	c.Assert(err, qt.IsNil)
+
+	// Use the public macro — helper-macro is NOT exported
+	sv = parseSchemeExpr(t, env, `(public-macro 5)`)
+	result, err := compileAndRun(t, env, sv)
+	c.Assert(err, qt.IsNil, qt.Commentf("exported macro using unexported helper macro should work"))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(15))
+}
+
+// TestLibraryChainedMacroHygiene tests chained macro references similar to
+// the miniKanren pattern: an exported macro uses an unexported intermediate
+// macro which in turn uses another unexported helper. All three must resolve
+// through the library's environment.
+func TestLibraryChainedMacroHygiene(t *testing.T) {
+	c := qt.New(t)
+	env := setupSchemeLibraryTest(t)
+
+	libCode := `(define-library (test chained-macros)
+	  (export outer-macro)
+	  (import (scheme base))
+	  (begin
+	    (define-syntax inner-macro
+	      (syntax-rules ()
+	        ((inner-macro x) (+ x 100))))
+	    (define-syntax middle-macro
+	      (syntax-rules ()
+	        ((middle-macro x) (inner-macro x))))
+	    (define-syntax outer-macro
+	      (syntax-rules ()
+	        ((outer-macro x) (middle-macro x))))))`
+
+	compileAndRegisterLibrary(t, env, libCode)
+
+	sv := parseSchemeExpr(t, env, `(import (test chained-macros))`)
+	_, err := compileAndRun(t, env, sv)
+	c.Assert(err, qt.IsNil)
+
+	sv = parseSchemeExpr(t, env, `(outer-macro 5)`)
+	result, err := compileAndRun(t, env, sv)
+	c.Assert(err, qt.IsNil, qt.Commentf("chained macro references should resolve through library scopes"))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(105))
+}
