@@ -79,7 +79,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 	// When a macro defined in this library references an unexported binding,
 	// the library scope enables the compiler to redirect lookup to this
 	// library's environment via the TLE's scope registry.
-	libScope := syntax.NewScope()
+	libScope := syntax.NewScopeWithLabel("library:" + libName.SchemeString())
 	lib.LibraryScope = libScope
 	libEnv.TopLevelEnv().RegisterLibraryScope(libScope, libEnv)
 

@@ -40,6 +40,9 @@ type Scope struct {
 	// This distinction is used in literalScopesMatch to correctly handle auxiliary
 	// syntax like => and else in cond/case.
 	IsRebinding bool
+	// Label is an optional human-readable description for debugging.
+	// Examples: "lambda", "let-syntax", "intro:my-macro", "library:(wile kanren)".
+	Label string
 }
 
 // nextScopeID is a counter for generating unique scope identities
@@ -49,7 +52,14 @@ var nextScopeID uint64
 // By default, scopes are not rebinding scopes.
 func NewScope() *Scope {
 	id := atomic.AddUint64(&nextScopeID, 1)
-	return &Scope{id: id, IsRebinding: false}
+	return &Scope{id: id}
+}
+
+// NewScopeWithLabel creates a new scope with a human-readable label for debugging.
+// The label has no semantic effect — it is purely for diagnostics.
+func NewScopeWithLabel(label string) *Scope {
+	id := atomic.AddUint64(&nextScopeID, 1)
+	return &Scope{id: id, Label: label}
 }
 
 // NewRebindingScope creates a new scope that can potentially rebind auxiliary syntax.
@@ -59,6 +69,12 @@ func NewRebindingScope() *Scope {
 	return &Scope{id: id, IsRebinding: true}
 }
 
+// NewRebindingScopeWithLabel creates a new rebinding scope with a label.
+func NewRebindingScopeWithLabel(label string) *Scope {
+	id := atomic.AddUint64(&nextScopeID, 1)
+	return &Scope{id: id, IsRebinding: true, Label: label}
+}
+
 // ID returns the unique identifier for this scope.
 // This can be used as a macro application ID for tracing.
 func (p *Scope) ID() uint64 {
@@ -66,6 +82,18 @@ func (p *Scope) ID() uint64 {
 		return 0
 	}
 	return p.id
+}
+
+// String returns a human-readable representation of the scope.
+// If a label is set, returns "scope:ID(label)"; otherwise "scope:ID".
+func (p *Scope) String() string {
+	if p == nil {
+		return "scope:nil"
+	}
+	if p.Label != "" {
+		return fmt.Sprintf("scope:%d(%s)", p.id, p.Label)
+	}
+	return fmt.Sprintf("scope:%d", p.id)
 }
 
 // syntaxBase provides common SourceContext() implementation for syntax types.

@@ -275,7 +275,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 	// Create a rebinding scope for the let-syntax body.
 	// Rebinding scopes indicate that auxiliary syntax could be shadowed.
 	// This is used in literalScopesMatch to correctly reject shadowed literals.
-	letScope := syntax.NewRebindingScope()
+	letScope := syntax.NewRebindingScopeWithLabel("let-syntax")
 
 	// For letrec-syntax, pre-register all keywords so transformers can see each other
 	if recursive && !bindingsEmpty {
@@ -488,7 +488,7 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(_ *syntax.SyntaxSymbol
 	body := bodyPair.SyntaxCar()
 
 	// Create a fresh binding scope
-	bindingScope := syntax.NewScope()
+	bindingScope := syntax.NewScopeWithLabel("binding")
 
 	// Add the scope to the entire body
 	// This adds the scope to ALL identifiers in the body, including:
@@ -791,7 +791,7 @@ func (p *ExpanderTimeContinuation) expandLambdaForm(sym *syntax.SyntaxSymbol, ex
 	// This also maintains the compiler's fast-path invariant: every symbol inside
 	// a local binding context has at least one scope (lambdaScope), so symbols
 	// with empty scopes can safely skip scope-aware resolution. See CompileSymbol.
-	lambdaScope := syntax.NewScope()
+	lambdaScope := syntax.NewScopeWithLabel("lambda")
 
 	// Add lambda scope to formals and body
 	formalsStx := syntax.AddScopeToSyntax(formals, lambdaScope)
