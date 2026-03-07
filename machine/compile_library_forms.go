@@ -80,7 +80,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 	// the library scope enables the compiler to redirect lookup to this
 	// library's environment via the TLE's scope registry.
 	libScope := syntax.NewScopeWithLabel("library:" + libName.SchemeString())
-	libEnv.TopLevelEnv().RegisterLibraryScope(libScope, libEnv)
+	p.env.TopLevelEnv().RegisterLibraryScope(libScope, libEnv)
 
 	// Process library declarations
 	declsExpr := rest.SyntaxCdr()

@@ -88,7 +88,7 @@ func (p *FreeIdResolution) GetGlobal() *environment.GlobalIndex {
 }
 
 // GetLibraryScope returns the library scope associated with this free identifier,
-// or nil if the identifier is not from a library.
+// or nil if the containing macro was not compiled inside a library.
 // Implements the libraryScopeProvider interface for match package hygiene.
 func (p *FreeIdResolution) GetLibraryScope() *syntax.Scope {
 	if p == nil {
