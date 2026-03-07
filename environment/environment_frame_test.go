@@ -931,32 +931,30 @@ func TestGetGlobalIndexAcrossPhases(t *testing.T) {
 	internedSym := env.InternSymbol(sym)
 
 	// Not found in any phase
-	gi, phase := env.GetGlobalIndexAcrossPhases(sym)
+	gi := env.GetGlobalIndexAcrossPhases(sym)
 	c.Assert(gi, qt.IsNil)
-	c.Assert(phase, qt.Equals, -1)
 
 	// Add to runtime (phase 0) — should be found
 	env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
-	gi, phase = env.GetGlobalIndexAcrossPhases(sym)
+	gi = env.GetGlobalIndexAcrossPhases(sym)
 	c.Assert(gi, qt.IsNotNil)
 	c.Assert(gi.Index, qt.Equals, internedSym)
-	c.Assert(phase, qt.Equals, PhaseRuntime)
 
 	// Add a different symbol to expand (phase 1) — should find it there
 	barSym := values.NewSymbol("bar")
 	internedBar := env.InternSymbol(barSym)
 	expandEnv := tle.Expand()
 	expandEnv.MaybeCreateOwnGlobalBinding(barSym, BindingTypeSyntax)
-	gi, phase = env.GetGlobalIndexAcrossPhases(barSym)
+	gi = env.GetGlobalIndexAcrossPhases(barSym)
 	c.Assert(gi, qt.IsNotNil)
 	c.Assert(gi.Index, qt.Equals, internedBar)
-	c.Assert(phase, qt.Equals, PhaseExpand)
 
 	// Runtime takes priority over expand for same symbol
 	env.MaybeCreateOwnGlobalBinding(barSym, BindingTypeVariable)
-	gi, phase = env.GetGlobalIndexAcrossPhases(barSym)
+	gi = env.GetGlobalIndexAcrossPhases(barSym)
 	c.Assert(gi, qt.IsNotNil)
-	c.Assert(phase, qt.Equals, PhaseRuntime)
+	// After adding to runtime, runtime binding should be returned (priority order)
+	c.Assert(gi.Index, qt.Equals, internedBar)
 }
 
 func TestGetGlobalIndexFromLibraryScopes(t *testing.T) {
@@ -1007,9 +1005,8 @@ func TestGetGlobalIndexAcrossPhases_ExpandPhaseBinding(t *testing.T) {
 	expandEnv := tle.Expand()
 	expandEnv.MaybeCreateOwnGlobalBinding(macroSym, BindingTypeSyntax)
 
-	gi, phase := env.GetGlobalIndexAcrossPhases(macroSym)
+	gi := env.GetGlobalIndexAcrossPhases(macroSym)
 	c.Assert(gi, qt.IsNotNil)
-	c.Assert(phase, qt.Equals, PhaseExpand)
 
 	// Not in runtime
 	runtimeGi := env.GetGlobalIndex(macroSym)

@@ -437,7 +437,7 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 
 				// Use cross-phase lookup to find bindings in any phase
 				// (runtime for define, expand for define-syntax, compile for auxiliary syntax)
-				gi, _ := env.GetGlobalIndexAcrossPhases(internedSym)
+				gi := env.GetGlobalIndexAcrossPhases(internedSym)
 				// Store the resolved GlobalIndex (may be nil if unbound, which is ok -
 				// unbound free identifiers like special forms will be handled normally)
 				freeIds[symVal.Key] = &FreeIdResolution{

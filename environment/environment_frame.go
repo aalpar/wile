@@ -768,21 +768,16 @@ func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
 
 // GetGlobalIndexAcrossPhases searches for a global binding across phases
 // (runtime → expand → compile) using read-only phase access. Returns the
-// GlobalIndex and the phase level where the binding was found, or (nil, -1)
-// if not found in any phase.
+// first GlobalIndex found, or nil if not found in any phase.
 //
 // This is used during macro compilation to resolve free identifiers that may
 // be defined in any phase (e.g., define in runtime, define-syntax in expand).
-func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol) (*GlobalIndex, int) {
+func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol) *GlobalIndex {
 	key = p.InternSymbol(key)
 	phases := p.phases
 	if phases == nil {
 		// No phase registry — try runtime only
-		gi := p.GetGlobalIndex(key)
-		if gi != nil {
-			return gi, PhaseRuntime
-		}
-		return nil, -1
+		return p.GetGlobalIndex(key)
 	}
 
 	// Search runtime (phase 0) first, then expand (1), then compile (2)
@@ -793,10 +788,10 @@ func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol) (*Glob
 		}
 		gi := phaseEnv.GetGlobalIndex(key)
 		if gi != nil {
-			return gi, phase
+			return gi
 		}
 	}
-	return nil, -1
+	return nil
 }
 
 // GetGlobalIndexFromLibraryScopes searches for a binding by checking each
@@ -812,7 +807,7 @@ func (p *EnvironmentFrame) GetGlobalIndexFromLibraryScopes(key *values.Symbol, s
 		if libEnv == nil {
 			continue
 		}
-		gi, _ := libEnv.GetGlobalIndexAcrossPhases(key)
+		gi := libEnv.GetGlobalIndexAcrossPhases(key)
 		if gi != nil {
 			return gi
 		}
