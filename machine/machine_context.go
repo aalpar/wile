@@ -687,8 +687,9 @@ func (p *MachineContext) applyParameter(param *Parameter, args []values.Value) (
 }
 
 // applyComposableContinuation applies a composable continuation by splicing
-// its captured frames onto the current continuation chain. The continuation
-// is deep-copied for safe re-invocation.
+// its captured frames onto the current continuation chain. On first invocation,
+// the segment is used directly (marked shared for frame preservation). On
+// re-invocation, the segment is deep-copied for independence.
 //
 // See: Flatt, Yu, Findler, Felleisen "Adding Delimited and Composable Control
 // to a Production Programming Environment" (ICFP 2007).
@@ -719,8 +720,9 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 	// the backing array and invalidating args.
 	val := args[0]
 
-	// Deep-copy the segment for safe re-invocation
-	segment := cc.Cont().DeepCopy()
+	// Acquire the segment: first invocation avoids DeepCopy by marking
+	// the segment shared; re-invocations deep-copy from preserved frames.
+	segment := cc.AcquireSegment()
 
 	// Handle dynamic-wind: unwind current extents not in captured stack,
 	// rewind captured extents not in current stack.

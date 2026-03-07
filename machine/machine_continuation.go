@@ -154,31 +154,29 @@ func (p *MachineContinuation) CallDepth() int {
 }
 
 func (p *MachineContinuation) Copy() *MachineContinuation {
-	var evalsCopy *Stack
+	q := acquireContinuation()
+	q.env = p.env
+	q.template = p.template
+	q.singleValue = p.singleValue
+	q.multiValues = slices.Clone(p.multiValues)
 	if p.evals != nil {
-		evalsCopy = p.evals.Copy()
+		q.evals = p.evals.Copy()
 	}
-	q := &MachineContinuation{
-		vmState: vmState{
-			env:          p.env,
-			template:     p.template,
-			singleValue:  p.singleValue,
-			multiValues:  slices.Clone(p.multiValues),
-			evals:        evalsCopy,
-			pc:           p.pc,
-			windingStack: p.windingStack.Copy(),
-			promptTag:    p.promptTag,
-			threadID:     p.threadID,
-			callDepth:    p.callDepth,
-			// envPooled intentionally false: Copy() shares the env pointer
-			// with the original frame. The copy does not own the env frame
-			// and must not release it back to the pool.
-		},
-		parent:         p.parent,
-		promptHandler:  p.promptHandler,
-		inlineEvalsLen: p.inlineEvalsLen,
-		inlineEvals:    p.inlineEvals, // array copy (value semantics)
+	q.pc = p.pc
+	if len(p.windingStack) > 0 {
+		q.windingStack = p.windingStack.Copy()
 	}
+	q.promptTag = p.promptTag
+	q.threadID = p.threadID
+	q.callDepth = p.callDepth
+	// envPooled: zero value (false) — Copy() shares the env pointer
+	// with the original frame. The copy does not own the env frame
+	// and must not release it back to the pool.
+	// shared: zero value (false) — copies are always fresh.
+	q.parent = p.parent
+	q.promptHandler = p.promptHandler
+	q.inlineEvalsLen = p.inlineEvalsLen
+	q.inlineEvals = p.inlineEvals // array copy (value semantics)
 	return q
 }
 

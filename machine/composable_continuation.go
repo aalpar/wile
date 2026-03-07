@@ -31,8 +31,22 @@ var _ values.Callable = (*ComposableContinuation)(nil)
 type ComposableContinuation struct {
 	cont         *MachineContinuation
 	windingStack WindingStack
-	threadID     uint64        // SRFI-18: thread that captured this continuation (0 = primordial)
-	barrierValid *BarrierToken // barrier context at capture time; nil = no active barrier
+	threadID     uint64               // SRFI-18: thread that captured this continuation (0 = primordial)
+	barrierValid *BarrierToken        // barrier context at capture time; nil = no active barrier
+	bottom       *MachineContinuation // bottom frame of segment; for parent reset on re-invocation
+	consumed     bool                 // true after first AcquireSegment call
+}
+
+// bottomOfChain walks a continuation chain to its terminal frame (parent == nil).
+func bottomOfChain(head *MachineContinuation) *MachineContinuation {
+	if head == nil {
+		return nil
+	}
+	current := head
+	for current.parent != nil {
+		current = current.parent
+	}
+	return current
 }
 
 // NewComposableContinuation creates a composable continuation from a
@@ -45,6 +59,7 @@ func NewComposableContinuation(cont *MachineContinuation, windingStack WindingSt
 		windingStack: windingStack,
 		threadID:     threadID,
 		barrierValid: barrierValid,
+		bottom:       bottomOfChain(cont),
 	}
 	return q
 }
@@ -65,6 +80,35 @@ func (p *ComposableContinuation) ThreadID() uint64 {
 // was created. Used by applyComposableContinuation to detect barrier crossings.
 func (p *ComposableContinuation) BarrierValid() *BarrierToken {
 	return p.barrierValid
+}
+
+// AcquireSegment returns the continuation segment for grafting.
+//
+// First invocation marks the segment shared and returns it directly, avoiding
+// a DeepCopy. Shared marking ensures RestoreAndRelease preserves frame evals
+// for potential re-invocation.
+//
+// Subsequent invocations reset the bottom frame's parent to nil (undoing
+// GraftContinuation's mutation from the prior invocation) and deep-copy
+// from the preserved shared frames.
+//
+// This optimizes one-shot continuations (the common case in Schelog-style
+// backtracking), eliminating O(depth) frame allocations per invocation.
+func (p *ComposableContinuation) AcquireSegment() *MachineContinuation {
+	if p.cont == nil {
+		return nil
+	}
+	if !p.consumed {
+		p.consumed = true
+		p.cont.MarkChainShared()
+		return p.cont
+	}
+	// Re-invocation: undo GraftContinuation's parent mutation so
+	// DeepCopy produces a self-contained segment (bottom.parent == nil).
+	if p.bottom != nil {
+		p.bottom.parent = nil
+	}
+	return p.cont.DeepCopy()
 }
 
 // AcceptsArity reports whether this composable continuation can be called with
