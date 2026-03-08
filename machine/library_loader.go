@@ -132,7 +132,7 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 
 	// Create a fresh environment for the library
 	// This isolates the library's bindings from the caller's environment,
-	// but shares the TopLevelEnvironment for symbol interning.
+	// but shares the TopLevelEnvironment for syntax interning.
 	factory := callerEnv.TopLevelEnv().LibraryEnvFactory()
 	if factory == nil {
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration, "LibraryEnvFactory not configured")

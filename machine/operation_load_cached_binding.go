@@ -21,8 +21,8 @@ import (
 )
 
 // OperationLoadCachedBinding loads a global variable from a compile-time
-// resolved *Binding pointer, bypassing the runtime symbol interning and
-// map lookup path used by OpLoadGlobal.
+// resolved *Binding pointer, bypassing the runtime environment lookup
+// path used by OpLoadGlobal.
 type OperationLoadCachedBinding struct {
 	OperationBase
 	BindingIndex int32

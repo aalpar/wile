@@ -58,7 +58,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 	}
 
 	// Create isolated library environment with primitives
-	// The library gets its own bindings but shares the TopLevelEnvironment for symbol interning
+	// The library gets its own bindings but shares the TopLevelEnvironment for syntax interning
 	var libEnv *environment.EnvironmentFrame
 	factory := p.env.TopLevelEnv().LibraryEnvFactory()
 	if factory != nil {

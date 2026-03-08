@@ -420,12 +420,12 @@ func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 		changed := false
 		newElements := make([]values.Value, len(*val))
 		for i, elem := range *val {
-			interned, err := p.validateQuotedLiteralWithVisited(elem, visited)
+			validated, err := p.validateQuotedLiteralWithVisited(elem, visited)
 			if err != nil {
 				return nil, err
 			}
-			newElements[i] = interned
-			if interned != elem {
+			newElements[i] = validated
+			if validated != elem {
 				changed = true
 			}
 		}
@@ -447,7 +447,7 @@ func (p *CompileTimeContinuation) CompileSelfEvaluating(_ CompileTimeCallContext
 		)
 		return nil
 	}
-	// Intern symbols to ensure eq? identity per R7RS 6.5
+	// Validate quoted literal for circular datum labels.
 	// Use UnwrapAll() to fully unwrap syntax values (including vector elements)
 	// so that equal? comparisons work correctly on literal vectors.
 	val, err := p.validateQuotedLiteral(expr.UnwrapAll())

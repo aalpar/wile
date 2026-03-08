@@ -152,8 +152,8 @@ func BenchmarkAllocThenStringEqEscaped(b *testing.B) {
 	}
 }
 
-// eqByString is the eq? implementation for symbols (string-keyed comparison).
-// For non-symbol types, falls back to pointer comparison.
+// eqByString duplicates helpers.EqIdentity for benchmarking purposes.
+// Cannot import registry/helpers here due to package layering.
 func eqByString(a, b values.Value) bool {
 	sa, ok := a.(*values.Symbol)
 	if ok {

@@ -30,7 +30,7 @@ import (
 )
 
 // Helper function to parse a string into syntax using the given environment.
-// Using the same environment ensures symbols are interned consistently.
+// Using the same environment ensures consistent symbol resolution.
 func parseString(t *testing.T, env *environment.EnvironmentFrame, input string) syntax.SyntaxValue {
 	reader := strings.NewReader(input)
 	p := parser.NewParser(env, true, reader)

@@ -234,7 +234,7 @@ func (p *CompileTimeContinuation) CompileValidatedDefine(ctctx CompileTimeCallCo
 
 // declareDefineBinding creates the binding for a define form before compiling its value.
 // This early declaration enables self-recursive definitions like (define (fact n) ... (fact (- n 1)) ...).
-// Returns the interned symbol for use by the caller when storing the compiled value.
+// Returns the symbol for use by the caller when storing the compiled value.
 func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefine) *values.Symbol {
 	// Get the symbol for the name (validator guarantees it's a SyntaxSymbol)
 	sym := v.Name().Sym
@@ -688,15 +688,13 @@ func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallC
 
 // CompileValidatedQuote compiles a validated (quote datum) form.
 func (p *CompileTimeContinuation) CompileValidatedQuote(_ CompileTimeCallContext, v *validate.ValidatedQuote) error {
-	// Unwrap all syntax and intern symbols in the global environment.
-	// This ensures symbol identity (eq?) works correctly across compilation boundaries per R7RS 6.5:
 	// Validate quoted literal for circular datum labels.
 	unwrapped := v.Datum.UnwrapAll()
-	interned, err := p.validateQuotedLiteral(unwrapped)
+	validated, err := p.validateQuotedLiteral(unwrapped)
 	if err != nil {
 		return err
 	}
-	litIdx := p.template.MaybeAppendLiteral(interned)
+	litIdx := p.template.MaybeAppendLiteral(validated)
 	p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
 	return nil
 }

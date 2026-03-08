@@ -989,7 +989,7 @@ func TestMutualRecursion(t *testing.T) {
 // TestSymbolIdentityAcrossCompilationBoundaries tests R7RS 6.5 symbol identity.
 // Per R7RS: "Two symbols are identical (in the sense of eq?) if and only if
 // their names are spelled the same way."
-// This test verifies that symbols are properly interned across different
+// This test verifies that symbol identity (eq?) works correctly across different
 // NativeTemplates (e.g., when a symbol appears both in a lambda body and
 // in the outer expression that calls the lambda).
 func TestSymbolIdentityAcrossCompilationBoundaries(t *testing.T) {

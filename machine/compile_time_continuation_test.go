@@ -2307,9 +2307,9 @@ func TestCompileValidatedDefineFnDotted(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 }
 
-// TestInternSymbolsInValue_CircularDatumLabel tests that circular datum labels
+// TestValidateQuotedLiteral_CircularDatumLabel tests that circular datum labels
 // produce a compile error instead of crashing with a stack overflow.
-func TestInternSymbolsInValue_CircularDatumLabel(t *testing.T) {
+func TestValidateQuotedLiteral_CircularDatumLabel(t *testing.T) {
 	t.Run("circular cdr", func(t *testing.T) {
 		_, err := evalSchemeString("'#0=(a . #0#)")
 		qt.Assert(t, err, qt.IsNotNil)
