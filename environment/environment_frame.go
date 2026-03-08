@@ -122,7 +122,7 @@ func NewTopLevelEnvironmentFrame() *EnvironmentFrame {
 // The parent field is set to nil. This is typically used for isolated environments.
 // newEnvironmentFrame creates an isolated environment frame without a
 // TopLevelEnvironment or PhaseRegistry. Calling AtPhase() or
-// InternSyntax() on the result will panic. Use NewTopLevelEnvironment().Runtime()
+// Use NewTopLevelEnvironment().Runtime()
 // for full environments or NewEnvironmentFrameWithParent() for child scopes.
 func newEnvironmentFrame(local *LocalEnvironmentFrame, global *GlobalEnvironmentFrame) *EnvironmentFrame {
 	q := &EnvironmentFrame{
@@ -877,17 +877,4 @@ func (p *EnvironmentFrame) EqualTo(value values.Value) bool {
 // Returns nil for legacy environments created without TopLevelEnvironment.
 func (p *EnvironmentFrame) TopLevelEnv() *TopLevelEnvironment {
 	return p.topLevel
-}
-
-// InternSyntax interns the given syntax value.
-// Delegates to the TopLevelEnvironment for this frame.
-// Panics if topLevel is nil (legacy environments no longer supported).
-func (p *EnvironmentFrame) InternSyntax(k values.Value, v syntax.SyntaxValue) syntax.SyntaxValue {
-	if p.topLevel == nil {
-		panic(werr.WrapForeignErrorf(
-			werr.ErrMissingTopLevelEnvironment,
-			"InternSyntax called on environment without TopLevelEnvironment - use NewTopLevelEnvironment()",
-		))
-	}
-	return p.topLevel.InternSyntax(k, v)
 }

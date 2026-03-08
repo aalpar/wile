@@ -18,7 +18,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 	"github.com/aalpar/wile/werr"
@@ -154,17 +153,6 @@ func TestGlobalEnvironmentFrame_SetLibraryRegistry(t *testing.T) {
 	qt.Assert(t, env.LibraryRegistry(), qt.IsNil)
 }
 
-func TestGlobalEnvironmentFrame_InternSyntax(t *testing.T) {
-	env := newTestGlobalEnvFrame()
-
-	// Create a syntax value to intern
-	sym := values.NewSymbol("test")
-	// InternSyntax takes key and syntax value
-	interned1 := env.InternSyntax(sym, nil)
-	// First call with nil value returns nil
-	qt.Assert(t, interned1, qt.IsNil)
-}
-
 func TestGlobalEnvironmentFrame_GetGlobalIndex_NotFound(t *testing.T) {
 	env := newTestGlobalEnvFrame()
 
@@ -196,31 +184,9 @@ func TestGlobalEnvironmentFrame_SymbolEquality(t *testing.T) {
 	qt.Assert(t, sym1.Key, qt.Equals, sym2.Key)
 }
 
-func TestGlobalEnvironmentFrame_SyntaxInterningViaTopLevel(t *testing.T) {
-	// Create source environment
-	topLevel := NewTopLevelEnvironment()
-	env := topLevel.Runtime().GlobalEnvironment()
-
-	key := values.NewInteger(42)
-	stx := syntax.NewSyntaxSymbol("test", nil)
-	interned1 := env.InternSyntax(key, stx)
-	qt.Assert(t, interned1, qt.Equals, stx)
-
-	// Interning the same key again should return the same value
-	stx2 := syntax.NewSyntaxSymbol("different", nil)
-	interned2 := env.InternSyntax(key, stx2)
-	qt.Assert(t, interned2, qt.Equals, stx, // Should return original, not stx2
-		qt.Commentf("interning same key returns original value"))
-}
-
 func TestGlobalEnvironmentFrame_NewWithoutTopLevel_Panics(t *testing.T) {
 	// Create a bare GlobalEnvironmentFrame without TopLevelEnvironment
 	env := NewGlobalEnvironmentFrame()
-
-	// InternSyntax should panic
-	qt.Assert(t, func() {
-		env.InternSyntax(values.NewInteger(1), nil)
-	}, qt.PanicMatches, ".*TopLevelEnvironment.*")
 
 	// LibraryRegistry should panic
 	qt.Assert(t, func() {
@@ -238,13 +204,6 @@ func TestGlobalEnvironmentFrame_PanicSentinels(t *testing.T) {
 		name    string
 		trigger func()
 	}{
-		{
-			"InternSyntax",
-			func() {
-				env := NewGlobalEnvironmentFrame()
-				env.InternSyntax(values.NewInteger(1), nil)
-			},
-		},
 		{
 			"LibraryRegistry",
 			func() {

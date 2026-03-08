@@ -577,16 +577,6 @@ func TestEnvironmentFrame_Copy(t *testing.T) {
 	qt.Assert(t, copied.LocalEnvironment(), qt.Not(qt.IsNil))
 }
 
-func TestEnvironmentFrame_InternSyntax(t *testing.T) {
-	env := NewTopLevelEnvironmentFrame()
-
-	// Create a syntax value to intern
-	sym := values.NewSymbol("test")
-	// InternSyntax takes (key, syntaxValue) - first call with nil returns nil
-	interned1 := env.InternSyntax(sym, nil)
-	qt.Assert(t, interned1, qt.IsNil)
-}
-
 func TestEnvironmentFrame_GetLocalIndex_NotFound(t *testing.T) {
 	env := NewTopLevelEnvironmentFrame()
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
@@ -709,14 +699,6 @@ func TestEnvironmentFrame_PanicSentinels(t *testing.T) {
 				env.AtPhase(0)
 			},
 			werr.ErrMissingPhaseRegistry,
-		},
-		{
-			"InternSyntax without TopLevel panics with ErrMissingTopLevelEnvironment",
-			func() {
-				env := newEnvironmentFrame(nil, NewGlobalEnvironmentFrame())
-				env.InternSyntax(values.NewInteger(1), nil)
-			},
-			werr.ErrMissingTopLevelEnvironment,
 		},
 	}
 	for _, tc := range tcs {

@@ -21,7 +21,6 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -293,21 +292,6 @@ func (p *GlobalEnvironmentFrame) EqualTo(o values.Value) bool {
 		}
 	}
 	return true
-}
-
-// InternSyntax returns the canonical version of the given syntax value.
-// If an equivalent syntax value has been seen before, it is returned.
-// Otherwise, the value is added to the intern map and returned.
-// Delegates to TopLevelEnvironment.
-// Panics if topLevel is nil.
-func (p *GlobalEnvironmentFrame) InternSyntax(k values.Value, v syntax.SyntaxValue) syntax.SyntaxValue {
-	if p.topLevel == nil {
-		panic(werr.WrapForeignErrorf(
-			werr.ErrMissingTopLevelEnvironment,
-			"InternSyntax called on GlobalEnvironmentFrame without TopLevelEnvironment",
-		))
-	}
-	return p.topLevel.InternSyntax(k, v)
 }
 
 // LibraryRegistry returns the library registry for R7RS library loading.
