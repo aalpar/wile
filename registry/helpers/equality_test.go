@@ -458,10 +458,10 @@ func TestEqv(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "fallthrough/symbol vs same symbol different pointer",
+			name: "symbol/same name different pointer",
 			a:    values.NewSymbol("foo"),
 			b:    values.NewSymbol("foo"),
-			want: false, // NewSymbol creates fresh pointers (not interned without VM)
+			want: true, // symbols compare by name, not pointer identity
 		},
 
 		// ── Nil handling ───────────────────────────────────────────────
