@@ -578,6 +578,10 @@ func (p *EnvironmentFrame) HasLocalVariableBinding(sym *values.Symbol, scopes []
 // requires scope matching and candidate accumulation across the full parent
 // chain (Flatt's "collect-then-maximize" algorithm). A simple delegate-and-
 // adjust-depth pattern cannot express the cross-frame maximization.
+//
+// COUPLING: The loop below must mirror resolveLocal's walk conditions
+// (hasLocal check, IsTopLevel break, parent traversal). If resolveLocal's
+// termination logic changes, update this loop to match.
 func (p *EnvironmentFrame) GetLocalIndexWithScopes(key *values.Symbol, scopes []*syntax.Scope) *LocalIndex {
 	if p == nil || !p.hasLocal() {
 		return nil
