@@ -72,14 +72,20 @@ func (p *MetaCommandHandler) Handle(line string, out io.Writer) bool {
 	return true
 }
 
-// Commands returns all meta-command names (session + debug) for autocomplete.
+// Commands returns all meta-command names and aliases (session + debug) for autocomplete.
 func (p *MetaCommandHandler) Commands() []string {
-	return []string{
-		"help", "doc", "edit",
-		"break", "delete", "list", "enable", "disable",
-		"step", "next", "finish", "continue",
-		"backtrace", "where",
+	var names []string
+	for _, cmd := range metaCommands {
+		if cmd.category == "session" {
+			names = append(names, cmd.name)
+			names = append(names, cmd.aliases...)
+		}
 	}
+	for _, dc := range p.debugCtx.DebugCommands() {
+		names = append(names, dc.Name)
+		names = append(names, dc.Aliases...)
+	}
+	return names
 }
 
 type commandInfo struct {
@@ -91,9 +97,8 @@ type commandInfo struct {
 }
 
 // metaCommands defines metadata for all commands (session + debug).
-// Debug command metadata is duplicated from DebugContext to provide unified
-// help output. If debug commands are added or changed, update both here
-// and in DebugContext.HandleDebugCommand.
+// Session commands are declared here; debug commands are appended in init()
+// from DebugContext.DebugCommands(), the single source of truth.
 var metaCommands = []commandInfo{
 	{"help", []string{"h", "?"}, "Show this help or help for a specific command",
 		"Usage: ,help [command]\n\nWith no arguments, lists all commands.\nWith a command name, shows detailed help for that command.",
@@ -104,28 +109,20 @@ var metaCommands = []commandInfo{
 	{"edit", nil, "Open file in $EDITOR",
 		"Usage: ,edit <file>\n\nOpens the given file in the editor specified by the $EDITOR\nenvironment variable. The REPL blocks until the editor exits.",
 		"session"},
-	{"break", []string{"b"}, "Set breakpoint at FILE:LINE[:COLUMN]",
-		"Usage: ,break FILE:LINE[:COLUMN]", "debug"},
-	{"delete", []string{"d"}, "Delete a breakpoint",
-		"Usage: ,delete ID", "debug"},
-	{"list", []string{"l"}, "List breakpoints",
-		"Usage: ,list", "debug"},
-	{"enable", nil, "Enable a breakpoint",
-		"Usage: ,enable ID", "debug"},
-	{"disable", nil, "Disable a breakpoint",
-		"Usage: ,disable ID", "debug"},
-	{"step", []string{"s"}, "Step into",
-		"Usage: ,step", "debug"},
-	{"next", []string{"n"}, "Step over",
-		"Usage: ,next", "debug"},
-	{"finish", []string{"f"}, "Step out",
-		"Usage: ,finish", "debug"},
-	{"continue", []string{"c"}, "Continue execution",
-		"Usage: ,continue", "debug"},
-	{"backtrace", []string{"bt"}, "Show stack trace",
-		"Usage: ,backtrace", "debug"},
-	{"where", nil, "Show current location",
-		"Usage: ,where", "debug"},
+}
+
+func init() {
+	// Derive debug command entries from the canonical DebugCommands() table.
+	// The DebugContext instance is throwaway — only metadata fields are read.
+	for _, dc := range NewDebugContext().DebugCommands() {
+		metaCommands = append(metaCommands, commandInfo{
+			name:     dc.Name,
+			aliases:  dc.Aliases,
+			summary:  dc.Summary,
+			detail:   dc.Detail,
+			category: "debug",
+		})
+	}
 }
 
 func (p *MetaCommandHandler) cmdHelp(args []string, out io.Writer) {
