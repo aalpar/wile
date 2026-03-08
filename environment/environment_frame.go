@@ -509,26 +509,20 @@ func (p *EnvironmentFrame) MaybeCreateLocalBindingWithScopes(key *values.Symbol,
 // It returns the LocalIndex of the binding and a boolean indicating whether
 // the binding was created (true) or already existed (false).
 //
-// The parent-chain walk is EnvironmentFrame's responsibility; single-frame
-// lookup delegates to LocalEnvironmentFrame.GetLocalIndex.
+// The parent-chain walk delegates to resolveLocal; creation uses
+// EnsureLocalBinding on the innermost frame.
 func (p *EnvironmentFrame) MaybeCreateLocalBinding(key *values.Symbol, bt BindingType) (*LocalIndex, bool) {
-	env := p
-	if !env.hasLocal() {
+	if !p.hasLocal() {
 		return nil, false
 	}
-	depth := 0
-	for {
-		li := env.local.GetLocalIndex(key)
-		if li != nil {
-			return NewLocalIndex(li[0], depth), false
-		}
-		if env.IsTopLevel() || !env.parent.hasLocal() {
-			break
-		}
-		env = env.parent
-		depth++
+	// Search existing bindings in current and parent frames
+	result := p.resolveLocal(key, nil, false, func(_ *Binding, slot int, depth int) any {
+		return NewLocalIndex(slot, depth)
+	})
+	if result != nil {
+		return result.(*LocalIndex), false
 	}
-	// Not found in any parent — create in the current (innermost) frame
+	// Not found — create in the current (innermost) frame
 	return p.local.EnsureLocalBinding(key, bt)
 }
 
