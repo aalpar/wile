@@ -77,6 +77,25 @@ func Eqv(a, b values.Value) bool {
 		if ok {
 			return va.Value == vb.Value
 		}
+	case *values.Symbol:
+		vb, ok := b.(*values.Symbol)
+		if ok {
+			return va.Key == vb.Key
+		}
 	}
 	return false
+}
+
+// EqIdentity implements eq? semantics: pointer identity for all types
+// except symbols, which compare by name (R7RS §6.1, §6.5).
+func EqIdentity(a, b values.Value) bool {
+	sa, ok := a.(*values.Symbol)
+	if ok {
+		sb, ok2 := b.(*values.Symbol)
+		if ok2 {
+			return sa.Key == sb.Key
+		}
+		return false
+	}
+	return a == b
 }

@@ -458,10 +458,10 @@ func TestEqv(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "fallthrough/symbol vs same symbol different pointer",
+			name: "symbol/same name different pointer",
 			a:    values.NewSymbol("foo"),
 			b:    values.NewSymbol("foo"),
-			want: false, // NewSymbol creates fresh pointers (not interned without VM)
+			want: true, // symbols compare by name, not pointer identity
 		},
 
 		// ── Nil handling ───────────────────────────────────────────────
@@ -488,6 +488,85 @@ func TestEqv(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			got := Eqv(tc.a, tc.b)
+			c.Assert(got, qt.Equals, tc.want)
+		})
+	}
+}
+
+func TestEqIdentity(t *testing.T) {
+	c := qt.New(t)
+
+	sym1 := values.NewSymbol("foo")
+	sym2 := values.NewSymbol("foo")
+	sym3 := values.NewSymbol("bar")
+	int1 := values.NewInteger(42)
+	int2 := values.NewInteger(99999)
+
+	tcs := []struct {
+		name string
+		a    values.Value
+		b    values.Value
+		want bool
+	}{
+		{
+			name: "same symbol pointer",
+			a:    sym1,
+			b:    sym1,
+			want: true,
+		},
+		{
+			name: "different symbol pointers same name",
+			a:    sym1,
+			b:    sym2,
+			want: true,
+		},
+		{
+			name: "different symbol names",
+			a:    sym1,
+			b:    sym3,
+			want: false,
+		},
+		{
+			name: "symbol vs non-symbol",
+			a:    sym1,
+			b:    int1,
+			want: false,
+		},
+		{
+			name: "non-symbol vs symbol",
+			a:    int1,
+			b:    sym1,
+			want: false,
+		},
+		{
+			name: "same integer pointer",
+			a:    int1,
+			b:    int1,
+			want: true,
+		},
+		{
+			name: "different integer pointers different value",
+			a:    int1,
+			b:    int2,
+			want: false,
+		},
+		{
+			name: "true true",
+			a:    values.TrueValue,
+			b:    values.TrueValue,
+			want: true,
+		},
+		{
+			name: "true false",
+			a:    values.TrueValue,
+			b:    values.FalseValue,
+			want: false,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got := EqIdentity(tc.a, tc.b)
 			c.Assert(got, qt.Equals, tc.want)
 		})
 	}

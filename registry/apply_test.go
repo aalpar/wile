@@ -47,7 +47,7 @@ func TestApply_RuntimePrimitive(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Verify the primitive is bound in the runtime environment
-	sym := env.InternSymbol(values.NewSymbol("test-prim"))
+	sym := values.NewSymbol("test-prim")
 	binding := env.GetBinding(sym)
 	c.Assert(binding, qt.IsNotNil)
 	c.Assert(binding.Value(), qt.IsNotNil)
@@ -71,7 +71,7 @@ func TestApply_ExpandTimePrimitive(t *testing.T) {
 
 	// Verify the primitive is bound in the expand environment
 	expandEnv := env.Expand()
-	sym := expandEnv.InternSymbol(values.NewSymbol("expand-prim"))
+	sym := values.NewSymbol("expand-prim")
 	binding := expandEnv.GetBinding(sym)
 	c.Assert(binding, qt.IsNotNil)
 	c.Assert(binding.Value(), qt.IsNotNil)
@@ -91,7 +91,7 @@ func TestApply_CompileTimeBinding(t *testing.T) {
 
 	// Verify the binding exists in the compile environment
 	compileEnv := env.Compile()
-	sym := compileEnv.InternSymbol(values.NewSymbol("special-form"))
+	sym := values.NewSymbol("special-form")
 	binding := compileEnv.GetBinding(sym)
 	c.Assert(binding, qt.IsNotNil)
 }
@@ -114,7 +114,7 @@ func TestApply_CompileOnlyPrimitive(t *testing.T) {
 
 	// Should have a compile-time binding
 	compileEnv := env.Compile()
-	sym := compileEnv.InternSymbol(values.NewSymbol("compile-only"))
+	sym := values.NewSymbol("compile-only")
 	binding := compileEnv.GetBinding(sym)
 	c.Assert(binding, qt.IsNotNil)
 }
@@ -155,12 +155,12 @@ func TestApply_MultiPhasePrimitive(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Should exist in both runtime and expand environments
-	sym := env.InternSymbol(values.NewSymbol("multi-phase"))
+	sym := values.NewSymbol("multi-phase")
 	runtimeBinding := env.GetBinding(sym)
 	c.Assert(runtimeBinding, qt.IsNotNil)
 
 	expandEnv := env.Expand()
-	expandSym := expandEnv.InternSymbol(values.NewSymbol("multi-phase"))
+	expandSym := values.NewSymbol("multi-phase")
 	expandBinding := expandEnv.GetBinding(expandSym)
 	c.Assert(expandBinding, qt.IsNotNil)
 }

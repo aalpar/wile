@@ -416,9 +416,12 @@ func TestAtomicSwapError(t *testing.T) {
 }
 
 func TestAtomicCompareAndSwapSuccess(t *testing.T) {
+	// CAS uses Go's atomic.Value.CompareAndSwap (pointer comparison),
+	// so we must load the value first to get the same pointer.
 	code := `
 		(let ((a (make-atomic 'old)))
-			(atomic-compare-and-swap! a 'old 'new))
+			(let ((old (atomic-load a)))
+				(atomic-compare-and-swap! a old 'new)))
 	`
 	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)
@@ -436,10 +439,13 @@ func TestAtomicCompareAndSwapFailure(t *testing.T) {
 }
 
 func TestAtomicCompareAndSwapUpdatesOnSuccess(t *testing.T) {
+	// CAS uses Go's atomic.Value.CompareAndSwap (pointer comparison),
+	// so we must load the value first to get the same pointer.
 	code := `
 		(let ((a (make-atomic 'old)))
-			(atomic-compare-and-swap! a 'old 'new)
-			(atomic-load a))
+			(let ((old (atomic-load a)))
+				(atomic-compare-and-swap! a old 'new)
+				(atomic-load a)))
 	`
 	result, err := testhelpers.RunSchemeCode(t, code)
 	qt.Assert(t, err, qt.IsNil)

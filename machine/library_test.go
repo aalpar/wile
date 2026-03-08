@@ -413,13 +413,13 @@ func TestImport_Simple(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Verify that the exported names are now bound in the environment
-	makeAdder := env.InternSymbol(values.NewSymbol("make-adder"))
+	makeAdder := values.NewSymbol("make-adder")
 	c.Assert(env.GetBinding(makeAdder), qt.IsNotNil)
 
-	double := env.InternSymbol(values.NewSymbol("double"))
+	double := values.NewSymbol("double")
 	c.Assert(env.GetBinding(double), qt.IsNotNil)
 
-	secretValue := env.InternSymbol(values.NewSymbol("secret-value"))
+	secretValue := values.NewSymbol("secret-value")
 	c.Assert(env.GetBinding(secretValue), qt.IsNotNil)
 }
 
@@ -441,10 +441,10 @@ func TestImport_OnlyModifier(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Verify only 'double' is bound
-	double := env.InternSymbol(values.NewSymbol("double"))
+	double := values.NewSymbol("double")
 	c.Assert(env.GetBinding(double), qt.IsNotNil)
 
-	makeAdder := env.InternSymbol(values.NewSymbol("make-adder"))
+	makeAdder := values.NewSymbol("make-adder")
 	c.Assert(env.GetBinding(makeAdder), qt.IsNil)
 }
 
@@ -466,11 +466,11 @@ func TestImport_PrefixModifier(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Verify prefixed names are bound
-	testDouble := env.InternSymbol(values.NewSymbol("test:double"))
+	testDouble := values.NewSymbol("test:double")
 	c.Assert(env.GetBinding(testDouble), qt.IsNotNil)
 
 	// Verify unprefixed names are NOT bound
-	double := env.InternSymbol(values.NewSymbol("double"))
+	double := values.NewSymbol("double")
 	c.Assert(env.GetBinding(double), qt.IsNil)
 }
 
@@ -483,14 +483,14 @@ func TestCopyLibraryBindingsToEnv(t *testing.T) {
 	lib := machine.NewCompiledLibrary(libName, srcEnv)
 
 	// Add runtime binding (variable)
-	foSym := srcEnv.InternSymbol(values.NewSymbol("bindSymbolWithScopes"))
+	foSym := values.NewSymbol("bindSymbolWithScopes")
 	_, _ = srcEnv.MaybeCreateOwnGlobalBinding(foSym, environment.BindingTypeVariable)
 	fooIdx := srcEnv.GetGlobalIndex(foSym)
 	_ = srcEnv.SetOwnGlobalValue(fooIdx, values.NewInteger(42))
 	lib.AddExport("bindSymbolWithScopes", "")
 
 	// Add syntax binding (macro)
-	barSym := srcEnv.InternSymbol(values.NewSymbol("bar"))
+	barSym := values.NewSymbol("bar")
 	expandEnv := srcEnv.Expand()
 	_, _ = expandEnv.MaybeCreateOwnGlobalBinding(barSym, environment.BindingTypeSyntax)
 	barIdx := expandEnv.GetGlobalIndex(barSym)
@@ -512,13 +512,13 @@ func TestCopyLibraryBindingsToEnv(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Verify runtime binding was copied
-	fooTarget := targetEnv.InternSymbol(values.NewSymbol("bindSymbolWithScopes"))
+	fooTarget := values.NewSymbol("bindSymbolWithScopes")
 	fooBinding := targetEnv.GetBinding(fooTarget)
 	c.Assert(fooBinding, qt.IsNotNil)
 	c.Assert(fooBinding.Value(), valuestest.SchemeEquals, values.NewInteger(42))
 
 	// Verify syntax binding was copied
-	barTarget := targetEnv.InternSymbol(values.NewSymbol("bar"))
+	barTarget := values.NewSymbol("bar")
 	barBinding := targetEnv.Expand().GetBinding(barTarget)
 	c.Assert(barBinding, qt.IsNotNil)
 	c.Assert(barBinding.BindingType(), qt.Equals, environment.BindingTypeSyntax)
@@ -534,7 +534,7 @@ func TestCopyLibraryBindingsToEnv_WithRename(t *testing.T) {
 	lib := machine.NewCompiledLibrary(libName, srcEnv)
 
 	// Add binding with internal name different from external
-	internalSym := srcEnv.InternSymbol(values.NewSymbol("internal-bindSymbolWithScopes"))
+	internalSym := values.NewSymbol("internal-bindSymbolWithScopes")
 	_, _ = srcEnv.MaybeCreateOwnGlobalBinding(internalSym, environment.BindingTypeVariable)
 	idx := srcEnv.GetGlobalIndex(internalSym)
 	_ = srcEnv.SetOwnGlobalValue(idx, values.NewInteger(99))
@@ -552,7 +552,7 @@ func TestCopyLibraryBindingsToEnv_WithRename(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Verify binding is accessible with local name
-	myFooSym := targetEnv.InternSymbol(values.NewSymbol("my-bindSymbolWithScopes"))
+	myFooSym := values.NewSymbol("my-bindSymbolWithScopes")
 	binding := targetEnv.GetBinding(myFooSym)
 	c.Assert(binding, qt.IsNotNil)
 	c.Assert(binding.Value(), valuestest.SchemeEquals, values.NewInteger(99))
@@ -684,7 +684,7 @@ func TestCopyLibraryBindingsToEnv_CompilePhase(t *testing.T) {
 
 	// Register "else" in the compile environment (phase 2), mimicking
 	// how specialforms.go registers auxiliary syntax
-	elseSym := srcEnv.InternSymbol(values.NewSymbol("else"))
+	elseSym := values.NewSymbol("else")
 	compileEnv := srcEnv.Compile()
 	_, _ = compileEnv.MaybeCreateOwnGlobalBinding(elseSym, environment.BindingTypeVariable)
 	elseIdx := compileEnv.GetGlobalIndex(elseSym)
@@ -704,14 +704,14 @@ func TestCopyLibraryBindingsToEnv_CompilePhase(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Verify binding is present in runtime phase (phase 0)
-	elseTarget := targetEnv.InternSymbol(values.NewSymbol("else"))
+	elseTarget := values.NewSymbol("else")
 	runtimeBinding := targetEnv.GetBinding(elseTarget)
 	c.Assert(runtimeBinding, qt.IsNotNil, qt.Commentf("else should be in runtime phase"))
 	c.Assert(runtimeBinding.Value(), valuestest.SchemeEquals, mockValue)
 
 	// Verify binding is also present in compile phase (phase 2)
 	targetCompileEnv := targetEnv.AtPhase(2)
-	elseCompileSym := targetCompileEnv.InternSymbol(values.NewSymbol("else"))
+	elseCompileSym := values.NewSymbol("else")
 	compileBinding := targetCompileEnv.GetBinding(elseCompileSym)
 	c.Assert(compileBinding, qt.IsNotNil, qt.Commentf("else should be propagated to compile phase"))
 	c.Assert(compileBinding.Value(), valuestest.SchemeEquals, mockValue)
@@ -764,4 +764,61 @@ func TestLibraryForwardReferences(t *testing.T) {
 	compiler := machine.NewCompiletimeContinuation(tpl, env)
 	err = compiler.CompileExpression(ctctx, expanded)
 	c.Assert(err, qt.IsNil, qt.Commentf("Forward references should work with letrec* semantics"))
+}
+
+// TestLoadLibrary_IncludeStampsLibraryScope verifies that forms loaded via
+// (include ...) inside define-library receive the library scope (Flatt §3.3).
+// The library defines base-value in an included file and a macro double-base
+// in (begin ...) that references it. This exercises the invariant that include
+// is semantically equivalent to textual insertion into the library body.
+func TestLoadLibrary_IncludeStampsLibraryScope(t *testing.T) {
+	c := qt.New(t)
+	env := setupLibraryTest(t)
+
+	// Load the library that uses (include "include-body.scm")
+	name := machine.NewLibraryName("test", "include-lib")
+	lib, err := machine.LoadLibrary(context.Background(), name, env)
+	c.Assert(err, qt.IsNil)
+	c.Assert(lib, qt.IsNotNil)
+
+	// Verify exports exist
+	c.Assert(lib.IsExported("double-base"), qt.IsTrue)
+	c.Assert(lib.IsExported("base-value"), qt.IsTrue)
+
+	// Import and call: (double-base) should return 14 (* 2 7).
+	// double-base is a macro defined in (begin ...) whose template references
+	// base-value from the included file. The macro template's free identifier
+	// base-value gets resolved during compilation with the library scope.
+	// Without scope stamping on included forms, base-value's binding has
+	// empty scopes, and the scoped free-identifier reference fails to find it.
+	importDef := parseLibrarySyntax(t, env, `(import (test include-lib))`)
+	importPair := importDef.(*syntax.SyntaxPair)
+	args := importPair.Cdr().(syntax.SyntaxValue)
+
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	ctc := machine.NewCompiletimeContinuation(tpl, env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false)
+
+	err = ctc.CompileImport(ctctx, args)
+	c.Assert(err, qt.IsNil)
+
+	// Compile and run (double-base)
+	callExpr := parseLibrarySyntax(t, env, `(double-base)`)
+	callTpl := machine.NewNativeTemplate(0, 0, false)
+	callCtc := machine.NewCompiletimeContinuation(callTpl, env)
+	callCtctx := machine.NewCompileTimeCallContext(context.Background(), false, true)
+
+	expanded, err := machine.NewExpanderTimeContinuation(context.Background(), env).ExpandExpression(callExpr)
+	c.Assert(err, qt.IsNil)
+
+	err = callCtc.CompileExpression(callCtctx, expanded)
+	c.Assert(err, qt.IsNil)
+
+	mc := machine.NewMachineContext(
+		context.Background(),
+		machine.NewMachineContinuation(nil, callTpl, env),
+	)
+	err = mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(14))
 }

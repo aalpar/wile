@@ -227,7 +227,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 		}
 
 		// Search source environments in phase order for the binding.
-		libSym := lib.Env.InternSymbol(values.NewSymbol(internalName))
+		libSym := values.NewSymbol(internalName)
 		var libBinding *environment.Binding
 		sourcePhase := 0
 		for _, src := range sourceEnvs {
@@ -247,7 +247,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 
 		// Create binding in the target at the base phase.
 		phaseEnv := targetEnv.AtPhase(targetPhase)
-		localSym := phaseEnv.InternSymbol(values.NewSymbol(localName))
+		localSym := values.NewSymbol(localName)
 		_, _ = phaseEnv.MaybeCreateOwnGlobalBinding(localSym, libBinding.BindingType())
 		globalIdx := phaseEnv.GetGlobalIndex(localSym)
 		if globalIdx != nil {
@@ -263,7 +263,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 		// (auxiliary syntax, phase 2) need to be in the compile phase.
 		if sourcePhase > 0 {
 			propagateEnv := targetEnv.AtPhase(targetPhase + sourcePhase)
-			propagateSym := propagateEnv.InternSymbol(values.NewSymbol(localName))
+			propagateSym := values.NewSymbol(localName)
 			_, _ = propagateEnv.MaybeCreateOwnGlobalBinding(propagateSym, libBinding.BindingType())
 			propagateIdx := propagateEnv.GetGlobalIndex(propagateSym)
 			if propagateIdx != nil {
@@ -289,7 +289,7 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 		}
 
 		// Search source environments in phase order: runtime, expand, compile.
-		libSym := lib.Env.InternSymbol(values.NewSymbol(internalName))
+		libSym := values.NewSymbol(internalName)
 		importedBinding := lib.Env.GetBinding(libSym)
 		if importedBinding == nil {
 			expandEnv := lib.Env.Expand()
@@ -309,7 +309,7 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 		}
 
 		// Install in the target environment directly.
-		localSym := targetEnv.InternSymbol(values.NewSymbol(localName))
+		localSym := values.NewSymbol(localName)
 		_, _ = targetEnv.MaybeCreateOwnGlobalBinding(localSym, importedBinding.BindingType())
 		globalIdx := targetEnv.GetGlobalIndex(localSym)
 		if globalIdx != nil {

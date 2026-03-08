@@ -184,8 +184,20 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 // R7RS §5.3: Internal define-syntax forms must be processed before expanding
 // subsequent body expressions.
 func (p *CompileTimeContinuation) processFormsWithLetrecSemantics(ctctx CompileTimeCallContext, forms []syntax.SyntaxValue, filename string) error {
+	// Flatt §3.3: when including inside a library, stamp all forms with the
+	// library scope so that bindings and references carry the same scope set
+	// as forms in the library's (begin ...) body. Without this, included
+	// bindings have empty scopes while (begin ...) bindings carry the library
+	// scope, violating the invariant that include is textual insertion.
+	if p.libraryScope != nil {
+		for i, form := range forms {
+			forms[i] = syntax.AddScopeToSyntax(form, p.libraryScope)
+		}
+	}
+
 	// Pass 1: Expand all forms, compiling define-syntax as encountered
 	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env)
+	expander.libraryScope = p.libraryScope
 	expandedForms, err := expander.ExpandBodyWithDefineSyntax(forms)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "include: error expanding forms from %q", filename)
@@ -254,7 +266,7 @@ func (p *CompileTimeContinuation) predeclareDefineBinding(v syntax.SyntaxValue) 
 	}
 
 	// Pre-create the binding
-	name := p.env.InternSymbol(nameSym.Unwrap().(*values.Symbol))
+	name := nameSym.Unwrap().(*values.Symbol)
 	symbolScopes := nameSym.Scopes()
 	symbolSource := nameSym.SourceContext()
 

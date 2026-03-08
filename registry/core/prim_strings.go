@@ -196,15 +196,13 @@ func PrimSymbolToString(mc *machine.MachineContext) error {
 }
 
 // PrimStringToSymbol implements the string->symbol primitive.
-// Converts a string to an interned symbol.
+// Converts a string to a symbol.
 func PrimStringToSymbol(mc *machine.MachineContext) error {
 	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string->symbol")
 	if err != nil {
 		return err
 	}
 	sym := values.NewSymbol(s.Value)
-	// Intern the symbol
-	sym = mc.EnvironmentFrame().InternSymbol(sym)
 	mc.SetValue(sym)
 	return nil
 }

@@ -28,10 +28,9 @@ import (
 //
 //	┌─────────────────────────────────────────────────────────────────────────┐
 //	│                        TopLevelEnvironment                              │
-//	│  (Per-VM instance: owns symbol/syntax interning, phases, libraries)     │
+//	│  (Per-VM instance: owns syntax interning, phases, libraries)            │
 //	│                                                                         │
-//	│  symbolInterns ──── map[Symbol]*Symbol (thread-safe, per-instance)      │
-//	│  syntaxInterns ──── map[wrt]SyntaxValue (thread-safe)                   │
+//	│  syntaxInterns ──── map[Value]SyntaxValue (thread-safe)                 │
 //	│  phases ─────────── *PhaseRegistry                                      │
 //	│  libraryRegistry ── any (*machine.LibraryRegistry)                      │
 //	│  runtime ────────── *EnvironmentFrame (phase 0)                         │
@@ -122,7 +121,7 @@ func NewTopLevelEnvironmentFrame() *EnvironmentFrame {
 // NewEnvironmentFrame creates a new environment frame with the given local and global environment frames.
 // The parent field is set to nil. This is typically used for isolated environments.
 // newEnvironmentFrame creates an isolated environment frame without a
-// TopLevelEnvironment or PhaseRegistry. Calling AtPhase(), InternSymbol(), or
+// TopLevelEnvironment or PhaseRegistry. Calling AtPhase() or
 // InternSyntax() on the result will panic. Use NewTopLevelEnvironment().Runtime()
 // for full environments or NewEnvironmentFrameWithParent() for child scopes.
 func newEnvironmentFrame(local *LocalEnvironmentFrame, global *GlobalEnvironmentFrame) *EnvironmentFrame {
@@ -735,14 +734,9 @@ func (p *EnvironmentFrame) MaybeCreateOwnGlobalBinding(key *values.Symbol, bt Bi
 // searching global bindings in the current and parent environments.
 // It returns nil if the binding does not exist.
 //
-// The key is interned before lookup to ensure the returned GlobalIndex.Index
-// always points to the canonical symbol (consistent with
-// GlobalEnvironmentFrame.GetGlobalIndex).
-//
 // The returned GlobalIndex records the specific global frame where the binding
 // was found, enabling cross-library macro hygiene (see GlobalIndex.Env).
 func (p *EnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex {
-	key = p.InternSymbol(key)
 	result := p.resolveGlobal(*key, func(g *GlobalEnvironmentFrame, _ int) any {
 		gi := NewGlobalIndex(key)
 		gi.Env = g
@@ -773,7 +767,6 @@ func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
 // This is used during macro compilation to resolve free identifiers that may
 // be defined in any phase (e.g., define in runtime, define-syntax in expand).
 func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol) *GlobalIndex {
-	key = p.InternSymbol(key)
 	phases := p.phases
 	if phases == nil {
 		// No phase registry — try runtime only
@@ -878,21 +871,6 @@ func (p *EnvironmentFrame) EqualTo(value values.Value) bool {
 		return p.parent == v.parent
 	}
 	return p.parent.EqualTo(v.parent)
-}
-
-// InternSymbol interns the given symbol.
-// Delegates to the TopLevelEnvironment for this frame.
-// Per R7RS §6.5: "Two symbols are identical (in the sense of eq?) if and only
-// if their names are spelled the same way."
-// Panics if topLevel is nil (legacy environments no longer supported).
-func (p *EnvironmentFrame) InternSymbol(q *values.Symbol) *values.Symbol {
-	if p.topLevel == nil {
-		panic(werr.WrapForeignErrorf(
-			werr.ErrMissingTopLevelEnvironment,
-			"InternSymbol called on environment without TopLevelEnvironment - use NewTopLevelEnvironment()",
-		))
-	}
-	return p.topLevel.InternSymbol(q)
 }
 
 // TopLevelEnv returns the TopLevelEnvironment for this frame.

@@ -187,26 +187,13 @@ func TestGlobalEnvironmentFrame_EqualTo_NilCases(t *testing.T) {
 	qt.Assert(t, env2.EqualTo(env3), qt.IsFalse)
 }
 
-func TestGlobalEnvironmentFrame_SymbolInterning(t *testing.T) {
-	// Create two separate top-level environments
-	topLevel1 := NewTopLevelEnvironment()
-	topLevel2 := NewTopLevelEnvironment()
-	env1 := topLevel1.Runtime().GlobalEnvironment()
-	env2 := topLevel2.Runtime().GlobalEnvironment()
-
-	// Intern a symbol in env1
+func TestGlobalEnvironmentFrame_SymbolEquality(t *testing.T) {
+	// Symbols with the same key are structurally equal
 	sym1 := values.NewSymbol("foo")
-	interned1 := env1.InternSymbol(sym1)
-	qt.Assert(t, interned1, qt.Equals, sym1)
-
-	// Intern the same symbol name in env2
 	sym2 := values.NewSymbol("foo")
-	interned2 := env2.InternSymbol(sym2)
 
-	// With per-instance interning, they should be different pointers
-	// (unless the global fallback is used, which we removed)
-	qt.Assert(t, interned2 != interned1, qt.IsTrue,
-		qt.Commentf("per-instance symbol interning: same name should return different pointers"))
+	qt.Assert(t, sym1.EqualTo(sym2), qt.IsTrue)
+	qt.Assert(t, sym1.Key, qt.Equals, sym2.Key)
 }
 
 func TestGlobalEnvironmentFrame_SyntaxInterningViaTopLevel(t *testing.T) {
@@ -230,11 +217,6 @@ func TestGlobalEnvironmentFrame_NewWithoutTopLevel_Panics(t *testing.T) {
 	// Create a bare GlobalEnvironmentFrame without TopLevelEnvironment
 	env := NewGlobalEnvironmentFrame()
 
-	// InternSymbol should panic
-	qt.Assert(t, func() {
-		env.InternSymbol(values.NewSymbol("test"))
-	}, qt.PanicMatches, ".*TopLevelEnvironment.*")
-
 	// InternSyntax should panic
 	qt.Assert(t, func() {
 		env.InternSyntax(values.NewInteger(1), nil)
@@ -256,13 +238,6 @@ func TestGlobalEnvironmentFrame_PanicSentinels(t *testing.T) {
 		name    string
 		trigger func()
 	}{
-		{
-			"InternSymbol",
-			func() {
-				env := NewGlobalEnvironmentFrame()
-				env.InternSymbol(values.NewSymbol("test"))
-			},
-		},
 		{
 			"InternSyntax",
 			func() {

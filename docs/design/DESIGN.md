@@ -104,8 +104,8 @@ type SyntaxRulesClause struct {
     patternVarSyntax map[string]*syntax.SyntaxSymbol
     ellipsisVars     map[int]map[string]struct{}
     freeIds          map[string]*FreeIdResolution
-    macroScope       *syntax.Scope
     ellipsis         string
+    literalSyntax    map[string]*syntax.SyntaxSymbol
 }
 ```
 

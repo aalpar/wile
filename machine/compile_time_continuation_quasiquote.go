@@ -31,8 +31,8 @@ import (
 func (p *CompileTimeContinuation) compileQuasiquoteDatum(ctctx CompileTimeCallContext, datum syntax.SyntaxValue, depth int) error {
 	// Optimization: if no runtime evaluation needed, emit as literal
 	if !p.quasiquoteNeedsRuntime(datum, depth) {
-		// Intern symbols to ensure eq? identity per R7RS 6.5
-		val, err := p.internSymbolsInValue(datum.UnwrapAll())
+		// Validate quoted literal for circular datum labels
+		val, err := p.validateQuotedLiteral(datum.UnwrapAll())
 		if err != nil {
 			return err
 		}

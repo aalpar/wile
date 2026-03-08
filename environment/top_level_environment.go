@@ -25,8 +25,8 @@ import (
 
 // LibraryEnvFactory creates a fresh environment for an R7RS library.
 // The returned environment must share the caller's TopLevelEnvironment
-// for symbol interning (R7RS §6.5 symbol identity), but have isolated
-// bindings so library definitions don't leak.
+// for syntax interning, but have isolated bindings so library definitions
+// don't leak.
 //
 // The libraryName parameter contains the library name parts (e.g.,
 // ["scheme", "base"]) so the factory can implement per-library policies.
@@ -35,31 +35,21 @@ type LibraryEnvFactory func(ctx context.Context, callerEnv *EnvironmentFrame, li
 var _ values.Value = (*TopLevelEnvironment)(nil)
 
 // TopLevelEnvironment represents a complete Wile VM instance.
-// It owns per-instance symbol interning, syntax interning, phase registry,
+// It owns per-instance syntax interning, phase registry,
 // and library registry. This enables multiple independent Wile VMs in a
 // single Go process.
 //
 // Design: TopLevelEnvironment is the root of the environment hierarchy.
 // Each EnvironmentFrame holds a reference back to its TopLevelEnvironment
-// to access shared resources (interning, phases, libraries).
-//
-// Symbol interning is per-TopLevelEnvironment (not global) to support:
-//   - Multiple isolated Wile VMs
-//   - Clean VM teardown without affecting other instances
-//   - R7RS §6.5 symbol identity: "Two symbols are identical (in the sense of eq?)
-//     if and only if their names are spelled the same way."
+// to access shared resources (syntax interning, phases, libraries).
 type TopLevelEnvironment struct {
 	// Name is an optional descriptive name (e.g., "interaction-environment").
 	Name string
 
 	// parent is the parent TopLevelEnvironment for interning delegation.
-	// When non-nil, InternSymbol and InternSyntax delegate to the parent,
-	// ensuring R7RS §6.5 symbol identity across child environments.
+	// When non-nil, InternSyntax delegates to the parent,
+	// ensuring syntax identity across child environments.
 	parent *TopLevelEnvironment
-
-	// symbolInterns is the per-instance symbol interning table.
-	symbolInterns   map[values.Symbol]*values.Symbol
-	symbolInternsMu sync.RWMutex
 
 	// syntaxInterns is the per-instance syntax object interning table.
 	syntaxInterns   map[values.Value]syntax.SyntaxValue
@@ -98,7 +88,6 @@ type TopLevelEnvironment struct {
 // This is the primary entry point for creating an isolated Wile VM instance.
 func NewTopLevelEnvironment() *TopLevelEnvironment {
 	q := &TopLevelEnvironment{
-		symbolInterns: make(map[values.Symbol]*values.Symbol),
 		syntaxInterns: make(map[values.Value]syntax.SyntaxValue),
 		loadPathStack: NewLoadPathStack(),
 		scopeRegistry: make(map[*syntax.Scope]*EnvironmentFrame),
@@ -120,49 +109,6 @@ func NewTopLevelEnvironment() *TopLevelEnvironment {
 	q.runtime.phases = q.phases
 
 	return q
-}
-
-// InternSymbol returns the canonical interned version of the given symbol.
-// If a symbol with the same name has been interned before, that pointer is returned.
-// Otherwise, the symbol is added to the intern table and returned.
-// This ensures symbol identity (eq?) works correctly per R7RS §6.5.
-//
-// When a parent TopLevelEnvironment exists (child environments created via
-// NewChildTopLevelEnvironment), interning is delegated to the parent to
-// maintain symbol identity across environments.
-//
-// This function is thread-safe.
-func (p *TopLevelEnvironment) InternSymbol(s *values.Symbol) *values.Symbol {
-	if s == nil {
-		return nil
-	}
-
-	// Delegate to parent if this is a child environment
-	if p.parent != nil {
-		return p.parent.InternSymbol(s)
-	}
-
-	// Fast path: check if already interned with read lock
-	p.symbolInternsMu.RLock()
-	v, ok := p.symbolInterns[*s]
-	if ok {
-		p.symbolInternsMu.RUnlock()
-		return v
-	}
-	p.symbolInternsMu.RUnlock()
-
-	// Slow path: acquire write lock and intern
-	p.symbolInternsMu.Lock()
-	defer p.symbolInternsMu.Unlock()
-
-	// Double-check after acquiring write lock (another goroutine may have interned it)
-	v, ok = p.symbolInterns[*s]
-	if ok {
-		return v
-	}
-
-	p.symbolInterns[*s] = s
-	return s
 }
 
 // InternSyntax returns the canonical version of the given syntax value.
@@ -298,11 +244,8 @@ func (p *TopLevelEnvironment) LookupLibraryEnv(scope *syntax.Scope) *Environment
 	return p.scopeRegistry[scope]
 }
 
-// NewChildTopLevelEnvironment creates a new TopLevelEnvironment whose symbol
-// and syntax interning is delegated to the receiver (the parent). This ensures
-// R7RS §6.5 symbol identity across environment boundaries: symbols interned in
-// the child resolve to the same pointer as identically-named symbols in the
-// parent, so eq? comparisons between them return #t.
+// NewChildTopLevelEnvironment creates a new TopLevelEnvironment whose syntax
+// interning is delegated to the receiver (the parent).
 //
 // # Ownership structure
 //
@@ -319,9 +262,8 @@ func (p *TopLevelEnvironment) LookupLibraryEnv(scope *syntax.Scope) *Environment
 //
 //	Parent TopLevelEnvironment (root)
 //	+-----------------------------------------------+
-//	| symbolInterns: map[Symbol]*Symbol  ◄──────────────── all interning
-//	| syntaxInterns: map[Value]SyntaxValue ◄────────────── goes here
-//	| symbolInternsMu / syntaxInternsMu  (mutexes)  |
+//	| syntaxInterns: map[Value]SyntaxValue ◄────────────── all interning
+//	| syntaxInternsMu  (mutex)                      |
 //	| parent: nil                                   |
 //	| phases: *PhaseRegistry ──► {0: envP}          |
 //	| runtime: envP ─────────────────────────────┐  |
@@ -344,7 +286,6 @@ func (p *TopLevelEnvironment) LookupLibraryEnv(scope *syntax.Scope) *Environment
 //
 //	Child TopLevelEnvironment (returned by this method)
 //	+-----------------------------------------------+
-//	| symbolInterns: nil  (never accessed)          |
 //	| syntaxInterns: nil  (never accessed)          |
 //	| parent: ──► parent TLE  (interning delegate)  |
 //	| phases: *PhaseRegistry ──► {0: envC}          |
@@ -368,28 +309,11 @@ func (p *TopLevelEnvironment) LookupLibraryEnv(scope *syntax.Scope) *Environment
 //
 // # Interning delegation
 //
-// The child stores a parent pointer and has nil interning maps. InternSymbol
-// and InternSyntax check for a non-nil parent and delegate recursively,
-// ultimately reaching the root TopLevelEnvironment where the maps and mutexes
-// live. This avoids sharing map pointers across structs with independent
-// mutexes (which would be a data race).
-//
-//	child.InternSymbol(s)
-//	    │
-//	    │  p.parent != nil
-//	    ▼
-//	parent.InternSymbol(s)
-//	    │
-//	    │  p.parent == nil (root)
-//	    ▼
-//	p.symbolInternsMu.RLock()   ◄── mutex lives on root only
-//	check p.symbolInterns[*s]   ◄── map lives on root only
-//	    │
-//	    ├── found: return canonical *Symbol
-//	    │
-//	    └── not found:
-//	        p.symbolInternsMu.Lock()
-//	        double-check, insert, return
+// The child stores a parent pointer and has nil interning maps. InternSyntax
+// checks for a non-nil parent and delegates recursively, ultimately reaching
+// the root TopLevelEnvironment where the maps and mutexes live. This avoids
+// sharing map pointers across structs with independent mutexes (which would
+// be a data race).
 //
 // # Inherited state
 //
@@ -403,8 +327,8 @@ func (p *TopLevelEnvironment) LookupLibraryEnv(scope *syntax.Scope) *Environment
 //
 // NewChildRuntime returns an *EnvironmentFrame that shares the parent's
 // TopLevelEnvironment directly (same pointer). It is used for library loading,
-// where the library environment should intern symbols through the same
-// TopLevelEnvironment. However, because it shares the TopLevelEnvironment,
+// where the library environment should share the same TopLevelEnvironment
+// for syntax interning. However, because it shares the TopLevelEnvironment,
 // it cannot be returned as a standalone environment value — calling Runtime()
 // on the shared TopLevelEnvironment returns the parent's runtime frame, not
 // the child's.
@@ -482,7 +406,7 @@ func (p *TopLevelEnvironment) NewSchemeReportEnvironment() *TopLevelEnvironment 
 	}
 
 	// Copy the parent's global bindings and repoint topLevel to the child,
-	// so that symbol interning delegates through q → p (parent chain).
+	// so that syntax interning delegates through q → p (parent chain).
 	copiedGlobal := p.runtime.global.Copy().(*GlobalEnvironmentFrame)
 	copiedGlobal.topLevel = q
 
@@ -500,11 +424,11 @@ func (p *TopLevelEnvironment) NewSchemeReportEnvironment() *TopLevelEnvironment 
 }
 
 // NewChildRuntime creates a new runtime environment frame that shares this
-// TopLevelEnvironment for symbol and syntax interning, but has its own
+// TopLevelEnvironment for syntax interning, but has its own
 // GlobalEnvironmentFrame and PhaseRegistry for isolated bindings.
 //
 // This is used for library environments that need to:
-//   - Share symbol interning (for R7RS §6.5 symbol identity)
+//   - Share syntax interning
 //   - Have isolated bindings (library definitions don't leak)
 //   - Have their own phase hierarchy
 func (p *TopLevelEnvironment) NewChildRuntime() *EnvironmentFrame {
@@ -528,14 +452,6 @@ func (p *TopLevelEnvironment) NewChildRuntime() *EnvironmentFrame {
 	runtime.phases = childPhases
 
 	return runtime
-}
-
-// SymbolInternCount returns the number of interned symbols.
-// This is intended for testing and debugging purposes.
-func (p *TopLevelEnvironment) SymbolInternCount() int {
-	p.symbolInternsMu.RLock()
-	defer p.symbolInternsMu.RUnlock()
-	return len(p.symbolInterns)
 }
 
 // SyntaxInternCount returns the number of interned syntax objects.

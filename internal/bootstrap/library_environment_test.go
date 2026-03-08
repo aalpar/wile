@@ -75,16 +75,16 @@ func TestNewLibraryEnvironmentFrame_SymbolIdentity(t *testing.T) {
 	callerEnv, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv, nil)
+	_, err = NewLibraryEnvironmentFrame(ctx, callerEnv, nil)
 	c.Assert(err, qt.IsNil)
 
-	// Intern the same symbol name in both environments
-	sym1 := callerEnv.InternSymbol(values.NewSymbol("test-symbol"))
-	sym2 := libEnv.InternSymbol(values.NewSymbol("test-symbol"))
+	// Symbols with the same key should be structurally equal across environments
+	sym1 := values.NewSymbol("test-symbol")
+	sym2 := values.NewSymbol("test-symbol")
 
-	// Must be pointer-identical (same *Symbol), not just structurally equal
-	c.Assert(sym1 == sym2, qt.IsTrue, qt.Commentf(
-		"symbols interned across library boundaries must be pointer-identical"))
+	// Must be structurally equal (same key)
+	c.Assert(sym1.EqualTo(sym2), qt.IsTrue, qt.Commentf(
+		"symbols with same key must be structurally equal across library boundaries"))
 }
 
 // TestNewLibraryEnvironmentFrame_BindingIsolation verifies that bindings
@@ -100,7 +100,7 @@ func TestNewLibraryEnvironmentFrame_BindingIsolation(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Define a binding in the library environment
-	libSym := libEnv.InternSymbol(values.NewSymbol("lib-only-binding"))
+	libSym := values.NewSymbol("lib-only-binding")
 	libEnv.MaybeCreateOwnGlobalBinding(libSym, environment.BindingTypeVariable)
 
 	// The caller environment should not see this binding

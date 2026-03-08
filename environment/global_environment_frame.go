@@ -165,12 +165,11 @@ func (p *GlobalEnvironmentFrame) Keys() map[values.Symbol]int {
 }
 
 // CreateGlobalBinding creates a new global binding with the given key and type.
-// The key is interned before use. Returns the GlobalIndex and whether a new
-// binding was created (false if the binding already existed).
+// Returns the GlobalIndex and whether a new binding was created (false if the
+// binding already existed).
 // Thread-safe: uses full Lock to prevent TOCTOU races.
 func (p *GlobalEnvironmentFrame) CreateGlobalBinding(key *values.Symbol, bt BindingType) (*GlobalIndex, bool) {
 	r := p
-	key = p.InternSymbol(key)
 
 	// Use full Lock (not RLock) for check-then-write pattern to prevent TOCTOU
 	p.mu.Lock()
@@ -194,7 +193,6 @@ func (p *GlobalEnvironmentFrame) CreateGlobalBinding(key *values.Symbol, bt Bind
 // Thread-safe: uses RLock for read-only access.
 func (p *GlobalEnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex {
 	ge := p
-	key = p.InternSymbol(key)
 
 	p.mu.RLock()
 	_, ok := ge.keys[*key]
@@ -213,7 +211,7 @@ func (p *GlobalEnvironmentFrame) GetGlobalIndex(key *values.Symbol) *GlobalIndex
 // Thread-safe: uses RLock for read-only access.
 func (p *GlobalEnvironmentFrame) GetOwnGlobalBinding(gi *GlobalIndex) *Binding {
 	ge := p
-	key := p.InternSymbol(gi.Index)
+	key := gi.Index
 
 	p.mu.RLock()
 	i, ok := ge.keys[*key]
@@ -295,21 +293,6 @@ func (p *GlobalEnvironmentFrame) EqualTo(o values.Value) bool {
 		}
 	}
 	return true
-}
-
-// InternSymbol returns the canonical version of the given symbol.
-// Delegates to TopLevelEnvironment.
-// Per R7RS §6.5: "Two symbols are identical (in the sense of eq?) if and only
-// if their names are spelled the same way."
-// Panics if topLevel is nil.
-func (p *GlobalEnvironmentFrame) InternSymbol(q *values.Symbol) *values.Symbol {
-	if p.topLevel == nil {
-		panic(werr.WrapForeignErrorf(
-			werr.ErrMissingTopLevelEnvironment,
-			"InternSymbol called on GlobalEnvironmentFrame without TopLevelEnvironment",
-		))
-	}
-	return p.topLevel.InternSymbol(q)
 }
 
 // InternSyntax returns the canonical version of the given syntax value.

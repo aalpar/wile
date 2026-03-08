@@ -234,10 +234,10 @@ func (p *CompileTimeContinuation) CompileValidatedDefine(ctctx CompileTimeCallCo
 
 // declareDefineBinding creates the binding for a define form before compiling its value.
 // This early declaration enables self-recursive definitions like (define (fact n) ... (fact (- n 1)) ...).
-// Returns the interned symbol for use by the caller when storing the compiled value.
+// Returns the symbol for use by the caller when storing the compiled value.
 func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefine) *values.Symbol {
-	// Get the interned symbol for the name (validator guarantees it's a SyntaxSymbol)
-	sym := p.env.InternSymbol(v.Name().Sym)
+	// Get the symbol for the name (validator guarantees it's a SyntaxSymbol)
+	sym := v.Name().Sym
 	symbolScopes := v.Name().Scopes()
 	symbolSource := v.Name().SourceContext()
 	// Create binding early for recursion support
@@ -422,7 +422,7 @@ func (p *CompileTimeContinuation) compileClosureBody(
 	// Params() is nil for zero-arg case-lambda clauses: (() ...).
 	if v.Params() != nil {
 		for _, paramSym := range v.Params().Required {
-			param := p.env.InternSymbol(paramSym.Sym)
+			param := paramSym.Sym
 			paramScopes := paramSym.Scopes()
 
 			_, ok := lenv.EnsureLocalBinding(param, environment.BindingTypeVariable)
@@ -537,7 +537,7 @@ func (p *CompileTimeContinuation) predeclareDefineBindingFromValidated(expr vali
 		return // Not a define, skip
 	}
 
-	sym := p.env.InternSymbol(def.Name().Sym)
+	sym := def.Name().Sym
 	symbolScopes := def.Name().Scopes()
 	symbolSource := def.Name().SourceContext()
 
@@ -553,14 +553,13 @@ func (p *CompileTimeContinuation) predeclareDefineBindingFromValidated(expr vali
 //
 // At runtime, the VM collects excess arguments into a list and stores it in the
 // rest parameter's local slot, after storing the required arguments in their slots.
-func bindRestParameter(v validate.ValidatedBodyAndParams, p *CompileTimeContinuation, lenv *environment.LocalEnvironmentFrame, tpl *NativeTemplate) error {
+func bindRestParameter(v validate.ValidatedBodyAndParams, _ *CompileTimeContinuation, lenv *environment.LocalEnvironmentFrame, tpl *NativeTemplate) error {
 	// Early exit if no rest parameter. Most lambdas are fixed-arity.
 	if v.Params().Rest == nil {
 		return nil
 	}
 
-	// Intern the rest parameter symbol for consistent identity.
-	rest := p.env.InternSymbol(v.Params().Rest.Sym)
+	rest := v.Params().Rest.Sym
 	restScopes := v.Params().Rest.Scopes()
 
 	// Create a local binding slot for the rest parameter. This slot comes after
@@ -638,8 +637,8 @@ func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCa
 
 // CompileValidatedSetBang compiles a validated (set! name expr) form.
 func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallContext, v *validate.ValidatedSetBang) error {
-	// Get the interned symbol (validator guarantees it's a SyntaxSymbol)
-	sym := p.env.InternSymbol(v.Name.Sym)
+	// Get the symbol (validator guarantees it's a SyntaxSymbol)
+	sym := v.Name.Sym
 	symbolScopes := v.Name.Scopes()
 
 	// Compile the value expression
@@ -689,15 +688,13 @@ func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallC
 
 // CompileValidatedQuote compiles a validated (quote datum) form.
 func (p *CompileTimeContinuation) CompileValidatedQuote(_ CompileTimeCallContext, v *validate.ValidatedQuote) error {
-	// Unwrap all syntax and intern symbols in the global environment.
-	// This ensures symbol identity (eq?) works correctly across compilation boundaries per R7RS 6.5:
-	// "Two symbols are identical (in the sense of eq?) if and only if their names are spelled the same way."
+	// Validate quoted literal for circular datum labels.
 	unwrapped := v.Datum.UnwrapAll()
-	interned, err := p.internSymbolsInValue(unwrapped)
+	validated, err := p.validateQuotedLiteral(unwrapped)
 	if err != nil {
 		return err
 	}
-	litIdx := p.template.MaybeAppendLiteral(interned)
+	litIdx := p.template.MaybeAppendLiteral(validated)
 	p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
 	return nil
 }

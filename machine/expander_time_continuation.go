@@ -160,7 +160,7 @@ func (p *ExpanderTimeContinuation) ExpandSelfEvaluating(expr syntax.SyntaxValue)
 // If found, it invokes the expander; otherwise returns the form unchanged.
 func (p *ExpanderTimeContinuation) ExpandPrimitiveForm(primName string, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	// Look up the primitive expander in the registry
-	symVal := p.env.InternSymbol(values.NewSymbol(primName))
+	symVal := values.NewSymbol(primName)
 	scopes := sym.Scopes()
 
 	pe := LookupPrimitiveExpander(p.env, symVal, scopes)
@@ -516,7 +516,7 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(_ *syntax.SyntaxSymbol
 			copy(newScopes, idScopes)
 			newScopes[len(idScopes)] = bindingScope
 
-			sym := p.env.InternSymbol(id.Sym)
+			sym := id.Sym
 			childExpandEnv.MaybeCreateLocalBindingWithScopes(sym, environment.BindingTypeVariable, newScopes, id.SourceContext())
 		}
 
@@ -968,7 +968,7 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 	for _, form := range forms {
 		nameSym := extractDefineName(form)
 		if nameSym != nil {
-			name := p.env.InternSymbol(nameSym.Unwrap().(*values.Symbol))
+			name := nameSym.Unwrap().(*values.Symbol)
 			scopes := nameSym.Scopes()
 			source := nameSym.SourceContext()
 			// Create placeholder binding in current environment (not expand phase)
@@ -1029,7 +1029,7 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotASymbol, "define-syntax: keyword must be a symbol")
 	}
-	keyword := expandEnv.InternSymbol(keywordSym.Unwrap().(*values.Symbol))
+	keyword := keywordSym.Unwrap().(*values.Symbol)
 	symbolScopes := keywordSym.Scopes()
 
 	transformerCdr, ok := cdr.Cdr().(*syntax.SyntaxPair)
@@ -1263,7 +1263,7 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 		}
 
 		// Not a macro - check if it's a primitive (quote, if, define-syntax, etc.)
-		symVal := p.env.InternSymbol(sym0)
+		symVal := sym0
 		pe := LookupPrimitiveExpander(p.env, symVal, sym.Scopes())
 		if pe != nil {
 			return pe.Expand(p, sym, expr)

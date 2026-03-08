@@ -15,7 +15,6 @@
 package environment
 
 import (
-	"sync"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -32,135 +31,6 @@ func TestNewTopLevelEnvironment(t *testing.T) {
 	c.Assert(topLevel.Runtime(), qt.Not(qt.IsNil))
 	c.Assert(topLevel.Phases(), qt.Not(qt.IsNil))
 	c.Assert(topLevel.Runtime().TopLevelEnv(), qt.Equals, topLevel)
-}
-
-func TestTopLevelEnvironment_InternSymbol(t *testing.T) {
-	c := qt.New(t)
-
-	topLevel := NewTopLevelEnvironment()
-
-	// Intern a symbol
-	sym1 := values.NewSymbol("foo")
-	interned1 := topLevel.InternSymbol(sym1)
-
-	c.Assert(interned1, qt.Not(qt.IsNil))
-	c.Assert(interned1.Datum(), qt.Equals, "foo")
-
-	// Intern the same symbol again
-	sym2 := values.NewSymbol("foo")
-	interned2 := topLevel.InternSymbol(sym2)
-
-	// Should return the same pointer (identity)
-	c.Assert(interned2, qt.Equals, interned1)
-}
-
-func TestTopLevelEnvironment_SymbolIsolation(t *testing.T) {
-	c := qt.New(t)
-
-	// Create two independent TopLevelEnvironments
-	topLevel1 := NewTopLevelEnvironment()
-	topLevel2 := NewTopLevelEnvironment()
-
-	// Intern the same symbol name in both
-	sym1 := topLevel1.InternSymbol(values.NewSymbol("isolated"))
-	sym2 := topLevel2.InternSymbol(values.NewSymbol("isolated"))
-
-	// The symbols should have the same name
-	c.Assert(sym1.Datum(), qt.Equals, sym2.Datum())
-
-	// But they should NOT be the same pointer (different VMs)
-	c.Assert(sym1 != sym2, qt.IsTrue, qt.Commentf("symbols from different TopLevelEnvironments should not be identical"))
-
-	// Within each VM, interning should return the same pointer
-	sym1Again := topLevel1.InternSymbol(values.NewSymbol("isolated"))
-	c.Assert(sym1Again, qt.Equals, sym1)
-
-	sym2Again := topLevel2.InternSymbol(values.NewSymbol("isolated"))
-	c.Assert(sym2Again, qt.Equals, sym2)
-}
-
-func TestTopLevelEnvironment_SymbolInternCount(t *testing.T) {
-	c := qt.New(t)
-
-	topLevel := NewTopLevelEnvironment()
-
-	c.Assert(topLevel.SymbolInternCount(), qt.Equals, 0)
-
-	topLevel.InternSymbol(values.NewSymbol("a"))
-	c.Assert(topLevel.SymbolInternCount(), qt.Equals, 1)
-
-	topLevel.InternSymbol(values.NewSymbol("b"))
-	c.Assert(topLevel.SymbolInternCount(), qt.Equals, 2)
-
-	// Interning the same symbol again shouldn't increase the count
-	topLevel.InternSymbol(values.NewSymbol("a"))
-	c.Assert(topLevel.SymbolInternCount(), qt.Equals, 2)
-}
-
-func TestInternSymbol_Stress(t *testing.T) {
-	c := qt.New(t)
-
-	topLevel := NewTopLevelEnvironment()
-	const count = 10000
-
-	// Intern 10,000 unique symbols
-	symbols := make([]*values.Symbol, count)
-	for i := range count {
-		sym := values.NewSymbol("stress-sym-" + string(rune(i/256+1)) + string(rune(i%256+1)))
-		symbols[i] = topLevel.InternSymbol(sym)
-	}
-	c.Assert(topLevel.SymbolInternCount(), qt.Equals, count)
-
-	// Re-interning all returns same pointers
-	for i := range count {
-		again := topLevel.InternSymbol(values.NewSymbol(symbols[i].Datum()))
-		c.Assert(again, qt.Equals, symbols[i],
-			qt.Commentf("re-intern of symbol %d should return same pointer", i))
-	}
-	c.Assert(topLevel.SymbolInternCount(), qt.Equals, count,
-		qt.Commentf("count should not increase after re-interning"))
-}
-
-func TestInternSymbol_Concurrent(t *testing.T) {
-	c := qt.New(t)
-
-	topLevel := NewTopLevelEnvironment()
-	const goroutines = 10
-	const perGoroutine = 1000
-
-	// 100 shared names + 900 unique per goroutine = 100 + 9000 = 9100 total
-	var wg sync.WaitGroup
-	results := make([][perGoroutine]*values.Symbol, goroutines)
-
-	for g := range goroutines {
-		wg.Add(1)
-		go func(gIdx int) {
-			defer wg.Done()
-			for i := range perGoroutine {
-				var name string
-				if i < 100 {
-					// Shared names across all goroutines
-					name = "shared-" + string(rune(i+1))
-				} else {
-					// Unique per goroutine
-					name = "g" + string(rune(gIdx+1)) + "-" + string(rune(i+1))
-				}
-				results[gIdx][i] = topLevel.InternSymbol(values.NewSymbol(name))
-			}
-		}(g)
-	}
-	wg.Wait()
-
-	// Shared symbols: all goroutines should get the same pointer
-	for i := range 100 {
-		for g := 1; g < goroutines; g++ {
-			c.Assert(results[g][i], qt.Equals, results[0][i],
-				qt.Commentf("shared symbol %d should be identical across goroutines", i))
-		}
-	}
-
-	// Total count: 100 shared + 900*10 unique = 9100
-	c.Assert(topLevel.SymbolInternCount(), qt.Equals, 9100)
 }
 
 func TestTopLevelEnvironment_Phases(t *testing.T) {
@@ -208,22 +78,6 @@ func TestTopLevelEnvironment_LibraryRegistry(t *testing.T) {
 	c.Assert(topLevel.Runtime().LibraryRegistry(), qt.Equals, placeholder)
 }
 
-func TestEnvironmentFrame_InternSymbol_DelegatesToTopLevel(t *testing.T) {
-	c := qt.New(t)
-
-	topLevel := NewTopLevelEnvironment()
-	env := topLevel.Runtime()
-
-	// Intern via environment frame
-	sym1 := env.InternSymbol(values.NewSymbol("delegate"))
-
-	// Intern directly via TopLevelEnvironment
-	sym2 := topLevel.InternSymbol(values.NewSymbol("delegate"))
-
-	// Should be the same pointer
-	c.Assert(sym1, qt.Equals, sym2)
-}
-
 func TestNewEnvironmentFrameWithParent_InheritsTopLevel(t *testing.T) {
 	c := qt.New(t)
 
@@ -236,11 +90,6 @@ func TestNewEnvironmentFrameWithParent_InheritsTopLevel(t *testing.T) {
 
 	// Child should inherit topLevel
 	c.Assert(child.TopLevelEnv(), qt.Equals, topLevel)
-
-	// Symbol interning should work through child
-	sym1 := child.InternSymbol(values.NewSymbol("inherited"))
-	sym2 := topLevel.InternSymbol(values.NewSymbol("inherited"))
-	c.Assert(sym1, qt.Equals, sym2)
 }
 
 func TestTopLevelEnvironment_ChildSharesLoadPathStack(t *testing.T) {
@@ -293,4 +142,16 @@ func TestTopLevelEnvironment_NestedChildSharesLoadPathStack(t *testing.T) {
 	c.Assert(root.LoadPathStack().Current(), qt.Equals, "/deep/file.scm")
 	c.Assert(child1.LoadPathStack().Current(), qt.Equals, "/deep/file.scm")
 	c.Assert(child2.LoadPathStack().Current(), qt.Equals, "/deep/file.scm")
+}
+
+// Verify that symbols with the same name are structurally equal
+// even when created independently (no interning needed).
+func TestTopLevelEnvironment_SymbolEquality(t *testing.T) {
+	c := qt.New(t)
+
+	sym1 := values.NewSymbol("foo")
+	sym2 := values.NewSymbol("foo")
+
+	c.Assert(sym1.EqualTo(sym2), qt.IsTrue)
+	c.Assert(sym1.Key, qt.Equals, sym2.Key)
 }

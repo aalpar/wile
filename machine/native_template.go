@@ -42,7 +42,7 @@ type NativeTemplate struct {
 
 	// cachedBindings stores *Binding pointers resolved at compile time.
 	// OpLoadCachedBinding/OpPushCachedBinding index into this array,
-	// bypassing the runtime InternSymbol → RLock → map lookup path.
+	// bypassing the runtime environment lookup path.
 	cachedBindings []*environment.Binding
 
 	// literalIndex maps hash codes to literal pool indices for O(1) amortized

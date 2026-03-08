@@ -32,13 +32,6 @@ type ResolvedRef interface {
 	values.Value
 }
 
-// SymbolInterner is an interface for interning symbols.
-// This allows SyntaxSymbol to cache interned symbols without importing
-// the environment package (which would create a circular dependency).
-type SymbolInterner interface {
-	InternSymbol(*values.Symbol) *values.Symbol
-}
-
 // SyntaxSymbol wraps a Scheme symbol with source context and hygiene scopes.
 type SyntaxSymbol struct {
 	Sym *values.Symbol

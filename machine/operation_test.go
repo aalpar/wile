@@ -72,7 +72,7 @@ func TestOperation(t *testing.T) {
 		{
 			op: NewOperationLoadLocalByLocalIndexImmediate(environment.NewLocalIndex(0, 0)),
 			setupFn: func(t *testing.T, mc *MachineContext) {
-				li, _ := mc.env.LocalEnvironment().EnsureLocalBinding(mc.env.InternSymbol(values.NewSymbol("bindSymbolWithScopes")), environment.BindingTypeVariable)
+				li, _ := mc.env.LocalEnvironment().EnsureLocalBinding(values.NewSymbol("bindSymbolWithScopes"), environment.BindingTypeVariable)
 				mc.env.LocalEnvironment().SetLocalValue(li, values.NewInteger(10)) //nolint:errcheck
 			},
 			checkFn: func(t *testing.T, mc *MachineContext) {
@@ -85,14 +85,14 @@ func TestOperation(t *testing.T) {
 			op:    NewOperationStoreLocalByLocalIndexImmediate(environment.NewLocalIndex(0, 0)),
 			evals: NewStack(values.NewInteger(10)),
 			setupFn: func(t *testing.T, mc *MachineContext) {
-				sym := mc.env.InternSymbol(values.NewSymbol("bindSymbolWithScopes"))
+				sym := values.NewSymbol("bindSymbolWithScopes")
 				mc.env.LocalEnvironment().EnsureLocalBinding(sym, environment.BindingTypeVariable)
 			},
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, mc.pc, qt.Equals, 1)
 				qt.Assert(t, mc.GetValues(), qt.HasLen, 0)
 				qt.Assert(t, *mc.evals, qt.HasLen, 0)
-				sym := mc.env.InternSymbol(values.NewSymbol("bindSymbolWithScopes"))
+				sym := values.NewSymbol("bindSymbolWithScopes")
 				li := mc.env.LocalEnvironment().GetLocalIndex(sym)
 				bd := mc.env.LocalEnvironment().GetLocalBinding(li)
 				qt.Assert(t, bd.Value(), valuestest.SchemeEquals, values.NewInteger(10))
@@ -101,7 +101,7 @@ func TestOperation(t *testing.T) {
 		{
 			op: NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(0),
 			setupFn: func(t *testing.T, mc *MachineContext) {
-				sym := mc.env.InternSymbol(values.NewSymbol("bindSymbolWithScopes"))
+				sym := values.NewSymbol("bindSymbolWithScopes")
 				gi, ok := mc.env.GlobalEnvironment().CreateGlobalBinding(sym, environment.BindingTypeVariable)
 				qt.Assert(t, ok, qt.IsTrue)
 				mc.template.MaybeAppendLiteral(gi)
@@ -119,7 +119,7 @@ func TestOperation(t *testing.T) {
 			op:    NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(0),
 			evals: NewStack(values.NewInteger(10)),
 			setupFn: func(t *testing.T, mc *MachineContext) {
-				sym := mc.env.InternSymbol(values.NewSymbol("bindSymbolWithScopes"))
+				sym := values.NewSymbol("bindSymbolWithScopes")
 				gi, ok := mc.env.GlobalEnvironment().CreateGlobalBinding(sym, environment.BindingTypeVariable)
 				qt.Assert(t, ok, qt.IsTrue)
 				mc.template.MaybeAppendLiteral(gi)
@@ -127,7 +127,7 @@ func TestOperation(t *testing.T) {
 			checkFn: func(t *testing.T, mc *MachineContext) {
 				qt.Assert(t, mc.pc, qt.Equals, 1)
 				qt.Assert(t, mc.GetValues(), qt.HasLen, 0)
-				sym := mc.env.InternSymbol(values.NewSymbol("bindSymbolWithScopes"))
+				sym := values.NewSymbol("bindSymbolWithScopes")
 				gi := mc.env.GlobalEnvironment().GetGlobalIndex(sym)
 				v := mc.env.GlobalEnvironment().GetOwnGlobalBinding(gi).Value()
 				qt.Assert(t, v, valuestest.SchemeEquals, values.NewInteger(10))

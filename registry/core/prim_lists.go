@@ -327,9 +327,7 @@ func PrimListTail(mc *machine.MachineContext) error {
 // PrimMemq implements the memq primitive.
 // Finds an element in a list using eq? for comparison.
 func PrimMemq(mc *machine.MachineContext) error {
-	return helpers.MemberLookup(mc, "memq", func(a, b values.Value) bool {
-		return a == b
-	})
+	return helpers.MemberLookup(mc, "memq", helpers.EqIdentity)
 }
 
 // PrimMemv implements the memv primitive.
@@ -410,7 +408,7 @@ func PrimMember(mc *machine.MachineContext) error {
 
 // PrimAssq implements the assq primitive.
 func PrimAssq(mc *machine.MachineContext) error {
-	return helpers.AssocLookup(mc, "assq", func(a, b values.Value) bool { return a == b })
+	return helpers.AssocLookup(mc, "assq", helpers.EqIdentity)
 }
 
 // PrimAssv implements the assv primitive.

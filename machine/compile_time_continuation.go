@@ -83,7 +83,7 @@ func (p *CompileTimeContinuation) SetLibraryCallback(cb func(*CompiledLibrary)) 
 
 // CompileSymbol compiles a syntax symbol expression.
 func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, expr *syntax.SyntaxSymbol) error {
-	sym := p.env.InternSymbol(expr.Sym)
+	sym := expr.Sym
 	// Check for pre-resolved binding from macro expansion
 	// This handles cross-library hygiene: free identifiers in macro templates
 	// carry their definition-time GlobalIndex so they resolve correctly
@@ -205,7 +205,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 // Core forms (if, lambda, define, etc.) use a separate validated compilation path —
 // see compile_validated.go and the compileValidated() method there.
 func (p *CompileTimeContinuation) CompileSyntaxPrimitive(ctctx CompileTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (bool, error) {
-	symVal := p.env.InternSymbol(sym.Sym)
+	symVal := sym.Sym
 	scopes := sym.Scopes()
 
 	// Dynamic lookup in the compile environment.
@@ -373,20 +373,19 @@ func (p *CompileTimeContinuation) CompileExpression(ctctx CompileTimeCallContext
 	return p.compileValidated(ctctx, result.Expr)
 }
 
-// internSymbolsInValue recursively interns all symbols in a value using the environment.
-// This ensures symbol identity (eq?) works correctly across compilation boundaries per R7RS 6.5:
-// "Two symbols are identical (in the sense of eq?) if and only if their names are spelled the same way."
-// Returns an error if the value contains circular pair structures (from datum labels).
-func (p *CompileTimeContinuation) internSymbolsInValue(v values.Value) (values.Value, error) {
-	return p.internSymbolsInValueWithVisited(v, nil)
+// validateQuotedLiteral recursively walks a quoted literal value to detect
+// circular pair structures from datum labels (e.g., '#0=(a . #0#)).
+// Returns an error if circular references are found.
+func (p *CompileTimeContinuation) validateQuotedLiteral(v values.Value) (values.Value, error) {
+	return p.validateQuotedLiteralWithVisited(v, nil)
 }
 
-func (p *CompileTimeContinuation) internSymbolsInValueWithVisited(
+func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 	v values.Value, visited map[*values.Pair]bool,
 ) (values.Value, error) {
 	switch val := v.(type) {
 	case *values.Symbol:
-		return p.env.InternSymbol(val), nil
+		return val, nil
 	case *values.Pair:
 		if val == nil {
 			return nil, nil
@@ -401,11 +400,11 @@ func (p *CompileTimeContinuation) internSymbolsInValueWithVisited(
 			)
 		}
 		visited[val] = true
-		car, err := p.internSymbolsInValueWithVisited(val.Car(), visited)
+		car, err := p.validateQuotedLiteralWithVisited(val.Car(), visited)
 		if err != nil {
 			return nil, err
 		}
-		cdr, err := p.internSymbolsInValueWithVisited(val.Cdr(), visited)
+		cdr, err := p.validateQuotedLiteralWithVisited(val.Cdr(), visited)
 		if err != nil {
 			return nil, err
 		}
@@ -421,12 +420,12 @@ func (p *CompileTimeContinuation) internSymbolsInValueWithVisited(
 		changed := false
 		newElements := make([]values.Value, len(*val))
 		for i, elem := range *val {
-			interned, err := p.internSymbolsInValueWithVisited(elem, visited)
+			validated, err := p.validateQuotedLiteralWithVisited(elem, visited)
 			if err != nil {
 				return nil, err
 			}
-			newElements[i] = interned
-			if interned != elem {
+			newElements[i] = validated
+			if validated != elem {
 				changed = true
 			}
 		}
@@ -448,10 +447,10 @@ func (p *CompileTimeContinuation) CompileSelfEvaluating(_ CompileTimeCallContext
 		)
 		return nil
 	}
-	// Intern symbols to ensure eq? identity per R7RS 6.5
+	// Validate quoted literal for circular datum labels.
 	// Use UnwrapAll() to fully unwrap syntax values (including vector elements)
 	// so that equal? comparisons work correctly on literal vectors.
-	val, err := p.internSymbolsInValue(expr.UnwrapAll())
+	val, err := p.validateQuotedLiteral(expr.UnwrapAll())
 	if err != nil {
 		return err
 	}

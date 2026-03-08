@@ -482,7 +482,6 @@ func PrimSyntaxLocalValue(mc *machine.MachineContext) error {
 	// Look up in expand phase
 	expandEnv := expanderCtx.Env().Expand()
 	sym := syntaxSym.Datum()
-	sym = expandEnv.InternSymbol(sym)
 
 	binding := expandEnv.GetBindingWithScopes(sym, syntaxSym.Scopes())
 	if binding == nil {

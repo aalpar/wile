@@ -65,16 +65,16 @@ func TestLookupSyntaxCompiler(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Should find built-in syntax compilers
-	metaSym := env.InternSymbol(values.NewSymbol("meta"))
+	metaSym := values.NewSymbol("meta")
 	metaPc := LookupSyntaxCompiler(env, metaSym, nil)
 	qt.Assert(t, metaPc, qt.IsNotNil)
 
-	includeSym := env.InternSymbol(values.NewSymbol("include"))
+	includeSym := values.NewSymbol("include")
 	includePc := LookupSyntaxCompiler(env, includeSym, nil)
 	qt.Assert(t, includePc, qt.IsNotNil)
 
 	// Should return nil for non-existent syntax compiler
-	nonExistentSym := env.InternSymbol(values.NewSymbol("nonexistent-primitive"))
+	nonExistentSym := values.NewSymbol("nonexistent-primitive")
 	nonExistent := LookupSyntaxCompiler(env, nonExistentSym, nil)
 	qt.Assert(t, nonExistent, qt.IsNil)
 }
@@ -87,7 +87,7 @@ func TestLookupSyntaxCompiler_PhaseEnvironment(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Should find syntax compilers in the compile phase
-	defineSyntaxSym := env.InternSymbol(values.NewSymbol("define-syntax"))
+	defineSyntaxSym := values.NewSymbol("define-syntax")
 	defineSyntaxPc := LookupSyntaxCompiler(env, defineSyntaxSym, nil)
 	qt.Assert(t, defineSyntaxPc, qt.IsNotNil)
 }

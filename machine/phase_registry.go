@@ -42,7 +42,7 @@ func RegisterPhaseBindings[F any](
 ) error {
 	targetEnv := phaseEnv()
 	for _, entry := range entries {
-		sym := env.InternSymbol(values.NewSymbol(entry.Name))
+		sym := values.NewSymbol(entry.Name)
 		val := wrapper(entry.Name, entry.Fn)
 		idx, _ := targetEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypePrimitive)
 		targetEnv.SetOwnGlobalValue(idx, val) //nolint:errcheck
