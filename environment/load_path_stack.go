@@ -13,7 +13,7 @@ import (
 //
 // # Threading and Concurrency
 //
-// The stack is thread-safe for concurrent access (uses sync.Mutex), but does
+// The stack is thread-safe for concurrent access (uses sync.RWMutex), but does
 // not guarantee correct LIFO ordering when multiple goroutines push/pop
 // concurrently. This is an acceptable limitation:
 //
@@ -35,7 +35,7 @@ import (
 // Future: If SRFI-18 threading becomes more complete and concurrent file loading
 // becomes common, consider migrating to per-thread stacks.
 type LoadPathStack struct {
-	mu    sync.Mutex
+	mu    sync.RWMutex
 	paths []string // absolute paths only; top = paths[len-1]
 }
 
@@ -77,8 +77,8 @@ func (s *LoadPathStack) Pop() {
 // Current returns the path at the top of the stack without removing it.
 // Returns empty string if the stack is empty.
 func (s *LoadPathStack) Current() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	if len(s.paths) == 0 {
 		return ""
@@ -98,8 +98,8 @@ func (s *LoadPathStack) CurrentDir() string {
 
 // Depth returns the number of paths on the stack.
 func (s *LoadPathStack) Depth() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	return len(s.paths)
 }
