@@ -73,9 +73,7 @@ type extSnapshot struct {
 // By default, only core primitives are included.
 // Use WithExtension to add optional extensions.
 func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
-	cfg := &engineConfig{
-		registry: nil,
-	}
+	cfg := &engineConfig{}
 	for _, opt := range opts {
 		opt(cfg)
 	}
@@ -87,97 +85,24 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		cfg.maxCallDepth = DefaultMaxCallDepth
 	}
 
-	// Build registry
-	reg := cfg.registry
-	if reg == nil {
-		reg = registry.NewRegistry()
-		if !cfg.skipCore {
-			err := core.AddToRegistry(reg)
-			if err != nil {
-				return nil, werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "register core primitives")
-			}
-		}
-	}
-
-	// Add any additional extensions, tracking primitive snapshots for library creation
-	var extSnapshots []extSnapshot
-	for _, ext := range cfg.extensions {
-		startIdx := reg.PrimitiveCount()
-		err := ext.AddToRegistry(reg)
-		if err != nil {
-			return nil, werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "register extension %q", ext.Name())
-		}
-		endIdx := reg.PrimitiveCount()
-		var namer registry.LibraryNamer
-		n, ok := ext.(registry.LibraryNamer)
-		if ok {
-			namer = n
-		}
-		extSnapshots = append(extSnapshots, extSnapshot{
-			name:       ext.Name(),
-			startIndex: startIdx,
-			endIndex:   endIdx,
-			namer:      namer,
-		})
-	}
-
-	// Create TopLevelEnvironment (per-instance symbol interning)
-	topLevel := environment.NewTopLevelEnvironment()
-	env := topLevel.Runtime()
-
-	// Apply registry, syntax compilers, primitive expanders, and bootstrap macros
-	macroSources := reg.MacroSources()
-	err := applyBaseEnvironment(ctx, env, reg, macroSources)
+	reg, snapshots, closers, err := buildRegistry(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	// Set up library system if WithLibraryPaths was called
-	if cfg.libraryEnabled {
-		libReg := machine.NewLibraryRegistry()
+	topLevel := environment.NewTopLevelEnvironment()
+	env := topLevel.Runtime()
 
-		// Prepend user paths in reverse order so first path has highest priority.
-		// PrependSearchPath prepends, so reverse-iterating produces the correct order.
-		for i := len(cfg.libraryPaths) - 1; i >= 0; i-- {
-			libReg.PrependSearchPath(cfg.libraryPaths[i])
-		}
-
-		if cfg.importObserver != nil {
-			libReg.SetImportObserver(cfg.importObserver)
-		}
-
-		env.SetLibraryRegistry(libReg)
-
-		err = registerExtensionLibraries(reg, env, libReg, extSnapshots)
-		if err != nil {
-			return nil, err
-		}
-
-		// LibraryEnvFactory creates isolated library environments that mirror
-		// this engine's configuration — same registry, same macros.
-		topLevel.SetLibraryEnvFactory(func(ctx context.Context, callerEnv *environment.EnvironmentFrame, _ []string) (*environment.EnvironmentFrame, error) {
-			callerTopLevel := callerEnv.TopLevelEnv()
-			if callerTopLevel == nil {
-				return nil, werr.WrapForeignErrorf(werr.ErrEngineInit, "library env factory: caller has no TopLevelEnvironment")
-			}
-
-			libEnv := callerTopLevel.NewChildRuntime()
-
-			applyErr := applyBaseEnvironment(ctx, libEnv, reg, macroSources)
-			if applyErr != nil {
-				return nil, applyErr
-			}
-
-			return libEnv, nil
-		})
+	macroSources := reg.MacroSources()
+	err = applyBaseEnvironment(ctx, env, reg, macroSources)
+	if err != nil {
+		return nil, err
 	}
 
-	// Collect closeable extensions for Engine.Close()
-	var closers []registry.Closeable
-	for _, ext := range cfg.extensions {
-		c, ok := ext.(registry.Closeable)
-		if ok {
-			closers = append(closers, c)
+	if cfg.libraryEnabled {
+		err = setupLibrarySystem(cfg, reg, env, topLevel, macroSources, snapshots)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -190,6 +115,95 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		authorizer:   cfg.authorizer,
 	}
 	return q, nil
+}
+
+// buildRegistry creates and populates the registry from engine configuration.
+// It registers extensions (tracking primitive index ranges for library creation)
+// and collects closeable extensions for Engine.Close().
+func buildRegistry(cfg *engineConfig) (*registry.Registry, []extSnapshot, []registry.Closeable, error) {
+	reg := cfg.registry
+	if reg == nil {
+		reg = registry.NewRegistry()
+		if !cfg.skipCore {
+			err := core.AddToRegistry(reg)
+			if err != nil {
+				return nil, nil, nil, werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "register core primitives")
+			}
+		}
+	}
+
+	var snapshots []extSnapshot
+	var closers []registry.Closeable
+	for _, ext := range cfg.extensions {
+		startIdx := reg.PrimitiveCount()
+		err := ext.AddToRegistry(reg)
+		if err != nil {
+			return nil, nil, nil, werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "register extension %q", ext.Name())
+		}
+		endIdx := reg.PrimitiveCount()
+
+		var namer registry.LibraryNamer
+		n, ok := ext.(registry.LibraryNamer)
+		if ok {
+			namer = n
+		}
+		snapshots = append(snapshots, extSnapshot{
+			name:       ext.Name(),
+			startIndex: startIdx,
+			endIndex:   endIdx,
+			namer:      namer,
+		})
+
+		c, ok := ext.(registry.Closeable)
+		if ok {
+			closers = append(closers, c)
+		}
+	}
+
+	return reg, snapshots, closers, nil
+}
+
+// setupLibrarySystem configures the R7RS library system: search paths,
+// import observer, extension libraries, and the library environment factory.
+func setupLibrarySystem(cfg *engineConfig, reg *registry.Registry, env *environment.EnvironmentFrame, topLevel *environment.TopLevelEnvironment, macroSources []string, snapshots []extSnapshot) error {
+	libReg := machine.NewLibraryRegistry()
+
+	// Prepend user paths in reverse order so first path has highest priority.
+	// PrependSearchPath prepends, so reverse-iterating produces the correct order.
+	for i := len(cfg.libraryPaths) - 1; i >= 0; i-- {
+		libReg.PrependSearchPath(cfg.libraryPaths[i])
+	}
+
+	if cfg.importObserver != nil {
+		libReg.SetImportObserver(cfg.importObserver)
+	}
+
+	env.SetLibraryRegistry(libReg)
+
+	err := registerExtensionLibraries(reg, env, libReg, snapshots)
+	if err != nil {
+		return err
+	}
+
+	// LibraryEnvFactory creates isolated library environments that mirror
+	// this engine's configuration — same registry, same macros.
+	topLevel.SetLibraryEnvFactory(func(ctx context.Context, callerEnv *environment.EnvironmentFrame, _ []string) (*environment.EnvironmentFrame, error) {
+		callerTopLevel := callerEnv.TopLevelEnv()
+		if callerTopLevel == nil {
+			return nil, werr.WrapForeignErrorf(werr.ErrEngineInit, "library env factory: caller has no TopLevelEnvironment")
+		}
+
+		libEnv := callerTopLevel.NewChildRuntime()
+
+		applyErr := applyBaseEnvironment(ctx, libEnv, reg, macroSources)
+		if applyErr != nil {
+			return nil, applyErr
+		}
+
+		return libEnv, nil
+	})
+
+	return nil
 }
 
 // Eval parses, compiles, and executes Scheme code, returning the result.
@@ -526,11 +540,12 @@ func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*Comp
 func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, error) {
 	ctx = p.withAuth(ctx)
 	mc := machine.AcquireTopLevelContext(ctx, cc.template, cc.env)
+	defer machine.ReleaseTopLevelContext(mc)
 	mc.SetMaxCallDepth(p.maxCallDepth)
+
 	err := mc.RunWithEscapeHandling()
 	p.lastCounters = mc.Counters()
 	val := mc.GetValue()
-	machine.ReleaseTopLevelContext(mc)
 	if err != nil {
 		return nil, p.wrapRuntimeError(err)
 	}
@@ -596,9 +611,8 @@ func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame
 	}
 
 	mc := machine.AcquireTopLevelContext(ctx, tpl, env)
-	err = mc.Run()
-	machine.ReleaseTopLevelContext(mc)
-	return err
+	defer machine.ReleaseTopLevelContext(mc)
+	return mc.Run()
 }
 
 // LoadPath Stack API
