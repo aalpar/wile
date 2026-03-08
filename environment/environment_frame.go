@@ -287,15 +287,22 @@ func (p *EnvironmentFrame) GlobalEnvironment() *GlobalEnvironmentFrame {
 
 // LibraryRegistry returns the library registry from the top-level environment.
 // The caller must type-assert to *machine.LibraryRegistry.
-// Returns nil if no registry has been set.
+// Returns nil if no registry has been set or if topLevel is nil.
 func (p *EnvironmentFrame) LibraryRegistry() any {
-	return p.TopLevel().global.LibraryRegistry()
+	if p.topLevel == nil {
+		return nil
+	}
+	return p.topLevel.LibraryRegistry()
 }
 
 // SetLibraryRegistry sets the library registry on the top-level environment.
 // The registry should be a *machine.LibraryRegistry.
+// No-op if topLevel is nil.
 func (p *EnvironmentFrame) SetLibraryRegistry(registry any) {
-	p.TopLevel().global.SetLibraryRegistry(registry)
+	if p.topLevel == nil {
+		return
+	}
+	p.topLevel.SetLibraryRegistry(registry)
 }
 
 // LoadPathStack returns the load path stack for tracking files currently

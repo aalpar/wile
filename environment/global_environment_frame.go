@@ -293,32 +293,3 @@ func (p *GlobalEnvironmentFrame) EqualTo(o values.Value) bool {
 	}
 	return true
 }
-
-// LibraryRegistry returns the library registry for R7RS library loading.
-// The caller must type-assert to *machine.LibraryRegistry.
-// Returns nil if no registry has been set.
-// Delegates to TopLevelEnvironment.
-// Panics if topLevel is nil.
-func (p *GlobalEnvironmentFrame) LibraryRegistry() any {
-	if p.topLevel == nil {
-		panic(werr.WrapForeignErrorf(
-			werr.ErrMissingTopLevelEnvironment,
-			"LibraryRegistry called on GlobalEnvironmentFrame without TopLevelEnvironment",
-		))
-	}
-	return p.topLevel.LibraryRegistry()
-}
-
-// SetLibraryRegistry sets the library registry for R7RS library loading.
-// The registry should be a *machine.LibraryRegistry.
-// Delegates to TopLevelEnvironment.
-// Panics if topLevel is nil.
-func (p *GlobalEnvironmentFrame) SetLibraryRegistry(registry any) {
-	if p.topLevel == nil {
-		panic(werr.WrapForeignErrorf(
-			werr.ErrMissingTopLevelEnvironment,
-			"SetLibraryRegistry called on GlobalEnvironmentFrame without TopLevelEnvironment",
-		))
-	}
-	p.topLevel.SetLibraryRegistry(registry)
-}
