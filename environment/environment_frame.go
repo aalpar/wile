@@ -561,22 +561,13 @@ func (p *EnvironmentFrame) HasLocalVariableBinding(sym *values.Symbol, scopes []
 	if p == nil {
 		return false
 	}
-	li := p.GetLocalIndex(sym)
-	if li == nil {
-		return false
-	}
-	binding := p.GetLocalBinding(li)
-	if binding == nil {
-		return false
-	}
-	if binding.BindingType() != BindingTypeVariable {
-		return false
-	}
-	bindingScopes := binding.Scopes()
-	if len(bindingScopes) == 0 {
-		return true
-	}
-	return syntax.ScopesMatch(scopes, bindingScopes)
+	result := p.resolveLocal(sym, scopes, true, func(binding *Binding, _ int, _ int) any {
+		if binding.BindingType() == BindingTypeVariable {
+			return true
+		}
+		return nil
+	})
+	return result != nil
 }
 
 // GetLocalIndexWithScopes returns the LocalIndex of a local binding that

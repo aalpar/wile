@@ -902,6 +902,32 @@ func TestInitApplyFrame_PanicsOnNilParent(t *testing.T) {
 	src.InitApplyFrame(&dst)
 }
 
+func TestHasLocalVariableBinding_OuterScopeCompatible(t *testing.T) {
+	c := qt.New(t)
+
+	// Scenario: inner binding has incompatible scopes, outer has compatible.
+	// HasLocalVariableBinding should find the outer binding.
+	topLevel := NewTopLevelEnvironment()
+	env := topLevel.Runtime()
+
+	scopeA := syntax.NewScope()
+	scopeB := syntax.NewScope()
+
+	sym := values.NewSymbol("x")
+
+	// Outer: binding with [scopeA] — compatible with reference [scopeA]
+	outerEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
+	outerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeA}, nil)
+
+	// Inner: binding with [scopeB] — incompatible with reference [scopeA]
+	innerEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), outerEnv)
+	innerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeB}, nil)
+
+	// Reference has [scopeA] — inner binding [scopeB] doesn't match,
+	// but outer binding [scopeA] does. Should return true.
+	c.Assert(innerEnv.HasLocalVariableBinding(sym, []*syntax.Scope{scopeA}), qt.IsTrue)
+}
+
 func TestGetGlobalIndexAcrossPhases(t *testing.T) {
 	c := qt.New(t)
 
