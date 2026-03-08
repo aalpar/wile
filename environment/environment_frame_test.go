@@ -577,16 +577,6 @@ func TestEnvironmentFrame_Copy(t *testing.T) {
 	qt.Assert(t, copied.LocalEnvironment(), qt.Not(qt.IsNil))
 }
 
-func TestEnvironmentFrame_InternSyntax(t *testing.T) {
-	env := NewTopLevelEnvironmentFrame()
-
-	// Create a syntax value to intern
-	sym := values.NewSymbol("test")
-	// InternSyntax takes (key, syntaxValue) - first call with nil returns nil
-	interned1 := env.InternSyntax(sym, nil)
-	qt.Assert(t, interned1, qt.IsNil)
-}
-
 func TestEnvironmentFrame_GetLocalIndex_NotFound(t *testing.T) {
 	env := NewTopLevelEnvironmentFrame()
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
@@ -709,14 +699,6 @@ func TestEnvironmentFrame_PanicSentinels(t *testing.T) {
 				env.AtPhase(0)
 			},
 			werr.ErrMissingPhaseRegistry,
-		},
-		{
-			"InternSyntax without TopLevel panics with ErrMissingTopLevelEnvironment",
-			func() {
-				env := newEnvironmentFrame(nil, NewGlobalEnvironmentFrame())
-				env.InternSyntax(values.NewInteger(1), nil)
-			},
-			werr.ErrMissingTopLevelEnvironment,
 		},
 	}
 	for _, tc := range tcs {
@@ -918,6 +900,32 @@ func TestInitApplyFrame_PanicsOnNilParent(t *testing.T) {
 		qt.Assert(t, errors.Is(err, werr.ErrNilParentEnvironment), qt.IsTrue)
 	}()
 	src.InitApplyFrame(&dst)
+}
+
+func TestHasLocalVariableBinding_OuterScopeCompatible(t *testing.T) {
+	c := qt.New(t)
+
+	// Scenario: inner binding has incompatible scopes, outer has compatible.
+	// HasLocalVariableBinding should find the outer binding.
+	topLevel := NewTopLevelEnvironment()
+	env := topLevel.Runtime()
+
+	scopeA := syntax.NewScope()
+	scopeB := syntax.NewScope()
+
+	sym := values.NewSymbol("x")
+
+	// Outer: binding with [scopeA] — compatible with reference [scopeA]
+	outerEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
+	outerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeA}, nil)
+
+	// Inner: binding with [scopeB] — incompatible with reference [scopeA]
+	innerEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), outerEnv)
+	innerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeB}, nil)
+
+	// Reference has [scopeA] — inner binding [scopeB] doesn't match,
+	// but outer binding [scopeA] does. Should return true.
+	c.Assert(innerEnv.HasLocalVariableBinding(sym, []*syntax.Scope{scopeA}), qt.IsTrue)
 }
 
 func TestGetGlobalIndexAcrossPhases(t *testing.T) {

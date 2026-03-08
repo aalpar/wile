@@ -144,6 +144,35 @@ func TestTopLevelEnvironment_NestedChildSharesLoadPathStack(t *testing.T) {
 	c.Assert(child2.LoadPathStack().Current(), qt.Equals, "/deep/file.scm")
 }
 
+func TestConstructorEquivalence(t *testing.T) {
+	c := qt.New(t)
+
+	parent := NewTopLevelEnvironment()
+	childRuntime := parent.NewChildRuntime()
+
+	c.Assert(childRuntime.TopLevelEnv(), qt.Equals, parent)
+	c.Assert(childRuntime.PhaseLevel(), qt.Equals, PhaseRuntime)
+	c.Assert(childRuntime.GlobalEnvironment(), qt.IsNotNil)
+	c.Assert(childRuntime.IsTopLevel(), qt.IsTrue)
+
+	expand := childRuntime.Expand()
+	c.Assert(expand, qt.IsNotNil)
+	c.Assert(expand.PhaseLevel(), qt.Equals, PhaseExpand)
+
+	child := parent.NewChildTopLevelEnvironment()
+	c.Assert(child.Runtime().TopLevelEnv(), qt.Equals, child)
+	c.Assert(child.Expand().PhaseLevel(), qt.Equals, PhaseExpand)
+
+	sym := values.NewSymbol("test-snap")
+	parent.Runtime().MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
+	report := parent.NewSchemeReportEnvironment()
+	c.Assert(report.Runtime().GetGlobalIndex(sym), qt.IsNotNil)
+
+	sym2 := values.NewSymbol("after-snap")
+	parent.Runtime().MaybeCreateOwnGlobalBinding(sym2, BindingTypeVariable)
+	c.Assert(report.Runtime().GetGlobalIndex(sym2), qt.IsNil)
+}
+
 // Verify that symbols with the same name are structurally equal
 // even when created independently (no interning needed).
 func TestTopLevelEnvironment_SymbolEquality(t *testing.T) {

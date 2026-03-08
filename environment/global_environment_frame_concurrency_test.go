@@ -171,7 +171,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				copied := env.global.Copy().(*GlobalEnvironmentFrame)
+				copied := env.global.Copy()
 				c.Assert(copied, qt.Not(qt.IsNil))
 				c.Assert(len(copied.Keys()), qt.Equals, 10)
 			}()

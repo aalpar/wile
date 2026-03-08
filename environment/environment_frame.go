@@ -118,12 +118,10 @@ func NewTopLevelEnvironmentFrame() *EnvironmentFrame {
 	return NewTopLevelEnvironment().Runtime()
 }
 
-// NewEnvironmentFrame creates a new environment frame with the given local and global environment frames.
-// The parent field is set to nil. This is typically used for isolated environments.
 // newEnvironmentFrame creates an isolated environment frame without a
-// TopLevelEnvironment or PhaseRegistry. Calling AtPhase() or
-// InternSyntax() on the result will panic. Use NewTopLevelEnvironment().Runtime()
-// for full environments or NewEnvironmentFrameWithParent() for child scopes.
+// TopLevelEnvironment or PhaseRegistry. Calling AtPhase() on the result
+// will panic. Use NewTopLevelEnvironment().Runtime() for full environments
+// or NewEnvironmentFrameWithParent() for child scopes.
 func newEnvironmentFrame(local *LocalEnvironmentFrame, global *GlobalEnvironmentFrame) *EnvironmentFrame {
 	q := &EnvironmentFrame{
 		global:     global,
@@ -287,15 +285,22 @@ func (p *EnvironmentFrame) GlobalEnvironment() *GlobalEnvironmentFrame {
 
 // LibraryRegistry returns the library registry from the top-level environment.
 // The caller must type-assert to *machine.LibraryRegistry.
-// Returns nil if no registry has been set.
+// Returns nil if no registry has been set or if topLevel is nil.
 func (p *EnvironmentFrame) LibraryRegistry() any {
-	return p.TopLevel().global.LibraryRegistry()
+	if p.topLevel == nil {
+		return nil
+	}
+	return p.topLevel.LibraryRegistry()
 }
 
 // SetLibraryRegistry sets the library registry on the top-level environment.
 // The registry should be a *machine.LibraryRegistry.
+// No-op if topLevel is nil.
 func (p *EnvironmentFrame) SetLibraryRegistry(registry any) {
-	p.TopLevel().global.SetLibraryRegistry(registry)
+	if p.topLevel == nil {
+		return
+	}
+	p.topLevel.SetLibraryRegistry(registry)
 }
 
 // LoadPathStack returns the load path stack for tracking files currently
@@ -502,26 +507,20 @@ func (p *EnvironmentFrame) MaybeCreateLocalBindingWithScopes(key *values.Symbol,
 // It returns the LocalIndex of the binding and a boolean indicating whether
 // the binding was created (true) or already existed (false).
 //
-// The parent-chain walk is EnvironmentFrame's responsibility; single-frame
-// lookup delegates to LocalEnvironmentFrame.GetLocalIndex.
+// The parent-chain walk delegates to resolveLocal; creation uses
+// EnsureLocalBinding on the innermost frame.
 func (p *EnvironmentFrame) MaybeCreateLocalBinding(key *values.Symbol, bt BindingType) (*LocalIndex, bool) {
-	env := p
-	if !env.hasLocal() {
+	if !p.hasLocal() {
 		return nil, false
 	}
-	depth := 0
-	for {
-		li := env.local.GetLocalIndex(key)
-		if li != nil {
-			return NewLocalIndex(li[0], depth), false
-		}
-		if env.IsTopLevel() || !env.parent.hasLocal() {
-			break
-		}
-		env = env.parent
-		depth++
+	// Search existing bindings in current and parent frames
+	result := p.resolveLocal(key, nil, false, func(_ *Binding, slot int, depth int) any {
+		return NewLocalIndex(slot, depth)
+	})
+	if result != nil {
+		return result.(*LocalIndex), false
 	}
-	// Not found in any parent — create in the current (innermost) frame
+	// Not found — create in the current (innermost) frame
 	return p.local.EnsureLocalBinding(key, bt)
 }
 
@@ -554,22 +553,13 @@ func (p *EnvironmentFrame) HasLocalVariableBinding(sym *values.Symbol, scopes []
 	if p == nil {
 		return false
 	}
-	li := p.GetLocalIndex(sym)
-	if li == nil {
-		return false
-	}
-	binding := p.GetLocalBinding(li)
-	if binding == nil {
-		return false
-	}
-	if binding.BindingType() != BindingTypeVariable {
-		return false
-	}
-	bindingScopes := binding.Scopes()
-	if len(bindingScopes) == 0 {
-		return true
-	}
-	return syntax.ScopesMatch(scopes, bindingScopes)
+	result := p.resolveLocal(sym, scopes, true, func(binding *Binding, _ int, _ int) any {
+		if binding.BindingType() == BindingTypeVariable {
+			return true
+		}
+		return nil
+	})
+	return result != nil
 }
 
 // GetLocalIndexWithScopes returns the LocalIndex of a local binding that
@@ -586,6 +576,10 @@ func (p *EnvironmentFrame) HasLocalVariableBinding(sym *values.Symbol, scopes []
 // requires scope matching and candidate accumulation across the full parent
 // chain (Flatt's "collect-then-maximize" algorithm). A simple delegate-and-
 // adjust-depth pattern cannot express the cross-frame maximization.
+//
+// COUPLING: The loop below must mirror resolveLocal's walk conditions
+// (hasLocal check, IsTopLevel break, parent traversal). If resolveLocal's
+// termination logic changes, update this loop to match.
 func (p *EnvironmentFrame) GetLocalIndexWithScopes(key *values.Symbol, scopes []*syntax.Scope) *LocalIndex {
 	if p == nil || !p.hasLocal() {
 		return nil
@@ -829,7 +823,7 @@ func (p *EnvironmentFrame) SetGlobalBindingByIndex(i int, bd *Binding) {
 func (p *EnvironmentFrame) Copy() *EnvironmentFrame {
 	q := &EnvironmentFrame{
 		parent:     p.parent,
-		global:     p.global.Copy().(*GlobalEnvironmentFrame),
+		global:     p.global.Copy(),
 		phaseLevel: p.phaseLevel,
 		phases:     p.phases,
 		topLevel:   p.topLevel,
@@ -877,17 +871,4 @@ func (p *EnvironmentFrame) EqualTo(value values.Value) bool {
 // Returns nil for legacy environments created without TopLevelEnvironment.
 func (p *EnvironmentFrame) TopLevelEnv() *TopLevelEnvironment {
 	return p.topLevel
-}
-
-// InternSyntax interns the given syntax value.
-// Delegates to the TopLevelEnvironment for this frame.
-// Panics if topLevel is nil (legacy environments no longer supported).
-func (p *EnvironmentFrame) InternSyntax(k values.Value, v syntax.SyntaxValue) syntax.SyntaxValue {
-	if p.topLevel == nil {
-		panic(werr.WrapForeignErrorf(
-			werr.ErrMissingTopLevelEnvironment,
-			"InternSyntax called on environment without TopLevelEnvironment - use NewTopLevelEnvironment()",
-		))
-	}
-	return p.topLevel.InternSyntax(k, v)
 }

@@ -21,7 +21,6 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -57,17 +56,14 @@ func (p *GlobalIndex) IsVoid() bool {
 
 // EqualTo returns true if this global index equals the given value.
 func (p *GlobalIndex) EqualTo(value values.Value) bool {
-	if value == nil || p == nil {
-		return value == nil && p == nil
+	if p == nil || value == nil {
+		return p == nil && value == nil
 	}
 	v, ok := value.(*GlobalIndex)
 	if !ok {
 		return false
 	}
-	if v.Index.EqualTo(p.Index) {
-		return true
-	}
-	return false
+	return v.Index.EqualTo(p.Index)
 }
 
 // GlobalEnvironmentFrame represents global bindings for a single phase.
@@ -106,9 +102,9 @@ func NewGlobalEnvironmentFrame() *GlobalEnvironmentFrame {
 // Bindings are batch-allocated (contiguous array) for cache locality
 // and reduced GC pressure.
 // Thread-safe: uses RLock for read-only access.
-func (p *GlobalEnvironmentFrame) Copy() values.Value {
+func (p *GlobalEnvironmentFrame) Copy() *GlobalEnvironmentFrame {
 	if p == nil {
-		return (*GlobalEnvironmentFrame)(nil)
+		return nil
 	}
 
 	p.mu.RLock()
@@ -293,48 +289,4 @@ func (p *GlobalEnvironmentFrame) EqualTo(o values.Value) bool {
 		}
 	}
 	return true
-}
-
-// InternSyntax returns the canonical version of the given syntax value.
-// If an equivalent syntax value has been seen before, it is returned.
-// Otherwise, the value is added to the intern map and returned.
-// Delegates to TopLevelEnvironment.
-// Panics if topLevel is nil.
-func (p *GlobalEnvironmentFrame) InternSyntax(k values.Value, v syntax.SyntaxValue) syntax.SyntaxValue {
-	if p.topLevel == nil {
-		panic(werr.WrapForeignErrorf(
-			werr.ErrMissingTopLevelEnvironment,
-			"InternSyntax called on GlobalEnvironmentFrame without TopLevelEnvironment",
-		))
-	}
-	return p.topLevel.InternSyntax(k, v)
-}
-
-// LibraryRegistry returns the library registry for R7RS library loading.
-// The caller must type-assert to *machine.LibraryRegistry.
-// Returns nil if no registry has been set.
-// Delegates to TopLevelEnvironment.
-// Panics if topLevel is nil.
-func (p *GlobalEnvironmentFrame) LibraryRegistry() any {
-	if p.topLevel == nil {
-		panic(werr.WrapForeignErrorf(
-			werr.ErrMissingTopLevelEnvironment,
-			"LibraryRegistry called on GlobalEnvironmentFrame without TopLevelEnvironment",
-		))
-	}
-	return p.topLevel.LibraryRegistry()
-}
-
-// SetLibraryRegistry sets the library registry for R7RS library loading.
-// The registry should be a *machine.LibraryRegistry.
-// Delegates to TopLevelEnvironment.
-// Panics if topLevel is nil.
-func (p *GlobalEnvironmentFrame) SetLibraryRegistry(registry any) {
-	if p.topLevel == nil {
-		panic(werr.WrapForeignErrorf(
-			werr.ErrMissingTopLevelEnvironment,
-			"SetLibraryRegistry called on GlobalEnvironmentFrame without TopLevelEnvironment",
-		))
-	}
-	p.topLevel.SetLibraryRegistry(registry)
 }

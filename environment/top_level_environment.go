@@ -92,22 +92,7 @@ func NewTopLevelEnvironment() *TopLevelEnvironment {
 		loadPathStack: NewLoadPathStack(),
 		scopeRegistry: make(map[*syntax.Scope]*EnvironmentFrame),
 	}
-
-	// Create the runtime (phase 0) environment frame
-	global := newGlobalEnvironmentFrameWithTopLevel(q)
-	q.runtime = &EnvironmentFrame{
-		parent:     nil,
-		global:     global,
-		phaseLevel: PhaseRuntime,
-		topLevel:   q,
-	}
-
-	// Create phase registry and register runtime as phase 0
-	q.phases = newPhaseRegistryWithTopLevel(q)
-
-	// Set the phases reference on the runtime frame
-	q.runtime.phases = q.phases
-
+	initRuntimeFrame(q, newGlobalEnvironmentFrameWithTopLevel(q))
 	return q
 }
 
@@ -371,22 +356,7 @@ func (p *TopLevelEnvironment) NewChildTopLevelEnvironment() *TopLevelEnvironment
 		libraryEnvFactory: p.libraryEnvFactory,
 		parent:            p,
 	}
-
-	// Create the runtime (phase 0) environment frame
-	global := newGlobalEnvironmentFrameWithTopLevel(q)
-	q.runtime = &EnvironmentFrame{
-		parent:     nil,
-		global:     global,
-		phaseLevel: PhaseRuntime,
-		topLevel:   q,
-	}
-
-	// Create phase registry and register runtime as phase 0
-	q.phases = newPhaseRegistryWithTopLevel(q)
-
-	// Set the phases reference on the runtime frame
-	q.runtime.phases = q.phases
-
+	initRuntimeFrame(q, newGlobalEnvironmentFrameWithTopLevel(q))
 	return q
 }
 
@@ -407,19 +377,9 @@ func (p *TopLevelEnvironment) NewSchemeReportEnvironment() *TopLevelEnvironment 
 
 	// Copy the parent's global bindings and repoint topLevel to the child,
 	// so that syntax interning delegates through q → p (parent chain).
-	copiedGlobal := p.runtime.global.Copy().(*GlobalEnvironmentFrame)
+	copiedGlobal := p.runtime.global.Copy()
 	copiedGlobal.topLevel = q
-
-	q.runtime = &EnvironmentFrame{
-		parent:     nil,
-		global:     copiedGlobal,
-		phaseLevel: PhaseRuntime,
-		topLevel:   q,
-	}
-
-	q.phases = newPhaseRegistryWithTopLevel(q)
-	q.runtime.phases = q.phases
-
+	initRuntimeFrame(q, copiedGlobal)
 	return q
 }
 
@@ -432,25 +392,14 @@ func (p *TopLevelEnvironment) NewSchemeReportEnvironment() *TopLevelEnvironment 
 //   - Have isolated bindings (library definitions don't leak)
 //   - Have their own phase hierarchy
 func (p *TopLevelEnvironment) NewChildRuntime() *EnvironmentFrame {
-	// Create a new global frame sharing this TopLevelEnvironment
 	global := newGlobalEnvironmentFrameWithTopLevel(p)
-
-	// Create the runtime frame for the child
 	runtime := &EnvironmentFrame{
 		parent:     nil,
 		global:     global,
 		phaseLevel: PhaseRuntime,
-		topLevel:   p, // Share the TopLevelEnvironment
+		topLevel:   p,
 	}
-
-	// Create a new phase registry for the child
-	childPhases := &PhaseRegistry{
-		envs:  make(map[int]*EnvironmentFrame),
-		owner: p,
-	}
-	childPhases.envs[PhaseRuntime] = runtime
-	runtime.phases = childPhases
-
+	runtime.phases = newPhaseRegistryForChild(p, runtime)
 	return runtime
 }
 
@@ -503,5 +452,31 @@ func newPhaseRegistryWithTopLevel(topLevel *TopLevelEnvironment) *PhaseRegistry 
 	}
 	// TopLevel is phase 0 (runtime)
 	q.envs[PhaseRuntime] = topLevel.runtime
+	return q
+}
+
+// initRuntimeFrame creates a runtime EnvironmentFrame with a GlobalEnvironmentFrame
+// and PhaseRegistry wired to the given TopLevelEnvironment. Used by all TLE
+// constructors to eliminate boilerplate divergence.
+func initRuntimeFrame(topLevel *TopLevelEnvironment, global *GlobalEnvironmentFrame) {
+	topLevel.runtime = &EnvironmentFrame{
+		parent:     nil,
+		global:     global,
+		phaseLevel: PhaseRuntime,
+		topLevel:   topLevel,
+	}
+	topLevel.phases = newPhaseRegistryWithTopLevel(topLevel)
+	topLevel.runtime.phases = topLevel.phases
+}
+
+// newPhaseRegistryForChild creates a PhaseRegistry for a child environment
+// that shares a TopLevelEnvironment. Unlike newPhaseRegistryWithTopLevel,
+// it does NOT read topLevel.runtime (which belongs to the parent).
+func newPhaseRegistryForChild(topLevel *TopLevelEnvironment, runtime *EnvironmentFrame) *PhaseRegistry {
+	q := &PhaseRegistry{
+		envs:  make(map[int]*EnvironmentFrame),
+		owner: topLevel,
+	}
+	q.envs[PhaseRuntime] = runtime
 	return q
 }
