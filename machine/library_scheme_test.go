@@ -454,3 +454,137 @@ func TestLibraryChainedMacroHygiene(t *testing.T) {
 	c.Assert(err, qt.IsNil, qt.Commentf("chained macro references should resolve through library scopes"))
 	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(105))
 }
+
+// TestLibraryTwoLibrarySameHelperName verifies that two libraries can each
+// define an internal (unexported) macro named "helper" without collision.
+// Each library's exported macro should resolve its own "helper" via its
+// unique library scope, even when both are imported into the same environment.
+func TestLibraryTwoLibrarySameHelperName(t *testing.T) {
+	c := qt.New(t)
+	env := setupSchemeLibraryTest(t)
+
+	// Library A: helper adds 10
+	libA := `(define-library (test scope-a)
+	  (export macro-a)
+	  (import (scheme base))
+	  (begin
+	    (define-syntax helper
+	      (syntax-rules ()
+	        ((helper x) (+ x 10))))
+	    (define-syntax macro-a
+	      (syntax-rules ()
+	        ((macro-a x) (helper x))))))`
+
+	// Library B: helper multiplies by 2
+	libB := `(define-library (test scope-b)
+	  (export macro-b)
+	  (import (scheme base))
+	  (begin
+	    (define-syntax helper
+	      (syntax-rules ()
+	        ((helper x) (* x 2))))
+	    (define-syntax macro-b
+	      (syntax-rules ()
+	        ((macro-b x) (helper x))))))`
+
+	compileAndRegisterLibrary(t, env, libA)
+	compileAndRegisterLibrary(t, env, libB)
+
+	sv := parseSchemeExpr(t, env, `(import (test scope-a))`)
+	_, err := compileAndRun(t, env, sv)
+	c.Assert(err, qt.IsNil)
+
+	sv = parseSchemeExpr(t, env, `(import (test scope-b))`)
+	_, err = compileAndRun(t, env, sv)
+	c.Assert(err, qt.IsNil)
+
+	// macro-a should use A's helper (+ x 10)
+	sv = parseSchemeExpr(t, env, `(macro-a 5)`)
+	result, err := compileAndRun(t, env, sv)
+	c.Assert(err, qt.IsNil, qt.Commentf("macro-a should resolve to library A's helper"))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(15))
+
+	// macro-b should use B's helper (* x 2)
+	sv = parseSchemeExpr(t, env, `(macro-b 5)`)
+	result, err = compileAndRun(t, env, sv)
+	c.Assert(err, qt.IsNil, qt.Commentf("macro-b should resolve to library B's helper"))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(10))
+}
+
+// TestLibraryReExportChain verifies that a re-exported macro still resolves
+// its free identifiers in the defining library's environment, not the
+// re-exporting library's. Library A defines helper + my-macro, library B
+// re-exports my-macro, and the test imports from B.
+func TestLibraryReExportChain(t *testing.T) {
+	c := qt.New(t)
+	env := setupSchemeLibraryTest(t)
+
+	libA := `(define-library (test reexport-source)
+	  (export my-macro)
+	  (import (scheme base))
+	  (begin
+	    (define-syntax helper
+	      (syntax-rules ()
+	        ((helper x) (+ x 42))))
+	    (define-syntax my-macro
+	      (syntax-rules ()
+	        ((my-macro x) (helper x))))))`
+
+	libB := `(define-library (test reexport-relay)
+	  (export my-macro)
+	  (import (test reexport-source)))`
+
+	compileAndRegisterLibrary(t, env, libA)
+	compileAndRegisterLibrary(t, env, libB)
+
+	sv := parseSchemeExpr(t, env, `(import (test reexport-relay))`)
+	_, err := compileAndRun(t, env, sv)
+	c.Assert(err, qt.IsNil)
+
+	// my-macro was re-exported through B, but helper lives in A
+	sv = parseSchemeExpr(t, env, `(my-macro 8)`)
+	result, err := compileAndRun(t, env, sv)
+	c.Assert(err, qt.IsNil, qt.Commentf("re-exported macro should resolve helper in defining library"))
+	c.Assert(result, valuestest.SchemeEquals, values.NewInteger(50))
+}
+
+// TestLibraryBindingsCarryLibraryScope verifies that after Flatt §3.3
+// stamping, bindings created in a library environment carry the library
+// scope in their scope set. This is the observable effect of stamping
+// library body forms with the library scope before expansion.
+func TestLibraryBindingsCarryLibraryScope(t *testing.T) {
+	c := qt.New(t)
+	env := setupSchemeLibraryTest(t)
+
+	libCode := `(define-library (test scoped-bindings)
+	  (export my-fn)
+	  (import (scheme base))
+	  (begin
+	    (define (my-fn x) (+ x 1))))`
+
+	lib := compileAndRegisterLibrary(t, env, libCode)
+
+	// The binding in the library's env should carry the library scope
+	myFnSym := lib.Env.InternSymbol(values.NewSymbol("my-fn"))
+	binding := lib.Env.GetBinding(myFnSym)
+	c.Assert(binding, qt.IsNotNil, qt.Commentf("my-fn should exist in library env"))
+	c.Assert(len(binding.Scopes()) > 0, qt.IsTrue,
+		qt.Commentf("library binding should carry at least the library scope"))
+
+	// Also check a define-syntax binding in the expand phase
+	libCode2 := `(define-library (test scoped-syntax)
+	  (export my-macro)
+	  (import (scheme base))
+	  (begin
+	    (define-syntax my-macro
+	      (syntax-rules ()
+	        ((my-macro x) x)))))`
+
+	lib2 := compileAndRegisterLibrary(t, env, libCode2)
+
+	myMacroSym := lib2.Env.Expand().InternSymbol(values.NewSymbol("my-macro"))
+	syntaxBinding := lib2.Env.Expand().GetBinding(myMacroSym)
+	c.Assert(syntaxBinding, qt.IsNotNil, qt.Commentf("my-macro should exist in library expand env"))
+	c.Assert(len(syntaxBinding.Scopes()) > 0, qt.IsTrue,
+		qt.Commentf("library syntax binding should carry at least the library scope"))
+}
