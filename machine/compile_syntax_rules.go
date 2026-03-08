@@ -119,9 +119,9 @@ func (p *FreeIdResolution) GetHasLocalBinding() bool {
 // The pattern is compiled to bytecode for efficient matching. The template
 // is stored as-is and expanded by substituting captured pattern variables.
 //
-// The macroScope field supports hygiene: when the transformer runs, it creates
-// a fresh "intro scope" that marks all identifiers introduced by the macro.
-// This prevents variable capture between the macro and its use site.
+// The freeIds map supports hygiene: free identifiers (template identifiers
+// that are not pattern variables) are resolved at definition time so they
+// maintain their binding even when the macro expands in a different scope.
 type SyntaxRulesClause struct {
 	template         syntax.SyntaxValue              // The template to expand on match (includes source context)
 	bytecode         []match.SyntaxCommand           // Compiled pattern bytecode
@@ -130,7 +130,6 @@ type SyntaxRulesClause struct {
 	patternVarSyntax map[string]*syntax.SyntaxSymbol // Pattern variables with their scopes (for nested macro hygiene)
 	ellipsisVars     map[int]map[string]struct{}     // ellipsisID -> captured pattern variables
 	freeIds          map[string]*FreeIdResolution    // Free identifiers resolved to definition-time bindings
-	macroScope       *syntax.Scope                   // Hygiene scope for this macro (Flatt's model)
 	ellipsis         string                          // Custom ellipsis identifier (default "...")
 	literalSyntax    map[string]*syntax.SyntaxSymbol // Literal identifiers with scopes for hygiene
 }
@@ -380,7 +379,6 @@ func compileClauseWithEllipsisAndLiterals(
 		patternVarSyntax: varSyntax,
 		ellipsisVars:     compiled.EllipsisVars,
 		freeIds:          freeIds,
-		macroScope:       nil, // Will be set when macro is defined
 		ellipsis:         ellipsis,
 		literalSyntax:    literalSyntax,
 	}, nil

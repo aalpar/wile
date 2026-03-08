@@ -25,7 +25,7 @@ import (
 // when the expander encounters a special form.
 //
 // Each primitive has different expansion behavior:
-//   - quote, define-syntax, quasiquote: return unchanged (no expansion)
+//   - quote, define-syntax, define-library, quasiquote: return unchanged (no expansion)
 //   - if: expand test, consequent, alternative separately
 //   - begin: expand all subexpressions
 //   - set!: expand only the value expression
@@ -42,6 +42,7 @@ func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
 		{"unquote-splicing", (*ExpanderTimeContinuation).expandUnchanged},
 		{"include", (*ExpanderTimeContinuation).expandUnchanged},
 		{"include-ci", (*ExpanderTimeContinuation).expandUnchanged},
+		{"define-library", (*ExpanderTimeContinuation).expandUnchanged},
 		{"cond-expand", (*ExpanderTimeContinuation).expandUnchanged},
 		{"syntax", (*ExpanderTimeContinuation).expandUnchanged},
 		{"syntax-case", (*ExpanderTimeContinuation).expandUnchanged},

@@ -49,6 +49,17 @@ func (p *CompileTimeContinuation) compileLibraryBegin(ctctx CompileTimeCallConte
 		return werr.WrapForeignErrorf(err, "failed to collect library body forms")
 	}
 
+	// Flatt §3.3: all forms in a library body carry the library scope.
+	// This ensures bindings and references within the library are scoped,
+	// enabling bindingScopes ⊆ useScopes for intra-library resolution.
+	// Scopes propagate to bindings via nameSym.Scopes() → binding.SetScopes()
+	// in both predeclareDefineBinding and ExpandBodyWithDefineSyntax.
+	if p.libraryScope != nil {
+		for i, form := range forms {
+			forms[i] = syntax.AddScopeToSyntax(form, p.libraryScope)
+		}
+	}
+
 	// Pass 1: Expand all forms, compiling define-syntax as encountered
 	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env)
 	expander.libraryScope = p.libraryScope
