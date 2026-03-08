@@ -98,6 +98,79 @@ This means:
 - **Fail-fast**: Errors are caught at compile time, not at execution time.
 - **No bypass**: There is no `eval`-like escape hatch unless the eval extension is explicitly loaded.
 
+## Why Scheme makes sandboxing tractable
+
+Wile's sandboxing works because Scheme's language design cooperates with capability-based security in ways that imperative languages resist. The registry mechanism described above is simple — but it is only simple *because* the language doesn't fight it. The properties below are structural consequences of Scheme's lambda-calculus foundation, not bolted-on restrictions.
+
+### Authority is lexical
+
+In Scheme, a procedure can only invoke operations present in its lexical environment. There is no ambient authority — no global `os` module reachable via `import`, no `globalThis.fetch`, no `System.exit()` accessible from any scope. If `open-input-file` is not bound in the environment, no Scheme expression can conjure it into existence.
+
+This is the property Rees (1996) formalized: closures *are* capabilities. A closure over a file port can read that file; a closure without one cannot. Authority flows through bindings, and bindings are controlled by whoever constructs the environment — in Wile's case, the registry.
+
+Contrast with imperative languages, where ambient authority creates escape hatches that sandboxing must individually seal:
+
+| Language | Ambient authority escape | Mitigation |
+|----------|--------------------------|------------|
+| Python | `__import__('os')`, `__builtins__`, `getattr` | Restricted execution (abandoned in CPython as infeasible) |
+| JavaScript | `globalThis`, prototype pollution, `eval`, `import()` | Frozen realms (SES/Hardened JS), membrane proxies |
+| Java | `Class.forName`, `setAccessible(true)` | SecurityManager (deprecated JDK 17, permanently disabled JDK 24) |
+| Ruby | `ObjectSpace`, `send`, `const_get` | No standard solution |
+| Scheme | None — authority is lexically scoped | Registry controls which bindings exist |
+
+Each of those mitigations is a patch over a language feature that assumes ambient access. Scheme doesn't need patches because it never assumed ambient access in the first place.
+
+### No mutable dispatch
+
+Scheme is not fully immutable — pairs have `set-car!`/`set-cdr!`, vectors have `vector-set!`, and R7RS strings have `string-set!`. But Scheme lacks **mutable dispatch**: there are no prototypes, method tables, or class hierarchies that an attacker can modify to change what operations mean.
+
+In JavaScript, modifying `Array.prototype.push` affects every array in the program. In Python, monkey-patching a class method changes behavior for every instance. In Java, reflection can replace `private` field values on shared objects. Each of these is a single mutation that poisons behavior globally.
+
+Scheme has no equivalent. Operations like `car`, `+`, and `open-input-file` are lexical bindings, not methods on mutable objects. A `set!` in one scope doesn't affect closures that already captured the original value. The authority graph — which bindings exist and what they resolve to — is determined by lexical structure, not by mutable object state.
+
+### No reflection escape hatches
+
+Scheme provides no built-in mechanism to:
+- Access bindings outside the current lexical scope
+- Enumerate or modify an environment's internal structure
+- Bypass access controls via a metaobject protocol
+- Load arbitrary code without an explicit `eval` binding
+
+Wile's `introspection` extension (`environment-bound-names`, `environment-ref`) is opt-in and read-only. Even when loaded, it operates within the engine's existing environment — it cannot introduce new bindings or access extensions that weren't registered.
+
+This is a sharp contrast with languages like Python (where `__builtins__` and `getattr` provide universal introspection), Java (where reflection can bypass `private` access), or JavaScript (where property enumeration and `Proxy` provide deep metaprogramming). In those languages, sandboxing must anticipate every reflective path to authority. In Scheme, there are no reflective paths unless you create them.
+
+### Hygienic macros preserve boundaries
+
+Unhygienic macro systems (C preprocessor, Common Lisp `defmacro`) can accidentally — or deliberately — capture bindings from the expansion site. A macro could smuggle a reference to a privileged operation into unprivileged code.
+
+Wile's hygienic macro system (Flatt 2016) prevents this: macro-introduced identifiers resolve in the macro's *definition* environment, not the use site. A macro defined in a privileged library cannot leak its internal bindings into user code, and user code cannot capture a macro's internal references. The scope-set mechanism that enforces hygiene is the same mechanism that enforces sandboxing — both are consequences of lexical scoping.
+
+### Closures are the composition mechanism
+
+In capability-secure systems, the hard problem is *attenuation*: granting partial authority (read but not write, this directory but not that one). In Scheme, attenuation is just a closure:
+
+```scheme
+;; Full authority: can write anywhere
+(define write-file open-output-file)
+
+;; Attenuated: can only write to /tmp
+(define (safe-write-file path)
+  (if (string-prefix? "/tmp/" path)
+      (open-output-file path)
+      (error "access denied" path)))
+```
+
+The attenuated capability is a first-class value that can be passed, stored, and composed — using the same mechanisms as any other Scheme value. There is no separate "policy language" or "permission descriptor" — the language's own composition mechanism *is* the security mechanism.
+
+This is the central thesis of Miller (2006): in a language where authority flows through closures, capability security and software engineering are the same discipline. Good modularity *is* good security.
+
+### The practical consequence
+
+These properties compound. Because authority is lexical, removing a binding from the registry makes it inexpressible — not merely blocked. Because there are no ambient escape hatches, there are no runtime permission checks on the hot path. Because closures compose, fine-grained attenuation uses the same tools as ordinary programming.
+
+The result is that Wile's sandboxing has zero runtime cost, fails at compile time, and requires no ongoing maintenance against new escape vectors — because the language doesn't generate escape vectors.
+
 ## What sandboxing does NOT cover
 
 | Concern | Status | Mitigation |
@@ -135,6 +208,8 @@ Isolation invariants are verified in `engine_sandbox_test.go`:
 - Jonathan Rees, "A Security Kernel Based on the Lambda Calculus", MIT AI Memo 1564, 1996. https://dspace.mit.edu/handle/1721.1/5944
 - Mark S. Miller, "Robust Composition: Towards a Unified Approach to Access Control and Concurrency Control", PhD Dissertation, Johns Hopkins, 2006. http://www.erights.org/talks/thesis/
 - Mark S. Miller et al., "Caja: Safe active content in sanitized JavaScript", Google, 2008. https://research.google/pubs/pub32user/
+- Matthew Flatt, "Binding as Sets of Scopes", POPL 2016. https://doi.org/10.1145/2837614.2837620
+- Mark S. Miller, Mike Samuel, et al., "Safe ECMAScript (SES)", TC39 Proposal. https://github.com/tc39/proposal-ses
 
 ## Related
 
