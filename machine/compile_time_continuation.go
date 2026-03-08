@@ -373,15 +373,14 @@ func (p *CompileTimeContinuation) CompileExpression(ctctx CompileTimeCallContext
 	return p.compileValidated(ctctx, result.Expr)
 }
 
-// internSymbolsInValue recursively interns all symbols in a value using the environment.
-// This ensures symbol identity (eq?) works correctly across compilation boundaries per R7RS 6.5:
-// "Two symbols are identical (in the sense of eq?) if and only if their names are spelled the same way."
-// Returns an error if the value contains circular pair structures (from datum labels).
-func (p *CompileTimeContinuation) internSymbolsInValue(v values.Value) (values.Value, error) {
-	return p.internSymbolsInValueWithVisited(v, nil)
+// validateQuotedLiteral recursively walks a quoted literal value to detect
+// circular pair structures from datum labels (e.g., '#0=(a . #0#)).
+// Returns an error if circular references are found.
+func (p *CompileTimeContinuation) validateQuotedLiteral(v values.Value) (values.Value, error) {
+	return p.validateQuotedLiteralWithVisited(v, nil)
 }
 
-func (p *CompileTimeContinuation) internSymbolsInValueWithVisited(
+func (p *CompileTimeContinuation) validateQuotedLiteralWithVisited(
 	v values.Value, visited map[*values.Pair]bool,
 ) (values.Value, error) {
 	switch val := v.(type) {
@@ -401,11 +400,11 @@ func (p *CompileTimeContinuation) internSymbolsInValueWithVisited(
 			)
 		}
 		visited[val] = true
-		car, err := p.internSymbolsInValueWithVisited(val.Car(), visited)
+		car, err := p.validateQuotedLiteralWithVisited(val.Car(), visited)
 		if err != nil {
 			return nil, err
 		}
-		cdr, err := p.internSymbolsInValueWithVisited(val.Cdr(), visited)
+		cdr, err := p.validateQuotedLiteralWithVisited(val.Cdr(), visited)
 		if err != nil {
 			return nil, err
 		}
@@ -421,7 +420,7 @@ func (p *CompileTimeContinuation) internSymbolsInValueWithVisited(
 		changed := false
 		newElements := make([]values.Value, len(*val))
 		for i, elem := range *val {
-			interned, err := p.internSymbolsInValueWithVisited(elem, visited)
+			interned, err := p.validateQuotedLiteralWithVisited(elem, visited)
 			if err != nil {
 				return nil, err
 			}
@@ -451,7 +450,7 @@ func (p *CompileTimeContinuation) CompileSelfEvaluating(_ CompileTimeCallContext
 	// Intern symbols to ensure eq? identity per R7RS 6.5
 	// Use UnwrapAll() to fully unwrap syntax values (including vector elements)
 	// so that equal? comparisons work correctly on literal vectors.
-	val, err := p.internSymbolsInValue(expr.UnwrapAll())
+	val, err := p.validateQuotedLiteral(expr.UnwrapAll())
 	if err != nil {
 		return err
 	}

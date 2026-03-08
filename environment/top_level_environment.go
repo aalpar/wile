@@ -41,7 +41,7 @@ var _ values.Value = (*TopLevelEnvironment)(nil)
 //
 // Design: TopLevelEnvironment is the root of the environment hierarchy.
 // Each EnvironmentFrame holds a reference back to its TopLevelEnvironment
-// to access shared resources (interning, phases, libraries).
+// to access shared resources (syntax interning, phases, libraries).
 type TopLevelEnvironment struct {
 	// Name is an optional descriptive name (e.g., "interaction-environment").
 	Name string

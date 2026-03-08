@@ -21,13 +21,12 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-// PrimEqQ implements the eq? predicate for object identity.
-// Returns #t if both arguments are the same object (pointer equality).
+// PrimEqQ implements the eq? predicate (R7RS §6.1).
+// Returns #t if both arguments are identical: pointer equality for most types,
+// string key comparison for symbols (R7RS §6.5).
 func PrimEqQ(mc *machine.MachineContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
-	// eq? tests for object identity - same pointer or same immediate value
-	// Go's == compares pointers by address for reference types
 	mc.SetValue(values.BoolToBoolean(helpers.EqIdentity(o0, o1)))
 	return nil
 }

@@ -690,9 +690,9 @@ func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallC
 func (p *CompileTimeContinuation) CompileValidatedQuote(_ CompileTimeCallContext, v *validate.ValidatedQuote) error {
 	// Unwrap all syntax and intern symbols in the global environment.
 	// This ensures symbol identity (eq?) works correctly across compilation boundaries per R7RS 6.5:
-	// "Two symbols are identical (in the sense of eq?) if and only if their names are spelled the same way."
+	// Validate quoted literal for circular datum labels.
 	unwrapped := v.Datum.UnwrapAll()
-	interned, err := p.internSymbolsInValue(unwrapped)
+	interned, err := p.validateQuotedLiteral(unwrapped)
 	if err != nil {
 		return err
 	}
