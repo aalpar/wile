@@ -201,7 +201,7 @@ func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 			phaseIndices := phases.Phases()
 			sort.Ints(phaseIndices)
 
-			sym := p.env.InternSymbol(values.NewSymbol(name))
+			sym := values.NewSymbol(name)
 			for _, phase := range phaseIndices {
 				phaseEnv := phases.Get(phase)
 				if phaseEnv == nil {

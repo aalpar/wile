@@ -83,7 +83,7 @@ func (p *CompileTimeContinuation) SetLibraryCallback(cb func(*CompiledLibrary)) 
 
 // CompileSymbol compiles a syntax symbol expression.
 func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, expr *syntax.SyntaxSymbol) error {
-	sym := p.env.InternSymbol(expr.Sym)
+	sym := expr.Sym
 	// Check for pre-resolved binding from macro expansion
 	// This handles cross-library hygiene: free identifiers in macro templates
 	// carry their definition-time GlobalIndex so they resolve correctly
@@ -205,7 +205,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 // Core forms (if, lambda, define, etc.) use a separate validated compilation path —
 // see compile_validated.go and the compileValidated() method there.
 func (p *CompileTimeContinuation) CompileSyntaxPrimitive(ctctx CompileTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (bool, error) {
-	symVal := p.env.InternSymbol(sym.Sym)
+	symVal := sym.Sym
 	scopes := sym.Scopes()
 
 	// Dynamic lookup in the compile environment.
@@ -386,7 +386,7 @@ func (p *CompileTimeContinuation) internSymbolsInValueWithVisited(
 ) (values.Value, error) {
 	switch val := v.(type) {
 	case *values.Symbol:
-		return p.env.InternSymbol(val), nil
+		return val, nil
 	case *values.Pair:
 		if val == nil {
 			return nil, nil

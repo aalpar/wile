@@ -36,8 +36,7 @@ func (p *Parser) wrapSyntaxSymbol(o string, t tokenizer.Token) *syntax.SyntaxSym
 	if p.foldCase {
 		o = strings.ToLower(o)
 	}
-	// Intern the symbol at parse time, colocating interning with syntax occurrence
-	sym := p.env.InternSymbol(values.NewSymbol(o))
+	sym := values.NewSymbol(o)
 	return syntax.NewSyntaxSymbolForSymbol(sym, p.newSourceContext(t))
 }
 

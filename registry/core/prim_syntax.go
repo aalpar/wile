@@ -196,8 +196,8 @@ func PrimFreeIdentifierEqualQ(mc *machine.MachineContext) error {
 	}
 
 	env := mc.EnvironmentFrame()
-	sym0 := env.InternSymbol(values.NewSymbol(id0.Sym.Key))
-	sym1 := env.InternSymbol(values.NewSymbol(id1.Sym.Key))
+	sym0 := values.NewSymbol(id0.Sym.Key)
+	sym1 := values.NewSymbol(id1.Sym.Key)
 
 	// Look up bindings for both identifiers
 	binding0 := env.GetBindingWithScopes(sym0, id0.Scopes())

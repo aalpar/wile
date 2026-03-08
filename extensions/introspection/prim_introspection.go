@@ -53,8 +53,8 @@ func PrimEnvironmentBoundNames(mc *machine.MachineContext) error {
 	keys := env.GlobalEnvironment().Keys()
 	var result values.Value = values.EmptyList
 	for key := range keys {
-		interned := env.InternSymbol(&key)
-		result = values.NewCons(interned, result)
+		sym := values.NewSymbol(key.Key)
+		result = values.NewCons(sym, result)
 	}
 
 	mc.SetValue(result)
@@ -80,7 +80,6 @@ func PrimEnvironmentRef(mc *machine.MachineContext) error {
 	}
 
 	env := topLevelEnv.Runtime()
-	sym = env.InternSymbol(sym)
 	binding := env.GetBinding(sym)
 	if binding == nil {
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "environment-ref: unbound symbol %s", sym.Key)
@@ -108,7 +107,6 @@ func PrimEnvironmentBoundQ(mc *machine.MachineContext) error {
 	}
 
 	env := topLevelEnv.Runtime()
-	sym = env.InternSymbol(sym)
 	binding := env.GetBinding(sym)
 	mc.SetValue(values.BoolToBoolean(binding != nil))
 	return nil

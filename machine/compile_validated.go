@@ -236,8 +236,8 @@ func (p *CompileTimeContinuation) CompileValidatedDefine(ctctx CompileTimeCallCo
 // This early declaration enables self-recursive definitions like (define (fact n) ... (fact (- n 1)) ...).
 // Returns the interned symbol for use by the caller when storing the compiled value.
 func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefine) *values.Symbol {
-	// Get the interned symbol for the name (validator guarantees it's a SyntaxSymbol)
-	sym := p.env.InternSymbol(v.Name().Sym)
+	// Get the symbol for the name (validator guarantees it's a SyntaxSymbol)
+	sym := v.Name().Sym
 	symbolScopes := v.Name().Scopes()
 	symbolSource := v.Name().SourceContext()
 	// Create binding early for recursion support
@@ -422,7 +422,7 @@ func (p *CompileTimeContinuation) compileClosureBody(
 	// Params() is nil for zero-arg case-lambda clauses: (() ...).
 	if v.Params() != nil {
 		for _, paramSym := range v.Params().Required {
-			param := p.env.InternSymbol(paramSym.Sym)
+			param := paramSym.Sym
 			paramScopes := paramSym.Scopes()
 
 			_, ok := lenv.EnsureLocalBinding(param, environment.BindingTypeVariable)
@@ -537,7 +537,7 @@ func (p *CompileTimeContinuation) predeclareDefineBindingFromValidated(expr vali
 		return // Not a define, skip
 	}
 
-	sym := p.env.InternSymbol(def.Name().Sym)
+	sym := def.Name().Sym
 	symbolScopes := def.Name().Scopes()
 	symbolSource := def.Name().SourceContext()
 
@@ -559,8 +559,7 @@ func bindRestParameter(v validate.ValidatedBodyAndParams, p *CompileTimeContinua
 		return nil
 	}
 
-	// Intern the rest parameter symbol for consistent identity.
-	rest := p.env.InternSymbol(v.Params().Rest.Sym)
+	rest := v.Params().Rest.Sym
 	restScopes := v.Params().Rest.Scopes()
 
 	// Create a local binding slot for the rest parameter. This slot comes after
@@ -638,8 +637,8 @@ func (p *CompileTimeContinuation) CompileValidatedCaseLambda(ctctx CompileTimeCa
 
 // CompileValidatedSetBang compiles a validated (set! name expr) form.
 func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallContext, v *validate.ValidatedSetBang) error {
-	// Get the interned symbol (validator guarantees it's a SyntaxSymbol)
-	sym := p.env.InternSymbol(v.Name.Sym)
+	// Get the symbol (validator guarantees it's a SyntaxSymbol)
+	sym := v.Name.Sym
 	symbolScopes := v.Name.Scopes()
 
 	// Compile the value expression

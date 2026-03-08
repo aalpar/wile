@@ -178,7 +178,7 @@ func PrimFeatures(mc *machine.MachineContext) error {
 
 	elems := make([]values.Value, len(features))
 	for i, f := range features {
-		elems[i] = mc.EnvironmentFrame().InternSymbol(values.NewSymbol(f))
+		elems[i] = values.NewSymbol(f)
 	}
 	result := values.List(elems...)
 

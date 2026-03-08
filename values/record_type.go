@@ -51,7 +51,7 @@ func (p *RecordType) FieldCount() int {
 // FieldIndex returns the index of the field with the given name, or -1 if not found.
 func (p *RecordType) FieldIndex(name *Symbol) int {
 	for i, fn := range p.fieldNames {
-		if fn == name {
+		if fn.Key == name.Key {
 			return i
 		}
 	}

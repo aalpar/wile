@@ -124,7 +124,6 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateToOps(stx syntax.SyntaxVa
 			p.AppendOperations(NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
 			return nil
 		}
-		symVal = p.env.InternSymbol(symVal)
 		li := p.env.GetLocalIndex(symVal)
 		if li != nil {
 			// This is a pattern variable - load its value

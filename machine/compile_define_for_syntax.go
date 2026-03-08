@@ -86,9 +86,6 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 		valueExpr = restPair.SyntaxCar()
 	}
 
-	// Intern the symbol
-	nameSym = p.env.InternSymbol(nameSym)
-
 	// Expand, compile, and execute the expression at compile time
 	// Uses the expand-phase environment so the expression can access other
 	// define-for-syntax bindings and runtime primitives

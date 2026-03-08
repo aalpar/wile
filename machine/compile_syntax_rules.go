@@ -413,12 +413,9 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 			// If it's not a pattern variable, it's a free identifier
 			_, isPatternVar := patternVars[symVal.Key]
 			if !isPatternVar {
-				// Resolve the free identifier to its definition-time binding
-				// Use the interned symbol for consistent lookup
-				internedSym := env.InternSymbol(symVal)
-
+				// Resolve the free identifier to its definition-time binding.
 				// Check local binding first (for let-syntax hygiene)
-				li := env.GetLocalIndex(internedSym)
+				li := env.GetLocalIndex(symVal)
 				if li != nil {
 					binding := env.GetLocalBinding(li)
 					if binding != nil {
@@ -435,7 +432,7 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 
 				// Use cross-phase lookup to find bindings in any phase
 				// (runtime for define, expand for define-syntax, compile for auxiliary syntax)
-				gi := env.GetGlobalIndexAcrossPhases(internedSym)
+				gi := env.GetGlobalIndexAcrossPhases(symVal)
 				// Store the resolved GlobalIndex (may be nil if unbound, which is ok -
 				// unbound free identifiers like special forms will be handled normally)
 				freeIds[symVal.Key] = &FreeIdResolution{

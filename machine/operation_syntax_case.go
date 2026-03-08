@@ -140,7 +140,7 @@ func (p *OperationBindPatternVars) Apply(mc *MachineContext) (*MachineContext, e
 	// Bind each pattern variable - use MaybeCreateLocalBinding to get the actual slot
 	// which matches what the compiler does at compile time
 	for _, varName := range p.PatternVars {
-		sym := childEnv.InternSymbol(values.NewSymbol(varName))
+		sym := values.NewSymbol(varName)
 		li, _ := childEnv.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable)
 		stxVal, ok := sc.bindings[varName]
 		if ok && li == nil {

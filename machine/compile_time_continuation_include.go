@@ -266,7 +266,7 @@ func (p *CompileTimeContinuation) predeclareDefineBinding(v syntax.SyntaxValue) 
 	}
 
 	// Pre-create the binding
-	name := p.env.InternSymbol(nameSym.Unwrap().(*values.Symbol))
+	name := nameSym.Unwrap().(*values.Symbol)
 	symbolScopes := nameSym.Scopes()
 	symbolSource := nameSym.SourceContext()
 

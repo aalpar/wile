@@ -300,14 +300,14 @@ func (p *Engine) Run(ctx context.Context, cc *CompiledCode) (Value, error) {
 
 // Define binds a value to a name in the top-level environment.
 func (p *Engine) Define(name string, value Value) error {
-	sym := p.env.InternSymbol(values.NewSymbol(name))
+	sym := values.NewSymbol(name)
 	p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 	return p.env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), unwrapValue(value))
 }
 
 // Get retrieves a value by name from the environment.
 func (p *Engine) Get(name string) (Value, bool) {
-	sym := p.env.InternSymbol(values.NewSymbol(name))
+	sym := values.NewSymbol(name)
 	idx := environment.NewGlobalIndex(sym)
 	binding := p.env.GetGlobalBinding(idx)
 	if binding == nil {
@@ -318,7 +318,7 @@ func (p *Engine) Get(name string) (Value, bool) {
 
 // RegisterPrimitive adds a Go function as a Scheme primitive.
 func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
-	sym := p.env.InternSymbol(values.NewSymbol(spec.Name))
+	sym := values.NewSymbol(spec.Name)
 	p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 
 	closure := machine.NewForeignClosure(

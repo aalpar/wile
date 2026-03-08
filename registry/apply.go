@@ -89,13 +89,13 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame)
 //nolint:unparam // Returns error for consistency with other register functions
 func registerCompileTimeBinding(env *environment.EnvironmentFrame, name string) error {
 	compileEnv := env.Compile()
-	sym := compileEnv.InternSymbol(values.NewSymbol(name))
+	sym := values.NewSymbol(name)
 	compileEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypePrimitive)
 	return nil
 }
 
 func registerRuntimePrimitive(env *environment.EnvironmentFrame, spec PrimitiveSpec) error {
-	sym := env.InternSymbol(values.NewSymbol(spec.Name))
+	sym := values.NewSymbol(spec.Name)
 	env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 
 	closure := machine.NewForeignClosure(
@@ -114,7 +114,7 @@ func registerRuntimePrimitive(env *environment.EnvironmentFrame, spec PrimitiveS
 }
 
 func registerGlobalValue(env *environment.EnvironmentFrame, name string, value values.Value) error {
-	sym := env.InternSymbol(values.NewSymbol(name))
+	sym := values.NewSymbol(name)
 	env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 
 	err := env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), value)
@@ -126,7 +126,7 @@ func registerGlobalValue(env *environment.EnvironmentFrame, name string, value v
 
 func registerExpandTimePrimitive(env *environment.EnvironmentFrame, spec PrimitiveSpec) error {
 	expandEnv := env.Expand()
-	sym := expandEnv.InternSymbol(values.NewSymbol(spec.Name))
+	sym := values.NewSymbol(spec.Name)
 	expandEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 
 	closure := machine.NewForeignClosure(
