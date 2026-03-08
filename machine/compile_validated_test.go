@@ -35,11 +35,11 @@ func newDynamicWindEnv() *environment.EnvironmentFrame {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 
 	// Register dynamic-wind as a primitive binding so the expander/validator recognize it
-	dwSym := env.InternSymbol(values.NewSymbol("dynamic-wind"))
+	dwSym := values.NewSymbol("dynamic-wind")
 	env.MaybeCreateOwnGlobalBinding(dwSym, environment.BindingTypePrimitive)
 
 	// Register case-lambda as a primitive binding
-	clSym := env.InternSymbol(values.NewSymbol("case-lambda"))
+	clSym := values.NewSymbol("case-lambda")
 	env.MaybeCreateOwnGlobalBinding(clSym, environment.BindingTypePrimitive)
 
 	return env
@@ -47,7 +47,7 @@ func newDynamicWindEnv() *environment.EnvironmentFrame {
 
 // registerForeignFn registers a zero-argument foreign closure in the environment.
 func registerForeignFn(env *environment.EnvironmentFrame, name string, fn func(*MachineContext) error) {
-	sym := env.InternSymbol(values.NewSymbol(name))
+	sym := values.NewSymbol(name)
 	env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 	closure := NewForeignClosure(env, 0, false, fn)
 	env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure) //nolint:errcheck
@@ -296,7 +296,7 @@ func TestCompileValidatedCaseLambda_ZeroArgClause(t *testing.T) {
 	env := newDynamicWindEnv()
 
 	// Register + primitive for the test
-	addSym := env.InternSymbol(values.NewSymbol("+"))
+	addSym := values.NewSymbol("+")
 	env.MaybeCreateOwnGlobalBinding(addSym, environment.BindingTypeVariable)
 	addFn := func(mc *MachineContext) error {
 		a := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value().(*values.Integer).Value

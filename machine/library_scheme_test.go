@@ -137,58 +137,58 @@ func TestSchemeLibraryImports(t *testing.T) {
 	// Verify some key bindings from each library are available
 
 	// (scheme base) - car, cdr, cons, list, etc.
-	car := env.InternSymbol(values.NewSymbol("car"))
+	car := values.NewSymbol("car")
 	c.Assert(env.GetBinding(car), qt.IsNotNil, qt.Commentf("car not found from (scheme base)"))
 
 	// (scheme char) - char-upcase, char-downcase, etc.
-	charUpcase := env.InternSymbol(values.NewSymbol("char-upcase"))
+	charUpcase := values.NewSymbol("char-upcase")
 	c.Assert(env.GetBinding(charUpcase), qt.IsNotNil, qt.Commentf("char-upcase not found from (scheme char)"))
 
 	// (scheme lazy) - delay, force, promise?
-	force := env.InternSymbol(values.NewSymbol("force"))
+	force := values.NewSymbol("force")
 	c.Assert(env.GetBinding(force), qt.IsNotNil, qt.Commentf("force not found from (scheme lazy)"))
 
 	// (scheme inexact) - exp, log, sin, cos, etc.
-	exp := env.InternSymbol(values.NewSymbol("exp"))
+	exp := values.NewSymbol("exp")
 	c.Assert(env.GetBinding(exp), qt.IsNotNil, qt.Commentf("exp not found from (scheme inexact)"))
 
 	// (scheme complex) - make-rectangular, make-polar, etc.
-	makeRectangular := env.InternSymbol(values.NewSymbol("make-rectangular"))
+	makeRectangular := values.NewSymbol("make-rectangular")
 	c.Assert(env.GetBinding(makeRectangular), qt.IsNotNil, qt.Commentf("make-rectangular not found from (scheme complex)"))
 
 	// (scheme time) - current-second, current-jiffy, etc.
-	currentSecond := env.InternSymbol(values.NewSymbol("current-second"))
+	currentSecond := values.NewSymbol("current-second")
 	c.Assert(env.GetBinding(currentSecond), qt.IsNotNil, qt.Commentf("current-second not found from (scheme time)"))
 
 	// (scheme file) - open-input-file, open-output-file, etc.
-	openInputFile := env.InternSymbol(values.NewSymbol("open-input-file"))
+	openInputFile := values.NewSymbol("open-input-file")
 	c.Assert(env.GetBinding(openInputFile), qt.IsNotNil, qt.Commentf("open-input-file not found from (scheme file)"))
 
 	// (scheme read) - read
-	read := env.InternSymbol(values.NewSymbol("read"))
+	read := values.NewSymbol("read")
 	c.Assert(env.GetBinding(read), qt.IsNotNil, qt.Commentf("read not found from (scheme read)"))
 
 	// (scheme write) - write, display
-	write := env.InternSymbol(values.NewSymbol("write"))
+	write := values.NewSymbol("write")
 	c.Assert(env.GetBinding(write), qt.IsNotNil, qt.Commentf("write not found from (scheme write)"))
 
 	// (scheme eval) - eval, environment
-	eval := env.InternSymbol(values.NewSymbol("eval"))
+	eval := values.NewSymbol("eval")
 	c.Assert(env.GetBinding(eval), qt.IsNotNil, qt.Commentf("eval not found from (scheme eval)"))
 
 	// (scheme process-context) - command-line, exit, get-environment-variable
-	commandLine := env.InternSymbol(values.NewSymbol("command-line"))
+	commandLine := values.NewSymbol("command-line")
 	c.Assert(env.GetBinding(commandLine), qt.IsNotNil, qt.Commentf("command-line not found from (scheme process-context)"))
 
 	// (scheme case-lambda) - case-lambda (syntax)
 	// Note: case-lambda is a syntax binding, so check expand environment
-	caseLambda := env.InternSymbol(values.NewSymbol("case-lambda"))
+	caseLambda := values.NewSymbol("case-lambda")
 	caseLambdaBinding := env.Expand().GetBinding(caseLambda)
 	c.Assert(caseLambdaBinding, qt.IsNotNil, qt.Commentf("case-lambda not found from (scheme case-lambda)"))
 
 	// (scheme r5rs) - provides R5RS compatibility
 	// Check for null-environment which is R5RS-specific
-	nullEnvironment := env.InternSymbol(values.NewSymbol("null-environment"))
+	nullEnvironment := values.NewSymbol("null-environment")
 	c.Assert(env.GetBinding(nullEnvironment), qt.IsNotNil, qt.Commentf("null-environment not found from (scheme r5rs)"))
 }
 
@@ -338,7 +338,7 @@ func TestIndividualSchemeLibraries(t *testing.T) {
 			c.Assert(err, qt.IsNil, qt.Commentf("failed to import (scheme %s)", lib.name))
 
 			// Verify the expected binding exists
-			sym := env.InternSymbol(values.NewSymbol(lib.verify))
+			sym := values.NewSymbol(lib.verify)
 
 			// Check both runtime and expand environments
 			binding := env.GetBinding(sym)
@@ -565,7 +565,7 @@ func TestLibraryBindingsCarryLibraryScope(t *testing.T) {
 	lib := compileAndRegisterLibrary(t, env, libCode)
 
 	// The binding in the library's env should carry the library scope
-	myFnSym := lib.Env.InternSymbol(values.NewSymbol("my-fn"))
+	myFnSym := values.NewSymbol("my-fn")
 	binding := lib.Env.GetBinding(myFnSym)
 	c.Assert(binding, qt.IsNotNil, qt.Commentf("my-fn should exist in library env"))
 	c.Assert(len(binding.Scopes()) > 0, qt.IsTrue,
@@ -582,7 +582,7 @@ func TestLibraryBindingsCarryLibraryScope(t *testing.T) {
 
 	lib2 := compileAndRegisterLibrary(t, env, libCode2)
 
-	myMacroSym := lib2.Env.Expand().InternSymbol(values.NewSymbol("my-macro"))
+	myMacroSym := values.NewSymbol("my-macro")
 	syntaxBinding := lib2.Env.Expand().GetBinding(myMacroSym)
 	c.Assert(syntaxBinding, qt.IsNotNil, qt.Commentf("my-macro should exist in library expand env"))
 	c.Assert(len(syntaxBinding.Scopes()) > 0, qt.IsTrue,

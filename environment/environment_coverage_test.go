@@ -94,11 +94,10 @@ func TestTopLevelEnvironment_NewChildTopLevelEnvironment_Coverage(t *testing.T) 
 	c.Assert(child.Runtime(), qt.IsNotNil)
 	c.Assert(child.Phases(), qt.IsNotNil)
 
-	// Interning delegates to parent
-	sym := values.NewSymbol("test-sym")
-	interned1 := parent.InternSymbol(sym)
-	interned2 := child.InternSymbol(values.NewSymbol("test-sym"))
-	c.Assert(interned1, qt.Equals, interned2)
+	// Symbols with same key are structurally equal
+	sym1 := values.NewSymbol("test-sym")
+	sym2 := values.NewSymbol("test-sym")
+	c.Assert(sym1.EqualTo(sym2), qt.IsTrue)
 }
 
 // NewChildRuntime
@@ -111,11 +110,10 @@ func TestTopLevelEnvironment_NewChildRuntime_Coverage(t *testing.T) {
 	c.Assert(childEnv, qt.IsNotNil)
 	c.Assert(childEnv.TopLevelEnv(), qt.Equals, parent)
 
-	// Shares interning with parent
-	sym := values.NewSymbol("shared-sym")
-	interned1 := parent.InternSymbol(sym)
-	interned2 := childEnv.InternSymbol(values.NewSymbol("shared-sym"))
-	c.Assert(interned1, qt.Equals, interned2)
+	// Symbols with same key are structurally equal
+	sym1 := values.NewSymbol("shared-sym")
+	sym2 := values.NewSymbol("shared-sym")
+	c.Assert(sym1.EqualTo(sym2), qt.IsTrue)
 }
 
 // GlobalEnvironmentFrame.SchemeString — different name
@@ -158,7 +156,7 @@ func TestGetLocalIndexWithScopes_Coverage(t *testing.T) {
 		env := topLevel.Runtime()
 
 		local := NewLocalEnvironment(0)
-		sym := env.InternSymbol(values.NewSymbol("x"))
+		sym := values.NewSymbol("x")
 		local.EnsureLocalBinding(sym, BindingTypeVariable)
 
 		childEnv := NewEnvironmentFrameWithParent(local, env)
@@ -171,7 +169,7 @@ func TestGetLocalIndexWithScopes_Coverage(t *testing.T) {
 		env := topLevel.Runtime()
 
 		local := NewLocalEnvironment(0)
-		sym := env.InternSymbol(values.NewSymbol("y"))
+		sym := values.NewSymbol("y")
 		scope := syntax.NewScope()
 
 		childEnv := NewEnvironmentFrameWithParent(local, env)
@@ -186,7 +184,7 @@ func TestGetLocalIndexWithScopes_Coverage(t *testing.T) {
 		env := topLevel.Runtime()
 
 		local := NewLocalEnvironment(0)
-		sym := env.InternSymbol(values.NewSymbol("z"))
+		sym := values.NewSymbol("z")
 		scope1 := syntax.NewScope()
 		scope2 := syntax.NewScope()
 
@@ -206,7 +204,7 @@ func TestGetBindingWithScopes_GlobalPhase_Coverage(t *testing.T) {
 	topLevel := NewTopLevelEnvironment()
 	env := topLevel.Runtime()
 
-	sym := env.InternSymbol(values.NewSymbol("global-var"))
+	sym := values.NewSymbol("global-var")
 	env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
 	err := env.SetOwnGlobalValue(NewGlobalIndex(sym), values.NewInteger(42))
 	c.Assert(err, qt.IsNil)
@@ -229,7 +227,7 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 		scope2 := syntax.NewScope()
 		scope3 := syntax.NewScope()
 
-		sym := env.InternSymbol(values.NewSymbol("x"))
+		sym := values.NewSymbol("x")
 
 		// Build 3-level chain: parentEnv ← middleEnv ← innerEnv
 		parentEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
@@ -255,7 +253,7 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 		scopeA := syntax.NewScope()
 		scopeB := syntax.NewScope()
 
-		sym := env.InternSymbol(values.NewSymbol("x"))
+		sym := values.NewSymbol("x")
 
 		// Parent: binding with [scopeA] (1 scope)
 		parentEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
@@ -279,7 +277,7 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 		scope1 := syntax.NewScope()
 		scope2 := syntax.NewScope()
 
-		sym := env.InternSymbol(values.NewSymbol("x"))
+		sym := values.NewSymbol("x")
 
 		childEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 		childEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scope1, scope2}, nil)
@@ -299,7 +297,7 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 		scopeC := syntax.NewScope()
 		scopeD := syntax.NewScope()
 
-		sym := env.InternSymbol(values.NewSymbol("x"))
+		sym := values.NewSymbol("x")
 
 		// Build 3-level chain with overlapping, non-nested scope sets:
 		//   outer:  {A, B}     (2 scopes)
@@ -328,7 +326,7 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 
 		scope1 := syntax.NewScope()
 
-		sym := env.InternSymbol(values.NewSymbol("x"))
+		sym := values.NewSymbol("x")
 
 		// Inner: no scopes (scopeCount=0), Outer: 1 scope (scopeCount=1)
 		outerEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
@@ -351,7 +349,7 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 		scope2 := syntax.NewScope()
 		scope3 := syntax.NewScope()
 
-		sym := env.InternSymbol(values.NewSymbol("x"))
+		sym := values.NewSymbol("x")
 
 		childEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 		// Binding has 3 scopes, but reference only has 2
@@ -371,7 +369,7 @@ func TestMaybeCreateLocalBinding_Existing_Coverage(t *testing.T) {
 	env := topLevel.Runtime()
 
 	local := NewLocalEnvironment(0)
-	sym := env.InternSymbol(values.NewSymbol("dup"))
+	sym := values.NewSymbol("dup")
 	childEnv := NewEnvironmentFrameWithParent(local, env)
 
 	idx1, created1 := childEnv.MaybeCreateLocalBinding(sym, BindingTypeVariable)

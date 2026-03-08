@@ -151,8 +151,8 @@ func TestFreeIdentifierEqualQ(t *testing.T) {
 
 			// Test free-identifier=? by checking binding resolution
 			// (This tests the underlying logic used by primFreeIdentifierEqualQ)
-			sym1 := env.InternSymbol(values.NewSymbol(tc.id1.Sym.Key))
-			sym2 := env.InternSymbol(values.NewSymbol(tc.id2.Sym.Key))
+			sym1 := values.NewSymbol(tc.id1.Sym.Key)
+			sym2 := values.NewSymbol(tc.id2.Sym.Key)
 
 			binding1 := env.GetBindingWithScopes(sym1, tc.id1.Scopes())
 			binding2 := env.GetBindingWithScopes(sym2, tc.id2.Scopes())
@@ -180,7 +180,7 @@ func TestBoundIdentifierEqualQPrimitiveExists(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Verify the bound-identifier=? primitive exists
-	boundIdSym := env.InternSymbol(values.NewSymbol("bound-identifier=?"))
+	boundIdSym := values.NewSymbol("bound-identifier=?")
 	bnd := env.GetBinding(boundIdSym)
 	qt.Assert(t, bnd, qt.IsNotNil)
 }
@@ -190,7 +190,7 @@ func TestFreeIdentifierEqualQPrimitiveExists(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Verify the free-identifier=? primitive exists
-	freeIdSym := env.InternSymbol(values.NewSymbol("free-identifier=?"))
+	freeIdSym := values.NewSymbol("free-identifier=?")
 	bnd := env.GetBinding(freeIdSym)
 	qt.Assert(t, bnd, qt.IsNotNil)
 }

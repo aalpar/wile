@@ -30,7 +30,7 @@ func setupLocalEnv(n int) (*EnvironmentFrame, []*values.Symbol) {
 
 	syms := make([]*values.Symbol, n)
 	for i := range n {
-		sym := env.InternSymbol(values.NewSymbol(fmt.Sprintf("x%d", i)))
+		sym := values.NewSymbol(fmt.Sprintf("x%d", i))
 		syms[i] = sym
 		env.EnsureLocalBinding(sym, BindingTypeVariable)
 		li := env.GetLocalIndex(sym)
@@ -47,7 +47,7 @@ func setupGlobalEnv(n int) (*EnvironmentFrame, []*GlobalIndex) {
 
 	gis := make([]*GlobalIndex, n)
 	for i := range n {
-		sym := env.InternSymbol(values.NewSymbol(fmt.Sprintf("g%d", i)))
+		sym := values.NewSymbol(fmt.Sprintf("g%d", i))
 		env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
 		gi := env.GetGlobalIndex(sym)
 		env.SetOwnGlobalValue(gi, values.NewInteger(int64(i)))

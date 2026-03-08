@@ -2557,11 +2557,11 @@ func TestCoverageSyntaxCaseFender(t *testing.T) {
 
 	mc, err := runSchemeExpr(t, env, "(check-positive 5)")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, env.TopLevelEnv().InternSymbol(values.NewSymbol("positive")))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewSymbol("positive"))
 
 	mc, err = runSchemeExpr(t, env, "(check-positive -3)")
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, env.TopLevelEnv().InternSymbol(values.NewSymbol("non-positive")))
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewSymbol("non-positive"))
 }
 
 // TestCoverageParameterObjectsExtended tests parameterize with nested scoping.

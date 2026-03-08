@@ -104,7 +104,7 @@ func TestCompileContext_CompileDefine_SelfRecursion_FunctionForm(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Verify the function is defined
-	factSym := env.InternSymbol(values.NewSymbol("fact"))
+	factSym := values.NewSymbol("fact")
 	factGi := env.GetGlobalIndex(factSym)
 	qt.Assert(t, factGi, qt.IsNotNil, qt.Commentf("fact should be defined"))
 }

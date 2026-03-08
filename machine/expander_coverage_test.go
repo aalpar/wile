@@ -63,11 +63,11 @@ func TestExpandUnchanged_ReturnsFormUnchanged(t *testing.T) {
 // to the registered primitive expander for known forms.
 func TestExpandPrimitiveForm_KnownForm(t *testing.T) {
 	c := qt.New(t)
-	env, expander := newExpanderEnv()
+	_, expander := newExpanderEnv()
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// "quote" has a registered primitive expander that returns unchanged
-	sym := syntax.NewSyntaxSymbolForSymbol(env.InternSymbol(values.NewSymbol("quote")), sctx)
+	sym := syntax.NewSyntaxSymbolForSymbol(values.NewSymbol("quote"), sctx)
 	body := syntax.SyntaxList(sctx, syntax.NewSyntaxObject(values.NewInteger(42), sctx))
 
 	result, err := expander.ExpandPrimitiveForm("quote", sym, body)

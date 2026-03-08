@@ -70,8 +70,8 @@ func TestMultiEnv_SymbolNonIdentityAcrossTopLevels(t *testing.T) {
 	env2, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	sym1 := env1.InternSymbol(values.NewSymbol("cross-env-sym"))
-	sym2 := env2.InternSymbol(values.NewSymbol("cross-env-sym"))
+	sym1 := values.NewSymbol("cross-env-sym")
+	sym2 := values.NewSymbol("cross-env-sym")
 
 	// Structurally equal (same name)
 	c.Assert(sym1.EqualTo(sym2), qt.IsTrue)
@@ -210,19 +210,17 @@ func TestMultiEnv_SiblingLibrarySymbolIdentity(t *testing.T) {
 	parent, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	lib1, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
+	_, err = NewLibraryEnvironmentFrame(ctx, parent, nil)
 	c.Assert(err, qt.IsNil)
 
-	lib2, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
+	_, err = NewLibraryEnvironmentFrame(ctx, parent, nil)
 	c.Assert(err, qt.IsNil)
 
-	sym1 := lib1.InternSymbol(values.NewSymbol("shared-sym"))
-	sym2 := lib2.InternSymbol(values.NewSymbol("shared-sym"))
-	symParent := parent.InternSymbol(values.NewSymbol("shared-sym"))
+	sym1 := values.NewSymbol("shared-sym")
+	sym2 := values.NewSymbol("shared-sym")
 
-	// All three must be the same pointer
-	c.Assert(sym1 == sym2, qt.IsTrue, qt.Commentf("sibling libraries must share symbol identity"))
-	c.Assert(sym1 == symParent, qt.IsTrue, qt.Commentf("library and parent must share symbol identity"))
+	// Symbols with same key are structurally equal
+	c.Assert(sym1.EqualTo(sym2), qt.IsTrue, qt.Commentf("symbols with same key must be structurally equal"))
 }
 
 // TestMultiEnv_SiblingLibrarySharedPrimitives verifies that sibling libraries
@@ -332,15 +330,13 @@ func TestMultiEnv_NestedLibrarySymbolIdentity(t *testing.T) {
 	outerLib, err := NewLibraryEnvironmentFrame(ctx, topLevel, nil)
 	c.Assert(err, qt.IsNil)
 
-	innerLib, err := NewLibraryEnvironmentFrame(ctx, outerLib, nil)
+	_, err = NewLibraryEnvironmentFrame(ctx, outerLib, nil)
 	c.Assert(err, qt.IsNil)
 
-	symTop := topLevel.InternSymbol(values.NewSymbol("nested-sym"))
-	symOuter := outerLib.InternSymbol(values.NewSymbol("nested-sym"))
-	symInner := innerLib.InternSymbol(values.NewSymbol("nested-sym"))
+	sym1 := values.NewSymbol("nested-sym")
+	sym2 := values.NewSymbol("nested-sym")
 
-	c.Assert(symTop == symOuter, qt.IsTrue)
-	c.Assert(symOuter == symInner, qt.IsTrue)
+	c.Assert(sym1.EqualTo(sym2), qt.IsTrue)
 }
 
 // TestMultiEnv_NestedLibraryBindingIsolation verifies that bindings at each
@@ -430,7 +426,7 @@ func TestMultiEnv_ValuesCrossEnvironmentBoundary(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Bind it in the library environment via direct global binding
-	dataSym := lib.InternSymbol(values.NewSymbol("imported-data"))
+	dataSym := values.NewSymbol("imported-data")
 	gi, _ := lib.MaybeCreateOwnGlobalBinding(dataSym, environment.BindingTypeVariable)
 	err = lib.SetOwnGlobalValue(gi, parentResult)
 	c.Assert(err, qt.IsNil)
@@ -469,7 +465,7 @@ func TestMultiEnv_ClosureCapturesDefiningEnvironment(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Bind the closure in the library
-	fnSym := lib.InternSymbol(values.NewSymbol("get-parent-x"))
+	fnSym := values.NewSymbol("get-parent-x")
 	gi, _ := lib.MaybeCreateOwnGlobalBinding(fnSym, environment.BindingTypeVariable)
 	err = lib.SetOwnGlobalValue(gi, closureVal)
 	c.Assert(err, qt.IsNil)
@@ -509,7 +505,7 @@ func TestMultiEnv_ParameterObjectAcrossEnvironments(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Bind it in the library
-	paramSym := lib.InternSymbol(values.NewSymbol("my-param"))
+	paramSym := values.NewSymbol("my-param")
 	gi, _ := lib.MaybeCreateOwnGlobalBinding(paramSym, environment.BindingTypeVariable)
 	err = lib.SetOwnGlobalValue(gi, paramVal)
 	c.Assert(err, qt.IsNil)

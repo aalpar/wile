@@ -553,7 +553,7 @@ func (p *CompileTimeContinuation) predeclareDefineBindingFromValidated(expr vali
 //
 // At runtime, the VM collects excess arguments into a list and stores it in the
 // rest parameter's local slot, after storing the required arguments in their slots.
-func bindRestParameter(v validate.ValidatedBodyAndParams, p *CompileTimeContinuation, lenv *environment.LocalEnvironmentFrame, tpl *NativeTemplate) error {
+func bindRestParameter(v validate.ValidatedBodyAndParams, _ *CompileTimeContinuation, lenv *environment.LocalEnvironmentFrame, tpl *NativeTemplate) error {
 	// Early exit if no rest parameter. Most lambdas are fixed-arity.
 	if v.Params().Rest == nil {
 		return nil

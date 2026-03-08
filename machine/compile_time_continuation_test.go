@@ -325,7 +325,7 @@ func evalSchemeString(code string) (values.Value, error) {
 	}
 
 	// Register list primitive for quasiquote expansion
-	listSym := env.InternSymbol(values.NewSymbol("list"))
+	listSym := values.NewSymbol("list")
 	env.MaybeCreateOwnGlobalBinding(listSym, environment.BindingTypeVariable)
 	listIdx := env.GetGlobalIndex(listSym)
 	if listIdx != nil {
@@ -406,7 +406,7 @@ func TestCompileContext_CompileIf(t *testing.T) {
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// Set up a global variable 'x' for non-constant test
-	symX := env.InternSymbol(values.NewSymbol("x"))
+	symX := values.NewSymbol("x")
 	gi, _ := env.MaybeCreateOwnGlobalBinding(symX, environment.BindingTypeVariable)
 
 	// (if x "true" "false") — tests BranchOnFalseValue (value register, no Push)
@@ -486,7 +486,7 @@ func TestCompileContext_CompileIfConstantFolding(t *testing.T) {
 
 func TestCompileContext_CompileSetBang(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
-	symX := env.InternSymbol(values.NewSymbol("x"))
+	symX := values.NewSymbol("x")
 	gi, _ := env.MaybeCreateOwnGlobalBinding(symX, environment.BindingTypeVariable)
 	sctx := syntax.NewZeroValueSourceContext()
 
@@ -517,7 +517,7 @@ func TestCompileContext_CompileSetBang(t *testing.T) {
 	// set! now returns void with the LoadVoid operation at the end
 	qt.Assert(t, mc.GetValue(), qt.Equals, values.Void)
 	qt.Assert(t, *mc.evals, qt.HasLen, 0)
-	gi = mc.env.GlobalEnvironment().GetGlobalIndex(mc.env.InternSymbol(values.NewSymbol("x")))
+	gi = mc.env.GlobalEnvironment().GetGlobalIndex(values.NewSymbol("x"))
 	qt.Assert(t, gi, qt.IsNotNil)
 	v := mc.env.GlobalEnvironment().GetOwnGlobalBinding(gi)
 	qt.Assert(t, v.BindingType(), qt.Equals, environment.BindingTypeVariable)
@@ -526,7 +526,7 @@ func TestCompileContext_CompileSetBang(t *testing.T) {
 
 func TestCompileContext_CompileBegin_0(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
-	symX := env.InternSymbol(values.NewSymbol("x"))
+	symX := values.NewSymbol("x")
 	// top-level closure with no parameters (thunk)
 	prog := values.List(values.NewSymbol("begin"),
 		values.List(values.NewSymbol("define"), symX,
@@ -653,16 +653,16 @@ func newTopLevelThunk(prog syntax.SyntaxValue, env *environment.EnvironmentFrame
 }
 
 func newTopLevelEnv(env *environment.EnvironmentFrame) *environment.EnvironmentFrame {
-	ifSym := env.InternSymbol(values.NewSymbol("if"))
-	lambdaSym := env.InternSymbol(values.NewSymbol("lambda"))
-	quoteSym := env.InternSymbol(values.NewSymbol("quote"))
-	quasiquoteSym := env.InternSymbol(values.NewSymbol("quasiquote"))
-	defineSym := env.InternSymbol(values.NewSymbol("define"))
-	setSym := env.InternSymbol(values.NewSymbol("set!"))
-	beginSym := env.InternSymbol(values.NewSymbol("begin"))
-	metaSym := env.InternSymbol(values.NewSymbol("meta"))
-	includeSym := env.InternSymbol(values.NewSymbol("include"))
-	includeCiSym := env.InternSymbol(values.NewSymbol("include-ci"))
+	ifSym := values.NewSymbol("if")
+	lambdaSym := values.NewSymbol("lambda")
+	quoteSym := values.NewSymbol("quote")
+	quasiquoteSym := values.NewSymbol("quasiquote")
+	defineSym := values.NewSymbol("define")
+	setSym := values.NewSymbol("set!")
+	beginSym := values.NewSymbol("begin")
+	metaSym := values.NewSymbol("meta")
+	includeSym := values.NewSymbol("include")
+	includeCiSym := values.NewSymbol("include-ci")
 
 	env.MaybeCreateOwnGlobalBinding(ifSym, environment.BindingTypePrimitive)
 	env.MaybeCreateOwnGlobalBinding(lambdaSym, environment.BindingTypePrimitive)
@@ -690,7 +690,7 @@ func TestCondExpandRegistered(t *testing.T) {
 	}
 
 	// Check if cond-expand is registered
-	sym := env.InternSymbol(values.NewSymbol("cond-expand"))
+	sym := values.NewSymbol("cond-expand")
 	pc := LookupSyntaxCompiler(env, sym, nil)
 	if pc == nil {
 		t.Errorf("cond-expand primitive compiler not found")
@@ -700,7 +700,7 @@ func TestCondExpandRegistered(t *testing.T) {
 
 	// Core forms like 'if' are now handled by compileValidated* methods
 	// and are NOT registered as primitive compilers. Check that 'if' is NOT registered.
-	ifSym := env.InternSymbol(values.NewSymbol("if"))
+	ifSym := values.NewSymbol("if")
 	ifPc := LookupSyntaxCompiler(env, ifSym, nil)
 	if ifPc != nil {
 		t.Errorf("if should NOT be registered as primitive compiler (handled by validation)")
@@ -721,7 +721,7 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 	var maxCallDepth int
 
 	// Register call-depth primitive: returns current continuation stack depth
-	callDepthSym := env.InternSymbol(values.NewSymbol("call-depth"))
+	callDepthSym := values.NewSymbol("call-depth")
 	env.MaybeCreateOwnGlobalBinding(callDepthSym, environment.BindingTypeVariable)
 	callDepthFn := func(mc *MachineContext) error {
 		depth := mc.CallDepth()
@@ -735,7 +735,7 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 	env.SetOwnGlobalValue(environment.NewGlobalIndex(callDepthSym), callDepthClosure) //nolint:errcheck
 
 	// Register subtraction primitive: (- a b)
-	subSym := env.InternSymbol(values.NewSymbol("-"))
+	subSym := values.NewSymbol("-")
 	env.MaybeCreateOwnGlobalBinding(subSym, environment.BindingTypeVariable)
 	subFn := func(mc *MachineContext) error {
 		a := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value().(*values.Integer).Value
@@ -747,7 +747,7 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 	env.SetOwnGlobalValue(environment.NewGlobalIndex(subSym), subClosure) //nolint:errcheck
 
 	// Register equality primitive: (= a b)
-	eqSym := env.InternSymbol(values.NewSymbol("="))
+	eqSym := values.NewSymbol("=")
 	env.MaybeCreateOwnGlobalBinding(eqSym, environment.BindingTypeVariable)
 	eqFn := func(mc *MachineContext) error {
 		a := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value().(*values.Integer).Value
