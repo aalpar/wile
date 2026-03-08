@@ -825,7 +825,7 @@ func (p *EnvironmentFrame) SetGlobalBindingByIndex(i int, bd *Binding) {
 func (p *EnvironmentFrame) Copy() *EnvironmentFrame {
 	q := &EnvironmentFrame{
 		parent:     p.parent,
-		global:     p.global.Copy().(*GlobalEnvironmentFrame),
+		global:     p.global.Copy(),
 		phaseLevel: p.phaseLevel,
 		phases:     p.phases,
 		topLevel:   p.topLevel,

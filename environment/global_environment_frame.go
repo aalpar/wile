@@ -56,17 +56,14 @@ func (p *GlobalIndex) IsVoid() bool {
 
 // EqualTo returns true if this global index equals the given value.
 func (p *GlobalIndex) EqualTo(value values.Value) bool {
-	if value == nil || p == nil {
-		return value == nil && p == nil
+	if p == nil || value == nil {
+		return p == nil && value == nil
 	}
 	v, ok := value.(*GlobalIndex)
 	if !ok {
 		return false
 	}
-	if v.Index.EqualTo(p.Index) {
-		return true
-	}
-	return false
+	return v.Index.EqualTo(p.Index)
 }
 
 // GlobalEnvironmentFrame represents global bindings for a single phase.
@@ -105,9 +102,9 @@ func NewGlobalEnvironmentFrame() *GlobalEnvironmentFrame {
 // Bindings are batch-allocated (contiguous array) for cache locality
 // and reduced GC pressure.
 // Thread-safe: uses RLock for read-only access.
-func (p *GlobalEnvironmentFrame) Copy() values.Value {
+func (p *GlobalEnvironmentFrame) Copy() *GlobalEnvironmentFrame {
 	if p == nil {
-		return (*GlobalEnvironmentFrame)(nil)
+		return nil
 	}
 
 	p.mu.RLock()

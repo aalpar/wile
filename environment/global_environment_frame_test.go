@@ -94,12 +94,10 @@ func TestGlobalEnvironmentFrame_Copy(t *testing.T) {
 	env.CreateGlobalBinding(sym, BindingTypeVariable)
 
 	copied := env.Copy()
-	envCopy, ok := copied.(*GlobalEnvironmentFrame)
-	qt.Assert(t, ok, qt.IsTrue)
-	qt.Assert(t, envCopy, qt.Not(qt.IsNil))
+	qt.Assert(t, copied, qt.Not(qt.IsNil))
 
 	// Verify bindings were copied
-	qt.Assert(t, len(envCopy.Bindings()), qt.Equals, len(env.Bindings()))
+	qt.Assert(t, len(copied.Bindings()), qt.Equals, len(env.Bindings()))
 }
 
 func TestGlobalEnvironmentFrame_IsVoid(t *testing.T) {

@@ -377,7 +377,7 @@ func (p *TopLevelEnvironment) NewSchemeReportEnvironment() *TopLevelEnvironment 
 
 	// Copy the parent's global bindings and repoint topLevel to the child,
 	// so that syntax interning delegates through q → p (parent chain).
-	copiedGlobal := p.runtime.global.Copy().(*GlobalEnvironmentFrame)
+	copiedGlobal := p.runtime.global.Copy()
 	copiedGlobal.topLevel = q
 	initRuntimeFrame(q, copiedGlobal)
 	return q
