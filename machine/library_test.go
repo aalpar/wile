@@ -765,3 +765,60 @@ func TestLibraryForwardReferences(t *testing.T) {
 	err = compiler.CompileExpression(ctctx, expanded)
 	c.Assert(err, qt.IsNil, qt.Commentf("Forward references should work with letrec* semantics"))
 }
+
+// TestLoadLibrary_IncludeStampsLibraryScope verifies that forms loaded via
+// (include ...) inside define-library receive the library scope (Flatt §3.3).
+// The library defines base-value in an included file and a macro double-base
+// in (begin ...) that references it. This exercises the invariant that include
+// is semantically equivalent to textual insertion into the library body.
+func TestLoadLibrary_IncludeStampsLibraryScope(t *testing.T) {
+	c := qt.New(t)
+	env := setupLibraryTest(t)
+
+	// Load the library that uses (include "include-body.scm")
+	name := machine.NewLibraryName("test", "include-lib")
+	lib, err := machine.LoadLibrary(context.Background(), name, env)
+	c.Assert(err, qt.IsNil)
+	c.Assert(lib, qt.IsNotNil)
+
+	// Verify exports exist
+	c.Assert(lib.IsExported("double-base"), qt.IsTrue)
+	c.Assert(lib.IsExported("base-value"), qt.IsTrue)
+
+	// Import and call: (double-base) should return 14 (* 2 7).
+	// double-base is a macro defined in (begin ...) whose template references
+	// base-value from the included file. The macro template's free identifier
+	// base-value gets resolved during compilation with the library scope.
+	// Without scope stamping on included forms, base-value's binding has
+	// empty scopes, and the scoped free-identifier reference fails to find it.
+	importDef := parseLibrarySyntax(t, env, `(import (test include-lib))`)
+	importPair := importDef.(*syntax.SyntaxPair)
+	args := importPair.Cdr().(syntax.SyntaxValue)
+
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	ctc := machine.NewCompiletimeContinuation(tpl, env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false)
+
+	err = ctc.CompileImport(ctctx, args)
+	c.Assert(err, qt.IsNil)
+
+	// Compile and run (double-base)
+	callExpr := parseLibrarySyntax(t, env, `(double-base)`)
+	callTpl := machine.NewNativeTemplate(0, 0, false)
+	callCtc := machine.NewCompiletimeContinuation(callTpl, env)
+	callCtctx := machine.NewCompileTimeCallContext(context.Background(), false, true)
+
+	expanded, err := machine.NewExpanderTimeContinuation(context.Background(), env).ExpandExpression(callExpr)
+	c.Assert(err, qt.IsNil)
+
+	err = callCtc.CompileExpression(callCtctx, expanded)
+	c.Assert(err, qt.IsNil)
+
+	mc := machine.NewMachineContext(
+		context.Background(),
+		machine.NewMachineContinuation(nil, callTpl, env),
+	)
+	err = mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(14))
+}
