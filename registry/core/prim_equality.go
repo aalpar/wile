@@ -28,7 +28,7 @@ func PrimEqQ(mc *machine.MachineContext) error {
 	o1 := mc.Arg(1)
 	// eq? tests for object identity - same pointer or same immediate value
 	// Go's == compares pointers by address for reference types
-	mc.SetValue(values.BoolToBoolean(o0 == o1))
+	mc.SetValue(values.BoolToBoolean(helpers.EqIdentity(o0, o1)))
 	return nil
 }
 
