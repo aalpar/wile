@@ -42,7 +42,7 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 
 - [x] **Rename `AddSearchPath` to `PrependSearchPath`** [Low, S]: Renamed in library_registry.go and all call sites.
 - [x] **Unify library/include path resolution** [Low, S]: `findFile` now consults library registry search paths as fallback dirs, sharing the same paths as `import`.
-- [ ] **Tokenizer test file consolidation** [Low, M]: 14 test files, several named by coverage goals (`additional_coverage_test.go`, `final_coverage_test.go`). Consolidate into behavior-oriented files (`tokenizer_number_test.go`, `tokenizer_string_test.go`, etc.).
+- [x] **Tokenizer test file consolidation** [Low, M]: Consolidated 14 coverage-goal-named test files into 10 behavior-oriented files mirroring source structure. All 191 tests preserved. PR #448.
 - [ ] **REPL deprecated wrappers** [Low, S]: `internal/repl/repl.go:370-393` — `Compile`, `Run`, `Load` marked `Deprecated`, delegate to runtime package. Delete if no callers remain.
 - [ ] **Error sentinel grouping** [Low, S]: ~103 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.
 
@@ -99,3 +99,8 @@ No demand signal. Speculative or research-only.
 - [ ] **Hashtable SRFI compliance** [Standard library]: Current implementation is a custom API (10 primitives, fixed FNV-1a hash, fixed `EqualTo` comparison). Not R7RS-small (hashtables aren't in the spec) but doesn't conform to any SRFI either. Gaps vs SRFI-125: no custom hash/equality functions in constructor, no `hash-table-update!`, no `hash-table-fold`/`hash-table-map`, no immutable variant, no `hash-table->alist`/`alist->hash-table` conversion, naming uses `hashtable-*` not `hash-table-*`. Decide: target SRFI-125 (broader ecosystem compat) or keep custom API. Internal design issue: bucket chaining over `map[uint64][]entry` could be replaced with native Go map.
 - [ ] **Fused lexing/parsing** [Research]: Flap paper analysis. Actionable only after profiling confirms tokenizer is a bottleneck. `plans/PERFORMANCE.md`
 - [ ] **Unit testing expansion**: Regression test files (`test/regression/`), library-specific tests (`lib/*/test/`), new test cases for features not covered by Go test extraction.
+- [ ] **Type system**: type system that covers all the base types and can be expanded.  Discover useful properties of types to track (if any).  Types should be a distinct type (exists at the top of the hierarchy) - except for maybe some generic object type.
+- [ ] **Parser unit tests**: unit tests for parser.
+- [ ] **Source file tracking in Syntax Objects**: need some utilities around finding source locations and providing source lines.
+- [ ] **Exceptions and Error stack tracrs**: Both Foreign and Native errors should track stacktraces with source code references.
+- [ ] **Foreign Stack trace entry in stack traces that cross from Native -> Foriegn -> Native callback.
