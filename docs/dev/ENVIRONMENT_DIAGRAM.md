@@ -21,8 +21,7 @@ See [ENVIRONMENT_SYSTEM.md](ENVIRONMENT_SYSTEM.md) for detailed API documentatio
 ┌───────────────────────────────────────────────────────────────────────────────┐
 │              TopLevelEnvironment (root, one per VM)                           │
 │                                                                               │
-│  symbolInterns ─── map[Symbol]*Symbol   ← thread-safe, canonical identity     │
-│  syntaxInterns ─── map[Value]SyntaxValue ← thread-safe                        │
+│  syntaxInterns ─── map[Value]SyntaxValue ← thread-safe, per-instance           │
 │  loadPathStack ─── *LoadPathStack        ← shared across all children         │
 │  libraryRegistry ─ any                   ← *machine.LibraryRegistry           │
 │  phases ────────── *PhaseRegistry        ← owns phase→env mapping             │
@@ -38,7 +37,7 @@ See [ENVIRONMENT_SYSTEM.md](ENVIRONMENT_SYSTEM.md) for detailed API documentatio
 │                             │    │   Child TopLevelEnvironment              │
 │  envs:                      │    │                                          │
 │    0 → runtime EnvFrame ────┼──→ │  parent ──→ root TopLevelEnvironment     │
-│    1 → expand EnvFrame      │    │  symbolInterns ── nil (delegates up)     │
+│    1 → expand EnvFrame      │    │  syntaxInterns ── nil (delegates up)     │
 │    2 → compile EnvFrame     │    │  syntaxInterns ── nil (delegates up)     │
 │   -1 → template EnvFrame    │    │  phases ────── own PhaseRegistry         │
 │   ...                       │    │  runtime ───── own EnvironmentFrame      │
@@ -105,12 +104,12 @@ Child frames inherit `global`, `phases`, and `topLevel` from the parent. Only `l
 
 ## Library Environments
 
-Created by `TopLevelEnv.NewChildRuntime()`. Shares interning for R7RS §6.5 symbol identity but has isolated bindings and phases.
+Created by `TopLevelEnv.NewChildRuntime()`. Shares syntax interning but has isolated bindings and phases.
 
 ```
 Root TopLevelEnvironment                Library environment
 ┌──────────────────────┐               ┌──────────────────────┐
-│  symbolInterns: {...} │◄──────────────│  topLevel: ──────────┤ (same pointer!)
+│  syntaxInterns: {...} │◄──────────────│  topLevel: ──────────┤ (same pointer!)
 │  syntaxInterns: {...} │  shared TLE   │  global: OWN         │ (isolated bindings)
 │  phases: rootPhases   │               │  phases: ownPhases   │ (isolated phases)
 │  runtime: rootEnv     │               │  parent: nil         │

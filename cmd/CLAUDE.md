@@ -56,7 +56,7 @@ make release          # Full GoReleaser release (requires tag context)
 
 Quick build (convenience binary at dist root):
 ```bash
-go build -o dist/scheme ./cmd
+go build -o dist/scheme ./cmd/scheme
 ```
 
 Run a single test:

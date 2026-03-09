@@ -236,11 +236,11 @@ Instead of eagerly deep-copying on capture, mark frames as shared and defer the 
 
 **`MachineContinuation.shared bool`**: This field controls whether `RestoreAndRelease` can pool the frame. It is set by `MarkChainShared()` during `call/cc` capture and never cleared. Once shared, always shared — clearing it would allow pooling of a frame that another continuation still references.
 
-**`MarkChainShared()` early exit**: The `if frame.shared { return }` on line 186-188 of `machine_continuation.go` is the critical optimization for repeated captures. In a coroutine-style workload, `call/cc` is called many times with mostly the same ancestor chain. Without the early exit, each capture would re-walk the entire chain. With it, each capture only marks the new frames since the last capture.
+**`MarkChainShared()` early exit**: The `if frame.shared { return }` in `MarkChainShared()` is the critical optimization for repeated captures. In a coroutine-style workload, `call/cc` is called many times with mostly the same ancestor chain. Without the early exit, each capture would re-walk the entire chain. With it, each capture only marks the new frames since the last capture.
 
-**`RestoreAndRelease` two branches**: The `if cont.shared` branch at line 250-257 of `machine_context.go` copies evals and skips pooling. The `else` branch at line 259-268 transfers evals and pools. **These must remain separate paths.** The shared path preserves the frame for re-invocation; the unshared path recycles it. Merging them (e.g., always copying, always pooling) either corrupts captured continuations or defeats the pooling optimization.
+**`RestoreAndRelease` two branches**: The `if cont.shared` branch in `RestoreAndRelease` copies evals and skips pooling. The `else` branch transfers evals and pools. **These must remain separate paths.** The shared path preserves the frame for re-invocation; the unshared path recycles it. Merging them (e.g., always copying, always pooling) either corrupts captured continuations or defeats the pooling optimization.
 
-**`releaseContinuation` precondition**: The comment on line 121-122 of `pool.go` states shared frames must NOT be passed to `releaseContinuation`. The function itself starts at line 123. This is enforced by the `if cont.shared` check in `RestoreAndRelease`. There is no runtime assertion — the check is structural, not defensive.
+**`releaseContinuation` precondition**: The comment on `releaseContinuation` in `pool.go` states shared frames must NOT be passed to it. This is enforced by the `if cont.shared` check in `RestoreAndRelease`. There is no runtime assertion — the check is structural, not defensive.
 
 **`DeepCopy` still exists**: It is still used by composable continuations (`applyComposableContinuation`), which need a full independent copy of a continuation segment before grafting it onto a different chain. The `call/cc` path no longer uses it. **Do not remove `DeepCopy`** — it serves a different use case.
 
@@ -270,12 +270,12 @@ After compiling a lambda body, `computeNoCopyApply()` scans the bytecode:
 ┌──────────────────────────────────────────────────────────────────┐
 │ Escape Analysis: Can bindings outlive the call?                  │
 │                                                                  │
-│  Template bytecode scan:                                         │
+│  Template bytecode scan (code[] only):                           │
 │    code[] contains OpSaveContinuation?  → bindings may be        │
 │      captured in a continuation frame (mc.env saved to cont)     │
 │                                                                  │
-│    sideTable[] contains *OperationMakeClosure? → bindings may    │
-│      be captured as a closure parent (env becomes closure.env)   │
+│    code[] contains OpMakeClosure? → bindings may be captured     │
+│      as a closure parent (env becomes closure.env)               │
 │                                                                  │
 │  If NEITHER is present:                                          │
 │    noCopyApply = true                                            │
@@ -293,20 +293,20 @@ After compiling a lambda body, `computeNoCopyApply()` scans the bytecode:
 
 ### Why the code looks this way
 
-**`NativeTemplate.noCopyApply` field**: Set once after compilation by `computeNoCopyApply()` (called at `compile_validated.go:428`). Never changes after that. The field is checked on every `Apply` call (`machine_context.go:345`), so it must be pre-computed, not calculated per call.
+**`NativeTemplate.noCopyApply` field**: Set once after compilation by `computeNoCopyApply()`. Never changes after that. The field is checked on every `Apply` call in the noCopy path of `MachineContext`, so it must be pre-computed, not calculated per call.
 
 **Conservative analysis**: The analysis has no false positives (never marks a template as safe when it isn't), but has false negatives (marks some safe templates as unsafe). This is the correct trade-off: a false positive corrupts execution; a false negative only costs one extra allocation. In the Zebra benchmark, 10.9% of applications take the no-copy path — a modest but measurable win.
 
-**Two escape paths**: `OpSaveContinuation` captures `mc.env` into the continuation chain (it becomes `cont.env`). `*OperationMakeClosure` captures `mc.env` as a closure's parent environment. Both allow the bindings to outlive the call frame. If neither is present, the bindings are dead after the call returns, so sharing them is safe.
+**Two escape paths**: `OpSaveContinuation` captures `mc.env` into the continuation chain (it becomes `cont.env`). `OpMakeClosure` captures `mc.env` as a closure's parent environment. Both allow the bindings to outlive the call frame. If neither is present, the bindings are dead after the call returns, so sharing them is safe.
 
 ### Why this is safe
 
-When `noCopyApply == true`, the Apply path at `machine_context.go:345-353` reuses `mcls.env` directly, mutating its bindings in place for the new call's parameters. This is safe because:
+When `noCopyApply == true`, the noCopy Apply path reuses `mcls.env` directly, mutating its bindings in place for the new call's parameters. This is safe because:
 
 1. No `SaveContinuation` means no non-tail calls, so no recursive invocations that would read the old parameter values while new ones are being written
 2. No `MakeClosure` means no inner closures that reference the bindings after the call returns
 
-If either condition is violated, the standard copy path at `machine_context.go:354-365` is taken, creating fresh bindings that are independent of the closure's template.
+If either condition is violated, the standard copy path (via `NewApplyFrame`) is taken, creating fresh bindings that are independent of the closure's template.
 
 ---
 
@@ -357,9 +357,9 @@ If either condition is violated, the standard copy path at `machine_context.go:3
 ## References
 
 - `machine/pool.go` — Continuation and stack pooling
-- `machine/machine_context.go:240-269` — `RestoreAndRelease` with shared-flag branching
-- `machine/machine_context.go:323-382` — `Apply` with `NoCopyApply` branching
-- `machine/machine_continuation.go:184-191` — `MarkChainShared` with early exit
-- `machine/native_template.go:288-303` — `computeNoCopyApply` escape analysis
-- `environment/environment_frame.go:164-181` — `NewApplyFrame` fused allocation
-- `machine/stack.go:109-119` — `PopAll` with backing array retention
+- `machine/machine_context.go` — `RestoreAndRelease` with shared-flag branching
+- `machine/machine_context.go` — Apply path with `noCopyApply` branching
+- `machine/machine_continuation.go` — `MarkChainShared` with early exit
+- `machine/native_template.go` — `computeNoCopyApply` escape analysis
+- `environment/environment_frame.go` — `NewApplyFrame` fused allocation
+- `machine/stack.go` — `PopAll` with backing array retention

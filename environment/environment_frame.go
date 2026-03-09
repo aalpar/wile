@@ -85,7 +85,7 @@ import (
 //	    └── [-1] Template EnvironmentFrame (for-template, future)
 //
 // Each phase has its own GlobalEnvironmentFrame but shares the same
-// TopLevelEnvironment for symbol/syntax interning.
+// TopLevelEnvironment for syntax interning.
 //
 // # Binding Lookup
 //
@@ -103,16 +103,16 @@ type EnvironmentFrame struct {
 	phaseLevel int
 	// phases is the shared phase registry, owned by TopLevel
 	phases *PhaseRegistry
-	// topLevel is the owning TopLevelEnvironment (nil for legacy environments)
+	// topLevel is the owning TopLevelEnvironment
 	topLevel *TopLevelEnvironment
 }
 
 // NewTopLevelEnvironmentFrame creates a new top-level global environment frame.
-// This frame has no parent and contains the shared symbol/syntax interning maps.
+// This frame has no parent and contains the shared syntax interning maps.
 // It also creates the PhaseRegistry for indexed phase access.
 //
 // Deprecated: Use NewTopLevelEnvironment().Runtime() instead for per-instance
-// symbol interning. This function now internally uses NewTopLevelEnvironment()
+// syntax interning. This function now internally uses NewTopLevelEnvironment()
 // to provide proper isolation.
 func NewTopLevelEnvironmentFrame() *EnvironmentFrame {
 	return NewTopLevelEnvironment().Runtime()
@@ -868,7 +868,6 @@ func (p *EnvironmentFrame) EqualTo(value values.Value) bool {
 }
 
 // TopLevelEnv returns the TopLevelEnvironment for this frame.
-// Returns nil for legacy environments created without TopLevelEnvironment.
 func (p *EnvironmentFrame) TopLevelEnv() *TopLevelEnvironment {
 	return p.topLevel
 }

@@ -67,8 +67,8 @@ Follow the coding conventions in `CODING_STYLE.md`:
 
 **Key Patterns:**
 - Read files before editing them
-- Use existing error sentinels (`values/foreign_error.go`) before creating new ones
-- Wrap errors with context at boundaries: `values.WrapForeignErrorf(sentinel, "where: what failed")`
+- Use existing error sentinels (`werr/werr.go`) before creating new ones
+- Wrap errors with context at boundaries: `werr.WrapForeignErrorf(sentinel, "where: what failed")`
 - Follow GNU flag conventions (double-dash for long flags: `--verbose`, not `-verbose`)
 
 ### 3. Write Tests

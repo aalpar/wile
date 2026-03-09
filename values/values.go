@@ -77,7 +77,7 @@ var EOFObject Value = eofType{}
 // Every runtime object in Wile implements Value. The three methods correspond
 // to fundamental Scheme operations:
 //
-//   - SchemeString returns the external representation (R7RS §13.2 write).
+//   - SchemeString returns the external representation (R7RS §6.13.3 write).
 //   - IsVoid reports whether this value represents the absence of a result
 //     (e.g., the return value of set! or display). A nil receiver must
 //     return true so that missing values are treated as void.
@@ -185,7 +185,7 @@ type Tuple interface {
 
 // Indexable represents a fixed-size, random-access container of values.
 //
-// R7RS §6.3.6 (vectors), §6.3.7 (strings as character sequences), §6.4
+// R7RS §6.8 (vectors), §6.7 (strings as character sequences), §6.9 (bytevectors).
 // ---------------------------------------------------------------------------
 // SourceLocation — source positions
 // ---------------------------------------------------------------------------
@@ -249,7 +249,7 @@ type TextualWriter interface {
 
 // BinaryReader represents a binary input port capable of byte-level I/O.
 //
-// R7RS §6.13.3: Binary input ports support read-u8, peek-u8, read-bytevector, etc.
+// R7RS §6.13.2: Binary input ports support read-u8, peek-u8, read-bytevector, etc.
 type BinaryReader interface {
 	InputPort
 	ReadByte() (byte, error)

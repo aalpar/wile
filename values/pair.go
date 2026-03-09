@@ -61,7 +61,7 @@ func NewCons(car, cdr Value) *Pair {
 	return q
 }
 
-// Datum returns the underlying data of the Pair as a [2]buf array.
+// Datum returns the underlying data of the Pair as a [2]Value array.
 func (p *Pair) Datum() [2]Value {
 	return [2]Value{p[0], p[1]}
 }

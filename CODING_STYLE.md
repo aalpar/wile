@@ -72,7 +72,7 @@ func processDataEarlyReturn(value int, settings map[string]bool) error {
 - **Readability**: The code reads more linearly, making the primary execution flow (the "happy path") much clearer.
 - **Reduced Nesting**: It avoids the "arrow code" or "deep nesting" problem associated with multiple if/else blocks.
 - **Maintainability**: It is easier to add or modify a validation check without affecting the indentation or structure of the main logic.
-- **Idiomatic Go**: This style is explicitly mentioned and encouraged in the official _Effective Go_ documentation.  (Claude:  please provide a link/citation for Effective Go.  DO NOT add this to the BIBLIOGRAPHY as this is a Meta issue about the development process)
+- **Idiomatic Go**: This style is explicitly mentioned and encouraged in the official [Effective Go](https://go.dev/doc/effective_go) documentation.
 
 ## Return Values
 
@@ -180,7 +180,7 @@ tcs := []struct {
 | `Get` | Getter | Value |
 | `May` | Optional operation (may not perform) | Varies |
 | `Must` | Required operation (panics on failure) | Varies |
-| `As` | Value conversion | A type other than the reciver |
+| `As` | Value conversion | A type other than the receiver |
 
 ### Constructor Variants
 
@@ -251,31 +251,31 @@ if x != nil && x.IsValid() {  // OK - no assignment
 
 ### Error Types
 
-All errors use the `values` package error types:
+All Go-side errors use the `werr` package (`werr/werr.go`). Scheme-level error objects are in `values`.
 
-1. **Static errors** - Pre-created constants for common errors:
+1. **Static errors** - Pre-created sentinel constants for `errors.Is` matching:
    ```go
    var (
-       ErrNotANumber     = NewStaticError("not a number")
-       ErrDivisionByZero = NewStaticError("division by zero")
-       ErrNoSuchBinding  = NewStaticError("no such binding")
+       ErrNotANumber     = werr.NewStaticError("not a number")
+       ErrDivisionByZero = werr.NewStaticError("division by zero")
+       ErrNoSuchBinding  = werr.NewStaticError("no such binding")
    )
    ```
 
-2. **Foreign errors** - New error instances, foreign to Scheme:
+2. **Foreign errors** - New error instances with format string:
    ```go
-   values.NewForeignError("custom error message")
+   werr.NewForeignErrorf("custom error: %s", detail)
    ```
 
-3. **Wrapped errors** - Adding context to existing errors:
+3. **Wrapped errors** - Adding context to existing sentinels:
    ```go
-   values.WrapForeignErrorf(err, "context: %s", details)
-   values.WrapForeignErrorf(ErrNoSuchBinding, "variable %q not found", name)
+   werr.WrapForeignErrorf(werr.ErrNotANumber, "add: expected number but got %T", arg)
+   werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "variable %q not found", name)
    ```
 
-4. **Native errors** - Native means Scheme error objects.
+4. **Native errors** - Scheme error objects (R7RS `error` procedure):
    ```go
-   return values.NewError( "something went wrong" )
+   values.NewErrorObject("something went wrong", irritant1, irritant2)
    ```
 
 ### Error Comparison
@@ -294,7 +294,7 @@ if err == errNeedsBigInt {  // DON'T
 }
 ```
 
-**Rationale**: `errors.Is` traverses the error wrapping chain, so it works correctly even when errors are wrapped with `fmt.Errorf("%w", ...)` or `WrapForeignErrorf`. Direct `==` comparison breaks silently if the error is ever wrapped.
+**Rationale**: `errors.Is` traverses the error wrapping chain, so it works correctly even when errors are wrapped with `WrapForeignErrorf`. Direct `==` comparison breaks silently if the error is ever wrapped.
 
 ### Error Pattern Preference
 
@@ -691,7 +691,7 @@ func PrimXxx(mc *machine.MachineContext) error {
     // 2. Type assertion and validation
     typed, ok := arg.(*values.SomeType)
     if !ok {
-        return values.WrapForeignErrorf(values.ErrSomeError, "xxx: expected type but got %T", arg)
+        return werr.WrapForeignErrorf(werr.ErrSomeError, "xxx: expected type but got %T", arg)
     }
 
     // 3. Computation
@@ -716,7 +716,7 @@ func PrimXxxVariadic(mc *machine.MachineContext) error {
     first := mc.Arg(0)
     rest, ok := mc.Arg(1).(*values.Pair)
     if !ok {
-        return values.WrapForeignErrorf(values.ErrBadSyntax, "xxx: invalid arguments")
+        return werr.WrapForeignErrorf(werr.ErrBadSyntax, "xxx: invalid arguments")
     }
 
     result := first
@@ -792,13 +792,13 @@ Include primitive name and expected vs actual type:
 
 ```go
 // Good - includes context
-return values.WrapForeignErrorf(values.ErrNotANumber, "add: expected number but got %T", arg)
+return werr.WrapForeignErrorf(werr.ErrNotANumber, "add: expected number but got %T", arg)
 
 // Good - specific to primitive
-return values.WrapForeignErrorf(values.ErrBadIndex, "vector-ref: index %d out of bounds for vector of length %d", idx, len)
+return werr.WrapForeignErrorf(werr.ErrBadIndex, "vector-ref: index %d out of bounds for vector of length %d", idx, len)
 
 // Avoid - missing context
-return values.NewForeignError("not a number")
+return werr.NewForeignErrorf("not a number")
 ```
 
 ## Helper Function Patterns
@@ -822,7 +822,7 @@ For type conversions that may fail:
 func toXxx(v values.Value) (*XxxType, error) {
     typed, ok := v.(*XxxType)
     if !ok {
-        return nil, values.WrapForeignErrorf(values.ErrSomeError, "expected xxx but got %T", v)
+        return nil, werr.WrapForeignErrorf(werr.ErrSomeError, "expected xxx but got %T", v)
     }
     return typed, nil
 }

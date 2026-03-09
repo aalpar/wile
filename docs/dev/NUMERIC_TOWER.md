@@ -68,8 +68,6 @@ A unified tower dispatch (`TowerAdd`, etc.) was prototyped but **abandoned** bec
 2. **Battle-tested code**: Direct dispatch has been tested across all 49 type combinations
 3. **Explicit cases**: Each type switch case is explicit and debuggable
 
-See "Why Direct Dispatch" section above for the decision rationale.
-
 ---
 
 ## Current API
@@ -185,5 +183,5 @@ go test -v ./values/ -run "TestNumericTower|TestLattice"
 - R7RS §6.2.1 — Numerical types (tower definition)
 - R7RS §6.2.2 — Exactness (contagion rules)
 - R7RS §6.2.3 — Implementation restrictions
-- `values/CLAUDE.local.md` — Package documentation
+- `values/CLAUDE.md` — Package documentation
 - Design rationale: Unified tower dispatch was prototyped and abandoned (see "Why Direct Dispatch" above)
