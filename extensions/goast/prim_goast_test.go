@@ -141,7 +141,7 @@ func TestGoParseString(t *testing.T) {
 		},
 		{
 			name: "package name extracted",
-			code: `(cdr (car (cdr (go-parse-string "package main"))))`,
+			code: `(cdr (assoc 'name (cdr (go-parse-string "package main"))))`,
 			want: values.NewString("main"),
 		},
 	}

@@ -82,7 +82,7 @@ func PrimGoParseFile(mc *machine.MachineContext) error {
 	opts, mode := parseOpts(mc.Arg(1), fset)
 
 	f, parseErr := parser.ParseFile(fset, filename.Value, nil, mode)
-	if parseErr != nil && f == nil {
+	if parseErr != nil {
 		return werr.WrapForeignErrorf(errGoParseError,
 			"go-parse-file: %s: %s", filename.Value, parseErr)
 	}
@@ -103,7 +103,7 @@ func PrimGoParseString(mc *machine.MachineContext) error {
 	opts, mode := parseOpts(mc.Arg(1), fset)
 
 	f, parseErr := parser.ParseFile(fset, "source.go", source.Value, mode)
-	if parseErr != nil && f == nil {
+	if parseErr != nil {
 		return werr.WrapForeignErrorf(errGoParseError,
 			"go-parse-string: %s", parseErr)
 	}

@@ -55,14 +55,14 @@ Variadic symbols after the required argument:
 
 ## S-expression Format
 
-Every AST node is a tagged alist: `(node-type (field . value) ...)`. Optional/nil fields are omitted. `#f` represents nil/absent nodes when a field is present but empty.
+Every AST node is a tagged alist: `(node-type (field . value) ...)`. Optional/nil fields are represented as `#f` (e.g., `(recv . #f)` when a function has no receiver). Fields are always present in the alist for a given node type; `#f` indicates "absent" rather than omitting the field entirely.
 
 ### Atoms
 
 ```scheme
 (ident (name . "fmt"))
-(lit (kind . int) (value . "42"))
-(lit (kind . string) (value . "\"hello\""))
+(lit (kind . INT) (value . "42"))
+(lit (kind . STRING) (value . "\"hello\""))
 ```
 
 ### Declarations
@@ -205,11 +205,13 @@ Comments survive the round-trip when parsed with `'comments` flag. The unmapper 
 
 ### New Sentinels
 
-Add to `werr/werr.go`:
+Extension-local sentinels in `extensions/goast/helpers.go` (unexported, scoped to the extension):
 
 ```go
-ErrGoParseError   = NewStaticError("go parse error")
-ErrMalformedGoAST = NewStaticError("malformed go ast")
+var (
+	errGoParseError   = werr.NewStaticError("go parse error")
+	errMalformedGoAST = werr.NewStaticError("malformed go ast")
+)
 ```
 
 ### Usage

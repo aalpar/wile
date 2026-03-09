@@ -181,7 +181,8 @@ func unmapExprList(v values.Value) ([]ast.Expr, error) {
 	for !values.IsEmptyList(tuple) {
 		pair, ok := tuple.(*values.Pair)
 		if !ok {
-			break
+			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: expected proper list of expressions, got %T", tuple)
 		}
 		expr, err := unmapExpr(pair.Car())
 		if err != nil {
@@ -192,7 +193,8 @@ func unmapExprList(v values.Value) ([]ast.Expr, error) {
 		}
 		cdr, ok := pair.Cdr().(values.Tuple)
 		if !ok {
-			break
+			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: improper list in expression list")
 		}
 		tuple = cdr
 	}
@@ -213,7 +215,8 @@ func unmapStmtList(v values.Value) ([]ast.Stmt, error) {
 	for !values.IsEmptyList(tuple) {
 		pair, ok := tuple.(*values.Pair)
 		if !ok {
-			break
+			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: expected proper list of statements, got %T", tuple)
 		}
 		stmt, err := unmapStmt(pair.Car())
 		if err != nil {
@@ -224,7 +227,8 @@ func unmapStmtList(v values.Value) ([]ast.Stmt, error) {
 		}
 		cdr, ok := pair.Cdr().(values.Tuple)
 		if !ok {
-			break
+			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: improper list in statement list")
 		}
 		tuple = cdr
 	}
@@ -245,7 +249,8 @@ func unmapStringList(v values.Value, nodeType, fieldName string) ([]string, erro
 	for !values.IsEmptyList(tuple) {
 		pair, ok := tuple.(*values.Pair)
 		if !ok {
-			break
+			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: %s field '%s' expected proper list, got %T", nodeType, fieldName, tuple)
 		}
 		s, err := requireString(pair.Car(), nodeType, fieldName)
 		if err != nil {
@@ -254,7 +259,8 @@ func unmapStringList(v values.Value, nodeType, fieldName string) ([]string, erro
 		result = append(result, s)
 		cdr, ok := pair.Cdr().(values.Tuple)
 		if !ok {
-			break
+			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: %s field '%s' improper list", nodeType, fieldName)
 		}
 		tuple = cdr
 	}
@@ -656,7 +662,11 @@ func unmapIfStmt(fields values.Value) (*ast.IfStmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, _ := bodyNode.(*ast.BlockStmt)
+	body, ok := bodyNode.(*ast.BlockStmt)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+			"goast: if-stmt field 'body' expected block, got %T", bodyNode)
+	}
 
 	elseVal, err := requireField(fields, "if-stmt", "else")
 	if err != nil {
@@ -706,7 +716,11 @@ func unmapForStmt(fields values.Value) (*ast.ForStmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, _ := bodyNode.(*ast.BlockStmt)
+	body, ok := bodyNode.(*ast.BlockStmt)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+			"goast: for-stmt field 'body' expected block, got %T", bodyNode)
+	}
 
 	return &ast.ForStmt{Init: init, Cond: cond, Post: post, Body: body}, nil
 }
@@ -756,7 +770,11 @@ func unmapRangeStmt(fields values.Value) (*ast.RangeStmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, _ := bodyNode.(*ast.BlockStmt)
+	body, ok := bodyNode.(*ast.BlockStmt)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+			"goast: range-stmt field 'body' expected block, got %T", bodyNode)
+	}
 
 	return &ast.RangeStmt{Key: key, Value: val, Tok: tok, X: x, Body: body}, nil
 }
@@ -1211,9 +1229,11 @@ func unmapField(fields values.Value) (*ast.Field, error) {
 			return nil, err
 		}
 		tagLit, ok := tagNode.(*ast.BasicLit)
-		if ok {
-			f.Tag = tagLit
+		if !ok {
+			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: field 'tag' expected basic-lit, got %T", tagNode)
 		}
+		f.Tag = tagLit
 	}
 
 	return f, nil
@@ -1233,7 +1253,8 @@ func unmapFieldListValue(v values.Value, nodeType, fieldName string) (*ast.Field
 	for !values.IsEmptyList(tuple) {
 		pair, ok := tuple.(*values.Pair)
 		if !ok {
-			break
+			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: %s field '%s' expected proper list, got %T", nodeType, fieldName, tuple)
 		}
 		n, err := unmapNode(pair.Car())
 		if err != nil {
@@ -1247,7 +1268,8 @@ func unmapFieldListValue(v values.Value, nodeType, fieldName string) (*ast.Field
 		fields = append(fields, f)
 		cdr, ok := pair.Cdr().(values.Tuple)
 		if !ok {
-			break
+			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: %s field '%s' improper list", nodeType, fieldName)
 		}
 		tuple = cdr
 	}
