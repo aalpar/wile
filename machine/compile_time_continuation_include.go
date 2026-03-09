@@ -221,76 +221,14 @@ func (p *CompileTimeContinuation) processFormsWithLetrecSemantics(ctctx CompileT
 
 // predeclareDefineBinding pre-creates a binding for a define form.
 // This enables forward references within library bodies and included files.
+// See letrec_semantics.go for the shared pattern documentation.
 func (p *CompileTimeContinuation) predeclareDefineBinding(v syntax.SyntaxValue) {
-	pair, ok := v.(*syntax.SyntaxPair)
-	if !ok {
-		return
-	}
-
-	car := pair.SyntaxCar()
-	sym, ok := car.(*syntax.SyntaxSymbol)
-	if !ok {
-		return
-	}
-
-	keyword := sym.Unwrap().(*values.Symbol).Key
-	if keyword != "define" {
-		return
-	}
-
-	// Extract the name being defined
-	cdr := pair.SyntaxCdr()
-	cdrPair, ok := cdr.(*syntax.SyntaxPair)
-	if !ok {
-		return
-	}
-
-	second := cdrPair.SyntaxCar()
-	var nameSym *syntax.SyntaxSymbol
-
-	switch s := second.(type) {
-	case *syntax.SyntaxSymbol:
-		// (define name expr)
-		nameSym = s
-	case *syntax.SyntaxPair:
-		// (define (name params...) body...)
-		nameExpr := s.SyntaxCar()
-		ns, ok := nameExpr.(*syntax.SyntaxSymbol)
-		if ok {
-			nameSym = ns
-		}
-	}
-
+	nameSym := extractDefineName(v)
 	if nameSym == nil {
 		return
 	}
-
-	// Pre-create the binding
 	name := nameSym.Unwrap().(*values.Symbol)
-	symbolScopes := nameSym.Scopes()
-	symbolSource := nameSym.SourceContext()
-
-	p.bindSymbolWithSource(name, symbolScopes, symbolSource)
-}
-
-// bindSymbolWithSource creates a binding for the given symbol with the specified scopes and source context.
-// If a binding already exists, it updates the scopes and source if possible. This is used for pre-declaring
-// define bindings with the correct scopes for hygiene.
-func (p *CompileTimeContinuation) bindSymbolWithSource(name *values.Symbol, scopes []*syntax.Scope, source *syntax.SourceContext) {
-	if p.env.LocalEnvironment() != nil {
-		_, _ = p.env.MaybeCreateLocalBindingWithScopes(name, environment.BindingTypeVariable, scopes, source)
-	} else {
-		gi, _ := p.env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable)
-		binding := p.env.GetGlobalBinding(gi)
-		if binding != nil {
-			if scopes != nil {
-				binding.SetScopes(scopes)
-			}
-			if source != nil {
-				binding.SetSource(source)
-			}
-		}
-	}
+	predeclareBinding(p.env, name, nameSym.Scopes(), nameSym.SourceContext())
 }
 
 // CompileIncludeCi compiles an include-ci expression.

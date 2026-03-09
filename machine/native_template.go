@@ -114,14 +114,8 @@ func (p *NativeTemplate) Operations() Operations {
 	return ops
 }
 
-// EffectiveOperations is an alias for Operations() for backward compatibility.
-// Both return the reconstructed operation sequence from bytecode.
-func (p *NativeTemplate) EffectiveOperations() Operations {
-	return p.Operations()
-}
-
 // instructionToOperation converts a direct instruction back to its
-// corresponding Operation value. Used by EffectiveOperations for test support.
+// corresponding Operation value. Used by Operations for test support.
 func instructionToOperation(instr Instruction) Operation {
 	switch instr.Op {
 	// --- Wave 1: zero-operand operations ---

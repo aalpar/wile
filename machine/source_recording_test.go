@@ -211,7 +211,7 @@ func TestSourceRecording_IfAllOpsHaveSource(t *testing.T) {
 
 	// Every operation in the template should have source, including
 	// BranchOnFalse and BranchOffset infrastructure ops
-	effOps := tpl.EffectiveOperations()
+	effOps := tpl.Operations()
 	for pc := range len(effOps) {
 		source := tpl.SourceAt(pc)
 		c.Assert(source, qt.IsNotNil,
@@ -226,7 +226,7 @@ func TestSourceRecording_LambdaAllOpsHaveSource(t *testing.T) {
 	// Uses only core syntax (no primitives needed).
 	tpl := compileScheme(t, "(lambda (x) x)")
 
-	effOps := tpl.EffectiveOperations()
+	effOps := tpl.Operations()
 	for pc := range len(effOps) {
 		source := tpl.SourceAt(pc)
 		c.Assert(source, qt.IsNotNil,
@@ -239,7 +239,7 @@ func TestSourceRecording_BeginAllOpsHaveSource(t *testing.T) {
 
 	tpl := compileScheme(t, "(begin 1 2 3)")
 
-	effOps := tpl.EffectiveOperations()
+	effOps := tpl.Operations()
 	for pc := range len(effOps) {
 		source := tpl.SourceAt(pc)
 		c.Assert(source, qt.IsNotNil,
@@ -255,7 +255,7 @@ func TestSourceRecording_NestedIfAllOpsHaveSource(t *testing.T) {
 	// ops inherit the enclosing form's source
 	tpl := compileScheme(t, "(if #t (if #f 42 0) -1)")
 
-	effOps := tpl.EffectiveOperations()
+	effOps := tpl.Operations()
 	for pc := range len(effOps) {
 		source := tpl.SourceAt(pc)
 		c.Assert(source, qt.IsNotNil,
@@ -268,7 +268,7 @@ func TestSourceRecording_DefineAllOpsHaveSource(t *testing.T) {
 
 	tpl := compileScheme(t, "(define x 42)")
 
-	effOps := tpl.EffectiveOperations()
+	effOps := tpl.Operations()
 	for pc := range len(effOps) {
 		source := tpl.SourceAt(pc)
 		c.Assert(source, qt.IsNotNil,
@@ -281,7 +281,7 @@ func TestSourceRecording_QuoteAllOpsHaveSource(t *testing.T) {
 
 	tpl := compileScheme(t, "'(a b c)")
 
-	effOps := tpl.EffectiveOperations()
+	effOps := tpl.Operations()
 	for pc := range len(effOps) {
 		source := tpl.SourceAt(pc)
 		c.Assert(source, qt.IsNotNil,

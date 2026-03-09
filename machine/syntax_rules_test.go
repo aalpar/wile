@@ -95,9 +95,8 @@ func TestSyntaxRulesSimpleVariable(t *testing.T) {
 		t.Fatalf("bindSymbolWithScopes binding value is %T, expected MachineClosure", binding.Value())
 	}
 
-	// Test passes if we got this far - the syntax-rules macro was successfully compiled
-	// TODO: Add test for actually invoking the transformer once the API supports it
-	_ = closure // Suppress unused variable warning
+	// Transformer invocation is exercised in hygiene_test.go and coverage_fullruntime_test.go.
+	_ = closure
 }
 
 func TestSyntaxRulesWithLiteral(t *testing.T) {
@@ -134,9 +133,7 @@ func TestSyntaxRulesWithLiteral(t *testing.T) {
 		t.Fatalf("my-if binding value is %T, expected MachineClosure", binding.Value())
 	}
 
-	// Test passes if we got this far - the syntax-rules macro with literals was successfully compiled
-	// TODO: Add test for actually invoking the transformer once the API supports it
-	_ = closure // Suppress unused variable warning
+	_ = closure
 }
 
 func TestSyntaxRulesWithEllipsis(t *testing.T) {
@@ -172,9 +169,7 @@ func TestSyntaxRulesWithEllipsis(t *testing.T) {
 		t.Fatalf("list* binding value is %T, expected MachineClosure", binding.Value())
 	}
 
-	// Test passes if we got this far - the syntax-rules macro with ellipsis was successfully compiled
-	// TODO: Add test for actually invoking the transformer once the API supports it
-	_ = closure // Suppress unused variable warning
+	_ = closure
 }
 
 // TestSyntaxRulesWithCustomEllipsis tests R7RS §4.3.2 custom ellipsis identifier.
