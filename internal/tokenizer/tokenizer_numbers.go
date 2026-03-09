@@ -60,8 +60,6 @@ func signedState(signed bool, s, u TokenizerState) TokenizerState {
 	return u
 }
 
-// Tokenize is a convenience function that tokenizes a complete string.
-
 func (p *Tokenizer) readSpecialNumber(s string, r int, mismatchErr string, onMismatch func()) {
 	n := p.scanCaseInsensitive([]byte(s))
 	if p.err != nil {

@@ -100,7 +100,7 @@ type commandInfo struct {
 
 // metaCommands defines metadata for all commands (session + debug).
 // Session commands are declared here; debug commands are appended in init()
-// from DebugContext.DebugCommands(), the single source of truth.
+// from debugCommandMetadata, the single source of truth.
 var metaCommands = []commandInfo{
 	{"help", []string{"h", "?"}, "Show this help or help for a specific command",
 		"Usage: ,help [command]\n\nWith no arguments, lists all commands.\nWith a command name, shows detailed help for that command.",
@@ -114,9 +114,8 @@ var metaCommands = []commandInfo{
 }
 
 func init() {
-	// Derive debug command entries from the canonical DebugCommands() table.
-	// The DebugContext instance is throwaway — only metadata fields are read.
-	for _, dc := range NewDebugContext().DebugCommands() {
+	// Derive debug command entries from the canonical metadata table.
+	for _, dc := range debugCommandMetadata {
 		metaCommands = append(metaCommands, commandInfo{
 			name:     dc.Name,
 			aliases:  dc.Aliases,

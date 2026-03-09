@@ -49,6 +49,43 @@ func (p *DebugContext) SetCurrentMC(mc *machine.MachineContext) {
 	p.currentMC = mc
 }
 
+// debugCommandMeta is the single source of truth for debug command metadata.
+// Separated from DebugCommandInfo so init() can read metadata without
+// allocating a DebugContext (and its machine.Debugger).
+type debugCommandMeta struct {
+	Name    string
+	Aliases []string
+	Summary string
+	Detail  string
+}
+
+var debugCommandMetadata = []debugCommandMeta{
+	{"break", []string{"b"}, "Set breakpoint at FILE:LINE[:COLUMN]",
+		"Usage: ,break FILE:LINE[:COLUMN]"},
+	{"delete", []string{"d"}, "Delete a breakpoint",
+		"Usage: ,delete ID"},
+	{"list", []string{"l"}, "List breakpoints",
+		"Usage: ,list"},
+	{"enable", nil, "Enable a breakpoint",
+		"Usage: ,enable ID"},
+	{"disable", nil, "Disable a breakpoint",
+		"Usage: ,disable ID"},
+	{"step", []string{"s"}, "Step into",
+		"Usage: ,step"},
+	{"next", []string{"n"}, "Step over",
+		"Usage: ,next"},
+	{"finish", []string{"f"}, "Step out",
+		"Usage: ,finish"},
+	{"continue", []string{"c"}, "Continue execution",
+		"Usage: ,continue"},
+	{"backtrace", []string{"bt"}, "Show stack trace",
+		"Usage: ,backtrace"},
+	{"where", nil, "Show current location",
+		"Usage: ,where"},
+	{"help", []string{"h", "?"}, "Show available debug commands",
+		"Usage: ,help"},
+}
+
 // DebugCommandInfo describes a single debug command: its canonical name,
 // aliases, summary text, detail text, and handler function.
 type DebugCommandInfo struct {
@@ -59,35 +96,25 @@ type DebugCommandInfo struct {
 	Handler func(args []string, out io.Writer)
 }
 
-// DebugCommands returns the canonical list of debug commands.
-// This is the single source of truth for command metadata and dispatch.
+// DebugCommands returns the canonical list of debug commands with bound handlers.
 func (p *DebugContext) DebugCommands() []DebugCommandInfo {
-	return []DebugCommandInfo{
-		{"break", []string{"b"}, "Set breakpoint at FILE:LINE[:COLUMN]",
-			"Usage: ,break FILE:LINE[:COLUMN]", p.cmdBreak},
-		{"delete", []string{"d"}, "Delete a breakpoint",
-			"Usage: ,delete ID", p.cmdDelete},
-		{"list", []string{"l"}, "List breakpoints",
-			"Usage: ,list", p.cmdList},
-		{"enable", nil, "Enable a breakpoint",
-			"Usage: ,enable ID", p.cmdEnable},
-		{"disable", nil, "Disable a breakpoint",
-			"Usage: ,disable ID", p.cmdDisable},
-		{"step", []string{"s"}, "Step into",
-			"Usage: ,step", p.cmdStep},
-		{"next", []string{"n"}, "Step over",
-			"Usage: ,next", p.cmdNext},
-		{"finish", []string{"f"}, "Step out",
-			"Usage: ,finish", p.cmdFinish},
-		{"continue", []string{"c"}, "Continue execution",
-			"Usage: ,continue", p.cmdContinue},
-		{"backtrace", []string{"bt"}, "Show stack trace",
-			"Usage: ,backtrace", p.cmdBacktrace},
-		{"where", nil, "Show current location",
-			"Usage: ,where", p.cmdWhere},
-		{"help", []string{"h", "?"}, "Show available debug commands",
-			"Usage: ,help", p.cmdHelp},
+	handlers := []func(args []string, out io.Writer){
+		p.cmdBreak, p.cmdDelete, p.cmdList,
+		p.cmdEnable, p.cmdDisable,
+		p.cmdStep, p.cmdNext, p.cmdFinish, p.cmdContinue,
+		p.cmdBacktrace, p.cmdWhere, p.cmdHelp,
 	}
+	q := make([]DebugCommandInfo, len(debugCommandMetadata))
+	for i, m := range debugCommandMetadata {
+		q[i] = DebugCommandInfo{
+			Name:    m.Name,
+			Aliases: m.Aliases,
+			Summary: m.Summary,
+			Detail:  m.Detail,
+			Handler: handlers[i],
+		}
+	}
+	return q
 }
 
 // HandleDebugCommand processes a debug command starting with ','.

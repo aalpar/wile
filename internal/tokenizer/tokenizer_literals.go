@@ -50,8 +50,6 @@ var charMnemonics = map[string]rune{
 	"form-feed":    '\f',
 }
 
-// TokenizerState represents the type of token recognized by the tokenizer.
-
 func validateCodePoint(x int64) error {
 	if x > 0x10FFFF {
 		return NewTokenizerError(MessageCodePointExceedsUnicodeMaximum)
@@ -175,8 +173,6 @@ func (p *Tokenizer) skipLineContinuation() {
 		p.next()
 	}
 }
-
-// readLineCommentOrPragma reads a line comment starting with one or more semicolons.
 
 func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape() rune {
 	var qrune rune
