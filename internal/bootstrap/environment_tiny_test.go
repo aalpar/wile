@@ -19,6 +19,10 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/extensions/math"
+	"github.com/aalpar/wile/registry"
 )
 
 // TestNewEnvironmentTiny tests that the top-level environment can be created successfully.
@@ -41,4 +45,30 @@ func TestNewTopLevelWithRegistry(t *testing.T) {
 	// Verify the registry has primitives (+ is registered by core)
 	_, found := reg.FindPrimitive("+", 0)
 	c.Assert(found, qt.IsTrue)
+}
+
+// TestSelectiveExtensionLoading verifies that passing an explicit extension
+// list to initializeEnvironmentWithRegistry loads only those extensions.
+func TestSelectiveExtensionLoading(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	topLevel := environment.NewTopLevelEnvironment()
+	env := topLevel.Runtime()
+
+	// Load only the math extension
+	reg, err := initializeEnvironmentWithRegistry(ctx, env, []registry.Extension{math.Extension})
+	c.Assert(err, qt.IsNil)
+
+	// Core primitives should still be present
+	_, found := reg.FindPrimitive("+", 0)
+	c.Assert(found, qt.IsTrue)
+
+	// Math extension primitives should be present
+	_, found = reg.FindPrimitive("sin", 0)
+	c.Assert(found, qt.IsTrue)
+
+	// Primitives from other extensions (io) should NOT be present
+	_, found = reg.FindPrimitive("display", 0)
+	c.Assert(found, qt.IsFalse)
 }
