@@ -104,3 +104,5 @@ No demand signal. Speculative or research-only.
 - [ ] **Source file tracking in Syntax Objects**: need some utilities around finding source locations and providing source lines.
 - [ ] **Exceptions and Error stack tracrs**: Both Foreign and Native errors should track stacktraces with source code references.
 - [ ] **Foreign Stack trace entry in stack traces that cross from Native -> Foriegn -> Native callback.
+- [ ] **Area for blog articles** Git blog area in repo
+- [ ] **Finish blog article** Finish blog article on appropriateness of Scheme for sandboxing.
