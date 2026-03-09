@@ -18,6 +18,7 @@ package repl
 import (
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -48,6 +49,74 @@ func (p *DebugContext) SetCurrentMC(mc *machine.MachineContext) {
 	p.currentMC = mc
 }
 
+// debugCommandMeta is the single source of truth for debug command metadata.
+// Separated from DebugCommandInfo so init() can read metadata without
+// allocating a DebugContext (and its machine.Debugger).
+type debugCommandMeta struct {
+	Name    string
+	Aliases []string
+	Summary string
+	Detail  string
+}
+
+var debugCommandMetadata = []debugCommandMeta{
+	{"break", []string{"b"}, "Set breakpoint at FILE:LINE[:COLUMN]",
+		"Usage: ,break FILE:LINE[:COLUMN]"},
+	{"delete", []string{"d"}, "Delete a breakpoint",
+		"Usage: ,delete ID"},
+	{"list", []string{"l"}, "List breakpoints",
+		"Usage: ,list"},
+	{"enable", nil, "Enable a breakpoint",
+		"Usage: ,enable ID"},
+	{"disable", nil, "Disable a breakpoint",
+		"Usage: ,disable ID"},
+	{"step", []string{"s"}, "Step into",
+		"Usage: ,step"},
+	{"next", []string{"n"}, "Step over",
+		"Usage: ,next"},
+	{"finish", []string{"f"}, "Step out",
+		"Usage: ,finish"},
+	{"continue", []string{"c"}, "Continue execution",
+		"Usage: ,continue"},
+	{"backtrace", []string{"bt"}, "Show stack trace",
+		"Usage: ,backtrace"},
+	{"where", nil, "Show current location",
+		"Usage: ,where"},
+	{"help", []string{"h", "?"}, "Show available debug commands",
+		"Usage: ,help"},
+}
+
+// DebugCommandInfo describes a single debug command: its canonical name,
+// aliases, summary text, detail text, and handler function.
+type DebugCommandInfo struct {
+	Name    string
+	Aliases []string
+	Summary string
+	Detail  string
+	Handler func(args []string, out io.Writer)
+}
+
+// DebugCommands returns the canonical list of debug commands with bound handlers.
+func (p *DebugContext) DebugCommands() []DebugCommandInfo {
+	handlers := []func(args []string, out io.Writer){
+		p.cmdBreak, p.cmdDelete, p.cmdList,
+		p.cmdEnable, p.cmdDisable,
+		p.cmdStep, p.cmdNext, p.cmdFinish, p.cmdContinue,
+		p.cmdBacktrace, p.cmdWhere, p.cmdHelp,
+	}
+	q := make([]DebugCommandInfo, len(debugCommandMetadata))
+	for i, m := range debugCommandMetadata {
+		q[i] = DebugCommandInfo{
+			Name:    m.Name,
+			Aliases: m.Aliases,
+			Summary: m.Summary,
+			Detail:  m.Detail,
+			Handler: handlers[i],
+		}
+	}
+	return q
+}
+
 // HandleDebugCommand processes a debug command starting with ','.
 // Returns true if a command was handled, false otherwise.
 func (p *DebugContext) HandleDebugCommand(line string, out io.Writer) bool {
@@ -64,35 +133,14 @@ func (p *DebugContext) HandleDebugCommand(line string, out io.Writer) bool {
 	cmd := parts[0]
 	args := parts[1:]
 
-	switch cmd {
-	case "break", "b":
-		p.cmdBreak(args, out)
-	case "delete", "d":
-		p.cmdDelete(args, out)
-	case "list", "l":
-		p.cmdList(out)
-	case "enable":
-		p.cmdEnable(args, out)
-	case "disable":
-		p.cmdDisable(args, out)
-	case "step", "s":
-		p.cmdStep(out)
-	case "next", "n":
-		p.cmdNext(out)
-	case "finish", "f":
-		p.cmdFinish(out)
-	case "continue", "c":
-		p.cmdContinue(out)
-	case "backtrace", "bt":
-		p.cmdBacktrace(out)
-	case "where":
-		p.cmdWhere(out)
-	case "help", "h", "?":
-		p.cmdHelp(out)
-	default:
-		fmt.Fprintf(out, "Unknown command: %s (type ,help for commands)\n", cmd)
+	for _, dc := range p.DebugCommands() {
+		if cmd == dc.Name || slices.Contains(dc.Aliases, cmd) {
+			dc.Handler(args, out)
+			return true
+		}
 	}
 
+	fmt.Fprintf(out, "Unknown command: %s (type ,help for commands)\n", cmd)
 	return true
 }
 
@@ -143,7 +191,7 @@ func (p *DebugContext) cmdDelete(args []string, out io.Writer) {
 }
 
 // cmdList lists all breakpoints.
-func (p *DebugContext) cmdList(out io.Writer) {
+func (p *DebugContext) cmdList(_ []string, out io.Writer) {
 	bps := p.debugger.Breakpoints()
 	if len(bps) == 0 {
 		fmt.Fprintln(out, "No breakpoints set")
@@ -180,13 +228,13 @@ func (p *DebugContext) cmdDisable(args []string, out io.Writer) {
 }
 
 // cmdStep steps into the next expression.
-func (p *DebugContext) cmdStep(out io.Writer) {
+func (p *DebugContext) cmdStep(_ []string, out io.Writer) {
 	p.debugger.StepInto()
 	fmt.Fprintln(out, "Will step into next expression")
 }
 
 // cmdNext steps over (same frame).
-func (p *DebugContext) cmdNext(out io.Writer) {
+func (p *DebugContext) cmdNext(_ []string, out io.Writer) {
 	if p.currentMC == nil {
 		fmt.Fprintln(out, "No active execution context")
 		return
@@ -196,7 +244,7 @@ func (p *DebugContext) cmdNext(out io.Writer) {
 }
 
 // cmdFinish steps out of current function.
-func (p *DebugContext) cmdFinish(out io.Writer) {
+func (p *DebugContext) cmdFinish(_ []string, out io.Writer) {
 	if p.currentMC == nil {
 		fmt.Fprintln(out, "No active execution context")
 		return
@@ -206,13 +254,13 @@ func (p *DebugContext) cmdFinish(out io.Writer) {
 }
 
 // cmdContinue resumes execution.
-func (p *DebugContext) cmdContinue(out io.Writer) {
+func (p *DebugContext) cmdContinue(_ []string, out io.Writer) {
 	p.debugger.Continue()
 	fmt.Fprintln(out, "Continuing execution")
 }
 
 // cmdBacktrace shows the current stack trace.
-func (p *DebugContext) cmdBacktrace(out io.Writer) {
+func (p *DebugContext) cmdBacktrace(_ []string, out io.Writer) {
 	if p.currentMC == nil {
 		fmt.Fprintln(out, "No active execution context")
 		return
@@ -229,7 +277,7 @@ func (p *DebugContext) cmdBacktrace(out io.Writer) {
 }
 
 // cmdWhere shows the current source location.
-func (p *DebugContext) cmdWhere(out io.Writer) {
+func (p *DebugContext) cmdWhere(_ []string, out io.Writer) {
 	if p.currentMC == nil {
 		fmt.Fprintln(out, "No active execution context")
 		return
@@ -244,21 +292,16 @@ func (p *DebugContext) cmdWhere(out io.Writer) {
 	fmt.Fprintf(out, "At %s:%d:%d\n", source.File, source.Start.Line(), source.Start.Column())
 }
 
-// cmdHelp shows available commands.
-func (p *DebugContext) cmdHelp(out io.Writer) {
-	fmt.Fprintln(out, `Debug commands:
-  ,break FILE:LINE[:COL]  Set breakpoint (aliases: ,b)
-  ,delete ID              Delete breakpoint (aliases: ,d)
-  ,list                   List breakpoints (aliases: ,l)
-  ,enable ID              Enable breakpoint
-  ,disable ID             Disable breakpoint
-  ,step                   Step into next expression (aliases: ,s)
-  ,next                   Step over (same frame) (aliases: ,n)
-  ,finish                 Step out (return from function) (aliases: ,f)
-  ,continue               Continue execution (aliases: ,c)
-  ,backtrace              Show stack trace (aliases: ,bt)
-  ,where                  Show current location
-  ,help                   Show this help (aliases: ,h, ,?)`)
+// cmdHelp shows available debug commands.
+func (p *DebugContext) cmdHelp(_ []string, out io.Writer) {
+	fmt.Fprintln(out, "Debug commands:")
+	for _, dc := range p.DebugCommands() {
+		aliases := ""
+		if len(dc.Aliases) > 0 {
+			aliases = " (," + strings.Join(dc.Aliases, ", ,") + ")"
+		}
+		fmt.Fprintf(out, "  ,%-12s %s%s\n", dc.Name, dc.Summary, aliases)
+	}
 }
 
 // parseLocation parses a location string like "file.scm:10" or "file.scm:10:5".

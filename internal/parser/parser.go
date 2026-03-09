@@ -129,6 +129,21 @@ func (p *Parser) matchingClose(opener tokenizer.TokenizerState) tokenizer.Tokeni
 	return tokenizer.TokenizerStateCloseParen
 }
 
+// checkDelimiterMatch returns an error if the current token is a closing
+// delimiter that doesn't match the given opener. Returns nil if the current
+// token is either the correct closer or not a closer at all.
+func (p *Parser) checkDelimiterMatch(opener tokenizer.TokenizerState) error {
+	if !p.isListCloser(p.cur.Type()) {
+		return nil
+	}
+	expectedClose := p.matchingClose(opener)
+	if p.cur.Type() == expectedClose {
+		return nil
+	}
+	return NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",
+		p.delimiterString(opener), p.delimiterString(p.cur.Type()))
+}
+
 // delimiterString returns a human-readable string for a delimiter token type.
 func (p *Parser) delimiterString(t tokenizer.TokenizerState) string {
 	switch t {
@@ -231,9 +246,9 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 		return placeholder, nil
 	}
 	// Check for bracket mismatch on close
-	if p.isListCloser(p.cur.Type()) && p.cur.Type() != expectedClose {
-		return nil, NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",
-			p.delimiterString(opener), p.delimiterString(p.cur.Type()))
+	err := p.checkDelimiterMatch(opener)
+	if err != nil {
+		return nil, err
 	}
 
 	// Read the first element
@@ -268,9 +283,9 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 			return nil, p.err
 		}
 		if p.cur.Type() != expectedClose {
-			if p.isListCloser(p.cur.Type()) {
-				return nil, NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",
-					p.delimiterString(opener), p.delimiterString(p.cur.Type()))
+			err := p.checkDelimiterMatch(opener)
+			if err != nil {
+				return nil, err
 			}
 			return nil, NewParserErrorf(p.cur, "expected %s after improper list cdr",
 				p.delimiterString(expectedClose))
@@ -285,9 +300,9 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 		return placeholder, nil
 	}
 	// Check for bracket mismatch
-	if p.isListCloser(p.cur.Type()) && p.cur.Type() != expectedClose {
-		return nil, NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",
-			p.delimiterString(opener), p.delimiterString(p.cur.Type()))
+	err = p.checkDelimiterMatch(opener)
+	if err != nil {
+		return nil, err
 	}
 
 	// Continue reading remaining elements
@@ -334,9 +349,9 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 			return nil, p.err
 		}
 		if p.cur.Type() != expectedClose {
-			if p.isListCloser(p.cur.Type()) {
-				return nil, NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",
-					p.delimiterString(opener), p.delimiterString(p.cur.Type()))
+			err := p.checkDelimiterMatch(opener)
+			if err != nil {
+				return nil, err
 			}
 			return nil, NewParserErrorf(p.cur, "expected %s after improper list cdr",
 				p.delimiterString(expectedClose))
@@ -346,8 +361,7 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 		current.SetCdr(syntax.SyntaxEmptyList)
 	case p.isListCloser(p.cur.Type()):
 		// Bracket mismatch
-		return nil, NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",
-			p.delimiterString(opener), p.delimiterString(p.cur.Type()))
+		return nil, p.checkDelimiterMatch(opener)
 	}
 
 	return placeholder, nil
@@ -515,9 +529,9 @@ func (p *Parser) readList(opener tokenizer.TokenizerState) (syntax.SyntaxValue, 
 		}
 		// Check for bracket mismatch
 		if p.cur.Type() != expectedClose {
-			if p.isListCloser(p.cur.Type()) {
-				return nil, p.cur, NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",
-					p.delimiterString(opener), p.delimiterString(p.cur.Type()))
+			err := p.checkDelimiterMatch(opener)
+			if err != nil {
+				return nil, p.cur, err
 			}
 			return nil, p.cur, NewParserErrorWithWrapf(werr.ErrNotACloseParen, p.cur, "expected %s after dotted pair, got %s",
 				p.delimiterString(expectedClose), p.cur.String())
@@ -529,8 +543,7 @@ func (p *Parser) readList(opener tokenizer.TokenizerState) (syntax.SyntaxValue, 
 		pr0.SetCdr(pr)
 	case p.isListCloser(p.cur.Type()):
 		// Bracket mismatch
-		return nil, p.cur, NewParserErrorf(p.cur, "mismatched delimiters: opened with %s but closed with %s",
-			p.delimiterString(opener), p.delimiterString(p.cur.Type()))
+		return nil, p.cur, p.checkDelimiterMatch(opener)
 	}
 	return q0, p.cur, nil
 }
@@ -704,7 +717,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q = p.wrapSyntaxSymbol(p.cur.Value(), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateUnsignedInteger, tokenizer.TokenizerStateSignedInteger:
-		return p.parseDecimalInteger()
+		return p.parseIntegerWithBase(10)
 	case tokenizer.TokenizerStateUnsignedDecimalFraction, tokenizer.TokenizerStateSignedDecimalFraction:
 		var a float64
 		a, p.err = strconv.ParseFloat(normalizeExponentMarker(replaceHashDigits(p.cur.String())), 64)

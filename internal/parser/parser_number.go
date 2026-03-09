@@ -27,46 +27,13 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-// parseDecimalInteger parses an unsigned or signed base-10 integer token.
+// parseIntegerWithBase parses the current token as an integer in the given base.
 // Handles hash digit substitution, overflow promotion to BigInteger,
 // and forces inexact (Float) when hash digits are present.
 //
-// R7RS §7.1.1: When # appears in a number literal, each # represents an
-// unknown digit (treated as 0) and the result is inexact.
-func (p *Parser) parseDecimalInteger() (syntax.SyntaxValue, tokenizer.Token, error) {
-	s := replaceHashDigits(p.cur.String())
-	a, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
-		// If overflow, promote to BigInteger
-		var numErr *strconv.NumError
-		isNumErr := errors.As(err, &numErr)
-		if isNumErr && errors.Is(numErr.Err, strconv.ErrRange) {
-			bigInt := new(big.Int)
-			_, ok := bigInt.SetString(s, 10)
-			if ok {
-				if p.cur.HasHashDigit() {
-					f, _ := bigInt.Float64()
-					q := p.wrapSyntax(values.NewFloat(f), p.cur)
-					return q, p.cur, nil
-				}
-				q := p.wrapSyntax(values.NewBigInteger(bigInt), p.cur)
-				return q, p.cur, nil
-			}
-		}
-		return nil, p.cur, err
-	}
-	if p.cur.HasHashDigit() {
-		q := p.wrapSyntax(values.NewFloat(float64(a)), p.cur)
-		return q, p.cur, nil
-	}
-	q := p.wrapSyntax(values.NewInteger(a), p.cur)
-	return q, p.cur, nil
-}
-
-// parseIntegerWithBase parses the current token as an integer in the given base.
-// Handles hash digit substitution and forces inexact when hash digits are present.
-//
 // R7RS §7.1.1: <uinteger R> -> <digit R>+ #*
+// When # appears in a number literal, each # represents an unknown digit
+// (treated as 0) and the result is inexact.
 func (p *Parser) parseIntegerWithBase(base int) (syntax.SyntaxValue, tokenizer.Token, error) {
 	s := replaceHashDigits(p.cur.String())
 	a, err := strconv.ParseInt(s, base, 64)
