@@ -216,20 +216,15 @@ func buildFFISpec(name string, fn any) (*ffiSpec, error) {
 
 		// For variadic functions, the last Go parameter is a slice.
 		// Build a converter for the element type.
+		convType := paramType
 		if spec.isVariadic && i == fnType.NumIn()-1 {
-			elemType := paramType.Elem()
-			conv, err := makeArgConverter(name, idx+1, elemType)
-			if err != nil {
-				return nil, err
-			}
-			spec.argConvs[idx] = conv
-		} else {
-			conv, err := makeArgConverter(name, idx+1, paramType)
-			if err != nil {
-				return nil, err
-			}
-			spec.argConvs[idx] = conv
+			convType = paramType.Elem()
 		}
+		conv, err := makeArgConverter(name, idx+1, convType)
+		if err != nil {
+			return nil, err
+		}
+		spec.argConvs[idx] = conv
 	}
 
 	spec.paramCount = numSchemeParams
@@ -632,6 +627,18 @@ func makeCallbackArgConverter(name string, pos int, t reflect.Type) (argConverte
 	}, nil
 }
 
+// makeCallbackReturnWithError builds a reflect return value slice with all
+// positions zero-valued except the last, which holds err.
+func makeCallbackReturnWithError(funcType reflect.Type, err error) []reflect.Value {
+	numOut := funcType.NumOut()
+	out := make([]reflect.Value, numOut)
+	for i := range out[:numOut-1] {
+		out[i] = reflect.Zero(funcType.Out(i))
+	}
+	out[numOut-1] = reflect.ValueOf(&err).Elem()
+	return out
+}
+
 // callbackErrorResult builds reflect return values when a callback encounters an error.
 // If the Go func type includes an error return, the error is returned normally.
 // Otherwise, the error is panicked (standard Go pattern for unrecoverable callback failures).
@@ -641,17 +648,8 @@ func callbackErrorResult(funcType reflect.Type, hasErrorReturn bool, err error) 
 		"callback invocation failed",
 	)
 	if hasErrorReturn {
-		out := make([]reflect.Value, funcType.NumOut())
-		for i := range out {
-			if i == funcType.NumOut()-1 {
-				out[i] = reflect.ValueOf(&wrapped).Elem()
-			} else {
-				out[i] = reflect.Zero(funcType.Out(i))
-			}
-		}
-		return out
+		return makeCallbackReturnWithError(funcType, wrapped)
 	}
-	// No error return: panic with wrapped error
 	panic(wrapped)
 }
 
@@ -674,26 +672,15 @@ func callbackSuccessResult(
 				"callback result conversion failed",
 			)
 			if hasErrorReturn {
-				for i := range out {
-					if i == numOut-1 {
-						out[i] = reflect.ValueOf(&wrapped).Elem()
-					} else {
-						out[i] = reflect.Zero(funcType.Out(i))
-					}
-				}
-				return out
+				return makeCallbackReturnWithError(funcType, wrapped)
 			}
 			panic(wrapped)
 		}
 		out[0] = converted
 	}
 
-	if hasErrorReturn {
-		// Set error return to nil.
-		out[numOut-1] = reflect.Zero(errorType)
-	}
-
-	// Fill any unset slots with zero values (for void callbacks with error return).
+	// Fill unset slots with zero values (nil error for hasErrorReturn,
+	// zero value for void callbacks).
 	for i := range out {
 		if !out[i].IsValid() {
 			out[i] = reflect.Zero(funcType.Out(i))
@@ -761,12 +748,7 @@ func makeRetConverter(name string, t reflect.Type) (retConverter, error) {
 	}
 
 	switch t.Kind() {
-	case reflect.Int64:
-		return func(v reflect.Value) values.Value {
-			return values.NewInteger(v.Int())
-		}, nil
-
-	case reflect.Int:
+	case reflect.Int64, reflect.Int:
 		return func(v reflect.Value) values.Value {
 			return values.NewInteger(v.Int())
 		}, nil

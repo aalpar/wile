@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-03-06
+**Last Updated**: 2026-03-09
 
 ### Current Project Status
 
@@ -34,6 +34,7 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 
 - [x] **I/O port extraction helper** [Medium, S]: Extracted generic `extractPort[T]` in #424.
 - [x] **Optional fill argument extraction**: 3 `make-*` primitives (`PrimMakeVector`, `PrimMakeBytevector`, `PrimMakeString`) independently extract optional fill arguments with slightly different patterns. Share a helper.
+- [x] **Machine package tech debt** [Medium, M]: 6 phases — arity dedup, closure extraction, expander decomposition, letrec* unification, library import dedup, stale alias removal. Complete in #444. See `plans/MACHINE-TECH-DEBT.md`.
 
 ### Low Priority
 
