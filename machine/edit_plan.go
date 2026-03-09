@@ -18,6 +18,7 @@ import (
 	"sort"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // EditPlan collects non-overlapping bytecode edits for a NativeTemplate.
@@ -114,10 +115,10 @@ func (p *EditPlan) Apply() int {
 func validateEdits(edits []edit, codeLen int) {
 	for i, e := range edits {
 		if e.start < 0 || e.end > codeLen || e.start > e.end {
-			panic("edit_plan: edit out of bounds")
+			panic(werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "edit_plan: edit out of bounds"))
 		}
 		if i > 0 && e.start < edits[i-1].end {
-			panic("edit_plan: overlapping edits")
+			panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument, "edit_plan: overlapping edits"))
 		}
 	}
 }

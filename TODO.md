@@ -37,6 +37,13 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 - [x] **Optional fill argument extraction**: 3 `make-*` primitives (`PrimMakeVector`, `PrimMakeBytevector`, `PrimMakeString`) independently extract optional fill arguments with slightly different patterns. Share a helper.
 - [x] **Machine package tech debt** [Medium, M]: 6 phases — arity dedup, closure extraction, expander decomposition, letrec* unification, library import dedup, stale alias removal. Complete in #444. See `plans/MACHINE-TECH-DEBT.md`.
 - [x] **Math extension file split** [Low, S]: Split 1,292-line `prim_math.go` into 5 files by R7RS section (transcendental, rounding, rational, complex, conversion). Complete in #446.
+- [x] **Raw string panics** [Medium, S]: 4 panics use raw strings instead of `werr.WrapForeignErrorf(sentinel, ...)`: `extensions/math/prim_complex.go:104`, `machine/edit_plan.go:117,120`, `machine/native_template.go:653`. Wrap each with the appropriate sentinel.
+- [x] **Bare sentinel panics** [Medium, S]: `values/promotion.go:343,367` (`NumberToFloat64`, `NumberToComplex128`) and `values/numeric_tower.go:172` (`ExactnessOf`) panic with bare `werr.ErrNotANumber` — no `WrapForeignErrorf` wrapping. Add call-site context.
+- [ ] **internal/forms tests** [Medium, S]: `internal/forms/form_spec.go` (105 lines) is the only internal package with zero test files. Central registry used by `validate` and `machine`. Add `form_spec_test.go` covering registration, duplicate detection, and lookup miss behavior.
+- [ ] **Expander time continuation decomposition** [Medium, M]: `machine/expander_time_continuation.go` is 1,327 lines. `expandLetSyntaxImpl` (215 lines) handles three variants inline. Extract `expandLetSyntax`, `expandLetrecSyntax`, `expandLetSyntaxStar`; consider splitting into `expander_let_syntax.go` and `expander_primitive_forms.go`.
+- [ ] **Quasiquote/quasisyntax duplication** [Medium, M]: `compile_time_continuation_quasiquote.go` (183 lines) and `compile_quasisyntax.go` (104 lines) implement nearly identical depth-tracking and unquote/splice dispatch. Different data types (values vs. syntax objects) make naive unification hard. Extract common depth-tracked expansion skeleton with callbacks.
+- [ ] **goast/unmapper.go split** [Medium, S]: 1,277 lines in a single file. Split into `unmapper_expr.go`, `unmapper_stmt.go`, `unmapper_decl.go`, `unmapper_types.go` before Phase 2 adds ~12 more node types.
+- [ ] **Pooling contract documentation** [Medium, S]: `machine/pool.go` has 4 global pools (stack, sub-context, continuation, env-frame). Continuation frames pooled only on normal return; `call/cc` escapes leave frames for GC via `MarkChainShared`. Intentional but undocumented. Add `docs/dev/POOLING.md`.
 
 ### Low Priority
 
@@ -45,10 +52,12 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 - [x] **Tokenizer test file consolidation** [Low, M]: Consolidated 14 coverage-goal-named test files into 10 behavior-oriented files mirroring source structure. All 191 tests preserved. PR #448.
 - [x] **REPL deprecated wrappers** [Low, S]: Deleted `Compile`, `Run`, `Load` wrappers from `internal/repl/repl.go`. Internal call sites now use `wileruntime` directly.
 - [ ] **Error sentinel grouping** [Low, S]: ~103 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.
+- [ ] **Operation file consolidation** [Low, M]: 28 single-method `machine/operation_*.go` files (30–50 lines each). Group into families: `operations_stack.go` (Push/Pop/Pull/Drop/PeekK), `operations_load.go` (LoadLiteral/LoadGlobal/LoadLocal/LoadVoid), `operations_branch.go`, etc. Reduces 28 files to ~8.
+- [ ] **internal/validate test coverage** [Low, M]: 15 code files but only 2 test files. Each special form has its own validator but most lack dedicated unit tests. Coverage comes from integration tests. Add targeted tests when modifying validators.
 
 ### Postponed
 
-- [ ] **F10: MachineContext decomposition** [Medium, Postponed]: 1671 lines, 71 methods, 10+ responsibilities. Extract `WindingStack`, `ContinuationChain`, `ExceptionHandler` into delegate types. Postponed — requires stable method surface; do after other refactorings settle.
+- [ ] **F10: MachineContext decomposition** [Medium, Postponed]: 1,638 lines, 80+ methods, 5 responsibilities (VM state, execution loop, continuation mechanics, winding/exception, sub-context creation). Extract continuation (~150 lines), winding/exception (~100 lines), sub-context (~80 lines), foreign call dispatch (~70 lines) into separate files. Postponed — requires stable method surface; do after other refactorings settle.
 - [ ] **F11: Promote internal extensions** [Low, Postponed]: `internal/extensions/{io,eval,all}` invisible to embedders. Promote to `extensions/{io,eval}/` when extension API stabilizes and external consumers exist.
 - [ ] **Parser: unify readList + readLabeledList** [Low, Postponed]: High risk — datum labels require in-place mutation of placeholder pairs. The structural difference is semantic, not accidental. Unifying requires careful design to handle the placeholder protocol.
 - [ ] **Match: extract opcode handlers from VM interpreter** [Low, Postponed]: 264-line switch is large but stable. Extraction adds indirection without clear benefit until new opcodes are needed.

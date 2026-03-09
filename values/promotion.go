@@ -340,7 +340,7 @@ func NumberToFloat64(n Number) float64 {
 	case *BigComplex:
 		return toBigFloat(v.real).Float64()
 	}
-	panic(werr.ErrNotANumber)
+	panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "NumberToFloat64: unsupported type"))
 }
 
 // NumberToComplex128 converts any Number to complex128. BigFloat and
@@ -364,7 +364,7 @@ func NumberToComplex128(n Number) complex128 {
 	case *BigComplex:
 		return complex(toBigFloat(v.real).Float64(), toBigFloat(v.imag).Float64())
 	}
-	panic(werr.ErrNotANumber)
+	panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "NumberToComplex128: unsupported type"))
 }
 
 // cmpFloat64 compares two float64 values, returning -1, 0, or 1.
