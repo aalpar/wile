@@ -16,7 +16,6 @@ package machine
 
 import (
 	"github.com/aalpar/wile/values"
-	"github.com/aalpar/wile/werr"
 )
 
 // callForeignCached executes a *ForeignClosure resolved from cachedBindings[instr.Arg].
@@ -44,17 +43,9 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 
 	l := fcls.paramCount
 
-	// Arity check.
-	if !fcls.isVariadic {
-		if len(vs) != l {
-			return nil, applyCallableError(mc, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
-				"expected %d arguments, got %d", l, len(vs)))
-		}
-	} else {
-		if len(vs) < l-1 {
-			return nil, applyCallableError(mc, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
-				"expected at least %d arguments, got %d", l-1, len(vs)))
-		}
+	err := checkArity(l, fcls.isVariadic, len(vs))
+	if err != nil {
+		return nil, applyCallableError(mc, err)
 	}
 
 	mc.counters.ClosuresApplied++
@@ -66,22 +57,13 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 	bnds := env.LocalEnvironment().Bindings()
 	mc.counters.NoCopyBindingsSaved += uint64(len(bnds))
 
-	if !fcls.isVariadic {
-		for i := range bnds[:l] {
-			bnds[i].SetValue(vs[i])
-		}
-	} else {
-		for i := range bnds[:l-1] {
-			bnds[i].SetValue(vs[i])
-		}
-		bnds[l-1].SetValue(mc.buildRestArg(vs, l-1))
-	}
+	bindArgs(bnds, vs, l, fcls.isVariadic, mc.buildRestArg)
 
 	mc.env = env
 	mc.envPooled = false
 
 	savedTemplate := mc.template
-	err := fcls.fn(mc)
+	err = fcls.fn(mc)
 	if err != nil {
 		return nil, applyCallableError(mc, err)
 	}

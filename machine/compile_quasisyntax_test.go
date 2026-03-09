@@ -733,7 +733,7 @@ func TestCompileQuasisyntaxTemplate_PureLiteral(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Check that only one operation was emitted (LoadLiteral)
-	ops := ccnt.template.EffectiveOperations()
+	ops := ccnt.template.Operations()
 	c.Assert(len(ops), qt.Equals, 1)
 	_, ok := ops[0].(*OperationLoadLiteralByLiteralIndexImmediate)
 	c.Assert(ok, qt.IsTrue)
@@ -781,7 +781,7 @@ func TestCompileQuasisyntaxTemplate_NestedPure(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Should be single LoadLiteral
-	ops := ccnt.template.EffectiveOperations()
+	ops := ccnt.template.Operations()
 	c.Assert(len(ops), qt.Equals, 1)
 	_, ok := ops[0].(*OperationLoadLiteralByLiteralIndexImmediate)
 	c.Assert(ok, qt.IsTrue)

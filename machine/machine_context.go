@@ -428,14 +428,9 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	// Check arity before copying environment (fast-fail path).
 	// Wrong-arity calls are common enough (dynamic typing, variadic dispatch)
 	// that avoiding the copy overhead is worthwhile.
-	if !tpl.IsVariadic() {
-		if len(vs) != l {
-			return nil, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "expected %d arguments, got %d", l, len(vs))
-		}
-	} else {
-		if len(vs) < l-1 {
-			return nil, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "expected at least %d arguments, got %d", l-1, len(vs))
-		}
+	err := checkArity(l, tpl.IsVariadic(), len(vs))
+	if err != nil {
+		return nil, err
 	}
 
 	p.counters.ClosuresApplied++
@@ -470,16 +465,7 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 		p.counters.KeysShared++
 	}
 
-	if !tpl.IsVariadic() {
-		for i := range bnds[:l] {
-			bnds[i].SetValue(vs[i])
-		}
-	} else {
-		for i := range bnds[:l-1] {
-			bnds[i].SetValue(vs[i])
-		}
-		bnds[l-1].SetValue(values.List(vs[l-1:]...))
-	}
+	bindArgs(bnds, vs, l, tpl.IsVariadic(), nil)
 
 	p.template = tpl
 	p.env = env
@@ -493,17 +479,9 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) (*MachineContext, error) {
 	l := fcls.paramCount
 
-	// Arity check (same logic as Apply).
-	if !fcls.isVariadic {
-		if len(vs) != l {
-			return nil, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
-				"expected %d arguments, got %d", l, len(vs))
-		}
-	} else {
-		if len(vs) < l-1 {
-			return nil, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
-				"expected at least %d arguments, got %d", l-1, len(vs))
-		}
+	err := checkArity(l, fcls.isVariadic, len(vs))
+	if err != nil {
+		return nil, err
 	}
 
 	p.counters.ClosuresApplied++
@@ -514,16 +492,7 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	bnds := env.LocalEnvironment().Bindings()
 	p.counters.NoCopyBindingsSaved += uint64(len(bnds))
 
-	if !fcls.isVariadic {
-		for i := range bnds[:l] {
-			bnds[i].SetValue(vs[i])
-		}
-	} else {
-		for i := range bnds[:l-1] {
-			bnds[i].SetValue(vs[i])
-		}
-		bnds[l-1].SetValue(p.buildRestArg(vs, l-1))
-	}
+	bindArgs(bnds, vs, l, fcls.isVariadic, p.buildRestArg)
 
 	p.env = env
 	// envPooled: closure's own env, not from pool.
@@ -539,7 +508,7 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	// configured the VM state.
 	savedTemplate := p.template
 
-	err := fcls.fn(p)
+	err = fcls.fn(p)
 	if err != nil {
 		// Propagate prompt aborts and exception escapes as-is.
 		var abortErr *ErrPromptAbort

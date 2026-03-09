@@ -207,10 +207,11 @@ func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *en
 	return nil
 }
 
-func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]string, targetEnv *environment.EnvironmentFrame, targetPhase int) error {
-	// Source environments to search for exported bindings, in priority order.
-	// Phase 0 (runtime) holds variables, phase 1 (expand) holds syntax bindings
-	// from define-syntax, phase 2 (compile) holds auxiliary syntax (else, =>, ..., _).
+// findLibraryBinding searches the library's runtime, expand, and compile
+// environments for a binding with the given internal name. Returns the
+// binding and the phase it was found in. Returns (nil, 0) if no binding
+// is found in any phase environment.
+func findLibraryBinding(lib *CompiledLibrary, internalName string) (*environment.Binding, int) {
 	sourceEnvs := []struct {
 		env   *environment.EnvironmentFrame
 		phase int
@@ -220,26 +221,27 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 		{lib.Env.Compile(), environment.PhaseCompile},
 	}
 
+	libSym := values.NewSymbol(internalName)
+	for _, src := range sourceEnvs {
+		if src.env == nil {
+			continue
+		}
+		binding := src.env.GetBinding(libSym)
+		if binding != nil {
+			return binding, src.phase
+		}
+	}
+	return nil, 0
+}
+
+func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]string, targetEnv *environment.EnvironmentFrame, targetPhase int) error {
 	for localName, externalName := range bindings {
 		internalName := lib.GetInternalName(externalName)
 		if internalName == "" {
 			internalName = externalName
 		}
 
-		// Search source environments in phase order for the binding.
-		libSym := values.NewSymbol(internalName)
-		var libBinding *environment.Binding
-		sourcePhase := 0
-		for _, src := range sourceEnvs {
-			if src.env == nil {
-				continue
-			}
-			libBinding = src.env.GetBinding(libSym)
-			if libBinding != nil {
-				sourcePhase = src.phase
-				break
-			}
-		}
+		libBinding, sourcePhase := findLibraryBinding(lib, internalName)
 		if libBinding == nil {
 			return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "library %s exports %q but binding not found",
 				lib.Name.SchemeString(), internalName)
@@ -288,21 +290,7 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 			internalName = externalName
 		}
 
-		// Search source environments in phase order: runtime, expand, compile.
-		libSym := values.NewSymbol(internalName)
-		importedBinding := lib.Env.GetBinding(libSym)
-		if importedBinding == nil {
-			expandEnv := lib.Env.Expand()
-			if expandEnv != nil {
-				importedBinding = expandEnv.GetBinding(libSym)
-			}
-		}
-		if importedBinding == nil {
-			compileEnv := lib.Env.Compile()
-			if compileEnv != nil {
-				importedBinding = compileEnv.GetBinding(libSym)
-			}
-		}
+		importedBinding, _ := findLibraryBinding(lib, internalName)
 		if importedBinding == nil {
 			return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "import: %s exports %q but binding not found",
 				lib.Name.SchemeString(), internalName)
