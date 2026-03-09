@@ -420,7 +420,7 @@ Replaces 4 inline mismatch checks in readList and readLabeledList."
 
 ---
 
-## Phase 3: Match Refactoring (M effort, medium value)
+## Phase 3: Match Refactoring (M effort, medium value) ✅
 
 ### Task 3.1: Extract shared symbol expansion helper
 
@@ -507,7 +507,7 @@ SyntaxSymbol handling. Now both delegate to expandSymbol."
 
 ---
 
-## Phase 4: Tokenizer Structural (L effort, medium value)
+## Phase 4: Tokenizer Structural (L effort, medium value) ✅
 
 ### Task 4.1: Extract shared escape sequence table
 

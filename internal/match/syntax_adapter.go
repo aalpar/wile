@@ -270,36 +270,7 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 
 	switch t := template.(type) {
 	case *syntax.SyntaxSymbol:
-		symVal := t.Unwrap().(*values.Symbol)
-
-		// Check if it's a pattern variable by name
-		capturedVal, ok := ctx.bindings[symVal.Key]
-		if ok {
-			// Check scope compatibility before substituting
-			// R7RS nested macro hygiene: only substitute if template symbol's scopes
-			// are compatible with pattern variable's scopes
-			if opts.PatternVarSyntax != nil {
-				patternSym, hasPattern := opts.PatternVarSyntax[symVal.Key]
-				if hasPattern {
-					templateScopes := t.Scopes()
-					patternScopes := patternSym.Scopes()
-
-					// For substitution to occur, pattern var scopes must be subset of template scopes
-					// AND template scopes must be subset of pattern scopes (i.e., scope equality)
-					// This ensures symbols introduced by outer macros are not captured by inner patterns
-					if !scopesCompatibleForSubstitution(templateScopes, patternScopes) {
-						// Scopes don't match - keep template symbol as literal (hygiene!)
-						// Apply intro scope and free ID handling as normal
-						return p.applyHygieneToSymbol(t, opts), nil
-					}
-				}
-			}
-			// Scopes match (or no pattern var syntax) - substitute with captured value
-			return p.capturedValueToSyntax(capturedVal, opts)
-		}
-
-		// Not a pattern variable - apply hygiene as normal
-		return p.applyHygieneToSymbol(t, opts), nil
+		return p.expandSymbol(t, ctx, opts)
 
 	case *syntax.SyntaxPair:
 		if syntax.IsSyntaxEmptyList(t) {
@@ -483,6 +454,33 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 	return newSym
 }
 
+// expandSymbol handles symbol expansion for both normal and escaped template contexts.
+// It checks pattern variable bindings, scope compatibility, and applies hygiene.
+func (p *SyntaxMatcher) expandSymbol(
+	t *syntax.SyntaxSymbol,
+	ctx *captureContext,
+	opts *ExpandOptions,
+) (syntax.SyntaxValue, error) {
+	symVal := t.Unwrap().(*values.Symbol)
+
+	capturedVal, ok := ctx.bindings[symVal.Key]
+	if ok {
+		if opts.PatternVarSyntax != nil {
+			patternSym, hasPattern := opts.PatternVarSyntax[symVal.Key]
+			if hasPattern {
+				templateScopes := t.Scopes()
+				patternScopes := patternSym.Scopes()
+				if !scopesCompatibleForSubstitution(templateScopes, patternScopes) {
+					return p.applyHygieneToSymbol(t, opts), nil
+				}
+			}
+		}
+		return p.capturedValueToSyntax(capturedVal, opts)
+	}
+
+	return p.applyHygieneToSymbol(t, opts), nil
+}
+
 // capturedValueToSyntax converts a captured value back to syntax.
 // Captured values from pattern variable substitution preserve their original scopes.
 // Since bindings now store syntax.SyntaxValue directly, this typically just returns
@@ -640,27 +638,7 @@ func (p *SyntaxMatcher) expandEscapedSyntaxTemplate(
 
 	switch t := template.(type) {
 	case *syntax.SyntaxSymbol:
-		symVal := t.Unwrap().(*values.Symbol)
-
-		// Check if it's a pattern variable by name
-		capturedVal, ok := ctx.bindings[symVal.Key]
-		if ok {
-			// Check scope compatibility before substituting
-			if opts.PatternVarSyntax != nil {
-				patternSym, hasPattern := opts.PatternVarSyntax[symVal.Key]
-				if hasPattern {
-					templateScopes := t.Scopes()
-					patternScopes := patternSym.Scopes()
-
-					if !scopesCompatibleForSubstitution(templateScopes, patternScopes) {
-						return p.applyHygieneToSymbol(t, opts), nil
-					}
-				}
-			}
-			return p.capturedValueToSyntax(capturedVal, opts)
-		}
-
-		return p.applyHygieneToSymbol(t, opts), nil
+		return p.expandSymbol(t, ctx, opts)
 
 	case *syntax.SyntaxPair:
 		if syntax.IsSyntaxEmptyList(t) {
