@@ -46,7 +46,6 @@ func PrimNumerator(mc *machine.MachineContext) error {
 		f, _ := new(big.Float).SetInt(num).Float64()
 		mc.SetValue(values.NewFloat(f))
 	case *values.BigFloat:
-		// L18: Handle BigFloat from Rational.ToInexact()
 		// R7RS §6.2.6: inexact input → inexact output
 		r, _ := v.BigFloatValue().Rat(nil)
 		if r == nil {
@@ -84,7 +83,6 @@ func PrimDenominator(mc *machine.MachineContext) error {
 		f, _ := new(big.Float).SetInt(denom).Float64()
 		mc.SetValue(values.NewFloat(f))
 	case *values.BigFloat:
-		// L18: Handle BigFloat from Rational.ToInexact()
 		// R7RS §6.2.6: inexact input → inexact output
 		r, _ := v.BigFloatValue().Rat(nil)
 		if r == nil {

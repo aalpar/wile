@@ -65,6 +65,9 @@ func PrimLog(mc *machine.MachineContext) error {
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotAList, "log: expected a list for rest arguments")
 		}
+		if !values.IsEmptyList(baseArg.Cdr()) {
+			return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "log: expected 1 or 2 arguments")
+		}
 		base, err := helpers.ToComplex128(baseArg.Car())
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "log: %v", err)
@@ -93,6 +96,9 @@ func PrimAtan(mc *machine.MachineContext) error {
 		xArg, ok := rest.(values.Tuple)
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotAList, "atan: expected a list for rest arguments")
+		}
+		if !values.IsEmptyList(xArg.Cdr()) {
+			return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "atan: expected 1 or 2 arguments")
 		}
 		x, err := helpers.ToFloat64(xArg.Car())
 		if err != nil {

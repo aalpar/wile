@@ -55,6 +55,9 @@ func PrimNumberToString(mc *machine.MachineContext) error {
 			if !ok {
 				return werr.WrapForeignErrorf(werr.ErrNotANumber, "number->string: expected an integer radix but got %T", pr.Car())
 			}
+			if !values.IsEmptyList(pr.Cdr()) {
+				return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "number->string: expected 1 or 2 arguments")
+			}
 			radix = int(r.Value)
 			if radix != 2 && radix != 8 && radix != 10 && radix != 16 {
 				return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "number->string: radix must be 2, 8, 10, or 16")
@@ -117,7 +120,13 @@ func PrimStringToNumber(mc *machine.MachineContext) error {
 			if !ok {
 				return werr.WrapForeignErrorf(werr.ErrNotANumber, "string->number: expected an integer radix but got %T", pr.Car())
 			}
+			if !values.IsEmptyList(pr.Cdr()) {
+				return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "string->number: expected 1 or 2 arguments")
+			}
 			radix = int(r.Value)
+			if radix != 2 && radix != 8 && radix != 10 && radix != 16 {
+				return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "string->number: radix must be 2, 8, 10, or 16")
+			}
 		}
 	}
 
