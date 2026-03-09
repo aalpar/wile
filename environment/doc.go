@@ -18,13 +18,13 @@
 //   - Lexical scoping via parent chain traversal
 //   - Phase separation (Runtime, Expand, Compile)
 //   - Hygienic macros via Flatt's "sets of scopes" model
-//   - Per-instance symbol interning for eq? identity
+//   - Per-instance syntax interning for consistent syntax identity
 //   - R7RS library import/export mappings
 //
 // # Architecture
 //
 // Each Wile VM instance owns a [TopLevelEnvironment] that provides:
-//   - Symbol interning (thread-safe, per-instance)
+//   - Syntax interning (thread-safe, per-instance)
 //   - Phase registry for accessing phase-specific environments
 //   - The runtime [EnvironmentFrame] tree
 //

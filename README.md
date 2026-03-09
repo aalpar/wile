@@ -190,7 +190,7 @@ ls examples/
 ```
 
 **Explore**:
-- [**75 Examples**](examples/) — Basics, macros, concurrency, numeric tower, and more
+- [**76 Examples**](examples/) — Basics, macros, concurrency, numeric tower, and more
 - [**Gabriel Benchmarks**](examples/benchmarks/) — Scheme benchmarks for performance testing
 - [**Schelog**](examples/logic/schelog/) — Full Prolog-style logic programming embedded in Scheme
 - [**Embedding Guide**](examples/embedding/) — How to use Wile from Go
@@ -243,7 +243,7 @@ ls examples/
 (let ((ch (make-channel)))
   (thread-start!
    (make-thread
-    (lambda () (channel-send ch 42))))
+    (lambda () (channel-send! ch 42))))
   (channel-receive ch))  ; ⇒ 42
 ```
 

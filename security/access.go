@@ -17,8 +17,8 @@
 // helpers that gate primitives like file I/O, code loading, and
 // process control.
 //
-// The package has no dependencies on the rest of wile and can be
-// imported independently.
+// The package depends only on werr/ for error types and can be
+// imported with minimal dependencies.
 package security
 
 // AccessRequest describes an operation that requires authorization.

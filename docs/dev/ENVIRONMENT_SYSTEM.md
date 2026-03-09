@@ -1,6 +1,6 @@
 # Environment System
 
-This document describes Wile's environment system, which manages variable bindings, symbol interning, and the phase hierarchy for macro expansion.
+This document describes Wile's environment system, which manages variable bindings, syntax interning, and the phase hierarchy for macro expansion.
 
 ---
 
@@ -11,10 +11,9 @@ The environment system has four key types organized in a hierarchy:
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                        TopLevelEnvironment                              │
-│  (Per-VM instance: owns symbol/syntax interning, phases, libraries)    │
+│  (Per-VM instance: owns syntax interning, phases, libraries)           │
 │                                                                         │
-│  symbolInterns ──── map[Symbol]*Symbol (thread-safe, per-instance)     │
-│  syntaxInterns ──── map[Value]SyntaxValue (thread-safe)                │
+│  syntaxInterns ──── map[Value]SyntaxValue (thread-safe, per-instance)  │
 │  phases ─────────── *PhaseRegistry                                     │
 │  libraryRegistry ── any (*machine.LibraryRegistry)                     │
 │  runtime ────────── *EnvironmentFrame (phase 0)                        │
@@ -52,8 +51,7 @@ The environment system has four key types organized in a hierarchy:
 
 The `TopLevelEnvironment` is the root of the environment hierarchy. Each Wile VM instance has exactly one TopLevelEnvironment which owns:
 
-- **Symbol interning table**: Ensures `(eq? 'foo 'foo)` is `#t` per R7RS §6.5
-- **Syntax interning table**: Caches syntax objects for hygiene
+- **Syntax interning table**: Caches syntax objects for consistent identity across macro expansion
 - **Phase registry**: O(1) access to any phase environment
 - **Library registry**: Tracks loaded R7RS libraries
 
@@ -68,28 +66,18 @@ env := topLevel.Runtime()  // Get the runtime (phase 0) environment
 env := environment.NewTopLevelEnvironmentFrame()
 ```
 
-### Symbol Interning
+### Syntax Interning
 
-Symbol interning is **per-TopLevelEnvironment**, ensuring symbol identity works correctly:
+Syntax interning is **per-TopLevelEnvironment**, ensuring consistent syntax object identity during macro expansion:
 
 ```go
 topLevel := environment.NewTopLevelEnvironment()
 
-// These will be eq? because they're interned in the same TopLevelEnvironment
-sym1 := topLevel.InternSymbol(values.NewSymbol("foo"))
-sym2 := topLevel.InternSymbol(values.NewSymbol("foo"))
-// sym1 == sym2 (pointer equality)
-
-// Symbols from different TopLevelEnvironments are NOT eq?
-otherTopLevel := environment.NewTopLevelEnvironment()
-sym3 := otherTopLevel.InternSymbol(values.NewSymbol("foo"))
-// sym1 != sym3 (different instances)
+// Syntax objects are interned for consistent identity
+interned := topLevel.InternSyntax(key, syntaxValue)
 ```
 
-This design enables:
-- Multiple isolated Wile VMs in one Go process
-- Clean VM teardown without affecting other instances
-- R7RS §6.5 compliance: "Two symbols are identical if and only if their names are spelled the same way"
+**Note:** Symbol `eq?` identity does not use interning. Symbols are compared by their string key via `helpers.EqIdentity`, satisfying R7RS §6.5 ("Two symbols are identical if and only if their names are spelled the same way") without per-instance interning.
 
 ---
 
@@ -146,10 +134,10 @@ childEnv := environment.NewEnvironmentFrameWithParent(localEnv, topEnv)
 
 ### For Libraries
 
-Libraries need isolated bindings but must share the `TopLevelEnvironment` for symbol identity:
+Libraries need isolated bindings but must share the `TopLevelEnvironment` for syntax identity:
 
 ```go
-// WRONG: Creates new TopLevelEnvironment, breaks symbol eq?
+// WRONG: Creates new TopLevelEnvironment, breaks syntax identity
 // libEnv := environment.NewTopLevelEnvironmentFrame()
 
 // CORRECT: Share TopLevelEnvironment with caller
@@ -160,7 +148,7 @@ libEnv := callerTopLevel.NewChildRuntime()
 The `NewChildRuntime` method creates an environment that:
 - Has its own `GlobalEnvironmentFrame` (isolated bindings)
 - Has its own `PhaseRegistry` (isolated phase hierarchy)
-- Shares the `TopLevelEnvironment` (symbol/syntax interning)
+- Shares the `TopLevelEnvironment` (syntax interning)
 
 ---
 
@@ -170,16 +158,9 @@ The `LibraryEnvFactory` field on `TopLevelEnvironment` creates environments for 
 
 ```go
 // In internal/bootstrap/environment_tiny.go
-func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.EnvironmentFrame) (*environment.EnvironmentFrame, error) {
-    // Get caller's TopLevelEnvironment
-    callerTopLevel := callerEnv.TopLevelEnv()
-    if callerTopLevel == nil {
-        return nil, values.WrapForeignErrorf(values.ErrMissingTopLevelEnvironment,
-            "caller environment has no TopLevelEnvironment")
-    }
-
-    // Create a new environment that shares the TopLevelEnvironment
-    libEnv := callerTopLevel.NewChildRuntime()
+func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.EnvironmentFrame, _ []string) (*environment.EnvironmentFrame, error) {
+    // Create a new environment that shares the caller's TopLevelEnvironment
+    libEnv := callerEnv.TopLevelEnv().NewChildRuntime()
 
     // Initialize with shared sequence (primitives, macros, etc.)
     // ...
@@ -270,45 +251,17 @@ These invariants must be maintained:
    - Use `NewTopLevelEnvironmentFrame()` or `NewEnvironmentFrameWithParent()` with a valid parent
    - Never call `NewEnvironmentFrameWithParent(local, nil)` - it will panic
 
-2. **Symbol interning requires TopLevelEnvironment**
-   - `InternSymbol()` panics if `topLevel` is nil
+2. **Syntax interning requires TopLevelEnvironment**
+   - `InternSyntax()` delegates to parent if this is a child environment
    - Always create environments properly
 
 3. **Libraries share TopLevelEnvironment with caller**
    - `TopLevelEnvironment.LibraryEnvFactory()` must use caller's TopLevelEnvironment
-   - Failure breaks `(eq? 'foo (string->symbol "foo"))` per R7RS §6.5
+   - Failure breaks syntax identity across library boundaries
 
 4. **Phase environments share TopLevelEnvironment**
    - All phases use the same interning tables
    - Expand-phase macros can reference runtime symbols correctly
-
----
-
-## Migration from Legacy Environments
-
-The following patterns are deprecated and will panic:
-
-```go
-// DEPRECATED: Creates environment without TopLevelEnvironment
-env := environment.NewEnvironmentFrame(nil, nil)
-
-// DEPRECATED: Creates GlobalEnvironmentFrame without TopLevelEnvironment
-genv := environment.NewGlobalEnvironmentFrame()
-env := environment.NewEnvironmentFrame(nil, genv)
-
-// DEPRECATED: Parent cannot be nil
-env := environment.NewEnvironmentFrameWithParent(local, nil)
-```
-
-Replace with:
-
-```go
-// CORRECT: Creates environment with proper TopLevelEnvironment
-env := environment.NewTopLevelEnvironmentFrame()
-
-// CORRECT: Create child with parent
-childEnv := environment.NewEnvironmentFrameWithParent(local, parentEnv)
-```
 
 ---
 
@@ -387,7 +340,6 @@ The stack lives on `TopLevelEnvironment`, shared across all child environments v
 
 ## Thread Safety
 
-- `TopLevelEnvironment.InternSymbol()` - Thread-safe (uses RWMutex)
 - `TopLevelEnvironment.InternSyntax()` - Thread-safe (uses RWMutex)
 - `PhaseRegistry.GetOrCreate()` - Thread-safe (uses RWMutex)
 - `LoadPathStack` - Thread-safe for individual operations (uses Mutex); LIFO ordering only guaranteed single-threaded

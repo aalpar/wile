@@ -89,7 +89,7 @@ func addPrimitives(r *registry.Registry) error {
 func primDouble(mc *machine.MachineContext) error {
     n, ok := mc.Arg(0).(values.Number)
     if !ok {
-        return values.WrapForeignErrorf(values.ErrNotANumber, "double: expected number")
+        return werr.WrapForeignErrorf(werr.ErrNotANumber, "double: expected number")
     }
     mc.SetValue(n.Add(n))
     return nil
@@ -157,10 +157,23 @@ Extensions can implement additional interfaces for extra behavior:
 // Custom library name: (myorg utils) instead of (wile custom)
 type myExtension struct{}
 
-func (e *myExtension) Name() string                          { return "custom" }
-func (e *myExtension) AddToRegistry(r *registry.Registry) error { /* ... */ }
-func (e *myExtension) LibraryName() []string                 { return []string{"myorg", "utils"} }
-func (e *myExtension) Close() error                          { /* cleanup */ }
+func (e *myExtension) Name() string {
+	return "custom"
+}
+
+func (e *myExtension) AddToRegistry(r *registry.Registry) error {
+	// ... register primitives ...
+	return nil
+}
+
+func (e *myExtension) LibraryName() []string {
+	return []string{"myorg", "utils"}
+}
+
+func (e *myExtension) Close() error {
+	// cleanup
+	return nil
+}
 ```
 
 ---
@@ -309,11 +322,11 @@ func(mc *machine.MachineContext) error
 func primAdd(mc *machine.MachineContext) error {
     a, ok := mc.Arg(0).(values.Number)
     if !ok {
-        return values.WrapForeignErrorf(values.ErrNotANumber, "add: first argument")
+        return werr.WrapForeignErrorf(werr.ErrNotANumber, "add: first argument")
     }
     b, ok := mc.Arg(1).(values.Number)
     if !ok {
-        return values.WrapForeignErrorf(values.ErrNotANumber, "add: second argument")
+        return werr.WrapForeignErrorf(werr.ErrNotANumber, "add: second argument")
     }
     // Number.Add panics on unknown types; the VM recovers panics
     mc.SetValue(a.Add(b))
@@ -347,11 +360,11 @@ Use project error types, not bare `errors.New` or `fmt.Errorf`:
 
 ```go
 // Type check errors
-return values.WrapForeignErrorf(values.ErrTypeConversion,
+return werr.WrapForeignErrorf(werr.ErrTypeConversion,
     "sqrt: expected number, got %s", v.SchemeString())
 
 // Wrong argument count
-return values.WrapForeignErrorf(values.ErrWrongNumberOfArguments,
+return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
     "my-fn: expected 2 arguments, got %d", n)
 ```
 

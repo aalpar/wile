@@ -43,13 +43,13 @@ Use Go channels or goroutines for non-blocking I/O patterns:
     (read-char port)
     'not-ready)
 
-;; Use a thread with timeout:
-(let ((result (make-channel)))
+;; Use a thread to read asynchronously:
+(let ((ch (make-channel)))
   (thread-start!
     (make-thread
       (lambda ()
-        (channel-send! result (read-char port)))))
-  (channel-receive/timeout result 1000 'timeout))
+        (channel-send! ch (read-char port)))))
+  (channel-receive ch))
 ```
 
 **Impact:** **LOW** — `char-ready?` and `u8-ready?` are rarely used in modern Scheme code. These predicates were designed for select-style event loops, a pattern largely superseded by async/await and channel-based concurrency. Most I/O in Wile is either:
