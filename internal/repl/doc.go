@@ -39,9 +39,4 @@
 //	,next               Step over (same frame)
 //	,continue           Continue execution
 //	,backtrace          Show stack trace
-//
-// # Standalone Functions
-//
-// [Compile] and [Run] are exported for use outside the REPL loop,
-// providing the canonical compilation pipeline entry points.
 package repl
