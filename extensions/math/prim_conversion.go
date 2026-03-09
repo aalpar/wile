@@ -1,0 +1,301 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package math
+
+import (
+	"math"
+	"math/big"
+	"strconv"
+	"strings"
+
+	"github.com/aalpar/wile/internal/parser"
+	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
+)
+
+// ensureInexactDecimal ensures a float string has a decimal point, even in
+// scientific notation. "5e-324" becomes "5.0e-324", "1" becomes "1.0".
+func ensureInexactDecimal(s string) string {
+	eIdx := strings.IndexAny(s, "eE")
+	if eIdx >= 0 {
+		mantissa := s[:eIdx]
+		if !strings.ContainsRune(mantissa, '.') {
+			return mantissa + ".0" + s[eIdx:]
+		}
+		return s
+	}
+	if !strings.ContainsRune(s, '.') {
+		return s + ".0"
+	}
+	return s
+}
+
+// PrimNumberToString implements the number->string primitive.
+func PrimNumberToString(mc *machine.MachineContext) error {
+	n := mc.Arg(0)
+	rest := mc.Arg(1)
+	radix := 10
+	if !values.IsEmptyList(rest) {
+		pr, ok := rest.(values.Tuple)
+		if ok && !pr.IsEmptyList() {
+			r, ok := pr.Car().(*values.Integer)
+			if !ok {
+				return werr.WrapForeignErrorf(werr.ErrNotANumber, "number->string: expected an integer radix but got %T", pr.Car())
+			}
+			radix = int(r.Value)
+			if radix != 2 && radix != 8 && radix != 10 && radix != 16 {
+				return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "number->string: radix must be 2, 8, 10, or 16")
+			}
+		}
+	}
+	switch v := n.(type) {
+	case *values.Integer:
+		mc.SetValue(values.NewString(strconv.FormatInt(v.Value, radix)))
+	case *values.Float:
+		switch {
+		case math.IsInf(v.Value, 1):
+			mc.SetValue(values.NewString("+inf.0"))
+		case math.IsInf(v.Value, -1):
+			mc.SetValue(values.NewString("-inf.0"))
+		case math.IsNaN(v.Value):
+			mc.SetValue(values.NewString("+nan.0"))
+		default:
+			s := strconv.FormatFloat(v.Value, 'g', -1, 64)
+			s = ensureInexactDecimal(s)
+			mc.SetValue(values.NewString(s))
+		}
+	case *values.Rational:
+		mc.SetValue(values.NewString(v.SchemeString()))
+	case *values.Complex:
+		mc.SetValue(values.NewString(v.SchemeString()))
+	case *values.BigComplex:
+		mc.SetValue(values.NewString(v.SchemeString()))
+	case *values.BigInteger:
+		mc.SetValue(values.NewString(v.BigInt().Text(radix)))
+	case *values.BigFloat:
+		mc.SetValue(values.NewString(v.SchemeString()))
+	default:
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "number->string: expected a number but got %T", n)
+	}
+	return nil
+}
+
+// PrimStringToNumber implements the string->number primitive.
+//
+// R7RS §6.2.7: string->number returns a number of the maximally precise
+// representation expressed by the given string. It is an error if radix
+// is not 2, 8, 10, or 16.
+//
+// R7RS §7.1.1: The string may contain prefix directives #b, #o, #d, #x
+// (radix) and #e, #i (exactness), in either order, up to one of each.
+// A radix prefix in the string overrides the radix argument.
+func PrimStringToNumber(mc *machine.MachineContext) error {
+	s := mc.Arg(0)
+	rest := mc.Arg(1)
+	str, ok := s.(*values.String)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAString, "string->number: expected a string but got %T", s)
+	}
+	radix := 10
+	if !values.IsEmptyList(rest) {
+		pr, ok := rest.(values.Tuple)
+		if ok && !pr.IsEmptyList() {
+			r, ok := pr.Car().(*values.Integer)
+			if !ok {
+				return werr.WrapForeignErrorf(werr.ErrNotANumber, "string->number: expected an integer radix but got %T", pr.Car())
+			}
+			radix = int(r.Value)
+		}
+	}
+
+	input := str.Value
+	exactness := 0 // 0 = unspecified, 1 = exact (#e), -1 = inexact (#i)
+
+	// Parse up to two R7RS prefix directives.
+	for range 2 {
+		if len(input) < 2 || input[0] != '#' {
+			break
+		}
+		switch input[1] {
+		case 'b', 'B':
+			radix = 2
+			input = input[2:]
+		case 'o', 'O':
+			radix = 8
+			input = input[2:]
+		case 'd', 'D':
+			radix = 10
+			input = input[2:]
+		case 'x', 'X':
+			radix = 16
+			input = input[2:]
+		case 'e', 'E':
+			exactness = 1
+			input = input[2:]
+		case 'i', 'I':
+			exactness = -1
+			input = input[2:]
+		default:
+			// Unknown prefix — not a valid number.
+			mc.SetValue(values.FalseValue)
+			return nil
+		}
+	}
+
+	result := parseStringToNumber(input, radix)
+	if result == nil {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+
+	// Apply exactness conversion if a prefix was specified.
+	switch exactness {
+	case 1:
+		result = stringToNumberMakeExact(result)
+	case -1:
+		result = stringToNumberMakeInexact(result)
+	}
+
+	mc.SetValue(result)
+	return nil
+}
+
+// parseStringToNumber parses a numeric string in the given radix.
+// Returns nil if the string is not a valid number.
+// R7RS §6.2.7: handles integers, rationals, floats, complex, and special values.
+func parseStringToNumber(input string, radix int) values.Value {
+	if len(input) == 0 {
+		return nil
+	}
+
+	// Special float values (+inf.0, -inf.0, +nan.0, -nan.0) are always decimal.
+	sf, ok := parser.ParseSpecialFloat(input)
+	if ok {
+		return sf
+	}
+
+	// Complex and imaginary numbers (only for radix 10).
+	if radix == 10 && len(input) > 1 && (input[len(input)-1] == 'i' || input[len(input)-1] == 'I') {
+		// Try pure imaginary first (no real part separator).
+		n, imagOK := parser.ParseImaginaryStringNumber(input)
+		if imagOK {
+			return n
+		}
+		// Try full complex (real + imaginary parts).
+		n, complexOK := parser.ParseComplexStringNumber(input)
+		if complexOK {
+			return n
+		}
+	}
+
+	// Try integer first.
+	i, err := strconv.ParseInt(input, radix, 64)
+	if err == nil {
+		return values.NewInteger(i)
+	}
+
+	// Try big integer for overflow.
+	bi := new(big.Int)
+	_, bigOK := bi.SetString(input, radix)
+	if bigOK {
+		return values.NewBigInteger(bi)
+	}
+
+	// Try rational (only if radix applies to both parts).
+	idx := strings.Index(input, "/")
+	if idx > 0 && idx < len(input)-1 {
+		numStr := input[:idx]
+		denStr := input[idx+1:]
+		num := new(big.Int)
+		den := new(big.Int)
+		_, ok := num.SetString(numStr, radix)
+		if ok {
+			_, ok := den.SetString(denStr, radix)
+			if ok {
+				if den.Sign() == 0 {
+					return nil
+				}
+				r := new(big.Rat).SetFrac(num, den)
+				return values.Simplify(values.NewRationalFromRat(r))
+			}
+		}
+	}
+
+	// Float and scientific notation only for radix 10.
+	if radix == 10 {
+		f, err := strconv.ParseFloat(normalizeExponentMarker(input), 64)
+		if err == nil {
+			return values.NewFloat(f)
+		}
+	}
+
+	return nil
+}
+
+// stringToNumberMakeExact converts a number to its exact representation.
+//
+// R7RS §6.2.6: exact returns an exact representation of z.
+func stringToNumberMakeExact(n values.Value) values.Value {
+	switch v := n.(type) {
+	case *values.Integer, *values.BigInteger, *values.Rational:
+		return v
+	case *values.Float:
+		f := v.Value
+		if f == math.Trunc(f) && f >= math.MinInt64 && f <= math.MaxInt64 {
+			return values.NewInteger(int64(f))
+		}
+		r := new(big.Rat).SetFloat64(f)
+		if r == nil {
+			return n // inf/nan — cannot convert
+		}
+		return values.Simplify(values.NewRationalFromRat(r))
+	default:
+		return n
+	}
+}
+
+// stringToNumberMakeInexact converts a number to its inexact representation.
+//
+// R7RS §6.2.6: inexact returns an inexact representation of z.
+func stringToNumberMakeInexact(n values.Value) values.Value {
+	switch v := n.(type) {
+	case *values.Float:
+		return v
+	case *values.Integer:
+		return values.NewFloat(float64(v.Value))
+	case *values.BigInteger:
+		f, _ := new(big.Float).SetInt(v.BigInt()).Float64()
+		return values.NewFloat(f)
+	case *values.Rational:
+		f, _ := v.Rat().Float64()
+		return values.NewFloat(f)
+	default:
+		return n
+	}
+}
+
+// normalizeExponentMarker replaces R7RS short float exponent suffixes
+// (s, S, f, F, d, D, l, L) with 'e' so strconv.ParseFloat can parse them.
+// R7RS §7.1.1: All exponent markers have the same meaning in Wile.
+func normalizeExponentMarker(s string) string {
+	idx := strings.IndexAny(s, "sSfFdDlL")
+	if idx == -1 {
+		return s
+	}
+	q := []byte(s)
+	q[idx] = 'e'
+	return string(q)
+}
