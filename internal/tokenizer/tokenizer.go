@@ -91,6 +91,24 @@ var (
 	ErrNotALiteral             = werr.NewStaticError("not a literal")
 )
 
+// charMnemonics maps R7RS character mnemonic names (lowercased) to their rune values.
+// R7RS §6.6: Character names are case-insensitive.
+// Keys must be lowercase — lookup normalizes via strings.ToLower.
+var charMnemonics = map[string]rune{
+	"alarm":        '\a',
+	"backspace":    '\b',
+	"back-space":   '\b',
+	"delete":       '\x7F',
+	"escape":       '\x1B',
+	"newline":      '\n',
+	"null":         '\x00',
+	"return":       '\r',
+	"space":        ' ',
+	"tab":          '\t',
+	"vertical-tab": '\v',
+	"form-feed":    '\f',
+}
+
 // TokenizerState represents the type of token recognized by the tokenizer.
 // Each state corresponds to a distinct lexical element in Scheme syntax.
 type TokenizerState int
@@ -997,29 +1015,9 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 			mnemonic += string(p.curr())
 			p.next() // skip letter
 		}
-		switch {
-		case strings.EqualFold(mnemonic, "alarm"):
-			return '\a'
-		case strings.EqualFold(mnemonic, "backspace"), strings.EqualFold(mnemonic, "back-space"):
-			return '\b'
-		case strings.EqualFold(mnemonic, "delete"):
-			return '\x7F'
-		case strings.EqualFold(mnemonic, "escape"):
-			return '\x1B'
-		case strings.EqualFold(mnemonic, "newline"):
-			return '\n'
-		case strings.EqualFold(mnemonic, "null"):
-			return '\x00'
-		case strings.EqualFold(mnemonic, "return"):
-			return '\r'
-		case strings.EqualFold(mnemonic, "space"):
-			return ' '
-		case strings.EqualFold(mnemonic, "tab"):
-			return '\t'
-		case strings.EqualFold(mnemonic, "vertical-tab"):
-			return '\v'
-		case strings.EqualFold(mnemonic, "form-feed"):
-			return '\f'
+		r, ok := charMnemonics[strings.ToLower(mnemonic)]
+		if ok {
+			return r
 		}
 		p.err = NewTokenizerError(MessageInvalidCharacterMnemonic)
 		return utf8.RuneError
