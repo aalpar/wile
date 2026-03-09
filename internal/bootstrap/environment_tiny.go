@@ -66,9 +66,14 @@ var allExtensions = []registry.Extension{
 }
 
 // initializeEnvironmentWithRegistry is the shared initialization sequence for environment creation.
-// It creates a registry, adds all extensions, applies primitives, registers compilers/expanders,
-// loads bootstrap macros, and returns the populated registry.
-func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.EnvironmentFrame) (*registry.Registry, error) {
+// It creates a registry, adds the specified extensions, applies primitives, registers
+// compilers/expanders, loads bootstrap macros, and returns the populated registry.
+// If exts is nil, all extensions are loaded (backward compatible).
+func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.EnvironmentFrame, exts []registry.Extension) (*registry.Registry, error) {
+	if exts == nil {
+		exts = allExtensions
+	}
+
 	// Create registry with core primitives
 	reg := registry.NewRegistry()
 	err := core.AddToRegistry(reg)
@@ -76,8 +81,8 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 		return nil, werr.WrapForeignErrorf(err, "error adding core to registry")
 	}
 
-	// Add all extensions
-	for _, ext := range allExtensions {
+	// Add extensions
+	for _, ext := range exts {
 		err := ext.AddToRegistry(reg)
 		if err != nil {
 			return nil, werr.WrapForeignErrorf(err, "error adding extension %s to registry", ext.Name())
@@ -115,7 +120,7 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 // It creates a registry, adds all extensions, applies primitives, registers compilers/expanders,
 // and loads bootstrap macros.
 func initializeEnvironment(ctx context.Context, env *environment.EnvironmentFrame) error {
-	_, err := initializeEnvironmentWithRegistry(ctx, env)
+	_, err := initializeEnvironmentWithRegistry(ctx, env, nil)
 	return err
 }
 
@@ -147,7 +152,7 @@ func NewTopLevelWithRegistry(ctx context.Context) (*environment.EnvironmentFrame
 	env := topLevel.Runtime()
 
 	// Initialize with shared sequence, keeping the registry
-	reg, err := initializeEnvironmentWithRegistry(ctx, env)
+	reg, err := initializeEnvironmentWithRegistry(ctx, env, nil)
 	if err != nil {
 		return nil, nil, err
 	}
