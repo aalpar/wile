@@ -106,3 +106,6 @@ No demand signal. Speculative or research-only.
 - [ ] **Foreign Stack trace entry in stack traces that cross from Native -> Foriegn -> Native callback.
 - [ ] **Area for blog articles** Git blog area in repo
 - [ ] **Finish blog article** Finish blog article on appropriateness of Scheme for sandboxing.
+- [ ] **Go AST extension Phase 1 — Core** [Standard library, M]: Extension (`extensions/goast/`, `(wile goast)`) wrapping `go/ast`, `go/parser`, `go/token`, `go/format`. S-expression alist representation. ~28 node types (declarations, statements, expressions, basic types). All 5 primitives (`go-parse-file`, `go-parse-string`, `go-parse-expr`, `go-format`, `go-node-type`). Bidirectional mapper + round-trip tests. `plans/GO-AST.md`
+- [ ] **Go AST extension Phase 2 — Advanced** [Standard library, S]: Concurrency (`GoStmt`, `DeferStmt`, `SelectStmt`, `CommClause`), switch (`SwitchStmt`, `TypeSwitchStmt`, `CaseClause`), `SliceExpr`, `TypeAssertExpr`, `ChanType`, `Ellipsis`, `LabeledStmt`. ~12 additional node types. `plans/GO-AST.md`
+- [ ] **Go AST extension Phase 3 — Comments & generics** [Standard library, S]: `Comment`/`CommentGroup` attachment for round-trip structural fidelity. `BadExpr`/`BadStmt`/`BadDecl` for error recovery. `IndexListExpr` for generics. `plans/GO-AST.md`
