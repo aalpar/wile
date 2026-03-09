@@ -683,7 +683,7 @@ func (p *Tokenizer) readUnsignedBaseNInteger(r, maxn int) (int64, int) {
 	// always attempt to parse s, even on error
 	q, err = strconv.ParseInt(s.String(), r, 64)
 	if err != nil {
-		err = NewTokenizerErrorWithWrap(p.err, MessageCannotParseNumber)
+		err = NewTokenizerErrorWithWrap(err, MessageCannotParseNumber)
 	}
 	if p.err == nil {
 		p.err = err

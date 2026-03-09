@@ -26,10 +26,7 @@ func isUnicodeDigit(c rune) bool {
 
 // isSymbolSubsequent returns true if c can appear after the first character of a symbol.
 func isSymbolSubsequent(c rune) bool {
-	for isInitial(c) || isSpecialSubsequent(c) || isExtendedSubsequent(c) || isUnicodeDigit(c) {
-		return true
-	}
-	return false
+	return isInitial(c) || isSpecialSubsequent(c) || isExtendedSubsequent(c) || isUnicodeDigit(c)
 }
 
 // isVerticalLine returns true if c is the vertical line character (|).
@@ -118,7 +115,7 @@ func isNumberInitial(r int, c rune) bool {
 	return false
 }
 
-// isMarket returns true if c is a market character (#).
+// isMarker returns true if c is a marker character (#).
 func isMarker(c rune) bool {
 	return c == '#'
 }
@@ -153,7 +150,7 @@ func isBackSlash(c rune) bool {
 	return c == '\\'
 }
 
-// isQuote returns true if c is a backslash (\).
+// isQuote returns true if c is a single quote (').
 func isQuote(c rune) bool {
 	return c == '\''
 }

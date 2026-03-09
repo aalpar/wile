@@ -81,9 +81,11 @@ func (p *MetaCommandHandler) Commands() []string {
 			names = append(names, cmd.aliases...)
 		}
 	}
-	for _, dc := range p.debugCtx.DebugCommands() {
-		names = append(names, dc.Name)
-		names = append(names, dc.Aliases...)
+	if p.debugCtx != nil {
+		for _, dc := range p.debugCtx.DebugCommands() {
+			names = append(names, dc.Name)
+			names = append(names, dc.Aliases...)
+		}
 	}
 	return names
 }
