@@ -50,7 +50,7 @@ func TestEquality_ArityErrors(t *testing.T) {
 		testhelpers.RunSchemeCodeExpectError(t, "(not 1 2)")
 	})
 
-	// Variadic with minimum 1 arg: boolean=?, symbol=?
+	// Variadic with minimum 2 args: boolean=?, symbol=?
 	variadicMin1 := []string{
 		"boolean=?",
 		"symbol=?",

@@ -603,7 +603,7 @@ func TestMultiEnv_LibraryPrimitiveAvailability(t *testing.T) {
 		{"predicate/string?", `(string? "x")`, values.TrueValue},
 		{"predicate/zero?", `(zero? 0)`, values.TrueValue},
 
-		// addEquality + addBoolean
+		// addEquality (+ bootstrap procedures: not)
 		{"equality/eq?", `(eq? 'a 'a)`, values.TrueValue},
 		{"equality/eqv?", `(eqv? 1 1)`, values.TrueValue},
 		{"equality/equal?", `(equal? '(1 2) '(1 2))`, values.TrueValue},

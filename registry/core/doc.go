@@ -18,9 +18,9 @@
 //
 // # Primitives
 //
-//   - Type predicates: null?, pair?, list?, number?, string?, symbol?, etc.
-//   - Equality: eq?, eqv?, equal?, boolean=?, symbol=?
-//   - Pairs and lists: cons, car, cdr, list, append, reverse, member, assoc
+//   - Type predicates: null?, pair?, number?, string?, symbol?, etc.
+//   - Equality: eq?, eqv?, equal?
+//   - Pairs and lists: cons, car, cdr, list, append, reverse
 //   - Arithmetic: +, -, *, /, comparisons, min, max, gcd, lcm
 //   - Vectors: make-vector, vector-ref, vector-set!, vector->list
 //   - Strings: string-length, string-ref, string-append, string comparisons
