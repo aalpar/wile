@@ -41,3 +41,71 @@
            (if #f #f)
            (begin (apply f (map car all))
                   (loop (map cdr all))))))))
+
+;; Vector higher-order operations
+;; Implemented in Scheme so that iteration produces capturable Scheme
+;; continuation frames (enabling call/cc inside callbacks).
+
+(define (vector-map f . vecs)
+  (let ((len (apply min (map vector-length vecs))))
+    (let ((result (make-vector len)))
+      (let loop ((i 0))
+        (if (< i len)
+            (begin
+              (vector-set! result i
+                (apply f (map (lambda (v) (vector-ref v i)) vecs)))
+              (loop (+ i 1)))
+            result)))))
+
+(define (vector-for-each f . vecs)
+  (let ((len (apply min (map vector-length vecs))))
+    (let loop ((i 0))
+      (if (< i len)
+          (begin
+            (apply f (map (lambda (v) (vector-ref v i)) vecs))
+            (loop (+ i 1)))))))
+
+;; String higher-order operations
+
+(define (string-map f . strs)
+  (let ((len (apply min (map string-length strs))))
+    (let ((result (make-string len)))
+      (let loop ((i 0))
+        (if (< i len)
+            (begin
+              (string-set! result i
+                (apply f (map (lambda (s) (string-ref s i)) strs)))
+              (loop (+ i 1)))
+            result)))))
+
+(define (string-for-each f . strs)
+  (let ((len (apply min (map string-length strs))))
+    (let loop ((i 0))
+      (if (< i len)
+          (begin
+            (apply f (map (lambda (s) (string-ref s i)) strs))
+            (loop (+ i 1)))))))
+
+;; List search with optional comparator
+;; Default path uses equal?. Custom comparator path must be Scheme
+;; to produce capturable continuation frames.
+
+(define member
+  (case-lambda
+    ((obj lst) (member obj lst equal?))
+    ((obj lst compare)
+     (let loop ((lst lst))
+       (cond
+         ((null? lst) #f)
+         ((compare obj (car lst)) lst)
+         (else (loop (cdr lst))))))))
+
+(define assoc
+  (case-lambda
+    ((obj alist) (assoc obj alist equal?))
+    ((obj alist compare)
+     (let loop ((alist alist))
+       (cond
+         ((null? alist) #f)
+         ((compare obj (caar alist)) (car alist))
+         (else (loop (cdr alist))))))))
