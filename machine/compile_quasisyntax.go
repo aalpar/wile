@@ -70,7 +70,7 @@ func (p *CompileTimeContinuation) compileQuasisyntaxTemplate(ctctx CompileTimeCa
 	expanded := p.expandQuasisyntax(ctctx.ctx, stx, depth)
 
 	// Wrap: (datum->syntax #f expanded)
-	wrapped := p.buildQuasiquoteSyntaxList(srcCtx,
+	wrapped := p.buildQuasiSyntaxList(srcCtx,
 		syntax.NewSyntaxSymbol("datum->syntax", srcCtx),
 		syntax.NewSyntaxObject(values.FalseValue, srcCtx),
 		expanded,
@@ -151,7 +151,7 @@ func (p *CompileTimeContinuation) expandQuasisyntax(ctx context.Context, stx syn
 	case *syntax.SyntaxPair:
 		if syntax.IsSyntaxEmptyList(v) {
 			// Empty list - wrap in syntax
-			return p.buildQuasiquoteSyntaxList(srcCtx,
+			return p.buildQuasiSyntaxList(srcCtx,
 				syntax.NewSyntaxSymbol("syntax", srcCtx),
 				v,
 			)
@@ -174,16 +174,16 @@ func (p *CompileTimeContinuation) expandQuasisyntax(ctx context.Context, stx syn
 					arg := cdr.SyntaxCar()
 					processedArg := p.expandQuasisyntax(ctx, arg, depth-1)
 					// Build: (list (syntax unsyntax) <processedArg>)
-					return p.buildQuasiquoteSyntaxList(srcCtx,
+					return p.buildQuasiSyntaxList(srcCtx,
 						syntax.NewSyntaxSymbol("list", srcCtx),
-						p.buildQuasiquoteSyntaxList(srcCtx,
+						p.buildQuasiSyntaxList(srcCtx,
 							syntax.NewSyntaxSymbol("syntax", srcCtx),
 							syntax.NewSyntaxSymbol("unsyntax", srcCtx),
 						),
 						processedArg,
 					)
 				}
-				return p.buildQuasiquoteSyntaxList(srcCtx,
+				return p.buildQuasiSyntaxList(srcCtx,
 					syntax.NewSyntaxSymbol("syntax", srcCtx),
 					v,
 				)
@@ -193,9 +193,9 @@ func (p *CompileTimeContinuation) expandQuasisyntax(ctx context.Context, stx syn
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					arg := cdr.SyntaxCar()
 					processedArg := p.expandQuasisyntax(ctx, arg, depth-1)
-					return p.buildQuasiquoteSyntaxList(srcCtx,
+					return p.buildQuasiSyntaxList(srcCtx,
 						syntax.NewSyntaxSymbol("list", srcCtx),
-						p.buildQuasiquoteSyntaxList(srcCtx,
+						p.buildQuasiSyntaxList(srcCtx,
 							syntax.NewSyntaxSymbol("syntax", srcCtx),
 							syntax.NewSyntaxSymbol("unsyntax-splicing", srcCtx),
 						),
@@ -203,7 +203,7 @@ func (p *CompileTimeContinuation) expandQuasisyntax(ctx context.Context, stx syn
 					)
 				}
 				// At depth 1, unsyntax-splicing needs special list handling
-				return p.buildQuasiquoteSyntaxList(srcCtx,
+				return p.buildQuasiSyntaxList(srcCtx,
 					syntax.NewSyntaxSymbol("syntax", srcCtx),
 					v,
 				)
@@ -214,16 +214,16 @@ func (p *CompileTimeContinuation) expandQuasisyntax(ctx context.Context, stx syn
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					body := cdr.SyntaxCar()
 					processedBody := p.expandQuasisyntax(ctx, body, depth+1)
-					return p.buildQuasiquoteSyntaxList(srcCtx,
+					return p.buildQuasiSyntaxList(srcCtx,
 						syntax.NewSyntaxSymbol("list", srcCtx),
-						p.buildQuasiquoteSyntaxList(srcCtx,
+						p.buildQuasiSyntaxList(srcCtx,
 							syntax.NewSyntaxSymbol("syntax", srcCtx),
 							syntax.NewSyntaxSymbol("quasisyntax", srcCtx),
 						),
 						processedBody,
 					)
 				}
-				return p.buildQuasiquoteSyntaxList(srcCtx,
+				return p.buildQuasiSyntaxList(srcCtx,
 					syntax.NewSyntaxSymbol("syntax", srcCtx),
 					v,
 				)
@@ -235,14 +235,14 @@ func (p *CompileTimeContinuation) expandQuasisyntax(ctx context.Context, stx syn
 
 	case *syntax.SyntaxSymbol:
 		// Sym - wrap in syntax
-		return p.buildQuasiquoteSyntaxList(srcCtx,
+		return p.buildQuasiSyntaxList(srcCtx,
 			syntax.NewSyntaxSymbol("syntax", srcCtx),
 			v,
 		)
 
 	default:
 		// Other atoms - wrap in syntax
-		return p.buildQuasiquoteSyntaxList(srcCtx,
+		return p.buildQuasiSyntaxList(srcCtx,
 			syntax.NewSyntaxSymbol("syntax", srcCtx),
 			stx,
 		)
@@ -302,7 +302,7 @@ func (p *CompileTimeContinuation) expandQuasisyntaxList(ctx context.Context, pai
 				break
 			}
 		}
-		return p.buildQuasiquoteSyntaxList(srcCtx, elems...)
+		return p.buildQuasiSyntaxList(srcCtx, elems...)
 	}
 
 	// Has splicing - use append
@@ -326,7 +326,7 @@ func (p *CompileTimeContinuation) expandQuasisyntaxList(ctx context.Context, pai
 			} else {
 				// Regular element - wrap in (list ...)
 				appendArgs = append(appendArgs,
-					p.buildQuasiquoteSyntaxList(srcCtx,
+					p.buildQuasiSyntaxList(srcCtx,
 						syntax.NewSyntaxSymbol("list", srcCtx),
 						p.expandQuasisyntax(ctx, carSyntax, depth),
 					),
@@ -334,7 +334,7 @@ func (p *CompileTimeContinuation) expandQuasisyntaxList(ctx context.Context, pai
 			}
 		} else {
 			appendArgs = append(appendArgs,
-				p.buildQuasiquoteSyntaxList(srcCtx,
+				p.buildQuasiSyntaxList(srcCtx,
 					syntax.NewSyntaxSymbol("list", srcCtx),
 					p.expandQuasisyntax(ctx, carSyntax, depth),
 				),
@@ -352,7 +352,7 @@ func (p *CompileTimeContinuation) expandQuasisyntaxList(ctx context.Context, pai
 		}
 	}
 
-	return p.buildQuasiquoteSyntaxList(srcCtx, appendArgs...)
+	return p.buildQuasiSyntaxList(srcCtx, appendArgs...)
 }
 
 // CompileUnsyntax errors - unsyntax outside of quasisyntax

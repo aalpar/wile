@@ -46,15 +46,6 @@ func (p *CompileTimeContinuation) compileQuasiquoteDatum(ctctx CompileTimeCallCo
 	return p.CompileExpression(ctctx, expanded)
 }
 
-// buildQuasiquoteSyntaxList creates a proper list from syntax elements.
-func (p *CompileTimeContinuation) buildQuasiquoteSyntaxList(srcCtx *syntax.SourceContext, elems ...syntax.SyntaxValue) syntax.SyntaxValue {
-	var result syntax.SyntaxValue = syntax.SyntaxEmptyList
-	for i := len(elems) - 1; i >= 0; i-- {
-		result = syntax.NewSyntaxCons(elems[i], result, srcCtx)
-	}
-	return result
-}
-
 // expandQuasiquote transforms quasiquoted syntax into equivalent Scheme code.
 // At depth=1, unquotes are evaluated. At depth>1, they produce literal unquote forms.
 //
@@ -73,7 +64,7 @@ func (p *CompileTimeContinuation) expandQuasiquote(ctx context.Context, stx synt
 	case *syntax.SyntaxPair:
 		if syntax.IsSyntaxEmptyList(v) {
 			quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
-			return p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, v)
+			return p.buildQuasiSyntaxList(srcCtx, quoteSym, v)
 		}
 
 		carSymName, ok := p.getSymbolName(v.SyntaxCar())
@@ -90,9 +81,9 @@ func (p *CompileTimeContinuation) expandQuasiquote(ctx context.Context, stx synt
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					arg := cdr.SyntaxCar()
 					processedArg := p.expandQuasiquote(ctx, arg, depth-1)
-					return p.buildQuasiquoteSyntaxList(srcCtx,
+					return p.buildQuasiSyntaxList(srcCtx,
 						syntax.NewSyntaxSymbol("list", srcCtx),
-						p.buildQuasiquoteSyntaxList(srcCtx,
+						p.buildQuasiSyntaxList(srcCtx,
 							syntax.NewSyntaxSymbol("quote", srcCtx),
 							syntax.NewSyntaxSymbol("unquote", srcCtx),
 						),
@@ -100,16 +91,16 @@ func (p *CompileTimeContinuation) expandQuasiquote(ctx context.Context, stx synt
 					)
 				}
 				quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
-				return p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, v)
+				return p.buildQuasiSyntaxList(srcCtx, quoteSym, v)
 
 			case "unquote-splicing":
 				if depth > 1 && v.Length() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					arg := cdr.SyntaxCar()
 					processedArg := p.expandQuasiquote(ctx, arg, depth-1)
-					return p.buildQuasiquoteSyntaxList(srcCtx,
+					return p.buildQuasiSyntaxList(srcCtx,
 						syntax.NewSyntaxSymbol("list", srcCtx),
-						p.buildQuasiquoteSyntaxList(srcCtx,
+						p.buildQuasiSyntaxList(srcCtx,
 							syntax.NewSyntaxSymbol("quote", srcCtx),
 							syntax.NewSyntaxSymbol("unquote-splicing", srcCtx),
 						),
@@ -117,16 +108,16 @@ func (p *CompileTimeContinuation) expandQuasiquote(ctx context.Context, stx synt
 					)
 				}
 				quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
-				return p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, v)
+				return p.buildQuasiSyntaxList(srcCtx, quoteSym, v)
 
 			case "quasiquote":
 				if v.Length() == 2 {
 					cdr := v.SyntaxCdr().(*syntax.SyntaxPair)
 					body := cdr.SyntaxCar()
 					processedBody := p.expandQuasiquote(ctx, body, depth+1)
-					return p.buildQuasiquoteSyntaxList(srcCtx,
+					return p.buildQuasiSyntaxList(srcCtx,
 						syntax.NewSyntaxSymbol("list", srcCtx),
-						p.buildQuasiquoteSyntaxList(srcCtx,
+						p.buildQuasiSyntaxList(srcCtx,
 							syntax.NewSyntaxSymbol("quote", srcCtx),
 							syntax.NewSyntaxSymbol("quasiquote", srcCtx),
 						),
@@ -134,7 +125,7 @@ func (p *CompileTimeContinuation) expandQuasiquote(ctx context.Context, stx synt
 					)
 				}
 				quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
-				return p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, v)
+				return p.buildQuasiSyntaxList(srcCtx, quoteSym, v)
 			}
 		}
 
@@ -143,7 +134,7 @@ func (p *CompileTimeContinuation) expandQuasiquote(ctx context.Context, stx synt
 
 	case *syntax.SyntaxSymbol:
 		quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
-		return p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, v)
+		return p.buildQuasiSyntaxList(srcCtx, quoteSym, v)
 
 	case *syntax.SyntaxVector:
 		// Vectors: expand elements and wrap in (list->vector ...)
@@ -169,8 +160,8 @@ func (p *CompileTimeContinuation) expandQuasiquote(ctx context.Context, stx synt
 			for _, elem := range v.Values {
 				elems = append(elems, p.expandQuasiquote(ctx, elem, depth))
 			}
-			listExpr := p.buildQuasiquoteSyntaxList(srcCtx, elems...)
-			return p.buildQuasiquoteSyntaxList(srcCtx,
+			listExpr := p.buildQuasiSyntaxList(srcCtx, elems...)
+			return p.buildQuasiSyntaxList(srcCtx,
 				syntax.NewSyntaxSymbol("list->vector", srcCtx),
 				listExpr,
 			)
@@ -232,21 +223,21 @@ func (p *CompileTimeContinuation) expandQuasiquote(ctx context.Context, stx synt
 				// Wrap in (list ...)
 				listArgs := []syntax.SyntaxValue{syntax.NewSyntaxSymbol("list", srcCtx)}
 				listArgs = append(listArgs, seg.elems...)
-				appendArgs = append(appendArgs, p.buildQuasiquoteSyntaxList(srcCtx, listArgs...))
+				appendArgs = append(appendArgs, p.buildQuasiSyntaxList(srcCtx, listArgs...))
 			case segSplice:
 				appendArgs = append(appendArgs, seg.expr)
 			}
 		}
 
-		appendExpr := p.buildQuasiquoteSyntaxList(srcCtx, appendArgs...)
-		return p.buildQuasiquoteSyntaxList(srcCtx,
+		appendExpr := p.buildQuasiSyntaxList(srcCtx, appendArgs...)
+		return p.buildQuasiSyntaxList(srcCtx,
 			syntax.NewSyntaxSymbol("list->vector", srcCtx),
 			appendExpr,
 		)
 
 	default:
 		quoteSym := syntax.NewSyntaxSymbol("quote", srcCtx)
-		return p.buildQuasiquoteSyntaxList(srcCtx, quoteSym, stx)
+		return p.buildQuasiSyntaxList(srcCtx, quoteSym, stx)
 	}
 }
 
@@ -301,7 +292,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteList(ctx context.Context, pair
 					var result syntax.SyntaxValue
 					result = tailExpr
 					for i := len(elems) - 1; i >= 1; i-- {
-						result = p.buildQuasiquoteSyntaxList(srcCtx,
+						result = p.buildQuasiSyntaxList(srcCtx,
 							syntax.NewSyntaxSymbol("cons", srcCtx),
 							elems[i],
 							result,
@@ -325,7 +316,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteList(ctx context.Context, pair
 				return p.expandQuasiquoteImproperList(ctx, pair, depth)
 			}
 		}
-		return p.buildQuasiquoteSyntaxList(srcCtx, elems...)
+		return p.buildQuasiSyntaxList(srcCtx, elems...)
 	}
 
 	// Has splicing: use (append seg1 seg2 ...)
@@ -367,7 +358,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteImproperList(ctx context.Conte
 	result = p.expandQuasiquote(ctx, tailSyntax, depth)
 
 	for i := len(elements) - 1; i >= 0; i-- {
-		result = p.buildQuasiquoteSyntaxList(srcCtx,
+		result = p.buildQuasiSyntaxList(srcCtx,
 			syntax.NewSyntaxSymbol("cons", srcCtx),
 			elements[i],
 			result,
@@ -453,13 +444,13 @@ func (p *CompileTimeContinuation) expandQuasiquoteListWithSplice(ctx context.Con
 			// Wrap in (list ...)
 			listArgs := []syntax.SyntaxValue{syntax.NewSyntaxSymbol("list", srcCtx)}
 			listArgs = append(listArgs, seg.elems...)
-			appendArgs = append(appendArgs, p.buildQuasiquoteSyntaxList(srcCtx, listArgs...))
+			appendArgs = append(appendArgs, p.buildQuasiSyntaxList(srcCtx, listArgs...))
 		case segSplice:
 			appendArgs = append(appendArgs, seg.expr)
 		}
 	}
 
-	return p.buildQuasiquoteSyntaxList(srcCtx, appendArgs...)
+	return p.buildQuasiSyntaxList(srcCtx, appendArgs...)
 }
 
 // quasiquoteNeedsRuntime checks if a syntax value contains unquotes that would
@@ -548,15 +539,6 @@ func (p *CompileTimeContinuation) quasiquoteNeedsRuntimeList(pair *syntax.Syntax
 		current = nextPair
 	}
 	return false
-}
-
-// getSymbolName returns the symbol name if the value is a symbol
-func (p *CompileTimeContinuation) getSymbolName(v syntax.SyntaxValue) (string, bool) {
-	s, ok := v.(*syntax.SyntaxSymbol)
-	if ok {
-		return s.Sym.Key, true
-	}
-	return "", false
 }
 
 // CompileUnquote errors - unquote outside of quasiquote
