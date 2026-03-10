@@ -94,13 +94,14 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	env := topLevel.Runtime()
 
 	macroSources := reg.MacroSources()
-	err = applyBaseEnvironment(ctx, env, reg, macroSources)
+	bootstrapResolver := machine.NewEmbedFileResolver(core.BootstrapFS)
+	err = applyBaseEnvironment(ctx, env, reg, macroSources, bootstrapResolver)
 	if err != nil {
 		return nil, err
 	}
 
 	if cfg.libraryEnabled {
-		err = setupLibrarySystem(cfg, reg, env, topLevel, macroSources, snapshots)
+		err = setupLibrarySystem(cfg, reg, env, topLevel, macroSources, snapshots, bootstrapResolver)
 		if err != nil {
 			return nil, err
 		}
@@ -165,7 +166,7 @@ func buildRegistry(cfg *engineConfig) (*registry.Registry, []extSnapshot, []regi
 
 // setupLibrarySystem configures the R7RS library system: search paths,
 // import observer, extension libraries, and the library environment factory.
-func setupLibrarySystem(cfg *engineConfig, reg *registry.Registry, env *environment.EnvironmentFrame, topLevel *environment.TopLevelEnvironment, macroSources []string, snapshots []extSnapshot) error {
+func setupLibrarySystem(cfg *engineConfig, reg *registry.Registry, env *environment.EnvironmentFrame, topLevel *environment.TopLevelEnvironment, macroSources []string, snapshots []extSnapshot, bootstrapResolver machine.FileResolver) error {
 	libReg := machine.NewLibraryRegistry()
 
 	// Prepend user paths in reverse order so first path has highest priority.
@@ -195,7 +196,7 @@ func setupLibrarySystem(cfg *engineConfig, reg *registry.Registry, env *environm
 
 		libEnv := callerTopLevel.NewChildRuntime()
 
-		applyErr := applyBaseEnvironment(ctx, libEnv, reg, macroSources)
+		applyErr := applyBaseEnvironment(ctx, libEnv, reg, macroSources, bootstrapResolver)
 		if applyErr != nil {
 			return nil, applyErr
 		}
@@ -486,7 +487,9 @@ func registerExtensionLibraries(reg *registry.Registry, env *environment.Environ
 // applyBaseEnvironment performs the four-step setup that every usable environment
 // requires: apply registry bindings, register syntax compilers, register primitive
 // expanders, and load bootstrap macros. Each step wraps errors with ErrEngineInit.
-func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.Registry, macroSources []string) error {
+// The resolver controls how include/load finds files during bootstrap; pass nil
+// for OS filesystem defaults.
+func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.Registry, macroSources []string, resolver machine.FileResolver) error {
 	err := reg.Apply(ctx, env)
 	if err != nil {
 		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "apply registry")
@@ -502,7 +505,7 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "register primitive expanders")
 	}
 
-	err = loadBootstrapMacros(ctx, env, macroSources)
+	err = loadBootstrapMacros(ctx, env, macroSources, resolver)
 	if err != nil {
 		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "load bootstrap macros")
 	}
@@ -510,8 +513,10 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 }
 
 // expandAndCompile runs the expand → compile → optimize pipeline for a single
-// syntax value, returning the resulting template. Callers own error wrapping.
-func expandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue) (*machine.NativeTemplate, error) {
+// syntax value, returning the resulting template. An optional FileResolver
+// overrides how include/load finds files (nil uses the OS filesystem default).
+// Callers own error wrapping.
+func expandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver machine.FileResolver) (*machine.NativeTemplate, error) {
 	tpl := machine.NewEmptyNativeTemplate()
 
 	expanded, err := machine.NewExpanderTimeContinuation(ctx, env).ExpandExpression(stx)
@@ -520,7 +525,11 @@ func expandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, st
 	}
 
 	cctx := machine.NewCompileTimeCallContext(ctx, false, true)
-	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
+	compiler := machine.NewCompiletimeContinuation(tpl, env)
+	if resolver != nil {
+		compiler.SetFileResolver(resolver)
+	}
+	err = compiler.CompileExpression(cctx, expanded)
 	if err != nil {
 		return nil, err
 	}
@@ -530,7 +539,7 @@ func expandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, st
 }
 
 func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*CompiledCode, error) {
-	tpl, err := expandAndCompile(ctx, p.env, stx)
+	tpl, err := expandAndCompile(ctx, p.env, stx, nil)
 	if err != nil {
 		return nil, &CompilationError{Message: "expand/compile error", Cause: err}
 	}
@@ -580,7 +589,7 @@ func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
 	return &RuntimeError{Message: "runtime error", Cause: err}
 }
 
-func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame, sources []string) error {
+func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame, sources []string, resolver machine.FileResolver) error {
 	for _, source := range sources {
 		reader := strings.NewReader(source)
 		pr := parser.NewParser(env, true, reader)
@@ -594,7 +603,7 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 				return err
 			}
 
-			err = runBootstrapMacroStx(ctx, env, stx)
+			err = runBootstrapMacroStx(ctx, env, stx, resolver)
 			if err != nil {
 				return err
 			}
@@ -604,8 +613,8 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 }
 
 // runBootstrapMacroStx expands, compiles, and runs a single syntax value as part of the bootstrap process.
-func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue) error {
-	tpl, err := expandAndCompile(ctx, env, stx)
+func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver machine.FileResolver) error {
+	tpl, err := expandAndCompile(ctx, env, stx, resolver)
 	if err != nil {
 		return err
 	}

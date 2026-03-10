@@ -15,32 +15,31 @@
 package core
 
 import (
-	_ "embed"
+	"embed"
+	"io/fs"
 
 	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/werr"
 )
 
-// bootstrapMacroSource contains essential derived expression forms
-// (define-syntax). Loaded first so that procedures can use these macros.
+// BootstrapFS embeds bootstrap.scm and the files it includes.
+// bootstrap.scm uses (include ...) directives to load bootstrap_macros.scm
+// and bootstrap_procedures.scm. The engine passes this FS to an
+// EmbedFileResolver so the compiler's include form can resolve them.
 //
-// Source: registry/core/bootstrap_macros.scm (embedded at compile-time)
-//
-//go:embed bootstrap_macros.scm
-var bootstrapMacroSource string
+//go:embed bootstrap.scm bootstrap_macros.scm bootstrap_procedures.scm
+var BootstrapFS embed.FS
 
-// bootstrapProcedureSource contains Scheme procedure definitions (define).
-// Loaded after macros because these procedures use syntax forms like
-// case-lambda and begin, and macros like let and and.
-//
-// Source: registry/core/bootstrap_procedures.scm (embedded at compile-time)
-//
-//go:embed bootstrap_procedures.scm
-var bootstrapProcedureSource string
-
-// addBootstrapSources registers both the macro and procedure bootstrap Scheme
-// sources, ensuring macros are loaded before procedures that depend on them.
+// addBootstrapSources registers bootstrap.scm as a single macro source.
+// The (include ...) directives inside it are resolved by the compiler
+// against BootstrapFS via EmbedFileResolver.
 func addBootstrapSources(r *registry.Registry) error {
-	r.AddMacroSource(bootstrapMacroSource)
-	r.AddMacroSource(bootstrapProcedureSource)
+	source, err := fs.ReadFile(BootstrapFS, "bootstrap.scm")
+	if err != nil {
+		return werr.WrapForeignErrorf(
+			werr.ErrFileNotFound, "bootstrap: reading bootstrap.scm",
+		)
+	}
+	r.AddMacroSource(string(source))
 	return nil
 }
