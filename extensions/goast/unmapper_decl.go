@@ -59,7 +59,8 @@ func unmapDeclList(v values.Value) ([]ast.Decl, error) {
 	for !values.IsEmptyList(tuple) {
 		pair, ok := tuple.(*values.Pair)
 		if !ok {
-			break
+			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: expected proper list of declarations, got %T", tuple)
 		}
 		n, err := unmapNode(pair.Car())
 		if err != nil {
@@ -73,7 +74,8 @@ func unmapDeclList(v values.Value) ([]ast.Decl, error) {
 		result = append(result, decl)
 		cdr, ok := pair.Cdr().(values.Tuple)
 		if !ok {
-			break
+			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: expected proper list of declarations, got improper cdr %T", pair.Cdr())
 		}
 		tuple = cdr
 	}
@@ -179,7 +181,8 @@ func unmapSpecList(v values.Value) ([]ast.Spec, error) {
 	for !values.IsEmptyList(tuple) {
 		pair, ok := tuple.(*values.Pair)
 		if !ok {
-			break
+			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: expected proper list of specs, got %T", tuple)
 		}
 		n, err := unmapNode(pair.Car())
 		if err != nil {
@@ -193,7 +196,8 @@ func unmapSpecList(v values.Value) ([]ast.Spec, error) {
 		result = append(result, spec)
 		cdr, ok := pair.Cdr().(values.Tuple)
 		if !ok {
-			break
+			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: expected proper list of specs, got improper cdr %T", pair.Cdr())
 		}
 		tuple = cdr
 	}
