@@ -177,11 +177,15 @@ func (p *Debugger) ShouldStep(mc *MachineContext) bool {
 // Continue resumes execution.
 func (p *Debugger) Continue() {
 	p.stepMode = StepNone
+	p.stepFrame = nil
+	p.stepFrameDepth = 0
 }
 
 // StepInto enables step-into mode.
 func (p *Debugger) StepInto() {
 	p.stepMode = StepInto
+	p.stepFrame = nil
+	p.stepFrameDepth = 0
 }
 
 // StepOver enables step-over mode.
