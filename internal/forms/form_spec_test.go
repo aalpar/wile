@@ -16,18 +16,32 @@ package forms
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 )
 
+// saveRegistry snapshots the registry before a test and restores it after,
+// so mutations don't leak between tests.
+func saveRegistry(t *testing.T) {
+	t.Helper()
+	saved := make(map[string]*FormSpec, len(registry))
+	maps.Copy(saved, registry)
+	t.Cleanup(func() {
+		registry = saved
+	})
+}
+
 func TestLookup_Miss(t *testing.T) {
+	saveRegistry(t)
 	c := qt.New(t)
 	c.Assert(Lookup("nonexistent-form"), qt.IsNil)
 }
 
 func TestRegister_And_Lookup(t *testing.T) {
+	saveRegistry(t)
 	c := qt.New(t)
 
 	validator := func(_ context.Context, _ any, _ any, _ any) any { return "validated" }
@@ -47,6 +61,7 @@ func TestRegister_And_Lookup(t *testing.T) {
 }
 
 func TestRegister_Replaces_Existing(t *testing.T) {
+	saveRegistry(t)
 	c := qt.New(t)
 
 	first := func(_ context.Context, _ any, _ any, _ any) any { return "first" }
@@ -64,6 +79,7 @@ func TestRegister_Replaces_Existing(t *testing.T) {
 }
 
 func TestRegisterValidator_Creates_New_Entry(t *testing.T) {
+	saveRegistry(t)
 	c := qt.New(t)
 
 	validator := func(_ context.Context, _ any, _ any, _ any) any { return "v" }
@@ -77,6 +93,7 @@ func TestRegisterValidator_Creates_New_Entry(t *testing.T) {
 }
 
 func TestRegisterCompiler_Creates_New_Entry(t *testing.T) {
+	saveRegistry(t)
 	c := qt.New(t)
 
 	compiler := func(_ any, _ any, _ any) error { return nil }
@@ -90,6 +107,7 @@ func TestRegisterCompiler_Creates_New_Entry(t *testing.T) {
 }
 
 func TestRegisterValidator_Sets_On_Existing(t *testing.T) {
+	saveRegistry(t)
 	c := qt.New(t)
 
 	compiler := func(_ any, _ any, _ any) error { return nil }
@@ -104,6 +122,7 @@ func TestRegisterValidator_Sets_On_Existing(t *testing.T) {
 }
 
 func TestRegisterCompiler_Sets_On_Existing(t *testing.T) {
+	saveRegistry(t)
 	c := qt.New(t)
 
 	validator := func(_ context.Context, _ any, _ any, _ any) any { return "v" }
@@ -118,6 +137,7 @@ func TestRegisterCompiler_Sets_On_Existing(t *testing.T) {
 }
 
 func TestNames_Returns_All_Registered(t *testing.T) {
+	saveRegistry(t)
 	c := qt.New(t)
 
 	Register(&FormSpec{Name: "test-names-a"})
