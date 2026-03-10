@@ -332,7 +332,7 @@ func TestAddToRegistry_HasMacroSources(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	sources := r.MacroSources()
-	c.Assert(len(sources) > 0, qt.IsTrue, qt.Commentf("expected bootstrap macro sources"))
+	c.Assert(len(sources), qt.Equals, 2, qt.Commentf("expected bootstrap macros + bootstrap procedures"))
 }
 
 func TestPrimitivePhases(t *testing.T) {

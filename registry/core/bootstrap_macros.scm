@@ -1,11 +1,12 @@
 ;; Bootstrap Macros
 ;;
-;; Essential derived expression forms required for Scheme to function.
-;; This file is embedded at compile-time into the Wile binary via go:embed.
+;; Essential derived expression forms (define-syntax) required for Scheme
+;; to function. This file is embedded at compile-time via go:embed.
 ;;
-;; These macros are loaded after all primitives are registered but before
-;; any user code runs. They provide the standard R7RS binding forms, conditionals,
-;; lazy evaluation, parameters, exceptions, records, and iteration.
+;; Loaded after all primitives are registered but before bootstrap
+;; procedures or any user code runs. Provides standard R7RS binding forms,
+;; conditionals, lazy evaluation, parameters, exceptions, records, and
+;; iteration.
 ;;
 ;; Lambda: The Ultimate Imperative (Steele & Sussman, AIM-353, 1976).
 ;; Derived forms are defined as macros over core forms per R7RS §7.3.
@@ -311,41 +312,6 @@
     ;; All values as list: var (no parens)
     ((define-values var expr)
      (define var (call-with-values (lambda () expr) list)))))
-
-;; Higher-order list operations
-;; Implemented in Scheme so that iteration produces capturable Scheme
-;; continuation frames (enabling call/cc inside map/for-each callbacks).
-(define map
-  (case-lambda
-    ((f lst)
-     (let loop ((lst lst))
-       (if (null? lst) '()
-           (cons (f (car lst)) (loop (cdr lst))))))
-    ((f lst . lsts)
-     (let loop ((all (cons lst lsts)))
-       (if (let any-null? ((ls all))
-             (if (null? ls) #f
-                 (if (null? (car ls)) #t
-                     (any-null? (cdr ls)))))
-           '()
-           (cons (apply f (map car all))
-                 (loop (map cdr all))))))))
-
-(define for-each
-  (case-lambda
-    ((f lst)
-     (let loop ((lst lst))
-       (if (null? lst) (if #f #f)
-           (begin (f (car lst)) (loop (cdr lst))))))
-    ((f lst . lsts)
-     (let loop ((all (cons lst lsts)))
-       (if (let any-null? ((ls all))
-             (if (null? ls) #f
-                 (if (null? (car ls)) #t
-                     (any-null? (cdr ls)))))
-           (if #f #f)
-           (begin (apply f (map car all))
-                  (loop (map cdr all))))))))
 
 ;; Iteration
 (define-syntax do
