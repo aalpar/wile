@@ -106,20 +106,20 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext
 	// Build (list expr ...)
 	listElems := []syntax.SyntaxValue{syntax.NewSyntaxSymbol("list", srcCtx)}
 	listElems = append(listElems, exprs...)
-	listExpr := p.buildQuasiquoteSyntaxList(srcCtx, listElems...)
+	listExpr := p.buildQuasiSyntaxList(srcCtx, listElems...)
 
 	// Build (pattern ...)
-	patternList := p.buildQuasiquoteSyntaxList(srcCtx, patterns...)
+	patternList := p.buildQuasiSyntaxList(srcCtx, patterns...)
 
 	// Build (begin body ...)
 	bodyBegin := p.buildWithSyntaxBegin(srcCtx, bodyList)
 
 	// Build the clause: ((pattern ...) (begin body ...))
-	clause := p.buildQuasiquoteSyntaxList(srcCtx, patternList, bodyBegin)
+	clause := p.buildQuasiSyntaxList(srcCtx, patternList, bodyBegin)
 
 	// Build the full syntax-case form:
 	// (syntax-case (list expr ...) () ((pattern ...) (begin body ...)))
-	syntaxCaseForm := p.buildQuasiquoteSyntaxList(srcCtx,
+	syntaxCaseForm := p.buildQuasiSyntaxList(srcCtx,
 		syntax.NewSyntaxSymbol("syntax-case", srcCtx),
 		listExpr,
 		syntax.SyntaxEmptyList, // empty literals list
@@ -188,5 +188,5 @@ func (p *CompileTimeContinuation) buildWithSyntaxBegin(srcCtx *syntax.SourceCont
 		}
 	}
 
-	return p.buildQuasiquoteSyntaxList(srcCtx, elems...)
+	return p.buildQuasiSyntaxList(srcCtx, elems...)
 }

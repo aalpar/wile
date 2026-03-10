@@ -682,7 +682,7 @@ func TestExpandQuasisyntaxList_ImproperList(t *testing.T) {
 	c := qt.New(t)
 	ccnt, _ := newTestCompiler()
 
-	// (a . b) -> (list* (syntax a) (syntax b))
+	// (a . b) -> (cons (syntax a) (syntax b))
 	// Create improper list manually: (a . b)
 	stx := syntax.NewSyntaxCons(
 		makeTestSyntaxSymbol("a"),
@@ -691,13 +691,13 @@ func TestExpandQuasisyntaxList_ImproperList(t *testing.T) {
 	)
 	expanded := ccnt.expandQuasisyntaxList(context.Background(), stx, 1)
 
-	// Should be (list* ...)
+	// Should be (cons ...)
 	pair, ok := expanded.(*syntax.SyntaxPair)
 	c.Assert(ok, qt.IsTrue)
 	car := pair.SyntaxCar()
 	carSym, ok := car.(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "list*")
+	c.Assert(carSym.Sym.Key, qt.Equals, "cons")
 
 	// Verify we have two elements: (syntax a) and (syntax b)
 	cdr := pair.SyntaxCdr().(*syntax.SyntaxPair)
@@ -980,7 +980,7 @@ func TestExpandQuasisyntaxList_ImproperWithUnsyntax(t *testing.T) {
 	c.Assert(ok, qt.IsTrue)
 	carSym, ok := pair.SyntaxCar().(*syntax.SyntaxSymbol)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(carSym.Sym.Key, qt.Equals, "list*")
+	c.Assert(carSym.Sym.Key, qt.Equals, "cons")
 }
 
 func TestExpandQuasisyntaxList_ImproperWithSplice(t *testing.T) {
