@@ -46,45 +46,89 @@
 ;; Implemented in Scheme so that iteration produces capturable Scheme
 ;; continuation frames (enabling call/cc inside callbacks).
 
-(define (vector-map f . vecs)
-  (let ((len (apply min (map vector-length vecs))))
-    (let ((result (make-vector len)))
-      (let loop ((i 0))
-        (if (< i len)
-            (begin
-              (vector-set! result i
-                (apply f (map (lambda (v) (vector-ref v i)) vecs)))
-              (loop (+ i 1)))
-            result)))))
+(define vector-map
+  (case-lambda
+    ((f v)
+     (let ((len (vector-length v)))
+       (let ((result (make-vector len)))
+         (let loop ((i 0))
+           (if (< i len)
+               (begin
+                 (vector-set! result i (f (vector-ref v i)))
+                 (loop (+ i 1)))
+               result)))))
+    ((f v1 . rest)
+     (let ((vecs (cons v1 rest)))
+       (let ((len (apply min (map vector-length vecs))))
+         (let ((result (make-vector len)))
+           (let loop ((i 0))
+             (if (< i len)
+                 (begin
+                   (vector-set! result i
+                     (apply f (map (lambda (v) (vector-ref v i)) vecs)))
+                   (loop (+ i 1)))
+                 result))))))))
 
-(define (vector-for-each f . vecs)
-  (let ((len (apply min (map vector-length vecs))))
-    (let loop ((i 0))
-      (if (< i len)
-          (begin
-            (apply f (map (lambda (v) (vector-ref v i)) vecs))
-            (loop (+ i 1)))))))
+(define vector-for-each
+  (case-lambda
+    ((f v)
+     (let ((len (vector-length v)))
+       (let loop ((i 0))
+         (if (< i len)
+             (begin
+               (f (vector-ref v i))
+               (loop (+ i 1)))))))
+    ((f v1 . rest)
+     (let ((vecs (cons v1 rest)))
+       (let ((len (apply min (map vector-length vecs))))
+         (let loop ((i 0))
+           (if (< i len)
+               (begin
+                 (apply f (map (lambda (v) (vector-ref v i)) vecs))
+                 (loop (+ i 1))))))))))
 
 ;; String higher-order operations
 
-(define (string-map f . strs)
-  (let ((len (apply min (map string-length strs))))
-    (let ((result (make-string len)))
-      (let loop ((i 0))
-        (if (< i len)
-            (begin
-              (string-set! result i
-                (apply f (map (lambda (s) (string-ref s i)) strs)))
-              (loop (+ i 1)))
-            result)))))
+(define string-map
+  (case-lambda
+    ((f s)
+     (let ((len (string-length s)))
+       (let ((result (make-string len)))
+         (let loop ((i 0))
+           (if (< i len)
+               (begin
+                 (string-set! result i (f (string-ref s i)))
+                 (loop (+ i 1)))
+               result)))))
+    ((f s1 . rest)
+     (let ((strs (cons s1 rest)))
+       (let ((len (apply min (map string-length strs))))
+         (let ((result (make-string len)))
+           (let loop ((i 0))
+             (if (< i len)
+                 (begin
+                   (string-set! result i
+                     (apply f (map (lambda (s) (string-ref s i)) strs)))
+                   (loop (+ i 1)))
+                 result))))))))
 
-(define (string-for-each f . strs)
-  (let ((len (apply min (map string-length strs))))
-    (let loop ((i 0))
-      (if (< i len)
-          (begin
-            (apply f (map (lambda (s) (string-ref s i)) strs))
-            (loop (+ i 1)))))))
+(define string-for-each
+  (case-lambda
+    ((f s)
+     (let ((len (string-length s)))
+       (let loop ((i 0))
+         (if (< i len)
+             (begin
+               (f (string-ref s i))
+               (loop (+ i 1)))))))
+    ((f s1 . rest)
+     (let ((strs (cons s1 rest)))
+       (let ((len (apply min (map string-length strs))))
+         (let loop ((i 0))
+           (if (< i len)
+               (begin
+                 (apply f (map (lambda (s) (string-ref s i)) strs))
+                 (loop (+ i 1))))))))))
 
 ;; List search with optional comparator
 ;; Default path uses equal?. Custom comparator path must be Scheme
