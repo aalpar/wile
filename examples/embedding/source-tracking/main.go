@@ -30,15 +30,12 @@ import (
 	"log"
 
 	"github.com/aalpar/wile"
-	"github.com/aalpar/wile/extensions/exceptions"
 )
 
 func main() {
 	ctx := context.Background()
 
-	engine, err := wile.NewEngine(ctx,
-		wile.WithExtension(exceptions.Extension),
-	)
+	engine, err := wile.NewEngine(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}

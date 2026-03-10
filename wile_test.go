@@ -22,7 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aalpar/wile/extensions/exceptions"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/werr"
 
@@ -576,7 +575,7 @@ func TestRuntimeError_DivisionByZero(t *testing.T) {
 
 func TestRuntimeError_SchemeRaise(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine(context.Background(), WithExtension(exceptions.Extension))
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
@@ -978,8 +977,8 @@ func TestWithSafeExtensions(t *testing.T) {
 func TestSafeExtensions(t *testing.T) {
 	c := qt.New(t)
 	opts := SafeExtensions()
-	// io, exceptions, math, introspection, all-safe
-	c.Assert(len(opts), qt.Equals, 5)
+	// io, math, introspection, all-safe (exceptions moved to core)
+	c.Assert(len(opts), qt.Equals, 4)
 }
 
 func TestWithMaxCallDepth(t *testing.T) {

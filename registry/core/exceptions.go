@@ -12,23 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package exceptions provides exception handling primitives.
-package exceptions
+package core
 
 import (
 	"github.com/aalpar/wile/registry"
 )
 
-// Extension is the exceptions extension.
-var Extension = registry.NewExtension("exceptions", AddToRegistry)
-
-// Builder aggregates all exception registration functions.
-var Builder = registry.NewRegistryBuilder(addPrimitives)
-
-// AddToRegistry registers all exception primitives.
-var AddToRegistry = Builder.AddToRegistry
-
-func addPrimitives(r *registry.Registry) error {
+func addExceptions(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "with-exception-handler", ParamCount: 2, Impl: PrimWithExceptionHandler,
 			Doc: "Installs an exception handler and calls thunk.", ParamNames: []string{"handler", "thunk"}, Category: "exceptions"},
