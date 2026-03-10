@@ -36,8 +36,8 @@ var BootstrapFS embed.FS
 func addBootstrapSources(r *registry.Registry) error {
 	source, err := fs.ReadFile(BootstrapFS, "bootstrap.scm")
 	if err != nil {
-		return werr.WrapForeignErrorf(
-			werr.ErrFileNotFound, "bootstrap: reading bootstrap.scm",
+		return werr.WrapForeignErrorWithCause(
+			werr.ErrFileNotFound, err, "bootstrap: reading bootstrap.scm",
 		)
 	}
 	r.AddMacroSource(string(source))
