@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile"
-	extexceptions "github.com/aalpar/wile/extensions/exceptions"
 	extintrospection "github.com/aalpar/wile/extensions/introspection"
 	exteval "github.com/aalpar/wile/internal/extensions/eval"
 	"github.com/aalpar/wile/values"
@@ -391,7 +390,6 @@ func TestEvalDynamicContextInheritance(t *testing.T) {
 	// Create engine with both the standard extension and exceptions extension
 	engine, err := wile.NewEngine(context.Background(),
 		wile.WithExtension(exteval.Extension),
-		wile.WithExtension(extexceptions.Extension),
 		wile.WithExtension(extintrospection.Extension),
 	)
 	c.Assert(err, qt.IsNil)

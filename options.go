@@ -16,7 +16,6 @@ package wile
 
 import (
 	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/extensions/exceptions"
 	"github.com/aalpar/wile/extensions/introspection"
 	"github.com/aalpar/wile/extensions/math"
 	"github.com/aalpar/wile/internal/extensions/all"
@@ -182,7 +181,6 @@ func WithAuthorizer(auth security.Authorizer) EngineOption {
 func SafeExtensions() []EngineOption {
 	return []EngineOption{
 		WithExtension(io.Extension),
-		WithExtension(exceptions.Extension),
 		WithExtension(math.Extension),
 		WithExtension(introspection.Extension),
 		WithExtension(all.SafeExtension),

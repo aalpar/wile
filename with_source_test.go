@@ -20,8 +20,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aalpar/wile/extensions/exceptions"
-
 	qt "github.com/frankban/quicktest"
 )
 
@@ -89,7 +87,7 @@ func TestEvalWithSource_RuntimeError(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			engine, err := NewEngine(context.Background(), WithExtension(exceptions.Extension))
+			engine, err := NewEngine(context.Background())
 			c.Assert(err, qt.IsNil)
 
 			ctx := context.Background()
@@ -183,7 +181,7 @@ func TestEvalWithSource_Success(t *testing.T) {
 // works across multiple expressions.
 func TestEvalMultipleWithSource_RuntimeError(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine(context.Background(), WithExtension(exceptions.Extension))
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
@@ -218,7 +216,7 @@ func TestEvalMultipleWithSource_Success(t *testing.T) {
 // and later executed with Run should still carry source info in errors.
 func TestCompileWithSource_RuntimeError(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine(context.Background(), WithExtension(exceptions.Extension))
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
@@ -267,7 +265,7 @@ func TestWithSource_DistinctSources(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			engine, err := NewEngine(context.Background(), WithExtension(exceptions.Extension))
+			engine, err := NewEngine(context.Background())
 			c.Assert(err, qt.IsNil)
 
 			ctx := context.Background()
@@ -319,7 +317,7 @@ func TestWithSource_SourcelessEvalHasEmptySource(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			engine, err := NewEngine(context.Background(), WithExtension(exceptions.Extension))
+			engine, err := NewEngine(context.Background())
 			c.Assert(err, qt.IsNil)
 
 			err = tc.eval(engine, context.Background())
@@ -337,7 +335,7 @@ func TestWithSource_SourcelessEvalHasEmptySource(t *testing.T) {
 // the source information in errors.
 func TestCompileWithSource_ReusedCompiledCode(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine(context.Background(), WithExtension(exceptions.Extension))
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
@@ -359,7 +357,7 @@ func TestCompileWithSource_ReusedCompiledCode(t *testing.T) {
 // includes the source prefix.
 func TestEvalWithSource_ErrorFormat(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine(context.Background(), WithExtension(exceptions.Extension))
+	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()

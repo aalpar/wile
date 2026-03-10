@@ -34,7 +34,6 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/extensions/exceptions"
 	"github.com/aalpar/wile/extensions/files"
 	"github.com/aalpar/wile/extensions/gointerop"
 	"github.com/aalpar/wile/extensions/introspection"
@@ -58,7 +57,6 @@ var allExtensions = []registry.Extension{
 	math.Extension,
 	introspection.Extension,
 	eval.Extension,
-	exceptions.Extension,
 	threads.Extension,
 	gointerop.Extension,
 	all.Extension,

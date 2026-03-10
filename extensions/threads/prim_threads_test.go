@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/aalpar/wile"
-	extexceptions "github.com/aalpar/wile/extensions/exceptions"
 	extthreads "github.com/aalpar/wile/extensions/threads"
 	"github.com/aalpar/wile/values"
 
@@ -37,13 +36,12 @@ func newEngine(t *testing.T) *wile.Engine {
 	return engine
 }
 
-// newEngineWithExceptions creates a Wile engine with threads and exceptions.
-// Needed for tests that use guard, with-exception-handler, etc.
+// newEngineWithExceptions creates a Wile engine with threads.
+// Exception primitives are now in core, so only threads need explicit loading.
 func newEngineWithExceptions(t *testing.T) *wile.Engine {
 	t.Helper()
 	engine, err := wile.NewEngine(context.Background(),
 		wile.WithExtension(extthreads.Extension),
-		wile.WithExtension(extexceptions.Extension),
 	)
 	qt.New(t).Assert(err, qt.IsNil)
 	return engine

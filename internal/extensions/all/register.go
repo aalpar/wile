@@ -16,7 +16,6 @@
 package all
 
 import (
-	"github.com/aalpar/wile/extensions/exceptions"
 	"github.com/aalpar/wile/extensions/files"
 	"github.com/aalpar/wile/extensions/gointerop"
 	"github.com/aalpar/wile/extensions/math"
@@ -36,7 +35,6 @@ var Builder = registry.RegistryBuilder{
 	files.AddToRegistry,
 	system.AddToRegistry,
 	math.AddToRegistry,
-	exceptions.AddToRegistry,
 	eval.AddToRegistry,
 	threads.AddToRegistry,
 	gointerop.AddToRegistry,
