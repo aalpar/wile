@@ -298,17 +298,6 @@ func PrimExpt(mc *machine.MachineContext) error {
 	return nil
 }
 
-// PrimSquare implements the (square) primitive.
-func PrimSquare(mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	n, ok := o.(values.Number)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "square: expected a number but got %T", o)
-	}
-	mc.SetValue(n.Multiply(n))
-	return nil
-}
-
 // exactIntegerSqrt checks if n (non-negative) is a perfect square.
 // For n <= 2^53 the float64 sqrt is exact; for larger values we verify
 // that root*root == n. Returns (root, true) on success.

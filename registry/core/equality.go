@@ -26,19 +26,6 @@ func addEquality(r *registry.Registry) error {
 			Doc: "Returns #t if obj1 and obj2 are equivalent.", ParamNames: []string{"obj1", "obj2"}, Category: "equality"},
 		{Name: "equal?", ParamCount: 2, Impl: PrimEqualQ,
 			Doc: "Returns #t if obj1 and obj2 have the same structure and contents.", ParamNames: []string{"obj1", "obj2"}, Category: "equality"},
-		{Name: "boolean=?", ParamCount: 2, IsVariadic: true, Impl: PrimBooleanEq,
-			Doc: "Returns #t if all boolean arguments are the same.", ParamNames: []string{"bool1", "bool2", "bools"}, Category: "equality"},
-		{Name: "symbol=?", ParamCount: 2, IsVariadic: true, Impl: PrimSymbolEq,
-			Doc: "Returns #t if all symbol arguments are the same.", ParamNames: []string{"sym1", "sym2", "syms"}, Category: "equality"},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
-
-	return nil
-}
-
-func addBoolean(r *registry.Registry) error {
-	r.AddPrimitives([]registry.PrimitiveSpec{
-		{Name: "not", ParamCount: 1, Impl: PrimNot,
-			Doc: "Returns #t if obj is #f, #f otherwise.", ParamNames: []string{"obj"}, Category: "equality"},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

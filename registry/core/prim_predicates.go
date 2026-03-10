@@ -112,22 +112,6 @@ func PrimPairQ(mc *machine.MachineContext) error {
 	return nil
 }
 
-// PrimListQ implements the list? predicate.
-// Returns #t if the argument is a proper list, #f otherwise.
-// R7RS: list? operates on runtime values, not syntax objects.
-// (list? #'()) => #f, (list? '()) => #t
-func PrimListQ(mc *machine.MachineContext) error {
-	o := mc.Arg(0)
-	// Runtime list types only — not syntax pairs.
-	switch t := o.(type) {
-	case *values.Pair:
-		mc.SetValue(values.BoolToBoolean(t.IsList()))
-	default:
-		mc.SetValue(values.BoolToBoolean(values.IsEmptyList(o)))
-	}
-	return nil
-}
-
 // PrimIntegerQ implements the integer? predicate.
 //
 // R7RS §6.2.6: Returns #t if the argument is an integer (exact or inexact).
@@ -189,57 +173,6 @@ var PrimInexactQ = helpers.MakeNumericPredicate[values.Number](
 		return !n.IsExact()
 	},
 )
-
-// PrimExactIntegerQ implements the exact-integer? predicate.
-//
-// R7RS §6.2.6: Returns #t if the argument is both exact and an integer.
-func PrimExactIntegerQ(mc *machine.MachineContext) error {
-	n, ok := mc.Arg(0).(values.Number)
-	if !ok {
-		mc.SetValue(values.FalseValue)
-		return nil
-	}
-	mc.SetValue(values.BoolToBoolean(n.IsExact() && n.IsInteger()))
-	return nil
-}
-
-// PrimZeroQ implements the zero? predicate.
-// Returns #t if the number is zero, #f otherwise.
-var PrimZeroQ = helpers.MakeNumericPredicate[values.Number](
-	"zero?", werr.ErrNotANumber, values.Number.IsZero,
-)
-
-// PrimPositiveQ implements the positive? predicate.
-//
-// R7RS §6.2.6: Returns #t if the real number is positive.
-// Real-valued complex numbers (zero imaginary part) are accepted.
-func PrimPositiveQ(mc *machine.MachineContext) error {
-	return realSignPredicate(mc, "positive?", values.RealNumber.IsPositive)
-}
-
-// PrimNegativeQ implements the negative? predicate.
-//
-// R7RS §6.2.6: Returns #t if the real number is negative.
-// Real-valued complex numbers (zero imaginary part) are accepted.
-func PrimNegativeQ(mc *machine.MachineContext) error {
-	return realSignPredicate(mc, "negative?", values.RealNumber.IsNegative)
-}
-
-// realSignPredicate implements positive? and negative? with support for
-// real-valued complex numbers per R7RS §6.2.6.
-func realSignPredicate(mc *machine.MachineContext, name string, test func(values.RealNumber) bool) error {
-	o := mc.Arg(0)
-	c, ok := o.(values.ComplexNumber)
-	if ok && c.IsReal() {
-		o = c.RealPart()
-	}
-	r, ok := o.(values.RealNumber)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a real number but got %T", name, mc.Arg(0))
-	}
-	mc.SetValue(values.BoolToBoolean(test(r)))
-	return nil
-}
 
 // parityCheck is a helper for implementing parity predicates (odd? and even?).
 // It accepts the predicate name, a test for regular integers, and a test for big integers.

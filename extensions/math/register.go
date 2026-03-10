@@ -53,8 +53,6 @@ func addPrimitives(r *registry.Registry) error {
 			Doc: "Returns the square root of z.", ParamNames: []string{"z"}, Category: "math"},
 		{Name: "expt", ParamCount: 2, Impl: PrimExpt,
 			Doc: "Returns z1 raised to the power z2.", ParamNames: []string{"z1", "z2"}, Category: "math"},
-		{Name: "square", ParamCount: 1, Impl: PrimSquare,
-			Doc: "Returns the square of z.", ParamNames: []string{"z"}, Category: "math"},
 	}, registry.PhaseRuntime)
 
 	// Rounding and division
