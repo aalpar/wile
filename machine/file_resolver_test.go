@@ -20,9 +20,9 @@ import (
 // filepath.Abs() inside resolvers won't match.
 func realDir(t *testing.T, dir string) string {
 	t.Helper()
-	real, err := filepath.EvalSymlinks(dir)
+	resolved, err := filepath.EvalSymlinks(dir)
 	qt.Assert(t, err, qt.IsNil)
-	return real
+	return resolved
 }
 
 // --- OSFileResolver ---
