@@ -33,15 +33,5 @@ func addPairs(r *registry.Registry) error {
 			Doc: "Sets the cdr of a pair.", ParamNames: []string{"pair", "obj"}, Category: "pairs"},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
-	// CxR accessors (2/3/4-level) — generated from cxrSpecs table
-	cxrPrims := make([]registry.PrimitiveSpec, len(cxrSpecs))
-	for i, spec := range cxrSpecs {
-		cxrPrims[i] = registry.PrimitiveSpec{
-			Name: spec.name, ParamCount: 1, Impl: makeCxrPrimitive(spec.name, spec.ops),
-			Doc: "Composition of car and cdr operations.", ParamNames: []string{"pair"}, Category: "pairs",
-		}
-	}
-	r.AddPrimitives(cxrPrims, registry.PhaseRuntime|registry.PhaseExpand)
-
 	return nil
 }
