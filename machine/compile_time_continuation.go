@@ -37,23 +37,40 @@ type CompileTimeContinuation struct {
 	// can carry the library scope for cross-library hygiene.
 	libraryScope *syntax.Scope
 	// fileResolver controls how include/load resolves files.
-	// Defaults to OSFileResolver; set to EmbedFileResolver for bootstrap.
+	// Defaults to the resolver stored on TopLevelEnvironment (usually
+	// OSFileResolver); set to EmbedFileResolver for bootstrap.
 	fileResolver FileResolver
 }
 
 // NewCompiletimeContinuation creates a new CompileTimeContinuation.
-// The default file resolver uses the OS filesystem.
+// The file resolver defaults to the one stored on the TopLevelEnvironment.
+// If none is set, falls back to a fresh OSFileResolver.
 func NewCompiletimeContinuation(tpl *NativeTemplate, env *environment.EnvironmentFrame) *CompileTimeContinuation {
+	var resolver FileResolver
+	if r, ok := env.FileResolver().(FileResolver); ok {
+		resolver = r
+	} else {
+		resolver = NewOSFileResolver(env)
+	}
 	q := &CompileTimeContinuation{
 		env:          env,
 		template:     tpl,
-		fileResolver: NewOSFileResolver(env),
+		fileResolver: resolver,
 	}
 	return q
 }
 
 // SetFileResolver overrides the file resolver used by include/load.
+// Nil resets to the environment's resolver (or OSFileResolver as fallback).
 func (p *CompileTimeContinuation) SetFileResolver(r FileResolver) {
+	if r == nil {
+		if envR, ok := p.env.FileResolver().(FileResolver); ok {
+			p.fileResolver = envR
+		} else {
+			p.fileResolver = NewOSFileResolver(p.env)
+		}
+		return
+	}
 	p.fileResolver = r
 }
 

@@ -100,6 +100,10 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		return nil, err
 	}
 
+	// Set the default file resolver for runtime include/load operations.
+	// This must happen after bootstrap (which uses EmbedFileResolver).
+	env.SetFileResolver(machine.NewOSFileResolver(env))
+
 	if cfg.libraryEnabled {
 		err = setupLibrarySystem(cfg, reg, env, topLevel, macroSources, snapshots, bootstrapResolver)
 		if err != nil {

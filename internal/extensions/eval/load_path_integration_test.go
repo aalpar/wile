@@ -25,6 +25,7 @@ import (
 
 	"github.com/aalpar/wile"
 	exteval "github.com/aalpar/wile/internal/extensions/eval"
+	"github.com/aalpar/wile/machine"
 )
 
 // Helper functions
@@ -266,4 +267,79 @@ func TestLoadPathStack_WithLoadPathAPI(t *testing.T) {
 
 	// Verify stack is empty after WithLoadPath completes
 	c.Assert(engine.CurrentLoadPath(), qt.Equals, "")
+}
+
+// Tests for unified load/include resolution (FileResolver).
+// Before unification, load used only LoadPathStack+CWD.
+// After unification, load shares OSFileResolver with include,
+// so it also searches SCHEME_INCLUDE_PATH and library registry paths.
+
+func TestLoad_ResolvesViaSchemeIncludePath(t *testing.T) {
+	c := qt.New(t)
+
+	// Create a file in a directory that is NOT the CWD and NOT on
+	// the load path stack — only reachable via SCHEME_INCLUDE_PATH.
+	libDir, err := os.MkdirTemp("", "load-include-path-")
+	c.Assert(err, qt.IsNil)
+	defer os.RemoveAll(libDir)
+
+	helperFile := filepath.Join(libDir, "include-helper.scm")
+	c.Assert(os.WriteFile(helperFile, []byte("(define include-helper-val 99)"), 0644), qt.IsNil)
+
+	// Set SCHEME_INCLUDE_PATH to the directory containing the file.
+	t.Setenv(machine.SchemeIncludePathEnv, libDir)
+
+	// Move CWD somewhere else so it can't accidentally find the file.
+	otherDir, err := os.MkdirTemp("", "load-include-path-cwd-")
+	c.Assert(err, qt.IsNil)
+	defer os.RemoveAll(otherDir)
+
+	oldCwd, err := os.Getwd()
+	c.Assert(err, qt.IsNil)
+	defer os.Chdir(oldCwd) //nolint:errcheck
+	c.Assert(os.Chdir(otherDir), qt.IsNil)
+
+	engine := newTestEngine(t)
+
+	// (load "include-helper.scm") should find it via SCHEME_INCLUDE_PATH.
+	evalCode(t, engine, `(load "include-helper.scm")`)
+	result := evalCode(t, engine, `include-helper-val`)
+	c.Assert(result.SchemeString(), qt.Equals, "99")
+}
+
+func TestLoad_ResolvesViaLibrarySearchPaths(t *testing.T) {
+	c := qt.New(t)
+
+	// Create a file reachable only via library search paths.
+	libDir, err := os.MkdirTemp("", "load-lib-path-")
+	c.Assert(err, qt.IsNil)
+	defer os.RemoveAll(libDir)
+
+	helperFile := filepath.Join(libDir, "lib-helper.scm")
+	c.Assert(os.WriteFile(helperFile, []byte("(define lib-helper-val 77)"), 0644), qt.IsNil)
+
+	// Clear SCHEME_INCLUDE_PATH so only library paths apply.
+	t.Setenv(machine.SchemeIncludePathEnv, "")
+
+	// Move CWD somewhere else.
+	otherDir, err := os.MkdirTemp("", "load-lib-path-cwd-")
+	c.Assert(err, qt.IsNil)
+	defer os.RemoveAll(otherDir)
+
+	oldCwd, err := os.Getwd()
+	c.Assert(err, qt.IsNil)
+	defer os.Chdir(oldCwd) //nolint:errcheck
+	c.Assert(os.Chdir(otherDir), qt.IsNil)
+
+	// Create engine with library paths pointing to our directory.
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithExtension(exteval.Extension),
+		wile.WithLibraryPaths(libDir),
+	)
+	c.Assert(err, qt.IsNil)
+
+	// (load "lib-helper.scm") should find it via library search paths.
+	evalCode(t, engine, `(load "lib-helper.scm")`)
+	result := evalCode(t, engine, `lib-helper-val`)
+	c.Assert(result.SchemeString(), qt.Equals, "77")
 }

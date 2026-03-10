@@ -63,6 +63,11 @@ type TopLevelEnvironment struct {
 	// phases is the phase registry for O(1) access to any phase environment.
 	phases *PhaseRegistry
 
+	// fileResolver resolves and opens files for include/load operations.
+	// Stored as any to avoid circular dependency with machine package
+	// (the concrete type is machine.FileResolver).
+	fileResolver any
+
 	// libraryRegistry is the R7RS library registry.
 	// Stored as any to avoid circular dependency with machine package.
 	// TODO: consider defining an interface for library registries.
@@ -159,6 +164,29 @@ func (p *TopLevelEnvironment) Compile() *EnvironmentFrame {
 // Phases returns the phase registry.
 func (p *TopLevelEnvironment) Phases() *PhaseRegistry {
 	return p.phases
+}
+
+// FileResolver returns the file resolver for include/load operations.
+// The caller must type-assert to machine.FileResolver.
+// Delegates to parent when non-nil, so child environments share the
+// root resolver. Returns nil if no resolver has been set.
+func (p *TopLevelEnvironment) FileResolver() any {
+	if p.parent != nil {
+		return p.parent.FileResolver()
+	}
+	return p.fileResolver
+}
+
+// SetFileResolver sets the file resolver for include/load operations.
+// The resolver should be a machine.FileResolver.
+// Delegates to parent when non-nil, matching the getter's delegation,
+// so the resolver is always stored on the root TopLevelEnvironment.
+func (p *TopLevelEnvironment) SetFileResolver(resolver any) {
+	if p.parent != nil {
+		p.parent.SetFileResolver(resolver)
+		return
+	}
+	p.fileResolver = resolver
 }
 
 // LibraryRegistry returns the library registry for R7RS library loading.
