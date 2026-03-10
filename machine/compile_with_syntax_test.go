@@ -35,7 +35,7 @@ func TestCompileWithSyntax_Error_NoArgs(t *testing.T) {
 	// Empty args
 	expr := syntax.SyntaxEmptyList
 
-	err := ccnt.CompileWithSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
+	err := ccnt.CompileWithSyntax(NewCompileTimeCallContext(context.Background(), false), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "with-syntax")
 }
@@ -51,7 +51,7 @@ func TestCompileWithSyntax_Error_NoBody(t *testing.T) {
 	bindings := syntax.SyntaxEmptyList
 	expr := syntax.NewSyntaxCons(bindings, syntax.SyntaxEmptyList, nil)
 
-	err := ccnt.CompileWithSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
+	err := ccnt.CompileWithSyntax(NewCompileTimeCallContext(context.Background(), false), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "with-syntax")
 }
@@ -69,6 +69,6 @@ func TestCompileWithSyntax_EmptyBindings(t *testing.T) {
 	expr := syntax.NewSyntaxCons(bindings,
 		syntax.NewSyntaxCons(body, syntax.SyntaxEmptyList, nil), nil)
 
-	err := ccnt.CompileWithSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
+	err := ccnt.CompileWithSyntax(NewCompileTimeCallContext(context.Background(), false), expr)
 	c.Assert(err, qt.IsNil)
 }

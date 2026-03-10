@@ -380,7 +380,7 @@ func evalSchemeString(code string) (values.Value, error) {
 		// Compile
 		tpl := NewNativeTemplate(0, 0, false)
 		cctx := NewCompiletimeContinuation(tpl, env)
-		cnt := NewCompileTimeCallContext(context.Background(), false, true)
+		cnt := NewCompileTimeCallContext(context.Background(), false)
 		err = cctx.CompileExpression(cnt, expanded)
 		if err != nil {
 			return nil, err
@@ -644,7 +644,7 @@ func newTopLevelThunk(prog syntax.SyntaxValue, env *environment.EnvironmentFrame
 	}
 	// Use inTail=false for top-level expressions. Top-level is NOT tail position
 	// because there's no outer function to return to.
-	cnt := NewCompileTimeCallContext(context.Background(), false, true)
+	cnt := NewCompileTimeCallContext(context.Background(), false)
 	err = cctx.CompileExpression(cnt, prog)
 	if err != nil {
 		return nil, err
@@ -1914,7 +1914,7 @@ func TestCompileSelfEvaluatingNilDirect(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	ctc := NewCompiletimeContinuation(tpl, env)
-	ctctx := NewCompileTimeCallContext(context.Background(), false, true)
+	ctctx := NewCompileTimeCallContext(context.Background(), false)
 
 	// Call with nil to test the nil branch
 	err := ctc.CompileSelfEvaluating(ctctx, nil)
@@ -2149,7 +2149,7 @@ func TestFindFileCWDFallback(t *testing.T) {
 	os.Unsetenv(SchemeIncludePathEnv) //nolint:errcheck
 
 	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
-	ctctx := NewCompileTimeCallContext(context.Background(), false, true)
+	ctctx := NewCompileTimeCallContext(context.Background(), false)
 	cont := NewCompiletimeContinuation(NewNativeTemplate(0, 0, false), env)
 
 	// findFile should resolve "cwd-test.scm" via CWD fallback.
@@ -2168,7 +2168,7 @@ func TestFindFileCWDFallback(t *testing.T) {
 // TestFindFileEmptyPath verifies that findFile rejects empty paths.
 func TestFindFileEmptyPath(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
-	ctctx := NewCompileTimeCallContext(context.Background(), false, true)
+	ctctx := NewCompileTimeCallContext(context.Background(), false)
 	cont := NewCompiletimeContinuation(NewNativeTemplate(0, 0, false), env)
 
 	_, _, err := findFile(cont, ctctx, "")

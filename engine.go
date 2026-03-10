@@ -528,7 +528,7 @@ func expandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, st
 		return nil, err
 	}
 
-	cctx := machine.NewCompileTimeCallContext(ctx, false, true)
+	cctx := machine.NewCompileTimeCallContext(ctx, false)
 	compiler := machine.NewCompiletimeContinuation(tpl, env)
 	if resolver != nil {
 		compiler.SetFileResolver(resolver)

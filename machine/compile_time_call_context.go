@@ -19,8 +19,8 @@ import (
 )
 
 // CompileTimeCallContext carries contextual information through the compilation process.
-// It tracks properties that affect code generation, particularly for tail call optimization
-// and distinguishing definition contexts from expression contexts.
+// It tracks whether an expression is in tail position, which controls whether the
+// compiler emits SaveContinuation (non-tail) or reuses the current frame (tail).
 //
 // This structure is passed by value (not pointer) through the compiler, allowing each
 // compilation step to create modified copies without affecting the caller's context.
@@ -48,30 +48,18 @@ import (
 //   - Condition of if: (if (pred x) ...) - pred is not in tail position
 //   - Definitions: (define x (expr)) - expr is not in tail position
 //   - Non-final expressions in begin: (begin (a) (b) (c)) - only c is in tail position
-//
-// # Definition vs Expression Context
-//
-// The inExpression flag distinguishes between definition contexts (top-level or internal
-// definitions) and expression contexts. This affects how certain forms are compiled:
-//   - In definition context: define creates bindings
-//   - In expression context: define may be an error or treated differently
-//
-// Use NotInExpression() when entering a definition-only context (e.g., library body).
 type CompileTimeCallContext struct {
-	ctx          context.Context
-	inTail       bool
-	inExpression bool
+	ctx    context.Context
+	inTail bool
 }
 
-// NewCompileTimeCallContext creates a new compile-time context with the given flags.
+// NewCompileTimeCallContext creates a new compile-time context.
 // Parameters:
 //   - inTail: true if compiling an expression in tail position
-//   - inExpression: true if compiling an expression (vs. a definition)
-func NewCompileTimeCallContext(ctx context.Context, inTail, inExpression bool) CompileTimeCallContext {
+func NewCompileTimeCallContext(ctx context.Context, inTail bool) CompileTimeCallContext {
 	return CompileTimeCallContext{
-		ctx:          ctx,
-		inTail:       inTail,
-		inExpression: inExpression,
+		ctx:    ctx,
+		inTail: inTail,
 	}
 }
 
@@ -93,19 +81,7 @@ func (p CompileTimeCallContext) Context() context.Context {
 //	err := p.CompileExpression(ctctx.NotInTail(), argExpr)
 func (p CompileTimeCallContext) NotInTail() CompileTimeCallContext {
 	return CompileTimeCallContext{
-		ctx:          p.ctx,
-		inTail:       false,
-		inExpression: p.inExpression,
-	}
-}
-
-// NotInExpression returns a copy of the context with inExpression set to false.
-// Use this when entering a definition-only context where expressions are not allowed
-// at the current level (e.g., library declaration bodies before begin).
-func (p CompileTimeCallContext) NotInExpression() CompileTimeCallContext {
-	return CompileTimeCallContext{
-		ctx:          p.ctx,
-		inTail:       p.inTail,
-		inExpression: false,
+		ctx:    p.ctx,
+		inTail: false,
 	}
 }

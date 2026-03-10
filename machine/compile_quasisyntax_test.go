@@ -79,7 +79,7 @@ func TestCompileQuasisyntax_Error_NoArgs(t *testing.T) {
 	// Empty args
 	expr := syntax.SyntaxEmptyList
 
-	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
+	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "quasisyntax")
 }
@@ -93,7 +93,7 @@ func TestCompileUnsyntax_Error(t *testing.T) {
 
 	expr := syntax.SyntaxEmptyList
 
-	err := ccnt.CompileUnsyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
+	err := ccnt.CompileUnsyntax(NewCompileTimeCallContext(context.Background(), false), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "unsyntax")
 }
@@ -107,7 +107,7 @@ func TestCompileUnsyntaxSplicing_Error(t *testing.T) {
 
 	expr := syntax.SyntaxEmptyList
 
-	err := ccnt.CompileUnsyntaxSplicing(NewCompileTimeCallContext(context.Background(), false, true), expr)
+	err := ccnt.CompileUnsyntaxSplicing(NewCompileTimeCallContext(context.Background(), false), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "unsyntax-splicing")
 }
@@ -727,7 +727,7 @@ func TestCompileQuasisyntaxTemplate_PureLiteral(t *testing.T) {
 
 	// Pure literal should emit only LoadLiteral
 	stx := makeTestSyntaxSymbol("bindSymbolWithScopes")
-	ctctx := NewCompileTimeCallContext(context.Background(), false, true)
+	ctctx := NewCompileTimeCallContext(context.Background(), false)
 
 	err := ccnt.compileQuasisyntaxTemplate(ctctx, stx, 1)
 	c.Assert(err, qt.IsNil)
@@ -775,7 +775,7 @@ func TestCompileQuasisyntaxTemplate_NestedPure(t *testing.T) {
 			makeTestSyntaxSymbol("c"),
 		),
 	)
-	ctctx := NewCompileTimeCallContext(context.Background(), false, true)
+	ctctx := NewCompileTimeCallContext(context.Background(), false)
 
 	err := ccnt.compileQuasisyntaxTemplate(ctctx, stx, 1)
 	c.Assert(err, qt.IsNil)
@@ -816,7 +816,7 @@ func TestCompileQuasisyntax_Error_NonPairArg(t *testing.T) {
 	ccnt, _ := newTestCompiler()
 
 	expr := makeTestSyntaxSymbol("bindSymbolWithScopes")
-	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
+	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "quasisyntax")
 }
@@ -829,7 +829,7 @@ func TestCompileQuasisyntax_Error_ExtraArgs(t *testing.T) {
 		makeTestSyntaxSymbol("template"),
 		makeTestSyntaxSymbol("extra"),
 	)
-	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
+	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "quasisyntax")
 }
@@ -843,7 +843,7 @@ func TestCompileQuasisyntax_Error_ImproperArgsList(t *testing.T) {
 		makeTestSyntaxSymbol("extra"),
 		nil,
 	)
-	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
+	err := ccnt.CompileQuasisyntax(NewCompileTimeCallContext(context.Background(), false), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "quasisyntax")
 }

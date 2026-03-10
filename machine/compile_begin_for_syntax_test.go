@@ -35,7 +35,7 @@ func TestCompileBeginForSyntax_Error_NilEnv(t *testing.T) {
 
 	expr := syntax.SyntaxEmptyList
 
-	err := ccnt.CompileBeginForSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
+	err := ccnt.CompileBeginForSyntax(NewCompileTimeCallContext(context.Background(), false), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "begin-for-syntax")
 }
@@ -51,7 +51,7 @@ func TestCompileBeginForSyntax_Error_NilTemplate(t *testing.T) {
 
 	expr := syntax.SyntaxEmptyList
 
-	err := ccnt.CompileBeginForSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
+	err := ccnt.CompileBeginForSyntax(NewCompileTimeCallContext(context.Background(), false), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "begin-for-syntax")
 }
@@ -66,7 +66,7 @@ func TestCompileBeginForSyntax_Error_NotPair(t *testing.T) {
 	// Not a pair
 	expr := syntax.NewSyntaxSymbol("bad", nil)
 
-	err := ccnt.CompileBeginForSyntax(NewCompileTimeCallContext(context.Background(), false, true), expr)
+	err := ccnt.CompileBeginForSyntax(NewCompileTimeCallContext(context.Background(), false), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "begin-for-syntax")
 }
@@ -81,6 +81,6 @@ func TestCompileBeginForSyntax_Empty(t *testing.T) {
 	// Empty list singleton
 	exprPair := syntax.SyntaxEmptyList
 
-	err := ccnt.CompileBeginForSyntax(NewCompileTimeCallContext(context.Background(), false, true), exprPair)
+	err := ccnt.CompileBeginForSyntax(NewCompileTimeCallContext(context.Background(), false), exprPair)
 	c.Assert(err, qt.IsNil)
 }

@@ -39,7 +39,7 @@ func compileScheme(t *testing.T, code string) *NativeTemplate {
 	expanded, err := NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
-	cctx := NewCompileTimeCallContext(context.Background(), false, true)
+	cctx := NewCompileTimeCallContext(context.Background(), false)
 	err = NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -112,7 +112,7 @@ func TestSourceRecording_Call(t *testing.T) {
 	ectx := context.Background()
 	expanded, err := NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
-	cctx := NewCompileTimeCallContext(context.Background(), false, true)
+	cctx := NewCompileTimeCallContext(context.Background(), false)
 	err = NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -141,7 +141,7 @@ func TestSourceRecording_SetBang(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
 	expanded, _ := NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
-	cctx := NewCompileTimeCallContext(context.Background(), false, true)
+	cctx := NewCompileTimeCallContext(context.Background(), false)
 	err := NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -182,7 +182,7 @@ func TestSourceRecording_SourceLocationPreserved(t *testing.T) {
 	expanded, err := NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
-	cctx := NewCompileTimeCallContext(context.Background(), false, true)
+	cctx := NewCompileTimeCallContext(context.Background(), false)
 	err = NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 

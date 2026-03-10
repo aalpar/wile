@@ -32,25 +32,6 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// TestCompileTimeCallContext_NotInExpression tests the NotInExpression method
-func TestCompileTimeCallContext_NotInExpression(t *testing.T) {
-	// Create a context that is in expression mode
-	ctx := NewCompileTimeCallContext(context.Background(), true, true)
-	qt.Assert(t, ctx.inExpression, qt.IsTrue)
-	qt.Assert(t, ctx.inTail, qt.IsTrue)
-
-	// Call NotInExpression
-	newCtx := ctx.NotInExpression()
-
-	// Verify that inExpression is now false
-	qt.Assert(t, newCtx.inExpression, qt.IsFalse)
-	// Verify that inTail is preserved
-	qt.Assert(t, newCtx.inTail, qt.IsTrue)
-
-	// Verify original context is unchanged
-	qt.Assert(t, ctx.inExpression, qt.IsTrue)
-}
-
 // TestClausesWrapper_EqualTo tests the EqualTo method of clausesWrapper
 func TestClausesWrapper_EqualTo(t *testing.T) {
 	c1 := &clausesWrapper{clauses: []*SyntaxRulesClause{}}
@@ -110,7 +91,7 @@ func TestCompileUnquoteDirectCall(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	ctc := NewCompiletimeContinuation(tpl, env)
-	ctctx := NewCompileTimeCallContext(context.Background(), false, true)
+	ctctx := NewCompileTimeCallContext(context.Background(), false)
 
 	sctx := syntax.NewZeroValueSourceContext()
 	expr := schemeutil.DatumToSyntaxValue(context.Background(), sctx, values.NewSymbol("x"))
@@ -125,7 +106,7 @@ func TestCompileUnquoteSplicingDirectCall(t *testing.T) {
 	env := environment.NewTopLevelEnvironment().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	ctc := NewCompiletimeContinuation(tpl, env)
-	ctctx := NewCompileTimeCallContext(context.Background(), false, true)
+	ctctx := NewCompileTimeCallContext(context.Background(), false)
 
 	sctx := syntax.NewZeroValueSourceContext()
 	expr := schemeutil.DatumToSyntaxValue(context.Background(), sctx, values.NewSymbol("x"))
