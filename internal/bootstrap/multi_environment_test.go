@@ -713,7 +713,7 @@ func TestMultiEnv_LibraryPrimitiveAvailability(t *testing.T) {
 		{"ext-system/jiffies", `(> (current-jiffy) 0)`, values.TrueValue},
 	}
 
-	// Bootstrap macros (from addBootstrapMacros)
+	// Bootstrap macros (from addBootstrapSources)
 	bootstrapCases := []roundTripCase{
 		{"macro/and", `(and #t #t #t)`, values.TrueValue},
 		{"macro/or", `(or #f #f 42)`, values.NewInteger(42)},

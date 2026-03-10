@@ -29,15 +29,17 @@ import (
 var bootstrapMacroSource string
 
 // bootstrapProcedureSource contains Scheme procedure definitions (define).
-// Loaded after macros because these procedures use macros like case-lambda,
-// let, begin, and and.
+// Loaded after macros because these procedures use syntax forms like
+// case-lambda and begin, and macros like let and and.
 //
 // Source: registry/core/bootstrap_procedures.scm (embedded at compile-time)
 //
 //go:embed bootstrap_procedures.scm
 var bootstrapProcedureSource string
 
-func addBootstrapMacros(r *registry.Registry) error {
+// addBootstrapSources registers both the macro and procedure bootstrap Scheme
+// sources, ensuring macros are loaded before procedures that depend on them.
+func addBootstrapSources(r *registry.Registry) error {
 	r.AddMacroSource(bootstrapMacroSource)
 	r.AddMacroSource(bootstrapProcedureSource)
 	return nil

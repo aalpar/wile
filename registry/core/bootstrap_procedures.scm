@@ -3,9 +3,9 @@
 ;; Scheme procedure definitions (define) loaded after bootstrap macros.
 ;; This file is embedded at compile-time via go:embed.
 ;;
-;; These procedures may use macros defined in bootstrap_macros.scm
-;; (e.g. case-lambda, let, begin, and). They are loaded before any
-;; user code runs.
+;; These procedures may use syntactic forms and macros defined in
+;; bootstrap_macros.scm (e.g. forms/macros such as case-lambda, let,
+;; begin, and). They are loaded before any user code runs.
 
 ;; Higher-order list operations
 ;; Implemented in Scheme so that iteration produces capturable Scheme
