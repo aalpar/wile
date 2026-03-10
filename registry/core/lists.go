@@ -51,14 +51,10 @@ func addLists(r *registry.Registry) error {
 			Doc: "Returns the first sublist whose car is eq? to obj.", ParamNames: []string{"obj", "list"}, Category: "lists"},
 		{Name: "memv", ParamCount: 2, Impl: PrimMemv,
 			Doc: "Returns the first sublist whose car is eqv? to obj.", ParamNames: []string{"obj", "list"}, Category: "lists"},
-		{Name: "member", ParamCount: 3, IsVariadic: true, Impl: PrimMember,
-			Doc: "Returns the first sublist whose car is equal? to obj, using optional compare.", ParamNames: []string{"obj", "list", "compare"}, Category: "lists"},
 		{Name: "assq", ParamCount: 2, Impl: PrimAssq,
 			Doc: "Returns the first pair whose car is eq? to obj.", ParamNames: []string{"obj", "alist"}, Category: "lists"},
 		{Name: "assv", ParamCount: 2, Impl: PrimAssv,
 			Doc: "Returns the first pair whose car is eqv? to obj.", ParamNames: []string{"obj", "alist"}, Category: "lists"},
-		{Name: "assoc", ParamCount: 3, IsVariadic: true, Impl: PrimAssoc,
-			Doc: "Returns the first pair whose car is equal? to obj, using optional compare.", ParamNames: []string{"obj", "alist", "compare"}, Category: "lists"},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

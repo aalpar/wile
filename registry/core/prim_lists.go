@@ -16,7 +16,6 @@ package core
 
 import (
 	"context"
-	"errors"
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
@@ -336,76 +335,6 @@ func PrimMemv(mc *machine.MachineContext) error {
 	return helpers.MemberLookup(mc, "memv", helpers.Eqv)
 }
 
-// PrimMember implements the member primitive.
-// R7RS §6.4: (member obj list [compare])
-// Finds an element in a list using equal? for comparison, or a custom compare procedure.
-func PrimMember(mc *machine.MachineContext) error {
-	obj := mc.Arg(0)
-	lst := mc.Arg(1)
-	rest := mc.Arg(2)
-
-	// Check for optional compare procedure
-	var compareCls values.Callable
-	if !values.IsEmptyList(rest) {
-		tuple, ok := rest.(values.Tuple)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAList, "member: improper argument list")
-		}
-		cmp, ok := tuple.Car().(values.Callable)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAProcedure, "member: expected a procedure for compare but got %T", tuple.Car())
-		}
-		compareCls = cmp
-	}
-
-	// If no compare procedure, use equal?
-	if compareCls == nil {
-		for !values.IsEmptyList(lst) {
-			pr, ok := lst.(values.Tuple)
-			if !ok {
-				return werr.WrapForeignErrorf(werr.ErrNotAList, "member: expected a list but got %T", lst)
-			}
-			if values.EqualTo(pr.Car(), obj) {
-				mc.SetValue(pr)
-				return nil
-			}
-			lst = pr.Cdr()
-		}
-		mc.SetValue(values.FalseValue)
-		return nil
-	}
-
-	// Use custom compare procedure
-	sub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub)
-	for !values.IsEmptyList(lst) {
-		pr, ok := lst.(values.Tuple)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAList, "member: expected a list but got %T", lst)
-		}
-
-		// Call compare procedure with (obj, element)
-		_, err := sub.ApplyCallable(compareCls, obj, pr.Car())
-		if err != nil {
-			return err
-		}
-		err = sub.Run()
-		if err != nil {
-			return err
-		}
-
-		// If compare returns a true value (not #f), we found a match
-		result := sub.GetValue()
-		if values.ValueToBool(result) {
-			mc.SetValue(pr)
-			return nil
-		}
-		lst = pr.Cdr()
-	}
-	mc.SetValue(values.FalseValue)
-	return nil
-}
-
 // PrimAssq implements the assq primitive.
 func PrimAssq(mc *machine.MachineContext) error {
 	return helpers.AssocLookup(mc, "assq", helpers.EqIdentity)
@@ -414,84 +343,6 @@ func PrimAssq(mc *machine.MachineContext) error {
 // PrimAssv implements the assv primitive.
 func PrimAssv(mc *machine.MachineContext) error {
 	return helpers.AssocLookup(mc, "assv", helpers.Eqv)
-}
-
-// PrimAssoc implements the assoc primitive.
-// R7RS §6.4: (assoc obj alist [compare])
-// Finds an entry in an alist using equal? for comparison, or a custom compare procedure.
-func PrimAssoc(mc *machine.MachineContext) error {
-	obj := mc.Arg(0)
-	alist := mc.Arg(1)
-	rest := mc.Arg(2)
-
-	// Check for optional compare procedure
-	var compareCls values.Callable
-	if !values.IsEmptyList(rest) {
-		tuple, ok := rest.(values.Tuple)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAList, "assoc: improper argument list")
-		}
-		cmp, ok := tuple.Car().(values.Callable)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAProcedure, "assoc: expected a procedure for compare but got %T", tuple.Car())
-		}
-		compareCls = cmp
-	}
-
-	// If no compare procedure, use equal?
-	if compareCls == nil {
-		return helpers.AssocLookup(mc, "assoc", values.EqualTo)
-	}
-
-	// Handle empty list
-	if values.IsEmptyList(alist) {
-		mc.SetValue(values.FalseValue)
-		return nil
-	}
-
-	pr, ok := alist.(values.Tuple)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "assoc: expected a list but got %T", alist)
-	}
-
-	// Use custom compare procedure
-	sub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub)
-	v, err := pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
-		entry, ok := elem.(values.Tuple)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAPair, "assoc: expected a pair in alist but got %T", elem)
-		}
-
-		// Call compare procedure with (obj, car of entry)
-		_, err := sub.ApplyCallable(compareCls, obj, entry.Car())
-		if err != nil {
-			return err
-		}
-		err = sub.Run()
-		if err != nil {
-			return err
-		}
-
-		// If compare returns a true value (not #f), we found a match
-		result := sub.GetValue()
-		if values.ValueToBool(result) {
-			mc.SetValue(entry)
-			return werr.ErrStopIteration
-		}
-		return nil
-	})
-	if errors.Is(err, werr.ErrStopIteration) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if !values.IsEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "assoc: expected a proper list")
-	}
-	mc.SetValue(values.FalseValue)
-	return nil
 }
 
 // PrimListCopy implements the list-copy primitive.

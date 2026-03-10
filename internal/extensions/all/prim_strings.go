@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // String primitives: case-insensitive comparison, Unicode case mapping,
-// string-copy!, string-fill!, string-map, string-for-each
+// string-copy!, string-fill!
 
 package all
 
@@ -145,106 +145,6 @@ func PrimStringFill(mc *machine.MachineContext) error {
 	err = s.Fill(char.Value, start, end)
 	if err != nil {
 		return err
-	}
-
-	mc.SetValue(values.Void)
-	return nil
-}
-
-// PrimStringMap implements the string-map primitive.
-// R7RS §6.7: (string-map proc string1 string2 ...)
-func PrimStringMap(mc *machine.MachineContext) error {
-	proc := mc.Arg(0)
-	stringsVal := mc.Arg(1)
-
-	mcls, err := helpers.RequireType[machine.Closure](proc, werr.ErrNotAProcedure, "string-map")
-	if err != nil {
-		return err
-	}
-
-	if values.IsEmptyList(stringsVal) {
-		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "string-map: expected at least one string")
-	}
-
-	strs, runeSlices, minLen, err := helpers.CollectStrings(stringsVal, "string-map")
-	if err != nil {
-		return err
-	}
-	if len(strs) == 0 {
-		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "string-map: expected at least one string")
-	}
-
-	result := make([]rune, minLen)
-	sub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub)
-
-	for i := range minLen {
-		args := make(values.Vector, len(strs))
-		for j := range strs {
-			args[j] = values.NewCharacter(runeSlices[j][i])
-		}
-
-		_, err := sub.ApplyCallable(mcls, args...)
-		if err != nil {
-			return err
-		}
-		err = sub.Run()
-		if err != nil {
-			return err
-		}
-
-		resultVal := sub.GetValue()
-		char, ok := resultVal.(*values.Character)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotACharacter, "string-map: procedure must return a character but got %T", resultVal)
-		}
-		result[i] = char.Value
-	}
-
-	mc.SetValue(values.NewMutableString(string(result)))
-	return nil
-}
-
-// PrimStringForEach implements the string-for-each primitive.
-// R7RS §6.7: (string-for-each proc string1 string2 ...)
-func PrimStringForEach(mc *machine.MachineContext) error {
-	proc := mc.Arg(0)
-	stringsVal := mc.Arg(1)
-
-	mcls, err := helpers.RequireType[machine.Closure](proc, werr.ErrNotAProcedure, "string-for-each")
-	if err != nil {
-		return err
-	}
-
-	if values.IsEmptyList(stringsVal) {
-		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "string-for-each: expected at least one string")
-	}
-
-	strs, runeSlices, minLen, err := helpers.CollectStrings(stringsVal, "string-for-each")
-	if err != nil {
-		return err
-	}
-	if len(strs) == 0 {
-		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "string-for-each: expected at least one string")
-	}
-
-	sub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub)
-
-	for i := range minLen {
-		args := make(values.Vector, len(strs))
-		for j := range strs {
-			args[j] = values.NewCharacter(runeSlices[j][i])
-		}
-
-		_, err := sub.ApplyCallable(mcls, args...)
-		if err != nil {
-			return err
-		}
-		err = sub.Run()
-		if err != nil {
-			return err
-		}
 	}
 
 	mc.SetValue(values.Void)
