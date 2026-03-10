@@ -43,7 +43,7 @@ var Builder = registry.NewRegistryBuilder(
 	addPrompts,
 	addBoxes,
 	addHashtables,
-	addBootstrapMacros,
+	addBootstrapSources,
 )
 
 // AddToRegistry registers all core primitives.

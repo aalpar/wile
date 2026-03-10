@@ -20,15 +20,27 @@ import (
 	"github.com/aalpar/wile/registry"
 )
 
-// bootstrapMacroSource contains essential derived expression forms.
-// These macros are required for standard Scheme to work.
+// bootstrapMacroSource contains essential derived expression forms
+// (define-syntax). Loaded first so that procedures can use these macros.
 //
-// Source: registry/core/bootstrap.scm (embedded at compile-time)
+// Source: registry/core/bootstrap_macros.scm (embedded at compile-time)
 //
-//go:embed bootstrap.scm
+//go:embed bootstrap_macros.scm
 var bootstrapMacroSource string
 
-func addBootstrapMacros(r *registry.Registry) error {
+// bootstrapProcedureSource contains Scheme procedure definitions (define).
+// Loaded after macros because these procedures use syntax forms like
+// case-lambda and begin, and macros like let and and.
+//
+// Source: registry/core/bootstrap_procedures.scm (embedded at compile-time)
+//
+//go:embed bootstrap_procedures.scm
+var bootstrapProcedureSource string
+
+// addBootstrapSources registers both the macro and procedure bootstrap Scheme
+// sources, ensuring macros are loaded before procedures that depend on them.
+func addBootstrapSources(r *registry.Registry) error {
 	r.AddMacroSource(bootstrapMacroSource)
+	r.AddMacroSource(bootstrapProcedureSource)
 	return nil
 }
