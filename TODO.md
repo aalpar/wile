@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-03-09
+**Last Updated**: 2026-03-10
 
 ### Current Project Status
 
@@ -119,5 +119,8 @@ No demand signal. Speculative or research-only.
 - [ ] **Go AST extension Phase 2 — Advanced** [Standard library, S]: Concurrency (`GoStmt`, `DeferStmt`, `SelectStmt`, `CommClause`), switch (`SwitchStmt`, `TypeSwitchStmt`, `CaseClause`), `SliceExpr`, `TypeAssertExpr`, `ChanType`, `Ellipsis`, `LabeledStmt`. ~12 additional node types. `plans/GO-AST.md`
 - [ ] **Go AST extension Phase 3 — Comments & generics** [Standard library, S]: `Comment`/`CommentGroup` attachment for round-trip structural fidelity. `BadExpr`/`BadStmt`/`BadDecl` for error recovery. `IndexListExpr` for generics. `plans/GO-AST.md`
 - [ ] **Implement let-syntax*** [Core language, S]: Implement `let-syntax*`.
-- [ ] **Reduce number of Go primitives** [Performance, M]: Reduce the number of Go primitives by identifying which ones can be effectively replaced by macros or native continuations. Both have the potential to be optimized on the Scheme side — macros via code generation and peephole optimization, or native Scheme opcodes that can be optimized via inlining.
+- [ ] **Native forms migration** [Refactoring, M]: Migrate Go primitives to Scheme where equivalent or superior. 43 of 52 done (Phases 0–2, 4 complete in #460, #462, #463). Phase 3 (9 list algorithms + port helpers, benchmark-gated) remains. See `plans/NATIVE-FORMS-MIGRATION.md`.
 - [ ] **User labels/tags to distinguish FS resolvers** Use tags or labels to distinguish bootstrap loadee from include/library loaders in fileResolver.
+- [ ] **Benchmark** benchmark result of moving primitives to Scheme
+- [ ] **Procedure Inlining?** how can peephole inline procedures?
+- [ ] **Operations for cxr** What about instructions for CxR?

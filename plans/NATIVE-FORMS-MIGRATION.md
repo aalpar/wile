@@ -1,0 +1,541 @@
+# Native Forms Migration Plan
+
+Migrate Foreign (Go) primitives to native Scheme forms where the Scheme implementation is equivalent or superior. Four tiers, ordered by urgency.
+
+**Branch:** `refactor/native-forms-migration` (one sub-branch per phase)
+
+**References:**
+- `TODO.md` line 122: "Reduce number of Go primitives"
+- `bootstrap.scm` line 316-317: continuation-correctness precedent (`map`/`for-each`)
+- R7RS §6.4 (`member`/`assoc`), §6.7 (`string-for-each`), §6.10 (`vector-map`/`vector-for-each`)
+
+---
+
+## Phase 0: Bootstrap File Split
+
+**Branch:** `refactor/native-forms-migration-phase0`
+
+Split `bootstrap.scm` into two files with clean separation of concerns.
+
+### Files
+
+| Old | New | Contents |
+|-----|-----|----------|
+| `bootstrap.scm` | `bootstrap_macros.scm` | All `define-syntax` forms |
+| — | `bootstrap_procedures.scm` | All `define` forms (`map`, `for-each`, plus future additions) |
+
+`do` stays in `bootstrap_macros.scm` (it is `define-syntax`).
+`map` and `for-each` move to `bootstrap_procedures.scm` (they are `define`).
+
+### Loading Order
+
+Macros first, procedures second. Procedures use macros (`let`, `case-lambda`, `begin`, `and`).
+
+### Steps
+
+1. Rename `registry/core/bootstrap.scm` → `registry/core/bootstrap_macros.scm`
+2. Create `registry/core/bootstrap_procedures.scm` with `map` and `for-each` moved from the macros file
+3. Update `registry/core/bootstrap.go`:
+   - Two `//go:embed` directives
+   - Two `AddMacroSource` calls, macros first
+4. Update `registry/core/register_test.go` to expect 2 macro sources
+5. Update header comments in both `.scm` files to reflect the split
+
+### Exit Criteria
+
+- `make test` passes
+- `make lint && make covercheck` clean
+- `map`/`for-each` still work (tested by existing tests)
+
+---
+
+## Phase 1: Continuation Correctness
+
+**Branch:** `refactor/native-forms-migration-phase1`
+**Depends on:** Phase 0
+
+Fix `call/cc`-inside-callback truncation. These Go implementations use `sub.ApplyCallable()` + `sub.Run()` in Go `for` loops. If `call/cc` is called inside the callback, the captured continuation cannot re-enter the Go loop — the Go stack frame is gone. This is the same architectural limitation already fixed for `map`/`for-each` (see `bootstrap.scm` line 316-317).
+
+### Functions to Convert
+
+| Function | Source | Extension dependency |
+|----------|--------|---------------------|
+| `vector-map` | `registry/core/prim_vectors.go` | None (core) |
+| `vector-for-each` | `registry/core/prim_vectors.go` | None (core) |
+| `string-map` | `internal/extensions/all/prim_strings.go` | None (uses core `string-ref`, `string-length`, `make-string`, `string-set!`) |
+| `string-for-each` | `internal/extensions/all/prim_strings.go` | None (uses core `string-ref`, `string-length`) |
+| `member` | `registry/core/prim_lists.go` | None (core) |
+| `assoc` | `registry/core/prim_lists.go` | None (core) |
+
+`memq`, `memv`, `assq`, `assv` stay in Go — they never invoke user closures, so no continuation issue.
+
+### Scheme Implementations
+
+All definitions go in `registry/core/bootstrap_procedures.scm`.
+
+```scheme
+;; Vector higher-order operations
+;; Implemented in Scheme so that iteration produces capturable Scheme
+;; continuation frames (enabling call/cc inside callbacks).
+
+(define (vector-map f . vecs)
+  (let ((len (apply min (map vector-length vecs))))
+    (let ((result (make-vector len)))
+      (let loop ((i 0))
+        (if (< i len)
+            (begin
+              (vector-set! result i
+                (apply f (map (lambda (v) (vector-ref v i)) vecs)))
+              (loop (+ i 1)))
+            result)))))
+
+(define (vector-for-each f . vecs)
+  (let ((len (apply min (map vector-length vecs))))
+    (let loop ((i 0))
+      (if (< i len)
+          (begin
+            (apply f (map (lambda (v) (vector-ref v i)) vecs))
+            (loop (+ i 1)))))))
+
+;; String higher-order operations
+
+(define (string-map f . strs)
+  (let ((len (apply min (map string-length strs))))
+    (let ((result (make-string len)))
+      (let loop ((i 0))
+        (if (< i len)
+            (begin
+              (string-set! result i
+                (apply f (map (lambda (s) (string-ref s i)) strs)))
+              (loop (+ i 1)))
+            result)))))
+
+(define (string-for-each f . strs)
+  (let ((len (apply min (map string-length strs))))
+    (let loop ((i 0))
+      (if (< i len)
+          (begin
+            (apply f (map (lambda (s) (string-ref s i)) strs))
+            (loop (+ i 1)))))))
+
+;; List search with optional comparator
+;; Default path uses equal?. Custom comparator path must be Scheme
+;; to produce capturable continuation frames.
+
+(define member
+  (case-lambda
+    ((obj lst) (member obj lst equal?))
+    ((obj lst compare)
+     (let loop ((lst lst))
+       (cond
+         ((null? lst) #f)
+         ((compare obj (car lst)) lst)
+         (else (loop (cdr lst))))))))
+
+(define assoc
+  (case-lambda
+    ((obj alist) (assoc obj alist equal?))
+    ((obj alist compare)
+     (let loop ((alist alist))
+       (cond
+         ((null? alist) #f)
+         ((compare obj (caar alist)) (car alist))
+         (else (loop (cdr alist))))))))
+```
+
+### Per-Function Migration Steps
+
+For each function:
+
+1. Remove the `PrimitiveSpec` entry from the Go registration array
+2. Add the Scheme `define` to `bootstrap_procedures.scm`
+3. Run `make test` — all existing tests must pass
+4. Remove the `Prim*` Go function
+5. Remove corresponding tests from `prim_*_test.go`
+6. Run `make test` again
+7. Run `make lint && make covercheck`
+
+### New Correctness Tests
+
+Add integration tests that verify `call/cc` works inside callbacks. These tests validate the architectural fix — they should fail against the old Go implementation and pass with the Scheme version.
+
+```scheme
+;; vector-map + call/cc
+(let ((k #f))
+  (let ((v (vector-map (lambda (x)
+                         (if (= x 2)
+                             (call/cc (lambda (c) (set! k c) x))
+                             x))
+                       '#(1 2 3))))
+    (if k
+        (let ((saved-k k))
+          (set! k #f)
+          (saved-k 99))
+        v)))
+;; => #(1 99 3)
+
+;; member + call/cc with custom comparator
+(let ((k #f))
+  (let ((result (member 2 '(1 2 3)
+                        (lambda (a b)
+                          (if (and (= b 2) k)
+                              (= a b)
+                              (begin
+                                (when (= b 2) (call/cc (lambda (c) (set! k c))))
+                                (= a b)))))))
+    result))
+;; => (2 3)
+```
+
+Place these in `integration/` or as table-driven Go tests using `engine.Eval`.
+
+### Expand-Time Note
+
+All converted functions are currently registered at `PhaseRuntime|PhaseExpand`. No existing code uses `syntax-case`, `define-for-syntax`, or `begin-for-syntax` — expand-time availability is unused infrastructure. Loss of expand-time availability is documented, not blocking. If expand-time usage appears before this phase executes, keep thin Go wrappers at `PhaseExpand`.
+
+### Exit Criteria
+
+- All existing tests pass
+- New `call/cc`-inside-callback tests pass
+- `make lint && make covercheck` clean
+- Go functions and their tests removed
+
+---
+
+## Phase 2: Trivial Predicates
+
+**Branch:** `refactor/native-forms-migration-phase2`
+**Depends on:** Phase 0
+
+Replace 9 facade primitives with one-line Scheme definitions. These are pure compositions of existing primitives with no Go-specific dependency.
+
+### Functions to Convert
+
+| Function | Scheme definition |
+|----------|-------------------|
+| `not` | `(define (not x) (if x #f #t))` |
+| `zero?` | `(define (zero? z) (= z 0))` |
+| `positive?` | `(define (positive? x) (> x 0))` |
+| `negative?` | `(define (negative? x) (< x 0))` |
+| `exact-integer?` | `(define (exact-integer? x) (and (exact? x) (integer? x)))` |
+| `list?` | See below |
+| `boolean=?` | See below |
+| `symbol=?` | See below |
+| `square` | `(define (square x) (* x x))` |
+
+### Non-Trivial Definitions
+
+```scheme
+;; list? — must detect cycles (R7RS §6.4: "Returns #t if obj is a proper list")
+;; Uses tortoise-and-hare for cycle detection.
+(define (list? x)
+  (let loop ((slow x) (fast x))
+    (cond
+      ((null? fast) #t)
+      ((not (pair? fast)) #f)
+      ((null? (cdr fast)) #t)
+      ((not (pair? (cdr fast))) #f)
+      ((eq? slow (cdr fast)) #f)
+      (else (loop (cdr slow) (cddr fast))))))
+
+;; boolean=? — variadic, all args must be booleans and equal
+(define (boolean=? b1 b2 . rest)
+  (if (not (boolean? b1))
+      (error "boolean=?: not a boolean" b1)
+      (let loop ((prev b1) (args (cons b2 rest)))
+        (if (null? args) #t
+            (let ((curr (car args)))
+              (if (not (boolean? curr))
+                  (error "boolean=?: not a boolean" curr)
+                  (and (eq? prev curr)
+                       (loop curr (cdr args)))))))))
+
+;; symbol=? — same pattern
+(define (symbol=? s1 s2 . rest)
+  (if (not (symbol? s1))
+      (error "symbol=?: not a symbol" s1)
+      (let loop ((prev s1) (args (cons s2 rest)))
+        (if (null? args) #t
+            (let ((curr (car args)))
+              (if (not (symbol? curr))
+                  (error "symbol=?: not a symbol" curr)
+                  (and (eq? prev curr)
+                       (loop curr (cdr args)))))))))
+```
+
+### Precondition Check
+
+Before removing each Go primitive, verify no expand-time usage:
+
+```bash
+grep -rn 'syntax-case\|define-for-syntax\|begin-for-syntax' lib/ test/ examples/
+```
+
+Currently zero hits. If this changes, keep thin Go wrappers at `PhaseExpand`.
+
+### Migration Steps
+
+Same per-function steps as Phase 1. No new correctness tests needed — these are simple substitutions covered by existing test suites.
+
+### Source Files Affected
+
+| Function | Registration file | Implementation file | Test file |
+|----------|------------------|--------------------|-----------|
+| `not` | `registry/core/equality.go` | `registry/core/prim_equality.go` | `registry/core/prim_equality_test.go` |
+| `zero?`, `positive?`, `negative?` | `registry/core/predicates.go` | `registry/core/prim_predicates.go` | `registry/core/prim_predicates_test.go` |
+| `exact-integer?`, `list?` | same | same | same |
+| `boolean=?`, `symbol=?` | `registry/core/equality.go` | `registry/core/prim_equality.go` | `registry/core/prim_equality_test.go` |
+| `square` | `extensions/math/transcendental.go` | `extensions/math/prim_transcendental.go` | `extensions/math/prim_transcendental_test.go` |
+
+### Exit Criteria
+
+- All existing tests pass
+- `make lint && make covercheck` clean
+- Go functions and their tests removed
+
+---
+
+## Phase 3: List Algorithms (Benchmark-Gated)
+
+**Branch:** `refactor/native-forms-migration-phase3`
+**Depends on:** Phase 0
+
+Convert pure-algorithmic operations to Scheme. Each conversion is gated by benchmark measurements.
+
+### Candidates
+
+| Function | Source | Notes |
+|----------|--------|-------|
+| `make-list` | `registry/core/prim_lists.go` | Build list of n copies |
+| `list-copy` | same | Copy spine |
+| `list-tail` | same | k iterations of `cdr` |
+| `reverse` | same | Accumulator pattern |
+| `length` | same | Counter walk |
+| `append` | same | Right-fold concatenation |
+| `call-with-port` | `internal/extensions/io/prim_ports.go` | Must handle multiple return values |
+| `call-with-input-file` | `extensions/files/prim_files.go` | Delegates to `open-input-file` + `call-with-port` |
+| `call-with-output-file` | `extensions/files/prim_files.go` | Delegates to `open-output-file` + `call-with-port` |
+
+### Benchmark Protocol
+
+**Before conversion (per candidate):**
+
+1. Ensure a micro-benchmark exists in `prim_bench_test.go` for the candidate. If missing, add one.
+2. Run `make bench` — record baseline numbers for the candidate.
+3. Run `make bench-gabriel` — record baseline (Gabriel benchmarks use lists heavily).
+
+**After conversion (per candidate):**
+
+4. Re-run `make bench` — compare candidate's micro-benchmark against baseline.
+5. Re-run `make bench-gabriel` — compare all Gabriel benchmarks against baseline.
+
+**Gate thresholds:**
+
+| Metric | Threshold | Action if exceeded |
+|--------|-----------|-------------------|
+| Micro-benchmark | > 20% slower | Keep Go version, document why |
+| Any Gabriel benchmark | > 5% slower | Investigate; keep Go if attributable |
+
+The 20%/5% split reflects that micro-benchmarks amplify per-call overhead while Gabriel benchmarks measure real workloads.
+
+### Scheme Implementations
+
+```scheme
+;; List algorithms
+
+(define (make-list k . fill)
+  (let ((f (if (null? fill) #f (car fill))))
+    (let loop ((i 0) (result '()))
+      (if (< i k)
+          (loop (+ i 1) (cons f result))
+          result))))
+
+(define (list-copy lst)
+  (if (null? lst) '()
+      (cons (car lst) (list-copy (cdr lst)))))
+
+(define (list-tail lst k)
+  (if (zero? k) lst
+      (list-tail (cdr lst) (- k 1))))
+
+(define (reverse lst)
+  (let loop ((lst lst) (acc '()))
+    (if (null? lst) acc
+        (loop (cdr lst) (cons (car lst) acc)))))
+
+(define (length lst)
+  (let loop ((lst lst) (n 0))
+    (if (null? lst) n
+        (loop (cdr lst) (+ n 1)))))
+
+(define (append . lsts)
+  (cond
+    ((null? lsts) '())
+    ((null? (cdr lsts)) (car lsts))
+    (else
+     (let append2 ((a (car lsts)) (b (apply append (cdr lsts))))
+       (if (null? a) b
+           (cons (car a) (append2 (cdr a) b)))))))
+
+;; Port resource management
+;; R7RS §6.13.1: "the values yielded by proc are returned"
+;; Must preserve multiple return values.
+
+(define (call-with-port port proc)
+  (let ((results (call-with-values (lambda () (proc port)) list)))
+    (close-port port)
+    (apply values results)))
+
+;; File operations — delegate to open-*-file + call-with-port
+;; Security is enforced by open-input-file / open-output-file
+;; (security.Check at prim_files.go openFile helper).
+
+(define (call-with-input-file filename proc)
+  (call-with-port (open-input-file filename) proc))
+
+(define (call-with-output-file filename proc)
+  (call-with-port (open-output-file filename) proc))
+```
+
+### Security Note
+
+`call-with-input-file` and `call-with-output-file` currently have their own `security.Check` in `callWithFile` (`prim_files.go:150`). When delegating to `open-input-file`/`open-output-file`, the security check happens inside the `openFile` helper (`prim_files.go:38`). Verify by running security integration tests that file access is still gated.
+
+### `call-with-port` Placement
+
+Unlike the list algorithms, `call-with-port` depends on `close-port` which is in the I/O extension. Two options:
+
+- (a) Define in `bootstrap_procedures.scm` — works only if the I/O extension is loaded
+- (b) Define via the I/O extension's own `AddMacroSource`
+
+Recommend (b) for `call-with-port` and the files extension's own macro source for `call-with-input-file`/`call-with-output-file`. This preserves the invariant that bootstrap code depends only on core primitives.
+
+### Per-Candidate Migration Steps
+
+1. Verify/add micro-benchmark
+2. Record baseline (`make bench`, `make bench-gabriel`)
+3. Remove Go registration, add Scheme definition
+4. Re-run benchmarks, compare against gate thresholds
+5. If gate passes: remove Go function and tests, commit
+6. If gate fails: revert, document in this plan as "kept in Go: [reason]"
+
+### Exit Criteria
+
+- All converted functions pass existing tests
+- No benchmark regression beyond gate thresholds
+- Unconverted functions documented with benchmark data
+- `make lint && make covercheck` clean
+
+---
+
+## Phase 4: CxR Consolidation
+
+**Branch:** `refactor/native-forms-migration-phase4`
+**Depends on:** Phase 0
+
+Replace 28 Go CxR primitives with Scheme definitions. The same 28 functions already exist in `lib/scheme/cxr.sld` — the Go primitives are redundant infrastructure.
+
+### Scheme Definitions
+
+Add to `bootstrap_procedures.scm`:
+
+```scheme
+;; CxR accessors (R7RS §6.4, also in (scheme cxr) library)
+;; 2-level
+(define (caar x) (car (car x)))
+(define (cadr x) (car (cdr x)))
+(define (cdar x) (cdr (car x)))
+(define (cddr x) (cdr (cdr x)))
+;; 3-level
+(define (caaar x) (car (car (car x))))
+(define (caadr x) (car (car (cdr x))))
+(define (cadar x) (car (cdr (car x))))
+(define (caddr x) (car (cdr (cdr x))))
+(define (cdaar x) (cdr (car (car x))))
+(define (cdadr x) (cdr (car (cdr x))))
+(define (cddar x) (cdr (cdr (car x))))
+(define (cdddr x) (cdr (cdr (cdr x))))
+;; 4-level
+(define (caaaar x) (car (car (car (car x)))))
+(define (caaadr x) (car (car (car (cdr x)))))
+(define (caadar x) (car (car (cdr (car x)))))
+(define (caaddr x) (car (car (cdr (cdr x)))))
+(define (cadaar x) (car (cdr (car (car x)))))
+(define (cadadr x) (car (cdr (car (cdr x)))))
+(define (caddar x) (car (cdr (cdr (car x)))))
+(define (cadddr x) (car (cdr (cdr (cdr x)))))
+(define (cdaaar x) (cdr (car (car (car x)))))
+(define (cdaadr x) (cdr (car (car (cdr x)))))
+(define (cdadar x) (cdr (car (cdr (car x)))))
+(define (cdaddr x) (cdr (car (cdr (cdr x)))))
+(define (cddaar x) (cdr (cdr (car (car x)))))
+(define (cddadr x) (cdr (cdr (car (cdr x)))))
+(define (cdddar x) (cdr (cdr (cdr (car x)))))
+(define (cddddr x) (cdr (cdr (cdr (cdr x)))))
+```
+
+### Go Code to Remove
+
+From `registry/core/prim_pairs.go`:
+- `cxrEntries` table (~30 lines)
+- `makeCxrPrimitive` function
+- `cxrHelper` function
+- CxR registration loop in `registry/core/pairs.go`
+
+From `registry/core/prim_pairs_test.go`:
+- CxR test cases
+
+### Verification
+
+`(import (scheme cxr))` must still work — `lib/scheme/cxr.sld` has its own definitions that shadow the bootstrap versions when the library is imported.
+
+### Exit Criteria
+
+- `cadr`, `caddr`, etc. work in the base environment (bootstrap definitions)
+- `(import (scheme cxr))` works (library definitions)
+- All existing tests pass
+- `make lint && make covercheck` clean
+- Go CxR infrastructure removed
+
+---
+
+## Cross-Cutting Concerns
+
+### Phase Independence
+
+Phases 1-4 all depend on Phase 0 but are independent of each other. They can be executed in any order after Phase 0 and merged independently.
+
+Recommended execution order: Phase 0 → Phase 1 (correctness fix, highest priority) → Phase 2 (lowest risk) → Phase 4 (straightforward) → Phase 3 (needs benchmark infrastructure).
+
+### Go Code Cleanup
+
+After each phase, run `make lint` to catch:
+- Unused imports
+- Orphaned helper functions
+- Empty test files
+
+### Documentation Updates
+
+- Update `TODO.md` line 122 after each phase to reflect progress
+- Update `CHANGELOG.md` with the migration (one entry per phase)
+
+### Expand-Time Availability
+
+All converted functions are currently registered at `PhaseRuntime|PhaseExpand`. Moving to Scheme `define` removes expand-time availability. As of the plan's writing date, no code in the repository uses `syntax-case`, `define-for-syntax`, or `begin-for-syntax` — expand-time availability is unused infrastructure.
+
+**If expand-time usage appears before a phase executes:** Keep thin Go wrappers at `PhaseExpand` that delegate to the Scheme definitions, or find a mechanism to register Scheme definitions in the expand environment.
+
+---
+
+## Summary
+
+| Phase | Functions | Count | Motivation |
+|-------|-----------|-------|------------|
+| 0 | Bootstrap split | — | Infrastructure |
+| 1 | `vector-map`, `vector-for-each`, `string-map`, `string-for-each`, `member`, `assoc` | 6 | Continuation correctness |
+| 2 | `not`, `zero?`, `positive?`, `negative?`, `exact-integer?`, `list?`, `boolean=?`, `symbol=?`, `square` | 9 | Eliminate facades |
+| 3 | `make-list`, `list-copy`, `list-tail`, `reverse`, `length`, `append`, `call-with-port`, `call-with-input-file`, `call-with-output-file` | 9 | Simplify (benchmark-gated) |
+| 4 | 28 CxR accessors | 28 | Eliminate duplication |
+| **Total** | | **52** | |
+
+Net reduction: ~52 Go primitive implementations replaced by ~120 lines of Scheme.
