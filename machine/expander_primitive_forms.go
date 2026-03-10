@@ -355,7 +355,7 @@ func (p *ExpanderTimeContinuation) expandImportForm(sym *syntax.SyntaxSymbol, ex
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, werr.WrapForeignErrorf(err, "import: failed to resolve import set")
 	}
 
 	// Return the import form unchanged for later compilation
