@@ -651,7 +651,11 @@ func (p *NativeTemplate) Copy() *NativeTemplate {
 		return nil
 	}
 	if len(p.code) != len(p.sourceRefs) {
-		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument, "native_template: code/sourceRefs length invariant violated"))
+		panic(werr.WrapForeignErrorf(
+			werr.ErrInvalidArgument,
+			"native_template: code/sourceRefs length invariant violated (len(code)=%d, len(sourceRefs)=%d)",
+			len(p.code), len(p.sourceRefs),
+		))
 	}
 	q := &NativeTemplate{
 		parameterCount: p.parameterCount,

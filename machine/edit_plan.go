@@ -115,10 +115,14 @@ func (p *EditPlan) Apply() int {
 func validateEdits(edits []edit, codeLen int) {
 	for i, e := range edits {
 		if e.start < 0 || e.end > codeLen || e.start > e.end {
-			panic(werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "edit_plan: edit out of bounds"))
+			panic(werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "edit_plan: edit out of bounds (start=%d, end=%d, codeLen=%d)", e.start, e.end, codeLen))
 		}
 		if i > 0 && e.start < edits[i-1].end {
-			panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument, "edit_plan: overlapping edits"))
+			panic(werr.WrapForeignErrorf(
+				werr.ErrInvalidArgument,
+				"edit_plan: overlapping edits: prev=[%d,%d) curr=[%d,%d)",
+				edits[i-1].start, edits[i-1].end, e.start, e.end,
+			))
 		}
 	}
 }
