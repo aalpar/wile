@@ -49,7 +49,7 @@ func (p *CompileTimeContinuation) compileQuasiquoteDatum(ctctx CompileTimeCallCo
 func (p *CompileTimeContinuation) expandQuasiquote(ctx context.Context, stx syntax.SyntaxValue, depth int) syntax.SyntaxValue {
 	v, ok := stx.(*syntax.SyntaxVector)
 	if ok {
-		return p.expandQuasiquoteVector(ctx, v, depth)
+		return p.expandQuasiquoteVector(ctx, v, depth, quasiquoteKW)
 	}
 	return p.expandQuasi(ctx, stx, depth, quasiquoteKW)
 }
@@ -57,16 +57,16 @@ func (p *CompileTimeContinuation) expandQuasiquote(ctx context.Context, stx synt
 // expandQuasiquoteVector handles vector quasiquote expansion.
 // Vectors expand to (list->vector (list ...)) or (list->vector (append ...))
 // depending on whether unquote-splicing is present.
-func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v *syntax.SyntaxVector, depth int) syntax.SyntaxValue {
+func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v *syntax.SyntaxVector, depth int, kw quasiKeywords) syntax.SyntaxValue {
 	srcCtx := v.SourceContext()
 
-	// Check if any element is unquote-splicing at depth 1
+	// Check if any element is unquote-splicing/unsyntax-splicing at depth 1
 	hasSplice := false
 	for _, elem := range v.Values {
 		elemPair, ok := elem.(*syntax.SyntaxPair)
 		if ok {
 			carSymName, ok := p.getSymbolName(elemPair.SyntaxCar())
-			if ok && carSymName == "unquote-splicing" && depth == 1 {
+			if ok && carSymName == kw.splicing && depth == 1 {
 				hasSplice = true
 				break
 			}
@@ -78,7 +78,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v 
 		var elems []syntax.SyntaxValue
 		elems = append(elems, syntax.NewSyntaxSymbol("list", srcCtx))
 		for _, elem := range v.Values {
-			elems = append(elems, p.expandQuasi(ctx, elem, depth, quasiquoteKW))
+			elems = append(elems, p.expandQuasi(ctx, elem, depth, kw))
 		}
 		listExpr := p.buildQuasiSyntaxList(srcCtx, elems...)
 		return p.buildQuasiSyntaxList(srcCtx,
@@ -113,7 +113,7 @@ func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v 
 		elemPair, ok := elem.(*syntax.SyntaxPair)
 		if ok {
 			carSymName, ok := p.getSymbolName(elemPair.SyntaxCar())
-			if ok && carSymName == "unquote-splicing" && depth == 1 {
+			if ok && carSymName == kw.splicing && depth == 1 {
 				flushNormal()
 				if elemPair.Length() == 2 {
 					cdrPair := elemPair.SyntaxCdr().(*syntax.SyntaxPair)
@@ -121,12 +121,12 @@ func (p *CompileTimeContinuation) expandQuasiquoteVector(ctx context.Context, v 
 					segments = append(segments, segment{typ: segSplice, expr: expr})
 				} else {
 					// Malformed - treat as normal
-					currentElems = append(currentElems, p.expandQuasi(ctx, elem, depth, quasiquoteKW))
+					currentElems = append(currentElems, p.expandQuasi(ctx, elem, depth, kw))
 				}
 				continue
 			}
 		}
-		currentElems = append(currentElems, p.expandQuasi(ctx, elem, depth, quasiquoteKW))
+		currentElems = append(currentElems, p.expandQuasi(ctx, elem, depth, kw))
 	}
 	flushNormal()
 

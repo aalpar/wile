@@ -2525,6 +2525,74 @@ func TestCoverageQuasiquoteEdgeCases(t *testing.T) {
 	}
 }
 
+// TestQuasiQuoteRegressions tests bugs found during PR #454 review:
+//   - Nested vector unquote: `(a #(1 ,x 3)) must expand unquotes inside vectors
+//   - Improper list with splice: `(1 ,@xs . 4) must preserve the dotted tail
+//   - Improper list without splice: `(a b . ,x) must not double-expand elements
+func TestQuasiQuoteRegressions(t *testing.T) {
+	testCases := []struct {
+		name     string
+		defs     []string
+		code     string
+		expected values.Value
+	}{
+		{
+			"nested vector with unquote",
+			[]string{"(define x 42)"},
+			"`(a #(1 ,x 3))",
+			values.List(
+				values.NewSymbol("a"),
+				values.NewVector(values.NewInteger(1), values.NewInteger(42), values.NewInteger(3)),
+			),
+		},
+		{
+			"nested vector with unquote-splicing",
+			[]string{"(define xs '(2 3 4))"},
+			"`(a #(1 ,@xs 5))",
+			values.List(
+				values.NewSymbol("a"),
+				values.NewVector(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3), values.NewInteger(4), values.NewInteger(5)),
+			),
+		},
+		{
+			"improper list with splice",
+			[]string{"(define xs '(2 3))"},
+			"`(1 ,@xs . 4)",
+			values.NewCons(values.NewInteger(1),
+				values.NewCons(values.NewInteger(2),
+					values.NewCons(values.NewInteger(3), values.NewInteger(4)))),
+		},
+		{
+			"improper list with unquote tail",
+			[]string{"(define x 99)"},
+			"`(a b . ,x)",
+			values.NewCons(values.NewSymbol("a"),
+				values.NewCons(values.NewSymbol("b"), values.NewInteger(99))),
+		},
+		{
+			"improper list with multiple elements",
+			[]string{"(define x 'tail)"},
+			"`(1 2 3 . ,x)",
+			values.NewCons(values.NewInteger(1),
+				values.NewCons(values.NewInteger(2),
+					values.NewCons(values.NewInteger(3), values.NewSymbol("tail")))),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newFullRuntimeEnv(t)
+			for _, def := range tc.defs {
+				_, err := runSchemeExpr(t, env, def)
+				qt.Assert(t, err, qt.IsNil)
+			}
+			mc, err := runSchemeExpr(t, env, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
+		})
+	}
+}
+
 // TestCoverageIncludeError tests the include form with nonexistent file.
 // Exercises CompileInclude error path in compile_time_continuation.go.
 func TestCoverageIncludeError(t *testing.T) {

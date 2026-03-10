@@ -154,6 +154,9 @@ func (p *CompileTimeContinuation) expandQuasi(
 		quoteSym := syntax.NewSyntaxSymbol(kw.quoting, srcCtx)
 		return p.buildQuasiSyntaxList(srcCtx, quoteSym, v)
 
+	case *syntax.SyntaxVector:
+		return p.expandQuasiquoteVector(ctx, v, depth, kw)
+
 	default:
 		quoteSym := syntax.NewSyntaxSymbol(kw.quoting, srcCtx)
 		return p.buildQuasiSyntaxList(srcCtx, quoteSym, stx)
@@ -233,34 +236,14 @@ func (p *CompileTimeContinuation) expandQuasiList(
 			continue
 		}
 
-		// Improper list: build nested cons from collected elements + expanded tail
-		var elements []syntax.SyntaxValue
-		var tail syntax.SyntaxValue
-
-		cur := pair
-		for {
-			elements = append(elements, p.expandQuasi(ctx, cur.SyntaxCar(), depth, kw))
-			cdrVal := cur.SyntaxCdr()
-			if syntax.IsSyntaxEmptyList(cdrVal) {
-				tail = syntax.SyntaxEmptyList
-				break
-			}
-			np, ok := cdrVal.(*syntax.SyntaxPair)
-			if ok {
-				cur = np
-			} else {
-				tail = cdrVal
-				break
-			}
-		}
-
-		// Build nested cons: (cons elem1 (cons elem2 ... expandedTail))
-		var result syntax.SyntaxValue
-		result = p.expandQuasi(ctx, tail, depth, kw)
-		for i := len(elements) - 1; i >= 0; i-- {
+		// Improper list: build nested cons from already-expanded elements + expanded tail.
+		// elems[0] is the "list" symbol; elems[1:] are the already-expanded elements.
+		expandedTail := p.expandQuasi(ctx, cdr, depth, kw)
+		result := expandedTail
+		for i := len(elems) - 1; i >= 1; i-- {
 			result = p.buildQuasiSyntaxList(srcCtx,
 				syntax.NewSyntaxSymbol("cons", srcCtx),
-				elements[i],
+				elems[i],
 				result,
 			)
 		}
@@ -292,6 +275,7 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 
 	var segments []segment
 	var currentElems []syntax.SyntaxValue
+	var improperTail syntax.SyntaxValue
 
 	flushNormal := func() {
 		if len(currentElems) > 0 {
@@ -332,6 +316,10 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 		if ok {
 			current = nextPair
 		} else {
+			// Improper list: expand the dotted tail and preserve it
+			// as the final append argument. R7RS append with a non-list
+			// final argument produces an improper list.
+			improperTail = p.expandQuasi(ctx, cdr, depth, kw)
 			break
 		}
 	}
@@ -351,6 +339,10 @@ func (p *CompileTimeContinuation) expandQuasiListWithSplice(
 		case segSplice:
 			appendArgs = append(appendArgs, seg.expr)
 		}
+	}
+
+	if improperTail != nil {
+		appendArgs = append(appendArgs, improperTail)
 	}
 
 	return p.buildQuasiSyntaxList(srcCtx, appendArgs...)
