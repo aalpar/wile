@@ -40,7 +40,7 @@ func (p *Stack) Push(v values.Value) {
 // on top. See BIBLIOGRAPHY.md "Stack-Based Virtual Machines".
 func (p *Stack) Pull() values.Value {
 	if len(*p) == 0 {
-		panic(werr.ErrStackUnderflow)
+		panic(werr.WrapForeignErrorf(werr.ErrStackUnderflow, "Stack.Pull: stack is empty"))
 	}
 	q := (*p)[0]
 	copy((*p), (*p)[1:])
@@ -52,7 +52,7 @@ func (p *Stack) Pull() values.Value {
 func (p *Stack) Pop() values.Value {
 	l := len(*p)
 	if l == 0 {
-		panic(werr.ErrStackUnderflow)
+		panic(werr.WrapForeignErrorf(werr.ErrStackUnderflow, "Stack.Pop: stack is empty"))
 	}
 	v := (*p)[l-1]
 	*p = (*p)[:l-1]

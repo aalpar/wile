@@ -322,7 +322,7 @@ func TestBigInteger_DivisionByZero(t *testing.T) {
 
 	_, err := bi.Divide(zero)
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(err.Error(), qt.Matches, "division by zero")
+	c.Assert(err.Error(), qt.Matches, ".*division by zero")
 }
 
 func TestBigFloat_DivisionByZero(t *testing.T) {
@@ -333,7 +333,7 @@ func TestBigFloat_DivisionByZero(t *testing.T) {
 	exactZero := values.NewBigIntegerFromInt64(0)
 	_, err := bf.Divide(exactZero)
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(err.Error(), qt.Matches, "division by zero")
+	c.Assert(err.Error(), qt.Matches, ".*division by zero")
 
 	// Division by inexact zero returns +Inf per IEEE 754 / R7RS §6.2.6.
 	inexactZero := values.NewBigFloatFromFloat64(0.0)

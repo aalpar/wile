@@ -153,7 +153,7 @@ func (p *Float) Multiply(o Number) Number {
 // Divide returns the quotient of this float and another number.
 func (p *Float) Divide(o Number) (Number, error) {
 	if o.IsZero() && o.IsExact() {
-		return nil, werr.ErrDivisionByZero
+		return nil, werr.WrapForeignErrorf(werr.ErrDivisionByZero, "Float.Divide: division by exact zero")
 	}
 	v, ok := o.(*Float)
 	if ok {

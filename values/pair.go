@@ -136,7 +136,7 @@ func (p *Pair) IsList() bool {
 // and sets the last cdr to vs.
 func (p *Pair) Append(vs Value) Value {
 	if !p.IsList() {
-		panic(werr.ErrNotAList)
+		panic(werr.WrapForeignErrorf(werr.ErrNotAList, "Pair.Append: receiver is not a proper list"))
 	}
 	if IsEmptyList(vs) {
 		return p
@@ -166,7 +166,7 @@ func (p *Pair) Append(vs Value) Value {
 		var ok bool
 		q, ok = cdr.(*Pair)
 		if !ok {
-			panic(werr.ErrNotAList)
+			panic(werr.WrapForeignErrorf(werr.ErrNotAList, "Pair.Append: improper list during spine copy"))
 		}
 	}
 
@@ -233,7 +233,7 @@ func Must(v Value, err error) {
 		panic(err)
 	}
 	if !IsEmptyList(v) {
-		panic(werr.ErrNotAList)
+		panic(werr.WrapForeignErrorf(werr.ErrNotAList, "Must: tail is not empty list"))
 	}
 }
 

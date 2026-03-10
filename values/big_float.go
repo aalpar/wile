@@ -225,7 +225,7 @@ func (p *BigFloat) Divide(o Number) (Number, error) {
 	}
 	if o.IsZero() {
 		if o.IsExact() {
-			return nil, werr.ErrDivisionByZero
+			return nil, werr.WrapForeignErrorf(werr.ErrDivisionByZero, "BigFloat.Divide: division by exact zero")
 		}
 		// Inexact zero: IEEE 754 semantics — ±Inf or NaN
 		if p.nan || p.IsZero() {

@@ -122,7 +122,7 @@ func TestSyntaxPair_Length(t *testing.T) {
 		{in: NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), SyntaxEmptyList, nil), nil), out: 2},
 		{
 			in:           NewSyntaxCons(NewSyntaxObject(values.NewInteger(10), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(20), nil), NewSyntaxObject(values.NewInteger(30), nil), nil), nil),
-			panicMatches: "not a list",
+			panicMatches: ".*not a list",
 			out:          -1,
 		},
 	}
@@ -216,7 +216,7 @@ func TestSyntaxPair_AsVector(t *testing.T) {
 			in: NewSyntaxCons(
 				NewSyntaxObject(values.NewInteger(1), nil),
 				NewSyntaxObject(values.NewInteger(2), nil), nil),
-			panicMatches: "not a list",
+			panicMatches: ".*not a list",
 		},
 	}
 	for _, tc := range tcs {
@@ -286,7 +286,7 @@ func TestSyntaxPair_AsSyntaxVector(t *testing.T) {
 			in: NewSyntaxCons(
 				NewSyntaxObject(values.NewInteger(1), nil),
 				NewSyntaxObject(values.NewInteger(2), nil), nil),
-			panicMatches: "not a syntax list",
+			panicMatches: ".*not a syntax list",
 		},
 	}
 	for _, tc := range tcs {
@@ -337,7 +337,7 @@ func TestSyntaxPair_Append(t *testing.T) {
 			in:           (*SyntaxPair)(nil),
 			vs:           (*SyntaxPair)(nil),
 			out:          (*SyntaxPair)(nil),
-			panicMatches: "not a list",
+			panicMatches: ".*not a list",
 			expect:       false,
 		},
 		{

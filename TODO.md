@@ -21,6 +21,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 ## Bugs & Correctness
 
 - L7 (`char-ready?`/`u8-ready?` always `#t`) — documented semantic difference, no fix planned
+- [x] **`==` error comparison in REPL** [Low, S]: Fixed — now uses `errors.Is(err, readline.ErrInterrupt)`.
 - [x] **`guard` body drops multiple values** [Medium, S]: Fixed in #395 — body now uses `call-with-values` + `list` capture.
 - [x] **Tuple ForEach nil returns Void instead of EmptyList** [Medium, S]: Fixed in #394 — nil guards and loop exits now return `EmptyList`/`SyntaxEmptyList`.
 - [x] **Variadic math primitives accept excess args** [Low, S]: Fixed in #446 — `log`, `atan`, `number->string`, `string->number` now reject extra arguments. Also added missing radix validation to `string->number`.
@@ -31,8 +32,20 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 Ordered by dependency — items that unblock others or carry divergence risk come first. MachineContext decomposition is last (depends on other refactorings settling).
 
+### High Priority
+
+- [x] **Remaining raw sentinel panics** [High, S]: 20 `panic(werr.ErrXxx)` calls without `WrapForeignErrorf` wrapping. Sites: `values/pair.go:139,169,236`, `values/empty_list.go:83,88`, `values/promotion.go:308`, `internal/syntax/syntax_pair.go:151,168,172,181,198,212,338,357`, `internal/syntax/syntax_empty_list.go:91,96,101,106`, `machine/stack.go:43,55`. Wrapped with site-specific context. Ruleguard rule `noBareSentinelPanic` added to prevent regression.
+- [x] **Bare division-by-zero returns** [High, S]: 7 numeric `Divide` methods return bare `werr.ErrDivisionByZero` without wrapping. Wrapped with `"Type.Divide: division by exact zero"` at each site.
+
 ### Medium Priority
 
+- [ ] **Extract `parser.readSyntax()` dispatcher** [Medium, M]: `internal/parser/parser.go:281-~900` is a 500+ line switch on 30+ token types. Extract token-class-specific methods (`readSymbolOrKeyword()`, `readNumber()`, `readString()`, `readVector()`, `readListForm()`) and reduce the switch to a ~50-line dispatcher.
+- [ ] **Environment resolve: unify parent-chain walks** [Medium, M]: `environment/environment_frame.go` has 4 similar parent-chain walks: `resolveLocal()`, `resolveGlobal()`, `GetLocalIndexWithScopes()`, `HasLocalVariableBinding()` (via `resolveLocal`). Loop conditions must stay in sync. Consider a shared walk iterator with composable visitors.
+- [ ] **`syntax_adapter.go` responsibility split** [Medium, M]: `internal/match/syntax_adapter.go` (812 lines) combines hygiene-aware pattern matching, template expansion, and scope-set validation. Split into `syntax_matcher.go` (adapter), `syntax_expander.go` (template expansion), `hygiene_checker.go` (scope validation). Same total LOC, clearer responsibilities.
+- [ ] **Numeric tower type-switch checklist** [Medium, S]: 6 functions in `values/promotion.go` and `values/numeric_tower.go` switch on all 7 numeric types. Adding a new type requires updating ~10-15 files. Add a checklist comment in `values/numeric_kind.go` listing every switch that must be updated. Consider an exhaustive test that verifies all `Number` implementations are handled by every conversion function.
+- [ ] **Opcode extension checklist** [Medium, S]: Adding a new opcode requires changes in 4+ files: `machine/opcode.go`, `machine/machine_context.go` (Run loop), `machine/native_template.go`, `machine/peephole.go`. No compile-time enforcement — missing cases are silent. Add a comment to `opcode.go` listing all files. Consider an exhaustive test verifying every opcode has a handler in Run().
+- [ ] **Document ffi.go callback converter inversion** [Medium, S]: `ffi.go:851-898` — callback parameters use `retConverter` (Go→Scheme) while callback returns use `argConverter` (Scheme→Go). The direction inversion is correct but undocumented. Add a 5-line comment block explaining why.
+- [ ] **Document optional argument patterns** [Medium, S]: Registry primitives use 3 patterns for optional arguments: `helpers.OptionalArg[T]` (typed default + error), `helpers.ParseOptionalArg` (presence check), and hand-rolled variadic walking. Add a decision tree to `registry/CLAUDE.md`.
 - [x] **I/O port extraction helper** [Medium, S]: Extracted generic `extractPort[T]` in #424.
 - [x] **Optional fill argument extraction**: 3 `make-*` primitives (`PrimMakeVector`, `PrimMakeBytevector`, `PrimMakeString`) independently extract optional fill arguments with slightly different patterns. Share a helper.
 - [x] **Machine package tech debt** [Medium, M]: 6 phases — arity dedup, closure extraction, expander decomposition, letrec* unification, library import dedup, stale alias removal. Complete in #444. See `plans/MACHINE-TECH-DEBT.md`.
@@ -51,6 +64,10 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 - [x] **Unify library/include path resolution** [Low, S]: `findFile` now consults library registry search paths as fallback dirs, sharing the same paths as `import`.
 - [x] **Tokenizer test file consolidation** [Low, M]: Consolidated 14 coverage-goal-named test files into 10 behavior-oriented files mirroring source structure. All 191 tests preserved. PR #448.
 - [x] **REPL deprecated wrappers** [Low, S]: Deleted `Compile`, `Run`, `Load` wrappers from `internal/repl/repl.go`. Internal call sites now use `wileruntime` directly.
+- [ ] **String utility duplication** [Low, S]: `internal/parser/parser_string.go` (`TrimPrefixFolded`, `TrimSuffixFolded`) and `internal/tokenizer/utils.go` (`TrimPrefixCI`, `TrimSuffixCI`) implement the same case-insensitive string trimming. Extract to a shared `internal/schemeutil` or `internal/text` package.
+- [ ] **Hand-rolled predicates in extensions** [Low, S]: `extensions/threads/prim_threads.go` (~8 predicates) and `extensions/gointerop/prim_gointerop.go` (~5 predicates) hand-roll type-check predicates instead of using the `helpers.MakeTypePredicate` factory that core primitives use. Convert ~13 predicates to use the factory for consistency.
+- [ ] **Machine: document implicit PC contract** [Low, S]: `machine/machine_context.go` — the program counter must be set correctly at three sites (NewMachineContext, Apply, Restore) with no type-level enforcement. Document the contract on the `pc` field. Consider an assertion at the top of Run() that validates pc is within bounds.
+- [ ] **Machine: naming — `declareDefineBinding` vs `predeclareDefineBindingFromValidated`** [Low, S]: `machine/compile_validated.go:235,531` — two methods that may do the same operation (early-declare a binding for self-recursion) have different names suggesting different semantics. Investigate and unify if semantically identical.
 - [ ] **Error sentinel grouping** [Low, S]: ~103 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.
 - [ ] **Operation file consolidation** [Low, M]: 28 single-method `machine/operation_*.go` files (30–50 lines each). Group into families: `operations_stack.go` (Push/Pop/Pull/Drop/PeekK), `operations_load.go` (LoadLiteral/LoadGlobal/LoadLocal/LoadVoid), `operations_branch.go`, etc. Reduces 28 files to ~8.
 - [ ] **internal/validate test coverage** [Low, M]: 15 code files but only 2 test files. Each special form has its own validator but most lack dedicated unit tests. Coverage comes from integration tests. Add targeted tests when modifying validators.

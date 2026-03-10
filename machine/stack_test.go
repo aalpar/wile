@@ -32,7 +32,7 @@ func TestNewStack(t *testing.T) {
 func TestStack_Push(t *testing.T) {
 	q := NewStack()
 	qt.Assert(t, q.Len(), qt.Equals, 0)
-	qt.Assert(t, func() { q.Pop() }, qt.PanicMatches, "stack underflow.*")
+	qt.Assert(t, func() { q.Pop() }, qt.PanicMatches, ".*stack underflow.*")
 	q.Push(values.NewInteger(10))
 	qt.Assert(t, q.Len(), qt.Equals, 1)
 	qt.Assert(t, q.Pop(), valuestest.SchemeEquals, values.NewInteger(10))

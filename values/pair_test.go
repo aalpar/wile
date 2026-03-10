@@ -241,7 +241,7 @@ func TestPair_Length(t *testing.T) {
 		{in: values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.EmptyList)), out: 2},
 		{
 			in:           values.NewCons(values.NewInteger(10), values.NewCons(values.NewInteger(20), values.NewInteger(30))),
-			panicMatches: "not a list",
+			panicMatches: ".*not a list",
 			out:          -1,
 		},
 	}
@@ -300,11 +300,11 @@ func TestEmptyList_SchemeString(t *testing.T) {
 }
 
 func TestEmptyList_Car_Panics(t *testing.T) {
-	qt.Assert(t, func() { values.EmptyList.Car() }, qt.PanicMatches, "not a pair")
+	qt.Assert(t, func() { values.EmptyList.Car() }, qt.PanicMatches, ".*not a pair")
 }
 
 func TestEmptyList_Cdr_Panics(t *testing.T) {
-	qt.Assert(t, func() { values.EmptyList.Cdr() }, qt.PanicMatches, "not a pair")
+	qt.Assert(t, func() { values.EmptyList.Cdr() }, qt.PanicMatches, ".*not a pair")
 }
 
 func TestPair_AsVector(t *testing.T) {
@@ -322,7 +322,7 @@ func TestPair_AsVector(t *testing.T) {
 		{
 			name:         "void pair panics",
 			in:           values.NewCons(nil, nil),
-			panicMatches: "not a list",
+			panicMatches: ".*not a list",
 		},
 		{
 			name: "single element list",
@@ -352,12 +352,12 @@ func TestPair_AsVector(t *testing.T) {
 		{
 			name:         "improper list panics",
 			in:           values.NewCons(values.NewInteger(1), values.NewInteger(2)),
-			panicMatches: "not a list",
+			panicMatches: ".*not a list",
 		},
 		{
 			name:         "improper list with multiple elements panics",
 			in:           values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(2), values.NewInteger(3))),
-			panicMatches: "not a list",
+			panicMatches: ".*not a list",
 		},
 	}
 	for _, tc := range tcs {
@@ -389,13 +389,13 @@ func TestPair_Append(t *testing.T) {
 			in:           (*values.Pair)(nil),
 			vs:           (*values.Pair)(nil),
 			out:          (*values.Pair)(nil),
-			panicMatches: "not a list",
+			panicMatches: ".*not a list",
 		},
 		{
 			name:         "void pair input",
 			in:           values.NewCons(nil, nil),
 			vs:           (*values.Pair)(nil),
-			panicMatches: "not a list",
+			panicMatches: ".*not a list",
 		},
 		{
 			name: "empty vs with nil",
@@ -419,7 +419,7 @@ func TestPair_Append(t *testing.T) {
 			name:         "append to non-list pair",
 			in:           values.NewCons(values.NewInteger(1), values.NewInteger(2)),
 			vs:           values.NewCons(values.NewInteger(3), values.EmptyList),
-			panicMatches: "not a list",
+			panicMatches: ".*not a list",
 		},
 		{
 			name: "append non-list value",
@@ -437,13 +437,13 @@ func TestPair_Append(t *testing.T) {
 			name:         "append Void to non-list",
 			in:           values.NewCons(values.NewInteger(1), values.NewInteger(2)),
 			vs:           values.Void,
-			panicMatches: "not a list",
+			panicMatches: ".*not a list",
 		},
 		{
 			name:         "append Void to list",
 			in:           values.NewCons(values.NewInteger(1), values.NewInteger(2)),
 			vs:           values.Void,
-			panicMatches: "not a list",
+			panicMatches: ".*not a list",
 		},
 	}
 	for _, tc := range tcs {
