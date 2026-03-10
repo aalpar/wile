@@ -101,7 +101,7 @@ func toExactBigComplexPart(n values.Number) values.Number {
 	case *values.Rational:
 		return v
 	default:
-		panic("toExactBigComplexPart: expected exact number")
+		panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "toExactBigComplexPart: expected exact number but got %T", n))
 	}
 }
 

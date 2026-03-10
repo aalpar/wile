@@ -21,6 +21,7 @@ import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 type LiteralIndex int
@@ -650,7 +651,11 @@ func (p *NativeTemplate) Copy() *NativeTemplate {
 		return nil
 	}
 	if len(p.code) != len(p.sourceRefs) {
-		panic("native_template: code/sourceRefs length invariant violated")
+		panic(werr.WrapForeignErrorf(
+			werr.ErrInvalidArgument,
+			"native_template: code/sourceRefs length invariant violated (len(code)=%d, len(sourceRefs)=%d)",
+			len(p.code), len(p.sourceRefs),
+		))
 	}
 	q := &NativeTemplate{
 		parameterCount: p.parameterCount,

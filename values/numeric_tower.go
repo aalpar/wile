@@ -154,7 +154,7 @@ func ExactnessOf(n Number) Exactness {
 		}
 		return Inexact
 	}
-	panic(werr.ErrNotANumber)
+	panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "ExactnessOf: unsupported type %T", n))
 }
 
 // IntegerEqualsFloat compares an exact integer to an inexact float.
