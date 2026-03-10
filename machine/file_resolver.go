@@ -111,6 +111,9 @@ func NewEmbedFileResolver(fsys fs.FS) *EmbedFileResolver {
 }
 
 func (p *EmbedFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.File, string, error) {
+	if path == "" {
+		return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "include: empty filename")
+	}
 	f, err := p.fsys.Open(path)
 	if err != nil {
 		return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "include: %s", path)

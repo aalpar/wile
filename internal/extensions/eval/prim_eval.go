@@ -19,7 +19,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/parser"
@@ -27,7 +26,6 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
-	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -81,6 +79,11 @@ func PrimEval(mc *machine.MachineContext) error {
 
 // PrimLoad implements the (load) primitive.
 // Loads and evaluates a Scheme source file.
+//
+// File resolution uses the same FileResolver as include, so load and
+// include share the same search path priority:
+//
+//	LoadPathStack > LibraryRegistry > SCHEME_INCLUDE_PATH > CWD
 func PrimLoad(mc *machine.MachineContext) error {
 	filenameVal := mc.Arg(0)
 	filename, err := helpers.RequireType[*values.String](filenameVal, werr.ErrNotAString, "load")
@@ -91,35 +94,20 @@ func PrimLoad(mc *machine.MachineContext) error {
 	// Use the current top-level environment
 	env := mc.EnvironmentFrame().TopLevel()
 
-	// Resolve the file path
-	stack := env.LoadPathStack()
-	cwd, err := os.Getwd()
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "load: cannot get current directory")
+	// Resolve and open via the shared FileResolver (same as include).
+	resolver, ok := env.FileResolver().(machine.FileResolver)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrFileNotFound, "load: no file resolver configured")
 	}
 
-	absPath, err := environment.ResolveFile(stack, filename.Value, []string{cwd})
+	f, absPath, err := resolver.ResolveAndOpen(mc.Context(), filename.Value)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "load")
-	}
-
-	err = security.Check(mc.Context(), security.AccessRequest{
-		Resource: security.ResourceCode,
-		Action:   security.ActionLoad,
-		Target:   absPath,
-	})
-	if err != nil {
-		return err
-	}
-
-	// Open the file
-	f, err := os.Open(absPath)
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "load: cannot open file %s", absPath)
 	}
 	defer f.Close() //nolint:errcheck
 
 	// Push to stack after successful open, pop on exit
+	stack := env.LoadPathStack()
 	err = stack.Push(absPath)
 	if err != nil {
 		return err

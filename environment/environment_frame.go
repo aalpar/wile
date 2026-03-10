@@ -283,6 +283,26 @@ func (p *EnvironmentFrame) GlobalEnvironment() *GlobalEnvironmentFrame {
 	return p.global
 }
 
+// FileResolver returns the file resolver from the top-level environment.
+// The caller must type-assert to machine.FileResolver.
+// Returns nil if no resolver has been set or if topLevel is nil.
+func (p *EnvironmentFrame) FileResolver() any {
+	if p.topLevel == nil {
+		return nil
+	}
+	return p.topLevel.FileResolver()
+}
+
+// SetFileResolver sets the file resolver on the top-level environment.
+// The resolver should be a machine.FileResolver.
+// No-op if topLevel is nil.
+func (p *EnvironmentFrame) SetFileResolver(resolver any) {
+	if p.topLevel == nil {
+		return
+	}
+	p.topLevel.SetFileResolver(resolver)
+}
+
 // LibraryRegistry returns the library registry from the top-level environment.
 // The caller must type-assert to *machine.LibraryRegistry.
 // Returns nil if no registry has been set or if topLevel is nil.

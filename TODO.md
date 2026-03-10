@@ -120,4 +120,4 @@ No demand signal. Speculative or research-only.
 - [ ] **Go AST extension Phase 3 — Comments & generics** [Standard library, S]: `Comment`/`CommentGroup` attachment for round-trip structural fidelity. `BadExpr`/`BadStmt`/`BadDecl` for error recovery. `IndexListExpr` for generics. `plans/GO-AST.md`
 - [ ] **Implement let-syntax*** [Core language, S]: Implement `let-syntax*`.
 - [ ] **Reduce number of Go primitives** [Performance, M]: Reduce the number of Go primitives by identifying which ones can be effectively replaced by macros or native continuations. Both have the potential to be optimized on the Scheme side — macros via code generation and peephole optimization, or native Scheme opcodes that can be optimized via inlining.
-- [ ] **User labels/tags to distinguish FS resolvers** Use tags or labels to distinguish bootstrap loadee from inlcude/library loaders in fileResolver.
+- [ ] **User labels/tags to distinguish FS resolvers** Use tags or labels to distinguish bootstrap loadee from include/library loaders in fileResolver.
