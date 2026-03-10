@@ -377,7 +377,7 @@ func TestEditPlan_OverlappingEdits_Panics(t *testing.T) {
 	plan.Delete(0, 2)
 	plan.Delete(1, 3) // overlaps with first
 
-	qt.Assert(t, func() { plan.Apply() }, qt.PanicMatches, "edit_plan: overlapping edits")
+	qt.Assert(t, func() { plan.Apply() }, qt.PanicMatches, "edit_plan: overlapping edits.*")
 }
 
 func TestEditPlan_OutOfBounds_Panics(t *testing.T) {
@@ -388,7 +388,7 @@ func TestEditPlan_OutOfBounds_Panics(t *testing.T) {
 	plan := NewEditPlan(tpl)
 	plan.Delete(0, 5) // end > len(code)
 
-	qt.Assert(t, func() { plan.Apply() }, qt.PanicMatches, "edit_plan: edit out of bounds")
+	qt.Assert(t, func() { plan.Apply() }, qt.PanicMatches, "edit_plan: edit out of bounds.*")
 }
 
 // --- Compound: Delete + Replace + Insert in one plan ---
