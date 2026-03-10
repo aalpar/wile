@@ -28,7 +28,6 @@ var Builder = registry.NewRegistryBuilder(
 	addSpecialForms,
 	addPredicates,
 	addEquality,
-	addBoolean,
 	addPairs,
 	addLists,
 	addArithmetic,

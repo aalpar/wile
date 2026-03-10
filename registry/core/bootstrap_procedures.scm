@@ -153,3 +153,54 @@
          ((null? alist) #f)
          ((compare obj (caar alist)) (car alist))
          (else (loop (cdr alist))))))))
+
+;; Trivial predicates — pure compositions of existing primitives.
+
+(define (not x) (if x #f #t))
+
+(define (zero? z) (= z 0))
+
+(define (positive? x) (> x 0))
+
+(define (negative? x) (< x 0))
+
+(define (exact-integer? x) (and (integer? x) (exact? x)))
+
+;; list? — must detect cycles (R7RS §6.4: "Returns #t if obj is a proper list")
+;; Uses tortoise-and-hare for cycle detection.
+(define (list? x)
+  (let loop ((slow x) (fast x))
+    (cond
+      ((null? fast) #t)
+      ((not (pair? fast)) #f)
+      ((null? (cdr fast)) #t)
+      ((not (pair? (cdr fast))) #f)
+      ((eq? slow (cdr fast)) #f)
+      (else (loop (cdr slow) (cddr fast))))))
+
+;; boolean=? — variadic, all args must be booleans and equal.
+;; Type check uses boolean? guard; non-boolean arg triggers a
+;; car-of-non-pair error via (car #f) as a deliberate crash —
+;; (error) is not available in core bootstrap.
+(define (boolean=? b1 b2 . rest)
+  (define (check x) (if (boolean? x) x (car #f)))
+  (check b1)
+  (let loop ((prev b1) (args (cons b2 rest)))
+    (if (null? args) #t
+        (let ((curr (car args)))
+          (check curr)
+          (and (eq? prev curr)
+               (loop curr (cdr args)))))))
+
+;; symbol=? — same pattern
+(define (symbol=? s1 s2 . rest)
+  (define (check x) (if (symbol? x) x (car #f)))
+  (check s1)
+  (let loop ((prev s1) (args (cons s2 rest)))
+    (if (null? args) #t
+        (let ((curr (car args)))
+          (check curr)
+          (and (eq? prev curr)
+               (loop curr (cdr args)))))))
+
+(define (square x) (* x x))

@@ -115,25 +115,6 @@ func TestAddToRegistry_RegistersEquality(t *testing.T) {
 	}
 }
 
-func TestAddToRegistry_RegistersBoolean(t *testing.T) {
-	c := qt.New(t)
-
-	r := registry.NewRegistry()
-	err := addBoolean(r)
-	c.Assert(err, qt.IsNil)
-
-	prims := r.Primitives()
-	primNames := make(map[string]bool)
-	for _, p := range prims {
-		primNames[p.Spec.Name] = true
-	}
-
-	expectedPrims := []string{"not"}
-	for _, name := range expectedPrims {
-		c.Assert(primNames[name], qt.IsTrue, qt.Commentf("expected boolean primitive %q", name))
-	}
-}
-
 func TestAddToRegistry_RegistersPairs(t *testing.T) {
 	c := qt.New(t)
 

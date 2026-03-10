@@ -43,8 +43,6 @@ func addPredicates(r *registry.Registry) error {
 			Doc: "Returns #t if obj is exact.", ParamNames: []string{"obj"}, Category: "predicates"},
 		{Name: "inexact?", ParamCount: 1, Impl: PrimInexactQ,
 			Doc: "Returns #t if obj is inexact.", ParamNames: []string{"obj"}, Category: "predicates"},
-		{Name: "exact-integer?", ParamCount: 1, Impl: PrimExactIntegerQ,
-			Doc: "Returns #t if obj is an exact integer.", ParamNames: []string{"obj"}, Category: "predicates"},
 		{Name: "symbol?", ParamCount: 1, Impl: PrimSymbolQ,
 			Doc: "Returns #t if obj is a symbol.", ParamNames: []string{"obj"}, Category: "predicates"},
 		{Name: "string?", ParamCount: 1, Impl: PrimStringQ,
@@ -57,18 +55,10 @@ func addPredicates(r *registry.Registry) error {
 			Doc: "Returns #t if obj is a bytevector.", ParamNames: []string{"obj"}, Category: "predicates"},
 		{Name: "procedure?", ParamCount: 1, Impl: PrimProcedureQ,
 			Doc: "Returns #t if obj is a procedure.", ParamNames: []string{"obj"}, Category: "predicates"},
-		{Name: "list?", ParamCount: 1, Impl: PrimListQ,
-			Doc: "Returns #t if obj is a proper list.", ParamNames: []string{"obj"}, Category: "predicates"},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// Numeric predicates
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{Name: "zero?", ParamCount: 1, Impl: PrimZeroQ,
-			Doc: "Returns #t if z is zero.", ParamNames: []string{"z"}, Category: "predicates"},
-		{Name: "positive?", ParamCount: 1, Impl: PrimPositiveQ,
-			Doc: "Returns #t if x is positive.", ParamNames: []string{"x"}, Category: "predicates"},
-		{Name: "negative?", ParamCount: 1, Impl: PrimNegativeQ,
-			Doc: "Returns #t if x is negative.", ParamNames: []string{"x"}, Category: "predicates"},
 		{Name: "odd?", ParamCount: 1, Impl: PrimOddQ,
 			Doc: "Returns #t if n is odd.", ParamNames: []string{"n"}, Category: "predicates"},
 		{Name: "even?", ParamCount: 1, Impl: PrimEvenQ,
