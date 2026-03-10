@@ -148,7 +148,7 @@ func (p *SyntaxPair) IsList() bool {
 // Append appends a value to the end of the list.
 func (p *SyntaxPair) Append(vs values.Value) values.Value {
 	if p.IsVoid() {
-		panic(werr.ErrNotAList)
+		panic(werr.WrapForeignErrorf(werr.ErrNotAList, "SyntaxPair.Append: receiver is void"))
 	}
 	if values.IsEmptyList(vs) {
 		return p
@@ -165,11 +165,11 @@ func (p *SyntaxPair) Append(vs values.Value) values.Value {
 		}
 	}
 	if q.IsVoid() {
-		panic(werr.ErrNotAList)
+		panic(werr.WrapForeignErrorf(werr.ErrNotAList, "SyntaxPair.Append: traversal reached void"))
 	}
 	vs0, ok := vs.(SyntaxValue)
 	if !ok {
-		panic(werr.ErrNotASyntaxValue)
+		panic(werr.WrapForeignErrorf(werr.ErrNotASyntaxValue, "SyntaxPair.Append: value is not a SyntaxValue"))
 	}
 	q.SetCdr(vs0)
 	return p
@@ -178,7 +178,7 @@ func (p *SyntaxPair) Append(vs values.Value) values.Value {
 // SyntaxAppend appends a syntax value to the end of the list.
 func (p *SyntaxPair) SyntaxAppend(vs SyntaxValue) SyntaxValue {
 	if p.IsVoid() {
-		panic(werr.ErrNotAList)
+		panic(werr.WrapForeignErrorf(werr.ErrNotAList, "SyntaxPair.SyntaxAppend: receiver is void"))
 	}
 	if values.IsEmptyList(vs) {
 		return p
@@ -195,7 +195,7 @@ func (p *SyntaxPair) SyntaxAppend(vs SyntaxValue) SyntaxValue {
 		}
 	}
 	if q.IsVoid() {
-		panic(werr.ErrNotAList)
+		panic(werr.WrapForeignErrorf(werr.ErrNotAList, "SyntaxPair.SyntaxAppend: traversal reached void"))
 	}
 	q.SetCdr(vs)
 	return p
@@ -209,7 +209,7 @@ func (p *SyntaxPair) Length() int {
 		return nil
 	})
 	if !IsSyntaxEmptyList(r) {
-		panic(werr.ErrNotAList)
+		panic(werr.WrapForeignErrorf(werr.ErrNotAList, "SyntaxPair.Length: improper list"))
 	}
 	return q
 }
@@ -335,7 +335,7 @@ func (p *SyntaxPair) AsVector() *values.Vector {
 		panic(err)
 	}
 	if !values.IsEmptyList(cdr) {
-		panic(werr.ErrNotAList)
+		panic(werr.WrapForeignErrorf(werr.ErrNotAList, "SyntaxPair.AsVector: improper list"))
 	}
 	return values.NewVector(vs...)
 }
@@ -354,7 +354,7 @@ func (p *SyntaxPair) AsSyntaxVector() *SyntaxVector {
 		return nil
 	})
 	if !IsSyntaxEmptyList(cdr) {
-		panic(werr.ErrNotASyntaxList)
+		panic(werr.WrapForeignErrorf(werr.ErrNotASyntaxList, "SyntaxPair.AsSyntaxVector: improper list"))
 	}
 	return NewSyntaxVector(p.sourceContext, vs...)
 }

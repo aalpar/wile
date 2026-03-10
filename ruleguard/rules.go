@@ -54,3 +54,18 @@ func noFmtErrorf(m dsl.Matcher) { //nolint:unused // loaded by gocritic ruleguar
 		Where(!m.File().Name.Matches(`_test\.go$`)).
 		Report(`use werr.WrapForeignErrorf(sentinel, msg, args...) instead of fmt.Errorf`)
 }
+
+// noBareSentinelPanic flags panic calls with bare werr sentinel errors.
+// Project convention: always wrap with WrapForeignErrorf for site context.
+// Skips test files — tests legitimately panic with bare sentinels.
+//
+//	// Wrong:
+//	panic(werr.ErrNotAList)
+//
+//	// Right:
+//	panic(werr.WrapForeignErrorf(werr.ErrNotAList, "site: what failed"))
+func noBareSentinelPanic(m dsl.Matcher) { //nolint:unused // loaded by gocritic ruleguard checker at lint time
+	m.Match(`panic(werr.$err)`).
+		Where(m["err"].Text.Matches(`^Err[A-Z]`) && !m.File().Name.Matches(`_test\.go$`)).
+		Report(`panic with bare sentinel: wrap with werr.WrapForeignErrorf(werr.$err, "site: context")`)
+}

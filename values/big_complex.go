@@ -261,7 +261,7 @@ func (p *BigComplex) Multiply(o Number) Number {
 // R7RS §6.2.2 Exactness: exact / exact = exact, exact / inexact = inexact.
 func (p *BigComplex) Divide(o Number) (Number, error) {
 	if o.IsZero() && o.IsExact() {
-		return nil, werr.ErrDivisionByZero
+		return nil, werr.WrapForeignErrorf(werr.ErrDivisionByZero, "BigComplex.Divide: division by exact zero")
 	}
 	return bigComplexDivide[o.Kind()](p, o)
 }

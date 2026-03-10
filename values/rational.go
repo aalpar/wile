@@ -183,7 +183,7 @@ func (p *Rational) Multiply(o Number) Number {
 // Divide returns the quotient of two numbers.
 func (p *Rational) Divide(o Number) (Number, error) {
 	if o.IsZero() && o.IsExact() {
-		return nil, werr.ErrDivisionByZero
+		return nil, werr.WrapForeignErrorf(werr.ErrDivisionByZero, "Rational.Divide: division by exact zero")
 	}
 	v, ok := o.(*Rational)
 	if ok {

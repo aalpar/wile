@@ -88,22 +88,22 @@ func (*syntaxEmptyListType) AsVector() *values.Vector {
 
 // Car panics with ErrNotAPair. R7RS: (car '()) is an error.
 func (*syntaxEmptyListType) Car() values.Value {
-	panic(werr.ErrNotAPair)
+	panic(werr.WrapForeignErrorf(werr.ErrNotAPair, "syntaxEmptyList.Car: empty list has no car"))
 }
 
 // Cdr panics with ErrNotAPair. R7RS: (cdr '()) is an error.
 func (*syntaxEmptyListType) Cdr() values.Value {
-	panic(werr.ErrNotAPair)
+	panic(werr.WrapForeignErrorf(werr.ErrNotAPair, "syntaxEmptyList.Cdr: empty list has no cdr"))
 }
 
 // SyntaxCar panics with ErrNotAPair.
 func (*syntaxEmptyListType) SyntaxCar() SyntaxValue {
-	panic(werr.ErrNotAPair)
+	panic(werr.WrapForeignErrorf(werr.ErrNotAPair, "syntaxEmptyList.SyntaxCar: empty list has no car"))
 }
 
 // SyntaxCdr panics with ErrNotAPair.
 func (*syntaxEmptyListType) SyntaxCdr() SyntaxValue {
-	panic(werr.ErrNotAPair)
+	panic(werr.WrapForeignErrorf(werr.ErrNotAPair, "syntaxEmptyList.SyntaxCdr: empty list has no cdr"))
 }
 
 // SyntaxForEach is a no-op on the empty list.

@@ -158,7 +158,7 @@ func (p *REPL) Run(ctx context.Context) error {
 
 		line, err := rl.ReadLine()
 		if err != nil {
-			if err == readline.ErrInterrupt {
+			if errors.Is(err, readline.ErrInterrupt) {
 				// Ctrl-C: clear current input and continue
 				inputBuffer.Reset()
 				rl.SetPrompt(p.prompt)

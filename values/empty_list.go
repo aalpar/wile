@@ -80,10 +80,10 @@ func (emptyListType) AsVector() *Vector {
 
 // Car panics with werr.ErrNotAPair. R7RS: (car '()) is an error.
 func (emptyListType) Car() Value {
-	panic(werr.ErrNotAPair)
+	panic(werr.WrapForeignErrorf(werr.ErrNotAPair, "emptyList.Car: empty list has no car"))
 }
 
 // Cdr panics with werr.ErrNotAPair. R7RS: (cdr '()) is an error.
 func (emptyListType) Cdr() Value {
-	panic(werr.ErrNotAPair)
+	panic(werr.WrapForeignErrorf(werr.ErrNotAPair, "emptyList.Cdr: empty list has no cdr"))
 }

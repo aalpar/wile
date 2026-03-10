@@ -257,7 +257,7 @@ func (p *Integer) Multiply(o Number) Number {
 // exact / inexact = inexact (Float or Complex).
 func (p *Integer) Divide(o Number) (Number, error) {
 	if o.IsZero() && o.IsExact() {
-		return nil, werr.ErrDivisionByZero
+		return nil, werr.WrapForeignErrorf(werr.ErrDivisionByZero, "Integer.Divide: division by exact zero")
 	}
 	v, ok := o.(*Integer)
 	if ok {

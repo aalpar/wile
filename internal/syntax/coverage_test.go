@@ -582,7 +582,7 @@ func TestSyntaxPair_Append_NonList(t *testing.T) {
 
 	qt.Assert(t, func() {
 		improperList.Append(values.NewInteger(3))
-	}, qt.PanicMatches, "not a list")
+	}, qt.PanicMatches, ".*not a list")
 }
 
 func TestSyntaxPair_ForEach(t *testing.T) {

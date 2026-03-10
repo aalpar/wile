@@ -305,7 +305,7 @@ func Promote(n Number, target NumericKind) Number {
 	}
 	fn := promoter[src][target]
 	if fn == nil {
-		panic(werr.ErrNotANumber)
+		panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "Promote: no promoter from kind %d to kind %d", src, target))
 	}
 	return fn(n)
 }
