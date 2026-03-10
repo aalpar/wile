@@ -37,7 +37,7 @@ Each `panic(werr.ErrXxx)` becomes `panic(werr.WrapForeignErrorf(werr.ErrXxx, "Si
 
 | Line | Current | Wrapped Message |
 |------|---------|-----------------|
-| 308 | `panic(werr.ErrNotANumber)` | `"Promote: no promoter from %s to %s"` (use the NumericKind names) |
+| 308 | `panic(werr.ErrNotANumber)` | `"Promote: no promoter from kind %d to kind %d"` |
 
 #### Group D: `internal/syntax/syntax_pair.go` (8 sites)
 
