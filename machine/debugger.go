@@ -47,8 +47,7 @@ type Debugger struct {
 	breakpoints map[BreakpointID]*Breakpoint
 	nextID      BreakpointID
 
-	// Stepping state
-	stepping       bool
+	// Stepping state — stepMode == StepNone means not stepping.
 	stepMode       StepMode
 	stepFrameDepth int                  // For step-over
 	stepFrame      *MachineContinuation // For step-out
@@ -159,10 +158,6 @@ func (p *Debugger) CheckBreakpoint(mc *MachineContext) *Breakpoint {
 
 // ShouldStep checks if we should break due to stepping.
 func (p *Debugger) ShouldStep(mc *MachineContext) bool {
-	if !p.stepping {
-		return false
-	}
-
 	switch p.stepMode {
 	case StepNone:
 		return false
@@ -181,25 +176,22 @@ func (p *Debugger) ShouldStep(mc *MachineContext) bool {
 
 // Continue resumes execution.
 func (p *Debugger) Continue() {
-	p.stepping = false
+	p.stepMode = StepNone
 }
 
 // StepInto enables step-into mode.
 func (p *Debugger) StepInto() {
-	p.stepping = true
 	p.stepMode = StepInto
 }
 
 // StepOver enables step-over mode.
 func (p *Debugger) StepOver(mc *MachineContext) {
-	p.stepping = true
 	p.stepMode = StepOver
 	p.stepFrameDepth = mc.CallDepth()
 }
 
 // StepOut enables step-out mode.
 func (p *Debugger) StepOut(mc *MachineContext) {
-	p.stepping = true
 	p.stepMode = StepOut
 	p.stepFrame = mc.cont
 }
@@ -218,5 +210,5 @@ func (p *Debugger) TriggerBreak(mc *MachineContext, bp *Breakpoint) {
 
 // IsStepping returns whether the debugger is in stepping mode.
 func (p *Debugger) IsStepping() bool {
-	return p.stepping
+	return p.stepMode != StepNone
 }

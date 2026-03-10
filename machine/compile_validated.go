@@ -648,7 +648,7 @@ func (p *CompileTimeContinuation) compileValidatedLiteral(ctctx CompileTimeCallC
 func (p *CompileTimeContinuation) CompileValidatedDynamicWind(ctctx CompileTimeCallContext, v *validate.ValidatedDynamicWind) error {
 	// Phase 1: Compile and push before, thunk, after to stack
 	// Note: We compile in expression context (not tail) since we need all three values
-	exprCtx := NewCompileTimeCallContext(ctctx.ctx, false, true)
+	exprCtx := NewCompileTimeCallContext(ctctx.ctx, false)
 
 	err := p.compileValidated(exprCtx, v.Before)
 	if err != nil {

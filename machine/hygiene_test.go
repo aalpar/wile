@@ -72,7 +72,7 @@ func TestBasicHygiene_SwapMacro(t *testing.T) {
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, letMacro)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
@@ -92,7 +92,7 @@ func TestBasicHygiene_SwapMacro(t *testing.T) {
 
 	// Compile the define-syntax for swap!
 	ctc = machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx = machine.NewCompileTimeCallContext(context.Background(), false, false)
+	ctctx = machine.NewCompileTimeCallContext(context.Background(), false)
 	args = extractDefineSyntaxArgs(t, defineSyntaxForm)
 	err = ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
@@ -118,7 +118,7 @@ func TestBasicHygiene_SwapMacro(t *testing.T) {
 
 	// Compile the expanded form
 	ctc2 := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx2 := machine.NewCompileTimeCallContext(context.Background(), false, true)
+	ctctx2 := machine.NewCompileTimeCallContext(context.Background(), false)
 	err = ctc2.CompileExpression(ctctx2, expanded)
 	if err != nil {
 		t.Fatalf("failed to compile: %v", err)
@@ -140,7 +140,7 @@ func TestLetMacroExpansion(t *testing.T) {
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, simpleMacro)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
@@ -179,7 +179,7 @@ func TestLetMacroSimple(t *testing.T) {
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, simpleMacro)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
@@ -215,7 +215,7 @@ func TestMultipleElementsWithTrailingEllipsis(t *testing.T) {
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, simpleMacro)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
@@ -268,7 +268,7 @@ func TestLetMacroFull(t *testing.T) {
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, letMacro)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
@@ -304,7 +304,7 @@ func TestScopeCreation(t *testing.T) {
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, defineSyntaxForm)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	qt.Assert(t, err, qt.IsNil)
@@ -521,7 +521,7 @@ func TestAuxiliarySyntaxShadowing(t *testing.T) {
 							sym, ok := car.(*syntax.SyntaxSymbol)
 							if ok && sym.Sym.Key == "define-syntax" {
 								ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-								ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false)
+								ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 								args := extractDefineSyntaxArgs(t, expanded)
 								err := ctc.CompileDefineSyntax(ctctx, args)
 								if err != nil {
@@ -602,7 +602,7 @@ func TestBoundIdentifierHygieneInNestedSyntaxRules(t *testing.T) {
 	`)
 
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, false)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, outerMacro)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	qt.Assert(t, err, qt.IsNil, qt.Commentf("failed to compile outer macro"))
@@ -643,7 +643,7 @@ func TestVectorInMacroTemplate(t *testing.T) {
 
 	macroForm := parseString(t, env, macroCode)
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, true)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, macroForm)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	c.Assert(err, qt.IsNil, qt.Commentf("failed to compile vector-macro"))
@@ -696,7 +696,7 @@ func TestNestedVectorInMacroTemplate(t *testing.T) {
 
 	macroForm := parseString(t, env, macroCode)
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, true)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, macroForm)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	c.Assert(err, qt.IsNil, qt.Commentf("failed to compile nested-vector-macro"))
@@ -740,7 +740,7 @@ func TestVectorWithIdentifiers(t *testing.T) {
 
 	macroForm := parseString(t, env, macroCode)
 	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, true)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, macroForm)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	c.Assert(err, qt.IsNil, qt.Commentf("failed to compile vec-test macro"))

@@ -77,7 +77,7 @@ func evalScopeSyntax(env *environment.EnvironmentFrame, sv syntax.SyntaxValue) (
 		return nil, err
 	}
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false, true)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(ctctx, expanded)
 	if err != nil {
 		return nil, err

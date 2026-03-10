@@ -56,7 +56,7 @@ func evalScheme(t *testing.T, code string) values.Value {
 
 		// Compile
 		tpl := machine.NewNativeTemplate(0, 0, false)
-		cctx := machine.NewCompileTimeCallContext(context.Background(), false, true)
+		cctx := machine.NewCompileTimeCallContext(context.Background(), false)
 		err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 		qt.Assert(t, err, qt.IsNil)
 

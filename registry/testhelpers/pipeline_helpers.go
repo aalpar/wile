@@ -42,7 +42,7 @@ func RunProgramAST(t *testing.T, prog values.Value) (values.Value, error) {
 // RunProgramASTWithEnv compiles and runs a Scheme program AST with the given environment.
 func RunProgramASTWithEnv(t *testing.T, env *environment.EnvironmentFrame, prog values.Value) (values.Value, error) {
 	t.Helper()
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false, true)
+	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ccnt := machine.NewCompiletimeContinuation(tpl, env)
 	sctx := syntax.NewZeroValueSourceContext()
@@ -82,7 +82,7 @@ func RunSchemeCodeWithEnvAndContext(ctx context.Context, t *testing.T, env *envi
 	}
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(ctx, false, true)
+	cctx := machine.NewCompileTimeCallContext(ctx, false)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	if err != nil {
 		return nil, err

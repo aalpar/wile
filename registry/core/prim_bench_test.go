@@ -110,7 +110,7 @@ func benchCompile(ctx context.Context, b *testing.B, env *environment.Environmen
 	}
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(ctx, false, true)
+	cctx := machine.NewCompileTimeCallContext(ctx, false)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	if err != nil {
 		b.Fatal(err)

@@ -144,7 +144,7 @@ func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, t
 // throughout the body, enabling forward references between defines.
 func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clause validate.ValidatedBodyAndParams, childEnv *environment.EnvironmentFrame, tpl *NativeTemplate) error {
 	childCompiler := NewCompiletimeContinuation(tpl, childEnv)
-	lambdaBodyContext := NewCompileTimeCallContext(ctctx.ctx, true, ctctx.inExpression)
+	lambdaBodyContext := NewCompileTimeCallContext(ctctx.ctx, true)
 
 	// R7RS §5.3.2: Internal definitions use letrec* semantics
 	// Pass 1: Pre-declare all define bindings so forward references work

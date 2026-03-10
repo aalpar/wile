@@ -220,7 +220,7 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 			// Compile and run
 			tpl := machine.NewNativeTemplate(0, 0, false)
 			// Use inTail=false for top-level expressions
-			cctx := machine.NewCompileTimeCallContext(ctx, false, true)
+			cctx := machine.NewCompileTimeCallContext(ctx, false)
 			compiler := machine.NewCompiletimeContinuation(tpl, env)
 			if resolver != nil {
 				compiler.SetFileResolver(resolver)
