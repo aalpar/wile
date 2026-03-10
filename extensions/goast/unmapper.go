@@ -167,6 +167,38 @@ func unmapStmt(v values.Value) (ast.Stmt, error) {
 	return stmt, nil
 }
 
+// unmapList traverses a Scheme proper list, applying convert to each element.
+func unmapList[T any](v values.Value, convert func(values.Value) (T, error), what string) ([]T, error) {
+	if isFalse(v) {
+		return nil, nil
+	}
+	tuple, ok := v.(values.Tuple)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+			"goast: expected list of %s, got %T", what, v)
+	}
+	var result []T
+	for !values.IsEmptyList(tuple) {
+		pair, ok := tuple.(*values.Pair)
+		if !ok {
+			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: expected proper list of %s, got %T", what, tuple)
+		}
+		item, err := convert(pair.Car())
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+		cdr, ok := pair.Cdr().(values.Tuple)
+		if !ok {
+			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: expected proper list of %s, got improper cdr %T", what, pair.Cdr())
+		}
+		tuple = cdr
+	}
+	return result, nil
+}
+
 // unmapExprList converts a Scheme list of expressions to []ast.Expr.
 func unmapExprList(v values.Value) ([]ast.Expr, error) {
 	if isFalse(v) {

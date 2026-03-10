@@ -47,39 +47,18 @@ func unmapFile(fields values.Value) (*ast.File, error) {
 }
 
 func unmapDeclList(v values.Value) ([]ast.Decl, error) {
-	if isFalse(v) {
-		return nil, nil
-	}
-	tuple, ok := v.(values.Tuple)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
-			"goast: expected list of declarations, got %T", v)
-	}
-	var result []ast.Decl
-	for !values.IsEmptyList(tuple) {
-		pair, ok := tuple.(*values.Pair)
-		if !ok {
-			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
-				"goast: expected proper list of declarations, got %T", tuple)
-		}
-		n, err := unmapNode(pair.Car())
+	return unmapList(v, func(elem values.Value) (ast.Decl, error) {
+		n, err := unmapNode(elem)
 		if err != nil {
 			return nil, err
 		}
-		decl, ok := n.(ast.Decl)
+		d, ok := n.(ast.Decl)
 		if !ok {
 			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
 				"goast: expected declaration, got %T", n)
 		}
-		result = append(result, decl)
-		cdr, ok := pair.Cdr().(values.Tuple)
-		if !ok {
-			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
-				"goast: expected proper list of declarations, got improper cdr %T", pair.Cdr())
-		}
-		tuple = cdr
-	}
-	return result, nil
+		return d, nil
+	}, "declarations")
 }
 
 // --- Declarations ---
@@ -169,39 +148,18 @@ func unmapGenDecl(fields values.Value) (*ast.GenDecl, error) {
 }
 
 func unmapSpecList(v values.Value) ([]ast.Spec, error) {
-	if isFalse(v) {
-		return nil, nil
-	}
-	tuple, ok := v.(values.Tuple)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
-			"goast: expected list of specs, got %T", v)
-	}
-	var result []ast.Spec
-	for !values.IsEmptyList(tuple) {
-		pair, ok := tuple.(*values.Pair)
-		if !ok {
-			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
-				"goast: expected proper list of specs, got %T", tuple)
-		}
-		n, err := unmapNode(pair.Car())
+	return unmapList(v, func(elem values.Value) (ast.Spec, error) {
+		n, err := unmapNode(elem)
 		if err != nil {
 			return nil, err
 		}
-		spec, ok := n.(ast.Spec)
+		s, ok := n.(ast.Spec)
 		if !ok {
 			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
 				"goast: expected spec, got %T", n)
 		}
-		result = append(result, spec)
-		cdr, ok := pair.Cdr().(values.Tuple)
-		if !ok {
-			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
-				"goast: expected proper list of specs, got improper cdr %T", pair.Cdr())
-		}
-		tuple = cdr
-	}
-	return result, nil
+		return s, nil
+	}, "specs")
 }
 
 // --- Specs ---
