@@ -19,13 +19,10 @@ import (
 	"errors"
 	"io"
 	"io/fs"
-	"os"
 	"path/filepath"
 
-	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
-	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -36,56 +33,7 @@ const (
 )
 
 func findFile(p *CompileTimeContinuation, ctctx CompileTimeCallContext, path string) (fs.File, string, error) {
-	if path == "" {
-		return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "include: empty filename")
-	}
-
-	stack := p.env.LoadPathStack()
-
-	// Build fallback directories from all configured sources.
-	// Priority: library registry > SCHEME_INCLUDE_PATH > CWD.
-	var fallbackDirs []string
-
-	// Library registry search paths (shared with import).
-	regAny := p.env.LibraryRegistry()
-	if regAny != nil {
-		reg, ok := regAny.(*LibraryRegistry)
-		if ok {
-			fallbackDirs = append(fallbackDirs, reg.GetSearchPaths()...)
-		}
-	}
-
-	// SCHEME_INCLUDE_PATH env var (backward compatibility).
-	includePath := os.Getenv(SchemeIncludePathEnv)
-	if includePath != "" {
-		fallbackDirs = append(fallbackDirs, filepath.SplitList(includePath)...)
-	}
-
-	// CWD as final fallback (matches Chez source-directories default, Racket current-directory).
-	cwd, cwdErr := os.Getwd()
-	if cwdErr == nil {
-		fallbackDirs = append(fallbackDirs, cwd)
-	}
-
-	absPath, err := environment.ResolveFile(stack, path, fallbackDirs)
-	if err != nil {
-		return nil, "", err
-	}
-
-	err = security.Check(ctctx.Context(), security.AccessRequest{
-		Resource: security.ResourceCode,
-		Action:   security.ActionLoad,
-		Target:   absPath,
-	})
-	if err != nil {
-		return nil, "", err
-	}
-
-	f, err := os.Open(absPath)
-	if err != nil {
-		return nil, "", err
-	}
-	return f, absPath, nil
+	return p.fileResolver.ResolveAndOpen(ctctx.Context(), path)
 }
 
 // CompileInclude compiles an include expression.
@@ -123,14 +71,18 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 			}
 			defer file.Close() //nolint:errcheck
 
-			// Push to stack after successful open, pop on exit
-			stack := p.env.LoadPathStack()
-			if stack != nil {
-				pushErr := stack.Push(filePath)
-				if pushErr != nil {
-					return pushErr
+			// Push to stack after successful open, pop on exit.
+			// Only push absolute paths — embedded/virtual filesystems return
+			// relative paths that don't participate in load-path resolution.
+			if filepath.IsAbs(filePath) {
+				stack := p.env.LoadPathStack()
+				if stack != nil {
+					pushErr := stack.Push(filePath)
+					if pushErr != nil {
+						return pushErr
+					}
+					defer stack.Pop()
 				}
-				defer stack.Pop()
 			}
 
 			// Create parser for the file

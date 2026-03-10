@@ -276,10 +276,10 @@ func TestLoadBootstrapMacros_EmptySources(t *testing.T) {
 	env, err := NewTopLevelEnvironmentFrameTiny(ctx)
 	c.Assert(err, qt.IsNil)
 
-	err = loadBootstrapMacros(ctx, env, []string{})
+	err = loadBootstrapMacros(ctx, env, []string{}, nil)
 	c.Assert(err, qt.IsNil)
 
-	err = loadBootstrapMacros(ctx, env, nil)
+	err = loadBootstrapMacros(ctx, env, nil, nil)
 	c.Assert(err, qt.IsNil)
 }
 
@@ -295,7 +295,7 @@ func TestLoadBootstrapMacros_InvalidExpansion(t *testing.T) {
 	// A define-syntax with a non-transformer value should fail during expansion.
 	err = loadBootstrapMacros(ctx, env, []string{
 		`(define-syntax bad 42)`,
-	})
+	}, nil)
 	c.Assert(err, qt.IsNotNil)
 }
 
@@ -312,7 +312,7 @@ func TestLoadBootstrapMacros_CompileError(t *testing.T) {
 	// expansion or compilation.
 	err = loadBootstrapMacros(ctx, env, []string{
 		`(define-syntax bad-macro (syntax-rules () ((bad-macro) (undefined-variable-xyz))))`,
-	})
+	}, nil)
 	// This should succeed at the definition stage (define-syntax just registers
 	// the transformer); the error would occur at use time. So we just verify
 	// no panic occurred.
@@ -333,7 +333,7 @@ func TestLoadBootstrapMacros_ValidMacro(t *testing.T) {
 		`(define-syntax my-add
 		   (syntax-rules ()
 		     ((my-add a b) (+ a b))))`,
-	})
+	}, nil)
 	c.Assert(err, qt.IsNil)
 
 	// Use the macro
@@ -358,7 +358,7 @@ func TestLoadBootstrapMacros_MultipleSources(t *testing.T) {
 		`(define-syntax quadruple
 		   (syntax-rules ()
 		     ((quadruple x) (double (double x)))))`,
-	})
+	}, nil)
 	c.Assert(err, qt.IsNil)
 
 	result, err := evalScheme(t, env, `(quadruple 5)`)

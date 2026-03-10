@@ -36,15 +36,25 @@ type CompileTimeContinuation struct {
 	// Threaded to CompileSyntaxRules so free identifiers in macro templates
 	// can carry the library scope for cross-library hygiene.
 	libraryScope *syntax.Scope
+	// fileResolver controls how include/load resolves files.
+	// Defaults to OSFileResolver; set to EmbedFileResolver for bootstrap.
+	fileResolver FileResolver
 }
 
-// NewCompiletimeContinuation creates a new CompileTimeContinuation
+// NewCompiletimeContinuation creates a new CompileTimeContinuation.
+// The default file resolver uses the OS filesystem.
 func NewCompiletimeContinuation(tpl *NativeTemplate, env *environment.EnvironmentFrame) *CompileTimeContinuation {
 	q := &CompileTimeContinuation{
-		env:      env,
-		template: tpl,
+		env:          env,
+		template:     tpl,
+		fileResolver: NewOSFileResolver(env),
 	}
 	return q
+}
+
+// SetFileResolver overrides the file resolver used by include/load.
+func (p *CompileTimeContinuation) SetFileResolver(r FileResolver) {
+	p.fileResolver = r
 }
 
 // formArgs extracts the argument list from a compiled form's expression.

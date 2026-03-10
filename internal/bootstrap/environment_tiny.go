@@ -108,7 +108,8 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 	}
 
 	// Load bootstrap macros from registry
-	err = loadBootstrapMacros(ctx, env, reg.MacroSources())
+	bootstrapResolver := machine.NewEmbedFileResolver(core.BootstrapFS)
+	err = loadBootstrapMacros(ctx, env, reg.MacroSources(), bootstrapResolver)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "error loading bootstrap macros")
 	}
@@ -194,7 +195,7 @@ func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.Envi
 //  2. Macro-expanded (which is a no-op for define-syntax at top level)
 //  3. Compiled to bytecode
 //  4. Executed to register the syntax transformer
-func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame, sources []string) error {
+func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame, sources []string, resolver machine.FileResolver) error {
 	for _, source := range sources {
 		rdr := strings.NewReader(source)
 		p := parser.NewParser(env, true, rdr)
@@ -218,7 +219,11 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 			tpl := machine.NewNativeTemplate(0, 0, false)
 			// Use inTail=false for top-level expressions
 			cctx := machine.NewCompileTimeCallContext(ctx, false, true)
-			err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
+			compiler := machine.NewCompiletimeContinuation(tpl, env)
+			if resolver != nil {
+				compiler.SetFileResolver(resolver)
+			}
+			err = compiler.CompileExpression(cctx, expanded)
 			if err != nil {
 				return werr.WrapForeignErrorf(err, "error compiling bootstrap macro")
 			}
