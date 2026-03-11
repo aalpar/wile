@@ -45,39 +45,6 @@ const (
 	ConstUnsyntaxSplicing = "unsyntax-splicing"
 )
 
-// Character mnemonic runes.
-const (
-	RuneAlarm       = rune('\a')
-	RuneSpace       = rune(' ')
-	RuneBackspace   = rune('\b')
-	RuneFormFeed    = rune('\f')
-	RuneRubout      = rune(127)
-	RuneEscape      = rune(27)
-	RuneNewline     = rune('\n')
-	RuneNull        = rune(0)
-	RuneReturn      = rune('\r')
-	RuneTab         = rune('\t')
-	RuneVerticalTab = rune('\v')
-)
-
-// mnemonicRunes maps R7RS character mnemonic names to their rune values.
-// Keys must be lowercase — lookup normalizes via strings.ToLower to match
-// the tokenizer's case-insensitive acceptance (R7RS §6.6).
-var mnemonicRunes = map[string]rune{
-	"alarm":        RuneAlarm,
-	"space":        RuneSpace,
-	"backspace":    RuneBackspace,
-	"back-space":   RuneBackspace,
-	"form-feed":    RuneFormFeed,
-	"delete":       RuneRubout,
-	"escape":       RuneEscape,
-	"newline":      RuneNewline,
-	"null":         RuneNull,
-	"return":       RuneReturn,
-	"tab":          RuneTab,
-	"vertical-tab": RuneVerticalTab,
-}
-
 // Parser represents a R7RS compliant Scheme syntax parser.
 type Parser struct {
 	rdr         io.RuneReader // the rune reader
@@ -654,7 +621,7 @@ func (p *Parser) parseCharacter() (syntax.SyntaxValue, tokenizer.Token, error) {
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateCharMnemonic:
 		s := strings.ToLower(TrimPrefixFolded(p.cur.String(), values.PrefixCharacter))
-		r, ok := mnemonicRunes[s]
+		r, ok := tokenizer.CharMnemonics[s]
 		if !ok {
 			return nil, nil, NewParserErrorWithWrapf(werr.ErrUnknownCharacterMnemonic, p.cur, "unknown character mnemonic: %s", s)
 		}

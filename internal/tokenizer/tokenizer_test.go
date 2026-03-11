@@ -932,13 +932,6 @@ func TestTokenizer_read(t *testing.T) {
 			state: TokenizerStateCharMnemonic,
 		},
 		{
-			// character constant '^H'
-			bs:    `#\back-space`,
-			scan:  `#\back-space`,
-			err0:  io.EOF,
-			state: TokenizerStateCharMnemonic,
-		},
-		{
 			// character constant 'λ'
 			bs:    `#\x03BB`,
 			scan:  `#\x03BB`,

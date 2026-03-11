@@ -2547,28 +2547,6 @@ func TestParser_ListSyntaxMultipleElements(t *testing.T) {
 	c.Assert(quotedList.Length(), qt.Equals, 4)
 }
 
-// TestParser_CharacterMnemonicCoverage tests all character mnemonics
-func TestParser_CharacterMnemonicCoverage(t *testing.T) {
-	tcs := []struct {
-		input    string
-		expected rune
-	}{
-		{"#\\form-feed", RuneFormFeed},
-		{"#\\vertical-tab", RuneVerticalTab},
-	}
-	for _, tc := range tcs {
-		t.Run(tc.input, func(t *testing.T) {
-			c := qt.New(t)
-			env := environment.NewTopLevelEnvironment().Runtime()
-			p := NewParser(env, true, strings.NewReader(tc.input))
-			syn, err := p.ReadSyntax(context.TODO())
-			c.Assert(err, qt.IsNil)
-			ch := syn.UnwrapAll().(*values.Character)
-			c.Assert(ch.Value, qt.Equals, tc.expected)
-		})
-	}
-}
-
 // TestParser_ReadSyntaxErrorPropagation tests error propagation in ReadSyntax
 func TestParser_ReadSyntaxErrorPropagation(t *testing.T) {
 	c := qt.New(t)

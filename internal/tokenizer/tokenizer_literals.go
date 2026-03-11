@@ -33,21 +33,18 @@ var stringEscapes = map[rune]string{
 	'|':  "|",
 }
 
-// R7RS §6.6: Character names are case-insensitive.
+// CharMnemonics maps R7RS §6.6 character mnemonic names to their rune values.
 // Keys must be lowercase — lookup normalizes via strings.ToLower.
-var charMnemonics = map[string]rune{
-	"alarm":        '\a',
-	"backspace":    '\b',
-	"back-space":   '\b',
-	"delete":       '\x7F',
-	"escape":       '\x1B',
-	"newline":      '\n',
-	"null":         '\x00',
-	"return":       '\r',
-	"space":        ' ',
-	"tab":          '\t',
-	"vertical-tab": '\v',
-	"form-feed":    '\f',
+var CharMnemonics = map[string]rune{
+	"alarm":     '\a',
+	"backspace": '\b',
+	"delete":    '\x7F',
+	"escape":    '\x1B',
+	"newline":   '\n',
+	"null":      '\x00',
+	"return":    '\r',
+	"space":     ' ',
+	"tab":       '\t',
 }
 
 func validateCodePoint(x int64) error {
@@ -230,7 +227,7 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 			mnemonic += string(p.curr())
 			p.next() // skip letter
 		}
-		r, ok := charMnemonics[strings.ToLower(mnemonic)]
+		r, ok := CharMnemonics[strings.ToLower(mnemonic)]
 		if ok {
 			return r
 		}
