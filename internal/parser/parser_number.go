@@ -680,3 +680,63 @@ func (p *Parser) makeInexact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error)
 
 	return p.rewrapSyntax(stx, inexactNum), nil
 }
+
+// parseDecimalFraction parses a decimal fraction token (e.g., "1.5", "-0.3").
+func (p *Parser) parseDecimalFraction() (syntax.SyntaxValue, tokenizer.Token, error) {
+	a, err := strconv.ParseFloat(normalizeExponentMarker(replaceHashDigits(p.cur.String())), 64)
+	if err != nil {
+		return nil, p.cur, err
+	}
+	q := p.wrapSyntax(values.NewFloat(a), p.cur)
+	return q, p.cur, nil
+}
+
+// parseBigFloat parses a big float token (e.g., "#m1.23456789012345678901234567890").
+func (p *Parser) parseBigFloat() (syntax.SyntaxValue, tokenizer.Token, error) {
+	s := TrimPrefixFolded(p.cur.String(), "#m")
+	s = TrimPrefixFolded(s, "#M")
+	q1 := values.NewBigFloatFromString(s)
+	if q1 == nil {
+		return nil, p.cur, NewParserErrorf(p.cur, "invalid big float: %s", p.cur.String())
+	}
+	q := p.wrapSyntax(q1, p.cur)
+	return q, p.cur, nil
+}
+
+// parseSignedInf parses a signed infinity token (+inf.0 or -inf.0).
+func (p *Parser) parseSignedInf() (syntax.SyntaxValue, tokenizer.Token, error) {
+	s := p.cur.String()
+	var f float64
+	if strings.HasPrefix(s, "-") {
+		f = math.Inf(-1)
+	} else {
+		f = math.Inf(1)
+	}
+	q := p.wrapSyntax(values.NewFloat(f), p.cur)
+	return q, p.cur, nil
+}
+
+// parseSignedNan parses a signed NaN token (+nan.0 or -nan.0).
+func (p *Parser) parseSignedNan() (syntax.SyntaxValue, tokenizer.Token, error) {
+	q := p.wrapSyntax(values.NewFloat(math.NaN()), p.cur)
+	return q, p.cur, nil
+}
+
+// parseImaginaryInf parses an imaginary infinity token (+inf.0i or -inf.0i).
+func (p *Parser) parseImaginaryInf() (syntax.SyntaxValue, tokenizer.Token, error) {
+	s := p.cur.String()
+	var img float64
+	if strings.HasPrefix(s, "-") {
+		img = math.Inf(-1)
+	} else {
+		img = math.Inf(1)
+	}
+	q := p.wrapSyntax(values.NewComplexFromParts(0, img), p.cur)
+	return q, p.cur, nil
+}
+
+// parseImaginaryNan parses an imaginary NaN token (+nan.0i or -nan.0i).
+func (p *Parser) parseImaginaryNan() (syntax.SyntaxValue, tokenizer.Token, error) {
+	q := p.wrapSyntax(values.NewComplexFromParts(0, math.NaN()), p.cur)
+	return q, p.cur, nil
+}

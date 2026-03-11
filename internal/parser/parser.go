@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"math"
 	"math/bits"
 	"strconv"
 	"strings"
@@ -760,13 +759,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateUnsignedInteger, tokenizer.TokenizerStateSignedInteger:
 		return p.parseIntegerWithBase(10)
 	case tokenizer.TokenizerStateUnsignedDecimalFraction, tokenizer.TokenizerStateSignedDecimalFraction:
-		var a float64
-		a, p.err = strconv.ParseFloat(normalizeExponentMarker(replaceHashDigits(p.cur.String())), 64)
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q = p.wrapSyntax(values.NewFloat(a), p.cur)
-		return q, p.cur, nil
+		return p.parseDecimalFraction()
 	case tokenizer.TokenizerStateSignedScientificNotation,
 		tokenizer.TokenizerStateUnsignedScientificNotation:
 		return p.parseScientificNotation()
@@ -803,18 +796,9 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateSignedIntegerBase16, tokenizer.TokenizerStateUnsignedIntegerBase16:
 		return p.parseIntegerWithBase(16)
 	case tokenizer.TokenizerStateSignedInf:
-		s := p.cur.String()
-		var f float64
-		if strings.HasPrefix(s, "-") {
-			f = math.Inf(-1)
-		} else {
-			f = math.Inf(1)
-		}
-		q = p.wrapSyntax(values.NewFloat(f), p.cur)
-		return q, p.cur, nil
+		return p.parseSignedInf()
 	case tokenizer.TokenizerStateSignedNan:
-		q = p.wrapSyntax(values.NewFloat(math.NaN()), p.cur)
-		return q, p.cur, nil
+		return p.parseSignedNan()
 	case tokenizer.TokenizerStateSignedImaginary, tokenizer.TokenizerStateUnsignedImaginary:
 		var q1 values.Number
 		q1, p.err = p.parseImaginary(replaceHashDigits(p.cur.String()))
@@ -827,18 +811,9 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateSignedImaginaryInf, tokenizer.TokenizerStateUnsignedImaginaryInf:
-		s := p.cur.String()
-		var img float64
-		if strings.HasPrefix(s, "-") {
-			img = math.Inf(-1)
-		} else {
-			img = math.Inf(1)
-		}
-		q = p.wrapSyntax(values.NewComplexFromParts(0, img), p.cur)
-		return q, p.cur, nil
+		return p.parseImaginaryInf()
 	case tokenizer.TokenizerStateSignedImaginaryNan, tokenizer.TokenizerStateUnsignedImaginaryNan:
-		q = p.wrapSyntax(values.NewComplexFromParts(0, math.NaN()), p.cur)
-		return q, p.cur, nil
+		return p.parseImaginaryNan()
 	case tokenizer.TokenizerStateUnsignedComplex, tokenizer.TokenizerStateSignedComplex:
 		var q1 values.Number
 		q1, p.err = p.parseComplex(replaceHashDigits(p.cur.String()))
@@ -873,14 +848,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateBigIntegerBase2:
 		return p.parseBigIntegerWithBase(2)
 	case tokenizer.TokenizerStateBigFloat:
-		s := TrimPrefixFolded(p.cur.String(), "#m")
-		s = TrimPrefixFolded(s, "#M")
-		q1 := values.NewBigFloatFromString(s)
-		if q1 == nil {
-			return nil, p.cur, NewParserErrorf(cur, "invalid big float: %s", p.cur.String())
-		}
-		q = p.wrapSyntax(q1, p.cur)
-		return q, p.cur, nil
+		return p.parseBigFloat()
 	case tokenizer.TokenizerStateMarkerBooleanTrue:
 		q = p.wrapSyntax(values.TrueValue, p.cur)
 		return q, p.cur, nil
