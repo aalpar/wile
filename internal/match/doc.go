@@ -34,10 +34,9 @@
 // [SyntaxMatcher] adds hygiene: scope-aware literal matching and template
 // expansion with intro scopes per Flatt's "sets of scopes" model.
 //
-// # Template Expansion
+// # Template Expansion (syntax_expand.go)
 //
-//   - [Matcher.Expand]: expand template with captured bindings
-//   - [SyntaxMatcher.Expand]: expand with hygiene via [ExpandOptions]
+//   - [SyntaxMatcher.Expand]: expand template with captured bindings via [ExpandOptions]
 //
 // Reference: R7RS Section 4.3.2 (syntax-rules pattern language).
 package match
