@@ -639,10 +639,11 @@ func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 	return p.wrapSyntax(q0, p.cur), p.cur, nil
 }
 
-// readCharacter parses a character literal from the three character token types:
-// graphic (#\a), mnemonic (#\space), and hex escape (#\x41).
-func (p *Parser) readCharacter(tok tokenizer.Token) (syntax.SyntaxValue, tokenizer.Token, error) {
-	switch tok.Type() {
+// parseCharacter parses a character literal from the current token.
+// Handles three character token types: graphic (#\a), mnemonic (#\space),
+// and hex escape (#\x41).
+func (p *Parser) parseCharacter() (syntax.SyntaxValue, tokenizer.Token, error) {
+	switch p.cur.Type() {
 	case tokenizer.TokenizerStateCharGraphic:
 		s := TrimPrefixFolded(p.cur.String(), values.PrefixCharacter)
 		rs := []rune(s)
@@ -666,7 +667,7 @@ func (p *Parser) readCharacter(tok tokenizer.Token) (syntax.SyntaxValue, tokeniz
 		q := p.wrapSyntax(values.NewCharacter(rune(i)), p.cur)
 		return q, p.cur, nil
 	default:
-		return nil, p.cur, NewParserErrorWithWrapf(ErrUnknownTokenType, p.cur, "readCharacter: unexpected token type: %q", tok.String())
+		return nil, p.cur, NewParserErrorWithWrapf(ErrUnknownTokenType, p.cur, "parseCharacter: unexpected token type: %q", p.cur.String())
 	}
 }
 
@@ -861,7 +862,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateCharGraphic,
 		tokenizer.TokenizerStateCharMnemonic,
 		tokenizer.TokenizerStateCharHexEscape:
-		return p.readCharacter(cur)
+		return p.parseCharacter()
 	case tokenizer.TokenizerStateString:
 		q = p.wrapSyntax(values.NewString(p.cur.Value()), p.cur)
 		return q, p.cur, nil

@@ -685,7 +685,7 @@ func (p *Parser) makeInexact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error)
 func (p *Parser) parseDecimalFraction() (syntax.SyntaxValue, tokenizer.Token, error) {
 	a, err := strconv.ParseFloat(normalizeExponentMarker(replaceHashDigits(p.cur.String())), 64)
 	if err != nil {
-		return nil, p.cur, err
+		return nil, p.cur, NewParserErrorWithWrapf(err, p.cur, "invalid decimal fraction: %s", p.cur.String())
 	}
 	q := p.wrapSyntax(values.NewFloat(a), p.cur)
 	return q, p.cur, nil
