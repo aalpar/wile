@@ -478,57 +478,9 @@ EnsureLocalBinding.
 
 ---
 
-## Task 6: Document GetLocalIndexWithScopes walk coupling
+## Task 6: ~~Document GetLocalIndexWithScopes walk coupling~~ Superseded
 
-**Files:**
-- Modify: `environment/environment_frame.go`
-
-**Problem:** `GetLocalIndexWithScopes` has its own parent-chain walk that must stay in sync with `resolveLocal`'s loop conditions. The doc comment explains why `resolveLocal` can't express the "collect all, then pick best" pattern. But there's no explicit coupling marker between the two walks.
-
-**Step 1: Verify loop conditions match**
-
-Compare the loop conditions:
-
-`resolveLocal` (line ~342):
-```go
-for env != nil && env.hasLocal() {
-    ...
-    if env.IsTopLevel() { break }
-    env = env.parent
-}
-```
-
-`GetLocalIndexWithScopes` (line ~603):
-```go
-for env != nil && env.hasLocal() {
-    ...
-    if env.IsTopLevel() { break }
-    env = env.parent
-}
-```
-
-Verify they are identical.
-
-**Step 2: Add coupling comment**
-
-Add to `GetLocalIndexWithScopes` doc comment:
-
-```go
-// COUPLING: The loop below must mirror resolveLocal's walk conditions
-// (hasLocal check, IsTopLevel break, parent traversal). If resolveLocal's
-// termination logic changes, update this loop to match.
-```
-
-**Step 3: Run lint**
-
-Run: `make lint`
-Expected: Pass
-
-**Step 4: Commit**
-
-```
-docs(environment): mark GetLocalIndexWithScopes walk coupling with resolveLocal
-```
+Superseded — `GetLocalIndexWithScopes` now delegates to `resolveLocal` directly. The coupling that needed documenting no longer exists. See `plans/MEDIUM-REFACTORING-BATCH.md` Work Item B.
 
 ---
 

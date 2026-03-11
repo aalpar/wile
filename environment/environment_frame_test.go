@@ -1017,3 +1017,45 @@ func TestGetGlobalIndexAcrossPhases_ExpandPhaseBinding(t *testing.T) {
 	runtimeGi := env.GetGlobalIndex(macroSym)
 	c.Assert(runtimeGi, qt.IsNil)
 }
+
+func TestGetLocalIndexWithScopes_MaximalBinding(t *testing.T) {
+	c := qt.New(t)
+
+	topLevel := NewTopLevelEnvironment()
+	env := topLevel.Runtime()
+
+	scopeA := syntax.NewScope()
+	scopeB := syntax.NewScope()
+	scopeC := syntax.NewScope()
+
+	sym := values.NewSymbol("x")
+
+	// Outer: binding with [scopeA] — 1 scope
+	outer := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
+	outer.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable,
+		[]*syntax.Scope{scopeA}, nil)
+
+	// Inner: binding with [scopeA, scopeB] — 2 scopes
+	inner := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), outer)
+	inner.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable,
+		[]*syntax.Scope{scopeA, scopeB}, nil)
+
+	// Reference [scopeA, scopeB, scopeC]: both bindings match,
+	// inner wins (more scopes = more specific)
+	idx := inner.GetLocalIndexWithScopes(sym,
+		[]*syntax.Scope{scopeA, scopeB, scopeC})
+	c.Assert(idx, qt.IsNotNil)
+	c.Assert(idx[1], qt.Equals, 0) // depth 0 = inner
+
+	// Reference [scopeA, scopeC]: only outer matches
+	// (inner requires scopeB which reference doesn't have)
+	idx2 := inner.GetLocalIndexWithScopes(sym,
+		[]*syntax.Scope{scopeA, scopeC})
+	c.Assert(idx2, qt.IsNotNil)
+	c.Assert(idx2[1], qt.Equals, 1) // depth 1 = outer
+
+	// No matching scopes
+	idx3 := inner.GetLocalIndexWithScopes(sym,
+		[]*syntax.Scope{scopeC})
+	c.Assert(idx3, qt.IsNil)
+}

@@ -54,7 +54,7 @@ func (p *Parser) parseIntegerWithBase(base int) (syntax.SyntaxValue, tokenizer.T
 				return q, p.cur, nil
 			}
 		}
-		return nil, p.cur, err
+		return nil, p.cur, NewParserErrorWithWrapf(err, p.cur, "invalid base-%d integer: %s", base, p.cur.String())
 	}
 	if p.cur.HasHashDigit() {
 		q := p.wrapSyntax(values.NewFloat(float64(a)), p.cur)
