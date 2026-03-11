@@ -39,9 +39,11 @@ import (
 //
 // Per Flatt 2016 "sets of scopes" model: when deciding whether to substitute a template
 // symbol with a captured value, we compare the template symbol's scopes with the pattern
-// variable's scopes. Only substitute if the scopes are compatible (pattern var scopes ⊆
-// template symbol scopes). If the template symbol has additional scopes (e.g., from an
-// outer macro's intro scope), it should NOT be substituted.
+// variable's scopes. Only substitute if the scopes are compatible, meaning the template
+// symbol and pattern variable have exactly the same set of scopes (pattern scopes ⊆
+// template scopes and template scopes ⊆ pattern scopes). A template symbol with any
+// additional or missing scopes (e.g., from an outer macro's intro scope) is not
+// substituted.
 type ExpandOptions struct {
 	// IntroScope is the hygiene scope added to newly created syntax objects (from the
 	// template), but NOT to syntax objects preserved from pattern variable substitution.
@@ -234,7 +236,12 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 			localScopes := lsp.GetLocalScopes()
 			if len(localScopes) > 0 {
 				// Local binding - use definition-site scopes
-				scopedCtx := srcCtx.Clone()
+				var scopedCtx *syntax.SourceContext
+				if srcCtx != nil {
+					scopedCtx = srcCtx.Clone()
+				} else {
+					scopedCtx = &syntax.SourceContext{}
+				}
 				scopedCtx.Scopes = localScopes
 				return syntax.NewSyntaxSymbol(symVal.Key, scopedCtx)
 			}
