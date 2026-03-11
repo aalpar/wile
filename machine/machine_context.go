@@ -104,7 +104,8 @@ func NewMachineContext(ctx context.Context, cont *MachineContinuation) *MachineC
 			evals:       evals,
 			pc:          cont.pc,
 		},
-		cont: cont.parent,
+		cont:     cont.parent,
+		counters: VMCounters{opcodeHits: newOpcodeHits()},
 	}
 	return q
 }
@@ -277,7 +278,9 @@ func (p *MachineContext) Run() error {
 
 		instr := mc.template.code[mc.pc]
 		mc.counters.OpsExecuted++
-		mc.counters.OpcodeHits[instr.Op]++
+		if mc.counters.opcodeHits != nil {
+			mc.counters.opcodeHits[instr.Op]++
+		}
 
 		switch instr.Op {
 		// --- Wave 1: zero-operand operations ---

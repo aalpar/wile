@@ -16,8 +16,10 @@ package machine
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // VMCounters holds performance counters for a single MachineContext execution.
@@ -26,7 +28,7 @@ import (
 // into the parent).
 type VMCounters struct {
 	OpsExecuted            uint64
-	OpcodeHits             [opCount]uint64
+	opcodeHits             *[opCount]uint64
 	ClosuresApplied        uint64
 	EnvsCopied             uint64
 	BindingsCopied         uint64
@@ -59,6 +61,18 @@ type VMCounters struct {
 	StackDepth5to8  uint64 // depth 5-8: fits in pool cap 8
 	StackDepth9to16 uint64 // depth 9-16: requires 1 growth from cap 8
 	StackDepth17p   uint64 // depth 17+: requires 2+ growths
+}
+
+var opcodeHitsEnabled = sync.OnceValue(func() bool {
+	return os.Getenv("WILE_OPCODE_HITS") != ""
+})
+
+// newOpcodeHits returns a hits array if WILE_OPCODE_HITS is set, nil otherwise.
+func newOpcodeHits() *[opCount]uint64 {
+	if opcodeHitsEnabled() {
+		return new([opCount]uint64)
+	}
+	return nil
 }
 
 // RecordStackDepth updates the depth histogram and max tracker.
@@ -140,16 +154,19 @@ func (c VMCounters) String() string {
 // sorted by frequency (descending). Only opcodes with non-zero hits
 // are included.
 func (c VMCounters) OpcodeHistogram() string {
+	if c.opcodeHits == nil {
+		return ""
+	}
 	type entry struct {
 		name  string
 		count uint64
 	}
 	var entries []entry
 	for i := range opCount {
-		if c.OpcodeHits[i] > 0 {
+		if c.opcodeHits[i] > 0 {
 			entries = append(entries, entry{
-				name:  OpCode(i).String(),
-				count: c.OpcodeHits[i],
+				name:  i.String(),
+				count: c.opcodeHits[i],
 			})
 		}
 	}

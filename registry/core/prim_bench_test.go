@@ -115,6 +115,7 @@ func benchCompile(ctx context.Context, b *testing.B, env *environment.Environmen
 	if err != nil {
 		b.Fatal(err)
 	}
+	tpl.Optimize()
 	return tpl
 }
 
