@@ -48,7 +48,8 @@ func TestGoInstall(t *testing.T) {
 	}
 
 	binary := filepath.Join(gobin, "scheme")
-	if _, err := os.Stat(binary); err != nil {
+	_, err = os.Stat(binary)
+	if err != nil {
 		t.Fatalf("installed binary not found at %s: %v", binary, err)
 	}
 
