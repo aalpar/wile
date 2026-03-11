@@ -13,7 +13,7 @@ is a concrete demonstration of Wile's R7RS language completeness.
 Start a REPL with schelog loaded:
 
 ```bash
-./dist/scheme -i -f examples/logic/schelog/schelog.scm
+./dist/wile -i -f examples/logic/schelog/schelog.scm
 ```
 
 Try some queries:
@@ -32,7 +32,7 @@ Try some queries:
 Or load the demo for family relationships, append, and more:
 
 ```bash
-./dist/scheme -i -f examples/logic/schelog/schelog.scm -f examples/logic/schelog/demo.scm
+./dist/wile -i -f examples/logic/schelog/schelog.scm -f examples/logic/schelog/demo.scm
 ```
 
 ## Running Examples
@@ -41,24 +41,24 @@ Load schelog first, then any example file. All of these complete in seconds:
 
 ```bash
 # Basic predicates: append, reverse, factorial, length
-./dist/scheme -i -f examples/logic/schelog/schelog.scm -f examples/logic/schelog/toys.scm
+./dist/wile -i -f examples/logic/schelog/schelog.scm -f examples/logic/schelog/toys.scm
 
 # Map coloring (4-color theorem)
-./dist/scheme -i -f examples/logic/schelog/schelog.scm -f examples/logic/schelog/mapcol.scm
+./dist/wile -i -f examples/logic/schelog/schelog.scm -f examples/logic/schelog/mapcol.scm
 
 # Logic puzzle from Sterling & Shapiro
-./dist/scheme -i -f examples/logic/schelog/schelog.scm \
+./dist/wile -i -f examples/logic/schelog/schelog.scm \
               -f examples/logic/schelog/puzzle.scm \
               -f examples/logic/schelog/games.scm
 
 # Royal family relationships
-./dist/scheme -i -f examples/logic/schelog/schelog.scm -f examples/logic/schelog/england.scm
+./dist/wile -i -f examples/logic/schelog/schelog.scm -f examples/logic/schelog/england.scm
 
 # Biblical genealogy with set predicates
-./dist/scheme -i -f examples/logic/schelog/schelog.scm -f examples/logic/schelog/bible.scm
+./dist/wile -i -f examples/logic/schelog/schelog.scm -f examples/logic/schelog/bible.scm
 
 # Simple facts database
-./dist/scheme -i -f examples/logic/schelog/schelog.scm -f examples/logic/schelog/holland.scm
+./dist/wile -i -f examples/logic/schelog/schelog.scm -f examples/logic/schelog/holland.scm
 ```
 
 ### Multiple Files
@@ -66,7 +66,7 @@ Load schelog first, then any example file. All of these complete in seconds:
 The `-f` flag can be repeated to load multiple files in order:
 
 ```bash
-./dist/scheme -i -f lib1.scm -f lib2.scm -f main.scm
+./dist/wile -i -f lib1.scm -f lib2.scm -f main.scm
 ```
 
 All files except the last are loaded silently. In interactive mode (`-i`), the
@@ -84,7 +84,7 @@ mapcol, games) and completes in seconds:
 Or via the single-process Scheme test runner:
 
 ```bash
-./dist/scheme -f examples/logic/schelog/run-all-tests.scm
+./dist/wile -f examples/logic/schelog/run-all-tests.scm
 ```
 
 ## Key Concepts
@@ -132,13 +132,13 @@ space; Schelog's pure backtracking approach does not.
 To run:
 
 ```bash
-./dist/scheme -f examples/logic/schelog/stress-test.scm
+./dist/wile -f examples/logic/schelog/stress-test.scm
 ```
 
 Or interactively:
 
 ```bash
-./dist/scheme -i -f examples/logic/schelog/schelog.scm \
+./dist/wile -i -f examples/logic/schelog/schelog.scm \
               -f examples/logic/schelog/puzzle.scm \
               -f examples/logic/schelog/houses.scm
 ```

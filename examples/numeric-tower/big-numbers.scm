@@ -3,7 +3,7 @@
 ;;; Demonstrates: BigInteger, BigFloat, precision beyond native types
 ;;; Wile-specific: Automatic promotion to arbitrary precision
 ;;;
-;;; Usage: ./dist/scheme --file examples/numeric-tower/big-numbers.scm
+;;; Usage: ./dist/wile --file examples/numeric-tower/big-numbers.scm
 
 ;; Wile automatically promotes to arbitrary precision when needed.
 ;; No overflow errors - numbers grow as large as memory allows.

@@ -179,7 +179,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Add Schelog logic programming system (Prolog-style relational programming in Scheme)
 - Add benchmark infrastructure: `make bench-gabriel` (canonical), `make bench-gabriel-all` (all benchmarks), `make bench-gabriel-compare` (cross-implementation comparison)
 - Add R6RS compatibility shim (`examples/lib/r6rs-compat.scm`) for `error` procedure signature differences — accepts both R6RS `(error who message ...)` and R7RS `(error message ...)` forms
-- Create convenience symlink `dist/scheme` → `dist/{os}/{arch}/scheme` during build for easier manual invocation (Makefile targets use explicit platform paths)
+- Create convenience symlink `dist/wile` → `dist/{os}/{arch}/wile` during build for easier manual invocation (Makefile targets use explicit platform paths)
 - Add Apache 2.0 NOTICE file
 - Add CLI package subprocess tests (coverage 9.8% → 75%)
 
@@ -354,7 +354,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Interactive REPL with readline support and debug commands
 - File execution mode with positional argument and `--file` flag
 - SIGQUIT handler for goroutine stack dumps
-- Multi-platform builds: `dist/{os}/{arch}/scheme` layout with targets for darwin/linux on arm64/amd64
+- Multi-platform builds: `dist/{os}/{arch}/wile` layout with targets for darwin/linux on arm64/amd64
 - Docker build support with `TARGETOS`/`TARGETARCH` platform awareness
 - CI builds all four OS/architecture combinations
 - R7RS conformance test suite running in CI

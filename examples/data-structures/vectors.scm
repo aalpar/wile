@@ -3,7 +3,7 @@
 ;;; Demonstrates: Vectors, random access, mutation, vector operations
 ;;; Wile-specific: Full R7RS vector support
 ;;;
-;;; Usage: ./dist/scheme --file examples/data-structures/vectors.scm
+;;; Usage: ./dist/wile --file examples/data-structures/vectors.scm
 
 ;; Vectors provide O(1) random access to elements.
 ;; Unlike lists, vectors have constant-time indexing and mutation.

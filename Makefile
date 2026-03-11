@@ -15,7 +15,7 @@ BUILD_SHA:=$(shell git rev-parse --short HEAD 2>/dev/null || echo "0000000" )
 BUILD_VERSION:=$(shell cat ./VERSION 2>/dev/null || echo "v0.0.0")
 DIST_DIR=./dist
 TEST_DIR=./test
-MY_BIN=scheme
+MY_BIN=wile
 
 GORELEASER=goreleaser
 
@@ -24,7 +24,7 @@ DOCKER_PLATFORM ?=
 DOCKER_SHELL ?=
 
 
-# Build the scheme binary for the current platform to ./dist/{os}/{arch}/scheme.
+# Build the scheme binary for the current platform to ./dist/{os}/{arch}/wile.
 # Rebuilds only when Go source files change.
 #   make build
 #
@@ -37,7 +37,7 @@ DOCKER_SHELL ?=
 #
 # Docker build:
 #   docker build -f docker/Dockerfile -t wile .
-#   docker run wile ./dist/${TARGETOS}/${TARGETARCH}/scheme --file example.scm
+#   docker run wile ./dist/${TARGETOS}/${TARGETARCH}/wile --file example.scm
 #
 # Cross-platform Docker build:
 #   docker build --platform linux/amd64 -f docker/Dockerfile -t wile .
@@ -65,7 +65,7 @@ $(DIST_DIR)/%/$(MY_BIN): $(SOURCES) $(EMBED_SOURCES)
 	$(eval TARGET_OS := $(word 1,$(OS_ARCH)))
 	$(eval TARGET_ARCH := $(word 2,$(OS_ARCH)))
 	@mkdir -p $(DIST_DIR)/$*
-	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) $(GO_BUILD) -o $(DIST_DIR)/$*/$(MY_BIN) $(LDFLAGS) ./cmd/scheme
+	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) $(GO_BUILD) -o $(DIST_DIR)/$*/$(MY_BIN) $(LDFLAGS) ./cmd/wile
 
 .PHONY: build-darwin-arm64
 build-darwin-arm64: $(DIST_DIR)/darwin/arm64/$(MY_BIN)
@@ -140,7 +140,7 @@ test-race: build
 # Override SCHEME to test against different implementations:
 #   make test-scheme                                    # Use Wile (default)
 #   make test-scheme SCHEME=chez-scheme                 # Test with Chez Scheme
-#   make test-scheme SCHEME=./old-dist/scheme           # Test with old Wile version
+#   make test-scheme SCHEME=./old-dist/wile           # Test with old Wile version
 #   make test-scheme SCHEME=/usr/local/bin/chibi-scheme # Test with Chibi-Scheme
 .PHONY: test-scheme
 test-scheme:

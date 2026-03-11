@@ -4,7 +4,7 @@
 ;;;               fixed-point iteration, define-record-type, closures,
 ;;;               the kind of system you'd embed Scheme to build
 ;;;
-;;; Usage: ./dist/scheme --file examples/applications/rule-engine.scm
+;;; Usage: ./dist/wile --file examples/applications/rule-engine.scm
 
 ;; -----------------------------------------------------------------------
 ;; Logic variables (symbols starting with ?)

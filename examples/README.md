@@ -6,7 +6,7 @@ Comprehensive examples demonstrating Wile's capabilities as a full R7RS Scheme w
 
 ```bash
 # Run any example
-./dist/scheme --file examples/basics/hello.scm
+./dist/wile --file examples/basics/hello.scm
 
 # Build the interpreter first if needed
 make build
@@ -156,13 +156,13 @@ Standard Scheme benchmarks from the Gabriel suite and others.
 ### Single Example
 
 ```bash
-./dist/scheme --file examples/basics/hello.scm
+./dist/wile --file examples/basics/hello.scm
 ```
 
 ### Interactive REPL After Loading
 
 ```bash
-./dist/scheme --file examples/macros/state-machine.scm --interactive
+./dist/wile --file examples/macros/state-machine.scm --interactive
 ```
 
 ### All Examples in a Category
@@ -170,7 +170,7 @@ Standard Scheme benchmarks from the Gabriel suite and others.
 ```bash
 for f in examples/basics/*.scm; do
   echo "=== $f ==="
-  ./dist/scheme --file "$f"
+  ./dist/wile --file "$f"
   echo
 done
 ```
@@ -192,7 +192,7 @@ Each example follows a consistent format:
 ;;; Demonstrates: feature1, feature2, feature3
 ;;; Wile-specific: non-standard extensions used (if any)
 ;;;
-;;; Usage: ./dist/scheme --file examples/category/filename.scm
+;;; Usage: ./dist/wile --file examples/category/filename.scm
 
 ;; Explanatory comments
 (define (example-function args)

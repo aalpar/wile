@@ -5,14 +5,14 @@
 #   ./test/compare-schemes.sh [scheme1] [scheme2] ...
 #
 # Example:
-#   ./test/compare-schemes.sh ./dist/darwin/arm64/scheme chez-scheme chibi-scheme
+#   ./test/compare-schemes.sh ./dist/darwin/arm64/wile chez-scheme chibi-scheme
 #
 # If no arguments provided, compares Wile with Chibi-Scheme (if available)
 
 set -e
 
 # Default implementations to test
-SCHEMES=("${@:-./dist/darwin/arm64/scheme chibi-scheme}")
+SCHEMES=("${@:-./dist/darwin/arm64/wile chibi-scheme}")
 
 echo "═══════════════════════════════════════════════════════════"
 echo "Scheme Implementation Comparison"

@@ -3,7 +3,7 @@
 ;;; Demonstrates: define-record-type, constructors, accessors, predicates
 ;;; Wile-specific: Full R7RS record support
 ;;;
-;;; Usage: ./dist/scheme --file examples/data-structures/records.scm
+;;; Usage: ./dist/wile --file examples/data-structures/records.scm
 
 ;; Records provide user-defined structured data types.
 ;; define-record-type creates a new disjoint type.

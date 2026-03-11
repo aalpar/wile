@@ -207,7 +207,7 @@ Isolation invariants are verified in `engine_sandbox_test.go`:
 - Norm Hardy, "The Confused Deputy", ACM SIGOPS 1988. https://doi.org/10.1145/54289.871709
 - Jonathan Rees, "A Security Kernel Based on the Lambda Calculus", MIT AI Memo 1564, 1996. https://dspace.mit.edu/handle/1721.1/5944
 - Mark S. Miller, "Robust Composition: Towards a Unified Approach to Access Control and Concurrency Control", PhD Dissertation, Johns Hopkins, 2006. http://www.erights.org/talks/thesis/
-- Mark S. Miller et al., "Caja: Safe active content in sanitized JavaScript", Google, 2008. https://research.google/pubs/pub32user/
+- Mark S. Miller et al., "Caja: Safe active content in sanitized JavaScript", Google, 2008. https://google-code-archive-downloads.storage.googleapis.com/v2/code.google.com/google-caja/caja-spec-2008-06-06.pdf
 - Matthew Flatt, "Binding as Sets of Scopes", POPL 2016. https://doi.org/10.1145/2837614.2837620
 - Mark S. Miller, Mike Samuel, et al., "Safe ECMAScript (SES)", TC39 Proposal. https://github.com/tc39/proposal-ses
 

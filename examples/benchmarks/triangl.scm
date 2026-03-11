@@ -3,7 +3,7 @@
 ;;; A benchmark that creates a doubly-recursive tree structure.
 ;;; Tests recursion depth and memory allocation patterns.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/triangl.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/triangl.scm
 
 (define (tri n)
   (if (<= n 0)

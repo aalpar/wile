@@ -3,7 +3,7 @@
 ;;; Demonstrates: Thread creation, joining, thread-local state
 ;;; Wile-specific: Go-backed threads via SRFI-18
 ;;;
-;;; Usage: ./dist/scheme --file examples/concurrency/threads.scm
+;;; Usage: ./dist/wile --file examples/concurrency/threads.scm
 
 ;; Output mutex to prevent interleaved output
 (define output-mutex (make-mutex))

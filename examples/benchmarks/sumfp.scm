@@ -3,7 +3,7 @@
 ;;; Tests floating-point arithmetic performance with a simple
 ;;; iterative loop. Exercises numeric tower and tail recursion.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/sumfp.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/sumfp.scm
 
 (define (sumfp n)
   (let loop ((i 0.0)

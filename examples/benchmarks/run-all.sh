@@ -3,7 +3,7 @@
 
 set -e
 
-SCHEME="${SCHEME:-../../dist/scheme}"
+SCHEME="${SCHEME:-../../dist/wile}"
 
 if [ ! -e "$SCHEME" ]; then
     echo "Error: Scheme interpreter not found at $SCHEME"

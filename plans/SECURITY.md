@@ -218,7 +218,7 @@ type LibraryEnvFactory func(context.Context, *EnvironmentFrame, []string) (*Envi
 | Call site 2 | `machine/compile_time_continuation_library.go:120` | Pass `libName.Parts` |
 | Engine factory closure | `engine.go:139` | Add `_ []string` param (unused for now) |
 | Bootstrap factory | `internal/bootstrap/environment_tiny.go:149` | Add `_ []string` param |
-| CLI setup | `cmd/scheme/main.go:229` | Points to bootstrap factory (no change needed) |
+| CLI setup | `cmd/wile/main.go:229` | Points to bootstrap factory (no change needed) |
 | Tests (factory reference) | `machine/library_test.go:309,745`, `machine/library_scheme_test.go:54` | Point to bootstrap factory (no change needed — signature matches) |
 | Tests (direct calls) | `internal/bootstrap/library_environment_test.go`, `multi_environment_test.go` | Add `nil` third argument |
 | Docs | `docs/EXTENSION_LIBRARIES.md`, `docs/dev/ENVIRONMENT_SYSTEM.md` | Text updates (deferred) |

@@ -508,7 +508,7 @@ Formalizes the object-capability model and the principle of least authority (POL
 Closest analog in another language: restricting JavaScript to a capability-safe subset. Demonstrates why compile-time capability elimination is harder in JavaScript (prototype chains, ambient globals like `window`) than in Scheme (lexical scoping provides natural isolation).
 
 - **Paper**: Mark S. Miller, Mike Samuel, Ben Laurie, Ihab Awad, Mike Stay, "Caja: Safe active content in sanitized JavaScript", Google Technical Report, 2008
-- **URL**: https://research.google/pubs/pub32user/
+- **URL**: https://google-code-archive-downloads.storage.googleapis.com/v2/code.google.com/google-caja/caja-spec-2008-06-06.pdf
 
 ## Language Specifications
 

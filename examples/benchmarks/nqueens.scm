@@ -4,7 +4,7 @@
 ;;; chessboard such that no two queens attack each other.
 ;;; Tests backtracking and list manipulation.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/nqueens.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/nqueens.scm
 
 (define (safe? col positions)
   (let loop ((pos-list positions)

@@ -3,7 +3,7 @@
 ;;; Simple recursive summation from 1 to n.
 ;;; Tests basic recursion and integer arithmetic.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/sum.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/sum.scm
 
 (define (sum n)
   (if (<= n 0)

@@ -35,8 +35,8 @@ make build
 make test
 
 # Run the REPL
-./dist/darwin/arm64/scheme  # macOS ARM64
-./dist/linux/amd64/scheme   # Linux x86-64
+./dist/darwin/arm64/wile  # macOS ARM64
+./dist/linux/amd64/wile   # Linux x86-64
 ```
 
 ## Development Workflow
@@ -127,7 +127,7 @@ The Scheme test suite can run against any R7RS-compatible Scheme implementation:
 ```bash
 make test-scheme SCHEME=chez-scheme        # Test with Chez Scheme
 make test-scheme SCHEME=chibi-scheme       # Test with Chibi-Scheme
-make test-scheme SCHEME=./old-dist/scheme  # Compare with old Wile version
+make test-scheme SCHEME=./old-dist/wile  # Compare with old Wile version
 ```
 
 This is useful for verifying R7RS conformance and compatibility.

@@ -3,7 +3,7 @@
 ;;; Demonstrates: Anaphoric macros, deliberate variable introduction
 ;;; Wile-specific: Techniques for controlled hygiene violation
 ;;;
-;;; Usage: ./dist/scheme --file examples/macros/anaphoric.scm
+;;; Usage: ./dist/wile --file examples/macros/anaphoric.scm
 
 ;; Anaphoric macros deliberately introduce bindings that user code can reference.
 ;; Common in languages like Common Lisp (e.g., aif, awhen).

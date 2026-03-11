@@ -3,7 +3,7 @@
 ;;; A variant of the Takeuchi function that uses lists instead of integers.
 ;;; Stresses list allocation, GC, and function call overhead.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/takl.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/takl.scm
 
 (define (listn n)
   (if (= n 0)

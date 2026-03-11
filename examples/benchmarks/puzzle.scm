@@ -3,7 +3,7 @@
 ;;; Classic puzzle-solving benchmark from the Gabriel suite.
 ;;; Tests list manipulation and backtracking algorithms.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/puzzle.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/puzzle.scm
 
 (define (puzzle-iota n)
   (let loop ((i 0) (result '()))

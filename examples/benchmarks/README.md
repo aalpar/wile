@@ -26,7 +26,7 @@ have been adapted to R7RS signatures.
 Run a single benchmark:
 
 ```bash
-./dist/scheme --file examples/benchmarks/tak.scm
+./dist/wile --file examples/benchmarks/tak.scm
 ```
 
 Run all benchmarks:
@@ -35,7 +35,7 @@ Run all benchmarks:
 for bench in examples/benchmarks/*.scm; do
     [ "$bench" = "examples/benchmarks/README.md" ] && continue
     echo "Running $(basename $bench)..."
-    ./dist/scheme --file "$bench"
+    ./dist/wile --file "$bench"
     echo ""
 done
 ```
@@ -160,7 +160,7 @@ Follow this template:
 ;;;
 ;;; Detailed description of what this benchmarks.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/benchmark-name.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/benchmark-name.scm
 
 (define (your-benchmark-function args)
   ...)

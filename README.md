@@ -174,7 +174,7 @@ The [`values`](https://pkg.go.dev/github.com/aalpar/wile/values) package provide
 
 ```bash
 # Install as a command-line tool
-go install github.com/aalpar/wile/cmd/scheme@latest
+go install github.com/aalpar/wile/cmd/wile@latest
 
 # Or download a prebuilt binary from releases
 # https://github.com/aalpar/wile/releases
@@ -281,7 +281,7 @@ cd wile
 make build
 ```
 
-The binary is built to `./dist/{os}/{arch}/scheme`.
+The binary is built to `./dist/{os}/{arch}/wile`.
 
 ## Usage
 

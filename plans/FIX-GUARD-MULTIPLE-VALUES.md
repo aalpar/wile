@@ -108,7 +108,7 @@ results ...)` rest-arg is a heap-allocated proper list — not backed by the
 
 ## Tests
 
-**File**: `test/scheme/exceptions-test.scm`
+**File**: `test/wile/exceptions-test.scm`
 **Location**: add a new `test-group` after "guard normal execution"
 
 ```scheme
@@ -167,8 +167,8 @@ briefly so future contributors know the behavior is intentional.
 1. Verify current error behavior: run `(guard (e (#f)) (values 1 2))` in REPL
 2. Edit `registry/core/bootstrap.scm` lines 186–188 (3-line change → 4 lines)
 3. Run `make test` — existing guard tests must still pass
-4. Add the new `test-group "guard body multiple values"` to `test/scheme/exceptions-test.scm`
-5. Run `./dist/$(go env GOOS)/$(go env GOARCH)/scheme test/scheme/exceptions-test.scm` to verify
+4. Add the new `test-group "guard body multiple values"` to `test/wile/exceptions-test.scm`
+5. Run `./dist/$(go env GOOS)/$(go env GOARCH)/wile test/wile/exceptions-test.scm` to verify
 6. Update `docs/dev/R7RS_SEMANTIC_DIFFERENCES.md` summary section
 7. Run `make lint`
 

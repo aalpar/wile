@@ -12,7 +12,7 @@
 #
 # Usage (from repo root):
 #   cd examples/benchmarks && \
-#     SCHEME=../../dist/linux/amd64/scheme \
+#     SCHEME=../../dist/linux/amd64/wile \
 #     BASELINE=canonical-baseline.csv \
 #     THRESHOLD=5 \
 #     ../../tools/sh/bench-regression.sh

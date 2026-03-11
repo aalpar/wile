@@ -2,7 +2,7 @@
 ;;;
 ;;; Demonstrates: String input/output ports, in-memory I/O
 ;;;
-;;; Usage: ./dist/scheme --file examples/io/string-ports.scm
+;;; Usage: ./dist/wile --file examples/io/string-ports.scm
 
 ;; Writing to a string port
 (display "Writing to string port:")

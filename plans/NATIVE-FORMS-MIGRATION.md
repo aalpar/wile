@@ -433,7 +433,7 @@ Recommend (b) for `call-with-port` and the files extension's own macro source fo
 **Branch:** `refactor/native-forms-migration-phase4`
 **Depends on:** Phase 0
 
-Replace 28 Go CxR primitives with Scheme definitions. The same 28 functions already exist in `lib/scheme/cxr.sld` — the Go primitives are redundant infrastructure.
+Replace 28 Go CxR primitives with Scheme definitions. The same 28 functions already exist in `lib/wile/cxr.sld` — the Go primitives are redundant infrastructure.
 
 ### Scheme Definitions
 
@@ -487,7 +487,7 @@ From `registry/core/prim_pairs_test.go`:
 
 ### Verification
 
-`(import (scheme cxr))` must still work — `lib/scheme/cxr.sld` has its own definitions that shadow the bootstrap versions when the library is imported.
+`(import (scheme cxr))` must still work — `lib/wile/cxr.sld` has its own definitions that shadow the bootstrap versions when the library is imported.
 
 ### Exit Criteria
 

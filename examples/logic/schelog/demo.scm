@@ -5,10 +5,10 @@
 ;;;
 ;;; Usage:
 ;;;   cd <wile-root>
-;;;   ./dist/scheme -i -f examples/logic/schelog/schelog.scm -f examples/logic/schelog/demo.scm
+;;;   ./dist/wile -i -f examples/logic/schelog/schelog.scm -f examples/logic/schelog/demo.scm
 ;;;
 ;;; For interactive exploration:
-;;;   ./dist/scheme -i -f examples/logic/schelog/schelog.scm
+;;;   ./dist/wile -i -f examples/logic/schelog/schelog.scm
 ;;;   > (%which (x) (%member x '(a b c)))
 ;;;   > (%more)
 

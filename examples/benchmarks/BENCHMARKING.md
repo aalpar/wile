@@ -8,7 +8,7 @@
 # Run only the canonical Gabriel suite benchmarks
 for bench in tak takl ctak cpstak fib triangl sum sumfp diviter divrec deriv ackermann sieve nqueens primes peval; do
     echo "=== $bench ==="
-    ./dist/scheme --file examples/benchmarks/${bench}.scm
+    ./dist/wile --file examples/benchmarks/${bench}.scm
     echo ""
 done
 ```
@@ -16,7 +16,7 @@ done
 ### Individual Benchmark
 
 ```bash
-./dist/scheme --file examples/benchmarks/tak.scm
+./dist/wile --file examples/benchmarks/tak.scm
 ```
 
 ### All Benchmarks (Including Non-Canonical)
@@ -49,7 +49,7 @@ Create `bench-wile`:
 #!/usr/bin/env bash
 # bench-wile - Wrapper for Wile Scheme in r7rs-benchmarks
 
-WILE="/path/to/wile/dist/scheme"
+WILE="/path/to/wile/dist/wile"
 
 # The benchmark suite expects: bench-<scheme> <benchmark.scm>
 # It provides input via stdin and measures wall-clock time
@@ -115,7 +115,7 @@ dnf install chezscheme racket chibi-scheme guile
 
 ```bash
 # Wile
-time ./dist/scheme --file examples/benchmarks/tak.scm
+time ./dist/wile --file examples/benchmarks/tak.scm
 
 # Chez Scheme
 time scheme --script examples/benchmarks/tak.scm
@@ -144,7 +144,7 @@ echo "Benchmark: $BENCH"
 echo "========================"
 
 echo -n "Wile:   "
-time ./dist/scheme --file examples/benchmarks/${BENCH}.scm 2>&1 | grep "Total time"
+time ./dist/wile --file examples/benchmarks/${BENCH}.scm 2>&1 | grep "Total time"
 
 echo -n "Chez:   "
 time scheme --script examples/benchmarks/${BENCH}.scm 2>&1 | grep "Total time"
@@ -252,7 +252,7 @@ Create a baseline for your current version:
 # Generate baseline
 for bench in tak fib ack deriv sieve; do
     echo -n "$bench,"
-    ./dist/scheme --file examples/benchmarks/${bench}.scm 2>&1 | \
+    ./dist/wile --file examples/benchmarks/${bench}.scm 2>&1 | \
         grep "Total time" | awk '{print $3}' | tr -d 's'
 done > benchmarks-baseline.csv
 ```
@@ -263,7 +263,7 @@ done > benchmarks-baseline.csv
 # After making changes, generate new results
 for bench in tak fib ack deriv sieve; do
     echo -n "$bench,"
-    ./dist/scheme --file examples/benchmarks/${bench}.scm 2>&1 | \
+    ./dist/wile --file examples/benchmarks/${bench}.scm 2>&1 | \
         grep "Total time" | awk '{print $3}' | tr -d 's'
 done > benchmarks-current.csv
 
@@ -299,7 +299,7 @@ jobs:
         run: |
           for bench in tak fib ack deriv sieve; do
             echo "=== $bench ==="
-            ./dist/scheme --file examples/benchmarks/${bench}.scm
+            ./dist/wile --file examples/benchmarks/${bench}.scm
           done
 
       - name: Check for Regressions
@@ -315,14 +315,14 @@ jobs:
 
 ```bash
 # 1. Identify slow benchmark
-./dist/scheme --file examples/benchmarks/deriv.scm
+./dist/wile --file examples/benchmarks/deriv.scm
 # "Total time: 0.8s" - this does a lot of symbol lookups
 
 # 2. Make optimization to environment/binding.go
 
 # 3. Rebuild and re-run
 make build
-./dist/scheme --file examples/benchmarks/deriv.scm
+./dist/wile --file examples/benchmarks/deriv.scm
 # "Total time: 0.6s" - 25% improvement!
 
 # 4. Run full suite to check for regressions
@@ -335,7 +335,7 @@ cd examples/benchmarks && ./run-all.sh
 # Run before optimization
 for b in tak fib triangl; do
     echo -n "$b: "
-    ./dist/scheme --file examples/benchmarks/$b.scm 2>&1 | grep "Total time"
+    ./dist/wile --file examples/benchmarks/$b.scm 2>&1 | grep "Total time"
 done > before.txt
 
 # Apply optimization, rebuild
@@ -344,7 +344,7 @@ done > before.txt
 # Run after optimization
 for b in tak fib triangl; do
     echo -n "$b: "
-    ./dist/scheme --file examples/benchmarks/$b.scm 2>&1 | grep "Total time"
+    ./dist/wile --file examples/benchmarks/$b.scm 2>&1 | grep "Total time"
 done > after.txt
 
 # Compare
@@ -359,7 +359,7 @@ Run benchmarks multiple times and average:
 
 ```bash
 for i in {1..5}; do
-    ./dist/scheme --file examples/benchmarks/tak.scm
+    ./dist/wile --file examples/benchmarks/tak.scm
 done | grep "Total time" | awk '{sum+=$3; n++} END {print "Average:", sum/n}'
 ```
 
@@ -394,11 +394,11 @@ First run is often slower due to disk cache, binary loading:
 
 ```bash
 # Warmup run (discard results)
-./dist/scheme --file examples/benchmarks/tak.scm > /dev/null 2>&1
+./dist/wile --file examples/benchmarks/tak.scm > /dev/null 2>&1
 
 # Actual benchmark runs
 for i in {1..3}; do
-    ./dist/scheme --file examples/benchmarks/tak.scm
+    ./dist/wile --file examples/benchmarks/tak.scm
 done
 ```
 
@@ -408,4 +408,4 @@ done
 - [Larceny Benchmarks](http://www.larcenists.org/benchmarksAboutR7.html) - R7RS results
 - [r7rs-benchmarks](https://github.com/ecraven/r7rs-benchmarks) - Standardized framework
 - [Gambit Benchmarks](https://github.com/gambit/gambit/tree/master/bench) - Additional suite
-- [Computer Language Benchmarks Game](https://benchmarksgame-team.pages.debian.net/) - Cross-language comparisons
+- [Computer Language Benchmarks Game](https://benchmarksgame-team.pages.debian.net/benchmarksgame/) - Cross-language comparisons

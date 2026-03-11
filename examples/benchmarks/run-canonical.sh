@@ -5,7 +5,7 @@
 set -e
 
 RUNS="${RUNS:-6}"
-SCHEME="${SCHEME:-../../dist/scheme}"
+SCHEME="${SCHEME:-../../dist/wile}"
 
 if [ ! -e "$SCHEME" ]; then
     echo "Error: Scheme interpreter not found at $SCHEME"

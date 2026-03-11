@@ -3,7 +3,7 @@
 ;;; Demonstrates: delay, force, delay-force, syntax-rules macros,
 ;;;               memoization, infinite data structures, compositionality
 ;;;
-;;; Usage: ./dist/scheme --file examples/data-structures/lazy-streams.scm
+;;; Usage: ./dist/wile --file examples/data-structures/lazy-streams.scm
 
 ;; -----------------------------------------------------------------------
 ;; Stream primitives

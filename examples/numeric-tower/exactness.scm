@@ -3,7 +3,7 @@
 ;;; Demonstrates: Exactness preservation, contagion, conversions
 ;;; Wile-specific: Full exactness tracking across the numeric tower
 ;;;
-;;; Usage: ./dist/scheme --file examples/numeric-tower/exactness.scm
+;;; Usage: ./dist/wile --file examples/numeric-tower/exactness.scm
 
 ;; R7RS distinguishes exact and inexact numbers.
 ;; Exact: integers, rationals (preserves mathematical precision)

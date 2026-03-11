@@ -3,7 +3,7 @@
 ;;; Demonstrates: symbolic computation, S-expressions as algebra,
 ;;;               exact rational arithmetic, recursive case analysis
 ;;;
-;;; Usage: ./dist/scheme --file examples/numeric-tower/symbolic-diff.scm
+;;; Usage: ./dist/wile --file examples/numeric-tower/symbolic-diff.scm
 
 ;; -----------------------------------------------------------------------
 ;; Differentiation rules

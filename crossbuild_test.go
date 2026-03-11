@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-// TestGoInstall verifies that `go install github.com/aalpar/wile/cmd/scheme`
+// TestGoInstall verifies that `go install github.com/aalpar/wile/cmd/wile`
 // succeeds using local module resolution, producing a working binary in GOBIN.
 // This exercises the same code path as `go install ... @latest` but resolves
 // against local source rather than the module proxy.
@@ -39,7 +39,7 @@ func TestGoInstall(t *testing.T) {
 
 	gobin := t.TempDir()
 
-	cmd := exec.CommandContext(ctx, "go", "install", "github.com/aalpar/wile/cmd/scheme")
+	cmd := exec.CommandContext(ctx, "go", "install", "github.com/aalpar/wile/cmd/wile")
 	cmd.Env = append(os.Environ(), "GOBIN="+gobin)
 
 	output, err := cmd.CombinedOutput()
@@ -47,7 +47,7 @@ func TestGoInstall(t *testing.T) {
 		t.Fatalf("go install failed:\n%s", output)
 	}
 
-	binary := filepath.Join(gobin, "scheme")
+	binary := filepath.Join(gobin, "wile")
 	_, err = os.Stat(binary)
 	if err != nil {
 		t.Fatalf("installed binary not found at %s: %v", binary, err)
@@ -57,18 +57,18 @@ func TestGoInstall(t *testing.T) {
 	evalCmd := exec.CommandContext(ctx, binary, "-e", "(+ 1 2)")
 	evalOutput, err := evalCmd.Output()
 	if err != nil {
-		t.Fatalf("scheme -e '(+ 1 2)' failed: %v", err)
+		t.Fatalf("wile -e '(+ 1 2)' failed: %v", err)
 	}
 
 	got := strings.TrimSpace(string(evalOutput))
 	if got != "3" {
-		t.Errorf("scheme -e '(+ 1 2)' = %q, want %q", got, "3")
+		t.Errorf("wile -e '(+ 1 2)' = %q, want %q", got, "3")
 	}
 }
 
-// TestCrossBuildLinux verifies that `go build ./cmd/scheme` succeeds for
+// TestCrossBuildLinux verifies that `go build ./cmd/wile` succeeds for
 // linux/amd64 and linux/arm64 with CGO_ENABLED=0. This exercises the same
-// code path as `go install github.com/aalpar/wile/cmd/scheme@latest` and
+// code path as `go install github.com/aalpar/wile/cmd/wile@latest` and
 // validates the pure-Go (no CGo) claim from the README.
 //
 // Each resulting binary is verified to be a valid 64-bit ELF executable
@@ -93,9 +93,9 @@ func TestCrossBuildLinux(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
 
-			outPath := filepath.Join(t.TempDir(), "scheme")
+			outPath := filepath.Join(t.TempDir(), "wile")
 
-			cmd := exec.CommandContext(ctx, "go", "build", "-o", outPath, "./cmd/scheme")
+			cmd := exec.CommandContext(ctx, "go", "build", "-o", outPath, "./cmd/wile")
 			cmd.Env = append(os.Environ(),
 				"GOOS=linux",
 				"GOARCH="+target.goarch,

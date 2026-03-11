@@ -3,7 +3,7 @@
 ;;; Demonstrates: call/cc, mutation, closures capturing continuations,
 ;;;               backtracking search, constraint programming
 ;;;
-;;; Usage: ./dist/scheme --file examples/control/amb.scm
+;;; Usage: ./dist/wile --file examples/control/amb.scm
 
 ;; -----------------------------------------------------------------------
 ;; Amb infrastructure

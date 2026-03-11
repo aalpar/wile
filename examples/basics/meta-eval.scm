@@ -3,7 +3,7 @@
 ;;; Demonstrates: closures, symbols-as-data, homoiconicity, recursive descent,
 ;;;               first-class procedures, quasiquotation
 ;;;
-;;; Usage: ./dist/scheme --file examples/basics/meta-eval.scm
+;;; Usage: ./dist/wile --file examples/basics/meta-eval.scm
 
 ;; -----------------------------------------------------------------------
 ;; Environments

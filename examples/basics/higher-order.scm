@@ -2,7 +2,7 @@
 ;;;
 ;;; Demonstrates: map, filter, fold, function composition
 ;;;
-;;; Usage: ./dist/scheme --file examples/basics/higher-order.scm
+;;; Usage: ./dist/wile --file examples/basics/higher-order.scm
 
 ;; map - apply function to each element
 (display "Square each element: ")

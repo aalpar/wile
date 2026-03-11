@@ -31,7 +31,7 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 WILE_ROOT="$(cd "$DIR/../.." && pwd)"
-SCHEME="${WILE_SCHEME:-$WILE_ROOT/dist/scheme}"
+SCHEME="${WILE_SCHEME:-$WILE_ROOT/dist/wile}"
 LIBDIR="$WILE_ROOT/lib"
 SRC="$DIR/src"
 INPUTS="$DIR/inputs"
@@ -155,7 +155,7 @@ fi
 # Check binary exists.
 if [ ! -x "$SCHEME" ]; then
     echo "Error: Wile binary not found at $SCHEME"
-    echo "Build it first: make build (or set WILE_SCHEME=/path/to/scheme)"
+    echo "Build it first: make build (or set WILE_SCHEME=/path/to/wile)"
     exit 1
 fi
 

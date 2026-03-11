@@ -3,7 +3,7 @@
 ;;; Demonstrates: File reading, writing, line-by-line processing
 ;;; Wile-specific: R7RS file I/O primitives
 ;;;
-;;; Usage: ./dist/scheme --file examples/io/file-io.scm
+;;; Usage: ./dist/wile --file examples/io/file-io.scm
 
 (define test-file "examples/io/test-data.txt")
 

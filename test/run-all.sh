@@ -3,7 +3,7 @@
 #
 # Usage:
 #   ./test/run-all.sh
-#   SCHEME=/path/to/scheme ./test/run-all.sh
+#   SCHEME=/path/to/wile ./test/run-all.sh
 #
 # Discovers all *-test.scm files and executes them.
 
@@ -12,7 +12,7 @@ set -e
 # Change to repository root (parent of test directory where this script lives)
 cd "$(dirname "$0")/.."
 
-SCHEME="${SCHEME:-./dist/scheme}"
+SCHEME="${SCHEME:-./dist/wile}"
 
 # Check if scheme binary exists
 if [ ! -x "$SCHEME" ]; then

@@ -3,7 +3,7 @@
 ;;; CPS version of the Takeuchi function. Tests closure creation,
 ;;; higher-order function calls, and tail-call optimization.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/cpstak.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/cpstak.scm
 
 (define (cpstak x y z k)
   (if (not (< y x))

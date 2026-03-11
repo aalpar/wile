@@ -3,7 +3,7 @@
 ;;; Generates prime numbers using trial division.
 ;;; Tests integer arithmetic and simple algorithms.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/primes.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/primes.scm
 
 (define (is-prime? n)
   (if (< n 2)

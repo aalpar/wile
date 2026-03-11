@@ -3,7 +3,7 @@
 ;;; Demonstrates: R7RS numeric tower, type promotion, exactness contagion
 ;;; Wile-specific: Full tower with exact rationals, complex, arbitrary precision
 ;;;
-;;; Usage: ./dist/scheme --file examples/numeric-tower/mixed-arithmetic.scm
+;;; Usage: ./dist/wile --file examples/numeric-tower/mixed-arithmetic.scm
 
 ;; R7RS requires seamless mixing of different numeric types.
 ;; Wile implements the full tower: Integer → Rational → Float → Complex

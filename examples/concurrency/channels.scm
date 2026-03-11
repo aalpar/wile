@@ -3,7 +3,7 @@
 ;;; Demonstrates: Channel send/receive, synchronization
 ;;; Wile-specific: Go-backed channels extension
 ;;;
-;;; Usage: ./dist/scheme --file examples/concurrency/channels.scm
+;;; Usage: ./dist/wile --file examples/concurrency/channels.scm
 ;;;
 ;;; Note: Some output may be interleaved due to concurrent execution.
 ;;; This is expected behavior demonstrating true concurrency.

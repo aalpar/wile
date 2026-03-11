@@ -3,7 +3,7 @@
 ;;; Demonstrates: Complex arithmetic, polar/rectangular forms, complex functions
 ;;; Wile-specific: Exact complex numbers (e.g., 1/2+1/3i)
 ;;;
-;;; Usage: ./dist/scheme --file examples/numeric-tower/complex.scm
+;;; Usage: ./dist/wile --file examples/numeric-tower/complex.scm
 
 ;; Complex numbers extend the real line to the complex plane.
 ;; Wile supports both exact and inexact complex numbers.

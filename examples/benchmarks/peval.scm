@@ -3,7 +3,7 @@
 ;;; Tests higher-order functions and partial evaluation patterns.
 ;;; Demonstrates function composition and currying.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/peval.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/peval.scm
 
 (define (peval-compose f g)
   (lambda (x) (f (g x))))
