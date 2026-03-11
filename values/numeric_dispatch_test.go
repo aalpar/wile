@@ -1,6 +1,8 @@
 package values
 
 import (
+	"fmt"
+	"math/big"
 	"reflect"
 	"testing"
 )
@@ -69,5 +71,49 @@ func TestAllDispatchEntriesPopulated(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestTypeSwitchFunctionsHandleAllTypes verifies that standalone functions
+// with type switches over Number handle all concrete numeric types without
+// panicking. This complements TestAllDispatchEntriesPopulated, which covers
+// the [numKinds] dispatch tables.
+//
+// If a new numeric type is added and these functions are not updated,
+// this test will panic (caught by the deferred recover).
+func TestTypeSwitchFunctionsHandleAllTypes(t *testing.T) {
+	allTypes := []Number{
+		NewInteger(1),
+		NewBigInteger(big.NewInt(1)),
+		NewFloat(1.0),
+		NewBigFloat(big.NewFloat(1.0)),
+		NewRational(1, 1),
+		NewComplex(complex(1, 1)),
+		NewBigComplex(NewBigFloat(big.NewFloat(1.0)), NewBigFloat(big.NewFloat(1.0))),
+	}
+
+	funcs := []struct {
+		name string
+		call func(Number)
+	}{
+		{"NumberToFloat64", func(n Number) { NumberToFloat64(n) }},
+		{"NumberToComplex128", func(n Number) { NumberToComplex128(n) }},
+		{"Simplify", func(n Number) { Simplify(n) }},
+		{"ExactnessOf", func(n Number) { ExactnessOf(n) }},
+	}
+
+	for _, fn := range funcs {
+		for _, n := range allTypes {
+			name := fmt.Sprintf("%s/%T", fn.name, n)
+			t.Run(name, func(t *testing.T) {
+				defer func() {
+					r := recover()
+					if r != nil {
+						t.Errorf("panicked: %v", r)
+					}
+				}()
+				fn.call(n)
+			})
+		}
 	}
 }

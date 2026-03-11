@@ -73,6 +73,36 @@ When a single test function needs both success and error cases, use two separate
 
 **The only exception** is a test that requires unique setup/teardown per case (e.g., subprocess execution, `t.Setenv`, file I/O). Even then, prefer a table with a setup callback over hand-unrolled `t.Run` calls.
 
+## Optional Argument Patterns
+
+Registry primitives use three patterns for handling optional arguments.
+Use this decision tree to pick the right one:
+
+```
+Does the optional arg have a known expected type?
+├─ YES: Do you want a default value on absence?
+│  ├─ YES → helpers.OptionalArg[T](rest, defaultVal, sentinel, name)
+│  │        Returns (T, error). Type-checks and returns default if absent.
+│  │        Example: make-bytevector fill arg (default 0)
+│  │          fill, err := helpers.OptionalArg[*values.Integer](
+│  │              mc.Arg(1), values.NewInteger(0),
+│  │              werr.ErrNotAnInteger, "make-bytevector")
+│  │
+│  └─ NO → helpers.ParseOptionalArg(rest) then type-assert
+│          Returns (Value, bool). Caller handles type check.
+│
+└─ NO: Is the optional arg polymorphic (any Value)?
+   └─ YES → helpers.ParseOptionalArg(rest)
+            Returns (Value, bool). Use the raw value directly.
+            Example: make-vector fill arg (any value, default #f)
+              v, ok := helpers.ParseOptionalArg(mc.Arg(1))
+              if ok { fill = v }
+```
+
+For positional `[start [end]]` patterns (e.g., `string-copy`, `bytevector-copy`),
+use `helpers.ParseSubrange(rest, length, name)` which bundles extraction, validation,
+and bounds checking.
+
 ## Gotchas
 
 - **Variadic rest-arg buffer**: When a variadic primitive is applied via the `noCopyApply`
