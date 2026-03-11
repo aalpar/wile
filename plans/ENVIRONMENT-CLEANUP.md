@@ -482,51 +482,6 @@ EnsureLocalBinding.
 
 Superseded — `GetLocalIndexWithScopes` now delegates to `resolveLocal` directly. The coupling that needed documenting no longer exists. See `plans/MEDIUM-REFACTORING-BATCH.md` Work Item B.
 
-**Step 1: Verify loop conditions match**
-
-Compare the loop conditions:
-
-`resolveLocal` (line ~342):
-```go
-for env != nil && env.hasLocal() {
-    ...
-    if env.IsTopLevel() { break }
-    env = env.parent
-}
-```
-
-`GetLocalIndexWithScopes` (line ~603):
-```go
-for env != nil && env.hasLocal() {
-    ...
-    if env.IsTopLevel() { break }
-    env = env.parent
-}
-```
-
-Verify they are identical.
-
-**Step 2: Add coupling comment**
-
-Add to `GetLocalIndexWithScopes` doc comment:
-
-```go
-// COUPLING: The loop below must mirror resolveLocal's walk conditions
-// (hasLocal check, IsTopLevel break, parent traversal). If resolveLocal's
-// termination logic changes, update this loop to match.
-```
-
-**Step 3: Run lint**
-
-Run: `make lint`
-Expected: Pass
-
-**Step 4: Commit**
-
-```
-docs(environment): mark GetLocalIndexWithScopes walk coupling with resolveLocal
-```
-
 ---
 
 ## Task 7: Fix GlobalIndex.EqualTo nil check and Copy return types
