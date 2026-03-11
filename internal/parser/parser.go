@@ -61,10 +61,13 @@ const (
 )
 
 // mnemonicRunes maps R7RS character mnemonic names to their rune values.
+// Keys must be lowercase — lookup normalizes via strings.ToLower to match
+// the tokenizer's case-insensitive acceptance (R7RS §6.6).
 var mnemonicRunes = map[string]rune{
 	"alarm":        RuneAlarm,
 	"space":        RuneSpace,
 	"backspace":    RuneBackspace,
+	"back-space":   RuneBackspace,
 	"form-feed":    RuneFormFeed,
 	"delete":       RuneRubout,
 	"escape":       RuneEscape,
@@ -650,7 +653,7 @@ func (p *Parser) parseCharacter() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q := p.wrapSyntax(values.NewCharacter(rs[0]), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateCharMnemonic:
-		s := TrimPrefixFolded(p.cur.String(), values.PrefixCharacter)
+		s := strings.ToLower(TrimPrefixFolded(p.cur.String(), values.PrefixCharacter))
 		r, ok := mnemonicRunes[s]
 		if !ok {
 			return nil, nil, NewParserErrorWithWrapf(werr.ErrUnknownCharacterMnemonic, p.cur, "unknown character mnemonic: %s", s)

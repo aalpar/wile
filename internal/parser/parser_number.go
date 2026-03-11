@@ -694,7 +694,6 @@ func (p *Parser) parseDecimalFraction() (syntax.SyntaxValue, tokenizer.Token, er
 // parseBigFloat parses a big float token (e.g., "#m1.23456789012345678901234567890").
 func (p *Parser) parseBigFloat() (syntax.SyntaxValue, tokenizer.Token, error) {
 	s := TrimPrefixFolded(p.cur.String(), "#m")
-	s = TrimPrefixFolded(s, "#M")
 	q1 := values.NewBigFloatFromString(s)
 	if q1 == nil {
 		return nil, p.cur, NewParserErrorf(p.cur, "invalid big float: %s", p.cur.String())
