@@ -370,7 +370,7 @@ func (p *Parser) readExactnessMarker(label string, convert func(syntax.SyntaxVal
 	}
 	result, err := convert(q)
 	if err != nil {
-		return nil, tok, NewParserErrorf(tok, "cannot convert to %s: %v", label, err)
+		return nil, tok, NewParserErrorWithWrapf(err, tok, "cannot convert to %s", label)
 	}
 	return result, tok, nil
 }
@@ -623,7 +623,7 @@ func (p *Parser) parseCharacter() (syntax.SyntaxValue, tokenizer.Token, error) {
 		s := strings.ToLower(TrimPrefixFolded(p.cur.String(), values.PrefixCharacter))
 		r, ok := tokenizer.CharMnemonics[s]
 		if !ok {
-			return nil, nil, NewParserErrorWithWrapf(werr.ErrUnknownCharacterMnemonic, p.cur, "unknown character mnemonic: %s", s)
+			return nil, p.cur, NewParserErrorWithWrapf(werr.ErrUnknownCharacterMnemonic, p.cur, "unknown character mnemonic: %s", s)
 		}
 		q := p.wrapSyntax(values.NewCharacter(r), p.cur)
 		return q, p.cur, nil
