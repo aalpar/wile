@@ -591,68 +591,35 @@ func (p *EnvironmentFrame) HasLocalVariableBinding(sym *values.Symbol, scopes []
 // preferred over less specific ones.
 //
 // Returns nil if no matching local binding exists.
-//
-// Note: this method accesses local.keys directly because each iteration
-// requires scope matching and candidate accumulation across the full parent
-// chain (Flatt's "collect-then-maximize" algorithm). A simple delegate-and-
-// adjust-depth pattern cannot express the cross-frame maximization.
-//
-// COUPLING: The loop below must mirror resolveLocal's walk conditions
-// (hasLocal check, IsTopLevel break, parent traversal). If resolveLocal's
-// termination logic changes, update this loop to match.
-func (p *EnvironmentFrame) GetLocalIndexWithScopes(key *values.Symbol, scopes []*syntax.Scope) *LocalIndex {
+func (p *EnvironmentFrame) GetLocalIndexWithScopes(
+	key *values.Symbol,
+	scopes []*syntax.Scope,
+) *LocalIndex {
 	if p == nil || !p.hasLocal() {
 		return nil
 	}
 
-	// Collect all matching bindings with their scope counts
 	type candidate struct {
 		index      *LocalIndex
 		scopeCount int
 	}
-	var candidates []candidate
+	var best candidate
 
-	env := p
-	j := 0
-	for env != nil && env.hasLocal() {
-		i, ok := env.local.keys[*key]
-		if ok {
-			binding := &env.local.bindings[i]
-			bindingScopes := binding.Scopes()
-			// Check if scopes match
-			if len(bindingScopes) == 0 {
-				// Binding has no scopes (top-level or pre-hygiene)
-				// This is a valid candidate with scope count 0
-				candidates = append(candidates, candidate{NewLocalIndex(i, j), 0})
-			} else if syntax.ScopesMatch(scopes, bindingScopes) {
-				// Perfect match — maximally specific, no need to search further
-				if len(bindingScopes) == len(scopes) {
-					return NewLocalIndex(i, j)
-				}
-				// Scopes match - count how many scopes are in common
-				// (which equals len(bindingScopes) since it's a subset)
-				candidates = append(candidates, candidate{NewLocalIndex(i, j), len(bindingScopes)})
-			}
-			// If scopes don't match, skip this binding
-		}
-		if env.IsTopLevel() {
-			break
-		}
-		env = env.parent
-		j++
-	}
+	p.resolveLocal(key, scopes, true, func(binding *Binding, slot int, depth int) any {
+		scopeCount := len(binding.Scopes())
 
-	if len(candidates) == 0 {
-		return nil
-	}
-
-	// Find the candidate with the maximum scope count (most specific binding)
-	best := candidates[0]
-	for _, c := range candidates[1:] {
-		if c.scopeCount > best.scopeCount {
-			best = c
+		// Perfect match — stop walking
+		if scopeCount > 0 && scopeCount == len(scopes) {
+			best = candidate{NewLocalIndex(slot, depth), scopeCount}
+			return true
 		}
-	}
+
+		// Better candidate than current best?
+		if best.index == nil || scopeCount > best.scopeCount {
+			best = candidate{NewLocalIndex(slot, depth), scopeCount}
+		}
+		return nil // continue collecting
+	})
 
 	return best.index
 }
