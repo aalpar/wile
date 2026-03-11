@@ -284,6 +284,11 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 		if ok && hlp.GetHasLocalBinding() {
 			return syntax.NewSyntaxSymbol(symVal.Key, srcCtx)
 		}
+
+		// If resolution is non-nil but matched none of the provider interfaces,
+		// a nil FreeIds value means "skip intro scope only" (see ExpandOptions.FreeIds doc).
+		// If it implements a provider but returns zero/nil, fall through to intro scope
+		// is intentional — the binding was unresolvable at definition time.
 	}
 
 	// Not a free identifier or unresolved - create symbol with intro scope
@@ -390,7 +395,13 @@ func (p *SyntaxMatcher) expandSyntaxEllipsis(
 	// Find the ellipsis ID that captured these variables
 	ellipsisID := p.matcher.findMatchingEllipsisID(patternVarsInTemplate)
 	if ellipsisID < 0 {
-		// No matching ellipsis - just expand the rest
+		// No matching ellipsis — the pattern element contains no variables that
+		// were captured under any ellipsis, so it acts as a constant template
+		// (e.g., a literal symbol followed by `...`). R7RS §4.3.2: "It is an
+		// error if the template ... contains a pattern variable that does not
+		// appear in the pattern." The pattern compiler validates this earlier;
+		// reaching here means the element has no pattern variables at all, so
+		// repeating it zero times (dropping it) is correct.
 		return p.expandSyntaxValue(rest, ctx, ellipsisVars, opts)
 	}
 
