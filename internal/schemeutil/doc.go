@@ -32,4 +32,14 @@
 // # Collection
 //
 //   - [AsList]: convert Go slice to proper Scheme list
+//
+// # Case-Insensitive String Utilities
+//
+// ASCII case-insensitive prefix/suffix operations for R7RS lexical syntax:
+//
+//   - [TrimPrefixCI]: case-insensitive strings.TrimPrefix
+//   - [TrimSuffixCI]: case-insensitive strings.TrimSuffix
+//   - [HasPrefixCI]: case-insensitive strings.HasPrefix
+//   - [HasSuffixCI]: case-insensitive strings.HasSuffix
+//   - [ToLowerASCII]: single-byte ASCII lowercase
 package schemeutil

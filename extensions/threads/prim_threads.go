@@ -93,12 +93,10 @@ func PrimCurrentThread(mc *machine.MachineContext) error {
 
 // PrimThreadQ tests if an object is a thread
 // (thread? obj) -> boolean
-func PrimThreadQ(mc *machine.MachineContext) error {
-	o := mc.Arg(0)
+var PrimThreadQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	_, ok := o.(*values.Thread)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
+	return ok
+})
 
 // PrimMakeThread creates a new thread
 // (make-thread thunk [name]) -> thread
@@ -320,12 +318,10 @@ func PrimThreadJoin(mc *machine.MachineContext) error {
 
 // PrimMutexQ tests if an object is a mutex
 // (mutex? obj) -> boolean
-func PrimMutexQ(mc *machine.MachineContext) error {
-	o := mc.Arg(0)
+var PrimMutexQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	_, ok := o.(*values.Mutex)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
+	return ok
+})
 
 // PrimMakeMutex creates a new mutex
 // (make-mutex [name]) -> mutex
@@ -518,12 +514,10 @@ func PrimMutexUnlock(mc *machine.MachineContext) error {
 
 // PrimConditionVariableQ tests if an object is a condition variable
 // (condition-variable? obj) -> boolean
-func PrimConditionVariableQ(mc *machine.MachineContext) error {
-	o := mc.Arg(0)
+var PrimConditionVariableQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	_, ok := o.(*values.ConditionVariable)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
+	return ok
+})
 
 // PrimMakeConditionVariable creates a new condition variable
 // (make-condition-variable [name]) -> condition-variable
@@ -615,12 +609,10 @@ func PrimCurrentTime(mc *machine.MachineContext) error {
 
 // PrimTimeQ tests if an object is a time
 // (time? obj) -> boolean
-func PrimTimeQ(mc *machine.MachineContext) error {
-	o := mc.Arg(0)
+var PrimTimeQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	_, ok := o.(*values.Time)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
+	return ok
+})
 
 // PrimTimeToSeconds converts a time to seconds
 // (time->seconds time) -> number

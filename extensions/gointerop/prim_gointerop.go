@@ -52,12 +52,10 @@ func PrimMakeChannel(mc *machine.MachineContext) error {
 
 // PrimChannelQ tests if an object is a channel
 // (channel? obj) -> boolean
-func PrimChannelQ(mc *machine.MachineContext) error {
-	o := mc.Arg(0)
+var PrimChannelQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	_, ok := o.(*values.Channel)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
+	return ok
+})
 
 // PrimChannelSend sends a value on the channel (blocking)
 // (channel-send! ch value) -> void
@@ -219,12 +217,10 @@ func PrimMakeWaitGroup(mc *machine.MachineContext) error {
 
 // PrimWaitGroupQ tests if an object is a WaitGroup
 // (wait-group? obj) -> boolean
-func PrimWaitGroupQ(mc *machine.MachineContext) error {
-	o := mc.Arg(0)
+var PrimWaitGroupQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	_, ok := o.(*values.WaitGroup)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
+	return ok
+})
 
 // PrimWaitGroupAdd adds to the WaitGroup counter
 // (wait-group-add! wg n) -> void
@@ -304,12 +300,10 @@ func PrimMakeRWMutex(mc *machine.MachineContext) error {
 
 // PrimRWMutexQ tests if an object is an RWMutex
 // (rw-mutex? obj) -> boolean
-func PrimRWMutexQ(mc *machine.MachineContext) error {
-	o := mc.Arg(0)
+var PrimRWMutexQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	_, ok := o.(*values.RWMutex)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
+	return ok
+})
 
 // PrimRWMutexReadLock acquires the read lock
 // (rw-mutex-read-lock! rwm) -> void
@@ -401,12 +395,10 @@ func PrimMakeOnce(mc *machine.MachineContext) error {
 
 // PrimOnceQ tests if an object is a Once
 // (once? obj) -> boolean
-func PrimOnceQ(mc *machine.MachineContext) error {
-	o := mc.Arg(0)
+var PrimOnceQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	_, ok := o.(*values.Once)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
+	return ok
+})
 
 // PrimOnceDo executes the thunk only once
 // (once-do! once thunk) -> boolean (true if executed, false if already done)
@@ -475,12 +467,10 @@ func PrimMakeAtomic(mc *machine.MachineContext) error {
 
 // PrimAtomicQ tests if an object is an AtomicBox
 // (atomic? obj) -> boolean
-func PrimAtomicQ(mc *machine.MachineContext) error {
-	o := mc.Arg(0)
+var PrimAtomicQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	_, ok := o.(*values.AtomicBox)
-	mc.SetValue(values.BoolToBoolean(ok))
-	return nil
-}
+	return ok
+})
 
 // PrimAtomicLoad atomically loads the value
 // (atomic-load a) -> value

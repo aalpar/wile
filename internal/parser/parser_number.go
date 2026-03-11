@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/internal/tokenizer"
 	"github.com/aalpar/wile/values"
@@ -152,8 +153,7 @@ func (p *Parser) parseRationalWithBase(base int) (syntax.SyntaxValue, tokenizer.
 // parseBigIntegerWithBase parses the current token as a big integer with the given base.
 // It strips the #z or #Z prefix before parsing.
 func (p *Parser) parseBigIntegerWithBase(base int) (syntax.SyntaxValue, tokenizer.Token, error) {
-	s := TrimPrefixFolded(p.cur.String(), "#z")
-	s = TrimPrefixFolded(s, "#Z")
+	s := schemeutil.TrimPrefixCI(p.cur.String(), "#z")
 	q1 := values.NewBigIntegerFromString(s, base)
 	if q1 == nil {
 		return nil, p.cur, NewParserErrorf(p.cur, "invalid big integer: %s", p.cur.String())
@@ -279,7 +279,7 @@ func (p *Parser) parseRational(s string) (values.Number, error) {
 // inexact Complex for floating-point imaginary parts.
 func (p *Parser) parseImaginary(s string) (values.Number, error) {
 	// Remove the trailing 'i'
-	s = TrimSuffixFolded(s, "i")
+	s = schemeutil.TrimSuffixCI(s, "i")
 
 	// Handle "+i" and "-i" cases - these are exact
 	if s == "+" || s == "" {
@@ -415,7 +415,7 @@ func parseExactPart(s string) (values.Number, error) {
 // otherwise returns an inexact Complex.
 func (p *Parser) parseComplex(s string) (values.Number, error) {
 	// Remove the trailing 'i'
-	s = TrimSuffixFolded(s, "i")
+	s = schemeutil.TrimSuffixCI(s, "i")
 
 	// Find the position of the sign separating real and imaginary parts
 	// Skip position 0 since the real part might start with a sign
@@ -693,7 +693,7 @@ func (p *Parser) parseDecimalFraction() (syntax.SyntaxValue, tokenizer.Token, er
 
 // parseBigFloat parses a big float token (e.g., "#m1.23456789012345678901234567890").
 func (p *Parser) parseBigFloat() (syntax.SyntaxValue, tokenizer.Token, error) {
-	s := TrimPrefixFolded(p.cur.String(), "#m")
+	s := schemeutil.TrimPrefixCI(p.cur.String(), "#m")
 	q1 := values.NewBigFloatFromString(s)
 	if q1 == nil {
 		return nil, p.cur, NewParserErrorf(p.cur, "invalid big float: %s", p.cur.String())
