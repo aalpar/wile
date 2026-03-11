@@ -478,12 +478,9 @@ EnsureLocalBinding.
 
 ---
 
-## Task 6: Document GetLocalIndexWithScopes walk coupling
+## Task 6: ~~Document GetLocalIndexWithScopes walk coupling~~ Superseded
 
-**Files:**
-- Modify: `environment/environment_frame.go`
-
-**Problem:** `GetLocalIndexWithScopes` has its own parent-chain walk that must stay in sync with `resolveLocal`'s loop conditions. The doc comment explains why `resolveLocal` can't express the "collect all, then pick best" pattern. But there's no explicit coupling marker between the two walks.
+Superseded — `GetLocalIndexWithScopes` now delegates to `resolveLocal` directly. The coupling that needed documenting no longer exists. See `plans/MEDIUM-REFACTORING-BATCH.md` Work Item B.
 
 **Step 1: Verify loop conditions match**
 
