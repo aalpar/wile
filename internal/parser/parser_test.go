@@ -2547,14 +2547,23 @@ func TestParser_ListSyntaxMultipleElements(t *testing.T) {
 	c.Assert(quotedList.Length(), qt.Equals, 4)
 }
 
-// TestParser_CharacterMnemonicCoverage tests all character mnemonics
-func TestParser_CharacterMnemonicCoverage(t *testing.T) {
+// TestParser_CharacterMnemonics verifies all R7RS §6.6 character mnemonics
+// parse to the correct rune value. The parser uses tokenizer.CharMnemonics
+// as the single source of truth.
+func TestParser_CharacterMnemonics(t *testing.T) {
 	tcs := []struct {
 		input    string
 		expected rune
 	}{
-		{"#\\form-feed", RuneFormFeed},
-		{"#\\vertical-tab", RuneVerticalTab},
+		{`#\alarm`, '\a'},
+		{`#\backspace`, '\b'},
+		{`#\delete`, '\x7F'},
+		{`#\escape`, '\x1B'},
+		{`#\newline`, '\n'},
+		{`#\null`, '\x00'},
+		{`#\return`, '\r'},
+		{`#\space`, ' '},
+		{`#\tab`, '\t'},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.input, func(t *testing.T) {

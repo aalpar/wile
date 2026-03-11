@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"math"
 	"math/bits"
 	"strconv"
 	"strings"
@@ -45,36 +44,6 @@ const (
 	ConstUnsyntax         = "unsyntax"
 	ConstUnsyntaxSplicing = "unsyntax-splicing"
 )
-
-// Character mnemonic runes.
-const (
-	RuneAlarm       = rune('\a')
-	RuneSpace       = rune(' ')
-	RuneBackspace   = rune('\b')
-	RuneFormFeed    = rune('\f')
-	RuneRubout      = rune(127)
-	RuneEscape      = rune(27)
-	RuneNewline     = rune('\n')
-	RuneNull        = rune(0)
-	RuneReturn      = rune('\r')
-	RuneTab         = rune('\t')
-	RuneVerticalTab = rune('\v')
-)
-
-// mnemonicRunes maps R7RS character mnemonic names to their rune values.
-var mnemonicRunes = map[string]rune{
-	"alarm":        RuneAlarm,
-	"space":        RuneSpace,
-	"backspace":    RuneBackspace,
-	"form-feed":    RuneFormFeed,
-	"delete":       RuneRubout,
-	"escape":       RuneEscape,
-	"newline":      RuneNewline,
-	"null":         RuneNull,
-	"return":       RuneReturn,
-	"tab":          RuneTab,
-	"vertical-tab": RuneVerticalTab,
-}
 
 // Parser represents a R7RS compliant Scheme syntax parser.
 type Parser struct {
@@ -368,9 +337,12 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 }
 
 // readQuoteForm reads a quote-like form (quote, unquote, quasiquote, etc.).
-// It advances the tokenizer, reads the next datum, and wraps it in a list
-// with the given keyword symbol.
+// It saves the current token (the quote mark) for source location, advances
+// the tokenizer, reads the next datum, and wraps it in a list with the given
+// keyword symbol. The source location is the quote mark's position, not the
+// datum's position.
 func (p *Parser) readQuoteForm(keyword string) (syntax.SyntaxValue, tokenizer.Token, error) {
+	t := p.curr()
 	p.cur, p.err = p.toks.Next()
 	if p.err != nil {
 		return nil, p.cur, p.err
@@ -379,9 +351,28 @@ func (p *Parser) readQuoteForm(keyword string) (syntax.SyntaxValue, tokenizer.To
 	if err != nil {
 		return nil, p.cur, err
 	}
-	sym := p.wrapSyntaxSymbol(keyword, p.cur)
-	result := p.listSyntax(p.cur, sym, q)
+	sym := p.wrapSyntaxSymbol(keyword, t)
+	result := p.listSyntax(t, sym, q)
 	return result, p.cur, nil
+}
+
+// readExactnessMarker handles #e and #i exactness prefixes.
+// It advances the tokenizer, reads the next datum, and applies the conversion
+// function (makeExact or makeInexact) to it.
+func (p *Parser) readExactnessMarker(label string, convert func(syntax.SyntaxValue) (syntax.SyntaxValue, error)) (syntax.SyntaxValue, tokenizer.Token, error) {
+	p.cur, p.err = p.toks.Next()
+	if p.err != nil {
+		return nil, p.cur, p.err
+	}
+	q, tok, err := p.readSyntax()
+	if err != nil {
+		return nil, tok, err
+	}
+	result, err := convert(q)
+	if err != nil {
+		return nil, tok, NewParserErrorf(tok, "cannot convert to %s: %v", label, err)
+	}
+	return result, tok, nil
 }
 
 // readLabelAssignment handles #n=<datum> — defining a datum label.
@@ -618,6 +609,38 @@ func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 	return p.wrapSyntax(q0, p.cur), p.cur, nil
 }
 
+// parseCharacter parses a character literal from the current token.
+// Handles three character token types: graphic (#\a), mnemonic (#\space),
+// and hex escape (#\x41).
+func (p *Parser) parseCharacter() (syntax.SyntaxValue, tokenizer.Token, error) {
+	switch p.cur.Type() {
+	case tokenizer.TokenizerStateCharGraphic:
+		s := TrimPrefixFolded(p.cur.String(), values.PrefixCharacter)
+		rs := []rune(s)
+		q := p.wrapSyntax(values.NewCharacter(rs[0]), p.cur)
+		return q, p.cur, nil
+	case tokenizer.TokenizerStateCharMnemonic:
+		s := strings.ToLower(TrimPrefixFolded(p.cur.String(), values.PrefixCharacter))
+		r, ok := tokenizer.CharMnemonics[s]
+		if !ok {
+			return nil, nil, NewParserErrorWithWrapf(werr.ErrUnknownCharacterMnemonic, p.cur, "unknown character mnemonic: %s", s)
+		}
+		q := p.wrapSyntax(values.NewCharacter(r), p.cur)
+		return q, p.cur, nil
+	case tokenizer.TokenizerStateCharHexEscape:
+		s := TrimPrefixFolded(p.cur.String(), "#\\x")
+		var i int64
+		i, p.err = strconv.ParseInt(s, 16, 32)
+		if p.err != nil {
+			return nil, p.cur, NewParserErrorWithWrapf(p.err, p.cur, "invalid character hex escape: %s", s)
+		}
+		q := p.wrapSyntax(values.NewCharacter(rune(i)), p.cur)
+		return q, p.cur, nil
+	default:
+		return nil, p.cur, NewParserErrorWithWrapf(ErrUnknownTokenType, p.cur, "parseCharacter: unexpected token type: %q", p.cur.String())
+	}
+}
+
 func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	var q syntax.SyntaxValue
 
@@ -692,19 +715,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateUnquoteSplicing:
 		return p.readQuoteForm(ConstUnquoteSplicing)
 	case tokenizer.TokenizerStateQuote:
-		// Quote uses the pre-advance token for source location
-		t := p.curr()
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q, _, p.err = p.readSyntax()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q1 := p.wrapSyntaxSymbol(ConstQuote, t)
-		q2 := p.listSyntax(t, q1, q)
-		return q2, p.cur, nil
+		return p.readQuoteForm(ConstQuote)
 	case tokenizer.TokenizerStateUnsyntax:
 		return p.readQuoteForm(ConstUnsyntax)
 	case tokenizer.TokenizerStateQuasisyntax:
@@ -719,13 +730,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateUnsignedInteger, tokenizer.TokenizerStateSignedInteger:
 		return p.parseIntegerWithBase(10)
 	case tokenizer.TokenizerStateUnsignedDecimalFraction, tokenizer.TokenizerStateSignedDecimalFraction:
-		var a float64
-		a, p.err = strconv.ParseFloat(normalizeExponentMarker(replaceHashDigits(p.cur.String())), 64)
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q = p.wrapSyntax(values.NewFloat(a), p.cur)
-		return q, p.cur, nil
+		return p.parseDecimalFraction()
 	case tokenizer.TokenizerStateSignedScientificNotation,
 		tokenizer.TokenizerStateUnsignedScientificNotation:
 		return p.parseScientificNotation()
@@ -762,18 +767,9 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateSignedIntegerBase16, tokenizer.TokenizerStateUnsignedIntegerBase16:
 		return p.parseIntegerWithBase(16)
 	case tokenizer.TokenizerStateSignedInf:
-		s := p.cur.String()
-		var f float64
-		if strings.HasPrefix(s, "-") {
-			f = math.Inf(-1)
-		} else {
-			f = math.Inf(1)
-		}
-		q = p.wrapSyntax(values.NewFloat(f), p.cur)
-		return q, p.cur, nil
+		return p.parseSignedInf()
 	case tokenizer.TokenizerStateSignedNan:
-		q = p.wrapSyntax(values.NewFloat(math.NaN()), p.cur)
-		return q, p.cur, nil
+		return p.parseSignedNan()
 	case tokenizer.TokenizerStateSignedImaginary, tokenizer.TokenizerStateUnsignedImaginary:
 		var q1 values.Number
 		q1, p.err = p.parseImaginary(replaceHashDigits(p.cur.String()))
@@ -786,18 +782,9 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateSignedImaginaryInf, tokenizer.TokenizerStateUnsignedImaginaryInf:
-		s := p.cur.String()
-		var img float64
-		if strings.HasPrefix(s, "-") {
-			img = math.Inf(-1)
-		} else {
-			img = math.Inf(1)
-		}
-		q = p.wrapSyntax(values.NewComplexFromParts(0, img), p.cur)
-		return q, p.cur, nil
+		return p.parseImaginaryInf()
 	case tokenizer.TokenizerStateSignedImaginaryNan, tokenizer.TokenizerStateUnsignedImaginaryNan:
-		q = p.wrapSyntax(values.NewComplexFromParts(0, math.NaN()), p.cur)
-		return q, p.cur, nil
+		return p.parseImaginaryNan()
 	case tokenizer.TokenizerStateUnsignedComplex, tokenizer.TokenizerStateSignedComplex:
 		var q1 values.Number
 		q1, p.err = p.parseComplex(replaceHashDigits(p.cur.String()))
@@ -818,33 +805,9 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateMarkerNumberExact:
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q, tok, err := p.readSyntax()
-		if err != nil {
-			return nil, tok, err
-		}
-		exactVal, err := p.makeExact(q)
-		if err != nil {
-			return nil, tok, NewParserErrorf(tok, "cannot convert to exact: %v", err)
-		}
-		return exactVal, tok, nil
+		return p.readExactnessMarker("exact", p.makeExact)
 	case tokenizer.TokenizerStateMarkerNumberInexact:
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q, tok, err := p.readSyntax()
-		if err != nil {
-			return nil, tok, err
-		}
-		inexactVal, err := p.makeInexact(q)
-		if err != nil {
-			return nil, tok, NewParserErrorf(tok, "cannot convert to inexact: %v", err)
-		}
-		return inexactVal, tok, nil
+		return p.readExactnessMarker("inexact", p.makeInexact)
 	case tokenizer.TokenizerStateBigIntegerDefaultBase:
 		return p.parseBigIntegerWithBase(ParserNumberDefaultBase)
 	case tokenizer.TokenizerStateBigIntegerBase10:
@@ -856,14 +819,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateBigIntegerBase2:
 		return p.parseBigIntegerWithBase(2)
 	case tokenizer.TokenizerStateBigFloat:
-		s := TrimPrefixFolded(p.cur.String(), "#m")
-		s = TrimPrefixFolded(s, "#M")
-		q1 := values.NewBigFloatFromString(s)
-		if q1 == nil {
-			return nil, p.cur, NewParserErrorf(cur, "invalid big float: %s", p.cur.String())
-		}
-		q = p.wrapSyntax(q1, p.cur)
-		return q, p.cur, nil
+		return p.parseBigFloat()
 	case tokenizer.TokenizerStateMarkerBooleanTrue:
 		q = p.wrapSyntax(values.TrueValue, p.cur)
 		return q, p.cur, nil
@@ -873,28 +829,10 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateEmptyList:
 		q = p.wrapSyntaxEmptyList(p.cur)
 		return q, p.cur, nil
-	case tokenizer.TokenizerStateCharGraphic:
-		s := TrimPrefixFolded(p.cur.String(), values.PrefixCharacter)
-		rs := []rune(s)
-		q = p.wrapSyntax(values.NewCharacter(rs[0]), p.cur)
-		return q, p.cur, nil
-	case tokenizer.TokenizerStateCharMnemonic:
-		s := TrimPrefixFolded(p.cur.String(), values.PrefixCharacter)
-		r, ok := mnemonicRunes[s]
-		if !ok {
-			return nil, nil, NewParserErrorWithWrapf(werr.ErrUnknownCharacterMnemonic, p.cur, "unknown character mnemonic: %s", s)
-		}
-		q = p.wrapSyntax(values.NewCharacter(r), p.cur)
-		return q, p.cur, nil
-	case tokenizer.TokenizerStateCharHexEscape:
-		s := TrimPrefixFolded(p.cur.String(), "#\\x")
-		var i int64
-		i, p.err = strconv.ParseInt(s, 16, 32)
-		if p.err != nil {
-			return nil, p.cur, NewParserErrorWithWrapf(p.err, p.cur, "invalid character hex escape: %s", s)
-		}
-		q = p.wrapSyntax(values.NewCharacter(rune(i)), p.cur)
-		return q, p.cur, nil
+	case tokenizer.TokenizerStateCharGraphic,
+		tokenizer.TokenizerStateCharMnemonic,
+		tokenizer.TokenizerStateCharHexEscape:
+		return p.parseCharacter()
 	case tokenizer.TokenizerStateString:
 		q = p.wrapSyntax(values.NewString(p.cur.Value()), p.cur)
 		return q, p.cur, nil
