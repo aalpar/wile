@@ -1,0 +1,15 @@
+1
+7
+2
+1
+20160
+
+; Reduced from Larceny standard for bytecode interpreter speed.
+; M=1, N=7 (7! = 5040 permutations vs N=10's 3628800).
+;
+; Larceny standard (for compiled implementations):
+; 20
+; 10
+; 2
+; 1
+; 16329600

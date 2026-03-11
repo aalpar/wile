@@ -14,7 +14,11 @@
 
 package machine
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
 
 // VMCounters holds performance counters for a single MachineContext execution.
 // All counters are plain uint64 — no atomics needed because each MachineContext
@@ -22,6 +26,7 @@ import "fmt"
 // into the parent).
 type VMCounters struct {
 	OpsExecuted            uint64
+	OpcodeHits             [opCount]uint64
 	ClosuresApplied        uint64
 	EnvsCopied             uint64
 	BindingsCopied         uint64
@@ -129,4 +134,33 @@ func (c VMCounters) String() string {
 		c.StackDepth9to16,
 		c.StackDepth17p,
 	)
+}
+
+// OpcodeHistogram returns a formatted histogram of opcode hit counts,
+// sorted by frequency (descending). Only opcodes with non-zero hits
+// are included.
+func (c VMCounters) OpcodeHistogram() string {
+	type entry struct {
+		name  string
+		count uint64
+	}
+	var entries []entry
+	for i := range opCount {
+		if c.OpcodeHits[i] > 0 {
+			entries = append(entries, entry{
+				name:  OpCode(i).String(),
+				count: c.OpcodeHits[i],
+			})
+		}
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].count > entries[j].count
+	})
+
+	var b strings.Builder
+	for _, e := range entries {
+		pct := float64(e.count) / float64(c.OpsExecuted) * 100
+		fmt.Fprintf(&b, "  %-24s %10d  (%5.1f%%)\n", e.name, e.count, pct)
+	}
+	return b.String()
 }

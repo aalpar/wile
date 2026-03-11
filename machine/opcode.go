@@ -76,6 +76,23 @@ const (
 	OpCallForeignCached     // Non-tail: call ForeignClosure, then mc.pc++
 	OpCallForeignCachedTail // Tail: call ForeignClosure, then returnImmediate()
 
+	// Wave 8: general call fusion (Arg = same encoding as PushLocal/PushCachedBinding)
+	// Fused PushLocal/PushCachedBinding + PullApply for non-foreign callables.
+	// Emitted by peephole only — compiler never produces these.
+	OpCallLocal         // Resolve local binding, drain args, ApplyCallable
+	OpCallCachedBinding // Resolve cached binding, drain args, ApplyCallable
+
+	// Wave 9: promoted primitive operations (Arg = index into cachedBindings)
+	// Inline the hot primitive logic directly, bypassing arity check, arg
+	// binding, and indirect function call. Emitted by peephole only when
+	// the cached binding holds a known promoted ForeignClosure.
+	OpEqQ           // Non-tail inlined eq?
+	OpEqQTail       // Tail inlined eq?
+	OpVectorQ       // Non-tail inlined vector?
+	OpVectorQTail   // Tail inlined vector?
+	OpVectorRef     // Non-tail inlined vector-ref
+	OpVectorRefTail // Tail inlined vector-ref
+
 	// Fallback: dispatch to sideTable[Arg]
 	OpComplex
 
@@ -130,6 +147,14 @@ var opcodeTable = [opCount]opcodeInfo{
 	OpPushCachedBinding:     {name: "PushCachedBinding"},
 	OpCallForeignCached:     {name: "CallForeignCached"},
 	OpCallForeignCachedTail: {name: "CallForeignCachedTail"},
+	OpCallLocal:             {name: "CallLocal"},
+	OpCallCachedBinding:     {name: "CallCachedBinding"},
+	OpEqQ:                   {name: "EqQ"},
+	OpEqQTail:               {name: "EqQTail"},
+	OpVectorQ:               {name: "VectorQ"},
+	OpVectorQTail:           {name: "VectorQTail"},
+	OpVectorRef:             {name: "VectorRef"},
+	OpVectorRefTail:         {name: "VectorRefTail"},
 	OpComplex:               {name: "Complex"},
 }
 

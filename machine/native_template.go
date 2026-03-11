@@ -195,6 +195,24 @@ func instructionToOperation(instr Instruction) Operation {
 	case OpCallForeignCachedTail:
 		return NewOperationLoadCachedBinding(instr.Arg)
 
+	// --- Wave 8: general call fusion ---
+	// Decomposed back to their original unfused forms for test assertions.
+	case OpCallLocal:
+		slot, depth := DecodeLocalIndex(instr.Arg)
+		li := environment.NewLocalIndex(slot, depth)
+		return NewOperationLoadLocalByLocalIndexImmediate(li)
+	case OpCallCachedBinding:
+		return NewOperationLoadCachedBinding(instr.Arg)
+
+	// --- Wave 9: promoted primitives ---
+	// Decomposed back to LoadCachedBinding for test assertions.
+	case OpEqQ, OpEqQTail:
+		return NewOperationLoadCachedBinding(instr.Arg)
+	case OpVectorQ, OpVectorQTail:
+		return NewOperationLoadCachedBinding(instr.Arg)
+	case OpVectorRef, OpVectorRefTail:
+		return NewOperationLoadCachedBinding(instr.Arg)
+
 	// --- Wave 5: promoted complex operations ---
 	case OpMakeClosure:
 		return NewOperationMakeClosure()

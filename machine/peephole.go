@@ -61,6 +61,10 @@ func (p *NativeTemplate) Optimize() {
 	fuseCallForeignCached(p, plan2)
 	plan2.Apply()
 
+	plan3 := NewEditPlan(p)
+	fuseCallGeneric(p, plan3)
+	plan3.Apply()
+
 	p.optimizeSubTemplates()
 }
 
@@ -181,13 +185,17 @@ func isPushOp(op OpCode) bool {
 //
 // Non-tail pattern (preceded by SaveContinuation):
 //
-//	code[i]     = SaveContinuation(off)
-//	code[i+1]   = PushCachedBinding(idx)   -- binding holds *ForeignClosure
+//	code[i]       = SaveContinuation(off)
+//	code[i+1]     = PushCachedBinding(idx)   -- binding holds *ForeignClosure
 //	... 0+ Push-family ops ...
-//	code[i+off] = PullApply                -- SaveCont offset lands here
+//	code[i+off-1] = PullApply                -- SaveCont offset targets return point (one past here)
 //
-// Rewrite: delete SaveCont + PushCachedBinding, replace PullApply with
-// OpCallForeignCached(idx).
+// Rewrite: delete PushCachedBinding (keep SaveContinuation for stack
+// isolation), replace PullApply with OpCallForeignCached(idx). The runtime
+// restores the continuation after the call to recover the caller's state.
+//
+// Promoted primitives (eq?, vector?, vector-ref) delete both SaveCont and
+// PushCachedBinding because they use fixed Pop() counts instead of Drain().
 //
 // Tail pattern (no preceding SaveContinuation):
 //
@@ -216,10 +224,10 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 			i+1 < len(code) &&
 			code[i+1].Op == OpPushCachedBinding {
 			off := int(code[i].Arg)
-			pullIdx := i + off
+			pullIdx := i + off - 1
 			bindingIdx := code[i+1].Arg
 
-			// SaveCont offset must land on PullApply within bounds.
+			// SaveCont offset targets the return point (one past PullApply).
 			if pullIdx < 0 || pullIdx >= len(code) || code[pullIdx].Op != OpPullApply {
 				continue
 			}
@@ -233,7 +241,7 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 			if int(bindingIdx) >= len(tpl.cachedBindings) {
 				continue
 			}
-			_, ok := tpl.cachedBindings[bindingIdx].Value().(*ForeignClosure)
+			fcls, ok := tpl.cachedBindings[bindingIdx].Value().(*ForeignClosure)
 			if !ok {
 				continue
 			}
@@ -264,8 +272,25 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 				continue
 			}
 
-			// Delete SaveCont + PushCachedBinding [i, i+2)
-			plan.Delete(i, i+2)
+			// Check for promoted primitive: inline the hot primitive logic
+			// directly, bypassing arity check and indirect function call.
+			argCount := pullIdx - (i + 2)
+			promotedOp, _, promotedArity := promotedOpForName(fcls.name)
+			if promotedOp != OpInvalid && argCount == promotedArity {
+				plan.Delete(i, i+2)
+				plan.Replace(pullIdx, pullIdx+1,
+					[]Instruction{{Op: promotedOp, Arg: bindingIdx}},
+					tpl.sourceRefs[pullIdx],
+				)
+				claimed[pullIdx] = true
+				continue
+			}
+
+			// Delete only PushCachedBinding [i+1, i+2). Keep SaveContinuation
+			// for stack isolation — CallForeignCached uses Drain() which
+			// needs the saved evals boundary, and RestoreAndRelease to
+			// recover the caller's env/template/pc after the call.
+			plan.Delete(i+1, i+2)
 			// Replace PullApply with OpCallForeignCached
 			plan.Replace(pullIdx, pullIdx+1,
 				[]Instruction{{Op: OpCallForeignCached, Arg: bindingIdx}},
@@ -291,7 +316,7 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 			if int(bindingIdx) >= len(tpl.cachedBindings) {
 				continue
 			}
-			_, ok := tpl.cachedBindings[bindingIdx].Value().(*ForeignClosure)
+			fcls, ok := tpl.cachedBindings[bindingIdx].Value().(*ForeignClosure)
 			if !ok {
 				continue
 			}
@@ -328,6 +353,19 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 				continue
 			}
 
+			// Check for promoted primitive (tail variant).
+			argCount := pullIdx - (i + 1)
+			_, promotedTailOp, promotedArity := promotedOpForName(fcls.name)
+			if promotedTailOp != OpInvalid && argCount == promotedArity {
+				plan.Delete(i, i+1)
+				plan.Replace(pullIdx, pullIdx+1,
+					[]Instruction{{Op: promotedTailOp, Arg: bindingIdx}},
+					tpl.sourceRefs[pullIdx],
+				)
+				claimed[pullIdx] = true
+				continue
+			}
+
 			// Delete PushCachedBinding [i, i+1)
 			plan.Delete(i, i+1)
 			// Replace PullApply with OpCallForeignCachedTail
@@ -338,5 +376,142 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 			claimed[pullIdx] = true
 			continue
 		}
+	}
+}
+
+// calleeToCallOp maps the opcode that pushes the callee to the fused
+// call opcode that replaces PullApply. Only push-family opcodes that
+// can appear as the first push in a call sequence are included.
+var calleeToCallOp = [opCount]OpCode{
+	OpPushLocal:         OpCallLocal,
+	OpPushCachedBinding: OpCallCachedBinding,
+}
+
+// fuseCallGeneric rewrites PushLocal/PushCachedBinding...PullApply sequences
+// into OpCallLocal / OpCallCachedBinding instructions. This handles the
+// general case (any callable) after fuseCallForeignCached has already claimed
+// the foreign-closure-specific patterns.
+//
+// This pass runs third, on post-pass-2 bytecode where some PullApply have
+// already been replaced by CallForeignCached/CallForeignCachedTail/promoted ops.
+//
+// Non-tail pattern:
+//
+//	code[i]       = SaveContinuation(off)
+//	code[i+1]     = PushLocal(arg) or PushCachedBinding(arg)   -- callee
+//	... 0+ Push-family ops ...
+//	code[i+off-1] = PullApply                                  -- SaveCont targets return point (one past here)
+//
+// Rewrite: delete callee push, replace PullApply with CallLocal/CallCachedBinding(arg).
+// SaveContinuation is preserved (needed for non-foreign callables).
+//
+// Tail pattern:
+//
+//	code[i] = PushLocal(arg) or PushCachedBinding(arg)     -- callee, not preceded by SaveCont/push
+//	... 0+ Push-family ops ...
+//	code[j] = PullApply
+//
+// Rewrite: delete callee push, replace PullApply with CallLocal/CallCachedBinding(arg).
+func fuseCallGeneric(tpl *NativeTemplate, plan *EditPlan) {
+	code := tpl.code
+	if len(code) < 2 {
+		return
+	}
+	targets := branchTargets(code)
+
+	for i := range len(code) {
+		// Non-tail pattern: SaveContinuation + PushLocal/PushCachedBinding ... PullApply
+		if code[i].Op == OpSaveContinuation &&
+			i+1 < len(code) {
+			calleeOp := calleeToCallOp[code[i+1].Op]
+			if calleeOp == OpInvalid {
+				continue
+			}
+
+			off := int(code[i].Arg)
+			pullIdx := i + off - 1
+			calleeArg := code[i+1].Arg
+
+			if pullIdx < 0 || pullIdx >= len(code) || code[pullIdx].Op != OpPullApply {
+				continue
+			}
+
+			// No branch target in (i+1, pullIdx).
+			branchInInterior := false
+			for k := i + 1; k < pullIdx; k++ {
+				if targets[k] {
+					branchInInterior = true
+					break
+				}
+			}
+			if branchInInterior {
+				continue
+			}
+
+			// All instructions between the callee push and PullApply must be push-family.
+			allPush := true
+			for k := i + 2; k < pullIdx; k++ {
+				if !isPushOp(code[k].Op) {
+					allPush = false
+					break
+				}
+			}
+			if !allPush {
+				continue
+			}
+
+			// Delete only the callee push [i+1, i+2). Keep SaveContinuation.
+			plan.Delete(i+1, i+2)
+			plan.Replace(pullIdx, pullIdx+1,
+				[]Instruction{{Op: calleeOp, Arg: calleeArg}},
+				tpl.sourceRefs[pullIdx],
+			)
+			continue
+		}
+
+		// Tail pattern: PushLocal/PushCachedBinding (not preceded by SaveCont/push) ... PullApply
+		calleeOp := calleeToCallOp[code[i].Op]
+		if calleeOp == OpInvalid {
+			continue
+		}
+		if i > 0 && (code[i-1].Op == OpSaveContinuation || isPushOp(code[i-1].Op)) {
+			continue
+		}
+
+		calleeArg := code[i].Arg
+
+		// Scan forward for PullApply, only allowing push-family ops.
+		pullIdx := -1
+		for k := i + 1; k < len(code); k++ {
+			if code[k].Op == OpPullApply {
+				pullIdx = k
+				break
+			}
+			if !isPushOp(code[k].Op) {
+				break
+			}
+		}
+		if pullIdx < 0 {
+			continue
+		}
+
+		// No branch target in [i, pullIdx].
+		branchInInterior := false
+		for k := i; k <= pullIdx; k++ {
+			if targets[k] {
+				branchInInterior = true
+				break
+			}
+		}
+		if branchInInterior {
+			continue
+		}
+
+		// Delete callee push [i, i+1).
+		plan.Delete(i, i+1)
+		plan.Replace(pullIdx, pullIdx+1,
+			[]Instruction{{Op: calleeOp, Arg: calleeArg}},
+			tpl.sourceRefs[pullIdx],
+		)
 	}
 }

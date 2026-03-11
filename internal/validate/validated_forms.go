@@ -15,15 +15,14 @@
 package validate
 
 import (
+	"github.com/aalpar/wile/internal/forms"
 	"github.com/aalpar/wile/internal/syntax"
 )
 
-// ValidatedExpr is the interface for all validated expressions
-type ValidatedExpr interface {
-	SetFormName(name string)
-	FormName() string
-	Source() *syntax.SourceContext // Original source for error messages
-}
+// ValidatedExpr is the interface for all validated expressions.
+// The canonical definition lives in [forms.ValidatedExpr] to break
+// the validate → forms ← machine import cycle.
+type ValidatedExpr = forms.ValidatedExpr
 
 // ValidatedProcedure represents a validated procedure form with parameters and body.
 type ValidatedProcedure interface {

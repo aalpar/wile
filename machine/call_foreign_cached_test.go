@@ -63,7 +63,9 @@ func TestOpCallForeignCached(t *testing.T) {
 				tpl := NewNativeTemplate(0, 0, false)
 				cbIdx := tpl.AppendCachedBinding(bd)
 
-				// Push two args, then call.
+				// SaveContinuation provides stack isolation for non-tail.
+				// Offset 4 targets one past CallForeignCached (return point).
+				tpl.AppendInstruction(Instruction{Op: OpSaveContinuation, Arg: 4})
 				litIdx3 := tpl.MaybeAppendLiteral(values.NewInteger(3))
 				litIdx4 := tpl.MaybeAppendLiteral(values.NewInteger(4))
 				tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litIdx3)})
@@ -104,6 +106,8 @@ func TestOpCallForeignCached(t *testing.T) {
 				tpl := NewNativeTemplate(0, 0, false)
 				cbIdx := tpl.AppendCachedBinding(bd)
 
+				// SaveContinuation for non-tail; offset 3 = one past CallForeignCached.
+				tpl.AppendInstruction(Instruction{Op: OpSaveContinuation, Arg: 3})
 				// Push only 1 arg.
 				litIdx := tpl.MaybeAppendLiteral(values.NewInteger(1))
 				tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litIdx)})
@@ -141,6 +145,8 @@ func TestOpCallForeignCached(t *testing.T) {
 				tpl := NewNativeTemplate(0, 0, false)
 				cbIdx := tpl.AppendCachedBinding(bd)
 
+				// SaveContinuation for non-tail; offset 5 = one past CallForeignCached.
+				tpl.AppendInstruction(Instruction{Op: OpSaveContinuation, Arg: 5})
 				// Push 3 args: 10, 20, 30 => first=10, rest=(20 30), sum=60
 				litIdx10 := tpl.MaybeAppendLiteral(values.NewInteger(10))
 				litIdx20 := tpl.MaybeAppendLiteral(values.NewInteger(20))
@@ -164,6 +170,8 @@ func TestOpCallForeignCached(t *testing.T) {
 				tpl := NewNativeTemplate(0, 0, false)
 				cbIdx := tpl.AppendCachedBinding(bd)
 
+				// SaveContinuation for non-tail; offset 2 = one past CallForeignCached.
+				tpl.AppendInstruction(Instruction{Op: OpSaveContinuation, Arg: 2})
 				// No args — 0-param closure.
 				tpl.AppendInstruction(Instruction{Op: OpCallForeignCached, Arg: cbIdx})
 

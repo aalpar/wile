@@ -5,7 +5,7 @@
 
 **R7RS Scheme in pure Go. No CGo, no C toolchain, no cross-compilation pain.**
 
-Full hygienic macros, first-class continuations, and numeric tower. `go get` and it just works.
+Full hygienic macros, first-class continuations, numeric tower, and sandboxing. `go get` and it just works.
 
 ### Embed Scheme in 4 lines of Go
 
@@ -34,7 +34,7 @@ result, _ := engine.Eval(ctx, "(* width height)")  // => 480000
 
 ## Why Wile?
 
-**Embedding a Lisp in Go has always required tradeoffs:**
+**Embedding a Lisp in Go means tradeoffs:**
 
 | Approach | Problem |
 |----------|---------|
@@ -56,7 +56,7 @@ result, _ := engine.Eval(ctx, "(* width height)")  // => 480000
 
 ### Performance
 
-Gabriel benchmark suite (16 benchmarks), showing improvement from allocation and dispatch optimizations:
+Gabriel benchmarks (16 programs), showing gains from allocation and dispatch optimizations:
 
 | Benchmark | v1.3.0 | v1.4.0 | Change |
 |-----------|-------:|-------:|-------:|
@@ -70,7 +70,7 @@ Full results and methodology in [examples/benchmarks/](examples/benchmarks/).
 
 ## Embedding in Go
 
-Wile provides a public API for embedding Scheme in Go programs via the [`wile`](https://pkg.go.dev/github.com/aalpar/wile) package.
+The [`wile`](https://pkg.go.dev/github.com/aalpar/wile) package provides the public API for embedding Scheme in Go.
 
 ### Basic Usage
 
@@ -155,7 +155,7 @@ result, err := engine.Call(ctx, proc, wile.NewInteger(42))
 | `wile.EmptyList` | Empty list `'()` |
 | `wile.Void` | Void value |
 
-Additional constructors (e.g., `NewRationalFromBigInt`, `NewComplexFromParts`) are available in the [`values`](https://pkg.go.dev/github.com/aalpar/wile/values) package.
+The [`values`](https://pkg.go.dev/github.com/aalpar/wile/values) package provides additional constructors (e.g., `NewRationalFromBigInt`, `NewComplexFromParts`).
 
 ### Engine Options
 
@@ -308,7 +308,7 @@ The `SCHEME_LIBRARY_PATH` environment variable provides additional library searc
 
 ### REPL Debugger
 
-The REPL includes an integrated debugger. Commands start with `,`:
+The REPL includes a debugger. Commands start with `,`:
 
 | Command | Description |
 |---------|-------------|
@@ -355,7 +355,7 @@ The REPL includes an integrated debugger. Commands start with `,`:
 
 ### Extension Libraries
 
-When the library system is enabled (`WithLibraryPaths`), Go extensions are importable as `(wile <name>)`:
+With the library system enabled (`WithLibraryPaths`), Go extensions import as `(wile <name>)`:
 
 | Library | Description |
 |---|---|
@@ -409,7 +409,7 @@ Source → Tokenizer → Parser → Expander → Compiler → VM
 
 ### API Stability
 
-The following packages form the public API and follow [Go module versioning](https://go.dev/doc/modules/version-numbers):
+These packages form the public API and follow [Go module versioning](https://go.dev/doc/modules/version-numbers):
 
 - **[`wile`](https://pkg.go.dev/github.com/aalpar/wile)** (root) — `Engine`, `RegisterFunc`, `Eval`/`Compile`/`Run`, error types
 - **[`values`](https://pkg.go.dev/github.com/aalpar/wile/values)** — Scheme value types, `Value` interface, numeric tower
@@ -418,7 +418,7 @@ The following packages form the public API and follow [Go module versioning](htt
 - **[`security`](https://pkg.go.dev/github.com/aalpar/wile/security)** — `Authorizer`, `AccessRequest`, built-in authorizers
 - **[`extensions/*`](https://pkg.go.dev/github.com/aalpar/wile/extensions)** — Public extensions (files, math, threads, system, etc.)
 
-All other packages ([`machine/`](https://pkg.go.dev/github.com/aalpar/wile/machine), [`environment/`](https://pkg.go.dev/github.com/aalpar/wile/environment), [`internal/`](internal/)) are implementation details and may change without notice. The `machine` package is technically importable but is not covered by compatibility guarantees.
+All other packages ([`machine/`](https://pkg.go.dev/github.com/aalpar/wile/machine), [`environment/`](https://pkg.go.dev/github.com/aalpar/wile/environment), [`internal/`](internal/)) are implementation details and may change without notice. The `machine` package is importable but carries no compatibility guarantees.
 
 ## Hygiene Model
 
@@ -470,7 +470,7 @@ This prevents unintended variable capture in macros:
 
 ## Sandboxing
 
-Wile provides two-layer sandboxing for embedded engines. The layers are independent and composable.
+Wile sandboxes embedded engines with two independent, composable layers.
 
 ### Layer 1: Extension-based (compile-time)
 
@@ -539,11 +539,11 @@ See [`docs/SANDBOXING.md`](docs/SANDBOXING.md) for the full security model, exte
 
 ## Contributing
 
-Wile welcomes contributions! We're actively looking for help with:
+Wile welcomes contributions. Help wanted:
 
 - **Documentation** — Examples, guides, tutorials
 - **Standard library** — R7RS-small features, SRFI implementations
-- **Test coverage** — Improving test coverage across packages
+- **Test coverage** — Broader coverage across packages
 - **Performance** — Allocation reduction, targeted optimizations
 - **Tooling** — REPL improvements, debugging tools, IDE integration
 

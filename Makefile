@@ -156,7 +156,7 @@ test-scheme:
 #   make bench
 .PHONY: bench
 bench:
-	$(GO_TEST) -bench=. -benchmem ./...
+	$(GO_TEST) -bench=. -benchmem -short -timeout 3m ./...
 
 # Run the Schelog integration benchmark (logic programming stress test).
 # Runs the Zebra puzzle and basic schelog operations in a single process.
@@ -209,6 +209,21 @@ bench-gabriel: build
 .PHONY: bench-gabriel-all
 bench-gabriel-all: build
 	@cd examples/benchmarks && SCHEME=../../$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) ./run-all.sh
+
+# Run Larceny R7RS benchmark suite (standard cross-implementation benchmarks).
+# Uses single iteration by default for a quick check (~60s).
+# Override COUNT for full benchmark runs: make bench-larceny COUNT=
+#   make bench-larceny                   # Quick run (1 iteration each)
+#   make bench-larceny BENCHMARKS=quick  # Fast subset only
+#   make bench-larceny COUNT= BENCHMARKS=gabriel  # Gabriel group, original counts
+#   make bench-larceny BENCHMARKS="fib tak ack"   # Specific benchmarks
+LARCENY_COUNT ?= 1
+LARCENY_BENCHMARKS ?= all
+
+.PHONY: bench-larceny
+bench-larceny: build
+	@WILE_SCHEME=$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) \
+		./benchmarks/larceny/bench.sh $(if $(LARCENY_COUNT),-n $(LARCENY_COUNT)) -q $(LARCENY_BENCHMARKS)
 
 # Compare Wile against other Scheme implementations.
 # Requires other Schemes installed (chez, racket, chibi, guile).
