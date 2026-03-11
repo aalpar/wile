@@ -387,6 +387,25 @@ func (p *Parser) readQuoteForm(keyword string) (syntax.SyntaxValue, tokenizer.To
 	return result, p.cur, nil
 }
 
+// readExactnessMarker handles #e and #i exactness prefixes.
+// It advances the tokenizer, reads the next datum, and applies the conversion
+// function (makeExact or makeInexact) to it.
+func (p *Parser) readExactnessMarker(label string, convert func(syntax.SyntaxValue) (syntax.SyntaxValue, error)) (syntax.SyntaxValue, tokenizer.Token, error) {
+	p.cur, p.err = p.toks.Next()
+	if p.err != nil {
+		return nil, p.cur, p.err
+	}
+	q, tok, err := p.readSyntax()
+	if err != nil {
+		return nil, tok, err
+	}
+	result, err := convert(q)
+	if err != nil {
+		return nil, tok, NewParserErrorf(tok, "cannot convert to %s: %v", label, err)
+	}
+	return result, tok, nil
+}
+
 // readLabelAssignment handles #n=<datum> — defining a datum label.
 // R7RS §2.4: For circular/shared structures, we pre-register the container
 // before reading its contents so back-references via #n# resolve correctly.
@@ -840,33 +859,9 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q = p.wrapSyntax(q1, p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateMarkerNumberExact:
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q, tok, err := p.readSyntax()
-		if err != nil {
-			return nil, tok, err
-		}
-		exactVal, err := p.makeExact(q)
-		if err != nil {
-			return nil, tok, NewParserErrorf(tok, "cannot convert to exact: %v", err)
-		}
-		return exactVal, tok, nil
+		return p.readExactnessMarker("exact", p.makeExact)
 	case tokenizer.TokenizerStateMarkerNumberInexact:
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q, tok, err := p.readSyntax()
-		if err != nil {
-			return nil, tok, err
-		}
-		inexactVal, err := p.makeInexact(q)
-		if err != nil {
-			return nil, tok, NewParserErrorf(tok, "cannot convert to inexact: %v", err)
-		}
-		return inexactVal, tok, nil
+		return p.readExactnessMarker("inexact", p.makeInexact)
 	case tokenizer.TokenizerStateBigIntegerDefaultBase:
 		return p.parseBigIntegerWithBase(ParserNumberDefaultBase)
 	case tokenizer.TokenizerStateBigIntegerBase10:
