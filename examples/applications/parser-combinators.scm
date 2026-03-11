@@ -3,7 +3,7 @@
 ;;; Demonstrates: closures as parsers, define-record-type, case-lambda,
 ;;;               higher-order composition, string operations
 ;;;
-;;; Usage: ./dist/scheme --file examples/applications/parser-combinators.scm
+;;; Usage: ./dist/wile --file examples/applications/parser-combinators.scm
 
 ;; -----------------------------------------------------------------------
 ;; Parse results

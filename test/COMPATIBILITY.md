@@ -45,19 +45,19 @@ make test-scheme
 **Test old version:**
 ```bash
 # Save old binary
-cp ./dist/darwin/arm64/scheme ./dist/darwin/arm64/scheme-v1.0.0
+cp ./dist/darwin/arm64/wile ./dist/darwin/arm64/wile-v1.0.0
 
 # Build new version
 make build
 
 # Compare
-make test-scheme SCHEME=./dist/darwin/arm64/scheme-v1.0.0
+make test-scheme SCHEME=./dist/darwin/arm64/wile-v1.0.0
 make test-scheme  # Current version
 ```
 
 ## Example: Comparing Numeric Tower Behavior
 
-Create a test file `test/scheme/numeric-comparison.scm`:
+Create a test file `test/wile/numeric-comparison.scm`:
 
 ```scheme
 (import (scheme base)

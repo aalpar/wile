@@ -3,7 +3,7 @@
 ;;; The Takeuchi function is a classic Lisp benchmark from the Gabriel suite.
 ;;; It stresses recursion and function call overhead.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/tak.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/tak.scm
 
 (define (tak x y z)
   (if (not (< y x))

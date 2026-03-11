@@ -3,7 +3,7 @@
 ;;; Tests recursive function calls with division operations.
 ;;; Benchmarks tail recursion optimization and arithmetic.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/divrec.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/divrec.scm
 
 (define (divrec n)
   (if (<= n 0)

@@ -79,7 +79,7 @@ COPY . .
 RUN make build-${TARGETOS}-${TARGETARCH}
 
 # Verify build
-RUN ./dist/${TARGETOS}/${TARGETARCH}/scheme --version || true
+RUN ./dist/${TARGETOS}/${TARGETARCH}/wile --version || true
 
 # Default command: run tests
 CMD ["make", "test"]

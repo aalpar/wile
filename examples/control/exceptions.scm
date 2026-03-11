@@ -3,7 +3,7 @@
 ;;; Demonstrates: guard, raise, with-exception-handler, error objects
 ;;; Wile-specific: Full R7RS exception system
 ;;;
-;;; Usage: ./dist/scheme --file examples/control/exceptions.scm
+;;; Usage: ./dist/wile --file examples/control/exceptions.scm
 
 ;; R7RS provides structured exception handling.
 ;; guard: pattern-matching exception handler

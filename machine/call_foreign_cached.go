@@ -19,10 +19,11 @@ import (
 )
 
 // callForeignCached executes a *ForeignClosure resolved from cachedBindings[instr.Arg].
-// This is the fast path for peephole-optimized primitive calls, bypassing
-// SaveContinuation/RestoreAndRelease entirely.
+// This is the fast path for peephole-optimized primitive calls.
 //
-// For non-tail calls (tail=false): advances mc.pc after the call.
+// For non-tail calls (tail=false): the bytecode retains SaveContinuation for
+// stack isolation. After the call, RestoreAndRelease recovers the caller's
+// evals, env, template, and pc.
 // For tail calls (tail=true): calls returnImmediate() to pop to the caller's caller.
 func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*MachineContext, error) {
 	callable := mc.template.cachedBindings[instr.Arg].Value()
@@ -32,8 +33,11 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 	fcls, ok := callable.(*ForeignClosure)
 	if !ok {
 		// Slow path: binding was reassigned at runtime (e.g., set! on a
-		// primitive). Fall back to the generic ApplyCallable path.
-		return callForeignCachedFallback(mc, callable, tail)
+		// primitive). For non-tail, SaveContinuation is in the bytecode
+		// and provides stack isolation; ApplyCallable will consume the
+		// saved continuation via RestoreContinuation or returnImmediate.
+		// For tail, no continuation is needed (tail call semantics).
+		return callForeignCachedReassigned(mc, callable)
 	}
 
 	vs := mc.evals.Drain()
@@ -77,30 +81,23 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 	if tail {
 		mc = mc.returnImmediate()
 	} else {
-		mc.pc++
+		// Non-tail: SaveContinuation is in the bytecode. Restore it
+		// to recover the caller's evals, env, template, and pc.
+		mc.RestoreAndRelease(mc.cont)
 	}
 	return mc, nil
 }
 
-// callForeignCachedFallback handles the case where a cached binding no longer
+// callForeignCachedReassigned handles the case where a cached binding no longer
 // holds a *ForeignClosure at runtime (e.g., the binding was reassigned via
-// set!). It reconstructs the original PullApply semantics: pop all args from
-// the eval stack and dispatch through the generic ApplyCallable path.
-func callForeignCachedFallback(mc *MachineContext, callable values.Value, tail bool) (*MachineContext, error) {
+// set!). The bytecode retains SaveContinuation for non-tail calls, providing
+// stack isolation (Drain only takes args, not outer state) and return dispatch
+// (ApplyCallable consumers the saved continuation automatically).
+func callForeignCachedReassigned(mc *MachineContext, callable values.Value) (*MachineContext, error) {
 	vs := mc.evals.Drain()
 	mc.counters.StackDrains++
 	mc.counters.StackElementsDrained += uint64(len(vs))
 	mc.counters.RecordStackDepth(len(vs))
-
-	if !tail {
-		// Non-tail: the peephole optimizer removed SaveContinuation, so we
-		// must save one now to return to the instruction after this one.
-		// off=1 means the saved PC will be mc.pc + 1 (the next instruction).
-		err := mc.SaveContinuation(1)
-		if err != nil {
-			return nil, err
-		}
-	}
 
 	result, err := mc.ApplyCallable(callable, vs...)
 	if err != nil {

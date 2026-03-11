@@ -41,7 +41,7 @@ When adding new flags, prefer these standard GNU short-flag assignments:
 ## Build Commands
 
 ```bash
-make build            # Build to ./dist/{os}/{arch}/scheme (e.g., dist/darwin/arm64/scheme)
+make build            # Build to ./dist/{os}/{arch}/wile (e.g., dist/darwin/arm64/wile)
 make build-all        # Build for all platforms (darwin/linux x arm64/amd64)
 make test             # Run all tests (go test -v ./...)
 make lint             # Run golangci-lint
@@ -56,7 +56,7 @@ make release          # Full GoReleaser release (requires tag context)
 
 Quick build (convenience binary at dist root):
 ```bash
-go build -o dist/scheme ./cmd/scheme
+go build -o dist/wile ./cmd/wile
 ```
 
 Run a single test:
@@ -66,20 +66,20 @@ go test -v -run TestName ./package/...
 
 Run the REPL:
 ```bash
-./dist/scheme                            # Using convenience binary
-./dist/darwin/arm64/scheme               # Using platform-specific binary
+./dist/wile                            # Using convenience binary
+./dist/darwin/arm64/wile               # Using platform-specific binary
 ```
 
 Run a Scheme file:
 ```bash
-./dist/scheme --file example.scm
+./dist/wile --file example.scm
 ```
 
 ### dist/ Directory Structure
 
 ```
 dist/
-├── scheme                    # Convenience binary (from go build -o dist/scheme)
+├── scheme                    # Convenience binary (from go build -o dist/wile)
 ├── darwin/
 │   ├── arm64/
 │   │   └── scheme            # macOS ARM64 binary (from make build on M1/M2)

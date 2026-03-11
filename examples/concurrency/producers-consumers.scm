@@ -2,7 +2,7 @@
 ;;;
 ;;; Demonstrates: Producer-consumer pattern, work queues
 ;;;
-;;; Usage: ./dist/scheme --file examples/concurrency/producers-consumers.scm
+;;; Usage: ./dist/wile --file examples/concurrency/producers-consumers.scm
 
 ;; Output mutex to prevent interleaved output
 (define output-mutex (make-mutex))

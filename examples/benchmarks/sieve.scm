@@ -3,7 +3,7 @@
 ;;; Classic list-processing benchmark. Finds prime numbers using
 ;;; the sieve algorithm with functional list operations.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/sieve.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/sieve.scm
 
 ;; filter is not a primitive in Wile, so we define it
 (define (filter pred lst)

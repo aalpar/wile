@@ -205,9 +205,9 @@ func TestInitLibraryRegistry(t *testing.T) {
 		},
 		{
 			name:         "env var only",
-			envPath:      "/usr/share/scheme" + string(os.PathListSeparator) + "/opt/scheme",
+			envPath:      "/usr/share/wile" + string(os.PathListSeparator) + "/opt/wile",
 			cmdLinePath:  "",
-			wantContains: []string{".", "./lib", "/usr/share/scheme", "/opt/scheme"},
+			wantContains: []string{".", "./lib", "/usr/share/wile", "/opt/wile"},
 		},
 		{
 			name:         "command line only",
@@ -217,15 +217,15 @@ func TestInitLibraryRegistry(t *testing.T) {
 		},
 		{
 			name:         "both env and command line",
-			envPath:      "/usr/share/scheme",
+			envPath:      "/usr/share/wile",
 			cmdLinePath:  "/home/user/.scheme",
-			wantContains: []string{".", "./lib", "/usr/share/scheme", "/home/user/.scheme"},
+			wantContains: []string{".", "./lib", "/usr/share/wile", "/home/user/.scheme"},
 		},
 		{
 			name:         "empty components in env",
-			envPath:      string(os.PathListSeparator) + "/usr/share/scheme" + string(os.PathListSeparator) + string(os.PathListSeparator),
+			envPath:      string(os.PathListSeparator) + "/usr/share/wile" + string(os.PathListSeparator) + string(os.PathListSeparator),
 			cmdLinePath:  "",
-			wantContains: []string{".", "./lib", "/usr/share/scheme"},
+			wantContains: []string{".", "./lib", "/usr/share/wile"},
 		},
 		{
 			name:         "empty components in command line",

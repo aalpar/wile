@@ -19,7 +19,7 @@ func TestSchemeTestSuite(t *testing.T) {
 
 	// Find the scheme binary
 	// Go test runs with ./test as the working directory, so paths are relative to test/
-	schemePath := "../dist/scheme"
+	schemePath := "../dist/wile"
 	_, err := os.Stat(schemePath)
 	if os.IsNotExist(err) {
 		// Detect host platform and try that first, then fall back to other platforms
@@ -28,13 +28,13 @@ func TestSchemeTestSuite(t *testing.T) {
 		hostArch := runtime.GOARCH
 
 		// Try host platform first, then all others
-		hostPath := "../dist/" + hostOS + "/" + hostArch + "/scheme"
+		hostPath := "../dist/" + hostOS + "/" + hostArch + "/wile"
 		candidates := []string{
 			hostPath,
-			"../dist/darwin/arm64/scheme",
-			"../dist/darwin/amd64/scheme",
-			"../dist/linux/arm64/scheme",
-			"../dist/linux/amd64/scheme",
+			"../dist/darwin/arm64/wile",
+			"../dist/darwin/amd64/wile",
+			"../dist/linux/arm64/wile",
+			"../dist/linux/amd64/wile",
 		}
 		found := false
 		for _, path := range candidates {

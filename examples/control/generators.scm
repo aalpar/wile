@@ -3,7 +3,7 @@
 ;;; Demonstrates: call/cc, closures capturing execution state,
 ;;;               eof-object sentinel, case-lambda, lazy iteration
 ;;;
-;;; Usage: ./dist/scheme --file examples/control/generators.scm
+;;; Usage: ./dist/wile --file examples/control/generators.scm
 
 ;; -----------------------------------------------------------------------
 ;; Generator protocol

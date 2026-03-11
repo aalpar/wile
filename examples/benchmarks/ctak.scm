@@ -3,7 +3,7 @@
 ;;; A variant of tak that uses call/cc (call-with-current-continuation).
 ;;; Tests continuation capture and invocation performance.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/ctak.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/ctak.scm
 
 (define (ctak x y z)
   (call-with-current-continuation

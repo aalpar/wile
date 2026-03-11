@@ -8,7 +8,7 @@
 ;;; to prune the search space; Schelog's pure backtracking approach does not.
 ;;;
 ;;; Usage (from project root):
-;;;   ./dist/scheme -f examples/logic/schelog/stress-test.scm
+;;;   ./dist/wile -f examples/logic/schelog/stress-test.scm
 
 (include "examples/logic/schelog/schelog.scm")
 (include "examples/logic/schelog/puzzle.scm")

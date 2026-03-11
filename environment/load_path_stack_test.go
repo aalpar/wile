@@ -71,8 +71,8 @@ func TestLoadPathStack_CurrentDir(t *testing.T) {
 		},
 		{
 			name: "nested path",
-			path: "/usr/local/share/scheme/lib.scm",
-			want: "/usr/local/share/scheme",
+			path: "/usr/local/share/wile/lib.scm",
+			want: "/usr/local/share/wile",
 		},
 	}
 

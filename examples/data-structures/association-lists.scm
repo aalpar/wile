@@ -3,7 +3,7 @@
 ;;; Demonstrates: assoc, assq, assv, alist operations, key-value storage
 ;;; Wile-specific: Full R7RS alist support
 ;;;
-;;; Usage: ./dist/scheme --file examples/data-structures/association-lists.scm
+;;; Usage: ./dist/wile --file examples/data-structures/association-lists.scm
 
 ;; Association lists (alists) store key-value pairs as lists of cons cells.
 ;; Simple, functional alternative to hash tables for small datasets.

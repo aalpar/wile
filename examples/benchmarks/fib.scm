@@ -4,7 +4,7 @@
 ;;; This uses the naive doubly-recursive implementation to stress
 ;;; function calls and stack management.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/fib.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/fib.scm
 
 (define (fib n)
   (if (<= n 1)

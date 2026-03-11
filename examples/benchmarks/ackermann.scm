@@ -3,7 +3,7 @@
 ;;; The Ackermann function is a classic test of deep recursion.
 ;;; It grows extremely fast and stresses stack management.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/ackermann.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/ackermann.scm
 
 (define (ackermann m n)
   (cond ((= m 0) (+ n 1))

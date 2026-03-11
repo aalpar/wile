@@ -2,7 +2,7 @@
 ;;;
 ;;; Demonstrates: Closures, captured variables, private state
 ;;;
-;;; Usage: ./dist/scheme --file examples/basics/closures.scm
+;;; Usage: ./dist/wile --file examples/basics/closures.scm
 
 ;; Simple closure - function that captures a variable
 (define (make-multiplier factor)

@@ -3,7 +3,7 @@
 ;;; Demonstrates: guard, error, raise, error-object-message,
 ;;;               error-object-irritants, source-tracked error output
 ;;;
-;;; Usage: ./dist/scheme --file examples/basics/error-source-tracking.scm
+;;; Usage: ./dist/wile --file examples/basics/error-source-tracking.scm
 ;;;
 ;;; When run via the interpreter, uncaught exceptions display the source
 ;;; filename, line, and column where the error was raised, plus a VM

@@ -3,7 +3,7 @@
 ;;; Classic Lisp benchmark performing symbolic differentiation.
 ;;; Tests list manipulation and pattern matching.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/deriv.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/deriv.scm
 
 (define (deriv a)
   (cond ((not (pair? a))

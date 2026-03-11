@@ -2,7 +2,7 @@
 ;;;
 ;;; Demonstrates: Parallel map, work distribution, thread pools
 ;;;
-;;; Usage: ./dist/scheme --file examples/concurrency/parallel-map.scm
+;;; Usage: ./dist/wile --file examples/concurrency/parallel-map.scm
 
 ;; Output mutex to prevent interleaved output
 (define output-mutex (make-mutex))

@@ -3,7 +3,7 @@
 ;;; Demonstrates: syntax-rules, pattern matching, macro expansion
 ;;; Wile-specific: Hygienic macros using "sets of scopes" (Flatt 2016)
 ;;;
-;;; Usage: ./dist/scheme --file examples/macros/simple-macros.scm
+;;; Usage: ./dist/wile --file examples/macros/simple-macros.scm
 
 ;; Macros transform code at compile time.
 ;; syntax-rules provides pattern-based macro definition.

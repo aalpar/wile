@@ -80,7 +80,7 @@ func init() {
 
 // registerTypedCompiler registers a compiler that handles a typed ValidatedExpr.
 func registerTypedCompiler[T validate.ValidatedExpr](name string, fn func(*CompileTimeContinuation, CompileTimeCallContext, T) error) {
-	forms.RegisterCompiler(name, func(ctc any, ctctx any, expr any) error {
+	forms.RegisterCompiler(name, func(ctc any, ctctx any, expr forms.ValidatedExpr) error {
 		return fn(
 			ctc.(*CompileTimeContinuation),
 			ctctx.(CompileTimeCallContext),
@@ -92,7 +92,7 @@ func registerTypedCompiler[T validate.ValidatedExpr](name string, fn func(*Compi
 // registerSyntaxCompiler registers a compiler that handles syntax directly.
 // For forms that pass through validation as ValidatedLiteral.
 func registerSyntaxCompiler(name string, fn SyntaxCompilerFunc) {
-	forms.RegisterCompiler(name, func(ctc any, ctctx any, expr any) error {
+	forms.RegisterCompiler(name, func(ctc any, ctctx any, expr forms.ValidatedExpr) error {
 		// Extract syntax from ValidatedLiteral
 		lit := expr.(*validate.ValidatedLiteral)
 		pair := lit.Value.(*syntax.SyntaxPair)

@@ -5,7 +5,7 @@
 ;;; stress test, see stress-test.scm.
 ;;;
 ;;; Usage (from project root):
-;;;   ./dist/scheme -q -i -f examples/logic/schelog/schelog.scm \
+;;;   ./dist/wile -q -i -f examples/logic/schelog/schelog.scm \
 ;;;                    -i -f examples/logic/schelog/toys.scm \
 ;;;                    -i -f examples/logic/schelog/puzzle.scm \
 ;;;                    -i -f examples/logic/schelog/mapcol.scm \

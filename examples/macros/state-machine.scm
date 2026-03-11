@@ -3,7 +3,7 @@
 ;;; Demonstrates: syntax-rules with nested ellipsis, case dispatch,
 ;;;               tail-recursive state transitions, macros-as-compilers
 ;;;
-;;; Usage: ./dist/scheme --file examples/macros/state-machine.scm
+;;; Usage: ./dist/wile --file examples/macros/state-machine.scm
 
 ;; -----------------------------------------------------------------------
 ;; The define-state-machine macro

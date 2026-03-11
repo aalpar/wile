@@ -3,7 +3,7 @@
 ;;; Demonstrates: dynamic-wind, before/after guards, cleanup with continuations
 ;;; Wile-specific: Full dynamic-wind support for continuation-safe resource management
 ;;;
-;;; Usage: ./dist/scheme --file examples/control/dynamic-wind.scm
+;;; Usage: ./dist/wile --file examples/control/dynamic-wind.scm
 
 ;; dynamic-wind ensures cleanup code runs even when continuations are involved.
 ;; Form: (dynamic-wind before-thunk body-thunk after-thunk)

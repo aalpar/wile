@@ -3,7 +3,7 @@
 ;;; Demonstrates: Mutexes, critical sections, race condition prevention
 ;;; Wile-specific: SRFI-18 mutex primitives
 ;;;
-;;; Usage: ./dist/scheme --file examples/concurrency/mutex.scm
+;;; Usage: ./dist/wile --file examples/concurrency/mutex.scm
 
 ;; Output mutex to prevent interleaved output
 (define output-mutex (make-mutex))

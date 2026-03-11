@@ -15,8 +15,8 @@
 ;; Future enhancement: Use directory traversal when available
 (define test-files
   '(;; Core language tests
-    ;; "test/scheme/numeric-tower-test.scm"
-    ;; "test/scheme/hygiene-test.scm"
+    ;; "test/wile/numeric-tower-test.scm"
+    ;; "test/wile/hygiene-test.scm"
 
     ;; Regression tests
     ;; "test/regression/issue-123-example.scm"

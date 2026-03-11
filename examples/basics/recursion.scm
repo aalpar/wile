@@ -2,7 +2,7 @@
 ;;;
 ;;; Demonstrates: Recursion, base cases, tail recursion
 ;;;
-;;; Usage: ./dist/scheme --file examples/basics/recursion.scm
+;;; Usage: ./dist/wile --file examples/basics/recursion.scm
 
 ;; Classic recursive factorial
 ;; Not tail-recursive - builds up stack frames

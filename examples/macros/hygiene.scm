@@ -3,7 +3,7 @@
 ;;; Demonstrates: Automatic hygiene, scope sets, preventing unintended capture
 ;;; Wile-specific: "Sets of scopes" hygiene model (Flatt 2016) - same as Racket
 ;;;
-;;; Usage: ./dist/scheme --file examples/macros/hygiene.scm
+;;; Usage: ./dist/wile --file examples/macros/hygiene.scm
 
 ;; Hygienic macros prevent accidental variable capture.
 ;; Wile uses "sets of scopes" to track binding origins.

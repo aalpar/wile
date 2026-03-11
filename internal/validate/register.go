@@ -69,19 +69,14 @@ type validatorFunc func(ctx context.Context, env *environment.EnvironmentFrame, 
 
 // registerValidator wraps a validation function and registers it with the forms package.
 func registerValidator(name string, fn validatorFunc) {
-	forms.RegisterValidator(name, func(ctx context.Context, env any, pair any, result any) any {
-		var envFrame *environment.EnvironmentFrame
-		if env != nil {
-			envFrame = env.(*environment.EnvironmentFrame)
-		}
-		return fn(ctx, envFrame, pair.(*syntax.SyntaxPair), result.(*ValidationResult))
+	forms.RegisterValidator(name, func(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result any) forms.ValidatedExpr {
+		return fn(ctx, env, pair, result.(*ValidationResult))
 	})
 }
 
 // registerPassthrough registers a form that passes through as ValidatedLiteral.
 func registerPassthrough(name string) {
-	forms.RegisterValidator(name, func(_ context.Context, _ any, pair any, _ any) any {
-		p := pair.(*syntax.SyntaxPair)
-		return newLiteralExpr(p.SourceContext(), p)
+	forms.RegisterValidator(name, func(_ context.Context, _ *environment.EnvironmentFrame, pair *syntax.SyntaxPair, _ any) forms.ValidatedExpr {
+		return newLiteralExpr(pair.SourceContext(), pair)
 	})
 }

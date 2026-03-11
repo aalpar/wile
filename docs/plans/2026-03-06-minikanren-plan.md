@@ -6,7 +6,7 @@
 
 **Architecture:** Two layered libraries — `(wile microkanren)` provides the ~40-line procedural core (unification, goals, streams), `(wile kanren)` adds syntactic sugar via `syntax-rules` macros (`fresh`, `conde`, `run`, `run*`). Integration tests exercise both layers and classic relational programs.
 
-**Tech Stack:** Pure R7RS Scheme. No Go code. Tests via the Wile CLI binary (`dist/{os}/{arch}/scheme`).
+**Tech Stack:** Pure R7RS Scheme. No Go code. Tests via the Wile CLI binary (`dist/{os}/{arch}/wile`).
 
 **Design doc:** `docs/plans/2026-03-06-minikanren-design.md`
 

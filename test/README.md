@@ -42,13 +42,13 @@ make test-scheme
 make test-scheme SCHEME=chez-scheme
 
 # Test with an older Wile version
-make test-scheme SCHEME=./old-dist/scheme
+make test-scheme SCHEME=./old-dist/wile
 
 # Test with Chibi-Scheme
 make test-scheme SCHEME=chibi-scheme
 
 # Test with any other R7RS Scheme
-make test-scheme SCHEME=/path/to/scheme
+make test-scheme SCHEME=/path/to/wile
 ```
 
 **Directly via shell:**
@@ -59,7 +59,7 @@ SCHEME=chez-scheme ./test/run-all.sh # Override binary
 
 **Via Scheme interpreter:**
 ```bash
-./dist/scheme -f test/run-all.scm
+./dist/wile -f test/run-all.scm
 ```
 
 **Via Go test:**
@@ -76,7 +76,7 @@ All test files must match the pattern `*-test.scm` for automatic discovery.
 | Location | Pattern | Example |
 |----------|---------|---------|
 | Library tests | `lib/<library>/test/<module>-test.scm` | `lib/srfi/1/test/fold-test.scm` |
-| Core tests | `test/scheme/<feature>-test.scm` | `test/scheme/numeric-tower-test.scm` |
+| Core tests | `test/wile/<feature>-test.scm` | `test/wile/numeric-tower-test.scm` |
 | Regression tests | `test/regression/issue-<num>-<slug>.scm` | `test/regression/issue-123-macro-hygiene.scm` |
 
 ### Test Template
@@ -135,7 +135,7 @@ Scheme tests run as part of `make test` in CI. The Go test `TestSchemeTestSuite`
 ## Adding New Tests
 
 1. **For library code**: Create `lib/<library>/test/<module>-test.scm`
-2. **For core features**: Create `test/scheme/<feature>-test.scm`
+2. **For core features**: Create `test/wile/<feature>-test.scm`
 3. **For bug fixes**: Create `test/regression/issue-<num>-<slug>.scm`
 4. **Run tests**: `make test` or `./test/run-all.sh`
 
@@ -147,12 +147,12 @@ The test suite can run against any R7RS Scheme implementation:
 
 ```bash
 # Compare multiple implementations
-./test/compare-schemes.sh ./dist/darwin/arm64/scheme chez-scheme chibi-scheme
+./test/compare-schemes.sh ./dist/darwin/arm64/wile chez-scheme chibi-scheme
 
 # Compare Wile versions
-cp ./dist/darwin/arm64/scheme ./dist/darwin/arm64/scheme-old
+cp ./dist/darwin/arm64/wile ./dist/darwin/arm64/wile-old
 make build
-./test/compare-schemes.sh ./dist/darwin/arm64/scheme-old ./dist/darwin/arm64/scheme
+./test/compare-schemes.sh ./dist/darwin/arm64/wile-old ./dist/darwin/arm64/wile
 ```
 
 See `test/COMPATIBILITY.md` for detailed guidance on cross-implementation testing.

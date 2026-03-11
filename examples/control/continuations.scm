@@ -3,7 +3,7 @@
 ;;; Demonstrates: call/cc, continuation capture, non-local control flow
 ;;; Wile-specific: Full call/cc support, continuations can be invoked multiple times
 ;;;
-;;; Usage: ./dist/scheme --file examples/control/continuations.scm
+;;; Usage: ./dist/wile --file examples/control/continuations.scm
 
 ;; Continuations represent "the rest of the computation."
 ;; call/cc captures the current continuation as a first-class value.

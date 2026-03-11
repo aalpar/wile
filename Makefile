@@ -15,7 +15,7 @@ BUILD_SHA:=$(shell git rev-parse --short HEAD 2>/dev/null || echo "0000000" )
 BUILD_VERSION:=$(shell cat ./VERSION 2>/dev/null || echo "v0.0.0")
 DIST_DIR=./dist
 TEST_DIR=./test
-MY_BIN=scheme
+MY_BIN=wile
 
 GORELEASER=goreleaser
 
@@ -24,7 +24,7 @@ DOCKER_PLATFORM ?=
 DOCKER_SHELL ?=
 
 
-# Build the scheme binary for the current platform to ./dist/{os}/{arch}/scheme.
+# Build the scheme binary for the current platform to ./dist/{os}/{arch}/wile.
 # Rebuilds only when Go source files change.
 #   make build
 #
@@ -37,7 +37,7 @@ DOCKER_SHELL ?=
 #
 # Docker build:
 #   docker build -f docker/Dockerfile -t wile .
-#   docker run wile ./dist/${TARGETOS}/${TARGETARCH}/scheme --file example.scm
+#   docker run wile ./dist/${TARGETOS}/${TARGETARCH}/wile --file example.scm
 #
 # Cross-platform Docker build:
 #   docker build --platform linux/amd64 -f docker/Dockerfile -t wile .
@@ -65,7 +65,7 @@ $(DIST_DIR)/%/$(MY_BIN): $(SOURCES) $(EMBED_SOURCES)
 	$(eval TARGET_OS := $(word 1,$(OS_ARCH)))
 	$(eval TARGET_ARCH := $(word 2,$(OS_ARCH)))
 	@mkdir -p $(DIST_DIR)/$*
-	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) $(GO_BUILD) -o $(DIST_DIR)/$*/$(MY_BIN) $(LDFLAGS) ./cmd/scheme
+	GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) $(GO_BUILD) -o $(DIST_DIR)/$*/$(MY_BIN) $(LDFLAGS) ./cmd/wile
 
 .PHONY: build-darwin-arm64
 build-darwin-arm64: $(DIST_DIR)/darwin/arm64/$(MY_BIN)
@@ -140,7 +140,7 @@ test-race: build
 # Override SCHEME to test against different implementations:
 #   make test-scheme                                    # Use Wile (default)
 #   make test-scheme SCHEME=chez-scheme                 # Test with Chez Scheme
-#   make test-scheme SCHEME=./old-dist/scheme           # Test with old Wile version
+#   make test-scheme SCHEME=./old-dist/wile           # Test with old Wile version
 #   make test-scheme SCHEME=/usr/local/bin/chibi-scheme # Test with Chibi-Scheme
 .PHONY: test-scheme
 test-scheme:
@@ -156,7 +156,7 @@ test-scheme:
 #   make bench
 .PHONY: bench
 bench:
-	$(GO_TEST) -bench=. -benchmem ./...
+	$(GO_TEST) -bench=. -benchmem -short -timeout 3m ./...
 
 # Run the Schelog integration benchmark (logic programming stress test).
 # Runs the Zebra puzzle and basic schelog operations in a single process.
@@ -209,6 +209,21 @@ bench-gabriel: build
 .PHONY: bench-gabriel-all
 bench-gabriel-all: build
 	@cd examples/benchmarks && SCHEME=../../$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) ./run-all.sh
+
+# Run Larceny R7RS benchmark suite (standard cross-implementation benchmarks).
+# Uses single iteration by default for a quick check (~60s).
+# Override COUNT for full benchmark runs: make bench-larceny COUNT=
+#   make bench-larceny                   # Quick run (1 iteration each)
+#   make bench-larceny BENCHMARKS=quick  # Fast subset only
+#   make bench-larceny COUNT= BENCHMARKS=gabriel  # Gabriel group, original counts
+#   make bench-larceny BENCHMARKS="fib tak ack"   # Specific benchmarks
+LARCENY_COUNT ?= 1
+LARCENY_BENCHMARKS ?= all
+
+.PHONY: bench-larceny
+bench-larceny: build
+	@WILE_SCHEME=$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) \
+		./benchmarks/larceny/bench.sh $(if $(LARCENY_COUNT),-n $(LARCENY_COUNT)) -q $(LARCENY_BENCHMARKS)
 
 # Compare Wile against other Scheme implementations.
 # Requires other Schemes installed (chez, racket, chibi, guile).

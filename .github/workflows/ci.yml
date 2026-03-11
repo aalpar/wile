@@ -34,7 +34,7 @@ jobs:
       - name: Benchmark (Gabriel suite)
         run: |
           cd examples/benchmarks
-          SCHEME=../../dist/linux/amd64/scheme RUNS=3 ./run-canonical.sh
+          SCHEME=../../dist/linux/amd64/wile RUNS=3 ./run-canonical.sh
 
       - name: Upload benchmark results
         if: always()

@@ -133,7 +133,13 @@ func BenchmarkCompile(b *testing.B) {
 //
 // Libraries are loaded via Scheme's (include ...) which uses letrec*
 // semantics for forward references within included files.
+//
+// Skipped in short mode — a single iteration takes minutes in a bytecode
+// interpreter. Use `make profile-zebra` for dedicated profiling.
 func BenchmarkZebraPuzzle(b *testing.B) {
+	if testing.Short() {
+		b.Skip("skipping zebra puzzle benchmark in short mode (use make profile-zebra)")
+	}
 	// include resolves paths via SCHEME_INCLUDE_PATH.
 	b.Setenv("SCHEME_INCLUDE_PATH", ".")
 

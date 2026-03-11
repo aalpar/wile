@@ -45,13 +45,13 @@ BENCHMARKS="tak fib ack deriv sieve nqueens" ./compare-schemes.sh
 
 ```bash
 cd examples/benchmarks
-../../dist/scheme --file tak.scm
+../../dist/wile --file tak.scm
 ```
 
 Or from the repository root:
 
 ```bash
-./dist/scheme --file examples/benchmarks/tak.scm
+./dist/wile --file examples/benchmarks/tak.scm
 ```
 
 ## Interpreting Output

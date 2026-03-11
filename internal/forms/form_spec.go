@@ -19,34 +19,36 @@ package forms
 
 import (
 	"context"
+
+	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/internal/syntax"
 )
 
+// ValidatedExpr is the interface for all validated expressions.
+// It lives in the forms package (rather than validate) to break the
+// validate → forms ← machine import cycle while preserving type safety.
+type ValidatedExpr interface {
+	SetFormName(name string)
+	FormName() string
+	Source() *syntax.SourceContext
+}
+
 // ValidatorFunc is the signature for validation functions.
-// Parameters:
-//   - ctx: context for cancellation
-//   - env: *environment.EnvironmentFrame - for checking local variable shadowing
-//   - pair: *syntax.SyntaxPair - the form to validate
-//   - result: *validate.ValidationResult - collects errors
-//
-// Returns: validate.ValidatedExpr
-type ValidatorFunc func(ctx context.Context, env any, pair any, result any) any
+// The result parameter remains [any] (*validate.ValidationResult) because
+// validate imports forms, so forms cannot import validate.
+type ValidatorFunc func(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result any) ValidatedExpr
 
 // CompilerFunc is the signature for compilation functions.
-// Parameters:
-//   - ctc: *machine.CompileTimeContinuation - compiler state
-//   - ctctx: machine.CompileTimeCallContext - call context
-//   - expr: validate.ValidatedExpr - the validated expression
-//
-// Returns: error
-type CompilerFunc func(ctc any, ctctx any, expr any) error
+// The ctc (*machine.CompileTimeContinuation) and ctctx (machine.CompileTimeCallContext)
+// parameters remain [any] because machine imports forms.
+type CompilerFunc func(ctc any, ctctx any, expr ValidatedExpr) error
 
 // FormSpec defines how a special form is validated and compiled.
 //
-// Validate and Compile use type-erased signatures ([any]) to break circular
-// imports between forms, validate, and machine. Type safety is restored at
-// registration time: validate/register.go wraps typed validators into
-// [ValidatorFunc], and machine/register.go wraps typed compilers into
-// [CompilerFunc]. See those wrappers for the concrete type assertions.
+// Parameters that cross the validate/machine boundary use [any] to break
+// import cycles. Type safety is restored at registration time:
+// validate/register.go wraps typed validators into [ValidatorFunc], and
+// machine/register.go wraps typed compilers into [CompilerFunc].
 type FormSpec struct {
 	// Name is the keyword that triggers this form (e.g., "if", "lambda").
 	Name string

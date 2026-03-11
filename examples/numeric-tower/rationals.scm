@@ -3,7 +3,7 @@
 ;;; Demonstrates: Exact fractions, rational arithmetic, automatic simplification
 ;;; Wile-specific: Full rational support throughout the numeric tower
 ;;;
-;;; Usage: ./dist/scheme --file examples/numeric-tower/rationals.scm
+;;; Usage: ./dist/wile --file examples/numeric-tower/rationals.scm
 
 ;; Wile represents rational numbers as exact fractions.
 ;; Rationals are automatically reduced to lowest terms.

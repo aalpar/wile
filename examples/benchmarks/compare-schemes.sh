@@ -8,22 +8,22 @@ set -e
 BENCHMARKS="${BENCHMARKS:-tak fib deriv peval}"
 
 # Determine Wile path - prefer symlink, fall back to platform-specific
-if [ -e "../../dist/scheme" ]; then
-    WILE_BIN="../../dist/scheme"
+if [ -e "../../dist/wile" ]; then
+    WILE_BIN="../../dist/wile"
     # Resolve symlink if needed
     if [ -L "$WILE_BIN" ]; then
         WILE_DIR=$(dirname "$WILE_BIN")
         WILE_TARGET=$(readlink "$WILE_BIN")
         WILE_BIN="$WILE_DIR/$WILE_TARGET"
     fi
-elif [ -x "../../dist/darwin/arm64/scheme" ]; then
-    WILE_BIN="../../dist/darwin/arm64/scheme"
-elif [ -x "../../dist/linux/amd64/scheme" ]; then
-    WILE_BIN="../../dist/linux/amd64/scheme"
-elif [ -x "../../dist/linux/arm64/scheme" ]; then
-    WILE_BIN="../../dist/linux/arm64/scheme"
-elif [ -x "../../dist/darwin/amd64/scheme" ]; then
-    WILE_BIN="../../dist/darwin/amd64/scheme"
+elif [ -x "../../dist/darwin/arm64/wile" ]; then
+    WILE_BIN="../../dist/darwin/arm64/wile"
+elif [ -x "../../dist/linux/amd64/wile" ]; then
+    WILE_BIN="../../dist/linux/amd64/wile"
+elif [ -x "../../dist/linux/arm64/wile" ]; then
+    WILE_BIN="../../dist/linux/arm64/wile"
+elif [ -x "../../dist/darwin/amd64/wile" ]; then
+    WILE_BIN="../../dist/darwin/amd64/wile"
 else
     WILE_BIN=""
 fi

@@ -3,7 +3,7 @@
 ;;; Tests iterative loops with division operations.
 ;;; Benchmarks basic arithmetic in a tight loop.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/diviter.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/diviter.scm
 
 (define (diviter n)
   (let loop ((i n) (result 1))

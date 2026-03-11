@@ -4,7 +4,7 @@
 ;;;               lists as substitution maps, recursive structural matching,
 ;;;               the core algorithm behind Prolog and type inference
 ;;;
-;;; Usage: ./dist/scheme --file examples/data-structures/unification.scm
+;;; Usage: ./dist/wile --file examples/data-structures/unification.scm
 
 ;; -----------------------------------------------------------------------
 ;; Logic variables

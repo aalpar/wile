@@ -104,7 +104,8 @@ func NewMachineContext(ctx context.Context, cont *MachineContinuation) *MachineC
 			evals:       evals,
 			pc:          cont.pc,
 		},
-		cont: cont.parent,
+		cont:     cont.parent,
+		counters: VMCounters{opcodeHits: newOpcodeHits()},
 	}
 	return q
 }
@@ -277,6 +278,9 @@ func (p *MachineContext) Run() error {
 
 		instr := mc.template.code[mc.pc]
 		mc.counters.OpsExecuted++
+		if mc.counters.opcodeHits != nil {
+			mc.counters.opcodeHits[instr.Op]++
+		}
 
 		switch instr.Op {
 		// --- Wave 1: zero-operand operations ---
@@ -515,6 +519,128 @@ func (p *MachineContext) Run() error {
 			if err != nil {
 				return err
 			}
+
+		// --- Wave 8: general call fusion ---
+
+		case OpCallLocal:
+			bd, err := mc.resolveLocalBinding(instr)
+			if err != nil {
+				return err
+			}
+			callable := bd.Value()
+			vs := mc.evals.Drain()
+			mc.counters.StackDrains++
+			mc.counters.StackElementsDrained += uint64(len(vs))
+			mc.counters.RecordStackDepth(len(vs))
+			result, err := mc.ApplyCallable(callable, vs...)
+			if err != nil {
+				return applyCallableError(mc, err)
+			}
+			mc = result
+
+		case OpCallCachedBinding:
+			callable := mc.template.cachedBindings[instr.Arg].Value()
+			vs := mc.evals.Drain()
+			mc.counters.StackDrains++
+			mc.counters.StackElementsDrained += uint64(len(vs))
+			mc.counters.RecordStackDepth(len(vs))
+			result, err := mc.ApplyCallable(callable, vs...)
+			if err != nil {
+				return applyCallableError(mc, err)
+			}
+			mc = result
+
+		// --- Wave 9: promoted primitive operations ---
+
+		case OpEqQ:
+			callable := mc.template.cachedBindings[instr.Arg].Value()
+			_, ok := callable.(*ForeignClosure)
+			if !ok {
+				var err error
+				mc, err = callPromotedFallback(mc, callable, false, 2)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			inlineEq(mc)
+			mc.pc++
+
+		case OpEqQTail:
+			callable := mc.template.cachedBindings[instr.Arg].Value()
+			_, ok := callable.(*ForeignClosure)
+			if !ok {
+				var err error
+				mc, err = callPromotedFallback(mc, callable, true, 2)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			inlineEq(mc)
+			mc = mc.returnImmediate()
+
+		case OpVectorQ:
+			callable := mc.template.cachedBindings[instr.Arg].Value()
+			_, ok := callable.(*ForeignClosure)
+			if !ok {
+				var err error
+				mc, err = callPromotedFallback(mc, callable, false, 1)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			inlineVectorQ(mc)
+			mc.pc++
+
+		case OpVectorQTail:
+			callable := mc.template.cachedBindings[instr.Arg].Value()
+			_, ok := callable.(*ForeignClosure)
+			if !ok {
+				var err error
+				mc, err = callPromotedFallback(mc, callable, true, 1)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			inlineVectorQ(mc)
+			mc = mc.returnImmediate()
+
+		case OpVectorRef:
+			callable := mc.template.cachedBindings[instr.Arg].Value()
+			_, ok := callable.(*ForeignClosure)
+			if !ok {
+				var err error
+				mc, err = callPromotedFallback(mc, callable, false, 2)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			err := inlineVectorRef(mc)
+			if err != nil {
+				return err
+			}
+			mc.pc++
+
+		case OpVectorRefTail:
+			callable := mc.template.cachedBindings[instr.Arg].Value()
+			_, ok := callable.(*ForeignClosure)
+			if !ok {
+				var err error
+				mc, err = callPromotedFallback(mc, callable, true, 2)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			err := inlineVectorRef(mc)
+			if err != nil {
+				return err
+			}
+			mc = mc.returnImmediate()
 
 		// --- Fallback: complex operations via side table ---
 

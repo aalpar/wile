@@ -14,7 +14,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WILE_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-SCHEME="$WILE_ROOT/dist/scheme"
+SCHEME="$WILE_ROOT/dist/wile"
 SCHELOG_DIR="$SCRIPT_DIR"
 
 echo "=== Schelog Validation Suite for Wile ==="
@@ -26,7 +26,7 @@ echo ""
 # Check that scheme binary exists
 if [ ! -x "$SCHEME" ]; then
     echo "ERROR: Scheme binary not found at $SCHEME"
-    echo "Run 'make build' or 'go build -o dist/scheme ./cmd' first"
+    echo "Run 'make build' or 'go build -o dist/wile ./cmd' first"
     exit 1
 fi
 

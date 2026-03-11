@@ -3,7 +3,7 @@
 ;;; Tests list destructuring and reconstruction patterns.
 ;;; Stresses cons cell allocation and list operations.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/destruct.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/destruct.scm
 
 (define (destruct x)
   (cond ((null? x) '())

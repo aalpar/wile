@@ -3,7 +3,7 @@
 ;;; Simple iterative summation from 1 to n using named let.
 ;;; Tests tail recursion optimization and integer arithmetic.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/sumloop.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/sumloop.scm
 
 (define (sumloop n)
   (let loop ((i 1) (acc 0))

@@ -5,7 +5,7 @@
 ;;;
 ;;; Usage:
 ;;;   cd <wile-root>
-;;;   ./dist/scheme -f examples/logic/schelog/run-all-tests.scm
+;;;   ./dist/wile -f examples/logic/schelog/run-all-tests.scm
 ;;;
 ;;; Expected output: All tests should pass with no errors.
 

@@ -3,7 +3,7 @@
 ;;; Creates and traverses a tree structure repeatedly.
 ;;; Tests allocation, GC, and tree traversal patterns.
 ;;;
-;;; Usage: ./dist/scheme --file examples/benchmarks/browse.scm
+;;; Usage: ./dist/wile --file examples/benchmarks/browse.scm
 
 (define (browse-random seed)
   (let ((seed (modulo (+ (* seed 3581) 12751) 131072)))

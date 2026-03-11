@@ -153,7 +153,7 @@ Use `values.Tuple` for read-only operations, `*values.Pair` only for mutation or
 ## Build Commands
 
 ```bash
-make build    # Build to ./dist/{os}/{arch}/scheme
+make build    # Build to ./dist/{os}/{arch}/wile
 make test     # Run all tests (go test -v ./...)
 make lint     # Run golangci-lint
 go test -v -run TestName ./package/...  # Run a single test

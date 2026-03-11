@@ -23,7 +23,7 @@ MODULE="github.com/aalpar/wile"
 # Packages excluded from coverage enforcement.
 # Entry points, registration/wiring, helpers, and test infrastructure.
 EXCLUDED_PKGS=(
-	"cmd/scheme"
+	"cmd/wile"
 	"internal/repl"
 	"internal/forms"
 	"registry/testhelpers"

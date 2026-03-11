@@ -1697,10 +1697,10 @@ This is the only known semantic difference from R7RS-small.
 
 ```bash
 make build                                     # Build interpreter
-./dist/scheme                                  # Start REPL
-./dist/scheme --file program.scm               # Run file
-./dist/scheme --file program.scm --interactive # Run file then REPL
-./dist/scheme -e '(+ 1 2)'                     # Evaluate expression
+./dist/wile                                  # Start REPL
+./dist/wile --file program.scm               # Run file
+./dist/wile --file program.scm --interactive # Run file then REPL
+./dist/wile -e '(+ 1 2)'                     # Evaluate expression
 ```
 
 ### REPL

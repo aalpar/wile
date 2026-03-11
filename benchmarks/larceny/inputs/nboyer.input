@@ -1,0 +1,16 @@
+1
+2
+1813975
+
+; Larceny standard (for compiled implementations):
+; 1
+; 5
+; 51507739
+;
+; Scaling parameter → rewrites:
+;   n=0:      95024
+;   n=1:     591777
+;   n=2:    1813975
+;   n=3:    5375678
+;   n=4:   16445406
+;   n=5:   51507739

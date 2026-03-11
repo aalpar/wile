@@ -3,7 +3,7 @@
 ;;; Demonstrates: call/cc, define-record-type, mutation, closures,
 ;;;               goroutine-like concurrency in pure userspace Scheme
 ;;;
-;;; Usage: ./dist/scheme --file examples/control/coroutines.scm
+;;; Usage: ./dist/wile --file examples/control/coroutines.scm
 
 ;; -----------------------------------------------------------------------
 ;; Scheduler

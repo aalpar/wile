@@ -2,7 +2,7 @@
 ;;;
 ;;; Demonstrates: Basic syntax, display, string operations
 ;;;
-;;; Usage: ./dist/scheme --file examples/basics/hello.scm
+;;; Usage: ./dist/wile --file examples/basics/hello.scm
 
 ;; The classic first program
 (display "Hello, World!")

@@ -10,8 +10,8 @@
 # Examples:
 #   build/docker-run.sh make test           # run the test suite
 #   build/docker-run.sh make lint           # run the linter
-#   build/docker-run.sh ../dist/scheme      # start the REPL
-#   build/docker-run.sh ../dist/scheme --file examples/hello.scm
+#   build/docker-run.sh ../dist/wile      # start the REPL
+#   build/docker-run.sh ../dist/wile --file examples/hello.scm
 #
 # Environment variables:
 #   DOCKER_IMAGE         image name (default: wile)

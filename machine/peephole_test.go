@@ -761,29 +761,31 @@ func TestFuseCallForeignCached(t *testing.T) {
 	}{
 		{
 			name: "non-tail: SaveCont + PushCachedBinding + PullApply",
-			// SaveCont(+2) PushCachedBinding(0) PullApply
+			// SaveCont(+3) PushCachedBinding(0) PullApply — offset targets return point
+			// Keeps SaveCont for stack isolation; only PushCachedBinding deleted.
 			code: []Instruction{
-				{Op: OpSaveContinuation, Arg: 2},
+				{Op: OpSaveContinuation, Arg: 3},
 				{Op: OpPushCachedBinding, Arg: 0},
 				{Op: OpPullApply},
 			},
 			cachedBindings: []*environment.Binding{foreignBinding},
-			wantOps:        []OpCode{OpCallForeignCached},
-			wantArg:        map[int]int32{0: 0},
+			wantOps:        []OpCode{OpSaveContinuation, OpCallForeignCached},
+			wantArg:        map[int]int32{0: 2, 1: 0},
 		},
 		{
 			name: "non-tail with args: SaveCont + PushCachedBinding + PushLocal + PushLocal + PullApply",
-			// SaveCont(+4) PushCachedBinding(0) PushLocal(0) PushLocal(1) PullApply
+			// SaveCont(+5) PushCachedBinding(0) PushLocal(0) PushLocal(1) PullApply — offset targets return point
+			// Keeps SaveCont; only PushCachedBinding deleted.
 			code: []Instruction{
-				{Op: OpSaveContinuation, Arg: 4},
+				{Op: OpSaveContinuation, Arg: 5},
 				{Op: OpPushCachedBinding, Arg: 0},
 				{Op: OpPushLocal, Arg: 0},
 				{Op: OpPushLocal, Arg: 1},
 				{Op: OpPullApply},
 			},
 			cachedBindings: []*environment.Binding{foreignBinding},
-			wantOps:        []OpCode{OpPushLocal, OpPushLocal, OpCallForeignCached},
-			wantArg:        map[int]int32{0: 0, 1: 1, 2: 0},
+			wantOps:        []OpCode{OpSaveContinuation, OpPushLocal, OpPushLocal, OpCallForeignCached},
+			wantArg:        map[int]int32{0: 4, 1: 0, 2: 1, 3: 0},
 		},
 		{
 			name: "tail: PushCachedBinding + PullApply",
@@ -807,22 +809,22 @@ func TestFuseCallForeignCached(t *testing.T) {
 			wantArg:        map[int]int32{0: 0, 1: 0},
 		},
 		{
-			name: "no match: binding is MachineClosure",
+			name: "non-foreign binding: fused to CallCachedBinding by pass 3",
 			code: []Instruction{
-				{Op: OpSaveContinuation, Arg: 2},
+				{Op: OpSaveContinuation, Arg: 3},
 				{Op: OpPushCachedBinding, Arg: 0},
 				{Op: OpPullApply},
 			},
 			cachedBindings: []*environment.Binding{machineBinding},
-			wantOps:        []OpCode{OpSaveContinuation, OpPushCachedBinding, OpPullApply},
-			wantArg:        map[int]int32{0: 2},
+			wantOps:        []OpCode{OpSaveContinuation, OpCallCachedBinding},
+			wantArg:        map[int]int32{0: 2, 1: 0},
 		},
 		{
 			name: "no match: branch target in interior",
 			// Branch targets PushCachedBinding, preventing fusion.
 			code: []Instruction{
 				{Op: OpBranch, Arg: 2},
-				{Op: OpSaveContinuation, Arg: 3},
+				{Op: OpSaveContinuation, Arg: 4},
 				{Op: OpPushCachedBinding, Arg: 0}, // branch target
 				{Op: OpPushLocal, Arg: 0},
 				{Op: OpPullApply},
@@ -841,6 +843,263 @@ func TestFuseCallForeignCached(t *testing.T) {
 			},
 			cachedBindings: []*environment.Binding{foreignBinding},
 			wantOps:        []OpCode{OpSaveContinuation, OpPushCachedBinding, OpPushLocal, OpPullApply},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tpl := NewEmptyNativeTemplate()
+			tpl.code = make([]Instruction, len(tt.code))
+			copy(tpl.code, tt.code)
+			tpl.sourceRefs = make([]uint16, len(tt.code))
+			tpl.cachedBindings = tt.cachedBindings
+
+			tpl.Optimize()
+
+			qt.Assert(t, opcodes(tpl), qt.DeepEquals, tt.wantOps)
+			for idx, expectedArg := range tt.wantArg {
+				qt.Assert(t, tpl.code[idx].Arg, qt.Equals, expectedArg,
+					qt.Commentf("instruction %d (%s)", idx, tpl.code[idx].Op))
+			}
+		})
+	}
+}
+
+// --- FuseCallGeneric (pass 3) ---
+
+func TestFuseCallGeneric(t *testing.T) {
+	machineBinding := makeMachineClosureBinding()
+
+	tests := []struct {
+		name           string
+		code           []Instruction
+		cachedBindings []*environment.Binding
+		wantOps        []OpCode
+		wantArg        map[int]int32
+	}{
+		{
+			name: "non-tail CallLocal: SaveCont + PushLocal + PullApply",
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 3},
+				{Op: OpPushLocal, Arg: 42},
+				{Op: OpPullApply},
+			},
+			wantOps: []OpCode{OpSaveContinuation, OpCallLocal},
+			wantArg: map[int]int32{0: 2, 1: 42},
+		},
+		{
+			name: "non-tail CallLocal with args: SaveCont + PushLocal + PushLocal + PushLocal + PullApply",
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 5},
+				{Op: OpPushLocal, Arg: 42},
+				{Op: OpPushLocal, Arg: 10},
+				{Op: OpPushLocal, Arg: 11},
+				{Op: OpPullApply},
+			},
+			wantOps: []OpCode{OpSaveContinuation, OpPushLocal, OpPushLocal, OpCallLocal},
+			wantArg: map[int]int32{0: 4, 1: 10, 2: 11, 3: 42},
+		},
+		{
+			name: "tail CallLocal: PushLocal + PullApply (no SaveCont)",
+			code: []Instruction{
+				{Op: OpPushLocal, Arg: 7},
+				{Op: OpPullApply},
+			},
+			wantOps: []OpCode{OpCallLocal},
+			wantArg: map[int]int32{0: 7},
+		},
+		{
+			name: "tail CallLocal with args: PushLocal + PushLocal + PullApply",
+			code: []Instruction{
+				{Op: OpPushLocal, Arg: 7},
+				{Op: OpPushLocal, Arg: 3},
+				{Op: OpPullApply},
+			},
+			wantOps: []OpCode{OpPushLocal, OpCallLocal},
+			wantArg: map[int]int32{0: 3, 1: 7},
+		},
+		{
+			name: "non-tail CallCachedBinding: SaveCont + PushCachedBinding(machine closure) + PullApply",
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 3},
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{machineBinding},
+			wantOps:        []OpCode{OpSaveContinuation, OpCallCachedBinding},
+			wantArg:        map[int]int32{0: 2, 1: 0},
+		},
+		{
+			name: "tail CallCachedBinding: PushCachedBinding(machine closure) + PullApply",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{machineBinding},
+			wantOps:        []OpCode{OpCallCachedBinding},
+			wantArg:        map[int]int32{0: 0},
+		},
+		{
+			name: "no match: branch target on callee push",
+			code: []Instruction{
+				{Op: OpBranch, Arg: 1},
+				{Op: OpPushLocal, Arg: 7}, // branch target
+				{Op: OpPullApply},
+			},
+			wantOps: []OpCode{OpBranch, OpPushLocal, OpPullApply},
+		},
+		{
+			name: "no match: PushLocal preceded by SaveCont is non-tail, requires offset match",
+			// SaveCont offset 2 → pullIdx = 0+2-1 = 1 (PushLocal, not PullApply).
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 2},
+				{Op: OpPushLocal, Arg: 7},
+				{Op: OpPullApply},
+			},
+			wantOps: []OpCode{OpSaveContinuation, OpPushLocal, OpPullApply},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tpl := NewEmptyNativeTemplate()
+			tpl.code = make([]Instruction, len(tt.code))
+			copy(tpl.code, tt.code)
+			tpl.sourceRefs = make([]uint16, len(tt.code))
+			tpl.cachedBindings = tt.cachedBindings
+
+			tpl.Optimize()
+
+			qt.Assert(t, opcodes(tpl), qt.DeepEquals, tt.wantOps)
+			for idx, expectedArg := range tt.wantArg {
+				qt.Assert(t, tpl.code[idx].Arg, qt.Equals, expectedArg,
+					qt.Commentf("instruction %d (%s)", idx, tpl.code[idx].Op))
+			}
+		})
+	}
+}
+
+// --- Promoted Primitive Fusion ---
+
+// makeNamedForeignBinding creates a *Binding holding a *ForeignClosure with
+// the given name and parameter count.
+func makeNamedForeignBinding(name string, paramCount int) *environment.Binding {
+	env := environment.NewTopLevelEnvironment().Runtime()
+	fc := NewForeignClosure(env, paramCount, false, func(mc *MachineContext) error {
+		return nil
+	})
+	fc.SetName(name)
+	return environment.NewBinding(fc, environment.BindingTypeVariable)
+}
+
+func TestFusePromotedPrimitives(t *testing.T) {
+	tests := []struct {
+		name           string
+		code           []Instruction
+		cachedBindings []*environment.Binding
+		wantOps        []OpCode
+		wantArg        map[int]int32
+	}{
+		{
+			name: "non-tail eq?: SaveCont + PushCachedBinding + PushLocal + PushLocal + PullApply",
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 5},
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPushLocal, Arg: 1},
+				{Op: OpPushLocal, Arg: 2},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{makeNamedForeignBinding("eq?", 2)},
+			wantOps:        []OpCode{OpPushLocal, OpPushLocal, OpEqQ},
+			wantArg:        map[int]int32{0: 1, 1: 2, 2: 0},
+		},
+		{
+			name: "tail eq?: PushCachedBinding + PushLocal + PushLocal + PullApply",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPushLocal, Arg: 1},
+				{Op: OpPushLocal, Arg: 2},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{makeNamedForeignBinding("eq?", 2)},
+			wantOps:        []OpCode{OpPushLocal, OpPushLocal, OpEqQTail},
+			wantArg:        map[int]int32{0: 1, 1: 2, 2: 0},
+		},
+		{
+			name: "non-tail vector?: SaveCont + PushCachedBinding + PushLocal + PullApply",
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 4},
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPushLocal, Arg: 5},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{makeNamedForeignBinding("vector?", 1)},
+			wantOps:        []OpCode{OpPushLocal, OpVectorQ},
+			wantArg:        map[int]int32{0: 5, 1: 0},
+		},
+		{
+			name: "tail vector?: PushCachedBinding + PushLocal + PullApply",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPushLocal, Arg: 5},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{makeNamedForeignBinding("vector?", 1)},
+			wantOps:        []OpCode{OpPushLocal, OpVectorQTail},
+			wantArg:        map[int]int32{0: 5, 1: 0},
+		},
+		{
+			name: "non-tail vector-ref: SaveCont + PushCachedBinding + PushLocal + PushLocal + PullApply",
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 5},
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPushLocal, Arg: 3},
+				{Op: OpPushLocal, Arg: 4},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{makeNamedForeignBinding("vector-ref", 2)},
+			wantOps:        []OpCode{OpPushLocal, OpPushLocal, OpVectorRef},
+			wantArg:        map[int]int32{0: 3, 1: 4, 2: 0},
+		},
+		{
+			name: "tail vector-ref: PushCachedBinding + PushLocal + PushLocal + PullApply",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPushLocal, Arg: 3},
+				{Op: OpPushLocal, Arg: 4},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{makeNamedForeignBinding("vector-ref", 2)},
+			wantOps:        []OpCode{OpPushLocal, OpPushLocal, OpVectorRefTail},
+			wantArg:        map[int]int32{0: 3, 1: 4, 2: 0},
+		},
+		{
+			name: "wrong arity: eq? with 1 arg falls back to CallForeignCached",
+			// Not promoted (arity mismatch), so treated as generic CallForeignCached.
+			// SaveCont is kept for stack isolation.
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 4},
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPushLocal, Arg: 1},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{makeNamedForeignBinding("eq?", 2)},
+			wantOps:        []OpCode{OpSaveContinuation, OpPushLocal, OpCallForeignCached},
+			wantArg:        map[int]int32{0: 3, 1: 1, 2: 0},
+		},
+		{
+			name: "non-promoted foreign: falls back to CallForeignCached",
+			// Not promoted, so treated as generic CallForeignCached.
+			// SaveCont is kept for stack isolation.
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 4},
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPushLocal, Arg: 1},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{makeNamedForeignBinding("car", 1)},
+			wantOps:        []OpCode{OpSaveContinuation, OpPushLocal, OpCallForeignCached},
+			wantArg:        map[int]int32{0: 3, 1: 1, 2: 0},
 		},
 	}
 

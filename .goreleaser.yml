@@ -1,9 +1,9 @@
 version: 2
 
 builds:
-  - id: scheme
-    binary: scheme
-    dir: ./cmd/scheme
+  - id: wile
+    binary: wile
+    dir: ./cmd/wile
     env:
       - CGO_ENABLED=0
     goos:
@@ -16,9 +16,9 @@ builds:
       - -X main.BuildSHA={{ .ShortCommit }} -X main.BuildVersion={{ .Tag }}
 
 archives:
-  - id: scheme
+  - id: wile
     ids:
-      - scheme
+      - wile
     name_template: "wile-{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
     formats:
       - tar.gz

@@ -2,7 +2,7 @@
 ;;;
 ;;; Demonstrates: Bytevector operations, binary file I/O
 ;;;
-;;; Usage: ./dist/scheme --file examples/io/binary-io.scm
+;;; Usage: ./dist/wile --file examples/io/binary-io.scm
 
 (define test-file "examples/io/test-binary.dat")
 

@@ -60,27 +60,30 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 
 ### Low Priority
 
+- [ ] **Port type boilerplate** [Low, S]: 10 `values/*_port.go` files with copy-pasted `IsVoid()`, `EqualTo()`, `SchemeString()` implementations (30 methods, ~92 lines). `portBase` provides `Close()`/`IsClosed()` but not Value interface methods. Fix: add `SchemeString()` and `IsVoid()` to `portBase` (EqualTo can't be shared without generics). See `private/VALUES_TECH_DEBT_ASSESSMENT.md`.
+- [ ] **Machine: document implicit PC contract** [Low, S]: `machine/machine_context.go` — `Run()` doc comment (lines 235-257) already documents the three-site contract (NewMachineContext, Apply, Restore). Remaining: add doc comment on the `pc` field itself and consider a defensive bounds assertion at the top of `Run()`.
+- [ ] **Error sentinel grouping** [Low, S]: ~103 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.
+- [ ] **Operation file consolidation** [Low, M]: 28 single-method `machine/operation_*.go` files (30–50 lines each). Group into families: `operations_stack.go` (Push/Pop/Pull/Drop/PeekK), `operations_load.go` (LoadLiteral/LoadGlobal/LoadLocal/LoadVoid), `operations_branch.go`, etc. Reduces 28 files to ~8.
+- [ ] **internal/validate test coverage** [Low, M]: 16 code files but only 2 test files. Each special form has its own validator but most lack dedicated unit tests. Coverage comes from integration tests. Add targeted tests when modifying validators.
 - [x] **Rename `AddSearchPath` to `PrependSearchPath`** [Low, S]: Renamed in library_registry.go and all call sites.
 - [x] **Unify library/include path resolution** [Low, S]: `findFile` now consults library registry search paths as fallback dirs, sharing the same paths as `import`.
 - [x] **Tokenizer test file consolidation** [Low, M]: Consolidated 14 coverage-goal-named test files into 10 behavior-oriented files mirroring source structure. All 191 tests preserved. PR #448.
 - [x] **REPL deprecated wrappers** [Low, S]: Deleted `Compile`, `Run`, `Load` wrappers from `internal/repl/repl.go`. Internal call sites now use `wileruntime` directly.
 - [x] **String utility duplication** [Low, S]: Unified `TrimPrefixFolded`/`TrimSuffixFolded` (parser) and `TrimPrefixCI`/`TrimSuffixCI` (tokenizer) into `internal/schemeutil/stringutil.go`. ASCII-only implementation (all call sites use ASCII prefixes). Deleted `parser_string.go` and `tokenizer/utils.go`. Fixed redundant double-trim of `#z`/`#Z` prefix in `parseBigIntegerWithBase`.
 - [x] **Hand-rolled predicates in extensions** [Low, S]: Converted 9 hand-rolled type predicates (4 in threads, 5 in gointerop) to use `helpers.MakeTypePredicate` factory, matching core primitive pattern.
-- [ ] **Machine: document implicit PC contract** [Low, S]: `machine/machine_context.go` — the program counter must be set correctly at three sites (NewMachineContext, Apply, Restore) with no type-level enforcement. Document the contract on the `pc` field. Consider an assertion at the top of Run() that validates pc is within bounds.
-- [ ] **Machine: naming — `declareDefineBinding` vs `predeclareDefineBindingFromValidated`** [Low, S]: `machine/compile_validated.go:235,531` — two methods that may do the same operation (early-declare a binding for self-recursion) have different names suggesting different semantics. Investigate and unify if semantically identical.
-- [ ] **Error sentinel grouping** [Low, S]: ~103 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.
-- [ ] **Operation file consolidation** [Low, M]: 28 single-method `machine/operation_*.go` files (30–50 lines each). Group into families: `operations_stack.go` (Push/Pop/Pull/Drop/PeekK), `operations_load.go` (LoadLiteral/LoadGlobal/LoadLocal/LoadVoid), `operations_branch.go`, etc. Reduces 28 files to ~8.
-- [ ] **internal/validate test coverage** [Low, M]: 15 code files but only 2 test files. Each special form has its own validator but most lack dedicated unit tests. Coverage comes from integration tests. Add targeted tests when modifying validators.
+- [x] **Duplicated import set parsing** [Medium, M]: Already resolved — all three import paths (compile-time, library-internal, expand-time) call `.UnwrapAll()` to strip syntax wrappers, then delegate to the single `ParseImportSetFromDatum` in `import_set_datum.go`. No duplication exists.
+- [x] **`forms` package type erasure** [Medium, S]: Moved `ValidatedExpr` interface to `forms` package (depends only on `*syntax.SourceContext`). Type alias in `validate` preserves all existing references. `ValidatorFunc` now typed: `env *environment.EnvironmentFrame`, `pair *syntax.SyntaxPair`, returns `ValidatedExpr`. `CompilerFunc` `expr` param typed as `ValidatedExpr`. Remaining `any` params (`result`, `ctc`, `ctctx`) are genuinely uncrossable — `validate` and `machine` import `forms`, so `forms` can't import them back.
+- [x] **Machine: naming — `declareDefineBinding` vs `predeclareDefineBindingFromValidated`** [Low, S]: Investigated — semantically different. `declareDefineBinding` (compile_validated.go) compiles a single define form and returns the symbol for immediate use. `predeclareDefineBindingFromValidated` (compile_closure.go) pre-declares all defines in a body (letrec* Pass 1) with void return. Different phases, different return types, no unification needed.
 
 ### Postponed
 
-- [x] **F10: MachineContext decomposition** [Medium, Postponed]: Split 1,639-line `machine_context.go` into 5 files by responsibility: `machine_context_continuation.go` (286 lines), `machine_context_winding.go` (149 lines), `machine_context_subcontext.go` (106 lines), `machine_context_apply.go` (320 lines), core reduced to 857 lines.
 - [ ] **F11: Promote internal extensions** [Low, Postponed]: `internal/extensions/{io,eval,all}` invisible to embedders. Promote to `extensions/{io,eval}/` when extension API stabilizes and external consumers exist.
 - [ ] **Parser: unify readList + readLabeledList** [Low, Postponed]: High risk — datum labels require in-place mutation of placeholder pairs. The structural difference is semantic, not accidental. Unifying requires careful design to handle the placeholder protocol.
 - [ ] **Match: extract opcode handlers from VM interpreter** [Low, Postponed]: 264-line switch is large but stable. Extraction adds indirection without clear benefit until new opcodes are needed.
 - [ ] **Match: consolidate bytecode type files** [Low, Postponed]: Pure cosmetic reorganization.
 - [ ] **Extensions: standardize registration patterns** [Low, Postponed]: Requires design decision on the canonical pattern. Worth a separate discussion, not a mechanical refactoring.
 - [ ] **Schemeutil: grab-bag reorganization** [Low, Postponed]: Moving functions risks import cycle issues. Needs careful dependency analysis.
+- [x] **F10: MachineContext decomposition** [Medium, Postponed]: Split 1,639-line `machine_context.go` into 5 files by responsibility: `machine_context_continuation.go` (286 lines), `machine_context_winding.go` (149 lines), `machine_context_subcontext.go` (106 lines), `machine_context_apply.go` (320 lines), core reduced to 857 lines.
 
 ---
 
@@ -116,7 +119,6 @@ No demand signal. Speculative or research-only.
 - [ ] **Dialect system** [Architecture, Proposed]: De-globalize forms registry, `WithDialect()` option, extract R7RS as default dialect. `plans/ARCHITECTURE.md`
 - [ ] **Plugin shadowing** [Architecture, Proposed]: Extension primitive shadowing. Depends on public extensions. `plans/ARCHITECTURE.md`
 - [ ] **Programmatic tokenization/parsing** [Tooling]: Expose tokenizer/parser to Scheme code. 4 phases: token introspection, syntax introspection, EOF handling, advanced reader control.
-- [x] **Reflection primitives** [Runtime]: `procedure-arity`, `procedure-name`, `procedure-source-location`, `procedure-bound-symbols`, `procedure-type` in `registry/core/`.
 - [ ] **Continuation marks** [Runtime]: Racket-style stack annotation. Prompt infrastructure exists; needs per-frame key→value map.
 - [ ] **Logging library** [Standard library]: Levels, structured output, handlers.
 - [ ] **Event callbacks** [Tooling]: Hooks for expansion, compilation, debugging. IDE integration, profiling.
@@ -128,11 +130,10 @@ No demand signal. Speculative or research-only.
 - [ ] **Type system**: type system that covers all the base types and can be expanded.  Discover useful properties of types to track (if any).  Types should be a distinct type (exists at the top of the hierarchy) - except for maybe some generic object type.
 - [ ] **Parser unit tests**: unit tests for parser.
 - [ ] **Source file tracking in Syntax Objects**: need some utilities around finding source locations and providing source lines.
-- [ ] **Exceptions and Error stack tracrs**: Both Foreign and Native errors should track stacktraces with source code references.
-- [ ] **Foreign Stack trace entry in stack traces that cross from Native -> Foriegn -> Native callback.
+- [ ] **Exceptions and Error stack traces**: Both Foreign and Native errors should track stacktraces with source code references.
+- [ ] **Foreign Stack trace entry in stack traces that cross from Native -> Foreign -> Native callback.**
 - [ ] **Area for blog articles** Git blog area in repo
 - [ ] **Finish blog article** Finish blog article on appropriateness of Scheme for sandboxing.
-- [x] **Go AST extension Phase 1 — Core** [Standard library, M]: Extension (`extensions/goast/`, `(wile goast)`) wrapping `go/ast`, `go/parser`, `go/token`, `go/format`. S-expression alist representation. ~28 node types (declarations, statements, expressions, basic types). All 5 primitives (`go-parse-file`, `go-parse-string`, `go-parse-expr`, `go-format`, `go-node-type`). Bidirectional mapper + round-trip tests. `plans/GO-AST.md`
 - [ ] **Go AST extension Phase 2 — Advanced** [Standard library, S]: Concurrency (`GoStmt`, `DeferStmt`, `SelectStmt`, `CommClause`), switch (`SwitchStmt`, `TypeSwitchStmt`, `CaseClause`), `SliceExpr`, `TypeAssertExpr`, `ChanType`, `Ellipsis`, `LabeledStmt`. ~12 additional node types. `plans/GO-AST.md`
 - [ ] **Go AST extension Phase 3 — Comments & generics** [Standard library, S]: `Comment`/`CommentGroup` attachment for round-trip structural fidelity. `BadExpr`/`BadStmt`/`BadDecl` for error recovery. `IndexListExpr` for generics. `plans/GO-AST.md`
 - [ ] **Implement let-syntax*** [Core language, S]: Implement `let-syntax*`.
@@ -141,3 +142,6 @@ No demand signal. Speculative or research-only.
 - [ ] **Benchmark** benchmark result of moving primitives to Scheme
 - [ ] **Procedure Inlining?** how can peephole inline procedures?
 - [ ] **Operations for cxr** What about instructions for CxR?
+- [ ] **Disassembler** Implement a disassembler for Wile
+- [x] **Reflection primitives** [Runtime]: `procedure-arity`, `procedure-name`, `procedure-source-location`, `procedure-bound-symbols`, `procedure-type` in `registry/core/`.
+- [x] **Go AST extension Phase 1 — Core** [Standard library, M]: Extension (`extensions/goast/`, `(wile goast)`) wrapping `go/ast`, `go/parser`, `go/token`, `go/format`. S-expression alist representation. ~28 node types (declarations, statements, expressions, basic types). All 5 primitives (`go-parse-file`, `go-parse-string`, `go-parse-expr`, `go-format`, `go-node-type`). Bidirectional mapper + round-trip tests. `plans/GO-AST.md`

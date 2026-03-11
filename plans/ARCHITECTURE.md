@@ -420,7 +420,7 @@ Create `wile-workspace` with `go.work` linking all modules.
 ## Verified Dependency Analysis (2026-02-25)
 
 - `engine.go` does NOT import any extensions. Extensions are purely opt-in via `WithExtension()`.
-- The only all-extensions import is `internal/bootstrap`. Only `cmd/scheme/main.go` imports it.
+- The only all-extensions import is `internal/bootstrap`. Only `cmd/wile/main.go` imports it.
 - All 6 public extensions can be extracted with zero production code changes.
 - Internal extensions (io, eval) have internal package dependencies that need resolution before extraction.
 - `wile-extension-example/` already validates the separate-module pattern.
