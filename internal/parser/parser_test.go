@@ -2547,6 +2547,37 @@ func TestParser_ListSyntaxMultipleElements(t *testing.T) {
 	c.Assert(quotedList.Length(), qt.Equals, 4)
 }
 
+// TestParser_CharacterMnemonics verifies all R7RS §6.6 character mnemonics
+// parse to the correct rune value. The parser uses tokenizer.CharMnemonics
+// as the single source of truth.
+func TestParser_CharacterMnemonics(t *testing.T) {
+	tcs := []struct {
+		input    string
+		expected rune
+	}{
+		{`#\alarm`, '\a'},
+		{`#\backspace`, '\b'},
+		{`#\delete`, '\x7F'},
+		{`#\escape`, '\x1B'},
+		{`#\newline`, '\n'},
+		{`#\null`, '\x00'},
+		{`#\return`, '\r'},
+		{`#\space`, ' '},
+		{`#\tab`, '\t'},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewTopLevelEnvironment().Runtime()
+			p := NewParser(env, true, strings.NewReader(tc.input))
+			syn, err := p.ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNil)
+			ch := syn.UnwrapAll().(*values.Character)
+			c.Assert(ch.Value, qt.Equals, tc.expected)
+		})
+	}
+}
+
 // TestParser_ReadSyntaxErrorPropagation tests error propagation in ReadSyntax
 func TestParser_ReadSyntaxErrorPropagation(t *testing.T) {
 	c := qt.New(t)
