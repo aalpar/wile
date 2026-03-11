@@ -368,9 +368,12 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 }
 
 // readQuoteForm reads a quote-like form (quote, unquote, quasiquote, etc.).
-// It advances the tokenizer, reads the next datum, and wraps it in a list
-// with the given keyword symbol.
+// It saves the current token (the quote mark) for source location, advances
+// the tokenizer, reads the next datum, and wraps it in a list with the given
+// keyword symbol. The source location is the quote mark's position, not the
+// datum's position.
 func (p *Parser) readQuoteForm(keyword string) (syntax.SyntaxValue, tokenizer.Token, error) {
+	t := p.curr()
 	p.cur, p.err = p.toks.Next()
 	if p.err != nil {
 		return nil, p.cur, p.err
@@ -379,8 +382,8 @@ func (p *Parser) readQuoteForm(keyword string) (syntax.SyntaxValue, tokenizer.To
 	if err != nil {
 		return nil, p.cur, err
 	}
-	sym := p.wrapSyntaxSymbol(keyword, p.cur)
-	result := p.listSyntax(p.cur, sym, q)
+	sym := p.wrapSyntaxSymbol(keyword, t)
+	result := p.listSyntax(t, sym, q)
 	return result, p.cur, nil
 }
 
@@ -723,19 +726,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateUnquoteSplicing:
 		return p.readQuoteForm(ConstUnquoteSplicing)
 	case tokenizer.TokenizerStateQuote:
-		// Quote uses the pre-advance token for source location
-		t := p.curr()
-		p.cur, p.err = p.toks.Next()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q, _, p.err = p.readSyntax()
-		if p.err != nil {
-			return nil, p.cur, p.err
-		}
-		q1 := p.wrapSyntaxSymbol(ConstQuote, t)
-		q2 := p.listSyntax(t, q1, q)
-		return q2, p.cur, nil
+		return p.readQuoteForm(ConstQuote)
 	case tokenizer.TokenizerStateUnsyntax:
 		return p.readQuoteForm(ConstUnsyntax)
 	case tokenizer.TokenizerStateQuasisyntax:
