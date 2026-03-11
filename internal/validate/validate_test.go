@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
@@ -1352,4 +1353,261 @@ func TestValidateApply(t *testing.T) {
 			c.Assert(len(apply.PrefixArgs), qt.Equals, tt.prefixArgCount)
 		})
 	}
+}
+
+// TestValidateDynamicWind tests the dynamic-wind form validator
+func TestValidateDynamicWind(t *testing.T) {
+	tests := []validationTestCase{
+		{
+			name: "valid with symbols",
+			input: values.List(
+				values.NewSymbol("dynamic-wind"),
+				values.NewSymbol("before"),
+				values.NewSymbol("thunk"),
+				values.NewSymbol("after"),
+			),
+			wantOk: true,
+		},
+		{
+			name: "valid with nested lambdas",
+			input: values.List(
+				values.NewSymbol("dynamic-wind"),
+				values.List(values.NewSymbol("lambda"), values.EmptyList, values.NewInteger(1)),
+				values.List(values.NewSymbol("lambda"), values.EmptyList, values.NewInteger(2)),
+				values.List(values.NewSymbol("lambda"), values.EmptyList, values.NewInteger(3)),
+			),
+			wantOk: true,
+		},
+		{
+			name:   "too few args (zero)",
+			input:  values.List(values.NewSymbol("dynamic-wind")),
+			wantOk: false,
+		},
+		{
+			name: "too few args (one)",
+			input: values.List(
+				values.NewSymbol("dynamic-wind"),
+				values.NewSymbol("before"),
+			),
+			wantOk: false,
+		},
+		{
+			name: "too few args (two)",
+			input: values.List(
+				values.NewSymbol("dynamic-wind"),
+				values.NewSymbol("before"),
+				values.NewSymbol("thunk"),
+			),
+			wantOk: false,
+		},
+		{
+			name: "too many args",
+			input: values.List(
+				values.NewSymbol("dynamic-wind"),
+				values.NewSymbol("before"),
+				values.NewSymbol("thunk"),
+				values.NewSymbol("after"),
+				values.NewSymbol("extra"),
+			),
+			wantOk: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			result := ValidateExpression(context.TODO(), nil, makeSyntax(tt.input))
+			if tt.wantOk {
+				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
+				dw, ok := result.Expr.(*ValidatedDynamicWind)
+				c.Assert(ok, qt.IsTrue)
+				c.Assert(dw.Before, qt.IsNotNil)
+				c.Assert(dw.Thunk, qt.IsNotNil)
+				c.Assert(dw.After, qt.IsNotNil)
+			} else {
+				c.Assert(result.Ok(), qt.IsFalse)
+				c.Assert(len(result.Errors), qt.Not(qt.Equals), 0)
+			}
+		})
+	}
+}
+
+// TestValidateDynamicWindImproperList tests dynamic-wind rejects improper lists
+func TestValidateDynamicWindImproperList(t *testing.T) {
+	c := qt.New(t)
+	// (dynamic-wind before thunk . after)
+	input := values.NewCons(
+		values.NewSymbol("dynamic-wind"),
+		values.NewCons(
+			values.NewSymbol("before"),
+			values.NewCons(
+				values.NewSymbol("thunk"),
+				values.NewSymbol("after"),
+			),
+		),
+	)
+	result := ValidateExpression(context.TODO(), nil, makeSyntax(input))
+	c.Assert(result.Ok(), qt.IsFalse)
+	c.Assert(result.Errors[0].Message, qt.Contains, "proper list")
+}
+
+// TestValidateShadowing tests that lambda parameters shadow special forms (R7RS §4.2.2)
+func TestValidateShadowing(t *testing.T) {
+	tests := []struct {
+		name  string
+		input values.Value
+	}{
+		{
+			// (lambda (quote) (quote)) — quote param shadows special form.
+			// As special form: (quote) fails (requires 1 arg).
+			// As call: (quote) is a valid 0-arg call.
+			name: "lambda param shadows quote",
+			input: values.List(
+				values.NewSymbol("lambda"),
+				values.List(values.NewSymbol("quote")),
+				values.List(values.NewSymbol("quote")),
+			),
+		},
+		{
+			// (lambda (if) (if)) — if param shadows special form.
+			// As special form: (if) fails (requires 2-3 args).
+			// As call: (if) is a valid 0-arg call.
+			name: "lambda param shadows if",
+			input: values.List(
+				values.NewSymbol("lambda"),
+				values.List(values.NewSymbol("if")),
+				values.List(values.NewSymbol("if")),
+			),
+		},
+	}
+
+	env := environment.NewTopLevelEnvironment().Runtime()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			result := ValidateExpression(context.TODO(), env, makeSyntax(tt.input))
+			c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
+			lambda, ok := result.Expr.(*ValidatedLambda)
+			c.Assert(ok, qt.IsTrue)
+			// Body should be a call (param shadows the special form)
+			_, isCall := lambda.Body()[0].(*ValidatedCall)
+			c.Assert(isCall, qt.IsTrue,
+				qt.Commentf("expected body to be a call (shadowed), got %T", lambda.Body()[0]))
+		})
+	}
+}
+
+// TestValidateErrorAccumulation tests that multiple errors are collected across sub-expressions
+func TestValidateErrorAccumulation(t *testing.T) {
+	c := qt.New(t)
+
+	// (if (f . 1) (g . 2) (h . 3))
+	// Each sub-expression is an improper-list call that produces an error,
+	// but the if validator continues to validate all three branches.
+	input := values.List(
+		values.NewSymbol("if"),
+		values.NewCons(values.NewSymbol("f"), values.NewInteger(1)),
+		values.NewCons(values.NewSymbol("g"), values.NewInteger(2)),
+		values.NewCons(values.NewSymbol("h"), values.NewInteger(3)),
+	)
+	result := ValidateExpression(context.TODO(), nil, makeSyntax(input))
+	c.Assert(result.Ok(), qt.IsFalse)
+	c.Assert(len(result.Errors) >= 3, qt.IsTrue,
+		qt.Commentf("expected at least 3 errors, got %d: %v", len(result.Errors), result.Errors))
+}
+
+// TestValidateApplyErrorAccumulation tests that apply collects errors from multiple sub-expressions
+func TestValidateApplyErrorAccumulation(t *testing.T) {
+	c := qt.New(t)
+
+	// (apply (if) (quote) args) — proc and prefix arg both fail
+	input := values.List(
+		values.NewSymbol("apply"),
+		values.List(values.NewSymbol("if")),    // invalid: if requires 2-3 args
+		values.List(values.NewSymbol("quote")), // invalid: quote requires 1 arg
+		values.NewSymbol("args"),
+	)
+	result := ValidateExpression(context.TODO(), nil, makeSyntax(input))
+	c.Assert(result.Ok(), qt.IsFalse)
+	c.Assert(len(result.Errors) >= 2, qt.IsTrue,
+		qt.Commentf("expected at least 2 errors, got %d: %v", len(result.Errors), result.Errors))
+}
+
+// TestValidateCallImproperList tests function call rejects improper lists
+func TestValidateCallImproperList(t *testing.T) {
+	c := qt.New(t)
+	// (f . 1) — improper list call
+	input := values.NewCons(values.NewSymbol("f"), values.NewInteger(1))
+	result := ValidateExpression(context.TODO(), nil, makeSyntax(input))
+	c.Assert(result.Ok(), qt.IsFalse)
+	c.Assert(result.Errors[0].Message, qt.Contains, "proper list")
+}
+
+// TestValidateSetBangTooManyArgs tests set! with too many arguments
+func TestValidateSetBangTooManyArgs(t *testing.T) {
+	c := qt.New(t)
+	input := values.List(
+		values.NewSymbol("set!"),
+		values.NewSymbol("x"),
+		values.NewInteger(1),
+		values.NewInteger(2),
+	)
+	result := ValidateExpression(context.TODO(), nil, makeSyntax(input))
+	c.Assert(result.Ok(), qt.IsFalse)
+	c.Assert(result.Errors[0].Message, qt.Contains, "exactly 2")
+}
+
+// TestValidateIncludeCi tests the include-ci form (registered alias)
+func TestValidateIncludeCi(t *testing.T) {
+	tests := []validationTestCase{
+		{
+			name: "valid include-ci",
+			input: values.List(
+				values.NewSymbol("include-ci"),
+				values.NewString("file.scm"),
+			),
+			wantOk: true,
+		},
+		{
+			name:   "missing filename",
+			input:  values.List(values.NewSymbol("include-ci")),
+			wantOk: false,
+		},
+		{
+			name: "non-string filename",
+			input: values.List(
+				values.NewSymbol("include-ci"),
+				values.NewInteger(42),
+			),
+			wantOk: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			result := ValidateExpression(context.TODO(), nil, makeSyntax(tt.input))
+			if tt.wantOk {
+				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
+				_, ok := result.Expr.(*ValidatedLiteral)
+				c.Assert(ok, qt.IsTrue)
+			} else {
+				c.Assert(result.Ok(), qt.IsFalse)
+			}
+		})
+	}
+}
+
+// TestValidateLibraryAlias tests that (library ...) is accepted as alias for define-library
+func TestValidateLibraryAlias(t *testing.T) {
+	c := qt.New(t)
+	input := values.List(
+		values.NewSymbol("library"),
+		values.List(values.NewSymbol("my"), values.NewSymbol("lib")),
+	)
+	result := ValidateExpression(context.TODO(), nil, makeSyntax(input))
+	c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
+	_, ok := result.Expr.(*ValidatedLiteral)
+	c.Assert(ok, qt.IsTrue)
 }

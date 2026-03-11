@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/internal/tokenizer"
 	"github.com/aalpar/wile/values"
@@ -379,7 +380,7 @@ func (p *Parser) readExactnessMarker(label string, convert func(syntax.SyntaxVal
 // R7RS §2.4: For circular/shared structures, we pre-register the container
 // before reading its contents so back-references via #n# resolve correctly.
 func (p *Parser) readLabelAssignment() (syntax.SyntaxValue, tokenizer.Token, error) {
-	s := TrimPrefixFolded(p.cur.String(), "#")
+	s := schemeutil.TrimPrefixCI(p.cur.String(), "#")
 	is := strings.TrimSuffix(s, "=")
 	var i int64
 	i, p.err = strconv.ParseInt(is, 10, bits.UintSize)
@@ -615,12 +616,12 @@ func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 func (p *Parser) parseCharacter() (syntax.SyntaxValue, tokenizer.Token, error) {
 	switch p.cur.Type() {
 	case tokenizer.TokenizerStateCharGraphic:
-		s := TrimPrefixFolded(p.cur.String(), values.PrefixCharacter)
+		s := schemeutil.TrimPrefixCI(p.cur.String(), values.PrefixCharacter)
 		rs := []rune(s)
 		q := p.wrapSyntax(values.NewCharacter(rs[0]), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateCharMnemonic:
-		s := strings.ToLower(TrimPrefixFolded(p.cur.String(), values.PrefixCharacter))
+		s := strings.ToLower(schemeutil.TrimPrefixCI(p.cur.String(), values.PrefixCharacter))
 		r, ok := tokenizer.CharMnemonics[s]
 		if !ok {
 			return nil, p.cur, NewParserErrorWithWrapf(werr.ErrUnknownCharacterMnemonic, p.cur, "unknown character mnemonic: %s", s)
@@ -628,7 +629,7 @@ func (p *Parser) parseCharacter() (syntax.SyntaxValue, tokenizer.Token, error) {
 		q := p.wrapSyntax(values.NewCharacter(r), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateCharHexEscape:
-		s := TrimPrefixFolded(p.cur.String(), "#\\x")
+		s := schemeutil.TrimPrefixCI(p.cur.String(), "#\\x")
 		var i int64
 		i, p.err = strconv.ParseInt(s, 16, 32)
 		if p.err != nil {
@@ -675,7 +676,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 			continue
 		case tokenizer.TokenizerStateDirective:
 			// Process fold-case directives even when skipping
-			d := p.wrapSyntaxDirective(TrimPrefixFolded(p.cur.String(), "#!"), p.cur)
+			d := p.wrapSyntaxDirective(schemeutil.TrimPrefixCI(p.cur.String(), "#!"), p.cur)
 			p.processFoldCaseDirective(d)
 			p.cur, p.err = p.toks.Next()
 			if p.err != nil {
@@ -695,7 +696,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateLabelReference:
 		return p.readLabelReference()
 	case tokenizer.TokenizerStateDirective:
-		q = p.wrapSyntaxDirective(TrimPrefixFolded(p.cur.String(), "#!"), p.cur)
+		q = p.wrapSyntaxDirective(schemeutil.TrimPrefixCI(p.cur.String(), "#!"), p.cur)
 		return q, p.cur, nil
 	case tokenizer.TokenizerStateLineCommentBody, tokenizer.TokenizerStateBlockCommentBody:
 		q = p.wrapSyntaxComment(p.cur.String(), p.cur)
