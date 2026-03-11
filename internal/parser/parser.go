@@ -618,6 +618,37 @@ func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 	return p.wrapSyntax(q0, p.cur), p.cur, nil
 }
 
+// readCharacter parses a character literal from the three character token types:
+// graphic (#\a), mnemonic (#\space), and hex escape (#\x41).
+func (p *Parser) readCharacter(tok tokenizer.Token) (syntax.SyntaxValue, tokenizer.Token, error) {
+	switch tok.Type() {
+	case tokenizer.TokenizerStateCharGraphic:
+		s := TrimPrefixFolded(p.cur.String(), values.PrefixCharacter)
+		rs := []rune(s)
+		q := p.wrapSyntax(values.NewCharacter(rs[0]), p.cur)
+		return q, p.cur, nil
+	case tokenizer.TokenizerStateCharMnemonic:
+		s := TrimPrefixFolded(p.cur.String(), values.PrefixCharacter)
+		r, ok := mnemonicRunes[s]
+		if !ok {
+			return nil, nil, NewParserErrorWithWrapf(werr.ErrUnknownCharacterMnemonic, p.cur, "unknown character mnemonic: %s", s)
+		}
+		q := p.wrapSyntax(values.NewCharacter(r), p.cur)
+		return q, p.cur, nil
+	case tokenizer.TokenizerStateCharHexEscape:
+		s := TrimPrefixFolded(p.cur.String(), "#\\x")
+		var i int64
+		i, p.err = strconv.ParseInt(s, 16, 32)
+		if p.err != nil {
+			return nil, p.cur, NewParserErrorWithWrapf(p.err, p.cur, "invalid character hex escape: %s", s)
+		}
+		q := p.wrapSyntax(values.NewCharacter(rune(i)), p.cur)
+		return q, p.cur, nil
+	default:
+		return nil, p.cur, NewParserErrorWithWrapf(ErrUnknownTokenType, p.cur, "readCharacter: unexpected token type: %q", tok.String())
+	}
+}
+
 func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	var q syntax.SyntaxValue
 
@@ -873,28 +904,10 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateEmptyList:
 		q = p.wrapSyntaxEmptyList(p.cur)
 		return q, p.cur, nil
-	case tokenizer.TokenizerStateCharGraphic:
-		s := TrimPrefixFolded(p.cur.String(), values.PrefixCharacter)
-		rs := []rune(s)
-		q = p.wrapSyntax(values.NewCharacter(rs[0]), p.cur)
-		return q, p.cur, nil
-	case tokenizer.TokenizerStateCharMnemonic:
-		s := TrimPrefixFolded(p.cur.String(), values.PrefixCharacter)
-		r, ok := mnemonicRunes[s]
-		if !ok {
-			return nil, nil, NewParserErrorWithWrapf(werr.ErrUnknownCharacterMnemonic, p.cur, "unknown character mnemonic: %s", s)
-		}
-		q = p.wrapSyntax(values.NewCharacter(r), p.cur)
-		return q, p.cur, nil
-	case tokenizer.TokenizerStateCharHexEscape:
-		s := TrimPrefixFolded(p.cur.String(), "#\\x")
-		var i int64
-		i, p.err = strconv.ParseInt(s, 16, 32)
-		if p.err != nil {
-			return nil, p.cur, NewParserErrorWithWrapf(p.err, p.cur, "invalid character hex escape: %s", s)
-		}
-		q = p.wrapSyntax(values.NewCharacter(rune(i)), p.cur)
-		return q, p.cur, nil
+	case tokenizer.TokenizerStateCharGraphic,
+		tokenizer.TokenizerStateCharMnemonic,
+		tokenizer.TokenizerStateCharHexEscape:
+		return p.readCharacter(cur)
 	case tokenizer.TokenizerStateString:
 		q = p.wrapSyntax(values.NewString(p.cur.Value()), p.cur)
 		return q, p.cur, nil
