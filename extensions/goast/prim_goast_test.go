@@ -271,6 +271,53 @@ func TestGoASTErrors(t *testing.T) {
 	}
 }
 
+func TestGoTypecheckPackage(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	const pkgPath = "github.com/aalpar/wile/extensions/goast"
+
+	// Load the package once and cache via define — avoids three separate go list calls.
+	runScheme(t, engine, `(define typechecked (go-typecheck-package "`+pkgPath+`"))`)
+
+	t.Run("returns package node", func(t *testing.T) {
+		result := runScheme(t, engine, `(go-node-type (car typechecked))`)
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewSymbol("package"))
+	})
+
+	t.Run("package name", func(t *testing.T) {
+		result := runScheme(t, engine, `(cdr (assoc 'name (cdr (car typechecked))))`)
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewString("goast"))
+	})
+
+	t.Run("package path", func(t *testing.T) {
+		result := runScheme(t, engine, `(cdr (assoc 'path (cdr (car typechecked))))`)
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewString(pkgPath))
+	})
+
+	t.Run("has file nodes", func(t *testing.T) {
+		result := runScheme(t, engine, `(go-node-type (car (cdr (assoc 'files (cdr (car typechecked))))))`)
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewSymbol("file"))
+	})
+}
+
+func TestGoTypecheckPackageErrors(t *testing.T) {
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{name: "wrong arg type", code: `(go-typecheck-package 42)`},
+		{name: "nonexistent package", code: `(go-typecheck-package "github.com/aalpar/wile/does-not-exist-xyz")`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			runSchemeExpectError(t, engine, tc.code)
+		})
+	}
+}
+
 // schemeStringLiteral wraps a Go string as a Scheme string literal,
 // escaping backslashes, double quotes, and newlines.
 func schemeStringLiteral(s string) string {
