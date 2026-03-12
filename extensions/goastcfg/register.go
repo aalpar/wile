@@ -26,7 +26,7 @@ var AddToRegistry = Builder.AddToRegistry
 func addPrimitives(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{
-			Name: "go-cfg", ParamCount: 2, IsVariadic: true,
+			Name: "go-cfg", ParamCount: 3, IsVariadic: true,
 			Impl:       PrimGoCFG,
 			Doc:        "Builds the CFG for a named function in a Go package.",
 			ParamNames: []string{"pattern", "func-name", "options"},
