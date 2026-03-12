@@ -46,6 +46,13 @@ func addPrimitives(r *registry.Registry) error {
 			ParamNames: []string{"dom-tree", "a", "b"},
 			Category:   "goast-cfg",
 		},
+		{
+			Name: "go-cfg-paths", ParamCount: 3,
+			Impl:       PrimGoCFGPaths,
+			Doc:        "Enumerates simple paths between two blocks in the CFG. Capped at 1024 paths.",
+			ParamNames: []string{"cfg", "from", "to"},
+			Category:   "goast-cfg",
+		},
 	}, registry.PhaseRuntime)
 	return nil
 }

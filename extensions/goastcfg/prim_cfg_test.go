@@ -133,6 +133,54 @@ func TestGoCFGDominates(t *testing.T) {
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 }
 
+func TestGoCFGPaths_LinearFunction(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	// A linear function has at least one path from entry to last block.
+	runScheme(t, engine,
+		`(define cfg (go-cfg "github.com/aalpar/wile/extensions/goast" "PrimGoFormat"))`)
+
+	result := runScheme(t, engine, `
+		(let* ((last-idx (- (length cfg) 1))
+		       (paths (go-cfg-paths cfg 0 last-idx)))
+			(pair? paths))`)
+	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+}
+
+func TestGoCFGPaths_BranchingFunction(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	// A branching function has multiple paths; each path is a list of indices.
+	runScheme(t, engine,
+		`(define cfg (go-cfg "github.com/aalpar/wile/extensions/goast" "PrimGoParseExpr"))`)
+
+	result := runScheme(t, engine, `
+		(let* ((last-idx (- (length cfg) 1))
+		       (paths (go-cfg-paths cfg 0 last-idx)))
+			(and (list? paths)
+			     (if (pair? paths)
+			         (list? (car paths))
+			         #t)))`)
+	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+}
+
+func TestGoCFGPaths_SameBlock(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	runScheme(t, engine,
+		`(define cfg (go-cfg "github.com/aalpar/wile/extensions/goast" "PrimGoFormat"))`)
+
+	// A path from block 0 to itself is a single path containing just block 0.
+	result := runScheme(t, engine, `
+		(let ((paths (go-cfg-paths cfg 0 0)))
+			(and (pair? paths)
+			     (equal? (car paths) '(0))))`)
+	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+}
+
 func TestGoCFG_Errors(t *testing.T) {
 	engine := newEngine(t)
 	tcs := []struct {

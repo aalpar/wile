@@ -310,3 +310,65 @@ func PrimGoCFGDominates(mc *machine.MachineContext) error {
 	mc.SetValue(values.BoolToBoolean(current == aVal.Value))
 	return nil
 }
+
+const maxCFGPaths = 1024
+
+// PrimGoCFGPaths implements (go-cfg-paths cfg from to).
+// Returns a list of simple paths (lists of block indices) from block `from`
+// to block `to`. Capped at maxCFGPaths to bound cost.
+func PrimGoCFGPaths(mc *machine.MachineContext) error {
+	fromVal, err := helpers.RequireArg[*values.Integer](mc, 1, werr.ErrNotANumber, "go-cfg-paths")
+	if err != nil {
+		return err
+	}
+	toVal, err := helpers.RequireArg[*values.Integer](mc, 2, werr.ErrNotANumber, "go-cfg-paths")
+	if err != nil {
+		return err
+	}
+
+	// Build adjacency map from cfg-block list.
+	blocks := parseCFGBlocks(mc.Arg(0))
+	succs := make(map[int64][]int64, len(blocks))
+	for _, b := range blocks {
+		succs[b.index] = b.succs
+	}
+
+	// DFS to enumerate simple paths.
+	var paths [][]int64
+	visited := make(map[int64]bool)
+
+	var dfs func(current int64, path []int64)
+	dfs = func(current int64, path []int64) {
+		if len(paths) >= maxCFGPaths {
+			return
+		}
+		path = append(path, current)
+		if current == toVal.Value {
+			cp := make([]int64, len(path))
+			copy(cp, path)
+			paths = append(paths, cp)
+			return
+		}
+		visited[current] = true
+		for _, next := range succs[current] {
+			if !visited[next] {
+				dfs(next, path)
+			}
+		}
+		visited[current] = false
+	}
+
+	dfs(fromVal.Value, nil)
+
+	// Convert paths to s-expression: list of lists of integers.
+	pathVals := make([]values.Value, len(paths))
+	for i, p := range paths {
+		blockVals := make([]values.Value, len(p))
+		for j, idx := range p {
+			blockVals[j] = values.NewInteger(idx)
+		}
+		pathVals[i] = goast.ValueList(blockVals)
+	}
+	mc.SetValue(goast.ValueList(pathVals))
+	return nil
+}
