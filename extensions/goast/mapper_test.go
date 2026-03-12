@@ -1073,3 +1073,32 @@ func TestMapFieldListOrFalse(t *testing.T) {
 	result = mapFieldListOrFalse(&ast.FieldList{}, opts)
 	c.Assert(values.IsEmptyList(result), qt.IsTrue)
 }
+
+func TestMapFileEmitsCommentGroupInDecls(t *testing.T) {
+	c := qt.New(t)
+	fset := token.NewFileSet()
+	source := "package p\n\nvar X int\n\n// standalone\n\nvar Y int\n"
+	f, err := parser.ParseFile(fset, "test.go", source, parser.ParseComments)
+	c.Assert(err, qt.IsNil)
+
+	opts := &mapperOpts{fset: fset, comments: true}
+	sexpr := mapNode(f, opts)
+
+	// The decls list should contain a comment-group entry.
+	fields := sexpFields(sexpr)
+	declsVal, hasDeclsField := GetField(fields, "decls")
+	c.Assert(hasDeclsField, qt.IsTrue)
+
+	found := false
+	tuple, ok := declsVal.(values.Tuple)
+	c.Assert(ok, qt.IsTrue)
+	for !values.IsEmptyList(tuple) {
+		pair := tuple.(*values.Pair)
+		if sexpTag(pair.Car()) == "comment-group" {
+			found = true
+			break
+		}
+		tuple = pair.Cdr().(values.Tuple)
+	}
+	c.Assert(found, qt.IsTrue, qt.Commentf("expected comment-group in decls"))
+}
