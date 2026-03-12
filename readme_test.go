@@ -129,7 +129,7 @@ func assembleREADMESource(blocks []string) string {
 	cleaned := make([]string, len(blocks))
 	for i, block := range blocks {
 		var lines []string
-		for _, line := range strings.Split(block, "\n") {
+		for line := range strings.SplitSeq(block, "\n") {
 			sub := importLineRe.FindStringSubmatch(line)
 			if sub != nil {
 				imports[`"`+sub[1]+`"`] = true
@@ -179,7 +179,7 @@ func assembleREADMESource(blocks []string) string {
 		src.WriteString("\n")
 
 		// Write the block body.
-		for _, line := range strings.Split(block, "\n") {
+		for line := range strings.SplitSeq(block, "\n") {
 			if strings.TrimSpace(line) == "" {
 				src.WriteString("\n")
 			} else {
@@ -224,7 +224,7 @@ func readmeTopLevelVars(block string) []string {
 	seen := map[string]bool{}
 	var vars []string
 
-	for _, line := range strings.Split(block, "\n") {
+	for line := range strings.SplitSeq(block, "\n") {
 		trimmed := strings.TrimSpace(line)
 
 		// Skip comment lines.
@@ -236,7 +236,7 @@ func readmeTopLevelVars(block string) []string {
 		if braceDepth == 0 {
 			sub := assignRe.FindStringSubmatch(trimmed)
 			if sub != nil {
-				for _, v := range strings.Split(sub[1], ",") {
+				for v := range strings.SplitSeq(sub[1], ",") {
 					v = strings.TrimSpace(v)
 					if v != "_" && !seen[v] {
 						vars = append(vars, v)

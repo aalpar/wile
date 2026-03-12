@@ -130,7 +130,7 @@ func extractTestSummary(output string) string {
 	if idx == -1 {
 		// Try to find pass/fail counts directly
 		var lines []string
-		for _, line := range strings.Split(output, "\n") {
+		for line := range strings.SplitSeq(output, "\n") {
 			if strings.Contains(line, "Passed:") || strings.Contains(line, "Failed:") {
 				lines = append(lines, strings.TrimSpace(line))
 			}
