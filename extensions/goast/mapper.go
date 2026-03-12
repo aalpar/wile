@@ -21,6 +21,7 @@ import (
 	"go/types"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // mapperOpts controls what optional information the mapper emits.
@@ -590,7 +591,8 @@ func chanDirSymbol(dir ast.ChanDir) values.Value {
 	case ast.SEND | ast.RECV:
 		return Sym("both")
 	default:
-		return Sym("both")
+		panic(werr.WrapForeignErrorf(errMalformedGoAST,
+			"chanDirSymbol: unknown channel direction %d", dir))
 	}
 }
 
