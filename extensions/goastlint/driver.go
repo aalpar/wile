@@ -20,6 +20,8 @@ import (
 
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/packages"
+
+	"github.com/aalpar/wile/werr"
 )
 
 // diagnostic holds a captured analysis diagnostic.
@@ -33,7 +35,9 @@ type diagnostic struct {
 // Only diagnostics from the originally requested analyzers are returned;
 // prerequisite results are available to dependents via Pass.ResultOf but
 // their diagnostics are silently discarded.
-func runAnalyzers(pkg *packages.Package, fset *token.FileSet, analyzers []*analysis.Analyzer) []diagnostic {
+// An error is returned if any requested analyzer fails to run (directly or
+// because one of its prerequisites failed).
+func runAnalyzers(pkg *packages.Package, fset *token.FileSet, analyzers []*analysis.Analyzer) ([]diagnostic, error) {
 	// Collect all analyzers (including prerequisites) in topological order.
 	ordered := topoSort(analyzers)
 
@@ -58,6 +62,14 @@ func runAnalyzers(pkg *packages.Package, fset *token.FileSet, analyzers []*analy
 		}
 		if skip {
 			failed[a] = true
+			if requested[a] {
+				for _, req := range a.Requires {
+					if failed[req] {
+						return nil, werr.WrapForeignErrorf(errLintRunError,
+							"go-analyze: %q: prerequisite %q failed", a.Name, req.Name)
+					}
+				}
+			}
 			continue
 		}
 
@@ -67,9 +79,13 @@ func runAnalyzers(pkg *packages.Package, fset *token.FileSet, analyzers []*analy
 				collected = append(collected, d)
 			}
 		})
-		result, err := a.Run(pass)
-		if err != nil {
+		result, runErr := a.Run(pass)
+		if runErr != nil {
 			failed[a] = true
+			if requested[a] {
+				return nil, werr.WrapForeignErrorf(errLintRunError,
+					"go-analyze: analyzer %q: %s", a.Name, runErr)
+			}
 			continue
 		}
 		if result != nil {
@@ -82,7 +98,7 @@ func runAnalyzers(pkg *packages.Package, fset *token.FileSet, analyzers []*analy
 			})
 		}
 	}
-	return diags
+	return diags, nil
 }
 
 // topoSort returns all analyzers (including transitive prerequisites) in
@@ -119,19 +135,29 @@ func makePass(
 	report func(analysis.Diagnostic),
 ) *analysis.Pass {
 	return &analysis.Pass{
-		Analyzer:          a,
-		Fset:              fset,
-		Files:             pkg.Syntax,
-		Pkg:               pkg.Types,
-		TypesInfo:         pkg.TypesInfo,
-		TypesSizes:        pkg.TypesSizes,
-		ResultOf:          resultOf,
-		Report:            report,
-		AllObjectFacts:    func() []analysis.ObjectFact { return nil },
-		AllPackageFacts:   func() []analysis.PackageFact { return nil },
-		ExportObjectFact:  func(types.Object, analysis.Fact) {},
-		ExportPackageFact: func(analysis.Fact) {},
-		ImportObjectFact:  func(types.Object, analysis.Fact) bool { return false },
-		ImportPackageFact: func(*types.Package, analysis.Fact) bool { return false },
+		Analyzer:   a,
+		Fset:       fset,
+		Files:      pkg.Syntax,
+		Pkg:        pkg.Types,
+		TypesInfo:  pkg.TypesInfo,
+		TypesSizes: pkg.TypesSizes,
+		ResultOf:   resultOf,
+		Report:     report,
+		AllObjectFacts: func() []analysis.ObjectFact {
+			return nil
+		},
+		AllPackageFacts: func() []analysis.PackageFact {
+			return nil
+		},
+		ExportObjectFact: func(types.Object, analysis.Fact) {
+		},
+		ExportPackageFact: func(analysis.Fact) {
+		},
+		ImportObjectFact: func(types.Object, analysis.Fact) bool {
+			return false
+		},
+		ImportPackageFact: func(*types.Package, analysis.Fact) bool {
+			return false
+		},
 	}
 }

@@ -20,14 +20,14 @@ func newEngine(t *testing.T) *wile.Engine {
 	return engine
 }
 
-func runScheme(t *testing.T, engine *wile.Engine, code string) wile.Value {
+func eval(t *testing.T, engine *wile.Engine, code string) wile.Value {
 	t.Helper()
 	result, err := engine.Eval(context.Background(), code)
 	qt.New(t).Assert(err, qt.IsNil)
 	return result
 }
 
-func runSchemeExpectError(t *testing.T, engine *wile.Engine, code string) {
+func evalExpectError(t *testing.T, engine *wile.Engine, code string) {
 	t.Helper()
 	_, err := engine.Eval(context.Background(), code)
 	qt.New(t).Assert(err, qt.IsNotNil)
@@ -46,7 +46,7 @@ func TestGoAnalyzeList_ReturnsStrings(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
 
-	result := runScheme(t, engine, `(pair? (go-analyze-list))`)
+	result := eval(t, engine, `(pair? (go-analyze-list))`)
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 }
 
@@ -55,7 +55,7 @@ func TestGoAnalyzeList_ContainsKnownAnalyzers(t *testing.T) {
 	engine := newEngine(t)
 
 	for _, name := range []string{"nilness", "shadow", "assign", "unreachable"} {
-		result := runScheme(t, engine, `
+		result := eval(t, engine, `
 			(let loop ((names (go-analyze-list)))
 				(cond
 					((null? names) #f)
@@ -72,7 +72,7 @@ func TestGoAnalyze_ReturnsListForKnownPackage(t *testing.T) {
 
 	// Run a simple analyzer on a known package.
 	// Result may be empty (no issues) or non-empty — both are valid.
-	result := runScheme(t, engine,
+	result := eval(t, engine,
 		`(list? (go-analyze "github.com/aalpar/wile/extensions/goast" "assign"))`)
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 }
@@ -82,7 +82,7 @@ func TestGoAnalyze_DiagnosticStructure(t *testing.T) {
 	engine := newEngine(t)
 
 	// If any diagnostics are returned, verify they have expected fields.
-	result := runScheme(t, engine, `
+	result := eval(t, engine, `
 		(let ((diags (go-analyze "github.com/aalpar/wile/extensions/goast" "assign")))
 			(if (null? diags) #t
 				(let ((d (car diags)))
@@ -97,7 +97,7 @@ func TestGoAnalyze_MultipleAnalyzers(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
 
-	result := runScheme(t, engine,
+	result := eval(t, engine,
 		`(list? (go-analyze "github.com/aalpar/wile/extensions/goast" "assign" "unreachable"))`)
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 }
@@ -114,7 +114,7 @@ func TestGoAnalyze_Errors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeExpectError(t, engine, tc.code)
+			evalExpectError(t, engine, tc.code)
 		})
 	}
 }
@@ -125,7 +125,7 @@ func TestIntegration_AnalyzeRealPackage(t *testing.T) {
 
 	// Run multiple analyzers at once on the goastlint package itself.
 	// Every diagnostic (if any) must have correct structure.
-	result := runScheme(t, engine, `
+	result := eval(t, engine, `
 		(let* ((diags (go-analyze "github.com/aalpar/wile/extensions/goastlint"
 		                          "assign" "unreachable" "structtag"))
 		       (nf (lambda (node key)
@@ -148,7 +148,7 @@ func TestIntegration_AllAnalyzersRunnable(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
 
-	result := runScheme(t, engine, `
+	result := eval(t, engine, `
 		(let loop ((ns (go-analyze-list)) (ok #t))
 		  (if (null? ns) ok
 		    (let ((diags (go-analyze "github.com/aalpar/wile/extensions/goast"

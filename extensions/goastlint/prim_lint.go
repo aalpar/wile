@@ -30,9 +30,46 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
+// parseAnalyzerNames collects and validates the variadic analyzer-name arguments.
+// Returns an error on an improper list, a non-string element, or an unknown name.
+func parseAnalyzerNames(rest values.Value) ([]*analysis.Analyzer, error) {
+	tuple, ok := rest.(values.Tuple)
+	if !ok {
+		return nil, nil
+	}
+	var analyzers []*analysis.Analyzer
+	for !values.IsEmptyList(tuple) {
+		pair, pok := tuple.(*values.Pair)
+		if !pok {
+			return nil, werr.WrapForeignErrorf(werr.ErrNotAList,
+				"go-analyze: malformed analyzer list")
+		}
+		nameVal, sok := pair.Car().(*values.String)
+		if !sok {
+			return nil, werr.WrapForeignErrorf(werr.ErrNotAString,
+				"go-analyze: analyzer names must be strings")
+		}
+		a, found := analyzerRegistry[nameVal.Value]
+		if !found {
+			return nil, werr.WrapForeignErrorf(errLintUnknownName,
+				"go-analyze: unknown analyzer %q; use go-analyze-list for available names",
+				nameVal.Value)
+		}
+		analyzers = append(analyzers, a)
+		cdr, cok := pair.Cdr().(values.Tuple)
+		if !cok {
+			return nil, werr.WrapForeignErrorf(werr.ErrNotAList,
+				"go-analyze: malformed analyzer list")
+		}
+		tuple = cdr
+	}
+	return analyzers, nil
+}
+
 var (
-	errAnalyzeBuildError  = werr.NewStaticError("analyze build error")
-	errAnalyzeUnknownName = werr.NewStaticError("unknown analyzer name")
+	errLintBuildError  = werr.NewStaticError("analyze build error")
+	errLintUnknownName = werr.NewStaticError("unknown analyzer name")
+	errLintRunError    = werr.NewStaticError("analyzer run error")
 )
 
 // PrimGoAnalyze implements (go-analyze pattern analyzer-name ...).
@@ -44,34 +81,9 @@ func PrimGoAnalyze(mc *machine.MachineContext) error {
 		return err
 	}
 
-	// Collect and validate analyzer names from variadic args.
-	var analyzers []*analysis.Analyzer
-	rest := mc.Arg(1)
-	tuple, ok := rest.(values.Tuple)
-	if ok {
-		for !values.IsEmptyList(tuple) {
-			pair, pok := tuple.(*values.Pair)
-			if !pok {
-				break
-			}
-			nameVal, sok := pair.Car().(*values.String)
-			if !sok {
-				return werr.WrapForeignErrorf(werr.ErrNotAString,
-					"go-analyze: analyzer names must be strings")
-			}
-			a, found := analyzerRegistry[nameVal.Value]
-			if !found {
-				return werr.WrapForeignErrorf(errAnalyzeUnknownName,
-					"go-analyze: unknown analyzer %q; use go-analyze-list for available names",
-					nameVal.Value)
-			}
-			analyzers = append(analyzers, a)
-			cdr, cok := pair.Cdr().(values.Tuple)
-			if !cok {
-				break
-			}
-			tuple = cdr
-		}
+	analyzers, err := parseAnalyzerNames(mc.Arg(1))
+	if err != nil {
+		return err
 	}
 
 	if len(analyzers) == 0 {
@@ -104,8 +116,12 @@ func PrimGoAnalyze(mc *machine.MachineContext) error {
 
 	pkgs, loadErr := packages.Load(cfg, pattern.Value)
 	if loadErr != nil {
-		return werr.WrapForeignErrorf(errAnalyzeBuildError,
+		return werr.WrapForeignErrorf(errLintBuildError,
 			"go-analyze: %s: %s", pattern.Value, loadErr)
+	}
+	if len(pkgs) == 0 {
+		return werr.WrapForeignErrorf(errLintBuildError,
+			"go-analyze: %s: no packages found", pattern.Value)
 	}
 
 	var errs []string
@@ -115,14 +131,18 @@ func PrimGoAnalyze(mc *machine.MachineContext) error {
 		}
 	}
 	if len(errs) > 0 {
-		return werr.WrapForeignErrorf(errAnalyzeBuildError,
+		return werr.WrapForeignErrorf(errLintBuildError,
 			"go-analyze: %s: %s", pattern.Value, strings.Join(errs, "; "))
 	}
 
 	// Run analyzers on each loaded package; collect all diagnostics.
 	var allDiags []diagnostic
 	for _, pkg := range pkgs {
-		allDiags = append(allDiags, runAnalyzers(pkg, fset, analyzers)...)
+		pkgDiags, runErr := runAnalyzers(pkg, fset, analyzers)
+		if runErr != nil {
+			return runErr
+		}
+		allDiags = append(allDiags, pkgDiags...)
 	}
 
 	// Map diagnostics to s-expressions.
