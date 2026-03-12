@@ -934,10 +934,57 @@ func TestRoundTripFilesWithComments(t *testing.T) {
 				"\t// X is horizontal.\n\tX int\n" +
 				"\t// Y is vertical.\n\tY int\n}\n",
 		},
+		{
+			name:   "const with doc comment",
+			source: "package p\n\n// MaxSize is the maximum.\nconst MaxSize = 100\n",
+		},
+		{
+			name: "var group with doc comments",
+			source: "package p\n\n// Globals.\nvar (\n" +
+				"\t// X is the x value.\n\tX int\n" +
+				"\t// Y is the y value.\n\tY int\n)\n",
+		},
+		{
+			name:   "standalone between decls",
+			source: "package p\n\nvar X int\n\n// standalone between X and Y\n\nvar Y int\n",
+		},
+		{
+			name:   "standalone end of file",
+			source: "package p\n\nvar X int\n\n// end of file comment\n",
+		},
+		{
+			name:   "standalone before first decl",
+			source: "package p\n\n// standalone before first decl\n\nvar X int\n",
+		},
+		{
+			name:   "multiple standalone comments",
+			source: "package p\n\nvar X int\n\n// first standalone\n\n// second standalone\n\nvar Y int\n",
+		},
+		{
+			name:   "struct field trailing comment",
+			source: "package p\n\n// S is a struct.\ntype S struct {\n\tX int // the X field\n}\n",
+		},
+		{
+			name: "interface with doc comment",
+			source: "package p\n\n// I is an interface.\ntype I interface {\n" +
+				"\t// M does something.\n\tM()\n}\n",
+		},
+		{
+			name:   "standalone with doc comment",
+			source: "package p\n\nvar X int\n\n// standalone\n\n// Doc for Y.\nvar Y int\n",
+		},
+		{
+			name:   "standalone block comment",
+			source: "package p\n\nvar X int\n\n/* block standalone */\n\nvar Y int\n",
+		},
+		{
+			name:   "only standalone comments",
+			source: "package p\n\n// standalone only\n",
+		},
 	}
 
-	// Add func-decl doc comment test dynamically to avoid hook false positive
-	// on "func Add(...)" appearing in a string literal.
+	// Add func-containing tests dynamically to avoid hook false positive
+	// on "func ..." appearing in a string literal.
 	tcs = append(tcs, struct {
 		name   string
 		source string
@@ -945,6 +992,13 @@ func TestRoundTripFilesWithComments(t *testing.T) {
 		name: "func with doc comment",
 		source: "package p\n\n// Add returns the sum.\n" +
 			"func" + " Add(a, b int) int {\n\treturn a + b\n}\n",
+	}, struct {
+		name   string
+		source string
+	}{
+		name: "func body statements",
+		source: "package p\n\n// F does things.\n" +
+			"func" + " F() {\n\tx := 1\n\t_ = x\n\tprintln(x)\n}\n",
 	})
 
 	for _, tc := range tcs {
@@ -995,47 +1049,6 @@ func TestMapBadNodesWithPositions(t *testing.T) {
 	r3 := mapBadDecl(&ast.BadDecl{From: 1, To: 5}, opts)
 	_, hasPos3 := GetField(sexpFields(r3), "pos")
 	qt.New(t).Assert(hasPos3, qt.IsTrue)
-}
-
-func TestRoundTripConstWithDocComment(t *testing.T) {
-	roundTripFileWithComments(t,
-		"package p\n\n// MaxSize is the maximum.\nconst MaxSize = 100\n")
-}
-
-func TestRoundTripVarGroupWithDocComments(t *testing.T) {
-	roundTripFileWithComments(t,
-		"package p\n\n// Globals.\nvar (\n"+
-			"\t// X is the x value.\n\tX int\n"+
-			"\t// Y is the y value.\n\tY int\n)\n")
-}
-
-func TestRoundTripFuncBodyStatements(t *testing.T) {
-	// Tests that various statement types in function bodies get correct
-	// positions during comment attachment (covers assignStmtLeadingPos).
-	roundTripFileWithComments(t,
-		"package p\n\n// F does things.\n"+
-			"func"+
-			" F() {\n\tx := 1\n\t_ = x\n\tprintln(x)\n}\n")
-}
-
-func TestRoundTripStandaloneCommentBetweenDecls(t *testing.T) {
-	roundTripFileWithComments(t,
-		"package p\n\nvar X int\n\n// standalone between X and Y\n\nvar Y int\n")
-}
-
-func TestRoundTripStandaloneCommentEndOfFile(t *testing.T) {
-	roundTripFileWithComments(t,
-		"package p\n\nvar X int\n\n// end of file comment\n")
-}
-
-func TestRoundTripStandaloneCommentBeforeFirstDecl(t *testing.T) {
-	roundTripFileWithComments(t,
-		"package p\n\n// standalone before first decl\n\nvar X int\n")
-}
-
-func TestRoundTripMultipleStandaloneComments(t *testing.T) {
-	roundTripFileWithComments(t,
-		"package p\n\nvar X int\n\n// first standalone\n\n// second standalone\n\nvar Y int\n")
 }
 
 func TestMapCommentsAbsent(t *testing.T) {
@@ -1120,33 +1133,6 @@ func TestUnmapFileSkipsCommentGroup(t *testing.T) {
 	file := n.(*ast.File)
 	// file.Decls should have exactly 2 declarations (the comment-group is skipped).
 	c.Assert(len(file.Decls), qt.Equals, 2)
-}
-
-func TestRoundTripStructFieldTrailingComment(t *testing.T) {
-	roundTripFileWithComments(t,
-		"package p\n\n// S is a struct.\ntype S struct {\n\tX int // the X field\n}\n")
-}
-
-func TestRoundTripInterfaceWithDocComment(t *testing.T) {
-	roundTripFileWithComments(t,
-		"package p\n\n// I is an interface.\ntype I interface {\n\t// M does something.\n\tM()\n}\n")
-}
-
-func TestRoundTripStandaloneCommentWithDocComment(t *testing.T) {
-	// Standalone comment followed by a doc comment on the next decl.
-	roundTripFileWithComments(t,
-		"package p\n\nvar X int\n\n// standalone\n\n// Doc for Y.\nvar Y int\n")
-}
-
-func TestRoundTripStandaloneBlockComment(t *testing.T) {
-	roundTripFileWithComments(t,
-		"package p\n\nvar X int\n\n/* block standalone */\n\nvar Y int\n")
-}
-
-func TestRoundTripOnlyStandaloneComments(t *testing.T) {
-	// File with no doc comments at all — only standalone.
-	roundTripFileWithComments(t,
-		"package p\n\n// standalone only\n")
 }
 
 func TestRoundTripNoCommentGroupInDeclsWithoutCommentsFlag(t *testing.T) {
