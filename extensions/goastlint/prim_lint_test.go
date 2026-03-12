@@ -118,3 +118,41 @@ func TestGoAnalyze_Errors(t *testing.T) {
 		})
 	}
 }
+
+func TestIntegration_AnalyzeRealPackage(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	// Run multiple analyzers at once on the goastlint package itself.
+	// Every diagnostic (if any) must have correct structure.
+	result := runScheme(t, engine, `
+		(let* ((diags (go-analyze "github.com/aalpar/wile/extensions/goastlint"
+		                          "assign" "unreachable" "structtag"))
+		       (nf (lambda (node key)
+		             (let ((e (assoc key (cdr node))))
+		               (if e (cdr e) #f)))))
+		  (let loop ((ds diags))
+		    (if (null? ds) #t
+		      (let ((d (car ds)))
+		        (and (eq? (car d) 'diagnostic)
+		             (string? (nf d 'analyzer))
+		             (string? (nf d 'pos))
+		             (string? (nf d 'message))
+		             (loop (cdr ds)))))))`)
+	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+}
+
+func TestIntegration_AllAnalyzersRunnable(t *testing.T) {
+	// Verify that every registered analyzer can run without panicking.
+	// Run go-analyze-list and run each analyzer on a simple, known package.
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	result := runScheme(t, engine, `
+		(let loop ((ns (go-analyze-list)) (ok #t))
+		  (if (null? ns) ok
+		    (let ((diags (go-analyze "github.com/aalpar/wile/extensions/goast"
+		                             (car ns))))
+		      (loop (cdr ns) (and ok (list? diags))))))`)
+	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+}

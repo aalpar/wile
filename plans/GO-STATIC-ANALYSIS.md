@@ -1,6 +1,6 @@
 # Go Static Analysis Extensions
 
-**Status**: Phases 1-3 complete; Phase 4 (lint) not started
+**Status**: Phases 1-4 complete
 **Foundation**: `extensions/goast/` (see `plans/GO-AST.md`)
 **Dependencies**: `golang.org/x/tools v0.42.0` (already vendored) — `go/ssa`, `go/callgraph`, `go/cfg`, `go/analysis`
 
@@ -187,7 +187,7 @@ Exposes `go/cfg` for intra-procedural control flow and `go/ssa`'s dominator tree
 
 **Dependency**: Uses SSA function representation from Phase 1. Could share the SSA loading infrastructure rather than re-loading.
 
-### Phase 4: `(wile goast lint)` — Analysis Passes
+### Phase 4: `(wile goast lint)` — Analysis Passes  ✓ Complete
 
 Exposes `go/analysis` framework, letting Scheme scripts invoke any registered analyzer and query its diagnostics and facts.
 
