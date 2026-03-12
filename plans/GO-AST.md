@@ -1,6 +1,6 @@
 # Go AST Extension
 
-**Status**: Planned
+**Status**: Phases 1 & 4 complete; Phases 2 & 3 not started
 **Package**: `extensions/goast/`, importable as `(wile goast)`
 **Dependencies**: `go/ast`, `go/parser`, `go/token`, `go/printer`, `go/format` (all stdlib)
 
@@ -240,7 +240,7 @@ All other primitives operate on strings/lists — no security gate needed.
 
 ## Phases
 
-### Phase 4 — Type-checked Package AST
+### Phase 4 — Type-checked Package AST  ✓ Complete
 
 Adds `go-typecheck-package`: loads a whole package via `golang.org/x/tools/go/packages`
 (which invokes `go list` for module-aware import resolution), type-checks it with
@@ -299,7 +299,7 @@ import resolution; `go/importer.Default()` does not handle modules correctly.
 
 ---
 
-### Phase 1 — Core Subset (~28 node types)
+### Phase 1 — Core Subset (~28 node types)  ✓ Complete
 
 Enough to parse and generate real Go programs without concurrency or generics.
 
@@ -314,23 +314,29 @@ Enough to parse and generate real Go programs without concurrency or generics.
 
 **Deliverables**: All 5 primitives, bidirectional mapping, mapper round-trip tests, integration test parsing real Go source.
 
-### Phase 2 — Concurrency, Switch, Advanced (~12 node types)
+### Phase 2 — Concurrency, Switch, Advanced (13 node types)
+
+Enough to parse and generate Go programs with concurrency, switch statements, and advanced expressions.
 
 | Category | Types |
 |----------|-------|
-| Statements | `GoStmt`, `DeferStmt`, `SendStmt`, `SelectStmt`, `CommClause`, `SwitchStmt`, `TypeSwitchStmt`, `CaseClause`, `LabeledStmt` |
+| Statements | `GoStmt`, `DeferStmt`, `SendStmt`, `LabeledStmt`, `SwitchStmt`, `TypeSwitchStmt`, `CaseClause`, `SelectStmt`, `CommClause` |
 | Expressions | `SliceExpr`, `TypeAssertExpr` |
 | Types | `ChanType`, `Ellipsis` |
 
-### Phase 3 — Comments, Error Recovery, Generics
+**See detailed design: `plans/GO-AST-PHASE-2.md`**
 
-| Category | Types |
-|----------|-------|
-| Comments | `Comment`, `CommentGroup` attachment to nodes |
-| Error recovery | `BadExpr`, `BadStmt`, `BadDecl` |
-| Generics | `IndexListExpr` (type parameter instantiation) |
+### Phase 3 — Comments, Error Recovery, Generics (6 node types + doc field attachment)
 
-Comment attachment is the complex part — reconstructing the position-based association that `go/printer` needs for round-trip structural fidelity.
+Three sub-features with different complexity levels:
+
+| Category | Types | Complexity |
+|----------|-------|------------|
+| Error recovery | `BadExpr`, `BadStmt`, `BadDecl` | Low — empty tag nodes; positions opt-in |
+| Generics | `IndexListExpr` | Low — same shape as `IndexExpr` but with list of indices |
+| Comments | `Comment`, `CommentGroup` + doc/comment fields on 7 existing node types | High — position-based attachment for `go/printer` round-trip |
+
+**See detailed design: `plans/GO-AST-PHASE-3.md`**
 
 ## Testing Strategy
 
