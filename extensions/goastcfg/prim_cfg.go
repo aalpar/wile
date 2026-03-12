@@ -1,3 +1,17 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package goastcfg
 
 import (
@@ -63,12 +77,20 @@ func parseCFGBlock(node values.Value) (cfgBlockInfo, bool) {
 	if !found {
 		return cfgBlockInfo{}, false
 	}
-	idx := indexVal.(*values.Integer).Value
+	indexInt, ok := indexVal.(*values.Integer)
+	if !ok {
+		return cfgBlockInfo{}, false
+	}
+	idx := indexInt.Value
 
 	idomVal, found := goast.GetField(np.Cdr(), "idom")
 	idom := int64(-1)
 	if found && idomVal != values.FalseValue {
-		idom = idomVal.(*values.Integer).Value
+		idomInt, ok := idomVal.(*values.Integer)
+		if !ok {
+			return cfgBlockInfo{}, false
+		}
+		idom = idomInt.Value
 	}
 
 	succsField, found := goast.GetField(np.Cdr(), "succs")
@@ -92,11 +114,12 @@ func parseCFGBlock(node values.Value) (cfgBlockInfo, bool) {
 }
 
 // parseCFGOpts extracts mapper options from the variadic rest-arg list.
-func parseCFGOpts(rest values.Value, fset *token.FileSet) *cfgMapper {
+// Returns an error for non-symbol values or unrecognized option names.
+func parseCFGOpts(rest values.Value, fset *token.FileSet) (*cfgMapper, error) {
 	opts := &cfgMapper{fset: fset}
 	tuple, ok := rest.(values.Tuple)
 	if !ok {
-		return opts
+		return opts, nil
 	}
 	for !values.IsEmptyList(tuple) {
 		pair, ok := tuple.(*values.Pair)
@@ -104,8 +127,16 @@ func parseCFGOpts(rest values.Value, fset *token.FileSet) *cfgMapper {
 			break
 		}
 		s, ok := pair.Car().(*values.Symbol)
-		if ok && s.Key == "positions" {
+		if !ok {
+			return nil, werr.WrapForeignErrorf(errCFGBuildError,
+				"go-cfg: options must be symbols, got %T", pair.Car())
+		}
+		switch s.Key {
+		case "positions":
 			opts.positions = true
+		default:
+			return nil, werr.WrapForeignErrorf(errCFGBuildError,
+				"go-cfg: unknown option '%s'; valid options: positions", s.Key)
 		}
 		cdr, ok := pair.Cdr().(values.Tuple)
 		if !ok {
@@ -113,7 +144,7 @@ func parseCFGOpts(rest values.Value, fset *token.FileSet) *cfgMapper {
 		}
 		tuple = cdr
 	}
-	return opts
+	return opts, nil
 }
 
 // findFunction looks up a function by name across all members and methods
@@ -163,7 +194,10 @@ func PrimGoCFG(mc *machine.MachineContext) error {
 	}
 
 	fset := token.NewFileSet()
-	mapper := parseCFGOpts(mc.Arg(2), fset)
+	mapper, err := parseCFGOpts(mc.Arg(2), fset)
+	if err != nil {
+		return err
+	}
 
 	cfg := &packages.Config{
 		Mode: packages.NeedName |
@@ -282,10 +316,20 @@ func PrimGoCFGDominates(mc *machine.MachineContext) error {
 		if ok2 {
 			blockVal, found := goast.GetField(np.Cdr(), "block")
 			if found {
-				idx := blockVal.(*values.Integer).Value
+				blockInt, blockOK := blockVal.(*values.Integer)
+				if !blockOK {
+					tuple, ok = pair.Cdr().(values.Tuple)
+					continue
+				}
+				idx := blockInt.Value
 				idomVal, found := goast.GetField(np.Cdr(), "idom")
 				if found && idomVal != values.FalseValue {
-					parent[idx] = idomVal.(*values.Integer).Value
+					idomInt, idomOK := idomVal.(*values.Integer)
+					if !idomOK {
+						tuple, ok = pair.Cdr().(values.Tuple)
+						continue
+					}
+					parent[idx] = idomInt.Value
 				} else {
 					parent[idx] = -1
 				}

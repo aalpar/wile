@@ -1,3 +1,17 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package goastcg
 
 import (
@@ -17,8 +31,8 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// writeTestPkg writes a Go source file and go.mod to a temp dir.
-func writeTestPkg(t *testing.T, dir, source string) {
+// writeTestPackage writes a Go source file and go.mod to a temp dir.
+func writeTestPackage(t *testing.T, dir, source string) {
 	t.Helper()
 	c := qt.New(t)
 
@@ -37,7 +51,7 @@ func buildTestCallgraph(t *testing.T, dir, source string) (*token.FileSet, value
 	t.Helper()
 	c := qt.New(t)
 
-	writeTestPkg(t, dir, source)
+	writeTestPackage(t, dir, source)
 
 	fset := token.NewFileSet()
 	cfg := &packages.Config{
@@ -100,7 +114,7 @@ func findCGNodeByNameSuffix(graph values.Value, nameSuffix string) values.Value 
 	return nil
 }
 
-func cgListLength(v values.Value) int {
+func listLength(v values.Value) int {
 	n := 0
 	tuple, ok := v.(values.Tuple)
 	if !ok {
@@ -139,7 +153,7 @@ func leaf() {}
 `)
 
 	// Graph should contain cg-nodes.
-	c.Assert(cgListLength(graph) > 0, qt.IsTrue,
+	c.Assert(listLength(graph) > 0, qt.IsTrue,
 		qt.Commentf("expected non-empty callgraph"))
 
 	// Find main function node.
@@ -149,7 +163,7 @@ func leaf() {}
 	// main should have edges-out to helper.
 	edgesOut, ok := goast.GetField(mainNode.(*values.Pair).Cdr(), "edges-out")
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(cgListLength(edgesOut) > 0, qt.IsTrue,
+	c.Assert(listLength(edgesOut) > 0, qt.IsTrue,
 		qt.Commentf("expected main to have outgoing edges"))
 
 	// helper should have edges-out to leaf.
@@ -157,7 +171,7 @@ func leaf() {}
 	c.Assert(helperNode, qt.IsNotNil, qt.Commentf("expected helper node"))
 	helperOut, ok := goast.GetField(helperNode.(*values.Pair).Cdr(), "edges-out")
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(cgListLength(helperOut) > 0, qt.IsTrue,
+	c.Assert(listLength(helperOut) > 0, qt.IsTrue,
 		qt.Commentf("expected helper to call leaf"))
 
 	// leaf should have edges-in from helper.
@@ -165,7 +179,7 @@ func leaf() {}
 	c.Assert(leafNode, qt.IsNotNil, qt.Commentf("expected leaf node"))
 	leafIn, ok := goast.GetField(leafNode.(*values.Pair).Cdr(), "edges-in")
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(cgListLength(leafIn) > 0, qt.IsTrue,
+	c.Assert(listLength(leafIn) > 0, qt.IsTrue,
 		qt.Commentf("expected leaf to be called by helper"))
 }
 

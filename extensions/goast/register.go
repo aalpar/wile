@@ -39,7 +39,7 @@ func addPrimitives(r *registry.Registry) error {
 			Doc:        "Parses a single Go expression and returns an s-expression AST.",
 			ParamNames: []string{"source"}, Category: "goast"},
 		{Name: "go-format", ParamCount: 1, Impl: PrimGoFormat,
-			Doc:        "Converts an s-expression AST to formatted Go source.",
+			Doc:        "Converts an s-expression AST to Go source. Falls back to unformatted output for partial ASTs.",
 			ParamNames: []string{"ast"}, Category: "goast"},
 		{Name: "go-node-type", ParamCount: 1, Impl: PrimGoNodeType,
 			Doc:        "Returns the tag symbol of an AST node.",

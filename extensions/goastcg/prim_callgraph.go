@@ -1,7 +1,22 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package goastcg
 
 import (
 	"go/token"
+	"sort"
 	"strings"
 
 	"golang.org/x/tools/go/callgraph"
@@ -192,11 +207,16 @@ func PrimGoCallgraphCallers(mc *machine.MachineContext) error {
 
 	node := findCGNode(graph, funcName.Value)
 	if node == nil {
-		mc.SetValue(values.EmptyList)
+		mc.SetValue(values.FalseValue)
 		return nil
 	}
 
-	edgesIn, ok := goast.GetField(node.(*values.Pair).Cdr(), "edges-in")
+	np, ok := node.(*values.Pair)
+	if !ok {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+	edgesIn, ok := goast.GetField(np.Cdr(), "edges-in")
 	if !ok {
 		mc.SetValue(values.EmptyList)
 		return nil
@@ -215,11 +235,16 @@ func PrimGoCallgraphCallees(mc *machine.MachineContext) error {
 
 	node := findCGNode(graph, funcName.Value)
 	if node == nil {
-		mc.SetValue(values.EmptyList)
+		mc.SetValue(values.FalseValue)
 		return nil
 	}
 
-	edgesOut, ok := goast.GetField(node.(*values.Pair).Cdr(), "edges-out")
+	np, ok := node.(*values.Pair)
+	if !ok {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+	edgesOut, ok := goast.GetField(np.Cdr(), "edges-out")
 	if !ok {
 		mc.SetValue(values.EmptyList)
 		return nil
@@ -343,9 +368,14 @@ func PrimGoCallgraphReachable(mc *machine.MachineContext) error {
 	nodeMap := buildNodeMap(graph)
 	reachable := computeReachable(nodeMap, rootName.Value)
 
-	result := make([]values.Value, 0, len(reachable))
+	names := make([]string, 0, len(reachable))
 	for name := range reachable {
-		result = append(result, goast.Str(name))
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	result := make([]values.Value, len(names))
+	for i, name := range names {
+		result[i] = goast.Str(name)
 	}
 	mc.SetValue(goast.ValueList(result))
 	return nil

@@ -1,3 +1,17 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package goastssa
 
 import (
@@ -79,9 +93,28 @@ func (p *ssaMapper) mapBlock(b *ssa.BasicBlock) values.Value {
 	return goast.Node("ssa-block", fields...)
 }
 
-// mapInstruction dispatches on SSA instruction type.
-// Unmapped types produce (ssa-unknown ...) nodes.
+// mapInstruction dispatches on SSA instruction type and optionally injects a
+// (pos . "file:line:col") field when p.positions is enabled.
 func (p *ssaMapper) mapInstruction(instr ssa.Instruction) values.Value {
+	node := p.dispatchInstruction(instr)
+	if !p.positions {
+		return node
+	}
+	pos := instr.Pos()
+	if !pos.IsValid() {
+		return node
+	}
+	np, ok := node.(*values.Pair)
+	if !ok {
+		return node
+	}
+	posField := goast.Field("pos", goast.Str(p.fset.Position(pos).String()))
+	return values.NewCons(np.Car(), values.NewCons(posField, np.Cdr()))
+}
+
+// dispatchInstruction dispatches on SSA instruction type.
+// Unmapped types produce (ssa-unknown ...) nodes.
+func (p *ssaMapper) dispatchInstruction(instr ssa.Instruction) values.Value {
 	switch v := instr.(type) {
 	case *ssa.BinOp:
 		return p.mapBinOp(v)

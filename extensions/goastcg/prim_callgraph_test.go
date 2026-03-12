@@ -1,3 +1,17 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package goastcg_test
 
 import (
@@ -20,14 +34,14 @@ func newEngine(t *testing.T) *wile.Engine {
 	return engine
 }
 
-func runScheme(t *testing.T, engine *wile.Engine, code string) wile.Value {
+func eval(t *testing.T, engine *wile.Engine, code string) wile.Value {
 	t.Helper()
 	result, err := engine.Eval(context.Background(), code)
 	qt.New(t).Assert(err, qt.IsNil)
 	return result
 }
 
-func runSchemeExpectError(t *testing.T, engine *wile.Engine, code string) {
+func evalExpectError(t *testing.T, engine *wile.Engine, code string) {
 	t.Helper()
 	_, err := engine.Eval(context.Background(), code)
 	qt.New(t).Assert(err, qt.IsNotNil)
@@ -47,7 +61,7 @@ func TestGoCallgraph_Static(t *testing.T) {
 	engine := newEngine(t)
 
 	// Load a known package with static analysis.
-	result := runScheme(t, engine,
+	result := eval(t, engine,
 		`(pair? (go-callgraph "github.com/aalpar/wile/extensions/goast" 'static))`)
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 }
@@ -56,7 +70,7 @@ func TestGoCallgraph_CHA(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
 
-	result := runScheme(t, engine,
+	result := eval(t, engine,
 		`(pair? (go-callgraph "github.com/aalpar/wile/extensions/goast" 'cha))`)
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 }
@@ -75,7 +89,7 @@ func TestGoCallgraph_Errors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeExpectError(t, engine, tc.code)
+			evalExpectError(t, engine, tc.code)
 		})
 	}
 }
@@ -89,11 +103,11 @@ func TestGoCallgraphCallers(t *testing.T) {
 	engine := newEngine(t)
 
 	// Build a static callgraph for a package.
-	runScheme(t, engine,
+	eval(t, engine,
 		`(define cg (go-callgraph "github.com/aalpar/wile/extensions/goast" 'static))`)
 
 	// Returns a list (may be empty for a function not called by other goast functions).
-	result := runScheme(t, engine,
+	result := eval(t, engine,
 		`(list? (go-callgraph-callers cg "`+goastTestFunc+`"))`)
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 }
@@ -102,11 +116,11 @@ func TestGoCallgraphCallees(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
 
-	runScheme(t, engine,
+	eval(t, engine,
 		`(define cg (go-callgraph "github.com/aalpar/wile/extensions/goast" 'static))`)
 
 	// PrimGoCallgraph calls helpers and security — it should have outgoing edges.
-	result := runScheme(t, engine,
+	result := eval(t, engine,
 		`(pair? (go-callgraph-callees cg "`+goastTestFunc+`"))`)
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 }
@@ -115,29 +129,29 @@ func TestGoCallgraphCallers_NotFound(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
 
-	runScheme(t, engine,
+	eval(t, engine,
 		`(define cg (go-callgraph "github.com/aalpar/wile/extensions/goast" 'static))`)
 
-	// Nonexistent function returns empty list.
-	result := runScheme(t, engine,
-		`(null? (go-callgraph-callers cg "does.not.Exist"))`)
-	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+	// Nonexistent function returns #f (not empty list).
+	result := eval(t, engine,
+		`(go-callgraph-callers cg "does.not.Exist")`)
+	c.Assert(result.Internal(), qt.Equals, values.FalseValue)
 }
 
 func TestMapCallgraph_Reachable(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
 
-	runScheme(t, engine,
+	eval(t, engine,
 		`(define cg (go-callgraph "github.com/aalpar/wile/extensions/goast" 'static))`)
 
 	// Reachable from a known function should return a non-empty list of strings.
-	result := runScheme(t, engine,
+	result := eval(t, engine,
 		`(pair? (go-callgraph-reachable cg "`+goastTestFunc+`"))`)
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 
 	// The root itself should appear in the reachable set.
-	result = runScheme(t, engine, `
+	result = eval(t, engine, `
 		(let ((reachable (go-callgraph-reachable cg "`+goastTestFunc+`")))
 			(let loop ((r reachable))
 				(cond
@@ -151,11 +165,11 @@ func TestGoCallgraphReachable_NotFound(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
 
-	runScheme(t, engine,
+	eval(t, engine,
 		`(define cg (go-callgraph "github.com/aalpar/wile/extensions/goast" 'static))`)
 
 	// Nonexistent root returns empty list.
-	result := runScheme(t, engine,
+	result := eval(t, engine,
 		`(null? (go-callgraph-reachable cg "does.not.Exist"))`)
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 }
@@ -165,17 +179,17 @@ func TestIntegration_CallgraphQuery(t *testing.T) {
 	engine := newEngine(t)
 
 	// Build static callgraph for the goast extension.
-	runScheme(t, engine,
+	eval(t, engine,
 		`(define cg (go-callgraph "github.com/aalpar/wile/extensions/goast" 'static))`)
 
 	// Define a helper to extract a named field from an alist node.
-	runScheme(t, engine, `
+	eval(t, engine, `
 		(define (nf node key)
 			(let ((e (assoc key (cdr node))))
 				(if e (cdr e) #f)))`)
 
 	// Verify the graph has cg-node entries with expected structure.
-	result := runScheme(t, engine, `
+	result := eval(t, engine, `
 		(let ((first-node (car cg)))
 			(and (eq? (car first-node) 'cg-node)
 			     (string? (nf first-node 'name))
@@ -185,7 +199,7 @@ func TestIntegration_CallgraphQuery(t *testing.T) {
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 
 	// Verify edges have expected structure.
-	result = runScheme(t, engine, `
+	result = eval(t, engine, `
 		(let* ((node (car cg))
 		       (edges (nf node 'edges-out)))
 			(if (null? edges)
@@ -197,7 +211,7 @@ func TestIntegration_CallgraphQuery(t *testing.T) {
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 
 	// Verify reachable returns a list of strings.
-	result = runScheme(t, engine, `
+	result = eval(t, engine, `
 		(let ((reachable (go-callgraph-reachable cg "`+goastTestFunc+`")))
 			(if (null? reachable)
 				#t
@@ -208,6 +222,6 @@ func TestIntegration_CallgraphQuery(t *testing.T) {
 func TestGoCallgraph_RTA_NoMain(t *testing.T) {
 	// RTA on a library package (no main) should error.
 	engine := newEngine(t)
-	runSchemeExpectError(t, engine,
+	evalExpectError(t, engine,
 		`(go-callgraph "github.com/aalpar/wile/extensions/goast" 'rta)`)
 }

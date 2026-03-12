@@ -1,3 +1,17 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package goastssa
 
 import (
@@ -20,11 +34,12 @@ import (
 var errSSABuildError = werr.NewStaticError("ssa build error")
 
 // parseSSAOpts extracts mapper options from a variadic rest-arg list.
-func parseSSAOpts(rest values.Value, fset *token.FileSet) *ssaMapper {
+// Returns an error for non-symbol values or unrecognized option names.
+func parseSSAOpts(rest values.Value, fset *token.FileSet) (*ssaMapper, error) {
 	opts := &ssaMapper{fset: fset}
 	tuple, ok := rest.(values.Tuple)
 	if !ok {
-		return opts
+		return opts, nil
 	}
 	for !values.IsEmptyList(tuple) {
 		pair, ok := tuple.(*values.Pair)
@@ -32,8 +47,16 @@ func parseSSAOpts(rest values.Value, fset *token.FileSet) *ssaMapper {
 			break
 		}
 		s, ok := pair.Car().(*values.Symbol)
-		if ok && s.Key == "positions" {
+		if !ok {
+			return nil, werr.WrapForeignErrorf(errSSABuildError,
+				"go-ssa-build: options must be symbols, got %T", pair.Car())
+		}
+		switch s.Key {
+		case "positions":
 			opts.positions = true
+		default:
+			return nil, werr.WrapForeignErrorf(errSSABuildError,
+				"go-ssa-build: unknown option '%s'; valid options: positions", s.Key)
 		}
 		cdr, ok := pair.Cdr().(values.Tuple)
 		if !ok {
@@ -41,7 +64,7 @@ func parseSSAOpts(rest values.Value, fset *token.FileSet) *ssaMapper {
 		}
 		tuple = cdr
 	}
-	return opts
+	return opts, nil
 }
 
 // PrimGoSSABuild implements (go-ssa-build pattern . options).
@@ -61,7 +84,10 @@ func PrimGoSSABuild(mc *machine.MachineContext) error {
 	}
 
 	fset := token.NewFileSet()
-	mapper := parseSSAOpts(mc.Arg(1), fset)
+	mapper, err := parseSSAOpts(mc.Arg(1), fset)
+	if err != nil {
+		return err
+	}
 
 	cfg := &packages.Config{
 		Mode: packages.NeedName |
@@ -119,23 +145,15 @@ func PrimGoSSABuild(mc *machine.MachineContext) error {
 			funcs = append(funcs, mapper.mapFunction(fn))
 		}
 		// Collect methods on named types.
+		// MethodSet(*T) is a superset of MethodSet(T): it includes both pointer- and
+		// value-receiver methods. Iterating only the pointer-receiver set avoids
+		// collecting value-receiver methods twice.
 		for _, mem := range ssaPkg.Members {
 			typ, ok := mem.(*ssa.Type)
 			if !ok {
 				continue
 			}
 			mset := prog.MethodSets.MethodSet(types.NewPointer(typ.Type()))
-			for sel := range mset.Methods() {
-				fn := prog.MethodValue(sel)
-				if fn == nil || fn.Synthetic != "" {
-					continue
-				}
-				if fn.Pkg == ssaPkg {
-					funcs = append(funcs, mapper.mapFunction(fn))
-				}
-			}
-			// Value receiver methods.
-			mset = prog.MethodSets.MethodSet(typ.Type())
 			for sel := range mset.Methods() {
 				fn := prog.MethodValue(sel)
 				if fn == nil || fn.Synthetic != "" {

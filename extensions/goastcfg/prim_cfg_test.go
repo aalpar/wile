@@ -1,3 +1,17 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package goastcfg_test
 
 import (
@@ -20,14 +34,14 @@ func newEngine(t *testing.T) *wile.Engine {
 	return engine
 }
 
-func runScheme(t *testing.T, engine *wile.Engine, code string) wile.Value {
+func eval(t *testing.T, engine *wile.Engine, code string) wile.Value {
 	t.Helper()
 	result, err := engine.Eval(context.Background(), code)
 	qt.New(t).Assert(err, qt.IsNil)
 	return result
 }
 
-func runSchemeExpectError(t *testing.T, engine *wile.Engine, code string) {
+func evalExpectError(t *testing.T, engine *wile.Engine, code string) {
 	t.Helper()
 	_, err := engine.Eval(context.Background(), code)
 	qt.New(t).Assert(err, qt.IsNotNil)
@@ -46,7 +60,7 @@ func TestGoCFG_ReturnsCFGBlocks(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
 
-	result := runScheme(t, engine,
+	result := eval(t, engine,
 		`(pair? (go-cfg "github.com/aalpar/wile/extensions/goast" "PrimGoParseExpr"))`)
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 }
@@ -55,7 +69,7 @@ func TestGoCFG_EntryBlockHasNoIdom(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
 
-	result := runScheme(t, engine, `
+	result := eval(t, engine, `
 		(let* ((blocks (go-cfg "github.com/aalpar/wile/extensions/goast" "PrimGoParseExpr"))
 		       (entry  (car blocks)))
 			(eq? (cdr (assoc 'idom (cdr entry))) #f))`)
@@ -67,14 +81,14 @@ func TestGoCFGDominators_Structure(t *testing.T) {
 	engine := newEngine(t)
 
 	// A branching function guarantees multiple blocks with non-trivial dominance.
-	runScheme(t, engine, `
+	eval(t, engine, `
 		(define cfg (go-cfg "github.com/aalpar/wile/extensions/goast" "PrimGoParseExpr"))`)
 
-	result := runScheme(t, engine, `(pair? (go-cfg-dominators cfg))`)
+	result := eval(t, engine, `(pair? (go-cfg-dominators cfg))`)
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 
 	// Every dom-node must have block, idom, and children fields.
-	result = runScheme(t, engine, `
+	result = eval(t, engine, `
 		(let loop ((nodes (go-cfg-dominators cfg)))
 			(if (null? nodes) #t
 				(let ((n (car nodes)))
@@ -92,13 +106,13 @@ func TestGoCFGDominators_EntryDominatesAll(t *testing.T) {
 
 	// Entry block (index 0) should appear in children of no other node
 	// (it is the root — idom is #f).
-	runScheme(t, engine,
+	eval(t, engine,
 		`(define cfg (go-cfg "github.com/aalpar/wile/extensions/goast" "PrimGoParseExpr"))`)
-	runScheme(t, engine,
+	eval(t, engine,
 		`(define dom (go-cfg-dominators cfg))`)
 	// Walk dom-tree to find the entry block (the one with idom=#f)
 	// and verify its block field is an integer.
-	result := runScheme(t, engine, `
+	result := eval(t, engine, `
 		(let loop ((nodes dom))
 			(if (null? nodes) #f
 				(let* ((n    (car nodes))
@@ -113,17 +127,17 @@ func TestGoCFGDominates(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
 
-	runScheme(t, engine,
+	eval(t, engine,
 		`(define cfg (go-cfg "github.com/aalpar/wile/extensions/goast" "PrimGoParseExpr"))`)
-	runScheme(t, engine,
+	eval(t, engine,
 		`(define dom (go-cfg-dominators cfg))`)
 
 	// Entry block (0) dominates itself.
-	result := runScheme(t, engine, `(go-cfg-dominates? dom 0 0)`)
+	result := eval(t, engine, `(go-cfg-dominates? dom 0 0)`)
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 
 	// Entry block (0) dominates every other block.
-	result = runScheme(t, engine, `
+	result = eval(t, engine, `
 		(let loop ((nodes dom))
 			(if (null? nodes) #t
 				(let ((idx (cdr (assoc 'block (cdr (car nodes))))))
@@ -138,10 +152,10 @@ func TestGoCFGPaths_LinearFunction(t *testing.T) {
 	engine := newEngine(t)
 
 	// A linear function has at least one path from entry to last block.
-	runScheme(t, engine,
+	eval(t, engine,
 		`(define cfg (go-cfg "github.com/aalpar/wile/extensions/goast" "PrimGoFormat"))`)
 
-	result := runScheme(t, engine, `
+	result := eval(t, engine, `
 		(let* ((last-idx (- (length cfg) 1))
 		       (paths (go-cfg-paths cfg 0 last-idx)))
 			(pair? paths))`)
@@ -153,10 +167,10 @@ func TestGoCFGPaths_BranchingFunction(t *testing.T) {
 	engine := newEngine(t)
 
 	// A branching function has multiple paths; each path is a list of indices.
-	runScheme(t, engine,
+	eval(t, engine,
 		`(define cfg (go-cfg "github.com/aalpar/wile/extensions/goast" "PrimGoParseExpr"))`)
 
-	result := runScheme(t, engine, `
+	result := eval(t, engine, `
 		(let* ((last-idx (- (length cfg) 1))
 		       (paths (go-cfg-paths cfg 0 last-idx)))
 			(and (list? paths)
@@ -170,11 +184,11 @@ func TestGoCFGPaths_SameBlock(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
 
-	runScheme(t, engine,
+	eval(t, engine,
 		`(define cfg (go-cfg "github.com/aalpar/wile/extensions/goast" "PrimGoFormat"))`)
 
 	// A path from block 0 to itself is a single path containing just block 0.
-	result := runScheme(t, engine, `
+	result := eval(t, engine, `
 		(let ((paths (go-cfg-paths cfg 0 0)))
 			(and (pair? paths)
 			     (equal? (car paths) '(0))))`)
@@ -186,13 +200,13 @@ func TestIntegration_DominanceQuery(t *testing.T) {
 	engine := newEngine(t)
 
 	// Build CFG + dominator tree for a real function.
-	runScheme(t, engine,
+	eval(t, engine,
 		`(define cfg (go-cfg "github.com/aalpar/wile/extensions/goast" "PrimGoParseExpr"))`)
-	runScheme(t, engine,
+	eval(t, engine,
 		`(define dom (go-cfg-dominators cfg))`)
 
 	// Verify: entry block dominates every other block.
-	result := runScheme(t, engine, `
+	result := eval(t, engine, `
 		(let loop ((nodes dom))
 			(if (null? nodes) #t
 				(let ((idx (cdr (assoc 'block (cdr (car nodes))))))
@@ -201,7 +215,7 @@ func TestIntegration_DominanceQuery(t *testing.T) {
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 
 	// Verify: every block dominates itself.
-	result = runScheme(t, engine, `
+	result = eval(t, engine, `
 		(let loop ((blocks cfg))
 			(if (null? blocks) #t
 				(let* ((b     (car blocks))
@@ -224,7 +238,7 @@ func TestGoCFG_Errors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeExpectError(t, engine, tc.code)
+			evalExpectError(t, engine, tc.code)
 		})
 	}
 }
