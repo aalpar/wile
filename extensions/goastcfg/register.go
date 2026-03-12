@@ -39,6 +39,13 @@ func addPrimitives(r *registry.Registry) error {
 			ParamNames: []string{"cfg"},
 			Category:   "goast-cfg",
 		},
+		{
+			Name: "go-cfg-dominates?", ParamCount: 3,
+			Impl:       PrimGoCFGDominates,
+			Doc:        "Returns #t if block a dominates block b in the dominator tree.",
+			ParamNames: []string{"dom-tree", "a", "b"},
+			Category:   "goast-cfg",
+		},
 	}, registry.PhaseRuntime)
 	return nil
 }

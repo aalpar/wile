@@ -257,3 +257,56 @@ func PrimGoCFGDominators(mc *machine.MachineContext) error {
 	mc.SetValue(goast.ValueList(nodes))
 	return nil
 }
+
+// PrimGoCFGDominates implements (go-cfg-dominates? dom-tree a b).
+// Returns #t if block a dominates block b (a is an ancestor of b in dom-tree).
+func PrimGoCFGDominates(mc *machine.MachineContext) error {
+	aVal, err := helpers.RequireArg[*values.Integer](mc, 1, werr.ErrNotANumber, "go-cfg-dominates?")
+	if err != nil {
+		return err
+	}
+	bVal, err := helpers.RequireArg[*values.Integer](mc, 2, werr.ErrNotANumber, "go-cfg-dominates?")
+	if err != nil {
+		return err
+	}
+
+	// Build a parent map from the dom-tree: block index -> idom index (-1 for entry).
+	parent := make(map[int64]int64)
+	tuple, ok := mc.Arg(0).(values.Tuple)
+	for ok && !values.IsEmptyList(tuple) {
+		pair, ok2 := tuple.(*values.Pair)
+		if !ok2 {
+			break
+		}
+		np, ok2 := pair.Car().(*values.Pair)
+		if ok2 {
+			blockVal, found := goast.GetField(np.Cdr(), "block")
+			if found {
+				idx := blockVal.(*values.Integer).Value
+				idomVal, found := goast.GetField(np.Cdr(), "idom")
+				if found && idomVal != values.FalseValue {
+					parent[idx] = idomVal.(*values.Integer).Value
+				} else {
+					parent[idx] = -1
+				}
+			}
+		}
+		tuple, ok = pair.Cdr().(values.Tuple)
+	}
+
+	// Walk from b toward the root; a dominates b iff a appears on the path.
+	current := bVal.Value
+	for {
+		if current == aVal.Value {
+			mc.SetValue(values.TrueValue)
+			return nil
+		}
+		p, found := parent[current]
+		if !found || p < 0 {
+			break
+		}
+		current = p
+	}
+	mc.SetValue(values.BoolToBoolean(current == aVal.Value))
+	return nil
+}

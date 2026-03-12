@@ -109,6 +109,30 @@ func TestGoCFGDominators_EntryDominatesAll(t *testing.T) {
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 }
 
+func TestGoCFGDominates(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	runScheme(t, engine,
+		`(define cfg (go-cfg "github.com/aalpar/wile/extensions/goast" "PrimGoParseExpr"))`)
+	runScheme(t, engine,
+		`(define dom (go-cfg-dominators cfg))`)
+
+	// Entry block (0) dominates itself.
+	result := runScheme(t, engine, `(go-cfg-dominates? dom 0 0)`)
+	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+
+	// Entry block (0) dominates every other block.
+	result = runScheme(t, engine, `
+		(let loop ((nodes dom))
+			(if (null? nodes) #t
+				(let ((idx (cdr (assoc 'block (cdr (car nodes))))))
+					(if (go-cfg-dominates? dom 0 idx)
+						(loop (cdr nodes))
+						#f))))`)
+	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+}
+
 func TestGoCFG_Errors(t *testing.T) {
 	engine := newEngine(t)
 	tcs := []struct {
