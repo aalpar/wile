@@ -27,6 +27,12 @@ func runScheme(t *testing.T, engine *wile.Engine, code string) wile.Value {
 	return result
 }
 
+func runSchemeExpectError(t *testing.T, engine *wile.Engine, code string) {
+	t.Helper()
+	_, err := engine.Eval(context.Background(), code)
+	qt.New(t).Assert(err, qt.IsNotNil)
+}
+
 func TestExtensionLibraryName(t *testing.T) {
 	type libraryNamer interface {
 		LibraryName() []string
@@ -57,5 +63,58 @@ func TestGoAnalyzeList_ContainsKnownAnalyzers(t *testing.T) {
 					(else (loop (cdr names)))))`)
 		c.Assert(result.Internal(), qt.Equals, values.TrueValue,
 			qt.Commentf("expected %q in go-analyze-list", name))
+	}
+}
+
+func TestGoAnalyze_ReturnsListForKnownPackage(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	// Run a simple analyzer on a known package.
+	// Result may be empty (no issues) or non-empty — both are valid.
+	result := runScheme(t, engine,
+		`(list? (go-analyze "github.com/aalpar/wile/extensions/goast" "assign"))`)
+	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+}
+
+func TestGoAnalyze_DiagnosticStructure(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	// If any diagnostics are returned, verify they have expected fields.
+	result := runScheme(t, engine, `
+		(let ((diags (go-analyze "github.com/aalpar/wile/extensions/goast" "assign")))
+			(if (null? diags) #t
+				(let ((d (car diags)))
+					(and (eq? (car d) 'diagnostic)
+					     (string? (cdr (assoc 'analyzer (cdr d))))
+					     (string? (cdr (assoc 'pos      (cdr d))))
+					     (string? (cdr (assoc 'message  (cdr d))))))))`)
+	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+}
+
+func TestGoAnalyze_MultipleAnalyzers(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	result := runScheme(t, engine,
+		`(list? (go-analyze "github.com/aalpar/wile/extensions/goast" "assign" "unreachable"))`)
+	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+}
+
+func TestGoAnalyze_Errors(t *testing.T) {
+	engine := newEngine(t)
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{name: "wrong pattern type", code: `(go-analyze 42 "assign")`},
+		{name: "unknown analyzer name", code: `(go-analyze "github.com/aalpar/wile/extensions/goast" "no-such-analyzer")`},
+		{name: "nonexistent package", code: `(go-analyze "github.com/aalpar/wile/does-not-exist-xyz" "assign")`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			runSchemeExpectError(t, engine, tc.code)
+		})
 	}
 }
