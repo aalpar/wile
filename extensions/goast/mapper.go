@@ -587,6 +587,8 @@ func chanDirSymbol(dir ast.ChanDir) values.Value {
 		return Sym("send")
 	case ast.RECV:
 		return Sym("recv")
+	case ast.SEND | ast.RECV:
+		return Sym("both")
 	default:
 		return Sym("both")
 	}

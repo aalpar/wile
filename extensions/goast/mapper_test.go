@@ -712,6 +712,70 @@ func TestUnmapNodeMalformedFields(t *testing.T) {
 			name:  "field missing names",
 			input: Node("field"),
 		},
+		{
+			name:  "go-stmt missing call",
+			input: Node("go-stmt"),
+		},
+		{
+			name:  "defer-stmt missing call",
+			input: Node("defer-stmt"),
+		},
+		{
+			name:  "send-stmt missing chan",
+			input: Node("send-stmt"),
+		},
+		{
+			name:  "labeled-stmt missing label",
+			input: Node("labeled-stmt"),
+		},
+		{
+			name:  "switch-stmt missing init",
+			input: Node("switch-stmt"),
+		},
+		{
+			name:  "type-switch-stmt missing init",
+			input: Node("type-switch-stmt"),
+		},
+		{
+			name:  "case-clause missing list",
+			input: Node("case-clause"),
+		},
+		{
+			name:  "select-stmt missing body",
+			input: Node("select-stmt"),
+		},
+		{
+			name:  "comm-clause missing comm",
+			input: Node("comm-clause"),
+		},
+		{
+			name:  "type-assert-expr missing x",
+			input: Node("type-assert-expr"),
+		},
+		{
+			name:  "slice-expr missing x",
+			input: Node("slice-expr"),
+		},
+		{
+			name:  "ellipsis missing elt",
+			input: Node("ellipsis"),
+		},
+		{
+			name:  "chan-type missing dir",
+			input: Node("chan-type"),
+		},
+		{
+			name:  "go-stmt call not call-expr",
+			input: Node("go-stmt", Field("call", Node("ident", Field("name", Str("x"))))),
+		},
+		{
+			name:  "slice-expr slice3 not boolean",
+			input: Node("slice-expr", Field("x", Node("ident", Field("name", Str("s")))), Field("low", values.FalseValue), Field("high", values.FalseValue), Field("max", values.FalseValue), Field("slice3", Str("yes"))),
+		},
+		{
+			name:  "chan-type invalid dir symbol",
+			input: Node("chan-type", Field("dir", Sym("invalid")), Field("value", Node("ident", Field("name", Str("int"))))),
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

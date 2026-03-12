@@ -21,6 +21,25 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
+// requireBlockBody unmaps a body field and asserts it is a *ast.BlockStmt.
+// Returns a clear error if the field is #f or the wrong node type.
+func requireBlockBody(bodyVal values.Value, nodeType string) (*ast.BlockStmt, error) {
+	bodyNode, err := unmapStmt(bodyVal)
+	if err != nil {
+		return nil, err
+	}
+	if bodyNode == nil {
+		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+			"goast: %s field 'body' must not be #f", nodeType)
+	}
+	body, ok := bodyNode.(*ast.BlockStmt)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+			"goast: %s field 'body' expected block, got %T", nodeType, bodyNode)
+	}
+	return body, nil
+}
+
 func unmapBlockStmt(fields values.Value) (*ast.BlockStmt, error) {
 	listVal, err := RequireField(fields, "block", "list")
 	if err != nil {
@@ -111,14 +130,9 @@ func unmapIfStmt(fields values.Value) (*ast.IfStmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	bodyNode, err := unmapStmt(bodyVal)
+	body, err := requireBlockBody(bodyVal, "if-stmt")
 	if err != nil {
 		return nil, err
-	}
-	body, ok := bodyNode.(*ast.BlockStmt)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
-			"goast: if-stmt field 'body' expected block, got %T", bodyNode)
 	}
 
 	elseVal, err := RequireField(fields, "if-stmt", "else")
@@ -165,14 +179,9 @@ func unmapForStmt(fields values.Value) (*ast.ForStmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	bodyNode, err := unmapStmt(bodyVal)
+	body, err := requireBlockBody(bodyVal, "for-stmt")
 	if err != nil {
 		return nil, err
-	}
-	body, ok := bodyNode.(*ast.BlockStmt)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
-			"goast: for-stmt field 'body' expected block, got %T", bodyNode)
 	}
 
 	return &ast.ForStmt{Init: init, Cond: cond, Post: post, Body: body}, nil
@@ -219,14 +228,9 @@ func unmapRangeStmt(fields values.Value) (*ast.RangeStmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	bodyNode, err := unmapStmt(bodyVal)
+	body, err := requireBlockBody(bodyVal, "range-stmt")
 	if err != nil {
 		return nil, err
-	}
-	body, ok := bodyNode.(*ast.BlockStmt)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
-			"goast: range-stmt field 'body' expected block, got %T", bodyNode)
 	}
 
 	return &ast.RangeStmt{Key: key, Value: val, Tok: tok, X: x, Body: body}, nil
@@ -398,14 +402,9 @@ func unmapSwitchStmt(fields values.Value) (*ast.SwitchStmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	bodyNode, err := unmapStmt(bodyVal)
+	body, err := requireBlockBody(bodyVal, "switch-stmt")
 	if err != nil {
 		return nil, err
-	}
-	body, ok := bodyNode.(*ast.BlockStmt)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
-			"goast: switch-stmt field 'body' expected block, got %T", bodyNode)
 	}
 
 	return &ast.SwitchStmt{Init: init, Tag: tag, Body: body}, nil
@@ -434,14 +433,9 @@ func unmapTypeSwitchStmt(fields values.Value) (*ast.TypeSwitchStmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	bodyNode, err := unmapStmt(bodyVal)
+	body, err := requireBlockBody(bodyVal, "type-switch-stmt")
 	if err != nil {
 		return nil, err
-	}
-	body, ok := bodyNode.(*ast.BlockStmt)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
-			"goast: type-switch-stmt field 'body' expected block, got %T", bodyNode)
 	}
 
 	return &ast.TypeSwitchStmt{Init: init, Assign: assign, Body: body}, nil
@@ -452,14 +446,9 @@ func unmapSelectStmt(fields values.Value) (*ast.SelectStmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	bodyNode, err := unmapStmt(bodyVal)
+	body, err := requireBlockBody(bodyVal, "select-stmt")
 	if err != nil {
 		return nil, err
-	}
-	body, ok := bodyNode.(*ast.BlockStmt)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
-			"goast: select-stmt field 'body' expected block, got %T", bodyNode)
 	}
 	return &ast.SelectStmt{Body: body}, nil
 }
