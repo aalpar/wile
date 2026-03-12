@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"go/types"
 
 	"github.com/aalpar/wile/values"
 )
@@ -27,6 +28,7 @@ type mapperOpts struct {
 	fset      *token.FileSet
 	positions bool
 	comments  bool
+	typeInfo  *types.Info // nil when type-checking was not requested
 }
 
 // mapNode dispatches on ast.Node type to the appropriate mapper function.
@@ -318,35 +320,42 @@ func mapIncDecStmt(i *ast.IncDecStmt, opts *mapperOpts) values.Value {
 
 // --- Expressions ---
 
-func mapIdent(id *ast.Ident, opts *mapperOpts) values.Value { //nolint:unparam // opts unused until Phase 3 (positions/comments)
-	return node("ident",
-		field("name", str(id.Name)),
-	)
+func mapIdent(id *ast.Ident, opts *mapperOpts) values.Value {
+	fields := []values.Value{field("name", str(id.Name))}
+	fields = addTypeAnnotation(id, opts, fields)
+	fields = addObjPkgAnnotation(id, opts, fields)
+	return node("ident", fields...)
 }
 
-func mapBasicLit(lit *ast.BasicLit, opts *mapperOpts) values.Value { //nolint:unparam // opts unused until Phase 3 (positions/comments)
+func mapBasicLit(lit *ast.BasicLit, opts *mapperOpts) values.Value {
 	if lit == nil {
 		return values.FalseValue
 	}
-	return node("lit",
+	fields := []values.Value{
 		field("kind", sym(lit.Kind.String())),
 		field("value", str(lit.Value)),
-	)
+	}
+	fields = addTypeAnnotation(lit, opts, fields)
+	return node("lit", fields...)
 }
 
 func mapBinaryExpr(b *ast.BinaryExpr, opts *mapperOpts) values.Value {
-	return node("binary-expr",
+	fields := []values.Value{
 		field("op", sym(b.Op.String())),
 		field("x", mapExpr(b.X, opts)),
 		field("y", mapExpr(b.Y, opts)),
-	)
+	}
+	fields = addTypeAnnotation(b, opts, fields)
+	return node("binary-expr", fields...)
 }
 
 func mapUnaryExpr(u *ast.UnaryExpr, opts *mapperOpts) values.Value {
-	return node("unary-expr",
+	fields := []values.Value{
 		field("op", sym(u.Op.String())),
 		field("x", mapExpr(u.X, opts)),
-	)
+	}
+	fields = addTypeAnnotation(u, opts, fields)
+	return node("unary-expr", fields...)
 }
 
 func mapCallExpr(c *ast.CallExpr, opts *mapperOpts) values.Value {
@@ -354,36 +363,42 @@ func mapCallExpr(c *ast.CallExpr, opts *mapperOpts) values.Value {
 	for i, a := range c.Args {
 		args[i] = mapExpr(a, opts)
 	}
-	return node("call-expr",
+	fields := []values.Value{
 		field("fun", mapExpr(c.Fun, opts)),
 		field("args", valueList(args)),
-	)
+	}
+	fields = addTypeAnnotation(c, opts, fields)
+	return node("call-expr", fields...)
 }
 
 func mapSelectorExpr(s *ast.SelectorExpr, opts *mapperOpts) values.Value {
-	return node("selector-expr",
+	fields := []values.Value{
 		field("x", mapExpr(s.X, opts)),
 		field("sel", str(s.Sel.Name)),
-	)
+	}
+	fields = addTypeAnnotation(s, opts, fields)
+	return node("selector-expr", fields...)
 }
 
 func mapIndexExpr(i *ast.IndexExpr, opts *mapperOpts) values.Value {
-	return node("index-expr",
+	fields := []values.Value{
 		field("x", mapExpr(i.X, opts)),
 		field("index", mapExpr(i.Index, opts)),
-	)
+	}
+	fields = addTypeAnnotation(i, opts, fields)
+	return node("index-expr", fields...)
 }
 
 func mapStarExpr(s *ast.StarExpr, opts *mapperOpts) values.Value {
-	return node("star-expr",
-		field("x", mapExpr(s.X, opts)),
-	)
+	fields := []values.Value{field("x", mapExpr(s.X, opts))}
+	fields = addTypeAnnotation(s, opts, fields)
+	return node("star-expr", fields...)
 }
 
 func mapParenExpr(p *ast.ParenExpr, opts *mapperOpts) values.Value {
-	return node("paren-expr",
-		field("x", mapExpr(p.X, opts)),
-	)
+	fields := []values.Value{field("x", mapExpr(p.X, opts))}
+	fields = addTypeAnnotation(p, opts, fields)
+	return node("paren-expr", fields...)
 }
 
 func mapCompositeLit(c *ast.CompositeLit, opts *mapperOpts) values.Value {
@@ -391,24 +406,30 @@ func mapCompositeLit(c *ast.CompositeLit, opts *mapperOpts) values.Value {
 	for i, e := range c.Elts {
 		elts[i] = mapExpr(e, opts)
 	}
-	return node("composite-lit",
+	fields := []values.Value{
 		field("type", mapExpr(c.Type, opts)),
 		field("elts", valueList(elts)),
-	)
+	}
+	fields = addTypeAnnotation(c, opts, fields)
+	return node("composite-lit", fields...)
 }
 
 func mapKeyValueExpr(kv *ast.KeyValueExpr, opts *mapperOpts) values.Value {
-	return node("kv-expr",
+	fields := []values.Value{
 		field("key", mapExpr(kv.Key, opts)),
 		field("value", mapExpr(kv.Value, opts)),
-	)
+	}
+	fields = addTypeAnnotation(kv, opts, fields)
+	return node("kv-expr", fields...)
 }
 
 func mapFuncLit(f *ast.FuncLit, opts *mapperOpts) values.Value {
-	return node("func-lit",
+	fields := []values.Value{
 		field("type", mapFuncType(f.Type, opts)),
 		field("body", mapStmt(f.Body, opts)),
-	)
+	}
+	fields = addTypeAnnotation(f, opts, fields)
+	return node("func-lit", fields...)
 }
 
 // --- Type expressions ---
@@ -480,4 +501,38 @@ func mapFieldListOrFalse(fl *ast.FieldList, opts *mapperOpts) values.Value {
 		return values.FalseValue
 	}
 	return mapFieldList(fl, opts)
+}
+
+// --- Type annotation helpers ---
+
+// addTypeAnnotation appends an (inferred-type . "TYPE_STRING") field if type
+// info is available for e. The key is distinct from the structural "type"
+// field used by composite-lit and func-lit to avoid alist ambiguity.
+func addTypeAnnotation(e ast.Expr, opts *mapperOpts, fields []values.Value) []values.Value {
+	if opts.typeInfo == nil {
+		return fields
+	}
+	tv, ok := opts.typeInfo.Types[e]
+	if !ok {
+		return fields
+	}
+	return append(fields, field("inferred-type", str(types.TypeString(tv.Type, nil))))
+}
+
+// addObjPkgAnnotation appends an (obj-pkg . "PKG_PATH") field to an ident
+// when it resolves to an object in a named package. This distinguishes
+// e.g. fmt.Errorf (obj-pkg "fmt") from a local variable named fmt.
+func addObjPkgAnnotation(id *ast.Ident, opts *mapperOpts, fields []values.Value) []values.Value {
+	if opts.typeInfo == nil {
+		return fields
+	}
+	obj, ok := opts.typeInfo.Uses[id]
+	if !ok {
+		return fields
+	}
+	pkg := obj.Pkg()
+	if pkg == nil {
+		return fields
+	}
+	return append(fields, field("obj-pkg", str(pkg.Path())))
 }

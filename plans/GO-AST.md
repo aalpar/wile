@@ -240,6 +240,65 @@ All other primitives operate on strings/lists — no security gate needed.
 
 ## Phases
 
+### Phase 4 — Type-checked Package AST
+
+Adds `go-typecheck-package`: loads a whole package via `golang.org/x/tools/go/packages`
+(which invokes `go list` for module-aware import resolution), type-checks it with
+`go/types`, and returns annotated ASTs.
+
+#### New primitive
+
+| Primitive | Signature | Security | Description |
+|-----------|-----------|----------|-------------|
+| `go-typecheck-package` | `(go-typecheck-package pattern . options)` | `ResourceProcess`/`ActionLoad` | Load and type-check a package; return annotated AST list |
+
+`pattern` is a `go list`-compatible pattern: `"."`, `"./..."`, or a full import path.
+
+#### Return value
+
+A Scheme list of `package` nodes:
+
+```scheme
+((package
+    (name . "values")
+    (path . "github.com/aalpar/wile/values")
+    (files . ((file ...) (file ...) ...))))
+```
+
+#### Type annotations
+
+Added to expression nodes when type information is available:
+
+- `(inferred-type . "TYPE_STRING")` — on all expression nodes, via `types.Info.Types`; key is distinct from the structural `type` field used by `composite-lit` and `func-lit`
+- `(obj-pkg . "PKG_PATH")` — on `ident` nodes only, via `types.Info.Uses`; identifies which package the name resolves to
+
+Example annotated nodes:
+
+```scheme
+(ident (name . "Errorf") (inferred-type . "func(format string, a ...any) error") (obj-pkg . "fmt"))
+(call-expr (fun . ...) (args . (...)) (inferred-type . "error"))
+(binary-expr (op . +) (x . ...) (y . ...) (inferred-type . "int"))
+; composite-lit: structural (type . AST-NODE) and annotation coexist without collision
+(composite-lit (type . (ident (name . "Foo"))) (elts . (...)) (inferred-type . "pkg.Foo"))
+```
+
+#### Architecture
+
+`mapperOpts` gains a `typeInfo *types.Info` field (nil for plain parses).
+`addTypeAnnotation(e ast.Expr, opts, fields)` and
+`addObjPkgAnnotation(id *ast.Ident, opts, fields)` are new helpers in `mapper.go`.
+All expression-level `mapXxx` functions call these before returning.
+
+`mapPackage` in `prim_goast.go` constructs `mapperOpts` with `pkg.Fset` and
+`pkg.TypesInfo`, then maps each file in `pkg.Syntax`.
+
+#### Dependency
+
+`golang.org/x/tools/go/packages` added to `go.mod`. Required for module-aware
+import resolution; `go/importer.Default()` does not handle modules correctly.
+
+---
+
 ### Phase 1 — Core Subset (~28 node types)
 
 Enough to parse and generate real Go programs without concurrency or generics.

@@ -21,6 +21,8 @@ import (
 	"go/token"
 	"strings"
 
+	"golang.org/x/tools/go/packages"
+
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/security"
@@ -177,5 +179,88 @@ func PrimGoNodeType(mc *machine.MachineContext) error {
 	}
 
 	mc.SetValue(values.NewSymbol(tagSym.Key))
+	return nil
+}
+
+// mapPackage maps a loaded, type-checked package to a (package ...) s-expression node.
+// Each file in pkg.Syntax is mapped with type annotations drawn from pkg.TypesInfo.
+func mapPackage(pkg *packages.Package, baseOpts *mapperOpts) values.Value {
+	opts := &mapperOpts{
+		fset:      pkg.Fset,
+		positions: baseOpts.positions,
+		comments:  baseOpts.comments,
+		typeInfo:  pkg.TypesInfo,
+	}
+	files := make([]values.Value, len(pkg.Syntax))
+	for i, f := range pkg.Syntax {
+		files[i] = mapFile(f, opts)
+	}
+	return node("package",
+		field("name", str(pkg.Name)),
+		field("path", str(pkg.PkgPath)),
+		field("files", valueList(files)),
+	)
+}
+
+// PrimGoTypecheckPackage implements (go-typecheck-package pattern . options).
+// Loads a Go package using go/packages (module-aware via go list), type-checks it,
+// and returns a list of annotated (package ...) s-expression nodes.
+// pattern is a go-list-compatible pattern: ".", "./...", or an import path.
+func PrimGoTypecheckPackage(mc *machine.MachineContext) error {
+	pattern, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "go-typecheck-package")
+	if err != nil {
+		return err
+	}
+
+	// packages.Load internally spawns "go list" to perform module-aware import
+	// resolution and type information collection. That subprocess can read
+	// arbitrary source files and download modules from the network, so the
+	// correct security gate is ResourceProcess/ActionLoad targeting "go" — not
+	// ResourceFile/ActionRead. File reads are an internal implementation detail
+	// of go list, not paths directly supplied by the Scheme caller.
+	err = security.Check(mc.Context(), security.AccessRequest{
+		Resource: security.ResourceProcess,
+		Action:   security.ActionLoad,
+		Target:   "go",
+	})
+	if err != nil {
+		return err
+	}
+
+	fset := token.NewFileSet()
+	baseOpts, _ := parseOpts(mc.Arg(1), fset)
+
+	cfg := &packages.Config{
+		Mode: packages.NeedName |
+			packages.NeedFiles |
+			packages.NeedSyntax |
+			packages.NeedTypes |
+			packages.NeedTypesInfo,
+		Context: mc.Context(),
+		Fset:    fset,
+	}
+
+	pkgs, loadErr := packages.Load(cfg, pattern.Value)
+	if loadErr != nil {
+		return werr.WrapForeignErrorf(errGoPackageLoadError,
+			"go-typecheck-package: %s: %s", pattern.Value, loadErr)
+	}
+
+	var errs []string
+	for _, pkg := range pkgs {
+		for _, e := range pkg.Errors {
+			errs = append(errs, e.Error())
+		}
+	}
+	if len(errs) > 0 {
+		return werr.WrapForeignErrorf(errGoPackageLoadError,
+			"go-typecheck-package: %s: %s", pattern.Value, strings.Join(errs, "; "))
+	}
+
+	result := make([]values.Value, len(pkgs))
+	for i, pkg := range pkgs {
+		result[i] = mapPackage(pkg, baseOpts)
+	}
+	mc.SetValue(valueList(result))
 	return nil
 }

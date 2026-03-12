@@ -44,6 +44,9 @@ func addPrimitives(r *registry.Registry) error {
 		{Name: "go-node-type", ParamCount: 1, Impl: PrimGoNodeType,
 			Doc:        "Returns the tag symbol of an AST node.",
 			ParamNames: []string{"ast"}, Category: "goast"},
+		{Name: "go-typecheck-package", ParamCount: 2, IsVariadic: true, Impl: PrimGoTypecheckPackage,
+			Doc:        "Loads a Go package with type information and returns annotated s-expression ASTs.",
+			ParamNames: []string{"pattern", "options"}, Category: "goast"},
 	}, registry.PhaseRuntime)
 	return nil
 }
