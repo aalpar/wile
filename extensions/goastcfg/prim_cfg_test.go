@@ -181,6 +181,36 @@ func TestGoCFGPaths_SameBlock(t *testing.T) {
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 }
 
+func TestIntegration_DominanceQuery(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	// Build CFG + dominator tree for a real function.
+	runScheme(t, engine,
+		`(define cfg (go-cfg "github.com/aalpar/wile/extensions/goast" "PrimGoParseExpr"))`)
+	runScheme(t, engine,
+		`(define dom (go-cfg-dominators cfg))`)
+
+	// Verify: entry block dominates every other block.
+	result := runScheme(t, engine, `
+		(let loop ((nodes dom))
+			(if (null? nodes) #t
+				(let ((idx (cdr (assoc 'block (cdr (car nodes))))))
+					(and (go-cfg-dominates? dom 0 idx)
+					     (loop (cdr nodes))))))`)
+	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+
+	// Verify: every block dominates itself.
+	result = runScheme(t, engine, `
+		(let loop ((blocks cfg))
+			(if (null? blocks) #t
+				(let* ((b     (car blocks))
+				       (b-idx (cdr (assoc 'index (cdr b)))))
+					(and (go-cfg-dominates? dom b-idx b-idx)
+					     (loop (cdr blocks))))))`)
+	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+}
+
 func TestGoCFG_Errors(t *testing.T) {
 	engine := newEngine(t)
 	tcs := []struct {

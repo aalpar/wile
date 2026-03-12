@@ -155,7 +155,7 @@ Exposes `go/callgraph` with algorithm selection. Builds on Phase 1 (call graph a
 
 **Estimated scope**: ~3 node types (graph, node, edge), 4-5 primitives. The mapper is straightforward — call graphs are flat node/edge structures.
 
-### Phase 3: `(wile goast cfg)` — Control Flow Graph + Dominance
+### Phase 3: `(wile goast cfg)` — Control Flow Graph + Dominance  ✓ Complete
 
 Exposes `go/cfg` for intra-procedural control flow and `go/ssa`'s dominator tree for path analysis.
 
