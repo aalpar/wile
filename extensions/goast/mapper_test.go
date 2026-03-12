@@ -111,6 +111,22 @@ func TestRoundTripExpressions(t *testing.T) {
 		{name: "key-value in composite", source: `map[string]int{"a": 1}`},
 		{name: "func literal", source: "func() {}"},
 		{name: "func literal with params", source: "func(x int) int {\n\treturn x\n}"},
+		{
+			name:   "type assert",
+			source: "x.(int)",
+		},
+		{
+			name:   "slice 2-index",
+			source: "s[1:3]",
+		},
+		{
+			name:   "slice 3-index",
+			source: "s[1:3:5]",
+		},
+		{
+			name:   "slice no low",
+			source: "s[:3]",
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -289,6 +305,158 @@ import foo "fmt"
 		{
 			name:   "struct tag",
 			source: "package main\n\ntype Foo struct {\n\tX int " + "`json:\"x\"`" + "\n}\n",
+		},
+		{
+			name: "go statement",
+			source: `package p
+
+func f(g func()) {
+	go g()
+}
+`,
+		},
+		{
+			name: "defer statement",
+			source: `package p
+
+func f(g func()) {
+	defer g()
+}
+`,
+		},
+		{
+			name: "labeled statement",
+			source: `package p
+
+func f() {
+outer:
+	for {
+		break outer
+	}
+}
+`,
+		},
+		{
+			name: "switch statement",
+			source: `package p
+
+func f(x int) int {
+	switch x {
+	case 1:
+		return 10
+	case 2, 3:
+		return 20
+	default:
+		return 0
+	}
+}
+`,
+		},
+		{
+			name: "bare switch",
+			source: `package p
+
+func f(x int) {
+	switch {
+	case x > 0:
+		return
+	}
+}
+`,
+		},
+		{
+			name: "type switch",
+			source: `package p
+
+func f(x Any) {
+	switch v := x.(type) {
+	case int:
+		_ = v
+	case string:
+		_ = v
+	default:
+		_ = v
+	}
+}
+`,
+		},
+		{
+			name: "type assertion",
+			source: `package p
+
+func f(x Any) int {
+	return x.(int)
+}
+`,
+		},
+		{
+			name: "send statement",
+			source: `package p
+
+func f(ch chan int) {
+	ch <- 42
+}
+`,
+		},
+		{
+			name: "select statement",
+			source: `package p
+
+func f(c1, c2 chan int) int {
+	select {
+	case v := <-c1:
+		return v
+	case c2 <- 42:
+		return 0
+	default:
+		return -1
+	}
+}
+`,
+		},
+		{
+			name: "slice expr",
+			source: `package p
+
+func f(s []int) []int {
+	return s[1:3]
+}
+`,
+		},
+		{
+			name: "3-index slice",
+			source: `package p
+
+func f(s []int) []int {
+	return s[1:3:5]
+}
+`,
+		},
+		{
+			name: "channel types",
+			source: `package p
+
+var (
+	a chan int
+	b chan<- int
+	c <-chan int
+)
+`,
+		},
+		{
+			name: "variadic function",
+			source: `package p
+
+func f(args ...int) {
+}
+`,
+		},
+		{
+			name: "array ellipsis",
+			source: `package p
+
+var a = [...]int{1, 2, 3}
+`,
 		},
 	}
 	for _, tc := range tcs {
