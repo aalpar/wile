@@ -212,6 +212,12 @@ func PrimGoTypecheckPackage(mc *machine.MachineContext) error {
 		return err
 	}
 
+	// packages.Load internally spawns "go list" to perform module-aware import
+	// resolution and type information collection. That subprocess can read
+	// arbitrary source files and download modules from the network, so the
+	// correct security gate is ResourceProcess/ActionLoad targeting "go" — not
+	// ResourceFile/ActionRead. File reads are an internal implementation detail
+	// of go list, not paths directly supplied by the Scheme caller.
 	err = security.Check(mc.Context(), security.AccessRequest{
 		Resource: security.ResourceProcess,
 		Action:   security.ActionLoad,
