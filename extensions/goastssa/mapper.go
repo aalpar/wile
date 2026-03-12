@@ -109,6 +109,54 @@ func (p *ssaMapper) mapInstruction(instr ssa.Instruction) values.Value {
 		return p.mapJump(v)
 	case *ssa.Return:
 		return p.mapReturn(v)
+	case *ssa.MakeMap:
+		return p.mapMakeMap(v)
+	case *ssa.MapUpdate:
+		return p.mapMapUpdate(v)
+	case *ssa.Lookup:
+		return p.mapLookup(v)
+	case *ssa.Extract:
+		return p.mapExtract(v)
+	case *ssa.MakeSlice:
+		return p.mapMakeSlice(v)
+	case *ssa.Slice:
+		return p.mapSlice(v)
+	case *ssa.MakeChan:
+		return p.mapMakeChan(v)
+	case *ssa.Send:
+		return p.mapSend(v)
+	case *ssa.Select:
+		return p.mapSelect(v)
+	case *ssa.Go:
+		return p.mapGo(v)
+	case *ssa.Defer:
+		return p.mapDefer(v)
+	case *ssa.RunDefers:
+		return p.mapRunDefers(v)
+	case *ssa.Range:
+		return p.mapRange(v)
+	case *ssa.Next:
+		return p.mapNext(v)
+	case *ssa.Panic:
+		return p.mapPanic(v)
+	case *ssa.ChangeType:
+		return p.mapChangeType(v)
+	case *ssa.Convert:
+		return p.mapConvert(v)
+	case *ssa.ChangeInterface:
+		return p.mapChangeInterface(v)
+	case *ssa.SliceToArrayPointer:
+		return p.mapSliceToArrayPointer(v)
+	case *ssa.MakeInterface:
+		return p.mapMakeInterface(v)
+	case *ssa.TypeAssert:
+		return p.mapTypeAssert(v)
+	case *ssa.MakeClosure:
+		return p.mapMakeClosure(v)
+	case *ssa.MultiConvert:
+		return p.mapMultiConvert(v)
+	case *ssa.DebugRef:
+		return p.mapDebugRef(v)
 	default:
 		return p.mapUnknown(instr)
 	}
@@ -308,6 +356,256 @@ func (p *ssaMapper) mapReturn(v *ssa.Return) values.Value {
 		goast.Field("results", goast.ValueList(results)),
 		goast.Field("operands", goast.ValueList(operands)),
 	)
+}
+
+func (p *ssaMapper) mapMakeMap(v *ssa.MakeMap) values.Value {
+	return goast.Node("ssa-make-map",
+		goast.Field("name", goast.Str(v.Name())),
+		goast.Field("type", goast.Str(types.TypeString(v.Type(), nil))),
+		goast.Field("reserve", valName(v.Reserve)),
+		goast.Field("operands", values.EmptyList),
+	)
+}
+
+func (p *ssaMapper) mapMapUpdate(v *ssa.MapUpdate) values.Value {
+	return goast.Node("ssa-map-update",
+		goast.Field("map", valName(v.Map)),
+		goast.Field("key", valName(v.Key)),
+		goast.Field("val", valName(v.Value)),
+		goast.Field("operands", goast.ValueList([]values.Value{
+			valName(v.Map), valName(v.Key), valName(v.Value),
+		})),
+	)
+}
+
+func (p *ssaMapper) mapLookup(v *ssa.Lookup) values.Value {
+	return goast.Node("ssa-lookup",
+		goast.Field("name", goast.Str(v.Name())),
+		goast.Field("x", valName(v.X)),
+		goast.Field("index", valName(v.Index)),
+		goast.Field("type", goast.Str(types.TypeString(v.Type(), nil))),
+		goast.Field("comma-ok", values.BoolToBoolean(v.CommaOk)),
+		goast.Field("operands", goast.ValueList([]values.Value{valName(v.X), valName(v.Index)})),
+	)
+}
+
+func (p *ssaMapper) mapExtract(v *ssa.Extract) values.Value {
+	return goast.Node("ssa-extract",
+		goast.Field("name", goast.Str(v.Name())),
+		goast.Field("tup", valName(v.Tuple)),
+		goast.Field("index", values.NewInteger(int64(v.Index))),
+		goast.Field("type", goast.Str(types.TypeString(v.Type(), nil))),
+		goast.Field("operands", goast.ValueList([]values.Value{valName(v.Tuple)})),
+	)
+}
+
+func (p *ssaMapper) mapMakeSlice(v *ssa.MakeSlice) values.Value {
+	return goast.Node("ssa-make-slice",
+		goast.Field("name", goast.Str(v.Name())),
+		goast.Field("type", goast.Str(types.TypeString(v.Type(), nil))),
+		goast.Field("len", valName(v.Len)),
+		goast.Field("cap", valName(v.Cap)),
+		goast.Field("operands", goast.ValueList([]values.Value{valName(v.Len), valName(v.Cap)})),
+	)
+}
+
+func (p *ssaMapper) mapSlice(v *ssa.Slice) values.Value {
+	return goast.Node("ssa-slice",
+		goast.Field("name", goast.Str(v.Name())),
+		goast.Field("x", valName(v.X)),
+		goast.Field("low", valName(v.Low)),
+		goast.Field("high", valName(v.High)),
+		goast.Field("max", valName(v.Max)),
+		goast.Field("type", goast.Str(types.TypeString(v.Type(), nil))),
+		goast.Field("operands", goast.ValueList([]values.Value{valName(v.X)})),
+	)
+}
+
+func (p *ssaMapper) mapMakeChan(v *ssa.MakeChan) values.Value {
+	return goast.Node("ssa-make-chan",
+		goast.Field("name", goast.Str(v.Name())),
+		goast.Field("type", goast.Str(types.TypeString(v.Type(), nil))),
+		goast.Field("size", valName(v.Size)),
+		goast.Field("operands", goast.ValueList([]values.Value{valName(v.Size)})),
+	)
+}
+
+func (p *ssaMapper) mapSend(v *ssa.Send) values.Value {
+	return goast.Node("ssa-send",
+		goast.Field("chan", valName(v.Chan)),
+		goast.Field("x", valName(v.X)),
+		goast.Field("operands", goast.ValueList([]values.Value{valName(v.Chan), valName(v.X)})),
+	)
+}
+
+func (p *ssaMapper) mapSelect(v *ssa.Select) values.Value {
+	states := make([]values.Value, len(v.States))
+	var operands []values.Value
+	for i, s := range v.States {
+		stateFields := []values.Value{
+			goast.Field("chan", valName(s.Chan)),
+			goast.Field("dir", goast.Sym(chanDirStr(s.Dir))),
+		}
+		operands = append(operands, valName(s.Chan))
+		if s.Send != nil {
+			stateFields = append(stateFields, goast.Field("send", valName(s.Send)))
+			operands = append(operands, valName(s.Send))
+		}
+		states[i] = goast.Node("ssa-select-state", stateFields...)
+	}
+	return goast.Node("ssa-select",
+		goast.Field("name", goast.Str(v.Name())),
+		goast.Field("blocking", values.BoolToBoolean(v.Blocking)),
+		goast.Field("states", goast.ValueList(states)),
+		goast.Field("type", goast.Str(types.TypeString(v.Type(), nil))),
+		goast.Field("operands", goast.ValueList(operands)),
+	)
+}
+
+func (p *ssaMapper) mapGo(v *ssa.Go) values.Value {
+	fields := p.mapCallCommon(&v.Call)
+	return goast.Node("ssa-go", fields...)
+}
+
+func (p *ssaMapper) mapDefer(v *ssa.Defer) values.Value {
+	fields := p.mapCallCommon(&v.Call)
+	return goast.Node("ssa-defer", fields...)
+}
+
+func (p *ssaMapper) mapRunDefers(_ *ssa.RunDefers) values.Value {
+	return goast.Node("ssa-run-defers",
+		goast.Field("operands", values.EmptyList),
+	)
+}
+
+func (p *ssaMapper) mapRange(v *ssa.Range) values.Value {
+	return goast.Node("ssa-range",
+		goast.Field("name", goast.Str(v.Name())),
+		goast.Field("x", valName(v.X)),
+		goast.Field("type", goast.Str(types.TypeString(v.Type(), nil))),
+		goast.Field("operands", goast.ValueList([]values.Value{valName(v.X)})),
+	)
+}
+
+func (p *ssaMapper) mapNext(v *ssa.Next) values.Value {
+	return goast.Node("ssa-next",
+		goast.Field("name", goast.Str(v.Name())),
+		goast.Field("iter", valName(v.Iter)),
+		goast.Field("is-string", values.BoolToBoolean(v.IsString)),
+		goast.Field("type", goast.Str(types.TypeString(v.Type(), nil))),
+		goast.Field("operands", goast.ValueList([]values.Value{valName(v.Iter)})),
+	)
+}
+
+func (p *ssaMapper) mapPanic(v *ssa.Panic) values.Value {
+	return goast.Node("ssa-panic",
+		goast.Field("x", valName(v.X)),
+		goast.Field("operands", goast.ValueList([]values.Value{valName(v.X)})),
+	)
+}
+
+func (p *ssaMapper) mapChangeType(v *ssa.ChangeType) values.Value {
+	return goast.Node("ssa-change-type",
+		goast.Field("name", goast.Str(v.Name())),
+		goast.Field("x", valName(v.X)),
+		goast.Field("type", goast.Str(types.TypeString(v.Type(), nil))),
+		goast.Field("operands", goast.ValueList([]values.Value{valName(v.X)})),
+	)
+}
+
+func (p *ssaMapper) mapConvert(v *ssa.Convert) values.Value {
+	return goast.Node("ssa-convert",
+		goast.Field("name", goast.Str(v.Name())),
+		goast.Field("x", valName(v.X)),
+		goast.Field("type", goast.Str(types.TypeString(v.Type(), nil))),
+		goast.Field("operands", goast.ValueList([]values.Value{valName(v.X)})),
+	)
+}
+
+func (p *ssaMapper) mapChangeInterface(v *ssa.ChangeInterface) values.Value {
+	return goast.Node("ssa-change-interface",
+		goast.Field("name", goast.Str(v.Name())),
+		goast.Field("x", valName(v.X)),
+		goast.Field("type", goast.Str(types.TypeString(v.Type(), nil))),
+		goast.Field("operands", goast.ValueList([]values.Value{valName(v.X)})),
+	)
+}
+
+func (p *ssaMapper) mapSliceToArrayPointer(v *ssa.SliceToArrayPointer) values.Value {
+	return goast.Node("ssa-slice-to-array-ptr",
+		goast.Field("name", goast.Str(v.Name())),
+		goast.Field("x", valName(v.X)),
+		goast.Field("type", goast.Str(types.TypeString(v.Type(), nil))),
+		goast.Field("operands", goast.ValueList([]values.Value{valName(v.X)})),
+	)
+}
+
+func (p *ssaMapper) mapMakeInterface(v *ssa.MakeInterface) values.Value {
+	return goast.Node("ssa-make-interface",
+		goast.Field("name", goast.Str(v.Name())),
+		goast.Field("x", valName(v.X)),
+		goast.Field("type", goast.Str(types.TypeString(v.Type(), nil))),
+		goast.Field("operands", goast.ValueList([]values.Value{valName(v.X)})),
+	)
+}
+
+func (p *ssaMapper) mapTypeAssert(v *ssa.TypeAssert) values.Value {
+	return goast.Node("ssa-type-assert",
+		goast.Field("name", goast.Str(v.Name())),
+		goast.Field("x", valName(v.X)),
+		goast.Field("asserted-type", goast.Str(types.TypeString(v.AssertedType, nil))),
+		goast.Field("type", goast.Str(types.TypeString(v.Type(), nil))),
+		goast.Field("comma-ok", values.BoolToBoolean(v.CommaOk)),
+		goast.Field("operands", goast.ValueList([]values.Value{valName(v.X)})),
+	)
+}
+
+func (p *ssaMapper) mapMakeClosure(v *ssa.MakeClosure) values.Value {
+	bindings := make([]values.Value, len(v.Bindings))
+	operands := make([]values.Value, len(v.Bindings))
+	for i, b := range v.Bindings {
+		bindings[i] = valName(b)
+		operands[i] = valName(b)
+	}
+	return goast.Node("ssa-make-closure",
+		goast.Field("name", goast.Str(v.Name())),
+		goast.Field("fn", valName(v.Fn)),
+		goast.Field("bindings", goast.ValueList(bindings)),
+		goast.Field("type", goast.Str(types.TypeString(v.Type(), nil))),
+		goast.Field("operands", goast.ValueList(operands)),
+	)
+}
+
+// mapMultiConvert handles generic multi-type conversions (same shape as Convert).
+func (p *ssaMapper) mapMultiConvert(v *ssa.MultiConvert) values.Value {
+	return goast.Node("ssa-multi-convert",
+		goast.Field("name", goast.Str(v.Name())),
+		goast.Field("x", valName(v.X)),
+		goast.Field("type", goast.Str(types.TypeString(v.Type(), nil))),
+		goast.Field("operands", goast.ValueList([]values.Value{valName(v.X)})),
+	)
+}
+
+// mapDebugRef handles source-level debug annotations.
+// Only appears when SSA is built with ssa.GlobalDebug; included for completeness.
+func (p *ssaMapper) mapDebugRef(v *ssa.DebugRef) values.Value {
+	return goast.Node("ssa-debug-ref",
+		goast.Field("x", valName(v.X)),
+		goast.Field("is-addr", values.BoolToBoolean(v.IsAddr)),
+		goast.Field("operands", goast.ValueList([]values.Value{valName(v.X)})),
+	)
+}
+
+// chanDirStr converts a channel direction to a Scheme symbol string.
+func chanDirStr(dir types.ChanDir) string {
+	switch dir {
+	case types.SendOnly:
+		return "send"
+	case types.RecvOnly:
+		return "recv"
+	default:
+		return "both"
+	}
 }
 
 func (p *ssaMapper) mapUnknown(instr ssa.Instruction) values.Value {

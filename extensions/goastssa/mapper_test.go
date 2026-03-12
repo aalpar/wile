@@ -240,6 +240,423 @@ func Hello() {
 	c.Assert(funcField, qt.Not(qt.Equals), values.FalseValue)
 }
 
+func TestMapMakeMapAndLookup(t *testing.T) {
+	c := qt.New(t)
+	dir := t.TempDir()
+	fn := buildSSAFromSource(t, dir, `
+package testpkg
+
+func UseMap() (int, bool) {
+	m := make(map[string]int)
+	m["key"] = 42
+	v, ok := m["key"]
+	return v, ok
+}
+`, "UseMap")
+
+	mapper := &ssaMapper{fset: token.NewFileSet()}
+	result := mapper.mapFunction(fn)
+
+	// MakeMap
+	mkMap := findNodeByTag(result, "ssa-make-map")
+	c.Assert(mkMap, qt.IsNotNil, qt.Commentf("expected ssa-make-map"))
+
+	// MapUpdate
+	mu := findNodeByTag(result, "ssa-map-update")
+	c.Assert(mu, qt.IsNotNil, qt.Commentf("expected ssa-map-update"))
+
+	// Lookup
+	lk := findNodeByTag(result, "ssa-lookup")
+	c.Assert(lk, qt.IsNotNil, qt.Commentf("expected ssa-lookup"))
+
+	commaOk, ok := goast.GetField(lk.(*values.Pair).Cdr(), "comma-ok")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(commaOk, qt.Equals, values.TrueValue)
+
+	// Extract (from the commaok tuple)
+	ex := findNodeByTag(result, "ssa-extract")
+	c.Assert(ex, qt.IsNotNil, qt.Commentf("expected ssa-extract from commaok lookup"))
+}
+
+func TestMapMakeSliceAndSlice(t *testing.T) {
+	c := qt.New(t)
+	dir := t.TempDir()
+	fn := buildSSAFromSource(t, dir, `
+package testpkg
+
+func UseSlice(n int) []int {
+	s := make([]int, n)
+	return s[1:]
+}
+`, "UseSlice")
+
+	mapper := &ssaMapper{fset: token.NewFileSet()}
+	result := mapper.mapFunction(fn)
+
+	ms := findNodeByTag(result, "ssa-make-slice")
+	c.Assert(ms, qt.IsNotNil, qt.Commentf("expected ssa-make-slice"))
+
+	sl := findNodeByTag(result, "ssa-slice")
+	c.Assert(sl, qt.IsNotNil, qt.Commentf("expected ssa-slice"))
+
+	xField, ok := goast.GetField(sl.(*values.Pair).Cdr(), "x")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(xField, qt.Not(qt.Equals), values.FalseValue)
+}
+
+func TestMapChannels(t *testing.T) {
+	dir := t.TempDir()
+
+	t.Run("MakeChan and Send", func(t *testing.T) {
+		c := qt.New(t)
+		fn := buildSSAFromSource(t, dir, `
+package testpkg
+
+func UseChan() {
+	ch := make(chan int, 1)
+	ch <- 42
+}
+`, "UseChan")
+		mapper := &ssaMapper{fset: token.NewFileSet()}
+		result := mapper.mapFunction(fn)
+
+		mc := findNodeByTag(result, "ssa-make-chan")
+		c.Assert(mc, qt.IsNotNil, qt.Commentf("expected ssa-make-chan"))
+
+		sn := findNodeByTag(result, "ssa-send")
+		c.Assert(sn, qt.IsNotNil, qt.Commentf("expected ssa-send"))
+	})
+
+	t.Run("Select", func(t *testing.T) {
+		c := qt.New(t)
+		dir2 := t.TempDir()
+		fn := buildSSAFromSource(t, dir2, `
+package testpkg
+
+func UseSelect(c1, c2 chan int) int {
+	select {
+	case v := <-c1:
+		return v
+	case v := <-c2:
+		return v
+	}
+}
+`, "UseSelect")
+		mapper := &ssaMapper{fset: token.NewFileSet()}
+		result := mapper.mapFunction(fn)
+
+		sel := findNodeByTag(result, "ssa-select")
+		c.Assert(sel, qt.IsNotNil, qt.Commentf("expected ssa-select"))
+
+		states, ok := goast.GetField(sel.(*values.Pair).Cdr(), "states")
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(listLength(states), qt.Equals, 2)
+	})
+}
+
+func TestMapGoroutineAndDefer(t *testing.T) {
+	c := qt.New(t)
+	dir := t.TempDir()
+	fn := buildSSAFromSource(t, dir, `
+package testpkg
+
+func noop() {
+}
+
+func UseGoDefer() {
+	go noop()
+	defer noop()
+}
+`, "UseGoDefer")
+
+	mapper := &ssaMapper{fset: token.NewFileSet()}
+	result := mapper.mapFunction(fn)
+
+	goNode := findNodeByTag(result, "ssa-go")
+	c.Assert(goNode, qt.IsNotNil, qt.Commentf("expected ssa-go"))
+
+	deferNode := findNodeByTag(result, "ssa-defer")
+	c.Assert(deferNode, qt.IsNotNil, qt.Commentf("expected ssa-defer"))
+
+	// RunDefers is inserted at the return site when defers are present.
+	rdNode := findNodeByTag(result, "ssa-run-defers")
+	c.Assert(rdNode, qt.IsNotNil, qt.Commentf("expected ssa-run-defers"))
+}
+
+func TestMapRangeAndNext(t *testing.T) {
+	c := qt.New(t)
+	dir := t.TempDir()
+	fn := buildSSAFromSource(t, dir, `
+package testpkg
+
+func UseRange(m map[string]int) int {
+	sum := 0
+	for _, v := range m {
+		sum += v
+	}
+	return sum
+}
+`, "UseRange")
+
+	mapper := &ssaMapper{fset: token.NewFileSet()}
+	result := mapper.mapFunction(fn)
+
+	rn := findNodeByTag(result, "ssa-range")
+	c.Assert(rn, qt.IsNotNil, qt.Commentf("expected ssa-range"))
+
+	nx := findNodeByTag(result, "ssa-next")
+	c.Assert(nx, qt.IsNotNil, qt.Commentf("expected ssa-next"))
+}
+
+func TestMapPanic(t *testing.T) {
+	c := qt.New(t)
+	dir := t.TempDir()
+	fn := buildSSAFromSource(t, dir, `
+package testpkg
+
+func UsePanic(x int) int {
+	if x < 0 {
+		panic("negative")
+	}
+	return x
+}
+`, "UsePanic")
+
+	mapper := &ssaMapper{fset: token.NewFileSet()}
+	result := mapper.mapFunction(fn)
+
+	pn := findNodeByTag(result, "ssa-panic")
+	c.Assert(pn, qt.IsNotNil, qt.Commentf("expected ssa-panic"))
+}
+
+func TestMapTypeConversions(t *testing.T) {
+	t.Run("Convert numeric", func(t *testing.T) {
+		c := qt.New(t)
+		dir := t.TempDir()
+		fn := buildSSAFromSource(t, dir, `
+package testpkg
+
+func ToInt64(x int) int64 {
+	return int64(x)
+}
+`, "ToInt64")
+		mapper := &ssaMapper{fset: token.NewFileSet()}
+		result := mapper.mapFunction(fn)
+
+		cv := findNodeByTag(result, "ssa-convert")
+		c.Assert(cv, qt.IsNotNil, qt.Commentf("expected ssa-convert"))
+	})
+
+	t.Run("ChangeType channel direction", func(t *testing.T) {
+		c := qt.New(t)
+		dir := t.TempDir()
+		fn := buildSSAFromSource(t, dir, `
+package testpkg
+
+func SendOnly(c chan int) chan<- int {
+	return c
+}
+`, "SendOnly")
+		mapper := &ssaMapper{fset: token.NewFileSet()}
+		result := mapper.mapFunction(fn)
+
+		ct := findNodeByTag(result, "ssa-change-type")
+		c.Assert(ct, qt.IsNotNil, qt.Commentf("expected ssa-change-type"))
+	})
+
+	t.Run("SliceToArrayPointer", func(t *testing.T) {
+		c := qt.New(t)
+		dir := t.TempDir()
+		fn := buildSSAFromSource(t, dir, `
+package testpkg
+
+func SliceToArr(s []int) *[3]int {
+	return (*[3]int)(s)
+}
+`, "SliceToArr")
+		mapper := &ssaMapper{fset: token.NewFileSet()}
+		result := mapper.mapFunction(fn)
+
+		sap := findNodeByTag(result, "ssa-slice-to-array-ptr")
+		c.Assert(sap, qt.IsNotNil, qt.Commentf("expected ssa-slice-to-array-ptr"))
+	})
+
+	t.Run("ChangeInterface", func(t *testing.T) {
+		c := qt.New(t)
+		dir := t.TempDir()
+		fn := buildSSAFromSource(t, dir, `
+package testpkg
+
+type Stringer interface {
+	String() string
+}
+
+type ReadStringer interface {
+	String() string
+	Read() []byte
+}
+
+func ToStringer(x ReadStringer) Stringer {
+	return x
+}
+`, "ToStringer")
+		mapper := &ssaMapper{fset: token.NewFileSet()}
+		result := mapper.mapFunction(fn)
+
+		// ChangeInterface may be elided by the SSA compiler in some cases.
+		// If absent, verify by dumping SSA with ssa.WriteFunction and
+		// adjusting the test source.
+		ci := findNodeByTag(result, "ssa-change-interface")
+		c.Assert(ci, qt.IsNotNil,
+			qt.Commentf("expected ssa-change-interface; if absent, verify SSA output"))
+	})
+}
+
+func TestMapMakeInterface(t *testing.T) {
+	c := qt.New(t)
+	dir := t.TempDir()
+	fn := buildSSAFromSource(t, dir, `
+package testpkg
+
+func ToInterface(x int) interface{} {
+	return x
+}
+`, "ToInterface")
+
+	mapper := &ssaMapper{fset: token.NewFileSet()}
+	result := mapper.mapFunction(fn)
+
+	mi := findNodeByTag(result, "ssa-make-interface")
+	c.Assert(mi, qt.IsNotNil, qt.Commentf("expected ssa-make-interface"))
+}
+
+func TestMapTypeAssert(t *testing.T) {
+	c := qt.New(t)
+	dir := t.TempDir()
+	fn := buildSSAFromSource(t, dir, `
+package testpkg
+
+func FromInterface(x interface{}) int {
+	return x.(int)
+}
+`, "FromInterface")
+
+	mapper := &ssaMapper{fset: token.NewFileSet()}
+	result := mapper.mapFunction(fn)
+
+	ta := findNodeByTag(result, "ssa-type-assert")
+	c.Assert(ta, qt.IsNotNil, qt.Commentf("expected ssa-type-assert"))
+
+	asserted, ok := goast.GetField(ta.(*values.Pair).Cdr(), "asserted-type")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(asserted.(*values.String).Value, qt.Equals, "int")
+}
+
+func TestMapMakeClosure(t *testing.T) {
+	c := qt.New(t)
+	dir := t.TempDir()
+	fn := buildSSAFromSource(t, dir, `
+package testpkg
+
+func MakeClosure(x int) func() int {
+	return func() int {
+		return x
+	}
+}
+`, "MakeClosure")
+
+	mapper := &ssaMapper{fset: token.NewFileSet()}
+	result := mapper.mapFunction(fn)
+
+	cl := findNodeByTag(result, "ssa-make-closure")
+	c.Assert(cl, qt.IsNotNil, qt.Commentf("expected ssa-make-closure"))
+
+	bindings, ok := goast.GetField(cl.(*values.Pair).Cdr(), "bindings")
+	c.Assert(ok, qt.IsTrue)
+	// x is captured, so at least one binding.
+	c.Assert(listLength(bindings) >= 1, qt.IsTrue)
+}
+
+func TestMapMultiConvert(t *testing.T) {
+	c := qt.New(t)
+	dir := t.TempDir()
+	fn := buildSSAFromSource(t, dir, `
+package testpkg
+
+func ToInt64[T ~int | ~float64](x T) int64 {
+	return int64(x)
+}
+`, "ToInt64")
+
+	// MultiConvert may or may not appear depending on SSA compiler decisions.
+	// If it does, verify the tag; if not, the instruction falls through to
+	// ssa-unknown or ssa-convert, which is acceptable.
+	mapper := &ssaMapper{fset: token.NewFileSet()}
+	result := mapper.mapFunction(fn)
+
+	mc := findNodeByTag(result, "ssa-multi-convert")
+	if mc == nil {
+		// SSA compiler may have lowered this to a regular Convert.
+		cv := findNodeByTag(result, "ssa-convert")
+		c.Assert(cv, qt.IsNotNil,
+			qt.Commentf("expected either ssa-multi-convert or ssa-convert"))
+		return
+	}
+	xField, ok := goast.GetField(mc.(*values.Pair).Cdr(), "x")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(xField, qt.Not(qt.Equals), values.FalseValue)
+}
+
+// buildSSAFromSourceDebug is like buildSSAFromSource but builds with
+// ssa.GlobalDebug to produce DebugRef instructions.
+func buildSSAFromSourceDebug(t *testing.T, dir, source, funcName string) *ssa.Function {
+	t.Helper()
+	c := qt.New(t)
+	writeTestPackage(t, dir, source)
+
+	fset := token.NewFileSet()
+	cfg := &packages.Config{
+		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax |
+			packages.NeedTypes | packages.NeedTypesInfo |
+			packages.NeedImports | packages.NeedDeps,
+		Fset: fset,
+		Dir:  dir,
+	}
+	pkgs, err := packages.Load(cfg, ".")
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(pkgs), qt.Not(qt.Equals), 0)
+
+	_, ssaPkgs := ssautil.Packages(pkgs, ssa.SanityCheckFunctions|ssa.GlobalDebug)
+	for _, p := range ssaPkgs {
+		if p != nil {
+			p.Build()
+		}
+	}
+
+	fn := ssaPkgs[0].Func(funcName)
+	c.Assert(fn, qt.IsNotNil, qt.Commentf("function %s not found", funcName))
+	return fn
+}
+
+func TestMapDebugRef(t *testing.T) {
+	c := qt.New(t)
+	dir := t.TempDir()
+	fn := buildSSAFromSourceDebug(t, dir, `
+package testpkg
+
+func UseDebug(x int) int {
+	y := x + 1
+	return y
+}
+`, "UseDebug")
+
+	mapper := &ssaMapper{fset: token.NewFileSet()}
+	result := mapper.mapFunction(fn)
+
+	dr := findNodeByTag(result, "ssa-debug-ref")
+	c.Assert(dr, qt.IsNotNil, qt.Commentf("expected ssa-debug-ref with GlobalDebug"))
+}
+
 // findNodeByTag does a depth-first search for a node with the given tag.
 func findNodeByTag(v values.Value, tag string) values.Value {
 	pair, ok := v.(*values.Pair)
