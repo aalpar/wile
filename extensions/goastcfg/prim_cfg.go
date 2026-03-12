@@ -9,6 +9,7 @@ import (
 	"golang.org/x/tools/go/ssa"
 	"golang.org/x/tools/go/ssa/ssautil"
 
+	"github.com/aalpar/wile/extensions/goast"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/security"
@@ -20,6 +21,75 @@ var (
 	errCFGBuildError   = werr.NewStaticError("cfg build error")
 	errCFGFuncNotFound = werr.NewStaticError("function not found in package")
 )
+
+// cfgBlockInfo holds the parsed fields of a single cfg-block s-expression.
+type cfgBlockInfo struct {
+	index int64
+	idom  int64 // -1 means no idom (entry block)
+	succs []int64
+}
+
+// parseCFGBlocks extracts index, idom, and succs from a cfg-block list.
+// Blocks whose tag or required fields are missing are silently skipped.
+func parseCFGBlocks(cfg values.Value) []cfgBlockInfo {
+	tuple, ok := cfg.(values.Tuple)
+	if !ok {
+		return nil
+	}
+	var blocks []cfgBlockInfo
+	for !values.IsEmptyList(tuple) {
+		pair, ok := tuple.(*values.Pair)
+		if !ok {
+			break
+		}
+		info, ok := parseCFGBlock(pair.Car())
+		if ok {
+			blocks = append(blocks, info)
+		}
+		tuple, ok = pair.Cdr().(values.Tuple)
+		if !ok {
+			break
+		}
+	}
+	return blocks
+}
+
+func parseCFGBlock(node values.Value) (cfgBlockInfo, bool) {
+	np, ok := node.(*values.Pair)
+	if !ok {
+		return cfgBlockInfo{}, false
+	}
+	indexVal, found := goast.GetField(np.Cdr(), "index")
+	if !found {
+		return cfgBlockInfo{}, false
+	}
+	idx := indexVal.(*values.Integer).Value
+
+	idomVal, found := goast.GetField(np.Cdr(), "idom")
+	idom := int64(-1)
+	if found && idomVal != values.FalseValue {
+		idom = idomVal.(*values.Integer).Value
+	}
+
+	succsField, found := goast.GetField(np.Cdr(), "succs")
+	var succs []int64
+	if found {
+		st, ok := succsField.(values.Tuple)
+		for ok && !values.IsEmptyList(st) {
+			sp, ok2 := st.(*values.Pair)
+			if !ok2 {
+				break
+			}
+			sv, ok2 := sp.Car().(*values.Integer)
+			if ok2 {
+				succs = append(succs, sv.Value)
+			}
+			st, ok = sp.Cdr().(values.Tuple)
+		}
+	}
+
+	return cfgBlockInfo{index: idx, idom: idom, succs: succs}, true
+}
 
 // parseCFGOpts extracts mapper options from the variadic rest-arg list.
 func parseCFGOpts(rest values.Value, fset *token.FileSet) *cfgMapper {
@@ -145,4 +215,45 @@ func PrimGoCFG(mc *machine.MachineContext) error {
 
 	return werr.WrapForeignErrorf(errCFGFuncNotFound,
 		"go-cfg: function %q not found in %s", funcName.Value, pattern.Value)
+}
+
+// PrimGoCFGDominators implements (go-cfg-dominators cfg).
+// Takes the cfg-block list from go-cfg and returns a list of dom-node
+// s-expressions (the dominator tree, rooted at the entry block).
+func PrimGoCFGDominators(mc *machine.MachineContext) error {
+	blocks := parseCFGBlocks(mc.Arg(0))
+	if len(blocks) == 0 {
+		mc.SetValue(values.EmptyList)
+		return nil
+	}
+
+	// Build children map: idom index -> list of child indices.
+	children := make(map[int64][]int64)
+	for _, b := range blocks {
+		if b.idom >= 0 {
+			children[b.idom] = append(children[b.idom], b.index)
+		}
+	}
+
+	// Emit dom-node for each block.
+	nodes := make([]values.Value, len(blocks))
+	for i, b := range blocks {
+		childVals := make([]values.Value, len(children[b.index]))
+		for j, c := range children[b.index] {
+			childVals[j] = values.NewInteger(c)
+		}
+		var idomVal values.Value
+		if b.idom >= 0 {
+			idomVal = values.NewInteger(b.idom)
+		} else {
+			idomVal = values.FalseValue
+		}
+		nodes[i] = goast.Node("dom-node",
+			goast.Field("block", values.NewInteger(b.index)),
+			goast.Field("idom", idomVal),
+			goast.Field("children", goast.ValueList(childVals)),
+		)
+	}
+	mc.SetValue(goast.ValueList(nodes))
+	return nil
 }

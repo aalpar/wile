@@ -32,6 +32,13 @@ func addPrimitives(r *registry.Registry) error {
 			ParamNames: []string{"pattern", "func-name", "options"},
 			Category:   "goast-cfg",
 		},
+		{
+			Name: "go-cfg-dominators", ParamCount: 1,
+			Impl:       PrimGoCFGDominators,
+			Doc:        "Builds a dominator tree from a cfg-block list returned by go-cfg.",
+			ParamNames: []string{"cfg"},
+			Category:   "goast-cfg",
+		},
 	}, registry.PhaseRuntime)
 	return nil
 }

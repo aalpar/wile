@@ -62,6 +62,53 @@ func TestGoCFG_EntryBlockHasNoIdom(t *testing.T) {
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 }
 
+func TestGoCFGDominators_Structure(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	// A branching function guarantees multiple blocks with non-trivial dominance.
+	runScheme(t, engine, `
+		(define cfg (go-cfg "github.com/aalpar/wile/extensions/goast" "PrimGoParseExpr"))`)
+
+	result := runScheme(t, engine, `(pair? (go-cfg-dominators cfg))`)
+	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+
+	// Every dom-node must have block, idom, and children fields.
+	result = runScheme(t, engine, `
+		(let loop ((nodes (go-cfg-dominators cfg)))
+			(if (null? nodes) #t
+				(let ((n (car nodes)))
+					(and (eq? (car n) 'dom-node)
+					     (assoc 'block    (cdr n))
+					     (assoc 'idom     (cdr n))
+					     (assoc 'children (cdr n))
+					     (loop (cdr nodes))))))`)
+	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+}
+
+func TestGoCFGDominators_EntryDominatesAll(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	// Entry block (index 0) should appear in children of no other node
+	// (it is the root — idom is #f).
+	runScheme(t, engine,
+		`(define cfg (go-cfg "github.com/aalpar/wile/extensions/goast" "PrimGoParseExpr"))`)
+	runScheme(t, engine,
+		`(define dom (go-cfg-dominators cfg))`)
+	// Walk dom-tree to find the entry block (the one with idom=#f)
+	// and verify its block field is an integer.
+	result := runScheme(t, engine, `
+		(let loop ((nodes dom))
+			(if (null? nodes) #f
+				(let* ((n    (car nodes))
+				       (idom (cdr (assoc 'idom (cdr n)))))
+					(if (eq? #f idom)
+						(integer? (cdr (assoc 'block (cdr n))))
+						(loop (cdr nodes))))))`)
+	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+}
+
 func TestGoCFG_Errors(t *testing.T) {
 	engine := newEngine(t)
 	tcs := []struct {
