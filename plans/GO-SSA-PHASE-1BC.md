@@ -1046,13 +1046,13 @@ docs: mark GO-STATIC-ANALYSIS Phase 1B+1C complete
 
 ## Post-implementation checklist
 
-- [ ] All 6 task commits on branch
-- [ ] `make lint` clean
-- [ ] `make test` passes
-- [ ] `make covercheck` passes
-- [ ] `plans/GO-STATIC-ANALYSIS.md` updated: Phase 1B + 1C → "Complete"
-- [ ] All 20 new instruction types have named mapper methods (no anonymous fallthrough)
-- [ ] ssa-unknown with go-type diagnostic still works for any future instruction types
+- [x] All 6 task commits on branch
+- [x] `make lint` clean
+- [x] `make test` passes
+- [x] `make covercheck` passes
+- [x] `plans/GO-STATIC-ANALYSIS.md` updated: Phase 1B + 1C → "Complete"
+- [x] All 20 new instruction types have named mapper methods (no anonymous fallthrough)
+- [x] ssa-unknown with go-type diagnostic still works for any future instruction types
 
 ## Instruction type coverage after Phase 1BC
 

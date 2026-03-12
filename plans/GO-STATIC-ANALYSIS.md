@@ -1,6 +1,6 @@
 # Go Static Analysis Extensions
 
-**Status**: Complete
+**Status**: Phases 1-3 complete; Phase 4 (lint) not started
 **Foundation**: `extensions/goast/` (see `plans/GO-AST.md`)
 **Dependencies**: `golang.org/x/tools v0.42.0` (already vendored) — `go/ssa`, `go/callgraph`, `go/cfg`, `go/analysis`
 
@@ -119,13 +119,13 @@ Cross-referencing between layers uses position strings. When both AST and SSA in
 
 ## High-Level Roadmap
 
-### Phase 1: `(wile goast ssa)` — SSA / Data Flow
+### Phase 1: `(wile goast ssa)` — SSA / Data Flow  ✓ Complete (instruction mapping)
 
 **See detailed design below.**
 
 Exposes `go/ssa` as s-expressions. Enables data-flow queries: def-use chains, phi-node analysis, field store tracking, mutation independence checks.
 
-**Key primitives**: `go-ssa-build`, `go-ssa-operands`, `go-ssa-referrers`
+**Key primitives**: `go-ssa-build` ✓, `go-ssa-operands` (not implemented — operands embedded in each instruction node), `go-ssa-referrers` (not implemented — achievable via Scheme-side tree walking)
 
 **Deliverable**: The state-trace analysis from our prototype can answer "are these fields mutated independently?" — the gap identified in the current goast-only approach.
 

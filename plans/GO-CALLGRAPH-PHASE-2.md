@@ -1379,16 +1379,16 @@ docs: mark GO-STATIC-ANALYSIS Phase 2 complete
 
 ## Post-implementation checklist
 
-- [ ] All 5 task commits on branch
-- [ ] `make lint` clean
-- [ ] `make test` passes (full suite)
-- [ ] `make covercheck` passes
-- [ ] `plans/GO-STATIC-ANALYSIS.md` updated: Phase 2 -> "Complete"
-- [ ] `plans/CLAUDE.md` updated with plan file entry
-- [ ] All 4 primitives have happy-path + error-path tests
-- [ ] At least one integration test validating the full pipeline
-- [ ] Mapper handles synthetic root node (nil Func) gracefully
-- [ ] RTA produces clear error when no main function exists
+- [x] All 5 task commits on branch
+- [x] `make lint` clean
+- [x] `make test` passes (full suite)
+- [x] `make covercheck` passes
+- [x] `plans/GO-STATIC-ANALYSIS.md` updated: Phase 2 -> "Complete"
+- [x] `plans/CLAUDE.md` updated with plan file entry
+- [x] All 4 primitives have happy-path + error-path tests
+- [x] At least one integration test validating the full pipeline
+- [x] Mapper handles synthetic root node (nil Func) gracefully
+- [x] RTA produces clear error when no main function exists
 
 ## Primitives summary
 
