@@ -1,6 +1,6 @@
 # Go Static Analysis Extensions
 
-**Status**: Design
+**Status**: Complete
 **Foundation**: `extensions/goast/` (see `plans/GO-AST.md`)
 **Dependencies**: `golang.org/x/tools v0.42.0` (already vendored) — `go/ssa`, `go/callgraph`, `go/cfg`, `go/analysis`
 
