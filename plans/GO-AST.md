@@ -334,7 +334,7 @@ Three sub-features with different complexity levels:
 |----------|-------|------------|
 | Error recovery | `BadExpr`, `BadStmt`, `BadDecl` | Low — empty tag nodes; positions opt-in |
 | Generics | `IndexListExpr` | Low — same shape as `IndexExpr` but with list of indices |
-| Comments | `Comment`, `CommentGroup` + doc/comment fields on 7 existing node types | High — position-based attachment for `go/printer` round-trip |
+| Comments | `Comment`, `CommentGroup` + doc/comment/comments attachments on existing node types | High — position-based attachment for `go/printer` round-trip |
 
 **See detailed design: `plans/GO-AST-PHASE-3.md`**
 

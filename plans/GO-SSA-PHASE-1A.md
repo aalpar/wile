@@ -1383,12 +1383,12 @@ mapper to Scheme-side tree walking.
 
 ## Post-implementation checklist
 
-- [ ] All 8 tasks committed
-- [ ] `make lint` clean
-- [ ] `make test` passes (not just `./extensions/goastssa/...`)
-- [ ] `make covercheck` passes
-- [ ] `plans/GO-STATIC-ANALYSIS.md` updated: Phase 1A sub-phase status → "Complete"
-- [ ] Unmapped instruction types produce `ssa-unknown` with `go-type` diagnostic (no panics)
+- [x] All 8 tasks committed
+- [x] `make lint` clean
+- [x] `make test` passes (not just `./extensions/goastssa/...`)
+- [x] `make covercheck` passes
+- [x] `plans/GO-STATIC-ANALYSIS.md` updated: Phase 1A sub-phase status → "Complete"
+- [x] Unmapped instruction types produce `ssa-unknown` with `go-type` diagnostic (no panics)
 
 ## What this enables
 

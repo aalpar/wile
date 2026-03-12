@@ -247,14 +247,16 @@ func chanDirFromSymbol(v values.Value) (ast.ChanDir, error) {
 
 ### Key unmapping patterns
 
-**SliceExpr.Slice3** — extract boolean:
+**SliceExpr.Slice3** — extract boolean (strict validation, consistent with unmapper conventions):
 ```go
 slice3Val, err := RequireField(fields, "slice-expr", "slice3")
 // ...
-slice3 := false
-if b, ok := slice3Val.(*values.Boolean); ok {
-    slice3 = b.Value
+b, ok := slice3Val.(*values.Boolean)
+if !ok {
+    return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+        "goast: slice-expr field 'slice3' must be boolean, got %T", slice3Val)
 }
+slice3 := b.Value
 ```
 
 **CaseClause.List** — `#f` for default, `[]Expr` otherwise:

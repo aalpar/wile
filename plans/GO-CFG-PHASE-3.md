@@ -1382,18 +1382,18 @@ docs: mark GO-STATIC-ANALYSIS Phase 3 complete
 
 ## Post-implementation checklist
 
-- [ ] All 6 task commits on branch
-- [ ] `make lint` clean
-- [ ] `make test` passes (full suite)
-- [ ] `make covercheck` passes
-- [ ] `plans/GO-STATIC-ANALYSIS.md` updated: Phase 3 → "Complete"
-- [ ] `plans/CLAUDE.md` updated with plan file entry
-- [ ] All 4 primitives have happy-path + error-path tests
-- [ ] At least one integration test validating dominance + paths together
-- [ ] `go-cfg-paths` handles the same-block case `(go-cfg-paths cfg 0 0) => ((0))`
-- [ ] `go-cfg-paths` is capped at 1024 paths (no infinite loop on loops)
-- [ ] Recover blocks tagged with `(recover . #t)` — tests don't break on functions with `defer`/`recover`
-- [ ] Method iteration uses `for sel := range mset.Methods()` (Go 1.23 pattern, matches goastssa)
+- [x] All 6 task commits on branch
+- [x] `make lint` clean
+- [x] `make test` passes (full suite)
+- [x] `make covercheck` passes
+- [x] `plans/GO-STATIC-ANALYSIS.md` updated: Phase 3 → "Complete"
+- [x] `plans/CLAUDE.md` updated with plan file entry
+- [x] All 4 primitives have happy-path + error-path tests
+- [x] At least one integration test validating dominance + paths together
+- [x] `go-cfg-paths` handles the same-block case `(go-cfg-paths cfg 0 0) => ((0))`
+- [x] `go-cfg-paths` is capped at 1024 paths (no infinite loop on loops)
+- [x] Recover blocks tagged with `(recover . #t)` — tests don't break on functions with `defer`/`recover`
+- [x] Method iteration uses `for sel := range mset.Methods()` (Go 1.23 pattern, matches goastssa)
 
 ## Primitives summary
 

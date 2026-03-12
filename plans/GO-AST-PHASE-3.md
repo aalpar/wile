@@ -133,16 +133,18 @@ For each of the 6 node types with `Doc`:
 
 ```go
 // In mapFuncDecl, prepend to fields list:
-if opts.comments && f.Doc != nil {
+if opts.comments {
     fs = append(fs, Field("doc", commentGroupToStrings(f.Doc)))
 }
 ```
+
+Note: `commentGroupToStrings` already returns `#f` for nil input, so always emitting the field preserves the invariant from `GO-AST.md` that fields are always present with `#f` for absent values.
 
 For the 4 node types with trailing `Comment`:
 
 ```go
 // In mapField, append to fields list:
-if opts.comments && f.Comment != nil {
+if opts.comments {
     fs = append(fs, Field("comment", commentGroupToStrings(f.Comment)))
 }
 ```
@@ -151,7 +153,7 @@ For `mapFile`:
 
 ```go
 // Add comments field:
-if opts.comments && f.Comments != nil {
+if opts.comments {
     fs = append(fs, Field("comments", mapCommentGroups(f.Comments)))
 }
 ```
