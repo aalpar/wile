@@ -15,6 +15,9 @@
 package goastlint
 
 import (
+	"sort"
+
+	"github.com/aalpar/wile/extensions/goast"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 )
@@ -25,8 +28,17 @@ func PrimGoAnalyze(mc *machine.MachineContext) error {
 	return nil
 }
 
-// PrimGoAnalyzeList stub — filled in by Task 2.
+// PrimGoAnalyzeList returns a sorted list of available analyzer name strings.
 func PrimGoAnalyzeList(mc *machine.MachineContext) error {
-	mc.SetValue(values.EmptyList)
+	names := make([]string, 0, len(analyzerRegistry))
+	for name := range analyzerRegistry {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	result := make([]values.Value, len(names))
+	for i, name := range names {
+		result[i] = goast.Str(name)
+	}
+	mc.SetValue(goast.ValueList(result))
 	return nil
 }
