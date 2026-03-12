@@ -1132,6 +1132,46 @@ func TestRoundTripInterfaceWithDocComment(t *testing.T) {
 		"package p\n\n// I is an interface.\ntype I interface {\n\t// M does something.\n\tM()\n}\n")
 }
 
+func TestRoundTripStandaloneCommentWithDocComment(t *testing.T) {
+	// Standalone comment followed by a doc comment on the next decl.
+	roundTripFileWithComments(t,
+		"package p\n\nvar X int\n\n// standalone\n\n// Doc for Y.\nvar Y int\n")
+}
+
+func TestRoundTripStandaloneBlockComment(t *testing.T) {
+	roundTripFileWithComments(t,
+		"package p\n\nvar X int\n\n/* block standalone */\n\nvar Y int\n")
+}
+
+func TestRoundTripOnlyStandaloneComments(t *testing.T) {
+	// File with no doc comments at all — only standalone.
+	roundTripFileWithComments(t,
+		"package p\n\n// standalone only\n")
+}
+
+func TestRoundTripNoCommentGroupInDeclsWithoutCommentsFlag(t *testing.T) {
+	// Without comments flag, decls should NOT contain comment-group entries.
+	c := qt.New(t)
+	fset := token.NewFileSet()
+	source := "package p\n\nvar X int\n\n// standalone\n\nvar Y int\n"
+	f, err := parser.ParseFile(fset, "test.go", source, parser.ParseComments)
+	c.Assert(err, qt.IsNil)
+
+	opts := &mapperOpts{fset: fset, comments: false}
+	sexpr := mapNode(f, opts)
+
+	fields := sexpFields(sexpr)
+	declsVal, _ := GetField(fields, "decls")
+	tuple, ok := declsVal.(values.Tuple)
+	c.Assert(ok, qt.IsTrue)
+	for !values.IsEmptyList(tuple) {
+		pair := tuple.(*values.Pair)
+		c.Assert(sexpTag(pair.Car()), qt.Not(qt.Equals), "comment-group",
+			qt.Commentf("comment-group should not appear without comments flag"))
+		tuple = pair.Cdr().(values.Tuple)
+	}
+}
+
 func TestForEachSexprErrors(t *testing.T) {
 	t.Run("non-tuple input", func(t *testing.T) {
 		c := qt.New(t)
