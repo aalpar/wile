@@ -1017,6 +1017,26 @@ func TestRoundTripFuncBodyStatements(t *testing.T) {
 			" F() {\n\tx := 1\n\t_ = x\n\tprintln(x)\n}\n")
 }
 
+func TestRoundTripStandaloneCommentBetweenDecls(t *testing.T) {
+	roundTripFileWithComments(t,
+		"package p\n\nvar X int\n\n// standalone between X and Y\n\nvar Y int\n")
+}
+
+func TestRoundTripStandaloneCommentEndOfFile(t *testing.T) {
+	roundTripFileWithComments(t,
+		"package p\n\nvar X int\n\n// end of file comment\n")
+}
+
+func TestRoundTripStandaloneCommentBeforeFirstDecl(t *testing.T) {
+	roundTripFileWithComments(t,
+		"package p\n\n// standalone before first decl\n\nvar X int\n")
+}
+
+func TestRoundTripMultipleStandaloneComments(t *testing.T) {
+	roundTripFileWithComments(t,
+		"package p\n\nvar X int\n\n// first standalone\n\n// second standalone\n\nvar Y int\n")
+}
+
 func TestMapCommentsAbsent(t *testing.T) {
 	c := qt.New(t)
 	fset := token.NewFileSet()
