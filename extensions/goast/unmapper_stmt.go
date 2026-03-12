@@ -21,6 +21,25 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
+// requireBlockBody unmaps a body field and asserts it is a *ast.BlockStmt.
+// Returns a clear error if the field is #f or the wrong node type.
+func requireBlockBody(bodyVal values.Value, nodeType string) (*ast.BlockStmt, error) {
+	bodyNode, err := unmapStmt(bodyVal)
+	if err != nil {
+		return nil, err
+	}
+	if bodyNode == nil {
+		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+			"goast: %s field 'body' must not be #f", nodeType)
+	}
+	body, ok := bodyNode.(*ast.BlockStmt)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+			"goast: %s field 'body' expected block, got %T", nodeType, bodyNode)
+	}
+	return body, nil
+}
+
 func unmapBlockStmt(fields values.Value) (*ast.BlockStmt, error) {
 	listVal, err := RequireField(fields, "block", "list")
 	if err != nil {
@@ -111,14 +130,9 @@ func unmapIfStmt(fields values.Value) (*ast.IfStmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	bodyNode, err := unmapStmt(bodyVal)
+	body, err := requireBlockBody(bodyVal, "if-stmt")
 	if err != nil {
 		return nil, err
-	}
-	body, ok := bodyNode.(*ast.BlockStmt)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
-			"goast: if-stmt field 'body' expected block, got %T", bodyNode)
 	}
 
 	elseVal, err := RequireField(fields, "if-stmt", "else")
@@ -165,14 +179,9 @@ func unmapForStmt(fields values.Value) (*ast.ForStmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	bodyNode, err := unmapStmt(bodyVal)
+	body, err := requireBlockBody(bodyVal, "for-stmt")
 	if err != nil {
 		return nil, err
-	}
-	body, ok := bodyNode.(*ast.BlockStmt)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
-			"goast: for-stmt field 'body' expected block, got %T", bodyNode)
 	}
 
 	return &ast.ForStmt{Init: init, Cond: cond, Post: post, Body: body}, nil
@@ -219,14 +228,9 @@ func unmapRangeStmt(fields values.Value) (*ast.RangeStmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	bodyNode, err := unmapStmt(bodyVal)
+	body, err := requireBlockBody(bodyVal, "range-stmt")
 	if err != nil {
 		return nil, err
-	}
-	body, ok := bodyNode.(*ast.BlockStmt)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
-			"goast: range-stmt field 'body' expected block, got %T", bodyNode)
 	}
 
 	return &ast.RangeStmt{Key: key, Value: val, Tok: tok, X: x, Body: body}, nil
@@ -295,4 +299,206 @@ func unmapIncDecStmt(fields values.Value) (*ast.IncDecStmt, error) {
 	}
 
 	return &ast.IncDecStmt{X: x, Tok: tok}, nil
+}
+
+func unmapGoStmt(fields values.Value) (*ast.GoStmt, error) {
+	callVal, err := RequireField(fields, "go-stmt", "call")
+	if err != nil {
+		return nil, err
+	}
+	callNode, err := unmapNode(callVal)
+	if err != nil {
+		return nil, err
+	}
+	call, ok := callNode.(*ast.CallExpr)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+			"goast: go-stmt 'call' expected call-expr, got %T", callNode)
+	}
+	return &ast.GoStmt{Call: call}, nil
+}
+
+func unmapDeferStmt(fields values.Value) (*ast.DeferStmt, error) {
+	callVal, err := RequireField(fields, "defer-stmt", "call")
+	if err != nil {
+		return nil, err
+	}
+	callNode, err := unmapNode(callVal)
+	if err != nil {
+		return nil, err
+	}
+	call, ok := callNode.(*ast.CallExpr)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+			"goast: defer-stmt 'call' expected call-expr, got %T", callNode)
+	}
+	return &ast.DeferStmt{Call: call}, nil
+}
+
+func unmapSendStmt(fields values.Value) (*ast.SendStmt, error) {
+	chanVal, err := RequireField(fields, "send-stmt", "chan")
+	if err != nil {
+		return nil, err
+	}
+	ch, err := unmapExpr(chanVal)
+	if err != nil {
+		return nil, err
+	}
+
+	valueVal, err := RequireField(fields, "send-stmt", "value")
+	if err != nil {
+		return nil, err
+	}
+	val, err := unmapExpr(valueVal)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ast.SendStmt{Chan: ch, Value: val}, nil
+}
+
+func unmapLabeledStmt(fields values.Value) (*ast.LabeledStmt, error) {
+	labelVal, err := RequireField(fields, "labeled-stmt", "label")
+	if err != nil {
+		return nil, err
+	}
+	label, err := RequireString(labelVal, "labeled-stmt", "label")
+	if err != nil {
+		return nil, err
+	}
+
+	stmtVal, err := RequireField(fields, "labeled-stmt", "stmt")
+	if err != nil {
+		return nil, err
+	}
+	stmt, err := unmapStmt(stmtVal)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ast.LabeledStmt{Label: ast.NewIdent(label), Stmt: stmt}, nil
+}
+
+func unmapSwitchStmt(fields values.Value) (*ast.SwitchStmt, error) {
+	initVal, err := RequireField(fields, "switch-stmt", "init")
+	if err != nil {
+		return nil, err
+	}
+	init, err := unmapStmt(initVal)
+	if err != nil {
+		return nil, err
+	}
+
+	tagVal, err := RequireField(fields, "switch-stmt", "tag")
+	if err != nil {
+		return nil, err
+	}
+	tag, err := unmapExpr(tagVal)
+	if err != nil {
+		return nil, err
+	}
+
+	bodyVal, err := RequireField(fields, "switch-stmt", "body")
+	if err != nil {
+		return nil, err
+	}
+	body, err := requireBlockBody(bodyVal, "switch-stmt")
+	if err != nil {
+		return nil, err
+	}
+
+	return &ast.SwitchStmt{Init: init, Tag: tag, Body: body}, nil
+}
+
+func unmapTypeSwitchStmt(fields values.Value) (*ast.TypeSwitchStmt, error) {
+	initVal, err := RequireField(fields, "type-switch-stmt", "init")
+	if err != nil {
+		return nil, err
+	}
+	init, err := unmapStmt(initVal)
+	if err != nil {
+		return nil, err
+	}
+
+	assignVal, err := RequireField(fields, "type-switch-stmt", "assign")
+	if err != nil {
+		return nil, err
+	}
+	assign, err := unmapStmt(assignVal)
+	if err != nil {
+		return nil, err
+	}
+
+	bodyVal, err := RequireField(fields, "type-switch-stmt", "body")
+	if err != nil {
+		return nil, err
+	}
+	body, err := requireBlockBody(bodyVal, "type-switch-stmt")
+	if err != nil {
+		return nil, err
+	}
+
+	return &ast.TypeSwitchStmt{Init: init, Assign: assign, Body: body}, nil
+}
+
+func unmapSelectStmt(fields values.Value) (*ast.SelectStmt, error) {
+	bodyVal, err := RequireField(fields, "select-stmt", "body")
+	if err != nil {
+		return nil, err
+	}
+	body, err := requireBlockBody(bodyVal, "select-stmt")
+	if err != nil {
+		return nil, err
+	}
+	return &ast.SelectStmt{Body: body}, nil
+}
+
+func unmapCommClause(fields values.Value) (*ast.CommClause, error) {
+	commVal, err := RequireField(fields, "comm-clause", "comm")
+	if err != nil {
+		return nil, err
+	}
+	var comm ast.Stmt
+	if !IsFalse(commVal) {
+		comm, err = unmapStmt(commVal)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	bodyVal, err := RequireField(fields, "comm-clause", "body")
+	if err != nil {
+		return nil, err
+	}
+	body, err := unmapStmtList(bodyVal)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ast.CommClause{Comm: comm, Body: body}, nil
+}
+
+func unmapCaseClause(fields values.Value) (*ast.CaseClause, error) {
+	listVal, err := RequireField(fields, "case-clause", "list")
+	if err != nil {
+		return nil, err
+	}
+	var list []ast.Expr
+	if !IsFalse(listVal) {
+		list, err = unmapExprList(listVal)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	bodyVal, err := RequireField(fields, "case-clause", "body")
+	if err != nil {
+		return nil, err
+	}
+	body, err := unmapStmtList(bodyVal)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ast.CaseClause{List: list, Body: body}, nil
 }

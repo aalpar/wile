@@ -21,6 +21,7 @@ import (
 	"go/types"
 
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // mapperOpts controls what optional information the mapper emits.
@@ -76,6 +77,24 @@ func mapNode(n ast.Node, opts *mapperOpts) values.Value {
 		return mapDeclStmt(v, opts)
 	case *ast.IncDecStmt:
 		return mapIncDecStmt(v, opts)
+	case *ast.GoStmt:
+		return mapGoStmt(v, opts)
+	case *ast.DeferStmt:
+		return mapDeferStmt(v, opts)
+	case *ast.SendStmt:
+		return mapSendStmt(v, opts)
+	case *ast.LabeledStmt:
+		return mapLabeledStmt(v, opts)
+	case *ast.SwitchStmt:
+		return mapSwitchStmt(v, opts)
+	case *ast.TypeSwitchStmt:
+		return mapTypeSwitchStmt(v, opts)
+	case *ast.CaseClause:
+		return mapCaseClause(v, opts)
+	case *ast.SelectStmt:
+		return mapSelectStmt(v, opts)
+	case *ast.CommClause:
+		return mapCommClause(v, opts)
 
 	// Expressions
 	case *ast.Ident:
@@ -102,6 +121,12 @@ func mapNode(n ast.Node, opts *mapperOpts) values.Value {
 		return mapKeyValueExpr(v, opts)
 	case *ast.FuncLit:
 		return mapFuncLit(v, opts)
+	case *ast.TypeAssertExpr:
+		return mapTypeAssertExpr(v, opts)
+	case *ast.SliceExpr:
+		return mapSliceExpr(v, opts)
+	case *ast.Ellipsis:
+		return mapEllipsis(v, opts)
 
 	// Types
 	case *ast.ArrayType:
@@ -114,6 +139,8 @@ func mapNode(n ast.Node, opts *mapperOpts) values.Value {
 		return mapInterfaceType(v, opts)
 	case *ast.FuncType:
 		return mapFuncType(v, opts)
+	case *ast.ChanType:
+		return mapChanType(v, opts)
 	case *ast.Field:
 		return mapField(v, opts)
 	case *ast.FieldList:
@@ -318,6 +345,92 @@ func mapIncDecStmt(i *ast.IncDecStmt, opts *mapperOpts) values.Value {
 	)
 }
 
+func mapGoStmt(g *ast.GoStmt, opts *mapperOpts) values.Value {
+	return Node("go-stmt",
+		Field("call", mapCallExpr(g.Call, opts)),
+	)
+}
+
+func mapDeferStmt(d *ast.DeferStmt, opts *mapperOpts) values.Value {
+	return Node("defer-stmt",
+		Field("call", mapCallExpr(d.Call, opts)),
+	)
+}
+
+func mapSendStmt(s *ast.SendStmt, opts *mapperOpts) values.Value {
+	return Node("send-stmt",
+		Field("chan", mapExpr(s.Chan, opts)),
+		Field("value", mapExpr(s.Value, opts)),
+	)
+}
+
+func mapLabeledStmt(l *ast.LabeledStmt, opts *mapperOpts) values.Value {
+	return Node("labeled-stmt",
+		Field("label", Str(l.Label.Name)),
+		Field("stmt", mapStmt(l.Stmt, opts)),
+	)
+}
+
+func mapSwitchStmt(s *ast.SwitchStmt, opts *mapperOpts) values.Value {
+	return Node("switch-stmt",
+		Field("init", mapStmt(s.Init, opts)),
+		Field("tag", mapExpr(s.Tag, opts)),
+		Field("body", mapBlockStmt(s.Body, opts)),
+	)
+}
+
+func mapTypeSwitchStmt(s *ast.TypeSwitchStmt, opts *mapperOpts) values.Value {
+	return Node("type-switch-stmt",
+		Field("init", mapStmt(s.Init, opts)),
+		Field("assign", mapStmt(s.Assign, opts)),
+		Field("body", mapBlockStmt(s.Body, opts)),
+	)
+}
+
+func mapSelectStmt(s *ast.SelectStmt, opts *mapperOpts) values.Value {
+	return Node("select-stmt",
+		Field("body", mapBlockStmt(s.Body, opts)),
+	)
+}
+
+func mapCommClause(c *ast.CommClause, opts *mapperOpts) values.Value {
+	var commVal values.Value
+	if c.Comm == nil {
+		commVal = values.FalseValue
+	} else {
+		commVal = mapStmt(c.Comm, opts)
+	}
+	stmts := make([]values.Value, len(c.Body))
+	for i, s := range c.Body {
+		stmts[i] = mapStmt(s, opts)
+	}
+	return Node("comm-clause",
+		Field("comm", commVal),
+		Field("body", ValueList(stmts)),
+	)
+}
+
+func mapCaseClause(c *ast.CaseClause, opts *mapperOpts) values.Value {
+	var listVal values.Value
+	if c.List == nil {
+		listVal = values.FalseValue
+	} else {
+		exprs := make([]values.Value, len(c.List))
+		for i, e := range c.List {
+			exprs[i] = mapExpr(e, opts)
+		}
+		listVal = ValueList(exprs)
+	}
+	stmts := make([]values.Value, len(c.Body))
+	for i, s := range c.Body {
+		stmts[i] = mapStmt(s, opts)
+	}
+	return Node("case-clause",
+		Field("list", listVal),
+		Field("body", ValueList(stmts)),
+	)
+}
+
 // --- Expressions ---
 
 func mapIdent(id *ast.Ident, opts *mapperOpts) values.Value {
@@ -432,7 +545,56 @@ func mapFuncLit(f *ast.FuncLit, opts *mapperOpts) values.Value {
 	return Node("func-lit", fields...)
 }
 
+func mapTypeAssertExpr(t *ast.TypeAssertExpr, opts *mapperOpts) values.Value {
+	fields := []values.Value{
+		Field("x", mapExpr(t.X, opts)),
+		Field("type", mapExpr(t.Type, opts)),
+	}
+	fields = addTypeAnnotation(t, opts, fields)
+	return Node("type-assert-expr", fields...)
+}
+
+func mapSliceExpr(s *ast.SliceExpr, opts *mapperOpts) values.Value {
+	fields := []values.Value{
+		Field("x", mapExpr(s.X, opts)),
+		Field("low", mapExpr(s.Low, opts)),
+		Field("high", mapExpr(s.High, opts)),
+		Field("max", mapExpr(s.Max, opts)),
+		Field("slice3", values.BoolToBoolean(s.Slice3)),
+	}
+	fields = addTypeAnnotation(s, opts, fields)
+	return Node("slice-expr", fields...)
+}
+
+func mapEllipsis(e *ast.Ellipsis, opts *mapperOpts) values.Value {
+	fields := []values.Value{Field("elt", mapExpr(e.Elt, opts))}
+	fields = addTypeAnnotation(e, opts, fields)
+	return Node("ellipsis", fields...)
+}
+
 // --- Type expressions ---
+
+func mapChanType(c *ast.ChanType, opts *mapperOpts) values.Value {
+	return Node("chan-type",
+		Field("dir", chanDirSymbol(c.Dir)),
+		Field("value", mapExpr(c.Value, opts)),
+	)
+}
+
+// chanDirSymbol converts ast.ChanDir to a Scheme symbol.
+func chanDirSymbol(dir ast.ChanDir) values.Value {
+	switch dir {
+	case ast.SEND:
+		return Sym("send")
+	case ast.RECV:
+		return Sym("recv")
+	case ast.SEND | ast.RECV:
+		return Sym("both")
+	default:
+		panic(werr.WrapForeignErrorf(errMalformedGoAST,
+			"chanDirSymbol: unknown channel direction %d", dir))
+	}
+}
 
 func mapArrayType(a *ast.ArrayType, opts *mapperOpts) values.Value {
 	return Node("array-type",

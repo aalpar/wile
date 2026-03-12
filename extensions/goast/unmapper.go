@@ -76,6 +76,24 @@ func unmapNode(v values.Value) (ast.Node, error) {
 		return unmapDeclStmt(fields)
 	case "inc-dec-stmt":
 		return unmapIncDecStmt(fields)
+	case "go-stmt":
+		return unmapGoStmt(fields)
+	case "defer-stmt":
+		return unmapDeferStmt(fields)
+	case "send-stmt":
+		return unmapSendStmt(fields)
+	case "labeled-stmt":
+		return unmapLabeledStmt(fields)
+	case "switch-stmt":
+		return unmapSwitchStmt(fields)
+	case "type-switch-stmt":
+		return unmapTypeSwitchStmt(fields)
+	case "case-clause":
+		return unmapCaseClause(fields)
+	case "select-stmt":
+		return unmapSelectStmt(fields)
+	case "comm-clause":
+		return unmapCommClause(fields)
 
 	// Expressions
 	case "ident":
@@ -102,8 +120,16 @@ func unmapNode(v values.Value) (ast.Node, error) {
 		return unmapKeyValueExpr(fields)
 	case "func-lit":
 		return unmapFuncLit(fields)
+	case "type-assert-expr":
+		return unmapTypeAssertExpr(fields)
+	case "slice-expr":
+		return unmapSliceExpr(fields)
+	case "ellipsis":
+		return unmapEllipsis(fields)
 
 	// Types
+	case "chan-type":
+		return unmapChanType(fields)
 	case "array-type":
 		return unmapArrayType(fields)
 	case "map-type":

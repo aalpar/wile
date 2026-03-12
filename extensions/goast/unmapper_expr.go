@@ -242,6 +242,90 @@ func unmapKeyValueExpr(fields values.Value) (*ast.KeyValueExpr, error) {
 	return &ast.KeyValueExpr{Key: key, Value: val}, nil
 }
 
+func unmapSliceExpr(fields values.Value) (*ast.SliceExpr, error) {
+	xVal, err := RequireField(fields, "slice-expr", "x")
+	if err != nil {
+		return nil, err
+	}
+	x, err := unmapExpr(xVal)
+	if err != nil {
+		return nil, err
+	}
+
+	lowVal, err := RequireField(fields, "slice-expr", "low")
+	if err != nil {
+		return nil, err
+	}
+	low, err := unmapExpr(lowVal)
+	if err != nil {
+		return nil, err
+	}
+
+	highVal, err := RequireField(fields, "slice-expr", "high")
+	if err != nil {
+		return nil, err
+	}
+	high, err := unmapExpr(highVal)
+	if err != nil {
+		return nil, err
+	}
+
+	maxVal, err := RequireField(fields, "slice-expr", "max")
+	if err != nil {
+		return nil, err
+	}
+	sliceMax, err := unmapExpr(maxVal)
+	if err != nil {
+		return nil, err
+	}
+
+	slice3Val, err := RequireField(fields, "slice-expr", "slice3")
+	if err != nil {
+		return nil, err
+	}
+	b, ok := slice3Val.(*values.Boolean)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+			"goast: slice-expr field 'slice3' must be boolean, got %T", slice3Val)
+	}
+
+	return &ast.SliceExpr{X: x, Low: low, High: high, Max: sliceMax, Slice3: b.Value}, nil
+}
+
+func unmapEllipsis(fields values.Value) (*ast.Ellipsis, error) {
+	eltVal, err := RequireField(fields, "ellipsis", "elt")
+	if err != nil {
+		return nil, err
+	}
+	elt, err := unmapExpr(eltVal)
+	if err != nil {
+		return nil, err
+	}
+	return &ast.Ellipsis{Elt: elt}, nil
+}
+
+func unmapTypeAssertExpr(fields values.Value) (*ast.TypeAssertExpr, error) {
+	xVal, err := RequireField(fields, "type-assert-expr", "x")
+	if err != nil {
+		return nil, err
+	}
+	x, err := unmapExpr(xVal)
+	if err != nil {
+		return nil, err
+	}
+
+	typeVal, err := RequireField(fields, "type-assert-expr", "type")
+	if err != nil {
+		return nil, err
+	}
+	typ, err := unmapExpr(typeVal)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ast.TypeAssertExpr{X: x, Type: typ}, nil
+}
+
 func unmapFuncLit(fields values.Value) (*ast.FuncLit, error) {
 	typeVal, err := RequireField(fields, "func-lit", "type")
 	if err != nil {

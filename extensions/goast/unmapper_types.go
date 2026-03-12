@@ -21,6 +21,47 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
+func unmapChanType(fields values.Value) (*ast.ChanType, error) {
+	dirVal, err := RequireField(fields, "chan-type", "dir")
+	if err != nil {
+		return nil, err
+	}
+	dir, err := chanDirFromSymbol(dirVal)
+	if err != nil {
+		return nil, err
+	}
+
+	valueVal, err := RequireField(fields, "chan-type", "value")
+	if err != nil {
+		return nil, err
+	}
+	val, err := unmapExpr(valueVal)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ast.ChanType{Dir: dir, Value: val}, nil
+}
+
+// chanDirFromSymbol converts a Scheme symbol to ast.ChanDir.
+func chanDirFromSymbol(v values.Value) (ast.ChanDir, error) {
+	name, err := RequireSymbol(v, "chan-type", "dir")
+	if err != nil {
+		return 0, err
+	}
+	switch name {
+	case "send":
+		return ast.SEND, nil
+	case "recv":
+		return ast.RECV, nil
+	case "both":
+		return ast.SEND | ast.RECV, nil
+	default:
+		return 0, werr.WrapForeignErrorf(errMalformedGoAST,
+			"goast: chan-type field 'dir' unknown direction '%s'", name)
+	}
+}
+
 func unmapArrayType(fields values.Value) (*ast.ArrayType, error) {
 	lenVal, err := RequireField(fields, "array-type", "len")
 	if err != nil {
