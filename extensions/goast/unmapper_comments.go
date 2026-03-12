@@ -69,8 +69,39 @@ func attachComments(file *ast.File, fileSexprFields values.Value, fset *token.Fi
 	file.Name.NamePos = pkgPos
 
 	declsVal, _ := GetField(fileSexprFields, "decls")
-	err := walkParallel(file.Decls, declsVal, func(decl ast.Decl, sexpr values.Value) error {
-		return attachDeclComments(decl, sexpr, alloc, &cgs)
+	declIdx := 0
+
+	err := forEachSexpr(declsVal, func(elem values.Value) error {
+		tag := sexpTag(elem)
+		if tag == "comment-group" {
+			fields := sexpFields(elem)
+			textsVal, _ := GetField(fields, "text")
+			if IsFalse(textsVal) {
+				return nil
+			}
+			g, gErr := stringsToCommentGroup(textsVal, func() token.Pos {
+				return alloc.nextLine()
+			})
+			if gErr != nil {
+				return gErr
+			}
+			if g != nil {
+				cgs = append(cgs, g)
+			}
+			// Consume an extra line so the next declaration's position
+			// is on a different line than this comment group. Without
+			// the gap, go/printer treats the comment as a doc comment
+			// for the following declaration.
+			alloc.nextLine()
+			return nil
+		}
+		// Declaration entry — process with existing logic.
+		if declIdx >= len(file.Decls) {
+			return nil
+		}
+		dErr := attachDeclComments(file.Decls[declIdx], elem, alloc, &cgs)
+		declIdx++
+		return dErr
 	})
 	if err != nil {
 		return err
@@ -425,6 +456,36 @@ func stringsToCommentGroup(v values.Value, posFunc func() token.Pos) (*ast.Comme
 		return nil, nil
 	}
 	return &ast.CommentGroup{List: comments}, nil
+}
+
+// forEachSexpr iterates a Scheme proper list, calling fn for each element.
+func forEachSexpr(v values.Value, fn func(values.Value) error) error {
+	if IsFalse(v) {
+		return nil
+	}
+	tuple, ok := v.(values.Tuple)
+	if !ok {
+		return werr.WrapForeignErrorf(errMalformedGoAST,
+			"goast: expected list, got %T", v)
+	}
+	for !values.IsEmptyList(tuple) {
+		pair, ok := tuple.(*values.Pair)
+		if !ok {
+			return werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: expected proper list, got %T", tuple)
+		}
+		err := fn(pair.Car())
+		if err != nil {
+			return err
+		}
+		cdr, ok := pair.Cdr().(values.Tuple)
+		if !ok {
+			return werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: improper list")
+		}
+		tuple = cdr
+	}
+	return nil
 }
 
 // walkParallel iterates a Go slice and a Scheme list in lockstep.

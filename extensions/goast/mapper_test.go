@@ -15,6 +15,7 @@
 package goast
 
 import (
+	"errors"
 	"go/ast"
 	"go/format"
 	"go/parser"
@@ -1119,4 +1120,61 @@ func TestUnmapFileSkipsCommentGroup(t *testing.T) {
 	file := n.(*ast.File)
 	// file.Decls should have exactly 2 declarations (the comment-group is skipped).
 	c.Assert(len(file.Decls), qt.Equals, 2)
+}
+
+func TestRoundTripStructFieldTrailingComment(t *testing.T) {
+	roundTripFileWithComments(t,
+		"package p\n\n// S is a struct.\ntype S struct {\n\tX int // the X field\n}\n")
+}
+
+func TestRoundTripInterfaceWithDocComment(t *testing.T) {
+	roundTripFileWithComments(t,
+		"package p\n\n// I is an interface.\ntype I interface {\n\t// M does something.\n\tM()\n}\n")
+}
+
+func TestForEachSexprErrors(t *testing.T) {
+	t.Run("non-tuple input", func(t *testing.T) {
+		c := qt.New(t)
+		err := forEachSexpr(values.NewString("not-a-list"), func(v values.Value) error {
+			return nil
+		})
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(errors.Is(err, errMalformedGoAST), qt.IsTrue)
+	})
+
+	t.Run("improper list", func(t *testing.T) {
+		c := qt.New(t)
+		// Build (a . "not-a-tuple") — a pair whose cdr is not a Tuple.
+		improper := values.NewCons(
+			values.NewSymbol("a"),
+			values.NewString("not-a-tuple"),
+		)
+		err := forEachSexpr(improper, func(v values.Value) error {
+			return nil
+		})
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(errors.Is(err, errMalformedGoAST), qt.IsTrue)
+	})
+
+	t.Run("false input is no-op", func(t *testing.T) {
+		c := qt.New(t)
+		called := false
+		err := forEachSexpr(values.FalseValue, func(v values.Value) error {
+			called = true
+			return nil
+		})
+		c.Assert(err, qt.IsNil)
+		c.Assert(called, qt.IsFalse)
+	})
+
+	t.Run("empty list is no-op", func(t *testing.T) {
+		c := qt.New(t)
+		called := false
+		err := forEachSexpr(values.EmptyList, func(v values.Value) error {
+			called = true
+			return nil
+		})
+		c.Assert(err, qt.IsNil)
+		c.Assert(called, qt.IsFalse)
+	})
 }
