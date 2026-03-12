@@ -27,6 +27,9 @@ When investigating R7RS conformance issues:
 | `CONTINUATION_MARKS.md` | Racket-style per-frame key-value annotations on the continuation chain | Proposed |
 | `REMOVE-SYMBOL-INTERNING.md` | Remove symbol canonicalization, compare by string key | Proposed |
 | `ENVIRONMENT-CLEANUP.md` | Environment package cleanup: constructor duplication, dead delegation, semantic inconsistency | Proposed |
+| `GO-CALLGRAPH-PHASE-2.md` | Callgraph extension implementation plan (Phase 2 of GO-STATIC-ANALYSIS) | Complete |
+| `GO-CFG-PHASE-3.md` | CFG + dominance extension implementation plan (Phase 3 of GO-STATIC-ANALYSIS) | Draft |
+| `GO-LINT-PHASE-4.md` | Analysis passes extension implementation plan (Phase 4 of GO-STATIC-ANALYSIS) | Draft |
 
 ## Before Starting Work
 

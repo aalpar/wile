@@ -129,7 +129,7 @@ Exposes `go/ssa` as s-expressions. Enables data-flow queries: def-use chains, ph
 
 **Deliverable**: The state-trace analysis from our prototype can answer "are these fields mutated independently?" — the gap identified in the current goast-only approach.
 
-### Phase 2: `(wile goast callgraph)` — Call Graph
+### Phase 2: `(wile goast callgraph)` — Call Graph  ✓ Complete
 
 Exposes `go/callgraph` with algorithm selection. Builds on Phase 1 (call graph algorithms take `*ssa.Program` as input, so the SSA infrastructure is reused internally).
 
@@ -441,7 +441,7 @@ Enough for data-flow analysis on typical Go code: arithmetic, calls, field acces
 
 **Deliverable**: `go-ssa-build`, `go-ssa-operands`, `go-ssa-referrers` working on core instruction set. State-trace "mutation independence" query is possible.
 
-#### Sub-phase 1B: Collections + concurrency (~12 types)
+#### Sub-phase 1B: Collections + concurrency ✓ Complete
 
 | Category | SSA types |
 |---|---|
@@ -452,7 +452,7 @@ Enough for data-flow analysis on typical Go code: arithmetic, calls, field acces
 | Iteration | `Range`, `Next` |
 | Panic | `Panic` |
 
-#### Sub-phase 1C: Type operations + closures (~8 types)
+#### Sub-phase 1C: Type operations + closures ✓ Complete
 
 | Category | SSA types |
 |---|---|
