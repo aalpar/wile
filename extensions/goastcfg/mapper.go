@@ -15,16 +15,22 @@ type cfgMapper struct {
 }
 
 // mapFunction maps all basic blocks of an SSA function to cfg-block s-expressions.
+// fn.Recover, if present, is appended last and tagged with (recover . #t).
 func (p *cfgMapper) mapFunction(fn *ssa.Function) values.Value {
 	blocks := make([]values.Value, len(fn.Blocks))
 	for i, b := range fn.Blocks {
-		blocks[i] = p.mapBlock(b)
+		blocks[i] = p.mapBlock(b, false)
+	}
+	if fn.Recover != nil {
+		blocks = append(blocks, p.mapBlock(fn.Recover, true))
 	}
 	return goast.ValueList(blocks)
 }
 
 // mapBlock maps a single SSA basic block to a cfg-block s-expression.
-func (p *cfgMapper) mapBlock(b *ssa.BasicBlock) values.Value {
+// isRecover must be true when b is fn.Recover; it adds (recover . #t) to the
+// field list to distinguish it from the entry block (both have idom=#f).
+func (p *cfgMapper) mapBlock(b *ssa.BasicBlock, isRecover bool) values.Value {
 	preds := make([]values.Value, len(b.Preds))
 	for i, pred := range b.Preds {
 		preds[i] = values.NewInteger(int64(pred.Index))
@@ -46,6 +52,9 @@ func (p *cfgMapper) mapBlock(b *ssa.BasicBlock) values.Value {
 		goast.Field("preds", goast.ValueList(preds)),
 		goast.Field("succs", goast.ValueList(succs)),
 		goast.Field("idom", idom),
+	}
+	if isRecover {
+		fields = append(fields, goast.Field("recover", values.TrueValue))
 	}
 	if b.Comment != "" {
 		fields = append(fields, goast.Field("comment", goast.Str(b.Comment)))

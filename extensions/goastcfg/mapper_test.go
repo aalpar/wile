@@ -107,6 +107,48 @@ func Add(a, b int) int {
 	c.Assert(idom, qt.Equals, values.FalseValue)
 }
 
+func TestMapCFG_RecoverBlock(t *testing.T) {
+	c := qt.New(t)
+	dir := t.TempDir()
+	fset, fn := buildSSAFunc(t, dir, `
+package testpkg
+
+func SafeDiv(a, b int) (result int) {
+	defer func() {
+		if r := recover(); r != nil {
+			result = -1
+		}
+	}()
+	return a / b
+}
+`, "SafeDiv")
+
+	c.Assert(fn.Recover, qt.IsNotNil, qt.Commentf("SafeDiv should have a recover block"))
+
+	mapper := &cfgMapper{fset: fset}
+	result := mapper.mapFunction(fn)
+
+	// Find the block tagged (recover . #t).
+	var recoverBlock values.Value
+	tuple := result.(values.Tuple)
+	for !values.IsEmptyList(tuple) {
+		pair := tuple.(*values.Pair)
+		block := pair.Car()
+		_, hasRecover := goast.GetField(block.(*values.Pair).Cdr(), "recover")
+		if hasRecover {
+			recoverBlock = block
+			break
+		}
+		tuple = pair.Cdr().(values.Tuple)
+	}
+	c.Assert(recoverBlock, qt.IsNotNil, qt.Commentf("expected a block with (recover . #t)"))
+
+	// Recover block has idom=#f (no dominator in the normal CFG).
+	idom, ok := goast.GetField(recoverBlock.(*values.Pair).Cdr(), "idom")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(idom, qt.Equals, values.FalseValue)
+}
+
 func TestMapCFG_BranchingFunction(t *testing.T) {
 	c := qt.New(t)
 	dir := t.TempDir()
