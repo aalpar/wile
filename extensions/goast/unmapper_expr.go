@@ -22,11 +22,11 @@ import (
 )
 
 func unmapIdent(fields values.Value) (*ast.Ident, error) {
-	nameVal, err := requireField(fields, "ident", "name")
+	nameVal, err := RequireField(fields, "ident", "name")
 	if err != nil {
 		return nil, err
 	}
-	name, err := requireString(nameVal, "ident", "name")
+	name, err := RequireString(nameVal, "ident", "name")
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +34,7 @@ func unmapIdent(fields values.Value) (*ast.Ident, error) {
 }
 
 func unmapBasicLit(fields values.Value) (*ast.BasicLit, error) {
-	kindVal, err := requireField(fields, "lit", "kind")
+	kindVal, err := RequireField(fields, "lit", "kind")
 	if err != nil {
 		return nil, err
 	}
@@ -43,11 +43,11 @@ func unmapBasicLit(fields values.Value) (*ast.BasicLit, error) {
 		return nil, err
 	}
 
-	valFieldVal, err := requireField(fields, "lit", "value")
+	valFieldVal, err := RequireField(fields, "lit", "value")
 	if err != nil {
 		return nil, err
 	}
-	val, err := requireString(valFieldVal, "lit", "value")
+	val, err := RequireString(valFieldVal, "lit", "value")
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +56,7 @@ func unmapBasicLit(fields values.Value) (*ast.BasicLit, error) {
 }
 
 func unmapBinaryExpr(fields values.Value) (*ast.BinaryExpr, error) {
-	opVal, err := requireField(fields, "binary-expr", "op")
+	opVal, err := RequireField(fields, "binary-expr", "op")
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func unmapBinaryExpr(fields values.Value) (*ast.BinaryExpr, error) {
 		return nil, err
 	}
 
-	xVal, err := requireField(fields, "binary-expr", "x")
+	xVal, err := RequireField(fields, "binary-expr", "x")
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func unmapBinaryExpr(fields values.Value) (*ast.BinaryExpr, error) {
 		return nil, err
 	}
 
-	yVal, err := requireField(fields, "binary-expr", "y")
+	yVal, err := RequireField(fields, "binary-expr", "y")
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func unmapBinaryExpr(fields values.Value) (*ast.BinaryExpr, error) {
 }
 
 func unmapUnaryExpr(fields values.Value) (*ast.UnaryExpr, error) {
-	opVal, err := requireField(fields, "unary-expr", "op")
+	opVal, err := RequireField(fields, "unary-expr", "op")
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +96,7 @@ func unmapUnaryExpr(fields values.Value) (*ast.UnaryExpr, error) {
 		return nil, err
 	}
 
-	xVal, err := requireField(fields, "unary-expr", "x")
+	xVal, err := RequireField(fields, "unary-expr", "x")
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func unmapUnaryExpr(fields values.Value) (*ast.UnaryExpr, error) {
 }
 
 func unmapCallExpr(fields values.Value) (*ast.CallExpr, error) {
-	funVal, err := requireField(fields, "call-expr", "fun")
+	funVal, err := RequireField(fields, "call-expr", "fun")
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +118,7 @@ func unmapCallExpr(fields values.Value) (*ast.CallExpr, error) {
 		return nil, err
 	}
 
-	argsVal, err := requireField(fields, "call-expr", "args")
+	argsVal, err := RequireField(fields, "call-expr", "args")
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +131,7 @@ func unmapCallExpr(fields values.Value) (*ast.CallExpr, error) {
 }
 
 func unmapSelectorExpr(fields values.Value) (*ast.SelectorExpr, error) {
-	xVal, err := requireField(fields, "selector-expr", "x")
+	xVal, err := RequireField(fields, "selector-expr", "x")
 	if err != nil {
 		return nil, err
 	}
@@ -140,11 +140,11 @@ func unmapSelectorExpr(fields values.Value) (*ast.SelectorExpr, error) {
 		return nil, err
 	}
 
-	selVal, err := requireField(fields, "selector-expr", "sel")
+	selVal, err := RequireField(fields, "selector-expr", "sel")
 	if err != nil {
 		return nil, err
 	}
-	sel, err := requireString(selVal, "selector-expr", "sel")
+	sel, err := RequireString(selVal, "selector-expr", "sel")
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +153,7 @@ func unmapSelectorExpr(fields values.Value) (*ast.SelectorExpr, error) {
 }
 
 func unmapIndexExpr(fields values.Value) (*ast.IndexExpr, error) {
-	xVal, err := requireField(fields, "index-expr", "x")
+	xVal, err := RequireField(fields, "index-expr", "x")
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +162,7 @@ func unmapIndexExpr(fields values.Value) (*ast.IndexExpr, error) {
 		return nil, err
 	}
 
-	indexVal, err := requireField(fields, "index-expr", "index")
+	indexVal, err := RequireField(fields, "index-expr", "index")
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +175,7 @@ func unmapIndexExpr(fields values.Value) (*ast.IndexExpr, error) {
 }
 
 func unmapStarExpr(fields values.Value) (*ast.StarExpr, error) {
-	xVal, err := requireField(fields, "star-expr", "x")
+	xVal, err := RequireField(fields, "star-expr", "x")
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ func unmapStarExpr(fields values.Value) (*ast.StarExpr, error) {
 }
 
 func unmapParenExpr(fields values.Value) (*ast.ParenExpr, error) {
-	xVal, err := requireField(fields, "paren-expr", "x")
+	xVal, err := RequireField(fields, "paren-expr", "x")
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +199,7 @@ func unmapParenExpr(fields values.Value) (*ast.ParenExpr, error) {
 }
 
 func unmapCompositeLit(fields values.Value) (*ast.CompositeLit, error) {
-	typeVal, err := requireField(fields, "composite-lit", "type")
+	typeVal, err := RequireField(fields, "composite-lit", "type")
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +208,7 @@ func unmapCompositeLit(fields values.Value) (*ast.CompositeLit, error) {
 		return nil, err
 	}
 
-	eltsVal, err := requireField(fields, "composite-lit", "elts")
+	eltsVal, err := RequireField(fields, "composite-lit", "elts")
 	if err != nil {
 		return nil, err
 	}
@@ -221,7 +221,7 @@ func unmapCompositeLit(fields values.Value) (*ast.CompositeLit, error) {
 }
 
 func unmapKeyValueExpr(fields values.Value) (*ast.KeyValueExpr, error) {
-	keyVal, err := requireField(fields, "kv-expr", "key")
+	keyVal, err := RequireField(fields, "kv-expr", "key")
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +230,7 @@ func unmapKeyValueExpr(fields values.Value) (*ast.KeyValueExpr, error) {
 		return nil, err
 	}
 
-	valFieldVal, err := requireField(fields, "kv-expr", "value")
+	valFieldVal, err := RequireField(fields, "kv-expr", "value")
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +243,7 @@ func unmapKeyValueExpr(fields values.Value) (*ast.KeyValueExpr, error) {
 }
 
 func unmapFuncLit(fields values.Value) (*ast.FuncLit, error) {
-	typeVal, err := requireField(fields, "func-lit", "type")
+	typeVal, err := RequireField(fields, "func-lit", "type")
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +257,7 @@ func unmapFuncLit(fields values.Value) (*ast.FuncLit, error) {
 			"goast: func-lit 'type' expected func-type, got %T", typeNode)
 	}
 
-	bodyVal, err := requireField(fields, "func-lit", "body")
+	bodyVal, err := RequireField(fields, "func-lit", "body")
 	if err != nil {
 		return nil, err
 	}

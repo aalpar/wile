@@ -22,7 +22,7 @@ import (
 )
 
 func unmapArrayType(fields values.Value) (*ast.ArrayType, error) {
-	lenVal, err := requireField(fields, "array-type", "len")
+	lenVal, err := RequireField(fields, "array-type", "len")
 	if err != nil {
 		return nil, err
 	}
@@ -31,7 +31,7 @@ func unmapArrayType(fields values.Value) (*ast.ArrayType, error) {
 		return nil, err
 	}
 
-	eltVal, err := requireField(fields, "array-type", "elt")
+	eltVal, err := RequireField(fields, "array-type", "elt")
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func unmapArrayType(fields values.Value) (*ast.ArrayType, error) {
 }
 
 func unmapMapType(fields values.Value) (*ast.MapType, error) {
-	keyVal, err := requireField(fields, "map-type", "key")
+	keyVal, err := RequireField(fields, "map-type", "key")
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func unmapMapType(fields values.Value) (*ast.MapType, error) {
 		return nil, err
 	}
 
-	valFieldVal, err := requireField(fields, "map-type", "value")
+	valFieldVal, err := RequireField(fields, "map-type", "value")
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func unmapMapType(fields values.Value) (*ast.MapType, error) {
 }
 
 func unmapStructType(fields values.Value) (*ast.StructType, error) {
-	fieldsVal, err := requireField(fields, "struct-type", "fields")
+	fieldsVal, err := RequireField(fields, "struct-type", "fields")
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func unmapStructType(fields values.Value) (*ast.StructType, error) {
 }
 
 func unmapInterfaceType(fields values.Value) (*ast.InterfaceType, error) {
-	methodsVal, err := requireField(fields, "interface-type", "methods")
+	methodsVal, err := RequireField(fields, "interface-type", "methods")
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func unmapInterfaceType(fields values.Value) (*ast.InterfaceType, error) {
 }
 
 func unmapFuncType(fields values.Value) (*ast.FuncType, error) {
-	paramsVal, err := requireField(fields, "func-type", "params")
+	paramsVal, err := RequireField(fields, "func-type", "params")
 	if err != nil {
 		return nil, err
 	}
@@ -99,12 +99,12 @@ func unmapFuncType(fields values.Value) (*ast.FuncType, error) {
 		return nil, err
 	}
 
-	resultsVal, err := requireField(fields, "func-type", "results")
+	resultsVal, err := RequireField(fields, "func-type", "results")
 	if err != nil {
 		return nil, err
 	}
 	var results *ast.FieldList
-	if !isFalse(resultsVal) {
+	if !IsFalse(resultsVal) {
 		results, err = unmapFieldListValue(resultsVal, "func-type", "results")
 		if err != nil {
 			return nil, err
@@ -115,7 +115,7 @@ func unmapFuncType(fields values.Value) (*ast.FuncType, error) {
 }
 
 func unmapField(fields values.Value) (*ast.Field, error) {
-	namesVal, err := requireField(fields, "field", "names")
+	namesVal, err := RequireField(fields, "field", "names")
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func unmapField(fields values.Value) (*ast.Field, error) {
 		names = append(names, ast.NewIdent(s))
 	}
 
-	typeVal, err := requireField(fields, "field", "type")
+	typeVal, err := RequireField(fields, "field", "type")
 	if err != nil {
 		return nil, err
 	}
@@ -142,8 +142,8 @@ func unmapField(fields values.Value) (*ast.Field, error) {
 		Type:  typ,
 	}
 
-	tagVal, ok := getField(fields, "tag")
-	if ok && !isFalse(tagVal) {
+	tagVal, ok := GetField(fields, "tag")
+	if ok && !IsFalse(tagVal) {
 		tagNode, err := unmapNode(tagVal)
 		if err != nil {
 			return nil, err
@@ -161,7 +161,7 @@ func unmapField(fields values.Value) (*ast.Field, error) {
 
 // unmapFieldListValue converts a Scheme list of field nodes to *ast.FieldList.
 func unmapFieldListValue(v values.Value, nodeType, fieldName string) (*ast.FieldList, error) {
-	if isFalse(v) {
+	if IsFalse(v) {
 		return nil, nil
 	}
 	tuple, ok := v.(values.Tuple)

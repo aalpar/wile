@@ -24,15 +24,15 @@ import (
 // --- Top-level ---
 
 func unmapFile(fields values.Value) (*ast.File, error) {
-	nameVal, err := requireField(fields, "file", "name")
+	nameVal, err := RequireField(fields, "file", "name")
 	if err != nil {
 		return nil, err
 	}
-	name, err := requireString(nameVal, "file", "name")
+	name, err := RequireString(nameVal, "file", "name")
 	if err != nil {
 		return nil, err
 	}
-	declsVal, err := requireField(fields, "file", "decls")
+	declsVal, err := RequireField(fields, "file", "decls")
 	if err != nil {
 		return nil, err
 	}
@@ -64,28 +64,28 @@ func unmapDeclList(v values.Value) ([]ast.Decl, error) {
 // --- Declarations ---
 
 func unmapFuncDecl(fields values.Value) (*ast.FuncDecl, error) {
-	nameVal, err := requireField(fields, "func-decl", "name")
+	nameVal, err := RequireField(fields, "func-decl", "name")
 	if err != nil {
 		return nil, err
 	}
-	name, err := requireString(nameVal, "func-decl", "name")
+	name, err := RequireString(nameVal, "func-decl", "name")
 	if err != nil {
 		return nil, err
 	}
 
-	recvVal, err := requireField(fields, "func-decl", "recv")
+	recvVal, err := RequireField(fields, "func-decl", "recv")
 	if err != nil {
 		return nil, err
 	}
 	var recv *ast.FieldList
-	if !isFalse(recvVal) {
+	if !IsFalse(recvVal) {
 		recv, err = unmapFieldListValue(recvVal, "func-decl", "recv")
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	typeVal, err := requireField(fields, "func-decl", "type")
+	typeVal, err := RequireField(fields, "func-decl", "type")
 	if err != nil {
 		return nil, err
 	}
@@ -99,12 +99,12 @@ func unmapFuncDecl(fields values.Value) (*ast.FuncDecl, error) {
 			"goast: func-decl 'type' expected func-type, got %T", typeNode)
 	}
 
-	bodyVal, err := requireField(fields, "func-decl", "body")
+	bodyVal, err := RequireField(fields, "func-decl", "body")
 	if err != nil {
 		return nil, err
 	}
 	var body *ast.BlockStmt
-	if !isFalse(bodyVal) {
+	if !IsFalse(bodyVal) {
 		bodyNode, err := unmapNode(bodyVal)
 		if err != nil {
 			return nil, err
@@ -125,7 +125,7 @@ func unmapFuncDecl(fields values.Value) (*ast.FuncDecl, error) {
 }
 
 func unmapGenDecl(fields values.Value) (*ast.GenDecl, error) {
-	tokVal, err := requireField(fields, "gen-decl", "tok")
+	tokVal, err := RequireField(fields, "gen-decl", "tok")
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func unmapGenDecl(fields values.Value) (*ast.GenDecl, error) {
 	if err != nil {
 		return nil, err
 	}
-	specsVal, err := requireField(fields, "gen-decl", "specs")
+	specsVal, err := RequireField(fields, "gen-decl", "specs")
 	if err != nil {
 		return nil, err
 	}
@@ -165,20 +165,20 @@ func unmapSpecList(v values.Value) ([]ast.Spec, error) {
 // --- Specs ---
 
 func unmapImportSpec(fields values.Value) (*ast.ImportSpec, error) {
-	nameVal, err := requireField(fields, "import-spec", "name")
+	nameVal, err := RequireField(fields, "import-spec", "name")
 	if err != nil {
 		return nil, err
 	}
 	var name *ast.Ident
-	if !isFalse(nameVal) {
-		s, err := requireString(nameVal, "import-spec", "name")
+	if !IsFalse(nameVal) {
+		s, err := RequireString(nameVal, "import-spec", "name")
 		if err != nil {
 			return nil, err
 		}
 		name = ast.NewIdent(s)
 	}
 
-	pathVal, err := requireField(fields, "import-spec", "path")
+	pathVal, err := RequireField(fields, "import-spec", "path")
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +199,7 @@ func unmapImportSpec(fields values.Value) (*ast.ImportSpec, error) {
 }
 
 func unmapValueSpec(fields values.Value) (*ast.ValueSpec, error) {
-	namesVal, err := requireField(fields, "value-spec", "names")
+	namesVal, err := RequireField(fields, "value-spec", "names")
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +212,7 @@ func unmapValueSpec(fields values.Value) (*ast.ValueSpec, error) {
 		names[i] = ast.NewIdent(s)
 	}
 
-	typeVal, err := requireField(fields, "value-spec", "type")
+	typeVal, err := RequireField(fields, "value-spec", "type")
 	if err != nil {
 		return nil, err
 	}
@@ -221,7 +221,7 @@ func unmapValueSpec(fields values.Value) (*ast.ValueSpec, error) {
 		return nil, err
 	}
 
-	valsVal, err := requireField(fields, "value-spec", "values")
+	valsVal, err := RequireField(fields, "value-spec", "values")
 	if err != nil {
 		return nil, err
 	}
@@ -238,15 +238,15 @@ func unmapValueSpec(fields values.Value) (*ast.ValueSpec, error) {
 }
 
 func unmapTypeSpec(fields values.Value) (*ast.TypeSpec, error) {
-	nameVal, err := requireField(fields, "type-spec", "name")
+	nameVal, err := RequireField(fields, "type-spec", "name")
 	if err != nil {
 		return nil, err
 	}
-	name, err := requireString(nameVal, "type-spec", "name")
+	name, err := RequireString(nameVal, "type-spec", "name")
 	if err != nil {
 		return nil, err
 	}
-	typeVal, err := requireField(fields, "type-spec", "type")
+	typeVal, err := RequireField(fields, "type-spec", "type")
 	if err != nil {
 		return nil, err
 	}

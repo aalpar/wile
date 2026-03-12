@@ -118,7 +118,7 @@ func unmapNode(v values.Value) (ast.Node, error) {
 		return unmapField(fields)
 
 	case "unknown":
-		goType, _ := getField(fields, "go-type")
+		goType, _ := GetField(fields, "go-type")
 		s, ok := goType.(*values.String)
 		if ok {
 			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
@@ -135,7 +135,7 @@ func unmapNode(v values.Value) (ast.Node, error) {
 
 // unmapExpr converts a Scheme value to an ast.Expr. Returns nil for #f.
 func unmapExpr(v values.Value) (ast.Expr, error) {
-	if isFalse(v) {
+	if IsFalse(v) {
 		return nil, nil
 	}
 	n, err := unmapNode(v)
@@ -152,7 +152,7 @@ func unmapExpr(v values.Value) (ast.Expr, error) {
 
 // unmapStmt converts a Scheme value to an ast.Stmt. Returns nil for #f.
 func unmapStmt(v values.Value) (ast.Stmt, error) {
-	if isFalse(v) {
+	if IsFalse(v) {
 		return nil, nil
 	}
 	n, err := unmapNode(v)
@@ -169,7 +169,7 @@ func unmapStmt(v values.Value) (ast.Stmt, error) {
 
 // unmapList traverses a Scheme proper list, applying convert to each element.
 func unmapList[T any](v values.Value, convert func(values.Value) (T, error), what string) ([]T, error) {
-	if isFalse(v) {
+	if IsFalse(v) {
 		return nil, nil
 	}
 	tuple, ok := v.(values.Tuple)
@@ -201,7 +201,7 @@ func unmapList[T any](v values.Value, convert func(values.Value) (T, error), wha
 
 // unmapExprList converts a Scheme list of expressions to []ast.Expr.
 func unmapExprList(v values.Value) ([]ast.Expr, error) {
-	if isFalse(v) {
+	if IsFalse(v) {
 		return nil, nil
 	}
 	tuple, ok := v.(values.Tuple)
@@ -235,7 +235,7 @@ func unmapExprList(v values.Value) ([]ast.Expr, error) {
 
 // unmapStmtList converts a Scheme list of statements to []ast.Stmt.
 func unmapStmtList(v values.Value) ([]ast.Stmt, error) {
-	if isFalse(v) {
+	if IsFalse(v) {
 		return nil, nil
 	}
 	tuple, ok := v.(values.Tuple)
@@ -269,7 +269,7 @@ func unmapStmtList(v values.Value) ([]ast.Stmt, error) {
 
 // unmapStringList extracts a list of Go strings from a Scheme list of strings.
 func unmapStringList(v values.Value, nodeType, fieldName string) ([]string, error) {
-	if isFalse(v) {
+	if IsFalse(v) {
 		return nil, nil
 	}
 	tuple, ok := v.(values.Tuple)
@@ -284,7 +284,7 @@ func unmapStringList(v values.Value, nodeType, fieldName string) ([]string, erro
 			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
 				"goast: %s field '%s' expected proper list, got %T", nodeType, fieldName, tuple)
 		}
-		s, err := requireString(pair.Car(), nodeType, fieldName)
+		s, err := RequireString(pair.Car(), nodeType, fieldName)
 		if err != nil {
 			return nil, err
 		}
@@ -309,7 +309,7 @@ var tokenLookup = func() map[string]token.Token {
 
 // tokenFromSymbol converts a Scheme symbol to a token.Token.
 func tokenFromSymbol(v values.Value, nodeType, fieldName string) (token.Token, error) {
-	name, err := requireSymbol(v, nodeType, fieldName)
+	name, err := RequireSymbol(v, nodeType, fieldName)
 	if err != nil {
 		return token.ILLEGAL, err
 	}
