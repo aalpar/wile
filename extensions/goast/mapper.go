@@ -505,8 +505,9 @@ func mapFieldListOrFalse(fl *ast.FieldList, opts *mapperOpts) values.Value {
 
 // --- Type annotation helpers ---
 
-// addTypeAnnotation appends a (type . "TYPE_STRING") field if type info is
-// available for e. Called on all expression-level mapper functions.
+// addTypeAnnotation appends an (inferred-type . "TYPE_STRING") field if type
+// info is available for e. The key is distinct from the structural "type"
+// field used by composite-lit and func-lit to avoid alist ambiguity.
 func addTypeAnnotation(e ast.Expr, opts *mapperOpts, fields []values.Value) []values.Value {
 	if opts.typeInfo == nil {
 		return fields
@@ -515,7 +516,7 @@ func addTypeAnnotation(e ast.Expr, opts *mapperOpts, fields []values.Value) []va
 	if !ok {
 		return fields
 	}
-	return append(fields, field("type", str(types.TypeString(tv.Type, nil))))
+	return append(fields, field("inferred-type", str(types.TypeString(tv.Type, nil))))
 }
 
 // addObjPkgAnnotation appends an (obj-pkg . "PKG_PATH") field to an ident

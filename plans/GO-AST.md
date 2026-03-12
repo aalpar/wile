@@ -269,15 +269,17 @@ A Scheme list of `package` nodes:
 
 Added to expression nodes when type information is available:
 
-- `(type . "TYPE_STRING")` — on all expression nodes, via `types.Info.Types`
+- `(inferred-type . "TYPE_STRING")` — on all expression nodes, via `types.Info.Types`; key is distinct from the structural `type` field used by `composite-lit` and `func-lit`
 - `(obj-pkg . "PKG_PATH")` — on `ident` nodes only, via `types.Info.Uses`; identifies which package the name resolves to
 
 Example annotated nodes:
 
 ```scheme
-(ident (name . "Errorf") (type . "func(format string, a ...any) error") (obj-pkg . "fmt"))
-(call-expr (fun . ...) (args . (...)) (type . "error"))
-(binary-expr (op . +) (x . ...) (y . ...) (type . "int"))
+(ident (name . "Errorf") (inferred-type . "func(format string, a ...any) error") (obj-pkg . "fmt"))
+(call-expr (fun . ...) (args . (...)) (inferred-type . "error"))
+(binary-expr (op . +) (x . ...) (y . ...) (inferred-type . "int"))
+; composite-lit: structural (type . AST-NODE) and annotation coexist without collision
+(composite-lit (type . (ident (name . "Foo"))) (elts . (...)) (inferred-type . "pkg.Foo"))
 ```
 
 #### Architecture

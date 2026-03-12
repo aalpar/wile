@@ -55,10 +55,11 @@ HOST_ARCH := $(RAW_ARCH)
 endif
 
 # Resolve the directory where 'go install' places binaries:
-# GOBIN if set, otherwise $GOPATH/bin.
+# GOBIN if set, otherwise the first entry of $GOPATH/bin.
+# GOPATH can be colon-separated; use only the first path to avoid an invalid install dir.
 GOBIN := $(shell $(GO) env GOBIN)
 ifeq ($(GOBIN),)
-GOBIN := $(shell $(GO) env GOPATH)/bin
+GOBIN := $(firstword $(subst :, ,$(shell $(GO) env GOPATH)))/bin
 endif
 
 .PHONY: build
