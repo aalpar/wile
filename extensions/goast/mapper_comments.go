@@ -34,6 +34,11 @@ func collectAttached(f *ast.File) map[*ast.CommentGroup]bool {
 			if dd.Doc != nil {
 				attached[dd.Doc] = true
 			}
+			collectFieldListAttached(dd.Recv, attached)
+			if dd.Type != nil {
+				collectFieldListAttached(dd.Type.Params, attached)
+				collectFieldListAttached(dd.Type.Results, attached)
+			}
 		case *ast.GenDecl:
 			if dd.Doc != nil {
 				attached[dd.Doc] = true
@@ -76,26 +81,26 @@ func collectSpecAttached(s ast.Spec, attached map[*ast.CommentGroup]bool) {
 func collectTypeAttached(t ast.Expr, attached map[*ast.CommentGroup]bool) {
 	switch tt := t.(type) {
 	case *ast.StructType:
-		if tt.Fields != nil {
-			for _, f := range tt.Fields.List {
-				if f.Doc != nil {
-					attached[f.Doc] = true
-				}
-				if f.Comment != nil {
-					attached[f.Comment] = true
-				}
-			}
-		}
+		collectFieldListAttached(tt.Fields, attached)
 	case *ast.InterfaceType:
-		if tt.Methods != nil {
-			for _, f := range tt.Methods.List {
-				if f.Doc != nil {
-					attached[f.Doc] = true
-				}
-				if f.Comment != nil {
-					attached[f.Comment] = true
-				}
-			}
+		collectFieldListAttached(tt.Methods, attached)
+	case *ast.FuncType:
+		collectFieldListAttached(tt.Params, attached)
+		collectFieldListAttached(tt.Results, attached)
+	}
+}
+
+// collectFieldListAttached marks Doc/Comment on each field in a FieldList.
+func collectFieldListAttached(fl *ast.FieldList, attached map[*ast.CommentGroup]bool) {
+	if fl == nil {
+		return
+	}
+	for _, f := range fl.List {
+		if f.Doc != nil {
+			attached[f.Doc] = true
+		}
+		if f.Comment != nil {
+			attached[f.Comment] = true
 		}
 	}
 }
