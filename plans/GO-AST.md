@@ -201,6 +201,13 @@ Tolerant of field ordering (alist lookup by key). Missing optional fields return
 
 Comments survive the round-trip when parsed with `'comments` flag. The unmapper reconstructs synthetic `token.Pos` values to maintain relative ordering between nodes and their comments — exact positions don't matter, only the ordering relationship that `go/printer` uses for attachment.
 
+Standalone comments (between declarations, end-of-file, before first declaration)
+are preserved by interleaving `(comment-group ...)` entries in the `decls` list.
+The mapper classifies groups using pointer identity against the Doc/Comment fields
+it collects (declarations, specs, struct/interface/func-type fields, receivers);
+groups not attached via those fields are treated as standalone and emitted at
+their source positions.
+
 ## Error Handling
 
 ### New Sentinels

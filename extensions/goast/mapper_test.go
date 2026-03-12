@@ -15,6 +15,7 @@
 package goast
 
 import (
+	"errors"
 	"go/ast"
 	"go/format"
 	"go/parser"
@@ -1017,6 +1018,26 @@ func TestRoundTripFuncBodyStatements(t *testing.T) {
 			" F() {\n\tx := 1\n\t_ = x\n\tprintln(x)\n}\n")
 }
 
+func TestRoundTripStandaloneCommentBetweenDecls(t *testing.T) {
+	roundTripFileWithComments(t,
+		"package p\n\nvar X int\n\n// standalone between X and Y\n\nvar Y int\n")
+}
+
+func TestRoundTripStandaloneCommentEndOfFile(t *testing.T) {
+	roundTripFileWithComments(t,
+		"package p\n\nvar X int\n\n// end of file comment\n")
+}
+
+func TestRoundTripStandaloneCommentBeforeFirstDecl(t *testing.T) {
+	roundTripFileWithComments(t,
+		"package p\n\n// standalone before first decl\n\nvar X int\n")
+}
+
+func TestRoundTripMultipleStandaloneComments(t *testing.T) {
+	roundTripFileWithComments(t,
+		"package p\n\nvar X int\n\n// first standalone\n\n// second standalone\n\nvar Y int\n")
+}
+
 func TestMapCommentsAbsent(t *testing.T) {
 	c := qt.New(t)
 	fset := token.NewFileSet()
@@ -1052,4 +1073,148 @@ func TestMapFieldListOrFalse(t *testing.T) {
 	// empty FieldList maps to empty list
 	result = mapFieldListOrFalse(&ast.FieldList{}, opts)
 	c.Assert(values.IsEmptyList(result), qt.IsTrue)
+}
+
+func TestMapFileEmitsCommentGroupInDecls(t *testing.T) {
+	c := qt.New(t)
+	fset := token.NewFileSet()
+	source := "package p\n\nvar X int\n\n// standalone\n\nvar Y int\n"
+	f, err := parser.ParseFile(fset, "test.go", source, parser.ParseComments)
+	c.Assert(err, qt.IsNil)
+
+	opts := &mapperOpts{fset: fset, comments: true}
+	sexpr := mapNode(f, opts)
+
+	// The decls list should contain a comment-group entry.
+	fields := sexpFields(sexpr)
+	declsVal, hasDeclsField := GetField(fields, "decls")
+	c.Assert(hasDeclsField, qt.IsTrue)
+
+	found := false
+	tuple, ok := declsVal.(values.Tuple)
+	c.Assert(ok, qt.IsTrue)
+	for !values.IsEmptyList(tuple) {
+		pair := tuple.(*values.Pair)
+		if sexpTag(pair.Car()) == "comment-group" {
+			found = true
+			break
+		}
+		tuple = pair.Cdr().(values.Tuple)
+	}
+	c.Assert(found, qt.IsTrue, qt.Commentf("expected comment-group in decls"))
+}
+
+func TestUnmapFileSkipsCommentGroup(t *testing.T) {
+	c := qt.New(t)
+	fset := token.NewFileSet()
+	source := "package p\n\nvar X int\n\n// standalone\n\nvar Y int\n"
+	f, err := parser.ParseFile(fset, "test.go", source, parser.ParseComments)
+	c.Assert(err, qt.IsNil)
+
+	opts := &mapperOpts{fset: fset, comments: true}
+	sexpr := mapNode(f, opts)
+
+	n, unmapErr := unmapNode(sexpr)
+	c.Assert(unmapErr, qt.IsNil)
+
+	file := n.(*ast.File)
+	// file.Decls should have exactly 2 declarations (the comment-group is skipped).
+	c.Assert(len(file.Decls), qt.Equals, 2)
+}
+
+func TestRoundTripStructFieldTrailingComment(t *testing.T) {
+	roundTripFileWithComments(t,
+		"package p\n\n// S is a struct.\ntype S struct {\n\tX int // the X field\n}\n")
+}
+
+func TestRoundTripInterfaceWithDocComment(t *testing.T) {
+	roundTripFileWithComments(t,
+		"package p\n\n// I is an interface.\ntype I interface {\n\t// M does something.\n\tM()\n}\n")
+}
+
+func TestRoundTripStandaloneCommentWithDocComment(t *testing.T) {
+	// Standalone comment followed by a doc comment on the next decl.
+	roundTripFileWithComments(t,
+		"package p\n\nvar X int\n\n// standalone\n\n// Doc for Y.\nvar Y int\n")
+}
+
+func TestRoundTripStandaloneBlockComment(t *testing.T) {
+	roundTripFileWithComments(t,
+		"package p\n\nvar X int\n\n/* block standalone */\n\nvar Y int\n")
+}
+
+func TestRoundTripOnlyStandaloneComments(t *testing.T) {
+	// File with no doc comments at all — only standalone.
+	roundTripFileWithComments(t,
+		"package p\n\n// standalone only\n")
+}
+
+func TestRoundTripNoCommentGroupInDeclsWithoutCommentsFlag(t *testing.T) {
+	// Without comments flag, decls should NOT contain comment-group entries.
+	c := qt.New(t)
+	fset := token.NewFileSet()
+	source := "package p\n\nvar X int\n\n// standalone\n\nvar Y int\n"
+	f, err := parser.ParseFile(fset, "test.go", source, parser.ParseComments)
+	c.Assert(err, qt.IsNil)
+
+	opts := &mapperOpts{fset: fset, comments: false}
+	sexpr := mapNode(f, opts)
+
+	fields := sexpFields(sexpr)
+	declsVal, _ := GetField(fields, "decls")
+	tuple, ok := declsVal.(values.Tuple)
+	c.Assert(ok, qt.IsTrue)
+	for !values.IsEmptyList(tuple) {
+		pair := tuple.(*values.Pair)
+		c.Assert(sexpTag(pair.Car()), qt.Not(qt.Equals), "comment-group",
+			qt.Commentf("comment-group should not appear without comments flag"))
+		tuple = pair.Cdr().(values.Tuple)
+	}
+}
+
+func TestForEachSexprErrors(t *testing.T) {
+	t.Run("non-tuple input", func(t *testing.T) {
+		c := qt.New(t)
+		err := forEachSexpr(values.NewString("not-a-list"), func(v values.Value) error {
+			return nil
+		})
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(errors.Is(err, errMalformedGoAST), qt.IsTrue)
+	})
+
+	t.Run("improper list", func(t *testing.T) {
+		c := qt.New(t)
+		// Build (a . "not-a-tuple") — a pair whose cdr is not a Tuple.
+		improper := values.NewCons(
+			values.NewSymbol("a"),
+			values.NewString("not-a-tuple"),
+		)
+		err := forEachSexpr(improper, func(v values.Value) error {
+			return nil
+		})
+		c.Assert(err, qt.IsNotNil)
+		c.Assert(errors.Is(err, errMalformedGoAST), qt.IsTrue)
+	})
+
+	t.Run("false input is no-op", func(t *testing.T) {
+		c := qt.New(t)
+		called := false
+		err := forEachSexpr(values.FalseValue, func(v values.Value) error {
+			called = true
+			return nil
+		})
+		c.Assert(err, qt.IsNil)
+		c.Assert(called, qt.IsFalse)
+	})
+
+	t.Run("empty list is no-op", func(t *testing.T) {
+		c := qt.New(t)
+		called := false
+		err := forEachSexpr(values.EmptyList, func(v values.Value) error {
+			called = true
+			return nil
+		})
+		c.Assert(err, qt.IsNil)
+		c.Assert(called, qt.IsFalse)
+	})
 }

@@ -181,9 +181,14 @@ func mapStmt(s ast.Stmt, opts *mapperOpts) values.Value {
 // --- Top-level ---
 
 func mapFile(f *ast.File, opts *mapperOpts) values.Value {
-	decls := make([]values.Value, len(f.Decls))
-	for i, d := range f.Decls {
-		decls[i] = mapNode(d, opts)
+	var decls []values.Value
+	if opts.comments && opts.fset != nil {
+		decls = mapDeclsWithStandalone(f, opts)
+	} else {
+		decls = make([]values.Value, len(f.Decls))
+		for i, d := range f.Decls {
+			decls[i] = mapNode(d, opts)
+		}
 	}
 	var fs []values.Value
 	fs = append(fs,
