@@ -110,6 +110,8 @@ func unmapNode(v values.Value) (ast.Node, error) {
 		return unmapSelectorExpr(fields)
 	case "index-expr":
 		return unmapIndexExpr(fields)
+	case "index-list-expr":
+		return unmapIndexListExpr(fields)
 	case "star-expr":
 		return unmapStarExpr(fields)
 	case "paren-expr":
@@ -142,6 +144,17 @@ func unmapNode(v values.Value) (ast.Node, error) {
 		return unmapFuncType(fields)
 	case "field":
 		return unmapField(fields)
+
+	// Error recovery — bad nodes cannot be unmapped back to valid Go source.
+	case "bad-expr":
+		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+			"goast: bad-expr cannot be unmapped (represents a parse error)")
+	case "bad-stmt":
+		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+			"goast: bad-stmt cannot be unmapped (represents a parse error)")
+	case "bad-decl":
+		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+			"goast: bad-decl cannot be unmapped (represents a parse error)")
 
 	case "unknown":
 		goType, _ := GetField(fields, "go-type")

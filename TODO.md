@@ -135,7 +135,8 @@ No demand signal. Speculative or research-only.
 - [ ] **Area for blog articles** Git blog area in repo
 - [ ] **Finish blog article** Finish blog article on appropriateness of Scheme for sandboxing.
 - [ ] **Go AST extension Phase 2 — Advanced** [Standard library, S]: Concurrency (`GoStmt`, `DeferStmt`, `SelectStmt`, `CommClause`), switch (`SwitchStmt`, `TypeSwitchStmt`, `CaseClause`), `SliceExpr`, `TypeAssertExpr`, `ChanType`, `Ellipsis`, `LabeledStmt`. ~12 additional node types. `plans/GO-AST.md`
-- [ ] **Go AST extension Phase 3 — Comments & generics** [Standard library, S]: `Comment`/`CommentGroup` attachment for round-trip structural fidelity. `BadExpr`/`BadStmt`/`BadDecl` for error recovery. `IndexListExpr` for generics. `plans/GO-AST.md`
+- [x] **Go AST extension Phase 3 — Comments & generics** [Standard library, S]: `Comment`/`CommentGroup` attachment for round-trip structural fidelity. `BadExpr`/`BadStmt`/`BadDecl` for error recovery. `IndexListExpr` for generics. `plans/GO-AST.md`
+- [ ] **Go AST: file-level comment rebuild** [Standard library, S]: `attachComments` only collects doc/trailing comments from decls/specs/fields. Standalone comments (between decls, end-of-file) are dropped. The mapper emits a file-level `comments` field (`mapper.go:194`) but the unmapper ignores it. Fix: rebuild `file.Comments` from the s-expression's `comments` list, wire Doc/Comment pointers to groups in that slice. `plans/GO-AST.md`
 - [ ] **Implement let-syntax*** [Core language, S]: Implement `let-syntax*`.
 - [ ] **Native forms migration** [Refactoring, M]: Migrate Go primitives to Scheme where equivalent or superior. 43 of 52 done (Phases 0–2, 4 complete in #460, #462, #463). Phase 3 (9 list algorithms + port helpers, benchmark-gated) remains. See `plans/NATIVE-FORMS-MIGRATION.md`.
 - [ ] **User labels/tags to distinguish FS resolvers** Use tags or labels to distinguish bootstrap loadee from include/library loaders in fileResolver.

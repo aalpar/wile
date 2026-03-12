@@ -15,6 +15,7 @@
 package goast
 
 import (
+	"go/ast"
 	"go/format"
 	"go/parser"
 	"go/printer"
@@ -144,6 +145,22 @@ func PrimGoFormat(mc *machine.MachineContext) error {
 	}
 
 	fset := token.NewFileSet()
+
+	// When the s-expression was produced with 'comments, attach comment
+	// groups with synthetic positions so go/printer places them correctly.
+	file, isFile := n.(*ast.File)
+	if isFile {
+		fields := sexpFields(astVal)
+		_, hasComments := GetField(fields, "comments")
+		if hasComments {
+			attachErr := attachComments(file, fields, fset)
+			if attachErr != nil {
+				return werr.WrapForeignErrorf(errMalformedGoAST,
+					"go-format: %s", attachErr)
+			}
+		}
+	}
+
 	var buf strings.Builder
 	err = printer.Fprint(&buf, fset, n)
 	if err != nil {

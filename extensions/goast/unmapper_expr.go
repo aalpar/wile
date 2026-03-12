@@ -152,6 +152,26 @@ func unmapSelectorExpr(fields values.Value) (*ast.SelectorExpr, error) {
 	return &ast.SelectorExpr{X: x, Sel: ast.NewIdent(sel)}, nil
 }
 
+func unmapIndexListExpr(fields values.Value) (*ast.IndexListExpr, error) {
+	xVal, err := RequireField(fields, "index-list-expr", "x")
+	if err != nil {
+		return nil, err
+	}
+	x, err := unmapExpr(xVal)
+	if err != nil {
+		return nil, err
+	}
+	indicesVal, err := RequireField(fields, "index-list-expr", "indices")
+	if err != nil {
+		return nil, err
+	}
+	indices, err := unmapExprList(indicesVal)
+	if err != nil {
+		return nil, err
+	}
+	return &ast.IndexListExpr{X: x, Indices: indices}, nil
+}
+
 func unmapIndexExpr(fields values.Value) (*ast.IndexExpr, error) {
 	xVal, err := RequireField(fields, "index-expr", "x")
 	if err != nil {

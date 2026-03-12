@@ -47,6 +47,8 @@ func mapNode(n ast.Node, opts *mapperOpts) values.Value {
 		return mapFuncDecl(v, opts)
 	case *ast.GenDecl:
 		return mapGenDecl(v, opts)
+	case *ast.BadDecl:
+		return mapBadDecl(v, opts)
 
 	// Specs
 	case *ast.ImportSpec:
@@ -95,6 +97,8 @@ func mapNode(n ast.Node, opts *mapperOpts) values.Value {
 		return mapSelectStmt(v, opts)
 	case *ast.CommClause:
 		return mapCommClause(v, opts)
+	case *ast.BadStmt:
+		return mapBadStmt(v, opts)
 
 	// Expressions
 	case *ast.Ident:
@@ -111,6 +115,8 @@ func mapNode(n ast.Node, opts *mapperOpts) values.Value {
 		return mapSelectorExpr(v, opts)
 	case *ast.IndexExpr:
 		return mapIndexExpr(v, opts)
+	case *ast.IndexListExpr:
+		return mapIndexListExpr(v, opts)
 	case *ast.StarExpr:
 		return mapStarExpr(v, opts)
 	case *ast.ParenExpr:
@@ -127,6 +133,8 @@ func mapNode(n ast.Node, opts *mapperOpts) values.Value {
 		return mapSliceExpr(v, opts)
 	case *ast.Ellipsis:
 		return mapEllipsis(v, opts)
+	case *ast.BadExpr:
+		return mapBadExpr(v, opts)
 
 	// Types
 	case *ast.ArrayType:
@@ -177,21 +185,30 @@ func mapFile(f *ast.File, opts *mapperOpts) values.Value {
 	for i, d := range f.Decls {
 		decls[i] = mapNode(d, opts)
 	}
-	return Node("file",
+	var fs []values.Value
+	fs = append(fs,
 		Field("name", Str(f.Name.Name)),
 		Field("decls", ValueList(decls)),
 	)
+	if opts.comments {
+		fs = append(fs, Field("comments", mapCommentGroups(f.Comments)))
+	}
+	return Node("file", fs...)
 }
 
 // --- Declarations ---
 
 func mapFuncDecl(f *ast.FuncDecl, opts *mapperOpts) values.Value {
-	fields := []values.Value{
+	var fields []values.Value
+	if opts.comments {
+		fields = append(fields, Field("doc", commentGroupToStrings(f.Doc)))
+	}
+	fields = append(fields,
 		Field("name", Str(f.Name.Name)),
 		Field("recv", mapFieldListOrFalse(f.Recv, opts)),
 		Field("type", mapFuncType(f.Type, opts)),
 		Field("body", mapStmt(f.Body, opts)),
-	}
+	)
 	return Node("func-decl", fields...)
 }
 
@@ -200,10 +217,15 @@ func mapGenDecl(g *ast.GenDecl, opts *mapperOpts) values.Value {
 	for i, s := range g.Specs {
 		specs[i] = mapNode(s, opts)
 	}
-	return Node("gen-decl",
+	var fs []values.Value
+	if opts.comments {
+		fs = append(fs, Field("doc", commentGroupToStrings(g.Doc)))
+	}
+	fs = append(fs,
 		Field("tok", Sym(g.Tok.String())),
 		Field("specs", ValueList(specs)),
 	)
+	return Node("gen-decl", fs...)
 }
 
 // --- Specs ---
@@ -215,10 +237,18 @@ func mapImportSpec(s *ast.ImportSpec, opts *mapperOpts) values.Value {
 	} else {
 		nameVal = values.FalseValue
 	}
-	return Node("import-spec",
+	var fs []values.Value
+	if opts.comments {
+		fs = append(fs, Field("doc", commentGroupToStrings(s.Doc)))
+	}
+	fs = append(fs,
 		Field("name", nameVal),
 		Field("path", mapBasicLit(s.Path, opts)),
 	)
+	if opts.comments {
+		fs = append(fs, Field("comment", commentGroupToStrings(s.Comment)))
+	}
+	return Node("import-spec", fs...)
 }
 
 func mapValueSpec(s *ast.ValueSpec, opts *mapperOpts) values.Value {
@@ -230,18 +260,34 @@ func mapValueSpec(s *ast.ValueSpec, opts *mapperOpts) values.Value {
 	for i, v := range s.Values {
 		vals[i] = mapExpr(v, opts)
 	}
-	return Node("value-spec",
+	var fs []values.Value
+	if opts.comments {
+		fs = append(fs, Field("doc", commentGroupToStrings(s.Doc)))
+	}
+	fs = append(fs,
 		Field("names", ValueList(names)),
 		Field("type", mapExpr(s.Type, opts)),
 		Field("values", ValueList(vals)),
 	)
+	if opts.comments {
+		fs = append(fs, Field("comment", commentGroupToStrings(s.Comment)))
+	}
+	return Node("value-spec", fs...)
 }
 
 func mapTypeSpec(s *ast.TypeSpec, opts *mapperOpts) values.Value {
-	return Node("type-spec",
+	var fs []values.Value
+	if opts.comments {
+		fs = append(fs, Field("doc", commentGroupToStrings(s.Doc)))
+	}
+	fs = append(fs,
 		Field("name", Str(s.Name.Name)),
 		Field("type", mapExpr(s.Type, opts)),
 	)
+	if opts.comments {
+		fs = append(fs, Field("comment", commentGroupToStrings(s.Comment)))
+	}
+	return Node("type-spec", fs...)
 }
 
 // --- Statements ---
@@ -319,7 +365,7 @@ func mapRangeStmt(r *ast.RangeStmt, opts *mapperOpts) values.Value {
 	)
 }
 
-func mapBranchStmt(b *ast.BranchStmt, opts *mapperOpts) values.Value { //nolint:unparam // opts unused until Phase 3 (positions/comments)
+func mapBranchStmt(b *ast.BranchStmt, opts *mapperOpts) values.Value { //nolint:unparam // opts unused for branch-stmt (no comment fields)
 	var labelVal values.Value
 	if b.Label != nil {
 		labelVal = Str(b.Label.Name)
@@ -502,6 +548,19 @@ func mapIndexExpr(i *ast.IndexExpr, opts *mapperOpts) values.Value {
 	return Node("index-expr", fields...)
 }
 
+func mapIndexListExpr(i *ast.IndexListExpr, opts *mapperOpts) values.Value {
+	indices := make([]values.Value, len(i.Indices))
+	for j, idx := range i.Indices {
+		indices[j] = mapExpr(idx, opts)
+	}
+	fields := []values.Value{
+		Field("x", mapExpr(i.X, opts)),
+		Field("indices", ValueList(indices)),
+	}
+	fields = addTypeAnnotation(i, opts, fields)
+	return Node("index-list-expr", fields...)
+}
+
 func mapStarExpr(s *ast.StarExpr, opts *mapperOpts) values.Value {
 	fields := []values.Value{Field("x", mapExpr(s.X, opts))}
 	fields = addTypeAnnotation(s, opts, fields)
@@ -637,12 +696,19 @@ func mapField(f *ast.Field, opts *mapperOpts) values.Value {
 	for i, n := range f.Names {
 		names[i] = Str(n.Name)
 	}
-	fs := []values.Value{
+	var fs []values.Value
+	if opts.comments {
+		fs = append(fs, Field("doc", commentGroupToStrings(f.Doc)))
+	}
+	fs = append(fs,
 		Field("names", ValueList(names)),
 		Field("type", mapExpr(f.Type, opts)),
-	}
+	)
 	if f.Tag != nil {
 		fs = append(fs, Field("tag", mapBasicLit(f.Tag, opts)))
+	}
+	if opts.comments {
+		fs = append(fs, Field("comment", commentGroupToStrings(f.Comment)))
 	}
 	return Node("field", fs...)
 }
@@ -697,4 +763,62 @@ func addObjPkgAnnotation(id *ast.Ident, opts *mapperOpts, fields []values.Value)
 		return fields
 	}
 	return append(fields, Field("obj-pkg", Str(pkg.Path())))
+}
+
+// --- Error recovery nodes ---
+
+func mapBadExpr(b *ast.BadExpr, opts *mapperOpts) values.Value {
+	if opts.positions && opts.fset != nil {
+		return Node("bad-expr",
+			Field("pos", Str(opts.fset.Position(b.From).String())),
+			Field("end", Str(opts.fset.Position(b.To).String())),
+		)
+	}
+	return Node("bad-expr")
+}
+
+func mapBadStmt(b *ast.BadStmt, opts *mapperOpts) values.Value {
+	if opts.positions && opts.fset != nil {
+		return Node("bad-stmt",
+			Field("pos", Str(opts.fset.Position(b.From).String())),
+			Field("end", Str(opts.fset.Position(b.To).String())),
+		)
+	}
+	return Node("bad-stmt")
+}
+
+func mapBadDecl(b *ast.BadDecl, opts *mapperOpts) values.Value {
+	if opts.positions && opts.fset != nil {
+		return Node("bad-decl",
+			Field("pos", Str(opts.fset.Position(b.From).String())),
+			Field("end", Str(opts.fset.Position(b.To).String())),
+		)
+	}
+	return Node("bad-decl")
+}
+
+// --- Comment helpers ---
+
+// commentGroupToStrings converts a CommentGroup to a list of text strings.
+func commentGroupToStrings(cg *ast.CommentGroup) values.Value {
+	if cg == nil {
+		return values.FalseValue
+	}
+	strs := make([]values.Value, len(cg.List))
+	for i, c := range cg.List {
+		strs[i] = Str(c.Text)
+	}
+	return ValueList(strs)
+}
+
+// mapCommentGroups converts []*ast.CommentGroup to a list of string lists.
+func mapCommentGroups(groups []*ast.CommentGroup) values.Value {
+	if groups == nil {
+		return values.FalseValue
+	}
+	gs := make([]values.Value, len(groups))
+	for i, g := range groups {
+		gs[i] = commentGroupToStrings(g)
+	}
+	return ValueList(gs)
 }

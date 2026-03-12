@@ -1,6 +1,6 @@
 # Go AST Extension
 
-**Status**: Phases 1, 2 & 4 complete; Phase 3 not started
+**Status**: Phases 1, 2, 3 & 4 complete
 **Package**: `extensions/goast/`, importable as `(wile goast)`
 **Dependencies**: `go/ast`, `go/parser`, `go/token`, `go/printer`, `go/format` (all stdlib)
 
