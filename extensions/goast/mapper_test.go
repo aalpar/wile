@@ -344,7 +344,7 @@ import foo "fmt"
 			source: `package main
 
 type Foo struct {
-    X int ` + "`json:`" + `
+    X int ` + "`json:\"x\"`" + `
 }`,
 		},
 		{

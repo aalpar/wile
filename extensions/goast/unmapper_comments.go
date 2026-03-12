@@ -252,6 +252,8 @@ func attachFieldComments(field *ast.Field, sexpr values.Value, alloc *posAllocat
 	declPos := alloc.nextLine()
 	if len(field.Names) > 0 {
 		field.Names[0].NamePos = declPos
+	} else {
+		assignExprLeadingPos(field.Type, declPos)
 	}
 	if doc != nil {
 		field.Doc = doc
@@ -294,12 +296,14 @@ func assignStmtLeadingPos(s ast.Stmt, pos token.Pos) {
 		v.TokPos = pos
 	case *ast.IncDecStmt:
 		v.TokPos = pos
+		assignExprLeadingPos(v.X, pos)
 	case *ast.GoStmt:
 		v.Go = pos
 	case *ast.DeferStmt:
 		v.Defer = pos
 	case *ast.SendStmt:
 		v.Arrow = pos
+		assignExprLeadingPos(v.Chan, pos)
 	case *ast.SwitchStmt:
 		v.Switch = pos
 	case *ast.TypeSwitchStmt:
@@ -312,6 +316,9 @@ func assignStmtLeadingPos(s ast.Stmt, pos token.Pos) {
 		v.Case = pos
 	case *ast.LabeledStmt:
 		v.Colon = pos
+		if v.Label != nil {
+			v.Label.NamePos = pos
+		}
 	case *ast.DeclStmt:
 		switch dd := v.Decl.(type) {
 		case *ast.GenDecl:
@@ -427,13 +434,15 @@ func walkParallel[T any](goSlice []T, sexprList values.Value, fn func(T, values.
 	}
 	tuple, ok := sexprList.(values.Tuple)
 	if !ok {
-		return nil
+		return werr.WrapForeignErrorf(errMalformedGoAST,
+			"goast: expected proper list for parallel walk, got %T", sexprList)
 	}
 	i := 0
 	for i < len(goSlice) && !values.IsEmptyList(tuple) {
 		pair, ok := tuple.(*values.Pair)
 		if !ok {
-			break
+			return werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: expected pair in parallel walk, got %T", tuple)
 		}
 		err := fn(goSlice[i], pair.Car())
 		if err != nil {
@@ -442,7 +451,8 @@ func walkParallel[T any](goSlice []T, sexprList values.Value, fn func(T, values.
 		i++
 		cdr, ok := pair.Cdr().(values.Tuple)
 		if !ok {
-			break
+			return werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: improper list in parallel walk")
 		}
 		tuple = cdr
 	}
