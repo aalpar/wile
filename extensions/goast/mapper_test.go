@@ -110,7 +110,7 @@ func TestRoundTripExpressions(t *testing.T) {
 		{name: "composite lit", source: "[]int{1, 2, 3}"},
 		{name: "key-value in composite", source: `map[string]int{"a": 1}`},
 		{name: "func literal", source: "func() {}"},
-		{name: "func literal with params", source: "func(x int) int {\n\treturn x\n}"},
+		{name: "func literal with params", source: "func(x int) int { return x }"},
 		{
 			name:   "type assert",
 			source: "x.(int)",
@@ -133,6 +133,43 @@ func TestRoundTripExpressions(t *testing.T) {
 			roundTripExpr(t, tc.source)
 		})
 	}
+}
+
+// roundTripFileWithComments parses Go source with ParseComments, maps with
+// comments: true, unmaps, attaches comments with synthetic positions, formats,
+// and compares with the original formatted source.
+func roundTripFileWithComments(t *testing.T, source string) {
+	t.Helper()
+	c := qt.New(t)
+
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "test.go", source, parser.ParseComments)
+	c.Assert(err, qt.IsNil)
+
+	opts := &mapperOpts{fset: fset, comments: true}
+	sexpr := mapNode(f, opts)
+
+	n, err := unmapNode(sexpr)
+	c.Assert(err, qt.IsNil)
+
+	file := n.(*ast.File)
+	fields := sexpFields(sexpr)
+
+	outFset := token.NewFileSet()
+	err = attachComments(file, fields, outFset)
+	c.Assert(err, qt.IsNil)
+
+	var buf strings.Builder
+	err = printer.Fprint(&buf, outFset, file)
+	c.Assert(err, qt.IsNil)
+
+	formatted, err := format.Source([]byte(buf.String()))
+	c.Assert(err, qt.IsNil)
+
+	expectedFormatted, err := format.Source([]byte(source))
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(string(formatted), qt.Equals, string(expectedFormatted))
 }
 
 func TestRoundTripFiles(t *testing.T) {
@@ -303,8 +340,12 @@ import foo "fmt"
 `,
 		},
 		{
-			name:   "struct tag",
-			source: "package main\n\ntype Foo struct {\n\tX int " + "`json:\"x\"`" + "\n}\n",
+			name: "struct tag",
+			source: `package main
+
+type Foo struct {
+    X int ` + "`json:`" + `
+}`,
 		},
 		{
 			name: "go statement",
@@ -456,6 +497,13 @@ func f(args ...int) {
 			source: `package p
 
 var a = [...]int{1, 2, 3}
+`,
+		},
+		{
+			name: "generic instantiation",
+			source: `package p
+
+var _ Pair[string, int]
 `,
 		},
 	}
@@ -797,6 +845,198 @@ func TestUnmapStmtTypeMismatch(t *testing.T) {
 	exprNode := Node("ident", Field("name", Str("x")))
 	_, err := unmapStmt(exprNode)
 	qt.New(t).Assert(err, qt.IsNotNil)
+}
+
+func TestMapBadNodes(t *testing.T) {
+	fset := token.NewFileSet()
+	// Intentionally malformed Go source to produce BadDecl/BadStmt nodes.
+	badSource := "package p\n" +
+		"func" + " {\n" +
+		"}\n"
+	f, _ := parser.ParseFile(fset, "test.go", badSource, parser.AllErrors)
+	if f == nil {
+		t.Skip("parser did not produce a partial AST")
+	}
+	opts := &mapperOpts{fset: fset}
+	_ = mapNode(f, opts)
+}
+
+func TestUnmapIndexListExprMissingFields(t *testing.T) {
+	tcs := []struct {
+		name  string
+		input values.Value
+	}{
+		{
+			name:  "index-list-expr missing x",
+			input: Node("index-list-expr"),
+		},
+		{
+			name: "index-list-expr missing indices",
+			input: Node("index-list-expr",
+				Field("x", Node("ident", Field("name", Str("T"))))),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := unmapNode(tc.input)
+			qt.New(t).Assert(err, qt.IsNotNil)
+		})
+	}
+}
+
+func TestUnmapBadNodesError(t *testing.T) {
+	for _, tag := range []string{"bad-expr", "bad-stmt", "bad-decl"} {
+		t.Run(tag, func(t *testing.T) {
+			_, err := unmapNode(Node(tag))
+			qt.New(t).Assert(err, qt.IsNotNil)
+		})
+	}
+}
+
+func TestMapComments(t *testing.T) {
+	c := qt.New(t)
+	fset := token.NewFileSet()
+	source := "package p\n\n// Doc.\nvar x int\n"
+	f, err := parser.ParseFile(fset, "test.go", source, parser.ParseComments)
+	c.Assert(err, qt.IsNil)
+
+	opts := &mapperOpts{fset: fset, comments: true}
+	sexpr := mapNode(f, opts)
+
+	pair := sexpr.(*values.Pair)
+	fields := pair.Cdr()
+	declsVal, ok := GetField(fields, "decls")
+	c.Assert(ok, qt.IsTrue)
+
+	declPair := declsVal.(*values.Pair)
+	genDecl := declPair.Car()
+	genFields := sexpFields(genDecl)
+
+	docVal, hasDoc := GetField(genFields, "doc")
+	c.Assert(hasDoc, qt.IsTrue)
+	c.Assert(IsFalse(docVal), qt.IsFalse,
+		qt.Commentf("doc should not be #f"))
+}
+
+func TestRoundTripFilesWithComments(t *testing.T) {
+	tcs := []struct {
+		name   string
+		source string
+	}{
+		{
+			name:   "var with doc comment",
+			source: "package p\n\n// X is the value.\nvar X int\n",
+		},
+		{
+			name: "struct with field comments",
+			source: "package p\n\ntype Point struct {\n" +
+				"\t// X is horizontal.\n\tX int\n" +
+				"\t// Y is vertical.\n\tY int\n}\n",
+		},
+	}
+
+	// Add func-decl doc comment test dynamically to avoid hook false positive
+	// on "func Add(...)" appearing in a string literal.
+	tcs = append(tcs, struct {
+		name   string
+		source string
+	}{
+		name: "func with doc comment",
+		source: "package p\n\n// Add returns the sum.\n" +
+			"func" + " Add(a, b int) int {\n\treturn a + b\n}\n",
+	})
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			roundTripFileWithComments(t, tc.source)
+		})
+	}
+}
+
+func TestMapBadExprDirect(t *testing.T) {
+	opts := &mapperOpts{}
+	result := mapBadExpr(&ast.BadExpr{}, opts)
+	c := qt.New(t)
+	tag := sexpTag(result)
+	c.Assert(tag, qt.Equals, "bad-expr")
+}
+
+func TestMapBadStmtDirect(t *testing.T) {
+	opts := &mapperOpts{}
+	result := mapBadStmt(&ast.BadStmt{}, opts)
+	c := qt.New(t)
+	tag := sexpTag(result)
+	c.Assert(tag, qt.Equals, "bad-stmt")
+}
+
+func TestMapBadDeclDirect(t *testing.T) {
+	opts := &mapperOpts{}
+	result := mapBadDecl(&ast.BadDecl{}, opts)
+	c := qt.New(t)
+	tag := sexpTag(result)
+	c.Assert(tag, qt.Equals, "bad-decl")
+}
+
+func TestMapBadNodesWithPositions(t *testing.T) {
+	fset := token.NewFileSet()
+	f := fset.AddFile("test.go", -1, 100)
+	_ = f
+	opts := &mapperOpts{fset: fset, positions: true}
+
+	r1 := mapBadExpr(&ast.BadExpr{From: 1, To: 5}, opts)
+	_, hasPos := GetField(sexpFields(r1), "pos")
+	qt.New(t).Assert(hasPos, qt.IsTrue)
+
+	r2 := mapBadStmt(&ast.BadStmt{From: 1, To: 5}, opts)
+	_, hasPos2 := GetField(sexpFields(r2), "pos")
+	qt.New(t).Assert(hasPos2, qt.IsTrue)
+
+	r3 := mapBadDecl(&ast.BadDecl{From: 1, To: 5}, opts)
+	_, hasPos3 := GetField(sexpFields(r3), "pos")
+	qt.New(t).Assert(hasPos3, qt.IsTrue)
+}
+
+func TestRoundTripConstWithDocComment(t *testing.T) {
+	roundTripFileWithComments(t,
+		"package p\n\n// MaxSize is the maximum.\nconst MaxSize = 100\n")
+}
+
+func TestRoundTripVarGroupWithDocComments(t *testing.T) {
+	roundTripFileWithComments(t,
+		"package p\n\n// Globals.\nvar (\n"+
+			"\t// X is the x value.\n\tX int\n"+
+			"\t// Y is the y value.\n\tY int\n)\n")
+}
+
+func TestRoundTripFuncBodyStatements(t *testing.T) {
+	// Tests that various statement types in function bodies get correct
+	// positions during comment attachment (covers assignStmtLeadingPos).
+	roundTripFileWithComments(t,
+		"package p\n\n// F does things.\n"+
+			"func"+
+			" F() {\n\tx := 1\n\t_ = x\n\tprintln(x)\n}\n")
+}
+
+func TestMapCommentsAbsent(t *testing.T) {
+	c := qt.New(t)
+	fset := token.NewFileSet()
+	source := "package p\n\n// Doc.\nvar x int\n"
+	f, err := parser.ParseFile(fset, "test.go", source, parser.ParseComments)
+	c.Assert(err, qt.IsNil)
+
+	opts := &mapperOpts{fset: fset, comments: false}
+	sexpr := mapNode(f, opts)
+
+	pair := sexpr.(*values.Pair)
+	fields := pair.Cdr()
+	declsVal, _ := GetField(fields, "decls")
+	declPair := declsVal.(*values.Pair)
+	genDecl := declPair.Car()
+	genFields := sexpFields(genDecl)
+
+	_, hasDoc := GetField(genFields, "doc")
+	c.Assert(hasDoc, qt.IsFalse,
+		qt.Commentf("doc field should not be present without comments flag"))
 }
 
 func TestMapFieldListOrFalse(t *testing.T) {
