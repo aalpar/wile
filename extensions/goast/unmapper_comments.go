@@ -68,14 +68,22 @@ func attachComments(file *ast.File, fileSexprFields values.Value, fset *token.Fi
 	file.Package = pkgPos
 	file.Name.NamePos = pkgPos
 
-	declsVal, _ := GetField(fileSexprFields, "decls")
+	declsVal, hasDeclsField := GetField(fileSexprFields, "decls")
+	if !hasDeclsField {
+		return werr.WrapForeignErrorf(errMalformedGoAST,
+			"attachComments: file s-expression missing required field 'decls'")
+	}
 	declIdx := 0
 
 	err := forEachSexpr(declsVal, func(elem values.Value) error {
 		tag := sexpTag(elem)
 		if tag == "comment-group" {
 			fields := sexpFields(elem)
-			textsVal, _ := GetField(fields, "text")
+			textsVal, hasTextField := GetField(fields, "text")
+			if !hasTextField {
+				return werr.WrapForeignErrorf(errMalformedGoAST,
+					"attachComments: comment-group missing required field 'text'")
+			}
 			if IsFalse(textsVal) {
 				return nil
 			}
@@ -95,9 +103,14 @@ func attachComments(file *ast.File, fileSexprFields values.Value, fset *token.Fi
 			alloc.nextLine()
 			return nil
 		}
+		if tag == "" {
+			return werr.WrapForeignErrorf(errMalformedGoAST,
+				"attachComments: expected tagged s-expression in decls list")
+		}
 		// Declaration entry — process with existing logic.
 		if declIdx >= len(file.Decls) {
-			return nil
+			return werr.WrapForeignErrorf(errMalformedGoAST,
+				"attachComments: s-expression has more declaration entries than AST (%d decls exhausted)", len(file.Decls))
 		}
 		dErr := attachDeclComments(file.Decls[declIdx], elem, alloc, &cgs)
 		declIdx++
