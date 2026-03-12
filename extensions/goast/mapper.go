@@ -121,8 +121,8 @@ func mapNode(n ast.Node, opts *mapperOpts) values.Value {
 
 	default:
 		// Unsupported node types preserve the Go type for diagnostics.
-		return node("unknown",
-			field("go-type", str(fmt.Sprintf("%T", n))),
+		return Node("unknown",
+			Field("go-type", Str(fmt.Sprintf("%T", n))),
 		)
 	}
 }
@@ -150,9 +150,9 @@ func mapFile(f *ast.File, opts *mapperOpts) values.Value {
 	for i, d := range f.Decls {
 		decls[i] = mapNode(d, opts)
 	}
-	return node("file",
-		field("name", str(f.Name.Name)),
-		field("decls", valueList(decls)),
+	return Node("file",
+		Field("name", Str(f.Name.Name)),
+		Field("decls", ValueList(decls)),
 	)
 }
 
@@ -160,12 +160,12 @@ func mapFile(f *ast.File, opts *mapperOpts) values.Value {
 
 func mapFuncDecl(f *ast.FuncDecl, opts *mapperOpts) values.Value {
 	fields := []values.Value{
-		field("name", str(f.Name.Name)),
-		field("recv", mapFieldListOrFalse(f.Recv, opts)),
-		field("type", mapFuncType(f.Type, opts)),
-		field("body", mapStmt(f.Body, opts)),
+		Field("name", Str(f.Name.Name)),
+		Field("recv", mapFieldListOrFalse(f.Recv, opts)),
+		Field("type", mapFuncType(f.Type, opts)),
+		Field("body", mapStmt(f.Body, opts)),
 	}
-	return node("func-decl", fields...)
+	return Node("func-decl", fields...)
 }
 
 func mapGenDecl(g *ast.GenDecl, opts *mapperOpts) values.Value {
@@ -173,9 +173,9 @@ func mapGenDecl(g *ast.GenDecl, opts *mapperOpts) values.Value {
 	for i, s := range g.Specs {
 		specs[i] = mapNode(s, opts)
 	}
-	return node("gen-decl",
-		field("tok", sym(g.Tok.String())),
-		field("specs", valueList(specs)),
+	return Node("gen-decl",
+		Field("tok", Sym(g.Tok.String())),
+		Field("specs", ValueList(specs)),
 	)
 }
 
@@ -184,36 +184,36 @@ func mapGenDecl(g *ast.GenDecl, opts *mapperOpts) values.Value {
 func mapImportSpec(s *ast.ImportSpec, opts *mapperOpts) values.Value {
 	var nameVal values.Value
 	if s.Name != nil {
-		nameVal = str(s.Name.Name)
+		nameVal = Str(s.Name.Name)
 	} else {
 		nameVal = values.FalseValue
 	}
-	return node("import-spec",
-		field("name", nameVal),
-		field("path", mapBasicLit(s.Path, opts)),
+	return Node("import-spec",
+		Field("name", nameVal),
+		Field("path", mapBasicLit(s.Path, opts)),
 	)
 }
 
 func mapValueSpec(s *ast.ValueSpec, opts *mapperOpts) values.Value {
 	names := make([]values.Value, len(s.Names))
 	for i, n := range s.Names {
-		names[i] = str(n.Name)
+		names[i] = Str(n.Name)
 	}
 	vals := make([]values.Value, len(s.Values))
 	for i, v := range s.Values {
 		vals[i] = mapExpr(v, opts)
 	}
-	return node("value-spec",
-		field("names", valueList(names)),
-		field("type", mapExpr(s.Type, opts)),
-		field("values", valueList(vals)),
+	return Node("value-spec",
+		Field("names", ValueList(names)),
+		Field("type", mapExpr(s.Type, opts)),
+		Field("values", ValueList(vals)),
 	)
 }
 
 func mapTypeSpec(s *ast.TypeSpec, opts *mapperOpts) values.Value {
-	return node("type-spec",
-		field("name", str(s.Name.Name)),
-		field("type", mapExpr(s.Type, opts)),
+	return Node("type-spec",
+		Field("name", Str(s.Name.Name)),
+		Field("type", mapExpr(s.Type, opts)),
 	)
 }
 
@@ -227,8 +227,8 @@ func mapBlockStmt(b *ast.BlockStmt, opts *mapperOpts) values.Value {
 	for i, s := range b.List {
 		stmts[i] = mapStmt(s, opts)
 	}
-	return node("block",
-		field("list", valueList(stmts)),
+	return Node("block",
+		Field("list", ValueList(stmts)),
 	)
 }
 
@@ -237,14 +237,14 @@ func mapReturnStmt(r *ast.ReturnStmt, opts *mapperOpts) values.Value {
 	for i, e := range r.Results {
 		results[i] = mapExpr(e, opts)
 	}
-	return node("return-stmt",
-		field("results", valueList(results)),
+	return Node("return-stmt",
+		Field("results", ValueList(results)),
 	)
 }
 
 func mapExprStmt(e *ast.ExprStmt, opts *mapperOpts) values.Value {
-	return node("expr-stmt",
-		field("x", mapExpr(e.X, opts)),
+	return Node("expr-stmt",
+		Field("x", mapExpr(e.X, opts)),
 	)
 }
 
@@ -257,74 +257,74 @@ func mapAssignStmt(a *ast.AssignStmt, opts *mapperOpts) values.Value {
 	for i, e := range a.Rhs {
 		rhs[i] = mapExpr(e, opts)
 	}
-	return node("assign-stmt",
-		field("lhs", valueList(lhs)),
-		field("tok", sym(a.Tok.String())),
-		field("rhs", valueList(rhs)),
+	return Node("assign-stmt",
+		Field("lhs", ValueList(lhs)),
+		Field("tok", Sym(a.Tok.String())),
+		Field("rhs", ValueList(rhs)),
 	)
 }
 
 func mapIfStmt(i *ast.IfStmt, opts *mapperOpts) values.Value {
-	return node("if-stmt",
-		field("init", mapStmt(i.Init, opts)),
-		field("cond", mapExpr(i.Cond, opts)),
-		field("body", mapStmt(i.Body, opts)),
-		field("else", mapStmt(i.Else, opts)),
+	return Node("if-stmt",
+		Field("init", mapStmt(i.Init, opts)),
+		Field("cond", mapExpr(i.Cond, opts)),
+		Field("body", mapStmt(i.Body, opts)),
+		Field("else", mapStmt(i.Else, opts)),
 	)
 }
 
 func mapForStmt(f *ast.ForStmt, opts *mapperOpts) values.Value {
-	return node("for-stmt",
-		field("init", mapStmt(f.Init, opts)),
-		field("cond", mapExpr(f.Cond, opts)),
-		field("post", mapStmt(f.Post, opts)),
-		field("body", mapStmt(f.Body, opts)),
+	return Node("for-stmt",
+		Field("init", mapStmt(f.Init, opts)),
+		Field("cond", mapExpr(f.Cond, opts)),
+		Field("post", mapStmt(f.Post, opts)),
+		Field("body", mapStmt(f.Body, opts)),
 	)
 }
 
 func mapRangeStmt(r *ast.RangeStmt, opts *mapperOpts) values.Value {
-	return node("range-stmt",
-		field("key", mapExpr(r.Key, opts)),
-		field("value", mapExpr(r.Value, opts)),
-		field("tok", sym(r.Tok.String())),
-		field("x", mapExpr(r.X, opts)),
-		field("body", mapStmt(r.Body, opts)),
+	return Node("range-stmt",
+		Field("key", mapExpr(r.Key, opts)),
+		Field("value", mapExpr(r.Value, opts)),
+		Field("tok", Sym(r.Tok.String())),
+		Field("x", mapExpr(r.X, opts)),
+		Field("body", mapStmt(r.Body, opts)),
 	)
 }
 
 func mapBranchStmt(b *ast.BranchStmt, opts *mapperOpts) values.Value { //nolint:unparam // opts unused until Phase 3 (positions/comments)
 	var labelVal values.Value
 	if b.Label != nil {
-		labelVal = str(b.Label.Name)
+		labelVal = Str(b.Label.Name)
 	} else {
 		labelVal = values.FalseValue
 	}
-	return node("branch-stmt",
-		field("tok", sym(b.Tok.String())),
-		field("label", labelVal),
+	return Node("branch-stmt",
+		Field("tok", Sym(b.Tok.String())),
+		Field("label", labelVal),
 	)
 }
 
 func mapDeclStmt(d *ast.DeclStmt, opts *mapperOpts) values.Value {
-	return node("decl-stmt",
-		field("decl", mapNode(d.Decl, opts)),
+	return Node("decl-stmt",
+		Field("decl", mapNode(d.Decl, opts)),
 	)
 }
 
 func mapIncDecStmt(i *ast.IncDecStmt, opts *mapperOpts) values.Value {
-	return node("inc-dec-stmt",
-		field("x", mapExpr(i.X, opts)),
-		field("tok", sym(i.Tok.String())),
+	return Node("inc-dec-stmt",
+		Field("x", mapExpr(i.X, opts)),
+		Field("tok", Sym(i.Tok.String())),
 	)
 }
 
 // --- Expressions ---
 
 func mapIdent(id *ast.Ident, opts *mapperOpts) values.Value {
-	fields := []values.Value{field("name", str(id.Name))}
+	fields := []values.Value{Field("name", Str(id.Name))}
 	fields = addTypeAnnotation(id, opts, fields)
 	fields = addObjPkgAnnotation(id, opts, fields)
-	return node("ident", fields...)
+	return Node("ident", fields...)
 }
 
 func mapBasicLit(lit *ast.BasicLit, opts *mapperOpts) values.Value {
@@ -332,30 +332,30 @@ func mapBasicLit(lit *ast.BasicLit, opts *mapperOpts) values.Value {
 		return values.FalseValue
 	}
 	fields := []values.Value{
-		field("kind", sym(lit.Kind.String())),
-		field("value", str(lit.Value)),
+		Field("kind", Sym(lit.Kind.String())),
+		Field("value", Str(lit.Value)),
 	}
 	fields = addTypeAnnotation(lit, opts, fields)
-	return node("lit", fields...)
+	return Node("lit", fields...)
 }
 
 func mapBinaryExpr(b *ast.BinaryExpr, opts *mapperOpts) values.Value {
 	fields := []values.Value{
-		field("op", sym(b.Op.String())),
-		field("x", mapExpr(b.X, opts)),
-		field("y", mapExpr(b.Y, opts)),
+		Field("op", Sym(b.Op.String())),
+		Field("x", mapExpr(b.X, opts)),
+		Field("y", mapExpr(b.Y, opts)),
 	}
 	fields = addTypeAnnotation(b, opts, fields)
-	return node("binary-expr", fields...)
+	return Node("binary-expr", fields...)
 }
 
 func mapUnaryExpr(u *ast.UnaryExpr, opts *mapperOpts) values.Value {
 	fields := []values.Value{
-		field("op", sym(u.Op.String())),
-		field("x", mapExpr(u.X, opts)),
+		Field("op", Sym(u.Op.String())),
+		Field("x", mapExpr(u.X, opts)),
 	}
 	fields = addTypeAnnotation(u, opts, fields)
-	return node("unary-expr", fields...)
+	return Node("unary-expr", fields...)
 }
 
 func mapCallExpr(c *ast.CallExpr, opts *mapperOpts) values.Value {
@@ -364,41 +364,41 @@ func mapCallExpr(c *ast.CallExpr, opts *mapperOpts) values.Value {
 		args[i] = mapExpr(a, opts)
 	}
 	fields := []values.Value{
-		field("fun", mapExpr(c.Fun, opts)),
-		field("args", valueList(args)),
+		Field("fun", mapExpr(c.Fun, opts)),
+		Field("args", ValueList(args)),
 	}
 	fields = addTypeAnnotation(c, opts, fields)
-	return node("call-expr", fields...)
+	return Node("call-expr", fields...)
 }
 
 func mapSelectorExpr(s *ast.SelectorExpr, opts *mapperOpts) values.Value {
 	fields := []values.Value{
-		field("x", mapExpr(s.X, opts)),
-		field("sel", str(s.Sel.Name)),
+		Field("x", mapExpr(s.X, opts)),
+		Field("sel", Str(s.Sel.Name)),
 	}
 	fields = addTypeAnnotation(s, opts, fields)
-	return node("selector-expr", fields...)
+	return Node("selector-expr", fields...)
 }
 
 func mapIndexExpr(i *ast.IndexExpr, opts *mapperOpts) values.Value {
 	fields := []values.Value{
-		field("x", mapExpr(i.X, opts)),
-		field("index", mapExpr(i.Index, opts)),
+		Field("x", mapExpr(i.X, opts)),
+		Field("index", mapExpr(i.Index, opts)),
 	}
 	fields = addTypeAnnotation(i, opts, fields)
-	return node("index-expr", fields...)
+	return Node("index-expr", fields...)
 }
 
 func mapStarExpr(s *ast.StarExpr, opts *mapperOpts) values.Value {
-	fields := []values.Value{field("x", mapExpr(s.X, opts))}
+	fields := []values.Value{Field("x", mapExpr(s.X, opts))}
 	fields = addTypeAnnotation(s, opts, fields)
-	return node("star-expr", fields...)
+	return Node("star-expr", fields...)
 }
 
 func mapParenExpr(p *ast.ParenExpr, opts *mapperOpts) values.Value {
-	fields := []values.Value{field("x", mapExpr(p.X, opts))}
+	fields := []values.Value{Field("x", mapExpr(p.X, opts))}
 	fields = addTypeAnnotation(p, opts, fields)
-	return node("paren-expr", fields...)
+	return Node("paren-expr", fields...)
 }
 
 func mapCompositeLit(c *ast.CompositeLit, opts *mapperOpts) values.Value {
@@ -407,56 +407,56 @@ func mapCompositeLit(c *ast.CompositeLit, opts *mapperOpts) values.Value {
 		elts[i] = mapExpr(e, opts)
 	}
 	fields := []values.Value{
-		field("type", mapExpr(c.Type, opts)),
-		field("elts", valueList(elts)),
+		Field("type", mapExpr(c.Type, opts)),
+		Field("elts", ValueList(elts)),
 	}
 	fields = addTypeAnnotation(c, opts, fields)
-	return node("composite-lit", fields...)
+	return Node("composite-lit", fields...)
 }
 
 func mapKeyValueExpr(kv *ast.KeyValueExpr, opts *mapperOpts) values.Value {
 	fields := []values.Value{
-		field("key", mapExpr(kv.Key, opts)),
-		field("value", mapExpr(kv.Value, opts)),
+		Field("key", mapExpr(kv.Key, opts)),
+		Field("value", mapExpr(kv.Value, opts)),
 	}
 	fields = addTypeAnnotation(kv, opts, fields)
-	return node("kv-expr", fields...)
+	return Node("kv-expr", fields...)
 }
 
 func mapFuncLit(f *ast.FuncLit, opts *mapperOpts) values.Value {
 	fields := []values.Value{
-		field("type", mapFuncType(f.Type, opts)),
-		field("body", mapStmt(f.Body, opts)),
+		Field("type", mapFuncType(f.Type, opts)),
+		Field("body", mapStmt(f.Body, opts)),
 	}
 	fields = addTypeAnnotation(f, opts, fields)
-	return node("func-lit", fields...)
+	return Node("func-lit", fields...)
 }
 
 // --- Type expressions ---
 
 func mapArrayType(a *ast.ArrayType, opts *mapperOpts) values.Value {
-	return node("array-type",
-		field("len", mapExpr(a.Len, opts)),
-		field("elt", mapExpr(a.Elt, opts)),
+	return Node("array-type",
+		Field("len", mapExpr(a.Len, opts)),
+		Field("elt", mapExpr(a.Elt, opts)),
 	)
 }
 
 func mapMapType(m *ast.MapType, opts *mapperOpts) values.Value {
-	return node("map-type",
-		field("key", mapExpr(m.Key, opts)),
-		field("value", mapExpr(m.Value, opts)),
+	return Node("map-type",
+		Field("key", mapExpr(m.Key, opts)),
+		Field("value", mapExpr(m.Value, opts)),
 	)
 }
 
 func mapStructType(s *ast.StructType, opts *mapperOpts) values.Value {
-	return node("struct-type",
-		field("fields", mapFieldList(s.Fields, opts)),
+	return Node("struct-type",
+		Field("fields", mapFieldList(s.Fields, opts)),
 	)
 }
 
 func mapInterfaceType(i *ast.InterfaceType, opts *mapperOpts) values.Value {
-	return node("interface-type",
-		field("methods", mapFieldList(i.Methods, opts)),
+	return Node("interface-type",
+		Field("methods", mapFieldList(i.Methods, opts)),
 	)
 }
 
@@ -464,25 +464,25 @@ func mapFuncType(f *ast.FuncType, opts *mapperOpts) values.Value {
 	if f == nil {
 		return values.FalseValue
 	}
-	return node("func-type",
-		field("params", mapFieldList(f.Params, opts)),
-		field("results", mapFieldListOrFalse(f.Results, opts)),
+	return Node("func-type",
+		Field("params", mapFieldList(f.Params, opts)),
+		Field("results", mapFieldListOrFalse(f.Results, opts)),
 	)
 }
 
 func mapField(f *ast.Field, opts *mapperOpts) values.Value {
 	names := make([]values.Value, len(f.Names))
 	for i, n := range f.Names {
-		names[i] = str(n.Name)
+		names[i] = Str(n.Name)
 	}
 	fs := []values.Value{
-		field("names", valueList(names)),
-		field("type", mapExpr(f.Type, opts)),
+		Field("names", ValueList(names)),
+		Field("type", mapExpr(f.Type, opts)),
 	}
 	if f.Tag != nil {
-		fs = append(fs, field("tag", mapBasicLit(f.Tag, opts)))
+		fs = append(fs, Field("tag", mapBasicLit(f.Tag, opts)))
 	}
-	return node("field", fs...)
+	return Node("field", fs...)
 }
 
 func mapFieldList(fl *ast.FieldList, opts *mapperOpts) values.Value {
@@ -493,7 +493,7 @@ func mapFieldList(fl *ast.FieldList, opts *mapperOpts) values.Value {
 	for i, f := range fl.List {
 		fields[i] = mapField(f, opts)
 	}
-	return valueList(fields)
+	return ValueList(fields)
 }
 
 func mapFieldListOrFalse(fl *ast.FieldList, opts *mapperOpts) values.Value {
@@ -516,7 +516,7 @@ func addTypeAnnotation(e ast.Expr, opts *mapperOpts, fields []values.Value) []va
 	if !ok {
 		return fields
 	}
-	return append(fields, field("inferred-type", str(types.TypeString(tv.Type, nil))))
+	return append(fields, Field("inferred-type", Str(types.TypeString(tv.Type, nil))))
 }
 
 // addObjPkgAnnotation appends an (obj-pkg . "PKG_PATH") field to an ident
@@ -534,5 +534,5 @@ func addObjPkgAnnotation(id *ast.Ident, opts *mapperOpts, fields []values.Value)
 	if pkg == nil {
 		return fields
 	}
-	return append(fields, field("obj-pkg", str(pkg.Path())))
+	return append(fields, Field("obj-pkg", Str(pkg.Path())))
 }

@@ -22,7 +22,7 @@ import (
 )
 
 func unmapBlockStmt(fields values.Value) (*ast.BlockStmt, error) {
-	listVal, err := requireField(fields, "block", "list")
+	listVal, err := RequireField(fields, "block", "list")
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +34,7 @@ func unmapBlockStmt(fields values.Value) (*ast.BlockStmt, error) {
 }
 
 func unmapReturnStmt(fields values.Value) (*ast.ReturnStmt, error) {
-	resultsVal, err := requireField(fields, "return-stmt", "results")
+	resultsVal, err := RequireField(fields, "return-stmt", "results")
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func unmapReturnStmt(fields values.Value) (*ast.ReturnStmt, error) {
 }
 
 func unmapExprStmt(fields values.Value) (*ast.ExprStmt, error) {
-	xVal, err := requireField(fields, "expr-stmt", "x")
+	xVal, err := RequireField(fields, "expr-stmt", "x")
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +58,7 @@ func unmapExprStmt(fields values.Value) (*ast.ExprStmt, error) {
 }
 
 func unmapAssignStmt(fields values.Value) (*ast.AssignStmt, error) {
-	lhsVal, err := requireField(fields, "assign-stmt", "lhs")
+	lhsVal, err := RequireField(fields, "assign-stmt", "lhs")
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func unmapAssignStmt(fields values.Value) (*ast.AssignStmt, error) {
 		return nil, err
 	}
 
-	tokVal, err := requireField(fields, "assign-stmt", "tok")
+	tokVal, err := RequireField(fields, "assign-stmt", "tok")
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func unmapAssignStmt(fields values.Value) (*ast.AssignStmt, error) {
 		return nil, err
 	}
 
-	rhsVal, err := requireField(fields, "assign-stmt", "rhs")
+	rhsVal, err := RequireField(fields, "assign-stmt", "rhs")
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func unmapAssignStmt(fields values.Value) (*ast.AssignStmt, error) {
 }
 
 func unmapIfStmt(fields values.Value) (*ast.IfStmt, error) {
-	initVal, err := requireField(fields, "if-stmt", "init")
+	initVal, err := RequireField(fields, "if-stmt", "init")
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func unmapIfStmt(fields values.Value) (*ast.IfStmt, error) {
 		return nil, err
 	}
 
-	condVal, err := requireField(fields, "if-stmt", "cond")
+	condVal, err := RequireField(fields, "if-stmt", "cond")
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +107,7 @@ func unmapIfStmt(fields values.Value) (*ast.IfStmt, error) {
 		return nil, err
 	}
 
-	bodyVal, err := requireField(fields, "if-stmt", "body")
+	bodyVal, err := RequireField(fields, "if-stmt", "body")
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +121,7 @@ func unmapIfStmt(fields values.Value) (*ast.IfStmt, error) {
 			"goast: if-stmt field 'body' expected block, got %T", bodyNode)
 	}
 
-	elseVal, err := requireField(fields, "if-stmt", "else")
+	elseVal, err := RequireField(fields, "if-stmt", "else")
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +134,7 @@ func unmapIfStmt(fields values.Value) (*ast.IfStmt, error) {
 }
 
 func unmapForStmt(fields values.Value) (*ast.ForStmt, error) {
-	initVal, err := requireField(fields, "for-stmt", "init")
+	initVal, err := RequireField(fields, "for-stmt", "init")
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func unmapForStmt(fields values.Value) (*ast.ForStmt, error) {
 		return nil, err
 	}
 
-	condVal, err := requireField(fields, "for-stmt", "cond")
+	condVal, err := RequireField(fields, "for-stmt", "cond")
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func unmapForStmt(fields values.Value) (*ast.ForStmt, error) {
 		return nil, err
 	}
 
-	postVal, err := requireField(fields, "for-stmt", "post")
+	postVal, err := RequireField(fields, "for-stmt", "post")
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +161,7 @@ func unmapForStmt(fields values.Value) (*ast.ForStmt, error) {
 		return nil, err
 	}
 
-	bodyVal, err := requireField(fields, "for-stmt", "body")
+	bodyVal, err := RequireField(fields, "for-stmt", "body")
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +179,7 @@ func unmapForStmt(fields values.Value) (*ast.ForStmt, error) {
 }
 
 func unmapRangeStmt(fields values.Value) (*ast.RangeStmt, error) {
-	keyVal, err := requireField(fields, "range-stmt", "key")
+	keyVal, err := RequireField(fields, "range-stmt", "key")
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +188,7 @@ func unmapRangeStmt(fields values.Value) (*ast.RangeStmt, error) {
 		return nil, err
 	}
 
-	valueFieldVal, err := requireField(fields, "range-stmt", "value")
+	valueFieldVal, err := RequireField(fields, "range-stmt", "value")
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +197,7 @@ func unmapRangeStmt(fields values.Value) (*ast.RangeStmt, error) {
 		return nil, err
 	}
 
-	tokVal, err := requireField(fields, "range-stmt", "tok")
+	tokVal, err := RequireField(fields, "range-stmt", "tok")
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +206,7 @@ func unmapRangeStmt(fields values.Value) (*ast.RangeStmt, error) {
 		return nil, err
 	}
 
-	xVal, err := requireField(fields, "range-stmt", "x")
+	xVal, err := RequireField(fields, "range-stmt", "x")
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +215,7 @@ func unmapRangeStmt(fields values.Value) (*ast.RangeStmt, error) {
 		return nil, err
 	}
 
-	bodyVal, err := requireField(fields, "range-stmt", "body")
+	bodyVal, err := RequireField(fields, "range-stmt", "body")
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +233,7 @@ func unmapRangeStmt(fields values.Value) (*ast.RangeStmt, error) {
 }
 
 func unmapBranchStmt(fields values.Value) (*ast.BranchStmt, error) {
-	tokVal, err := requireField(fields, "branch-stmt", "tok")
+	tokVal, err := RequireField(fields, "branch-stmt", "tok")
 	if err != nil {
 		return nil, err
 	}
@@ -242,13 +242,13 @@ func unmapBranchStmt(fields values.Value) (*ast.BranchStmt, error) {
 		return nil, err
 	}
 
-	labelVal, err := requireField(fields, "branch-stmt", "label")
+	labelVal, err := RequireField(fields, "branch-stmt", "label")
 	if err != nil {
 		return nil, err
 	}
 	var label *ast.Ident
-	if !isFalse(labelVal) {
-		s, err := requireString(labelVal, "branch-stmt", "label")
+	if !IsFalse(labelVal) {
+		s, err := RequireString(labelVal, "branch-stmt", "label")
 		if err != nil {
 			return nil, err
 		}
@@ -259,7 +259,7 @@ func unmapBranchStmt(fields values.Value) (*ast.BranchStmt, error) {
 }
 
 func unmapDeclStmt(fields values.Value) (*ast.DeclStmt, error) {
-	declVal, err := requireField(fields, "decl-stmt", "decl")
+	declVal, err := RequireField(fields, "decl-stmt", "decl")
 	if err != nil {
 		return nil, err
 	}
@@ -276,7 +276,7 @@ func unmapDeclStmt(fields values.Value) (*ast.DeclStmt, error) {
 }
 
 func unmapIncDecStmt(fields values.Value) (*ast.IncDecStmt, error) {
-	xVal, err := requireField(fields, "inc-dec-stmt", "x")
+	xVal, err := RequireField(fields, "inc-dec-stmt", "x")
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +285,7 @@ func unmapIncDecStmt(fields values.Value) (*ast.IncDecStmt, error) {
 		return nil, err
 	}
 
-	tokVal, err := requireField(fields, "inc-dec-stmt", "tok")
+	tokVal, err := RequireField(fields, "inc-dec-stmt", "tok")
 	if err != nil {
 		return nil, err
 	}

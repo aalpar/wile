@@ -38,16 +38,16 @@ func newEngine(t *testing.T) *wile.Engine {
 	return engine
 }
 
-// runScheme runs Scheme code and returns the result.
-func runScheme(t *testing.T, engine *wile.Engine, code string) wile.Value {
+// eval runs Scheme code and returns the result.
+func eval(t *testing.T, engine *wile.Engine, code string) wile.Value {
 	t.Helper()
 	result, err := engine.Eval(context.Background(), code)
 	qt.New(t).Assert(err, qt.IsNil)
 	return result
 }
 
-// runSchemeExpectError runs Scheme code and asserts that it produces an error.
-func runSchemeExpectError(t *testing.T, engine *wile.Engine, code string) {
+// evalExpectError runs Scheme code and asserts that it produces an error.
+func evalExpectError(t *testing.T, engine *wile.Engine, code string) {
 	t.Helper()
 	_, err := engine.Eval(context.Background(), code)
 	qt.New(t).Assert(err, qt.IsNotNil)
@@ -119,7 +119,7 @@ func TestGoParseExpr(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result := runScheme(t, engine, tc.code)
+			result := eval(t, engine, tc.code)
 			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
@@ -147,7 +147,7 @@ func TestGoParseString(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result := runScheme(t, engine, tc.code)
+			result := eval(t, engine, tc.code)
 			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
@@ -164,7 +164,7 @@ func TestGoParseFile(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	code := `(go-node-type (go-parse-file "` + path + `"))`
-	result := runScheme(t, engine, code)
+	result := eval(t, engine, code)
 	c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewSymbol("file"))
 }
 
@@ -193,7 +193,7 @@ func TestGoFormatRoundTrip(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Parse, format, compare.
 			code := `(go-format (go-parse-expr "` + tc.source + `"))`
-			result := runScheme(t, engine, code)
+			result := eval(t, engine, code)
 			s, ok := result.Internal().(*values.String)
 			c.Assert(ok, qt.IsTrue, qt.Commentf("expected string, got %T", result.Internal()))
 			c.Assert(s.Value, qt.Equals, tc.source)
@@ -213,7 +213,7 @@ func Add(a, b int) int {
 `
 	// Use Scheme string escaping — the Go source has tabs and newlines.
 	code := `(go-format (go-parse-string ` + schemeStringLiteral(source) + `))`
-	result := runScheme(t, engine, code)
+	result := eval(t, engine, code)
 	s, ok := result.Internal().(*values.String)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("expected string, got %T", result.Internal()))
 	c.Assert(s.Value, qt.Equals, source)
@@ -241,7 +241,7 @@ func TestGoNodeType(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result := runScheme(t, engine, tc.code)
+			result := eval(t, engine, tc.code)
 			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
@@ -266,7 +266,7 @@ func TestGoASTErrors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeExpectError(t, engine, tc.code)
+			evalExpectError(t, engine, tc.code)
 		})
 	}
 }
@@ -278,25 +278,25 @@ func TestGoTypecheckPackage(t *testing.T) {
 	const pkgPath = "github.com/aalpar/wile/extensions/goast"
 
 	// Load the package once and cache via define — avoids three separate go list calls.
-	runScheme(t, engine, `(define typechecked (go-typecheck-package "`+pkgPath+`"))`)
+	eval(t, engine, `(define typechecked (go-typecheck-package "`+pkgPath+`"))`)
 
 	t.Run("returns package node", func(t *testing.T) {
-		result := runScheme(t, engine, `(go-node-type (car typechecked))`)
+		result := eval(t, engine, `(go-node-type (car typechecked))`)
 		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewSymbol("package"))
 	})
 
 	t.Run("package name", func(t *testing.T) {
-		result := runScheme(t, engine, `(cdr (assoc 'name (cdr (car typechecked))))`)
+		result := eval(t, engine, `(cdr (assoc 'name (cdr (car typechecked))))`)
 		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewString("goast"))
 	})
 
 	t.Run("package path", func(t *testing.T) {
-		result := runScheme(t, engine, `(cdr (assoc 'path (cdr (car typechecked))))`)
+		result := eval(t, engine, `(cdr (assoc 'path (cdr (car typechecked))))`)
 		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewString(pkgPath))
 	})
 
 	t.Run("has file nodes", func(t *testing.T) {
-		result := runScheme(t, engine, `(go-node-type (car (cdr (assoc 'files (cdr (car typechecked))))))`)
+		result := eval(t, engine, `(go-node-type (car (cdr (assoc 'files (cdr (car typechecked))))))`)
 		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewSymbol("file"))
 	})
 }
@@ -313,7 +313,7 @@ func TestGoTypecheckPackageErrors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			runSchemeExpectError(t, engine, tc.code)
+			evalExpectError(t, engine, tc.code)
 		})
 	}
 }

@@ -35,6 +35,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/extensions/files"
+	"github.com/aalpar/wile/extensions/goast"
 	"github.com/aalpar/wile/extensions/gointerop"
 	"github.com/aalpar/wile/extensions/introspection"
 	"github.com/aalpar/wile/extensions/math"
@@ -59,6 +60,7 @@ var allExtensions = []registry.Extension{
 	eval.Extension,
 	threads.Extension,
 	gointerop.Extension,
+	goast.Extension,
 	all.Extension,
 	system.Extension,
 }
@@ -131,7 +133,7 @@ func initializeEnvironment(ctx context.Context, env *environment.EnvironmentFram
 //
 // This function:
 //  1. Creates a registry with core primitives
-//  2. Adds all extensions (io, files, math, eval, exceptions, threads, gointerop, all, system)
+//  2. Adds all extensions (io, files, math, introspection, eval, threads, gointerop, goast, all, system)
 //  3. Creates a new TopLevelEnvironment with per-instance symbol interning
 //  4. Applies the registry to register all primitives
 //  5. Registers primitive compilers in the compile environment

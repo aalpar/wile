@@ -195,10 +195,10 @@ func mapPackage(pkg *packages.Package, baseOpts *mapperOpts) values.Value {
 	for i, f := range pkg.Syntax {
 		files[i] = mapFile(f, opts)
 	}
-	return node("package",
-		field("name", str(pkg.Name)),
-		field("path", str(pkg.PkgPath)),
-		field("files", valueList(files)),
+	return Node("package",
+		Field("name", Str(pkg.Name)),
+		Field("path", Str(pkg.PkgPath)),
+		Field("files", ValueList(files)),
 	)
 }
 
@@ -261,6 +261,6 @@ func PrimGoTypecheckPackage(mc *machine.MachineContext) error {
 	for i, pkg := range pkgs {
 		result[i] = mapPackage(pkg, baseOpts)
 	}
-	mc.SetValue(valueList(result))
+	mc.SetValue(ValueList(result))
 	return nil
 }

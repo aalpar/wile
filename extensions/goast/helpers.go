@@ -26,40 +26,40 @@ var (
 	errGoPackageLoadError = werr.NewStaticError("go package load error")
 )
 
-// tag returns a symbol value for a node tag name.
-func tag(name string) values.Value {
+// Tag returns a symbol value for a node tag name.
+func Tag(name string) values.Value {
 	return values.NewSymbol(name)
 }
 
-// field returns a pair (key . val) for an alist entry.
-func field(key string, val values.Value) values.Value {
+// Field returns a pair (key . val) for an alist entry.
+func Field(key string, val values.Value) values.Value {
 	return values.NewCons(values.NewSymbol(key), val)
 }
 
-// node builds a tagged alist: (tag (field . val) ...).
+// Node builds a tagged alist: (tag (field . val) ...).
 // The car is the tag symbol, the cdr is the alist of fields.
-func node(tagName string, fields ...values.Value) values.Value {
-	return values.NewCons(tag(tagName), values.List(fields...))
+func Node(tagName string, fields ...values.Value) values.Value {
+	return values.NewCons(Tag(tagName), values.List(fields...))
 }
 
-// str returns an immutable Scheme string.
-func str(s string) values.Value {
+// Str returns an immutable Scheme string.
+func Str(s string) values.Value {
 	return values.NewString(s)
 }
 
-// sym returns a Scheme symbol.
-func sym(s string) values.Value {
+// Sym returns a Scheme symbol.
+func Sym(s string) values.Value {
 	return values.NewSymbol(s)
 }
 
-// valueList builds a proper Scheme list from a slice of values.
-func valueList(vs []values.Value) values.Value {
+// ValueList builds a proper Scheme list from a slice of values.
+func ValueList(vs []values.Value) values.Value {
 	return values.List(vs...)
 }
 
-// getField looks up a key in an alist (list of pairs).
+// GetField looks up a key in an alist (list of pairs).
 // Returns the cdr of the matching pair and true, or FalseValue and false.
-func getField(fields values.Value, key string) (values.Value, bool) {
+func GetField(fields values.Value, key string) (values.Value, bool) {
 	tuple, ok := fields.(values.Tuple)
 	if !ok {
 		return values.FalseValue, false
@@ -92,9 +92,9 @@ func getField(fields values.Value, key string) (values.Value, bool) {
 	return values.FalseValue, false
 }
 
-// requireField looks up a key in an alist, returning an error if missing.
-func requireField(fields values.Value, nodeType, key string) (values.Value, error) {
-	val, ok := getField(fields, key)
+// RequireField looks up a key in an alist, returning an error if missing.
+func RequireField(fields values.Value, nodeType, key string) (values.Value, error) {
+	val, ok := GetField(fields, key)
 	if !ok {
 		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
 			"goast: %s missing required field '%s'", nodeType, key)
@@ -102,8 +102,8 @@ func requireField(fields values.Value, nodeType, key string) (values.Value, erro
 	return val, nil
 }
 
-// requireString extracts a Go string from a Scheme string value.
-func requireString(v values.Value, nodeType, fieldName string) (string, error) {
+// RequireString extracts a Go string from a Scheme string value.
+func RequireString(v values.Value, nodeType, fieldName string) (string, error) {
 	s, ok := v.(*values.String)
 	if !ok {
 		return "", werr.WrapForeignErrorf(errMalformedGoAST,
@@ -112,8 +112,8 @@ func requireString(v values.Value, nodeType, fieldName string) (string, error) {
 	return s.Value, nil
 }
 
-// requireSymbol extracts a Go string from a Scheme symbol value.
-func requireSymbol(v values.Value, nodeType, fieldName string) (string, error) {
+// RequireSymbol extracts a Go string from a Scheme symbol value.
+func RequireSymbol(v values.Value, nodeType, fieldName string) (string, error) {
 	s, ok := v.(*values.Symbol)
 	if !ok {
 		return "", werr.WrapForeignErrorf(errMalformedGoAST,
@@ -122,8 +122,8 @@ func requireSymbol(v values.Value, nodeType, fieldName string) (string, error) {
 	return s.Key, nil
 }
 
-// isFalse returns true if v is #f (used for optional/nil fields).
-func isFalse(v values.Value) bool {
+// IsFalse returns true if v is #f (used for optional/nil fields).
+func IsFalse(v values.Value) bool {
 	b, ok := v.(*values.Boolean)
 	return ok && !b.Value
 }

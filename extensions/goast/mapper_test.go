@@ -321,7 +321,7 @@ func TestUnmapNodeErrors(t *testing.T) {
 		},
 		{
 			name:  "unknown tag",
-			input: node("nonexistent-node-type"),
+			input: Node("nonexistent-node-type"),
 		},
 	}
 	for _, tc := range tcs {
@@ -410,139 +410,139 @@ func TestUnmapNodeMalformedFields(t *testing.T) {
 	}{
 		{
 			name:  "ident missing name field",
-			input: node("ident"),
+			input: Node("ident"),
 		},
 		{
 			name:  "ident name wrong type",
-			input: node("ident", field("name", values.NewInteger(42))),
+			input: Node("ident", Field("name", values.NewInteger(42))),
 		},
 		{
 			name:  "binary-expr missing op",
-			input: node("binary-expr"),
+			input: Node("binary-expr"),
 		},
 		{
 			name:  "lit bad kind symbol",
-			input: node("lit", field("kind", sym("NONEXISTENT")), field("value", str("42"))),
+			input: Node("lit", Field("kind", Sym("NONEXISTENT")), Field("value", Str("42"))),
 		},
 		{
 			name:  "call-expr missing fun",
-			input: node("call-expr"),
+			input: Node("call-expr"),
 		},
 		{
 			name:  "func-type missing params",
-			input: node("func-type"),
+			input: Node("func-type"),
 		},
 		{
 			name:  "assign-stmt missing lhs",
-			input: node("assign-stmt"),
+			input: Node("assign-stmt"),
 		},
 		{
 			name:  "if-stmt missing cond",
-			input: node("if-stmt", field("init", values.FalseValue)),
+			input: Node("if-stmt", Field("init", values.FalseValue)),
 		},
 		{
 			name:  "for-stmt missing init",
-			input: node("for-stmt"),
+			input: Node("for-stmt"),
 		},
 		{
 			name:  "range-stmt missing key",
-			input: node("range-stmt"),
+			input: Node("range-stmt"),
 		},
 		{
 			name:  "branch-stmt missing tok",
-			input: node("branch-stmt"),
+			input: Node("branch-stmt"),
 		},
 		{
 			name:  "inc-dec-stmt missing x",
-			input: node("inc-dec-stmt"),
+			input: Node("inc-dec-stmt"),
 		},
 		{
 			name:  "selector-expr missing x",
-			input: node("selector-expr"),
+			input: Node("selector-expr"),
 		},
 		{
 			name:  "index-expr missing x",
-			input: node("index-expr"),
+			input: Node("index-expr"),
 		},
 		{
 			name:  "star-expr missing x",
-			input: node("star-expr"),
+			input: Node("star-expr"),
 		},
 		{
 			name:  "paren-expr missing x",
-			input: node("paren-expr"),
+			input: Node("paren-expr"),
 		},
 		{
 			name:  "composite-lit missing type",
-			input: node("composite-lit"),
+			input: Node("composite-lit"),
 		},
 		{
 			name:  "kv-expr missing key",
-			input: node("kv-expr"),
+			input: Node("kv-expr"),
 		},
 		{
 			name:  "func-lit missing type",
-			input: node("func-lit"),
+			input: Node("func-lit"),
 		},
 		{
 			name:  "array-type missing len",
-			input: node("array-type"),
+			input: Node("array-type"),
 		},
 		{
 			name:  "map-type missing key",
-			input: node("map-type"),
+			input: Node("map-type"),
 		},
 		{
 			name:  "struct-type missing fields",
-			input: node("struct-type"),
+			input: Node("struct-type"),
 		},
 		{
 			name:  "interface-type missing methods",
-			input: node("interface-type"),
+			input: Node("interface-type"),
 		},
 		{
 			name:  "file missing name",
-			input: node("file"),
+			input: Node("file"),
 		},
 		{
 			name:  "gen-decl missing tok",
-			input: node("gen-decl"),
+			input: Node("gen-decl"),
 		},
 		{
 			name:  "import-spec missing name",
-			input: node("import-spec"),
+			input: Node("import-spec"),
 		},
 		{
 			name:  "value-spec missing names",
-			input: node("value-spec"),
+			input: Node("value-spec"),
 		},
 		{
 			name:  "type-spec missing name",
-			input: node("type-spec"),
+			input: Node("type-spec"),
 		},
 		{
 			name:  "block missing list",
-			input: node("block"),
+			input: Node("block"),
 		},
 		{
 			name:  "return-stmt missing results",
-			input: node("return-stmt"),
+			input: Node("return-stmt"),
 		},
 		{
 			name:  "expr-stmt missing x",
-			input: node("expr-stmt"),
+			input: Node("expr-stmt"),
 		},
 		{
 			name:  "decl-stmt missing decl",
-			input: node("decl-stmt"),
+			input: Node("decl-stmt"),
 		},
 		{
 			name:  "unary-expr missing op",
-			input: node("unary-expr"),
+			input: Node("unary-expr"),
 		},
 		{
 			name:  "field missing names",
-			input: node("field"),
+			input: Node("field"),
 		},
 	}
 	for _, tc := range tcs {
@@ -555,14 +555,14 @@ func TestUnmapNodeMalformedFields(t *testing.T) {
 
 func TestUnmapExprTypeMismatch(t *testing.T) {
 	// Pass a statement node where an expression is expected.
-	stmtNode := node("block", field("list", values.EmptyList))
+	stmtNode := Node("block", Field("list", values.EmptyList))
 	_, err := unmapExpr(stmtNode)
 	qt.New(t).Assert(err, qt.IsNotNil)
 }
 
 func TestUnmapStmtTypeMismatch(t *testing.T) {
 	// Pass an expression node where a statement is expected.
-	exprNode := node("ident", field("name", str("x")))
+	exprNode := Node("ident", Field("name", Str("x")))
 	_, err := unmapStmt(exprNode)
 	qt.New(t).Assert(err, qt.IsNotNil)
 }
