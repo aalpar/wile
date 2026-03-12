@@ -34,7 +34,7 @@ When investigating R7RS conformance issues:
 | `GO-CALLGRAPH-PHASE-2.md` | Callgraph extension implementation plan (Phase 2 of GO-STATIC-ANALYSIS) | Complete |
 | `GO-CFG-PHASE-3.md` | CFG + dominance extension implementation plan (Phase 3 of GO-STATIC-ANALYSIS) | Complete |
 | `GO-LINT-PHASE-4.md` | Analysis passes extension implementation plan (Phase 4 of GO-STATIC-ANALYSIS) | Not started |
-| `GO-AST-PHASE-2.md` | AST extension Phase 2 implementation plan (concurrency, switch, advanced) | Not started |
+| `GO-AST-PHASE-2.md` | AST extension Phase 2 implementation plan (concurrency, switch, advanced) | Complete |
 | `GO-AST-PHASE-3.md` | AST extension Phase 3 implementation plan (comments, error recovery, generics) | Not started |
 
 ## Before Starting Work

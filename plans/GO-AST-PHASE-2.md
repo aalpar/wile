@@ -433,6 +433,28 @@ ChanType.Dir is encoded as send/recv/both symbol. Ellipsis.Elt is
 
 ---
 
+## Implementation Deviations
+
+### 1. `send statement` and `select statement` tests moved to Task 4
+
+The plan placed send-stmt in Task 1 and select-stmt in Task 3. Both test sources
+include a channel parameter in the function signature, which contains an
+`*ast.ChanType` node. Unmapping fails with "unsupported Go node type *ast.ChanType"
+until ChanType is implemented in Task 4. Both tests were moved there and added
+alongside the other channel-type round-trip tests.
+
+### 2. `type switch` and `type assertion` tests use a named type instead of `interface{}`
+
+The plan used `interface{}` as the parameter type in these test sources. An empty
+interface type round-trips as `interface {\n}` rather than `interface{}` because
+`go/printer` inserts a newline inside empty interface braces when no position
+information is present in the AST. This is a pre-existing limitation of the
+position-stripped round-trip, not introduced by Phase 2. The tests use the
+identifier `Any` as a named placeholder type, which maps to a plain `*ast.Ident`
+and avoids the formatting discrepancy.
+
+---
+
 ## Post-implementation checklist
 
 - [ ] All 13 node types have bidirectional mapping (mapper + unmapper)
