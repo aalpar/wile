@@ -1102,3 +1102,21 @@ func TestMapFileEmitsCommentGroupInDecls(t *testing.T) {
 	}
 	c.Assert(found, qt.IsTrue, qt.Commentf("expected comment-group in decls"))
 }
+
+func TestUnmapFileSkipsCommentGroup(t *testing.T) {
+	c := qt.New(t)
+	fset := token.NewFileSet()
+	source := "package p\n\nvar X int\n\n// standalone\n\nvar Y int\n"
+	f, err := parser.ParseFile(fset, "test.go", source, parser.ParseComments)
+	c.Assert(err, qt.IsNil)
+
+	opts := &mapperOpts{fset: fset, comments: true}
+	sexpr := mapNode(f, opts)
+
+	n, unmapErr := unmapNode(sexpr)
+	c.Assert(unmapErr, qt.IsNil)
+
+	file := n.(*ast.File)
+	// file.Decls should have exactly 2 declarations (the comment-group is skipped).
+	c.Assert(len(file.Decls), qt.Equals, 2)
+}

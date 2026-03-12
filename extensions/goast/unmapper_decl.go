@@ -47,8 +47,32 @@ func unmapFile(fields values.Value) (*ast.File, error) {
 }
 
 func unmapDeclList(v values.Value) ([]ast.Decl, error) {
-	return unmapList(v, func(elem values.Value) (ast.Decl, error) {
-		n, err := unmapNode(elem)
+	if IsFalse(v) {
+		return nil, nil
+	}
+	tuple, ok := v.(values.Tuple)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+			"goast: expected list of declarations, got %T", v)
+	}
+	var decls []ast.Decl
+	for !values.IsEmptyList(tuple) {
+		pair, ok := tuple.(*values.Pair)
+		if !ok {
+			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: expected proper list of declarations, got %T", tuple)
+		}
+		// Skip comment-group entries (standalone comments interleaved by mapper).
+		if sexpTag(pair.Car()) == "comment-group" {
+			cdr, ok := pair.Cdr().(values.Tuple)
+			if !ok {
+				return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+					"goast: improper list in declarations")
+			}
+			tuple = cdr
+			continue
+		}
+		n, err := unmapNode(pair.Car())
 		if err != nil {
 			return nil, err
 		}
@@ -57,8 +81,15 @@ func unmapDeclList(v values.Value) ([]ast.Decl, error) {
 			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
 				"goast: expected declaration, got %T", n)
 		}
-		return d, nil
-	}, "declarations")
+		decls = append(decls, d)
+		cdr, ok := pair.Cdr().(values.Tuple)
+		if !ok {
+			return nil, werr.WrapForeignErrorf(errMalformedGoAST,
+				"goast: expected proper list of declarations, got improper cdr %T", pair.Cdr())
+		}
+		tuple = cdr
+	}
+	return decls, nil
 }
 
 // --- Declarations ---
