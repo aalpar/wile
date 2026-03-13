@@ -74,17 +74,3 @@ func (p *BinaryOutputPort) Close() error {
 func (p *BinaryOutputPort) Datum() io.Writer {
 	return p.wrt
 }
-
-// IsVoid returns true if the port is nil.
-func (p *BinaryOutputPort) IsVoid() bool {
-	return p == nil
-}
-
-// EqualTo returns true if both ports wrap the same buf.
-func (p *BinaryOutputPort) EqualTo(v Value) bool {
-	other, ok := v.(*BinaryOutputPort)
-	if ok {
-		return p.wrt == other.wrt
-	}
-	return false
-}

@@ -72,17 +72,3 @@ func (p *ByteVectorOutputPort) WriteByte(b byte) error {
 func (p *ByteVectorOutputPort) Datum() *bufio.Writer {
 	return p.wrt
 }
-
-// IsVoid returns true if this port is nil.
-func (p *ByteVectorOutputPort) IsVoid() bool {
-	return p == nil
-}
-
-// EqualTo returns true if both ports share the same buffer.
-func (p *ByteVectorOutputPort) EqualTo(v Value) bool {
-	other, ok := v.(*ByteVectorOutputPort)
-	if ok {
-		return p.wrt == other.wrt
-	}
-	return false
-}

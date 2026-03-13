@@ -67,17 +67,3 @@ func (p *ByteVectorInputPort) UnreadByte() error {
 func (p *ByteVectorInputPort) Datum() *bufio.Reader {
 	return p.rdr
 }
-
-// IsVoid returns true if this port is nil.
-func (p *ByteVectorInputPort) IsVoid() bool {
-	return p == nil
-}
-
-// EqualTo returns true if both ports share the same rdr.
-func (p *ByteVectorInputPort) EqualTo(v Value) bool {
-	other, ok := v.(*ByteVectorInputPort)
-	if ok {
-		return p.rdr == other.rdr
-	}
-	return false
-}

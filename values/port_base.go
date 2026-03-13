@@ -89,6 +89,34 @@ func (b *portBase) guardClosed() error {
 	return nil
 }
 
+// IsVoid returns false. Ports are never void.
+func (b *portBase) IsVoid() bool {
+	return false
+}
+
+// portDatumProvider is implemented by all port types via portBase embedding.
+// It allows EqualTo to extract the portBase from any port Value.
+type portDatumProvider interface {
+	getPortBase() *portBase
+}
+
+func (b *portBase) getPortBase() *portBase {
+	return b
+}
+
+// EqualTo returns true if v is a port with the same kind and datum identity.
+// This works because Go's any equality checks both dynamic type and value,
+// so two ports sharing a kind but using different backing types (e.g.,
+// *bufio.Writer vs *bytes.Buffer) will never compare equal.
+func (b *portBase) EqualTo(v Value) bool {
+	other, ok := v.(portDatumProvider)
+	if !ok {
+		return false
+	}
+	ob := other.getPortBase()
+	return b.kind == ob.kind && b.datum == ob.datum
+}
+
 // SchemeString returns the Scheme external representation of the port.
 func (b *portBase) SchemeString() string {
 	return fmt.Sprintf("<%s %p>", b.kind, b.datum)

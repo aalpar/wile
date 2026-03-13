@@ -74,17 +74,3 @@ func (p *CharacterOutputPort) WriteRune(rn rune) (int, error) {
 func (p *CharacterOutputPort) Datum() io.Writer {
 	return p.wrt
 }
-
-// IsVoid returns true if the port is nil.
-func (p *CharacterOutputPort) IsVoid() bool {
-	return p == nil
-}
-
-// EqualTo returns true if both ports wrap the same buf.
-func (p *CharacterOutputPort) EqualTo(v Value) bool {
-	other, ok := v.(*CharacterOutputPort)
-	if ok {
-		return p.wrt == other.wrt
-	}
-	return false
-}

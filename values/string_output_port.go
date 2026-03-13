@@ -77,20 +77,6 @@ func (p *StringOutputPort) Datum() *bytes.Buffer {
 	return p.buf
 }
 
-// IsVoid returns true if the port is nil.
-func (p *StringOutputPort) IsVoid() bool {
-	return p == nil
-}
-
-// EqualTo returns true if both ports use the same buffer.
-func (p *StringOutputPort) EqualTo(v Value) bool {
-	other, ok := v.(*StringOutputPort)
-	if ok {
-		return p.buf == other.buf
-	}
-	return false
-}
-
 func (p *StringOutputPort) String() string {
 	return p.buf.String()
 }

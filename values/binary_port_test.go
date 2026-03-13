@@ -96,9 +96,6 @@ func TestBinaryInputPort_CloseWithCloser(t *testing.T) {
 func TestBinaryInputPort_IsVoid(t *testing.T) {
 	port := values.NewBinaryInputPortFromReader(bytes.NewReader([]byte{1}))
 	qt.Assert(t, port.IsVoid(), qt.IsFalse)
-
-	var nilPort *values.BinaryInputPort
-	qt.Assert(t, nilPort.IsVoid(), qt.IsTrue)
 }
 
 func TestBinaryInputPort_EqualTo(t *testing.T) {
@@ -170,9 +167,6 @@ func TestBinaryOutputPort_IsVoid(t *testing.T) {
 	buf := &bytes.Buffer{}
 	port := values.NewBinaryOutputPortFromWriter(buf)
 	qt.Assert(t, port.IsVoid(), qt.IsFalse)
-
-	var nilPort *values.BinaryOutputPort
-	qt.Assert(t, nilPort.IsVoid(), qt.IsTrue)
 }
 
 func TestBinaryOutputPort_EqualTo(t *testing.T) {
