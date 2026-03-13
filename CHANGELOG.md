@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-03-12
+
+### Added
+
+- Add `(wile goast lint)` extension — Scheme-programmable Go static analysis with pattern-based AST linting rules (#484)
+- Add `(wile goast ssa)` and `(wile goast cfg)` extensions — SSA-form and control-flow-graph analysis for Go packages (#478)
+- Add `go-typecheck-package` with type and package annotations on Go AST nodes (#477)
+- Add Go AST mapping for 13 node types: `GoStmt`, `DeferStmt`, `SendStmt`, `LabeledStmt`, `SwitchStmt`, `TypeSwitchStmt`, `CaseClause`, `SelectStmt`, `CommClause`, `TypeAssertExpr`, `SliceExpr`, `ChanType`, `Ellipsis` (#480)
+- Add Go AST support for `BadExpr`, `BadStmt`, `BadDecl`, `IndexListExpr`, and full comment round-trip preservation (#481)
+
+### Changed
+
+- Migrate 28 CxR accessors (`caar`, `cddr`, etc.), 9 type predicates, and 6 higher-order functions (`map`, `for-each`, `string-for-each`, `vector-map`, `vector-for-each`, `string-map`) from Go to Scheme — enables correct `call/cc` behavior through these procedures (#456, #460, #462)
+- Move exception primitives from extension to core for availability in all engine configurations (#461)
+- Wrap bare sentinel panics and error returns with call-site context for improved error diagnostics (#470)
+
+### Fixed
+
+- Fix Go AST file-level comment rebuild — standalone comments survive round-trip (#482)
+- Fix Go AST `ChanDir` handling — panic on unknown direction replaced with error return
+- Harden error handling in Go AST comment rebuild and consolidate tests (#483)
+
+### Performance
+
+- Opcode fusion and primitive promotion — fused opcodes for common instruction sequences, hot primitives promoted to inline VM dispatch (#476)
+
 ## [1.5.0] - 2026-03-05
 
 ### Added
@@ -359,7 +385,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CI builds all four OS/architecture combinations
 - R7RS conformance test suite running in CI
 
-[Unreleased]: https://github.com/aalpar/wile/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/aalpar/wile/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/aalpar/wile/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/aalpar/wile/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/aalpar/wile/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/aalpar/wile/compare/v1.2.0...v1.3.0
