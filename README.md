@@ -193,6 +193,7 @@ ls examples/
 - [**76 Examples**](examples/) — Basics, macros, concurrency, numeric tower, and more
 - [**Gabriel Benchmarks**](examples/benchmarks/) — Scheme benchmarks for performance testing
 - [**Schelog**](examples/logic/schelog/) — Full Prolog-style logic programming embedded in Scheme
+- [**Go Static Analysis**](docs/GO-STATIC-ANALYSIS.md) — Query Go AST, SSA, call graph, CFG, and lint from Scheme
 - [**Embedding Guide**](examples/embedding/) — How to use Wile from Go
 
 ## Key Features in Action
@@ -366,8 +367,13 @@ With the library system enabled (`WithLibraryPaths`), Go extensions import as `(
 | `(wile exceptions)` | Exception handling |
 | `(wile gointerop)` | Go interop primitives |
 | `(wile introspection)` | Reflection and introspection |
+| `(wile goast)` | Go AST as s-expressions (parse, typecheck, format) |
+| `(wile goast ssa)` | Go SSA intermediate representation |
+| `(wile goast callgraph)` | Go call graph (static, CHA, RTA, VTA) |
+| `(wile goast cfg)` | Go control flow graph + dominator tree |
+| `(wile goast lint)` | `go/analysis` framework (~40 analyzers) |
 
-See [`docs/EXTENSION_LIBRARIES.md`](docs/EXTENSION_LIBRARIES.md) for import syntax and modifiers.
+See [`docs/EXTENSION_LIBRARIES.md`](docs/EXTENSION_LIBRARIES.md) for import syntax and modifiers. See [`docs/GO-STATIC-ANALYSIS.md`](docs/GO-STATIC-ANALYSIS.md) for the full Go analysis guide.
 
 ## Architecture
 
@@ -521,6 +527,7 @@ See [`docs/SANDBOXING.md`](docs/SANDBOXING.md) for the full security model, exte
 | [`docs/SANDBOXING.md`](docs/SANDBOXING.md) | Sandboxing and security model |
 | [`docs/EXTENSIONS.md`](docs/EXTENSIONS.md) | Extension system architecture and authoring guide |
 | [`docs/EXTENSION_LIBRARIES.md`](docs/EXTENSION_LIBRARIES.md) | R7RS library integration for extensions |
+| [`docs/GO-STATIC-ANALYSIS.md`](docs/GO-STATIC-ANALYSIS.md) | Go static analysis with Scheme (AST, SSA, call graph, CFG, lint) |
 | [`PRIMITIVES.md`](PRIMITIVES.md) | Complete reference of types and primitives |
 | [`docs/design/DESIGN.md`](docs/design/DESIGN.md) | Macro system design |
 | [`docs/design/EMBEDDING.md`](docs/design/EMBEDDING.md) | Embedding API design |

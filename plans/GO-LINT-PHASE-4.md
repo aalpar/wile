@@ -19,11 +19,12 @@
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | Analysis driver | Custom minimal driver using `analysis.Pass` directly | `multichecker.Main` and `unitchecker` are CLI-oriented; embedding requires wiring `Pass` fields manually |
-| Prerequisites | Topological sort over `a.Requires`; run all prerequisites before their dependents | Some analyzers need non-inspect prerequisites: `nilness` needs `buildssa`, `lostcancel` needs `ctrlflow`. Topo sort handles arbitrary chains correctly. |
-| Facts (inter-package) | No-op implementations (`AllObjectFacts`, `AllPackageFacts` return nothing) | Removes a significant complexity tier; diagnostics alone cover the common scripting use case |
+| Prerequisites | Topological sort over `a.Requires`; run all prerequisites before their dependents | Some analyzers need non-inspect prerequisites: `nilness` needs `buildssa` (which needs `ctrlflow`), `lostcancel` needs `ctrlflow`, `errorsas` needs `typeindexanalyzer`. Topo sort follows `Requires` pointers transitively — no need to import prerequisite packages directly. |
+| Facts (inter-package) | No-op implementations (`AllObjectFacts`, `AllPackageFacts` return empty slices) | Removes a significant complexity tier; diagnostics alone cover the common scripting use case. **Consequence**: `ctrlflow` exports `noReturn` facts across packages; with no-op facts, `nilness` and `lostcancel` may under-report (false negatives) for cross-package no-return calls. Acceptable for scripting. |
+| TypesSizes | Populated from `pkg.TypesSizes` via `NeedTypesSizes` load mode | Required by `shift` analyzer (`pass.TypesSizes.Sizeof`); nil would panic |
 | Suggested fixes | Encoded as `#f` (not included) | Suggested fixes are AST patch operations; encoding them as s-expressions is deferred |
 | Analyzer registry | Compile-time map of name → `*analysis.Analyzer` | No dynamic loading; analyzers from `go/analysis/passes` are all available at compile time |
-| Curated set | 25 analyzers from `go/analysis/passes` that work with `inspect` prerequisite | Excludes analyzers that depend on custom facts or have complex prerequisite chains beyond `inspect` |
+| Curated set | 25 analyzers from `go/analysis/passes` | All prerequisite chains resolved by topoSort; excludes analyzers that require inter-package facts for correctness (e.g. `unusedresult`) |
 | Variadic analyzers | `(go-analyze pattern "name1" "name2" ...)` | Natural for scripting: `(go-analyze "pkg" "nilness" "shadow")` |
 | Unknown analyzer name | Return error, not silent skip | Fail loudly — typos should surface immediately |
 
@@ -36,7 +37,7 @@ These analyzers from `golang.org/x/tools/go/analysis/passes` are supported. Prer
 | `assign` | `passes/assign` | Useless assignments (x = x) |
 | `bools` | `passes/bools` | Common mistakes with boolean operators |
 | `composite` | `passes/composite` | Composite literal uses unkeyed fields |
-| `copylocks` | `passes/copylocks` | Locks passed or copied by value |
+| `copylocks` | `passes/copylock` | Locks passed or copied by value |
 | `defers` | `passes/defers` | Common mistakes in defer statements |
 | `directive` | `passes/directive` | Malformed //go: directives |
 | `errorsas` | `passes/errorsas` | Second arg to errors.As is not a pointer |
@@ -200,7 +201,7 @@ var AddToRegistry = Builder.AddToRegistry
 func addPrimitives(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{
-			Name: "go-analyze", ParamCount: 1, IsVariadic: true,
+			Name: "go-analyze", ParamCount: 2, IsVariadic: true,
 			Impl:       PrimGoAnalyze,
 			Doc:        "Runs named go/analysis passes on a Go package and returns diagnostics.",
 			ParamNames: []string{"pattern", "analyzer-names"},
@@ -223,7 +224,6 @@ func addPrimitives(r *registry.Registry) error {
 package goastlint
 
 import (
-	"github.com/aalpar/wile/extensions/goast"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
@@ -326,7 +326,7 @@ import (
 	"golang.org/x/tools/go/analysis/passes/assign"
 	"golang.org/x/tools/go/analysis/passes/bools"
 	"golang.org/x/tools/go/analysis/passes/composite"
-	"golang.org/x/tools/go/analysis/passes/copylocks"
+	"golang.org/x/tools/go/analysis/passes/copylock"
 	"golang.org/x/tools/go/analysis/passes/defers"
 	"golang.org/x/tools/go/analysis/passes/directive"
 	"golang.org/x/tools/go/analysis/passes/errorsas"
@@ -351,12 +351,14 @@ import (
 )
 
 // analyzerRegistry maps analyzer names to their *analysis.Analyzer.
-// All entries use inspect as their only prerequisite (or no prerequisite).
+// Prerequisites vary: most use inspect; nilness needs buildssa→ctrlflow,
+// lostcancel needs ctrlflow, errorsas needs typeindexanalyzer.
+// The driver's topological sort resolves all prerequisite chains automatically.
 var analyzerRegistry = map[string]*analysis.Analyzer{
 	"assign":          assign.Analyzer,
 	"bools":           bools.Analyzer,
 	"composite":       composite.Analyzer,
-	"copylocks":       copylocks.Analyzer,
+	"copylocks":       copylock.Analyzer,
 	"defers":          defers.Analyzer,
 	"directive":       directive.Analyzer,
 	"errorsas":        errorsas.Analyzer,
@@ -444,7 +446,6 @@ package goastlint
 import (
 	"go/token"
 	"go/types"
-	"reflect"
 
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/packages"
@@ -454,7 +455,6 @@ import (
 type diagnostic struct {
 	analyzerName string
 	diag         analysis.Diagnostic
-	fset         *token.FileSet
 }
 
 // runAnalyzers runs the requested analyzers on a loaded package, first
@@ -473,16 +473,34 @@ func runAnalyzers(pkg *packages.Package, fset *token.FileSet, analyzers []*analy
 	}
 
 	resultOf := make(map[*analysis.Analyzer]interface{})
+	failed := make(map[*analysis.Analyzer]bool)
 	var diags []diagnostic
 
 	for _, a := range ordered {
+		// Skip if any prerequisite failed — avoids nil-deref in ResultOf lookups.
+		skip := false
+		for _, req := range a.Requires {
+			if failed[req] {
+				skip = true
+				break
+			}
+		}
+		if skip {
+			failed[a] = true
+			continue
+		}
+
 		var collected []analysis.Diagnostic
 		pass := makePass(pkg, fset, a, resultOf, func(d analysis.Diagnostic) {
 			if requested[a] {
 				collected = append(collected, d)
 			}
 		})
-		result, _ := a.Run(pass)
+		result, err := a.Run(pass)
+		if err != nil {
+			failed[a] = true
+			continue
+		}
 		if result != nil {
 			resultOf[a] = result
 		}
@@ -490,7 +508,6 @@ func runAnalyzers(pkg *packages.Package, fset *token.FileSet, analyzers []*analy
 			diags = append(diags, diagnostic{
 				analyzerName: a.Name,
 				diag:         d,
-				fset:         fset,
 			})
 		}
 	}
@@ -520,7 +537,9 @@ func topoSort(analyzers []*analysis.Analyzer) []*analysis.Analyzer {
 }
 
 // makePass constructs an analysis.Pass for the given analyzer and package.
-// Fact functions are no-ops: single-package analysis; no cross-package facts.
+// Fact functions are no-ops: single-package analysis, no cross-package facts.
+// This means ctrlflow's noReturn facts won't propagate across packages,
+// so nilness and lostcancel may under-report (false negatives). Acceptable.
 func makePass(
 	pkg *packages.Package,
 	fset *token.FileSet,
@@ -529,15 +548,16 @@ func makePass(
 	report func(analysis.Diagnostic),
 ) *analysis.Pass {
 	return &analysis.Pass{
-		Analyzer:  a,
-		Fset:      fset,
-		Files:     pkg.Syntax,
-		Pkg:       pkg.Types,
-		TypesInfo: pkg.TypesInfo,
-		ResultOf:  resultOf,
-		Report:    report,
-		AllObjectFacts:    func(reflect.Type, interface{}) {},
-		AllPackageFacts:   func(reflect.Type, interface{}) {},
+		Analyzer:   a,
+		Fset:       fset,
+		Files:      pkg.Syntax,
+		Pkg:        pkg.Types,
+		TypesInfo:  pkg.TypesInfo,
+		TypesSizes: pkg.TypesSizes,
+		ResultOf:   resultOf,
+		Report:     report,
+		AllObjectFacts:    func() []analysis.ObjectFact { return nil },
+		AllPackageFacts:   func() []analysis.PackageFact { return nil },
 		ExportObjectFact:  func(types.Object, analysis.Fact) {},
 		ExportPackageFact: func(analysis.Fact) {},
 		ImportObjectFact:  func(types.Object, analysis.Fact) bool { return false },
@@ -697,6 +717,7 @@ func PrimGoAnalyze(mc *machine.MachineContext) error {
 			packages.NeedSyntax |
 			packages.NeedTypes |
 			packages.NeedTypesInfo |
+			packages.NeedTypesSizes |
 			packages.NeedImports |
 			packages.NeedDeps,
 		Context: mc.Context(),
@@ -909,4 +930,4 @@ docs: mark GO-STATIC-ANALYSIS Phase 4 complete
 
 **Suggested fixes**: `analysis.Diagnostic.SuggestedFixes` carries AST patch operations. These could be encoded as `(suggested-fix (message . "...") (edits . ((edit (pos . "...") (end . "...") (new-text . "...")) ...)))`. Deferred until a use case requires applying fixes from Scheme.
 
-**Additional analyzers**: Analyzers with prerequisites beyond `inspect` (e.g., `SA*` from staticcheck) can be added to the registry once their prerequisite chains are handled by the driver. The driver currently handles one level of prerequisites (inspect). A topological sort loop over `a.Requires` would handle arbitrary depths.
+**Additional analyzers**: The driver already handles arbitrary prerequisite depths via topological sort — `nilness` → `buildssa` → `ctrlflow` → `inspect` is a 4-deep chain that works today. Third-party analyzers (e.g., `SA*` from staticcheck) can be added if they don't require cross-package facts beyond what the no-op stubs provide.
