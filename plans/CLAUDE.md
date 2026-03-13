@@ -25,7 +25,8 @@ When investigating R7RS conformance issues:
 | `UNIFY-ESCAPE-MECHANISMS.md` | Unified `call-with-exit` and prompt/abort escape paths | Completed (#418) |
 | `MACHINE-TECH-DEBT.md` | Machine package debt: arity dedup, expander decomposition, letrec* unification, file splits | Complete (#444) |
 | `CONTINUATION_MARKS.md` | Racket-style per-frame key-value annotations on the continuation chain | Proposed |
-| `REMOVE-SYMBOL-INTERNING.md` | Remove symbol canonicalization, compare by string key | Proposed |
+| `REMOVE-SYMBOL-INTERNING.md` | Remove symbol canonicalization, compare by string key | Complete |
+| `FF-CEREMONY-REDUCTION.md` | Reduce ForeignFunction call overhead: encode arity in instruction, skip redundant checks | Active |
 | `ENVIRONMENT-CLEANUP.md` | Environment package cleanup: constructor duplication, dead delegation, semantic inconsistency | Proposed |
 Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans).
 
