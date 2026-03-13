@@ -213,6 +213,59 @@ func TestOpCallForeignCached(t *testing.T) {
 			wantErr: werr.ErrNotAProcedure,
 		},
 		{
+			name: "fast-path arity error: stack has wrong arg count",
+			setupTpl: func() (*NativeTemplate, *environment.EnvironmentFrame) {
+				env := environment.NewTopLevelEnvironment().Runtime()
+				fcls := foreignAddClosure() // expects 2 args
+				bd := environment.NewBinding(fcls, environment.BindingTypeVariable)
+
+				tpl := NewNativeTemplate(0, 0, false)
+				cbIdx := tpl.AppendCachedBinding(bd)
+
+				// SaveContinuation for non-tail; offset 3 = one past CallForeignCached.
+				tpl.AppendInstruction(Instruction{Op: OpSaveContinuation, Arg: 3})
+				// Push only 1 arg, but encode paramCount=2 (matching closure).
+				// This simulates hand-constructed bytecode with mismatched stack.
+				litIdx := tpl.MaybeAppendLiteral(values.NewInteger(1))
+				tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litIdx)})
+				tpl.AppendInstruction(Instruction{
+					Op:  OpCallForeignCached,
+					Arg: EncodeForeignCallArg(cbIdx, 2),
+				})
+
+				return tpl, env
+			},
+			wantErr: werr.ErrWrongNumberOfArguments,
+		},
+		{
+			name: "variadic arity error: too few args for required params",
+			setupTpl: func() (*NativeTemplate, *environment.EnvironmentFrame) {
+				env := environment.NewTopLevelEnvironment().Runtime()
+
+				// paramCount=2, isVariadic=true: needs at least 1 required arg.
+				varEnv := environment.NewTopLevelEnvironment().Runtime()
+				fcls := NewForeignClosure(varEnv, 2, true, func(mc *MachineContext) error {
+					mc.SetValue(values.TrueValue)
+					return nil
+				})
+				bd := environment.NewBinding(fcls, environment.BindingTypeVariable)
+
+				tpl := NewNativeTemplate(0, 0, false)
+				cbIdx := tpl.AppendCachedBinding(bd)
+
+				// SaveContinuation for non-tail; offset 2 = one past CallForeignCachedVar.
+				tpl.AppendInstruction(Instruction{Op: OpSaveContinuation, Arg: 2})
+				// Push 0 args — variadic with paramCount=2 needs at least 1.
+				tpl.AppendInstruction(Instruction{
+					Op:  OpCallForeignCachedVar,
+					Arg: EncodeForeignCallArg(cbIdx, 2),
+				})
+
+				return tpl, env
+			},
+			wantErr: werr.ErrWrongNumberOfArguments,
+		},
+		{
 			name: "reassigned: binding holds non-ForeignClosure",
 			setupTpl: func() (*NativeTemplate, *environment.EnvironmentFrame) {
 				env := environment.NewTopLevelEnvironment().Runtime()

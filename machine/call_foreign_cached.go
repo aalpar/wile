@@ -69,6 +69,9 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 	// Bind args into closure's own env (noCopyApply by construction).
 	env := fcls.env
 	bnds := env.LocalEnvironment().Bindings()
+	if len(bnds) < paramCount {
+		return nil, applyCallableError(mc, checkArity(len(bnds), false, paramCount))
+	}
 	mc.counters.NoCopyBindingsSaved += uint64(len(bnds))
 
 	switch paramCount {
@@ -164,6 +167,7 @@ func callForeignCachedVar(mc *MachineContext, instr Instruction, tail bool) (*Ma
 // (e.g., set! replaced it with a different foreign closure). Falls back to
 // full arity checking and generic bindArgs.
 func callForeignCachedMismatch(mc *MachineContext, fcls *ForeignClosure, tail bool) (*MachineContext, error) {
+	mc.counters.ForeignCallFallbacks++
 	vs := mc.evals.Drain()
 	mc.counters.StackDrains++
 	mc.counters.StackElementsDrained += uint64(len(vs))
@@ -204,8 +208,16 @@ func callForeignCachedMismatch(mc *MachineContext, fcls *ForeignClosure, tail bo
 // holds a *ForeignClosure at runtime (e.g., the binding was reassigned via
 // set!). The bytecode retains SaveContinuation for non-tail calls, providing
 // stack isolation (Drain only takes args, not outer state) and return dispatch
-// (ApplyCallable consumers the saved continuation automatically).
+// (ApplyCallable consumes the saved continuation automatically).
+//
+// The tail parameter is not needed here: ApplyCallable handles both cases via
+// the continuation chain state. For non-tail, the bytecode already emitted
+// SaveContinuation, so mc.cont has the saved frame that ApplyCallable's
+// RestoreContinuation will pop. For tail, no SaveContinuation exists, so
+// mc.cont is the parent frame and returnImmediate inside ApplyCallable
+// returns to the caller's caller — correct tail call semantics.
 func callForeignCachedReassigned(mc *MachineContext, callable values.Value) (*MachineContext, error) {
+	mc.counters.ForeignCallFallbacks++
 	vs := mc.evals.Drain()
 	mc.counters.StackDrains++
 	mc.counters.StackElementsDrained += uint64(len(vs))

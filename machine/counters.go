@@ -51,6 +51,7 @@ type VMCounters struct {
 	KeysShared               uint64
 	NoCopyApplies            uint64
 	NoCopyBindingsSaved      uint64
+	ForeignCallFallbacks     uint64 // set!-reassigned binding forced slow path in callForeignCached
 	InlineEvalsSaved         uint64 // SaveContinuation used inline slots instead of stack pool
 
 	// Stack depth instrumentation (ongoing monitoring; prior cap-tuning investigation
@@ -115,6 +116,7 @@ func (c VMCounters) String() string {
 			"keys_shared:                  %d\n"+
 			"no_copy_applies:              %d\n"+
 			"no_copy_bindings_saved:       %d\n"+
+			"foreign_call_fallbacks:       %d\n"+
 			"inline_evals_saved:           %d\n"+
 			"stack_max_depth:              %d\n"+
 			"stack_depth_0to2:             %d\n"+
@@ -140,6 +142,7 @@ func (c VMCounters) String() string {
 		c.KeysShared,
 		c.NoCopyApplies,
 		c.NoCopyBindingsSaved,
+		c.ForeignCallFallbacks,
 		c.InlineEvalsSaved,
 		c.StackMaxDepth,
 		c.StackDepth0to2,

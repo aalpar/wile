@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/werr"
 )
 
 // Instruction is a single VM instruction for the switch-dispatch loop.
@@ -91,6 +92,18 @@ func DecodeLocalIndex(arg int32) (slot, depth int) {
 //	bits 16-23: paramCount (0..255)
 //	bits 24-31: reserved
 func EncodeForeignCallArg(bindingIdx int32, paramCount int) int32 {
+	if bindingIdx < 0 || bindingIdx > 0xFFFF {
+		panic(werr.WrapForeignErrorf(
+			werr.ErrInvalidArgument,
+			"EncodeForeignCallArg: bindingIdx %d exceeds 16-bit range [0, 65535]", bindingIdx,
+		))
+	}
+	if paramCount < 0 || paramCount > 255 {
+		panic(werr.WrapForeignErrorf(
+			werr.ErrInvalidArgument,
+			"EncodeForeignCallArg: paramCount %d exceeds 8-bit range [0, 255]", paramCount,
+		))
+	}
 	return (bindingIdx & 0xFFFF) | int32(paramCount&0xFF)<<16
 }
 

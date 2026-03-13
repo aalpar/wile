@@ -107,7 +107,9 @@ func TestLocalIndexBitPackingEdgeCases(t *testing.T) {
 }
 
 func TestEncodeForeignCallArg(t *testing.T) {
-	tcs := []struct {
+	c := qt.New(t)
+
+	tests := []struct {
 		name       string
 		bindingIdx int32
 		paramCount int
@@ -118,12 +120,57 @@ func TestEncodeForeignCallArg(t *testing.T) {
 		{name: "max params", bindingIdx: 42, paramCount: 255},
 		{name: "both max", bindingIdx: 0xFFFF, paramCount: 255},
 	}
-	for _, tc := range tcs {
+	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			encoded := EncodeForeignCallArg(tc.bindingIdx, tc.paramCount)
 			gotIdx, gotPC := DecodeForeignCallArg(encoded)
-			qt.Assert(t, gotIdx, qt.Equals, tc.bindingIdx)
-			qt.Assert(t, gotPC, qt.Equals, tc.paramCount)
+			c.Assert(gotIdx, qt.Equals, tc.bindingIdx)
+			c.Assert(gotPC, qt.Equals, tc.paramCount)
+		})
+	}
+}
+
+func TestEncodeForeignCallArgOverflow(t *testing.T) {
+	c := qt.New(t)
+
+	tests := []struct {
+		name       string
+		bindingIdx int32
+		paramCount int
+	}{
+		{name: "bindingIdx too large", bindingIdx: 0x10000, paramCount: 0},
+		{name: "bindingIdx negative", bindingIdx: -1, paramCount: 0},
+		{name: "paramCount too large", bindingIdx: 0, paramCount: 256},
+		{name: "paramCount negative", bindingIdx: 0, paramCount: -1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c.Assert(func() {
+				EncodeForeignCallArg(tc.bindingIdx, tc.paramCount)
+			}, qt.PanicMatches, ".*exceeds.*range.*")
+		})
+	}
+}
+
+func TestInstructionStringForeignCall(t *testing.T) {
+	c := qt.New(t)
+
+	tests := []struct {
+		name string
+		op   OpCode
+	}{
+		{name: "non-tail", op: OpCallForeignCached},
+		{name: "tail", op: OpCallForeignCachedTail},
+		{name: "var", op: OpCallForeignCachedVar},
+		{name: "var tail", op: OpCallForeignCachedVarTail},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			instr := Instruction{
+				Op:  tc.op,
+				Arg: EncodeForeignCallArg(7, 3),
+			}
+			c.Assert(instr.String(), qt.Matches, tc.op.String()+` binding=7 params=3`)
 		})
 	}
 }

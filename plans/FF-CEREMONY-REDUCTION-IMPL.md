@@ -249,7 +249,8 @@ func callForeignCachedVar(mc *MachineContext, instr Instruction, tail bool) (*Ma
 	return mc, nil
 }
 
-func callForeignCachedMismatch(mc *MachineContext, fcls *ForeignClosure) (*MachineContext, error) {
+func callForeignCachedMismatch(mc *MachineContext, fcls *ForeignClosure, tail bool) (*MachineContext, error) {
+	mc.counters.ForeignCallFallbacks++
 	vs := mc.evals.Drain()
 	mc.counters.StackDrains++
 	mc.counters.StackElementsDrained += uint64(len(vs))
@@ -278,15 +279,14 @@ func callForeignCachedMismatch(mc *MachineContext, fcls *ForeignClosure) (*Machi
 		return nil, applyCallableError(mc, err)
 	}
 
-	// Mismatch means set! changed the binding. Cannot know tail/non-tail
-	// from the closure alone — but the opcode handler passes it through.
-	// For now, treat as non-tail (conservative). The slow path is rare.
-	mc.RestoreAndRelease(mc.cont)
+	if tail {
+		mc = mc.returnImmediate()
+	} else {
+		mc.RestoreAndRelease(mc.cont)
+	}
 	return mc, nil
 }
 ```
-
-**Note:** The mismatch path needs tail awareness. The simplest fix: add a `tail bool` parameter to `callForeignCachedMismatch` and handle both cases. Refine during implementation.
 
 **Step 2: Run tests**
 
