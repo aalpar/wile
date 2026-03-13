@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-03-12
+
+### Fixed
+
+- Fix release pipeline — move kanren benchmark out of example test path to avoid 30s timeout on CI runners (#486)
+
 ## [1.6.0] - 2026-03-12
 
 ### Added
@@ -385,7 +391,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CI builds all four OS/architecture combinations
 - R7RS conformance test suite running in CI
 
-[Unreleased]: https://github.com/aalpar/wile/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/aalpar/wile/compare/v1.6.1...HEAD
+[1.6.1]: https://github.com/aalpar/wile/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/aalpar/wile/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/aalpar/wile/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/aalpar/wile/compare/v1.3.0...v1.4.0
