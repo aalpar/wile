@@ -448,16 +448,22 @@ type assertion, result boxing via `SetValue`, and the indirect function call its
 For a 5-element list, this overhead is paid 5× per operation, dominating the total
 cost and producing the observed 4-9× regression.
 
-If these hot-path primitives were promoted to VM opcodes (`OpCar`, `OpCdr`,
-`OpNullQ`, `OpCons`, `OpFixnumAdd`, `OpFixnumLT`), they would execute inline in
-`MachineContext.Run()` without ForeignFunction dispatch. Each would be a single
-`case` in the opcode switch — a direct stack pop, type assertion, and stack push,
-all within the Go frame already holding `mc`. The per-element cost would drop from
-~300 ns to an estimated ~30-50 ns (based on existing opcode dispatch overhead for
-`OpPush`/`OpPop`), which could bring Scheme list algorithms within the 20%
-benchmark gate and unblock migration.
+Two approaches exist to reduce this overhead, both worth exploring:
 
-**Candidates for opcode promotion:**
+#### Approach A: Promoted Opcodes
+
+Promote hot-path primitives to VM opcodes (`OpCar`, `OpCdr`, `OpNullQ`, `OpCons`,
+`OpFixnumAdd`, `OpFixnumLT`). Each would execute inline in `MachineContext.Run()`
+without ForeignFunction dispatch — a direct stack pop, type assertion, and stack
+push, all within the Go frame already holding `mc`. Per-element cost would drop
+from ~300 ns to an estimated ~30-50 ns (based on existing opcode dispatch for
+`OpPush`/`OpPop`).
+
+Prior art: `OpEqQ`, `OpVectorQ`, `OpVectorRef` already follow this pattern
+(`call_promoted.go`). Each has a tail variant and a `callPromotedFallback` path
+for when the binding has been reassigned via `set!`.
+
+**Candidates:**
 
 | Current Primitive | Proposed Opcode | Hot Loop Role |
 |-------------------|----------------|---------------|
@@ -468,9 +474,75 @@ benchmark gate and unblock migration.
 | `+` on fixnums | `OpFixnumAdd` | Counter increment `(+ n 1)` |
 | `<` on fixnums | `OpFixnumLT` | Bound check `(< i k)` |
 
-The compiler would emit these opcodes when the callee is statically known (e.g.,
-a global binding that hasn't been `set!`'d). Fallback to ForeignFunction dispatch
+The compiler would emit these opcodes when the callee is statically known (a
+global binding that hasn't been `set!`'d). Fallback to ForeignFunction dispatch
 when the binding is dynamic or shadowed.
+
+**Cost**: 6 opcodes × 2 (non-tail + tail) = 12 new switch cases, expanding the
+`Run()` dispatch from 37 to 49 cases. Risk: L1 icache pressure from a larger
+`Run()` function body degrades all opcode dispatch, not just the new ones.
+
+#### Approach B: Lightweight Cached Foreign Call
+
+Instead of expanding the switch, specialize `callForeignCached` itself. The
+current path does `Drain()` + `checkArity()` + `bindArgs()` + env swap even
+though the compiler already knows the arity and parameter layout. A "direct"
+variant would skip these steps.
+
+The bottleneck in `callForeignCached` is not arg collection (step 3 below) but
+the **post-collection ceremony** (steps 4–8):
+
+```
+callForeignCached (current):
+  1. cachedBindings[arg].Value()     binding lookup
+  2. type-assert *ForeignClosure     branch
+  3. Drain()                         zero-alloc, gets []Value view
+  4. checkArity()                    compare + branch           ← skip
+  5. bindArgs(bnds, vs, ...)         loop: SetValue per arg     ← skip
+  6. mc.env = fcls.env               env swap                   ← skip
+  7. fcls.fn(mc)                     INDIRECT function call
+  8. template change check           branch                     ← skip
+  9. RestoreAndRelease               continuation management
+```
+
+Steps 4–6 and 8 are unnecessary when the compiler knows the callee at compile
+time. A new calling convention where the foreign function reads args directly
+from a stack view (instead of `mc.Arg()` reading from environment bindings)
+would eliminate them. This captures most of the promoted-op savings in a single
+new opcode (`OpCallForeignDirect`) rather than 12, keeping the switch compact.
+
+**Cost**: 1 new opcode (+ tail variant = 2 switch cases). Requires eligible
+`Prim*` functions to support a second calling convention (stack-arg reader), or
+a wrapper that adapts the stack view to the existing `mc.Arg()` interface.
+
+#### Evaluation Protocol
+
+The approaches are not mutually exclusive. Use this protocol to evaluate either:
+
+**Phase 1 — Measure icache cost (applies to Approach A only):**
+
+1. Add the new case arms to `Run()` but do NOT change the compiler to emit them.
+2. Run Gabriel benchmarks. Compare against baseline.
+3. If existing benchmarks regress > 1-2%, the switch is too big — Approach A
+   is not viable regardless of per-call savings. Fall back to Approach B.
+
+**Phase 2 — Measure dispatch savings:**
+
+4. Enable the compiler to emit the new opcodes (A) or the direct call (B).
+5. Run the Phase 3 list algorithm micro-benchmarks (`prim_bench_test.go`):
+   Length, Append, Reverse, MakeList, ListTail, ListCopy.
+6. Run Gabriel benchmarks for net workload impact.
+7. Calculate: `(opcode_frequency × per_call_savings) - (total_ops × cache_penalty)`.
+
+**Phase 3 — Re-attempt Scheme migration:**
+
+8. Convert the 6 list algorithms to Scheme (definitions already written above).
+9. Re-run Phase 3 micro-benchmarks. If all pass the 20% gate, the migration
+   succeeds. If some still fail, keep those in Go and document the numbers.
+
+The opcode hit counters (`mc.counters.opcodeHits[instr.Op]++` at
+`machine_context.go:282`) provide frequency data for step 7 without additional
+instrumentation.
 
 This is tracked in `TODO.md` as **List primitive opcodes**.
 
