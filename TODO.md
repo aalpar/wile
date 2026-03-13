@@ -106,6 +106,7 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 - [ ] **Debugger / DAP integration** [Tooling]: Debug Adapter Protocol. Inline traps + snap-to-next designs ready in `plans/DEBUGGER.md`
 - [ ] **POSIX API / SRFI-170** [Standard library, 10 phases]: Comprehensive OS access — stat, permissions, links, temp files, env vars, subprocess, signals, user/group, terminal, error handling.
 - [ ] **Go FFI Phase 3 — Plugin support** [Embedding]: Dynamic extension loading via registry pattern.
+- [ ] **Procedure unification detection** [Static analysis, goast rule]: Scheme rule using `(wile goast)` to detect function pairs that are candidates for unification — structurally similar functions differing only in parameterizable ways (type names, literal values, identifiers). Four passes: enumerate candidates (group by signature shape), recursive AST diff, classify diffs (type/literal/identifier/structural), score and report. Uses AST + type annotations (`go-typecheck-package`), not SSA — type differences are localized at the AST level but diffuse through every SSA instruction. Builds on the `walk`/`nf`/`tag?` infrastructure from `state-trace-full.scm`. `plans/UNIFICATION-DETECTION.md`
 
 ---
 
@@ -113,6 +114,7 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 
 No demand signal. Speculative or research-only.
 
+- [ ] **Doc metadata for Scheme-defined procedures** [Tooling]: 44 primitives migrated to Scheme lost their `PrimitiveSpec` doc/params/category metadata (REPL `,doc`, extension library exports). Need a mechanism to register documentation for `define`-based procedures — either a doc-only `PrimitiveSpec` entry or a parallel doc registry that macro sources can populate.
 - [ ] **Security context** Authorizer rides on `context.valueContext`.  This is considered to be bad style - create a custom security context that implements `context.Context`.
 - [ ] **Hygiene debugging** [Tooling, Planned]: Scope introspection for macro authors. `plans/MACRO_SYSTEM.md`
 - [ ] **Macro expansion tracing** [Tooling, Planned]: Trace generated code back to macro invocation/template. `plans/MACRO_SYSTEM.md`
