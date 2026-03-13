@@ -27,15 +27,7 @@ When investigating R7RS conformance issues:
 | `CONTINUATION_MARKS.md` | Racket-style per-frame key-value annotations on the continuation chain | Proposed |
 | `REMOVE-SYMBOL-INTERNING.md` | Remove symbol canonicalization, compare by string key | Proposed |
 | `ENVIRONMENT-CLEANUP.md` | Environment package cleanup: constructor duplication, dead delegation, semantic inconsistency | Proposed |
-| `GO-AST.md` | Go AST extension design and phased implementation | Phases 1, 2, 3 & 4 complete |
-| `GO-STATIC-ANALYSIS.md` | Go static analysis extensions umbrella design (SSA, callgraph, CFG, lint) | Phases 1-3 complete; Phase 4 not started |
-| `GO-SSA-PHASE-1A.md` | SSA extension Phase 1A implementation plan (core instructions) | Complete |
-| `GO-SSA-PHASE-1BC.md` | SSA extension Phase 1B+1C implementation plan (collections, type ops, closures) | Complete |
-| `GO-CALLGRAPH-PHASE-2.md` | Callgraph extension implementation plan (Phase 2 of GO-STATIC-ANALYSIS) | Complete |
-| `GO-CFG-PHASE-3.md` | CFG + dominance extension implementation plan (Phase 3 of GO-STATIC-ANALYSIS) | Complete |
-| `GO-LINT-PHASE-4.md` | Analysis passes extension implementation plan (Phase 4 of GO-STATIC-ANALYSIS) | Complete |
-| `GO-AST-PHASE-2.md` | AST extension Phase 2 implementation plan (concurrency, switch, advanced) | Complete |
-| `GO-AST-PHASE-3.md` | AST extension Phase 3 implementation plan (comments, error recovery, generics) | Complete |
+Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans).
 
 ## Before Starting Work
 

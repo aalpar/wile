@@ -193,7 +193,6 @@ ls examples/
 - [**76 Examples**](examples/) — Basics, macros, concurrency, numeric tower, and more
 - [**Gabriel Benchmarks**](examples/benchmarks/) — Scheme benchmarks for performance testing
 - [**Schelog**](examples/logic/schelog/) — Full Prolog-style logic programming embedded in Scheme
-- [**Go Static Analysis**](docs/GO-STATIC-ANALYSIS.md) — Query Go AST, SSA, call graph, CFG, and lint from Scheme
 - [**Embedding Guide**](examples/embedding/) — How to use Wile from Go
 
 ## Key Features in Action
@@ -523,7 +522,6 @@ See [`docs/SANDBOXING.md`](docs/SANDBOXING.md) for the full security model, exte
 | [`docs/SANDBOXING.md`](docs/SANDBOXING.md) | Sandboxing and security model |
 | [`docs/EXTENSIONS.md`](docs/EXTENSIONS.md) | Extension system architecture and authoring guide |
 | [`docs/EXTENSION_LIBRARIES.md`](docs/EXTENSION_LIBRARIES.md) | R7RS library integration for extensions |
-| [`docs/GO-STATIC-ANALYSIS.md`](docs/GO-STATIC-ANALYSIS.md) | Go static analysis with Scheme (AST, SSA, call graph, CFG, lint) |
 | [`PRIMITIVES.md`](PRIMITIVES.md) | Complete reference of types and primitives |
 | [`docs/design/DESIGN.md`](docs/design/DESIGN.md) | Macro system design |
 | [`docs/design/EMBEDDING.md`](docs/design/EMBEDDING.md) | Embedding API design |
