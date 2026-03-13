@@ -77,6 +77,11 @@ func (p *StringOutputPort) Datum() *bytes.Buffer {
 	return p.buf
 }
 
+// IsVoid returns true if the port is nil.
+func (p *StringOutputPort) IsVoid() bool {
+	return p == nil
+}
+
 func (p *StringOutputPort) String() string {
 	return p.buf.String()
 }

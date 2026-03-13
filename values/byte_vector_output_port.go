@@ -32,14 +32,6 @@ type ByteVectorOutputPort struct {
 	wrt *bufio.Writer
 }
 
-// NewByteVectorOutputPort creates a new in-memory bytevector output port.
-func NewByteVectorOutputPort(wrt *bufio.Writer) *ByteVectorOutputPort {
-	q := &ByteVectorOutputPort{wrt: wrt}
-	q.kind = portKindBytevectorOutput
-	q.datum = q.wrt
-	return q
-}
-
 // NewByteVectorOutputPortFromWriter creates a new in-memory bytevector output port.
 func NewByteVectorOutputPortFromWriter(wrt io.Writer) *ByteVectorOutputPort {
 	q := &ByteVectorOutputPort{
@@ -71,4 +63,9 @@ func (p *ByteVectorOutputPort) WriteByte(b byte) error {
 // Datum returns the underlying bytes.Buffer.
 func (p *ByteVectorOutputPort) Datum() *bufio.Writer {
 	return p.wrt
+}
+
+// IsVoid returns true if the port is nil.
+func (p *ByteVectorOutputPort) IsVoid() bool {
+	return p == nil
 }

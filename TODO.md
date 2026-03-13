@@ -60,7 +60,7 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 
 ### Low Priority
 
-- [x] **Port type boilerplate** [Low, S]: `portBase` now provides all three Value interface methods — `IsVoid()`, `EqualTo()`, and `SchemeString()` — via embedding promotion. `EqualTo` uses `kind + datum` identity comparison (Go's `any` equality checks both dynamic type and value, preventing false matches across port types that share a kind). 20 copy-pasted methods removed from 10 port files.
+- [x] **Port type boilerplate** [Low, S]: `portBase` now provides `EqualTo()` and `SchemeString()` via embedding promotion. `EqualTo` uses `kind + datum` identity comparison (Go's `any` equality checks both dynamic type and value, preventing false matches across port types that share a kind). `IsVoid()` remains per-type (nil-receiver contract requires concrete type method). 10 `EqualTo` methods removed from 10 port files.
 - [ ] **Machine: document implicit PC contract** [Low, S]: `machine/machine_context.go` — `Run()` doc comment (lines 235-257) already documents the three-site contract (NewMachineContext, Apply, Restore). Remaining: add doc comment on the `pc` field itself and consider a defensive bounds assertion at the top of `Run()`.
 - [ ] **Error sentinel grouping** [Low, S]: ~103 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.
 - [ ] **Operation file consolidation** [Low, M]: 28 single-method `machine/operation_*.go` files (30–50 lines each). Group into families: `operations_stack.go` (Push/Pop/Pull/Drop/PeekK), `operations_load.go` (LoadLiteral/LoadGlobal/LoadLocal/LoadVoid), `operations_branch.go`, etc. Reduces 28 files to ~8.

@@ -85,6 +85,11 @@ func (p *ByteVectorInputOutputPort) ReadByteVector() (*ByteVector, error) {
 	return NewByteVectorFromBytes(b...), nil
 }
 
+// IsVoid returns true if the port is nil.
+func (p *ByteVectorInputOutputPort) IsVoid() bool {
+	return p == nil
+}
+
 // Datum returns the underlying bytes.Buffer.
 func (p *ByteVectorInputOutputPort) Datum() *bytes.Buffer {
 	return p.buf

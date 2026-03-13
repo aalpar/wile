@@ -89,11 +89,6 @@ func (b *portBase) guardClosed() error {
 	return nil
 }
 
-// IsVoid returns false. Ports are never void.
-func (b *portBase) IsVoid() bool {
-	return false
-}
-
 // portDatumProvider is implemented by all port types via portBase embedding.
 // It allows EqualTo to extract the portBase from any port Value.
 type portDatumProvider interface {

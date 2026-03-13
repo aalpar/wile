@@ -65,3 +65,8 @@ func (p *BinaryInputPort) Read(bs []byte) (int, error) {
 func (p *BinaryInputPort) Datum() io.Reader {
 	return p.rdr
 }
+
+// IsVoid returns true if the port is nil.
+func (p *BinaryInputPort) IsVoid() bool {
+	return p == nil
+}

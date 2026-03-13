@@ -32,14 +32,6 @@ type ByteVectorInputPort struct {
 	rdr *bufio.Reader
 }
 
-// NewByteVectorInputPort creates a new input port reading from the given byte slice.
-func NewByteVectorInputPort(reader *bufio.Reader) *ByteVectorInputPort {
-	q := &ByteVectorInputPort{rdr: reader}
-	q.kind = portKindBytevectorInput
-	q.datum = q.rdr
-	return q
-}
-
 // NewByteVectorInputPortFromReader creates a new input port reading from the given byte slice.
 func NewByteVectorInputPortFromReader(reader io.Reader) *ByteVectorInputPort {
 	q := &ByteVectorInputPort{rdr: bufio.NewReader(reader)}
@@ -66,4 +58,9 @@ func (p *ByteVectorInputPort) UnreadByte() error {
 // Datum returns the underlying bytes.Reader.
 func (p *ByteVectorInputPort) Datum() *bufio.Reader {
 	return p.rdr
+}
+
+// IsVoid returns true if the port is nil.
+func (p *ByteVectorInputPort) IsVoid() bool {
+	return p == nil
 }

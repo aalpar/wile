@@ -79,6 +79,9 @@ func TestBytevectorInputPort_UnreadByte(t *testing.T) {
 func TestBytevectorInputPort_IsVoid(t *testing.T) {
 	port := values.NewByteVectorInputPortFromReader(bytes.NewBuffer(toBytes(values.NewByteVectorFromBytes(1))))
 	qt.Assert(t, port.IsVoid(), qt.IsFalse)
+
+	var nilPort *values.ByteVectorInputPort
+	qt.Assert(t, nilPort.IsVoid(), qt.IsTrue)
 }
 
 func TestBytevectorInputPort_Datum(t *testing.T) {
@@ -146,6 +149,9 @@ func TestBytevectorOutputPort_IsVoid(t *testing.T) {
 	buf := bytes.NewBuffer(nil)
 	port := values.NewByteVectorOutputPortFromWriter(buf)
 	qt.Assert(t, port.IsVoid(), qt.IsFalse)
+
+	var nilPort *values.ByteVectorOutputPort
+	qt.Assert(t, nilPort.IsVoid(), qt.IsTrue)
 }
 
 func TestBytevectorOutputPort_Datum(t *testing.T) {
@@ -166,4 +172,11 @@ func TestBytevectorOutputPort_SchemeString(t *testing.T) {
 	port := values.NewByteVectorOutputPortFromWriter(bytes.NewBuffer(nil))
 	s := port.SchemeString()
 	qt.Assert(t, strings.Contains(s, "bytevector-output-port"), qt.IsTrue)
+}
+
+func TestBytevectorPort_CrossTypeEqualTo(t *testing.T) {
+	buf := bytes.NewBuffer(nil)
+	bvo := values.NewByteVectorOutputPortFromWriter(buf)
+	bvb := values.NewByteVectorBufferedOutputPortFromBuffer(buf)
+	qt.Assert(t, bvo.EqualTo(bvb), qt.IsFalse)
 }

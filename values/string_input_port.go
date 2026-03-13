@@ -32,16 +32,6 @@ type StringInputPort struct {
 	buf *bytes.Buffer
 }
 
-// NewStringInputPort creates a new string output port.
-func NewStringInputPort() *StringInputPort {
-	q := &StringInputPort{
-		buf: &bytes.Buffer{},
-	}
-	q.kind = portKindStringInput
-	q.datum = q.buf
-	return q
-}
-
 // NewStringInputPortWithBuffer creates a new string output port.
 func NewStringInputPortWithBuffer(buffer *bytes.Buffer) *StringInputPort {
 	q := &StringInputPort{
@@ -74,6 +64,11 @@ func (p *StringInputPort) Flush() error {
 // Datum returns the underlying buffer.
 func (p *StringInputPort) Datum() *bytes.Buffer {
 	return p.buf
+}
+
+// IsVoid returns true if the port is nil.
+func (p *StringInputPort) IsVoid() bool {
+	return p == nil
 }
 
 func (p *StringInputPort) String() string {

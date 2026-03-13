@@ -32,17 +32,11 @@ type CharacterOutputPort struct {
 	wrt *bufio.Writer
 }
 
-// NewCharacterOutputPort creates a new character input port from an io.Reader.
-func NewCharacterOutputPort(wrt *bufio.Writer) *CharacterOutputPort {
-	q := &CharacterOutputPort{wrt: wrt}
-	q.kind = portKindCharacterOutput
-	q.datum = q.wrt
-	return q
-}
-
 // NewCharacterOutputPortFromWriter creates a new character output port wrapping the given buf.
 func NewCharacterOutputPortFromWriter(wrt io.Writer) *CharacterOutputPort {
-	q := NewCharacterOutputPort(bufio.NewWriter(wrt))
+	q := &CharacterOutputPort{wrt: bufio.NewWriter(wrt)}
+	q.kind = portKindCharacterOutput
+	q.datum = q.wrt
 	q.setCloser(wrt)
 	return q
 }
@@ -73,4 +67,9 @@ func (p *CharacterOutputPort) WriteRune(rn rune) (int, error) {
 // there is no RunWriter interface in the standard library, so we just use io.Writer here.
 func (p *CharacterOutputPort) Datum() io.Writer {
 	return p.wrt
+}
+
+// IsVoid returns true if the port is nil.
+func (p *CharacterOutputPort) IsVoid() bool {
+	return p == nil
 }

@@ -66,3 +66,8 @@ func (p *CharacterInputPort) UnreadRune() error {
 func (p *CharacterInputPort) Datum() io.RuneReader {
 	return p.rdr
 }
+
+// IsVoid returns true if the port is nil.
+func (p *CharacterInputPort) IsVoid() bool {
+	return p == nil
+}

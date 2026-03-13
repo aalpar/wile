@@ -33,14 +33,6 @@ type BinaryOutputPort struct {
 	wrt *bufio.Writer
 }
 
-// NewBinaryOutputPort creates a new binary output port wrapping the given buf.
-func NewBinaryOutputPort(wrt *bufio.Writer) *BinaryOutputPort {
-	q := &BinaryOutputPort{wrt: wrt}
-	q.kind = portKindBinaryOutput
-	q.datum = q.wrt
-	return q
-}
-
 // NewBinaryOutputPortFromWriter creates a new input port reading from the given byte slice.
 func NewBinaryOutputPortFromWriter(writer io.Writer) *BinaryOutputPort {
 	q := &BinaryOutputPort{wrt: bufio.NewWriter(writer)}
@@ -73,4 +65,9 @@ func (p *BinaryOutputPort) Close() error {
 // Datum returns the underlying io.Writer.
 func (p *BinaryOutputPort) Datum() io.Writer {
 	return p.wrt
+}
+
+// IsVoid returns true if the port is nil.
+func (p *BinaryOutputPort) IsVoid() bool {
+	return p == nil
 }

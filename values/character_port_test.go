@@ -42,6 +42,9 @@ func TestCharacterInputPort_IsVoid(t *testing.T) {
 	reader := strings.NewReader("test")
 	port := values.NewCharacterInputPortFromReader(reader)
 	qt.Assert(t, port.IsVoid(), qt.IsFalse)
+
+	var nilPort *values.CharacterInputPort
+	qt.Assert(t, nilPort.IsVoid(), qt.IsTrue)
 }
 
 func TestCharacterInputPort_Datum(t *testing.T) {
@@ -95,6 +98,9 @@ func TestCharacterOutputPort_IsVoid(t *testing.T) {
 	var buf bytes.Buffer
 	port := values.NewCharacterOutputPortFromWriter(&buf)
 	qt.Assert(t, port.IsVoid(), qt.IsFalse)
+
+	var nilPort *values.CharacterOutputPort
+	qt.Assert(t, nilPort.IsVoid(), qt.IsTrue)
 }
 
 func TestCharacterOutputPort_Datum(t *testing.T) {

@@ -55,6 +55,9 @@ func TestStringInputOutputPort_UnreadRune(t *testing.T) {
 func TestStringInputOutputPort_IsVoid(t *testing.T) {
 	port := values.NewStringOutputPortWithBuffer(bytes.NewBufferString("test"))
 	qt.Assert(t, port.IsVoid(), qt.IsFalse)
+
+	var nilPort *values.StringOutputPort
+	qt.Assert(t, nilPort.IsVoid(), qt.IsTrue)
 }
 
 func TestStringInputOutputPort_Datum(t *testing.T) {
