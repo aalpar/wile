@@ -44,6 +44,10 @@ var primBenchCases = []primBenchCase{
 	{"Car", "(define bench-pair (cons 1 2))", "(car bench-pair)"},
 	{"Length", "", "(length '(1 2 3 4 5))"},
 	{"Append", "", "(append '(1 2) '(3 4))"},
+	{"Reverse", "", "(reverse '(1 2 3 4 5))"},
+	{"MakeList", "", "(make-list 5 0)"},
+	{"ListTail", "(define bench-list '(1 2 3 4 5))", "(list-tail bench-list 3)"},
+	{"ListCopy", "(define bench-list5 '(1 2 3 4 5))", "(list-copy bench-list5)"},
 
 	// Predicates
 	{"NullQ", "", "(null? '())"},

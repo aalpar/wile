@@ -18,8 +18,16 @@
 package io
 
 import (
+	_ "embed"
+
 	"github.com/aalpar/wile/registry"
 )
+
+// portProcSource contains call-with-port, defined in Scheme so that
+// proc's continuation frames are capturable by call/cc.
+//
+//go:embed port_procs.scm
+var portProcSource string
 
 // Extension is the I/O extension.
 var Extension = registry.NewExtension("io", AddToRegistry)
@@ -29,6 +37,7 @@ var Builder = registry.NewRegistryBuilder(
 	addReadWrite,
 	addPorts,
 	addPortState,
+	addPortProcs,
 )
 
 // AddToRegistry registers all I/O primitives.
@@ -113,8 +122,7 @@ func addPorts(r *registry.Registry) error {
 			Doc: "Returns the EOF object.", Category: "ports"},
 		{Name: "eof-object?", ParamCount: 1, Impl: PrimEofObjectQ,
 			Doc: "Returns #t if obj is the EOF object.", ParamNames: []string{"obj"}, Category: "ports"},
-		{Name: "call-with-port", ParamCount: 2, Impl: PrimCallWithPort,
-			Doc: "Calls proc with port, then closes it.", ParamNames: []string{"port", "proc"}, Category: "ports"},
+		// call-with-port is defined in port_procs.scm (addPortProcs)
 	}, registry.PhaseRuntime)
 
 	// String ports
@@ -145,5 +153,10 @@ func addPortState(r *registry.Registry) error {
 	r.AddGlobalValue("current-input-port", GetCurrentInputPortParam())
 	r.AddGlobalValue("current-output-port", GetCurrentOutputPortParam())
 	r.AddGlobalValue("current-error-port", GetCurrentErrorPortParam())
+	return nil
+}
+
+func addPortProcs(r *registry.Registry) error {
+	r.AddMacroSource(portProcSource)
 	return nil
 }

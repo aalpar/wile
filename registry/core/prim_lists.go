@@ -70,28 +70,11 @@ func PrimMakeList(mc *machine.MachineContext) error {
 	return nil
 }
 
-// PrimAppend implements (append list ...) per R7RS.
+// PrimAppend implements (append list ...) per R7RS §6.4.
 // Returns a list consisting of the elements of the first list followed by
 // the elements of the other lists. The last argument may be any object.
-//
-// Algorithm overview:
-//  1. Collect all argument lists into a vector for random access
-//  2. Build result from right to left, starting with the last argument as the tail
-//  3. For each preceding list, collect its elements into a vector, then prepend
-//     them to the result in reverse order to preserve original ordering
-//
-// Why use a vector for intermediate storage?
-// Lists are singly-linked and can only be efficiently traversed forward.
-// To prepend list elements while preserving order, we need to process them
-// in reverse. We collect elements into a vector (O(1) append), then iterate
-// backward through the vector to prepend each element to the result.
-// This achieves O(n) time complexity where n is total elements across all lists.
-//
-// Example: (append '(a b) '(c d) '(e))
-// - lists vector: ['(a b), '(c d), '(e)]
-// - Start with result = '(e) (last element)
-// - Process '(c d): collect [c, d], prepend d then c → result = '(c d e)
-// - Process '(a b): collect [a, b], prepend b then a → result = '(a b c d e)
+// Benchmarked: kept in Go — Scheme impl is 4-9x slower on short lists
+// (benchmark gate: 20% threshold; actual regression was ~363% for Append).
 func PrimAppend(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
@@ -103,7 +86,6 @@ func PrimAppend(mc *machine.MachineContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "append: expected a list but got %T", o)
 	}
 
-	// Collect all argument lists into a vector for random access (right-to-left processing)
 	var lists values.Vector
 	v, err := args.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
 		lists = append(lists, elem)
@@ -115,16 +97,13 @@ func PrimAppend(mc *machine.MachineContext) error {
 	if !values.IsEmptyList(v) {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "append: expected proper list of arguments")
 	}
-	// Build result from right to left
 	var result values.Value = values.EmptyList
 	for i := len(lists) - 1; i >= 0; i-- {
 		lst := lists[i]
 		if i == len(lists)-1 {
-			// Last element can be any value (for improper lists)
 			result = lst
 			continue
 		}
-		// Prepend elements of this list to result
 		if values.IsEmptyList(lst) {
 			continue
 		}
@@ -132,11 +111,6 @@ func PrimAppend(mc *machine.MachineContext) error {
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotAList, "append: expected list but got %T", lst)
 		}
-		// Collect list elements into a vector for reverse-order access.
-		// We use a vector because lists only support forward traversal, but we need
-		// to prepend elements in reverse order to preserve the original sequence.
-		// E.g., for list (a b c), we collect [a, b, c], then prepend c, b, a
-		// to result, yielding (a b c . result).
 		var elems values.Vector
 		v, err = pr.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, elem values.Value) error {
 			elems = append(elems, elem)
@@ -148,8 +122,6 @@ func PrimAppend(mc *machine.MachineContext) error {
 		if !values.IsEmptyList(v) {
 			return werr.WrapForeignErrorf(werr.ErrNotAList, "append: expected proper list but got improper list")
 		}
-		// Prepend elements in reverse order: iterate backward through vector,
-		// consing each element onto result. This reconstructs the original order.
 		for j := len(elems) - 1; j >= 0; j-- {
 			result = values.NewCons(elems[j], result)
 		}
@@ -159,7 +131,7 @@ func PrimAppend(mc *machine.MachineContext) error {
 }
 
 // PrimReverse implements the (reverse) primitive.
-// Returns reversed copy of list.
+// Benchmarked: kept in Go — Scheme impl is 7x slower on short lists.
 func PrimReverse(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
@@ -186,7 +158,7 @@ func PrimReverse(mc *machine.MachineContext) error {
 }
 
 // PrimLength implements the (length) primitive.
-// Returns the length of a proper list.
+// Benchmarked: kept in Go — Scheme impl is 9x slower on short lists.
 func PrimLength(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
@@ -281,8 +253,7 @@ func PrimListSet(mc *machine.MachineContext) error {
 }
 
 // PrimListTail implements the (list-tail) primitive.
-// Returns the sublist starting at the given index.
-// R7RS §6.4: The index must be an exact non-negative integer.
+// Benchmarked: kept in Go — Scheme impl is 6x slower on short lists.
 func PrimListTail(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
 	k := mc.Arg(1)
@@ -323,6 +294,50 @@ func PrimListTail(mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimListCopy implements the list-copy primitive.
+// Benchmarked: kept in Go — Scheme impl is 7x slower on short lists.
+func PrimListCopy(mc *machine.MachineContext) error {
+	obj := mc.Arg(0)
+	if values.IsEmptyList(obj) {
+		mc.SetValue(values.EmptyList)
+		return nil
+	}
+	pr, ok := obj.(values.Tuple)
+	if !ok {
+		mc.SetValue(obj)
+		return nil
+	}
+	var head, tail *values.Pair
+	current := values.Value(pr)
+	for {
+		p, ok := current.(values.Tuple)
+		if !ok {
+			if tail != nil {
+				tail.SetCdr(current)
+			}
+			break
+		}
+		newPair := values.NewCons(p.Car(), values.EmptyList)
+		if head == nil {
+			head = newPair
+		} else {
+			tail.SetCdr(newPair)
+		}
+		tail = newPair
+		cdr := p.Cdr()
+		if values.IsEmptyList(cdr) {
+			break
+		}
+		current = cdr
+	}
+	if head == nil {
+		mc.SetValue(values.EmptyList)
+	} else {
+		mc.SetValue(head)
+	}
+	return nil
+}
+
 // PrimMemq implements the memq primitive.
 // Finds an element in a list using eq? for comparison.
 func PrimMemq(mc *machine.MachineContext) error {
@@ -343,60 +358,4 @@ func PrimAssq(mc *machine.MachineContext) error {
 // PrimAssv implements the assv primitive.
 func PrimAssv(mc *machine.MachineContext) error {
 	return helpers.AssocLookup(mc, "assv", helpers.Eqv)
-}
-
-// PrimListCopy implements the list-copy primitive.
-// R7RS §6.4: (list-copy obj)
-// Returns a newly allocated copy of obj if it is a list.
-// Only the pairs are copied; the car elements are shared.
-func PrimListCopy(mc *machine.MachineContext) error {
-	obj := mc.Arg(0)
-
-	// If not a pair, return as-is
-	if values.IsEmptyList(obj) {
-		mc.SetValue(values.EmptyList)
-		return nil
-	}
-
-	pr, ok := obj.(values.Tuple)
-	if !ok {
-		// Not a list, return as-is per R7RS
-		mc.SetValue(obj)
-		return nil
-	}
-
-	// Copy the spine of the list
-	var head, tail *values.Pair
-	current := values.Value(pr)
-	for {
-		p, ok := current.(values.Tuple)
-		if !ok {
-			// Improper list ending - append the final cdr
-			if tail != nil {
-				tail.SetCdr(current)
-			}
-			break
-		}
-
-		newPair := values.NewCons(p.Car(), values.EmptyList)
-		if head == nil {
-			head = newPair
-		} else {
-			tail.SetCdr(newPair)
-		}
-		tail = newPair
-
-		cdr := p.Cdr()
-		if values.IsEmptyList(cdr) {
-			break
-		}
-		current = cdr
-	}
-
-	if head == nil {
-		mc.SetValue(values.EmptyList)
-	} else {
-		mc.SetValue(head)
-	}
-	return nil
 }

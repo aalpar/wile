@@ -298,6 +298,12 @@ Same per-function steps as Phase 1. No new correctness tests needed — these ar
 ## Phase 3: List Algorithms (Benchmark-Gated)
 
 **Branch:** `refactor/native-forms-migration-phase3`
+**Status:** Partially complete. `call-with-port` migrated to Scheme (in io extension
+macro source). All 6 list algorithms benchmarked and **kept in Go** (4-9x slower on
+short lists; all exceed the 20% micro-benchmark gate). See benchmark results below.
+`call-with-input-file`/`call-with-output-file` kept in Go (files extension must remain
+independently loadable without io; these functions' Go implementations own their security
+checks).
 **Depends on:** Phase 0
 
 Convert pure-algorithmic operations to Scheme. Each conversion is gated by benchmark measurements.
@@ -409,6 +415,64 @@ Unlike the list algorithms, `call-with-port` depends on `close-port` which is in
 - (b) Define via the I/O extension's own `AddMacroSource`
 
 Recommend (b) for `call-with-port` and the files extension's own macro source for `call-with-input-file`/`call-with-output-file`. This preserves the invariant that bootstrap code depends only on core primitives.
+
+### Benchmark Results (Apple M4 Max, 2026-03-13)
+
+All 6 candidates failed the 20% micro-benchmark gate. All kept in Go.
+
+| Function | Baseline (Go) | Scheme | Change | Decision |
+|----------|--------------|--------|--------|----------|
+| `length` | 199 ns | 1787 ns | +797% | **kept in Go** |
+| `append` | 392 ns | 1816 ns | +363% | **kept in Go** |
+| `reverse` | 278 ns | 2006 ns | +620% | **kept in Go** |
+| `make-list` | 285 ns | 2255 ns | +690% | **kept in Go** |
+| `list-tail` | 191 ns | 1188 ns | +519% | **kept in Go** |
+| `list-copy` | 268 ns | 1849 ns | +588% | **kept in Go** |
+
+Root cause: for 5-element lists, each per-element Scheme step (car/cdr/null?/+) is a
+foreign-function dispatch. The Go versions use tight native loops; the Scheme versions
+pay VM overhead per element that dominates on short lists. The benchmark gate exists
+precisely to catch this: 4-9x slower is far outside the 20% threshold.
+
+The benchmark cases (Reverse, MakeList, ListTail, ListCopy) were added to
+`registry/core/prim_bench_test.go` and remain as fixtures for future re-evaluation
+if the VM dispatch overhead is reduced.
+
+### Unblocking Path: List Primitive Opcodes
+
+**Thesis:** These 6 functions cannot be migrated to Scheme because they fail the
+performance gate. They fail the gate because their per-element sub-operations
+(`car`, `cdr`, `null?`, `cons`, `+`, `<`) are ForeignFunction calls, each incurring
+the full dispatch overhead: argument extraction from `MachineContext`, Go interface
+type assertion, result boxing via `SetValue`, and the indirect function call itself.
+For a 5-element list, this overhead is paid 5× per operation, dominating the total
+cost and producing the observed 4-9× regression.
+
+If these hot-path primitives were promoted to VM opcodes (`OpCar`, `OpCdr`,
+`OpNullQ`, `OpCons`, `OpFixnumAdd`, `OpFixnumLT`), they would execute inline in
+`MachineContext.Run()` without ForeignFunction dispatch. Each would be a single
+`case` in the opcode switch — a direct stack pop, type assertion, and stack push,
+all within the Go frame already holding `mc`. The per-element cost would drop from
+~300 ns to an estimated ~30-50 ns (based on existing opcode dispatch overhead for
+`OpPush`/`OpPop`), which could bring Scheme list algorithms within the 20%
+benchmark gate and unblock migration.
+
+**Candidates for opcode promotion:**
+
+| Current Primitive | Proposed Opcode | Hot Loop Role |
+|-------------------|----------------|---------------|
+| `car` (PrimCar) | `OpCar` | Element access per step |
+| `cdr` (PrimCdr) | `OpCdr` | List traversal per step |
+| `null?` (PrimNullQ) | `OpNullQ` | Termination check per step |
+| `cons` (PrimCons) | `OpCons` | Result construction per step |
+| `+` on fixnums | `OpFixnumAdd` | Counter increment `(+ n 1)` |
+| `<` on fixnums | `OpFixnumLT` | Bound check `(< i k)` |
+
+The compiler would emit these opcodes when the callee is statically known (e.g.,
+a global binding that hasn't been `set!`'d). Fallback to ForeignFunction dispatch
+when the binding is dynamic or shadowed.
+
+This is tracked in `TODO.md` as **List primitive opcodes**.
 
 ### Per-Candidate Migration Steps
 
@@ -529,13 +593,17 @@ All converted functions are currently registered at `PhaseRuntime|PhaseExpand`. 
 
 ## Summary
 
-| Phase | Functions | Count | Motivation |
-|-------|-----------|-------|------------|
-| 0 | Bootstrap split | — | Infrastructure |
-| 1 | `vector-map`, `vector-for-each`, `string-map`, `string-for-each`, `member`, `assoc` | 6 | Continuation correctness |
-| 2 | `not`, `zero?`, `positive?`, `negative?`, `exact-integer?`, `list?`, `boolean=?`, `symbol=?`, `square` | 9 | Eliminate facades |
-| 3 | `make-list`, `list-copy`, `list-tail`, `reverse`, `length`, `append`, `call-with-port`, `call-with-input-file`, `call-with-output-file` | 9 | Simplify (benchmark-gated) |
-| 4 | 28 CxR accessors | 28 | Eliminate duplication |
-| **Total** | | **52** | |
+| Phase | Functions | Migrated | Kept in Go | Motivation |
+|-------|-----------|----------|------------|------------|
+| 0 | Bootstrap split | — | — | Infrastructure |
+| 1 | `vector-map`, `vector-for-each`, `string-map`, `string-for-each`, `member`, `assoc` | 6 | 0 | Continuation correctness |
+| 2 | `not`, `zero?`, `positive?`, `negative?`, `exact-integer?`, `list?`, `boolean=?`, `symbol=?`, `square` | 9 | 0 | Eliminate facades |
+| 3 | `call-with-port` | 1 | 8 | Simplify (benchmark-gated) |
+| 4 | 28 CxR accessors | 28 | 0 | Eliminate duplication |
+| **Total** | | **44** | **8** | |
 
-Net reduction: ~52 Go primitive implementations replaced by ~120 lines of Scheme.
+Phase 3 kept in Go:
+- 6 list algorithms (`make-list`, `list-copy`, `list-tail`, `reverse`, `length`, `append`): all 4-9× slower in Scheme — ForeignFunction dispatch per element dominates. Unblocked by future list primitive opcodes (see above).
+- `call-with-input-file`, `call-with-output-file`: files extension must be independently loadable without io; Go implementations own their security checks. `callWithFile` single-value bug fixed (`SetValue` → `SetValues`).
+
+Net reduction: 44 Go primitive implementations replaced by ~120 lines of Scheme.
