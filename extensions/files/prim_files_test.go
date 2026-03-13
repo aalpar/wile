@@ -186,6 +186,19 @@ func TestCallWithInputFile(t *testing.T) {
 	result = eval(t, engine, fmt.Sprintf(
 		`(call-with-input-file %q (lambda (port) (input-port? port)))`, path))
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+
+	// Multiple return values preserved (SetValue -> SetValues fix)
+	result = eval(t, engine, fmt.Sprintf(
+		`(call-with-values
+		   (lambda ()
+		     (call-with-input-file %q
+		       (lambda (port)
+		         (let ((a (read-char port))
+		               (b (read-char port)))
+		           (values a b)))))
+		   (lambda (a b)
+		     (and (equal? a #\h) (equal? b #\e))))`, path))
+	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 }
 
 func TestCallWithOutputFile(t *testing.T) {

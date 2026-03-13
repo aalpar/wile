@@ -231,41 +231,6 @@ func PrimBinaryPortQ(mc *machine.MachineContext) error {
 	return nil
 }
 
-// PrimCallWithPort implements the call-with-port primitive.
-// R7RS §6.13.1: (call-with-port port proc)
-// Calls proc with port as an argument. When proc returns, the port is closed.
-func PrimCallWithPort(mc *machine.MachineContext) error {
-	portArg := mc.Arg(0)
-	proc := mc.Arg(1)
-
-	// Validate that proc is a procedure
-	mcls, err := helpers.RequireType[machine.Closure](proc, werr.ErrNotAProcedure, "call-with-port")
-	if err != nil {
-		return err
-	}
-
-	// Call the procedure with the port
-	sub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub)
-	_, err = sub.ApplyCallable(mcls, portArg)
-	if err != nil {
-		return err
-	}
-	runErr := sub.Run()
-
-	// Close the port after proc returns (even if there was an error)
-	_ = closePort(portArg)
-
-	// Handle any errors from running the procedure
-	if runErr != nil {
-		return runErr
-	}
-
-	// Return the result of the procedure
-	mc.SetValues(sub.GetValues()...)
-	return nil
-}
-
 // closePort closes a port regardless of its type and evicts
 // any cached tokenizer/parser for the port.
 

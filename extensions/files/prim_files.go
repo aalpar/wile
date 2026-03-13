@@ -127,7 +127,8 @@ func PrimDeleteFile(mc *machine.MachineContext) error {
 }
 
 // callWithFile is a helper for call-with-input-file and call-with-output-file.
-// Takes filename at index 0, proc at index 1. Opens file, creates port, calls proc.
+// Takes filename at index 0, proc at index 1. Opens file, creates port,
+// calls proc, closes file, returns all values from proc.
 //
 //nolint:unparam
 func callWithFile(
@@ -175,7 +176,7 @@ func callWithFile(
 		return err
 	}
 
-	mc.SetValue(sub.GetValue())
+	mc.SetValues(sub.GetValues()...)
 	return nil
 }
 

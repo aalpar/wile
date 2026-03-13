@@ -434,6 +434,25 @@ func TestCallWithPort(t *testing.T) {
 			             (write-string "abc" port)
 			             (get-output-string port)))
 			         "abc")`, values.TrueValue},
+		// call/cc inside proc: continuation frames are capturable because
+		// call-with-port is now a Scheme procedure (Phase 3 migration).
+		// Captures the continuation and returns it as the result; call-with-port
+		// propagates it as a procedure value.
+		{"call/cc inside proc captures continuation",
+			`(procedure?
+			   (call-with-port (open-input-string "x")
+			     (lambda (p) (call/cc (lambda (k) k)))))`, values.TrueValue},
+		// Multiple return values preserved through call-with-port.
+		{"preserves multiple return values",
+			`(call-with-values
+			   (lambda ()
+			     (call-with-port (open-input-string "xy")
+			       (lambda (p)
+			         (let ((a (read-char p))
+			               (b (read-char p)))
+			           (values a b)))))
+			   (lambda (a b)
+			     (and (equal? a #\x) (equal? b #\y))))`, values.TrueValue},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

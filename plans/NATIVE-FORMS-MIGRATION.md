@@ -298,6 +298,12 @@ Same per-function steps as Phase 1. No new correctness tests needed — these ar
 ## Phase 3: List Algorithms (Benchmark-Gated)
 
 **Branch:** `refactor/native-forms-migration-phase3`
+**Status:** Partially complete. `call-with-port` migrated to Scheme (in io extension
+macro source). All 6 list algorithms benchmarked and **kept in Go** (4-9x slower on
+short lists; all exceed the 20% micro-benchmark gate). See benchmark results below.
+`call-with-input-file`/`call-with-output-file` kept in Go (files extension must remain
+independently loadable without io; these functions' Go implementations own their security
+checks).
 **Depends on:** Phase 0
 
 Convert pure-algorithmic operations to Scheme. Each conversion is gated by benchmark measurements.
@@ -409,6 +415,136 @@ Unlike the list algorithms, `call-with-port` depends on `close-port` which is in
 - (b) Define via the I/O extension's own `AddMacroSource`
 
 Recommend (b) for `call-with-port` and the files extension's own macro source for `call-with-input-file`/`call-with-output-file`. This preserves the invariant that bootstrap code depends only on core primitives.
+
+### Benchmark Results (Apple M4 Max, 2026-03-13)
+
+All 6 candidates failed the 20% micro-benchmark gate. All kept in Go.
+
+| Function | Baseline (Go) | Scheme | Change | Decision |
+|----------|--------------|--------|--------|----------|
+| `length` | 199 ns | 1787 ns | +797% | **kept in Go** |
+| `append` | 392 ns | 1816 ns | +363% | **kept in Go** |
+| `reverse` | 278 ns | 2006 ns | +620% | **kept in Go** |
+| `make-list` | 285 ns | 2255 ns | +690% | **kept in Go** |
+| `list-tail` | 191 ns | 1188 ns | +519% | **kept in Go** |
+| `list-copy` | 268 ns | 1849 ns | +588% | **kept in Go** |
+
+Root cause: for 5-element lists, each per-element Scheme step (car/cdr/null?/+) is a
+foreign-function dispatch. The Go versions use tight native loops; the Scheme versions
+pay VM overhead per element that dominates on short lists. The benchmark gate exists
+precisely to catch this: 4-9x slower is far outside the 20% threshold.
+
+The benchmark cases (Reverse, MakeList, ListTail, ListCopy) were added to
+`registry/core/prim_bench_test.go` and remain as fixtures for future re-evaluation
+if the VM dispatch overhead is reduced.
+
+### Unblocking Path: List Primitive Opcodes
+
+**Thesis:** These 6 functions cannot be migrated to Scheme because they fail the
+performance gate. They fail the gate because their per-element sub-operations
+(`car`, `cdr`, `null?`, `cons`, `+`, `<`) are ForeignFunction calls, each incurring
+the full dispatch overhead: argument extraction from `MachineContext`, Go interface
+type assertion, result boxing via `SetValue`, and the indirect function call itself.
+For a 5-element list, this overhead is paid 5× per operation, dominating the total
+cost and producing the observed 4-9× regression.
+
+Two approaches exist to reduce this overhead, both worth exploring:
+
+#### Approach A: Promoted Opcodes
+
+Promote hot-path primitives to VM opcodes (`OpCar`, `OpCdr`, `OpNullQ`, `OpCons`,
+`OpFixnumAdd`, `OpFixnumLT`). Each would execute inline in `MachineContext.Run()`
+without ForeignFunction dispatch — a direct stack pop, type assertion, and stack
+push, all within the Go frame already holding `mc`. Per-element cost would drop
+from ~300 ns to an estimated ~30-50 ns (based on existing opcode dispatch for
+`OpPush`/`OpPop`).
+
+Prior art: `OpEqQ`, `OpVectorQ`, `OpVectorRef` already follow this pattern
+(`call_promoted.go`). Each has a tail variant and a `callPromotedFallback` path
+for when the binding has been reassigned via `set!`.
+
+**Candidates:**
+
+| Current Primitive | Proposed Opcode | Hot Loop Role |
+|-------------------|----------------|---------------|
+| `car` (PrimCar) | `OpCar` | Element access per step |
+| `cdr` (PrimCdr) | `OpCdr` | List traversal per step |
+| `null?` (PrimNullQ) | `OpNullQ` | Termination check per step |
+| `cons` (PrimCons) | `OpCons` | Result construction per step |
+| `+` on fixnums | `OpFixnumAdd` | Counter increment `(+ n 1)` |
+| `<` on fixnums | `OpFixnumLT` | Bound check `(< i k)` |
+
+The compiler would emit these opcodes when the callee is statically known (a
+global binding that hasn't been `set!`'d). Fallback to ForeignFunction dispatch
+when the binding is dynamic or shadowed.
+
+**Cost**: 6 opcodes × 2 (non-tail + tail) = 12 new switch cases, expanding the
+`Run()` dispatch from 37 to 49 cases. Risk: L1 icache pressure from a larger
+`Run()` function body degrades all opcode dispatch, not just the new ones.
+
+#### Approach B: Lightweight Cached Foreign Call
+
+Instead of expanding the switch, specialize `callForeignCached` itself. The
+current path does `Drain()` + `checkArity()` + `bindArgs()` + env swap even
+though the compiler already knows the arity and parameter layout. A "direct"
+variant would skip these steps.
+
+The bottleneck in `callForeignCached` is not arg collection (step 3 below) but
+the **post-collection ceremony** (steps 4–8):
+
+```
+callForeignCached (current):
+  1. cachedBindings[arg].Value()     binding lookup
+  2. type-assert *ForeignClosure     branch
+  3. Drain()                         zero-alloc, gets []Value view
+  4. checkArity()                    compare + branch           ← skip
+  5. bindArgs(bnds, vs, ...)         loop: SetValue per arg     ← skip
+  6. mc.env = fcls.env               env swap                   ← skip
+  7. fcls.fn(mc)                     INDIRECT function call
+  8. template change check           branch                     ← skip
+  9. RestoreAndRelease               continuation management
+```
+
+Steps 4–6 and 8 are unnecessary when the compiler knows the callee at compile
+time. A new calling convention where the foreign function reads args directly
+from a stack view (instead of `mc.Arg()` reading from environment bindings)
+would eliminate them. This captures most of the promoted-op savings in a single
+new opcode (`OpCallForeignDirect`) rather than 12, keeping the switch compact.
+
+**Cost**: 1 new opcode (+ tail variant = 2 switch cases). Requires eligible
+`Prim*` functions to support a second calling convention (stack-arg reader), or
+a wrapper that adapts the stack view to the existing `mc.Arg()` interface.
+
+#### Evaluation Protocol
+
+The approaches are not mutually exclusive. Use this protocol to evaluate either:
+
+**Phase 1 — Measure icache cost (applies to Approach A only):**
+
+1. Add the new case arms to `Run()` but do NOT change the compiler to emit them.
+2. Run Gabriel benchmarks. Compare against baseline.
+3. If existing benchmarks regress > 1-2%, the switch is too big — Approach A
+   is not viable regardless of per-call savings. Fall back to Approach B.
+
+**Phase 2 — Measure dispatch savings:**
+
+4. Enable the compiler to emit the new opcodes (A) or the direct call (B).
+5. Run the Phase 3 list algorithm micro-benchmarks (`prim_bench_test.go`):
+   Length, Append, Reverse, MakeList, ListTail, ListCopy.
+6. Run Gabriel benchmarks for net workload impact.
+7. Calculate: `(opcode_frequency × per_call_savings) - (total_ops × cache_penalty)`.
+
+**Phase 3 — Re-attempt Scheme migration:**
+
+8. Convert the 6 list algorithms to Scheme (definitions already written above).
+9. Re-run Phase 3 micro-benchmarks. If all pass the 20% gate, the migration
+   succeeds. If some still fail, keep those in Go and document the numbers.
+
+The opcode hit counters (`mc.counters.opcodeHits[instr.Op]++` at
+`machine_context.go:282`) provide frequency data for step 7 without additional
+instrumentation.
+
+This is tracked in `TODO.md` as **List primitive opcodes**.
 
 ### Per-Candidate Migration Steps
 
@@ -529,13 +665,17 @@ All converted functions are currently registered at `PhaseRuntime|PhaseExpand`. 
 
 ## Summary
 
-| Phase | Functions | Count | Motivation |
-|-------|-----------|-------|------------|
-| 0 | Bootstrap split | — | Infrastructure |
-| 1 | `vector-map`, `vector-for-each`, `string-map`, `string-for-each`, `member`, `assoc` | 6 | Continuation correctness |
-| 2 | `not`, `zero?`, `positive?`, `negative?`, `exact-integer?`, `list?`, `boolean=?`, `symbol=?`, `square` | 9 | Eliminate facades |
-| 3 | `make-list`, `list-copy`, `list-tail`, `reverse`, `length`, `append`, `call-with-port`, `call-with-input-file`, `call-with-output-file` | 9 | Simplify (benchmark-gated) |
-| 4 | 28 CxR accessors | 28 | Eliminate duplication |
-| **Total** | | **52** | |
+| Phase | Functions | Migrated | Kept in Go | Motivation |
+|-------|-----------|----------|------------|------------|
+| 0 | Bootstrap split | — | — | Infrastructure |
+| 1 | `vector-map`, `vector-for-each`, `string-map`, `string-for-each`, `member`, `assoc` | 6 | 0 | Continuation correctness |
+| 2 | `not`, `zero?`, `positive?`, `negative?`, `exact-integer?`, `list?`, `boolean=?`, `symbol=?`, `square` | 9 | 0 | Eliminate facades |
+| 3 | `call-with-port` | 1 | 8 | Simplify (benchmark-gated) |
+| 4 | 28 CxR accessors | 28 | 0 | Eliminate duplication |
+| **Total** | | **44** | **8** | |
 
-Net reduction: ~52 Go primitive implementations replaced by ~120 lines of Scheme.
+Phase 3 kept in Go:
+- 6 list algorithms (`make-list`, `list-copy`, `list-tail`, `reverse`, `length`, `append`): all 4-9× slower in Scheme — ForeignFunction dispatch per element dominates. Unblocked by future list primitive opcodes (see above).
+- `call-with-input-file`, `call-with-output-file`: files extension must be independently loadable without io; Go implementations own their security checks. `callWithFile` single-value bug fixed (`SetValue` → `SetValues`).
+
+Net reduction: 44 Go primitive implementations replaced by ~120 lines of Scheme.
