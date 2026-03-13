@@ -1,9 +1,10 @@
 ;;; state-trace-full.scm — Cross-layer split-state detection
 ;;;
-;;; Uses three goast* layers:
+;;; Uses four goast* layers:
 ;;;   Pass 1 (AST):  Boolean clusters — structs with >=2 bool fields
 ;;;   Pass 2 (AST):  If-chain field sweeps — cascading checks on same receiver
 ;;;   Pass 3 (SSA):  Mutation independence — are clustered fields stored independently?
+;;;   Pass 4 (CFG):  Check ordering — do field reads follow a fixed dominance order?
 ;;;
 ;;; Usage: ./dist/wile -f examples/embedding/goast-query/state-trace-full.scm
 
@@ -53,6 +54,19 @@
     (cond ((null? xs) (reverse seen))
           ((member? (car xs) seen) (loop (cdr xs) seen))
           (else (loop (cdr xs) (cons (car xs) seen))))))
+
+(define (has-char? s c)
+  (let loop ((i 0))
+    (cond ((>= i (string-length s)) #f)
+          ((char=? (string-ref s i) c) #t)
+          (else (loop (+ i 1))))))
+
+;; Generate all ordered pairs from a list (each unordered pair once).
+(define (ordered-pairs lst)
+  (if (null? lst) '()
+    (append
+      (map (lambda (b) (list (car lst) b)) (cdr lst))
+      (ordered-pairs (cdr lst)))))
 
 ;; ══════════════════════════════════════════════════════════
 ;; Pass 1: Boolean Clusters (AST layer)
@@ -267,8 +281,130 @@
 (if (= independence-count 0) (begin (display "  (none found)") (newline)))
 (newline)
 
+;; ══════════════════════════════════════════════════════════
+;; Pass 4: Check Ordering via Dominance (SSA + CFG)
+;;
+;; For each boolean cluster, find functions that access 2+
+;; of the cluster's fields. Build the CFG for each such
+;; function, extract the dominator tree, and check whether
+;; one field's access always dominates the other's.
+;;
+;; If field A's block dominates field B's block, A is
+;; guaranteed to be checked/accessed before B on every
+;; execution path — evidence of a fixed priority ordering.
+;; ══════════════════════════════════════════════════════════
+
+;; For an SSA function, find which basic blocks access cluster fields.
+;; Returns ((field-name . block-index) ...) — one entry per field-addr.
+(define (field-access-sites ssa-func cluster-fields)
+  (let ((blocks (nf ssa-func 'blocks)))
+    (if (not (pair? blocks)) '()
+      (flat-map
+        (lambda (block)
+          (let ((idx (nf block 'index))
+                (instrs (nf block 'instrs)))
+            (if (not (pair? instrs)) '()
+              (filter-map
+                (lambda (instr)
+                  (and (tag? instr 'ssa-field-addr)
+                       (let ((field (nf instr 'field)))
+                         (and (member? field cluster-fields)
+                              (cons field idx)))))
+                instrs))))
+        blocks))))
+
+;; Keep only the first access per field (earliest block encountered).
+(define (first-per-field sites)
+  (let loop ((xs sites) (seen '()) (acc '()))
+    (cond
+      ((null? xs) (reverse acc))
+      ((member? (caar xs) seen) (loop (cdr xs) seen acc))
+      (else (loop (cdr xs)
+                  (cons (caar xs) seen)
+                  (cons (car xs) acc))))))
+
+;; Build CFG + dominator tree and check dominance between field-access blocks.
+;; Returns #f on failure, or a list of dominance results:
+;;   ((field-a block-a field-b block-b a-dom-b? b-dom-a?) ...)
+(define (check-dominance func-name sites)
+  (guard (exn (#t #f))
+    (let* ((cfg (go-cfg target func-name))
+           (dom (go-cfg-dominators cfg))
+           (pairs (ordered-pairs sites)))
+      (map
+        (lambda (pair)
+          (let ((fa (car pair))
+                (fb (cadr pair)))
+            (list (car fa) (cdr fa)
+                  (car fb) (cdr fb)
+                  (go-cfg-dominates? dom (cdr fa) (cdr fb))
+                  (go-cfg-dominates? dom (cdr fb) (cdr fa)))))
+        pairs))))
+
+;; Format a single dominance result as a readable string.
+(define (display-dominance-result r)
+  (let ((field-a (list-ref r 0))
+        (block-a (list-ref r 1))
+        (field-b (list-ref r 2))
+        (block-b (list-ref r 3))
+        (a-dom-b (list-ref r 4))
+        (b-dom-a (list-ref r 5)))
+    (display "      ")
+    (display field-a) (display " [block ") (display block-a)
+    (display "] -> ") (display field-b)
+    (display " [block ") (display block-b) (display "]: ")
+    (cond
+      ((and a-dom-b (not b-dom-a)) (display "dominates"))
+      ((and b-dom-a (not a-dom-b)) (display "dominated-by"))
+      ((and a-dom-b b-dom-a)       (display "same-block"))
+      (else                        (display "no-dominance")))
+    (newline)))
+
+;; ── Pass 4 ───────────────────────────────────────────────
+(display "── Pass 4: Check Ordering (SSA + CFG) ──") (newline)
+(define dominance-count 0)
+(for-each
+  (lambda (cluster)
+    (let* ((struct-name (car cluster))
+           (fields (cadr cluster))
+           ;; Find SSA functions that access 2+ cluster fields
+           (interesting
+             (filter-map
+               (lambda (fn)
+                 (let* ((fname (nf fn 'name))
+                        (sites (field-access-sites fn fields))
+                        (deduped (first-per-field sites)))
+                   (and (>= (length deduped) 2)
+                        (not (has-char? fname #\$))
+                        (list fname deduped))))
+               ssa-funcs)))
+      (if (pair? interesting)
+        (begin
+          (display "  struct ") (display struct-name) (display ":") (newline)
+          (for-each
+            (lambda (entry)
+              (let* ((fname (car entry))
+                     (sites (cadr entry))
+                     (results (check-dominance fname sites)))
+                (if results
+                  (begin
+                    (display "    func ") (display fname) (display ":") (newline)
+                    (for-each
+                      (lambda (r)
+                        (set! dominance-count (+ dominance-count 1))
+                        (display-dominance-result r))
+                      results))
+                  (begin
+                    (display "    func ") (display fname)
+                    (display ": (CFG unavailable)") (newline)))))
+            interesting)))))
+  all-clusters)
+(if (= dominance-count 0) (begin (display "  (none found)") (newline)))
+(newline)
+
 ;; ── Summary ──────────────────────────────────────────────
 (display "── Summary ──") (newline)
 (display "  Boolean clusters:          ") (display (length all-clusters)) (newline)
 (display "  Field sweep chains:        ") (display (length all-sweeps)) (newline)
 (display "  Independent mutation sites: ") (display independence-count) (newline)
+(display "  Dominance orderings:       ") (display dominance-count) (newline)
