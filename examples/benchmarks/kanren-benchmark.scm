@@ -1,4 +1,4 @@
-;;; benchmark.scm - miniKanren benchmark suite for Wile
+;;; kanren-benchmark.scm - miniKanren benchmark suite for Wile
 ;;;
 ;;; Three benchmarks covering distinct hot paths:
 ;;;   1. Zebra puzzle    — deep backtracking, large substitutions (walk/unify)
@@ -6,7 +6,7 @@
 ;;;   3. Relational arith — deep recursion, variable chains (goal application)
 ;;;
 ;;; Usage (from project root):
-;;;   SCHEME_LIBRARY_PATH=lib ./dist/wile --file examples/logic/kanren/benchmark.scm
+;;;   SCHEME_LIBRARY_PATH=lib ./dist/wile --file examples/benchmarks/kanren-benchmark.scm
 
 (import (scheme base)
         (scheme write)
