@@ -1,7 +1,7 @@
 # Procedure Unification Detection
 
 **Status**: Proposed
-**Foundation**: `extensions/goast/` — all five goast layers (see `plans/GO-STATIC-ANALYSIS.md`)
+**Foundation**: [wile-goast](https://github.com/aalpar/wile-goast) — all five goast layers (see `plans/GO-STATIC-ANALYSIS.md`)
 **Dependencies**: None beyond existing goast infrastructure
 **Implementation**: Pure Scheme rule using `(wile goast)` primitives
 
@@ -238,7 +238,7 @@ Full tree edit distance (handling insertions/deletions) is a v2 enhancement for 
 
 ## Existing Prior Art in This Codebase
 
-The `state-trace-full.scm` example (`examples/embedding/goast-query/`) demonstrates the exact multi-layer analysis pattern:
+The `state-trace-full.scm` example (in [wile-goast](https://github.com/aalpar/wile-goast) `examples/goast-query/`) demonstrates the exact multi-layer analysis pattern:
 
 - **Pass 1 (AST):** `walk` + `tag?` + `nf` for structural pattern detection (boolean clusters)
 - **Pass 2 (AST):** If-chain field sweep detection via recursive condition extraction

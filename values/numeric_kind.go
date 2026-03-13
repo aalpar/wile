@@ -18,7 +18,7 @@ package values
 //  6. registry/helpers/value_conv.go  — update ToComplex128, ToFloat64
 //  7. extensions/math/prim_conversion.go — update exact->inexact, number->string, etc.
 //  8. extensions/math/prim_complex.go — update make-rectangular, make-polar, etc.
-//  9. extensions/goast/mapper.go      — update numberToAST if the type maps to a Go literal
+//  9. wile-goast/goast/mapper.go      — update numberToAST if the type maps to a Go literal
 //  10. ffi.go                         — update schemeToReflectValue (line ~300)
 //  11. internal/parser/parser_number.go — if the type can be parsed from source
 //

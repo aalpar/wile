@@ -367,13 +367,9 @@ With the library system enabled (`WithLibraryPaths`), Go extensions import as `(
 | `(wile exceptions)` | Exception handling |
 | `(wile gointerop)` | Go interop primitives |
 | `(wile introspection)` | Reflection and introspection |
-| `(wile goast)` | Go AST as s-expressions (parse, typecheck, format) |
-| `(wile goast ssa)` | Go SSA intermediate representation |
-| `(wile goast callgraph)` | Go call graph (static, CHA, RTA, VTA) |
-| `(wile goast cfg)` | Go control flow graph + dominator tree |
-| `(wile goast lint)` | `go/analysis` framework (~40 analyzers) |
+See [`docs/EXTENSION_LIBRARIES.md`](docs/EXTENSION_LIBRARIES.md) for import syntax and modifiers.
 
-See [`docs/EXTENSION_LIBRARIES.md`](docs/EXTENSION_LIBRARIES.md) for import syntax and modifiers. See [`docs/GO-STATIC-ANALYSIS.md`](docs/GO-STATIC-ANALYSIS.md) for the full Go analysis guide.
+Go static analysis extensions (AST, SSA, CFG, callgraph, lint) have been extracted to [wile-goast](https://github.com/aalpar/wile-goast).
 
 ## Architecture
 
