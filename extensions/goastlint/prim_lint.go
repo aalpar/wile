@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/checker"
 	"golang.org/x/tools/go/packages"
 
 	"github.com/aalpar/wile/extensions/goast"
@@ -102,14 +103,7 @@ func PrimGoAnalyze(mc *machine.MachineContext) error {
 
 	fset := token.NewFileSet()
 	cfg := &packages.Config{
-		Mode: packages.NeedName |
-			packages.NeedFiles |
-			packages.NeedSyntax |
-			packages.NeedTypes |
-			packages.NeedTypesInfo |
-			packages.NeedTypesSizes |
-			packages.NeedImports |
-			packages.NeedDeps,
+		Mode:    packages.LoadAllSyntax,
 		Context: mc.Context(),
 		Fset:    fset,
 	}
@@ -135,27 +129,32 @@ func PrimGoAnalyze(mc *machine.MachineContext) error {
 			"go-analyze: %s: %s", pattern.Value, strings.Join(errs, "; "))
 	}
 
-	// Run analyzers on each loaded package; collect all diagnostics.
-	var allDiags []diagnostic
-	for _, pkg := range pkgs {
-		pkgDiags, runErr := runAnalyzers(pkg, fset, analyzers)
-		if runErr != nil {
-			return runErr
-		}
-		allDiags = append(allDiags, pkgDiags...)
+	graph, analyzeErr := checker.Analyze(analyzers, pkgs, nil)
+	if analyzeErr != nil {
+		return werr.WrapForeignErrorf(errLintRunError,
+			"go-analyze: %s", analyzeErr)
 	}
 
-	// Map diagnostics to s-expressions.
-	result := make([]values.Value, len(allDiags))
-	for i, d := range allDiags {
-		pos := fset.Position(d.diag.Pos)
-		fields := []values.Value{
-			goast.Field("analyzer", goast.Str(d.analyzerName)),
-			goast.Field("pos", goast.Str(pos.String())),
-			goast.Field("message", goast.Str(d.diag.Message)),
-			goast.Field("category", goast.Str(d.diag.Category)),
+	// Collect diagnostics from root actions only. The driver runs
+	// analyzers on dependency packages for fact propagation, but
+	// only root diagnostics are relevant to the user's query.
+	var result []values.Value
+	for _, act := range graph.Roots {
+		if act.Err != nil {
+			return werr.WrapForeignErrorf(errLintRunError,
+				"go-analyze: analyzer %q on %s: %s",
+				act.Analyzer.Name, act.Package.PkgPath, act.Err)
 		}
-		result[i] = goast.Node("diagnostic", fields...)
+		for _, d := range act.Diagnostics {
+			pos := fset.Position(d.Pos)
+			fields := []values.Value{
+				goast.Field("analyzer", goast.Str(act.Analyzer.Name)),
+				goast.Field("pos", goast.Str(pos.String())),
+				goast.Field("message", goast.Str(d.Message)),
+				goast.Field("category", goast.Str(d.Category)),
+			}
+			result = append(result, goast.Node("diagnostic", fields...))
+		}
 	}
 	mc.SetValue(goast.ValueList(result))
 	return nil

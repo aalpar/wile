@@ -25,7 +25,6 @@ MODULE="github.com/aalpar/wile"
 EXCLUDED_PKGS=(
 	"cmd/wile"
 	"internal/repl"
-	"internal/forms"
 	"registry/testhelpers"
 	"examples/embedding"
 	"examples/embedding/source-tracking"

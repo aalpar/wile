@@ -46,7 +46,8 @@ import (
 // analyzerRegistry maps analyzer names to their *analysis.Analyzer.
 // Prerequisites vary: most use inspect; nilness needs buildssa→ctrlflow,
 // lostcancel needs ctrlflow, errorsas needs typeindexanalyzer.
-// The driver's topological sort resolves all prerequisite chains automatically.
+// The checker.Analyze driver resolves all prerequisite chains and
+// cross-package fact propagation automatically.
 var analyzerRegistry = map[string]*analysis.Analyzer{
 	"assign":           assign.Analyzer,
 	"bools":            bools.Analyzer,
