@@ -251,6 +251,57 @@ func TestOpcodeFusion(t *testing.T) {
 	}
 }
 
+// TestPromotedPrimitiveFallback verifies that promoted primitives (eq?,
+// vector?, vector-ref) fall back correctly when their bindings are replaced
+// via set! with a different ForeignClosure. Without the name guard, the
+// inline implementation would run incorrectly for the replacement closure.
+func TestPromotedPrimitiveFallback(t *testing.T) {
+	tests := []struct {
+		name       string
+		code       string
+		wantResult string
+	}{
+		{
+			// eq? replaced with car — same type (*ForeignClosure) but different
+			// name/arity. Without the name guard, inlineEq would run on car's args.
+			name:       "set! eq? to car: fallback runs car correctly",
+			code:       `(let ((original-eq? eq?)) (set! eq? car) (let ((result (eq? '(hello world)))) (set! eq? original-eq?) result))`,
+			wantResult: "hello",
+		},
+		{
+			// eq? replaced with a Scheme closure (non-ForeignClosure).
+			name:       "set! eq? to lambda: fallback runs lambda",
+			code:       `(let ((original-eq? eq?)) (set! eq? (lambda (a b) (+ a b))) (let ((result (eq? 3 4))) (set! eq? original-eq?) result))`,
+			wantResult: "7",
+		},
+		{
+			// vector? replaced with not — different ForeignClosure, same arity (1).
+			name:       "set! vector? to not: fallback runs not correctly",
+			code:       `(let ((original-vector? vector?)) (set! vector? not) (let ((result (vector? #f))) (set! vector? original-vector?) result))`,
+			wantResult: "#t",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			engine, err := NewEngine(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			result, err := engine.Eval(ctx, tt.code)
+			if err != nil {
+				t.Fatalf("eval: %v", err)
+			}
+			got := result.SchemeString()
+			if got != tt.wantResult {
+				t.Errorf("result = %s, want %s", got, tt.wantResult)
+			}
+		})
+	}
+}
+
 // dumpTemplateOpcodes logs all opcodes in a template tree for debugging
 // failed assertions.
 func dumpTemplateOpcodes(t *testing.T, tpl *machine.NativeTemplate, path string) {

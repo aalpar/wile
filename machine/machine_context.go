@@ -554,8 +554,8 @@ func (p *MachineContext) Run() error {
 
 		case OpEqQ:
 			callable := mc.template.cachedBindings[instr.Arg].Value()
-			_, ok := callable.(*ForeignClosure)
-			if !ok {
+			fcls, ok := callable.(*ForeignClosure)
+			if !ok || fcls.name != "eq?" {
 				var err error
 				mc, err = callPromotedFallback(mc, callable, false, 2)
 				if err != nil {
@@ -568,8 +568,8 @@ func (p *MachineContext) Run() error {
 
 		case OpEqQTail:
 			callable := mc.template.cachedBindings[instr.Arg].Value()
-			_, ok := callable.(*ForeignClosure)
-			if !ok {
+			fcls, ok := callable.(*ForeignClosure)
+			if !ok || fcls.name != "eq?" {
 				var err error
 				mc, err = callPromotedFallback(mc, callable, true, 2)
 				if err != nil {
@@ -582,8 +582,8 @@ func (p *MachineContext) Run() error {
 
 		case OpVectorQ:
 			callable := mc.template.cachedBindings[instr.Arg].Value()
-			_, ok := callable.(*ForeignClosure)
-			if !ok {
+			fcls, ok := callable.(*ForeignClosure)
+			if !ok || fcls.name != "vector?" {
 				var err error
 				mc, err = callPromotedFallback(mc, callable, false, 1)
 				if err != nil {
@@ -596,8 +596,8 @@ func (p *MachineContext) Run() error {
 
 		case OpVectorQTail:
 			callable := mc.template.cachedBindings[instr.Arg].Value()
-			_, ok := callable.(*ForeignClosure)
-			if !ok {
+			fcls, ok := callable.(*ForeignClosure)
+			if !ok || fcls.name != "vector?" {
 				var err error
 				mc, err = callPromotedFallback(mc, callable, true, 1)
 				if err != nil {
@@ -610,8 +610,8 @@ func (p *MachineContext) Run() error {
 
 		case OpVectorRef:
 			callable := mc.template.cachedBindings[instr.Arg].Value()
-			_, ok := callable.(*ForeignClosure)
-			if !ok {
+			fcls, ok := callable.(*ForeignClosure)
+			if !ok || fcls.name != "vector-ref" {
 				var err error
 				mc, err = callPromotedFallback(mc, callable, false, 2)
 				if err != nil {
@@ -627,8 +627,8 @@ func (p *MachineContext) Run() error {
 
 		case OpVectorRefTail:
 			callable := mc.template.cachedBindings[instr.Arg].Value()
-			_, ok := callable.(*ForeignClosure)
-			if !ok {
+			fcls, ok := callable.(*ForeignClosure)
+			if !ok || fcls.name != "vector-ref" {
 				var err error
 				mc, err = callPromotedFallback(mc, callable, true, 2)
 				if err != nil {
