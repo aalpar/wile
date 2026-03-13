@@ -65,6 +65,16 @@ Multiple PRs eliminated the remaining per-call allocations identified in the pos
 | Stack.Drain | Zero-copy view eliminates `PopAll` allocation | `stack.go` |
 | Inline continuation evals | Skip stack pool round-trip | `machine_context.go` |
 
+## Opcode Promotion (Active)
+
+See `plans/OPCODE-PROMOTION.md` for full Larceny profiling data and phased plan.
+
+**Phase 1 (list ops):** Promote `null?`, `pair?`, `car`, `cdr` to dedicated opcodes. Same pattern as existing `eq?`/`vector?`/`vector-ref`. Targets takl (17.7M foreign calls, 100% list ops), browse, destruct, deriv, sieve.
+
+**Phase 2 (2-arg arithmetic):** Promote `+`, `-`, `<`, `<=`, `>`, `>=`, `=` for the 2-arg case. Needs type-check-before-call to avoid defer/recover overhead. Targets fib, tak, ackermann, sumfp, diviter.
+
+**Profiling fix:** `AcquireTopLevelContext` now initializes `opcodeHits` (was missing from pool path).
+
 ## Remaining Optimization Opportunities
 
 ### Architectural Changes (Tier 3)

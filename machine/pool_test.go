@@ -114,6 +114,34 @@ func TestSubContextPool_Roundtrip(t *testing.T) {
 	qt.Assert(t, mc2.thread, qt.IsNil)
 }
 
+func TestAcquireTopLevelContext_InitializesOpcodeHits(t *testing.T) {
+	tpl := NewEmptyNativeTemplate()
+	env := environment.NewTopLevelEnvironment().Runtime()
+	mc := AcquireTopLevelContext(context.Background(), tpl, env)
+	defer ReleaseTopLevelContext(mc)
+
+	if opcodeHitsEnabled() {
+		qt.Assert(t, mc.counters.opcodeHits != nil, qt.IsTrue)
+	}
+}
+
+func TestAcquireTopLevelContext_OpcodeHitsZeroedAfterReuse(t *testing.T) {
+	tpl := NewEmptyNativeTemplate()
+	env := environment.NewTopLevelEnvironment().Runtime()
+
+	mc := AcquireTopLevelContext(context.Background(), tpl, env)
+	if mc.counters.opcodeHits != nil {
+		mc.counters.opcodeHits[OpPush] = 42
+	}
+	ReleaseTopLevelContext(mc)
+
+	mc2 := AcquireTopLevelContext(context.Background(), tpl, env)
+	defer ReleaseTopLevelContext(mc2)
+	if mc2.counters.opcodeHits != nil {
+		qt.Assert(t, mc2.counters.opcodeHits[OpPush], qt.Equals, uint64(0))
+	}
+}
+
 func TestReleaseSubContext_ReleasesEvalsStack(t *testing.T) {
 	mc := acquireSubContext()
 	mc.evals = acquireStack()

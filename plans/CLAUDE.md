@@ -27,6 +27,7 @@ When investigating R7RS conformance issues:
 | `CONTINUATION_MARKS.md` | Racket-style per-frame key-value annotations on the continuation chain | Proposed |
 | `REMOVE-SYMBOL-INTERNING.md` | Remove symbol canonicalization, compare by string key | Proposed |
 | `ENVIRONMENT-CLEANUP.md` | Environment package cleanup: constructor duplication, dead delegation, semantic inconsistency | Proposed |
+| `OPCODE-PROMOTION.md` | Promote hot primitives to dedicated opcodes; Larceny profiling data, tiered plan (list ops, then arithmetic) | Profiling complete, Phase 1 ready |
 Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans).
 
 ## Before Starting Work
