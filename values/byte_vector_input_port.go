@@ -32,14 +32,6 @@ type ByteVectorInputPort struct {
 	rdr *bufio.Reader
 }
 
-// NewByteVectorInputPort creates a new input port reading from the given byte slice.
-func NewByteVectorInputPort(reader *bufio.Reader) *ByteVectorInputPort {
-	q := &ByteVectorInputPort{rdr: reader}
-	q.kind = portKindBytevectorInput
-	q.datum = q.rdr
-	return q
-}
-
 // NewByteVectorInputPortFromReader creates a new input port reading from the given byte slice.
 func NewByteVectorInputPortFromReader(reader io.Reader) *ByteVectorInputPort {
 	q := &ByteVectorInputPort{rdr: bufio.NewReader(reader)}
@@ -68,16 +60,7 @@ func (p *ByteVectorInputPort) Datum() *bufio.Reader {
 	return p.rdr
 }
 
-// IsVoid returns true if this port is nil.
+// IsVoid returns true if the port is nil.
 func (p *ByteVectorInputPort) IsVoid() bool {
 	return p == nil
-}
-
-// EqualTo returns true if both ports share the same rdr.
-func (p *ByteVectorInputPort) EqualTo(v Value) bool {
-	other, ok := v.(*ByteVectorInputPort)
-	if ok {
-		return p.rdr == other.rdr
-	}
-	return false
 }

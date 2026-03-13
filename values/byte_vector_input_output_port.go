@@ -85,21 +85,12 @@ func (p *ByteVectorInputOutputPort) ReadByteVector() (*ByteVector, error) {
 	return NewByteVectorFromBytes(b...), nil
 }
 
-// Datum returns the underlying bytes.Buffer.
-func (p *ByteVectorInputOutputPort) Datum() *bytes.Buffer {
-	return p.buf
-}
-
-// IsVoid returns true if this port is nil.
+// IsVoid returns true if the port is nil.
 func (p *ByteVectorInputOutputPort) IsVoid() bool {
 	return p == nil
 }
 
-// EqualTo returns true if both ports share the same buffer.
-func (p *ByteVectorInputOutputPort) EqualTo(v Value) bool {
-	other, ok := v.(*ByteVectorInputOutputPort)
-	if ok {
-		return p.buf == other.buf
-	}
-	return false
+// Datum returns the underlying bytes.Buffer.
+func (p *ByteVectorInputOutputPort) Datum() *bytes.Buffer {
+	return p.buf
 }

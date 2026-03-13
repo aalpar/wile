@@ -70,12 +70,3 @@ func (p *BinaryInputPort) Datum() io.Reader {
 func (p *BinaryInputPort) IsVoid() bool {
 	return p == nil
 }
-
-// EqualTo returns true if both ports wrap the same rdr.
-func (p *BinaryInputPort) EqualTo(v Value) bool {
-	other, ok := v.(*BinaryInputPort)
-	if ok {
-		return p.rdr == other.rdr
-	}
-	return false
-}

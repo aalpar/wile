@@ -32,17 +32,11 @@ type CharacterOutputPort struct {
 	wrt *bufio.Writer
 }
 
-// NewCharacterOutputPort creates a new character input port from an io.Reader.
-func NewCharacterOutputPort(wrt *bufio.Writer) *CharacterOutputPort {
-	q := &CharacterOutputPort{wrt: wrt}
-	q.kind = portKindCharacterOutput
-	q.datum = q.wrt
-	return q
-}
-
 // NewCharacterOutputPortFromWriter creates a new character output port wrapping the given buf.
 func NewCharacterOutputPortFromWriter(wrt io.Writer) *CharacterOutputPort {
-	q := NewCharacterOutputPort(bufio.NewWriter(wrt))
+	q := &CharacterOutputPort{wrt: bufio.NewWriter(wrt)}
+	q.kind = portKindCharacterOutput
+	q.datum = q.wrt
 	q.setCloser(wrt)
 	return q
 }
@@ -78,13 +72,4 @@ func (p *CharacterOutputPort) Datum() io.Writer {
 // IsVoid returns true if the port is nil.
 func (p *CharacterOutputPort) IsVoid() bool {
 	return p == nil
-}
-
-// EqualTo returns true if both ports wrap the same buf.
-func (p *CharacterOutputPort) EqualTo(v Value) bool {
-	other, ok := v.(*CharacterOutputPort)
-	if ok {
-		return p.wrt == other.wrt
-	}
-	return false
 }

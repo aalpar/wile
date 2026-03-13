@@ -71,12 +71,3 @@ func (p *CharacterInputPort) Datum() io.RuneReader {
 func (p *CharacterInputPort) IsVoid() bool {
 	return p == nil
 }
-
-// EqualTo returns true if both ports wrap the same rdr.
-func (p *CharacterInputPort) EqualTo(v Value) bool {
-	other, ok := v.(*CharacterInputPort)
-	if ok {
-		return p.rdr == other.rdr
-	}
-	return false
-}

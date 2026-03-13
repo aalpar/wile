@@ -173,3 +173,10 @@ func TestBytevectorOutputPort_SchemeString(t *testing.T) {
 	s := port.SchemeString()
 	qt.Assert(t, strings.Contains(s, "bytevector-output-port"), qt.IsTrue)
 }
+
+func TestBytevectorPort_CrossTypeEqualTo(t *testing.T) {
+	buf := bytes.NewBuffer(nil)
+	bvo := values.NewByteVectorOutputPortFromWriter(buf)
+	bvb := values.NewByteVectorBufferedOutputPortFromBuffer(buf)
+	qt.Assert(t, bvo.EqualTo(bvb), qt.IsFalse)
+}
