@@ -292,8 +292,13 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 			// recover the caller's env/template/pc after the call.
 			plan.Delete(i+1, i+2)
 			// Replace PullApply with OpCallForeignCached
+			encodedArg := EncodeForeignCallArg(bindingIdx, fcls.paramCount)
+			callOp := OpCallForeignCached
+			if fcls.isVariadic {
+				callOp = OpCallForeignCachedVar
+			}
 			plan.Replace(pullIdx, pullIdx+1,
-				[]Instruction{{Op: OpCallForeignCached, Arg: bindingIdx}},
+				[]Instruction{{Op: callOp, Arg: encodedArg}},
 				tpl.sourceRefs[pullIdx],
 			)
 			claimed[pullIdx] = true
@@ -369,8 +374,13 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 			// Delete PushCachedBinding [i, i+1)
 			plan.Delete(i, i+1)
 			// Replace PullApply with OpCallForeignCachedTail
+			encodedArg := EncodeForeignCallArg(bindingIdx, fcls.paramCount)
+			callOp := OpCallForeignCachedTail
+			if fcls.isVariadic {
+				callOp = OpCallForeignCachedVarTail
+			}
 			plan.Replace(pullIdx, pullIdx+1,
-				[]Instruction{{Op: OpCallForeignCachedTail, Arg: bindingIdx}},
+				[]Instruction{{Op: callOp, Arg: encodedArg}},
 				tpl.sourceRefs[pullIdx],
 			)
 			claimed[pullIdx] = true

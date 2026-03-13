@@ -102,19 +102,19 @@ func TestOpcodeFusion(t *testing.T) {
 		{
 			name:       "non-tail foreign call fused",
 			code:       "(+ 1 2)",
-			wantOps:    []machine.OpCode{machine.OpCallForeignCached},
+			wantOps:    []machine.OpCode{machine.OpCallForeignCachedVar},
 			wantResult: "3",
 		},
 		{
 			name:       "tail foreign call fused",
 			code:       "((lambda () (+ 1 2)))",
-			wantOps:    []machine.OpCode{machine.OpCallForeignCachedTail},
+			wantOps:    []machine.OpCode{machine.OpCallForeignCachedVarTail},
 			wantResult: "3",
 		},
 		{
 			name:       "tail foreign call with args",
 			code:       "((lambda (x y) (+ x y)) 3 4)",
-			wantOps:    []machine.OpCode{machine.OpCallForeignCachedTail},
+			wantOps:    []machine.OpCode{machine.OpCallForeignCachedVarTail},
 			wantResult: "7",
 		},
 
@@ -161,37 +161,37 @@ func TestOpcodeFusion(t *testing.T) {
 		{
 			name:       "branch over fused consequent (if-then)",
 			code:       "(if #t (+ 2 3) (+ 4 5))",
-			wantOps:    []machine.OpCode{machine.OpCallForeignCached},
+			wantOps:    []machine.OpCode{machine.OpCallForeignCachedVar},
 			wantResult: "5",
 		},
 		{
 			name:       "branch over fused consequent (if-else)",
 			code:       "(if #f (+ 2 3) (+ 4 5))",
-			wantOps:    []machine.OpCode{machine.OpCallForeignCached},
+			wantOps:    []machine.OpCode{machine.OpCallForeignCachedVar},
 			wantResult: "9",
 		},
 		{
 			name:       "fused eq? test + fused consequent call",
 			code:       "(if (eq? 'a 'a) (+ 2 3) (+ 4 5))",
-			wantOps:    []machine.OpCode{machine.OpEqQ, machine.OpCallForeignCached},
+			wantOps:    []machine.OpCode{machine.OpEqQ, machine.OpCallForeignCachedVar},
 			wantResult: "5",
 		},
 		{
 			name:       "fused eq? false + fused alternative call",
 			code:       "(if (eq? 'a 'b) (+ 2 3) (+ 4 5))",
-			wantOps:    []machine.OpCode{machine.OpEqQ, machine.OpCallForeignCached},
+			wantOps:    []machine.OpCode{machine.OpEqQ, machine.OpCallForeignCachedVar},
 			wantResult: "9",
 		},
 		{
 			name:       "nested fused calls",
 			code:       "(+ (+ 1 2) (+ 3 4))",
-			wantOps:    []machine.OpCode{machine.OpCallForeignCached},
+			wantOps:    []machine.OpCode{machine.OpCallForeignCachedVar},
 			wantResult: "10",
 		},
 		{
 			name:       "let with multiple fused bindings",
 			code:       "(let ((a (+ 1 2)) (b (+ 3 4))) (+ a b))",
-			wantOps:    []machine.OpCode{machine.OpCallForeignCached},
+			wantOps:    []machine.OpCode{machine.OpCallForeignCachedVar},
 			wantResult: "10",
 		},
 		{
@@ -203,7 +203,7 @@ func TestOpcodeFusion(t *testing.T) {
 		{
 			name:       "named let: recursive calls with multiple fused sub-calls",
 			code:       "(let loop ((n 10) (acc 0)) (if (<= n 0) acc (loop (- n 1) (+ acc n))))",
-			wantOps:    []machine.OpCode{machine.OpCallForeignCached},
+			wantOps:    []machine.OpCode{machine.OpCallForeignCachedVar},
 			wantResult: "55",
 		},
 	}

@@ -73,8 +73,10 @@ const (
 
 	// Wave 7: direct foreign call operations (Arg = index into cachedBindings)
 	// Emitted by peephole only — compiler never produces these.
-	OpCallForeignCached     // Non-tail: call ForeignClosure, then mc.pc++
-	OpCallForeignCachedTail // Tail: call ForeignClosure, then returnImmediate()
+	OpCallForeignCached        // Non-tail: call ForeignClosure, then mc.pc++
+	OpCallForeignCachedTail    // Tail: call ForeignClosure, then returnImmediate()
+	OpCallForeignCachedVar     // Variadic: call ForeignClosure, then mc.pc++
+	OpCallForeignCachedVarTail // Variadic tail: call ForeignClosure, then returnImmediate()
 
 	// Wave 8: general call fusion (Arg = same encoding as PushLocal/PushCachedBinding)
 	// Fused PushLocal/PushCachedBinding + PullApply for non-foreign callables.
@@ -119,43 +121,45 @@ type opcodeInfo struct {
 // isBranch: opcode's Arg is a relative PC offset that must be adjusted
 // when instructions are removed or inserted by the edit plan.
 var opcodeTable = [opCount]opcodeInfo{
-	OpInvalid:               {name: "Invalid"},
-	OpPush:                  {name: "Push"},
-	OpPop:                   {name: "Pop", writesValue: true},
-	OpPull:                  {name: "Pull", writesValue: true},
-	OpLoadVoid:              {name: "LoadVoid", writesValue: true},
-	OpDrop:                  {name: "Drop"},
-	OpPopEnv:                {name: "PopEnv"},
-	OpApply:                 {name: "Apply"},
-	OpUnpackListToStack:     {name: "UnpackListToStack"},
-	OpRestoreContinuation:   {name: "RestoreContinuation"},
-	OpBranchOnFalseValue:    {name: "BranchOnFalseValue", isBranch: true},
-	OpBranch:                {name: "Branch", isBranch: true},
-	OpSaveContinuation:      {name: "SaveContinuation", isBranch: true},
-	OpLoadLiteral:           {name: "LoadLiteral", writesValue: true},
-	OpLoadGlobal:            {name: "LoadGlobal", writesValue: true},
-	OpStoreGlobal:           {name: "StoreGlobal"},
-	OpPeekK:                 {name: "PeekK", writesValue: true},
-	OpLoadLocal:             {name: "LoadLocal", writesValue: true},
-	OpStoreLocal:            {name: "StoreLocal"},
-	OpPushLiteral:           {name: "PushLiteral"},
-	OpPushGlobal:            {name: "PushGlobal"},
-	OpPushLocal:             {name: "PushLocal"},
-	OpPullApply:             {name: "PullApply"},
-	OpMakeClosure:           {name: "MakeClosure", writesValue: true},
-	OpLoadCachedBinding:     {name: "LoadCachedBinding", writesValue: true},
-	OpPushCachedBinding:     {name: "PushCachedBinding"},
-	OpCallForeignCached:     {name: "CallForeignCached"},
-	OpCallForeignCachedTail: {name: "CallForeignCachedTail"},
-	OpCallLocal:             {name: "CallLocal"},
-	OpCallCachedBinding:     {name: "CallCachedBinding"},
-	OpEqQ:                   {name: "EqQ"},
-	OpEqQTail:               {name: "EqQTail"},
-	OpVectorQ:               {name: "VectorQ"},
-	OpVectorQTail:           {name: "VectorQTail"},
-	OpVectorRef:             {name: "VectorRef"},
-	OpVectorRefTail:         {name: "VectorRefTail"},
-	OpComplex:               {name: "Complex"},
+	OpInvalid:                  {name: "Invalid"},
+	OpPush:                     {name: "Push"},
+	OpPop:                      {name: "Pop", writesValue: true},
+	OpPull:                     {name: "Pull", writesValue: true},
+	OpLoadVoid:                 {name: "LoadVoid", writesValue: true},
+	OpDrop:                     {name: "Drop"},
+	OpPopEnv:                   {name: "PopEnv"},
+	OpApply:                    {name: "Apply"},
+	OpUnpackListToStack:        {name: "UnpackListToStack"},
+	OpRestoreContinuation:      {name: "RestoreContinuation"},
+	OpBranchOnFalseValue:       {name: "BranchOnFalseValue", isBranch: true},
+	OpBranch:                   {name: "Branch", isBranch: true},
+	OpSaveContinuation:         {name: "SaveContinuation", isBranch: true},
+	OpLoadLiteral:              {name: "LoadLiteral", writesValue: true},
+	OpLoadGlobal:               {name: "LoadGlobal", writesValue: true},
+	OpStoreGlobal:              {name: "StoreGlobal"},
+	OpPeekK:                    {name: "PeekK", writesValue: true},
+	OpLoadLocal:                {name: "LoadLocal", writesValue: true},
+	OpStoreLocal:               {name: "StoreLocal"},
+	OpPushLiteral:              {name: "PushLiteral"},
+	OpPushGlobal:               {name: "PushGlobal"},
+	OpPushLocal:                {name: "PushLocal"},
+	OpPullApply:                {name: "PullApply"},
+	OpMakeClosure:              {name: "MakeClosure", writesValue: true},
+	OpLoadCachedBinding:        {name: "LoadCachedBinding", writesValue: true},
+	OpPushCachedBinding:        {name: "PushCachedBinding"},
+	OpCallForeignCached:        {name: "CallForeignCached"},
+	OpCallForeignCachedTail:    {name: "CallForeignCachedTail"},
+	OpCallForeignCachedVar:     {name: "CallForeignCachedVar"},
+	OpCallForeignCachedVarTail: {name: "CallForeignCachedVarTail"},
+	OpCallLocal:                {name: "CallLocal"},
+	OpCallCachedBinding:        {name: "CallCachedBinding"},
+	OpEqQ:                      {name: "EqQ"},
+	OpEqQTail:                  {name: "EqQTail"},
+	OpVectorQ:                  {name: "VectorQ"},
+	OpVectorQTail:              {name: "VectorQTail"},
+	OpVectorRef:                {name: "VectorRef"},
+	OpVectorRefTail:            {name: "VectorRefTail"},
+	OpComplex:                  {name: "Complex"},
 }
 
 // String returns the human-readable name of the opcode.

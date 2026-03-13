@@ -106,6 +106,28 @@ func TestLocalIndexBitPackingEdgeCases(t *testing.T) {
 	}
 }
 
+func TestEncodeForeignCallArg(t *testing.T) {
+	tcs := []struct {
+		name       string
+		bindingIdx int32
+		paramCount int
+	}{
+		{name: "zero/zero", bindingIdx: 0, paramCount: 0},
+		{name: "small", bindingIdx: 5, paramCount: 2},
+		{name: "max binding", bindingIdx: 0xFFFF, paramCount: 3},
+		{name: "max params", bindingIdx: 42, paramCount: 255},
+		{name: "both max", bindingIdx: 0xFFFF, paramCount: 255},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			encoded := EncodeForeignCallArg(tc.bindingIdx, tc.paramCount)
+			gotIdx, gotPC := DecodeForeignCallArg(encoded)
+			qt.Assert(t, gotIdx, qt.Equals, tc.bindingIdx)
+			qt.Assert(t, gotPC, qt.Equals, tc.paramCount)
+		})
+	}
+}
+
 func TestOperationToInstructionWave3(t *testing.T) {
 	c := qt.New(t)
 	li := environment.NewLocalIndex(7, 4)

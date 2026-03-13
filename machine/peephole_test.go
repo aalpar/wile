@@ -1085,7 +1085,7 @@ func TestFusePromotedPrimitives(t *testing.T) {
 			},
 			cachedBindings: []*environment.Binding{makeNamedForeignBinding("eq?", 2)},
 			wantOps:        []OpCode{OpSaveContinuation, OpPushLocal, OpCallForeignCached},
-			wantArg:        map[int]int32{0: 3, 1: 1, 2: 0},
+			wantArg:        map[int]int32{0: 3, 1: 1, 2: EncodeForeignCallArg(0, 2)},
 		},
 		{
 			name: "non-promoted foreign: falls back to CallForeignCached",
@@ -1099,7 +1099,7 @@ func TestFusePromotedPrimitives(t *testing.T) {
 			},
 			cachedBindings: []*environment.Binding{makeNamedForeignBinding("car", 1)},
 			wantOps:        []OpCode{OpSaveContinuation, OpPushLocal, OpCallForeignCached},
-			wantArg:        map[int]int32{0: 3, 1: 1, 2: 0},
+			wantArg:        map[int]int32{0: 3, 1: 1, 2: EncodeForeignCallArg(0, 1)},
 		},
 	}
 

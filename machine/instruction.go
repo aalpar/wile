@@ -40,6 +40,11 @@ func (instr Instruction) String() string {
 		slot, depth := DecodeLocalIndex(instr.Arg)
 		return fmt.Sprintf("%s slot=%d depth=%d", instr.Op, slot, depth)
 	}
+	if instr.Op == OpCallForeignCached || instr.Op == OpCallForeignCachedTail ||
+		instr.Op == OpCallForeignCachedVar || instr.Op == OpCallForeignCachedVarTail {
+		bindingIdx, paramCount := DecodeForeignCallArg(instr.Arg)
+		return fmt.Sprintf("%s binding=%d params=%d", instr.Op, bindingIdx, paramCount)
+	}
 	if instr.Arg != 0 {
 		return fmt.Sprintf("%s %d", instr.Op, instr.Arg)
 	}
@@ -77,4 +82,20 @@ func DecodeLocalIndex(arg int32) (slot, depth int) {
 	slot = int(int16(arg))
 	depth = int(int16(arg >> 16))
 	return
+}
+
+// EncodeForeignCallArg packs a cachedBindings index and paramCount into
+// a single int32 for OpCallForeignCached instructions.
+//
+//	bits  0-15: cachedBindings index (0..65535)
+//	bits 16-23: paramCount (0..255)
+//	bits 24-31: reserved
+func EncodeForeignCallArg(bindingIdx int32, paramCount int) int32 {
+	return (bindingIdx & 0xFFFF) | int32(paramCount&0xFF)<<16
+}
+
+// DecodeForeignCallArg unpacks the cachedBindings index and paramCount
+// from a bit-packed Instruction.Arg.
+func DecodeForeignCallArg(arg int32) (bindingIdx int32, paramCount int) {
+	return arg & 0xFFFF, int(arg>>16) & 0xFF
 }

@@ -191,9 +191,17 @@ func instructionToOperation(instr Instruction) Operation {
 	// --- Wave 7: direct foreign call operations ---
 	// Decomposed back to LoadCachedBinding for test assertions.
 	case OpCallForeignCached:
-		return NewOperationLoadCachedBinding(instr.Arg)
+		bindingIdx, _ := DecodeForeignCallArg(instr.Arg)
+		return NewOperationLoadCachedBinding(bindingIdx)
 	case OpCallForeignCachedTail:
-		return NewOperationLoadCachedBinding(instr.Arg)
+		bindingIdx, _ := DecodeForeignCallArg(instr.Arg)
+		return NewOperationLoadCachedBinding(bindingIdx)
+	case OpCallForeignCachedVar:
+		bindingIdx, _ := DecodeForeignCallArg(instr.Arg)
+		return NewOperationLoadCachedBinding(bindingIdx)
+	case OpCallForeignCachedVarTail:
+		bindingIdx, _ := DecodeForeignCallArg(instr.Arg)
+		return NewOperationLoadCachedBinding(bindingIdx)
 
 	// --- Wave 8: general call fusion ---
 	// Decomposed back to their original unfused forms for test assertions.

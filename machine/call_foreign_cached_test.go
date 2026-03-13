@@ -70,7 +70,7 @@ func TestOpCallForeignCached(t *testing.T) {
 				litIdx4 := tpl.MaybeAppendLiteral(values.NewInteger(4))
 				tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litIdx3)})
 				tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litIdx4)})
-				tpl.AppendInstruction(Instruction{Op: OpCallForeignCached, Arg: cbIdx})
+				tpl.AppendInstruction(Instruction{Op: OpCallForeignCached, Arg: EncodeForeignCallArg(cbIdx, 2)})
 
 				return tpl, env
 			},
@@ -90,14 +90,14 @@ func TestOpCallForeignCached(t *testing.T) {
 				litIdx6 := tpl.MaybeAppendLiteral(values.NewInteger(6))
 				tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litIdx5)})
 				tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litIdx6)})
-				tpl.AppendInstruction(Instruction{Op: OpCallForeignCachedTail, Arg: cbIdx})
+				tpl.AppendInstruction(Instruction{Op: OpCallForeignCachedTail, Arg: EncodeForeignCallArg(cbIdx, 2)})
 
 				return tpl, env
 			},
 			wantValue: values.NewInteger(11),
 		},
 		{
-			name: "arity error: too few args",
+			name: "arity error via mismatch: too few args",
 			setupTpl: func() (*NativeTemplate, *environment.EnvironmentFrame) {
 				env := environment.NewTopLevelEnvironment().Runtime()
 				fcls := foreignAddClosure() // expects 2 args
@@ -111,7 +111,12 @@ func TestOpCallForeignCached(t *testing.T) {
 				// Push only 1 arg.
 				litIdx := tpl.MaybeAppendLiteral(values.NewInteger(1))
 				tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litIdx)})
-				tpl.AppendInstruction(Instruction{Op: OpCallForeignCached, Arg: cbIdx})
+				// Encode paramCount=1 (doesn't match closure's 2) → mismatch path.
+				// Mismatch calls checkArity(fcls.paramCount=2, false, len(vs)=1) → error.
+				tpl.AppendInstruction(Instruction{
+					Op:  OpCallForeignCached,
+					Arg: EncodeForeignCallArg(cbIdx, 1),
+				})
 
 				return tpl, env
 			},
@@ -154,7 +159,7 @@ func TestOpCallForeignCached(t *testing.T) {
 				tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litIdx10)})
 				tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litIdx20)})
 				tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litIdx30)})
-				tpl.AppendInstruction(Instruction{Op: OpCallForeignCached, Arg: cbIdx})
+				tpl.AppendInstruction(Instruction{Op: OpCallForeignCachedVar, Arg: EncodeForeignCallArg(cbIdx, 2)})
 
 				return tpl, env
 			},
@@ -173,12 +178,61 @@ func TestOpCallForeignCached(t *testing.T) {
 				// SaveContinuation for non-tail; offset 2 = one past CallForeignCached.
 				tpl.AppendInstruction(Instruction{Op: OpSaveContinuation, Arg: 2})
 				// No args — 0-param closure.
-				tpl.AppendInstruction(Instruction{Op: OpCallForeignCached, Arg: cbIdx})
+				tpl.AppendInstruction(Instruction{Op: OpCallForeignCached, Arg: EncodeForeignCallArg(cbIdx, 0)})
 
 				return tpl, env
 			},
 			// The error gets wrapped as ErrExceptionEscape by applyCallableError,
 			// so we check for the exception escape wrapper, not the raw sentinel.
+			wantErr: werr.ErrNotAProcedure,
+		},
+		{
+			name: "mismatch: set! to different-arity ForeignClosure",
+			setupTpl: func() (*NativeTemplate, *environment.EnvironmentFrame) {
+				env := environment.NewTopLevelEnvironment().Runtime()
+				fcls := foreignAddClosure() // 2 params
+				bd := environment.NewBinding(fcls, environment.BindingTypeVariable)
+
+				tpl := NewNativeTemplate(0, 0, false)
+				cbIdx := tpl.AppendCachedBinding(bd)
+
+				// Replace binding with 0-param error closure at "runtime".
+				bd.SetValue(foreignErrorClosure())
+
+				tpl.AppendInstruction(Instruction{Op: OpSaveContinuation, Arg: 2})
+				// Push 0 args (matching the replacement closure).
+				tpl.AppendInstruction(Instruction{
+					Op:  OpCallForeignCached,
+					Arg: EncodeForeignCallArg(cbIdx, 2), // compiled for 2 params
+				})
+
+				return tpl, env
+			},
+			// paramCount mismatch (0 != 2) → mismatch path.
+			// checkArity(0, false, 0) passes. foreignErrorClosure returns error.
+			wantErr: werr.ErrNotAProcedure,
+		},
+		{
+			name: "reassigned: binding holds non-ForeignClosure",
+			setupTpl: func() (*NativeTemplate, *environment.EnvironmentFrame) {
+				env := environment.NewTopLevelEnvironment().Runtime()
+				fcls := foreignAddClosure()
+				bd := environment.NewBinding(fcls, environment.BindingTypeVariable)
+
+				tpl := NewNativeTemplate(0, 0, false)
+				cbIdx := tpl.AppendCachedBinding(bd)
+
+				// Replace with non-callable at "runtime".
+				bd.SetValue(values.NewInteger(42))
+
+				tpl.AppendInstruction(Instruction{Op: OpSaveContinuation, Arg: 2})
+				tpl.AppendInstruction(Instruction{
+					Op:  OpCallForeignCached,
+					Arg: EncodeForeignCallArg(cbIdx, 2),
+				})
+
+				return tpl, env
+			},
 			wantErr: werr.ErrNotAProcedure,
 		},
 	}

@@ -520,6 +520,20 @@ func (p *MachineContext) Run() error {
 				return err
 			}
 
+		case OpCallForeignCachedVar:
+			var err error
+			mc, err = callForeignCachedVar(mc, instr, false)
+			if err != nil {
+				return err
+			}
+
+		case OpCallForeignCachedVarTail:
+			var err error
+			mc, err = callForeignCachedVar(mc, instr, true)
+			if err != nil {
+				return err
+			}
+
 		// --- Wave 8: general call fusion ---
 
 		case OpCallLocal:
