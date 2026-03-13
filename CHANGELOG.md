@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Extract Go static analysis extensions (`goast`, `goastssa`, `goastcfg`, `goastcg`, `goastlint`) to [wile-goast](https://github.com/aalpar/wile-goast) — removes `golang.org/x/tools` dependency from core interpreter (#492)
+
 ## [1.6.1] - 2026-03-12
 
 ### Fixed
