@@ -137,6 +137,7 @@ func AcquireTopLevelContext(ctx context.Context, tpl *NativeTemplate, env *envir
 	mc.env = env
 	mc.template = tpl
 	mc.evals = acquireStack()
+	mc.counters.opcodeHits = newOpcodeHits()
 	return mc
 }
 
