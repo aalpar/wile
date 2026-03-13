@@ -7,7 +7,7 @@ TODO
 
 **Version**: v1.5.0 (released)
 **Core Language**: R7RS-small complete with hygienic macros, composable continuations, numeric tower
-**Extensions**: 10 extension packages — 7 public (files, math, system, threads, exceptions, gointerop, introspection), 3 internal (io, eval, all); all importable as R7RS `(wile <name>)` libraries
+**Extensions**: 10 extension packages — 7 public (files, math, system, threads, exceptions, gointerop, introspection), 3 internal (io, eval, all); all importable as R7RS `(wile <name>)` libraries. Go static analysis extensions extracted to [wile-goast](https://github.com/aalpar/wile-goast).
 **Examples**: 76 examples across 12 categories, 21 Gabriel benchmarks, Schelog
 **Tests**: Go test suite comprehensive; Scheme test suite: 3,248 lines across 11 files (strings, characters, ports, numbers, exceptions, lazy, records, eval, control, macros) + 915-test R7RS conformance suite
 **Libraries**: (chibi test), (chibi optional), (chibi diff), (chibi term ansi), (srfi 1) complete
@@ -55,7 +55,6 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 - [x] **internal/forms tests** [Medium, S]: `internal/forms/form_spec.go` (105 lines) is the only internal package with zero test files. Central registry used by `validate` and `machine`. Add `form_spec_test.go` covering registration, duplicate detection, and lookup miss behavior. Complete in #452.
 - [x] **Expander time continuation decomposition** [Medium, M]: Split 1,327-line `expander_time_continuation.go` into 4 files: `expander_let_syntax.go` (let-syntax/letrec-syntax), `expander_primitive_forms.go` (if, begin, set!, define, import, etc.), `expander_lambda.go` (lambda, case-lambda, helpers), core dispatch remaining in original file.
 - [x] **Quasiquote/quasisyntax duplication** [Medium, M]: Extracted shared `expandQuasi`, `expandQuasiList`, `expandQuasiListWithSplice` into `machine/quasi_expand.go` with `quasiKeywords` config struct. Fixed latent `list*` bug in quasisyntax improper list expansion (replaced with nested `cons`).
-- [x] **goast/unmapper.go split** [Medium, S]: Split 1,277-line `unmapper.go` into 5 files by AST node category: dispatch+helpers, decl, stmt, expr, types. PR #465.
 - [x] **Pooling contract documentation** [Medium, S]: `machine/pool.go` has 4 global pools (stack, sub-context, continuation, env-frame). Continuation frames pooled only on normal return; `call/cc` escapes leave frames for GC via `MarkChainShared`. Documented in `docs/dev/POOLING.md`.
 
 ### Low Priority
@@ -106,7 +105,6 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 - [ ] **Debugger / DAP integration** [Tooling]: Debug Adapter Protocol. Inline traps + snap-to-next designs ready in `plans/DEBUGGER.md`
 - [ ] **POSIX API / SRFI-170** [Standard library, 10 phases]: Comprehensive OS access — stat, permissions, links, temp files, env vars, subprocess, signals, user/group, terminal, error handling.
 - [ ] **Go FFI Phase 3 — Plugin support** [Embedding]: Dynamic extension loading via registry pattern.
-- [ ] **Procedure unification detection** [Static analysis, goast rule]: Scheme rule using `(wile goast)` to detect function pairs that are candidates for unification — structurally similar functions differing only in parameterizable ways (type names, literal values, identifiers). Four passes: enumerate candidates (group by signature shape), recursive AST diff, classify diffs (type/literal/identifier/structural), score and report. Uses AST + type annotations (`go-typecheck-package`), not SSA — type differences are localized at the AST level but diffuse through every SSA instruction. Builds on the `walk`/`nf`/`tag?` infrastructure from `state-trace-full.scm`. `plans/UNIFICATION-DETECTION.md`
 
 ---
 
@@ -136,10 +134,6 @@ No demand signal. Speculative or research-only.
 - [ ] **Foreign Stack trace entry in stack traces that cross from Native -> Foreign -> Native callback.**
 - [ ] **Area for blog articles** Git blog area in repo
 - [ ] **Finish blog article** Finish blog article on appropriateness of Scheme for sandboxing.
-- [x] **Go AST extension Phase 2 — Advanced** [Standard library, S]: Concurrency (`GoStmt`, `DeferStmt`, `SelectStmt`, `CommClause`), switch (`SwitchStmt`, `TypeSwitchStmt`, `CaseClause`), `SliceExpr`, `TypeAssertExpr`, `ChanType`, `Ellipsis`, `LabeledStmt`. ~12 additional node types. `plans/GO-AST.md`
-- [x] **Go AST extension Phase 3 — Comments & generics** [Standard library, S]: `Comment`/`CommentGroup` attachment for round-trip structural fidelity. `BadExpr`/`BadStmt`/`BadDecl` for error recovery. `IndexListExpr` for generics. `plans/GO-AST.md`
-- [x] **Go AST: file-level comment rebuild** [Standard library, S]: Standalone comments (between decls, end-of-file) were dropped during round-trip. Fixed by interleaving `(comment-group ...)` entries in the `decls` list during mapping; the mapper classifies groups by pointer identity against Doc/Comment fields, emitting unattached groups at their source positions. `plans/GO-AST.md`
-- [ ] **Go AST: consolidate list iteration** [Refactoring, S]: 8 sites in the goast unmapper hand-unroll the same Scheme-list iteration (IsFalse, Tuple cast, Pair cast, cdr Tuple cast). `forEachSexpr` abstracts the callback shape; the collect-into-slice shape (`unmapExprList`, `unmapStmtList`, `unmapStringList`, `unmapFieldList`, `unmapDeclList`, `stringsToCommentGroup`, `unmapList[T]`) is still hand-unrolled. Unify via a `collectSexpr[T]` built on `forEachSexpr`, preserving per-site error context.
 - [ ] **Implement let-syntax*** [Core language, S]: Implement `let-syntax*`.
 - [x] **Native forms migration** [Refactoring, M]: 44 of 52 done. Phase 3 complete: `call-with-port` migrated to Scheme in io extension (capturable continuation frames); `callWithFile` single-value bug fixed; all 6 list algorithms benchmarked and kept in Go (4-9× slower on short lists; all exceed 20% gate — per-element Scheme VM dispatch dominates); `call-with-input-file`/`call-with-output-file` kept in Go (files extension must load without io). Benchmark data in `plans/NATIVE-FORMS-MIGRATION.md`.
 - [ ] **User labels/tags to distinguish FS resolvers** Use tags or labels to distinguish bootstrap loadee from include/library loaders in fileResolver.
@@ -148,4 +142,3 @@ No demand signal. Speculative or research-only.
 - [ ] **Optimize hot-path ForeignFunction calls** [Performance, M]: 6 list algorithms are 4-9× slower in Scheme because `car`/`cdr`/`null?`/`cons`/fixnum `+`/`<` pay full ForeignFunction dispatch overhead per element (arity check, `bindArgs`, env swap, indirect call). Two approaches to explore: **(A) Promoted opcodes** — add `OpCar`/`OpCdr`/`OpNullQ`/`OpCons`/`OpFixnumAdd`/`OpFixnumLT` inline in `Run()` (prior art: `OpEqQ`/`OpVectorQ`/`OpVectorRef`); risk is icache pressure from 12 new switch cases. **(B) Lightweight cached call** — specialize `callForeignCached` to skip `bindArgs`/env-swap/arity-check when compiler knows the callee; args read from stack view instead of environment bindings; 1 new opcode (`OpCallForeignDirect` + tail) instead of 12. Evaluation protocol and Scheme migration re-attempt documented in `plans/NATIVE-FORMS-MIGRATION.md`. Also subsumes the narrower CxR opcode idea.
 - [ ] **Disassembler** Implement a disassembler for Wile
 - [x] **Reflection primitives** [Runtime]: `procedure-arity`, `procedure-name`, `procedure-source-location`, `procedure-bound-symbols`, `procedure-type` in `registry/core/`.
-- [x] **Go AST extension Phase 1 — Core** [Standard library, M]: Extension (`extensions/goast/`, `(wile goast)`) wrapping `go/ast`, `go/parser`, `go/token`, `go/format`. S-expression alist representation. ~28 node types (declarations, statements, expressions, basic types). All 5 primitives (`go-parse-file`, `go-parse-string`, `go-parse-expr`, `go-format`, `go-node-type`). Bidirectional mapper + round-trip tests. `plans/GO-AST.md`
