@@ -16,18 +16,14 @@ When investigating R7RS conformance issues:
 | File | Contents | Status |
 |------|----------|--------|
 | `PERFORMANCE.md` | Allocation history, fused lexing research, Tier 3 architectural changes | Tier 1-2 complete; Tier 3 + fused lexing open |
-| `SECURITY.md` | Opcode resource limits | Phases 1-6 done, resource limits proposed |
+| `SECURITY.md` | Extension-level sandboxing, authorization framework, opcode resource limits | Phases 1-6 done, resource limits proposed |
 | `MACRO_SYSTEM.md` | ER macro transformer, hygiene debugging, macro expansion tracing | Proposed |
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |
 | `ARCHITECTURE.md` | Dialect system, module decomposition, plugin shadowing | Open items remain |
-| `FIX-GUARD-MULTIPLE-VALUES.md` | `guard` body drops multiple values — `call-with-values` fix | Draft |
-| `FIX-TUPLE-FOREACH-NIL.md` | Tuple ForEach nil returns Void instead of EmptyList | Draft |
-| `UNIFY-ESCAPE-MECHANISMS.md` | Unified `call-with-exit` and prompt/abort escape paths | Completed (#418) |
-| `MACHINE-TECH-DEBT.md` | Machine package debt: arity dedup, expander decomposition, letrec* unification, file splits | Complete (#444) |
 | `CONTINUATION_MARKS.md` | Racket-style per-frame key-value annotations on the continuation chain | Proposed |
 | `REMOVE-SYMBOL-INTERNING.md` | Remove symbol canonicalization, compare by string key | Proposed |
-| `ENVIRONMENT-CLEANUP.md` | Environment package cleanup: constructor duplication, dead delegation, semantic inconsistency | Proposed |
-| `OPCODE-PROMOTION.md` | Promote hot primitives to dedicated opcodes; Larceny profiling data, tiered plan (list ops, then arithmetic) | Phase 1+2 complete (#497, #498); Phase 3 open |
+| `ENVIRONMENT-CLEANUP.md` | Environment package cleanup: constructor duplication, dead delegation, semantic inconsistency | Proposed (Task 6 superseded) |
+| `OPCODE-PROMOTION.md` | Promote hot primitives to dedicated opcodes; Larceny profiling data, tiered plan | Phase 1+2 complete (#497, #498); Phase 3 open |
 Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans).
 
 ## Before Starting Work
