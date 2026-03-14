@@ -65,15 +65,33 @@ Multiple PRs eliminated the remaining per-call allocations identified in the pos
 | Stack.Drain | Zero-copy view eliminates `PopAll` allocation | `stack.go` |
 | Inline continuation evals | Skip stack pool round-trip | `machine_context.go` |
 
-## Opcode Promotion (Active)
+## Completed: Opcode Promotion (Phase 1+2)
 
-See `plans/OPCODE-PROMOTION.md` for full Larceny profiling data and phased plan.
+**Date:** 2026-03-13
 
-**Phase 1 (list ops):** Promote `null?`, `pair?`, `car`, `cdr` to dedicated opcodes. Same pattern as existing `eq?`/`vector?`/`vector-ref`. Targets takl (17.7M foreign calls, 100% list ops), browse, destruct, deriv, sieve.
+Promoted 11 hot primitives to dedicated opcodes (22 opcodes total: non-tail + tail each). See `plans/OPCODE-PROMOTION.md` for Larceny profiling data and panic audit.
 
-**Phase 2 (2-arg arithmetic):** Promote `+`, `-`, `<`, `<=`, `>`, `>=`, `=` for the 2-arg case. No defer/recover needed — the hot path (`callForeignCached`) never had it, and the numeric tower cannot panic from valid Number inputs. Type-assert args as Number, call method directly. Targets fib, tak, ackermann, sumfp, diviter.
+| Phase | PR | Primitives | Opcodes |
+|-------|-----|-----------|---------|
+| 1 | #497 | `null?`, `pair?`, `car`, `cdr` | 8 |
+| 2 | #498 | `+`, `-`, `<`, `<=`, `>`, `>=`, `=` (2-arg) | 14 |
+| Fix | #495 | Pool `opcodeHits` init | — |
 
-**Profiling fix:** `AcquireTopLevelContext` now initializes `opcodeHits` (was missing from pool path).
+Combined Larceny benchmark improvements (vs pre-promotion master):
+
+| Benchmark | Change | Dominant Ops |
+|-----------|--------|-------------|
+| sumfp | **-71%** | `+`, `>=` |
+| ackermann | **-57%** | `=`, `-`, `+` |
+| takl | **-43%** | `cdr`, `pair?`, `null?` |
+| fib | **-40%** | `<=`, `-`, `+` |
+| browse | **-32%** | `pair?`, `car`, `cdr` |
+| tak | **-30%** | `<`, `-` |
+| destruct | **-29%** | `cdr`, `null?`, `car` |
+| deriv | **-17%** | `car`, `null?`, `cdr`, `pair?` |
+| diviter | **-16%** | `<=`, `/`, `-` |
+
+No defer/recover needed for arithmetic — the numeric tower cannot panic from valid Number inputs, and the hot path (`callForeignCached`) never had panic recovery.
 
 ## Remaining Optimization Opportunities
 
