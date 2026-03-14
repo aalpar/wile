@@ -184,6 +184,20 @@ func promotedOpForName(name string) (nonTail, tail OpCode, arity int) {
 		return OpCar, OpCarTail, 1
 	case "cdr":
 		return OpCdr, OpCdrTail, 1
+	case "+":
+		return OpAdd, OpAddTail, 2
+	case "-":
+		return OpSub, OpSubTail, 2
+	case "<":
+		return OpNumLt, OpNumLtTail, 2
+	case "<=":
+		return OpNumLe, OpNumLeTail, 2
+	case ">":
+		return OpNumGt, OpNumGtTail, 2
+	case ">=":
+		return OpNumGe, OpNumGeTail, 2
+	case "=":
+		return OpNumEq, OpNumEqTail, 2
 	default:
 		return OpInvalid, OpInvalid, 0
 	}
