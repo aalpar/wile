@@ -26,7 +26,7 @@ import (
 // compile_validated.go handles compilation of core Scheme forms that go through
 // upfront validation (validate.Validate) before codegen. These are the fixed
 // R7RS core forms: if, lambda, define, set!, quote, quasiquote, begin,
-// case-lambda, dynamic-wind.
+// case-lambda, dynamic-wind, apply, with-continuation-mark.
 //
 // Extension forms (define-syntax, import, include, syntax-case, etc.) use a
 // separate registry-based compilation path in compile_time_continuation.go via

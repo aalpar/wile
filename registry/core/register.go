@@ -43,6 +43,7 @@ var Builder = registry.NewRegistryBuilder(
 	addBoxes,
 	addHashtables,
 	addExceptions,
+	addContMarks,
 	addBootstrapSources,
 )
 

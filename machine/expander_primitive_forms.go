@@ -16,7 +16,8 @@ package machine
 
 // expander_primitive_forms.go implements expand-time handlers for primitive
 // special forms: quote-family (via expandUnchanged), if, begin, set!, define,
-// import, with-binding-scope, and syntax-error.
+// import, with-binding-scope, syntax-error, dynamic-wind, and
+// with-continuation-mark.
 //
 // Each handler is registered in primitive_expanders_registry.go and invoked
 // by ExpandSyntaxExpression when the expander encounters a primitive keyword.

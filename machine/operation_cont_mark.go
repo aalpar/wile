@@ -18,10 +18,26 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-// noMarkSentinel is a package-level sentinel used by OperationSaveContMark
-// and OperationRestoreContMark to distinguish "no previous mark" from a mark
-// whose value is nil. Compared by pointer identity only.
-var noMarkSentinel = values.NewSymbol("\x00no-mark-sentinel")
+// noMarkSentinelType is a dedicated type used by OperationSaveContMark and
+// OperationRestoreContMark to distinguish "no previous mark" from a mark
+// whose value is nil. Using a distinct type instead of a symbol ensures the
+// sentinel is identified by type assertion, not pointer identity, making it
+// safe across continuation capture, deep copy, and serialization.
+type noMarkSentinelType struct{}
+
+func (noMarkSentinelType) SchemeString() string {
+	return "#<no-mark-sentinel>"
+}
+
+func (noMarkSentinelType) IsVoid() bool {
+	return false
+}
+func (noMarkSentinelType) EqualTo(v values.Value) bool {
+	_, ok := v.(noMarkSentinelType)
+	return ok
+}
+
+var noMarkSentinel values.Value = noMarkSentinelType{}
 
 // OperationSetContMark sets a continuation mark on the current frame.
 // Used in tail position where no restore is needed.
@@ -102,7 +118,7 @@ func NewOperationRestoreContMark() *OperationRestoreContMark {
 func (*OperationRestoreContMark) Apply(mc *MachineContext) (*MachineContext, error) {
 	old := mc.evals.Pop()
 	key := mc.evals.Pop()
-	if old == noMarkSentinel {
+	if _, ok := old.(noMarkSentinelType); ok {
 		mc.DeleteMark(key)
 	} else {
 		mc.SetMark(key, old)
