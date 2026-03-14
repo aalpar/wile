@@ -71,7 +71,7 @@ See `plans/OPCODE-PROMOTION.md` for full Larceny profiling data and phased plan.
 
 **Phase 1 (list ops):** Promote `null?`, `pair?`, `car`, `cdr` to dedicated opcodes. Same pattern as existing `eq?`/`vector?`/`vector-ref`. Targets takl (17.7M foreign calls, 100% list ops), browse, destruct, deriv, sieve.
 
-**Phase 2 (2-arg arithmetic):** Promote `+`, `-`, `<`, `<=`, `>`, `>=`, `=` for the 2-arg case. Needs type-check-before-call to avoid defer/recover overhead. Targets fib, tak, ackermann, sumfp, diviter.
+**Phase 2 (2-arg arithmetic):** Promote `+`, `-`, `<`, `<=`, `>`, `>=`, `=` for the 2-arg case. No defer/recover needed — the hot path (`callForeignCached`) never had it, and the numeric tower cannot panic from valid Number inputs. Type-assert args as Number, call method directly. Targets fib, tak, ackermann, sumfp, diviter.
 
 **Profiling fix:** `AcquireTopLevelContext` now initializes `opcodeHits` (was missing from pool path).
 
