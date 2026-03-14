@@ -100,6 +100,20 @@ const (
 	OpCarTail       // Tail inlined car
 	OpCdr           // Non-tail inlined cdr
 	OpCdrTail       // Tail inlined cdr
+	OpAdd           // Non-tail inlined 2-arg +
+	OpAddTail       // Tail inlined 2-arg +
+	OpSub           // Non-tail inlined 2-arg -
+	OpSubTail       // Tail inlined 2-arg -
+	OpNumLt         // Non-tail inlined 2-arg <
+	OpNumLtTail     // Tail inlined 2-arg <
+	OpNumLe         // Non-tail inlined 2-arg <=
+	OpNumLeTail     // Tail inlined 2-arg <=
+	OpNumGt         // Non-tail inlined 2-arg >
+	OpNumGtTail     // Tail inlined 2-arg >
+	OpNumGe         // Non-tail inlined 2-arg >=
+	OpNumGeTail     // Tail inlined 2-arg >=
+	OpNumEq         // Non-tail inlined 2-arg =
+	OpNumEqTail     // Tail inlined 2-arg =
 
 	// Fallback: dispatch to sideTable[Arg]
 	OpComplex
@@ -171,6 +185,20 @@ var opcodeTable = [opCount]opcodeInfo{
 	OpCarTail:               {name: "CarTail"},
 	OpCdr:                   {name: "Cdr"},
 	OpCdrTail:               {name: "CdrTail"},
+	OpAdd:                   {name: "Add"},
+	OpAddTail:               {name: "AddTail"},
+	OpSub:                   {name: "Sub"},
+	OpSubTail:               {name: "SubTail"},
+	OpNumLt:                 {name: "NumLt"},
+	OpNumLtTail:             {name: "NumLtTail"},
+	OpNumLe:                 {name: "NumLe"},
+	OpNumLeTail:             {name: "NumLeTail"},
+	OpNumGt:                 {name: "NumGt"},
+	OpNumGtTail:             {name: "NumGtTail"},
+	OpNumGe:                 {name: "NumGe"},
+	OpNumGeTail:             {name: "NumGeTail"},
+	OpNumEq:                 {name: "NumEq"},
+	OpNumEqTail:             {name: "NumEqTail"},
 	OpComplex:               {name: "Complex"},
 }
 
