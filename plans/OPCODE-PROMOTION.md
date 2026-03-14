@@ -253,11 +253,11 @@ func inlineAdd(mc *MachineContext) error {
 
 ## Open Questions
 
-1. **Should per-primitive call counting be permanent infrastructure?** The profiling data was collected via temporary instrumentation. Adding a `PrimitiveCalls map[string]uint64` field to `VMCounters` (behind `WILE_OPCODE_HITS`) would make future analysis trivial. Cost: one map write per foreign call when profiling is enabled.
+1. ~~**Should per-primitive call counting be permanent infrastructure?**~~ **Resolved: yes.** `primitiveCalls map[string]uint64` added to `VMCounters`, gated by `WILE_OPCODE_HITS`. `RecordPrimitiveCall(name)` called at three dispatch sites: `execPromoted` (all promoted ops), `callForeignCached` (peephole non-promoted), `applyForeign` (uncached). `PrimitiveCallHistogram()` formats output by frequency. Access via `engine.LastCounters().PrimitiveCallHistogram()`.
 
-2. **`sum` benchmark overflows call depth.** `sum(1000000)` hits the 10K call depth limit. This is a non-tail recursive sum — expected behavior. The benchmark needs adjustment or the limit needs raising for benchmarking only.
+2. **`sum` benchmark overflows call depth.** `sum(10000)` is non-tail-recursive with n exactly at the `DefaultMaxCallDepth` limit (10,000). Not a VM bug — the benchmark needs `n` lowered or a tail-recursive rewrite.
 
-3. **Can the defer/recover in `OperationForeignFunctionCall.Apply` be moved to `RunWithEscapeHandling`?** Currently each `OpComplex` foreign call pays ~30ns for defer/recover. If recovery moved to the top-level Run boundary, that cost drops to zero for normal execution. Trade-off: coarser error recovery (lose continuation state at panic point). For panics that represent programmer bugs, this is acceptable. For `big.ErrNaN` recovery in BigFloat, the local `recoverNaN` wrapper already handles it before it could reach the VM. Worth investigating as a separate optimization.
+3. ~~**Can the defer/recover in `OperationForeignFunctionCall.Apply` be moved to `RunWithEscapeHandling`?**~~ **Resolved: no.** Post-promotion, `OperationForeignFunctionCall` has exactly one user (call/cc escape closure). Moving defer/recover to Run would save ~30ns on this single cold path while losing continuation context at the panic point (needed by `goErrorToSchemeException` for stack traces). The panic audit confirmed all reachable panics are programmer assertions, not runtime conditions. Cost/benefit is poor.
 
 ## Panic Audit Summary (for reference)
 

@@ -53,6 +53,10 @@ type VMCounters struct {
 	NoCopyBindingsSaved      uint64
 	InlineEvalsSaved         uint64 // SaveContinuation used inline slots instead of stack pool
 
+	// Per-primitive call counting. Gated by WILE_OPCODE_HITS (same as opcodeHits).
+	// nil when profiling is disabled; allocated when enabled.
+	primitiveCalls map[string]uint64
+
 	// Stack depth instrumentation (ongoing monitoring; prior cap-tuning investigation
 	// showed cap-8 is sufficient for observed workloads)
 	StackMaxDepth   uint64
@@ -73,6 +77,23 @@ func newOpcodeHits() *[opCount]uint64 {
 		return new([opCount]uint64)
 	}
 	return nil
+}
+
+// newPrimitiveCalls returns a map for per-primitive call counting if
+// WILE_OPCODE_HITS is set, nil otherwise.
+func newPrimitiveCalls() map[string]uint64 {
+	if opcodeHitsEnabled() {
+		return make(map[string]uint64)
+	}
+	return nil
+}
+
+// RecordPrimitiveCall increments the call count for the named primitive.
+// No-op when profiling is disabled (nil map).
+func (c *VMCounters) RecordPrimitiveCall(name string) {
+	if c.primitiveCalls != nil {
+		c.primitiveCalls[name]++
+	}
 }
 
 // RecordStackDepth updates the depth histogram and max tracker.
@@ -177,6 +198,35 @@ func (c VMCounters) OpcodeHistogram() string {
 	var b strings.Builder
 	for _, e := range entries {
 		pct := float64(e.count) / float64(c.OpsExecuted) * 100
+		fmt.Fprintf(&b, "  %-24s %10d  (%5.1f%%)\n", e.name, e.count, pct)
+	}
+	return b.String()
+}
+
+// PrimitiveCallHistogram returns a formatted histogram of per-primitive
+// call counts, sorted by frequency (descending). Returns empty string
+// when profiling is disabled.
+func (c VMCounters) PrimitiveCallHistogram() string {
+	if c.primitiveCalls == nil {
+		return ""
+	}
+	type entry struct {
+		name  string
+		count uint64
+	}
+	entries := make([]entry, 0, len(c.primitiveCalls))
+	var total uint64
+	for name, count := range c.primitiveCalls {
+		entries = append(entries, entry{name: name, count: count})
+		total += count
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].count > entries[j].count
+	})
+
+	var b strings.Builder
+	for _, e := range entries {
+		pct := float64(e.count) / float64(total) * 100
 		fmt.Fprintf(&b, "  %-24s %10d  (%5.1f%%)\n", e.name, e.count, pct)
 	}
 	return b.String()
