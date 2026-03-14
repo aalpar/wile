@@ -33,7 +33,7 @@ The `wile` package exposes a high-level API for embedding the Scheme interpreter
 1. Apply functional options to build configuration
 2. Create a registry (default: core primitives via `core.AddToRegistry`)
 3. Apply any extensions to the registry
-4. Create a per-instance `TopLevelEnvironment` for symbol interning
+4. Create a per-instance `TopLevelEnvironment` for syntax interning and phase management
 5. Create the runtime `EnvironmentFrame` from the top-level environment
 6. Apply registry bindings to the environment
 7. Register syntax compilers and primitive expanders
@@ -174,7 +174,7 @@ The two layers complement each other: layer 1 removes entire categories of capab
 
 **Value wrapping**: The public `Value` interface hides internal types to maintain API stability. The `Internal()` escape hatch is available for advanced use cases that need direct access.
 
-**Per-instance symbol interning**: Avoids global state and allows concurrent independent engines.
+**Per-instance syntax interning**: Avoids global state and allows concurrent independent engines. Symbols are compared by string key (`helpers.EqIdentity`), not pointer identity.
 
 **Registry freezing**: Primitives must be registered before or during engine creation. This simplifies the runtime model — the set of available primitives is fixed once the engine is initialized.
 
