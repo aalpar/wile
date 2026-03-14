@@ -1611,3 +1611,100 @@ func TestValidateLibraryAlias(t *testing.T) {
 	_, ok := result.Expr.(*ValidatedLiteral)
 	c.Assert(ok, qt.IsTrue)
 }
+
+// TestValidateWithContinuationMark tests the with-continuation-mark form validator
+func TestValidateWithContinuationMark(t *testing.T) {
+	tests := []validationTestCase{
+		{
+			name: "valid with symbols",
+			input: values.List(
+				values.NewSymbol("with-continuation-mark"),
+				values.NewSymbol("key"),
+				values.NewInteger(1),
+				values.NewSymbol("body"),
+			),
+			wantOk: true,
+		},
+		{
+			name: "valid with nested expressions",
+			input: values.List(
+				values.NewSymbol("with-continuation-mark"),
+				values.List(values.NewSymbol("quote"), values.NewSymbol("mark-key")),
+				values.NewInteger(42),
+				values.List(values.NewSymbol("begin"), values.NewInteger(1)),
+			),
+			wantOk: true,
+		},
+		{
+			name:   "too few args (zero)",
+			input:  values.List(values.NewSymbol("with-continuation-mark")),
+			wantOk: false,
+		},
+		{
+			name: "too few args (one)",
+			input: values.List(
+				values.NewSymbol("with-continuation-mark"),
+				values.NewSymbol("key"),
+			),
+			wantOk: false,
+		},
+		{
+			name: "too few args (two)",
+			input: values.List(
+				values.NewSymbol("with-continuation-mark"),
+				values.NewSymbol("key"),
+				values.NewInteger(1),
+			),
+			wantOk: false,
+		},
+		{
+			name: "too many args",
+			input: values.List(
+				values.NewSymbol("with-continuation-mark"),
+				values.NewSymbol("key"),
+				values.NewInteger(1),
+				values.NewSymbol("body"),
+				values.NewSymbol("extra"),
+			),
+			wantOk: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			result := ValidateExpression(context.TODO(), nil, makeSyntax(tt.input))
+			if tt.wantOk {
+				c.Assert(result.Ok(), qt.IsTrue, qt.Commentf("errors: %v", result.Errors))
+				wcm, ok := result.Expr.(*ValidatedWithContinuationMark)
+				c.Assert(ok, qt.IsTrue)
+				c.Assert(wcm.Key, qt.IsNotNil)
+				c.Assert(wcm.Val, qt.IsNotNil)
+				c.Assert(wcm.Body, qt.IsNotNil)
+				c.Assert(wcm.FormName(), qt.Equals, "with-continuation-mark")
+			} else {
+				c.Assert(result.Ok(), qt.IsFalse)
+				c.Assert(len(result.Errors), qt.Not(qt.Equals), 0)
+			}
+		})
+	}
+}
+
+// TestValidateWithContinuationMarkImproperList tests with-continuation-mark rejects improper lists
+func TestValidateWithContinuationMarkImproperList(t *testing.T) {
+	c := qt.New(t)
+	// (with-continuation-mark key 1 . body)
+	input := values.NewCons(
+		values.NewSymbol("with-continuation-mark"),
+		values.NewCons(
+			values.NewSymbol("key"),
+			values.NewCons(
+				values.NewInteger(1),
+				values.NewSymbol("body"),
+			),
+		),
+	)
+	result := ValidateExpression(context.TODO(), nil, makeSyntax(input))
+	c.Assert(result.Ok(), qt.IsFalse)
+	c.Assert(result.Errors[0].Message, qt.Contains, "proper list")
+}

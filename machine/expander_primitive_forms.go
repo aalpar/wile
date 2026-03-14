@@ -361,3 +361,41 @@ func (p *ExpanderTimeContinuation) expandImportForm(sym *syntax.SyntaxSymbol, ex
 	// Return the import form unchanged for later compilation
 	return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 }
+
+// expandWithContinuationMarkForm expands all three sub-expressions of
+// (with-continuation-mark key val body).
+func (p *ExpanderTimeContinuation) expandWithContinuationMarkForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	pair, ok := expr.(*syntax.SyntaxPair)
+	if !ok || syntax.IsSyntaxEmptyList(pair) {
+		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+	}
+
+	// Expand key
+	expandedKey, err := p.ExpandExpression(pair.SyntaxCar())
+	if err != nil {
+		return nil, werr.WrapForeignErrorf(err, "with-continuation-mark: failed to expand key")
+	}
+
+	// Get val pair
+	valPair, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
+	if !ok || syntax.IsSyntaxEmptyList(valPair) {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-continuation-mark: missing value")
+	}
+	expandedVal, err := p.ExpandExpression(valPair.SyntaxCar())
+	if err != nil {
+		return nil, werr.WrapForeignErrorf(err, "with-continuation-mark: failed to expand value")
+	}
+
+	// Get body pair
+	bodyPair, ok := valPair.SyntaxCdr().(*syntax.SyntaxPair)
+	if !ok || syntax.IsSyntaxEmptyList(bodyPair) {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-continuation-mark: missing body")
+	}
+	expandedBody, err := p.ExpandExpression(bodyPair.SyntaxCar())
+	if err != nil {
+		return nil, werr.WrapForeignErrorf(err, "with-continuation-mark: failed to expand body")
+	}
+
+	args := syntax.SyntaxList(sym.SourceContext(), expandedKey, expandedVal, expandedBody)
+	return syntax.NewSyntaxCons(sym, args, sym.SourceContext()), nil
+}
