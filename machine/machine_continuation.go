@@ -16,6 +16,7 @@ package machine
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/aalpar/wile/environment"
@@ -108,6 +109,7 @@ func NewMachineContinuationFromMachineContext(mc *MachineContext, off int) *Mach
 	q.threadID = mc.threadID
 	q.callDepth = depth
 	q.envPooled = mc.envPooled
+	q.marks = mc.marks
 	q.parent = mc.cont
 	return q
 }
@@ -173,6 +175,9 @@ func (p *MachineContinuation) Copy() *MachineContinuation {
 	// with the original frame. The copy does not own the env frame
 	// and must not release it back to the pool.
 	// shared: zero value (false) — copies are always fresh.
+	if len(p.marks) > 0 {
+		q.marks = maps.Clone(p.marks)
+	}
 	q.parent = p.parent
 	q.promptHandler = p.promptHandler
 	q.inlineEvalsLen = p.inlineEvalsLen

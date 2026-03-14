@@ -35,6 +35,7 @@ func (p *MachineContext) Restore(cont *MachineContinuation) {
 	// the chain (e.g., SaveContinuation frames created before the composable
 	// continuation was invoked). Let GC collect it naturally.
 	p.envPooled = false
+	p.marks = cont.marks
 
 	if cont.evals == nil {
 		// Inline: restore from inline slots, reuse mc.evals.
@@ -94,6 +95,7 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 		}
 		// envPooled: shared continuation may be re-invoked; env must not be recycled.
 		p.envPooled = false
+		p.marks = cont.marks
 		if oldEnvPooled && oldEnv != p.env {
 			p.counters.EnvFramePoolReleases++
 			releaseEnvFrame(oldEnv)
@@ -104,6 +106,7 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 	// Unshared frame: transfer evals ownership and pool the frame.
 	p.counters.ContinuationPoolReleases++
 	p.envPooled = cont.envPooled
+	p.marks = cont.marks
 
 	if cont.evals == nil {
 		// Inline + unshared: restore from inline slots, reuse mc.evals.
@@ -160,6 +163,7 @@ func (p *MachineContext) PopContinuation() (*MachineContinuation, error) {
 	// envPooled: restore caller's ownership state. Caller (releaseContinuation
 	// in Run loop) handles release of the old env via the popped frame.
 	p.envPooled = q.envPooled
+	p.marks = q.marks
 
 	if q.evals == nil {
 		// Inline: restore from inline slots, reuse mc.evals.
@@ -205,6 +209,7 @@ func (p *MachineContext) SaveContinuation(off int) error {
 		p.evals = acquireStack()
 	}
 	p.cont = cont
+	p.marks = nil // callee starts with no marks
 	return nil
 }
 

@@ -980,6 +980,29 @@ func (p *MachineContext) SetThread(t *values.Thread) {
 	}
 }
 
+// SetMark sets a continuation mark on the current frame.
+// Lazily allocates the marks map on first use.
+func (p *MachineContext) SetMark(key, val values.Value) {
+	if p.marks == nil {
+		p.marks = make(map[values.Value]values.Value)
+	}
+	p.marks[key] = val
+}
+
+// GetMark returns the continuation mark for key on the current frame,
+// or nil if no mark is set.
+func (p *MachineContext) GetMark(key values.Value) values.Value {
+	if p.marks == nil {
+		return nil
+	}
+	return p.marks[key]
+}
+
+// DeleteMark removes the continuation mark for key from the current frame.
+func (p *MachineContext) DeleteMark(key values.Value) {
+	delete(p.marks, key)
+}
+
 // RunWithEscapeHandling runs the VM loop, handling continuation escapes
 // that weren't caught by an enclosing call/cc. This is used at the top level
 // (REPL and file execution) to catch continuations invoked outside their
