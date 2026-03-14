@@ -16,7 +16,6 @@ package machine
 
 import (
 	"fmt"
-	"maps"
 	"slices"
 
 	"github.com/aalpar/wile/environment"
@@ -175,9 +174,7 @@ func (p *MachineContinuation) Copy() *MachineContinuation {
 	// with the original frame. The copy does not own the env frame
 	// and must not release it back to the pool.
 	// shared: zero value (false) — copies are always fresh.
-	if len(p.marks) > 0 {
-		q.marks = maps.Clone(p.marks)
-	}
+	q.marks = cloneMarks(p.marks)
 	q.parent = p.parent
 	q.promptHandler = p.promptHandler
 	q.inlineEvalsLen = p.inlineEvalsLen

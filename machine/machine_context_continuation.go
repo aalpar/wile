@@ -15,8 +15,19 @@
 package machine
 
 import (
+	"maps"
+
+	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
+
+// cloneMarks returns a shallow clone of marks, or nil if marks is nil/empty.
+func cloneMarks(marks map[values.Value]values.Value) map[values.Value]values.Value {
+	if len(marks) == 0 {
+		return nil
+	}
+	return maps.Clone(marks)
+}
 
 func (p *MachineContext) Restore(cont *MachineContinuation) {
 	p.counters.ContinuationsRestored++
@@ -35,7 +46,7 @@ func (p *MachineContext) Restore(cont *MachineContinuation) {
 	// the chain (e.g., SaveContinuation frames created before the composable
 	// continuation was invoked). Let GC collect it naturally.
 	p.envPooled = false
-	p.marks = cont.marks
+	p.marks = cloneMarks(cont.marks)
 
 	if cont.evals == nil {
 		// Inline: restore from inline slots, reuse mc.evals.
@@ -95,7 +106,7 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 		}
 		// envPooled: shared continuation may be re-invoked; env must not be recycled.
 		p.envPooled = false
-		p.marks = cont.marks
+		p.marks = cloneMarks(cont.marks)
 		if oldEnvPooled && oldEnv != p.env {
 			p.counters.EnvFramePoolReleases++
 			releaseEnvFrame(oldEnv)

@@ -999,8 +999,12 @@ func (p *MachineContext) GetMark(key values.Value) values.Value {
 }
 
 // DeleteMark removes the continuation mark for key from the current frame.
+// Nils the map when empty to maintain the "nil = zero-cost" invariant.
 func (p *MachineContext) DeleteMark(key values.Value) {
 	delete(p.marks, key)
+	if len(p.marks) == 0 {
+		p.marks = nil
+	}
 }
 
 // RunWithEscapeHandling runs the VM loop, handling continuation escapes

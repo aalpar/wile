@@ -83,12 +83,11 @@ func NewOperationSaveContMark() *OperationSaveContMark {
 
 func (*OperationSaveContMark) Apply(mc *MachineContext) (*MachineContext, error) {
 	key := mc.evals.Pop()
-	old := mc.GetMark(key)
 	mc.evals.Push(key)
-	if old == nil {
-		mc.evals.Push(noMarkSentinel)
-	} else {
+	if old, ok := mc.marks[key]; ok {
 		mc.evals.Push(old)
+	} else {
+		mc.evals.Push(noMarkSentinel)
 	}
 	mc.SetMark(key, mc.GetValue())
 	mc.pc++
