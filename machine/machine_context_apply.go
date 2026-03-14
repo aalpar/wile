@@ -202,6 +202,21 @@ func (p *MachineContext) ApplyCallable(callable values.Value, args ...values.Val
 	}
 }
 
+// drainAndApply drains all arguments from the eval stack, updates counters,
+// and applies the callable. This is the common pattern shared by OpApply,
+// OpPullApply, OpCallLocal, and OpCallCachedBinding.
+func (p *MachineContext) drainAndApply(callable values.Value) (*MachineContext, error) {
+	vs := p.evals.Drain()
+	p.counters.StackDrains++
+	p.counters.StackElementsDrained += uint64(len(vs))
+	p.counters.RecordStackDepth(len(vs))
+	result, err := p.ApplyCallable(callable, vs...)
+	if err != nil {
+		return nil, applyCallableError(p, err)
+	}
+	return result, nil
+}
+
 // returnImmediate returns control to the caller after a non-bytecode callable
 // (e.g., Parameter get/set) has placed its result in the value register.
 // If a continuation is saved, it restores it (like RestoreContinuation for
