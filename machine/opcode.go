@@ -92,6 +92,14 @@ const (
 	OpVectorQTail   // Tail inlined vector?
 	OpVectorRef     // Non-tail inlined vector-ref
 	OpVectorRefTail // Tail inlined vector-ref
+	OpNullQ         // Non-tail inlined null?
+	OpNullQTail     // Tail inlined null?
+	OpPairQ         // Non-tail inlined pair?
+	OpPairQTail     // Tail inlined pair?
+	OpCar           // Non-tail inlined car
+	OpCarTail       // Tail inlined car
+	OpCdr           // Non-tail inlined cdr
+	OpCdrTail       // Tail inlined cdr
 
 	// Fallback: dispatch to sideTable[Arg]
 	OpComplex
@@ -155,6 +163,14 @@ var opcodeTable = [opCount]opcodeInfo{
 	OpVectorQTail:           {name: "VectorQTail"},
 	OpVectorRef:             {name: "VectorRef"},
 	OpVectorRefTail:         {name: "VectorRefTail"},
+	OpNullQ:                 {name: "NullQ"},
+	OpNullQTail:             {name: "NullQTail"},
+	OpPairQ:                 {name: "PairQ"},
+	OpPairQTail:             {name: "PairQTail"},
+	OpCar:                   {name: "Car"},
+	OpCarTail:               {name: "CarTail"},
+	OpCdr:                   {name: "Cdr"},
+	OpCdrTail:               {name: "CdrTail"},
 	OpComplex:               {name: "Complex"},
 }
 

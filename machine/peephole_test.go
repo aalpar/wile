@@ -1097,7 +1097,7 @@ func TestFusePromotedPrimitives(t *testing.T) {
 				{Op: OpPushLocal, Arg: 1},
 				{Op: OpPullApply},
 			},
-			cachedBindings: []*environment.Binding{makeNamedForeignBinding("car", 1)},
+			cachedBindings: []*environment.Binding{makeNamedForeignBinding("length", 1)},
 			wantOps:        []OpCode{OpSaveContinuation, OpPushLocal, OpCallForeignCached},
 			wantArg:        map[int]int32{0: 3, 1: 1, 2: 0},
 		},
