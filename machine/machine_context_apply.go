@@ -101,6 +101,7 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	p.envPooled = false
 
 	p.counters.ForeignCalls++
+	p.counters.RecordPrimitiveCall(fcls.name)
 
 	// Save the template pointer before calling the foreign function.
 	// Some foreign functions (e.g., PrimCallCC inline mode) call Apply()
