@@ -642,6 +642,130 @@ func (p *MachineContext) Run() error {
 			}
 			mc = mc.returnImmediate()
 
+		case OpNullQ:
+			callable := mc.template.cachedBindings[instr.Arg].Value()
+			fcls, ok := callable.(*ForeignClosure)
+			if !ok || fcls.name != "null?" {
+				var err error
+				mc, err = callPromotedFallback(mc, callable, false, 1)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			inlineNullQ(mc)
+			mc.pc++
+
+		case OpNullQTail:
+			callable := mc.template.cachedBindings[instr.Arg].Value()
+			fcls, ok := callable.(*ForeignClosure)
+			if !ok || fcls.name != "null?" {
+				var err error
+				mc, err = callPromotedFallback(mc, callable, true, 1)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			inlineNullQ(mc)
+			mc = mc.returnImmediate()
+
+		case OpPairQ:
+			callable := mc.template.cachedBindings[instr.Arg].Value()
+			fcls, ok := callable.(*ForeignClosure)
+			if !ok || fcls.name != "pair?" {
+				var err error
+				mc, err = callPromotedFallback(mc, callable, false, 1)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			inlinePairQ(mc)
+			mc.pc++
+
+		case OpPairQTail:
+			callable := mc.template.cachedBindings[instr.Arg].Value()
+			fcls, ok := callable.(*ForeignClosure)
+			if !ok || fcls.name != "pair?" {
+				var err error
+				mc, err = callPromotedFallback(mc, callable, true, 1)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			inlinePairQ(mc)
+			mc = mc.returnImmediate()
+
+		case OpCar:
+			callable := mc.template.cachedBindings[instr.Arg].Value()
+			fcls, ok := callable.(*ForeignClosure)
+			if !ok || fcls.name != "car" {
+				var err error
+				mc, err = callPromotedFallback(mc, callable, false, 1)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			err := inlineCar(mc)
+			if err != nil {
+				return err
+			}
+			mc.pc++
+
+		case OpCarTail:
+			callable := mc.template.cachedBindings[instr.Arg].Value()
+			fcls, ok := callable.(*ForeignClosure)
+			if !ok || fcls.name != "car" {
+				var err error
+				mc, err = callPromotedFallback(mc, callable, true, 1)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			err := inlineCar(mc)
+			if err != nil {
+				return err
+			}
+			mc = mc.returnImmediate()
+
+		case OpCdr:
+			callable := mc.template.cachedBindings[instr.Arg].Value()
+			fcls, ok := callable.(*ForeignClosure)
+			if !ok || fcls.name != "cdr" {
+				var err error
+				mc, err = callPromotedFallback(mc, callable, false, 1)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			err := inlineCdr(mc)
+			if err != nil {
+				return err
+			}
+			mc.pc++
+
+		case OpCdrTail:
+			callable := mc.template.cachedBindings[instr.Arg].Value()
+			fcls, ok := callable.(*ForeignClosure)
+			if !ok || fcls.name != "cdr" {
+				var err error
+				mc, err = callPromotedFallback(mc, callable, true, 1)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+			err := inlineCdr(mc)
+			if err != nil {
+				return err
+			}
+			mc = mc.returnImmediate()
+
 		// --- Fallback: complex operations via side table ---
 
 		case OpComplex:

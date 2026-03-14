@@ -84,6 +84,61 @@ func inlineVectorRef(mc *MachineContext) error {
 	return nil
 }
 
+// inlineNullQ pops one argument from the eval stack and sets the value
+// register to #t if it is the empty list, #f otherwise.
+func inlineNullQ(mc *MachineContext) {
+	o := mc.evals.Pop()
+	mc.counters.StackDrains++
+	mc.counters.StackElementsDrained++
+	mc.counters.ForeignCalls++
+	mc.SetValue(values.BoolToBoolean(values.IsEmptyList(o)))
+}
+
+// inlinePairQ pops one argument from the eval stack and sets the value
+// register to #t if it is a pair, #f otherwise.
+func inlinePairQ(mc *MachineContext) {
+	o := mc.evals.Pop()
+	mc.counters.StackDrains++
+	mc.counters.StackElementsDrained++
+	mc.counters.ForeignCalls++
+	_, ok := o.(*values.Pair)
+	mc.SetValue(values.BoolToBoolean(ok))
+}
+
+// inlineCar pops one argument from the eval stack, validates it is a pair,
+// and sets the value register to its car. Returns nil on success.
+func inlineCar(mc *MachineContext) error {
+	o := mc.evals.Pop()
+	mc.counters.StackDrains++
+	mc.counters.StackElementsDrained++
+	mc.counters.ForeignCalls++
+
+	p, ok := o.(values.Tuple)
+	if !ok || values.IsEmptyList(o) {
+		return applyCallableError(mc, werr.WrapForeignErrorf(
+			werr.ErrNotAPair, "car: expected pair, got %s", o.SchemeString()))
+	}
+	mc.SetValue(p.Car())
+	return nil
+}
+
+// inlineCdr pops one argument from the eval stack, validates it is a pair,
+// and sets the value register to its cdr. Returns nil on success.
+func inlineCdr(mc *MachineContext) error {
+	o := mc.evals.Pop()
+	mc.counters.StackDrains++
+	mc.counters.StackElementsDrained++
+	mc.counters.ForeignCalls++
+
+	p, ok := o.(values.Tuple)
+	if !ok || values.IsEmptyList(o) {
+		return applyCallableError(mc, werr.WrapForeignErrorf(
+			werr.ErrNotAPair, "cdr: expected pair, got %s", o.SchemeString()))
+	}
+	mc.SetValue(p.Cdr())
+	return nil
+}
+
 // callPromotedFallback handles the case where a promoted primitive's cached
 // binding no longer holds a *ForeignClosure at runtime (e.g., reassigned via
 // set!). Unlike callForeignCached's fallback, promoted ops have their
@@ -121,6 +176,14 @@ func promotedOpForName(name string) (nonTail, tail OpCode, arity int) {
 		return OpVectorQ, OpVectorQTail, 1
 	case "vector-ref":
 		return OpVectorRef, OpVectorRefTail, 2
+	case "null?":
+		return OpNullQ, OpNullQTail, 1
+	case "pair?":
+		return OpPairQ, OpPairQTail, 1
+	case "car":
+		return OpCar, OpCarTail, 1
+	case "cdr":
+		return OpCdr, OpCdrTail, 1
 	default:
 		return OpInvalid, OpInvalid, 0
 	}
