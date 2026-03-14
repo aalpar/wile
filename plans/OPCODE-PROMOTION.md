@@ -144,25 +144,40 @@ Implementation: 4 new inline functions in `call_promoted.go`, 8 new opcodes (non
 
 ### Phase 2: Binary Arithmetic and Comparisons
 
-Higher payoff but needs numeric tower handling.
+Higher payoff. Simpler than initially expected — see panic analysis below.
 
-| Primitive | Arity | Inline Logic | Challenge |
-|-----------|-------|-------------|-----------|
-| `+` (2-arg) | 2 | `a.(Number).Add(b.(Number))` | Panics on type mismatch |
-| `-` (2-arg) | 2 | `a.(Number).Subtract(b.(Number))` | Same |
-| `<` | 2 | `a.(Number).LessThan(b.(Number))` | Same |
-| `<=` | 2 | `!b.(Number).LessThan(a.(Number))` | Same |
-| `>` | 2 | `b.(Number).LessThan(a.(Number))` | Same |
-| `>=` | 2 | `!a.(Number).LessThan(b.(Number))` | Same |
-| `=` (2-arg) | 2 | `a.(Number).Equal(b.(Number))` | Same |
+| Primitive | Arity | Inline Logic |
+|-----------|-------|-------------|
+| `+` (2-arg) | 2 | `a.(Number).Add(b.(Number))` |
+| `-` (2-arg) | 2 | `a.(Number).Subtract(b.(Number))` |
+| `<` | 2 | `a.(Number).LessThan(b.(Number))` |
+| `<=` | 2 | `!b.(Number).LessThan(a.(Number))` |
+| `>` | 2 | `b.(Number).LessThan(a.(Number))` |
+| `>=` | 2 | `!a.(Number).LessThan(b.(Number))` |
+| `=` (2-arg) | 2 | `a.(Number).Equal(b.(Number))` |
 
-#### The Panic Problem
+#### No defer/recover Needed
 
-The `values.Number` interface methods (`Add`, `Subtract`, `LessThan`, etc.) return `Number`, not `(Number, error)`. They panic on type mismatch (e.g., adding a pair to an integer). Currently, `OperationForeignFunctionCall.Apply` has a `defer/recover` that catches these panics and converts them to `ErrExceptionEscape`.
+The initial plan assumed promoted arithmetic would need `defer/recover` to catch panics from the `Number` interface. This was wrong on two counts:
 
-**Option A: Per-op defer/recover.** Each promoted arithmetic op wraps its inline logic in `defer/recover`. Simple, follows existing pattern. Cost: ~30ns per call on the non-panic path (Go defer/recover overhead). At 28M `+` calls in sumfp, that's ~0.84s of overhead — likely worse than the savings.
+**1. The hot path already has no defer/recover.** `callForeignCached` (the path that promoted ops replace) calls `fcls.fn(mc)` directly with no defer/recover. The defer/recover exists only in `OperationForeignFunctionCall.Apply`, which is the `OpComplex` side table path for `NewVMForeignClosure` primitives (`map`, `for-each`, `apply`, `call/cc` — things that do nested VM execution). Promoted ops replace `callForeignCached`, not `OperationForeignFunctionCall`.
 
-**Option B: Type-check before calling Number methods.** Assert both args are `Number` before calling. If either isn't, fall back to `callPromotedFallback`. The Number methods themselves won't panic because both args are already validated as Number. This avoids defer/recover entirely.
+| Path | defer/recover? | Used by |
+|------|---------------|---------|
+| `callForeignCached` | **No** | `OpCallForeignCached` — all peephole-optimized primitives |
+| `applyForeign` | **No** | `OpApply`/`OpPullApply` — uncached foreign calls |
+| `OperationForeignFunctionCall.Apply` | **Yes** | `OpComplex` side table — nested-VM primitives only |
+
+**2. The numeric tower cannot panic from valid Number inputs.** A systematic audit of every panic site in `values/` found:
+
+- **All Number methods** (`Add`, `Subtract`, `Multiply`, `LessThan`, `Compare`) — cannot panic when both operands implement `Number`. The dispatch tables are complete (validated at init by `validatePromotionTable`). No gaps exist.
+- **Division by exact zero** — caught by guard clauses in every `Divide` method, returns `(nil, ErrDivisionByZero)`. Does not panic.
+- **Division by inexact zero** (e.g., `1.0 / 0.0`) — produces `+Inf` or `NaN` via IEEE 754. Go's `float64` division does not panic. `big.Float` division catches `big.ErrNaN` locally in `recoverNaN`. None of this reaches the VM.
+- **Overflow** (`int64` to `BigInteger`) — handled by `addInt64`/`subInt64`/`mulInt64` helpers that detect overflow and auto-promote. No panic.
+
+The only panics in `values/` are programmer assertions: type-switch exhaustiveness guards (`"unsupported type %T"`), startup validation (`validatePromotionTable`), and `emptyList.Car()`/`emptyList.Cdr()` (guarded by the primitives that call them).
+
+**Conclusion:** Type-assert both args as `Number`, then call the method directly. No defer/recover, no residual panic risk.
 
 ```go
 func inlineAdd(mc *MachineContext) error {
@@ -182,12 +197,6 @@ func inlineAdd(mc *MachineContext) error {
     return nil
 }
 ```
-
-**Remaining risk:** `Number.Add` can still panic for division-by-zero, overflow to bignum edge cases, etc. These are extremely rare in practice. A single `defer/recover` per Run() iteration (wrapping the entire switch) could catch them, but that changes the dispatch loop structure.
-
-**Option C: Change Number interface to return (Number, error).** Clean but massive — touches every numeric type (Integer, BigInteger, Float, BigFloat, Rational, Complex) and every caller. Deferred to a separate plan.
-
-**Recommendation:** Option B for Phase 2. Type-check args, skip defer/recover. Accept the theoretical panic risk for rare edge cases (they'd crash the VM, which is already what happens for other panics not caught by OperationForeignFunctionCall).
 
 #### Variadic Arity
 
@@ -235,6 +244,21 @@ func inlineAdd(mc *MachineContext) error {
 
 1. **Should per-primitive call counting be permanent infrastructure?** The profiling data was collected via temporary instrumentation. Adding a `PrimitiveCalls map[string]uint64` field to `VMCounters` (behind `WILE_OPCODE_HITS`) would make future analysis trivial. Cost: one map write per foreign call when profiling is enabled.
 
-2. **Tail-call arithmetic:** For tail-position `(+ a b)`, the promoted op does `inlineAdd` + `returnImmediate`. But `returnImmediate` restores the caller's continuation. If the caller is also doing arithmetic in tail position, this chains correctly. Confirm no edge cases with `call/cc` capturing mid-arithmetic.
+2. **`sum` benchmark overflows call depth.** `sum(1000000)` hits the 10K call depth limit. This is a non-tail recursive sum — expected behavior. The benchmark needs adjustment or the limit needs raising for benchmarking only.
 
-3. **`sum` benchmark overflows call depth.** `sum(1000000)` hits the 10K call depth limit. This is a non-tail recursive sum — expected behavior. The benchmark needs adjustment or the limit needs raising for benchmarking only.
+3. **Can the defer/recover in `OperationForeignFunctionCall.Apply` be moved to `RunWithEscapeHandling`?** Currently each `OpComplex` foreign call pays ~30ns for defer/recover. If recovery moved to the top-level Run boundary, that cost drops to zero for normal execution. Trade-off: coarser error recovery (lose continuation state at panic point). For panics that represent programmer bugs, this is acceptable. For `big.ErrNaN` recovery in BigFloat, the local `recoverNaN` wrapper already handles it before it could reach the VM. Worth investigating as a separate optimization.
+
+## Panic Audit Summary (for reference)
+
+Audit date: 2026-03-13. Traced every `panic()` in `values/` reachable from arithmetic.
+
+**Not reachable from normal Scheme arithmetic (programmer assertions only):**
+- `big_complex.go:72,115,140,395` — type-switch exhaustiveness in BigComplex helpers
+- `big_float.go:87` — re-panic of non-`big.ErrNaN` panics (Go stdlib edge case)
+- `promotion.go:278,283` — startup validation of dispatch tables
+- `promotion.go:308,343,367` — `Promote`, `NumberToFloat64`, `NumberToComplex128` type guards
+- `numeric_tower.go:157` — `ExactnessOf` type guard
+- `empty_list.go:83,88` — `Car`/`Cdr` on empty list (guarded by primitives)
+- `pair.go:139,169,233,236` — `Append`/`Must` on improper lists (guarded by primitives)
+
+**Division by zero:** All 7 `Divide` methods guard exact zero with `(nil, ErrDivisionByZero)` error return. Inexact zero produces IEEE 754 `+Inf`/`NaN` — Go `float64` does not panic. `big.Float` NaN is caught locally by `recoverNaN`.
