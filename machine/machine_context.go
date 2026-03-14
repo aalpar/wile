@@ -322,15 +322,11 @@ func (p *MachineContext) Run() error {
 			mc.pc++
 
 		case OpApply:
-			vs := mc.evals.Drain()
-			mc.counters.StackDrains++
-			mc.counters.StackElementsDrained += uint64(len(vs))
-			mc.counters.RecordStackDepth(len(vs))
-			result, err := mc.ApplyCallable(mc.GetValue(), vs...)
+			var err error
+			mc, err = mc.drainAndApply(mc.GetValue())
 			if err != nil {
-				return applyCallableError(mc, err)
+				return err
 			}
-			mc = result
 
 		case OpUnpackListToStack:
 			v := mc.GetValue()
@@ -459,15 +455,11 @@ func (p *MachineContext) Run() error {
 
 		case OpPullApply:
 			mc.SetValue(mc.evals.Pull())
-			vs := mc.evals.Drain()
-			mc.counters.StackDrains++
-			mc.counters.StackElementsDrained += uint64(len(vs))
-			mc.counters.RecordStackDepth(len(vs))
-			result, err := mc.ApplyCallable(mc.GetValue(), vs...)
+			var err error
+			mc, err = mc.drainAndApply(mc.GetValue())
 			if err != nil {
-				return applyCallableError(mc, err)
+				return err
 			}
-			mc = result
 
 		// --- Wave 5: promoted complex operations ---
 
@@ -527,484 +519,217 @@ func (p *MachineContext) Run() error {
 			if err != nil {
 				return err
 			}
-			callable := bd.Value()
-			vs := mc.evals.Drain()
-			mc.counters.StackDrains++
-			mc.counters.StackElementsDrained += uint64(len(vs))
-			mc.counters.RecordStackDepth(len(vs))
-			result, err := mc.ApplyCallable(callable, vs...)
+			mc, err = mc.drainAndApply(bd.Value())
 			if err != nil {
-				return applyCallableError(mc, err)
+				return err
 			}
-			mc = result
 
 		case OpCallCachedBinding:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			vs := mc.evals.Drain()
-			mc.counters.StackDrains++
-			mc.counters.StackElementsDrained += uint64(len(vs))
-			mc.counters.RecordStackDepth(len(vs))
-			result, err := mc.ApplyCallable(callable, vs...)
+			var err error
+			mc, err = mc.drainAndApply(mc.template.cachedBindings[instr.Arg].Value())
 			if err != nil {
-				return applyCallableError(mc, err)
+				return err
 			}
-			mc = result
 
 		// --- Wave 9: promoted primitive operations ---
 
 		case OpEqQ:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "eq?" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, false, 2)
-				if err != nil {
-					return err
-				}
-				continue
+			var err error
+			mc, err = execPromoted(mc, instr, "eq?", 2, false, inlineEq)
+			if err != nil {
+				return err
 			}
-			inlineEq(mc)
-			mc.pc++
 
 		case OpEqQTail:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "eq?" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, true, 2)
-				if err != nil {
-					return err
-				}
-				continue
+			var err error
+			mc, err = execPromoted(mc, instr, "eq?", 2, true, inlineEq)
+			if err != nil {
+				return err
 			}
-			inlineEq(mc)
-			mc = mc.returnImmediate()
 
 		case OpVectorQ:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "vector?" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, false, 1)
-				if err != nil {
-					return err
-				}
-				continue
+			var err error
+			mc, err = execPromoted(mc, instr, "vector?", 1, false, inlineVectorQ)
+			if err != nil {
+				return err
 			}
-			inlineVectorQ(mc)
-			mc.pc++
 
 		case OpVectorQTail:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "vector?" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, true, 1)
-				if err != nil {
-					return err
-				}
-				continue
+			var err error
+			mc, err = execPromoted(mc, instr, "vector?", 1, true, inlineVectorQ)
+			if err != nil {
+				return err
 			}
-			inlineVectorQ(mc)
-			mc = mc.returnImmediate()
 
 		case OpVectorRef:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "vector-ref" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, false, 2)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			err := inlineVectorRef(mc)
+			var err error
+			mc, err = execPromoted(mc, instr, "vector-ref", 2, false, inlineVectorRef)
 			if err != nil {
 				return err
 			}
-			mc.pc++
 
 		case OpVectorRefTail:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "vector-ref" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, true, 2)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			err := inlineVectorRef(mc)
+			var err error
+			mc, err = execPromoted(mc, instr, "vector-ref", 2, true, inlineVectorRef)
 			if err != nil {
 				return err
 			}
-			mc = mc.returnImmediate()
 
 		case OpNullQ:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "null?" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, false, 1)
-				if err != nil {
-					return err
-				}
-				continue
+			var err error
+			mc, err = execPromoted(mc, instr, "null?", 1, false, inlineNullQ)
+			if err != nil {
+				return err
 			}
-			inlineNullQ(mc)
-			mc.pc++
 
 		case OpNullQTail:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "null?" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, true, 1)
-				if err != nil {
-					return err
-				}
-				continue
+			var err error
+			mc, err = execPromoted(mc, instr, "null?", 1, true, inlineNullQ)
+			if err != nil {
+				return err
 			}
-			inlineNullQ(mc)
-			mc = mc.returnImmediate()
 
 		case OpPairQ:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "pair?" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, false, 1)
-				if err != nil {
-					return err
-				}
-				continue
+			var err error
+			mc, err = execPromoted(mc, instr, "pair?", 1, false, inlinePairQ)
+			if err != nil {
+				return err
 			}
-			inlinePairQ(mc)
-			mc.pc++
 
 		case OpPairQTail:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "pair?" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, true, 1)
-				if err != nil {
-					return err
-				}
-				continue
+			var err error
+			mc, err = execPromoted(mc, instr, "pair?", 1, true, inlinePairQ)
+			if err != nil {
+				return err
 			}
-			inlinePairQ(mc)
-			mc = mc.returnImmediate()
 
 		case OpCar:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "car" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, false, 1)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			err := inlineCar(mc)
+			var err error
+			mc, err = execPromoted(mc, instr, "car", 1, false, inlineCar)
 			if err != nil {
 				return err
 			}
-			mc.pc++
 
 		case OpCarTail:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "car" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, true, 1)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			err := inlineCar(mc)
+			var err error
+			mc, err = execPromoted(mc, instr, "car", 1, true, inlineCar)
 			if err != nil {
 				return err
 			}
-			mc = mc.returnImmediate()
 
 		case OpCdr:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "cdr" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, false, 1)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			err := inlineCdr(mc)
+			var err error
+			mc, err = execPromoted(mc, instr, "cdr", 1, false, inlineCdr)
 			if err != nil {
 				return err
 			}
-			mc.pc++
 
 		case OpCdrTail:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "cdr" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, true, 1)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			err := inlineCdr(mc)
+			var err error
+			mc, err = execPromoted(mc, instr, "cdr", 1, true, inlineCdr)
 			if err != nil {
 				return err
 			}
-			mc = mc.returnImmediate()
 
 		// --- Wave 10: promoted arithmetic operations (2-arg only) ---
 
 		case OpAdd:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "+" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, false, 2)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			err := inlineAdd(mc)
+			var err error
+			mc, err = execPromoted(mc, instr, "+", 2, false, inlineAdd)
 			if err != nil {
 				return err
 			}
-			mc.pc++
 
 		case OpAddTail:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "+" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, true, 2)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			err := inlineAdd(mc)
+			var err error
+			mc, err = execPromoted(mc, instr, "+", 2, true, inlineAdd)
 			if err != nil {
 				return err
 			}
-			mc = mc.returnImmediate()
 
 		case OpSub:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "-" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, false, 2)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			err := inlineSub(mc)
+			var err error
+			mc, err = execPromoted(mc, instr, "-", 2, false, inlineSub)
 			if err != nil {
 				return err
 			}
-			mc.pc++
 
 		case OpSubTail:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "-" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, true, 2)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			err := inlineSub(mc)
+			var err error
+			mc, err = execPromoted(mc, instr, "-", 2, true, inlineSub)
 			if err != nil {
 				return err
 			}
-			mc = mc.returnImmediate()
 
 		case OpNumLt:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "<" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, false, 2)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			err := inlineNumLt(mc)
+			var err error
+			mc, err = execPromoted(mc, instr, "<", 2, false, inlineNumLt)
 			if err != nil {
 				return err
 			}
-			mc.pc++
 
 		case OpNumLtTail:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "<" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, true, 2)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			err := inlineNumLt(mc)
+			var err error
+			mc, err = execPromoted(mc, instr, "<", 2, true, inlineNumLt)
 			if err != nil {
 				return err
 			}
-			mc = mc.returnImmediate()
 
 		case OpNumLe:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "<=" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, false, 2)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			err := inlineNumLe(mc)
+			var err error
+			mc, err = execPromoted(mc, instr, "<=", 2, false, inlineNumLe)
 			if err != nil {
 				return err
 			}
-			mc.pc++
 
 		case OpNumLeTail:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "<=" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, true, 2)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			err := inlineNumLe(mc)
+			var err error
+			mc, err = execPromoted(mc, instr, "<=", 2, true, inlineNumLe)
 			if err != nil {
 				return err
 			}
-			mc = mc.returnImmediate()
 
 		case OpNumGt:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != ">" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, false, 2)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			err := inlineNumGt(mc)
+			var err error
+			mc, err = execPromoted(mc, instr, ">", 2, false, inlineNumGt)
 			if err != nil {
 				return err
 			}
-			mc.pc++
 
 		case OpNumGtTail:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != ">" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, true, 2)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			err := inlineNumGt(mc)
+			var err error
+			mc, err = execPromoted(mc, instr, ">", 2, true, inlineNumGt)
 			if err != nil {
 				return err
 			}
-			mc = mc.returnImmediate()
 
 		case OpNumGe:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != ">=" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, false, 2)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			err := inlineNumGe(mc)
+			var err error
+			mc, err = execPromoted(mc, instr, ">=", 2, false, inlineNumGe)
 			if err != nil {
 				return err
 			}
-			mc.pc++
 
 		case OpNumGeTail:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != ">=" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, true, 2)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			err := inlineNumGe(mc)
+			var err error
+			mc, err = execPromoted(mc, instr, ">=", 2, true, inlineNumGe)
 			if err != nil {
 				return err
 			}
-			mc = mc.returnImmediate()
 
 		case OpNumEq:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "=" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, false, 2)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			err := inlineNumEq(mc)
+			var err error
+			mc, err = execPromoted(mc, instr, "=", 2, false, inlineNumEq)
 			if err != nil {
 				return err
 			}
-			mc.pc++
 
 		case OpNumEqTail:
-			callable := mc.template.cachedBindings[instr.Arg].Value()
-			fcls, ok := callable.(*ForeignClosure)
-			if !ok || fcls.name != "=" {
-				var err error
-				mc, err = callPromotedFallback(mc, callable, true, 2)
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			err := inlineNumEq(mc)
+			var err error
+			mc, err = execPromoted(mc, instr, "=", 2, true, inlineNumEq)
 			if err != nil {
 				return err
 			}
-			mc = mc.returnImmediate()
 
 		// --- Fallback: complex operations via side table ---
 

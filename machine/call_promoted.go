@@ -36,24 +36,26 @@ func eqIdentity(a, b values.Value) bool {
 
 // inlineEq pops two arguments from the eval stack and sets the value register
 // to the eq? result. Returns nil on success.
-func inlineEq(mc *MachineContext) {
+func inlineEq(mc *MachineContext) error {
 	b := mc.evals.Pop()
 	a := mc.evals.Pop()
 	mc.counters.StackDrains++
 	mc.counters.StackElementsDrained += 2
 	mc.counters.ForeignCalls++
 	mc.SetValue(values.BoolToBoolean(eqIdentity(a, b)))
+	return nil
 }
 
 // inlineVectorQ pops one argument from the eval stack and sets the value
 // register to #t if it is a vector, #f otherwise.
-func inlineVectorQ(mc *MachineContext) {
+func inlineVectorQ(mc *MachineContext) error {
 	o := mc.evals.Pop()
 	mc.counters.StackDrains++
 	mc.counters.StackElementsDrained++
 	mc.counters.ForeignCalls++
 	_, ok := o.(*values.Vector)
 	mc.SetValue(values.BoolToBoolean(ok))
+	return nil
 }
 
 // inlineVectorRef pops two arguments (vector, index) from the eval stack,
@@ -86,23 +88,25 @@ func inlineVectorRef(mc *MachineContext) error {
 
 // inlineNullQ pops one argument from the eval stack and sets the value
 // register to #t if it is the empty list, #f otherwise.
-func inlineNullQ(mc *MachineContext) {
+func inlineNullQ(mc *MachineContext) error {
 	o := mc.evals.Pop()
 	mc.counters.StackDrains++
 	mc.counters.StackElementsDrained++
 	mc.counters.ForeignCalls++
 	mc.SetValue(values.BoolToBoolean(values.IsEmptyList(o)))
+	return nil
 }
 
 // inlinePairQ pops one argument from the eval stack and sets the value
 // register to #t if it is a pair, #f otherwise.
-func inlinePairQ(mc *MachineContext) {
+func inlinePairQ(mc *MachineContext) error {
 	o := mc.evals.Pop()
 	mc.counters.StackDrains++
 	mc.counters.StackElementsDrained++
 	mc.counters.ForeignCalls++
 	_, ok := o.(*values.Pair)
 	mc.SetValue(values.BoolToBoolean(ok))
+	return nil
 }
 
 // inlineCar pops one argument from the eval stack, validates it is a pair,
@@ -137,6 +141,34 @@ func inlineCdr(mc *MachineContext) error {
 	}
 	mc.SetValue(p.Cdr())
 	return nil
+}
+
+// execPromoted runs the common promoted-op dispatch pattern: resolve the
+// cached binding, verify it is still the expected ForeignClosure, fall back
+// to generic call if not, otherwise execute the inline function and handle
+// the tail/non-tail epilogue.
+func execPromoted(
+	mc *MachineContext,
+	instr Instruction,
+	name string,
+	arity int,
+	tail bool,
+	fn func(*MachineContext) error,
+) (*MachineContext, error) {
+	callable := mc.template.cachedBindings[instr.Arg].Value()
+	fcls, ok := callable.(*ForeignClosure)
+	if !ok || fcls.name != name {
+		return callPromotedFallback(mc, callable, tail, arity)
+	}
+	err := fn(mc)
+	if err != nil {
+		return nil, err
+	}
+	if tail {
+		return mc.returnImmediate(), nil
+	}
+	mc.pc++
+	return mc, nil
 }
 
 // callPromotedFallback handles the case where a promoted primitive's cached
