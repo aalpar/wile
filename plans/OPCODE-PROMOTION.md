@@ -1,8 +1,8 @@
 # Opcode Promotion Plan
 
-**Status:** Profiling complete, implementation not started
+**Status:** Phase 1 and Phase 2 complete. Phase 3 (lower priority) open.
 **Date:** 2026-03-13
-**Prereq:** Profiling infrastructure fix (pool opcodeHits bug) — done, not yet committed
+**Prereq:** Profiling infrastructure fix (pool opcodeHits bug) — merged (#495)
 
 ## Context
 
@@ -125,36 +125,47 @@ From 361K ops in `(fib 20)`:
 
 ## Promotion Plan
 
-### Phase 1: List Predicates and Accessors
+### Phase 1: List Predicates and Accessors — Complete (#497)
 
-Zero-risk, follows existing `eq?` pattern exactly. No numeric tower, no variadic args, no allocations.
+| Primitive | Opcodes | Arity | Inline Logic |
+|-----------|---------|-------|-------------|
+| `null?` | `OpNullQ`/`Tail` | 1 | `values.IsEmptyList(o)` |
+| `pair?` | `OpPairQ`/`Tail` | 1 | `_, ok := o.(*values.Pair)` |
+| `car` | `OpCar`/`Tail` | 1 | Type assert Tuple + `.Car()` |
+| `cdr` | `OpCdr`/`Tail` | 1 | Type assert Tuple + `.Cdr()` |
 
-| Primitive | Arity | Inline Logic | Approx Savings |
-|-----------|-------|-------------|----------------|
-| `null?` | 1 | `values.IsEmptyList(o)` | 8M calls (takl, nqueens, sieve, destruct) |
-| `pair?` | 1 | `_, ok := o.(*values.Pair)` | 7M calls (takl, browse, deriv) |
-| `car` | 1 | Type assert `*values.Pair` + `.Car()` | 5M calls |
-| `cdr` | 1 | Type assert `*values.Pair` + `.Cdr()` | 13M calls |
+Results (list-heavy Larceny benchmarks):
 
-Implementation: 4 new inline functions in `call_promoted.go`, 8 new opcodes (non-tail + tail each), extend `promotedOpForName` switch.
+| Benchmark | Change |
+|-----------|--------|
+| takl | **-43%** |
+| browse | **-32%** |
+| destruct | **-29%** |
+| deriv | **-17%** |
 
-`car` and `cdr` need error handling for non-pair input (return wrapped `ErrNotAPair`), same pattern as `inlineVectorRef`.
+### Phase 2: Binary Arithmetic and Comparisons — Complete (#498)
 
-**Expected impact on takl:** `cdr`+`pair?`+`null?` are 100% of foreign calls (17.7M). Each currently goes through Drain + arity check + env bind + indirect call. Promotion eliminates all of that.
+2-arg only; variadic calls stay on `CallForeignCached`.
 
-### Phase 2: Binary Arithmetic and Comparisons
+| Primitive | Opcodes | Arity | Inline Logic |
+|-----------|---------|-------|-------------|
+| `+` | `OpAdd`/`Tail` | 2 | `a.Add(b)` |
+| `-` | `OpSub`/`Tail` | 2 | `a.Subtract(b)` |
+| `<` | `OpNumLt`/`Tail` | 2 | `a.LessThan(b)` |
+| `<=` | `OpNumLe`/`Tail` | 2 | NaN check + `!b.LessThan(a)` |
+| `>` | `OpNumGt`/`Tail` | 2 | `b.LessThan(a)` |
+| `>=` | `OpNumGe`/`Tail` | 2 | NaN check + `!a.LessThan(b)` |
+| `=` | `OpNumEq`/`Tail` | 2 | `numericEquals(a, b)` (IEEE 754 + cross-type) |
 
-Higher payoff. Simpler than initially expected — see panic analysis below.
+Results (numeric-heavy Larceny benchmarks, vs pre-promotion master):
 
-| Primitive | Arity | Inline Logic |
-|-----------|-------|-------------|
-| `+` (2-arg) | 2 | `a.(Number).Add(b.(Number))` |
-| `-` (2-arg) | 2 | `a.(Number).Subtract(b.(Number))` |
-| `<` | 2 | `a.(Number).LessThan(b.(Number))` |
-| `<=` | 2 | `!b.(Number).LessThan(a.(Number))` |
-| `>` | 2 | `b.(Number).LessThan(a.(Number))` |
-| `>=` | 2 | `!a.(Number).LessThan(b.(Number))` |
-| `=` (2-arg) | 2 | `a.(Number).Equal(b.(Number))` |
+| Benchmark | Change |
+|-----------|--------|
+| sumfp | **-71%** |
+| ackermann | **-57%** |
+| fib | **-40%** |
+| tak | **-30%** |
+| diviter | **-16%** |
 
 #### No defer/recover Needed
 
