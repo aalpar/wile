@@ -25,7 +25,7 @@
       (begin
         (display "FAIL: zebra puzzle returned no solution\n")
         (exit 1))
-      (let ((solution (schelog:deref* (cdr (car result)))))
+      (let ((solution (schelog:deref* (cadr (car result)))))
         (let ((answer1 (schelog:deref* (car solution)))
               (answer2 (schelog:deref* (cadr solution))))
           (display "Solution: ")
