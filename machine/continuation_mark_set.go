@@ -15,18 +15,17 @@
 package machine
 
 import (
-	"maps"
-
 	"github.com/aalpar/wile/values"
 )
 
 // ContinuationMarkSet is an immutable snapshot of continuation marks
 // collected from a walk of the continuation chain.
 //
-// The frames slice contains per-frame mark maps, nearest frame first.
-// Only frames with non-nil marks are included.
+// The frames slice contains per-frame mark slices, nearest frame first.
+// Only frames with non-nil marks are included. Each frame is a []markEntry
+// searched with eqIdentity (eq? semantics).
 type ContinuationMarkSet struct {
-	frames []map[values.Value]values.Value
+	frames [][]markEntry
 }
 
 func (p *ContinuationMarkSet) SchemeString() string {
@@ -47,12 +46,15 @@ func (p *ContinuationMarkSet) EqualTo(o values.Value) bool {
 
 // ToList returns a list of values for key across all frames, nearest first.
 // Returns the empty list if no frame contains the key.
+// Uses eq? semantics (eqIdentity) for key comparison.
 func (p *ContinuationMarkSet) ToList(key values.Value) values.Tuple {
 	var collected []values.Value
 	for _, frame := range p.frames {
-		v, ok := frame[key]
-		if ok {
-			collected = append(collected, v)
+		for _, e := range frame {
+			if eqIdentity(e.key, key) {
+				collected = append(collected, e.val)
+				break
+			}
 		}
 	}
 	return values.List(collected...)
@@ -60,11 +62,13 @@ func (p *ContinuationMarkSet) ToList(key values.Value) values.Tuple {
 
 // First returns the value for key from the nearest frame, or defaultVal
 // if no frame contains the key.
+// Uses eq? semantics (eqIdentity) for key comparison.
 func (p *ContinuationMarkSet) First(key, defaultVal values.Value) values.Value {
 	for _, frame := range p.frames {
-		v, ok := frame[key]
-		if ok {
-			return v
+		for _, e := range frame {
+			if eqIdentity(e.key, key) {
+				return e.val
+			}
 		}
 	}
 	return defaultVal
@@ -75,19 +79,23 @@ func (p *ContinuationMarkSet) First(key, defaultVal values.Value) values.Value {
 // and all continuation frames up to and including the nearest frame
 // with a matching promptTag.
 func (p *MachineContext) CollectContinuationMarks(tag *PromptTag) *ContinuationMarkSet {
-	var frames []map[values.Value]values.Value
+	var frames [][]markEntry
 
 	// Current frame
-	if p.marks != nil {
-		frames = append(frames, maps.Clone(p.marks))
+	if len(p.marks) > 0 {
+		frames = append(frames, cloneMarks(p.marks))
 	}
 
 	// Walk continuation chain, stopping at a frame with matching promptTag.
-	// The MachineContext's own promptTag is NOT checked — it represents
-	// the execution boundary, and all frames in the chain are within it.
+	// The MachineContext's own promptTag is NOT checked — it represents the
+	// execution boundary established by call-with-continuation-prompt on a
+	// sub-context, and collection is always called from within that boundary.
+	// Contrast with FindPrompt, which checks p.promptTag for escape detection;
+	// that check is not needed here because current-continuation-marks is only
+	// callable from code already inside the prompt scope.
 	for cont := p.cont; cont != nil; cont = cont.parent {
-		if cont.marks != nil {
-			frames = append(frames, maps.Clone(cont.marks))
+		if len(cont.marks) > 0 {
+			frames = append(frames, cloneMarks(cont.marks))
 		}
 		if cont.promptTag == tag {
 			break

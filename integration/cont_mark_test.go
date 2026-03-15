@@ -96,6 +96,31 @@ func TestWithContinuationMark_NestedNonTail(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "30")
 }
 
+// TestWithContinuationMark_CrossTemplateSymbolKey verifies that a mark
+// installed with a quoted symbol key is found when queried with the same
+// symbol name from a different compiled function. Without EqIdentity-based
+// lookup, the map uses pointer identity and the mark is silently lost because
+// two NativeTemplates produce distinct *Symbol pointers for the same name.
+func TestWithContinuationMark_CrossTemplateSymbolKey(t *testing.T) {
+	c := qt.New(t)
+	engine, err := wile.NewEngine(context.Background())
+	c.Assert(err, qt.IsNil)
+
+	// The lambda body is a separate NativeTemplate from the outer expression,
+	// so 'my-key in the lambda and 'my-key in the with-continuation-mark are
+	// distinct *Symbol pointers. EqIdentity must be used for lookup.
+	result, err := engine.Eval(context.Background(), `
+		(let ((read-marks (lambda ()
+				(continuation-mark-set->list
+					(current-continuation-marks)
+					'my-key))))
+			(with-continuation-mark 'my-key 42
+				(read-marks)))
+	`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "(42)")
+}
+
 func TestWithContinuationMark_BodySideEffects(t *testing.T) {
 	c := qt.New(t)
 	engine, err := wile.NewEngine(context.Background())

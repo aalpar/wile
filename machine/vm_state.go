@@ -19,6 +19,13 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
+// markEntry is a single continuation mark key-value pair.
+// Marks are stored as a flat slice; see vmState.marks for rationale.
+type markEntry struct {
+	key values.Value
+	val values.Value
+}
+
 // vmState holds the execution state fields shared between MachineContext and
 // MachineContinuation. Both types embed this struct so that the shared field
 // set is documented in one place and impossible to get out of sync.
@@ -191,8 +198,15 @@ type vmState struct {
 	// nil when no marks are set on this frame (zero-cost common case).
 	// Lazily allocated by SetMark on first use.
 	//
+	// Stored as a flat slice rather than a map. Key lookup uses eqIdentity
+	// (eq? semantics: symbol identity by name, all other types by pointer).
+	// Mark counts per frame are typically 0–3, so O(n) scan is O(1) in practice
+	// and avoids the Go-map comparability requirement that caused panics for
+	// non-comparable value types (MultipleValues) and wrong results for symbols
+	// after interning removal.
+	//
 	// Propagation: SaveContinuation copies to continuation then nils mc.marks
 	// (callee starts clean). Restore/PopContinuation restores from continuation.
-	// Copy() uses maps.Clone (shallow copy for call/cc re-invocation safety).
-	marks map[values.Value]values.Value
+	// cloneMarks does a shallow copy for call/cc re-invocation safety.
+	marks []markEntry
 }

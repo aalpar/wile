@@ -980,30 +980,47 @@ func (p *MachineContext) SetThread(t *values.Thread) {
 	}
 }
 
-// SetMark sets a continuation mark on the current frame.
-// Lazily allocates the marks map on first use.
+// SetMark sets a continuation mark on the current frame using eq? semantics.
+// Updates an existing entry with the same key, or appends a new one.
 func (p *MachineContext) SetMark(key, val values.Value) {
-	if p.marks == nil {
-		p.marks = make(map[values.Value]values.Value)
+	for i := range p.marks {
+		if eqIdentity(p.marks[i].key, key) {
+			p.marks[i].val = val
+			return
+		}
 	}
-	p.marks[key] = val
+	p.marks = append(p.marks, markEntry{key: key, val: val})
 }
 
 // GetMark returns the continuation mark for key on the current frame,
-// or nil if no mark is set.
+// or nil if no mark is set. Uses eq? semantics for key comparison.
+// Invariant: nil is used exclusively as the "not found" sentinel. Mark values
+// are always non-nil Scheme values (GetValue never returns nil); SetMark must
+// never be called with a nil val, as nil would be indistinguishable from absent.
 func (p *MachineContext) GetMark(key values.Value) values.Value {
-	if p.marks == nil {
-		return nil
+	for _, e := range p.marks {
+		if eqIdentity(e.key, key) {
+			return e.val
+		}
 	}
-	return p.marks[key]
+	return nil
 }
 
 // DeleteMark removes the continuation mark for key from the current frame.
-// Nils the map when empty to maintain the "nil = zero-cost" invariant.
+// Nils the slice when empty to maintain the "nil = zero-cost" invariant.
+// Uses eq? semantics for key comparison.
+// Deletion uses swap-with-last for O(1) removal; insertion order is not preserved.
 func (p *MachineContext) DeleteMark(key values.Value) {
-	delete(p.marks, key)
-	if len(p.marks) == 0 {
-		p.marks = nil
+	for i := range p.marks {
+		if eqIdentity(p.marks[i].key, key) {
+			p.marks[i] = p.marks[len(p.marks)-1]
+			p.marks[len(p.marks)-1] = markEntry{}
+			p.marks = p.marks[:len(p.marks)-1]
+			if len(p.marks) == 0 {
+				p.marks = nil
+			}
+			return
+		}
 	}
 }
 
