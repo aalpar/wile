@@ -146,12 +146,12 @@ Wile uses Landin's environment model for variable resolution: closures pair a co
 
 ### Hash Consing / Symbol Interning (Goto 1974)
 
-Symbol interning ensures that structurally equal symbols share a single pointer, enabling O(1) `eq?` comparison per R7RS §6.5. Wile interns per-TopLevelEnvironment (not global), supporting multiple isolated VMs. The double-checked locking pattern amortizes synchronization cost.
+Symbol interning ensures that structurally equal symbols share a single pointer, enabling O(1) `eq?` comparison. Wile previously interned symbols per-TopLevelEnvironment but removed symbol interning in favor of string-key comparison via `helpers.EqIdentity` (symbols compare by `.Key` field). The historical references are retained for context.
 
 - **Origin**: Eiichi Goto, "Monocopy and Associative Algorithms in an Extended Lisp", Technical Report 74-03, University of Tokyo, 1974
 - **Earlier**: Andrei P. Ershov, "On Programming of Arithmetic Operations", Communications of the ACM, Vol. 1, No. 8, 1958
 - **DOI** (Ershov): https://doi.org/10.1145/368892.368907
-- **Location**: `environment/top_level_environment.go` (InternSymbol)
+- **Location (historical)**: `registry/helpers/equality.go` (EqIdentity)
 
 ### Superinstruction Formation (Ertl & Gregg 2003)
 
@@ -433,7 +433,7 @@ Numeric arithmetic uses pre-built dispatch tables indexed by `NumericKind`, impl
 
 ### Units: Module System Foundations (Flatt & Felleisen 1998)
 
-Wile's library isolation model (shared symbol interning, isolated binding stores) follows the "units" approach to modular linking. Each library has its own `GlobalEnvironmentFrame` for bindings but delegates `InternSymbol` to a shared `TopLevelEnvironment`, ensuring R7RS §6.5 symbol identity across library boundaries.
+Wile's library isolation model (shared syntax interning, isolated binding stores) follows the "units" approach to modular linking. Each library has its own `GlobalEnvironmentFrame` for bindings but shares a `TopLevelEnvironment` for syntax interning. R7RS §6.5 symbol identity is ensured by string-key comparison via `helpers.EqIdentity`.
 
 - **Paper**: Matthew Flatt, Matthias Felleisen, "Units: Cool Modules for HOT Languages", PLDI 1998
 - **DOI**: https://doi.org/10.1145/277650.277730

@@ -564,7 +564,7 @@ Append after `PrimSyntaxLocalIdentifierAsBinding` (end of file):
 
 - **`PrimEnvironmentQ`**: Use `helpers.MakeTypePredicate` checking `*environment.TopLevelEnvironment`.
 - **`PrimEnvironmentBoundNames`**: Type-assert arg -> `*TopLevelEnvironment`, call `topLevelEnv.Runtime().GlobalEnvironment().Keys()`, cons each `*values.Symbol` onto accumulator.
-- **`PrimEnvironmentRef`**: Type-assert env arg, require `*values.Symbol` for second arg, intern via `env.InternSymbol(sym)`, call `env.GetBinding(sym)`. Return `binding.Value()`. Error with `ErrNoSuchBinding` if nil.
+- **`PrimEnvironmentRef`**: Type-assert env arg, require `*values.Symbol` for second arg, call `env.GetBinding(sym)`. Return `binding.Value()`. Error with `ErrNoSuchBinding` if nil.
 - **`PrimEnvironmentBoundQ`**: Same as ref but return `BoolToBoolean(binding != nil)`.
 
 ### 2. `internal/extensions/eval/register.go` -- Add 4 specs
@@ -575,7 +575,7 @@ Append after `PrimSyntaxLocalIdentifierAsBinding` (end of file):
 
 - **`environment-bound-names` includes all binding types** in one list.
 - **`environment-ref` traverses the parent chain** via `GetBinding()`.
-- **Symbol interning before lookup** is critical — `env.InternSymbol(sym)` ensures match.
+- **Symbol comparison by string key** — `helpers.EqIdentity` compares symbols by `.Key` field; no interning needed.
 - **No mutation primitives** in this cut.
 
 ## Go Infrastructure Already Available
