@@ -90,6 +90,22 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 
 - [x] **CI benchmark tracking** [CI, S]: Gabriel suite (16 benchmarks, 3 runs) runs in CI; results uploaded as 90-day artifacts. PR #430. Baseline regenerated from CI hardware in #431 — apparent 20% regression was a measurement environment mismatch (local vs CI hardware), not a code regression.
 
+### Actionable
+
+- [x] **Remove symbol interning** [Performance, M]: Removed `InternSymbol` canonicalization; symbols compared by `.Key` string via `helpers.EqIdentity`. ~50 call sites removed, `symbolInterns` map deleted from `TopLevelEnvironment`. `plans/REMOVE-SYMBOL-INTERNING.md`
+- [ ] **Optimize hot-path ForeignFunction calls** [Performance, M]: `car`/`cdr`/`null?`/`cons`/fixnum `+`/`<` pay full dispatch overhead per element (arity check, `bindArgs`, env swap, indirect call), making Scheme list algorithms 4-9× slower than Go. Two approaches: **(A) Promoted opcodes** — 6 new ops inline in `Run()` (prior art: `OpEqQ`/`OpVectorQ`/`OpVectorRef`); risk is icache pressure. **(B) Lightweight cached call** — 1 new opcode (`OpCallForeignDirect`) skips ceremony when compiler knows the callee. Evaluation protocol in `plans/NATIVE-FORMS-MIGRATION.md`.
+- [ ] **Procedure inlining** [Performance, Research]: Explore peephole inlining of known procedures at compile time. No plan yet.
+
+### Architectural (Tier 3)
+
+- [ ] **Flat closures** [Performance, L]: Copy only free variables into a flat array on the closure instead of capturing linked EnvironmentFrame chain. Eliminates parent-chain walk and full-frame copy. Requires compile-time free-variable analysis + `set!` boxing. `plans/PERFORMANCE.md`
+- [ ] **Stack frames replacing continuation chains** [Performance, L]: Contiguous stack of frames instead of per-call `MachineContinuation` allocation. Hybrid approach: stack frames for normal path, materialize continuation objects only on `call/cc`. `plans/PERFORMANCE.md`
+- [ ] **NaN-boxing / tagged pointers** [Performance, L]: Encode small values (fixnums, booleans, chars) in 64 bits instead of 16-byte Go interface. Halves stack/binding sizes. Massive change, awkward in Go. `plans/PERFORMANCE.md`
+
+### Research
+
+- [ ] **Fused lexing/parsing** [Performance, Research]: Flap paper (PLDI 2023) — fuse tokenizer and parser into single character-level pass, eliminating per-token heap allocation. 6-phase incremental plan written. Gated on profiling confirming tokenizer is a bottleneck. `plans/PERFORMANCE.md`
+
 ---
 
 ## Features
@@ -125,7 +141,6 @@ No demand signal. Speculative or research-only.
 - [ ] **Feature flags (3-tier)** [Runtime]: Compile-time, runtime global, extension-defined. No demand signal yet.
 - [ ] **Scribble syntax (@-expressions)** [Syntax]: Racket-style text processing. No demand signal yet.
 - [ ] **Hashtable SRFI compliance** [Standard library]: Current implementation is a custom API (10 primitives, fixed FNV-1a hash, fixed `EqualTo` comparison). Not R7RS-small (hashtables aren't in the spec) but doesn't conform to any SRFI either. Gaps vs SRFI-125: no custom hash/equality functions in constructor, no `hash-table-update!`, no `hash-table-fold`/`hash-table-map`, no immutable variant, no `hash-table->alist`/`alist->hash-table` conversion, naming uses `hashtable-*` not `hash-table-*`. Decide: target SRFI-125 (broader ecosystem compat) or keep custom API. Internal design issue: bucket chaining over `map[uint64][]entry` could be replaced with native Go map.
-- [ ] **Fused lexing/parsing** [Research]: Flap paper analysis. Actionable only after profiling confirms tokenizer is a bottleneck. `plans/PERFORMANCE.md`
 - [ ] **Unit testing expansion**: Regression test files (`test/regression/`), library-specific tests (`lib/*/test/`), new test cases for features not covered by Go test extraction.
 - [ ] **Type system**: type system that covers all the base types and can be expanded.  Discover useful properties of types to track (if any).  Types should be a distinct type (exists at the top of the hierarchy) - except for maybe some generic object type.
 - [ ] **Parser unit tests**: unit tests for parser.
@@ -138,7 +153,5 @@ No demand signal. Speculative or research-only.
 - [x] **Native forms migration** [Refactoring, M]: 44 of 52 done. Phase 3 complete: `call-with-port` migrated to Scheme in io extension (capturable continuation frames); `callWithFile` single-value bug fixed; all 6 list algorithms benchmarked and kept in Go (4-9× slower on short lists; all exceed 20% gate — per-element Scheme VM dispatch dominates); `call-with-input-file`/`call-with-output-file` kept in Go (files extension must load without io). Benchmark data in `plans/NATIVE-FORMS-MIGRATION.md`.
 - [ ] **User labels/tags to distinguish FS resolvers** Use tags or labels to distinguish bootstrap loadee from include/library loaders in fileResolver.
 - [x] **Benchmark** benchmark result of moving primitives to Scheme — measured in Phase 3 of native forms migration. All 6 list algorithms 4-9× slower in Scheme (per-element ForeignFunction dispatch dominates on short lists). Data in `plans/NATIVE-FORMS-MIGRATION.md`.
-- [ ] **Procedure Inlining?** how can peephole inline procedures?
-- [ ] **Optimize hot-path ForeignFunction calls** [Performance, M]: 6 list algorithms are 4-9× slower in Scheme because `car`/`cdr`/`null?`/`cons`/fixnum `+`/`<` pay full ForeignFunction dispatch overhead per element (arity check, `bindArgs`, env swap, indirect call). Two approaches to explore: **(A) Promoted opcodes** — add `OpCar`/`OpCdr`/`OpNullQ`/`OpCons`/`OpFixnumAdd`/`OpFixnumLT` inline in `Run()` (prior art: `OpEqQ`/`OpVectorQ`/`OpVectorRef`); risk is icache pressure from 12 new switch cases. **(B) Lightweight cached call** — specialize `callForeignCached` to skip `bindArgs`/env-swap/arity-check when compiler knows the callee; args read from stack view instead of environment bindings; 1 new opcode (`OpCallForeignDirect` + tail) instead of 12. Evaluation protocol and Scheme migration re-attempt documented in `plans/NATIVE-FORMS-MIGRATION.md`. Also subsumes the narrower CxR opcode idea.
 - [ ] **Disassembler** Implement a disassembler for Wile
 - [x] **Reflection primitives** [Runtime]: `procedure-arity`, `procedure-name`, `procedure-source-location`, `procedure-bound-symbols`, `procedure-type` in `registry/core/`.

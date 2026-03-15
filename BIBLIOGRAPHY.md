@@ -151,7 +151,7 @@ Symbol interning ensures that structurally equal symbols share a single pointer,
 - **Origin**: Eiichi Goto, "Monocopy and Associative Algorithms in an Extended Lisp", Technical Report 74-03, University of Tokyo, 1974
 - **Earlier**: Andrei P. Ershov, "On Programming of Arithmetic Operations", Communications of the ACM, Vol. 1, No. 8, 1958
 - **DOI** (Ershov): https://doi.org/10.1145/368892.368907
-- **Location (historical)**: `registry/helpers/equality.go` (EqIdentity)
+- **Location (historical)**: `environment/top_level_environment.go` (InternSymbol, removed — symbols now compared by string key via `helpers.EqIdentity`)
 
 ### Superinstruction Formation (Ertl & Gregg 2003)
 
