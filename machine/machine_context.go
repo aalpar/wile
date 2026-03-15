@@ -1006,6 +1006,28 @@ func (p *MachineContext) GetMark(key values.Value) values.Value {
 	return nil
 }
 
+// GetImmediateMark returns the nearest mark for key, checking the current
+// frame first, then the immediately saved continuation frame.
+//
+// This is the correct lookup for call-with-immediate-continuation-mark:
+// in tail position, with-continuation-mark sets the mark on the live frame
+// (mc.marks); in non-tail position, SaveContinuation moves mc.marks to
+// mc.cont and nils the live frame. Both cases are handled here.
+func (p *MachineContext) GetImmediateMark(key values.Value) values.Value {
+	val := p.GetMark(key)
+	if val != nil {
+		return val
+	}
+	if p.cont != nil {
+		for _, e := range p.cont.marks {
+			if eqIdentity(e.key, key) {
+				return e.val
+			}
+		}
+	}
+	return nil
+}
+
 // DeleteMark removes the continuation mark for key from the current frame.
 // Nils the slice when empty to maintain the "nil = zero-cost" invariant.
 // Uses eq? semantics for key comparison.

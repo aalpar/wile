@@ -133,3 +133,54 @@ func TestPrimContMarkErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestPrimCallWithImmediateContMark(t *testing.T) {
+	tcs := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			name:     "no mark uses default #f",
+			code:     `(call-with-immediate-continuation-mark 'k (lambda (v) v))`,
+			expected: "#f",
+		},
+		{
+			name:     "no mark uses explicit default",
+			code:     `(call-with-immediate-continuation-mark 'k (lambda (v) v) 'missing)`,
+			expected: "missing",
+		},
+		{
+			name: "reads mark from current frame",
+			code: `(with-continuation-mark 'k 99
+				(call-with-immediate-continuation-mark 'k (lambda (v) v)))`,
+			expected: "99",
+		},
+		{
+			name: "tail replacement — sees only innermost",
+			code: `(with-continuation-mark 'k 1
+				(with-continuation-mark 'k 2
+					(call-with-immediate-continuation-mark 'k (lambda (v) v))))`,
+			expected: "2",
+		},
+		{
+			name: "different key returns default",
+			code: `(with-continuation-mark 'k 1
+				(call-with-immediate-continuation-mark 'other (lambda (v) v)))`,
+			expected: "#f",
+		},
+		{
+			name: "proc result is returned",
+			code: `(call-with-immediate-continuation-mark 'k
+				(lambda (v) (+ 1 2)))`,
+			expected: "3",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result.SchemeString(), qt.Equals, tc.expected)
+		})
+	}
+}

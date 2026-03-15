@@ -74,6 +74,26 @@ func (p *ContinuationMarkSet) First(key, defaultVal values.Value) values.Value {
 	return defaultVal
 }
 
+// CollectMarksFromContinuation walks a captured MachineContinuation chain
+// and builds a ContinuationMarkSet snapshot. Used by the (continuation-marks
+// cont) primitive to extract marks from a continuation captured via call/cc.
+//
+// Starts from cont (nearest frame) and walks parent links, stopping at the
+// first frame whose promptTag matches tag (inclusive). Pass DefaultPromptTag
+// for an unbounded walk.
+func CollectMarksFromContinuation(cont *MachineContinuation, tag *PromptTag) *ContinuationMarkSet {
+	var frames [][]markEntry
+	for c := cont; c != nil; c = c.parent {
+		if len(c.marks) > 0 {
+			frames = append(frames, cloneMarks(c.marks))
+		}
+		if c.promptTag == tag {
+			break
+		}
+	}
+	return &ContinuationMarkSet{frames: frames}
+}
+
 // CollectContinuationMarks walks the continuation chain and builds a
 // ContinuationMarkSet snapshot. Collects marks from the current frame
 // and all continuation frames up to and including the nearest frame
