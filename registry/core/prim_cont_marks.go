@@ -70,3 +70,39 @@ var PrimContinuationMarkSetQ = helpers.MakeTypePredicate(func(o values.Value) bo
 	_, ok := o.(*machine.ContinuationMarkSet)
 	return ok
 })
+
+// PrimCallWithImmediateContMark implements
+// (call-with-immediate-continuation-mark key proc [default]).
+//
+// Gets the nearest mark for key in the current continuation, then calls proc
+// with that value. If no mark is set, calls proc with default (#f if omitted).
+//
+// Uses GetImmediateMark, which checks the live frame first, then the saved
+// continuation frame — covering both tail and non-tail compilation contexts.
+// In tail position, with-continuation-mark writes to mc.marks. In non-tail
+// position, SaveContinuation moves mc.marks to mc.cont before the call.
+func PrimCallWithImmediateContMark(mc *machine.MachineContext) error {
+	key := mc.Arg(0)
+	proc := mc.Arg(1)
+	val := mc.GetImmediateMark(key)
+	if val == nil {
+		val = values.FalseValue
+		v, ok := helpers.ParseOptionalArg(mc.Arg(2))
+		if ok {
+			val = v
+		}
+	}
+	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
+	sub.SetWindingStack(mc.WindingStack())
+	_, err := sub.ApplyCallable(proc, val)
+	if err != nil {
+		return err
+	}
+	err = sub.Run()
+	if err != nil {
+		return err
+	}
+	mc.SetValues(sub.GetValues()...)
+	return nil
+}
