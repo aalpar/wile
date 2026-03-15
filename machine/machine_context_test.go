@@ -2162,6 +2162,29 @@ func TestRunDispatch_OpPushCachedBinding(t *testing.T) {
 	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
+// markGet finds the value for key in a marks slice using eq? semantics, or nil.
+// Test helper only.
+func markGet(marks []markEntry, key values.Value) values.Value {
+	for _, e := range marks {
+		if eqIdentity(e.key, key) {
+			return e.val
+		}
+	}
+	return nil
+}
+
+// markSet sets the value for key in a marks slice using eq? semantics.
+// Panics if key is not present. Test helper only.
+func markSet(marks []markEntry, key values.Value, val values.Value) {
+	for i := range marks {
+		if eqIdentity(marks[i].key, key) {
+			marks[i].val = val
+			return
+		}
+	}
+	panic("markSet: key not found")
+}
+
 // newContMarkTestContext creates a minimal MachineContext for continuation mark tests.
 func newContMarkTestContext() *MachineContext {
 	env := environment.NewTopLevelEnvironment().Runtime()
@@ -2205,8 +2228,8 @@ func TestContMark_SaveContinuation_NilsMarks(t *testing.T) {
 	c.Assert(mc.GetMark(key), qt.IsNil)
 
 	// Saved continuation should have the mark
-	c.Assert(mc.cont.marks != nil, qt.IsTrue)
-	c.Assert(mc.cont.marks[key], qt.Equals, values.NewInteger(1))
+	c.Assert(len(mc.cont.marks) > 0, qt.IsTrue)
+	c.Assert(markGet(mc.cont.marks, key), qt.Equals, values.NewInteger(1))
 }
 
 func TestContMark_PopContinuation_RestoresMarks(t *testing.T) {
@@ -2243,6 +2266,6 @@ func TestContMark_Copy_Independent(t *testing.T) {
 	copied := original.Copy()
 
 	// Mutating copy doesn't affect original
-	copied.marks[key] = values.NewInteger(999)
-	c.Assert(original.marks[key], qt.Equals, values.NewInteger(1))
+	markSet(copied.marks, key, values.NewInteger(999))
+	c.Assert(markGet(original.marks, key), qt.Equals, values.NewInteger(1))
 }

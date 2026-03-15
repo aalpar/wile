@@ -15,18 +15,17 @@
 package machine
 
 import (
-	"maps"
-
-	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
 
-// cloneMarks returns a shallow clone of marks, or nil if marks is nil/empty.
-func cloneMarks(marks map[values.Value]values.Value) map[values.Value]values.Value {
+// cloneMarks returns a shallow copy of marks, or nil if marks is nil/empty.
+func cloneMarks(marks []markEntry) []markEntry {
 	if len(marks) == 0 {
 		return nil
 	}
-	return maps.Clone(marks)
+	q := make([]markEntry, len(marks))
+	copy(q, marks)
+	return q
 }
 
 func (p *MachineContext) Restore(cont *MachineContinuation) {

@@ -22,9 +22,8 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-// Shared symbols for tests — NewSymbol is not interned, so Go map
-// lookups require pointer identity between the key used to store
-// and the key used to look up.
+// Symbols for tests. markKeyEqual compares symbols by Key string, so
+// freshly allocated symbols with the same name are equivalent keys.
 var (
 	testKeyK     = values.NewSymbol("k")
 	testKeyA     = values.NewSymbol("a")
@@ -35,7 +34,7 @@ var (
 func TestContinuationMarkSet_ToList(t *testing.T) {
 	tcs := []struct {
 		name     string
-		frames   []map[values.Value]values.Value
+		frames   [][]markEntry
 		key      values.Value
 		expected string
 	}{
@@ -47,35 +46,35 @@ func TestContinuationMarkSet_ToList(t *testing.T) {
 		},
 		{
 			name: "single frame with mark",
-			frames: []map[values.Value]values.Value{
-				{testKeyK: values.NewInteger(1)},
+			frames: [][]markEntry{
+				{{testKeyK, values.NewInteger(1)}},
 			},
 			key:      testKeyK,
 			expected: "(1)",
 		},
 		{
 			name: "key absent",
-			frames: []map[values.Value]values.Value{
-				{testKeyK: values.NewInteger(1)},
+			frames: [][]markEntry{
+				{{testKeyK, values.NewInteger(1)}},
 			},
 			key:      testKeyOther,
 			expected: "()",
 		},
 		{
 			name: "multiple frames",
-			frames: []map[values.Value]values.Value{
-				{testKeyK: values.NewInteger(1)},
-				{testKeyK: values.NewInteger(2)},
+			frames: [][]markEntry{
+				{{testKeyK, values.NewInteger(1)}},
+				{{testKeyK, values.NewInteger(2)}},
 			},
 			key:      testKeyK,
 			expected: "(1 2)",
 		},
 		{
 			name: "mixed keys across frames",
-			frames: []map[values.Value]values.Value{
-				{testKeyA: values.NewInteger(1), testKeyB: values.NewInteger(10)},
-				{testKeyA: values.NewInteger(2)},
-				{testKeyB: values.NewInteger(20)},
+			frames: [][]markEntry{
+				{{testKeyA, values.NewInteger(1)}, {testKeyB, values.NewInteger(10)}},
+				{{testKeyA, values.NewInteger(2)}},
+				{{testKeyB, values.NewInteger(20)}},
 			},
 			key:      testKeyB,
 			expected: "(10 20)",
@@ -92,7 +91,7 @@ func TestContinuationMarkSet_ToList(t *testing.T) {
 func TestContinuationMarkSet_First(t *testing.T) {
 	tcs := []struct {
 		name     string
-		frames   []map[values.Value]values.Value
+		frames   [][]markEntry
 		key      values.Value
 		expected values.Value
 	}{
@@ -104,25 +103,25 @@ func TestContinuationMarkSet_First(t *testing.T) {
 		},
 		{
 			name: "single frame",
-			frames: []map[values.Value]values.Value{
-				{testKeyK: values.NewInteger(1)},
+			frames: [][]markEntry{
+				{{testKeyK, values.NewInteger(1)}},
 			},
 			key:      testKeyK,
 			expected: values.NewInteger(1),
 		},
 		{
 			name: "returns nearest",
-			frames: []map[values.Value]values.Value{
-				{testKeyK: values.NewInteger(1)},
-				{testKeyK: values.NewInteger(2)},
+			frames: [][]markEntry{
+				{{testKeyK, values.NewInteger(1)}},
+				{{testKeyK, values.NewInteger(2)}},
 			},
 			key:      testKeyK,
 			expected: values.NewInteger(1),
 		},
 		{
 			name: "key absent returns default",
-			frames: []map[values.Value]values.Value{
-				{testKeyK: values.NewInteger(1)},
+			frames: [][]markEntry{
+				{{testKeyK, values.NewInteger(1)}},
 			},
 			key:      testKeyOther,
 			expected: values.FalseValue,
