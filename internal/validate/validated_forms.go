@@ -221,6 +221,19 @@ type ValidatedDynamicWind struct {
 	After  ValidatedExpr
 }
 
+// ValidatedWithContinuationMark represents (with-continuation-mark key val body)
+//
+// Sets a continuation mark on the current frame during body evaluation.
+// In tail position, the mark replaces any existing mark with the same key
+// on the current frame. In non-tail position, the mark is removed after
+// body completes.
+type ValidatedWithContinuationMark struct {
+	validatedBase
+	Key  ValidatedExpr
+	Val  ValidatedExpr
+	Body ValidatedExpr
+}
+
 // ValidatedApply represents (apply proc arg1 ... args)
 //
 // R7RS §6.10: apply calls proc with the elements of the list

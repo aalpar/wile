@@ -26,7 +26,7 @@ import (
 // compile_validated.go handles compilation of core Scheme forms that go through
 // upfront validation (validate.Validate) before codegen. These are the fixed
 // R7RS core forms: if, lambda, define, set!, quote, quasiquote, begin,
-// case-lambda, dynamic-wind.
+// case-lambda, dynamic-wind, apply, with-continuation-mark.
 //
 // Extension forms (define-syntax, import, include, syntax-case, etc.) use a
 // separate registry-based compilation path in compile_time_continuation.go via
@@ -780,5 +780,56 @@ func (p *CompileTimeContinuation) CompileValidatedApply(ctctx CompileTimeCallCon
 		p.patchSaveContinuationOffset(saveContinuationIndex)
 	}
 
+	return nil
+}
+
+// CompileValidatedWithContinuationMark compiles (with-continuation-mark key val body).
+//
+// Tail position:
+//
+//	<compile key> PUSH
+//	<compile val>
+//	SetContMark               ; pops key, sets marks[key] = val
+//	<compile body in tail>
+//
+// Non-tail position:
+//
+//	<compile key> PUSH
+//	<compile val>
+//	SaveContMark              ; pops key, saves (key, old) on stack, sets mark
+//	<compile body in non-tail>
+//	RestoreContMark           ; pops (old, key), restores mark
+func (p *CompileTimeContinuation) CompileValidatedWithContinuationMark(
+	ctctx CompileTimeCallContext,
+	v *validate.ValidatedWithContinuationMark,
+) error {
+	exprCtx := ctctx.NotInTail()
+
+	// Compile key expression
+	err := p.compileValidated(exprCtx, v.Key)
+	if err != nil {
+		return err
+	}
+	p.AppendOperations(NewOperationPush())
+
+	// Compile val expression
+	err = p.compileValidated(exprCtx, v.Val)
+	if err != nil {
+		return err
+	}
+
+	if ctctx.inTail {
+		// Tail position: set mark, compile body in tail, no restore
+		p.AppendOperations(NewOperationSetContMark())
+		return p.compileValidated(ctctx, v.Body)
+	}
+
+	// Non-tail position: save+set, body, restore
+	p.AppendOperations(NewOperationSaveContMark())
+	err = p.compileValidated(exprCtx, v.Body)
+	if err != nil {
+		return err
+	}
+	p.AppendOperations(NewOperationRestoreContMark())
 	return nil
 }

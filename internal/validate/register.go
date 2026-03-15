@@ -33,6 +33,7 @@ func init() {
 	registerValidator("begin", validateBegin)
 	registerValidator("quasiquote", validateQuasiquote)
 	registerValidator("dynamic-wind", validateDynamicWind)
+	registerValidator("with-continuation-mark", validateWithContinuationMark)
 	registerValidator("apply", validateApply)
 
 	// Macro and library forms with structural validation

@@ -203,6 +203,79 @@ func TestCompileValidatedDynamicWind_Nested(t *testing.T) {
 	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(7))
 }
 
+// newContMarkEnv creates a test environment with with-continuation-mark binding
+// and a + primitive for arithmetic tests.
+func newContMarkEnv() *environment.EnvironmentFrame {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+
+	wcmSym := values.NewSymbol("with-continuation-mark")
+	env.MaybeCreateOwnGlobalBinding(wcmSym, environment.BindingTypePrimitive)
+
+	// Register + primitive for body-is-call and nested tests
+	addSym := values.NewSymbol("+")
+	env.MaybeCreateOwnGlobalBinding(addSym, environment.BindingTypeVariable)
+	addFn := func(mc *MachineContext) error {
+		a := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value().(*values.Integer).Value
+		b := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value().(*values.Integer).Value
+		mc.SetValue(values.NewInteger(a + b))
+		return nil
+	}
+	addClosure := NewForeignClosure(env, 2, false, addFn)
+	env.SetOwnGlobalValue(environment.NewGlobalIndex(addSym), addClosure) //nolint:errcheck
+
+	return env
+}
+
+// TestCompileWithContinuationMark_TailPosition verifies that with-continuation-mark
+// in tail position returns the body's value.
+func TestCompileWithContinuationMark_TailPosition(t *testing.T) {
+	env := newContMarkEnv()
+
+	// (with-continuation-mark 'k 1 'result) → result
+	mc := compileAndRun(t, env, "(with-continuation-mark 'k 1 'result)")
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewSymbol("result"))
+}
+
+// TestCompileWithContinuationMark_NonTailPosition verifies that with-continuation-mark
+// in non-tail position returns the body's value when followed by another expression.
+func TestCompileWithContinuationMark_NonTailPosition(t *testing.T) {
+	env := newContMarkEnv()
+
+	// In (begin X Y), X is not in tail position. The with-continuation-mark
+	// is X, so it compiles with SaveContMark/RestoreContMark. The begin returns
+	// the value of Y ('after), but the wcm body must still evaluate correctly.
+	// We verify the overall begin returns 'after (the last expression).
+	mc := compileAndRun(t, env, "(begin (with-continuation-mark 'k 1 42) 'after)")
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewSymbol("after"))
+}
+
+// TestCompileWithContinuationMark_BodyIsCall verifies that with-continuation-mark
+// works when the body is a procedure call.
+func TestCompileWithContinuationMark_BodyIsCall(t *testing.T) {
+	env := newContMarkEnv()
+
+	// (with-continuation-mark 'k 1 (+ 2 3)) → 5
+	mc := compileAndRun(t, env, "(with-continuation-mark 'k 1 (+ 2 3))")
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(5))
+}
+
+// TestCompileWithContinuationMark_Nested verifies nested with-continuation-mark
+// forms compile and run correctly in both tail and non-tail positions.
+func TestCompileWithContinuationMark_Nested(t *testing.T) {
+	env := newContMarkEnv()
+
+	// Nested in tail position: inner wcm inherits tail from outer wcm
+	// (with-continuation-mark 'a 1 (with-continuation-mark 'b 2 (+ 10 20))) → 30
+	mc := compileAndRun(t, env, "(with-continuation-mark 'a 1 (with-continuation-mark 'b 2 (+ 10 20)))")
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(30))
+
+	// Nested in non-tail position: both marks saved/restored,
+	// begin discards the wcm result and returns the final expression.
+	mc = compileAndRun(t, env,
+		"(begin (with-continuation-mark 'a 1 (with-continuation-mark 'b 2 (+ 10 20))) 'done)")
+	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewSymbol("done"))
+}
+
 // TestCompileValidated_UnknownExprType verifies the default branch in
 // compileValidated returns an error for unknown ValidatedExpr types.
 func TestCompileValidated_UnknownExprType(t *testing.T) {

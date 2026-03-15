@@ -83,6 +83,7 @@ import (
 //	│ promptTag    │ ✗              │ ✗           │ ✗                   │ ✗                │
 //	│ callDepth    │ ✓              │ ✓ (saved)   │ ✓ (saved)           │ ✗                │
 //	│ envPooled    │ ✓              │ ✗ (=false)  │ ✓ or false(shared)  │ ✓                │
+//	│ marks        │ ✓              │ ✓           │ ✓                   │ ✓                │
 //	└──────────────┴────────────────┴─────────────┴─────────────────────┴──────────────────┘
 type vmState struct {
 	env      *environment.EnvironmentFrame
@@ -186,4 +187,12 @@ type vmState struct {
 	//  │ acquireMacroContext      │ false(0) │ n/a (fresh context)               │
 	//  └──────────────────────────┴──────────┴───────────────────────────────────┘
 	envPooled bool
+	// marks holds per-frame continuation marks (Racket-style key-value annotations).
+	// nil when no marks are set on this frame (zero-cost common case).
+	// Lazily allocated by SetMark on first use.
+	//
+	// Propagation: SaveContinuation copies to continuation then nils mc.marks
+	// (callee starts clean). Restore/PopContinuation restores from continuation.
+	// Copy() uses maps.Clone (shallow copy for call/cc re-invocation safety).
+	marks map[values.Value]values.Value
 }

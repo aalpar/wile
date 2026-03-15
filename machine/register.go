@@ -52,6 +52,9 @@ func init() {
 	registerTypedCompiler("apply", func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, v *validate.ValidatedApply) error {
 		return ctc.CompileValidatedApply(ctctx, v)
 	})
+	registerTypedCompiler("with-continuation-mark", func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, v *validate.ValidatedWithContinuationMark) error {
+		return ctc.CompileValidatedWithContinuationMark(ctctx, v)
+	})
 
 	// Register compilers for extension forms (Tier 2 - syntax passthrough)
 	// These extract syntax from ValidatedLiteral and compile it

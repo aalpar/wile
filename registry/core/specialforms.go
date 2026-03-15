@@ -45,6 +45,8 @@ var compileTimeBindings = []string{
 	"dynamic-wind",
 	// R7RS §6.10: apply for procedure application with argument list
 	"apply",
+	// Racket-style continuation marks
+	"with-continuation-mark",
 	// Auxiliary syntax (R7RS §4.2.1, §4.2.5)
 	// These are literals used in syntax-rules patterns for cond and case
 	"else",

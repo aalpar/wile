@@ -2161,3 +2161,88 @@ func TestRunDispatch_OpPushCachedBinding(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 }
+
+// newContMarkTestContext creates a minimal MachineContext for continuation mark tests.
+func newContMarkTestContext() *MachineContext {
+	env := environment.NewTopLevelEnvironment().Runtime()
+	tpl := NewNativeTemplate(0, 0, false)
+	cont := NewMachineContinuation(nil, tpl, env)
+	return NewMachineContext(context.Background(), cont)
+}
+
+func TestContMark_SetGetDelete(t *testing.T) {
+	c := qt.New(t)
+	mc := newContMarkTestContext()
+
+	key := values.NewSymbol("k")
+
+	// Initially no marks
+	val := mc.GetMark(key)
+	c.Assert(val, qt.IsNil)
+
+	// Set and get
+	mc.SetMark(key, values.NewInteger(42))
+	val = mc.GetMark(key)
+	c.Assert(val, qt.Equals, values.NewInteger(42))
+
+	// Delete
+	mc.DeleteMark(key)
+	val = mc.GetMark(key)
+	c.Assert(val, qt.IsNil)
+}
+
+func TestContMark_SaveContinuation_NilsMarks(t *testing.T) {
+	c := qt.New(t)
+	mc := newContMarkTestContext()
+
+	key := values.NewSymbol("k")
+	mc.SetMark(key, values.NewInteger(1))
+
+	err := mc.SaveContinuation(1)
+	c.Assert(err, qt.IsNil)
+
+	// After save, mc.marks should be nil (callee starts clean)
+	c.Assert(mc.GetMark(key), qt.IsNil)
+
+	// Saved continuation should have the mark
+	c.Assert(mc.cont.marks != nil, qt.IsTrue)
+	c.Assert(mc.cont.marks[key], qt.Equals, values.NewInteger(1))
+}
+
+func TestContMark_PopContinuation_RestoresMarks(t *testing.T) {
+	c := qt.New(t)
+	mc := newContMarkTestContext()
+
+	key := values.NewSymbol("k")
+	otherKey := values.NewSymbol("other")
+	mc.SetMark(key, values.NewInteger(1))
+
+	err := mc.SaveContinuation(1)
+	c.Assert(err, qt.IsNil)
+
+	// Callee sets different mark
+	mc.SetMark(otherKey, values.NewInteger(99))
+
+	// Pop restores saved marks
+	_, err = mc.PopContinuation()
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetMark(key), qt.Equals, values.NewInteger(1))
+	c.Assert(mc.GetMark(otherKey), qt.IsNil)
+}
+
+func TestContMark_Copy_Independent(t *testing.T) {
+	c := qt.New(t)
+	mc := newContMarkTestContext()
+
+	key := values.NewSymbol("k")
+	mc.SetMark(key, values.NewInteger(1))
+	err := mc.SaveContinuation(1)
+	c.Assert(err, qt.IsNil)
+
+	original := mc.cont
+	copied := original.Copy()
+
+	// Mutating copy doesn't affect original
+	copied.marks[key] = values.NewInteger(999)
+	c.Assert(original.marks[key], qt.Equals, values.NewInteger(1))
+}
