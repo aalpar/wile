@@ -54,9 +54,9 @@ func (p *ERMacroTransformer) SchemeString() string {
 }
 
 func (p *ERMacroTransformer) EqualTo(o values.Value) bool {
-	_, ok := o.(*ERMacroTransformer)
+	v, ok := o.(*ERMacroTransformer)
 	if !ok {
 		return false
 	}
-	return p == o
+	return p == v
 }

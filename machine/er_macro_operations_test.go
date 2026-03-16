@@ -29,7 +29,7 @@ func TestERRename_Basic(t *testing.T) {
 	c := qt.New(t)
 
 	env := createHygieneTestEnv()
-	rename := machine.NewERRenameClosure(env.Expand())
+	rename := machine.NewERRenameClosure(env.Expand(), syntax.NewScope())
 
 	mc := machine.NewMachineContext(
 		context.Background(),
@@ -51,7 +51,7 @@ func TestERRename_CachesResults(t *testing.T) {
 	c := qt.New(t)
 
 	env := createHygieneTestEnv()
-	rename := machine.NewERRenameClosure(env.Expand())
+	rename := machine.NewERRenameClosure(env.Expand(), syntax.NewScope())
 
 	// First call.
 	mc1 := machine.NewMachineContext(
@@ -79,7 +79,7 @@ func TestERRename_SyntaxSymbolInput(t *testing.T) {
 	c := qt.New(t)
 
 	env := createHygieneTestEnv()
-	rename := machine.NewERRenameClosure(env.Expand())
+	rename := machine.NewERRenameClosure(env.Expand(), syntax.NewScope())
 
 	// Pass a SyntaxSymbol instead of a plain Symbol.
 	sctx := syntax.NewSourceContext("", "", syntax.NewSourceIndexes(0, 0, 0), syntax.NewSourceIndexes(0, 0, 0))
@@ -102,7 +102,7 @@ func TestERRename_RejectsNonSymbol(t *testing.T) {
 	c := qt.New(t)
 
 	env := createHygieneTestEnv()
-	rename := machine.NewERRenameClosure(env.Expand())
+	rename := machine.NewERRenameClosure(env.Expand(), syntax.NewScope())
 
 	mc := machine.NewMachineContext(
 		context.Background(),

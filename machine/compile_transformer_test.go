@@ -63,6 +63,29 @@ func TestCompileTransformerToMachineClosure_Lambda(t *testing.T) {
 	qt.Assert(t, closure, qt.IsNotNil)
 }
 
+func TestCompileTransformerToMachineClosure_ERMacroTransformer(t *testing.T) {
+	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	sctx := syntax.NewZeroValueSourceContext()
+
+	// (er-macro-transformer (lambda (form rename compare) form))
+	transformer := values.List(
+		values.NewSymbol("er-macro-transformer"),
+		values.List(
+			values.NewSymbol("lambda"),
+			values.List(values.NewSymbol("form"), values.NewSymbol("rename"), values.NewSymbol("compare")),
+			values.NewSymbol("form"),
+		),
+	)
+	transformerStx := schemeutil.DatumToSyntaxValue(context.Background(), sctx, transformer)
+
+	result, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, qt.IsNotNil)
+
+	_, isER := result.(*ERMacroTransformer)
+	qt.Assert(t, isER, qt.IsTrue)
+}
+
 func TestCompileTransformerToMachineClosure_UnsupportedType(t *testing.T) {
 	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
 	sctx := syntax.NewZeroValueSourceContext()

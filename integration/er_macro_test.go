@@ -30,3 +30,7 @@ func TestERMacro_Hygiene(t *testing.T) {
 func TestERMacro_Compare(t *testing.T) {
 	runSchemeTest(t, "er_macro_compare.scm", 15*time.Second, "ER macro compare")
 }
+
+func TestERMacro_CrossLibrary(t *testing.T) {
+	runSchemeTest(t, "er_macro_cross_library.scm", 15*time.Second, "ER macro cross-library")
+}

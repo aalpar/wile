@@ -23,11 +23,15 @@ import (
 
 // NewERRenameClosure creates the `rename` closure for an ER macro invocation.
 // defExpandEnv is the definition-site expand environment.
+// introScope is a fresh scope unique to this macro invocation, used to ensure
+// that renamed symbols not found in the definition-site env (e.g., temporary
+// names like 'tmp') get a unique identity that prevents variable capture.
 // The returned closure accepts a single symbol argument and returns a
 // SyntaxSymbol that resolves to the definition-site binding.
 // Results are cached per symbol name so that (eq? (rename 'x) (rename 'x)) is #t.
 func NewERRenameClosure(
 	defExpandEnv *environment.EnvironmentFrame,
+	introScope *syntax.Scope,
 ) *ForeignClosure {
 	cache := make(map[string]*syntax.SyntaxSymbol)
 
@@ -46,7 +50,7 @@ func NewERRenameClosure(
 		}
 
 		sym := values.NewSymbol(key)
-		result := resolveRenamedSymbol(defExpandEnv, sym)
+		result := resolveRenamedSymbol(defExpandEnv, sym, introScope)
 
 		cache[key] = result
 		mc.SetValue(result)
@@ -60,7 +64,10 @@ func NewERRenameClosure(
 
 // resolveRenamedSymbol creates a SyntaxSymbol that resolves to the
 // definition-site binding for the given symbol.
-func resolveRenamedSymbol(defExpandEnv *environment.EnvironmentFrame, sym *values.Symbol) *syntax.SyntaxSymbol {
+// For symbols not found in any definition-site environment, the introScope
+// is added to ensure the renamed identifier is distinct from any use-site
+// binding with the same name, preventing variable capture.
+func resolveRenamedSymbol(defExpandEnv *environment.EnvironmentFrame, sym *values.Symbol, introScope *syntax.Scope) *syntax.SyntaxSymbol {
 	// Try expand environment first.
 	bnd := defExpandEnv.GetBinding(sym)
 	if bnd != nil {
@@ -76,12 +83,17 @@ func resolveRenamedSymbol(defExpandEnv *environment.EnvironmentFrame, sym *value
 		}
 	}
 
-	// Not found — return symbol with empty scopes (top-level resolution).
+	// Not found — return symbol with the intro scope. This ensures that
+	// renamed temporaries like (rename 'tmp) are distinct from any use-site
+	// binding of 'tmp', providing ER macro hygiene for introduced identifiers.
 	sctx := syntax.NewSourceContext(
 		"", "",
 		syntax.NewSourceIndexes(0, 0, 0),
 		syntax.NewSourceIndexes(0, 0, 0),
 	)
+	if introScope != nil {
+		sctx = sctx.WithScope(introScope)
+	}
 	return syntax.NewSyntaxSymbol(sym.Key, sctx)
 }
 

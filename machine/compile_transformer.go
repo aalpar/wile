@@ -74,7 +74,7 @@ func compileTransformerToMachineClosure(
 		return compileERMacroTransformer(ctx, env, transformerPair)
 
 	default:
-		return nil, werr.WrapForeignErrorf(werr.ErrUnexpectedTransformer, "define-syntax: unsupported transformer type %q (expected syntax-rules or lambda)", symbol.Key)
+		return nil, werr.WrapForeignErrorf(werr.ErrUnexpectedTransformer, "define-syntax: unsupported transformer type %q (expected syntax-rules, lambda, or er-macro-transformer)", symbol.Key)
 	}
 }
 

@@ -360,14 +360,34 @@ func (p *ExpanderTimeContinuation) expandERMacroInvocation(
 	expr syntax.SyntaxValue,
 	erTransformer *ERMacroTransformer,
 ) (syntax.SyntaxValue, error) {
+	wrapped, err := p.invokeERTransformer(sym, expr, erTransformer)
+	if err != nil {
+		return nil, err
+	}
+	// Recursively expand the result
+	return p.ExpandExpression(wrapped)
+}
+
+// invokeERTransformer runs the ER transformer and returns the re-wrapped result
+// without recursive expansion. Used by both expandERMacroInvocation (which recurses)
+// and ExpandOnce (which does not).
+func (p *ExpanderTimeContinuation) invokeERTransformer(
+	sym *syntax.SyntaxSymbol,
+	expr syntax.SyntaxValue,
+	erTransformer *ERMacroTransformer,
+) (syntax.SyntaxValue, error) {
 	// Build complete input form: (macro-name . args)
 	inputForm := syntax.NewSyntaxCons(sym, expr, sym.SourceContext())
 
 	// Unwrap to raw s-expression for the transformer
 	rawForm := inputForm.UnwrapAll()
 
-	// Create rename closure (captures definition-site expand env)
-	renameCls := NewERRenameClosure(erTransformer.DefEnv())
+	// Create a fresh intro scope for this invocation. Unbound renamed symbols
+	// (like temporary names) get this scope to prevent variable capture.
+	introScope := syntax.NewScope()
+
+	// Create rename closure (captures definition-site expand env + intro scope)
+	renameCls := NewERRenameClosure(erTransformer.DefEnv(), introScope)
 
 	// Create compare closure (captures use-site env)
 	compareCls := NewERCompareClosure(p.env)
@@ -404,9 +424,7 @@ func (p *ExpanderTimeContinuation) expandERMacroInvocation(
 	// Already-SyntaxValue nodes (from rename) pass through unchanged.
 	// Raw symbols get use-site source context (no special scopes = use-site resolution).
 	wrapped := schemeutil.DatumToSyntaxValue(p.ctx, sym.SourceContext(), result)
-
-	// Recursively expand the result
-	return p.ExpandExpression(wrapped)
+	return wrapped, nil
 }
 
 // ExpandOnce performs a single step of macro expansion.
@@ -455,13 +473,7 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 		return expr, false, nil
 	}
 
-	// Get the transformer closure
-	cls, ok := bnd.Value().(Closure)
-	if !ok {
-		return nil, false, werr.WrapForeignErrorf(werr.ErrNotAClosure, "not a closure: %T", bnd.Value())
-	}
-
-	// Build the input form
+	// Build the cdr (argument list) for both ER and syntax-rules paths.
 	var cdr syntax.SyntaxValue
 	cdrPair, ok := stxPair.SyntaxCdr().(*syntax.SyntaxPair)
 	if ok {
@@ -469,6 +481,23 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 	} else {
 		cdr = syntax.SyntaxEmptyList
 	}
+
+	// Check for ER macro transformer first
+	erTransformer, isER := bnd.Value().(*ERMacroTransformer)
+	if isER {
+		result, err := p.invokeERTransformer(sym, cdr, erTransformer)
+		if err != nil {
+			return nil, false, err
+		}
+		return result, true, nil
+	}
+
+	// Get the transformer closure (syntax-rules / lambda)
+	cls, ok := bnd.Value().(Closure)
+	if !ok {
+		return nil, false, werr.WrapForeignErrorf(werr.ErrNotAClosure, "not a closure: %T", bnd.Value())
+	}
+
 	inputForm := syntax.NewSyntaxCons(sym, cdr, sym.SourceContext())
 
 	mc, err := invokeTransformerClosure(p.ctx, cls, inputForm, nil)

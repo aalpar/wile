@@ -185,11 +185,15 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 		if !created {
 			localIndex = childExpandEnv.GetLocalIndex(keyword)
 		}
-		if localIndex != nil {
-			err := childExpandEnv.SetLocalValue(localIndex, closure)
-			if err != nil {
-				return nil, err
-			}
+		if localIndex == nil {
+			return nil, werr.WrapForeignErrorf(
+				werr.ErrInvalidSyntax,
+				"%s: failed to create binding for %s", formName, keyword.Key,
+			)
+		}
+		err = childExpandEnv.SetLocalValue(localIndex, closure)
+		if err != nil {
+			return nil, err
 		}
 
 		cdr := current.SyntaxCdr()

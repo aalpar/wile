@@ -47,6 +47,15 @@ func compileERMacroTransformer(
 		)
 	}
 
+	// Reject extra arguments: (er-macro-transformer <lambda>) must have exactly one arg.
+	rest := argsPair.SyntaxCdr()
+	if !syntax.IsSyntaxEmptyList(rest) {
+		return nil, werr.WrapForeignErrorf(
+			werr.ErrInvalidSyntax,
+			"er-macro-transformer: expected exactly one argument (lambda expression), got extra forms",
+		)
+	}
+
 	// Compile and evaluate the lambda to get a MachineClosure.
 	// compileAndEvalLambdaTransformer handles expansion, compilation, and evaluation.
 	closure, err := compileAndEvalLambdaTransformer(ctx, env, lambdaExpr)
