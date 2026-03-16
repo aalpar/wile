@@ -24,20 +24,21 @@ import (
 )
 
 // compileTransformerToMachineClosure compiles a define-syntax transformer expression
-// into a MachineClosure for storage in the expand environment.
+// into a values.Value for storage in the expand environment.
 //
 // Supports:
-//   - (syntax-rules ...) - compiled directly via CompileSyntaxRules
-//   - (lambda (stx) ...) - compiled and evaluated to produce a closure
+//   - (syntax-rules ...) - compiled directly via CompileSyntaxRules → *MachineClosure
+//   - (lambda (stx) ...) - compiled and evaluated to produce a *MachineClosure
+//   - (er-macro-transformer (lambda (form rename compare) ...)) → *ERMacroTransformer
 //
 // The env parameter is used for compilation (so transformers can see local bindings),
-// while the resulting closure is intended to be stored in env.Expand().
+// while the resulting value is intended to be stored in env.Expand().
 func compileTransformerToMachineClosure(
 	ctx context.Context,
 	env *environment.EnvironmentFrame,
 	transformerExpr syntax.SyntaxValue,
 	libraryScope *syntax.Scope,
-) (*MachineClosure, error) {
+) (values.Value, error) {
 	transformerPair, ok := transformerExpr.(*syntax.SyntaxPair)
 	if !ok {
 		return nil, werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "define-syntax: transformer must be a list")
@@ -70,8 +71,11 @@ func compileTransformerToMachineClosure(
 	case "lambda":
 		return compileAndEvalLambdaTransformer(ctx, env, transformerPair)
 
+	case "er-macro-transformer":
+		return compileERMacroTransformer(ctx, env, transformerPair)
+
 	default:
-		return nil, werr.WrapForeignErrorf(werr.ErrUnexpectedTransformer, "define-syntax: unsupported transformer type %q (expected syntax-rules or lambda)", symbol.Key)
+		return nil, werr.WrapForeignErrorf(werr.ErrUnexpectedTransformer, "define-syntax: unsupported transformer type %q (expected syntax-rules, lambda, or er-macro-transformer)", symbol.Key)
 	}
 }
 

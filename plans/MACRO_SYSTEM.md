@@ -4,7 +4,7 @@
 
 # `er-macro-transformer` (Explicit Renaming Macros)
 
-**Status:** Proposed
+**Status:** Complete
 
 ## Goal
 
