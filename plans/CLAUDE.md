@@ -17,7 +17,7 @@ When investigating R7RS conformance issues:
 |------|----------|--------|
 | `PERFORMANCE.md` | Allocation history, fused lexing research, Tier 3 architectural changes | Tier 1-2 complete; Tier 3 + fused lexing open |
 | `SECURITY.md` | Extension-level sandboxing, authorization framework, opcode resource limits | Phases 1-6 done, resource limits proposed |
-| `MACRO_SYSTEM.md` | ER macro transformer, hygiene debugging, macro expansion tracing | Proposed |
+| `MACRO_SYSTEM.md` | ER macro transformer, hygiene debugging, macro expansion tracing | ER macros complete; hygiene debugging + tracing planned |
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |
 | `ARCHITECTURE.md` | Dialect system, module decomposition, plugin shadowing | Open items remain |
 | `CONTINUATION_MARKS.md` | Racket-style per-frame key-value annotations on the continuation chain | Proposed |

@@ -34,3 +34,15 @@ func TestERMacro_Compare(t *testing.T) {
 func TestERMacro_CrossLibrary(t *testing.T) {
 	runSchemeTest(t, "er_macro_cross_library.scm", 15*time.Second, "ER macro cross-library")
 }
+
+func TestERMacro_Nested(t *testing.T) {
+	runSchemeTest(t, "er_macro_nested.scm", 15*time.Second, "ER macro nested")
+}
+
+func TestERMacro_Mixed(t *testing.T) {
+	runSchemeTest(t, "er_macro_mixed.scm", 15*time.Second, "ER macro mixed with syntax-rules")
+}
+
+func TestERMacro_Cond(t *testing.T) {
+	runSchemeTest(t, "er_macro_cond.scm", 15*time.Second, "ER macro my-cond")
+}
