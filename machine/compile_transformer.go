@@ -37,7 +37,7 @@ func compileTransformerToMachineClosure(
 	env *environment.EnvironmentFrame,
 	transformerExpr syntax.SyntaxValue,
 	libraryScope *syntax.Scope,
-) (*MachineClosure, error) {
+) (values.Value, error) {
 	transformerPair, ok := transformerExpr.(*syntax.SyntaxPair)
 	if !ok {
 		return nil, werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "define-syntax: transformer must be a list")
