@@ -29,6 +29,10 @@ func addContMarks(r *registry.Registry) error {
 			Doc: "Returns #t if obj is a continuation mark set.", ParamNames: []string{"obj"}, Category: "continuations"},
 		{Name: "call-with-immediate-continuation-mark", ParamCount: 3, IsVariadic: true, Impl: PrimCallWithImmediateContMark,
 			Doc: "Calls proc with the immediate continuation mark for key on the current frame.", ParamNames: []string{"key", "proc", "default"}, Category: "continuations"},
+		{Name: "continuation-marks", ParamCount: 2, IsVariadic: true, Impl: PrimContinuationMarks,
+			Doc: "Returns the continuation mark set of a captured continuation.", ParamNames: []string{"cont", "prompt-tag"}, Category: "continuations"},
+		{Name: "continuation?", ParamCount: 1, Impl: PrimContinuationQ,
+			Doc: "Returns #t if obj is a captured continuation.", ParamNames: []string{"obj"}, Category: "continuations"},
 	}, registry.PhaseRuntime)
 
 	return nil

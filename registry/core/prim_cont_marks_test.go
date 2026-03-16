@@ -125,11 +125,87 @@ func TestPrimContMarkErrors(t *testing.T) {
 		{Name: "->list wrong type", Code: `(continuation-mark-set->list 42 'k)`},
 		{Name: "first wrong type", Code: `(continuation-mark-set-first 42 'k)`},
 		{Name: "current-continuation-marks wrong tag", Code: `(current-continuation-marks 42)`},
+		{Name: "continuation-marks wrong type", Code: `(continuation-marks 42)`},
+		{Name: "continuation-marks wrong tag", Code: `(call/cc (lambda (k) (continuation-marks k 42)))`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
 			_, err := testhelpers.RunSchemeCode(t, tc.Code)
 			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
+
+func TestPrimContinuationMarks(t *testing.T) {
+	tcs := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			name: "no marks on captured continuation",
+			code: `(continuation-mark-set->list
+				(call/cc (lambda (k) (continuation-marks k)))
+				'x)`,
+			expected: "()",
+		},
+		{
+			name: "marks visible on captured continuation",
+			code: `(with-continuation-mark 'k 42
+				(call/cc (lambda (cont)
+					(continuation-mark-set->list
+						(continuation-marks cont)
+						'k))))`,
+			expected: "(42)",
+		},
+		{
+			name: "continuation-mark-set? on result",
+			code: `(continuation-mark-set?
+				(call/cc (lambda (k) (continuation-marks k))))`,
+			expected: "#t",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result.SchemeString(), qt.Equals, tc.expected)
+		})
+	}
+}
+
+func TestPrimContinuationQ(t *testing.T) {
+	tcs := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			name:     "captured continuation is true",
+			code:     `(call/cc (lambda (k) (continuation? k)))`,
+			expected: "#t",
+		},
+		{
+			name:     "lambda is false",
+			code:     `(continuation? (lambda () 1))`,
+			expected: "#f",
+		},
+		{
+			name:     "integer is false",
+			code:     `(continuation? 42)`,
+			expected: "#f",
+		},
+		{
+			name:     "procedure? on continuation is true",
+			code:     `(call/cc (lambda (k) (procedure? k)))`,
+			expected: "#t",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result.SchemeString(), qt.Equals, tc.expected)
 		})
 	}
 }

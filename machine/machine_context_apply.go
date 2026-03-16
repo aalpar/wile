@@ -197,6 +197,8 @@ func (p *MachineContext) ApplyCallable(callable values.Value, args ...values.Val
 		return p.applyParameter(cls, args)
 	case *ComposableContinuation:
 		return p.applyComposableContinuation(cls, args)
+	case *CapturedContinuation:
+		return p.applyCapturedContinuation(cls, args)
 	default:
 		return p, werr.WrapForeignErrorf(werr.ErrNotAProcedure,
 			"application: expected a procedure, got %s", callable.SchemeString())
