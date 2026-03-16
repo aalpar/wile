@@ -174,27 +174,8 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 		}
 		transformerExpr := transformerPair.SyntaxCar()
 
-		// Check if transformer is a syntax-rules form
-		transformerPairExpr, ok := transformerExpr.(*syntax.SyntaxPair)
-		if !ok {
-			return nil, werr.WrapForeignErrorf(werr.ErrUnsupportedTransformer, "%s: only syntax-rules transformers are currently supported", formName)
-		}
-		car := transformerPairExpr.SyntaxCar()
-		if car == nil {
-			return nil, werr.WrapForeignErrorf(werr.ErrUnsupportedTransformer, "%s: invalid transformer", formName)
-		}
-		srSym, ok := car.(*syntax.SyntaxSymbol)
-		if !ok {
-			return nil, werr.WrapForeignErrorf(werr.ErrUnsupportedTransformer, "%s: only syntax-rules transformers are currently supported", formName)
-		}
-		srSymVal := srSym.Unwrap()
-		srSymbol, ok := srSymVal.(*values.Symbol)
-		if !ok || srSymbol.Key != "syntax-rules" {
-			return nil, werr.WrapForeignErrorf(werr.ErrUnsupportedTransformer, "%s: only syntax-rules transformers are currently supported", formName)
-		}
-
-		// Compile the syntax-rules transformer
-		closure, err := CompileSyntaxRules(p.ctx, p.env, transformerPairExpr, p.libraryScope)
+		// Compile the transformer (supports syntax-rules, lambda, er-macro-transformer)
+		closure, err := compileTransformerToMachineClosure(p.ctx, p.env, transformerExpr, p.libraryScope)
 		if err != nil {
 			return nil, werr.WrapForeignErrorf(err, "%s: could not compile transformer for %s", formName, keyword.Key)
 		}

@@ -120,3 +120,26 @@ func TestERMacro_EndToEnd_Constant(t *testing.T) {
 	unwrapped := expanded.UnwrapAll()
 	c.Assert(unwrapped.SchemeString(), qt.Equals, "42")
 }
+
+func TestERMacro_InLetSyntax(t *testing.T) {
+	c := qt.New(t)
+
+	env := createHygieneTestEnv()
+
+	// Parse a let-syntax with ER macro that returns a constant
+	form := parseString(t, env, `
+		(let-syntax
+		  ((my-const (er-macro-transformer
+		               (lambda (form rename compare) 42))))
+		  (my-const anything))
+	`)
+
+	etc := machine.NewExpanderTimeContinuation(context.Background(), env)
+	expanded, err := etc.ExpandExpression(form)
+	c.Assert(err, qt.IsNil)
+
+	// let-syntax wraps body in (begin ...), so the result is (begin 42)
+	t.Logf("Expanded: %s", expanded.SchemeString())
+	unwrapped := expanded.UnwrapAll()
+	c.Assert(unwrapped.SchemeString(), qt.Equals, "(begin 42)")
+}
