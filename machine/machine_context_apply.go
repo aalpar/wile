@@ -36,6 +36,10 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	}
 
 	p.counters.ClosuresApplied++
+	name := tpl.Name()
+	if name != "" {
+		p.counters.RecordCall(name)
+	}
 
 	var env *environment.EnvironmentFrame
 	var bnds []environment.Binding
@@ -101,7 +105,7 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	p.envPooled = false
 
 	p.counters.ForeignCalls++
-	p.counters.RecordPrimitiveCall(fcls.name)
+	p.counters.RecordCall(fcls.name)
 
 	// Save the template pointer before calling the foreign function.
 	// Some foreign functions (e.g., PrimCallCC inline mode) call Apply()

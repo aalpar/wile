@@ -105,7 +105,7 @@ func NewMachineContext(ctx context.Context, cont *MachineContinuation) *MachineC
 			pc:          cont.pc,
 		},
 		cont:     cont.parent,
-		counters: VMCounters{opcodeHits: newOpcodeHits()},
+		counters: VMCounters{opcodeHits: newOpcodeHits(), callCounts: newCallCounts()},
 	}
 	return q
 }

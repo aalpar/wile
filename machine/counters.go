@@ -53,9 +53,10 @@ type VMCounters struct {
 	NoCopyBindingsSaved      uint64
 	InlineEvalsSaved         uint64 // SaveContinuation used inline slots instead of stack pool
 
-	// Per-primitive call counting. Gated by WILE_OPCODE_HITS (same as opcodeHits).
-	// nil when profiling is disabled; allocated when enabled.
-	primitiveCalls map[string]uint64
+	// Per-callee call counting. Tracks both ForeignClosure (Go primitives) and
+	// named MachineClosure (Scheme-defined procedures) calls. Gated by
+	// WILE_OPCODE_HITS (same as opcodeHits). nil when profiling is disabled.
+	callCounts map[string]uint64
 
 	// Stack depth instrumentation (ongoing monitoring; prior cap-tuning investigation
 	// showed cap-8 is sufficient for observed workloads)
@@ -79,20 +80,20 @@ func newOpcodeHits() *[opCount]uint64 {
 	return nil
 }
 
-// newPrimitiveCalls returns a map for per-primitive call counting if
+// newCallCounts returns a map for per-callee call counting if
 // WILE_OPCODE_HITS is set, nil otherwise.
-func newPrimitiveCalls() map[string]uint64 {
+func newCallCounts() map[string]uint64 {
 	if opcodeHitsEnabled() {
 		return make(map[string]uint64)
 	}
 	return nil
 }
 
-// RecordPrimitiveCall increments the call count for the named primitive.
-// No-op when profiling is disabled (nil map).
-func (c *VMCounters) RecordPrimitiveCall(name string) {
-	if c.primitiveCalls != nil {
-		c.primitiveCalls[name]++
+// RecordCall increments the call count for the named callee (foreign primitive
+// or Scheme-defined procedure). No-op when profiling is disabled (nil map).
+func (c *VMCounters) RecordCall(name string) {
+	if c.callCounts != nil {
+		c.callCounts[name]++
 	}
 }
 
@@ -203,20 +204,20 @@ func (c VMCounters) OpcodeHistogram() string {
 	return b.String()
 }
 
-// PrimitiveCallHistogram returns a formatted histogram of per-primitive
-// call counts, sorted by frequency (descending). Returns empty string
-// when profiling is disabled.
-func (c VMCounters) PrimitiveCallHistogram() string {
-	if c.primitiveCalls == nil {
+// CallHistogram returns a formatted histogram of per-callee call counts
+// (both foreign primitives and named Scheme procedures), sorted by frequency
+// (descending). Returns empty string when profiling is disabled.
+func (c VMCounters) CallHistogram() string {
+	if c.callCounts == nil {
 		return ""
 	}
 	type entry struct {
 		name  string
 		count uint64
 	}
-	entries := make([]entry, 0, len(c.primitiveCalls))
+	entries := make([]entry, 0, len(c.callCounts))
 	var total uint64
-	for name, count := range c.primitiveCalls {
+	for name, count := range c.callCounts {
 		entries = append(entries, entry{name: name, count: count})
 		total += count
 	}

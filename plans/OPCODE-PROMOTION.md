@@ -7,7 +7,7 @@
 ## Context
 
 The VM dispatch loop (`machine/machine_context.go:Run()`) uses a two-tier model:
-- **Primary switch**: ~37 opcodes inlined in the main dispatch loop
+- **Primary switch**: ~58 opcodes inlined in the main dispatch loop (post Phase 1+2; was ~37 pre-promotion)
 - **OpComplex side table**: Complex operations dispatched via `sideTable[arg].Apply(mc)`
 
 Peephole optimizer (`machine/peephole.go`) fuses common instruction sequences:
@@ -104,7 +104,7 @@ Across all 16 successful benchmarks, ranked by total call volume:
 | 13 | `*` | ~0.7M | Numeric |
 | 14 | `modulo` | ~0.7M | Numeric |
 | 15 | `cons` | ~0.6M | List + mixed |
-| 16 | `not` | — | Absorbed into branching (special form, not primitive call) |
+| 16 | `not` | — | Scheme-defined `MachineClosure` — invisible to `ForeignClosure` profiling |
 
 ### Opcode-Level Profile (fib example)
 
@@ -151,10 +151,10 @@ Results (list-heavy Larceny benchmarks):
 |-----------|---------|-------|-------------|
 | `+` | `OpAdd`/`Tail` | 2 | `a.Add(b)` |
 | `-` | `OpSub`/`Tail` | 2 | `a.Subtract(b)` |
-| `<` | `OpNumLt`/`Tail` | 2 | `a.LessThan(b)` |
-| `<=` | `OpNumLe`/`Tail` | 2 | NaN check + `!b.LessThan(a)` |
-| `>` | `OpNumGt`/`Tail` | 2 | `b.LessThan(a)` |
-| `>=` | `OpNumGe`/`Tail` | 2 | NaN check + `!a.LessThan(b)` |
+| `<` | `OpNumLt`/`Tail` | 2 | Complex check + `a.LessThan(b)` |
+| `<=` | `OpNumLe`/`Tail` | 2 | Complex check + NaN check + `!b.LessThan(a)` |
+| `>` | `OpNumGt`/`Tail` | 2 | Complex check + `b.LessThan(a)` |
+| `>=` | `OpNumGe`/`Tail` | 2 | Complex check + NaN check + `!a.LessThan(b)` |
 | `=` | `OpNumEq`/`Tail` | 2 | `numericEquals(a, b)` (IEEE 754 + cross-type) |
 
 Results (numeric-heavy Larceny benchmarks, vs pre-promotion master):
@@ -190,24 +190,7 @@ The only panics in `values/` are programmer assertions: type-switch exhaustivene
 
 **Conclusion:** Type-assert both args as `Number`, then call the method directly. No defer/recover, no residual panic risk.
 
-```go
-func inlineAdd(mc *MachineContext) error {
-    b := mc.evals.Pop()
-    a := mc.evals.Pop()
-    an, ok := a.(values.Number)
-    if !ok {
-        return applyCallableError(mc, werr.WrapForeignErrorf(
-            werr.ErrNotANumber, "+: expected number, got %s", a.SchemeString()))
-    }
-    bn, ok := b.(values.Number)
-    if !ok {
-        return applyCallableError(mc, werr.WrapForeignErrorf(
-            werr.ErrNotANumber, "+: expected number, got %s", b.SchemeString()))
-    }
-    mc.SetValue(an.Add(bn))
-    return nil
-}
-```
+Implemented in `machine/call_promoted_arithmetic.go` via shared `popTwoNumbers` helper (pop + type assert + counter update) called by all seven arithmetic inline functions.
 
 #### Variadic Arity
 
@@ -219,13 +202,13 @@ func inlineAdd(mc *MachineContext) error {
 |-----------|-------|
 | `cons` | Allocates a new `*values.Pair` — promotion saves dispatch but not allocation |
 | `modulo` | 700K calls (primes, sieve). Numeric tower + potential division-by-zero |
-| `not` | Already absorbed into branching by special form compilation — not a primitive call |
+| `not` | Scheme-defined procedure `(define (not x) (if x #f #t))` in `bootstrap_procedures.scm`. Full `MachineClosure` call path, invisible to `ForeignClosure` profiling. Promotion would require compiler-level recognition (e.g., `(not expr)` → branch + constant), not peephole. Unknown call frequency. |
 | `list` | Variadic, allocating. Not a good candidate. |
 | `append` | O(n), allocating. Dispatch overhead negligible vs work done. |
 
 ## Demotion Analysis
 
-**No current opcodes warrant demotion.** The primary switch has ~37 cases, well within Go's jump table efficiency. All opcodes either:
+**No current opcodes warrant demotion.** The primary switch has ~58 cases, well within Go's jump table efficiency. All opcodes either:
 - Are hot across most workloads (Push, PushLocal, SaveContinuation, etc.)
 - Serve specific workloads where they're dominant (vector ops for solvers)
 - Have trivial inline logic (the dispatch cost of OpComplex indirection would be comparable)
@@ -237,7 +220,8 @@ func inlineAdd(mc *MachineContext) error {
 | File | Changes |
 |------|---------|
 | `machine/opcode.go` | New opcode constants + metadata entries |
-| `machine/call_promoted.go` | New inline functions + extend `promotedOpForName` |
+| `machine/call_promoted.go` | `promotedOpForName` switch, `execPromoted`, `callPromotedFallback`, predicate/accessor inlines |
+| `machine/call_promoted_arithmetic.go` | Arithmetic/comparison inlines, `popTwoNumbers` helper, `numericEquals` |
 | `machine/machine_context.go` | New `case` arms in `Run()` dispatch switch |
 | `machine/peephole.go` | Already generic — `promotedOpForName` is the only change needed |
 | `machine/opcode_test.go` | Opcode metadata coverage |
@@ -253,11 +237,13 @@ func inlineAdd(mc *MachineContext) error {
 
 ## Open Questions
 
-1. ~~**Should per-primitive call counting be permanent infrastructure?**~~ **Resolved: yes.** `primitiveCalls map[string]uint64` added to `VMCounters`, gated by `WILE_OPCODE_HITS`. `RecordPrimitiveCall(name)` called at three dispatch sites: `execPromoted` (all promoted ops), `callForeignCached` (peephole non-promoted), `applyForeign` (uncached). `PrimitiveCallHistogram()` formats output by frequency. Access via `engine.LastCounters().PrimitiveCallHistogram()`.
+1. ~~**Should per-primitive call counting be permanent infrastructure?**~~ **Resolved: yes.** `callCounts map[string]uint64` added to `VMCounters`, gated by `WILE_OPCODE_HITS`. `RecordCall(name)` called at three dispatch sites: `execPromoted` (all promoted ops), `callForeignCached` (peephole non-promoted), `applyForeign` (uncached). `CallHistogram()` formats output by frequency. Access via `engine.LastCounters().CallHistogram()`.
 
-2. **`sum` benchmark overflows call depth.** `sum(10000)` is non-tail-recursive with n exactly at the `DefaultMaxCallDepth` limit (10,000). Not a VM bug — the benchmark needs `n` lowered or a tail-recursive rewrite.
+2. ~~**Profiling blind spot: `MachineClosure` calls are untracked.**~~ **Resolved.** `RecordCall` now also fires in `Apply()` for named `MachineClosure` calls. Anonymous lambdas (empty template name) are skipped. The `CallHistogram()` (formerly `PrimitiveCallHistogram()`) now shows both foreign primitives and Scheme-defined procedures in a single unified ranking.
 
-3. ~~**Can the defer/recover in `OperationForeignFunctionCall.Apply` be moved to `RunWithEscapeHandling`?**~~ **Resolved: no.** Post-promotion, `OperationForeignFunctionCall` has exactly one user (call/cc escape closure). Moving defer/recover to Run would save ~30ns on this single cold path while losing continuation context at the panic point (needed by `goErrorToSchemeException` for stack traces). The panic audit confirmed all reachable panics are programmer assertions, not runtime conditions. Cost/benefit is poor.
+3. **`sum` benchmark overflows call depth.** `sum(10000)` is non-tail-recursive with n exactly at the `DefaultMaxCallDepth` limit (10,000). Not a VM bug — the benchmark needs `n` lowered or a tail-recursive rewrite.
+
+4. ~~**Can the defer/recover in `OperationForeignFunctionCall.Apply` be moved to `RunWithEscapeHandling`?**~~ **Resolved: no.** Post-promotion, `OperationForeignFunctionCall` has exactly one user (call/cc escape closure). Moving defer/recover to Run would save ~30ns on this single cold path while losing continuation context at the panic point (needed by `goErrorToSchemeException` for stack traces). The panic audit confirmed all reachable panics are programmer assertions, not runtime conditions. Cost/benefit is poor.
 
 ## Panic Audit Summary (for reference)
 

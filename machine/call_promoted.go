@@ -161,7 +161,7 @@ func execPromoted(
 		return callPromotedFallback(mc, callable, tail, arity)
 	}
 	err := fn(mc)
-	mc.counters.RecordPrimitiveCall(name)
+	mc.counters.RecordCall(name)
 	if err != nil {
 		return nil, err
 	}
