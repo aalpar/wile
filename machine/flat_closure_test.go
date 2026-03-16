@@ -233,11 +233,18 @@ func TestFlatClosure_OpMakeFlatClosure(t *testing.T) {
 		},
 	})
 
-	// The outer template: push innerTpl, then MakeFlatClosure
+	// Create a compile-time env for the inner closure's parameter bindings.
+	innerLenv := environment.NewLocalEnvironment(0)
+	innerEnv := environment.NewEnvironmentFrameWithParent(innerLenv, topEnv)
+
+	// The outer template: push innerTpl, push innerEnv, then MakeFlatClosure
 	outerTpl := NewNativeTemplate(0, 0, false)
-	litIdx := outerTpl.MaybeAppendLiteral(innerTpl)
+	tplIdx := outerTpl.MaybeAppendLiteral(innerTpl)
+	envIdx := outerTpl.MaybeAppendLiteral(innerEnv)
 	outerTpl.AppendOperations(
-		NewOperationLoadLiteralByLiteralIndexImmediate(litIdx),
+		NewOperationLoadLiteralByLiteralIndexImmediate(tplIdx),
+		NewOperationPush(),
+		NewOperationLoadLiteralByLiteralIndexImmediate(envIdx),
 		NewOperationPush(),
 		NewOperationMakeFlatClosure(),
 	)
@@ -250,7 +257,7 @@ func TestFlatClosure_OpMakeFlatClosure(t *testing.T) {
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, cls.FreeVars(), qt.HasLen, 1)
 	qt.Assert(t, cls.FreeVars()[0], valuestest.SchemeEquals, values.NewInteger(42))
-	qt.Assert(t, cls.Env(), qt.IsNil)
+	qt.Assert(t, cls.Env(), qt.IsNotNil)
 }
 
 func TestFlatClosure_OpMakeFlatClosureFromFreeVars(t *testing.T) {
@@ -266,11 +273,18 @@ func TestFlatClosure_OpMakeFlatClosureFromFreeVars(t *testing.T) {
 		},
 	})
 
-	// The outer template
+	// Create a compile-time env for the inner closure's parameter bindings.
+	innerLenv := environment.NewLocalEnvironment(0)
+	innerEnv := environment.NewEnvironmentFrameWithParent(innerLenv, topEnv)
+
+	// The outer template: push innerTpl, push innerEnv, then MakeFlatClosure
 	outerTpl := NewNativeTemplate(0, 0, false)
-	litIdx := outerTpl.MaybeAppendLiteral(innerTpl)
+	tplIdx := outerTpl.MaybeAppendLiteral(innerTpl)
+	envIdx := outerTpl.MaybeAppendLiteral(innerEnv)
 	outerTpl.AppendOperations(
-		NewOperationLoadLiteralByLiteralIndexImmediate(litIdx),
+		NewOperationLoadLiteralByLiteralIndexImmediate(tplIdx),
+		NewOperationPush(),
+		NewOperationLoadLiteralByLiteralIndexImmediate(envIdx),
 		NewOperationPush(),
 		NewOperationMakeFlatClosure(),
 	)
@@ -293,10 +307,17 @@ func TestFlatClosure_OpMakeFlatClosureNoInfo(t *testing.T) {
 
 	innerTpl := NewNativeTemplate(0, 0, false) // no FreeVarInfo set
 
+	// Create a compile-time env for the inner closure.
+	innerLenv := environment.NewLocalEnvironment(0)
+	innerEnv := environment.NewEnvironmentFrameWithParent(innerLenv, topEnv)
+
 	outerTpl := NewNativeTemplate(0, 0, false)
-	litIdx := outerTpl.MaybeAppendLiteral(innerTpl)
+	tplIdx := outerTpl.MaybeAppendLiteral(innerTpl)
+	envIdx := outerTpl.MaybeAppendLiteral(innerEnv)
 	outerTpl.AppendOperations(
-		NewOperationLoadLiteralByLiteralIndexImmediate(litIdx),
+		NewOperationLoadLiteralByLiteralIndexImmediate(tplIdx),
+		NewOperationPush(),
+		NewOperationLoadLiteralByLiteralIndexImmediate(envIdx),
 		NewOperationPush(),
 		NewOperationMakeFlatClosure(),
 	)

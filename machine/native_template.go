@@ -55,6 +55,11 @@ type NativeTemplate struct {
 	// nil until Pass 1 (FreeVarAnalysis) runs.
 	freeVarInfo *FreeVarInfo
 
+	// flatClosuresDone is true after the flat closure pipeline (Passes 1-3)
+	// has been run on this template. Used to prevent double-processing when
+	// nested compileClosureBody calls each run the pipeline.
+	flatClosuresDone bool
+
 	// Integer dispatch: all operations compiled to Instructions.
 	// Hot-path ops (Wave 1-3) are direct switch cases; complex ops
 	// (closures, macros, FFI) are in sideTable and dispatched via OpComplex.

@@ -75,6 +75,7 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 
 	p.template = tpl
 	p.env = env
+	p.freeVars = mcls.freeVars
 	p.pc = 0
 	return p, nil
 }

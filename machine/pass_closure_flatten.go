@@ -43,6 +43,12 @@ func FlattenClosures(tpl *NativeTemplate, enclosingInfo *FreeVarInfo) {
 	if info != nil && len(info.Captures) > 0 {
 		lookup := buildFreeVarLookup(info)
 		rewriteFreeVarReferences(tpl, lookup)
+
+		// Step 2.5: Insert OpUnbox after OpLoadFreeVar for boxed captures.
+		// rewriteFreeVarReferences already handled OpStoreLocal(depth>0) by
+		// emitting OpLoadFreeVar + OpSetBox. For reads, we now need to unbox
+		// the *values.Box loaded by OpLoadFreeVar.
+		rewriteBoxedFreeVarReads(tpl, info)
 	}
 
 	// Step 3: Rewrite OpMakeClosure → OpMakeFlatClosure for sub-templates
@@ -50,9 +56,13 @@ func FlattenClosures(tpl *NativeTemplate, enclosingInfo *FreeVarInfo) {
 	rewriteMakeClosureToFlat(tpl)
 
 	// Step 4: Recurse into sub-templates (top-down).
+	// Skip sub-templates already processed by a nested compileClosureBody call.
 	for _, lit := range tpl.Literals() {
 		sub, ok := lit.(*NativeTemplate)
 		if !ok {
+			continue
+		}
+		if sub.flatClosuresDone {
 			continue
 		}
 		FlattenClosures(sub, info)
@@ -118,8 +128,14 @@ func buildFreeVarLookup(info *FreeVarInfo) map[[2]int]int {
 	return q
 }
 
-// rewriteFreeVarReferences rewrites OpLoadLocal(slot, depth>0) and
-// OpPushLocal(slot, depth>0) to OpLoadFreeVar(closureSlot) using an EditPlan.
+// rewriteFreeVarReferences rewrites OpLoadLocal(slot, depth>0),
+// OpPushLocal(slot, depth>0), and OpStoreLocal(slot, depth>0) to flat
+// closure operations using an EditPlan.
+//
+// Load/Push: rewritten to OpLoadFreeVar(closureSlot).
+// Store: rewritten to OpLoadFreeVar(closureSlot) + OpSetBox. All
+// cross-scope stores must target boxed variables (the boxing criterion
+// in InsertBoxes guarantees this).
 func rewriteFreeVarReferences(tpl *NativeTemplate, lookup map[[2]int]int) {
 	plan := NewEditPlan(tpl)
 
@@ -151,35 +167,91 @@ func rewriteFreeVarReferences(tpl *NativeTemplate, lookup map[[2]int]int) {
 				{Op: OpLoadFreeVar, Arg: int32(closureSlot)},
 				{Op: OpPush},
 			}, tpl.sourceRefs[pc])
+
+		case OpStoreLocal:
+			slot, depth := DecodeLocalIndex(instr.Arg)
+			if depth == 0 {
+				continue
+			}
+			closureSlot, ok := lookup[[2]int{slot, depth}]
+			if !ok {
+				continue
+			}
+			// Cross-scope stores always target boxed variables.
+			// Rewrite: OpLoadFreeVar(closureSlot) loads the *values.Box,
+			// then OpSetBox stores evals.Pop() into it.
+			plan.Replace(pc, pc+1, []Instruction{
+				{Op: OpLoadFreeVar, Arg: int32(closureSlot)},
+				{Op: OpSetBox},
+			}, tpl.sourceRefs[pc])
 		}
 	}
 
 	plan.Apply()
 }
 
-// rewriteMakeClosureToFlat scans for OpMakeClosure instructions and rewrites
-// the closure creation sequence to use OpMakeFlatClosure when the child
-// template has captures (non-empty FreeVarInfo).
+// rewriteBoxedFreeVarReads inserts OpUnbox after OpLoadFreeVar instructions
+// that reference boxed captures. This is the capturing-scope counterpart of
+// rewriteBoxedReads in pass_box_insertion.go (which handles the defining scope).
 //
-// The compiler emits the following 5-instruction sequence:
+// After rewriteFreeVarReferences, boxed reads appear as:
 //
-//	OpLoadLiteral(tplIdx)   ; load template
-//	OpPush                  ; push template
-//	OpLoadLiteral(envIdx)   ; load env
-//	OpPush                  ; push env
-//	OpMakeClosure           ; pop env, pop template, create closure
+//	OpLoadFreeVar(closureSlot)     ; loads *values.Box
 //
-// After peephole optimization, Load+Push pairs may be fused:
+// This pass rewrites them to:
 //
-//	OpPushLiteral(tplIdx)   ; fused load+push template
-//	OpPushLiteral(envIdx)   ; fused load+push env
-//	OpMakeClosure           ; pop env, pop template, create closure
+//	OpLoadFreeVar(closureSlot)     ; loads *values.Box
+//	OpUnbox                        ; extracts box.Value
 //
-// OpMakeFlatClosure pops only the template (not the env). The rewrite
-// removes the env-pushing instructions and replaces MakeClosure:
+// Non-boxed captures are left unchanged. OpSetBox sequences (from
+// rewriteFreeVarReferences handling StoreLocal) are also left unchanged —
+// they correctly load the box and set its value.
+func rewriteBoxedFreeVarReads(tpl *NativeTemplate, info *FreeVarInfo) {
+	// Build a set of closure slots that are boxed.
+	boxedSlots := make(map[int32]bool)
+	for _, c := range info.Captures {
+		if c.Boxed {
+			boxedSlots[int32(c.ClosureSlot)] = true
+		}
+	}
+	if len(boxedSlots) == 0 {
+		return
+	}
+
+	plan := NewEditPlan(tpl)
+	code := tpl.Code()
+
+	for pc, instr := range code {
+		if instr.Op != OpLoadFreeVar {
+			continue
+		}
+		if !boxedSlots[instr.Arg] {
+			continue
+		}
+		// Skip if the next instruction is OpSetBox — this is a write sequence
+		// emitted by rewriteFreeVarReferences for OpStoreLocal(depth>0).
+		if pc+1 < len(code) && code[pc+1].Op == OpSetBox {
+			continue
+		}
+		// Insert OpUnbox after OpLoadFreeVar.
+		plan.Replace(pc, pc+1, []Instruction{
+			{Op: OpLoadFreeVar, Arg: instr.Arg},
+			{Op: OpUnbox},
+		}, tpl.sourceRefs[pc])
+	}
+
+	plan.Apply()
+}
+
+// rewriteMakeClosureToFlat scans for OpMakeClosure instructions and replaces
+// them with OpMakeFlatClosure when the child template has captures (non-empty
+// FreeVarInfo).
 //
-//	unfused: keep [tplLoad, tplPush], replace [envLoad, envPush, MakeClosure] → [MakeFlatClosure]
-//	fused:   keep [PushLiteral(tplIdx)], replace [PushLiteral(envIdx), MakeClosure] → [MakeFlatClosure]
+// The instruction stream is otherwise unchanged — OpMakeFlatClosure pops
+// both the env and the template from the stack, just like OpMakeClosure.
+// The difference is how the closure is constructed: MakeFlatClosure
+// additionally populates the freeVars array from the creating scope's
+// bindings/freeVars.
 func rewriteMakeClosureToFlat(tpl *NativeTemplate) {
 	plan := NewEditPlan(tpl)
 	code := tpl.Code()
@@ -189,19 +261,18 @@ func rewriteMakeClosureToFlat(tpl *NativeTemplate) {
 			continue
 		}
 
-		// Try to match the closure creation pattern by scanning backward.
-		// We need to find: (1) the env push, and (2) the template literal index.
-		match := matchMakeClosurePattern(code, pc)
-		if !match.valid {
+		// Find the template literal index by scanning backward.
+		tplLitIdx := findTemplateLiteralIndex(code, pc)
+		if tplLitIdx < 0 {
 			continue
 		}
 
 		// Look up the child template from the literal pool.
 		lits := tpl.Literals()
-		if int(match.tplLitIdx) >= len(lits) {
+		if int(tplLitIdx) >= len(lits) {
 			continue
 		}
-		childTpl, ok := lits[match.tplLitIdx].(*NativeTemplate)
+		childTpl, ok := lits[tplLitIdx].(*NativeTemplate)
 		if !ok {
 			continue
 		}
@@ -212,9 +283,9 @@ func rewriteMakeClosureToFlat(tpl *NativeTemplate) {
 			continue
 		}
 
-		// Replace the env-push instructions and MakeClosure with MakeFlatClosure.
-		// Everything from match.envStart to pc (inclusive) is replaced.
-		plan.Replace(match.envStart, pc+1, []Instruction{
+		// Replace only the MakeClosure instruction with MakeFlatClosure.
+		// The env and template pushes remain on the stack.
+		plan.Replace(pc, pc+1, []Instruction{
 			{Op: OpMakeFlatClosure},
 		}, tpl.sourceRefs[pc])
 	}
@@ -222,18 +293,12 @@ func rewriteMakeClosureToFlat(tpl *NativeTemplate) {
 	plan.Apply()
 }
 
-// makeClosureMatch holds the result of backward pattern matching for
-// a MakeClosure instruction sequence.
-type makeClosureMatch struct {
-	valid     bool  // true if pattern was recognized
-	tplLitIdx int32 // literal index of the child template
-	envStart  int   // first instruction of the env-push sequence to replace
-}
-
-// matchMakeClosurePattern scans backward from an OpMakeClosure at code[pc]
-// to identify the closure creation pattern. Handles both unfused and
-// peephole-fused variants.
-func matchMakeClosurePattern(code []Instruction, pc int) makeClosureMatch {
+// findTemplateLiteralIndex scans backward from an OpMakeClosure at code[pc]
+// to find the template literal index. Handles both unfused and peephole-fused
+// instruction sequences.
+//
+// Returns the literal index, or -1 if the pattern is not recognized.
+func findTemplateLiteralIndex(code []Instruction, pc int) int32 {
 	// Pattern A (unfused, 5 instructions):
 	//   pc-4: LoadLiteral(tplIdx)
 	//   pc-3: Push
@@ -245,11 +310,7 @@ func matchMakeClosurePattern(code []Instruction, pc int) makeClosureMatch {
 		code[pc-3].Op == OpPush &&
 		code[pc-2].Op == OpLoadLiteral &&
 		code[pc-1].Op == OpPush {
-		return makeClosureMatch{
-			valid:     true,
-			tplLitIdx: code[pc-4].Arg,
-			envStart:  pc - 2,
-		}
+		return code[pc-4].Arg
 	}
 
 	// Pattern B (fully fused, 3 instructions):
@@ -259,11 +320,7 @@ func matchMakeClosurePattern(code []Instruction, pc int) makeClosureMatch {
 	if pc >= 2 &&
 		code[pc-2].Op == OpPushLiteral &&
 		code[pc-1].Op == OpPushLiteral {
-		return makeClosureMatch{
-			valid:     true,
-			tplLitIdx: code[pc-2].Arg,
-			envStart:  pc - 1,
-		}
+		return code[pc-2].Arg
 	}
 
 	// Pattern C (tpl unfused, env fused, 4 instructions):
@@ -275,11 +332,7 @@ func matchMakeClosurePattern(code []Instruction, pc int) makeClosureMatch {
 		code[pc-3].Op == OpLoadLiteral &&
 		code[pc-2].Op == OpPush &&
 		code[pc-1].Op == OpPushLiteral {
-		return makeClosureMatch{
-			valid:     true,
-			tplLitIdx: code[pc-3].Arg,
-			envStart:  pc - 1,
-		}
+		return code[pc-3].Arg
 	}
 
 	// Pattern D (tpl fused, env unfused, 4 instructions):
@@ -291,12 +344,8 @@ func matchMakeClosurePattern(code []Instruction, pc int) makeClosureMatch {
 		code[pc-3].Op == OpPushLiteral &&
 		code[pc-2].Op == OpLoadLiteral &&
 		code[pc-1].Op == OpPush {
-		return makeClosureMatch{
-			valid:     true,
-			tplLitIdx: code[pc-3].Arg,
-			envStart:  pc - 2,
-		}
+		return code[pc-3].Arg
 	}
 
-	return makeClosureMatch{}
+	return -1
 }

@@ -31,9 +31,13 @@ import (
 // are analyzed before the outer template.
 func AnalyzeFreeVars(tpl *NativeTemplate) *FreeVarInfo {
 	// Step 1: Recurse into sub-templates (bottom-up).
+	// Skip sub-templates already processed by a nested compileClosureBody call.
 	for _, lit := range tpl.Literals() {
 		sub, ok := lit.(*NativeTemplate)
 		if !ok {
+			continue
+		}
+		if sub.flatClosuresDone {
 			continue
 		}
 		info := AnalyzeFreeVars(sub)

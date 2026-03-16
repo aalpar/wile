@@ -769,15 +769,23 @@ func (p *MachineContext) Run() error {
 			mc.pc++
 
 		case OpMakeFlatClosure:
-			tplVal := mc.evals.Pop()
-			tpl, ok := tplVal.(*NativeTemplate)
+			// Pop env and template from the stack (same layout as OpMakeClosure).
+			compiletimeEnv, ok := mc.evals.Pop().(*environment.EnvironmentFrame)
 			if !ok {
-				return werr.WrapForeignErrorf(werr.ErrNotAMachineTemplate, "MakeFlatClosure: expected template")
+				return werr.WrapForeignErrorf(werr.ErrNotALocalEnvironmentFrame,
+					"MakeFlatClosure: expected environment frame on stack")
+			}
+			tpl, ok := mc.evals.Pop().(*NativeTemplate)
+			if !ok {
+				return werr.WrapForeignErrorf(werr.ErrNotAMachineTemplate,
+					"MakeFlatClosure: expected template on stack")
 			}
 			info := tpl.FreeVarInfo()
 			if info == nil {
-				return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "MakeFlatClosure: template has no FreeVarInfo")
+				return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+					"MakeFlatClosure: template has no FreeVarInfo")
 			}
+			// Build the freeVars array from the creating scope's bindings.
 			fv := make([]values.Value, len(info.Captures))
 			for i, c := range info.Captures {
 				if c.FromFreeVars {
@@ -786,12 +794,20 @@ func (p *MachineContext) Run() error {
 					bd := mc.env.GetLocalBindingBySlotDepth(c.SourceSlot, c.SourceDepth-1)
 					if bd == nil {
 						return werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
-							"MakeFlatClosure: no binding at slot=%d depth=%d", c.SourceSlot, c.SourceDepth-1)
+							"MakeFlatClosure: no binding at slot=%d depth=%d",
+							c.SourceSlot, c.SourceDepth-1)
 					}
 					fv[i] = bd.Value()
 				}
 			}
+			// Create a runtime env for parameter bindings (same as MakeClosure)
+			// but also attach freeVars for free variable access.
+			runtimeEnv := environment.NewEnvironmentFrameWithParent(
+				compiletimeEnv.LocalEnvironment(),
+				mc.env,
+			)
 			cls := NewClosureWithFreeVars(tpl, fv)
+			cls.env = runtimeEnv
 			mc.SetValue(cls)
 			mc.envPooled = false
 			mc.pc++

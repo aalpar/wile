@@ -134,15 +134,9 @@ func TestFlattenClosures_MultipleFreeVars(t *testing.T) {
 
 func TestFlattenClosures_BoxedCaptureRewrite(t *testing.T) {
 	// When a captured variable is boxed (Boxed=true in CaptureEntry),
-	// Pass 3 rewrites OpLoadLocal(0, 1) → OpLoadFreeVar(closureSlot).
-	// The freeVars array will hold the *values.Box at runtime;
-	// unboxing is handled downstream (integration pass or runtime).
-	//
-	// Note: OpStoreLocal(slot, depth>0) is NOT rewritten by Pass 3 —
-	// that requires a separate box-aware rewrite pass for capturing scopes.
-	// Pass 2 only inserts box rewrites in the DEFINING scope (depth=0).
-	//
-	// This test verifies the Boxed flag is set and LoadLocal is rewritten.
+	// Pass 3 rewrites:
+	//   - OpLoadLocal(0, 1)  → OpLoadFreeVar(0) + OpUnbox  (boxed read)
+	//   - OpStoreLocal(0, 1) → OpLoadFreeVar(0) + OpSetBox  (boxed write)
 	innerTpl := makeTemplate([]Instruction{
 		{Op: OpLoadLocal, Arg: encodeLocal(0, 1)},  // read captured var
 		{Op: OpStoreLocal, Arg: encodeLocal(0, 1)}, // write (triggers boxing in outer)
@@ -165,18 +159,27 @@ func TestFlattenClosures_BoxedCaptureRewrite(t *testing.T) {
 
 	FlattenClosures(outerTpl, nil)
 
-	// After flatten, the LoadLocal(0,1) should be LoadFreeVar(0).
-	// The StoreLocal(0,1) remains (not handled by Pass 3).
+	// After flatten:
+	//   LoadFreeVar(0), Unbox,       ← boxed read
+	//   LoadFreeVar(0), SetBox,      ← boxed write
+	//   RestoreContinuation
 	innerCode := innerTpl.Code()
+	qt.Assert(t, innerCode, qt.HasLen, 5)
 	qt.Assert(t, innerCode[0].Op, qt.Equals, OpLoadFreeVar)
 	qt.Assert(t, innerCode[0].Arg, qt.Equals, int32(0))
+	qt.Assert(t, innerCode[1].Op, qt.Equals, OpUnbox)
+	qt.Assert(t, innerCode[2].Op, qt.Equals, OpLoadFreeVar)
+	qt.Assert(t, innerCode[2].Arg, qt.Equals, int32(0))
+	qt.Assert(t, innerCode[3].Op, qt.Equals, OpSetBox)
+	qt.Assert(t, innerCode[4].Op, qt.Equals, OpRestoreContinuation)
 }
 
 func TestFlattenClosures_ReadOnlyBoxedCapture(t *testing.T) {
 	// A variable that is captured AND mutated gets boxed. When the inner
 	// template only reads it (the mutation is in the outer scope via set!),
 	// Pass 3 should rewrite the inner template's LoadLocal(0,1) to
-	// LoadFreeVar(closureSlot). At runtime the freeVar holds the Box.
+	// LoadFreeVar(closureSlot) + Unbox. At runtime the freeVar holds the
+	// *values.Box; Unbox extracts its current value.
 	innerTpl := makeTemplate([]Instruction{
 		{Op: OpLoadLocal, Arg: encodeLocal(0, 1)}, // read
 		{Op: OpRestoreContinuation},
@@ -200,9 +203,11 @@ func TestFlattenClosures_ReadOnlyBoxedCapture(t *testing.T) {
 	FlattenClosures(outerTpl, nil)
 
 	innerCode := innerTpl.Code()
+	qt.Assert(t, innerCode, qt.HasLen, 3)
 	qt.Assert(t, innerCode[0].Op, qt.Equals, OpLoadFreeVar)
 	qt.Assert(t, innerCode[0].Arg, qt.Equals, int32(0))
-	qt.Assert(t, innerCode[1].Op, qt.Equals, OpRestoreContinuation)
+	qt.Assert(t, innerCode[1].Op, qt.Equals, OpUnbox)
+	qt.Assert(t, innerCode[2].Op, qt.Equals, OpRestoreContinuation)
 }
 
 func TestFlattenClosures_FromFreeVarsDepth1(t *testing.T) {
@@ -273,7 +278,8 @@ func TestFlattenClosures_FromFreeVarsDepthGreaterThan1(t *testing.T) {
 
 func TestFlattenClosures_MakeClosureToMakeFlatClosure(t *testing.T) {
 	// Outer template creates a closure for an inner template that has captures.
-	// The MakeClosure instruction sequence should be rewritten to MakeFlatClosure.
+	// The MakeClosure instruction should be replaced with MakeFlatClosure,
+	// but the env push remains (flat closures still need a parameter frame).
 	innerTpl := makeTemplate([]Instruction{
 		{Op: OpLoadLocal, Arg: encodeLocal(0, 1)},
 		{Op: OpRestoreContinuation},
@@ -298,18 +304,20 @@ func TestFlattenClosures_MakeClosureToMakeFlatClosure(t *testing.T) {
 	runPasses1and2(outerTpl)
 	FlattenClosures(outerTpl, nil)
 
-	// After flatten, the sequence should be:
-	//   LoadLiteral(0), Push, MakeFlatClosure, RestoreContinuation
-	// (3 instructions removed, 1 added → net -2)
+	// After flatten, only MakeClosure → MakeFlatClosure. The instruction
+	// count is unchanged (6).
 	outerCode := outerTpl.Code()
-	qt.Assert(t, outerCode, qt.HasLen, 4,
-		qt.Commentf("expected 4 instructions, got %d", len(outerCode)))
+	qt.Assert(t, outerCode, qt.HasLen, 6,
+		qt.Commentf("expected 6 instructions, got %d", len(outerCode)))
 
 	qt.Assert(t, outerCode[0].Op, qt.Equals, OpLoadLiteral)
 	qt.Assert(t, outerCode[0].Arg, qt.Equals, int32(0))
 	qt.Assert(t, outerCode[1].Op, qt.Equals, OpPush)
-	qt.Assert(t, outerCode[2].Op, qt.Equals, OpMakeFlatClosure)
-	qt.Assert(t, outerCode[3].Op, qt.Equals, OpRestoreContinuation)
+	qt.Assert(t, outerCode[2].Op, qt.Equals, OpLoadLiteral)
+	qt.Assert(t, outerCode[2].Arg, qt.Equals, int32(1))
+	qt.Assert(t, outerCode[3].Op, qt.Equals, OpPush)
+	qt.Assert(t, outerCode[4].Op, qt.Equals, OpMakeFlatClosure)
+	qt.Assert(t, outerCode[5].Op, qt.Equals, OpRestoreContinuation)
 }
 
 func TestFlattenClosures_MakeClosureUnchangedForNoCaptureSubTemplate(t *testing.T) {
@@ -363,15 +371,17 @@ func TestFlattenClosures_FusedPushLiteralPattern(t *testing.T) {
 	runPasses1and2(outerTpl)
 	FlattenClosures(outerTpl, nil)
 
-	// After flatten: PushLiteral(0), MakeFlatClosure, RestoreContinuation
+	// After flatten: PushLiteral(0), PushLiteral(1), MakeFlatClosure, RestoreContinuation
 	outerCode := outerTpl.Code()
-	qt.Assert(t, outerCode, qt.HasLen, 3,
-		qt.Commentf("expected 3 instructions, got %d", len(outerCode)))
+	qt.Assert(t, outerCode, qt.HasLen, 4,
+		qt.Commentf("expected 4 instructions, got %d", len(outerCode)))
 
 	qt.Assert(t, outerCode[0].Op, qt.Equals, OpPushLiteral)
 	qt.Assert(t, outerCode[0].Arg, qt.Equals, int32(0))
-	qt.Assert(t, outerCode[1].Op, qt.Equals, OpMakeFlatClosure)
-	qt.Assert(t, outerCode[2].Op, qt.Equals, OpRestoreContinuation)
+	qt.Assert(t, outerCode[1].Op, qt.Equals, OpPushLiteral)
+	qt.Assert(t, outerCode[1].Arg, qt.Equals, int32(1))
+	qt.Assert(t, outerCode[2].Op, qt.Equals, OpMakeFlatClosure)
+	qt.Assert(t, outerCode[3].Op, qt.Equals, OpRestoreContinuation)
 }
 
 func TestFlattenClosures_DepthZeroReferencesUntouched(t *testing.T) {
@@ -465,14 +475,12 @@ func TestFlattenClosures_NoLoadLocalRemains(t *testing.T) {
 	}
 }
 
-func TestMatchMakeClosurePattern_AllVariants(t *testing.T) {
+func TestFindTemplateLiteralIndex_AllVariants(t *testing.T) {
 	tcs := []struct {
-		name         string
-		code         []Instruction
-		pc           int
-		wantValid    bool
-		wantTplLit   int32
-		wantEnvStart int
+		name       string
+		code       []Instruction
+		pc         int
+		wantTplLit int32 // -1 means no match expected
 	}{
 		{
 			name: "pattern A — fully unfused",
@@ -483,10 +491,8 @@ func TestMatchMakeClosurePattern_AllVariants(t *testing.T) {
 				{Op: OpPush},
 				{Op: OpMakeClosure},
 			},
-			pc:           4,
-			wantValid:    true,
-			wantTplLit:   0,
-			wantEnvStart: 2,
+			pc:         4,
+			wantTplLit: 0,
 		},
 		{
 			name: "pattern B — fully fused",
@@ -495,10 +501,8 @@ func TestMatchMakeClosurePattern_AllVariants(t *testing.T) {
 				{Op: OpPushLiteral, Arg: 1},
 				{Op: OpMakeClosure},
 			},
-			pc:           2,
-			wantValid:    true,
-			wantTplLit:   0,
-			wantEnvStart: 1,
+			pc:         2,
+			wantTplLit: 0,
 		},
 		{
 			name: "pattern C — tpl unfused, env fused",
@@ -508,10 +512,8 @@ func TestMatchMakeClosurePattern_AllVariants(t *testing.T) {
 				{Op: OpPushLiteral, Arg: 1},
 				{Op: OpMakeClosure},
 			},
-			pc:           3,
-			wantValid:    true,
-			wantTplLit:   0,
-			wantEnvStart: 2,
+			pc:         3,
+			wantTplLit: 0,
 		},
 		{
 			name: "pattern D — tpl fused, env unfused",
@@ -521,18 +523,16 @@ func TestMatchMakeClosurePattern_AllVariants(t *testing.T) {
 				{Op: OpPush},
 				{Op: OpMakeClosure},
 			},
-			pc:           3,
-			wantValid:    true,
-			wantTplLit:   0,
-			wantEnvStart: 1,
+			pc:         3,
+			wantTplLit: 0,
 		},
 		{
 			name: "no match — too few instructions",
 			code: []Instruction{
 				{Op: OpMakeClosure},
 			},
-			pc:        0,
-			wantValid: false,
+			pc:         0,
+			wantTplLit: -1,
 		},
 		{
 			name: "no match — wrong preceding ops",
@@ -543,19 +543,15 @@ func TestMatchMakeClosurePattern_AllVariants(t *testing.T) {
 				{Op: OpPush},
 				{Op: OpMakeClosure},
 			},
-			pc:        4,
-			wantValid: false,
+			pc:         4,
+			wantTplLit: -1,
 		},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			match := matchMakeClosurePattern(tc.code, tc.pc)
-			qt.Assert(t, match.valid, qt.Equals, tc.wantValid)
-			if tc.wantValid {
-				qt.Assert(t, match.tplLitIdx, qt.Equals, tc.wantTplLit)
-				qt.Assert(t, match.envStart, qt.Equals, tc.wantEnvStart)
-			}
+			got := findTemplateLiteralIndex(tc.code, tc.pc)
+			qt.Assert(t, got, qt.Equals, tc.wantTplLit)
 		})
 	}
 }

@@ -30,9 +30,13 @@ package machine
 // outer templates (same as AnalyzeFreeVars).
 func InsertBoxes(tpl *NativeTemplate) {
 	// Step 1: Recurse into sub-templates first (bottom-up).
+	// Skip sub-templates already processed by a nested compileClosureBody call.
 	for _, lit := range tpl.Literals() {
 		sub, ok := lit.(*NativeTemplate)
 		if !ok {
+			continue
+		}
+		if sub.flatClosuresDone {
 			continue
 		}
 		InsertBoxes(sub)
