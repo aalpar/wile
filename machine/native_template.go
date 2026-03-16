@@ -418,7 +418,7 @@ func (p *NativeTemplate) NoCopyApply() bool {
 // See BIBLIOGRAPHY.md "Environment Escape Analysis".
 func (p *NativeTemplate) computeNoCopyApply() {
 	for _, instr := range p.code {
-		if instr.Op == OpSaveContinuation || instr.Op == OpMakeClosure {
+		if instr.Op == OpSaveContinuation || instr.Op == OpMakeClosure || instr.Op == OpMakeFlatClosure {
 			p.noCopyApply = false
 			return
 		}
