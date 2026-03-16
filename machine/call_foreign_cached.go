@@ -55,7 +55,7 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 	mc.counters.ClosuresApplied++
 	mc.counters.NoCopyApplies++
 	mc.counters.ForeignCalls++
-	mc.counters.RecordPrimitiveCall(fcls.name)
+	mc.counters.RecordCall(fcls.name)
 
 	// Bind args into closure's own env (noCopyApply by construction).
 	env := fcls.env

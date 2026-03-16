@@ -135,7 +135,7 @@ No demand signal. Speculative or research-only.
 - [ ] **Dialect system** [Architecture, Proposed]: De-globalize forms registry, `WithDialect()` option, extract R7RS as default dialect. `plans/ARCHITECTURE.md`
 - [ ] **Plugin shadowing** [Architecture, Proposed]: Extension primitive shadowing. Depends on public extensions. `plans/ARCHITECTURE.md`
 - [ ] **Programmatic tokenization/parsing** [Tooling]: Expose tokenizer/parser to Scheme code. 4 phases: token introspection, syntax introspection, EOF handling, advanced reader control.
-- [ ] **Continuation marks** [Runtime]: Racket-style stack annotation. Prompt infrastructure exists; needs per-frame key→value map.
+- [x] **Continuation marks** [Runtime]: Racket-style per-frame key→value annotations. Phase 1: `marks` field on `vmState`, `with-continuation-mark` special form (#508, #509). Phase 2: `ContinuationMarkSet` type, `current-continuation-marks`, `continuation-mark-set->list`, `continuation-mark-set-first`, prompt-delimited collection (#510). Phase 3: `call-with-immediate-continuation-mark`, `continuation-marks` on captured continuations via `CapturedContinuation` type, `continuation?` predicate (#511). `plans/CONTINUATION_MARKS.md`.
 - [ ] **Logging library** [Standard library]: Levels, structured output, handlers.
 - [ ] **Event callbacks** [Tooling]: Hooks for expansion, compilation, debugging. IDE integration, profiling.
 - [ ] **Feature flags (3-tier)** [Runtime]: Compile-time, runtime global, extension-defined. No demand signal yet.

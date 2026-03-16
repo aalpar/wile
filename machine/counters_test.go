@@ -21,38 +21,38 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-func TestRecordPrimitiveCall_NilMap(t *testing.T) {
+func TestRecordCall_NilMap(t *testing.T) {
 	var c VMCounters
-	// Should not panic when primitiveCalls is nil.
-	c.RecordPrimitiveCall("+")
+	// Should not panic when callCounts map is nil.
+	c.RecordCall("+")
 }
 
-func TestRecordPrimitiveCall_Counting(t *testing.T) {
+func TestRecordCall_Counting(t *testing.T) {
 	var c VMCounters
-	c.primitiveCalls = make(map[string]uint64)
+	c.callCounts = make(map[string]uint64)
 
-	c.RecordPrimitiveCall("+")
-	c.RecordPrimitiveCall("+")
-	c.RecordPrimitiveCall("car")
+	c.RecordCall("+")
+	c.RecordCall("+")
+	c.RecordCall("car")
 
-	qt.Assert(t, c.primitiveCalls["+"], qt.Equals, uint64(2))
-	qt.Assert(t, c.primitiveCalls["car"], qt.Equals, uint64(1))
+	qt.Assert(t, c.callCounts["+"], qt.Equals, uint64(2))
+	qt.Assert(t, c.callCounts["car"], qt.Equals, uint64(1))
 }
 
-func TestPrimitiveCallHistogram_NilMap(t *testing.T) {
+func TestCallHistogram_NilMap(t *testing.T) {
 	var c VMCounters
-	qt.Assert(t, c.PrimitiveCallHistogram(), qt.Equals, "")
+	qt.Assert(t, c.CallHistogram(), qt.Equals, "")
 }
 
-func TestPrimitiveCallHistogram_SortedByFrequency(t *testing.T) {
+func TestCallHistogram_SortedByFrequency(t *testing.T) {
 	var c VMCounters
-	c.primitiveCalls = map[string]uint64{
+	c.callCounts = map[string]uint64{
 		"+":     100,
 		"car":   50,
 		"null?": 200,
 	}
 
-	hist := c.PrimitiveCallHistogram()
+	hist := c.CallHistogram()
 
 	// Verify all primitives appear.
 	qt.Assert(t, strings.Contains(hist, "+"), qt.IsTrue)
@@ -69,20 +69,20 @@ func TestPrimitiveCallHistogram_SortedByFrequency(t *testing.T) {
 		qt.Commentf("+ at %d should appear before car at %d", plusIdx, carIdx))
 }
 
-func TestPrimitiveCallHistogram_EmptyMap(t *testing.T) {
+func TestCallHistogram_EmptyMap(t *testing.T) {
 	var c VMCounters
-	c.primitiveCalls = make(map[string]uint64)
-	qt.Assert(t, c.PrimitiveCallHistogram(), qt.Equals, "")
+	c.callCounts = make(map[string]uint64)
+	qt.Assert(t, c.CallHistogram(), qt.Equals, "")
 }
 
-func TestPrimitiveCallHistogram_PercentageTotals(t *testing.T) {
+func TestCallHistogram_PercentageTotals(t *testing.T) {
 	var c VMCounters
-	c.primitiveCalls = map[string]uint64{
+	c.callCounts = map[string]uint64{
 		"+": 75,
 		"-": 25,
 	}
 
-	hist := c.PrimitiveCallHistogram()
+	hist := c.CallHistogram()
 	qt.Assert(t, strings.Contains(hist, "75.0%"), qt.IsTrue)
 	qt.Assert(t, strings.Contains(hist, "25.0%"), qt.IsTrue)
 }

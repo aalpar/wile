@@ -888,6 +888,41 @@ func TestApplyCallable_MachineClosure(t *testing.T) {
 	c.Assert(bnds[1].Value(), valuestest.SchemeEquals, values.NewInteger(20))
 }
 
+func TestApply_RecordsNamedMachineClosureCall(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	lenv := environment.NewLocalEnvironment(1)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+	tpl := NewNativeTemplate(1, 0, false)
+	tpl.SetName("my-scheme-proc")
+
+	cls := NewClosureWithTemplate(tpl, env)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+	// Enable call tracking.
+	mc.counters.callCounts = make(map[string]uint64)
+
+	_, err := mc.Apply(cls, values.NewInteger(42))
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.counters.callCounts["my-scheme-proc"], qt.Equals, uint64(1))
+}
+
+func TestApply_SkipsAnonymousClosure(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	lenv := environment.NewLocalEnvironment(1)
+	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+	tpl := NewNativeTemplate(1, 0, false)
+	// No SetName — anonymous lambda.
+
+	cls := NewClosureWithTemplate(tpl, env)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+	mc.counters.callCounts = make(map[string]uint64)
+
+	_, err := mc.Apply(cls, values.NewInteger(42))
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(mc.counters.callCounts), qt.Equals, 0)
+}
+
 func TestApplyCallable_CaseLambdaClosure(t *testing.T) {
 	c := qt.New(t)
 	topEnv := environment.NewTopLevelEnvironment().Runtime()

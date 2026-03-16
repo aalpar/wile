@@ -142,31 +142,31 @@ func TestAcquireTopLevelContext_OpcodeHitsZeroedAfterReuse(t *testing.T) {
 	}
 }
 
-func TestAcquireTopLevelContext_InitializesPrimitiveCalls(t *testing.T) {
+func TestAcquireTopLevelContext_InitializesCallCounts(t *testing.T) {
 	tpl := NewEmptyNativeTemplate()
 	env := environment.NewTopLevelEnvironment().Runtime()
 	mc := AcquireTopLevelContext(context.Background(), tpl, env)
 	defer ReleaseTopLevelContext(mc)
 
 	if opcodeHitsEnabled() {
-		qt.Assert(t, mc.counters.primitiveCalls != nil, qt.IsTrue)
+		qt.Assert(t, mc.counters.callCounts != nil, qt.IsTrue)
 	}
 }
 
-func TestAcquireTopLevelContext_PrimitiveCallsZeroedAfterReuse(t *testing.T) {
+func TestAcquireTopLevelContext_CallCountsZeroedAfterReuse(t *testing.T) {
 	tpl := NewEmptyNativeTemplate()
 	env := environment.NewTopLevelEnvironment().Runtime()
 
 	mc := AcquireTopLevelContext(context.Background(), tpl, env)
-	if mc.counters.primitiveCalls != nil {
-		mc.counters.primitiveCalls["+"] = 42
+	if mc.counters.callCounts != nil {
+		mc.counters.callCounts["+"] = 42
 	}
 	ReleaseTopLevelContext(mc)
 
 	mc2 := AcquireTopLevelContext(context.Background(), tpl, env)
 	defer ReleaseTopLevelContext(mc2)
-	if mc2.counters.primitiveCalls != nil {
-		qt.Assert(t, mc2.counters.primitiveCalls["+"], qt.Equals, uint64(0))
+	if mc2.counters.callCounts != nil {
+		qt.Assert(t, mc2.counters.callCounts["+"], qt.Equals, uint64(0))
 	}
 }
 
