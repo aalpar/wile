@@ -89,3 +89,34 @@ func TestCompileERMacroTransformer(t *testing.T) {
 	_, ok := bnd.Value().(*machine.ERMacroTransformer)
 	c.Assert(ok, qt.IsTrue)
 }
+
+func TestERMacro_EndToEnd_Constant(t *testing.T) {
+	c := qt.New(t)
+
+	env := createHygieneTestEnv()
+
+	// Define: (define-syntax my-const (er-macro-transformer (lambda (form rename compare) 42)))
+	// The transformer ignores the input form and returns a constant.
+	form := parseString(t, env, `
+		(define-syntax my-const
+		  (er-macro-transformer
+		    (lambda (form rename compare) 42)))
+	`)
+
+	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	args := extractDefineSyntaxArgs(t, form)
+	err := ctc.CompileDefineSyntax(ctctx, args)
+	c.Assert(err, qt.IsNil)
+
+	// Expand: (my-const anything) — transformer returns 42 regardless
+	testForm := parseString(t, env, `(my-const anything)`)
+	etc := machine.NewExpanderTimeContinuation(context.Background(), env)
+	expanded, err := etc.ExpandExpression(testForm)
+	c.Assert(err, qt.IsNil)
+
+	// The expanded result should be 42, wrapped in syntax notation
+	t.Logf("Expanded: %s", expanded.SchemeString())
+	unwrapped := expanded.UnwrapAll()
+	c.Assert(unwrapped.SchemeString(), qt.Equals, "42")
+}

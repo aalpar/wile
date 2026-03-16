@@ -42,6 +42,7 @@ import (
 	"context"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
@@ -304,6 +305,12 @@ func invokeTransformerClosure(ctx context.Context, cls Closure, inputForm syntax
 // expandMacroInvocation invokes a macro transformer and returns the expanded result.
 // This is called when ExpandSyntaxExpression determines that a symbol is bound to a macro.
 func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue, bnd *environment.Binding) (syntax.SyntaxValue, error) {
+	// Check for ER macro transformer first
+	erTransformer, isER := bnd.Value().(*ERMacroTransformer)
+	if isER {
+		return p.expandERMacroInvocation(sym, expr, erTransformer)
+	}
+
 	cls, ok := bnd.Value().(Closure)
 	if !ok {
 		return nil, werr.WrapForeignErrorf(werr.ErrNotAClosure, "not a closure: %T", bnd.Value())
@@ -343,6 +350,63 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 		return p.ExpandExpression(stx)
 	}
 	return nil, werr.WrapForeignErrorf(werr.ErrNotASyntaxValue, "syntax transformer returned non-syntax value: %T", result)
+}
+
+// expandERMacroInvocation handles expansion of explicit-renaming macro invocations.
+// It unwraps the input form to raw s-expressions, creates rename/compare closures,
+// calls the 3-arg transformer, and re-wraps the result for recursive expansion.
+func (p *ExpanderTimeContinuation) expandERMacroInvocation(
+	sym *syntax.SyntaxSymbol,
+	expr syntax.SyntaxValue,
+	erTransformer *ERMacroTransformer,
+) (syntax.SyntaxValue, error) {
+	// Build complete input form: (macro-name . args)
+	inputForm := syntax.NewSyntaxCons(sym, expr, sym.SourceContext())
+
+	// Unwrap to raw s-expression for the transformer
+	rawForm := inputForm.UnwrapAll()
+
+	// Create rename closure (captures definition-site expand env)
+	renameCls := NewERRenameClosure(erTransformer.DefEnv())
+
+	// Create compare closure (captures use-site env)
+	compareCls := NewERCompareClosure(p.env)
+
+	// Set up expander context for auxiliary syntax hygiene
+	expanderCtx := NewExpanderContext(p.env, p)
+
+	// Invoke the 3-arg transformer: (transformer form rename compare)
+	mc := acquireMacroContext(p.ctx, erTransformer.Closure())
+	mc.SetExpanderContext(expanderCtx)
+
+	_, err := mc.Apply(erTransformer.Closure(), rawForm, renameCls, compareCls)
+	if err != nil {
+		ReleaseSubContext(mc)
+		return nil, werr.WrapForeignErrorf(err, "er-macro-transformer: failed to apply transformer")
+	}
+
+	err = mc.Run()
+	if err != nil {
+		ReleaseSubContext(mc)
+		return nil, werr.WrapForeignErrorf(err, "er-macro-transformer: transformer raised an error")
+	}
+	defer ReleaseSubContext(mc)
+
+	result := mc.GetValue()
+	if values.IsVoid(result) {
+		return nil, werr.WrapForeignErrorf(
+			werr.ErrUnexpectedNil,
+			"er-macro-transformer: transformer produced no result",
+		)
+	}
+
+	// Re-wrap the result to syntax.
+	// Already-SyntaxValue nodes (from rename) pass through unchanged.
+	// Raw symbols get use-site source context (no special scopes = use-site resolution).
+	wrapped := schemeutil.DatumToSyntaxValue(p.ctx, sym.SourceContext(), result)
+
+	// Recursively expand the result
+	return p.ExpandExpression(wrapped)
 }
 
 // ExpandOnce performs a single step of macro expansion.
