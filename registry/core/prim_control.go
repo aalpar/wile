@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
@@ -153,14 +152,14 @@ func PrimCallCC(mc *machine.MachineContext) error {
 	windingStack := mc.WindingStack().Copy()
 	cc := machine.NewComposableContinuation(segment, windingStack, mc.ThreadID(), mc.BarrierValid())
 
-	contClosure := newComposeAbortEscapeClosure(mc.EnvironmentFrame().TopLevel(), cc, mc.ThreadID(), mc.BarrierValid())
+	capt := machine.NewCapturedContinuation(cc, mc.ThreadID(), mc.BarrierValid())
 
 	if mc.Parent() != nil {
 		// Inline mode: apply the lambda directly in the current VM context.
 		// When the lambda returns normally, RestoreContinuation pops mc.cont,
 		// resuming from the caller of call/cc. When the lambda invokes the
 		// continuation, the escape propagates through the VM to RunWithEscapeHandling.
-		_, err := mc.ApplyCallable(mcls, contClosure)
+		_, err := mc.ApplyCallable(mcls, capt)
 		if err != nil {
 			return err
 		}
@@ -169,15 +168,15 @@ func PrimCallCC(mc *machine.MachineContext) error {
 	}
 
 	// Sub-context mode: run the lambda in an isolated context.
-	// The escape closure emits ErrPromptAbort to DefaultPromptTag. This
-	// propagates up through Run() and is caught by RunWithEscapeHandling
+	// The CapturedContinuation's apply emits ErrPromptAbort to DefaultPromptTag.
+	// This propagates up through Run() and is caught by RunWithEscapeHandling
 	// at the top level. In contexts without RunWithEscapeHandling (e.g., threads
 	// that call Run() directly), we catch the abort here and extract the value —
 	// sub-context mode acts as the implicit call-with-continuation-prompt.
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
 	sub.SetWindingStack(mc.WindingStack())
-	_, err = sub.ApplyCallable(mcls, contClosure)
+	_, err = sub.ApplyCallable(mcls, capt)
 	if err != nil {
 		return err
 	}
@@ -200,70 +199,6 @@ func PrimCallCC(mc *machine.MachineContext) error {
 
 	mc.SetValues(sub.GetValues()...)
 	return nil
-}
-
-// newComposeAbortEscapeClosure creates an escape closure that applies the composable
-// continuation in a sub-context, then aborts to DefaultPromptTag with the result.
-//
-// This implements the Racket model: (lambda (v) (abort-current-continuation default-prompt-tag (k v)))
-// where k is the composable continuation captured at the call/cc site.
-//
-// capturingThreadID records which thread captured the continuation; invoking from a
-// different thread returns ErrCrossThreadContinuation per SRFI-18 semantics.
-//
-// capturingBarrierValid is mc.BarrierValid() at capture time (nil = outside any barrier).
-// On invocation, the closure compares capture-time and invocation-time barrier pointers:
-// inequality means the continuation would cross a with-continuation-barrier boundary.
-func newComposeAbortEscapeClosure(
-	env *environment.EnvironmentFrame,
-	cc *machine.ComposableContinuation,
-	capturingThreadID uint64,
-	capturingBarrierValid *machine.BarrierToken,
-) machine.Closure {
-	fn := func(innerMC *machine.MachineContext) error {
-		// Reject cross-thread continuation invocation
-		if innerMC.ThreadID() != capturingThreadID {
-			return werr.WrapForeignErrorf(werr.ErrCrossThreadContinuation,
-				"call/cc: continuation captured in thread %d, invoked from thread %d",
-				capturingThreadID, innerMC.ThreadID())
-		}
-		// Reject barrier crossing: pointer inequality means different barrier contexts.
-		// nil != non-nil: captured outside, invoked inside (or vice versa).
-		// ptr-A != ptr-B: captured inside barrier A, invoked inside barrier B.
-		if capturingBarrierValid != innerMC.BarrierValid() {
-			return werr.WrapForeignErrorf(werr.ErrContinuationBarrier,
-				"call/cc: continuation cannot cross continuation barrier")
-		}
-		// Get the value passed to the continuation (from the closure's argument)
-		val := innerMC.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
-
-		// Apply the composable continuation in a sub-context.
-		// ApplyCallable does DeepCopy → Graft → RestoreWithWindingFrom → Restore → SetValue.
-		sub := innerMC.NewSubContext()
-		defer machine.ReleaseSubContext(sub)
-		sub.SetWindingStack(innerMC.WindingStack())
-		_, err := sub.ApplyCallable(cc, val)
-		if err != nil {
-			return err
-		}
-		// Run the restored frames to completion.
-		// When frames finish (cont == nil → errHalt → Run returns nil).
-		err = sub.Run()
-		if err != nil {
-			return err
-		}
-
-		// Abort to DefaultPromptTag with all values produced by the continuation.
-		// RunWithEscapeHandling catches this via the nil-prompt path.
-		// Using GetValues (not GetValue) preserves multiple values through
-		// the escape mechanism — required for guard's call-with-values pattern
-		// and for R7RS §6.10 multi-value continuation semantics.
-		return &machine.ErrPromptAbort{
-			Tag:    machine.DefaultPromptTag,
-			Values: sub.GetValues(),
-		}
-	}
-	return machine.NewVMForeignClosure(env, 1, false, fn)
 }
 
 // PrimDynamicWind implements the (dynamic-wind) primitive.

@@ -71,6 +71,32 @@ var PrimContinuationMarkSetQ = helpers.MakeTypePredicate(func(o values.Value) bo
 	return ok
 })
 
+// PrimContinuationMarks implements (continuation-marks cont [prompt-tag]).
+// Extracts a ContinuationMarkSet from a captured continuation (the result of
+// call/cc), optionally stopping at prompt-tag.
+func PrimContinuationMarks(mc *machine.MachineContext) error {
+	capt, err := helpers.RequireType[*machine.CapturedContinuation](mc.Arg(0), werr.ErrNotAContinuation, "continuation-marks")
+	if err != nil {
+		return err
+	}
+	tag := machine.DefaultPromptTag
+	v, ok := helpers.ParseOptionalArg(mc.Arg(1))
+	if ok {
+		tag, err = helpers.RequireType[*machine.PromptTag](v, werr.ErrNotAPromptTag, "continuation-marks")
+		if err != nil {
+			return err
+		}
+	}
+	mc.SetValue(machine.CollectMarksFromContinuation(capt.ComposableContinuation().Cont(), tag))
+	return nil
+}
+
+// PrimContinuationQ implements (continuation? obj).
+var PrimContinuationQ = helpers.MakeTypePredicate(func(o values.Value) bool {
+	_, ok := o.(*machine.CapturedContinuation)
+	return ok
+})
+
 // PrimCallWithImmediateContMark implements
 // (call-with-immediate-continuation-mark key proc [default]).
 //

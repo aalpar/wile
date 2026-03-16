@@ -93,6 +93,7 @@ var (
 	ErrNotAMatch               = NewStaticError("not a match")
 	ErrNotAPromptTag           = NewStaticError("not a prompt tag")
 	ErrNotAContinuationMarkSet = NewStaticError("not a continuation mark set")
+	ErrNotAContinuation        = NewStaticError("not a continuation")
 	ErrTypeConversion          = NewStaticError("type conversion failed")
 	ErrIndexOutOfRange         = NewStaticError("index out of range")
 	ErrImmutableString         = NewStaticError("cannot mutate immutable string")

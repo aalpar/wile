@@ -93,7 +93,8 @@ TODO: decide representation
 
 - `call-with-immediate-continuation-mark` ✓ — in `registry/core/prim_cont_marks.go`. Uses `GetImmediateMark` which checks `mc.marks` (tail) then `mc.cont.marks` (non-tail).
 - `continuation-mark-set?` predicate ✓ — already done in Phase 2
-- `continuation-marks` on captured continuations — **deferred**: requires a new `CapturedContinuation` value type. `call/cc` returns a `ForeignClosure` (opaque Go closure); there is no way to extract the continuation chain without a dedicated continuation object type. When this type is added, `CollectMarksFromContinuation` (in `machine/continuation_mark_set.go`) is already in place.
+- `continuation-marks` on captured continuations ✓ — `CapturedContinuation` type in `machine/captured_continuation.go` replaces the opaque `ForeignClosure` escape. `call/cc` now returns `*CapturedContinuation` which implements `values.Callable` (so `(procedure? k)` stays `#t`) and exposes `ComposableContinuation()` for mark chain access. `continuation-marks` primitive walks the chain via `CollectMarksFromContinuation`.
+- `continuation?` predicate ✓ — type predicate for `*CapturedContinuation`
 - Consider: reimplement `parameterize` using marks (optional, breaking)
 
 ## Key Semantics
