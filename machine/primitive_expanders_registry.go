@@ -46,6 +46,7 @@ func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
 		{"cond-expand", (*ExpanderTimeContinuation).expandUnchanged},
 		{"syntax", (*ExpanderTimeContinuation).expandUnchanged},
 		{"syntax-case", (*ExpanderTimeContinuation).expandUnchanged},
+		{"er-macro-transformer", (*ExpanderTimeContinuation).expandUnchanged},
 		{"quasisyntax", (*ExpanderTimeContinuation).expandUnchanged},
 		{"unsyntax", (*ExpanderTimeContinuation).expandUnchanged},
 		{"unsyntax-splicing", (*ExpanderTimeContinuation).expandUnchanged},
