@@ -15,6 +15,7 @@
 package machine_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/aalpar/wile/environment"
@@ -58,4 +59,33 @@ func TestERMacroTransformer_EqualTo(t *testing.T) {
 	c.Assert(ert1.EqualTo(ert1), qt.IsTrue)
 	c.Assert(ert1.EqualTo(ert2), qt.IsFalse)
 	c.Assert(ert1.EqualTo(values.TrueValue), qt.IsFalse)
+}
+
+func TestCompileERMacroTransformer(t *testing.T) {
+	c := qt.New(t)
+
+	env := createHygieneTestEnv()
+
+	// Parse a define-syntax using er-macro-transformer with a simple identity lambda.
+	// The lambda body is just 'form' (the first parameter) since cadr is not available
+	// in the minimal test environment.
+	form := parseString(t, env, `
+		(define-syntax my-id
+		  (er-macro-transformer
+		    (lambda (form rename compare) form)))
+	`)
+
+	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
+	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	args := extractDefineSyntaxArgs(t, form)
+	err := ctc.CompileDefineSyntax(ctctx, args)
+	c.Assert(err, qt.IsNil)
+
+	// Verify the binding is an ERMacroTransformer
+	expandEnv := env.Expand()
+	bnd := expandEnv.GetBinding(values.NewSymbol("my-id"))
+	c.Assert(bnd, qt.Not(qt.IsNil))
+
+	_, ok := bnd.Value().(*machine.ERMacroTransformer)
+	c.Assert(ok, qt.IsTrue)
 }
