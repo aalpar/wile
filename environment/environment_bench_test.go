@@ -207,15 +207,17 @@ func BenchmarkFrameCopyForApplyAndCreate(b *testing.B) {
 	}
 }
 
-// BenchmarkNewApplyFrame measures the fused NewApplyFrame path.
-// This is the optimized Apply path: single allocation instead of two.
-func BenchmarkNewApplyFrame(b *testing.B) {
+// BenchmarkInitApplyFrame measures the pooled InitApplyFrame path.
+// This sets up binding slots without copying values — the actual
+// production Apply path.
+func BenchmarkInitApplyFrame(b *testing.B) {
 	for _, n := range []int{1, 5, 10, 25, 50} {
 		b.Run(fmt.Sprintf("bindings=%d", n), func(b *testing.B) {
 			env, _ := setupLocalEnv(n)
+			var dst EnvironmentFrame
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_ = env.NewApplyFrame()
+				env.InitApplyFrame(&dst)
 			}
 		})
 	}

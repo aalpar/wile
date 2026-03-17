@@ -74,9 +74,9 @@ func BenchmarkContinuationRoundTrip(b *testing.B) {
 // ---------- Env copy (Apply path for MachineClosure) ----------
 
 // BenchmarkEnvCopy measures the env-frame acquisition + InitApplyFrame
-// that happens on every non-tail MachineClosure call. fib's template has
-// noCopy=false (it contains SaveContinuation), so every recursive call
-// pays this cost.
+// (slot setup without binding value copy) that happens on every non-tail
+// MachineClosure call. fib's template has noCopy=false (it contains
+// SaveContinuation), so every recursive call pays this cost.
 func BenchmarkEnvCopy(b *testing.B) {
 	_, closureEnv := fibEnv()
 

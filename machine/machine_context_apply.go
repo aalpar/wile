@@ -47,42 +47,27 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	switch {
 	case tpl.NoCopyApply():
 		// No-copy path: the template contains no SaveContinuation and no
-		// MakeClosure, so mc.env is never captured. Safe to mutate the
-		// closure's own bindings in place, eliminating both the
-		// EnvironmentFrame and []Binding allocations.
+		// MakeClosure/MakeFlatClosure, so mc.env is never captured. Safe
+		// to mutate the closure's own bindings in place, eliminating both
+		// the EnvironmentFrame and []Binding allocations.
 		env = mcls.env
 		bnds = env.LocalEnvironment().Bindings()
-		// envPooled: closure's own env, not from pool.
 		p.envPooled = false
 		p.counters.NoCopyApplies++
 		p.counters.NoCopyBindingsSaved += uint64(len(bnds))
 
-	case mcls.freeVars != nil:
-		// Flat closure copy path: free vars live in the closure's freeVars
-		// array, not the environment chain. Allocate fresh binding slots
-		// but skip the binding value memcpy — bindArgs overwrites parameter
-		// slots and body code (OpStoreLocal) initializes the rest.
-		env = acquireEnvFrame()
-		mcls.env.InitFlatApplyFrame(env)
-		bnds = env.LocalEnvironment().Bindings()
-		p.envPooled = true
-		p.counters.FlatCopyApplies++
-		p.counters.EnvsCopied++
-
 	default:
-		// Linked closure copy path: acquire a frame from the pool and populate it.
-		// Critical for recursive functions with SaveContinuation: without
-		// copying, all invocations share the same bindings, causing
-		// parameter corruption when evaluating arguments like
-		// (+ (f (- n 1)) (f (- n 2))).
+		// Copy path: acquire a fresh frame from the pool and set up binding
+		// slots WITHOUT copying values. bindArgs overwrites parameter slots
+		// and body code (OpStoreLocal) initializes the rest, so the memcpy
+		// is dead work — the closure env's bindings are always compile-time
+		// void/unknown placeholders for the !noCopyApply path. Free
+		// variables (if any) live in mcls.freeVars, not in binding slots.
 		env = acquireEnvFrame()
 		mcls.env.InitApplyFrame(env)
 		bnds = env.LocalEnvironment().Bindings()
-		// envPooled: frame from envFramePool; RestoreAndRelease will recycle it.
 		p.envPooled = true
 		p.counters.EnvsCopied++
-		p.counters.BindingsCopied += uint64(len(bnds))
-		p.counters.KeysShared++
 	}
 
 	bindArgs(bnds, vs, l, tpl.IsVariadic(), nil)

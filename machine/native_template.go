@@ -38,7 +38,7 @@ type NativeTemplate struct {
 	// noCopyApply is true when the template's bindings never escape:
 	// no OpSaveContinuation in code[] and no *OperationMakeClosure in sideTable[].
 	// When true, Apply can reuse the closure's own environment frame
-	// instead of allocating a fresh copy via NewApplyFrame().
+	// instead of allocating a fresh frame via InitApplyFrame().
 	noCopyApply bool
 
 	// cachedBindings stores *Binding pointers resolved at compile time.
