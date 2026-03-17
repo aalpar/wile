@@ -110,6 +110,7 @@ func NewMachineContinuationFromMachineContext(mc *MachineContext, off int) *Mach
 	q.callDepth = depth
 	q.envPooled = mc.envPooled
 	q.marks = mc.marks
+	q.freeVars = mc.freeVars
 	q.parent = mc.cont
 	return q
 }
@@ -177,6 +178,7 @@ func (p *MachineContinuation) Copy() *MachineContinuation {
 	// and must not release it back to the pool.
 	// shared: zero value (false) — copies are always fresh.
 	q.marks = cloneMarks(p.marks)
+	q.freeVars = p.freeVars
 	q.parent = p.parent
 	q.promptHandler = p.promptHandler
 	q.inlineEvalsLen = p.inlineEvalsLen

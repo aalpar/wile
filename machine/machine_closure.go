@@ -85,6 +85,12 @@ func NewClosureWithFreeVars(tpl *NativeTemplate, freeVars []values.Value) *Machi
 	return q
 }
 
+// IsFlat returns true if this closure uses the flat representation
+// (free variables captured in an array) rather than a linked environment chain.
+func (p *MachineClosure) IsFlat() bool {
+	return p.freeVars != nil
+}
+
 func (p *MachineClosure) Copy() *MachineClosure {
 	q := &MachineClosure{
 		template: p.template,
