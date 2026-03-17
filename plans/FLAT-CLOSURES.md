@@ -1,8 +1,8 @@
 # Flat Closures Implementation Plan
 
-**Status:** PR A in progress (A1 partial, A2 done)
+**Status:** All three PRs merged (#514, #515, #516). Remaining: C1 (remove linked path — deferred, serves as zero-capture fallback), C2 partial (OpPushFreeVar done; OpLoadFreeVarUnboxed, OpPushFreeVarUnboxed not done), C3 not done. Open questions 1-3 unresolved.
 **Design:** `plans/PERFORMANCE.md` Tier 3, Item 8
-**Branch strategy:** Three PRs (Infrastructure + Analysis, Behavioral Change, Cleanup)
+**Branch strategy:** Three PRs (Infrastructure + Analysis, Behavioral Change, Cleanup) — all merged
 
 **Goal:** Replace linked-closure environment capture with flat closures that copy only referenced free variables, using `*values.Box` for shared mutation. Eliminates parent-chain walks, per-call env copying, and EnvironmentFrame allocation for closures.
 
@@ -555,8 +555,33 @@ The debugger (`machine/debugger.go`) inspects `mc.env` for variable display. Fla
 
 ## Open Questions
 
-1. **Should Pass 1 run for top-level templates?** Top-level code can reference variables at `depth > 0` in `let` bindings, but these are within a single template (not across lambda boundaries). Pass 1 should only run on templates that represent closures (have parameters). Verify this assumption.
+1. **Should Pass 1 run for top-level templates?** ~~Verify this assumption.~~ **Verified (2026-03-17).** The assumption is correct and already implemented. `RunFlatClosurePipeline` is called only from `compileClosureBody` (`compile_closure.go:114`), which is invoked only for `lambda` (`compile_closure.go:129`) and `case-lambda` (`compile_validated.go:416`) bodies. Top-level templates never enter the pipeline. Top-level `let` bindings produce `depth > 0` opcodes (nested `LocalEnvironmentFrame` scopes within a single template), but these are not cross-lambda free variables — no action needed.
 
-2. **Pool `freeVars` arrays?** Small arrays (1-4 elements) dominate. A `sync.Pool` keyed by size could reduce allocation. Measure first -- premature optimization otherwise.
+2. **Pool `freeVars` arrays?** ~~Measure first -- premature optimization otherwise.~~ **Measured (2026-03-17).** Line-level `memprofile` on `machine_context.go:793` (`fv := make([]values.Value, len(info.Captures))`).
 
-3. **`values.Box` allocation pressure:** Every boxed variable creates a `*values.Box` at closure creation time. If many closures share the same boxed variable, they share the same `*values.Box` instance (that's the point). But the `OpBox` instruction at the defining scope creates a new `*values.Box` per call. Measure allocation profile after PR B.
+   **Finding: Not worth pooling.** The freeVars array allocation is proportional to closure *creation* count, not *call* count. Since closures are typically created once and called many times, freeVars allocation is noise in the typical case.
+
+   - **Pathological case** (HotBoxCreation: 1000 new closures per benchmark iteration):
+     - `fv := make(...)`: 11.1% of allocs by count, 6.9% by bytes
+     - Smaller than env frame allocation (16.6% by bytes) and closure struct (10.5% by bytes) at the same site
+   - **Typical case** (Counter: closure created once, called 1000×):
+     - `fv := make(...)`: 0.3% of allocs by count, 0.09% by bytes
+     - Dominated entirely by `drainAndApply` (98%+)
+   - Observed capture counts: 1 element in 4/5 benchmarks, 3 elements in 1/5. Matches prediction that small arrays dominate.
+
+   **If revisited:** A `sync.Pool` for 1-element `[]values.Value` slices would only help when closures are created in a tight loop — a pattern not seen in Gabriel benchmarks or typical Scheme code. The env frame pool factory (32% of total bytes in HotBoxCreation) would be a higher-leverage target.
+
+3. **`values.Box` allocation pressure:** ~~Measure allocation profile after PR B.~~ **Measured (2026-03-17).** See `box_pressure_test.go` for benchmarks and `TestBoxPressureProfile` for per-opcode histograms.
+
+   **Finding: Box allocation pressure is negligible.** No action needed.
+
+   - Gabriel benchmarks contain zero `set!` on captured variables. Box pressure is 0% of allocations for purely functional code.
+   - In the pathological case (HotBoxCreation: new closure with fresh box every iteration, 1000×):
+     - `values.NewBox`: **5.45%** of allocation count, **1.61%** of allocation bytes (23MB / 1.4GB total)
+     - Dominant allocators: env frame pool factory (32%), `NewEnvironmentFrameWithParent` (24%), `initFlatApplyInto` (10.7%), `NewClosureWithFreeVars` (10.2%)
+   - In the typical case (Counter: box created once, closure called 1000×):
+     - `values.NewBox` doesn't appear in the allocation profile (below noise floor)
+     - Dominated entirely by env frame pool (48.8%) and `initFlatApplyInto` (48.6%)
+   - Per opcode histogram: `OpBox` fires 2× in Counter/SharedMutation/NestedCapture (once per boxed variable definition), 1001× in HotBoxCreation (once per loop iteration creating a new closure). `OpUnbox` and `OpSetBox` are proportional to closure invocations, not Box allocations.
+
+   **Conclusion:** Pooling `*values.Box` is not warranted. The 16-byte allocation (one pointer) is amortized over many `OpUnbox`/`OpSetBox` operations. The env frame pool factory and binding array copies are 20-60× more impactful.
