@@ -1,6 +1,6 @@
 # Flat Closures Implementation Plan
 
-**Status:** All three PRs merged (#514, #515, #516). Remaining: C1 (remove linked path — deferred, serves as zero-capture fallback), C2 partial (OpPushFreeVar done; OpLoadFreeVarUnboxed, OpPushFreeVarUnboxed not done), C3 not done. Open questions 1-3 unresolved.
+**Status:** Complete. All three PRs merged (#514, #515, #516). Open questions resolved with allocation profiling (2026-03-17). C1 deferred (linked path retained as zero-capture fallback). C2 partial (OpPushFreeVar fused; OpLoadFreeVarUnboxed/OpPushFreeVarUnboxed deferred — box pressure measured as negligible). C3 deferred (compiler-internal, no runtime benefit). Machine Modernization Roadmap added (2026-03-17) — documents remaining Racket/Chibi gaps, identifies tasks blocked by `unsafe` constraint.
 **Design:** `plans/PERFORMANCE.md` Tier 3, Item 8
 **Branch strategy:** Three PRs (Infrastructure + Analysis, Behavioral Change, Cleanup) — all merged
 
@@ -585,3 +585,791 @@ The debugger (`machine/debugger.go`) inspects `mc.env` for variable display. Fla
    - Per opcode histogram: `OpBox` fires 2× in Counter/SharedMutation/NestedCapture (once per boxed variable definition), 1001× in HotBoxCreation (once per loop iteration creating a new closure). `OpUnbox` and `OpSetBox` are proportional to closure invocations, not Box allocations.
 
    **Conclusion:** Pooling `*values.Box` is not warranted. The 16-byte allocation (one pointer) is amortized over many `OpUnbox`/`OpSetBox` operations. The env frame pool factory and binding array copies are 20-60× more impactful.
+
+---
+
+## Machine Modernization Roadmap
+
+Flat closures (PRs #514-#516) were the first milestone in bringing Wile's machine up-to-date with Racket and Chibi. This section documents the remaining gaps, organized by value and dependency order.
+
+### Constraint: No `unsafe` Packages
+
+Wile is pure Go — no `unsafe`, no `reflect` on internal layouts, no CGo, no direct manipulation of Go runtime structures. Tasks that require `unsafe` operations are documented below for completeness but **will NOT be completed for Wile**. This is a hard constraint, not a deferral.
+
+### What's Done (Matching Racket/Chibi)
+
+| Feature | Evidence | Racket/Chibi Equivalent |
+|---------|----------|------------------------|
+| Flat closures | `pass_pipeline.go:32`, opcodes in `opcode.go:119-124` | Chez flat closures (Dybvig 1987) |
+| Box for mutated captures | `pass_box_insertion.go`, `OpBox`/`OpUnbox`/`OpSetBox` | Racket/Chibi shared mutation cells |
+| Continuation marks | `vm_state.go:199-213`, Phases 1-3 complete | Racket `with-continuation-mark` |
+| Delimited continuations | `PromptTag`, `ComposableContinuation`, `ErrPromptAbort` | Racket prompts (Flatt et al. ICFP 2007) |
+| Hygienic macros (Flatt 2016) | Sets-of-scopes model | Racket's scope-set hygiene |
+| syntax-case | R6RS-style | Chez/Racket syntax-case |
+| ER macro transformers | Per TODO.md | Chibi ER macros |
+| Promoted primitive opcodes | 11 primitives, 22 opcodes (`OPCODE-PROMOTION.md`) | Chez/Chibi inline primitives |
+
+### Remaining Tasks
+
+#### T1. Stack Frames Replacing Continuation Chains
+
+**Requires `unsafe`:** No. Uses Go slices (`[]callFrame`) and index arithmetic.
+
+**Priority:** Highest-value single optimization remaining.
+
+**Status:** Attempted and reverted (2026-03-17). Profiling predicted 5.9-12.5% on fib. Implementation achieved -5.1% on fib but regressed continuation-heavy benchmarks 10-20% (ctak +20%, takl +13%, nqueens +13%). Net negative on Gabriel suite. Reverted. See T1.1.5 below.
+
+---
+
+##### T1.1 Profiling Results (2026-03-17)
+
+All measurements on Apple M4 Max, Go 1.24, 6-run median.
+
+###### T1.1.1 Allocation Profile (Fibonacci benchmark, `-memprofile`)
+
+`BenchmarkRun/Fibonacci` (42,240 iterations of fib(10)):
+
+**By allocation count** (10M total objects):
+
+| Source | Objects | % of total |
+|--------|---------|-----------|
+| `copyForApplyInto` (env frame binding copy) | 4,718,735 | 47.00% |
+| `init.func8` (continuation pool factory) | 4,522,329 | **45.05%** |
+| `Run()` misc | 196,609 | 1.96% |
+| All other | 601,158 | 5.99% |
+
+**By allocation bytes** (524MB total):
+
+| Source | MB | % of total |
+|--------|-----|-----------|
+| `init.func8` (continuation pool factory) | 345 | **65.78%** |
+| `copyForApplyInto` (env frame binding copy) | 144 | 27.45% |
+| `buildRestArg` | 7 | 1.33% |
+| All other | 28.5 | 5.44% |
+
+**Key finding:** The continuation pool factory (`init.func8`) is the **#1 allocation source by bytes** (65.78%) and **#2 by count** (45.05%). These are pool-miss allocations — every time Go's GC clears `sync.Pool`, the factory must re-allocate `MachineContinuation` structs. With a `[]callFrame` contiguous stack, these allocations **disappear entirely** — the backing array is allocated once and reused via `append`/reslice.
+
+###### T1.1.2 Micro-Benchmarks (pool round-trip vs callStack append/pop)
+
+| Benchmark | ns/op | allocs/op | What it measures |
+|-----------|-------|-----------|-----------------|
+| `ContinuationRoundTrip` | **18.4** | 0 | Full SaveContinuation + RestoreAndRelease (current) |
+| `ContinuationPoolFull` | 11.0 | 0 | Pool acquire + field populate + release |
+| `ContinuationPool` (bare) | 10.4 | 0 | Pool acquire + release (no field copy) |
+| `CallStackAppendPop` | **9.3** | 0 | `append(callFrame{...})` + zero + reslice (proposed) |
+| `CallStackAppendPopDeep` | 9.0 | 0 | Same at depth 20 (cache-warm backing array) |
+
+**Per round-trip savings:** 18.4 - 9.3 = **9.1ns** (2.0x faster for the push/pop operation).
+
+Note: both benchmarks show 0 allocs/op because the pool is warm from the previous iteration and the `[]callFrame` capacity is pre-allocated. The allocation profile (T1.1.1) reveals the real cost — pool factory calls during GC, which the micro-benchmark doesn't trigger.
+
+###### T1.1.3 Counter-Based Profiling (fib)
+
+| | fib(10) | fib(15) | fib(20) |
+|---|---------|---------|---------|
+| ops_executed | 2,562 | 28,604 | 317,415 |
+| continuations_saved | 177 | 1,973 | 21,891 |
+| continuations_restored | 177 | 1,973 | 21,891 |
+| continuation_pool_releases | 177 | 1,973 | 21,891 |
+| inline_evals_saved | 177 | 1,973 | 21,891 |
+| shared_frame_restores | 0 | 0 | 0 |
+| stack_pool_releases | 0 | 0 | 0 |
+| save % of ops | 6.9% | 6.9% | 6.9% |
+| envs_copied | 177 | 1,973 | 21,891 |
+| closures_applied | 265 | 2,959 | 32,836 |
+| no_copy_applies | 88 | 986 | 10,945 |
+
+**Observations:**
+- SaveContinuation is a stable 6.9% of all ops for tree-recursive fibonacci.
+- 100% of continuations use inline eval storage (≤ 2 items on stack at save time).
+- 0 shared frame restores (no call/cc in fibonacci).
+- 0 stack pool releases (all inlined — no stack transfer needed).
+- Every SaveContinuation is paired with exactly one RestoreAndRelease (0 abandoned frames).
+
+###### T1.1.4 Min/Max Impact Estimates
+
+**Input data:**
+- fib(10) benchmark time: 27,307 ns/op (`BenchmarkRun/Fibonacci`)
+- fib(10) save/restore cycles: 177 per invocation
+- Per-cycle savings: 9.1ns (micro-benchmark delta)
+- Continuation pool factory: 65.78% of allocation bytes
+
+**Minimum estimate (dispatch savings only, no GC benefit):**
+```
+min_savings = 177 cycles × 9.1 ns/cycle = 1,611 ns
+min_speedup = 1,611 / 27,307 = 5.9%
+```
+
+**Maximum estimate (dispatch + GC pressure reduction):**
+
+Eliminating 65.78% of allocation volume reduces GC work. Assuming GC overhead is 8-12% of total benchmark time (typical for allocation-heavy Go programs), eliminating the dominant allocation source saves:
+```
+gc_savings = 27,307 × 0.10 × 0.66 = 1,802 ns  (midpoint: 10% GC, 66% of allocs removed)
+max_savings = 1,611 + 1,802 = 3,413 ns
+max_speedup = 3,413 / 27,307 = 12.5%
+```
+
+**Projected range: 5.9% – 12.5% speedup on fib(10).**
+
+For continuation-heavier workloads (VM profile shows SaveContinuation at 13.8% of ops for the Schelog/ZebraPuzzle workload vs 6.9% for fib), the impact would be proportionally larger. The 8.7:1 save-to-restore ratio in ZebraPuzzle (abandoned continuations from call/cc) means most pool acquires are wasted — callStack would make these free.
+
+**Decision gate: min_speedup (5.9%) > 5% threshold → PROCEED with implementation.**
+
+###### T1.1.5 Actual Results (Post-Implementation)
+
+Implementation completed and reverted (2026-03-17). The callStack approach replaced `MachineContinuation` pool with `[]callFrame` for SaveContinuation/Restore. Cold-path consumers (`call/cc`, composable continuations, marks, stack traces) materialized the callStack into linked chains on demand.
+
+**Gabriel benchmark results (6 runs, M4 Max):**
+
+| Benchmark | Baseline | CallStack | Change | Category |
+|-----------|----------|-----------|--------|----------|
+| tak | 0.1123 | 0.1071 | **-4.6%** | Win |
+| fib | 0.3715 | 0.3598 | **-3.2%** | Win |
+| sum | 0.0311 | 0.0282 | **-9.3%** | Win |
+| sieve | 0.0808 | 0.0763 | **-5.6%** | Win |
+| divrec | 0.8759 | 0.8359 | **-4.6%** | Win |
+| ackermann | 0.4851 | 0.4734 | **-2.4%** | Win |
+| triangl | 0.0382 | 0.0375 | -1.8% | Neutral |
+| deriv | 0.1028 | 0.1045 | +1.7% | Neutral |
+| primes | 0.2367 | 0.2420 | +2.2% | Neutral |
+| peval | 0.0675 | 0.0694 | +2.8% | Neutral |
+| diviter | 2.5677 | 2.6538 | +3.4% | Neutral |
+| cpstak | 0.1806 | 0.1975 | **+9.4%** | Loss |
+| sumfp | 0.6206 | 0.6848 | **+10.3%** | Loss |
+| takl | 1.0883 | 1.2303 | **+13.0%** | Loss |
+| nqueens | 1.9047 | 2.1606 | **+13.4%** | Loss |
+| ctak | 1.6532 | 1.9841 | **+20.0%** | Loss |
+
+**Root cause of regressions:** The split representation (callStack for hot path, `*MachineContinuation` chains for cold path) required O(depth) materialization every time a cold-path consumer needed the chain. In the old model, the chain already existed — no conversion needed. The materialization tax (heap allocation per frame + GC pressure) exceeded the dispatch savings on continuation-heavy workloads.
+
+**Key lesson:** Profiling the dispatch cost alone (T1.1.2, T1.1.4) was insufficient. The estimate missed the representation-conversion tax that dominates when cold-path consumers are exercised. The pool-based linked list is well-optimized for Wile's workload mix because the linked list IS the universal representation — every consumer reads it directly with zero conversion.
+
+**Verdict:** The pool-based `*MachineContinuation` linked list is retained. T1 is closed.
+
+---
+
+##### T1.0 Current Architecture
+
+The continuation chain is a singly-linked list of heap-allocated `MachineContinuation` frames:
+
+```
+MachineContext.cont → frame_N → frame_N-1 → ... → frame_0 → nil
+```
+
+Each non-tail call:
+1. `acquireContinuation()` — pool acquire, returns zeroed `*MachineContinuation`
+2. Copy 12 fields from `MachineContext` into the frame (`machine_continuation.go:96-114`)
+3. Transfer or inline the eval stack (`machine_context_continuation.go:209-223`)
+4. Link `cont.parent = mc.cont`, set `mc.cont = cont`
+
+Each normal return:
+1. Copy 10 fields back from continuation to `MachineContext` (`machine_context_continuation.go:80-150`)
+2. Transfer or copy the eval stack
+3. `releaseContinuation(cont)` — pool release, zero all fields
+
+**Key data from the codebase:**
+
+| Metric | Source |
+|--------|--------|
+| `SaveContinuation` = 13.8% of all ops | `private/VM_EXECUTION_PROFILE.md` |
+| Save-to-restore ratio = 8.7:1 | `private/VM_EXECUTION_PROFILE.md` (74.8M saves / 8.7M restores) |
+| Inline evals threshold = 2 values | `machine_continuation.go:35` (covers >95% of cases per fib profile) |
+| Fields saved per frame = 12 | `vm_state.go:79-95` table |
+| `MachineContinuation` struct size = `vmState` + 4 fields (parent, promptHandler, shared, inline evals) | `machine_continuation.go:37-51` |
+| `vmState` fields: env, freeVars, template, singleValue, multiValues, evals, pc, windingStack, promptTag, threadID, callDepth, envPooled, marks | `vm_state.go:96-213` |
+
+**Sites that read/write `*MachineContinuation`:** 14 production files, 63 references total. Key consumers: `SaveContinuation`, `Restore`, `RestoreAndRelease`, `PopContinuation`, `FindPrompt`, `SliceContinuationAt`, `GraftContinuation`, `DeepCopy`, `MarkChainShared`, `CaptureStackTrace`, `CollectContinuationMarks`, `CollectMarksFromContinuation`, `ComposableContinuation`, `CapturedContinuation`, `debugger.go`.
+
+---
+
+##### T1.1 Profiling Phase (BEFORE Implementation)
+
+**Goal:** Establish min/max performance impact estimates before writing any implementation code. The profiling phase produces numbers that determine whether T1 is worth pursuing and which sub-components contribute most to the current cost.
+
+###### T1.1.1 Allocation Profile: Where Do Allocations Come From?
+
+**Method:** Run Gabriel benchmarks + ZebraPuzzle with `-memprofile`. Identify what fraction of total allocations (by count and bytes) come from the continuation system vs other sources (env frames, closures, pairs, etc.).
+
+**Measurements:**
+- `acquireContinuation` / `NewMachineContinuationFromMachineContext` — pool acquire path
+- `acquireStack` — stack allocation in SaveContinuation's non-inline path
+- `evals.Copy()` — stack copy in Restore/RestoreAndRelease shared path
+- `cloneMarks` — mark copy in Restore path
+- Compare against: `acquireEnvFrame`, `NewClosureWithFreeVars`, `values.List` block allocations
+
+**Deliverable:** Table showing allocation breakdown by source, fraction of total, for both a closure-heavy benchmark (nqueens) and a call/cc-heavy benchmark (ZebraPuzzle).
+
+###### T1.1.2 Micro-Benchmark: Continuation Pool Round-Trip Cost
+
+**Method:** Isolated benchmark measuring just the pool acquire→fill→release cycle, independent of VM execution.
+
+```go
+func BenchmarkContinuationPoolRoundTrip(b *testing.B) {
+    // Setup: create a realistic MachineContext state
+    for b.Loop() {
+        cont := acquireContinuation()
+        // fill fields (simulating NewMachineContinuationFromMachineContext)
+        releaseContinuation(cont)
+    }
+}
+```
+
+**Compare against:** The equivalent operation for a contiguous stack:
+
+```go
+func BenchmarkCallStackAppendPop(b *testing.B) {
+    stack := make([]callFrame, 0, 64)
+    for b.Loop() {
+        stack = append(stack, callFrame{/* fill fields */})
+        stack = stack[:len(stack)-1]
+    }
+}
+```
+
+**Deliverable:** ns/op and allocs/op for both approaches. The difference is the per-call savings. Multiply by `ContinuationsSaved` counter to project total impact.
+
+###### T1.1.3 Counter-Based Profiling: Chain Walk Costs
+
+**Method:** Add temporary instrumentation (reverted after measurement) to count chain-walk lengths for:
+- `FindPrompt` — how many frames walked on average?
+- `CaptureStackTrace` — how many frames captured?
+- `CollectContinuationMarks` — how many frames inspected?
+- `SliceContinuationAt` — how many frames deep-copied?
+- `MarkChainShared` — how many frames marked?
+
+**Deliverable:** Average and max chain-walk lengths per benchmark. These determine whether replacing linked-list walks with array scans matters (short chains = negligible; long chains = meaningful).
+
+###### T1.1.4 Min/Max Impact Estimates
+
+**Minimum estimate (conservative):** Assume only the pool acquire/release overhead is eliminated. All other costs (field copies, stack handling, mark cloning) remain identical.
+
+```
+min_savings = (ns_pool_roundtrip - ns_append_pop) × ContinuationsSaved_per_benchmark
+min_speedup = min_savings / total_benchmark_time
+```
+
+**Maximum estimate (optimistic):** Assume pool overhead + GC pressure reduction from fewer heap objects + cache locality improvement from contiguous frames.
+
+```
+max_savings = min_savings × cache_locality_multiplier (estimate 1.5-2x)
+             + GC_savings (proportional to heap_reduction from eliminating pooled objects)
+```
+
+**Decision gate:** If `min_speedup` < 3% on the benchmark most dominated by SaveContinuation (ZebraPuzzle or nqueens), T1 is not worth the blast radius. If `min_speedup` > 5%, proceed to implementation.
+
+---
+
+##### T1.2 Design: Contiguous Call Stack
+
+###### T1.2.1 New Type: `callFrame`
+
+Replace heap-allocated `MachineContinuation` with a value-type `callFrame` stored contiguously in a slice:
+
+```go
+// callFrame holds the saved state for one non-tail call.
+// Stored by value in []callFrame — no heap allocation per frame.
+type callFrame struct {
+    env          *environment.EnvironmentFrame
+    freeVars     []values.Value
+    template     *NativeTemplate
+    singleValue  values.Value
+    multiValues  MultipleValues
+    pc           int
+    threadID     uint64
+    callDepth    int
+    envPooled    bool
+    marks        []markEntry
+
+    // Prompt fields (non-nil only for prompt frames).
+    promptTag     *PromptTag
+    promptHandler Closure
+
+    // Eval stack: inline storage for the common case (0-2 values).
+    // When evals is nil, values are in inlineEvals[0:inlineEvalsLen].
+    // When evals is non-nil, it owns the stack (transferred from mc).
+    inlineEvalsLen uint8
+    inlineEvals    [inlineEvalsCap]values.Value
+    evals          *Stack
+}
+```
+
+The `callFrame` is a value type (not a pointer). `[]callFrame` allocates all frames contiguously. Each `append` copies the struct value — no heap allocation for the frame itself. The only heap allocations within a frame are the pointer fields (`env`, `freeVars`, `template`, `marks`, `evals`, `promptHandler`), which are shared by pointer.
+
+**Critical difference from `MachineContinuation`:** No `parent` pointer. Parent is implicit — `callStack[i-1]` is the parent of `callStack[i]`.
+
+###### T1.2.2 MachineContext Changes
+
+```go
+type MachineContext struct {
+    vmState
+    callStack []callFrame  // replaces cont *MachineContinuation
+    // ... other fields unchanged ...
+}
+```
+
+**Initial capacity:** `make([]callFrame, 0, 64)`. Most programs use < 64 call depth. The Gabriel benchmark max depths are 20-50. ZebraPuzzle (backtracking) goes deeper but `call/cc` escapes reset the depth.
+
+###### T1.2.3 SaveContinuation → Push Frame
+
+```go
+func (p *MachineContext) SaveContinuation(off int) error {
+    p.callDepth++
+    if p.maxCallDepth > 0 && uint64(p.callDepth) > p.maxCallDepth {
+        p.callDepth--
+        return werr.WrapForeignErrorf(werr.ErrCallDepthExceeded, ...)
+    }
+    p.counters.ContinuationsSaved++
+
+    frame := callFrame{
+        env:         p.env,
+        freeVars:    p.freeVars,
+        template:    p.template,
+        singleValue: p.singleValue,
+        multiValues: p.multiValues,
+        pc:          p.pc + off,
+        threadID:    p.threadID,
+        callDepth:   p.callDepth - 1, // parent's depth
+        envPooled:   p.envPooled,
+        marks:       p.marks,
+    }
+
+    // Inline eval stack into frame (same logic as today).
+    n := p.evals.Len()
+    if n <= inlineEvalsCap {
+        frame.inlineEvalsLen = uint8(n)
+        for i := range n {
+            frame.inlineEvals[i] = (*p.evals)[i]
+        }
+        // frame.evals stays nil (sentinel)
+        p.evals.Clear()
+        p.counters.InlineEvalsSaved++
+    } else {
+        frame.evals = p.evals // transfer ownership
+        p.evals = acquireStack()
+    }
+
+    p.callStack = append(p.callStack, frame)
+    p.marks = nil
+    return nil
+}
+```
+
+**Cost:** One struct copy (the `callFrame` is ~160 bytes). No pool acquire. Go's `append` amortizes the backing array growth.
+
+###### T1.2.4 PopContinuation → Pop Frame
+
+```go
+func (p *MachineContext) PopContinuation() error {
+    p.callDepth--
+    if p.callDepth < 0 {
+        p.callDepth = 0
+        return werr.WrapForeignErrorf(werr.ErrContinuationUnderflow, ...)
+    }
+    top := len(p.callStack) - 1
+    frame := &p.callStack[top]
+
+    p.template = frame.template
+    p.env = frame.env
+    p.freeVars = frame.freeVars
+    p.pc = frame.pc
+    p.singleValue = frame.singleValue
+    p.multiValues = frame.multiValues
+    p.envPooled = frame.envPooled
+    p.marks = frame.marks
+
+    if frame.evals == nil {
+        restoreInlineEvalsFromFrame(p.evals, frame)
+    } else {
+        releaseStack(p.evals)
+        p.evals = frame.evals
+    }
+
+    // Zero the frame to break GC references, then shrink.
+    p.callStack[top] = callFrame{}
+    p.callStack = p.callStack[:top]
+    return nil
+}
+```
+
+**Cost:** One struct read + field assignments. No pool release. The frame struct is zeroed in place.
+
+**Note:** Current `PopContinuation` returns the frame for the caller (the `Run` loop) to release the old env. With the contiguous stack, the frame is ephemeral — the env release must happen within `PopContinuation` itself or via a returned env pointer. This is a design detail to resolve during implementation.
+
+###### T1.2.5 RestoreAndRelease → Pop Frame (Normal Return)
+
+The `RestoreAndRelease` path handles shared/unshared frames differently. With contiguous stacks, the `shared` flag changes meaning:
+
+**Unshared (common case):** Same as PopContinuation above.
+
+**Shared (call/cc captured):** The frame's evals must be copied, not transferred. The frame itself stays in the array (it was copied to a `MaterializedContinuation` chain during capture). The `shared` flag can be a `bool` on `callFrame`, set during `call/cc` capture on all frames from top to the prompt.
+
+###### T1.2.6 call/cc: Materialize to Heap
+
+When `call/cc` captures, the contiguous stack must be materialized into a heap-allocated linked chain (for storage in `ComposableContinuation`/`CapturedContinuation`):
+
+```go
+func (p *MachineContext) materializeCallStack() *MachineContinuation {
+    if len(p.callStack) == 0 {
+        return nil
+    }
+    // Build linked chain from bottom to top.
+    var chain *MachineContinuation
+    for i := range p.callStack {
+        frame := &p.callStack[i]
+        cont := &MachineContinuation{
+            vmState: vmState{
+                env:         frame.env,
+                freeVars:    frame.freeVars,
+                template:    frame.template,
+                singleValue: frame.singleValue,
+                multiValues: slices.Clone(frame.multiValues),
+                pc:          frame.pc,
+                threadID:    frame.threadID,
+                callDepth:   frame.callDepth,
+                envPooled:   false, // materialized frames are not pooled
+                marks:       cloneMarks(frame.marks),
+            },
+            parent: chain,
+        }
+        // Copy evals (snapshot for re-invocation).
+        if frame.evals == nil {
+            cont.inlineEvalsLen = frame.inlineEvalsLen
+            cont.inlineEvals = frame.inlineEvals
+        } else {
+            cont.evals = frame.evals.Copy()
+        }
+        chain = cont
+    }
+    // Mark all frames in callStack as shared.
+    for i := range p.callStack {
+        p.callStack[i].shared = true
+    }
+    return chain
+}
+```
+
+**Cost:** O(depth) heap allocations. This is the *cold path* — `call/cc` is rare relative to normal calls. The profiling data shows `call-with-current-continuation` at 200K calls in ZebraPuzzle vs 74.8M `SaveContinuation` ops — a 374:1 ratio.
+
+###### T1.2.7 FindPrompt → Backwards Array Scan
+
+```go
+func (p *MachineContext) FindPrompt(tag *PromptTag) (int, bool) {
+    for i := len(p.callStack) - 1; i >= 0; i-- {
+        if p.callStack[i].promptTag == tag {
+            return i, true
+        }
+    }
+    if p.promptTag == tag {
+        return -1, true
+    }
+    return -1, false
+}
+```
+
+Returns an index instead of a frame pointer. Callers adapted to use index.
+
+###### T1.2.8 SliceContinuationAt → Array Slice + Materialize
+
+```go
+func (p *MachineContext) SliceContinuationAt(promptIndex int) *MachineContinuation {
+    end := len(p.callStack)
+    if promptIndex >= 0 {
+        end = promptIndex // exclude the prompt frame
+    }
+    // Materialize frames [0..end) into a linked chain.
+    // Same logic as materializeCallStack but bounded.
+    ...
+}
+```
+
+###### T1.2.9 CaptureStackTrace → Array Walk
+
+```go
+func (p *MachineContext) CaptureStackTrace(maxDepth int) StackTrace {
+    trace := make(StackTrace, 0, 16)
+    if p.template != nil {
+        trace = append(trace, StackFrame{...})
+    }
+    for i := len(p.callStack) - 1; i >= 0 && len(trace) < maxDepth; i-- {
+        frame := &p.callStack[i]
+        trace = append(trace, StackFrame{
+            FunctionName: frame.template.Name(),
+            CurrentLoc:   frame.template.SourceAt(frame.pc - 1),
+        })
+    }
+    return trace
+}
+```
+
+###### T1.2.10 CollectContinuationMarks → Array Walk
+
+```go
+func (p *MachineContext) CollectContinuationMarks(tag *PromptTag) *ContinuationMarkSet {
+    var frames [][]markEntry
+    if len(p.marks) > 0 {
+        frames = append(frames, cloneMarks(p.marks))
+    }
+    for i := len(p.callStack) - 1; i >= 0; i-- {
+        frame := &p.callStack[i]
+        if len(frame.marks) > 0 {
+            frames = append(frames, cloneMarks(frame.marks))
+        }
+        if frame.promptTag == tag {
+            break
+        }
+    }
+    return &ContinuationMarkSet{frames: frames}
+}
+```
+
+###### T1.2.11 ComposableContinuation and CapturedContinuation
+
+These types continue to store `*MachineContinuation` linked chains. They receive materialized chains from `materializeCallStack`/`SliceContinuationAt`. Their `AcquireSegment`, `DeepCopy`, and `GraftContinuation` logic is unchanged — they operate on the materialized heap chain, not the live call stack.
+
+When a `ComposableContinuation` is applied, its chain is grafted onto the current `mc.cont` (which no longer exists as a field). Instead:
+- Materialize the composable's chain frames back into the callStack via a `graftToCallStack` method
+- Or: maintain a hybrid where the callStack has a `materialized *MachineContinuation` base that `PopContinuation` falls through to when the array is empty
+
+**Hybrid approach (recommended):**
+
+```go
+type MachineContext struct {
+    vmState
+    callStack           []callFrame
+    materializedBase    *MachineContinuation // from composable continuation graft
+    // ...
+}
+```
+
+When `PopContinuation` empties the callStack and `materializedBase != nil`, switch to walking the materialized chain. This avoids the O(depth) cost of converting a materialized chain back into callStack frames on every composable continuation invocation.
+
+---
+
+##### T1.3 Implementation Phases
+
+###### Phase 0: Profiling (T1.1)
+
+Deliverables: allocation profile, micro-benchmarks, chain-walk instrumentation, min/max impact estimates.
+
+**Decision gate:** If min_speedup < 3% on the heaviest benchmark, stop.
+
+###### Phase 1: Infrastructure (No Behavioral Change)
+
+**PR A: Add `callFrame` type alongside existing continuation chain.**
+
+- Define `callFrame` struct in `machine/call_frame.go`
+- Add `callStack []callFrame` field to `MachineContext`
+- Add `materializedBase *MachineContinuation` field
+- Initialize `callStack` in constructors (`NewMachineContext`, `AcquireTopLevelContext`, `NewSubContext`)
+- All existing continuation logic unchanged — `callStack` is allocated but unused
+
+**Tests:** Verify `callFrame` struct size. Verify `callStack` is initialized. All existing tests pass.
+
+###### Phase 2: Dual-Path Save/Restore
+
+**PR B: `SaveContinuation` writes to both `callStack` AND continuation chain.**
+
+- `SaveContinuation` pushes a `callFrame` AND creates a `MachineContinuation` (dual-write)
+- `PopContinuation` pops from both (dual-read, verify agreement)
+- Counter: `callStackDepth` vs `callDepth` — assert equal after every operation
+- This phase validates the frame content is correct without changing behavior
+
+**Tests:** All existing tests pass. Add assertion that callStack depth matches continuation chain depth after every Save/Pop.
+
+###### Phase 3: Switch to Call Stack (Behavioral Change)
+
+**PR C: `SaveContinuation` writes to `callStack` only. `PopContinuation`/`RestoreAndRelease` read from `callStack` only.**
+
+- Remove dual-write from Phase 2
+- `mc.cont` field removed from normal Save/Pop path
+- `call/cc` capture calls `materializeCallStack` to create linked chain for `ComposableContinuation`
+- `FindPrompt` scans `callStack` array backwards
+- `CaptureStackTrace` walks `callStack` array
+- `CollectContinuationMarks` walks `callStack` array
+- `materializedBase` handles composable continuation graft
+
+**Tests:** All existing tests pass. Gabriel benchmarks. ZebraPuzzle (call/cc stress). Integration tests for call/cc + composable continuations + continuation marks + dynamic-wind across stack frame boundaries.
+
+###### Phase 4: Cleanup
+
+**PR D: Remove `MachineContinuation` pool. Clean up dead code.**
+
+- Remove `continuationPool` from `pool.go`
+- Remove `acquireContinuation`/`releaseContinuation`
+- `MachineContinuation` retained ONLY for materialized chains (call/cc, composable continuations)
+- Remove `shared` flag from `MachineContinuation` (sharing is a callStack concept now)
+- Remove `MarkChainShared` (replaced by marking `callFrame.shared` in the array)
+
+**Tests:** All existing tests pass. Verify no pool acquire/release in the normal call path.
+
+---
+
+##### T1.4 Risk Assessment
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|-----------|--------|------------|
+| `callFrame` struct too large for efficient append | Low | Medium | Measure. ~160 bytes is acceptable for Go's `append` — it copies via `memmove`, which is fast for structs < 256 bytes. Profile confirms or denies. |
+| Composable continuation graft to callStack is complex | Medium | High | Hybrid approach: `materializedBase` field avoids converting chains back to array frames. Composable continuations stay as linked chains. |
+| `call/cc` materialize is too slow for ZebraPuzzle | Low | Medium | ZebraPuzzle has 200K call/cc captures vs 74.8M saves. Even if materialize is 10x slower per operation, net savings from 74.6M cheaper saves dominate. |
+| eval stack ownership transfer broken | Medium | High | Phase 2 dual-path validates field-by-field agreement before Phase 3 switches. |
+| `callStack` growth unbounded for deep recursion | Low | Low | `maxCallDepth` limit already enforced in `SaveContinuation`. `callStack` cannot grow past this limit. |
+| Shared frame semantics change breaks call/cc | Medium | High | Phase 2 dual-path catches disagreements. Integration tests for all call/cc patterns (escape, composable, re-invocation). |
+
+---
+
+##### T1.5 Files Modified
+
+| File | Change | Phase |
+|------|--------|-------|
+| `machine/call_frame.go` (new) | `callFrame` type definition | 1 |
+| `machine/machine_context.go` | Add `callStack`, `materializedBase` fields; update `Run` loop for new `PopContinuation` signature | 1-3 |
+| `machine/machine_context_continuation.go` | Rewrite `SaveContinuation`, `PopContinuation`, `RestoreAndRelease`, `Restore`, `FindPrompt`, `SliceContinuationAt` | 2-3 |
+| `machine/machine_continuation.go` | Retain for materialized chains; remove pool interaction | 3-4 |
+| `machine/vm_state.go` | No change (shared by both callFrame and MachineContext) | — |
+| `machine/pool.go` | Remove `continuationPool`; add callStack initial capacity | 4 |
+| `machine/composable_continuation.go` | `AcquireSegment` returns materialized chain (unchanged); add `graftToCallStack` or `materializedBase` path | 3 |
+| `machine/captured_continuation.go` | `applyCapturedContinuation` triggers `materializeCallStack` | 3 |
+| `machine/continuation_mark_set.go` | `CollectContinuationMarks` and `CollectMarksFromContinuation` walk array or chain | 3 |
+| `machine/machine_context_subcontext.go` | `NewSubContext` initializes `callStack` | 1 |
+| `machine/debugger.go` | Walk `callStack` instead of continuation chain | 3 |
+| `machine/machine_context_winding.go` | `RestoreWithWinding` uses callStack for frame traversal | 3 |
+| `machine/stack_frame.go` | `CaptureStackTrace` walks `callStack` | 3 |
+| `machine/counters.go` | Add `CallStackGrowths`, `MaterializedCaptures` | 1 |
+| Test files (6+) | Update to new APIs, add callStack-specific tests | 1-4 |
+
+**Total:** ~15 production files, ~6 test files.
+
+#### T2. NaN-Boxing / Tagged Pointers
+
+**Requires `unsafe`:** **YES. Will NOT be completed for Wile.**
+
+**Gap:** `values.Value` is a Go interface (16 bytes per value, `values/values.go:85`). Every eval stack slot, every binding, every continuation-saved value pays 16 bytes. Racket/Chez/Chibi encode small values (fixnums, booleans, chars, `()`) in a single machine word (8 bytes) with no heap allocation.
+
+**Why it requires `unsafe`:** Encoding type tags in pointer bits requires `unsafe.Pointer` to reinterpret `uint64` as heap pointers. Go's type system provides no safe mechanism to represent a tagged union of `int64 | *Pair | bool | char | ()` in 8 bytes. Go interfaces are the safe equivalent — they're 16 bytes because they store both a type pointer and a data pointer.
+
+**Alternatives considered:**
+- `uint64` with manual bit tagging: still requires `unsafe.Pointer` to recover heap pointers from the tagged word
+- Separate typed stacks (one for fixnums, one for pointers): destroys the uniform `values.Value` interface, would require rewriting every value-consuming site in the codebase
+- Accept the Go interface overhead: **this is Wile's position**
+
+**Impact of not doing this:** The eval stack, bindings, and continuation frames remain 2x larger than a C-based implementation. The promoted opcodes (`OpAdd`, `OpNumLt`, etc.) mitigate part of the cost by avoiding dispatch ceremony, but values still flow through 16-byte interfaces. This is the "Go tax" — the cost of memory safety, garbage collection, and type safety.
+
+---
+
+#### T3. Custom Memory Allocator
+
+**Requires `unsafe`:** **YES. Will NOT be completed for Wile.**
+
+**Gap:** Racket uses a precise GC (originally Boehm, now Chez's collector). Chibi uses a custom copying collector. Both allocators are tuned for Scheme's allocation patterns (many small, short-lived objects).
+
+**Why it requires `unsafe`:** Implementing a custom allocator in Go requires `unsafe.Pointer` to manage raw memory. Go's garbage collector is the only option without unsafe/CGo.
+
+**Mitigation already in place:** `sync.Pool` for continuation frames, eval stacks, sub-contexts, and environment frames (`machine/pool.go`). Block-allocated pairs (`values.List()` allocates `make([]Pair, N)`). These approximate arena allocation within safe Go.
+
+---
+
+#### T4. Computed Goto / Direct-Threaded Dispatch
+
+**Requires `unsafe`:** **YES. Will NOT be completed for Wile.**
+
+**Gap:** Chez and Chibi use computed goto (GCC's `&&label` extension) for the VM dispatch loop, jumping directly to the next opcode handler via a function pointer table. This eliminates the branch prediction overhead of a central switch statement.
+
+**Why it requires `unsafe`:** Go has no computed goto, no first-class labels, and no way to build a jump table manually. The Go compiler *may* generate a jump table for a dense `switch` on integer opcodes, but this is an implementation detail of the compiler, not guaranteed. There is no safe mechanism to force direct-threaded dispatch.
+
+**Current state:** Wile's `Run()` loop uses a `switch instr.Op` with ~58 inlined cases. The Go compiler likely generates a jump table for this (dense integer range). This is the best achievable in safe Go.
+
+---
+
+#### T5. Procedure Inlining
+
+**Requires `unsafe`:** No. Compiler-level bytecode transformation.
+
+**Gap:** Wile performs no compile-time inlining of known procedures. Racket/Chez inline small known procedures at call sites when the binding is immutable.
+
+**Design direction:**
+- Reuse the flat closure infrastructure: `pass_free_var_analysis.go` already identifies `set!` targets. Bindings not in the `Mutated` set are immutable candidates.
+- Inline criterion: procedure body is a single expression (or small number of instructions), binding is not `set!`-ed, callee is in scope.
+- New pass between Pass 3 (ClosureFlatten) and Pass 4 (Peephole): scan for `OpCallCachedBinding` where the target is a known small closure, replace with inlined body.
+
+**Prerequisite:** Design document scoping which procedures qualify and what "small enough" means. The opcode promotion work already inlines the 11 hottest primitives at the VM level — this would extend to user-defined functions.
+
+**Priority:** Medium. Fills the last compiler-level gap vs Chez.
+
+---
+
+#### T6. Environment Frame Slimming for Flat Closures
+
+**Requires `unsafe`:** No. Struct redesign.
+
+**Gap:** Flat closures still create full `EnvironmentFrame` objects via `InitFlatApplyFrame` (`environment_frame.go:209`). The `EnvironmentFrame` struct (`environment_frame.go:93-108`) carries 6 fields: `parent`, `local`, `global`, `phaseLevel`, `phases`, `topLevel`. Flat closure bodies only need `local` (for parameter bindings). The other 5 fields are set but never read at runtime — the parent chain is dead code after flattening.
+
+**Design direction:**
+- Lightweight parameter-only frame type: `struct { bindings []Binding }` with no parent/global/phase fields
+- Or: make `EnvironmentFrame` fields lazy — only populate parent/global/phases when first accessed (check for flat closure context)
+- Eliminates 5 pointer/int copies per flat closure call
+
+**Prerequisite:** Pairs naturally with T1 (stack frames). If the call frame representation changes, do both simultaneously.
+
+**Priority:** Low-medium. Incremental improvement.
+
+---
+
+#### T7. De-Globalize Forms Registry
+
+**Requires `unsafe`:** No. Internal refactor.
+
+**Gap:** `internal/forms/form_spec.go` has a package-level global `registry` map populated by `init()` in `machine/register.go`. All engines in the same process share it. This blocks the Dialect system (`plans/ARCHITECTURE.md` Phase 1).
+
+**Racket model:** Per-namespace form registration. Different modules can have different special form sets.
+
+**Status:** Designed in `ARCHITECTURE.md` Phase 1 with blast radius analysis. Not implemented.
+
+**Priority:** Low for performance. Required for v2.0.0 Dialect system goal. Orthogonal to the performance-focused tasks above.
+
+---
+
+#### T8. Opcode Promotion Phase 3
+
+**Requires `unsafe`:** No.
+
+**Gap:** `plans/OPCODE-PROMOTION.md` Phase 3 lists remaining candidates: `cons` (saves dispatch but not allocation), `modulo` (700K calls in primes/sieve), `not` (Scheme-defined `MachineClosure`, requires compiler recognition not peephole).
+
+**Priority:** Low. The 11 promoted primitives already cover the dominant call volume.
+
+---
+
+#### T9. Flat Closure Deferred Items (C1, C2 remaining, C3)
+
+**Requires `unsafe`:** No.
+
+**C1 — Remove linked closure path:** Deferred. The linked path correctly serves zero-capture closures that save continuations. Removing it would force zero-capture closures through the flat path, allocating a zero-length `freeVars` slice — wasteful. **Current design is correct. Close this item.**
+
+**C2 — Remaining fused opcodes:** `OpLoadFreeVarUnboxed` and `OpPushFreeVarUnboxed` deferred. Box pressure measured as negligible (Open Question 3 above). **Close this item — profiling shows insufficient value.**
+
+**C3 — Collapse Pass 2 into single bottom-up pass:** Compiler-internal optimization, no runtime benefit. **Close this item.**
+
+---
+
+### Summary: Achievable vs Blocked
+
+| Task | Requires `unsafe` | Status |
+|------|-------------------|--------|
+| T1. Stack frames replacing continuation chains | No | **Closed — attempted, net regression on Gabriel suite, reverted** |
+| T2. NaN-boxing / tagged pointers | **Yes** | **Will NOT be done** |
+| T3. Custom memory allocator | **Yes** | **Will NOT be done** |
+| T4. Computed goto / direct-threaded dispatch | **Yes** | **Will NOT be done** |
+| T5. Procedure inlining | No | Open — needs design document |
+| T6. Environment frame slimming | No | Open — pairs with T1 |
+| T7. De-globalize forms registry | No | Open — blocked on Dialect system priority |
+| T8. Opcode promotion Phase 3 | No | Open — low priority |
+| T9. Flat closure deferred items | No | Closed — profiling shows insufficient value |
+
+### The Go Tax
+
+Three of the four blocked tasks (T2, T3, T4) represent fundamental differences between Go's runtime model and C-based Scheme implementations. Collectively they account for roughly a 2-3x performance gap that is inherent to the language choice:
+
+- **Value representation (T2):** 16-byte interfaces vs 8-byte tagged words — 2x memory overhead on the hottest data structures
+- **Allocation control (T3):** Go's GC vs custom collectors — less control over allocation patterns, mitigated by `sync.Pool`
+- **Dispatch mechanism (T4):** Go switch vs computed goto — branch prediction overhead, mitigated by dense opcode numbering
+
+These are accepted costs of Wile's core design decision: pure Go, no CGo, `go get` installable. The remaining achievable tasks (T1, T5, T6) close the gap on *architectural* differences. After those, remaining performance differences are language-level, not design-level.
