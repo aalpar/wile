@@ -1,6 +1,8 @@
 # Stack Frames Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **Status: CLOSED.** Implemented and reverted (PR #518, 2026-03-17). Dispatch improved 5% on fib but regressed continuation-heavy benchmarks 10-20% (ctak +20%, takl +13%, nqueens +13%). Net negative. Pool-based `MachineContinuation` linked list retained. This plan is preserved as a historical record.
+
+---
 
 **Goal:** Replace the per-call `MachineContinuation` pool-allocated linked list with a contiguous `[]callFrame` slice, eliminating 65.78% of allocation bytes and reducing SaveContinuation/RestoreAndRelease round-trip cost from 18.4ns to 9.3ns.
 
