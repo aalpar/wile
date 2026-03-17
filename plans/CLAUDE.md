@@ -24,7 +24,7 @@ When investigating R7RS conformance issues:
 | `REMOVE-SYMBOL-INTERNING.md` | Remove symbol canonicalization, compare by string key | Complete (all 7 tasks verified 2026-03-14) |
 | `ENVIRONMENT-CLEANUP.md` | Environment package cleanup: constructor duplication, dead delegation, semantic inconsistency | Complete (all 7 tasks verified 2026-03-14; Task 6 superseded) |
 | `OPCODE-PROMOTION.md` | Promote hot primitives to dedicated opcodes; Larceny profiling data, tiered plan | Phase 1+2 complete (#497, #498); Phase 3 open |
-| `FLAT-CLOSURES.md` | Flat closure implementation: 3-PR plan (infra+analysis, behavioral change, cleanup) | Not started |
+| `FLAT-CLOSURES.md` | Flat closure implementation: 3-PR plan (infra+analysis, behavioral change, cleanup) | PR A in progress |
 Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans).
 
 ## Before Starting Work

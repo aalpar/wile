@@ -1,6 +1,6 @@
 # Flat Closures Implementation Plan
 
-**Status:** Not started
+**Status:** PR A in progress (A1 partial, A2 done)
 **Design:** `plans/PERFORMANCE.md` Tier 3, Item 8
 **Branch strategy:** Three PRs (Infrastructure + Analysis, Behavioral Change, Cleanup)
 
@@ -56,7 +56,7 @@ Implementation in each method:
 Extend `MachineClosure`:
 ```go
 type MachineClosure struct {
-    env      *environment.EnvironmentFrame // nil for flat closures
+    env      *environment.EnvironmentFrame // used by InitApplyFrame for frame shape (non-nil even for flat closures)
     freeVars []values.Value                // nil for linked closures
     template *NativeTemplate
 }
@@ -67,7 +67,7 @@ Add constructor:
 func NewClosureWithFreeVars(tpl *NativeTemplate, freeVars []values.Value) *MachineClosure
 ```
 
-Update `Copy()`: flat closures don't need env copy. `freeVars` is immutable (mutations go through `*values.Box`), so `Copy()` can share the slice.
+Update `Copy()`: flat closures don't need env copy. `freeVars` is immutable (mutations go through `*values.Box`), so `Copy()` could share the slice. Current implementation conservatively clones via `slices.Clone` — can be relaxed to share once flat closures are validated end-to-end.
 
 Add predicate:
 ```go
