@@ -238,6 +238,11 @@ func instructionToOperation(instr Instruction) Operation {
 	case OpMakeFlatClosure:
 		return NewOperationMakeFlatClosure()
 
+	// --- Wave 10: fused flat closure operations ---
+	// Decomposed back to LoadFreeVar for test assertions (same as PushLocal → LoadLocal).
+	case OpPushFreeVar:
+		return NewOperationLoadFreeVar(instr.Arg)
+
 	default:
 		return nil
 	}

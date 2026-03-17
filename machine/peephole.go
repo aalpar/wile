@@ -102,6 +102,7 @@ var loadToFusedPush = [opCount]OpCode{
 	OpLoadGlobal:        OpPushGlobal,
 	OpLoadLocal:         OpPushLocal,
 	OpLoadCachedBinding: OpPushCachedBinding,
+	OpLoadFreeVar:       OpPushFreeVar,
 }
 
 // fuseLoadPush scans for LoadLiteral+Push, LoadGlobal+Push, LoadLocal+Push
@@ -168,7 +169,7 @@ func branchTargets(code []Instruction) []bool {
 // to identify argument-pushing instructions between the callee load and apply.
 func isPushOp(op OpCode) bool {
 	switch op {
-	case OpPush, OpPushLiteral, OpPushGlobal, OpPushLocal, OpPushCachedBinding:
+	case OpPush, OpPushLiteral, OpPushGlobal, OpPushLocal, OpPushCachedBinding, OpPushFreeVar:
 		return true
 	default:
 		return false

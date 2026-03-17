@@ -147,3 +147,73 @@ func TestFlatClosure_Integration_MapWithClosure(t *testing.T) {
 		  (map (lambda (x) (+ x offset)) '(1 2 3)))
 	`), qt.Equals, "(11 12 13)")
 }
+
+func TestFlatClosure_Integration_MixedBoxedNonBoxed(t *testing.T) {
+	// x is captured+mutated (boxed), y is captured-only (not boxed).
+	qt.Assert(t, evalFlatClosureTest(t, `
+		(let ((x 0) (y 10))
+		  (let ((inc (lambda () (set! x (+ x 1))))
+		        (get (lambda () (+ x y))))
+		    (inc) (inc) (get)))
+	`), qt.Equals, "12")
+}
+
+func TestFlatClosure_Integration_CallCC(t *testing.T) {
+	// call/cc captures and restores freeVars across continuation invocation.
+	// Uses define for letrec semantics so k is visible in f's body.
+	qt.Assert(t, evalFlatClosureTest(t, `
+		(let ((x 10))
+		  (define k #f)
+		  (define (f)
+		    (call-with-current-continuation
+		      (lambda (c) (set! k c) 1)))
+		  (let ((r (f)))
+		    (if (= r 1)
+		        (k 2)
+		        (+ x r))))
+	`), qt.Equals, "12")
+}
+
+func TestFlatClosure_Integration_RecursiveWithSetBang(t *testing.T) {
+	// Recursive closure using set! on a captured counter variable.
+	qt.Assert(t, evalFlatClosureTest(t, `
+		(let ((count 0))
+		  (letrec ((loop (lambda (n)
+		                   (if (= n 0) count
+		                       (begin (set! count (+ count 1))
+		                              (loop (- n 1)))))))
+		    (loop 5)))
+	`), qt.Equals, "5")
+}
+
+func TestFlatClosure_Integration_VariadicCapture(t *testing.T) {
+	// Variadic closure that captures a free variable.
+	qt.Assert(t, evalFlatClosureTest(t, `
+		(let ((base 100))
+		  (let ((sum-with-base (lambda args
+		                         (apply + base args))))
+		    (sum-with-base 1 2 3)))
+	`), qt.Equals, "106")
+}
+
+func TestFlatClosure_Integration_DynamicWind(t *testing.T) {
+	// dynamic-wind with flat closure: before/after thunks capture a log variable.
+	qt.Assert(t, evalFlatClosureTest(t, `
+		(let ((log '()))
+		  (dynamic-wind
+		    (lambda () (set! log (cons 'before log)))
+		    (lambda () (set! log (cons 'during log)) 42)
+		    (lambda () (set! log (cons 'after log))))
+		  (reverse log))
+	`), qt.Equals, "(before during after)")
+}
+
+func TestFlatClosure_Integration_TailCallBetweenFlat(t *testing.T) {
+	// Tail calls between two different flat closures: freeVars must update.
+	qt.Assert(t, evalFlatClosureTest(t, `
+		(let ((x 1) (y 2))
+		  (letrec ((f (lambda (n) (if (= n 0) x (g (- n 1)))))
+		           (g (lambda (n) (if (= n 0) y (f (- n 1))))))
+		    (+ (f 0) (f 1) (f 2) (f 3))))
+	`), qt.Equals, "6")
+}
