@@ -98,7 +98,7 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 
 ### Architectural (Tier 3)
 
-- [ ] **Flat closures** [Performance, L]: Copy only free variables into a flat array on the closure instead of capturing linked EnvironmentFrame chain. Eliminates parent-chain walk and full-frame copy. Requires compile-time free-variable analysis + `set!` boxing. `plans/PERFORMANCE.md`
+- [ ] **Flat closures** [Performance, L]: Multi-pass pipeline: FreeVarAnalysis → BoxInsertion → ClosureFlatten. Copy only free variables into flat array; `set!`-ed captures use `*values.Box`. 5 new opcodes (`OpLoadFreeVar`, `OpBox`, `OpUnbox`, `OpSetBox`, `OpMakeFlatClosure`). 7-step migration path. `plans/PERFORMANCE.md` §8
 - [ ] **Stack frames replacing continuation chains** [Performance, L]: Contiguous stack of frames instead of per-call `MachineContinuation` allocation. Hybrid approach: stack frames for normal path, materialize continuation objects only on `call/cc`. `plans/PERFORMANCE.md`
 - [ ] **NaN-boxing / tagged pointers** [Performance, L]: Encode small values (fixnums, booleans, chars) in 64 bits instead of 16-byte Go interface. Halves stack/binding sizes. Massive change, awkward in Go. `plans/PERFORMANCE.md`
 
