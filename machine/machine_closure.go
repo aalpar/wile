@@ -23,29 +23,29 @@ import (
 
 var _ values.Callable = (*MachineClosure)(nil)
 
-// Linked closure (Church 1936, Landin 1964, Cardelli 1983). A closure is
-// a pair of compiled code and the lexical environment at definition time.
+// MachineClosure is a callable pairing compiled code with its lexical
+// environment at definition time.
 //
-//	closure = ⟨λ, E⟩, where:
-//	  λ = template  — compiled bytecode (NativeTemplate)
-//	  E = env       — pointer to enclosing EnvironmentFrame
+//	closure = ⟨λ, E, FV⟩, where:
+//	  λ  = template  — compiled bytecode (NativeTemplate)
+//	  E  = env       — pointer to enclosing EnvironmentFrame (parameter shape)
+//	  FV = freeVars  — captured free variables (nil when no captures)
 //
-//	Access cost: O(1) creation (capture pointer), O(depth) free variable
-//	  lookup (traverse parent chain). Flat closures invert this trade-off.
+// Two representations coexist:
+//   - Zero-capture closures: freeVars is nil, env provides parameter
+//     bindings only. Created by OpMakeClosure.
+//   - Flat closures: freeVars holds captured values, env provides
+//     parameter shape. Created by OpMakeFlatClosure.
 //
-//	Invariant: E is a live pointer into the frame chain, not a copy.
-//	  Mutations via set! are visible through the closure because the
-//	  closure shares the frame, not a snapshot.
-//	Constrains: OperationMakeClosure (must link E to runtime parent),
-//	  Apply (must copy E for non-noCopyApply calls to prevent aliasing),
-//	  computeNoCopyApply (escape analysis on E).
-//	Constrained by: de Bruijn addressing (free vars addressed by
-//	  slot,depth in E's chain), CESK model (E is the environment component).
+// Both representations use the same Apply path. The env frame is always
+// allocated fresh (via InitApplyFrame) for non-noCopyApply closures;
+// binding values are NOT copied because bindArgs and body opcodes
+// initialize all slots.
 //
 // See BIBLIOGRAPHY.md "Linked Closure Representation".
 type MachineClosure struct {
 	env      *environment.EnvironmentFrame
-	freeVars []values.Value // nil for linked closures; populated for flat closures
+	freeVars []values.Value // nil for zero-capture closures; populated for flat closures
 	template *NativeTemplate
 }
 
@@ -83,12 +83,6 @@ func NewClosureWithFreeVars(tpl *NativeTemplate, freeVars []values.Value) *Machi
 		template: tpl,
 	}
 	return q
-}
-
-// IsFlat returns true if this closure uses the flat representation
-// (free variables captured in an array) rather than a linked environment chain.
-func (p *MachineClosure) IsFlat() bool {
-	return p.freeVars != nil
 }
 
 func (p *MachineClosure) Copy() *MachineClosure {

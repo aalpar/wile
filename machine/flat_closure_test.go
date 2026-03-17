@@ -466,9 +466,9 @@ func TestFlatClosure_ContinuationCopyPreservesFreeVars(t *testing.T) {
 
 // --- Apply fast path tests ---
 
-func TestFlatClosure_ApplyFlatCopyPath(t *testing.T) {
+func TestFlatClosure_ApplyCopyPath(t *testing.T) {
 	// A flat closure with noCopyApply=false (contains SaveContinuation)
-	// should use InitFlatApplyFrame, not InitApplyFrame.
+	// should use InitApplyFrame (no binding value copy).
 	topEnv := environment.NewTopLevelEnvironment().Runtime()
 
 	// Create a flat closure: template with SaveContinuation (forces copy path),
@@ -505,8 +505,7 @@ func TestFlatClosure_ApplyFlatCopyPath(t *testing.T) {
 	qt.Assert(t, mc.freeVars, qt.HasLen, 1)
 	qt.Assert(t, mc.freeVars[0], valuestest.SchemeEquals, values.NewInteger(99))
 
-	// Verify the counter tracked it as a flat copy apply
-	qt.Assert(t, mc.counters.FlatCopyApplies, qt.Equals, uint64(1))
+	// Verify the counter tracked it as a copy apply
 	qt.Assert(t, mc.counters.EnvsCopied, qt.Equals, uint64(1))
 
 	// Verify envPooled is true (frame from pool, will be recycled)
@@ -545,8 +544,8 @@ func TestFlatClosure_ApplyNoCopyPath(t *testing.T) {
 	qt.Assert(t, mc.freeVars, qt.HasLen, 1)
 	qt.Assert(t, mc.freeVars[0], valuestest.SchemeEquals, values.NewInteger(7))
 
-	// noCopy path should NOT increment FlatCopyApplies
-	qt.Assert(t, mc.counters.FlatCopyApplies, qt.Equals, uint64(0))
+	// noCopy path should not increment EnvsCopied
+	qt.Assert(t, mc.counters.EnvsCopied, qt.Equals, uint64(0))
 	qt.Assert(t, mc.counters.NoCopyApplies, qt.Equals, uint64(1))
 
 	// env should be the closure's own env (not pooled)

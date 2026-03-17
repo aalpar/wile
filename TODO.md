@@ -98,8 +98,8 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 
 ### Architectural (Tier 3)
 
-- [ ] **Flat closures** [Performance, L]: Multi-pass pipeline: FreeVarAnalysis → BoxInsertion → ClosureFlatten. Copy only free variables into flat array; `set!`-ed captures use `*values.Box`. 5 new opcodes (`OpLoadFreeVar`, `OpBox`, `OpUnbox`, `OpSetBox`, `OpMakeFlatClosure`). 7-step migration path. `plans/PERFORMANCE.md` §8
-- [ ] **Stack frames replacing continuation chains** [Performance, L]: Contiguous stack of frames instead of per-call `MachineContinuation` allocation. Hybrid approach: stack frames for normal path, materialize continuation objects only on `call/cc`. `plans/PERFORMANCE.md`
+- [x] **Flat closures** [Performance, L]: Multi-pass pipeline: FreeVarAnalysis → BoxInsertion → ClosureFlatten. Copy only free variables into flat array; `set!`-ed captures use `*values.Box`. 6 new opcodes. PRs #514, #515, #516. `plans/FLAT-CLOSURES.md`
+- [x] **Stack frames replacing continuation chains** [Performance, L, Closed]: Implemented and reverted (PR #518). Dispatch improved 5% on fib but regressed continuation-heavy benchmarks 10-20%. Pool-based `MachineContinuation` linked list retained. `plans/STACK-FRAMES.md`
 - [ ] **NaN-boxing / tagged pointers** [Performance, L]: Encode small values (fixnums, booleans, chars) in 64 bits instead of 16-byte Go interface. Halves stack/binding sizes. Massive change, awkward in Go. `plans/PERFORMANCE.md`
 
 ### Research

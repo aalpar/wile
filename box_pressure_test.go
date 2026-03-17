@@ -131,8 +131,7 @@ func BenchmarkBoxPressure(b *testing.B) {
 			}
 			b.StopTimer()
 			c := engine.LastCounters()
-			b.ReportMetric(float64(c.FlatCopyApplies), "flat_applies/op")
-			b.ReportMetric(float64(c.EnvsCopied), "envs_copied/op")
+			b.ReportMetric(float64(c.EnvsCopied), "copy_applies/op")
 		})
 	}
 }
@@ -179,8 +178,8 @@ func TestBoxPressureSummary(t *testing.T) {
 	fmt.Println()
 	fmt.Println("Box Allocation Pressure Summary")
 	fmt.Println("───────────────────────────────────────────────────────────────────────────")
-	fmt.Printf("%-20s %10s %10s %10s %12s\n",
-		"Benchmark", "TotalOps", "Closures", "FlatApply", "EnvsCopied")
+	fmt.Printf("%-20s %10s %10s %12s %12s\n",
+		"Benchmark", "TotalOps", "Closures", "EnvsCopied", "NoCopy")
 	fmt.Println("───────────────────────────────────────────────────────────────────────────")
 
 	for _, tc := range boxBenchCases {
@@ -199,8 +198,8 @@ func TestBoxPressureSummary(t *testing.T) {
 			t.Fatal(err)
 		}
 		c := engine.LastCounters()
-		fmt.Printf("%-20s %10d %10d %10d %12d\n",
-			tc.name, c.OpsExecuted, c.ClosuresApplied, c.FlatCopyApplies, c.EnvsCopied)
+		fmt.Printf("%-20s %10d %10d %12d %12d\n",
+			tc.name, c.OpsExecuted, c.ClosuresApplied, c.EnvsCopied, c.NoCopyApplies)
 	}
 	fmt.Println("───────────────────────────────────────────────────────────────────────────")
 	fmt.Println("Run with WILE_OPCODE_HITS=1 and TestBoxPressureProfile for per-opcode detail")

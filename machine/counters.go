@@ -31,7 +31,6 @@ type VMCounters struct {
 	opcodeHits             *[opCount]uint64
 	ClosuresApplied        uint64
 	EnvsCopied             uint64
-	BindingsCopied         uint64
 	ContinuationsSaved     uint64
 	ContinuationsRestored  uint64
 	StackDrains            uint64
@@ -48,10 +47,8 @@ type VMCounters struct {
 	ContinuationPoolReleases uint64
 	EnvFramePoolReleases     uint64
 	SharedFrameRestores      uint64
-	KeysShared               uint64
 	NoCopyApplies            uint64
 	NoCopyBindingsSaved      uint64
-	FlatCopyApplies          uint64 // flat closure copy path (skip binding memcpy)
 	InlineEvalsSaved         uint64 // SaveContinuation used inline slots instead of stack pool
 
 	// Per-callee call counting. Tracks both ForeignClosure (Go primitives) and
@@ -123,7 +120,6 @@ func (c VMCounters) String() string {
 		"ops_executed:                 %d\n"+
 			"closures_applied:             %d\n"+
 			"envs_copied:                  %d\n"+
-			"bindings_copied:              %d\n"+
 			"continuations_saved:          %d\n"+
 			"continuations_restored:       %d\n"+
 			"stack_drains:                 %d\n"+
@@ -135,10 +131,8 @@ func (c VMCounters) String() string {
 			"continuation_pool_releases:   %d\n"+
 			"env_frame_pool_releases:      %d\n"+
 			"shared_frame_restores:        %d\n"+
-			"keys_shared:                  %d\n"+
 			"no_copy_applies:              %d\n"+
 			"no_copy_bindings_saved:       %d\n"+
-			"flat_copy_applies:            %d\n"+
 			"inline_evals_saved:           %d\n"+
 			"stack_max_depth:              %d\n"+
 			"stack_depth_0to2:             %d\n"+
@@ -149,7 +143,6 @@ func (c VMCounters) String() string {
 		c.OpsExecuted,
 		c.ClosuresApplied,
 		c.EnvsCopied,
-		c.BindingsCopied,
 		c.ContinuationsSaved,
 		c.ContinuationsRestored,
 		c.StackDrains,
@@ -161,10 +154,8 @@ func (c VMCounters) String() string {
 		c.ContinuationPoolReleases,
 		c.EnvFramePoolReleases,
 		c.SharedFrameRestores,
-		c.KeysShared,
 		c.NoCopyApplies,
 		c.NoCopyBindingsSaved,
-		c.FlatCopyApplies,
 		c.InlineEvalsSaved,
 		c.StackMaxDepth,
 		c.StackDepth0to2,
