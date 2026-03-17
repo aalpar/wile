@@ -222,23 +222,37 @@ func rewriteBoxedFreeVarReads(tpl *NativeTemplate, info *FreeVarInfo) {
 	code := tpl.Code()
 
 	for pc, instr := range code {
-		if instr.Op != OpLoadFreeVar {
-			continue
+		switch instr.Op {
+		case OpLoadFreeVar:
+			if !boxedSlots[instr.Arg] {
+				continue
+			}
+			// Skip if the next instruction is OpSetBox (write sequence from
+			// rewriteFreeVarReferences) or OpUnbox (already unboxed by a
+			// previous pass — makes this function idempotent).
+			if pc+1 < len(code) && (code[pc+1].Op == OpSetBox || code[pc+1].Op == OpUnbox) {
+				continue
+			}
+			// Insert OpUnbox after OpLoadFreeVar.
+			plan.Replace(pc, pc+1, []Instruction{
+				{Op: OpLoadFreeVar, Arg: instr.Arg},
+				{Op: OpUnbox},
+			}, tpl.sourceRefs[pc])
+
+		case OpPushFreeVar:
+			// Handle fused OpPushFreeVar for boxed captures. Inner templates
+			// may have been peephole-optimized (fusing LoadFreeVar+Push into
+			// PushFreeVar) before the parent's InsertBoxes set Boxed=true.
+			// Expand back to LoadFreeVar + Unbox + Push.
+			if !boxedSlots[instr.Arg] {
+				continue
+			}
+			plan.Replace(pc, pc+1, []Instruction{
+				{Op: OpLoadFreeVar, Arg: instr.Arg},
+				{Op: OpUnbox},
+				{Op: OpPush},
+			}, tpl.sourceRefs[pc])
 		}
-		if !boxedSlots[instr.Arg] {
-			continue
-		}
-		// Skip if the next instruction is OpSetBox (write sequence from
-		// rewriteFreeVarReferences) or OpUnbox (already unboxed by a
-		// previous pass — makes this function idempotent).
-		if pc+1 < len(code) && (code[pc+1].Op == OpSetBox || code[pc+1].Op == OpUnbox) {
-			continue
-		}
-		// Insert OpUnbox after OpLoadFreeVar.
-		plan.Replace(pc, pc+1, []Instruction{
-			{Op: OpLoadFreeVar, Arg: instr.Arg},
-			{Op: OpUnbox},
-		}, tpl.sourceRefs[pc])
 	}
 
 	plan.Apply()

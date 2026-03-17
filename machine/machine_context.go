@@ -748,6 +748,10 @@ func (p *MachineContext) Run() error {
 			mc.SetValue(mc.freeVars[instr.Arg])
 			mc.pc++
 
+		case OpPushFreeVar:
+			mc.evals.Push(mc.freeVars[instr.Arg])
+			mc.pc++
+
 		case OpBox:
 			mc.SetValue(values.NewBox(mc.GetValue()))
 			mc.pc++

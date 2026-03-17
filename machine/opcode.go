@@ -121,6 +121,7 @@ const (
 	OpUnbox           // Unwrap value register from *values.Box
 	OpSetBox          // Set box value: value_reg.(*Box).Value = evals.Pop()
 	OpMakeFlatClosure // Create closure with flat free-var array
+	OpPushFreeVar     // LoadFreeVar + Push (fused)
 
 	// Fallback: dispatch to sideTable[Arg]
 	OpComplex
@@ -211,6 +212,7 @@ var opcodeTable = [opCount]opcodeInfo{
 	OpUnbox:                 {name: "Unbox", writesValue: true},
 	OpSetBox:                {name: "SetBox"},
 	OpMakeFlatClosure:       {name: "MakeFlatClosure", writesValue: true},
+	OpPushFreeVar:           {name: "PushFreeVar"},
 	OpComplex:               {name: "Complex"},
 }
 
