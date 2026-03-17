@@ -44,22 +44,31 @@ func AnalyzeFreeVars(tpl *NativeTemplate) *FreeVarInfo {
 		sub.SetFreeVarInfo(info)
 	}
 
-	// freeVarSet maps (slot, depth) to presence for deduplication.
-	freeVarSet := make(map[[2]int]bool)
-	// mutatedSet tracks which (slot, depth) pairs are targeted by set!.
-	mutatedSet := make(map[[2]int]bool)
+	// Step 2: Scan own bytecodes for depth > 0 references.
+	// Defer map allocation until a free var is actually found (fast path
+	// for the common case where a template has no free variables).
+	var freeVarSet map[[2]int]bool
+	var mutatedSet map[[2]int]bool
 
-	// Step 2: Scan own bytecodes.
 	for _, instr := range tpl.Code() {
 		switch instr.Op {
 		case OpLoadLocal, OpPushLocal:
 			slot, depth := DecodeLocalIndex(instr.Arg)
 			if depth > 0 {
+				if freeVarSet == nil {
+					freeVarSet = make(map[[2]int]bool)
+				}
 				freeVarSet[[2]int{slot, depth}] = true
 			}
 		case OpStoreLocal:
 			slot, depth := DecodeLocalIndex(instr.Arg)
 			if depth > 0 {
+				if freeVarSet == nil {
+					freeVarSet = make(map[[2]int]bool)
+				}
+				if mutatedSet == nil {
+					mutatedSet = make(map[[2]int]bool)
+				}
 				key := [2]int{slot, depth}
 				freeVarSet[key] = true
 				mutatedSet[key] = true
@@ -74,13 +83,16 @@ func AnalyzeFreeVars(tpl *NativeTemplate) *FreeVarInfo {
 			continue
 		}
 		subInfo := sub.FreeVarInfo()
-		if subInfo == nil {
+		if subInfo == nil || len(subInfo.Captures) == 0 {
 			continue
 		}
 		for _, cap := range subInfo.Captures {
 			if cap.SourceDepth > 1 {
 				// Variable passes through the current template.
 				// Adjust depth by -1: the inner template's depth=2 is our depth=1.
+				if freeVarSet == nil {
+					freeVarSet = make(map[[2]int]bool)
+				}
 				adjusted := [2]int{cap.SourceSlot, cap.SourceDepth - 1}
 				freeVarSet[adjusted] = true
 			}
@@ -94,10 +106,19 @@ func AnalyzeFreeVars(tpl *NativeTemplate) *FreeVarInfo {
 			if mutKey[1] > 1 {
 				adjusted := [2]int{mutKey[0], mutKey[1] - 1}
 				if freeVarSet[adjusted] {
+					if mutatedSet == nil {
+						mutatedSet = make(map[[2]int]bool)
+					}
 					mutatedSet[adjusted] = true
 				}
 			}
 		}
+	}
+
+	// Fast path: no free vars found. Return empty FreeVarInfo without
+	// allocating the sort/capture slice.
+	if len(freeVarSet) == 0 {
+		return &FreeVarInfo{}
 	}
 
 	// Step 4: Build capture list in deterministic order.
@@ -121,7 +142,6 @@ func AnalyzeFreeVars(tpl *NativeTemplate) *FreeVarInfo {
 		}
 	}
 
-	// Step 5: Return FreeVarInfo (always non-nil, empty Captures if no free vars).
 	q := &FreeVarInfo{
 		Captures: captures,
 		Mutated:  mutatedSet,

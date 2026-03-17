@@ -30,7 +30,33 @@ func RunFlatClosurePipeline(tpl *NativeTemplate) {
 		return
 	}
 	AnalyzeFreeVars(tpl)
-	InsertBoxes(tpl)
-	FlattenClosures(tpl, nil)
+
+	// Skip passes 2-3 when no template in the tree has free variables.
+	// The Gabriel benchmarks (call-heavy, few closures over free vars)
+	// hit this fast path for nearly every lambda, avoiding the EditPlan
+	// and rewrite overhead of InsertBoxes and FlattenClosures.
+	if templateTreeHasFreeVars(tpl) {
+		InsertBoxes(tpl)
+		FlattenClosures(tpl, nil)
+	}
 	tpl.flatClosuresDone = true
+}
+
+// templateTreeHasFreeVars returns true if tpl or any sub-template
+// in its literal pool has a non-empty capture list.
+func templateTreeHasFreeVars(tpl *NativeTemplate) bool {
+	info := tpl.FreeVarInfo()
+	if info != nil && len(info.Captures) > 0 {
+		return true
+	}
+	for _, lit := range tpl.Literals() {
+		sub, ok := lit.(*NativeTemplate)
+		if !ok {
+			continue
+		}
+		if templateTreeHasFreeVars(sub) {
+			return true
+		}
+	}
+	return false
 }
