@@ -158,8 +158,9 @@ func TestFlattenClosures_BoxedCaptureRewrite(t *testing.T) {
 		qt.Commentf("capture should be boxed"))
 
 	FlattenClosures(outerTpl, nil)
+	RewriteBoxedReadsTree(outerTpl)
 
-	// After flatten:
+	// After flatten + boxed-read rewrite:
 	//   LoadFreeVar(0), Unbox,       ← boxed read
 	//   LoadFreeVar(0), SetBox,      ← boxed write
 	//   RestoreContinuation
@@ -201,6 +202,7 @@ func TestFlattenClosures_ReadOnlyBoxedCapture(t *testing.T) {
 	qt.Assert(t, innerInfo.Captures[0].Boxed, qt.IsTrue)
 
 	FlattenClosures(outerTpl, nil)
+	RewriteBoxedReadsTree(outerTpl)
 
 	innerCode := innerTpl.Code()
 	qt.Assert(t, innerCode, qt.HasLen, 3)

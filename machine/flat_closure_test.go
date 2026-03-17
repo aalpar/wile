@@ -464,6 +464,96 @@ func TestFlatClosure_ContinuationCopyPreservesFreeVars(t *testing.T) {
 	qt.Assert(t, copied.freeVars[0], valuestest.SchemeEquals, values.NewInteger(10))
 }
 
+// --- Apply fast path tests ---
+
+func TestFlatClosure_ApplyFlatCopyPath(t *testing.T) {
+	// A flat closure with noCopyApply=false (contains SaveContinuation)
+	// should use InitFlatApplyFrame, not InitApplyFrame.
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+
+	// Create a flat closure: template with SaveContinuation (forces copy path),
+	// 1 parameter, and freeVars set.
+	lenv := environment.NewLocalEnvironment(1)
+	sym := values.NewSymbol("n")
+	lenv.EnsureLocalBinding(sym, environment.BindingTypeVariable)
+	closureEnv := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+
+	// Template: SaveContinuation (forces noCopyApply=false) + RestoreContinuation
+	innerTpl := NewNativeTemplate(1, 0, false,
+		NewOperationSaveContinuationOffsetImmediate(1),
+		NewOperationRestoreContinuation(),
+	)
+	innerTpl.Optimize()
+	innerTpl.computeNoCopyApply()
+	innerTpl.SetName("flat-copy-test")
+
+	cls := NewClosureWithFreeVars(innerTpl, []values.Value{values.NewInteger(99)})
+	cls.env = closureEnv
+
+	// Verify noCopyApply is false (SaveContinuation present)
+	qt.Assert(t, innerTpl.NoCopyApply(), qt.IsFalse)
+
+	// Set up a parent MachineContext to call Apply on
+	outerTpl := NewNativeTemplate(0, 0, false)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, outerTpl, topEnv))
+
+	// Apply the flat closure with one arg
+	_, err := mc.Apply(cls, values.NewInteger(42))
+	qt.Assert(t, err, qt.IsNil)
+
+	// Verify freeVars were set
+	qt.Assert(t, mc.freeVars, qt.HasLen, 1)
+	qt.Assert(t, mc.freeVars[0], valuestest.SchemeEquals, values.NewInteger(99))
+
+	// Verify the counter tracked it as a flat copy apply
+	qt.Assert(t, mc.counters.FlatCopyApplies, qt.Equals, uint64(1))
+	qt.Assert(t, mc.counters.EnvsCopied, qt.Equals, uint64(1))
+
+	// Verify envPooled is true (frame from pool, will be recycled)
+	qt.Assert(t, mc.envPooled, qt.IsTrue)
+}
+
+func TestFlatClosure_ApplyNoCopyPath(t *testing.T) {
+	// A flat closure with noCopyApply=true should reuse the closure's env
+	// and still set freeVars.
+	topEnv := environment.NewTopLevelEnvironment().Runtime()
+
+	lenv := environment.NewLocalEnvironment(1)
+	sym := values.NewSymbol("n")
+	lenv.EnsureLocalBinding(sym, environment.BindingTypeVariable)
+	closureEnv := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
+
+	// Template: no SaveContinuation → noCopyApply=true
+	innerTpl := NewNativeTemplate(1, 0, false,
+		NewOperationRestoreContinuation(),
+	)
+	innerTpl.Optimize()
+	innerTpl.computeNoCopyApply()
+
+	cls := NewClosureWithFreeVars(innerTpl, []values.Value{values.NewInteger(7)})
+	cls.env = closureEnv
+
+	qt.Assert(t, innerTpl.NoCopyApply(), qt.IsTrue)
+
+	outerTpl := NewNativeTemplate(0, 0, false)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, outerTpl, topEnv))
+
+	_, err := mc.Apply(cls, values.NewInteger(1))
+	qt.Assert(t, err, qt.IsNil)
+
+	// freeVars should be set even on the noCopy path
+	qt.Assert(t, mc.freeVars, qt.HasLen, 1)
+	qt.Assert(t, mc.freeVars[0], valuestest.SchemeEquals, values.NewInteger(7))
+
+	// noCopy path should NOT increment FlatCopyApplies
+	qt.Assert(t, mc.counters.FlatCopyApplies, qt.Equals, uint64(0))
+	qt.Assert(t, mc.counters.NoCopyApplies, qt.Equals, uint64(1))
+
+	// env should be the closure's own env (not pooled)
+	qt.Assert(t, mc.env, qt.Equals, closureEnv)
+	qt.Assert(t, mc.envPooled, qt.IsFalse)
+}
+
 // --- Opcode metadata tests ---
 
 func TestFlatClosure_OpcodeString(t *testing.T) {

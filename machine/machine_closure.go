@@ -15,6 +15,8 @@
 package machine
 
 import (
+	"slices"
+
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
 )
@@ -85,8 +87,11 @@ func NewClosureWithFreeVars(tpl *NativeTemplate, freeVars []values.Value) *Machi
 
 func (p *MachineClosure) Copy() *MachineClosure {
 	q := &MachineClosure{
-		env:      p.env.Copy(),
 		template: p.template,
+		freeVars: slices.Clone(p.freeVars),
+	}
+	if p.env != nil {
+		q.env = p.env.Copy()
 	}
 	return q
 }

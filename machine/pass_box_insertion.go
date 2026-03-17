@@ -219,9 +219,19 @@ func rewriteBoxedWrites(tpl *NativeTemplate, plan *EditPlan, boxedSlots map[int]
 	}
 }
 
-// markCapturesBoxed sets Boxed=true on CaptureEntry values in sub-templates
-// whose SourceDepth==1 and SourceSlot is in boxedSlots.
+// markCapturesBoxed sets Boxed=true on CaptureEntry values in the template
+// tree for boxed variables. Each closure boundary adds depth=1, so a boxed
+// slot at depth=0 in the defining template appears at depth=1 in direct
+// sub-templates, depth=2 in sub-sub-templates, etc.
+//
+// The recursion walks the entire sub-template tree because variables
+// captured at depth > 1 (through intermediate closures) also carry the
+// Box value at runtime and need OpUnbox.
 func markCapturesBoxed(tpl *NativeTemplate, boxedSlots map[int]bool) {
+	markCapturesBoxedAtDepth(tpl, boxedSlots, 1)
+}
+
+func markCapturesBoxedAtDepth(tpl *NativeTemplate, boxedSlots map[int]bool, depth int) {
 	for _, lit := range tpl.Literals() {
 		sub, ok := lit.(*NativeTemplate)
 		if !ok {
@@ -233,10 +243,11 @@ func markCapturesBoxed(tpl *NativeTemplate, boxedSlots map[int]bool) {
 		}
 		for i := range subInfo.Captures {
 			entry := &subInfo.Captures[i]
-			if entry.SourceDepth == 1 && boxedSlots[entry.SourceSlot] {
+			if entry.SourceDepth == depth && boxedSlots[entry.SourceSlot] {
 				entry.Boxed = true
 			}
 		}
+		markCapturesBoxedAtDepth(sub, boxedSlots, depth+1)
 	}
 }
 

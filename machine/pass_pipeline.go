@@ -14,14 +14,18 @@
 
 package machine
 
-// RunFlatClosurePipeline runs the three-pass flat closure transformation
-// on a compiled template: free variable analysis, box insertion, and
-// closure flattening. Each pass recurses internally into sub-templates
-// (bottom-up for Passes 1-2, top-down for Pass 3).
+// RunFlatClosurePipeline runs the four-pass flat closure transformation
+// on a compiled template: free variable analysis, box insertion,
+// closure flattening, and boxed-read unboxing. Each pass recurses
+// internally into sub-templates (bottom-up for Passes 1-2, top-down
+// for Pass 3, unconditional for Pass 4).
 //
-// The pipeline is idempotent: sub-templates already processed by a
-// nested compileClosureBody call are skipped via the flatClosuresDone
-// flag on NativeTemplate.
+// Sub-templates already processed by a nested compileClosureBody call
+// have FreeVarInfo set (Pass 1 uses FreeVarInfo != nil as skip guard)
+// and flatClosuresDone = true (Passes 2-3 skip via this flag). Pass 4
+// (RewriteBoxedReadsTree) recurses unconditionally because inner
+// templates may need boxed-read rewriting after the parent's InsertBoxes
+// marks their captures as Boxed.
 //
 // Call site: compileClosureBody, after compileBody returns and before
 // peephole optimization.
@@ -29,15 +33,28 @@ func RunFlatClosurePipeline(tpl *NativeTemplate) {
 	if tpl.flatClosuresDone {
 		return
 	}
+	// Pass 1: Free variable analysis (bottom-up).
+	// Stores FreeVarInfo on all templates, including the root.
 	AnalyzeFreeVars(tpl)
 
-	// Skip passes 2-3 when no template in the tree has free variables.
+	// Skip passes 2-4 when no template in the tree has free variables.
 	// The Gabriel benchmarks (call-heavy, few closures over free vars)
 	// hit this fast path for nearly every lambda, avoiding the EditPlan
 	// and rewrite overhead of InsertBoxes and FlattenClosures.
 	if templateTreeHasFreeVars(tpl) {
+		// Pass 2: Box insertion (bottom-up). Boxes captured+mutated variables
+		// in defining scopes and marks sub-template captures as Boxed.
 		InsertBoxes(tpl)
+
+		// Pass 3: Closure flattening (top-down). Rewrites OpLoadLocal(depth>0)
+		// to OpLoadFreeVar and OpMakeClosure to OpMakeFlatClosure.
 		FlattenClosures(tpl, nil)
+
+		// Pass 4: Boxed-read unboxing (unconditional recursion). Inserts
+		// OpUnbox after OpLoadFreeVar for Boxed captures. Runs separately
+		// from Pass 3 because inner templates may be flattened before the
+		// parent's InsertBoxes sets their Boxed flags.
+		RewriteBoxedReadsTree(tpl)
 	}
 	tpl.flatClosuresDone = true
 }

@@ -34,28 +34,28 @@ import (
 func FlattenClosures(tpl *NativeTemplate, enclosingInfo *FreeVarInfo) {
 	info := tpl.FreeVarInfo()
 
-	// Step 1: Resolve FromFreeVars on captures.
-	if info != nil && len(info.Captures) > 0 {
-		resolveFromFreeVars(info, enclosingInfo)
-	}
-
-	// Step 2: Build lookup map and rewrite bytecodes.
+	// Step 1: Rewrite free-variable references in this template's bytecodes.
+	//   1a. Build lookup from original (slot, depth) → closureSlot.
+	//   1b. Resolve FromFreeVars (rewrites SourceSlot for depth > 1 so
+	//       OpMakeFlatClosure reads from the enclosing freeVars at runtime).
+	//       Must happen AFTER buildFreeVarLookup since it mutates SourceSlot.
+	//   1c. Rewrite OpLoadLocal/OpStoreLocal(depth>0) to OpLoadFreeVar/OpSetBox.
+	//
+	// NOTE: Boxed-read unboxing (OpUnbox insertion) is NOT done here — it runs
+	// as a separate pass (RewriteBoxedReadsTree) after InsertBoxes has marked
+	// captures as Boxed. This ordering is required because inner templates may
+	// be flattened before the parent's InsertBoxes sets their Boxed flags.
 	if info != nil && len(info.Captures) > 0 {
 		lookup := buildFreeVarLookup(info)
+		resolveFromFreeVars(info, enclosingInfo)
 		rewriteFreeVarReferences(tpl, lookup)
-
-		// Step 2.5: Insert OpUnbox after OpLoadFreeVar for boxed captures.
-		// rewriteFreeVarReferences already handled OpStoreLocal(depth>0) by
-		// emitting OpLoadFreeVar + OpSetBox. For reads, we now need to unbox
-		// the *values.Box loaded by OpLoadFreeVar.
-		rewriteBoxedFreeVarReads(tpl, info)
 	}
 
-	// Step 3: Rewrite OpMakeClosure → OpMakeFlatClosure for sub-templates
+	// Step 2: Rewrite OpMakeClosure → OpMakeFlatClosure for sub-templates
 	// that have captures.
 	rewriteMakeClosureToFlat(tpl)
 
-	// Step 4: Recurse into sub-templates (top-down).
+	// Step 3: Recurse into sub-templates (top-down).
 	// Skip sub-templates already processed by a nested compileClosureBody call.
 	for _, lit := range tpl.Literals() {
 		sub, ok := lit.(*NativeTemplate)
@@ -228,9 +228,10 @@ func rewriteBoxedFreeVarReads(tpl *NativeTemplate, info *FreeVarInfo) {
 		if !boxedSlots[instr.Arg] {
 			continue
 		}
-		// Skip if the next instruction is OpSetBox — this is a write sequence
-		// emitted by rewriteFreeVarReferences for OpStoreLocal(depth>0).
-		if pc+1 < len(code) && code[pc+1].Op == OpSetBox {
+		// Skip if the next instruction is OpSetBox (write sequence from
+		// rewriteFreeVarReferences) or OpUnbox (already unboxed by a
+		// previous pass — makes this function idempotent).
+		if pc+1 < len(code) && (code[pc+1].Op == OpSetBox || code[pc+1].Op == OpUnbox) {
 			continue
 		}
 		// Insert OpUnbox after OpLoadFreeVar.
@@ -291,6 +292,32 @@ func rewriteMakeClosureToFlat(tpl *NativeTemplate) {
 	}
 
 	plan.Apply()
+}
+
+// RewriteBoxedReadsTree inserts OpUnbox after OpLoadFreeVar for boxed captures
+// across the entire template tree. This is Pass 4 of the flat closure pipeline.
+//
+// It runs as a separate pass AFTER InsertBoxes (which marks captures as Boxed)
+// and FlattenClosures (which rewrites OpLoadLocal → OpLoadFreeVar). This
+// ordering is required because inner templates may be flattened by a nested
+// compileClosureBody call before the parent's InsertBoxes sets their Boxed flags.
+//
+// Recurses unconditionally into all sub-templates (does NOT check flatClosuresDone)
+// because sub-templates processed by inner pipeline calls need boxed-read
+// rewriting after the parent pipeline marks their captures as Boxed.
+// The rewrite is idempotent: already-unboxed reads are skipped.
+func RewriteBoxedReadsTree(tpl *NativeTemplate) {
+	info := tpl.FreeVarInfo()
+	if info != nil && len(info.Captures) > 0 {
+		rewriteBoxedFreeVarReads(tpl, info)
+	}
+	for _, lit := range tpl.Literals() {
+		sub, ok := lit.(*NativeTemplate)
+		if !ok {
+			continue
+		}
+		RewriteBoxedReadsTree(sub)
+	}
 }
 
 // findTemplateLiteralIndex scans backward from an OpMakeClosure at code[pc]

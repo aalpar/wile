@@ -31,17 +31,19 @@ import (
 // are analyzed before the outer template.
 func AnalyzeFreeVars(tpl *NativeTemplate) *FreeVarInfo {
 	// Step 1: Recurse into sub-templates (bottom-up).
-	// Skip sub-templates already processed by a nested compileClosureBody call.
+	// Skip sub-templates that already have FreeVarInfo (analyzed by a nested
+	// compileClosureBody's pipeline call). Uses FreeVarInfo != nil rather than
+	// flatClosuresDone so that analysis results are available even before the
+	// full transformation pipeline completes.
 	for _, lit := range tpl.Literals() {
 		sub, ok := lit.(*NativeTemplate)
 		if !ok {
 			continue
 		}
-		if sub.flatClosuresDone {
+		if sub.FreeVarInfo() != nil {
 			continue
 		}
-		info := AnalyzeFreeVars(sub)
-		sub.SetFreeVarInfo(info)
+		AnalyzeFreeVars(sub)
 	}
 
 	// Step 2: Scan own bytecodes for depth > 0 references.
@@ -118,7 +120,9 @@ func AnalyzeFreeVars(tpl *NativeTemplate) *FreeVarInfo {
 	// Fast path: no free vars found. Return empty FreeVarInfo without
 	// allocating the sort/capture slice.
 	if len(freeVarSet) == 0 {
-		return &FreeVarInfo{}
+		q := &FreeVarInfo{}
+		tpl.SetFreeVarInfo(q)
+		return q
 	}
 
 	// Step 4: Build capture list in deterministic order.
@@ -146,5 +150,6 @@ func AnalyzeFreeVars(tpl *NativeTemplate) *FreeVarInfo {
 		Captures: captures,
 		Mutated:  mutatedSet,
 	}
+	tpl.SetFreeVarInfo(q)
 	return q
 }

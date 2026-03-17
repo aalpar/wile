@@ -720,11 +720,13 @@ func (p *NativeTemplate) Copy() *NativeTemplate {
 		))
 	}
 	q := &NativeTemplate{
-		parameterCount: p.parameterCount,
-		valueCount:     p.valueCount,
-		isVariadic:     p.isVariadic,
-		noCopyApply:    p.noCopyApply,
-		name:           p.name,
+		parameterCount:   p.parameterCount,
+		valueCount:       p.valueCount,
+		isVariadic:       p.isVariadic,
+		noCopyApply:      p.noCopyApply,
+		name:             p.name,
+		freeVarInfo:      p.freeVarInfo,
+		flatClosuresDone: p.flatClosuresDone,
 	}
 	q.literals = slices.Clone(p.literals)
 	q.cachedBindings = slices.Clone(p.cachedBindings)
