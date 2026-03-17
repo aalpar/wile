@@ -44,7 +44,8 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	var env *environment.EnvironmentFrame
 	var bnds []environment.Binding
 
-	if tpl.NoCopyApply() {
+	switch {
+	case tpl.NoCopyApply():
 		// No-copy path: the template contains no SaveContinuation and no
 		// MakeClosure, so mc.env is never captured. Safe to mutate the
 		// closure's own bindings in place, eliminating both the
@@ -55,8 +56,21 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 		p.envPooled = false
 		p.counters.NoCopyApplies++
 		p.counters.NoCopyBindingsSaved += uint64(len(bnds))
-	} else {
-		// Copy path: acquire a frame from the pool and populate it.
+
+	case mcls.freeVars != nil:
+		// Flat closure copy path: free vars live in the closure's freeVars
+		// array, not the environment chain. Allocate fresh binding slots
+		// but skip the binding value memcpy — bindArgs overwrites parameter
+		// slots and body code (OpStoreLocal) initializes the rest.
+		env = acquireEnvFrame()
+		mcls.env.InitFlatApplyFrame(env)
+		bnds = env.LocalEnvironment().Bindings()
+		p.envPooled = true
+		p.counters.FlatCopyApplies++
+		p.counters.EnvsCopied++
+
+	default:
+		// Linked closure copy path: acquire a frame from the pool and populate it.
 		// Critical for recursive functions with SaveContinuation: without
 		// copying, all invocations share the same bindings, causing
 		// parameter corruption when evaluating arguments like
@@ -75,6 +89,7 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 
 	p.template = tpl
 	p.env = env
+	p.freeVars = mcls.freeVars
 	p.pc = 0
 	return p, nil
 }

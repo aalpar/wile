@@ -51,6 +51,7 @@ type VMCounters struct {
 	KeysShared               uint64
 	NoCopyApplies            uint64
 	NoCopyBindingsSaved      uint64
+	FlatCopyApplies          uint64 // flat closure copy path (skip binding memcpy)
 	InlineEvalsSaved         uint64 // SaveContinuation used inline slots instead of stack pool
 
 	// Per-callee call counting. Tracks both ForeignClosure (Go primitives) and
@@ -137,6 +138,7 @@ func (c VMCounters) String() string {
 			"keys_shared:                  %d\n"+
 			"no_copy_applies:              %d\n"+
 			"no_copy_bindings_saved:       %d\n"+
+			"flat_copy_applies:            %d\n"+
 			"inline_evals_saved:           %d\n"+
 			"stack_max_depth:              %d\n"+
 			"stack_depth_0to2:             %d\n"+
@@ -162,6 +164,7 @@ func (c VMCounters) String() string {
 		c.KeysShared,
 		c.NoCopyApplies,
 		c.NoCopyBindingsSaved,
+		c.FlatCopyApplies,
 		c.InlineEvalsSaved,
 		c.StackMaxDepth,
 		c.StackDepth0to2,

@@ -201,6 +201,27 @@ func (p *EnvironmentFrame) InitApplyFrame(dst *EnvironmentFrame) {
 	p.local.copyForApplyInto(&dst.local)
 }
 
+// InitFlatApplyFrame populates dst for a flat closure Apply. Unlike
+// InitApplyFrame, this does NOT copy binding values — bindArgs overwrites
+// parameter slots and body code initializes locals, so the memcpy is dead
+// work. Parent and global pointers are still set for OpPopEnv (let scopes)
+// and the OpStoreGlobal fallback path.
+func (p *EnvironmentFrame) InitFlatApplyFrame(dst *EnvironmentFrame) {
+	parent := p.parent
+	if parent == nil {
+		panic(werr.WrapForeignErrorf(
+			werr.ErrNilParentEnvironment,
+			"InitFlatApplyFrame called on frame with nil parent - closure environments must have a parent",
+		))
+	}
+	dst.parent = parent
+	dst.global = parent.global
+	dst.phaseLevel = parent.phaseLevel
+	dst.phases = parent.phases
+	dst.topLevel = parent.topLevel
+	p.local.initFlatApplyInto(&dst.local)
+}
+
 // ResetForPool clears the EnvironmentFrame for return to a sync.Pool while
 // preserving the local bindings backing array capacity. This mirrors the
 // Stack pool pattern: clear full capacity (so GC can collect referenced

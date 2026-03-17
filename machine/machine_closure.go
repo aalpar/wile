@@ -15,6 +15,8 @@
 package machine
 
 import (
+	"slices"
+
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
 )
@@ -43,6 +45,7 @@ var _ values.Callable = (*MachineClosure)(nil)
 // See BIBLIOGRAPHY.md "Linked Closure Representation".
 type MachineClosure struct {
 	env      *environment.EnvironmentFrame
+	freeVars []values.Value // nil for linked closures; populated for flat closures
 	template *NativeTemplate
 }
 
@@ -66,10 +69,29 @@ func (p *MachineClosure) Env() *environment.EnvironmentFrame {
 	return p.env
 }
 
+// FreeVars returns the flat closure's captured free variable array,
+// or nil for linked closures.
+func (p *MachineClosure) FreeVars() []values.Value {
+	return p.freeVars
+}
+
+// NewClosureWithFreeVars creates a flat closure with a captured free variable
+// array and no linked environment. The freeVars slice is owned by the closure.
+func NewClosureWithFreeVars(tpl *NativeTemplate, freeVars []values.Value) *MachineClosure {
+	q := &MachineClosure{
+		freeVars: freeVars,
+		template: tpl,
+	}
+	return q
+}
+
 func (p *MachineClosure) Copy() *MachineClosure {
 	q := &MachineClosure{
-		env:      p.env.Copy(),
 		template: p.template,
+		freeVars: slices.Clone(p.freeVars),
+	}
+	if p.env != nil {
+		q.env = p.env.Copy()
 	}
 	return q
 }

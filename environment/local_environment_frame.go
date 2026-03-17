@@ -207,3 +207,23 @@ func (p *LocalEnvironmentFrame) copyForApplyInto(dst *LocalEnvironmentFrame) {
 	}
 	copy(dst.bindings, p.bindings)
 }
+
+// initFlatApplyInto sets up dst with the correct number of binding slots
+// without copying binding values. Used by flat closure Apply: bindArgs
+// overwrites parameter slots, and body code (OpStoreLocal) initializes
+// the rest, so copying from source is pure waste.
+//
+// Keys are shared (CoW) for error messages and debugging. Pooled frames
+// (the common case) are pre-zeroed by ResetForPool, so the resliced
+// bindings already contain valid zero-value Binding structs.
+func (p *LocalEnvironmentFrame) initFlatApplyInto(dst *LocalEnvironmentFrame) {
+	dst.keys = p.keys
+	dst.keysShared = true
+	p.keysShared = true
+	n := len(p.bindings)
+	if cap(dst.bindings) >= n {
+		dst.bindings = dst.bindings[:n]
+	} else {
+		dst.bindings = make([]Binding, n)
+	}
+}
