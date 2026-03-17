@@ -97,22 +97,251 @@ No defer/recover needed for arithmetic — the numeric tower cannot panic from v
 
 ### Architectural Changes (Tier 3)
 
-#### 8. Flat Closures (Display-Based Environments)
+#### 8. Flat Closures — Multi-Pass Pipeline
 
-Current model: closures capture a linked list of EnvironmentFrame nodes. `NewApplyFrame` copies the leaf frame's bindings. Parent chain is shared.
+**Status:** Design complete, implementation planned
 
-**Alternative:** At compile time, analyze which free variables a closure references. Copy only those values into a flat array on the closure. Eliminates:
+**Goal:** Replace linked-closure environment capture with flat closures that copy only referenced free variables, using `*values.Box` for shared mutation.
+
+**Current model:** Closures capture a linked list of `EnvironmentFrame` nodes (`machine_closure.go:44`). `NewApplyFrame` copies the leaf frame's bindings (`machine_context_apply.go:64`). Parent chain is shared. The `Up` coordinate in `LocalIndex` (`instruction.go:52-68`) encodes parent-frame hops resolved at runtime. This is what Chez Scheme, Larceny, Gambit, and Racket (via Chez backend) replaced with flat closures.
+
+**Target model:** At compile time, analyze which free variables a closure references. Copy only those values into a flat array on the closure. Variables that are both captured *and* mutated use `*values.Box` (`values/box.go:22`) as a shared mutable cell. Eliminates:
 - Parent-chain walk for `Up > 0` lookups
-- Copying entire local frame (only copy free variables)
-- EnvironmentFrame allocation (closure *is* its environment)
+- Copying entire local frame on every call (only copy free variables, once, at closure creation)
+- `EnvironmentFrame` allocation for closures (the closure *is* its environment)
 
-This is what Chez Scheme, Larceny, and Gambit do.
+##### Design Philosophy
 
-**Trade-offs:**
-- Requires compile-time free-variable analysis pass
-- Changes closure representation fundamentally
-- `set!` on closed-over variables requires boxing (heap-allocate mutable cell, close over the box)
-- Significant compiler + VM changes
+Compilation is a simple translation of source to canonical bytecodes — no optimization, no combining of opcodes, no forward or back references. Each subsequent pass is similarly lightweight: one scan of `[]Instruction`, one concern per pass. Passes 1-3 run **before** peephole optimization, so they only see canonical opcodes (no fused variants like `OpPushLocal`).
+
+##### Pass Pipeline
+
+```
+Pass 0: Compile            source → canonical bytecodes     (existing, unchanged)
+Pass 1: FreeVarAnalysis    bytecodes → metadata             (read-only scan)
+Pass 2: BoxInsertion       bytecodes + metadata → bytecodes (rewrite defining scopes)
+Pass 3: ClosureFlatten     bytecodes + metadata → bytecodes (rewrite capturing scopes)
+Pass 4: Peephole           existing tpl.Optimize()
+Pass 5: EscapeAnalysis     existing tpl.computeNoCopyApply()
+```
+
+Insertion point: `compileClosureBody` (`compile_closure.go:60`), between body compilation (Phase 4) and peephole (Phase 5). Passes 1-3 execute bottom-up across nested templates — inner lambdas analyzed before outer lambdas.
+
+##### New Types
+
+```go
+// CaptureEntry describes one free variable in a closure's capture list.
+type CaptureEntry struct {
+    SourceSlot    int  // binding slot in the source scope
+    SourceDepth   int  // de Bruijn depth from the closure (1 = immediate parent)
+    ClosureSlot   int  // index in the flat freeVars array
+    Boxed         bool // true if this var needs *values.Box wrapping
+    FromFreeVars  bool // true: source is enclosing closure's freeVars[SourceSlot]
+                       // false: source is mc.env local bindings at SourceDepth
+}
+
+// FreeVarInfo is the analysis result for one NativeTemplate.
+type FreeVarInfo struct {
+    Captures  []CaptureEntry    // free variables to capture, ordered by ClosureSlot
+    Mutated   map[[2]int]bool   // (slot, depth) pairs targeted by set! in this template
+}
+```
+
+Stored on `NativeTemplate` after Pass 1. Used by Passes 2 and 3.
+
+##### New Opcodes
+
+| Opcode | Arg | Semantics |
+|--------|-----|-----------|
+| `OpLoadFreeVar` | closure slot | `value_reg = mc.freeVars[arg]` |
+| `OpBox` | — | `value_reg = values.NewBox(value_reg)` |
+| `OpUnbox` | — | `value_reg = value_reg.(*values.Box).Value` |
+| `OpSetBox` | — | `value_reg.(*values.Box).Value = evals.Pop()` |
+| `OpMakeFlatClosure` | — | Create closure from template + flat free-var array |
+
+`OpStoreFreeVar` is not needed. Mutation of captured variables always goes through `*values.Box`: load the box via `OpLoadFreeVar`, then `OpSetBox`. Non-boxed captured variables are never mutated.
+
+Per the opcode checklist (`opcode.go:22-29`): each new opcode requires entries in `opcode.go`, `machine_context.go` `Run()`, `native_template.go` conversion functions, an operation type, compiler emission, and tests.
+
+##### Pass 0: Compile (existing, unchanged)
+
+Simple translation. Every variable reference becomes `OpLoadLocal(slot, depth)` or `OpLoadGlobal(...)`. Every `set!` becomes `OpStoreLocal(slot, depth)` or `OpStoreGlobal(...)`. The `depth` coordinate naturally encodes whether a variable is free: `depth > 0` means it crosses a lambda boundary.
+
+No changes to `CompileSymbol` (`compile_time_continuation.go:112`), `CompileValidatedSetBang` (`compile_validated.go:443`), or `compileClosure` (`compile_closure.go:122`).
+
+##### Pass 1: FreeVarAnalysis
+
+**Input:** Compiled `NativeTemplate` (canonical bytecodes).
+**Output:** `FreeVarInfo` on the template. No bytecode modification.
+**File:** `machine/pass_free_var_analysis.go`
+
+**Algorithm:**
+
+1. Scan `template.code[]` for `OpLoadLocal` and `OpStoreLocal` where `depth > 0` (decoded via `DecodeLocalIndex`). Each such instruction references a binding in an enclosing scope — a free variable.
+2. Deduplicate by `(slot, depth)`. Assign `ClosureSlot` indices (0, 1, 2, ...).
+3. If the opcode is `OpStoreLocal`, mark `(slot, depth)` in the `Mutated` set.
+4. **Propagate from inner templates:** For each sub-template in `tpl.literals`, take its `FreeVarInfo`. For each capture entry with `SourceDepth > 1`, add `(SourceSlot, SourceDepth-1)` to the current template's free var set. If `SourceDepth == 1`, the variable comes from the current template's locals — no propagation needed, but the inner template needs it, so the current template's analysis is still aware.
+
+The propagation rule handles nested closures. A variable at de Bruijn depth D in an inner lambda is at depth D-1 in the immediately enclosing lambda. If D-1 > 0, it's still free in the enclosing lambda and propagates further.
+
+**Execution order:** Bottom-up. Analyze innermost templates first (leaves of the literal tree), then work outward. Each template's analysis is complete before its parent's analysis begins.
+
+##### Pass 2: BoxInsertion
+
+**Input:** `NativeTemplate` bytecodes + `FreeVarInfo` from all nested templates.
+**Output:** Modified bytecodes with box operations inserted.
+**File:** `machine/pass_box_insertion.go`
+
+**Boxing criterion:** A variable needs boxing when it is both:
+- **Captured** by any closure (appears in any nested template's `FreeVarInfo.Captures`)
+- **Mutated** by any site (appears in `FreeVarInfo.Mutated` of the defining template OR any nested template)
+
+This pass uses the **two-scan approach** (option B from design discussion):
+
+**Scan 1 — Collect box requests:** Walk all nested `NativeTemplate` values in `tpl.literals`. For each nested template's `FreeVarInfo`, collect `(slot, depth)` pairs that are both captured and mutated. Translate depths relative to the current template. These are "box requests" — bindings in the current template that must be boxed.
+
+**Scan 2 — Rewrite bytecodes in the defining scope:**
+
+*Lambda parameters* that need boxing — insert at the top of the template body (after `bindArgs` has populated the slots):
+
+```
+OpLoadLocal(slot, 0)    ; load parameter value
+OpBox                   ; wrap in *values.Box
+OpPush                  ; push boxed value to eval stack
+OpStoreLocal(slot, 0)   ; replace parameter with boxed version
+```
+
+*let/define initial assignments* that need boxing — insert `OpBox` before the `OpPush` that precedes the initial `OpStoreLocal`:
+
+```
+<compile init expr>     ; value in value_reg
+OpBox                   ; wrap in *values.Box  ← INSERTED
+OpPush                  ; push boxed value
+OpStoreLocal(slot, 0)   ; store the box
+```
+
+*Reads* of boxed variables (in ANY scope, including the defining scope) — insert `OpUnbox` after each `OpLoadLocal(slot, depth)` that refers to a boxed variable:
+
+```
+OpLoadLocal(slot, depth)  ; loads *values.Box
+OpUnbox                   ; extracts the value inside
+```
+
+*Writes* (`set!`) of boxed variables — replace `OpStoreLocal(slot, depth)` with a load-and-set-box sequence. The new value is already on the eval stack (pushed before the original `OpStoreLocal`):
+
+```
+OpLoadLocal(slot, depth)  ; load the *values.Box into value_reg
+OpSetBox                  ; box.Value = evals.Pop()
+```
+
+**Branch offset adjustment:** Inserting instructions shifts branch targets. Use the existing `EditPlan` infrastructure (`machine/edit_plan.go`) which handles offset fixup for `isBranch` opcodes.
+
+**Optimization opportunity (future):** Collapse the two-scan approach into a single bottom-up pass (option A) by processing inner templates before outer templates and propagating box requests upward during analysis. Same result, fewer scans.
+
+##### Pass 3: ClosureFlatten
+
+**Input:** Box-inserted bytecodes + `FreeVarInfo`.
+**Output:** Bytecodes with free-var references rewritten to flat closure slots.
+**File:** `machine/pass_closure_flatten.go`
+
+**Bytecode rewrites** in the capturing template (the closure body):
+
+- `OpLoadLocal(slot, depth>0)` → `OpLoadFreeVar(closureSlot)` where `closureSlot` comes from `FreeVarInfo.Captures`.
+- `OpStoreLocal(slot, depth>0)` — should not exist after Pass 2 (all stores to free boxed vars became `OpLoadLocal + OpSetBox`; non-boxed free vars are never stored to). Emit error if encountered.
+- `OpMakeClosure` → `OpMakeFlatClosure` when the child template has a non-empty `FreeVarInfo`.
+
+**Resolving `FromFreeVars`:** After Pass 1 assigns `ClosureSlot` indices to each template, Pass 3 resolves the `CaptureEntry.FromFreeVars` flag. If a capture's `SourceDepth == 1`, the value comes from the enclosing scope's local bindings. If `SourceDepth > 1`, the value is itself a free variable of the enclosing scope — `FromFreeVars` is set to true, and `SourceSlot` is rewritten to the enclosing scope's `ClosureSlot` for that variable.
+
+**`OpMakeFlatClosure` execution:**
+
+```go
+func (p *OperationMakeFlatClosure) Apply(mc *MachineContext) (*MachineContext, error) {
+    tpl := mc.evals.Pop().(*NativeTemplate)
+    info := tpl.freeVarInfo
+    freeVars := make([]values.Value, len(info.Captures))
+    for i, c := range info.Captures {
+        if c.FromFreeVars {
+            freeVars[i] = mc.freeVars[c.SourceSlot]
+        } else {
+            bd := mc.env.GetLocalBindingBySlotDepth(c.SourceSlot, c.SourceDepth-1)
+            freeVars[i] = bd.Value()
+        }
+    }
+    cls := NewClosureWithFreeVars(tpl, freeVars)
+    mc.SetValue(cls)
+    mc.pc++
+    return mc, nil
+}
+```
+
+Note: `SourceDepth-1` because the capture's depth is relative to the closure being created (depth=1 means the immediately enclosing scope), but `GetLocalBindingBySlotDepth` is called from within that enclosing scope (depth=0 is the current env).
+
+##### Passes 4-5: Existing (Peephole + Escape Analysis)
+
+Peephole (`peephole.go:47`) runs unchanged. May gain new fusion rules later (e.g., `OpLoadFreeVar + OpPush` → `OpPushFreeVar`, `OpLoadFreeVar + OpUnbox` → `OpLoadFreeVarUnboxed`).
+
+Escape analysis (`native_template.go:375`) simplifies for flat closures: `noCopyApply` is always true for flat closures because there is no environment frame to copy. The closure's `freeVars` array is immutable — boxed vars mutate through the `*values.Box`, not the array slot. Parameters are still bound to a fresh local frame per call.
+
+##### Closure Representation Changes
+
+Current `MachineClosure` (`machine_closure.go:44`):
+
+```go
+type MachineClosure struct {
+    env      *environment.EnvironmentFrame
+    template *NativeTemplate
+}
+```
+
+Extended for flat closures:
+
+```go
+type MachineClosure struct {
+    env      *environment.EnvironmentFrame // nil for flat closures
+    freeVars []values.Value                // nil for linked closures
+    template *NativeTemplate
+}
+```
+
+A closure is flat when `freeVars != nil`, linked when `env != nil`. Both cannot be non-nil simultaneously. This allows incremental migration — linked closures continue to work while flat closures are rolled out.
+
+`MachineContext` gains a `freeVars []values.Value` field, set when applying a flat closure. `OpLoadFreeVar` reads from `mc.freeVars[arg]`. Continuations save/restore `freeVars` automatically (it's part of `MachineContext` state).
+
+##### Apply Path Changes
+
+The Apply path (`machine_context_apply.go:38`) branches on closure type:
+
+- **Flat closure:** No env copy. Allocate (or pool) a minimal `LocalEnvironmentFrame` for parameters only. Set `mc.freeVars = cls.freeVars`. Free vars accessed via `OpLoadFreeVar`, not parent-chain walks.
+- **Linked closure:** Existing path unchanged (copy or no-copy based on `noCopyApply`).
+
+##### What's NOT Changing
+
+- Pass 0 (compilation) — no changes to the compiler
+- Global bindings — `OpLoadGlobal`/`OpStoreGlobal` are unaffected
+- `values.Box` type — used as-is from `values/box.go`
+- `EnvironmentFrame` for non-closure scopes (top-level, library environments)
+- Continuation chain mechanics — continuations save/restore `MachineContext` fields; `freeVars` is just another field
+- Peephole infrastructure — unchanged, gains new fusion opportunities later
+
+##### Testing Strategy
+
+Each pass is independently testable:
+
+1. **Pass 1 tests:** Compile a lambda with known free vars, run `analyzeFreeVars`, assert the capture list and mutation set match expectations. Test cases: no free vars, one free var, nested closures (transitive capture), `set!` on captured var, `set!` on non-captured var, mixed.
+2. **Pass 2 tests:** Given a template with known box requests, run box insertion, inspect bytecodes, verify `OpBox`/`OpUnbox`/`OpSetBox` at correct positions. Test: parameter boxing, let-binding boxing, read-through-box, write-through-box.
+3. **Pass 3 tests:** Given a box-inserted template with known `FreeVarInfo`, run flatten, verify `OpLoadLocal(depth>0)` replaced by `OpLoadFreeVar`. Test: `FromFreeVars` true vs false, nested capture resolution.
+4. **Integration tests:** Full pipeline producing programs that behave identically to the linked-closure model. Scheme programs exercising: `set!` on captured variables, multiple closures sharing a boxed variable, nested closures, closures that capture nothing, mixed boxed/non-boxed captures, `call/cc` across flat closure boundaries.
+5. **Regression:** Full test suite + Gabriel benchmarks. The correctness invariant: passes 0-5 produce programs with identical behavior to the current linked-closure model.
+
+##### Migration Path
+
+1. Implement types (`CaptureEntry`, `FreeVarInfo`) and new opcodes
+2. Implement Pass 1 (analysis only — no behavioral change, testable in isolation)
+3. Implement Pass 2 (box insertion — changes bytecodes but linked closures still work)
+4. Implement Pass 3 (flatten — switches to flat closures)
+5. Run full test suite and Gabriel benchmarks with flat closures
+6. Remove linked closure path once validated
+7. Optimize: collapse Pass 2 two-scan into bottom-up propagation (option A)
 
 #### 9. Stack Frames Instead of Continuation Chains
 
@@ -125,6 +354,33 @@ Replace per-call `MachineContinuation` allocation with a contiguous stack of fra
 `values.Value` is a Go interface (16 bytes). Small integers, booleans, characters could be encoded in 64 bits. Eliminates interface overhead, reduces stack/binding sizes by 50%.
 
 **Trade-off:** Massive change affecting every value operation. Go's type system makes this awkward (unsafe.Pointer gymnastics).
+
+## Benchmark Baseline (2026-03-16, `ec26f1c8`)
+
+Current canonical Gabriel suite baseline (6 runs, M4 Max). Previous baseline was `1c1db76` (2026-03-13).
+
+| Benchmark | Avg (s) | Min (s) | vs Previous | Speedup |
+|-----------|---------|---------|-------------|---------|
+| tak | 0.1123 | 0.1086 | -69.1% | 3.23x |
+| takl | 1.0883 | 1.0669 | -74.8% | 3.97x |
+| ctak | 1.6532 | 1.5877 | -64.6% | 2.82x |
+| cpstak | 0.1806 | 0.1753 | -65.7% | 2.92x |
+| fib | 0.3715 | 0.3621 | -70.7% | 3.42x |
+| triangl | 0.0382 | 0.0367 | -69.9% | 3.32x |
+| sum | 0.0311 | 0.0300 | -67.3% | 3.05x |
+| sumfp | 0.6206 | 0.6038 | -86.4% | 7.38x |
+| diviter | 2.5677 | 2.5217 | -69.2% | 3.25x |
+| divrec | 0.8759 | 0.8452 | -67.3% | 3.06x |
+| deriv | 0.1028 | 0.1001 | -64.4% | 2.81x |
+| ackermann | 0.4851 | 0.4660 | -79.8% | 4.95x |
+| sieve | 0.0808 | 0.0786 | -67.5% | 3.08x |
+| nqueens | 1.9047 | 1.8476 | -70.4% | 3.38x |
+| primes | 0.2367 | 0.2316 | -63.5% | 2.74x |
+| peval | 0.0675 | 0.0653 | -62.4% | 2.66x |
+
+**Geometric mean speedup vs previous baseline: 3.37x (+237.5%)**
+
+Primary contributors: opcode promotion (Phase 1+2), hot-path allocation reductions, env frame pooling, inline continuation evals, Stack.Drain.
 
 ## Measurement
 
