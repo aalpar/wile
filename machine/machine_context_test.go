@@ -2304,3 +2304,16 @@ func TestContMark_Copy_Independent(t *testing.T) {
 	markSet(copied.marks, key, values.NewInteger(999))
 	c.Assert(markGet(original.marks, key), qt.Equals, values.NewInteger(1))
 }
+
+func TestMachineContext_Run_NegativePC(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewTopLevelEnvironment().Runtime()
+	tpl := NewNativeTemplate(0, 0, false)
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	mc.SetPC(-1)
+	err := mc.Run()
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, ErrInvalidProgramCounter), qt.IsTrue)
+}
