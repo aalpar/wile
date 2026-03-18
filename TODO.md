@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-03-10
+**Last Updated**: 2026-03-18
 
 ### Current Project Status
 
@@ -36,6 +36,8 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 
 - [x] **Remaining raw sentinel panics** [High, S]: 20 `panic(werr.ErrXxx)` calls without `WrapForeignErrorf` wrapping. Sites: `values/pair.go:139,169,236`, `values/empty_list.go:83,88`, `values/promotion.go:308`, `internal/syntax/syntax_pair.go:151,168,172,181,198,212,338,357`, `internal/syntax/syntax_empty_list.go:91,96,101,106`, `machine/stack.go:43,55`. Wrapped with site-specific context. Ruleguard rule `noBareSentinelPanic` added to prevent regression.
 - [x] **Bare division-by-zero returns** [High, S]: 7 numeric `Divide` methods return bare `werr.ErrDivisionByZero` without wrapping. Wrapped with `"Type.Divide: division by exact zero"` at each site.
+- [ ] **internal/validate test coverage** [High, M]: 17 source files, 2 test files (1,724 source lines). 15 validator modules (`validate_lambda.go`, `validate_define.go`, `validate_macro.go`, etc.) have zero dedicated unit tests — coverage comes entirely from integration tests. Validators are the first defense against malformed syntax; silent validation failures produce confusing compiler errors or incorrect bytecode. `validate_macro.go` (247 lines), `validate_define.go` (185 lines), `validate_lambda.go` (84 lines) carry the most edge cases — start there.
+- [ ] **Tokenizer `readNan` refactoring** [High, M]: 4 stacked TODOs in `internal/tokenizer/tokenizer_numbers.go:186,192,226,446` describe tangled state: "refactor readNan", "do not remove line below... should not be needed, but current readNan implementation sets p.state to Symbol on error". `readNan` incorrectly mutates tokenizer state on error, requiring callers to compensate. `//nolint:errcheck` on lines 193 and 225 silence error returns because callers work around the bug. Refactor `readNan` to return errors cleanly without state mutation side effects.
 
 ### Medium Priority
 
@@ -56,14 +58,20 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 - [x] **Expander time continuation decomposition** [Medium, M]: Split 1,327-line `expander_time_continuation.go` into 4 files: `expander_let_syntax.go` (let-syntax/letrec-syntax), `expander_primitive_forms.go` (if, begin, set!, define, import, etc.), `expander_lambda.go` (lambda, case-lambda, helpers), core dispatch remaining in original file.
 - [x] **Quasiquote/quasisyntax duplication** [Medium, M]: Extracted shared `expandQuasi`, `expandQuasiList`, `expandQuasiListWithSplice` into `machine/quasi_expand.go` with `quasiKeywords` config struct. Fixed latent `list*` bug in quasisyntax improper list expansion (replaced with nested `cons`).
 - [x] **Pooling contract documentation** [Medium, S]: `machine/pool.go` has 4 global pools (stack, sub-context, continuation, env-frame). Continuation frames pooled only on normal return; `call/cc` escapes leave frames for GC via `MarkChainShared`. Documented in `docs/dev/POOLING.md`.
+- [ ] **`context.TODO()` in production code** [Medium, S]: `values/pair.go:185` (`Length`) and `values/pair.go:388` (`AsVector`) pass `context.TODO()` to `ForEach`. These are the only production `context.TODO()` calls. `ForEach` accepts `context.Context` for cancellation, but these methods bypass it — infinite circular structures have no escape hatch. Either accept a `context.Context` parameter or use `context.Background()` to make the design choice explicit.
+- [ ] **Numeric kind checklist incomplete** [Medium, S]: `values/numeric_kind.go:8-23` checklist for adding a new numeric type is missing `registry/helpers/value_conv.go` (contains `ToComplex128`, `ToFloat64` conversions). Also, item 9 (`wile-goast/goast/mapper.go`) is in an external repo — add a note flagging this.
+- [ ] **extensions/math/ test coverage** [Medium, M]: 1,553 source lines across 7 files, 928 test lines in a single `prim_math_test.go` (0.59 ratio). `prim_complex.go` (275 lines), `prim_conversion.go` (310 lines), `prim_rational.go` (260 lines), `prim_rounding.go` (225 lines), `prim_transcendental.go` (320 lines) each lack dedicated test files. R7RS §6.2.6 mandates detailed edge cases for these operations. Split tests per module and add edge cases for complex construction and exact/inexact conversion.
+- [ ] **ruleguard/ has zero tests** [Medium, S]: `ruleguard/rules.go` enforces the project's error handling invariants (`noErrorsNew`, `noFmtErrorf`, `noBareSentinelPanic`) but has no test file. If a rule has a regex bug or a Go version changes AST structure, violations pass lint silently. Add `ruleguard/rules_test.go` with positive and negative cases for each rule.
+- [ ] **Missing checklists for extensions and special forms** [Medium, S]: Adding a new opcode (7 items) and numeric type (11 items) both have documented checklists. Adding a new extension (4-6 files) or special form (5-7 files) has no checklist. Extensions require touching `internal/bootstrap/environment_tiny.go:54` (hardcoded `allExtensions` slice) which is easy to miss. Special forms require coordinating validators and compilers across `internal/validate/register.go` and `machine/register.go`. Add checklist comments following the opcode checklist pattern.
 
 ### Low Priority
 
 - [x] **Port type boilerplate** [Low, S]: `portBase` now provides `EqualTo()` and `SchemeString()` via embedding promotion. `EqualTo` uses `kind + datum` identity comparison (Go's `any` equality checks both dynamic type and value, preventing false matches across port types that share a kind). `IsVoid()` remains per-type (nil-receiver contract requires concrete type method). 10 `EqualTo` methods removed from 10 port files.
 - [x] **Machine: document implicit PC contract** [Low, S]: Added doc comment on `pc` field in `vmState` listing all write sites (NewMachineContext, Apply, Restore, SaveContinuation, opcodes) and the raise-continuable rationale. Added defensive `pc < 0` bounds assertion at top of `Run()` with `ErrInvalidProgramCounter` sentinel. Test in `machine_context_test.go`.
+- [x] **Compound if-init in OperationSaveContMark** [Low, S]: `machine/operation_cont_mark.go:87` used `if old := mc.GetMark(key); old != nil {` — extracted assignment before conditional per project style.
 - [ ] **Error sentinel grouping** [Low, S]: ~103 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.
+- [ ] **`int16` instruction argument limit undocumented** [Low, S]: Branch offsets in `machine/instruction.go` use `int16`, limiting jump distances to ±32,767 instructions. A single Scheme function with >32K bytecode instructions would fail with no clear error. Add a comment documenting the limit and a compile-time bounds check that panics with a descriptive message if a branch target exceeds `int16` range.
 - [x] **Operation file consolidation** [Low, M]: Consolidated 24 single-method operation files into 6 family files: `operations_stack.go` (Push/Pop/Pull/Drop/PeekK), `operations_load_store.go` (Load*/Store*), `operations_control.go` (Branch/BranchOnFalse/SaveCont/RestoreCont), `operations_call.go` (Apply/ForeignFunctionCall/UnpackListToStack), `operations_closure.go` (MakeClosure/MakeCaseLambdaClosure), `operations_winding.go` (PushWind/PopWind/PopEnv). 5 larger files kept separate (build_syntax, syntax_rules_transform, syntax_case, cont_mark, helpers).
-- [ ] **internal/validate test coverage** [Low, M]: 16 code files but only 2 test files. Each special form has its own validator but most lack dedicated unit tests. Coverage comes from integration tests. Add targeted tests when modifying validators.
 - [x] **Rename `AddSearchPath` to `PrependSearchPath`** [Low, S]: Renamed in library_registry.go and all call sites.
 - [x] **Unify library/include path resolution** [Low, S]: `findFile` now consults library registry search paths as fallback dirs, sharing the same paths as `import`.
 - [x] **Tokenizer test file consolidation** [Low, M]: Consolidated 14 coverage-goal-named test files into 10 behavior-oriented files mirroring source structure. All 191 tests preserved. PR #448.
@@ -147,8 +155,8 @@ No demand signal. Speculative or research-only.
 - [ ] **Source file tracking in Syntax Objects**: need some utilities around finding source locations and providing source lines.
 - [ ] **Exceptions and Error stack traces**: Both Foreign and Native errors should track stacktraces with source code references.
 - [ ] **Foreign Stack trace entry in stack traces that cross from Native -> Foreign -> Native callback.**
-- [ ] **Area for blog articles** Git blog area in repo
-- [ ] **Finish blog article** Finish blog article on appropriateness of Scheme for sandboxing.
+- [x] **Area for blog articles** Git blog area in repo — `docs/blog/`.
+- [x] **Finish blog article** Sandboxing blog post: `docs/blog/sandboxing.md`.
 - [ ] **Implement let-syntax*** [Core language, S]: Implement `let-syntax*`.
 - [x] **Native forms migration** [Refactoring, M]: 44 of 52 done. Phase 3 complete: `call-with-port` migrated to Scheme in io extension (capturable continuation frames); `callWithFile` single-value bug fixed; all 6 list algorithms benchmarked and kept in Go (4-9× slower on short lists; all exceed 20% gate — per-element Scheme VM dispatch dominates); `call-with-input-file`/`call-with-output-file` kept in Go (files extension must load without io). Benchmark data in `plans/NATIVE-FORMS-MIGRATION.md`.
 - [ ] **User labels/tags to distinguish FS resolvers** Use tags or labels to distinguish bootstrap loadee from include/library loaders in fileResolver.
