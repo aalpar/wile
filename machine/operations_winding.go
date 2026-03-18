@@ -18,6 +18,8 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
+// --- PushWind ---
+
 // OperationPushWind creates a dynamic-wind frame and pushes it onto the winding stack.
 // It expects the stack to contain [before, thunk, after] where:
 //   - before is at PeekK(2) - the before thunk
@@ -66,5 +68,60 @@ func (*OperationPushWind) Apply(mc *MachineContext) (*MachineContext, error) {
 
 func (p *OperationPushWind) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationPushWind)
+	return sameType(p, v, ok)
+}
+
+// --- PopWind ---
+
+// OperationPopWind pops the innermost dynamic-wind frame from the winding stack.
+// This operation does NOT call the after thunk - that is done explicitly in the
+// bytecode stream to ensure proper continuation semantics.
+//
+// The frame is simply removed from the winding stack. If a continuation captured
+// inside the dynamic extent is later restored, the RestoreWithWinding mechanism
+// will handle running the appropriate before/after thunks.
+//
+// R7RS §6.10: dynamic-wind establishes a dynamic extent during which the before
+// and after thunks are called whenever control enters or exits.
+type OperationPopWind struct {
+	OperationBase
+}
+
+func NewOperationPopWind() *OperationPopWind {
+	return &OperationPopWind{
+		OperationBase: NewOperationBase("machine-operation-pop-wind"),
+	}
+}
+
+func (*OperationPopWind) Apply(mc *MachineContext) (*MachineContext, error) {
+	mc.PopWindingFrame()
+	mc.pc++
+	return mc, nil
+}
+
+func (p *OperationPopWind) EqualTo(o values.Value) bool {
+	v, ok := o.(*OperationPopWind)
+	return sameType(p, v, ok)
+}
+
+// --- PopEnv ---
+
+// OperationPopEnv unconditionally restores the parent environment.
+// It pops one level from the environment chain (restoring the parent environment).
+//
+// This is used in syntax-case fender evaluation to restore the environment
+// when the fender returns false, before branching to the next clause.
+type OperationPopEnv struct {
+	OperationBase
+}
+
+func NewOperationPopEnv() *OperationPopEnv {
+	return &OperationPopEnv{
+		OperationBase: NewOperationBaseWithGoName("operation:pop-env", "PopEnv"),
+	}
+}
+
+func (p *OperationPopEnv) EqualTo(other values.Value) bool {
+	v, ok := other.(*OperationPopEnv)
 	return sameType(p, v, ok)
 }

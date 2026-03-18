@@ -15,10 +15,14 @@
 package machine
 
 import (
+	"fmt"
+
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
+
+// --- MakeClosure ---
 
 type OperationMakeClosure struct {
 	OperationBase
@@ -78,4 +82,48 @@ func (p *OperationMakeClosure) Apply(mc *MachineContext) (*MachineContext, error
 func (p *OperationMakeClosure) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationMakeClosure)
 	return sameType(p, v, ok)
+}
+
+// --- MakeCaseLambdaClosure ---
+
+// OperationMakeCaseLambdaClosure creates a case-lambda closure from multiple closures.
+// Stack layout (top to bottom): closure_n, closure_n-1, ..., closure_1
+// The closureCount immediate specifies how many closures to pop.
+type OperationMakeCaseLambdaClosure struct {
+	OperationBase
+	closureCount int
+}
+
+func NewOperationMakeCaseLambdaClosure(closureCount int) *OperationMakeCaseLambdaClosure {
+	return &OperationMakeCaseLambdaClosure{
+		OperationBase: NewOperationBase("machine-operation-make-case-lambda-closure"),
+		closureCount:  closureCount,
+	}
+}
+
+func (p *OperationMakeCaseLambdaClosure) Apply(mc *MachineContext) (*MachineContext, error) {
+	// Batch pop all closures from the stack
+	// PopN returns elements in stack order (bottom to top)
+	elements := mc.evals.PopN(p.closureCount)
+
+	// Convert elements to closures, preserving order
+	closures := make([]*MachineClosure, p.closureCount)
+	for i := 0; i < p.closureCount; i++ {
+		cls, ok := elements[i].(*MachineClosure)
+		if !ok {
+			err := mc.Error(fmt.Sprintf("expected closure in case-lambda, got %T", elements[i]))
+			return mc, err
+		}
+		closures[i] = cls
+	}
+
+	caseLambda := NewCaseLambdaClosure(closures)
+	mc.SetValue(caseLambda)
+	mc.pc++
+	return mc, nil
+}
+
+func (p *OperationMakeCaseLambdaClosure) EqualTo(o values.Value) bool {
+	v, ok := o.(*OperationMakeCaseLambdaClosure)
+	return fieldMatches(p, v, ok, func(op *OperationMakeCaseLambdaClosure) int { return op.closureCount })
 }

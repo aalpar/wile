@@ -20,6 +20,32 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
+// --- Branch ---
+
+type OperationBranchOffsetImmediate struct {
+	OperationBase
+	Offset int
+}
+
+func NewOperationBranchOffsetImmediate(offset int) *OperationBranchOffsetImmediate {
+	return &OperationBranchOffsetImmediate{
+		OperationBase: NewOperationBase("machine-operation-branch-offset-immediate"),
+		Offset:        offset,
+	}
+}
+
+// SchemeString overrides OperationBase to include offset value.
+func (p *OperationBranchOffsetImmediate) SchemeString() string {
+	return fmt.Sprintf("#<machine-operation-branch-offset-immediate %d>", p.Offset)
+}
+
+func (p *OperationBranchOffsetImmediate) EqualTo(o values.Value) bool {
+	v, ok := o.(*OperationBranchOffsetImmediate)
+	return fieldMatches(p, v, ok, func(op *OperationBranchOffsetImmediate) int { return op.Offset })
+}
+
+// --- BranchOnFalseValue ---
+
 // OperationBranchOnFalseValueOffsetImmediate branches if the value register
 // is #f. This reads directly from the value register instead of popping from
 // the eval stack, eliminating the Push instruction that would otherwise be
@@ -52,4 +78,45 @@ func (p *OperationBranchOnFalseValueOffsetImmediate) EqualTo(o values.Value) boo
 	return fieldMatches(p, v, ok, func(op *OperationBranchOnFalseValueOffsetImmediate) int {
 		return op.Offset
 	})
+}
+
+// --- SaveContinuation ---
+
+type OperationSaveContinuationOffsetImmediate struct {
+	OperationBase
+	Offset int
+}
+
+func NewOperationSaveContinuationOffsetImmediate(off int) *OperationSaveContinuationOffsetImmediate {
+	return &OperationSaveContinuationOffsetImmediate{
+		OperationBase: NewOperationBase("machine-operation-save-continuation-offset-immediate"),
+		Offset:        off,
+	}
+}
+
+// SchemeString overrides OperationBase to include offset value.
+func (p *OperationSaveContinuationOffsetImmediate) SchemeString() string {
+	return fmt.Sprintf("#<machine-operation-save-continuation-offset-immediate %d>", p.Offset)
+}
+
+func (p *OperationSaveContinuationOffsetImmediate) EqualTo(o values.Value) bool {
+	v, ok := o.(*OperationSaveContinuationOffsetImmediate)
+	return fieldMatches(p, v, ok, func(op *OperationSaveContinuationOffsetImmediate) int { return op.Offset })
+}
+
+// --- RestoreContinuation ---
+
+type OperationRestoreContinuation struct {
+	OperationBase
+}
+
+func NewOperationRestoreContinuation() *OperationRestoreContinuation {
+	return &OperationRestoreContinuation{
+		OperationBase: NewOperationBase("machine-operation-restore-continuation"),
+	}
+}
+
+func (p *OperationRestoreContinuation) EqualTo(o values.Value) bool {
+	v, ok := o.(*OperationRestoreContinuation)
+	return sameType(p, v, ok)
 }
