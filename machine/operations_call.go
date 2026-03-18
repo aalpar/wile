@@ -21,6 +21,32 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
+// --- Apply ---
+
+// OperationApply is the bytecode operation that dispatches procedure calls.
+// The compiler emits it after pushing arguments onto the eval stack and placing
+// the callee in the value register. Apply pops all arguments and delegates to
+// MachineContext.ApplyCallable, which handles the five callable types
+// (MachineClosure, ForeignClosure, CaseLambdaClosure, Parameter, ComposableContinuation).
+type OperationApply struct {
+	OperationBase
+}
+
+// NewOperationApply returns a new apply operation.
+func NewOperationApply() *OperationApply {
+	return &OperationApply{
+		OperationBase: NewOperationBase("operation-apply"),
+	}
+}
+
+// EqualTo returns true if o is also an OperationApply (identity by type).
+func (p *OperationApply) EqualTo(o values.Value) bool {
+	v, ok := o.(*OperationApply)
+	return sameType(p, v, ok)
+}
+
+// --- ForeignFunctionCall ---
+
 // OperationForeignFunctionCall executes a Go function within the VM loop.
 // Used for foreign closures that do nested VM execution (sub-context + Run),
 // where the iterative VM loop prevents Go stack growth. Leaf primitives use
@@ -75,5 +101,30 @@ func (p *OperationForeignFunctionCall) Apply(mc *MachineContext) (rmc *MachineCo
 
 func (p *OperationForeignFunctionCall) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationForeignFunctionCall)
+	return sameType(p, v, ok)
+}
+
+// --- UnpackListToStack ---
+
+// OperationUnpackListToStack reads a proper list from the value register
+// and pushes each element to the eval stack in order. Used by compiled
+// (apply proc arg1 ... args) to flatten the final arg list onto the stack
+// before Pull + OpApply.
+//
+// Errors if the value is not a proper list (improper list or non-list).
+type OperationUnpackListToStack struct {
+	OperationBase
+}
+
+// NewOperationUnpackListToStack returns a new unpack-list-to-stack operation.
+func NewOperationUnpackListToStack() *OperationUnpackListToStack {
+	return &OperationUnpackListToStack{
+		OperationBase: NewOperationBase("operation-unpack-list-to-stack"),
+	}
+}
+
+// EqualTo returns true if o is also an OperationUnpackListToStack (identity by type).
+func (p *OperationUnpackListToStack) EqualTo(o values.Value) bool {
+	v, ok := o.(*OperationUnpackListToStack)
 	return sameType(p, v, ok)
 }
