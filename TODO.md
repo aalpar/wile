@@ -155,8 +155,8 @@ No demand signal. Speculative or research-only.
 - [ ] **Source file tracking in Syntax Objects**: need some utilities around finding source locations and providing source lines.
 - [ ] **Exceptions and Error stack traces**: Both Foreign and Native errors should track stacktraces with source code references.
 - [ ] **Foreign Stack trace entry in stack traces that cross from Native -> Foreign -> Native callback.**
-- [ ] **Area for blog articles** Git blog area in repo
-- [ ] **Finish blog article** Finish blog article on appropriateness of Scheme for sandboxing.
+- [x] **Area for blog articles** Git blog area in repo — `docs/blog/`.
+- [x] **Finish blog article** Sandboxing blog post: `docs/blog/sandboxing.md`.
 - [ ] **Implement let-syntax*** [Core language, S]: Implement `let-syntax*`.
 - [x] **Native forms migration** [Refactoring, M]: 44 of 52 done. Phase 3 complete: `call-with-port` migrated to Scheme in io extension (capturable continuation frames); `callWithFile` single-value bug fixed; all 6 list algorithms benchmarked and kept in Go (4-9× slower on short lists; all exceed 20% gate — per-element Scheme VM dispatch dominates); `call-with-input-file`/`call-with-output-file` kept in Go (files extension must load without io). Benchmark data in `plans/NATIVE-FORMS-MIGRATION.md`.
 - [ ] **User labels/tags to distinguish FS resolvers** Use tags or labels to distinguish bootstrap loadee from include/library loaders in fileResolver.
