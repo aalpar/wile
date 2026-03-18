@@ -20,23 +20,15 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-// inlineBindingsCap is the number of bindings stored directly in the
-// LocalEnvironmentFrame struct. When the binding count is ≤ inlineBindingsCap,
-// the bindings slice header points into inlineBindings, avoiding a heap
-// allocation. Profiling confirms 100% of Apply env copies have ≤4 bindings
-// across all tested workloads.
-const inlineBindingsCap = 4
-
 // LocalEnvironmentFrame stores local variable bindings for a single scope.
 // It maps symbols to binding indices for efficient lookup. Local environments
 // are created for lambda parameters and let-bound variables.
 // Note: LocalEnvironmentFrame has no hierarchy of its own; the hierarchy is
 // managed by EnvironmentFrame via its parent field.
 type LocalEnvironmentFrame struct {
-	keys           map[values.Symbol]int
-	bindings       []Binding
-	inlineBindings [inlineBindingsCap]Binding
-	keysShared     bool // true when keys map is shared with another frame (CoW)
+	keys       map[values.Symbol]int
+	bindings   []Binding
+	keysShared bool // true when keys map is shared with another frame (CoW)
 }
 
 // NewLocalEnvironment creates a new local environment frame with pre-allocated
@@ -44,12 +36,8 @@ type LocalEnvironmentFrame struct {
 // binding of unknown type.
 func NewLocalEnvironment(pcnt int) *LocalEnvironmentFrame {
 	q := &LocalEnvironmentFrame{
-		keys: make(map[values.Symbol]int),
-	}
-	if pcnt <= inlineBindingsCap {
-		q.bindings = q.inlineBindings[:pcnt]
-	} else {
-		q.bindings = make([]Binding, pcnt)
+		keys:     make(map[values.Symbol]int),
+		bindings: make([]Binding, pcnt),
 	}
 	for i := range pcnt {
 		q.bindings[i] = Binding{value: values.Void, bindingType: BindingTypeUnknown}
@@ -160,18 +148,13 @@ func (p *LocalEnvironmentFrame) Copy() values.Value {
 	if p == nil {
 		return (*LocalEnvironmentFrame)(nil)
 	}
-	q := &LocalEnvironmentFrame{
+	bindings := make([]Binding, len(p.bindings))
+	copy(bindings, p.bindings)
+	return &LocalEnvironmentFrame{
 		keys:       p.keys,
 		keysShared: true,
+		bindings:   bindings,
 	}
-	n := len(p.bindings)
-	if n <= inlineBindingsCap {
-		q.bindings = q.inlineBindings[:n]
-	} else {
-		q.bindings = make([]Binding, n)
-	}
-	copy(q.bindings, p.bindings)
-	return q
 }
 
 // CopyForApply creates a lightweight copy optimized for the Apply hot path.
@@ -189,12 +172,8 @@ func (p *LocalEnvironmentFrame) CopyForApply() *LocalEnvironmentFrame {
 		keysShared: true,
 	}
 	p.keysShared = true
-	n := len(p.bindings)
-	if n <= inlineBindingsCap {
-		q.bindings = q.inlineBindings[:n]
-	} else {
-		q.bindings = make([]Binding, n)
-	}
+
+	q.bindings = make([]Binding, len(p.bindings))
 	copy(q.bindings, p.bindings)
 	return q
 }
@@ -204,12 +183,7 @@ func (p *LocalEnvironmentFrame) CopyForApply() *LocalEnvironmentFrame {
 func (p *LocalEnvironmentFrame) copyInto(dst *LocalEnvironmentFrame) {
 	dst.keys = p.keys
 	dst.keysShared = true
-	n := len(p.bindings)
-	if n <= inlineBindingsCap {
-		dst.bindings = dst.inlineBindings[:n]
-	} else {
-		dst.bindings = make([]Binding, n)
-	}
+	dst.bindings = make([]Binding, len(p.bindings))
 	copy(dst.bindings, p.bindings)
 }
 
@@ -226,12 +200,9 @@ func (p *LocalEnvironmentFrame) copyForApplyInto(dst *LocalEnvironmentFrame) {
 	dst.keysShared = true
 	p.keysShared = true
 	n := len(p.bindings)
-	switch {
-	case n <= inlineBindingsCap:
-		dst.bindings = dst.inlineBindings[:n]
-	case cap(dst.bindings) >= n:
+	if cap(dst.bindings) >= n {
 		dst.bindings = dst.bindings[:n]
-	default:
+	} else {
 		dst.bindings = make([]Binding, n)
 	}
 	copy(dst.bindings, p.bindings)

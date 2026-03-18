@@ -53,14 +53,6 @@ type VMCounters struct {
 	NoCopyBindingsSaved      uint64
 	InlineEvalsSaved         uint64 // SaveContinuation used inline slots instead of stack pool
 
-	// Binding count distribution at env copy (Apply copy path only).
-	BindingCount1    uint64 // 1 binding (unary lambda)
-	BindingCount2    uint64 // 2 bindings (binary / variadic with 1 required)
-	BindingCount3    uint64 // 3 bindings
-	BindingCount4    uint64 // 4 bindings
-	BindingCount5to8 uint64 // 5-8 bindings
-	BindingCount9p   uint64 // 9+ bindings
-
 	// Per-callee call counting. Tracks both ForeignClosure (Go primitives) and
 	// named MachineClosure (Scheme-defined procedures) calls. Gated by
 	// WILE_OPCODE_HITS (same as opcodeHits). nil when profiling is disabled.
@@ -105,26 +97,6 @@ func (c *VMCounters) RecordCall(name string) {
 	}
 }
 
-// RecordBindingCount updates the binding count histogram for Apply env copies.
-func (c *VMCounters) RecordBindingCount(n int) {
-	switch n {
-	case 1:
-		c.BindingCount1++
-	case 2:
-		c.BindingCount2++
-	case 3:
-		c.BindingCount3++
-	case 4:
-		c.BindingCount4++
-	default:
-		if n <= 8 {
-			c.BindingCount5to8++
-		} else {
-			c.BindingCount9p++
-		}
-	}
-}
-
 // RecordStackDepth updates the depth histogram and max tracker.
 func (c *VMCounters) RecordStackDepth(n int) {
 	if uint64(n) > c.StackMaxDepth {
@@ -166,12 +138,6 @@ func (c VMCounters) String() string {
 			"no_copy_applies:              %d\n"+
 			"no_copy_bindings_saved:       %d\n"+
 			"inline_evals_saved:           %d\n"+
-			"binding_count_1:              %d\n"+
-			"binding_count_2:              %d\n"+
-			"binding_count_3:              %d\n"+
-			"binding_count_4:              %d\n"+
-			"binding_count_5to8:           %d\n"+
-			"binding_count_9p:             %d\n"+
 			"stack_max_depth:              %d\n"+
 			"stack_depth_0to2:             %d\n"+
 			"stack_depth_3to4:             %d\n"+
@@ -197,12 +163,6 @@ func (c VMCounters) String() string {
 		c.NoCopyApplies,
 		c.NoCopyBindingsSaved,
 		c.InlineEvalsSaved,
-		c.BindingCount1,
-		c.BindingCount2,
-		c.BindingCount3,
-		c.BindingCount4,
-		c.BindingCount5to8,
-		c.BindingCount9p,
 		c.StackMaxDepth,
 		c.StackDepth0to2,
 		c.StackDepth3to4,
