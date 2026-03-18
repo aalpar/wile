@@ -143,6 +143,18 @@ func inlineCdr(mc *MachineContext) error {
 	return nil
 }
 
+// inlineCons pops two arguments (car, cdr) from the eval stack and sets the
+// value register to a new pair. No validation needed — cons accepts any values.
+func inlineCons(mc *MachineContext) error {
+	cdr := mc.evals.Pop()
+	car := mc.evals.Pop()
+	mc.counters.StackDrains++
+	mc.counters.StackElementsDrained += 2
+	mc.counters.ForeignCalls++
+	mc.SetValue(values.NewCons(car, cdr))
+	return nil
+}
+
 // execPromoted runs the common promoted-op dispatch pattern: resolve the
 // cached binding, verify it is still the expected ForeignClosure, fall back
 // to generic call if not, otherwise execute the inline function and handle
@@ -231,6 +243,12 @@ func promotedOpForName(name string) (nonTail, tail OpCode, arity int) {
 		return OpNumGe, OpNumGeTail, 2
 	case "=":
 		return OpNumEq, OpNumEqTail, 2
+	case "cons":
+		return OpCons, OpConsTail, 2
+	case "*":
+		return OpMul, OpMulTail, 2
+	case "/":
+		return OpDiv, OpDivTail, 2
 	default:
 		return OpInvalid, OpInvalid, 0
 	}

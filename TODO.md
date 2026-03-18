@@ -93,7 +93,7 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 ### Actionable
 
 - [x] **Remove symbol interning** [Performance, M]: Removed `InternSymbol` canonicalization; symbols compared by `.Key` string via `helpers.EqIdentity`. ~50 call sites removed, `symbolInterns` map deleted from `TopLevelEnvironment`. `plans/REMOVE-SYMBOL-INTERNING.md`
-- [ ] **Optimize hot-path ForeignFunction calls** [Performance, M]: `car`/`cdr`/`null?`/`cons`/fixnum `+`/`<` pay full dispatch overhead per element (arity check, `bindArgs`, env swap, indirect call), making Scheme list algorithms 4-9× slower than Go. Two approaches: **(A) Promoted opcodes** — 6 new ops inline in `Run()` (prior art: `OpEqQ`/`OpVectorQ`/`OpVectorRef`); risk is icache pressure. **(B) Lightweight cached call** — 1 new opcode (`OpCallForeignDirect`) skips ceremony when compiler knows the callee. Evaluation protocol in `plans/NATIVE-FORMS-MIGRATION.md`.
+- [x] **Optimize hot-path ForeignFunction calls** [Performance, M]: Promoted opcodes approach (A). Phase 1: list predicates/accessors (`null?`, `pair?`, `car`, `cdr`) — #497. Phase 2: binary arithmetic/comparisons (`+`, `-`, `<`, `<=`, `>`, `>=`, `=`) — #498. Phase 3: `cons`, `*`, `/` — bypasses dispatch for 2-arg calls; variadic falls back to `CallForeignCached`. `plans/OPCODE-PROMOTION.md`.
 - [ ] **Procedure inlining** [Performance, Research]: Explore peephole inlining of known procedures at compile time. No plan yet.
 
 ### Architectural (Tier 3)

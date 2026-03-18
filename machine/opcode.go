@@ -114,6 +114,12 @@ const (
 	OpNumGeTail     // Tail inlined 2-arg >=
 	OpNumEq         // Non-tail inlined 2-arg =
 	OpNumEqTail     // Tail inlined 2-arg =
+	OpCons          // Non-tail inlined cons
+	OpConsTail      // Tail inlined cons
+	OpMul           // Non-tail inlined 2-arg *
+	OpMulTail       // Tail inlined 2-arg *
+	OpDiv           // Non-tail inlined 2-arg /
+	OpDivTail       // Tail inlined 2-arg /
 
 	// Fallback: dispatch to sideTable[Arg]
 	OpComplex
@@ -199,6 +205,12 @@ var opcodeTable = [opCount]opcodeInfo{
 	OpNumGeTail:             {name: "NumGeTail"},
 	OpNumEq:                 {name: "NumEq"},
 	OpNumEqTail:             {name: "NumEqTail"},
+	OpCons:                  {name: "Cons"},
+	OpConsTail:              {name: "ConsTail"},
+	OpMul:                   {name: "Mul"},
+	OpMulTail:               {name: "MulTail"},
+	OpDiv:                   {name: "Div"},
+	OpDivTail:               {name: "DivTail"},
 	OpComplex:               {name: "Complex"},
 }
 

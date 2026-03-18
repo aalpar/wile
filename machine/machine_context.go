@@ -736,6 +736,48 @@ func (p *MachineContext) Run() error {
 				return err
 			}
 
+		case OpCons:
+			var err error
+			mc, err = execPromoted(mc, instr, "cons", 2, false, inlineCons)
+			if err != nil {
+				return err
+			}
+
+		case OpConsTail:
+			var err error
+			mc, err = execPromoted(mc, instr, "cons", 2, true, inlineCons)
+			if err != nil {
+				return err
+			}
+
+		case OpMul:
+			var err error
+			mc, err = execPromoted(mc, instr, "*", 2, false, inlineMul)
+			if err != nil {
+				return err
+			}
+
+		case OpMulTail:
+			var err error
+			mc, err = execPromoted(mc, instr, "*", 2, true, inlineMul)
+			if err != nil {
+				return err
+			}
+
+		case OpDiv:
+			var err error
+			mc, err = execPromoted(mc, instr, "/", 2, false, inlineDiv)
+			if err != nil {
+				return err
+			}
+
+		case OpDivTail:
+			var err error
+			mc, err = execPromoted(mc, instr, "/", 2, true, inlineDiv)
+			if err != nil {
+				return err
+			}
+
 		// --- Fallback: complex operations via side table ---
 
 		case OpComplex:

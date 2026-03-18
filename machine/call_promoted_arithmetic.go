@@ -199,3 +199,29 @@ func inlineNumEq(mc *MachineContext) error {
 	mc.SetValue(values.BoolToBoolean(numericEquals(a, b)))
 	return nil
 }
+
+// inlineMul pops two numbers and sets value register to a * b.
+func inlineMul(mc *MachineContext) error {
+	a, b, err := popTwoNumbers(mc, "*")
+	if err != nil {
+		return err
+	}
+	mc.SetValue(a.Multiply(b))
+	return nil
+}
+
+// inlineDiv pops two numbers and sets value register to a / b.
+// Returns an error on division by exact zero.
+func inlineDiv(mc *MachineContext) error {
+	a, b, err := popTwoNumbers(mc, "/")
+	if err != nil {
+		return err
+	}
+	result, divErr := a.Divide(b)
+	if divErr != nil {
+		return applyCallableError(mc, werr.WrapForeignErrorf(
+			divErr, "/: division error"))
+	}
+	mc.SetValue(result)
+	return nil
+}
