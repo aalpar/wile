@@ -39,6 +39,7 @@ var errHalt = werr.NewStaticError("machine halt: no more operations to run")
 const contextCheckMask = 1023
 
 var ErrMachineDoNotAdvancePC = werr.NewStaticError("machine do not advance PC: operation did not advance program counter")
+var ErrInvalidProgramCounter = werr.NewStaticError("invalid program counter")
 
 var ErrInvalidLiteralIndex = werr.NewStaticError("invalid literal index")
 var ErrInvalidGlobalIndex = werr.NewStaticError("literal is not a global index")
@@ -258,6 +259,10 @@ func (p *MachineContext) Context() context.Context {
 // Set the context via SetContext() before calling Run().
 func (p *MachineContext) Run() error {
 	mc := p
+	if mc.pc < 0 {
+		return werr.WrapForeignErrorf(ErrInvalidProgramCounter,
+			"Run: negative program counter %d", mc.pc)
+	}
 	for mc.pc < len(mc.template.code) {
 		if mc.counters.OpsExecuted&contextCheckMask == 0 {
 			select {

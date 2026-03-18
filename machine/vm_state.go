@@ -109,9 +109,22 @@ type vmState struct {
 	//
 	// multiValues is only populated by R7RS (values ...) and is consumed by
 	// call-with-values. All other instructions operate on singleValue.
-	singleValue  values.Value   // value register: single value (fast path)
-	multiValues  MultipleValues // value register: multiple values (R7RS values/call-with-values only)
-	evals        *Stack         // evaluation stack, holds intermediate values during execution
+	singleValue values.Value   // value register: single value (fast path)
+	multiValues MultipleValues // value register: multiple values (R7RS values/call-with-values only)
+	evals       *Stack         // evaluation stack, holds intermediate values during execution
+	// pc is the program counter: index into template.code.
+	// Run() does NOT reset pc — it starts from the current value.
+	//
+	// Write sites:
+	//   - NewMachineContext: copies from continuation (typically 0)
+	//   - Apply: sets to 0 for fresh closure invocation
+	//   - Restore/RestoreAndRelease/PopContinuation: restores saved pc
+	//   - SaveContinuation: saves pc + offset into continuation
+	//   - Opcodes: mc.pc++ or mc.pc += offset (branches)
+	//
+	// This design enables raise-continuable resumption: Restore sets pc
+	// to the instruction after the handler call, and Run() continues
+	// from there rather than restarting at 0.
 	pc           int
 	windingStack WindingStack // R7RS dynamic-wind extent tracking
 	promptTag    *PromptTag   // prompt tag for continuation prompts
