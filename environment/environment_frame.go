@@ -201,22 +201,23 @@ func (p *EnvironmentFrame) InitApplyFrame(dst *EnvironmentFrame) {
 	p.local.copyForApplyInto(&dst.local)
 }
 
-// ResetForPool clears the EnvironmentFrame for return to a sync.Pool while
-// preserving the local bindings backing array capacity. This mirrors the
-// Stack pool pattern: clear full capacity (so GC can collect referenced
-// values), zero the struct, then restore the slice header with len=0.
-//
-// After reset, the frame is a valid zero-value EnvironmentFrame whose
-// local.bindings has cap > 0 but len == 0. The next copyForApplyInto call
-// will reslice instead of allocating when cap >= n.
+// ResetForPool clears the EnvironmentFrame for return to a sync.Pool.
+// The struct zero clears the inline binding array for GC. If bindings
+// spilled to a heap-allocated slice (>4 bindings, never observed in
+// profiling), that slice is cleared separately before the struct zero.
+// After reset, local.bindings points at the zeroed inline array with len=0.
 func (p *EnvironmentFrame) ResetForPool() {
-	bindings := p.local.bindings
-	full := bindings[:cap(bindings)]
-	for i := range full {
-		full[i] = Binding{}
+	// If bindings spilled to heap, clear for GC.
+	if cap(p.local.bindings) > inlineBindingsCap {
+		full := p.local.bindings[:cap(p.local.bindings)]
+		for i := range full {
+			full[i] = Binding{}
+		}
 	}
+	// Zero the entire struct (clears inline array and all fields).
 	*p = EnvironmentFrame{}
-	p.local.bindings = full[:0]
+	// Point bindings at the (now-zeroed) inline array with len=0.
+	p.local.bindings = p.local.inlineBindings[:0]
 }
 
 // IsTopLevel returns true if this is the top-level environment frame (no parent).

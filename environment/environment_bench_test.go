@@ -207,6 +207,39 @@ func BenchmarkFrameCopyForApplyAndCreate(b *testing.B) {
 	}
 }
 
+// BenchmarkCopyForApplyInto measures copyForApplyInto into a fresh destination.
+// For n≤4, bindings use the inline array (0 allocs). For n>4, a heap slice is allocated.
+func BenchmarkCopyForApplyInto(b *testing.B) {
+	for _, n := range []int{1, 2, 3, 4, 5, 8} {
+		b.Run(fmt.Sprintf("bindings=%d", n), func(b *testing.B) {
+			env, _ := setupLocalEnv(n)
+			local := env.LocalEnvironment()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				var dst LocalEnvironmentFrame
+				local.copyForApplyInto(&dst)
+			}
+		})
+	}
+}
+
+// BenchmarkCopyForApplyInto_Reuse measures copyForApplyInto into a reused destination,
+// simulating the pool hot path where dst already has inline capacity from a prior call.
+func BenchmarkCopyForApplyInto_Reuse(b *testing.B) {
+	for _, n := range []int{1, 2, 3, 4, 5, 8} {
+		b.Run(fmt.Sprintf("bindings=%d", n), func(b *testing.B) {
+			env, _ := setupLocalEnv(n)
+			local := env.LocalEnvironment()
+			var dst LocalEnvironmentFrame
+			local.copyForApplyInto(&dst) // warm up dst
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				local.copyForApplyInto(&dst)
+			}
+		})
+	}
+}
+
 // BenchmarkNewApplyFrame measures the fused NewApplyFrame path.
 // This is the optimized Apply path: single allocation instead of two.
 func BenchmarkNewApplyFrame(b *testing.B) {

@@ -68,6 +68,7 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 		p.envPooled = true
 		p.counters.EnvsCopied++
 		p.counters.BindingsCopied += uint64(len(bnds))
+		p.counters.RecordBindingCount(len(bnds))
 		p.counters.KeysShared++
 	}
 

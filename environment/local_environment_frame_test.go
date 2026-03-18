@@ -15,6 +15,7 @@
 package environment
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -252,6 +253,62 @@ func TestCopyInto_CopiesBindings(t *testing.T) {
 	// Mutating dst does not affect source
 	dst.bindings[0].SetValue(values.NewInteger(99))
 	qt.Assert(t, le.GetLocalBinding(li0).Value(), valuestest.SchemeEquals, values.NewInteger(10))
+}
+
+func TestInlineBindings_SmallFrame(t *testing.T) {
+	for _, n := range []int{1, 2, 3, 4} {
+		t.Run(fmt.Sprintf("bindings=%d", n), func(t *testing.T) {
+			le := NewLocalEnvironment(n)
+			for i := range n {
+				le.bindings[i].SetValue(values.NewInteger(int64(i * 10)))
+			}
+
+			var dst LocalEnvironmentFrame
+			le.copyForApplyInto(&dst)
+
+			// Verify values copied correctly.
+			for i := range n {
+				qt.Assert(t, dst.bindings[i].Value(),
+					valuestest.SchemeEquals, values.NewInteger(int64(i*10)))
+			}
+
+			// Verify dst bindings are independent of source.
+			dst.bindings[0].SetValue(values.NewInteger(999))
+			qt.Assert(t, le.bindings[0].Value(),
+				valuestest.SchemeEquals, values.NewInteger(0))
+		})
+	}
+}
+
+func TestInlineBindings_LargeFrame(t *testing.T) {
+	le := NewLocalEnvironment(6)
+	for i := range 6 {
+		le.bindings[i].SetValue(values.NewInteger(int64(i)))
+	}
+
+	var dst LocalEnvironmentFrame
+	le.copyForApplyInto(&dst)
+
+	qt.Assert(t, len(dst.bindings), qt.Equals, 6)
+	for i := range 6 {
+		qt.Assert(t, dst.bindings[i].Value(),
+			valuestest.SchemeEquals, values.NewInteger(int64(i)))
+	}
+}
+
+func TestInlineBindings_CopyForApplyInto_PooledReuse(t *testing.T) {
+	le := NewLocalEnvironment(2)
+	le.bindings[0].SetValue(values.NewInteger(1))
+	le.bindings[1].SetValue(values.NewInteger(2))
+
+	var dst LocalEnvironmentFrame
+	le.copyForApplyInto(&dst)
+	qt.Assert(t, dst.bindings[0].Value(), valuestest.SchemeEquals, values.NewInteger(1))
+
+	// Second copy into same dst (simulates pool reuse).
+	le.bindings[0].SetValue(values.NewInteger(99))
+	le.copyForApplyInto(&dst)
+	qt.Assert(t, dst.bindings[0].Value(), valuestest.SchemeEquals, values.NewInteger(99))
 }
 
 func TestCopyForApplyInto_MarksBothShared(t *testing.T) {
