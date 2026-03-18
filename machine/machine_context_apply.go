@@ -44,37 +44,37 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	var env *environment.EnvironmentFrame
 	var bnds []environment.Binding
 
-	switch {
-	case tpl.NoCopyApply():
+	if tpl.NoCopyApply() {
 		// No-copy path: the template contains no SaveContinuation and no
-		// MakeClosure/MakeFlatClosure, so mc.env is never captured. Safe
-		// to mutate the closure's own bindings in place, eliminating both
-		// the EnvironmentFrame and []Binding allocations.
+		// MakeClosure, so mc.env is never captured. Safe to mutate the
+		// closure's own bindings in place, eliminating both the
+		// EnvironmentFrame and []Binding allocations.
 		env = mcls.env
 		bnds = env.LocalEnvironment().Bindings()
+		// envPooled: closure's own env, not from pool.
 		p.envPooled = false
 		p.counters.NoCopyApplies++
 		p.counters.NoCopyBindingsSaved += uint64(len(bnds))
-
-	default:
-		// Copy path: acquire a fresh frame from the pool and set up binding
-		// slots WITHOUT copying values. bindArgs overwrites parameter slots
-		// and body code (OpStoreLocal) initializes the rest, so the memcpy
-		// is dead work — the closure env's bindings are always compile-time
-		// void/unknown placeholders for the !noCopyApply path. Free
-		// variables (if any) live in mcls.freeVars, not in binding slots.
+	} else {
+		// Copy path: acquire a frame from the pool and populate it.
+		// Critical for recursive functions with SaveContinuation: without
+		// copying, all invocations share the same bindings, causing
+		// parameter corruption when evaluating arguments like
+		// (+ (f (- n 1)) (f (- n 2))).
 		env = acquireEnvFrame()
 		mcls.env.InitApplyFrame(env)
 		bnds = env.LocalEnvironment().Bindings()
+		// envPooled: frame from envFramePool; RestoreAndRelease will recycle it.
 		p.envPooled = true
 		p.counters.EnvsCopied++
+		p.counters.BindingsCopied += uint64(len(bnds))
+		p.counters.KeysShared++
 	}
 
 	bindArgs(bnds, vs, l, tpl.IsVariadic(), nil)
 
 	p.template = tpl
 	p.env = env
-	p.freeVars = mcls.freeVars
 	p.pc = 0
 	return p, nil
 }

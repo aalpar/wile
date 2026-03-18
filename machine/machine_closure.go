@@ -15,37 +15,34 @@
 package machine
 
 import (
-	"slices"
-
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
 )
 
 var _ values.Callable = (*MachineClosure)(nil)
 
-// MachineClosure is a callable pairing compiled code with its lexical
-// environment at definition time.
+// Linked closure (Church 1936, Landin 1964, Cardelli 1983). A closure is
+// a pair of compiled code and the lexical environment at definition time.
 //
-//	closure = ⟨λ, E, FV⟩, where:
-//	  λ  = template  — compiled bytecode (NativeTemplate)
-//	  E  = env       — pointer to enclosing EnvironmentFrame (parameter shape)
-//	  FV = freeVars  — captured free variables (nil when no captures)
+//	closure = ⟨λ, E⟩, where:
+//	  λ = template  — compiled bytecode (NativeTemplate)
+//	  E = env       — pointer to enclosing EnvironmentFrame
 //
-// Two representations coexist:
-//   - Zero-capture closures: freeVars is nil, env provides parameter
-//     bindings only. Created by OpMakeClosure.
-//   - Flat closures: freeVars holds captured values, env provides
-//     parameter shape. Created by OpMakeFlatClosure.
+//	Access cost: O(1) creation (capture pointer), O(depth) free variable
+//	  lookup (traverse parent chain). Flat closures invert this trade-off.
 //
-// Both representations use the same Apply path. The env frame is always
-// allocated fresh (via InitApplyFrame) for non-noCopyApply closures;
-// binding values are NOT copied because bindArgs and body opcodes
-// initialize all slots.
+//	Invariant: E is a live pointer into the frame chain, not a copy.
+//	  Mutations via set! are visible through the closure because the
+//	  closure shares the frame, not a snapshot.
+//	Constrains: OperationMakeClosure (must link E to runtime parent),
+//	  Apply (must copy E for non-noCopyApply calls to prevent aliasing),
+//	  computeNoCopyApply (escape analysis on E).
+//	Constrained by: de Bruijn addressing (free vars addressed by
+//	  slot,depth in E's chain), CESK model (E is the environment component).
 //
 // See BIBLIOGRAPHY.md "Linked Closure Representation".
 type MachineClosure struct {
 	env      *environment.EnvironmentFrame
-	freeVars []values.Value // nil for zero-capture closures; populated for flat closures
 	template *NativeTemplate
 }
 
@@ -69,29 +66,10 @@ func (p *MachineClosure) Env() *environment.EnvironmentFrame {
 	return p.env
 }
 
-// FreeVars returns the flat closure's captured free variable array,
-// or nil for linked closures.
-func (p *MachineClosure) FreeVars() []values.Value {
-	return p.freeVars
-}
-
-// NewClosureWithFreeVars creates a flat closure with a captured free variable
-// array and no linked environment. The freeVars slice is owned by the closure.
-func NewClosureWithFreeVars(tpl *NativeTemplate, freeVars []values.Value) *MachineClosure {
-	q := &MachineClosure{
-		freeVars: freeVars,
-		template: tpl,
-	}
-	return q
-}
-
 func (p *MachineClosure) Copy() *MachineClosure {
 	q := &MachineClosure{
+		env:      p.env.Copy(),
 		template: p.template,
-		freeVars: slices.Clone(p.freeVars),
-	}
-	if p.env != nil {
-		q.env = p.env.Copy()
 	}
 	return q
 }

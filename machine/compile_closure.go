@@ -107,16 +107,10 @@ func (p *CompileTimeContinuation) compileClosureBody(
 		return 0, 0, err
 	}
 
-	// Phase 4.5: Flat closure analysis and transformation.
-	// Runs passes 1-3 (free variable analysis, box insertion, closure
-	// flattening) on this template. The passes recurse into sub-templates
-	// internally; already-processed sub-templates are skipped.
-	RunFlatClosurePipeline(tpl)
-
 	// Phase 5: Peephole optimization before escape analysis (optimization may
 	// change which ops are present). Escape analysis determines whether Apply
 	// can skip copying the closure's environment frame — safe when the body
-	// contains no SaveContinuation and no MakeClosure (or MakeFlatClosure).
+	// contains no SaveContinuation and no MakeClosure.
 	tpl.Optimize()
 	tpl.computeNoCopyApply()
 

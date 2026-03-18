@@ -100,7 +100,6 @@ func NewMachineContinuationFromMachineContext(mc *MachineContext, off int) *Mach
 	}
 	q := acquireContinuation()
 	q.env = mc.env
-	q.freeVars = mc.freeVars
 	q.template = mc.template
 	q.singleValue = mc.singleValue
 	q.multiValues = mc.multiValues
@@ -158,7 +157,6 @@ func (p *MachineContinuation) CallDepth() int {
 func (p *MachineContinuation) Copy() *MachineContinuation {
 	q := acquireContinuation()
 	q.env = p.env
-	q.freeVars = p.freeVars
 	q.template = p.template
 	q.singleValue = p.singleValue
 	q.multiValues = slices.Clone(p.multiValues)

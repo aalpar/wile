@@ -115,14 +115,6 @@ const (
 	OpNumEq         // Non-tail inlined 2-arg =
 	OpNumEqTail     // Tail inlined 2-arg =
 
-	// Wave 10: flat closure operations
-	OpLoadFreeVar     // Load from closure's freeVars[arg]
-	OpBox             // Wrap value register in *values.Box
-	OpUnbox           // Unwrap value register from *values.Box
-	OpSetBox          // Set box value: value_reg.(*Box).Value = evals.Pop()
-	OpMakeFlatClosure // Create closure with flat free-var array
-	OpPushFreeVar     // LoadFreeVar + Push (fused)
-
 	// Fallback: dispatch to sideTable[Arg]
 	OpComplex
 
@@ -207,12 +199,6 @@ var opcodeTable = [opCount]opcodeInfo{
 	OpNumGeTail:             {name: "NumGeTail"},
 	OpNumEq:                 {name: "NumEq"},
 	OpNumEqTail:             {name: "NumEqTail"},
-	OpLoadFreeVar:           {name: "LoadFreeVar", writesValue: true},
-	OpBox:                   {name: "Box", writesValue: true},
-	OpUnbox:                 {name: "Unbox", writesValue: true},
-	OpSetBox:                {name: "SetBox"},
-	OpMakeFlatClosure:       {name: "MakeFlatClosure", writesValue: true},
-	OpPushFreeVar:           {name: "PushFreeVar"},
 	OpComplex:               {name: "Complex"},
 }
 
