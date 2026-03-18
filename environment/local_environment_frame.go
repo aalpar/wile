@@ -226,11 +226,12 @@ func (p *LocalEnvironmentFrame) copyForApplyInto(dst *LocalEnvironmentFrame) {
 	dst.keysShared = true
 	p.keysShared = true
 	n := len(p.bindings)
-	if n <= inlineBindingsCap {
+	switch {
+	case n <= inlineBindingsCap:
 		dst.bindings = dst.inlineBindings[:n]
-	} else if cap(dst.bindings) >= n {
+	case cap(dst.bindings) >= n:
 		dst.bindings = dst.bindings[:n]
-	} else {
+	default:
 		dst.bindings = make([]Binding, n)
 	}
 	copy(dst.bindings, p.bindings)
