@@ -206,6 +206,19 @@ Implemented in `machine/call_promoted_arithmetic.go` via shared `popTwoNumbers` 
 
 2-arg only; variadic `*` and `/` calls stay on `CallForeignCached`.
 
+Results (extended suite, 3-run avg, vs pre-promotion `5a35a6f0`):
+
+| Benchmark | Change | Driver |
+|-----------|--------|--------|
+| mbrot | **-12.3%** | `*` and `/` (Mandelbrot) |
+| destruc | **-11.8%** | `cons` (10% of calls) |
+| fibc | **-6.3%** | continuation + arithmetic mix |
+| fft | -1.5% | `*` and `/` (FFT) |
+| matrix | -1.2% | `*` (matrix multiply) |
+| paraffins | -1.3% | `cons` heavy |
+
+Geo mean across 32 benchmarks (≥5ms): **-0.6%**. 4 improved >2%, 1 regressed >3% (quicksort +4.1%, noise — 14.7% spread). 27 neutral.
+
 **Not promoted (diminishing returns):**
 
 | Primitive | Reason |
