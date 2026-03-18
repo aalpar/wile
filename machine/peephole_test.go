@@ -1074,6 +1074,71 @@ func TestFusePromotedPrimitives(t *testing.T) {
 			wantArg:        map[int]int32{0: 3, 1: 4, 2: 0},
 		},
 		{
+			name: "non-tail cons: SaveCont + PushCachedBinding + PushLocal + PushLocal + PullApply",
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 5},
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPushLocal, Arg: 1},
+				{Op: OpPushLocal, Arg: 2},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{makeNamedForeignBinding("cons", 2)},
+			wantOps:        []OpCode{OpPushLocal, OpPushLocal, OpCons},
+			wantArg:        map[int]int32{0: 1, 1: 2, 2: 0},
+		},
+		{
+			name: "tail cons: PushCachedBinding + PushLocal + PushLocal + PullApply",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPushLocal, Arg: 1},
+				{Op: OpPushLocal, Arg: 2},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{makeNamedForeignBinding("cons", 2)},
+			wantOps:        []OpCode{OpPushLocal, OpPushLocal, OpConsTail},
+			wantArg:        map[int]int32{0: 1, 1: 2, 2: 0},
+		},
+		{
+			name: "non-tail *: SaveCont + PushCachedBinding + PushLocal + PushLocal + PullApply",
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 5},
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPushLocal, Arg: 1},
+				{Op: OpPushLocal, Arg: 2},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{makeNamedForeignBinding("*", 2)},
+			wantOps:        []OpCode{OpPushLocal, OpPushLocal, OpMul},
+			wantArg:        map[int]int32{0: 1, 1: 2, 2: 0},
+		},
+		{
+			name: "tail /: PushCachedBinding + PushLocal + PushLocal + PullApply",
+			code: []Instruction{
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPushLocal, Arg: 1},
+				{Op: OpPushLocal, Arg: 2},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{makeNamedForeignBinding("/", 2)},
+			wantOps:        []OpCode{OpPushLocal, OpPushLocal, OpDivTail},
+			wantArg:        map[int]int32{0: 1, 1: 2, 2: 0},
+		},
+		{
+			name: "wrong arity: * with 3 args falls back to CallForeignCached",
+			// Variadic * with 3 args doesn't match promoted arity (2).
+			code: []Instruction{
+				{Op: OpSaveContinuation, Arg: 6},
+				{Op: OpPushCachedBinding, Arg: 0},
+				{Op: OpPushLocal, Arg: 1},
+				{Op: OpPushLocal, Arg: 2},
+				{Op: OpPushLocal, Arg: 3},
+				{Op: OpPullApply},
+			},
+			cachedBindings: []*environment.Binding{makeNamedForeignBinding("*", 2)},
+			wantOps:        []OpCode{OpSaveContinuation, OpPushLocal, OpPushLocal, OpPushLocal, OpCallForeignCached},
+			wantArg:        map[int]int32{0: 5, 1: 1, 2: 2, 3: 3, 4: 0},
+		},
+		{
 			name: "wrong arity: eq? with 1 arg falls back to CallForeignCached",
 			// Not promoted (arity mismatch), so treated as generic CallForeignCached.
 			// SaveCont is kept for stack isolation.

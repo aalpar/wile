@@ -1,13 +1,13 @@
 # Opcode Promotion Plan
 
-**Status:** Phase 1 and Phase 2 complete. Phase 3 (lower priority) open.
+**Status:** All 3 phases complete. Phase 1 (#497), Phase 2 (#498), Phase 3: cons/*/÷.
 **Date:** 2026-03-13
 **Prereq:** Profiling infrastructure fix (pool opcodeHits bug) — merged (#495)
 
 ## Context
 
 The VM dispatch loop (`machine/machine_context.go:Run()`) uses a two-tier model:
-- **Primary switch**: ~58 opcodes inlined in the main dispatch loop (post Phase 1+2; was ~37 pre-promotion)
+- **Primary switch**: ~64 opcodes inlined in the main dispatch loop (post Phase 1+2+3; was ~37 pre-promotion)
 - **OpComplex side table**: Complex operations dispatched via `sideTable[arg].Apply(mc)`
 
 Peephole optimizer (`machine/peephole.go`) fuses common instruction sequences:
@@ -196,19 +196,28 @@ Implemented in `machine/call_promoted_arithmetic.go` via shared `popTwoNumbers` 
 
 `+`, `-`, `*`, `/` are variadic in R7RS. The peephole optimizer currently checks `argCount == promotedArity`. For Phase 2, promote only the 2-arg case (which is >99% of calls in practice). The variadic case stays on the `CallForeignCached` path.
 
-### Phase 3: Remaining Candidates (Lower Priority)
+### Phase 3: cons, *, / — Complete
 
-| Primitive | Notes |
-|-----------|-------|
-| `cons` | Allocates a new `*values.Pair` — promotion saves dispatch but not allocation |
-| `modulo` | 700K calls (primes, sieve). Numeric tower + potential division-by-zero |
-| `not` | Scheme-defined procedure `(define (not x) (if x #f #t))` in `bootstrap_procedures.scm`. Full `MachineClosure` call path, invisible to `ForeignClosure` profiling. Promotion would require compiler-level recognition (e.g., `(not expr)` → branch + constant), not peephole. Unknown call frequency. |
-| `list` | Variadic, allocating. Not a good candidate. |
-| `append` | O(n), allocating. Dispatch overhead negligible vs work done. |
+| Primitive | Opcodes | Arity | Inline Logic |
+|-----------|---------|-------|-------------|
+| `cons` | `OpCons`/`Tail` | 2 | `values.NewCons(car, cdr)` — no validation |
+| `*` | `OpMul`/`Tail` | 2 | `a.Multiply(b)` — same pattern as `+`/`-` |
+| `/` | `OpDiv`/`Tail` | 2 | `a.Divide(b)` — division-by-zero error handling |
+
+2-arg only; variadic `*` and `/` calls stay on `CallForeignCached`.
+
+**Not promoted (diminishing returns):**
+
+| Primitive | Reason |
+|-----------|--------|
+| `modulo` | 700K calls but `integerDivisionOp` logic (BigInteger dispatch, inexact tracking, ExtractInteger) too complex to duplicate for the benefit |
+| `not` | Scheme-defined procedure — requires compiler-level recognition, not peephole |
+| `list` | Variadic, allocating. Not a good candidate |
+| `append` | O(n), allocating. Dispatch overhead negligible vs work done |
 
 ## Demotion Analysis
 
-**No current opcodes warrant demotion.** The primary switch has ~58 cases, well within Go's jump table efficiency. All opcodes either:
+**No current opcodes warrant demotion.** The primary switch has ~64 cases, well within Go's jump table efficiency. All opcodes either:
 - Are hot across most workloads (Push, PushLocal, SaveContinuation, etc.)
 - Serve specific workloads where they're dominant (vector ops for solvers)
 - Have trivial inline logic (the dispatch cost of OpComplex indirection would be comparable)

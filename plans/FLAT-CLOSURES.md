@@ -1,6 +1,6 @@
 # Flat Closures Implementation Plan
 
-**Status:** Complete. All three PRs merged (#514, #515, #516). **Flat closures produced zero performance benefit.** Back-to-back benchmarking (M4 Max, 2026-03-17) measured a +7.0% geo-mean regression on the Gabriel suite — every benchmark slower, none faster. The regression comes from new allocations: 11M `freeVars` slices and 1.5M `Box` values per nqueens run (+24% total alloc objects, +29% total bytes). The "savings" flat closures were supposed to deliver (eliminating parent-chain walks and per-call env copying) turned out to be negligible: parent-chain walks were cheap (1-2 pointer chases), and per-call binding copies were already dead work (overwritten by `bindArgs`). An inline freeVars optimization was attempted and reverted (merged allocations but increased struct size; net zero runtime change). Flat closures are a pure architectural change — simpler environment model at a 7% runtime cost. C1 deferred. C2 partial. C3 deferred. Machine Modernization Roadmap added (2026-03-17).
+**Status:** Implemented and **reverted** (PR #520). All three PRs merged (#514, #515, #516, #519), then reverted after benchmarking showed a **+7.4% geo-mean regression across 31 benchmarks** (Larceny R7RS + Schelog + miniKanren) with zero benchmarks improved. The regression comes from new allocations: per-closure `freeVars` slice (+438 MB) and larger `MachineClosure` structs (+379 MB) on nqueens. The savings flat closures were supposed to deliver (eliminating parent-chain walks and per-call env copying) were negligible: parent-chain walks were 1-2 pointer chases, and per-call binding copies were already dead work (overwritten by `bindArgs`). Code reverted to linked closures; plan and benchmark evidence preserved below.
 **Design:** `plans/PERFORMANCE.md` Tier 3, Item 8
 **Branch strategy:** Three PRs (Infrastructure + Analysis, Behavioral Change, Cleanup) — all merged
 
@@ -601,48 +601,100 @@ The debugger (`machine/debugger.go`) inspects `mc.env` for variable display. Fla
 
 ---
 
-## Post-Merge Regression Analysis (2026-03-17)
+## Regression Analysis and Revert (2026-03-17)
 
-All measurements: Apple M4 Max, Go 1.24, 6 runs each, back-to-back on same machine.
-
-### Gabriel Benchmark Regression
-
+All measurements: Apple M4 Max, Go 1.24, back-to-back on same machine with freshly built binaries.
 Before = `ec26f1c8` (pre-flat-closures). After = `20160b4b` (flat closures + post-simplification PR #519).
+Both binaries built and benchmarked in the same session — no historical data trusted.
 
-| Benchmark | Before(s) | After(s) | Delta | Notes |
-|-----------|-----------|----------|-------|-------|
-| tak | 0.1128 | 0.1163 | +3.1% | |
-| takl | 1.0781 | 1.2212 | **+13.3%** | Heavy closure creation in recursion |
-| ctak | 1.6710 | 1.8192 | +8.9% | |
-| cpstak | 0.1785 | 0.2022 | **+13.3%** | CPS — every call creates closures |
-| fib | 0.3690 | 0.3781 | +2.5% | |
-| triangl | 0.0386 | 0.0391 | +1.3% | |
-| sum | 0.0308 | 0.0320 | +3.9% | |
-| sumfp | 0.6235 | 0.6778 | +8.7% | |
-| diviter | 2.5629 | 2.7074 | +5.6% | |
-| divrec | 0.8647 | 0.8962 | +3.6% | |
-| deriv | 0.1008 | 0.1109 | **+10.0%** | |
-| ackermann | 0.4868 | 0.4910 | +0.9% | Minimal closure allocation |
-| sieve | 0.0804 | 0.0839 | +4.4% | |
-| nqueens | 1.8866 | 2.2271 | **+18.0%** | Worst — closures created per recursive call |
-| primes | 0.2357 | 0.2598 | **+10.2%** | |
-| peval | 0.0673 | 0.0712 | +5.8% | |
-| **GEO MEAN** | | | **+7.0%** | |
+### Gabriel Benchmark Regression (16 benchmarks, 6 runs each)
 
-### Allocation Profile (nqueens, `-memprofile`)
+| Benchmark | Before(s) | After(s) | Delta |
+|-----------|-----------|----------|-------|
+| tak | 0.1122 | 0.1135 | +1.2% |
+| takl | 1.0871 | 1.1891 | +9.4% |
+| ctak | 1.6423 | 1.7073 | +4.0% |
+| cpstak | 0.1813 | 0.1958 | +8.0% |
+| fib | 0.3728 | 0.3670 | -1.6% |
+| triangl | 0.0387 | 0.0381 | -1.6% |
+| sum | 0.0312 | 0.0306 | -1.9% |
+| sumfp | 0.6246 | 0.6673 | +6.8% |
+| diviter | 2.5827 | 2.6304 | +1.8% |
+| divrec | 0.8723 | 0.8618 | -1.2% |
+| deriv | 0.1026 | 0.1068 | +4.1% |
+| ackermann | 0.4849 | 0.4737 | -2.3% |
+| sieve | 0.0811 | 0.0810 | -0.1% |
+| nqueens | 1.9100 | 2.1534 | **+12.7%** |
+| primes | 0.2378 | 0.2556 | +7.5% |
+| peval | 0.0684 | 0.0703 | +2.8% |
+| **GEO MEAN** | | | **+3.0%** |
 
-| Allocator | Before | After | Delta |
-|-----------|--------|-------|-------|
-| `Run():793 make([]Value, len(Captures))` | 0 | 11,067,280 | **NEW** — freeVars slice per closure |
-| `values.NewBox` | 0 | 1,474,582 | **NEW** — boxing mutable captures |
-| `initApplyInto: make([]Binding, n)` | 11,999,055 | 12,834,677 | +7% |
-| `NewClosureWith{Template→FreeVars}` | 11,993,271 | 11,567,633 | -4% |
-| `init.func8` (pool factory) | 12,151,299 | 11,817,041 | -3% |
-| `NewEnvironmentFrameWithParent` | 11,803,934 | 12,052,989 | +2% |
-| **TOTAL** | **53,437,941** | **66,428,340** | **+24%** |
-| **TOTAL BYTES** | **2,624 MB** | **3,380 MB** | **+29%** |
+Faster (>2%): 1 | Noise (±2%): 7 | Slower (>2%): 8
 
-The regression cascades through GC: `madvise` (OS memory mapping) jumped +136%, `kevent` (GC coordination) jumped +124%.
+### Extended Benchmark Regression (31 benchmarks, Larceny + Schelog + Kanren, 3 runs each)
+
+Filtered to benchmarks ≥10ms avg. Sorted by regression magnitude.
+
+| Benchmark | Before(s) | After(s) | Delta | Category |
+|-----------|-----------|----------|-------|----------|
+| nqueens | 0.2679 | 0.2658 | -0.8% | |
+| ack | 1.6007 | 1.6050 | +0.3% | |
+| fib | 0.4215 | 0.4248 | +0.8% | |
+| paraffins | 3.3127 | 3.3410 | +0.9% | |
+| kanren-zebra | 16.3818 | 16.7265 | +2.1% | Continuation-heavy |
+| equal | 2.6508 | 2.7099 | +2.2% | |
+| sboyer | 4.0985 | 4.2999 | +4.9% | GC-heavy |
+| schelog-zebra | 6.6516 | 7.0232 | +5.6% | Continuation-heavy |
+| nboyer | 3.5512 | 3.7774 | +6.4% | GC-heavy |
+| destruc | 0.0367 | 0.0395 | +7.6% | |
+| ctak | 0.1642 | 0.1780 | +8.4% | Continuation-heavy |
+| triangl | 3.1873 | 3.4558 | +8.4% | |
+| fft | 0.6538 | 0.7119 | +8.9% | |
+| takl | 0.1385 | 0.1512 | +9.2% | |
+| mbrot | 0.1643 | 0.1829 | +11.3% | |
+| peval | 0.1171 | 0.1304 | +11.4% | |
+| fibc | 0.0250 | 0.0281 | +12.4% | Continuation-heavy |
+| conform | 0.3458 | 0.3887 | +12.4% | |
+| browse | 0.0648 | 0.0730 | +12.7% | |
+| puzzle | 0.2652 | 0.2996 | +13.0% | |
+| gcbench | 0.4552 | 0.5168 | +13.5% | GC-heavy |
+| cpstak | 0.0190 | 0.0216 | +13.7% | Continuation-heavy |
+| quicksort | 0.1054 | 0.1257 | +19.3% | |
+| **GEO MEAN (31)** | | | **+7.4%** | |
+
+Faster (>2%): 0 | Noise (±2%): 5 | Slower (>2%): 26
+
+### Allocation Profile (nqueens, `--memprofile`, alloc_objects)
+
+| Allocator | Before (objects) | After (objects) | Before (MB) | After (MB) | Delta (MB) |
+|-----------|-----------------|-----------------|-------------|------------|------------|
+| `NewClosureWithFreeVars` | — | 12.28M | — | 562 | +562 (NEW) |
+| `Run()` inline (freeVars slices) | — | 11.15M | — | 438 | +438 (NEW) |
+| `NewClosureWithTemplate` | 11.96M | — | 183 | — | -183 (gone) |
+| `initApplyInto` | 12.85M | 12.26M | 541 | 523 | -18 |
+| `init.func8` (env frame pool) | 12.02M | 12.07M | 917 | 921 | +4 |
+| `NewEnvironmentFrameWithParent` | 11.96M | 11.74M | 887 | 896 | +9 |
+| `NumericChainCompare` | 5.01M | 5.51M | 77 | 84 | +7 |
+| `NewBox` | — | 0.59M | — | ~5 | +5 (NEW) |
+| **TOTAL** | **53.7M** | **65.9M (+22.7%)** | **2,621** | **3,452** | **+831 (+31.7%)** |
+
+### Why the Predicted Savings Didn't Materialize
+
+The flat closures hypothesis had three predicted savings:
+
+1. **Eliminate parent-chain walks** — Free var access O(1) instead of O(depth). But parent-chain walks were already 1-2 pointer chases. Neither profile shows measurable time in binding lookup.
+
+2. **Eliminate per-call env copying** — `copyForApplyInto` went 541→523 MB (-3%). Closures still need env frames for parameter bindings. Binding values were already dead work, overwritten by `bindArgs`.
+
+3. **Reduce EnvironmentFrame allocation** — `NewEnvironmentFrameWithParent` went 887→896 MB (+1%). Nothing was eliminated; closures still allocate env frames for parameters.
+
+Meanwhile, two new costs dwarfed the savings:
+- **`freeVars` slices**: `make([]values.Value, N)` per closure creation = +438 MB
+- **Larger `MachineClosure` struct**: slice header added 24 bytes per closure = +379 MB
+
+### Post-Revert Verification
+
+After reverting (PR #520, commit `d114ee04`), Gabriel benchmark geo-mean returned to +0.4% vs pre-flat-closures baseline — within noise. Regression fully recovered.
 
 ### Baseline Correction
 
@@ -658,7 +710,7 @@ The commit `2f6eb2f1` claimed a 3.37× geo-mean speedup from `1c1db76` to `ec26f
 
 ## Machine Modernization Roadmap
 
-Flat closures (PRs #514-#516) were the first milestone in bringing Wile's machine up-to-date with Racket and Chibi. This section documents the remaining gaps, organized by value and dependency order.
+Flat closures (PRs #514-#516) were attempted as the first milestone in bringing Wile's machine up-to-date with Racket and Chibi, but were reverted due to regression. This section documents the remaining gaps, organized by value and dependency order.
 
 ### Constraint: No `unsafe` Packages
 
@@ -668,8 +720,8 @@ Wile is pure Go — no `unsafe`, no `reflect` on internal layouts, no CGo, no di
 
 | Feature | Evidence | Racket/Chibi Equivalent |
 |---------|----------|------------------------|
-| Flat closures | `pass_pipeline.go:32`, opcodes in `opcode.go:119-124` | Chez flat closures (Dybvig 1987) |
-| Box for mutated captures | `pass_box_insertion.go`, `OpBox`/`OpUnbox`/`OpSetBox` | Racket/Chibi shared mutation cells |
+| ~~Flat closures~~ | ~~Reverted (PR #520) — +7.4% regression~~ | ~~Chez flat closures (Dybvig 1987)~~ |
+| ~~Box for mutated captures~~ | ~~Reverted with flat closures~~ | ~~Racket/Chibi shared mutation cells~~ |
 | Continuation marks | `vm_state.go:199-213`, Phases 1-3 complete | Racket `with-continuation-mark` |
 | Delimited continuations | `PromptTag`, `ComposableContinuation`, `ErrPromptAbort` | Racket prompts (Flatt et al. ICFP 2007) |
 | Hygienic macros (Flatt 2016) | Sets-of-scopes model | Racket's scope-set hygiene |
