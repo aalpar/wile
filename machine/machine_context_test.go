@@ -542,6 +542,7 @@ func TestMachineContext_Apply_Counters(t *testing.T) {
 	before := mc.Counters()
 	qt.Assert(t, before.ClosuresApplied, qt.Equals, uint64(0))
 	qt.Assert(t, before.EnvsCopied, qt.Equals, uint64(0))
+	qt.Assert(t, before.BindingsCopied, qt.Equals, uint64(0))
 
 	_, err := mc.Apply(cls, values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
 	qt.Assert(t, err, qt.IsNil)
@@ -549,6 +550,7 @@ func TestMachineContext_Apply_Counters(t *testing.T) {
 	after := mc.Counters()
 	qt.Assert(t, after.ClosuresApplied, qt.Equals, uint64(1))
 	qt.Assert(t, after.EnvsCopied, qt.Equals, uint64(1))
+	qt.Assert(t, after.BindingsCopied, qt.Equals, uint64(3))
 }
 
 func TestMachineContext_Apply_ReturnsSameContext(t *testing.T) {

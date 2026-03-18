@@ -24,7 +24,7 @@ When investigating R7RS conformance issues:
 | `REMOVE-SYMBOL-INTERNING.md` | Remove symbol canonicalization, compare by string key | Complete (all 7 tasks verified 2026-03-14) |
 | `ENVIRONMENT-CLEANUP.md` | Environment package cleanup: constructor duplication, dead delegation, semantic inconsistency | Complete (all 7 tasks verified 2026-03-14; Task 6 superseded) |
 | `OPCODE-PROMOTION.md` | Promote hot primitives to dedicated opcodes; Larceny profiling data, tiered plan | Phase 1+2 complete (#497, #498); Phase 3 open |
-| `FLAT-CLOSURES.md` | Flat closure implementation: 3-PR plan (infra+analysis, behavioral change, cleanup) + Machine Modernization Roadmap (remaining Racket/Chibi gaps, `unsafe` constraint analysis) | Complete (all 3 PRs merged; C1/C2 partial/C3 deferred — measured as low-value). Roadmap: T1-T9 documented, T2/T3/T4 blocked by `unsafe` constraint |
+| `FLAT-CLOSURES.md` | Flat closure implementation: 3-PR plan (infra+analysis, behavioral change, cleanup) + Machine Modernization Roadmap | **Reverted** — +7.4% geo-mean regression across 31 benchmarks (Larceny + Schelog + Kanren). Zero benchmarks improved. New `freeVars` slice allocation (+831 MB) exceeded savings from eliminated parent-chain walks. |
 | `STACK-FRAMES.md` | Replace continuation pool with contiguous `[]callFrame` slice — 12 tasks, 3 PRs (infra, behavioral change, cleanup) | **Closed** — implemented and reverted. Dispatch improved 5% on fib but regressed continuation-heavy benchmarks 10-20%. Net negative. |
 Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans).
 

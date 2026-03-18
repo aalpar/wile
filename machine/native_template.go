@@ -38,7 +38,7 @@ type NativeTemplate struct {
 	// noCopyApply is true when the template's bindings never escape:
 	// no OpSaveContinuation in code[] and no *OperationMakeClosure in sideTable[].
 	// When true, Apply can reuse the closure's own environment frame
-	// instead of allocating a fresh frame via InitApplyFrame().
+	// instead of allocating a fresh copy via NewApplyFrame().
 	noCopyApply bool
 
 	// cachedBindings stores *Binding pointers resolved at compile time.
@@ -50,15 +50,6 @@ type NativeTemplate struct {
 	// deduplication of Hashable values. Non-hashable values fall back to
 	// linear scan. Lazily initialized on first Hashable literal.
 	literalIndex map[uint64][]int
-
-	// freeVarInfo holds the flat closure analysis result for this template.
-	// nil until Pass 1 (FreeVarAnalysis) runs.
-	freeVarInfo *FreeVarInfo
-
-	// flatClosuresDone is true after the flat closure pipeline (Passes 1-3)
-	// has been run on this template. Used to prevent double-processing when
-	// nested compileClosureBody calls each run the pipeline.
-	flatClosuresDone bool
 
 	// Integer dispatch: all operations compiled to Instructions.
 	// Hot-path ops (Wave 1-3) are direct switch cases; complex ops
@@ -226,23 +217,6 @@ func instructionToOperation(instr Instruction) Operation {
 	case OpMakeClosure:
 		return NewOperationMakeClosure()
 
-	// --- Wave 10: flat closure operations ---
-	case OpLoadFreeVar:
-		return NewOperationLoadFreeVar(instr.Arg)
-	case OpBox:
-		return NewOperationBox()
-	case OpUnbox:
-		return NewOperationUnbox()
-	case OpSetBox:
-		return NewOperationSetBox()
-	case OpMakeFlatClosure:
-		return NewOperationMakeFlatClosure()
-
-	// --- Wave 10: fused flat closure operations ---
-	// Decomposed back to LoadFreeVar for test assertions (same as PushLocal → LoadLocal).
-	case OpPushFreeVar:
-		return NewOperationLoadFreeVar(instr.Arg)
-
 	default:
 		return nil
 	}
@@ -346,18 +320,6 @@ func operationToInstruction(op Operation) (Instruction, bool) {
 	case *OperationLoadCachedBinding:
 		return Instruction{Op: OpLoadCachedBinding, Arg: v.BindingIndex}, true
 
-	// --- Wave 10: flat closure operations ---
-	case *OperationLoadFreeVar:
-		return Instruction{Op: OpLoadFreeVar, Arg: v.Index}, true
-	case *OperationBox:
-		return Instruction{Op: OpBox}, true
-	case *OperationUnbox:
-		return Instruction{Op: OpUnbox}, true
-	case *OperationSetBox:
-		return Instruction{Op: OpSetBox}, true
-	case *OperationMakeFlatClosure:
-		return Instruction{Op: OpMakeFlatClosure}, true
-
 	default:
 		return Instruction{}, false
 	}
@@ -379,17 +341,6 @@ func (p *NativeTemplate) Name() string {
 
 func (p *NativeTemplate) SetName(name string) {
 	p.name = name
-}
-
-// FreeVarInfo returns the flat closure analysis result, or nil if analysis
-// has not been run.
-func (p *NativeTemplate) FreeVarInfo() *FreeVarInfo {
-	return p.freeVarInfo
-}
-
-// SetFreeVarInfo stores the flat closure analysis result on this template.
-func (p *NativeTemplate) SetFreeVarInfo(info *FreeVarInfo) {
-	p.freeVarInfo = info
 }
 
 // NoCopyApply returns true if Apply can reuse the closure's environment
@@ -423,7 +374,7 @@ func (p *NativeTemplate) NoCopyApply() bool {
 // See BIBLIOGRAPHY.md "Environment Escape Analysis".
 func (p *NativeTemplate) computeNoCopyApply() {
 	for _, instr := range p.code {
-		if instr.Op == OpSaveContinuation || instr.Op == OpMakeClosure || instr.Op == OpMakeFlatClosure {
+		if instr.Op == OpSaveContinuation || instr.Op == OpMakeClosure {
 			p.noCopyApply = false
 			return
 		}
@@ -725,13 +676,11 @@ func (p *NativeTemplate) Copy() *NativeTemplate {
 		))
 	}
 	q := &NativeTemplate{
-		parameterCount:   p.parameterCount,
-		valueCount:       p.valueCount,
-		isVariadic:       p.isVariadic,
-		noCopyApply:      p.noCopyApply,
-		name:             p.name,
-		freeVarInfo:      p.freeVarInfo,
-		flatClosuresDone: p.flatClosuresDone,
+		parameterCount: p.parameterCount,
+		valueCount:     p.valueCount,
+		isVariadic:     p.isVariadic,
+		noCopyApply:    p.noCopyApply,
+		name:           p.name,
 	}
 	q.literals = slices.Clone(p.literals)
 	q.cachedBindings = slices.Clone(p.cachedBindings)

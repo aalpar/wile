@@ -226,6 +226,15 @@ bench-gabriel: build
 bench-gabriel-all: build
 	@cd examples/benchmarks && SCHEME=../../$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) ./run-all.sh
 
+# Run extended benchmark suite: Larceny R7RS + Schelog Zebra + miniKanren.
+# Exercises continuation-heavy, backtracking, and deep-recursion workloads.
+# Saves timestamped CSV results to examples/benchmarks/extended-results-*.csv.
+#   make bench-extended
+#   make bench-extended RUNS=6
+.PHONY: bench-extended
+bench-extended: build
+	@cd examples/benchmarks && SCHEME=../../$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) ./run-extended.sh
+
 # Run Larceny R7RS benchmark suite (standard cross-implementation benchmarks).
 # Uses single iteration by default for a quick check (~60s).
 # Override COUNT for full benchmark runs: make bench-larceny COUNT=

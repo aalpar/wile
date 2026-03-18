@@ -1,6 +1,6 @@
 # Flat Closures Implementation Plan
 
-**Status:** Complete. All three PRs merged (#514, #515, #516). Open questions resolved with allocation profiling (2026-03-17). C1 deferred (linked path retained as zero-capture fallback). C2 partial (OpPushFreeVar fused; OpLoadFreeVarUnboxed/OpPushFreeVarUnboxed deferred — box pressure measured as negligible). C3 deferred (compiler-internal, no runtime benefit). Machine Modernization Roadmap added (2026-03-17) — documents remaining Racket/Chibi gaps, identifies tasks blocked by `unsafe` constraint.
+**Status:** Complete. All three PRs merged (#514, #515, #516). **Flat closures produced zero performance benefit.** Back-to-back benchmarking (M4 Max, 2026-03-17) measured a +7.0% geo-mean regression on the Gabriel suite — every benchmark slower, none faster. The regression comes from new allocations: 11M `freeVars` slices and 1.5M `Box` values per nqueens run (+24% total alloc objects, +29% total bytes). The "savings" flat closures were supposed to deliver (eliminating parent-chain walks and per-call env copying) turned out to be negligible: parent-chain walks were cheap (1-2 pointer chases), and per-call binding copies were already dead work (overwritten by `bindArgs`). An inline freeVars optimization was attempted and reverted (merged allocations but increased struct size; net zero runtime change). Flat closures are a pure architectural change — simpler environment model at a 7% runtime cost. C1 deferred. C2 partial. C3 deferred. Machine Modernization Roadmap added (2026-03-17).
 **Design:** `plans/PERFORMANCE.md` Tier 3, Item 8
 **Branch strategy:** Three PRs (Infrastructure + Analysis, Behavioral Change, Cleanup) — all merged
 
@@ -559,7 +559,7 @@ The debugger (`machine/debugger.go`) inspects `mc.env` for variable display. Fla
 
 2. **Pool `freeVars` arrays?** ~~Measure first -- premature optimization otherwise.~~ **Measured (2026-03-17).** Line-level `memprofile` on `machine_context.go:793` (`fv := make([]values.Value, len(info.Captures))`).
 
-   **Finding: Not worth pooling.** The freeVars array allocation is proportional to closure *creation* count, not *call* count. Since closures are typically created once and called many times, freeVars allocation is noise in the typical case.
+   **Original finding (micro-benchmarks only): Not worth pooling.** The freeVars array allocation is proportional to closure *creation* count, not *call* count. Since closures are typically created once and called many times, freeVars allocation is noise in the typical case.
 
    - **Pathological case** (HotBoxCreation: 1000 new closures per benchmark iteration):
      - `fv := make(...)`: 11.1% of allocs by count, 6.9% by bytes
@@ -569,7 +569,20 @@ The debugger (`machine/debugger.go`) inspects `mc.env` for variable display. Fla
      - Dominated entirely by `drainAndApply` (98%+)
    - Observed capture counts: 1 element in 4/5 benchmarks, 3 elements in 1/5. Matches prediction that small arrays dominate.
 
-   **If revisited:** A `sync.Pool` for 1-element `[]values.Value` slices would only help when closures are created in a tight loop — a pattern not seen in Gabriel benchmarks or typical Scheme code. The env frame pool factory (32% of total bytes in HotBoxCreation) would be a higher-leverage target.
+   **Corrected finding (end-to-end Gabriel profiling, 2026-03-17).** The micro-benchmark analysis was correct for its test cases but drew a general conclusion from non-representative workloads. End-to-end profiling of the nqueens Gabriel benchmark revealed `fv := make(...)` as the **#1 new allocation site**: 11.1M objects (16.7% of total), responsible for +24% total allocation count and +29% total bytes vs pre-flat-closures. The Gabriel benchmarks ARE the "closures created in a tight loop" pattern the original analysis dismissed.
+
+   **Inline freeVars optimization attempted and reverted.** Added `inlineFreeVars [3]values.Value` to `MachineClosure` (same pattern as `inlineEvals` on `MachineContinuation`). Results:
+   - Eliminated 100% of freeVars slice allocations (11M objects gone)
+   - Total alloc count: 66.4M → 55.6M (-16%), recovering 83% of the allocation regression
+   - But total alloc **bytes** increased 5% (3.38GB → 3.55GB) — larger closure structs offset the savings
+   - Runtime: -0.1% geo-mean (within noise). Only nqueens improved (-6.2%)
+   - **Reverted.** The optimization consolidated two small allocations into one larger one. GC pressure depends on bytes scanned, not just object count.
+
+   **Key lesson:** Reducing allocation count without reducing total bytes does not help. The successful prior optimizations (split value register, inline continuation evals) eliminated allocation entirely — replacing heap operations with register/stack assignments. Merely merging allocations is fundamentally weaker.
+
+   **Remaining options (not yet attempted):**
+   - Pooling `MachineClosure` structs themselves (requires identifying a release point — closures have GC-determined lifetimes, no explicit "done" signal)
+   - Escape analysis at compile time to skip `freeVars` allocation for closures that don't escape their creating scope
 
 3. **`values.Box` allocation pressure:** ~~Measure allocation profile after PR B.~~ **Measured (2026-03-17).** See `box_pressure_test.go` for benchmarks and `TestBoxPressureProfile` for per-opcode histograms.
 
@@ -585,6 +598,61 @@ The debugger (`machine/debugger.go`) inspects `mc.env` for variable display. Fla
    - Per opcode histogram: `OpBox` fires 2× in Counter/SharedMutation/NestedCapture (once per boxed variable definition), 1001× in HotBoxCreation (once per loop iteration creating a new closure). `OpUnbox` and `OpSetBox` are proportional to closure invocations, not Box allocations.
 
    **Conclusion:** Pooling `*values.Box` is not warranted. The 16-byte allocation (one pointer) is amortized over many `OpUnbox`/`OpSetBox` operations. The env frame pool factory and binding array copies are 20-60× more impactful.
+
+---
+
+## Post-Merge Regression Analysis (2026-03-17)
+
+All measurements: Apple M4 Max, Go 1.24, 6 runs each, back-to-back on same machine.
+
+### Gabriel Benchmark Regression
+
+Before = `ec26f1c8` (pre-flat-closures). After = `20160b4b` (flat closures + post-simplification PR #519).
+
+| Benchmark | Before(s) | After(s) | Delta | Notes |
+|-----------|-----------|----------|-------|-------|
+| tak | 0.1128 | 0.1163 | +3.1% | |
+| takl | 1.0781 | 1.2212 | **+13.3%** | Heavy closure creation in recursion |
+| ctak | 1.6710 | 1.8192 | +8.9% | |
+| cpstak | 0.1785 | 0.2022 | **+13.3%** | CPS — every call creates closures |
+| fib | 0.3690 | 0.3781 | +2.5% | |
+| triangl | 0.0386 | 0.0391 | +1.3% | |
+| sum | 0.0308 | 0.0320 | +3.9% | |
+| sumfp | 0.6235 | 0.6778 | +8.7% | |
+| diviter | 2.5629 | 2.7074 | +5.6% | |
+| divrec | 0.8647 | 0.8962 | +3.6% | |
+| deriv | 0.1008 | 0.1109 | **+10.0%** | |
+| ackermann | 0.4868 | 0.4910 | +0.9% | Minimal closure allocation |
+| sieve | 0.0804 | 0.0839 | +4.4% | |
+| nqueens | 1.8866 | 2.2271 | **+18.0%** | Worst — closures created per recursive call |
+| primes | 0.2357 | 0.2598 | **+10.2%** | |
+| peval | 0.0673 | 0.0712 | +5.8% | |
+| **GEO MEAN** | | | **+7.0%** | |
+
+### Allocation Profile (nqueens, `-memprofile`)
+
+| Allocator | Before | After | Delta |
+|-----------|--------|-------|-------|
+| `Run():793 make([]Value, len(Captures))` | 0 | 11,067,280 | **NEW** — freeVars slice per closure |
+| `values.NewBox` | 0 | 1,474,582 | **NEW** — boxing mutable captures |
+| `initApplyInto: make([]Binding, n)` | 11,999,055 | 12,834,677 | +7% |
+| `NewClosureWith{Template→FreeVars}` | 11,993,271 | 11,567,633 | -4% |
+| `init.func8` (pool factory) | 12,151,299 | 11,817,041 | -3% |
+| `NewEnvironmentFrameWithParent` | 11,803,934 | 12,052,989 | +2% |
+| **TOTAL** | **53,437,941** | **66,428,340** | **+24%** |
+| **TOTAL BYTES** | **2,624 MB** | **3,380 MB** | **+29%** |
+
+The regression cascades through GC: `madvise` (OS memory mapping) jumped +136%, `kevent` (GC coordination) jumped +124%.
+
+### Baseline Correction
+
+The commit `2f6eb2f1` claimed a 3.37× geo-mean speedup from `1c1db76` to `ec26f1c8`. **This was wrong.** Back-to-back benchmarking on the same machine (2026-03-17) measured **1.34× geo-mean** (range: 1.07×–2.92×). The saved baseline at `1c1db76` was likely run on a different or throttled machine. Saved baselines should not be trusted without verifying run conditions.
+
+| Workload type | Verified speedup (`1c1db76` → `ec26f1c8`) |
+|---|---|
+| Arithmetic-heavy (sumfp) | 2.92× |
+| General Gabriel suite | 1.34× geo-mean |
+| Continuation-heavy (kanren, schelog, ctak/cpstak) | 1.10× geo-mean |
 
 ---
 

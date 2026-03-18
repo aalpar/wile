@@ -831,58 +831,64 @@ func TestMaybeCreateLocalBindingWithScopes_ExistingBindingGetsSource(t *testing.
 // InitApplyFrame
 // ---------------------------------------------------------------------------
 
-func TestInitApplyFrame_AllocatesBindingsWithoutCopy(t *testing.T) {
-	tl := NewTopLevelEnvironment()
-	parent := tl.Runtime()
-	local := NewLocalEnvironment(3)
-	src := NewEnvironmentFrameWithParent(local, parent)
-	src.SetLocalValue(&LocalIndex{0, 0}, values.NewInteger(10))
-	src.SetLocalValue(&LocalIndex{1, 0}, values.NewInteger(20))
-	src.SetLocalValue(&LocalIndex{2, 0}, values.NewInteger(30))
-
-	var dst EnvironmentFrame
-	src.InitApplyFrame(&dst)
-
-	// Parent chain should match (needed for OpPopEnv in let expressions).
-	qt.Assert(t, dst.Parent(), qt.Equals, parent)
-
-	// Binding count should match source.
-	dstBindings := dst.LocalEnvironment().Bindings()
-	qt.Assert(t, len(dstBindings), qt.Equals, 3)
-
-	// Binding VALUES should NOT be copied — slots are zero-valued.
-	// This is the key invariant: bindArgs and body code fill them.
-	for i, bd := range dstBindings {
-		qt.Assert(t, bd.Value(), qt.IsNil,
-			qt.Commentf("slot %d should be nil (not copied), got %v", i, bd.Value()))
-	}
-}
-
-func TestInitApplyFrame_ReusePooledCapacity(t *testing.T) {
+func TestInitApplyFrame_PopulatesExistingFrame(t *testing.T) {
+	// Set up source env with bindings (simulates closure env).
 	tl := NewTopLevelEnvironment()
 	parent := tl.Runtime()
 	local := NewLocalEnvironment(2)
 	src := NewEnvironmentFrameWithParent(local, parent)
+	li0 := &LocalIndex{0, 0}
+	li1 := &LocalIndex{1, 0}
+	src.SetLocalValue(li0, values.NewInteger(10))
+	src.SetLocalValue(li1, values.NewInteger(20))
 
-	// First call sets up the dst frame (simulates pool warmup).
+	// Populate dst from src.
 	var dst EnvironmentFrame
 	src.InitApplyFrame(&dst)
-	qt.Assert(t, len(dst.LocalEnvironment().Bindings()), qt.Equals, 2)
 
-	// Verify capacity was allocated. Extend the backing array to simulate
-	// a pooled frame with extra capacity (e.g., after ResetForPool).
-	firstCap := cap(dst.LocalEnvironment().Bindings())
-	qt.Assert(t, firstCap >= 2, qt.IsTrue)
+	// Parent chain should match.
+	qt.Assert(t, dst.Parent(), qt.Equals, parent)
 
-	// Second call on the same dst should reslice without allocating.
-	src.InitApplyFrame(&dst)
+	// Bindings should be independent copies.
 	dstBindings := dst.LocalEnvironment().Bindings()
 	qt.Assert(t, len(dstBindings), qt.Equals, 2)
-	qt.Assert(t, cap(dstBindings), qt.Equals, firstCap,
-		qt.Commentf("should reuse existing capacity"))
+	qt.Assert(t, dstBindings[0].Value(), valuestest.SchemeEquals, values.NewInteger(10))
+	qt.Assert(t, dstBindings[1].Value(), valuestest.SchemeEquals, values.NewInteger(20))
+
+	// Mutating dst should not affect src.
+	dstBindings[0].SetValue(values.NewInteger(99))
+	qt.Assert(t, src.GetLocalBindingByIndex(0).Value(), valuestest.SchemeEquals, values.NewInteger(10))
+}
+
+func TestInitApplyFrame_MatchesNewApplyFrame(t *testing.T) {
+	// InitApplyFrame must produce the same result as NewApplyFrame.
+	tl := NewTopLevelEnvironment()
+	parent := tl.Runtime()
+	local := NewLocalEnvironment(3)
+	src := NewEnvironmentFrameWithParent(local, parent)
+	for i := range 3 {
+		src.SetLocalValue(&LocalIndex{i, 0}, values.NewInteger(int64(i*10)))
+	}
+
+	fromNew := src.NewApplyFrame()
+
+	var fromInit EnvironmentFrame
+	src.InitApplyFrame(&fromInit)
+
+	// Same parent.
+	qt.Assert(t, fromInit.Parent(), qt.Equals, fromNew.Parent())
+
+	// Same bindings.
+	newBindings := fromNew.LocalEnvironment().Bindings()
+	initBindings := fromInit.LocalEnvironment().Bindings()
+	qt.Assert(t, len(initBindings), qt.Equals, len(newBindings))
+	for i := range newBindings {
+		qt.Assert(t, initBindings[i].Value(), valuestest.SchemeEquals, newBindings[i].Value())
+	}
 }
 
 func TestInitApplyFrame_PanicsOnNilParent(t *testing.T) {
+	// A frame with no parent should panic, same as NewApplyFrame.
 	src := &EnvironmentFrame{}
 	var dst EnvironmentFrame
 
@@ -894,24 +900,6 @@ func TestInitApplyFrame_PanicsOnNilParent(t *testing.T) {
 		qt.Assert(t, errors.Is(err, werr.ErrNilParentEnvironment), qt.IsTrue)
 	}()
 	src.InitApplyFrame(&dst)
-}
-
-func TestInitApplyFrame_SharesKeysMap(t *testing.T) {
-	tl := NewTopLevelEnvironment()
-	parent := tl.Runtime()
-	local := NewLocalEnvironment(1)
-	sym := values.NewSymbol("x")
-	local.EnsureLocalBinding(sym, BindingTypeVariable)
-	src := NewEnvironmentFrameWithParent(local, parent)
-
-	var dst EnvironmentFrame
-	src.InitApplyFrame(&dst)
-
-	// Keys should be shared (same map for error messages/debugging).
-	srcKeys := src.LocalEnvironment().Keys()
-	dstKeys := dst.LocalEnvironment().Keys()
-	qt.Assert(t, len(dstKeys), qt.Equals, len(srcKeys))
-	qt.Assert(t, dstKeys[*sym], qt.Equals, srcKeys[*sym])
 }
 
 func TestHasLocalVariableBinding_OuterScopeCompatible(t *testing.T) {

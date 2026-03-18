@@ -80,7 +80,6 @@ type markEntry struct {
 //	│ Field        │ SaveCont saves │ Restore     │ RestoreAndRelease   │ PopContinuation  │
 //	├──────────────┼────────────────┼─────────────┼─────────────────────┼──────────────────┤
 //	│ env          │ ✓              │ ✓           │ ✓                   │ ✓                │
-//	│ freeVars     │ ✓              │ ✓           │ ✓                   │ ✓                │
 //	│ template     │ ✓              │ ✓           │ ✓                   │ ✓                │
 //	│ singleValue  │ ✓              │ ✗           │ ✗                   │ ✓                │
 //	│ multiValues  │ ✓              │ ✗           │ ✗                   │ ✓                │
@@ -95,7 +94,6 @@ type markEntry struct {
 //	└──────────────┴────────────────┴─────────────┴─────────────────────┴──────────────────┘
 type vmState struct {
 	env      *environment.EnvironmentFrame
-	freeVars []values.Value // flat closure's captured free variables; nil for linked closures
 	template *NativeTemplate
 	// singleValue and multiValues form a split value register.
 	//

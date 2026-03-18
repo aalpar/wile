@@ -31,7 +31,6 @@ func cloneMarks(marks []markEntry) []markEntry {
 func (p *MachineContext) Restore(cont *MachineContinuation) {
 	p.counters.ContinuationsRestored++
 	p.env = cont.env
-	p.freeVars = cont.freeVars
 	p.template = cont.template
 	p.cont = cont.parent
 	p.pc = cont.pc
@@ -84,7 +83,6 @@ func (p *MachineContext) RestoreAndRelease(cont *MachineContinuation) {
 	oldEnvPooled := p.envPooled
 
 	p.env = cont.env
-	p.freeVars = cont.freeVars
 	p.template = cont.template
 	p.cont = cont.parent
 	p.pc = cont.pc
@@ -168,7 +166,6 @@ func (p *MachineContext) PopContinuation() (*MachineContinuation, error) {
 	q := p.cont
 	p.template = q.template
 	p.env = q.env
-	p.freeVars = q.freeVars
 	p.cont = q.parent
 	p.pc = q.pc
 	p.singleValue = q.singleValue

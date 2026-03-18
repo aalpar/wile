@@ -98,7 +98,6 @@ func NewMachineContext(ctx context.Context, cont *MachineContinuation) *MachineC
 		ctx: ctx,
 		vmState: vmState{
 			env:         cont.env,         // cannot copy environment here, it will be copied when pushed onto the stack
-			freeVars:    cont.freeVars,    // flat closure free vars; nil for linked closures
 			template:    cont.template,    // not needed to copy, templates are immutable
 			singleValue: cont.singleValue, // must not copy the values, they are passed between contexts
 			multiValues: cont.multiValues,
@@ -164,16 +163,6 @@ func (p *MachineContext) PC() int {
 // SetPC sets the program counter. Used by PrimCallCC for inline lambda execution.
 func (p *MachineContext) SetPC(v int) {
 	p.pc = v
-}
-
-// FreeVars returns the flat closure's captured free variables, or nil for linked closures.
-func (p *MachineContext) FreeVars() []values.Value {
-	return p.freeVars
-}
-
-// SetFreeVars sets the flat closure's captured free variables on this context.
-func (p *MachineContext) SetFreeVars(fv []values.Value) {
-	p.freeVars = fv
 }
 
 // SetValues sets the value register. For a single value this uses the
@@ -741,80 +730,6 @@ func (p *MachineContext) Run() error {
 			if err != nil {
 				return err
 			}
-
-		// --- Wave 10: flat closure operations ---
-
-		case OpLoadFreeVar:
-			mc.SetValue(mc.freeVars[instr.Arg])
-			mc.pc++
-
-		case OpPushFreeVar:
-			mc.evals.Push(mc.freeVars[instr.Arg])
-			mc.pc++
-
-		case OpBox:
-			mc.SetValue(values.NewBox(mc.GetValue()))
-			mc.pc++
-
-		case OpUnbox:
-			box, ok := mc.GetValue().(*values.Box)
-			if !ok {
-				return werr.WrapForeignErrorf(werr.ErrTypeConversion, "unbox: expected box, got %T", mc.GetValue())
-			}
-			mc.SetValue(box.Value)
-			mc.pc++
-
-		case OpSetBox:
-			box, ok := mc.GetValue().(*values.Box)
-			if !ok {
-				return werr.WrapForeignErrorf(werr.ErrTypeConversion, "set-box: expected box, got %T", mc.GetValue())
-			}
-			box.Value = mc.evals.Pop()
-			mc.pc++
-
-		case OpMakeFlatClosure:
-			// Pop env and template from the stack (same layout as OpMakeClosure).
-			compiletimeEnv, ok := mc.evals.Pop().(*environment.EnvironmentFrame)
-			if !ok {
-				return werr.WrapForeignErrorf(werr.ErrNotALocalEnvironmentFrame,
-					"MakeFlatClosure: expected environment frame on stack")
-			}
-			tpl, ok := mc.evals.Pop().(*NativeTemplate)
-			if !ok {
-				return werr.WrapForeignErrorf(werr.ErrNotAMachineTemplate,
-					"MakeFlatClosure: expected template on stack")
-			}
-			info := tpl.FreeVarInfo()
-			if info == nil {
-				return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-					"MakeFlatClosure: template has no FreeVarInfo")
-			}
-			// Build the freeVars array from the creating scope's bindings.
-			fv := make([]values.Value, len(info.Captures))
-			for i, c := range info.Captures {
-				if c.FromFreeVars {
-					fv[i] = mc.freeVars[c.SourceSlot]
-				} else {
-					bd := mc.env.GetLocalBindingBySlotDepth(c.SourceSlot, c.SourceDepth-1)
-					if bd == nil {
-						return werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
-							"MakeFlatClosure: no binding at slot=%d depth=%d",
-							c.SourceSlot, c.SourceDepth-1)
-					}
-					fv[i] = bd.Value()
-				}
-			}
-			// Create a runtime env for parameter bindings (same as MakeClosure)
-			// but also attach freeVars for free variable access.
-			runtimeEnv := environment.NewEnvironmentFrameWithParent(
-				compiletimeEnv.LocalEnvironment(),
-				mc.env,
-			)
-			cls := NewClosureWithFreeVars(tpl, fv)
-			cls.env = runtimeEnv
-			mc.SetValue(cls)
-			mc.envPooled = false
-			mc.pc++
 
 		// --- Fallback: complex operations via side table ---
 

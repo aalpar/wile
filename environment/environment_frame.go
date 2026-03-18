@@ -159,11 +159,32 @@ func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *Environ
 	return q
 }
 
-// InitApplyFrame populates dst for a closure Apply. Binding values are NOT
-// copied — bindArgs overwrites parameter slots and body code (OpStoreLocal)
-// initializes the rest, so the memcpy is dead work. Parent and global
-// pointers are set for OpPopEnv (let scopes) and the OpStoreGlobal fallback
-// path.
+// NewApplyFrame creates a new EnvironmentFrame for a closure application,
+// fusing CopyForApply + NewEnvironmentFrameWithParent into one allocation.
+// The source frame's local bindings are copied into the new frame, and the
+// parent chain is set from the source's parent.
+func (p *EnvironmentFrame) NewApplyFrame() *EnvironmentFrame {
+	parent := p.parent
+	if parent == nil {
+		panic(werr.WrapForeignErrorf(
+			werr.ErrNilParentEnvironment,
+			"NewApplyFrame called on frame with nil parent - closure environments must have a parent",
+		))
+	}
+	q := &EnvironmentFrame{
+		parent:     parent,
+		global:     parent.global,
+		phaseLevel: parent.phaseLevel,
+		phases:     parent.phases,
+		topLevel:   parent.topLevel,
+	}
+	p.local.copyForApplyInto(&q.local)
+	return q
+}
+
+// InitApplyFrame populates dst from p's closure environment without allocating
+// a new EnvironmentFrame. The caller is responsible for providing dst (e.g.
+// from a pool). This is the pooling-friendly counterpart of NewApplyFrame.
 func (p *EnvironmentFrame) InitApplyFrame(dst *EnvironmentFrame) {
 	parent := p.parent
 	if parent == nil {
@@ -177,7 +198,7 @@ func (p *EnvironmentFrame) InitApplyFrame(dst *EnvironmentFrame) {
 	dst.phaseLevel = parent.phaseLevel
 	dst.phases = parent.phases
 	dst.topLevel = parent.topLevel
-	p.local.initApplyInto(&dst.local)
+	p.local.copyForApplyInto(&dst.local)
 }
 
 // ResetForPool clears the EnvironmentFrame for return to a sync.Pool while
@@ -186,7 +207,7 @@ func (p *EnvironmentFrame) InitApplyFrame(dst *EnvironmentFrame) {
 // values), zero the struct, then restore the slice header with len=0.
 //
 // After reset, the frame is a valid zero-value EnvironmentFrame whose
-// local.bindings has cap > 0 but len == 0. The next initApplyInto call
+// local.bindings has cap > 0 but len == 0. The next copyForApplyInto call
 // will reslice instead of allocating when cap >= n.
 func (p *EnvironmentFrame) ResetForPool() {
 	bindings := p.local.bindings
