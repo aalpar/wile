@@ -485,7 +485,7 @@ smoke-test: build
 bench-regression: build
 	@cd examples/benchmarks && \
 		SCHEME=../../$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) \
-		BASELINE=canonical-baseline.csv \
+		BASELINE=canonical-baseline-$(HOST_OS)-$(HOST_ARCH).csv \
 		THRESHOLD=5 \
 		../../$(SH_TOOLS_DIR)/bench-regression.sh
 

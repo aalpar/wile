@@ -4,7 +4,7 @@
 #
 # Environment variables:
 #   SCHEME    — path to scheme binary (required)
-#   BASELINE  — path to baseline CSV (default: canonical-baseline.csv)
+#   BASELINE  — path to baseline CSV (default: canonical-baseline-GOOS-GOARCH.csv)
 #   THRESHOLD — max allowed regression percentage (default: 5)
 #   RUNS      — number of benchmark runs (default: 3, fewer than canonical for speed)
 #
@@ -13,14 +13,14 @@
 # Usage (from repo root):
 #   cd examples/benchmarks && \
 #     SCHEME=../../dist/linux/amd64/wile \
-#     BASELINE=canonical-baseline.csv \
+#     BASELINE=canonical-baseline-linux-amd64.csv \
 #     THRESHOLD=5 \
 #     ../../tools/sh/bench-regression.sh
 
 set -euo pipefail
 
 SCHEME="${SCHEME:?SCHEME must be set to the path of the scheme binary}"
-BASELINE="${BASELINE:-canonical-baseline.csv}"
+BASELINE="${BASELINE:-canonical-baseline-$(go env GOOS)-$(go env GOARCH).csv}"
 THRESHOLD="${THRESHOLD:-5}"
 RUNS="${RUNS:-3}"
 
