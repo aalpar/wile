@@ -26,6 +26,7 @@ When investigating R7RS conformance issues:
 | `OPCODE-PROMOTION.md` | Promote hot primitives to dedicated opcodes; Larceny profiling data, tiered plan | Phase 1+2 complete (#497, #498); Phase 3 open |
 | `FLAT-CLOSURES.md` | Flat closure implementation: 3-PR plan (infra+analysis, behavioral change, cleanup) + Machine Modernization Roadmap | **Reverted** — +7.4% geo-mean regression across 31 benchmarks (Larceny + Schelog + Kanren). Zero benchmarks improved. New `freeVars` slice allocation (+831 MB) exceeded savings from eliminated parent-chain walks. |
 | `STACK-FRAMES.md` | Replace continuation pool with contiguous `[]callFrame` slice — 12 tasks, 3 PRs (infra, behavioral change, cleanup) | **Closed** — implemented and reverted. Dispatch improved 5% on fib but regressed continuation-heavy benchmarks 10-20%. Net negative. |
+| `INLINE-BINDINGS.md` | Embed `[4]Binding` inline array in `LocalEnvironmentFrame` to eliminate `copyForApplyInto` heap allocations | **Complete** — merged as PR #521. `copyForApplyInto` eliminated from top alloc sources. Extended suite: equal -8.2%, schelog-zebra -4.5%, ack -3.6%. |
 Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans).
 
 ## Before Starting Work
