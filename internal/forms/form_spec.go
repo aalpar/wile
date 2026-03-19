@@ -19,6 +19,7 @@ package forms
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/aalpar/wile/environment"
@@ -122,6 +123,7 @@ func Verify() error {
 	if len(missing) == 0 {
 		return nil
 	}
+	slices.Sort(missing)
 	var b strings.Builder
 	for _, m := range missing {
 		b.WriteString("\n  ")

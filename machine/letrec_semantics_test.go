@@ -15,58 +15,13 @@
 package machine_test
 
 import (
-	"context"
-	"io"
-	"strings"
 	"testing"
 
-	"github.com/aalpar/wile/internal/bootstrap"
-	"github.com/aalpar/wile/internal/parser"
-	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
-
-// evalLetrecScheme evaluates a Scheme expression through the full pipeline
-// (parse -> expand -> compile -> run) using a tiny bootstrap environment.
-func evalLetrecScheme(t *testing.T, code string) values.Value {
-	t.Helper()
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
-	qt.Assert(t, err, qt.IsNil)
-
-	ctx := context.Background()
-	rdr := strings.NewReader(code)
-	p := parser.NewParser(env, true, rdr)
-
-	var lastValue = values.Void
-
-	for {
-		stx, err := p.ReadSyntax(context.TODO())
-		if err == io.EOF {
-			break
-		}
-		qt.Assert(t, err, qt.IsNil)
-
-		expanded, err := machine.NewExpanderTimeContinuation(ctx, env).ExpandExpression(stx)
-		qt.Assert(t, err, qt.IsNil)
-
-		tpl := machine.NewNativeTemplate(0, 0, false)
-		cctx := machine.NewCompileTimeCallContext(ctx, false)
-		err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
-		qt.Assert(t, err, qt.IsNil)
-
-		cont := machine.NewMachineContinuation(nil, tpl, env)
-		mc := machine.NewMachineContext(ctx, cont)
-		err = mc.Run()
-		qt.Assert(t, err, qt.IsNil)
-
-		lastValue = mc.GetValue()
-	}
-
-	return lastValue
-}
 
 func TestLetrecSemantics(t *testing.T) {
 	tcs := []struct {
@@ -107,7 +62,7 @@ func TestLetrecSemantics(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result := evalLetrecScheme(t, tc.code)
+			result := evalScheme(t, tc.code)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}

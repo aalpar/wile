@@ -24,16 +24,12 @@ import (
 )
 
 func TestNewDebugContext(t *testing.T) {
-	c := qt.New(t)
-
 	dc := NewDebugContext()
-	c.Assert(dc, qt.IsNotNil)
-	c.Assert(dc.Debugger(), qt.IsNotNil)
+	qt.Assert(t, dc, qt.IsNotNil)
+	qt.Assert(t, dc.Debugger(), qt.IsNotNil)
 }
 
 func TestHandleDebugCommand(t *testing.T) {
-	c := qt.New(t)
-
 	tcs := []struct {
 		name    string
 		setup   func(dc *DebugContext) // optional setup before handling
@@ -201,9 +197,9 @@ func TestHandleDebugCommand(t *testing.T) {
 			}
 			var buf bytes.Buffer
 			handled := dc.HandleDebugCommand(tc.input, &buf)
-			c.Assert(handled, qt.Equals, tc.handled)
+			qt.Assert(t, handled, qt.Equals, tc.handled)
 			if tc.contain != "" {
-				c.Assert(strings.Contains(buf.String(), tc.contain), qt.IsTrue,
+				qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
 					qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
 			}
 		})
@@ -211,26 +207,22 @@ func TestHandleDebugCommand(t *testing.T) {
 }
 
 func TestHandleDebugCommand_StepMode(t *testing.T) {
-	c := qt.New(t)
-
 	dc := NewDebugContext()
-	c.Assert(dc.Debugger().IsStepping(), qt.IsFalse)
+	qt.Assert(t, dc.Debugger().IsStepping(), qt.IsFalse)
 
 	var buf bytes.Buffer
 	dc.HandleDebugCommand(",step", &buf)
-	c.Assert(dc.Debugger().IsStepping(), qt.IsTrue)
+	qt.Assert(t, dc.Debugger().IsStepping(), qt.IsTrue)
 
 	buf.Reset()
 	dc.HandleDebugCommand(",continue", &buf)
-	c.Assert(dc.Debugger().IsStepping(), qt.IsFalse)
+	qt.Assert(t, dc.Debugger().IsStepping(), qt.IsFalse)
 }
 
 func TestDebugCommands(t *testing.T) {
-	c := qt.New(t)
-
 	dc := NewDebugContext()
 	cmds := dc.DebugCommands()
-	c.Assert(len(cmds) > 0, qt.IsTrue)
+	qt.Assert(t, len(cmds) > 0, qt.IsTrue)
 
 	names := make([]string, len(cmds))
 	for i, cmd := range cmds {
@@ -238,20 +230,18 @@ func TestDebugCommands(t *testing.T) {
 	}
 
 	for _, expected := range []string{"break", "step", "continue", "backtrace", "where", "list", "delete", "enable", "disable", "next", "finish", "help"} {
-		c.Assert(slices.Contains(names, expected), qt.IsTrue,
+		qt.Assert(t, slices.Contains(names, expected), qt.IsTrue,
 			qt.Commentf("DebugCommands should contain %q, got %v", expected, names))
 	}
 
 	// Verify each command has a non-nil handler
 	for _, cmd := range cmds {
-		c.Assert(cmd.Handler, qt.IsNotNil,
+		qt.Assert(t, cmd.Handler, qt.IsNotNil,
 			qt.Commentf("command %q should have a non-nil handler", cmd.Name))
 	}
 }
 
 func TestParseLocation(t *testing.T) {
-	c := qt.New(t)
-
 	tcs := []struct {
 		name   string
 		input  string
@@ -268,9 +258,9 @@ func TestParseLocation(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			file, line, column := parseLocation(tc.input)
-			c.Assert(file, qt.Equals, tc.file)
-			c.Assert(line, qt.Equals, tc.line)
-			c.Assert(column, qt.Equals, tc.column)
+			qt.Assert(t, file, qt.Equals, tc.file)
+			qt.Assert(t, line, qt.Equals, tc.line)
+			qt.Assert(t, column, qt.Equals, tc.column)
 		})
 	}
 }

@@ -13,8 +13,6 @@ import (
 )
 
 func TestMetaCommandHandler(t *testing.T) {
-	c := qt.New(t)
-
 	tcs := []struct {
 		name    string
 		input   string
@@ -36,9 +34,9 @@ func TestMetaCommandHandler(t *testing.T) {
 			}
 			h := NewMetaCommandHandler(nil, debugCtx, nil)
 			handled := h.Handle(tc.input, &buf)
-			c.Assert(handled, qt.Equals, tc.handled)
+			qt.Assert(t, handled, qt.Equals, tc.handled)
 			if tc.contain != "" {
-				c.Assert(strings.Contains(buf.String(), tc.contain), qt.IsTrue,
+				qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
 					qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
 			}
 		})
@@ -46,8 +44,6 @@ func TestMetaCommandHandler(t *testing.T) {
 }
 
 func TestCmdEdit(t *testing.T) {
-	c := qt.New(t)
-
 	tcs := []struct {
 		name    string
 		args    []string
@@ -63,28 +59,26 @@ func TestCmdEdit(t *testing.T) {
 			var buf bytes.Buffer
 			h := NewMetaCommandHandler(nil, nil, nil)
 			h.cmdEdit(tc.args, &buf)
-			c.Assert(strings.Contains(buf.String(), tc.contain), qt.IsTrue,
+			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
 				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
 		})
 	}
 }
 
 func TestCmdEdit_EditorExec(t *testing.T) {
-	c := qt.New(t)
 	// Use "true" as editor — it always succeeds and exits immediately
 	t.Setenv("EDITOR", "true")
 	var buf bytes.Buffer
 	h := NewMetaCommandHandler(nil, nil, nil)
 	h.cmdEdit([]string{"/dev/null"}, &buf)
 	// Should succeed silently
-	c.Assert(buf.String(), qt.Equals, "")
+	qt.Assert(t, buf.String(), qt.Equals, "")
 }
 
 func TestCmdDoc(t *testing.T) {
-	c := qt.New(t)
 	ctx := context.Background()
 	env, reg, err := bootstrap.NewTopLevelWithRegistry(ctx)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, err, qt.IsNil)
 	docProv := NewRegistryDocProvider(reg)
 
 	tcs := []struct {
@@ -102,15 +96,13 @@ func TestCmdDoc(t *testing.T) {
 			var buf bytes.Buffer
 			h := NewMetaCommandHandler(env, nil, docProv)
 			h.cmdDoc(tc.args, &buf)
-			c.Assert(strings.Contains(buf.String(), tc.contain), qt.IsTrue,
+			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
 				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
 		})
 	}
 }
 
 func TestCmdHelp(t *testing.T) {
-	c := qt.New(t)
-
 	t.Run("lists all commands", func(t *testing.T) {
 		t.Setenv("PAGER", "")
 		var buf bytes.Buffer
@@ -118,7 +110,7 @@ func TestCmdHelp(t *testing.T) {
 		h.cmdHelp(nil, &buf)
 		output := buf.String()
 		for _, cmd := range []string{",doc", ",edit", ",help", ",break"} {
-			c.Assert(strings.Contains(output, cmd), qt.IsTrue,
+			qt.Assert(t, strings.Contains(output, cmd), qt.IsTrue,
 				qt.Commentf("help output should contain %q", cmd))
 		}
 	})
@@ -129,9 +121,9 @@ func TestCmdHelp(t *testing.T) {
 		h := NewMetaCommandHandler(nil, nil, nil)
 		h.cmdHelp([]string{"doc"}, &buf)
 		output := buf.String()
-		c.Assert(strings.Contains(output, ",doc"), qt.IsTrue)
+		qt.Assert(t, strings.Contains(output, ",doc"), qt.IsTrue)
 		// Should have more detail than the list view
-		c.Assert(strings.Contains(output, "binding"), qt.IsTrue,
+		qt.Assert(t, strings.Contains(output, "binding"), qt.IsTrue,
 			qt.Commentf("help doc output should mention bindings: %q", output))
 	})
 
@@ -140,15 +132,14 @@ func TestCmdHelp(t *testing.T) {
 		var buf bytes.Buffer
 		h := NewMetaCommandHandler(nil, nil, nil)
 		h.cmdHelp([]string{"nonexistent"}, &buf)
-		c.Assert(strings.Contains(buf.String(), "Unknown"), qt.IsTrue)
+		qt.Assert(t, strings.Contains(buf.String(), "Unknown"), qt.IsTrue)
 	})
 }
 
 func TestCmdDoc_BindingLookup(t *testing.T) {
-	c := qt.New(t)
 	ctx := context.Background()
 	env, _, err := bootstrap.NewTopLevelWithRegistry(ctx)
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, err, qt.IsNil)
 
 	// No doc provider — falls through to environment lookup
 	t.Setenv("PAGER", "")
@@ -158,64 +149,56 @@ func TestCmdDoc_BindingLookup(t *testing.T) {
 	h.cmdDoc([]string{"if"}, &buf)
 	output := buf.String()
 	// Should find something (not "Unbound")
-	c.Assert(strings.Contains(output, "nbound"), qt.IsFalse,
+	qt.Assert(t, strings.Contains(output, "nbound"), qt.IsFalse,
 		qt.Commentf("output was: %q", output))
 }
 
 func TestMetaCommandHandlerCommands(t *testing.T) {
-	c := qt.New(t)
-
 	debugCtx := NewDebugContext()
 	h := NewMetaCommandHandler(nil, debugCtx, nil)
 	cmds := h.Commands()
-	c.Assert(len(cmds) > 0, qt.IsTrue)
+	qt.Assert(t, len(cmds) > 0, qt.IsTrue)
 
 	// Session commands
 	for _, expected := range []string{"help", "doc", "edit"} {
-		c.Assert(slices.Contains(cmds, expected), qt.IsTrue,
+		qt.Assert(t, slices.Contains(cmds, expected), qt.IsTrue,
 			qt.Commentf("Commands() should contain session command %q, got %v", expected, cmds))
 	}
 
 	// Debug commands (delegated from DebugContext)
 	for _, expected := range []string{"break", "step", "continue", "backtrace", "where"} {
-		c.Assert(slices.Contains(cmds, expected), qt.IsTrue,
+		qt.Assert(t, slices.Contains(cmds, expected), qt.IsTrue,
 			qt.Commentf("Commands() should contain debug command %q, got %v", expected, cmds))
 	}
 
 	// Aliases should also be present
 	for _, expected := range []string{"h", "?", "b", "s", "c", "bt"} {
-		c.Assert(slices.Contains(cmds, expected), qt.IsTrue,
+		qt.Assert(t, slices.Contains(cmds, expected), qt.IsTrue,
 			qt.Commentf("Commands() should contain alias %q, got %v", expected, cmds))
 	}
 }
 
 func TestMetaCommandHandlerCommands_NoDebugCtx(t *testing.T) {
-	c := qt.New(t)
-
 	h := NewMetaCommandHandler(nil, nil, nil)
 	cmds := h.Commands()
 	// Should still have session commands
-	c.Assert(slices.Contains(cmds, "help"), qt.IsTrue)
+	qt.Assert(t, slices.Contains(cmds, "help"), qt.IsTrue)
 	// Should NOT have debug commands
-	c.Assert(slices.Contains(cmds, "break"), qt.IsFalse)
+	qt.Assert(t, slices.Contains(cmds, "break"), qt.IsFalse)
 }
 
 func TestMetaHandleUnknown(t *testing.T) {
-	c := qt.New(t)
-
 	var buf bytes.Buffer
 	h := NewMetaCommandHandler(nil, nil, nil)
 
 	// Unknown command still returns true (it's a meta-command, just unrecognized)
 	handled := h.Handle(",totally_unknown_cmd", &buf)
-	c.Assert(handled, qt.IsTrue)
-	c.Assert(strings.Contains(buf.String(), "Unknown command"), qt.IsTrue,
+	qt.Assert(t, handled, qt.IsTrue)
+	qt.Assert(t, strings.Contains(buf.String(), "Unknown command"), qt.IsTrue,
 		qt.Commentf("output was: %q", buf.String()))
 }
 
 func TestMetaHandleDebugDelegation(t *testing.T) {
-	c := qt.New(t)
-
 	tcs := []struct {
 		name    string
 		input   string
@@ -232,8 +215,8 @@ func TestMetaHandleDebugDelegation(t *testing.T) {
 			h := NewMetaCommandHandler(nil, debugCtx, nil)
 			var buf bytes.Buffer
 			handled := h.Handle(tc.input, &buf)
-			c.Assert(handled, qt.IsTrue)
-			c.Assert(strings.Contains(buf.String(), tc.contain), qt.IsTrue,
+			qt.Assert(t, handled, qt.IsTrue)
+			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
 				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
 		})
 	}

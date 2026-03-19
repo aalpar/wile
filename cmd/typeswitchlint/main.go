@@ -17,8 +17,9 @@
 //
 // It works by parsing Go source files with go/ast, finding type switch
 // statements, extracting case types, and comparing against a known list
-// of concrete types. Switches with a default branch that returns an error
-// or panics are reported as informational rather than warnings.
+// of concrete types. Switches with a default branch are reported as
+// informational rather than warnings, since the default may already
+// handle unknown types.
 //
 // Usage:
 //
@@ -111,13 +112,15 @@ func main() {
 	}
 
 	var switches []switchInfo
+	skipped := 0
 	for _, dir := range dirs {
-		s, err := scanDir(dir)
+		s, sk, err := scanDir(dir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error scanning %s: %v\n", dir, err)
 			os.Exit(1)
 		}
 		switches = append(switches, s...)
+		skipped += sk
 	}
 
 	if len(switches) == 0 {
@@ -150,12 +153,17 @@ func main() {
 		}
 	}
 
-	fmt.Printf("\n%d type switches scanned, %d with potential gaps.\n",
+	summary := fmt.Sprintf("\n%d type switches scanned, %d with potential gaps",
 		len(switches), reported)
+	if skipped > 0 {
+		summary += fmt.Sprintf(", %d files skipped due to errors", skipped)
+	}
+	fmt.Println(summary + ".")
 }
 
-func scanDir(root string) ([]switchInfo, error) {
+func scanDir(root string) ([]switchInfo, int, error) {
 	var result []switchInfo
+	skipped := 0
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -173,12 +181,13 @@ func scanDir(root string) ([]switchInfo, error) {
 		switches, err := scanFile(path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: skipping %s: %v\n", path, err)
+			skipped++
 			return nil
 		}
 		result = append(result, switches...)
 		return nil
 	})
-	return result, err
+	return result, skipped, err
 }
 
 func scanFile(path string) ([]switchInfo, error) {
@@ -195,6 +204,8 @@ func scanFile(path string) ([]switchInfo, error) {
 			return true
 		}
 		cases, hasDefault := extractCaseTypes(ts)
+		// Heuristic: match any case type containing "values." — relies on
+		// the codebase convention of importing values without alias.
 		valuesCase := false
 		for _, c := range cases {
 			if strings.Contains(c, "values.") {
