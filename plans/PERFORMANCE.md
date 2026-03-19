@@ -99,7 +99,7 @@ No defer/recover needed for arithmetic — the numeric tower cannot panic from v
 
 #### 8. Flat Closures — Multi-Pass Pipeline
 
-**Status:** Design complete, implementation planned
+**Status:** Reverted (PR #520) — +7.4% geo-mean regression across 31 benchmarks. See `plans/FLAT-CLOSURES.md`.
 
 **Goal:** Replace linked-closure environment capture with flat closures that copy only referenced free variables, using `*values.Box` for shared mutation.
 

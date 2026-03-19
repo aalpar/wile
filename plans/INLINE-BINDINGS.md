@@ -1,6 +1,6 @@
 # Inline Binding Array Implementation Plan
 
-**Status:** Complete — merged as PR #521 (2026-03-18)
+**Status:** Reverted — merged as PR #521 (2026-03-18), then reverted. See `plans/CLAUDE.md`.
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 

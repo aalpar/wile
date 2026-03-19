@@ -1,5 +1,7 @@
 # Continuation Marks
 
+**Status:** Complete — all 3 phases implemented (#508, #509, #510, #511)
+
 Racket-style per-frame key-value annotations on the continuation chain.
 
 ## Motivation
