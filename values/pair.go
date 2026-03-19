@@ -180,9 +180,13 @@ func (p *Pair) Append(vs Value) Value {
 
 // Length returns the length of the list represented by the Pair.
 // It panics if the Pair does not represent a proper list.
+//
+// Note: Uses context.Background() — no cancellation path. ForEach has no
+// cycle detection, so a circular list will hang indefinitely. Callers must
+// ensure the receiver is a proper list (e.g., via IsList).
 func (p *Pair) Length() int {
 	q := 0
-	Must(p.ForEach(context.TODO(), func(_ context.Context, i int, _ bool, _ Value) error {
+	Must(p.ForEach(context.Background(), func(_ context.Context, i int, _ bool, _ Value) error {
 		q = i + 1
 		return nil
 	}))
@@ -380,12 +384,14 @@ func (p *Pair) stringWithVisited(visited map[*Pair]bool) string {
 
 // AsVector converts the Pair representing a proper list into a Vector.
 // It panics if the Pair does not represent a proper list.
+//
+// Note: Uses context.Background() — see Length comment for circular list caveat.
 func (p *Pair) AsVector() *Vector {
 	if p.IsVoid() {
 		return nil
 	}
 	vs := []Value{}
-	Must(p.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v Value) error {
+	Must(p.ForEach(context.Background(), func(_ context.Context, _ int, _ bool, v Value) error {
 		vs = append(vs, v)
 		return nil
 	}))

@@ -51,6 +51,15 @@ import (
 )
 
 // allExtensions returns all available extensions for the full runtime environment.
+//
+// ADDING A NEW EXTENSION requires updates in these locations:
+//
+//  1. extensions/<name>/             — new package implementing registry.Extension
+//  2. extensions/<name>/register.go  — Builder + Extension var, AddToRegistry
+//  3. internal/bootstrap/environment_tiny.go — add to allExtensions slice (this file)
+//  4. engine.go                      — add to SafeExtensions() if applicable
+//  5. CLAUDE.md                      — update extension count and list
+//  6. TODO.md                        — update extension count in project status
 var allExtensions = []registry.Extension{
 	ioext.Extension,
 	files.Extension,

@@ -191,7 +191,7 @@ func PrimSymbolToString(mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	mc.SetValue(values.InternString(sym.Key))
+	mc.SetValue(values.NewString(sym.Key))
 	return nil
 }
 

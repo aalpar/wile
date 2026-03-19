@@ -32,6 +32,10 @@ var (
 // Small integer cache: same flyweight technique as character caching. The
 // range [-32768, 32767] covers most loop counters and small constants.
 // See BIBLIOGRAPHY.md "Flyweight Pattern / Value Caching".
+// intCacheMin/intCacheMax define the range of pre-allocated Integer values.
+// Covers the int16 range — empirically, most Scheme integers in typical
+// programs fall within this range (loop counters, small constants, indices).
+// Startup cost: 65,536 *Integer allocations (~1 MB).
 const (
 	intCacheMin = -32768
 	intCacheMax = 32767

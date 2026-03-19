@@ -16,9 +16,16 @@ package machine
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/werr"
 )
+
+// ErrLocalIndexOverflow signals that a De Bruijn index slot or depth
+// exceeds the int16 encoding range (-32768..32767). EncodeLocalIndex panics
+// with this sentinel when the bytecode format cannot represent the index.
+var ErrLocalIndexOverflow = werr.NewStaticError("local index overflow")
 
 // Instruction is a single VM instruction for the switch-dispatch loop.
 // Op selects the operation; Arg carries an immediate operand whose meaning
@@ -69,7 +76,17 @@ func (instr Instruction) String() string {
 //
 // See BIBLIOGRAPHY.md "De Bruijn Indices / Lexical Addressing".
 func EncodeLocalIndex(li *environment.LocalIndex) int32 {
-	return int32(li.Up()<<16) | int32(li.Over()&0xFFFF)
+	slot := li.Over()
+	depth := li.Up()
+	if slot > math.MaxInt16 || slot < math.MinInt16 {
+		panic(werr.WrapForeignErrorf(ErrLocalIndexOverflow,
+			"EncodeLocalIndex: slot %d exceeds int16 range (%d..%d)", slot, math.MinInt16, math.MaxInt16))
+	}
+	if depth > math.MaxInt16 || depth < math.MinInt16 {
+		panic(werr.WrapForeignErrorf(ErrLocalIndexOverflow,
+			"EncodeLocalIndex: depth %d exceeds int16 range (%d..%d)", depth, math.MinInt16, math.MaxInt16))
+	}
+	return int32(depth<<16) | int32(slot&0xFFFF)
 }
 
 // DecodeLocalIndex unpacks slot and depth from a bit-packed Instruction.Arg.

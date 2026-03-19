@@ -18,9 +18,10 @@ package values
 //  6. registry/helpers/value_conv.go  — update ToComplex128, ToFloat64
 //  7. extensions/math/prim_conversion.go — update exact->inexact, number->string, etc.
 //  8. extensions/math/prim_complex.go — update make-rectangular, make-polar, etc.
-//  9. wile-goast/goast/mapper.go      — update numberToAST if the type maps to a Go literal
+//  9. wile-goast/goast/mapper.go      — (EXTERNAL REPO) update numberToAST if the type maps to a Go literal
 //  10. ffi.go                         — update schemeToReflectValue (line ~300)
 //  11. internal/parser/parser_number.go — if the type can be parsed from source
+//  12. registry/helpers/equality.go    — update Eqv if the type has special eqv? semantics
 //
 // The dispatch tables (item 2) are tested by TestAllDispatchEntriesPopulated.
 // The type-switch functions (items 3-4, 6) are tested by TestTypeSwitchFunctionsHandleAllTypes.

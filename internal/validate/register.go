@@ -22,6 +22,16 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 )
 
+// ADDING A NEW SPECIAL FORM requires updates in these locations:
+//
+//  1. internal/validate/register.go    — register validator (this file)
+//  2. internal/validate/validate_<name>.go — implement validator function
+//  3. machine/register.go              — register compiler
+//  4. machine/compile_validated.go     — implement compilation (Tier 1)
+//     OR machine/compile_<name>.go     — implement compilation (Tier 2)
+//  5. machine/primitive_expanders_registry.go — register expander (if needed)
+//  6. machine/expander_*.go            — implement expander (if needed)
+//  7. registry/core/specialforms.go    — register compile-time binding
 func init() {
 	// Register validators for core forms
 	registerValidator("if", validateIf)
