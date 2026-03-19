@@ -6,7 +6,7 @@ Thank you for your interest in contributing to Wile! This document provides guid
 
 ### Prerequisites
 
-- Go 1.23 or later
+- Go 1.24 or later
 - Git
 - Basic familiarity with Scheme (R7RS) or Lisp
 - For Go contributors: Understanding of interpreters, compilers, or virtual machines helpful but not required
