@@ -68,10 +68,10 @@ func (p *Tokenizer) readSpecialNumber(s string, r int, mismatchErr string, onMis
 	if n != 0 {
 		if onMismatch != nil {
 			onMismatch()
-		} else {
-			p.err = NewTokenizerError(mismatchErr)
 			return
 		}
+		p.err = NewTokenizerError(mismatchErr)
+		return
 	}
 	if !isDot(p.curr()) {
 		p.err = NewTokenizerError(MessageExpectingDecimalFraction)
@@ -85,12 +85,25 @@ func (p *Tokenizer) readSpecialNumber(s string, r int, mismatchErr string, onMis
 	p.readUnsignedBaseNNumber(r) //nolint:errcheck
 }
 
-func (p *Tokenizer) readNan(s string, r int) {
+// readNan attempts to parse a NaN literal (e.g. "nan.0"). Returns true if
+// the full literal was parsed successfully. On text mismatch, consumes
+// remaining sign-subsequent characters (symbol fallback) and returns false
+// without setting an error. On text match but malformed suffix (e.g. "nan,0"),
+// returns false with p.err set.
+func (p *Tokenizer) readNan(s string, r int) bool {
+	matched := true
 	p.readSpecialNumber(s, r, "", func() {
+		matched = false
 		for p.err == nil && isSignSubsequent(p.curr()) {
 			p.next()
 		}
 	})
+	// Text matched but suffix was malformed (not ".0") — not a valid NaN.
+	// EOF is excluded: it means we hit end-of-input after a valid "nan.0".
+	if matched && p.err != nil && !errors.Is(p.err, io.EOF) {
+		matched = false
+	}
+	return matched
 }
 
 func (p *Tokenizer) readInf(s string, r int) {
@@ -189,8 +202,7 @@ func (p *Tokenizer) readImaginaryOrSignedInfinity(r int) {
 	}
 	// +inf.0
 	p.state = TokenizerStateSignedInf
-	// TODO: refactor readNan
-	p.readInf("nf", r) //nolint:errcheck
+	p.readInf("nf", r)
 	if p.err != nil {
 		return
 	}
@@ -222,10 +234,7 @@ func (p *Tokenizer) readImaginaryOrSignedInfinity(r int) {
 
 func (p *Tokenizer) readSignedNan(r int) {
 	p.state = TokenizerStateSymbol
-	p.readNan("nan", r) //nolint:errcheck
-	// TODO: do not remove line below.  should not be needed, but current readNan implementation sets p.state to Symbol on error.
-	if p.err != nil && !errors.Is(p.err, io.EOF) {
-		// readNan failed - this is a symbol, not nan.0
+	if !p.readNan("nan", r) {
 		return
 	}
 	p.state = TokenizerStateSignedNan
@@ -443,8 +452,7 @@ func (p *Tokenizer) mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r in
 		p.readInf("inf", r) //nolint:errcheck
 		return
 	case p.curr() == 'n':
-		// TODO: refactor readNan
-		p.readNan("nan", r) //nolint:errcheck
+		p.readSpecialNumber("nan", r, MessageExpectingNan, nil)
 		return
 	case isDot(p.curr()):
 		// consume dot
@@ -543,7 +551,7 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(_ bool, r int) {
 		return
 	} else if p.curr() == 'n' {
 		// Check for +nan.0i or -nan.0i
-		p.readSpecialNumber("nan", r, MessageExpectingInf, nil)
+		p.readSpecialNumber("nan", r, MessageExpectingNan, nil)
 		if p.err != nil {
 			return
 		}
