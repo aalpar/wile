@@ -28,9 +28,9 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 ### High Priority
 
-- [ ] **machine/ unit test coverage** [High, L]: 52 of 99 production files in `machine/` have no corresponding `_test.go`. Critical untested files: `machine_context_apply.go` (342 lines — callable dispatch), `machine_context_continuation.go` (301 lines — continuation save/restore, delimited ops), `expander_primitive_forms.go` (402 lines — macro expansion for primitive forms), `quasi_expand.go` (349 lines), `expander_lambda.go` (301 lines), `call_promoted.go` + `call_promoted_arithmetic.go` (482 lines — promoted opcode hot paths). Only 5 of 73 test files use `errors.Is` — error path testing is especially sparse. Some coverage exists indirectly via Scheme-level test suites, but Go-level unit tests for boundary conditions and error paths are absent. Prioritize `machine_context_apply.go`, `machine_context_continuation.go`, and `call_promoted*.go` first.
-- [ ] **engine.go unit tests** [High, M]: The public embedding API (720 lines, 37 exported functions — `Eval`, `Compile`, `Run`, `Close`, `RegisterFunc`) has no dedicated test file. Coverage comes entirely through integration and example tests.
-- [ ] **REPL test coverage** [High, M]: `internal/repl/` has 40.8% coverage. `repl.go` (367 lines) and `debug.go` (326 lines — breakpoint/stepping) have minimal or zero tests. Debug mode handles mutable state (breakpoint sets, step mode) — especially prone to subtle bugs. Start with table-driven tests for meta-command parsing and debug step/breakpoint logic.
+- [x] **machine/ unit test coverage** [High, L]: Added 49 test files covering types/utilities, operations, VM runtime, compilation, expansion, library system, macro runtime, and infrastructure. ~500+ test cases. 3 of 52 files remain: `doc.go` (no code), `operations.go` (already covered by `operation_test.go`), one consolidated.
+- [x] **engine.go unit tests** [High, M]: Added `engine_unit_test.go` with 7 test functions covering Eval, EvalMultiple, Compile+Run, Define+Get, Call, Close, error wrapping, and options.
+- [x] **REPL test coverage** [High, M]: Added `debug_test.go` (23+ subtests for DebugContext: break, delete, list, enable, disable, step, next, finish, continue, backtrace, where). Extended `meta_test.go` with command listing, debug delegation, unknown command handling.
 
 ---
 
@@ -40,8 +40,8 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 - [x] **Missing primitive registration guide comment** [Medium, S]: Added "ADDING A NEW CORE PRIMITIVE" comment in `registry/core/register.go` (4 items).
 - [x] **Value type guide comment** [Medium, S]: Added "ADDING A NEW VALUE TYPE" comment near the `Value` interface in `values/values.go` (7 conditional items + cross-reference to `values/numeric_kind.go` for numeric types).
-- [ ] **Type switch exhaustiveness linter** [Medium, M]: 117 type switches with 182 `case *values.X` arms across the codebase. Go provides no compile-time enforcement. Consider a `go generate` linter for dispatch table completeness.
-- [ ] **Special form dual-dispatch unification** [Medium, M]: Special forms are registered in two separate `init()` functions in different packages — `internal/validate/register.go` (validators) and `machine/register.go` (compilers) — matched by string name with no compile-time guarantee they stay in sync. This is the only registration mechanism that uses `init()` rather than the Builder pattern. Consider a unified registration that pairs validators and compilers in a single site.
+- [x] **Type switch exhaustiveness linter** [Medium, M]: Added `cmd/typeswitchlint` — scans for type switches on `values.*`, reports switches without `default:` that may be missing concrete types. 8 warnings found across extensions/math, extensions/system, extensions/threads, internal/syntax, registry/helpers. Run: `go run ./cmd/typeswitchlint .` (default: warnings only; `-v` for all).
+- [x] **Special form dual-dispatch verification** [Medium, M]: Added `forms.Verify()` checking that every registered form has both a validator and a compiler (with exceptions for expand-time-only forms: let-syntax, letrec-syntax, syntax-rules). `TestFormRegistrationConsistency` in `internal/forms/consistency_test.go` runs after init() from both validate and machine packages. Full unification blocked by import cycle; verification catches the same class of bug at test time.
 
 ### Low Priority
 
