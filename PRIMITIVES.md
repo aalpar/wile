@@ -689,6 +689,7 @@ Complete list of supported types, primitives, and special forms in Wile.
 
 | Primitive | Description |
 |-----------|-------------|
+| `interaction-environment` | Get interactive top-level environment (introspection extension) |
 | `environment?` | Test for environment object |
 | `environment-bound-names` | List all bound names in an environment |
 | `environment-ref` | Look up a binding by symbol in an environment |

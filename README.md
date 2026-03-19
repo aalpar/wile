@@ -163,7 +163,7 @@ The [`values`](https://pkg.go.dev/github.com/aalpar/wile/values) package provide
 |---|---|
 | `wile.WithExtension(ext)` | Add a single extension |
 | `wile.WithExtensions(exts...)` | Add multiple extensions |
-| `wile.WithSafeExtensions()` | Add safe extension set (no filesystem, eval, system, threads) |
+| `wile.WithSafeExtensions()` | Add safe extension set (no filesystem, eval, system, threads, Go interop) |
 | `wile.WithoutCore()` | Skip core primitives — bare engine with only explicit extensions |
 | `wile.WithLibraryPaths(paths...)` | Enable R7RS library system with search paths |
 | `wile.WithMaxCallDepth(n)` | Set maximum VM recursion depth |
@@ -180,10 +180,10 @@ go install github.com/aalpar/wile/cmd/wile@latest
 # https://github.com/aalpar/wile/releases
 
 # Run the REPL
-scheme
+wile
 
 # Try an example
-scheme --file examples/basics/hello.scm
+wile --file examples/basics/hello.scm
 
 # See all examples
 ls examples/
@@ -263,7 +263,7 @@ ls examples/
 
 ## Installation
 
-Requires Go 1.23 or later.
+Requires Go 1.24 or later.
 
 ### As a library
 
@@ -287,21 +287,21 @@ The binary is built to `./dist/{os}/{arch}/wile`.
 
 ```bash
 # Start REPL
-scheme
+wile
 
 # Run a Scheme file
-scheme example.scm
-scheme --file example.scm
-scheme -f example.scm
+wile example.scm
+wile --file example.scm
+wile -f example.scm
 
 # With library search path
-scheme -L /path/to/libs example.scm
+wile -L /path/to/libs example.scm
 
 # Enter REPL after loading file
-scheme -f example.scm -i
+wile -f example.scm -i
 
 # Print version
-scheme --version
+wile --version
 ```
 
 The `SCHEME_LIBRARY_PATH` environment variable provides additional library search paths (colon-separated).
@@ -363,8 +363,7 @@ With the library system enabled (`WithLibraryPaths`), Go extensions import as `(
 | `(wile files)` | File I/O |
 | `(wile threads)` | SRFI-18 multithreading (threads, mutexes, condition variables) |
 | `(wile system)` | System interaction (environment, process) |
-| `(wile exceptions)` | Exception handling |
-| `(wile gointerop)` | Go interop primitives |
+| `(wile gointerop)` | Go concurrency primitives (channels, wait groups, atomics) |
 | `(wile introspection)` | Reflection and introspection |
 See [`docs/EXTENSION_LIBRARIES.md`](docs/EXTENSION_LIBRARIES.md) for import syntax and modifiers.
 
@@ -455,7 +454,8 @@ This prevents unintended variable capture in macros:
 | Rational | Exact fraction | `3/4`, `-1/2` |
 | Float | Inexact IEEE 754 double | `3.14`, `1e10` |
 | BigFloat | Inexact arbitrary precision | `#m3.14159265358979323846` |
-| Complex | Complex number | `1+2i`, `3@1.57` (polar) |
+| Complex | Inexact complex (float64 parts) | `1+2i`, `3@1.57` (polar) |
+| BigComplex | Arbitrary-precision complex | Exact or inexact parts |
 
 ### Concurrency Types
 
@@ -478,7 +478,7 @@ Wile sandboxes embedded engines with two independent, composable layers.
 Primitives not loaded into the engine don't exist. Attempts to use them produce compile-time errors — there are no runtime checks to bypass.
 
 ```go
-// Safe sandbox: no filesystem, eval, system, or threading
+// Safe sandbox: no filesystem, eval, system, threading, or Go interop
 engine, err := wile.NewEngine(ctx, wile.WithSafeExtensions())
 ```
 
