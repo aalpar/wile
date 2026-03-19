@@ -64,7 +64,7 @@ Finish codebase reading and exploration before the session ends. If a plan is to
 3. **Continuations**: Explicit `MachineContinuation` linked list — NOT Go call stack; enables `call/cc`, dynamic-wind, delimited continuations
 4. **Pipeline**: `Tokenizer → Parser → Expander → Compiler → VM` (string → tokens → SyntaxValue → bytecode → execution)
 5. **Packages (public)**: `wile/` (Engine, embedding API), `values/` (Scheme types), `werr/` (error infrastructure), `registry/` (primitives/extensions), `security/` (authorization), `extensions/` (public extensions)
-6. **Packages (internal)**: `machine/` (VM/compiler/expander), `environment/` (bindings/scopes), `internal/{tokenizer,parser,syntax,match,repl,bootstrap,validate,schemeutil,forms}`
+6. **Packages (internal)**: `machine/` (VM/compiler/expander), `environment/` (bindings/scopes), `internal/{tokenizer,parser,syntax,match,repl,bootstrap,validate,schemeutil,forms,extensions}`
 7. **Values**: Go heap objects managed by Go GC — pure Go, no CGo, no custom allocator
 8. **Error handling**: Sentinel + wrap pattern — `werr.NewStaticError` for sentinels, `werr.WrapForeignErrorf` for context; never `fmt.Errorf`
 9. **Hygiene**: Identifiers carry scope sets, resolution checks `bindingScopes ⊆ useScopes`; free template identifiers skip intro scope
@@ -85,8 +85,10 @@ Entry: `engine.go` → `Engine.Eval()` or `Engine.Compile()` + `Engine.Run()`
 
 ```
 werr/ → values/ → environment/ → internal/{tokenizer,parser,syntax,schemeutil,validate,match,bootstrap,extensions,forms,repl}
-  → machine/ → security/ → registry/ → extensions/ → wile/ (root)
+  → machine/ + security/ → registry/ → extensions/ → wile/ (root)
 ```
+
+Note: `machine/` and `security/` are peers — `machine/` imports `security/` for authorization gate sites, but `security/` has no dependency on `machine/`.
 
 Public API (embedders): `wile/`, `values/`, `werr/`, `registry/`, `security/`, `extensions/*`. Internal: `internal/*`. Machine: public but rarely used directly.
 
@@ -94,7 +96,7 @@ Public API (embedders): `wile/`, `values/`, `werr/`, `registry/`, `security/`, `
 
 Two-layer sandboxing for embedded use:
 
-1. **Extension-level** (zero-cost): Extensions opt-in via `WithExtension()`. Unprovided extensions don't exist at compile time. `SafeExtensions()` provides a safe sandbox (no filesystem, eval, system, threads).
+1. **Extension-level** (zero-cost): Extensions opt-in via `WithExtension()`. Unprovided extensions don't exist at compile time. `SafeExtensions()` provides a safe sandbox (no filesystem, eval, system, threads, Go interop).
 2. **Fine-grained authorization**: `security.Authorizer` interface gates privileged operations at runtime. K8s-style vocabulary: Resource (`file`, `code`, `env`, `process`) + Action (`read`, `write`, `delete`, `load`, `exit`). Set via `WithAuthorizer()` engine option. Gate sites: files, system, eval extensions; `include`; library import.
 
 ## Code & Style
