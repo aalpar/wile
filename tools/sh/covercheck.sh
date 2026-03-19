@@ -24,6 +24,7 @@ MODULE="github.com/aalpar/wile"
 # Entry points, registration/wiring, helpers, and test infrastructure.
 EXCLUDED_PKGS=(
 	"cmd/wile"
+	"cmd/typeswitchlint"
 	"internal/repl"
 	"registry/testhelpers"
 	"examples/embedding"

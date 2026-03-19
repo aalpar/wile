@@ -175,3 +175,61 @@ func TestNames_Returns_All_Registered(t *testing.T) {
 	c.Assert(slices.Contains(names, "test-names-a"), qt.IsTrue)
 	c.Assert(slices.Contains(names, "test-names-b"), qt.IsTrue)
 }
+
+func TestVerify_AllPaired(t *testing.T) {
+	saveRegistry(t)
+	c := qt.New(t)
+
+	validator := func(_ context.Context, _ *environment.EnvironmentFrame, _ *syntax.SyntaxPair, _ any) ValidatedExpr {
+		return &testExpr{tag: "v"}
+	}
+	compiler := func(_ any, _ any, _ ValidatedExpr) error {
+		return nil
+	}
+	Register(&FormSpec{Name: "test-verify-ok", Validate: validator, Compile: compiler})
+
+	err := Verify()
+	c.Assert(err, qt.IsNil)
+}
+
+func TestVerify_MissingCompiler(t *testing.T) {
+	saveRegistry(t)
+	c := qt.New(t)
+
+	validator := func(_ context.Context, _ *environment.EnvironmentFrame, _ *syntax.SyntaxPair, _ any) ValidatedExpr {
+		return &testExpr{tag: "v"}
+	}
+	Register(&FormSpec{Name: "test-verify-no-compiler", Validate: validator})
+
+	err := Verify()
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "test-verify-no-compiler: missing compiler")
+}
+
+func TestVerify_MissingValidator(t *testing.T) {
+	saveRegistry(t)
+	c := qt.New(t)
+
+	compiler := func(_ any, _ any, _ ValidatedExpr) error {
+		return nil
+	}
+	Register(&FormSpec{Name: "test-verify-no-validator", Compile: compiler})
+
+	err := Verify()
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "test-verify-no-validator: missing validator")
+}
+
+func TestVerify_ExpandTimeOnlyAllowed(t *testing.T) {
+	saveRegistry(t)
+	c := qt.New(t)
+
+	validator := func(_ context.Context, _ *environment.EnvironmentFrame, _ *syntax.SyntaxPair, _ any) ValidatedExpr {
+		return &testExpr{tag: "v"}
+	}
+	// let-syntax is in expandTimeOnlyForms — no compiler needed.
+	Register(&FormSpec{Name: "let-syntax", Validate: validator})
+
+	err := Verify()
+	c.Assert(err, qt.IsNil)
+}

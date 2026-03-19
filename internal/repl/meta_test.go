@@ -3,6 +3,7 @@ package repl
 import (
 	"bytes"
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -159,4 +160,81 @@ func TestCmdDoc_BindingLookup(t *testing.T) {
 	// Should find something (not "Unbound")
 	c.Assert(strings.Contains(output, "nbound"), qt.IsFalse,
 		qt.Commentf("output was: %q", output))
+}
+
+func TestMetaCommandHandlerCommands(t *testing.T) {
+	c := qt.New(t)
+
+	debugCtx := NewDebugContext()
+	h := NewMetaCommandHandler(nil, debugCtx, nil)
+	cmds := h.Commands()
+	c.Assert(len(cmds) > 0, qt.IsTrue)
+
+	// Session commands
+	for _, expected := range []string{"help", "doc", "edit"} {
+		c.Assert(slices.Contains(cmds, expected), qt.IsTrue,
+			qt.Commentf("Commands() should contain session command %q, got %v", expected, cmds))
+	}
+
+	// Debug commands (delegated from DebugContext)
+	for _, expected := range []string{"break", "step", "continue", "backtrace", "where"} {
+		c.Assert(slices.Contains(cmds, expected), qt.IsTrue,
+			qt.Commentf("Commands() should contain debug command %q, got %v", expected, cmds))
+	}
+
+	// Aliases should also be present
+	for _, expected := range []string{"h", "?", "b", "s", "c", "bt"} {
+		c.Assert(slices.Contains(cmds, expected), qt.IsTrue,
+			qt.Commentf("Commands() should contain alias %q, got %v", expected, cmds))
+	}
+}
+
+func TestMetaCommandHandlerCommands_NoDebugCtx(t *testing.T) {
+	c := qt.New(t)
+
+	h := NewMetaCommandHandler(nil, nil, nil)
+	cmds := h.Commands()
+	// Should still have session commands
+	c.Assert(slices.Contains(cmds, "help"), qt.IsTrue)
+	// Should NOT have debug commands
+	c.Assert(slices.Contains(cmds, "break"), qt.IsFalse)
+}
+
+func TestMetaHandleUnknown(t *testing.T) {
+	c := qt.New(t)
+
+	var buf bytes.Buffer
+	h := NewMetaCommandHandler(nil, nil, nil)
+
+	// Unknown command still returns true (it's a meta-command, just unrecognized)
+	handled := h.Handle(",totally_unknown_cmd", &buf)
+	c.Assert(handled, qt.IsTrue)
+	c.Assert(strings.Contains(buf.String(), "Unknown command"), qt.IsTrue,
+		qt.Commentf("output was: %q", buf.String()))
+}
+
+func TestMetaHandleDebugDelegation(t *testing.T) {
+	c := qt.New(t)
+
+	tcs := []struct {
+		name    string
+		input   string
+		contain string
+	}{
+		{"break command", ",break test.scm:1", "Breakpoint"},
+		{"step command", ",step", "Will step into"},
+		{"continue command", ",continue", "Continuing"},
+		{"list command", ",list", "No breakpoints"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			debugCtx := NewDebugContext()
+			h := NewMetaCommandHandler(nil, debugCtx, nil)
+			var buf bytes.Buffer
+			handled := h.Handle(tc.input, &buf)
+			c.Assert(handled, qt.IsTrue)
+			c.Assert(strings.Contains(buf.String(), tc.contain), qt.IsTrue,
+				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
+		})
+	}
 }
