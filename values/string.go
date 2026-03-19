@@ -16,7 +16,6 @@ package values
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/aalpar/wile/werr"
 )
@@ -27,15 +26,6 @@ var (
 	_ fmt.Stringer = (*String)(nil)
 )
 
-// String interning: ensures that structurally equal short strings share
-// a single allocation, reducing memory use and enabling fast pointer
-// comparison. The 64-byte threshold balances memory savings against the
-// cost of the sync.Map lookup.
-// See BIBLIOGRAPHY.md "String Interning".
-const stringInternMaxLen = 64
-
-var stringInterns sync.Map // map[string]*String
-
 // String represents a Scheme string value.
 // R7RS §6.7: Literal strings and strings from symbol->string are immutable.
 type String struct {
@@ -44,16 +34,9 @@ type String struct {
 }
 
 // NewString returns an immutable String value.
-// Short strings (up to 64 bytes) are automatically interned and return
-// the same pointer for the same value.
 // R7RS §6.7: Literal strings and strings from symbol->string are immutable.
 // Use NewMutableString for runtime-allocated strings that may be mutated.
 func NewString(str string) *String {
-	if len(str) <= stringInternMaxLen {
-		s := InternString(str)
-		s.immutable = true
-		return s
-	}
 	return &String{Value: str, immutable: true}
 }
 
@@ -62,19 +45,6 @@ func NewString(str string) *String {
 // R7RS §6.7: Procedures like string-copy return mutable strings.
 func NewMutableString(str string) *String {
 	return &String{Value: str, immutable: false}
-}
-
-// InternString returns an interned String for the given value.
-// Multiple calls with the same string value return the same pointer.
-// Interned strings are immutable per R7RS §6.7.
-func InternString(str string) *String {
-	existing, ok := stringInterns.Load(str)
-	if ok {
-		return existing.(*String)
-	}
-	newStr := &String{Value: str, immutable: true}
-	actual, _ := stringInterns.LoadOrStore(str, newStr)
-	return actual.(*String)
 }
 
 // HashCode returns a hash of the string value.
@@ -111,7 +81,7 @@ func (p *String) String() string {
 }
 
 // IsImmutable returns true if the string cannot be mutated.
-// Interned strings and strings returned by symbol->string are immutable.
+// Literal strings and strings returned by symbol->string are immutable.
 // R7RS §6.7: It is an error to apply mutation procedures to literal strings
 // or strings returned by symbol->string.
 func (p *String) IsImmutable() bool {

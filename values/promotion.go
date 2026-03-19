@@ -83,6 +83,8 @@ var promotionOnce sync.Once
 // by the dispatch generators (makeArithmeticDispatch, makeLessThanDispatch,
 // makeCompareDispatch) which may run from type-file init() functions
 // before promotion.go's own init().
+// Startup cost: populates 7×7 promotion table (49 entries) and 294 dispatch
+// closures for arithmetic, comparison, and ordering operations.
 func ensurePromotionInit() {
 	promotionOnce.Do(func() {
 		initPromotionTable()

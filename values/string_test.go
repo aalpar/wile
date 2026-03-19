@@ -57,59 +57,43 @@ func TestString_IsVoid(t *testing.T) {
 	qt.Assert(t, nilString.IsVoid(), qt.IsTrue)
 }
 
-func TestString_Interning(t *testing.T) {
-	// Short strings should be interned (same pointer)
+func TestString_Allocation(t *testing.T) {
+	// Each NewString call produces a fresh allocation
 	s1 := values.NewString("hello")
 	s2 := values.NewString("hello")
-	qt.Assert(t, s1 == s2, qt.IsTrue, qt.Commentf("short strings should return same pointer"))
+	qt.Assert(t, s1 != s2, qt.IsTrue, qt.Commentf("each NewString should allocate"))
 
-	// Different strings should have different pointers
+	// But they are structurally equal
+	qt.Assert(t, s1.EqualTo(s2), qt.IsTrue)
+
+	// Different strings are not equal
 	s3 := values.NewString("world")
-	qt.Assert(t, s1 != s3, qt.IsTrue, qt.Commentf("different strings should have different pointers"))
+	qt.Assert(t, s1.EqualTo(s3), qt.IsFalse)
 
-	// Empty string should be interned
-	sEmpty1 := values.NewString("")
-	sEmpty2 := values.NewString("")
-	qt.Assert(t, sEmpty1 == sEmpty2, qt.IsTrue, qt.Commentf("empty strings should return same pointer"))
-
-	// Strings at the boundary (64 chars) should be interned
-	boundary := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" // 64 chars
-	sBoundary1 := values.NewString(boundary)
-	sBoundary2 := values.NewString(boundary)
-	qt.Assert(t, sBoundary1 == sBoundary2, qt.IsTrue, qt.Commentf("64-char strings should be interned"))
-
-	// Long strings (>64 chars) should NOT be interned
-	longStr := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" // 65 chars
-	sLong1 := values.NewString(longStr)
-	sLong2 := values.NewString(longStr)
-	qt.Assert(t, sLong1 != sLong2, qt.IsTrue, qt.Commentf("strings over 64 chars should not be interned"))
-
-	// Interned strings should still have correct values
+	// Values are correct
 	qt.Assert(t, s1.Value, qt.Equals, "hello")
-	qt.Assert(t, sLong1.Value, qt.Equals, longStr)
+	qt.Assert(t, s3.Value, qt.Equals, "world")
 }
 
-func TestString_InternString(t *testing.T) {
-	// InternString should always intern regardless of length
-	longStr := "this is a very long string that exceeds the automatic interning threshold of 64 characters"
-	sIntern1 := values.InternString(longStr)
-	sIntern2 := values.InternString(longStr)
-	qt.Assert(t, sIntern1 == sIntern2, qt.IsTrue, qt.Commentf("InternString should always return same pointer"))
+func TestString_NewStringImmutable(t *testing.T) {
+	// NewString always returns immutable strings
+	s := values.NewString("hello")
+	qt.Assert(t, s.IsImmutable(), qt.IsTrue)
 
-	// InternString should work for short strings too
-	sShort1 := values.InternString("short")
-	sShort2 := values.InternString("short")
-	qt.Assert(t, sShort1 == sShort2, qt.IsTrue)
+	// NewMutableString returns mutable strings
+	m := values.NewMutableString("hello")
+	qt.Assert(t, m.IsImmutable(), qt.IsFalse)
 
-	// Values should be correct
-	qt.Assert(t, sIntern1.Value, qt.Equals, longStr)
+	// Both have correct values
+	qt.Assert(t, s.Value, qt.Equals, "hello")
+	qt.Assert(t, m.Value, qt.Equals, "hello")
 }
 
 func TestStringImmutability(t *testing.T) {
 	c := qt.New(t)
 
-	t.Run("interned strings are immutable", func(t *testing.T) {
-		s := values.NewString("hello") // ≤64 bytes, gets interned
+	t.Run("NewString returns immutable", func(t *testing.T) {
+		s := values.NewString("hello")
 		c.Assert(s.IsImmutable(), qt.IsTrue)
 	})
 
@@ -175,20 +159,15 @@ func TestStringImmutability(t *testing.T) {
 	})
 }
 
-func TestStringInternPreserved(t *testing.T) {
+func TestStringImmutablePreserved(t *testing.T) {
 	c := qt.New(t)
 
 	s1 := values.NewString("test")
-	s2 := values.NewString("test")
 
-	// Same interned pointer
-	c.Assert(s1 == s2, qt.IsTrue)
-
-	// Cannot mutate
+	// Cannot mutate immutable strings
 	err := s1.SetChar(0, 'X')
 	c.Assert(err, qt.Not(qt.IsNil))
 
-	// Both still unchanged
+	// Still unchanged
 	c.Assert(s1.Value, qt.Equals, "test")
-	c.Assert(s2.Value, qt.Equals, "test")
 }

@@ -130,6 +130,9 @@ func PrimProcedureSourceLocation(mc *machine.MachineContext) error {
 	switch v := callable.(type) {
 	case *machine.MachineClosure:
 		mc.SetValue(templateSourceLocation(v.Template()))
+	case *machine.ForeignClosure:
+		// Foreign closures (Go primitives) have no Scheme source location.
+		mc.SetValue(values.FalseValue)
 	case *machine.CaseLambdaClosure:
 		clauses := v.Clauses()
 		if len(clauses) > 0 {

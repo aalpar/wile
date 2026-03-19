@@ -180,9 +180,13 @@ func (p *Pair) Append(vs Value) Value {
 
 // Length returns the length of the list represented by the Pair.
 // It panics if the Pair does not represent a proper list.
+//
+// Note: Uses context.Background() because Length has no cancellation path.
+// Circular lists are rejected by Must (improper tail), but a truly pathological
+// structure could hang. See TODO.md "context.TODO() in production code".
 func (p *Pair) Length() int {
 	q := 0
-	Must(p.ForEach(context.TODO(), func(_ context.Context, i int, _ bool, _ Value) error {
+	Must(p.ForEach(context.Background(), func(_ context.Context, i int, _ bool, _ Value) error {
 		q = i + 1
 		return nil
 	}))
@@ -380,12 +384,14 @@ func (p *Pair) stringWithVisited(visited map[*Pair]bool) string {
 
 // AsVector converts the Pair representing a proper list into a Vector.
 // It panics if the Pair does not represent a proper list.
+//
+// Note: Uses context.Background() — see Length comment for rationale.
 func (p *Pair) AsVector() *Vector {
 	if p.IsVoid() {
 		return nil
 	}
 	vs := []Value{}
-	Must(p.ForEach(context.TODO(), func(_ context.Context, _ int, _ bool, v Value) error {
+	Must(p.ForEach(context.Background(), func(_ context.Context, _ int, _ bool, v Value) error {
 		vs = append(vs, v)
 		return nil
 	}))
