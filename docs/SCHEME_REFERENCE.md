@@ -2,7 +2,7 @@
 
 A complete reference for Wile's Scheme language, covering lexical syntax, data types, special forms, standard procedures, libraries, and extensions. Wile implements R7RS-small with hygienic macros (Flatt 2016), first-class continuations, a full numeric tower, and Go concurrency primitives.
 
-**Version**: v1.4.0
+**Version**: v1.5.0
 
 ---
 

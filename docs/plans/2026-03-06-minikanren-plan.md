@@ -2,6 +2,8 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
+**Status:** Complete
+
 **Goal:** Port microKanren and miniKanren to Wile as pure Scheme R7RS libraries, serving as a conformance stress test for closures, streams, macros, and the library system.
 
 **Architecture:** Two layered libraries — `(wile microkanren)` provides the ~40-line procedural core (unification, goals, streams), `(wile kanren)` adds syntactic sugar via `syntax-rules` macros (`fresh`, `conde`, `run`, `run*`). Integration tests exercise both layers and classic relational programs.

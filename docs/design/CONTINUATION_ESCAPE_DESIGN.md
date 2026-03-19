@@ -14,11 +14,13 @@ continuations and prompt abort:
     default-prompt-tag)
 ```
 
-The escape closure captures a `ComposableContinuation` at call/cc time.
-When invoked, it applies the composable continuation in a sub-context (running
-the captured frames to completion), then aborts to `DefaultPromptTag` with
-the result. This produces a regular `ErrPromptAbort` that the standard prompt
-handling path catches — no special-case escape detection needed.
+Call/cc now returns a `CapturedContinuation` value (defined in
+`machine/captured_continuation.go`), which wraps the `ComposableContinuation`
+rather than building a Go closure directly. When invoked, `CapturedContinuation`
+applies the composable continuation in a sub-context (running the captured
+frames to completion), then aborts to `DefaultPromptTag` with the result.
+This produces a regular `ErrPromptAbort` that the standard prompt handling
+path catches — no special-case escape detection needed.
 
 ## Design Rationale
 
@@ -83,7 +85,8 @@ without `RunWithEscapeHandling` (e.g., threads that call `Run()` directly).
 | Component | File |
 |-----------|------|
 | `PrimCallCC` | `registry/core/prim_control.go` |
-| `newComposeAbortEscapeClosure` | `registry/core/prim_control.go` |
+| `NewCapturedContinuation` | `machine/captured_continuation.go` |
+| `CapturedContinuation` | `machine/captured_continuation.go` |
 | `ComposableContinuation` | `machine/composable_continuation.go` |
 | `BarrierToken` | `machine/barrier_token.go` |
 | `applyComposableContinuation` | `machine/machine_context.go` |

@@ -113,7 +113,7 @@ The interface includes an unexported method to prevent external implementations.
 
 | Constant | Value |
 |---|---|
-| `Null` | Empty list `'()` |
+| `EmptyList` | Empty list `'()` |
 | `Void` | Void value |
 | `True` | `#t` |
 | `False` | `#f` |
@@ -143,7 +143,7 @@ The `ForeignFunction` receives a `MachineContext` and unwrapped arguments. It se
 
 `Call(ctx, proc, args...)` invokes a Scheme procedure from Go. It creates a sub-context, applies the closure, and runs it to completion.
 
-**Limitation**: `Call` only supports `MachineClosure` (compiled Scheme functions). Foreign closures or other callable types will fail.
+`Call` supports any `values.Callable`: `MachineClosure`, `ForeignClosure`, `CaseLambdaClosure`, and `Parameter`. It rejects `ComposableContinuation` (which cannot be re-entered via a simple sub-context).
 
 ## Extensions
 
@@ -164,7 +164,7 @@ Extensions implement `registry.Extension` and register primitives, macros, and c
 
 Wile provides two independent sandboxing layers.
 
-**Layer 1: Extension-based (compile-time).** Primitives not in the registry don't exist — there's no runtime check to bypass (Rees, "A Security Kernel Based on the Lambda Calculus", 1996; Miller, "Robust Composition", 2006). `WithSafeExtensions()` adds only extensions with no ambient authority: io (in-memory ports, no filesystem), exceptions, math, introspection, and the safe subset of all (records, promises, strings, characters). Privileged extensions (files, eval, system) and context-dependent extensions (gointerop, threads) are excluded. `WithoutCore()` goes further — it produces an engine with zero primitives. Library environments inherit the engine's registry, so restrictions propagate transitively to loaded libraries.
+**Layer 1: Extension-based (compile-time).** Primitives not in the registry don't exist — there's no runtime check to bypass (Rees, "A Security Kernel Based on the Lambda Calculus", 1996; Miller, "Robust Composition", 2006). `WithSafeExtensions()` adds only extensions with no ambient authority: io (in-memory ports, no filesystem), math, introspection, and the safe subset of all (records, promises, strings, characters). Privileged extensions (files, eval, system) and context-dependent extensions (gointerop, threads) are excluded. `WithoutCore()` goes further — it produces an engine with zero primitives. Library environments inherit the engine's registry, so restrictions propagate transitively to loaded libraries.
 
 **Layer 2: Fine-grained authorization (runtime).** The `security.Authorizer` interface gates privileged operations at runtime using a K8s-style resource+action vocabulary (`file`, `code`, `env`, `process` x `read`, `write`, `delete`, `stat`, `load`, `exit`). Set via `WithAuthorizer(auth)`. Gate sites include file I/O, system calls, `eval`/`load`, `include`, and library loading. Without an authorizer, all operations are allowed (open by default). Built-in authorizers: `DenyAll()`, `ReadOnly()`, `FilesystemRoot(path)`, `All(authorizers...)`.
 

@@ -2,6 +2,8 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
+**Status:** Complete — ER macros fully implemented
+
 **Goal:** Add `er-macro-transformer` to Wile's macro system, providing procedural macros with opt-in hygiene via `rename` and `compare` closures.
 
 **Architecture:** New `ERMacroTransformer` marker type wraps a 3-arg `MachineClosure` + definition-site environment. The expander detects this type in `expandMacroInvocation`, unwraps the input form, creates `rename`/`compare` as `ForeignClosure`s, calls the transformer with 3 args, and re-wraps the result via `DatumToSyntaxValue`. The `rename` closure creates `SyntaxSymbol`s with definition-site scopes and `ResolvedBinding` for cross-library hygiene. The `compare` closure resolves both identifiers and checks binding equality.

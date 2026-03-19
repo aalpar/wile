@@ -309,7 +309,8 @@ Creates an independent copy of an entire continuation chain. Every frame is `Cop
 | `machine/machine_context.go` | `FindPrompt`, `SliceContinuationAt`, `GraftContinuation`, `RestoreWithWindingFrom`, `RunWithEscapeHandling`, `applyComposableContinuation` |
 | `machine/operation_foreign_function_call.go` | `ErrPromptAbort` passthrough |
 | `registry/core/prim_prompt.go` | Prompt primitive implementations |
-| `registry/core/prim_control.go` | `PrimCallCC`, `newComposeAbortEscapeClosure` |
+| `machine/captured_continuation.go` | `CapturedContinuation`: call/cc escape value wrapping `ComposableContinuation` |
+| `registry/core/prim_control.go` | `PrimCallCC`, `NewCapturedContinuation` |
 | `registry/core/prompts.go` | Primitive registration |
 | `registry/core/bootstrap.go` | Scheme `map`/`for-each` definitions |
 

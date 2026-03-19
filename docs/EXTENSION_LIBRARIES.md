@@ -65,7 +65,7 @@ registered as an R7RS library named `(wile <extension-name>)`:
 | `(wile system)` | `extensions/system` | 9 system primitives |
 | `(wile files)` | `extensions/files` | File I/O primitives |
 | `(wile threads)` | `extensions/threads` | SRFI-18 threading primitives |
-| `(wile gointerop)` | `extensions/gointerop` | Go reflection primitives |
+| `(wile gointerop)` | `extensions/gointerop` | Go concurrency primitives |
 
 ## How It Works
 
