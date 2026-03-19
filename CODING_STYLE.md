@@ -356,20 +356,23 @@ type voidType struct{}  // unexported
 var Void Value = voidType{}  // exported singleton
 
 type eofType struct{}
-var EofObject Value = eofType{}
+var EOFObject Value = eofType{}
 
-var EmptyList = NewCons(nil, nil)
+type emptyListType struct{}
+var EmptyList Value = emptyListType{}  // implements Tuple, NOT *Pair
 ```
 
 ### Type Aliases for Clarity
 
-Use type aliases to distinguish similar numeric types:
+Use type aliases to distinguish similar types:
 
 ```go
-type LiteralIndex int
-type KeywordIndex int
-type LocalIndex []int
-type GlobalIndex []int
+type LiteralIndex int                // machine/native_template.go
+type LocalIndex [2]int               // environment/local_index.go — [slot, depth] De Bruijn index
+type GlobalIndex struct {            // environment/global_environment_frame.go
+    Index *values.Symbol
+    Env   *GlobalEnvironmentFrame
+}
 ```
 
 ## Test Conventions
@@ -621,7 +624,7 @@ case *Complex:
     return NewComplex(complex(float64(p.Value), 0) + v.Value)
 ```
 
-**Promotion hierarchy**: Integer → BigInteger → Float → BigFloat → Rational → Complex → BigComplex
+**Promotion lattice** (see `values/promotion.go`): Exact×Exact stays exact (Integer→BigInteger→Rational). Exact×InexactReal promotes to BigFloat (never truncates to Float). Anything×Complex goes to BigComplex (except Float+Complex→Complex).
 
 ### Exactness Contagion Pattern
 
@@ -705,29 +708,34 @@ func PrimXxx(mc *machine.MachineContext) error {
 
 ### Variadic Primitive Pattern
 
-For primitives accepting variable arguments:
+For primitives accepting variable arguments, use `values.Tuple` (not `*values.Pair`) for rest-arg traversal:
 
 ```go
 // ParamCount: 2, IsVariadic: true
 // mc.Arg(0) = first argument (direct)
-// mc.Arg(1) = rest of arguments as Pair
+// mc.Arg(1) = rest of arguments as Tuple (Pair or EmptyList)
 
 func PrimXxxVariadic(mc *machine.MachineContext) error {
     first := mc.Arg(0)
-    rest, ok := mc.Arg(1).(*values.Pair)
+    rest := mc.Arg(1)
+
+    if values.IsEmptyList(rest) {
+        mc.SetValue(first)
+        return nil
+    }
+
+    tuple, ok := rest.(values.Tuple)
     if !ok {
-        return werr.WrapForeignErrorf(werr.ErrBadSyntax, "xxx: invalid arguments")
+        return werr.WrapForeignErrorf(werr.ErrNotAList, "xxx: expected list but got %T", rest)
     }
 
     result := first
-    for curr := rest; curr != values.EmptyList; {
-        next := curr.Car()
-        result = process(result, next)
-        cdr, ok := curr.Cdr().(*values.Pair)
-        if !ok {
-            break
-        }
-        curr = cdr
+    _, err := tuple.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
+        result = process(result, v)
+        return nil
+    })
+    if err != nil {
+        return err
     }
     mc.SetValue(result)
     return nil
@@ -736,53 +744,46 @@ func PrimXxxVariadic(mc *machine.MachineContext) error {
 
 ### Comparison Chain Pattern
 
-For variadic comparison primitives (=, <, >, etc.):
+For variadic comparison primitives (=, <, >, etc.). Note: 2-arg comparisons are now promoted opcodes (Phase 2) and bypass this path entirely.
 
 ```go
-func compareChain(first values.Value, rest *values.Pair, cmp func(a, b values.Number) bool) (bool, error) {
+func compareChain(ctx context.Context, first values.Value, rest values.Tuple, cmp func(a, b values.Number) bool) (bool, error) {
     prev, err := toNumber(first)
     if err != nil {
         return false, err
     }
-    for curr := rest; curr != values.EmptyList; {
-        next, err := toNumber(curr.Car())
+    result := true
+    _, err = rest.ForEach(ctx, func(_ context.Context, _ int, _ bool, v values.Value) error {
+        next, err := toNumber(v)
         if err != nil {
-            return false, err
+            return err
         }
         if !cmp(prev, next) {
-            return false, nil
+            result = false
         }
         prev = next
-        cdr, ok := curr.Cdr().(*values.Pair)
-        if !ok {
-            break
-        }
-        curr = cdr
-    }
-    return true, nil
+        return nil
+    })
+    return result, err
 }
 ```
 
 ### Fold Pattern for Associative Operations
 
-For variadic associative operations (+, *, gcd, lcm):
+For variadic associative operations (+, *, gcd, lcm). Note: 2-arg +, -, *, / are now promoted opcodes (Phases 2-3) and bypass this path.
 
 ```go
-func foldNumbers(identity values.Number, args *values.Pair, op func(a, b values.Number) values.Number) (values.Number, error) {
+func foldNumbers(ctx context.Context, identity values.Number, args values.Tuple, op func(a, b values.Number) values.Number) (values.Number, error) {
     result := identity
-    for curr := args; curr != values.EmptyList; {
-        n, err := toNumber(curr.Car())
+    _, err := args.ForEach(ctx, func(_ context.Context, _ int, _ bool, v values.Value) error {
+        n, err := toNumber(v)
         if err != nil {
-            return nil, err
+            return err
         }
         result = op(result, n)
-        cdr, ok := curr.Cdr().(*values.Pair)
-        if !ok {
-            break
-        }
-        curr = cdr
-    }
-    return result, nil
+        return nil
+    })
+    return result, err
 }
 ```
 
@@ -828,27 +829,9 @@ func toXxx(v values.Value) (*XxxType, error) {
 }
 ```
 
-### Part Accessor Helper Pattern
+### Dispatch Table Arithmetic
 
-For operations that work on parts of composite types:
-
-```go
-// Generic helper that handles multiple types via type switch
-func addParts(a, b Number) Number {
-    switch va := a.(type) {
-    case *BigInteger:
-        switch vb := b.(type) {
-        case *BigInteger:
-            return va.Add(vb)
-        case *BigFloat:
-            return toBigFloat(va).Add(vb)
-        }
-    case *BigFloat:
-        return va.Add(toBigFloat(b))
-    }
-    panic("unsupported part type")
-}
-```
+Arithmetic is handled via pre-built dispatch tables in `values/promotion.go`. Each type has `[numKinds]func` arrays populated at init time. There are no manual `addParts`/`subtractParts` helpers — the dispatch table closures handle cross-type promotion automatically.
 
 ## Miscellaneous
 
