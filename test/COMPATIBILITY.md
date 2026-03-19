@@ -57,7 +57,7 @@ make test-scheme  # Current version
 
 ## Example: Comparing Numeric Tower Behavior
 
-Create a test file `test/wile/numeric-comparison.scm`:
+Create a test file `test/scheme/numeric-comparison.scm`:
 
 ```scheme
 (import (scheme base)

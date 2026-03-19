@@ -38,7 +38,7 @@ By default, this runs a few quick benchmarks (tak, fib, deriv, peval) on all ins
 To compare more benchmarks:
 
 ```bash
-BENCHMARKS="tak fib ack deriv sieve nqueens" ./compare-schemes.sh
+BENCHMARKS="tak fib ackermann deriv sieve nqueens" ./compare-schemes.sh
 ```
 
 ## Run Individual Benchmark
