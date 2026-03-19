@@ -40,7 +40,7 @@ func NewString(str string) *String {
 	return &String{Value: str, immutable: true}
 }
 
-// NewMutableString returns a newly allocated String that is not interned.
+// NewMutableString returns a mutable String value.
 // Use this for strings that may be mutated (e.g., via string-set! or string-fill!).
 // R7RS §6.7: Procedures like string-copy return mutable strings.
 func NewMutableString(str string) *String {

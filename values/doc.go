@@ -29,8 +29,8 @@
 //
 //   - [Boolean]: #t and #f singletons ([TrueValue], [FalseValue])
 //   - [Character]: Unicode rune wrapper
-//   - [String]: interned strings (<=64 bytes)
-//   - [Symbol]: interned identifiers for eq? identity
+//   - [String]: immutable and mutable string values
+//   - [Symbol]: identifiers compared by string key
 //   - [Pair]: cons cells as [2]Value arrays
 //   - [Vector]: fixed-size mutable value arrays
 //   - [ByteVector]: byte arrays for binary data
