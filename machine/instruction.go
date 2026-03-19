@@ -80,11 +80,11 @@ func EncodeLocalIndex(li *environment.LocalIndex) int32 {
 	depth := li.Up()
 	if slot > math.MaxInt16 || slot < math.MinInt16 {
 		panic(werr.WrapForeignErrorf(ErrLocalIndexOverflow,
-			"EncodeLocalIndex: slot %d exceeds int16 range (max %d)", slot, math.MaxInt16))
+			"EncodeLocalIndex: slot %d exceeds int16 range (%d..%d)", slot, math.MinInt16, math.MaxInt16))
 	}
 	if depth > math.MaxInt16 || depth < math.MinInt16 {
 		panic(werr.WrapForeignErrorf(ErrLocalIndexOverflow,
-			"EncodeLocalIndex: depth %d exceeds int16 range (max %d)", depth, math.MaxInt16))
+			"EncodeLocalIndex: depth %d exceeds int16 range (%d..%d)", depth, math.MinInt16, math.MaxInt16))
 	}
 	return int32(depth<<16) | int32(slot&0xFFFF)
 }
