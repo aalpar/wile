@@ -117,7 +117,7 @@ Each release produces:
 
 | Artifact | Contents |
 |----------|----------|
-| `wile-v{X.Y.Z}-{os}-{arch}.tar.gz` | `scheme` binary + LICENSE + README.md |
+| `wile-v{X.Y.Z}-{os}-{arch}.tar.gz` | `wile` binary + LICENSE + README.md |
 | `checksums.txt` | SHA256 checksums for all archives |
 
 Platforms: darwin/linux x amd64/arm64 (4 archives total).
@@ -125,7 +125,7 @@ Platforms: darwin/linux x amd64/arm64 (4 archives total).
 ### How It Works
 
 1. The `release.yml` workflow triggers on `v*` tag pushes
-2. GoReleaser builds the `scheme` binary from `./cmd` for all 4 platform combinations with `CGO_ENABLED=0`
+2. GoReleaser builds the `wile` binary from `./cmd/wile` for all 4 platform combinations with `CGO_ENABLED=0`
 3. Binaries are stamped via ldflags: `-X main.BuildSHA={{ .ShortCommit }} -X main.BuildVersion={{ .Tag }}`
 4. Archives and checksums are uploaded as a GitHub release
 5. GitHub generates the release changelog from commit messages (`changelog.use: github-native`)

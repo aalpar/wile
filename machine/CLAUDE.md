@@ -2,15 +2,15 @@
 
 ## VM Operations
 
-Two-tier dispatch: `Operation` is the base interface (`values.Value` only) for all ops. `InlinedOperation` extends it with `Apply(*MachineContext) (*MachineContext, error)` for complex ops dispatched via the `OpComplex` side table. Inlined ops (Push, Pop, Branch, etc.) have their logic in the `Run()` switch and implement only `Operation`.
+Two-tier dispatch: Most opcodes are inlined directly in the `Run()` switch (~63 cases including promoted ops from opcode promotion Phases 1-3). `InlinedOperation` extends `Operation` with `Apply(*MachineContext) (*MachineContext, error)` for remaining complex ops dispatched via the `OpComplex` side table (~16 ops: build-syntax, syntax-rules-transform, syntax-case, cont-mark, helpers, etc.).
 
-Key ops: Push/Pop (stack), Apply (dispatch), ForeignFunctionCall (Go primitives), MakeClosure, LoadLocal/StoreLocal, LoadGlobal/StoreGlobal, BranchOnFalse/BranchOnNotFalse, SaveContinuation/RestoreContinuation, PushWind/PopWind.
+Key ops: Push/Pop (stack), Apply (dispatch), CallForeignCached/CallForeignCachedTail (Go primitives), MakeClosure, LoadLocal/StoreLocal, PushLocal/PushCachedBinding (fused ops), BranchOnFalse, SaveContinuation/RestoreContinuation, PushWind/PopWind. Promoted ops: NullQ, PairQ, Car, Cdr, Add, Sub, Mul, Div, Cons, numeric comparisons, EqQ, VectorQ, VectorRef (each with tail variants).
 
 ## Extensions
 
 Primitives: `registry/core/prim_*.go`. Signature: `func(*MachineContext) error` (type: `machine.ForeignFunction`).
 
-Register: `r.AddPrimitive(PrimitiveSpec{Name, ParamCount (-1=variadic), IsVariadic, Impl}, Phase)`. Phases: `PhaseRuntime | PhaseExpand | PhaseCompile`.
+Register: `r.AddPrimitive(PrimitiveSpec{Name, ParamCount, IsVariadic, Impl}, Phase)`. Phases: `PhaseRuntime | PhaseExpand | PhaseCompile`.
 
 Extension interface: `Name() string` + `AddToRegistry(*Registry) error`.
 

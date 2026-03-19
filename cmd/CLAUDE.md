@@ -79,15 +79,15 @@ Run a Scheme file:
 
 ```
 dist/
-├── scheme                    # Convenience binary (from go build -o dist/wile)
+├── wile                      # Convenience binary (from go build -o dist/wile)
 ├── darwin/
 │   ├── arm64/
-│   │   └── scheme            # macOS ARM64 binary (from make build on M1/M2)
+│   │   └── wile              # macOS ARM64 binary (from make build on M1/M2)
 │   └── amd64/
-│       └── scheme            # macOS Intel binary
+│       └── wile              # macOS Intel binary
 └── linux/
     ├── arm64/
-    │   └── scheme            # Linux ARM64 binary
+    │   └── wile              # Linux ARM64 binary
     └── amd64/
-        └── scheme            # Linux Intel binary
+        └── wile              # Linux Intel binary
 ```
