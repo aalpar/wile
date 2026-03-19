@@ -22,9 +22,9 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-// ErrLocalIndexOverflow is returned when a De Bruijn index slot or depth
-// exceeds the int16 encoding range (±32,767). This indicates a function with
-// more local variables or nesting depth than the bytecode format supports.
+// ErrLocalIndexOverflow signals that a De Bruijn index slot or depth
+// exceeds the int16 encoding range (-32768..32767). EncodeLocalIndex panics
+// with this sentinel when the bytecode format cannot represent the index.
 var ErrLocalIndexOverflow = werr.NewStaticError("local index overflow")
 
 // Instruction is a single VM instruction for the switch-dispatch loop.
