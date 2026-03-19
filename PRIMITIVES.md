@@ -10,7 +10,7 @@ Complete list of supported types, primitives, and special forms in Wile.
 |------|-------------|
 | Boolean | Truth values `#t` and `#f` |
 | Character | Unicode character, e.g., `#\a`, `#\newline` |
-| Symbol | Interned identifier name |
+| Symbol | Identifier name (compared by string key) |
 | Pair | Cons cell with car and cdr, basis for lists |
 | Null | Empty list `()` |
 | Vector | Fixed-size mutable array, e.g., `#(1 2 3)` |
@@ -29,7 +29,8 @@ Complete list of supported types, primitives, and special forms in Wile.
 | Float | Inexact IEEE 754 double-precision number |
 | Big-Real | Inexact arbitrary-precision floating-point number, e.g., `#m3.14159265358979323846` |
 | Rational | Exact fraction with arbitrary precision |
-| Complex | Complex number with real and imaginary parts |
+| Complex | Inexact complex number with real and imaginary float64 parts |
+| Big-Complex | Complex number with arbitrary-precision parts (exact or inexact) |
 
 ### I/O Port Types
 
@@ -121,6 +122,8 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `library` | R6RS alias for `define-library` |
 | `import` | Import library exports into current environment |
 | `export` | Declare library exports |
+| `er-macro-transformer` | Explicit-renaming macro transformer |
+| `with-continuation-mark` | Attach key-value mark to current continuation frame |
 | `syntax-error` | Signal compile-time error |
 | `syntax-case` | Pattern matching with fenders and arbitrary body (R6RS) |
 | `syntax` | Construct syntax object from template |
@@ -545,6 +548,8 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `open-binary-output-file` | Open binary file for writing |
 | `call-with-input-file` | Call procedure with input file port |
 | `call-with-output-file` | Call procedure with output file port |
+| `with-input-from-file` | Parameterize current-input-port from file (Scheme macro) |
+| `with-output-to-file` | Parameterize current-output-port to file (Scheme macro) |
 | `file-exists?` | Test if file exists |
 | `delete-file` | Delete a file |
 
@@ -589,6 +594,27 @@ Complete list of supported types, primitives, and special forms in Wile.
 |-----------|-------------|
 | `call-with-exit` | Call procedure with one-shot escape continuation |
 | `call-with-continuation-barrier` | Call thunk with continuation re-entry barrier |
+
+## Continuation Marks
+
+| Primitive | Description |
+|-----------|-------------|
+| `current-continuation-marks` | Collect marks from current continuation chain |
+| `continuation-mark-set->list` | Extract mark values for a key from mark set |
+| `continuation-mark-set-first` | Get first mark value for a key |
+| `call-with-immediate-continuation-mark` | Call procedure with mark from current frame |
+| `continuation-mark-set?` | Test for continuation mark set |
+| `continuation?` | Test for continuation value |
+
+## Reflection
+
+| Primitive | Description |
+|-----------|-------------|
+| `procedure-arity` | Get arity information of a procedure |
+| `procedure-name` | Get name of a procedure |
+| `procedure-source-location` | Get source location of a procedure |
+| `procedure-bound-symbols` | Get bound symbols of a procedure |
+| `procedure-type` | Get type classification of a procedure |
 
 ## Multiple Values
 
@@ -663,7 +689,6 @@ Complete list of supported types, primitives, and special forms in Wile.
 
 | Primitive | Description |
 |-----------|-------------|
-| `interaction-environment` | Get interactive environment |
 | `environment?` | Test for environment object |
 | `environment-bound-names` | List all bound names in an environment |
 | `environment-ref` | Look up a binding by symbol in an environment |
