@@ -110,7 +110,7 @@ Closures capture a pointer to the enclosing environment frame rather than copyin
 - **Paper**: Luca Cardelli, "The Functional Abstract Machine", *Polymorphism*, Vol. 1, No. 1, 1983
 - **Also**: Andrew W. Appel, *Compiling with Continuations*, Cambridge University Press, 1992, Chapter 10
 - **ISBN** (Appel): 978-0-521-41695-5
-- **Location**: `machine/operation_make_closure.go`, `machine/machine_closure.go`
+- **Location**: `machine/operations_closure.go`, `machine/machine_closure.go`
 
 ### Direct-Style Compilation (Dybvig 1987)
 
@@ -126,7 +126,7 @@ Wile compiles Scheme directly to stack-machine bytecode without intermediate CPS
 Static bytecode scan to determine whether a closure's environment can escape its call. When it cannot (no continuation capture, no nested closure creation), the environment frame is reused in place rather than copied, eliminating allocation. The analysis in `computeNoCopyApply` checks for `OpSaveContinuation` and `OpMakeClosure` — if neither appears, the environment cannot be captured.
 
 - **Reference**: Andrew W. Appel, *Compiling with Continuations*, Cambridge University Press, 1992, §10.3
-- **Location**: `machine/native_template.go` (computeNoCopyApply, NoCopyApply), `machine/machine_context.go` (Apply noCopy path)
+- **Location**: `machine/native_template.go` (computeNoCopyApply, NoCopyApply), `machine/machine_context_apply.go` (Apply noCopy path)
 
 ### Lexical Scoping (Landin 1966, Strachey 1967)
 
@@ -169,7 +169,7 @@ Examines a small window of generated instructions and replaces inefficient patte
 
 - **Reference**: Alfred V. Aho, Monica S. Lam, Ravi Sethi, Jeffrey D. Ullman, *Compilers: Principles, Techniques, and Tools*, 2nd edition, §8.9
 - **ISBN**: 978-0-321-48681-3
-- **Location**: `machine/operation_branch_on_false_value_offset_immediate.go`
+- **Location**: `machine/operations_control.go`
 
 ### Constant Folding
 
@@ -345,7 +345,7 @@ Wile's scope sets address the same problem as Barendregt's variable convention (
 
 - **Book**: Henk P. Barendregt, *The Lambda Calculus: Its Syntax and Semantics*, revised edition, Studies in Logic, Vol. 103, North-Holland, 1984
 - **ISBN**: 978-0-444-87508-2
-- **Location**: `internal/syntax/syntax_value.go` (Scope type), `internal/match/syntax_adapter.go` (scopesCompatibleForSubstitution)
+- **Location**: `internal/syntax/syntax_value.go` (Scope type), `internal/match/syntax_expand.go` (scopesCompatibleForSubstitution)
 
 ### Reflective Tower (Smith 1984)
 
@@ -445,7 +445,7 @@ The foundational paper on structured exception handling design. Identifies the k
 
 - **Paper**: John B. Goodenough, "Exception Handling: Issues and a Proposed Notation", Communications of the ACM, Vol. 18, No. 12, 1975
 - **DOI**: https://doi.org/10.1145/361227.361230
-- **Location**: `extensions/exceptions/prim_exceptions.go`
+- **Location**: `registry/core/prim_exceptions.go`
 
 ## Security & Sandboxing
 
