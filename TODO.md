@@ -5,7 +5,7 @@ TODO
 
 ### Current Project Status
 
-**Version**: v1.5.0 (released)
+**Version**: v1.6.1 (released)
 **Core Language**: R7RS-small complete with hygienic macros, composable continuations, numeric tower
 **Extensions**: 10 extension packages — 7 public (files, math, system, threads, exceptions, gointerop, introspection), 3 internal (io, eval, all); all importable as R7RS `(wile <name>)` libraries. Go static analysis extensions extracted to [wile-goast](https://github.com/aalpar/wile-goast).
 **Examples**: 76 examples across 12 categories, 21 Gabriel benchmarks, Schelog
