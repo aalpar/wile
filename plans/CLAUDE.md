@@ -15,18 +15,18 @@ When investigating R7RS conformance issues:
 
 | File | Contents | Status |
 |------|----------|--------|
-| `PERFORMANCE.md` | Allocation history, fused lexing research, Tier 3 architectural changes | Tier 1-2 complete; Tier 3 + fused lexing open |
-| `SECURITY.md` | Extension-level sandboxing, authorization framework, opcode resource limits | Phases 1-6 done, resource limits proposed |
+| `PERFORMANCE.md` | Allocation history, fused lexing research, Tier 3 architectural changes | Tier 1-2 complete; NaN-boxing + fused lexing open |
+| `SECURITY.md` | Extension-level sandboxing, authorization framework, opcode resource limits | Extension sandboxing Phases 1-6 done; Authorization Phases 1-6 done; resource limits proposed |
 | `MACRO_SYSTEM.md` | ER macro transformer, hygiene debugging, macro expansion tracing | ER macros complete; hygiene debugging + tracing planned |
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |
-| `ARCHITECTURE.md` | Dialect system, module decomposition, plugin shadowing | Open items remain |
-| `CONTINUATION_MARKS.md` | Racket-style per-frame key-value annotations on the continuation chain | Proposed |
-| `REMOVE-SYMBOL-INTERNING.md` | Remove symbol canonicalization, compare by string key | Complete (all 7 tasks verified 2026-03-14) |
-| `ENVIRONMENT-CLEANUP.md` | Environment package cleanup: constructor duplication, dead delegation, semantic inconsistency | Complete (all 7 tasks verified 2026-03-14; Task 6 superseded) |
-| `OPCODE-PROMOTION.md` | Promote hot primitives to dedicated opcodes; Larceny profiling data, tiered plan | All 3 phases complete (#497, #498, Phase 3: cons/*/÷) |
-| `FLAT-CLOSURES.md` | Flat closure implementation: 3-PR plan (infra+analysis, behavioral change, cleanup) + Machine Modernization Roadmap | **Reverted** — +7.4% geo-mean regression across 31 benchmarks (Larceny + Schelog + Kanren). Zero benchmarks improved. New `freeVars` slice allocation (+831 MB) exceeded savings from eliminated parent-chain walks. |
-| `STACK-FRAMES.md` | Replace continuation pool with contiguous `[]callFrame` slice — 12 tasks, 3 PRs (infra, behavioral change, cleanup) | **Closed** — implemented and reverted. Dispatch improved 5% on fib but regressed continuation-heavy benchmarks 10-20%. Net negative. |
-| `INLINE-BINDINGS.md` | Embed `[4]Binding` inline array in `LocalEnvironmentFrame` to eliminate `copyForApplyInto` heap allocations | **Reverted** — implemented and reverted in PR #521. Plan and benchmark evidence preserved. |
+| `ARCHITECTURE.md` | Dialect system, module decomposition, plugin shadowing | Engine refactoring done; dialect, decomposition, shadowing, introspection open |
+| `CONTINUATION_MARKS.md` | Racket-style per-frame key-value annotations on the continuation chain | Complete (all 3 phases implemented: #508-#511) |
+| `OPCODE-PROMOTION.md` | Promote hot primitives to dedicated opcodes; Larceny profiling data, tiered plan | Complete (all 3 phases: #497, #498, Phase 3) |
+| `REMOVE-SYMBOL-INTERNING.md` | Remove symbol canonicalization, compare by string key | Complete (verified 2026-03-14) |
+| `ENVIRONMENT-CLEANUP.md` | Environment package cleanup: constructor duplication, dead delegation, semantic inconsistency | Complete (verified 2026-03-14) |
+| `FLAT-CLOSURES.md` | Flat closure implementation + Machine Modernization Roadmap | **Reverted** (PR #520) — +7.4% geo-mean regression |
+| `STACK-FRAMES.md` | Replace continuation pool with contiguous `[]callFrame` slice | **Reverted** (PR #518) — net negative on continuation-heavy benchmarks |
+| `INLINE-BINDINGS.md` | Embed `[4]Binding` inline array in `LocalEnvironmentFrame` | **Reverted** (PR #521) |
 Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans).
 
 ## Before Starting Work

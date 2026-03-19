@@ -21,66 +21,14 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 ## Bugs & Correctness
 
 - L7 (`char-ready?`/`u8-ready?` always `#t`) — documented semantic difference, no fix planned
-- [x] **`==` error comparison in REPL** [Low, S]: Fixed — now uses `errors.Is(err, readline.ErrInterrupt)`.
-- [x] **`guard` body drops multiple values** [Medium, S]: Fixed in #395 — body now uses `call-with-values` + `list` capture.
-- [x] **Tuple ForEach nil returns Void instead of EmptyList** [Medium, S]: Fixed in #394 — nil guards and loop exits now return `EmptyList`/`SyntaxEmptyList`.
-- [x] **Variadic math primitives accept excess args** [Low, S]: Fixed in #446 — `log`, `atan`, `number->string`, `string->number` now reject extra arguments. Also added missing radix validation to `string->number`.
 
 ---
 
 ## Refactoring
 
-Ordered by dependency — items that unblock others or carry divergence risk come first. MachineContext decomposition is last (depends on other refactorings settling).
-
-### High Priority
-
-- [x] **Remaining raw sentinel panics** [High, S]: 20 `panic(werr.ErrXxx)` calls without `WrapForeignErrorf` wrapping. Sites: `values/pair.go:139,169,236`, `values/empty_list.go:83,88`, `values/promotion.go:308`, `internal/syntax/syntax_pair.go:151,168,172,181,198,212,338,357`, `internal/syntax/syntax_empty_list.go:91,96,101,106`, `machine/stack.go:43,55`. Wrapped with site-specific context. Ruleguard rule `noBareSentinelPanic` added to prevent regression.
-- [x] **Bare division-by-zero returns** [High, S]: 7 numeric `Divide` methods return bare `werr.ErrDivisionByZero` without wrapping. Wrapped with `"Type.Divide: division by exact zero"` at each site.
-- [x] **internal/validate test coverage** [High, M]: Added 3 dedicated test files: `validate_macro_test.go` (define-syntax, syntax-rules, import, cond-expand), `validate_define_test.go` (variable/function define, error cases), `validate_lambda_test.go` (lambda, case-lambda, variadic, errors). 35 test cases across 12 test functions.
-- [x] **Tokenizer `readNan` refactoring** [High, M]: Fixed fall-through bug in `readSpecialNumber` where `onMismatch` callback didn't return, falling through to dot/digit validation. `readNan` now returns `bool` (true = full `nan.0` parsed). `readSignedNan` uses bool return instead of `p.err` workaround. `mayReadUnsignedFractionalRealNumberOrRationalRealNumber` calls `readSpecialNumber` directly (error-on-mismatch). Fixed `MessageExpectingInf` → `MessageExpectingNan` in `mayReadSignedImaginaryPart`. 4 stale TODO/nolint comments removed.
-
-### Medium Priority
-
-- [x] **Extract `parser.readSyntax()` dispatcher** [Medium, M]: Extracted `readCharacter()`, `readExactnessMarker()`, and 6 numeric methods to `parser_number.go`. Fixed `readQuoteForm` source location (pre-advance token) and unified Quote case. Switch reduced from ~238 lines to ~120 lines.
-- [x] **Environment resolve: unify parent-chain walks** [Medium, M]: `GetLocalIndexWithScopes` was the only search walk duplicating `resolveLocal`'s loop. Rewritten to delegate to `resolveLocal` with `checkScopes=true`; visitor handles candidate collection and perfect-match early exit. All parent-chain search walks now use `resolveLocal`.
-- [x] **`syntax_adapter.go` responsibility split** [Medium, M]: Split into `syntax_adapter.go` (~337 lines, matching + interfaces) and `syntax_expand.go` (~505 lines, template expansion). Two files instead of three — hygiene validation is inseparable from matching/expansion.
-- [x] **Numeric tower type-switch checklist** [Medium, S]: Added 11-item checklist comment in `values/numeric_kind.go` listing every file that must be updated when adding a new numeric type. Added `TestTypeSwitchFunctionsHandleAllTypes` in `numeric_dispatch_test.go` covering `NumberToFloat64`, `NumberToComplex128`, `Simplify`, `ExactnessOf` across all 7 types.
-- [x] **Opcode extension checklist** [Medium, S]: 7-item checklist comment already exists in `machine/opcode.go:22-29` listing all files that must be updated when adding a new opcode.
-- [x] **Document ffi.go callback converter inversion** [Medium, S]: Already documented in `ffi.go:541-543` (direction inversion summary) and `ffi.go:559-561` (callback return explanation).
-- [x] **Document optional argument patterns** [Medium, S]: Added decision tree to `registry/CLAUDE.md` covering `OptionalArg[T]` (typed default), `ParseOptionalArg` (presence check), and `ParseSubrange` (positional start/end).
-- [x] **I/O port extraction helper** [Medium, S]: Extracted generic `extractPort[T]` in #424.
-- [x] **Optional fill argument extraction**: 3 `make-*` primitives (`PrimMakeVector`, `PrimMakeBytevector`, `PrimMakeString`) independently extract optional fill arguments with slightly different patterns. Share a helper.
-- [x] **Machine package tech debt** [Medium, M]: 6 phases — arity dedup, closure extraction, expander decomposition, letrec* unification, library import dedup, stale alias removal. Complete in #444. See `plans/MACHINE-TECH-DEBT.md`.
-- [x] **Math extension file split** [Low, S]: Split 1,292-line `prim_math.go` into 5 files by R7RS section (transcendental, rounding, rational, complex, conversion). Complete in #446.
-- [x] **Raw string panics** [Medium, S]: 4 panics used raw strings instead of `werr.WrapForeignErrorf(sentinel, ...)` in `extensions/math/prim_complex.go`, `machine/edit_plan.go`, `machine/native_template.go`. Wrapped each with the appropriate sentinel.
-- [x] **Bare sentinel panics** [Medium, S]: `NumberToFloat64`, `NumberToComplex128` (`values/promotion.go`) and `ExactnessOf` (`values/numeric_tower.go`) panicked with bare `werr.ErrNotANumber` — no `WrapForeignErrorf` wrapping. Added call-site context.
-- [x] **internal/forms tests** [Medium, S]: `internal/forms/form_spec.go` (105 lines) is the only internal package with zero test files. Central registry used by `validate` and `machine`. Add `form_spec_test.go` covering registration, duplicate detection, and lookup miss behavior. Complete in #452.
-- [x] **Expander time continuation decomposition** [Medium, M]: Split 1,327-line `expander_time_continuation.go` into 4 files: `expander_let_syntax.go` (let-syntax/letrec-syntax), `expander_primitive_forms.go` (if, begin, set!, define, import, etc.), `expander_lambda.go` (lambda, case-lambda, helpers), core dispatch remaining in original file.
-- [x] **Quasiquote/quasisyntax duplication** [Medium, M]: Extracted shared `expandQuasi`, `expandQuasiList`, `expandQuasiListWithSplice` into `machine/quasi_expand.go` with `quasiKeywords` config struct. Fixed latent `list*` bug in quasisyntax improper list expansion (replaced with nested `cons`).
-- [x] **Pooling contract documentation** [Medium, S]: `machine/pool.go` has 4 global pools (stack, sub-context, continuation, env-frame). Continuation frames pooled only on normal return; `call/cc` escapes leave frames for GC via `MarkChainShared`. Documented in `docs/dev/POOLING.md`.
-- [x] **`context.TODO()` in production code** [Medium, S]: Changed to `context.Background()` in `values/pair.go` (`Length` and `AsVector`). Design choice made explicit: these methods intentionally have no cancellation path. Documented in comments.
-- [x] **Numeric kind checklist incomplete** [Medium, S]: Added item 12 (`registry/helpers/equality.go` for eqv? semantics). Marked item 9 (`wile-goast/goast/mapper.go`) as EXTERNAL REPO.
-- [x] **extensions/math/ test coverage** [Medium, M]: Split `prim_math_test.go` into 5 per-module test files: `prim_transcendental_test.go`, `prim_conversion_test.go`, `prim_complex_test.go`, `prim_rational_test.go`, `prim_rounding_test.go`. Added edge case tests for transcendental domains, complex construction, and rounding behavior.
-- [x] **ruleguard/ has zero tests** [Medium, S]: Added `ruleguard/rules_test.go` with positive and negative test cases for all 4 rules (`noCompoundIf`, `noErrorsNew`, `noFmtErrorf`, `noBareSentinelPanic`). Tests run `golangci-lint` against fixture files to verify rules actually catch violations.
-- [x] **Missing checklists for extensions and special forms** [Medium, S]: Added 6-item extension checklist in `internal/bootstrap/environment_tiny.go` and 7-item special form checklist in `internal/validate/register.go`.
-
 ### Low Priority
 
-- [x] **Port type boilerplate** [Low, S]: `portBase` now provides `EqualTo()` and `SchemeString()` via embedding promotion. `EqualTo` uses `kind + datum` identity comparison (Go's `any` equality checks both dynamic type and value, preventing false matches across port types that share a kind). `IsVoid()` remains per-type (nil-receiver contract requires concrete type method). 10 `EqualTo` methods removed from 10 port files.
-- [x] **Machine: document implicit PC contract** [Low, S]: Added doc comment on `pc` field in `vmState` listing all write sites (NewMachineContext, Apply, Restore, SaveContinuation, opcodes) and the raise-continuable rationale. Added defensive `pc < 0` bounds assertion at top of `Run()` with `ErrInvalidProgramCounter` sentinel. Test in `machine_context_test.go`.
-- [x] **Compound if-init in OperationSaveContMark** [Low, S]: `machine/operation_cont_mark.go:87` used `if old := mc.GetMark(key); old != nil {` — extracted assignment before conditional per project style.
-- [ ] **Error sentinel grouping** [Low, S]: ~103 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.
-- [x] **`int16` instruction argument limit undocumented** [Low→High, S]: Added compile-time bounds check in `EncodeLocalIndex` (`machine/instruction.go`) that panics with `ErrLocalIndexOverflow` when slot or depth exceeds int16 range. Note: branch offsets use full int32 — the int16 limit applies only to De Bruijn index packing (slot and depth).
-- [x] **Operation file consolidation** [Low, M]: Consolidated 24 single-method operation files into 6 family files: `operations_stack.go` (Push/Pop/Pull/Drop/PeekK), `operations_load_store.go` (Load*/Store*), `operations_control.go` (Branch/BranchOnFalse/SaveCont/RestoreCont), `operations_call.go` (Apply/ForeignFunctionCall/UnpackListToStack), `operations_closure.go` (MakeClosure/MakeCaseLambdaClosure), `operations_winding.go` (PushWind/PopWind/PopEnv). 5 larger files kept separate (build_syntax, syntax_rules_transform, syntax_case, cont_mark, helpers).
-- [x] **Rename `AddSearchPath` to `PrependSearchPath`** [Low, S]: Renamed in library_registry.go and all call sites.
-- [x] **Unify library/include path resolution** [Low, S]: `findFile` now consults library registry search paths as fallback dirs, sharing the same paths as `import`.
-- [x] **Tokenizer test file consolidation** [Low, M]: Consolidated 14 coverage-goal-named test files into 10 behavior-oriented files mirroring source structure. All 191 tests preserved. PR #448.
-- [x] **REPL deprecated wrappers** [Low, S]: Deleted `Compile`, `Run`, `Load` wrappers from `internal/repl/repl.go`. Internal call sites now use `wileruntime` directly.
-- [x] **String utility duplication** [Low, S]: Unified `TrimPrefixFolded`/`TrimSuffixFolded` (parser) and `TrimPrefixCI`/`TrimSuffixCI` (tokenizer) into `internal/schemeutil/stringutil.go`. ASCII-only implementation (all call sites use ASCII prefixes). Deleted `parser_string.go` and `tokenizer/utils.go`. Fixed redundant double-trim of `#z`/`#Z` prefix in `parseBigIntegerWithBase`.
-- [x] **Hand-rolled predicates in extensions** [Low, S]: Converted 9 hand-rolled type predicates (4 in threads, 5 in gointerop) to use `helpers.MakeTypePredicate` factory, matching core primitive pattern.
-- [x] **Duplicated import set parsing** [Medium, M]: Already resolved — all three import paths (compile-time, library-internal, expand-time) call `.UnwrapAll()` to strip syntax wrappers, then delegate to the single `ParseImportSetFromDatum` in `import_set_datum.go`. No duplication exists.
-- [x] **`forms` package type erasure** [Medium, S]: Moved `ValidatedExpr` interface to `forms` package (depends only on `*syntax.SourceContext`). Type alias in `validate` preserves all existing references. `ValidatorFunc` now typed: `env *environment.EnvironmentFrame`, `pair *syntax.SyntaxPair`, returns `ValidatedExpr`. `CompilerFunc` `expr` param typed as `ValidatedExpr`. Remaining `any` params (`result`, `ctc`, `ctctx`) are genuinely uncrossable — `validate` and `machine` import `forms`, so `forms` can't import them back.
-- [x] **Machine: naming — `declareDefineBinding` vs `predeclareDefineBindingFromValidated`** [Low, S]: Investigated — semantically different. `declareDefineBinding` (compile_validated.go) compiles a single define form and returns the symbol for immediate use. `predeclareDefineBindingFromValidated` (compile_closure.go) pre-declares all defines in a body (letrec* Pass 1) with void return. Different phases, different return types, no unification needed.
+- [ ] **Error sentinel grouping** [Low, S]: ~105 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.
 
 ### Postponed
 
@@ -90,25 +38,17 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 - [ ] **Match: consolidate bytecode type files** [Low, Postponed]: Pure cosmetic reorganization.
 - [ ] **Extensions: standardize registration patterns** [Low, Postponed]: Requires design decision on the canonical pattern. Worth a separate discussion, not a mechanical refactoring.
 - [ ] **Schemeutil: grab-bag reorganization** [Low, Postponed]: Moving functions risks import cycle issues. Needs careful dependency analysis.
-- [x] **F10: MachineContext decomposition** [Medium, Postponed]: Split 1,639-line `machine_context.go` into 5 files by responsibility: `machine_context_continuation.go` (286 lines), `machine_context_winding.go` (149 lines), `machine_context_subcontext.go` (106 lines), `machine_context_apply.go` (320 lines), core reduced to 857 lines.
 
 ---
 
 ## Performance & CI
 
-- [x] **CI benchmark tracking** [CI, S]: Gabriel suite (16 benchmarks, 3 runs) runs in CI; results uploaded as 90-day artifacts. PR #430. Baseline regenerated from CI hardware in #431 — apparent 20% regression was a measurement environment mismatch (local vs CI hardware), not a code regression.
-
 ### Actionable
 
-- [x] **Remove symbol interning** [Performance, M]: Removed `InternSymbol` canonicalization; symbols compared by `.Key` string via `helpers.EqIdentity`. ~50 call sites removed, `symbolInterns` map deleted from `TopLevelEnvironment`. `plans/REMOVE-SYMBOL-INTERNING.md`
-- [x] **Remove string interning** [Performance, S]: Removed `InternString`, `stringInterns sync.Map`, and `stringInternMaxLen`. `EqualTo` already compared by `.Value` string, so interning provided no benefit — only unbounded memory growth from the never-evicted `sync.Map`. `NewString` now always allocates. `symbol->string` changed from `InternString` to `NewString` (still returns immutable per R7RS §6.5).
-- [x] **Optimize hot-path ForeignFunction calls** [Performance, M]: Promoted opcodes approach (A). Phase 1: list predicates/accessors (`null?`, `pair?`, `car`, `cdr`) — #497. Phase 2: binary arithmetic/comparisons (`+`, `-`, `<`, `<=`, `>`, `>=`, `=`) — #498. Phase 3: `cons`, `*`, `/` — bypasses dispatch for 2-arg calls; variadic falls back to `CallForeignCached`. `plans/OPCODE-PROMOTION.md`.
 - [ ] **Procedure inlining** [Performance, Research]: Explore peephole inlining of known procedures at compile time. No plan yet.
 
 ### Architectural (Tier 3)
 
-- [x] **Flat closures** [Performance, L, Reverted]: Implemented (PRs #514, #515, #516) and reverted. +7.4% geo-mean regression across 31 benchmarks — new `freeVars` slice allocation exceeded savings from eliminated parent-chain walks. `plans/FLAT-CLOSURES.md`
-- [x] **Stack frames replacing continuation chains** [Performance, L, Closed]: Implemented and reverted (PR #518). Dispatch improved 5% on fib but regressed continuation-heavy benchmarks 10-20%. Pool-based `MachineContinuation` linked list retained. `plans/STACK-FRAMES.md`
 - [ ] **NaN-boxing / tagged pointers** [Performance, L]: Encode small values (fixnums, booleans, chars) in 64 bits instead of 16-byte Go interface. Halves stack/binding sizes. Massive change, awkward in Go. `plans/PERFORMANCE.md`
 
 ### Research
@@ -121,7 +61,6 @@ Ordered by dependency — items that unblock others or carry divergence risk com
 
 - [ ] **Opcode resource limits** [Security, Design]: Per-category limits for match/expand/continuation copy. Completes defense-in-depth for embedded use. `plans/SECURITY.md`
 - [ ] **Module decomposition Phase 1** [Architecture]: Decompose `internal/extensions/all/` into records, promises, core. Enables future module extraction. `plans/ARCHITECTURE.md`
-- [x] **ER macro transformer** [Macro system]: Unlocks Chibi library ecosystem. Matters after Go-side adoption creates demand for Scheme library porting. `plans/MACRO_SYSTEM.md`
 - [ ] **Network libraries** [Standard library]: TCP/UDP, HTTP, TLS, DNS. Required for real-world embedded use cases.
   - TCP/UDP sockets (tcp-connect, tcp-listen, tcp-accept, tcp-close)
   - HTTP client/server primitives
@@ -144,7 +83,6 @@ No demand signal. Speculative or research-only.
 - [ ] **Dialect system** [Architecture, Proposed]: De-globalize forms registry, `WithDialect()` option, extract R7RS as default dialect. `plans/ARCHITECTURE.md`
 - [ ] **Plugin shadowing** [Architecture, Proposed]: Extension primitive shadowing. Depends on public extensions. `plans/ARCHITECTURE.md`
 - [ ] **Programmatic tokenization/parsing** [Tooling]: Expose tokenizer/parser to Scheme code. 4 phases: token introspection, syntax introspection, EOF handling, advanced reader control.
-- [x] **Continuation marks** [Runtime]: Racket-style per-frame key→value annotations. Phase 1: `marks` field on `vmState`, `with-continuation-mark` special form (#508, #509). Phase 2: `ContinuationMarkSet` type, `current-continuation-marks`, `continuation-mark-set->list`, `continuation-mark-set-first`, prompt-delimited collection (#510). Phase 3: `call-with-immediate-continuation-mark`, `continuation-marks` on captured continuations via `CapturedContinuation` type, `continuation?` predicate (#511). `plans/CONTINUATION_MARKS.md`.
 - [ ] **Logging library** [Standard library]: Levels, structured output, handlers.
 - [ ] **Event callbacks** [Tooling]: Hooks for expansion, compilation, debugging. IDE integration, profiling.
 - [ ] **Feature flags (3-tier)** [Runtime]: Compile-time, runtime global, extension-defined. No demand signal yet.
@@ -156,11 +94,6 @@ No demand signal. Speculative or research-only.
 - [ ] **Source file tracking in Syntax Objects**: need some utilities around finding source locations and providing source lines.
 - [ ] **Exceptions and Error stack traces**: Both Foreign and Native errors should track stacktraces with source code references.
 - [ ] **Foreign Stack trace entry in stack traces that cross from Native -> Foreign -> Native callback.**
-- [x] **Area for blog articles** Git blog area in repo — `docs/blog/`.
-- [x] **Finish blog article** Sandboxing blog post: `docs/blog/sandboxing.md`.
 - [ ] **Implement let-syntax*** [Core language, S]: Implement `let-syntax*`.
-- [x] **Native forms migration** [Refactoring, M]: 44 of 52 done. Phase 3 complete: `call-with-port` migrated to Scheme in io extension (capturable continuation frames); `callWithFile` single-value bug fixed; all 6 list algorithms benchmarked and kept in Go (4-9× slower on short lists; all exceed 20% gate — per-element Scheme VM dispatch dominates); `call-with-input-file`/`call-with-output-file` kept in Go (files extension must load without io). Benchmark data in `plans/NATIVE-FORMS-MIGRATION.md`.
 - [ ] **User labels/tags to distinguish FS resolvers** Use tags or labels to distinguish bootstrap loadee from include/library loaders in fileResolver.
-- [x] **Benchmark** benchmark result of moving primitives to Scheme — measured in Phase 3 of native forms migration. All 6 list algorithms 4-9× slower in Scheme (per-element ForeignFunction dispatch dominates on short lists). Data in `plans/NATIVE-FORMS-MIGRATION.md`.
 - [ ] **Disassembler** Implement a disassembler for Wile
-- [x] **Reflection primitives** [Runtime]: `procedure-arity`, `procedure-name`, `procedure-source-location`, `procedure-bound-symbols`, `procedure-type` in `registry/core/`.

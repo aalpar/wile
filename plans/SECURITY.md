@@ -319,7 +319,7 @@ Embedders that don't set it pay nothing (nil check before firing).
 
 # Authorization Framework
 
-**Status**: Phases 1-3 implemented
+**Status**: Phases 1-6 implemented
 
 ## Motivation
 
