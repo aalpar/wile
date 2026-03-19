@@ -250,7 +250,7 @@ Create a baseline for your current version:
 
 ```bash
 # Generate baseline
-for bench in tak fib ack deriv sieve; do
+for bench in tak fib ackermann deriv sieve; do
     echo -n "$bench,"
     ./dist/wile --file examples/benchmarks/${bench}.scm 2>&1 | \
         grep "Total time" | awk '{print $3}' | tr -d 's'
@@ -261,7 +261,7 @@ done > benchmarks-baseline.csv
 
 ```bash
 # After making changes, generate new results
-for bench in tak fib ack deriv sieve; do
+for bench in tak fib ackermann deriv sieve; do
     echo -n "$bench,"
     ./dist/wile --file examples/benchmarks/${bench}.scm 2>&1 | \
         grep "Total time" | awk '{print $3}' | tr -d 's'
@@ -290,14 +290,14 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v4
         with:
-          go-version: '1.21'
+          go-version: '1.24'
 
       - name: Build
         run: make build
 
       - name: Run Benchmarks
         run: |
-          for bench in tak fib ack deriv sieve; do
+          for bench in tak fib ackermann deriv sieve; do
             echo "=== $bench ==="
             ./dist/wile --file examples/benchmarks/${bench}.scm
           done
@@ -306,7 +306,7 @@ jobs:
         run: |
           # Compare against stored baseline
           # Fail if any benchmark regresses >20%
-          ./scripts/check-benchmark-regression.sh
+          ./tools/sh/bench-regression.sh
 ```
 
 ## Benchmark-Driven Development

@@ -8,7 +8,7 @@ Automated test suite for Wile's Scheme implementation using the `(chibi test)` f
 test/
 ├── scheme/           # Core language tests
 │                     # - Numeric tower, hygiene, continuations, etc.
-├── regression/       # Bug regression tests
+├── regression/       # Bug regression tests (not yet populated)
 │                     # - issue-XXX-*.scm for specific bug fixes
 ├── run-all.scm       # Scheme test runner (discovers and executes tests)
 ├── run-all.sh        # Shell wrapper for test execution
@@ -16,7 +16,7 @@ test/
 └── README.md         # This file
 ```
 
-Library-specific tests are colocated with their implementations:
+Library-specific tests are colocated with their implementations (pattern, not yet populated):
 ```
 lib/
 └── srfi/1/
@@ -76,8 +76,8 @@ All test files must match the pattern `*-test.scm` for automatic discovery.
 | Location | Pattern | Example |
 |----------|---------|---------|
 | Library tests | `lib/<library>/test/<module>-test.scm` | `lib/srfi/1/test/fold-test.scm` |
-| Core tests | `test/wile/<feature>-test.scm` | `test/wile/numeric-tower-test.scm` |
-| Regression tests | `test/regression/issue-<num>-<slug>.scm` | `test/regression/issue-123-macro-hygiene.scm` |
+| Core tests | `test/scheme/<feature>-test.scm` | `test/scheme/numeric-tower-test.scm` |
+| Regression tests | `test/regression/issue-<num>-<slug>.scm` | `test/regression/issue-123-macro-hygiene.scm` | (directory not yet populated) |
 
 ### Test Template
 
@@ -135,7 +135,7 @@ Scheme tests run as part of `make test` in CI. The Go test `TestSchemeTestSuite`
 ## Adding New Tests
 
 1. **For library code**: Create `lib/<library>/test/<module>-test.scm`
-2. **For core features**: Create `test/wile/<feature>-test.scm`
+2. **For core features**: Create `test/scheme/<feature>-test.scm`
 3. **For bug fixes**: Create `test/regression/issue-<num>-<slug>.scm`
 4. **Run tests**: `make test` or `./test/run-all.sh`
 
@@ -162,4 +162,3 @@ See `test/COMPATIBILITY.md` for detailed guidance on cross-implementation testin
 - `test/COMPATIBILITY.md` — Cross-implementation testing guide
 - `CONTRIBUTING.md` — Full test guidelines and conventions
 - `lib/chibi/test.scm` — Test framework implementation
-- `plans/SCHEME_TEST_INFRASTRUCTURE_PLAN.md` — Design document

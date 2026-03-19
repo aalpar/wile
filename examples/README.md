@@ -149,7 +149,7 @@ Standard Scheme benchmarks from the Gabriel suite and others.
 | [ackermann.scm](benchmarks/ackermann.scm) | Ackermann function (deep recursion) |
 | [sieve.scm](benchmarks/sieve.scm) | Sieve of Eratosthenes (allocation) |
 
-**21 benchmarks** covering recursion, allocation, floating-point, list processing, and more. See [benchmarks/README.md](benchmarks/README.md) for the complete list and cross-implementation comparison scripts.
+**23 benchmarks** covering recursion, allocation, floating-point, list processing, and more. See [benchmarks/README.md](benchmarks/README.md) for the complete list and cross-implementation comparison scripts.
 
 ## Running Examples
 
