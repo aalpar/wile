@@ -24,7 +24,24 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 ---
 
+## Testing
+
+### High Priority
+
+- [x] **machine/ unit test coverage** [High, L]: Added 49 test files covering types/utilities, operations, VM runtime, compilation, expansion, library system, macro runtime, and infrastructure. ~500+ test cases. 3 of 52 files remain: `doc.go` (no code), `operations.go` (already covered by `operation_test.go`), one consolidated.
+- [x] **engine.go unit tests** [High, M]: Added `engine_unit_test.go` with 7 test functions covering Eval, EvalMultiple, Compile+Run, Define+Get, Call, Close, error wrapping, and options.
+- [x] **REPL test coverage** [High, M]: Added `debug_test.go` (23+ subtests for DebugContext: break, delete, list, enable, disable, step, next, finish, continue, backtrace, where). Extended `meta_test.go` with command listing, debug delegation, unknown command handling.
+
+---
+
 ## Refactoring
+
+### Medium Priority
+
+- [x] **Missing primitive registration guide comment** [Medium, S]: Added "ADDING A NEW CORE PRIMITIVE" comment in `registry/core/register.go` (4 items).
+- [x] **Value type guide comment** [Medium, S]: Added "ADDING A NEW VALUE TYPE" comment near the `Value` interface in `values/values.go` (7 conditional items + cross-reference to `values/numeric_kind.go` for numeric types).
+- [x] **Type switch exhaustiveness linter** [Medium, M]: Added `cmd/typeswitchlint` — scans for type switches on `values.*`, reports switches without `default:` that may be missing concrete types. 8 warnings found across extensions/math, extensions/system, extensions/threads, internal/syntax, registry/helpers. Run: `go run ./cmd/typeswitchlint .` (default: warnings only; `-v` for all).
+- [x] **Special form dual-dispatch verification** [Medium, M]: Added `forms.Verify()` checking that every registered form has both a validator and a compiler (with exceptions for expand-time-only forms: let-syntax, letrec-syntax, syntax-rules). `TestFormRegistrationConsistency` in `internal/forms/consistency_test.go` runs after init() from both validate and machine packages. Full unification blocked by import cycle; verification catches the same class of bug at test time.
 
 ### Low Priority
 
@@ -34,7 +51,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 - [ ] **F11: Promote internal extensions** [Low, Postponed]: `internal/extensions/{io,eval,all}` invisible to embedders. Promote to `extensions/{io,eval}/` when extension API stabilizes and external consumers exist.
 - [ ] **Parser: unify readList + readLabeledList** [Low, Postponed]: High risk — datum labels require in-place mutation of placeholder pairs. The structural difference is semantic, not accidental. Unifying requires careful design to handle the placeholder protocol.
-- [ ] **Match: extract opcode handlers from VM interpreter** [Low, Postponed]: 264-line switch is large but stable. Extraction adds indirection without clear benefit until new opcodes are needed.
+- [ ] **VM dispatch loop extraction** [Low, Postponed]: `MachineContext.Run()` is 539 lines with ~63 inlined opcode cases. Extraction adds indirection without clear benefit — Go has no computed goto, and method dispatch adds measurable overhead on the hot path. The two-tier model (inlined ops + `OpComplex` side table for ~16 complex ops) already extracts the most complex operations. Intentional performance-over-readability trade-off.
 - [ ] **Match: consolidate bytecode type files** [Low, Postponed]: Pure cosmetic reorganization.
 - [ ] **Extensions: standardize registration patterns** [Low, Postponed]: Requires design decision on the canonical pattern. Worth a separate discussion, not a mechanical refactoring.
 - [ ] **Schemeutil: grab-bag reorganization** [Low, Postponed]: Moving functions risks import cycle issues. Needs careful dependency analysis.

@@ -19,9 +19,12 @@ package forms
 
 import (
 	"context"
+	"slices"
+	"strings"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
+	"github.com/aalpar/wile/werr"
 )
 
 // ValidatedExpr is the interface for all validated expressions.
@@ -94,6 +97,40 @@ func RegisterCompiler(name string, fn CompilerFunc) {
 // Lookup returns the FormSpec for a keyword, or nil if not found.
 func Lookup(name string) *FormSpec {
 	return registry[name]
+}
+
+// expandTimeOnlyForms are forms handled entirely during expansion that
+// legitimately have no compiler. They never reach the compilation phase.
+var expandTimeOnlyForms = map[string]bool{
+	"let-syntax":    true, // primitive expander, wrapper disappears after expansion
+	"letrec-syntax": true, // primitive expander, wrapper disappears after expansion
+	"syntax-rules":  true, // compiled inline by CompileSyntaxRules within define-syntax
+}
+
+// Verify checks that every registered form has both a validator and a compiler,
+// except for forms that are handled entirely during expansion. Returns an error
+// listing any forms with missing handlers, or nil if all pairings are consistent.
+func Verify() error {
+	var missing []string
+	for name, spec := range registry {
+		if spec.Validate == nil {
+			missing = append(missing, name+": missing validator")
+		}
+		if spec.Compile == nil && !expandTimeOnlyForms[name] {
+			missing = append(missing, name+": missing compiler")
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	slices.Sort(missing)
+	var b strings.Builder
+	for _, m := range missing {
+		b.WriteString("\n  ")
+		b.WriteString(m)
+	}
+	return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+		"form registration inconsistencies:%s", b.String())
 }
 
 // Names returns all registered form names.

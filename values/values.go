@@ -82,6 +82,21 @@ var EOFObject Value = eofType{}
 //     (e.g., the return value of set! or display). A nil receiver must
 //     return true so that missing values are treated as void.
 //   - EqualTo implements structural equality (R7RS §6.1 equal?).
+//
+// ADDING A NEW VALUE TYPE requires at minimum:
+//
+//  1. values/<type>.go              — implement Value (SchemeString, IsVoid, EqualTo)
+//  2. values/<type>_test.go         — test the three Value methods + type-specific behavior
+//
+// Depending on the type's role, also update:
+//
+//  3. registry/core/prim_predicates.go  — if it needs a type predicate (e.g., box?)
+//  4. ffi.go                           — if it maps to/from Go types via RegisterFunc
+//  5. values/scheme_writer.go          — if it has internal structure that can be shared/circular
+//  6. machine/machine_context_apply.go  — if it is callable (implements Callable)
+//  7. machine/native_template.go       — if it can appear as a compile-time literal
+//
+// For numeric types, see the more detailed guide in values/numeric_kind.go (12 items).
 type Value interface {
 	SchemeString() string
 	IsVoid() bool
