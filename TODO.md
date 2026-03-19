@@ -24,7 +24,24 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 ---
 
+## Testing
+
+### High Priority
+
+- [ ] **machine/ unit test coverage** [High, L]: 52 of 99 production files in `machine/` have no corresponding `_test.go`. Critical untested files: `machine_context_apply.go` (342 lines — callable dispatch), `machine_context_continuation.go` (301 lines — continuation save/restore, delimited ops), `expander_primitive_forms.go` (402 lines — macro expansion for primitive forms), `quasi_expand.go` (349 lines), `expander_lambda.go` (301 lines), `call_promoted.go` + `call_promoted_arithmetic.go` (482 lines — promoted opcode hot paths). Only 5 of 73 test files use `errors.Is` — error path testing is especially sparse. Some coverage exists indirectly via Scheme-level test suites, but Go-level unit tests for boundary conditions and error paths are absent. Prioritize `machine_context_apply.go`, `machine_context_continuation.go`, and `call_promoted*.go` first.
+- [ ] **engine.go unit tests** [High, M]: The public embedding API (720 lines, 37 exported functions — `Eval`, `Compile`, `Run`, `Close`, `RegisterFunc`) has no dedicated test file. Coverage comes entirely through integration and example tests.
+- [ ] **REPL test coverage** [High, M]: `internal/repl/` has 40.8% coverage. `repl.go` (367 lines) and `debug.go` (326 lines — breakpoint/stepping) have minimal or zero tests. Debug mode handles mutable state (breakpoint sets, step mode) — especially prone to subtle bugs. Start with table-driven tests for meta-command parsing and debug step/breakpoint logic.
+
+---
+
 ## Refactoring
+
+### Medium Priority
+
+- [x] **Missing primitive registration guide comment** [Medium, S]: Added "ADDING A NEW CORE PRIMITIVE" comment in `registry/core/register.go` (4 items).
+- [x] **Value type guide comment** [Medium, S]: Added "ADDING A NEW VALUE TYPE" comment near the `Value` interface in `values/values.go` (7 conditional items + cross-reference to `values/numeric_kind.go` for numeric types).
+- [ ] **Type switch exhaustiveness linter** [Medium, M]: 117 type switches with 182 `case *values.X` arms across the codebase. Go provides no compile-time enforcement. Consider a `go generate` linter for dispatch table completeness.
+- [ ] **Special form dual-dispatch unification** [Medium, M]: Special forms are registered in two separate `init()` functions in different packages — `internal/validate/register.go` (validators) and `machine/register.go` (compilers) — matched by string name with no compile-time guarantee they stay in sync. This is the only registration mechanism that uses `init()` rather than the Builder pattern. Consider a unified registration that pairs validators and compilers in a single site.
 
 ### Low Priority
 
@@ -34,7 +51,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 - [ ] **F11: Promote internal extensions** [Low, Postponed]: `internal/extensions/{io,eval,all}` invisible to embedders. Promote to `extensions/{io,eval}/` when extension API stabilizes and external consumers exist.
 - [ ] **Parser: unify readList + readLabeledList** [Low, Postponed]: High risk — datum labels require in-place mutation of placeholder pairs. The structural difference is semantic, not accidental. Unifying requires careful design to handle the placeholder protocol.
-- [ ] **Match: extract opcode handlers from VM interpreter** [Low, Postponed]: 264-line switch is large but stable. Extraction adds indirection without clear benefit until new opcodes are needed.
+- [ ] **VM dispatch loop extraction** [Low, Postponed]: `MachineContext.Run()` is 539 lines with ~63 inlined opcode cases. Extraction adds indirection without clear benefit — Go has no computed goto, and method dispatch adds measurable overhead on the hot path. The two-tier model (inlined ops + `OpComplex` side table for ~16 complex ops) already extracts the most complex operations. Intentional performance-over-readability trade-off.
 - [ ] **Match: consolidate bytecode type files** [Low, Postponed]: Pure cosmetic reorganization.
 - [ ] **Extensions: standardize registration patterns** [Low, Postponed]: Requires design decision on the canonical pattern. Worth a separate discussion, not a mechanical refactoring.
 - [ ] **Schemeutil: grab-bag reorganization** [Low, Postponed]: Moving functions risks import cycle issues. Needs careful dependency analysis.

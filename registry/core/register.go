@@ -24,6 +24,13 @@ import (
 var Extension = registry.NewExtension("core", AddToRegistry)
 
 // Builder aggregates all core registration functions.
+//
+// ADDING A NEW CORE PRIMITIVE requires updates in these locations:
+//
+//  1. registry/core/<category>.go     — add PrimitiveSpec to the appropriate addXxx function
+//  2. registry/core/prim_<category>.go — implement the ForeignFunction
+//  3. registry/core/register.go       — add addXxx to Builder (only if creating a new category)
+//  4. registry/core/prim_<category>_test.go — add table-driven tests
 var Builder = registry.NewRegistryBuilder(
 	addSpecialForms,
 	addPredicates,
