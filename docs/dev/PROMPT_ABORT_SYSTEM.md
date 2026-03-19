@@ -178,7 +178,7 @@ Concretely, `PrimCallCC`:
 1. Captures a composable continuation via `SliceContinuationAt(nil)` (deep-copies the entire chain)
 2. Copies the winding stack
 3. Creates a `ComposableContinuation` from the segment + winding stack + thread ID + barrier token
-4. Builds an escape closure via `newComposeAbortEscapeClosure`
+4. Builds a `CapturedContinuation` escape value via `NewCapturedContinuation`
 
 ### Inline mode (mc.Parent() != nil)
 
@@ -190,15 +190,10 @@ PrimCallCC
   segment = mc.SliceContinuationAt(nil)
   windingStack = mc.WindingStack().Copy()
   cc = NewComposableContinuation(segment, windingStack, threadID, barrierValid)
-  contClosure = newComposeAbortEscapeClosure(env, cc, threadID, barrierValid)
+  contClosure = NewCapturedContinuation(cc, threadID, barrierValid)
   mc.Apply(mcls, contClosure)
-  mc.SetPC(mc.PC() - 1)   // compensate for ForeignFunctionCall's pc++
   return nil
 ```
-
-The PC compensation is necessary because `OperationForeignFunctionCall.Apply()`
-does `mc.pc++` after the foreign function returns. Since `mc.Apply()` already
-set `pc=0` for the fresh closure, the `pc++` would skip the first instruction.
 
 ### Sub-context mode (mc.Parent() == nil)
 
@@ -210,7 +205,7 @@ PrimCallCC
   segment = mc.SliceContinuationAt(nil)
   windingStack = mc.WindingStack().Copy()
   cc = NewComposableContinuation(segment, windingStack, threadID, barrierValid)
-  contClosure = newComposeAbortEscapeClosure(env, cc, threadID, barrierValid)
+  contClosure = NewCapturedContinuation(cc, threadID, barrierValid)
   sub = mc.NewSubContext()
   sub.SetWindingStack(mc.WindingStack())
   sub.Apply(mcls, contClosure)
@@ -228,11 +223,11 @@ caught directly here rather than propagating to `RunWithEscapeHandling`.
 This ensures call/cc works in contexts without `RunWithEscapeHandling`
 (e.g., threads that call `Run()` directly).
 
-## call/cc escape closure
+## call/cc escape value
 
-`registry/core/prim_control.go:193` (`newComposeAbortEscapeClosure`)
+`machine/captured_continuation.go` (`NewCapturedContinuation`)
 
-The escape closure is a `ForeignClosure` that:
+The escape value is a `CapturedContinuation` that:
 1. Checks thread identity (captured vs invoking thread ID)
 2. Checks barrier identity (captured vs invoking barrier token)
 3. Applies the composable continuation in a sub-context with the passed value
@@ -323,7 +318,7 @@ the composable continuation corrupts the shared frames.
 | `FindCommonWindingPrefix` | `machine/dynamic_wind.go:78` | Common ancestor of two winding stacks |
 | `applyComposableContinuation` | `machine/machine_context.go:486` | Apply composable continuation value |
 | `PrimCallCC` | `registry/core/prim_control.go:116` | call/cc primitive (inline + sub-context) |
-| `newComposeAbortEscapeClosure` | `registry/core/prim_control.go:193` | Build escape closure: apply cc then abort |
+| `NewCapturedContinuation` | `machine/captured_continuation.go` | Build call/cc escape value: apply cc then abort |
 | `PrimCallWithContinuationPrompt` | `registry/core/prim_prompt.go:71` | Install prompt, run thunk, handle abort |
 | `PrimAbortCurrentContinuation` | `registry/core/prim_prompt.go:161` | Return ErrPromptAbort |
 | `PrimCallWithComposableContinuation` | `registry/core/prim_prompt.go:197` | Capture composable continuation |
@@ -342,7 +337,8 @@ the composable continuation corrupts the shared frames.
 
 At capture time, `PrimCallCC` captures a `ComposableContinuation` wrapping
 the continuation chain inside the dynamic-wind thunk, plus the winding stack
-`[D1]`. The escape closure `newComposeAbortEscapeClosure` wraps this cc.
+`[D1]`. `NewCapturedContinuation` wraps this into a `CapturedContinuation`
+escape value.
 
 ```scheme
 (k 42)

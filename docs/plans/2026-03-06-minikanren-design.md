@@ -1,5 +1,7 @@
 # miniKanren for Wile — Design Document
 
+**Status:** Complete — libraries and test data implemented
+
 ## Goal
 
 Port miniKanren to Wile as a pure Scheme R7RS library. Primary purpose: conformance stress test for closures, streams, macros, and the library system. Secondary: a usable logic programming library for Wile users.

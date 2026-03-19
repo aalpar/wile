@@ -61,6 +61,7 @@ import (
     "github.com/aalpar/wile/machine"
     "github.com/aalpar/wile/registry"
     "github.com/aalpar/wile/values"
+    "github.com/aalpar/wile/werr"
 )
 
 // Extension is the package's entry point.
@@ -484,7 +485,7 @@ Not importable by external code:
 |--------|-------------|
 | `WithExtension(ext)` | Add a single extension |
 | `WithExtensions(ext...)` | Add multiple extensions |
-| `WithSafeExtensions()` | Add the safe extension set (io, exceptions, math, records, promises, strings, characters) |
+| `WithSafeExtensions()` | Add the safe extension set (io, math, introspection, records, promises, strings, characters) |
 | `WithoutCore()` | Skip core primitives — creates a bare engine with only explicitly added extensions |
 | `WithLibraryPaths(paths...)` | Enable R7RS library system with optional search paths |
 | `WithRegistry(reg)` | Use a custom registry (skips core primitives) |

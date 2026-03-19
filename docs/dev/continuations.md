@@ -33,7 +33,7 @@ type vmState struct {
     windingStack WindingStack
     promptTag    *PromptTag
     threadID     uint64
-    callDepth    uint64
+    callDepth    int
 }
 ```
 
@@ -172,11 +172,13 @@ This is the same mechanism used by delimited continuations (`abort-current-conti
 
 ### Shared Frames and the Copy Problem
 
-When `call/cc` captures a continuation, it calls `MarkChainShared()` on the live chain. This sets `shared = true` on every frame. Why?
+When `call/cc` captures a continuation, it calls `SliceContinuationAt` which deep-copies every frame via `Copy()` per frame. The copy is what gets stored in the `ComposableContinuation` — the live chain is not marked or mutated by `call/cc` directly.
 
-Normally, when a function returns, `RestoreAndRelease` destructively transfers the frame's eval stack to the VM and pools the frame for reuse. But if someone captured this frame via `call/cc`, they might re-invoke it later. Destroying the eval stack would corrupt the captured continuation.
+`MarkChainShared()` is called by `CurrentContinuation()` and by `ComposableContinuation.AcquireSegment()`, not by `call/cc`. It sets `shared = true` on every frame in the live chain when those paths are used.
 
-Shared frames use the safe path: `evals.Copy()` instead of transfer, and the frame is left for GC instead of pooled. This is the performance cost of `call/cc` — even on the normal return path, shared frames pay for a stack copy.
+Normally, when a function returns, `RestoreAndRelease` destructively transfers the frame's eval stack to the VM and pools the frame for reuse. But if a frame has been marked shared, it might be re-invoked later. Destroying the eval stack would corrupt the captured continuation.
+
+Shared frames use the safe path: `evals.Copy()` instead of transfer, and the frame is left for GC instead of pooled. This is the performance cost of shared frames — even on the normal return path, they pay for a stack copy.
 
 ### Dynamic-Wind Integration
 

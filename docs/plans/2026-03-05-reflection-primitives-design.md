@@ -1,5 +1,7 @@
 # Reflection Primitives Design
 
+**Status:** Complete — all 5 primitives implemented
+
 ## Summary
 
 Five runtime primitives for inspecting procedure metadata. All operate on

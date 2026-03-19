@@ -47,11 +47,12 @@ Storage sites (`DynamicWindFrame.Before/After`, `MachineContinuation.promptHandl
 ```go
 func (p *MachineContext) ApplyCallable(callable values.Value, args ...values.Value) {
     switch cls := callable.(type) {
-    case *MachineClosure:    p.Apply(cls, args...)
-    case *ForeignClosure:    p.applyForeign(cls, args...)
-    case *CaseLambdaClosure: p.ApplyCaseLambda(cls, args...)
-    case *Parameter:         p.applyParameter(cls, args)
+    case *MachineClosure:         p.Apply(cls, args...)
+    case *ForeignClosure:         p.applyForeign(cls, args...)
+    case *CaseLambdaClosure:      p.ApplyCaseLambda(cls, args...)
+    case *Parameter:              p.applyParameter(cls, args)
     case *ComposableContinuation: p.applyComposableContinuation(cls, args)
+    case *CapturedContinuation:   p.applyCapturedContinuation(cls, args)
     }
 }
 ```
@@ -105,21 +106,20 @@ only `PrimCallCC` inline mode does.
 `applyForeign` calls `fn(p)` synchronously on the Go call stack. For leaf
 primitives (`+`, `car`, `cons`), this is fine — they return immediately.
 
-But some foreign closures create sub-contexts and call `Run()`:
+But some callables create sub-contexts and call `Run()`:
 
 ```go
-// newComposeAbortEscapeClosure (call/cc escape closure)
-fn := func(innerMC *MachineContext) error {
-    sub := innerMC.NewSubContext()
-    _, err := sub.ApplyCallable(cc, val)  // graft continuation
-    err = sub.Run()                        // execute restored frames
-    // ...
-}
+// CapturedContinuation (call/cc escape value)
+// applyCapturedContinuation:
+sub := innerMC.NewSubContext()
+_, err := sub.ApplyCallable(cc, val)  // graft continuation
+err = sub.Run()                        // execute restored frames
+// ...
 ```
 
-When the restored computation invokes another escape closure, the pattern
-repeats: `applyForeign` → `fn` → `sub.Run()` → `ApplyCallable` →
-`applyForeign` → `fn` → `sub.Run()` → ...
+When the restored computation invokes another `CapturedContinuation`, the
+pattern repeats: `applyCapturedContinuation` → `sub.Run()` → `ApplyCallable` →
+`applyCapturedContinuation` → `sub.Run()` → ...
 
 Each level adds ~4 Go stack frames that persist until the inner `Run()`
 returns. The `ctak` benchmark (continuation-based Takeuchi) creates thousands
@@ -151,8 +151,11 @@ This creates a `*MachineClosure` (not `*ForeignClosure`), so `ApplyCallable`
 dispatches through `Apply` → VM loop → `OpForeignFunctionCall` — keeping the
 loop iterative.
 
-**Only `newComposeAbortEscapeClosure` uses this path.** All other registered
-primitives (~200+) use the direct `*ForeignClosure` / `applyForeign` fast path.
+**`NewVMForeignClosure` now has zero callers in production code.** Call/cc
+escape values became `CapturedContinuation` (dispatched via
+`applyCapturedContinuation`), which handles the nested VM execution directly
+without going through the bytecode trampoline. All registered primitives
+(~200+) use the direct `*ForeignClosure` / `applyForeign` fast path.
 
 ### Decision Criteria: Which Path?
 

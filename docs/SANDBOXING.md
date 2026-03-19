@@ -34,7 +34,7 @@ This restriction is **transitive**: when the library system is enabled (`WithLib
 engine, err := wile.NewEngine(ctx, wile.WithSafeExtensions())
 ```
 
-This includes core + io + exceptions + math + introspection + records/promises/strings/characters. No filesystem, no eval, no system calls, no Go concurrency (gointerop, threads).
+This includes core + io + math + introspection + records/promises/strings/characters. No filesystem, no eval, no system calls, no Go concurrency (gointerop, threads).
 
 ### Safe sandbox with library support
 

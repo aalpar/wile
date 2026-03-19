@@ -2,6 +2,8 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
+**Status:** Complete
+
 **Goal:** Add five runtime primitives (`procedure-arity`, `procedure-name`, `procedure-source-location`, `procedure-bound-symbols`, `procedure-type`) that inspect procedure metadata, returning plain Scheme data.
 
 **Architecture:** All five primitives share the same pattern — type-switch on `values.Callable` to extract metadata from the concrete closure type. One infrastructure change is needed first: `ForeignClosure` needs a `name` field so `(procedure-name +)` returns `"+"`. The primitives live in `registry/core/` as runtime-only registrations.

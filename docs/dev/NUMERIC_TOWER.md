@@ -155,10 +155,12 @@ Where:
 
 ## Error Handling
 
-All types use consistent panic-based error handling:
+All types use consistent panic-based error handling for invalid inputs:
 
-- Unknown types: `panic(ErrNotANumber)`
-- Division by zero: `panic(ErrDivisionByZero)`
+- Unknown types: `panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "context: ..."))`
+- Division by zero: `panic(werr.WrapForeignErrorf(werr.ErrDivisionByZero, "context: ..."))`
+
+No bare sentinel panics remain. All panics wrap the sentinel with location context, enforced by the `noBareSentinelPanic` ruleguard rule.
 
 All 49 type combinations (7×7) are handled without panics for valid operations.
 
