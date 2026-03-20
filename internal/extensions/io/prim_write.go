@@ -171,14 +171,14 @@ func PrimWriteString(mc *machine.MachineContext) error {
 	start := 0
 	end := length
 
-	writer, tuple, err := extractPort[values.OutputPort](
+	writer, tuple, found, err := extractPort[values.OutputPort](
 		mc.Arg(1), "write-string", werr.ErrNotAnOutputPort, "an output port",
-		func() values.OutputPort {
-			return resolveCurrentOutputPort(mc)
-		},
 	)
 	if err != nil {
 		return err
+	}
+	if !found {
+		writer = resolveCurrentOutputPort(mc)
 	}
 	if !tuple.IsEmptyList() {
 		start, end, err = helpers.ParseSubrange(tuple.Cdr(), length, "write-string")
