@@ -137,7 +137,7 @@ func PrimSyntaxToList(mc *machine.MachineContext) error {
 			return nil
 		}
 		sp, ok := current.(*syntax.SyntaxPair)
-		if !ok {
+		if !ok || sp == nil {
 			mc.SetValue(values.FalseValue)
 			return nil
 		}
