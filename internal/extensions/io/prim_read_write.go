@@ -34,39 +34,36 @@ const (
 )
 
 // extractPort extracts a port of type T from a rest-argument list.
-// If the list is empty and defaultPort is non-nil, defaultPort() is returned.
-// If the list is empty and defaultPort is nil, the sentinel error is returned.
+// Returns (port, tuple, true, nil) when a port is found in the list.
+// Returns (zero, tuple, false, nil) when the list is empty — the caller
+// resolves the default. Returns (zero, nil, false, error) on type mismatch
+// or malformed input.
 func extractPort[T any](
 	o values.Value,
 	name string,
 	errSentinel *werr.StaticError,
 	portDesc string,
-	defaultPort func() T,
-) (T, values.Tuple, error) {
+) (T, values.Tuple, bool, error) {
 	var zero T
 	prefix := fmtPrefix(name)
 	tuple, ok := o.(values.Tuple)
 	if !ok {
-		return zero, nil, werr.WrapForeignErrorf(
+		return zero, nil, false, werr.WrapForeignErrorf(
 			werr.ErrNotAList, "%sexpected a list but got %T", prefix, o)
 	}
 	if !tuple.IsList() {
-		return zero, nil, werr.WrapForeignErrorf(
+		return zero, nil, false, werr.WrapForeignErrorf(
 			werr.ErrNotAList, "%sexpected a list but got %s", prefix, tuple.SchemeString())
 	}
 	if tuple.IsEmptyList() {
-		if defaultPort != nil {
-			return defaultPort(), tuple, nil
-		}
-		return zero, nil, werr.WrapForeignErrorf(
-			errSentinel, "%sno %s specified", prefix, portDesc)
+		return zero, tuple, false, nil
 	}
 	p, ok := tuple.Car().(T)
 	if !ok {
-		return zero, nil, werr.WrapForeignErrorf(
+		return zero, nil, false, werr.WrapForeignErrorf(
 			errSentinel, "%sexpected %s but got %T", prefix, portDesc, tuple.Car())
 	}
-	return p, tuple, nil
+	return p, tuple, true, nil
 }
 
 func fmtPrefix(name string) string {
@@ -80,13 +77,16 @@ func fmtPrefix(name string) string {
 // If the list is empty, returns the current output port.
 // Otherwise, extracts and validates the port from the list's car.
 func getOptionalOutputPort(mc *machine.MachineContext, argIndex int) (values.OutputPort, error) {
-	p, _, err := extractPort[values.OutputPort](
+	p, _, found, err := extractPort[values.OutputPort](
 		mc.Arg(argIndex), "", werr.ErrNotAnOutputPort, "an output port",
-		func() values.OutputPort {
-			return resolveCurrentOutputPort(mc)
-		},
 	)
-	return p, err
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return resolveCurrentOutputPort(mc), nil
+	}
+	return p, nil
 }
 
 // getOptionalTextualOutputPort extracts an optional textual output port, rejecting
@@ -109,31 +109,50 @@ func getOptionalTextualOutputPort(mc *machine.MachineContext, argIndex int) (val
 // If the list is empty, returns the current input port.
 // Otherwise, extracts and validates the port from the list's car.
 func getOptionalInputPort(mc *machine.MachineContext, argIndex int) (values.TextualReader, error) {
-	p, _, err := extractPort[values.TextualReader](
+	p, _, found, err := extractPort[values.TextualReader](
 		mc.Arg(argIndex), "", werr.ErrNotAnInputPort, "an input port",
-		func() values.TextualReader {
-			return resolveCurrentInputPort(mc)
-		},
 	)
-	return p, err
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return resolveCurrentInputPort(mc), nil
+	}
+	return p, nil
 }
 
 // getRequiredBinaryInputPort extracts a required binary input port from a variadic argument list.
 // Returns an error if the list is empty (no default port for binary I/O).
 // Also returns the validated tuple for callers that need to extract further arguments.
 func getRequiredBinaryInputPort(o values.Value, name string) (values.BinaryReader, values.Tuple, error) {
-	return extractPort[values.BinaryReader](
-		o, name, werr.ErrNotAByteInputPort, "a binary input port", nil,
+	p, tuple, found, err := extractPort[values.BinaryReader](
+		o, name, werr.ErrNotAByteInputPort, "a binary input port",
 	)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !found {
+		return nil, nil, werr.WrapForeignErrorf(
+			werr.ErrNotAByteInputPort, "%s: no binary input port specified", name)
+	}
+	return p, tuple, nil
 }
 
 // getRequiredBinaryOutputPort extracts a required binary output port from a variadic argument list.
 // Returns an error if the list is empty (no default port for binary I/O).
 // Also returns the validated tuple for callers that need to extract further arguments.
 func getRequiredBinaryOutputPort(o values.Value, name string) (values.BinaryWriter, values.Tuple, error) {
-	return extractPort[values.BinaryWriter](
-		o, name, werr.ErrNotAByteOutputPort, "a binary output port", nil,
+	p, tuple, found, err := extractPort[values.BinaryWriter](
+		o, name, werr.ErrNotAByteOutputPort, "a binary output port",
 	)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !found {
+		return nil, nil, werr.WrapForeignErrorf(
+			werr.ErrNotAByteOutputPort, "%s: no binary output port specified", name)
+	}
+	return p, tuple, nil
 }
 
 // PrimRead implements the (read) primitive.
