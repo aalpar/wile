@@ -303,14 +303,14 @@ func (p *MachineContext) findParameterInMarks(param *Parameter) values.Value {
 	for mc != nil {
 		// Check current frame marks.
 		for _, e := range mc.marks {
-			if e.key == param {
+			if eqIdentity(e.key, param) {
 				return e.val
 			}
 		}
 		// Walk continuation chain.
 		for c := mc.cont; c != nil; c = c.parent {
 			for _, e := range c.marks {
-				if e.key == param {
+				if eqIdentity(e.key, param) {
 					return e.val
 				}
 			}

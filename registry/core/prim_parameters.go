@@ -100,11 +100,11 @@ func PrimParameterConvert(mc *machine.MachineContext) error {
 	sub.SetWindingStack(mc.WindingStack())
 	_, err = sub.ApplyCallable(param.Converter(), val)
 	if err != nil {
-		return err
+		return werr.WrapForeignErrorf(err, "%%parameter-convert: failed to apply converter")
 	}
 	err = sub.Run()
 	if err != nil {
-		return err
+		return werr.WrapForeignErrorf(err, "%%parameter-convert: converter error")
 	}
 	mc.SetValue(sub.GetValue())
 	return nil
