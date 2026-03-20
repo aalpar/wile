@@ -75,10 +75,11 @@ type MachineContext struct {
 	// The numeric half (threadID) lives in vmState and propagates into
 	// continuations. See the comment on vmState.threadID for the full
 	// design and invariant.
-	thread       *values.Thread
-	syntaxCase   *syntaxCaseState // per-context syntax-case expansion state; nil when not in syntax-case
-	maxCallDepth uint64           // 0 = unlimited (default), otherwise max continuation depth
-	restArgBuf   values.PairBlock // reusable buffer for variadic rest-arg list construction (noCopyApply path only)
+	thread        *values.Thread
+	syntaxCase    *syntaxCaseState // per-context syntax-case expansion state; nil when not in syntax-case
+	maxCallDepth  uint64           // 0 = unlimited (default), otherwise max continuation depth
+	restArgBuf    values.PairBlock // reusable buffer for variadic rest-arg list construction (noCopyApply path only)
+	isolatedMarks bool             // when true, findParameterInMarks does not walk parentMC; set by applyCapturedContinuation
 }
 
 // NewMachineContext creates a new machine context with the given context and continuation.

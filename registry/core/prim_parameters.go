@@ -67,8 +67,6 @@ func PrimMakeParameter(mc *machine.MachineContext) error {
 
 // PrimParameterRawSet implements the (%parameter-raw-set! param val) primitive.
 // Sets a parameter's internal value directly, bypassing the converter.
-// Used by the parameterize macro to restore a previously captured value
-// without double-applying the converter.
 //
 // This is an internal primitive — not part of the public API.
 func PrimParameterRawSet(mc *machine.MachineContext) error {
@@ -78,6 +76,37 @@ func PrimParameterRawSet(mc *machine.MachineContext) error {
 	}
 	param.SetValue(mc.Arg(1))
 	mc.SetValue(values.Void)
+	return nil
+}
+
+// PrimParameterConvert implements (%parameter-convert param val).
+// Applies the parameter's converter to val and returns the result.
+// If the parameter has no converter, returns val unchanged.
+//
+// Used by the parameterize macro to pre-convert the value before storing
+// it as a continuation mark. This is an internal primitive.
+func PrimParameterConvert(mc *machine.MachineContext) error {
+	param, err := helpers.RequireArg[*machine.Parameter](mc, 0, werr.ErrNotAParameter, "%parameter-convert")
+	if err != nil {
+		return err
+	}
+	val := mc.Arg(1)
+	if !param.HasConverter() {
+		mc.SetValue(val)
+		return nil
+	}
+	sub := mc.NewSubContext()
+	defer machine.ReleaseSubContext(sub)
+	sub.SetWindingStack(mc.WindingStack())
+	_, err = sub.ApplyCallable(param.Converter(), val)
+	if err != nil {
+		return err
+	}
+	err = sub.Run()
+	if err != nil {
+		return err
+	}
+	mc.SetValue(sub.GetValue())
 	return nil
 }
 

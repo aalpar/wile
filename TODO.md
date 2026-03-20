@@ -46,6 +46,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 ### Low Priority
 
 - [ ] **Error sentinel grouping** [Low, S]: ~105 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.
+- [ ] **extractPort thunk→bool refactor** [Low, S]: `extractPort` in `internal/extensions/io/prim_read_write.go` takes a `defaultPort func() T` thunk. Refactor to return a `(T, bool, Tuple, error)` so callers decide how to resolve the default. Affects 6 call sites. See marks-based parameterize migration for context.
 
 ### Postponed
 

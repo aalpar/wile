@@ -173,7 +173,9 @@ func PrimWriteString(mc *machine.MachineContext) error {
 
 	writer, tuple, err := extractPort[values.OutputPort](
 		mc.Arg(1), "write-string", werr.ErrNotAnOutputPort, "an output port",
-		GetCurrentOutputPort,
+		func() values.OutputPort {
+			return mc.ResolveParameterValue(currentOutputPortParam).(values.OutputPort)
+		},
 	)
 	if err != nil {
 		return err

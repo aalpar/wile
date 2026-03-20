@@ -2,12 +2,9 @@
 ;; R7RS §6.13.2: These primitives temporarily redirect I/O to a file.
 ;;
 ;; These are implemented as macros using parameterize to ensure proper
-;; integration with the continuation and dynamic-wind system.
-;;
-;; Fixes T3 from architectural review: Using parameterize (which expands to
-;; dynamic-wind) ensures that parameter changes are properly tracked on the
-;; winding stack. This makes them safe to use with call/cc and provides
-;; correct restoration semantics.
+;; integration with the continuation system. parameterize uses
+;; with-continuation-mark, so port bindings ride on the continuation
+;; frames and compose correctly with call/cc and composable continuations.
 
 (define-syntax with-input-from-file
   (syntax-rules ()

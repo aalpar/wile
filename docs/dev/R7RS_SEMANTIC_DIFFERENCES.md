@@ -10,7 +10,9 @@ This document catalogs differences between the current implementation and the R7
 
 ## Summary
 
-One known limitation exists: non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. This is a conservative safe behavior with minimal practical impact. See details below.
+Two known differences exist:
+1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Conservative safe behavior with minimal practical impact.
+2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
 
 ---
 
@@ -60,6 +62,22 @@ Use Go channels or goroutines for non-blocking I/O patterns:
 **Estimated implementation effort:** 4-8 hours including cross-platform support and testing.
 
 **ROI analysis:** Documentation (15 minutes) provides clear expectations at far better ROI than implementation (4-8 hours) for an exotic edge case.
+
+---
+
+## Parameterize Implementation (Marks-Based)
+
+**Affected Form:** `parameterize`
+
+**R7RS §4.2.6:** The R7RS reference implementation uses `dynamic-wind` to save/restore parameter values. Wile uses `with-continuation-mark` instead, storing parameter bindings as continuation marks keyed by the parameter object.
+
+**Why:** The `dynamic-wind` approach has bugs when composable continuations (`call-with-composable-continuation`) cross `parameterize` boundaries. The after-thunk captures the "old" value at definition time. When a composable continuation is invoked from a different `parameterize` context, the stale old value clobbers the outer binding. Marks-based `parameterize` eliminates this class of bugs because bindings ride on the continuation frames structurally.
+
+**Semantic difference:** `(p val)` (calling a parameter with 1 argument) inside `parameterize` sets the parameter's base value. With `dynamic-wind`-based `parameterize`, the mutation is visible within the extent and undone on exit. With marks-based `parameterize`, the mark shadows the base value, so the mutation is invisible while the `parameterize` is active but persists after it exits.
+
+This difference is observable only when code mutates a parameter via `(p val)` inside a `parameterize` body — a rare pattern. The standard pattern of reading `(p)` inside `parameterize` is unaffected.
+
+**Impact:** **LOW** — standard R7RS programs use `parameterize` for scoped binding, not direct mutation. The marks-based approach matches Racket's semantics and is correct for composable continuations.
 
 ---
 
