@@ -33,7 +33,7 @@ import (
 // evalScheme evaluates a Scheme expression string and returns the result
 func evalScheme(t *testing.T, code string) values.Value {
 	t.Helper()
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	ctx := context.Background()

@@ -595,7 +595,7 @@ func TestDynamicWind(t *testing.T) {
 // TestDynamicWindEscape tests that after is called on continuation escape.
 // This test uses runSchemeCodeWithEnv to load bootstrap macros for 'let'.
 func TestDynamicWindEscape(t *testing.T) {
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Parse and run:

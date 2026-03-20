@@ -22,21 +22,21 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-func TestNewTopLevelEnvironment(t *testing.T) {
+func TestNewNamespace(t *testing.T) {
 	c := qt.New(t)
 
-	topLevel := NewTopLevelEnvironment()
+	topLevel := NewNamespace()
 
 	c.Assert(topLevel, qt.Not(qt.IsNil))
 	c.Assert(topLevel.Runtime(), qt.Not(qt.IsNil))
 	c.Assert(topLevel.Phases(), qt.Not(qt.IsNil))
-	c.Assert(topLevel.Runtime().TopLevelEnv(), qt.Equals, topLevel)
+	c.Assert(topLevel.Runtime().Namespace(), qt.Equals, topLevel)
 }
 
-func TestTopLevelEnvironment_Phases(t *testing.T) {
+func TestNamespace_Phases(t *testing.T) {
 	c := qt.New(t)
 
-	topLevel := NewTopLevelEnvironment()
+	topLevel := NewNamespace()
 
 	// Runtime is phase 0
 	runtime := topLevel.Runtime()
@@ -55,16 +55,16 @@ func TestTopLevelEnvironment_Phases(t *testing.T) {
 	c.Assert(compile.PhaseLevel(), qt.Equals, PhaseCompile)
 	c.Assert(topLevel.AtPhase(PhaseCompile), qt.Equals, compile)
 
-	// All phases should share the same TopLevelEnvironment
-	c.Assert(runtime.TopLevelEnv(), qt.Equals, topLevel)
-	c.Assert(expand.TopLevelEnv(), qt.Equals, topLevel)
-	c.Assert(compile.TopLevelEnv(), qt.Equals, topLevel)
+	// All phases should share the same Namespace
+	c.Assert(runtime.Namespace(), qt.Equals, topLevel)
+	c.Assert(expand.Namespace(), qt.Equals, topLevel)
+	c.Assert(compile.Namespace(), qt.Equals, topLevel)
 }
 
-func TestTopLevelEnvironment_LibraryRegistry(t *testing.T) {
+func TestNamespace_LibraryRegistry(t *testing.T) {
 	c := qt.New(t)
 
-	topLevel := NewTopLevelEnvironment()
+	topLevel := NewNamespace()
 
 	// Initially nil
 	c.Assert(topLevel.LibraryRegistry(), qt.IsNil)
@@ -81,7 +81,7 @@ func TestTopLevelEnvironment_LibraryRegistry(t *testing.T) {
 func TestNewEnvironmentFrameWithParent_InheritsTopLevel(t *testing.T) {
 	c := qt.New(t)
 
-	topLevel := NewTopLevelEnvironment()
+	topLevel := NewNamespace()
 	parent := topLevel.Runtime()
 
 	// Create a child environment
@@ -89,14 +89,14 @@ func TestNewEnvironmentFrameWithParent_InheritsTopLevel(t *testing.T) {
 	child := NewEnvironmentFrameWithParent(local, parent)
 
 	// Child should inherit topLevel
-	c.Assert(child.TopLevelEnv(), qt.Equals, topLevel)
+	c.Assert(child.Namespace(), qt.Equals, topLevel)
 }
 
-func TestTopLevelEnvironment_ChildSharesLoadPathStack(t *testing.T) {
+func TestNamespace_ChildSharesLoadPathStack(t *testing.T) {
 	c := qt.New(t)
 
-	parent := NewTopLevelEnvironment()
-	child := parent.NewChildTopLevelEnvironment()
+	parent := NewNamespace()
+	child := parent.NewChildNamespace()
 
 	// Verify both have non-nil stacks
 	c.Assert(parent.LoadPathStack(), qt.Not(qt.IsNil))
@@ -124,12 +124,12 @@ func TestTopLevelEnvironment_ChildSharesLoadPathStack(t *testing.T) {
 	c.Assert(child.LoadPathStack().CurrentDir(), qt.Equals, "/parent")
 }
 
-func TestTopLevelEnvironment_NestedChildSharesLoadPathStack(t *testing.T) {
+func TestNamespace_NestedChildSharesLoadPathStack(t *testing.T) {
 	c := qt.New(t)
 
-	root := NewTopLevelEnvironment()
-	child1 := root.NewChildTopLevelEnvironment()
-	child2 := child1.NewChildTopLevelEnvironment()
+	root := NewNamespace()
+	child1 := root.NewChildNamespace()
+	child2 := child1.NewChildNamespace()
 
 	// All three should share the same stack
 	c.Assert(child1.LoadPathStack(), qt.Equals, root.LoadPathStack())
@@ -147,10 +147,10 @@ func TestTopLevelEnvironment_NestedChildSharesLoadPathStack(t *testing.T) {
 func TestConstructorEquivalence(t *testing.T) {
 	c := qt.New(t)
 
-	parent := NewTopLevelEnvironment()
+	parent := NewNamespace()
 	childRuntime := parent.NewChildRuntime()
 
-	c.Assert(childRuntime.TopLevelEnv(), qt.Equals, parent)
+	c.Assert(childRuntime.Namespace(), qt.Equals, parent)
 	c.Assert(childRuntime.PhaseLevel(), qt.Equals, PhaseRuntime)
 	c.Assert(childRuntime.GlobalEnvironment(), qt.IsNotNil)
 	c.Assert(childRuntime.IsTopLevel(), qt.IsTrue)
@@ -159,13 +159,13 @@ func TestConstructorEquivalence(t *testing.T) {
 	c.Assert(expand, qt.IsNotNil)
 	c.Assert(expand.PhaseLevel(), qt.Equals, PhaseExpand)
 
-	child := parent.NewChildTopLevelEnvironment()
-	c.Assert(child.Runtime().TopLevelEnv(), qt.Equals, child)
+	child := parent.NewChildNamespace()
+	c.Assert(child.Runtime().Namespace(), qt.Equals, child)
 	c.Assert(child.Expand().PhaseLevel(), qt.Equals, PhaseExpand)
 
 	sym := values.NewSymbol("test-snap")
 	parent.Runtime().MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
-	report := parent.NewSchemeReportEnvironment()
+	report := parent.NewSchemeReportNamespace()
 	c.Assert(report.Runtime().GetGlobalIndex(sym), qt.IsNotNil)
 
 	sym2 := values.NewSymbol("after-snap")
@@ -173,9 +173,129 @@ func TestConstructorEquivalence(t *testing.T) {
 	c.Assert(report.Runtime().GetGlobalIndex(sym2), qt.IsNil)
 }
 
+func TestNamespace_RegistryField(t *testing.T) {
+	c := qt.New(t)
+
+	ns := NewNamespace()
+	c.Assert(ns.Registry(), qt.IsNil)
+
+	ns.SetRegistry("test-registry")
+	c.Assert(ns.Registry(), qt.Equals, "test-registry")
+}
+
+func TestNamespace_AuthorizerField(t *testing.T) {
+	c := qt.New(t)
+
+	ns := NewNamespace()
+	c.Assert(ns.Authorizer(), qt.IsNil)
+
+	ns.SetAuthorizer("test-authorizer")
+	c.Assert(ns.Authorizer(), qt.Equals, "test-authorizer")
+}
+
+func TestNamespace_Derive_SharesRegistryAndAuthorizer(t *testing.T) {
+	c := qt.New(t)
+
+	parent := NewNamespace()
+	parent.SetRegistry("parent-registry")
+	parent.SetAuthorizer("parent-authorizer")
+
+	child := parent.Derive()
+
+	// Same pointer — immutable registry and authorizer are shared
+	c.Assert(child.Registry(), qt.Equals, parent.Registry())
+	c.Assert(child.Authorizer(), qt.Equals, parent.Authorizer())
+	c.Assert(child, qt.Not(qt.Equals), parent)
+}
+
+func TestNamespace_DeriveWith_OverrideRegistry(t *testing.T) {
+	c := qt.New(t)
+
+	parent := NewNamespace()
+	parent.SetRegistry("parent-registry")
+	parent.SetAuthorizer("parent-authorizer")
+
+	child := parent.DeriveWith(func(cfg *NamespaceDeriveConfig) {
+		cfg.Registry = "restricted-registry"
+	})
+
+	c.Assert(child.Registry(), qt.Equals, "restricted-registry")
+	// Authorizer inherited when not overridden
+	c.Assert(child.Authorizer(), qt.Equals, parent.Authorizer())
+}
+
+func TestNamespace_DeriveWith_OverrideAuthorizer(t *testing.T) {
+	c := qt.New(t)
+
+	parent := NewNamespace()
+	parent.SetRegistry("parent-registry")
+	parent.SetAuthorizer("parent-authorizer")
+
+	child := parent.DeriveWith(func(cfg *NamespaceDeriveConfig) {
+		cfg.Authorizer = "child-authorizer"
+	})
+
+	// Registry inherited when not overridden
+	c.Assert(child.Registry(), qt.Equals, parent.Registry())
+	c.Assert(child.Authorizer(), qt.Equals, "child-authorizer")
+}
+
+func TestNamespace_ModuleInstances(t *testing.T) {
+	c := qt.New(t)
+
+	ns := NewNamespace()
+
+	// No instance initially
+	_, ok := ns.ModuleInstance("(scheme base)")
+	c.Assert(ok, qt.IsFalse)
+
+	// Register an instance
+	inst := &ModuleInstance{
+		Exports: make(map[string]*GlobalIndex),
+	}
+	ns.SetModuleInstance("(scheme base)", inst)
+
+	got, ok := ns.ModuleInstance("(scheme base)")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(got, qt.Equals, inst)
+}
+
+func TestNamespace_Derive_IsolatesModuleInstances(t *testing.T) {
+	c := qt.New(t)
+
+	parent := NewNamespace()
+	parent.SetModuleInstance("(scheme base)", &ModuleInstance{})
+
+	child := parent.Derive()
+
+	// Derived namespace should not inherit module instances
+	_, ok := child.ModuleInstance("(scheme base)")
+	c.Assert(ok, qt.IsFalse)
+}
+
+func TestNamespace_AttachModule(t *testing.T) {
+	c := qt.New(t)
+
+	source := NewNamespace()
+	inst := &ModuleInstance{}
+	source.SetModuleInstance("(scheme write)", inst)
+
+	target := NewNamespace()
+	err := source.AttachModule("(scheme write)", target)
+	c.Assert(err, qt.IsNil)
+
+	got, ok := target.ModuleInstance("(scheme write)")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(got, qt.Equals, inst)
+
+	// Attaching a non-existent module should error
+	err = source.AttachModule("(scheme nonexistent)", target)
+	c.Assert(err, qt.IsNotNil)
+}
+
 // Verify that symbols with the same name are structurally equal
 // even when created independently (no interning needed).
-func TestTopLevelEnvironment_SymbolEquality(t *testing.T) {
+func TestNamespace_SymbolEquality(t *testing.T) {
 	c := qt.New(t)
 
 	sym1 := values.NewSymbol("foo")

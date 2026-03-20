@@ -41,55 +41,55 @@ func TestNewEnvironmentFrame_Isolated(t *testing.T) {
 	c.Assert(env.phases, qt.IsNil)
 }
 
-// TopLevelEnvironment value interface methods
+// Namespace value interface methods
 
-func TestTopLevelEnvironment_SchemeString_Coverage(t *testing.T) {
+func TestNamespace_SchemeString_Coverage(t *testing.T) {
 	c := qt.New(t)
 
 	t.Run("with name", func(t *testing.T) {
-		topLevel := NewTopLevelEnvironment()
+		topLevel := NewNamespace()
 		topLevel.Name = "interaction-environment"
 		c.Assert(topLevel.SchemeString(), qt.Equals, "#<environment interaction-environment>")
 	})
 
 	t.Run("without name", func(t *testing.T) {
-		topLevel := NewTopLevelEnvironment()
+		topLevel := NewNamespace()
 		c.Assert(topLevel.SchemeString(), qt.Equals, "#<environment>")
 	})
 }
 
-func TestTopLevelEnvironment_IsVoid_Coverage(t *testing.T) {
+func TestNamespace_IsVoid_Coverage(t *testing.T) {
 	c := qt.New(t)
-	topLevel := NewTopLevelEnvironment()
+	topLevel := NewNamespace()
 	c.Assert(topLevel.IsVoid(), qt.IsFalse)
 
-	var nilTLE *TopLevelEnvironment
+	var nilTLE *Namespace
 	c.Assert(nilTLE.IsVoid(), qt.IsTrue)
 }
 
-func TestTopLevelEnvironment_EqualTo_Coverage(t *testing.T) {
+func TestNamespace_EqualTo_Coverage(t *testing.T) {
 	c := qt.New(t)
-	a := NewTopLevelEnvironment()
-	b := NewTopLevelEnvironment()
+	a := NewNamespace()
+	b := NewNamespace()
 
 	c.Assert(a.EqualTo(a), qt.IsTrue)
 	c.Assert(a.EqualTo(b), qt.IsFalse)
 	c.Assert(a.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }
 
-func TestTopLevelEnvironment_SyntaxInternCount_Coverage(t *testing.T) {
+func TestNamespace_SyntaxInternCount_Coverage(t *testing.T) {
 	c := qt.New(t)
-	topLevel := NewTopLevelEnvironment()
+	topLevel := NewNamespace()
 	c.Assert(topLevel.SyntaxInternCount(), qt.Equals, 0)
 }
 
-// NewChildTopLevelEnvironment
+// NewChildNamespace
 
-func TestTopLevelEnvironment_NewChildTopLevelEnvironment_Coverage(t *testing.T) {
+func TestNamespace_NewChildNamespace_Coverage(t *testing.T) {
 	c := qt.New(t)
-	parent := NewTopLevelEnvironment()
+	parent := NewNamespace()
 
-	child := parent.NewChildTopLevelEnvironment()
+	child := parent.NewChildNamespace()
 	c.Assert(child, qt.IsNotNil)
 	c.Assert(child.Runtime(), qt.IsNotNil)
 	c.Assert(child.Phases(), qt.IsNotNil)
@@ -102,13 +102,13 @@ func TestTopLevelEnvironment_NewChildTopLevelEnvironment_Coverage(t *testing.T) 
 
 // NewChildRuntime
 
-func TestTopLevelEnvironment_NewChildRuntime_Coverage(t *testing.T) {
+func TestNamespace_NewChildRuntime_Coverage(t *testing.T) {
 	c := qt.New(t)
-	parent := NewTopLevelEnvironment()
+	parent := NewNamespace()
 
 	childEnv := parent.NewChildRuntime()
 	c.Assert(childEnv, qt.IsNotNil)
-	c.Assert(childEnv.TopLevelEnv(), qt.Equals, parent)
+	c.Assert(childEnv.Namespace(), qt.Equals, parent)
 
 	// Symbols with same key are structurally equal
 	sym1 := values.NewSymbol("shared-sym")
@@ -120,17 +120,17 @@ func TestTopLevelEnvironment_NewChildRuntime_Coverage(t *testing.T) {
 
 func TestGlobalEnvironmentFrame_SchemeString_Coverage(t *testing.T) {
 	c := qt.New(t)
-	topLevel := NewTopLevelEnvironment()
+	topLevel := NewNamespace()
 	env := topLevel.Runtime()
 	c.Assert(env.global.SchemeString(), qt.Equals, "#<global-environment>")
 }
 
-// PhaseRegistry.TopLevelEnv
+// PhaseRegistry.Namespace
 
-func TestPhaseRegistry_TopLevelEnv_Coverage(t *testing.T) {
+func TestPhaseRegistry_Namespace_Coverage(t *testing.T) {
 	c := qt.New(t)
-	topLevel := NewTopLevelEnvironment()
-	c.Assert(topLevel.Phases().TopLevelEnv(), qt.Equals, topLevel)
+	topLevel := NewNamespace()
+	c.Assert(topLevel.Phases().Namespace(), qt.Equals, topLevel)
 }
 
 // GetLocalIndexWithScopes
@@ -145,14 +145,14 @@ func TestGetLocalIndexWithScopes_Coverage(t *testing.T) {
 	})
 
 	t.Run("no local frame", func(t *testing.T) {
-		topLevel := NewTopLevelEnvironment()
+		topLevel := NewNamespace()
 		env := topLevel.Runtime()
 		result := env.GetLocalIndexWithScopes(values.NewSymbol("x"), nil)
 		c.Assert(result, qt.IsNil)
 	})
 
 	t.Run("finds binding without scopes", func(t *testing.T) {
-		topLevel := NewTopLevelEnvironment()
+		topLevel := NewNamespace()
 		env := topLevel.Runtime()
 
 		local := NewLocalEnvironment(0)
@@ -165,7 +165,7 @@ func TestGetLocalIndexWithScopes_Coverage(t *testing.T) {
 	})
 
 	t.Run("finds binding with matching scopes", func(t *testing.T) {
-		topLevel := NewTopLevelEnvironment()
+		topLevel := NewNamespace()
 		env := topLevel.Runtime()
 
 		local := NewLocalEnvironment(0)
@@ -180,7 +180,7 @@ func TestGetLocalIndexWithScopes_Coverage(t *testing.T) {
 	})
 
 	t.Run("no match when scopes incompatible", func(t *testing.T) {
-		topLevel := NewTopLevelEnvironment()
+		topLevel := NewNamespace()
 		env := topLevel.Runtime()
 
 		local := NewLocalEnvironment(0)
@@ -201,7 +201,7 @@ func TestGetLocalIndexWithScopes_Coverage(t *testing.T) {
 
 func TestGetBindingWithScopes_GlobalPhase_Coverage(t *testing.T) {
 	c := qt.New(t)
-	topLevel := NewTopLevelEnvironment()
+	topLevel := NewNamespace()
 	env := topLevel.Runtime()
 
 	sym := values.NewSymbol("global-var")
@@ -220,7 +220,7 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 	c := qt.New(t)
 
 	t.Run("maximal scope count wins among competing candidates", func(t *testing.T) {
-		topLevel := NewTopLevelEnvironment()
+		topLevel := NewNamespace()
 		env := topLevel.Runtime()
 
 		scope1 := syntax.NewScope()
@@ -247,7 +247,7 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 	})
 
 	t.Run("same scope count tie-break favors innermost", func(t *testing.T) {
-		topLevel := NewTopLevelEnvironment()
+		topLevel := NewNamespace()
 		env := topLevel.Runtime()
 
 		scopeA := syntax.NewScope()
@@ -271,7 +271,7 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 	})
 
 	t.Run("perfect match returns immediately", func(t *testing.T) {
-		topLevel := NewTopLevelEnvironment()
+		topLevel := NewNamespace()
 		env := topLevel.Runtime()
 
 		scope1 := syntax.NewScope()
@@ -289,7 +289,7 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 	})
 
 	t.Run("non-nested overlapping scope sets resolved by count", func(t *testing.T) {
-		topLevel := NewTopLevelEnvironment()
+		topLevel := NewNamespace()
 		env := topLevel.Runtime()
 
 		scopeA := syntax.NewScope()
@@ -321,7 +321,7 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 	})
 
 	t.Run("scopeless candidate loses to scoped candidate", func(t *testing.T) {
-		topLevel := NewTopLevelEnvironment()
+		topLevel := NewNamespace()
 		env := topLevel.Runtime()
 
 		scope1 := syntax.NewScope()
@@ -342,7 +342,7 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 	})
 
 	t.Run("superset binding rejected", func(t *testing.T) {
-		topLevel := NewTopLevelEnvironment()
+		topLevel := NewNamespace()
 		env := topLevel.Runtime()
 
 		scope1 := syntax.NewScope()
@@ -365,7 +365,7 @@ func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
 
 func TestMaybeCreateLocalBinding_Existing_Coverage(t *testing.T) {
 	c := qt.New(t)
-	topLevel := NewTopLevelEnvironment()
+	topLevel := NewNamespace()
 	env := topLevel.Runtime()
 
 	local := NewLocalEnvironment(0)

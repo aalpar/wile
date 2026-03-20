@@ -73,7 +73,7 @@ func stubAdd(mc *MachineContext) error {
 
 // newBenchEnv creates a top-level environment for benchmarking.
 func newBenchEnv() *environment.EnvironmentFrame {
-	return environment.NewTopLevelEnvironment().Runtime()
+	return environment.NewNamespace().Runtime()
 }
 
 // newBenchMC creates a minimal MachineContext suitable for benchmarking.

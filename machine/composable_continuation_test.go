@@ -54,7 +54,7 @@ func TestAcquireSegment_NilCont(t *testing.T) {
 }
 
 func TestAcquireSegment_FirstCallReturnsOriginal(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, nil, env)
 	cc := NewComposableContinuation(cont, nil, 0, nil)
 
@@ -69,7 +69,7 @@ func TestAcquireSegment_FirstCallReturnsOriginal(t *testing.T) {
 }
 
 func TestAcquireSegment_SecondCallDeepCopies(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	bottom := NewMachineContinuation(nil, nil, env)
 	top := NewMachineContinuation(bottom, nil, env)
 	cc := NewComposableContinuation(top, nil, 0, nil)

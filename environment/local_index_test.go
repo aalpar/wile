@@ -34,7 +34,7 @@ func TestLocalIndex_Up(t *testing.T) {
 }
 
 func TestLocalIndex_GetBinding(t *testing.T) {
-	env := NewTopLevelEnvironmentFrame()
+	env := NewNamespaceFrame()
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 
 	tv := values.NewSymbol("test")

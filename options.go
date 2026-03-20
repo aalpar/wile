@@ -46,6 +46,7 @@ type engineConfig struct {
 	skipCore       bool // true when WithoutCore was called
 	importObserver func(LibraryImportEvent)
 	authorizer     security.Authorizer
+	namespace      *environment.Namespace // pre-built namespace (via WithNamespace)
 }
 
 // EngineOption configures an Engine.
@@ -142,6 +143,18 @@ func WithoutCore() EngineOption {
 func WithAuthorizer(auth security.Authorizer) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.authorizer = auth
+	}
+}
+
+// WithNamespace uses a pre-built namespace instead of building one from
+// extension options. When set, registry/extension/core options are ignored
+// by NewEngine (they were already applied when the namespace was created).
+//
+// This enables sharing a namespace across engines or pre-configuring
+// namespaces with specific capabilities.
+func WithNamespace(ns *environment.Namespace) EngineOption {
+	return func(cfg *engineConfig) {
+		cfg.namespace = ns
 	}
 }
 

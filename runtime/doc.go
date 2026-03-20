@@ -24,12 +24,12 @@
 //
 // To evaluate Scheme code from a string:
 //
-//	env, _ := bootstrap.NewTopLevelEnvironmentFrameTiny(ctx)
+//	env, _ := bootstrap.NewNamespaceFrameTiny(ctx)
 //	reader := strings.NewReader(`(+ 1 2)`)
 //	err := runtime.Load(ctx, env, reader, "example.scm")
 //
 // # Creating Environments
 //
-// Use [github.com/aalpar/wile/internal/bootstrap.NewTopLevelEnvironmentFrameTiny]
+// Use [github.com/aalpar/wile/internal/bootstrap.NewNamespaceFrameTiny]
 // to create a top-level environment with all standard bindings.
 package runtime

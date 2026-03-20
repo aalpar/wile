@@ -83,7 +83,8 @@ func (p *OSFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.Fi
 		return nil, "", err
 	}
 
-	err = security.Check(ctx, security.AccessRequest{
+	auth, _ := p.env.Namespace().Authorizer().(security.Authorizer)
+	err = security.CheckWithAuthorizer(auth, security.AccessRequest{
 		Resource: security.ResourceCode,
 		Action:   security.ActionLoad,
 		Target:   absPath,

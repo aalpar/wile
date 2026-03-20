@@ -45,13 +45,13 @@ func setupSchemeLibraryTest(t *testing.T) *environment.EnvironmentFrame {
 	t.Helper()
 
 	// Create the top-level environment
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	if err != nil {
 		t.Fatalf("failed to create environment: %v", err)
 	}
 
 	// Set up the factory for creating library environments
-	env.TopLevelEnv().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
+	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
 	// Create and configure the library registry with the scheme lib path
 	registry := machine.NewLibraryRegistry()

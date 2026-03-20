@@ -1481,7 +1481,7 @@ func TestValidateShadowing(t *testing.T) {
 		},
 	}
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -61,7 +61,7 @@ func makeTestQuasisyntax(body syntax.SyntaxValue) *syntax.SyntaxPair {
 }
 
 func newTestCompiler() (*CompileTimeContinuation, *environment.EnvironmentFrame) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 	return ccnt, env
@@ -72,7 +72,7 @@ func newTestCompiler() (*CompileTimeContinuation, *environment.EnvironmentFrame)
 func TestCompileQuasisyntax_Error_NoArgs(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
@@ -87,7 +87,7 @@ func TestCompileQuasisyntax_Error_NoArgs(t *testing.T) {
 func TestCompileUnsyntax_Error(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
@@ -101,7 +101,7 @@ func TestCompileUnsyntax_Error(t *testing.T) {
 func TestCompileUnsyntaxSplicing_Error(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 

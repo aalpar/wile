@@ -47,7 +47,7 @@ func TestReadSyntaxBigInteger(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.input, func(t *testing.T) {
 			c := qt.New(t)
-			env := environment.NewTopLevelEnvironment().Runtime()
+			env := environment.NewNamespace().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
 
 			syn, err := p.ReadSyntax(context.TODO())
@@ -83,7 +83,7 @@ func TestReadSyntaxBigFloat(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.input, func(t *testing.T) {
 			c := qt.New(t)
-			env := environment.NewTopLevelEnvironment().Runtime()
+			env := environment.NewNamespace().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
 
 			syn, err := p.ReadSyntax(context.TODO())
@@ -101,7 +101,7 @@ func TestReadSyntaxBigFloat(t *testing.T) {
 
 func TestReadSyntaxBigIntegerInList(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	p := NewParser(env, true, strings.NewReader("(#z123 #z456 #z789)"))
 
 	syn, err := p.ReadSyntax(context.TODO())
@@ -120,7 +120,7 @@ func TestReadSyntaxBigIntegerInList(t *testing.T) {
 
 func TestReadSyntaxBigFloatInList(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	p := NewParser(env, true, strings.NewReader("(#m1.5 #m2.5 #m3.5)"))
 
 	syn, err := p.ReadSyntax(context.TODO())
@@ -139,7 +139,7 @@ func TestReadSyntaxBigFloatInList(t *testing.T) {
 
 func TestReadSyntaxMixedBigNumbers(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	p := NewParser(env, true, strings.NewReader("(#z100 #m1.5 42 3.14)"))
 
 	syn, err := p.ReadSyntax(context.TODO())
@@ -158,7 +158,7 @@ func TestReadSyntaxMixedBigNumbers(t *testing.T) {
 
 func TestReadSyntaxBigIntegerInVector(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	p := NewParser(env, true, strings.NewReader("#(#z100 #z200)"))
 
 	syn, err := p.ReadSyntax(context.TODO())
@@ -198,7 +198,7 @@ func TestIntegerOverflowPromotion(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.input, func(t *testing.T) {
 			c := qt.New(t)
-			env := environment.NewTopLevelEnvironment().Runtime()
+			env := environment.NewNamespace().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
 
 			syn, err := p.ReadSyntax(context.TODO())
@@ -231,7 +231,7 @@ func TestIntegerNoOverflow(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.input, func(t *testing.T) {
 			c := qt.New(t)
-			env := environment.NewTopLevelEnvironment().Runtime()
+			env := environment.NewNamespace().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
 
 			syn, err := p.ReadSyntax(context.TODO())
@@ -281,7 +281,7 @@ func TestScientificNotationToFloat(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.input, func(t *testing.T) {
 			c := qt.New(t)
-			env := environment.NewTopLevelEnvironment().Runtime()
+			env := environment.NewNamespace().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
 
 			syn, err := p.ReadSyntax(context.TODO())
@@ -312,7 +312,7 @@ func TestScientificNotationExactPrefix(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.input, func(t *testing.T) {
 			c := qt.New(t)
-			env := environment.NewTopLevelEnvironment().Runtime()
+			env := environment.NewNamespace().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.input))
 
 			syn, err := p.ReadSyntax(context.TODO())

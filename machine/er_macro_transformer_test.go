@@ -28,7 +28,7 @@ import (
 func TestERMacroTransformer_IsValue(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := machine.NewNativeTemplate(3, 0, false)
 	cls := machine.NewClosureWithTemplate(tpl, env)
 
@@ -48,7 +48,7 @@ func TestERMacroTransformer_IsValue(t *testing.T) {
 func TestERMacroTransformer_EqualTo(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := machine.NewNativeTemplate(3, 0, false)
 	cls := machine.NewClosureWithTemplate(tpl, env)
 

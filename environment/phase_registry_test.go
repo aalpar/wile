@@ -23,7 +23,7 @@ import (
 )
 
 func TestPhaseRegistry_Creation(t *testing.T) {
-	topLevel := NewTopLevelEnvironmentFrame()
+	topLevel := NewNamespaceFrame()
 
 	qt.Assert(t, topLevel.phases, qt.IsNotNil)
 	qt.Assert(t, topLevel.phases.TopLevelFrame(), qt.Equals, topLevel)
@@ -33,7 +33,7 @@ func TestPhaseRegistry_Creation(t *testing.T) {
 }
 
 func TestPhaseRegistry_GetOrCreate(t *testing.T) {
-	topLevel := NewTopLevelEnvironmentFrame()
+	topLevel := NewNamespaceFrame()
 
 	// Get phase 0 (should be TopLevel)
 	phase0 := topLevel.phases.GetOrCreate(PhaseRuntime)
@@ -61,7 +61,7 @@ func TestPhaseRegistry_GetOrCreate(t *testing.T) {
 }
 
 func TestPhaseRegistry_Get(t *testing.T) {
-	topLevel := NewTopLevelEnvironmentFrame()
+	topLevel := NewNamespaceFrame()
 
 	// Get non-existent phase returns nil
 	qt.Assert(t, topLevel.phases.Get(5), qt.IsNil)
@@ -72,7 +72,7 @@ func TestPhaseRegistry_Get(t *testing.T) {
 }
 
 func TestPhaseRegistry_Phases(t *testing.T) {
-	topLevel := NewTopLevelEnvironmentFrame()
+	topLevel := NewNamespaceFrame()
 
 	// Initially only phase 0
 	phases := topLevel.phases.Phases()
@@ -91,7 +91,7 @@ func TestPhaseRegistry_Phases(t *testing.T) {
 }
 
 func TestPhaseRegistry_PhaseEnvParentsToTopLevel(t *testing.T) {
-	topLevel := NewTopLevelEnvironmentFrame()
+	topLevel := NewNamespaceFrame()
 
 	phase1 := topLevel.phases.GetOrCreate(PhaseExpand)
 	phase2 := topLevel.phases.GetOrCreate(PhaseCompile)
@@ -102,7 +102,7 @@ func TestPhaseRegistry_PhaseEnvParentsToTopLevel(t *testing.T) {
 }
 
 func TestPhaseRegistry_PhaseEnvHasOwnGlobal(t *testing.T) {
-	topLevel := NewTopLevelEnvironmentFrame()
+	topLevel := NewNamespaceFrame()
 
 	phase1 := topLevel.phases.GetOrCreate(PhaseExpand)
 	phase2 := topLevel.phases.GetOrCreate(PhaseCompile)
@@ -114,7 +114,7 @@ func TestPhaseRegistry_PhaseEnvHasOwnGlobal(t *testing.T) {
 }
 
 func TestPhaseRegistry_Concurrent(t *testing.T) {
-	topLevel := NewTopLevelEnvironmentFrame()
+	topLevel := NewNamespaceFrame()
 
 	var wg sync.WaitGroup
 	const numGoroutines = 10

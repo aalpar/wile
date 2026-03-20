@@ -79,7 +79,7 @@ func TestParserError_EqualTo(t *testing.T) {
 
 func TestCoverage_BinaryIntegers(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	tests := []struct {
 		name   string
@@ -103,7 +103,7 @@ func TestCoverage_BinaryIntegers(t *testing.T) {
 
 func TestCoverage_OctalIntegers(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	tests := []struct {
 		name   string
@@ -126,7 +126,7 @@ func TestCoverage_OctalIntegers(t *testing.T) {
 
 func TestCoverage_HexIntegers(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	tests := []struct {
 		name   string
@@ -154,7 +154,7 @@ func TestCoverage_HexIntegers(t *testing.T) {
 
 func TestCoverage_BinaryRationals(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	tests := []struct {
 		name      string
@@ -180,7 +180,7 @@ func TestCoverage_BinaryRationals(t *testing.T) {
 
 func TestCoverage_OctalRationals(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	p := NewParser(env, false, strings.NewReader("#o7/3"))
 	syn, err := p.ReadSyntax(context.TODO())
@@ -192,7 +192,7 @@ func TestCoverage_OctalRationals(t *testing.T) {
 
 func TestCoverage_HexRationals(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	p := NewParser(env, false, strings.NewReader("#x10/8"))
 	syn, err := p.ReadSyntax(context.TODO())
@@ -207,7 +207,7 @@ func TestCoverage_HexRationals(t *testing.T) {
 
 func TestCoverage_ExactPrefix(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	tests := []struct {
 		name  string
@@ -265,7 +265,7 @@ func TestCoverage_ExactPrefix(t *testing.T) {
 
 func TestCoverage_ExactInfError(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	p := NewParser(env, false, strings.NewReader("#e+inf.0"))
 	_, err := p.ReadSyntax(context.TODO())
@@ -275,7 +275,7 @@ func TestCoverage_ExactInfError(t *testing.T) {
 
 func TestCoverage_ExactNanError(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	p := NewParser(env, false, strings.NewReader("#e+nan.0"))
 	_, err := p.ReadSyntax(context.TODO())
@@ -285,7 +285,7 @@ func TestCoverage_ExactNanError(t *testing.T) {
 
 func TestCoverage_InexactPrefix(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	tests := []struct {
 		name     string
@@ -311,7 +311,7 @@ func TestCoverage_InexactPrefix(t *testing.T) {
 
 func TestCoverage_InexactFloat(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #i on an already-inexact float should pass through unchanged
 	p := NewParser(env, false, strings.NewReader("#i1.5"))
@@ -328,7 +328,7 @@ func TestCoverage_InexactFloat(t *testing.T) {
 
 func TestCoverage_HashDigitInteger(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// 1## -> inexact 100.0 (already tested in hash_digit_test but exercises numberToInexact)
 	p := NewParser(env, false, strings.NewReader("1##"))
@@ -345,7 +345,7 @@ func TestCoverage_HashDigitInteger(t *testing.T) {
 
 func TestCoverage_DatumLabelList(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #0=(1 2 3) -> labeled list
 	p := NewParser(env, true, strings.NewReader("#0=(1 2 3)"))
@@ -361,7 +361,7 @@ func TestCoverage_DatumLabelList(t *testing.T) {
 
 func TestCoverage_DatumLabelCircular(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #0=(a . #0#) -> circular pair
 	p := NewParser(env, true, strings.NewReader("#0=(a . #0#)"))
@@ -384,7 +384,7 @@ func TestCoverage_DatumLabelCircular(t *testing.T) {
 
 func TestCoverage_DatumLabelEmptyList(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #0=() -> labeled empty list
 	p := NewParser(env, true, strings.NewReader("#0=()"))
@@ -399,7 +399,7 @@ func TestCoverage_DatumLabelEmptyList(t *testing.T) {
 
 func TestCoverage_DatumLabelSingleElement(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #0=(42) -> labeled single-element list
 	p := NewParser(env, true, strings.NewReader("#0=(42)"))
@@ -414,7 +414,7 @@ func TestCoverage_DatumLabelSingleElement(t *testing.T) {
 
 func TestCoverage_DatumLabelImproperMulti(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #0=(a b . c) -> labeled improper list with multiple elements
 	p := NewParser(env, true, strings.NewReader("#0=(a b . c)"))
@@ -429,7 +429,7 @@ func TestCoverage_DatumLabelImproperMulti(t *testing.T) {
 
 func TestCoverage_DatumLabelAtom(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #0=42 -> labeled atom (non-compound)
 	p := NewParser(env, true, strings.NewReader("#0=42"))
@@ -444,7 +444,7 @@ func TestCoverage_DatumLabelAtom(t *testing.T) {
 
 func TestCoverage_DatumLabelReference(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Read two datums: #0=hello then #0# (reference to label 0)
 	p := NewParser(env, true, strings.NewReader("#0=hello #0#"))
@@ -459,7 +459,7 @@ func TestCoverage_DatumLabelReference(t *testing.T) {
 
 func TestCoverage_DatumLabelVector(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #0=#(1 2 3) -> labeled vector
 	p := NewParser(env, true, strings.NewReader("#0=#(1 2 3)"))
@@ -478,7 +478,7 @@ func TestCoverage_DatumLabelVector(t *testing.T) {
 
 func TestCoverage_InfNanStandalone(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	tests := []struct {
 		name  string
@@ -534,7 +534,7 @@ func TestCoverage_InfNanStandalone(t *testing.T) {
 
 func TestCoverage_InfNanImaginary(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	tests := []struct {
 		name  string
@@ -588,7 +588,7 @@ func TestCoverage_InfNanImaginary(t *testing.T) {
 
 func TestCoverage_MultipleReads(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("1 2 3"))
 	syn1, err := p.ReadSyntax(context.TODO())
@@ -606,7 +606,7 @@ func TestCoverage_MultipleReads(t *testing.T) {
 
 func TestCoverage_FoldCaseDirective(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #!fold-case should cause subsequent symbols to be lowercased
 	p := NewParser(env, true, strings.NewReader("#!fold-case FOO"))
@@ -619,7 +619,7 @@ func TestCoverage_FoldCaseDirective(t *testing.T) {
 
 func TestCoverage_NoFoldCaseDirective(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #!fold-case followed by #!no-fold-case should restore case sensitivity
 	p := NewParser(env, true, strings.NewReader("#!fold-case #!no-fold-case FOO"))
@@ -636,7 +636,7 @@ func TestCoverage_NoFoldCaseDirective(t *testing.T) {
 
 func TestCoverage_ComplexInfNan(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	tests := []struct {
 		name      string
@@ -695,7 +695,7 @@ func TestCoverage_ComplexInfNan(t *testing.T) {
 
 func TestCoverage_ExactComplex(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #e on a complex with inf should error
 	p := NewParser(env, false, strings.NewReader("#e1.0+inf.0i"))
@@ -705,7 +705,7 @@ func TestCoverage_ExactComplex(t *testing.T) {
 
 func TestCoverage_InexactComplex(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #i on an exact complex number like 1+2i
 	p := NewParser(env, false, strings.NewReader("#i1+2i"))
@@ -723,7 +723,7 @@ func TestCoverage_InexactComplex(t *testing.T) {
 
 func TestCoverage_PolarComplex(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// 1@0 -> 1+0i (angle 0 means pure real)
 	p := NewParser(env, false, strings.NewReader("1@0"))
@@ -741,7 +741,7 @@ func TestCoverage_PolarComplex(t *testing.T) {
 
 func TestCoverage_PolarNonZeroAngle(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// 2@1.5708 (approximately pi/2) -> real near 0, imag near 2
 	p := NewParser(env, false, strings.NewReader("2@1.5708"))
@@ -758,7 +758,7 @@ func TestCoverage_PolarNonZeroAngle(t *testing.T) {
 
 func TestCoverage_ScientificNotation(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	tests := []struct {
 		name     string
@@ -788,7 +788,7 @@ func TestCoverage_ScientificNotation(t *testing.T) {
 
 func TestCoverage_ExactScientific(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #e1e2 -> exact integer 100
 	p := NewParser(env, false, strings.NewReader("#e1e2"))
@@ -805,7 +805,7 @@ func TestCoverage_ExactScientific(t *testing.T) {
 
 func TestCoverage_CloseParser(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	p := NewParser(env, false, strings.NewReader("42"))
 	_, err := p.ReadSyntax(context.TODO())
@@ -821,7 +821,7 @@ func TestCoverage_CloseParser(t *testing.T) {
 
 func TestCoverage_UnexpectedCloseParen(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	p := NewParser(env, true, strings.NewReader(")"))
 	_, err := p.ReadSyntax(context.TODO())
@@ -835,7 +835,7 @@ func TestCoverage_UnexpectedCloseParen(t *testing.T) {
 
 func TestCoverage_CommentSkipInList(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// List with inline comments that should be skipped
 	p := NewParser(env, true, strings.NewReader("(1 ; a comment\n 2 3)"))
@@ -846,7 +846,7 @@ func TestCoverage_CommentSkipInList(t *testing.T) {
 
 func TestCoverage_DatumCommentSkip(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #; datum comment should skip the next datum
 	p := NewParser(env, true, strings.NewReader("#;foo bar"))
@@ -859,7 +859,7 @@ func TestCoverage_DatumCommentSkip(t *testing.T) {
 
 func TestCoverage_DatumCommentInList(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Datum comment inside a list
 	p := NewParser(env, true, strings.NewReader("(1 #;2 3)"))
@@ -908,7 +908,7 @@ func TestParserErrorf(t *testing.T) {
 
 func TestCoverage_InexactBigInteger(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #i on a big integer
 	p := NewParser(env, false, strings.NewReader("#i999999999999999999"))
@@ -925,7 +925,7 @@ func TestCoverage_InexactBigInteger(t *testing.T) {
 
 func TestCoverage_BlockComment(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Block comment followed by a datum
 	p := NewParser(env, true, strings.NewReader("#| block comment |# 42"))
@@ -940,7 +940,7 @@ func TestCoverage_BlockComment(t *testing.T) {
 
 func TestCoverage_Bytevector(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("#u8(1 2 3)"))
 	syn, err := p.ReadSyntax(context.TODO())
@@ -952,7 +952,7 @@ func TestCoverage_Bytevector(t *testing.T) {
 
 func TestCoverage_EmptyBytevector(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("#u8()"))
 	syn, err := p.ReadSyntax(context.TODO())
@@ -968,7 +968,7 @@ func TestCoverage_EmptyBytevector(t *testing.T) {
 
 func TestCoverage_Characters(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	tests := []struct {
 		name     string
@@ -1005,7 +1005,7 @@ func TestCoverage_Characters(t *testing.T) {
 
 func TestCoverage_Vector(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("#(1 2 3)"))
 	syn, err := p.ReadSyntax(context.TODO())
@@ -1017,7 +1017,7 @@ func TestCoverage_Vector(t *testing.T) {
 
 func TestCoverage_EmptyVector(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("#()"))
 	syn, err := p.ReadSyntax(context.TODO())
@@ -1033,7 +1033,7 @@ func TestCoverage_EmptyVector(t *testing.T) {
 
 func TestCoverage_QuoteForms(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	tests := []struct {
 		name  string
@@ -1060,7 +1060,7 @@ func TestCoverage_QuoteForms(t *testing.T) {
 
 func TestCoverage_DottedPair(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("(1 . 2)"))
 	syn, err := p.ReadSyntax(context.TODO())
@@ -1076,7 +1076,7 @@ func TestCoverage_DottedPair(t *testing.T) {
 
 func TestCoverage_DirectiveNoSkip(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// When not skipping comments, directives are returned as syntax values
 	p := NewParser(env, false, strings.NewReader("#!fold-case"))
@@ -1092,7 +1092,7 @@ func TestCoverage_DirectiveNoSkip(t *testing.T) {
 
 func TestCoverage_ExactBigFloat(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #e on a BigFloat (arbitrary precision)
 	p := NewParser(env, false, strings.NewReader("#e#m1.5"))
@@ -1105,7 +1105,7 @@ func TestCoverage_ExactBigFloat(t *testing.T) {
 
 func TestCoverage_ExactBigFloatInt(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #e on a BigFloat that is an integer
 	p := NewParser(env, false, strings.NewReader("#e#m42.0"))
@@ -1122,7 +1122,7 @@ func TestCoverage_ExactBigFloatInt(t *testing.T) {
 
 func TestCoverage_BinaryHashDigit(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #b1# -> binary with hash digit, should be inexact
 	p := NewParser(env, false, strings.NewReader("#b1#"))
@@ -1136,7 +1136,7 @@ func TestCoverage_BinaryHashDigit(t *testing.T) {
 
 func TestCoverage_OctalHashDigit(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #o7## -> octal with hash digits, should be inexact
 	p := NewParser(env, false, strings.NewReader("#o7##"))
@@ -1150,7 +1150,7 @@ func TestCoverage_OctalHashDigit(t *testing.T) {
 
 func TestCoverage_HexHashDigit(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #xf# -> hex with hash digit, should be inexact
 	p := NewParser(env, false, strings.NewReader("#xf#"))
@@ -1168,7 +1168,7 @@ func TestCoverage_HexHashDigit(t *testing.T) {
 
 func TestCoverage_NumberToInexactRational(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #i on a rational number -> should convert to float
 	p := NewParser(env, false, strings.NewReader("#i1/3"))
@@ -1185,7 +1185,7 @@ func TestCoverage_NumberToInexactRational(t *testing.T) {
 
 func TestCoverage_ExactInexactComplex(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #e on an inexact complex like 1.5+2.5i -> exact BigComplex
 	p := NewParser(env, false, strings.NewReader("#e1.5+2.5i"))
@@ -1201,7 +1201,7 @@ func TestCoverage_ExactInexactComplex(t *testing.T) {
 
 func TestCoverage_InexactBigComplex(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #i on an exact complex number 1+2i -> inexact Complex
 	p := NewParser(env, false, strings.NewReader("#i1+2i"))
@@ -1219,7 +1219,7 @@ func TestCoverage_InexactBigComplex(t *testing.T) {
 
 func TestCoverage_ExactExactBigComplex(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #e on an already exact complex 1+2i -> should stay exact BigComplex
 	p := NewParser(env, false, strings.NewReader("#e1+2i"))
@@ -1235,7 +1235,7 @@ func TestCoverage_ExactExactBigComplex(t *testing.T) {
 
 func TestCoverage_PolarWithFloats(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// 2.0@0.0 -> 2+0i (exercises parseFloatOrInfnan with regular float)
 	p := NewParser(env, false, strings.NewReader("2.0@0.0"))
@@ -1252,7 +1252,7 @@ func TestCoverage_PolarWithFloats(t *testing.T) {
 
 func TestCoverage_SkipTopLevelComment(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Line comment at top level followed by datum
 	p := NewParser(env, true, strings.NewReader("; comment\n42"))
@@ -1267,7 +1267,7 @@ func TestCoverage_SkipTopLevelComment(t *testing.T) {
 
 func TestCoverage_CachedError(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Parse something that causes an error, then try again
 	p := NewParser(env, true, strings.NewReader(")"))
@@ -1285,7 +1285,7 @@ func TestCoverage_CachedError(t *testing.T) {
 
 func TestCoverage_HashDigitRational(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Rational with hash digits should force inexact
 	p := NewParser(env, false, strings.NewReader("1#/3"))
@@ -1303,7 +1303,7 @@ func TestCoverage_HashDigitRational(t *testing.T) {
 
 func TestCoverage_SyntaxQuoteForms(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	tests := []struct {
 		name  string
@@ -1330,7 +1330,7 @@ func TestCoverage_SyntaxQuoteForms(t *testing.T) {
 
 func TestCoverage_Base10Prefix(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	p := NewParser(env, false, strings.NewReader("#d42"))
 	syn, err := p.ReadSyntax(context.TODO())
@@ -1344,7 +1344,7 @@ func TestCoverage_Base10Prefix(t *testing.T) {
 
 func TestCoverage_EmptyList(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("()"))
 	syn, err := p.ReadSyntax(context.TODO())
@@ -1358,7 +1358,7 @@ func TestCoverage_EmptyList(t *testing.T) {
 
 func TestCoverage_SignedDecimal(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	tests := []struct {
 		name     string
@@ -1387,7 +1387,7 @@ func TestCoverage_SignedDecimal(t *testing.T) {
 
 func TestCoverage_SignedRational(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	tests := []struct {
 		name   string
@@ -1415,7 +1415,7 @@ func TestCoverage_SignedRational(t *testing.T) {
 
 func TestCoverage_ExactNonNumber(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #e on a symbol - should produce an error
 	p := NewParser(env, false, strings.NewReader("#efoo"))
@@ -1429,7 +1429,7 @@ func TestCoverage_ExactNonNumber(t *testing.T) {
 
 func TestCoverage_InexactNonNumber(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #i on a symbol - should produce an error
 	p := NewParser(env, false, strings.NewReader("#ifoo"))
@@ -1443,7 +1443,7 @@ func TestCoverage_InexactNonNumber(t *testing.T) {
 
 func TestCoverage_Strings(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	p := NewParser(env, false, strings.NewReader(`"hello world"`))
 	syn, err := p.ReadSyntax(context.TODO())
@@ -1459,7 +1459,7 @@ func TestCoverage_Strings(t *testing.T) {
 
 func TestCoverage_ExactBigFloatInf(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #e on -inf.0 should error
 	p := NewParser(env, false, strings.NewReader("#e-inf.0"))
@@ -1473,7 +1473,7 @@ func TestCoverage_ExactBigFloatInf(t *testing.T) {
 
 func TestCoverage_PureImaginary(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	tests := []struct {
 		name  string
@@ -1534,7 +1534,7 @@ func TestCoverage_PureImaginary(t *testing.T) {
 
 func TestCoverage_ParserWithFile(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	p := NewParserWithFile(env, true, strings.NewReader("42"), "test.scm")
 	syn, err := p.ReadSyntax(context.TODO())
@@ -1548,7 +1548,7 @@ func TestCoverage_ParserWithFile(t *testing.T) {
 
 func TestCoverage_InexactRational(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("#i1/3"))
 	syn, err := p.ReadSyntax(context.TODO())
@@ -1561,7 +1561,7 @@ func TestCoverage_InexactRational(t *testing.T) {
 
 func TestCoverage_InexactBigComplexMakeInexact(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #i on an exact complex number exercises makeInexact BigComplex path
 	p := NewParser(env, true, strings.NewReader("#i1+2i"))
@@ -1575,7 +1575,7 @@ func TestCoverage_InexactBigComplexMakeInexact(t *testing.T) {
 
 func TestCoverage_ExactComplexToExact(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #e on inexact complex exercises makeExact Complex → BigComplex path
 	p := NewParser(env, true, strings.NewReader("#e1.0+2.0i"))
@@ -1592,7 +1592,7 @@ func TestCoverage_ExactComplexToExact(t *testing.T) {
 
 func TestCoverage_BinaryIntegerOverflow(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// 65-bit binary number overflows int64
 	bigBin := "#b1" + strings.Repeat("0", 64)
@@ -1605,7 +1605,7 @@ func TestCoverage_BinaryIntegerOverflow(t *testing.T) {
 
 func TestCoverage_HexIntegerOverflow(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Hex number that overflows int64
 	p := NewParser(env, true, strings.NewReader("#xFFFFFFFFFFFFFFFF1"))
@@ -1621,7 +1621,7 @@ func TestCoverage_HexIntegerOverflow(t *testing.T) {
 
 func TestCoverage_BinaryRationalOverflowNumerator(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Binary rational with overflow numerator
 	bigBin := "#b" + strings.Repeat("1", 65) + "/10"
@@ -1633,7 +1633,7 @@ func TestCoverage_BinaryRationalOverflowNumerator(t *testing.T) {
 
 func TestCoverage_HexRationalOverflowDenominator(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Hex rational with overflow denominator
 	p := NewParser(env, true, strings.NewReader("#x1/FFFFFFFFFFFFFFFF1"))
@@ -1644,7 +1644,7 @@ func TestCoverage_HexRationalOverflowDenominator(t *testing.T) {
 
 func TestCoverage_SignedBinaryRationalOverflow(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Signed binary rational with overflow
 	bigBin := "#b-" + strings.Repeat("1", 65) + "/10"
@@ -1660,7 +1660,7 @@ func TestCoverage_SignedBinaryRationalOverflow(t *testing.T) {
 
 func TestCoverage_PolarWithRationalMagnitude(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Polar complex with non-zero angle to exercise cos/sin paths
 	p := NewParser(env, true, strings.NewReader("2@1"))
@@ -1679,7 +1679,7 @@ func TestCoverage_PolarWithRationalMagnitude(t *testing.T) {
 
 func TestCoverage_UnsignedImaginary(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Test +nan.0i and -nan.0i
 	p := NewParser(env, true, strings.NewReader("+nan.0i"))
@@ -1699,7 +1699,7 @@ func TestCoverage_UnsignedImaginary(t *testing.T) {
 
 func TestCoverage_SignedDecimalFraction(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Positive signed decimal fraction
 	p := NewParser(env, true, strings.NewReader("+3.14"))
@@ -1720,7 +1720,7 @@ func TestCoverage_SignedDecimalFraction(t *testing.T) {
 
 func TestCoverage_Boolean(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	p := NewParser(env, true, strings.NewReader("#t #f #true #false"))
 	syn, err := p.ReadSyntax(context.TODO())
@@ -1742,7 +1742,7 @@ func TestCoverage_Boolean(t *testing.T) {
 
 func TestCoverage_ExactFloat(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #e on a float that is a whole number → Integer
 	p := NewParser(env, true, strings.NewReader("#e5.0"))
@@ -1763,7 +1763,7 @@ func TestCoverage_ExactFloat(t *testing.T) {
 
 func TestCoverage_InexactInteger(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #i on an integer
 	p := NewParser(env, true, strings.NewReader("#i42"))
@@ -1776,7 +1776,7 @@ func TestCoverage_InexactInteger(t *testing.T) {
 
 func TestCoverage_ConsError(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// A standalone '.' at top-level should produce an error
 	p := NewParser(env, true, strings.NewReader("."))
@@ -1786,7 +1786,7 @@ func TestCoverage_ConsError(t *testing.T) {
 
 func TestCoverage_NestedList(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Nested list (1 (2 3))
 	p := NewParser(env, true, strings.NewReader("(1 (2 3))"))
@@ -1797,7 +1797,7 @@ func TestCoverage_NestedList(t *testing.T) {
 
 func TestCoverage_ExactBigInteger(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #e on a BigInteger - should pass through
 	bigNum := "#e99999999999999999999"
@@ -1810,7 +1810,7 @@ func TestCoverage_ExactBigInteger(t *testing.T) {
 
 func TestCoverage_ExactRational(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #e on a rational - should pass through
 	p := NewParser(env, true, strings.NewReader("#e1/3"))
@@ -1822,7 +1822,7 @@ func TestCoverage_ExactRational(t *testing.T) {
 
 func TestCoverage_NumberToInexactBigComplex(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Parse exact complex 1+2i (becomes BigComplex), then apply #i
 	// This exercises numberToInexact BigComplex path
@@ -1835,7 +1835,7 @@ func TestCoverage_NumberToInexactBigComplex(t *testing.T) {
 
 func TestCoverage_BigFloatBasic(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #m prefix for BigFloat
 	p := NewParser(env, true, strings.NewReader("#m3.14159265358979323846"))
@@ -1847,7 +1847,7 @@ func TestCoverage_BigFloatBasic(t *testing.T) {
 
 func TestCoverage_MakeInexactBigInteger(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// #i on a BigInteger exercises makeInexact BigInteger path
 	p := NewParser(env, true, strings.NewReader("#i99999999999999999999"))
@@ -1859,7 +1859,7 @@ func TestCoverage_MakeInexactBigInteger(t *testing.T) {
 
 func TestCoverage_SignedRationalFraction(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Positive signed rational
 	p := NewParser(env, true, strings.NewReader("+3/4"))
@@ -1870,7 +1870,7 @@ func TestCoverage_SignedRationalFraction(t *testing.T) {
 
 func TestCoverage_UnsignedComplexExact(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Exact complex with integer parts
 	p := NewParser(env, true, strings.NewReader("3+4i"))

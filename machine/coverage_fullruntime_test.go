@@ -46,7 +46,7 @@ func parseSchemeExprExt(t *testing.T, env *environment.EnvironmentFrame, code st
 
 // newFullRuntimeEnv creates a full runtime environment with all primitives
 func newFullRuntimeEnv(t *testing.T) *environment.EnvironmentFrame {
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	return env
 }

@@ -24,7 +24,7 @@ import (
 )
 
 func TestMachineClosure_Copy(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(2)
 	lenv.Bindings()[0].SetValue(values.NewInteger(42))
 	lenv.Bindings()[1].SetValue(values.NewInteger(100))
@@ -43,7 +43,7 @@ func TestMachineClosure_Copy(t *testing.T) {
 }
 
 func TestMachineClosure_IsVoid(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	cls := NewClosureWithTemplate(tpl, env)
@@ -54,7 +54,7 @@ func TestMachineClosure_IsVoid(t *testing.T) {
 }
 
 func TestMachineClosure_SchemeString(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	cls := NewClosureWithTemplate(tpl, env)
@@ -62,7 +62,7 @@ func TestMachineClosure_SchemeString(t *testing.T) {
 }
 
 func TestMachineClosure_EqualTo(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	cls1 := NewClosureWithTemplate(tpl, env)
@@ -80,7 +80,7 @@ func TestMachineClosure_EqualTo(t *testing.T) {
 	qt.Assert(t, cls1.EqualTo(cls4), qt.IsFalse)
 
 	// Different environment
-	env2 := environment.NewTopLevelEnvironment().Runtime()
+	env2 := environment.NewNamespace().Runtime()
 	cls5 := NewClosureWithTemplate(tpl, env2)
 	qt.Assert(t, cls1.EqualTo(cls5), qt.IsFalse)
 
@@ -94,7 +94,7 @@ func TestMachineClosure_EqualTo(t *testing.T) {
 }
 
 func TestMachineClosure_AcceptsArity(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	tcs := []struct {
 		name     string
@@ -127,7 +127,7 @@ func TestMachineClosure_AcceptsArity(t *testing.T) {
 // Tests moved from coverage_additional_test.go
 // TestMachineClosureMethodsAdditional tests MachineClosure methods
 func TestMachineClosureMethodsAdditional(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(1, 0, false)
 	closure := NewClosureWithTemplate(tpl, env)
 
@@ -145,7 +145,7 @@ func TestMachineClosureMethodsAdditional(t *testing.T) {
 
 // TestMachineClosureMethods tests MachineClosure methods
 func TestMachineClosureMethods(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(2, 1, true)
 	closure := NewClosureWithTemplate(tpl, env)
 
@@ -158,7 +158,7 @@ func TestMachineClosureMethods(t *testing.T) {
 
 // TestMachineClosureEqualToNil tests closure equality with nil
 func TestMachineClosureEqualToNil(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(2, 2, true)
 	cls := NewClosureWithTemplate(tpl, env)
 
@@ -170,7 +170,7 @@ func TestMachineClosureEqualToNil(t *testing.T) {
 
 // TestForeignClosureSchemeString tests ForeignClosure methods
 func TestForeignClosureSchemeString(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	fn := func(mc *MachineContext) error {
 		return nil
 	}

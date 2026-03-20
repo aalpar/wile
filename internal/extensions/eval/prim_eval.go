@@ -32,15 +32,39 @@ import (
 )
 
 // PrimEval implements the (eval) primitive.
-// Evaluates an expression in a given environment.
+// 1-arg form: (eval expr) — uses current namespace (interaction-environment).
+// 2-arg form: (eval expr env) — uses the given environment.
+//
+// With ParamCount: 1 and IsVariadic: true, all args arrive as a rest
+// list in mc.Arg(0).
 func PrimEval(mc *machine.MachineContext) error {
-	expr := mc.Arg(0)
-	envSpec := mc.Arg(1)
+	args := mc.Arg(0)
 
-	// Get the environment frame from the TopLevelEnvironment
-	topLevelEnv, ok := envSpec.(*environment.TopLevelEnvironment)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "eval: expected an environment specifier but got %T", envSpec)
+	argList, ok := args.(values.Tuple)
+	if !ok || argList.IsEmptyList() {
+		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "eval: expected 1 or 2 arguments")
+	}
+
+	expr := argList.Car()
+
+	// Determine the target namespace
+	var topLevelEnv *environment.Namespace
+	restTuple, _ := argList.Cdr().(values.Tuple)
+	if restTuple != nil && !restTuple.IsEmptyList() {
+		// 2-arg form: extract environment from second arg
+		envSpec := restTuple.Car()
+		topLevelEnv, ok = envSpec.(*environment.Namespace)
+		if !ok {
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "eval: expected an environment specifier but got %T", envSpec)
+		}
+		// Reject extra arguments beyond the environment
+		envRest, _ := restTuple.Cdr().(values.Tuple)
+		if envRest != nil && !envRest.IsEmptyList() {
+			return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "eval: expected 1 or 2 arguments")
+		}
+	} else {
+		// 1-arg form: use current namespace
+		topLevelEnv = mc.EnvironmentFrame().Namespace()
 	}
 
 	env := topLevelEnv.Runtime()
@@ -170,7 +194,7 @@ func PrimLoad(mc *machine.MachineContext) error {
 // Returns the absolute path of the file currently being loaded, or #f if
 // no file is being loaded (e.g., REPL).
 func PrimCurrentLoadPath(mc *machine.MachineContext) error {
-	current := mc.EnvironmentFrame().TopLevelEnv().LoadPathStack().Current()
+	current := mc.EnvironmentFrame().Namespace().LoadPathStack().Current()
 	if current == "" {
 		mc.SetValue(values.FalseValue)
 	} else {
@@ -183,7 +207,7 @@ func PrimCurrentLoadPath(mc *machine.MachineContext) error {
 // Returns the directory of the file currently being loaded, or #f if
 // no file is being loaded (e.g., REPL).
 func PrimCurrentLoadDirectory(mc *machine.MachineContext) error {
-	currentDir := mc.EnvironmentFrame().TopLevelEnv().LoadPathStack().CurrentDir()
+	currentDir := mc.EnvironmentFrame().Namespace().LoadPathStack().CurrentDir()
 	if currentDir == "" {
 		mc.SetValue(values.FalseValue)
 	} else {
@@ -196,7 +220,7 @@ func PrimCurrentLoadDirectory(mc *machine.MachineContext) error {
 // Returns the current load stack depth (number of nested loads).
 // Returns 0 when not inside a load call.
 func PrimCurrentLoadDepth(mc *machine.MachineContext) error {
-	depth := mc.EnvironmentFrame().TopLevelEnv().LoadPathStack().Depth()
+	depth := mc.EnvironmentFrame().Namespace().LoadPathStack().Depth()
 	mc.SetValue(values.NewInteger(int64(depth)))
 	return nil
 }
@@ -217,8 +241,8 @@ func PrimSchemeReportEnvironment(mc *machine.MachineContext) error {
 		// but contains a snapshot of the current standard bindings.
 		// R7RS §6.12: scheme-report-environment must be distinct from
 		// interaction-environment and contain the R7RS standard bindings.
-		callerTopLevel := mc.EnvironmentFrame().TopLevelEnv()
-		newTopLevel := callerTopLevel.NewSchemeReportEnvironment()
+		callerTopLevel := mc.EnvironmentFrame().Namespace()
+		newTopLevel := callerTopLevel.NewSchemeReportNamespace()
 		newTopLevel.Name = "scheme-report-environment"
 		mc.SetValue(newTopLevel)
 		return nil
@@ -241,8 +265,8 @@ func PrimNullEnvironment(mc *machine.MachineContext) error {
 	case 5, 7:
 		// Create a new empty top-level environment with only syntax bindings.
 		// Shares the caller's symbol interning for R7RS §6.5 symbol identity.
-		callerTopLevel := mc.EnvironmentFrame().TopLevelEnv()
-		newTopLevel := callerTopLevel.NewChildTopLevelEnvironment()
+		callerTopLevel := mc.EnvironmentFrame().Namespace()
+		newTopLevel := callerTopLevel.NewChildNamespace()
 		newTopLevel.Name = "null-environment"
 		mc.SetValue(newTopLevel)
 		return nil
@@ -265,9 +289,9 @@ func PrimEnvironment(mc *machine.MachineContext) error {
 
 	// Create child top-level environment sharing the caller's symbol interning
 	// and library registry for R7RS §6.5 symbol identity.
-	callerTopLevel := mc.EnvironmentFrame().TopLevelEnv()
+	callerTopLevel := mc.EnvironmentFrame().Namespace()
 	callerEnv := mc.EnvironmentFrame().TopLevel()
-	newTopLevel := callerTopLevel.NewChildTopLevelEnvironment()
+	newTopLevel := callerTopLevel.NewChildNamespace()
 	newTopLevel.Name = "environment"
 	newEnv := newTopLevel.Runtime()
 

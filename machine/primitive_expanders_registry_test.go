@@ -27,7 +27,7 @@ func TestPrimitiveExpandersRegistry(t *testing.T) {
 	// RegisterPrimitiveExpanders binds PrimitiveExpander values into
 	// env.Expand(). After registration, LookupPrimitiveExpander should
 	// find them by symbol with nil scopes.
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	err := RegisterPrimitiveExpanders(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -78,7 +78,7 @@ func TestPrimitiveExpandersRegistry(t *testing.T) {
 }
 
 func TestPrimitiveExpandersRegistryLookupMiss(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	err := RegisterPrimitiveExpanders(env)
 	qt.Assert(t, err, qt.IsNil)
 

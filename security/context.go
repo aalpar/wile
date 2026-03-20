@@ -34,33 +34,23 @@ func FromContext(ctx context.Context) Authorizer {
 	return auth
 }
 
-// Check authorizes req against the Authorizer in ctx. If no Authorizer
-// is set, the operation is allowed (open by default). Returns nil on
-// success or a wrapped ErrAccessDenied on denial.
+// Check authorizes req against the Authorizer in ctx.
 //
-// Reference monitor (Anderson 1972). Three properties must hold:
+// Deprecated: The authorizer now lives on Namespace, not context.
+// Production gate sites use CheckWithAuthorizer(mc.Authorizer(), req).
+// This function remains for backward compatibility but will always find
+// nil (open by default) unless the caller explicitly injects an
+// authorizer via WithAuthorizer(ctx, auth).
 //
-//  1. Always invoked:  every privileged path calls Check.
-//
-//  2. Tamperproof:     Authorizer is in context.Context (immutable
-//     after engine construction via WithAuthorizer).
-//
-//  3. Complete:        gate sites are enumerated — files, system, eval
-//     extensions, include, library import.
-//
-//     req = AccessRequest{Resource, Action, Target}, where Resource ∈
-//     {file, code, env, process} and Action ∈ {read, write, delete, load, exit}.
-//
-//     Invariant: if no Authorizer is set (auth == nil), all operations are
-//     allowed. This is "open by default" — sandboxing is opt-in.
-//     Constrains: all gate sites (must call Check before privileged ops).
-//     Constrained by: WithAuthorizer (injects auth into context at engine
-//     construction), POLA (SafeExtensions eliminates capabilities at
-//     compile time before Check is even reachable).
-//
-// See BIBLIOGRAPHY.md "Anderson".
+// New code should use CheckWithAuthorizer directly.
 func Check(ctx context.Context, req AccessRequest) error {
 	auth := FromContext(ctx)
+	return CheckWithAuthorizer(auth, req)
+}
+
+// CheckWithAuthorizer checks authorization using an explicit authorizer.
+// Returns nil if auth is nil (open by default).
+func CheckWithAuthorizer(auth Authorizer, req AccessRequest) error {
 	if auth == nil {
 		return nil
 	}

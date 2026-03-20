@@ -149,7 +149,7 @@ func TestOperation(t *testing.T) {
 		{
 			op: NewOperationMakeClosure(),
 			setupFn: func(t *testing.T, mc *MachineContext) {
-				topEnv := environment.NewTopLevelEnvironment().Runtime()
+				topEnv := environment.NewNamespace().Runtime()
 				lenv := environment.NewLocalEnvironment(0)
 				env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 				tpl := NewNativeTemplate(0, 0, false)
@@ -174,7 +174,7 @@ func TestOperation(t *testing.T) {
 			op: NewOperationApply(),
 			setupFn: func(t *testing.T, mc *MachineContext) {
 				// Create a zero-arity closure that loads literal 42 and returns.
-				topEnv := environment.NewTopLevelEnvironment().Runtime()
+				topEnv := environment.NewNamespace().Runtime()
 				lenv := environment.NewLocalEnvironment(0)
 				closureEnv := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 				closureTpl := NewNativeTemplate(0, 0, false,
@@ -199,7 +199,7 @@ func TestOperation(t *testing.T) {
 		{
 			op: NewOperationSaveContinuationOffsetImmediate(1),
 			setupFn: func(t *testing.T, mc *MachineContext) {
-				topEnv := environment.NewTopLevelEnvironment().Runtime()
+				topEnv := environment.NewNamespace().Runtime()
 				lenv := environment.NewLocalEnvironment(0)
 				mc.env = environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 				// Pre-save a continuation to build chain depth.
@@ -216,7 +216,7 @@ func TestOperation(t *testing.T) {
 		{
 			op: NewOperationRestoreContinuation(),
 			setupFn: func(t *testing.T, mc *MachineContext) {
-				topEnv := environment.NewTopLevelEnvironment().Runtime()
+				topEnv := environment.NewNamespace().Runtime()
 				lenv := environment.NewLocalEnvironment(0)
 				mc.env = environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 				// Build a 3-level chain; RestoreContinuation will pop one level.
@@ -238,7 +238,7 @@ func TestOperation(t *testing.T) {
 			if tc.evals == nil {
 				tc.evals = NewStack()
 			}
-			topEnv := environment.NewTopLevelEnvironment().Runtime()
+			topEnv := environment.NewNamespace().Runtime()
 			lenv := environment.NewLocalEnvironment(0)
 			env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 			tpl := NewNativeTemplate(0, 0, false, tc.op)
@@ -786,7 +786,7 @@ func TestOperationsCopy(t *testing.T) {
 
 // TestOperationMakeClosureError tests MakeClosure with wrong stack
 func TestOperationMakeClosureError(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendOperations(
 		// Push something that's not an environment frame

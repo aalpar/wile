@@ -32,7 +32,7 @@ import (
 //
 // However, these are process-global pointers, not per-VM interned symbols.
 // Reader-interned 'new (created via the parser gate) lives in the per-VM
-// TopLevelEnvironment intern table and is a different pointer. Therefore:
+// Namespace intern table and is a different pointer. Therefore:
 //
 //	(eq? (thread-state t) (thread-state t))  → #t  (same singleton)
 //	(eq? (thread-state t) 'new)              → #f  (singleton ≠ interned)

@@ -28,7 +28,7 @@ import (
 
 // foreignAddClosure creates a ForeignClosure that adds two integer arguments.
 func foreignAddClosure() *ForeignClosure {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	return NewForeignClosure(env, 2, false, func(mc *MachineContext) error {
 		bnds := mc.env.LocalEnvironment().Bindings()
 		a := bnds[0].Value().(*values.Integer)
@@ -40,7 +40,7 @@ func foreignAddClosure() *ForeignClosure {
 
 // foreignErrorClosure creates a ForeignClosure that always returns an error.
 func foreignErrorClosure() *ForeignClosure {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	return NewForeignClosure(env, 0, false, func(mc *MachineContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAProcedure, "intentional test error")
 	})
@@ -56,7 +56,7 @@ func TestOpCallForeignCached(t *testing.T) {
 		{
 			name: "non-tail: add 3+4=7",
 			setupTpl: func() (*NativeTemplate, *environment.EnvironmentFrame) {
-				env := environment.NewTopLevelEnvironment().Runtime()
+				env := environment.NewNamespace().Runtime()
 				fcls := foreignAddClosure()
 				bd := environment.NewBinding(fcls, environment.BindingTypeVariable)
 
@@ -79,7 +79,7 @@ func TestOpCallForeignCached(t *testing.T) {
 		{
 			name: "tail: add 5+6=11",
 			setupTpl: func() (*NativeTemplate, *environment.EnvironmentFrame) {
-				env := environment.NewTopLevelEnvironment().Runtime()
+				env := environment.NewNamespace().Runtime()
 				fcls := foreignAddClosure()
 				bd := environment.NewBinding(fcls, environment.BindingTypeVariable)
 
@@ -99,7 +99,7 @@ func TestOpCallForeignCached(t *testing.T) {
 		{
 			name: "arity error: too few args",
 			setupTpl: func() (*NativeTemplate, *environment.EnvironmentFrame) {
-				env := environment.NewTopLevelEnvironment().Runtime()
+				env := environment.NewNamespace().Runtime()
 				fcls := foreignAddClosure() // expects 2 args
 				bd := environment.NewBinding(fcls, environment.BindingTypeVariable)
 
@@ -120,10 +120,10 @@ func TestOpCallForeignCached(t *testing.T) {
 		{
 			name: "variadic: sum with rest args",
 			setupTpl: func() (*NativeTemplate, *environment.EnvironmentFrame) {
-				env := environment.NewTopLevelEnvironment().Runtime()
+				env := environment.NewNamespace().Runtime()
 
 				// paramCount=2, isVariadic=true: bnds[0]=first required, bnds[1]=rest list
-				varEnv := environment.NewTopLevelEnvironment().Runtime()
+				varEnv := environment.NewNamespace().Runtime()
 				fcls := NewForeignClosure(varEnv, 2, true, func(mc *MachineContext) error {
 					bnds := mc.env.LocalEnvironment().Bindings()
 					first := bnds[0].Value().(*values.Integer)
@@ -163,7 +163,7 @@ func TestOpCallForeignCached(t *testing.T) {
 		{
 			name: "error propagation from foreign fn",
 			setupTpl: func() (*NativeTemplate, *environment.EnvironmentFrame) {
-				env := environment.NewTopLevelEnvironment().Runtime()
+				env := environment.NewNamespace().Runtime()
 				fcls := foreignErrorClosure() // 0 params, always errors
 				bd := environment.NewBinding(fcls, environment.BindingTypeVariable)
 

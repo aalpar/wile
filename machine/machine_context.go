@@ -21,6 +21,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
+	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -218,6 +219,17 @@ func (p *MachineContext) GetValues() MultipleValues {
 
 func (p *MachineContext) EnvironmentFrame() *environment.EnvironmentFrame {
 	return p.env
+}
+
+// Authorizer returns the security authorizer from this context's namespace,
+// or nil if none is set.
+func (p *MachineContext) Authorizer() security.Authorizer {
+	ns := p.env.Namespace()
+	if ns == nil {
+		return nil
+	}
+	auth, _ := ns.Authorizer().(security.Authorizer)
+	return auth
 }
 
 func (p *MachineContext) Arg(index int) values.Value {

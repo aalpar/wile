@@ -24,7 +24,7 @@ import (
 // setupLocalEnv creates an EnvironmentFrame with n local bindings for benchmarking.
 // Returns the frame and the symbols used as keys.
 func setupLocalEnv(n int) (*EnvironmentFrame, []*values.Symbol) {
-	tl := NewTopLevelEnvironment()
+	tl := NewNamespace()
 	parent := tl.Runtime()
 	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), parent)
 
@@ -42,7 +42,7 @@ func setupLocalEnv(n int) (*EnvironmentFrame, []*values.Symbol) {
 // setupGlobalEnv creates an EnvironmentFrame with n global bindings for benchmarking.
 // Returns the frame and the GlobalIndex values used as keys.
 func setupGlobalEnv(n int) (*EnvironmentFrame, []*GlobalIndex) {
-	tl := NewTopLevelEnvironment()
+	tl := NewNamespace()
 	env := tl.Runtime()
 
 	gis := make([]*GlobalIndex, n)

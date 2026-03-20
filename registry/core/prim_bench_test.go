@@ -73,7 +73,7 @@ func BenchmarkPrimitiveCall(b *testing.B) {
 	for _, tc := range primBenchCases {
 		b.Run(tc.name, func(b *testing.B) {
 			ctx := context.Background()
-			env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(ctx)
+			env, err := bootstrap.NewNamespaceFrameTiny(ctx)
 			if err != nil {
 				b.Fatal(err)
 			}

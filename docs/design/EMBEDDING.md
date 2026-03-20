@@ -33,7 +33,7 @@ The `wile` package exposes a high-level API for embedding the Scheme interpreter
 1. Apply functional options to build configuration
 2. Create a registry (default: core primitives via `core.AddToRegistry`)
 3. Apply any extensions to the registry
-4. Create a per-instance `TopLevelEnvironment` for syntax interning and phase management
+4. Create a per-instance `Namespace` for syntax interning and phase management
 5. Create the runtime `EnvironmentFrame` from the top-level environment
 6. Apply registry bindings to the environment
 7. Register syntax compilers and primitive expanders
@@ -43,7 +43,7 @@ If any step fails (including bootstrap macro loading), the engine is not returne
 
 ### Per-Instance Isolation
 
-Each `Engine` has its own `TopLevelEnvironment` and symbol table. This means:
+Each `Engine` has its own `Namespace` and symbol table. This means:
 
 - Multiple engines can coexist in the same process
 - Symbols from different engines are not `eq?` to each other

@@ -44,7 +44,7 @@ func parseString(t *testing.T, env *environment.EnvironmentFrame, input string) 
 
 // Helper function to create a test environment with basic primitives
 func createHygieneTestEnv() *environment.EnvironmentFrame {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Register primitive expanders (for let-syntax, quote, if, etc.)
 	err := machine.RegisterPrimitiveExpanders(env)

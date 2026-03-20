@@ -27,14 +27,14 @@ import (
 )
 
 func Test_newEnvironmentFrame(t *testing.T) {
-	q := NewTopLevelEnvironmentFrame()
+	q := NewNamespaceFrame()
 	qt.Assert(t, q, qt.Not(qt.IsNil))
 	qt.Assert(t, q.GlobalEnvironment(), qt.IsNotNil)
 	qt.Assert(t, q.LocalEnvironment(), qt.IsNil)
 }
 
-func TestNewTopLevelEnvironmentFrame(t *testing.T) {
-	q := NewTopLevelEnvironmentFrame()
+func TestNewNamespaceFrame(t *testing.T) {
+	q := NewNamespaceFrame()
 	qt.Assert(t, q, qt.Not(qt.IsNil))
 	qt.Assert(t, q.GlobalEnvironment(), qt.IsNotNil)
 	qt.Assert(t, q.LocalEnvironment(), qt.IsNil)
@@ -42,7 +42,7 @@ func TestNewTopLevelEnvironmentFrame(t *testing.T) {
 
 func TestEnvironmentFrame_Locals(t *testing.T) {
 	// Create a new Local environment
-	env := NewTopLevelEnvironmentFrame()
+	env := NewNamespaceFrame()
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 
 	// Check if the environment is initialized correctly
@@ -93,7 +93,7 @@ func TestEnvironmentFrame_Locals(t *testing.T) {
 
 func TestEnvironmentFrame_Globals(t *testing.T) {
 	// Create a new Local environment
-	env := NewTopLevelEnvironmentFrame()
+	env := NewNamespaceFrame()
 
 	// Check if the environment is initialized correctly
 	if env == nil {
@@ -140,7 +140,7 @@ func TestEnvironmentFrame_Globals(t *testing.T) {
 }
 
 func TestEnvironmentFrame_Bindings(t *testing.T) {
-	env := NewTopLevelEnvironmentFrame()
+	env := NewNamespaceFrame()
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 
 	// check global environment
@@ -200,7 +200,7 @@ func TestEnvironmentFrame_Bindings(t *testing.T) {
 }
 
 func TestEnvironmentFrame_Hierarchy(t *testing.T) {
-	env := NewTopLevelEnvironmentFrame()
+	env := NewNamespaceFrame()
 
 	tv0 := values.NewSymbol("testVar0")
 	gi, ok := env.MaybeCreateOwnGlobalBinding(tv0, BindingTypeVariable)
@@ -227,7 +227,7 @@ func TestEnvironmentFrame_Hierarchy(t *testing.T) {
 
 func TestEnvironmentFrame_ExpandHierarchy(t *testing.T) {
 	// Expand() returns the phase 1 environment
-	env := NewTopLevelEnvironmentFrame()
+	env := NewNamespaceFrame()
 	qt.Assert(t, env.Expand(), qt.IsNotNil)
 	qt.Assert(t, env.Expand(), qt.Not(qt.Equals), env)
 	qt.Assert(t, env.Expand().LocalEnvironment(), qt.IsNil)
@@ -247,7 +247,7 @@ func TestEnvironmentFrame_ExpandHierarchy(t *testing.T) {
 func TestEnvironmentFrame_PhaseHierarchy(t *testing.T) {
 	// Test the indexed phase hierarchy:
 	// TopLevel is phase 0, Expand is phase 1, Compile is phase 2
-	topLevel := NewTopLevelEnvironmentFrame()
+	topLevel := NewNamespaceFrame()
 
 	// TopLevel is phase 0 (runtime)
 	qt.Assert(t, topLevel.PhaseLevel(), qt.Equals, PhaseRuntime)
@@ -309,7 +309,7 @@ func TestEnvironmentFrame_PhaseHierarchy(t *testing.T) {
 
 func TestEnvironmentFrame_SymbolEqualityAcrossPhases(t *testing.T) {
 	// Test that symbols with the same key are structurally equal across phases
-	tipTop := NewTopLevelEnvironmentFrame()
+	tipTop := NewNamespaceFrame()
 	runtime := tipTop.Runtime()
 	expand := tipTop.Expand()
 
@@ -329,7 +329,7 @@ func TestEnvironmentFrame_SymbolEqualityAcrossPhases(t *testing.T) {
 }
 
 func TestEnvironmentFrame_GetBinding(t *testing.T) {
-	env := NewTopLevelEnvironmentFrame()
+	env := NewNamespaceFrame()
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 
 	// Create global binding
@@ -357,7 +357,7 @@ func TestEnvironmentFrame_GetBinding(t *testing.T) {
 }
 
 func TestEnvironmentFrame_GetBindingWithScopes(t *testing.T) {
-	env := NewTopLevelEnvironmentFrame()
+	env := NewNamespaceFrame()
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 
 	// Create a binding without scopes
@@ -446,7 +446,7 @@ func TestEnvironmentFrame_HasLocalVariableBinding(t *testing.T) {
 				return
 			}
 
-			env := NewTopLevelEnvironmentFrame()
+			env := NewNamespaceFrame()
 			env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 
 			if tc.noBinding {
@@ -462,7 +462,7 @@ func TestEnvironmentFrame_HasLocalVariableBinding(t *testing.T) {
 }
 
 func TestEnvironmentFrame_MaybeCreateLocalBindingWithScopes(t *testing.T) {
-	env := NewTopLevelEnvironmentFrame()
+	env := NewNamespaceFrame()
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 
 	sym := values.NewSymbol("test-var")
@@ -478,14 +478,14 @@ func TestEnvironmentFrame_MaybeCreateLocalBindingWithScopes(t *testing.T) {
 	qt.Assert(t, li2, qt.DeepEquals, li)
 
 	// Test on environment with no local
-	topEnv := NewTopLevelEnvironmentFrame()
+	topEnv := NewNamespaceFrame()
 	li3, created3 := topEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, nil)
 	qt.Assert(t, created3, qt.IsFalse)
 	qt.Assert(t, li3, qt.IsNil)
 }
 
 func TestEnvironmentFrame_GetLocalBindingByIndex(t *testing.T) {
-	env := NewTopLevelEnvironmentFrame()
+	env := NewNamespaceFrame()
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 
 	sym := values.NewSymbol("test-var")
@@ -500,7 +500,7 @@ func TestEnvironmentFrame_GetLocalBindingByIndex(t *testing.T) {
 }
 
 func TestEnvironmentFrame_SetGlobalBindingByIndex(t *testing.T) {
-	env := NewTopLevelEnvironmentFrame()
+	env := NewNamespaceFrame()
 
 	sym := values.NewSymbol("test-global")
 	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
@@ -517,14 +517,14 @@ func TestEnvironmentFrame_SetGlobalBindingByIndex(t *testing.T) {
 }
 
 func TestEnvironmentFrame_LibraryRegistry(t *testing.T) {
-	env := NewTopLevelEnvironmentFrame()
+	env := NewNamespaceFrame()
 
 	// Initially nil
 	qt.Assert(t, env.LibraryRegistry(), qt.IsNil)
 }
 
 func TestEnvironmentFrame_SetLibraryRegistry(t *testing.T) {
-	env := NewTopLevelEnvironmentFrame()
+	env := NewNamespaceFrame()
 
 	// Test is minimal since LibraryRegistry type is in machine package
 	// Just verify we can call SetLibraryRegistry without panic
@@ -533,7 +533,7 @@ func TestEnvironmentFrame_SetLibraryRegistry(t *testing.T) {
 }
 
 func TestEnvironmentFrame_SchemeString(t *testing.T) {
-	env := NewTopLevelEnvironmentFrame()
+	env := NewNamespaceFrame()
 	str := env.SchemeString()
 	qt.Assert(t, str, qt.Equals, "#<environment>")
 }
@@ -542,13 +542,13 @@ func TestEnvironmentFrame_IsVoid(t *testing.T) {
 	var env *EnvironmentFrame
 	qt.Assert(t, env.IsVoid(), qt.IsTrue)
 
-	env2 := NewTopLevelEnvironmentFrame()
+	env2 := NewNamespaceFrame()
 	qt.Assert(t, env2.IsVoid(), qt.IsFalse)
 }
 
 func TestEnvironmentFrame_EqualTo(t *testing.T) {
-	env1 := NewTopLevelEnvironmentFrame()
-	env2 := NewTopLevelEnvironmentFrame()
+	env1 := NewNamespaceFrame()
+	env2 := NewNamespaceFrame()
 
 	// Two fresh top-level environments are equal (same structure)
 	qt.Assert(t, env1.EqualTo(env2), qt.IsTrue)
@@ -566,7 +566,7 @@ func TestEnvironmentFrame_EqualTo(t *testing.T) {
 }
 
 func TestEnvironmentFrame_Copy(t *testing.T) {
-	env := NewTopLevelEnvironmentFrame()
+	env := NewNamespaceFrame()
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 
 	sym := values.NewSymbol("test")
@@ -578,7 +578,7 @@ func TestEnvironmentFrame_Copy(t *testing.T) {
 }
 
 func TestEnvironmentFrame_GetLocalIndex_NotFound(t *testing.T) {
-	env := NewTopLevelEnvironmentFrame()
+	env := NewNamespaceFrame()
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 
 	// GetLocalIndex for non-existent should return nil
@@ -587,7 +587,7 @@ func TestEnvironmentFrame_GetLocalIndex_NotFound(t *testing.T) {
 }
 
 func TestEnvironmentFrame_GetLocalBinding_NotFound(t *testing.T) {
-	env := NewTopLevelEnvironmentFrame()
+	env := NewNamespaceFrame()
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(2), env)
 
 	// GetLocalBinding with invalid index - should return nil or handle gracefully
@@ -597,7 +597,7 @@ func TestEnvironmentFrame_GetLocalBinding_NotFound(t *testing.T) {
 }
 
 func TestEnvironmentFrame_SetLocalValue_NoLocal(t *testing.T) {
-	env := NewTopLevelEnvironmentFrame()
+	env := NewNamespaceFrame()
 
 	// SetLocalValue without local env
 	idx := NewLocalIndex(0, 0)
@@ -606,7 +606,7 @@ func TestEnvironmentFrame_SetLocalValue_NoLocal(t *testing.T) {
 }
 
 func TestEnvironmentFrame_GetLocalBindingBySlotDepth(t *testing.T) {
-	parent := NewTopLevelEnvironmentFrame()
+	parent := NewNamespaceFrame()
 	parent = NewEnvironmentFrameWithParent(NewLocalEnvironment(2), parent)
 	parent.local.bindings[0] = Binding{value: values.NewInteger(10), bindingType: BindingTypeVariable}
 	parent.local.bindings[1] = Binding{value: values.NewInteger(20), bindingType: BindingTypeVariable}
@@ -636,7 +636,7 @@ func TestEnvironmentFrame_GetLocalBindingBySlotDepth(t *testing.T) {
 }
 
 func TestEnvironmentFrame_SetLocalValueBySlotDepth(t *testing.T) {
-	parent := NewTopLevelEnvironmentFrame()
+	parent := NewNamespaceFrame()
 	parent = NewEnvironmentFrameWithParent(NewLocalEnvironment(1), parent)
 	parent.local.bindings[0] = Binding{value: values.NewInteger(10), bindingType: BindingTypeVariable}
 
@@ -654,7 +654,7 @@ func TestEnvironmentFrame_SetLocalValueBySlotDepth(t *testing.T) {
 	qt.Assert(t, parent.local.bindings[0].Value().EqualTo(values.NewInteger(77)), qt.IsTrue)
 
 	// No local frame -> error
-	topOnly := NewTopLevelEnvironmentFrame()
+	topOnly := NewNamespaceFrame()
 	err = topOnly.SetLocalValueBySlotDepth(0, 0, values.NewInteger(1))
 	qt.Assert(t, err, qt.IsNotNil)
 
@@ -667,7 +667,7 @@ func TestEnvironmentFrame_SetLocalValueBySlotDepth(t *testing.T) {
 
 func TestEnvironmentFrame_EqualTo_NilAndDifferent(t *testing.T) {
 	var env1 *EnvironmentFrame
-	env2 := NewTopLevelEnvironmentFrame()
+	env2 := NewNamespaceFrame()
 
 	// Nil equals nil
 	qt.Assert(t, env1.EqualTo(env1), qt.IsTrue)
@@ -727,7 +727,7 @@ func TestMaybeCreateLocalBindingWithScopes_Source(t *testing.T) {
 	src := syntax.NewSourceContext("x", "test.scm",
 		syntax.NewSourceIndexes(0, 0, 1), syntax.NewSourceIndexes(1, 1, 1))
 
-	topEnv := NewTopLevelEnvironmentFrame()
+	topEnv := NewNamespaceFrame()
 	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
 	sym := values.NewSymbol("x")
 
@@ -743,7 +743,7 @@ func TestMaybeCreateLocalBindingWithScopes_Source(t *testing.T) {
 func TestMaybeCreateLocalBindingWithScopes_NilSource(t *testing.T) {
 	c := qt.New(t)
 
-	topEnv := NewTopLevelEnvironmentFrame()
+	topEnv := NewNamespaceFrame()
 	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
 	sym := values.NewSymbol("x")
 
@@ -767,7 +767,7 @@ func TestMaybeCreateLocalBindingWithScopes_SourceWithOrigin(t *testing.T) {
 		Origin: origin,
 	}
 
-	topEnv := NewTopLevelEnvironmentFrame()
+	topEnv := NewNamespaceFrame()
 	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
 	sym := values.NewSymbol("temp")
 
@@ -787,7 +787,7 @@ func TestGlobalBinding_SetSource(t *testing.T) {
 	src := syntax.NewSourceContext("x", "global.scm",
 		syntax.NewSourceIndexes(0, 0, 1), syntax.NewSourceIndexes(1, 1, 1))
 
-	topEnv := NewTopLevelEnvironmentFrame()
+	topEnv := NewNamespaceFrame()
 	sym := values.NewSymbol("x")
 
 	gi, created := topEnv.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
@@ -806,7 +806,7 @@ func TestGlobalBinding_SetSource(t *testing.T) {
 func TestMaybeCreateLocalBindingWithScopes_ExistingBindingGetsSource(t *testing.T) {
 	c := qt.New(t)
 
-	topEnv := NewTopLevelEnvironmentFrame()
+	topEnv := NewNamespaceFrame()
 	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
 	sym := values.NewSymbol("x")
 
@@ -833,7 +833,7 @@ func TestMaybeCreateLocalBindingWithScopes_ExistingBindingGetsSource(t *testing.
 
 func TestInitApplyFrame_PopulatesExistingFrame(t *testing.T) {
 	// Set up source env with bindings (simulates closure env).
-	tl := NewTopLevelEnvironment()
+	tl := NewNamespace()
 	parent := tl.Runtime()
 	local := NewLocalEnvironment(2)
 	src := NewEnvironmentFrameWithParent(local, parent)
@@ -862,7 +862,7 @@ func TestInitApplyFrame_PopulatesExistingFrame(t *testing.T) {
 
 func TestInitApplyFrame_MatchesNewApplyFrame(t *testing.T) {
 	// InitApplyFrame must produce the same result as NewApplyFrame.
-	tl := NewTopLevelEnvironment()
+	tl := NewNamespace()
 	parent := tl.Runtime()
 	local := NewLocalEnvironment(3)
 	src := NewEnvironmentFrameWithParent(local, parent)
@@ -907,7 +907,7 @@ func TestHasLocalVariableBinding_OuterScopeCompatible(t *testing.T) {
 
 	// Scenario: inner binding has incompatible scopes, outer has compatible.
 	// HasLocalVariableBinding should find the outer binding.
-	topLevel := NewTopLevelEnvironment()
+	topLevel := NewNamespace()
 	env := topLevel.Runtime()
 
 	scopeA := syntax.NewScope()
@@ -931,7 +931,7 @@ func TestHasLocalVariableBinding_OuterScopeCompatible(t *testing.T) {
 func TestGetGlobalIndexAcrossPhases(t *testing.T) {
 	c := qt.New(t)
 
-	tle := NewTopLevelEnvironment()
+	tle := NewNamespace()
 	env := tle.Runtime()
 
 	sym := values.NewSymbol("foo")
@@ -965,7 +965,7 @@ func TestGetGlobalIndexAcrossPhases(t *testing.T) {
 func TestGetGlobalIndexFromLibraryScopes(t *testing.T) {
 	c := qt.New(t)
 
-	tle := NewTopLevelEnvironment()
+	tle := NewNamespace()
 	userEnv := tle.Runtime()
 
 	// Create a library environment with its own bindings
@@ -992,7 +992,7 @@ func TestGetGlobalIndexFromLibraryScopes(t *testing.T) {
 	c.Assert(gi.Index.Key, qt.Equals, "helper-macro")
 
 	// Lookup via child TLE (delegation)
-	childTLE := tle.NewChildTopLevelEnvironment()
+	childTLE := tle.NewChildNamespace()
 	childEnv := childTLE.Runtime()
 	gi = childEnv.GetGlobalIndexFromLibraryScopes(helperSym, []*syntax.Scope{libScope})
 	c.Assert(gi, qt.IsNotNil)
@@ -1002,7 +1002,7 @@ func TestGetGlobalIndexFromLibraryScopes(t *testing.T) {
 func TestGetGlobalIndexAcrossPhases_ExpandPhaseBinding(t *testing.T) {
 	c := qt.New(t)
 
-	tle := NewTopLevelEnvironment()
+	tle := NewNamespace()
 	env := tle.Runtime()
 
 	// Only in expand phase (simulates define-syntax in a library)
@@ -1021,7 +1021,7 @@ func TestGetGlobalIndexAcrossPhases_ExpandPhaseBinding(t *testing.T) {
 func TestGetLocalIndexWithScopes_MaximalBinding(t *testing.T) {
 	c := qt.New(t)
 
-	topLevel := NewTopLevelEnvironment()
+	topLevel := NewNamespace()
 	env := topLevel.Runtime()
 
 	scopeA := syntax.NewScope()

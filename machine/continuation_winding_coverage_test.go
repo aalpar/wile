@@ -295,7 +295,7 @@ func TestRestoreWithWinding_UnwindAndRewind(t *testing.T) {
 // a prompt tag is found on a continuation frame (not on the context itself).
 func TestFindPrompt_ContinuationFrame(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := machine.NewNativeTemplate(0, 0, false)
 
 	tag := machine.NewPromptTag("test-frame")
@@ -318,7 +318,7 @@ func TestFindPrompt_ContinuationFrame(t *testing.T) {
 // TestFindPrompt_NotFound exercises the branch where no prompt matches.
 func TestFindPrompt_NotFound(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := machine.NewNativeTemplate(0, 0, false)
 
 	tag := machine.NewPromptTag("missing")
@@ -335,7 +335,7 @@ func TestFindPrompt_NotFound(t *testing.T) {
 // TestSliceContinuationAt_NilCont exercises the branch where p.cont is nil.
 func TestSliceContinuationAt_NilCont(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := machine.NewNativeTemplate(0, 0, false)
 
 	// Create context with nil continuation (no parent)
@@ -352,7 +352,7 @@ func TestSliceContinuationAt_NilCont(t *testing.T) {
 // p.cont == prompt (prompt is the first frame).
 func TestSliceContinuationAt_PromptIsTopFrame(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := machine.NewNativeTemplate(0, 0, false)
 
 	prompt := machine.NewMachineContinuation(nil, tpl, env)
@@ -368,7 +368,7 @@ func TestSliceContinuationAt_PromptIsTopFrame(t *testing.T) {
 // TestSliceContinuationAt_DeepChain exercises slicing a multi-frame chain.
 func TestSliceContinuationAt_DeepChain(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := machine.NewNativeTemplate(0, 0, false)
 
 	// Build chain: top -> frame2 -> prompt -> bottom

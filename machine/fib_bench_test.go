@@ -41,7 +41,7 @@ import (
 
 // fibEnv creates a top-level env with a 1-param binding (simulating fib's env).
 func fibEnv() (*environment.EnvironmentFrame, *environment.EnvironmentFrame) {
-	tl := environment.NewTopLevelEnvironment()
+	tl := environment.NewNamespace()
 	runtime := tl.Runtime()
 	local := environment.NewLocalEnvironment(1)
 	closureEnv := environment.NewEnvironmentFrameWithParent(local, runtime)

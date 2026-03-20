@@ -30,7 +30,7 @@ import (
 type dummyExpandTimeCallContext struct{} //nolint:unused
 
 func TestExpandSymbol_ReturnsSymbol(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewExpanderTimeContinuation(context.Background(), env)
 	sym := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)
 	result, err := cont.ExpandSymbol(sym)
@@ -43,7 +43,7 @@ func TestExpandSymbol_ReturnsSymbol(t *testing.T) {
 }
 
 func TestExpandSelfEvaluating_ReturnsExpr(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewExpanderTimeContinuation(context.Background(), env)
 	num := syntax.NewSyntaxObject(values.NewInteger(42), nil)
 	result, err := cont.ExpandSelfEvaluating(num)
@@ -56,7 +56,7 @@ func TestExpandSelfEvaluating_ReturnsExpr(t *testing.T) {
 }
 
 func TestExpandExpression_Symbol(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewExpanderTimeContinuation(context.Background(), env)
 	sym := syntax.NewSyntaxSymbol("bar", nil)
 	result, err := cont.ExpandExpression(sym)
@@ -72,7 +72,7 @@ func TestExpandExpression_List(t *testing.T) {
 	// Test that macro expansion works with a dummy transformer.
 	// The expander pushes the full form (sym . args) onto the eval stack,
 	// so the transformer receives the complete macro invocation.
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	gi, ok := env.MaybeCreateOwnGlobalBinding(values.NewSymbol("bar"), environment.BindingTypeSyntax)
 	qt.Assert(t, ok, qt.Equals, true)
 	// Dummy transformer that reverses the arguments: (bar 10 20) -> (bar 20 10)
@@ -124,7 +124,7 @@ func TestExpandExpression_List(t *testing.T) {
 }
 
 func TestExpandCaseLambdaForm_Basic(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewExpanderTimeContinuation(context.Background(), env)
 
 	// (case-lambda ((x) x) ((x y) (+ x y)))
@@ -163,7 +163,7 @@ func TestExpandCaseLambdaForm_Basic(t *testing.T) {
 }
 
 func TestExpandCaseLambdaForm_Empty(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewExpanderTimeContinuation(context.Background(), env)
 
 	sym := syntax.NewSyntaxSymbol("case-lambda", nil)
@@ -182,7 +182,7 @@ func TestExpandCaseLambdaForm_Empty(t *testing.T) {
 
 // TestExpandSetForm tests set! form expansion
 func TestExpandSetForm(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -212,7 +212,7 @@ func TestExpandSetForm(t *testing.T) {
 
 // TestExpandCaseLambdaForm tests case-lambda expansion
 func TestExpandCaseLambdaForm(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 

@@ -43,6 +43,7 @@ import (
 	"github.com/aalpar/wile/internal/extensions/all"
 	"github.com/aalpar/wile/internal/extensions/eval"
 	ioext "github.com/aalpar/wile/internal/extensions/io"
+	nsext "github.com/aalpar/wile/internal/extensions/namespace"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry"
@@ -66,6 +67,7 @@ var allExtensions = []registry.Extension{
 	math.Extension,
 	introspection.Extension,
 	eval.Extension,
+	nsext.Extension,
 	threads.Extension,
 	gointerop.Extension,
 	all.Extension,
@@ -136,19 +138,19 @@ func initializeEnvironment(ctx context.Context, env *environment.EnvironmentFram
 	return err
 }
 
-// NewTopLevelEnvironmentFrameTiny creates and initializes a complete Scheme runtime environment.
+// NewNamespaceFrameTiny creates and initializes a complete Scheme runtime environment.
 //
 // This function:
 //  1. Creates a registry with core primitives
 //  2. Adds all extensions (io, files, math, introspection, eval, threads, gointerop, all, system)
-//  3. Creates a new TopLevelEnvironment with per-instance symbol interning
+//  3. Creates a new Namespace with per-instance symbol interning
 //  4. Applies the registry to register all primitives
 //  5. Registers primitive compilers in the compile environment
 //  6. Loads bootstrap macros (and, or, let, let*, letrec, cond, when, unless, parameterize)
 //
 // The resulting environment is ready for parsing, expanding, compiling, and executing
 // Scheme programs.
-func NewTopLevelEnvironmentFrameTiny(ctx context.Context) (*environment.EnvironmentFrame, error) {
+func NewNamespaceFrameTiny(ctx context.Context) (*environment.EnvironmentFrame, error) {
 	env, _, err := NewTopLevelWithRegistry(ctx)
 	if err != nil {
 		return nil, err
@@ -159,8 +161,8 @@ func NewTopLevelEnvironmentFrameTiny(ctx context.Context) (*environment.Environm
 // NewTopLevelWithRegistry creates a top-level environment and returns both
 // the environment frame and the primitive registry for doc introspection.
 func NewTopLevelWithRegistry(ctx context.Context) (*environment.EnvironmentFrame, *registry.Registry, error) {
-	// Create TopLevelEnvironment (per-instance symbol interning)
-	topLevel := environment.NewTopLevelEnvironment()
+	// Create Namespace (per-instance symbol interning)
+	topLevel := environment.NewNamespace()
 	env := topLevel.Runtime()
 
 	// Initialize with shared sequence, keeping the registry
@@ -173,7 +175,7 @@ func NewTopLevelWithRegistry(ctx context.Context) (*environment.EnvironmentFrame
 }
 
 // NewLibraryEnvironmentFrame creates a new environment for a library that shares
-// the TopLevelEnvironment with the caller. This ensures symbol identity is preserved
+// the Namespace with the caller. This ensures symbol identity is preserved
 // across library boundaries per R7RS §6.5: (eq? 'foo (string->symbol "foo")) must be #t.
 //
 // The library gets its own:
@@ -181,12 +183,12 @@ func NewTopLevelWithRegistry(ctx context.Context) (*environment.EnvironmentFrame
 //   - PhaseRegistry for expand/compile phases
 //
 // But shares with caller:
-//   - TopLevelEnvironment (symbol and syntax interning)
+//   - Namespace (symbol and syntax interning)
 //   - LibraryRegistry (for nested imports)
 func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.EnvironmentFrame, _ []string) (*environment.EnvironmentFrame, error) {
-	// Create a new environment that shares the caller's TopLevelEnvironment
+	// Create a new environment that shares the caller's Namespace
 	// (for symbol identity per R7RS §6.5) but with isolated bindings.
-	libEnv := callerEnv.TopLevelEnv().NewChildRuntime()
+	libEnv := callerEnv.Namespace().NewChildRuntime()
 
 	// Initialize with shared sequence
 	err := initializeEnvironment(ctx, libEnv)

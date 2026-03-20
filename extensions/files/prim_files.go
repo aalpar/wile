@@ -35,7 +35,7 @@ func openFilePort(
 	if err != nil {
 		return err
 	}
-	err = security.Check(mc.Context(), security.AccessRequest{
+	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceFile,
 		Action:   action,
 		Target:   filename.Value,
@@ -90,7 +90,7 @@ func PrimFileExistsQ(mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	err = security.Check(mc.Context(), security.AccessRequest{
+	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceFile,
 		Action:   security.ActionStat,
 		Target:   filename.Value,
@@ -110,7 +110,7 @@ func PrimDeleteFile(mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	err = security.Check(mc.Context(), security.AccessRequest{
+	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceFile,
 		Action:   security.ActionDelete,
 		Target:   filename.Value,
@@ -148,7 +148,7 @@ func callWithFile(
 		return err
 	}
 
-	err = security.Check(mc.Context(), security.AccessRequest{
+	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceFile,
 		Action:   action,
 		Target:   filename.Value,

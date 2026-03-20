@@ -29,10 +29,10 @@ import (
 )
 
 // RunProgramAST compiles and runs a Scheme program from a pre-built values.Value AST.
-// Uses a minimal top-level environment (bootstrap.NewTopLevelEnvironmentFrameTiny).
+// Uses a minimal top-level environment (bootstrap.NewNamespaceFrameTiny).
 func RunProgramAST(t *testing.T, prog values.Value) (values.Value, error) {
 	t.Helper()
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	if err != nil {
 		return nil, err
 	}

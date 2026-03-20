@@ -37,7 +37,7 @@ func parseSchemeExpr(t *testing.T, env *environment.EnvironmentFrame, code strin
 }
 
 func TestNewForeignClosure(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	fn := func(mc *MachineContext) error {
 		return nil
@@ -56,7 +56,7 @@ func TestNewForeignClosure(t *testing.T) {
 }
 
 func TestNewForeignClosure_Variadic(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	fn := func(mc *MachineContext) error {
 		return nil

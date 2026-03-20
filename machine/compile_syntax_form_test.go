@@ -29,7 +29,7 @@ import (
 func TestCompileSyntax_SingleArg(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
@@ -45,7 +45,7 @@ func TestCompileSyntax_SingleArg(t *testing.T) {
 func TestCompileSyntax_Error_NoArgs(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
@@ -61,7 +61,7 @@ func TestCompileSyntax_Error_NoArgs(t *testing.T) {
 func TestCompileSyntax_Error_TooManyArgs(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
@@ -175,7 +175,7 @@ func TestTemplateContainsEllipsis_BareEllipsisNotEscapeForm(t *testing.T) {
 func TestCompileSyntax_EscapeFormCompilesDirectly(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
@@ -203,7 +203,7 @@ func TestCompileSyntax_EscapeFormCompilesDirectly(t *testing.T) {
 func TestCompileSyntax_NonEscapeEllipsisUsesRuntimeExpansion(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 

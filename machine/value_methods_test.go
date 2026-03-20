@@ -43,7 +43,7 @@ func TestParameter_Converter(t *testing.T) {
 	c.Assert(p.HasConverter(), qt.IsFalse)
 	c.Assert(p.Converter(), qt.IsNil)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	conv := NewForeignClosure(env, 1, false, func(mc *MachineContext) error {
 		mc.SetValue(values.Void)
 		return nil
@@ -119,7 +119,7 @@ func TestErrPromptAbort_Error(t *testing.T) {
 
 func TestComposableContinuation_Accessors(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	cont := NewMachineContinuation(nil, tpl, env)
 	ws := WindingStack{NewDynamicWindFrame(nil, nil)}
@@ -243,7 +243,7 @@ func TestWindingStack_Depth(t *testing.T) {
 
 func TestMachineContext_ParentMC(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
@@ -253,7 +253,7 @@ func TestMachineContext_ParentMC(t *testing.T) {
 
 func TestMachineContext_EscapeCont(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
@@ -265,7 +265,7 @@ func TestMachineContext_EscapeCont(t *testing.T) {
 }
 
 func TestMachineContext_SetPC(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
@@ -276,7 +276,7 @@ func TestMachineContext_SetPC(t *testing.T) {
 
 func TestMachineContext_Context(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	cont := NewMachineContinuation(nil, tpl, env)
 	ctx := context.Background()
@@ -291,7 +291,7 @@ func TestMachineContext_Context(t *testing.T) {
 }
 
 func TestMachineContext_ExpanderContext(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
@@ -302,7 +302,7 @@ func TestMachineContext_ExpanderContext(t *testing.T) {
 
 func TestMachineContext_ExceptionHandler(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
@@ -316,7 +316,7 @@ func TestMachineContext_ExceptionHandler(t *testing.T) {
 
 func TestMachineContext_PushPopExceptionHandler(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
@@ -344,7 +344,7 @@ func TestMachineContext_PushPopExceptionHandler(t *testing.T) {
 
 func TestMachineContext_WindingStack(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
@@ -358,7 +358,7 @@ func TestMachineContext_WindingStack(t *testing.T) {
 
 func TestMachineContext_PromptTag(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
@@ -374,7 +374,7 @@ func TestMachineContext_PromptTag(t *testing.T) {
 
 func TestMachineContinuation_PromptMethods(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	cont := NewMachineContinuation(nil, tpl, env)
@@ -394,7 +394,7 @@ func TestMachineContinuation_PromptMethods(t *testing.T) {
 
 func TestNewMachineContinuationWithPrompt(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	tag := NewPromptTag("p")
 	handler := NewForeignClosure(env, 0, false, func(mc *MachineContext) error {

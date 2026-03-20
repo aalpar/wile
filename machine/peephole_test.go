@@ -733,7 +733,7 @@ func TestIsPushOp(t *testing.T) {
 // makeForeignBinding creates a *Binding holding a *ForeignClosure suitable
 // for peephole tests. The closure's function body is a no-op.
 func makeForeignBinding() *environment.Binding {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	fc := NewForeignClosure(env, 0, false, func(mc *MachineContext) error {
 		return nil
 	})
@@ -743,7 +743,7 @@ func makeForeignBinding() *environment.Binding {
 // makeMachineClosureBinding creates a *Binding holding a *MachineClosure
 // (non-foreign) for negative tests.
 func makeMachineClosureBinding() *environment.Binding {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	mc := NewClosureWithTemplate(NewNativeTemplate(0, 0, false), env)
 	return environment.NewBinding(mc, environment.BindingTypeVariable)
 }
@@ -984,7 +984,7 @@ func TestFuseCallGeneric(t *testing.T) {
 // makeNamedForeignBinding creates a *Binding holding a *ForeignClosure with
 // the given name and parameter count.
 func makeNamedForeignBinding(name string, paramCount int) *environment.Binding {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	fc := NewForeignClosure(env, paramCount, false, func(mc *MachineContext) error {
 		return nil
 	})

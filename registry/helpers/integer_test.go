@@ -37,7 +37,7 @@ func makeMC(args ...values.Value) *machine.MachineContext {
 	for i, arg := range args {
 		local.Bindings()[i].SetValue(arg)
 	}
-	topLevel := environment.NewTopLevelEnvironment()
+	topLevel := environment.NewNamespace()
 	env := environment.NewEnvironmentFrameWithParent(local, topLevel.Runtime())
 	tpl := machine.NewNativeTemplate(len(args), 0, false)
 	return machine.NewMachineContext(

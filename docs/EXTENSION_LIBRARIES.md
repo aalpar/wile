@@ -308,7 +308,7 @@ func main() {
    `RegisterFunc`/`RegisterFuncs` go directly to the top-level environment
    and are not wrapped in a library.
 
-4. **`LibraryEnvFactory` is per-`TopLevelEnvironment`.** Each engine stores
+4. **`LibraryEnvFactory` is per-`Namespace`.** Each engine stores
    its own factory via `SetLibraryEnvFactory`, so multiple engines can coexist
    safely without race conditions.
 

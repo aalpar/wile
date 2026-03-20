@@ -115,3 +115,6 @@ No demand signal. Speculative or research-only.
 - [ ] **Implement let-syntax*** [Core language, S]: Implement `let-syntax*`.
 - [ ] **User labels/tags to distinguish FS resolvers** Use tags or labels to distinguish bootstrap loadee from include/library loaders in fileResolver.
 - [ ] **Disassembler** Implement a disassembler for Wile
+- [ ] **CompilationError** does not have source location, nor does it have an identity as a SchemeError and no Wrap* constructor.  Look into CompilationError and determine where it sits between Scheme and Foreign errors
+- [ ] **RuntimeError** does not have an identity as SchemeError or ForeignError.  It also does not have a constructor
+

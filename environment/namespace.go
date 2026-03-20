@@ -21,10 +21,11 @@ import (
 
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // LibraryEnvFactory creates a fresh environment for an R7RS library.
-// The returned environment must share the caller's TopLevelEnvironment
+// The returned environment must share the caller's Namespace
 // for syntax interning, but have isolated bindings so library definitions
 // don't leak.
 //
@@ -32,31 +33,31 @@ import (
 // ["scheme", "base"]) so the factory can implement per-library policies.
 type LibraryEnvFactory func(ctx context.Context, callerEnv *EnvironmentFrame, libraryName []string) (*EnvironmentFrame, error)
 
-var _ values.Value = (*TopLevelEnvironment)(nil)
+var _ values.Value = (*Namespace)(nil)
 
-// TopLevelEnvironment represents a complete Wile VM instance.
+// Namespace represents a complete Wile VM instance.
 // It owns per-instance syntax interning, phase registry,
 // and library registry. This enables multiple independent Wile VMs in a
 // single Go process.
 //
-// Design: TopLevelEnvironment is the root of the environment hierarchy.
-// Each EnvironmentFrame holds a reference back to its TopLevelEnvironment
+// Design: Namespace is the root of the environment hierarchy.
+// Each EnvironmentFrame holds a reference back to its Namespace
 // to access shared resources (syntax interning, phases, libraries).
-type TopLevelEnvironment struct {
+type Namespace struct {
 	// Name is an optional descriptive name (e.g., "interaction-environment").
 	Name string
 
-	// parent is the parent TopLevelEnvironment for interning delegation.
+	// parent is the parent Namespace for interning delegation.
 	// When non-nil, InternSyntax delegates to the parent,
 	// ensuring syntax identity across child environments.
-	parent *TopLevelEnvironment
+	parent *Namespace
 
 	// syntaxInterns is the per-instance syntax object interning table.
 	syntaxInterns   map[values.Value]syntax.SyntaxValue
 	syntaxInternsMu sync.RWMutex
 
 	// loadPathStack tracks files currently being loaded for relative path
-	// resolution. Only exists on the root TopLevelEnvironment (nil in children).
+	// resolution. Only exists on the root Namespace (nil in children).
 	// Children access via LoadPathStack() which delegates to parent.
 	loadPathStack *LoadPathStack
 
@@ -85,19 +86,40 @@ type TopLevelEnvironment struct {
 	scopeRegistry   map[*syntax.Scope]*EnvironmentFrame
 	scopeRegistryMu sync.RWMutex
 
+	// registry is the primitive registry.
+	// Stored as any to avoid circular dependency with registry package.
+	// The concrete type is *registry.Registry.
+	registry any
+
+	// authorizer is the security authorizer for this namespace.
+	// Stored as any to avoid circular dependency with security package.
+	// The concrete type is security.Authorizer.
+	authorizer any
+
+	// moduleInstances caches loaded and initialized library instances.
+	// Keyed by resolved library path (e.g., "(scheme base)").
+	// Nil until the first module is loaded.
+	moduleInstances map[string]*ModuleInstance
+
 	// runtime is the phase 0 (runtime) environment frame.
 	runtime *EnvironmentFrame
 }
 
-// NewTopLevelEnvironment creates a new TopLevelEnvironment.
+// ModuleInstance represents a loaded and initialized library.
+type ModuleInstance struct {
+	Env     *EnvironmentFrame
+	Exports map[string]*GlobalIndex
+}
+
+// NewNamespace creates a new Namespace.
 // This is the primary entry point for creating an isolated Wile VM instance.
-func NewTopLevelEnvironment() *TopLevelEnvironment {
-	q := &TopLevelEnvironment{
+func NewNamespace() *Namespace {
+	q := &Namespace{
 		syntaxInterns: make(map[values.Value]syntax.SyntaxValue),
 		loadPathStack: NewLoadPathStack(),
 		scopeRegistry: make(map[*syntax.Scope]*EnvironmentFrame),
 	}
-	initRuntimeFrame(q, newGlobalEnvironmentFrameWithTopLevel(q))
+	initRuntimeFrame(q, newGlobalEnvironmentFrameForNamespace(q))
 	return q
 }
 
@@ -105,11 +127,11 @@ func NewTopLevelEnvironment() *TopLevelEnvironment {
 // If an equivalent syntax value has been seen before, it is returned.
 // Otherwise, the value is added to the intern table and returned.
 //
-// When a parent TopLevelEnvironment exists, interning is delegated to the
+// When a parent Namespace exists, interning is delegated to the
 // parent to maintain syntax identity across environments.
 //
 // This function is thread-safe.
-func (p *TopLevelEnvironment) InternSyntax(k values.Value, v syntax.SyntaxValue) syntax.SyntaxValue {
+func (p *Namespace) InternSyntax(k values.Value, v syntax.SyntaxValue) syntax.SyntaxValue {
 	// Delegate to parent if this is a child environment
 	if p.parent != nil {
 		return p.parent.InternSyntax(k, v)
@@ -138,31 +160,31 @@ func (p *TopLevelEnvironment) InternSyntax(k values.Value, v syntax.SyntaxValue)
 
 // Runtime returns the runtime phase environment (phase 0).
 // This is the main environment where top-level bindings live.
-func (p *TopLevelEnvironment) Runtime() *EnvironmentFrame {
+func (p *Namespace) Runtime() *EnvironmentFrame {
 	return p.runtime
 }
 
 // AtPhase returns the environment for the given phase level, creating it if needed.
 // Phase 0 is runtime, phase 1 is expansion (for-syntax), phase 2 is compile-time, etc.
 // Negative phases (e.g., -1 for for-template) are also supported.
-func (p *TopLevelEnvironment) AtPhase(phase int) *EnvironmentFrame {
+func (p *Namespace) AtPhase(phase int) *EnvironmentFrame {
 	return p.phases.GetOrCreate(phase)
 }
 
 // Expand returns the expand phase environment (phase 1), creating it if needed.
 // This is where syntax bindings from define-syntax are stored.
-func (p *TopLevelEnvironment) Expand() *EnvironmentFrame {
+func (p *Namespace) Expand() *EnvironmentFrame {
 	return p.AtPhase(PhaseExpand)
 }
 
 // Compile returns the compile phase environment (phase 2), creating it if needed.
 // This is where compile-time procedures (syntax compilers) are stored.
-func (p *TopLevelEnvironment) Compile() *EnvironmentFrame {
+func (p *Namespace) Compile() *EnvironmentFrame {
 	return p.AtPhase(PhaseCompile)
 }
 
 // Phases returns the phase registry.
-func (p *TopLevelEnvironment) Phases() *PhaseRegistry {
+func (p *Namespace) Phases() *PhaseRegistry {
 	return p.phases
 }
 
@@ -170,7 +192,7 @@ func (p *TopLevelEnvironment) Phases() *PhaseRegistry {
 // The caller must type-assert to machine.FileResolver.
 // Delegates to parent when non-nil, so child environments share the
 // root resolver. Returns nil if no resolver has been set.
-func (p *TopLevelEnvironment) FileResolver() any {
+func (p *Namespace) FileResolver() any {
 	if p.parent != nil {
 		return p.parent.FileResolver()
 	}
@@ -180,8 +202,8 @@ func (p *TopLevelEnvironment) FileResolver() any {
 // SetFileResolver sets the file resolver for include/load operations.
 // The resolver should be a machine.FileResolver.
 // Delegates to parent when non-nil, matching the getter's delegation,
-// so the resolver is always stored on the root TopLevelEnvironment.
-func (p *TopLevelEnvironment) SetFileResolver(resolver any) {
+// so the resolver is always stored on the root Namespace.
+func (p *Namespace) SetFileResolver(resolver any) {
 	if p.parent != nil {
 		p.parent.SetFileResolver(resolver)
 		return
@@ -192,35 +214,86 @@ func (p *TopLevelEnvironment) SetFileResolver(resolver any) {
 // LibraryRegistry returns the library registry for R7RS library loading.
 // The caller must type-assert to *machine.LibraryRegistry.
 // Returns nil if no registry has been set.
-func (p *TopLevelEnvironment) LibraryRegistry() any {
+func (p *Namespace) LibraryRegistry() any {
 	return p.libraryRegistry
 }
 
 // SetLibraryRegistry sets the library registry for R7RS library loading.
 // The registry should be a *machine.LibraryRegistry.
-func (p *TopLevelEnvironment) SetLibraryRegistry(registry any) {
+func (p *Namespace) SetLibraryRegistry(registry any) {
 	p.libraryRegistry = registry
 }
 
 // LibraryEnvFactory returns the factory for creating library environments.
 // Returns nil if no factory has been set.
-func (p *TopLevelEnvironment) LibraryEnvFactory() LibraryEnvFactory {
+func (p *Namespace) LibraryEnvFactory() LibraryEnvFactory {
 	return p.libraryEnvFactory
 }
 
 // SetLibraryEnvFactory sets the factory for creating library environments.
-func (p *TopLevelEnvironment) SetLibraryEnvFactory(f LibraryEnvFactory) {
+func (p *Namespace) SetLibraryEnvFactory(f LibraryEnvFactory) {
 	p.libraryEnvFactory = f
 }
 
 // LoadPathStack returns the load path stack for tracking files currently
 // being loaded. Delegates to parent when non-nil, ensuring child environments
-// share the same stack as the root TopLevelEnvironment.
-func (p *TopLevelEnvironment) LoadPathStack() *LoadPathStack {
+// share the same stack as the root Namespace.
+func (p *Namespace) LoadPathStack() *LoadPathStack {
 	if p.parent != nil {
 		return p.parent.LoadPathStack()
 	}
 	return p.loadPathStack
+}
+
+// Registry returns the primitive registry.
+// The caller must type-assert to *registry.Registry.
+func (p *Namespace) Registry() any {
+	return p.registry
+}
+
+// SetRegistry sets the primitive registry.
+func (p *Namespace) SetRegistry(reg any) {
+	p.registry = reg
+}
+
+// Authorizer returns the security authorizer for this namespace.
+// The caller must type-assert to security.Authorizer.
+func (p *Namespace) Authorizer() any {
+	return p.authorizer
+}
+
+// SetAuthorizer sets the security authorizer for this namespace.
+func (p *Namespace) SetAuthorizer(auth any) {
+	p.authorizer = auth
+}
+
+// ModuleInstance returns the cached module instance for the given path,
+// or (nil, false) if not loaded.
+func (p *Namespace) ModuleInstance(path string) (*ModuleInstance, bool) {
+	if p.moduleInstances == nil {
+		return nil, false
+	}
+	inst, ok := p.moduleInstances[path]
+	return inst, ok
+}
+
+// SetModuleInstance caches a loaded module instance.
+func (p *Namespace) SetModuleInstance(path string, inst *ModuleInstance) {
+	if p.moduleInstances == nil {
+		p.moduleInstances = make(map[string]*ModuleInstance)
+	}
+	p.moduleInstances[path] = inst
+}
+
+// AttachModule copies a module instance from this namespace to the target.
+// Returns an error if the module is not loaded in this namespace.
+func (p *Namespace) AttachModule(path string, target *Namespace) error {
+	inst, ok := p.ModuleInstance(path)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "attachModule: %s not loaded in source namespace", path)
+	}
+	target.SetModuleInstance(path, inst)
+	return nil
 }
 
 // RegisterLibraryScope associates a library scope with its defining environment.
@@ -228,7 +301,7 @@ func (p *TopLevelEnvironment) LoadPathStack() *LoadPathStack {
 // scope, the compiler can redirect binding lookup to the library's env.
 //
 // This function is thread-safe.
-func (p *TopLevelEnvironment) RegisterLibraryScope(scope *syntax.Scope, env *EnvironmentFrame) {
+func (p *Namespace) RegisterLibraryScope(scope *syntax.Scope, env *EnvironmentFrame) {
 	if scope == nil || env == nil {
 		return
 	}
@@ -244,7 +317,7 @@ func (p *TopLevelEnvironment) RegisterLibraryScope(scope *syntax.Scope, env *Env
 
 // LookupLibraryEnv returns the environment associated with the given library
 // scope, or nil if not registered. This function is thread-safe.
-func (p *TopLevelEnvironment) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
+func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 	if scope == nil {
 		return nil
 	}
@@ -257,23 +330,23 @@ func (p *TopLevelEnvironment) LookupLibraryEnv(scope *syntax.Scope) *Environment
 	return p.scopeRegistry[scope]
 }
 
-// NewChildTopLevelEnvironment creates a new TopLevelEnvironment whose syntax
+// NewChildNamespace creates a new Namespace whose syntax
 // interning is delegated to the receiver (the parent).
 //
 // # Ownership structure
 //
-// The child is a fully independent TopLevelEnvironment with its own:
+// The child is a fully independent Namespace with its own:
 //
 //   - EnvironmentFrame (runtime, phase 0) — the root lexical scope
 //   - GlobalEnvironmentFrame — isolated global bindings (define, set!, etc.)
 //   - PhaseRegistry — isolated phase hierarchy (expand, compile created on demand)
 //
-// The child's GlobalEnvironmentFrame.topLevel points to the child (not the
+// The child's GlobalEnvironmentFrame.namespace points to the child (not the
 // parent), so new global bindings created in the child are keyed against the
 // child's GlobalEnvironmentFrame. This is what provides binding isolation:
 // definitions in the child do not appear in the parent, and vice versa.
 //
-//	Parent TopLevelEnvironment (root)
+//	Parent Namespace (root)
 //	+-----------------------------------------------+
 //	| syntaxInterns: map[Value]SyntaxValue ◄────────────── all interning
 //	| syntaxInternsMu  (mutex)                      |
@@ -287,20 +360,20 @@ func (p *TopLevelEnvironment) LookupLibraryEnv(scope *syntax.Scope) *Environment
 //	                         EnvironmentFrame (envP, phase 0)
 //	                         +-------------------------------+
 //	                         | global: *GlobalEnvFrame ───┐  |
-//	                         | topLevel: ──► parent TLE   |  |
+//	                         | namespace: ──► parent NS   |  |
 //	                         +---------------------------│---+
 //	                                                     ▼
 //	                                  GlobalEnvironmentFrame
 //	                                  +-------------------------+
 //	                                  | keys: {x:0, y:1, ...}   |
 //	                                  | bindings: [...]         |
-//	                                  | topLevel: ──► parent TLE|
+//	                                  | namespace: ──► parent NS|
 //	                                  +-------------------------+
 //
-//	Child TopLevelEnvironment (returned by this method)
+//	Child Namespace (returned by this method)
 //	+-----------------------------------------------+
 //	| syntaxInterns: nil  (never accessed)          |
-//	| parent: ──► parent TLE  (interning delegate)  |
+//	| parent: ──► parent NS  (interning delegate)  |
 //	| phases: *PhaseRegistry ──► {0: envC}          |
 //	| runtime: envC ─────────────────────────────┐  |
 //	| libraryRegistry: ──► same pointer as parent|  |
@@ -310,21 +383,21 @@ func (p *TopLevelEnvironment) LookupLibraryEnv(scope *syntax.Scope) *Environment
 //	                         EnvironmentFrame (envC, phase 0)
 //	                         +-------------------------------+
 //	                         | global: *GlobalEnvFrame ───┐  |
-//	                         | topLevel: ──► child TLE    |  |
+//	                         | namespace: ──► child NS    |  |
 //	                         +---------------------------│---+
 //	                                                     ▼
 //	                                  GlobalEnvironmentFrame
 //	                                  +-------------------------+
 //	                                  | keys: {}  (empty)       |
 //	                                  | bindings: []            |
-//	                                  | topLevel: ──► child TLE |
+//	                                  | namespace: ──► child NS |
 //	                                  +-------------------------+
 //
 // # Interning delegation
 //
 // The child stores a parent pointer and has nil interning maps. InternSyntax
 // checks for a non-nil parent and delegates recursively, ultimately reaching
-// the root TopLevelEnvironment where the maps and mutexes live. This avoids
+// the root Namespace where the maps and mutexes live. This avoids
 // sharing map pointers across structs with independent mutexes (which would
 // be a data race).
 //
@@ -339,16 +412,16 @@ func (p *TopLevelEnvironment) LookupLibraryEnv(scope *syntax.Scope) *Environment
 // # Contrast with NewChildRuntime
 //
 // NewChildRuntime returns an *EnvironmentFrame that shares the parent's
-// TopLevelEnvironment directly (same pointer). It is used for library loading,
-// where the library environment should share the same TopLevelEnvironment
-// for syntax interning. However, because it shares the TopLevelEnvironment,
+// Namespace directly (same pointer). It is used for library loading,
+// where the library environment should share the same Namespace
+// for syntax interning. However, because it shares the Namespace,
 // it cannot be returned as a standalone environment value — calling Runtime()
-// on the shared TopLevelEnvironment returns the parent's runtime frame, not
+// on the shared Namespace returns the parent's runtime frame, not
 // the child's.
 //
-//	NewChildRuntime:                NewChildTopLevelEnvironment:
+//	NewChildRuntime:                NewChildNamespace:
 //
-//	  TopLevelEnvironment (shared)    Parent TLE        Child TLE
+//	  Namespace (shared)    Parent NS         Child NS
 //	  +------------------+            +----------+      +----------+
 //	  | runtime: envP    |            | runtime: |      | runtime: |
 //	  +------------------+            | envP     |      | envC     |
@@ -356,16 +429,16 @@ func (p *TopLevelEnvironment) LookupLibraryEnv(scope *syntax.Scope) *Environment
 //	          │                                            │
 //	     ┌────┴────┐                                       ▼
 //	     ▼         ▼                           EnvironmentFrame (envC)
-//	   envP      envC ◄── new child            +---------------------+
-//	   (parent   (has own Global-              | topLevel: child TLE |
-//	    frame)    EnvFrame, but                +---------------------+
-//	              topLevel points
-//	              to shared TLE)
+//	   envP      envC ◄── new child            +----------------------+
+//	   (parent   (has own Global-              | namespace: child NS  |
+//	    frame)    EnvFrame, but                +----------------------+
+//	              namespace points
+//	              to shared NS)
 //
-//	envC.TopLevelEnv() == parent    envC.TopLevelEnv() == child
+//	envC.Namespace() == parent    envC.Namespace() == child
 //	TLE.Runtime() returns envP     child.Runtime() returns envC  ✓
 //
-// NewChildTopLevelEnvironment returns a new *TopLevelEnvironment that can be
+// NewChildNamespace returns a new *Namespace that can be
 // passed as a first-class Scheme value (e.g., returned from the (environment)
 // primitive and accepted by eval). Its Runtime() returns the child's own
 // runtime frame, and its AtPhase/Expand/Compile methods create phase
@@ -378,17 +451,19 @@ func (p *TopLevelEnvironment) LookupLibraryEnv(scope *syntax.Scope) *Environment
 // while providing isolated bindings.
 // TODO: review whether libraryRegistry should be copied here
 // TODO: review for optimization/refactoring opportunities
-func (p *TopLevelEnvironment) NewChildTopLevelEnvironment() *TopLevelEnvironment {
-	q := &TopLevelEnvironment{
+func (p *Namespace) NewChildNamespace() *Namespace {
+	q := &Namespace{
 		libraryRegistry:   p.libraryRegistry,
 		libraryEnvFactory: p.libraryEnvFactory,
+		registry:          p.registry,
+		authorizer:        p.authorizer,
 		parent:            p,
 	}
-	initRuntimeFrame(q, newGlobalEnvironmentFrameWithTopLevel(q))
+	initRuntimeFrame(q, newGlobalEnvironmentFrameForNamespace(q))
 	return q
 }
 
-// NewSchemeReportEnvironment creates a new TopLevelEnvironment that is
+// NewSchemeReportNamespace creates a new Namespace that is
 // distinct from the receiver (so eq? returns #f) but contains a snapshot
 // of the receiver's current global bindings at the time of the call.
 //
@@ -396,57 +471,106 @@ func (p *TopLevelEnvironment) NewChildTopLevelEnvironment() *TopLevelEnvironment
 // environment is a separate object from interaction-environment and contains
 // the standard bindings. User definitions added after this call are NOT
 // visible in the returned environment.
-func (p *TopLevelEnvironment) NewSchemeReportEnvironment() *TopLevelEnvironment {
-	q := &TopLevelEnvironment{
+func (p *Namespace) NewSchemeReportNamespace() *Namespace {
+	q := &Namespace{
 		libraryRegistry:   p.libraryRegistry,
 		libraryEnvFactory: p.libraryEnvFactory,
+		registry:          p.registry,
+		authorizer:        p.authorizer,
 		parent:            p,
 	}
 
-	// Copy the parent's global bindings and repoint topLevel to the child,
+	// Copy the parent's global bindings and repoint namespace to the child,
 	// so that syntax interning delegates through q → p (parent chain).
 	copiedGlobal := p.runtime.global.Copy()
-	copiedGlobal.topLevel = q
+	copiedGlobal.namespace = q
 	initRuntimeFrame(q, copiedGlobal)
 	return q
 }
 
 // NewChildRuntime creates a new runtime environment frame that shares this
-// TopLevelEnvironment for syntax interning, but has its own
+// Namespace for syntax interning, but has its own
 // GlobalEnvironmentFrame and PhaseRegistry for isolated bindings.
 //
 // This is used for library environments that need to:
 //   - Share syntax interning
 //   - Have isolated bindings (library definitions don't leak)
 //   - Have their own phase hierarchy
-func (p *TopLevelEnvironment) NewChildRuntime() *EnvironmentFrame {
-	global := newGlobalEnvironmentFrameWithTopLevel(p)
+func (p *Namespace) NewChildRuntime() *EnvironmentFrame {
+	global := newGlobalEnvironmentFrameForNamespace(p)
 	runtime := &EnvironmentFrame{
 		parent:     nil,
 		global:     global,
 		phaseLevel: PhaseRuntime,
-		topLevel:   p,
+		namespace:  p,
 	}
 	runtime.phases = newPhaseRegistryForChild(p, runtime)
 	return runtime
 }
 
+// NamespaceDeriveOption configures a derived namespace.
+type NamespaceDeriveOption func(*NamespaceDeriveConfig)
+
+// NamespaceDeriveConfig holds options for DeriveWith.
+// Zero value means "inherit everything from parent."
+type NamespaceDeriveConfig struct {
+	Registry   any // if non-nil, overrides parent's registry
+	Authorizer any // if non-nil, overrides parent's authorizer
+}
+
+// Derive creates a child namespace that shares syntax interning with
+// the parent but has isolated bindings. The parent's registry and
+// authorizer are shared by pointer — safe because registries are
+// immutable after construction and authorizers are stateless interfaces.
+func (p *Namespace) Derive() *Namespace {
+	child := p.NewChildNamespace()
+	child.registry = p.registry
+	child.authorizer = p.authorizer
+	return child
+}
+
+// DeriveWith creates a child namespace with option overrides.
+// Use this when the child needs a restricted registry or different
+// authorizer.
+func (p *Namespace) DeriveWith(opts ...NamespaceDeriveOption) *Namespace {
+	cfg := &NamespaceDeriveConfig{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
+	child := p.NewChildNamespace()
+
+	if cfg.Registry != nil {
+		child.registry = cfg.Registry
+	} else {
+		child.registry = p.registry
+	}
+
+	if cfg.Authorizer != nil {
+		child.authorizer = cfg.Authorizer
+	} else {
+		child.authorizer = p.authorizer
+	}
+
+	return child
+}
+
 // SyntaxInternCount returns the number of interned syntax objects.
 // This is intended for testing and debugging purposes.
-func (p *TopLevelEnvironment) SyntaxInternCount() int {
+func (p *Namespace) SyntaxInternCount() int {
 	p.syntaxInternsMu.RLock()
 	defer p.syntaxInternsMu.RUnlock()
 	return len(p.syntaxInterns)
 }
 
 // IsVoid returns true if the environment is nil.
-func (p *TopLevelEnvironment) IsVoid() bool {
+func (p *Namespace) IsVoid() bool {
 	return p == nil
 }
 
 // EqualTo returns true if the environments are the same object.
-func (p *TopLevelEnvironment) EqualTo(v values.Value) bool {
-	other, ok := v.(*TopLevelEnvironment)
+func (p *Namespace) EqualTo(v values.Value) bool {
+	other, ok := v.(*Namespace)
 	if !ok {
 		return false
 	}
@@ -454,56 +578,55 @@ func (p *TopLevelEnvironment) EqualTo(v values.Value) bool {
 }
 
 // SchemeString returns the Scheme representation of the environment.
-func (p *TopLevelEnvironment) SchemeString() string {
+func (p *Namespace) SchemeString() string {
 	if p.Name != "" {
 		return fmt.Sprintf("#<environment %s>", p.Name)
 	}
 	return "#<environment>"
 }
 
-// newGlobalEnvironmentFrameWithTopLevel creates a new GlobalEnvironmentFrame
-// that references the given TopLevelEnvironment.
-func newGlobalEnvironmentFrameWithTopLevel(topLevel *TopLevelEnvironment) *GlobalEnvironmentFrame {
+// newGlobalEnvironmentFrameForNamespace creates a new GlobalEnvironmentFrame
+// that references the given Namespace.
+func newGlobalEnvironmentFrameForNamespace(ns *Namespace) *GlobalEnvironmentFrame {
 	q := &GlobalEnvironmentFrame{
-		bindings: []*Binding{},
-		keys:     map[values.Symbol]int{},
-		topLevel: topLevel,
+		bindings:  []*Binding{},
+		keys:      map[values.Symbol]int{},
+		namespace: ns,
 	}
 	return q
 }
 
-// newPhaseRegistryWithTopLevel creates a new PhaseRegistry owned by the given TopLevelEnvironment.
-func newPhaseRegistryWithTopLevel(topLevel *TopLevelEnvironment) *PhaseRegistry {
+// newPhaseRegistryForNamespace creates a new PhaseRegistry owned by the given Namespace.
+func newPhaseRegistryForNamespace(ns *Namespace) *PhaseRegistry {
 	q := &PhaseRegistry{
 		envs:  make(map[int]*EnvironmentFrame),
-		owner: topLevel,
+		owner: ns,
 	}
-	// TopLevel is phase 0 (runtime)
-	q.envs[PhaseRuntime] = topLevel.runtime
+	q.envs[PhaseRuntime] = ns.runtime
 	return q
 }
 
 // initRuntimeFrame creates a runtime EnvironmentFrame with a GlobalEnvironmentFrame
-// and PhaseRegistry wired to the given TopLevelEnvironment. Used by all TLE
+// and PhaseRegistry wired to the given Namespace. Used by all Namespace
 // constructors to eliminate boilerplate divergence.
-func initRuntimeFrame(topLevel *TopLevelEnvironment, global *GlobalEnvironmentFrame) {
-	topLevel.runtime = &EnvironmentFrame{
+func initRuntimeFrame(ns *Namespace, global *GlobalEnvironmentFrame) {
+	ns.runtime = &EnvironmentFrame{
 		parent:     nil,
 		global:     global,
 		phaseLevel: PhaseRuntime,
-		topLevel:   topLevel,
+		namespace:  ns,
 	}
-	topLevel.phases = newPhaseRegistryWithTopLevel(topLevel)
-	topLevel.runtime.phases = topLevel.phases
+	ns.phases = newPhaseRegistryForNamespace(ns)
+	ns.runtime.phases = ns.phases
 }
 
 // newPhaseRegistryForChild creates a PhaseRegistry for a child environment
-// that shares a TopLevelEnvironment. Unlike newPhaseRegistryWithTopLevel,
-// it does NOT read topLevel.runtime (which belongs to the parent).
-func newPhaseRegistryForChild(topLevel *TopLevelEnvironment, runtime *EnvironmentFrame) *PhaseRegistry {
+// that shares a Namespace. Unlike newPhaseRegistryForNamespace,
+// it does NOT read ns.runtime (which belongs to the parent).
+func newPhaseRegistryForChild(ns *Namespace, runtime *EnvironmentFrame) *PhaseRegistry {
 	q := &PhaseRegistry{
 		envs:  make(map[int]*EnvironmentFrame),
-		owner: topLevel,
+		owner: ns,
 	}
 	q.envs[PhaseRuntime] = runtime
 	return q

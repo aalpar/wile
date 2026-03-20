@@ -29,7 +29,7 @@ func TestLibraryRegistryMethodsAdditional(t *testing.T) {
 	reg := NewLibraryRegistry()
 
 	// Create a test library
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	lib := &CompiledLibrary{
 		Name:    NewLibraryName("test", "lib"),
 		Env:     env,
@@ -51,7 +51,7 @@ func TestLibraryRegistryMethodsAdditional(t *testing.T) {
 
 // TestParseLibraryNameErrors tests parseLibraryName error cases
 func TestParseLibraryNameErrors(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 
 	testCases := []struct {
 		name string
@@ -82,7 +82,7 @@ func TestLibraryRequirementIsSatisfiedAdditional(t *testing.T) {
 	qt.Assert(t, libReq.IsSatisfied(registry), qt.IsFalse)
 
 	// With library registered
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	lib := NewCompiledLibrary(NewLibraryName("test", "lib"), env)
 	registry.Register(lib) //nolint:errcheck
 

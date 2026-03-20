@@ -11,7 +11,7 @@ See [ENVIRONMENT_SYSTEM.md](ENVIRONMENT_SYSTEM.md) for detailed API documentatio
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
 │                         Engine (engine.go)                                    │
-│  topLevel ──→ TopLevelEnvironment                                             │
+│  topLevel ──→ Namespace                                             │
 │  env ────────→ runtime EnvironmentFrame (phase 0)                             │
 │  registry ──→ Registry (Go-side primitive registration)                       │
 └───────────────────────────────────────────────────────────────────────────────┘
@@ -19,7 +19,7 @@ See [ENVIRONMENT_SYSTEM.md](ENVIRONMENT_SYSTEM.md) for detailed API documentatio
                     │ owns
                     ▼
 ┌───────────────────────────────────────────────────────────────────────────────┐
-│              TopLevelEnvironment (root, one per VM)                           │
+│              Namespace (root, one per VM)                           │
 │                                                                               │
 │  syntaxInterns ─── map[Value]SyntaxValue ← thread-safe, per-instance           │
 │  loadPathStack ─── *LoadPathStack        ← shared across all children         │
@@ -29,14 +29,14 @@ See [ENVIRONMENT_SYSTEM.md](ENVIRONMENT_SYSTEM.md) for detailed API documentatio
 │  parent ────────── nil (root)                                                 │
 └───────────────────────────────────────────────────────────────────────────────┘
          │                                      │
-         │ phases registry                      │ NewChildTopLevelEnvironment()
+         │ phases registry                      │ NewChildNamespace()
          │ (lazily created)                     │ (for R7RS (environment),
          ▼                                      │  (null-environment))
 ┌─────────────────────────────┐                 ▼
 │     PhaseRegistry           │    ┌──────────────────────────────────────────┐
-│                             │    │   Child TopLevelEnvironment              │
+│                             │    │   Child Namespace              │
 │  envs:                      │    │                                          │
-│    0 → runtime EnvFrame ────┼──→ │  parent ──→ root TopLevelEnvironment     │
+│    0 → runtime EnvFrame ────┼──→ │  parent ──→ root Namespace     │
 │    1 → expand EnvFrame      │    │  syntaxInterns ── nil (delegates up)     │
 │    2 → compile EnvFrame     │    │  syntaxInterns ── nil (delegates up)     │
 │   -1 → template EnvFrame    │    │  phases ────── own PhaseRegistry         │
@@ -51,7 +51,7 @@ See [ENVIRONMENT_SYSTEM.md](ENVIRONMENT_SYSTEM.md) for detailed API documentatio
 
 ## Phase Environments
 
-Each phase has its own `GlobalEnvironmentFrame` (isolated bindings) but shares the `PhaseRegistry`, `TopLevelEnvironment`, and parents to the runtime frame.
+Each phase has its own `GlobalEnvironmentFrame` (isolated bindings) but shares the `PhaseRegistry`, `Namespace`, and parents to the runtime frame.
 
 ```
 Phase -1 (Template)     Phase 0 (Runtime)     Phase 1 (Expand)     Phase 2 (Compile)
@@ -75,7 +75,7 @@ Phase -1 (Template)     Phase 0 (Runtime)     Phase 1 (Expand)     Phase 2 (Comp
 
 All phase environments share:
 - The same `*PhaseRegistry` (back-pointer)
-- The same `*TopLevelEnvironment` (for interning)
+- The same `*Namespace` (for interning)
 
 ---
 
@@ -104,10 +104,10 @@ Child frames inherit `global`, `phases`, and `topLevel` from the parent. Only `l
 
 ## Library Environments
 
-Created by `TopLevelEnv.NewChildRuntime()`. Shares syntax interning but has isolated bindings and phases.
+Created by `Namespace.NewChildRuntime()`. Shares syntax interning but has isolated bindings and phases.
 
 ```
-Root TopLevelEnvironment                Library environment
+Root Namespace                Library environment
 ┌──────────────────────┐               ┌──────────────────────┐
 │  syntaxInterns: {...} │◄──────────────│  topLevel: ──────────┤ (same pointer!)
 │  syntaxInterns: {...} │  shared TLE   │  global: OWN         │ (isolated bindings)
@@ -126,14 +126,14 @@ Root TopLevelEnvironment                Library environment
 
 ---
 
-## NewChildRuntime vs NewChildTopLevelEnvironment
+## NewChildRuntime vs NewChildNamespace
 
-Both create isolated bindings with shared interning. They differ in what they return and how `TopLevelEnv()` resolves.
+Both create isolated bindings with shared interning. They differ in what they return and how `Namespace()` resolves.
 
 ```
-NewChildRuntime:                NewChildTopLevelEnvironment:
+NewChildRuntime:                NewChildNamespace:
 
-  TopLevelEnvironment (shared)    Parent TLE        Child TLE
+  Namespace (shared)    Parent TLE        Child TLE
   +------------------+            +----------+      +----------+
   | runtime: envP    |            | runtime: |      | runtime: |
   +------------------+            | envP     |      | envC     |
@@ -147,15 +147,15 @@ NewChildRuntime:                NewChildTopLevelEnvironment:
               topLevel points
               to shared TLE)
 
-  envC.TopLevelEnv() == parent    envC.TopLevelEnv() == child
+  envC.Namespace() == parent    envC.Namespace() == child
   TLE.Runtime() returns envP     child.Runtime() returns envC  ✓
 ```
 
-| | `NewChildRuntime()` | `NewChildTopLevelEnvironment()` |
+| | `NewChildRuntime()` | `NewChildNamespace()` |
 |---|---|---|
-| **Returns** | `*EnvironmentFrame` | `*TopLevelEnvironment` |
+| **Returns** | `*EnvironmentFrame` | `*Namespace` |
 | **Use case** | Library loading (internal) | `(environment)`, `(null-environment)` (first-class) |
-| **`TopLevelEnv()`** | Parent's TLE | The child TLE itself |
+| **`Namespace()`** | Parent's TLE | The child TLE itself |
 | **`Runtime()`** | N/A | Returns child's own frame |
 
 ---
@@ -220,8 +220,8 @@ MachineContext
 
 | Environment | Created by | Bindings | Interning | Phases | Use |
 |---|---|---|---|---|---|
-| Root TLE | `NewTopLevelEnvironment()` | Own | Own tables | Own registry | VM instance |
-| Child TLE | `NewChildTopLevelEnvironment()` | Own | Delegates to parent | Own registry | `(environment)`, `(null-environment)` |
+| Root TLE | `NewNamespace()` | Own | Own tables | Own registry | VM instance |
+| Child TLE | `NewChildNamespace()` | Own | Delegates to parent | Own registry | `(environment)`, `(null-environment)` |
 | Runtime frame | `TLE.Runtime()` | Phase 0 global | Via TLE | Shared | Normal execution |
 | Expand frame | `env.Expand()` / `AtPhase(1)` | Phase 1 global | Via TLE | Shared | Macro bindings |
 | Compile frame | `env.Compile()` / `AtPhase(2)` | Phase 2 global | Via TLE | Shared | Syntax compilers |

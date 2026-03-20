@@ -44,7 +44,7 @@ func TestCompileEvalWhen_Error_NilEnv(t *testing.T) {
 func TestCompileEvalWhen_Error_NilTemplate(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	ccnt := &CompileTimeContinuation{
 		template: nil,
 		env:      env,
@@ -60,7 +60,7 @@ func TestCompileEvalWhen_Error_NilTemplate(t *testing.T) {
 func TestCompileEvalWhen_Error_NoArgs(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
@@ -75,7 +75,7 @@ func TestCompileEvalWhen_Error_NoArgs(t *testing.T) {
 func TestCompileEvalWhen_EmptyBody(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
@@ -92,7 +92,7 @@ func TestCompileEvalWhen_EmptyBody(t *testing.T) {
 func TestCompileEvalWhen_Error_UnknownPhase(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
@@ -112,7 +112,7 @@ func TestCompileEvalWhen_Error_UnknownPhase(t *testing.T) {
 func TestCompileEvalWhen_RunPhase(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
@@ -132,7 +132,7 @@ func TestCompileEvalWhen_RunPhase(t *testing.T) {
 func TestCompileEvalWhen_EmptyPhases(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 

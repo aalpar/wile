@@ -60,7 +60,7 @@ func PrimCommandLine(mc *machine.MachineContext) error {
 // and call os.Exit. Currently identical; the distinction exists for R7RS
 // compliance (emergency-exit should skip cleanup, which is not yet implemented).
 func exitWithCode(mc *machine.MachineContext) error {
-	err := security.Check(mc.Context(), security.AccessRequest{
+	err := security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceProcess,
 		Action:   security.ActionExit,
 	})
@@ -105,7 +105,7 @@ func PrimGetEnvironmentVariable(mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	err = security.Check(mc.Context(), security.AccessRequest{
+	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceEnv,
 		Action:   security.ActionRead,
 		Target:   name.Value,
@@ -125,7 +125,7 @@ func PrimGetEnvironmentVariable(mc *machine.MachineContext) error {
 // PrimGetEnvironmentVariables implements the (get-environment-variables) primitive.
 // Returns all environment variables.
 func PrimGetEnvironmentVariables(mc *machine.MachineContext) error {
-	err := security.Check(mc.Context(), security.AccessRequest{
+	err := security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceEnv,
 		Action:   security.ActionRead,
 		Target:   "*",

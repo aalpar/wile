@@ -25,14 +25,14 @@ import (
 // PrimEnvironmentQ implements the (environment?) predicate.
 // Returns #t if the argument is an environment, #f otherwise.
 var PrimEnvironmentQ = helpers.MakeTypePredicate(func(o values.Value) bool {
-	_, ok := o.(*environment.TopLevelEnvironment)
+	_, ok := o.(*environment.Namespace)
 	return ok
 })
 
 // PrimInteractionEnvironment implements the (interaction-environment) primitive.
 // Returns the REPL environment (the current top-level environment).
 func PrimInteractionEnvironment(mc *machine.MachineContext) error {
-	topLevel := mc.EnvironmentFrame().TopLevelEnv()
+	topLevel := mc.EnvironmentFrame().Namespace()
 	topLevel.Name = "interaction-environment"
 	mc.SetValue(topLevel)
 	return nil
@@ -44,7 +44,7 @@ func PrimInteractionEnvironment(mc *machine.MachineContext) error {
 func PrimEnvironmentBoundNames(mc *machine.MachineContext) error {
 	envVal := mc.Arg(0)
 
-	topLevelEnv, ok := envVal.(*environment.TopLevelEnvironment)
+	topLevelEnv, ok := envVal.(*environment.Namespace)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "environment-bound-names: expected an environment but got %T", envVal)
 	}
@@ -69,7 +69,7 @@ func PrimEnvironmentRef(mc *machine.MachineContext) error {
 	envVal := mc.Arg(0)
 	symVal := mc.Arg(1)
 
-	topLevelEnv, err := helpers.RequireType[*environment.TopLevelEnvironment](envVal, werr.ErrInvalidArgument, "environment-ref")
+	topLevelEnv, err := helpers.RequireType[*environment.Namespace](envVal, werr.ErrInvalidArgument, "environment-ref")
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func PrimEnvironmentBoundQ(mc *machine.MachineContext) error {
 	envVal := mc.Arg(0)
 	symVal := mc.Arg(1)
 
-	topLevelEnv, err := helpers.RequireType[*environment.TopLevelEnvironment](envVal, werr.ErrInvalidArgument, "environment-bound?")
+	topLevelEnv, err := helpers.RequireType[*environment.Namespace](envVal, werr.ErrInvalidArgument, "environment-bound?")
 	if err != nil {
 		return err
 	}

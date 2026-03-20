@@ -28,7 +28,7 @@ func realDir(t *testing.T, dir string) string {
 // --- OSFileResolver ---
 
 func TestOSFileResolver_EmptyPath(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	r := NewOSFileResolver(env)
 
 	_, _, err := r.ResolveAndOpen(context.Background(), "")
@@ -43,7 +43,7 @@ func TestOSFileResolver_AbsolutePath(t *testing.T) {
 	err := os.WriteFile(absPath, []byte("42"), 0o644)
 	qt.Assert(t, err, qt.IsNil)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	r := NewOSFileResolver(env)
 
 	f, resolved, err := r.ResolveAndOpen(context.Background(), absPath)
@@ -53,7 +53,7 @@ func TestOSFileResolver_AbsolutePath(t *testing.T) {
 }
 
 func TestOSFileResolver_AbsolutePathNotFound(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	r := NewOSFileResolver(env)
 
 	_, _, err := r.ResolveAndOpen(context.Background(), "/nonexistent/path/to/file.scm")
@@ -66,7 +66,7 @@ func TestOSFileResolver_RelativeViaLoadPathStack(t *testing.T) {
 	err := os.WriteFile(filepath.Join(dir, "found.scm"), []byte("ok"), 0o644)
 	qt.Assert(t, err, qt.IsNil)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	stack := env.LoadPathStack()
 	// Push a file path in the target directory so CurrentDir() returns dir.
 	qt.Assert(t, stack.Push(filepath.Join(dir, "parent.scm")), qt.IsNil)
@@ -95,7 +95,7 @@ func TestOSFileResolver_RelativeViaCWDFallback(t *testing.T) {
 
 	t.Setenv(SchemeIncludePathEnv, "")
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	r := NewOSFileResolver(env)
 
 	f, resolved, err := r.ResolveAndOpen(context.Background(), "cwd.scm")
@@ -111,7 +111,7 @@ func TestOSFileResolver_RelativeViaIncludePath(t *testing.T) {
 
 	t.Setenv(SchemeIncludePathEnv, dir)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	r := NewOSFileResolver(env)
 
 	f, resolved, err := r.ResolveAndOpen(context.Background(), "env.scm")
@@ -127,7 +127,7 @@ func TestOSFileResolver_RelativeViaLibraryRegistry(t *testing.T) {
 
 	t.Setenv(SchemeIncludePathEnv, "")
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	reg := NewLibraryRegistry()
 	reg.PrependSearchPath(dir)
 	env.SetLibraryRegistry(reg)
@@ -151,7 +151,7 @@ func TestOSFileResolver_RelativeNotFound(t *testing.T) {
 	err = os.Chdir(dir)
 	qt.Assert(t, err, qt.IsNil)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	r := NewOSFileResolver(env)
 
 	_, _, err = r.ResolveAndOpen(context.Background(), "missing.scm")
@@ -166,7 +166,7 @@ func TestOSFileResolver_ReturnedPathIsAbsolute(t *testing.T) {
 
 	t.Setenv(SchemeIncludePathEnv, dir)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	r := NewOSFileResolver(env)
 
 	f, resolved, err := r.ResolveAndOpen(context.Background(), "check.scm")
@@ -181,17 +181,14 @@ func TestOSFileResolver_SecurityDenied(t *testing.T) {
 	err := os.WriteFile(absPath, []byte("secret"), 0o644)
 	qt.Assert(t, err, qt.IsNil)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	ns := environment.NewNamespace()
+	ns.SetAuthorizer(security.AuthorizerFunc(func(_ security.AccessRequest) error {
+		return security.ErrAccessDenied
+	}))
+	env := ns.Runtime()
 	r := NewOSFileResolver(env)
 
-	ctx := security.WithAuthorizer(
-		context.Background(),
-		security.AuthorizerFunc(func(_ security.AccessRequest) error {
-			return security.ErrAccessDenied
-		}),
-	)
-
-	_, _, err = r.ResolveAndOpen(ctx, absPath)
+	_, _, err = r.ResolveAndOpen(context.Background(), absPath)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
 }
@@ -202,17 +199,14 @@ func TestOSFileResolver_SecurityAllowed(t *testing.T) {
 	err := os.WriteFile(absPath, []byte("ok"), 0o644)
 	qt.Assert(t, err, qt.IsNil)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	ns := environment.NewNamespace()
+	ns.SetAuthorizer(security.AuthorizerFunc(func(_ security.AccessRequest) error {
+		return nil
+	}))
+	env := ns.Runtime()
 	r := NewOSFileResolver(env)
 
-	ctx := security.WithAuthorizer(
-		context.Background(),
-		security.AuthorizerFunc(func(_ security.AccessRequest) error {
-			return nil
-		}),
-	)
-
-	f, resolved, err := r.ResolveAndOpen(ctx, absPath)
+	f, resolved, err := r.ResolveAndOpen(context.Background(), absPath)
 	qt.Assert(t, err, qt.IsNil)
 	defer f.Close()
 	qt.Assert(t, resolved, qt.Equals, absPath)
@@ -224,19 +218,16 @@ func TestOSFileResolver_SecurityCheckTarget(t *testing.T) {
 	err := os.WriteFile(absPath, []byte("t"), 0o644)
 	qt.Assert(t, err, qt.IsNil)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	ns := environment.NewNamespace()
+	var captured security.AccessRequest
+	ns.SetAuthorizer(security.AuthorizerFunc(func(req security.AccessRequest) error {
+		captured = req
+		return nil
+	}))
+	env := ns.Runtime()
 	r := NewOSFileResolver(env)
 
-	var captured security.AccessRequest
-	ctx := security.WithAuthorizer(
-		context.Background(),
-		security.AuthorizerFunc(func(req security.AccessRequest) error {
-			captured = req
-			return nil
-		}),
-	)
-
-	f, _, err := r.ResolveAndOpen(ctx, absPath)
+	f, _, err := r.ResolveAndOpen(context.Background(), absPath)
 	qt.Assert(t, err, qt.IsNil)
 	defer f.Close()
 
@@ -251,7 +242,7 @@ func TestOSFileResolver_NoAuthorizerAllowsByDefault(t *testing.T) {
 	err := os.WriteFile(absPath, []byte("default"), 0o644)
 	qt.Assert(t, err, qt.IsNil)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	r := NewOSFileResolver(env)
 
 	// No authorizer on context — open by default.
@@ -274,7 +265,7 @@ func TestOSFileResolver_FallbackPriority(t *testing.T) {
 
 	t.Setenv(SchemeIncludePathEnv, includeDir)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	reg := NewLibraryRegistry()
 	reg.PrependSearchPath(regDir)
 	env.SetLibraryRegistry(reg)
@@ -298,7 +289,7 @@ func TestOSFileResolver_LoadPathStackPriorityOverFallbacks(t *testing.T) {
 
 	t.Setenv(SchemeIncludePathEnv, fallbackDir)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	stack := env.LoadPathStack()
 	qt.Assert(t, stack.Push(filepath.Join(stackDir, "parent.scm")), qt.IsNil)
 	defer stack.Pop()
@@ -323,7 +314,7 @@ func TestOSFileResolver_DotDotResolution(t *testing.T) {
 
 	t.Setenv(SchemeIncludePathEnv, "")
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	stack := env.LoadPathStack()
 	qt.Assert(t, stack.Push(filepath.Join(deepDir, "parent.scm")), qt.IsNil)
 	defer stack.Pop()

@@ -27,7 +27,6 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/registry/core"
-	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -50,14 +49,13 @@ const DefaultMaxCallDepth uint64 = 10000
 // SRFI-18 threads within a single Engine are safe — the VM handles
 // thread coordination internally.
 type Engine struct {
-	topLevel     *environment.TopLevelEnvironment
+	namespace    *environment.Namespace
 	env          *environment.EnvironmentFrame
 	registry     *registry.Registry
 	lastCounters machine.VMCounters
 	closers      []registry.Closeable
 	closed       bool
 	maxCallDepth uint64
-	authorizer   security.Authorizer
 }
 
 // extSnapshot tracks the primitive index range for an extension so it can be
@@ -69,9 +67,57 @@ type extSnapshot struct {
 	namer      registry.LibraryNamer // nil if not implemented
 }
 
+// NewNamespace creates a fully initialized namespace with a registry,
+// base environment bindings, syntax compilers, expanders, and bootstrap
+// macros. The namespace can be passed to NewEngine via WithNamespace.
+//
+// Options are shared with NewEngine: WithExtension, WithRegistry,
+// WithoutCore, WithAuthorizer all work. Engine-specific options
+// (WithMaxCallDepth, WithLibraryPaths, etc.) are accepted but ignored.
+//
+// Example:
+//
+//	ns, err := wile.NewNamespace(ctx,
+//	    wile.WithExtension(math.Extension),
+//	    wile.WithAuthorizer(security.ReadOnly()),
+//	)
+//	eng, err := wile.NewEngine(ctx, wile.WithNamespace(ns))
+func NewNamespace(ctx context.Context, opts ...EngineOption) (*environment.Namespace, error) {
+	cfg := &engineConfig{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
+	reg, _, _, err := buildRegistry(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	ns := environment.NewNamespace()
+	ns.SetRegistry(reg)
+	if cfg.authorizer != nil {
+		ns.SetAuthorizer(cfg.authorizer)
+	}
+
+	env := ns.Runtime()
+	macroSources := reg.MacroSources()
+	bootstrapResolver := machine.NewEmbedFileResolver(core.BootstrapFS)
+	err = applyBaseEnvironment(ctx, env, reg, macroSources, bootstrapResolver)
+	if err != nil {
+		return nil, err
+	}
+
+	return ns, nil
+}
+
 // NewEngine creates a new Wile engine.
 // By default, only core primitives are included.
 // Use WithExtension to add optional extensions.
+//
+// When WithNamespace is used, the engine uses the pre-built namespace
+// and ignores registry/extension/core options (they were applied when
+// the namespace was created). Library paths and other engine-specific
+// options still apply.
 func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	cfg := &engineConfig{}
 	for _, opt := range opts {
@@ -85,39 +131,73 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		cfg.maxCallDepth = DefaultMaxCallDepth
 	}
 
-	reg, snapshots, closers, err := buildRegistry(cfg)
-	if err != nil {
-		return nil, err
+	var ns *environment.Namespace
+	var reg *registry.Registry
+	var snapshots []extSnapshot
+	var closers []registry.Closeable
+
+	if cfg.namespace != nil {
+		// Use pre-built namespace
+		ns = cfg.namespace
+		regAny := ns.Registry()
+		if regAny == nil {
+			return nil, werr.WrapForeignErrorf(werr.ErrEngineInit,
+				"WithNamespace: namespace has no registry — use wile.NewNamespace() or SetRegistry()")
+		}
+		var ok bool
+		reg, ok = regAny.(*registry.Registry)
+		if !ok {
+			return nil, werr.WrapForeignErrorf(werr.ErrEngineInit,
+				"WithNamespace: namespace registry is %T, expected *registry.Registry", regAny)
+		}
+	} else {
+		// Build namespace from engine options (backward compat)
+		var err error
+		reg, snapshots, closers, err = buildRegistry(cfg)
+		if err != nil {
+			return nil, err
+		}
+
+		ns = environment.NewNamespace()
+		ns.SetRegistry(reg)
+		if cfg.authorizer != nil {
+			ns.SetAuthorizer(cfg.authorizer)
+		}
+
+		env := ns.Runtime()
+		macroSources := reg.MacroSources()
+		bootstrapResolver := machine.NewEmbedFileResolver(core.BootstrapFS)
+		err = applyBaseEnvironment(ctx, env, reg, macroSources, bootstrapResolver)
+		if err != nil {
+			return nil, err
+		}
+
+		// Set the default file resolver for runtime include/load operations.
+		// This must happen after bootstrap (which uses EmbedFileResolver).
+		env.SetFileResolver(machine.NewOSFileResolver(env))
 	}
 
-	topLevel := environment.NewTopLevelEnvironment()
-	env := topLevel.Runtime()
-
-	macroSources := reg.MacroSources()
-	bootstrapResolver := machine.NewEmbedFileResolver(core.BootstrapFS)
-	err = applyBaseEnvironment(ctx, env, reg, macroSources, bootstrapResolver)
-	if err != nil {
-		return nil, err
-	}
-
-	// Set the default file resolver for runtime include/load operations.
-	// This must happen after bootstrap (which uses EmbedFileResolver).
-	env.SetFileResolver(machine.NewOSFileResolver(env))
+	env := ns.Runtime()
 
 	if cfg.libraryEnabled {
-		err = setupLibrarySystem(cfg, reg, env, topLevel, macroSources, snapshots, bootstrapResolver)
+		// File resolver must be set before library loading
+		if env.FileResolver() == nil {
+			env.SetFileResolver(machine.NewOSFileResolver(env))
+		}
+		macroSources := reg.MacroSources()
+		bootstrapResolver := machine.NewEmbedFileResolver(core.BootstrapFS)
+		err := setupLibrarySystem(cfg, reg, env, ns, macroSources, snapshots, bootstrapResolver)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	q := &Engine{
-		topLevel:     topLevel,
+		namespace:    ns,
 		env:          env,
 		registry:     reg,
 		closers:      closers,
 		maxCallDepth: cfg.maxCallDepth,
-		authorizer:   cfg.authorizer,
 	}
 	return q, nil
 }
@@ -170,7 +250,7 @@ func buildRegistry(cfg *engineConfig) (*registry.Registry, []extSnapshot, []regi
 
 // setupLibrarySystem configures the R7RS library system: search paths,
 // import observer, extension libraries, and the library environment factory.
-func setupLibrarySystem(cfg *engineConfig, reg *registry.Registry, env *environment.EnvironmentFrame, topLevel *environment.TopLevelEnvironment, macroSources []string, snapshots []extSnapshot, bootstrapResolver machine.FileResolver) error {
+func setupLibrarySystem(cfg *engineConfig, reg *registry.Registry, env *environment.EnvironmentFrame, ns *environment.Namespace, macroSources []string, snapshots []extSnapshot, bootstrapResolver machine.FileResolver) error {
 	libReg := machine.NewLibraryRegistry()
 
 	// Prepend user paths in reverse order so first path has highest priority.
@@ -192,10 +272,10 @@ func setupLibrarySystem(cfg *engineConfig, reg *registry.Registry, env *environm
 
 	// LibraryEnvFactory creates isolated library environments that mirror
 	// this engine's configuration — same registry, same macros.
-	topLevel.SetLibraryEnvFactory(func(ctx context.Context, callerEnv *environment.EnvironmentFrame, _ []string) (*environment.EnvironmentFrame, error) {
-		callerTopLevel := callerEnv.TopLevelEnv()
+	ns.SetLibraryEnvFactory(func(ctx context.Context, callerEnv *environment.EnvironmentFrame, _ []string) (*environment.EnvironmentFrame, error) {
+		callerTopLevel := callerEnv.Namespace()
 		if callerTopLevel == nil {
-			return nil, werr.WrapForeignErrorf(werr.ErrEngineInit, "library env factory: caller has no TopLevelEnvironment")
+			return nil, werr.WrapForeignErrorf(werr.ErrEngineInit, "library env factory: caller has no Namespace")
 		}
 
 		libEnv := callerTopLevel.NewChildRuntime()
@@ -218,6 +298,37 @@ func (p *Engine) Eval(ctx context.Context, code string) (Value, error) {
 		return nil, err
 	}
 	return p.Run(ctx, compiled)
+}
+
+// EvalIn parses, compiles, and executes Scheme code in the given namespace,
+// rather than the engine's own namespace. This enables evaluating code in
+// isolated or restricted environments.
+//
+// The target namespace's authorizer governs security checks during
+// execution. If the target namespace has no authorizer, the engine's
+// authorizer is propagated to it before evaluation.
+func (p *Engine) EvalIn(ctx context.Context, code string, ns *environment.Namespace) (Value, error) {
+	// Propagate engine's authorizer if the target namespace has none,
+	// so security checks are not silently skipped.
+	if ns.Authorizer() == nil && p.namespace.Authorizer() != nil {
+		ns.SetAuthorizer(p.namespace.Authorizer())
+	}
+	env := ns.Runtime()
+	reader := strings.NewReader(code)
+	pr := parser.NewParserWithFile(env, true, reader, "")
+
+	stx, err := pr.ReadSyntax(ctx)
+	if err != nil {
+		return nil, &CompilationError{Message: "parse error", Cause: err}
+	}
+
+	tpl, err := expandAndCompile(ctx, env, stx, nil)
+	if err != nil {
+		return nil, &CompilationError{Message: "expand/compile error", Cause: err}
+	}
+
+	cc := &CompiledCode{template: tpl, env: env}
+	return p.runCompiled(ctx, cc)
 }
 
 // EvalWithSource parses, compiles, and executes Scheme code, returning the result.
@@ -244,7 +355,6 @@ func (p *Engine) EvalMultipleWithSource(ctx context.Context, code string, source
 }
 
 func (p *Engine) evalMultiple(ctx context.Context, code string, source string) (Value, error) {
-	ctx = p.withAuth(ctx)
 	reader := strings.NewReader(code)
 	pr := parser.NewParserWithFile(p.env, true, reader, source)
 
@@ -286,7 +396,6 @@ func (p *Engine) CompileWithSource(ctx context.Context, code string, source stri
 }
 
 func (p *Engine) compile(ctx context.Context, code string, source string) (*CompiledCode, error) {
-	ctx = p.withAuth(ctx)
 	reader := strings.NewReader(code)
 	pr := parser.NewParserWithFile(p.env, true, reader, source)
 
@@ -374,7 +483,6 @@ func (p *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, er
 }
 
 func (p *Engine) callCallable(ctx context.Context, callable values.Callable, args []values.Value) (Value, error) {
-	ctx = p.withAuth(ctx)
 	tpl := machine.NewEmptyNativeTemplate()
 	mc := machine.AcquireTopLevelContext(ctx, tpl, p.env)
 	mc.SetMaxCallDepth(p.maxCallDepth)
@@ -423,10 +531,10 @@ func (p *Engine) Environment() *environment.EnvironmentFrame {
 	return p.env
 }
 
-// TopLevelEnvironment returns the TopLevelEnvironment for advanced use.
+// Namespace returns the Namespace for advanced use.
 // This provides access to per-instance symbol interning and phase management.
-func (p *Engine) TopLevelEnvironment() *environment.TopLevelEnvironment {
-	return p.topLevel
+func (p *Engine) Namespace() *environment.Namespace {
+	return p.namespace
 }
 
 // Registry returns a clone of the engine's registry. The returned registry
@@ -434,15 +542,6 @@ func (p *Engine) TopLevelEnvironment() *environment.TopLevelEnvironment {
 // passed to NewEngine via WithRegistry to create a restricted engine.
 func (p *Engine) Registry() *registry.Registry {
 	return p.registry.Clone()
-}
-
-// withAuth returns ctx with the engine's authorizer attached, or ctx
-// unchanged if no authorizer is configured.
-func (p *Engine) withAuth(ctx context.Context) context.Context {
-	if p.authorizer == nil {
-		return ctx
-	}
-	return security.WithAuthorizer(ctx, p.authorizer)
 }
 
 // internal helpers
@@ -551,7 +650,6 @@ func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*Comp
 }
 
 func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, error) {
-	ctx = p.withAuth(ctx)
 	mc := machine.AcquireTopLevelContext(ctx, cc.template, cc.env)
 	defer machine.ReleaseTopLevelContext(mc)
 	mc.SetMaxCallDepth(p.maxCallDepth)
@@ -657,7 +755,7 @@ func (p *Engine) WithLoadPath(absPath string, fn func() error) error {
 // CurrentLoadPath returns the absolute path of the file currently being loaded,
 // or empty string if no file is being loaded.
 func (p *Engine) CurrentLoadPath() string {
-	stack := p.topLevel.LoadPathStack()
+	stack := p.namespace.LoadPathStack()
 	if stack == nil {
 		return ""
 	}
@@ -667,7 +765,7 @@ func (p *Engine) CurrentLoadPath() string {
 // CurrentLoadDirectory returns the directory of the file currently being loaded,
 // or empty string if no file is being loaded.
 func (p *Engine) CurrentLoadDirectory() string {
-	stack := p.topLevel.LoadPathStack()
+	stack := p.namespace.LoadPathStack()
 	if stack == nil {
 		return ""
 	}
@@ -680,7 +778,7 @@ func (p *Engine) CurrentLoadDirectory() string {
 // Advanced embedders who need fine-grained control can use Push/Pop directly,
 // but most should use WithLoadPath for automatic cleanup.
 func (p *Engine) PushLoadPath(absPath string) error {
-	stack := p.topLevel.LoadPathStack()
+	stack := p.namespace.LoadPathStack()
 	if stack == nil {
 		return nil
 	}
@@ -693,7 +791,7 @@ func (p *Engine) PushLoadPath(absPath string) error {
 // Advanced embedders who need fine-grained control can use Push/Pop directly,
 // but most should use WithLoadPath for automatic cleanup.
 func (p *Engine) PopLoadPath() {
-	stack := p.topLevel.LoadPathStack()
+	stack := p.namespace.LoadPathStack()
 	if stack != nil {
 		stack.Pop()
 	}

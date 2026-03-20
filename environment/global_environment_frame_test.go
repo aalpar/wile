@@ -23,13 +23,13 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// Helper to create a GlobalEnvironmentFrame with proper TopLevelEnvironment
+// Helper to create a GlobalEnvironmentFrame with proper Namespace
 func newTestGlobalEnvFrame() *GlobalEnvironmentFrame {
-	return NewTopLevelEnvironmentFrame().GlobalEnvironment()
+	return NewNamespaceFrame().GlobalEnvironment()
 }
 
 func TestGlobalEnvironment(t *testing.T) {
-	// Create a new environment via TopLevelEnvironmentFrame
+	// Create a new environment via NamespaceFrame
 	env := newTestGlobalEnvFrame()
 
 	// Check if the environment is initialized correctly
@@ -153,6 +153,33 @@ func TestGlobalEnvironmentFrame_EqualTo_NilCases(t *testing.T) {
 	env3 := newTestGlobalEnvFrame()
 	env3.CreateGlobalBinding(sym, BindingTypeVariable)
 	qt.Assert(t, env2.EqualTo(env3), qt.IsFalse)
+}
+
+func TestGlobalEnvironmentFrame_DeleteBinding(t *testing.T) {
+	c := qt.New(t)
+
+	ns := NewNamespace()
+	env := ns.Runtime()
+
+	sym := values.NewSymbol("x")
+	_, created := env.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
+	c.Assert(created, qt.IsTrue)
+
+	// Verify binding exists
+	b := env.GetBinding(sym)
+	c.Assert(b, qt.IsNotNil)
+
+	// Delete it
+	deleted := env.GlobalEnvironment().DeleteBinding(sym)
+	c.Assert(deleted, qt.IsTrue)
+
+	// Verify binding is gone via key lookup
+	gi := env.GlobalEnvironment().GetGlobalIndex(sym)
+	c.Assert(gi, qt.IsNil)
+
+	// Deleting non-existent binding returns false
+	deleted = env.GlobalEnvironment().DeleteBinding(values.NewSymbol("nonexistent"))
+	c.Assert(deleted, qt.IsFalse)
 }
 
 func TestGlobalEnvironmentFrame_SymbolEquality(t *testing.T) {

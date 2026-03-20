@@ -23,6 +23,7 @@ import (
 	"github.com/aalpar/wile/extensions/threads"
 	"github.com/aalpar/wile/internal/extensions/eval"
 	"github.com/aalpar/wile/internal/extensions/io"
+	nsext "github.com/aalpar/wile/internal/extensions/namespace"
 	"github.com/aalpar/wile/registry"
 )
 
@@ -36,6 +37,7 @@ var Builder = registry.RegistryBuilder{
 	system.AddToRegistry,
 	math.AddToRegistry,
 	eval.AddToRegistry,
+	nsext.AddToRegistry,
 	threads.AddToRegistry,
 	gointerop.AddToRegistry,
 	addRecords,

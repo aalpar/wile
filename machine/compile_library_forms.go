@@ -58,9 +58,9 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 	}
 
 	// Create isolated library environment with primitives
-	// The library gets its own bindings but shares the TopLevelEnvironment for syntax interning
+	// The library gets its own bindings but shares the Namespace for syntax interning
 	var libEnv *environment.EnvironmentFrame
-	factory := p.env.TopLevelEnv().LibraryEnvFactory()
+	factory := p.env.Namespace().LibraryEnvFactory()
 	if factory != nil {
 		libEnv, err = factory(ctctx.ctx, p.env, libName.Parts)
 		if err != nil {
@@ -70,7 +70,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 		libEnv.SetLibraryRegistry(p.env.LibraryRegistry())
 	} else {
 		// Fallback for tests that don't set up the factory
-		libEnv = environment.NewTopLevelEnvironment().Runtime()
+		libEnv = environment.NewNamespace().Runtime()
 	}
 
 	lib := NewCompiledLibrary(libName, libEnv)
@@ -80,7 +80,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 	// the library scope enables the compiler to redirect lookup to this
 	// library's environment via the TLE's scope registry.
 	libScope := syntax.NewScopeWithLabel("library:" + libName.SchemeString())
-	p.env.TopLevelEnv().RegisterLibraryScope(libScope, libEnv)
+	p.env.Namespace().RegisterLibraryScope(libScope, libEnv)
 
 	// Process library declarations
 	declsExpr := rest.SyntaxCdr()
