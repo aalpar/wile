@@ -33,6 +33,8 @@ func addContMarks(r *registry.Registry) error {
 			Doc: "Returns the continuation mark set of a captured continuation.", ParamNames: []string{"cont", "prompt-tag"}, Category: "continuations"},
 		{Name: "continuation?", ParamCount: 1, Impl: PrimContinuationQ,
 			Doc: "Returns #t if obj is a captured continuation.", ParamNames: []string{"obj"}, Category: "continuations"},
+		{Name: "continuation-mark-set->list*", ParamCount: 3, IsVariadic: true, Impl: PrimContinuationMarkSetToListStar,
+			Doc: "Multi-key variant of continuation-mark-set->list returning vectors.", ParamNames: []string{"mark-set", "key-list", "none-v"}, Category: "continuations"},
 	}, registry.PhaseRuntime)
 
 	return nil

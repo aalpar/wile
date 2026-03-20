@@ -517,6 +517,16 @@ func PrimSyntaxLocalValue(mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimSyntaxLocalValueImmediate implements (syntax-local-value/immediate id).
+// Like syntax-local-value but does not chase rename-transformer chains.
+// Wile does not currently have rename-transformers, so this behaves
+// identically to syntax-local-value.
+//
+// Racket §12.4: syntax-local-value/immediate
+func PrimSyntaxLocalValueImmediate(mc *machine.MachineContext) error {
+	return PrimSyntaxLocalValue(mc)
+}
+
 // PrimMakeCompileTimeValue implements the make-compile-time-value primitive.
 // Wraps a value for compile-time storage.
 // (make-compile-time-value value) -> compile-time-value

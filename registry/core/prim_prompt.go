@@ -183,6 +183,25 @@ func PrimAbortCurrentContinuation(mc *machine.MachineContext) error {
 	}
 }
 
+// PrimContinuationPromptAvailableQ tests whether a prompt with the given tag
+// is on the current continuation chain.
+//
+// (continuation-prompt-available? tag) -> boolean
+//
+// Walks the continuation chain using FindPrompt, which checks both
+// continuation frames and the context-level prompt.
+//
+// Racket §10.4: continuation-prompt-available?
+func PrimContinuationPromptAvailableQ(mc *machine.MachineContext) error {
+	tag, err := helpers.RequireArg[*machine.PromptTag](mc, 0, werr.ErrNotAPromptTag, "continuation-prompt-available?")
+	if err != nil {
+		return err
+	}
+	_, found := mc.FindPrompt(tag)
+	mc.SetValue(values.BoolToBoolean(found))
+	return nil
+}
+
 // PrimCallWithComposableContinuation captures a composable (delimited)
 // continuation up to the nearest prompt with the given tag, then invokes
 // proc with that continuation as its argument.

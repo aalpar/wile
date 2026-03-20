@@ -45,6 +45,7 @@ var Builder = registry.NewRegistryBuilder(
 	addCharacters,
 	addBytevectors,
 	addSyntax,
+	addSyntaxLoc,
 	addParameters,
 	addPrompts,
 	addBoxes,
