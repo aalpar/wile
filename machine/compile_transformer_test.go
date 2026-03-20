@@ -27,7 +27,7 @@ import (
 )
 
 func TestCompileTransformerToMachineClosure_SyntaxRules(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (syntax-rules () ((my-const) 42))
@@ -47,7 +47,7 @@ func TestCompileTransformerToMachineClosure_SyntaxRules(t *testing.T) {
 }
 
 func TestCompileTransformerToMachineClosure_Lambda(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (lambda (stx) (quote 42))
@@ -64,7 +64,7 @@ func TestCompileTransformerToMachineClosure_Lambda(t *testing.T) {
 }
 
 func TestCompileTransformerToMachineClosure_ERMacroTransformer(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (er-macro-transformer (lambda (form rename compare) form))
@@ -87,7 +87,7 @@ func TestCompileTransformerToMachineClosure_ERMacroTransformer(t *testing.T) {
 }
 
 func TestCompileTransformerToMachineClosure_UnsupportedType(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (unsupported-keyword ...)
@@ -104,7 +104,7 @@ func TestCompileTransformerToMachineClosure_UnsupportedType(t *testing.T) {
 }
 
 func TestCompileTransformerToMachineClosure_NotAPair(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// Just a symbol, not a pair
@@ -119,7 +119,7 @@ func TestCompileTransformerToMachineClosure_NotAPair(t *testing.T) {
 // TestProceduralMacroExpandTimePath tests that procedural macros work through
 // the expand-time path (used by load/include/REPL)
 func TestProceduralMacroExpandTimePath(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// Define a simple procedural macro that returns a constant

@@ -32,7 +32,7 @@ import (
 // newDynamicWindEnv creates a test environment with dynamic-wind binding
 // and helper primitives for tracking call order via foreign closures.
 func newDynamicWindEnv() *environment.EnvironmentFrame {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 
 	// Register dynamic-wind as a primitive binding so the expander/validator recognize it
 	dwSym := values.NewSymbol("dynamic-wind")
@@ -206,7 +206,7 @@ func TestCompileValidatedDynamicWind_Nested(t *testing.T) {
 // newContMarkEnv creates a test environment with with-continuation-mark binding
 // and a + primitive for arithmetic tests.
 func newContMarkEnv() *environment.EnvironmentFrame {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 
 	wcmSym := values.NewSymbol("with-continuation-mark")
 	env.MaybeCreateOwnGlobalBinding(wcmSym, environment.BindingTypePrimitive)
@@ -281,7 +281,7 @@ func TestCompileWithContinuationMark_Nested(t *testing.T) {
 func TestCompileValidated_UnknownExprType(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ctc := NewCompiletimeContinuation(tpl, env)
 	ctctx := NewCompileTimeCallContext(context.Background(), false)
@@ -356,7 +356,7 @@ func TestSetScopesOnLastBinding_NilScopes(t *testing.T) {
 func TestBindRestParameter_DuplicateRestParam(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 
 	// Try (lambda (x . x) x) - rest param 'x' duplicates required param 'x'
 	err := compileAndRunExpectError(t, env, "(lambda (x . x) x)")

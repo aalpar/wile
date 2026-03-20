@@ -134,7 +134,7 @@ func TestLoadDefinesVariableInTopLevel(t *testing.T) {
 	qt.Assert(t, result.IsVoid(), qt.IsTrue)
 }
 
-func TestLoadAccessesTopLevelEnvironment(t *testing.T) {
+func TestLoadAccessesNamespace(t *testing.T) {
 	// Test that load can access variables defined in the top-level environment
 	f, err := os.CreateTemp("", "test*.scm")
 	qt.Assert(t, err, qt.IsNil)

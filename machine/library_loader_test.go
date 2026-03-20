@@ -32,9 +32,9 @@ import (
 func TestLibraryLoaderNotFound(t *testing.T) {
 	c := qt.New(t)
 
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
-	env.TopLevelEnv().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
+	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
 	registry := machine.NewLibraryRegistry()
 	registry.SetSearchPaths([]string{"/nonexistent/dir"})
@@ -51,7 +51,7 @@ func TestLibraryLoaderNotFound(t *testing.T) {
 func TestLibraryLoaderNoRegistry(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	// Intentionally NOT setting a library registry
 
 	name := machine.NewLibraryName("scheme", "base")
@@ -76,9 +76,9 @@ func TestLibraryLoaderMalformedFile(t *testing.T) {
 	err = os.WriteFile(malformedPath, []byte(`(not-a-library "hello")`), 0o644)
 	c.Assert(err, qt.IsNil)
 
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
-	env.TopLevelEnv().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
+	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
 	registry := machine.NewLibraryRegistry()
 	registry.SetSearchPaths([]string{tmpDir})
@@ -102,9 +102,9 @@ func TestLibraryLoaderEmptyFile(t *testing.T) {
 	err = os.WriteFile(emptyPath, []byte(""), 0o644)
 	c.Assert(err, qt.IsNil)
 
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
-	env.TopLevelEnv().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
+	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
 	registry := machine.NewLibraryRegistry()
 	registry.SetSearchPaths([]string{tmpDir})
@@ -135,9 +135,9 @@ func TestLibraryLoaderNameMismatch(t *testing.T) {
 	err = os.WriteFile(libPath, []byte(libContent), 0o644)
 	c.Assert(err, qt.IsNil)
 
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	c.Assert(err, qt.IsNil)
-	env.TopLevelEnv().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
+	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
 	registry := machine.NewLibraryRegistry()
 	registry.SetSearchPaths([]string{tmpDir})

@@ -6,7 +6,7 @@
 - `helpers.go`: `RunSchemeCode`, `RunSchemeCodeWithTimeout`, `RunSchemeCodeWithContext`, `RunSchemeCodeExpectError`, `RunSchemeCodeExpectTrue`, `RunSchemeCodeExpectFalse`, `SchemeCodeTestCase`, `SchemeCodeErrorTestCase`
 - `pipeline_helpers.go`: `RunProgramAST`, `RunProgramASTWithEnv`, `RunSchemeCodeWithEnv`, `RunSchemeCodeWithEnvAndContext`
 
-All helpers use the internal pipeline (`bootstrap.NewTopLevelEnvironmentFrameTiny` → parser → expander → compiler → VM) with full extension coverage.
+All helpers use the internal pipeline (`bootstrap.NewNamespaceFrameTiny` → parser → expander → compiler → VM) with full extension coverage.
 
 Root tests (`wile_test.go`): `NewEngine()` directly. Assertions: `qt` (quicktest).
 

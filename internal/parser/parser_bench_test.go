@@ -23,7 +23,7 @@ import (
 )
 
 func BenchmarkParseInteger(b *testing.B) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	input := "42"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -34,7 +34,7 @@ func BenchmarkParseInteger(b *testing.B) {
 }
 
 func BenchmarkParseList(b *testing.B) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	input := "(+ 1 2 3 4 5)"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -45,7 +45,7 @@ func BenchmarkParseList(b *testing.B) {
 }
 
 func BenchmarkParseQuoted(b *testing.B) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	input := "'(a b c)"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -56,7 +56,7 @@ func BenchmarkParseQuoted(b *testing.B) {
 }
 
 func BenchmarkParseNestedList(b *testing.B) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	input := "((lambda (x) (+ x 1)) 42)"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -67,7 +67,7 @@ func BenchmarkParseNestedList(b *testing.B) {
 }
 
 func BenchmarkParseString(b *testing.B) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	input := `"hello world"`
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -78,7 +78,7 @@ func BenchmarkParseString(b *testing.B) {
 }
 
 func BenchmarkParseFloat(b *testing.B) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	input := "3.14159"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

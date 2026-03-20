@@ -17,14 +17,14 @@
 // The package creates and bootstraps complete runtime environments using
 // the registry pattern:
 //
-//	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(ctx)
+//	env, err := bootstrap.NewNamespaceFrameTiny(ctx)
 //
 // # Initialization
 //
-// [NewTopLevelEnvironmentFrameTiny] performs these steps:
+// [NewNamespaceFrameTiny] performs these steps:
 //  1. Creates a registry with core primitives
 //  2. Adds all extensions (io, files, math, eval, exceptions, threads, etc.)
-//  3. Creates a new TopLevelEnvironment with per-instance symbol interning
+//  3. Creates a new Namespace with per-instance symbol interning
 //  4. Applies all primitives to the environment
 //  5. Registers syntax compilers and primitive expanders
 //  6. Loads bootstrap macros

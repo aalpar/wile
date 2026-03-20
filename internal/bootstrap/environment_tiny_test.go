@@ -27,7 +27,7 @@ import (
 
 // TestNewEnvironmentTiny tests that the top-level environment can be created successfully.
 func TestNewEnvironmentTiny(t *testing.T) {
-	env, err := NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := NewNamespaceFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, env, qt.IsNotNil)
 }
@@ -53,7 +53,7 @@ func TestSelectiveExtensionLoading(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
-	topLevel := environment.NewTopLevelEnvironment()
+	topLevel := environment.NewNamespace()
 	env := topLevel.Runtime()
 
 	// Load only the math extension

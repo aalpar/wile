@@ -26,7 +26,7 @@ import (
 )
 
 func TestMachine_Operations(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(0)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(0, 0, false, NewOperationPush())
@@ -37,7 +37,7 @@ func TestMachine_Operations(t *testing.T) {
 }
 
 func TestMachineContinuation_Parent(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	parent := NewMachineContinuation(nil, nil, env)
 	child := NewMachineContinuation(parent, nil, env)
@@ -47,14 +47,14 @@ func TestMachineContinuation_Parent(t *testing.T) {
 }
 
 func TestMachineContinuation_EnvironmentFrame(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	cont := NewMachineContinuation(nil, nil, env)
 	qt.Assert(t, cont.EnvironmentFrame(), qt.Equals, env)
 }
 
 func TestMachineContinuation_Template(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(3, 0, false)
 
 	cont := NewMachineContinuation(nil, tpl, env)
@@ -62,7 +62,7 @@ func TestMachineContinuation_Template(t *testing.T) {
 }
 
 func TestMachineContinuation_SetPC(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	cont := NewMachineContinuation(nil, nil, env)
 	qt.Assert(t, cont.PC(), qt.Equals, 0)
@@ -72,7 +72,7 @@ func TestMachineContinuation_SetPC(t *testing.T) {
 }
 
 func TestMachineContinuation_PushValues(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	cont := NewMachineContinuation(nil, nil, env)
 	qt.Assert(t, len(cont.multiValues), qt.Equals, 0)
@@ -87,7 +87,7 @@ func TestMachineContinuation_PushValues(t *testing.T) {
 }
 
 func TestMachineContinuation_PushValues_PromoteSingleToMulti(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	cont := NewMachineContinuation(nil, nil, env)
 
@@ -105,7 +105,7 @@ func TestMachineContinuation_PushValues_PromoteSingleToMulti(t *testing.T) {
 }
 
 func TestMachineContinuation_Copy(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(2, 0, false)
 
 	parent := NewMachineContinuation(nil, nil, env)
@@ -130,7 +130,7 @@ func TestMachineContinuation_Copy(t *testing.T) {
 }
 
 func TestMachineContinuation_SchemeString(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	cont := NewMachineContinuation(nil, nil, env)
 	qt.Assert(t, cont.SchemeString(), qt.Equals, "<machine-continuation %0>")
@@ -140,7 +140,7 @@ func TestMachineContinuation_SchemeString(t *testing.T) {
 }
 
 func TestMachineContinuation_IsVoid(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	cont := NewMachineContinuation(nil, nil, env)
 	qt.Assert(t, cont.IsVoid(), qt.IsFalse)
@@ -150,7 +150,7 @@ func TestMachineContinuation_IsVoid(t *testing.T) {
 }
 
 func TestMachineContinuation_EqualTo(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(2, 0, false)
 
 	cont1 := NewMachineContinuation(nil, tpl, env)
@@ -204,7 +204,7 @@ func TestMachineContinuation_EqualTo(t *testing.T) {
 // Tests moved from coverage_additional_test.go
 // TestMachineContinuationMethodsAdditional tests MachineContinuation methods
 func TestMachineContinuationMethodsAdditional(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendOperations(
 		NewOperationLoadVoid(),
@@ -226,7 +226,7 @@ func TestMachineContinuationMethodsAdditional(t *testing.T) {
 
 // TestMachineContinuationFromMachineContext tests creating continuation from context
 func TestMachineContinuationFromMachineContext(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendOperations(
 		NewOperationLoadLiteralByLiteralIndexImmediate(tpl.MaybeAppendLiteral(values.NewInteger(42))),
@@ -244,7 +244,7 @@ func TestMachineContinuationFromMachineContext(t *testing.T) {
 
 // TestMachineContinuationMethods tests MachineContinuation methods
 func TestMachineContinuationMethods(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	cont := NewMachineContinuation(nil, tpl, env)
 
@@ -257,7 +257,7 @@ func TestMachineContinuationMethods(t *testing.T) {
 
 // TestMachineContinuationEqualToDifferentTemplates tests continuation equality with different templates
 func TestMachineContinuationEqualToDifferentTemplates(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendOperations(NewOperationRestoreContinuation())
 	cont := NewMachineContinuation(nil, tpl, env)
@@ -279,7 +279,7 @@ func TestMachineContinuation_DeepCopy_Nil(t *testing.T) {
 }
 
 func TestMachineContinuation_DeepCopy_SingleFrame(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	cont := NewMachineContinuation(nil, tpl, env)
@@ -301,7 +301,7 @@ func TestMachineContinuation_DeepCopy_SingleFrame(t *testing.T) {
 }
 
 func TestMachineContinuation_DeepCopy_MultiFrameChain(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	bottom := NewMachineContinuation(nil, tpl, env)
@@ -330,7 +330,7 @@ func TestMachineContinuation_DeepCopy_MultiFrameChain(t *testing.T) {
 }
 
 func TestMachineContinuation_DeepCopy_PreservesPromptTag(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	tag := NewPromptTag("test")
 
@@ -346,7 +346,7 @@ func TestMachineContinuation_DeepCopy_PreservesPromptTag(t *testing.T) {
 // --- GraftContinuation tests ---
 
 func TestGraftContinuation_NilSegment(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	target := NewMachineContinuation(nil, tpl, env)
 
@@ -355,7 +355,7 @@ func TestGraftContinuation_NilSegment(t *testing.T) {
 }
 
 func TestGraftContinuation_SingleFrame(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	segment := NewMachineContinuation(nil, tpl, env)
@@ -370,7 +370,7 @@ func TestGraftContinuation_SingleFrame(t *testing.T) {
 }
 
 func TestGraftContinuation_MultiFrameSegment(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	bottom := NewMachineContinuation(nil, tpl, env)
@@ -391,7 +391,7 @@ func TestGraftContinuation_MultiFrameSegment(t *testing.T) {
 }
 
 func TestGraftContinuation_NilTarget(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	segment := NewMachineContinuation(nil, tpl, env)
@@ -404,7 +404,7 @@ func TestGraftContinuation_NilTarget(t *testing.T) {
 // --- CallDepth tests ---
 
 func TestMachineContinuation_CallDepth(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	var nilCont *MachineContinuation
@@ -427,7 +427,7 @@ func TestMachineContinuation_CallDepth(t *testing.T) {
 // continuation path, where mc.callDepth == 0 would previously underflow.
 func TestNewMachineContinuationFromMachineContext_CallDepth(t *testing.T) {
 	c := qt.New(t)
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 
 	tcs := []struct {

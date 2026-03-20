@@ -23,7 +23,7 @@
 //
 // # Architecture
 //
-// Each Wile VM instance owns a [TopLevelEnvironment] that provides:
+// Each Wile VM instance owns a [Namespace] that provides:
 //   - Syntax interning (thread-safe, per-instance)
 //   - Phase registry for accessing phase-specific environments
 //   - The runtime [EnvironmentFrame] tree

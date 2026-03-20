@@ -27,7 +27,7 @@ import (
 func TestNewExpanderContext(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	expander := NewExpanderTimeContinuation(context.Background(), env)
 
 	ctx := NewExpanderContext(env, expander)
@@ -39,7 +39,7 @@ func TestNewExpanderContext(t *testing.T) {
 func TestExpanderContext_IntroductionScope(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	expander := NewExpanderTimeContinuation(context.Background(), env)
 
 	ctx := NewExpanderContext(env, expander)
@@ -56,7 +56,7 @@ func TestExpanderContext_IntroductionScope(t *testing.T) {
 func TestExpanderContext_UseSiteScope(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	expander := NewExpanderTimeContinuation(context.Background(), env)
 
 	ctx := NewExpanderContext(env, expander)

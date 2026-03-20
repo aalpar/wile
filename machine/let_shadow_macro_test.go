@@ -32,7 +32,7 @@ import (
 // runSchemeCodeForShadowTest parses and runs Scheme code using a full environment.
 func runSchemeCodeForShadowTest(t *testing.T, code string) (values.Value, error) {
 	t.Helper()
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	if err != nil {
 		return nil, err
 	}

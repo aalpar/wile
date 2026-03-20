@@ -10,7 +10,7 @@ The environment system has four key types organized in a hierarchy:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                        TopLevelEnvironment                              │
+│                        Namespace                              │
 │  (Per-VM instance: owns syntax interning, phases, libraries)           │
 │                                                                         │
 │  syntaxInterns ──── map[Value]SyntaxValue (thread-safe, per-instance)  │
@@ -30,7 +30,7 @@ The environment system has four key types organized in a hierarchy:
 │  global ─────────── *GlobalEnvironmentFrame (define bindings)          │
 │  phaseLevel ─────── int (0=runtime, 1=expand, 2=compile)               │
 │  phases ─────────── *PhaseRegistry (shared reference)                  │
-│  topLevel ───────── *TopLevelEnvironment (back-reference)              │
+│  namespace ───────── *Namespace (back-reference)                        │
 └─────────────────────────────────────────────────────────────────────────┘
           │                                    │
           │ contains                           │ contains
@@ -41,37 +41,37 @@ The environment system has four key types organized in a hierarchy:
 │                           │    │                                        │
 │  keys ─── map[Symbol]int  │    │  keys ──────── map[Symbol]int          │
 │  bindings ── []*Binding   │    │  bindings ──── []*Binding              │
-└───────────────────────────┘    │  topLevel ──── *TopLevelEnvironment    │
+└───────────────────────────┘    │  namespace ──── *Namespace             │
                                  └────────────────────────────────────────┘
 ```
 
 ---
 
-## TopLevelEnvironment
+## Namespace
 
-The `TopLevelEnvironment` is the root of the environment hierarchy. Each Wile VM instance has exactly one TopLevelEnvironment which owns:
+The `Namespace` is the root of the environment hierarchy. Each Wile VM instance has exactly one Namespace which owns:
 
 - **Syntax interning table**: Caches syntax objects for consistent identity across macro expansion
 - **Phase registry**: O(1) access to any phase environment
 - **Library registry**: Tracks loaded R7RS libraries
 
-### Creating a TopLevelEnvironment
+### Creating a Namespace
 
 ```go
 // Basic creation
-topLevel := environment.NewTopLevelEnvironment()
+topLevel := environment.NewNamespace()
 env := topLevel.Runtime()  // Get the runtime (phase 0) environment
 
-// Convenience wrapper (creates TopLevelEnvironment internally)
-env := environment.NewTopLevelEnvironmentFrame()
+// Convenience wrapper (creates Namespace internally)
+env := environment.NewNamespaceFrame()
 ```
 
 ### Syntax Interning
 
-Syntax interning is **per-TopLevelEnvironment**, ensuring consistent syntax object identity during macro expansion:
+Syntax interning is **per-Namespace**, ensuring consistent syntax object identity during macro expansion:
 
 ```go
-topLevel := environment.NewTopLevelEnvironment()
+topLevel := environment.NewNamespace()
 
 // Syntax objects are interned for consistent identity
 interned := topLevel.InternSyntax(key, syntaxValue)
@@ -95,7 +95,7 @@ Wile supports multiple phases for macro expansion:
 ### Accessing Phase Environments
 
 ```go
-env := environment.NewTopLevelEnvironmentFrame()
+env := environment.NewNamespaceFrame()
 
 // Direct phase access
 runtime := env.AtPhase(0)   // Same as env.Runtime()
@@ -108,7 +108,7 @@ env.Expand()    // Phase 1
 env.Compile()   // Phase 2
 ```
 
-Each phase has its own `GlobalEnvironmentFrame` for bindings but shares the `TopLevelEnvironment` for interning.
+Each phase has its own `GlobalEnvironmentFrame` for bindings but shares the `Namespace` for interning.
 
 ---
 
@@ -120,7 +120,7 @@ Use `NewEnvironmentFrameWithParent` to create child environments that inherit fr
 
 ```go
 // Create a top-level environment
-topEnv := environment.NewTopLevelEnvironmentFrame()
+topEnv := environment.NewNamespaceFrame()
 
 // Create a child with local bindings (e.g., for lambda parameters)
 localEnv := environment.NewLocalEnvironment(2)  // 2 parameters
@@ -129,38 +129,38 @@ childEnv := environment.NewEnvironmentFrameWithParent(localEnv, topEnv)
 // The child shares:
 // - Same GlobalEnvironmentFrame as parent
 // - Same PhaseRegistry
-// - Same TopLevelEnvironment (for interning)
+// - Same Namespace (for interning)
 ```
 
 ### For Libraries
 
-Libraries need isolated bindings but must share the `TopLevelEnvironment` for syntax identity:
+Libraries need isolated bindings but must share the `Namespace` for syntax identity:
 
 ```go
-// WRONG: Creates new TopLevelEnvironment, breaks syntax identity
-// libEnv := environment.NewTopLevelEnvironmentFrame()
+// WRONG: Creates new Namespace, breaks syntax identity
+// libEnv := environment.NewNamespaceFrame()
 
-// CORRECT: Share TopLevelEnvironment with caller
-callerTopLevel := callerEnv.TopLevelEnv()
+// CORRECT: Share Namespace with caller
+callerTopLevel := callerEnv.Namespace()
 libEnv := callerTopLevel.NewChildRuntime()
 ```
 
 The `NewChildRuntime` method creates an environment that:
 - Has its own `GlobalEnvironmentFrame` (isolated bindings)
 - Has its own `PhaseRegistry` (isolated phase hierarchy)
-- Shares the `TopLevelEnvironment` (syntax interning)
+- Shares the `Namespace` (syntax interning)
 
 ---
 
 ## Library Environment Factory
 
-The `LibraryEnvFactory` field on `TopLevelEnvironment` creates environments for R7RS libraries. It must share the caller's `TopLevelEnvironment`:
+The `LibraryEnvFactory` field on `Namespace` creates environments for R7RS libraries. It must share the caller's `Namespace`:
 
 ```go
 // In internal/bootstrap/environment_tiny.go
 func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.EnvironmentFrame, _ []string) (*environment.EnvironmentFrame, error) {
-    // Create a new environment that shares the caller's TopLevelEnvironment
-    libEnv := callerEnv.TopLevelEnv().NewChildRuntime()
+    // Create a new environment that shares the caller's Namespace
+    libEnv := callerEnv.Namespace().NewChildRuntime()
 
     // Initialize with shared sequence (primitives, macros, etc.)
     // ...
@@ -169,7 +169,7 @@ func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.Envi
 }
 
 // In main.go or engine setup
-env.TopLevelEnv().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
+env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 ```
 
 ---
@@ -188,7 +188,7 @@ import (
 
 func setupRuntime(ctx context.Context) (*environment.EnvironmentFrame, error) {
     // Create complete environment with primitives and macros
-    env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(ctx)
+    env, err := bootstrap.NewNamespaceFrameTiny(ctx)
     if err != nil {
         return nil, err
     }
@@ -197,8 +197,8 @@ func setupRuntime(ctx context.Context) (*environment.EnvironmentFrame, error) {
     registry := machine.NewLibraryRegistry()
     env.SetLibraryRegistry(registry)
 
-    // Configure library environment factory (shares TopLevelEnvironment)
-    env.TopLevelEnv().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
+    // Configure library environment factory (shares Namespace)
+    env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
     return env, nil
 }
@@ -209,23 +209,23 @@ func setupRuntime(ctx context.Context) (*environment.EnvironmentFrame, error) {
 ```go
 func TestSomething(t *testing.T) {
     // Simple environment for unit tests
-    env := environment.NewTopLevelEnvironmentFrame()
+    env := environment.NewNamespaceFrame()
 
     // Or with full primitives
-    env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+    env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
     if err != nil {
         t.Fatal(err)
     }
 
     // For tests involving libraries
-    env.TopLevelEnv().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
+    env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 }
 ```
 
 ### Accessing Bindings
 
 ```go
-env := environment.NewTopLevelEnvironmentFrame()
+env := environment.NewNamespaceFrame()
 
 // Create a global binding
 sym := values.NewSymbol("foo")
@@ -247,19 +247,19 @@ if binding != nil {
 
 These invariants must be maintained:
 
-1. **Every EnvironmentFrame has a TopLevelEnvironment**
-   - Use `NewTopLevelEnvironmentFrame()` or `NewEnvironmentFrameWithParent()` with a valid parent
+1. **Every EnvironmentFrame has a Namespace**
+   - Use `NewNamespaceFrame()` or `NewEnvironmentFrameWithParent()` with a valid parent
    - Never call `NewEnvironmentFrameWithParent(local, nil)` - it will panic
 
-2. **Syntax interning requires TopLevelEnvironment**
+2. **Syntax interning requires Namespace**
    - `InternSyntax()` delegates to parent if this is a child environment
    - Always create environments properly
 
-3. **Libraries share TopLevelEnvironment with caller**
-   - `TopLevelEnvironment.LibraryEnvFactory()` must use caller's TopLevelEnvironment
+3. **Libraries share Namespace with caller**
+   - `Namespace.LibraryEnvFactory()` must use caller's Namespace
    - Failure breaks syntax identity across library boundaries
 
-4. **Phase environments share TopLevelEnvironment**
+4. **Phase environments share Namespace**
    - All phases use the same interning tables
    - Expand-phase macros can reference runtime symbols correctly
 
@@ -267,7 +267,7 @@ These invariants must be maintained:
 
 ## Load-Path Stack
 
-The `LoadPathStack` enables relative path resolution for `load`, `include`, and `import` by tracking which files are currently being loaded. It is stored on `TopLevelEnvironment` (per-VM, not per-thread).
+The `LoadPathStack` enables relative path resolution for `load`, `include`, and `import` by tracking which files are currently being loaded. It is stored on `Namespace` (per-VM, not per-thread).
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -332,7 +332,7 @@ engine.CurrentLoadDirectory()  // "" if none
 
 ### Design: Per-VM, Not Per-Thread
 
-The stack lives on `TopLevelEnvironment`, shared across all child environments via delegation. This is intentional: library loading must resolve paths relative to the importing file even when the library runs in its own isolated environment.
+The stack lives on `Namespace`, shared across all child environments via delegation. This is intentional: library loading must resolve paths relative to the importing file even when the library runs in its own isolated environment.
 
 **Concurrency caveat**: Concurrent `(load ...)` from multiple SRFI-18 threads can corrupt LIFO ordering. Single-threaded loading (the common case) is fully correct.
 
@@ -340,7 +340,7 @@ The stack lives on `TopLevelEnvironment`, shared across all child environments v
 
 ## Thread Safety
 
-- `TopLevelEnvironment.InternSyntax()` - Thread-safe (uses RWMutex)
+- `Namespace.InternSyntax()` - Thread-safe (uses RWMutex)
 - `PhaseRegistry.GetOrCreate()` - Thread-safe (uses RWMutex)
 - `LoadPathStack` - Thread-safe for individual operations (uses Mutex); LIFO ordering only guaranteed single-threaded
 - Binding operations - Not thread-safe (single-threaded compilation assumed)

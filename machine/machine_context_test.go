@@ -28,7 +28,7 @@ import (
 )
 
 func TestNewMachineContext(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(3, 0, false)
 
 	// Create a parent continuation to verify parent chain works
@@ -62,7 +62,7 @@ func TestNewMachineContext(t *testing.T) {
 }
 
 func TestNewMachineContext_NilParent(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Create a continuation with nil parent
 	cont := NewMachineContinuation(nil, nil, env)
@@ -76,7 +76,7 @@ func TestNewMachineContext_NilParent(t *testing.T) {
 
 func TestNewMachineContext_RoundTrip(t *testing.T) {
 	// Test that saving and restoring a continuation preserves state
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(2, 0, false)
 
 	cont := NewMachineContinuation(nil, tpl, env)
@@ -106,7 +106,7 @@ func TestNewMachineContext_RoundTrip(t *testing.T) {
 }
 
 func TestMachineContext_PushContinuation_0(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, nil, env)
 	mc := NewMachineContext(context.Background(), cont)
 	qt.Assert(t, mc.cont, qt.IsNil)
@@ -120,7 +120,7 @@ func TestMachineContext_PushContinuation_0(t *testing.T) {
 }
 
 func TestMachineContext_PushContinuation_1(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 	mc.SaveContinuation(10)
 	qt.Assert(t, mc.CallDepth(), qt.Equals, 1)
@@ -134,7 +134,7 @@ func TestMachineContext_PushContinuation_1(t *testing.T) {
 }
 
 func TestMachineContext_PushContinuation_2(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 	bottom0 := mc.cont
 	mc.SaveContinuation(10)
@@ -161,7 +161,7 @@ func TestMachineContext_PushContinuation_2(t *testing.T) {
 
 func TestPopContinuation_Underflow(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 	// Popping from an empty continuation chain must return an error, not panic.
@@ -170,7 +170,7 @@ func TestPopContinuation_Underflow(t *testing.T) {
 }
 
 func TestMachineContext_SetValues_GetValues(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 	// Test SetValues and GetValues
@@ -191,7 +191,7 @@ func TestMachineContext_SetValues_GetValues(t *testing.T) {
 }
 
 func TestMachineContext_CurrentContinuation(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(2, 0, false)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
@@ -208,7 +208,7 @@ func TestMachineContext_CurrentContinuation(t *testing.T) {
 }
 
 func TestMachineContext_NewSubContext(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(2)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(2, 0, false)
@@ -231,7 +231,7 @@ func TestMachineContext_NewSubContext(t *testing.T) {
 }
 
 func TestMachineContext_Restore(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	env1 := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 	env2 := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 	tpl1 := NewNativeTemplate(1, 0, false)
@@ -264,7 +264,7 @@ func TestMachineContext_Restore(t *testing.T) {
 }
 
 func TestMachineContext_Apply_FixedArity(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(2)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(2, 0, false)
@@ -290,7 +290,7 @@ func TestMachineContext_Apply_FixedArity(t *testing.T) {
 }
 
 func TestMachineContext_Apply_WrongArgCount(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(2)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(2, 0, false)
@@ -305,7 +305,7 @@ func TestMachineContext_Apply_WrongArgCount(t *testing.T) {
 }
 
 func TestMachineContext_Apply_Variadic(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(3)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	// Variadic with 2 required parameters plus rest
@@ -328,7 +328,7 @@ func TestMachineContext_Apply_Variadic(t *testing.T) {
 }
 
 func TestMachineContext_Apply_VariadicTooFewArgs(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(3)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(3, 0, true)
@@ -343,7 +343,7 @@ func TestMachineContext_Apply_VariadicTooFewArgs(t *testing.T) {
 }
 
 func TestMachineContext_ApplyCaseLambda(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 
 	// Create two clauses with different arities
 	lenv1 := environment.NewLocalEnvironment(1)
@@ -376,7 +376,7 @@ func TestMachineContext_ApplyCaseLambda(t *testing.T) {
 }
 
 func TestMachineContext_ApplyCaseLambda_NoMatch(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 
 	lenv := environment.NewLocalEnvironment(2)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
@@ -394,7 +394,7 @@ func TestMachineContext_ApplyCaseLambda_NoMatch(t *testing.T) {
 }
 
 func TestMachineContext_Apply_FixedArityTooManyArgs(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(2)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(2, 0, false)
@@ -409,7 +409,7 @@ func TestMachineContext_Apply_FixedArityTooManyArgs(t *testing.T) {
 }
 
 func TestMachineContext_Apply_ZeroArity(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(0)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(0, 0, false)
@@ -426,7 +426,7 @@ func TestMachineContext_Apply_ZeroArity(t *testing.T) {
 }
 
 func TestMachineContext_Apply_VariadicExactlyRequiredArgs(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(3)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	// 2 required + rest: (lambda (a b . rest) ...)
@@ -446,7 +446,7 @@ func TestMachineContext_Apply_VariadicExactlyRequiredArgs(t *testing.T) {
 }
 
 func TestMachineContext_Apply_VariadicRestOnly(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(1)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	// (lambda args ...) — paramCount=1, variadic, 0 required
@@ -466,7 +466,7 @@ func TestMachineContext_Apply_VariadicRestOnly(t *testing.T) {
 }
 
 func TestMachineContext_Apply_VariadicRestOnlyNoArgs(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(1)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	// (lambda args ...) called with zero args
@@ -483,7 +483,7 @@ func TestMachineContext_Apply_VariadicRestOnlyNoArgs(t *testing.T) {
 }
 
 func TestMachineContext_Apply_EnvironmentIsolation(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(1)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(1, 0, false)
@@ -516,7 +516,7 @@ func TestMachineContext_Apply_EnvironmentIsolation(t *testing.T) {
 }
 
 func TestMachineContext_Apply_PCResetFromNonZero(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(1)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(1, 0, false)
@@ -531,7 +531,7 @@ func TestMachineContext_Apply_PCResetFromNonZero(t *testing.T) {
 }
 
 func TestMachineContext_Apply_Counters(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(3)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(3, 0, false)
@@ -554,7 +554,7 @@ func TestMachineContext_Apply_Counters(t *testing.T) {
 }
 
 func TestMachineContext_Apply_ReturnsSameContext(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(1)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(1, 0, false)
@@ -568,7 +568,7 @@ func TestMachineContext_Apply_ReturnsSameContext(t *testing.T) {
 }
 
 func TestMachineContext_Apply_ErrorsWrapSentinel(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 
 	tcs := []struct {
 		name       string
@@ -608,7 +608,7 @@ func TestMachineContext_Apply_ErrorsWrapSentinel(t *testing.T) {
 }
 
 func TestMachineContext_ApplyCaseLambda_VariadicClause(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 
 	// Fixed 1-arity clause
 	lenv1 := environment.NewLocalEnvironment(1)
@@ -642,7 +642,7 @@ func TestMachineContext_ApplyCaseLambda_VariadicClause(t *testing.T) {
 }
 
 func TestMachineContext_ApplyCaseLambda_NoMatchErrorSentinel(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 
 	lenv := environment.NewLocalEnvironment(2)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
@@ -658,7 +658,7 @@ func TestMachineContext_ApplyCaseLambda_NoMatchErrorSentinel(t *testing.T) {
 }
 
 func TestNewMachineContextFromMachineClosure(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(2)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(2, 0, false)
@@ -673,7 +673,7 @@ func TestNewMachineContextFromMachineClosure(t *testing.T) {
 }
 
 func TestMachineContext_Error(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.SetName("test-func")
 
@@ -689,7 +689,7 @@ func TestMachineContext_Error(t *testing.T) {
 }
 
 func TestMachineContext_Error_NoSource(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// No template means no source
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
@@ -702,7 +702,7 @@ func TestMachineContext_Error_NoSource(t *testing.T) {
 }
 
 func TestMachineContext_WrapError(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
@@ -716,7 +716,7 @@ func TestMachineContext_WrapError(t *testing.T) {
 }
 
 func TestMachineContext_WrapError_EmptyMessage(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
@@ -733,7 +733,7 @@ func TestMachineContext_WrapError_EmptyMessage(t *testing.T) {
 // Tests moved from coverage_additional_test.go
 // TestExecuteSimpleProcedureCall tests actually running a procedure call
 func TestExecuteSimpleProcedureCall(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 
 	prog := "((lambda (x) x) 42)"
 	sv := parseSchemeExpr(t, env, prog)
@@ -751,7 +751,7 @@ func TestExecuteSimpleProcedureCall(t *testing.T) {
 
 // TestExecuteVariadicProcedure tests running a variadic procedure
 func TestExecuteVariadicProcedure(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 
 	// (lambda args args) called with (1 2 3) should return (1 2 3)
 	prog := "((lambda args args) 1 2 3)"
@@ -768,7 +768,7 @@ func TestExecuteVariadicProcedure(t *testing.T) {
 
 // TestMachineContextNewSubContext tests creating a sub-context
 func TestMachineContextNewSubContext(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -784,7 +784,7 @@ func TestMachineContextNewSubContext(t *testing.T) {
 
 // TestMachineContextSetValues tests SetValues and GetValues
 func TestMachineContextSetValues(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendOperations(
 		NewOperationLoadVoid(),
@@ -803,7 +803,7 @@ func TestMachineContextSetValues(t *testing.T) {
 
 // TestMachineContextSetValue tests SetValue and GetValue
 func TestMachineContextSetValue(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendOperations(
 		NewOperationLoadVoid(),
@@ -820,7 +820,7 @@ func TestMachineContextSetValue(t *testing.T) {
 
 // TestMachineContextApplySimple tests mc.Apply with a simple closure
 func TestMachineContextApplySimple(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -836,7 +836,7 @@ func TestMachineContextApplySimple(t *testing.T) {
 
 // TestMachineContextValueMethods tests MachineContext value get/set
 func TestMachineContextValueMethods(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendOperations(NewOperationRestoreContinuation())
 	cont := NewMachineContinuation(nil, tpl, env)
@@ -854,7 +854,7 @@ func TestMachineContextValueMethods(t *testing.T) {
 
 // TestMachineContextNewSubContextAdditional tests additional sub-context paths
 func TestMachineContextNewSubContextAdditional(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendOperations(NewOperationRestoreContinuation())
 	cont := NewMachineContinuation(nil, tpl, env)
@@ -869,7 +869,7 @@ func TestMachineContextNewSubContextAdditional(t *testing.T) {
 
 func TestApplyCallable_MachineClosure(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(2)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(2, 0, false)
@@ -890,7 +890,7 @@ func TestApplyCallable_MachineClosure(t *testing.T) {
 
 func TestApply_RecordsNamedMachineClosureCall(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(1)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(1, 0, false)
@@ -908,7 +908,7 @@ func TestApply_RecordsNamedMachineClosureCall(t *testing.T) {
 
 func TestApply_SkipsAnonymousClosure(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(1)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(1, 0, false)
@@ -925,7 +925,7 @@ func TestApply_SkipsAnonymousClosure(t *testing.T) {
 
 func TestApplyCallable_CaseLambdaClosure(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 
 	lenv1 := environment.NewLocalEnvironment(1)
 	env1 := environment.NewEnvironmentFrameWithParent(lenv1, topEnv)
@@ -955,7 +955,7 @@ func TestApplyCallable_CaseLambdaClosure(t *testing.T) {
 
 func TestApplyCallable_Parameter(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 
 	tcs := []struct {
@@ -1002,7 +1002,7 @@ func TestApplyCallable_Parameter(t *testing.T) {
 
 func TestApplyCallable_Parameter_WrongArgCount(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 
 	param := NewParameter(values.NewInteger(0), nil)
@@ -1016,7 +1016,7 @@ func TestApplyCallable_Parameter_WrongArgCount(t *testing.T) {
 
 func TestApplyCallable_Parameter_WithContinuation(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendOperations(NewOperationRestoreContinuation())
@@ -1036,7 +1036,7 @@ func TestApplyCallable_Parameter_WithContinuation(t *testing.T) {
 
 func TestApplyCallable_ComposableContinuation(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendOperations(NewOperationRestoreContinuation())
@@ -1054,7 +1054,7 @@ func TestApplyCallable_ComposableContinuation(t *testing.T) {
 
 func TestApplyCallable_ComposableContinuation_WrongArgCount(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 
 	cc := NewComposableContinuation(nil, nil, 0, nil)
@@ -1067,7 +1067,7 @@ func TestApplyCallable_ComposableContinuation_WrongArgCount(t *testing.T) {
 
 func TestApplyCallable_NonCallable(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 
 	tcs := []struct {
@@ -1091,7 +1091,7 @@ func TestApplyCallable_NonCallable(t *testing.T) {
 
 func TestApplyCallable_Nil(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
@@ -1105,7 +1105,7 @@ func TestApplyCallable_Nil(t *testing.T) {
 // automatically inherits the parent's exception handler chain (M3 fix).
 func TestNewSubContext_InheritsExceptionHandler(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 	parent := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
@@ -1122,7 +1122,7 @@ func TestNewSubContext_InheritsExceptionHandler(t *testing.T) {
 // handlers form a chain that is correctly inherited by sub-contexts.
 func TestNewSubContext_InheritsNestedHandlers(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 	parent := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
@@ -1144,7 +1144,7 @@ func TestNewSubContext_InheritsNestedHandlers(t *testing.T) {
 // correctly when the parent has no exception handler installed.
 func TestNewSubContext_NoExceptionHandler(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 	parent := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
@@ -1157,7 +1157,7 @@ func TestNewSubContext_NoExceptionHandler(t *testing.T) {
 // sub-contexts correctly inherit exception handlers via SubContextParams.
 func TestNewThreadSubContext_InheritsExceptionHandler(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 	parent := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
@@ -1214,7 +1214,7 @@ func TestSaveContinuation_CallDepthTracking(t *testing.T) {
 				ops[i] = NewOperationLoadVoid()
 			}
 			tpl := NewNativeTemplate(0, 0, false, ops...)
-			topEnv := environment.NewTopLevelEnvironment().Runtime()
+			topEnv := environment.NewNamespace().Runtime()
 			env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 			cont := NewMachineContinuation(nil, tpl, env)
 			mc := NewMachineContext(context.Background(), cont)
@@ -1248,7 +1248,7 @@ func TestPopContinuation_DecrementsCallDepth(t *testing.T) {
 		ops[i] = NewOperationLoadVoid()
 	}
 	tpl := NewNativeTemplate(0, 0, false, ops...)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
@@ -1287,7 +1287,7 @@ func TestPopContinuation_DecrementsCallDepth(t *testing.T) {
 }
 
 func TestNewSubContext_InheritsMaxCallDepth(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 	mc.SetMaxCallDepth(42)
@@ -1299,7 +1299,7 @@ func TestNewSubContext_InheritsMaxCallDepth(t *testing.T) {
 }
 
 func TestNewThreadSubContext_InheritsMaxCallDepth(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 	mc.SetMaxCallDepth(99)
@@ -1319,7 +1319,7 @@ func TestRunDispatch_InitialOperations(t *testing.T) {
 	c := qt.New(t)
 	// Template created with initial operations converts them to bytecode.
 	tpl := NewNativeTemplate(0, 0, false, NewOperationLoadVoid())
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 
@@ -1364,7 +1364,7 @@ func TestRunDispatch_IntegerPathOpComplex(t *testing.T) {
 	instr := tpl.AppendSideTableOp(op)
 	tpl.AppendInstruction(instr)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 
@@ -1384,7 +1384,7 @@ func TestRunDispatch_IntegerPathErrHalt(t *testing.T) {
 	instr := tpl.AppendSideTableOp(op)
 	tpl.AppendInstruction(instr)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 
@@ -1396,7 +1396,7 @@ func TestRunDispatch_EmptyTemplate(t *testing.T) {
 	c := qt.New(t)
 	// Empty template (neither operations nor code) returns nil immediately.
 	tpl := NewNativeTemplate(0, 0, false)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 
@@ -1410,7 +1410,7 @@ func TestRunDispatch_UnimplementedOpcode(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendInstruction(Instruction{Op: OpInvalid, Arg: 0})
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 
@@ -1440,7 +1440,7 @@ func TestRunDispatch_IntegerPathMultipleOps(t *testing.T) {
 	instr1 := tpl.AppendSideTableOp(makeLoadVoidOp())
 	tpl.AppendInstruction(instr1)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 
@@ -1461,7 +1461,7 @@ func TestRunDispatch_OpPush(t *testing.T) {
 	tpl.AppendInstruction(Instruction{Op: OpPush})
 	tpl.AppendInstruction(Instruction{Op: OpPop})
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 
@@ -1476,7 +1476,7 @@ func TestRunDispatch_OpPush_Nil(t *testing.T) {
 	// OpPush with nil value register should be a no-op (line 631 guard)
 	tpl.AppendInstruction(Instruction{Op: OpPush})
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 
@@ -1498,7 +1498,7 @@ func TestRunDispatch_OpPop(t *testing.T) {
 	tpl.AppendInstruction(Instruction{Op: OpPush})
 	tpl.AppendInstruction(Instruction{Op: OpPop})
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 
@@ -1521,7 +1521,7 @@ func TestRunDispatch_OpPull(t *testing.T) {
 	tpl.AppendInstruction(Instruction{Op: OpPush})
 	tpl.AppendInstruction(Instruction{Op: OpPull})
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 
@@ -1545,7 +1545,7 @@ func TestRunDispatch_OpDrop(t *testing.T) {
 	tpl.AppendInstruction(Instruction{Op: OpDrop})
 	tpl.AppendInstruction(Instruction{Op: OpPop})
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 
@@ -1559,7 +1559,7 @@ func TestRunDispatch_OpPopEnv(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendInstruction(Instruction{Op: OpPopEnv})
 
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	childLenv := environment.NewLocalEnvironment(0)
 	childEnv := environment.NewEnvironmentFrameWithParent(childLenv, topEnv)
 
@@ -1576,7 +1576,7 @@ func TestRunDispatch_OpPopEnv_TopLevel(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendInstruction(Instruction{Op: OpPopEnv})
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 
@@ -1590,7 +1590,7 @@ func TestRunDispatch_OpRestoreContinuation_NilCont(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.AppendInstruction(Instruction{Op: OpRestoreContinuation})
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 	// mc.cont is nil (cont had nil parent)
@@ -1610,7 +1610,7 @@ func TestRunDispatch_OpBranch(t *testing.T) {
 	tpl.AppendInstruction(Instruction{Op: OpInvalid})
 	tpl.AppendInstruction(Instruction{Op: OpLoadVoid})
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 
@@ -1630,7 +1630,7 @@ func TestRunDispatch_OpBranchOnFalseValue_False(t *testing.T) {
 	tpl.AppendInstruction(Instruction{Op: OpInvalid})
 	tpl.AppendInstruction(Instruction{Op: OpLoadVoid})
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 
@@ -1650,7 +1650,7 @@ func TestRunDispatch_OpBranchOnFalseValue_True(t *testing.T) {
 	tpl.AppendInstruction(Instruction{Op: OpBranchOnFalseValue, Arg: 2})
 	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(lit42)})
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 
@@ -1674,7 +1674,7 @@ func TestRunDispatch_OpSaveContinuation(t *testing.T) {
 	tpl.AppendInstruction(Instruction{Op: OpRestoreContinuation})
 	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(lit99)})
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 
@@ -1691,7 +1691,7 @@ func TestRunDispatch_OpLoadLiteral(t *testing.T) {
 	litIdx := tpl.MaybeAppendLiteral(values.NewInteger(42))
 	tpl.AppendInstruction(Instruction{Op: OpLoadLiteral, Arg: int32(litIdx)})
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 
@@ -1714,7 +1714,7 @@ func TestRunDispatch_OpPeekK(t *testing.T) {
 	tpl.AppendInstruction(Instruction{Op: OpPush})
 	tpl.AppendInstruction(Instruction{Op: OpPeekK, Arg: 0})
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 
@@ -1726,7 +1726,7 @@ func TestRunDispatch_OpPeekK(t *testing.T) {
 
 func TestRunDispatch_OpLoadGlobal(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	sym := values.NewSymbol("test-var")
 	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 
@@ -1748,7 +1748,7 @@ func TestRunDispatch_OpLoadGlobal(t *testing.T) {
 
 func TestRunDispatch_OpLoadGlobal_NoBinding(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Create a GlobalIndex for a symbol that doesn't exist as a binding
 	sym := values.NewSymbol("nonexistent")
@@ -1769,7 +1769,7 @@ func TestRunDispatch_OpLoadGlobal_NoBinding(t *testing.T) {
 func TestRunDispatch_OpLoadGlobal_Sentinels(t *testing.T) {
 	t.Run("nil literal returns ErrInvalidLiteralIndex", func(t *testing.T) {
 		c := qt.New(t)
-		env := environment.NewTopLevelEnvironment().Runtime()
+		env := environment.NewNamespace().Runtime()
 		tpl := NewNativeTemplate(0, 0, false)
 		// Append a nil literal manually to simulate a corrupt literal slot.
 		tpl.literals = append(tpl.literals, nil)
@@ -1784,7 +1784,7 @@ func TestRunDispatch_OpLoadGlobal_Sentinels(t *testing.T) {
 
 	t.Run("wrong type returns ErrInvalidGlobalIndex", func(t *testing.T) {
 		c := qt.New(t)
-		env := environment.NewTopLevelEnvironment().Runtime()
+		env := environment.NewNamespace().Runtime()
 		tpl := NewNativeTemplate(0, 0, false)
 		// Put a non-GlobalIndex value in the literal slot.
 		litIdx := tpl.MaybeAppendLiteral(values.NewInteger(1))
@@ -1799,7 +1799,7 @@ func TestRunDispatch_OpLoadGlobal_Sentinels(t *testing.T) {
 
 	t.Run("missing binding returns ErrBindingNotFound", func(t *testing.T) {
 		c := qt.New(t)
-		env := environment.NewTopLevelEnvironment().Runtime()
+		env := environment.NewNamespace().Runtime()
 		gi := environment.NewGlobalIndex(values.NewSymbol("nonexistent"))
 
 		tpl := NewNativeTemplate(0, 0, false)
@@ -1817,7 +1817,7 @@ func TestRunDispatch_OpLoadGlobal_Sentinels(t *testing.T) {
 func TestRunDispatch_OpStoreGlobal_Sentinels(t *testing.T) {
 	t.Run("missing binding returns ErrBindingNotFound", func(t *testing.T) {
 		c := qt.New(t)
-		env := environment.NewTopLevelEnvironment().Runtime()
+		env := environment.NewNamespace().Runtime()
 		gi := environment.NewGlobalIndex(values.NewSymbol("nonexistent"))
 
 		tpl := NewNativeTemplate(0, 0, false)
@@ -1838,7 +1838,7 @@ func TestRunDispatch_OpStoreGlobal_Sentinels(t *testing.T) {
 func TestRunDispatch_OpLoadLocal_Sentinels(t *testing.T) {
 	t.Run("missing binding returns ErrBindingNotFound", func(t *testing.T) {
 		c := qt.New(t)
-		env := environment.NewTopLevelEnvironment().Runtime()
+		env := environment.NewNamespace().Runtime()
 		// depth=1 with no parent local frame — resolveLocalBinding returns nil.
 
 		tpl := NewNativeTemplate(0, 0, false)
@@ -1855,7 +1855,7 @@ func TestRunDispatch_OpLoadLocal_Sentinels(t *testing.T) {
 
 func TestRunDispatch_OpStoreGlobal(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	sym := values.NewSymbol("store-var")
 	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 
@@ -1883,7 +1883,7 @@ func TestRunDispatch_OpStoreGlobal(t *testing.T) {
 
 func TestRunDispatch_OpLoadLocal(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(1)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 
@@ -1905,7 +1905,7 @@ func TestRunDispatch_OpLoadLocal(t *testing.T) {
 
 func TestRunDispatch_OpLoadLocal_Depth(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 
 	// Parent frame with slot 0 = 99
 	parentLenv := environment.NewLocalEnvironment(1)
@@ -1931,7 +1931,7 @@ func TestRunDispatch_OpLoadLocal_Depth(t *testing.T) {
 
 func TestRunDispatch_OpLoadLocal_NoBinding(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	tpl := NewNativeTemplate(0, 0, false)
 	// No local environment → slot 0 doesn't exist
@@ -1948,7 +1948,7 @@ func TestRunDispatch_OpLoadLocal_NoBinding(t *testing.T) {
 
 func TestRunDispatch_OpStoreLocal(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(1)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 
@@ -1984,7 +1984,7 @@ func TestRunDispatch_OpPushLiteral(t *testing.T) {
 	tpl.AppendInstruction(Instruction{Op: OpPushLiteral, Arg: int32(litIdx)})
 	tpl.AppendInstruction(Instruction{Op: OpPop})
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 
@@ -1995,7 +1995,7 @@ func TestRunDispatch_OpPushLiteral(t *testing.T) {
 
 func TestRunDispatch_OpPushGlobal(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	sym := values.NewSymbol("push-global-var")
 	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 	bd := env.GetGlobalBinding(gi)
@@ -2018,7 +2018,7 @@ func TestRunDispatch_OpPushGlobal(t *testing.T) {
 
 func TestRunDispatch_OpPushLocal(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(1)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	err := env.SetLocalValueBySlotDepth(0, 0, values.NewInteger(42))
@@ -2043,7 +2043,7 @@ func TestRunDispatch_OpPushLocal(t *testing.T) {
 
 func TestRunDispatch_OpPullApply(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 
 	// Create closure template: 1 param, loads local slot 0 (the arg) then ends
 	clsTpl := NewNativeTemplate(1, 0, false)
@@ -2077,7 +2077,7 @@ func TestRunDispatch_OpPullApply(t *testing.T) {
 
 func TestRunDispatch_OpMakeClosure(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 
 	// Template and env to push on stack
 	innerTpl := NewNativeTemplate(1, 0, false)
@@ -2107,7 +2107,7 @@ func TestRunDispatch_OpMakeClosure(t *testing.T) {
 
 func TestRunDispatch_OpMakeClosure_BadTemplate(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	innerLenv := environment.NewLocalEnvironment(1)
 	innerEnv := environment.NewEnvironmentFrameWithParent(innerLenv, topEnv)
 
@@ -2130,7 +2130,7 @@ func TestRunDispatch_OpMakeClosure_BadTemplate(t *testing.T) {
 
 func TestRunDispatch_OpMakeClosure_BadEnv(t *testing.T) {
 	c := qt.New(t)
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 
 	innerTpl := NewNativeTemplate(1, 0, false)
 	innerTpl.AppendInstruction(Instruction{Op: OpLoadVoid})
@@ -2156,7 +2156,7 @@ func TestRunDispatch_OpMakeClosure_BadEnv(t *testing.T) {
 
 func TestRunDispatch_OpLoadCachedBinding(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	sym := values.NewSymbol("cached-var")
 	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 	bd := env.GetGlobalBinding(gi)
@@ -2176,7 +2176,7 @@ func TestRunDispatch_OpLoadCachedBinding(t *testing.T) {
 
 func TestRunDispatch_OpPushCachedBinding(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	sym := values.NewSymbol("push-cached-var")
 	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 	bd := env.GetGlobalBinding(gi)
@@ -2222,7 +2222,7 @@ func markSet(marks []markEntry, key values.Value, val values.Value) {
 
 // newContMarkTestContext creates a minimal MachineContext for continuation mark tests.
 func newContMarkTestContext() *MachineContext {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	cont := NewMachineContinuation(nil, tpl, env)
 	return NewMachineContext(context.Background(), cont)
@@ -2307,7 +2307,7 @@ func TestContMark_Copy_Independent(t *testing.T) {
 
 func TestMachineContext_Run_NegativePC(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)

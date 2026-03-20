@@ -185,7 +185,7 @@ func TestHashDigit_Parser(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			env := environment.NewTopLevelEnvironment().Runtime()
+			env := environment.NewNamespace().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.in))
 			syn, err := p.ReadSyntax(context.TODO())
 			c.Assert(err, qt.IsNil)
@@ -199,7 +199,7 @@ func TestHashDigit_Parser(t *testing.T) {
 // (Float type) and that #e prefix can override this to produce exact results.
 func TestHashDigit_Inexactness(t *testing.T) {
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// 1## should be inexact (Float)
 	p := NewParser(env, true, strings.NewReader("1##"))

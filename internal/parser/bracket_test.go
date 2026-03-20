@@ -93,7 +93,7 @@ func TestParser_Brackets(t *testing.T) {
 
 	for _, tc := range tcs {
 		c.Run(tc.name, func(c *qt.C) {
-			env := environment.NewTopLevelEnvironment().Runtime()
+			env := environment.NewNamespace().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.in))
 			stx, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)
@@ -150,7 +150,7 @@ func TestParser_BracketMismatch(t *testing.T) {
 
 	for _, tc := range tcs {
 		c.Run(tc.name, func(c *qt.C) {
-			env := environment.NewTopLevelEnvironment().Runtime()
+			env := environment.NewNamespace().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.in))
 			_, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNotNil)
@@ -182,7 +182,7 @@ func TestParser_BracketDatumLabels(t *testing.T) {
 
 	for _, tc := range tcs {
 		c.Run(tc.name, func(c *qt.C) {
-			env := environment.NewTopLevelEnvironment().Runtime()
+			env := environment.NewNamespace().Runtime()
 			p := NewParser(env, true, strings.NewReader(tc.in))
 			stx, err := p.ReadSyntax(context.Background())
 			c.Assert(err, qt.IsNil)

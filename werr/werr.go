@@ -108,9 +108,9 @@ var (
 	ErrEngineInit = NewStaticError("engine initialization error")
 
 	// Environment errors (keep as panics but use sentinels)
-	ErrMissingTopLevelEnvironment = NewStaticError("missing TopLevelEnvironment")
-	ErrMissingPhaseRegistry       = NewStaticError("missing PhaseRegistry")
-	ErrNilParentEnvironment       = NewStaticError("nil parent environment")
+	ErrMissingNamespace     = NewStaticError("missing Namespace")
+	ErrMissingPhaseRegistry = NewStaticError("missing PhaseRegistry")
+	ErrNilParentEnvironment = NewStaticError("nil parent environment")
 
 	// Panic recovery errors
 	ErrThreadPanic   = NewStaticError("thread panic")

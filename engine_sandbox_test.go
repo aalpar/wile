@@ -317,9 +317,9 @@ func TestImportObserver_OnlyModifier(t *testing.T) {
 	}
 }
 
-// TestWithAuthorizer_FlowsToContext verifies that WithAuthorizer injects
-// the authorizer into the context so security.Check sees it.
-func TestWithAuthorizer_FlowsToContext(t *testing.T) {
+// TestWithAuthorizer_FlowsToNamespace verifies that WithAuthorizer stores
+// the authorizer on the namespace so mc.Authorizer() sees it.
+func TestWithAuthorizer_FlowsToNamespace(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -336,15 +336,11 @@ func TestWithAuthorizer_FlowsToContext(t *testing.T) {
 	)
 	c.Assert(err, qt.IsNil)
 
-	// file-exists? should trigger a file/stat check once the primitives
-	// are gated (Phase 4). For now, verify the authorizer is reachable
-	// from the context by checking it via security.FromContext inside
-	// a Go primitive.
 	engine.RegisterPrimitive(PrimitiveSpec{
 		Name:       "test-auth-check",
 		ParamCount: 0,
 		Impl: func(mc *MachineContext) error {
-			err := security.Check(mc.Context(), security.AccessRequest{
+			err := security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 				Resource: security.ResourceFile,
 				Action:   security.ActionRead,
 				Target:   "/test/path",
@@ -365,7 +361,7 @@ func TestWithAuthorizer_FlowsToContext(t *testing.T) {
 }
 
 // TestWithAuthorizer_DenyBlocksEval verifies that a denying authorizer
-// causes security.Check to return ErrAccessDenied.
+// causes security.CheckWithAuthorizer to return ErrAccessDenied.
 func TestWithAuthorizer_DenyBlocksEval(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
@@ -379,7 +375,7 @@ func TestWithAuthorizer_DenyBlocksEval(t *testing.T) {
 		Name:       "test-auth-deny",
 		ParamCount: 0,
 		Impl: func(mc *MachineContext) error {
-			return security.Check(mc.Context(), security.AccessRequest{
+			return security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 				Resource: security.ResourceFile,
 				Action:   security.ActionWrite,
 				Target:   "/secret",
@@ -405,7 +401,7 @@ func TestNoAuthorizer_AllowsByDefault(t *testing.T) {
 		Name:       "test-auth-open",
 		ParamCount: 0,
 		Impl: func(mc *MachineContext) error {
-			err := security.Check(mc.Context(), security.AccessRequest{
+			err := security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 				Resource: security.ResourceFile,
 				Action:   security.ActionWrite,
 				Target:   "/anything",

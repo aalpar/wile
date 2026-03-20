@@ -193,7 +193,7 @@ func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 
 	// Walk phase environments for binding info
 	if p.env != nil {
-		topLevel := p.env.TopLevelEnv()
+		topLevel := p.env.Namespace()
 		if topLevel != nil {
 			phases := topLevel.Phases()
 			phaseIndices := phases.Phases()

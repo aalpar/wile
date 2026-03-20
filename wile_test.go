@@ -270,11 +270,94 @@ func TestEngine_Environment(t *testing.T) {
 	c.Assert(engine.Environment(), qt.IsNotNil)
 }
 
-func TestEngine_TopLevelEnvironment(t *testing.T) {
+func TestEngine_Namespace(t *testing.T) {
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
-	c.Assert(engine.TopLevelEnvironment(), qt.IsNotNil)
+	c.Assert(engine.Namespace(), qt.IsNotNil)
+}
+
+func TestNewNamespace(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	ns, err := NewNamespace(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(ns, qt.IsNotNil)
+	c.Assert(ns.Registry(), qt.IsNotNil)
+}
+
+func TestNewEngine_WithNamespace(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	ns, err := NewNamespace(ctx)
+	c.Assert(err, qt.IsNil)
+
+	eng, err := NewEngine(ctx, WithNamespace(ns))
+	c.Assert(err, qt.IsNil)
+
+	result, err := eng.Eval(ctx, "(+ 1 2)")
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "3")
+
+	// Engine's namespace is the one we passed in
+	c.Assert(eng.Namespace(), qt.Equals, ns)
+}
+
+func TestNewEngine_BackwardCompat(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	// Old style: options on NewEngine directly
+	eng, err := NewEngine(ctx)
+	c.Assert(err, qt.IsNil)
+
+	result, err := eng.Eval(ctx, "(+ 1 2)")
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "3")
+
+	// Namespace should have registry set
+	c.Assert(eng.Namespace().Registry(), qt.IsNotNil)
+}
+
+func TestNewNamespace_WithExtension(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	ns, err := NewNamespace(ctx, WithSafeExtensions())
+	c.Assert(err, qt.IsNil)
+
+	eng, err := NewEngine(ctx, WithNamespace(ns))
+	c.Assert(err, qt.IsNil)
+
+	// Math extension should be available
+	result, err := eng.Eval(ctx, "(floor 3.7)")
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "3.0")
+}
+
+func TestEngine_EvalIn(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	eng, err := NewEngine(ctx)
+	c.Assert(err, qt.IsNil)
+
+	// Define x in main namespace
+	_, err = eng.Eval(ctx, "(define x 42)")
+	c.Assert(err, qt.IsNil)
+
+	// Create an isolated namespace — x should not be visible
+	ns2, err := NewNamespace(ctx)
+	c.Assert(err, qt.IsNil)
+	_, err = eng.EvalIn(ctx, "x", ns2)
+	c.Assert(err, qt.IsNotNil)
+
+	// But core primitives should work
+	result, err := eng.EvalIn(ctx, "(+ 1 2)", ns2)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "3")
 }
 
 // CompiledCode.String

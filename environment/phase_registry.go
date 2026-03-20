@@ -43,8 +43,8 @@ const (
 type PhaseRegistry struct {
 	mu   sync.RWMutex
 	envs map[int]*EnvironmentFrame
-	// owner is the owning TopLevelEnvironment
-	owner *TopLevelEnvironment
+	// owner is the owning Namespace
+	owner *Namespace
 }
 
 // Get returns the environment for the given phase, or nil if not yet created.
@@ -87,14 +87,14 @@ func (p *PhaseRegistry) GetOrCreate(phase int) *EnvironmentFrame {
 func (p *PhaseRegistry) createPhaseEnv(phase int) *EnvironmentFrame {
 	// Create a new GlobalEnvironmentFrame for this phase.
 	global := NewGlobalEnvironmentFrame()
-	global.topLevel = p.owner
+	global.namespace = p.owner
 
 	q := &EnvironmentFrame{
 		parent:     p.envs[PhaseRuntime], // Phase envs parent to runtime frame
 		global:     global,
 		phaseLevel: phase,
 		phases:     p,
-		topLevel:   p.owner,
+		namespace:  p.owner,
 	}
 	return q
 }
@@ -117,7 +117,7 @@ func (p *PhaseRegistry) TopLevelFrame() *EnvironmentFrame {
 	return p.Get(PhaseRuntime)
 }
 
-// TopLevelEnv returns the owning TopLevelEnvironment.
-func (p *PhaseRegistry) TopLevelEnv() *TopLevelEnvironment {
+// Namespace returns the owning Namespace.
+func (p *PhaseRegistry) Namespace() *Namespace {
 	return p.owner
 }

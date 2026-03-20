@@ -27,7 +27,7 @@ func TestSyntaxCompilersRegistry(t *testing.T) {
 	// RegisterSyntaxCompilers binds SyntaxCompiler values into
 	// env.Compile(). After registration, LookupSyntaxCompiler should
 	// find them by symbol with nil scopes.
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -67,7 +67,7 @@ func TestSyntaxCompilersRegistry(t *testing.T) {
 }
 
 func TestSyntaxCompilersRegistryLookupMiss(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -80,7 +80,7 @@ func TestSyntaxCompilersRegistryCoreFormsNotRegistered(t *testing.T) {
 	// Core forms (if, define, lambda, etc.) are handled by Tier 1 validated
 	// compilers registered in the forms package, NOT as SyntaxCompiler
 	// bindings in the compile environment. Verify they do NOT appear here.
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 

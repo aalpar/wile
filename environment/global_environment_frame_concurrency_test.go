@@ -36,7 +36,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 
 	// Test 1: Concurrent CreateGlobalBinding (define pattern)
 	t.Run("concurrent CreateGlobalBinding", func(t *testing.T) {
-		topLevel := NewTopLevelEnvironment()
+		topLevel := NewNamespace()
 		env := topLevel.Runtime()
 
 		for i := range numGoroutines {
@@ -57,7 +57,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 
 	// Test 2: Concurrent GetGlobalIndex (lookup pattern)
 	t.Run("concurrent GetGlobalIndex", func(t *testing.T) {
-		topLevel := NewTopLevelEnvironment()
+		topLevel := NewNamespace()
 		env := topLevel.Runtime()
 
 		// Pre-populate with bindings
@@ -80,7 +80,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 
 	// Test 3: Concurrent SetOwnGlobalValue (set! pattern)
 	t.Run("concurrent SetOwnGlobalValue", func(t *testing.T) {
-		topLevel := NewTopLevelEnvironment()
+		topLevel := NewNamespace()
 		env := topLevel.Runtime()
 
 		// Pre-populate with bindings
@@ -114,7 +114,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 
 	// Test 4: Concurrent mixed operations (create, lookup, update)
 	t.Run("concurrent mixed operations", func(t *testing.T) {
-		topLevel := NewTopLevelEnvironment()
+		topLevel := NewNamespace()
 		env := topLevel.Runtime()
 
 		// Pre-populate with some bindings
@@ -157,7 +157,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 
 	// Test 5: Concurrent Copy operations
 	t.Run("concurrent Copy", func(t *testing.T) {
-		topLevel := NewTopLevelEnvironment()
+		topLevel := NewNamespace()
 		env := topLevel.Runtime()
 
 		// Pre-populate with bindings
@@ -181,7 +181,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 
 	// Test 6: Concurrent EqualTo operations
 	t.Run("concurrent EqualTo", func(t *testing.T) {
-		topLevel := NewTopLevelEnvironment()
+		topLevel := NewNamespace()
 		env1 := topLevel.Runtime()
 		env2 := topLevel.NewChildRuntime()
 
@@ -208,7 +208,7 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 
 	// Test 7: Concurrent EnvironmentFrame.resolveGlobal (variable lookup pattern)
 	t.Run("concurrent resolveGlobal", func(t *testing.T) {
-		topLevel := NewTopLevelEnvironment()
+		topLevel := NewNamespace()
 		parent := topLevel.Runtime()
 		child := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), parent)
 

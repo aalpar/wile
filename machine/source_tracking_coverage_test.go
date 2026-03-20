@@ -42,7 +42,7 @@ func addOpsWithSource(tpl *NativeTemplate, count int, source *syntax.SourceConte
 func TestCaptureStackTrace_Empty(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 	trace := mc.CaptureStackTrace(10)
@@ -52,7 +52,7 @@ func TestCaptureStackTrace_Empty(t *testing.T) {
 func TestCaptureStackTrace_SingleFrame(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.SetName("test-func")
 
@@ -74,7 +74,7 @@ func TestCaptureStackTrace_SingleFrame(t *testing.T) {
 func TestCaptureStackTrace_MultipleFrames(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Create templates with names and source maps
 	tpl1 := NewNativeTemplate(0, 0, false)
@@ -110,7 +110,7 @@ func TestCaptureStackTrace_MultipleFrames(t *testing.T) {
 func TestCaptureStackTrace_MaxDepth(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	// Build a deep continuation chain
@@ -130,7 +130,7 @@ func TestCaptureStackTrace_MaxDepth(t *testing.T) {
 func TestCaptureStackTrace_AnonymousFunction(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	// No name set - should show as <anonymous>
 
@@ -145,7 +145,7 @@ func TestCaptureStackTrace_AnonymousFunction(t *testing.T) {
 func TestCaptureStackTrace_NoSourceMap(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	tpl.SetName("no-source")
 	// No source map entries
@@ -167,7 +167,7 @@ func TestDebugger_CheckBreakpoint_Match(t *testing.T) {
 	d := NewDebugger()
 	d.SetBreakpoint("test.scm", 10, 0) // Any column
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	// Add source at line 10 - NewSourceIndexes(index, column, line)
@@ -190,7 +190,7 @@ func TestDebugger_CheckBreakpoint_MatchWithColumn(t *testing.T) {
 	d := NewDebugger()
 	d.SetBreakpoint("test.scm", 10, 5) // Specific column
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	// Add source at line 10, column 5 - NewSourceIndexes(index, column, line)
@@ -212,7 +212,7 @@ func TestDebugger_CheckBreakpoint_NoMatch_WrongFile(t *testing.T) {
 	d := NewDebugger()
 	d.SetBreakpoint("other.scm", 10, 0) // Breakpoint at other.scm:10
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	// Source at test.scm:10 - same line but different file
@@ -234,7 +234,7 @@ func TestDebugger_CheckBreakpoint_NoMatch_WrongLine(t *testing.T) {
 	d := NewDebugger()
 	d.SetBreakpoint("test.scm", 20, 0) // Breakpoint at line 20
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	// Source at line 10 - different line
@@ -256,7 +256,7 @@ func TestDebugger_CheckBreakpoint_NoMatch_WrongColumn(t *testing.T) {
 	d := NewDebugger()
 	d.SetBreakpoint("test.scm", 10, 20) // Breakpoint at line 10, column 20
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	// Source at line 10, column 5 - same line but different column
@@ -279,7 +279,7 @@ func TestDebugger_CheckBreakpoint_Disabled(t *testing.T) {
 	id := d.SetBreakpoint("test.scm", 10, 0) // Breakpoint at line 10
 	d.DisableBreakpoint(id)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	// Source at line 10 - matches but breakpoint is disabled
@@ -301,7 +301,7 @@ func TestDebugger_CheckBreakpoint_NoSource(t *testing.T) {
 	d := NewDebugger()
 	d.SetBreakpoint("test.scm", 10, 0)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// No template - no source
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
@@ -316,7 +316,7 @@ func TestDebugger_ShouldStep_StepInto(t *testing.T) {
 	d := NewDebugger()
 	d.StepInto()
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 
 	source := &syntax.SourceContext{File: "test.scm"}
@@ -333,7 +333,7 @@ func TestDebugger_ShouldStep_StepInto_NoSource(t *testing.T) {
 	d := NewDebugger()
 	d.StepInto()
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	// No source map entries
 
@@ -345,7 +345,7 @@ func TestDebugger_ShouldStep_StepInto_NoSource(t *testing.T) {
 func TestDebugger_ShouldStep_StepOver_SameDepth(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	source := &syntax.SourceContext{File: "test.scm"}
 	addOpsWithSource(tpl, 5, source)
@@ -362,7 +362,7 @@ func TestDebugger_ShouldStep_StepOver_SameDepth(t *testing.T) {
 func TestDebugger_ShouldStep_StepOver_DeeperFrame(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	source := &syntax.SourceContext{File: "test.scm"}
 	addOpsWithSource(tpl, 5, source)
@@ -382,7 +382,7 @@ func TestDebugger_ShouldStep_StepOver_DeeperFrame(t *testing.T) {
 func TestDebugger_ShouldStep_StepOver_ShallowerFrame(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	source := &syntax.SourceContext{File: "test.scm"}
 	addOpsWithSource(tpl, 5, source)
@@ -407,7 +407,7 @@ func TestDebugger_ShouldStep_StepOver_ShallowerFrame(t *testing.T) {
 func TestDebugger_ShouldStep_StepOut(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	source := &syntax.SourceContext{File: "test.scm"}
 	addOpsWithSource(tpl, 5, source)
@@ -433,7 +433,7 @@ func TestDebugger_ShouldStep_NotStepping(t *testing.T) {
 	d := NewDebugger()
 	// Not stepping
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 	c.Assert(d.ShouldStep(mc), qt.IsFalse)
@@ -446,7 +446,7 @@ func TestDebugger_ShouldStep_NotStepping(t *testing.T) {
 func TestSourceRecording_Symbol(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 
 	// First define x
 	rdr := strings.NewReader("(define x 42)")
@@ -479,7 +479,7 @@ func TestSourceRecording_Symbol(t *testing.T) {
 func TestSourceRecording_Literal(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	rdr := strings.NewReader("42")
 	p := parser.NewParserWithFile(env, true, rdr, "literal.scm")
 	stx, err := p.ReadSyntax(context.TODO())
@@ -515,7 +515,7 @@ func TestSourceRecording_CaseLambda(t *testing.T) {
 func TestRun_WithDebugger_Breakpoint(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Create a template that just loads a literal
 	tpl := NewNativeTemplate(0, 0, false)
@@ -562,7 +562,7 @@ func TestRun_WithDebugger_Breakpoint(t *testing.T) {
 func TestRun_WithDebugger_StepInto(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	tpl := NewNativeTemplate(0, 0, false)
 	source := &syntax.SourceContext{

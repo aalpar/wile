@@ -72,7 +72,7 @@ func (p *GlobalIndex) EqualTo(value values.Value) bool {
 // hierarchy is managed by EnvironmentFrame via its parent field. Each phase
 // (runtime, expand, compile) has its own GlobalEnvironmentFrame.
 //
-// Note: Symbol and syntax interning are delegated to TopLevelEnvironment,
+// Note: Symbol and syntax interning are delegated to Namespace,
 // ensuring R7RS symbol identity works correctly across all phases.
 //
 // Thread safety: All access to keys and bindings is protected by mu.
@@ -84,8 +84,8 @@ type GlobalEnvironmentFrame struct {
 	// symbol to binding index lookup map
 	keys     map[values.Symbol]int
 	bindings []*Binding
-	// topLevel is the owning TopLevelEnvironment
-	topLevel *TopLevelEnvironment
+	// namespace is the owning Namespace
+	namespace *Namespace
 }
 
 // NewGlobalEnvironmentFrame creates a new global environment frame.
@@ -98,7 +98,7 @@ func NewGlobalEnvironmentFrame() *GlobalEnvironmentFrame {
 }
 
 // Copy creates a deep copy of the global environment frame.
-// Note that topLevel is shared (not copied) between original and copy.
+// Note that namespace is shared (not copied) between original and copy.
 // Bindings are batch-allocated (contiguous array) for cache locality
 // and reduced GC pressure.
 // Thread-safe: uses RLock for read-only access.
@@ -111,7 +111,7 @@ func (p *GlobalEnvironmentFrame) Copy() *GlobalEnvironmentFrame {
 	defer p.mu.RUnlock()
 
 	q := &GlobalEnvironmentFrame{
-		topLevel: p.topLevel, // Shared, not copied
+		namespace: p.namespace, // Shared, not copied
 	}
 
 	// Batch allocation: allocate all Bindings contiguously (1 allocation)
@@ -237,6 +237,33 @@ func (p *GlobalEnvironmentFrame) SetOwnGlobalValue(gi *GlobalIndex, v values.Val
 	p.mu.Unlock()
 
 	return nil
+}
+
+// DeleteBinding removes a global binding by symbol key.
+// Returns true if the binding was found and removed, false if not found.
+//
+// Note: the binding slot in p.bindings is not compacted — index-based
+// references from compiled code would be stale. This is only safe for
+// top-level REPL/eval bindings, not for bindings referenced by compiled
+// bytecode.
+//
+// Thread-safe: uses full Lock for write access.
+func (p *GlobalEnvironmentFrame) DeleteBinding(sym *values.Symbol) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	i, ok := p.keys[*sym]
+	if !ok {
+		return false
+	}
+	delete(p.keys, *sym)
+	// Nil out the binding slot so stale GlobalIndex references from
+	// compiled code see nil (caught by resolveGlobalBinding) instead
+	// of silently returning the old value.
+	if i < len(p.bindings) {
+		p.bindings[i] = nil
+	}
+	return true
 }
 
 // IsVoid returns true if this global environment frame is nil.

@@ -230,9 +230,9 @@ func main() {
 	libRegistry := initLibraryRegistry(ctx)
 	env.SetLibraryRegistry(libRegistry)
 
-	// Set up the library environment factory on the TopLevelEnvironment.
-	// Uses NewLibraryEnvironmentFrame which shares the TopLevelEnvironment for symbol identity.
-	env.TopLevelEnv().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
+	// Set up the library environment factory on the Namespace.
+	// Uses NewLibraryEnvironmentFrame which shares the Namespace for symbol identity.
+	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 	// Load files if any
 	if len(opts.File) > 0 {
 		for i, filename := range opts.File {

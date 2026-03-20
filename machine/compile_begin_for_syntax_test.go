@@ -43,7 +43,7 @@ func TestCompileBeginForSyntax_Error_NilEnv(t *testing.T) {
 func TestCompileBeginForSyntax_Error_NilTemplate(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	ccnt := &CompileTimeContinuation{
 		template: nil,
 		env:      env,
@@ -59,7 +59,7 @@ func TestCompileBeginForSyntax_Error_NilTemplate(t *testing.T) {
 func TestCompileBeginForSyntax_Error_NotPair(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 
@@ -74,7 +74,7 @@ func TestCompileBeginForSyntax_Error_NotPair(t *testing.T) {
 func TestCompileBeginForSyntax_Empty(t *testing.T) {
 	c := qt.New(t)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
 	ccnt := NewCompiletimeContinuation(tpl, env)
 

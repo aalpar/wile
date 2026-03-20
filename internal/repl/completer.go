@@ -70,7 +70,7 @@ func (p *SchemeCompleter) collectBindingNames() []string {
 		return nil
 	}
 
-	topLevel := p.env.TopLevelEnv()
+	topLevel := p.env.Namespace()
 	if topLevel == nil {
 		return nil
 	}

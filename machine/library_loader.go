@@ -85,7 +85,8 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 		}
 	}
 
-	err = security.Check(ctx, security.AccessRequest{
+	auth, _ := env.Namespace().Authorizer().(security.Authorizer)
+	err = security.CheckWithAuthorizer(auth, security.AccessRequest{
 		Resource: security.ResourceCode,
 		Action:   security.ActionLoad,
 		Target:   filePath,
@@ -132,8 +133,8 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 
 	// Create a fresh environment for the library
 	// This isolates the library's bindings from the caller's environment,
-	// but shares the TopLevelEnvironment for syntax interning.
-	factory := callerEnv.TopLevelEnv().LibraryEnvFactory()
+	// but shares the Namespace for syntax interning.
+	factory := callerEnv.Namespace().LibraryEnvFactory()
 	if factory == nil {
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration, "LibraryEnvFactory not configured")
 	}

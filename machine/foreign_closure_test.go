@@ -21,7 +21,7 @@ func TestForeignClosure_ClosureInterface(t *testing.T) {
 }
 
 func TestForeignClosure_SchemeString(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	fn := func(mc *MachineContext) error {
 		return nil
 	}
@@ -30,7 +30,7 @@ func TestForeignClosure_SchemeString(t *testing.T) {
 }
 
 func TestForeignClosure_IsVoid(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	fn := func(mc *MachineContext) error {
 		return nil
 	}
@@ -42,7 +42,7 @@ func TestForeignClosure_IsVoid(t *testing.T) {
 }
 
 func TestForeignClosure_AcceptsArity(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	fn := func(mc *MachineContext) error {
 		return nil
 	}
@@ -74,7 +74,7 @@ func TestForeignClosure_AcceptsArity(t *testing.T) {
 }
 
 func TestForeignClosure_EqualTo(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	fn := func(mc *MachineContext) error {
 		return nil
 	}
@@ -96,7 +96,7 @@ func TestForeignClosure_EqualTo(t *testing.T) {
 }
 
 func TestForeignClosure_Name(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	fn := func(mc *MachineContext) error {
 		return nil
 	}

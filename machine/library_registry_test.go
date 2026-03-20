@@ -29,7 +29,7 @@ func TestLibraryRegistryDuplicateRegister(t *testing.T) {
 	c := qt.New(t)
 
 	registry := machine.NewLibraryRegistry()
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	name := machine.NewLibraryName("test", "duplib")
 	lib := machine.NewCompiledLibrary(name, env)
 
@@ -110,7 +110,7 @@ func TestLibraryNameSinglePart(t *testing.T) {
 func TestCompiledLibraryGetInternalNameNotExported(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	name := machine.NewLibraryName("test", "lib")
 	lib := machine.NewCompiledLibrary(name, env)
 

@@ -58,7 +58,7 @@ func TestClausesWrapper_SchemeString(t *testing.T) {
 
 // TestCompileUnquote tests that unquote outside quasiquote errors
 func TestCompileUnquote(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -73,7 +73,7 @@ func TestCompileUnquote(t *testing.T) {
 
 // TestCompileUnquoteSplicing tests that unquote-splicing outside quasiquote errors
 func TestCompileUnquoteSplicing(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -88,7 +88,7 @@ func TestCompileUnquoteSplicing(t *testing.T) {
 
 // TestCompileUnquoteDirectCall directly tests CompileUnquote method
 func TestCompileUnquoteDirectCall(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	ctc := NewCompiletimeContinuation(tpl, env)
 	ctctx := NewCompileTimeCallContext(context.Background(), false)
@@ -103,7 +103,7 @@ func TestCompileUnquoteDirectCall(t *testing.T) {
 
 // TestCompileUnquoteSplicingDirectCall directly tests CompileUnquoteSplicing method
 func TestCompileUnquoteSplicingDirectCall(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	ctc := NewCompiletimeContinuation(tpl, env)
 	ctctx := NewCompileTimeCallContext(context.Background(), false)
@@ -146,7 +146,7 @@ func TestParseExportSpec(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := environment.NewTopLevelEnvironment().Runtime()
+			env := environment.NewNamespace().Runtime()
 			lib := NewCompiledLibrary(NewLibraryName("test"), env)
 
 			// Parse the input
@@ -172,7 +172,7 @@ func TestParseExportSpec(t *testing.T) {
 
 // TestParseImportSetExcept tests parsing except import sets
 func TestParseImportSetExcept(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Parse (except (scheme base) car cdr)
 	input := "(except (scheme base) car cdr)"
@@ -192,7 +192,7 @@ func TestParseImportSetExcept(t *testing.T) {
 
 // TestParseImportSetRename tests parsing rename import sets
 func TestParseImportSetRename(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Parse (rename (scheme base) (car first) (cdr rest))
 	input := "(rename (scheme base) (car first) (cdr rest))"
@@ -280,7 +280,7 @@ func TestParseFeatureRequirement(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := environment.NewTopLevelEnvironment().Runtime()
+			env := environment.NewNamespace().Runtime()
 			reader := bufio.NewReader(strings.NewReader(tc.input))
 			p := parser.NewParser(env, true, reader)
 			stx, err := p.ReadSyntax(context.TODO())
@@ -302,7 +302,7 @@ func TestParseFeatureRequirement(t *testing.T) {
 
 // TestCompileCondExpand tests cond-expand compilation
 func TestCompileCondExpand(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -330,7 +330,7 @@ func TestCompileInclude(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Set up environment with include search path
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	err = RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -358,7 +358,7 @@ func TestCompileInclude_LibraryRegistryPaths(t *testing.T) {
 	err := os.WriteFile(filepath.Join(tmpDir, "lib-test.scm"), []byte("42"), 0o644)
 	qt.Assert(t, err, qt.IsNil)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	err = RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -390,7 +390,7 @@ func TestCompileIncludeCi(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Set up environment
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	err = RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -413,7 +413,7 @@ func TestCompileIncludeCi(t *testing.T) {
 
 // TestParseFeatureRequirementList tests parsing lists of feature requirements
 func TestParseFeatureRequirementList(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	input := "(r7rs r6rs (library (scheme base)))"
 	reader := bufio.NewReader(strings.NewReader(input))
 	p := parser.NewParser(env, true, reader)
@@ -427,7 +427,7 @@ func TestParseFeatureRequirementList(t *testing.T) {
 
 // TestCompileIncludeError tests include with non-existent file
 func TestCompileIncludeError(t *testing.T) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -461,7 +461,7 @@ func TestCompileIncludeReadError(t *testing.T) {
 	err := os.WriteFile(tmpFile, []byte("("), 0o644)
 	qt.Assert(t, err, qt.IsNil)
 
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	err = RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -512,7 +512,7 @@ func TestParseExportSpecRenameErrors(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := environment.NewTopLevelEnvironment().Runtime()
+			env := environment.NewNamespace().Runtime()
 			lib := NewCompiledLibrary(NewLibraryName("test"), env)
 
 			reader := bufio.NewReader(strings.NewReader(tc.input))

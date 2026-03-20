@@ -225,9 +225,9 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 		// check the library env's expand phase for an unexported macro binding.
 		// This enables macros that reference unexported helper macros.
 		symbolScopes := sym.Scopes()
-		if p.env.TopLevelEnv() != nil && len(symbolScopes) > 0 {
+		if p.env.Namespace() != nil && len(symbolScopes) > 0 {
 			for _, scope := range symbolScopes {
-				libEnv := p.env.TopLevelEnv().LookupLibraryEnv(scope)
+				libEnv := p.env.Namespace().LookupLibraryEnv(scope)
 				if libEnv == nil {
 					continue
 				}

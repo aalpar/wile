@@ -32,7 +32,7 @@ func TestRegisterAndLookupPhaseBindings(t *testing.T) {
 		{
 			name: "round-trip: register then lookup",
 			checkFn: func(t *testing.T) {
-				topLevel := environment.NewTopLevelEnvironment()
+				topLevel := environment.NewNamespace()
 				env := topLevel.Runtime()
 
 				entries := []PhaseEntry[PrimitiveExpanderFunc]{
@@ -72,7 +72,7 @@ func TestRegisterAndLookupPhaseBindings(t *testing.T) {
 		{
 			name: "lookup missing key returns zero value",
 			checkFn: func(t *testing.T) {
-				topLevel := environment.NewTopLevelEnvironment()
+				topLevel := environment.NewNamespace()
 				expandEnv := topLevel.Expand()
 
 				sym := values.NewSymbol("nonexistent")
@@ -83,7 +83,7 @@ func TestRegisterAndLookupPhaseBindings(t *testing.T) {
 		{
 			name: "lookup wrong type returns zero value",
 			checkFn: func(t *testing.T) {
-				topLevel := environment.NewTopLevelEnvironment()
+				topLevel := environment.NewNamespace()
 				env := topLevel.Runtime()
 
 				entries := []PhaseEntry[PrimitiveExpanderFunc]{
@@ -114,7 +114,7 @@ func TestRegisterAndLookupPhaseBindings(t *testing.T) {
 		{
 			name: "register empty entries slice does not error",
 			checkFn: func(t *testing.T) {
-				topLevel := environment.NewTopLevelEnvironment()
+				topLevel := environment.NewNamespace()
 				env := topLevel.Runtime()
 
 				var entries []PhaseEntry[PrimitiveExpanderFunc]

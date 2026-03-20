@@ -32,7 +32,7 @@ import (
 func parseSingle(t *testing.T, input string) values.Value {
 	t.Helper()
 	c := qt.New(t)
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	p := NewParser(env, false, strings.NewReader(input))
 	syn, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil, qt.Commentf("input: %s", input))
@@ -43,7 +43,7 @@ func parseSingle(t *testing.T, input string) values.Value {
 // helper: parse and expect an error.
 func parseExpectError(t *testing.T, input string) error {
 	t.Helper()
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	p := NewParser(env, false, strings.NewReader(input))
 	_, err := p.ReadSyntax(context.TODO())
 	if err == nil {

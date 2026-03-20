@@ -116,7 +116,7 @@ func TestSubContextPool_Roundtrip(t *testing.T) {
 
 func TestAcquireTopLevelContext_InitializesOpcodeHits(t *testing.T) {
 	tpl := NewEmptyNativeTemplate()
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	mc := AcquireTopLevelContext(context.Background(), tpl, env)
 	defer ReleaseTopLevelContext(mc)
 
@@ -127,7 +127,7 @@ func TestAcquireTopLevelContext_InitializesOpcodeHits(t *testing.T) {
 
 func TestAcquireTopLevelContext_OpcodeHitsZeroedAfterReuse(t *testing.T) {
 	tpl := NewEmptyNativeTemplate()
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	mc := AcquireTopLevelContext(context.Background(), tpl, env)
 	if mc.counters.opcodeHits != nil {
@@ -144,7 +144,7 @@ func TestAcquireTopLevelContext_OpcodeHitsZeroedAfterReuse(t *testing.T) {
 
 func TestAcquireTopLevelContext_InitializesCallCounts(t *testing.T) {
 	tpl := NewEmptyNativeTemplate()
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	mc := AcquireTopLevelContext(context.Background(), tpl, env)
 	defer ReleaseTopLevelContext(mc)
 
@@ -155,7 +155,7 @@ func TestAcquireTopLevelContext_InitializesCallCounts(t *testing.T) {
 
 func TestAcquireTopLevelContext_CallCountsZeroedAfterReuse(t *testing.T) {
 	tpl := NewEmptyNativeTemplate()
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	mc := AcquireTopLevelContext(context.Background(), tpl, env)
 	if mc.counters.callCounts != nil {
@@ -223,7 +223,7 @@ func TestReleaseSubContext_NoParent_NoPanic(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestAcquireMacroContext_InitializesFields(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(2)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(2, 0, false)
@@ -252,7 +252,7 @@ func TestAcquireMacroContext_InitializesFields(t *testing.T) {
 }
 
 func TestAcquireMacroContext_Roundtrip(t *testing.T) {
-	topEnv := environment.NewTopLevelEnvironment().Runtime()
+	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(2)
 	env := environment.NewEnvironmentFrameWithParent(lenv, topEnv)
 	tpl := NewNativeTemplate(2, 0, false)

@@ -27,7 +27,7 @@ import (
 
 // newExpanderEnv creates a test environment with expander support.
 func newExpanderEnv() (*environment.EnvironmentFrame, *ExpanderTimeContinuation) {
-	env := newTopLevelEnv(environment.NewTopLevelEnvironment().Runtime())
+	env := newNamespace(environment.NewNamespace().Runtime())
 	expander := NewExpanderTimeContinuation(context.Background(), env)
 	return env, expander
 }

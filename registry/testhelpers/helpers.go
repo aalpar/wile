@@ -32,7 +32,7 @@ import (
 // environment with all core primitives and extensions loaded.
 func RunSchemeCode(t *testing.T, code string) (values.Value, error) {
 	t.Helper()
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func RunSchemeCodeWithTimeout(t *testing.T, code string, timeout time.Duration) 
 // The context enables cancellation/timeout - the VM loop checks ctx.Done() on each iteration.
 func RunSchemeCodeWithContext(ctx context.Context, t *testing.T, code string) (values.Value, error) {
 	t.Helper()
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(ctx)
+	env, err := bootstrap.NewNamespaceFrameTiny(ctx)
 	if err != nil {
 		return nil, err
 	}

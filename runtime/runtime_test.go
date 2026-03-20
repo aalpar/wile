@@ -34,7 +34,7 @@ import (
 
 func newEnv(t *testing.T) *environment.EnvironmentFrame {
 	t.Helper()
-	env, err := bootstrap.NewTopLevelEnvironmentFrameTiny(context.Background())
+	env, err := bootstrap.NewNamespaceFrameTiny(context.Background())
 	qt.New(t).Assert(err, qt.IsNil)
 	return env
 }

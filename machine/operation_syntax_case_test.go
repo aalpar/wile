@@ -190,7 +190,7 @@ func TestOperationSyntaxCaseNoMatch_IsVoid(t *testing.T) {
 func TestOperationSyntaxCaseNoMatch_Apply(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
@@ -288,7 +288,7 @@ func TestOperationStoreSyntaxCaseInput_IsVoid(t *testing.T) {
 func TestOperationStoreSyntaxCaseInput_Apply_SyntaxValue(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
@@ -308,7 +308,7 @@ func TestOperationStoreSyntaxCaseInput_Apply_SyntaxValue(t *testing.T) {
 func TestOperationStoreSyntaxCaseInput_Apply_NonSyntaxValue(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 
@@ -369,7 +369,7 @@ func TestOperationClearSyntaxCaseInput_IsVoid(t *testing.T) {
 func TestOperationClearSyntaxCaseInput_Apply(t *testing.T) {
 	c := qt.New(t)
 
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 

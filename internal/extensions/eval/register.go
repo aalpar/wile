@@ -30,8 +30,8 @@ var AddToRegistry = Builder.AddToRegistry
 
 func addPrimitives(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
-		{Name: "eval", ParamCount: 2, Impl: PrimEval,
-			Doc: "Evaluates expression in the given environment.", ParamNames: []string{"expr", "env"}, Category: "eval"},
+		{Name: "eval", ParamCount: 1, IsVariadic: true, Impl: PrimEval,
+			Doc: "Evaluates expression. 1-arg uses current namespace; 2-arg uses given environment.", ParamNames: []string{"expr"}, Category: "eval"},
 		{Name: "load", ParamCount: 1, Impl: PrimLoad,
 			Doc: "Loads and evaluates a Scheme source file.", ParamNames: []string{"filename"}, Category: "eval"},
 		{Name: "current-load-path", Impl: PrimCurrentLoadPath,

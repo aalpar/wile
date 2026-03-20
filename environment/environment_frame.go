@@ -27,7 +27,7 @@ import (
 // The environment system has four types with distinct responsibilities:
 //
 //	┌─────────────────────────────────────────────────────────────────────────┐
-//	│                        TopLevelEnvironment                              │
+//	│                            Namespace                                    │
 //	│  (Per-VM instance: owns syntax interning, phases, libraries)            │
 //	│                                                                         │
 //	│  syntaxInterns ──── map[Value]SyntaxValue (thread-safe)                 │
@@ -47,7 +47,7 @@ import (
 //	│  global ─────────── *GlobalEnvironmentFrame (define bindings)           │
 //	│  phaseLevel ─────── int (0=runtime, 1=expand, 2=compile)                │
 //	│  phases ─────────── *PhaseRegistry (shared reference)                   │
-//	│  topLevel ───────── *TopLevelEnvironment (back-reference)               │
+//	│  namespace ───────── *Namespace (back-reference)                        │
 //	└─────────────────────────────────────────────────────────────────────────┘
 //	          │                                    │
 //	          │ contains                           │ contains
@@ -58,14 +58,14 @@ import (
 //	│                           │    │                                        │
 //	│  keys ─── map[Symbol]int  │    │  keys ──────── map[Symbol]int          │
 //	│  bindings ── []*Binding   │    │  bindings ──── []*Binding              │
-//	└───────────────────────────┘    │  topLevel ──── *TopLevelEnvironment    │
+//	└───────────────────────────┘    │  namespace ──── *Namespace             │
 //	                                 └────────────────────────────────────────┘
 //
 // # Ownership and Sharing
 //
-//   - TopLevelEnvironment: Root owner. One per Wile VM instance.
-//   - EnvironmentFrame: Many per VM. Share topLevel and phases references.
-//   - GlobalEnvironmentFrame: One per phase. Shares topLevel reference.
+//   - Namespace: Root owner. One per Wile VM instance.
+//   - EnvironmentFrame: Many per VM. Share namespace and phases references.
+//   - GlobalEnvironmentFrame: One per phase. Shares namespace reference.
 //   - LocalEnvironmentFrame: One per lexical scope. No external references.
 //
 // # Lexical Hierarchy (parent chain)
@@ -77,7 +77,7 @@ import (
 //
 // # Phase Hierarchy (via PhaseRegistry)
 //
-//	TopLevelEnvironment
+//	Namespace
 //	└── PhaseRegistry
 //	    ├── [0] Runtime EnvironmentFrame (normal execution)
 //	    ├── [1] Expand EnvironmentFrame (macro expansion, for-syntax)
@@ -85,7 +85,7 @@ import (
 //	    └── [-1] Template EnvironmentFrame (for-template, future)
 //
 // Each phase has its own GlobalEnvironmentFrame but shares the same
-// TopLevelEnvironment for syntax interning.
+// Namespace for syntax interning.
 //
 // # Binding Lookup
 //
@@ -103,24 +103,24 @@ type EnvironmentFrame struct {
 	phaseLevel int
 	// phases is the shared phase registry, owned by TopLevel
 	phases *PhaseRegistry
-	// topLevel is the owning TopLevelEnvironment
-	topLevel *TopLevelEnvironment
+	// namespace is the owning Namespace
+	namespace *Namespace
 }
 
-// NewTopLevelEnvironmentFrame creates a new top-level global environment frame.
+// NewNamespaceFrame creates a new top-level global environment frame.
 // This frame has no parent and contains the shared syntax interning maps.
 // It also creates the PhaseRegistry for indexed phase access.
 //
-// Deprecated: Use NewTopLevelEnvironment().Runtime() instead for per-instance
-// syntax interning. This function now internally uses NewTopLevelEnvironment()
+// Deprecated: Use NewNamespace().Runtime() instead for per-instance
+// syntax interning. This function now internally uses NewNamespace()
 // to provide proper isolation.
-func NewTopLevelEnvironmentFrame() *EnvironmentFrame {
-	return NewTopLevelEnvironment().Runtime()
+func NewNamespaceFrame() *EnvironmentFrame {
+	return NewNamespace().Runtime()
 }
 
 // newEnvironmentFrame creates an isolated environment frame without a
-// TopLevelEnvironment or PhaseRegistry. Calling AtPhase() on the result
-// will panic. Use NewTopLevelEnvironment().Runtime() for full environments
+// Namespace or PhaseRegistry. Calling AtPhase() on the result
+// will panic. Use NewNamespace().Runtime() for full environments
 // or NewEnvironmentFrameWithParent() for child scopes.
 func newEnvironmentFrame(local *LocalEnvironmentFrame, global *GlobalEnvironmentFrame) *EnvironmentFrame {
 	q := &EnvironmentFrame{
@@ -137,13 +137,13 @@ func newEnvironmentFrame(local *LocalEnvironmentFrame, global *GlobalEnvironment
 // NewEnvironmentFrameWithParent creates a new environment frame with the given local environment frame and parent environment frame.
 // The global environment frame is inherited from the parent.
 // This is used for creating child frames within a phase (e.g., lambda bodies, let-syntax).
-// The phase level, registry, and topLevel are inherited from the parent.
-// Panics if parent is nil - use NewTopLevelEnvironmentFrame() instead.
+// The phase level, registry, and namespace are inherited from the parent.
+// Panics if parent is nil - use NewNamespaceFrame() instead.
 func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *EnvironmentFrame) *EnvironmentFrame {
 	if parent == nil {
 		panic(werr.WrapForeignErrorf(
 			werr.ErrNilParentEnvironment,
-			"NewEnvironmentFrameWithParent called with nil parent - use NewTopLevelEnvironmentFrame() instead",
+			"NewEnvironmentFrameWithParent called with nil parent - use NewNamespaceFrame() instead",
 		))
 	}
 	q := &EnvironmentFrame{
@@ -151,7 +151,7 @@ func NewEnvironmentFrameWithParent(local *LocalEnvironmentFrame, parent *Environ
 		global:     parent.global,
 		phaseLevel: parent.phaseLevel,
 		phases:     parent.phases,
-		topLevel:   parent.topLevel,
+		namespace:  parent.namespace,
 	}
 	if local != nil {
 		q.local = *local
@@ -176,7 +176,7 @@ func (p *EnvironmentFrame) NewApplyFrame() *EnvironmentFrame {
 		global:     parent.global,
 		phaseLevel: parent.phaseLevel,
 		phases:     parent.phases,
-		topLevel:   parent.topLevel,
+		namespace:  parent.namespace,
 	}
 	p.local.copyForApplyInto(&q.local)
 	return q
@@ -197,7 +197,7 @@ func (p *EnvironmentFrame) InitApplyFrame(dst *EnvironmentFrame) {
 	dst.global = parent.global
 	dst.phaseLevel = parent.phaseLevel
 	dst.phases = parent.phases
-	dst.topLevel = parent.topLevel
+	dst.namespace = parent.namespace
 	p.local.copyForApplyInto(&dst.local)
 }
 
@@ -238,13 +238,13 @@ func (p *EnvironmentFrame) TopLevel() *EnvironmentFrame {
 // Negative phases (e.g., -1 for for-template) are also supported.
 //
 // This is the primary method for cross-phase access with O(1) lookup time.
-// The environment must have been created via NewTopLevelEnvironment().
+// The environment must have been created via NewNamespace().
 func (p *EnvironmentFrame) AtPhase(phase int) *EnvironmentFrame {
 	topLevel := p.TopLevel()
 	if topLevel.phases == nil {
 		panic(werr.WrapForeignErrorf(
 			werr.ErrMissingPhaseRegistry,
-			"AtPhase called on environment without PhaseRegistry - use NewTopLevelEnvironment()",
+			"AtPhase called on environment without PhaseRegistry - use NewNamespace()",
 		))
 	}
 	return topLevel.phases.GetOrCreate(phase)
@@ -285,51 +285,51 @@ func (p *EnvironmentFrame) GlobalEnvironment() *GlobalEnvironmentFrame {
 
 // FileResolver returns the file resolver from the top-level environment.
 // The caller must type-assert to machine.FileResolver.
-// Returns nil if no resolver has been set or if topLevel is nil.
+// Returns nil if no resolver has been set or if namespace is nil.
 func (p *EnvironmentFrame) FileResolver() any {
-	if p.topLevel == nil {
+	if p.namespace == nil {
 		return nil
 	}
-	return p.topLevel.FileResolver()
+	return p.namespace.FileResolver()
 }
 
 // SetFileResolver sets the file resolver on the top-level environment.
 // The resolver should be a machine.FileResolver.
-// No-op if topLevel is nil.
+// No-op if namespace is nil.
 func (p *EnvironmentFrame) SetFileResolver(resolver any) {
-	if p.topLevel == nil {
+	if p.namespace == nil {
 		return
 	}
-	p.topLevel.SetFileResolver(resolver)
+	p.namespace.SetFileResolver(resolver)
 }
 
 // LibraryRegistry returns the library registry from the top-level environment.
 // The caller must type-assert to *machine.LibraryRegistry.
-// Returns nil if no registry has been set or if topLevel is nil.
+// Returns nil if no registry has been set or if namespace is nil.
 func (p *EnvironmentFrame) LibraryRegistry() any {
-	if p.topLevel == nil {
+	if p.namespace == nil {
 		return nil
 	}
-	return p.topLevel.LibraryRegistry()
+	return p.namespace.LibraryRegistry()
 }
 
 // SetLibraryRegistry sets the library registry on the top-level environment.
 // The registry should be a *machine.LibraryRegistry.
-// No-op if topLevel is nil.
+// No-op if namespace is nil.
 func (p *EnvironmentFrame) SetLibraryRegistry(registry any) {
-	if p.topLevel == nil {
+	if p.namespace == nil {
 		return
 	}
-	p.topLevel.SetLibraryRegistry(registry)
+	p.namespace.SetLibraryRegistry(registry)
 }
 
 // LoadPathStack returns the load path stack for tracking files currently
-// being loaded, or nil if this frame has no TopLevelEnvironment.
+// being loaded, or nil if this frame has no Namespace.
 func (p *EnvironmentFrame) LoadPathStack() *LoadPathStack {
-	if p.topLevel == nil {
+	if p.namespace == nil {
 		return nil
 	}
-	return p.topLevel.LoadPathStack()
+	return p.namespace.LoadPathStack()
 }
 
 // hasLocal returns true if this frame has local bindings.
@@ -773,11 +773,11 @@ func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol) *Globa
 // library env, performs a cross-phase lookup in that library's env.
 // Returns the first match, or nil if no library binding is found.
 func (p *EnvironmentFrame) GetGlobalIndexFromLibraryScopes(key *values.Symbol, scopes []*syntax.Scope) *GlobalIndex {
-	if p.topLevel == nil || len(scopes) == 0 {
+	if p.namespace == nil || len(scopes) == 0 {
 		return nil
 	}
 	for _, scope := range scopes {
-		libEnv := p.topLevel.LookupLibraryEnv(scope)
+		libEnv := p.namespace.LookupLibraryEnv(scope)
 		if libEnv == nil {
 			continue
 		}
@@ -806,14 +806,14 @@ func (p *EnvironmentFrame) SetGlobalBindingByIndex(i int, bd *Binding) {
 }
 
 // Copy creates a deep copy of the environment frame.
-// The parent, phase registry, and topLevel are shared between the original and the copy.
+// The parent, phase registry, and namespace are shared between the original and the copy.
 func (p *EnvironmentFrame) Copy() *EnvironmentFrame {
 	q := &EnvironmentFrame{
 		parent:     p.parent,
 		global:     p.global.Copy(),
 		phaseLevel: p.phaseLevel,
 		phases:     p.phases,
-		topLevel:   p.topLevel,
+		namespace:  p.namespace,
 	}
 	if p.hasLocal() {
 		p.local.copyInto(&q.local)
@@ -854,7 +854,7 @@ func (p *EnvironmentFrame) EqualTo(value values.Value) bool {
 	return p.parent.EqualTo(v.parent)
 }
 
-// TopLevelEnv returns the TopLevelEnvironment for this frame.
-func (p *EnvironmentFrame) TopLevelEnv() *TopLevelEnvironment {
-	return p.topLevel
+// Namespace returns the Namespace for this frame.
+func (p *EnvironmentFrame) Namespace() *Namespace {
+	return p.namespace
 }

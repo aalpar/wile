@@ -84,8 +84,9 @@ func TestEval(t *testing.T) {
 		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(42))
 	})
 
-	t.Run("wrong number of arguments", func(t *testing.T) {
-		evalExpectError(t, engine, `(eval '(+ 1 2))`)
+	t.Run("1-arg form uses current namespace", func(t *testing.T) {
+		result := eval(t, engine, `(eval '(+ 1 2))`)
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(3))
 	})
 
 	t.Run("wrong environment type", func(t *testing.T) {
@@ -169,7 +170,7 @@ func TestSchemeReportEnvironment(t *testing.T) {
 	})
 
 	// C4: scheme-report-environment must be distinct from interaction-environment.
-	// Before the fix, both returned the same TopLevelEnv object.
+	// Before the fix, both returned the same Namespace object.
 	t.Run("distinct from interaction-environment", func(t *testing.T) {
 		result := eval(t, engine, `(eq? (interaction-environment) (scheme-report-environment 5))`)
 		c.Assert(result.Internal(), qt.Equals, values.FalseValue)

@@ -60,7 +60,7 @@ func TestSyntaxCompiler_EqualTo(t *testing.T) {
 }
 
 func TestLookupSyntaxCompiler(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	err := RegisterSyntaxCompilers(env)
 	qt.Assert(t, err, qt.IsNil)
 
@@ -80,7 +80,7 @@ func TestLookupSyntaxCompiler(t *testing.T) {
 }
 
 func TestLookupSyntaxCompiler_PhaseEnvironment(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 
 	// Register syntax compilers in the compile environment
 	err := RegisterSyntaxCompilers(env) //nolint:errcheck

@@ -11,7 +11,7 @@ import (
 )
 
 func TestApplyForeign_FixedArity(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	fn := func(mc *MachineContext) error {
 		bnds := mc.EnvironmentFrame().LocalEnvironment().Bindings()
 		a := bnds[0].Value().(*values.Integer).Value
@@ -31,7 +31,7 @@ func TestApplyForeign_FixedArity(t *testing.T) {
 }
 
 func TestApplyForeign_Variadic(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	// (lambda (x . rest) rest) — returns the rest arg list
 	fn := func(mc *MachineContext) error {
 		bnds := mc.EnvironmentFrame().LocalEnvironment().Bindings()
@@ -51,7 +51,7 @@ func TestApplyForeign_Variadic(t *testing.T) {
 }
 
 func TestApplyForeign_ArityError(t *testing.T) {
-	env := environment.NewTopLevelEnvironment().Runtime()
+	env := environment.NewNamespace().Runtime()
 	fn := func(mc *MachineContext) error {
 		return nil
 	}

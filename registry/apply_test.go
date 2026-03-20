@@ -41,7 +41,7 @@ func TestApply_RuntimePrimitive(t *testing.T) {
 		Impl:       noopImpl,
 	}, PhaseRuntime)
 
-	topLevel := environment.NewTopLevelEnvironment()
+	topLevel := environment.NewNamespace()
 	env := topLevel.Runtime()
 	err := reg.Apply(context.Background(), env)
 	c.Assert(err, qt.IsNil)
@@ -64,7 +64,7 @@ func TestApply_ExpandTimePrimitive(t *testing.T) {
 		Impl:       noopImpl,
 	}, PhaseExpand)
 
-	topLevel := environment.NewTopLevelEnvironment()
+	topLevel := environment.NewNamespace()
 	env := topLevel.Runtime()
 	err := reg.Apply(context.Background(), env)
 	c.Assert(err, qt.IsNil)
@@ -84,7 +84,7 @@ func TestApply_CompileTimeBinding(t *testing.T) {
 	reg := NewRegistry()
 	reg.AddBinding("special-form")
 
-	topLevel := environment.NewTopLevelEnvironment()
+	topLevel := environment.NewNamespace()
 	env := topLevel.Runtime()
 	err := reg.Apply(context.Background(), env)
 	c.Assert(err, qt.IsNil)
@@ -107,7 +107,7 @@ func TestApply_CompileOnlyPrimitive(t *testing.T) {
 		Impl:       noopImpl,
 	}, PhaseCompile)
 
-	topLevel := environment.NewTopLevelEnvironment()
+	topLevel := environment.NewNamespace()
 	env := topLevel.Runtime()
 	err := reg.Apply(context.Background(), env)
 	c.Assert(err, qt.IsNil)
@@ -131,7 +131,7 @@ func TestApply_InitFunc(t *testing.T) {
 		return nil
 	})
 
-	topLevel := environment.NewTopLevelEnvironment()
+	topLevel := environment.NewNamespace()
 	env := topLevel.Runtime()
 	err := reg.Apply(context.Background(), env)
 	c.Assert(err, qt.IsNil)
@@ -149,7 +149,7 @@ func TestApply_MultiPhasePrimitive(t *testing.T) {
 		Impl:       noopImpl,
 	}, PhaseRuntime|PhaseExpand)
 
-	topLevel := environment.NewTopLevelEnvironment()
+	topLevel := environment.NewNamespace()
 	env := topLevel.Runtime()
 	err := reg.Apply(context.Background(), env)
 	c.Assert(err, qt.IsNil)
@@ -170,7 +170,7 @@ func TestApply_MultiPhasePrimitive(t *testing.T) {
 func TestApply_EmptyRegistry(t *testing.T) {
 	c := qt.New(t)
 	reg := NewRegistry()
-	topLevel := environment.NewTopLevelEnvironment()
+	topLevel := environment.NewNamespace()
 	env := topLevel.Runtime()
 	err := reg.Apply(context.Background(), env)
 	c.Assert(err, qt.IsNil)

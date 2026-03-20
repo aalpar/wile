@@ -23,7 +23,7 @@ import (
 //
 // # Design Rationale: Per-VM vs Per-Thread
 //
-// LoadPathStack is stored on TopLevelEnvironment (per-VM, not per-thread).
+// LoadPathStack is stored on Namespace (per-VM, not per-thread).
 // This choice supports library loading across environment boundaries: when
 // a library is loaded, it needs to resolve paths relative to the importing
 // file, even though the library executes in its own isolated environment.
