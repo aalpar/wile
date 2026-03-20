@@ -1,6 +1,6 @@
 # Namespace Migration
 
-**Status:** Proposed
+**Status:** Complete (PR #544, merged 2026-03-20)
 **Date:** 2026-03-20
 
 ## Motivation

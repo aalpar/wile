@@ -2,6 +2,8 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
+**Status:** Complete (PR #544, merged 2026-03-20)
+
 **Goal:** Migrate `TopLevelEnvironment` to `Namespace`, unifying registry, authorizer, and module instances under one type. Five independently mergeable PRs.
 
 **Architecture:** `TopLevelEnvironment` → `Namespace` rename + extension. Registry and authorizer move from Engine to Namespace. Module instance caching added. Scheme API exposed. Zero runtime regression — namespace resolution is compile-time only.

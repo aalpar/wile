@@ -27,6 +27,8 @@ When investigating R7RS conformance issues:
 | `FLAT-CLOSURES.md` | Flat closure implementation + Machine Modernization Roadmap | **Reverted** (PR #520) — +7.4% geo-mean regression |
 | `STACK-FRAMES.md` | Replace continuation pool with contiguous `[]callFrame` slice | **Reverted** (PR #518) — net negative on continuation-heavy benchmarks |
 | `INLINE-BINDINGS.md` | Embed `[4]Binding` inline array in `LocalEnvironmentFrame` | **Reverted** (PR #521) |
+| `NAMESPACES.md` | Namespace migration design: rename, registry/authorizer ownership, module instances, Scheme API | Complete (PR #544) |
+| `NAMESPACES-IMPLEMENTATION.md` | Task-by-task implementation plan for namespace migration (5 PRs) | Complete (PR #544) |
 Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans).
 
 ## Before Starting Work

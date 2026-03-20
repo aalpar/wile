@@ -122,7 +122,7 @@ Embedded `LocalEnvironmentFrame` by value inside `EnvironmentFrame`:
 │ After: One allocation per Apply                      │
 │                                                      │
 │  EnvironmentFrame                                    │
-│  ├── parent, global, phaseLevel, phases, topLevel    │
+│  ├── parent, global, phaseLevel, phases, namespace   │
 │  └── local: LocalEnvironmentFrame (embedded value)   │
 │       ├── keys map[Symbol]int (shared, CoW)          │
 │       └── bindings []Binding (fresh copy)            │

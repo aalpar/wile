@@ -11,7 +11,7 @@ See [ENVIRONMENT_SYSTEM.md](ENVIRONMENT_SYSTEM.md) for detailed API documentatio
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
 │                         Engine (engine.go)                                    │
-│  topLevel ──→ Namespace                                             │
+│  namespace ──→ Namespace                                                    │
 │  env ────────→ runtime EnvironmentFrame (phase 0)                             │
 │  registry ──→ Registry (Go-side primitive registration)                       │
 └───────────────────────────────────────────────────────────────────────────────┘
@@ -98,7 +98,7 @@ Created by `lambda`, `let`, `letrec`, etc. via `NewEnvironmentFrameWithParent`.
                               (all frames at same phase share it)
 ```
 
-Child frames inherit `global`, `phases`, and `topLevel` from the parent. Only `local` and `parent` differ.
+Child frames inherit `global`, `phases`, and `namespace` from the parent. Only `local` and `parent` differ.
 
 ---
 
@@ -109,8 +109,8 @@ Created by `Namespace.NewChildRuntime()`. Shares syntax interning but has isolat
 ```
 Root Namespace                Library environment
 ┌──────────────────────┐               ┌──────────────────────┐
-│  syntaxInterns: {...} │◄──────────────│  topLevel: ──────────┤ (same pointer!)
-│  syntaxInterns: {...} │  shared TLE   │  global: OWN         │ (isolated bindings)
+│  syntaxInterns: {...} │◄──────────────│  namespace: ─────────┤ (same pointer!)
+│  syntaxInterns: {...} │  shared NS    │  global: OWN         │ (isolated bindings)
 │  phases: rootPhases   │               │  phases: ownPhases   │ (isolated phases)
 │  runtime: rootEnv     │               │  parent: nil         │
 └──────────────────────┘               │  phaseLevel: 0       │
@@ -133,7 +133,7 @@ Both create isolated bindings with shared interning. They differ in what they re
 ```
 NewChildRuntime:                NewChildNamespace:
 
-  Namespace (shared)    Parent TLE        Child TLE
+  Namespace (shared)    Parent NS         Child NS
   +------------------+            +----------+      +----------+
   | runtime: envP    |            | runtime: |      | runtime: |
   +------------------+            | envP     |      | envC     |
@@ -141,11 +141,11 @@ NewChildRuntime:                NewChildNamespace:
           │                                            │
      ┌────┴────┐                                       ▼
      ▼         ▼                           EnvironmentFrame (envC)
-   envP      envC ◄── new child            +---------------------+
-   (parent   (has own Global-              | topLevel: child TLE |
-    frame)    EnvFrame, but                +---------------------+
-              topLevel points
-              to shared TLE)
+   envP      envC ◄── new child            +----------------------+
+   (parent   (has own Global-              | namespace: child NS  |
+    frame)    EnvFrame, but                +----------------------+
+              namespace points
+              to shared NS)
 
   envC.Namespace() == parent    envC.Namespace() == child
   TLE.Runtime() returns envP     child.Runtime() returns envC  ✓
