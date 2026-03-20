@@ -1,13 +1,13 @@
 TODO
 ----
 
-**Last Updated**: 2026-03-18
+**Last Updated**: 2026-03-20
 
 ### Current Project Status
 
 **Version**: v1.6.1 (released)
 **Core Language**: R7RS-small complete with hygienic macros, composable continuations, numeric tower
-**Extensions**: 10 extension packages — 7 public (files, math, system, threads, exceptions, gointerop, introspection), 3 internal (io, eval, all); all importable as R7RS `(wile <name>)` libraries. Go static analysis extensions extracted to [wile-goast](https://github.com/aalpar/wile-goast).
+**Extensions**: 11 extension packages — 7 public (files, math, system, threads, exceptions, gointerop, introspection), 4 internal (io, eval, namespace, all); all importable as R7RS `(wile <name>)` libraries. Go static analysis extensions extracted to [wile-goast](https://github.com/aalpar/wile-goast).
 **Examples**: 76 examples across 12 categories, 21 Gabriel benchmarks, Schelog
 **Tests**: Go test suite comprehensive; Scheme test suite: 3,248 lines across 11 files (strings, characters, ports, numbers, exceptions, lazy, records, eval, control, macros) + 915-test R7RS conformance suite
 **Libraries**: (chibi test), (chibi optional), (chibi diff), (chibi term ansi), (srfi 1) complete
@@ -77,6 +77,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 ## Features
 
+- [x] **Namespace system** [Architecture, PR #544]: `TopLevelEnvironment` → `Namespace`. Registry and authorizer moved from Engine to Namespace. Module instance caching. 10 Scheme primitives (`make-namespace`, `namespace-derive`, `namespace-define!`, `namespace-ref`, `namespace-bound?`, `namespace-undefine!`, `namespace-bound-names`, `namespace-require`, `namespace?`, `namespace-name`). `eval` gains 1-arg form. `wile.NewNamespace()`, `WithNamespace`, `Engine.EvalIn`. `plans/NAMESPACES.md`
 - [ ] **Opcode resource limits** [Security, Design]: Per-category limits for match/expand/continuation copy. Completes defense-in-depth for embedded use. `plans/SECURITY.md`
 - [ ] **Module decomposition Phase 1** [Architecture]: Decompose `internal/extensions/all/` into records, promises, core. Enables future module extraction. `plans/ARCHITECTURE.md`
 - [ ] **Network libraries** [Standard library]: TCP/UDP, HTTP, TLS, DNS. Required for real-world embedded use cases.
@@ -95,7 +96,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 No demand signal. Speculative or research-only.
 
 - [ ] **Doc metadata for Scheme-defined procedures** [Tooling]: 44 primitives migrated to Scheme lost their `PrimitiveSpec` doc/params/category metadata (REPL `,doc`, extension library exports). Need a mechanism to register documentation for `define`-based procedures — either a doc-only `PrimitiveSpec` entry or a parallel doc registry that macro sources can populate.
-- [ ] **Security context** Authorizer rides on `context.valueContext`.  This is considered to be bad style - create a custom security context that implements `context.Context`.
+- [x] **Security context** Authorizer rides on `context.valueContext`. Fixed: authorizer moved from context to Namespace (PR #544). Gate sites use `mc.Authorizer()` → `security.CheckWithAuthorizer()`.
 - [ ] **Hygiene debugging** [Tooling, Planned]: Scope introspection for macro authors. `plans/MACRO_SYSTEM.md`
 - [ ] **Macro expansion tracing** [Tooling, Planned]: Trace generated code back to macro invocation/template. `plans/MACRO_SYSTEM.md`
 - [ ] **Dialect system** [Architecture, Proposed]: De-globalize forms registry, `WithDialect()` option, extract R7RS as default dialect. `plans/ARCHITECTURE.md`
