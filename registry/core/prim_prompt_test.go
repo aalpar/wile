@@ -225,3 +225,46 @@ func TestPrompt_DynamicWind(t *testing.T) {
 		})
 	}
 }
+
+func TestPrompt_AvailableQ(t *testing.T) {
+	c := qt.New(t)
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{Name: "default-available", Code: `
+			(continuation-prompt-available? (default-continuation-prompt-tag))`,
+			Expected: values.TrueValue},
+		{Name: "custom-not-available", Code: `
+			(let ((tag (make-continuation-prompt-tag 'test)))
+			  (continuation-prompt-available? tag))`,
+			Expected: values.FalseValue},
+		{Name: "custom-available-inside-prompt", Code: `
+			(let ((tag (make-continuation-prompt-tag 'test)))
+			  (call-with-continuation-prompt
+			    (lambda ()
+			      (continuation-prompt-available? tag))
+			    tag
+			    #f))`,
+			Expected: values.TrueValue},
+	}
+
+	for _, tc := range tcs {
+		c.Run(tc.Name, func(c *qt.C) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result, qt.DeepEquals, tc.Expected)
+		})
+	}
+}
+
+func TestPrompt_AvailableQErrors(t *testing.T) {
+	c := qt.New(t)
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "not-a-tag", Code: `(continuation-prompt-available? 42)`},
+	}
+
+	for _, tc := range tcs {
+		c.Run(tc.Name, func(c *qt.C) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
+			c.Assert(err, qt.IsNotNil)
+		})
+	}
+}

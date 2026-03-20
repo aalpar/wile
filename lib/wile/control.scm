@@ -148,7 +148,7 @@
 
 ;; ─────────────────────────────────────────────────
 ;; reset0/shift0
-;; Handler does NOT reinstall prompt. k wraps in reset.
+;; Handler does NOT reinstall prompt. k wraps in reset0.
 ;; ─────────────────────────────────────────────────
 
 (define-syntax reset0-at
@@ -169,7 +169,10 @@
              t
              (lambda ()
                (let ((k (lambda args
-                          (%prompt-reinstall t (lambda () (apply raw-k args))))))
+                          (call-with-continuation-prompt
+                            (lambda () (apply raw-k args))
+                            t
+                            (lambda (thunk) (thunk))))))
                  body ...))))
          t)))))
 
