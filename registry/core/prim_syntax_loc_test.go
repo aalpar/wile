@@ -26,18 +26,8 @@ import (
 
 func TestSyntaxLocationAccessors(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{
-		// Non-syntax values return #f
-		{Name: "source/non-syntax", Code: `(syntax-source 42)`, Expected: values.FalseValue},
-		{Name: "line/non-syntax", Code: `(syntax-line "hello")`, Expected: values.FalseValue},
-		{Name: "column/non-syntax", Code: `(syntax-column #t)`, Expected: values.FalseValue},
-		{Name: "position/non-syntax", Code: `(syntax-position '())`, Expected: values.FalseValue},
-		{Name: "span/non-syntax", Code: `(syntax-span 'foo)`, Expected: values.FalseValue},
-
-		// Syntax values with no source context (datum->syntax #f ...) return #f for source
+		// Syntax values with no source context (datum->syntax #f ...) return #f
 		{Name: "source/no-context", Code: `(syntax-source (datum->syntax #f 'x))`, Expected: values.FalseValue},
-
-		// Line/column/position return integers for syntax with no source context
-		// (SourceContext is nil => #f)
 		{Name: "line/no-context", Code: `(syntax-line (datum->syntax #f 'x))`, Expected: values.FalseValue},
 		{Name: "column/no-context", Code: `(syntax-column (datum->syntax #f 'x))`, Expected: values.FalseValue},
 		{Name: "position/no-context", Code: `(syntax-position (datum->syntax #f 'x))`, Expected: values.FalseValue},
@@ -53,11 +43,27 @@ func TestSyntaxLocationAccessors(t *testing.T) {
 	}
 }
 
+func TestSyntaxLocationAccessorsErrors(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		// Non-syntax values raise errors
+		{Name: "source/non-syntax", Code: `(syntax-source 42)`},
+		{Name: "line/non-syntax", Code: `(syntax-line "hello")`},
+		{Name: "column/non-syntax", Code: `(syntax-column #t)`},
+		{Name: "position/non-syntax", Code: `(syntax-position '())`},
+		{Name: "span/non-syntax", Code: `(syntax-span 'foo)`},
+		{Name: "->list/non-syntax", Code: `(syntax->list 42)`},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
+
 func TestSyntaxToList(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{
-		// Non-syntax returns #f
-		{Name: "non-syntax", Code: `(syntax->list 42)`, Expected: values.FalseValue},
-
 		// datum->syntax on a list creates a SyntaxPair chain
 		{Name: "proper-list/length", Code: `
 			(length (syntax->list (datum->syntax #f '(a b c))))`,
@@ -73,7 +79,7 @@ func TestSyntaxToList(t *testing.T) {
 			(identifier? (car (syntax->list (datum->syntax #f '(a b c)))))`,
 			Expected: values.TrueValue},
 
-		// Non-list syntax returns #f
+		// Non-list syntax returns #f (syntax object but not a list)
 		{Name: "non-list-syntax", Code: `
 			(syntax->list (datum->syntax #f 42))`,
 			Expected: values.FalseValue},

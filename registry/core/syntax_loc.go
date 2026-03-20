@@ -16,7 +16,6 @@ package core
 
 import "github.com/aalpar/wile/registry"
 
-//nolint:govet
 func addSyntaxLoc(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "syntax-source", ParamCount: 1, Impl: PrimSyntaxSource,

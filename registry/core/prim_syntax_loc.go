@@ -18,17 +18,27 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
+
+// requireSyntaxValue extracts a SyntaxValue from mc.Arg(0) or returns an error.
+func requireSyntaxValue(mc *machine.MachineContext, name string) (syntax.SyntaxValue, error) {
+	sv, ok := mc.Arg(0).(syntax.SyntaxValue)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotASyntaxObject,
+			"%s: expected syntax object, got %T", name, mc.Arg(0))
+	}
+	return sv, nil
+}
 
 // PrimSyntaxSource returns the source file path of a syntax object, or #f
 // if the syntax object has no source location.
 //
 // Racket §12.2: syntax-source
 func PrimSyntaxSource(mc *machine.MachineContext) error {
-	sv, ok := mc.Arg(0).(syntax.SyntaxValue)
-	if !ok {
-		mc.SetValue(values.FalseValue)
-		return nil
+	sv, err := requireSyntaxValue(mc, "syntax-source")
+	if err != nil {
+		return err
 	}
 	sctx := sv.SourceContext()
 	if sctx == nil || sctx.File == "" {
@@ -43,10 +53,9 @@ func PrimSyntaxSource(mc *machine.MachineContext) error {
 //
 // Racket §12.2: syntax-line
 func PrimSyntaxLine(mc *machine.MachineContext) error {
-	sv, ok := mc.Arg(0).(syntax.SyntaxValue)
-	if !ok {
-		mc.SetValue(values.FalseValue)
-		return nil
+	sv, err := requireSyntaxValue(mc, "syntax-line")
+	if err != nil {
+		return err
 	}
 	sctx := sv.SourceContext()
 	if sctx == nil {
@@ -61,10 +70,9 @@ func PrimSyntaxLine(mc *machine.MachineContext) error {
 //
 // Racket §12.2: syntax-column
 func PrimSyntaxColumn(mc *machine.MachineContext) error {
-	sv, ok := mc.Arg(0).(syntax.SyntaxValue)
-	if !ok {
-		mc.SetValue(values.FalseValue)
-		return nil
+	sv, err := requireSyntaxValue(mc, "syntax-column")
+	if err != nil {
+		return err
 	}
 	sctx := sv.SourceContext()
 	if sctx == nil {
@@ -79,10 +87,9 @@ func PrimSyntaxColumn(mc *machine.MachineContext) error {
 //
 // Racket §12.2: syntax-position
 func PrimSyntaxPosition(mc *machine.MachineContext) error {
-	sv, ok := mc.Arg(0).(syntax.SyntaxValue)
-	if !ok {
-		mc.SetValue(values.FalseValue)
-		return nil
+	sv, err := requireSyntaxValue(mc, "syntax-position")
+	if err != nil {
+		return err
 	}
 	sctx := sv.SourceContext()
 	if sctx == nil {
@@ -97,10 +104,9 @@ func PrimSyntaxPosition(mc *machine.MachineContext) error {
 //
 // Racket §12.2: syntax-span
 func PrimSyntaxSpan(mc *machine.MachineContext) error {
-	sv, ok := mc.Arg(0).(syntax.SyntaxValue)
-	if !ok {
-		mc.SetValue(values.FalseValue)
-		return nil
+	sv, err := requireSyntaxValue(mc, "syntax-span")
+	if err != nil {
+		return err
 	}
 	sctx := sv.SourceContext()
 	if sctx == nil {
@@ -113,23 +119,20 @@ func PrimSyntaxSpan(mc *machine.MachineContext) error {
 }
 
 // PrimSyntaxToList converts a syntax pair chain to a list of syntax objects.
-// Returns #f if the argument is not a proper syntax list.
+// Returns #f if the argument is a syntax object but not a proper syntax list.
+// Raises an error if the argument is not a syntax object at all.
 //
 // Racket §12.2: syntax->list
 func PrimSyntaxToList(mc *machine.MachineContext) error {
-	v := mc.Arg(0)
-
-	// Must be a syntax value to start
-	_, ok := v.(syntax.SyntaxValue)
-	if !ok {
-		mc.SetValue(values.FalseValue)
-		return nil
+	sv, err := requireSyntaxValue(mc, "syntax->list")
+	if err != nil {
+		return err
 	}
 
 	var result []values.Value
-	current := v
+	current := sv
 	for {
-		if syntax.IsSyntaxEmptyList(current.(syntax.SyntaxValue)) {
+		if syntax.IsSyntaxEmptyList(current) {
 			mc.SetValue(values.List(result...))
 			return nil
 		}

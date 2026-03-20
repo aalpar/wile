@@ -24,7 +24,7 @@ import (
 	"github.com/aalpar/wile/values/valuestest"
 )
 
-func TestContinuationMarkSetToListStar(t *testing.T) {
+func TestPrimContinuationMarkSetToListStar(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// No marks: empty list
 		{Name: "no-marks", Code: `
@@ -81,7 +81,7 @@ func TestContinuationMarkSetToListStar(t *testing.T) {
 	}
 }
 
-func TestContinuationMarkSetToListStarErrors(t *testing.T) {
+func TestPrimContinuationMarkSetToListStarErrors(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "not-a-mark-set", Code: `(continuation-mark-set->list* 42 '(a))`},
 		{Name: "not-a-list", Code: `(continuation-mark-set->list* (current-continuation-marks) 42)`},

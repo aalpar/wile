@@ -522,6 +522,11 @@ func PrimSyntaxLocalValue(mc *machine.MachineContext) error {
 // Wile does not currently have rename-transformers, so this behaves
 // identically to syntax-local-value.
 //
+// When rename-transformers are implemented, this function must NOT chase
+// the transformer chain — it should return the transformer object directly.
+// At that point, PrimSyntaxLocalValue and PrimSyntaxLocalValueImmediate
+// must diverge.
+//
 // Racket §12.4: syntax-local-value/immediate
 func PrimSyntaxLocalValueImmediate(mc *machine.MachineContext) error {
 	return PrimSyntaxLocalValue(mc)
