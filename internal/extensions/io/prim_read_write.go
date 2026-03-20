@@ -83,7 +83,7 @@ func getOptionalOutputPort(mc *machine.MachineContext, argIndex int) (values.Out
 	p, _, err := extractPort[values.OutputPort](
 		mc.Arg(argIndex), "", werr.ErrNotAnOutputPort, "an output port",
 		func() values.OutputPort {
-			return mc.ResolveParameterValue(currentOutputPortParam).(values.OutputPort)
+			return resolveCurrentOutputPort(mc)
 		},
 	)
 	return p, err
@@ -112,7 +112,7 @@ func getOptionalInputPort(mc *machine.MachineContext, argIndex int) (values.Text
 	p, _, err := extractPort[values.TextualReader](
 		mc.Arg(argIndex), "", werr.ErrNotAnInputPort, "an input port",
 		func() values.TextualReader {
-			return mc.ResolveParameterValue(currentInputPortParam).(values.TextualReader)
+			return resolveCurrentInputPort(mc)
 		},
 	)
 	return p, err
