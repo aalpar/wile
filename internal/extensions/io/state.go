@@ -23,6 +23,7 @@ import (
 	"github.com/aalpar/wile/internal/tokenizer"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // Package-level state for I/O ports.
@@ -175,6 +176,44 @@ func GetCurrentErrorPort() *values.CharacterOutputPort {
 // GetCurrentErrorPortParam returns the current-error-port parameter object.
 func GetCurrentErrorPortParam() *machine.Parameter {
 	return currentErrorPortParam
+}
+
+// resolveCurrentOutputPort returns the effective current output port, checking
+// continuation marks (from parameterize) before falling back to the base value.
+// Panics with a wrapped error if the resolved value is not an OutputPort —
+// the panic is caught by OperationForeignFunctionCall's recover and converted
+// to a Scheme exception.
+func resolveCurrentOutputPort(mc *machine.MachineContext) values.OutputPort {
+	if currentOutputPortParam == nil {
+		return values.NewCharacterOutputPortFromWriter(os.Stdout)
+	}
+	v := mc.ResolveParameterValue(currentOutputPortParam)
+	port, ok := v.(values.OutputPort)
+	if !ok {
+		panic(werr.WrapForeignErrorf(
+			werr.ErrNotAnOutputPort,
+			"current-output-port: parameterize value is %T, not an output port", v))
+	}
+	return port
+}
+
+// resolveCurrentInputPort returns the effective current input port, checking
+// continuation marks (from parameterize) before falling back to the base value.
+// Panics with a wrapped error if the resolved value is not a TextualReader —
+// the panic is caught by OperationForeignFunctionCall's recover and converted
+// to a Scheme exception.
+func resolveCurrentInputPort(mc *machine.MachineContext) values.TextualReader {
+	if currentInputPortParam == nil {
+		return values.NewCharacterInputPortFromReader(os.Stdin)
+	}
+	v := mc.ResolveParameterValue(currentInputPortParam)
+	port, ok := v.(values.TextualReader)
+	if !ok {
+		panic(werr.WrapForeignErrorf(
+			werr.ErrNotAnInputPort,
+			"current-input-port: parameterize value is %T, not an input port", v))
+	}
+	return port
 }
 
 // StringValue returns the display representation of a value.

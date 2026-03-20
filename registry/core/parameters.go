@@ -28,6 +28,10 @@ func addParameters(r *registry.Registry) error {
 		// Not part of the public R7RS API.
 		{Name: "%parameter-raw-set!", ParamCount: 2, Impl: PrimParameterRawSet,
 			Doc: "Sets a parameter's internal value directly, bypassing the converter.", ParamNames: []string{"param", "val"}, Category: "parameters"},
+		// Internal primitive: applies converter without setting the parameter value.
+		// Used by parameterize to pre-convert the value before storing as a continuation mark.
+		{Name: "%parameter-convert", ParamCount: 2, Impl: PrimParameterConvert,
+			Doc: "Applies the parameter's converter to val, returning the result.", ParamNames: []string{"param", "val"}, Category: "parameters"},
 	}, registry.PhaseRuntime)
 
 	return nil

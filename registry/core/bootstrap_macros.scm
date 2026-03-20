@@ -155,23 +155,25 @@
     ((delay-force expression)
      (%make-lazy-promise (lambda () expression)))))
 
-;; Parameters (dynamic binding)
-;; Note: the after-thunk uses %parameter-raw-set! instead of (p old) to restore
-;; the previous value without re-applying the converter. Using (p old) would
-;; double-convert: old was already converted when captured, so applying the
-;; converter again produces wrong results (e.g. (* 2 already-doubled-value)).
+;; Parameters (dynamic binding via continuation marks)
+;;
+;; parameterize uses with-continuation-mark to store parameter bindings on the
+;; continuation frame. Parameter lookup (0-arg call) walks the mark chain,
+;; falling back to the base value. This is correct under composable
+;; continuations: the marks ride on the continuation frames, so composing a
+;; captured continuation automatically carries its parameter bindings without
+;; firing before/after thunks that could clobber unrelated parameterize extents.
+;;
+;; %parameter-convert applies the converter (if any) before storing the mark,
+;; so the converter runs exactly once per parameterize entry.
 (define-syntax parameterize
   (syntax-rules ()
     ((parameterize () body ...)
      (begin body ...))
     ((parameterize ((param val) rest ...) body ...)
-     (let ((p param)
-           (new val)
-           (old (param)))
-       (dynamic-wind
-         (lambda () (p new))
-         (lambda () (parameterize (rest ...) body ...))
-         (lambda () (%parameter-raw-set! p old)))))))
+     (let ((p param))
+       (with-continuation-mark p (%parameter-convert p val)
+         (parameterize (rest ...) body ...))))))
 
 ;; Exception handling (R7RS §4.2.7 guard macro)
 ;;

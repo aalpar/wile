@@ -240,12 +240,19 @@ func (p *MachineContext) returnImmediate() *MachineContext {
 }
 
 // applyParameter handles calling a parameter object.
-// With 0 args: returns the current value.
-// With 1 arg: sets the value (after applying converter if present).
+// With 0 args: returns the current value (checking continuation marks first).
+// With 1 arg: sets the base value (after applying converter if present).
 func (p *MachineContext) applyParameter(param *Parameter, args []values.Value) (*MachineContext, error) {
 	switch len(args) {
 	case 0:
-		p.SetValue(param.Value())
+		// Check continuation marks for a parameterize binding.
+		// Walk current frame marks, then the continuation chain.
+		val := p.findParameterInMarks(param)
+		if val != nil {
+			p.SetValue(val)
+		} else {
+			p.SetValue(param.Value())
+		}
 		return p.returnImmediate(), nil
 
 	case 1:
@@ -277,6 +284,56 @@ func (p *MachineContext) applyParameter(param *Parameter, args []values.Value) (
 		err := p.Error(fmt.Sprintf("parameter: expected 0 or 1 arguments, got %d", len(args)))
 		return p, err
 	}
+}
+
+// findParameterInMarks walks the continuation mark chain looking for a mark
+// keyed by the given parameter (using pointer identity).
+// Returns the mark value, or nil if no mark is found.
+//
+// This is the lookup mechanism for marks-based parameterize: each
+// (parameterize ((p val)) ...) sets a continuation mark with key=p, val=converted.
+// Parameter reads walk the chain to find the nearest binding.
+//
+// The walk spans sub-context boundaries via parentMC, mirroring how dynamic-wind
+// extents are inherited through SetWindingStack. Without this, parameter bindings
+// from an outer parameterize would be invisible inside sub-contexts created by
+// call-with-continuation-prompt, apply, call-with-values, etc.
+func (p *MachineContext) findParameterInMarks(param *Parameter) values.Value {
+	mc := p
+	for mc != nil {
+		// Check current frame marks.
+		for _, e := range mc.marks {
+			if eqIdentity(e.key, param) {
+				return e.val
+			}
+		}
+		// Walk continuation chain.
+		for c := mc.cont; c != nil; c = c.parent {
+			for _, e := range c.marks {
+				if eqIdentity(e.key, param) {
+					return e.val
+				}
+			}
+		}
+		// Stop if this context has isolated marks (e.g., applyCapturedContinuation
+		// sub-context running a different continuation chain).
+		if mc.isolatedMarks {
+			break
+		}
+		mc = mc.parentMC
+	}
+	return nil
+}
+
+// ResolveParameterValue returns the effective value of a parameter, checking
+// continuation marks (from parameterize) before falling back to the base value.
+// This is the Go-side equivalent of calling the parameter with 0 args.
+func (p *MachineContext) ResolveParameterValue(param *Parameter) values.Value {
+	val := p.findParameterInMarks(param)
+	if val != nil {
+		return val
+	}
+	return param.Value()
 }
 
 // applyComposableContinuation applies a composable continuation by splicing

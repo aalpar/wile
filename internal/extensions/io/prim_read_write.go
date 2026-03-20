@@ -82,7 +82,9 @@ func fmtPrefix(name string) string {
 func getOptionalOutputPort(mc *machine.MachineContext, argIndex int) (values.OutputPort, error) {
 	p, _, err := extractPort[values.OutputPort](
 		mc.Arg(argIndex), "", werr.ErrNotAnOutputPort, "an output port",
-		GetCurrentOutputPort,
+		func() values.OutputPort {
+			return resolveCurrentOutputPort(mc)
+		},
 	)
 	return p, err
 }
@@ -109,7 +111,9 @@ func getOptionalTextualOutputPort(mc *machine.MachineContext, argIndex int) (val
 func getOptionalInputPort(mc *machine.MachineContext, argIndex int) (values.TextualReader, error) {
 	p, _, err := extractPort[values.TextualReader](
 		mc.Arg(argIndex), "", werr.ErrNotAnInputPort, "an input port",
-		GetCurrentInputPort,
+		func() values.TextualReader {
+			return resolveCurrentInputPort(mc)
+		},
 	)
 	return p, err
 }
