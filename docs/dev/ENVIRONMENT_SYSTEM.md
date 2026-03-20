@@ -59,8 +59,8 @@ The `Namespace` is the root of the environment hierarchy. Each Wile VM instance 
 
 ```go
 // Basic creation
-topLevel := environment.NewNamespace()
-env := topLevel.Runtime()  // Get the runtime (phase 0) environment
+ns := environment.NewNamespace()
+env := ns.Runtime()  // Get the runtime (phase 0) environment
 
 // Convenience wrapper (creates Namespace internally)
 env := environment.NewNamespaceFrame()
@@ -71,10 +71,10 @@ env := environment.NewNamespaceFrame()
 Syntax interning is **per-Namespace**, ensuring consistent syntax object identity during macro expansion:
 
 ```go
-topLevel := environment.NewNamespace()
+ns := environment.NewNamespace()
 
 // Syntax objects are interned for consistent identity
-interned := topLevel.InternSyntax(key, syntaxValue)
+interned := ns.InternSyntax(key, syntaxValue)
 ```
 
 **Note:** Symbol `eq?` identity does not use interning. Symbols are compared by their string key via `helpers.EqIdentity`, satisfying R7RS §6.5 ("Two symbols are identical if and only if their names are spelled the same way") without per-instance interning.
