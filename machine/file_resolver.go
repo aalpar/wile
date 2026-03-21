@@ -18,7 +18,9 @@ import (
 	"context"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/security"
@@ -120,4 +122,109 @@ func (p *EmbedFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.F
 		return nil, "", werr.WrapForeignErrorWithCause(werr.ErrFileNotFound, err, "resolve: %s", path)
 	}
 	return f, path, nil
+}
+
+// FSFileResolver resolves files from a virtual filesystem (fs.FS).
+// Used when an embedder provides WithSourceFS. All paths are relative
+// to the FS root. Absolute paths are rejected.
+//
+// Resolution priority:
+//  1. Relative to current load directory (from LoadPathStack)
+//  2. Library registry search paths
+//  3. Relative to FS root (path as-is)
+type FSFileResolver struct {
+	fsys fs.FS
+	env  *environment.EnvironmentFrame
+}
+
+// NewFSFileResolver creates a resolver backed by the given filesystem.
+func NewFSFileResolver(fsys fs.FS, env *environment.EnvironmentFrame) *FSFileResolver {
+	return &FSFileResolver{
+		fsys: fsys,
+		env:  env,
+	}
+}
+
+func (p *FSFileResolver) ResolveAndOpen(ctx context.Context, filePath string) (fs.File, string, error) {
+	if filePath == "" {
+		return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "resolve: empty filename")
+	}
+	if filepath.IsAbs(filePath) {
+		return nil, "", werr.WrapForeignErrorf(
+			werr.ErrFileNotFound,
+			"resolve: absolute paths not supported in virtual filesystem: %s",
+			filePath,
+		)
+	}
+
+	var searched []string
+
+	// Strategy 1: Try relative to current load directory.
+	stack := p.env.LoadPathStack()
+	currentDir := stack.CurrentDir()
+	if currentDir != "" && currentDir != "." {
+		candidate := path.Join(currentDir, filePath)
+		_, err := fs.Stat(p.fsys, candidate)
+		if err == nil {
+			return p.openChecked(ctx, candidate)
+		}
+		searched = append(searched, currentDir+"/")
+	}
+
+	// Strategy 2: Try library registry search paths.
+	regAny := p.env.LibraryRegistry()
+	if regAny != nil {
+		reg, ok := regAny.(*LibraryRegistry)
+		if ok {
+			for _, dir := range reg.GetSearchPaths() {
+				candidate := path.Join(dir, filePath)
+				_, err := fs.Stat(p.fsys, candidate)
+				if err == nil {
+					return p.openChecked(ctx, candidate)
+				}
+				searched = append(searched, dir+"/")
+			}
+		}
+	}
+
+	// Strategy 3: Try path as-is at FS root.
+	_, err := fs.Stat(p.fsys, filePath)
+	if err == nil {
+		return p.openChecked(ctx, filePath)
+	}
+	searched = append(searched, "<fs-root>/")
+
+	searchedList := strings.Join(searched, ", ")
+	return nil, "", werr.WrapForeignErrorf(
+		werr.ErrFileNotFound,
+		"file %q not found in virtual filesystem; searched: %s",
+		filePath,
+		searchedList,
+	)
+}
+
+// openChecked performs security authorization and opens a resolved path.
+func (p *FSFileResolver) openChecked(ctx context.Context, resolvedPath string) (fs.File, string, error) {
+	_ = ctx // reserved for future context propagation
+
+	auth, _ := p.env.Namespace().Authorizer().(security.Authorizer)
+	err := security.CheckWithAuthorizer(auth, security.AccessRequest{
+		Resource: security.ResourceCode,
+		Action:   security.ActionLoad,
+		Target:   resolvedPath,
+	})
+	if err != nil {
+		return nil, "", err
+	}
+
+	f, err := p.fsys.Open(resolvedPath)
+	if err != nil {
+		return nil, "", werr.WrapForeignErrorWithCause(
+			werr.ErrFileNotFound,
+			err,
+			"open %s",
+			resolvedPath,
+		)
+	}
+	return f, resolvedPath, nil
 }

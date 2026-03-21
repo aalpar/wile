@@ -383,10 +383,106 @@ func TestEmbedFileResolver_IgnoresContext(t *testing.T) {
 	qt.Assert(t, resolved, qt.Equals, "safe.scm")
 }
 
+// --- FSFileResolver ---
+
+func TestFSFileResolver_EmptyPath(t *testing.T) {
+	fsys := fstest.MapFS{"a.scm": {Data: []byte("1")}}
+	env := environment.NewNamespace().Runtime()
+	r := NewFSFileResolver(fsys, env)
+
+	_, _, err := r.ResolveAndOpen(context.Background(), "")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue)
+}
+
+func TestFSFileResolver_RejectsAbsolutePath(t *testing.T) {
+	fsys := fstest.MapFS{"a.scm": {Data: []byte("1")}}
+	env := environment.NewNamespace().Runtime()
+	r := NewFSFileResolver(fsys, env)
+
+	_, _, err := r.ResolveAndOpen(context.Background(), "/abs/path.scm")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue)
+	qt.Assert(t, err.Error(), qt.Contains, "absolute")
+}
+
+func TestFSFileResolver_DirectPath(t *testing.T) {
+	fsys := fstest.MapFS{"hello.scm": {Data: []byte("42")}}
+	env := environment.NewNamespace().Runtime()
+	r := NewFSFileResolver(fsys, env)
+
+	f, resolved, err := r.ResolveAndOpen(context.Background(), "hello.scm")
+	qt.Assert(t, err, qt.IsNil)
+	defer f.Close()
+	qt.Assert(t, resolved, qt.Equals, "hello.scm")
+}
+
+func TestFSFileResolver_RelativeToLoadPathStack(t *testing.T) {
+	fsys := fstest.MapFS{
+		"lib/main.sld":   {Data: []byte("(define-library (main))")},
+		"lib/helper.scm": {Data: []byte("42")},
+	}
+	env := environment.NewNamespace().Runtime()
+	stack := env.LoadPathStack()
+	qt.Assert(t, stack.Push("lib/main.sld"), qt.IsNil)
+	defer stack.Pop()
+
+	r := NewFSFileResolver(fsys, env)
+
+	f, resolved, err := r.ResolveAndOpen(context.Background(), "helper.scm")
+	qt.Assert(t, err, qt.IsNil)
+	defer f.Close()
+	qt.Assert(t, resolved, qt.Equals, "lib/helper.scm")
+}
+
+func TestFSFileResolver_ViaSearchPaths(t *testing.T) {
+	fsys := fstest.MapFS{
+		"vendor/util.scm": {Data: []byte("99")},
+	}
+	env := environment.NewNamespace().Runtime()
+	libReg := NewLibraryRegistry()
+	libReg.PrependSearchPath("vendor")
+	env.SetLibraryRegistry(libReg)
+
+	r := NewFSFileResolver(fsys, env)
+
+	f, resolved, err := r.ResolveAndOpen(context.Background(), "util.scm")
+	qt.Assert(t, err, qt.IsNil)
+	defer f.Close()
+	qt.Assert(t, resolved, qt.Equals, "vendor/util.scm")
+}
+
+func TestFSFileResolver_NotFound(t *testing.T) {
+	fsys := fstest.MapFS{}
+	env := environment.NewNamespace().Runtime()
+	r := NewFSFileResolver(fsys, env)
+
+	_, _, err := r.ResolveAndOpen(context.Background(), "missing.scm")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue)
+}
+
+func TestFSFileResolver_SecurityDenied(t *testing.T) {
+	fsys := fstest.MapFS{"secret.scm": {Data: []byte("(launch-missiles)")}}
+	ns := environment.NewNamespace()
+	ns.SetAuthorizer(security.DenyAll())
+	env := ns.Runtime()
+	r := NewFSFileResolver(fsys, env)
+
+	_, _, err := r.ResolveAndOpen(context.Background(), "secret.scm")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+func TestFSFileResolver_InterfaceCompliance(t *testing.T) {
+	var _ FileResolver = (*FSFileResolver)(nil)
+}
+
 // --- Interface compliance ---
 
 func TestFileResolverInterfaceCompliance(t *testing.T) {
-	// Compile-time check that both types satisfy the interface.
+	// Compile-time check that all types satisfy the interface.
 	var _ FileResolver = (*OSFileResolver)(nil)
 	var _ FileResolver = (*EmbedFileResolver)(nil)
+	var _ FileResolver = (*FSFileResolver)(nil)
 }
