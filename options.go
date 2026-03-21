@@ -43,7 +43,6 @@ type engineConfig struct {
 	callDepthSet   bool // true if WithMaxCallDepth was explicitly called
 	libraryPaths   []string
 	libraryEnabled bool // true when WithLibraryPaths was called
-	skipCore       bool // true when WithoutCore was called
 	importObserver func(LibraryImportEvent)
 	authorizer     security.Authorizer
 	namespace      *environment.Namespace // pre-built namespace (via WithNamespace)
@@ -124,7 +123,7 @@ func WithImportObserver(obs func(LibraryImportEvent)) EngineOption {
 // are needed, or for testing extension isolation.
 func WithoutCore() EngineOption {
 	return func(cfg *engineConfig) {
-		cfg.skipCore = true
+		cfg.registry = registry.NewRegistry()
 	}
 }
 
