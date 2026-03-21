@@ -1105,6 +1105,23 @@ All compositions of `car` and `cdr` up to 4 levels deep: `caar`, `cadr`, `cdar`,
 | `(call-with-continuation-prompt thunk tag handler)` | With handler |
 | `(abort-current-continuation tag v ...)` | Abort to prompt |
 | `(call-with-composable-continuation proc tag)` | Capture composable continuation |
+| `(continuation-prompt-available? tag)` | Is a prompt with this tag on the current continuation |
+
+### Continuation Marks
+
+| Procedure | Description |
+|-----------|-------------|
+| `(current-continuation-marks)` | Snapshot marks on current continuation |
+| `(current-continuation-marks tag)` | Snapshot up to prompt with tag |
+| `(continuation-marks cont)` | Extract marks from captured continuation |
+| `(continuation-mark-set->list marks key)` | Values for key across all frames |
+| `(continuation-mark-set->list* marks keys)` | Multi-key variant, returns list of vectors |
+| `(continuation-mark-set->list* marks keys none-v)` | With custom none-v for missing keys |
+| `(continuation-mark-set-first marks key)` | Nearest value for key, or `#f` |
+| `(continuation-mark-set-first marks key default)` | With custom default |
+| `(call-with-immediate-continuation-mark key proc)` | Call proc with mark from current frame |
+| `(continuation-mark-set? x)` | Is a continuation mark set |
+| `(continuation? x)` | Is a captured continuation |
 
 ### Escape Continuations
 
@@ -1302,10 +1319,17 @@ Requires the eval extension:
 | `(identifier? x)` | Is identifier syntax object |
 | `(syntax->datum stx)` | Strip syntax to raw datum |
 | `(datum->syntax ctx datum)` | Wrap datum with context's scopes |
+| `(syntax->list stx)` | Syntax pair chain to list of syntax objects, or `#f` |
 | `(generate-temporaries lst)` | Generate unique identifiers |
 | `(bound-identifier=? a b)` | Same binding identity |
 | `(free-identifier=? a b)` | Same free reference |
+| `(syntax-source stx)` | Source file path, or `#f` |
+| `(syntax-line stx)` | 1-based line number, or `#f` |
+| `(syntax-column stx)` | 0-based column, or `#f` |
+| `(syntax-position stx)` | 0-based byte position, or `#f` |
+| `(syntax-span stx)` | Byte span (end − start), or `#f` |
 | `(syntax-local-value id)` | Get compile-time value |
+| `(syntax-local-value/immediate id)` | Like above, no rename-transformer chasing |
 | `(make-compile-time-value v)` | Create compile-time value |
 | `(syntax-local-introduce stx)` | Introduce syntax marks |
 | `(syntax-local-identifier-as-binding id)` | Convert to binding form |
@@ -1555,6 +1579,14 @@ Import modifiers — `only`, `except`, `prefix`, `rename` — work on all librar
 (import (prefix (wile system) sys:))
 (import (rename (wile math) (sqrt square-root)))
 ```
+
+### Wile Scheme Libraries
+
+| Library | Contents |
+|---------|----------|
+| `(wile control)` | Delimited continuation operators — `shift`/`reset`, `prompt`/`control`, `shift0`/`reset0`, `prompt0`/`control0`, `spawn`, `set`/`cupto`, all with `-at` tagged variants; `call/ec`, `new-prompt` aliases; `continuation-mark-set->iterator`, `continuation-mark-set->context` |
+| `(wile kanren)` | miniKanren — `run`, `run*`, `fresh`, `conde` |
+| `(wile microkanren)` | microKanren core — `==`, `call/fresh`, `disj`, `conj` |
 
 ### Third-Party Libraries
 

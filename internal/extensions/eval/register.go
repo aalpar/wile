@@ -54,6 +54,8 @@ func addPrimitives(r *registry.Registry) error {
 			Doc: "Compiles an expression to a thunk.", ParamNames: []string{"expr"}, Category: "eval"},
 		{Name: "syntax-local-value", ParamCount: 1, Impl: PrimSyntaxLocalValue,
 			Doc: "Returns the compile-time value of an identifier.", ParamNames: []string{"id"}, Category: "eval"},
+		{Name: "syntax-local-value/immediate", ParamCount: 1, Impl: PrimSyntaxLocalValueImmediate,
+			Doc: "Returns the compile-time value without chasing rename-transformers.", ParamNames: []string{"id"}, Category: "eval"},
 		{Name: "make-compile-time-value", ParamCount: 1, Impl: PrimMakeCompileTimeValue,
 			Doc: "Wraps a value for compile-time storage.", ParamNames: []string{"value"}, Category: "eval"},
 		{Name: "syntax-local-introduce", ParamCount: 1, Impl: PrimSyntaxLocalIntroduce,

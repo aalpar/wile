@@ -319,4 +319,37 @@ Creates an independent copy of an entire continuation chain. Every frame is `Cop
 - Flatt, Yu, Findler, Felleisen. "Adding Delimited and Composable Control to a Production Programming Environment." ICFP 2007. The Racket model this implementation follows.
 - Felleisen. "The Theory and Practice of First-Class Prompts." POPL 1988. Original formalization of prompts and aborts.
 - Danvy, Filinski. "Abstracting Control." LFP 1990. Shift/reset as the composable variant.
+- Hieb, Dybvig. "Continuations and Concurrency." PPoPP 1990. Spawn operator.
+- Queinnec, Serpette. "A Dynamic Extent Control Operator for Partial Continuations." POPL 1991. Set/cupto.
 - R7RS section 6.10 (dynamic-wind, call/cc).
+
+## Derived Operators: (wile control)
+
+The `(wile control)` library provides all named delimited continuation operators
+from Racket's `racket/control` module, derived entirely from the three core
+primitives above (no additional VM paths).
+
+### Operator Matrix
+
+| Family          | Handler reinstalls prompt? | k wraps in prompt? | Source |
+|-----------------|---------------------------|--------------------|--------|
+| prompt/control  | Yes                       | No                 | Felleisen 1988 |
+| reset/shift     | Yes                       | Yes                | Danvy & Filinski 1990 |
+| prompt0/control0| No                        | No                 | — |
+| reset0/shift0   | No                        | Yes                | — |
+| spawn           | — (captures and applies)  | —                  | Hieb & Dybvig 1990 |
+| set/cupto       | No                        | No                 | Queinnec & Serpette 1991 |
+
+All operators have `-at` tagged variants that accept an explicit prompt tag.
+The untagged forms use `(default-continuation-prompt-tag)`.
+
+### Implementation Note: Self-Referential Macros
+
+Operators whose handlers reinstall the prompt (`prompt-at`, `reset-at`) cannot
+be implemented as self-referential `syntax-rules` macros — the handler template
+`(lambda (thunk) (reset-at t (thunk)))` causes infinite compile-time expansion
+because each expansion of `reset-at` produces another `reset-at` in the handler.
+
+The solution is a runtime helper function `%prompt-reinstall` that calls itself
+recursively. Function bodies are compiled once; the recursion happens at runtime
+when the handler is actually invoked.

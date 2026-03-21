@@ -30,6 +30,8 @@ func addPrompts(r *registry.Registry) error {
 			Doc: "Aborts to the nearest prompt with the given tag.", ParamNames: []string{"tag", "val", "vals"}, Category: "continuations"},
 		{Name: "call-with-composable-continuation", ParamCount: 2, Impl: PrimCallWithComposableContinuation,
 			Doc: "Captures a composable continuation up to the nearest prompt.", ParamNames: []string{"proc", "tag"}, Category: "continuations"},
+		{Name: "continuation-prompt-available?", ParamCount: 1, Impl: PrimContinuationPromptAvailableQ,
+			Doc: "Returns #t if a prompt with tag is on the current continuation.", ParamNames: []string{"tag"}, Category: "continuations"},
 	}, registry.PhaseRuntime)
 
 	return nil

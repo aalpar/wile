@@ -65,6 +65,46 @@ func PrimContinuationMarkSetFirst(mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimContinuationMarkSetToListStar implements
+// (continuation-mark-set->list* mark-set key-list [none-v]).
+// Returns a list of vectors, one per frame that has at least one of the keys.
+// Each vector position corresponds to a key in key-list.
+// Missing keys use none-v (default #f).
+//
+// Racket §10.5: continuation-mark-set->list*
+func PrimContinuationMarkSetToListStar(mc *machine.MachineContext) error {
+	cms, err := helpers.RequireType[*machine.ContinuationMarkSet](mc.Arg(0), werr.ErrNotAContinuationMarkSet, "continuation-mark-set->list*")
+	if err != nil {
+		return err
+	}
+
+	keyListVal := mc.Arg(1)
+	keyTuple, ok := keyListVal.(values.Tuple)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "continuation-mark-set->list*: expected a list of keys")
+	}
+
+	var keys []values.Value
+	current := values.Value(keyTuple)
+	for !values.IsEmptyList(current) {
+		t, ok := current.(values.Tuple)
+		if !ok {
+			return werr.WrapForeignErrorf(werr.ErrNotAList, "continuation-mark-set->list*: improper key list")
+		}
+		keys = append(keys, t.Car())
+		current = t.Cdr()
+	}
+
+	noneVal := values.Value(values.FalseValue)
+	v, ok := helpers.ParseOptionalArg(mc.Arg(2))
+	if ok {
+		noneVal = v
+	}
+
+	mc.SetValue(cms.ToListStar(keys, noneVal))
+	return nil
+}
+
 // PrimContinuationMarkSetQ implements (continuation-mark-set? obj).
 var PrimContinuationMarkSetQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 	_, ok := o.(*machine.ContinuationMarkSet)

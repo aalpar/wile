@@ -98,13 +98,13 @@ continuation primitives follow Flatt et al. (2007).
 | `call-with-exit` (≈ `call/ec`) | `registry/core/prim_exit.go` |
 | `with-continuation-barrier` | Derived form |
 
-**Could add at zero cost:**
+**Added in PR #547:**
 
-| Primitive | Effort | Notes |
-|-----------|--------|-------|
-| `call-with-escape-continuation` / `call/ec` | Trivial | Alias for existing `call-with-exit` |
-| `continuation-prompt-available?` | Low | Walk continuation chain for matching tag. O(depth), only runs when called. |
-| `shift` / `reset` and all `racket/control` operators | Zero Go code | Pure Scheme macros over existing primitives — see below |
+| Primitive | Location |
+|-----------|----------|
+| `call-with-escape-continuation` / `call/ec` | `(wile control)` — alias for `call-with-exit` |
+| `continuation-prompt-available?` | `registry/core/prim_prompt.go` |
+| `shift` / `reset` and all `racket/control` operators | `(wile control)` — Scheme macros over existing primitives |
 
 **Could add without regressing existing code:**
 
@@ -225,13 +225,13 @@ object pointer, the mark value is the pre-converted parameter value. The VM's
 | `call-with-immediate-continuation-mark` | `registry/core/prim_cont_marks.go` |
 | `continuation-mark-set?` | `registry/core/prim_cont_marks.go` |
 
-**Could add at zero cost:**
+**Added in PR #547:**
 
-| Primitive | Effort | Notes |
-|-----------|--------|-------|
-| `continuation-mark-set->list*` | Trivial | Multi-key variant returning vectors. Procedural wrapper over existing collection. |
-| `continuation-mark-set->iterator` | Low | Lazy closure-based iterator over mark frames. |
-| `continuation-mark-set->context` | Low | Extracts stack-trace-style context *from whatever marks exist*. Free as a reader. |
+| Primitive | Location |
+|-----------|----------|
+| `continuation-mark-set->list*` | `registry/core/prim_cont_marks.go` + `machine/continuation_mark_set.go` |
+| `continuation-mark-set->iterator` | `(wile control)` — Scheme closure over `->list*` |
+| `continuation-mark-set->context` | `(wile control)` — reads `'wile/source-location` key |
 
 **Performance-negative (avoid):**
 
@@ -336,22 +336,26 @@ compile-time binding manipulation is where gaps remain.
 | `interaction-environment` | REPL env | Introspection extension |
 | `environment?` / `environment-bound-names` / `environment-ref` / `environment-bound?` | Env introspection | Introspection extension |
 
+**Added in PR #547 (compile-time):**
+
+| Primitive | Location |
+|-----------|----------|
+| `syntax-local-value/immediate` | `internal/extensions/eval/prim_eval.go` — identical to `syntax-local-value` (no rename-transformers yet) |
+
 **Could add at zero cost (compile-time only):**
 
 | Primitive | Effort | Notes |
 |-----------|--------|-------|
-| `syntax-local-value/immediate` | Trivial | Like `syntax-local-value` without rename-transformer chasing. |
 | `identifier-binding` | Moderate | Introspect where an identifier is bound. Wile's scope-set system already tracks provenance. Read-only, zero runtime overhead. |
 | `syntax-local-context` | Low | Expose expansion context (`'expression`, `'module`, `'top-level`). Expander already knows this. |
 | `syntax-local-phase-level` | Trivial | Wile has 2 phases (0, 1). Return the current one. |
 | `syntax-transforming?` | Trivial | Boolean: are we inside a transformer? |
 
-**Could add at zero cost (syntax accessors):**
+**Added in PR #547 (syntax accessors):**
 
 Source location data already exists on every syntax object via `SourceContext`
-(`internal/syntax/source_context.go`). The struct carries `File`, `Start.Line()`,
-`Start.Column()`, `Start.Index()`, and `End` counterparts. These are just
-unexposed accessor primitives:
+(`internal/syntax/source_context.go`). These are now exposed as primitives
+in `registry/core/prim_syntax_loc.go`:
 
 | Primitive | Maps to |
 |-----------|---------|
@@ -617,17 +621,20 @@ internals via FFI" approaches — the abstractions are designed to be *safe to c
 
 **Tier 1 — Free lunch** (alias/wrapper over existing infrastructure, zero cost):
 
-| What | Effort | Why it's free |
-|------|--------|---------------|
-| `call/ec` / `call-with-escape-continuation` | Trivial | Alias for existing `call-with-exit` |
-| `shift` / `reset` and all `racket/control` operators | Scheme library | Macros over existing `call-with-continuation-prompt` + `call-with-composable-continuation` + `abort-current-continuation` |
-| `continuation-prompt-available?` | Low | Walk continuation chain. O(depth), only when called. |
-| `continuation-mark-set->list*` | Trivial | Procedural wrapper over existing `continuation-mark-set->list` |
-| `continuation-mark-set->iterator` | Low | Lazy closure-based iteration |
-| `continuation-mark-set->context` | Low | Read whatever marks exist (cheap); *installing* marks at every call is what's expensive |
-| `syntax-source` / `syntax-line` / `syntax-column` / `syntax-position` / `syntax-span` | Trivial | Data already exists in `SourceContext`. Just expose accessor primitives. |
-| `syntax->list` | Trivial | Unwrap syntax pair chain |
-| `syntax-local-value/immediate` | Trivial | Variant of existing `syntax-local-value` |
+All Tier 1 items are now implemented. Go primitives are in `registry/core/`
+and `internal/extensions/eval/`. Derived Scheme forms are in `(wile control)`.
+
+| What | Status | Location |
+|------|--------|----------|
+| `call/ec` / `call-with-escape-continuation` | ✅ Done | `(wile control)` — alias for `call-with-exit` |
+| `shift` / `reset` and all `racket/control` operators | ✅ Done | `(wile control)` — 24 operators + tagged variants |
+| `continuation-prompt-available?` | ✅ Done | `registry/core/prim_prompt.go` |
+| `continuation-mark-set->list*` | ✅ Done | `registry/core/prim_cont_marks.go` |
+| `continuation-mark-set->iterator` | ✅ Done | `(wile control)` — Scheme closure over `->list*` |
+| `continuation-mark-set->context` | ✅ Done | `(wile control)` — reads `'wile/source-location` key |
+| `syntax-source` / `syntax-line` / `syntax-column` / `syntax-position` / `syntax-span` | ✅ Done | `registry/core/prim_syntax_loc.go` |
+| `syntax->list` | ✅ Done | `registry/core/prim_syntax_loc.go` |
+| `syntax-local-value/immediate` | ✅ Done | `internal/extensions/eval/prim_eval.go` |
 
 **Tier 2 — Compile-time only** (expander work, zero runtime cost):
 
@@ -662,14 +669,14 @@ internals via FFI" approaches — the abstractions are designed to be *safe to c
 
 | Capability | Required primitives | Cost tier |
 |------------|-------------------|-----------|
-| Coroutines / generators | `shift`/`reset` | **Tier 1** — already have everything |
+| Coroutines / generators | `shift`/`reset` | **Done** — `(wile control)` |
 | Custom control operators | `call-in-continuation` | **Tier 3** |
-| Source location accessors | `syntax-source` etc. | **Tier 1** — data already exists |
+| Source location accessors | `syntax-source` etc. | **Done** — `registry/core/prim_syntax_loc.go` |
 | Macros that analyze expanded code | `local-expand` | **Tier 2** |
 | Contract systems | `local-expand` + `syntax-property` | **Tier 2 + Tier 4** |
 | Language-as-library (`#lang`) | `#%` interposition | **Tier 4** |
 | Sandboxed eval with cleanup | Custodians | **Tier 4** (security model covers most of this) |
-| Stack traces from marks | `continuation-mark-set->context` + auto marks | **Tier 1 reader + Tier 4 auto-install** |
+| Stack traces from marks | `continuation-mark-set->context` + auto marks | **Reader done** (`(wile control)`), auto-install is Tier 4 |
 
 ---
 
@@ -692,7 +699,7 @@ internals via FFI" approaches — the abstractions are designed to be *safe to c
 | `default-continuation-prompt-tag` | The default tag (wraps each REPL interaction, each thread) | Yes |
 | `continuation-prompt-tag?` | Predicate | Yes |
 | `continuation?` | Predicate — is `v` a captured continuation? | Yes |
-| `continuation-prompt-available?` | Is a prompt with this tag on the current continuation? | No (Tier 1) |
+| `continuation-prompt-available?` | Is a prompt with this tag on the current continuation? | Yes |
 
 #### `racket/control` — named operators (§10.4)
 
@@ -700,12 +707,12 @@ These are all *derived* from the core primitives above:
 
 | Operator pair | Semantics | Citation | Wile |
 |---------------|-----------|----------|------|
-| `prompt` / `control` | Felleisen's `F` | Felleisen 1988 | No (Tier 1 — Scheme macro) |
-| `reset` / `shift` | Danvy & Filinski | Danvy & Filinski 1990 | No (Tier 1 — Scheme macro) |
-| `prompt0` / `control0` | Like `prompt`/`control`, no re-prompt on abort | — | No (Tier 1 — Scheme macro) |
-| `reset0` / `shift0` | Like `reset`/`shift`, no re-prompt on abort | — | No (Tier 1 — Scheme macro) |
-| `spawn` | Hieb & Dybvig | Hieb & Dybvig 1990 | No (Tier 1 — Scheme macro) |
-| `set` / `cupto` | Queinnec & Serpette | Queinnec & Serpette 1991 | No (Tier 1 — Scheme macro) |
+| `prompt` / `control` | Felleisen's `F` | Felleisen 1988 | `(wile control)` |
+| `reset` / `shift` | Danvy & Filinski | Danvy & Filinski 1990 | `(wile control)` |
+| `prompt0` / `control0` | Like `prompt`/`control`, no re-prompt on abort | — | `(wile control)` |
+| `reset0` / `shift0` | Like `reset`/`shift`, no re-prompt on abort | — | `(wile control)` |
+| `spawn` | Hieb & Dybvig | Hieb & Dybvig 1990 | `(wile control)` |
+| `set` / `cupto` | Queinnec & Serpette | Queinnec & Serpette 1991 | `(wile control)` |
 
 Plus tagged variants: `prompt-at`, `reset-at`, `control-at`, `shift-at`, `prompt0-at`,
 `reset0-at`, `control0-at`, `shift0-at`, `spawn-at`, `set-at`, `cupto-at`.
@@ -720,11 +727,11 @@ And the alias `new-prompt` for `make-continuation-prompt-tag`.
 | `current-continuation-marks` | Snapshot all marks on current continuation | Yes |
 | `continuation-marks` | Extract marks from a captured continuation or exn | Yes |
 | `continuation-mark-set->list` | All values for a key, ordered innermost-first | Yes |
-| `continuation-mark-set->list*` | Multi-key variant (returns vectors) | No (Tier 1) |
+| `continuation-mark-set->list*` | Multi-key variant (returns vectors) | Yes |
 | `continuation-mark-set-first` | Nearest value for a key (amortized O(1)) | Yes |
-| `continuation-mark-set->iterator` | Lazy iterator over marks | No (Tier 1) |
+| `continuation-mark-set->iterator` | Lazy iterator over marks | `(wile control)` |
 | `continuation-mark-set?` | Predicate | Yes |
-| `continuation-mark-set->context` | Extract stack-trace-style context from marks | No (Tier 1 reader) |
+| `continuation-mark-set->context` | Extract stack-trace-style context from marks | `(wile control)` |
 | `continuation-mark-key?` | Predicate for impersonated mark keys | No (needs impersonators) |
 | `make-continuation-mark-key` | Create an impersonator-friendly mark key | No (needs impersonators) |
 | `call-with-immediate-continuation-mark` | Call proc with mark from current frame | Yes |
@@ -751,7 +758,7 @@ And the alias `new-prompt` for `make-continuation-prompt-tag`.
 | Primitive | Purpose | Wile |
 |-----------|---------|------|
 | `syntax-local-value` | Look up compile-time value of an identifier | Yes |
-| `syntax-local-value/immediate` | Like above, no rename-transformer chasing | No (Tier 1) |
+| `syntax-local-value/immediate` | Like above, no rename-transformer chasing | Yes |
 | `syntax-local-bind-syntaxes` | Create bindings in a definition context during expansion | No (Tier 2, high effort) |
 | `syntax-local-make-definition-context` | Create an internal-definition context | No (Tier 2, high effort) |
 | `identifier-binding` | Introspect: where is this identifier bound? | No (Tier 2) |
@@ -768,8 +775,8 @@ And the alias `new-prompt` for `make-continuation-prompt-tag`.
 | `datum->syntax` | Wrap datum with scopes from a template identifier | Yes |
 | `syntax-property` | Get/set syntax properties | No (Tier 4) |
 | `syntax-track-origin` | Transfer properties for macro-expansion tracking | No (Tier 4) |
-| `syntax-source` / `syntax-line` / `syntax-column` / `syntax-position` / `syntax-span` | Source location accessors | No (Tier 1 — data exists) |
-| `syntax->list` | Unwrap to list of syntax objects | No (Tier 1) |
+| `syntax-source` / `syntax-line` / `syntax-column` / `syntax-position` / `syntax-span` | Source location accessors | Yes |
+| `syntax->list` | Unwrap to list of syntax objects | Yes |
 | `generate-temporaries` | Generate unique temporary identifiers | Yes |
 
 ### 4. Compiler Callbacks / Interposition

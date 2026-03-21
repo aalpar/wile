@@ -74,6 +74,34 @@ func (p *ContinuationMarkSet) First(key, defaultVal values.Value) values.Value {
 	return defaultVal
 }
 
+// ToListStar returns a list of vectors for multiple keys across all frames.
+// Each vector corresponds to a frame that has at least one of the requested keys.
+// Vector positions correspond to the keys slice; noneVal fills missing keys.
+// Uses eq? semantics (eqIdentity) for key comparison.
+//
+// Racket §10.5: continuation-mark-set->list*
+func (p *ContinuationMarkSet) ToListStar(keys []values.Value, noneVal values.Value) values.Tuple {
+	var collected []values.Value
+	for _, frame := range p.frames {
+		vec := make([]values.Value, len(keys))
+		found := false
+		for i, key := range keys {
+			vec[i] = noneVal
+			for _, e := range frame {
+				if eqIdentity(e.key, key) {
+					vec[i] = e.val
+					found = true
+					break
+				}
+			}
+		}
+		if found {
+			collected = append(collected, values.NewVector(vec...))
+		}
+	}
+	return values.List(collected...)
+}
+
 // CollectMarksFromContinuation walks a captured MachineContinuation chain
 // and builds a ContinuationMarkSet snapshot. Used by the (continuation-marks
 // cont) primitive to extract marks from a continuation captured via call/cc.

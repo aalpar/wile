@@ -251,7 +251,13 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `identifier?` | Test for identifier syntax object |
 | `syntax->datum` | Convert syntax object to datum |
 | `datum->syntax` | Convert datum to syntax object |
+| `syntax->list` | Convert syntax pair chain to list of syntax objects, or `#f` |
 | `generate-temporaries` | Generate unique temporary identifiers |
+| `syntax-source` | Source file of syntax object, or `#f` |
+| `syntax-line` | 1-based line number, or `#f` |
+| `syntax-column` | 0-based column, or `#f` |
+| `syntax-position` | 0-based byte position, or `#f` |
+| `syntax-span` | Byte span (end − start), or `#f` |
 
 ## Pairs and Lists
 
@@ -587,6 +593,7 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `call-with-continuation-prompt` | Install a prompt and call thunk |
 | `abort-current-continuation` | Escape to nearest prompt |
 | `call-with-composable-continuation` | Capture composable delimited continuation |
+| `continuation-prompt-available?` | Test if a prompt with given tag is on the current continuation |
 
 ## Escape Continuations
 
@@ -601,6 +608,7 @@ Complete list of supported types, primitives, and special forms in Wile.
 |-----------|-------------|
 | `current-continuation-marks` | Collect marks from current continuation chain |
 | `continuation-mark-set->list` | Extract mark values for a key from mark set |
+| `continuation-mark-set->list*` | Multi-key variant returning list of vectors |
 | `continuation-mark-set-first` | Get first mark value for a key |
 | `call-with-immediate-continuation-mark` | Call procedure with mark from current frame |
 | `continuation-mark-set?` | Test for continuation mark set |
@@ -712,6 +720,7 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `expand-once` | Expand one level of macros |
 | `compile` | Compile an expression |
 | `syntax-local-value` | Get compile-time value of binding |
+| `syntax-local-value/immediate` | Like `syntax-local-value`, no rename-transformer chasing |
 | `make-compile-time-value` | Create a compile-time value |
 | `syntax-local-introduce` | Introduce syntax marks |
 | `syntax-local-identifier-as-binding` | Convert identifier to binding form |
