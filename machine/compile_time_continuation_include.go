@@ -19,7 +19,6 @@ import (
 	"errors"
 	"io"
 	"io/fs"
-	"path/filepath"
 
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
@@ -72,17 +71,13 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 			defer file.Close() //nolint:errcheck
 
 			// Push to stack after successful open, pop on exit.
-			// Only push absolute paths — embedded/virtual filesystems return
-			// relative paths that don't participate in load-path resolution.
-			if filepath.IsAbs(filePath) {
-				stack := p.env.LoadPathStack()
-				if stack != nil {
-					pushErr := stack.Push(filePath)
-					if pushErr != nil {
-						return pushErr
-					}
-					defer stack.Pop()
+			stack := p.env.LoadPathStack()
+			if stack != nil {
+				pushErr := stack.Push(filePath)
+				if pushErr != nil {
+					return pushErr
 				}
+				defer stack.Pop()
 			}
 
 			// Create parser for the file
