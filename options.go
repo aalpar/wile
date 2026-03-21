@@ -15,6 +15,8 @@
 package wile
 
 import (
+	"io/fs"
+
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/extensions/introspection"
 	"github.com/aalpar/wile/extensions/math"
@@ -46,6 +48,7 @@ type engineConfig struct {
 	importObserver func(LibraryImportEvent)
 	authorizer     security.Authorizer
 	namespace      *environment.Namespace // pre-built namespace (via WithNamespace)
+	sourceFS       fs.FS                  // virtual filesystem for source loading (via WithSourceFS)
 }
 
 // EngineOption configures an Engine.
@@ -154,6 +157,29 @@ func WithAuthorizer(auth security.Authorizer) EngineOption {
 func WithNamespace(ns *environment.Namespace) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.namespace = ns
+	}
+}
+
+// WithSourceFS sets a virtual filesystem for all source file loading
+// (include, load, library import). When set, the OS filesystem is not
+// consulted for source files. Library search paths from WithLibraryPaths
+// become relative paths within the FS.
+//
+// Bootstrap macros are unaffected — they always load from the embedded
+// bootstrap filesystem.
+//
+// Example:
+//
+//	//go:embed scheme
+//	var schemeFS embed.FS
+//
+//	eng, err := wile.NewEngine(ctx,
+//	    wile.WithSourceFS(schemeFS),
+//	    wile.WithLibraryPaths("lib"),
+//	)
+func WithSourceFS(fsys fs.FS) EngineOption {
+	return func(cfg *engineConfig) {
+		cfg.sourceFS = fsys
 	}
 }
 

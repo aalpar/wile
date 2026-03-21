@@ -174,7 +174,11 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 
 		// Set the default file resolver for runtime include/load operations.
 		// This must happen after bootstrap (which uses EmbedFileResolver).
-		env.SetFileResolver(machine.NewOSFileResolver(env))
+		if cfg.sourceFS != nil {
+			env.SetFileResolver(machine.NewFSFileResolver(cfg.sourceFS, env))
+		} else {
+			env.SetFileResolver(machine.NewOSFileResolver(env))
+		}
 	}
 
 	env := ns.Runtime()
@@ -182,7 +186,11 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	if cfg.libraryEnabled {
 		// File resolver must be set before library loading
 		if env.FileResolver() == nil {
-			env.SetFileResolver(machine.NewOSFileResolver(env))
+			if cfg.sourceFS != nil {
+				env.SetFileResolver(machine.NewFSFileResolver(cfg.sourceFS, env))
+			} else {
+				env.SetFileResolver(machine.NewOSFileResolver(env))
+			}
 		}
 		macroSources := reg.MacroSources()
 		bootstrapResolver := machine.NewEmbedFileResolver(core.BootstrapFS)
