@@ -83,6 +83,110 @@ func TestWithLibraryPaths_NotEnabled(t *testing.T) {
 	c.Assert(err.Error(), qt.Contains, "no library registry configured")
 }
 
+func TestLibraryExportEncapsulation(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	sld := `(define-library (encap)
+  (export public-fn)
+  (begin
+    (define (private-fn x) (* x 2))
+    (define (public-fn x) (+ x (private-fn x)))))`
+
+	err := os.WriteFile(filepath.Join(tmpDir, "encap.sld"), []byte(sld), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	engine, err := wile.NewEngine(ctx, wile.WithLibraryPaths(tmpDir))
+	c.Assert(err, qt.IsNil)
+
+	// Exported binding works through the full pipeline.
+	result, err := engine.EvalMultiple(ctx, `
+		(import (encap))
+		(public-fn 5)
+	`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "15")
+
+	// Non-exported binding must not be accessible from outside.
+	_, err = engine.EvalMultiple(ctx, `
+		(import (encap))
+		(private-fn 5)
+	`)
+	c.Assert(err, qt.IsNotNil,
+		qt.Commentf("private-fn is not exported and must not be accessible"))
+}
+
+func TestLibraryIsolationFromTopLevel(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	// Library references "leaked" without importing or defining it.
+	// If top-level bindings bleed into the library environment,
+	// this would silently resolve; otherwise compilation fails.
+	sld := `(define-library (leak-check)
+  (export get-leaked)
+  (begin
+    (define (get-leaked) leaked)))`
+
+	err := os.WriteFile(filepath.Join(tmpDir, "leak-check.sld"), []byte(sld), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	engine, err := wile.NewEngine(ctx, wile.WithLibraryPaths(tmpDir))
+	c.Assert(err, qt.IsNil)
+
+	// Define "leaked" at top-level before importing the library.
+	_, err = engine.Eval(ctx, `(define leaked 999)`)
+	c.Assert(err, qt.IsNil)
+
+	// Import + call should fail: the library's environment must not
+	// inherit top-level bindings.
+	_, err = engine.EvalMultiple(ctx, `
+		(import (leak-check))
+		(get-leaked)
+	`)
+	c.Assert(err, qt.IsNotNil,
+		qt.Commentf("top-level binding must not leak into library environment"))
+}
+
+func TestLibraryIsolationBetweenLibraries(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+
+	// Two libraries each define an internal "helper" with different values.
+	sldA := `(define-library (iso-a)
+  (export a-val)
+  (begin
+    (define helper 10)
+    (define (a-val) helper)))`
+
+	sldB := `(define-library (iso-b)
+  (export b-val)
+  (begin
+    (define helper 20)
+    (define (b-val) helper)))`
+
+	err := os.WriteFile(filepath.Join(tmpDir, "iso-a.sld"), []byte(sldA), 0o644)
+	c.Assert(err, qt.IsNil)
+	err = os.WriteFile(filepath.Join(tmpDir, "iso-b.sld"), []byte(sldB), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	engine, err := wile.NewEngine(ctx, wile.WithLibraryPaths(tmpDir))
+	c.Assert(err, qt.IsNil)
+
+	// Import both and verify each library's closure captures its own "helper".
+	result, err := engine.EvalMultiple(ctx, `
+		(import (iso-a))
+		(import (iso-b))
+		(list (a-val) (b-val))
+	`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "(10 20)")
+}
+
 func TestWithLibraryPaths_GoFuncsAvailableInLibrary(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
