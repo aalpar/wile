@@ -61,9 +61,9 @@ type Engine struct {
 // extSnapshot tracks the primitive index range for an extension so it can be
 // registered as a synthetic R7RS library after environment setup.
 type extSnapshot struct {
-	name       string // extension name for error messages and library naming
-	startIndex int // inclusive start of the extension's primitives in the registry
-	endIndex   int // exclusive end of the extension's primitives in the registry
+	name       string
+	startIndex int
+	endIndex   int
 	namer      registry.LibraryNamer // nil if not implemented
 }
 
