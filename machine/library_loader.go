@@ -29,12 +29,11 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
+	"strings"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
-	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/werr"
 )
 
@@ -44,66 +43,65 @@ import (
 // The function:
 // 1. Checks if already loaded (returns cached library)
 // 2. Checks for circular dependencies
-// 3. Finds the library file on the search path
+// 3. Resolves and opens the library file via FileResolver
 // 4. Parses and compiles the define-library form
 // 5. Executes the library to create runtime bindings
 // 6. Registers the library in the registry
 func LoadLibrary(ctx context.Context, name LibraryName, env *environment.EnvironmentFrame) (*CompiledLibrary, error) {
-	// Get the library registry from the environment
 	registryAny := env.LibraryRegistry()
 	if registryAny == nil {
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration, "load-library: no library registry configured")
 	}
-	registry, ok := registryAny.(*LibraryRegistry)
+	reg, ok := registryAny.(*LibraryRegistry)
 	if !ok {
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration, "load-library: invalid library registry type")
 	}
 
-	// Already loaded?
-	lib := registry.Lookup(name)
+	lib := reg.Lookup(name)
 	if lib != nil {
 		return lib, nil
 	}
 
-	// Cycle detection
-	if registry.IsLoading(name) {
+	if reg.IsLoading(name) {
 		return nil, werr.WrapForeignErrorf(werr.ErrCircularDependency,
 			"circular dependency detected while loading %s", name.SchemeString())
 	}
-	registry.StartLoading(name)
-	defer registry.FinishLoading(name)
+	reg.StartLoading(name)
+	defer reg.FinishLoading(name)
 
-	// Try unified resolver first
-	stack := env.LoadPathStack()
-	filePath, err := environment.ResolveFile(stack, name.ToFilePath(), registry.GetSearchPaths())
+	// Resolve and open via FileResolver (supports both OS and virtual FS).
+	resolver, resolverOK := env.FileResolver().(FileResolver)
+	if !resolverOK {
+		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration,
+			"load-library: no file resolver configured")
+	}
+
+	// Try .sld first, then .scm.
+	// Only fall through to .scm on file-not-found; propagate other
+	// errors (e.g. security denial) immediately.
+	sldPath := name.ToFSPath()
+	f, filePath, err := resolver.ResolveAndOpen(ctx, sldPath)
 	if err != nil {
-		// ResolveFile didn't find it — fall back to FindLibraryFile
-		filePath, err = registry.FindLibraryFile(name)
+		if !errors.Is(err, werr.ErrFileNotFound) {
+			return nil, werr.WrapForeignErrorf(err,
+				"could not load library %s", name.SchemeString())
+		}
+		scmPath := strings.TrimSuffix(sldPath, ".sld") + ".scm"
+		f, filePath, err = resolver.ResolveAndOpen(ctx, scmPath)
 		if err != nil {
 			return nil, werr.WrapForeignErrorf(err,
 				"could not find library %s", name.SchemeString())
 		}
 	}
+	defer f.Close() //nolint:errcheck
 
-	auth, _ := env.Namespace().Authorizer().(security.Authorizer)
-	err = security.CheckWithAuthorizer(auth, security.AccessRequest{
-		Resource: security.ResourceCode,
-		Action:   security.ActionLoad,
-		Target:   filePath,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// Load the library from file
-	lib, err = loadLibraryFromFile(ctx, filePath, name, env)
+	lib, err = loadLibraryFromReader(ctx, f, filePath, name, env)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err,
 			"error loading library %s from %s", name.SchemeString(), filePath)
 	}
 
-	// Register the library
-	err = registry.Register(lib)
+	err = reg.Register(lib)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err,
 			"error registering library %s", name.SchemeString())
@@ -112,16 +110,9 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 	return lib, nil
 }
 
-// loadLibraryFromFile parses, compiles, and executes a library file.
-func loadLibraryFromFile(ctx context.Context, filePath string, expectedName LibraryName, callerEnv *environment.EnvironmentFrame) (*CompiledLibrary, error) {
-	// Open the file
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "could not open file")
-	}
-	defer file.Close() //nolint:errcheck
-
-	// Push to stack after successful open, pop on exit
+// loadLibraryFromReader parses, compiles, and executes a library from an open reader.
+func loadLibraryFromReader(ctx context.Context, r io.Reader, filePath string, expectedName LibraryName, callerEnv *environment.EnvironmentFrame) (*CompiledLibrary, error) {
+	// Push to stack after successful open, pop on exit.
 	stack := callerEnv.LoadPathStack()
 	if stack != nil {
 		pushErr := stack.Push(filePath)
@@ -131,9 +122,6 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 		defer stack.Pop()
 	}
 
-	// Create a fresh environment for the library
-	// This isolates the library's bindings from the caller's environment,
-	// but shares the Namespace for syntax interning.
 	factory := callerEnv.Namespace().LibraryEnvFactory()
 	if factory == nil {
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration, "LibraryEnvFactory not configured")
@@ -143,15 +131,11 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 		return nil, werr.WrapForeignErrorf(err, "could not create library environment")
 	}
 
-	// Share the library registry with the new environment
-	// so that nested imports work correctly
 	libEnv.SetLibraryRegistry(callerEnv.LibraryRegistry())
 
-	// Parse the file
-	reader := bufio.NewReader(file)
+	reader := bufio.NewReader(r)
 	p := parser.NewParserWithFile(libEnv, true, reader, filePath)
 
-	// Read the first form - should be define-library
 	stx, err := p.ReadSyntax(ctx)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
@@ -160,7 +144,6 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 		return nil, werr.WrapForeignErrorf(err, "could not parse library file")
 	}
 
-	// Verify it's a define-library form
 	pair, ok := stx.(*syntax.SyntaxPair)
 	if !ok {
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "expected define-library form, got %T", stx)
@@ -177,7 +160,6 @@ func loadLibraryFromFile(ctx context.Context, filePath string, expectedName Libr
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "expected define-library, got %s", symName)
 	}
 
-	// Compile and execute the library
 	lib, err := compileAndExecuteLibrary(ctx, stx, expectedName, libEnv, filePath)
 	if err != nil {
 		return nil, err

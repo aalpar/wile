@@ -232,6 +232,7 @@ func TestCompileImport_LibraryNotFound(t *testing.T) {
 	// Set up a library registry (required for imports)
 	registry := machine.NewLibraryRegistry()
 	env.SetLibraryRegistry(registry)
+	env.SetFileResolver(machine.NewOSFileResolver(env))
 
 	// Parse an import declaration
 	importDef := parseLibrarySyntax(t, env, `(import (scheme base))`)
