@@ -99,6 +99,16 @@ func (p *RuntimeError) IsSchemeException() bool {
 	return p != nil && p.Condition != nil
 }
 
+// newRuntimeError creates a RuntimeError with only a message.
+func newRuntimeError(msg string) *RuntimeError {
+	return &RuntimeError{Message: msg}
+}
+
+// newRuntimeErrorWithCause creates a RuntimeError with a message and an underlying cause.
+func newRuntimeErrorWithCause(msg string, cause error) *RuntimeError {
+	return &RuntimeError{Message: msg, Cause: cause}
+}
+
 // isEOF checks if an error represents end of input.
 func isEOF(err error) bool {
 	return errors.Is(err, io.EOF)

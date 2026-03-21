@@ -466,7 +466,7 @@ func (p *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, er
 	// Composable continuations require the VM winding stack.
 	_, isCC := callee.(*machine.ComposableContinuation)
 	if isCC {
-		return nil, &RuntimeError{Message: "cannot call composable continuation from Go"}
+		return nil, newRuntimeError("cannot call composable continuation from Go")
 	}
 
 	// Reject non-procedures before entering the VM.
@@ -476,17 +476,22 @@ func (p *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, er
 	// Callable path below handles closures and case-lambdas.
 	callable, isCallable := callee.(values.Callable)
 	if !isCallable {
-		return nil, &RuntimeError{Message: "not a procedure"}
+		return nil, newRuntimeError("not a procedure")
 	}
 
 	return p.callCallable(ctx, callable, unwrappedArgs)
 }
 
+// callCallable spins up a sub-context to apply a general Callable (closure,
+// case-lambda) and returns the result. Used by Call and callParameter.
 func (p *Engine) callCallable(ctx context.Context, callable values.Callable, args []values.Value) (Value, error) {
+	// Build a throwaway top-level context with an empty template — the
+	// real work happens in the sub-context, but the VM needs a root.
 	tpl := machine.NewEmptyNativeTemplate()
 	mc := machine.AcquireTopLevelContext(ctx, tpl, p.env)
 	mc.SetMaxCallDepth(p.maxCallDepth)
 
+	// Create a sub-context, set up the call frame, and execute.
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
 	defer machine.ReleaseTopLevelContext(mc)
@@ -495,6 +500,7 @@ func (p *Engine) callCallable(ctx context.Context, callable values.Callable, arg
 		return nil, p.wrapRuntimeError(err)
 	}
 
+	// Run the VM loop; escape continuations are caught and converted.
 	err = sub.RunWithEscapeHandling()
 	if err != nil {
 		return nil, p.wrapRuntimeError(err)
@@ -502,17 +508,21 @@ func (p *Engine) callCallable(ctx context.Context, callable values.Callable, arg
 	return wrapValue(sub.GetValue()), nil
 }
 
+// callParameter handles Parameter invocation from Go: zero args returns the
+// current value, one arg sets it (running the converter if present).
 func (p *Engine) callParameter(ctx context.Context, param *machine.Parameter, args []values.Value) (Value, error) {
 	switch len(args) {
 	case 0:
+		// (param) — read the current value.
 		return wrapValue(param.Value()), nil
 
 	case 1:
+		// (param val) — set the value, running the converter first if one exists.
 		newVal := args[0]
 		if param.HasConverter() {
 			converted, err := p.callCallable(ctx, param.Converter(), []values.Value{newVal})
 			if err != nil {
-				return nil, &RuntimeError{Message: "parameter: converter error", Cause: err}
+				return nil, newRuntimeErrorWithCause("parameter: converter error", err)
 			}
 			newVal = unwrapValue(converted)
 		}
@@ -520,9 +530,7 @@ func (p *Engine) callParameter(ctx context.Context, param *machine.Parameter, ar
 		return Void, nil
 
 	default:
-		return nil, &RuntimeError{
-			Message: fmt.Sprintf("parameter: expected 0 or 1 arguments, got %d", len(args)),
-		}
+		return nil, newRuntimeError(fmt.Sprintf("parameter: expected 0 or 1 arguments, got %d", len(args)))
 	}
 }
 
@@ -688,7 +696,7 @@ func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
 		}
 		return re
 	}
-	return &RuntimeError{Message: "runtime error", Cause: err}
+	return newRuntimeErrorWithCause("runtime error", err)
 }
 
 func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame, sources []string, resolver machine.FileResolver) error {
