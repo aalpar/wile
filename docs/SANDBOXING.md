@@ -82,7 +82,7 @@ engine, err := wile.NewEngine(ctx,
 
 This produces an engine where only `sqrt`, `sin`, `cos`, etc. exist. Even `+`, `car`, and `if` are absent. This is useful for building highly specialized engines.
 
-Note: `WithoutCore()` and `WithRegistry(reg)` are independent. `WithRegistry` provides a pre-populated registry (skipping default core setup). `WithoutCore` creates an empty registry. If both are set, `WithRegistry` takes precedence (the custom registry is used as-is, `skipCore` has no effect).
+Note: Both `WithoutCore()` and `WithRegistry(reg)` set the registry. `WithRegistry` provides a pre-populated registry (skipping default core setup). `WithoutCore` provides an empty registry. If both are used, last-wins (standard Go options semantics).
 
 ## Enforcement mechanism
 

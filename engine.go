@@ -209,11 +209,9 @@ func buildRegistry(cfg *engineConfig) (*registry.Registry, []extSnapshot, []regi
 	reg := cfg.registry
 	if reg == nil {
 		reg = registry.NewRegistry()
-		if !cfg.skipCore {
-			err := core.AddToRegistry(reg)
-			if err != nil {
-				return nil, nil, nil, werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "register core primitives")
-			}
+		err := core.AddToRegistry(reg)
+		if err != nil {
+			return nil, nil, nil, werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "register core primitives")
 		}
 	}
 
