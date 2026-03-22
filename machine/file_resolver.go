@@ -166,13 +166,18 @@ func (p *FSFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.File
 
 	// Strategy 1: Try relative to current load directory.
 	stack := p.env.LoadPathStack()
-	currentDir := stack.CurrentDir()
-	if currentDir != "" && currentDir != "." {
-		candidate := p.statCandidate(currentDir, path)
-		if candidate != "" {
-			return p.openChecked(candidate)
+	if stack != nil {
+		currentDir := stack.CurrentDir()
+		if currentDir != "" && currentDir != "." {
+			candidate, err := p.statCandidate(currentDir, path)
+			if err != nil {
+				return nil, "", err
+			}
+			if candidate != "" {
+				return p.openChecked(candidate)
+			}
+			searched = append(searched, currentDir+"/")
 		}
-		searched = append(searched, currentDir+"/")
 	}
 
 	// Strategy 2: Try library registry search paths.
@@ -181,7 +186,13 @@ func (p *FSFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.File
 		reg, ok := regAny.(*LibraryRegistry)
 		if ok {
 			for _, dir := range reg.GetSearchPaths() {
-				candidate := p.statCandidate(dir, path)
+				if dir == "" {
+					continue
+				}
+				candidate, err := p.statCandidate(dir, path)
+				if err != nil {
+					return nil, "", err
+				}
 				if candidate != "" {
 					return p.openChecked(candidate)
 				}
@@ -214,18 +225,24 @@ func (p *FSFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.File
 
 // statCandidate joins dir and file, validates the result is a legal fs.FS
 // path, and stats it. Returns the resolved path on success, empty string
-// if the file does not exist. Returns an error only for non-ErrNotExist
-// failures (I/O errors, permission errors, etc.).
-func (p *FSFileResolver) statCandidate(dir, file string) string {
+// if the file does not exist. Returns an error for non-ErrNotExist
+// failures (I/O errors, permission errors).
+func (p *FSFileResolver) statCandidate(dir, file string) (string, error) {
 	candidate := pathpkg.Join(dir, file)
 	if !fs.ValidPath(candidate) {
-		return ""
+		return "", nil
 	}
 	_, err := fs.Stat(p.fsys, candidate)
 	if err == nil {
-		return candidate
+		return candidate, nil
 	}
-	return ""
+	if !errors.Is(err, fs.ErrNotExist) {
+		return "", werr.WrapForeignErrorWithCause(
+			werr.ErrFileNotFound, err,
+			"stat %s in virtual filesystem", candidate,
+		)
+	}
+	return "", nil
 }
 
 // openChecked performs security authorization and opens a resolved path.
