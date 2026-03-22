@@ -32,7 +32,7 @@ import (
 // Like quasiquote, unsyntax only evaluates when depth reaches 0.
 // The result is a syntax object, not a raw datum.
 func (p *CompileTimeContinuation) CompileQuasisyntax(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	// expr is the CDR of the form (already has keyword stripped).
+	// expr is the CDR of the form (keyword stripped by registerSyntaxCompiler in register.go).
 	// So expr = (template)
 	argsPair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || argsPair.IsEmptyList() {

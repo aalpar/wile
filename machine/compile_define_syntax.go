@@ -49,7 +49,7 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 	if err != nil {
 		return err
 	}
-	// expr is (keyword transformer-expr) - the args after 'define-syntax' has been stripped
+	// expr is (keyword transformer-expr) — keyword stripped by registerSyntaxCompiler in register.go
 	argsPair, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "define-syntax: expected keyword and transformer")

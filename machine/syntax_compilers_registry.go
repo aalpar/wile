@@ -21,19 +21,16 @@ import (
 )
 
 // RegisterSyntaxCompilers binds all syntax compilers in the compile-time
-// environment (env.Compile()). These are looked up by CompileSyntaxPrimitive()
-// when the compiler encounters a special form.
+// environment (env.Compile()). These bindings serve two purposes:
 //
-// The compiler uses a two-tier dispatch system:
+//  1. Library export/import: findLibraryBinding in library_bindings.go searches
+//     the compile environment to locate syntax compilers when exporting or
+//     importing forms like syntax-case, define-syntax, etc.
+//  2. Scope-aware lookup via LookupSyntaxCompiler for hygiene resolution.
 //
-// Tier 1 (Validated Forms): Core forms like if, define, lambda, set!, quote,
-// quasiquote, begin go through the validation layer which produces type-safe
-// ValidatedExpr types, then compile via compileValidated* methods. These are
-// NOT registered here.
-//
-// Tier 2 (Registry Forms): Extension forms like syntax-case, import, define-syntax
-// pass through validation as ValidatedLiteral, then are dispatched via this
-// registry. This is the single source of truth for these forms.
+// Compilation dispatch itself goes through the forms registry (register.go),
+// not through these bindings. The forms registry and the compile environment
+// are populated from the same source list to stay in sync.
 //
 // The syntax compilers are bound with BindingTypePrimitive to distinguish them
 // from syntax transformers (BindingTypeSyntax) and regular variables.

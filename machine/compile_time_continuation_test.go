@@ -859,39 +859,6 @@ func TestCompileContext_CompileCaseLambdaCall(t *testing.T) {
 	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
-// Tests moved from coverage_additional_test.go
-// compileProcedureArgumentList and CompileProcedureCall
-func TestCompileProcedureCallWithArgs(t *testing.T) {
-	env := newNamespace(environment.NewNamespace().Runtime())
-
-	testCases := []struct {
-		name string
-		prog string
-	}{
-		{
-			name: "simple procedure call with arguments",
-			prog: "((lambda (x y) x) 1 2)",
-		},
-		{
-			name: "nested procedure calls",
-			prog: "((lambda (f) (f 1)) (lambda (x) x))",
-		},
-		{
-			name: "procedure call with multiple args",
-			prog: "((lambda (a b c) a) 1 2 3)",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			sv := parseSchemeExpr(t, env, tc.prog)
-			cont, err := newTopLevelThunk(sv, env)
-			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, cont, qt.IsNotNil)
-		})
-	}
-}
-
 // TestCompileLambdaParameterListVariants tests lambda with various parameter lists
 func TestCompileLambdaParameterListVariants(t *testing.T) {
 	testCases := []struct {
@@ -1230,46 +1197,6 @@ func TestCompileQuasiquoteSimple(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 }
 
-// TestCompileProcedureCallTail tests tail call compilation
-func TestCompileProcedureCallTail(t *testing.T) {
-	env := newNamespace(environment.NewNamespace().Runtime())
-	err := RegisterSyntaxCompilers(env)
-	qt.Assert(t, err, qt.IsNil)
-
-	// Lambda with tail call
-	sv := parseSchemeExpr(t, env, `(define (fn x) ((lambda (y) y) x))`)
-	cont, err := newTopLevelThunk(sv, env)
-	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(context.Background(), cont)
-	err = mc.Run()
-	qt.Assert(t, err, qt.IsNil)
-
-	// Test calling the function
-	sv = parseSchemeExpr(t, env, `(fn 42)`)
-	cont, err = newTopLevelThunk(sv, env)
-	qt.Assert(t, err, qt.IsNil)
-	mc = NewMachineContext(context.Background(), cont)
-	err = mc.Run()
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
-}
-
-// TestCompileProcedureCallNonTail tests non-tail call compilation
-func TestCompileProcedureCallNonTail(t *testing.T) {
-	env := newNamespace(environment.NewNamespace().Runtime())
-	err := RegisterSyntaxCompilers(env)
-	qt.Assert(t, err, qt.IsNil)
-
-	// Lambda with non-tail call (result used as argument)
-	sv := parseSchemeExpr(t, env, `((lambda (x) (begin ((lambda (y) y) x) 99)) 1)`)
-	cont, err := newTopLevelThunk(sv, env)
-	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(context.Background(), cont)
-	err = mc.Run()
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(99))
-}
-
 // TestCompileBeginSequence tests begin with multiple expressions
 func TestCompileBeginSequence(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())
@@ -1444,36 +1371,6 @@ func TestCompileSymbolLocalBinding(t *testing.T) {
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(99))
-}
-
-// historical but the test remains valid for verifying primitive form compilation.
-func TestCompileSyntaxPrimitiveBranches(t *testing.T) {
-	env := newNamespace(environment.NewNamespace().Runtime())
-	err := RegisterSyntaxCompilers(env)
-	qt.Assert(t, err, qt.IsNil)
-
-	// Test various primitives
-	testCases := []struct {
-		name string
-		prog string
-	}{
-		{"quote", "'bindSymbolWithScopes"},
-		{"if-true", "(if #t 1 2)"},
-		{"if-false", "(if #f 1 2)"},
-		{"lambda", "(lambda (x) x)"},
-		{"begin", "(begin 1 2 3)"},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			sv := parseSchemeExpr(t, env, tc.prog)
-			cont, err := newTopLevelThunk(sv, env)
-			qt.Assert(t, err, qt.IsNil)
-			mc := NewMachineContext(context.Background(), cont)
-			err = mc.Run()
-			qt.Assert(t, err, qt.IsNil)
-		})
-	}
 }
 
 // TestCompileMultipleForms tests compiling multiple forms
@@ -2243,22 +2140,6 @@ func TestCompileSymbolNoBinding(t *testing.T) {
 	_, err = newTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "no such")
-}
-
-// TestCompilePrimitiveOrProcedureCallWithPair tests procedure call with pair in function position
-func TestCompilePrimitiveOrProcedureCallWithPair(t *testing.T) {
-	env := newNamespace(environment.NewNamespace().Runtime())
-	err := RegisterSyntaxCompilers(env)
-	qt.Assert(t, err, qt.IsNil)
-
-	// Call with lambda directly in function position
-	sv := parseSchemeExpr(t, env, "((lambda (x) x) 42)")
-	cont, err := newTopLevelThunk(sv, env)
-	qt.Assert(t, err, qt.IsNil)
-	mc := NewMachineContext(context.Background(), cont)
-	err = mc.Run()
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(42))
 }
 
 // TestCompileValidatedLambdaVariadic tests variadic lambda compilation

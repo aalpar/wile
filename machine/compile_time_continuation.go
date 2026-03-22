@@ -75,7 +75,7 @@ func (p *CompileTimeContinuation) SetFileResolver(r FileResolver) {
 }
 
 // formArgs extracts the argument list from a compiled form's expression.
-// expr is the CDR of the form (keyword already stripped by the dispatcher).
+// expr is the CDR of the form (keyword stripped by registerSyntaxCompiler in register.go).
 // usage describes what the form expects (e.g. "bindings and body") for error
 // messages. Returns the arguments as a non-empty SyntaxPair, or an error if
 // expr is not a SyntaxPair or is the empty list.
@@ -228,31 +228,6 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes", sym.Key)
 }
 
-// CompileSyntaxPrimitive compiles extension forms via the syntax compiler registry.
-// Core forms (if, lambda, define, etc.) use a separate validated compilation path —
-// see compile_validated.go and the compileValidated() method there.
-func (p *CompileTimeContinuation) CompileSyntaxPrimitive(ctctx CompileTimeCallContext, sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (bool, error) {
-	symVal := sym.Sym
-	scopes := sym.Scopes()
-
-	// Dynamic lookup in the compile environment.
-	// Syntax compilers are bound as SyntaxCompiler values in env.Compile().
-	// All syntax compilers are registered in syntax_compilers_registry.go.
-	pc := LookupSyntaxCompiler(p.env, symVal, scopes)
-	if pc != nil {
-		err := pc.Compile(p, ctctx, expr)
-		if err != nil {
-			return true, err
-		}
-		return true, nil
-	}
-
-	// Not a primitive - caller should treat as procedure call.
-	// Core forms (define, lambda, quote, quasiquote, if, set!, begin) are handled
-	// by compileValidated* methods and never reach here.
-	return false, werr.WrapForeignErrorf(werr.ErrNotAPrimitive, "compileSyntaxCompilerCall: no syntax compiler for form")
-}
-
 // CompileMeta compiles a meta expression.
 func (p *CompileTimeContinuation) CompileMeta(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
 	rest, ok := expr.(*syntax.SyntaxPair)
@@ -265,26 +240,6 @@ func (p *CompileTimeContinuation) CompileMeta(ctctx CompileTimeCallContext, expr
 	err := metaCont.compileExpressionList(ctctx, rest)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "failed to compile meta")
-	}
-	return nil
-}
-
-func (p *CompileTimeContinuation) compileProcedureArgumentList(ctctx CompileTimeCallContext, args syntax.SyntaxValue) error {
-	tail, err := syntax.SyntaxForEach(ctctx.ctx, args, func(_ context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
-		err := p.CompileExpression(ctctx.NotInTail(), v)
-		if err != nil {
-			return werr.WrapForeignErrorf(err, "failed to compile procedure argument list")
-		}
-		p.AppendOperations(
-			NewOperationPush(),
-		)
-		return nil
-	})
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "failed to compile procedure argument list")
-	}
-	if !syntax.IsSyntaxEmptyList(tail) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "expected a list of arguments, got %T", tail)
 	}
 	return nil
 }
@@ -309,74 +264,6 @@ func (p *CompileTimeContinuation) compileExpressionList(ctctx CompileTimeCallCon
 	}
 	if !syntax.IsSyntaxEmptyList(tail) {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "expected expression list, got %T", tail)
-	}
-	return nil
-}
-
-// CompileProcedureCall compiles a procedure call expression.
-// It assumes that the initial element is not a primitive and compiles it as a procedure call.
-// The compiled code will leave the result of the procedure call on the stack.
-//
-// Tail Call Optimization: When ctctx.inTail is true, we skip SaveContinuation.
-// This allows the called function's RestoreContinuation to return directly
-// to our caller's continuation, implementing proper tail call optimization
-// per R7RS Section 3.5.
-func (p *CompileTimeContinuation) CompileProcedureCall(ctctx CompileTimeCallContext, initial syntax.SyntaxValue, expr syntax.SyntaxValue) error {
-	var operationSaveContinuationIndex int
-	if !ctctx.inTail {
-		// Non-tail call: save continuation so we can return here after the call
-		operationSaveContinuationIndex = p.emitPatchableSaveContinuation()
-	}
-	// Tail call: skip SaveContinuation - the callee will return directly to our caller
-
-	err := p.CompileExpression(ctctx.NotInTail(), initial)
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "failed to compile expression")
-	}
-	p.AppendOperations(
-		NewOperationPush(),
-	)
-	// compile as a procedure call
-	err = p.compileProcedureArgumentList(ctctx, expr)
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "failed to compile expression list")
-	}
-	p.AppendOperations(
-		NewOperationPull(),
-		NewOperationApply(),
-	)
-
-	if !ctctx.inTail {
-		p.patchSaveContinuationOffset(operationSaveContinuationIndex)
-	}
-	return nil
-}
-
-// CompilePrimitiveOrProcedureCall compiles either a primitive or a procedure call.
-// It first checks if the initial element is a syntax symbol that corresponds to a primitive.
-// If so, it compiles the primitive. If not, it treats it as a procedure call.
-func (p *CompileTimeContinuation) CompilePrimitiveOrProcedureCall(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	stx0pr, ok := expr.(*syntax.SyntaxPair)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAPair, "expected a pair for procedure call, got %T", expr)
-	}
-	initial := stx0pr.SyntaxCar()
-	stx1cdr := stx0pr.SyntaxCdr()
-	switch v := initial.(type) {
-	case *syntax.SyntaxSymbol:
-		ok, err := p.CompileSyntaxPrimitive(ctctx, v, stx1cdr)
-		if !ok {
-			return p.CompileProcedureCall(ctctx, v, stx1cdr)
-		}
-		if err != nil {
-			return werr.WrapForeignErrorf(err, "failed to compile primitive or call")
-		}
-	case *syntax.SyntaxPair:
-		err := p.CompileProcedureCall(ctctx, v, stx1cdr)
-		if err != nil {
-			return werr.WrapForeignErrorf(err, "failed to compile expression")
-		}
-		return nil
 	}
 	return nil
 }

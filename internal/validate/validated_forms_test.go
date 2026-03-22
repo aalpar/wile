@@ -365,5 +365,5 @@ func TestValidatedLiteral_Passthrough(t *testing.T) {
 
 	vl, ok := result.Expr.(*ValidatedLiteral)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(vl.FormName(), qt.Equals, "@literal")
+	c.Assert(vl.FormName(), qt.Equals, "let-syntax")
 }
