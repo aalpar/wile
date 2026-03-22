@@ -698,12 +698,21 @@ func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
 }
 
 // newFileResolver creates the appropriate FileResolver based on engine config.
-// Returns FSFileResolver when sourceFS is set, OSFileResolver otherwise.
+// When no resolver factories are configured, defaults to OSFileResolver.
+// A single factory returns its resolver directly; multiple factories
+// produce a ChainFileResolver that tries each in order.
 func newFileResolver(cfg *engineConfig, env *environment.EnvironmentFrame) machine.FileResolver {
-	if cfg.sourceFS != nil {
-		return machine.NewFSFileResolver(cfg.sourceFS, env)
+	if len(cfg.resolverFactories) == 0 {
+		return machine.NewOSFileResolver(env)
 	}
-	return machine.NewOSFileResolver(env)
+	if len(cfg.resolverFactories) == 1 {
+		return cfg.resolverFactories[0](env)
+	}
+	resolvers := make([]machine.FileResolver, len(cfg.resolverFactories))
+	for i, f := range cfg.resolverFactories {
+		resolvers[i] = f(env)
+	}
+	return machine.NewChainFileResolver(resolvers)
 }
 
 func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame, sources []string, resolver machine.FileResolver) error {

@@ -186,7 +186,7 @@ The result is that Wile's sandboxing has zero runtime cost, fails at compile tim
 
 `(include "file.scm")` is a compile-time special form, not a runtime primitive. It reads a file during compilation, regardless of whether the files extension is loaded. However, `include` and library loading are gated by `security.Check` (resource `code`, action `load`), so a `WithAuthorizer` policy can restrict which files are loaded.
 
-When `WithSourceFS(fsys)` is set, `include` and `load` resolve files from the provided `fs.FS` instead of the OS filesystem. This provides filesystem-level isolation without an authorizer — the Scheme code can only access files present in the virtual FS.
+`WithSourceFS(fsys)` adds a virtual filesystem layer to the source resolver chain. Multiple calls add layers searched in order. When only `WithSourceFS` is used (without `WithSourceOS()`), the OS filesystem is excluded — Scheme code can only access files in the configured virtual filesystems.
 
 Without an authorizer or `WithSourceFS`, `include` is unrestricted on the OS filesystem. If you are compiling untrusted source code, either:
 - Use `WithSourceFS(fsys)` to confine source loading to a virtual filesystem.

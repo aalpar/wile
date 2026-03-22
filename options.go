@@ -25,6 +25,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/security"
+	"github.com/aalpar/wile/werr"
 )
 
 // LibraryImportEvent records what happened when a library was imported.
@@ -39,17 +40,21 @@ const (
 )
 
 type engineConfig struct {
-	registry       *registry.Registry
-	extensions     []registry.Extension
-	maxCallDepth   uint64
-	callDepthSet   bool // true if WithMaxCallDepth was explicitly called
-	libraryPaths   []string
-	libraryEnabled bool // true when WithLibraryPaths was called
-	importObserver func(LibraryImportEvent)
-	authorizer     security.Authorizer
-	namespace      *environment.Namespace // pre-built namespace (via WithNamespace)
-	sourceFS       fs.FS                  // virtual filesystem for source loading (via WithSourceFS)
+	registry          *registry.Registry
+	extensions        []registry.Extension
+	maxCallDepth      uint64
+	callDepthSet      bool // true if WithMaxCallDepth was explicitly called
+	libraryPaths      []string
+	libraryEnabled    bool // true when WithLibraryPaths was called
+	importObserver    func(LibraryImportEvent)
+	authorizer        security.Authorizer
+	namespace         *environment.Namespace // pre-built namespace (via WithNamespace)
+	resolverFactories []resolverFactory      // source file resolver chain (via WithSourceFS, WithSourceOS)
 }
+
+// resolverFactory creates a FileResolver given the runtime environment.
+// Used internally by WithSourceFS and WithSourceOS to build the resolver chain.
+type resolverFactory func(*environment.EnvironmentFrame) machine.FileResolver
 
 // EngineOption configures an Engine.
 type EngineOption func(*engineConfig)
@@ -160,10 +165,11 @@ func WithNamespace(ns *environment.Namespace) EngineOption {
 	}
 }
 
-// WithSourceFS sets a virtual filesystem for all source file loading
-// (include, load, library import). When set, the OS filesystem is not
-// consulted for source files. Library search paths from WithLibraryPaths
-// become relative paths within the FS.
+// WithSourceFS adds a virtual filesystem layer to the source file
+// resolver chain. Multiple calls add layers searched in call order.
+// When no resolver options are used, the engine defaults to the OS
+// filesystem. Once any resolver option is used (WithSourceFS or
+// WithSourceOS), only the explicitly configured resolvers are active.
 //
 // Bootstrap macros are unaffected — they always load from the embedded
 // bootstrap filesystem.
@@ -174,12 +180,37 @@ func WithNamespace(ns *environment.Namespace) EngineOption {
 //	var schemeFS embed.FS
 //
 //	eng, err := wile.NewEngine(ctx,
-//	    wile.WithSourceFS(schemeFS),
-//	    wile.WithLibraryPaths("lib"),
+//	    wile.WithSourceFS(schemeFS),  // searched first
+//	    wile.WithSourceOS(),          // OS filesystem searched last
 //	)
 func WithSourceFS(fsys fs.FS) EngineOption {
+	if fsys == nil {
+		panic(werr.WrapForeignErrorf(werr.ErrEngineInit, "WithSourceFS: fsys must not be nil"))
+	}
 	return func(cfg *engineConfig) {
-		cfg.sourceFS = fsys
+		cfg.resolverFactories = append(cfg.resolverFactories, func(env *environment.EnvironmentFrame) machine.FileResolver {
+			return machine.NewFSFileResolver(fsys, env)
+		})
+	}
+}
+
+// WithSourceOS adds the OS filesystem to the source file resolver chain.
+// This is typically called last so that virtual filesystems are searched
+// first. When no resolver options are used, the engine defaults to the
+// OS filesystem; WithSourceOS is only needed when building an explicit
+// chain with WithSourceFS.
+//
+// Example:
+//
+//	eng, err := wile.NewEngine(ctx,
+//	    wile.WithSourceFS(embedFS),  // virtual FS first
+//	    wile.WithSourceOS(),         // OS fallback last
+//	)
+func WithSourceOS() EngineOption {
+	return func(cfg *engineConfig) {
+		cfg.resolverFactories = append(cfg.resolverFactories, func(env *environment.EnvironmentFrame) machine.FileResolver {
+			return machine.NewOSFileResolver(env)
+		})
 	}
 }
 
