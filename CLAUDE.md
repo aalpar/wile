@@ -62,7 +62,7 @@ Finish codebase reading and exploration before the session ends. If a plan is to
 1. **Language**: R7RS Scheme with hygienic macros (sets of scopes per Flatt 2016), first-class continuations, numeric tower
 2. **Execution**: Bytecode VM with explicit PC loop (`MachineContext.Run()` in `machine_context.go`), separate eval stack — NOT tree-walking interpreter
 3. **Continuations**: Explicit `MachineContinuation` linked list — NOT Go call stack; enables `call/cc`, dynamic-wind, delimited continuations
-4. **Pipeline**: `Tokenizer → Parser → Expander → Compiler → VM` (string → tokens → SyntaxValue → bytecode → execution)
+4. **Pipeline**: `Tokenizer → Parser → Expression → Expander → Compiler → VM` (string → tokens → SyntaxValue → *Expression → bytecode → execution)
 5. **Packages (public)**: `wile/` (Engine, embedding API), `values/` (Scheme types), `werr/` (error infrastructure), `registry/` (primitives/extensions), `security/` (authorization), `extensions/` (public extensions)
 6. **Packages (internal)**: `machine/` (VM/compiler/expander), `environment/` (bindings/scopes), `internal/{tokenizer,parser,syntax,match,repl,bootstrap,validate,schemeutil,forms,extensions}`
 7. **Values**: Go heap objects managed by Go GC — pure Go, no CGo, no custom allocator
@@ -76,11 +76,17 @@ Finish codebase reading and exploration before the session ends. If a plan is to
 
 ```
 string → Tokenizer(internal/tokenizer) → Parser(internal/parser) → SyntaxValue
+  → *Expression(expression.go, Engine.Parse())
   → Expander(machine/expander_*.go) → Compiler(machine/compile_*.go) → NativeTemplate
   → VM(machine/machine_context.go, MachineContext.Run()) → values.Value
 ```
 
-Entry: `engine.go` → `Engine.Eval()` or `Engine.Compile()` + `Engine.Run()`
+Single-expression entry: `Engine.Parse()` → `*Expression` → `Engine.Eval()` or `Engine.Compile()` + `Engine.Run()`
+Multi-expression entry: `Engine.EvalMultiple()` (string → parse/expand/compile/run loop internally)
+
+`*Expression` wraps a single `SyntaxValue` — the "exactly one expression" constraint
+is enforced at parse time by `Parse`, not by `Eval`/`Compile`. This prevents silent
+partial consumption of multi-expression input. See `expression.go`.
 
 ### Package Layering
 
