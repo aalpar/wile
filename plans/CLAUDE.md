@@ -29,6 +29,8 @@ When investigating R7RS conformance issues:
 | `INLINE-BINDINGS.md` | Embed `[4]Binding` inline array in `LocalEnvironmentFrame` | **Reverted** (PR #521) |
 | `NAMESPACES.md` | Namespace migration design: rename, registry/authorizer ownership, module instances, Scheme API | Complete (PR #544) |
 | `NAMESPACES-IMPLEMENTATION.md` | Task-by-task implementation plan for namespace migration (5 PRs) | Complete (PR #544) |
+| `FS-SOURCE-LOADING.md` | fs.FS support for source loading (include, load, import) via `WithSourceFS` | Complete (PR #553) |
+| `FS-SOURCE-LOADING-IMPL.md` | Task-by-task implementation plan for fs.FS source loading | Complete (PR #553) |
 Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans).
 
 ## Before Starting Work

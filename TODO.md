@@ -5,7 +5,7 @@ TODO
 
 ### Current Project Status
 
-**Version**: v1.7.0 (released)
+**Version**: v1.7.1 (released)
 **Core Language**: R7RS-small complete with hygienic macros, composable continuations, numeric tower
 **Extensions**: 11 extension packages — 7 public (files, math, system, threads, exceptions, gointerop, introspection), 4 internal (io, eval, namespace, all); all importable as R7RS `(wile <name>)` libraries. Go static analysis extensions extracted to [wile-goast](https://github.com/aalpar/wile-goast).
 **Examples**: 76 examples across 12 categories, 21 Gabriel benchmarks, Schelog
@@ -118,4 +118,5 @@ No demand signal. Speculative or research-only.
 - [ ] **Disassembler** Implement a disassembler for Wile
 - [ ] **CompilationError** does not have source location, nor does it have an identity as a SchemeError and no Wrap* constructor.  Look into CompilationError and determine where it sits between Scheme and Foreign errors
 - [ ] **RuntimeError** does not have an identity as SchemeError or ForeignError.  It also does not have a constructor
+- [ ] **cond-expand (library ...) with fs.FS** `FindLibraryFile` in `features.go` uses `os.Stat` directly; `cond-expand (library ...)` cannot detect libraries in a virtual `fs.FS`. Requires passing `FileResolver` into the `FeatureRequirement` interface.
 

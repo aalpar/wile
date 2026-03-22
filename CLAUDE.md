@@ -70,6 +70,7 @@ Finish codebase reading and exploration before the session ends. If a plan is to
 9. **Hygiene**: Identifiers carry scope sets, resolution checks `bindingScopes ⊆ useScopes`; free template identifiers skip intro scope
 10. **Concurrency**: Engine not thread-safe (one per goroutine); SRFI-18 threads within Engine safe (VM manages coordination)
 11. **Security**: Two-layer sandboxing — extension-level (opt-in via `WithExtension()`) and fine-grained authorization (`security.Authorizer` interface with `security.Check()` gating)
+12. **Source loading**: All include/load/import goes through `FileResolver` interface (`machine/file_resolver.go`). Three implementations: `OSFileResolver` (OS filesystem), `FSFileResolver` (virtual `fs.FS` via `WithSourceFS`), `EmbedFileResolver` (bootstrap)
 
 ### Pipeline
 

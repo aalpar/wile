@@ -157,6 +157,8 @@ Engine behavior can be customized via functional options:
 | `WithoutCore()` | Skip core primitives — bare engine with only explicit extensions |
 | `WithRegistry(r)` | Use a custom registry (skips automatic core registration) |
 | `WithAuthorizer(auth)` | Set fine-grained runtime authorization policy |
+| `WithSourceFS(fsys)` | Route all source loading through a virtual `fs.FS` |
+| `WithNamespace(ns)` | Use a pre-built namespace |
 
 Extensions implement `registry.Extension` and register primitives, macros, and compile-time definitions via `AddToRegistry`.
 
@@ -169,6 +171,24 @@ Wile provides two independent sandboxing layers.
 **Layer 2: Fine-grained authorization (runtime).** The `security.Authorizer` interface gates privileged operations at runtime using a K8s-style resource+action vocabulary (`file`, `code`, `env`, `process` x `read`, `write`, `delete`, `stat`, `load`, `exit`). Set via `WithAuthorizer(auth)`. Gate sites include file I/O, system calls, `eval`/`load`, `include`, and library loading. Without an authorizer, all operations are allowed (open by default). Built-in authorizers: `DenyAll()`, `ReadOnly()`, `FilesystemRoot(path)`, `All(authorizers...)`.
 
 The two layers complement each other: layer 1 removes entire categories of capability at zero runtime cost; layer 2 fine-tunes what remains. See [`docs/SANDBOXING.md`](../SANDBOXING.md) for the full security model.
+
+## Virtual Filesystem
+
+`WithSourceFS(fsys fs.FS)` routes all source file loading — `include`, `load`, and library `import` — through a Go `fs.FS` instead of the OS filesystem. This enables embedding Scheme source files using Go's `embed` package or any custom filesystem implementation.
+
+```go
+//go:embed scheme
+var schemeFS embed.FS
+
+engine, err := wile.NewEngine(ctx,
+    wile.WithSourceFS(schemeFS),
+    wile.WithLibraryPaths("lib"),
+)
+```
+
+When set, the OS filesystem is not consulted for source files (exclusive mode). Library search paths from `WithLibraryPaths` become relative paths within the FS. Bootstrap macros are unaffected — they always load from the embedded bootstrap filesystem.
+
+Internally, `WithSourceFS` creates an `FSFileResolver` that resolves files within the `fs.FS` using the same priority as the OS resolver: load-path-stack directory, then library search paths, then FS root. Absolute paths are rejected. Security authorization (`WithAuthorizer`) is still enforced.
 
 ## Design Decisions
 

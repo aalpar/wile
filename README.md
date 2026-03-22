@@ -169,6 +169,8 @@ The [`values`](https://pkg.go.dev/github.com/aalpar/wile/values) package provide
 | `wile.WithMaxCallDepth(n)` | Set maximum VM recursion depth |
 | `wile.WithAuthorizer(auth)` | Set fine-grained runtime authorization policy |
 | `wile.WithRegistry(r)` | Use a custom registry instead of the default core primitives |
+| `wile.WithSourceFS(fsys)` | Route all source loading (include, load, import) through a virtual `fs.FS` |
+| `wile.WithNamespace(ns)` | Use a pre-built namespace (see `NewNamespace`) |
 
 ## Quick Start
 
