@@ -18,6 +18,7 @@ import (
 	"github.com/aalpar/wile/internal/forms"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/internal/validate"
+	"github.com/aalpar/wile/werr"
 )
 
 func init() {
@@ -96,11 +97,21 @@ func registerTypedCompiler[T validate.ValidatedExpr](name string, fn func(*Compi
 // For forms that pass through validation as ValidatedLiteral.
 func registerSyntaxCompiler(name string, fn SyntaxCompilerFunc) {
 	forms.RegisterCompiler(name, func(ctc any, ctctx any, expr forms.ValidatedExpr) error {
-		// Extract syntax from ValidatedLiteral
-		lit := expr.(*validate.ValidatedLiteral)
-		pair := lit.Value.(*syntax.SyntaxPair)
-		// Skip the keyword, get the arguments
-		args := pair.Cdr().(syntax.SyntaxValue)
+		lit, ok := expr.(*validate.ValidatedLiteral)
+		if !ok {
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+				"registerSyntaxCompiler(%s): expected ValidatedLiteral, got %T", name, expr)
+		}
+		pair, ok := lit.Value.(*syntax.SyntaxPair)
+		if !ok {
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+				"registerSyntaxCompiler(%s): expected SyntaxPair, got %T", name, lit.Value)
+		}
+		args, ok := pair.Cdr().(syntax.SyntaxValue)
+		if !ok {
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+				"registerSyntaxCompiler(%s): CDR is not SyntaxValue: %T", name, pair.Cdr())
+		}
 		return fn(
 			ctc.(*CompileTimeContinuation),
 			ctctx.(CompileTimeCallContext),

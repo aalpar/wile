@@ -75,7 +75,7 @@ func (p *CompileTimeContinuation) SetFileResolver(r FileResolver) {
 }
 
 // formArgs extracts the argument list from a compiled form's expression.
-// expr is the CDR of the form (keyword already stripped by the dispatcher).
+// expr is the CDR of the form (keyword stripped by registerSyntaxCompiler in register.go).
 // usage describes what the form expects (e.g. "bindings and body") for error
 // messages. Returns the arguments as a non-empty SyntaxPair, or an error if
 // expr is not a SyntaxPair or is the empty list.

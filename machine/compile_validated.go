@@ -91,8 +91,15 @@ func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext,
 			// The compiler receives the validated expression with guaranteed structure.
 			return spec.Compile(p, ctctx, expr)
 		}
-		// Form name present but no compiler registered - fall through to type switch.
-		// This can happen for forms that pass through validation without deep checking.
+		if spec != nil && spec.Compile == nil {
+			// Known form with no compiler — this form should have been fully
+			// handled during expansion (e.g., let-syntax, letrec-syntax,
+			// syntax-rules). If it reached compilation, the expander has a bug.
+			return werr.WrapForeignErrorf(werr.ErrInvalidSyntax,
+				"compile: form %q has no compiler (should be handled during expansion)", expr.FormName())
+		}
+		// Form name present but not in registry - fall through to type switch.
+		// This handles synthetic names like "@call", "@symbol", "@literal".
 	}
 
 	// Strategy 2: Type-based dispatch for non-form expressions.
