@@ -7,9 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-03-21
+
+### Added
+
+- Add `ChainFileResolver` for multi-layer source loading — searches multiple `FileResolver` instances in order, falling through on file-not-found while propagating security denials and I/O errors immediately (#554)
+- Add `WithSourceOS()` engine option to explicitly include the OS filesystem in the resolver chain (#554)
+
 ### Changed
 
-- Extract Go static analysis extensions (`goast`, `goastssa`, `goastcfg`, `goastcg`, `goastlint`) to [wile-goast](https://github.com/aalpar/wile-goast) — removes `golang.org/x/tools` dependency from core interpreter (#492)
+- `WithSourceFS(fsys)` is now additive — multiple calls build a resolver chain searched in call order. Previously it was exclusive (replaced OS filesystem entirely). To get the old exclusive behavior, use `WithSourceFS(fsys)` without `WithSourceOS()` (#554)
+- `WithSourceFS(nil)` now panics eagerly at option creation time with a clear message (#554)
+- Internal: replace `sourceFS fs.FS` config field with `resolverFactories []resolverFactory` — each `WithSourceFS`/`WithSourceOS` call appends a factory closure (#554)
+
+## [1.7.1] - 2026-03-20
+
+### Added
+
+- Add `WithSourceFS(fs.FS)` engine option — route all source loading (include, load, library import) through a virtual filesystem (#553)
+- Add `FSFileResolver` for virtual filesystem source resolution with load-path-stack, search paths, and FS root fallback (#553)
+
+### Changed
+
+- `LoadLibrary` routes through `FileResolver` interface instead of calling `os.Open` directly (#553)
+- `LoadPathStack` accepts relative paths (relaxed from absolute-only) (#553)
+
+## [1.7.0] - 2026-03-19
+
+### Added
+
+- Add namespace system — `Namespace` type owns syntax interning, phases, library registry, primitive registry, authorizer, and module instances (#544)
+- Add `NewNamespace(ctx, opts...)`, `WithNamespace(ns)`, `Engine.EvalIn(ctx, code, ns)` for namespace management (#544)
+- Add Scheme namespace API — 10 primitives for runtime namespace creation and manipulation (#544)
+- Add Tier 1 Racket primitives and `(wile control)` library (#547)
+- Add marks-based `parameterize` for composable continuation correctness (#542)
+
+### Changed
+
+- Rename `TopLevelEnvironment` to `Namespace`; move registry and authorizer from Engine to Namespace (#544)
+- `extractPort` returns `(T, Tuple, bool, error)` instead of taking a thunk (#543)
+- Eliminate `skipCore` flag from `engineConfig` (#552)
+- Add `RuntimeError` constructors (#551)
+- Extract Go static analysis extensions to [wile-goast](https://github.com/aalpar/wile-goast) — removes `golang.org/x/tools` dependency (#492)
+
+### Fixed
+
+- Fix marks-based `parameterize` — `isolatedMarks` flag prevents stale parent marks in `call/cc` escape sub-contexts (#542)
+
+### Refactored
+
+- Tech debt sweep — remove string interning, add bounds checks and tests (#529)
+- Fix `readNan` fall-through and separate match from error in tokenizer (#530)
+- Comprehensive doc fixes across 18+ files (#531-#540)
 
 ## [1.6.1] - 2026-03-12
 
