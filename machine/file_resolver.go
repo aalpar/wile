@@ -16,9 +16,10 @@ package machine
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"os"
-	"path"
+	pathpkg "path"
 	"path/filepath"
 	"strings"
 
@@ -138,22 +139,26 @@ type FSFileResolver struct {
 }
 
 // NewFSFileResolver creates a resolver backed by the given filesystem.
+// Panics if fsys is nil.
 func NewFSFileResolver(fsys fs.FS, env *environment.EnvironmentFrame) *FSFileResolver {
+	if fsys == nil {
+		panic(werr.WrapForeignErrorf(werr.ErrEngineInit, "NewFSFileResolver: fsys must not be nil"))
+	}
 	return &FSFileResolver{
 		fsys: fsys,
 		env:  env,
 	}
 }
 
-func (p *FSFileResolver) ResolveAndOpen(ctx context.Context, filePath string) (fs.File, string, error) {
-	if filePath == "" {
+func (p *FSFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.File, string, error) {
+	if path == "" {
 		return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "resolve: empty filename")
 	}
-	if filepath.IsAbs(filePath) {
+	if filepath.IsAbs(path) {
 		return nil, "", werr.WrapForeignErrorf(
 			werr.ErrFileNotFound,
 			"resolve: absolute paths not supported in virtual filesystem: %s",
-			filePath,
+			path,
 		)
 	}
 
@@ -163,10 +168,9 @@ func (p *FSFileResolver) ResolveAndOpen(ctx context.Context, filePath string) (f
 	stack := p.env.LoadPathStack()
 	currentDir := stack.CurrentDir()
 	if currentDir != "" && currentDir != "." {
-		candidate := path.Join(currentDir, filePath)
-		_, err := fs.Stat(p.fsys, candidate)
-		if err == nil {
-			return p.openChecked(ctx, candidate)
+		candidate := p.statCandidate(currentDir, path)
+		if candidate != "" {
+			return p.openChecked(candidate)
 		}
 		searched = append(searched, currentDir+"/")
 	}
@@ -177,10 +181,9 @@ func (p *FSFileResolver) ResolveAndOpen(ctx context.Context, filePath string) (f
 		reg, ok := regAny.(*LibraryRegistry)
 		if ok {
 			for _, dir := range reg.GetSearchPaths() {
-				candidate := path.Join(dir, filePath)
-				_, err := fs.Stat(p.fsys, candidate)
-				if err == nil {
-					return p.openChecked(ctx, candidate)
+				candidate := p.statCandidate(dir, path)
+				if candidate != "" {
+					return p.openChecked(candidate)
 				}
 				searched = append(searched, dir+"/")
 			}
@@ -188,9 +191,15 @@ func (p *FSFileResolver) ResolveAndOpen(ctx context.Context, filePath string) (f
 	}
 
 	// Strategy 3: Try path as-is at FS root.
-	_, err := fs.Stat(p.fsys, filePath)
+	_, err := fs.Stat(p.fsys, path)
 	if err == nil {
-		return p.openChecked(ctx, filePath)
+		return p.openChecked(path)
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return nil, "", werr.WrapForeignErrorWithCause(
+			werr.ErrFileNotFound, err,
+			"stat %s in virtual filesystem", path,
+		)
 	}
 	searched = append(searched, "<fs-root>/")
 
@@ -198,15 +207,29 @@ func (p *FSFileResolver) ResolveAndOpen(ctx context.Context, filePath string) (f
 	return nil, "", werr.WrapForeignErrorf(
 		werr.ErrFileNotFound,
 		"file %q not found in virtual filesystem; searched: %s",
-		filePath,
+		path,
 		searchedList,
 	)
 }
 
-// openChecked performs security authorization and opens a resolved path.
-func (p *FSFileResolver) openChecked(ctx context.Context, resolvedPath string) (fs.File, string, error) {
-	_ = ctx // reserved for future context propagation
+// statCandidate joins dir and file, validates the result is a legal fs.FS
+// path, and stats it. Returns the resolved path on success, empty string
+// if the file does not exist. Returns an error only for non-ErrNotExist
+// failures (I/O errors, permission errors, etc.).
+func (p *FSFileResolver) statCandidate(dir, file string) string {
+	candidate := pathpkg.Join(dir, file)
+	if !fs.ValidPath(candidate) {
+		return ""
+	}
+	_, err := fs.Stat(p.fsys, candidate)
+	if err == nil {
+		return candidate
+	}
+	return ""
+}
 
+// openChecked performs security authorization and opens a resolved path.
+func (p *FSFileResolver) openChecked(resolvedPath string) (fs.File, string, error) {
 	auth, _ := p.env.Namespace().Authorizer().(security.Authorizer)
 	err := security.CheckWithAuthorizer(auth, security.AccessRequest{
 		Resource: security.ResourceCode,

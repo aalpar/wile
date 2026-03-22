@@ -9,7 +9,7 @@ import (
 )
 
 // LoadPathStack tracks the stack of files currently being loaded.
-// It maintains a LIFO stack of absolute file paths, enabling relative
+// It maintains a LIFO stack of file paths (absolute or relative), enabling
 // path resolution and load provenance tracking.
 //
 // # Threading and Concurrency

@@ -70,8 +70,8 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 	defer reg.FinishLoading(name)
 
 	// Resolve and open via FileResolver (supports both OS and virtual FS).
-	resolver, resolverOK := env.FileResolver().(FileResolver)
-	if !resolverOK {
+	resolver, ok := env.FileResolver().(FileResolver)
+	if !ok {
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration,
 			"load-library: no file resolver configured")
 	}
@@ -117,7 +117,7 @@ func loadLibraryFromReader(ctx context.Context, r io.Reader, filePath string, ex
 	if stack != nil {
 		pushErr := stack.Push(filePath)
 		if pushErr != nil {
-			return nil, pushErr
+			return nil, werr.WrapForeignErrorf(pushErr, "load library %s: push load path", expectedName.SchemeString())
 		}
 		defer stack.Pop()
 	}

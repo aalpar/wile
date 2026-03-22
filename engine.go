@@ -174,11 +174,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 
 		// Set the default file resolver for runtime include/load operations.
 		// This must happen after bootstrap (which uses EmbedFileResolver).
-		if cfg.sourceFS != nil {
-			env.SetFileResolver(machine.NewFSFileResolver(cfg.sourceFS, env))
-		} else {
-			env.SetFileResolver(machine.NewOSFileResolver(env))
-		}
+		env.SetFileResolver(newFileResolver(cfg, env))
 	}
 
 	env := ns.Runtime()
@@ -186,11 +182,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	if cfg.libraryEnabled {
 		// File resolver must be set before library loading
 		if env.FileResolver() == nil {
-			if cfg.sourceFS != nil {
-				env.SetFileResolver(machine.NewFSFileResolver(cfg.sourceFS, env))
-			} else {
-				env.SetFileResolver(machine.NewOSFileResolver(env))
-			}
+			env.SetFileResolver(newFileResolver(cfg, env))
 		}
 		macroSources := reg.MacroSources()
 		bootstrapResolver := machine.NewEmbedFileResolver(core.BootstrapFS)
@@ -705,6 +697,15 @@ func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
 	return newRuntimeErrorWithCause("runtime error", err)
 }
 
+// newFileResolver creates the appropriate FileResolver based on engine config.
+// Returns FSFileResolver when sourceFS is set, OSFileResolver otherwise.
+func newFileResolver(cfg *engineConfig, env *environment.EnvironmentFrame) machine.FileResolver {
+	if cfg.sourceFS != nil {
+		return machine.NewFSFileResolver(cfg.sourceFS, env)
+	}
+	return machine.NewOSFileResolver(env)
+}
+
 func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame, sources []string, resolver machine.FileResolver) error {
 	for _, source := range sources {
 		reader := strings.NewReader(source)
@@ -745,11 +746,11 @@ func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame
 // currently being loaded. The stack enables relative path resolution during
 // load operations.
 
-// WithLoadPath executes fn with absPath pushed onto the load path stack.
-// This is the recommended API for embedders - it guarantees balanced push/pop
+// WithLoadPath executes fn with filePath pushed onto the load path stack.
+// This is the recommended API for embedders — it guarantees balanced push/pop
 // via defer even if fn panics or returns an error.
 //
-// Returns an error if absPath is not an absolute path.
+// Returns an error if filePath is empty.
 //
 // Example:
 //
@@ -757,8 +758,8 @@ func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame
 //	    _, err := engine.Eval(ctx, "(load \"helper.scm\")") // resolves relative to /app/scripts/
 //	    return err
 //	})
-func (p *Engine) WithLoadPath(absPath string, fn func() error) error {
-	err := p.PushLoadPath(absPath)
+func (p *Engine) WithLoadPath(filePath string, fn func() error) error {
+	err := p.PushLoadPath(filePath)
 	if err != nil {
 		return err
 	}
@@ -766,7 +767,7 @@ func (p *Engine) WithLoadPath(absPath string, fn func() error) error {
 	return fn()
 }
 
-// CurrentLoadPath returns the absolute path of the file currently being loaded,
+// CurrentLoadPath returns the path of the file currently being loaded,
 // or empty string if no file is being loaded.
 func (p *Engine) CurrentLoadPath() string {
 	stack := p.namespace.LoadPathStack()
@@ -786,17 +787,17 @@ func (p *Engine) CurrentLoadDirectory() string {
 	return stack.CurrentDir()
 }
 
-// PushLoadPath pushes an absolute path onto the load path stack.
-// Returns an error if absPath is not absolute.
+// PushLoadPath pushes a path onto the load path stack.
+// Returns an error if the path is empty.
 //
 // Advanced embedders who need fine-grained control can use Push/Pop directly,
 // but most should use WithLoadPath for automatic cleanup.
-func (p *Engine) PushLoadPath(absPath string) error {
+func (p *Engine) PushLoadPath(filePath string) error {
 	stack := p.namespace.LoadPathStack()
 	if stack == nil {
 		return nil
 	}
-	return stack.Push(absPath)
+	return stack.Push(filePath)
 }
 
 // PopLoadPath removes the top path from the load path stack.

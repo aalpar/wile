@@ -136,7 +136,10 @@ func (p *libraryRequirement) IsSatisfied(registry *LibraryRegistry) bool {
 	if registry.Lookup(p.name) != nil {
 		return true
 	}
-	// Check if library file exists
+	// Check if library file exists on the OS filesystem.
+	// TODO: This uses os.Stat directly and does not consult the FileResolver,
+	// so cond-expand (library ...) cannot detect libraries in a virtual fs.FS.
+	// Fix requires passing FileResolver into the FeatureRequirement interface.
 	_, err := registry.FindLibraryFile(p.name)
 	return err == nil
 }

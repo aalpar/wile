@@ -608,10 +608,6 @@ func TestFSFileResolver_NotFoundListsSearchedPaths(t *testing.T) {
 	qt.Assert(t, errMsg, qt.Contains, "vendor/")
 }
 
-func TestFSFileResolver_InterfaceCompliance(t *testing.T) {
-	var _ FileResolver = (*FSFileResolver)(nil)
-}
-
 // --- Interface compliance ---
 
 func TestFileResolverInterfaceCompliance(t *testing.T) {

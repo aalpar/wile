@@ -75,7 +75,7 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 			if stack != nil {
 				pushErr := stack.Push(filePath)
 				if pushErr != nil {
-					return pushErr
+					return werr.WrapForeignErrorf(pushErr, "include: push load path for %q", fn.Value)
 				}
 				defer stack.Pop()
 			}
