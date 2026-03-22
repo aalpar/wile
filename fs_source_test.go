@@ -174,3 +174,125 @@ func TestWithSourceFS_NotSet_UsesOSFilesystem(t *testing.T) {
 	_, err = engine.Eval(ctx, `(include "definitely-nonexistent-file.scm")`)
 	c.Assert(err, qt.IsNotNil)
 }
+
+// TestWithSourceFS_LibraryScmFallback verifies that the library loader
+// falls back to .scm when no .sld file exists. This exercises the
+// .sld-then-.scm resolution path in LoadLibrary.
+func TestWithSourceFS_LibraryScmFallback(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	fsys := fstest.MapFS{
+		"lib/mylib.scm": &fstest.MapFile{
+			Data: []byte(`(define-library (mylib)
+  (export val)
+  (begin (define val 123)))`),
+		},
+	}
+
+	engine, err := wile.NewEngine(ctx,
+		wile.WithSafeExtensions(),
+		wile.WithSourceFS(fsys),
+		wile.WithLibraryPaths("lib"),
+	)
+	c.Assert(err, qt.IsNil)
+
+	result, err := engine.EvalMultiple(ctx, `(import (mylib)) val`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "123")
+}
+
+// TestWithSourceFS_TransitiveLibraryImport verifies that a library can
+// import another library and re-export values. Library (derived) imports
+// (base) and defines derived-val in terms of base-val.
+func TestWithSourceFS_TransitiveLibraryImport(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	fsys := fstest.MapFS{
+		"lib/base.sld": &fstest.MapFile{
+			Data: []byte(`(define-library (base)
+  (export base-val)
+  (begin (define base-val 10)))`),
+		},
+		"lib/derived.sld": &fstest.MapFile{
+			Data: []byte(`(define-library (derived)
+  (import (base))
+  (export derived-val)
+  (begin (define derived-val (+ base-val 5))))`),
+		},
+	}
+
+	engine, err := wile.NewEngine(ctx,
+		wile.WithSafeExtensions(),
+		wile.WithSourceFS(fsys),
+		wile.WithLibraryPaths("lib"),
+	)
+	c.Assert(err, qt.IsNil)
+
+	result, err := engine.EvalMultiple(ctx, `(import (derived)) derived-val`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "15")
+}
+
+// TestWithSourceFS_DeeplyNestedInclude verifies that three levels of
+// nested includes resolve correctly: a.scm -> sub/b.scm -> sub/deep/c.scm.
+// Each include is relative to the including file's directory, not the
+// original evaluation root.
+func TestWithSourceFS_DeeplyNestedInclude(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	fsys := fstest.MapFS{
+		"a.scm": &fstest.MapFile{
+			Data: []byte(`(include "sub/b.scm")`),
+		},
+		"sub/b.scm": &fstest.MapFile{
+			Data: []byte(`(include "deep/c.scm")`),
+		},
+		"sub/deep/c.scm": &fstest.MapFile{
+			Data: []byte(`(define deep-val 333)`),
+		},
+	}
+
+	engine, err := wile.NewEngine(ctx,
+		wile.WithSafeExtensions(),
+		wile.WithSourceFS(fsys),
+	)
+	c.Assert(err, qt.IsNil)
+
+	result, err := engine.EvalMultiple(ctx, `(include "a.scm") deep-val`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "333")
+}
+
+// TestWithSourceFS_IncludeDotDotTraversal verifies that a library's
+// (include ...) directive can use ".." to reach files outside its own
+// directory. The library at lib/mylib.sld includes ../shared/common.scm,
+// which resolves to shared/common.scm in the virtual filesystem.
+func TestWithSourceFS_IncludeDotDotTraversal(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	fsys := fstest.MapFS{
+		"shared/common.scm": &fstest.MapFile{
+			Data: []byte(`(define common-val 55)`),
+		},
+		"lib/mylib.sld": &fstest.MapFile{
+			Data: []byte(`(define-library (mylib)
+  (export common-val)
+  (include "../shared/common.scm"))`),
+		},
+	}
+
+	engine, err := wile.NewEngine(ctx,
+		wile.WithSafeExtensions(),
+		wile.WithSourceFS(fsys),
+		wile.WithLibraryPaths("lib"),
+	)
+	c.Assert(err, qt.IsNil)
+
+	result, err := engine.EvalMultiple(ctx, `(import (mylib)) common-val`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "55")
+}

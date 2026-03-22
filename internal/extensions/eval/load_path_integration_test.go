@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
 
 	qt "github.com/frankban/quicktest"
 
@@ -341,5 +342,93 @@ func TestLoad_ResolvesViaLibrarySearchPaths(t *testing.T) {
 	// (load "lib-helper.scm") should find it via library search paths.
 	evalCode(t, engine, `(load "lib-helper.scm")`)
 	result := evalCode(t, engine, `lib-helper-val`)
+	c.Assert(result.SchemeString(), qt.Equals, "77")
+}
+
+// --- WithSourceFS tests for (load ...) runtime path ---
+
+func TestLoad_WithSourceFS(t *testing.T) {
+	c := qt.New(t)
+
+	fsys := fstest.MapFS{
+		"helper.scm": &fstest.MapFile{
+			Data: []byte(`(define fs-load-val 42)`),
+		},
+	}
+
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithExtension(exteval.Extension),
+		wile.WithSourceFS(fsys),
+	)
+	c.Assert(err, qt.IsNil)
+
+	evalCode(t, engine, `(load "helper.scm")`)
+	result := evalCode(t, engine, `fs-load-val`)
+	c.Assert(result.SchemeString(), qt.Equals, "42")
+}
+
+func TestLoad_WithSourceFS_NestedLoad(t *testing.T) {
+	c := qt.New(t)
+
+	fsys := fstest.MapFS{
+		"main.scm": &fstest.MapFile{
+			Data: []byte(`(load "sub/helper.scm")`),
+		},
+		"sub/helper.scm": &fstest.MapFile{
+			Data: []byte(`(define nested-load-val 99)`),
+		},
+	}
+
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithExtension(exteval.Extension),
+		wile.WithSourceFS(fsys),
+	)
+	c.Assert(err, qt.IsNil)
+
+	evalCode(t, engine, `(load "main.scm")`)
+	result := evalCode(t, engine, `nested-load-val`)
+	c.Assert(result.SchemeString(), qt.Equals, "99")
+}
+
+func TestLoad_WithSourceFS_RejectsAbsolutePath(t *testing.T) {
+	c := qt.New(t)
+
+	fsys := fstest.MapFS{
+		"dummy.scm": &fstest.MapFile{
+			Data: []byte(`1`),
+		},
+	}
+
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithExtension(exteval.Extension),
+		wile.WithSourceFS(fsys),
+	)
+	c.Assert(err, qt.IsNil)
+
+	_, err = engine.Eval(context.Background(), `(load "/absolute/path.scm")`)
+	c.Assert(err, qt.IsNotNil)
+}
+
+func TestLoad_WithSourceFS_RelativeToLoadingFile(t *testing.T) {
+	c := qt.New(t)
+
+	// outer.scm in sub/ loads sibling.scm via ../sibling.scm
+	fsys := fstest.MapFS{
+		"sub/outer.scm": &fstest.MapFile{
+			Data: []byte(`(load "../sibling.scm")`),
+		},
+		"sibling.scm": &fstest.MapFile{
+			Data: []byte(`(define sibling-val 77)`),
+		},
+	}
+
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithExtension(exteval.Extension),
+		wile.WithSourceFS(fsys),
+	)
+	c.Assert(err, qt.IsNil)
+
+	evalCode(t, engine, `(load "sub/outer.scm")`)
+	result := evalCode(t, engine, `sibling-val`)
 	c.Assert(result.SchemeString(), qt.Equals, "77")
 }

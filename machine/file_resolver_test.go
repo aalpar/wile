@@ -474,6 +474,140 @@ func TestFSFileResolver_SecurityDenied(t *testing.T) {
 	qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
 }
 
+func TestFSFileResolver_LoadPathStackPriorityOverSearchPaths(t *testing.T) {
+	fsys := fstest.MapFS{
+		"stack-dir/util.scm":  {Data: []byte("from-stack")},
+		"search-dir/util.scm": {Data: []byte("from-search")},
+	}
+	env := environment.NewNamespace().Runtime()
+	libReg := NewLibraryRegistry()
+	libReg.PrependSearchPath("search-dir")
+	env.SetLibraryRegistry(libReg)
+
+	stack := env.LoadPathStack()
+	qt.Assert(t, stack.Push("stack-dir/parent.scm"), qt.IsNil)
+	defer stack.Pop()
+
+	r := NewFSFileResolver(fsys, env)
+	f, resolved, err := r.ResolveAndOpen(context.Background(), "util.scm")
+	qt.Assert(t, err, qt.IsNil)
+	defer f.Close()
+	qt.Assert(t, resolved, qt.Equals, "stack-dir/util.scm")
+}
+
+func TestFSFileResolver_SearchPathPriorityOverRoot(t *testing.T) {
+	fsys := fstest.MapFS{
+		"util.scm":            {Data: []byte("from-root")},
+		"search-dir/util.scm": {Data: []byte("from-search")},
+	}
+	env := environment.NewNamespace().Runtime()
+	libReg := NewLibraryRegistry()
+	libReg.PrependSearchPath("search-dir")
+	env.SetLibraryRegistry(libReg)
+
+	r := NewFSFileResolver(fsys, env)
+	f, resolved, err := r.ResolveAndOpen(context.Background(), "util.scm")
+	qt.Assert(t, err, qt.IsNil)
+	defer f.Close()
+	qt.Assert(t, resolved, qt.Equals, "search-dir/util.scm")
+}
+
+func TestFSFileResolver_FirstSearchPathWins(t *testing.T) {
+	fsys := fstest.MapFS{
+		"first/lib.scm":  {Data: []byte("from-first")},
+		"second/lib.scm": {Data: []byte("from-second")},
+	}
+	env := environment.NewNamespace().Runtime()
+	libReg := NewLibraryRegistry()
+	// PrependSearchPath prepends, so add in reverse order
+	libReg.PrependSearchPath("second")
+	libReg.PrependSearchPath("first")
+	env.SetLibraryRegistry(libReg)
+
+	r := NewFSFileResolver(fsys, env)
+	f, resolved, err := r.ResolveAndOpen(context.Background(), "lib.scm")
+	qt.Assert(t, err, qt.IsNil)
+	defer f.Close()
+	qt.Assert(t, resolved, qt.Equals, "first/lib.scm")
+}
+
+func TestFSFileResolver_EmptySearchPathSkipped(t *testing.T) {
+	fsys := fstest.MapFS{
+		"real-dir/found.scm": {Data: []byte("ok")},
+	}
+	env := environment.NewNamespace().Runtime()
+	libReg := NewLibraryRegistry()
+	libReg.PrependSearchPath("real-dir")
+	libReg.PrependSearchPath("")
+	env.SetLibraryRegistry(libReg)
+
+	r := NewFSFileResolver(fsys, env)
+	f, resolved, err := r.ResolveAndOpen(context.Background(), "found.scm")
+	qt.Assert(t, err, qt.IsNil)
+	defer f.Close()
+	qt.Assert(t, resolved, qt.Equals, "real-dir/found.scm")
+}
+
+func TestFSFileResolver_DotDotTraversal(t *testing.T) {
+	fsys := fstest.MapFS{
+		"sibling.scm":     {Data: []byte("found")},
+		"sub/current.scm": {Data: []byte("here")},
+	}
+	env := environment.NewNamespace().Runtime()
+	stack := env.LoadPathStack()
+	qt.Assert(t, stack.Push("sub/current.scm"), qt.IsNil)
+	defer stack.Pop()
+
+	r := NewFSFileResolver(fsys, env)
+	// path.Join("sub", "../sibling.scm") cleans to "sibling.scm"
+	f, resolved, err := r.ResolveAndOpen(context.Background(), "../sibling.scm")
+	qt.Assert(t, err, qt.IsNil)
+	defer f.Close()
+	qt.Assert(t, resolved, qt.Equals, "sibling.scm")
+}
+
+func TestFSFileResolver_FallsThroughToRoot(t *testing.T) {
+	fsys := fstest.MapFS{
+		"root-only.scm": {Data: []byte("at-root")},
+		"sub/other.scm": {Data: []byte("other")},
+	}
+	env := environment.NewNamespace().Runtime()
+	stack := env.LoadPathStack()
+	qt.Assert(t, stack.Push("sub/other.scm"), qt.IsNil)
+	defer stack.Pop()
+
+	r := NewFSFileResolver(fsys, env)
+	// "root-only.scm" is NOT in "sub/", so load-path-stack miss,
+	// no search paths, falls through to FS root
+	f, resolved, err := r.ResolveAndOpen(context.Background(), "root-only.scm")
+	qt.Assert(t, err, qt.IsNil)
+	defer f.Close()
+	qt.Assert(t, resolved, qt.Equals, "root-only.scm")
+}
+
+func TestFSFileResolver_NotFoundListsSearchedPaths(t *testing.T) {
+	fsys := fstest.MapFS{}
+	env := environment.NewNamespace().Runtime()
+	libReg := NewLibraryRegistry()
+	libReg.PrependSearchPath("vendor")
+	libReg.PrependSearchPath("lib")
+	env.SetLibraryRegistry(libReg)
+
+	stack := env.LoadPathStack()
+	qt.Assert(t, stack.Push("src/main.scm"), qt.IsNil)
+	defer stack.Pop()
+
+	r := NewFSFileResolver(fsys, env)
+	_, _, err := r.ResolveAndOpen(context.Background(), "missing.scm")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue)
+	// Error should mention all searched locations
+	errMsg := err.Error()
+	qt.Assert(t, errMsg, qt.Contains, "src/")
+	qt.Assert(t, errMsg, qt.Contains, "lib/")
+	qt.Assert(t, errMsg, qt.Contains, "vendor/")
+}
+
 func TestFSFileResolver_InterfaceCompliance(t *testing.T) {
 	var _ FileResolver = (*FSFileResolver)(nil)
 }
