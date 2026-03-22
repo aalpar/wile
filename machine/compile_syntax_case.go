@@ -44,7 +44,7 @@ import (
 //  3. Pattern variables are bound as local variables in the body's scope
 //  4. If fender exists, it's evaluated as a guard condition
 func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	// expr is the CDR of the form (already has keyword stripped by CompilePrimitiveOrProcedureCall).
+	// expr is the CDR of the form (keyword stripped by registerSyntaxCompiler in register.go).
 	// So expr = (input-expr (literals) clause ...)
 	argsPair, err := formArgs(expr, "syntax-case", "expression and clauses")
 	if err != nil {

@@ -17,7 +17,6 @@ package machine
 import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/forms"
-	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/internal/validate"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
@@ -28,9 +27,9 @@ import (
 // R7RS core forms: if, lambda, define, set!, quote, quasiquote, begin,
 // case-lambda, dynamic-wind, apply, with-continuation-mark.
 //
-// Extension forms (define-syntax, import, include, syntax-case, etc.) use a
-// separate registry-based compilation path in compile_time_continuation.go via
-// CompileSyntaxPrimitive() → LookupSyntaxCompiler().
+// Extension forms (define-syntax, import, include, syntax-case, etc.) pass through
+// validation as ValidatedLiteral and are compiled via registerSyntaxCompiler() in
+// register.go, which registers compile functions in the forms registry.
 //
 // Decision criteria: if a form has fixed syntax that can be validated once before
 // compilation, it goes through the validated path. If a form's syntax is
@@ -113,10 +112,9 @@ func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext,
 		return p.CompileSymbol(ctctx, v.Symbol)
 
 	case *validate.ValidatedLiteral:
-		// Self-evaluating literal or passthrough form.
-		// Numbers, strings, booleans, etc. compile to literal loads.
-		// Some forms (define-syntax, define-library) pass through as literals
-		// and are handled by the legacy compilation path.
+		// Self-evaluating literal: numbers, strings, booleans, etc.
+		// Passthrough forms (define-syntax, define-library, etc.) have registered
+		// compilers and are handled by Strategy 1 above.
 		return p.compileValidatedLiteral(ctctx, v)
 
 	default:
@@ -595,22 +593,11 @@ func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallCont
 	return nil
 }
 
-// compileValidatedLiteral handles self-evaluating values and passthrough forms.
+// compileValidatedLiteral handles self-evaluating values (numbers, strings, booleans, etc.).
+// Passthrough forms (define-syntax, syntax-case, etc.) are handled by registerSyntaxCompiler
+// in register.go via the forms registry, so they never reach here.
 func (p *CompileTimeContinuation) compileValidatedLiteral(ctctx CompileTimeCallContext, v *validate.ValidatedLiteral) error {
-	// Check if this is actually a special form that passed through validation
-	// (like define-syntax, define-library, etc.)
-	pair, ok := v.Value.(*syntax.SyntaxPair)
-	if ok && !pair.IsEmptyList() {
-		// This is a form that wasn't validated deeply - use the old path
-		return p.CompilePrimitiveOrProcedureCall(ctctx, pair)
-	}
-
-	// Self-evaluating literal
-	err := p.CompileSelfEvaluating(ctctx, v.Value)
-	if err != nil {
-		return err
-	}
-	return nil
+	return p.CompileSelfEvaluating(ctctx, v.Value)
 }
 
 // CompileValidatedDynamicWind compiles a validated (dynamic-wind before thunk after) form.

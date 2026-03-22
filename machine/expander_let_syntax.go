@@ -96,11 +96,10 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 			numBindings++
 			cdr := current.SyntaxCdr()
 			nextPair, ok := cdr.(*syntax.SyntaxPair)
-			if ok {
-				current = nextPair
-			} else {
+			if !ok {
 				break
 			}
+			current = nextPair
 		}
 	}
 
@@ -139,11 +138,10 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 
 			cdr := current.SyntaxCdr()
 			nextPair, ok := cdr.(*syntax.SyntaxPair)
-			if ok {
-				current = nextPair
-			} else {
+			if !ok {
 				break
 			}
+			current = nextPair
 		}
 	}
 
@@ -198,11 +196,10 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 
 		cdr := current.SyntaxCdr()
 		nextPair, ok := cdr.(*syntax.SyntaxPair)
-		if ok {
-			current = nextPair
-		} else {
+		if !ok {
 			break
 		}
+		current = nextPair
 	}
 
 	// Add the let-syntax scope to the body

@@ -30,7 +30,7 @@ import (
 //
 // (syntax template) -> syntax-object
 func (p *CompileTimeContinuation) CompileSyntax(_ CompileTimeCallContext, expr syntax.SyntaxValue) error {
-	// expr is the CDR of the form (already has keyword stripped by CompilePrimitiveOrProcedureCall).
+	// expr is the CDR of the form (keyword stripped by registerSyntaxCompiler in register.go).
 	// So expr = (template)
 	template, err := formSingleArg(expr, "syntax")
 	if err != nil {
