@@ -1,11 +1,11 @@
 TODO
 ----
 
-**Last Updated**: 2026-03-20
+**Last Updated**: 2026-03-22
 
 ### Current Project Status
 
-**Version**: v1.7.2 (released)
+**Version**: v1.8.0 (released)
 **Core Language**: R7RS-small complete with hygienic macros, composable continuations, numeric tower
 **Extensions**: 11 extension packages — 7 public (files, math, system, threads, exceptions, gointerop, introspection), 4 internal (io, eval, namespace, all); all importable as R7RS `(wile <name>)` libraries. Go static analysis extensions extracted to [wile-goast](https://github.com/aalpar/wile-goast).
 **Examples**: 76 examples across 12 categories, 21 Gabriel benchmarks, Schelog
@@ -77,6 +77,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 ## Features
 
+- [x] **Expression type API** [Architecture, PR #555]: Single-expression APIs (`Eval`, `Compile`, `EvalIn`) accept `*Expression` instead of `string`. New `Parse`/`ParseWithSource`/`MustParse`/`MustParseWithSource` enforce "exactly one expression" at parse time. `EvalWithSource`/`CompileWithSource` removed. Eliminates silent partial consumption of multi-expression input. `plans/EXPRESSION-TYPE-API.md`
 - [x] **Namespace system** [Architecture, PR #544]: `TopLevelEnvironment` → `Namespace`. Registry and authorizer moved from Engine to Namespace. Module instance caching. 10 Scheme primitives (`make-namespace`, `namespace-derive`, `namespace-define!`, `namespace-ref`, `namespace-bound?`, `namespace-undefine!`, `namespace-bound-names`, `namespace-require`, `namespace?`, `namespace-name`). `eval` gains 1-arg form. `wile.NewNamespace()`, `WithNamespace`, `Engine.EvalIn`. `plans/NAMESPACES.md`
 - [ ] **Opcode resource limits** [Security, Design]: Per-category limits for match/expand/continuation copy. Completes defense-in-depth for embedded use. `plans/SECURITY.md`
 - [ ] **Module decomposition Phase 1** [Architecture]: Decompose `internal/extensions/all/` into records, promises, core. Enables future module extraction. `plans/ARCHITECTURE.md`
