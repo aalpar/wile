@@ -50,7 +50,7 @@ func newEngineWithExceptions(t *testing.T) *wile.Engine {
 // eval runs Scheme code and returns the result.
 func eval(t *testing.T, engine *wile.Engine, code string) wile.Value {
 	t.Helper()
-	result, err := engine.Eval(context.Background(), code)
+	result, err := engine.EvalMultiple(context.Background(), code)
 	qt.New(t).Assert(err, qt.IsNil)
 	return result
 }
@@ -58,7 +58,11 @@ func eval(t *testing.T, engine *wile.Engine, code string) wile.Value {
 // evalExpectError runs Scheme code and asserts that it produces an error.
 func evalExpectError(t *testing.T, engine *wile.Engine, code string) {
 	t.Helper()
-	_, err := engine.Eval(context.Background(), code)
+	expr, err := engine.Parse(context.Background(), code)
+	if err != nil {
+		return // parse error counts as expected error
+	}
+	_, err = engine.Eval(context.Background(), expr)
 	qt.New(t).Assert(err, qt.IsNotNil)
 }
 
@@ -229,7 +233,7 @@ func TestThreadSleepContextCancellation(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			done := make(chan error, 1)
 			go func() {
-				_, err := engine.Eval(ctx, tc.code)
+				_, err := engine.Eval(ctx, engine.MustParse(ctx, tc.code))
 				done <- err
 			}()
 			// Cancel after a short delay to ensure the sleep has started
@@ -768,10 +772,10 @@ func TestThreadParentContextCancellation(t *testing.T) {
 	go func() {
 		// Note: engine.Eval is the Scheme interpreter's eval, not JavaScript eval.
 		// It compiles and runs Scheme source code on the Wile VM.
-		_, err := engine.Eval(ctx,
+		_, err := engine.Eval(ctx, engine.MustParse(ctx,
 			`(let ((th (make-thread (lambda () (let loop () (loop))))))
 			   (thread-start! th)
-			   (thread-join! th))`)
+			   (thread-join! th))`))
 		errCh <- err
 	}()
 
@@ -801,10 +805,10 @@ func TestThreadRespectsParentTimeout(t *testing.T) {
 	start := time.Now()
 	// Note: engine.Eval is the Scheme interpreter's eval, not JavaScript eval.
 	// It compiles and runs Scheme source code on the Wile VM.
-	_, err := engine.Eval(ctx,
+	_, err := engine.Eval(ctx, engine.MustParse(ctx,
 		`(let ((th (make-thread (lambda () (let loop () (loop))))))
 		   (thread-start! th)
-		   (thread-join! th))`)
+		   (thread-join! th))`))
 	elapsed := time.Since(start)
 
 	c.Assert(err, qt.IsNotNil)

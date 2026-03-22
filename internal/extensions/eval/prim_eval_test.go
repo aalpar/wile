@@ -41,10 +41,10 @@ func newEngine(t *testing.T) *wile.Engine {
 	return engine
 }
 
-// eval runs Scheme code and returns the result.
+// eval runs Scheme code and returns the result of the last expression.
 func eval(t *testing.T, engine *wile.Engine, code string) wile.Value {
 	t.Helper()
-	result, err := engine.Eval(context.Background(), code)
+	result, err := engine.EvalMultiple(context.Background(), code)
 	qt.Assert(t, err, qt.IsNil)
 	return result
 }
@@ -52,7 +52,11 @@ func eval(t *testing.T, engine *wile.Engine, code string) wile.Value {
 // evalExpectError runs Scheme code and expects an error.
 func evalExpectError(t *testing.T, engine *wile.Engine, code string) {
 	t.Helper()
-	_, err := engine.Eval(context.Background(), code)
+	expr, err := engine.Parse(context.Background(), code)
+	if err != nil {
+		return // parse error counts as expected error
+	}
+	_, err = engine.Eval(context.Background(), expr)
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
@@ -415,7 +419,7 @@ func TestEvalDynamicContextInheritance(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := engine.Eval(context.Background(), tc.code)
+			result, err := engine.Eval(context.Background(), engine.MustParse(context.Background(), tc.code))
 			c.Assert(err, qt.IsNil)
 			c.Assert(result.Internal(), qt.Equals, tc.want)
 		})
@@ -438,19 +442,19 @@ func TestEnvironmentWithLibraryRegistry(t *testing.T) {
 	t.Run("nonexistent library covers ForEach body", func(t *testing.T) {
 		// Entering the ForEach with a valid import spec covers ParseImportSetFromDatum
 		// and the LoadLibrary call (which fails because the library doesn't exist).
-		_, err := engine.Eval(context.Background(), `(environment '(nonexistent lib))`)
+		_, err := engine.Eval(context.Background(), engine.MustParse(context.Background(), `(environment '(nonexistent lib))`))
 		qt.Assert(t, err, qt.IsNotNil)
 	})
 
 	t.Run("for-syntax phase modifier parses correctly", func(t *testing.T) {
 		// for-syntax variant covers the phase-shift parsing in ParseImportSetFromDatum.
-		_, err := engine.Eval(context.Background(), `(environment '(for-syntax (nonexistent lib)))`)
+		_, err := engine.Eval(context.Background(), engine.MustParse(context.Background(), `(environment '(for-syntax (nonexistent lib)))`))
 		qt.Assert(t, err, qt.IsNotNil)
 	})
 
 	t.Run("successful library import", func(t *testing.T) {
 		result, err := engine.Eval(context.Background(),
-			`(eval '(caar '((1 2) 3)) (environment '(scheme cxr)))`)
+			engine.MustParse(context.Background(), `(eval '(caar '((1 2) 3)) (environment '(scheme cxr)))`))
 		c.Assert(err, qt.IsNil)
 		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewInteger(1))
 	})

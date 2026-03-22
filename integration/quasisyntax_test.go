@@ -163,7 +163,7 @@ func TestQuasisyntaxIntegration(t *testing.T) {
 
 			// Wrap in syntax->datum to unwrap the syntax object
 			code := `(syntax->datum ` + tt.code + `)`
-			result, err := engine.Eval(context.Background(), code)
+			result, err := engine.Eval(context.Background(), engine.MustParse(context.Background(), code))
 			c.Assert(err, qt.IsNil)
 			c.Assert(result.SchemeString(), qt.Equals, tt.expected)
 		})
@@ -205,7 +205,12 @@ func TestQuasisyntaxErrors(t *testing.T) {
 			engine, err := wile.NewEngine(context.Background())
 			c.Assert(err, qt.IsNil)
 
-			_, err = engine.Eval(context.Background(), tt.code)
+			expr, parseErr := engine.Parse(context.Background(), tt.code)
+			if parseErr != nil {
+				c.Assert(parseErr.Error(), qt.Contains, tt.expectError)
+				return
+			}
+			_, err = engine.Eval(context.Background(), expr)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(err.Error(), qt.Contains, tt.expectError)
 		})
@@ -220,21 +225,21 @@ func TestQuasisyntaxWithMacros(t *testing.T) {
 
 	// Define a macro that uses quasisyntax
 	// Now that car/cdr work transparently on syntax objects, we can use them directly
-	_, err = engine.Eval(context.Background(), `
+	_, err = engine.Eval(context.Background(), engine.MustParse(context.Background(), `
 		(define-syntax my-when
 		  (lambda (stx)
 		    (let ((condition (cadr stx))
 		          (body (caddr stx)))
 		      (quasisyntax (if #,condition #,body #f)))))
-	`)
+	`))
 	c.Assert(err, qt.IsNil)
 
 	// Use the macro
-	result, err := engine.Eval(context.Background(), `(my-when #t 42)`)
+	result, err := engine.Eval(context.Background(), engine.MustParse(context.Background(), `(my-when #t 42)`))
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, `42`)
 
-	result, err = engine.Eval(context.Background(), `(my-when #f 42)`)
+	result, err = engine.Eval(context.Background(), engine.MustParse(context.Background(), `(my-when #f 42)`))
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, `#f`)
 }
@@ -247,16 +252,16 @@ func TestQuasisyntaxHygiene(t *testing.T) {
 
 	// Define a macro that introduces a binding using quasisyntax
 	// This tests that quasisyntax preserves source locations and scopes
-	_, err = engine.Eval(context.Background(), `
+	_, err = engine.Eval(context.Background(), engine.MustParse(context.Background(), `
 		(define-syntax add-one
 		  (lambda (stx)
 		    (let ((expr (cadr stx)))
 		      (quasisyntax (+ #,expr 1)))))
-	`)
+	`))
 	c.Assert(err, qt.IsNil)
 
 	// Use the macro
-	result, err := engine.Eval(context.Background(), `(add-one 5)`)
+	result, err := engine.Eval(context.Background(), engine.MustParse(context.Background(), `(add-one 5)`))
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, `6`)
 }
@@ -269,7 +274,7 @@ func TestQuasisyntaxRecursive(t *testing.T) {
 
 	// Define a recursive macro using quasisyntax
 	// Demonstrates transparent syntax operations: car, cdr, cadr, cddr work directly on stx
-	_, err = engine.Eval(context.Background(), `
+	_, err = engine.Eval(context.Background(), engine.MustParse(context.Background(), `
 		(define-syntax my-list
 		  (lambda (stx)
 		    (if (null? (cdr stx))
@@ -277,10 +282,10 @@ func TestQuasisyntaxRecursive(t *testing.T) {
 		        (let ((first (cadr stx))
 		              (rest (cons 'my-list (cddr stx))))
 		          (quasisyntax (cons #,first #,rest))))))
-	`)
+	`))
 	c.Assert(err, qt.IsNil)
 
-	result, err := engine.Eval(context.Background(), `(my-list 1 2 3)`)
+	result, err := engine.Eval(context.Background(), engine.MustParse(context.Background(), `(my-list 1 2 3)`))
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, `(1 2 3)`)
 }

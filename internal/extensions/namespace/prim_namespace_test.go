@@ -40,7 +40,7 @@ func newEngine(t *testing.T) *wile.Engine {
 func schemeEval(t *testing.T, eng *wile.Engine, code string) wile.Value {
 	t.Helper()
 	ctx := context.Background()
-	result, err := eng.Eval(ctx, code)
+	result, err := eng.EvalMultiple(ctx, code)
 	qt.Assert(t, err, qt.IsNil)
 	return result
 }
@@ -48,7 +48,11 @@ func schemeEval(t *testing.T, eng *wile.Engine, code string) wile.Value {
 func schemeEvalExpectError(t *testing.T, eng *wile.Engine, code string) {
 	t.Helper()
 	ctx := context.Background()
-	_, err := eng.Eval(ctx, code)
+	expr, err := eng.Parse(ctx, code)
+	if err != nil {
+		return // parse error counts as expected error
+	}
+	_, err = eng.Eval(ctx, expr)
 	qt.Assert(t, err, qt.IsNotNil)
 }
 

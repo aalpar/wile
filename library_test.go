@@ -137,7 +137,7 @@ func TestLibraryIsolationFromTopLevel(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Define "leaked" at top-level before importing the library.
-	_, err = engine.Eval(ctx, `(define leaked 999)`)
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(define leaked 999)`))
 	c.Assert(err, qt.IsNil)
 
 	// Import + call should fail: the library's environment must not

@@ -42,7 +42,7 @@ func newTestEngine(t *testing.T) *wile.Engine {
 
 func evalCode(t *testing.T, engine *wile.Engine, code string) wile.Value {
 	t.Helper()
-	result, err := engine.Eval(context.Background(), code)
+	result, err := engine.EvalMultiple(context.Background(), code)
 	qt.Assert(t, err, qt.IsNil)
 	return result
 }
@@ -219,7 +219,7 @@ func TestLoadPathStack_ErrorIncludesSearchPaths(t *testing.T) {
 
 	engine := newTestEngine(t)
 
-	_, err = engine.Eval(context.Background(), fmt.Sprintf(`(load %q)`, mainFile))
+	_, err = engine.Eval(context.Background(), engine.MustParse(context.Background(), fmt.Sprintf(`(load %q)`, mainFile)))
 	c.Assert(err, qt.Not(qt.IsNil))
 
 	// Error message should include searched paths
@@ -250,12 +250,12 @@ func TestLoadPathStack_WithLoadPathAPI(t *testing.T) {
 	var result string
 	err = engine.WithLoadPath(helperFile, func() error {
 		// Load the file in this context
-		_, evalErr := engine.Eval(context.Background(), `(load "test.scm")`)
+		_, evalErr := engine.Eval(context.Background(), engine.MustParse(context.Background(), `(load "test.scm")`))
 		if evalErr != nil {
 			return evalErr
 		}
 		// Now evaluate x
-		val, evalErr := engine.Eval(context.Background(), `x`)
+		val, evalErr := engine.Eval(context.Background(), engine.MustParse(context.Background(), `x`))
 		if evalErr != nil {
 			return evalErr
 		}
@@ -405,7 +405,7 @@ func TestLoad_WithSourceFS_RejectsAbsolutePath(t *testing.T) {
 	)
 	c.Assert(err, qt.IsNil)
 
-	_, err = engine.Eval(context.Background(), `(load "/absolute/path.scm")`)
+	_, err = engine.Eval(context.Background(), engine.MustParse(context.Background(), `(load "/absolute/path.scm")`))
 	c.Assert(err, qt.IsNotNil)
 }
 

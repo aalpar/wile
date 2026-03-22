@@ -13,7 +13,7 @@ Full hygienic macros, first-class continuations, numeric tower, and sandboxing. 
 engine, _ := wile.NewEngine(ctx)
 engine.Define("width", wile.NewInteger(800))
 engine.Define("height", wile.NewInteger(600))
-result, _ := engine.Eval(ctx, "(* width height)")  // => 480000
+result, _ := engine.Eval(ctx, engine.MustParse(ctx, "(* width height)"))  // => 480000
 ```
 
 ## Table of Contents
@@ -84,7 +84,7 @@ if err != nil {
 }
 
 // Evaluate a single expression
-result, err := engine.Eval(ctx, "(+ 1 2 3)")
+result, err := engine.Eval(ctx, engine.MustParse(ctx, "(+ 1 2 3)"))
 fmt.Println(result.SchemeString()) // "6"
 
 // Evaluate multiple expressions (returns last result)
@@ -98,7 +98,7 @@ result, err = engine.EvalMultiple(ctx, `
 ### Compile Once, Run Many Times
 
 ```go
-compiled, err := engine.Compile(ctx, "(+ x 1)")
+compiled, err := engine.Compile(ctx, engine.MustParse(ctx, "(+ x 1)"))
 result, err := engine.Run(ctx, compiled)
 ```
 

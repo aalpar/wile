@@ -39,7 +39,7 @@ func newEngine(t *testing.T) *wile.Engine {
 func eval(t *testing.T, engine *wile.Engine, code string) wile.Value {
 	t.Helper()
 	ctx := context.Background()
-	result, err := engine.Eval(ctx, code)
+	result, err := engine.Eval(ctx, engine.MustParse(ctx, code))
 	if err != nil {
 		t.Fatalf("eval %q: %v", code, err)
 	}
@@ -49,7 +49,7 @@ func eval(t *testing.T, engine *wile.Engine, code string) wile.Value {
 func evalExpectError(t *testing.T, engine *wile.Engine, code string) {
 	t.Helper()
 	ctx := context.Background()
-	_, err := engine.Eval(ctx, code)
+	_, err := engine.Eval(ctx, engine.MustParse(ctx, code))
 	if err == nil {
 		t.Fatalf("eval %q: expected error, got nil", code)
 	}
@@ -339,7 +339,7 @@ func TestRegisterFuncTypeMismatchMessage(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
-	_, err = engine.Eval(ctx, `(need-int "hello")`)
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(need-int "hello")`))
 	c.Assert(err, qt.IsNotNil)
 
 	// The runtime error should contain the type conversion message.
@@ -1044,7 +1044,7 @@ func TestRegisterFuncCallbackErrorSentinels(t *testing.T) {
 
 	// Trigger a runtime error in the callback via division by zero.
 	ctx := context.Background()
-	_, evalErr := engine.Eval(ctx, `(sentinel-callback (lambda (x) (/ x 0)) 5)`)
+	_, evalErr := engine.Eval(ctx, engine.MustParse(ctx, `(sentinel-callback (lambda (x) (/ x 0)) 5)`))
 	if evalErr == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -1075,7 +1075,7 @@ func TestRegisterFuncCallbackPanicToError(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	_, evalErr := engine.Eval(ctx, `(apply-f (lambda (x) (/ x 0)) 5)`)
+	_, evalErr := engine.Eval(ctx, engine.MustParse(ctx, `(apply-f (lambda (x) (/ x 0)) 5)`))
 	if evalErr == nil {
 		t.Fatal("expected error from callback panic, got nil")
 	}
@@ -1102,7 +1102,7 @@ func TestRegisterFuncCallbackResultConversionPanicToError(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	_, evalErr := engine.Eval(ctx, `(apply-f (lambda (x) "not-a-number") 5)`)
+	_, evalErr := engine.Eval(ctx, engine.MustParse(ctx, `(apply-f (lambda (x) "not-a-number") 5)`))
 	if evalErr == nil {
 		t.Fatal("expected error from callback result conversion, got nil")
 	}
@@ -1321,7 +1321,7 @@ func TestRegisterFuncsFailFast(t *testing.T) {
 	// Verify that "good" was registered despite the error (if it was iterated first).
 	// Since map order is non-deterministic, "good" may or may not be registered.
 	// We only check that calling it doesn't panic — it either works or returns an error.
-	_, _ = engine.Eval(context.Background(), "(good 5)")
+	_, _ = engine.Eval(context.Background(), engine.MustParse(context.Background(), "(good 5)"))
 }
 
 func TestRegisterFuncsEmpty(t *testing.T) {

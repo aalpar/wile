@@ -250,13 +250,13 @@ func TestReadAllocationLimitErrorMessages(t *testing.T) {
 	engine := newEngine(t)
 
 	// Verify read-string error messages are informative
-	_, err := engine.Eval(context.Background(), `(read-string 1000000000 (open-input-string "x"))`)
+	_, err := engine.Eval(context.Background(), engine.MustParse(context.Background(), `(read-string 1000000000 (open-input-string "x"))`))
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "exceeds maximum")
 	qt.Assert(t, err.Error(), qt.Contains, "100 MB")
 
 	// Verify read-bytevector error messages are informative
-	_, err = engine.Eval(context.Background(), `(read-bytevector 1000000000 (open-input-bytevector #u8(1)))`)
+	_, err = engine.Eval(context.Background(), engine.MustParse(context.Background(), `(read-bytevector 1000000000 (open-input-bytevector #u8(1)))`))
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Contains, "exceeds maximum")
 	qt.Assert(t, err.Error(), qt.Contains, "100 MB")
@@ -1180,7 +1180,7 @@ func TestWriteU8_ByteRangeSentinel(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := engine.Eval(context.Background(), tc.code)
+			_, err := engine.Eval(context.Background(), engine.MustParse(context.Background(), tc.code))
 			qt.Assert(t, err, qt.IsNotNil)
 			qt.Assert(t, errors.Is(err, werr.ErrNotAByte), qt.IsTrue)
 		})

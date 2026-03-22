@@ -55,7 +55,7 @@ func TestSafeEngine_RejectsPrivileged(t *testing.T) {
 	}
 	for _, tc := range privileged {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := engine.Eval(ctx, tc.code)
+			_, err := engine.Eval(ctx, engine.MustParse(ctx, tc.code))
 			var compErr *CompilationError
 			c.Assert(errors.As(err, &compErr), qt.IsTrue,
 				qt.Commentf("expected CompilationError for %s, got %T: %v", tc.name, err, err))
@@ -97,7 +97,7 @@ func TestSafeEngine_AllowsSafe(t *testing.T) {
 	}
 	for _, tc := range safe {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := engine.Eval(ctx, tc.code)
+			result, err := engine.Eval(ctx, engine.MustParse(ctx, tc.code))
 			c.Assert(err, qt.IsNil, qt.Commentf("code: %s", tc.code))
 			c.Assert(result.SchemeString(), qt.Equals, tc.want)
 		})
@@ -120,7 +120,7 @@ func TestWithoutCore_BareEngine(t *testing.T) {
 	}
 	for _, code := range bare {
 		t.Run(code, func(t *testing.T) {
-			_, err := engine.Eval(ctx, code)
+			_, err := engine.Eval(ctx, engine.MustParse(ctx, code))
 			var compErr *CompilationError
 			c.Assert(errors.As(err, &compErr), qt.IsTrue,
 				qt.Commentf("expected CompilationError for %s, got %T: %v", code, err, err))
@@ -138,12 +138,12 @@ func TestWithoutCore_PlusExtension(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// math extension primitives should work
-	result, err := engine.Eval(ctx, "(sqrt 9)")
+	result, err := engine.Eval(ctx, engine.MustParse(ctx, "(sqrt 9)"))
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "3")
 
 	// core primitives should be absent
-	_, err = engine.Eval(ctx, "(+ 1 2)")
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, "(+ 1 2)"))
 	var compErr *CompilationError
 	c.Assert(errors.As(err, &compErr), qt.IsTrue)
 }
@@ -192,12 +192,12 @@ func TestWithout_ImmutableSandbox(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// car still works.
-	result, err := engine.Eval(ctx, "(car '(1 2 3))")
+	result, err := engine.Eval(ctx, engine.MustParse(ctx, "(car '(1 2 3))"))
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "1")
 
 	// set-car! produces a compile error.
-	_, err = engine.Eval(ctx, "(set-car! (cons 1 2) 3)")
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, "(set-car! (cons 1 2) 3)"))
 	var compErr *CompilationError
 	c.Assert(errors.As(err, &compErr), qt.IsTrue,
 		qt.Commentf("expected CompilationError for set-car!, got %T: %v", err, err))
@@ -217,12 +217,12 @@ func TestWithoutCategory_RemoveHashtables(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Core primitives still work.
-	result, err := engine.Eval(ctx, "(+ 1 2)")
+	result, err := engine.Eval(ctx, engine.MustParse(ctx, "(+ 1 2)"))
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "3")
 
 	// Hashtable primitives should be gone.
-	_, err = engine.Eval(ctx, "(make-hashtable)")
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, "(make-hashtable)"))
 	var compErr *CompilationError
 	c.Assert(errors.As(err, &compErr), qt.IsTrue,
 		qt.Commentf("expected CompilationError for make-hashtable, got %T: %v", err, err))
@@ -353,7 +353,7 @@ func TestWithAuthorizer_FlowsToNamespace(t *testing.T) {
 		},
 	})
 
-	result, err := engine.Eval(ctx, "(test-auth-check)")
+	result, err := engine.Eval(ctx, engine.MustParse(ctx, "(test-auth-check)"))
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "#t")
 	c.Assert(len(captured), qt.Equals, 1)
@@ -383,7 +383,7 @@ func TestWithAuthorizer_DenyBlocksEval(t *testing.T) {
 		},
 	})
 
-	_, err = engine.Eval(ctx, "(test-auth-deny)")
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, "(test-auth-deny)"))
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
 }
@@ -414,7 +414,7 @@ func TestNoAuthorizer_AllowsByDefault(t *testing.T) {
 		},
 	})
 
-	result, err := engine.Eval(ctx, "(test-auth-open)")
+	result, err := engine.Eval(ctx, engine.MustParse(ctx, "(test-auth-open)"))
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "#t")
 }
@@ -433,7 +433,7 @@ func TestAuthorizer_DenyBlocksFileRead(t *testing.T) {
 	)
 	c.Assert(err, qt.IsNil)
 
-	_, err = engine.Eval(ctx, `(file-exists? "/tmp/x")`)
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(file-exists? "/tmp/x")`))
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
 }
@@ -448,7 +448,7 @@ func TestAuthorizer_DenyBlocksFileWrite(t *testing.T) {
 	)
 	c.Assert(err, qt.IsNil)
 
-	_, err = engine.Eval(ctx, `(open-output-file "/tmp/x")`)
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(open-output-file "/tmp/x")`))
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
 }
@@ -463,7 +463,7 @@ func TestAuthorizer_DenyBlocksDelete(t *testing.T) {
 	)
 	c.Assert(err, qt.IsNil)
 
-	_, err = engine.Eval(ctx, `(delete-file "/tmp/x")`)
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(delete-file "/tmp/x")`))
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
 }
@@ -480,7 +480,7 @@ func TestAuthorizer_ReadOnlyAllowsStat(t *testing.T) {
 	)
 	c.Assert(err, qt.IsNil)
 
-	result, err := engine.Eval(ctx, fmt.Sprintf(`(file-exists? %q)`, dir))
+	result, err := engine.Eval(ctx, engine.MustParse(ctx, fmt.Sprintf(`(file-exists? %q)`, dir)))
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "#t")
 }
@@ -495,7 +495,7 @@ func TestAuthorizer_ReadOnlyDeniesWrite(t *testing.T) {
 	)
 	c.Assert(err, qt.IsNil)
 
-	_, err = engine.Eval(ctx, `(open-output-file "/tmp/x")`)
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(open-output-file "/tmp/x")`))
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
 }
@@ -516,7 +516,7 @@ func TestAuthorizer_DenyBlocksEnvVar(t *testing.T) {
 	)
 	c.Assert(err, qt.IsNil)
 
-	_, err = engine.Eval(ctx, `(get-environment-variable "PATH")`)
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(get-environment-variable "PATH")`))
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
 }
@@ -537,7 +537,7 @@ func TestAuthorizer_DenyBlocksExit(t *testing.T) {
 	)
 	c.Assert(err, qt.IsNil)
 
-	_, err = engine.Eval(ctx, `(exit)`)
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(exit)`))
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
 }
@@ -564,7 +564,7 @@ func TestAuthorizer_DenyBlocksLoad(t *testing.T) {
 	)
 	c.Assert(err, qt.IsNil)
 
-	_, err = engine.Eval(ctx, fmt.Sprintf(`(load %q)`, scmFile))
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, fmt.Sprintf(`(load %q)`, scmFile)))
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
 }
@@ -611,7 +611,7 @@ func TestAuthorizer_FilesystemRootAllowsInside(t *testing.T) {
 	)
 	c.Assert(err, qt.IsNil)
 
-	result, err := engine.Eval(ctx, fmt.Sprintf(`(file-exists? %q)`, txtFile))
+	result, err := engine.Eval(ctx, engine.MustParse(ctx, fmt.Sprintf(`(file-exists? %q)`, txtFile)))
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "#t")
 }
@@ -627,7 +627,7 @@ func TestAuthorizer_FilesystemRootDeniesOutside(t *testing.T) {
 	)
 	c.Assert(err, qt.IsNil)
 
-	_, err = engine.Eval(ctx, `(file-exists? "/etc/passwd")`)
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(file-exists? "/etc/passwd")`))
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
 }
@@ -657,12 +657,12 @@ func TestAuthorizer_SelectivePolicy(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Read should succeed
-	result, err := engine.Eval(ctx, fmt.Sprintf(`(file-exists? %q)`, dataFile))
+	result, err := engine.Eval(ctx, engine.MustParse(ctx, fmt.Sprintf(`(file-exists? %q)`, dataFile)))
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "#t")
 
 	// Write should fail
-	_, err = engine.Eval(ctx, fmt.Sprintf(`(open-output-file %q)`, filepath.Join(dir, "out.txt")))
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, fmt.Sprintf(`(open-output-file %q)`, filepath.Join(dir, "out.txt"))))
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
 }

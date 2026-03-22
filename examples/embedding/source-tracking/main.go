@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// source-tracking demonstrates the WithSource API for embedding Wile
-// with per-operation source location tracking.
+// source-tracking demonstrates the ParseWithSource/MustParseWithSource API
+// for embedding Wile with per-operation source location tracking.
 //
-// When Scheme code is evaluated with EvalWithSource, EvalMultipleWithSource,
-// or CompileWithSource, the source name (typically a filename) is attached
-// to every parsed expression. If a runtime error occurs, the RuntimeError
-// includes the source location and a VM stack trace.
+// When Scheme code is parsed with ParseWithSource or MustParseWithSource,
+// the source name (typically a filename) is attached to every parsed
+// expression. If a runtime error occurs, the RuntimeError includes the
+// source location and a VM stack trace.
 //
 // Run with: go run ./examples/embedding/source-tracking/main.go
 package main
@@ -41,13 +41,14 @@ func main() {
 	}
 
 	// -----------------------------------------------------------------------
-	// 1. EvalWithSource: error messages include the source name
+	// 1. MustParseWithSource + Eval: error messages include the source name
 	// -----------------------------------------------------------------------
-	fmt.Println("--- EvalWithSource: error with source location ---")
+	fmt.Println("--- MustParseWithSource + Eval: error with source location ---")
 
-	_, err = engine.EvalWithSource(ctx,
-		`(error "something went wrong" 42)`,
-		"config.scm")
+	_, err = engine.Eval(ctx,
+		engine.MustParseWithSource(ctx,
+			`(error "something went wrong" 42)`,
+			"config.scm"))
 
 	var rtErr *wile.RuntimeError
 	if errors.As(err, &rtErr) {
@@ -77,20 +78,22 @@ func main() {
 	fmt.Println()
 
 	// -----------------------------------------------------------------------
-	// 3. CompileWithSource: compile once with source, run multiple times
+	// 3. MustParseWithSource + Compile: compile once with source, run multiple times
 	// -----------------------------------------------------------------------
-	fmt.Println("--- CompileWithSource: compile once, run many ---")
+	fmt.Println("--- MustParseWithSource + Compile: compile once, run many ---")
 
-	_, err = engine.EvalWithSource(ctx,
-		`(define n 0)`,
-		"setup.scm")
+	_, err = engine.Eval(ctx,
+		engine.MustParseWithSource(ctx,
+			`(define n 0)`,
+			"setup.scm"))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	compiled, err := engine.CompileWithSource(ctx,
-		`(* n n)`,
-		"compute.scm")
+	compiled, err := engine.Compile(ctx,
+		engine.MustParseWithSource(ctx,
+			`(* n n)`,
+			"compute.scm"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -122,7 +125,7 @@ func main() {
 	}
 
 	for _, src := range sources {
-		_, err = engine.EvalWithSource(ctx, src.code, src.name)
+		_, err = engine.Eval(ctx, engine.MustParseWithSource(ctx, src.code, src.name))
 		if errors.As(err, &rtErr) {
 			fmt.Printf("  [%s] %s\n", rtErr.Source, rtErr.Condition.SchemeString())
 		}
@@ -134,7 +137,7 @@ func main() {
 	// -----------------------------------------------------------------------
 	fmt.Println("--- Without source: no file in error ---")
 
-	_, err = engine.Eval(ctx, `(error "anonymous error")`)
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(error "anonymous error")`))
 	if errors.As(err, &rtErr) {
 		if rtErr.Source == "" {
 			fmt.Println("  Source is empty (no file tracked)")

@@ -156,7 +156,7 @@ func TestWithSourceFS_IncludeRejectsAbsolutePath(t *testing.T) {
 	)
 	c.Assert(err, qt.IsNil)
 
-	_, err = engine.Eval(ctx, `(include "/absolute/path.scm")`)
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(include "/absolute/path.scm")`))
 	c.Assert(err, qt.IsNotNil)
 }
 
@@ -171,7 +171,7 @@ func TestWithSourceFS_NotSet_UsesOSFilesystem(t *testing.T) {
 	engine, err := wile.NewEngine(ctx, wile.WithSafeExtensions())
 	c.Assert(err, qt.IsNil)
 
-	_, err = engine.Eval(ctx, `(include "definitely-nonexistent-file.scm")`)
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(include "definitely-nonexistent-file.scm")`))
 	c.Assert(err, qt.IsNotNil)
 }
 
@@ -321,7 +321,7 @@ func TestWithSourceOS_Fallback(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "1")
 
 	// File not in virtual FS falls through to OS, which also fails.
-	_, err = engine.Eval(ctx, `(include "definitely-nonexistent-chain-test.scm")`)
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(include "definitely-nonexistent-chain-test.scm")`))
 	c.Assert(err, qt.IsNotNil)
 }
 

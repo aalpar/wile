@@ -41,7 +41,7 @@ func TestErrorChain_SecurityDenial_PreservesErrAccessDenied(t *testing.T) {
 	defer eng.Close()
 
 	// security.Check happens before the file is opened, so no actual file needed.
-	_, err = eng.Eval(ctx, `(open-input-file "any-path")`)
+	_, err = eng.Eval(ctx, eng.MustParse(ctx, `(open-input-file "any-path")`))
 	c.Assert(err, qt.IsNotNil)
 
 	// Outermost error must be a RuntimeError.
@@ -65,7 +65,7 @@ func TestErrorChain_CallDepthExceeded(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	defer eng.Close()
 
-	_, err = eng.Eval(ctx, `(letrec ((f (lambda (n) (+ 1 (f n))))) (f 0))`)
+	_, err = eng.Eval(ctx, eng.MustParse(ctx, `(letrec ((f (lambda (n) (+ 1 (f n))))) (f 0))`))
 	c.Assert(err, qt.IsNotNil)
 
 	var re *RuntimeError

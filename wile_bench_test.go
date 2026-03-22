@@ -62,14 +62,14 @@ func BenchmarkEval(b *testing.B) {
 				b.Fatal(err)
 			}
 			if tc.setup != "" {
-				_, err = engine.Eval(ctx, tc.setup)
+				_, err = engine.Eval(ctx, engine.MustParse(ctx, tc.setup))
 				if err != nil {
 					b.Fatal(err)
 				}
 			}
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_, err = engine.Eval(ctx, tc.code)
+				_, err = engine.Eval(ctx, engine.MustParse(ctx, tc.code))
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -90,12 +90,12 @@ func BenchmarkRun(b *testing.B) {
 				b.Fatal(err)
 			}
 			if tc.setup != "" {
-				_, err = engine.Eval(ctx, tc.setup)
+				_, err = engine.Eval(ctx, engine.MustParse(ctx, tc.setup))
 				if err != nil {
 					b.Fatal(err)
 				}
 			}
-			compiled, err := engine.Compile(ctx, tc.code)
+			compiled, err := engine.Compile(ctx, engine.MustParse(ctx, tc.code))
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -119,7 +119,7 @@ func BenchmarkCompile(b *testing.B) {
 	code := "(lambda (x y) (+ x y))"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err = engine.Compile(context.Background(), code)
+		_, err = engine.Compile(context.Background(), engine.MustParse(context.Background(), code))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -163,7 +163,7 @@ func BenchmarkZebraPuzzle(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err = engine.Eval(ctx, "(solve-puzzle %houses)")
+		_, err = engine.Eval(ctx, engine.MustParse(ctx, "(solve-puzzle %houses)"))
 		if err != nil {
 			b.Fatal(err)
 		}

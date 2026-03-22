@@ -31,7 +31,7 @@ func ExampleNewEngine() {
 	}
 
 	ctx := context.Background()
-	result, err := engine.Eval(ctx, "(+ 1 2 3)")
+	result, err := engine.Eval(ctx, engine.MustParse(ctx, "(+ 1 2 3)"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -68,12 +68,12 @@ func ExampleEngine_Compile() {
 
 	// Define a variable, then compile an expression that uses it.
 	ctx := context.Background()
-	_, err = engine.Eval(ctx, "(define x 0)")
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, "(define x 0)"))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	compiled, err := engine.Compile(context.Background(), "(* x x)")
+	compiled, err := engine.Compile(context.Background(), engine.MustParse(context.Background(), "(* x x)"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func ExampleEngine_Define() {
 	}
 
 	ctx := context.Background()
-	result, err := engine.Eval(ctx, "(* width height)")
+	result, err := engine.Eval(ctx, engine.MustParse(ctx, "(* width height)"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func ExampleEngine_RegisterPrimitive() {
 	}
 
 	ctx := context.Background()
-	result, err := engine.Eval(ctx, "(double 21)")
+	result, err := engine.Eval(ctx, engine.MustParse(ctx, "(double 21)"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func ExampleEngine_RegisterFunc() {
 	}
 
 	ctx := context.Background()
-	result, err := engine.Eval(ctx, "(map double '(1 2 3 4 5))")
+	result, err := engine.Eval(ctx, engine.MustParse(ctx, "(map double '(1 2 3 4 5))"))
 	if err != nil {
 		log.Fatal(err)
 	}

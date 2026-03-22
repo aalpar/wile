@@ -238,7 +238,7 @@ func TestValueConstructors_RoundTrip(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			err = engine.Define("x", tc.val)
 			c.Assert(err, qt.IsNil)
-			result, err := engine.Eval(ctx, tc.code)
+			result, err := engine.Eval(ctx, engine.MustParse(ctx, tc.code))
 			c.Assert(err, qt.IsNil)
 			c.Assert(result.SchemeString(), qt.Equals, tc.wantStr)
 		})
@@ -297,7 +297,7 @@ func TestNewEngine_WithNamespace(t *testing.T) {
 	eng, err := NewEngine(ctx, WithNamespace(ns))
 	c.Assert(err, qt.IsNil)
 
-	result, err := eng.Eval(ctx, "(+ 1 2)")
+	result, err := eng.Eval(ctx, eng.MustParse(ctx, "(+ 1 2)"))
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "3")
 
@@ -313,7 +313,7 @@ func TestNewEngine_BackwardCompat(t *testing.T) {
 	eng, err := NewEngine(ctx)
 	c.Assert(err, qt.IsNil)
 
-	result, err := eng.Eval(ctx, "(+ 1 2)")
+	result, err := eng.Eval(ctx, eng.MustParse(ctx, "(+ 1 2)"))
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "3")
 
@@ -332,7 +332,7 @@ func TestNewNamespace_WithExtension(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Math extension should be available
-	result, err := eng.Eval(ctx, "(floor 3.7)")
+	result, err := eng.Eval(ctx, eng.MustParse(ctx, "(floor 3.7)"))
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "3.0")
 }
@@ -345,17 +345,17 @@ func TestEngine_EvalIn(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Define x in main namespace
-	_, err = eng.Eval(ctx, "(define x 42)")
+	_, err = eng.Eval(ctx, eng.MustParse(ctx, "(define x 42)"))
 	c.Assert(err, qt.IsNil)
 
 	// Create an isolated namespace — x should not be visible
 	ns2, err := NewNamespace(ctx)
 	c.Assert(err, qt.IsNil)
-	_, err = eng.EvalIn(ctx, "x", ns2)
+	_, err = eng.EvalIn(ctx, eng.MustParse(ctx, "x"), ns2)
 	c.Assert(err, qt.IsNotNil)
 
 	// But core primitives should work
-	result, err := eng.EvalIn(ctx, "(+ 1 2)", ns2)
+	result, err := eng.EvalIn(ctx, eng.MustParse(ctx, "(+ 1 2)"), ns2)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "3")
 }
@@ -367,7 +367,7 @@ func TestCompiledCode_String(t *testing.T) {
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
-	compiled, err := engine.Compile(context.Background(), "(+ 1 2)")
+	compiled, err := engine.Compile(context.Background(), engine.MustParse(context.Background(), "(+ 1 2)"))
 	c.Assert(err, qt.IsNil)
 	c.Assert(compiled.String(), qt.Equals, "#<compiled-code>")
 }
@@ -615,7 +615,7 @@ func TestCompilationError(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
-	_, err = engine.Eval(ctx, "(")
+	_, err = engine.Parse(ctx, "(")
 
 	var compErr *CompilationError
 	c.Assert(errors.As(err, &compErr), qt.IsTrue)
@@ -649,7 +649,7 @@ func TestRuntimeError_DivisionByZero(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
-	_, err = engine.Eval(ctx, "(/ 1 0)")
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, "(/ 1 0)"))
 
 	var rtErr *RuntimeError
 	c.Assert(errors.As(err, &rtErr), qt.IsTrue)
@@ -662,7 +662,7 @@ func TestRuntimeError_SchemeRaise(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
-	_, err = engine.Eval(ctx, `(raise "boom")`)
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(raise "boom")`))
 
 	var rtErr *RuntimeError
 	c.Assert(errors.As(err, &rtErr), qt.IsTrue)
@@ -891,7 +891,7 @@ func TestEval_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	_, err = engine.Eval(ctx, "(let loop () (loop))")
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, "(let loop () (loop))"))
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, context.DeadlineExceeded), qt.IsTrue)
 }
@@ -904,7 +904,7 @@ func TestEval_AlreadyCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err = engine.Eval(ctx, "(+ 1 2)")
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, "(+ 1 2)"))
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, context.Canceled), qt.IsTrue)
 }
@@ -920,7 +920,7 @@ func TestEval_CancelDuringComputation(t *testing.T) {
 		cancel()
 	}()
 
-	_, err = engine.Eval(ctx, "(let loop () (loop))")
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, "(let loop () (loop))"))
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, context.Canceled), qt.IsTrue)
 }
@@ -1022,7 +1022,7 @@ func TestDefaultCallDepth(t *testing.T) {
 	defer eng.Close()
 
 	// Uses (+ 1 ...) to prevent TCO so the continuation stack grows.
-	_, err = eng.Eval(ctx, "(letrec ((f (lambda (n) (+ 1 (f n))))) (f 0))")
+	_, err = eng.Eval(ctx, eng.MustParse(ctx, "(letrec ((f (lambda (n) (+ 1 (f n))))) (f 0))"))
 	c.Assert(errors.Is(err, werr.ErrCallDepthExceeded), qt.IsTrue)
 }
 
@@ -1033,7 +1033,7 @@ func TestWithoutCore(t *testing.T) {
 	c.Assert(engine, qt.IsNotNil)
 
 	// Core primitives should be absent
-	_, err = engine.Eval(context.Background(), "(+ 1 2)")
+	_, err = engine.Eval(context.Background(), engine.MustParse(context.Background(), "(+ 1 2)"))
 	var compErr *CompilationError
 	c.Assert(errors.As(err, &compErr), qt.IsTrue)
 }
@@ -1047,12 +1047,12 @@ func TestWithSafeExtensions(t *testing.T) {
 	ctx := context.Background()
 
 	// Safe primitives present
-	result, err := engine.Eval(ctx, "(sqrt 4)")
+	result, err := engine.Eval(ctx, engine.MustParse(ctx, "(sqrt 4)"))
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "2")
 
 	// Privileged primitives absent
-	_, err = engine.Eval(ctx, `(open-input-file "x")`)
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(open-input-file "x")`))
 	var compErr *CompilationError
 	c.Assert(errors.As(err, &compErr), qt.IsTrue)
 }
@@ -1099,7 +1099,7 @@ func TestWithMaxCallDepth(t *testing.T) {
 			if engErr != nil {
 				t.Fatalf("NewEngine: %v", engErr)
 			}
-			_, err := eng.Eval(context.Background(), tt.code)
+			_, err := eng.Eval(context.Background(), eng.MustParse(context.Background(), tt.code))
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
