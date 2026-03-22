@@ -44,6 +44,14 @@ func TestLibraryName_ToFilePath(t *testing.T) {
 	qt.Assert(t, path, qt.Contains, ".sld")
 }
 
+func TestLibraryName_ToFSPath(t *testing.T) {
+	name := NewLibraryName("scheme", "base")
+	qt.Assert(t, name.ToFSPath(), qt.Equals, "scheme/base.sld")
+
+	nested := NewLibraryName("my", "awesome", "library")
+	qt.Assert(t, nested.ToFSPath(), qt.Equals, "my/awesome/library.sld")
+}
+
 func TestLibraryName_MultiPart(t *testing.T) {
 	name := NewLibraryName("my", "awesome", "library")
 	qt.Assert(t, name.String(), qt.Equals, "my/awesome/library")

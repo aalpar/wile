@@ -19,7 +19,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"path/filepath"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/parser"
@@ -125,27 +124,23 @@ func PrimLoad(mc *machine.MachineContext) error {
 		return werr.WrapForeignErrorf(werr.ErrFileNotFound, "load: no file resolver configured")
 	}
 
-	f, absPath, err := resolver.ResolveAndOpen(mc.Context(), filename.Value)
+	f, resolvedPath, err := resolver.ResolveAndOpen(mc.Context(), filename.Value)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "load")
 	}
 	defer f.Close() //nolint:errcheck
 
 	// Push to stack after successful open, pop on exit.
-	// Only push absolute paths — embedded/virtual filesystems return
-	// relative paths that don't participate in load-path resolution.
 	stack := env.LoadPathStack()
-	if filepath.IsAbs(absPath) {
-		err = stack.Push(absPath)
-		if err != nil {
-			return err
-		}
-		defer stack.Pop()
+	err = stack.Push(resolvedPath)
+	if err != nil {
+		return err
 	}
+	defer stack.Pop()
 
 	// Create parser with file tracking for source locations
 	rdr := bufio.NewReader(f)
-	p := parser.NewParserWithFile(env, true, rdr, absPath)
+	p := parser.NewParserWithFile(env, true, rdr, resolvedPath)
 
 	// Read and evaluate each expression
 	var lastValue = values.Void
@@ -191,7 +186,7 @@ func PrimLoad(mc *machine.MachineContext) error {
 }
 
 // PrimCurrentLoadPath implements the (current-load-path) primitive.
-// Returns the absolute path of the file currently being loaded, or #f if
+// Returns the path of the file currently being loaded, or #f if
 // no file is being loaded (e.g., REPL).
 func PrimCurrentLoadPath(mc *machine.MachineContext) error {
 	current := mc.EnvironmentFrame().Namespace().LoadPathStack().Current()

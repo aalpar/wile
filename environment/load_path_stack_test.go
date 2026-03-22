@@ -85,27 +85,55 @@ func TestLoadPathStack_CurrentDir(t *testing.T) {
 	}
 }
 
-func TestLoadPathStack_PushRelativePathReturnsError(t *testing.T) {
+func TestLoadPathStack_PushEmptyPathReturnsError(t *testing.T) {
 	c := qt.New(t)
 	stack := NewLoadPathStack()
 
-	tcs := []struct {
-		name string
-		path string
-	}{
-		{"relative path", "helper.scm"},
-		{"relative with dot", "./helper.scm"},
-		{"relative with dotdot", "../util.scm"},
-		{"relative subdirectory", "sub/helper.scm"},
-	}
+	err := stack.Push("")
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, werr.ErrInvalidLoadPath), qt.IsTrue)
+}
 
-	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			err := stack.Push(tc.path)
-			c.Assert(err, qt.IsNotNil, qt.Commentf("Push(%q) should return error", tc.path))
-			c.Assert(errors.Is(err, werr.ErrInvalidLoadPath), qt.IsTrue)
-		})
-	}
+func TestLoadPathStack_RelativePaths(t *testing.T) {
+	c := qt.New(t)
+	stack := NewLoadPathStack()
+
+	c.Assert(stack.Push("lib/math.sld"), qt.IsNil)
+	c.Assert(stack.Current(), qt.Equals, "lib/math.sld")
+	c.Assert(stack.CurrentDir(), qt.Equals, "lib")
+	c.Assert(stack.Depth(), qt.Equals, 1)
+
+	c.Assert(stack.Push("lib/impl.scm"), qt.IsNil)
+	c.Assert(stack.Current(), qt.Equals, "lib/impl.scm")
+	c.Assert(stack.CurrentDir(), qt.Equals, "lib")
+	c.Assert(stack.Depth(), qt.Equals, 2)
+
+	stack.Pop()
+	c.Assert(stack.Current(), qt.Equals, "lib/math.sld")
+	stack.Pop()
+	c.Assert(stack.Depth(), qt.Equals, 0)
+}
+
+func TestLoadPathStack_MixedAbsoluteAndRelative(t *testing.T) {
+	c := qt.New(t)
+	stack := NewLoadPathStack()
+
+	c.Assert(stack.Push("/app/main.scm"), qt.IsNil)
+	c.Assert(stack.Push("lib/helper.scm"), qt.IsNil)
+	c.Assert(stack.Current(), qt.Equals, "lib/helper.scm")
+	c.Assert(stack.CurrentDir(), qt.Equals, "lib")
+
+	stack.Pop()
+	c.Assert(stack.Current(), qt.Equals, "/app/main.scm")
+	c.Assert(stack.CurrentDir(), qt.Equals, "/app")
+}
+
+func TestLoadPathStack_CurrentDir_RelativeRootFile(t *testing.T) {
+	c := qt.New(t)
+	stack := NewLoadPathStack()
+
+	c.Assert(stack.Push("main.scm"), qt.IsNil)
+	c.Assert(stack.CurrentDir(), qt.Equals, ".")
 }
 
 func TestLoadPathStack_ConcurrentAccess(t *testing.T) {

@@ -16,9 +16,12 @@ package machine
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"os"
+	pathpkg "path"
 	"path/filepath"
+	"strings"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/security"
@@ -120,4 +123,148 @@ func (p *EmbedFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.F
 		return nil, "", werr.WrapForeignErrorWithCause(werr.ErrFileNotFound, err, "resolve: %s", path)
 	}
 	return f, path, nil
+}
+
+// FSFileResolver resolves files from a virtual filesystem (fs.FS).
+// Used when an embedder provides WithSourceFS. All paths are relative
+// to the FS root. Absolute paths are rejected.
+//
+// Resolution priority:
+//  1. Relative to current load directory (from LoadPathStack)
+//  2. Library registry search paths
+//  3. Relative to FS root (path as-is)
+type FSFileResolver struct {
+	fsys fs.FS
+	env  *environment.EnvironmentFrame
+}
+
+// NewFSFileResolver creates a resolver backed by the given filesystem.
+// Panics if fsys is nil.
+func NewFSFileResolver(fsys fs.FS, env *environment.EnvironmentFrame) *FSFileResolver {
+	if fsys == nil {
+		panic(werr.WrapForeignErrorf(werr.ErrEngineInit, "NewFSFileResolver: fsys must not be nil"))
+	}
+	return &FSFileResolver{
+		fsys: fsys,
+		env:  env,
+	}
+}
+
+func (p *FSFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.File, string, error) {
+	if path == "" {
+		return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "resolve: empty filename")
+	}
+	if filepath.IsAbs(path) {
+		return nil, "", werr.WrapForeignErrorf(
+			werr.ErrFileNotFound,
+			"resolve: absolute paths not supported in virtual filesystem: %s",
+			path,
+		)
+	}
+
+	var searched []string
+
+	// Strategy 1: Try relative to current load directory.
+	stack := p.env.LoadPathStack()
+	if stack != nil {
+		currentDir := stack.CurrentDir()
+		if currentDir != "" && currentDir != "." {
+			candidate, err := p.statCandidate(currentDir, path)
+			if err != nil {
+				return nil, "", err
+			}
+			if candidate != "" {
+				return p.openChecked(candidate)
+			}
+			searched = append(searched, currentDir+"/")
+		}
+	}
+
+	// Strategy 2: Try library registry search paths.
+	regAny := p.env.LibraryRegistry()
+	if regAny != nil {
+		reg, ok := regAny.(*LibraryRegistry)
+		if ok {
+			for _, dir := range reg.GetSearchPaths() {
+				if dir == "" {
+					continue
+				}
+				candidate, err := p.statCandidate(dir, path)
+				if err != nil {
+					return nil, "", err
+				}
+				if candidate != "" {
+					return p.openChecked(candidate)
+				}
+				searched = append(searched, dir+"/")
+			}
+		}
+	}
+
+	// Strategy 3: Try path as-is at FS root.
+	_, err := fs.Stat(p.fsys, path)
+	if err == nil {
+		return p.openChecked(path)
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return nil, "", werr.WrapForeignErrorWithCause(
+			werr.ErrFileNotFound, err,
+			"stat %s in virtual filesystem", path,
+		)
+	}
+	searched = append(searched, "<fs-root>/")
+
+	searchedList := strings.Join(searched, ", ")
+	return nil, "", werr.WrapForeignErrorf(
+		werr.ErrFileNotFound,
+		"file %q not found in virtual filesystem; searched: %s",
+		path,
+		searchedList,
+	)
+}
+
+// statCandidate joins dir and file, validates the result is a legal fs.FS
+// path, and stats it. Returns the resolved path on success, empty string
+// if the file does not exist. Returns an error for non-ErrNotExist
+// failures (I/O errors, permission errors).
+func (p *FSFileResolver) statCandidate(dir, file string) (string, error) {
+	candidate := pathpkg.Join(dir, file)
+	if !fs.ValidPath(candidate) {
+		return "", nil
+	}
+	_, err := fs.Stat(p.fsys, candidate)
+	if err == nil {
+		return candidate, nil
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return "", werr.WrapForeignErrorWithCause(
+			werr.ErrFileNotFound, err,
+			"stat %s in virtual filesystem", candidate,
+		)
+	}
+	return "", nil
+}
+
+// openChecked performs security authorization and opens a resolved path.
+func (p *FSFileResolver) openChecked(resolvedPath string) (fs.File, string, error) {
+	auth, _ := p.env.Namespace().Authorizer().(security.Authorizer)
+	err := security.CheckWithAuthorizer(auth, security.AccessRequest{
+		Resource: security.ResourceCode,
+		Action:   security.ActionLoad,
+		Target:   resolvedPath,
+	})
+	if err != nil {
+		return nil, "", err
+	}
+
+	f, err := p.fsys.Open(resolvedPath)
+	if err != nil {
+		return nil, "", werr.WrapForeignErrorWithCause(
+			werr.ErrFileNotFound,
+			err,
+			"open %s",
+			resolvedPath,
+		)
+	}
+	return f, resolvedPath, nil
 }

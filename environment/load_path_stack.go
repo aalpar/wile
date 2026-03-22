@@ -1,6 +1,7 @@
 package environment
 
 import (
+	"path"
 	"path/filepath"
 	"sync"
 
@@ -8,7 +9,7 @@ import (
 )
 
 // LoadPathStack tracks the stack of files currently being loaded.
-// It maintains a LIFO stack of absolute file paths, enabling relative
+// It maintains a LIFO stack of file paths (absolute or relative), enabling
 // path resolution and load provenance tracking.
 //
 // # Threading and Concurrency
@@ -36,7 +37,7 @@ import (
 // becomes common, consider migrating to per-thread stacks.
 type LoadPathStack struct {
 	mu    sync.RWMutex
-	paths []string // absolute paths only; top = paths[len-1]
+	paths []string // absolute or relative paths; top = paths[len-1]
 }
 
 // NewLoadPathStack creates an empty load path stack.
@@ -46,18 +47,17 @@ func NewLoadPathStack() *LoadPathStack {
 	}
 }
 
-// Push adds an absolute path to the top of the stack.
-// Returns a wrapped ErrInvalidLoadPath (matchable via errors.Is) if absPath
-// is not an absolute path.
-func (s *LoadPathStack) Push(absPath string) error {
-	if !filepath.IsAbs(absPath) {
-		return werr.WrapForeignErrorf(werr.ErrInvalidLoadPath, "path must be absolute: %s", absPath)
+// Push adds a path to the top of the stack.
+// Returns a wrapped ErrInvalidLoadPath if the path is empty.
+func (s *LoadPathStack) Push(p string) error {
+	if p == "" {
+		return werr.WrapForeignErrorf(werr.ErrInvalidLoadPath, "path must not be empty")
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.paths = append(s.paths, absPath)
+	s.paths = append(s.paths, p)
 	return nil
 }
 
@@ -93,7 +93,10 @@ func (s *LoadPathStack) CurrentDir() string {
 	if current == "" {
 		return ""
 	}
-	return filepath.Dir(current)
+	if filepath.IsAbs(current) {
+		return filepath.Dir(current)
+	}
+	return path.Dir(current)
 }
 
 // Depth returns the number of paths on the stack.

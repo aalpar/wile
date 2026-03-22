@@ -62,6 +62,13 @@ func (p LibraryName) ToFilePath() string {
 	return strings.Join(p.Parts, string(os.PathSeparator)) + ".sld"
 }
 
+// ToFSPath returns the library name as a forward-slash-separated path
+// with .sld extension. Unlike ToFilePath, this always uses "/" as
+// separator, suitable for fs.FS and FileResolver operations.
+func (p LibraryName) ToFSPath() string {
+	return strings.Join(p.Parts, "/") + ".sld"
+}
+
 // CompiledLibrary holds a loaded and compiled library.
 type CompiledLibrary struct {
 	Name       LibraryName                   // Library name
