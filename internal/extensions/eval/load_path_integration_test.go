@@ -432,3 +432,193 @@ func TestLoad_WithSourceFS_RelativeToLoadingFile(t *testing.T) {
 	result := evalCode(t, engine, `sibling-val`)
 	c.Assert(result.SchemeString(), qt.Equals, "77")
 }
+
+// --- Mixed FS + OS chain tests ---
+
+// TestLoad_MixedChain_EmbedThenOS verifies that (load ...) searches an
+// embedded fs.FS first, then falls through to the OS filesystem.
+// The embedded FS has embed.scm, the OS temp dir has os-only.scm.
+func TestLoad_MixedChain_EmbedThenOS(t *testing.T) {
+	c := qt.New(t)
+
+	// Create a real file on the OS filesystem.
+	dir := realTestDir(t)
+	err := os.WriteFile(filepath.Join(dir, "os-only.scm"), []byte(`(define os-val 200)`), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	// Embedded FS has a different file.
+	embedFS := fstest.MapFS{
+		"embed.scm": &fstest.MapFile{
+			Data: []byte(`(define embed-val 100)`),
+		},
+	}
+
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithSafeExtensions(),
+		wile.WithExtension(exteval.Extension),
+		wile.WithSourceFS(embedFS),
+		wile.WithSourceOS(),
+		wile.WithLibraryPaths(dir),
+	)
+	c.Assert(err, qt.IsNil)
+
+	// File in embedded FS loads.
+	evalCode(t, engine, `(load "embed.scm")`)
+	result := evalCode(t, engine, `embed-val`)
+	c.Assert(result.SchemeString(), qt.Equals, "100")
+
+	// File only on OS loads via fallback.
+	evalCode(t, engine, fmt.Sprintf(`(load %q)`, filepath.Join(dir, "os-only.scm")))
+	result = evalCode(t, engine, `os-val`)
+	c.Assert(result.SchemeString(), qt.Equals, "200")
+}
+
+// TestLoad_MixedChain_EmbedWinsOverOS verifies that when the same file
+// exists in both the embedded FS and the OS filesystem, the embedded FS
+// (first in chain) wins.
+func TestLoad_MixedChain_EmbedWinsOverOS(t *testing.T) {
+	c := qt.New(t)
+
+	dir := realTestDir(t)
+	err := os.WriteFile(filepath.Join(dir, "shared.scm"),
+		[]byte(`(define shared-val "from-os")`), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	embedFS := fstest.MapFS{
+		"shared.scm": &fstest.MapFile{
+			Data: []byte(`(define shared-val "from-embed")`),
+		},
+	}
+
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithSafeExtensions(),
+		wile.WithExtension(exteval.Extension),
+		wile.WithSourceFS(embedFS),
+		wile.WithSourceOS(),
+		wile.WithLibraryPaths(dir),
+	)
+	c.Assert(err, qt.IsNil)
+
+	// Embedded FS should win because it's first in the chain.
+	evalCode(t, engine, `(load "shared.scm")`)
+	result := evalCode(t, engine, `shared-val`)
+	c.Assert(result.SchemeString(), qt.Equals, `"from-embed"`)
+}
+
+// TestInclude_MixedChain_EmbedThenOS verifies that (include ...) searches
+// the embedded FS first, then the OS filesystem. This is the compile-time
+// analog of the load test above.
+func TestInclude_MixedChain_EmbedThenOS(t *testing.T) {
+	c := qt.New(t)
+
+	dir := realTestDir(t)
+	err := os.WriteFile(filepath.Join(dir, "os-inc.scm"),
+		[]byte(`(define os-inc-val 300)`), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	embedFS := fstest.MapFS{
+		"embed-inc.scm": &fstest.MapFile{
+			Data: []byte(`(define embed-inc-val 400)`),
+		},
+	}
+
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithSafeExtensions(),
+		wile.WithExtension(exteval.Extension),
+		wile.WithSourceFS(embedFS),
+		wile.WithSourceOS(),
+		wile.WithLibraryPaths(dir),
+	)
+	c.Assert(err, qt.IsNil)
+
+	// Embedded file loads via include.
+	result, err := engine.EvalMultiple(context.Background(),
+		`(include "embed-inc.scm") embed-inc-val`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "400")
+
+	// OS file loads via fallback.
+	result, err = engine.EvalMultiple(context.Background(),
+		fmt.Sprintf(`(include %q) os-inc-val`, filepath.Join(dir, "os-inc.scm")))
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "300")
+}
+
+// TestInclude_MixedChain_EmbedWinsOverOS verifies include priority:
+// embedded FS (first in chain) wins when both have the same file.
+func TestInclude_MixedChain_EmbedWinsOverOS(t *testing.T) {
+	c := qt.New(t)
+
+	dir := realTestDir(t)
+	err := os.WriteFile(filepath.Join(dir, "overlap.scm"),
+		[]byte(`(define overlap-val "from-os")`), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	embedFS := fstest.MapFS{
+		"overlap.scm": &fstest.MapFile{
+			Data: []byte(`(define overlap-val "from-embed")`),
+		},
+	}
+
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithSafeExtensions(),
+		wile.WithExtension(exteval.Extension),
+		wile.WithSourceFS(embedFS),
+		wile.WithSourceOS(),
+		wile.WithLibraryPaths(dir),
+	)
+	c.Assert(err, qt.IsNil)
+
+	result, err := engine.EvalMultiple(context.Background(),
+		`(include "overlap.scm") overlap-val`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, `"from-embed"`)
+}
+
+// TestLibraryImport_MixedChain_AcrossLayers verifies that the library
+// loader searches across embedded FS and OS filesystem. Library (embed-lib)
+// lives in the embedded FS, library (os-lib) lives on disk.
+func TestLibraryImport_MixedChain_AcrossLayers(t *testing.T) {
+	c := qt.New(t)
+
+	dir := realTestDir(t)
+	libDir := filepath.Join(dir, "lib")
+	err := os.MkdirAll(libDir, 0o755)
+	c.Assert(err, qt.IsNil)
+	err = os.WriteFile(filepath.Join(libDir, "os-lib.sld"),
+		[]byte(`(define-library (os-lib)
+  (export os-lib-val)
+  (begin (define os-lib-val 500)))`), 0o644)
+	c.Assert(err, qt.IsNil)
+
+	embedFS := fstest.MapFS{
+		"lib/embed-lib.sld": &fstest.MapFile{
+			Data: []byte(`(define-library (embed-lib)
+  (export embed-lib-val)
+  (begin (define embed-lib-val 600)))`),
+		},
+	}
+
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithSafeExtensions(),
+		wile.WithExtension(exteval.Extension),
+		wile.WithSourceFS(embedFS),
+		wile.WithSourceOS(),
+		wile.WithLibraryPaths("lib", libDir),
+	)
+	c.Assert(err, qt.IsNil)
+
+	result, err := engine.EvalMultiple(context.Background(),
+		`(import (embed-lib) (os-lib)) (+ embed-lib-val os-lib-val)`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "1100")
+}
+
+// realTestDir returns a symlink-resolved temp directory.
+func realTestDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	resolved, err := filepath.EvalSymlinks(dir)
+	qt.Assert(t, err, qt.IsNil)
+	return resolved
+}

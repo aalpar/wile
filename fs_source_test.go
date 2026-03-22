@@ -235,6 +235,156 @@ func TestWithSourceFS_TransitiveLibraryImport(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "15")
 }
 
+// TestWithSourceFS_MultipleFS verifies that multiple WithSourceFS calls
+// create a chain where files are found across different virtual filesystems.
+// fs1 has helper.scm, fs2 has utils.scm — both resolve.
+func TestWithSourceFS_MultipleFS(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	fs1 := fstest.MapFS{
+		"helper.scm": &fstest.MapFile{
+			Data: []byte(`(define helper-val 10)`),
+		},
+	}
+	fs2 := fstest.MapFS{
+		"utils.scm": &fstest.MapFile{
+			Data: []byte(`(define utils-val 20)`),
+		},
+	}
+
+	engine, err := wile.NewEngine(ctx,
+		wile.WithSafeExtensions(),
+		wile.WithSourceFS(fs1),
+		wile.WithSourceFS(fs2),
+	)
+	c.Assert(err, qt.IsNil)
+
+	result, err := engine.EvalMultiple(ctx,
+		`(include "helper.scm") (include "utils.scm") (+ helper-val utils-val)`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "30")
+}
+
+// TestWithSourceFS_ChainPriority verifies that when two filesystems both
+// contain the same file, the first one in chain order wins.
+func TestWithSourceFS_ChainPriority(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	fs1 := fstest.MapFS{
+		"config.scm": &fstest.MapFile{
+			Data: []byte(`(define config-val "from-fs1")`),
+		},
+	}
+	fs2 := fstest.MapFS{
+		"config.scm": &fstest.MapFile{
+			Data: []byte(`(define config-val "from-fs2")`),
+		},
+	}
+
+	engine, err := wile.NewEngine(ctx,
+		wile.WithSafeExtensions(),
+		wile.WithSourceFS(fs1),
+		wile.WithSourceFS(fs2),
+	)
+	c.Assert(err, qt.IsNil)
+
+	result, err := engine.EvalMultiple(ctx, `(include "config.scm") config-val`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, `"from-fs1"`)
+}
+
+// TestWithSourceOS_Fallback verifies that WithSourceOS appends the
+// OS filesystem as the last resolver. A nonexistent file in the virtual
+// FS falls through to OS, which also fails — proving the chain tried both.
+func TestWithSourceOS_Fallback(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	fsys := fstest.MapFS{
+		"present.scm": &fstest.MapFile{
+			Data: []byte(`(define present-val 1)`),
+		},
+	}
+
+	engine, err := wile.NewEngine(ctx,
+		wile.WithSafeExtensions(),
+		wile.WithSourceFS(fsys),
+		wile.WithSourceOS(),
+	)
+	c.Assert(err, qt.IsNil)
+
+	// File in virtual FS resolves.
+	result, err := engine.EvalMultiple(ctx, `(include "present.scm") present-val`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "1")
+
+	// File not in virtual FS falls through to OS, which also fails.
+	_, err = engine.Eval(ctx, `(include "definitely-nonexistent-chain-test.scm")`)
+	c.Assert(err, qt.IsNotNil)
+}
+
+// TestWithSourceFS_ExcludesOSByDefault verifies that when WithSourceFS is used
+// without WithSourceOS, the OS filesystem is NOT consulted. Only the
+// virtual filesystem is searched.
+func TestWithSourceFS_ExcludesOSByDefault(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	fsys := fstest.MapFS{
+		"only-this.scm": &fstest.MapFile{
+			Data: []byte(`(define only-val 42)`),
+		},
+	}
+
+	engine, err := wile.NewEngine(ctx,
+		wile.WithSafeExtensions(),
+		wile.WithSourceFS(fsys),
+	)
+	c.Assert(err, qt.IsNil)
+
+	// File in virtual FS resolves.
+	result, err := engine.EvalMultiple(ctx, `(include "only-this.scm") only-val`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "42")
+}
+
+// TestWithSourceFS_LibraryAcrossLayers verifies that the library loader
+// searches across multiple virtual filesystems in chain order.
+func TestWithSourceFS_LibraryAcrossLayers(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	fs1 := fstest.MapFS{
+		"lib/base.sld": &fstest.MapFile{
+			Data: []byte(`(define-library (base)
+  (export base-val)
+  (begin (define base-val 100)))`),
+		},
+	}
+	fs2 := fstest.MapFS{
+		"lib/extra.sld": &fstest.MapFile{
+			Data: []byte(`(define-library (extra)
+  (import (base))
+  (export extra-val)
+  (begin (define extra-val (+ base-val 50))))`),
+		},
+	}
+
+	engine, err := wile.NewEngine(ctx,
+		wile.WithSafeExtensions(),
+		wile.WithSourceFS(fs1),
+		wile.WithSourceFS(fs2),
+		wile.WithLibraryPaths("lib"),
+	)
+	c.Assert(err, qt.IsNil)
+
+	result, err := engine.EvalMultiple(ctx, `(import (extra)) extra-val`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "150")
+}
+
 // TestWithSourceFS_DeeplyNestedInclude verifies that three levels of
 // nested includes resolve correctly: a.scm -> sub/b.scm -> sub/deep/c.scm.
 // Each include is relative to the including file's directory, not the

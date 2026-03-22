@@ -608,6 +608,83 @@ func TestFSFileResolver_NotFoundListsSearchedPaths(t *testing.T) {
 	qt.Assert(t, errMsg, qt.Contains, "vendor/")
 }
 
+// --- ChainFileResolver ---
+
+func TestChainFileResolver_FirstResolverWins(t *testing.T) {
+	fs1 := fstest.MapFS{"a.scm": {Data: []byte("from-fs1")}}
+	fs2 := fstest.MapFS{"a.scm": {Data: []byte("from-fs2")}}
+
+	r := NewChainFileResolver([]FileResolver{
+		NewEmbedFileResolver(fs1),
+		NewEmbedFileResolver(fs2),
+	})
+
+	f, resolved, err := r.ResolveAndOpen(context.Background(), "a.scm")
+	qt.Assert(t, err, qt.IsNil)
+	defer f.Close()
+	qt.Assert(t, resolved, qt.Equals, "a.scm")
+
+	// Verify we got fs1's content
+	buf := make([]byte, 20)
+	n, _ := f.Read(buf)
+	qt.Assert(t, string(buf[:n]), qt.Equals, "from-fs1")
+}
+
+func TestChainFileResolver_FallsThrough(t *testing.T) {
+	fs1 := fstest.MapFS{"only-in-fs1.scm": {Data: []byte("1")}}
+	fs2 := fstest.MapFS{"only-in-fs2.scm": {Data: []byte("2")}}
+
+	r := NewChainFileResolver([]FileResolver{
+		NewEmbedFileResolver(fs1),
+		NewEmbedFileResolver(fs2),
+	})
+
+	// File only in fs2 — falls through fs1.
+	f, resolved, err := r.ResolveAndOpen(context.Background(), "only-in-fs2.scm")
+	qt.Assert(t, err, qt.IsNil)
+	defer f.Close()
+	qt.Assert(t, resolved, qt.Equals, "only-in-fs2.scm")
+}
+
+func TestChainFileResolver_AllMiss(t *testing.T) {
+	fs1 := fstest.MapFS{}
+	fs2 := fstest.MapFS{}
+
+	r := NewChainFileResolver([]FileResolver{
+		NewEmbedFileResolver(fs1),
+		NewEmbedFileResolver(fs2),
+	})
+
+	_, _, err := r.ResolveAndOpen(context.Background(), "missing.scm")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue)
+}
+
+func TestChainFileResolver_SecurityDenialStopsChain(t *testing.T) {
+	// First resolver denies access — chain should NOT fall through.
+	fsys := fstest.MapFS{"secret.scm": {Data: []byte("classified")}}
+	ns := environment.NewNamespace()
+	ns.SetAuthorizer(security.DenyAll())
+	env := ns.Runtime()
+
+	backup := fstest.MapFS{"secret.scm": {Data: []byte("backup")}}
+
+	r := NewChainFileResolver([]FileResolver{
+		NewFSFileResolver(fsys, env),
+		NewEmbedFileResolver(backup),
+	})
+
+	_, _, err := r.ResolveAndOpen(context.Background(), "secret.scm")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, security.ErrAccessDenied), qt.IsTrue)
+}
+
+func TestChainFileResolver_PanicsOnEmptyResolvers(t *testing.T) {
+	qt.Assert(t, func() {
+		NewChainFileResolver([]FileResolver{})
+	}, qt.PanicMatches, `.*resolvers must not be empty.*`)
+}
+
 // --- Interface compliance ---
 
 func TestFileResolverInterfaceCompliance(t *testing.T) {
@@ -615,4 +692,5 @@ func TestFileResolverInterfaceCompliance(t *testing.T) {
 	var _ FileResolver = (*OSFileResolver)(nil)
 	var _ FileResolver = (*EmbedFileResolver)(nil)
 	var _ FileResolver = (*FSFileResolver)(nil)
+	var _ FileResolver = (*ChainFileResolver)(nil)
 }

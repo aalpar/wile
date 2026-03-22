@@ -245,6 +245,37 @@ func (p *FSFileResolver) statCandidate(dir, file string) (string, error) {
 	return "", nil
 }
 
+// ChainFileResolver tries multiple resolvers in order, falling through
+// to the next on ErrFileNotFound. Non-file-not-found errors (security
+// denials, I/O errors) propagate immediately.
+type ChainFileResolver struct {
+	resolvers []FileResolver
+}
+
+// NewChainFileResolver creates a resolver that tries each resolver in order.
+// Panics if resolvers is empty.
+func NewChainFileResolver(resolvers []FileResolver) *ChainFileResolver {
+	if len(resolvers) == 0 {
+		panic(werr.WrapForeignErrorf(werr.ErrEngineInit, "NewChainFileResolver: resolvers must not be empty"))
+	}
+	return &ChainFileResolver{resolvers: resolvers}
+}
+
+func (p *ChainFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.File, string, error) {
+	var lastErr error
+	for _, r := range p.resolvers {
+		f, resolved, err := r.ResolveAndOpen(ctx, path)
+		if err == nil {
+			return f, resolved, nil
+		}
+		if !errors.Is(err, werr.ErrFileNotFound) {
+			return nil, "", err
+		}
+		lastErr = err
+	}
+	return nil, "", lastErr
+}
+
 // openChecked performs security authorization and opens a resolved path.
 func (p *FSFileResolver) openChecked(resolvedPath string) (fs.File, string, error) {
 	auth, _ := p.env.Namespace().Authorizer().(security.Authorizer)
