@@ -162,7 +162,7 @@ func TestCallCC_InsideCallback(t *testing.T) {
 			engine, err := wile.NewEngine(context.Background(), wile.WithSafeExtensions())
 			c.Assert(err, qt.IsNil)
 
-			result, err := engine.Eval(context.Background(), tc.code)
+			result, err := engine.Eval(context.Background(), engine.MustParse(context.Background(), tc.code))
 			c.Assert(err, qt.IsNil)
 			c.Assert(result.SchemeString(), qt.Equals, tc.expected)
 		})

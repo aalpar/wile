@@ -31,13 +31,13 @@ func TestCircularPair_Write(t *testing.T) {
 	engine, err := wile.NewEngine(context.Background(), wile.WithSafeExtensions())
 	c.Assert(err, qt.IsNil)
 
-	result, err := engine.Eval(context.Background(), `
+	result, err := engine.Eval(context.Background(), engine.MustParse(context.Background(), `
 		(let ((x (list 'a))
 		      (out (open-output-string)))
 		  (set-cdr! x x)
 		  (write x out)
 		  (get-output-string out))
-	`)
+	`))
 	c.Assert(err, qt.IsNil)
 	// SchemeWriter uses datum-label notation for circular structures
 	got := result.SchemeString()
@@ -53,13 +53,13 @@ func TestCircularPair_Display(t *testing.T) {
 	engine, err := wile.NewEngine(context.Background(), wile.WithSafeExtensions())
 	c.Assert(err, qt.IsNil)
 
-	result, err := engine.Eval(context.Background(), `
+	result, err := engine.Eval(context.Background(), engine.MustParse(context.Background(), `
 		(let ((x (list 'a))
 		      (out (open-output-string)))
 		  (set-cdr! x x)
 		  (display x out)
 		  (get-output-string out))
-	`)
+	`))
 	c.Assert(err, qt.IsNil)
 	got := result.SchemeString()
 	// display should terminate and produce some output (not hang)

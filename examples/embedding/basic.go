@@ -36,7 +36,7 @@ func main() {
 	}
 
 	// 2. Evaluate a simple expression.
-	result, err := engine.Eval(ctx, "(+ 1 2 3)")
+	result, err := engine.Eval(ctx, engine.MustParse(ctx, "(+ 1 2 3)"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	result, err = engine.Eval(ctx, "(* width height)")
+	result, err = engine.Eval(ctx, engine.MustParse(ctx, "(* width height)"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	result, err = engine.Eval(ctx, "(go-max 42 17)")
+	result, err = engine.Eval(ctx, engine.MustParse(ctx, "(go-max 42 17)"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -107,12 +107,12 @@ func main() {
 	fmt.Println("(factorial 10) =>", result.SchemeString())
 
 	// 6. Compile once, run with different inputs.
-	_, err = engine.Eval(ctx, "(define x 0)")
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, "(define x 0)"))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	compiled, err := engine.Compile(context.Background(), "(* x x)")
+	compiled, err := engine.Compile(context.Background(), engine.MustParse(context.Background(), "(* x x)"))
 	if err != nil {
 		log.Fatal(err)
 	}

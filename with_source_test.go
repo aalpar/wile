@@ -23,10 +23,10 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// TestEvalWithSource_RuntimeError verifies that EvalWithSource populates
+// TestParseWithSource_RuntimeError verifies that ParseWithSource + Eval populates
 // RuntimeError.Source with the filename, line, and column when a runtime
 // error occurs.
-func TestEvalWithSource_RuntimeError(t *testing.T) {
+func TestParseWithSource_RuntimeError(t *testing.T) {
 	c := qt.New(t)
 
 	tcs := []struct {
@@ -133,9 +133,9 @@ func TestEvalWithSource_RuntimeError(t *testing.T) {
 	}
 }
 
-// TestEvalWithSource_Success verifies that EvalWithSource returns correct
+// TestParseWithSource_Success verifies that ParseWithSource + Eval returns correct
 // results for code that does not error.
-func TestEvalWithSource_Success(t *testing.T) {
+func TestParseWithSource_Success(t *testing.T) {
 	c := qt.New(t)
 
 	tcs := []struct {
@@ -170,7 +170,7 @@ func TestEvalWithSource_Success(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 
 			ctx := context.Background()
-			result, err := engine.EvalWithSource(ctx, tc.code, tc.source)
+			result, err := engine.Eval(ctx, engine.MustParseWithSource(ctx, tc.code, tc.source))
 			c.Assert(err, qt.IsNil)
 			c.Assert(result.SchemeString(), qt.Equals, tc.want)
 		})
@@ -211,16 +211,16 @@ func TestEvalMultipleWithSource_Success(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "30")
 }
 
-// TestCompileWithSource_RuntimeError verifies that source information
-// survives the compile → run boundary. Code compiled with CompileWithSource
+// TestCompileParseWithSource_RuntimeError verifies that source information
+// survives the compile → run boundary. Code compiled with ParseWithSource + Compile
 // and later executed with Run should still carry source info in errors.
-func TestCompileWithSource_RuntimeError(t *testing.T) {
+func TestCompileParseWithSource_RuntimeError(t *testing.T) {
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
-	compiled, err := engine.CompileWithSource(ctx, `(raise "compiled-boom")`, "compiled.scm")
+	compiled, err := engine.Compile(ctx, engine.MustParseWithSource(ctx, `(raise "compiled-boom")`, "compiled.scm"))
 	c.Assert(err, qt.IsNil)
 
 	_, err = engine.Run(ctx, compiled)
@@ -233,15 +233,15 @@ func TestCompileWithSource_RuntimeError(t *testing.T) {
 	c.Assert(rtErr.Condition.SchemeString(), qt.Equals, `"compiled-boom"`)
 }
 
-// TestCompileWithSource_ParseError verifies that CompileWithSource returns
+// TestParseWithSource_ParseError verifies that ParseWithSource returns
 // a CompilationError for malformed input.
-func TestCompileWithSource_ParseError(t *testing.T) {
+func TestParseWithSource_ParseError(t *testing.T) {
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
-	_, err = engine.CompileWithSource(ctx, "(", "broken.scm")
+	_, err = engine.ParseWithSource(ctx, "(", "broken.scm")
 	c.Assert(err, qt.IsNotNil)
 
 	var compErr *CompilationError
@@ -269,7 +269,7 @@ func TestWithSource_DistinctSources(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 
 			ctx := context.Background()
-			_, err = engine.EvalWithSource(ctx, `(raise "x")`, tc.source)
+			_, err = engine.Eval(ctx, engine.MustParseWithSource(ctx, `(raise "x")`, tc.source))
 
 			var rtErr *RuntimeError
 			c.Assert(errors.As(err, &rtErr), qt.IsTrue)
@@ -291,7 +291,7 @@ func TestWithSource_SourcelessEvalHasEmptySource(t *testing.T) {
 		{
 			name: "Eval",
 			eval: func(e *Engine, ctx context.Context) error {
-				_, err := e.Eval(ctx, `(raise "x")`)
+				_, err := e.Eval(ctx, e.MustParse(ctx, `(raise "x")`))
 				return err
 			},
 		},
@@ -305,7 +305,7 @@ func TestWithSource_SourcelessEvalHasEmptySource(t *testing.T) {
 		{
 			name: "Compile+Run",
 			eval: func(e *Engine, ctx context.Context) error {
-				cc, err := e.Compile(ctx, `(raise "x")`)
+				cc, err := e.Compile(ctx, e.MustParse(ctx, `(raise "x")`))
 				if err != nil {
 					return err
 				}
@@ -330,16 +330,16 @@ func TestWithSource_SourcelessEvalHasEmptySource(t *testing.T) {
 	}
 }
 
-// TestCompileWithSource_ReusedCompiledCode verifies that a single
-// CompileWithSource result can be Run multiple times, each retaining
+// TestCompileParseWithSource_ReusedCompiledCode verifies that a single
+// ParseWithSource + Compile result can be Run multiple times, each retaining
 // the source information in errors.
-func TestCompileWithSource_ReusedCompiledCode(t *testing.T) {
+func TestCompileParseWithSource_ReusedCompiledCode(t *testing.T) {
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
-	compiled, err := engine.CompileWithSource(ctx, `(raise "again")`, "reuse.scm")
+	compiled, err := engine.Compile(ctx, engine.MustParseWithSource(ctx, `(raise "again")`, "reuse.scm"))
 	c.Assert(err, qt.IsNil)
 
 	for i := range 3 {
@@ -353,15 +353,15 @@ func TestCompileWithSource_ReusedCompiledCode(t *testing.T) {
 	}
 }
 
-// TestEvalWithSource_ErrorFormat verifies the full Error() string format
+// TestParseWithSource_ErrorFormat verifies the full Error() string format
 // includes the source prefix.
-func TestEvalWithSource_ErrorFormat(t *testing.T) {
+func TestParseWithSource_ErrorFormat(t *testing.T) {
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())
 	c.Assert(err, qt.IsNil)
 
 	ctx := context.Background()
-	_, err = engine.EvalWithSource(ctx, `(raise "fmt-test")`, "format.scm")
+	_, err = engine.Eval(ctx, engine.MustParseWithSource(ctx, `(raise "fmt-test")`, "format.scm"))
 
 	var rtErr *RuntimeError
 	c.Assert(errors.As(err, &rtErr), qt.IsTrue)

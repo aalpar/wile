@@ -216,13 +216,13 @@ func TestOpcodeFusion(t *testing.T) {
 				t.Fatal(err)
 			}
 			if tt.setup != "" {
-				_, err = engine.Eval(ctx, tt.setup)
+				_, err = engine.Eval(ctx, engine.MustParse(ctx, tt.setup))
 				if err != nil {
 					t.Fatalf("setup: %v", err)
 				}
 			}
 
-			compiled, err := engine.Compile(ctx, tt.code)
+			compiled, err := engine.Compile(ctx, engine.MustParse(ctx, tt.code))
 			if err != nil {
 				t.Fatalf("compile: %v", err)
 			}
@@ -290,7 +290,7 @@ func TestPromotedPrimitiveFallback(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			result, err := engine.Eval(ctx, tt.code)
+			result, err := engine.Eval(ctx, engine.MustParse(ctx, tt.code))
 			if err != nil {
 				t.Fatalf("eval: %v", err)
 			}

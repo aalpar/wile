@@ -20,7 +20,7 @@
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
-//	result, err := engine.Eval(ctx, "(+ 1 2 3)")
+//	result, err := engine.Eval(ctx, engine.MustParse(ctx, "(+ 1 2 3)"))
 //	fmt.Println(result) // 6
 //
 // With extensions:

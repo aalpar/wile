@@ -289,55 +289,36 @@ func setupLibrarySystem(cfg *engineConfig, reg *registry.Registry, env *environm
 	return nil
 }
 
-// Eval parses, compiles, and executes Scheme code, returning the result.
-func (p *Engine) Eval(ctx context.Context, code string) (Value, error) {
-	compiled, err := p.Compile(ctx, code)
+// Eval compiles and executes a parsed expression, returning the result.
+// Use [Engine.Parse] to obtain an [Expression] from source code.
+// For evaluating multi-expression strings, use [Engine.EvalMultiple].
+func (p *Engine) Eval(ctx context.Context, expr *Expression) (Value, error) {
+	compiled, err := p.Compile(ctx, expr)
 	if err != nil {
 		return nil, err
 	}
 	return p.Run(ctx, compiled)
 }
 
-// EvalIn parses, compiles, and executes Scheme code in the given namespace,
-// rather than the engine's own namespace. This enables evaluating code in
-// isolated or restricted environments.
+// EvalIn compiles and executes a parsed expression in the given namespace,
+// rather than the engine's own namespace.
 //
 // The target namespace's authorizer governs security checks during
 // execution. If the target namespace has no authorizer, the engine's
 // authorizer is propagated to it before evaluation.
-func (p *Engine) EvalIn(ctx context.Context, code string, ns *environment.Namespace) (Value, error) {
-	// Propagate engine's authorizer if the target namespace has none,
-	// so security checks are not silently skipped.
+func (p *Engine) EvalIn(ctx context.Context, expr *Expression, ns *environment.Namespace) (Value, error) {
 	if ns.Authorizer() == nil && p.namespace.Authorizer() != nil {
 		ns.SetAuthorizer(p.namespace.Authorizer())
 	}
 	env := ns.Runtime()
-	reader := strings.NewReader(code)
-	pr := parser.NewParserWithFile(env, true, reader, "")
 
-	stx, err := pr.ReadSyntax(ctx)
-	if err != nil {
-		return nil, &CompilationError{Message: "parse error", Cause: err}
-	}
-
-	tpl, err := expandAndCompile(ctx, env, stx, nil)
+	tpl, err := expandAndCompile(ctx, env, expr.stx, nil)
 	if err != nil {
 		return nil, &CompilationError{Message: "expand/compile error", Cause: err}
 	}
 
 	cc := &CompiledCode{template: tpl, env: env}
 	return p.runCompiled(ctx, cc)
-}
-
-// EvalWithSource parses, compiles, and executes Scheme code, returning the result.
-// The source parameter identifies where the code came from (e.g. a filename)
-// and appears in error messages and stack traces.
-func (p *Engine) EvalWithSource(ctx context.Context, code string, source string) (Value, error) {
-	compiled, err := p.CompileWithSource(ctx, code, source)
-	if err != nil {
-		return nil, err
-	}
-	return p.Run(ctx, compiled)
 }
 
 // EvalMultiple evaluates multiple expressions, returning the last result.
@@ -381,28 +362,10 @@ func (p *Engine) evalMultiple(ctx context.Context, code string, source string) (
 	return lastResult, nil
 }
 
-// Compile parses and compiles code without executing.
-func (p *Engine) Compile(ctx context.Context, code string) (*CompiledCode, error) {
-	return p.compile(ctx, code, "")
-}
-
-// CompileWithSource parses and compiles code without executing.
-// The source parameter identifies where the code came from (e.g. a filename)
-// and appears in error messages and stack traces.
-func (p *Engine) CompileWithSource(ctx context.Context, code string, source string) (*CompiledCode, error) {
-	return p.compile(ctx, code, source)
-}
-
-func (p *Engine) compile(ctx context.Context, code string, source string) (*CompiledCode, error) {
-	reader := strings.NewReader(code)
-	pr := parser.NewParserWithFile(p.env, true, reader, source)
-
-	stx, err := pr.ReadSyntax(ctx)
-	if err != nil {
-		return nil, &CompilationError{Message: "parse error", Cause: err}
-	}
-
-	return p.compileExpr(ctx, stx)
+// Compile compiles a parsed expression without executing.
+// The result can be executed later with [Engine.Run].
+func (p *Engine) Compile(ctx context.Context, expr *Expression) (*CompiledCode, error) {
+	return p.compileExpr(ctx, expr.stx)
 }
 
 // Run executes previously compiled code.
@@ -764,7 +727,7 @@ func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame
 // Example:
 //
 //	err := engine.WithLoadPath("/app/scripts/main.scm", func() error {
-//	    _, err := engine.Eval(ctx, "(load \"helper.scm\")") // resolves relative to /app/scripts/
+//	    _, err := engine.EvalMultiple(ctx, "(load \"helper.scm\")") // resolves relative to /app/scripts/
 //	    return err
 //	})
 func (p *Engine) WithLoadPath(filePath string, fn func() error) error {

@@ -43,7 +43,12 @@ func TestPeepholeCensus(t *testing.T) {
 			t.Fatalf("engine: %v", err)
 		}
 
-		cc, err := engine.Compile(ctx, string(src))
+		expr, parseErr := engine.Parse(ctx, string(src))
+		if parseErr != nil {
+			t.Logf("skip %s: %v", filepath.Base(file), parseErr)
+			continue
+		}
+		cc, err := engine.Compile(ctx, expr)
 		if err != nil {
 			t.Logf("skip %s: %v", filepath.Base(file), err)
 			continue

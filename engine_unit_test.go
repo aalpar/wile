@@ -44,7 +44,7 @@ func TestEngineEval(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := engine.Eval(ctx, tc.code)
+			result, err := engine.Eval(ctx, engine.MustParse(ctx, tc.code))
 			qt.Assert(t, err, qt.IsNil, qt.Commentf("code: %s", tc.code))
 			qt.Assert(t, result.SchemeString(), qt.Equals, tc.wantStr)
 		})
@@ -89,7 +89,7 @@ func TestEngineCompileAndRun(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	t.Run("compile and run", func(t *testing.T) {
-		compiled, err := engine.Compile(ctx, "(+ 1 2)")
+		compiled, err := engine.Compile(ctx, engine.MustParse(ctx, "(+ 1 2)"))
 		qt.Assert(t, err, qt.IsNil)
 
 		result, err := engine.Run(ctx, compiled)
@@ -98,7 +98,7 @@ func TestEngineCompileAndRun(t *testing.T) {
 	})
 
 	t.Run("compiled code is reusable", func(t *testing.T) {
-		compiled, err := engine.Compile(ctx, "(+ 1 2)")
+		compiled, err := engine.Compile(ctx, engine.MustParse(ctx, "(+ 1 2)"))
 		qt.Assert(t, err, qt.IsNil)
 
 		result1, err := engine.Run(ctx, compiled)
@@ -108,14 +108,6 @@ func TestEngineCompileAndRun(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 
 		qt.Assert(t, result1.SchemeString(), qt.Equals, result2.SchemeString())
-	})
-
-	t.Run("compile invalid syntax returns CompilationError", func(t *testing.T) {
-		_, err := engine.Compile(ctx, "(")
-		qt.Assert(t, err, qt.IsNotNil)
-
-		var compErr *wile.CompilationError
-		qt.Assert(t, errors.As(err, &compErr), qt.IsTrue)
 	})
 }
 
@@ -198,7 +190,15 @@ func TestEngineErrorWrapping(t *testing.T) {
 			engine, err := wile.NewEngine(ctx)
 			qt.Assert(t, err, qt.IsNil)
 
-			_, err = engine.Eval(ctx, tc.code)
+			expr, parseErr := engine.Parse(ctx, tc.code)
+			if parseErr != nil {
+				// Parse error — must be a compilation error
+				var compErr *wile.CompilationError
+				qt.Assert(t, errors.As(parseErr, &compErr), qt.IsTrue,
+					qt.Commentf("expected CompilationError for %q, got %T: %v", tc.code, parseErr, parseErr))
+				return
+			}
+			_, err = engine.Eval(ctx, expr)
 			qt.Assert(t, err, qt.IsNotNil)
 
 			switch tc.errType {
@@ -215,6 +215,82 @@ func TestEngineErrorWrapping(t *testing.T) {
 	}
 }
 
+func TestEngineParse(t *testing.T) {
+	ctx := context.Background()
+
+	engine, err := wile.NewEngine(ctx)
+	qt.Assert(t, err, qt.IsNil)
+
+	t.Run("single expression succeeds", func(t *testing.T) {
+		expr, err := engine.Parse(ctx, "(+ 1 2)")
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, expr, qt.IsNotNil)
+		qt.Assert(t, expr.String(), qt.Equals, "#<expression>")
+	})
+
+	t.Run("trailing input errors with CompilationError", func(t *testing.T) {
+		_, err := engine.Parse(ctx, "(+ 1 2) (+ 3 4)")
+		qt.Assert(t, err, qt.IsNotNil)
+
+		var compErr *wile.CompilationError
+		qt.Assert(t, errors.As(err, &compErr), qt.IsTrue)
+		qt.Assert(t, compErr.Message, qt.Matches, "trailing input.*")
+	})
+
+	t.Run("empty input errors with CompilationError", func(t *testing.T) {
+		_, err := engine.Parse(ctx, "")
+		qt.Assert(t, err, qt.IsNotNil)
+
+		var compErr *wile.CompilationError
+		qt.Assert(t, errors.As(err, &compErr), qt.IsTrue)
+	})
+
+	t.Run("parse error from malformed input", func(t *testing.T) {
+		_, err := engine.Parse(ctx, "(")
+		qt.Assert(t, err, qt.IsNotNil)
+
+		var compErr *wile.CompilationError
+		qt.Assert(t, errors.As(err, &compErr), qt.IsTrue)
+	})
+}
+
+func TestEngineParseWithSource(t *testing.T) {
+	ctx := context.Background()
+
+	engine, err := wile.NewEngine(ctx)
+	qt.Assert(t, err, qt.IsNil)
+
+	expr, err := engine.ParseWithSource(ctx, "(+ 1 2)", "test-file.scm")
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, expr, qt.IsNotNil)
+	qt.Assert(t, expr.Source(), qt.Equals, "test-file.scm")
+}
+
+func TestEngineMustParse(t *testing.T) {
+	ctx := context.Background()
+
+	engine, err := wile.NewEngine(ctx)
+	qt.Assert(t, err, qt.IsNil)
+
+	t.Run("valid input succeeds", func(t *testing.T) {
+		expr := engine.MustParse(ctx, "(+ 1 2)")
+		qt.Assert(t, expr, qt.IsNotNil)
+		qt.Assert(t, expr.String(), qt.Equals, "#<expression>")
+	})
+
+	t.Run("invalid input panics", func(t *testing.T) {
+		qt.Assert(t, func() {
+			engine.MustParse(ctx, "(")
+		}, qt.PanicMatches, ".*")
+	})
+
+	t.Run("trailing input panics", func(t *testing.T) {
+		qt.Assert(t, func() {
+			engine.MustParse(ctx, "(+ 1 2) (+ 3 4)")
+		}, qt.PanicMatches, ".*")
+	})
+}
+
 func TestEngineOptions(t *testing.T) {
 	ctx := context.Background()
 
@@ -223,10 +299,10 @@ func TestEngineOptions(t *testing.T) {
 		qt.Assert(t, err, qt.IsNil)
 
 		// Non-tail recursion to force continuation stack growth.
-		_, err = engine.Eval(ctx, "(define (f n) (+ 1 (f (+ n 1))))")
+		_, err = engine.EvalMultiple(ctx, "(define (f n) (+ 1 (f (+ n 1))))")
 		qt.Assert(t, err, qt.IsNil)
 
-		_, err = engine.Eval(ctx, "(f 0)")
+		_, err = engine.Eval(ctx, engine.MustParse(ctx, "(f 0)"))
 		qt.Assert(t, err, qt.IsNotNil)
 		qt.Assert(t, errors.Is(err, werr.ErrCallDepthExceeded), qt.IsTrue)
 	})

@@ -69,7 +69,7 @@ func TestWithFileContinuationSafety_T3(t *testing.T) {
 		  (eq? (current-input-port) orig-port))
 	`
 
-	result, err := engine.Eval(context.Background(), code)
+	result, err := engine.EvalMultiple(context.Background(), code)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue, qt.Commentf("port should be restored after with-input-from-file"))
 
@@ -97,7 +97,7 @@ func TestWithFileContinuationSafety_T3(t *testing.T) {
 		  (eq? (current-input-port) orig-port))
 	`
 
-	result2, err := engine.Eval(context.Background(), code2)
+	result2, err := engine.EvalMultiple(context.Background(), code2)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result2.Internal(), qt.Equals, values.TrueValue, qt.Commentf("nested with-input-from-file should restore ports correctly"))
 }
@@ -136,7 +136,7 @@ func TestWithFileParameterizeSemanticsT3(t *testing.T) {
 		    (eq? (current-input-port) orig-port)))  ; After, port is restored
 	`
 
-	result, err := engine.Eval(context.Background(), code)
+	result, err := engine.EvalMultiple(context.Background(), code)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue, qt.Commentf("with-input-from-file should integrate with dynamic-wind"))
 }
