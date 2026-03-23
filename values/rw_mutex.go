@@ -24,7 +24,7 @@ var (
 	_ Value = (*RWMutex)(nil)
 
 	// RWMutex ID counter
-	rwMutexIDCounter uint64
+	rwMutexIDCounter atomic.Uint64
 )
 
 // RWMutex wraps sync.RWMutex for Scheme
@@ -36,7 +36,7 @@ type RWMutex struct {
 
 // NewRWMutex creates a new RWMutex
 func NewRWMutex(name string) *RWMutex {
-	id := atomic.AddUint64(&rwMutexIDCounter, 1)
+	id := rwMutexIDCounter.Add(1)
 	if name == "" {
 		name = fmt.Sprintf("rwmutex-%d", id)
 	}

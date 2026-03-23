@@ -123,10 +123,10 @@ Wile compiles Scheme directly to stack-machine bytecode without intermediate CPS
 
 ### Environment Escape Analysis (Appel 1992)
 
-Static bytecode scan to determine whether a closure's environment can escape its call. When it cannot (no continuation capture, no nested closure creation), the environment frame is reused in place rather than copied, eliminating allocation. The analysis in `computeNoCopyApply` checks for `OpSaveContinuation` and `OpMakeClosure` — if neither appears, the environment cannot be captured.
+Static bytecode scan to determine whether a closure's environment can escape its call. When it cannot (no continuation capture, no nested closure creation), the environment frame is reused in place rather than copied, eliminating allocation. **Removed in PR #561** — the optimization was unsafe under concurrent SRFI-18 thread invocation. Apply now always copies the env frame.
 
 - **Reference**: Andrew W. Appel, *Compiling with Continuations*, Cambridge University Press, 1992, §10.3
-- **Location**: `machine/native_template.go` (computeNoCopyApply, NoCopyApply), `machine/machine_context_apply.go` (Apply noCopy path)
+- **Location (historical)**: `machine/native_template.go`, `machine/machine_context_apply.go`
 
 ### Lexical Scoping (Landin 1966, Strachey 1967)
 

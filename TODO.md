@@ -24,31 +24,12 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 ---
 
-## Testing
-
-### High Priority
-
-- [x] **machine/ unit test coverage** [High, L]: Added 49 test files covering types/utilities, operations, VM runtime, compilation, expansion, library system, macro runtime, and infrastructure. ~500+ test cases. 3 of 52 files remain: `doc.go` (no code), `operations.go` (already covered by `operation_test.go`), one consolidated.
-- [x] **engine.go unit tests** [High, M]: Added `engine_unit_test.go` with 7 test functions covering Eval, EvalMultiple, Compile+Run, Define+Get, Call, Close, error wrapping, and options.
-- [x] **REPL test coverage** [High, M]: Added `debug_test.go` (23+ subtests for DebugContext: break, delete, list, enable, disable, step, next, finish, continue, backtrace, where). Extended `meta_test.go` with command listing, debug delegation, unknown command handling.
-
----
-
 ## Refactoring
-
-### Medium Priority
-
-- [x] **Missing primitive registration guide comment** [Medium, S]: Added "ADDING A NEW CORE PRIMITIVE" comment in `registry/core/register.go` (4 items).
-- [x] **Value type guide comment** [Medium, S]: Added "ADDING A NEW VALUE TYPE" comment near the `Value` interface in `values/values.go` (7 conditional items + cross-reference to `values/numeric_kind.go` for numeric types).
-- [x] **Type switch exhaustiveness linter** [Medium, M]: Added `cmd/typeswitchlint` — scans for type switches on `values.*`, reports switches without `default:` that may be missing concrete types. 8 warnings found across extensions/math, extensions/system, extensions/threads, internal/syntax, registry/helpers. Run: `go run ./cmd/typeswitchlint .` (default: warnings only; `-v` for all).
-- [x] **Special form dual-dispatch verification** [Medium, M]: Added `forms.Verify()` checking that every registered form has both a validator and a compiler (with exceptions for expand-time-only forms: let-syntax, letrec-syntax, syntax-rules). `TestFormRegistrationConsistency` in `internal/forms/consistency_test.go` runs after init() from both validate and machine packages. Full unification blocked by import cycle; verification catches the same class of bug at test time.
-- [x] **Remove dead old compilation path** [Medium, M, PR #559]: Removed `CompileSyntaxPrimitive`, `CompileProcedureCall`, `CompilePrimitiveOrProcedureCall`, `compileProcedureArgumentList` (~113 lines). Found by wile-goast call-convention mining. Enabled by fixing `validateForm` to set canonical `formName` on passthrough forms (was `"@literal"`, now the real keyword), so forms registry Strategy 1 catches all extension forms. Added compile-time guard for expand-time-only forms surviving to compilation. Checked type assertions in `registerSyntaxCompiler`. `RegisterSyntaxCompilers` retained — still needed by library export/import binding resolution.
 
 ### Low Priority
 
 - [ ] **ExpanderTimeContinuation convention deviations** [Low, M]: wile-goast call-clustering found 40 deviations across 4 conventions (`SourceContext` 76%, `WrapForeignErrorf` 68%, `NewSyntaxCons` 64%, `IsSyntaxEmptyList` 60%). Some explained (let-syntax/letrec-syntax delegate to impl which wraps), others not yet checked.
 - [ ] **Error sentinel grouping** [Low, S]: ~105 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.
-- [x] **extractPort thunk→bool refactor** [Low, S]: Refactored `extractPort` to return `(T, Tuple, bool, error)` — callers resolve the default. 6 call sites updated.
 
 ### Postponed
 
@@ -65,11 +46,8 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 ### Actionable
 
-- [ ] **Procedure inlining** [Performance, Research]: Explore peephole inlining of known procedures at compile time. No plan yet.
-
-### Architectural (Tier 3)
-
-- [ ] **NaN-boxing / tagged pointers** [Performance, L]: Encode small values (fixnums, booleans, chars) in 64 bits instead of 16-byte Go interface. Halves stack/binding sizes. Massive change, awkward in Go. `plans/PERFORMANCE.md`
+- [ ] **Procedure inlining** [Performance, Research]: Explore peephole inlining of known procedures at compile time. `plans/PERFORMANCE.md`
+- [ ] **Environment frame slimming** [Performance]: Reduce `EnvironmentFrame` struct for closure bodies that only need local bindings. `plans/PERFORMANCE.md`
 
 ### Research
 
@@ -79,8 +57,6 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 ## Features
 
-- [x] **Expression type API** [Architecture, PR #555]: Single-expression APIs (`Eval`, `Compile`, `EvalIn`) accept `*Expression` instead of `string`. New `Parse`/`ParseWithSource`/`MustParse`/`MustParseWithSource` enforce "exactly one expression" at parse time. `EvalWithSource`/`CompileWithSource` removed. Eliminates silent partial consumption of multi-expression input. `plans/EXPRESSION-TYPE-API.md`
-- [x] **Namespace system** [Architecture, PR #544]: `TopLevelEnvironment` → `Namespace`. Registry and authorizer moved from Engine to Namespace. Module instance caching. 10 Scheme primitives (`make-namespace`, `namespace-derive`, `namespace-define!`, `namespace-ref`, `namespace-bound?`, `namespace-undefine!`, `namespace-bound-names`, `namespace-require`, `namespace?`, `namespace-name`). `eval` gains 1-arg form. `wile.NewNamespace()`, `WithNamespace`, `Engine.EvalIn`. `plans/NAMESPACES.md`
 - [ ] **Opcode resource limits** [Security, Design]: Per-category limits for match/expand/continuation copy. Completes defense-in-depth for embedded use. `plans/SECURITY.md`
 - [ ] **Module decomposition Phase 1** [Architecture]: Decompose `internal/extensions/all/` into records, promises, core. Enables future module extraction. `plans/ARCHITECTURE.md`
 - [ ] **Network libraries** [Standard library]: TCP/UDP, HTTP, TLS, DNS. Required for real-world embedded use cases.
@@ -99,7 +75,6 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 No demand signal. Speculative or research-only.
 
 - [ ] **Doc metadata for Scheme-defined procedures** [Tooling]: 44 primitives migrated to Scheme lost their `PrimitiveSpec` doc/params/category metadata (REPL `,doc`, extension library exports). Need a mechanism to register documentation for `define`-based procedures — either a doc-only `PrimitiveSpec` entry or a parallel doc registry that macro sources can populate.
-- [x] **Security context** Authorizer rides on `context.valueContext`. Fixed: authorizer moved from context to Namespace (PR #544). Gate sites use `mc.Authorizer()` → `security.CheckWithAuthorizer()`.
 - [ ] **Hygiene debugging** [Tooling, Planned]: Scope introspection for macro authors. `plans/MACRO_SYSTEM.md`
 - [ ] **Macro expansion tracing** [Tooling, Planned]: Trace generated code back to macro invocation/template. `plans/MACRO_SYSTEM.md`
 - [ ] **Dialect system** [Architecture, Proposed]: De-globalize forms registry, `WithDialect()` option, extract R7RS as default dialect. `plans/ARCHITECTURE.md`

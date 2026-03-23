@@ -24,7 +24,7 @@ var (
 	_ Value = (*WaitGroup)(nil)
 
 	// WaitGroup ID counter
-	waitGroupIDCounter uint64
+	waitGroupIDCounter atomic.Uint64
 )
 
 // WaitGroup wraps sync.WaitGroup for Scheme
@@ -35,7 +35,7 @@ type WaitGroup struct {
 
 // NewWaitGroup creates a new WaitGroup
 func NewWaitGroup() *WaitGroup {
-	id := atomic.AddUint64(&waitGroupIDCounter, 1)
+	id := waitGroupIDCounter.Add(1)
 	return &WaitGroup{id: id}
 }
 

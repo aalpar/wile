@@ -195,7 +195,7 @@ type vmState struct {
 	//  │ Site                     │ envPooled│ Release of old env                │
 	//  ├──────────────────────────┼──────────┼───────────────────────────────────┤
 	//  │ Apply (copy path)        │ true     │ none (old env is in continuation) │
-	//  │ Apply (noCopy path)      │ false    │ none (old env is in continuation) │
+	//  │ Apply (nil-parent path)  │ false    │ none (old env is in continuation) │
 	//  │ RestoreAndRelease        │ from cont│ yes, if oldPooled && old != new   │
 	//  │ Restore (shared/callcc)  │ false    │ no (may be in shared chain → GC)  │
 	//  │ PopContinuation          │ from cont│ no (caller manages old frame)     │

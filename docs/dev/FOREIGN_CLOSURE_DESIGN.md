@@ -62,11 +62,7 @@ func (p *MachineContext) ApplyCallable(callable values.Value, args ...values.Val
 - `NativeTemplate.atomicBody` — structural via `*ForeignClosure` type
 - Two-op bytecode template per foreign closure (for leaf primitives)
 - `computeNoCopyApply()` call in `NewForeignClosure`
-
-### State Retained
-
-- `NativeTemplate.noCopyApply` — still needed for Scheme closures
-  (compiler calls `computeNoCopyApply()` at `compile_validated.go:454`)
+- `NativeTemplate.noCopyApply` — removed in PR #561 (SRFI-18 thread safety)
 
 ## Edge Case 1: Template-Pointer Guard (PrimCallCC Inline Mode)
 
@@ -141,7 +137,7 @@ func NewVMForeignClosure(env, pcnt, variadic, fn) *MachineClosure {
         NewOperationForeignFunctionCall(fn),
         NewOperationRestoreContinuation(),
     )
-    tpl.computeNoCopyApply()
+    // tpl.computeNoCopyApply() — removed in PR #561
     // ...
     return NewClosureWithTemplate(tpl, env)
 }

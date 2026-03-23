@@ -25,7 +25,7 @@ var (
 	_ Value = (*ConditionVariable)(nil)
 
 	// Condition variable ID counter
-	condVarIDCounter uint64
+	condVarIDCounter atomic.Uint64
 )
 
 // ConditionVariable represents a Scheme condition variable (SRFI-18)
@@ -41,7 +41,7 @@ type ConditionVariable struct {
 
 // NewConditionVariable creates a new condition variable
 func NewConditionVariable(name string) *ConditionVariable {
-	id := atomic.AddUint64(&condVarIDCounter, 1)
+	id := condVarIDCounter.Add(1)
 	if name == "" {
 		name = fmt.Sprintf("condvar-%d", id)
 	}
