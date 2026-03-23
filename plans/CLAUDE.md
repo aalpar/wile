@@ -16,6 +16,7 @@ When investigating R7RS conformance issues:
 | File | Contents | Status |
 |------|----------|--------|
 | `PERFORMANCE.md` | Remaining optimizations (procedure inlining, env frame slimming), benchmark baseline, fused lexing research | Procedure inlining + env frame slimming open; NaN-boxing blocked by unsafe |
+| `UNBOXED-FLOAT-PIPELINE.md` | Three-layer unboxed float pipeline (value register, tagged stack, binding unboxing) to eliminate Float heap allocations in arithmetic loops | Proposed — 4 phases |
 | `SECURITY.md` | Opcode resource limits (match steps, expand steps, continuation copy depth) | Proposed — not implemented |
 | `MACRO_SYSTEM.md` | Hygiene debugging, macro expansion tracing | Planned — not started |
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |
