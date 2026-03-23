@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-03-22
+
+### Changed (Breaking)
+
+- Remove `NoCopyApply` engine option to prevent SRFI-18 thread data races — argument copying is now always performed (#561)
+- Remove dead old compilation path (pre-template bytecode compiler) (#558)
+
+### Changed
+
+- Modernize atomic counters from `atomic.AddUint64`/`atomic.LoadUint64` to `atomic.Uint64`/`atomic.Uint32` (#562)
+
+## [1.8.0] - 2026-03-22
+
+### Added
+
+- Add `Expression` type — opaque wrapper for parsed Scheme expressions, enforces single-expression constraint at parse time (#555)
+- Add `Engine.Parse(ctx, code)` and `ParseWithSource(ctx, code, source)` for creating `*Expression` values (#555)
+- Add `Engine.MustParse(ctx, code)` and `MustParseWithSource` for test/example convenience (#555)
+
+### Changed (Breaking)
+
+- Single-expression APIs (`Eval`, `Compile`, `EvalIn`) now accept `*Expression` instead of `string` (#555)
+- Remove `EvalWithSource` and `CompileWithSource` — source context lives on `*Expression` via `ParseWithSource` (#555)
+
 ## [1.7.2] - 2026-03-21
 
 ### Added
@@ -444,7 +468,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CI builds all four OS/architecture combinations
 - R7RS conformance test suite running in CI
 
-[Unreleased]: https://github.com/aalpar/wile/compare/v1.6.1...HEAD
+[Unreleased]: https://github.com/aalpar/wile/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/aalpar/wile/compare/v1.8.0...v1.9.0
+[1.8.0]: https://github.com/aalpar/wile/compare/v1.7.2...v1.8.0
+[1.7.2]: https://github.com/aalpar/wile/compare/v1.7.1...v1.7.2
+[1.7.1]: https://github.com/aalpar/wile/compare/v1.7.0...v1.7.1
+[1.7.0]: https://github.com/aalpar/wile/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/aalpar/wile/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/aalpar/wile/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/aalpar/wile/compare/v1.4.0...v1.5.0
