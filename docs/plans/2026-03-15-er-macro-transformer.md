@@ -10,7 +10,7 @@
 
 **Tech Stack:** Go, Wile's `machine/`, `environment/`, `internal/syntax/`, `internal/schemeutil/` packages.
 
-**Design reference:** `plans/MACRO_SYSTEM.md` (ER macro transformer section)
+**Design reference:** ER macro transformer section was in `plans/MACRO_SYSTEM.md` (removed after completion)
 
 ---
 

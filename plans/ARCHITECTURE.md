@@ -245,7 +245,7 @@ The boundary is determined by answering: **what can't be removed without making 
 | Package | Contents | Why irreducible |
 |---------|----------|----------------|
 | `values/` | Type system: Value interface, Pair, Symbol, Number, etc. | Every package depends on this |
-| `environment/` | Bindings, scopes, phases, TopLevelEnvironment | Compiler and VM require it |
+| `environment/` | Bindings, scopes, phases, Namespace | Compiler and VM require it |
 | `machine/` | VM, compiler, expander, continuations, bytecode, operations | The execution engine |
 | `registry/` | Registry type, Extension interface, Phase, PrimitiveSpec | The composition mechanism |
 | `registry/core/` | ~148 primitives in 15 categories + core bootstrap macros | Language doesn't function without `cons`, `+`, `if`, `lambda` |
@@ -501,7 +501,7 @@ Scheme-level shadowing already works today via `(define error (let ((orig error)
 
 ## Context
 
-Wile exposes environments as first-class values (`TopLevelEnvironment` implements `values.Value`),
+Wile exposes environments as first-class values (`Namespace` implements `values.Value`),
 but provides no Scheme-level API to inspect their contents. The Go side has `Keys()`, `Bindings()`,
 `GetBinding()` — none of it reachable from Scheme. This adds 4 read-only introspection primitives
 following MIT Scheme naming conventions, informed by prior art from MIT Scheme, Chez Scheme, and Guile.
@@ -547,8 +547,8 @@ All registered at `PhaseRuntime` (same as existing eval primitives).
 
 Append after `PrimSyntaxLocalIdentifierAsBinding` (end of file):
 
-- **`PrimEnvironmentQ`**: Use `helpers.MakeTypePredicate` checking `*environment.TopLevelEnvironment`.
-- **`PrimEnvironmentBoundNames`**: Type-assert arg -> `*TopLevelEnvironment`, call `topLevelEnv.Runtime().GlobalEnvironment().Keys()`, cons each `*values.Symbol` onto accumulator.
+- **`PrimEnvironmentQ`**: Use `helpers.MakeTypePredicate` checking `*environment.Namespace`.
+- **`PrimEnvironmentBoundNames`**: Type-assert arg -> `*Namespace`, call `topLevelEnv.Runtime().GlobalEnvironment().Keys()`, cons each `*values.Symbol` onto accumulator.
 - **`PrimEnvironmentRef`**: Type-assert env arg, require `*values.Symbol` for second arg, call `env.GetBinding(sym)`. Return `binding.Value()`. Error with `ErrNoSuchBinding` if nil.
 - **`PrimEnvironmentBoundQ`**: Same as ref but return `BoolToBoolean(binding != nil)`.
 
@@ -567,7 +567,7 @@ Append after `PrimSyntaxLocalIdentifierAsBinding` (end of file):
 
 ```
 Scheme primitive          ->  Go path
-environment?              ->  type assertion on *TopLevelEnvironment
+environment?              ->  type assertion on *Namespace
 environment-bound-names   ->  topLevel.Runtime().GlobalEnvironment().Keys()
 environment-ref           ->  topLevel.Runtime().GetBinding(sym).Value()
 environment-bound?        ->  topLevel.Runtime().GetBinding(sym) != nil
