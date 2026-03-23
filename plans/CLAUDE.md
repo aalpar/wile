@@ -15,24 +15,13 @@ When investigating R7RS conformance issues:
 
 | File | Contents | Status |
 |------|----------|--------|
-| `PERFORMANCE.md` | Allocation history, fused lexing research, Tier 3 architectural changes | Tier 1-2 complete; NaN-boxing + fused lexing open |
-| `SECURITY.md` | Extension-level sandboxing, authorization framework, opcode resource limits | Extension sandboxing Phases 1-6 done; Authorization Phases 1-6 done; resource limits proposed |
-| `MACRO_SYSTEM.md` | ER macro transformer, hygiene debugging, macro expansion tracing | ER macros complete; hygiene debugging + tracing planned |
+| `PERFORMANCE.md` | Remaining optimizations (procedure inlining, env frame slimming), benchmark baseline, fused lexing research | Procedure inlining + env frame slimming open; NaN-boxing blocked by unsafe |
+| `SECURITY.md` | Opcode resource limits (match steps, expand steps, continuation copy depth) | Proposed — not implemented |
+| `MACRO_SYSTEM.md` | Hygiene debugging, macro expansion tracing | Planned — not started |
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |
-| `ARCHITECTURE.md` | Dialect system, module decomposition, plugin shadowing | Engine refactoring done; dialect, decomposition, shadowing, introspection open |
-| `CONTINUATION_MARKS.md` | Racket-style per-frame key-value annotations on the continuation chain | Complete (all 3 phases implemented: #508-#511) |
-| `OPCODE-PROMOTION.md` | Promote hot primitives to dedicated opcodes; Larceny profiling data, tiered plan | Complete (all 3 phases: #497, #498, Phase 3) |
-| `REMOVE-SYMBOL-INTERNING.md` | Remove symbol canonicalization, compare by string key | Complete (verified 2026-03-14) |
-| `ENVIRONMENT-CLEANUP.md` | Environment package cleanup: constructor duplication, dead delegation, semantic inconsistency | Complete (verified 2026-03-14) |
-| `FLAT-CLOSURES.md` | Flat closure implementation + Machine Modernization Roadmap | **Reverted** (PR #520) — +7.4% geo-mean regression |
-| `STACK-FRAMES.md` | Replace continuation pool with contiguous `[]callFrame` slice | **Reverted** (PR #518) — net negative on continuation-heavy benchmarks |
-| `INLINE-BINDINGS.md` | Embed `[4]Binding` inline array in `LocalEnvironmentFrame` | **Reverted** (PR #521) |
-| `NAMESPACES.md` | Namespace migration design: rename, registry/authorizer ownership, module instances, Scheme API | Complete (PR #544) |
-| `NAMESPACES-IMPLEMENTATION.md` | Task-by-task implementation plan for namespace migration (5 PRs) | Complete (PR #544) |
-| `FS-SOURCE-LOADING.md` | fs.FS support for source loading (include, load, import) via `WithSourceFS` | Complete (PR #553) |
-| `FS-SOURCE-LOADING-IMPL.md` | Task-by-task implementation plan for fs.FS source loading | Complete (PR #553) |
-| `THREAD-SAFE-NOCOPYAPPLY.md` | Thread-safe NoCopyApply design (threadShared latch) | **Superseded** (PR #561) — NoCopyApply removed entirely |
-| `THREAD-SAFE-NOCOPYAPPLY-IMPL.md` | Task-by-task implementation plan for threadShared latch | **Superseded** (PR #561) — NoCopyApply removed entirely |
+| `ARCHITECTURE.md` | Dialect system, module decomposition, plugin shadowing, environment introspection | All proposed |
+| `TEST-COVERAGE-AND-REFACTORING.md` | machine/ test coverage (52 files), engine.go tests, REPL tests, type switch linter, form dual-dispatch | Open |
+
 Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans).
 
 ## Before Starting Work

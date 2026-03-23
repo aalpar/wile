@@ -1,20 +1,5 @@
 # Architecture Plans
 
-## Completed: Engine.go Refactoring
-
-**Status:** Implemented
-
-Four structural issues addressed:
-
-1. **`callCallable`** replaced `callClosure` + `callCaseLambda` — single method using `sub.ApplyCallable(callable, args...)`
-2. **`applyBaseEnvironment`** extracted shared env setup (4-step sequence: reg.Apply -> RegisterSyntaxCompilers -> RegisterPrimitiveExpanders -> loadBootstrapMacros)
-3. **`expandAndCompile`** extracted shared compile pipeline (expand -> compile -> optimize)
-4. **`registerExtensionLibraries`** extracted from NewEngine
-
-**Result:** ~60 lines removed, three duplications eliminated, NewEngine cut roughly in half.
-
----
-
 # Dialect System
 
 **Status**: Proposed
