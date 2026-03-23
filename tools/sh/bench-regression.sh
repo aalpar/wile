@@ -25,8 +25,8 @@ THRESHOLD="${THRESHOLD:-5}"
 RUNS="${RUNS:-3}"
 
 if [ ! -f "$BASELINE" ]; then
-    echo "Error: Baseline file not found: $BASELINE"
-    exit 1
+    echo "Skipping: no baseline file for this platform: $BASELINE"
+    exit 0
 fi
 
 if [ ! -x "$SCHEME" ]; then
