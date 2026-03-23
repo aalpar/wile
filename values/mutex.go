@@ -35,7 +35,7 @@ var (
 	_ Value = (*Mutex)(nil)
 
 	// Mutex ID counter
-	mutexIDCounter uint64
+	mutexIDCounter atomic.Uint64
 )
 
 // MutexState represents the state of a mutex
@@ -78,7 +78,7 @@ type Mutex struct {
 
 // NewMutex creates a new unlocked mutex
 func NewMutex(name string) *Mutex {
-	id := atomic.AddUint64(&mutexIDCounter, 1)
+	id := mutexIDCounter.Add(1)
 	if name == "" {
 		name = fmt.Sprintf("mutex-%d", id)
 	}

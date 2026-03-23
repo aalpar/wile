@@ -24,19 +24,19 @@ var (
 	_ Value = (*Once)(nil)
 
 	// Once ID counter
-	onceIDCounter uint64
+	onceIDCounter atomic.Uint64
 )
 
 // Once wraps sync.Once for Scheme
 type Once struct {
 	id   uint64
 	once sync.Once
-	done uint32 // atomic flag to track if Do was called
+	done atomic.Uint32 // tracks if Do was called
 }
 
 // NewOnce creates a new Once
 func NewOnce() *Once {
-	id := atomic.AddUint64(&onceIDCounter, 1)
+	id := onceIDCounter.Add(1)
 	return &Once{id: id}
 }
 
@@ -50,7 +50,7 @@ func (p *Once) ID() uint64 {
 func (p *Once) Do(f func()) bool {
 	called := false
 	p.once.Do(func() {
-		atomic.StoreUint32(&p.done, 1)
+		p.done.Store(1)
 		called = true
 		f()
 	})
@@ -59,7 +59,7 @@ func (p *Once) Do(f func()) bool {
 
 // Done returns true if Do has been called
 func (p *Once) Done() bool {
-	return atomic.LoadUint32(&p.done) == 1
+	return p.done.Load() == 1
 }
 
 // buf interface implementation

@@ -27,7 +27,7 @@ var (
 	_ Value = (*Channel)(nil)
 
 	// Channel ID counter
-	channelIDCounter uint64
+	channelIDCounter atomic.Uint64
 )
 
 // Channel represents a Go channel exposed to Scheme
@@ -45,7 +45,7 @@ func NewChannel(bufferSize int) *Channel {
 	if bufferSize < 0 {
 		bufferSize = 0
 	}
-	id := atomic.AddUint64(&channelIDCounter, 1)
+	id := channelIDCounter.Add(1)
 	return &Channel{
 		id:         id,
 		bufferSize: bufferSize,

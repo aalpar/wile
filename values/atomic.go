@@ -23,7 +23,7 @@ var (
 	_ Value = (*AtomicBox)(nil)
 
 	// AtomicBox ID counter
-	atomicIDCounter uint64
+	atomicIDCounter atomic.Uint64
 )
 
 // AtomicBox provides atomic operations on a Value
@@ -35,7 +35,7 @@ type AtomicBox struct {
 
 // NewAtomicBox creates a new AtomicBox with the given initial value
 func NewAtomicBox(initial Value) *AtomicBox {
-	id := atomic.AddUint64(&atomicIDCounter, 1)
+	id := atomicIDCounter.Add(1)
 	a := &AtomicBox{id: id}
 	if initial != nil {
 		a.value.Store(initial)
@@ -116,7 +116,7 @@ var _ Value = (*AtomicInt64)(nil)
 
 // NewAtomicInt64 creates a new AtomicInt64 with the given initial value
 func NewAtomicInt64(initial int64) *AtomicInt64 {
-	id := atomic.AddUint64(&atomicIDCounter, 1)
+	id := atomicIDCounter.Add(1)
 	return &AtomicInt64{
 		id:    id,
 		value: initial,

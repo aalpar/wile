@@ -63,7 +63,7 @@ var (
 	_ Value = (*Thread)(nil)
 
 	// Thread ID counter
-	threadIDCounter uint64
+	threadIDCounter atomic.Uint64
 )
 
 // ThreadState represents the state of a thread
@@ -131,7 +131,7 @@ type Thread struct {
 
 // NewThread creates a new thread that will execute the given thunk.
 func NewThread(thunk Callable, name string) *Thread {
-	id := atomic.AddUint64(&threadIDCounter, 1)
+	id := threadIDCounter.Add(1)
 	if name == "" {
 		name = fmt.Sprintf("thread-%d", id)
 	}
