@@ -20,15 +20,21 @@ import (
 	"github.com/aalpar/wile/environment"
 )
 
-// Object pooling (sync.Pool) recycles short-lived allocations that follow
-// an acquire/release lifecycle. Each non-tail call creates a continuation
-// frame and eval stack; pooling avoids per-call heap allocations.
+// Object pooling recycles short-lived allocations that follow an acquire/release
+// lifecycle. Each non-tail call creates a continuation frame and eval stack;
+// pooling avoids per-call heap allocations.
+//
+// Two pool implementations are used: Pool[T] (sync.Pool-backed) for stacks,
+// sub-contexts, and continuations; FreeList[T] (mutex-guarded slice) for
+// environment frames where sync.Pool's GC-clearing behavior causes a feedback
+// loop (high alloc rate → frequent GC → pool cleared → more allocs).
+//
 // See BIBLIOGRAPHY.md "Object Pooling".
 
-// stackInitialCap is the initial capacity for pooled eval stacks.
+// StackInitialCap is the initial capacity for pooled eval stacks.
 // Most call sites use 0-4 stack slots (procedure + 1-3 arguments).
 // Profiling shows >97% of PopAll depths are ≤4.
-const stackInitialCap = 8
+const StackInitialCap = 8
 
 // pools is the package-level pool manager. It aggregates all pools for
 // unified observation and control (stats, drain, enable/disable).
@@ -39,7 +45,7 @@ var pools = NewPoolManager()
 // Pooling avoids repeated heap allocation of the backing slice.
 var stackPool = registerPool(pools, NewPool("stack",
 	func() *Stack {
-		s := make(Stack, 0, stackInitialCap)
+		s := make(Stack, 0, StackInitialCap)
 		return &s
 	},
 	func(s *Stack) {
@@ -85,7 +91,13 @@ var continuationPool = registerPool(pools, NewPool("continuation",
 // continuation chain. On normal return (RestoreAndRelease, unshared path),
 // the old mc.env is overwritten — the pool recycles it instead of leaving it
 // for GC. Shared frames (marked by call/cc) are never pooled.
-var envFramePool = registerPool(pools, NewPool("env_frame",
+//
+// Uses a mutex-guarded freelist instead of sync.Pool because sync.Pool is
+// cleared on every GC cycle. In recursive Scheme workloads the GC runs
+// 1000+ times per second, giving sync.Pool a <1% hit rate. A freelist
+// survives GC, so after warmup (one full recursion depth) every acquire
+// is a hit and copyForApplyInto reuses the retained bindings capacity.
+var envFramePool = registerFreeList(pools, NewFreeList("env_frame",
 	func() *environment.EnvironmentFrame {
 		return &environment.EnvironmentFrame{}
 	},
@@ -184,13 +196,13 @@ func releaseContinuation(cont *MachineContinuation) {
 	continuationPool.Release(cont)
 }
 
-// acquireEnvFrame returns a zeroed EnvironmentFrame from the pool.
+// acquireEnvFrame returns a zeroed EnvironmentFrame from the freelist.
 func acquireEnvFrame() *environment.EnvironmentFrame {
 	return envFramePool.Acquire()
 }
 
 // releaseEnvFrame zeros the EnvironmentFrame (breaking GC references) and
-// returns it to the pool. Nil-safe.
+// returns it to the freelist. Nil-safe.
 //
 // Must NOT be called on frames stored in shared continuations — those frames
 // may be re-invoked by call/cc and must remain live for GC.

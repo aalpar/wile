@@ -281,3 +281,150 @@ func TestPool_ConcurrentAcquireRelease(t *testing.T) {
 	qt.Assert(t, snap.Releases, qt.Equals, expectedOps)
 	qt.Assert(t, snap.InFlight, qt.Equals, uint64(0))
 }
+
+// ---------------------------------------------------------------------------
+// FreeList[T] core
+// ---------------------------------------------------------------------------
+
+// Compile-time check: *FreeList[testItem] must implement PoolHandle.
+var _ PoolHandle = (*FreeList[testItem])(nil)
+
+func TestFreeList_Acquire_ReturnsNewObject(t *testing.T) {
+	fl := NewFreeList("test", newTestItem, resetTestItem)
+
+	item := fl.Acquire()
+	qt.Assert(t, item, qt.IsNotNil)
+	qt.Assert(t, item.x, qt.Equals, 0)
+	qt.Assert(t, item.s, qt.Equals, "")
+}
+
+func TestFreeList_Release_RecyclesDeterministically(t *testing.T) {
+	fl := NewFreeList("test", newTestItem, resetTestItem)
+
+	item := fl.Acquire()
+	item.x = 42
+	item.s = "hello"
+	fl.Release(item)
+
+	// Re-acquire must return the same (reset) object — deterministic, no GC dependency.
+	item2 := fl.Acquire()
+	qt.Assert(t, item2, qt.IsNotNil)
+	qt.Assert(t, item2.x, qt.Equals, 0)
+	qt.Assert(t, item2.s, qt.Equals, "")
+
+	// Second acquire was a hit, not a miss.
+	snap := fl.Stats()
+	qt.Assert(t, snap.Acquires, qt.Equals, uint64(2))
+	qt.Assert(t, snap.Misses, qt.Equals, uint64(1))
+}
+
+func TestFreeList_Stats_TracksAcquiresAndReleases(t *testing.T) {
+	fl := NewFreeList("test", newTestItem, resetTestItem)
+
+	item1 := fl.Acquire()
+	item2 := fl.Acquire()
+	fl.Release(item1)
+
+	snap := fl.Stats()
+	qt.Assert(t, snap.Acquires, qt.Equals, uint64(2))
+	qt.Assert(t, snap.Releases, qt.Equals, uint64(1))
+	qt.Assert(t, snap.InFlight, qt.Equals, uint64(1))
+
+	fl.Release(item2)
+	snap = fl.Stats()
+	qt.Assert(t, snap.Acquires, qt.Equals, uint64(2))
+	qt.Assert(t, snap.Releases, qt.Equals, uint64(2))
+	qt.Assert(t, snap.InFlight, qt.Equals, uint64(0))
+}
+
+func TestFreeList_Stats_TracksMisses(t *testing.T) {
+	fl := NewFreeList("test", newTestItem, resetTestItem)
+
+	_ = fl.Acquire()
+	snap := fl.Stats()
+	qt.Assert(t, snap.Misses, qt.Equals, uint64(1))
+
+	_ = fl.Acquire()
+	snap = fl.Stats()
+	qt.Assert(t, snap.Misses, qt.Equals, uint64(2))
+}
+
+func TestFreeList_Name(t *testing.T) {
+	fl := NewFreeList("env_frame", newTestItem, resetTestItem)
+	qt.Assert(t, fl.Name(), qt.Equals, "env_frame")
+}
+
+func TestFreeList_SetEnabled_False_BypassesFreeList(t *testing.T) {
+	fl := NewFreeList("test", newTestItem, resetTestItem)
+	fl.SetEnabled(false)
+
+	item := fl.Acquire()
+	qt.Assert(t, item, qt.IsNotNil)
+
+	item.x = 99
+	fl.Release(item)
+
+	item2 := fl.Acquire()
+	qt.Assert(t, item2, qt.IsNotNil)
+	qt.Assert(t, item2.x, qt.Equals, 0)
+
+	snap := fl.Stats()
+	qt.Assert(t, snap.Misses, qt.Equals, uint64(2))
+	qt.Assert(t, snap.Acquires, qt.Equals, uint64(2))
+	qt.Assert(t, snap.Releases, qt.Equals, uint64(1))
+}
+
+func TestFreeList_Drain_ClearsCache(t *testing.T) {
+	fl := NewFreeList("test", newTestItem, resetTestItem)
+
+	item := fl.Acquire()
+	fl.Release(item)
+
+	fl.Drain()
+
+	// After drain, acquire must allocate (miss).
+	_ = fl.Acquire()
+	snap := fl.Stats()
+	qt.Assert(t, snap.Misses, qt.Equals, uint64(2))
+}
+
+func TestFreeList_ManagerRegistration(t *testing.T) {
+	mgr := NewPoolManager()
+	fl := registerFreeList(mgr, NewFreeList("fl", newTestItem, resetTestItem))
+
+	_ = fl.Acquire()
+
+	stats := mgr.AllStats()
+	qt.Assert(t, len(stats), qt.Equals, 1)
+	qt.Assert(t, stats[0].Name, qt.Equals, "fl")
+	qt.Assert(t, stats[0].Acquires, qt.Equals, uint64(1))
+}
+
+func TestFreeList_ConcurrentAcquireRelease(t *testing.T) {
+	const goroutines = 16
+	const iterations = 100
+
+	fl := NewFreeList("concurrent", newTestItem, resetTestItem)
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	for range goroutines {
+		go func() {
+			defer wg.Done()
+			for range iterations {
+				item := fl.Acquire()
+				item.x = 1
+				item.s = "busy"
+				fl.Release(item)
+			}
+		}()
+	}
+	wg.Wait()
+
+	snap := fl.Stats()
+	expectedOps := uint64(goroutines * iterations)
+	qt.Assert(t, snap.Acquires, qt.Equals, expectedOps)
+	qt.Assert(t, snap.Releases, qt.Equals, expectedOps)
+	qt.Assert(t, snap.InFlight, qt.Equals, uint64(0))
+}

@@ -36,7 +36,7 @@ type LocalEnvironmentFrame struct {
 // binding of unknown type.
 func NewLocalEnvironment(pcnt int) *LocalEnvironmentFrame {
 	q := &LocalEnvironmentFrame{
-		keys:     make(map[values.Symbol]int),
+		keys:     make(map[values.Symbol]int, pcnt),
 		bindings: make([]Binding, pcnt),
 	}
 	for i := range pcnt {
