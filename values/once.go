@@ -50,9 +50,9 @@ func (p *Once) ID() uint64 {
 func (p *Once) Do(f func()) bool {
 	called := false
 	p.once.Do(func() {
-		p.done.Store(1)
 		called = true
 		f()
+		p.done.Store(1)
 	})
 	return called
 }
