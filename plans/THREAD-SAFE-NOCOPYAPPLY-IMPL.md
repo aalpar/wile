@@ -1,6 +1,9 @@
 # Thread-Safe NoCopyApply Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **Historical (as of 2026-03-22).** This plan was never implemented. PR #561
+> removed NoCopyApply entirely instead of gating it with a `threadShared`
+> latch. The tasks below are not actionable — they reference code paths and
+> flags that no longer exist.
 
 **Status:** Superseded — NoCopyApply removed entirely (PR #561) instead of gating with threadShared latch.
 

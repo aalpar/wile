@@ -265,13 +265,22 @@ Instead of eagerly deep-copying on capture, mark frames as shared and defer the 
 **Files (historical):** `machine/native_template.go`, `machine/machine_context.go`, `machine/compile_validated.go`
 **Allocation saved (historical):** 1.8 GB, 24.6M allocations
 
-### Problem
+### Historical: How it worked (pre-PR #561)
 
-Every `Apply` copies the closure's environment frame to prevent parameter corruption from recursive calls. But many closures (leaf functions, simple predicates) never capture their environment — they have no `SaveContinuation` and no `MakeClosure`. For these, the copy is wasted work.
+The following describes the optimization as it existed before removal. It is
+retained for historical context — none of this code exists in the current
+codebase.
 
-### Solution
+#### Problem
 
-After compiling a lambda body, `computeNoCopyApply()` scans the bytecode:
+Every `Apply` copied the closure's environment frame to prevent parameter
+corruption from recursive calls. But many closures (leaf functions, simple
+predicates) never captured their environment — they had no `SaveContinuation`
+and no `MakeClosure`. For these, the copy was wasted work.
+
+#### Solution
+
+After compiling a lambda body, `computeNoCopyApply()` scanned the bytecode:
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -284,36 +293,59 @@ After compiling a lambda body, `computeNoCopyApply()` scans the bytecode:
 │    code[] contains OpMakeClosure? → bindings may be captured     │
 │      as a closure parent (env becomes closure.env)               │
 │                                                                  │
-│  If NEITHER is present:                                          │
+│  If NEITHER was present:                                         │
 │    noCopyApply = true                                            │
-│    Apply reuses closure's own env frame (0 allocations)          │
+│    Apply reused closure's own env frame (0 allocations)          │
 │                                                                  │
-│  If EITHER is present:                                           │
+│  If EITHER was present:                                          │
 │    noCopyApply = false                                           │
-│    Apply takes the standard NewApplyFrame() copy path            │
+│    Apply took the standard NewApplyFrame() copy path             │
 │                                                                  │
-│  This is a CONSERVATIVE analysis — any SaveContinuation or       │
-│  MakeClosure ANYWHERE in the template disables the optimization, │
-│  even if unreachable. No control flow analysis is performed.     │
+│  This was a CONSERVATIVE analysis — any SaveContinuation or      │
+│  MakeClosure ANYWHERE in the template disabled the optimization, │
+│  even if unreachable. No control flow analysis was performed.    │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-### Why the code looks this way
+#### Why the code looked this way
 
-**`NativeTemplate.noCopyApply` field**: Set once after compilation by `computeNoCopyApply()`. Never changes after that. The field is checked on every `Apply` call in the noCopy path of `MachineContext`, so it must be pre-computed, not calculated per call.
+**`NativeTemplate.noCopyApply` field**: Set once after compilation by
+`computeNoCopyApply()`. Never changed after that. The field was checked on
+every `Apply` call in the noCopy path of `MachineContext`, so it had to be
+pre-computed, not calculated per call.
 
-**Conservative analysis**: The analysis has no false positives (never marks a template as safe when it isn't), but has false negatives (marks some safe templates as unsafe). This is the correct trade-off: a false positive corrupts execution; a false negative only costs one extra allocation. In the Zebra benchmark, 10.9% of applications take the no-copy path — a modest but measurable win.
+**Conservative analysis**: The analysis had no false positives (never marked a
+template as safe when it wasn't), but had false negatives (marked some safe
+templates as unsafe). This was the correct trade-off: a false positive would
+corrupt execution; a false negative only cost one extra allocation. In the
+Zebra benchmark, 10.9% of applications took the no-copy path — a modest but
+measurable win.
 
-**Two escape paths**: `OpSaveContinuation` captures `mc.env` into the continuation chain (it becomes `cont.env`). `OpMakeClosure` captures `mc.env` as a closure's parent environment. Both allow the bindings to outlive the call frame. If neither is present, the bindings are dead after the call returns, so sharing them is safe.
+**Two escape paths**: `OpSaveContinuation` captured `mc.env` into the
+continuation chain (it became `cont.env`). `OpMakeClosure` captured `mc.env`
+as a closure's parent environment. Both allowed the bindings to outlive the
+call frame. If neither was present, the bindings were dead after the call
+returned, so sharing them was safe.
 
-### Why this is safe
+#### Why it was considered safe (single-threaded)
 
-When `noCopyApply == true`, the noCopy Apply path reuses `mcls.env` directly, mutating its bindings in place for the new call's parameters. This is safe because:
+When `noCopyApply == true`, the noCopy Apply path reused `mcls.env` directly,
+mutating its bindings in place for the new call's parameters. This was safe
+in single-threaded execution because:
 
-1. No `SaveContinuation` means no non-tail calls, so no recursive invocations that would read the old parameter values while new ones are being written
-2. No `MakeClosure` means no inner closures that reference the bindings after the call returns
+1. No `SaveContinuation` meant no non-tail calls, so no recursive invocations that would read the old parameter values while new ones were being written
+2. No `MakeClosure` meant no inner closures that referenced the bindings after the call returned
 
-If either condition is violated, the standard copy path (via `NewApplyFrame`) is taken, creating fresh bindings that are independent of the closure's template.
+If either condition was violated, the standard copy path (via `NewApplyFrame`)
+was taken, creating fresh bindings independent of the closure's template.
+
+#### Why it was removed
+
+The analysis was correct for single-threaded execution but unsound under SRFI-18
+concurrency. When multiple threads called the same closure concurrently, all
+callers wrote parameters to the same binding slots. `Binding.value` is a
+`values.Value` interface (two machine words); concurrent writes produced torn
+reads — one thread's type pointer with another's data pointer.
 
 ---
 

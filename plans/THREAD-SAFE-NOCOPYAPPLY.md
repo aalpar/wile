@@ -3,6 +3,10 @@
 **Date:** 2026-03-22
 **Status:** Superseded — NoCopyApply removed entirely (PR #561)
 
+> **Historical (as of 2026-03-22).** This plan was never implemented. PR #561
+> removed NoCopyApply entirely instead of gating it with a `threadShared`
+> latch. Everything below describes the proposed-but-not-implemented design.
+
 ## Problem
 
 `NoCopyApply` is a single-threaded optimization that reuses a closure's own
