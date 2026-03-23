@@ -52,11 +52,11 @@ type DynamicWindFrame struct {
 }
 
 // Global counter for generating unique frame IDs
-var nextWindingID uint64
+var nextWindingID atomic.Uint64
 
 // NewDynamicWindFrame creates a new winding frame with a unique ID.
 func NewDynamicWindFrame(before, after Closure) *DynamicWindFrame {
-	id := atomic.AddUint64(&nextWindingID, 1)
+	id := nextWindingID.Add(1)
 	return &DynamicWindFrame{
 		Before: before,
 		After:  after,

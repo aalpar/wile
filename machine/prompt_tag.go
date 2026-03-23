@@ -32,11 +32,11 @@ type PromptTag struct {
 	name string
 }
 
-var nextPromptTagID uint64
+var nextPromptTagID atomic.Uint64
 
 // NewPromptTag creates a new prompt tag with an optional name for debugging.
 func NewPromptTag(name string) *PromptTag {
-	id := atomic.AddUint64(&nextPromptTagID, 1)
+	id := nextPromptTagID.Add(1)
 	q := &PromptTag{
 		id:   id,
 		name: name,

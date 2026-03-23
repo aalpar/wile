@@ -25,7 +25,7 @@ import (
 )
 
 // gensymCounter is used to generate unique symbol names
-var gensymCounter uint64
+var gensymCounter atomic.Uint64
 
 // PrimIdentifierQ implements the identifier? predicate (R6RS).
 // Returns #t if the argument is a syntax object representing an identifier.
@@ -139,7 +139,7 @@ func PrimGenerateTemporaries(mc *machine.MachineContext) error {
 	// Generate fresh identifiers
 	elems := make([]values.Value, count)
 	for i := range elems {
-		id := atomic.AddUint64(&gensymCounter, 1)
+		id := gensymCounter.Add(1)
 		name := fmt.Sprintf("g%d", id)
 		elems[i] = syntax.NewSyntaxSymbol(name, nil)
 	}

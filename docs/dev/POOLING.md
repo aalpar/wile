@@ -89,9 +89,8 @@ frames) rather than O(chain length).
   sets `mc.envPooled = true`. Critical for recursive functions with
   `SaveContinuation` — without copying, all invocations share the same
   bindings.
-- **No-copy path** (`NoCopyApply`): reuses the closure's own environment,
-  sets `mc.envPooled = false`. Safe only when the template contains no
-  `SaveContinuation` and no `MakeClosure`.
+- **Nil-parent path**: reuses the closure's own environment for parentless
+  top-level thunks (no local parameter bindings), sets `mc.envPooled = false`.
 
 `RestoreAndRelease` checks `envPooled` before releasing the old environment:
 
@@ -109,7 +108,7 @@ where `oldEnv` and `cont.env` are the same pointer).
 | Site | Value | Rationale |
 |------|-------|-----------|
 | `Apply` (copy path) | `true` | Frame from pool; safe to recycle |
-| `Apply` (no-copy path) | `false` | Closure's own env; must not recycle |
+| `Apply` (nil-parent path) | `false` | Closure's own env; must not recycle |
 | `RestoreAndRelease` (unshared) | from continuation | Propagates caller's ownership |
 | `RestoreAndRelease` (shared) | `false` | Shared chain may be re-invoked; env must stay live |
 | `OpMakeClosure` | `false` | Closure captures `mc.env` via parent chain; must not recycle |

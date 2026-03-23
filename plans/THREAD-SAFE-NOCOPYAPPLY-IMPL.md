@@ -2,7 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Prevent data races when SRFI-18 threads concurrently call closures that use the NoCopyApply optimization, by latching an atomic `threadShared` flag on first thread invocation.
+**Status:** Superseded — NoCopyApply removed entirely (PR #561) instead of gating with threadShared latch.
+
+**Original goal:** Prevent data races when SRFI-18 threads concurrently call closures that use the NoCopyApply optimization, by latching an atomic `threadShared` flag on first thread invocation.
 
 **Architecture:** Add `threadShared uint32` to `MachineClosure` and `ForeignClosure`. At `Apply`/`callForeignCached`/`applyForeign` entry, if `mc.threadID != 0`, atomically latch the flag. When latched, force the copy path (allocate fresh env frame from pool). Single-threaded code is unaffected — the flag is never latched, and the read is one `atomic.LoadUint32`.
 

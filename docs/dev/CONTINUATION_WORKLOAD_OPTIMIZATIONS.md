@@ -253,10 +253,17 @@ Instead of eagerly deep-copying on capture, mark frames as shared and defer the 
 
 ---
 
-## Optimization 6: Compile-Time Escape Analysis (NoCopyApply)
+## Optimization 6: Compile-Time Escape Analysis (NoCopyApply) — REMOVED
 
-**Files:** `machine/native_template.go`, `machine/machine_context.go`, `machine/compile_validated.go`
-**Allocation saved:** 1.8 GB, 24.6M allocations
+> **Removed in PR #561.** NoCopyApply was removed to prevent data races when
+> SRFI-18 threads concurrently call the same closure. The optimization reused
+> the closure's own environment frame for leaf functions, but concurrent callers
+> would write parameters to the same binding slots, producing torn reads on the
+> two-word `values.Value` interface. Apply now always acquires a fresh env frame
+> from the pool (except for parentless top-level thunks with no parameters).
+
+**Files (historical):** `machine/native_template.go`, `machine/machine_context.go`, `machine/compile_validated.go`
+**Allocation saved (historical):** 1.8 GB, 24.6M allocations
 
 ### Problem
 
@@ -322,7 +329,7 @@ If either condition is violated, the standard copy path (via `NewApplyFrame`) is
 | `CurrentContinuation()` | `DeepCopy()` | `MarkChainShared()` | O(new) mark vs O(depth) copy |
 | `RestoreAndRelease()` | Always pool | Branch on `shared` flag | Preserves shared frames for re-invocation |
 | `OpLoadLocal` / `OpStoreLocal` | `NewLocalIndex()` → `*[2]int` | `GetLocalBindingBySlotDepth(slot, depth)` | Bypasses pointer allocation |
-| `NativeTemplate.noCopyApply` | N/A | Compile-time escape analysis flag | Skips env copy for leaf-like closures |
+| `NativeTemplate.noCopyApply` | N/A | ~~Compile-time escape analysis flag~~ | **Removed** (PR #561) — SRFI-18 thread safety |
 
 ---
 
@@ -346,7 +353,7 @@ If either condition is violated, the standard copy path (via `NewApplyFrame`) is
 
 4. **Do not merge the two `RestoreAndRelease` branches.** Shared frames must not be pooled; unshared frames should be.
 
-5. **Do not remove `computeNoCopyApply` or the `noCopyApply` flag.** It eliminates both the `EnvironmentFrame` and `[]Binding` allocations for 10.9% of closure applications.
+5. ~~**Do not remove `computeNoCopyApply` or the `noCopyApply` flag.**~~ **Removed in PR #561** to fix SRFI-18 thread races. The optimization saved allocations for 10.9% of closure applications but was unsafe under concurrent invocation.
 
 6. **Do not embed `*LocalEnvironmentFrame` by pointer again.** The value embedding eliminates one allocation per `Apply` — 112.9M allocations in the benchmark.
 
@@ -358,8 +365,7 @@ If either condition is violated, the standard copy path (via `NewApplyFrame`) is
 
 - `machine/pool.go` — Continuation and stack pooling
 - `machine/machine_context.go` — `RestoreAndRelease` with shared-flag branching
-- `machine/machine_context.go` — Apply path with `noCopyApply` branching
+- `machine/machine_context_apply.go` — Apply always-copy path (nil-parent exception)
 - `machine/machine_continuation.go` — `MarkChainShared` with early exit
-- `machine/native_template.go` — `computeNoCopyApply` escape analysis
 - `environment/environment_frame.go` — `NewApplyFrame` fused allocation
 - `machine/stack.go` — `PopAll` with backing array retention

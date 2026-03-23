@@ -46,32 +46,32 @@ type Scope struct {
 }
 
 // nextScopeID is a counter for generating unique scope identities
-var nextScopeID uint64
+var nextScopeID atomic.Uint64
 
 // NewScope creates a new scope with unique identity for hygiene tracking.
 // By default, scopes are not rebinding scopes.
 func NewScope() *Scope {
-	id := atomic.AddUint64(&nextScopeID, 1)
+	id := nextScopeID.Add(1)
 	return &Scope{id: id}
 }
 
 // NewScopeWithLabel creates a new scope with a human-readable label for debugging.
 // The label has no semantic effect — it is purely for diagnostics.
 func NewScopeWithLabel(label string) *Scope {
-	id := atomic.AddUint64(&nextScopeID, 1)
+	id := nextScopeID.Add(1)
 	return &Scope{id: id, Label: label}
 }
 
 // NewRebindingScope creates a new scope that can potentially rebind auxiliary syntax.
 // Used by let-syntax and letrec-syntax to mark scopes that could shadow literals.
 func NewRebindingScope() *Scope {
-	id := atomic.AddUint64(&nextScopeID, 1)
+	id := nextScopeID.Add(1)
 	return &Scope{id: id, IsRebinding: true}
 }
 
 // NewRebindingScopeWithLabel creates a new rebinding scope with a label.
 func NewRebindingScopeWithLabel(label string) *Scope {
-	id := atomic.AddUint64(&nextScopeID, 1)
+	id := nextScopeID.Add(1)
 	return &Scope{id: id, IsRebinding: true, Label: label}
 }
 

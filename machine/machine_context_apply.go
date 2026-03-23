@@ -50,6 +50,10 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 	// compile, top-level wrappers) cannot be copied via InitApplyFrame.
 	// These are safe to reuse directly — they have no local parameter
 	// bindings for concurrent callers to race on.
+	//
+	// Invariant: Parent() == nil implies parameterCount == 0. All closures
+	// with parameters are constructed with NewEnvironmentFrameWithParent,
+	// which guarantees a non-nil parent.
 	var env *environment.EnvironmentFrame
 	var bnds []environment.Binding
 

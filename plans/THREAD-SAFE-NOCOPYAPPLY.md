@@ -1,7 +1,7 @@
 # Thread-Safe NoCopyApply
 
 **Date:** 2026-03-22
-**Status:** Approved
+**Status:** Superseded — NoCopyApply removed entirely (PR #561)
 
 ## Problem
 

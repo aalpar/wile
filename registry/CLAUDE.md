@@ -105,11 +105,10 @@ and bounds checking.
 
 ## Gotchas
 
-- **Variadic rest-arg buffer**: When a variadic primitive is applied via the `noCopyApply`
-  path, the rest-arg list (the `values.Tuple` for `...args`) is backed by
-  `MachineContext.restArgBuf` — a reusable `PairBlock`. The list is valid only for the
-  duration of the foreign function call. If your primitive stores the rest-arg list (returns
-  it, puts it in a data structure, or passes it to a sub-context that outlives the call),
-  you MUST copy the spine first. See `PrimList` in `registry/core/prim_lists.go` for the
-  canonical copy pattern. Failure to copy creates a latent aliasing bug that corrupts the
-  next variadic call's arguments.
+- **Variadic rest-arg buffer**: When a variadic ForeignClosure is applied, the rest-arg
+  list (the `values.Tuple` for `...args`) is backed by `MachineContext.restArgBuf` — a
+  reusable `PairBlock`. The list is valid only for the duration of the foreign function
+  call. If your primitive stores the rest-arg list (returns it, puts it in a data structure,
+  or passes it to a sub-context that outlives the call), you MUST copy the spine first.
+  See `PrimList` in `registry/core/prim_lists.go` for the canonical copy pattern. Failure
+  to copy creates a latent aliasing bug that corrupts the next variadic call's arguments.

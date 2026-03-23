@@ -31,6 +31,8 @@ When investigating R7RS conformance issues:
 | `NAMESPACES-IMPLEMENTATION.md` | Task-by-task implementation plan for namespace migration (5 PRs) | Complete (PR #544) |
 | `FS-SOURCE-LOADING.md` | fs.FS support for source loading (include, load, import) via `WithSourceFS` | Complete (PR #553) |
 | `FS-SOURCE-LOADING-IMPL.md` | Task-by-task implementation plan for fs.FS source loading | Complete (PR #553) |
+| `THREAD-SAFE-NOCOPYAPPLY.md` | Thread-safe NoCopyApply design (threadShared latch) | **Superseded** (PR #561) — NoCopyApply removed entirely |
+| `THREAD-SAFE-NOCOPYAPPLY-IMPL.md` | Task-by-task implementation plan for threadShared latch | **Superseded** (PR #561) — NoCopyApply removed entirely |
 Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans).
 
 ## Before Starting Work

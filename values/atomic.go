@@ -109,7 +109,7 @@ func (p *AtomicBox) SchemeString() string {
 // This is more efficient than AtomicBox for integer operations
 type AtomicInt64 struct {
 	id    uint64
-	value int64
+	value atomic.Int64
 }
 
 var _ Value = (*AtomicInt64)(nil)
@@ -117,10 +117,9 @@ var _ Value = (*AtomicInt64)(nil)
 // NewAtomicInt64 creates a new AtomicInt64 with the given initial value
 func NewAtomicInt64(initial int64) *AtomicInt64 {
 	id := atomicIDCounter.Add(1)
-	return &AtomicInt64{
-		id:    id,
-		value: initial,
-	}
+	q := &AtomicInt64{id: id}
+	q.value.Store(initial)
+	return q
 }
 
 // ID returns the AtomicInt64's unique identifier
@@ -130,28 +129,28 @@ func (p *AtomicInt64) ID() uint64 {
 
 // Load atomically loads and returns the value
 func (p *AtomicInt64) Load() int64 {
-	return atomic.LoadInt64(&p.value)
+	return p.value.Load()
 }
 
 // Store atomically stores the value
 func (p *AtomicInt64) Store(v int64) {
-	atomic.StoreInt64(&p.value, v)
+	p.value.Store(v)
 }
 
 // Add atomically adds delta and returns the new value
 func (p *AtomicInt64) Add(delta int64) int64 {
-	return atomic.AddInt64(&p.value, delta)
+	return p.value.Add(delta)
 }
 
 // Swap atomically stores new and returns the old value
 func (p *AtomicInt64) Swap(nw int64) int64 {
-	return atomic.SwapInt64(&p.value, nw)
+	return p.value.Swap(nw)
 }
 
 // CompareAndSwap atomically compares and swaps
 // Returns true if the swap was performed
 func (p *AtomicInt64) CompareAndSwap(ol, nw int64) bool {
-	return atomic.CompareAndSwapInt64(&p.value, ol, nw)
+	return p.value.CompareAndSwap(ol, nw)
 }
 
 // buf interface implementation
