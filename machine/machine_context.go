@@ -79,7 +79,7 @@ type MachineContext struct {
 	thread        *values.Thread
 	syntaxCase    *syntaxCaseState // per-context syntax-case expansion state; nil when not in syntax-case
 	maxCallDepth  uint64           // 0 = unlimited (default), otherwise max continuation depth
-	restArgBuf    values.PairBlock // reusable buffer for variadic rest-arg list construction (noCopyApply path only)
+	restArgBuf    values.PairBlock // reusable buffer for variadic rest-arg list construction (ForeignClosure calls)
 	isolatedMarks bool             // when true, findParameterInMarks does not walk parentMC; set by applyCapturedContinuation
 }
 

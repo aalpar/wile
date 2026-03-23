@@ -41,30 +41,29 @@ func (p *MachineContext) Apply(mcls *MachineClosure, vs ...values.Value) (*Machi
 		p.counters.RecordCall(name)
 	}
 
+	// Acquire a fresh frame from the pool. This prevents two correctness
+	// issues: (1) recursive calls sharing bindings when SaveContinuation
+	// captures mc.env, and (2) concurrent SRFI-18 threads sharing binding
+	// slots when calling the same closure.
+	//
+	// Exception: closures whose env has no parent (e.g., thunks from
+	// compile, top-level wrappers) cannot be copied via InitApplyFrame.
+	// These are safe to reuse directly — they have no local parameter
+	// bindings for concurrent callers to race on.
 	var env *environment.EnvironmentFrame
 	var bnds []environment.Binding
 
-	if tpl.NoCopyApply() {
-		// No-copy path: the template contains no SaveContinuation and no
-		// MakeClosure, so mc.env is never captured. Safe to mutate the
-		// closure's own bindings in place, eliminating both the
-		// EnvironmentFrame and []Binding allocations.
+	if mcls.env.Parent() == nil {
 		env = mcls.env
-		bnds = env.LocalEnvironment().Bindings()
-		// envPooled: closure's own env, not from pool.
+		lenv := env.LocalEnvironment()
+		if lenv != nil {
+			bnds = lenv.Bindings()
+		}
 		p.envPooled = false
-		p.counters.NoCopyApplies++
-		p.counters.NoCopyBindingsSaved += uint64(len(bnds))
 	} else {
-		// Copy path: acquire a frame from the pool and populate it.
-		// Critical for recursive functions with SaveContinuation: without
-		// copying, all invocations share the same bindings, causing
-		// parameter corruption when evaluating arguments like
-		// (+ (f (- n 1)) (f (- n 2))).
 		env = acquireEnvFrame()
 		mcls.env.InitApplyFrame(env)
 		bnds = env.LocalEnvironment().Bindings()
-		// envPooled: frame from envFramePool; RestoreAndRelease will recycle it.
 		p.envPooled = true
 		p.counters.EnvsCopied++
 		p.counters.BindingsCopied += uint64(len(bnds))
@@ -91,18 +90,20 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	}
 
 	p.counters.ClosuresApplied++
-	p.counters.NoCopyApplies++
 
-	// Always reuse the closure's own env (noCopyApply by construction).
-	env := fcls.env
+	// Acquire a fresh frame to prevent concurrent SRFI-18 threads from
+	// racing on shared binding slots when calling the same ForeignClosure.
+	env := acquireEnvFrame()
+	fcls.env.InitApplyFrame(env)
 	bnds := env.LocalEnvironment().Bindings()
-	p.counters.NoCopyBindingsSaved += uint64(len(bnds))
+	p.envPooled = true
+	p.counters.EnvsCopied++
+	p.counters.BindingsCopied += uint64(len(bnds))
+	p.counters.KeysShared++
 
 	bindArgs(bnds, vs, l, fcls.isVariadic, p.buildRestArg)
 
 	p.env = env
-	// envPooled: closure's own env, not from pool.
-	p.envPooled = false
 
 	p.counters.ForeignCalls++
 	p.counters.RecordCall(fcls.name)
@@ -149,9 +150,10 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 // it as a Tuple. The buffer grows with doubling strategy and is reused across
 // calls, amortizing allocations to zero after warmup.
 //
-// SAFETY: Only safe on the noCopyApply path, where the environment is not
-// captured (no SaveContinuation/MakeClosure). The buffer is overwritten on
-// the next variadic call, so the returned Tuple must not be retained.
+// SAFETY: Safe for ForeignClosure calls because the env frame is used
+// synchronously during the Go function call and then released to the pool.
+// The buffer is per-MachineContext, so concurrent SRFI-18 threads each
+// have their own buffer.
 func (p *MachineContext) buildRestArg(vs []values.Value, start int) values.Tuple {
 	n := len(vs) - start
 	if n == 0 {

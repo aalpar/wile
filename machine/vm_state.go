@@ -46,8 +46,7 @@ type markEntry struct {
 //	Invariant: K is a heap-allocated linked list, never Go stack frames.
 //	  This is what makes call/cc possible — K is capturable data.
 //	Constrains: Apply (must produce correct K), SaveContinuation/Restore
-//	  (must preserve exactly the fields in σ), computeNoCopyApply
-//	  (decides whether E can be shared).
+//	  (must preserve exactly the fields in σ).
 //	Constrained by: de Bruijn addressing (E is indexed by slot,depth),
 //	  linked closures (MakeClosure captures E by pointer).
 //
@@ -183,8 +182,8 @@ type vmState struct {
 	// envPooled is true when env was acquired from the envFramePool (Apply
 	// copy path). When the env is about to be overwritten (RestoreAndRelease,
 	// Restore), this flag tells us it's safe to return it to the pool.
-	// Set false for noCopyApply (closure's own env), sub-context envs, or
-	// envs restored from shared continuations.
+	// Set false for sub-context envs or envs restored from shared
+	// continuations.
 	//
 	// INVARIANT: every site that writes mc.env MUST also set mc.envPooled.
 	// Failing to do so can cause releaseEnvFrame on a non-pooled frame

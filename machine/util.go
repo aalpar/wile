@@ -38,7 +38,6 @@ func NewVMForeignClosure(env *environment.EnvironmentFrame, pcnt int, variadic b
 		NewOperationForeignFunctionCall(fn),
 		NewOperationRestoreContinuation(),
 	)
-	tpl.computeNoCopyApply()
 	lenv := environment.NewLocalEnvironment(pcnt)
 	env = environment.NewEnvironmentFrameWithParent(lenv, env)
 	return NewClosureWithTemplate(tpl, env)

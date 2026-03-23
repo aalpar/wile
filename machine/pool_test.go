@@ -687,7 +687,7 @@ func TestRestoreAndRelease_ReleasesPooledEnvFrame(t *testing.T) {
 }
 
 func TestRestoreAndRelease_SkipsNonPooledEnvFrame(t *testing.T) {
-	// mc.env is NOT from the pool (simulates noCopy path).
+	// mc.env is NOT from the pool (simulates sub-context or non-pooled env).
 	mc := &MachineContext{}
 	mc.env = &environment.EnvironmentFrame{}
 	mc.envPooled = false
