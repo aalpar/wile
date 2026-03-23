@@ -35,8 +35,7 @@ var _ values.Callable = (*MachineClosure)(nil)
 //	  Mutations via set! are visible through the closure because the
 //	  closure shares the frame, not a snapshot.
 //	Constrains: OperationMakeClosure (must link E to runtime parent),
-//	  Apply (must copy E for non-noCopyApply calls to prevent aliasing),
-//	  computeNoCopyApply (escape analysis on E).
+//	  Apply (always copies E to prevent aliasing and thread races).
 //	Constrained by: de Bruijn addressing (free vars addressed by
 //	  slot,depth in E's chain), CESK model (E is the environment component).
 //

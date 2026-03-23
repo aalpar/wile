@@ -53,19 +53,22 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 	}
 
 	mc.counters.ClosuresApplied++
-	mc.counters.NoCopyApplies++
 	mc.counters.ForeignCalls++
 	mc.counters.RecordCall(fcls.name)
 
-	// Bind args into closure's own env (noCopyApply by construction).
-	env := fcls.env
+	// Acquire a fresh frame to prevent concurrent SRFI-18 threads from
+	// racing on shared binding slots when calling the same ForeignClosure.
+	env := acquireEnvFrame()
+	fcls.env.InitApplyFrame(env)
 	bnds := env.LocalEnvironment().Bindings()
-	mc.counters.NoCopyBindingsSaved += uint64(len(bnds))
+	mc.envPooled = true
+	mc.counters.EnvsCopied++
+	mc.counters.BindingsCopied += uint64(len(bnds))
+	mc.counters.KeysShared++
 
 	bindArgs(bnds, vs, l, fcls.isVariadic, mc.buildRestArg)
 
 	mc.env = env
-	mc.envPooled = false
 
 	savedTemplate := mc.template
 	err = fcls.fn(mc)

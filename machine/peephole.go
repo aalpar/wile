@@ -35,8 +35,8 @@ package machine
 //	  offsets are recomputed after compaction.
 //	Constrains: Run() must implement fused opcodes with identical
 //	  semantics to the original sequence.
-//	Constrained by: must run BEFORE computeNoCopyApply — removing
-//	  OpSaveContinuation would change escape analysis results.
+//	Constrained by: must preserve semantic equivalence of fused
+//	  instruction sequences.
 //
 // See BIBLIOGRAPHY.md "Superinstruction Formation".
 //

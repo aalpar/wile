@@ -53,8 +53,8 @@ func (p *OperationMakeClosure) Apply(mc *MachineContext) (*MachineContext, error
 	//   Invariant: the parent pointer must be the RUNTIME mc.env, not
 	//     the compile-time env. Compile-time frames hold placeholders;
 	//     runtime frames hold actual values.
-	//   Constrains: Apply (must copy this env for non-noCopyApply to
-	//     prevent aliasing across recursive calls), envPooled flag
+	//   Constrains: Apply (always copies this env to prevent aliasing
+	//     across recursive calls and SRFI-18 thread races), envPooled flag
 	//     (this env is not poolable — closure holds a live reference).
 	//   Constrained by: de Bruijn (depth in free-var access counts
 	//     parent hops through this chain), CESK model (E component).

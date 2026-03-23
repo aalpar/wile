@@ -107,12 +107,8 @@ func (p *CompileTimeContinuation) compileClosureBody(
 		return 0, 0, err
 	}
 
-	// Phase 5: Peephole optimization before escape analysis (optimization may
-	// change which ops are present). Escape analysis determines whether Apply
-	// can skip copying the closure's environment frame — safe when the body
-	// contains no SaveContinuation and no MakeClosure.
+	// Phase 5: Peephole optimization.
 	tpl.Optimize()
-	tpl.computeNoCopyApply()
 
 	return tpli, envi, nil
 }
