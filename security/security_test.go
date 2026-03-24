@@ -153,4 +153,6 @@ func TestAccessRequest_Constants(t *testing.T) {
 	c.Assert(ActionStat, qt.Equals, "stat")
 	c.Assert(ActionLoad, qt.Equals, "load")
 	c.Assert(ActionExit, qt.Equals, "exit")
+	c.Assert(ActionExec, qt.Equals, "exec")
+	c.Assert(ActionExecShell, qt.Equals, "exec-shell")
 }
