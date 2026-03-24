@@ -49,6 +49,7 @@ var Builder = registry.NewRegistryBuilder(
 	addParameters,
 	addPrompts,
 	addBoxes,
+	addOpaque,
 	addHashtables,
 	addExceptions,
 	addContMarks,

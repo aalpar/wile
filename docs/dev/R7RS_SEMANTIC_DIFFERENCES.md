@@ -10,9 +10,10 @@ This document catalogs differences between the current implementation and the R7
 
 ## Summary
 
-Two known differences exist:
+Three known differences exist:
 1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Conservative safe behavior with minimal practical impact.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
+3. `set-current-directory!` changes the process-global working directory via `os.Chdir`, which is inherently shared across all Wile engines and goroutines in the same OS process.
 
 ---
 
@@ -117,4 +118,18 @@ R7RS does not specify directory operations. This follows SRFI-170 conventions.
 R7RS §7.3's reference implementation of `guard` uses `(let ((result (begin e1 e2 ...))) ...)`, which binds a single value. If the body produces multiple values via `(values v1 v2 ...)`, the `let` binding triggers an arity mismatch.
 
 Wile's `guard` uses `call-with-values` to capture all values from the body, then re-emits them via `(apply values results)`. This means `(guard (e (#f)) (values 1 2))` correctly propagates both values, whereas the R7RS reference implementation would signal an error.
+
+---
+
+## Process-Global Working Directory
+
+**Primitive:** `set-current-directory!`
+
+**Behavior:** Calls `os.Chdir`, which changes the working directory for the entire OS process.
+
+**Impact:** Multiple Wile engines in the same Go process share one working directory. Concurrent calls from different goroutines race on the same OS state. This is inherent to POSIX — there is no per-thread working directory.
+
+**Mitigation:** The primitive is gated by `security.ResourceProcess` / `security.ActionWrite` / target `"cwd"`, so embedders can deny it via their authorizer. When denied, all file operations should use absolute paths.
+
+**R7RS context:** R7RS does not specify `set-current-directory!` or any directory operations. This follows SRFI-170 conventions. The SRFI acknowledges process-global CWD as a POSIX limitation.
 
