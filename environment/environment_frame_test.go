@@ -828,6 +828,64 @@ func TestMaybeCreateLocalBindingWithScopes_ExistingBindingGetsSource(t *testing.
 }
 
 // ---------------------------------------------------------------------------
+// PreAllocateBindings / LocalBindingsSlice
+// ---------------------------------------------------------------------------
+
+func TestPreAllocateBindings_SetsCapacity(t *testing.T) {
+	f := &EnvironmentFrame{}
+	f.PreAllocateBindings(4)
+
+	bs := f.LocalBindingsSlice()
+	qt.Assert(t, len(bs), qt.Equals, 0)
+	qt.Assert(t, cap(bs) >= 4, qt.IsTrue)
+}
+
+func TestPreAllocateBindings_ZeroCap(t *testing.T) {
+	f := &EnvironmentFrame{}
+	f.PreAllocateBindings(0)
+
+	bs := f.LocalBindingsSlice()
+	qt.Assert(t, len(bs), qt.Equals, 0)
+}
+
+func TestPreAllocateBindings_NegativeClampsToZero(t *testing.T) {
+	f := &EnvironmentFrame{}
+	f.PreAllocateBindings(-1)
+
+	bs := f.LocalBindingsSlice()
+	qt.Assert(t, len(bs), qt.Equals, 0)
+	qt.Assert(t, cap(bs), qt.Equals, 0)
+}
+
+func TestLocalBindingsSlice_FreshFrame(t *testing.T) {
+	// A bare EnvironmentFrame has nil bindings.
+	f := &EnvironmentFrame{}
+	qt.Assert(t, f.LocalBindingsSlice(), qt.IsNil)
+}
+
+func TestResetForPool_PreservesPreAllocatedCapacity(t *testing.T) {
+	f := &EnvironmentFrame{}
+	f.PreAllocateBindings(4)
+
+	// Simulate use via InitApplyFrame.
+	ns := NewNamespace()
+	parent := ns.Runtime()
+	lenv := NewLocalEnvironment(2)
+	src := NewEnvironmentFrameWithParent(lenv, parent)
+	src.InitApplyFrame(f)
+
+	capBefore := cap(f.LocalBindingsSlice())
+	qt.Assert(t, capBefore >= 4, qt.IsTrue)
+
+	f.ResetForPool()
+
+	// After reset, bindings should be len 0 but retain capacity.
+	bs := f.LocalBindingsSlice()
+	qt.Assert(t, len(bs), qt.Equals, 0)
+	qt.Assert(t, cap(bs), qt.Equals, capBefore)
+}
+
+// ---------------------------------------------------------------------------
 // InitApplyFrame
 // ---------------------------------------------------------------------------
 

@@ -219,6 +219,25 @@ func (p *EnvironmentFrame) ResetForPool() {
 	p.local.bindings = full[:0]
 }
 
+// PreAllocateBindings sets the local bindings slice to a zero-length slice
+// with the given capacity. Used by the env frame pool to ensure fresh frames
+// have sufficient capacity for copyForApplyInto to reslice instead of allocate.
+// Must only be called on freshly constructed frames (before any other use).
+// n must be non-negative; negative values are clamped to 0.
+func (p *EnvironmentFrame) PreAllocateBindings(n int) {
+	if n < 0 {
+		n = 0
+	}
+	p.local.bindings = make([]Binding, 0, n)
+}
+
+// LocalBindingsSlice returns the raw local bindings slice, bypassing the
+// nil-keys check in LocalEnvironment(). This exposes the pre-allocated
+// capacity that pooled frames retain across reset cycles.
+func (p *EnvironmentFrame) LocalBindingsSlice() []Binding {
+	return p.local.bindings
+}
+
 // IsTopLevel returns true if this is the top-level environment frame (no parent).
 func (p *EnvironmentFrame) IsTopLevel() bool {
 	return p.parent == nil

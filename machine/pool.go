@@ -20,9 +20,15 @@ import (
 	"github.com/aalpar/wile/environment"
 )
 
-// Object pooling (sync.Pool) recycles short-lived allocations that follow
-// an acquire/release lifecycle. Each non-tail call creates a continuation
-// frame and eval stack; pooling avoids per-call heap allocations.
+// Object pooling recycles short-lived allocations that follow an acquire/release
+// lifecycle. Each non-tail call creates a continuation frame and eval stack;
+// pooling avoids per-call heap allocations.
+//
+// Two pool implementations are used: Pool[T] (sync.Pool-backed) for
+// sub-contexts; FreeList[T] (mutex-guarded slice) for stacks, continuations,
+// and environment frames where sync.Pool's GC-clearing behavior causes a
+// feedback loop (high alloc rate → frequent GC → pool cleared → more allocs).
+//
 // See BIBLIOGRAPHY.md "Object Pooling".
 
 // stackInitialCap is the initial capacity for pooled eval stacks.
@@ -37,7 +43,7 @@ var pools = NewPoolManager()
 // stackPool recycles Stack allocations. Stacks are created on every
 // non-tail call (SaveContinuation) and discarded on return (Restore).
 // Pooling avoids repeated heap allocation of the backing slice.
-var stackPool = registerPool(pools, NewPool("stack",
+var stackPool = registerFreeList(pools, NewFreeList("stack",
 	func() *Stack {
 		s := make(Stack, 0, stackInitialCap)
 		return &s
@@ -70,7 +76,7 @@ var subContextPool = registerPool(pools, NewPool("sub_context",
 // return (RestoreAndRelease). Only the normal-return path pools frames;
 // call/cc, escape, and composable continuation paths must not pool because
 // the frame may be re-invoked.
-var continuationPool = registerPool(pools, NewPool("continuation",
+var continuationPool = registerFreeList(pools, NewFreeList("continuation",
 	func() *MachineContinuation {
 		return &MachineContinuation{}
 	},
@@ -80,14 +86,29 @@ var continuationPool = registerPool(pools, NewPool("continuation",
 	},
 ))
 
+// defaultBindingsCap is the pre-allocated binding capacity for fresh env
+// frames from the pool. Most lambdas take 1-3 parameters; cap 4 covers
+// >95% of closures without waste. Frames that need more will grow via
+// make([]Binding, n) in copyForApplyInto — a one-time cost per frame
+// that is retained across subsequent pool cycles via ResetForPool.
+const defaultBindingsCap = 4
+
 // envFramePool recycles EnvironmentFrame structs used in the Apply copy path.
 // Frames are created on every non-tail closure call and stored in the
 // continuation chain. On normal return (RestoreAndRelease, unshared path),
 // the old mc.env is overwritten — the pool recycles it instead of leaving it
 // for GC. Shared frames (marked by call/cc) are never pooled.
-var envFramePool = registerPool(pools, NewPool("env_frame",
+//
+// Uses a mutex-guarded freelist instead of sync.Pool because sync.Pool is
+// cleared on every GC cycle. In recursive Scheme workloads the GC runs
+// 1000+ times per second, giving sync.Pool a <1% hit rate. A freelist
+// survives GC, so after warmup (one full recursion depth) every acquire
+// is a hit and copyForApplyInto reuses the retained bindings capacity.
+var envFramePool = registerFreeList(pools, NewFreeList("env_frame",
 	func() *environment.EnvironmentFrame {
-		return &environment.EnvironmentFrame{}
+		f := &environment.EnvironmentFrame{}
+		f.PreAllocateBindings(defaultBindingsCap)
+		return f
 	},
 	func(f *environment.EnvironmentFrame) {
 		f.ResetForPool()
@@ -122,6 +143,11 @@ func ReleaseSubContext(mc *MachineContext) {
 	if mc.parentMC != nil {
 		mc.parentMC.counters.SubContextPoolReleases++
 	}
+	if mc.envPooled {
+		mc.counters.EnvFramePoolReleases++
+		releaseEnvFrame(mc.env)
+		mc.env = nil
+	}
 	subContextPool.Release(mc)
 }
 
@@ -147,6 +173,11 @@ func AcquireTopLevelContext(ctx context.Context, tpl *NativeTemplate, env *envir
 func ReleaseTopLevelContext(mc *MachineContext) {
 	if mc == nil {
 		return
+	}
+	if mc.envPooled {
+		mc.counters.EnvFramePoolReleases++
+		releaseEnvFrame(mc.env)
+		mc.env = nil
 	}
 	subContextPool.Release(mc)
 }
@@ -184,13 +215,13 @@ func releaseContinuation(cont *MachineContinuation) {
 	continuationPool.Release(cont)
 }
 
-// acquireEnvFrame returns a zeroed EnvironmentFrame from the pool.
+// acquireEnvFrame returns a zeroed EnvironmentFrame from the freelist.
 func acquireEnvFrame() *environment.EnvironmentFrame {
 	return envFramePool.Acquire()
 }
 
 // releaseEnvFrame zeros the EnvironmentFrame (breaking GC references) and
-// returns it to the pool. Nil-safe.
+// returns it to the freelist. Nil-safe.
 //
 // Must NOT be called on frames stored in shared continuations — those frames
 // may be re-invoked by call/cc and must remain live for GC.

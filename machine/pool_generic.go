@@ -196,6 +196,106 @@ func (m *PoolManager) String() string {
 	return b.String()
 }
 
+// FreeList[T] is a type-safe, observable object pool backed by a mutex-guarded
+// slice instead of sync.Pool. Unlike sync.Pool, the freelist is NOT cleared by
+// the garbage collector, so recycled objects (and any capacity they retain)
+// persist across GC cycles.
+//
+// Use FreeList when the GC feedback loop makes sync.Pool ineffective: high
+// allocation rates trigger frequent GC, which clears sync.Pool, causing more
+// allocations. FreeList breaks this loop at the cost of no automatic shrinkage.
+type FreeList[T any] struct {
+	name    string
+	mu      sync.Mutex
+	free    []*T
+	newFn   func() *T
+	reset   func(*T)
+	stats   poolStats
+	enabled atomic.Bool
+}
+
+// NewFreeList creates a FreeList[T] with the given name, constructor, and reset
+// function. The freelist starts enabled.
+func NewFreeList[T any](name string, newFn func() *T, resetFn func(*T)) *FreeList[T] {
+	q := &FreeList[T]{
+		name:  name,
+		newFn: newFn,
+		reset: resetFn,
+	}
+	q.enabled.Store(true)
+	return q
+}
+
+// Acquire returns a recycled object from the freelist. If the freelist is empty
+// or disabled, it calls newFn to allocate a new object.
+func (p *FreeList[T]) Acquire() *T {
+	p.stats.acquires.Add(1)
+	if p.enabled.Load() {
+		p.mu.Lock()
+		n := len(p.free)
+		if n > 0 {
+			v := p.free[n-1]
+			p.free[n-1] = nil
+			p.free = p.free[:n-1]
+			p.mu.Unlock()
+			return v
+		}
+		p.mu.Unlock()
+	}
+	p.stats.misses.Add(1)
+	return p.newFn()
+}
+
+// Release resets the object and appends it to the freelist. If disabled,
+// the object is discarded after reset.
+func (p *FreeList[T]) Release(v *T) {
+	p.stats.releases.Add(1)
+	p.reset(v)
+	if p.enabled.Load() {
+		p.mu.Lock()
+		p.free = append(p.free, v)
+		p.mu.Unlock()
+	}
+}
+
+// Name returns the freelist's name.
+func (p *FreeList[T]) Name() string {
+	return p.name
+}
+
+// Stats returns a point-in-time snapshot of the freelist's counters.
+func (p *FreeList[T]) Stats() PoolSnapshot {
+	acquires := p.stats.acquires.Load()
+	releases := p.stats.releases.Load()
+	var inFlight uint64
+	if acquires > releases {
+		inFlight = acquires - releases
+	}
+	return PoolSnapshot{
+		Name:     p.name,
+		Acquires: acquires,
+		Releases: releases,
+		Misses:   p.stats.misses.Load(),
+		InFlight: inFlight,
+	}
+}
+
+// Drain clears all cached objects from the freelist.
+func (p *FreeList[T]) Drain() {
+	p.mu.Lock()
+	for i := range p.free {
+		p.free[i] = nil
+	}
+	p.free = p.free[:0]
+	p.mu.Unlock()
+}
+
+// SetEnabled toggles the freelist on or off. When disabled, Acquire calls
+// newFn directly and Release discards after reset.
+func (p *FreeList[T]) SetEnabled(on bool) {
+	p.enabled.Store(on)
+}
+
 // registerPool registers a Pool[T] with a PoolManager and returns it,
 // enabling the var-init-chain pattern:
 //
@@ -203,4 +303,10 @@ func (m *PoolManager) String() string {
 func registerPool[T any](mgr *PoolManager, p *Pool[T]) *Pool[T] {
 	mgr.Register(p)
 	return p
+}
+
+// registerFreeList registers a FreeList[T] with a PoolManager and returns it.
+func registerFreeList[T any](mgr *PoolManager, fl *FreeList[T]) *FreeList[T] {
+	mgr.Register(fl)
+	return fl
 }

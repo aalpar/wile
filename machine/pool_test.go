@@ -16,6 +16,7 @@ package machine
 
 import (
 	"context"
+	"runtime"
 	"sync"
 	"testing"
 
@@ -661,6 +662,57 @@ func TestEnvFramePool_StatsTracked(t *testing.T) {
 	qt.Assert(t, after.Releases-before.Releases, qt.Equals, uint64(1))
 }
 
+func TestEnvFramePool_FreshFrameHasBindingCapacity(t *testing.T) {
+	frame := envFramePool.Acquire()
+	defer envFramePool.Release(frame)
+
+	bs := frame.LocalBindingsSlice()
+	qt.Assert(t, cap(bs) >= defaultBindingsCap, qt.IsTrue)
+	qt.Assert(t, len(bs), qt.Equals, 0)
+}
+
+func TestEnvFramePool_ResetPreservesCapacity(t *testing.T) {
+	frame := envFramePool.Acquire()
+
+	// Simulate use with 2 bindings via InitApplyFrame.
+	ns := environment.NewNamespace()
+	parent := ns.Runtime()
+	lenv := environment.NewLocalEnvironment(2)
+	src := environment.NewEnvironmentFrameWithParent(lenv, parent)
+	src.InitApplyFrame(frame)
+
+	capBefore := cap(frame.LocalEnvironment().Bindings())
+	qt.Assert(t, capBefore >= defaultBindingsCap, qt.IsTrue)
+
+	envFramePool.Release(frame)
+	frame2 := envFramePool.Acquire()
+	defer envFramePool.Release(frame2)
+
+	// Capacity should survive the release+acquire round trip.
+	qt.Assert(t, cap(frame2.LocalBindingsSlice()), qt.Equals, capBefore)
+}
+
+func TestEnvFramePool_CapacityGrowsSurvivesRoundTrip(t *testing.T) {
+	frame := envFramePool.Acquire()
+
+	// Use with 8 bindings (exceeds defaultBindingsCap=4), forcing growth.
+	ns := environment.NewNamespace()
+	parent := ns.Runtime()
+	lenv := environment.NewLocalEnvironment(8)
+	src := environment.NewEnvironmentFrameWithParent(lenv, parent)
+	src.InitApplyFrame(frame)
+
+	capBefore := cap(frame.LocalEnvironment().Bindings())
+	qt.Assert(t, capBefore >= 8, qt.IsTrue)
+
+	envFramePool.Release(frame)
+	frame2 := envFramePool.Acquire()
+	defer envFramePool.Release(frame2)
+
+	// The grown capacity should survive reset.
+	qt.Assert(t, cap(frame2.LocalBindingsSlice()), qt.Equals, capBefore)
+}
+
 func TestRestoreAndRelease_ReleasesPooledEnvFrame(t *testing.T) {
 	// Set up a pooled env frame as mc.env (simulates Apply copy path).
 	env := acquireEnvFrame()
@@ -777,4 +829,96 @@ func TestRestoreAndRelease_SameEnvIdentity_SkipsRelease(t *testing.T) {
 	// mc.env should still be the shared frame, usable.
 	qt.Assert(t, mc.env, qt.Equals, sharedEnv)
 	qt.Assert(t, mc.envPooled, qt.IsTrue)
+}
+
+// ---------------------------------------------------------------------------
+// Release paths: env frame leak fix
+// ---------------------------------------------------------------------------
+
+func TestReleaseTopLevelContext_ReleasesPooledEnvFrame(t *testing.T) {
+	// Simulate: after Run() halts, mc.env is a pooled frame.
+	// ReleaseTopLevelContext must release it before zeroing the MC.
+	env := acquireEnvFrame()
+	tpl := NewEmptyNativeTemplate()
+	ctx := context.Background()
+	mc := AcquireTopLevelContext(ctx, tpl, env)
+	mc.envPooled = true // as set by Apply
+
+	before := envFramePool.Stats()
+	ReleaseTopLevelContext(mc)
+	after := envFramePool.Stats()
+
+	// The pooled env frame should have been released.
+	released := after.Releases - before.Releases
+	qt.Assert(t, released, qt.Equals, uint64(1))
+}
+
+func TestReleaseSubContext_ReleasesPooledEnvFrame(t *testing.T) {
+	env := acquireEnvFrame()
+	mc := acquireSubContext()
+	mc.env = env
+	mc.envPooled = true
+
+	before := envFramePool.Stats()
+	ReleaseSubContext(mc)
+	after := envFramePool.Stats()
+
+	released := after.Releases - before.Releases
+	qt.Assert(t, released, qt.Equals, uint64(1))
+}
+
+// ---------------------------------------------------------------------------
+// GC survival — FreeList survives GC, sync.Pool does not
+// ---------------------------------------------------------------------------
+
+func TestContinuationPool_SurvivesGC(t *testing.T) {
+	cont := acquireContinuation()
+	releaseContinuation(cont)
+
+	before := continuationPool.Stats()
+
+	// Force GC — sync.Pool would clear; FreeList should not.
+	runtime.GC()
+	runtime.GC()
+
+	cont2 := acquireContinuation()
+	after := continuationPool.Stats()
+	releaseContinuation(cont2)
+
+	// Should be a hit (no new miss) after GC.
+	qt.Assert(t, after.Misses-before.Misses, qt.Equals, uint64(0))
+}
+
+func TestStackPool_SurvivesGC(t *testing.T) {
+	s := acquireStack()
+	releaseStack(s)
+
+	before := stackPool.Stats()
+
+	// Force GC — sync.Pool would clear; FreeList should not.
+	runtime.GC()
+	runtime.GC()
+
+	s2 := acquireStack()
+	after := stackPool.Stats()
+	releaseStack(s2)
+
+	// Should be a hit (no new miss) after GC.
+	qt.Assert(t, after.Misses-before.Misses, qt.Equals, uint64(0))
+}
+
+func TestEnvFramePool_SurvivesGC(t *testing.T) {
+	f := acquireEnvFrame()
+	releaseEnvFrame(f)
+
+	before := envFramePool.Stats()
+
+	runtime.GC()
+	runtime.GC()
+
+	f2 := acquireEnvFrame()
+	after := envFramePool.Stats()
+	releaseEnvFrame(f2)
+
+	qt.Assert(t, after.Misses-before.Misses, qt.Equals, uint64(0))
 }
