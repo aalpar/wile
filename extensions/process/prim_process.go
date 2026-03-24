@@ -104,15 +104,21 @@ func PrimProcessSpawn(mc *machine.MachineContext) error {
 	}
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
+		stdinPipe.Close() //nolint:errcheck
 		return werr.WrapForeignProcessError(err, "process-spawn", command.Value)
 	}
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
+		stdinPipe.Close()  //nolint:errcheck
+		stdoutPipe.Close() //nolint:errcheck
 		return werr.WrapForeignProcessError(err, "process-spawn", command.Value)
 	}
 
 	err = cmd.Start()
 	if err != nil {
+		stdinPipe.Close()  //nolint:errcheck
+		stdoutPipe.Close() //nolint:errcheck
+		stderrPipe.Close() //nolint:errcheck
 		return werr.WrapForeignProcessError(err, "process-spawn", command.Value)
 	}
 
@@ -164,7 +170,14 @@ func PrimProcessWait(mc *machine.MachineContext) error {
 	if err != nil {
 		return err
 	}
-	waitErr := proc.Cmd().Wait()
+	cmd := proc.Cmd()
+	if cmd == nil {
+		return werr.WrapForeignErrorf(
+			werr.ErrInvalidArgument,
+			"process-wait: process has no underlying command",
+		)
+	}
+	waitErr := cmd.Wait()
 	if waitErr != nil {
 		exitErr, ok := waitErr.(*exec.ExitError)
 		if ok {
@@ -204,7 +217,14 @@ func PrimProcessKill(mc *machine.MachineContext) error {
 			sigSym.Key,
 		)
 	}
-	killErr := proc.Cmd().Process.Signal(sig)
+	cmd := proc.Cmd()
+	if cmd == nil || cmd.Process == nil {
+		return werr.WrapForeignErrorf(
+			werr.ErrInvalidArgument,
+			"process-kill: process is not running",
+		)
+	}
+	killErr := cmd.Process.Signal(sig)
 	if killErr != nil {
 		return werr.WrapForeignProcessError(killErr, "process-kill", proc.Command())
 	}

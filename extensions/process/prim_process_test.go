@@ -37,14 +37,16 @@ func newEngine(t *testing.T) *wile.Engine {
 	return engine
 }
 
-func engineEval(t *testing.T, engine *wile.Engine, code string) wile.Value {
+// eval runs Scheme code and returns the result.
+func eval(t *testing.T, engine *wile.Engine, code string) wile.Value {
 	t.Helper()
 	result, err := engine.EvalMultiple(context.Background(), code)
 	qt.Assert(t, err, qt.IsNil)
 	return result
 }
 
-func engineEvalExpectError(t *testing.T, engine *wile.Engine, code string) {
+// evalExpectError runs Scheme code and expects an error.
+func evalExpectError(t *testing.T, engine *wile.Engine, code string) {
 	t.Helper()
 	expr, err := engine.Parse(context.Background(), code)
 	if err != nil {
@@ -62,17 +64,17 @@ func TestSystem(t *testing.T) {
 	engine := newEngine(t)
 
 	t.Run("returns zero for success", func(t *testing.T) {
-		result := engineEval(t, engine, `(system "true")`)
+		result := eval(t, engine, `(system "true")`)
 		c.Assert(result.Internal().(*values.Integer).Value, qt.Equals, int64(0))
 	})
 
 	t.Run("returns nonzero for failure", func(t *testing.T) {
-		result := engineEval(t, engine, `(system "false")`)
+		result := eval(t, engine, `(system "false")`)
 		c.Assert(result.Internal().(*values.Integer).Value, qt.Not(qt.Equals), int64(0))
 	})
 
 	t.Run("wrong type", func(t *testing.T) {
-		engineEvalExpectError(t, engine, `(system 42)`)
+		evalExpectError(t, engine, `(system 42)`)
 	})
 }
 
@@ -84,7 +86,7 @@ func TestProcessSpawn(t *testing.T) {
 	engine := newEngine(t)
 
 	t.Run("returns a process", func(t *testing.T) {
-		result := engineEval(t, engine, `
+		result := eval(t, engine, `
 			(let ((p (process-spawn "echo" "hello")))
 			  (process-wait p)
 			  (process? p))
@@ -93,7 +95,7 @@ func TestProcessSpawn(t *testing.T) {
 	})
 
 	t.Run("can read stdout", func(t *testing.T) {
-		result := engineEval(t, engine, `
+		result := eval(t, engine, `
 			(let ((proc (process-spawn "echo" "hello")))
 			  (let ((line (read-line (process-stdout proc))))
 			    (process-wait proc)
@@ -103,7 +105,7 @@ func TestProcessSpawn(t *testing.T) {
 	})
 
 	t.Run("can write stdin and read stdout", func(t *testing.T) {
-		result := engineEval(t, engine, `
+		result := eval(t, engine, `
 			(let ((proc (process-spawn "cat")))
 			  (display "ping" (process-stdin proc))
 			  (close-output-port (process-stdin proc))
@@ -115,7 +117,7 @@ func TestProcessSpawn(t *testing.T) {
 	})
 
 	t.Run("process-wait returns exit code", func(t *testing.T) {
-		result := engineEval(t, engine, `
+		result := eval(t, engine, `
 			(let ((proc (process-spawn "true")))
 			  (process-wait proc))
 		`)
@@ -123,7 +125,7 @@ func TestProcessSpawn(t *testing.T) {
 	})
 
 	t.Run("process-wait returns nonzero on failure", func(t *testing.T) {
-		result := engineEval(t, engine, `
+		result := eval(t, engine, `
 			(let ((proc (process-spawn "false")))
 			  (process-wait proc))
 		`)
@@ -138,7 +140,7 @@ func TestProcessKill(t *testing.T) {
 	engine := newEngine(t)
 
 	t.Run("kill terminates process", func(t *testing.T) {
-		engineEval(t, engine, `
+		eval(t, engine, `
 			(let ((proc (process-spawn "sleep" "60")))
 			  (process-kill proc 'kill)
 			  (process-wait proc))
@@ -146,7 +148,7 @@ func TestProcessKill(t *testing.T) {
 	})
 
 	t.Run("term terminates process", func(t *testing.T) {
-		engineEval(t, engine, `
+		eval(t, engine, `
 			(let ((proc (process-spawn "sleep" "60")))
 			  (process-kill proc 'term)
 			  (process-wait proc))
@@ -154,9 +156,13 @@ func TestProcessKill(t *testing.T) {
 	})
 
 	t.Run("invalid signal", func(t *testing.T) {
-		engineEvalExpectError(t, engine, `
+		// Spawn, attempt invalid signal, then clean up the process.
+		evalExpectError(t, engine, `
 			(let ((proc (process-spawn "sleep" "60")))
-			  (process-kill proc 'bogus))
+			  (guard (exn (#t (process-kill proc 'kill)
+			                  (process-wait proc)
+			                  (raise exn)))
+			    (process-kill proc 'bogus)))
 		`)
 	})
 }
@@ -169,7 +175,7 @@ func TestProcessPredicate(t *testing.T) {
 	engine := newEngine(t)
 
 	t.Run("process? true for process", func(t *testing.T) {
-		result := engineEval(t, engine, `
+		result := eval(t, engine, `
 			(let ((proc (process-spawn "true")))
 			  (process-wait proc)
 			  (process? proc))
@@ -178,7 +184,7 @@ func TestProcessPredicate(t *testing.T) {
 	})
 
 	t.Run("process? false for non-process", func(t *testing.T) {
-		result := engineEval(t, engine, `(process? 42)`)
+		result := eval(t, engine, `(process? 42)`)
 		c.Assert(result.Internal(), qt.Equals, values.FalseValue)
 	})
 }

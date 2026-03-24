@@ -49,7 +49,7 @@ func PrimCreateDirectory(mc *machine.MachineContext) error {
 }
 
 // PrimDeleteDirectory implements the (delete-directory) primitive.
-// Removes an empty directory. Errors if not empty or nonexistent.
+// Removes an empty directory. Errors if not empty, nonexistent, or not a directory.
 func PrimDeleteDirectory(mc *machine.MachineContext) error {
 	path, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "delete-directory")
 	if err != nil {
@@ -62,6 +62,16 @@ func PrimDeleteDirectory(mc *machine.MachineContext) error {
 	})
 	if err != nil {
 		return err
+	}
+	info, err := os.Stat(path.Value)
+	if err != nil {
+		return werr.WrapForeignFileError(err, "delete-directory", path.Value)
+	}
+	if !info.IsDir() {
+		return werr.WrapForeignErrorf(
+			werr.ErrInvalidArgument,
+			"delete-directory: not a directory: %s", path.Value,
+		)
 	}
 	err = os.Remove(path.Value)
 	if err != nil {
@@ -108,7 +118,7 @@ func PrimDirectoryFiles(mc *machine.MachineContext) error {
 func PrimCurrentDirectory(mc *machine.MachineContext) error {
 	wd, err := os.Getwd()
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "current-directory: getwd failed")
+		return werr.WrapForeignFileError(err, "current-directory", ".")
 	}
 	mc.SetValue(values.NewString(wd))
 	return nil

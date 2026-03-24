@@ -19,6 +19,7 @@ import (
 	"github.com/aalpar/wile/extensions/files"
 	"github.com/aalpar/wile/extensions/gointerop"
 	"github.com/aalpar/wile/extensions/math"
+	"github.com/aalpar/wile/extensions/process"
 	"github.com/aalpar/wile/extensions/system"
 	"github.com/aalpar/wile/extensions/threads"
 	"github.com/aalpar/wile/internal/extensions/eval"
@@ -40,6 +41,7 @@ var Builder = registry.RegistryBuilder{
 	nsext.AddToRegistry,
 	threads.AddToRegistry,
 	gointerop.AddToRegistry,
+	process.AddToRegistry,
 	addRecords,
 	addPromises,
 	addMoreStrings,
@@ -51,7 +53,7 @@ var AddToRegistry = Builder.AddToRegistry
 
 // SafeBuilder includes only the safe parts of all: records, promises, strings,
 // and characters. It excludes sub-extensions that grant ambient authority
-// (files, system, eval, gointerop, threads).
+// (files, system, eval, gointerop, threads, process).
 var SafeBuilder = registry.NewRegistryBuilder(
 	addRecords,
 	addPromises,

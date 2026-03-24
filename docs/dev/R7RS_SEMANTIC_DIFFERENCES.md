@@ -10,10 +10,9 @@ This document catalogs differences between the current implementation and the R7
 
 ## Summary
 
-Three known differences exist:
+Two known differences exist:
 1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Conservative safe behavior with minimal practical impact.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
-3. `set-current-directory!` calls `os.Chdir`, which is process-global. Multiple engines in the same Go process share one working directory.
 
 ---
 
@@ -103,19 +102,15 @@ Both prefixes are case-insensitive (`#Z`, `#M` also work), following R7RS §7.1.
 
 **Note:** R7RS requires implementations to support arbitrarily large exact integers (§6.2.3). Wile satisfies this via automatic overflow promotion from `Integer` (int64) to `BigInteger` — the `#z` prefix is a convenience for explicit construction, not a conformance requirement. Standard R7RS programs never need `#z` or `#m`.
 
-## Process-Global Working Directory
+### Process-Global Working Directory
 
 **Primitive:** `set-current-directory!`
 
-**Behavior:** Calls `os.Chdir`, which changes the working directory for the entire OS process.
-
-**Impact:** Multiple Wile engines in the same Go process share one working directory. Concurrent calls from different goroutines race on the same OS state. This is inherent to POSIX — there is no per-thread working directory.
+**Behavior:** Calls `os.Chdir`, which changes the working directory for the entire OS process. Multiple Wile engines in the same Go process share one working directory. Concurrent calls from different goroutines race on the same OS state. This is inherent to POSIX — there is no per-thread working directory.
 
 **Mitigation:** The primitive is gated by `security.ResourceProcess` / `security.ActionWrite` / target `"cwd"`, so embedders can deny it via their authorizer. When denied, all file operations should use absolute paths.
 
-**R7RS context:** R7RS does not specify `set-current-directory!` or any directory operations. This follows SRFI-170 conventions. The SRFI acknowledges process-global CWD as a POSIX limitation.
-
----
+R7RS does not specify directory operations. This follows SRFI-170 conventions.
 
 ### Guard Body Multiple Values
 

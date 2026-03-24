@@ -28,5 +28,10 @@
 //
 //   - file-exists?, delete-file
 //
+// # Directory Operations (SRFI-170)
+//
+//   - create-directory, delete-directory, directory-files
+//   - current-directory, set-current-directory!
+//
 // Use [Extension] or [AddToRegistry] to register all primitives.
 package files

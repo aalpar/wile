@@ -22,4 +22,19 @@
 //   - security.ActionExecShell gates system (shell command string)
 //
 // Both use security.ResourceProcess with the command as target.
+//
+// # Shell Execution
+//
+//   - system
+//
+// # Structured Process Control
+//
+//   - process-spawn, process-wait, process-kill
+//   - process-stdout, process-stderr, process-stdin
+//
+// # Process Predicates
+//
+//   - process?
+//
+// Use [Extension] or [AddToRegistry] to register all primitives.
 package process
