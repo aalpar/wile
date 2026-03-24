@@ -1,8 +1,14 @@
 # Object Pooling Contract
 
-The VM uses four `sync.Pool`-backed pools to recycle short-lived allocations
-on the call/return hot path. Each non-tail call creates a continuation frame
-and eval stack; pooling avoids per-call heap allocations.
+The VM uses four pools to recycle short-lived allocations on the call/return
+hot path. Each non-tail call creates a continuation frame and eval stack;
+pooling avoids per-call heap allocations.
+
+Three pools use `FreeList[T]` (mutex-guarded slice): stacks, continuations,
+and environment frames. These survive GC, unlike `sync.Pool` which is cleared
+every GC cycle — a problem for recursive Scheme workloads where GC runs 1000+
+times per second. One pool uses `Pool[T]` (`sync.Pool`-backed): sub-contexts,
+which have a longer lifecycle and lower churn.
 
 For performance motivation and benchmark data, see
 `CONTINUATION_WORKLOAD_OPTIMIZATIONS.md`.
@@ -14,12 +20,12 @@ For performance motivation and benchmark data, see
 All pools are registered with the package-level `PoolManager` (`pools`) and
 defined in `machine/pool.go`.
 
-| Pool | Type | Acquired | Released | Reset |
-|------|------|----------|----------|-------|
-| `stackPool` | `*Stack` | `SaveContinuation` (standard path), `AcquireTopLevelContext`, `acquireMacroContext` | `RestoreAndRelease` (old mc.evals), `releaseStack` | Nil all slots, reset length to 0, retain backing array |
-| `subContextPool` | `*MachineContext` | `acquireSubContext`, `AcquireTopLevelContext` | `ReleaseSubContext`, `ReleaseTopLevelContext` | Release inner evals stack, zero all fields |
-| `continuationPool` | `*MachineContinuation` | `NewMachineContinuationFromMachineContext`, `Copy` | `RestoreAndRelease` (unshared only) | Release inner evals stack, zero all fields |
-| `envFramePool` | `*EnvironmentFrame` | `Apply` (copy path) | `RestoreAndRelease` (when `envPooled && oldEnv != newEnv`) | `ResetForPool()` |
+| Pool | Type | Backend | Acquired | Released | Reset |
+|------|------|---------|----------|----------|-------|
+| `stackPool` | `*Stack` | FreeList | `SaveContinuation` (standard path), `AcquireTopLevelContext`, `acquireMacroContext` | `RestoreAndRelease` (old mc.evals), `releaseStack` | Nil all slots, reset length to 0, retain backing array |
+| `subContextPool` | `*MachineContext` | sync.Pool | `acquireSubContext`, `AcquireTopLevelContext` | `ReleaseSubContext`, `ReleaseTopLevelContext` | Release inner evals stack, zero all fields |
+| `continuationPool` | `*MachineContinuation` | FreeList | `NewMachineContinuationFromMachineContext`, `Copy` | `RestoreAndRelease` (unshared only) | Release inner evals stack, zero all fields |
+| `envFramePool` | `*EnvironmentFrame` | FreeList | `Apply` (copy path) | `RestoreAndRelease` (when `envPooled && oldEnv != newEnv`) | `ResetForPool()`, pre-allocates bindings cap 4 |
 
 ---
 
@@ -161,7 +167,7 @@ control over all four pools.
 | Method | Purpose |
 |--------|---------|
 | `AllStats()` | Point-in-time `PoolSnapshot` for each pool (acquires, releases, misses, in-flight) |
-| `DrainAll()` | Triggers `runtime.GC()` to clear all `sync.Pool` instances |
+| `DrainAll()` | Clears all pools (triggers `runtime.GC()` for sync.Pool; drains FreeList slices) |
 | `SetAllEnabled(bool)` | Toggle all pools on/off; disabled pools allocate fresh and discard on release |
 | `String()` | Tabular summary of all pool counters |
 

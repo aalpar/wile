@@ -258,8 +258,8 @@ func (p *GlobalEnvironmentFrame) DeleteBinding(sym *values.Symbol) bool {
 	}
 	delete(p.keys, *sym)
 	// Nil out the binding slot so stale GlobalIndex references from
-	// compiled code see nil (caught by resolveGlobalBinding) instead
-	// of silently returning the old value.
+	// compiled code see nil (caught by resolveGlobal) instead of
+	// silently returning the old value.
 	if i < len(p.bindings) {
 		p.bindings[i] = nil
 	}

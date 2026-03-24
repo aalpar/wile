@@ -11,12 +11,13 @@ The `wile` package exposes a high-level API for embedding the Scheme interpreter
 │  Go Application                                      │
 │                                                      │
 │  engine, _ := wile.NewEngine(ctx)                    │
-│  result, _ := engine.Eval(ctx, "(+ 1 2)")            │
+│  expr, _ := engine.Parse(ctx, "(+ 1 2)")             │
+│  result, _ := engine.Eval(ctx, expr)                 │
 │                                                      │
 ├──────────────────────────────────────────────────────┤
 │  wile.Engine                                         │
-│  - Eval / EvalMultiple / Compile / Run / Call         │
-│  - Define / Get / RegisterPrimitive                  │
+│  - Parse / Eval / EvalIn / EvalMultiple / Compile    │
+│  - Run / Call / Define / Get / RegisterPrimitive     │
 │  - Value wrapping/unwrapping boundary                │
 ├──────────────────────────────────────────────────────┤
 │  Internal Pipeline                                   │
@@ -51,12 +52,14 @@ Each `Engine` has its own `Namespace` and symbol table. This means:
 
 ## Evaluation Methods
 
-| Method | Parses | Purpose |
-|--------|--------|---------|
-| `Eval(ctx, code)` | First expression only | Single expression evaluation |
-| `EvalMultiple(ctx, code)` | All expressions | Multiple expressions, returns last result |
-| `Compile(code)` | First expression only | Compile without executing |
-| `Run(ctx, compiled)` | N/A | Execute pre-compiled code |
+| Method | Input | Purpose |
+|--------|-------|---------|
+| `Parse(ctx, code)` | `string` | Parse first expression to `*Expression` |
+| `Eval(ctx, expr)` | `*Expression` | Evaluate a single parsed expression |
+| `EvalMultiple(ctx, code)` | `string` | Parse and evaluate all expressions, return last result |
+| `Compile(ctx, expr)` | `*Expression` | Compile a parsed expression without executing |
+| `Run(ctx, compiled)` | `*CompiledCode` | Execute pre-compiled code |
+| `EvalIn(ctx, expr, ns)` | `*Expression` + `*Namespace` | Evaluate in an alternate namespace |
 
 ### Compile/Run Separation
 
@@ -69,18 +72,17 @@ Each `Engine` has its own `Namespace` and symbol table. This means:
 ### Internal Pipeline
 
 ```
-engine.Eval(ctx, "(+ 1 2 3)")
+engine.Parse(ctx, "(+ 1 2 3)")       ── string → *Expression
     │
-    ├─ parser.NewParser().ReadSyntax()
-    │  └─ Returns syntax.SyntaxValue
+engine.Eval(ctx, expr)               ── *Expression → result
     │
-    ├─ machine.NewExpanderTimeContinuation().ExpandExpression()
+    ├─ ExpandExpression()
     │  └─ Macro expansion
     │
-    ├─ machine.NewCompiletimeContinuation().CompileExpression()
+    ├─ CompileExpression()
     │  └─ Bytecode compilation
     │
-    └─ machine.NewMachineContext().Run()
+    └─ MachineContext.Run()
        └─ VM execution → result
 ```
 

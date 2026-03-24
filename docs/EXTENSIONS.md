@@ -105,7 +105,7 @@ engine, err := wile.NewEngine(ctx,
     wile.WithExtension(myext.Extension),
 )
 // double is now available in the top-level environment
-result, _ := engine.Eval(ctx, "(double 21)") // 42
+result, _ := engine.Eval(ctx, engine.MustParse(ctx, "(double 21)")) // 42
 ```
 
 ### Multiple Extensions

@@ -66,7 +66,7 @@ The entire mechanism is this: you register primitives at engine construction tim
 engine, err := wile.NewEngine(ctx, wile.WithSafeExtensions())
 
 // This produces a compile-time error — open-input-file is unbound
-result, err := engine.Eval(ctx, `(open-input-file "/etc/passwd")`)
+_, err = engine.Eval(ctx, engine.MustParse(ctx, `(open-input-file "/etc/passwd")`))
 // err: expand/compile error: no such local or global binding "open-input-file": no such binding
 ```
 

@@ -91,7 +91,7 @@ import (
 //
 // Two-phase search: first all locals up parent chain, then globals.
 type EnvironmentFrame struct {
-	// parent links to enclosing lexical scope (nil for TopLevel)
+	// parent links to enclosing lexical scope (nil for root frame)
 	parent *EnvironmentFrame
 	// local holds local bindings for this frame (parameters, let-bound variables).
 	// Embedded by value to eliminate a separate heap allocation per closure call.
@@ -101,15 +101,13 @@ type EnvironmentFrame struct {
 	global *GlobalEnvironmentFrame
 	// phaseLevel indicates which phase this frame represents (0=runtime, 1=expand, etc.)
 	phaseLevel int
-	// phases is the shared phase registry, owned by TopLevel
+	// phases is the shared phase registry, owned by Namespace
 	phases *PhaseRegistry
 	// namespace is the owning Namespace
 	namespace *Namespace
 }
 
-// NewNamespaceFrame creates a new top-level global environment frame.
-// This frame has no parent and contains the shared syntax interning maps.
-// It also creates the PhaseRegistry for indexed phase access.
+// NewNamespaceFrame creates a new root environment frame via NewNamespace.
 //
 // Deprecated: Use NewNamespace().Runtime() instead for per-instance
 // syntax interning. This function now internally uses NewNamespace()
@@ -201,7 +199,7 @@ func (p *EnvironmentFrame) InitApplyFrame(dst *EnvironmentFrame) {
 	p.local.copyForApplyInto(&dst.local)
 }
 
-// ResetForPool clears the EnvironmentFrame for return to a sync.Pool while
+// ResetForPool clears the EnvironmentFrame for return to the FreeList while
 // preserving the local bindings backing array capacity. This mirrors the
 // Stack pool pattern: clear full capacity (so GC can collect referenced
 // values), zero the struct, then restore the slice header with len=0.
@@ -275,7 +273,7 @@ func (p *EnvironmentFrame) PhaseLevel() int {
 }
 
 // Runtime returns the runtime phase environment (phase 0).
-// This is the TopLevel environment where normal bindings live.
+// This is the root environment where normal bindings live.
 func (p *EnvironmentFrame) Runtime() *EnvironmentFrame {
 	return p.AtPhase(PhaseRuntime)
 }
@@ -302,7 +300,7 @@ func (p *EnvironmentFrame) GlobalEnvironment() *GlobalEnvironmentFrame {
 	return p.global
 }
 
-// FileResolver returns the file resolver from the top-level environment.
+// FileResolver returns the file resolver from the Namespace.
 // The caller must type-assert to machine.FileResolver.
 // Returns nil if no resolver has been set or if namespace is nil.
 func (p *EnvironmentFrame) FileResolver() any {
@@ -312,7 +310,7 @@ func (p *EnvironmentFrame) FileResolver() any {
 	return p.namespace.FileResolver()
 }
 
-// SetFileResolver sets the file resolver on the top-level environment.
+// SetFileResolver sets the file resolver on the Namespace.
 // The resolver should be a machine.FileResolver.
 // No-op if namespace is nil.
 func (p *EnvironmentFrame) SetFileResolver(resolver any) {
@@ -322,7 +320,7 @@ func (p *EnvironmentFrame) SetFileResolver(resolver any) {
 	p.namespace.SetFileResolver(resolver)
 }
 
-// LibraryRegistry returns the library registry from the top-level environment.
+// LibraryRegistry returns the library registry from the Namespace.
 // The caller must type-assert to *machine.LibraryRegistry.
 // Returns nil if no registry has been set or if namespace is nil.
 func (p *EnvironmentFrame) LibraryRegistry() any {
@@ -332,7 +330,7 @@ func (p *EnvironmentFrame) LibraryRegistry() any {
 	return p.namespace.LibraryRegistry()
 }
 
-// SetLibraryRegistry sets the library registry on the top-level environment.
+// SetLibraryRegistry sets the library registry on the Namespace.
 // The registry should be a *machine.LibraryRegistry.
 // No-op if namespace is nil.
 func (p *EnvironmentFrame) SetLibraryRegistry(registry any) {
