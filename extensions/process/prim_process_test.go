@@ -24,6 +24,7 @@ import (
 	"github.com/aalpar/wile"
 	extprocess "github.com/aalpar/wile/extensions/process"
 	extio "github.com/aalpar/wile/internal/extensions/io"
+	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
 )
 
@@ -163,6 +164,108 @@ func TestProcessKill(t *testing.T) {
 			                  (process-wait proc)
 			                  (raise exn)))
 			    (process-kill proc 'bogus)))
+		`)
+	})
+}
+
+func TestProcessStderr(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses Unix commands")
+	}
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	t.Run("can read stderr", func(t *testing.T) {
+		result := eval(t, engine, `
+			(let ((proc (process-spawn "sh" "-c" "echo oops >&2")))
+			  (let ((line (read-line (process-stderr proc))))
+			    (process-wait proc)
+			    line))
+		`)
+		c.Assert(result.Internal().(*values.String).Value, qt.Equals, "oops")
+	})
+
+	t.Run("wrong type", func(t *testing.T) {
+		evalExpectError(t, engine, `(process-stderr 42)`)
+	})
+}
+
+func TestProcessAccessorErrors(t *testing.T) {
+	engine := newEngine(t)
+
+	t.Run("process-stdout wrong type", func(t *testing.T) {
+		evalExpectError(t, engine, `(process-stdout "not-a-process")`)
+	})
+
+	t.Run("process-stdin wrong type", func(t *testing.T) {
+		evalExpectError(t, engine, `(process-stdin #t)`)
+	})
+}
+
+func TestProcessSpawnErrors(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses Unix commands")
+	}
+	engine := newEngine(t)
+
+	t.Run("non-string argument", func(t *testing.T) {
+		evalExpectError(t, engine, `(process-spawn "echo" 42)`)
+	})
+
+	t.Run("wrong type for command", func(t *testing.T) {
+		evalExpectError(t, engine, `(process-spawn 42)`)
+	})
+
+	t.Run("nonexistent command", func(t *testing.T) {
+		evalExpectError(t, engine, `
+			(let ((proc (process-spawn "/nonexistent/binary/zzz")))
+			  (process-wait proc))
+		`)
+	})
+}
+
+func TestProcessSpawnSecurityDenied(t *testing.T) {
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithExtension(extio.Extension),
+		wile.WithExtension(extprocess.Extension),
+		wile.WithAuthorizer(security.DenyAll()),
+	)
+	qt.Assert(t, err, qt.IsNil)
+
+	t.Run("process-spawn denied", func(t *testing.T) {
+		evalExpectError(t, engine, `(process-spawn "echo" "hello")`)
+	})
+
+	t.Run("system denied", func(t *testing.T) {
+		evalExpectError(t, engine, `(system "true")`)
+	})
+}
+
+func TestProcessWaitErrors(t *testing.T) {
+	engine := newEngine(t)
+
+	t.Run("wrong type", func(t *testing.T) {
+		evalExpectError(t, engine, `(process-wait 42)`)
+	})
+}
+
+func TestProcessKillErrors(t *testing.T) {
+	engine := newEngine(t)
+
+	t.Run("wrong type for process", func(t *testing.T) {
+		evalExpectError(t, engine, `(process-kill 42 'term)`)
+	})
+
+	t.Run("wrong type for signal", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("uses Unix commands")
+		}
+		evalExpectError(t, engine, `
+			(let ((proc (process-spawn "sleep" "60")))
+			  (guard (exn (#t (process-kill proc 'kill)
+			                  (process-wait proc)
+			                  (raise exn)))
+			    (process-kill proc "not-a-symbol")))
 		`)
 	})
 }
