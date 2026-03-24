@@ -56,15 +56,14 @@ result, _ := engine.Eval(ctx, engine.MustParse(ctx, "(* width height)"))  // => 
 
 ### Performance
 
-Gabriel benchmarks (16 programs), showing gains from allocation and dispatch optimizations:
+Gabriel benchmarks (16 programs), cumulative gains from v1.3.0 through opcode promotion and pool optimizations:
 
-| Benchmark | v1.3.0 | v1.4.0 | Change |
+| Benchmark | v1.3.0 | v1.9.0 | Change |
 |-----------|-------:|-------:|-------:|
-| tak | 0.381s | 0.274s | -28% |
-| fib | 1.262s | 0.920s | -27% |
-| sumfp | 4.271s | 3.204s | -25% |
-| peval | 0.168s | 0.134s | -20% |
-| **Geo-mean (all 16)** | | | **-15%** |
+| tak | 0.381s | 0.117s | -69% |
+| fib | 1.262s | 0.381s | -70% |
+| sumfp | 4.271s | 1.068s | -75% |
+| peval | 0.168s | 0.079s | -53% |
 
 Full results and methodology in [examples/benchmarks/](examples/benchmarks/).
 

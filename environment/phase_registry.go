@@ -34,9 +34,9 @@ const (
 // It provides O(1) access to any phase environment and supports
 // lazy creation of phase environments on first access.
 //
-// The registry is owned by the TopLevel environment and shared
-// across all child environments via pointer. This enables any
-// environment frame to access any phase directly.
+// The registry is owned by the Namespace and shared across all
+// child environments via pointer. This enables any environment
+// frame to access any phase directly.
 //
 // Thread-safe: All operations are protected by a read-write mutex
 // to support concurrent macro expansion.
@@ -55,7 +55,7 @@ func (p *PhaseRegistry) Get(phase int) *EnvironmentFrame {
 }
 
 // GetOrCreate returns the environment for the given phase, creating it if needed.
-// Phase 0 always returns the TopLevel environment.
+// Phase 0 always returns the runtime environment.
 // Other phases are lazily created with their own GlobalEnvironmentFrame.
 func (p *PhaseRegistry) GetOrCreate(phase int) *EnvironmentFrame {
 	// Fast path: check with read lock

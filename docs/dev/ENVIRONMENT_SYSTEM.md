@@ -26,7 +26,7 @@ The environment system has four key types organized in a hierarchy:
 │  (Lexical scope node: links local/global bindings, parent chain)       │
 │                                                                         │
 │  parent ─────────── *EnvironmentFrame (lexical parent, nil at top)     │
-│  local ──────────── *LocalEnvironmentFrame (lambda params, let vars)   │
+│  local ──────────── LocalEnvironmentFrame (value; keys==nil → none)    │
 │  global ─────────── *GlobalEnvironmentFrame (define bindings)          │
 │  phaseLevel ─────── int (0=runtime, 1=expand, 2=compile)               │
 │  phases ─────────── *PhaseRegistry (shared reference)                  │
@@ -317,7 +317,7 @@ This enables correct nested resolution: `(load "a.scm")` containing `(load "b.sc
 ```go
 // Recommended: automatic push/pop via defer
 err := engine.WithLoadPath("/app/scripts/main.scm", func() error {
-    _, err := engine.Eval(ctx, `(load "helper.scm")`) // resolves relative to /app/scripts/
+    _, err := engine.EvalMultiple(ctx, `(load "helper.scm")`) // resolves relative to /app/scripts/
     return err
 })
 

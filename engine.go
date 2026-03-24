@@ -42,9 +42,9 @@ const DefaultMaxCallDepth uint64 = 10000
 // Engine is the main entry point for embedding Wile.
 //
 // An Engine is NOT safe for concurrent use from multiple goroutines.
-// The underlying environment's global bindings use a RWMutex (concurrent
-// reads are safe), but Eval, Compile, and Run mutate the environment.
-// Each goroutine should use its own Engine, or synchronize externally.
+// Most methods that parse, compile, or evaluate code mutate the
+// environment. Each goroutine should use its own Engine, or
+// synchronize externally.
 //
 // SRFI-18 threads within a single Engine are safe — the VM handles
 // thread coordination internally.
