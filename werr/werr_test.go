@@ -159,6 +159,24 @@ func TestForeignError_Cause(t *testing.T) {
 	}
 }
 
+func TestForeignProcessError(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("wraps with command context", func(t *testing.T) {
+		cause := fmt.Errorf("exec: not found")
+		err := werr.WrapForeignProcessError(cause, "process-spawn", "nonexistent-cmd")
+		c.Assert(err.Op, qt.Equals, "process-spawn")
+		c.Assert(err.Command, qt.Equals, "nonexistent-cmd")
+		c.Assert(err.Error(), qt.Matches, `.*process-spawn.*nonexistent-cmd.*`)
+	})
+
+	t.Run("unwraps to cause", func(t *testing.T) {
+		cause := fmt.Errorf("signal: killed")
+		err := werr.WrapForeignProcessError(cause, "process-wait", "sleep")
+		c.Assert(errors.Is(err, cause), qt.IsTrue)
+	})
+}
+
 func TestWrapForeignErrorWithCause(t *testing.T) {
 	c := qt.New(t)
 	sentinel := werr.NewStaticError("test sentinel")

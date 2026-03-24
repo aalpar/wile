@@ -142,6 +142,9 @@ var (
 	// Channel errors
 	ErrChannelClosed = NewStaticError("channel is closed")
 
+	// Process errors
+	ErrNotAProcess = NewStaticError("not a process")
+
 	// Thread errors
 	ErrJoinTimeout             = NewStaticError("thread-join!: timeout")
 	ErrThreadAlreadyStarted    = NewStaticError("thread-start!: thread already started")
@@ -274,6 +277,25 @@ func WrapForeignFileError(err error, op string, filename string) *ForeignFileErr
 	q := &ForeignFileError{
 		ForeignError: WrapForeignErrorf(err, "%s: %s", op, filename),
 		Filename:     filename,
+		Op:           op,
+	}
+	return q
+}
+
+// ForeignProcessError represents an error from a process operation.
+// Parallel to ForeignFileError for programmatic inspection of failed
+// process operations.
+type ForeignProcessError struct {
+	*ForeignError
+	Command string // the command that was run
+	Op      string // the operation (e.g., "process-spawn", "system")
+}
+
+// WrapForeignProcessError wraps an OS error with process context.
+func WrapForeignProcessError(err error, op string, command string) *ForeignProcessError {
+	q := &ForeignProcessError{
+		ForeignError: WrapForeignErrorf(err, "%s: %s", op, command),
+		Command:      command,
 		Op:           op,
 	}
 	return q

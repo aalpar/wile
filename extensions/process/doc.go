@@ -12,26 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package files provides file I/O primitives.
+// Package process provides subprocess execution primitives.
 //
-// # Textual File I/O (R7RS 6.13.1)
+// This extension is NOT included in SafeExtensions(). Embedders must
+// opt in explicitly with WithExtension(process.Extension).
 //
-//   - open-input-file, open-output-file
-//   - call-with-input-file, call-with-output-file
-//   - with-input-from-file, with-output-to-file
+// Two security actions gate process creation:
+//   - security.ActionExec gates process-spawn (structured, no shell)
+//   - security.ActionExecShell gates system (shell command string)
 //
-// # Binary File I/O
+// Both use security.ResourceProcess with the command as target.
 //
-//   - open-binary-input-file, open-binary-output-file
+// # Shell Execution
 //
-// # File Predicates
+//   - system
 //
-//   - file-exists?, delete-file
+// # Structured Process Control
 //
-// # Directory Operations (SRFI-170)
+//   - process-spawn, process-wait, process-kill
+//   - process-stdout, process-stderr, process-stdin
 //
-//   - create-directory, delete-directory, directory-files
-//   - current-directory, set-current-directory!
+// # Process Predicates
+//
+//   - process?
 //
 // Use [Extension] or [AddToRegistry] to register all primitives.
-package files
+package process

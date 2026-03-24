@@ -102,6 +102,16 @@ Both prefixes are case-insensitive (`#Z`, `#M` also work), following R7RS §7.1.
 
 **Note:** R7RS requires implementations to support arbitrarily large exact integers (§6.2.3). Wile satisfies this via automatic overflow promotion from `Integer` (int64) to `BigInteger` — the `#z` prefix is a convenience for explicit construction, not a conformance requirement. Standard R7RS programs never need `#z` or `#m`.
 
+### Process-Global Working Directory
+
+**Primitive:** `set-current-directory!`
+
+**Behavior:** Calls `os.Chdir`, which changes the working directory for the entire OS process. Multiple Wile engines in the same Go process share one working directory. Concurrent calls from different goroutines race on the same OS state. This is inherent to POSIX — there is no per-thread working directory.
+
+**Mitigation:** The primitive is gated by `security.ResourceProcess` / `security.ActionWrite` / target `"cwd"`, so embedders can deny it via their authorizer. When denied, all file operations should use absolute paths.
+
+R7RS does not specify directory operations. This follows SRFI-170 conventions.
+
 ### Guard Body Multiple Values
 
 R7RS §7.3's reference implementation of `guard` uses `(let ((result (begin e1 e2 ...))) ...)`, which binds a single value. If the body produces multiple values via `(values v1 v2 ...)`, the `let` binding triggers an arity mismatch.

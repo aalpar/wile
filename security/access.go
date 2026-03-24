@@ -43,10 +43,12 @@ const (
 // Well-known action constants. Extensions may define additional
 // actions without modifying this package.
 const (
-	ActionRead   = "read"
-	ActionWrite  = "write"
-	ActionDelete = "delete"
-	ActionStat   = "stat"
-	ActionLoad   = "load"
-	ActionExit   = "exit"
+	ActionRead      = "read"
+	ActionWrite     = "write"
+	ActionDelete    = "delete"
+	ActionStat      = "stat"
+	ActionLoad      = "load"
+	ActionExit      = "exit"
+	ActionExec      = "exec"       // structured process execution (process-spawn)
+	ActionExecShell = "exec-shell" // shell command execution (system)
 )
