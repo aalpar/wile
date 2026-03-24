@@ -24,17 +24,17 @@ import (
 // lifecycle. Each non-tail call creates a continuation frame and eval stack;
 // pooling avoids per-call heap allocations.
 //
-// Two pool implementations are used: Pool[T] (sync.Pool-backed) for stacks,
-// sub-contexts, and continuations; FreeList[T] (mutex-guarded slice) for
-// environment frames where sync.Pool's GC-clearing behavior causes a feedback
-// loop (high alloc rate → frequent GC → pool cleared → more allocs).
+// Two pool implementations are used: Pool[T] (sync.Pool-backed) for
+// sub-contexts; FreeList[T] (mutex-guarded slice) for stacks, continuations,
+// and environment frames where sync.Pool's GC-clearing behavior causes a
+// feedback loop (high alloc rate → frequent GC → pool cleared → more allocs).
 //
 // See BIBLIOGRAPHY.md "Object Pooling".
 
-// StackInitialCap is the initial capacity for pooled eval stacks.
+// stackInitialCap is the initial capacity for pooled eval stacks.
 // Most call sites use 0-4 stack slots (procedure + 1-3 arguments).
 // Profiling shows >97% of PopAll depths are ≤4.
-const StackInitialCap = 8
+const stackInitialCap = 8
 
 // pools is the package-level pool manager. It aggregates all pools for
 // unified observation and control (stats, drain, enable/disable).
@@ -43,9 +43,9 @@ var pools = NewPoolManager()
 // stackPool recycles Stack allocations. Stacks are created on every
 // non-tail call (SaveContinuation) and discarded on return (Restore).
 // Pooling avoids repeated heap allocation of the backing slice.
-var stackPool = registerPool(pools, NewPool("stack",
+var stackPool = registerFreeList(pools, NewFreeList("stack",
 	func() *Stack {
-		s := make(Stack, 0, StackInitialCap)
+		s := make(Stack, 0, stackInitialCap)
 		return &s
 	},
 	func(s *Stack) {
@@ -76,7 +76,7 @@ var subContextPool = registerPool(pools, NewPool("sub_context",
 // return (RestoreAndRelease). Only the normal-return path pools frames;
 // call/cc, escape, and composable continuation paths must not pool because
 // the frame may be re-invoked.
-var continuationPool = registerPool(pools, NewPool("continuation",
+var continuationPool = registerFreeList(pools, NewFreeList("continuation",
 	func() *MachineContinuation {
 		return &MachineContinuation{}
 	},
@@ -85,6 +85,13 @@ var continuationPool = registerPool(pools, NewPool("continuation",
 		*cont = MachineContinuation{}
 	},
 ))
+
+// defaultBindingsCap is the pre-allocated binding capacity for fresh env
+// frames from the pool. Most lambdas take 1-3 parameters; cap 4 covers
+// >95% of closures without waste. Frames that need more will grow via
+// make([]Binding, n) in copyForApplyInto — a one-time cost per frame
+// that is retained across subsequent pool cycles via ResetForPool.
+const defaultBindingsCap = 4
 
 // envFramePool recycles EnvironmentFrame structs used in the Apply copy path.
 // Frames are created on every non-tail closure call and stored in the
@@ -99,7 +106,9 @@ var continuationPool = registerPool(pools, NewPool("continuation",
 // is a hit and copyForApplyInto reuses the retained bindings capacity.
 var envFramePool = registerFreeList(pools, NewFreeList("env_frame",
 	func() *environment.EnvironmentFrame {
-		return &environment.EnvironmentFrame{}
+		f := &environment.EnvironmentFrame{}
+		f.PreAllocateBindings(defaultBindingsCap)
+		return f
 	},
 	func(f *environment.EnvironmentFrame) {
 		f.ResetForPool()
@@ -134,6 +143,9 @@ func ReleaseSubContext(mc *MachineContext) {
 	if mc.parentMC != nil {
 		mc.parentMC.counters.SubContextPoolReleases++
 	}
+	if mc.envPooled {
+		releaseEnvFrame(mc.env)
+	}
 	subContextPool.Release(mc)
 }
 
@@ -159,6 +171,9 @@ func AcquireTopLevelContext(ctx context.Context, tpl *NativeTemplate, env *envir
 func ReleaseTopLevelContext(mc *MachineContext) {
 	if mc == nil {
 		return
+	}
+	if mc.envPooled {
+		releaseEnvFrame(mc.env)
 	}
 	subContextPool.Release(mc)
 }
