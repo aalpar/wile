@@ -57,6 +57,16 @@ func addPrimitives(r *registry.Registry) error {
 			Doc: "Opens file, calls proc with the port, then closes it.", ParamNames: []string{"filename", "proc"}, Category: "files"},
 		{Name: "call-with-output-file", ParamCount: 2, Impl: PrimCallWithOutputFile,
 			Doc: "Opens file, calls proc with the port, then closes it.", ParamNames: []string{"filename", "proc"}, Category: "files"},
+		{Name: "create-directory", ParamCount: 1, Impl: PrimCreateDirectory,
+			Doc: "Creates a directory.", ParamNames: []string{"path"}, Category: "files"},
+		{Name: "delete-directory", ParamCount: 1, Impl: PrimDeleteDirectory,
+			Doc: "Deletes an empty directory.", ParamNames: []string{"path"}, Category: "files"},
+		{Name: "directory-files", ParamCount: 1, Impl: PrimDirectoryFiles,
+			Doc: "Returns filenames in a directory as a list of strings.", ParamNames: []string{"path"}, Category: "files"},
+		{Name: "current-directory", Impl: PrimCurrentDirectory,
+			Doc: "Returns the current working directory.", Category: "files"},
+		{Name: "set-current-directory!", ParamCount: 1, Impl: PrimSetCurrentDirectory,
+			Doc: "Changes the current working directory.", ParamNames: []string{"path"}, Category: "files"},
 		// with-input-from-file and with-output-to-file are now macros (see addMacros)
 	}, registry.PhaseRuntime)
 	return nil
