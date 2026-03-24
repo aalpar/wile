@@ -42,8 +42,8 @@ See [ENVIRONMENT_SYSTEM.md](ENVIRONMENT_SYSTEM.md) for detailed API documentatio
 │   -1 → template EnvFrame    │    │  phases ────── own PhaseRegistry         │
 │   ...                       │    │  runtime ───── own EnvironmentFrame      │
 │                             │    │  libraryReg ── inherited (shared ptr)    │
-│  topLevelEnv → TLE          │    └──────────────────────────────────────────┘
-│  topLevelEnvFrm → runtime   │
+│  owner → Namespace           │    └──────────────────────────────────────────┘
+│                             │
 └─────────────────────────────┘
 ```
 
@@ -148,14 +148,14 @@ NewChildRuntime:                NewChildNamespace:
               to shared NS)
 
   envC.Namespace() == parent    envC.Namespace() == child
-  TLE.Runtime() returns envP     child.Runtime() returns envC  ✓
+  ns.Runtime() returns envP       child.Runtime() returns envC  ✓
 ```
 
 | | `NewChildRuntime()` | `NewChildNamespace()` |
 |---|---|---|
 | **Returns** | `*EnvironmentFrame` | `*Namespace` |
 | **Use case** | Library loading (internal) | `(environment)`, `(null-environment)` (first-class) |
-| **`Namespace()`** | Parent's TLE | The child TLE itself |
+| **`Namespace()`** | Parent's Namespace | The child Namespace itself |
 | **`Runtime()`** | N/A | Returns child's own frame |
 
 ---
@@ -220,11 +220,11 @@ MachineContext
 
 | Environment | Created by | Bindings | Interning | Phases | Use |
 |---|---|---|---|---|---|
-| Root TLE | `NewNamespace()` | Own | Own tables | Own registry | VM instance |
-| Child TLE | `NewChildNamespace()` | Own | Delegates to parent | Own registry | `(environment)`, `(null-environment)` |
-| Runtime frame | `TLE.Runtime()` | Phase 0 global | Via TLE | Shared | Normal execution |
-| Expand frame | `env.Expand()` / `AtPhase(1)` | Phase 1 global | Via TLE | Shared | Macro bindings |
-| Compile frame | `env.Compile()` / `AtPhase(2)` | Phase 2 global | Via TLE | Shared | Syntax compilers |
-| Lexical child | `NewEnvironmentFrameWithParent()` | Own local, shared global | Via TLE | Shared | `lambda`, `let`, `letrec` |
-| Library env | `TLE.NewChildRuntime()` | Own global + phases | Via shared TLE | Own registry | `(import ...)` |
-| let-syntax env | `NewEnvironmentFrameWithParent(local, p.env)` | Own local macros | Via TLE | Shared | `let-syntax`, `letrec-syntax` |
+| Root Namespace | `NewNamespace()` | Own | Own tables | Own registry | VM instance |
+| Child Namespace | `NewChildNamespace()` | Own | Delegates to parent | Own registry | `(environment)`, `(null-environment)` |
+| Runtime frame | `ns.Runtime()` | Phase 0 global | Via Namespace | Shared | Normal execution |
+| Expand frame | `env.Expand()` / `AtPhase(1)` | Phase 1 global | Via Namespace | Shared | Macro bindings |
+| Compile frame | `env.Compile()` / `AtPhase(2)` | Phase 2 global | Via Namespace | Shared | Syntax compilers |
+| Lexical child | `NewEnvironmentFrameWithParent()` | Own local, shared global | Via Namespace | Shared | `lambda`, `let`, `letrec` |
+| Library env | `ns.NewChildRuntime()` | Own global + phases | Via shared Namespace | Own registry | `(import ...)` |
+| let-syntax env | `NewEnvironmentFrameWithParent(local, p.env)` | Own local macros | Via Namespace | Shared | `let-syntax`, `letrec-syntax` |

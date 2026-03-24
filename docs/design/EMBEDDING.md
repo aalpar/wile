@@ -72,16 +72,17 @@ Each `Engine` has its own `Namespace` and symbol table. This means:
 ### Internal Pipeline
 
 ```
-expr, _ := engine.Parse(ctx, "(+ 1 2 3)")   // string → *Expression
-engine.Eval(ctx, expr)                        // *Expression → result
+engine.Parse(ctx, "(+ 1 2 3)")       ── string → *Expression
     │
-    ├─ machine.NewExpanderTimeContinuation().ExpandExpression()
+engine.Eval(ctx, expr)               ── *Expression → result
+    │
+    ├─ ExpandExpression()
     │  └─ Macro expansion
     │
-    ├─ machine.NewCompiletimeContinuation().CompileExpression()
+    ├─ CompileExpression()
     │  └─ Bytecode compilation
     │
-    └─ machine.NewMachineContext().Run()
+    └─ MachineContext.Run()
        └─ VM execution → result
 ```
 
