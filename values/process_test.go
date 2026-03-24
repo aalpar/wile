@@ -30,9 +30,14 @@ func TestProcess(t *testing.T) {
 		c.Assert(p.SchemeString(), qt.Matches, `#<process "ls".*>`)
 	})
 
-	t.Run("IsVoid is false", func(t *testing.T) {
+	t.Run("IsVoid is false for non-nil", func(t *testing.T) {
 		p := values.NewProcess("ls", nil, nil, nil, nil)
 		c.Assert(p.IsVoid(), qt.IsFalse)
+	})
+
+	t.Run("IsVoid is true for nil", func(t *testing.T) {
+		var p *values.Process
+		c.Assert(p.IsVoid(), qt.IsTrue)
 	})
 
 	t.Run("EqualTo is identity", func(t *testing.T) {
@@ -41,6 +46,11 @@ func TestProcess(t *testing.T) {
 
 		q := values.NewProcess("ls", nil, nil, nil, nil)
 		c.Assert(p.EqualTo(q), qt.IsFalse)
+	})
+
+	t.Run("EqualTo false for non-process", func(t *testing.T) {
+		p := values.NewProcess("ls", nil, nil, nil, nil)
+		c.Assert(p.EqualTo(values.NewString("ls")), qt.IsFalse)
 	})
 
 	t.Run("Command returns command name", func(t *testing.T) {

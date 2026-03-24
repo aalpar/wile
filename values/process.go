@@ -83,12 +83,14 @@ func (p *Process) SchemeString() string {
 	return fmt.Sprintf(`#<process %q>`, p.command)
 }
 
-// IsVoid returns false.
+// IsVoid reports whether this process value is void.
+// A nil *Process is considered void to satisfy the values.Value contract.
 func (p *Process) IsVoid() bool {
-	return false
+	return p == nil
 }
 
 // EqualTo returns true only for identity (same pointer).
 func (p *Process) EqualTo(v Value) bool {
-	return p == v
+	other, ok := v.(*Process)
+	return ok && p == other
 }
