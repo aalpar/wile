@@ -223,7 +223,11 @@ func (p *EnvironmentFrame) ResetForPool() {
 // with the given capacity. Used by the env frame pool to ensure fresh frames
 // have sufficient capacity for copyForApplyInto to reslice instead of allocate.
 // Must only be called on freshly constructed frames (before any other use).
+// n must be non-negative; negative values are clamped to 0.
 func (p *EnvironmentFrame) PreAllocateBindings(n int) {
+	if n < 0 {
+		n = 0
+	}
 	p.local.bindings = make([]Binding, 0, n)
 }
 

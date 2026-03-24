@@ -144,7 +144,9 @@ func ReleaseSubContext(mc *MachineContext) {
 		mc.parentMC.counters.SubContextPoolReleases++
 	}
 	if mc.envPooled {
+		mc.counters.EnvFramePoolReleases++
 		releaseEnvFrame(mc.env)
+		mc.env = nil
 	}
 	subContextPool.Release(mc)
 }
@@ -173,7 +175,9 @@ func ReleaseTopLevelContext(mc *MachineContext) {
 		return
 	}
 	if mc.envPooled {
+		mc.counters.EnvFramePoolReleases++
 		releaseEnvFrame(mc.env)
+		mc.env = nil
 	}
 	subContextPool.Release(mc)
 }

@@ -906,3 +906,19 @@ func TestStackPool_SurvivesGC(t *testing.T) {
 	// Should be a hit (no new miss) after GC.
 	qt.Assert(t, after.Misses-before.Misses, qt.Equals, uint64(0))
 }
+
+func TestEnvFramePool_SurvivesGC(t *testing.T) {
+	f := acquireEnvFrame()
+	releaseEnvFrame(f)
+
+	before := envFramePool.Stats()
+
+	runtime.GC()
+	runtime.GC()
+
+	f2 := acquireEnvFrame()
+	after := envFramePool.Stats()
+	releaseEnvFrame(f2)
+
+	qt.Assert(t, after.Misses-before.Misses, qt.Equals, uint64(0))
+}

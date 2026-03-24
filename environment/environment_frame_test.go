@@ -848,6 +848,15 @@ func TestPreAllocateBindings_ZeroCap(t *testing.T) {
 	qt.Assert(t, len(bs), qt.Equals, 0)
 }
 
+func TestPreAllocateBindings_NegativeClampsToZero(t *testing.T) {
+	f := &EnvironmentFrame{}
+	f.PreAllocateBindings(-1)
+
+	bs := f.LocalBindingsSlice()
+	qt.Assert(t, len(bs), qt.Equals, 0)
+	qt.Assert(t, cap(bs), qt.Equals, 0)
+}
+
 func TestLocalBindingsSlice_FreshFrame(t *testing.T) {
 	// A bare EnvironmentFrame has nil bindings.
 	f := &EnvironmentFrame{}

@@ -283,6 +283,9 @@ func (p *FreeList[T]) Stats() PoolSnapshot {
 // Drain clears all cached objects from the freelist.
 func (p *FreeList[T]) Drain() {
 	p.mu.Lock()
+	for i := range p.free {
+		p.free[i] = nil
+	}
 	p.free = p.free[:0]
 	p.mu.Unlock()
 }
