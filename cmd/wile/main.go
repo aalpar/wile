@@ -209,7 +209,10 @@ func main() {
 			Failf(err, "Cannot create CPU profile")
 		}
 		defer func() {
-			_ = f.Close()
+			closeErr := f.Close()
+			if closeErr != nil {
+				Failf(closeErr, "Cannot close CPU profile")
+			}
 		}()
 		err = pprof.StartCPUProfile(f)
 		if err != nil {
@@ -284,7 +287,10 @@ func main() {
 			Failf(err, "Cannot create memory profile")
 		}
 		defer func() {
-			_ = f.Close()
+			closeErr := f.Close()
+			if closeErr != nil {
+				Failf(closeErr, "Cannot close memory profile")
+			}
 		}()
 		goruntime.GC()
 		err = pprof.WriteHeapProfile(f)

@@ -14,7 +14,10 @@
 
 package values
 
-import "io"
+import (
+	"errors"
+	"io"
+)
 
 // Unexported interfaces for backing-type methods not in the stdlib.
 
@@ -118,12 +121,12 @@ func guardedFlush(b *portBase, f flusher) error {
 }
 
 // flushThenClose flushes buffered data then closes the port.
-// Close errors take priority over flush errors.
+// If both flush and close fail, both errors are preserved via errors.Join.
 func flushThenClose(f flusher, b *portBase) error {
 	flushErr := f.Flush()
 	closeErr := b.Close()
 	if closeErr != nil {
-		return closeErr
+		return errors.Join(closeErr, flushErr)
 	}
 	return flushErr
 }

@@ -120,7 +120,11 @@ func (p *Pair) IsList() bool {
 			return true
 		}
 		// Slow pointer advances one step
-		slow = slow.Cdr().(*Pair)
+		nextSlow, ok := slow.Cdr().(*Pair)
+		if !ok {
+			return false
+		}
+		slow = nextSlow
 		// Cycle detected
 		if slow == fast {
 			return false

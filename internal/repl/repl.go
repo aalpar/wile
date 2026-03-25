@@ -122,7 +122,7 @@ func (p *REPL) Run(ctx context.Context) error {
 		AutoComplete:    p.completer,
 	})
 	if err != nil {
-		// Fall back to simple REPL if readline fails
+		fmt.Fprintf(p.errOut, "Warning: readline initialization failed (%v), using simple REPL\n", err)
 		return p.RunSimple(ctx)
 	}
 	defer rl.Close() //nolint:errcheck

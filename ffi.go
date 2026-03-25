@@ -912,7 +912,7 @@ func (s *ffiSpec) makeWrapper() ForeignFunction {
 					return
 				}
 			}
-			panic(r)
+			panic(fmt.Sprintf("FFI %q: %v", s.name, r))
 		}()
 
 		var args []reflect.Value

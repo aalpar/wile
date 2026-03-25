@@ -454,8 +454,8 @@ func (p *Engine) callCallable(ctx context.Context, callable values.Callable, arg
 
 	// Create a sub-context, set up the call frame, and execute.
 	sub := mc.NewSubContext()
-	defer machine.ReleaseSubContext(sub)
 	defer machine.ReleaseTopLevelContext(mc)
+	defer machine.ReleaseSubContext(sub)
 	_, err := sub.ApplyCallable(callable, args...)
 	if err != nil {
 		return nil, p.wrapRuntimeError(err)

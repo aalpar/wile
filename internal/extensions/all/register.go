@@ -32,7 +32,7 @@ import (
 var Extension = registry.NewExtension("all", AddToRegistry)
 
 // Builder aggregates all extension registration functions.
-var Builder = registry.RegistryBuilder{
+var Builder = registry.NewRegistryBuilder(
 	io.AddToRegistry,
 	files.AddToRegistry,
 	system.AddToRegistry,
@@ -46,7 +46,7 @@ var Builder = registry.RegistryBuilder{
 	addPromises,
 	addMoreStrings,
 	addMoreChars,
-}
+)
 
 // AddToRegistry registers all standard primitives.
 var AddToRegistry = Builder.AddToRegistry

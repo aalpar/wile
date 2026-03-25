@@ -44,9 +44,9 @@ func PrimInteractionEnvironment(mc *machine.MachineContext) error {
 func PrimEnvironmentBoundNames(mc *machine.MachineContext) error {
 	envVal := mc.Arg(0)
 
-	topLevelEnv, ok := envVal.(*environment.Namespace)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "environment-bound-names: expected an environment but got %T", envVal)
+	topLevelEnv, err := helpers.RequireType[*environment.Namespace](envVal, werr.ErrInvalidArgument, "environment-bound-names")
+	if err != nil {
+		return err
 	}
 
 	env := topLevelEnv.Runtime()
