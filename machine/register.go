@@ -59,14 +59,14 @@ func init() {
 	registerTypedCompiler("let", func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, v *validate.ValidatedLet) error {
 		return ctc.CompileValidatedLet(ctctx, v)
 	})
-	registerTypedCompiler("let*", func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, v *validate.ValidatedLetStar) error {
-		return ctc.CompileValidatedLetStar(ctctx, v)
+	registerTypedCompiler("let*", func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, v *validate.ValidatedLet) error {
+		return ctc.CompileValidatedLet(ctctx, v)
 	})
-	registerTypedCompiler("letrec", func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, v *validate.ValidatedLetrec) error {
-		return ctc.CompileValidatedLetrec(ctctx, v)
+	registerTypedCompiler("letrec", func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, v *validate.ValidatedLet) error {
+		return ctc.CompileValidatedLet(ctctx, v)
 	})
-	registerTypedCompiler("letrec*", func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, v *validate.ValidatedLetrec) error {
-		return ctc.CompileValidatedLetrec(ctctx, v)
+	registerTypedCompiler("letrec*", func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, v *validate.ValidatedLet) error {
+		return ctc.CompileValidatedLet(ctctx, v)
 	})
 
 	// Register compilers for extension forms (Tier 2 - syntax passthrough)

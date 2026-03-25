@@ -365,69 +365,47 @@ func TestValidatedLet_Getters(t *testing.T) {
 		Symbol:        sym,
 	}
 
-	vl := &ValidatedLet{
-		validatedBase: validatedBase{formName: "let"},
-		Bindings:      []ValidatedLetBinding{{Name: sym, Init: init}},
-		body:          []ValidatedExpr{body},
+	tcs := []struct {
+		name string
+		kind LetKind
+		form string
+	}{
+		{"let", LetKindLet, "let"},
+		{"let*", LetKindLetStar, "let*"},
+		{"letrec", LetKindLetrec, "letrec"},
+		{"letrec*", LetKindLetrecStar, "letrec*"},
 	}
-	c.Assert(vl.FormName(), qt.Equals, "let")
-	c.Assert(len(vl.Bindings), qt.Equals, 1)
-	c.Assert(vl.Bindings[0].Name, qt.Equals, sym)
-	c.Assert(vl.Bindings[0].Mutable, qt.IsFalse)
-	c.Assert(len(vl.Body()), qt.Equals, 1)
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			vl := &ValidatedLet{
+				validatedBase: validatedBase{formName: tc.form},
+				Kind:          tc.kind,
+				Bindings:      []ValidatedLetBinding{{Name: sym, Init: init}},
+				body:          []ValidatedExpr{body},
+			}
+			c.Assert(vl.FormName(), qt.Equals, tc.form)
+			c.Assert(vl.Kind, qt.Equals, tc.kind)
+			c.Assert(len(vl.Bindings), qt.Equals, 1)
+			c.Assert(vl.Bindings[0].Name, qt.Equals, sym)
+			c.Assert(vl.Bindings[0].Mutable, qt.IsFalse)
+			c.Assert(len(vl.Body()), qt.Equals, 1)
+		})
+	}
 }
 
-func TestValidatedLetStar_Getters(t *testing.T) {
+func TestLetKind_Predicates(t *testing.T) {
 	c := qt.New(t)
-	sym := syntax.NewSyntaxSymbol("x", nil)
-	init := &ValidatedLiteral{
-		validatedBase: validatedBase{formName: "@literal"},
-		Value:         syntax.NewSyntaxObject(values.NewInteger(1), nil),
-	}
-	body := &ValidatedSymbol{
-		validatedBase: validatedBase{formName: "@symbol"},
-		Symbol:        sym,
-	}
+	c.Assert(LetKindLet.InitsInScope(), qt.IsFalse)
+	c.Assert(LetKindLet.Sequential(), qt.IsFalse)
 
-	vls := &ValidatedLetStar{
-		validatedBase: validatedBase{formName: "let*"},
-		Bindings:      []ValidatedLetBinding{{Name: sym, Init: init}},
-		body:          []ValidatedExpr{body},
-	}
-	c.Assert(vls.FormName(), qt.Equals, "let*")
-	c.Assert(len(vls.Body()), qt.Equals, 1)
-}
+	c.Assert(LetKindLetStar.InitsInScope(), qt.IsFalse)
+	c.Assert(LetKindLetStar.Sequential(), qt.IsTrue)
 
-func TestValidatedLetrec_Getters(t *testing.T) {
-	c := qt.New(t)
-	sym := syntax.NewSyntaxSymbol("f", nil)
-	init := &ValidatedLiteral{
-		validatedBase: validatedBase{formName: "@literal"},
-		Value:         syntax.NewSyntaxObject(values.NewInteger(1), nil),
-	}
-	body := &ValidatedSymbol{
-		validatedBase: validatedBase{formName: "@symbol"},
-		Symbol:        sym,
-	}
+	c.Assert(LetKindLetrec.InitsInScope(), qt.IsTrue)
+	c.Assert(LetKindLetrec.Sequential(), qt.IsFalse)
 
-	vl := &ValidatedLetrec{
-		validatedBase: validatedBase{formName: "letrec"},
-		Bindings:      []ValidatedLetBinding{{Name: sym, Init: init}},
-		body:          []ValidatedExpr{body},
-	}
-	c.Assert(vl.FormName(), qt.Equals, "letrec")
-	c.Assert(vl.LetrecStar, qt.IsFalse)
-	c.Assert(len(vl.Body()), qt.Equals, 1)
-
-	vls := &ValidatedLetrec{
-		validatedBase: validatedBase{formName: "letrec*"},
-		Bindings:      []ValidatedLetBinding{{Name: sym, Init: init}},
-		LetrecStar:    true,
-		body:          []ValidatedExpr{body},
-	}
-	c.Assert(vls.LetrecStar, qt.IsTrue)
-	c.Assert(len(vls.Bindings), qt.Equals, 1)
-	c.Assert(len(vls.Body()), qt.Equals, 1)
+	c.Assert(LetKindLetrecStar.InitsInScope(), qt.IsTrue)
+	c.Assert(LetKindLetrecStar.Sequential(), qt.IsTrue)
 }
 
 // Passthrough form (ValidatedLiteral for let-syntax)

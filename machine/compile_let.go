@@ -14,34 +14,25 @@
 
 package machine
 
-// compile_let.go compiles let, let*, letrec, and letrec* binding forms.
+// compile_let.go compiles all four binding forms (let, let*, letrec, letrec*)
+// through a single entry point. The ValidatedLet.Kind field determines which
+// bytecode pattern is emitted.
 //
-// Each form uses OpPushEnv/StoreLocal/OpPopEnv to create local binding slots
-// directly, bypassing the closure+apply overhead of the old macro expansion.
-//
-// The slot count for OpPushEnv must account for BOTH the let bindings AND
-// any internal defines in the body (R7RS §5.3.2 letrec* semantics). We
-// pre-scan the body for defines and include them in the total before emitting
-// OpPushEnv. This mirrors how lambda's Apply copies the full compile-time env
-// structure (including predeclared define slots) via InitApplyFrame.
+// Two orthogonal dimensions:
+//   - Init compilation env: before OpPushEnv (let) vs after (let*, letrec, letrec*)
+//   - Store order: all-then-store (let, letrec) vs sequential (let*, letrec*)
 
 import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/validate"
 )
 
-// CompileValidatedLet compiles (let ((name val) ...) body ...).
+// CompileValidatedLet compiles all binding forms based on Kind.
 //
-// Bytecode:
-//
-//	<compile init-1> Push    ; init exprs in parent env
-//	<compile init-2> Push
-//	OpPushEnv(T)             ; new env frame with T slots (bindings + defines)
-//	StoreLocal name-N        ; pop from stack into slots (LIFO)
-//	...
-//	StoreLocal name-1
-//	<compile body>           ; last expr inherits tail position
-//	OpPopEnv                 ; only if let is NOT in tail position
+// let:     <inits> Push... | OpPushEnv | StoreLocal(reverse) | body | OpPopEnv
+// let*:    OpPushEnv | (init Push StoreLocal)... | body | OpPopEnv
+// letrec:  OpPushEnv | <inits> Push... | StoreLocal(reverse) | body | OpPopEnv
+// letrec*: OpPushEnv | (init Push StoreLocal)... | body | OpPopEnv
 func (p *CompileTimeContinuation) CompileValidatedLet(
 	ctctx CompileTimeCallContext,
 	v *validate.ValidatedLet,
@@ -52,17 +43,21 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 		return p.compileLetBody(ctctx, v.Body())
 	}
 
-	// Phase 1: Compile all init expressions in the CURRENT env and push to stack.
-	for _, b := range v.Bindings {
-		err := p.compileValidated(ctctx.NotInTail(), b.Init)
-		if err != nil {
-			return err
+	// For plain let: compile inits BEFORE creating the env frame
+	// (inits don't see bindings, so they're compiled in the parent env).
+	if v.Kind == validate.LetKindLet {
+		for _, b := range v.Bindings {
+			err := p.compileValidated(ctctx.NotInTail(), b.Init)
+			if err != nil {
+				return err
+			}
+			p.AppendOperations(NewOperationPush())
 		}
-		p.AppendOperations(NewOperationPush())
 	}
 
-	// Phase 2: Build compile-time env with bindings + body defines.
-	childEnv := p.createLetCompileEnv(v.Bindings)
+	// Build compile-time env with all bindings.
+	childEnv := p.createLetCompileEnv(v)
+
 	savedEnv := p.env
 	p.env = childEnv
 
@@ -72,143 +67,18 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 
 	p.AppendOperations(NewOperationPushEnv(totalSlots))
 
-	// Store values from stack into local slots (reverse order — LIFO).
-	for i := n - 1; i >= 0; i-- {
-		li := childEnv.GetLocalIndex(v.Bindings[i].Name.Sym)
-		p.AppendOperations(NewOperationStoreLocalByLocalIndexImmediate(li))
-	}
-
-	err := p.compileValidatedSequence(ctctx, v.Body())
-	p.env = savedEnv
-
-	if err != nil {
-		return err
-	}
-
-	if !ctctx.inTail {
-		p.AppendOperations(NewOperationPopEnv())
-	}
-
-	return nil
-}
-
-// CompileValidatedLetStar compiles (let* ((name val) ...) body ...).
-//
-// Bytecode:
-//
-//	OpPushEnv(T)             ; all slots upfront (bindings + defines)
-//	<compile init-1>
-//	StoreLocal name-1        ; name-1 now visible
-//	<compile init-2>         ; can reference name-1
-//	StoreLocal name-2
-//	<compile body>
-//	OpPopEnv                 ; only if not tail
-func (p *CompileTimeContinuation) CompileValidatedLetStar(
-	ctctx CompileTimeCallContext,
-	v *validate.ValidatedLetStar,
-) error {
-	n := len(v.Bindings)
-
-	if n == 0 {
-		return p.compileLetBody(ctctx, v.Body())
-	}
-
-	lenv := environment.NewLocalEnvironment(0)
-	childEnv := environment.NewEnvironmentFrameWithParent(lenv, p.env)
-
-	savedEnv := p.env
-	p.env = childEnv
-
-	// Add all binding names first (needed to count total slots with defines).
-	for _, b := range v.Bindings {
-		childEnv.MaybeCreateLocalBindingWithScopes(
-			b.Name.Sym,
-			environment.BindingTypeVariable,
-			b.Name.Scopes(),
-			b.Name.SourceContext(),
-		)
-	}
-
-	// Predeclare body defines to count total slots needed.
-	p.predeclareBodyDefines(v.Body())
-	totalSlots := len(childEnv.LocalEnvironment().Bindings())
-
-	p.AppendOperations(NewOperationPushEnv(totalSlots))
-
-	// Compile and store each init sequentially. The compile-time env
-	// already has all bindings, so sequential visibility is correct
-	// (the validator ensures each init only references preceding bindings).
-	for _, b := range v.Bindings {
-		err := p.compileValidated(ctctx.NotInTail(), b.Init)
-		if err != nil {
-			p.env = savedEnv
-			return err
-		}
-
-		li := childEnv.GetLocalIndex(b.Name.Sym)
-		p.AppendOperations(NewOperationPush())
-		p.AppendOperations(NewOperationStoreLocalByLocalIndexImmediate(li))
-	}
-
-	err := p.compileValidatedSequence(ctctx, v.Body())
-	p.env = savedEnv
-
-	if err != nil {
-		return err
-	}
-
-	if !ctctx.inTail {
-		p.AppendOperations(NewOperationPopEnv())
-	}
-
-	return nil
-}
-
-// CompileValidatedLetrec compiles (letrec ...) and (letrec* ...).
-//
-// letrec (delayed assignment):
-//
-//	OpPushEnv(T)             ; all bindings in scope (T = bindings + defines)
-//	<compile init-1> Push    ; all inits evaluated first
-//	<compile init-2> Push
-//	StoreLocal name-N        ; then assigned (LIFO)
-//	StoreLocal name-1
-//	<compile body>
-//	OpPopEnv
-//
-// letrec* (sequential assignment):
-//
-//	OpPushEnv(T)             ; all bindings in scope
-//	<compile init-1>
-//	StoreLocal name-1        ; assigned immediately
-//	<compile init-2>         ; sees name-1's value
-//	StoreLocal name-2
-//	<compile body>
-//	OpPopEnv
-func (p *CompileTimeContinuation) CompileValidatedLetrec(
-	ctctx CompileTimeCallContext,
-	v *validate.ValidatedLetrec,
-) error {
-	n := len(v.Bindings)
-
-	if n == 0 {
-		return p.compileLetBody(ctctx, v.Body())
-	}
-
-	// Create child env with ALL bindings visible before compiling any init.
-	childEnv := p.createLetCompileEnv(v.Bindings)
-	savedEnv := p.env
-	p.env = childEnv
-
-	// Predeclare body defines to count total slots needed.
-	p.predeclareBodyDefines(v.Body())
-	totalSlots := len(childEnv.LocalEnvironment().Bindings())
-
-	p.AppendOperations(NewOperationPushEnv(totalSlots))
-
+	// Emit init compilation + stores based on Kind.
 	var err error
-	if v.LetrecStar {
-		// letrec*: compile and store each init sequentially
+	switch v.Kind {
+	case validate.LetKindLet:
+		// Inits already on stack — store in reverse (LIFO).
+		for i := n - 1; i >= 0; i-- {
+			li := childEnv.GetLocalIndex(v.Bindings[i].Name.Sym)
+			p.AppendOperations(NewOperationStoreLocalByLocalIndexImmediate(li))
+		}
+
+	case validate.LetKindLetStar, validate.LetKindLetrecStar:
+		// Sequential: compile init, push, store — one at a time.
 		for _, b := range v.Bindings {
 			err = p.compileValidated(ctctx.NotInTail(), b.Init)
 			if err != nil {
@@ -219,8 +89,9 @@ func (p *CompileTimeContinuation) CompileValidatedLetrec(
 			p.AppendOperations(NewOperationPush())
 			p.AppendOperations(NewOperationStoreLocalByLocalIndexImmediate(li))
 		}
-	} else {
-		// letrec: compile all inits first, then store all (delayed assignment)
+
+	case validate.LetKindLetrec:
+		// Delayed assignment: compile all inits, push all, then store all.
 		for _, b := range v.Bindings {
 			err = p.compileValidated(ctctx.NotInTail(), b.Init)
 			if err != nil {
@@ -249,14 +120,17 @@ func (p *CompileTimeContinuation) CompileValidatedLetrec(
 	return nil
 }
 
-// createLetCompileEnv creates a compile-time child environment with the
-// given let bindings as local variables.
+// createLetCompileEnv creates a compile-time child environment with all
+// let bindings as local variables.
 func (p *CompileTimeContinuation) createLetCompileEnv(
-	bindings []validate.ValidatedLetBinding,
+	v *validate.ValidatedLet,
 ) *environment.EnvironmentFrame {
 	lenv := environment.NewLocalEnvironment(0)
 	childEnv := environment.NewEnvironmentFrameWithParent(lenv, p.env)
-	for _, b := range bindings {
+
+	// For let*: add ALL binding names upfront. The validator already
+	// enforced sequential visibility; the compiler only needs the slots.
+	for _, b := range v.Bindings {
 		childEnv.MaybeCreateLocalBindingWithScopes(
 			b.Name.Sym,
 			environment.BindingTypeVariable,
@@ -268,8 +142,7 @@ func (p *CompileTimeContinuation) createLetCompileEnv(
 }
 
 // predeclareBodyDefines scans the body for define forms and pre-creates
-// their bindings in the current compile-time env. This must be called
-// before emitting OpPushEnv so the slot count includes define slots.
+// their bindings in the current compile-time env.
 func (p *CompileTimeContinuation) predeclareBodyDefines(
 	body []validate.ValidatedExpr,
 ) {

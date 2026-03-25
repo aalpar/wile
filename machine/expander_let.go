@@ -17,10 +17,10 @@ package machine
 // expander_let.go implements expand-time handling of let, let*, letrec,
 // and letrec* binding forms as core forms (replacing macro expansion).
 //
-// Hygiene — scoping precision (improvement over macro):
-//   - let:          scope on names + body, NOT on init exprs (R7RS §4.2.2)
-//   - let*:         scope on names + body, each init sees only preceding bindings
-//   - letrec/letrec*: scope on names + body + ALL init exprs
+// All four forms share a single entry point parameterized by scopeInits
+// (whether to add scope to init expressions) and sequential (whether to
+// expand inits with incremental env visibility). Named let is handled
+// as a special case of plain let.
 
 import (
 	"github.com/aalpar/wile/environment"
@@ -28,11 +28,7 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-// expandLetForm expands (let ((name val) ...) body ...) and
-// (let tag ((name val) ...) body ...) for named let.
-//
-// R7RS §4.2.2: let bindings are not visible to init expressions.
-// Named let is rewritten to (letrec ((tag (lambda (names...) body...))) (tag vals...)).
+// expandLetForm expands (let ...) including named let.
 func (p *ExpanderTimeContinuation) expandLetForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(pair) {
@@ -46,7 +42,46 @@ func (p *ExpanderTimeContinuation) expandLetForm(sym *syntax.SyntaxSymbol, expr 
 		return p.expandNamedLet(sym, pair)
 	}
 
-	// Plain let: ((name val) ...) body ...
+	return p.expandLetCommon(sym, expr, "let", false, false)
+}
+
+// expandLetStarForm expands (let* ...).
+func (p *ExpanderTimeContinuation) expandLetStarForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	return p.expandLetCommon(sym, expr, "let*", false, true)
+}
+
+// expandLetrecForm expands (letrec ...).
+func (p *ExpanderTimeContinuation) expandLetrecForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	return p.expandLetCommon(sym, expr, "letrec", true, false)
+}
+
+// expandLetrecStarForm expands (letrec* ...).
+func (p *ExpanderTimeContinuation) expandLetrecStarForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	return p.expandLetCommon(sym, expr, "letrec*", true, false)
+}
+
+// expandLetCommon is the shared expansion logic for all four binding forms.
+//
+// Parameters:
+//   - scopeInits: add binding scope to init expressions (letrec, letrec*)
+//   - sequential: expand inits with incremental env visibility (let*)
+//
+// Hygiene — scoping precision:
+//   - let:          scope on names + body, NOT on init exprs (R7RS §4.2.2)
+//   - let*:         scope on names + body, each init sees preceding bindings
+//   - letrec/letrec*: scope on names + body + ALL init exprs
+func (p *ExpanderTimeContinuation) expandLetCommon(
+	sym *syntax.SyntaxSymbol,
+	expr syntax.SyntaxValue,
+	label string,
+	scopeInits bool,
+	sequential bool,
+) (syntax.SyntaxValue, error) {
+	pair, ok := expr.(*syntax.SyntaxPair)
+	if !ok || syntax.IsSyntaxEmptyList(pair) {
+		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
+	}
+
 	bindingsStx := pair.SyntaxCar()
 	bodyCdr := pair.SyntaxCdr()
 	bodyPair, ok := bodyCdr.(*syntax.SyntaxPair)
@@ -54,36 +89,39 @@ func (p *ExpanderTimeContinuation) expandLetForm(sym *syntax.SyntaxSymbol, expr 
 		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
 	}
 
-	// Create a scope for this let's bindings
-	letScope := syntax.NewScopeWithLabel("let")
+	scope := syntax.NewScopeWithLabel(label)
 
-	// For let: scope on binding NAMES + body, NOT on init expressions
-	// Expand init expressions in current env (they don't see let bindings)
-	expandedBindings, bindingSyms, err := p.expandLetBindings(bindingsStx, letScope, false)
+	// Expand bindings based on form semantics
+	var expandedBindings syntax.SyntaxValue
+	var bindingSyms []*syntax.SyntaxSymbol
+	var err error
+
+	if sequential {
+		expandedBindings, bindingSyms, err = p.expandLetStarBindings(bindingsStx, scope)
+	} else {
+		expandedBindings, bindingSyms, err = p.expandLetBindings(bindingsStx, scope, scopeInits)
+	}
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "let: failed to expand bindings")
+		return nil, werr.WrapForeignErrorf(err, "%s: failed to expand bindings", label)
 	}
 
 	// Add scope to body
-	bodyWithScope := syntax.AddScopeToSyntax(bodyPair, letScope)
+	bodyWithScope := syntax.AddScopeToSyntax(bodyPair, scope)
 
-	// Create child env with binding names
+	// Create child env with all binding names
 	childEnv := p.createBindingEnv(bindingSyms)
 
-	// Expand body in child env
+	// Expand body
 	expandedBody, err := p.expandBindingBody(childEnv, bodyWithScope)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "let: failed to expand body")
+		return nil, werr.WrapForeignErrorf(err, "%s: failed to expand body", label)
 	}
 
-	// Reconstruct (let ((name expanded-val) ...) expanded-body...)
 	args := syntax.NewSyntaxCons(expandedBindings, expandedBody, sym.SourceContext())
 	return syntax.NewSyntaxCons(sym, args, sym.SourceContext()), nil
 }
 
 // expandNamedLet handles (let tag ((name val) ...) body ...).
-// Rewrites to (letrec ((tag (lambda (names...) body...))) (tag vals...))
-// which the letrec expander then handles.
 func (p *ExpanderTimeContinuation) expandNamedLet(sym *syntax.SyntaxSymbol, argsPair *syntax.SyntaxPair) (syntax.SyntaxValue, error) {
 	tagSym := argsPair.SyntaxCar().(*syntax.SyntaxSymbol)
 
@@ -100,10 +138,8 @@ func (p *ExpanderTimeContinuation) expandNamedLet(sym *syntax.SyntaxSymbol, args
 		return syntax.NewSyntaxCons(sym, argsPair, sym.SourceContext()), nil
 	}
 
-	// Create scope for the letrec that wraps the named let
 	letrecScope := syntax.NewScopeWithLabel("letrec")
 
-	// Add scope to tag
 	tagWithScope := syntax.AddScopeToSyntax(tagSym, letrecScope).(*syntax.SyntaxSymbol)
 
 	// Expand bindings: init exprs don't see the tag
@@ -112,7 +148,6 @@ func (p *ExpanderTimeContinuation) expandNamedLet(sym *syntax.SyntaxSymbol, args
 		return nil, werr.WrapForeignErrorf(err, "named let: failed to expand bindings")
 	}
 
-	// Add scope to body
 	bodyWithScope := syntax.AddScopeToSyntax(bodyPair, letrecScope)
 
 	// Create child env with tag + binding names
@@ -131,123 +166,20 @@ func (p *ExpanderTimeContinuation) expandNamedLet(sym *syntax.SyntaxSymbol, args
 		)
 	}
 
-	// Expand body in child env
 	expandedBody, err := p.expandBindingBody(childEnv, bodyWithScope)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "named let: failed to expand body")
 	}
 
-	// Reconstruct (let tag ((name val) ...) expanded-body...)
 	bindsAndBody := syntax.NewSyntaxCons(expandedBindings, expandedBody, sym.SourceContext())
 	tagAndRest := syntax.NewSyntaxCons(tagWithScope, bindsAndBody, sym.SourceContext())
 	return syntax.NewSyntaxCons(sym, tagAndRest, sym.SourceContext()), nil
 }
 
-// expandLetStarForm expands (let* ((name val) ...) body ...).
-//
-// R7RS §4.2.2: Each binding's init sees all preceding bindings.
-func (p *ExpanderTimeContinuation) expandLetStarForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	pair, ok := expr.(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(pair) {
-		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
-	}
-
-	bindingsStx := pair.SyntaxCar()
-	bodyCdr := pair.SyntaxCdr()
-	bodyPair, ok := bodyCdr.(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(bodyPair) {
-		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
-	}
-
-	// Create scope for let* bindings
-	letScope := syntax.NewScopeWithLabel("let*")
-
-	// For let*: expand each init sequentially, adding each binding to env
-	// before expanding the next init
-	expandedBindings, bindingSyms, err := p.expandLetStarBindings(bindingsStx, letScope)
-	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "let*: failed to expand bindings")
-	}
-
-	// Add scope to body
-	bodyWithScope := syntax.AddScopeToSyntax(bodyPair, letScope)
-
-	// Create child env with all binding names
-	childEnv := p.createBindingEnv(bindingSyms)
-
-	// Expand body
-	expandedBody, err := p.expandBindingBody(childEnv, bodyWithScope)
-	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "let*: failed to expand body")
-	}
-
-	args := syntax.NewSyntaxCons(expandedBindings, expandedBody, sym.SourceContext())
-	return syntax.NewSyntaxCons(sym, args, sym.SourceContext()), nil
-}
-
-// expandLetrecForm expands (letrec ((name val) ...) body ...).
-//
-// R7RS §4.2.2: All bindings are in scope for all inits and body.
-func (p *ExpanderTimeContinuation) expandLetrecForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	return p.expandLetrecCommon(sym, expr, "letrec")
-}
-
-// expandLetrecStarForm expands (letrec* ((name val) ...) body ...).
-//
-// R7RS §4.2.2: Same scoping as letrec; left-to-right evaluation order is
-// a runtime semantic, not a scoping difference.
-func (p *ExpanderTimeContinuation) expandLetrecStarForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	return p.expandLetrecCommon(sym, expr, "letrec*")
-}
-
-// expandLetrecCommon is shared logic for letrec and letrec*.
-func (p *ExpanderTimeContinuation) expandLetrecCommon(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue, label string) (syntax.SyntaxValue, error) {
-	pair, ok := expr.(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(pair) {
-		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
-	}
-
-	bindingsStx := pair.SyntaxCar()
-	bodyCdr := pair.SyntaxCdr()
-	bodyPair, ok := bodyCdr.(*syntax.SyntaxPair)
-	if !ok || syntax.IsSyntaxEmptyList(bodyPair) {
-		return syntax.NewSyntaxCons(sym, expr, sym.SourceContext()), nil
-	}
-
-	// Create scope for letrec bindings
-	letrecScope := syntax.NewScopeWithLabel(label)
-
-	// For letrec: scope on names + init exprs + body (all bindings visible everywhere)
-	expandedBindings, bindingSyms, err := p.expandLetBindings(bindingsStx, letrecScope, true)
-	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "%s: failed to expand bindings", label)
-	}
-
-	// Add scope to body
-	bodyWithScope := syntax.AddScopeToSyntax(bodyPair, letrecScope)
-
-	// Create child env with all bindings
-	childEnv := p.createBindingEnv(bindingSyms)
-
-	// Expand body
-	expandedBody, err := p.expandBindingBody(childEnv, bodyWithScope)
-	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "%s: failed to expand body", label)
-	}
-
-	args := syntax.NewSyntaxCons(expandedBindings, expandedBody, sym.SourceContext())
-	return syntax.NewSyntaxCons(sym, args, sym.SourceContext()), nil
-}
-
 // --- Shared helpers ---
 
 // expandLetBindings expands init expressions in a binding list.
-// For let: scopeInits=false (inits don't see bindings).
-// For letrec/letrec*: scopeInits=true (inits see all bindings).
-//
-// The scope is added to binding names regardless. Init expressions get
-// the scope added only if scopeInits is true, then all inits are expanded
-// in the appropriate environment (current env for let, child env for letrec).
+// scopeInits controls whether the binding scope is added to init expressions.
 func (p *ExpanderTimeContinuation) expandLetBindings(
 	bindingsStx syntax.SyntaxValue,
 	scope *syntax.Scope,
@@ -262,7 +194,7 @@ func (p *ExpanderTimeContinuation) expandLetBindings(
 		return bindingsStx, nil, nil
 	}
 
-	// First pass: collect binding names with scope, add scope to inits if needed
+	// First pass: collect names with scope
 	var scopedNames []*syntax.SyntaxSymbol
 	var bindingPairs []*syntax.SyntaxPair
 	current := bindingsPair
@@ -270,11 +202,9 @@ func (p *ExpanderTimeContinuation) expandLetBindings(
 		bindingForm := current.SyntaxCar()
 		bPair, ok := bindingForm.(*syntax.SyntaxPair)
 		if !ok {
-			// Malformed — let validator will catch it
 			return bindingsStx, nil, nil
 		}
 
-		// Extract name and add scope
 		nameStx := bPair.SyntaxCar()
 		nameSym, ok := nameStx.(*syntax.SyntaxSymbol)
 		if !ok {
@@ -305,7 +235,6 @@ func (p *ExpanderTimeContinuation) expandLetBindings(
 	// Second pass: expand each init and rebuild binding list
 	var expandedBindingsList []syntax.SyntaxValue
 	for i, bPair := range bindingPairs {
-		// Get init expression (second element of binding pair)
 		initCdr := bPair.SyntaxCdr()
 		initPair, ok := initCdr.(*syntax.SyntaxPair)
 		if !ok || syntax.IsSyntaxEmptyList(initPair) {
@@ -313,18 +242,15 @@ func (p *ExpanderTimeContinuation) expandLetBindings(
 		}
 		initExpr := initPair.SyntaxCar()
 
-		// Add scope to init if letrec
 		if scopeInits {
 			initExpr = syntax.AddScopeToSyntax(initExpr, scope)
 		}
 
-		// Expand the init expression
 		expandedInit, err := initExpander.ExpandExpression(initExpr)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		// Rebuild (name expanded-init)
 		sc := bPair.SourceContext()
 		initList := syntax.SyntaxList(sc, expandedInit)
 		rebuilt := syntax.NewSyntaxCons(scopedNames[i], initList, sc)
@@ -349,7 +275,6 @@ func (p *ExpanderTimeContinuation) expandLetStarBindings(
 		return bindingsStx, nil, nil
 	}
 
-	// Build child env incrementally
 	childEnv := environment.NewEnvironmentFrameWithParent(
 		environment.NewLocalEnvironment(0),
 		p.env,
@@ -372,7 +297,6 @@ func (p *ExpanderTimeContinuation) expandLetStarBindings(
 			return bindingsStx, nil, nil
 		}
 
-		// Get init expression
 		initCdr := bPair.SyntaxCdr()
 		initPair, ok := initCdr.(*syntax.SyntaxPair)
 		if !ok || syntax.IsSyntaxEmptyList(initPair) {
@@ -381,28 +305,23 @@ func (p *ExpanderTimeContinuation) expandLetStarBindings(
 		initExpr := initPair.SyntaxCar()
 
 		// Add scope to init so references can resolve to preceding bindings.
-		// The scope enables matching; the env controls visibility (preceding
-		// bindings are in env, current binding is not yet).
 		scopedInit := syntax.AddScopeToSyntax(initExpr, scope)
 
-		// Expand init in current child env (sees preceding bindings)
 		currentExpander := NewExpanderTimeContinuation(p.ctx, childEnv)
 		expandedInit, err := currentExpander.ExpandExpression(scopedInit)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		// Add scope to name AFTER expanding init (name not visible to own init)
+		// Add scope to name AFTER expanding init
 		scopedName := syntax.AddScopeToSyntax(nameSym, scope).(*syntax.SyntaxSymbol)
 		scopedNames = append(scopedNames, scopedName)
 
-		// Add binding to child env for subsequent inits
 		childEnv.MaybeCreateLocalBindingWithScopes(
 			scopedName.Sym, environment.BindingTypeVariable,
 			scopedName.Scopes(), scopedName.SourceContext(),
 		)
 
-		// Rebuild (name expanded-init)
 		sc := bPair.SourceContext()
 		initList := syntax.SyntaxList(sc, expandedInit)
 		rebuilt := syntax.NewSyntaxCons(scopedName, initList, sc)
@@ -436,8 +355,7 @@ func (p *ExpanderTimeContinuation) createBindingEnv(syms []*syntax.SyntaxSymbol)
 	return childEnv
 }
 
-// expandBindingBody expands a body syntax value in the given environment,
-// processing define-syntax forms before expanding subsequent expressions.
+// expandBindingBody expands a body syntax value in the given environment.
 func (p *ExpanderTimeContinuation) expandBindingBody(
 	env *environment.EnvironmentFrame,
 	bodyStx syntax.SyntaxValue,
