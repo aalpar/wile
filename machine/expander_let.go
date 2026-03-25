@@ -56,6 +56,9 @@ func (p *ExpanderTimeContinuation) expandLetrecForm(sym *syntax.SyntaxSymbol, ex
 }
 
 // expandLetrecStarForm expands (letrec* ...).
+// sequential=false because all inits see all bindings (same as letrec at
+// expansion time). The sequential evaluation order is a compiler concern,
+// not an expander concern — handled by LetKindLetrecStar in CompileValidatedLet.
 func (p *ExpanderTimeContinuation) expandLetrecStarForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	return p.expandLetCommon(sym, expr, "letrec*", true, false)
 }
@@ -123,7 +126,10 @@ func (p *ExpanderTimeContinuation) expandLetCommon(
 
 // expandNamedLet handles (let tag ((name val) ...) body ...).
 func (p *ExpanderTimeContinuation) expandNamedLet(sym *syntax.SyntaxSymbol, argsPair *syntax.SyntaxPair) (syntax.SyntaxValue, error) {
-	tagSym := argsPair.SyntaxCar().(*syntax.SyntaxSymbol)
+	tagSym, ok := argsPair.SyntaxCar().(*syntax.SyntaxSymbol)
+	if !ok {
+		return syntax.NewSyntaxCons(sym, argsPair, sym.SourceContext()), nil
+	}
 
 	cdr := argsPair.SyntaxCdr()
 	cdrPair, ok := cdr.(*syntax.SyntaxPair)
@@ -180,6 +186,10 @@ func (p *ExpanderTimeContinuation) expandNamedLet(sym *syntax.SyntaxSymbol, args
 
 // expandLetBindings expands init expressions in a binding list.
 // scopeInits controls whether the binding scope is added to init expressions.
+//
+// Structural errors (non-pair bindings, non-symbol names, wrong arity) return
+// the original syntax unchanged with nil bindingSyms. The validator reports
+// precise structural errors downstream.
 func (p *ExpanderTimeContinuation) expandLetBindings(
 	bindingsStx syntax.SyntaxValue,
 	scope *syntax.Scope,
@@ -262,6 +272,9 @@ func (p *ExpanderTimeContinuation) expandLetBindings(
 
 // expandLetStarBindings expands init expressions sequentially for let*,
 // creating the child environment incrementally so each init sees preceding bindings.
+//
+// Structural errors return the original syntax unchanged with nil bindingSyms.
+// The validator reports precise structural errors downstream.
 func (p *ExpanderTimeContinuation) expandLetStarBindings(
 	bindingsStx syntax.SyntaxValue,
 	scope *syntax.Scope,

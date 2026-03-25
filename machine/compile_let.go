@@ -25,6 +25,7 @@ package machine
 import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/validate"
+	"github.com/aalpar/wile/werr"
 )
 
 // CompileValidatedLet compiles all binding forms based on Kind.
@@ -39,13 +40,9 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 ) error {
 	n := len(v.Bindings)
 
-	if n == 0 {
-		return p.compileLetBody(ctctx, v.Body())
-	}
-
 	// For plain let: compile inits BEFORE creating the env frame
 	// (inits don't see bindings, so they're compiled in the parent env).
-	if v.Kind == validate.LetKindLet {
+	if n > 0 && v.Kind == validate.LetKindLet {
 		for _, b := range v.Bindings {
 			err := p.compileValidated(ctctx.NotInTail(), b.Init)
 			if err != nil {
@@ -55,11 +52,15 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 		}
 	}
 
-	// Build compile-time env with all bindings.
+	// Build compile-time env with all bindings (even for empty-binding
+	// case, so that internal defines get their own scope boundary).
 	childEnv := p.createLetCompileEnv(v)
 
 	savedEnv := p.env
 	p.env = childEnv
+	defer func() {
+		p.env = savedEnv
+	}()
 
 	// Predeclare body defines to count total slots needed.
 	p.predeclareBodyDefines(v.Body())
@@ -68,24 +69,32 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 	p.AppendOperations(NewOperationPushEnv(totalSlots))
 
 	// Emit init compilation + stores based on Kind.
-	var err error
 	switch v.Kind {
 	case validate.LetKindLet:
 		// Inits already on stack — store in reverse (LIFO).
 		for i := n - 1; i >= 0; i-- {
 			li := childEnv.GetLocalIndex(v.Bindings[i].Name.Sym)
+			if li == nil {
+				return werr.WrapForeignErrorf(ErrBindingNotFound,
+					"compile let: binding %q not found in local environment",
+					v.Bindings[i].Name.Sym)
+			}
 			p.AppendOperations(NewOperationStoreLocalByLocalIndexImmediate(li))
 		}
 
 	case validate.LetKindLetStar, validate.LetKindLetrecStar:
 		// Sequential: compile init, push, store — one at a time.
 		for _, b := range v.Bindings {
-			err = p.compileValidated(ctctx.NotInTail(), b.Init)
+			err := p.compileValidated(ctctx.NotInTail(), b.Init)
 			if err != nil {
-				p.env = savedEnv
 				return err
 			}
 			li := childEnv.GetLocalIndex(b.Name.Sym)
+			if li == nil {
+				return werr.WrapForeignErrorf(ErrBindingNotFound,
+					"compile %s: binding %q not found in local environment",
+					v.Kind, b.Name.Sym)
+			}
 			p.AppendOperations(NewOperationPush())
 			p.AppendOperations(NewOperationStoreLocalByLocalIndexImmediate(li))
 		}
@@ -93,22 +102,24 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 	case validate.LetKindLetrec:
 		// Delayed assignment: compile all inits, push all, then store all.
 		for _, b := range v.Bindings {
-			err = p.compileValidated(ctctx.NotInTail(), b.Init)
+			err := p.compileValidated(ctctx.NotInTail(), b.Init)
 			if err != nil {
-				p.env = savedEnv
 				return err
 			}
 			p.AppendOperations(NewOperationPush())
 		}
 		for i := n - 1; i >= 0; i-- {
 			li := childEnv.GetLocalIndex(v.Bindings[i].Name.Sym)
+			if li == nil {
+				return werr.WrapForeignErrorf(ErrBindingNotFound,
+					"compile letrec: binding %q not found in local environment",
+					v.Bindings[i].Name.Sym)
+			}
 			p.AppendOperations(NewOperationStoreLocalByLocalIndexImmediate(li))
 		}
 	}
 
-	err = p.compileValidatedSequence(ctctx, v.Body())
-	p.env = savedEnv
-
+	err := p.compileValidatedSequence(ctctx, v.Body())
 	if err != nil {
 		return err
 	}
@@ -149,17 +160,4 @@ func (p *CompileTimeContinuation) predeclareBodyDefines(
 	for _, expr := range body {
 		p.predeclareDefineBindingFromValidated(expr)
 	}
-}
-
-// compileLetBody compiles a sequence of body expressions with
-// letrec* pre-declaration and tail position semantics.
-// Used only for empty-binding cases where no OpPushEnv is needed.
-func (p *CompileTimeContinuation) compileLetBody(
-	ctctx CompileTimeCallContext,
-	body []validate.ValidatedExpr,
-) error {
-	for _, expr := range body {
-		p.predeclareDefineBindingFromValidated(expr)
-	}
-	return p.compileValidatedSequence(ctctx, body)
 }

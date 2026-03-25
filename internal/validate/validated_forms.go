@@ -266,6 +266,22 @@ const (
 	LetKindLetrecStar                // R7RS §4.2.2: inits in full scope, sequential
 )
 
+// String returns the Scheme keyword for this kind.
+func (p LetKind) String() string {
+	switch p {
+	case LetKindLet:
+		return "let"
+	case LetKindLetStar:
+		return "let*"
+	case LetKindLetrec:
+		return "letrec"
+	case LetKindLetrecStar:
+		return "letrec*"
+	default:
+		return "let?"
+	}
+}
+
 // InitsInScope reports whether init expressions see the let bindings.
 func (p LetKind) InitsInScope() bool {
 	return p == LetKindLetrec || p == LetKindLetrecStar

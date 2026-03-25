@@ -485,7 +485,9 @@ func parseBindingsList(
 }
 
 // markMutableBindings checks which let bindings were targeted by set!
-// in the body and marks them accordingly.
+// in the body and marks them accordingly. Best-effort: if binding
+// resolution fails (scope mismatch), the binding stays immutable.
+// Must not gate correctness-critical optimizations without re-validation.
 func markMutableBindings(
 	childEnv *environment.EnvironmentFrame,
 	bindings []ValidatedLetBinding,
