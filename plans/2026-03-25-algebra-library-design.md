@@ -1,7 +1,7 @@
 # Algebra Library Design
 
 **Date:** 2026-03-25
-**Status:** Draft
+**Status:** Implemented
 **Version target:** TBD
 
 ## Goal
@@ -257,7 +257,7 @@ lattice ──→ partial-order
 (gc-abstract-lattice GC)               → <lattice>
 
 ;; Validation
-(gc-sound? GC concrete-samples)        → #t | violations
+(gc-sound? GC concrete-samples abstract-samples) → #t | violations
   ;; checks: ∀c. c ≤ γ(α(c))  (soundness / extensive lower adjoint)
   ;; checks: ∀a. α(γ(a)) ≤ a  (reductive upper adjoint)
 ```

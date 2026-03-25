@@ -332,7 +332,6 @@ Create `lib/wile/algebra/lattice.sld`:
           validate-lattice
           with-lattice)
   (import (scheme base)
-          (scheme case-lambda)
           (wile algebra order))
   (include "lattice.scm"))
 ```
@@ -381,12 +380,13 @@ Create `lib/wile/algebra/lattice.scm`:
 (define-syntax with-lattice
   (syntax-rules ()
     ((with-lattice L (join meet bottom top leq?) body ...)
-     (let ((join   (lambda (a b) (lattice-join L a b)))
-           (meet   (lambda (a b) (lattice-meet L a b)))
-           (bottom (lattice-bottom L))
-           (top    (lattice-top L))
-           (leq?   (lambda (a b) (lattice-leq? L a b))))
-       body ...))))
+     (let ((tmp L))
+       (let ((join   (lambda (a b) (lattice-join tmp a b)))
+             (meet   (lambda (a b) (lattice-meet tmp a b)))
+             (bottom (lattice-bottom tmp))
+             (top    (lattice-top tmp))
+             (leq?   (lambda (a b) (lattice-leq? tmp a b))))
+         body ...)))))
 
 ;; ─── Lattice equality (derived from leq?) ───
 
@@ -810,9 +810,10 @@ Create `lib/wile/algebra/monoid.scm`:
 (define-syntax with-monoid
   (syntax-rules ()
     ((with-monoid M (op identity) body ...)
-     (let ((op       (lambda (a b) (monoid-op M a b)))
-           (identity (monoid-identity M)))
-       body ...))))
+     (let ((tmp M))
+       (let ((op       (lambda (a b) (monoid-op tmp a b)))
+             (identity (monoid-identity tmp)))
+         body ...)))))
 
 (define (validate-monoid M samples)
   (let ((violations '())
@@ -1015,11 +1016,12 @@ Create `lib/wile/algebra/semiring.scm`:
 (define-syntax with-semiring
   (syntax-rules ()
     ((with-semiring S (plus times zero one) body ...)
-     (let ((plus  (lambda (a b) (semiring-plus S a b)))
-           (times (lambda (a b) (semiring-times S a b)))
-           (zero  (semiring-zero S))
-           (one   (semiring-one S)))
-       body ...))))
+     (let ((tmp S))
+       (let ((plus  (lambda (a b) (semiring-plus tmp a b)))
+             (times (lambda (a b) (semiring-times tmp a b)))
+             (zero  (semiring-zero tmp))
+             (one   (semiring-one tmp)))
+         body ...)))))
 
 ;; ─── Validation ──────────────────────────────
 
@@ -1182,10 +1184,11 @@ Create `lib/wile/algebra/group.scm`:
 (define-syntax with-group
   (syntax-rules ()
     ((with-group G (op identity inverse) body ...)
-     (let ((op      (lambda (a b) (group-op G a b)))
-           (identity (group-identity G))
-           (inverse  (lambda (a) (group-inverse G a))))
-       body ...))))
+     (let ((tmp G))
+       (let ((op      (lambda (a b) (group-op tmp a b)))
+             (identity (group-identity tmp))
+             (inverse  (lambda (a) (group-inverse tmp a))))
+         body ...)))))
 
 (define (validate-group G samples)
   (let ((violations '())
@@ -1306,7 +1309,7 @@ Create `test/wile/algebra-ring-test.scm`:
 
 (test-group "with-field"
   (let ((F (rational-field)))
-    (test 7/3 (with-field F (plus times zero one negate reciprocal)
+    (test 5/3 (with-field F (plus times zero one negate reciprocal)
                 (plus (times 2 (reciprocal 3)) one)))))
 
 (test-group "validate-field"
@@ -1385,12 +1388,13 @@ Create `lib/wile/algebra/ring.scm`:
 (define-syntax with-ring
   (syntax-rules ()
     ((with-ring R (plus times zero one negate) body ...)
-     (let ((plus   (lambda (a b) (ring-plus R a b)))
-           (times  (lambda (a b) (ring-times R a b)))
-           (zero   (ring-zero R))
-           (one    (ring-one R))
-           (negate (lambda (a) (ring-negate R a))))
-       body ...))))
+     (let ((tmp R))
+       (let ((plus   (lambda (a b) (ring-plus tmp a b)))
+             (times  (lambda (a b) (ring-times tmp a b)))
+             (zero   (ring-zero tmp))
+             (one    (ring-one tmp))
+             (negate (lambda (a) (ring-negate tmp a))))
+         body ...)))))
 
 ;; ─── Pre-built ring instances ────────────────
 
@@ -1465,13 +1469,14 @@ Create `lib/wile/algebra/ring.scm`:
 (define-syntax with-field
   (syntax-rules ()
     ((with-field F (plus times zero one negate reciprocal) body ...)
-     (let ((plus       (lambda (a b) (field-plus F a b)))
-           (times      (lambda (a b) (field-times F a b)))
-           (zero       (field-zero F))
-           (one        (field-one F))
-           (negate     (lambda (a) (field-negate F a)))
-           (reciprocal (lambda (a) (field-reciprocal F a))))
-       body ...))))
+     (let ((tmp F))
+       (let ((plus       (lambda (a b) (field-plus tmp a b)))
+             (times      (lambda (a b) (field-times tmp a b)))
+             (zero       (field-zero tmp))
+             (one        (field-one tmp))
+             (negate     (lambda (a) (field-negate tmp a)))
+             (reciprocal (lambda (a) (field-reciprocal tmp a))))
+         body ...)))))
 
 ;; ─── Pre-built field instances ───────────────
 
@@ -1572,15 +1577,14 @@ Create `test/wile/algebra-galois-test.scm`:
       (cond ((< n 0) 'neg)
             ((= n 0) 'zero)
             ((> n 0) 'pos)))
-    ;; gamma: sign → "most precise" concrete representative
-    ;; For soundness checking we need gamma to return a concrete value
-    ;; such that alpha(gamma(a)) ≤ a. Using representative values.
+    ;; gamma: sign → best concrete representative
+    ;; For extensiveness (c ≤ γ(α(c))), gamma must over-approximate.
     (lambda (s)
       (cond ((eq? s 'neg) -1)
             ((eq? s 'zero) 0)
-            ((eq? s 'pos) 1)
-            ((eq? s 'sign-bottom) 0)   ; arbitrary
-            ((eq? s 'sign-top) 0)))    ; arbitrary
+            ((eq? s 'pos) +inf.0)
+            ((eq? s 'sign-bottom) 0)
+            ((eq? s 'sign-top) +inf.0)))
     int-po
     sign-lattice))
 
@@ -1594,9 +1598,9 @@ Create `test/wile/algebra-galois-test.scm`:
   (test 'pos  (gc-alpha sign-gc 42)))
 
 (test-group "gc-gamma"
-  (test -1 (gc-gamma sign-gc 'neg))
-  (test 0  (gc-gamma sign-gc 'zero))
-  (test 1  (gc-gamma sign-gc 'pos)))
+  (test -1    (gc-gamma sign-gc 'neg))
+  (test 0     (gc-gamma sign-gc 'zero))
+  (test +inf.0 (gc-gamma sign-gc 'pos)))
 
 (test-group "gc-accessors"
   (test #t (partial-order? (gc-concrete-po sign-gc)))
