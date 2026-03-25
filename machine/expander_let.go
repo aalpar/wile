@@ -207,8 +207,14 @@ func (p *ExpanderTimeContinuation) expandLetBindings(
 	// First pass: collect names with scope
 	var scopedNames []*syntax.SyntaxSymbol
 	var bindingPairs []*syntax.SyntaxPair
-	current := bindingsPair
-	for !syntax.IsSyntaxEmptyList(current) {
+	rest := syntax.SyntaxValue(bindingsPair)
+	for !syntax.IsSyntaxEmptyList(rest) {
+		current, ok := rest.(*syntax.SyntaxPair)
+		if !ok {
+			// Improper bindings list — pass through for validator.
+			return bindingsStx, nil, nil
+		}
+
 		bindingForm := current.SyntaxCar()
 		bPair, ok := bindingForm.(*syntax.SyntaxPair)
 		if !ok {
@@ -224,13 +230,7 @@ func (p *ExpanderTimeContinuation) expandLetBindings(
 		scopedNames = append(scopedNames, scopedName)
 		bindingPairs = append(bindingPairs, bPair)
 
-		cdr := current.SyntaxCdr()
-		next, ok := cdr.(*syntax.SyntaxPair)
-		if ok {
-			current = next
-		} else {
-			break
-		}
+		rest = current.SyntaxCdr()
 	}
 
 	// For letrec: create child env before expanding inits
@@ -248,6 +248,11 @@ func (p *ExpanderTimeContinuation) expandLetBindings(
 		initCdr := bPair.SyntaxCdr()
 		initPair, ok := initCdr.(*syntax.SyntaxPair)
 		if !ok || syntax.IsSyntaxEmptyList(initPair) {
+			return bindingsStx, nil, nil
+		}
+		// Binding must be exactly (name init) — reject extra elements
+		// so the validator sees the original malformed form.
+		if !syntax.IsSyntaxEmptyList(initPair.SyntaxCdr()) {
 			return bindingsStx, nil, nil
 		}
 		initExpr := initPair.SyntaxCar()
@@ -296,8 +301,14 @@ func (p *ExpanderTimeContinuation) expandLetStarBindings(
 	var scopedNames []*syntax.SyntaxSymbol
 	var expandedBindingsList []syntax.SyntaxValue
 
-	current := bindingsPair
-	for !syntax.IsSyntaxEmptyList(current) {
+	rest := syntax.SyntaxValue(bindingsPair)
+	for !syntax.IsSyntaxEmptyList(rest) {
+		current, ok := rest.(*syntax.SyntaxPair)
+		if !ok {
+			// Improper bindings list — pass through for validator.
+			return bindingsStx, nil, nil
+		}
+
 		bindingForm := current.SyntaxCar()
 		bPair, ok := bindingForm.(*syntax.SyntaxPair)
 		if !ok {
@@ -313,6 +324,10 @@ func (p *ExpanderTimeContinuation) expandLetStarBindings(
 		initCdr := bPair.SyntaxCdr()
 		initPair, ok := initCdr.(*syntax.SyntaxPair)
 		if !ok || syntax.IsSyntaxEmptyList(initPair) {
+			return bindingsStx, nil, nil
+		}
+		// Binding must be exactly (name init) — reject extra elements.
+		if !syntax.IsSyntaxEmptyList(initPair.SyntaxCdr()) {
 			return bindingsStx, nil, nil
 		}
 		initExpr := initPair.SyntaxCar()
@@ -340,13 +355,7 @@ func (p *ExpanderTimeContinuation) expandLetStarBindings(
 		rebuilt := syntax.NewSyntaxCons(scopedName, initList, sc)
 		expandedBindingsList = append(expandedBindingsList, rebuilt)
 
-		cdr := current.SyntaxCdr()
-		next, ok := cdr.(*syntax.SyntaxPair)
-		if ok {
-			current = next
-		} else {
-			break
-		}
+		rest = current.SyntaxCdr()
 	}
 
 	return syntax.SyntaxList(bindingsPair.SourceContext(), expandedBindingsList...), scopedNames, nil
