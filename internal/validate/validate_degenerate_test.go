@@ -38,7 +38,10 @@ func runDegenerateErrorTests(t *testing.T, tcs []degenerateErrorCase) {
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
 			err := testhelpers.RunSchemeCodeExpectError(t, tc.Code)
-			if tc.WantErr != "" && err != nil {
+			if err == nil {
+				t.Fatalf("expected error for %q but got nil", tc.Code)
+			}
+			if tc.WantErr != "" {
 				qt.Assert(t, err.Error(), qt.Contains, tc.WantErr)
 			}
 		})
