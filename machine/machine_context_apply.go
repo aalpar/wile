@@ -112,13 +112,14 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	p.counters.ForeignCalls++
 	p.counters.RecordCall(fcls.name)
 
-	// Save the template pointer before calling the foreign function.
-	// Some foreign functions (e.g., PrimCallCC inline mode) call Apply()
-	// on the MachineContext, changing the template/env/pc to set up the VM
-	// for continued execution of a different closure. If the template changes,
-	// we must NOT do returnImmediate() — the foreign function has already
-	// configured the VM state.
+	// Save the template and continuation pointers before calling the foreign
+	// function. Some foreign functions (e.g., PrimCallCC inline mode) call
+	// ApplyCallable on the MachineContext, which may change the template (via
+	// Apply for MachineClosure) or consume the continuation (via a nested
+	// applyForeign for ForeignClosure). We check both after the call to avoid
+	// double-restoring from an already-consumed SaveContinuation frame.
 	savedTemplate := p.template
+	savedCont := p.cont
 
 	err = fcls.fn(p)
 	if err != nil {
@@ -140,12 +141,16 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 		return p, nil
 	}
 
-	// Restore continuation (same as returnImmediate).
-	if p.cont != nil {
-		p.RestoreAndRelease(p.cont)
-	} else {
-		p.template = immediateReturnTemplate
-		p.pc = 0
+	// Restore continuation, but only if the foreign function didn't already
+	// consume it (e.g., PrimCallCC inline mode calling ApplyCallable with a
+	// ForeignClosure, where the nested applyForeign does its own restore).
+	if p.cont == savedCont {
+		if p.cont != nil {
+			p.RestoreAndRelease(p.cont)
+		} else {
+			p.template = immediateReturnTemplate
+			p.pc = 0
+		}
 	}
 	return p, nil
 }
