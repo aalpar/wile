@@ -187,51 +187,50 @@ func writeTempScheme(t *testing.T, content string) string {
 // Existing unit tests (no subprocess needed)
 // ---------------------------------------------------------------------------
 
-func TestInitLibraryRegistry(t *testing.T) {
+func TestBuildLibraryPaths(t *testing.T) {
 	c := qt.New(t)
 
 	tcs := []struct {
 		name         string
 		envPath      string
 		cmdLinePath  string
-		wantPaths    []string // Expected search paths (in order)
 		wantContains []string // Paths that must be present (unordered)
 	}{
 		{
 			name:         "no paths",
 			envPath:      "",
 			cmdLinePath:  "",
-			wantContains: []string{".", "./stdlib/lib"}, // Default paths
+			wantContains: nil, // No user-specified paths
 		},
 		{
 			name:         "env var only",
 			envPath:      "/usr/share/wile" + string(os.PathListSeparator) + "/opt/wile",
 			cmdLinePath:  "",
-			wantContains: []string{".", "./stdlib/lib", "/usr/share/wile", "/opt/wile"},
+			wantContains: []string{"/usr/share/wile", "/opt/wile"},
 		},
 		{
 			name:         "command line only",
 			envPath:      "",
 			cmdLinePath:  "/home/user/.scheme" + string(os.PathListSeparator) + "/tmp/libs",
-			wantContains: []string{".", "./stdlib/lib", "/home/user/.scheme", "/tmp/libs"},
+			wantContains: []string{"/home/user/.scheme", "/tmp/libs"},
 		},
 		{
 			name:         "both env and command line",
 			envPath:      "/usr/share/wile",
 			cmdLinePath:  "/home/user/.scheme",
-			wantContains: []string{".", "./stdlib/lib", "/usr/share/wile", "/home/user/.scheme"},
+			wantContains: []string{"/usr/share/wile", "/home/user/.scheme"},
 		},
 		{
 			name:         "empty components in env",
 			envPath:      string(os.PathListSeparator) + "/usr/share/wile" + string(os.PathListSeparator) + string(os.PathListSeparator),
 			cmdLinePath:  "",
-			wantContains: []string{".", "./stdlib/lib", "/usr/share/wile"},
+			wantContains: []string{"/usr/share/wile"},
 		},
 		{
 			name:         "empty components in command line",
 			envPath:      "",
 			cmdLinePath:  string(os.PathListSeparator) + "/home/user/.scheme" + string(os.PathListSeparator) + string(os.PathListSeparator),
-			wantContains: []string{".", "./stdlib/lib", "/home/user/.scheme"},
+			wantContains: []string{"/home/user/.scheme"},
 		},
 	}
 
@@ -259,11 +258,7 @@ func TestInitLibraryRegistry(t *testing.T) {
 				opts = oldOpts
 			}()
 
-			// Create registry
-			registry := initLibraryRegistry(context.Background())
-
-			// Get actual search paths
-			paths := registry.GetSearchPaths()
+			paths := buildLibraryPaths()
 
 			// Check that all expected paths are present
 			for _, wantPath := range tc.wantContains {
@@ -288,21 +283,25 @@ func TestLibraryPathPriority(t *testing.T) {
 		opts = oldOpts
 	}()
 
-	registry := initLibraryRegistry(context.Background())
-	paths := registry.GetSearchPaths()
+	paths := buildLibraryPaths()
 
-	// Command line paths should appear after env paths
-	// (they are added last to the registry, but searched first)
+	// Command line paths should appear before env paths (higher priority)
 	cmdPaths := []string{"/cmd/path1", "/cmd/path2"}
 	envPaths := []string{"/env/path1", "/env/path2"}
 
-	for _, cmdPath := range cmdPaths {
-		c.Assert(slices.Contains(paths, cmdPath), qt.IsTrue, qt.Commentf("command line path %q not found", cmdPath))
+	for _, cp := range cmdPaths {
+		c.Assert(slices.Contains(paths, cp), qt.IsTrue, qt.Commentf("command line path %q not found", cp))
 	}
 
-	for _, envPath := range envPaths {
-		c.Assert(slices.Contains(paths, envPath), qt.IsTrue, qt.Commentf("env path %q not found", envPath))
+	for _, ep := range envPaths {
+		c.Assert(slices.Contains(paths, ep), qt.IsTrue, qt.Commentf("env path %q not found", ep))
 	}
+
+	// Verify command-line paths come before env paths in the slice
+	cmdIdx := slices.Index(paths, "/cmd/path1")
+	envIdx := slices.Index(paths, "/env/path1")
+	c.Assert(cmdIdx < envIdx, qt.IsTrue,
+		qt.Commentf("command line paths should precede env paths: cmd at %d, env at %d, paths=%v", cmdIdx, envIdx, paths))
 }
 
 func TestSchemeLibraryPathEnvConstant(t *testing.T) {

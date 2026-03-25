@@ -90,13 +90,22 @@ build-linux-amd64: $(DIST_DIR)/linux/amd64/$(MY_BIN)
 .PHONY: build-all
 build-all: build-darwin-arm64 build-darwin-amd64 build-linux-arm64 build-linux-amd64
 
-# Install the wile binary to the same location as 'go install' ($GOBIN or $GOPATH/bin).
+# Install prefix for non-Go files (libraries, data).
+# Binary is always installed to GOBIN; libraries to PREFIX/share/wile/lib.
+PREFIX ?= /usr/local
+DATADIR = $(PREFIX)/share/wile
+
+# Install the wile binary and standard libraries.
 #   make install
+#   make install PREFIX=/opt/wile
 .PHONY: install
 install: build
 	@mkdir -p $(GOBIN)
 	cp $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) $(GOBIN)/$(MY_BIN)
 	@echo "Installed $(MY_BIN) to $(GOBIN)/$(MY_BIN)"
+	@mkdir -p $(DATADIR)
+	cp -R stdlib/lib $(DATADIR)/
+	@echo "Installed libraries to $(DATADIR)/lib/"
 
 # Build all embedding examples. Verifies that the public API compiles.
 #   make examples

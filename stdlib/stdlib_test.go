@@ -13,7 +13,7 @@ func TestFS_ContainsSchemeBase(t *testing.T) {
 	c := qt.New(t)
 	f, err := stdlib.FS.Open("lib/scheme/base.sld")
 	c.Assert(err, qt.IsNil)
-	defer f.Close()
+	f.Close()
 }
 
 func TestFS_ContainsExpectedLibraries(t *testing.T) {
