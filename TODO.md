@@ -66,6 +66,44 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
   - DNS resolution
 - [ ] **Debugger / DAP integration** [Tooling]: Debug Adapter Protocol. Inline traps + snap-to-next designs ready in `plans/DEBUGGER.md`
 - [ ] **POSIX API / SRFI-170** [Standard library, 10 phases]: Comprehensive OS access — stat, permissions, links, temp files, env vars, subprocess, signals, user/group, terminal, error handling.
+- [ ] **Algebra library** [Standard library]: General-purpose algebraic structures as an R7RS library (`(wile algebra)` or similar). Two consumers: wile-goast static analysis (see wile-goast TODO Track C) and standalone algebraic computation.
+
+  **Design & implementation plan:**
+  - [ ] Design document: API shape, composability model, library organization
+  - [ ] Implementation plan: phased delivery, dependency order between structures
+
+  **Algebraic structures:**
+  - [ ] **Partial orders** — `make-partial-order`, `leq?`, `comparable?`, `monotone?` (debug check)
+  - [ ] **Lattices** — `make-lattice`, `join`, `meet`, `bottom`, `top`, `leq?`
+    - [ ] Powerset lattice (set with ⊆ ordering)
+    - [ ] Flat lattice (⊥ < concrete values < ⊤)
+    - [ ] Map/function lattice (keys → lattice values, pointwise join/meet)
+    - [ ] Product lattice (combine lattice dimensions)
+    - [ ] Interval lattice (range analysis)
+  - [ ] **Fixpoint computation** — Kleene iteration with convergence detection, ascending chain condition, optional widening/narrowing
+  - [ ] **Monoids** — `make-monoid`, `monoid-op`, `monoid-identity`, `monoid-fold`
+  - [ ] **Semirings** — `make-semiring`, `(+, ×, 0, 1)` with closure operation
+    - [ ] Boolean semiring (reachability)
+    - [ ] Tropical semiring (shortest/longest paths)
+    - [ ] CFL-reachability semiring
+  - [ ] **Groups** — `make-group`, `group-inverse` (extends monoid)
+  - [ ] **Rings / Fields** — full arithmetic structures for symbolic computation, polynomial manipulation
+  - [ ] **Galois connections** — `make-galois-connection`, `alpha` (abstraction), `gamma` (concretization), soundness check (`alpha ∘ gamma ⊒ id`)
+
+  **Known consumers (wile-goast):**
+
+  | Requirement | Algebra structure | wile-goast consumer |
+  |---|---|---|
+  | Powerset with ⊆ ordering | Lattice (powerset) | `checked-before-use`, liveness, reaching defs |
+  | Flat domain (⊥ < values < ⊤) | Lattice (flat) | Constant propagation |
+  | Map from vars → lattice values | Lattice (map/function) | Any per-variable analysis |
+  | Product of lattices | Lattice (product) | Combining analysis dimensions |
+  | Kleene fixpoint with convergence | Fixpoint combinator | All iterative analyses |
+  | Monotonicity check (debug) | Partial order | Catching buggy transfer functions |
+  | Boolean/tropical/CFL semiring | Semiring | Call graph path queries |
+  | Identity/annihilation rules | Monoid/ring axioms | SSA normalization |
+  | Abstraction/concretization pair | Galois connection | Future abstract domains (signs, intervals) |
+
 - [ ] **Go FFI Phase 3 — Plugin support** [Embedding]: Dynamic extension loading via registry pattern.
 - [x] **OpaqueValue type** [Values, Embedding]: Generic opaque wrapper for Go objects in Scheme. `SchemeString()` → `#<tag:id>`, identity-based equality, `opaque?` and `opaque-tag` predicates. Enables wile-goast shared sessions (Track A1) and other Go-object-wrapping use cases.
 
