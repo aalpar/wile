@@ -182,4 +182,6 @@ See `cmd/CLAUDE.md` for full build commands, dist/ structure, and REPL usage.
 - `docs/dev/DEBUG_METHODOLOGY.md` — Systematic debug logging methodology and Go gotchas
 - `docs/EXTENSIONS.md` — Extension system architecture and authoring guide
 - `docs/EXTENSION_LIBRARIES.md` — R7RS library integration for extensions
+- `docs/design/SOURCE_LOADING.md` — FileResolver chain, embedded stdlib, library import resolution
+- `docs/design/PEEPHOLE_OPTIMIZER.md` — Superinstruction formation, 3-pass pipeline, promoted opcodes
 - `plans/CLAUDE.md` — Active plan files and design documents

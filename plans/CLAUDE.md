@@ -54,6 +54,8 @@ Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wil
 | `docs/design/EMBEDDING.md` | Embedding API design (Engine, Value boundary, interop) |
 | `docs/design/CONTINUATION_ESCAPE_DESIGN.md` | First-class continuation escape mechanism |
 | `docs/design/DELIMITED_CONTINUATIONS.md` | Delimited continuations: prompts, abort, composable |
+| `docs/design/SOURCE_LOADING.md` | FileResolver chain, embedded stdlib, library import resolution |
+| `docs/design/PEEPHOLE_OPTIMIZER.md` | Superinstruction formation, 3-pass pipeline, EditPlan, promoted opcodes, savedCont invariant |
 | `docs/dev/ENVIRONMENT_SYSTEM.md` | Environment system architecture |
 | `docs/dev/NUMERIC_TOWER.md` | Numeric tower (direct dispatch, lattice model) |
 | `docs/dev/R7RS_SEMANTIC_DIFFERENCES.md` | Documented R7RS specification deviations |
