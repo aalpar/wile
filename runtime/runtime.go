@@ -57,14 +57,14 @@ func Compile(ctx context.Context, env *environment.EnvironmentFrame, expr syntax
 
 	expanded, err := machine.NewExpanderTimeContinuation(ctx, env).ExpandExpression(expr)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "expansion error")
+		return nil, werr.WrapForeignErrorWithCause(werr.ErrExpansion, err, "expansion error")
 	}
 
 	// Use inTail=false for top-level expressions
 	cctx := machine.NewCompileTimeCallContext(ctx, false)
 	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "compilation error")
+		return nil, werr.WrapForeignErrorWithCause(werr.ErrCompilation, err, "compilation error")
 	}
 
 	return tpl, nil
@@ -145,12 +145,12 @@ func Load(ctx context.Context, env *environment.EnvironmentFrame, r io.Reader, f
 	// Compile and run
 	tpl, err := Compile(ctx, env, programStx)
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "compile error in %s", filename)
+		return werr.WrapForeignErrorWithCause(werr.ErrCompilation, err, "load %s", filename)
 	}
 
 	_, err = Run(ctx, tpl, env)
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "runtime error in %s", filename)
+		return err
 	}
 
 	return nil

@@ -108,6 +108,10 @@ var (
 	// Engine initialization errors
 	ErrEngineInit = NewStaticError("engine initialization error")
 
+	// Pipeline errors (expansion, compilation, runtime phases)
+	ErrExpansion   = NewStaticError("expansion error")
+	ErrCompilation = NewStaticError("compilation error")
+
 	// Environment errors (keep as panics but use sentinels)
 	ErrMissingNamespace     = NewStaticError("missing Namespace")
 	ErrMissingPhaseRegistry = NewStaticError("missing PhaseRegistry")

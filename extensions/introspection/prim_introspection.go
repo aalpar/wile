@@ -33,7 +33,9 @@ var PrimEnvironmentQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 // Returns the REPL environment (the current top-level environment).
 func PrimInteractionEnvironment(mc *machine.MachineContext) error {
 	topLevel := mc.EnvironmentFrame().Namespace()
-	topLevel.Name = "interaction-environment"
+	if topLevel.Name == "" {
+		topLevel.Name = "interaction-environment"
+	}
 	mc.SetValue(topLevel)
 	return nil
 }
