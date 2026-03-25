@@ -153,11 +153,28 @@ func (p *CompileTimeContinuation) createLetCompileEnv(
 }
 
 // predeclareBodyDefines scans the body for define forms and pre-creates
-// their bindings in the current compile-time env.
+// their bindings in the current compile-time env. Unwraps begin blocks
+// to find defines from macro-expanded forms like define-values.
 func (p *CompileTimeContinuation) predeclareBodyDefines(
 	body []validate.ValidatedExpr,
 ) {
 	for _, expr := range body {
-		p.predeclareDefineBindingFromValidated(expr)
+		p.predeclareDefineFromValidatedRecursive(expr)
+	}
+}
+
+// predeclareDefineFromValidatedRecursive pre-creates bindings for defines,
+// recursing into begin blocks to find defines from macro expansions
+// (e.g., define-values expands to (begin (define ...) ...)).
+func (p *CompileTimeContinuation) predeclareDefineFromValidatedRecursive(
+	expr validate.ValidatedExpr,
+) {
+	switch v := expr.(type) {
+	case *validate.ValidatedDefine:
+		predeclareBinding(p.env, v.Name().Sym, v.Name().Scopes(), v.Name().SourceContext())
+	case *validate.ValidatedBegin:
+		for _, sub := range v.Body() {
+			p.predeclareDefineFromValidatedRecursive(sub)
+		}
 	}
 }
