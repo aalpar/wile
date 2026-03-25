@@ -150,7 +150,7 @@ func TestApplySyntax_Degenerate(t *testing.T) {
 // ============================================================================
 
 func TestBegin_Degenerate(t *testing.T) {
-	// (begin) is valid per R7RS — returns void
+	// (begin) is valid per R7RS; its value is unspecified. This implementation returns void.
 	result, err := testhelpers.RunSchemeCode(t, `(begin)`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, valuestest.SchemeEquals, values.Void)

@@ -4,7 +4,7 @@
 
 **Goal:** Add full-pipeline tests (string → tokenize → parse → expand → compile → run) for degenerate forms of all core special forms and macro-based derived forms, ensuring errors are caught and error messages are verified for macros.
 
-**Architecture:** One test file (`internal/validate/validate_degenerate_test.go`) with table-driven tests using `testhelpers.RunSchemeCode` and `RunSchemeCodeExpectError`. A local `degenerateTestCase` struct adds `WantErr string` for error message substring checking (macros). Tests are organized by form, with success cases for "valid degenerate" forms (e.g., `(and)` → `#t`) and error cases for truly invalid forms.
+**Architecture:** One test file (`internal/validate/validate_degenerate_test.go`) with table-driven tests using `testhelpers.RunSchemeCode` and `RunSchemeCodeExpectError`. A local `degenerateErrorCase` struct adds `WantErr string` for error message substring checking (macros). Tests are organized by form, with success cases for "valid degenerate" forms (e.g., `(and)` → `#t`) and error cases for truly invalid forms.
 
 **Tech Stack:** Go test, `registry/testhelpers`, `quicktest` (`qt`), `valuestest.SchemeEquals`
 
