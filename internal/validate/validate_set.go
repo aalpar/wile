@@ -42,11 +42,13 @@ func validateSetBang(ctx context.Context, env *environment.EnvironmentFrame, pai
 	}
 
 	// Resolve the target binding for mutability tracking.
+	// Uses BindingID (frame + slot) for stable identity — *Binding pointers
+	// into []Binding become stale when append reallocates the backing array.
 	// Opportunistic: if resolution fails, the compiler catches the error.
 	if env != nil {
-		binding := env.GetBindingWithScopes(name.Sym, name.Scopes())
-		if binding != nil {
-			result.markMutated(binding)
+		bid, ok := env.ResolveBindingID(name.Sym, name.Scopes())
+		if ok {
+			result.markMutated(bid)
 		}
 	}
 

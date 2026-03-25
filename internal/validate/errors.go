@@ -59,20 +59,23 @@ func (p ValidationError) ErrorWithMaxOriginDepth(maxDepth int) string {
 type ValidationResult struct {
 	Expr            ValidatedExpr     // nil if validation failed
 	Errors          []ValidationError // All errors encountered
-	mutatedBindings map[*environment.Binding]bool
+	mutatedBindings map[environment.BindingID]bool
 }
 
-// markMutated records that a binding is targeted by set!.
-func (p *ValidationResult) markMutated(b *environment.Binding) {
+// markMutated records that a local binding is targeted by set!.
+// Uses BindingID (frame pointer + slot index) instead of *Binding
+// because LocalEnvironmentFrame.bindings is []Binding (value type);
+// pointers into the slice become stale when append reallocates.
+func (p *ValidationResult) markMutated(bid environment.BindingID) {
 	if p.mutatedBindings == nil {
-		p.mutatedBindings = make(map[*environment.Binding]bool)
+		p.mutatedBindings = make(map[environment.BindingID]bool)
 	}
-	p.mutatedBindings[b] = true
+	p.mutatedBindings[bid] = true
 }
 
 // isMutated returns true if the binding was targeted by set!.
-func (p *ValidationResult) isMutated(b *environment.Binding) bool {
-	return p.mutatedBindings[b]
+func (p *ValidationResult) isMutated(bid environment.BindingID) bool {
+	return p.mutatedBindings[bid]
 }
 
 // Ok returns true if no validation errors were encountered.

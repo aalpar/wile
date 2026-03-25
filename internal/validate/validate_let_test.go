@@ -60,6 +60,7 @@ func TestLetValidation_Errors(t *testing.T) {
 		{Name: "binding too many", Code: `(let ((x 1 2)) 1)`},
 		{Name: "improper binding pair", Code: `(let ((x . 1)) x)`},
 		{Name: "improper bindings list", Code: `(let ((x 1) . y) x)`},
+		{Name: "duplicate binding", Code: `(let ((x 1) (x 2)) x)`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -78,6 +79,9 @@ func TestLetStarValidation(t *testing.T) {
 		{Name: "chain of three", Code: `(let* ((a 1) (b (+ a 1)) (c (+ b 1))) c)`, Expected: values.NewInteger(3)},
 		{Name: "empty bindings", Code: `(let* () 42)`, Expected: values.NewInteger(42)},
 		{Name: "set! in body", Code: `(let* ((x 1)) (set! x 2) x)`, Expected: values.NewInteger(2)},
+		// Duplicate names: R7RS allows shadowing in let* (sequential binding)
+		{Name: "duplicate shadow", Code: `(let* ((x 1) (x 2)) x)`, Expected: values.NewInteger(2)},
+		{Name: "duplicate closure capture", Code: `(let* ((x 1) (f (lambda () x)) (x 2)) (f))`, Expected: values.NewInteger(1)},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -128,6 +132,8 @@ func TestLetrecValidation_Errors(t *testing.T) {
 		{Name: "non-symbol name", Code: `(letrec ((1 2)) 3)`},
 		{Name: "binding too many", Code: `(letrec ((x 1 2)) 1)`},
 		{Name: "improper bindings list", Code: `(letrec ((x 1) . y) 1)`},
+		{Name: "duplicate binding", Code: `(letrec ((x 1) (x 2)) x)`},
+		{Name: "duplicate letrec*", Code: `(letrec* ((x 1) (x 2)) x)`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {

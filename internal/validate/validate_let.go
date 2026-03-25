@@ -99,6 +99,10 @@ func validateLetBindingsAndBody(
 		return nil
 	}
 
+	if !checkDuplicateBindingNames(bindings, formName, result) {
+		return nil
+	}
+
 	childEnv := createLetValidationEnv(env, bindings)
 
 	body, ok := validateBodySlice(ctx, childEnv, elements, 2, result)
@@ -116,7 +120,18 @@ func validateLetBindingsAndBody(
 	}
 }
 
+// letStarRawBinding holds a parsed but not-yet-validated let* binding pair.
+type letStarRawBinding struct {
+	name    *syntax.SyntaxSymbol
+	initStx syntax.SyntaxValue
+}
+
 // validateLetStarBindingsAndBody handles let*: inits validated incrementally.
+//
+// When bindings contain duplicate names, each binding that shadows an earlier
+// one starts a new env frame. This produces nested ValidatedLet nodes that the
+// compiler handles naturally — matching the R7RS semantics of nested let forms.
+// The common case (no duplicates) uses a single flat env frame.
 func validateLetStarBindingsAndBody(
 	ctx context.Context,
 	env *environment.EnvironmentFrame,
@@ -133,10 +148,8 @@ func validateLetStarBindingsAndBody(
 		return nil
 	}
 
-	lenv := environment.NewLocalEnvironment(0)
-	childEnv := environment.NewEnvironmentFrameWithParent(lenv, env)
-
-	var bindings []ValidatedLetBinding
+	// First pass: parse all binding pairs (names + init syntax), validate structure.
+	var raw []letStarRawBinding
 	allOk := true
 	for _, bindingExpr := range bindingsListRaw {
 		bPair, bOk := bindingExpr.(*syntax.SyntaxPair)
@@ -163,24 +176,60 @@ func validateLetStarBindingsAndBody(
 			continue
 		}
 
-		init := validateExpr(ctx, childEnv, elems[1], result)
-		if init == nil {
-			allOk = false
-			continue
-		}
-
-		bindings = append(bindings, ValidatedLetBinding{Name: nameSym, Init: init})
-
-		childEnv.MaybeCreateLocalBindingWithScopes(
-			nameSym.Sym,
-			environment.BindingTypeVariable,
-			nameSym.Scopes(),
-			nameSym.SourceContext(),
-		)
+		raw = append(raw, letStarRawBinding{name: nameSym, initStx: elems[1]})
 	}
-
 	if !allOk {
 		return nil
+	}
+
+	// Check for duplicate names — determines which code path to use.
+	hasDups := false
+	if len(raw) >= 2 {
+		seen := make(map[string]bool, len(raw))
+		for _, r := range raw {
+			if seen[r.name.Sym.Key] {
+				hasDups = true
+				break
+			}
+			seen[r.name.Sym.Key] = true
+		}
+	}
+
+	if !hasDups {
+		return validateLetStarFlat(ctx, env, formName, source, raw, elements, result)
+	}
+	return validateLetStarNested(ctx, env, formName, source, raw, elements, result)
+}
+
+// validateLetStarFlat is the efficient single-frame path for let* without
+// duplicate binding names. All bindings share one env frame.
+func validateLetStarFlat(
+	ctx context.Context,
+	env *environment.EnvironmentFrame,
+	formName string,
+	source *syntax.SourceContext,
+	raw []letStarRawBinding,
+	elements []syntax.SyntaxValue,
+	result *ValidationResult,
+) ValidatedExpr {
+	lenv := environment.NewLocalEnvironment(0)
+	childEnv := environment.NewEnvironmentFrameWithParent(lenv, env)
+
+	var bindings []ValidatedLetBinding
+	for _, r := range raw {
+		init := validateExpr(ctx, childEnv, r.initStx, result)
+		if init == nil {
+			return nil
+		}
+
+		bindings = append(bindings, ValidatedLetBinding{Name: r.name, Init: init})
+
+		childEnv.MaybeCreateLocalBindingWithScopes(
+			r.name.Sym,
+			environment.BindingTypeVariable,
+			r.name.Scopes(),
+			r.name.SourceContext(),
+		)
 	}
 
 	body, ok := validateBodySlice(ctx, childEnv, elements, 2, result)
@@ -196,6 +245,73 @@ func validateLetStarBindingsAndBody(
 		Bindings:      bindings,
 		body:          body,
 	}
+}
+
+// validateLetStarNested handles let* with duplicate binding names by nesting
+// each binding in its own env frame. Produces nested ValidatedLet nodes that
+// the compiler handles naturally, matching R7RS nested-let semantics.
+func validateLetStarNested(
+	ctx context.Context,
+	env *environment.EnvironmentFrame,
+	formName string,
+	source *syntax.SourceContext,
+	raw []letStarRawBinding,
+	elements []syntax.SyntaxValue,
+	result *ValidationResult,
+) ValidatedExpr {
+	// Validate each binding incrementally, creating a new env frame per binding.
+	type validatedBinding struct {
+		binding  ValidatedLetBinding
+		childEnv *environment.EnvironmentFrame
+	}
+	validated := make([]validatedBinding, 0, len(raw))
+	currentEnv := env
+	for _, r := range raw {
+		init := validateExpr(ctx, currentEnv, r.initStx, result)
+		if init == nil {
+			return nil
+		}
+
+		lenv := environment.NewLocalEnvironment(0)
+		childEnv := environment.NewEnvironmentFrameWithParent(lenv, currentEnv)
+		childEnv.MaybeCreateLocalBindingWithScopes(
+			r.name.Sym,
+			environment.BindingTypeVariable,
+			r.name.Scopes(),
+			r.name.SourceContext(),
+		)
+
+		validated = append(validated, validatedBinding{
+			binding:  ValidatedLetBinding{Name: r.name, Init: init},
+			childEnv: childEnv,
+		})
+		currentEnv = childEnv
+	}
+
+	// Validate body in innermost env
+	body, ok := validateBodySlice(ctx, currentEnv, elements, 2, result)
+	if !ok {
+		return nil
+	}
+
+	// Build nested ValidatedLet from innermost to outermost.
+	// Each binding wraps the next as its body.
+	var innerBody []ValidatedExpr
+	innerBody = body
+	for i := len(validated) - 1; i >= 0; i-- {
+		vb := validated[i]
+		markMutableBindings(vb.childEnv, []ValidatedLetBinding{vb.binding}, result)
+		node := &ValidatedLet{
+			validatedBase: validatedBase{formName: formName, source: source},
+			Kind:          LetKindLetStar,
+			Bindings:      []ValidatedLetBinding{vb.binding},
+			body:          innerBody,
+		}
+		innerBody = []ValidatedExpr{node}
+	}
+
+	// The outermost node is innerBody[0]
+	return innerBody[0]
 }
 
 // validateLetrecBindingsAndBody handles letrec/letrec*: all bindings visible
@@ -264,6 +380,24 @@ func validateLetrecBindingsAndBody(
 		return nil
 	}
 
+	// Check for duplicate binding names (R7RS §4.2.2)
+	if len(nameSyms) >= 2 {
+		seen := make(map[string]bool, len(nameSyms))
+		for _, ns := range nameSyms {
+			key := ns.Sym.Key
+			if seen[key] {
+				result.addErrorf(getSourceContext(ns), formName,
+					"duplicate binding name %q", key)
+				allOk = false
+				continue
+			}
+			seen[key] = true
+		}
+		if !allOk {
+			return nil
+		}
+	}
+
 	// Second pass: validate init expressions in child env
 	var bindings []ValidatedLetBinding
 	for i, initExpr := range initExprs {
@@ -319,6 +453,9 @@ func validateNamedLet(
 		var ok bool
 		bindings, ok = validateLetBindingPairs(ctx, env, bindingsPair, "let", result)
 		if !ok {
+			return nil
+		}
+		if !checkDuplicateBindingNames(bindings, "let", result) {
 			return nil
 		}
 	}
@@ -387,6 +524,33 @@ func buildNamedLetLambda(
 }
 
 // --- Shared helpers ---
+
+// checkDuplicateBindingNames reports an error for each duplicate name in
+// the binding list. R7RS §4.2.2: "It is an error for a ⟨variable⟩ to
+// appear more than once" in let, letrec, and letrec*. (let* allows
+// duplicates — sequential shadowing.)
+func checkDuplicateBindingNames(
+	bindings []ValidatedLetBinding,
+	formName string,
+	result *ValidationResult,
+) bool {
+	if len(bindings) < 2 {
+		return true
+	}
+	seen := make(map[string]bool, len(bindings))
+	allOk := true
+	for _, b := range bindings {
+		key := b.Name.Sym.Key
+		if seen[key] {
+			result.addErrorf(getSourceContext(b.Name), formName,
+				"duplicate binding name %q", key)
+			allOk = false
+			continue
+		}
+		seen[key] = true
+	}
+	return allOk
+}
 
 // validateLetBindingPairs parses and validates a ((name val) ...) binding list.
 func validateLetBindingPairs(
@@ -497,8 +661,8 @@ func markMutableBindings(
 		return
 	}
 	for i, b := range bindings {
-		binding := childEnv.GetBindingWithScopes(b.Name.Sym, b.Name.Scopes())
-		if binding != nil && result.isMutated(binding) {
+		bid, ok := childEnv.ResolveBindingID(b.Name.Sym, b.Name.Scopes())
+		if ok && result.isMutated(bid) {
 			bindings[i].Mutable = true
 		}
 	}

@@ -114,7 +114,7 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 					// Override formName only for passthrough forms (prefixed with "@")
 					// that haven't been given a proper form name by the validator.
 					// This allows validators like validateNamedLet to return a type
-					// with a different formName than the keyword (e.g., *ValidatedLetrec
+					// with a different formName than the keyword (e.g., *ValidatedLet
 					// with formName "letrec" for the keyword "let").
 					fn := expr.FormName()
 					if fn == "" || fn[0] == '@' {
