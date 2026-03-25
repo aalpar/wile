@@ -1,7 +1,7 @@
 # Algebra Library Design
 
 **Date:** 2026-03-25
-**Status:** Draft
+**Status:** Implemented
 **Version target:** TBD
 
 ## Goal

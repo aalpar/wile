@@ -1309,7 +1309,7 @@ Create `test/wile/algebra-ring-test.scm`:
 
 (test-group "with-field"
   (let ((F (rational-field)))
-    (test 7/3 (with-field F (plus times zero one negate reciprocal)
+    (test 5/3 (with-field F (plus times zero one negate reciprocal)
                 (plus (times 2 (reciprocal 3)) one)))))
 
 (test-group "validate-field"
@@ -1577,15 +1577,14 @@ Create `test/wile/algebra-galois-test.scm`:
       (cond ((< n 0) 'neg)
             ((= n 0) 'zero)
             ((> n 0) 'pos)))
-    ;; gamma: sign → "most precise" concrete representative
-    ;; For soundness checking we need gamma to return a concrete value
-    ;; such that alpha(gamma(a)) ≤ a. Using representative values.
+    ;; gamma: sign → best concrete representative
+    ;; For extensiveness (c ≤ γ(α(c))), gamma must over-approximate.
     (lambda (s)
       (cond ((eq? s 'neg) -1)
             ((eq? s 'zero) 0)
-            ((eq? s 'pos) 1)
-            ((eq? s 'sign-bottom) 0)   ; arbitrary
-            ((eq? s 'sign-top) 0)))    ; arbitrary
+            ((eq? s 'pos) +inf.0)
+            ((eq? s 'sign-bottom) 0)
+            ((eq? s 'sign-top) +inf.0)))
     int-po
     sign-lattice))
 
@@ -1599,9 +1598,9 @@ Create `test/wile/algebra-galois-test.scm`:
   (test 'pos  (gc-alpha sign-gc 42)))
 
 (test-group "gc-gamma"
-  (test -1 (gc-gamma sign-gc 'neg))
-  (test 0  (gc-gamma sign-gc 'zero))
-  (test 1  (gc-gamma sign-gc 'pos)))
+  (test -1    (gc-gamma sign-gc 'neg))
+  (test 0     (gc-gamma sign-gc 'zero))
+  (test +inf.0 (gc-gamma sign-gc 'pos)))
 
 (test-group "gc-accessors"
   (test #t (partial-order? (gc-concrete-po sign-gc)))
