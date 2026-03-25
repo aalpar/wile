@@ -431,8 +431,8 @@ func TestEvalDynamicContextInheritance(t *testing.T) {
 func TestEnvironmentWithLibraryRegistry(t *testing.T) {
 	c := qt.New(t)
 
-	// lib/ is at repo root, test is at internal/extensions/eval/
-	libDir := filepath.Join("..", "..", "..", "lib")
+	// stdlib/lib/ is at repo root, test is at internal/extensions/eval/
+	libDir := filepath.Join("..", "..", "..", "stdlib", "lib")
 	engine, err := wile.NewEngine(context.Background(),
 		wile.WithExtension(exteval.Extension),
 		wile.WithLibraryPaths(libDir),

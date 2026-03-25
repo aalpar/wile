@@ -204,11 +204,11 @@ KANREN_BENCH=examples/benchmarks/kanren-benchmark.scm
 .PHONY: bench-kanren
 bench-kanren: build
 	@if command -v gtime >/dev/null 2>&1; then \
-		SCHEME_LIBRARY_PATH=lib gtime -v $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_BENCH) 2>&1; \
+		SCHEME_LIBRARY_PATH=stdlib/lib gtime -v $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_BENCH) 2>&1; \
 	elif [ -x /usr/bin/time ]; then \
-		SCHEME_LIBRARY_PATH=lib /usr/bin/time -l $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_BENCH) 2>&1; \
+		SCHEME_LIBRARY_PATH=stdlib/lib /usr/bin/time -l $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_BENCH) 2>&1; \
 	else \
-		SCHEME_LIBRARY_PATH=lib time $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_BENCH); \
+		SCHEME_LIBRARY_PATH=stdlib/lib time $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_BENCH); \
 	fi
 
 # Run canonical Gabriel benchmark suite (16 benchmarks).

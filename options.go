@@ -98,7 +98,7 @@ func WithMaxCallDepth(n uint64) EngineOption {
 // Without this option, (import ...) raises a configuration error.
 //
 // Paths are searched in order: user-supplied paths first, then the defaults
-// ("." and "./lib"). An empty call WithLibraryPaths() enables library support
+// ("." and "./stdlib/lib"). An empty call WithLibraryPaths() enables library support
 // with defaults only.
 //
 // Example:
@@ -106,7 +106,7 @@ func WithMaxCallDepth(n uint64) EngineOption {
 //	eng, err := wile.NewEngine(ctx,
 //	    wile.WithLibraryPaths("/app/libs", "./vendor"),
 //	)
-//	// search order: /app/libs, ./vendor, ., ./lib
+//	// search order: /app/libs, ./vendor, ., ./stdlib/lib
 func WithLibraryPaths(paths ...string) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.libraryEnabled = true
@@ -244,7 +244,7 @@ func WithSourceOS() EngineOption {
 //
 //	eng, err := wile.NewEngine(ctx,
 //	    append(wile.SafeExtensions(),
-//	        wile.WithLibraryPaths("./lib"),
+//	        wile.WithLibraryPaths("./stdlib/lib"),
 //	    )...,
 //	)
 func SafeExtensions() []EngineOption {

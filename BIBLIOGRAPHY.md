@@ -537,7 +537,7 @@ Standard for floating-point representation used by `Float` type.
 
 ### SRFI-1: List Library
 
-Canonical definitions for list processing procedures including `fold`. Wile's implementation in `lib/srfi/1/` is from Chibi-Scheme.
+Canonical definitions for list processing procedures including `fold`. Wile's implementation in `stdlib/lib/srfi/1/` is from Chibi-Scheme.
 
 - **URL**: https://srfi.schemers.org/srfi-1/srfi-1.html
 
@@ -638,7 +638,7 @@ Implementation model for delimited continuations (prompt tags, composable contin
 
 ### Chibi-Scheme (Alex Shinn)
 
-Source of portable Scheme library code used in Wile. The `lib/chibi/` directory contains Chibi-Scheme's test framework, diff library, optional argument macros, and ANSI terminal library. The `lib/srfi/1/` directory contains Chibi-Scheme's SRFI-1 list library implementation split into functional modules.
+Source of portable Scheme library code used in Wile. The `stdlib/lib/chibi/` directory contains Chibi-Scheme's test framework, diff library, optional argument macros, and ANSI terminal library. The `stdlib/lib/srfi/1/` directory contains Chibi-Scheme's SRFI-1 list library implementation split into functional modules.
 
 - **Homepage**: https://synthcode.com/wiki/chibi-scheme
 - **Source**: https://github.com/ashinn/chibi-scheme

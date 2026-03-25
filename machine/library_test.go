@@ -75,7 +75,7 @@ func TestLibraryRegistry(t *testing.T) {
 	paths := registry.GetSearchPaths()
 	c.Assert(len(paths), qt.Equals, 2)
 	c.Assert(paths[0], qt.Equals, ".")
-	c.Assert(paths[1], qt.Equals, "./lib")
+	c.Assert(paths[1], qt.Equals, "./stdlib/lib")
 
 	// Test SetSearchPaths
 	registry.SetSearchPaths([]string{"/custom/path"})

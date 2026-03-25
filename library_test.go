@@ -59,7 +59,7 @@ func TestWithLibraryPaths_DefaultsOnly(t *testing.T) {
 	ctx := context.Background()
 
 	// WithLibraryPaths() with no args enables library support with defaults.
-	// We can't easily test that defaults work without placing files in "." or "./lib",
+	// We can't easily test that defaults work without placing files in "." or "./stdlib/lib",
 	// so we verify that the engine starts without error and the library system is active
 	// (importing a nonexistent library gives a "could not find" error, not a config error).
 	engine, err := wile.NewEngine(ctx, wile.WithLibraryPaths())

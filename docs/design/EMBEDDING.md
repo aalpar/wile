@@ -186,7 +186,7 @@ var schemeFS embed.FS
 engine, err := wile.NewEngine(ctx,
     wile.WithSourceFS(schemeFS),  // searched first
     wile.WithSourceOS(),          // OS filesystem searched last
-    wile.WithLibraryPaths("lib"),
+    wile.WithLibraryPaths("stdlib/lib"),
 )
 ```
 

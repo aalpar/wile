@@ -102,7 +102,7 @@ func resolveVersion() (version, sha string) {
 // Search path order (highest priority first):
 //  1. -L command line flag paths
 //  2. SCHEME_LIBRARY_PATH environment variable paths
-//  3. Default paths (".", "./lib")
+//  3. Default paths (".", "./stdlib/lib")
 func initLibraryRegistry(_ context.Context) *machine.LibraryRegistry {
 	registry := machine.NewLibraryRegistry()
 

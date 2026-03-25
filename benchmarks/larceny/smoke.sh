@@ -5,7 +5,7 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 SCHEME="$DIR/wile"
-LIBDIR="$(cd "$DIR/../.." && pwd)/lib"
+LIBDIR="$(cd "$DIR/../.." && pwd)/stdlib/lib"
 SRC="$DIR/src"
 INPUTS="$DIR/inputs"
 TMP="$DIR/tmp"

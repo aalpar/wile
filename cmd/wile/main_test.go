@@ -201,37 +201,37 @@ func TestInitLibraryRegistry(t *testing.T) {
 			name:         "no paths",
 			envPath:      "",
 			cmdLinePath:  "",
-			wantContains: []string{".", "./lib"}, // Default paths
+			wantContains: []string{".", "./stdlib/lib"}, // Default paths
 		},
 		{
 			name:         "env var only",
 			envPath:      "/usr/share/wile" + string(os.PathListSeparator) + "/opt/wile",
 			cmdLinePath:  "",
-			wantContains: []string{".", "./lib", "/usr/share/wile", "/opt/wile"},
+			wantContains: []string{".", "./stdlib/lib", "/usr/share/wile", "/opt/wile"},
 		},
 		{
 			name:         "command line only",
 			envPath:      "",
 			cmdLinePath:  "/home/user/.scheme" + string(os.PathListSeparator) + "/tmp/libs",
-			wantContains: []string{".", "./lib", "/home/user/.scheme", "/tmp/libs"},
+			wantContains: []string{".", "./stdlib/lib", "/home/user/.scheme", "/tmp/libs"},
 		},
 		{
 			name:         "both env and command line",
 			envPath:      "/usr/share/wile",
 			cmdLinePath:  "/home/user/.scheme",
-			wantContains: []string{".", "./lib", "/usr/share/wile", "/home/user/.scheme"},
+			wantContains: []string{".", "./stdlib/lib", "/usr/share/wile", "/home/user/.scheme"},
 		},
 		{
 			name:         "empty components in env",
 			envPath:      string(os.PathListSeparator) + "/usr/share/wile" + string(os.PathListSeparator) + string(os.PathListSeparator),
 			cmdLinePath:  "",
-			wantContains: []string{".", "./lib", "/usr/share/wile"},
+			wantContains: []string{".", "./stdlib/lib", "/usr/share/wile"},
 		},
 		{
 			name:         "empty components in command line",
 			envPath:      "",
 			cmdLinePath:  string(os.PathListSeparator) + "/home/user/.scheme" + string(os.PathListSeparator) + string(os.PathListSeparator),
-			wantContains: []string{".", "./lib", "/home/user/.scheme"},
+			wantContains: []string{".", "./stdlib/lib", "/home/user/.scheme"},
 		},
 	}
 

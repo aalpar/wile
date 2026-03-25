@@ -22,7 +22,7 @@
     ;; "test/regression/issue-123-example.scm"
 
     ;; Library tests (example paths)
-    ;; "lib/srfi/1/test/fold-test.scm"
+    ;; "stdlib/lib/srfi/1/test/fold-test.scm"
     ))
 
 (define (run-test-file path)
