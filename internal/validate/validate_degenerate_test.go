@@ -137,7 +137,7 @@ func TestWithContinuationMark_Degenerate(t *testing.T) {
 // apply — degenerate forms (syntax validation)
 // ============================================================================
 
-func TestApply_Degenerate_Syntax(t *testing.T) {
+func TestApplySyntax_Degenerate(t *testing.T) {
 	tcs := []degenerateErrorCase{
 		{Name: "no args", Code: `(apply)`, WantErr: "apply"},
 		{Name: "one arg", Code: `(apply +)`, WantErr: "apply"},

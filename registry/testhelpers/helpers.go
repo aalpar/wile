@@ -21,12 +21,22 @@ package testhelpers
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/aalpar/wile/internal/bootstrap"
 	"github.com/aalpar/wile/values"
 )
+
+// panicNonError wraps a recovered non-error panic value as an error.
+type panicNonError struct {
+	v any
+}
+
+func (p panicNonError) Error() string {
+	return fmt.Sprintf("panic (non-error): %v", p.v)
+}
 
 // RunSchemeCode parses and runs Scheme source code string using a fresh
 // environment with all core primitives and extensions loaded.
@@ -60,10 +70,11 @@ func RunSchemeCodeExpectError(t *testing.T, code string) (err error) {
 	defer func() {
 		r := recover()
 		if r != nil {
-			// Panic was expected, convert to error
 			e, ok := r.(error)
 			if ok {
 				err = e
+			} else {
+				err = panicNonError{v: r}
 			}
 		}
 	}()
