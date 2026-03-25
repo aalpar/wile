@@ -165,12 +165,13 @@ func ResetCurrentOutputPort() {
 }
 
 // GetCurrentErrorPort returns the current error port from the parameter.
-func GetCurrentErrorPort() *values.CharacterOutputPort {
+// Returns values.OutputPort to support parameterize with non-CharacterOutputPort types.
+func GetCurrentErrorPort() values.OutputPort {
 	if currentErrorPortParam == nil {
 		// Fallback for tests that don't call InitState
 		return values.NewCharacterOutputPortFromWriter(os.Stderr)
 	}
-	return currentErrorPortParam.Value().(*values.CharacterOutputPort)
+	return currentErrorPortParam.Value().(values.OutputPort)
 }
 
 // GetCurrentErrorPortParam returns the current-error-port parameter object.

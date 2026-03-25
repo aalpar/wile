@@ -96,14 +96,16 @@ func Load(ctx context.Context, env *environment.EnvironmentFrame, r io.Reader, f
 	// Mirrors PrimLoad in internal/extensions/eval/prim_eval.go:111-116.
 	if filename != "" {
 		absPath, absErr := filepath.Abs(filename)
-		if absErr == nil {
-			stack := env.LoadPathStack()
-			if stack != nil {
-				pushErr := stack.Push(absPath)
-				if pushErr == nil {
-					defer stack.Pop()
-				}
+		if absErr != nil {
+			return werr.WrapForeignErrorf(absErr, "load: cannot resolve path %q", filename)
+		}
+		stack := env.LoadPathStack()
+		if stack != nil {
+			pushErr := stack.Push(absPath)
+			if pushErr != nil {
+				return werr.WrapForeignErrorf(pushErr, "load: cannot push load path %q", absPath)
 			}
+			defer stack.Pop()
 		}
 	}
 

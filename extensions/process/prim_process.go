@@ -16,6 +16,7 @@ package process
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"syscall"
 
@@ -44,8 +45,8 @@ func PrimSystem(mc *machine.MachineContext) error {
 	cmd := exec.CommandContext(mc.Context(), "/bin/sh", "-c", command.Value)
 	runErr := cmd.Run()
 	if runErr != nil {
-		exitErr, ok := runErr.(*exec.ExitError)
-		if ok {
+		var exitErr *exec.ExitError
+		if errors.As(runErr, &exitErr) {
 			mc.SetValue(values.NewInteger(int64(exitErr.ExitCode())))
 			return nil
 		}
@@ -179,8 +180,8 @@ func PrimProcessWait(mc *machine.MachineContext) error {
 	}
 	waitErr := cmd.Wait()
 	if waitErr != nil {
-		exitErr, ok := waitErr.(*exec.ExitError)
-		if ok {
+		var exitErr *exec.ExitError
+		if errors.As(waitErr, &exitErr) {
 			mc.SetValue(values.NewInteger(int64(exitErr.ExitCode())))
 			return nil
 		}

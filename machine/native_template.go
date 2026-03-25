@@ -252,7 +252,13 @@ func (p *NativeTemplate) AppendOperationsWithSource(src *syntax.SourceContext, o
 	for _, op := range ops {
 		instr, ok := operationToInstruction(op)
 		if !ok {
-			instr = p.AppendSideTableOp(op.(InlinedOperation))
+			iop, iok := op.(InlinedOperation)
+			if !iok {
+				panic(werr.WrapForeignErrorf(
+					werr.ErrInvalidArgument,
+					"AppendOperationsWithSource: operation %T does not implement InlinedOperation", op))
+			}
+			instr = p.AppendSideTableOp(iop)
 		}
 		p.code = append(p.code, instr)
 		p.sourceRefs = append(p.sourceRefs, idx)
