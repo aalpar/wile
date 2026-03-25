@@ -351,6 +351,85 @@ func TestValidatedDynamicWind_Getters(t *testing.T) {
 	c.Assert(vdw.FormName(), qt.Equals, "dw-renamed")
 }
 
+// Binding form types
+
+func TestValidatedLet_Getters(t *testing.T) {
+	c := qt.New(t)
+	sym := syntax.NewSyntaxSymbol("x", nil)
+	init := &ValidatedLiteral{
+		validatedBase: validatedBase{formName: "@literal"},
+		Value:         syntax.NewSyntaxObject(values.NewInteger(1), nil),
+	}
+	body := &ValidatedSymbol{
+		validatedBase: validatedBase{formName: "@symbol"},
+		Symbol:        sym,
+	}
+
+	vl := &ValidatedLet{
+		validatedBase: validatedBase{formName: "let"},
+		Bindings:      []ValidatedLetBinding{{Name: sym, Init: init}},
+		body:          []ValidatedExpr{body},
+	}
+	c.Assert(vl.FormName(), qt.Equals, "let")
+	c.Assert(len(vl.Bindings), qt.Equals, 1)
+	c.Assert(vl.Bindings[0].Name, qt.Equals, sym)
+	c.Assert(vl.Bindings[0].Mutable, qt.IsFalse)
+	c.Assert(len(vl.Body()), qt.Equals, 1)
+}
+
+func TestValidatedLetStar_Getters(t *testing.T) {
+	c := qt.New(t)
+	sym := syntax.NewSyntaxSymbol("x", nil)
+	init := &ValidatedLiteral{
+		validatedBase: validatedBase{formName: "@literal"},
+		Value:         syntax.NewSyntaxObject(values.NewInteger(1), nil),
+	}
+	body := &ValidatedSymbol{
+		validatedBase: validatedBase{formName: "@symbol"},
+		Symbol:        sym,
+	}
+
+	vls := &ValidatedLetStar{
+		validatedBase: validatedBase{formName: "let*"},
+		Bindings:      []ValidatedLetBinding{{Name: sym, Init: init}},
+		body:          []ValidatedExpr{body},
+	}
+	c.Assert(vls.FormName(), qt.Equals, "let*")
+	c.Assert(len(vls.Body()), qt.Equals, 1)
+}
+
+func TestValidatedLetrec_Getters(t *testing.T) {
+	c := qt.New(t)
+	sym := syntax.NewSyntaxSymbol("f", nil)
+	init := &ValidatedLiteral{
+		validatedBase: validatedBase{formName: "@literal"},
+		Value:         syntax.NewSyntaxObject(values.NewInteger(1), nil),
+	}
+	body := &ValidatedSymbol{
+		validatedBase: validatedBase{formName: "@symbol"},
+		Symbol:        sym,
+	}
+
+	vl := &ValidatedLetrec{
+		validatedBase: validatedBase{formName: "letrec"},
+		Bindings:      []ValidatedLetBinding{{Name: sym, Init: init}},
+		body:          []ValidatedExpr{body},
+	}
+	c.Assert(vl.FormName(), qt.Equals, "letrec")
+	c.Assert(vl.LetrecStar, qt.IsFalse)
+	c.Assert(len(vl.Body()), qt.Equals, 1)
+
+	vls := &ValidatedLetrec{
+		validatedBase: validatedBase{formName: "letrec*"},
+		Bindings:      []ValidatedLetBinding{{Name: sym, Init: init}},
+		LetrecStar:    true,
+		body:          []ValidatedExpr{body},
+	}
+	c.Assert(vls.LetrecStar, qt.IsTrue)
+	c.Assert(len(vls.Bindings), qt.Equals, 1)
+	c.Assert(len(vls.Body()), qt.Equals, 1)
+}
+
 // Passthrough form (ValidatedLiteral for let-syntax)
 
 func TestValidatedLiteral_Passthrough(t *testing.T) {

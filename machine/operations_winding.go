@@ -125,3 +125,27 @@ func (p *OperationPopEnv) EqualTo(other values.Value) bool {
 	v, ok := other.(*OperationPopEnv)
 	return sameType(p, v, ok)
 }
+
+// --- PushEnv ---
+
+// OperationPushEnv allocates a new environment frame with the specified
+// number of local binding slots and chains it to the current environment.
+// Paired with OpPopEnv which restores the parent.
+type OperationPushEnv struct {
+	OperationBase
+	SlotCount int
+}
+
+func NewOperationPushEnv(slotCount int) *OperationPushEnv {
+	return &OperationPushEnv{
+		OperationBase: NewOperationBaseWithGoName("operation:push-env", "PushEnv"),
+		SlotCount:     slotCount,
+	}
+}
+
+func (p *OperationPushEnv) EqualTo(other values.Value) bool {
+	v, ok := other.(*OperationPushEnv)
+	return fieldMatches(p, v, ok, func(op *OperationPushEnv) int {
+		return op.SlotCount
+	})
+}

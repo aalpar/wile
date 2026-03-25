@@ -41,6 +41,15 @@ func validateSetBang(ctx context.Context, env *environment.EnvironmentFrame, pai
 		return nil
 	}
 
+	// Resolve the target binding for mutability tracking.
+	// Opportunistic: if resolution fails, the compiler catches the error.
+	if env != nil {
+		binding := env.GetBindingWithScopes(name.Sym, name.Scopes())
+		if binding != nil {
+			result.markMutated(binding)
+		}
+	}
+
 	return &ValidatedSetBang{
 		validatedBase: validatedBase{formName: "set!", source: source},
 		Name:          name,

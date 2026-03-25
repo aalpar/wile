@@ -429,6 +429,13 @@ func (p *MachineContext) Run() error {
 			mc.SetValue(mc.evals.PeekK(int(instr.Arg)))
 			mc.pc++
 
+		case OpPushEnv:
+			slotCount := int(instr.Arg)
+			lenv := environment.NewLocalEnvironment(slotCount)
+			mc.env = environment.NewEnvironmentFrameWithParent(lenv, mc.env)
+			mc.envPooled = false
+			mc.pc++
+
 		// --- Wave 3: two-operand operations (bit-packed slot|depth) ---
 
 		case OpLoadLocal:

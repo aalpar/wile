@@ -150,6 +150,8 @@ func instructionToOperation(instr Instruction) Operation {
 		return NewOperationLoadCachedBinding(instr.Arg)
 	case OpPeekK:
 		return NewOperationPeekK(int(instr.Arg))
+	case OpPushEnv:
+		return NewOperationPushEnv(int(instr.Arg))
 
 	// --- Wave 3: two-operand operations (bit-packed LocalIndex) ---
 	case OpLoadLocal:
@@ -305,6 +307,8 @@ func operationToInstruction(op Operation) (Instruction, bool) {
 		return Instruction{Op: OpStoreGlobal, Arg: int32(v.LiteralIndex)}, true
 	case *OperationPeekK:
 		return Instruction{Op: OpPeekK, Arg: int32(v.Depth)}, true
+	case *OperationPushEnv:
+		return Instruction{Op: OpPushEnv, Arg: int32(v.SlotCount)}, true
 
 	// --- Wave 3: two-operand operations (bit-packed LocalIndex) ---
 	case *OperationLoadLocalByLocalIndexImmediate:

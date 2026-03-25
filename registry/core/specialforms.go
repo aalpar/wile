@@ -47,6 +47,11 @@ var compileTimeBindings = []string{
 	"apply",
 	// Racket-style continuation marks
 	"with-continuation-mark",
+	// R7RS §4.2.2: binding forms (core compiled, not macros)
+	"let",
+	"let*",
+	"letrec",
+	"letrec*",
 	// Auxiliary syntax (R7RS §4.2.1, §4.2.5)
 	// These are literals used in syntax-rules patterns for cond and case
 	"else",

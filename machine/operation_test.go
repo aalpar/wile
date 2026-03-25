@@ -604,6 +604,21 @@ func TestOperationPeekKEqualTo(t *testing.T) {
 	qt.Assert(t, nilOp.EqualTo(nilOp), qt.IsTrue)
 }
 
+// TestOperationPushEnvEqualTo tests PushEnv EqualTo
+func TestOperationPushEnvEqualTo(t *testing.T) {
+	op1 := NewOperationPushEnv(3)
+	op2 := NewOperationPushEnv(3)
+	op3 := NewOperationPushEnv(5)
+
+	var nilOp *OperationPushEnv
+
+	qt.Assert(t, op1.EqualTo(op2), qt.IsTrue)
+	qt.Assert(t, op1.EqualTo(op3), qt.IsFalse)
+	qt.Assert(t, op1.EqualTo(nilOp), qt.IsFalse)
+	qt.Assert(t, nilOp.EqualTo(nilOp), qt.IsTrue)
+	qt.Assert(t, op1.EqualTo(NewOperationPopEnv()), qt.IsFalse)
+}
+
 // TestOperationBranchMethods tests Branch operation methods
 func TestOperationBranchMethods(t *testing.T) {
 	op := NewOperationBranchOffsetImmediate(10)

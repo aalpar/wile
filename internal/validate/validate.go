@@ -111,7 +111,15 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 			if spec != nil && spec.Validate != nil {
 				expr := spec.Validate(ctx, env, pair, result)
 				if expr != nil {
-					expr.SetFormName(symVal.Key)
+					// Override formName only for passthrough forms (prefixed with "@")
+					// that haven't been given a proper form name by the validator.
+					// This allows validators like validateNamedLet to return a type
+					// with a different formName than the keyword (e.g., *ValidatedLetrec
+					// with formName "letrec" for the keyword "let").
+					fn := expr.FormName()
+					if fn == "" || fn[0] == '@' {
+						expr.SetFormName(symVal.Key)
+					}
 				}
 				return expr
 			}

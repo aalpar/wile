@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
 )
 
@@ -56,8 +57,22 @@ func (p ValidationError) ErrorWithMaxOriginDepth(maxDepth int) string {
 
 // ValidationResult collects all errors from validation
 type ValidationResult struct {
-	Expr   ValidatedExpr     // nil if validation failed
-	Errors []ValidationError // All errors encountered
+	Expr            ValidatedExpr     // nil if validation failed
+	Errors          []ValidationError // All errors encountered
+	mutatedBindings map[*environment.Binding]bool
+}
+
+// markMutated records that a binding is targeted by set!.
+func (p *ValidationResult) markMutated(b *environment.Binding) {
+	if p.mutatedBindings == nil {
+		p.mutatedBindings = make(map[*environment.Binding]bool)
+	}
+	p.mutatedBindings[b] = true
+}
+
+// isMutated returns true if the binding was targeted by set!.
+func (p *ValidationResult) isMutated(b *environment.Binding) bool {
+	return p.mutatedBindings[b]
 }
 
 // Ok returns true if no validation errors were encountered.

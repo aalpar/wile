@@ -244,3 +244,54 @@ type ValidatedApply struct {
 	PrefixArgs []ValidatedExpr
 	FinalList  ValidatedExpr
 }
+
+// --- Binding forms ---
+
+// ValidatedLetBinding represents a single (name init-expr) binding pair.
+// Mutable is true if the binding is targeted by set! in the body.
+type ValidatedLetBinding struct {
+	Name    *syntax.SyntaxSymbol
+	Init    ValidatedExpr
+	Mutable bool
+}
+
+// ValidatedLet represents (let ((name val) ...) body ...).
+type ValidatedLet struct {
+	validatedBase
+	Bindings []ValidatedLetBinding
+	body     []ValidatedExpr
+}
+
+// Body returns the body expressions.
+func (p *ValidatedLet) Body() []ValidatedExpr {
+	return p.body
+}
+
+// ValidatedLetStar represents (let* ((name val) ...) body ...).
+type ValidatedLetStar struct {
+	validatedBase
+	Bindings []ValidatedLetBinding
+	body     []ValidatedExpr
+}
+
+// Body returns the body expressions.
+func (p *ValidatedLetStar) Body() []ValidatedExpr {
+	return p.body
+}
+
+// ValidatedLetrec represents (letrec ((name val) ...) body ...)
+// and (letrec* ((name val) ...) body ...).
+// LetrecStar distinguishes the two: false = letrec, true = letrec*.
+// Tag is non-nil for named let (compiled as letrec).
+type ValidatedLetrec struct {
+	validatedBase
+	Bindings   []ValidatedLetBinding
+	LetrecStar bool
+	Tag        *syntax.SyntaxSymbol
+	body       []ValidatedExpr
+}
+
+// Body returns the body expressions.
+func (p *ValidatedLetrec) Body() []ValidatedExpr {
+	return p.body
+}

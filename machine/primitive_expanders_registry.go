@@ -68,6 +68,10 @@ func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
 		{"lambda", (*ExpanderTimeContinuation).expandLambdaForm},
 		{"case-lambda", (*ExpanderTimeContinuation).expandCaseLambdaForm},
 		{"with-continuation-mark", (*ExpanderTimeContinuation).expandWithContinuationMarkForm},
+		{"let", (*ExpanderTimeContinuation).expandLetForm},
+		{"let*", (*ExpanderTimeContinuation).expandLetStarForm},
+		{"letrec", (*ExpanderTimeContinuation).expandLetrecForm},
+		{"letrec*", (*ExpanderTimeContinuation).expandLetrecStarForm},
 
 		// Import: loads libraries and makes bindings available during expansion
 		{"import", (*ExpanderTimeContinuation).expandImportForm},
