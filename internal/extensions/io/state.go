@@ -108,14 +108,19 @@ func ResetState() {
 	cacheMu.Unlock()
 }
 
-// GetCurrentInputPort returns the current input port from the parameter.
-// Returns values.TextualReader to support parameterize with string input ports.
+// GetCurrentInputPort returns the base input port from the parameter.
+// This is a test convenience for save/restore; production code should use
+// resolveCurrentInputPort which checks continuation marks from parameterize.
 func GetCurrentInputPort() values.TextualReader {
-	if currentInputPortParam == nil {
-		// Fallback for tests that don't call InitState
-		return values.NewCharacterInputPortFromReader(os.Stdin)
+	InitState()
+	port, ok := currentInputPortParam.Value().(values.TextualReader)
+	if !ok {
+		panic(werr.WrapForeignErrorf(
+			werr.ErrNotAnInputPort,
+			"current-input-port: value is %T, not an input port",
+			currentInputPortParam.Value()))
 	}
-	return currentInputPortParam.Value().(values.TextualReader)
+	return port
 }
 
 // GetCurrentInputPortParam returns the current-input-port parameter object.
@@ -136,14 +141,19 @@ func ResetCurrentInputPort() {
 	}
 }
 
-// GetCurrentOutputPort returns the current output port from the parameter.
-// Returns values.OutputPort to support parameterize with string output ports.
+// GetCurrentOutputPort returns the base output port from the parameter.
+// This is a test convenience for save/restore; production code should use
+// resolveCurrentOutputPort which checks continuation marks from parameterize.
 func GetCurrentOutputPort() values.OutputPort {
-	if currentOutputPortParam == nil {
-		// Fallback for tests that don't call InitState
-		return values.NewCharacterOutputPortFromWriter(os.Stdout)
+	InitState()
+	port, ok := currentOutputPortParam.Value().(values.OutputPort)
+	if !ok {
+		panic(werr.WrapForeignErrorf(
+			werr.ErrNotAnOutputPort,
+			"current-output-port: value is %T, not an output port",
+			currentOutputPortParam.Value()))
 	}
-	return currentOutputPortParam.Value().(values.OutputPort)
+	return port
 }
 
 // GetCurrentOutputPortParam returns the current-output-port parameter object.
@@ -164,16 +174,6 @@ func ResetCurrentOutputPort() {
 	}
 }
 
-// GetCurrentErrorPort returns the current error port from the parameter.
-// Returns values.OutputPort to support parameterize with non-CharacterOutputPort types.
-func GetCurrentErrorPort() values.OutputPort {
-	if currentErrorPortParam == nil {
-		// Fallback for tests that don't call InitState
-		return values.NewCharacterOutputPortFromWriter(os.Stderr)
-	}
-	return currentErrorPortParam.Value().(values.OutputPort)
-}
-
 // GetCurrentErrorPortParam returns the current-error-port parameter object.
 func GetCurrentErrorPortParam() *machine.Parameter {
 	return currentErrorPortParam
@@ -185,9 +185,7 @@ func GetCurrentErrorPortParam() *machine.Parameter {
 // the panic is caught by OperationForeignFunctionCall's recover and converted
 // to a Scheme exception.
 func resolveCurrentOutputPort(mc *machine.MachineContext) values.OutputPort {
-	if currentOutputPortParam == nil {
-		return values.NewCharacterOutputPortFromWriter(os.Stdout)
-	}
+	InitState()
 	v := mc.ResolveParameterValue(currentOutputPortParam)
 	port, ok := v.(values.OutputPort)
 	if !ok {
@@ -204,9 +202,7 @@ func resolveCurrentOutputPort(mc *machine.MachineContext) values.OutputPort {
 // the panic is caught by OperationForeignFunctionCall's recover and converted
 // to a Scheme exception.
 func resolveCurrentInputPort(mc *machine.MachineContext) values.TextualReader {
-	if currentInputPortParam == nil {
-		return values.NewCharacterInputPortFromReader(os.Stdin)
-	}
+	InitState()
 	v := mc.ResolveParameterValue(currentInputPortParam)
 	port, ok := v.(values.TextualReader)
 	if !ok {

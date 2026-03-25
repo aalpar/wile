@@ -315,15 +315,18 @@ func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin *bufio.
 	}
 
 	// Push file path onto LoadPathStack so (include ...) can resolve relative paths.
+	// Mirrors runtime.Load — errors here mean (include ...) will fail with misleading messages.
 	absPath, absErr := filepath.Abs(filename)
-	if absErr == nil {
-		stack := env.LoadPathStack()
-		if stack != nil {
-			pushErr := stack.Push(absPath)
-			if pushErr == nil {
-				defer stack.Pop()
-			}
+	if absErr != nil {
+		Failf(absErr, "cannot resolve path")
+	}
+	stack := env.LoadPathStack()
+	if stack != nil {
+		pushErr := stack.Push(absPath)
+		if pushErr != nil {
+			Failf(pushErr, "cannot push load path")
 		}
+		defer stack.Pop()
 	}
 
 	p := parser.NewParserWithFile(env, true, fin, filename)
