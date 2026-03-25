@@ -351,6 +351,63 @@ func TestValidatedDynamicWind_Getters(t *testing.T) {
 	c.Assert(vdw.FormName(), qt.Equals, "dw-renamed")
 }
 
+// Binding form types
+
+func TestValidatedLet_Getters(t *testing.T) {
+	c := qt.New(t)
+	sym := syntax.NewSyntaxSymbol("x", nil)
+	init := &ValidatedLiteral{
+		validatedBase: validatedBase{formName: "@literal"},
+		Value:         syntax.NewSyntaxObject(values.NewInteger(1), nil),
+	}
+	body := &ValidatedSymbol{
+		validatedBase: validatedBase{formName: "@symbol"},
+		Symbol:        sym,
+	}
+
+	tcs := []struct {
+		name string
+		kind LetKind
+		form string
+	}{
+		{"let", LetKindLet, "let"},
+		{"let*", LetKindLetStar, "let*"},
+		{"letrec", LetKindLetrec, "letrec"},
+		{"letrec*", LetKindLetrecStar, "letrec*"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			vl := &ValidatedLet{
+				validatedBase: validatedBase{formName: tc.form},
+				Kind:          tc.kind,
+				Bindings:      []ValidatedLetBinding{{Name: sym, Init: init}},
+				body:          []ValidatedExpr{body},
+			}
+			c.Assert(vl.FormName(), qt.Equals, tc.form)
+			c.Assert(vl.Kind, qt.Equals, tc.kind)
+			c.Assert(len(vl.Bindings), qt.Equals, 1)
+			c.Assert(vl.Bindings[0].Name, qt.Equals, sym)
+			c.Assert(vl.Bindings[0].Mutable, qt.IsFalse)
+			c.Assert(len(vl.Body()), qt.Equals, 1)
+		})
+	}
+}
+
+func TestLetKind_Predicates(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(LetKindLet.InitsInScope(), qt.IsFalse)
+	c.Assert(LetKindLet.Sequential(), qt.IsFalse)
+
+	c.Assert(LetKindLetStar.InitsInScope(), qt.IsFalse)
+	c.Assert(LetKindLetStar.Sequential(), qt.IsTrue)
+
+	c.Assert(LetKindLetrec.InitsInScope(), qt.IsTrue)
+	c.Assert(LetKindLetrec.Sequential(), qt.IsFalse)
+
+	c.Assert(LetKindLetrecStar.InitsInScope(), qt.IsTrue)
+	c.Assert(LetKindLetrecStar.Sequential(), qt.IsTrue)
+}
+
 // Passthrough form (ValidatedLiteral for let-syntax)
 
 func TestValidatedLiteral_Passthrough(t *testing.T) {

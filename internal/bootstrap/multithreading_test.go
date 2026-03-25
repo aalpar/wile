@@ -447,15 +447,16 @@ func TestAtomicCompareAndSwap(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.Equals, values.TrueValue)
 
-	// CAS fails when comparing with a different reference (even if same value)
-	// This is expected behavior for Go's atomic.wrt
-	// Note: Use 100000 (outside integer cache range -32768 to 32767) to ensure different references
+	// CAS fails when comparing with a different reference (even if same value).
+	// Uses (+ 99999 1) to produce a fresh integer object at runtime, since
+	// core let compiles in a single template where literal deduplication may
+	// share the pointer for identical large integers.
 	result, err = evalScheme(t, env, `
 		(let ((a (make-atomic 100000)))
-		  (atomic-compare-and-swap! a 100000 100))
+		  (atomic-compare-and-swap! a (+ 99999 1) 100))
 	`)
 	c.Assert(err, qt.IsNil)
-	// This should fail because 100000 is a new integer object, not the same reference
+	// This should fail because (+ 99999 1) is a new integer object, not the same reference
 	c.Assert(result, qt.Equals, values.FalseValue)
 }
 

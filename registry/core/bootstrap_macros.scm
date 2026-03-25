@@ -4,9 +4,10 @@
 ;; to function. This file is embedded at compile-time via go:embed.
 ;;
 ;; Loaded after all primitives are registered but before bootstrap
-;; procedures or any user code runs. Provides standard R7RS binding forms,
+;; procedures or any user code runs. Provides standard R7RS
 ;; conditionals, lazy evaluation, parameters, exceptions, records, and
-;; iteration.
+;; iteration. Binding forms (let, let*, letrec, letrec*) are core
+;; compiled — see plans/CORE-LET.md.
 ;;
 ;; Lambda: The Ultimate Imperative (Steele & Sussman, AIM-353, 1976).
 ;; Derived forms are defined as macros over core forms per R7RS §7.3.
@@ -17,9 +18,8 @@
 ;;   the formal identity from the Lambda Papers, made executable.
 ;;
 ;;   Invariant: every derived form must reduce to core forms only
-;;     (if, lambda, begin, define, set!, quote, dynamic-wind, case-lambda).
-;;   Constrains: all binding forms here (let*, letrec, letrec*) must
-;;     compose from lambda and set! without introducing new primitives.
+;;     (if, lambda, begin, define, set!, quote, dynamic-wind, case-lambda,
+;;      let, let*, letrec, letrec*).
 ;;   Constrained by: with-binding-scope (Wile-specific form for Flatt 2016
 ;;     scope creation), syntax-rules hygiene (intro scopes on expansion).
 ;;
@@ -41,49 +41,10 @@
      (let ((x test1))
        (if x x (or test2 ...))))))
 
-;; Binding forms
-;;
-;; Each binding form uses with-binding-scope to create a fresh scope for its
-;; bindings. This is essential for hygienic macro expansion - it ensures that
-;; nested bindings of the same name can be distinguished by their scopes.
-;; See Flatt 2016 "Binding as Sets of Scopes" for the theoretical foundation.
-(define-syntax let
-  (syntax-rules ()
-    ((let ((name val) ...) body ...)
-     (with-binding-scope (name ...)
-       ((lambda (name ...) (begin body ...)) val ...)))
-    ((let tag ((name val) ...) body ...)
-     (with-binding-scope (tag name ...)
-       (letrec ((tag (lambda (name ...) body ...)))
-         (tag val ...))))))
-
-(define-syntax let*
-  (syntax-rules ()
-    ((let* () body ...)
-     (let () body ...))
-    ((let* ((name1 val1) (name2 val2) ...) body ...)
-     (let ((name1 val1))
-       (let* ((name2 val2) ...) body ...)))))
-
-(define-syntax letrec
-  (syntax-rules ()
-    ((letrec ((var init) ...) body ...)
-     (let ((var #f) ...)
-       (set! var init) ...
-       body ...))))
-
-;; letrec* - like letrec but initializers are evaluated left-to-right
-;; R7RS §4.2.2: each variable is assigned in left-to-right order.
-;;
-;; This implementation delegates to letrec because Wile's letrec expansion
-;; produces sequential (set! var init) statements, which are evaluated
-;; left-to-right per R7RS §4.2.3. This differs from the canonical R7RS §7.3
-;; recursive macro but is semantically equivalent for this implementation.
-;; See plans/IMPLEMENTATION_NOTES.md for details.
-(define-syntax letrec*
-  (syntax-rules ()
-    ((letrec* ((var init) ...) body ...)
-     (letrec ((var init) ...) body ...))))
+;; Binding forms (let, let*, letrec, letrec*) are now core compiled forms,
+;; handled directly by the expander/validator/compiler pipeline.
+;; See plans/CORE-LET.md for the design.
+;; with-binding-scope is retained for user-defined binding macros.
 
 ;; Conditional forms
 (define-syntax cond

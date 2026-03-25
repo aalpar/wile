@@ -244,3 +244,77 @@ type ValidatedApply struct {
 	PrefixArgs []ValidatedExpr
 	FinalList  ValidatedExpr
 }
+
+// --- Binding forms ---
+
+// LetKind encodes the two orthogonal dimensions of binding form semantics:
+// init-visibility (do inits see the bindings?) and evaluation order
+// (all-then-store vs sequential store-as-you-go).
+//
+//	| Kind       | Inits see bindings? | Eval order      |
+//	|------------|---------------------|-----------------|
+//	| Let        | No (outer scope)    | All-then-store  |
+//	| LetStar    | Preceding only      | Sequential      |
+//	| Letrec     | All (full scope)    | All-then-store  |
+//	| LetrecStar | All (full scope)    | Sequential      |
+type LetKind int
+
+const (
+	LetKindLet        LetKind = iota // R7RS §4.2.2: inits in outer scope, all-then-store
+	LetKindLetStar                   // R7RS §4.2.2: inits see preceding, sequential
+	LetKindLetrec                    // R7RS §4.2.2: inits in full scope, all-then-store
+	LetKindLetrecStar                // R7RS §4.2.2: inits in full scope, sequential
+)
+
+// String returns the Scheme keyword for this kind.
+func (p LetKind) String() string {
+	switch p {
+	case LetKindLet:
+		return "let"
+	case LetKindLetStar:
+		return "let*"
+	case LetKindLetrec:
+		return "letrec"
+	case LetKindLetrecStar:
+		return "letrec*"
+	default:
+		return "let?"
+	}
+}
+
+// InitsInScope reports whether init expressions see the let bindings.
+func (p LetKind) InitsInScope() bool {
+	return p == LetKindLetrec || p == LetKindLetrecStar
+}
+
+// Sequential reports whether init expressions are stored immediately
+// (left-to-right) rather than all-then-store.
+func (p LetKind) Sequential() bool {
+	return p == LetKindLetStar || p == LetKindLetrecStar
+}
+
+// ValidatedLetBinding represents a single (name init-expr) binding pair.
+// Mutable is true if the binding is targeted by set! in the body.
+type ValidatedLetBinding struct {
+	Name    *syntax.SyntaxSymbol
+	Init    ValidatedExpr
+	Mutable bool
+}
+
+// ValidatedLet represents all four R7RS binding forms: let, let*, letrec,
+// letrec*. The Kind field encodes which form this is — the type is shared
+// because the four forms differ only in two orthogonal dimensions (init
+// visibility and evaluation order), not in structure.
+// Tag is non-nil for named let (compiled with letrec semantics).
+type ValidatedLet struct {
+	validatedBase
+	Kind     LetKind
+	Bindings []ValidatedLetBinding
+	Tag      *syntax.SyntaxSymbol
+	body     []ValidatedExpr
+}
+
+// Body returns the body expressions.
+func (p *ValidatedLet) Body() []ValidatedExpr {
+	return p.body
+}

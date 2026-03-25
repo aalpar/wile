@@ -45,6 +45,10 @@ func init() {
 	registerValidator("dynamic-wind", validateDynamicWind)
 	registerValidator("with-continuation-mark", validateWithContinuationMark)
 	registerValidator("apply", validateApply)
+	registerValidator("let", validateLetCommon(LetKindLet, "let"))
+	registerValidator("let*", validateLetCommon(LetKindLetStar, "let*"))
+	registerValidator("letrec", validateLetCommon(LetKindLetrec, "letrec"))
+	registerValidator("letrec*", validateLetCommon(LetKindLetrecStar, "letrec*"))
 
 	// Macro and library forms with structural validation
 	registerValidator("define-syntax", validateDefineSyntax)

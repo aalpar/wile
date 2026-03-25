@@ -51,6 +51,7 @@ const (
 	OpLoadGlobal
 	OpStoreGlobal
 	OpPeekK
+	OpPushEnv // Push new env frame with Arg local slots
 
 	// Wave 3: two-operand operations (Arg = bit-packed slot|depth)
 	OpLoadLocal
@@ -164,6 +165,7 @@ var opcodeTable = [opCount]opcodeInfo{
 	OpLoadGlobal:            {name: "LoadGlobal", writesValue: true},
 	OpStoreGlobal:           {name: "StoreGlobal"},
 	OpPeekK:                 {name: "PeekK", writesValue: true},
+	OpPushEnv:               {name: "PushEnv"},
 	OpLoadLocal:             {name: "LoadLocal", writesValue: true},
 	OpStoreLocal:            {name: "StoreLocal"},
 	OpPushLiteral:           {name: "PushLiteral"},

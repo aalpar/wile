@@ -253,17 +253,13 @@ func TestMultipleElementsWithTrailingEllipsis(t *testing.T) {
 func TestLetMacroFull(t *testing.T) {
 	env := createHygieneTestEnv()
 
-	// Simpler let macro - uses (begin body ...) to wrap multiple bodies
-	// This avoids the complex "body1 body2 ..." pattern which requires
-	// more sophisticated ellipsis tracking
-	// (define-syntax let
-	//   (syntax-rules ()
-	//     ((let ((name val) ...) body ...)
-	//      ((lambda (name ...) (begin body ...)) val ...))))
+	// Test that let is now a core form: expansion preserves the (let ...) syntax
+	// rather than transforming it to ((lambda ...) ...).
+	// Uses my-let (a user-defined macro) to verify macro expansion still works.
 	letMacro := parseString(t, env, `
-		(define-syntax let
+		(define-syntax my-let
 		  (syntax-rules ()
-		    ((let ((name val) ...) body ...)
+		    ((my-let ((name val) ...) body ...)
 		     ((lambda (name ...) (begin body ...)) val ...))))
 	`)
 
@@ -272,22 +268,20 @@ func TestLetMacroFull(t *testing.T) {
 	args := extractDefineSyntaxArgs(t, letMacro)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
-		t.Fatalf("failed to compile let macro: %v", err)
+		t.Fatalf("failed to compile my-let macro: %v", err)
 	}
 
-	// Test: (let ((x 1)) x) -> ((lambda (x) (begin x)) 1)
-	testForm := parseString(t, env, `(let ((x 1)) x)`)
+	// Test: (my-let ((x 1)) x) -> ((lambda (x) (begin x)) 1)
+	testForm := parseString(t, env, `(my-let ((x 1)) x)`)
 
 	etc := machine.NewExpanderTimeContinuation(context.Background(), env)
 	expanded, err := etc.ExpandExpression(testForm)
 	if err != nil {
-		t.Fatalf("failed to expand let: %v", err)
+		t.Fatalf("failed to expand my-let: %v", err)
 	}
 
 	t.Logf("Expanded: %s", expanded.SchemeString())
 
-	// With the (begin body ...) wrapper, the expansion is:
-	// ((lambda (x) (begin x)) 1)
 	expectedForm := parseString(t, env, `((lambda (x) (begin x)) 1)`)
 	qt.Assert(t, expanded.UnwrapAll(), valuestest.SchemeEquals, expectedForm.UnwrapAll())
 }
@@ -445,16 +439,11 @@ func TestAuxiliarySyntaxShadowing(t *testing.T) {
 			expected: "(begin (if else (begin (quote matched))))", // else is the test expression
 		},
 		// R7RS §4.3.2: Regular let binding also shadows auxiliary syntax.
-		// When => is bound via let (which expands to lambda), the lambda scope
-		// is added to the body, making => have different scopes than the pattern literal.
+		// Core let adds a scope to the binding name and body, making =>
+		// have different scopes than the pattern literal in my-cond.
 		{
 			name: "shadowed => via regular let treated as expression",
 			setup: `
-				(define-syntax let
-				  (syntax-rules ()
-				    ((let ((name val) ...) body ...)
-				     (with-binding-scope (name ...)
-				       ((lambda (name ...) (begin body ...)) val ...)))))
 				(define-syntax my-cond
 				  (syntax-rules (else =>)
 				    ((my-cond (else result1 result2 ...))
@@ -465,20 +454,14 @@ func TestAuxiliarySyntaxShadowing(t *testing.T) {
 				    ((my-cond (test result1 result2 ...))
 				     (if test (begin result1 result2 ...)))))
 			`,
-			// With => bound via let, it has the lambda scope.
-			// (test => 'ok) doesn't match the arrow pattern, falls through to (test result1 result2 ...).
-			// let expands to ((lambda (=>) ...) #f)
+			// With => bound via core let, it gets the let scope.
+			// (test => 'ok) doesn't match the arrow pattern, falls through.
 			code:     "(let ((=> #f)) (my-cond (#t => 'ok)))",
-			expected: "((lambda (=>) (begin (if #t (begin => (quote ok))))) #f)",
+			expected: "(let ((=> #f)) (if #t (begin => (quote ok))))",
 		},
 		{
 			name: "shadowed else via regular let not treated as else clause",
 			setup: `
-				(define-syntax let
-				  (syntax-rules ()
-				    ((let ((name val) ...) body ...)
-				     (with-binding-scope (name ...)
-				       ((lambda (name ...) (begin body ...)) val ...)))))
 				(define-syntax my-cond
 				  (syntax-rules (else =>)
 				    ((my-cond (else result1 result2 ...))
@@ -486,10 +469,10 @@ func TestAuxiliarySyntaxShadowing(t *testing.T) {
 				    ((my-cond (test result1 result2 ...))
 				     (if test (begin result1 result2 ...)))))
 			`,
-			// With else bound via let, it has the lambda scope.
+			// With else bound via core let, it has the let scope.
 			// (else 'matched) doesn't match the else pattern.
 			code:     "(let ((else #f)) (my-cond (else 'matched)))",
-			expected: "((lambda (else) (begin (if else (begin (quote matched))))) #f)",
+			expected: "(let ((else #f)) (if else (begin (quote matched))))",
 		},
 	}
 

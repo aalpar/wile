@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
 )
 
@@ -56,8 +57,25 @@ func (p ValidationError) ErrorWithMaxOriginDepth(maxDepth int) string {
 
 // ValidationResult collects all errors from validation
 type ValidationResult struct {
-	Expr   ValidatedExpr     // nil if validation failed
-	Errors []ValidationError // All errors encountered
+	Expr            ValidatedExpr     // nil if validation failed
+	Errors          []ValidationError // All errors encountered
+	mutatedBindings map[environment.BindingID]bool
+}
+
+// markMutated records that a local binding is targeted by set!.
+// Uses BindingID (frame pointer + slot index) instead of *Binding
+// because LocalEnvironmentFrame.bindings is []Binding (value type);
+// pointers into the slice become stale when append reallocates.
+func (p *ValidationResult) markMutated(bid environment.BindingID) {
+	if p.mutatedBindings == nil {
+		p.mutatedBindings = make(map[environment.BindingID]bool)
+	}
+	p.mutatedBindings[bid] = true
+}
+
+// isMutated returns true if the binding was targeted by set!.
+func (p *ValidationResult) isMutated(bid environment.BindingID) bool {
+	return p.mutatedBindings[bid]
 }
 
 // Ok returns true if no validation errors were encountered.
