@@ -256,18 +256,9 @@ func main() {
 					if absErr != nil {
 						Failf(absErr, "cannot resolve path")
 					}
-					code := "(begin\n" + string(content) + "\n)"
 					loadErr := eng.WithLoadPath(absPath, func() error {
-						expr, parseErr := eng.ParseWithSource(ctx, code, fn)
-						if parseErr != nil {
-							return parseErr
-						}
-						compiled, compileErr := eng.Compile(ctx, expr)
-						if compileErr != nil {
-							return compileErr
-						}
-						_, runErr := eng.Run(ctx, compiled)
-						return runErr
+						_, evalErr := eng.EvalMultipleWithSource(ctx, string(content), fn)
+						return evalErr
 					})
 					if loadErr != nil {
 						Failf(loadErr)
@@ -340,24 +331,11 @@ func runFile(ctx context.Context, eng *wile.Engine, fin *bufio.Reader, filename 
 		Failf(absErr, "cannot resolve path")
 	}
 
-	// Wrap in (begin ...) so all expressions share a single continuation
-	// chain — required for proper R7RS semantics across expression boundaries.
-	// The leading newline keeps source line numbers aligned with the file.
-	code := "(begin\n" + string(content) + "\n)"
-
 	var result wile.Value
 	loadErr := eng.WithLoadPath(absPath, func() error {
-		expr, parseErr := eng.ParseWithSource(ctx, code, filename)
-		if parseErr != nil {
-			return parseErr
-		}
-		compiled, compileErr := eng.Compile(ctx, expr)
-		if compileErr != nil {
-			return compileErr
-		}
-		var runErr error
-		result, runErr = eng.Run(ctx, compiled)
-		return runErr
+		var evalErr error
+		result, evalErr = eng.EvalMultipleWithSource(ctx, string(content), filename)
+		return evalErr
 	})
 	if loadErr != nil {
 		Failf(loadErr)
