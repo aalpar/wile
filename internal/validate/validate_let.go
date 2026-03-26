@@ -111,6 +111,7 @@ func validateLetBindingsAndBody(
 	}
 
 	markMutableBindings(childEnv, bindings, result)
+	markCapturedBindings(childEnv, bindings, body, false)
 
 	return &ValidatedLet{
 		validatedBase: validatedBase{formName: formName, source: source},
@@ -238,6 +239,7 @@ func validateLetStarFlat(
 	}
 
 	markMutableBindings(childEnv, bindings, result)
+	markCapturedBindings(childEnv, bindings, body, true)
 
 	return &ValidatedLet{
 		validatedBase: validatedBase{formName: formName, source: source},
@@ -301,6 +303,7 @@ func validateLetStarNested(
 	for i := len(validated) - 1; i >= 0; i-- {
 		vb := validated[i]
 		markMutableBindings(vb.childEnv, []ValidatedLetBinding{vb.binding}, result)
+		markCapturedBindings(vb.childEnv, []ValidatedLetBinding{vb.binding}, innerBody, true)
 		node := &ValidatedLet{
 			validatedBase: validatedBase{formName: formName, source: source},
 			Kind:          LetKindLetStar,
@@ -419,6 +422,7 @@ func validateLetrecBindingsAndBody(
 	}
 
 	markMutableBindings(childEnv, bindings, result)
+	markCapturedBindings(childEnv, bindings, body, true)
 
 	return &ValidatedLet{
 		validatedBase: validatedBase{formName: formName, source: source},
