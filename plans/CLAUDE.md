@@ -28,6 +28,10 @@ When investigating R7RS conformance issues:
 | `2026-03-25-degenerate-form-tests.md` | Degenerate form full-pipeline tests | **Complete** (PR #571) |
 | `2026-03-25-algebra-library-design.md` | Algebra library design document | **Complete** |
 | `2026-03-25-algebra-library-impl.md` | Algebra library implementation plan | **Complete** (PR #572) |
+| `2026-03-25-algebra-rewrite-design.md` | Term rewriting library design | **Complete** |
+| `2026-03-25-algebra-rewrite-impl.md` | Term rewriting implementation plan (Phase 1: wile, Phase 2: wile-goast) | **Complete** (PR #576, wile v1.9.11) |
+| `CAPTURE-ANALYSIS.md` | Capture analysis design for let bindings | **Complete** |
+| `CAPTURE-ANALYSIS-IMPL.md` | Capture analysis implementation plan | **Complete** (PR #575) |
 | `SECURITY.md` | Opcode resource limits (match steps, expand steps, continuation copy depth) | Proposed — not implemented |
 | `MACRO_SYSTEM.md` | Hygiene debugging, macro expansion tracing | Planned — not started |
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |

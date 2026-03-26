@@ -29,6 +29,8 @@ consumed by `(wile goast ssa-normalize)` in wile-goast.
 
 **Two phases:** Phase 1 builds the library in `wile/`. Phase 2 migrates wile-goast.
 
+**Status:** Complete. Phase 1: PR #576 (wile v1.9.11). Phase 2: wile-goast 8acc62a + 58956ce.
+
 ---
 
 ## Phase 1: Build (wile algebra rewrite) in wile
