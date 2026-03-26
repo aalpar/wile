@@ -26,9 +26,11 @@
       (display "s\n")
       elapsed)))
 
-;; Warmup
-(sum 10000)
+;; Warmup (must stay within DefaultMaxCallDepth of 10000 frames;
+;; sum is not tail-recursive, so (sum n) uses n+1 frames plus
+;; the frames from the benchmark harness and file-level begin)
+(sum 9990)
 
 ;; Benchmark
 (display "=== Recursive Summation Benchmark ===\n\n")
-(run-benchmark 15 10000)
+(run-benchmark 15 9990)
