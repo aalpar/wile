@@ -1,5 +1,7 @@
 package repl
 
+import "github.com/aalpar/wile/values"
+
 // DocInfo holds documentation for a primitive binding.
 type DocInfo struct {
 	Doc        string
@@ -7,6 +9,8 @@ type DocInfo struct {
 	Category   string
 	ParamCount int
 	IsVariadic bool
+	ParamTypes []values.ValueType
+	ReturnType values.ValueType
 }
 
 // DocProvider looks up documentation for named bindings.

@@ -10,6 +10,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/internal/bootstrap"
+	"github.com/aalpar/wile/values"
 )
 
 func TestMetaCommandHandler(t *testing.T) {
@@ -196,6 +197,47 @@ func TestMetaHandleUnknown(t *testing.T) {
 	qt.Assert(t, handled, qt.IsTrue)
 	qt.Assert(t, strings.Contains(buf.String(), "Unknown command"), qt.IsTrue,
 		qt.Commentf("output was: %q", buf.String()))
+}
+
+func TestFormatPrimitiveDoc_WithTypes(t *testing.T) {
+	c := qt.New(t)
+	var buf strings.Builder
+	info := DocInfo{
+		Doc:        "Returns the kth character of string.",
+		ParamNames: []string{"string", "k"},
+		Category:   "strings",
+		ParamCount: 2,
+		ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger},
+		ReturnType: values.TypeCharacter,
+	}
+	formatPrimitiveDoc(&buf, "string-ref", info)
+	output := buf.String()
+	c.Assert(strings.Contains(output, "→ character"), qt.IsTrue,
+		qt.Commentf("output: %s", output))
+	c.Assert(strings.Contains(output, "string : string"), qt.IsTrue,
+		qt.Commentf("output: %s", output))
+	c.Assert(strings.Contains(output, "k : exact-integer"), qt.IsTrue,
+		qt.Commentf("output: %s", output))
+	c.Assert(strings.Contains(output, "Returns: character"), qt.IsTrue,
+		qt.Commentf("output: %s", output))
+}
+
+func TestFormatPrimitiveDoc_WithoutTypes(t *testing.T) {
+	c := qt.New(t)
+	var buf strings.Builder
+	info := DocInfo{
+		Doc:        "Returns the length of string.",
+		ParamNames: []string{"string"},
+		Category:   "strings",
+		ParamCount: 1,
+	}
+	formatPrimitiveDoc(&buf, "string-length", info)
+	output := buf.String()
+	// Without ParamTypes, should have no type annotations
+	c.Assert(strings.Contains(output, " : "), qt.IsFalse,
+		qt.Commentf("output should have no type annotations: %s", output))
+	c.Assert(strings.Contains(output, "→"), qt.IsFalse,
+		qt.Commentf("output should have no return type: %s", output))
 }
 
 func TestMetaHandleDebugDelegation(t *testing.T) {

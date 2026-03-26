@@ -219,6 +219,8 @@ func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 }
 
 func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo) {
+	hasTypes := len(info.ParamTypes) > 0
+
 	// Signature line
 	fmt.Fprintf(w, "(%s", name)
 	for _, pn := range info.ParamNames {
@@ -227,14 +229,47 @@ func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo) {
 	if info.IsVariadic {
 		fmt.Fprint(w, " ...")
 	}
-	fmt.Fprintln(w, ")")
+	fmt.Fprint(w, ")")
+	if hasTypes && info.ReturnType != values.TypeAny {
+		fmt.Fprintf(w, " → %s", info.ReturnType.String())
+	}
+	fmt.Fprintln(w)
 
+	// Description
 	if info.Doc != "" {
 		fmt.Fprintf(w, "  %s\n", info.Doc)
 	}
+
+	// Parameter types
+	if hasTypes && len(info.ParamNames) > 0 {
+		fmt.Fprintln(w, "  Parameters:")
+		for i, pn := range info.ParamNames {
+			vt := paramTypeForDoc(info.ParamTypes, i)
+			fmt.Fprintf(w, "    %s : %s\n", pn, vt.String())
+		}
+	}
+
+	// Return type
+	if hasTypes && info.ReturnType != values.TypeAny {
+		fmt.Fprintf(w, "  Returns: %s\n", info.ReturnType.String())
+	}
+
+	// Category
 	if info.Category != "" {
 		fmt.Fprintf(w, "  Category: %s\n", info.Category)
 	}
+}
+
+// paramTypeForDoc returns the ValueType for parameter position i.
+// For variadic primitives, positions beyond len(types)-1 use the last entry.
+func paramTypeForDoc(types []values.ValueType, i int) values.ValueType {
+	if i < len(types) {
+		return types[i]
+	}
+	if len(types) > 0 {
+		return types[len(types)-1]
+	}
+	return values.TypeAny
 }
 
 func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding, phase int) {

@@ -28,5 +28,7 @@ func (p *RegistryDocProvider) LookupDoc(name string) (DocInfo, bool) {
 		Category:   pr.Spec.Category,
 		ParamCount: pr.Spec.ParamCount,
 		IsVariadic: pr.Spec.IsVariadic,
+		ParamTypes: pr.Spec.ParamTypes,
+		ReturnType: pr.Spec.ReturnType,
 	}, true
 }
