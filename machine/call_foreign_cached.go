@@ -91,6 +91,11 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 		// Non-tail: SaveContinuation is in the bytecode. Restore it
 		// to recover the caller's evals, env, template, and pc.
 		//
+		// mc.cont is always non-nil here: the bytecode preceding
+		// CallForeignCached always includes SaveContinuation, which
+		// pushes a frame onto mc.cont. (Unlike applyForeign, which
+		// can be called from sub-contexts where cont is nil.)
+		//
 		// Guard: if the foreign function already consumed the continuation
 		// (e.g., PrimCallCC inline mode calling ApplyCallable with a
 		// ForeignClosure, where applyForeign does its own RestoreAndRelease),

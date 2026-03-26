@@ -223,7 +223,10 @@ func main() {
 		Failf(err0, "Cannot create engine")
 	}
 	defer func() {
-		_ = eng.Close()
+		closeErr := eng.Close()
+		if closeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: engine close error: %v\n", closeErr)
+		}
 	}()
 	// Load files if any
 	if len(opts.File) > 0 {

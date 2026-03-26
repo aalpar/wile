@@ -23,9 +23,28 @@
 //	    wile.WithSourceOS(),
 //	    wile.WithLibraryPaths(),
 //	)
+//
+// Paths in [FS] are relative to the library root (e.g., "scheme/base.sld",
+// "chibi/test.sld"), not prefixed with "lib/".
 package stdlib
 
-import "embed"
+import (
+	"embed"
+	"io/fs"
+)
 
 //go:embed lib
-var FS embed.FS
+var rawFS embed.FS
+
+// FS is the embedded standard library filesystem with the "lib/" prefix
+// stripped. Library paths match the search path convention directly:
+// "scheme/base.sld", "srfi/1.sld", etc.
+var FS fs.FS
+
+func init() {
+	sub, err := fs.Sub(rawFS, "lib")
+	if err != nil {
+		panic("stdlib: failed to create sub-FS: " + err.Error())
+	}
+	FS = sub
+}

@@ -176,15 +176,25 @@ falling back to the FS root or CWD.
 
 ## Embedded Standard Library
 
-The `stdlib/` package embeds the full R7RS standard library tree:
+The `stdlib/` package embeds the full R7RS standard library tree. The
+raw `embed.FS` is sub'd via `fs.Sub(rawFS, "lib")` so that paths in
+the exported `FS` match the library name convention directly (e.g.,
+`"scheme/base.sld"`, not `"lib/scheme/base.sld"`). This means `"."`
+in `DefaultLibraryPaths` resolves libraries from the embedded FS
+without any path prefix gymnastics.
 
 ```go
 package stdlib
 
-import "embed"
+import (
+    "embed"
+    "io/fs"
+)
 
 //go:embed lib
-var FS embed.FS
+var rawFS embed.FS
+
+var FS fs.FS  // = fs.Sub(rawFS, "lib") in init()
 ```
 
 The directory structure under `stdlib/lib/` mirrors the library name
