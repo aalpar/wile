@@ -40,6 +40,8 @@ func addPrimitives(r *registry.Registry) error {
 			Doc: "Returns the value bound to a symbol in the environment.", ParamNames: []string{"env", "symbol"}, Category: "introspection"},
 		{Name: "environment-bound?", ParamCount: 2, Impl: PrimEnvironmentBoundQ,
 			Doc: "Returns #t if the symbol is bound in the environment.", ParamNames: []string{"env", "symbol"}, Category: "introspection"},
+		{Name: "features", Impl: PrimFeatures,
+			Doc: "Returns a list of implementation feature symbols.", Category: "introspection"},
 	}, registry.PhaseRuntime)
 	return nil
 }

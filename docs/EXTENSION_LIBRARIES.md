@@ -61,11 +61,12 @@ registered as an R7RS library named `(wile <extension-name>)`:
 | Library name | Go package | Primitives |
 |-------------|------------|------------|
 | `(wile math)` | `extensions/math` | 30 math primitives |
-| `(wile exceptions)` | `extensions/exceptions` | 9 exception handling primitives |
 | `(wile system)` | `extensions/system` | 9 system primitives |
 | `(wile files)` | `extensions/files` | File I/O primitives |
+| `(wile process)` | `extensions/process` | 8 process execution primitives |
 | `(wile threads)` | `extensions/threads` | SRFI-18 threading primitives |
 | `(wile gointerop)` | `extensions/gointerop` | Go concurrency primitives |
+| `(wile introspection)` | `extensions/introspection` | Environment introspection |
 
 ## How It Works
 
@@ -260,7 +261,7 @@ import (
 
     "github.com/aalpar/wile"
     "github.com/aalpar/wile/extensions/math"
-    "github.com/aalpar/wile/extensions/exceptions"
+    "github.com/aalpar/wile/extensions/process"
     "github.com/aalpar/wile/extensions/system"
 )
 
@@ -270,7 +271,7 @@ func main() {
     engine, err := wile.NewEngine(ctx,
         wile.WithExtensions(
             math.Extension,
-            exceptions.Extension,
+            process.Extension,
             system.Extension,
         ),
         wile.WithLibraryPaths(),

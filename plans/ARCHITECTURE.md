@@ -277,11 +277,12 @@ Each extension is a separate Go module with a single dependency on `github.com/a
 | Module | Current location | Security class |
 |--------|-----------------|---------------|
 | `wile-io` | `internal/extensions/io/` | safe |
-| `wile-exceptions` | `extensions/exceptions/` | safe |
 | `wile-records` | split from `internal/extensions/all/` | safe |
 | `wile-promises` | split from `internal/extensions/all/` | safe |
 | `wile-math` | `extensions/math/` | safe |
+| `wile-introspection` | `extensions/introspection/` | safe |
 | `wile-files` | `extensions/files/` | privileged |
+| `wile-process` | `extensions/process/` | privileged |
 | `wile-eval` | `internal/extensions/eval/` | privileged |
 | `wile-system` | `extensions/system/` | privileged |
 | `wile-threads` | `extensions/threads/` | context-dependent |
