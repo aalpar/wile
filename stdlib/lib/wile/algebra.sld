@@ -44,11 +44,22 @@
     make-galois-connection galois-connection?
     gc-alpha gc-gamma
     gc-concrete-po gc-abstract-lattice
-    gc-sound?)
+    gc-sound?
+    ;; Rewriting
+    make-term-protocol term-protocol?
+    term-compound? term-get-operator term-get-operands term-make-term term-compare
+    make-identity-axiom identity-axiom?
+    make-commutativity-axiom commutativity-axiom?
+    make-absorbing-axiom absorbing-axiom?
+    make-idempotence-axiom idempotence-axiom?
+    make-involution-axiom involution-axiom?
+    axiom?
+    make-normalizer)
   (import (wile algebra order)
           (wile algebra lattice)
           (wile algebra monoid)
           (wile algebra semiring)
           (wile algebra group)
           (wile algebra ring)
-          (wile algebra galois)))
+          (wile algebra galois)
+          (wile algebra rewrite)))
