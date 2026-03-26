@@ -302,12 +302,13 @@ func validateLetStarNested(
 	innerBody = body
 	for i := len(validated) - 1; i >= 0; i-- {
 		vb := validated[i]
-		markMutableBindings(vb.childEnv, []ValidatedLetBinding{vb.binding}, result)
-		markCapturedBindings(vb.childEnv, []ValidatedLetBinding{vb.binding}, innerBody, true)
+		bindings := []ValidatedLetBinding{vb.binding}
+		markMutableBindings(vb.childEnv, bindings, result)
+		markCapturedBindings(vb.childEnv, bindings, innerBody, true)
 		node := &ValidatedLet{
 			validatedBase: validatedBase{formName: formName, source: source},
 			Kind:          LetKindLetStar,
-			Bindings:      []ValidatedLetBinding{vb.binding},
+			Bindings:      bindings,
 			body:          innerBody,
 		}
 		innerBody = []ValidatedExpr{node}
@@ -496,12 +497,16 @@ func validateNamedLet(
 		args: callArgs,
 	}
 
+	tagBindings := []ValidatedLetBinding{{Name: tag, Init: lambdaInit}}
+	tagBody := []ValidatedExpr{callExpr}
+	markCapturedBindings(tagEnv, tagBindings, tagBody, true)
+
 	return &ValidatedLet{
 		validatedBase: validatedBase{formName: "letrec", source: source},
 		Kind:          LetKindLetrec,
-		Bindings:      []ValidatedLetBinding{{Name: tag, Init: lambdaInit}},
+		Bindings:      tagBindings,
 		Tag:           tag,
-		body:          []ValidatedExpr{callExpr},
+		body:          tagBody,
 	}
 }
 

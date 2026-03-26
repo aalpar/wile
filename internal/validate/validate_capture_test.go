@@ -331,6 +331,43 @@ func TestMarkCapturedBindings_LetStarInitCapture(t *testing.T) {
 	c.Assert(bindings[1].Captured, qt.IsFalse)
 }
 
+// setBang creates a ValidatedSetBang.
+func setBang(name string, expr ValidatedExpr) *ValidatedSetBang {
+	return &ValidatedSetBang{
+		validatedBase: validatedBase{formName: "set!"},
+		Name:          syntax.NewSyntaxSymbol(name, nil),
+		subExp:        expr,
+	}
+}
+
+func TestMarkCapturedBindings_SetBangInsideLambda(t *testing.T) {
+	c := qt.New(t)
+	env, bindings := makeTestEnvAndBindings("x")
+	// (let ((x 1)) (lambda () (set! x 2))) — set! target captured
+	body := []ValidatedExpr{lam(setBang("x", lit()))}
+	markCapturedBindings(env, bindings, body, false)
+	c.Assert(bindings[0].Captured, qt.IsTrue)
+}
+
+func TestMarkCapturedBindings_SetBangOutsideLambda(t *testing.T) {
+	c := qt.New(t)
+	env, bindings := makeTestEnvAndBindings("x")
+	// (let ((x 1)) (set! x 2)) — set! at depth 0, not captured
+	body := []ValidatedExpr{setBang("x", lit())}
+	markCapturedBindings(env, bindings, body, false)
+	c.Assert(bindings[0].Captured, qt.IsFalse)
+}
+
+func TestMarkCapturedBindings_SetBangValueExprCaptures(t *testing.T) {
+	c := qt.New(t)
+	env, bindings := makeTestEnvAndBindings("x", "y")
+	// (let ((x 1) (y 2)) (lambda () (set! x y))) — both captured
+	body := []ValidatedExpr{lam(setBang("x", symRef("y")))}
+	markCapturedBindings(env, bindings, body, false)
+	c.Assert(bindings[0].Captured, qt.IsTrue)
+	c.Assert(bindings[1].Captured, qt.IsTrue)
+}
+
 func TestMarkCapturedBindings_CrossLetBoundaryCapture(t *testing.T) {
 	c := qt.New(t)
 	env, bindings := makeTestEnvAndBindings("x")

@@ -14,7 +14,12 @@
 
 package validate
 
-import "github.com/aalpar/wile/environment"
+import (
+	"fmt"
+
+	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/internal/syntax"
+)
 
 // markCapturedBindings walks the validated body (and optionally init
 // expressions) to determine which let bindings are referenced from inside
@@ -23,6 +28,10 @@ import "github.com/aalpar/wile/environment"
 //
 // walkInits should be true for let*, letrec, and letrec* (where inits see the
 // bindings) and false for plain let (where inits are in the outer scope).
+//
+// Best-effort: if binding resolution fails (scope mismatch), the binding
+// stays non-captured. Must not gate correctness-critical optimizations
+// without re-validation.
 func markCapturedBindings(
 	childEnv *environment.EnvironmentFrame,
 	bindings []ValidatedLetBinding,
@@ -68,21 +77,28 @@ type captureWalker struct {
 	idToIdx  map[environment.BindingID]int
 }
 
+// checkSymbol marks a binding as captured if the given symbol resolves to
+// one of the tracked bindings and we are inside a closure (depth > 0).
+func (p *captureWalker) checkSymbol(sym *syntax.SyntaxSymbol, depth int) {
+	if depth <= 0 {
+		return
+	}
+	bid, ok := p.env.ResolveBindingID(sym.Sym, sym.Scopes())
+	if ok {
+		idx, found := p.idToIdx[bid]
+		if found {
+			p.bindings[idx].Captured = true
+		}
+	}
+}
+
 func (p *captureWalker) walkExpr(expr ValidatedExpr, depth int) {
 	if expr == nil {
 		return
 	}
 	switch e := expr.(type) {
 	case *ValidatedSymbol:
-		if depth > 0 {
-			bid, ok := p.env.ResolveBindingID(e.Symbol.Sym, e.Symbol.Scopes())
-			if ok {
-				idx, found := p.idToIdx[bid]
-				if found {
-					p.bindings[idx].Captured = true
-				}
-			}
-		}
+		p.checkSymbol(e.Symbol, depth)
 
 	case *ValidatedLambda:
 		p.walkBody(e.Body(), depth+1)
@@ -119,6 +135,7 @@ func (p *captureWalker) walkExpr(expr ValidatedExpr, depth int) {
 		p.walkBody(e.Body(), depth)
 
 	case *ValidatedSetBang:
+		p.checkSymbol(e.Name, depth)
 		p.walkExpr(e.SubExp(), depth)
 
 	case *ValidatedLet:
@@ -158,6 +175,11 @@ func (p *captureWalker) walkExpr(expr ValidatedExpr, depth int) {
 
 	case *ValidatedQuote, *ValidatedLiteral, *ValidatedQuasiquote:
 		// No sub-expressions to walk
+
+	default:
+		panic(fmt.Sprintf(
+			"captureWalker.walkExpr: unhandled ValidatedExpr type %T", expr,
+		))
 	}
 }
 
