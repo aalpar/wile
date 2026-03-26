@@ -171,17 +171,3 @@ func PrimJiffiesPerSecond(mc *machine.MachineContext) error {
 	return nil
 }
 
-// PrimFeatures implements the (features) primitive.
-// Returns list of implementation features.
-func PrimFeatures(mc *machine.MachineContext) error {
-	features := machine.AllFeatures()
-
-	elems := make([]values.Value, len(features))
-	for i, f := range features {
-		elems[i] = values.NewSymbol(f)
-	}
-	result := values.List(elems...)
-
-	mc.SetValue(result)
-	return nil
-}

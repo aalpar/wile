@@ -113,3 +113,17 @@ func PrimEnvironmentBoundQ(mc *machine.MachineContext) error {
 	mc.SetValue(values.BoolToBoolean(binding != nil))
 	return nil
 }
+
+// PrimFeatures implements the (features) primitive.
+// Returns list of implementation features.
+func PrimFeatures(mc *machine.MachineContext) error {
+	features := machine.AllFeatures()
+
+	elems := make([]values.Value, len(features))
+	for i, f := range features {
+		elems[i] = values.NewSymbol(f)
+	}
+
+	mc.SetValue(values.List(elems...))
+	return nil
+}

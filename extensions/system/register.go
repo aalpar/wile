@@ -46,8 +46,6 @@ func addPrimitives(r *registry.Registry) error {
 			Doc: "Returns monotonic nanoseconds since program start.", Category: "system"},
 		{Name: "jiffies-per-second", Impl: PrimJiffiesPerSecond,
 			Doc: "Returns the number of jiffies per second.", Category: "system"},
-		{Name: "features", Impl: PrimFeatures,
-			Doc: "Returns a list of implementation feature symbols.", Category: "system"},
 	}, registry.PhaseRuntime)
 	return nil
 }

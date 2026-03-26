@@ -267,52 +267,6 @@ func TestJiffiesPerSecond(t *testing.T) {
 	})
 }
 
-func TestFeatures(t *testing.T) {
-	c := qt.New(t)
-	engine := newEngine(t)
-
-	t.Run("returns a list", func(t *testing.T) {
-		result := eval(t, engine, `(list? (features))`)
-		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
-	})
-
-	t.Run("contains r7rs", func(t *testing.T) {
-		result := eval(t, engine, `
-			(let loop ((fs (features)))
-			  (cond
-			    ((null? fs) #f)
-			    ((eq? (car fs) 'r7rs) #t)
-			    (else (loop (cdr fs)))))
-		`)
-		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
-	})
-
-	t.Run("contains wile", func(t *testing.T) {
-		result := eval(t, engine, `
-			(let loop ((fs (features)))
-			  (cond
-			    ((null? fs) #f)
-			    ((eq? (car fs) 'wile) #t)
-			    (else (loop (cdr fs)))))
-		`)
-		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
-	})
-
-	t.Run("all elements are symbols", func(t *testing.T) {
-		result := eval(t, engine, `
-			(let loop ((fs (features)) (ok #t))
-			  (if (null? fs)
-			      ok
-			      (loop (cdr fs) (and ok (symbol? (car fs))))))
-		`)
-		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
-	})
-
-	t.Run("wrong argument count", func(t *testing.T) {
-		evalExpectError(t, engine, `(features 42)`)
-	})
-}
-
 // TestExit tests the (exit) primitive using subprocess execution.
 // Since exit calls os.Exit(), we must run it in a subprocess.
 func TestExit(t *testing.T) {
