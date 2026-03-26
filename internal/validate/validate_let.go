@@ -111,6 +111,7 @@ func validateLetBindingsAndBody(
 	}
 
 	markMutableBindings(childEnv, bindings, result)
+	markCapturedBindings(childEnv, bindings, body, false)
 
 	return &ValidatedLet{
 		validatedBase: validatedBase{formName: formName, source: source},
@@ -238,6 +239,7 @@ func validateLetStarFlat(
 	}
 
 	markMutableBindings(childEnv, bindings, result)
+	markCapturedBindings(childEnv, bindings, body, true)
 
 	return &ValidatedLet{
 		validatedBase: validatedBase{formName: formName, source: source},
@@ -300,11 +302,13 @@ func validateLetStarNested(
 	innerBody = body
 	for i := len(validated) - 1; i >= 0; i-- {
 		vb := validated[i]
-		markMutableBindings(vb.childEnv, []ValidatedLetBinding{vb.binding}, result)
+		bindings := []ValidatedLetBinding{vb.binding}
+		markMutableBindings(vb.childEnv, bindings, result)
+		markCapturedBindings(vb.childEnv, bindings, innerBody, true)
 		node := &ValidatedLet{
 			validatedBase: validatedBase{formName: formName, source: source},
 			Kind:          LetKindLetStar,
-			Bindings:      []ValidatedLetBinding{vb.binding},
+			Bindings:      bindings,
 			body:          innerBody,
 		}
 		innerBody = []ValidatedExpr{node}
@@ -419,6 +423,7 @@ func validateLetrecBindingsAndBody(
 	}
 
 	markMutableBindings(childEnv, bindings, result)
+	markCapturedBindings(childEnv, bindings, body, true)
 
 	return &ValidatedLet{
 		validatedBase: validatedBase{formName: formName, source: source},
@@ -492,12 +497,17 @@ func validateNamedLet(
 		args: callArgs,
 	}
 
+	tagBindings := []ValidatedLetBinding{{Name: tag, Init: lambdaInit}}
+	tagBody := []ValidatedExpr{callExpr}
+	markMutableBindings(tagEnv, tagBindings, result)
+	markCapturedBindings(tagEnv, tagBindings, tagBody, true)
+
 	return &ValidatedLet{
 		validatedBase: validatedBase{formName: "letrec", source: source},
 		Kind:          LetKindLetrec,
-		Bindings:      []ValidatedLetBinding{{Name: tag, Init: lambdaInit}},
+		Bindings:      tagBindings,
 		Tag:           tag,
-		body:          []ValidatedExpr{callExpr},
+		body:          tagBody,
 	}
 }
 

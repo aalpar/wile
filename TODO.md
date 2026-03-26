@@ -56,6 +56,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 - [ ] **Procedure inlining** [Performance, Research]: Explore peephole inlining of known procedures at compile time. `plans/PERFORMANCE.md`
 - [ ] **Environment frame slimming** [Performance]: Reduce `EnvironmentFrame` struct for closure bodies that only need local bindings. `plans/PERFORMANCE.md`
+- [ ] **B2 escape analysis for let-bound closures** [Performance, Research]: Track whether a closure stored in a let binding escapes the let scope. Enables `!Captured` for patterns like `(let ((f (lambda () x))) (f))` where the closure is only called locally. Requires data flow analysis within the let body. Blocked by: B1 capture analysis (`plans/CAPTURE-ANALYSIS.md`).
 
 ### Research
 
