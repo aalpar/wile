@@ -114,9 +114,10 @@ func TestEngine_EmbeddedStdlib_RewriteIdentityRight(t *testing.T) {
 
 		(define proto
 		  (make-term-protocol
-		    car                             ;; get-operator
-		    cdr                             ;; get-operands
-		    (lambda (term new-args)         ;; make-term: term × new-operands → term
+		    pair?                            ;; compound-term?
+		    car                              ;; get-operator
+		    cdr                              ;; get-operands
+		    (lambda (term new-args)          ;; make-term: term × new-operands → term
 		      (cons (car term) new-args))
 		    (lambda (a b) (string<? (symbol->string a) (symbol->string b))))) ;; compare
 
@@ -147,7 +148,7 @@ func TestEngine_EmbeddedStdlib_RewriteIdentityLeft(t *testing.T) {
 		(import (wile algebra rewrite))
 
 		(define proto
-		  (make-term-protocol car cdr
+		  (make-term-protocol pair? car cdr
 		    (lambda (term new-args) (cons (car term) new-args))
 		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
 
@@ -178,7 +179,7 @@ func TestEngine_EmbeddedStdlib_RewriteNoMatch(t *testing.T) {
 		(import (wile algebra rewrite))
 
 		(define proto
-		  (make-term-protocol car cdr
+		  (make-term-protocol pair? car cdr
 		    (lambda (term new-args) (cons (car term) new-args))
 		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
 
@@ -208,7 +209,7 @@ func TestEngine_EmbeddedStdlib_RewriteCommutativity(t *testing.T) {
 	result, err := eng.EvalMultiple(ctx, `
 		(import (wile algebra rewrite))
 		(define proto
-		  (make-term-protocol car cdr
+		  (make-term-protocol pair? car cdr
 		    (lambda (term new-args) (cons (car term) new-args))
 		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
 		(define normalize (make-normalizer (list (make-commutativity-axiom '+)) proto))
@@ -235,7 +236,7 @@ func TestEngine_EmbeddedStdlib_RewriteCommutativityOrdered(t *testing.T) {
 	result, err := eng.EvalMultiple(ctx, `
 		(import (wile algebra rewrite))
 		(define proto
-		  (make-term-protocol car cdr
+		  (make-term-protocol pair? car cdr
 		    (lambda (term new-args) (cons (car term) new-args))
 		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
 		(define normalize (make-normalizer (list (make-commutativity-axiom '+)) proto))
@@ -262,7 +263,7 @@ func TestEngine_EmbeddedStdlib_RewriteAbsorbing(t *testing.T) {
 	result, err := eng.EvalMultiple(ctx, `
 		(import (wile algebra rewrite))
 		(define proto
-		  (make-term-protocol car cdr
+		  (make-term-protocol pair? car cdr
 		    (lambda (term new-args) (cons (car term) new-args))
 		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
 		(define normalize
@@ -290,7 +291,7 @@ func TestEngine_EmbeddedStdlib_RewriteIdempotence(t *testing.T) {
 	result, err := eng.EvalMultiple(ctx, `
 		(import (wile algebra rewrite))
 		(define proto
-		  (make-term-protocol car cdr
+		  (make-term-protocol pair? car cdr
 		    (lambda (term new-args) (cons (car term) new-args))
 		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
 		(define normalize (make-normalizer (list (make-idempotence-axiom '&)) proto))
@@ -317,7 +318,7 @@ func TestEngine_EmbeddedStdlib_RewriteInvolution(t *testing.T) {
 	result, err := eng.EvalMultiple(ctx, `
 		(import (wile algebra rewrite))
 		(define proto
-		  (make-term-protocol car cdr
+		  (make-term-protocol pair? car cdr
 		    (lambda (term new-args) (cons (car term) new-args))
 		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
 		(define normalize (make-normalizer (list (make-involution-axiom '!)) proto))
@@ -344,7 +345,7 @@ func TestEngine_EmbeddedStdlib_RewriteComposed(t *testing.T) {
 	result, err := eng.EvalMultiple(ctx, `
 		(import (wile algebra rewrite))
 		(define proto
-		  (make-term-protocol car cdr
+		  (make-term-protocol pair? car cdr
 		    (lambda (term new-args) (cons (car term) new-args))
 		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
 		(define zero? (lambda (x) (eq? x 'zero)))

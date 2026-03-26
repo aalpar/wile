@@ -2,7 +2,7 @@
   (export
     ;; Term protocol
     make-term-protocol term-protocol?
-    term-get-operator term-get-operands term-make-term term-compare
+    term-compound? term-get-operator term-get-operands term-make-term term-compare
     ;; Axioms
     make-identity-axiom identity-axiom?
     make-commutativity-axiom commutativity-axiom?

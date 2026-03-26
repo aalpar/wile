@@ -24,15 +24,22 @@
 ;; ─── Term protocol ──────────────────────────
 
 (define-record-type <term-protocol>
-  (make-term-protocol* get-operator-fn get-operands-fn make-term-fn compare-fn)
+  (make-term-protocol* compound-term?-fn get-operator-fn get-operands-fn
+                       make-term-fn compare-fn)
   term-protocol?
-  (get-operator-fn  term-get-operator-fn)
-  (get-operands-fn  term-get-operands-fn)
-  (make-term-fn     term-make-term-fn)
-  (compare-fn       term-compare-fn))
+  (compound-term?-fn term-compound?-fn)
+  (get-operator-fn   term-get-operator-fn)
+  (get-operands-fn   term-get-operands-fn)
+  (make-term-fn      term-make-term-fn)
+  (compare-fn        term-compare-fn))
 
-(define (make-term-protocol get-operator get-operands make-term compare)
-  (make-term-protocol* get-operator get-operands make-term compare))
+(define (make-term-protocol compound-term? get-operator get-operands
+                            make-term compare)
+  (make-term-protocol* compound-term? get-operator get-operands
+                       make-term compare))
+
+(define (term-compound? proto x)
+  ((term-compound?-fn proto) x))
 
 (define (term-get-operator proto term)
   ((term-get-operator-fn proto) term))
@@ -169,7 +176,7 @@
              (if (and (equal? op target-op)
                       (= (length args) 1))
                  (let ((inner (car args)))
-                   (if (and (pair? inner)
+                   (if (and (term-compound? proto inner)
                             (equal? (term-get-operator proto inner) target-op)
                             (= (length (term-get-operands proto inner)) 1))
                        (car (term-get-operands proto inner))

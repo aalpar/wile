@@ -47,7 +47,7 @@
     gc-sound?
     ;; Rewriting
     make-term-protocol term-protocol?
-    term-get-operator term-get-operands term-make-term term-compare
+    term-compound? term-get-operator term-get-operands term-make-term term-compare
     make-identity-axiom identity-axiom?
     make-commutativity-axiom commutativity-axiom?
     make-absorbing-axiom absorbing-axiom?
