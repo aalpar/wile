@@ -75,7 +75,7 @@ All test files must match the pattern `*-test.scm` for automatic discovery.
 
 | Location | Pattern | Example |
 |----------|---------|---------|
-| Library tests | `lib/<library>/test/<module>-test.scm` | `lib/srfi/1/test/fold-test.scm` |
+| Library tests | `stdlib/lib/<library>/test/<module>-test.scm` | `stdlib/lib/srfi/1/test/fold-test.scm` |
 | Core tests | `test/scheme/<feature>-test.scm` | `test/scheme/numeric-tower-test.scm` |
 | Regression tests | `test/regression/issue-<num>-<slug>.scm` | `test/regression/issue-123-macro-hygiene.scm` | (directory not yet populated) |
 

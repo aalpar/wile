@@ -38,9 +38,9 @@ func getSchemeBinary() string {
 	return filepath.Join(getProjectRoot(), "dist", runtime.GOOS, runtime.GOARCH, "wile")
 }
 
-// getLibPath returns the path to the lib/ directory.
+// getLibPath returns the path to the stdlib/lib/ directory.
 func getLibPath() string {
-	return filepath.Join(getProjectRoot(), "lib")
+	return filepath.Join(getProjectRoot(), "stdlib", "lib")
 }
 
 // getTestDataPath returns the path to the testdata directory.

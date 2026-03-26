@@ -17,7 +17,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -30,15 +29,10 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile"
 	"github.com/aalpar/wile/extensions/system"
-	"github.com/aalpar/wile/internal/bootstrap"
-	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/repl"
-	"github.com/aalpar/wile/internal/syntax"
-	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/registry"
-	"github.com/aalpar/wile/runtime"
+	"github.com/aalpar/wile/stdlib"
 
 	"github.com/jessevdk/go-flags"
 )
@@ -98,38 +92,32 @@ func resolveVersion() (version, sha string) {
 	return version, sha
 }
 
-// initLibraryRegistry creates and configures the library registry with search paths.
-// Search path order (highest priority first):
-//  1. -L command line flag paths
-//  2. SCHEME_LIBRARY_PATH environment variable paths
-//  3. Default paths (".", "./lib")
-func initLibraryRegistry(_ context.Context) *machine.LibraryRegistry {
-	registry := machine.NewLibraryRegistry()
+// buildLibraryPaths collects library search paths from environment variables
+// and command-line flags. Paths from -L take priority over SCHEME_LIBRARY_PATH.
+func buildLibraryPaths() []string {
+	var paths []string
 
-	// Add environment variable paths (after defaults).
-	// Reverse-iterate so left-to-right order is preserved after prepending.
 	envPath := os.Getenv(SchemeLibraryPathEnv)
 	if envPath != "" {
-		parts := strings.Split(envPath, string(os.PathListSeparator))
-		for i := len(parts) - 1; i >= 0; i-- {
-			if parts[i] != "" {
-				registry.PrependSearchPath(parts[i])
+		for p := range strings.SplitSeq(envPath, string(os.PathListSeparator)) {
+			if p != "" {
+				paths = append(paths, p)
 			}
 		}
 	}
 
-	// Add command line paths (highest priority, added last so they're first).
-	// Reverse-iterate so left-to-right order is preserved after prepending.
 	if opts.LibraryPath != "" {
-		parts := strings.Split(opts.LibraryPath, string(os.PathListSeparator))
-		for i := len(parts) - 1; i >= 0; i-- {
-			if parts[i] != "" {
-				registry.PrependSearchPath(parts[i])
+		var cmdPaths []string
+		for p := range strings.SplitSeq(opts.LibraryPath, string(os.PathListSeparator)) {
+			if p != "" {
+				cmdPaths = append(cmdPaths, p)
 			}
 		}
+		// Command-line paths have higher priority (prepend before env paths)
+		paths = append(cmdPaths, paths...)
 	}
 
-	return registry
+	return paths
 }
 
 func setupSignals(quiet bool) {
@@ -224,18 +212,22 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	env, primRegistry, err0 := bootstrap.NewTopLevelWithRegistry(ctx)
+	libPaths := buildLibraryPaths()
+	eng, err0 := wile.NewEngine(ctx,
+		wile.WithAllExtensions(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceOS(),
+		wile.WithLibraryPaths(libPaths...),
+	)
 	if err0 != nil {
-		Failf(err0, "Cannot create top-level environment")
+		Failf(err0, "Cannot create engine")
 	}
-
-	// Initialize library registry with search paths and attach to environment
-	libRegistry := initLibraryRegistry(ctx)
-	env.SetLibraryRegistry(libRegistry)
-
-	// Set up the library environment factory on the Namespace.
-	// Uses NewLibraryEnvironmentFrame which shares the Namespace for symbol identity.
-	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
+	defer func() {
+		closeErr := eng.Close()
+		if closeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: engine close error: %v\n", closeErr)
+		}
+	}()
 	// Load files if any
 	if len(opts.File) > 0 {
 		for i, filename := range opts.File {
@@ -256,14 +248,34 @@ func main() {
 					// - interactive mode (all files loaded before REPL)
 					// - not the last file (earlier files are always silent)
 					// - -e expressions present (files are setup, -e is the main program)
-					err = runtime.Load(ctx, env, fd, fn)
-					if err != nil {
-						Failf(err)
+					content, readErr := io.ReadAll(bufio.NewReader(fd))
+					if readErr != nil {
+						Failf(readErr, "Cannot read file %s", fn)
+					}
+					absPath, absErr := filepath.Abs(fn)
+					if absErr != nil {
+						Failf(absErr, "cannot resolve path")
+					}
+					code := "(begin " + string(content) + "\n)"
+					loadErr := eng.WithLoadPath(absPath, func() error {
+						expr, parseErr := eng.ParseWithSource(ctx, code, fn)
+						if parseErr != nil {
+							return parseErr
+						}
+						compiled, compileErr := eng.Compile(ctx, expr)
+						if compileErr != nil {
+							return compileErr
+						}
+						_, runErr := eng.Run(ctx, compiled)
+						return runErr
+					})
+					if loadErr != nil {
+						Failf(loadErr)
 					}
 				} else {
 					// Run last file (print results) and exit in non-interactive mode
 					fin = bufio.NewReader(fd)
-					runFile(ctx, env, fin, fn, positionalFile)
+					runFile(ctx, eng, fin, fn, positionalFile)
 				}
 			}(filename, descriptor)
 		}
@@ -271,13 +283,13 @@ func main() {
 
 	// Evaluate -e expressions after files are loaded
 	if len(opts.Eval) > 0 {
-		runEval(ctx, env, opts.Eval)
+		runEval(ctx, eng, opts.Eval)
 	}
 
 	// Enter REPL if no files and no evals were provided, or interactive mode was requested
 	if (len(opts.File) == 0 && len(opts.Eval) == 0) || opts.Interactive {
 		setupSignals(opts.Quiet)
-		runREPL(ctx, env, primRegistry)
+		runREPL(ctx, eng)
 	}
 
 	// Memory profiling (written at exit after all work is done)
@@ -304,7 +316,7 @@ func main() {
 // All top-level expressions are wrapped in a single (begin ...) form to enable
 // proper R7RS continuation semantics across expression boundaries.
 // When shebang is true, a leading #! line is skipped if present.
-func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin *bufio.Reader, filename string, shebang bool) {
+func runFile(ctx context.Context, eng *wile.Engine, fin *bufio.Reader, filename string, shebang bool) {
 	// Skip shebang line: only for files executed as programs (positional arg),
 	// not for files loaded via -f which should be pure Scheme source.
 	if shebang {
@@ -314,120 +326,65 @@ func runFile(ctx context.Context, env *environment.EnvironmentFrame, fin *bufio.
 		}
 	}
 
-	// Push file path onto LoadPathStack so (include ...) can resolve relative paths.
-	// Mirrors runtime.Load — errors here mean (include ...) will fail with misleading messages.
+	content, readErr := io.ReadAll(fin)
+	if readErr != nil {
+		Failf(readErr, "Cannot read file %s", filename)
+	}
+
+	if len(content) == 0 {
+		return
+	}
+
 	absPath, absErr := filepath.Abs(filename)
 	if absErr != nil {
 		Failf(absErr, "cannot resolve path")
 	}
-	stack := env.LoadPathStack()
-	if stack != nil {
-		pushErr := stack.Push(absPath)
-		if pushErr != nil {
-			Failf(pushErr, "cannot push load path")
+
+	// Wrap in (begin ...) so all defines are mutually recursive and all
+	// expressions share a single continuation chain. Using a space (not
+	// newline) after "begin" avoids shifting source line numbers.
+	code := "(begin " + string(content) + "\n)"
+
+	var result wile.Value
+	loadErr := eng.WithLoadPath(absPath, func() error {
+		expr, parseErr := eng.ParseWithSource(ctx, code, filename)
+		if parseErr != nil {
+			return parseErr
 		}
-		defer stack.Pop()
+		compiled, compileErr := eng.Compile(ctx, expr)
+		if compileErr != nil {
+			return compileErr
+		}
+		var runErr error
+		result, runErr = eng.Run(ctx, compiled)
+		return runErr
+	})
+	if loadErr != nil {
+		Failf(loadErr)
 	}
 
-	p := parser.NewParserWithFile(env, true, fin, filename)
-
-	// Collect all expressions from the file
-	var exprs []syntax.SyntaxValue
-	stx, err := p.ReadSyntax(ctx)
-	for err == nil {
-		exprs = append(exprs, stx)
-		stx, err = p.ReadSyntax(ctx)
-	}
-	if !errors.Is(err, io.EOF) {
-		Failf(err)
-	}
-
-	// If no expressions, nothing to do
-	if len(exprs) == 0 {
-		return
-	}
-
-	// If only one expression, run it directly (no need for begin wrapper)
-	var programStx syntax.SyntaxValue
-	if len(exprs) == 1 {
-		programStx = exprs[0]
-	} else {
-		// Wrap all expressions in (begin expr1 expr2 ... exprN)
-		// This ensures all expressions share a single continuation chain,
-		// enabling proper R7RS continuation semantics across expression boundaries.
-		sctx := syntax.NewZeroValueSourceContext()
-		beginSym := syntax.NewSyntaxSymbol("begin", sctx)
-		allExprs := make([]syntax.SyntaxValue, 0, len(exprs)+1)
-		allExprs = append(allExprs, beginSym)
-		allExprs = append(allExprs, exprs...)
-		programStx = syntax.SyntaxList(sctx, allExprs...)
-	}
-
-	// Compile and run the single wrapped expression
-	tpl, err2 := runtime.Compile(ctx, env, programStx)
-	if err2 != nil {
-		Failf(err2, "Cannot compile expression")
-	}
-	mv, err2 := runtime.Run(ctx, tpl, env)
-	if err2 != nil {
-		Failf(err2)
-	}
-	if !mv.IsVoid() {
-		Printf("%s\n", mv.SchemeString())
+	if result != nil && !result.IsVoid() {
+		Printf("%s\n", result.SchemeString())
 	}
 }
 
 // runEval evaluates expressions supplied via -e flags.
-// All expressions are parsed together, wrapped in a single (begin ...) form,
-// and compiled/run as one unit — same continuation semantics as file execution.
-func runEval(ctx context.Context, env *environment.EnvironmentFrame, exprs []string) {
+// All expressions are joined and evaluated together via EvalMultipleWithSource.
+func runEval(ctx context.Context, eng *wile.Engine, exprs []string) {
 	combined := strings.Join(exprs, "\n")
-	fin := strings.NewReader(combined)
-	p := parser.NewParserWithFile(env, true, fin, "<eval>")
-
-	var stxExprs []syntax.SyntaxValue
-	stx, err := p.ReadSyntax(ctx)
-	for err == nil {
-		stxExprs = append(stxExprs, stx)
-		stx, err = p.ReadSyntax(ctx)
-	}
-	if !errors.Is(err, io.EOF) {
+	result, err := eng.EvalMultipleWithSource(ctx, combined, "<eval>")
+	if err != nil {
 		Failf(err)
 	}
-
-	if len(stxExprs) == 0 {
-		return
-	}
-
-	var programStx syntax.SyntaxValue
-	if len(stxExprs) == 1 {
-		programStx = stxExprs[0]
-	} else {
-		sctx := syntax.NewZeroValueSourceContext()
-		beginSym := syntax.NewSyntaxSymbol("begin", sctx)
-		allExprs := make([]syntax.SyntaxValue, 0, len(stxExprs)+1)
-		allExprs = append(allExprs, beginSym)
-		allExprs = append(allExprs, stxExprs...)
-		programStx = syntax.SyntaxList(sctx, allExprs...)
-	}
-
-	tpl, err2 := runtime.Compile(ctx, env, programStx)
-	if err2 != nil {
-		Failf(err2, "Cannot compile expression")
-	}
-	mv, err2 := runtime.Run(ctx, tpl, env)
-	if err2 != nil {
-		Failf(err2)
-	}
-	if !mv.IsVoid() {
-		Printf("%s\n", mv.SchemeString())
+	if result != nil && !result.IsVoid() {
+		Printf("%s\n", result.SchemeString())
 	}
 }
 
 // runREPL runs an interactive Read-Eval-Print Loop using the repl package
-func runREPL(ctx context.Context, env *environment.EnvironmentFrame, primRegistry *registry.Registry) {
-	docProv := repl.NewRegistryDocProvider(primRegistry)
-	r := repl.New(env, repl.WithDocProvider(docProv))
+func runREPL(ctx context.Context, eng *wile.Engine) {
+	docProv := repl.NewRegistryDocProvider(eng.Registry())
+	r := repl.New(eng.Environment(), repl.WithDocProvider(docProv))
 	err := r.Run(ctx)
 	if err != nil {
 		Failf(err, "REPL error")

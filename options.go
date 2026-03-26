@@ -18,10 +18,16 @@ import (
 	"io/fs"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/extensions/files"
+	"github.com/aalpar/wile/extensions/gointerop"
 	"github.com/aalpar/wile/extensions/introspection"
 	"github.com/aalpar/wile/extensions/math"
+	"github.com/aalpar/wile/extensions/system"
+	"github.com/aalpar/wile/extensions/threads"
 	"github.com/aalpar/wile/internal/extensions/all"
+	exteval "github.com/aalpar/wile/internal/extensions/eval"
 	"github.com/aalpar/wile/internal/extensions/io"
+	nsext "github.com/aalpar/wile/internal/extensions/namespace"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/security"
@@ -98,7 +104,7 @@ func WithMaxCallDepth(n uint64) EngineOption {
 // Without this option, (import ...) raises a configuration error.
 //
 // Paths are searched in order: user-supplied paths first, then the defaults
-// ("." and "./lib"). An empty call WithLibraryPaths() enables library support
+// ("." and "./stdlib/lib"). An empty call WithLibraryPaths() enables library support
 // with defaults only.
 //
 // Example:
@@ -106,7 +112,7 @@ func WithMaxCallDepth(n uint64) EngineOption {
 //	eng, err := wile.NewEngine(ctx,
 //	    wile.WithLibraryPaths("/app/libs", "./vendor"),
 //	)
-//	// search order: /app/libs, ./vendor, ., ./lib
+//	// search order: /app/libs, ./vendor, ., ./stdlib/lib
 func WithLibraryPaths(paths ...string) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.libraryEnabled = true
@@ -244,7 +250,7 @@ func WithSourceOS() EngineOption {
 //
 //	eng, err := wile.NewEngine(ctx,
 //	    append(wile.SafeExtensions(),
-//	        wile.WithLibraryPaths("./lib"),
+//	        wile.WithLibraryPaths("./stdlib/lib"),
 //	    )...,
 //	)
 func SafeExtensions() []EngineOption {
@@ -266,6 +272,50 @@ func SafeExtensions() []EngineOption {
 func WithSafeExtensions() EngineOption {
 	return func(cfg *engineConfig) {
 		for _, opt := range SafeExtensions() {
+			opt(cfg)
+		}
+	}
+}
+
+// AllExtensions returns the complete set of engine options that add every
+// available extension. This matches the extension set loaded by the CLI
+// binary (io, files, math, introspection, eval, namespace, threads,
+// gointerop, all, system).
+//
+// Use [WithAllExtensions] when no additional options need to be appended.
+//
+// Example:
+//
+//	eng, err := wile.NewEngine(ctx,
+//	    append(wile.AllExtensions(),
+//	        wile.WithLibraryPaths("./stdlib/lib"),
+//	    )...,
+//	)
+func AllExtensions() []EngineOption {
+	return []EngineOption{
+		WithExtension(io.Extension),
+		WithExtension(files.Extension),
+		WithExtension(math.Extension),
+		WithExtension(introspection.Extension),
+		WithExtension(exteval.Extension),
+		WithExtension(nsext.Extension),
+		WithExtension(threads.Extension),
+		WithExtension(gointerop.Extension),
+		WithExtension(all.Extension),
+		WithExtension(system.Extension),
+	}
+}
+
+// WithAllExtensions adds every available extension to the engine.
+// This is a convenience wrapper around AllExtensions for the common case
+// where no additional options need to be appended.
+//
+// Example:
+//
+//	eng, err := wile.NewEngine(ctx, wile.WithAllExtensions())
+func WithAllExtensions() EngineOption {
+	return func(cfg *engineConfig) {
+		for _, opt := range AllExtensions() {
 			opt(cfg)
 		}
 	}

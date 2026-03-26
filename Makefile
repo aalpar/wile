@@ -90,13 +90,22 @@ build-linux-amd64: $(DIST_DIR)/linux/amd64/$(MY_BIN)
 .PHONY: build-all
 build-all: build-darwin-arm64 build-darwin-amd64 build-linux-arm64 build-linux-amd64
 
-# Install the wile binary to the same location as 'go install' ($GOBIN or $GOPATH/bin).
+# Install prefix for non-Go files (libraries, data).
+# Binary is always installed to GOBIN; libraries to PREFIX/share/wile/lib.
+PREFIX ?= /usr/local
+DATADIR = $(PREFIX)/share/wile
+
+# Install the wile binary and standard libraries.
 #   make install
+#   make install PREFIX=/opt/wile
 .PHONY: install
 install: build
 	@mkdir -p $(GOBIN)
 	cp $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) $(GOBIN)/$(MY_BIN)
 	@echo "Installed $(MY_BIN) to $(GOBIN)/$(MY_BIN)"
+	@mkdir -p $(DATADIR)
+	cp -R stdlib/lib $(DATADIR)/
+	@echo "Installed libraries to $(DATADIR)/lib/"
 
 # Build all embedding examples. Verifies that the public API compiles.
 #   make examples
@@ -204,11 +213,11 @@ KANREN_BENCH=examples/benchmarks/kanren-benchmark.scm
 .PHONY: bench-kanren
 bench-kanren: build
 	@if command -v gtime >/dev/null 2>&1; then \
-		SCHEME_LIBRARY_PATH=lib gtime -v $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_BENCH) 2>&1; \
+		SCHEME_LIBRARY_PATH=stdlib/lib gtime -v $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_BENCH) 2>&1; \
 	elif [ -x /usr/bin/time ]; then \
-		SCHEME_LIBRARY_PATH=lib /usr/bin/time -l $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_BENCH) 2>&1; \
+		SCHEME_LIBRARY_PATH=stdlib/lib /usr/bin/time -l $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_BENCH) 2>&1; \
 	else \
-		SCHEME_LIBRARY_PATH=lib time $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_BENCH); \
+		SCHEME_LIBRARY_PATH=stdlib/lib time $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --file $(KANREN_BENCH); \
 	fi
 
 # Run canonical Gabriel benchmark suite (16 benchmarks).

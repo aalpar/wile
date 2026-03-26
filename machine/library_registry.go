@@ -133,7 +133,7 @@ type LibraryRegistry struct {
 // DefaultLibraryPaths are the default directories to search for libraries.
 var DefaultLibraryPaths = []string{
 	".",
-	"./lib",
+	"./stdlib/lib",
 }
 
 // NewLibraryRegistry creates a new library registry with default search paths.

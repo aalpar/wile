@@ -33,11 +33,11 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// getSchemeLibPath returns the path to the lib/ directory containing scheme libraries
+// getSchemeLibPath returns the path to the stdlib/lib/ directory containing scheme libraries
 func getSchemeLibPath() string {
 	_, filename, _, _ := runtime.Caller(0)
-	// machine/library_scheme_test.go -> lib/
-	return filepath.Join(filepath.Dir(filename), "..", "lib")
+	// machine/library_scheme_test.go -> stdlib/lib/
+	return filepath.Join(filepath.Dir(filename), "..", "stdlib", "lib")
 }
 
 // setupSchemeLibraryTest sets up a test environment with access to scheme libraries

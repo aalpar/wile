@@ -22,6 +22,7 @@ When investigating R7RS conformance issues:
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |
 | `ARCHITECTURE.md` | Dialect system, module decomposition, plugin shadowing, environment introspection | All proposed |
 | `TEST-COVERAGE-AND-REFACTORING.md` | machine/ test coverage (52 files), engine.go tests, REPL tests, type switch linter, form dual-dispatch | Open |
+| `OPTIMIZER-FIX.md` | Fix `callForeignCached` and `applyForeign` double-restore when call/cc inline mode calls a ForeignClosure. `savedCont` pointer-identity guard | Complete |
 
 Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans).
 
@@ -53,6 +54,8 @@ Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wil
 | `docs/design/EMBEDDING.md` | Embedding API design (Engine, Value boundary, interop) |
 | `docs/design/CONTINUATION_ESCAPE_DESIGN.md` | First-class continuation escape mechanism |
 | `docs/design/DELIMITED_CONTINUATIONS.md` | Delimited continuations: prompts, abort, composable |
+| `docs/design/SOURCE_LOADING.md` | FileResolver chain, embedded stdlib, library import resolution |
+| `docs/design/PEEPHOLE_OPTIMIZER.md` | Superinstruction formation, 3-pass pipeline, EditPlan, promoted opcodes, savedCont invariant |
 | `docs/dev/ENVIRONMENT_SYSTEM.md` | Environment system architecture |
 | `docs/dev/NUMERIC_TOWER.md` | Numeric tower (direct dispatch, lattice model) |
 | `docs/dev/R7RS_SEMANTIC_DIFFERENCES.md` | Documented R7RS specification deviations |

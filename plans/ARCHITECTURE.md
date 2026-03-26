@@ -99,7 +99,7 @@ Usage:
 eng, err := wile.NewEngine(ctx,
     wile.WithDialect(r7rs.Dialect),
     wile.WithExtension(files.Extension),
-    wile.WithLibraryPaths("./lib"),
+    wile.WithLibraryPaths("./stdlib/lib"),
 )
 ```
 
@@ -366,7 +366,7 @@ import (
 
 eng, _ := wile.NewEngine(ctx,
     wile.WithDialect(r7rs.Dialect),
-    wile.WithLibraryPaths("./lib"),
+    wile.WithLibraryPaths("./stdlib/lib"),
 )
 ```
 

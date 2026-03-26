@@ -6,7 +6,7 @@
 ;;;   3. Relational arith — deep recursion, variable chains (goal application)
 ;;;
 ;;; Usage (from project root):
-;;;   SCHEME_LIBRARY_PATH=lib ./dist/wile --file examples/benchmarks/kanren-benchmark.scm
+;;;   SCHEME_LIBRARY_PATH=stdlib/lib ./dist/wile --file examples/benchmarks/kanren-benchmark.scm
 
 (import (scheme base)
         (scheme write)

@@ -71,22 +71,36 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 	mc.env = env
 
 	savedTemplate := mc.template
+	savedCont := mc.cont
 	err = fcls.fn(mc)
 	if err != nil {
 		return nil, applyCallableError(mc, err)
 	}
 
-	// If the foreign function changed the template (defensive — no current
-	// ForeignClosure does this), let the VM continue from wherever it pointed.
+	// If the foreign function changed the template (e.g., PrimCallCC inline
+	// mode calling Apply on a MachineClosure), let the VM continue from
+	// wherever it pointed — the closure's RestoreContinuation will handle
+	// the SaveContinuation frame.
 	if mc.template != savedTemplate {
 		return mc, nil
 	}
 
 	if tail {
 		mc = mc.returnImmediate()
-	} else {
+	} else if mc.cont == savedCont {
 		// Non-tail: SaveContinuation is in the bytecode. Restore it
 		// to recover the caller's evals, env, template, and pc.
+		//
+		// mc.cont is always non-nil here: the bytecode preceding
+		// CallForeignCached always includes SaveContinuation, which
+		// pushes a frame onto mc.cont. (Unlike applyForeign, which
+		// can be called from sub-contexts where cont is nil.)
+		//
+		// Guard: if the foreign function already consumed the continuation
+		// (e.g., PrimCallCC inline mode calling ApplyCallable with a
+		// ForeignClosure, where applyForeign does its own RestoreAndRelease),
+		// mc.cont has already advanced past savedCont. Restoring again would
+		// double-restore from the wrong frame.
 		mc.RestoreAndRelease(mc.cont)
 	}
 	return mc, nil

@@ -41,11 +41,11 @@ This includes core + io + math + introspection + records/promises/strings/charac
 ```go
 engine, err := wile.NewEngine(ctx,
     wile.WithSafeExtensions(),
-    wile.WithLibraryPaths("./lib"),
+    wile.WithLibraryPaths("./stdlib/lib"),
 )
 ```
 
-Libraries loaded from `./lib` inherit the safe restriction. A library that tries to call `open-input-file` gets a compile-time error.
+Libraries loaded from `./stdlib/lib` inherit the safe restriction. A library that tries to call `open-input-file` gets a compile-time error.
 
 ### Composable: safe + specific extensions
 
@@ -55,7 +55,7 @@ Libraries loaded from `./lib` inherit the safe restriction. A library that tries
 engine, err := wile.NewEngine(ctx,
     append(wile.SafeExtensions(),
         wile.WithExtension(threads.Extension),
-        wile.WithLibraryPaths("./lib"),
+        wile.WithLibraryPaths("./stdlib/lib"),
     )...,
 )
 ```

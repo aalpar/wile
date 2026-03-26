@@ -15,7 +15,7 @@ raises a configuration error.
 engine, _ := wile.NewEngine(ctx)
 // (import ...) → error: "no library registry configured"
 
-// Library system enabled with default search paths ("." and "./lib")
+// Library system enabled with default search paths ("." and "./stdlib/lib")
 engine, _ := wile.NewEngine(ctx,
     wile.WithLibraryPaths(),
 )
@@ -24,7 +24,7 @@ engine, _ := wile.NewEngine(ctx,
 engine, _ := wile.NewEngine(ctx,
     wile.WithLibraryPaths("/app/libs", "./vendor"),
 )
-// Search order: /app/libs, ./vendor, ., ./lib
+// Search order: /app/libs, ./vendor, ., ./stdlib/lib
 ```
 
 ## Importing Extension Primitives
@@ -191,12 +191,12 @@ Library name     →  Search paths tried
                     /path/to/libs/mylib/greet.scm
                     ./mylib/greet.sld
                     ./mylib/greet.scm
-                    ./lib/mylib/greet.sld
-                    ./lib/mylib/greet.scm
+                    ./stdlib/lib/mylib/greet.sld
+                    ./stdlib/lib/mylib/greet.scm
 ```
 
 User-supplied paths are searched first (in order), then the defaults
-(`"."` and `"./lib"`).
+(`"."` and `"./stdlib/lib"`).
 
 ## Combining Extensions, Libraries, and RegisterFunc
 
