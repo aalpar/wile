@@ -4,12 +4,13 @@
     make-term-protocol term-protocol?
     term-get-operator term-get-operands term-make-term term-compare
     ;; Axioms
-    identity-axiom identity-axiom?
-    commutativity-axiom commutativity-axiom?
-    absorbing-axiom absorbing-axiom?
-    idempotence-axiom idempotence-axiom?
-    involution-axiom involution-axiom?
+    make-identity-axiom identity-axiom?
+    make-commutativity-axiom commutativity-axiom?
+    make-absorbing-axiom absorbing-axiom?
+    make-idempotence-axiom idempotence-axiom?
+    make-involution-axiom involution-axiom?
     axiom?
     ;; Normalizer
     make-normalizer)
+  (import (scheme base))
   (include "rewrite.scm"))

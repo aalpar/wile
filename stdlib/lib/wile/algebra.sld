@@ -48,11 +48,11 @@
     ;; Rewriting
     make-term-protocol term-protocol?
     term-get-operator term-get-operands term-make-term term-compare
-    identity-axiom identity-axiom?
-    commutativity-axiom commutativity-axiom?
-    absorbing-axiom absorbing-axiom?
-    idempotence-axiom idempotence-axiom?
-    involution-axiom involution-axiom?
+    make-identity-axiom identity-axiom?
+    make-commutativity-axiom commutativity-axiom?
+    make-absorbing-axiom absorbing-axiom?
+    make-idempotence-axiom idempotence-axiom?
+    make-involution-axiom involution-axiom?
     axiom?
     make-normalizer)
   (import (wile algebra order)

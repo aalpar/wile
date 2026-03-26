@@ -95,13 +95,14 @@ func TestEngine_EmbeddedStdlib_WileAlgebra(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "#t")
 }
 
-func TestAlgebraRewrite_IdentityAxiom(t *testing.T) {
+func TestEngine_EmbeddedStdlib_RewriteIdentityRight(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithAllExtensions(),
 		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
 	)
 	c.Assert(err, qt.IsNil)
@@ -119,7 +120,7 @@ func TestAlgebraRewrite_IdentityAxiom(t *testing.T) {
 		      (cons (car term) new-args))
 		    (lambda (a b) (string<? (symbol->string a) (symbol->string b))))) ;; compare
 
-		(define theory (list (identity-axiom '+ (lambda (x) (eq? x 'zero)))))
+		(define theory (list (make-identity-axiom '+ (lambda (x) (eq? x 'zero)))))
 		(define normalize (make-normalizer theory proto))
 
 		;; (+ x zero) → x
@@ -129,13 +130,14 @@ func TestAlgebraRewrite_IdentityAxiom(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "x")
 }
 
-func TestAlgebraRewrite_IdentityAxiomLeftZero(t *testing.T) {
+func TestEngine_EmbeddedStdlib_RewriteIdentityLeft(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithAllExtensions(),
 		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
 	)
 	c.Assert(err, qt.IsNil)
@@ -150,7 +152,7 @@ func TestAlgebraRewrite_IdentityAxiomLeftZero(t *testing.T) {
 		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
 
 		(define normalize
-		  (make-normalizer (list (identity-axiom '+ (lambda (x) (eq? x 'zero)))) proto))
+		  (make-normalizer (list (make-identity-axiom '+ (lambda (x) (eq? x 'zero)))) proto))
 
 		;; (+ zero x) → x
 		(normalize '(+ zero x))
@@ -159,13 +161,14 @@ func TestAlgebraRewrite_IdentityAxiomLeftZero(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "x")
 }
 
-func TestAlgebraRewrite_NoMatchReturnsFalse(t *testing.T) {
+func TestEngine_EmbeddedStdlib_RewriteNoMatch(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithAllExtensions(),
 		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
 	)
 	c.Assert(err, qt.IsNil)
@@ -180,7 +183,7 @@ func TestAlgebraRewrite_NoMatchReturnsFalse(t *testing.T) {
 		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
 
 		(define normalize
-		  (make-normalizer (list (identity-axiom '+ (lambda (x) (eq? x 'zero)))) proto))
+		  (make-normalizer (list (make-identity-axiom '+ (lambda (x) (eq? x 'zero)))) proto))
 
 		;; (+ a b) — no zero operand, returns #f
 		(normalize '(+ a b))
@@ -189,13 +192,14 @@ func TestAlgebraRewrite_NoMatchReturnsFalse(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "#f")
 }
 
-func TestAlgebraRewrite_Commutativity(t *testing.T) {
+func TestEngine_EmbeddedStdlib_RewriteCommutativity(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithAllExtensions(),
 		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
 	)
 	c.Assert(err, qt.IsNil)
@@ -207,7 +211,7 @@ func TestAlgebraRewrite_Commutativity(t *testing.T) {
 		  (make-term-protocol car cdr
 		    (lambda (term new-args) (cons (car term) new-args))
 		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
-		(define normalize (make-normalizer (list (commutativity-axiom '+)) proto))
+		(define normalize (make-normalizer (list (make-commutativity-axiom '+)) proto))
 		;; (+ y a) → (+ a y) because a < y
 		(normalize '(+ y a))
 	`)
@@ -215,13 +219,14 @@ func TestAlgebraRewrite_Commutativity(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "(+ a y)")
 }
 
-func TestAlgebraRewrite_CommutativityAlreadyOrdered(t *testing.T) {
+func TestEngine_EmbeddedStdlib_RewriteCommutativityOrdered(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithAllExtensions(),
 		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
 	)
 	c.Assert(err, qt.IsNil)
@@ -233,7 +238,7 @@ func TestAlgebraRewrite_CommutativityAlreadyOrdered(t *testing.T) {
 		  (make-term-protocol car cdr
 		    (lambda (term new-args) (cons (car term) new-args))
 		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
-		(define normalize (make-normalizer (list (commutativity-axiom '+)) proto))
+		(define normalize (make-normalizer (list (make-commutativity-axiom '+)) proto))
 		;; (+ a y) — already ordered, returns #f
 		(normalize '(+ a y))
 	`)
@@ -241,13 +246,14 @@ func TestAlgebraRewrite_CommutativityAlreadyOrdered(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "#f")
 }
 
-func TestAlgebraRewrite_Absorbing(t *testing.T) {
+func TestEngine_EmbeddedStdlib_RewriteAbsorbing(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithAllExtensions(),
 		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
 	)
 	c.Assert(err, qt.IsNil)
@@ -260,7 +266,7 @@ func TestAlgebraRewrite_Absorbing(t *testing.T) {
 		    (lambda (term new-args) (cons (car term) new-args))
 		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
 		(define normalize
-		  (make-normalizer (list (absorbing-axiom '* (lambda (x) (eq? x 'zero)))) proto))
+		  (make-normalizer (list (make-absorbing-axiom '* (lambda (x) (eq? x 'zero)))) proto))
 		;; (* x zero) → zero
 		(normalize '(* x zero))
 	`)
@@ -268,13 +274,14 @@ func TestAlgebraRewrite_Absorbing(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "zero")
 }
 
-func TestAlgebraRewrite_Idempotence(t *testing.T) {
+func TestEngine_EmbeddedStdlib_RewriteIdempotence(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithAllExtensions(),
 		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
 	)
 	c.Assert(err, qt.IsNil)
@@ -286,7 +293,7 @@ func TestAlgebraRewrite_Idempotence(t *testing.T) {
 		  (make-term-protocol car cdr
 		    (lambda (term new-args) (cons (car term) new-args))
 		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
-		(define normalize (make-normalizer (list (idempotence-axiom '&)) proto))
+		(define normalize (make-normalizer (list (make-idempotence-axiom '&)) proto))
 		;; (& x x) → x
 		(normalize '(& x x))
 	`)
@@ -294,13 +301,14 @@ func TestAlgebraRewrite_Idempotence(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "x")
 }
 
-func TestAlgebraRewrite_Involution(t *testing.T) {
+func TestEngine_EmbeddedStdlib_RewriteInvolution(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithAllExtensions(),
 		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
 	)
 	c.Assert(err, qt.IsNil)
@@ -312,7 +320,7 @@ func TestAlgebraRewrite_Involution(t *testing.T) {
 		  (make-term-protocol car cdr
 		    (lambda (term new-args) (cons (car term) new-args))
 		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
-		(define normalize (make-normalizer (list (involution-axiom '!)) proto))
+		(define normalize (make-normalizer (list (make-involution-axiom '!)) proto))
 		;; (! (! x)) → x
 		(normalize '(! (! x)))
 	`)
@@ -320,13 +328,14 @@ func TestAlgebraRewrite_Involution(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "x")
 }
 
-func TestAlgebraRewrite_ComposedTheory(t *testing.T) {
+func TestEngine_EmbeddedStdlib_RewriteComposed(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithAllExtensions(),
 		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
 	)
 	c.Assert(err, qt.IsNil)
@@ -340,9 +349,9 @@ func TestAlgebraRewrite_ComposedTheory(t *testing.T) {
 		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
 		(define zero? (lambda (x) (eq? x 'zero)))
 		(define theory
-		  (list (identity-axiom '+ zero?)
-		        (commutativity-axiom '+)
-		        (absorbing-axiom '* zero?)))
+		  (list (make-identity-axiom '+ zero?)
+		        (make-commutativity-axiom '+)
+		        (make-absorbing-axiom '* zero?)))
 		(define normalize (make-normalizer theory proto))
 		;; Identity: (+ x zero) → x
 		;; Absorbing: (* y zero) → zero
