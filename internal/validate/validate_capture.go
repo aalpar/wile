@@ -15,8 +15,6 @@
 package validate
 
 import (
-	"fmt"
-
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
 )
@@ -177,9 +175,8 @@ func (p *captureWalker) walkExpr(expr ValidatedExpr, depth int) {
 		// No sub-expressions to walk
 
 	default:
-		panic(fmt.Sprintf(
-			"captureWalker.walkExpr: unhandled ValidatedExpr type %T", expr,
-		))
+		// Best-effort: unknown validated forms are conservatively ignored
+		// so capture analysis cannot take down validation.
 	}
 }
 

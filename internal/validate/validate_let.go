@@ -499,6 +499,7 @@ func validateNamedLet(
 
 	tagBindings := []ValidatedLetBinding{{Name: tag, Init: lambdaInit}}
 	tagBody := []ValidatedExpr{callExpr}
+	markMutableBindings(tagEnv, tagBindings, result)
 	markCapturedBindings(tagEnv, tagBindings, tagBody, true)
 
 	return &ValidatedLet{
