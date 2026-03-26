@@ -28,6 +28,7 @@ func TestFS_ContainsExpectedLibraries(t *testing.T) {
 		"srfi/1.sld",
 		"wile/kanren.sld",
 		"wile/algebra.sld",
+		"wile/algebra/rewrite.sld",
 	}
 	for _, path := range expected {
 		_, err := fs.Stat(stdlib.FS, path)
