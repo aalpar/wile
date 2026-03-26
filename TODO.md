@@ -5,7 +5,7 @@ TODO
 
 ### Current Project Status
 
-**Version**: v1.9.7 (released)
+**Version**: v1.9.9 (released)
 **Core Language**: R7RS-small complete with hygienic macros, composable continuations, numeric tower, core-compiled let forms
 **Extensions**: 11 extension packages — 7 public (files, math, process, system, threads, gointerop, introspection), 4 internal (io, eval, namespace, all); all importable as R7RS `(wile <name>)` libraries. Go static analysis extensions extracted to [wile-goast](https://github.com/aalpar/wile-goast).
 **Embedding**: CLI uses public Engine API; embedded stdlib via `stdlib.FS` (`go:embed` + `fs.Sub`); `AllExtensions()`/`WithAllExtensions()` convenience options.

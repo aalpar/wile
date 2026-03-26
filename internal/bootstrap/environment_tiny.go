@@ -38,6 +38,7 @@ import (
 	"github.com/aalpar/wile/extensions/gointerop"
 	"github.com/aalpar/wile/extensions/introspection"
 	"github.com/aalpar/wile/extensions/math"
+	"github.com/aalpar/wile/extensions/process"
 	"github.com/aalpar/wile/extensions/system"
 	"github.com/aalpar/wile/extensions/threads"
 	"github.com/aalpar/wile/internal/extensions/all"
@@ -73,6 +74,7 @@ var allExtensions = []registry.Extension{
 	gointerop.Extension,
 	all.Extension,
 	system.Extension,
+	process.Extension,
 }
 
 // initializeEnvironmentWithRegistry is the shared initialization sequence for environment creation.

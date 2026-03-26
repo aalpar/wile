@@ -170,4 +170,3 @@ func PrimJiffiesPerSecond(mc *machine.MachineContext) error {
 	mc.SetValue(values.NewInteger(1000000000)) // 1 billion nanoseconds per second
 	return nil
 }
-
