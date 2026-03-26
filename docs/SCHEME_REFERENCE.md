@@ -1566,11 +1566,12 @@ Extension primitives are also importable as R7RS libraries when `WithLibraryPath
 | Library | Contents |
 |---------|----------|
 | `(wile math)` | Transcendental functions, complex number ops, rounding, conversion |
-| `(wile exceptions)` | Exception handling primitives |
 | `(wile system)` | Process context, time, features |
 | `(wile files)` | File I/O |
+| `(wile process)` | Process execution, subprocess management |
 | `(wile threads)` | SRFI-18 threading |
 | `(wile gointerop)` | Go channels, WaitGroup, RWMutex, Once, Atomic |
+| `(wile introspection)` | Environment introspection |
 
 Import modifiers — `only`, `except`, `prefix`, `rename` — work on all libraries:
 
