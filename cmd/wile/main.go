@@ -256,9 +256,18 @@ func main() {
 					if absErr != nil {
 						Failf(absErr, "cannot resolve path")
 					}
+					code := "(begin " + string(content) + "\n)"
 					loadErr := eng.WithLoadPath(absPath, func() error {
-						_, evalErr := eng.EvalMultipleWithSource(ctx, string(content), fn)
-						return evalErr
+						expr, parseErr := eng.ParseWithSource(ctx, code, fn)
+						if parseErr != nil {
+							return parseErr
+						}
+						compiled, compileErr := eng.Compile(ctx, expr)
+						if compileErr != nil {
+							return compileErr
+						}
+						_, runErr := eng.Run(ctx, compiled)
+						return runErr
 					})
 					if loadErr != nil {
 						Failf(loadErr)
@@ -331,11 +340,24 @@ func runFile(ctx context.Context, eng *wile.Engine, fin *bufio.Reader, filename 
 		Failf(absErr, "cannot resolve path")
 	}
 
+	// Wrap in (begin ...) so all defines are mutually recursive and all
+	// expressions share a single continuation chain. Using a space (not
+	// newline) after "begin" avoids shifting source line numbers.
+	code := "(begin " + string(content) + "\n)"
+
 	var result wile.Value
 	loadErr := eng.WithLoadPath(absPath, func() error {
-		var evalErr error
-		result, evalErr = eng.EvalMultipleWithSource(ctx, string(content), filename)
-		return evalErr
+		expr, parseErr := eng.ParseWithSource(ctx, code, filename)
+		if parseErr != nil {
+			return parseErr
+		}
+		compiled, compileErr := eng.Compile(ctx, expr)
+		if compileErr != nil {
+			return compileErr
+		}
+		var runErr error
+		result, runErr = eng.Run(ctx, compiled)
+		return runErr
 	})
 	if loadErr != nil {
 		Failf(loadErr)
