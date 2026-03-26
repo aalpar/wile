@@ -1,6 +1,6 @@
 # Core `let` Compilation — Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+**Status:** Complete (PR #570)
 
 **Goal:** Make `let`, `let*`, `letrec`, `letrec*` core compiled forms with `ValidatedLet`/`ValidatedLetStar`/`ValidatedLetrec` types, eliminating lambda overhead for all binding forms.
 

@@ -1,6 +1,6 @@
 # OS Primitives Design — SRFI-170 Subset
 
-**Status:** Approved
+**Status:** Complete Phase 1 (PR #565)
 **Date:** 2026-03-24
 **Scope:** Directory operations + structured process control (SRFI-170 subset, option B)
 **Delivery:** Two phases, two PRs

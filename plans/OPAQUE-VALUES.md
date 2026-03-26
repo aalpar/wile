@@ -1,6 +1,6 @@
 # Opaque Values Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+**Status:** Complete (PR #566)
 
 **Goal:** Add a two-layer opaque value system — an `Opaque` interface for capability checking and an `OpaqueValue` convenience struct for wrapping arbitrary Go objects.
 

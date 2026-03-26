@@ -1,6 +1,6 @@
 # Core `let` Compilation
 
-**Status:** Design complete, not yet implemented
+**Status:** Complete (implemented in PR #570)
 **Date:** 2026-03-24 (updated 2026-03-25: merged Phase 2, added mutability tracking)
 **Motivation:** Enable `let`, `let*`, `letrec`, `letrec*` as `ValidatedExpr` forms with per-binding mutability tracking — foundation for future inlining, ANF IR, constant propagation, dead binding elimination
 

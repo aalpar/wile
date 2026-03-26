@@ -114,7 +114,7 @@ result, _ := engine.Eval(ctx, engine.MustParse(ctx, "(double 21)")) // 42
 engine, err := wile.NewEngine(ctx,
     wile.WithExtensions(
         math.Extension,
-        exceptions.Extension,
+        process.Extension,
         system.Extension,
         myext.Extension,
     ),
@@ -461,11 +461,12 @@ These are importable by external Go code:
 | Package | Library Name | Primitives |
 |---------|-------------|------------|
 | `extensions/math` | `(wile math)` | `sqrt`, `exp`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `log`, `expt`, `square`, `floor`, `ceiling`, `truncate`, `round`, `floor/`, `floor-quotient`, `floor-remainder`, `truncate/`, `truncate-quotient`, `truncate-remainder`, `finite?`, `infinite?`, `nan?`, `numerator`, `denominator`, `rationalize`, `exact-integer-sqrt`, `make-rectangular`, `make-polar`, `real-part`, `imag-part`, `magnitude`, `angle`, `number->string`, `string->number` |
-| `extensions/exceptions` | `(wile exceptions)` | `with-exception-handler`, `raise`, `raise-continuable`, `error`, `error-object?`, `error-object-message`, `error-object-irritants`, `read-error?`, `file-error?` |
 | `extensions/system` | `(wile system)` | `command-line`, `exit`, `emergency-exit`, `get-environment-variable`, `get-environment-variables`, `current-second`, `current-jiffy`, `jiffies-per-second`, `features` |
 | `extensions/files` | `(wile files)` | `open-input-file`, `open-output-file`, `open-binary-input-file`, `open-binary-output-file`, `file-exists?`, `delete-file`, `call-with-input-file`, `call-with-output-file`, `with-input-from-file`, `with-output-to-file` |
+| `extensions/process` | `(wile process)` | `system`, `process-spawn`, `process-stdout`, `process-stderr`, `process-stdin`, `process-wait`, `process-kill`, `process?` |
 | `extensions/threads` | `(wile threads)` | SRFI-18 threading: `make-thread`, `thread-start!`, `thread-join!`, `thread-yield!`, `make-mutex`, `mutex-lock!`, `make-condition-variable`, `condition-variable-signal!`, etc. |
 | `extensions/gointerop` | `(wile gointerop)` | Go concurrency primitives: `make-channel`, `channel-send!`, `channel-receive`, `make-wait-group`, `make-rw-mutex`, `make-once`, `make-atomic`, `atomic-compare-and-swap!`, etc. |
+| `extensions/introspection` | `(wile introspection)` | `environment?`, `interaction-environment`, `environment-bound-names`, `environment-ref`, `environment-bound?` |
 
 ### Internal Extensions (`internal/extensions/`)
 
@@ -475,7 +476,8 @@ Not importable by external code:
 |---------|---------|
 | `internal/extensions/io` | R7RS I/O: `read`, `write`, `display`, port operations |
 | `internal/extensions/eval` | `eval`, `load`, library loading (couples to full compiler pipeline) |
-| `internal/extensions/all` | Convenience aggregator that loads all extensions |
+| `internal/extensions/namespace` | Namespace introspection and management |
+| `internal/extensions/all` | Records, promises, exceptions, strings, characters, and other R7RS primitives |
 
 ---
 
@@ -485,6 +487,7 @@ Not importable by external code:
 |--------|-------------|
 | `WithExtension(ext)` | Add a single extension |
 | `WithExtensions(ext...)` | Add multiple extensions |
+| `WithAllExtensions()` | Add all available extensions (matches CLI set) |
 | `WithSafeExtensions()` | Add the safe extension set (io, math, introspection, records, promises, strings, characters) |
 | `WithoutCore()` | Skip core primitives — creates a bare engine with only explicitly added extensions |
 | `WithLibraryPaths(paths...)` | Enable R7RS library system with optional search paths |

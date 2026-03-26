@@ -1,6 +1,6 @@
 # Degenerate Form Full-Pipeline Tests
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+**Status:** Complete (PR #571)
 
 **Goal:** Add full-pipeline tests (string → tokenize → parse → expand → compile → run) for degenerate forms of all core special forms and macro-based derived forms, ensuring errors are caught and error messages are verified for macros.
 

@@ -5,12 +5,12 @@ TODO
 
 ### Current Project Status
 
-**Version**: v1.9.6 (released)
-**Core Language**: R7RS-small complete with hygienic macros, composable continuations, numeric tower
-**Extensions**: 11 extension packages — 7 public (files, math, system, threads, exceptions, gointerop, introspection), 4 internal (io, eval, namespace, all); all importable as R7RS `(wile <name>)` libraries. Go static analysis extensions extracted to [wile-goast](https://github.com/aalpar/wile-goast).
+**Version**: v1.9.7 (released)
+**Core Language**: R7RS-small complete with hygienic macros, composable continuations, numeric tower, core-compiled let forms
+**Extensions**: 11 extension packages — 7 public (files, math, process, system, threads, gointerop, introspection), 4 internal (io, eval, namespace, all); all importable as R7RS `(wile <name>)` libraries. Go static analysis extensions extracted to [wile-goast](https://github.com/aalpar/wile-goast).
 **Embedding**: CLI uses public Engine API; embedded stdlib via `stdlib.FS` (`go:embed` + `fs.Sub`); `AllExtensions()`/`WithAllExtensions()` convenience options.
-**Examples**: 76 examples across 12 categories, 21 Gabriel benchmarks, Schelog
-**Tests**: Go test suite comprehensive; Scheme test suite: 3,248 lines across 11 files (strings, characters, ports, numbers, exceptions, lazy, records, eval, control, macros) + 915-test R7RS conformance suite
+**Examples**: 75 examples across 12 categories, 23 benchmarks (16 Gabriel + Larceny R7RS + Schelog + miniKanren)
+**Tests**: Go test suite comprehensive; Scheme test suite: 3,248 lines across 11 files (strings, characters, ports, numbers, exceptions, lazy, records, eval, control, macros) + 924-test R7RS conformance suite
 **Libraries**: (chibi test), (chibi optional), (chibi diff), (chibi term ansi), (srfi 1) complete; stdlib embedded in binary
 
 ### Ordering
@@ -22,6 +22,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 ## Bugs & Correctness
 
 - [x] **Peephole optimizer double-restore** [High, Bug, Fixed]: `callForeignCached` and `applyForeign` would double-restore when PrimCallCC inline mode called `ApplyCallable` with a `ForeignClosure` (e.g., `(call/cc procedure?)`). Fixed with `savedCont` pointer-identity guard. `plans/OPTIMIZER-FIX.md`
+- [x] **Degenerate form pipeline tests** [Correctness, Done]: Full-pipeline tests (string → tokenize → parse → expand → compile → run) for degenerate forms of all core special forms and macro-based derived forms. PR #571.
 - L7 (`char-ready?`/`u8-ready?` always `#t`) — documented semantic difference, no fix planned
 
 ---
@@ -31,13 +32,13 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 ### Low Priority
 
 - [ ] **ExpanderTimeContinuation convention deviations** [Low, M]: wile-goast call-clustering found 40 deviations across 4 conventions (`SourceContext` 76%, `WrapForeignErrorf` 68%, `NewSyntaxCons` 64%, `IsSyntaxEmptyList` 60%). Some explained (let-syntax/letrec-syntax delegate to impl which wraps), others not yet checked.
-- [ ] **Error sentinel grouping** [Low, S]: ~105 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.
+- [ ] **Error sentinel grouping** [Low, S]: ~109 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.
 
 ### Postponed
 
 - [ ] **F11: Promote internal extensions** [Low, Postponed]: `internal/extensions/{io,eval,all}` invisible to embedders. Promote to `extensions/{io,eval}/` when extension API stabilizes and external consumers exist.
 - [ ] **Parser: unify readList + readLabeledList** [Low, Postponed]: High risk — datum labels require in-place mutation of placeholder pairs. The structural difference is semantic, not accidental. Unifying requires careful design to handle the placeholder protocol.
-- [ ] **VM dispatch loop extraction** [Low, Postponed]: `MachineContext.Run()` is 539 lines with ~63 inlined opcode cases. Extraction adds indirection without clear benefit — Go has no computed goto, and method dispatch adds measurable overhead on the hot path. The two-tier model (inlined ops + `OpComplex` side table for ~16 complex ops) already extracts the most complex operations. Intentional performance-over-readability trade-off.
+- [ ] **VM dispatch loop extraction** [Low, Postponed]: `MachineContext.Run()` is 547 lines with 65 inlined opcode cases. Extraction adds indirection without clear benefit — Go has no computed goto, and method dispatch adds measurable overhead on the hot path. The two-tier model (inlined ops + `OpComplex` side table for 16 complex ops) already extracts the most complex operations. Intentional performance-over-readability trade-off.
 - [ ] **Match: consolidate bytecode type files** [Low, Postponed]: Pure cosmetic reorganization.
 - [ ] **Extensions: standardize registration patterns** [Low, Postponed]: Requires design decision on the canonical pattern. Worth a separate discussion, not a mechanical refactoring.
 - [ ] **Schemeutil: grab-bag reorganization** [Low, Postponed]: Moving functions risks import cycle issues. Needs careful dependency analysis.
@@ -45,6 +46,11 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 ---
 
 ## Performance & CI
+
+### Completed
+
+- [x] **GC pressure reduction** [Performance, Done]: FreeList migration for continuation/stack pools, pre-sized binding arrays in env frame pool, env frame leak fix in context release. -8.9% geo mean. PRs #562-563. `plans/GC-PRESSURE-REDUCTION.md`
+- [x] **Core-let compilation** [Performance, Done]: `let`, `let*`, `letrec`, `letrec*` compiled as core forms with `ValidatedLet` + `OpPushEnv`, eliminating lambda overhead for all binding forms. PR #570. `plans/CORE-LET-IMPL.md`
 
 ### Actionable
 
@@ -67,7 +73,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
   - SSL/TLS support
   - DNS resolution
 - [ ] **Debugger / DAP integration** [Tooling]: Debug Adapter Protocol. Inline traps + snap-to-next designs ready in `plans/DEBUGGER.md`
-- [ ] **POSIX API / SRFI-170** [Standard library, 10 phases]: Comprehensive OS access — stat, permissions, links, temp files, env vars, subprocess, signals, user/group, terminal, error handling.
+- [ ] **POSIX API / SRFI-170** [Standard library, 10 phases]: Comprehensive OS access — stat, permissions, links, temp files, env vars, subprocess, signals, user/group, terminal, error handling. Phase 1 (directory ops + process extension) completed in PR #565; remaining phases not started.
 - [x] **Algebra library** [Standard library]: General-purpose algebraic structures as an R7RS library `(wile algebra)`. Partial orders, lattices (flat, powerset, product, map), fixpoint (Kleene + widening), monoids, semirings (boolean, tropical, counting), groups, rings (integer, modular), fields (rational), Galois connections. Design: `plans/2026-03-25-algebra-library-design.md`. 158 tests across 8 test files.
 
 - [ ] **Go FFI Phase 3 — Plugin support** [Embedding]: Dynamic extension loading via registry pattern.

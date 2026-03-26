@@ -1,6 +1,6 @@
 # Algebra Library Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+**Status:** Complete (PR #572)
 
 **Goal:** Implement `(wile algebra)` — composable algebraic structures (partial orders through Galois connections) as R7RS records with validation and fixpoint computation.
 

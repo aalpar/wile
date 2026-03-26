@@ -1,6 +1,6 @@
 # GC Pressure Reduction Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+**Status:** Complete (PRs #562-563)
 
 **Goal:** Reduce per-call heap allocations in recursive Scheme programs from ~179/call-iteration to near zero after warmup, eliminating the ~95% GC overhead that dominates CPU profiles.
 

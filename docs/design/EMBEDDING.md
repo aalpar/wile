@@ -55,10 +55,14 @@ Each `Engine` has its own `Namespace` and symbol table. This means:
 | Method | Input | Purpose |
 |--------|-------|---------|
 | `Parse(ctx, code)` | `string` | Parse first expression to `*Expression` |
+| `ParseWithSource(ctx, code, source)` | `string` + source name | Parse with source file attribution |
+| `MustParse(ctx, code)` | `string` | Parse or panic |
 | `Eval(ctx, expr)` | `*Expression` | Evaluate a single parsed expression |
 | `EvalMultiple(ctx, code)` | `string` | Parse and evaluate all expressions, return last result |
+| `EvalMultipleWithSource(ctx, code, source)` | `string` + source name | EvalMultiple with source attribution |
 | `Compile(ctx, expr)` | `*Expression` | Compile a parsed expression without executing |
 | `Run(ctx, compiled)` | `*CompiledCode` | Execute pre-compiled code |
+| `Call(ctx, proc, args...)` | `Value` + args | Call a Scheme procedure from Go |
 | `EvalIn(ctx, expr, ns)` | `*Expression` + `*Namespace` | Evaluate in an alternate namespace |
 
 ### Compile/Run Separation
@@ -161,6 +165,8 @@ Engine behavior can be customized via functional options:
 | `WithAuthorizer(auth)` | Set fine-grained runtime authorization policy |
 | `WithSourceFS(fsys)` | Add a virtual `fs.FS` layer to the source resolver chain |
 | `WithSourceOS()` | Add OS filesystem to the source resolver chain |
+| `WithAllExtensions()` | Add all available extensions (matches CLI) |
+| `WithLibraryPaths(paths...)` | Set R7RS library search paths |
 | `WithNamespace(ns)` | Use a pre-built namespace |
 
 Extensions implement `registry.Extension` and register primitives, macros, and compile-time definitions via `AddToRegistry`.

@@ -119,17 +119,4 @@ R7RS §7.3's reference implementation of `guard` uses `(let ((result (begin e1 e
 
 Wile's `guard` uses `call-with-values` to capture all values from the body, then re-emits them via `(apply values results)`. This means `(guard (e (#f)) (values 1 2))` correctly propagates both values, whereas the R7RS reference implementation would signal an error.
 
----
-
-## Process-Global Working Directory
-
-**Primitive:** `set-current-directory!`
-
-**Behavior:** Calls `os.Chdir`, which changes the working directory for the entire OS process.
-
-**Impact:** Multiple Wile engines in the same Go process share one working directory. Concurrent calls from different goroutines race on the same OS state. This is inherent to POSIX — there is no per-thread working directory.
-
-**Mitigation:** The primitive is gated by `security.ResourceProcess` / `security.ActionWrite` / target `"cwd"`, so embedders can deny it via their authorizer. When denied, all file operations should use absolute paths.
-
-**R7RS context:** R7RS does not specify `set-current-directory!` or any directory operations. This follows SRFI-170 conventions. The SRFI acknowledges process-global CWD as a POSIX limitation.
 

@@ -2,7 +2,7 @@
 
 **Plans go in `plans/`.** Do not create plan files in any other location.
 
-**Plan file naming**: ALL CAPS. Use `UPPERCASE-WITH-HYPHENS.md` (e.g., `362-BIGCOMPLEX-INFNAN-GUARD.md`). Issue-linked plans are prefixed with the issue number.
+**Plan file naming**: Use `UPPERCASE-WITH-HYPHENS.md` (e.g., `362-BIGCOMPLEX-INFNAN-GUARD.md`) or date-prefixed `YYYY-MM-DD-description.md` for time-stamped designs. Issue-linked plans are prefixed with the issue number.
 
 ## R7RS Investigation Procedure
 
@@ -17,12 +17,22 @@ When investigating R7RS conformance issues:
 |------|----------|--------|
 | `PERFORMANCE.md` | Remaining optimizations (procedure inlining, env frame slimming), benchmark baseline, fused lexing research | Procedure inlining + env frame slimming open; NaN-boxing blocked by unsafe |
 | `UNBOXED-FLOAT-PIPELINE.md` | Three-layer unboxed float pipeline (value register, tagged stack, binding unboxing) to eliminate Float heap allocations in arithmetic loops | Proposed — 4 phases |
+| `GC-PRESSURE-REDUCTION.md` | FreeList migration, pre-sized bindings, env frame leak fix | **Complete** (PRs #562-563) |
+| `CORE-LET.md` | Core-let design: `let`/`let*`/`letrec`/`letrec*` as ValidatedExpr forms | **Complete** (design) |
+| `CORE-LET-IMPL.md` | Core-let implementation plan | **Complete** (PR #570) |
+| `OPAQUE-VALUES.md` | OpaqueValue type implementation plan | **Complete** (PR #566) |
+| `2026-03-24-opaque-values-design.md` | OpaqueValue design document | **Complete** |
+| `OS-PRIMITIVES.md` | SRFI-170 subset: directory ops + process extension | **Complete** Phase 1 (PR #565) |
+| `2026-03-24-os-primitives.md` | OS primitives design brainstorm | **Complete** |
+| `OPTIMIZER-FIX.md` | Fix `callForeignCached`/`applyForeign` double-restore | **Complete** (PR #573) |
+| `2026-03-25-degenerate-form-tests.md` | Degenerate form full-pipeline tests | **Complete** (PR #571) |
+| `2026-03-25-algebra-library-design.md` | Algebra library design document | **Complete** |
+| `2026-03-25-algebra-library-impl.md` | Algebra library implementation plan | **Complete** (PR #572) |
 | `SECURITY.md` | Opcode resource limits (match steps, expand steps, continuation copy depth) | Proposed — not implemented |
 | `MACRO_SYSTEM.md` | Hygiene debugging, macro expansion tracing | Planned — not started |
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |
 | `ARCHITECTURE.md` | Dialect system, module decomposition, plugin shadowing, environment introspection | All proposed |
 | `TEST-COVERAGE-AND-REFACTORING.md` | machine/ test coverage (52 files), engine.go tests, REPL tests, type switch linter, form dual-dispatch | Open |
-| `OPTIMIZER-FIX.md` | Fix `callForeignCached` and `applyForeign` double-restore when call/cc inline mode calls a ForeignClosure. `savedCont` pointer-identity guard | Complete |
 
 Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans).
 

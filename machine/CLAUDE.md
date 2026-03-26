@@ -2,7 +2,7 @@
 
 ## VM Operations
 
-Two-tier dispatch: Most opcodes are inlined directly in the `Run()` switch (~63 cases including promoted ops from opcode promotion Phases 1-3). `InlinedOperation` extends `Operation` with `Apply(*MachineContext) (*MachineContext, error)` for remaining complex ops dispatched via the `OpComplex` side table (~16 ops: build-syntax, syntax-rules-transform, syntax-case, cont-mark, helpers, etc.).
+Two-tier dispatch: Most opcodes are inlined directly in the `Run()` switch (65 cases including promoted ops from opcode promotion Phases 1-3). `InlinedOperation` extends `Operation` with `Apply(*MachineContext) (*MachineContext, error)` for remaining complex ops dispatched via the `OpComplex` side table (16 ops: build-syntax, syntax-rules-transform, syntax-case, cont-mark, helpers, etc.).
 
 Key ops: Push/Pop (stack), Apply (dispatch), CallForeignCached/CallForeignCachedTail (Go primitives), MakeClosure, LoadLocal/StoreLocal, PushLocal/PushCachedBinding (fused ops), BranchOnFalse, SaveContinuation/RestoreContinuation, PushWind/PopWind. Promoted ops: NullQ, PairQ, Car, Cdr, Add, Sub, Mul, Div, Cons, numeric comparisons, EqQ, VectorQ, VectorRef (each with tail variants).
 
