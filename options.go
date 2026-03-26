@@ -22,6 +22,7 @@ import (
 	"github.com/aalpar/wile/extensions/gointerop"
 	"github.com/aalpar/wile/extensions/introspection"
 	"github.com/aalpar/wile/extensions/math"
+	"github.com/aalpar/wile/extensions/process"
 	"github.com/aalpar/wile/extensions/system"
 	"github.com/aalpar/wile/extensions/threads"
 	"github.com/aalpar/wile/internal/extensions/all"
@@ -280,7 +281,7 @@ func WithSafeExtensions() EngineOption {
 // AllExtensions returns the complete set of engine options that add every
 // available extension. This matches the extension set loaded by the CLI
 // binary (io, files, math, introspection, eval, namespace, threads,
-// gointerop, all, system).
+// gointerop, all, system, process).
 //
 // Use [WithAllExtensions] when no additional options need to be appended.
 //
@@ -303,6 +304,7 @@ func AllExtensions() []EngineOption {
 		WithExtension(gointerop.Extension),
 		WithExtension(all.Extension),
 		WithExtension(system.Extension),
+		WithExtension(process.Extension),
 	}
 }
 
