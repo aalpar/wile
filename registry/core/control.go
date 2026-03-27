@@ -16,6 +16,7 @@ package core
 
 import (
 	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/values"
 )
 
 func addControl(r *registry.Registry) error {
@@ -30,22 +31,28 @@ func addControl(r *registry.Registry) error {
 	// Continuations
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "call-with-current-continuation", ParamCount: 1, Impl: PrimCallCC,
-			Doc: "Captures the current continuation and passes it to proc.", ParamNames: []string{"proc"}, Category: "control"},
+			Doc: "Captures the current continuation and passes it to proc.", ParamNames: []string{"proc"}, Category: "control",
+			ParamTypes: []values.ValueType{values.TypeProcedure}},
 		{Name: "call/cc", ParamCount: 1, Impl: PrimCallCC,
-			Doc: "Shorthand for call-with-current-continuation.", ParamNames: []string{"proc"}, Category: "control"},
+			Doc: "Shorthand for call-with-current-continuation.", ParamNames: []string{"proc"}, Category: "control",
+			ParamTypes: []values.ValueType{values.TypeProcedure}},
 		// dynamic-wind is now a compiled form, not a primitive (see machine/compile_validated.go)
 		{Name: "call-with-exit", ParamCount: 1, Impl: PrimCallWithExit,
-			Doc: "Calls proc with a lightweight one-shot escape procedure valid only during the call.", ParamNames: []string{"proc"}, Category: "control"},
+			Doc: "Calls proc with a lightweight one-shot escape procedure valid only during the call.", ParamNames: []string{"proc"}, Category: "control",
+			ParamTypes: []values.ValueType{values.TypeProcedure}},
 		{Name: "call-with-continuation-barrier", ParamCount: 1, Impl: PrimCallWithContinuationBarrier,
-			Doc: "Calls thunk, preventing continuations from crossing the barrier boundary.", ParamNames: []string{"thunk"}, Category: "control"},
+			Doc: "Calls thunk, preventing continuations from crossing the barrier boundary.", ParamNames: []string{"thunk"}, Category: "control",
+			ParamTypes: []values.ValueType{values.TypeProcedure}},
 	}, registry.PhaseRuntime)
 
 	// Multiple values
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "values", ParamCount: 1, IsVariadic: true, Impl: PrimValues,
-			Doc: "Returns multiple values.", ParamNames: []string{"obj", "objs"}, Category: "control"},
+			Doc: "Returns multiple values.", ParamNames: []string{"obj", "objs"}, Category: "control",
+			ParamTypes: []values.ValueType{values.TypeAny}},
 		{Name: "call-with-values", ParamCount: 2, Impl: PrimCallWithValues,
-			Doc: "Calls consumer with the values produced by producer.", ParamNames: []string{"producer", "consumer"}, Category: "control"},
+			Doc: "Calls consumer with the values produced by producer.", ParamNames: []string{"producer", "consumer"}, Category: "control",
+			ParamTypes: []values.ValueType{values.TypeProcedure, values.TypeProcedure}},
 	}, registry.PhaseRuntime)
 
 	return nil

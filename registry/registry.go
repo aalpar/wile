@@ -19,6 +19,7 @@ import (
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // PrimitiveSpec defines a primitive to be registered.
@@ -27,9 +28,11 @@ type PrimitiveSpec struct {
 	ParamCount int
 	IsVariadic bool
 	Impl       machine.ForeignFunction
-	Doc        string   // optional: one-line description
-	ParamNames []string // optional: parameter names
-	Category   string   // optional: grouping category
+	Doc        string             // optional: one-line description
+	ParamNames []string           // optional: parameter names
+	Category   string             // optional: grouping category
+	ParamTypes []values.ValueType // optional: type contract per parameter
+	ReturnType values.ValueType   // optional: return type (zero = TypeAny)
 }
 
 // PrimitiveRegistration holds a primitive and its phases.
@@ -71,6 +74,7 @@ func NewRegistry() *Registry {
 
 // AddPrimitive registers a primitive with the given phases.
 func (p *Registry) AddPrimitive(spec PrimitiveSpec, phases Phase) {
+	validateParamTypes(spec)
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.primitives = append(p.primitives, PrimitiveRegistration{
@@ -81,6 +85,9 @@ func (p *Registry) AddPrimitive(spec PrimitiveSpec, phases Phase) {
 
 // AddPrimitives registers multiple primitives with the given phases.
 func (p *Registry) AddPrimitives(specs []PrimitiveSpec, phases Phase) {
+	for _, spec := range specs {
+		validateParamTypes(spec)
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, spec := range specs {
@@ -88,6 +95,29 @@ func (p *Registry) AddPrimitives(specs []PrimitiveSpec, phases Phase) {
 			Spec:   spec,
 			Phases: phases,
 		})
+	}
+}
+
+// validateParamTypes panics if ParamTypes is non-empty but inconsistent with ParamCount.
+// For non-variadic: len(ParamTypes) must equal ParamCount.
+// For variadic: len(ParamTypes) must be in [1, ParamCount].
+func validateParamTypes(spec PrimitiveSpec) {
+	n := len(spec.ParamTypes)
+	if n == 0 {
+		return
+	}
+	if spec.IsVariadic {
+		if n < 1 || n > spec.ParamCount {
+			panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+				"AddPrimitive %q: ParamTypes length %d out of range [1, %d] for variadic",
+				spec.Name, n, spec.ParamCount))
+		}
+		return
+	}
+	if n != spec.ParamCount {
+		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"AddPrimitive %q: ParamTypes length %d != ParamCount %d",
+			spec.Name, n, spec.ParamCount))
 	}
 }
 

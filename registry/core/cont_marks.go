@@ -14,27 +14,38 @@
 
 package core
 
-import "github.com/aalpar/wile/registry"
+import (
+	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/values"
+)
 
 //nolint:govet
 func addContMarks(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "current-continuation-marks", ParamCount: 1, IsVariadic: true, Impl: PrimCurrentContinuationMarks,
-			Doc: "Returns the current continuation marks up to the nearest prompt.", ParamNames: []string{"prompt-tag"}, Category: "continuations"},
+			Doc: "Returns the current continuation marks up to the nearest prompt.", ParamNames: []string{"prompt-tag"}, Category: "continuations",
+			ParamTypes: []values.ValueType{values.TypeAny}},
 		{Name: "continuation-mark-set->list", ParamCount: 2, Impl: PrimContinuationMarkSetToList,
-			Doc: "Extracts values for key from a continuation mark set.", ParamNames: []string{"mark-set", "key"}, Category: "continuations"},
+			Doc: "Extracts values for key from a continuation mark set.", ParamNames: []string{"mark-set", "key"}, Category: "continuations",
+			ParamTypes: []values.ValueType{values.TypeAny, values.TypeAny}, ReturnType: values.TypeList},
 		{Name: "continuation-mark-set-first", ParamCount: 3, IsVariadic: true, Impl: PrimContinuationMarkSetFirst,
-			Doc: "Returns the first value for key in a continuation mark set.", ParamNames: []string{"mark-set", "key", "default"}, Category: "continuations"},
+			Doc: "Returns the first value for key in a continuation mark set.", ParamNames: []string{"mark-set", "key", "default"}, Category: "continuations",
+			ParamTypes: []values.ValueType{values.TypeAny, values.TypeAny, values.TypeAny}},
 		{Name: "continuation-mark-set?", ParamCount: 1, Impl: PrimContinuationMarkSetQ,
-			Doc: "Returns #t if obj is a continuation mark set.", ParamNames: []string{"obj"}, Category: "continuations"},
+			Doc: "Returns #t if obj is a continuation mark set.", ParamNames: []string{"obj"}, Category: "continuations",
+			ParamTypes: []values.ValueType{values.TypeAny}, ReturnType: values.TypeBoolean},
 		{Name: "call-with-immediate-continuation-mark", ParamCount: 3, IsVariadic: true, Impl: PrimCallWithImmediateContMark,
-			Doc: "Calls proc with the immediate continuation mark for key on the current frame.", ParamNames: []string{"key", "proc", "default"}, Category: "continuations"},
+			Doc: "Calls proc with the immediate continuation mark for key on the current frame.", ParamNames: []string{"key", "proc", "default"}, Category: "continuations",
+			ParamTypes: []values.ValueType{values.TypeAny, values.TypeProcedure, values.TypeAny}},
 		{Name: "continuation-marks", ParamCount: 2, IsVariadic: true, Impl: PrimContinuationMarks,
-			Doc: "Returns the continuation mark set of a captured continuation.", ParamNames: []string{"cont", "prompt-tag"}, Category: "continuations"},
+			Doc: "Returns the continuation mark set of a captured continuation.", ParamNames: []string{"cont", "prompt-tag"}, Category: "continuations",
+			ParamTypes: []values.ValueType{values.TypeAny, values.TypeAny}},
 		{Name: "continuation?", ParamCount: 1, Impl: PrimContinuationQ,
-			Doc: "Returns #t if obj is a captured continuation.", ParamNames: []string{"obj"}, Category: "continuations"},
+			Doc: "Returns #t if obj is a captured continuation.", ParamNames: []string{"obj"}, Category: "continuations",
+			ParamTypes: []values.ValueType{values.TypeAny}, ReturnType: values.TypeBoolean},
 		{Name: "continuation-mark-set->list*", ParamCount: 3, IsVariadic: true, Impl: PrimContinuationMarkSetToListStar,
-			Doc: "Multi-key variant of continuation-mark-set->list returning vectors.", ParamNames: []string{"mark-set", "key-list", "none-v"}, Category: "continuations"},
+			Doc: "Multi-key variant of continuation-mark-set->list returning vectors.", ParamNames: []string{"mark-set", "key-list", "none-v"}, Category: "continuations",
+			ParamTypes: []values.ValueType{values.TypeAny, values.TypeList, values.TypeAny}, ReturnType: values.TypeList},
 	}, registry.PhaseRuntime)
 
 	return nil

@@ -14,24 +14,33 @@
 
 package core
 
-import "github.com/aalpar/wile/registry"
+import (
+	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/values"
+)
 
 func addPrompts(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "make-continuation-prompt-tag", ParamCount: 1, IsVariadic: true, Impl: PrimMakeContinuationPromptTag,
-			Doc: "Creates a new continuation prompt tag.", ParamNames: []string{"name"}, Category: "continuations"},
+			Doc: "Creates a new continuation prompt tag.", ParamNames: []string{"name"}, Category: "continuations",
+			ParamTypes: []values.ValueType{values.TypeSymbol}},
 		{Name: "default-continuation-prompt-tag", Impl: PrimDefaultContinuationPromptTag,
 			Doc: "Returns the default continuation prompt tag.", Category: "continuations"},
 		{Name: "continuation-prompt-tag?", ParamCount: 1, Impl: PrimContinuationPromptTagQ,
-			Doc: "Returns #t if obj is a continuation prompt tag.", ParamNames: []string{"obj"}, Category: "continuations"},
+			Doc: "Returns #t if obj is a continuation prompt tag.", ParamNames: []string{"obj"}, Category: "continuations",
+			ParamTypes: []values.ValueType{values.TypeAny}, ReturnType: values.TypeBoolean},
 		{Name: "call-with-continuation-prompt", ParamCount: 3, Impl: PrimCallWithContinuationPrompt,
-			Doc: "Calls thunk with a continuation prompt.", ParamNames: []string{"thunk", "tag", "handler"}, Category: "continuations"},
+			Doc: "Calls thunk with a continuation prompt.", ParamNames: []string{"thunk", "tag", "handler"}, Category: "continuations",
+			ParamTypes: []values.ValueType{values.TypeProcedure, values.TypeAny, values.TypeProcedure}},
 		{Name: "abort-current-continuation", ParamCount: 2, IsVariadic: true, Impl: PrimAbortCurrentContinuation,
-			Doc: "Aborts to the nearest prompt with the given tag.", ParamNames: []string{"tag", "val", "vals"}, Category: "continuations"},
+			Doc: "Aborts to the nearest prompt with the given tag.", ParamNames: []string{"tag", "val", "vals"}, Category: "continuations",
+			ParamTypes: []values.ValueType{values.TypeAny, values.TypeAny}},
 		{Name: "call-with-composable-continuation", ParamCount: 2, Impl: PrimCallWithComposableContinuation,
-			Doc: "Captures a composable continuation up to the nearest prompt.", ParamNames: []string{"proc", "tag"}, Category: "continuations"},
+			Doc: "Captures a composable continuation up to the nearest prompt.", ParamNames: []string{"proc", "tag"}, Category: "continuations",
+			ParamTypes: []values.ValueType{values.TypeProcedure, values.TypeAny}},
 		{Name: "continuation-prompt-available?", ParamCount: 1, Impl: PrimContinuationPromptAvailableQ,
-			Doc: "Returns #t if a prompt with tag is on the current continuation.", ParamNames: []string{"tag"}, Category: "continuations"},
+			Doc: "Returns #t if a prompt with tag is on the current continuation.", ParamNames: []string{"tag"}, Category: "continuations",
+			ParamTypes: []values.ValueType{values.TypeAny}, ReturnType: values.TypeBoolean},
 	}, registry.PhaseRuntime)
 
 	return nil

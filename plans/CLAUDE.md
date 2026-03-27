@@ -32,6 +32,11 @@ When investigating R7RS conformance issues:
 | `2026-03-25-algebra-rewrite-impl.md` | Term rewriting implementation plan (Phase 1: wile, Phase 2: wile-goast) | **Complete** (PR #576, wile v1.9.11) |
 | `CAPTURE-ANALYSIS.md` | Capture analysis design for let bindings | **Complete** |
 | `CAPTURE-ANALYSIS-IMPL.md` | Capture analysis implementation plan | **Complete** (PR #575) |
+| `2026-03-26-extension-contracts-design.md` | Extension API contract system: ValueType enum, PrimitiveSpec type declarations, validation, doc integration | **Approved** (design) |
+| `2026-03-26-extension-contracts-impl.md` | Extension contracts implementation plan: 4 phases, 8 tasks in Phase 1 | Open |
+| `2026-03-26-environment-profiles.md` | Environment profiles design: named profiles (Tiny, Console, Small, KitchenSink), sandbox modifier | Draft |
+| `2026-03-26-environment-profiles-impl.md` | Environment profiles implementation plan | Draft |
+| `2026-03-26-wile-mcp-server-design.md` | Wile MCP server design: standalone binary exposing Scheme evaluation | Draft |
 | `SECURITY.md` | Opcode resource limits (match steps, expand steps, continuation copy depth) | Proposed — not implemented |
 | `MACRO_SYSTEM.md` | Hygiene debugging, macro expansion tracing | Planned — not started |
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |

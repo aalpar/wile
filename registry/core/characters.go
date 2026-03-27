@@ -16,15 +16,18 @@ package core
 
 import (
 	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/values"
 )
 
 func addCharacters(r *registry.Registry) error {
 	// Character conversion
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "char->integer", ParamCount: 1, Impl: PrimCharToInteger,
-			Doc: "Returns the Unicode code point of char.", ParamNames: []string{"char"}, Category: "characters"},
+			Doc: "Returns the Unicode code point of char.", ParamNames: []string{"char"}, Category: "characters",
+			ParamTypes: []values.ValueType{values.TypeCharacter}, ReturnType: values.TypeExactInteger},
 		{Name: "integer->char", ParamCount: 1, Impl: PrimIntegerToChar,
-			Doc: "Returns the character with the given Unicode code point.", ParamNames: []string{"n"}, Category: "characters"},
+			Doc: "Returns the character with the given Unicode code point.", ParamNames: []string{"n"}, Category: "characters",
+			ParamTypes: []values.ValueType{values.TypeExactInteger}, ReturnType: values.TypeCharacter},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// Character comparison (generated from charCompareSpecs table)
@@ -34,6 +37,8 @@ func addCharacters(r *registry.Registry) error {
 			Name: spec.name, ParamCount: 2, IsVariadic: true,
 			Impl: makeCharComparePrimitive(spec.name, spec.cmp),
 			Doc:  "Compares characters.", Category: "characters",
+			ParamTypes: []values.ValueType{values.TypeCharacter, values.TypeCharacter},
+			ReturnType: values.TypeBoolean,
 		}
 	}
 	r.AddPrimitives(charCmpPrims, registry.PhaseRuntime|registry.PhaseExpand)

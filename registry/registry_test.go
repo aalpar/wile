@@ -492,6 +492,30 @@ func TestRegistry_WithoutBindings(t *testing.T) {
 	}
 }
 
+func TestRegistry_PrimitiveSpecWithContract(t *testing.T) {
+	c := qt.New(t)
+	r := NewRegistry()
+	spec := PrimitiveSpec{
+		Name:       "test-contracted",
+		ParamCount: 2,
+		Impl: func(_ *machine.MachineContext) error {
+			return nil
+		},
+		ParamTypes: []values.ValueType{values.TypeString, values.TypeInteger},
+		ReturnType: values.TypeCharacter,
+		Doc:        "Test primitive with contract.",
+		ParamNames: []string{"s", "k"},
+		Category:   "test",
+	}
+	r.AddPrimitive(spec, PhaseRuntime)
+	prims := r.Primitives()
+	c.Assert(len(prims), qt.Equals, 1)
+	c.Assert(prims[0].Spec.ParamTypes, qt.HasLen, 2)
+	c.Assert(prims[0].Spec.ParamTypes[0], qt.Equals, values.TypeString)
+	c.Assert(prims[0].Spec.ParamTypes[1], qt.Equals, values.TypeInteger)
+	c.Assert(prims[0].Spec.ReturnType, qt.Equals, values.TypeCharacter)
+}
+
 func TestExtension(t *testing.T) {
 	c := qt.New(t)
 

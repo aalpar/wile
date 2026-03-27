@@ -4,7 +4,7 @@
 
 **Goal:** Implement `(wile algebra)` — composable algebraic structures (partial orders through Galois connections) as R7RS records with validation and fixpoint computation.
 
-**Architecture:** Each algebraic structure is an R7RS `define-record-type` with operation function slots. Sub-libraries under `lib/wile/algebra/` export one structure each. An umbrella `lib/wile/algebra.sld` re-exports everything. Tests use `(chibi test)` and are auto-discovered by `test/run-all.sh`.
+**Architecture:** Each algebraic structure is an R7RS `define-record-type` with operation function slots. Sub-libraries under `stdlib/lib/wile/algebra/` export one structure each. An umbrella `stdlib/lib/wile/algebra.sld` re-exports everything. Tests use `(chibi test)` and are auto-discovered by `test/run-all.sh`.
 
 **Tech Stack:** R7RS Scheme, `define-record-type`, `case-lambda`, `(chibi test)`
 
@@ -15,21 +15,21 @@
 ## File Layout
 
 ```
-lib/wile/algebra.sld                 umbrella re-export
-lib/wile/algebra/order.sld           partial orders (.sld)
-lib/wile/algebra/order.scm           partial orders (.scm)
-lib/wile/algebra/lattice.sld         lattices + fixpoint
-lib/wile/algebra/lattice.scm
-lib/wile/algebra/monoid.sld          monoids
-lib/wile/algebra/monoid.scm
-lib/wile/algebra/semiring.sld        semirings + pre-built
-lib/wile/algebra/semiring.scm
-lib/wile/algebra/group.sld           groups
-lib/wile/algebra/group.scm
-lib/wile/algebra/ring.sld            rings + fields + pre-built
-lib/wile/algebra/ring.scm
-lib/wile/algebra/galois.sld          Galois connections
-lib/wile/algebra/galois.scm
+stdlib/lib/wile/algebra.sld                 umbrella re-export
+stdlib/lib/wile/algebra/order.sld           partial orders (.sld)
+stdlib/lib/wile/algebra/order.scm           partial orders (.scm)
+stdlib/lib/wile/algebra/lattice.sld         lattices + fixpoint
+stdlib/lib/wile/algebra/lattice.scm
+stdlib/lib/wile/algebra/monoid.sld          monoids
+stdlib/lib/wile/algebra/monoid.scm
+stdlib/lib/wile/algebra/semiring.sld        semirings + pre-built
+stdlib/lib/wile/algebra/semiring.scm
+stdlib/lib/wile/algebra/group.sld           groups
+stdlib/lib/wile/algebra/group.scm
+stdlib/lib/wile/algebra/ring.sld            rings + fields + pre-built
+stdlib/lib/wile/algebra/ring.scm
+stdlib/lib/wile/algebra/galois.sld          Galois connections
+stdlib/lib/wile/algebra/galois.scm
 test/wile/algebra-order-test.scm     tests (per structure)
 test/wile/algebra-lattice-test.scm
 test/wile/algebra-monoid-test.scm
@@ -59,8 +59,8 @@ On Apple Silicon: `./dist/darwin/arm64/wile --quiet -f test/wile/algebra-order-t
 ## Task 1: Partial Orders — record type and operations
 
 **Files:**
-- Create: `lib/wile/algebra/order.sld`
-- Create: `lib/wile/algebra/order.scm`
+- Create: `stdlib/lib/wile/algebra/order.sld`
+- Create: `stdlib/lib/wile/algebra/order.scm`
 - Create: `test/wile/algebra-order-test.scm`
 
 ### Step 1: Write the failing test
@@ -123,7 +123,7 @@ Expected: FAIL — `(wile algebra order)` library not found.
 
 ### Step 3: Write the library definition
 
-Create `lib/wile/algebra/order.sld`:
+Create `stdlib/lib/wile/algebra/order.sld`:
 
 ```scheme
 (define-library (wile algebra order)
@@ -134,7 +134,7 @@ Create `lib/wile/algebra/order.sld`:
   (include "order.scm"))
 ```
 
-Create `lib/wile/algebra/order.scm`:
+Create `stdlib/lib/wile/algebra/order.scm`:
 
 ```scheme
 ;;; (wile algebra order) — Partial orders
@@ -201,7 +201,7 @@ Expected: PASS — all tests green.
 ### Step 5: Commit
 
 ```bash
-git add lib/wile/algebra/order.sld lib/wile/algebra/order.scm test/wile/algebra-order-test.scm
+git add stdlib/lib/wile/algebra/order.sld stdlib/lib/wile/algebra/order.scm test/wile/algebra-order-test.scm
 git commit -m "feat(algebra): add partial order library (wile algebra order)"
 ```
 
@@ -251,8 +251,8 @@ git commit -m "test(algebra): add validation tests for partial orders"
 ## Task 3: Lattices — record type and core operations
 
 **Files:**
-- Create: `lib/wile/algebra/lattice.sld`
-- Create: `lib/wile/algebra/lattice.scm`
+- Create: `stdlib/lib/wile/algebra/lattice.sld`
+- Create: `stdlib/lib/wile/algebra/lattice.scm`
 - Create: `test/wile/algebra-lattice-test.scm`
 
 ### Step 1: Write the failing test
@@ -320,7 +320,7 @@ Expected: FAIL — `(wile algebra lattice)` not found.
 
 ### Step 3: Write the library
 
-Create `lib/wile/algebra/lattice.sld`:
+Create `stdlib/lib/wile/algebra/lattice.sld`:
 
 ```scheme
 (define-library (wile algebra lattice)
@@ -336,7 +336,7 @@ Create `lib/wile/algebra/lattice.sld`:
   (include "lattice.scm"))
 ```
 
-Create `lib/wile/algebra/lattice.scm`:
+Create `stdlib/lib/wile/algebra/lattice.scm`:
 
 ```scheme
 ;;; (wile algebra lattice) — Lattices, constructors, and fixpoint
@@ -575,7 +575,7 @@ Expected: PASS
 ### Step 5: Commit
 
 ```bash
-git add lib/wile/algebra/lattice.sld lib/wile/algebra/lattice.scm test/wile/algebra-lattice-test.scm
+git add stdlib/lib/wile/algebra/lattice.sld stdlib/lib/wile/algebra/lattice.scm test/wile/algebra-lattice-test.scm
 git commit -m "feat(algebra): add lattice library (wile algebra lattice)"
 ```
 
@@ -702,8 +702,8 @@ git commit -m "test(algebra): add lattice constructor, fixpoint, and validation 
 ## Task 5: Monoids
 
 **Files:**
-- Create: `lib/wile/algebra/monoid.sld`
-- Create: `lib/wile/algebra/monoid.scm`
+- Create: `stdlib/lib/wile/algebra/monoid.sld`
+- Create: `stdlib/lib/wile/algebra/monoid.scm`
 - Create: `test/wile/algebra-monoid-test.scm`
 
 ### Step 1: Write the failing test
@@ -766,7 +766,7 @@ Expected: FAIL — library not found.
 
 ### Step 3: Write the library
 
-Create `lib/wile/algebra/monoid.sld`:
+Create `stdlib/lib/wile/algebra/monoid.sld`:
 
 ```scheme
 (define-library (wile algebra monoid)
@@ -779,7 +779,7 @@ Create `lib/wile/algebra/monoid.sld`:
   (include "monoid.scm"))
 ```
 
-Create `lib/wile/algebra/monoid.scm`:
+Create `stdlib/lib/wile/algebra/monoid.scm`:
 
 ```scheme
 ;;; (wile algebra monoid) — Monoids
@@ -851,7 +851,7 @@ Expected: PASS
 ### Step 5: Commit
 
 ```bash
-git add lib/wile/algebra/monoid.sld lib/wile/algebra/monoid.scm test/wile/algebra-monoid-test.scm
+git add stdlib/lib/wile/algebra/monoid.sld stdlib/lib/wile/algebra/monoid.scm test/wile/algebra-monoid-test.scm
 git commit -m "feat(algebra): add monoid library (wile algebra monoid)"
 ```
 
@@ -860,8 +860,8 @@ git commit -m "feat(algebra): add monoid library (wile algebra monoid)"
 ## Task 6: Semirings
 
 **Files:**
-- Create: `lib/wile/algebra/semiring.sld`
-- Create: `lib/wile/algebra/semiring.scm`
+- Create: `stdlib/lib/wile/algebra/semiring.sld`
+- Create: `stdlib/lib/wile/algebra/semiring.scm`
 - Create: `test/wile/algebra-semiring-test.scm`
 
 ### Step 1: Write the failing test
@@ -948,7 +948,7 @@ Expected: FAIL — library not found.
 
 ### Step 3: Write the library
 
-Create `lib/wile/algebra/semiring.sld`:
+Create `stdlib/lib/wile/algebra/semiring.sld`:
 
 ```scheme
 (define-library (wile algebra semiring)
@@ -963,7 +963,7 @@ Create `lib/wile/algebra/semiring.sld`:
   (include "semiring.scm"))
 ```
 
-Create `lib/wile/algebra/semiring.scm`:
+Create `stdlib/lib/wile/algebra/semiring.scm`:
 
 ```scheme
 ;;; (wile algebra semiring) — Semirings
@@ -1077,7 +1077,7 @@ Expected: PASS
 ### Step 5: Commit
 
 ```bash
-git add lib/wile/algebra/semiring.sld lib/wile/algebra/semiring.scm test/wile/algebra-semiring-test.scm
+git add stdlib/lib/wile/algebra/semiring.sld stdlib/lib/wile/algebra/semiring.scm test/wile/algebra-semiring-test.scm
 git commit -m "feat(algebra): add semiring library with boolean, tropical, counting instances"
 ```
 
@@ -1086,8 +1086,8 @@ git commit -m "feat(algebra): add semiring library with boolean, tropical, count
 ## Task 7: Groups
 
 **Files:**
-- Create: `lib/wile/algebra/group.sld`
-- Create: `lib/wile/algebra/group.scm`
+- Create: `stdlib/lib/wile/algebra/group.sld`
+- Create: `stdlib/lib/wile/algebra/group.scm`
 - Create: `test/wile/algebra-group-test.scm`
 
 ### Step 1: Write the failing test
@@ -1140,7 +1140,7 @@ Expected: FAIL — library not found.
 
 ### Step 3: Write the library
 
-Create `lib/wile/algebra/group.sld`:
+Create `stdlib/lib/wile/algebra/group.sld`:
 
 ```scheme
 (define-library (wile algebra group)
@@ -1154,7 +1154,7 @@ Create `lib/wile/algebra/group.sld`:
   (include "group.scm"))
 ```
 
-Create `lib/wile/algebra/group.scm`:
+Create `stdlib/lib/wile/algebra/group.scm`:
 
 ```scheme
 ;;; (wile algebra group) — Groups
@@ -1228,7 +1228,7 @@ Expected: PASS
 ### Step 5: Commit
 
 ```bash
-git add lib/wile/algebra/group.sld lib/wile/algebra/group.scm test/wile/algebra-group-test.scm
+git add stdlib/lib/wile/algebra/group.sld stdlib/lib/wile/algebra/group.scm test/wile/algebra-group-test.scm
 git commit -m "feat(algebra): add group library (wile algebra group)"
 ```
 
@@ -1237,8 +1237,8 @@ git commit -m "feat(algebra): add group library (wile algebra group)"
 ## Task 8: Rings and Fields
 
 **Files:**
-- Create: `lib/wile/algebra/ring.sld`
-- Create: `lib/wile/algebra/ring.scm`
+- Create: `stdlib/lib/wile/algebra/ring.sld`
+- Create: `stdlib/lib/wile/algebra/ring.scm`
 - Create: `test/wile/algebra-ring-test.scm`
 
 ### Step 1: Write the failing test
@@ -1326,7 +1326,7 @@ Expected: FAIL — library not found.
 
 ### Step 3: Write the library
 
-Create `lib/wile/algebra/ring.sld`:
+Create `stdlib/lib/wile/algebra/ring.sld`:
 
 ```scheme
 (define-library (wile algebra ring)
@@ -1351,7 +1351,7 @@ Create `lib/wile/algebra/ring.sld`:
   (include "ring.scm"))
 ```
 
-Create `lib/wile/algebra/ring.scm`:
+Create `stdlib/lib/wile/algebra/ring.scm`:
 
 ```scheme
 ;;; (wile algebra ring) — Rings and fields
@@ -1513,7 +1513,7 @@ Expected: PASS
 ### Step 5: Commit
 
 ```bash
-git add lib/wile/algebra/ring.sld lib/wile/algebra/ring.scm test/wile/algebra-ring-test.scm
+git add stdlib/lib/wile/algebra/ring.sld stdlib/lib/wile/algebra/ring.scm test/wile/algebra-ring-test.scm
 git commit -m "feat(algebra): add ring and field libraries with integer-ring, modular-ring, rational-field"
 ```
 
@@ -1522,8 +1522,8 @@ git commit -m "feat(algebra): add ring and field libraries with integer-ring, mo
 ## Task 9: Galois Connections
 
 **Files:**
-- Create: `lib/wile/algebra/galois.sld`
-- Create: `lib/wile/algebra/galois.scm`
+- Create: `stdlib/lib/wile/algebra/galois.sld`
+- Create: `stdlib/lib/wile/algebra/galois.scm`
 - Create: `test/wile/algebra-galois-test.scm`
 
 ### Step 1: Write the failing test
@@ -1624,7 +1624,7 @@ Expected: FAIL — library not found.
 
 ### Step 3: Write the library
 
-Create `lib/wile/algebra/galois.sld`:
+Create `stdlib/lib/wile/algebra/galois.sld`:
 
 ```scheme
 (define-library (wile algebra galois)
@@ -1638,7 +1638,7 @@ Create `lib/wile/algebra/galois.sld`:
   (include "galois.scm"))
 ```
 
-Create `lib/wile/algebra/galois.scm`:
+Create `stdlib/lib/wile/algebra/galois.scm`:
 
 ```scheme
 ;;; (wile algebra galois) — Galois connections
@@ -1695,7 +1695,7 @@ Expected: PASS
 ### Step 5: Commit
 
 ```bash
-git add lib/wile/algebra/galois.sld lib/wile/algebra/galois.scm test/wile/algebra-galois-test.scm
+git add stdlib/lib/wile/algebra/galois.sld stdlib/lib/wile/algebra/galois.scm test/wile/algebra-galois-test.scm
 git commit -m "feat(algebra): add Galois connection library (wile algebra galois)"
 ```
 
@@ -1704,7 +1704,7 @@ git commit -m "feat(algebra): add Galois connection library (wile algebra galois
 ## Task 10: Umbrella library and integration test
 
 **Files:**
-- Create: `lib/wile/algebra.sld`
+- Create: `stdlib/lib/wile/algebra.sld`
 - Create: `test/wile/algebra-integration-test.scm`
 
 ### Step 1: Write the failing test
@@ -1813,7 +1813,7 @@ Expected: FAIL — `(wile algebra)` not found.
 
 ### Step 3: Write the umbrella library
 
-Create `lib/wile/algebra.sld`:
+Create `stdlib/lib/wile/algebra.sld`:
 
 ```scheme
 (define-library (wile algebra)
@@ -1887,7 +1887,7 @@ Expected: All tests pass, including all 8 new test files.
 ### Step 6: Commit
 
 ```bash
-git add lib/wile/algebra.sld test/wile/algebra-integration-test.scm
+git add stdlib/lib/wile/algebra.sld test/wile/algebra-integration-test.scm
 git commit -m "feat(algebra): add umbrella library (wile algebra) with integration tests"
 ```
 
