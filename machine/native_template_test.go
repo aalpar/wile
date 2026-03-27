@@ -90,7 +90,7 @@ func TestNativeTemplate_DeduplicateLiteral_Vector(t *testing.T) {
 	c.Assert((*dedupedVec)[0] == sym, qt.IsTrue, qt.Commentf("symbol inside vector should be deduplicated"))
 }
 
-func TestNativeTemplateDoc(t *testing.T) {
+func TestNativeTemplate_Doc(t *testing.T) {
 	tpl := &NativeTemplate{}
 	qt.Assert(t, tpl.Doc(), qt.Equals, "")
 	tpl.SetDoc("Computes factorial.")
