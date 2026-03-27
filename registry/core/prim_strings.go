@@ -290,7 +290,7 @@ func PrimStringCopy(mc *machine.MachineContext) error {
 }
 
 // stringCompareSpecs defines the five R7RS §6.7 string comparison predicates.
-// Each entry pairs a primitive name with its comparison function.
+// Each entry has a primitive name, comparison function, and doc string.
 var stringCompareSpecs = []struct {
 	name string
 	cmp  func(string, string) bool

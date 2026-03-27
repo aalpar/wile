@@ -51,7 +51,7 @@ func PrimIntegerToChar(mc *machine.MachineContext) error {
 }
 
 // charCompareSpecs defines the five R7RS §6.6 character comparison predicates.
-// Each entry pairs a primitive name with its comparison function.
+// Each entry has a primitive name, comparison function, and doc string.
 var charCompareSpecs = []struct {
 	name string
 	cmp  func(rune, rune) bool

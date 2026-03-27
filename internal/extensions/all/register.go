@@ -121,7 +121,7 @@ func addMoreStrings(r *registry.Registry) error {
 		stringCiPrims[i] = registry.PrimitiveSpec{
 			Name: spec.name, ParamCount: 2, IsVariadic: true,
 			Impl:       makeStringCiComparePrimitive(spec.name, spec.cmp),
-			Doc:        "Compares strings case-insensitively using Unicode case folding. Accepts two or more string arguments.",
+			Doc:        spec.doc,
 			ParamNames: []string{"s1", "s2"}, Category: "strings",
 		}
 	}
@@ -136,7 +136,7 @@ func addMoreChars(r *registry.Registry) error {
 		charCiPrims[i] = registry.PrimitiveSpec{
 			Name: spec.name, ParamCount: 2, IsVariadic: true,
 			Impl:       makeCharCiComparePrimitive(spec.name, spec.cmp),
-			Doc:        "Compares characters case-insensitively using Unicode case folding. Accepts two or more character arguments.",
+			Doc:        spec.doc,
 			ParamNames: []string{"c1", "c2"}, Category: "characters",
 		}
 	}
