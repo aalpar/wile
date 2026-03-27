@@ -46,6 +46,72 @@ func foreignErrorClosure() *ForeignClosure {
 	})
 }
 
+func TestCallForeignCachedValidatorCalled(t *testing.T) {
+	c := qt.New(t)
+
+	validatorCalls := 0
+	fnCalls := 0
+
+	env := environment.NewNamespace().Runtime()
+	closureEnv := environment.NewNamespace().Runtime()
+	fcls := NewForeignClosure(closureEnv, 0, false, func(mc *MachineContext) error {
+		fnCalls++
+		mc.SetValue(values.TrueValue)
+		return nil
+	})
+	fcls.SetValidator(func(mc *MachineContext) error {
+		validatorCalls++
+		return nil
+	})
+	bd := environment.NewBinding(fcls, environment.BindingTypeVariable)
+
+	tpl := NewNativeTemplate(0, 0, false)
+	cbIdx := tpl.AppendCachedBinding(bd)
+
+	tpl.AppendInstruction(Instruction{Op: OpSaveContinuation, Arg: 2})
+	tpl.AppendInstruction(Instruction{Op: OpCallForeignCached, Arg: cbIdx})
+
+	mc := AcquireTopLevelContext(context.Background(), tpl, env)
+	defer ReleaseTopLevelContext(mc)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNil)
+	c.Assert(validatorCalls, qt.Equals, 1)
+	c.Assert(fnCalls, qt.Equals, 1)
+}
+
+func TestCallForeignCachedValidatorRejectsCall(t *testing.T) {
+	c := qt.New(t)
+
+	fnCalls := 0
+
+	env := environment.NewNamespace().Runtime()
+	closureEnv := environment.NewNamespace().Runtime()
+	fcls := NewForeignClosure(closureEnv, 0, false, func(mc *MachineContext) error {
+		fnCalls++
+		mc.SetValue(values.TrueValue)
+		return nil
+	})
+	fcls.SetValidator(func(mc *MachineContext) error {
+		return werr.WrapForeignErrorf(werr.ErrNotAProcedure, "validator rejected")
+	})
+	bd := environment.NewBinding(fcls, environment.BindingTypeVariable)
+
+	tpl := NewNativeTemplate(0, 0, false)
+	cbIdx := tpl.AppendCachedBinding(bd)
+
+	tpl.AppendInstruction(Instruction{Op: OpSaveContinuation, Arg: 2})
+	tpl.AppendInstruction(Instruction{Op: OpCallForeignCached, Arg: cbIdx})
+
+	mc := AcquireTopLevelContext(context.Background(), tpl, env)
+	defer ReleaseTopLevelContext(mc)
+
+	err := mc.Run()
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "validator rejected")
+	c.Assert(fnCalls, qt.Equals, 0, qt.Commentf("fn must not be called when validator rejects"))
+}
+
 func TestOpCallForeignCached(t *testing.T) {
 	tests := []struct {
 		name      string
