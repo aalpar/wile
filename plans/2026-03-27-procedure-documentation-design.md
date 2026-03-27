@@ -409,3 +409,4 @@ docs: add procedure-documentation to PRIMITIVES.md
 - Validator-layer docstring detection
 - Scribble-style `@` reader notation
 - `,doc` REPL command unification with `procedure-documentation`
+- **Multi-string docstrings**: Allow any number of consecutive leading string literals to serve as a docstring. Open design questions: concatenation semantics (newline-joined, direct concatenation like C adjacent literals, or return a list). Wile-specific — Guile does not support this.
