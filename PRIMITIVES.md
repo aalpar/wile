@@ -623,6 +623,7 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `procedure-source-location` | Get source location of a procedure |
 | `procedure-bound-symbols` | Get bound symbols of a procedure |
 | `procedure-type` | Get type classification of a procedure |
+| `procedure-documentation` | Get docstring of a procedure, or `#f` if none |
 
 ## Multiple Values
 
