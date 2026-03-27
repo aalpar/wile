@@ -147,7 +147,7 @@ func init() {
 		return v, true, nil
 	}
 	checks[TypeVoid] = func(v Value) (any, bool, error) {
-		if v.IsVoid() {
+		if v == nil || v.IsVoid() {
 			return v, true, nil
 		}
 		return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument,

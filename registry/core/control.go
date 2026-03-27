@@ -25,8 +25,7 @@ func addControl(r *registry.Registry) error {
 	// so their iteration becomes capturable Scheme frames for call/cc.
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "apply", ParamCount: 2, IsVariadic: true, Impl: PrimApply,
-			Doc: "Applies a procedure to a list of arguments.", ParamNames: []string{"proc", "arg1", "args"}, Category: "control",
-			ParamTypes: []values.ValueType{values.TypeProcedure, values.TypeAny}},
+			Doc: "Applies a procedure to a list of arguments.", ParamNames: []string{"proc", "arg1", "args"}, Category: "control"},
 	}, registry.PhaseRuntime)
 
 	// Continuations

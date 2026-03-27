@@ -29,7 +29,7 @@ for foreign functions. Contracts serve three consumers:
 
 ## ValueType Enum
 
-Lives in `registry/` alongside `PrimitiveSpec`. A `uint8` backed by `[typeCount]T`
+Defined in `values/` and referenced from `PrimitiveSpec` in `registry/` to avoid import cycles. A `uint8` backed by `[typeCount]T`
 lookup tables for constant-time access.
 
 ```go
@@ -96,7 +96,7 @@ The scalar **names the concept**. Three methods give it meaning:
 
 | Method | Signature | Purpose |
 |--------|-----------|---------|
-| `String()` | `string` | Scheme-facing name: `"string"`, `"exact integer"` |
+| `String()` | `string` | Scheme-facing name: `"string"`, `"exact-integer"` |
 | `Description()` | `string` | Longer help text: `"An exact integer (fixnum or bignum)"` |
 | `Check()` | `(values.Value) (any, bool, error)` | Predicate + narrowing + error |
 
