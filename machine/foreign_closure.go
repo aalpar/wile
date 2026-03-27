@@ -59,6 +59,7 @@ var _ Closure = (*ForeignClosure)(nil)
 // the bytecode VM — no template, no opcodes, no VM loop iteration.
 type ForeignClosure struct {
 	fn         ForeignFunction
+	validate   ForeignFunction // nil = no validation; set via SetValidator
 	env        *environment.EnvironmentFrame
 	paramCount int
 	isVariadic bool
@@ -90,6 +91,18 @@ func (p *ForeignClosure) Name() string {
 
 func (p *ForeignClosure) SetName(name string) {
 	p.name = name
+}
+
+// SetValidator installs a contract validation function that runs before
+// the implementation. Called during registration when contract enforcement
+// is enabled.
+func (p *ForeignClosure) SetValidator(v ForeignFunction) {
+	p.validate = v
+}
+
+// Validator returns the installed contract validator, or nil if none.
+func (p *ForeignClosure) Validator() ForeignFunction {
+	return p.validate
 }
 
 func (p *ForeignClosure) IsVoid() bool {
