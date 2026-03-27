@@ -2,10 +2,12 @@ package machine
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -63,6 +65,60 @@ func TestApplyForeign_ArityError(t *testing.T) {
 
 	_, err := mc.applyForeign(cls, values.NewInteger(1))
 	qt.Assert(t, err, qt.IsNotNil)
+}
+
+func TestApplyForeign_ValidatorCalled(t *testing.T) {
+	validatorCalls := 0
+	fnCalls := 0
+
+	env := environment.NewNamespace().Runtime()
+	fn := func(mc *MachineContext) error {
+		fnCalls++
+		mc.SetValue(values.TrueValue)
+		return nil
+	}
+	cls := newTestForeignClosure(env, 0, false, fn)
+	cls.SetValidator(func(mc *MachineContext) error {
+		validatorCalls++
+		return nil
+	})
+
+	tpl := NewNativeTemplate(0, 0, false)
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	_, err := mc.applyForeign(cls)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, validatorCalls, qt.Equals, 1)
+	qt.Assert(t, fnCalls, qt.Equals, 1)
+}
+
+func TestApplyForeign_ValidatorRejectsCall(t *testing.T) {
+	fnCalls := 0
+
+	env := environment.NewNamespace().Runtime()
+	fn := func(mc *MachineContext) error {
+		fnCalls++
+		mc.SetValue(values.TrueValue)
+		return nil
+	}
+	cls := newTestForeignClosure(env, 0, false, fn)
+	cls.SetValidator(func(mc *MachineContext) error {
+		return werr.WrapForeignErrorf(werr.ErrNotAProcedure, "validator rejected")
+	})
+
+	tpl := NewNativeTemplate(0, 0, false)
+	cont := NewMachineContinuation(nil, tpl, env)
+	mc := NewMachineContext(context.Background(), cont)
+
+	_, err := mc.applyForeign(cls)
+	qt.Assert(t, err, qt.IsNotNil)
+
+	var excErr *ErrExceptionEscape
+	qt.Assert(t, errors.As(err, &excErr), qt.IsTrue,
+		qt.Commentf("validator error must be wrapped as ErrExceptionEscape"))
+	qt.Assert(t, fnCalls, qt.Equals, 0,
+		qt.Commentf("fn must not be called when validator rejects"))
 }
 
 // TestApplyForeign_PanicRecovery was removed: applyForeign no longer

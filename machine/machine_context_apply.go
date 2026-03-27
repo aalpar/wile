@@ -112,6 +112,13 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	p.counters.ForeignCalls++
 	p.counters.RecordCall(fcls.name)
 
+	if fcls.validate != nil {
+		err = fcls.validate(p)
+		if err != nil {
+			return nil, applyCallableError(p, err)
+		}
+	}
+
 	// Save the template and continuation pointers before calling the foreign
 	// function. Some foreign functions (e.g., PrimCallCC inline mode) call
 	// ApplyCallable on the MachineContext, which may change the template (via

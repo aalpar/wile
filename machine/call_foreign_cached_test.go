@@ -16,6 +16,7 @@ package machine
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/environment"
@@ -44,6 +45,72 @@ func foreignErrorClosure() *ForeignClosure {
 	return NewForeignClosure(env, 0, false, func(mc *MachineContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAProcedure, "intentional test error")
 	})
+}
+
+func TestCallForeignCached_ValidatorCalled(t *testing.T) {
+	validatorCalls := 0
+	fnCalls := 0
+
+	env := environment.NewNamespace().Runtime()
+	closureEnv := environment.NewNamespace().Runtime()
+	fcls := NewForeignClosure(closureEnv, 0, false, func(mc *MachineContext) error {
+		fnCalls++
+		mc.SetValue(values.TrueValue)
+		return nil
+	})
+	fcls.SetValidator(func(mc *MachineContext) error {
+		validatorCalls++
+		return nil
+	})
+	bd := environment.NewBinding(fcls, environment.BindingTypeVariable)
+
+	tpl := NewNativeTemplate(0, 0, false)
+	cbIdx := tpl.AppendCachedBinding(bd)
+
+	tpl.AppendInstruction(Instruction{Op: OpSaveContinuation, Arg: 2})
+	tpl.AppendInstruction(Instruction{Op: OpCallForeignCached, Arg: cbIdx})
+
+	mc := AcquireTopLevelContext(context.Background(), tpl, env)
+	defer ReleaseTopLevelContext(mc)
+
+	err := mc.Run()
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, validatorCalls, qt.Equals, 1)
+	qt.Assert(t, fnCalls, qt.Equals, 1)
+}
+
+func TestCallForeignCached_ValidatorRejectsCall(t *testing.T) {
+	fnCalls := 0
+
+	env := environment.NewNamespace().Runtime()
+	closureEnv := environment.NewNamespace().Runtime()
+	fcls := NewForeignClosure(closureEnv, 0, false, func(mc *MachineContext) error {
+		fnCalls++
+		mc.SetValue(values.TrueValue)
+		return nil
+	})
+	fcls.SetValidator(func(mc *MachineContext) error {
+		return werr.WrapForeignErrorf(werr.ErrNotAProcedure, "validator rejected")
+	})
+	bd := environment.NewBinding(fcls, environment.BindingTypeVariable)
+
+	tpl := NewNativeTemplate(0, 0, false)
+	cbIdx := tpl.AppendCachedBinding(bd)
+
+	tpl.AppendInstruction(Instruction{Op: OpSaveContinuation, Arg: 2})
+	tpl.AppendInstruction(Instruction{Op: OpCallForeignCached, Arg: cbIdx})
+
+	mc := AcquireTopLevelContext(context.Background(), tpl, env)
+	defer ReleaseTopLevelContext(mc)
+
+	err := mc.Run()
+	qt.Assert(t, err, qt.IsNotNil)
+
+	var excErr *ErrExceptionEscape
+	qt.Assert(t, errors.As(err, &excErr), qt.IsTrue,
+		qt.Commentf("validator error must be wrapped as ErrExceptionEscape"))
+	qt.Assert(t, fnCalls, qt.Equals, 0,
+		qt.Commentf("fn must not be called when validator rejects"))
 }
 
 func TestOpCallForeignCached(t *testing.T) {

@@ -70,6 +70,13 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 
 	mc.env = env
 
+	if fcls.validate != nil {
+		err = fcls.validate(mc)
+		if err != nil {
+			return nil, applyCallableError(mc, err)
+		}
+	}
+
 	savedTemplate := mc.template
 	savedCont := mc.cont
 	err = fcls.fn(mc)
