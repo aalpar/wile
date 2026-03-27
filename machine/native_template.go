@@ -34,6 +34,7 @@ type NativeTemplate struct {
 	sourceRefs     []uint16                // parallel to code, index into sourceTable
 	sourceTable    []*syntax.SourceContext // index 0 = nil (no source)
 	name           string                  // Function name (for stack traces)
+	doc            string                  // Guile-style docstring from leading string literal in body
 
 	// cachedBindings stores *Binding pointers resolved at compile time.
 	// OpLoadCachedBinding/OpPushCachedBinding index into this array,
@@ -347,6 +348,14 @@ func (p *NativeTemplate) SetName(name string) {
 	p.name = name
 }
 
+func (p *NativeTemplate) Doc() string {
+	return p.doc
+}
+
+func (p *NativeTemplate) SetDoc(doc string) {
+	p.doc = doc
+}
+
 func (p *NativeTemplate) MaybeAppendLiteral(v values.Value) LiteralIndex {
 	// Don't deduplicate environments - each closure needs its own instance
 	// because environments are mutable and context-dependent. The parent
@@ -645,6 +654,7 @@ func (p *NativeTemplate) Copy() *NativeTemplate {
 		valueCount:     p.valueCount,
 		isVariadic:     p.isVariadic,
 		name:           p.name,
+		doc:            p.doc,
 	}
 	q.literals = slices.Clone(p.literals)
 	q.cachedBindings = slices.Clone(p.cachedBindings)

@@ -367,3 +367,83 @@ func TestProcedureTypeErrors(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// procedure-documentation Tests
+// =============================================================================
+
+func TestProcedureDocumentation(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name:     "define with docstring",
+			Code:     `(begin (define (f x) "Adds one to x." (+ x 1)) (procedure-documentation f))`,
+			Expected: values.NewString("Adds one to x."),
+		},
+		{
+			Name:     "lambda with docstring",
+			Code:     `(begin (define f (lambda (x) "Doubles x." (* x 2))) (procedure-documentation f))`,
+			Expected: values.NewString("Doubles x."),
+		},
+		{
+			Name:     "no docstring returns false",
+			Code:     `(begin (define (g x) (+ x 1)) (procedure-documentation g))`,
+			Expected: values.FalseValue,
+		},
+		{
+			Name:     "string-only body is return value not docstring",
+			Code:     `(begin (define (h) "just a string") (procedure-documentation h))`,
+			Expected: values.FalseValue,
+		},
+		{
+			Name:     "foreign procedure returns false",
+			Code:     `(procedure-documentation car)`,
+			Expected: values.FalseValue,
+		},
+		{
+			Name:     "non-procedure returns false",
+			Code:     `(procedure-documentation 42)`,
+			Expected: values.FalseValue,
+		},
+		{
+			Name: "case-lambda with docstring in first clause",
+			Code: `(begin (define f (case-lambda
+			           ((x) "One arg." (+ x 1))
+			           ((x y) (+ x y))))
+			       (procedure-documentation f))`,
+			Expected: values.NewString("One arg."),
+		},
+		{
+			Name: "case-lambda without docstring",
+			Code: `(begin (define f (case-lambda
+			           ((x) (+ x 1))
+			           ((x y) (+ x y))))
+			       (procedure-documentation f))`,
+			Expected: values.FalseValue,
+		},
+		{
+			Name:     "multiline docstring",
+			Code:     "(begin (define (f x)\n  \"Adds one to x.\\nReturns an integer.\"\n  (+ x 1))\n(procedure-documentation f))",
+			Expected: values.NewString("Adds one to x.\nReturns an integer."),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
+func TestProcedureDocumentationErrors(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "wrong arity zero", Code: `(procedure-documentation)`},
+		{Name: "wrong arity two", Code: `(procedure-documentation car car)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}

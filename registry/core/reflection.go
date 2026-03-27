@@ -36,6 +36,9 @@ func addReflection(r *registry.Registry) error {
 		{Name: "procedure-type", ParamCount: 1, Impl: PrimProcedureType,
 			Doc: "Returns a symbol classifying the procedure type.", ParamNames: []string{"proc"}, Category: "reflection",
 			ParamTypes: []values.ValueType{values.TypeProcedure}, ReturnType: values.TypeSymbol},
+		{Name: "procedure-documentation", ParamCount: 1, Impl: PrimProcedureDocumentation,
+			Doc: "Returns the docstring of a procedure, or #f if none.", ParamNames: []string{"proc"}, Category: "reflection",
+			ReturnType: values.TypeAny},
 	}, registry.PhaseRuntime)
 
 	return nil
