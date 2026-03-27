@@ -2,6 +2,7 @@ package machine
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/environment"
@@ -67,8 +68,6 @@ func TestApplyForeign_ArityError(t *testing.T) {
 }
 
 func TestApplyForeign_ValidatorCalled(t *testing.T) {
-	c := qt.New(t)
-
 	validatorCalls := 0
 	fnCalls := 0
 
@@ -89,14 +88,12 @@ func TestApplyForeign_ValidatorCalled(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 
 	_, err := mc.applyForeign(cls)
-	c.Assert(err, qt.IsNil)
-	c.Assert(validatorCalls, qt.Equals, 1)
-	c.Assert(fnCalls, qt.Equals, 1)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, validatorCalls, qt.Equals, 1)
+	qt.Assert(t, fnCalls, qt.Equals, 1)
 }
 
 func TestApplyForeign_ValidatorRejectsCall(t *testing.T) {
-	c := qt.New(t)
-
 	fnCalls := 0
 
 	env := environment.NewNamespace().Runtime()
@@ -115,9 +112,13 @@ func TestApplyForeign_ValidatorRejectsCall(t *testing.T) {
 	mc := NewMachineContext(context.Background(), cont)
 
 	_, err := mc.applyForeign(cls)
-	c.Assert(err, qt.IsNotNil)
-	c.Assert(err.Error(), qt.Contains, "validator rejected")
-	c.Assert(fnCalls, qt.Equals, 0, qt.Commentf("fn must not be called when validator rejects"))
+	qt.Assert(t, err, qt.IsNotNil)
+
+	var excErr *ErrExceptionEscape
+	qt.Assert(t, errors.As(err, &excErr), qt.IsTrue,
+		qt.Commentf("validator error must be wrapped as ErrExceptionEscape"))
+	qt.Assert(t, fnCalls, qt.Equals, 0,
+		qt.Commentf("fn must not be called when validator rejects"))
 }
 
 // TestApplyForeign_PanicRecovery was removed: applyForeign no longer

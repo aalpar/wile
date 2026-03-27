@@ -108,15 +108,13 @@ func TestForeignClosure_Name(t *testing.T) {
 }
 
 func TestForeignClosure_SetValidator(t *testing.T) {
-	c := qt.New(t)
-
 	env := environment.NewNamespace().Runtime()
 	cls := newTestForeignClosure(env, 1, false, func(mc *MachineContext) error {
 		return nil
 	})
 
 	// No validator by default
-	c.Assert(cls.Validator(), qt.IsNil)
+	qt.Assert(t, cls.Validator(), qt.IsNil)
 
 	// Set a validator
 	called := false
@@ -124,12 +122,12 @@ func TestForeignClosure_SetValidator(t *testing.T) {
 		called = true
 		return nil
 	})
-	c.Assert(cls.Validator(), qt.IsNotNil)
+	qt.Assert(t, cls.Validator(), qt.IsNotNil)
 
-	// Verify it's callable
+	// Verify accessor returns a callable function pointer
 	err := cls.Validator()(nil)
-	c.Assert(err, qt.IsNil)
-	c.Assert(called, qt.IsTrue)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, called, qt.IsTrue)
 }
 
 // newTestForeignClosure is a test helper that directly constructs a ForeignClosure

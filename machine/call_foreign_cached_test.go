@@ -16,6 +16,7 @@ package machine
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/environment"
@@ -46,9 +47,7 @@ func foreignErrorClosure() *ForeignClosure {
 	})
 }
 
-func TestCallForeignCachedValidatorCalled(t *testing.T) {
-	c := qt.New(t)
-
+func TestCallForeignCached_ValidatorCalled(t *testing.T) {
 	validatorCalls := 0
 	fnCalls := 0
 
@@ -75,14 +74,12 @@ func TestCallForeignCachedValidatorCalled(t *testing.T) {
 	defer ReleaseTopLevelContext(mc)
 
 	err := mc.Run()
-	c.Assert(err, qt.IsNil)
-	c.Assert(validatorCalls, qt.Equals, 1)
-	c.Assert(fnCalls, qt.Equals, 1)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, validatorCalls, qt.Equals, 1)
+	qt.Assert(t, fnCalls, qt.Equals, 1)
 }
 
-func TestCallForeignCachedValidatorRejectsCall(t *testing.T) {
-	c := qt.New(t)
-
+func TestCallForeignCached_ValidatorRejectsCall(t *testing.T) {
 	fnCalls := 0
 
 	env := environment.NewNamespace().Runtime()
@@ -107,9 +104,13 @@ func TestCallForeignCachedValidatorRejectsCall(t *testing.T) {
 	defer ReleaseTopLevelContext(mc)
 
 	err := mc.Run()
-	c.Assert(err, qt.IsNotNil)
-	c.Assert(err.Error(), qt.Contains, "validator rejected")
-	c.Assert(fnCalls, qt.Equals, 0, qt.Commentf("fn must not be called when validator rejects"))
+	qt.Assert(t, err, qt.IsNotNil)
+
+	var excErr *ErrExceptionEscape
+	qt.Assert(t, errors.As(err, &excErr), qt.IsTrue,
+		qt.Commentf("validator error must be wrapped as ErrExceptionEscape"))
+	qt.Assert(t, fnCalls, qt.Equals, 0,
+		qt.Commentf("fn must not be called when validator rejects"))
 }
 
 func TestOpCallForeignCached(t *testing.T) {
