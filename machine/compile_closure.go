@@ -23,7 +23,6 @@ import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/internal/validate"
-	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
 
@@ -151,10 +150,9 @@ func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clau
 		childCompiler.predeclareDefineBindingFromValidated(bodyExpr)
 	}
 
-	// Docstring extraction (Guile convention): if the first body expression
-	// is a string literal and the body has more than one expression, treat
-	// the string as documentation rather than executable code.
-	body = extractDocstring(body, tpl)
+	// Annotation extraction: strip leading metadata forms (docstrings,
+	// future: contract declarations) before compilation.
+	body = processBodyAnnotations(body, tpl)
 
 	// Pass 2: Compile all expressions (with all bindings now visible)
 	err := childCompiler.compileValidatedSequence(lambdaBodyContext, body)
@@ -164,26 +162,6 @@ func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clau
 
 	childCompiler.AppendOperations(NewOperationRestoreContinuation())
 	return nil
-}
-
-// extractDocstring checks whether the first body expression is a string
-// literal (Guile-style docstring). If so, stores it on the template and
-// returns the remaining body. The string must not be the only expression
-// (a body of just "hello" is a return value, not documentation).
-func extractDocstring(body []validate.ValidatedExpr, tpl *NativeTemplate) []validate.ValidatedExpr {
-	if len(body) < 2 {
-		return body
-	}
-	lit, ok := body[0].(*validate.ValidatedLiteral)
-	if !ok {
-		return body
-	}
-	str, ok := lit.Value.UnwrapAll().(*values.String)
-	if !ok {
-		return body
-	}
-	tpl.SetDoc(str.Value)
-	return body[1:]
 }
 
 // predeclareDefineBindingFromValidated pre-creates a binding for a validated define form.

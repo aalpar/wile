@@ -421,6 +421,7 @@ func TestProcedureDocumentation(t *testing.T) {
 			Expected: values.NewString("Adds one to x.\nReturns an integer."),
 		},
 	}
+
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
 			result, err := testhelpers.RunSchemeCode(t, tc.Code)
@@ -438,6 +439,7 @@ func TestProcedureDocumentationErrors(t *testing.T) {
 		{Name: "string", Code: `(procedure-documentation "hello")`},
 		{Name: "boolean", Code: `(procedure-documentation #t)`},
 	}
+
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
 			_, err := testhelpers.RunSchemeCode(t, tc.Code)

@@ -242,14 +242,15 @@ func PrimProcedureDocumentation(mc *machine.MachineContext) error {
 		}
 	case *machine.CaseLambdaClosure:
 		clauses := v.Clauses()
+		doc := ""
 		if len(clauses) > 0 {
-			doc := clauses[0].Template().Doc()
-			if doc != "" {
-				mc.SetValue(values.NewString(doc))
-				return nil
-			}
+			doc = clauses[0].Template().Doc()
 		}
-		mc.SetValue(values.FalseValue)
+		if doc == "" {
+			mc.SetValue(values.FalseValue)
+		} else {
+			mc.SetValue(values.NewString(doc))
+		}
 	case *machine.ForeignClosure, *machine.Parameter, *machine.ComposableContinuation:
 		mc.SetValue(values.FalseValue)
 	default:
