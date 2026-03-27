@@ -16,45 +16,59 @@ package core
 
 import (
 	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/values"
 )
 
 func addLists(r *registry.Registry) error {
 	// List construction
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "list", ParamCount: 1, IsVariadic: true, Impl: PrimList,
-			Doc: "Creates a new list from its arguments.", ParamNames: []string{"obj"}, Category: "lists"},
+			Doc: "Creates a new list from its arguments.", ParamNames: []string{"obj"}, Category: "lists",
+			ParamTypes: []values.ValueType{values.TypeAny}, ReturnType: values.TypeList},
 		{Name: "make-list", ParamCount: 2, IsVariadic: true, Impl: PrimMakeList,
-			Doc: "Creates a list of length k, optionally filled with fill.", ParamNames: []string{"k", "fill"}, Category: "lists"},
+			Doc: "Creates a list of length k, optionally filled with fill.", ParamNames: []string{"k", "fill"}, Category: "lists",
+			ParamTypes: []values.ValueType{values.TypeExactInteger, values.TypeAny}, ReturnType: values.TypeList},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// List operations
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "append", ParamCount: 1, IsVariadic: true, Impl: PrimAppend,
-			Doc: "Appends lists together.", ParamNames: []string{"list"}, Category: "lists"},
+			Doc: "Appends lists together.", ParamNames: []string{"list"}, Category: "lists",
+			ParamTypes: []values.ValueType{values.TypeList}, ReturnType: values.TypeList},
 		{Name: "reverse", ParamCount: 1, Impl: PrimReverse,
-			Doc: "Returns a newly allocated reversed list.", ParamNames: []string{"list"}, Category: "lists"},
+			Doc: "Returns a newly allocated reversed list.", ParamNames: []string{"list"}, Category: "lists",
+			ParamTypes: []values.ValueType{values.TypeList}, ReturnType: values.TypeList},
 		{Name: "length", ParamCount: 1, Impl: PrimLength,
-			Doc: "Returns the length of list.", ParamNames: []string{"list"}, Category: "lists"},
+			Doc: "Returns the length of list.", ParamNames: []string{"list"}, Category: "lists",
+			ParamTypes: []values.ValueType{values.TypeList}, ReturnType: values.TypeExactInteger},
 		{Name: "list-ref", ParamCount: 2, Impl: PrimListRef,
-			Doc: "Returns the element at index k.", ParamNames: []string{"list", "k"}, Category: "lists"},
+			Doc: "Returns the element at index k.", ParamNames: []string{"list", "k"}, Category: "lists",
+			ParamTypes: []values.ValueType{values.TypeList, values.TypeExactInteger}},
 		{Name: "list-set!", ParamCount: 3, Impl: PrimListSet,
-			Doc: "Sets the element at index k.", ParamNames: []string{"list", "k", "obj"}, Category: "lists"},
+			Doc: "Sets the element at index k.", ParamNames: []string{"list", "k", "obj"}, Category: "lists",
+			ParamTypes: []values.ValueType{values.TypePair, values.TypeExactInteger, values.TypeAny}, ReturnType: values.TypeVoid},
 		{Name: "list-tail", ParamCount: 2, Impl: PrimListTail,
-			Doc: "Returns the sublist after the first k elements.", ParamNames: []string{"list", "k"}, Category: "lists"},
+			Doc: "Returns the sublist after the first k elements.", ParamNames: []string{"list", "k"}, Category: "lists",
+			ParamTypes: []values.ValueType{values.TypeList, values.TypeExactInteger}},
 		{Name: "list-copy", ParamCount: 1, Impl: PrimListCopy,
-			Doc: "Returns a shallow copy of list.", ParamNames: []string{"list"}, Category: "lists"},
+			Doc: "Returns a shallow copy of list.", ParamNames: []string{"list"}, Category: "lists",
+			ParamTypes: []values.ValueType{values.TypeList}, ReturnType: values.TypeList},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// List search
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "memq", ParamCount: 2, Impl: PrimMemq,
-			Doc: "Returns the first sublist whose car is eq? to obj.", ParamNames: []string{"obj", "list"}, Category: "lists"},
+			Doc: "Returns the first sublist whose car is eq? to obj.", ParamNames: []string{"obj", "list"}, Category: "lists",
+			ParamTypes: []values.ValueType{values.TypeAny, values.TypeList}},
 		{Name: "memv", ParamCount: 2, Impl: PrimMemv,
-			Doc: "Returns the first sublist whose car is eqv? to obj.", ParamNames: []string{"obj", "list"}, Category: "lists"},
+			Doc: "Returns the first sublist whose car is eqv? to obj.", ParamNames: []string{"obj", "list"}, Category: "lists",
+			ParamTypes: []values.ValueType{values.TypeAny, values.TypeList}},
 		{Name: "assq", ParamCount: 2, Impl: PrimAssq,
-			Doc: "Returns the first pair whose car is eq? to obj.", ParamNames: []string{"obj", "alist"}, Category: "lists"},
+			Doc: "Returns the first pair whose car is eq? to obj.", ParamNames: []string{"obj", "alist"}, Category: "lists",
+			ParamTypes: []values.ValueType{values.TypeAny, values.TypeList}},
 		{Name: "assv", ParamCount: 2, Impl: PrimAssv,
-			Doc: "Returns the first pair whose car is eqv? to obj.", ParamNames: []string{"obj", "alist"}, Category: "lists"},
+			Doc: "Returns the first pair whose car is eqv? to obj.", ParamNames: []string{"obj", "alist"}, Category: "lists",
+			ParamTypes: []values.ValueType{values.TypeAny, values.TypeList}},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

@@ -16,18 +16,23 @@ package core
 
 import (
 	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/values"
 )
 
 func addBoxes(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "box", ParamCount: 1, Impl: PrimBox,
-			Doc: "Wraps a value in a mutable box.", ParamNames: []string{"obj"}, Category: "boxes"},
+			Doc: "Wraps a value in a mutable box.", ParamNames: []string{"obj"}, Category: "boxes",
+			ParamTypes: []values.ValueType{values.TypeAny}},
 		{Name: "box?", ParamCount: 1, Impl: PrimBoxQ,
-			Doc: "Returns #t if obj is a box.", ParamNames: []string{"obj"}, Category: "boxes"},
+			Doc: "Returns #t if obj is a box.", ParamNames: []string{"obj"}, Category: "boxes",
+			ParamTypes: []values.ValueType{values.TypeAny}, ReturnType: values.TypeBoolean},
 		{Name: "unbox", ParamCount: 1, Impl: PrimUnbox,
-			Doc: "Returns the value stored in a box.", ParamNames: []string{"box"}, Category: "boxes"},
+			Doc: "Returns the value stored in a box.", ParamNames: []string{"box"}, Category: "boxes",
+			ParamTypes: []values.ValueType{values.TypeAny}},
 		{Name: "set-box!", ParamCount: 2, Impl: PrimSetBox,
-			Doc: "Stores a new value in a box.", ParamNames: []string{"box", "obj"}, Category: "boxes"},
+			Doc: "Stores a new value in a box.", ParamNames: []string{"box", "obj"}, Category: "boxes",
+			ParamTypes: []values.ValueType{values.TypeAny, values.TypeAny}, ReturnType: values.TypeVoid},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

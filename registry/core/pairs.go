@@ -16,21 +16,27 @@ package core
 
 import (
 	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/values"
 )
 
 func addPairs(r *registry.Registry) error {
 	// Basic pair operations
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "cons", ParamCount: 2, Impl: PrimCons,
-			Doc: "Creates a new pair.", ParamNames: []string{"obj1", "obj2"}, Category: "pairs"},
+			Doc: "Creates a new pair.", ParamNames: []string{"obj1", "obj2"}, Category: "pairs",
+			ParamTypes: []values.ValueType{values.TypeAny, values.TypeAny}, ReturnType: values.TypePair},
 		{Name: "car", ParamCount: 1, Impl: PrimCar,
-			Doc: "Returns the car of a pair.", ParamNames: []string{"pair"}, Category: "pairs"},
+			Doc: "Returns the car of a pair.", ParamNames: []string{"pair"}, Category: "pairs",
+			ParamTypes: []values.ValueType{values.TypePair}},
 		{Name: "cdr", ParamCount: 1, Impl: PrimCdr,
-			Doc: "Returns the cdr of a pair.", ParamNames: []string{"pair"}, Category: "pairs"},
+			Doc: "Returns the cdr of a pair.", ParamNames: []string{"pair"}, Category: "pairs",
+			ParamTypes: []values.ValueType{values.TypePair}},
 		{Name: "set-car!", ParamCount: 2, Impl: PrimSetCar,
-			Doc: "Sets the car of a pair.", ParamNames: []string{"pair", "obj"}, Category: "pairs"},
+			Doc: "Sets the car of a pair.", ParamNames: []string{"pair", "obj"}, Category: "pairs",
+			ParamTypes: []values.ValueType{values.TypePair, values.TypeAny}, ReturnType: values.TypeVoid},
 		{Name: "set-cdr!", ParamCount: 2, Impl: PrimSetCdr,
-			Doc: "Sets the cdr of a pair.", ParamNames: []string{"pair", "obj"}, Category: "pairs"},
+			Doc: "Sets the cdr of a pair.", ParamNames: []string{"pair", "obj"}, Category: "pairs",
+			ParamTypes: []values.ValueType{values.TypePair, values.TypeAny}, ReturnType: values.TypeVoid},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

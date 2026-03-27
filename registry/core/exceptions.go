@@ -16,28 +16,38 @@ package core
 
 import (
 	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/values"
 )
 
 func addExceptions(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "with-exception-handler", ParamCount: 2, Impl: PrimWithExceptionHandler,
-			Doc: "Installs an exception handler and calls thunk.", ParamNames: []string{"handler", "thunk"}, Category: "exceptions"},
+			Doc: "Installs an exception handler and calls thunk.", ParamNames: []string{"handler", "thunk"}, Category: "exceptions",
+			ParamTypes: []values.ValueType{values.TypeProcedure, values.TypeProcedure}},
 		{Name: "raise", ParamCount: 1, Impl: PrimRaise,
-			Doc: "Raises a non-continuable exception.", ParamNames: []string{"obj"}, Category: "exceptions"},
+			Doc: "Raises a non-continuable exception.", ParamNames: []string{"obj"}, Category: "exceptions",
+			ParamTypes: []values.ValueType{values.TypeAny}},
 		{Name: "raise-continuable", ParamCount: 1, Impl: PrimRaiseContinuable,
-			Doc: "Raises a continuable exception.", ParamNames: []string{"obj"}, Category: "exceptions"},
+			Doc: "Raises a continuable exception.", ParamNames: []string{"obj"}, Category: "exceptions",
+			ParamTypes: []values.ValueType{values.TypeAny}},
 		{Name: "error", ParamCount: 2, IsVariadic: true, Impl: PrimError,
-			Doc: "Creates an error object and raises it.", ParamNames: []string{"message", "irritant"}, Category: "exceptions"},
+			Doc: "Creates an error object and raises it.", ParamNames: []string{"message", "irritant"}, Category: "exceptions",
+			ParamTypes: []values.ValueType{values.TypeString, values.TypeAny}},
 		{Name: "error-object?", ParamCount: 1, Impl: PrimErrorObjectQ,
-			Doc: "Returns #t if obj is an error object.", ParamNames: []string{"obj"}, Category: "exceptions"},
+			Doc: "Returns #t if obj is an error object.", ParamNames: []string{"obj"}, Category: "exceptions",
+			ParamTypes: []values.ValueType{values.TypeAny}, ReturnType: values.TypeBoolean},
 		{Name: "error-object-message", ParamCount: 1, Impl: PrimErrorObjectMessage,
-			Doc: "Returns the message of an error object.", ParamNames: []string{"error-obj"}, Category: "exceptions"},
+			Doc: "Returns the message of an error object.", ParamNames: []string{"error-obj"}, Category: "exceptions",
+			ParamTypes: []values.ValueType{values.TypeAny}, ReturnType: values.TypeString},
 		{Name: "error-object-irritants", ParamCount: 1, Impl: PrimErrorObjectIrritants,
-			Doc: "Returns the irritants of an error object.", ParamNames: []string{"error-obj"}, Category: "exceptions"},
+			Doc: "Returns the irritants of an error object.", ParamNames: []string{"error-obj"}, Category: "exceptions",
+			ParamTypes: []values.ValueType{values.TypeAny}, ReturnType: values.TypeList},
 		{Name: "read-error?", ParamCount: 1, Impl: PrimReadErrorQ,
-			Doc: "Returns #t if obj is a read error.", ParamNames: []string{"obj"}, Category: "exceptions"},
+			Doc: "Returns #t if obj is a read error.", ParamNames: []string{"obj"}, Category: "exceptions",
+			ParamTypes: []values.ValueType{values.TypeAny}, ReturnType: values.TypeBoolean},
 		{Name: "file-error?", ParamCount: 1, Impl: PrimFileErrorQ,
-			Doc: "Returns #t if obj is a file error.", ParamNames: []string{"obj"}, Category: "exceptions"},
+			Doc: "Returns #t if obj is a file error.", ParamNames: []string{"obj"}, Category: "exceptions",
+			ParamTypes: []values.ValueType{values.TypeAny}, ReturnType: values.TypeBoolean},
 	}, registry.PhaseRuntime)
 	return nil
 }

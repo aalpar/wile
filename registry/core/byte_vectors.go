@@ -16,34 +16,45 @@ package core
 
 import (
 	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/values"
 )
 
 func addBytevectors(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "make-bytevector", ParamCount: 2, IsVariadic: true, Impl: PrimMakeBytevector,
-			Doc: "Creates a bytevector of length k, optionally filled with byte.", ParamNames: []string{"k", "byte"}, Category: "bytevectors"},
+			Doc: "Creates a bytevector of length k, optionally filled with byte.", ParamNames: []string{"k", "byte"}, Category: "bytevectors",
+			ParamTypes: []values.ValueType{values.TypeExactInteger, values.TypeByte}, ReturnType: values.TypeByteVector},
 		{Name: "bytevector", ParamCount: 1, IsVariadic: true, Impl: PrimBytevector,
-			Doc: "Creates a bytevector from its arguments.", ParamNames: []string{"byte"}, Category: "bytevectors"},
+			Doc: "Creates a bytevector from its arguments.", ParamNames: []string{"byte"}, Category: "bytevectors",
+			ParamTypes: []values.ValueType{values.TypeByte}, ReturnType: values.TypeByteVector},
 		{Name: "bytevector-length", ParamCount: 1, Impl: PrimBytevectorLength,
-			Doc: "Returns the length of bytevector.", ParamNames: []string{"bytevector"}, Category: "bytevectors"},
+			Doc: "Returns the length of bytevector.", ParamNames: []string{"bytevector"}, Category: "bytevectors",
+			ParamTypes: []values.ValueType{values.TypeByteVector}, ReturnType: values.TypeExactInteger},
 		{Name: "bytevector-u8-ref", ParamCount: 2, Impl: PrimBytevectorU8Ref,
-			Doc: "Returns the byte at index k.", ParamNames: []string{"bytevector", "k"}, Category: "bytevectors"},
+			Doc: "Returns the byte at index k.", ParamNames: []string{"bytevector", "k"}, Category: "bytevectors",
+			ParamTypes: []values.ValueType{values.TypeByteVector, values.TypeExactInteger}, ReturnType: values.TypeByte},
 		{Name: "bytevector-u8-set!", ParamCount: 3, Impl: PrimBytevectorU8Set,
-			Doc: "Sets the byte at index k.", ParamNames: []string{"bytevector", "k", "byte"}, Category: "bytevectors"},
+			Doc: "Sets the byte at index k.", ParamNames: []string{"bytevector", "k", "byte"}, Category: "bytevectors",
+			ParamTypes: []values.ValueType{values.TypeByteVector, values.TypeExactInteger, values.TypeByte}, ReturnType: values.TypeVoid},
 		{Name: "bytevector-copy", ParamCount: 2, IsVariadic: true, Impl: PrimBytevectorCopy,
-			Doc: "Returns a copy of bytevector, optionally from start to end.", ParamNames: []string{"bytevector", "start"}, Category: "bytevectors"},
+			Doc: "Returns a copy of bytevector, optionally from start to end.", ParamNames: []string{"bytevector", "start"}, Category: "bytevectors",
+			ParamTypes: []values.ValueType{values.TypeByteVector, values.TypeExactInteger}, ReturnType: values.TypeByteVector},
 		{Name: "bytevector-copy!", ParamCount: 4, IsVariadic: true, Impl: PrimBytevectorCopyBang,
-			Doc: "Copies bytes from source to destination bytevector.", ParamNames: []string{"to", "at", "from", "start"}, Category: "bytevectors"},
+			Doc: "Copies bytes from source to destination bytevector.", ParamNames: []string{"to", "at", "from", "start"}, Category: "bytevectors",
+			ParamTypes: []values.ValueType{values.TypeByteVector, values.TypeExactInteger, values.TypeByteVector, values.TypeExactInteger}, ReturnType: values.TypeVoid},
 		{Name: "bytevector-append", ParamCount: 1, IsVariadic: true, Impl: PrimBytevectorAppend,
-			Doc: "Appends bytevectors together.", ParamNames: []string{"bytevector"}, Category: "bytevectors"},
+			Doc: "Appends bytevectors together.", ParamNames: []string{"bytevector"}, Category: "bytevectors",
+			ParamTypes: []values.ValueType{values.TypeByteVector}, ReturnType: values.TypeByteVector},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// UTF-8 conversion
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "utf8->string", ParamCount: 2, IsVariadic: true, Impl: PrimUtf8ToString,
-			Doc: "Decodes a UTF-8 bytevector to a string.", ParamNames: []string{"bytevector", "start"}, Category: "bytevectors"},
+			Doc: "Decodes a UTF-8 bytevector to a string.", ParamNames: []string{"bytevector", "start"}, Category: "bytevectors",
+			ParamTypes: []values.ValueType{values.TypeByteVector, values.TypeExactInteger}, ReturnType: values.TypeString},
 		{Name: "string->utf8", ParamCount: 2, IsVariadic: true, Impl: PrimStringToUtf8,
-			Doc: "Encodes a string to a UTF-8 bytevector.", ParamNames: []string{"string", "start"}, Category: "bytevectors"},
+			Doc: "Encodes a string to a UTF-8 bytevector.", ParamNames: []string{"string", "start"}, Category: "bytevectors",
+			ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger}, ReturnType: values.TypeByteVector},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

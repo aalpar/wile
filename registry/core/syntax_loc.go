@@ -14,22 +14,31 @@
 
 package core
 
-import "github.com/aalpar/wile/registry"
+import (
+	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/values"
+)
 
 func addSyntaxLoc(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "syntax-source", ParamCount: 1, Impl: PrimSyntaxSource,
-			Doc: "Returns the source file of a syntax object, or #f.", ParamNames: []string{"stx"}, Category: "syntax"},
+			Doc: "Returns the source file of a syntax object, or #f.", ParamNames: []string{"stx"}, Category: "syntax",
+			ParamTypes: []values.ValueType{values.TypeAny}},
 		{Name: "syntax-line", ParamCount: 1, Impl: PrimSyntaxLine,
-			Doc: "Returns the 1-based line number of a syntax object, or #f.", ParamNames: []string{"stx"}, Category: "syntax"},
+			Doc: "Returns the 1-based line number of a syntax object, or #f.", ParamNames: []string{"stx"}, Category: "syntax",
+			ParamTypes: []values.ValueType{values.TypeAny}},
 		{Name: "syntax-column", ParamCount: 1, Impl: PrimSyntaxColumn,
-			Doc: "Returns the 0-based column of a syntax object, or #f.", ParamNames: []string{"stx"}, Category: "syntax"},
+			Doc: "Returns the 0-based column of a syntax object, or #f.", ParamNames: []string{"stx"}, Category: "syntax",
+			ParamTypes: []values.ValueType{values.TypeAny}},
 		{Name: "syntax-position", ParamCount: 1, Impl: PrimSyntaxPosition,
-			Doc: "Returns the 0-based byte position of a syntax object, or #f.", ParamNames: []string{"stx"}, Category: "syntax"},
+			Doc: "Returns the 0-based byte position of a syntax object, or #f.", ParamNames: []string{"stx"}, Category: "syntax",
+			ParamTypes: []values.ValueType{values.TypeAny}},
 		{Name: "syntax-span", ParamCount: 1, Impl: PrimSyntaxSpan,
-			Doc: "Returns the byte span of a syntax object, or #f.", ParamNames: []string{"stx"}, Category: "syntax"},
+			Doc: "Returns the byte span of a syntax object, or #f.", ParamNames: []string{"stx"}, Category: "syntax",
+			ParamTypes: []values.ValueType{values.TypeAny}},
 		{Name: "syntax->list", ParamCount: 1, Impl: PrimSyntaxToList,
-			Doc: "Converts a syntax pair chain to a list of syntax objects, or #f.", ParamNames: []string{"stx"}, Category: "syntax"},
+			Doc: "Converts a syntax pair chain to a list of syntax objects, or #f.", ParamNames: []string{"stx"}, Category: "syntax",
+			ParamTypes: []values.ValueType{values.TypeAny}},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

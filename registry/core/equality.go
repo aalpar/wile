@@ -16,16 +16,20 @@ package core
 
 import (
 	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/values"
 )
 
 func addEquality(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "eq?", ParamCount: 2, Impl: PrimEqQ,
-			Doc: "Returns #t if obj1 and obj2 are the same object.", ParamNames: []string{"obj1", "obj2"}, Category: "equality"},
+			Doc: "Returns #t if obj1 and obj2 are the same object.", ParamNames: []string{"obj1", "obj2"}, Category: "equality",
+			ParamTypes: []values.ValueType{values.TypeAny, values.TypeAny}, ReturnType: values.TypeBoolean},
 		{Name: "eqv?", ParamCount: 2, Impl: PrimEqvQ,
-			Doc: "Returns #t if obj1 and obj2 are equivalent.", ParamNames: []string{"obj1", "obj2"}, Category: "equality"},
+			Doc: "Returns #t if obj1 and obj2 are equivalent.", ParamNames: []string{"obj1", "obj2"}, Category: "equality",
+			ParamTypes: []values.ValueType{values.TypeAny, values.TypeAny}, ReturnType: values.TypeBoolean},
 		{Name: "equal?", ParamCount: 2, Impl: PrimEqualQ,
-			Doc: "Returns #t if obj1 and obj2 have the same structure and contents.", ParamNames: []string{"obj1", "obj2"}, Category: "equality"},
+			Doc: "Returns #t if obj1 and obj2 have the same structure and contents.", ParamNames: []string{"obj1", "obj2"}, Category: "equality",
+			ParamTypes: []values.ValueType{values.TypeAny, values.TypeAny}, ReturnType: values.TypeBoolean},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil
