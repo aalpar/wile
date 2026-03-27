@@ -109,6 +109,12 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 
 	p.env = env
 
+	if fcls.validate != nil {
+		if err := fcls.validate(p); err != nil {
+			return nil, err
+		}
+	}
+
 	p.counters.ForeignCalls++
 	p.counters.RecordCall(fcls.name)
 
