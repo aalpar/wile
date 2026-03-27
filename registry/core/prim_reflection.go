@@ -222,17 +222,12 @@ func PrimProcedureType(mc *machine.MachineContext) error {
 	return nil
 }
 
-// PrimProcedureDocumentation implements (procedure-documentation proc).
+// PrimProcedureDocumentation implements (procedure-documentation obj).
 // Returns the docstring attached to a Scheme-defined procedure, or #f.
 // Follows the Guile convention (Guile Reference §6.7.2.2).
 func PrimProcedureDocumentation(mc *machine.MachineContext) error {
 	o := mc.Arg(0)
-	callable, ok := o.(values.Callable)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAProcedure,
-			"procedure-documentation: expected procedure")
-	}
-	switch v := callable.(type) {
+	switch v := o.(type) {
 	case *machine.MachineClosure:
 		doc := v.Template().Doc()
 		if doc == "" {
@@ -249,8 +244,6 @@ func PrimProcedureDocumentation(mc *machine.MachineContext) error {
 				return nil
 			}
 		}
-		mc.SetValue(values.FalseValue)
-	case *machine.ForeignClosure, *machine.Parameter, *machine.ComposableContinuation:
 		mc.SetValue(values.FalseValue)
 	default:
 		mc.SetValue(values.FalseValue)
