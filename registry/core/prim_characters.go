@@ -55,12 +55,13 @@ func PrimIntegerToChar(mc *machine.MachineContext) error {
 var charCompareSpecs = []struct {
 	name string
 	cmp  func(rune, rune) bool
+	doc  string
 }{
-	{"char=?", func(a, b rune) bool { return a == b }},
-	{"char<?", func(a, b rune) bool { return a < b }},
-	{"char>?", func(a, b rune) bool { return a > b }},
-	{"char<=?", func(a, b rune) bool { return a <= b }},
-	{"char>=?", func(a, b rune) bool { return a >= b }},
+	{"char=?", func(a, b rune) bool { return a == b }, "Returns #t if all character arguments have the same Unicode code point."},
+	{"char<?", func(a, b rune) bool { return a < b }, "Returns #t if character arguments are monotonically increasing by Unicode code point."},
+	{"char>?", func(a, b rune) bool { return a > b }, "Returns #t if character arguments are monotonically decreasing by Unicode code point."},
+	{"char<=?", func(a, b rune) bool { return a <= b }, "Returns #t if character arguments are monotonically non-decreasing by Unicode code point."},
+	{"char>=?", func(a, b rune) bool { return a >= b }, "Returns #t if character arguments are monotonically non-increasing by Unicode code point."},
 }
 
 // makeCharComparePrimitive returns a ForeignFunction that performs a variadic

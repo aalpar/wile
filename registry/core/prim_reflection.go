@@ -251,7 +251,14 @@ func PrimProcedureDocumentation(mc *machine.MachineContext) error {
 		} else {
 			mc.SetValue(values.NewString(doc))
 		}
-	case *machine.ForeignClosure, *machine.Parameter, *machine.ComposableContinuation:
+	case *machine.ForeignClosure:
+		doc := v.Doc()
+		if doc == "" {
+			mc.SetValue(values.FalseValue)
+		} else {
+			mc.SetValue(values.NewString(doc))
+		}
+	case *machine.Parameter, *machine.ComposableContinuation:
 		mc.SetValue(values.FalseValue)
 	default:
 		mc.SetValue(values.FalseValue)

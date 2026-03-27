@@ -31,17 +31,17 @@ var AddToRegistry = Builder.AddToRegistry
 func addPrimitives(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "interaction-environment", Impl: PrimInteractionEnvironment,
-			Doc: "Returns the current interaction environment.", Category: "introspection"},
+			Doc: "Returns the current top-level interaction environment as an environment object.", Category: "introspection"},
 		{Name: "environment?", ParamCount: 1, Impl: PrimEnvironmentQ,
-			Doc: "Returns #t if the argument is an environment.", ParamNames: []string{"obj"}, Category: "introspection"},
+			Doc: "Returns #t if obj is an environment object (created by environment, scheme-report-environment, etc.).", ParamNames: []string{"obj"}, Category: "introspection"},
 		{Name: "environment-bound-names", ParamCount: 1, Impl: PrimEnvironmentBoundNames,
-			Doc: "Returns a list of all symbols bound in the environment.", ParamNames: []string{"env"}, Category: "introspection"},
+			Doc: "Returns a list of all symbols that have bindings in the given environment.", ParamNames: []string{"env"}, Category: "introspection"},
 		{Name: "environment-ref", ParamCount: 2, Impl: PrimEnvironmentRef,
-			Doc: "Returns the value bound to a symbol in the environment.", ParamNames: []string{"env", "symbol"}, Category: "introspection"},
+			Doc: "Returns the value bound to symbol in the given environment. Raises an error if unbound.", ParamNames: []string{"env", "symbol"}, Category: "introspection"},
 		{Name: "environment-bound?", ParamCount: 2, Impl: PrimEnvironmentBoundQ,
-			Doc: "Returns #t if the symbol is bound in the environment.", ParamNames: []string{"env", "symbol"}, Category: "introspection"},
+			Doc: "Returns #t if symbol has a binding in the given environment.", ParamNames: []string{"env", "symbol"}, Category: "introspection"},
 		{Name: "features", Impl: PrimFeatures,
-			Doc: "Returns a list of implementation feature symbols.", Category: "introspection"},
+			Doc: "Returns a list of symbols representing implementation features (r7rs, wile, platform, architecture).", Category: "introspection"},
 	}, registry.PhaseRuntime)
 	return nil
 }
