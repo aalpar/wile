@@ -400,11 +400,6 @@ func TestProcedureDocumentation(t *testing.T) {
 			Expected: values.FalseValue,
 		},
 		{
-			Name:     "non-procedure returns false",
-			Code:     `(procedure-documentation 42)`,
-			Expected: values.FalseValue,
-		},
-		{
 			Name: "case-lambda with docstring in first clause",
 			Code: `(begin (define f (case-lambda
 			           ((x) "One arg." (+ x 1))
@@ -439,6 +434,9 @@ func TestProcedureDocumentationErrors(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{Name: "wrong arity zero", Code: `(procedure-documentation)`},
 		{Name: "wrong arity two", Code: `(procedure-documentation car car)`},
+		{Name: "integer", Code: `(procedure-documentation 42)`},
+		{Name: "string", Code: `(procedure-documentation "hello")`},
+		{Name: "boolean", Code: `(procedure-documentation #t)`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
