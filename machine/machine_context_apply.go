@@ -110,7 +110,8 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	p.env = env
 
 	if fcls.validate != nil {
-		if err := fcls.validate(p); err != nil {
+		err = fcls.validate(p)
+		if err != nil {
 			return nil, err
 		}
 	}

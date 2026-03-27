@@ -71,7 +71,8 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 	mc.env = env
 
 	if fcls.validate != nil {
-		if err := fcls.validate(mc); err != nil {
+		err = fcls.validate(mc)
+		if err != nil {
 			return nil, applyCallableError(mc, err)
 		}
 	}
