@@ -15,21 +15,21 @@
 ## File Layout
 
 ```
-stdlib/stdlib/lib/wile/algebra.sld                 umbrella re-export
-stdlib/stdlib/lib/wile/algebra/order.sld           partial orders (.sld)
-stdlib/stdlib/lib/wile/algebra/order.scm           partial orders (.scm)
-stdlib/stdlib/lib/wile/algebra/lattice.sld         lattices + fixpoint
-stdlib/stdlib/lib/wile/algebra/lattice.scm
-stdlib/stdlib/lib/wile/algebra/monoid.sld          monoids
-stdlib/stdlib/lib/wile/algebra/monoid.scm
-stdlib/stdlib/lib/wile/algebra/semiring.sld        semirings + pre-built
-stdlib/stdlib/lib/wile/algebra/semiring.scm
-stdlib/stdlib/lib/wile/algebra/group.sld           groups
-stdlib/stdlib/lib/wile/algebra/group.scm
-stdlib/stdlib/lib/wile/algebra/ring.sld            rings + fields + pre-built
-stdlib/stdlib/lib/wile/algebra/ring.scm
-stdlib/stdlib/lib/wile/algebra/galois.sld          Galois connections
-stdlib/stdlib/lib/wile/algebra/galois.scm
+stdlib/lib/wile/algebra.sld                 umbrella re-export
+stdlib/lib/wile/algebra/order.sld           partial orders (.sld)
+stdlib/lib/wile/algebra/order.scm           partial orders (.scm)
+stdlib/lib/wile/algebra/lattice.sld         lattices + fixpoint
+stdlib/lib/wile/algebra/lattice.scm
+stdlib/lib/wile/algebra/monoid.sld          monoids
+stdlib/lib/wile/algebra/monoid.scm
+stdlib/lib/wile/algebra/semiring.sld        semirings + pre-built
+stdlib/lib/wile/algebra/semiring.scm
+stdlib/lib/wile/algebra/group.sld           groups
+stdlib/lib/wile/algebra/group.scm
+stdlib/lib/wile/algebra/ring.sld            rings + fields + pre-built
+stdlib/lib/wile/algebra/ring.scm
+stdlib/lib/wile/algebra/galois.sld          Galois connections
+stdlib/lib/wile/algebra/galois.scm
 test/wile/algebra-order-test.scm     tests (per structure)
 test/wile/algebra-lattice-test.scm
 test/wile/algebra-monoid-test.scm

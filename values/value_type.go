@@ -14,7 +14,11 @@
 
 package values
 
-import "github.com/aalpar/wile/werr"
+import (
+	"fmt"
+
+	"github.com/aalpar/wile/werr"
+)
 
 // ValueType represents a Scheme type constraint for extension API contracts.
 // Each constant maps to either a concrete Go type or an interface in the
@@ -146,7 +150,8 @@ func init() {
 		if v.IsVoid() {
 			return v, true, nil
 		}
-		return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument, "expected void, got %T", v)
+		return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"expected void, got %s", SchemeTypeName(v))
 	}
 	checks[TypeBoolean] = makeCheck[*Boolean]("boolean")
 	checks[TypeNumber] = makeInterfaceCheck[Number]("number")
@@ -160,7 +165,8 @@ func init() {
 		case *BigInteger:
 			return t, true, nil
 		default:
-			return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument, "expected integer, got %T", v)
+			return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+				"expected integer, got %s", SchemeTypeName(v))
 		}
 	}
 	checks[TypeExactInteger] = checks[TypeInteger]
@@ -171,7 +177,8 @@ func init() {
 		case *BigFloat:
 			return t, true, nil
 		default:
-			return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument, "expected flonum, got %T", v)
+			return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+				"expected flonum, got %s", SchemeTypeName(v))
 		}
 	}
 	checks[TypeString] = makeCheck[*String]("string")
@@ -191,6 +198,19 @@ func init() {
 	checks[TypeTextualOutputPort] = makeInterfaceCheck[TextualWriter]("textual-output-port")
 	checks[TypeBinaryInputPort] = makeInterfaceCheck[BinaryReader]("binary-input-port")
 	checks[TypeBinaryOutputPort] = makeInterfaceCheck[BinaryWriter]("binary-output-port")
+
+	// Verify all slots are populated — catches missing entries when new types are added.
+	for i := range typeCount {
+		if typeNames[i] == "" {
+			panic("values: missing typeNames entry for ValueType " + fmt.Sprint(i))
+		}
+		if typeDescriptions[i] == "" {
+			panic("values: missing typeDescriptions entry for ValueType " + fmt.Sprint(i))
+		}
+		if checks[i] == nil {
+			panic("values: missing Check function for ValueType " + typeNames[i])
+		}
+	}
 }
 
 // Check tests whether v satisfies this type constraint.
@@ -203,6 +223,58 @@ func (p ValueType) Check(v Value) (any, bool, error) {
 	return checks[p](v)
 }
 
+// SchemeTypeName returns the Scheme-facing type name for a value.
+// Used in error messages so users see "integer" instead of "*values.Integer".
+func SchemeTypeName(v Value) string {
+	if v == nil || v.IsVoid() {
+		return "void"
+	}
+	switch v.(type) {
+	case *Boolean:
+		return "boolean"
+	case *Integer, *BigInteger:
+		return "integer"
+	case *Rational:
+		return "rational"
+	case *Float, *BigFloat:
+		return "flonum"
+	case *Complex, *BigComplex:
+		return "complex"
+	case *String:
+		return "string"
+	case *Character:
+		return "character"
+	case *Symbol:
+		return "symbol"
+	case *Byte:
+		return "byte"
+	case *Pair:
+		return "pair"
+	case *Vector:
+		return "vector"
+	case *ByteVector:
+		return "bytevector"
+	case *Hashtable:
+		return "hashtable"
+	case *Record:
+		return "record"
+	case *Box:
+		return "box"
+	case *Promise:
+		return "promise"
+	default:
+		// Fall back to interface checks for port types and other interfaces.
+		switch {
+		case IsEmptyList(v):
+			return "empty-list"
+		case IsList(v):
+			return "list"
+		default:
+			return fmt.Sprintf("%T", v)
+		}
+	}
+}
+
 // makeCheck creates a checkFunc for a concrete pointer type T.
 func makeCheck[T any](typeName string) checkFunc {
 	return func(v Value) (any, bool, error) {
@@ -210,7 +282,8 @@ func makeCheck[T any](typeName string) checkFunc {
 		if ok {
 			return t, true, nil
 		}
-		return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument, "expected %s, got %T", typeName, v)
+		return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"expected %s, got %s", typeName, SchemeTypeName(v))
 	}
 }
 
@@ -223,6 +296,7 @@ func makeInterfaceCheck[T any](typeName string) checkFunc {
 		if ok {
 			return t, true, nil
 		}
-		return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument, "expected %s, got %T", typeName, v)
+		return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"expected %s, got %s", typeName, SchemeTypeName(v))
 	}
 }

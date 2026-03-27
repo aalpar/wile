@@ -66,6 +66,9 @@ func addArithmetic(r *registry.Registry) error {
 		{Name: "max", ParamCount: 2, IsVariadic: true, Impl: PrimMax,
 			Doc: "Returns the largest of its arguments.", ParamNames: []string{"x1", "x2"}, Category: "arithmetic",
 			ParamTypes: []values.ValueType{values.TypeReal, values.TypeReal}, ReturnType: values.TypeReal},
+		// TODO(Phase 4): quotient/remainder/modulo/gcd/lcm contracts declare TypeInteger,
+		// but implementations accept inexact integers (e.g., 7.0) via helpers.ExtractInteger.
+		// Before enabling runtime enforcement, widen to TypeNumber or introduce TypeIntegerValue.
 		{Name: "quotient", ParamCount: 2, Impl: PrimQuotient,
 			Doc: "Returns the integer quotient of n1 and n2.", ParamNames: []string{"n1", "n2"}, Category: "arithmetic",
 			ParamTypes: []values.ValueType{values.TypeInteger, values.TypeInteger}, ReturnType: values.TypeInteger},

@@ -34,6 +34,9 @@ When investigating R7RS conformance issues:
 | `CAPTURE-ANALYSIS-IMPL.md` | Capture analysis implementation plan | **Complete** (PR #575) |
 | `2026-03-26-extension-contracts-design.md` | Extension API contract system: ValueType enum, PrimitiveSpec type declarations, validation, doc integration | **Approved** (design) |
 | `2026-03-26-extension-contracts-impl.md` | Extension contracts implementation plan: 4 phases, 8 tasks in Phase 1 | Open |
+| `2026-03-26-environment-profiles.md` | Environment profiles design: named profiles (Tiny, Console, Small, KitchenSink), sandbox modifier | Draft |
+| `2026-03-26-environment-profiles-impl.md` | Environment profiles implementation plan | Draft |
+| `2026-03-26-wile-mcp-server-design.md` | Wile MCP server design: standalone binary exposing Scheme evaluation | Draft |
 | `SECURITY.md` | Opcode resource limits (match steps, expand steps, continuation copy depth) | Proposed — not implemented |
 | `MACRO_SYSTEM.md` | Hygiene debugging, macro expansion tracing | Planned — not started |
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |
