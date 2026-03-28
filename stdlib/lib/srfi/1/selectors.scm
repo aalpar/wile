@@ -34,14 +34,14 @@
   (values (car x) (cdr x)))
 
 (define (take ls i)
-  "Return a freshly allocated list of the first I elements of LS.\nIt is an error if LS has fewer than I elements."
+  "Return a freshly allocated list of the first I elements of LS.\nIt is an error if LS has fewer than I elements.\n\nSee also: `drop', `split-at', `take-right'."
   (let lp ((i i) (ls ls) (res '()))
     (if (<= i 0)
         (reverse! res)
         (lp (- i 1) (cdr ls) (cons (car ls) res)))))
 
 (define (take! ls i)
-  "Linear-update variant of take. May mutate LS to produce\nthe first I elements. The result may or may not share\nstructure with LS."
+  "Linear-update variant of take. May mutate LS to produce\nthe first I elements. The result may or may not share\nstructure with LS.\n\nSee also: `take', `drop', `split-at!'."
   (if (<= i 0)
       '()
       (let ((tail (list-tail ls (- i 1))))
@@ -49,23 +49,23 @@
         ls)))
 
 (define (drop ls i)
-  "Return the tail of LS after skipping the first I elements.\nShares structure with the tail of LS."
+  "Return the tail of LS after skipping the first I elements.\nShares structure with the tail of LS.\n\nSee also: `take', `split-at', `drop-right'."
   (if (<= i 0) ls (drop (cdr ls) (- i 1))))
 
 (define (take-right ls i)
-  "Return the last I elements of LS. Shares structure with\nthe tail of LS."
+  "Return the last I elements of LS. Shares structure with\nthe tail of LS.\n\nSee also: `take', `drop-right'."
   (drop ls (- (length+ ls) i)))
 
 (define (drop-right ls i)
-  "Return a freshly allocated list containing all but the last\nI elements of LS."
+  "Return a freshly allocated list containing all but the last\nI elements of LS.\n\nSee also: `drop', `take-right'."
   (take ls (- (length+ ls) i)))
 
 (define (drop-right! ls i)
-  "Linear-update variant of drop-right. May mutate LS to\nremove the last I elements."
+  "Linear-update variant of drop-right. May mutate LS to\nremove the last I elements.\n\nSee also: `drop-right', `take!'."
   (take! ls (- (length+ ls) i)))
 
 (define (split-at ls i)
-  "Split LS at index I, returning two values: a freshly allocated\nlist of the first I elements and the remaining tail. Equivalent\nto (values (take ls i) (drop ls i)) but traverses only once."
+  "Split LS at index I, returning two values: a freshly allocated\nlist of the first I elements and the remaining tail. Equivalent\nto (values (take ls i) (drop ls i)) but traverses only once.\n\nSee also: `take', `drop'."
   (let lp ((i i) (ls ls) (res '()))
     (if (<= i 0)
         (values (reverse! res) ls)

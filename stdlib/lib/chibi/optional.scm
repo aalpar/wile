@@ -126,7 +126,7 @@
 ;;> \var{default}, or \scheme{#f}.
 
 (define (keyword-ref ls key . o)
-  "Look up KEY in property list LS and return its value, or the optional default"
+  "Look up KEY in property list LS and return its value, or the optional default.\n\nSee also: `keyword-ref*', `let-keywords', `let-keywords*'."
   (cond ((mem-key key ls) => (lambda (cell) (cadr cell)))
         (else (and (pair? o) (car o)))))
 

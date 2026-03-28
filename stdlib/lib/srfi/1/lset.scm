@@ -31,11 +31,11 @@
       (lset-union2 eq (if (member (car b) a eq) a (cons (car b) a)) (cdr b))))
 
 (define (lset-union eq . sets)
-  "Return the union of all SETS, using EQ as the element equality\npredicate. Elements from later sets are added to earlier ones,\nskipping duplicates."
+  "Return the union of all SETS, using EQ as the element equality\npredicate. Elements from later sets are added to earlier ones,\nskipping duplicates.\n\nSee also: `lset-intersection', `lset-difference', `lset-xor'."
   (reduce (lambda (a b) (lset-union2 eq b a)) '() sets))
 
 (define (lset-intersection eq . sets)
-  "Return the intersection of all SETS, using EQ as the element\nequality predicate. The result contains only elements present\nin every set."
+  "Return the intersection of all SETS, using EQ as the element\nequality predicate. The result contains only elements present\nin every set.\n\nSee also: `lset-union', `lset-difference', `lset-diff+intersection'."
   (reduce (lambda (a b) (filter (lambda (x) (member x a eq)) b)) '() sets))
 
 (define (lset-diff2 eq a b)
@@ -43,17 +43,17 @@
   (remove (lambda (x) (member x a eq)) b))
 
 (define (lset-difference eq . sets)
-  "Return elements of the first set not present in any of the\nremaining SETS, using EQ as the element equality predicate."
+  "Return elements of the first set not present in any of the\nremaining SETS, using EQ as the element equality predicate.\n\nSee also: `lset-union', `lset-intersection', `lset-diff+intersection'."
   (reduce (lambda (a b) (lset-diff2 eq a b)) '() sets))
 
 (define (lset-xor eq . sets)
-  "Return the symmetric difference of all SETS using EQ as the\nequality predicate. The result contains elements that appear\nin exactly one of each pairwise reduction."
+  "Return the symmetric difference of all SETS using EQ as the\nequality predicate. The result contains elements that appear\nin exactly one of each pairwise reduction.\n\nExamples:\n  (lset-xor eq? '(a b c) '(b c d))      => (d a)\n  (lset-xor eq? '(a b) '(b c) '(a c))   => ()\n\nSee also: `lset-union', `lset-difference', `lset-intersection'."
   (reduce (lambda (a b) (append (lset-diff2 eq a b) (lset-diff2 eq b a)))
           '()
           sets))
 
 (define (lset-diff+intersection eq . sets)
-  "Return two values: the difference and intersection of SETS,\nusing EQ as the equality predicate. Equivalent to calling\nlset-difference and lset-intersection separately."
+  "Return two values: the difference and intersection of SETS,\nusing EQ as the equality predicate. Equivalent to calling\nlset-difference and lset-intersection separately.\n\nSee also: `lset-difference', `lset-intersection'."
   (values (apply lset-difference eq sets) (apply lset-intersection eq sets)))
 
 (define lset-diff+intersection! lset-diff+intersection)

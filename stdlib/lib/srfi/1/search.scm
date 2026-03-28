@@ -3,7 +3,7 @@
 ;; BSD-style license: http://synthcode.com/license.txt
 
 (define (take-while pred ls)
-  "Return the longest initial prefix of LS whose elements all\nsatisfy PRED. The result is a freshly allocated list."
+  "Return the longest initial prefix of LS whose elements all\nsatisfy PRED. The result is a freshly allocated list.\n\nSee also: `drop-while', `span'."
   (let lp ((ls ls) (res '()))
     (if (and (pair? ls) (pred (car ls)))
         (lp (cdr ls) (cons (car ls) res))
@@ -12,11 +12,11 @@
 (define take-while! take-while)
 
 (define (drop-while pred ls)
-  "Skip the longest initial prefix of LS whose elements satisfy\nPRED and return the remaining tail. Shares structure with LS."
+  "Skip the longest initial prefix of LS whose elements satisfy\nPRED and return the remaining tail. Shares structure with LS.\n\nSee also: `take-while', `span'."
   (or (find-tail (lambda (x) (not (pred x))) ls) '()))
 
 (define (span pred ls)
-  "Split LS at the first element that does not satisfy PRED.\nReturns two values: the longest initial prefix of elements\nsatisfying PRED (freshly allocated), and the remaining tail\n(sharing structure with LS)."
+  "Split LS at the first element that does not satisfy PRED.\nReturns two values: the longest initial prefix of elements\nsatisfying PRED (freshly allocated), and the remaining tail\n(sharing structure with LS).\n\nExamples:\n  (span even? '(2 4 1 3 5))  => (2 4) (1 3 5)\n  (span even? '(1 2 3))      => () (1 2 3)\n\nSee also: `break', `take-while', `drop-while'."
   (let lp ((ls ls) (res '()))
     (if (and (pair? ls) (pred (car ls)))
         (lp (cdr ls) (cons (car ls) res))
@@ -25,13 +25,13 @@
 (define span! span)
 
 (define (break pred ls)
-  "Split LS at the first element satisfying PRED. Returns two\nvalues: the prefix of elements not satisfying PRED, and the\nremaining tail. The complement of span."
+  "Split LS at the first element satisfying PRED. Returns two\nvalues: the prefix of elements not satisfying PRED, and the\nremaining tail. The complement of span.\n\nExamples:\n  (break even? '(1 3 2 4 5))  => (1 3) (2 4 5)\n  (break even? '(2 4 6))      => () (2 4 6)\n\nSee also: `span', `take-while', `drop-while'."
   (span (lambda (x) (not (pred x))) ls))
 
 (define break! break)
 
 (define (list-index pred ls . lists)
-  "Return the index of the first element of LS satisfying PRED,\nor #f if no element matches. For multiple lists, PRED receives\ncorresponding elements and the search stops at the shortest list."
+  "Return the index of the first element of LS satisfying PRED,\nor #f if no element matches. For multiple lists, PRED receives\ncorresponding elements and the search stops at the shortest list.\n\nSee also: `find', `find-tail'."
   (if (null? lists)
       (let lp ((ls ls) (n 0))
         (and (pair? ls) (if (pred (car ls)) n (lp (cdr ls) (+ n 1)))))

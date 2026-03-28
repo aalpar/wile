@@ -59,7 +59,7 @@
 
     ;; Begin a test group
     (define (test-begin name . args)
-      "Begin a new test group with NAME and increase nesting level"
+      "Begin a new test group with NAME and increase nesting level.\n\nExamples:\n  (test-begin \"arithmetic\")\n  (test 4 (+ 2 2))\n  (test-end \"arithmetic\")\n\nSee also: `test-end', `test-group', `test-exit'."
       (indent)
       (display "Testing ")
       (display name)
@@ -70,7 +70,7 @@
 
     ;; End a test group
     (define (test-end . args)
-      "End the current test group and decrease nesting level"
+      "End the current test group and decrease nesting level.\n\nSee also: `test-begin', `test-group', `test-exit'."
       (when (pair? *test-group-stack*)
         (set! *test-group-stack* (cdr *test-group-stack*))
         (set! *group-indent* (max 0 (- *group-indent* 1)))
@@ -140,7 +140,7 @@
 
     ;; Exit with summary
     (define (test-exit . args)
-      "Print test summary and exit with status 1 if any tests failed"
+      "Print test summary and exit with status 1 if any tests failed.\n\nSee also: `test-begin', `test-end', `test-failure-count'."
       (newline)
       (display "Test Summary:")
       (newline)

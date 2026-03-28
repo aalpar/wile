@@ -17,17 +17,24 @@ Already implemented (PR #579, #581). A string literal as the first body expressi
 
 ## Docstring Conventions
 
-- **Format:** Guile-style leading string literal in lambda/define body
-- **First sentence:** Standalone summary (works in a `,doc` listing)
-- **Parameters:** UPPER CASE in docstring text (`"Return the inverse of A in group G."`)
-- **Math:** Self-contained — explain concepts inline, no assumed domain knowledge
-- **Newlines:** `\n` within the string literal
+Full convention documented in `CODING_STYLE.md` § "Scheme Docstring Conventions".
+
+Key formatting elements (Emacs Lisp-inspired, within plain strings):
+
+- **First sentence:** Standalone summary
+- **Parameters:** UPPER CASE (`"Return the inverse of A in group G."`)
+- **Cross-references:** `` `procedure-name' `` (backtick + straight quote)
+- **Paragraphs:** Separated by `\n\n`
+- **Examples:** `Examples:` header with indented code lines
+- **See also:** `See also:` at end with comma-separated `` `name' `` references
+- **Pre-formatted:** Indent with 2 spaces after `\n`
+- **Math:** Self-contained, no assumed domain knowledge
 - **No trailing period** after the last line
 
 Example:
 ```scheme
 (define (group-inverse G a)
-  "Return the element that, when combined with A using G's\noperation, yields the identity element. That is,\n(group-op G A (group-inverse G A)) = (group-identity G)."
+  "Return the element that, when combined with A using G's\noperation, yields the identity element. That is,\n(group-op G A (group-inverse G A)) = (group-identity G).\n\nSee also: `group-op', `group-identity'."
   ((group-inverse-fn G) a))
 ```
 

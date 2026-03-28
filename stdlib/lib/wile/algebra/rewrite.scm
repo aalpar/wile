@@ -36,7 +36,7 @@
 
 (define (make-term-protocol compound-term? get-operator get-operands
                             make-term compare)
-  "Construct a term protocol for abstract term representations.\nCOMPOUND-TERM? tests whether a value is a compound term.\nGET-OPERATOR and GET-OPERANDS extract parts of a compound term.\nMAKE-TERM rebuilds a term with new operands while preserving\nmetadata. COMPARE returns #t when its first argument should sort\nbefore the second, used by commutativity rules to normalize\noperand order."
+  "Construct a term protocol for abstract term representations.\nCOMPOUND-TERM? tests whether a value is a compound term.\nGET-OPERATOR and GET-OPERANDS extract parts of a compound term.\nMAKE-TERM rebuilds a term with new operands while preserving\nmetadata. COMPARE returns #t when its first argument should sort\nbefore the second, used by commutativity rules to normalize\noperand order.\n\nSee also: `term-compound?', `term-get-operator', `term-get-operands', `term-make-term'."
   (make-term-protocol* compound-term? get-operator get-operands
                        make-term compare))
 
@@ -90,7 +90,7 @@
   (op involution-axiom-op))
 
 (define (axiom? x)
-  "Test whether X is a recognized axiom type.\nReturns #t for identity, commutativity, absorbing, idempotence,\nor involution axiom records."
+  "Test whether X is a recognized axiom type.\nReturns #t for identity, commutativity, absorbing, idempotence,\nor involution axiom records.\n\nSee also: `make-identity-axiom', `make-commutativity-axiom', `make-absorbing-axiom'."
   (or (identity-axiom? x)
       (commutativity-axiom? x)
       (absorbing-axiom? x)
@@ -100,7 +100,7 @@
 ;; ─── Axiom → rewrite rules ─────────────────
 
 (define (axiom->rules axiom proto)
-  "Compile AXIOM into a list of rewrite-rule procedures using term protocol PROTO.\nEach rule is a procedure (term -> value-or-*no-match*) that attempts\none rewriting step. Identity axioms produce two rules (left and right),\ncommutativity produces one rule that normalizes by term ordering,\nand involution produces one rule that collapses f(f(x)) to x."
+  "Compile AXIOM into a list of rewrite-rule procedures using term protocol PROTO.\nEach rule is a procedure (term -> value-or-*no-match*) that attempts\none rewriting step. Identity axioms produce two rules (left and right),\ncommutativity produces one rule that normalizes by term ordering,\nand involution produces one rule that collapses f(f(x)) to x.\n\nExamples:\n  (axiom->rules (make-identity-axiom '+ zero?) proto)\n    => list of two rule procedures (left and right identity)\n  (axiom->rules (make-involution-axiom 'neg) proto)\n    => list of one rule: neg(neg(x)) => x\n\nSee also: `make-normalizer', `axiom?', `make-term-protocol'."
   (cond
     ((identity-axiom? axiom)
      (let ((target-op (identity-axiom-op axiom))
@@ -197,7 +197,7 @@
 ;; ─── Normalizer ─────────────────────────────
 
 (define (make-normalizer theory proto)
-  "Compile a list of axioms (THEORY) into a single normalizer function.\nReturns a procedure (term -> value-or-#f) that tries each compiled\nrule in order. The first matching rule's result is returned; #f is\nreturned if no rule applies. The internal *no-match* sentinel is\ntranslated to #f so callers never see it."
+  "Compile a list of axioms (THEORY) into a single normalizer function.\nReturns a procedure (term -> value-or-#f) that tries each compiled\nrule in order. The first matching rule's result is returned; #f is\nreturned if no rule applies. The internal *no-match* sentinel is\ntranslated to #f so callers never see it.\n\nSee also: `axiom->rules', `make-term-protocol'."
   (let ((rules (apply append
                  (map (lambda (ax) (axiom->rules ax proto)) theory))))
     (lambda (term)

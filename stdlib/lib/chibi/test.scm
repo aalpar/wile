@@ -187,7 +187,7 @@
 ;;> test reporting.
 
 (define (test-run expect expr info)
-  "Run a single test case.\nEXPECT and EXPR are thunks, INFO is an alist of test properties.\nApplies filters/removers, then delegates to current-test-applier\nor current-test-skipper"
+  "Run a single test case.\nEXPECT and EXPR are thunks, INFO is an alist of test properties.\nApplies filters/removers, then delegates to current-test-applier\nor current-test-skipper.\n\nSee also: `test', `current-test-applier', `current-test-skipper'."
   (let ((info (test-expand-info info)))
     ((current-test-reporter) 'BEGIN info)
     (if (and (cond ((current-test-group)
@@ -214,7 +214,7 @@
 ;;> \scheme{current-test-epsilon} of \var{expect}.
 
 (define (test-equal? expect res)
-  "Return true if EXPECT equals RES.\nLike equal? but also accepts inexact values within\ncurrent-test-epsilon of EXPECT"
+  "Return true if EXPECT equals RES.\nLike equal? but also accepts inexact values within\ncurrent-test-epsilon of EXPECT.\n\nSee also: `current-test-comparator', `current-test-epsilon'."
   (or (equal? expect res)
       (if (real? expect)
           (and (inexact? expect)
@@ -272,7 +272,7 @@
 ;;> Begin testing a new group until the closing \scheme{(test-end)}.
 
 (define-opt (test-begin (name ""))
-  "Begin a new test group with NAME.\nCreates a nested group under the current group and sets it as active"
+  "Begin a new test group with NAME.\nCreates a nested group under the current group and sets it as active.\n\nExamples:\n  (test-begin \"arithmetic\")\n  (test 4 (+ 2 2))\n  (test-end \"arithmetic\")\n\nSee also: `test-end', `test-group', `test-exit'."
   (let* ((parent (current-test-group))
          (group (make-test-group name parent)))
     ((current-test-group-reporter) group parent)
@@ -284,7 +284,7 @@
 ;;> or a warning is printed.
 
 (define-opt (test-end (name #f))
-  "End the current test group and print its summary.\nIf NAME is provided, it must match the corresponding test-begin name"
+  "End the current test group and print its summary.\nIf NAME is provided, it must match the corresponding test-begin name.\n\nSee also: `test-begin', `test-group', `test-exit'."
   (let ((group (current-test-group)))
     (when group
       (when (and name (not (equal? name (test-group-name group))))
@@ -307,7 +307,7 @@
 ;;> and a successful status otherwise.
 
 (define (test-exit)
-  "Exit the process with a failure status if any tests failed, success otherwise"
+  "Exit the process with a failure status if any tests failed, success otherwise.\n\nSee also: `test-begin', `test-end', `test-failure-count'."
   (when (current-test-group)
     (warning "calling test-exit with unfinished test group:"
              (test-group-name (current-test-group))))

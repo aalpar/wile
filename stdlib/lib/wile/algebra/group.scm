@@ -11,7 +11,7 @@
   (inverse-fn group-inverse-fn))
 
 (define (make-group op identity inverse)
-  "Construct a group from binary operation OP, IDENTITY element, and INVERSE function.\nOP must be associative, IDENTITY must be neutral for OP, and\nINVERSE must return an element such that OP of any element\nwith its inverse yields IDENTITY."
+  "Construct a group from binary operation OP, IDENTITY element, and INVERSE function.\nOP must be associative, IDENTITY must be neutral for OP, and\nINVERSE must return an element such that OP of any element\nwith its inverse yields IDENTITY.\n\nSee also: `group->monoid', `validate-group'."
   (make-group* op identity inverse))
 
 (define (group-op G a b)
@@ -19,11 +19,11 @@
   ((group-op-fn G) a b))
 
 (define (group-inverse G a)
-  "Return the inverse of A in group G.\nThe inverse is the unique element such that combining A with\nits inverse (in either order) yields G's identity element."
+  "Return the inverse of A in group G.\nThe inverse is the unique element such that combining A with\nits inverse (in either order) yields G's identity element.\n\nSee also: `group-op', `group-identity'."
   ((group-inverse-fn G) a))
 
 (define (group->monoid G)
-  "Project group G to its underlying monoid by forgetting the inverse.\nThe resulting monoid has the same binary operation and identity\nelement as G."
+  "Project group G to its underlying monoid by forgetting the inverse.\nThe resulting monoid has the same binary operation and identity\nelement as G.\n\nSee also: `make-group', `make-monoid'."
   (make-monoid (group-op-fn G) (group-identity G)))
 
 (define-syntax with-group
@@ -36,7 +36,7 @@
          body ...)))))
 
 (define (validate-group G samples)
-  "Spot-check that G satisfies the group laws on SAMPLES.\nTests left and right identity, left and right inverse, and\nassociativity for all elements and triples in SAMPLES. Returns\n#t if all laws hold, or a list of (violation-type element ...)\nentries describing failures."
+  "Spot-check that G satisfies the group laws on SAMPLES.\nTests left and right identity, left and right inverse, and\nassociativity for all elements and triples in SAMPLES. Returns\n#t if all laws hold, or a list of (violation-type element ...)\nentries describing failures.\n\nSee also: `make-group', `group-op', `group-inverse'."
   (let ((violations '())
         (e (group-identity G)))
     (define (fail! type . args)
