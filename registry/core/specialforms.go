@@ -262,11 +262,6 @@ var macroDocs = []registry.DocEntry{
 
 func addSpecialForms(r *registry.Registry) error {
 	r.AddBindingSpecs(compileTimeBindingSpecs)
-	for _, spec := range compileTimeBindingSpecs {
-		if spec.Doc != "" {
-			r.AddDocumentation(spec.Name, spec.Doc)
-		}
-	}
 	for _, doc := range macroDocs {
 		r.AddDocumentation(doc.Name, doc.Doc)
 	}

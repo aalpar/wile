@@ -161,7 +161,16 @@ func (p *Registry) ApplyDocs(env *environment.EnvironmentFrame) {
 	}
 	phases := topLevel.Phases()
 
-	for _, doc := range p.docs {
+	// Merge both doc sources: explicit DocEntry entries and BindingSpec.Doc fields.
+	allDocs := make([]DocEntry, 0, len(p.docs)+len(p.bindingSpecs))
+	allDocs = append(allDocs, p.docs...)
+	for _, spec := range p.bindingSpecs {
+		if spec.Doc != "" {
+			allDocs = append(allDocs, DocEntry(spec))
+		}
+	}
+
+	for _, doc := range allDocs {
 		sym := values.NewSymbol(doc.Name)
 		for _, phase := range phases.Phases() {
 			phaseEnv := phases.Get(phase)
