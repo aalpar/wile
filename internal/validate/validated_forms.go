@@ -34,13 +34,15 @@ type ValidatedProcedure interface {
 type ValidatedBodyAndParams interface {
 	Params() *ValidatedParams
 	Body() []ValidatedExpr
+	Docstring() string
 }
 
 // validatedProcBase provides the shared params/body fields and accessors
 // for procedure-like validated forms (lambda, define-function, case-lambda clause).
 type validatedProcBase struct {
-	params *ValidatedParams
-	body   []ValidatedExpr
+	params    *ValidatedParams
+	body      []ValidatedExpr
+	docstring string
 }
 
 // Params returns the parameter list.
@@ -51,6 +53,12 @@ func (p *validatedProcBase) Params() *ValidatedParams {
 // Body returns the body expressions.
 func (p *validatedProcBase) Body() []ValidatedExpr {
 	return p.body
+}
+
+// Docstring returns the Guile-style docstring extracted from the body,
+// or "" if no docstring was present.
+func (p *validatedProcBase) Docstring() string {
+	return p.docstring
 }
 
 // validatedBase provides the common FormName/SetFormName/Source implementation

@@ -19,6 +19,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
+	"github.com/aalpar/wile/values"
 )
 
 // validateLambda validates (lambda (params...) body...)
@@ -41,9 +42,11 @@ func validateLambda(ctx context.Context, env *environment.EnvironmentFrame, pair
 		return nil
 	}
 
+	docstring, body := extractDocstring(body)
+
 	return &ValidatedLambda{
 		validatedBase:     validatedBase{formName: "lambda", source: source},
-		validatedProcBase: validatedProcBase{params: params, body: body},
+		validatedProcBase: validatedProcBase{params: params, body: body, docstring: docstring},
 	}
 }
 
@@ -81,4 +84,23 @@ func createLambdaValidationEnv(env *environment.EnvironmentFrame, params *Valida
 	}
 
 	return childEnv
+}
+
+// extractDocstring checks whether the first body expression is a string
+// literal (Guile-style docstring). If so, returns the string and the
+// remaining body. The string must not be the only expression — a body
+// of just "hello" is a return value, not documentation.
+func extractDocstring(body []ValidatedExpr) (string, []ValidatedExpr) {
+	if len(body) < 2 {
+		return "", body
+	}
+	lit, ok := body[0].(*ValidatedLiteral)
+	if !ok {
+		return "", body
+	}
+	str, ok := lit.Value.UnwrapAll().(*values.String)
+	if !ok {
+		return "", body
+	}
+	return str.Value, body[1:]
 }

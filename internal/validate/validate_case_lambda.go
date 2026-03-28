@@ -79,8 +79,10 @@ func validateCaseLambdaClause(ctx context.Context, env *environment.EnvironmentF
 		return nil
 	}
 
+	docstring, body := extractDocstring(body)
+
 	return &ValidatedCaseLambdaClause{
 		validatedBase:     validatedBase{formName: "@clause", source: source},
-		validatedProcBase: validatedProcBase{params: params, body: body},
+		validatedProcBase: validatedProcBase{params: params, body: body, docstring: docstring},
 	}
 }

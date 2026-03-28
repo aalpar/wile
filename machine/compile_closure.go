@@ -150,9 +150,12 @@ func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clau
 		childCompiler.predeclareDefineBindingFromValidated(bodyExpr)
 	}
 
-	// Annotation extraction: strip leading metadata forms (docstrings,
-	// future: contract declarations) before compilation.
-	body = processBodyAnnotations(body, tpl)
+	// Docstring: the validator has already extracted any leading string
+	// literal and stripped it from the body. Just read the field.
+	doc := clause.Docstring()
+	if doc != "" {
+		tpl.SetDoc(doc)
+	}
 
 	// Pass 2: Compile all expressions (with all bindings now visible)
 	err := childCompiler.compileValidatedSequence(lambdaBodyContext, body)
