@@ -164,6 +164,57 @@ func TestCaseLambda(t *testing.T) {
 	}
 }
 
+// ============================================================================
+// docstring extraction
+// ============================================================================
+
+func TestDocstringExtraction(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name:     "lambda with docstring",
+			Code:     `(begin (define f (lambda (x) "Adds one." (+ x 1))) (procedure-documentation f))`,
+			Expected: values.NewString("Adds one."),
+		},
+		{
+			Name:     "define-function with docstring",
+			Code:     `(begin (define (g x) "Doubles x." (* x 2)) (procedure-documentation g))`,
+			Expected: values.NewString("Doubles x."),
+		},
+		{
+			Name:     "case-lambda clause with docstring",
+			Code:     `(begin (define h (case-lambda ((x) "One arg." (+ x 1)) ((x y) (+ x y)))) (procedure-documentation h))`,
+			Expected: values.NewString("One arg."),
+		},
+		{
+			Name:     "no docstring returns false",
+			Code:     `(begin (define (f x) (+ x 1)) (procedure-documentation f))`,
+			Expected: values.FalseValue,
+		},
+		{
+			Name:     "string-only body is return value not docstring",
+			Code:     `(begin (define (f) "hello") (procedure-documentation f))`,
+			Expected: values.FalseValue,
+		},
+		{
+			Name:     "string-only body returns the string",
+			Code:     `(begin (define (f) "hello") (f))`,
+			Expected: values.NewString("hello"),
+		},
+		{
+			Name:     "docstring stripped from body",
+			Code:     `(begin (define (f x) "doc" (+ x 1)) (f 10))`,
+			Expected: values.NewInteger(11),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
 func TestCaseLambda_Errors(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeErrorTestCase{
 		{

@@ -93,9 +93,11 @@ func validateDefineFunction(ctx context.Context, env *environment.EnvironmentFra
 		return nil
 	}
 
+	docstring, body := extractDocstring(body)
+
 	return &ValidatedDefine{
 		validatedBase:     validatedBase{formName: "define", source: source},
-		validatedProcBase: validatedProcBase{params: params, body: body},
+		validatedProcBase: validatedProcBase{params: params, body: body, docstring: docstring},
 		name:              name,
 		IsFunction:        true,
 	}
