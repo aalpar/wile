@@ -10,15 +10,17 @@
   (identity monoid-identity))
 
 (define (monoid-op M a b)
+  "Apply monoid M's binary operation to A and B.\nA monoid operation is associative: combining A with the result\nof combining B and C gives the same result as combining the\nresult of A and B with C."
   ((monoid-op-fn M) a b))
 
 (define (monoid-fold M lst)
+  "Fold LST under monoid M by combining elements left to right.\nStarts from M's identity element and accumulates by applying\nM's binary operation to each element in order. Returns the\nidentity when LST is empty."
   (let loop ((acc (monoid-identity M)) (xs lst))
     (if (null? xs) acc
         (loop (monoid-op M acc (car xs)) (cdr xs)))))
 
 (define (monoid-power M a n)
-  ;; Repeated application: a ⊕ a ⊕ ... (n times). O(n).
+  "Combine A with itself N times under monoid M.\nRepeated application of M's binary operation: the result is\nA combined N times starting from the identity. Returns the\nidentity when N is zero or negative. Runs in O(N) time."
   (let loop ((acc (monoid-identity M)) (remaining n))
     (if (<= remaining 0) acc
         (loop (monoid-op M acc a) (- remaining 1)))))
@@ -32,6 +34,7 @@
          body ...)))))
 
 (define (validate-monoid M samples)
+  "Spot-check that M satisfies the monoid laws on SAMPLES.\nTests left identity, right identity, and associativity for all\nelements and triples in SAMPLES. Returns #t if all laws hold,\nor a list of (violation-type element ...) entries describing failures."
   (let ((violations '())
         (e (monoid-identity M)))
     (define (fail! type . args)

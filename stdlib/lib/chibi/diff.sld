@@ -13,6 +13,7 @@
    (else
     (begin
       (define (port->list reader port)
+        "Read all values from PORT using READER until eof, returning them as a list"
         (let lp ((res '()))
           (let ((x (reader port)))
             (if (eof-object? x)

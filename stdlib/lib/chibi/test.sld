@@ -51,6 +51,7 @@
 
     ;; Indentation helper
     (define (indent)
+      "Display indentation spaces for the current group nesting level"
       (let loop ((i 0))
         (when (< i *group-indent*)
           (display "  ")
@@ -58,6 +59,7 @@
 
     ;; Begin a test group
     (define (test-begin name . args)
+      "Begin a new test group with NAME and increase nesting level"
       (indent)
       (display "Testing ")
       (display name)
@@ -68,6 +70,7 @@
 
     ;; End a test group
     (define (test-end . args)
+      "End the current test group and decrease nesting level"
       (when (pair? *test-group-stack*)
         (set! *test-group-stack* (cdr *test-group-stack*))
         (set! *group-indent* (max 0 (- *group-indent* 1)))
@@ -77,9 +80,11 @@
 
     ;; Test result reporting - exported for macro use
     (define (%test-pass name)
+      "Record a passing test result for NAME"
       (set! *test-pass-count* (+ *test-pass-count* 1)))
 
     (define (%test-fail name expected actual)
+      "Record a failing test result for NAME and display EXPECTED vs ACTUAL"
       (set! *test-fail-count* (+ *test-fail-count* 1))
       (indent)
       (display "FAIL: ")
@@ -96,6 +101,7 @@
     ;; Uses relative difference like the original chibi test library.
     ;; Handles special cases: infinities and NaN
     (define (%approx-equal? a b epsilon)
+      "Return true if A and B are approximately equal within EPSILON.\nHandles infinities, NaN, zero, complex numbers, pairs, and vectors"
       (cond
        ((and (number? a) (number? b))
         (cond
@@ -134,6 +140,7 @@
 
     ;; Exit with summary
     (define (test-exit . args)
+      "Print test summary and exit with status 1 if any tests failed"
       (newline)
       (display "Test Summary:")
       (newline)

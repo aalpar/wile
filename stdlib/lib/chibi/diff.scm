@@ -1,6 +1,7 @@
 
 ;; utility for lcs-with-positions
 (define (max-seq . o)
+  "Return the sequence with the greatest length from zero or more (length elements) pairs"
   (if (null? o)
       (list 0 '())
       (let loop ((a (car o)) (ls (cdr o)))
@@ -16,6 +17,7 @@
 ;;> \scheme{equal?}.  Returns this sequence as a list, using the
 ;;> elements from \var{a-ls}.  Uses quadratic time and space.
 (define (lcs a-ls b-ls . o)
+  "Find the longest common subsequence between A-LS and B-LS.\nCompares elements with EQ (default equal?). Returns the common\nelements as a list, taken from A-LS. Uses quadratic time and space"
   (let ((eq (if (pair? o) (car o) equal?)))
     (map car (lcs-with-positions a-ls b-ls eq))))
 
@@ -25,6 +27,7 @@
 ;;> \var{a-ls} where the element occurred, and the position in
 ;;> \var{b-ls}.
 (define (lcs-with-positions a-ls b-ls . o)
+  "Find the longest common subsequence with position annotations.\nReturns a list of (element a-index b-index) triples, where each\ntriple records a common element and its zero-based positions in\nA-LS and B-LS respectively. Compares with EQ (default equal?)"
   (let* ((eq (if (pair? o) (car o) equal?))
          (a-len (+ 1 (length a-ls)))
          (b-len (+ 1 (length b-ls)))
@@ -57,6 +60,7 @@
     (cadr (vector-ref results 0))))
 
 (define (source->list x reader)
+  "Convert source X to a list by reading with READER.\nX may be a port or a string; strings are opened as input ports"
   (port->list
    reader
    (cond ((port? x) x)
@@ -70,6 +74,7 @@
 ;;> result.  Unless \var{minimal?} is set, we trim common
 ;;> prefixes/suffixes before computing the lcs.
 (define (diff a b . o)
+  "Compute the diff between sources A and B.\nA and B may be strings or ports, tokenized by READER (default\nread-line) and compared with EQ (default equal?). Returns a\nthree-element list: the A sequence, the B sequence, and the\nannotated LCS. When OPTIMAL? is false (the default), trims\ncommon prefixes and suffixes before computing the LCS"
   (let-optionals o ((reader read-line)
                     (eq equal?)
                     (optimal? #f))
@@ -126,6 +131,7 @@
 ;;> input.  \var{writer} defaults to \scheme{write-line-diffs},
 ;;> assuming the default line diffs.
 (define (write-diff diff . o)
+  "Format a DIFF result to output port OUT (default current-output-port).\nWRITER is called as (WRITER subsequence type OUT) for each chunk,\nwhere TYPE is one of the symbols same, add, or remove. WRITER\ndefaults to write-line-diffs"
   (let-optionals o ((writer write-line-diffs)
                     (out (current-output-port)))
     (let* ((a-ls (car diff))
@@ -154,6 +160,7 @@
 
 ;;> Equivalent to \scheme{write-diff} but collects the output to a string.
 (define (diff->string diff . o)
+  "Format a DIFF result as a string, equivalent to write-diff collected to a string"
   (let ((out (open-output-string)))
     (write-diff diff (if (pair? o) (car o) write-line-diffs) out)
     (get-output-string out)))
@@ -161,6 +168,7 @@
 ;;> The default writer for \scheme{write-diff}, annotates simple +/-
 ;;> prefixes for added/removed lines.
 (define (write-line-diffs lines type out)
+  "Write LINES to OUT with +/- prefix annotations.\nTYPE is one of the symbols add, remove, or same. Added lines\nget a + prefix, removed lines a - prefix, and same lines a space"
   (for-each
    (lambda (line)
      (case type
@@ -178,6 +186,7 @@
 ;;> A variant of \scheme{write-line-diffs} which adds red/green ANSI
 ;;> coloring to the +/- prefix.
 (define (write-line-diffs/color lines type out)
+  "Write LINES to OUT with colored +/- prefix annotations.\nAdded lines are printed in green with a + prefix, removed lines\nin red with a - prefix, and same lines with a space prefix"
   (for-each
    (lambda (line)
      (case type
@@ -198,6 +207,7 @@
 ;;> generated with \scheme{read-char}), enclosing added characters in
 ;;> «...» brackets and removed characters in »...«.
 (define (write-char-diffs chars type out)
+  "Write character-level CHARS diff to OUT using bracket notation.\nAdded characters are enclosed in guillemets as << ... >>,\nremoved characters as >> ... <<, and same characters are written as-is"
   (case type
     ((add)
      (write-string " «" out)
@@ -215,6 +225,7 @@
 ;;> generated with \scheme{read-char}), formatting added characters in
 ;;> green and removed characters in red.
 (define (write-char-diffs/color chars type out)
+  "Write character-level CHARS diff to OUT using ANSI color.\nAdded characters are displayed in green, removed in red,\nand same characters are written unchanged"
   (case type
     ((add)
      (write-string (green (list->string chars)) out))
@@ -233,6 +244,7 @@
 ;;> formatting the differences as either added (if \var{index} is 0)
 ;;> or removed (if \var{index} is 1).
 (define (write-edits ls lcs . o)
+  "Format edits for a single sequence LS against annotated LCS.\nINDEX selects which position in the LCS triples to use (0 or 1,\ndefault 1). Elements not in the LCS are marked as add (index 0)\nor remove (index 1). WRITER and OUT control output formatting"
   (let-optionals o ((index 1)
                     (writer write-line-diffs)
                     (out (current-output-port)))
@@ -257,6 +269,7 @@
 
 ;;> Equivalent to \scheme{write-edits} but collects the output to a string.
 (define (edits->string ls lcs . o)
+  "Format edits for sequence LS against LCS and return as a string.\nAutomatically selects character or line diff writer based on\nwhether LS contains characters"
   (let-optionals o ((type 'add)
                     (writer (if (and (pair? ls) (char? (car ls)))
                                 write-char-diffs
@@ -270,6 +283,7 @@
 ;;> character diff this returns the original input string as-is, with
 ;;> only ANSI escapes indicating what changed.
 (define (edits->string/color ls lcs . o)
+  "Format edits for sequence LS against LCS as an ANSI-colored string.\nWith a character diff, returns the original string with only ANSI\nescape sequences indicating changes"
   (let-optionals o ((type 'add)
                     (writer (if (and (pair? ls) (char? (car ls)))
                                 write-char-diffs/color

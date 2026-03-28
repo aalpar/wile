@@ -16,22 +16,27 @@
   (leq-fn  lattice-leq-fn))
 
 (define (make-lattice join meet bottom top leq?)
+  "Construct a lattice from JOIN, MEET, BOTTOM, TOP, and LEQ? predicate.\nJOIN computes the least upper bound of two elements, MEET computes\nthe greatest lower bound. BOTTOM is less than all elements, TOP is\ngreater than all elements. LEQ? tests the partial ordering."
   (make-lattice* join meet bottom top leq?))
 
 ;; ─── Core operations ─────────────────────────
 
 (define (lattice-join L a b)
+  "Compute the join (least upper bound) of A and B in lattice L.\nThe join is the smallest element that is greater than or equal\nto both A and B."
   ((lattice-join-fn L) a b))
 
 (define (lattice-meet L a b)
+  "Compute the meet (greatest lower bound) of A and B in lattice L.\nThe meet is the largest element that is less than or equal to\nboth A and B."
   ((lattice-meet-fn L) a b))
 
 (define (lattice-leq? L a b)
+  "Test whether A is less than or equal to B in lattice L."
   ((lattice-leq-fn L) a b))
 
 ;; ─── Projection ──────────────────────────────
 
 (define (lattice->partial-order L)
+  "Extract the partial order from lattice L.\nThe resulting partial order uses L's leq? predicate."
   (make-partial-order (lattice-leq-fn L)))
 
 ;; ─── with-lattice macro ─────────────────────
@@ -50,6 +55,7 @@
 ;; ─── Lattice equality (derived from leq?) ───
 
 (define (lattice-equal? L a b)
+  "Test whether A and B are equal in lattice L.\nTwo elements are lattice-equal when each is less than or equal\nto the other (antisymmetry of the underlying partial order)."
   (and (lattice-leq? L a b)
        (lattice-leq? L b a)))
 
@@ -58,14 +64,13 @@
 (define fixpoint
   (case-lambda
     ((L f x)
-     ;; Unbounded Kleene iteration
+     "Compute the least fixpoint of F starting from X in lattice L.\nIterates F(F(...F(X)...)) until the result stabilizes according\nto lattice-equal?. This is Kleene iteration; F must be monotone\nand L must have no infinite ascending chains for termination.\nWith four arguments, limits iteration to FUEL steps and returns\n#f if the fixpoint is not reached."
      (let loop ((current x))
        (let ((next (f current)))
          (if (lattice-equal? L current next)
              current
              (loop next)))))
     ((L f x fuel)
-     ;; Bounded iteration — returns #f if fuel exhausted
      (let loop ((current x) (remaining fuel))
        (if (<= remaining 0) #f
            (let ((next (f current)))
@@ -74,10 +79,7 @@
                  (loop next (- remaining 1)))))))))
 
 (define (fixpoint/widen L f x widen)
-  ;; Kleene iteration with widening: apply widen instead of raw join
-  ;; when the value changes. widen : element element → element
-  ;; Must satisfy: ∀a,b. a ⊔ b ≤ widen(a, b) and every ascending
-  ;; chain under widen is finite.
+  "Compute a fixpoint of F from X in lattice L using WIDEN to ensure termination.\nLike fixpoint, but applies WIDEN instead of raw join when the\nvalue increases. WIDEN takes (current, next) and must return an\nelement at least as large as their join, and every ascending\nchain under WIDEN must be finite. This guarantees termination\neven when L has infinite ascending chains."
   (let loop ((current x))
     (let* ((next (f current))
            (widened (if (lattice-leq? L next current)
@@ -90,7 +92,7 @@
 ;; ─── Lattice constructors ────────────────────
 
 (define (flat-lattice elements equal?)
-  ;; ⊥ < each element < ⊤ ; incomparable between elements.
+  "Construct a flat lattice over ELEMENTS using EQUAL? for comparison.\nIn a flat lattice, all elements are incomparable to each other\nbut sit between a bottom element (less than everything) and a top\nelement (greater than everything). The lattice join of two unequal\nelements is top; their meet is bottom."
   (let ((bot 'flat-bottom)
         (top 'flat-top))
     (define (member? x)
@@ -120,8 +122,7 @@
               (else #f))))))
 
 (define (powerset-lattice universe)
-  ;; (P(universe), ⊆, ∪, ∩, ∅, universe)
-  ;; Sets represented as lists using equal?-based membership.
+  "Construct the powerset lattice over UNIVERSE.\nElements are lists representing subsets. Join is set union,\nmeet is set intersection, bottom is the empty set, top is\nUNIVERSE, and ordering is the subset relation. Membership\nis tested with equal?."
   (define (subset? a b)
     (cond ((null? a) #t)
           ((member (car a) b) (subset? (cdr a) b))
@@ -137,7 +138,7 @@
   (make-lattice union intersect '() universe subset?))
 
 (define (product-lattice . lattices)
-  ;; Pointwise on lists: (a1 a2 ...) ≤ (b1 b2 ...) iff a1≤b1 ∧ a2≤b2 ∧ ...
+  "Construct the product lattice from LATTICES applied pointwise.\nElements are lists of the same length as LATTICES. All operations\n(join, meet, leq?) apply component-wise to corresponding elements.\nBottom is the list of all component bottoms; top is the list of\nall component tops."
   (make-lattice
     ;; join: pointwise
     (lambda (a b) (map (lambda (L ai bi) (lattice-join L ai bi))
@@ -157,9 +158,7 @@
               (else (loop (cdr Ls) (cdr as) (cdr bs))))))))
 
 (define (map-lattice keys value-lattice)
-  ;; Alist: keys → value-lattice, pointwise operations.
-  ;; Elements are alists ((k1 . v1) (k2 . v2) ...).
-  ;; Missing keys treated as bottom.
+  "Construct a lattice of alists mapping KEYS to elements of VALUE-LATTICE.\nAll operations apply pointwise: join, meet, and leq? operate\non corresponding values for each key. Missing keys are treated\nas VALUE-LATTICE's bottom element. Bottom is all keys mapped\nto bottom; top is all keys mapped to top."
   (let ((vbot (lattice-bottom value-lattice))
         (vtop (lattice-top value-lattice)))
     (define (lookup key alist)
@@ -185,8 +184,7 @@
 ;; ─── Validation ──────────────────────────────
 
 (define (validate-lattice L samples)
-  ;; Spot-check lattice laws on sample elements.
-  ;; Returns #t or list of (violation-type a b ...).
+  "Spot-check that L satisfies the lattice laws on SAMPLES.\nTests join and meet commutativity, absorption, idempotence,\nand identity (bottom for join, top for meet) for all elements\nand pairs in SAMPLES. Returns #t if all laws hold, or a list\nof (violation-type element ...) entries describing failures."
   (let ((violations '()))
     (define (fail! type . args)
       (set! violations (cons (cons type args) violations)))

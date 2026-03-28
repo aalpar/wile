@@ -26,10 +26,13 @@
     (begin
       (define reverse! reverse)
       (define (find-tail pred ls)
+        "Return the first tail of LS whose car satisfies PRED,\nor #f if no element matches. The returned value is the\npair itself, sharing structure with LS."
         (and (pair? ls) (if (pred (car ls)) ls (find-tail pred (cdr ls)))))
       (define (find pred ls)
+        "Return the first element of LS satisfying predicate PRED,\nor #f if no element matches. Note: cannot distinguish between\n#f as a found value and #f as not-found. Use find-tail when\nthe list may contain #f."
         (cond ((find-tail pred ls) => car) (else #f)))
       (define (any pred ls . lol)
+        "Return the first true value produced by applying PRED to\nelements of LS, or #f if no element satisfies PRED. The\nreturn value is the actual result from PRED, not necessarily\n#t. For multiple lists, PRED receives corresponding elements\nand the search stops at the shortest list."
         (define (any1 pred ls)
           (if (pair? (cdr ls))
               ((lambda (x) (if x x (any1 pred (cdr ls)))) (pred (car ls)))
@@ -43,6 +46,7 @@
             (if (pair? ls) (any1 pred ls) #f)
             (anyn pred (cons ls lol))))
       (define (every pred ls . lol)
+        "Return #f if any element of LS fails to satisfy PRED.\nOtherwise return the result of PRED on the last element,\nor #t for the empty list. For multiple lists, PRED receives\ncorresponding elements and stops at the shortest list."
         (define (every1 pred ls)
           (if (null? (cdr ls))
               (pred (car ls))

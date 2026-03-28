@@ -7,10 +7,12 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define (make-simple-escape-procedure parameter)
+  "Return a thunk that produces the ANSI SGR escape sequence for PARAMETER"
   (let ((code (string-append "\x1B;[" (number->string parameter) "m")))
     (lambda () code)))
 
 (define (make-wrap-procedure start-escape end-escape)
+  "Return a procedure that wraps a string in START-ESCAPE and END-ESCAPE.\nWhen ANSI escapes are disabled, the string is returned unchanged"
   (lambda (str)
     (if (not (string? str))
         (error "argument must be a string" str))
@@ -57,6 +59,7 @@
 ;;> 256 colors.
 
 (define (rgb-escape red-level green-level blue-level)
+  "Return a 256-color ANSI escape for text color.\nRED-LEVEL, GREEN-LEVEL, and BLUE-LEVEL must be exact integers in [0, 5]"
   (when (not (and (exact-integer? red-level) (<= 0 red-level 5)))
     (error "invalid red-level value" red-level))
   (when (not (and (exact-integer? green-level) (<= 0 green-level 5)))
@@ -76,6 +79,7 @@
 ;;> 256 colors.
 
 (define (gray-escape gray-level)
+  "Return a 256-color ANSI escape for text grayscale.\nGRAY-LEVEL must be an exact integer in [0, 23]"
   (when (not (and (exact-integer? gray-level) (<= 0 gray-level 23)))
     (error "invalid gray-level value" gray-level))
   (string-append "\x1B;[38;5;"
@@ -89,6 +93,7 @@
 ;;> in the range [0, 255].
 
 (define (rgb24-escape red-level green-level blue-level)
+  "Return a 24-bit truecolor ANSI escape for text color.\nRED-LEVEL, GREEN-LEVEL, and BLUE-LEVEL must be exact integers in [0, 255]"
   (when (not (and (exact-integer? red-level) (<= 0 red-level 255)))
     (error "invalid red-level value" red-level))
   (when (not (and (exact-integer? green-level) (<= 0 green-level 255)))
@@ -156,6 +161,7 @@
 ;;> 256 colors.
 
 (define (rgb red-level green-level blue-level)
+  "Return a procedure that wraps a string in 256-color text escape codes.\nRED-LEVEL, GREEN-LEVEL, and BLUE-LEVEL must be in [0, 5]"
   (make-wrap-procedure (rgb-escape red-level green-level blue-level)
                        (reset-color-escape)))
 
@@ -174,6 +180,7 @@
 ;;> 256 colors.
 
 (define (gray gray-level)
+  "Return a procedure that wraps a string in grayscale text escape codes.\nGRAY-LEVEL must be in [0, 23]"
   (make-wrap-procedure (gray-escape gray-level)
                        (reset-color-escape)))
 
@@ -181,6 +188,7 @@
 ;;> to [0, 255].
 
 (define (rgb24 red-level green-level blue-level)
+  "Return a procedure that wraps a string in 24-bit truecolor text escape codes.\nRED-LEVEL, GREEN-LEVEL, and BLUE-LEVEL must be in [0, 255]"
   (make-wrap-procedure (rgb24-escape red-level green-level blue-level)
                        (reset-color-escape)))
 
@@ -216,6 +224,7 @@
 ;;> 256 colors.
 
 (define (rgb-background-escape red-level green-level blue-level)
+  "Return a 256-color ANSI escape for background color.\nRED-LEVEL, GREEN-LEVEL, and BLUE-LEVEL must be exact integers in [0, 5]"
   (when (not (and (exact-integer? red-level) (<= 0 red-level 5)))
     (error "invalid red-level value" red-level))
   (when (not (and (exact-integer? green-level) (<= 0 green-level 5)))
@@ -235,6 +244,7 @@
 ;;> 256 colors.
 
 (define (gray-background-escape gray-level)
+  "Return a 256-color ANSI escape for background grayscale.\nGRAY-LEVEL must be an exact integer in [0, 23]"
   (when (not (and (exact-integer? gray-level) (<= 0 gray-level 23)))
     (error "invalid gray-level value" gray-level))
   (string-append "\x1B;[48;5;"
@@ -248,6 +258,7 @@
 ;;> integer in the range [0, 255].
 
 (define (rgb24-background-escape red-level green-level blue-level)
+  "Return a 24-bit truecolor ANSI escape for background color.\nRED-LEVEL, GREEN-LEVEL, and BLUE-LEVEL must be exact integers in [0, 255]"
   (when (not (and (exact-integer? red-level) (<= 0 red-level 255)))
     (error "invalid red-level value" red-level))
   (when (not (and (exact-integer? green-level) (<= 0 green-level 255)))
@@ -317,6 +328,7 @@
 ;;> 256 colors.
 
 (define (rgb-background red-level green-level blue-level)
+  "Return a procedure that wraps a string in 256-color background escape codes.\nRED-LEVEL, GREEN-LEVEL, and BLUE-LEVEL must be in [0, 5]"
   (make-wrap-procedure (rgb-background-escape red-level green-level blue-level)
                        (reset-background-color-escape)))
 
@@ -335,6 +347,7 @@
 ;;> 256 colors.
 
 (define (gray-background gray-level)
+  "Return a procedure that wraps a string in grayscale background escape codes.\nGRAY-LEVEL must be in [0, 23]"
   (make-wrap-procedure (gray-background-escape gray-level)
                        (reset-background-color-escape)))
 
@@ -342,6 +355,7 @@
 ;;> the ranges to [0, 255].
 
 (define (rgb24-background red-level green-level blue-level)
+  "Return a procedure that wraps a string in 24-bit truecolor background escape codes.\nRED-LEVEL, GREEN-LEVEL, and BLUE-LEVEL must be in [0, 255]"
   (make-wrap-procedure
    (rgb24-background-escape red-level green-level blue-level)
    (reset-background-color-escape)))

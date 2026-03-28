@@ -15,18 +15,32 @@
   (negate-fn ring-negate-fn))
 
 (define (make-ring plus times zero one negate)
+  "Construct a ring from PLUS, TIMES, ZERO, ONE, and NEGATE.\nThe additive structure (PLUS, ZERO, NEGATE) must form an abelian\ngroup, TIMES must be associative with ONE as identity, and TIMES\nmust distribute over PLUS from both sides."
   (make-ring* plus times zero one negate))
 
-(define (ring-plus R a b)   ((ring-plus-fn R) a b))
-(define (ring-times R a b)  ((ring-times-fn R) a b))
-(define (ring-negate R a)   ((ring-negate-fn R) a))
-(define (ring-minus R a b)  (ring-plus R a (ring-negate R b)))
+(define (ring-plus R a b)
+  "Add A and B under ring R's additive operation."
+  ((ring-plus-fn R) a b))
+
+(define (ring-times R a b)
+  "Multiply A and B under ring R's multiplicative operation."
+  ((ring-times-fn R) a b))
+
+(define (ring-negate R a)
+  "Return the additive inverse of A in ring R.\nThe additive inverse is the element that, when added to A,\nyields the ring's zero element."
+  ((ring-negate-fn R) a))
+
+(define (ring-minus R a b)
+  "Subtract B from A in ring R.\nComputed as A plus the additive inverse of B."
+  (ring-plus R a (ring-negate R b)))
 
 (define (ring->semiring R)
+  "Project ring R to its underlying semiring by forgetting negation.\nThe resulting semiring has the same PLUS, TIMES, ZERO, and ONE."
   (make-semiring (ring-plus-fn R) (ring-times-fn R)
                  (ring-zero R) (ring-one R)))
 
 (define (ring->additive-group R)
+  "Extract the additive group (PLUS, ZERO, NEGATE) from ring R."
   (make-group (ring-plus-fn R) (ring-zero R) (ring-negate-fn R)))
 
 (define-syntax with-ring
@@ -43,9 +57,11 @@
 ;; ─── Pre-built ring instances ────────────────
 
 (define (integer-ring)
+  "Construct the ring of integers with standard arithmetic.\nPLUS is +, TIMES is *, ZERO is 0, ONE is 1, NEGATE is -."
   (make-ring + * 0 1 -))
 
 (define (modular-ring n)
+  "Construct the ring of integers modulo N.\nAll operations reduce results modulo N. Elements are integers\nin the range [0, N). For prime N this is also a field, but\nthis constructor does not provide a multiplicative inverse."
   (make-ring
     (lambda (a b) (modulo (+ a b) n))
     (lambda (a b) (modulo (* a b) n))
@@ -55,6 +71,7 @@
 ;; ─── Ring validation ─────────────────────────
 
 (define (validate-ring R samples)
+  "Spot-check that R satisfies the ring laws on SAMPLES.\nTests additive identity, multiplicative identity, additive\ninverse, and left distributivity for all elements and triples\nin SAMPLES. Returns #t if all laws hold, or a list of\n(violation-type element ...) entries describing failures."
   (let ((violations '())
         (z (ring-zero R))
         (o (ring-one R)))
@@ -98,15 +115,31 @@
   (reciprocal-fn field-reciprocal-fn))
 
 (define (make-field plus times zero one negate reciprocal)
+  "Construct a field from PLUS, TIMES, ZERO, ONE, NEGATE, and RECIPROCAL.\nA field is a ring where every nonzero element has a multiplicative\ninverse given by RECIPROCAL. RECIPROCAL need not be defined for ZERO."
   (make-field* plus times zero one negate reciprocal))
 
-(define (field-plus F a b)       ((field-plus-fn F) a b))
-(define (field-times F a b)      ((field-times-fn F) a b))
-(define (field-negate F a)       ((field-negate-fn F) a))
-(define (field-reciprocal F a)   ((field-reciprocal-fn F) a))
-(define (field-divide F a b)     (field-times F a (field-reciprocal F b)))
+(define (field-plus F a b)
+  "Add A and B under field F's additive operation."
+  ((field-plus-fn F) a b))
+
+(define (field-times F a b)
+  "Multiply A and B under field F's multiplicative operation."
+  ((field-times-fn F) a b))
+
+(define (field-negate F a)
+  "Return the additive inverse of A in field F."
+  ((field-negate-fn F) a))
+
+(define (field-reciprocal F a)
+  "Return the multiplicative inverse of A in field F.\nA must be nonzero. The result satisfies: A times its\nreciprocal equals the field's multiplicative identity (one)."
+  ((field-reciprocal-fn F) a))
+
+(define (field-divide F a b)
+  "Divide A by B in field F.\nComputed as A times the multiplicative inverse of B.\nB must be nonzero."
+  (field-times F a (field-reciprocal F b)))
 
 (define (field->ring F)
+  "Project field F to its underlying ring by forgetting the reciprocal.\nThe resulting ring has the same PLUS, TIMES, ZERO, ONE, and NEGATE."
   (make-ring (field-plus-fn F) (field-times-fn F)
              (field-zero F) (field-one F) (field-negate-fn F)))
 
@@ -125,12 +158,13 @@
 ;; ─── Pre-built field instances ───────────────
 
 (define (rational-field)
+  "Construct the field of rational numbers with standard arithmetic.\nPLUS is +, TIMES is *, ZERO is 0, ONE is 1, NEGATE is -,\nand RECIPROCAL is 1/x."
   (make-field + * 0 1 - (lambda (x) (/ 1 x))))
 
 ;; ─── Field validation ────────────────────────
 
 (define (validate-field F samples)
-  ;; Samples should exclude zero for multiplicative inverse checks.
+  "Spot-check that F satisfies the field laws on SAMPLES.\nDelegates ring law checks to validate-ring, then additionally\ntests that every nonzero element in SAMPLES has a multiplicative\ninverse. SAMPLES should exclude the zero element. Returns #t if\nall laws hold, or a list of (violation-type element ...) entries\ndescribing failures."
   (let ((violations '())
         (z (field-zero F))
         (o (field-one F)))

@@ -14,17 +14,19 @@
   (abstract-lattice gc-abstract-lattice))
 
 (define (make-galois-connection alpha gamma concrete-po abstract-lattice)
+  "Construct a Galois connection from ALPHA, GAMMA, CONCRETE-PO, and ABSTRACT-LATTICE.\nALPHA abstracts concrete values into the abstract lattice. GAMMA\nconcretizes abstract values back. The pair must satisfy: every\nconcrete value is below the concretization of its abstraction\n(soundness), and abstracting a concretization never exceeds the\noriginal abstract value (reductiveness)."
   (make-galois-connection* alpha gamma concrete-po abstract-lattice))
 
 (define (gc-alpha GC concrete-val)
+  "Abstract CONCRETE-VAL through Galois connection GC.\nMaps a concrete value into the abstract lattice."
   ((gc-alpha-fn GC) concrete-val))
 
 (define (gc-gamma GC abstract-val)
+  "Concretize ABSTRACT-VAL through Galois connection GC.\nMaps an abstract lattice element back to the concrete domain."
   ((gc-gamma-fn GC) abstract-val))
 
 (define (gc-sound? GC concrete-samples abstract-samples)
-  ;; Spot-check both Galois conditions on sample elements.
-  ;; Returns #t or list of (violation-type ...) entries.
+  "Spot-check that GC satisfies the Galois connection laws on sample elements.\nTests extensiveness (c <= gamma(alpha(c)) for each concrete sample)\nand reductiveness (alpha(gamma(a)) <= a for each abstract sample).\nReturns #t if all conditions hold, or a list of (violation-type ...)\nentries describing failures."
   (let ((violations '()))
     (define (fail! type . args)
       (set! violations (cons (cons type args) violations)))

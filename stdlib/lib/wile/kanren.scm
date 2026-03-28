@@ -38,9 +38,11 @@
 
 ;; Pull: force a stream to a list
 (define (pull $)
+  "Force a lazy answer stream $ to a concrete value.\nRepeatedly invokes $ while it is a suspension (procedure)\nuntil a pair or the empty list is obtained."
   (if (procedure? $) (pull ($)) $))
 
 (define (take-inf n $)
+  "Take at most N answers from the lazy stream $.\nForces suspensions via pull and collects results into a list.\nReturns fewer than N answers if the stream is exhausted."
   (cond
     ((zero? n) '())
     (else
@@ -50,6 +52,7 @@
          (else (cons (car $) (take-inf (- n 1) (cdr $)))))))))
 
 (define (take-all-inf $)
+  "Force the entire lazy stream $ and collect all answers into a list.\nWarning: diverges if the stream is infinite."
   (let (($ (pull $)))
     (cond
       ((null? $) '())
@@ -57,10 +60,12 @@
 
 ;; Reification
 (define (reify-name n)
+  "Generate a reification symbol for the Nth unnamed logic variable.\nProduces symbols of the form _.0, _.1, _.2, etc."
   (string->symbol
     (string-append "_." (number->string n))))
 
 (define (walk* v s)
+  "Deeply walk value V under substitution S.\nLike walk, but recursively resolves variables inside pairs,\nproducing a fully ground term when possible."
   (let ((v (walk v s)))
     (cond
       ((var? v) v)
@@ -70,6 +75,7 @@
       (else v))))
 
 (define (reify-s v s)
+  "Build a reification substitution for value V.\nWalks V under S and maps each remaining free variable to a\nhuman-readable symbol (_.0, _.1, ...) using reify-name.\nRecurses into pairs to discover all unbound variables."
   (let ((v (walk v s)))
     (cond
       ((var? v) (ext-s v (reify-name (length s)) s))
@@ -77,9 +83,11 @@
       (else s))))
 
 (define (reify v)
+  "Reify value V by replacing all free logic variables with\nhuman-readable symbols (_.0, _.1, ...). Composes walk* and\nreify-s to produce a fully readable term."
   (walk* v (reify-s v '())))
 
 (define (reify-1st s/c)
+  "Reify the first query variable (var 0) from state/counter S/C.\nExtracts the substitution, deeply walks variable 0, then\nreplaces remaining free variables with readable names.\nUsed by run and run* to present answers."
   (let ((v (walk* (var 0) (car s/c))))
     (walk* v (reify-s v '()))))
 

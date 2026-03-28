@@ -19,6 +19,7 @@
 (define *no-match* (list 'no-match))
 
 (define (no-match? x)
+  "Test whether X is the internal no-match sentinel.\nRewrite rules return this sentinel (via eq? identity) to indicate\nthat no rewriting step applied. Callers of make-normalizer see #f\ninstead; this predicate is for internal rule dispatch only."
   (eq? x *no-match*))
 
 ;; ─── Term protocol ──────────────────────────
@@ -35,22 +36,28 @@
 
 (define (make-term-protocol compound-term? get-operator get-operands
                             make-term compare)
+  "Construct a term protocol for abstract term representations.\nCOMPOUND-TERM? tests whether a value is a compound term.\nGET-OPERATOR and GET-OPERANDS extract parts of a compound term.\nMAKE-TERM rebuilds a term with new operands while preserving\nmetadata. COMPARE returns #t when its first argument should sort\nbefore the second, used by commutativity rules to normalize\noperand order."
   (make-term-protocol* compound-term? get-operator get-operands
                        make-term compare))
 
 (define (term-compound? proto x)
+  "Test whether X is a compound term under protocol PROTO.\nA compound term has an operator and operands, as opposed to\nan atomic value like a number or variable."
   ((term-compound?-fn proto) x))
 
 (define (term-get-operator proto term)
+  "Extract the operator from compound TERM under protocol PROTO."
   ((term-get-operator-fn proto) term))
 
 (define (term-get-operands proto term)
+  "Extract the list of operands from compound TERM under protocol PROTO."
   ((term-get-operands-fn proto) term))
 
 (define (term-make-term proto term new-args)
+  "Rebuild TERM with NEW-ARGS as operands under protocol PROTO.\nThe original TERM's operator and any metadata are preserved;\nonly the operands change."
   ((term-make-term-fn proto) term new-args))
 
 (define (term-compare proto a b)
+  "Test whether A should sort before B under protocol PROTO's term ordering.\nUsed by commutativity rules to pick a canonical operand order."
   ((term-compare-fn proto) a b))
 
 ;; ─── Axiom types ────────────────────────────
@@ -83,6 +90,7 @@
   (op involution-axiom-op))
 
 (define (axiom? x)
+  "Test whether X is a recognized axiom type.\nReturns #t for identity, commutativity, absorbing, idempotence,\nor involution axiom records."
   (or (identity-axiom? x)
       (commutativity-axiom? x)
       (absorbing-axiom? x)
@@ -92,7 +100,7 @@
 ;; ─── Axiom → rewrite rules ─────────────────
 
 (define (axiom->rules axiom proto)
-  ;; Returns a list of rewrite rule functions: (term → value-or-*no-match*)
+  "Compile AXIOM into a list of rewrite-rule procedures using term protocol PROTO.\nEach rule is a procedure (term -> value-or-*no-match*) that attempts\none rewriting step. Identity axioms produce two rules (left and right),\ncommutativity produces one rule that normalizes by term ordering,\nand involution produces one rule that collapses f(f(x)) to x."
   (cond
     ((identity-axiom? axiom)
      (let ((target-op (identity-axiom-op axiom))
@@ -189,8 +197,7 @@
 ;; ─── Normalizer ─────────────────────────────
 
 (define (make-normalizer theory proto)
-  ;; Compile all axioms into a flat list of rewrite rules.
-  ;; Returns (term → value-or-#f): first match wins, #f if none.
+  "Compile a list of axioms (THEORY) into a single normalizer function.\nReturns a procedure (term -> value-or-#f) that tries each compiled\nrule in order. The first matching rule's result is returned; #f is\nreturned if no rule applies. The internal *no-match* sentinel is\ntranslated to #f so callers never see it."
   (let ((rules (apply append
                  (map (lambda (ax) (axiom->rules ax proto)) theory))))
     (lambda (term)
