@@ -516,6 +516,57 @@ func TestRegistry_PrimitiveSpecWithContract(t *testing.T) {
 	c.Assert(prims[0].Spec.ReturnType, qt.Equals, values.TypeCharacter)
 }
 
+func TestRegistry_AddBindingSpecs(t *testing.T) {
+	c := qt.New(t)
+	r := NewRegistry()
+	r.AddBindingSpecs([]BindingSpec{
+		{Name: "if", Doc: "Conditional expression."},
+		{Name: "lambda", Doc: "Anonymous procedure."},
+		{Name: "else"},
+	})
+	c.Assert(r.BindingCount(), qt.Equals, 3)
+	bindings := r.Bindings()
+	c.Assert(bindings, qt.DeepEquals, []string{"if", "lambda", "else"})
+	specs := r.BindingSpecs()
+	c.Assert(specs, qt.HasLen, 3)
+	c.Assert(specs[0].Name, qt.Equals, "if")
+	c.Assert(specs[0].Doc, qt.Equals, "Conditional expression.")
+	c.Assert(specs[2].Doc, qt.Equals, "")
+}
+
+func TestRegistry_AddBindings_BackwardCompat(t *testing.T) {
+	c := qt.New(t)
+	r := NewRegistry()
+	r.AddBindings([]string{"if", "lambda"})
+	specs := r.BindingSpecs()
+	c.Assert(specs, qt.HasLen, 2)
+	c.Assert(specs[0].Name, qt.Equals, "if")
+	c.Assert(specs[0].Doc, qt.Equals, "")
+}
+
+func TestRegistry_AddDocumentation(t *testing.T) {
+	c := qt.New(t)
+	r := NewRegistry()
+	r.AddDocumentation("and", "Short-circuit conjunction.")
+	r.AddDocumentation("or", "Short-circuit disjunction.")
+	docs := r.Docs()
+	c.Assert(docs, qt.HasLen, 2)
+	c.Assert(docs[0].Name, qt.Equals, "and")
+	c.Assert(docs[0].Doc, qt.Equals, "Short-circuit conjunction.")
+}
+
+func TestRegistry_Clone_IncludesDocs(t *testing.T) {
+	c := qt.New(t)
+	r := NewRegistry()
+	r.AddDocumentation("and", "Short-circuit conjunction.")
+	r.AddBindingSpecs([]BindingSpec{{Name: "if", Doc: "Conditional."}})
+	r2 := r.Clone()
+	c.Assert(r2.Docs(), qt.HasLen, 1)
+	c.Assert(r2.BindingSpecs(), qt.HasLen, 1)
+	r2.AddDocumentation("or", "Disjunction.")
+	c.Assert(r.Docs(), qt.HasLen, 1)
+}
+
 func TestExtension(t *testing.T) {
 	c := qt.New(t)
 

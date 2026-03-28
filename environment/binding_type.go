@@ -25,6 +25,6 @@ const (
 	// BindingTypeSyntax indicates a syntax transformer binding (from define-syntax).
 	// These bindings live in the expand phase environment.
 	BindingTypeSyntax
-	// BindingTypePrimitive indicates a built-in primitive procedure.
+	// BindingTypePrimitive indicates a compile-time binding (special forms, auxiliary syntax).
 	BindingTypePrimitive
 )

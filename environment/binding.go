@@ -25,6 +25,7 @@ import (
 type BindingMeta struct {
 	Scopes []*syntax.Scope
 	Source *syntax.SourceContext
+	Doc    string
 }
 
 // Binding represents a variable binding in the environment.
@@ -122,6 +123,23 @@ func (p *Binding) SetSource(source *syntax.SourceContext) {
 	p.meta.Source = source
 }
 
+// Doc returns the documentation string for this binding.
+// Returns empty string for bindings without documentation.
+func (p *Binding) Doc() string {
+	if p.meta == nil {
+		return ""
+	}
+	return p.meta.Doc
+}
+
+// SetDoc updates the documentation string for this binding.
+func (p *Binding) SetDoc(doc string) {
+	if p.meta == nil {
+		p.meta = &BindingMeta{}
+	}
+	p.meta.Doc = doc
+}
+
 // SchemeString returns a string representation of this binding.
 func (p *Binding) SchemeString() string {
 	return "#<binding>"
@@ -160,6 +178,7 @@ func (p *Binding) Copy() values.Value {
 		b.meta = &BindingMeta{
 			Scopes: p.meta.Scopes,
 			Source: p.meta.Source,
+			Doc:    p.meta.Doc,
 		}
 	}
 	return b

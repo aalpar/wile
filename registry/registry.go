@@ -50,11 +50,24 @@ type GlobalValue struct {
 	Value values.Value
 }
 
+// BindingSpec defines a compile-time binding with optional documentation.
+type BindingSpec struct {
+	Name string
+	Doc  string
+}
+
+// DocEntry associates a documentation string with a named binding.
+type DocEntry struct {
+	Name string
+	Doc  string
+}
+
 // Registry is the central registry for primitives.
 type Registry struct {
 	mu           sync.RWMutex
 	primitives   []PrimitiveRegistration
-	bindings     []string // Compile-time only bindings
+	bindingSpecs []BindingSpec // Compile-time only bindings
+	docs         []DocEntry
 	initFuncs    []InitFunc
 	macroSources []string
 	globalValues []GlobalValue
@@ -64,7 +77,8 @@ type Registry struct {
 func NewRegistry() *Registry {
 	q := &Registry{
 		primitives:   make([]PrimitiveRegistration, 0, 128),
-		bindings:     make([]string, 0, 16),
+		bindingSpecs: make([]BindingSpec, 0, 32),
+		docs:         make([]DocEntry, 0, 16),
 		initFuncs:    make([]InitFunc, 0, 8),
 		macroSources: make([]string, 0, 4),
 		globalValues: make([]GlobalValue, 0, 4),
@@ -125,14 +139,31 @@ func validateParamTypes(spec PrimitiveSpec) {
 func (p *Registry) AddBinding(name string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.bindings = append(p.bindings, name)
+	p.bindingSpecs = append(p.bindingSpecs, BindingSpec{Name: name})
 }
 
 // AddBindings registers multiple compile-time only bindings.
 func (p *Registry) AddBindings(names []string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.bindings = append(p.bindings, names...)
+	for _, name := range names {
+		p.bindingSpecs = append(p.bindingSpecs, BindingSpec{Name: name})
+	}
+}
+
+// AddBindingSpecs registers multiple compile-time bindings with optional documentation.
+func (p *Registry) AddBindingSpecs(specs []BindingSpec) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.bindingSpecs = append(p.bindingSpecs, specs...)
+}
+
+// AddDocumentation registers a documentation entry for a named binding.
+// The documentation is applied to existing bindings during ApplyDocs.
+func (p *Registry) AddDocumentation(name, doc string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.docs = append(p.docs, DocEntry{Name: name, Doc: doc})
 }
 
 // AddInitFunc registers an initialization function.
@@ -197,7 +228,7 @@ func (p *Registry) HasPrimitive(name string, phase Phase) bool {
 func (p *Registry) BindingCount() int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	return len(p.bindings)
+	return len(p.bindingSpecs)
 }
 
 // MacroSources returns copies of macro source strings.
@@ -218,12 +249,32 @@ func (p *Registry) Primitives() []PrimitiveRegistration {
 	return q
 }
 
-// Bindings returns a copy of the compile-time bindings.
+// Bindings returns the names of compile-time bindings.
 func (p *Registry) Bindings() []string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	q := make([]string, len(p.bindings))
-	copy(q, p.bindings)
+	q := make([]string, len(p.bindingSpecs))
+	for i, spec := range p.bindingSpecs {
+		q[i] = spec.Name
+	}
+	return q
+}
+
+// BindingSpecs returns a defensive copy of the compile-time binding specs.
+func (p *Registry) BindingSpecs() []BindingSpec {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	q := make([]BindingSpec, len(p.bindingSpecs))
+	copy(q, p.bindingSpecs)
+	return q
+}
+
+// Docs returns a defensive copy of the documentation entries.
+func (p *Registry) Docs() []DocEntry {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	q := make([]DocEntry, len(p.docs))
+	copy(q, p.docs)
 	return q
 }
 
@@ -252,13 +303,15 @@ func (p *Registry) Clone() *Registry {
 
 	q := &Registry{
 		primitives:   make([]PrimitiveRegistration, len(p.primitives)),
-		bindings:     make([]string, len(p.bindings)),
+		bindingSpecs: make([]BindingSpec, len(p.bindingSpecs)),
+		docs:         make([]DocEntry, len(p.docs)),
 		initFuncs:    make([]InitFunc, len(p.initFuncs)),
 		macroSources: make([]string, len(p.macroSources)),
 		globalValues: make([]GlobalValue, len(p.globalValues)),
 	}
 	copy(q.primitives, p.primitives)
-	copy(q.bindings, p.bindings)
+	copy(q.bindingSpecs, p.bindingSpecs)
+	copy(q.docs, p.docs)
 	copy(q.initFuncs, p.initFuncs)
 	copy(q.macroSources, p.macroSources)
 	copy(q.globalValues, p.globalValues)
@@ -368,7 +421,8 @@ func (p *Registry) filterPrimitives(exclude []string, keyFn func(PrimitiveRegist
 
 	q := &Registry{
 		primitives:   make([]PrimitiveRegistration, 0, len(p.primitives)),
-		bindings:     make([]string, len(p.bindings)),
+		bindingSpecs: make([]BindingSpec, len(p.bindingSpecs)),
+		docs:         make([]DocEntry, len(p.docs)),
 		initFuncs:    make([]InitFunc, len(p.initFuncs)),
 		macroSources: make([]string, len(p.macroSources)),
 		globalValues: make([]GlobalValue, len(p.globalValues)),
@@ -380,7 +434,8 @@ func (p *Registry) filterPrimitives(exclude []string, keyFn func(PrimitiveRegist
 		}
 		q.primitives = append(q.primitives, reg)
 	}
-	copy(q.bindings, p.bindings)
+	copy(q.bindingSpecs, p.bindingSpecs)
+	copy(q.docs, p.docs)
 	copy(q.initFuncs, p.initFuncs)
 	copy(q.macroSources, p.macroSources)
 	copy(q.globalValues, p.globalValues)
@@ -402,19 +457,21 @@ func (p *Registry) WithoutBindings(names ...string) *Registry {
 
 	q := &Registry{
 		primitives:   make([]PrimitiveRegistration, len(p.primitives)),
-		bindings:     make([]string, 0, len(p.bindings)),
+		bindingSpecs: make([]BindingSpec, 0, len(p.bindingSpecs)),
+		docs:         make([]DocEntry, len(p.docs)),
 		initFuncs:    make([]InitFunc, len(p.initFuncs)),
 		macroSources: make([]string, len(p.macroSources)),
 		globalValues: make([]GlobalValue, len(p.globalValues)),
 	}
 	copy(q.primitives, p.primitives)
-	for _, b := range p.bindings {
-		_, ok := exclude[b]
+	for _, spec := range p.bindingSpecs {
+		_, ok := exclude[spec.Name]
 		if ok {
 			continue
 		}
-		q.bindings = append(q.bindings, b)
+		q.bindingSpecs = append(q.bindingSpecs, spec)
 	}
+	copy(q.docs, p.docs)
 	copy(q.initFuncs, p.initFuncs)
 	copy(q.macroSources, p.macroSources)
 	copy(q.globalValues, p.globalValues)
