@@ -526,6 +526,9 @@ func (p *MetaCommandHandler) searchBindings(pattern string) []DocSearchResult {
 			doc := ""
 			if idx < len(bindings) {
 				bnd := bindings[idx]
+				if bnd == nil {
+					continue
+				}
 				doc = bnd.Doc()
 				if doc == "" && bnd.BindingType() == environment.BindingTypeVariable {
 					doc = callableDoc(bnd.Value())

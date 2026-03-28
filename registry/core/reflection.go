@@ -41,12 +41,13 @@ func addReflection(r *registry.Registry) error {
 			ParamTypes: []values.ValueType{values.TypeProcedure}, ReturnType: values.TypeAny},
 		{Name: "apropos", ParamCount: 1, Impl: PrimApropos,
 			Doc: "Returns a list of symbols whose name, doc, or category matches the pattern string (case-insensitive substring).", ParamNames: []string{"pattern"}, Category: "reflection",
-			ParamTypes: []values.ValueType{values.TypeString}},
+			ParamTypes: []values.ValueType{values.TypeString}, ReturnType: values.TypeList},
 		{Name: "doc-topics", ParamCount: 0, Impl: PrimDocTopics,
-			Doc: "Returns a sorted list of documentation category name strings.", Category: "reflection"},
+			Doc: "Returns a sorted list of documentation category name strings.", Category: "reflection",
+			ReturnType: values.TypeList},
 		{Name: "doc-topic", ParamCount: 1, Impl: PrimDocTopic,
 			Doc: "Returns a sorted list of symbols in the named documentation category.", ParamNames: []string{"category"}, Category: "reflection",
-			ParamTypes: []values.ValueType{values.TypeString}},
+			ParamTypes: []values.ValueType{values.TypeString}, ReturnType: values.TypeList},
 	}, registry.PhaseRuntime)
 
 	return nil
