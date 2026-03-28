@@ -387,3 +387,33 @@ func TestEngine_EmbeddedStdlib_NoOSFallback(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "3")
 }
+
+func TestEngine_LibraryDescription(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	eng, err := wile.NewEngine(ctx,
+		wile.WithAllExtensions(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceOS(),
+		wile.WithLibraryPaths(),
+	)
+	c.Assert(err, qt.IsNil)
+	defer eng.Close()
+
+	// Positive test: imported library has a description from its .sld file
+	result, err := eng.EvalMultiple(ctx, `
+		(import (scheme time))
+		(library-description '(scheme time))
+	`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Contains,
+		"Time-related procedures")
+
+	// Negative test: unloaded library returns #f
+	result, err = eng.EvalMultiple(ctx, `
+		(library-description '(nonexistent lib))
+	`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "#f")
+}

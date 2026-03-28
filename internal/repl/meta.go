@@ -190,7 +190,7 @@ func containsString(ss []string, s string) bool {
 
 func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 	if len(args) == 0 {
-		fmt.Fprintln(out, "Usage: ,doc <name>")
+		fmt.Fprintln(out, "Usage: ,doc <name> or ,doc (<library-name>)")
 		return
 	}
 
