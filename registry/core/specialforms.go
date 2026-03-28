@@ -175,6 +175,62 @@ var compileTimeBindingSpecs = []registry.BindingSpec{
 		"Auxiliary syntax for a wildcard in syntax-rules patterns. Matches\n" +
 			"any form without binding it. Not a procedure; cannot be called\n" +
 			"directly. R7RS §4.3.2."},
+	// Library system forms (R7RS §5.6 and R6RS aliases)
+	{"define-library",
+		"Syntax: (define-library <library-name> <declaration> ...)\n" +
+			"Defines a Scheme library. <library-name> is a list of symbols.\n" +
+			"<declaration>s include (export ...), (import ...), (begin ...),\n" +
+			"(include ...), (description ...), and (cond-expand ...). R7RS §5.6."},
+	{"library",
+		"Syntax: (library <library-name> <declaration> ...)\n" +
+			"R6RS alias for define-library. Defines a Scheme library with the\n" +
+			"given name and declarations. See define-library."},
+	{"import",
+		"Syntax: (import <import-set> ...)\n" +
+			"Imports bindings from one or more libraries. Each <import-set>\n" +
+			"may be modified with only, except, prefix, or rename.\n" +
+			"R7RS §5.6."},
+	{"export",
+		"Syntax: (export <export-spec> ...)\n" +
+			"Inside define-library: specifies the exported bindings.\n" +
+			"Each <export-spec> is a name or (rename <internal> <external>).\n" +
+			"R7RS §5.6."},
+	// R6RS syntax-case macro system
+	{"syntax-case",
+		"Syntax: (syntax-case <expression> (<literal> ...) <clause> ...)\n" +
+			"Pattern-matching macro transformer (R6RS). Each clause is\n" +
+			"(<pattern> <body>) or (<pattern> <fender> <body>). Pattern\n" +
+			"variables are bound in <body>. Use (syntax template) to\n" +
+			"construct syntax output."},
+	{"syntax",
+		"Syntax: (syntax <template>)\n" +
+			"Inside syntax-case, constructs a syntax object from <template>\n" +
+			"with pattern variables substituted. Analogous to quasiquote\n" +
+			"for syntax objects (R6RS)."},
+	// Quasisyntax forms (R6RS / Wile extension)
+	{"quasisyntax",
+		"Syntax: (quasisyntax <template>) or #`<template>\n" +
+			"Like quasiquote but for syntax objects. unsyntax and\n" +
+			"unsyntax-splicing escapes are evaluated and inserted."},
+	{"unsyntax",
+		"Auxiliary syntax: (unsyntax <expression>) or #,<expression>\n" +
+			"Inside quasisyntax, evaluates <expression> (which must return\n" +
+			"a syntax object) and inserts it. Only valid inside quasisyntax."},
+	{"unsyntax-splicing",
+		"Auxiliary syntax: (unsyntax-splicing <expression>) or #,@<expression>\n" +
+			"Inside quasisyntax, evaluates <expression> (which must return a\n" +
+			"list of syntax objects) and splices them. Only valid inside quasisyntax."},
+	// with-syntax (R6RS pattern binding)
+	{"with-syntax",
+		"Syntax: (with-syntax ((<pattern> <expression>) ...) <body>)\n" +
+			"Binds syntax-case pattern variables from <expression>s.\n" +
+			"Like let, but for syntax patterns. Each <pattern> is matched\n" +
+			"against its <expression> and bound in <body>."},
+	// meta (phase-1 compilation)
+	{"meta",
+		"Syntax: (meta <expression> ...)\n" +
+			"Compiles <expression>s in the expand-time (phase-1) environment.\n" +
+			"Useful for calling expand-time helpers from compile-time code."},
 }
 
 // macroDocs provides documentation for bootstrap macros defined in Scheme.
