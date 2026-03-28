@@ -583,6 +583,11 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 	if err != nil {
 		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "load bootstrap macros")
 	}
+
+	// Inject documentation into bootstrap macro bindings (expand-time).
+	// Must run after loadBootstrapMacros so define-syntax bindings exist.
+	reg.ApplyDocs(env)
+
 	return nil
 }
 

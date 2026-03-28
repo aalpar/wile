@@ -32,6 +32,11 @@ When investigating R7RS conformance issues:
 | `2026-03-25-algebra-rewrite-impl.md` | Term rewriting implementation plan (Phase 1: wile, Phase 2: wile-goast) | **Complete** (PR #576, wile v1.9.11) |
 | `CAPTURE-ANALYSIS.md` | Capture analysis design for let bindings | **Complete** |
 | `CAPTURE-ANALYSIS-IMPL.md` | Capture analysis implementation plan | **Complete** (PR #575) |
+| `2026-03-27-procedure-documentation-design.md` | `procedure-documentation` primitive: NativeTemplate doc field, compileBody extraction, Guile-style convention | **Complete** (PR #579) |
+| `2026-03-27-scheme-library-docstrings-design.md` | Scheme library docstrings design: conventions, phasing, scope (300 procs across 29 files) | **Complete** |
+| `2026-03-27-scheme-library-docstrings-impl.md` | Scheme library docstrings implementation: 4 phases (algebra, control/kanren, SRFI-1, chibi, CxR) | **Complete** (PR #582) |
+| `2026-03-27-special-form-macro-docstrings-design.md` | Special form & macro docstrings: `BindingMeta.Doc`, `BindingSpec`, `DocEntry`, post-bootstrap `ApplyDocs` | **Approved** (design) |
+| `2026-03-27-special-form-macro-docstrings-impl.md` | Special form & macro docstrings implementation: 8 tasks across environment, registry, core, repl, engine | Open |
 | `2026-03-26-extension-contracts-design.md` | Extension API contract system: ValueType enum, PrimitiveSpec type declarations, validation, doc integration | **Approved** (design) |
 | `2026-03-26-extension-contracts-impl.md` | Extension contracts implementation plan: 4 phases, 8 tasks in Phase 1 | Open |
 | `2026-03-26-environment-profiles.md` | Environment profiles design: named profiles (Tiny, Console, Small, KitchenSink), sandbox modifier | Draft |

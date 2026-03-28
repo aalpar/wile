@@ -30,8 +30,8 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame)
 	defer p.mu.RUnlock()
 
 	// Register compile-time bindings first
-	for _, name := range p.bindings {
-		err := registerCompileTimeBinding(env, name)
+	for _, spec := range p.bindingSpecs {
+		err := registerCompileTimeBinding(env, spec)
 		if err != nil {
 			return err
 		}
@@ -40,7 +40,7 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame)
 	// Register compile-time primitives (bindings only, no values)
 	for _, reg := range p.primitives {
 		if reg.Phases.HasCompile() && !reg.Phases.HasRuntime() {
-			err := registerCompileTimeBinding(env, reg.Spec.Name)
+			err := registerCompileTimeBinding(env, BindingSpec{Name: reg.Spec.Name})
 			if err != nil {
 				return err
 			}
@@ -87,9 +87,9 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame)
 }
 
 //nolint:unparam // Returns error for consistency with other register functions
-func registerCompileTimeBinding(env *environment.EnvironmentFrame, name string) error {
+func registerCompileTimeBinding(env *environment.EnvironmentFrame, spec BindingSpec) error {
 	compileEnv := env.Compile()
-	sym := values.NewSymbol(name)
+	sym := values.NewSymbol(spec.Name)
 	compileEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypePrimitive)
 	return nil
 }
@@ -144,4 +144,34 @@ func registerExpandTimePrimitive(env *environment.EnvironmentFrame, spec Primiti
 		return werr.WrapForeignErrorf(err, "error registering expand-time primitive %s", spec.Name)
 	}
 	return nil
+}
+
+// ApplyDocs attaches documentation entries to existing bindings in the environment.
+// It searches all phases for each documented name and sets the doc string on every
+// matching binding. This is necessary because some names (e.g., special forms) have
+// bindings in multiple phases (expand and compile), and the REPL's ,doc command may
+// find any of them.
+func (p *Registry) ApplyDocs(env *environment.EnvironmentFrame) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	topLevel := env.Namespace()
+	if topLevel == nil {
+		return
+	}
+	phases := topLevel.Phases()
+
+	for _, doc := range p.docs {
+		sym := values.NewSymbol(doc.Name)
+		for _, phase := range phases.Phases() {
+			phaseEnv := phases.Get(phase)
+			if phaseEnv == nil {
+				continue
+			}
+			bnd := phaseEnv.GetBinding(sym)
+			if bnd != nil {
+				bnd.SetDoc(doc.Doc)
+			}
+		}
+	}
 }

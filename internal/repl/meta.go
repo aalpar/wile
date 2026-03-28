@@ -277,7 +277,7 @@ func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding,
 
 	switch bnd.BindingType() {
 	case environment.BindingTypePrimitive:
-		fmt.Fprintf(w, "%s: primitive (%s)\n", name, phaseName)
+		fmt.Fprintf(w, "%s: special form (%s)\n", name, phaseName)
 	case environment.BindingTypeSyntax:
 		fmt.Fprintf(w, "%s: syntax transformer (%s)\n", name, phaseName)
 	case environment.BindingTypeVariable:
@@ -285,6 +285,11 @@ func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding,
 		fmt.Fprintf(w, "%s: %s (%s)\n", name, val.SchemeString(), phaseName)
 	default:
 		fmt.Fprintf(w, "%s: bound in %s\n", name, phaseName)
+	}
+
+	doc := bnd.Doc()
+	if doc != "" {
+		fmt.Fprintf(w, "\n  %s\n", doc)
 	}
 }
 

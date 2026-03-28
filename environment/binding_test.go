@@ -214,6 +214,33 @@ func TestBinding_SetSource(t *testing.T) {
 	qt.Assert(t, b.Source().File, qt.Equals, "test.scm")
 }
 
+func TestBinding_Doc(t *testing.T) {
+	b := NewBinding(values.Void, BindingTypePrimitive)
+	qt.Assert(t, b.Doc(), qt.Equals, "")
+	b.SetDoc("Conditional expression.")
+	qt.Assert(t, b.Doc(), qt.Equals, "Conditional expression.")
+}
+
+func TestBinding_Doc_PreservesExistingMeta(t *testing.T) {
+	scope := syntax.NewScope()
+	b := NewBindingWithScopes(values.NewInteger(1), BindingTypeVariable, []*syntax.Scope{scope})
+	b.SetDoc("A documented binding.")
+	qt.Assert(t, b.Doc(), qt.Equals, "A documented binding.")
+	qt.Assert(t, b.Scopes(), qt.HasLen, 1)
+}
+
+func TestBinding_Copy_WithDoc(t *testing.T) {
+	b1 := NewBinding(values.Void, BindingTypePrimitive)
+	b1.SetDoc("Original doc.")
+	copied := b1.Copy()
+	b2, ok := copied.(*Binding)
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, b2.Doc(), qt.Equals, "Original doc.")
+	b2.SetDoc("Changed doc.")
+	qt.Assert(t, b1.Doc(), qt.Equals, "Original doc.")
+	qt.Assert(t, b2.Doc(), qt.Equals, "Changed doc.")
+}
+
 func TestBinding_Copy_WithSource(t *testing.T) {
 	source := &syntax.SourceContext{
 		File:  "test.scm",
