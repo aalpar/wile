@@ -176,7 +176,8 @@ func (ms *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (*
 	}
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
-	if err := ms.initLocked(ctx); err != nil {
+	err := ms.initLocked(ctx)
+	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("engine init failed: %v", err)), nil
 	}
 	val, err := ms.engine.EvalMultiple(ctx, code)
@@ -194,7 +195,8 @@ func (ms *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (*
 func (ms *mcpServer) runMeta(ctx context.Context, line string) (*mcp.CallToolResult, error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
-	if err := ms.initLocked(ctx); err != nil {
+	err := ms.initLocked(ctx)
+	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("engine init failed: %v", err)), nil
 	}
 	var sb strings.Builder
@@ -238,7 +240,8 @@ func (ms *mcpServer) handleReset(_ context.Context, _ mcp.CallToolRequest) (*mcp
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 	if ms.engine != nil {
-		if err := ms.engine.Close(); err != nil {
+		err := ms.engine.Close()
+		if err != nil {
 			log.Printf("reset: engine close: %v", err)
 		}
 		ms.engine = nil
@@ -295,7 +298,8 @@ func (ms *mcpServer) makePromptHandler(template string, argNames []string) serve
 	return func(_ context.Context, req mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 		text := template
 		for k, v := range req.Params.Arguments {
-			if _, ok := allowed[k]; !ok {
+			_, ok := allowed[k]
+			if !ok {
 				continue
 			}
 			text = strings.ReplaceAll(text, "{{"+k+"}}", v)
