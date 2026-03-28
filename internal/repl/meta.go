@@ -68,6 +68,8 @@ func (p *MetaCommandHandler) Handle(line string, out io.Writer) bool {
 		p.cmdTopics(out)
 	case "topic":
 		p.cmdTopic(args, out)
+	case "libraries", "libs":
+		p.cmdLibraries(out)
 	default:
 		// Delegate to debug context
 		if p.debugCtx != nil && p.debugCtx.HandleDebugCommand(line, out) {
@@ -126,6 +128,9 @@ var metaCommands = []commandInfo{
 		"session"},
 	{"topic", nil, "List bindings in a documentation category",
 		"Usage: ,topic <category>\n\nLists all bindings in the named category.\nUse ,topics to see available categories.",
+		"session"},
+	{"libraries", []string{"libs"}, "List loaded Scheme libraries",
+		"Usage: ,libraries\n\nLists all Scheme libraries currently loaded in the environment,\nsorted alphabetically, with their descriptions.",
 		"session"},
 }
 
@@ -552,6 +557,45 @@ func (p *MetaCommandHandler) cmdTopic(args []string, out io.Writer) {
 	for _, r := range results {
 		doc := firstLine(r.Doc)
 		fmt.Fprintf(&content, "  %-*s  %s\n", maxName, r.Name, doc)
+	}
+	writeWithPager(out, content.String(), os.Getenv("PAGER"))
+}
+
+func (p *MetaCommandHandler) cmdLibraries(out io.Writer) {
+	if p.env == nil {
+		fmt.Fprintln(out, "No environment available")
+		return
+	}
+	regAny := p.env.LibraryRegistry()
+	if regAny == nil {
+		fmt.Fprintln(out, "No library registry configured")
+		return
+	}
+	reg, ok := regAny.(*machine.LibraryRegistry)
+	if !ok {
+		fmt.Fprintln(out, "Library registry unavailable")
+		return
+	}
+
+	libs := reg.All()
+	if len(libs) == 0 {
+		fmt.Fprintln(out, "No libraries loaded")
+		return
+	}
+
+	var content strings.Builder
+	fmt.Fprintf(&content, "Loaded libraries (%d):\n", len(libs))
+	maxName := 0
+	for _, lib := range libs {
+		n := len(lib.Name.SchemeString())
+		if n > maxName {
+			maxName = n
+		}
+	}
+	for _, lib := range libs {
+		name := lib.Name.SchemeString()
+		desc := firstLine(lib.Description)
+		fmt.Fprintf(&content, "  %-*s  %s\n", maxName, name, desc)
 	}
 	writeWithPager(out, content.String(), os.Getenv("PAGER"))
 }

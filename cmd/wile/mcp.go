@@ -17,6 +17,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"strings"
 	"sync"
 
@@ -26,17 +27,17 @@ import (
 	"github.com/aalpar/wile"
 	"github.com/aalpar/wile/internal/repl"
 	"github.com/aalpar/wile/stdlib"
+	"github.com/aalpar/wile/werr"
 )
 
 type mcpServer struct {
-	engine     *wile.Engine
-	meta       *repl.MetaCommandHandler
-	engineOnce sync.Once
-	engineErr  error
+	mu     sync.Mutex
+	engine *wile.Engine
+	meta   *repl.MetaCommandHandler
 }
 
 // doMCP starts a Model Context Protocol server on stdio, exposing the Wile
-// documentation and evaluation tools: eval, doc, apropos, topics, topic.
+// documentation, evaluation, and session management tools.
 func doMCP(ctx context.Context) error {
 	ms := &mcpServer{}
 
@@ -49,12 +50,14 @@ func doMCP(ctx context.Context) error {
 		"wile",
 		v,
 		server.WithToolCapabilities(true),
+		server.WithPromptCapabilities(true),
 	)
 
 	s.AddTool(
 		mcp.NewTool("eval",
 			mcp.WithDescription(
-				"Evaluate one or more Scheme expressions. "+
+				"Evaluate one or more Scheme expressions in a persistent session. "+
+					"Definitions, imports, and state carry forward across calls. "+
 					"All R7RS features and wile extensions are available. "+
 					"Returns the value of the last expression, or empty string for void results."),
 			mcp.WithString("code",
@@ -116,26 +119,56 @@ func doMCP(ctx context.Context) error {
 		ms.handleTopic,
 	)
 
+	s.AddTool(
+		mcp.NewTool("libraries",
+			mcp.WithDescription(
+				"List all Scheme libraries currently loaded in the session, "+
+					"sorted alphabetically with their descriptions. "+
+					"Use doc with a library name (e.g. \"(scheme base)\") to see its exports."),
+		),
+		ms.handleLibraries,
+	)
+
+	s.AddTool(
+		mcp.NewTool("reset",
+			mcp.WithDescription(
+				"Reset the Scheme session, discarding all definitions and imported libraries. "+
+					"The next tool call reinitializes the engine from scratch. "+
+					"Use this to start fresh without restarting the MCP server."),
+		),
+		ms.handleReset,
+	)
+
+	err := ms.registerPrompts(s)
+	if err != nil {
+		return err
+	}
+
 	return server.ServeStdio(s)
 }
 
-// getHandler lazily initializes the engine and meta-command handler.
-// All five tool handlers go through this.
+// getHandler lazily initializes the engine and meta-command handler under the
+// mutex. Subsequent calls return the existing handler without re-initializing.
+// reset() sets engine and meta to nil so the next getHandler call rebuilds them.
 func (ms *mcpServer) getHandler(ctx context.Context) (*repl.MetaCommandHandler, error) {
-	ms.engineOnce.Do(func() {
-		ms.engine, ms.engineErr = wile.NewEngine(ctx,
-			wile.WithAllExtensions(),
-			wile.WithSourceFS(stdlib.FS),
-			wile.WithSourceOS(),
-			wile.WithLibraryPaths(buildLibraryPaths()...),
-		)
-		if ms.engineErr != nil {
-			return
-		}
-		docProv := repl.NewRegistryDocProvider(ms.engine.Registry())
-		ms.meta = repl.NewMetaCommandHandler(ms.engine.Environment(), nil, docProv)
-	})
-	return ms.meta, ms.engineErr
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+	if ms.meta != nil {
+		return ms.meta, nil
+	}
+	engine, err := wile.NewEngine(ctx,
+		wile.WithAllExtensions(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceOS(),
+		wile.WithLibraryPaths(buildLibraryPaths()...),
+	)
+	if err != nil {
+		return nil, err
+	}
+	ms.engine = engine
+	docProv := repl.NewRegistryDocProvider(engine.Registry())
+	ms.meta = repl.NewMetaCommandHandler(engine.Environment(), nil, docProv)
+	return ms.meta, nil
 }
 
 func (ms *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -147,7 +180,10 @@ func (ms *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (*
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("engine init failed: %v", err)), nil
 	}
-	val, err := ms.engine.EvalMultiple(ctx, code)
+	ms.mu.Lock()
+	engine := ms.engine
+	ms.mu.Unlock()
+	val, err := engine.EvalMultiple(ctx, code)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -195,4 +231,72 @@ func (ms *mcpServer) handleTopic(ctx context.Context, req mcp.CallToolRequest) (
 		return mcp.NewToolResultError("category parameter is required"), nil
 	}
 	return ms.runMeta(ctx, ",topic "+category)
+}
+
+func (ms *mcpServer) handleLibraries(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return ms.runMeta(ctx, ",libraries")
+}
+
+func (ms *mcpServer) handleReset(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+	if ms.engine != nil {
+		_ = ms.engine.Close()
+		ms.engine = nil
+		ms.meta = nil
+	}
+	return mcp.NewToolResultText("Session reset. The next call will reinitialize the engine."), nil
+}
+
+func (ms *mcpServer) registerPrompts(s *server.MCPServer) error {
+	type promptDef struct {
+		name        string
+		description string
+		file        string
+		args        []mcp.PromptOption
+	}
+
+	prompts := []promptDef{
+		{
+			name:        "wile-scheme",
+			description: "Write and evaluate Scheme code with wile — session model, imports, available libraries, and common patterns",
+			file:        "prompts/wile-scheme.md",
+			args: []mcp.PromptOption{
+				mcp.WithArgument("task",
+					mcp.RequiredArgument(),
+					mcp.ArgumentDescription("The Scheme task or question to address"),
+				),
+			},
+		},
+	}
+
+	for _, p := range prompts {
+		content, readErr := fs.ReadFile(embeddedPrompts, p.file)
+		if readErr != nil {
+			return werr.WrapForeignErrorf(werr.ErrFileNotFound, "reading prompt %s: %v", p.file, readErr)
+		}
+		text := string(content)
+		promptOpts := append([]mcp.PromptOption{mcp.WithPromptDescription(p.description)}, p.args...)
+
+		s.AddPrompt(
+			mcp.NewPrompt(p.name, promptOpts...),
+			ms.makePromptHandler(text),
+		)
+	}
+	return nil
+}
+
+func (ms *mcpServer) makePromptHandler(template string) server.PromptHandlerFunc {
+	return func(_ context.Context, req mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+		text := template
+		for k, v := range req.Params.Arguments {
+			text = strings.ReplaceAll(text, "{{"+k+"}}", v)
+		}
+		text = strings.ReplaceAll(text, "{{task}}", "(not specified)")
+		return &mcp.GetPromptResult{
+			Messages: []mcp.PromptMessage{
+				mcp.NewPromptMessage(mcp.RoleUser, mcp.NewTextContent(text)),
+			},
+		}, nil
+	}
 }
