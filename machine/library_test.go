@@ -251,6 +251,12 @@ func TestLibraryDescription(t *testing.T) {
 			errContains: "description: argument must be a string",
 		},
 		{
+			name:        "extra arguments rejected",
+			input:       `(define-library (test extra) (description "hello" "world"))`,
+			wantErr:     true,
+			errContains: "description: expected exactly one string argument",
+		},
+		{
 			name:     "last description wins",
 			input:    `(define-library (test multi) (description "first") (description "second") (export))`,
 			wantDesc: "second",

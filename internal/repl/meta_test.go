@@ -374,6 +374,18 @@ func TestCmdDocLibrary(t *testing.T) {
 				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
 		})
 	}
+
+	// Separate test: env without library registry
+	t.Run("no registry configured", func(t *testing.T) {
+		t.Setenv("PAGER", "")
+		noRegEnv, _, err := bootstrap.NewTopLevelWithRegistry(ctx)
+		qt.Assert(t, err, qt.IsNil)
+		var buf bytes.Buffer
+		h := NewMetaCommandHandler(noRegEnv, nil, nil)
+		h.cmdDoc([]string{"(some", "lib)"}, &buf)
+		qt.Assert(t, strings.Contains(buf.String(), "no library registry"), qt.IsTrue,
+			qt.Commentf("output was: %q", buf.String()))
+	})
 }
 
 func TestMetaHandleDebugDelegation(t *testing.T) {

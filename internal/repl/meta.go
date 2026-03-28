@@ -268,18 +268,18 @@ func (p *MetaCommandHandler) cmdDocLibrary(nameStr string, out io.Writer) {
 	libName := machine.NewLibraryName(parts...)
 
 	if p.env == nil {
-		fmt.Fprintf(out, "Library %s: not loaded\n", libName.SchemeString())
+		fmt.Fprintf(out, "Library %s: no environment available\n", libName.SchemeString())
 		return
 	}
 
 	regAny := p.env.LibraryRegistry()
 	if regAny == nil {
-		fmt.Fprintf(out, "Library %s: not loaded\n", libName.SchemeString())
+		fmt.Fprintf(out, "Library %s: no library registry configured\n", libName.SchemeString())
 		return
 	}
 	reg, ok := regAny.(*machine.LibraryRegistry)
 	if !ok {
-		fmt.Fprintf(out, "Library %s: not loaded\n", libName.SchemeString())
+		fmt.Fprintf(out, "Library %s: library registry unavailable\n", libName.SchemeString())
 		return
 	}
 

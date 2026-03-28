@@ -15,7 +15,6 @@
 package core
 
 import (
-	"context"
 	"sort"
 	"strings"
 
@@ -357,9 +356,9 @@ func PrimDocTopic(mc *machine.MachineContext) error {
 // Returns the description string of a loaded library, or #f if none or not loaded.
 func PrimLibraryDescription(mc *machine.MachineContext) error {
 	nameList := mc.Arg(0)
-	libName, err := machine.ParseLibraryNameFromDatum(context.Background(), nameList)
+	libName, err := machine.ParseLibraryNameFromDatum(mc.Context(), nameList)
 	if err != nil {
-		return err
+		return werr.WrapForeignErrorf(err, "library-description: invalid library name")
 	}
 
 	regAny := mc.EnvironmentFrame().LibraryRegistry()

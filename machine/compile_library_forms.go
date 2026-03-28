@@ -207,6 +207,11 @@ func (p *CompileTimeContinuation) processLibraryDescription(lib *CompiledLibrary
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotAString, "description: argument must be a string")
 	}
+	if !syntax.IsSyntaxEmptyList(argsPair.SyntaxCdr()) {
+		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "description: expected exactly one string argument")
+	}
+	// Last-writer-wins: multiple description declarations are allowed;
+	// the last one takes effect.
 	lib.Description = str.Value
 	return nil
 }
