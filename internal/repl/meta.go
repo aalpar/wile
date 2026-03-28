@@ -62,6 +62,12 @@ func (p *MetaCommandHandler) Handle(line string, out io.Writer) bool {
 		p.cmdDoc(args, out)
 	case "edit":
 		p.cmdEdit(args, out)
+	case "apropos", "a":
+		p.cmdApropos(args, out)
+	case "topics":
+		p.cmdTopics(out)
+	case "topic":
+		p.cmdTopic(args, out)
 	default:
 		// Delegate to debug context
 		if p.debugCtx != nil && p.debugCtx.HandleDebugCommand(line, out) {
@@ -111,6 +117,15 @@ var metaCommands = []commandInfo{
 		"session"},
 	{"edit", nil, "Open file in $EDITOR",
 		"Usage: ,edit <file>\n\nOpens the given file in the editor specified by the $EDITOR\nenvironment variable. The REPL blocks until the editor exits.",
+		"session"},
+	{"apropos", []string{"a"}, "Search bindings by name, doc, or category",
+		"Usage: ,apropos <pattern>\n\nSearches all bindings for case-insensitive substring matches\nagainst names, documentation, and categories.\nResults show name, category, and one-line description.",
+		"session"},
+	{"topics", nil, "List documentation categories",
+		"Usage: ,topics\n\nShows all available documentation categories with entry counts.",
+		"session"},
+	{"topic", nil, "List bindings in a documentation category",
+		"Usage: ,topic <category>\n\nLists all bindings in the named category.\nUse ,topics to see available categories.",
 		"session"},
 }
 
@@ -369,4 +384,185 @@ func (p *MetaCommandHandler) cmdEdit(args []string, out io.Writer) {
 	if err != nil {
 		fmt.Fprintf(out, "Editor exited with error: %v\n", err)
 	}
+}
+
+func (p *MetaCommandHandler) cmdApropos(args []string, out io.Writer) {
+	if len(args) == 0 {
+		fmt.Fprintln(out, "Usage: ,apropos <pattern>")
+		return
+	}
+
+	pattern := strings.Join(args, " ")
+	searchProv, ok := p.docProv.(DocSearchProvider)
+	if !ok {
+		fmt.Fprintln(out, "Search not available")
+		return
+	}
+
+	results := searchProv.Search(pattern)
+
+	// Also search phase environment bindings
+	if p.env != nil {
+		envResults := p.searchBindings(pattern)
+		results = mergeSearchResults(results, envResults)
+	}
+
+	if len(results) == 0 {
+		fmt.Fprintf(out, "No matches for %q\n", pattern)
+		return
+	}
+
+	var content strings.Builder
+	maxName := 0
+	for _, r := range results {
+		if len(r.Name) > maxName {
+			maxName = len(r.Name)
+		}
+	}
+	for _, r := range results {
+		cat := ""
+		if r.Category != "" {
+			cat = fmt.Sprintf("[%s]", r.Category)
+		}
+		doc := firstLine(r.Doc)
+		fmt.Fprintf(&content, "  %-*s  %-14s %s\n", maxName, r.Name, cat, doc)
+	}
+	writeWithPager(out, content.String(), os.Getenv("PAGER"))
+}
+
+func (p *MetaCommandHandler) cmdTopics(out io.Writer) {
+	searchProv, ok := p.docProv.(DocSearchProvider)
+	if !ok {
+		fmt.Fprintln(out, "Topics not available")
+		return
+	}
+
+	cats := searchProv.Categories()
+	if len(cats) == 0 {
+		fmt.Fprintln(out, "No categories found")
+		return
+	}
+
+	var content strings.Builder
+	fmt.Fprintln(&content, "Categories:")
+	for _, cat := range cats {
+		count := len(searchProv.ByCategory(cat))
+		fmt.Fprintf(&content, "  %-18s (%d)\n", cat, count)
+	}
+	writeWithPager(out, content.String(), os.Getenv("PAGER"))
+}
+
+func (p *MetaCommandHandler) cmdTopic(args []string, out io.Writer) {
+	if len(args) == 0 {
+		fmt.Fprintln(out, "Usage: ,topic <category>")
+		return
+	}
+
+	category := args[0]
+	searchProv, ok := p.docProv.(DocSearchProvider)
+	if !ok {
+		fmt.Fprintln(out, "Topics not available")
+		return
+	}
+
+	results := searchProv.ByCategory(category)
+	if len(results) == 0 {
+		fmt.Fprintf(out, "No category %q (use ,topics to list categories)\n", category)
+		return
+	}
+
+	var content strings.Builder
+	fmt.Fprintf(&content, "%s (%d procedures):\n", category, len(results))
+	maxName := 0
+	for _, r := range results {
+		if len(r.Name) > maxName {
+			maxName = len(r.Name)
+		}
+	}
+	for _, r := range results {
+		doc := firstLine(r.Doc)
+		fmt.Fprintf(&content, "  %-*s  %s\n", maxName, r.Name, doc)
+	}
+	writeWithPager(out, content.String(), os.Getenv("PAGER"))
+}
+
+// searchBindings searches phase environment bindings for the pattern.
+func (p *MetaCommandHandler) searchBindings(pattern string) []DocSearchResult {
+	lowerPattern := strings.ToLower(pattern)
+	topLevel := p.env.Namespace()
+	if topLevel == nil {
+		return nil
+	}
+	phases := topLevel.Phases()
+	phaseIndices := phases.Phases()
+
+	seen := make(map[string]bool)
+	var results []DocSearchResult
+	for _, phase := range phaseIndices {
+		phaseEnv := phases.Get(phase)
+		if phaseEnv == nil {
+			continue
+		}
+		global := phaseEnv.GlobalEnvironment()
+		if global == nil {
+			continue
+		}
+		keys := global.Keys()
+		bindings := global.Bindings()
+		for sym, idx := range keys {
+			name := sym.Key
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+
+			doc := ""
+			if idx < len(bindings) {
+				bnd := bindings[idx]
+				doc = bnd.Doc()
+				if doc == "" && bnd.BindingType() == environment.BindingTypeVariable {
+					doc = callableDoc(bnd.Value())
+				}
+			}
+
+			if strings.Contains(strings.ToLower(name), lowerPattern) ||
+				strings.Contains(strings.ToLower(doc), lowerPattern) {
+				results = append(results, DocSearchResult{
+					Name: name,
+					Doc:  doc,
+				})
+			}
+		}
+	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Name < results[j].Name
+	})
+	return results
+}
+
+// mergeSearchResults merges registry and environment results, deduplicating by name.
+// Registry results take precedence (richer metadata).
+func mergeSearchResults(registryResults, envResults []DocSearchResult) []DocSearchResult {
+	seen := make(map[string]bool, len(registryResults))
+	for _, r := range registryResults {
+		seen[r.Name] = true
+	}
+	for _, r := range envResults {
+		if !seen[r.Name] {
+			registryResults = append(registryResults, r)
+		}
+	}
+	sort.Slice(registryResults, func(i, j int) bool {
+		return registryResults[i].Name < registryResults[j].Name
+	})
+	return registryResults
+}
+
+// firstLine returns the first line of s, or s itself if single-line.
+func firstLine(s string) string {
+	line, _, found := strings.Cut(s, "\n")
+	if found {
+		return line
+	}
+	return s
 }

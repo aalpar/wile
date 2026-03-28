@@ -39,6 +39,14 @@ func addReflection(r *registry.Registry) error {
 		{Name: "procedure-documentation", ParamCount: 1, Impl: PrimProcedureDocumentation,
 			Doc: "Returns the docstring of a procedure, or #f if none. Works for both Scheme-defined and foreign procedures.", ParamNames: []string{"proc"}, Category: "reflection",
 			ParamTypes: []values.ValueType{values.TypeProcedure}, ReturnType: values.TypeAny},
+		{Name: "apropos", ParamCount: 1, Impl: PrimApropos,
+			Doc: "Returns a list of symbols whose name, doc, or category matches the pattern string (case-insensitive substring).", ParamNames: []string{"pattern"}, Category: "reflection",
+			ParamTypes: []values.ValueType{values.TypeString}},
+		{Name: "doc-topics", ParamCount: 0, Impl: PrimDocTopics,
+			Doc: "Returns a sorted list of documentation category name strings.", Category: "reflection"},
+		{Name: "doc-topic", ParamCount: 1, Impl: PrimDocTopic,
+			Doc: "Returns a sorted list of symbols in the named documentation category.", ParamNames: []string{"category"}, Category: "reflection",
+			ParamTypes: []values.ValueType{values.TypeString}},
 	}, registry.PhaseRuntime)
 
 	return nil

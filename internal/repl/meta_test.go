@@ -266,6 +266,78 @@ func TestFormatPrimitiveDoc_WithoutTypes(t *testing.T) {
 		qt.Commentf("output should have no return type: %s", output))
 }
 
+func TestCmdApropos(t *testing.T) {
+	ctx := context.Background()
+	env, reg, err := bootstrap.NewTopLevelWithRegistry(ctx)
+	qt.Assert(t, err, qt.IsNil)
+	docProv := NewRegistryDocProvider(reg)
+
+	tcs := []struct {
+		name    string
+		args    []string
+		contain string
+	}{
+		{"no args", nil, "Usage"},
+		{"matches name", []string{"string-app"}, "string-append"},
+		{"matches category", []string{"arithmetic"}, "+"},
+		{"no match", []string{"zzzzzzzzz"}, "No matches"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("PAGER", "")
+			var buf bytes.Buffer
+			h := NewMetaCommandHandler(env, nil, docProv)
+			h.cmdApropos(tc.args, &buf)
+			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
+				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
+		})
+	}
+}
+
+func TestCmdTopics(t *testing.T) {
+	ctx := context.Background()
+	_, reg, err := bootstrap.NewTopLevelWithRegistry(ctx)
+	qt.Assert(t, err, qt.IsNil)
+	docProv := NewRegistryDocProvider(reg)
+
+	t.Setenv("PAGER", "")
+	var buf bytes.Buffer
+	h := NewMetaCommandHandler(nil, nil, docProv)
+	h.cmdTopics(&buf)
+	output := buf.String()
+	qt.Assert(t, strings.Contains(output, "arithmetic"), qt.IsTrue,
+		qt.Commentf("output: %q", output))
+	qt.Assert(t, strings.Contains(output, "strings"), qt.IsTrue,
+		qt.Commentf("output: %q", output))
+}
+
+func TestCmdTopic(t *testing.T) {
+	ctx := context.Background()
+	_, reg, err := bootstrap.NewTopLevelWithRegistry(ctx)
+	qt.Assert(t, err, qt.IsNil)
+	docProv := NewRegistryDocProvider(reg)
+
+	tcs := []struct {
+		name    string
+		args    []string
+		contain string
+	}{
+		{"no args", nil, "Usage"},
+		{"valid category", []string{"arithmetic"}, "+"},
+		{"unknown category", []string{"nonexistent"}, "No category"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("PAGER", "")
+			var buf bytes.Buffer
+			h := NewMetaCommandHandler(nil, nil, docProv)
+			h.cmdTopic(tc.args, &buf)
+			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
+				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
+		})
+	}
+}
+
 func TestMetaHandleDebugDelegation(t *testing.T) {
 	tcs := []struct {
 		name    string

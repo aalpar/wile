@@ -15,7 +15,11 @@
 package core
 
 import (
+	"sort"
+	"strings"
+
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -264,5 +268,118 @@ func PrimProcedureDocumentation(mc *machine.MachineContext) error {
 	default:
 		mc.SetValue(values.FalseValue)
 	}
+	return nil
+}
+
+// registryFromContext extracts the *registry.Registry from the MachineContext's
+// namespace. Returns nil if unavailable.
+func registryFromContext(mc *machine.MachineContext) *registry.Registry {
+	regAny := mc.EnvironmentFrame().Namespace().Registry()
+	if regAny == nil {
+		return nil
+	}
+	reg, ok := regAny.(*registry.Registry)
+	if !ok {
+		return nil
+	}
+	return reg
+}
+
+// PrimDocTopics implements (doc-topics).
+// Returns a sorted list of category name strings.
+func PrimDocTopics(mc *machine.MachineContext) error {
+	reg := registryFromContext(mc)
+	if reg == nil {
+		mc.SetValue(values.EmptyList)
+		return nil
+	}
+
+	byCategory := reg.PrimitivesByCategory()
+	cats := make([]string, 0, len(byCategory))
+	for cat := range byCategory {
+		if cat != "" {
+			cats = append(cats, cat)
+		}
+	}
+	sort.Strings(cats)
+
+	items := make([]values.Value, len(cats))
+	for i, cat := range cats {
+		items[i] = values.NewString(cat)
+	}
+	mc.SetValue(values.List(items...))
+	return nil
+}
+
+// PrimDocTopic implements (doc-topic category).
+// Returns a sorted list of symbols in the named category.
+func PrimDocTopic(mc *machine.MachineContext) error {
+	s, ok := mc.Arg(0).(*values.String)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAString,
+			"doc-topic: expected string category name")
+	}
+	category := s.Value
+
+	reg := registryFromContext(mc)
+	if reg == nil {
+		mc.SetValue(values.EmptyList)
+		return nil
+	}
+
+	byCategory := reg.PrimitivesByCategory()
+	prims, found := byCategory[category]
+	if !found {
+		mc.SetValue(values.EmptyList)
+		return nil
+	}
+
+	names := make([]string, len(prims))
+	for i, pr := range prims {
+		names[i] = pr.Spec.Name
+	}
+	sort.Strings(names)
+
+	syms := make([]values.Value, len(names))
+	for i, n := range names {
+		syms[i] = values.NewSymbol(n)
+	}
+	mc.SetValue(values.List(syms...))
+	return nil
+}
+
+// PrimApropos implements (apropos pattern).
+// Returns a sorted list of symbols whose name, doc, or category contains
+// the pattern as a case-insensitive substring.
+func PrimApropos(mc *machine.MachineContext) error {
+	s, ok := mc.Arg(0).(*values.String)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAString,
+			"apropos: expected string pattern")
+	}
+	pattern := strings.ToLower(s.Value)
+
+	reg := registryFromContext(mc)
+	if reg == nil {
+		mc.SetValue(values.EmptyList)
+		return nil
+	}
+
+	var names []string
+	for _, pr := range reg.Primitives() {
+		spec := pr.Spec
+		if strings.Contains(strings.ToLower(spec.Name), pattern) ||
+			strings.Contains(strings.ToLower(spec.Doc), pattern) ||
+			strings.Contains(strings.ToLower(spec.Category), pattern) {
+			names = append(names, spec.Name)
+		}
+	}
+	sort.Strings(names)
+
+	syms := make([]values.Value, len(names))
+	for i, n := range names {
+		syms[i] = values.NewSymbol(n)
+	}
+	mc.SetValue(values.List(syms...))
 	return nil
 }

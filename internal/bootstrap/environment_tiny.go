@@ -107,6 +107,10 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 		return nil, werr.WrapForeignErrorf(err, "error applying registry to environment")
 	}
 
+	// Store registry on namespace so runtime primitives (apropos, doc-topic,
+	// doc-topics) can access it via mc.EnvironmentFrame().Namespace().Registry().
+	env.Namespace().SetRegistry(reg)
+
 	// Register syntax compilers in the compile environment
 	err = machine.RegisterSyntaxCompilers(env)
 	if err != nil {
