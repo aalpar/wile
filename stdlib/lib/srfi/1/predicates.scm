@@ -3,7 +3,7 @@
 ;; BSD-style license: http://synthcode.com/license.txt
 
 (define (proper-list? x)
-  "Return #t if X is a proper list, i.e. a chain of pairs\nterminated by the empty list. Returns #f for dotted lists,\ncircular lists, and non-pair values."
+  "Return #t if X is a proper list, i.e. a chain of pairs\nterminated by the empty list. Returns #f for dotted lists\nand non-pair values. Does not terminate on circular lists."
   (cond ((null? x) #t)
         ((pair? x) (proper-list? (cdr x)))
         (else #f)))
