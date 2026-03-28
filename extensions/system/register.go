@@ -31,21 +31,21 @@ var AddToRegistry = Builder.AddToRegistry
 func addPrimitives(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "command-line", Impl: PrimCommandLine,
-			Doc: "Returns the command-line arguments as a list.", Category: "system"},
+			Doc: "Returns the command-line arguments as a list of strings, including the program name.", Category: "system"},
 		{Name: "exit", ParamCount: 1, IsVariadic: true, Impl: PrimExit,
-			Doc: "Exits the program with the given status.", ParamNames: []string{"status"}, Category: "system"},
+			Doc: "Exits the process. With no argument or #t, exits with code 0. With #f, exits with code 1. With an integer, uses that code.", ParamNames: []string{"status"}, Category: "system"},
 		{Name: "emergency-exit", ParamCount: 1, IsVariadic: true, Impl: PrimEmergencyExit,
-			Doc: "Exits the program immediately.", ParamNames: []string{"status"}, Category: "system"},
+			Doc: "Exits the process immediately without running cleanup. Same argument handling as exit.", ParamNames: []string{"status"}, Category: "system"},
 		{Name: "get-environment-variable", ParamCount: 1, Impl: PrimGetEnvironmentVariable,
-			Doc: "Returns the value of an environment variable, or #f.", ParamNames: []string{"name"}, Category: "system"},
+			Doc: "Returns the value of the named environment variable as a string, or #f if not set.", ParamNames: []string{"name"}, Category: "system"},
 		{Name: "get-environment-variables", Impl: PrimGetEnvironmentVariables,
-			Doc: "Returns all environment variables as an alist.", Category: "system"},
+			Doc: "Returns all environment variables as an association list of (name . value) pairs.", Category: "system"},
 		{Name: "current-second", Impl: PrimCurrentSecond,
-			Doc: "Returns the current time as seconds since epoch.", Category: "system"},
+			Doc: "Returns the current time as seconds since the Unix epoch as an inexact real number.", Category: "system"},
 		{Name: "current-jiffy", Impl: PrimCurrentJiffy,
-			Doc: "Returns monotonic nanoseconds since program start.", Category: "system"},
+			Doc: "Returns the number of nanoseconds since program start, using the monotonic clock.", Category: "system"},
 		{Name: "jiffies-per-second", Impl: PrimJiffiesPerSecond,
-			Doc: "Returns the number of jiffies per second.", Category: "system"},
+			Doc: "Returns 1000000000, the number of jiffies (nanoseconds) per second.", Category: "system"},
 	}, registry.PhaseRuntime)
 	return nil
 }

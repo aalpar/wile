@@ -64,6 +64,7 @@ type ForeignClosure struct {
 	paramCount int
 	isVariadic bool
 	name       string
+	doc        string
 }
 
 func (p *ForeignClosure) closureMarker() {
@@ -91,6 +92,14 @@ func (p *ForeignClosure) Name() string {
 
 func (p *ForeignClosure) SetName(name string) {
 	p.name = name
+}
+
+func (p *ForeignClosure) Doc() string {
+	return p.doc
+}
+
+func (p *ForeignClosure) SetDoc(doc string) {
+	p.doc = doc
 }
 
 // SetValidator installs a contract validation function that runs before

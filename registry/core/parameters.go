@@ -22,20 +22,20 @@ import (
 func addParameters(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "make-parameter", ParamCount: 2, IsVariadic: true, Impl: PrimMakeParameter,
-			Doc: "Creates a new parameter with an initial value and optional converter.", ParamNames: []string{"init", "converter"}, Category: "parameters",
+			Doc: "Creates a new parameter object with init as its initial value. If converter is given, it is applied to init and all future values.", ParamNames: []string{"init", "converter"}, Category: "parameters",
 			ParamTypes: []values.ValueType{values.TypeAny, values.TypeProcedure}, ReturnType: values.TypeProcedure},
 		{Name: "parameter?", ParamCount: 1, Impl: PrimParameterQ,
-			Doc: "Returns #t if obj is a parameter.", ParamNames: []string{"obj"}, Category: "parameters",
+			Doc: "Returns #t if obj is a parameter object created by make-parameter.", ParamNames: []string{"obj"}, Category: "parameters",
 			ParamTypes: []values.ValueType{values.TypeAny}, ReturnType: values.TypeBoolean},
 		// Internal primitive: bypasses converter when restoring a parameter in parameterize.
 		// Not part of the public R7RS API.
 		{Name: "%parameter-raw-set!", ParamCount: 2, Impl: PrimParameterRawSet,
-			Doc: "Sets a parameter's internal value directly, bypassing the converter.", ParamNames: []string{"param", "val"}, Category: "parameters",
+			Doc: "Internal: sets a parameter's value directly, bypassing the converter. Used by parameterize restore.", ParamNames: []string{"param", "val"}, Category: "parameters",
 			ParamTypes: []values.ValueType{values.TypeProcedure, values.TypeAny}, ReturnType: values.TypeVoid},
 		// Internal primitive: applies converter without setting the parameter value.
 		// Used by parameterize to pre-convert the value before storing as a continuation mark.
 		{Name: "%parameter-convert", ParamCount: 2, Impl: PrimParameterConvert,
-			Doc: "Applies the parameter's converter to val, returning the result.", ParamNames: []string{"param", "val"}, Category: "parameters",
+			Doc: "Internal: applies the parameter's converter to val without setting it. Used by parameterize to pre-convert.", ParamNames: []string{"param", "val"}, Category: "parameters",
 			ParamTypes: []values.ValueType{values.TypeProcedure, values.TypeAny}},
 	}, registry.PhaseRuntime)
 

@@ -27,17 +27,18 @@ import (
 )
 
 // charCiCompareSpecs defines the five R7RS §6.6 case-insensitive character comparison
-// predicates. Each entry pairs a primitive name with its comparison function.
+// predicates. Each entry has a primitive name, comparison function, and doc string.
 // Mirrors charCompareSpecs in registry/core/prim_characters.go.
 var charCiCompareSpecs = []struct {
 	name string
 	cmp  func(rune, rune) bool
+	doc  string
 }{
-	{"char-ci=?", func(a, b rune) bool { return simpleCaseFold(a) == simpleCaseFold(b) }},
-	{"char-ci<?", func(a, b rune) bool { return simpleCaseFold(a) < simpleCaseFold(b) }},
-	{"char-ci>?", func(a, b rune) bool { return simpleCaseFold(a) > simpleCaseFold(b) }},
-	{"char-ci<=?", func(a, b rune) bool { return simpleCaseFold(a) <= simpleCaseFold(b) }},
-	{"char-ci>=?", func(a, b rune) bool { return simpleCaseFold(a) >= simpleCaseFold(b) }},
+	{"char-ci=?", func(a, b rune) bool { return simpleCaseFold(a) == simpleCaseFold(b) }, "Returns #t if all characters are equal after case folding."},
+	{"char-ci<?", func(a, b rune) bool { return simpleCaseFold(a) < simpleCaseFold(b) }, "Returns #t if characters are monotonically increasing after case folding."},
+	{"char-ci>?", func(a, b rune) bool { return simpleCaseFold(a) > simpleCaseFold(b) }, "Returns #t if characters are monotonically decreasing after case folding."},
+	{"char-ci<=?", func(a, b rune) bool { return simpleCaseFold(a) <= simpleCaseFold(b) }, "Returns #t if characters are monotonically non-decreasing after case folding."},
+	{"char-ci>=?", func(a, b rune) bool { return simpleCaseFold(a) >= simpleCaseFold(b) }, "Returns #t if characters are monotonically non-increasing after case folding."},
 }
 
 // makeCharCiComparePrimitive returns a ForeignFunction that performs a variadic

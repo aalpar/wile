@@ -22,22 +22,22 @@ import (
 func addReflection(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "procedure-arity", ParamCount: 1, Impl: PrimProcedureArity,
-			Doc: "Returns the arity of a procedure.", ParamNames: []string{"proc"}, Category: "reflection",
+			Doc: "Returns a pair (count . variadic?) describing the procedure's arity. Count is the number of required parameters.", ParamNames: []string{"proc"}, Category: "reflection",
 			ParamTypes: []values.ValueType{values.TypeProcedure}},
 		{Name: "procedure-name", ParamCount: 1, Impl: PrimProcedureName,
-			Doc: "Returns the name of a procedure, or #f if anonymous.", ParamNames: []string{"proc"}, Category: "reflection",
+			Doc: "Returns the name of a procedure as a string, or #f if anonymous.", ParamNames: []string{"proc"}, Category: "reflection",
 			ParamTypes: []values.ValueType{values.TypeProcedure}},
 		{Name: "procedure-source-location", ParamCount: 1, Impl: PrimProcedureSourceLocation,
-			Doc: "Returns (file line column) for a procedure, or #f if unavailable.", ParamNames: []string{"proc"}, Category: "reflection",
+			Doc: "Returns a list (file line column) for the procedure's definition site, or #f if unavailable.", ParamNames: []string{"proc"}, Category: "reflection",
 			ParamTypes: []values.ValueType{values.TypeProcedure}},
 		{Name: "procedure-bound-symbols", ParamCount: 1, Impl: PrimProcedureBoundSymbols,
-			Doc: "Returns the list of symbols bound in a closure's environment, or #f.", ParamNames: []string{"proc"}, Category: "reflection",
+			Doc: "Returns the list of symbols bound in a closure's captured environment, or #f for foreign procedures.", ParamNames: []string{"proc"}, Category: "reflection",
 			ParamTypes: []values.ValueType{values.TypeProcedure}},
 		{Name: "procedure-type", ParamCount: 1, Impl: PrimProcedureType,
-			Doc: "Returns a symbol classifying the procedure type.", ParamNames: []string{"proc"}, Category: "reflection",
+			Doc: "Returns a symbol classifying the procedure: closure, foreign, case-lambda, parameter, or continuation.", ParamNames: []string{"proc"}, Category: "reflection",
 			ParamTypes: []values.ValueType{values.TypeProcedure}, ReturnType: values.TypeSymbol},
 		{Name: "procedure-documentation", ParamCount: 1, Impl: PrimProcedureDocumentation,
-			Doc: "Returns the docstring of a procedure, or #f if none.", ParamNames: []string{"proc"}, Category: "reflection",
+			Doc: "Returns the docstring of a procedure, or #f if none. Works for both Scheme-defined and foreign procedures.", ParamNames: []string{"proc"}, Category: "reflection",
 			ParamTypes: []values.ValueType{values.TypeProcedure}, ReturnType: values.TypeAny},
 	}, registry.PhaseRuntime)
 

@@ -402,6 +402,8 @@ func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
 		spec.IsVariadic,
 		spec.Impl,
 	)
+	closure.SetName(spec.Name)
+	closure.SetDoc(spec.Doc)
 
 	return p.env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
 }

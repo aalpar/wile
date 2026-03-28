@@ -23,52 +23,52 @@ func addStrings(r *registry.Registry) error {
 	// String construction
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "string", ParamCount: 1, IsVariadic: true, Impl: PrimString,
-			Doc: "Creates a string from its character arguments.", ParamNames: []string{"char"}, Category: "strings",
+			Doc: "Returns a string composed of its character arguments. All arguments must be characters.", ParamNames: []string{"char"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeCharacter}, ReturnType: values.TypeString},
 		{Name: "make-string", ParamCount: 2, IsVariadic: true, Impl: PrimMakeString,
-			Doc: "Creates a string of length k, optionally filled with char.", ParamNames: []string{"k", "char"}, Category: "strings",
+			Doc: "Returns a string of length k. If char is given, each position is filled with char; otherwise unspecified.", ParamNames: []string{"k", "char"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeExactInteger, values.TypeCharacter}, ReturnType: values.TypeString},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// String access
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "string-length", ParamCount: 1, Impl: PrimStringLength,
-			Doc: "Returns the length of string.", ParamNames: []string{"string"}, Category: "strings",
+			Doc: "Returns the number of characters in string.", ParamNames: []string{"string"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeString}, ReturnType: values.TypeExactInteger},
 		{Name: "string-ref", ParamCount: 2, Impl: PrimStringRef,
-			Doc: "Returns the character at index k.", ParamNames: []string{"string", "k"}, Category: "strings",
+			Doc: "Returns the character at 0-based index k. Raises an error if k is out of range.", ParamNames: []string{"string", "k"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger}, ReturnType: values.TypeCharacter},
 		{Name: "string-set!", ParamCount: 3, Impl: PrimStringSet,
-			Doc: "Sets the character at index k.", ParamNames: []string{"string", "k", "char"}, Category: "strings",
+			Doc: "Stores char at 0-based index k in string. The string must be mutable.", ParamNames: []string{"string", "k", "char"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger, values.TypeCharacter}, ReturnType: values.TypeVoid},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// String conversion
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "string->list", ParamCount: 2, IsVariadic: true, Impl: PrimStringToList,
-			Doc: "Converts a string to a list of characters.", ParamNames: []string{"string", "start"}, Category: "strings",
+			Doc: "Returns a list of the characters in string from start to end. Start defaults to 0, end to string length.", ParamNames: []string{"string", "start"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger}, ReturnType: values.TypeList},
 		{Name: "list->string", ParamCount: 1, Impl: PrimListToString,
-			Doc: "Converts a list of characters to a string.", ParamNames: []string{"list"}, Category: "strings",
+			Doc: "Returns a string formed from a list of characters. All elements must be characters.", ParamNames: []string{"list"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeList}, ReturnType: values.TypeString},
 		{Name: "symbol->string", ParamCount: 1, Impl: PrimSymbolToString,
-			Doc: "Returns the name of a symbol as a string.", ParamNames: []string{"symbol"}, Category: "strings",
+			Doc: "Returns the name of symbol as an immutable string.", ParamNames: []string{"symbol"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeSymbol}, ReturnType: values.TypeString},
 		{Name: "string->symbol", ParamCount: 1, Impl: PrimStringToSymbol,
-			Doc: "Returns the symbol with the given name.", ParamNames: []string{"string"}, Category: "strings",
+			Doc: "Returns the symbol whose name is string. Symbols with the same name are always eq?.", ParamNames: []string{"string"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeString}, ReturnType: values.TypeSymbol},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// String operations
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "string-append", ParamCount: 1, IsVariadic: true, Impl: PrimStringAppend,
-			Doc: "Appends strings together.", ParamNames: []string{"string"}, Category: "strings",
+			Doc: "Returns a newly allocated string formed by concatenating its arguments.", ParamNames: []string{"string"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeString}, ReturnType: values.TypeString},
 		{Name: "substring", ParamCount: 3, Impl: PrimSubstring,
-			Doc: "Returns a substring from start to end.", ParamNames: []string{"string", "start", "end"}, Category: "strings",
+			Doc: "Returns a newly allocated string containing characters from start (inclusive) to end (exclusive).", ParamNames: []string{"string", "start", "end"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger, values.TypeExactInteger}, ReturnType: values.TypeString},
 		{Name: "string-copy", ParamCount: 2, IsVariadic: true, Impl: PrimStringCopy,
-			Doc: "Returns a copy of string, optionally from start to end.", ParamNames: []string{"string", "start"}, Category: "strings",
+			Doc: "Returns a mutable copy of string from start to end. Start defaults to 0, end to string length.", ParamNames: []string{"string", "start"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger}, ReturnType: values.TypeString},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
@@ -78,7 +78,7 @@ func addStrings(r *registry.Registry) error {
 		stringCmpPrims[i] = registry.PrimitiveSpec{
 			Name: spec.name, ParamCount: 2, IsVariadic: true,
 			Impl: makeStringComparePrimitive(spec.name, spec.cmp),
-			Doc:  "Compares strings lexicographically.", Category: "strings",
+			Doc:  spec.doc, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeString, values.TypeString},
 			ReturnType: values.TypeBoolean,
 		}
