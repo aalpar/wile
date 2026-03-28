@@ -447,3 +447,188 @@ func TestProcedureDocumentationErrors(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// apropos Tests
+// =============================================================================
+
+func TestApropos(t *testing.T) {
+	tcs := []struct {
+		name  string
+		code  string
+		check func(t *testing.T, result values.Value)
+	}{
+		{
+			name: "find by name",
+			code: `(memq 'string-append (apropos "string-app"))`,
+			check: func(t *testing.T, result values.Value) {
+				// memq returns a pair when found
+				_, ok := result.(*values.Pair)
+				qt.Assert(t, ok, qt.IsTrue, qt.Commentf("got %T: %s", result, result.SchemeString()))
+			},
+		},
+		{
+			name: "returns list of symbols",
+			code: `(let ((results (apropos "car")))
+				(and (list? results) (symbol? (car results))))`,
+			check: func(t *testing.T, result values.Value) {
+				qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
+			},
+		},
+		{
+			name: "no matches returns empty list",
+			code: `(apropos "zzzzzzzzzzz")`,
+			check: func(t *testing.T, result values.Value) {
+				qt.Assert(t, result, valuestest.SchemeEquals, values.EmptyList)
+			},
+		},
+		{
+			name: "matches category",
+			code: `(memq '+ (apropos "arithmetic"))`,
+			check: func(t *testing.T, result values.Value) {
+				_, ok := result.(*values.Pair)
+				qt.Assert(t, ok, qt.IsTrue, qt.Commentf("got %T: %s", result, result.SchemeString()))
+			},
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			tc.check(t, result)
+		})
+	}
+}
+
+func TestAproposErrors(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "wrong arity zero", Code: `(apropos)`},
+		{Name: "wrong arity two", Code: `(apropos "a" "b")`},
+		{Name: "wrong type", Code: `(apropos 42)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
+
+// =============================================================================
+// doc-topics Tests
+// =============================================================================
+
+func TestDocTopics(t *testing.T) {
+	tcs := []struct {
+		name  string
+		code  string
+		check func(t *testing.T, result values.Value)
+	}{
+		{
+			name: "returns list of strings",
+			code: `(let ((ts (doc-topics)))
+				(and (list? ts) (string? (car ts))))`,
+			check: func(t *testing.T, result values.Value) {
+				qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
+			},
+		},
+		{
+			name: "contains arithmetic",
+			code: `(member "arithmetic" (doc-topics))`,
+			check: func(t *testing.T, result values.Value) {
+				// member returns pair when found
+				_, ok := result.(*values.Pair)
+				qt.Assert(t, ok, qt.IsTrue, qt.Commentf("got %T: %s", result, result.SchemeString()))
+			},
+		},
+		{
+			name: "sorted",
+			code: `(let ((ts (doc-topics)))
+				(let check ((prev (car ts)) (rest (cdr ts)))
+				  (cond
+				    ((null? rest) #t)
+				    ((string<=? prev (car rest))
+				     (check (car rest) (cdr rest)))
+				    (else #f))))`,
+			check: func(t *testing.T, result values.Value) {
+				qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
+			},
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			tc.check(t, result)
+		})
+	}
+}
+
+func TestDocTopicsErrors(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "wrong arity", Code: `(doc-topics "extra")`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
+
+// =============================================================================
+// doc-topic Tests
+// =============================================================================
+
+func TestDocTopic(t *testing.T) {
+	tcs := []struct {
+		name  string
+		code  string
+		check func(t *testing.T, result values.Value)
+	}{
+		{
+			name: "returns list of symbols",
+			code: `(let ((procs (doc-topic "arithmetic")))
+				(and (list? procs) (symbol? (car procs))))`,
+			check: func(t *testing.T, result values.Value) {
+				qt.Assert(t, result, valuestest.SchemeEquals, values.TrueValue)
+			},
+		},
+		{
+			name: "contains +",
+			code: `(memq '+ (doc-topic "arithmetic"))`,
+			check: func(t *testing.T, result values.Value) {
+				_, ok := result.(*values.Pair)
+				qt.Assert(t, ok, qt.IsTrue, qt.Commentf("got %T: %s", result, result.SchemeString()))
+			},
+		},
+		{
+			name: "unknown category returns empty list",
+			code: `(doc-topic "nonexistent")`,
+			check: func(t *testing.T, result values.Value) {
+				qt.Assert(t, result, valuestest.SchemeEquals, values.EmptyList)
+			},
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			tc.check(t, result)
+		})
+	}
+}
+
+func TestDocTopicErrors(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "wrong arity zero", Code: `(doc-topic)`},
+		{Name: "wrong arity two", Code: `(doc-topic "a" "b")`},
+		{Name: "wrong type", Code: `(doc-topic 42)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}

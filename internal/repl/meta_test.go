@@ -10,6 +10,8 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/internal/bootstrap"
+	"github.com/aalpar/wile/internal/parser"
+	wileruntime "github.com/aalpar/wile/runtime"
 	"github.com/aalpar/wile/values"
 )
 
@@ -154,6 +156,30 @@ func TestCmdDoc_BindingLookup(t *testing.T) {
 		qt.Commentf("output was: %q", output))
 }
 
+func TestCmdDoc_ClosureDocstring(t *testing.T) {
+	ctx := context.Background()
+	env, _, err := bootstrap.NewTopLevelWithRegistry(ctx)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Define a procedure with a Guile-style docstring
+	rdr := strings.NewReader(`(define (f x) "Adds one to x." (+ x 1))`)
+	p := parser.NewParser(env, true, rdr)
+	stx, err := p.ReadSyntax(ctx)
+	qt.Assert(t, err, qt.IsNil)
+	tpl, err := wileruntime.Compile(ctx, env, stx)
+	qt.Assert(t, err, qt.IsNil)
+	_, err = wileruntime.Run(ctx, tpl, env)
+	qt.Assert(t, err, qt.IsNil)
+
+	t.Setenv("PAGER", "")
+	var buf bytes.Buffer
+	h := NewMetaCommandHandler(env, nil, nil)
+	h.cmdDoc([]string{"f"}, &buf)
+	output := buf.String()
+	qt.Assert(t, strings.Contains(output, "Adds one to x."), qt.IsTrue,
+		qt.Commentf(",doc should show closure docstring: %q", output))
+}
+
 func TestMetaCommandHandlerCommands(t *testing.T) {
 	debugCtx := NewDebugContext()
 	h := NewMetaCommandHandler(nil, debugCtx, nil)
@@ -161,7 +187,7 @@ func TestMetaCommandHandlerCommands(t *testing.T) {
 	qt.Assert(t, len(cmds) > 0, qt.IsTrue)
 
 	// Session commands
-	for _, expected := range []string{"help", "doc", "edit"} {
+	for _, expected := range []string{"help", "doc", "edit", "apropos", "topics", "topic"} {
 		qt.Assert(t, slices.Contains(cmds, expected), qt.IsTrue,
 			qt.Commentf("Commands() should contain session command %q, got %v", expected, cmds))
 	}
@@ -173,7 +199,7 @@ func TestMetaCommandHandlerCommands(t *testing.T) {
 	}
 
 	// Aliases should also be present
-	for _, expected := range []string{"h", "?", "b", "s", "c", "bt"} {
+	for _, expected := range []string{"h", "?", "a", "b", "s", "c", "bt"} {
 		qt.Assert(t, slices.Contains(cmds, expected), qt.IsTrue,
 			qt.Commentf("Commands() should contain alias %q, got %v", expected, cmds))
 	}
@@ -238,6 +264,78 @@ func TestFormatPrimitiveDoc_WithoutTypes(t *testing.T) {
 		qt.Commentf("output should have no type annotations: %s", output))
 	c.Assert(strings.Contains(output, "→"), qt.IsFalse,
 		qt.Commentf("output should have no return type: %s", output))
+}
+
+func TestCmdApropos(t *testing.T) {
+	ctx := context.Background()
+	env, reg, err := bootstrap.NewTopLevelWithRegistry(ctx)
+	qt.Assert(t, err, qt.IsNil)
+	docProv := NewRegistryDocProvider(reg)
+
+	tcs := []struct {
+		name    string
+		args    []string
+		contain string
+	}{
+		{"no args", nil, "Usage"},
+		{"matches name", []string{"string-app"}, "string-append"},
+		{"matches category", []string{"arithmetic"}, "+"},
+		{"no match", []string{"zzzzzzzzz"}, "No matches"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("PAGER", "")
+			var buf bytes.Buffer
+			h := NewMetaCommandHandler(env, nil, docProv)
+			h.cmdApropos(tc.args, &buf)
+			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
+				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
+		})
+	}
+}
+
+func TestCmdTopics(t *testing.T) {
+	ctx := context.Background()
+	_, reg, err := bootstrap.NewTopLevelWithRegistry(ctx)
+	qt.Assert(t, err, qt.IsNil)
+	docProv := NewRegistryDocProvider(reg)
+
+	t.Setenv("PAGER", "")
+	var buf bytes.Buffer
+	h := NewMetaCommandHandler(nil, nil, docProv)
+	h.cmdTopics(&buf)
+	output := buf.String()
+	qt.Assert(t, strings.Contains(output, "arithmetic"), qt.IsTrue,
+		qt.Commentf("output: %q", output))
+	qt.Assert(t, strings.Contains(output, "strings"), qt.IsTrue,
+		qt.Commentf("output: %q", output))
+}
+
+func TestCmdTopic(t *testing.T) {
+	ctx := context.Background()
+	_, reg, err := bootstrap.NewTopLevelWithRegistry(ctx)
+	qt.Assert(t, err, qt.IsNil)
+	docProv := NewRegistryDocProvider(reg)
+
+	tcs := []struct {
+		name    string
+		args    []string
+		contain string
+	}{
+		{"no args", nil, "Usage"},
+		{"valid category", []string{"arithmetic"}, "+"},
+		{"unknown category", []string{"nonexistent"}, "No category"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("PAGER", "")
+			var buf bytes.Buffer
+			h := NewMetaCommandHandler(nil, nil, docProv)
+			h.cmdTopic(tc.args, &buf)
+			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
+				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
+		})
+	}
 }
 
 func TestMetaHandleDebugDelegation(t *testing.T) {

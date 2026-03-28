@@ -624,6 +624,9 @@ Complete list of supported types, primitives, and special forms in Wile.
 | `procedure-bound-symbols` | Get bound symbols of a procedure |
 | `procedure-type` | Get type classification of a procedure |
 | `procedure-documentation` | Get docstring of a procedure, or `#f` if none |
+| `apropos` | Search primitives by name, doc, or category (returns list of symbols) |
+| `doc-topics` | List documentation categories (returns sorted list of strings) |
+| `doc-topic` | List primitives in a category (returns sorted list of symbols) |
 
 ## Multiple Values
 
