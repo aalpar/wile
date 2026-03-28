@@ -24,6 +24,10 @@ Wile follows standard GNU command-line option conventions. All flags use the `go
 | `-L` | `--library-path` | string | Library search paths (colon-separated) |
 | `-q` | `--quiet` | bool | Suppress informational messages |
 | `-V` | `--version` | bool | Print version and exit |
+| | `--mcp` | bool | Start as MCP server on stdio |
+| | `--mcp-timeout` | float64 | Default eval timeout in seconds for MCP mode (default: 30) |
+| | `--cpuprofile` | string | Write CPU profile to file |
+| | `--memprofile` | string | Write memory profile to file |
 
 ### Reserved Short Flags (GNU Convention)
 

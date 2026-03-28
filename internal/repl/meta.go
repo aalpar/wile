@@ -23,6 +23,7 @@ type MetaCommandHandler struct {
 	env      *environment.EnvironmentFrame
 	debugCtx *DebugContext
 	docProv  DocProvider
+	pager    string
 }
 
 // NewMetaCommandHandler creates a new meta-command handler.
@@ -35,7 +36,14 @@ func NewMetaCommandHandler(
 		env:      env,
 		debugCtx: debugCtx,
 		docProv:  docProv,
+		pager:    os.Getenv("PAGER"),
 	}
+}
+
+// SetPager overrides the pager command used for long output.
+// Pass "" to disable paging (e.g., for non-TTY contexts like MCP).
+func (p *MetaCommandHandler) SetPager(pager string) {
+	p.pager = pager
 }
 
 // Handle processes a line starting with ",". Returns true if the line was
@@ -68,6 +76,8 @@ func (p *MetaCommandHandler) Handle(line string, out io.Writer) bool {
 		p.cmdTopics(out)
 	case "topic":
 		p.cmdTopic(args, out)
+	case "libraries", "libs":
+		p.cmdLibraries(out)
 	default:
 		// Delegate to debug context
 		if p.debugCtx != nil && p.debugCtx.HandleDebugCommand(line, out) {
@@ -127,6 +137,9 @@ var metaCommands = []commandInfo{
 	{"topic", nil, "List bindings in a documentation category",
 		"Usage: ,topic <category>\n\nLists all bindings in the named category.\nUse ,topics to see available categories.",
 		"session"},
+	{"libraries", []string{"libs"}, "List loaded Scheme libraries",
+		"Usage: ,libraries\n\nLists all Scheme libraries currently loaded in the environment,\nsorted alphabetically, with their descriptions.",
+		"session"},
 }
 
 func init() {
@@ -169,7 +182,7 @@ func (p *MetaCommandHandler) cmdHelp(args []string, out io.Writer) {
 		}
 	}
 
-	writeWithPager(out, content.String(), os.Getenv("PAGER"))
+	writeWithPager(out, content.String(), p.pager)
 }
 
 func (p *MetaCommandHandler) cmdHelpSpecific(name string, out io.Writer) {
@@ -177,7 +190,7 @@ func (p *MetaCommandHandler) cmdHelpSpecific(name string, out io.Writer) {
 		if cmd.name == name || containsString(cmd.aliases, name) {
 			var content strings.Builder
 			fmt.Fprintf(&content, ",%s — %s\n\n%s\n", cmd.name, cmd.summary, cmd.detail)
-			writeWithPager(out, content.String(), os.Getenv("PAGER"))
+			writeWithPager(out, content.String(), p.pager)
 			return
 		}
 	}
@@ -230,13 +243,13 @@ func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 							info, found := p.docProv.LookupDoc(name)
 							if found {
 								formatPrimitiveDoc(&content, name, info)
-								writeWithPager(out, content.String(), os.Getenv("PAGER"))
+								writeWithPager(out, content.String(), p.pager)
 								return
 							}
 						}
 					}
 					formatBindingDoc(&content, name, bnd, phase)
-					writeWithPager(out, content.String(), os.Getenv("PAGER"))
+					writeWithPager(out, content.String(), p.pager)
 					return
 				}
 			}
@@ -248,7 +261,7 @@ func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 		info, found := p.docProv.LookupDoc(name)
 		if found {
 			formatPrimitiveDoc(&content, name, info)
-			writeWithPager(out, content.String(), os.Getenv("PAGER"))
+			writeWithPager(out, content.String(), p.pager)
 			return
 		}
 	}
@@ -291,7 +304,7 @@ func (p *MetaCommandHandler) cmdDocLibrary(nameStr string, out io.Writer) {
 
 	var content strings.Builder
 	formatLibraryDoc(&content, lib)
-	writeWithPager(out, content.String(), os.Getenv("PAGER"))
+	writeWithPager(out, content.String(), p.pager)
 }
 
 func formatLibraryDoc(w *strings.Builder, lib *machine.CompiledLibrary) {
@@ -497,7 +510,7 @@ func (p *MetaCommandHandler) cmdApropos(args []string, out io.Writer) {
 		doc := firstLine(r.Doc)
 		fmt.Fprintf(&content, "  %-*s  %-14s %s\n", maxName, r.Name, cat, doc)
 	}
-	writeWithPager(out, content.String(), os.Getenv("PAGER"))
+	writeWithPager(out, content.String(), p.pager)
 }
 
 func (p *MetaCommandHandler) cmdTopics(out io.Writer) {
@@ -519,7 +532,7 @@ func (p *MetaCommandHandler) cmdTopics(out io.Writer) {
 		count := len(searchProv.ByCategory(cat))
 		fmt.Fprintf(&content, "  %-18s (%d)\n", cat, count)
 	}
-	writeWithPager(out, content.String(), os.Getenv("PAGER"))
+	writeWithPager(out, content.String(), p.pager)
 }
 
 func (p *MetaCommandHandler) cmdTopic(args []string, out io.Writer) {
@@ -553,7 +566,46 @@ func (p *MetaCommandHandler) cmdTopic(args []string, out io.Writer) {
 		doc := firstLine(r.Doc)
 		fmt.Fprintf(&content, "  %-*s  %s\n", maxName, r.Name, doc)
 	}
-	writeWithPager(out, content.String(), os.Getenv("PAGER"))
+	writeWithPager(out, content.String(), p.pager)
+}
+
+func (p *MetaCommandHandler) cmdLibraries(out io.Writer) {
+	if p.env == nil {
+		fmt.Fprintln(out, "No environment available")
+		return
+	}
+	regAny := p.env.LibraryRegistry()
+	if regAny == nil {
+		fmt.Fprintln(out, "No library registry configured")
+		return
+	}
+	reg, ok := regAny.(*machine.LibraryRegistry)
+	if !ok {
+		fmt.Fprintln(out, "Library registry unavailable")
+		return
+	}
+
+	libs := reg.All()
+	if len(libs) == 0 {
+		fmt.Fprintln(out, "No libraries loaded")
+		return
+	}
+
+	var content strings.Builder
+	fmt.Fprintf(&content, "Loaded libraries (%d):\n", len(libs))
+	maxName := 0
+	for _, lib := range libs {
+		n := len(lib.Name.SchemeString())
+		if n > maxName {
+			maxName = n
+		}
+	}
+	for _, lib := range libs {
+		name := lib.Name.SchemeString()
+		desc := firstLine(lib.Description)
+		fmt.Fprintf(&content, "  %-*s  %s\n", maxName, name, desc)
+	}
+	writeWithPager(out, content.String(), p.pager)
 }
 
 // searchBindings searches phase environment bindings for the pattern.
