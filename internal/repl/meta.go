@@ -112,8 +112,8 @@ var metaCommands = []commandInfo{
 	{"help", []string{"h", "?"}, "Show this help or help for a specific command",
 		"Usage: ,help [command]\n\nWith no arguments, lists all commands.\nWith a command name, shows detailed help for that command.",
 		"session"},
-	{"doc", nil, "Show documentation for a Scheme binding",
-		"Usage: ,doc <name>\n\nLooks up the named binding across all phase environments\n(runtime, expand, compile) and displays documentation.\nFor primitives, shows signature, description, and category.\nFor user bindings, shows type and current value.",
+	{"doc", nil, "Show documentation for a Scheme binding or library",
+		"Usage: ,doc <name> or ,doc (<library-name>)\n\nLooks up the named binding across all phase environments\n(runtime, expand, compile) and displays documentation.\nFor primitives, shows signature, description, and category.\nFor user bindings, shows type and current value.\nFor libraries, shows description, source, and export list.",
 		"session"},
 	{"edit", nil, "Open file in $EDITOR",
 		"Usage: ,edit <file>\n\nOpens the given file in the editor specified by the $EDITOR\nenvironment variable. The REPL blocks until the editor exits.",
@@ -194,6 +194,15 @@ func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 		return
 	}
 
+	// Check if arguments form a library name like (scheme base)
+	if strings.HasPrefix(args[0], "(") {
+		joined := strings.Join(args, " ")
+		if strings.HasSuffix(joined, ")") {
+			p.cmdDocLibrary(joined, out)
+			return
+		}
+	}
+
 	name := args[0]
 	var content strings.Builder
 
@@ -245,6 +254,65 @@ func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 	}
 
 	fmt.Fprintf(out, "Unbound identifier: %s\n", name)
+}
+
+func (p *MetaCommandHandler) cmdDocLibrary(nameStr string, out io.Writer) {
+	// Strip parens: "(scheme base)" -> "scheme base"
+	inner := strings.TrimPrefix(strings.TrimSuffix(nameStr, ")"), "(")
+	parts := strings.Fields(inner)
+	if len(parts) == 0 {
+		fmt.Fprintln(out, "Usage: ,doc (library-name)")
+		return
+	}
+
+	libName := machine.NewLibraryName(parts...)
+
+	if p.env == nil {
+		fmt.Fprintf(out, "Library %s: not loaded\n", libName.SchemeString())
+		return
+	}
+
+	regAny := p.env.LibraryRegistry()
+	if regAny == nil {
+		fmt.Fprintf(out, "Library %s: not loaded\n", libName.SchemeString())
+		return
+	}
+	reg, ok := regAny.(*machine.LibraryRegistry)
+	if !ok {
+		fmt.Fprintf(out, "Library %s: not loaded\n", libName.SchemeString())
+		return
+	}
+
+	lib := reg.Lookup(libName)
+	if lib == nil {
+		fmt.Fprintf(out, "Library %s: not loaded\n", libName.SchemeString())
+		return
+	}
+
+	var content strings.Builder
+	formatLibraryDoc(&content, lib)
+	writeWithPager(out, content.String(), os.Getenv("PAGER"))
+}
+
+func formatLibraryDoc(w *strings.Builder, lib *machine.CompiledLibrary) {
+	fmt.Fprintf(w, "Library: %s\n", lib.Name.SchemeString())
+	if lib.Description != "" {
+		fmt.Fprintf(w, "\n  %s\n", lib.Description)
+	}
+	if lib.SourceFile != "" {
+		fmt.Fprintf(w, "\nSource: %s\n", lib.SourceFile)
+	}
+
+	exports := make([]string, 0, len(lib.Exports))
+	for name := range lib.Exports {
+		exports = append(exports, name)
+	}
+	sort.Strings(exports)
+
+	fmt.Fprintf(w, "\nExports (%d):\n", len(exports))
+	for _, name := range exports {
+		fmt.Fprintf(w, "  %s\n", name)
+	}
 }
 
 func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo) {

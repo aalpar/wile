@@ -11,6 +11,7 @@ import (
 
 	"github.com/aalpar/wile/internal/bootstrap"
 	"github.com/aalpar/wile/internal/parser"
+	"github.com/aalpar/wile/machine"
 	wileruntime "github.com/aalpar/wile/runtime"
 	"github.com/aalpar/wile/values"
 )
@@ -332,6 +333,43 @@ func TestCmdTopic(t *testing.T) {
 			var buf bytes.Buffer
 			h := NewMetaCommandHandler(nil, nil, docProv)
 			h.cmdTopic(tc.args, &buf)
+			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
+				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
+		})
+	}
+}
+
+func TestCmdDocLibrary(t *testing.T) {
+	ctx := context.Background()
+	env, _, err := bootstrap.NewTopLevelWithRegistry(ctx)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Set up a library registry with a test library
+	reg := machine.NewLibraryRegistry()
+	lib := machine.NewCompiledLibrary(machine.NewLibraryName("test", "lib"), env)
+	lib.Description = "A test library for documentation."
+	lib.AddExport("foo", "foo")
+	lib.AddExport("bar", "bar")
+	err = reg.Register(lib)
+	qt.Assert(t, err, qt.IsNil)
+	env.SetLibraryRegistry(reg)
+
+	tcs := []struct {
+		name    string
+		args    []string
+		contain string
+	}{
+		{"library with description", []string{"(test", "lib)"}, "A test library"},
+		{"library exports", []string{"(test", "lib)"}, "Exports (2)"},
+		{"unknown library", []string{"(unknown", "lib)"}, "not loaded"},
+		{"empty parens", []string{"()"}, "Usage"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("PAGER", "")
+			var buf bytes.Buffer
+			h := NewMetaCommandHandler(env, nil, nil)
+			h.cmdDoc(tc.args, &buf)
 			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
 				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
 		})
