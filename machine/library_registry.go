@@ -71,11 +71,12 @@ func (p LibraryName) ToFSPath() string {
 
 // CompiledLibrary holds a loaded and compiled library.
 type CompiledLibrary struct {
-	Name       LibraryName                   // Library name
-	Env        *environment.EnvironmentFrame // Library's private environment
-	Exports    map[string]string             // external-name -> internal-name
-	SourceFile string                        // Path to .sld file (for error messages)
-	Template   *NativeTemplate               // Compiled bytecode (for execution)
+	Name        LibraryName                   // Library name
+	Description string                        // from (description ...) clause; "" if absent
+	Env         *environment.EnvironmentFrame // Library's private environment
+	Exports     map[string]string             // external-name -> internal-name
+	SourceFile  string                        // Path to .sld file (for error messages)
+	Template    *NativeTemplate               // Compiled bytecode (for execution)
 }
 
 // NewCompiledLibrary creates a new compiled library.
