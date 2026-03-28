@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 )
 
@@ -181,17 +182,7 @@ func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 	name := args[0]
 	var content strings.Builder
 
-	// Try DocProvider first (primitive registry docs)
-	if p.docProv != nil {
-		info, found := p.docProv.LookupDoc(name)
-		if found {
-			formatPrimitiveDoc(&content, name, info)
-			writeWithPager(out, content.String(), os.Getenv("PAGER"))
-			return
-		}
-	}
-
-	// Walk phase environments for binding info
+	// Walk phase environments first — the binding's value is the source of truth
 	if p.env != nil {
 		topLevel := p.env.Namespace()
 		if topLevel != nil {
@@ -207,11 +198,34 @@ func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 				}
 				bnd := phaseEnv.GetBinding(sym)
 				if bnd != nil {
+					// For foreign closures, prefer DocProvider's rich format
+					// (signature, types, category)
+					if bnd.BindingType() == environment.BindingTypeVariable {
+						_, isForeign := bnd.Value().(*machine.ForeignClosure)
+						if isForeign && p.docProv != nil {
+							info, found := p.docProv.LookupDoc(name)
+							if found {
+								formatPrimitiveDoc(&content, name, info)
+								writeWithPager(out, content.String(), os.Getenv("PAGER"))
+								return
+							}
+						}
+					}
 					formatBindingDoc(&content, name, bnd, phase)
 					writeWithPager(out, content.String(), os.Getenv("PAGER"))
 					return
 				}
 			}
+		}
+	}
+
+	// Fallback: DocProvider for names not found in any phase environment
+	if p.docProv != nil {
+		info, found := p.docProv.LookupDoc(name)
+		if found {
+			formatPrimitiveDoc(&content, name, info)
+			writeWithPager(out, content.String(), os.Getenv("PAGER"))
+			return
 		}
 	}
 
@@ -287,11 +301,36 @@ func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding,
 		fmt.Fprintf(w, "%s: bound in %s\n", name, phaseName)
 	}
 
-	doc := bnd.Doc()
+	// Try closure docstring first (same logic as procedure-documentation),
+	// then fall back to binding-level doc (special forms, macros).
+	doc := ""
+	if bnd.BindingType() == environment.BindingTypeVariable {
+		doc = callableDoc(bnd.Value())
+	}
+	if doc == "" {
+		doc = bnd.Doc()
+	}
 	if doc != "" {
 		indented := strings.ReplaceAll(doc, "\n", "\n  ")
 		fmt.Fprintf(w, "\n  %s\n", indented)
 	}
+}
+
+// callableDoc extracts the docstring from a callable value.
+// Uses the same logic as (procedure-documentation proc).
+func callableDoc(v values.Value) string {
+	switch c := v.(type) {
+	case *machine.MachineClosure:
+		return c.Template().Doc()
+	case *machine.ForeignClosure:
+		return c.Doc()
+	case *machine.CaseLambdaClosure:
+		clauses := c.Clauses()
+		if len(clauses) > 0 {
+			return clauses[0].Template().Doc()
+		}
+	}
+	return ""
 }
 
 func phaseLabel(phase int) string {

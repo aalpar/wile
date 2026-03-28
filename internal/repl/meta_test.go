@@ -10,6 +10,8 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/internal/bootstrap"
+	"github.com/aalpar/wile/internal/parser"
+	wileruntime "github.com/aalpar/wile/runtime"
 	"github.com/aalpar/wile/values"
 )
 
@@ -152,6 +154,30 @@ func TestCmdDoc_BindingLookup(t *testing.T) {
 	// Should find something (not "Unbound")
 	qt.Assert(t, strings.Contains(output, "nbound"), qt.IsFalse,
 		qt.Commentf("output was: %q", output))
+}
+
+func TestCmdDoc_ClosureDocstring(t *testing.T) {
+	ctx := context.Background()
+	env, _, err := bootstrap.NewTopLevelWithRegistry(ctx)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Define a procedure with a Guile-style docstring
+	rdr := strings.NewReader(`(define (f x) "Adds one to x." (+ x 1))`)
+	p := parser.NewParser(env, true, rdr)
+	stx, err := p.ReadSyntax(ctx)
+	qt.Assert(t, err, qt.IsNil)
+	tpl, err := wileruntime.Compile(ctx, env, stx)
+	qt.Assert(t, err, qt.IsNil)
+	_, err = wileruntime.Run(ctx, tpl, env)
+	qt.Assert(t, err, qt.IsNil)
+
+	t.Setenv("PAGER", "")
+	var buf bytes.Buffer
+	h := NewMetaCommandHandler(env, nil, nil)
+	h.cmdDoc([]string{"f"}, &buf)
+	output := buf.String()
+	qt.Assert(t, strings.Contains(output, "Adds one to x."), qt.IsTrue,
+		qt.Commentf(",doc should show closure docstring: %q", output))
 }
 
 func TestMetaCommandHandlerCommands(t *testing.T) {
