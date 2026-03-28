@@ -108,6 +108,10 @@ No demand signal. Speculative or research-only.
 - [ ] **Source file tracking in Syntax Objects**: need some utilities around finding source locations and providing source lines.
 - [ ] **Exceptions and Error stack traces**: Both Foreign and Native errors should track stacktraces with source code references.
 - [ ] **Foreign Stack trace entry in stack traces that cross from Native -> Foreign -> Native callback.**
+- [ ] **Area for blog articles** Git blog area in repo
+- [ ] **Finish blog article** Finish blog article on appropriateness of Scheme for sandboxing.
+- [x] **Go AST extension Phase 2 — Advanced** [Standard library, S]: Concurrency (`GoStmt`, `DeferStmt`, `SelectStmt`, `CommClause`), switch (`SwitchStmt`, `TypeSwitchStmt`, `CaseClause`), `SliceExpr`, `TypeAssertExpr`, `ChanType`, `Ellipsis`, `LabeledStmt`. 13 node types. PR #480. `plans/GO-AST.md`
+- [ ] **Go AST extension Phase 3 — Comments & generics** [Standard library, S]: `Comment`/`CommentGroup` attachment for round-trip structural fidelity. `BadExpr`/`BadStmt`/`BadDecl` for error recovery. `IndexListExpr` for generics. `plans/GO-AST.md`
 - [ ] **Implement let-syntax*** [Core language, S]: Implement `let-syntax*`.
 - [ ] **User labels/tags to distinguish FS resolvers** Use tags or labels to distinguish bootstrap loadee from include/library loaders in fileResolver.
 - [ ] **Disassembler** Implement a disassembler for Wile
