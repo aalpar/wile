@@ -175,3 +175,91 @@ func TestApply_EmptyRegistry(t *testing.T) {
 	err := reg.Apply(context.Background(), env)
 	c.Assert(err, qt.IsNil)
 }
+
+// ApplyDocs
+
+func TestApplyDocs(t *testing.T) {
+	c := qt.New(t)
+
+	reg := NewRegistry()
+	reg.AddBindingSpecs([]BindingSpec{
+		{Name: "if", Doc: "Conditional expression."},
+		{Name: "else"}, // no doc
+	})
+	reg.AddDocumentation("and", "Short-circuit conjunction.")
+
+	topLevel := environment.NewNamespace()
+	env := topLevel.Runtime()
+	err := reg.Apply(context.Background(), env)
+	c.Assert(err, qt.IsNil)
+
+	// Simulate bootstrap macro: create a binding for "and" in compile phase
+	compileEnv := env.Compile()
+	compileEnv.MaybeCreateOwnGlobalBinding(
+		values.NewSymbol("and"), environment.BindingTypeSyntax,
+	)
+
+	reg.ApplyDocs(env)
+
+	tcs := []struct {
+		name    string
+		sym     string
+		wantDoc string
+	}{
+		{"BindingSpec with doc", "if", "Conditional expression."},
+		{"DocEntry on pre-existing binding", "and", "Short-circuit conjunction."},
+		{"BindingSpec without doc unchanged", "else", ""},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			bnd := compileEnv.GetBinding(values.NewSymbol(tc.sym))
+			c.Assert(bnd, qt.IsNotNil)
+			c.Assert(bnd.Doc(), qt.Equals, tc.wantDoc)
+		})
+	}
+}
+
+func TestApplyDocs_MultiPhase(t *testing.T) {
+	c := qt.New(t)
+
+	reg := NewRegistry()
+	reg.AddPrimitive(PrimitiveSpec{
+		Name:       "multi",
+		ParamCount: 0,
+		Impl:       noopImpl,
+	}, PhaseRuntime|PhaseExpand)
+	reg.AddDocumentation("multi", "Documented across phases.")
+
+	topLevel := environment.NewNamespace()
+	env := topLevel.Runtime()
+	err := reg.Apply(context.Background(), env)
+	c.Assert(err, qt.IsNil)
+
+	reg.ApplyDocs(env)
+
+	sym := values.NewSymbol("multi")
+
+	runtimeBnd := env.GetBinding(sym)
+	c.Assert(runtimeBnd, qt.IsNotNil)
+	c.Assert(runtimeBnd.Doc(), qt.Equals, "Documented across phases.")
+
+	expandBnd := env.Expand().GetBinding(sym)
+	c.Assert(expandBnd, qt.IsNotNil)
+	c.Assert(expandBnd.Doc(), qt.Equals, "Documented across phases.")
+}
+
+func TestApplyDocs_NonexistentBinding(t *testing.T) {
+	c := qt.New(t)
+
+	reg := NewRegistry()
+	reg.AddDocumentation("nonexistent", "Should be silently skipped.")
+
+	topLevel := environment.NewNamespace()
+	env := topLevel.Runtime()
+	err := reg.Apply(context.Background(), env)
+	c.Assert(err, qt.IsNil)
+
+	// Must not panic
+	reg.ApplyDocs(env)
+	c.Assert(true, qt.IsTrue)
+}
