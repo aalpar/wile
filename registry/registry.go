@@ -28,7 +28,7 @@ type PrimitiveSpec struct {
 	ParamCount int
 	IsVariadic bool
 	Impl       machine.ForeignFunction
-	Doc        string             // optional: one-line description
+	Doc        string             // optional: brief description
 	ParamNames []string           // optional: parameter names
 	Category   string             // optional: grouping category
 	ParamTypes []values.ValueType // optional: type contract per parameter

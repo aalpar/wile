@@ -51,16 +51,17 @@ func PrimIntegerToChar(mc *machine.MachineContext) error {
 }
 
 // charCompareSpecs defines the five R7RS §6.6 character comparison predicates.
-// Each entry pairs a primitive name with its comparison function.
+// Each entry has a primitive name, comparison function, and doc string.
 var charCompareSpecs = []struct {
 	name string
 	cmp  func(rune, rune) bool
+	doc  string
 }{
-	{"char=?", func(a, b rune) bool { return a == b }},
-	{"char<?", func(a, b rune) bool { return a < b }},
-	{"char>?", func(a, b rune) bool { return a > b }},
-	{"char<=?", func(a, b rune) bool { return a <= b }},
-	{"char>=?", func(a, b rune) bool { return a >= b }},
+	{"char=?", func(a, b rune) bool { return a == b }, "Returns #t if all character arguments have the same Unicode code point."},
+	{"char<?", func(a, b rune) bool { return a < b }, "Returns #t if character arguments are monotonically increasing by Unicode code point."},
+	{"char>?", func(a, b rune) bool { return a > b }, "Returns #t if character arguments are monotonically decreasing by Unicode code point."},
+	{"char<=?", func(a, b rune) bool { return a <= b }, "Returns #t if character arguments are monotonically non-decreasing by Unicode code point."},
+	{"char>=?", func(a, b rune) bool { return a >= b }, "Returns #t if character arguments are monotonically non-increasing by Unicode code point."},
 }
 
 // makeCharComparePrimitive returns a ForeignFunction that performs a variadic

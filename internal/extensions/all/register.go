@@ -68,21 +68,21 @@ var SafeExtension = registry.NewExtension("all-safe", SafeBuilder.AddToRegistry)
 func addRecords(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "make-record-type", ParamCount: 2, Impl: PrimMakeRecordType,
-			Doc: "Creates a new record type from name and field names.", ParamNames: []string{"name", "field-names"}, Category: "records"},
+			Doc: "Creates a new record type descriptor with the given name (symbol) and field-names (list of symbols).", ParamNames: []string{"name", "field-names"}, Category: "records"},
 		{Name: "record-type?", ParamCount: 1, Impl: PrimIsRecordType,
-			Doc: "Returns #t if obj is a record type.", ParamNames: []string{"obj"}, Category: "records"},
+			Doc: "Returns #t if obj is a record type descriptor.", ParamNames: []string{"obj"}, Category: "records"},
 		{Name: "record?", ParamCount: 1, Impl: PrimIsRecord,
-			Doc: "Returns #t if obj is a record.", ParamNames: []string{"obj"}, Category: "records"},
+			Doc: "Returns #t if obj is a record instance of any record type.", ParamNames: []string{"obj"}, Category: "records"},
 		{Name: "record-type", ParamCount: 1, Impl: PrimRecordType,
-			Doc: "Returns the record type of a record.", ParamNames: []string{"record"}, Category: "records"},
+			Doc: "Returns the record type descriptor of a record instance.", ParamNames: []string{"record"}, Category: "records"},
 		{Name: "record-constructor", ParamCount: 2, Impl: PrimRecordConstructor,
-			Doc: "Creates a constructor procedure for a record type.", ParamNames: []string{"rtd", "field-tags"}, Category: "records"},
+			Doc: "Returns a constructor procedure for rtd that initializes the fields named in field-tags.", ParamNames: []string{"rtd", "field-tags"}, Category: "records"},
 		{Name: "record-predicate", ParamCount: 1, Impl: PrimRecordPredicate,
-			Doc: "Creates a predicate procedure for a record type.", ParamNames: []string{"rtd"}, Category: "records"},
+			Doc: "Returns a predicate procedure that returns #t for instances of rtd.", ParamNames: []string{"rtd"}, Category: "records"},
 		{Name: "record-accessor", ParamCount: 2, Impl: PrimRecordAccessor,
-			Doc: "Creates a field accessor for a record type.", ParamNames: []string{"rtd", "field-tag"}, Category: "records"},
+			Doc: "Returns an accessor procedure that retrieves field-tag from instances of rtd.", ParamNames: []string{"rtd", "field-tag"}, Category: "records"},
 		{Name: "record-modifier", ParamCount: 2, Impl: PrimRecordModifier,
-			Doc: "Creates a field modifier for a record type.", ParamNames: []string{"rtd", "field-tag"}, Category: "records"},
+			Doc: "Returns a modifier procedure that sets field-tag on instances of rtd.", ParamNames: []string{"rtd", "field-tag"}, Category: "records"},
 	}, registry.PhaseRuntime)
 	return nil
 }
@@ -90,13 +90,13 @@ func addRecords(r *registry.Registry) error {
 func addPromises(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "promise?", ParamCount: 1, Impl: PrimPromiseQ,
-			Doc: "Returns #t if obj is a promise.", ParamNames: []string{"obj"}, Category: "promises"},
+			Doc: "Returns #t if obj is a promise (created by delay, delay-force, or make-promise).", ParamNames: []string{"obj"}, Category: "promises"},
 		{Name: "make-promise", ParamCount: 1, Impl: PrimMakePromise,
-			Doc: "Creates an eager promise wrapping a value.", ParamNames: []string{"obj"}, Category: "promises"},
+			Doc: "Returns an eager (already-forced) promise wrapping obj. If obj is already a promise, returns it unchanged.", ParamNames: []string{"obj"}, Category: "promises"},
 		{Name: "force", ParamCount: 1, Impl: PrimForce,
-			Doc: "Forces a promise and returns its value.", ParamNames: []string{"promise"}, Category: "promises"},
+			Doc: "Forces evaluation of a promise and returns its memoized value. Non-promise arguments are returned unchanged.", ParamNames: []string{"promise"}, Category: "promises"},
 		{Name: "%make-lazy-promise", ParamCount: 1, Impl: PrimMakeLazyPromise,
-			Doc: "Creates a lazy promise from a thunk.", ParamNames: []string{"thunk"}, Category: "promises"},
+			Doc: "Internal: creates a lazy promise from thunk. Used by the delay macro.", ParamNames: []string{"thunk"}, Category: "promises"},
 	}, registry.PhaseRuntime)
 	return nil
 }
@@ -104,15 +104,15 @@ func addPromises(r *registry.Registry) error {
 func addMoreStrings(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "string-copy!", ParamCount: 2, IsVariadic: true, Impl: PrimStringCopyTo,
-			Doc: "Copies characters from one string to another.", ParamNames: []string{"to", "at"}, Category: "strings"},
+			Doc: "Copies characters from the from string into the to string starting at position at.", ParamNames: []string{"to", "at"}, Category: "strings"},
 		{Name: "string-fill!", ParamCount: 2, IsVariadic: true, Impl: PrimStringFill,
-			Doc: "Fills a string range with a character.", ParamNames: []string{"string", "char"}, Category: "strings"},
+			Doc: "Fills string positions from start to end with char. Start defaults to 0, end to string length.", ParamNames: []string{"string", "char"}, Category: "strings"},
 		{Name: "string-upcase", ParamCount: 1, Impl: PrimStringUpcase,
-			Doc: "Returns the uppercase version of a string.", ParamNames: []string{"string"}, Category: "strings"},
+			Doc: "Returns a new string with all characters converted to uppercase using full Unicode case mapping.", ParamNames: []string{"string"}, Category: "strings"},
 		{Name: "string-downcase", ParamCount: 1, Impl: PrimStringDowncase,
-			Doc: "Returns the lowercase version of a string.", ParamNames: []string{"string"}, Category: "strings"},
+			Doc: "Returns a new string with all characters converted to lowercase using full Unicode case mapping.", ParamNames: []string{"string"}, Category: "strings"},
 		{Name: "string-foldcase", ParamCount: 1, Impl: PrimStringFoldcase,
-			Doc: "Returns the case-folded version of a string.", ParamNames: []string{"string"}, Category: "strings"},
+			Doc: "Returns a new string with full Unicode case folding applied. Useful for case-insensitive comparison.", ParamNames: []string{"string"}, Category: "strings"},
 	}, registry.PhaseRuntime)
 
 	// Case-insensitive string comparisons (generated from stringCiCompareSpecs table)
@@ -121,7 +121,7 @@ func addMoreStrings(r *registry.Registry) error {
 		stringCiPrims[i] = registry.PrimitiveSpec{
 			Name: spec.name, ParamCount: 2, IsVariadic: true,
 			Impl:       makeStringCiComparePrimitive(spec.name, spec.cmp),
-			Doc:        "Compares strings case-insensitively.",
+			Doc:        spec.doc,
 			ParamNames: []string{"s1", "s2"}, Category: "strings",
 		}
 	}
@@ -136,7 +136,7 @@ func addMoreChars(r *registry.Registry) error {
 		charCiPrims[i] = registry.PrimitiveSpec{
 			Name: spec.name, ParamCount: 2, IsVariadic: true,
 			Impl:       makeCharCiComparePrimitive(spec.name, spec.cmp),
-			Doc:        "Compares characters case-insensitively.",
+			Doc:        spec.doc,
 			ParamNames: []string{"c1", "c2"}, Category: "characters",
 		}
 	}
@@ -144,23 +144,23 @@ func addMoreChars(r *registry.Registry) error {
 
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "char-alphabetic?", ParamCount: 1, Impl: PrimCharAlphabeticQ,
-			Doc: "Returns #t if char is alphabetic.", ParamNames: []string{"char"}, Category: "characters"},
+			Doc: "Returns #t if char is a Unicode letter (Lu, Ll, Lt, Lm, Lo categories).", ParamNames: []string{"char"}, Category: "characters"},
 		{Name: "char-numeric?", ParamCount: 1, Impl: PrimCharNumericQ,
-			Doc: "Returns #t if char is numeric.", ParamNames: []string{"char"}, Category: "characters"},
+			Doc: "Returns #t if char is a Unicode decimal digit.", ParamNames: []string{"char"}, Category: "characters"},
 		{Name: "char-whitespace?", ParamCount: 1, Impl: PrimCharWhitespaceQ,
-			Doc: "Returns #t if char is whitespace.", ParamNames: []string{"char"}, Category: "characters"},
+			Doc: "Returns #t if char is a Unicode whitespace character.", ParamNames: []string{"char"}, Category: "characters"},
 		{Name: "char-upper-case?", ParamCount: 1, Impl: PrimCharUpperCaseQ,
-			Doc: "Returns #t if char is uppercase.", ParamNames: []string{"char"}, Category: "characters"},
+			Doc: "Returns #t if char is an uppercase Unicode letter.", ParamNames: []string{"char"}, Category: "characters"},
 		{Name: "char-lower-case?", ParamCount: 1, Impl: PrimCharLowerCaseQ,
-			Doc: "Returns #t if char is lowercase.", ParamNames: []string{"char"}, Category: "characters"},
+			Doc: "Returns #t if char is a lowercase Unicode letter.", ParamNames: []string{"char"}, Category: "characters"},
 		{Name: "char-upcase", ParamCount: 1, Impl: PrimCharUpcase,
-			Doc: "Returns the uppercase version of a character.", ParamNames: []string{"char"}, Category: "characters"},
+			Doc: "Returns the uppercase form of char. Simple (1:1) Unicode case mapping.", ParamNames: []string{"char"}, Category: "characters"},
 		{Name: "char-downcase", ParamCount: 1, Impl: PrimCharDowncase,
-			Doc: "Returns the lowercase version of a character.", ParamNames: []string{"char"}, Category: "characters"},
+			Doc: "Returns the lowercase form of char. Simple (1:1) Unicode case mapping.", ParamNames: []string{"char"}, Category: "characters"},
 		{Name: "char-foldcase", ParamCount: 1, Impl: PrimCharFoldcase,
-			Doc: "Returns the case-folded version of a character.", ParamNames: []string{"char"}, Category: "characters"},
+			Doc: "Returns the case-folded form of char for case-insensitive comparison.", ParamNames: []string{"char"}, Category: "characters"},
 		{Name: "digit-value", ParamCount: 1, Impl: PrimDigitValue,
-			Doc: "Returns the numeric value of a digit character, or #f.", ParamNames: []string{"char"}, Category: "characters"},
+			Doc: "Returns the numeric value (0-9) of a Unicode decimal digit character, or #f if not a digit.", ParamNames: []string{"char"}, Category: "characters"},
 	}, registry.PhaseRuntime)
 	return nil
 }

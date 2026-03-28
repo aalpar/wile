@@ -22,16 +22,16 @@ import (
 func addBoxes(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "box", ParamCount: 1, Impl: PrimBox,
-			Doc: "Wraps a value in a mutable box.", ParamNames: []string{"obj"}, Category: "boxes",
+			Doc: "Returns a new mutable box containing obj. Boxes are single-element mutable containers.", ParamNames: []string{"obj"}, Category: "boxes",
 			ParamTypes: []values.ValueType{values.TypeAny}},
 		{Name: "box?", ParamCount: 1, Impl: PrimBoxQ,
-			Doc: "Returns #t if obj is a box.", ParamNames: []string{"obj"}, Category: "boxes",
+			Doc: "Returns #t if obj is a box created by box.", ParamNames: []string{"obj"}, Category: "boxes",
 			ParamTypes: []values.ValueType{values.TypeAny}, ReturnType: values.TypeBoolean},
 		{Name: "unbox", ParamCount: 1, Impl: PrimUnbox,
-			Doc: "Returns the value stored in a box.", ParamNames: []string{"box"}, Category: "boxes",
+			Doc: "Returns the current value stored in box. Raises an error if the argument is not a box.", ParamNames: []string{"box"}, Category: "boxes",
 			ParamTypes: []values.ValueType{values.TypeAny}},
 		{Name: "set-box!", ParamCount: 2, Impl: PrimSetBox,
-			Doc: "Stores a new value in a box.", ParamNames: []string{"box", "obj"}, Category: "boxes",
+			Doc: "Replaces the contents of box with obj.", ParamNames: []string{"box", "obj"}, Category: "boxes",
 			ParamTypes: []values.ValueType{values.TypeAny, values.TypeAny}, ReturnType: values.TypeVoid},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 

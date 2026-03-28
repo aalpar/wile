@@ -290,16 +290,17 @@ func PrimStringCopy(mc *machine.MachineContext) error {
 }
 
 // stringCompareSpecs defines the five R7RS §6.7 string comparison predicates.
-// Each entry pairs a primitive name with its comparison function.
+// Each entry has a primitive name, comparison function, and doc string.
 var stringCompareSpecs = []struct {
 	name string
 	cmp  func(string, string) bool
+	doc  string
 }{
-	{"string=?", func(a, b string) bool { return a == b }},
-	{"string<?", func(a, b string) bool { return a < b }},
-	{"string>?", func(a, b string) bool { return a > b }},
-	{"string<=?", func(a, b string) bool { return a <= b }},
-	{"string>=?", func(a, b string) bool { return a >= b }},
+	{"string=?", func(a, b string) bool { return a == b }, "Returns #t if all string arguments have the same sequence of characters."},
+	{"string<?", func(a, b string) bool { return a < b }, "Returns #t if string arguments are monotonically increasing in lexicographic order."},
+	{"string>?", func(a, b string) bool { return a > b }, "Returns #t if string arguments are monotonically decreasing in lexicographic order."},
+	{"string<=?", func(a, b string) bool { return a <= b }, "Returns #t if string arguments are monotonically non-decreasing in lexicographic order."},
+	{"string>=?", func(a, b string) bool { return a >= b }, "Returns #t if string arguments are monotonically non-increasing in lexicographic order."},
 }
 
 // makeStringComparePrimitive returns a ForeignFunction that performs a variadic

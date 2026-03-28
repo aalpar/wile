@@ -152,17 +152,18 @@ func PrimStringFill(mc *machine.MachineContext) error {
 }
 
 // stringCiCompareSpecs defines the five R7RS §6.7 case-insensitive string comparison
-// predicates. Each entry pairs a primitive name with its comparison function.
-// Mirrors charCiCompareSpecs in prim_characters.go.
+// predicates. Each entry has a primitive name, comparison function, and doc string.
+// Mirrors stringCompareSpecs in registry/core/prim_strings.go.
 var stringCiCompareSpecs = []struct {
 	name string
 	cmp  func(string, string) bool
+	doc  string
 }{
-	{"string-ci=?", func(a, b string) bool { return getCaseFolded(a) == getCaseFolded(b) }},
-	{"string-ci<?", func(a, b string) bool { return getCaseFolded(a) < getCaseFolded(b) }},
-	{"string-ci>?", func(a, b string) bool { return getCaseFolded(a) > getCaseFolded(b) }},
-	{"string-ci<=?", func(a, b string) bool { return getCaseFolded(a) <= getCaseFolded(b) }},
-	{"string-ci>=?", func(a, b string) bool { return getCaseFolded(a) >= getCaseFolded(b) }},
+	{"string-ci=?", func(a, b string) bool { return getCaseFolded(a) == getCaseFolded(b) }, "Returns #t if all strings are equal after case folding."},
+	{"string-ci<?", func(a, b string) bool { return getCaseFolded(a) < getCaseFolded(b) }, "Returns #t if strings are monotonically increasing after case folding."},
+	{"string-ci>?", func(a, b string) bool { return getCaseFolded(a) > getCaseFolded(b) }, "Returns #t if strings are monotonically decreasing after case folding."},
+	{"string-ci<=?", func(a, b string) bool { return getCaseFolded(a) <= getCaseFolded(b) }, "Returns #t if strings are monotonically non-decreasing after case folding."},
+	{"string-ci>=?", func(a, b string) bool { return getCaseFolded(a) >= getCaseFolded(b) }, "Returns #t if strings are monotonically non-increasing after case folding."},
 }
 
 // makeStringCiComparePrimitive returns a ForeignFunction that performs a variadic
