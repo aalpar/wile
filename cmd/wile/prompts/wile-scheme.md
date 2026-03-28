@@ -21,7 +21,29 @@ state carry forward across calls:
 (* x 2)  ; → 84
 ```
 
+Multiple definitions in a single call can reference each other freely:
+
+```scheme
+;; Forward references work within a single eval call
+(define (even? n) (if (= n 0) #t (odd? (- n 1))))
+(define (odd? n) (if (= n 0) #f (even? (- n 1))))
+(even? 10)  ; → #t
+```
+
 Use the `reset` tool to discard all state and start fresh.
+
+## Result Format
+
+The `eval` tool returns JSON with two optional fields:
+
+```json
+{"output": "hello world\n", "value": "42"}
+```
+
+- **output** — captured stdout from `display`, `write`, `newline` (omitted if empty)
+- **value** — the result of the last expression (omitted if void)
+
+An empty object `{}` means the expression was void with no output.
 
 ## Discovering What's Available
 
@@ -35,6 +57,24 @@ Before writing code, use the documentation tools:
 | `doc (<lib>)` | Library info: description and export list |
 | `apropos <pattern>` | Search by name, doc text, or category |
 | `libraries` | List all currently loaded Scheme libraries |
+| `set-timeout` | Change the eval timeout for this session |
+
+## Timeout
+
+Eval has a default timeout of **30 seconds**. For long-running computations,
+pass the `timeout` parameter:
+
+```json
+{"code": "(some-expensive-computation)", "timeout": 120}
+```
+
+To change the session default, use the `set-timeout` tool:
+
+```json
+{"seconds": 120}
+```
+
+Use `0` to disable the timeout entirely.
 
 ## Importing Libraries
 
@@ -66,13 +106,13 @@ Libraries load on demand with `(import ...)`. Core forms are always available:
 (import (wile algebra))          ; lattices, semirings, monoids, groups, fields
 ```
 
-Use `(libraries)` to see which are already loaded. Use `(doc (wile files))`
-to see what a library exports.
+Use `libraries` to see which are already loaded. Use `doc` with a library
+name (e.g. `(wile files)`) to see what it exports.
 
 ## Common Patterns
 
 ```scheme
-; Output
+; Output (captured in the "output" field of the JSON result)
 (import (scheme write))
 (display "result: ") (display value) (newline)
 
@@ -107,3 +147,4 @@ to see what a library exports.
 3. Build incrementally: definitions accumulate across `eval` calls
 4. Use `reset` when you need a clean slate
 5. Report Scheme errors clearly: include the error text and the code that caused it
+6. For long computations, pass `timeout` to extend the default 30s limit

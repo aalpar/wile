@@ -15,32 +15,42 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/aalpar/wile"
+	ioext "github.com/aalpar/wile/internal/extensions/io"
 	"github.com/aalpar/wile/internal/repl"
 	"github.com/aalpar/wile/stdlib"
+	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
 
 type mcpServer struct {
-	mu     sync.Mutex
-	engine *wile.Engine
-	meta   *repl.MetaCommandHandler
+	mu             sync.Mutex
+	engine         *wile.Engine
+	meta           *repl.MetaCommandHandler
+	defaultTimeout time.Duration
 }
 
 // doMCP starts a Model Context Protocol server on stdio, exposing the Wile
 // documentation, evaluation, and session management tools.
-func doMCP(ctx context.Context) error {
+func doMCP(ctx context.Context, timeoutSec float64) error {
 	ms := &mcpServer{}
+	if timeoutSec > 0 {
+		ms.defaultTimeout = time.Duration(timeoutSec * float64(time.Second))
+	}
 
 	v := BuildVersion
 	if v == "" {
@@ -60,10 +70,19 @@ func doMCP(ctx context.Context) error {
 				"Evaluate one or more Scheme expressions in a persistent session. "+
 					"Definitions, imports, and state carry forward across calls. "+
 					"All R7RS features and wile extensions are available. "+
-					"Returns the value of the last expression, or empty string for void results."),
+					"Multiple top-level definitions in a single call can reference each other. "+
+					"Returns JSON: {\"output\":\"...\", \"value\":\"...\"} where output is captured "+
+					"stdout (display/write) and value is the result of the last expression. "+
+					"Fields are omitted when empty. "+
+					"Default timeout is 30s; pass timeout parameter to override."),
 			mcp.WithString("code",
 				mcp.Required(),
 				mcp.Description("Scheme expression(s) to evaluate"),
+			),
+			mcp.WithNumber("timeout",
+				mcp.Description(
+					"Eval timeout in seconds. Overrides the session default (30s). "+
+						"Use for long-running computations. 0 means no timeout."),
 			),
 		),
 		ms.handleEval,
@@ -140,6 +159,20 @@ func doMCP(ctx context.Context) error {
 		ms.handleReset,
 	)
 
+	s.AddTool(
+		mcp.NewTool("set-timeout",
+			mcp.WithDescription(
+				"Set the default eval timeout for this session in seconds. "+
+					"Affects all subsequent eval calls that don't specify their own timeout. "+
+					"Use 0 to disable the timeout. Initial default is 30s."),
+			mcp.WithNumber("seconds",
+				mcp.Required(),
+				mcp.Description("Timeout in seconds (0 = no timeout)"),
+			),
+		),
+		ms.handleSetTimeout,
+	)
+
 	err := ms.registerPrompts(s)
 	if err != nil {
 		return err
@@ -149,7 +182,8 @@ func doMCP(ctx context.Context) error {
 }
 
 // initLocked lazily initializes the engine and meta-command handler.
-// The caller must hold ms.mu.
+// The caller must hold ms.mu. Redirects current-output-port away from
+// os.Stdout to prevent Scheme output from corrupting the MCP transport.
 func (ms *mcpServer) initLocked(ctx context.Context) error {
 	if ms.meta != nil {
 		return nil
@@ -164,9 +198,21 @@ func (ms *mcpServer) initLocked(ctx context.Context) error {
 		return err
 	}
 	ms.engine = engine
+
+	// Redirect output away from stdout (the MCP JSON-RPC transport).
+	// Each handleEval call captures into its own buffer; between evals,
+	// output goes to discard.
+	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(io.Discard))
+
 	docProv := repl.NewRegistryDocProvider(engine.Registry())
 	ms.meta = repl.NewMetaCommandHandler(engine.Environment(), nil, docProv)
 	return nil
+}
+
+// evalResult is the structured JSON response from the eval tool.
+type evalResult struct {
+	Output string `json:"output,omitempty"`
+	Value  string `json:"value,omitempty"`
 }
 
 func (ms *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -174,20 +220,62 @@ func (ms *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (*
 	if code == "" {
 		return mcp.NewToolResultError("code parameter is required"), nil
 	}
+
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
+
 	err := ms.initLocked(ctx)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("engine init failed: %v", err)), nil
 	}
-	val, err := ms.engine.EvalMultiple(ctx, code)
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+
+	// Apply timeout: per-call parameter overrides session default.
+	timeout := req.GetFloat("timeout", -1)
+	evalTimeout := ms.defaultTimeout
+	if timeout > 0 {
+		evalTimeout = time.Duration(timeout * float64(time.Second))
+	} else if timeout == 0 {
+		evalTimeout = 0
 	}
-	if val == nil || val.IsVoid() {
-		return mcp.NewToolResultText(""), nil
+	if evalTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, evalTimeout)
+		defer cancel()
 	}
-	return mcp.NewToolResultText(val.SchemeString()), nil
+
+	// Capture stdout: redirect current-output-port to a buffer.
+	var buf bytes.Buffer
+	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(&buf))
+	defer ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(io.Discard))
+
+	// Wrap in (begin ...) so all defines have mutual visibility,
+	// matching the file execution pattern in runFile.
+	wrapped := "(begin " + code + "\n)"
+
+	val, evalErr := ms.engine.EvalMultiple(ctx, wrapped)
+
+	var result evalResult
+	output := buf.String()
+	if output != "" {
+		result.Output = output
+	}
+	if evalErr != nil {
+		// Include any captured output alongside the error.
+		errMsg := evalErr.Error()
+		if output != "" {
+			errMsg = fmt.Sprintf("%s\n\n[stderr]\n%s", output, evalErr.Error())
+		}
+		return mcp.NewToolResultError(errMsg), nil
+	}
+	if val != nil && !val.IsVoid() {
+		result.Value = val.SchemeString()
+	}
+
+	encoded, jsonErr := json.Marshal(result)
+	if jsonErr != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("encoding result: %v", jsonErr)), nil
+	}
+	return mcp.NewToolResultText(string(encoded)), nil
 }
 
 // runMeta routes a comma-command through MetaCommandHandler, capturing output
@@ -247,7 +335,23 @@ func (ms *mcpServer) handleReset(_ context.Context, _ mcp.CallToolRequest) (*mcp
 		ms.engine = nil
 		ms.meta = nil
 	}
+	ioext.ResetState()
 	return mcp.NewToolResultText("Session reset. The next call will reinitialize the engine."), nil
+}
+
+func (ms *mcpServer) handleSetTimeout(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	seconds := req.GetFloat("seconds", -1)
+	if seconds < 0 {
+		return mcp.NewToolResultError("seconds parameter is required"), nil
+	}
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+	if seconds == 0 {
+		ms.defaultTimeout = 0
+		return mcp.NewToolResultText("Eval timeout disabled."), nil
+	}
+	ms.defaultTimeout = time.Duration(seconds * float64(time.Second))
+	return mcp.NewToolResultText(fmt.Sprintf("Eval timeout set to %s.", ms.defaultTimeout)), nil
 }
 
 func (ms *mcpServer) registerPrompts(s *server.MCPServer) error {
