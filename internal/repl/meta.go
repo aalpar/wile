@@ -488,6 +488,9 @@ func (p *MetaCommandHandler) cmdTopic(args []string, out io.Writer) {
 
 // searchBindings searches phase environment bindings for the pattern.
 func (p *MetaCommandHandler) searchBindings(pattern string) []DocSearchResult {
+	if p.env == nil {
+		return nil
+	}
 	lowerPattern := strings.ToLower(pattern)
 	topLevel := p.env.Namespace()
 	if topLevel == nil {
@@ -507,6 +510,10 @@ func (p *MetaCommandHandler) searchBindings(pattern string) []DocSearchResult {
 		if global == nil {
 			continue
 		}
+		// Keys() and Bindings() are separate locked snapshots. A concurrent
+		// define could add a key whose index exceeds the bindings snapshot
+		// length. The idx < len(bindings) guard below prevents a panic;
+		// the skipped entry is acceptable for a best-effort REPL search.
 		keys := global.Keys()
 		bindings := global.Bindings()
 		for sym, idx := range keys {

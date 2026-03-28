@@ -187,7 +187,7 @@ func TestMetaCommandHandlerCommands(t *testing.T) {
 	qt.Assert(t, len(cmds) > 0, qt.IsTrue)
 
 	// Session commands
-	for _, expected := range []string{"help", "doc", "edit"} {
+	for _, expected := range []string{"help", "doc", "edit", "apropos", "topics", "topic"} {
 		qt.Assert(t, slices.Contains(cmds, expected), qt.IsTrue,
 			qt.Commentf("Commands() should contain session command %q, got %v", expected, cmds))
 	}
@@ -199,7 +199,7 @@ func TestMetaCommandHandlerCommands(t *testing.T) {
 	}
 
 	// Aliases should also be present
-	for _, expected := range []string{"h", "?", "b", "s", "c", "bt"} {
+	for _, expected := range []string{"h", "?", "a", "b", "s", "c", "bt"} {
 		qt.Assert(t, slices.Contains(cmds, expected), qt.IsTrue,
 			qt.Commentf("Commands() should contain alias %q, got %v", expected, cmds))
 	}

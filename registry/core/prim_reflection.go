@@ -274,7 +274,11 @@ func PrimProcedureDocumentation(mc *machine.MachineContext) error {
 // registryFromContext extracts the *registry.Registry from the MachineContext's
 // namespace. Returns nil if unavailable.
 func registryFromContext(mc *machine.MachineContext) *registry.Registry {
-	regAny := mc.EnvironmentFrame().Namespace().Registry()
+	ns := mc.EnvironmentFrame().Namespace()
+	if ns == nil {
+		return nil
+	}
+	regAny := ns.Registry()
 	if regAny == nil {
 		return nil
 	}
