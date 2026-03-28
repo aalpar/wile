@@ -61,7 +61,7 @@ Before writing code, use the documentation tools:
 
 ## Timeout
 
-Eval has a default timeout of **30 seconds**. For long-running computations,
+Eval has a **server-configured default timeout** (typically 30 seconds). For long-running computations,
 pass the `timeout` parameter:
 
 ```json

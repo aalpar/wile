@@ -197,6 +197,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Error: --mcp cannot be combined with -e, -f, or -i")
 		os.Exit(1)
 	}
+	if opts.MCPTimeout < 0 {
+		fmt.Fprintln(os.Stderr, "Error: --mcp-timeout must be non-negative")
+		os.Exit(1)
+	}
 
 	// CPU profiling
 	if opts.CPUProfile != "" {

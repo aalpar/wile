@@ -448,6 +448,7 @@ func TestCmdLibraries(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			h := NewMetaCommandHandler(env, nil, nil)
+			h.SetPager("")
 			h.cmdLibraries(&buf)
 			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
 				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
@@ -473,6 +474,7 @@ func TestCmdLibraries(t *testing.T) {
 	t.Run("alias libs", func(t *testing.T) {
 		var buf bytes.Buffer
 		h := NewMetaCommandHandler(env, nil, nil)
+		h.SetPager("")
 		h.Handle(",libs", &buf)
 		qt.Assert(t, strings.Contains(buf.String(), "(test lib)"), qt.IsTrue)
 	})

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"strings"
 	"sync"
@@ -76,14 +77,14 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 					"Returns JSON: {\"output\":\"...\", \"value\":\"...\"} where output is captured "+
 					"stdout (display/write) and value is the result of the last expression. "+
 					"Fields are omitted when empty. "+
-					"Default timeout is 30s; pass timeout parameter to override."),
+					"Uses the session default timeout; pass timeout parameter to override."),
 			mcp.WithString("code",
 				mcp.Required(),
 				mcp.Description("Scheme expression(s) to evaluate"),
 			),
 			mcp.WithNumber("timeout",
 				mcp.Description(
-					"Eval timeout in seconds. Overrides the session default (30s). "+
+					"Eval timeout in seconds. Overrides the session default. "+
 						"Use for long-running computations. 0 means no timeout."),
 			),
 		),
@@ -166,7 +167,7 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 			mcp.WithDescription(
 				"Set the default eval timeout for this session in seconds. "+
 					"Affects all subsequent eval calls that don't specify their own timeout. "+
-					"Use 0 to disable the timeout. Initial default is 30s."),
+					"Use 0 to disable the timeout."),
 			mcp.WithNumber("seconds",
 				mcp.Required(),
 				mcp.Description("Timeout in seconds (0 = no timeout)"),
@@ -253,6 +254,9 @@ func (p *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (to
 
 	// Apply timeout: per-call parameter overrides session default.
 	timeout := req.GetFloat("timeout", -1)
+	if timeout != -1 && (math.IsNaN(timeout) || math.IsInf(timeout, 0) || timeout < 0) {
+		return mcp.NewToolResultError("timeout must be a non-negative number"), nil
+	}
 	evalTimeout := p.defaultTimeout
 	if timeout > 0 {
 		evalTimeout = time.Duration(timeout * float64(time.Second))
@@ -386,8 +390,11 @@ func (p *mcpServer) handleReset(_ context.Context, _ mcp.CallToolRequest) (*mcp.
 
 func (p *mcpServer) handleSetTimeout(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	seconds := req.GetFloat("seconds", -1)
-	if seconds < 0 {
+	if seconds == -1 {
 		return mcp.NewToolResultError("seconds parameter is required"), nil
+	}
+	if math.IsNaN(seconds) || math.IsInf(seconds, 0) || seconds < 0 {
+		return mcp.NewToolResultError("seconds must be a non-negative number"), nil
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -454,6 +461,10 @@ func (p *mcpServer) makePromptHandler(template string, argNames []string) server
 			text = strings.ReplaceAll(text, "{{"+k+"}}", v)
 		}
 		for _, n := range argNames {
+			_, provided := req.Params.Arguments[n]
+			if provided {
+				continue
+			}
 			text = strings.ReplaceAll(text, "{{"+n+"}}", "(not specified)")
 		}
 		return &mcp.GetPromptResult{
