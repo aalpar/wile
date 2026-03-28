@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"log"
 	"strings"
 	"sync"
 
@@ -147,14 +148,11 @@ func doMCP(ctx context.Context) error {
 	return server.ServeStdio(s)
 }
 
-// getHandler lazily initializes the engine and meta-command handler under the
-// mutex. Subsequent calls return the existing handler without re-initializing.
-// reset() sets engine and meta to nil so the next getHandler call rebuilds them.
-func (ms *mcpServer) getHandler(ctx context.Context) (*repl.MetaCommandHandler, error) {
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
+// initLocked lazily initializes the engine and meta-command handler.
+// The caller must hold ms.mu.
+func (ms *mcpServer) initLocked(ctx context.Context) error {
 	if ms.meta != nil {
-		return ms.meta, nil
+		return nil
 	}
 	engine, err := wile.NewEngine(ctx,
 		wile.WithAllExtensions(),
@@ -163,12 +161,12 @@ func (ms *mcpServer) getHandler(ctx context.Context) (*repl.MetaCommandHandler, 
 		wile.WithLibraryPaths(buildLibraryPaths()...),
 	)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	ms.engine = engine
 	docProv := repl.NewRegistryDocProvider(engine.Registry())
 	ms.meta = repl.NewMetaCommandHandler(engine.Environment(), nil, docProv)
-	return ms.meta, nil
+	return nil
 }
 
 func (ms *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -176,14 +174,12 @@ func (ms *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (*
 	if code == "" {
 		return mcp.NewToolResultError("code parameter is required"), nil
 	}
-	_, err := ms.getHandler(ctx)
-	if err != nil {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+	if err := ms.initLocked(ctx); err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("engine init failed: %v", err)), nil
 	}
-	ms.mu.Lock()
-	engine := ms.engine
-	ms.mu.Unlock()
-	val, err := engine.EvalMultiple(ctx, code)
+	val, err := ms.engine.EvalMultiple(ctx, code)
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -196,12 +192,13 @@ func (ms *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (*
 // runMeta routes a comma-command through MetaCommandHandler, capturing output
 // in a strings.Builder and returning it as a tool result.
 func (ms *mcpServer) runMeta(ctx context.Context, line string) (*mcp.CallToolResult, error) {
-	handler, err := ms.getHandler(ctx)
-	if err != nil {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+	if err := ms.initLocked(ctx); err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("engine init failed: %v", err)), nil
 	}
 	var sb strings.Builder
-	handler.Handle(line, &sb)
+	ms.meta.Handle(line, &sb)
 	return mcp.NewToolResultText(sb.String()), nil
 }
 
@@ -241,7 +238,9 @@ func (ms *mcpServer) handleReset(_ context.Context, _ mcp.CallToolRequest) (*mcp
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 	if ms.engine != nil {
-		_ = ms.engine.Close()
+		if err := ms.engine.Close(); err != nil {
+			log.Printf("reset: engine close: %v", err)
+		}
 		ms.engine = nil
 		ms.meta = nil
 	}
@@ -254,6 +253,7 @@ func (ms *mcpServer) registerPrompts(s *server.MCPServer) error {
 		description string
 		file        string
 		args        []mcp.PromptOption
+		argNames    []string
 	}
 
 	prompts := []promptDef{
@@ -261,6 +261,7 @@ func (ms *mcpServer) registerPrompts(s *server.MCPServer) error {
 			name:        "wile-scheme",
 			description: "Write and evaluate Scheme code with wile — session model, imports, available libraries, and common patterns",
 			file:        "prompts/wile-scheme.md",
+			argNames:    []string{"task"},
 			args: []mcp.PromptOption{
 				mcp.WithArgument("task",
 					mcp.RequiredArgument(),
@@ -273,26 +274,35 @@ func (ms *mcpServer) registerPrompts(s *server.MCPServer) error {
 	for _, p := range prompts {
 		content, readErr := fs.ReadFile(embeddedPrompts, p.file)
 		if readErr != nil {
-			return werr.WrapForeignErrorf(werr.ErrFileNotFound, "reading prompt %s: %v", p.file, readErr)
+			return werr.WrapForeignErrorWithCause(werr.ErrFileNotFound, readErr, "reading prompt %s", p.file)
 		}
 		text := string(content)
 		promptOpts := append([]mcp.PromptOption{mcp.WithPromptDescription(p.description)}, p.args...)
 
 		s.AddPrompt(
 			mcp.NewPrompt(p.name, promptOpts...),
-			ms.makePromptHandler(text),
+			ms.makePromptHandler(text, p.argNames),
 		)
 	}
 	return nil
 }
 
-func (ms *mcpServer) makePromptHandler(template string) server.PromptHandlerFunc {
+func (ms *mcpServer) makePromptHandler(template string, argNames []string) server.PromptHandlerFunc {
+	allowed := make(map[string]struct{}, len(argNames))
+	for _, n := range argNames {
+		allowed[n] = struct{}{}
+	}
 	return func(_ context.Context, req mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 		text := template
 		for k, v := range req.Params.Arguments {
+			if _, ok := allowed[k]; !ok {
+				continue
+			}
 			text = strings.ReplaceAll(text, "{{"+k+"}}", v)
 		}
-		text = strings.ReplaceAll(text, "{{task}}", "(not specified)")
+		for _, n := range argNames {
+			text = strings.ReplaceAll(text, "{{"+n+"}}", "(not specified)")
+		}
 		return &mcp.GetPromptResult{
 			Messages: []mcp.PromptMessage{
 				mcp.NewPromptMessage(mcp.RoleUser, mcp.NewTextContent(text)),
