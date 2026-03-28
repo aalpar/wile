@@ -5,6 +5,7 @@
 ;; (chibi diff), (chibi term ansi), or (chibi optional).
 
 (define-library (chibi test)
+  (description "Lightweight test framework: test, test-group, test-begin, test-end.")
   (export
    ;; Core testing interface
    test

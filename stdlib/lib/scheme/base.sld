@@ -1,4 +1,5 @@
 (define-library (scheme base)
+  (description "R7RS base library: pairs, lists, numbers, strings, vectors, control, I/O, exceptions.")
   (export
     ;; Special forms
     quote

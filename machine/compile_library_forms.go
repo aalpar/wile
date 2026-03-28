@@ -169,6 +169,8 @@ func (p *CompileTimeContinuation) processLibraryDeclaration(ctctx CompileTimeCal
 		return p.processIncludeLibraryDeclarations(ctctx, lib, argsExpr)
 	case "cond-expand":
 		return p.processCondExpand(ctctx, lib, argsExpr)
+	case "description":
+		return p.processLibraryDescription(lib, argsExpr)
 	default:
 		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unknown library declaration: %s", keyword)
 	}
@@ -189,6 +191,29 @@ func (p *CompileTimeContinuation) processLibraryExport(ctx context.Context, lib 
 		return parseExportSpec(lib, spec)
 	})
 	return err
+}
+
+// processLibraryDescription handles (description <string>) within a library.
+func (p *CompileTimeContinuation) processLibraryDescription(lib *CompiledLibrary, args syntax.SyntaxValue) error {
+	if syntax.IsSyntaxEmptyList(args) {
+		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "description: expected a string argument")
+	}
+	argsPair, ok := args.(*syntax.SyntaxPair)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAPair, "description: expected a string argument")
+	}
+	strExpr := argsPair.SyntaxCar()
+	str, ok := strExpr.UnwrapAll().(*values.String)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAString, "description: argument must be a string")
+	}
+	if !syntax.IsSyntaxEmptyList(argsPair.SyntaxCdr()) {
+		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "description: expected exactly one string argument")
+	}
+	// Last-writer-wins: multiple description declarations are allowed;
+	// the last one takes effect.
+	lib.Description = str.Value
+	return nil
 }
 
 // parseExportSpec parses a single export spec and adds it to the library.

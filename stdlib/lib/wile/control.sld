@@ -1,4 +1,5 @@
 (define-library (wile control)
+  (description "Extended control flow: reset, shift, delimited continuations.")
   (export
     ;; Escape continuation aliases
     call-with-escape-continuation call/ec

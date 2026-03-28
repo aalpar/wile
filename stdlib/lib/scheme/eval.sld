@@ -1,4 +1,5 @@
 (define-library (scheme eval)
+  (description "Evaluation and environment procedures: eval, environment.")
   (export
     eval
     environment

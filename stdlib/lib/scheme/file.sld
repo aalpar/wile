@@ -1,4 +1,5 @@
 (define-library (scheme file)
+  (description "File I/O: open-input-file, open-output-file, file-exists?, delete-file.")
   (export open-input-file
           open-output-file
           open-binary-input-file

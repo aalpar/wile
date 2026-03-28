@@ -1,4 +1,5 @@
 (define-library (wile algebra rewrite)
+  (description "Term rewriting with algebraic simplification rules.")
   (export
     ;; Term protocol
     make-term-protocol term-protocol?

@@ -48,6 +48,10 @@ func addReflection(r *registry.Registry) error {
 		{Name: "doc-topic", ParamCount: 1, Impl: PrimDocTopic,
 			Doc: "Returns a sorted list of symbols in the named documentation category.", ParamNames: []string{"category"}, Category: "reflection",
 			ParamTypes: []values.ValueType{values.TypeString}, ReturnType: values.TypeList},
+		{Name: "library-description", ParamCount: 1, Impl: PrimLibraryDescription,
+			Doc:        "Returns the description string of a loaded library, or #f if none or not loaded.",
+			ParamNames: []string{"library-name"}, Category: "reflection",
+			ParamTypes: []values.ValueType{values.TypeList}, ReturnType: values.TypeAny},
 	}, registry.PhaseRuntime)
 
 	return nil

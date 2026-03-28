@@ -1,4 +1,5 @@
 (define-library (wile algebra ring)
+  (description "Rings: integer ring, modular rings.")
   (export make-ring ring?
           ring-plus ring-times ring-zero ring-one
           ring-negate ring-minus

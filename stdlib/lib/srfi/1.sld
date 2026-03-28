@@ -1,5 +1,6 @@
 
 (define-library (srfi 1)
+  (description "SRFI 1: List library — comprehensive list operations beyond R7RS.")
   (export
    xcons cons* make-list list-tabulate list-copy circular-list iota
    proper-list? circular-list? dotted-list? not-pair? null-list? list=

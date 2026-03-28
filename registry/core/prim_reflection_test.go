@@ -449,6 +449,50 @@ func TestProcedureDocumentationErrors(t *testing.T) {
 }
 
 // =============================================================================
+// library-description Tests
+// =============================================================================
+
+func TestLibraryDescription(t *testing.T) {
+	// Note: The test environment (NewNamespaceFrameTiny) does not configure a
+	// library registry, so (import ...) is unavailable. Tests for loaded
+	// libraries with/without descriptions belong in integration/ or
+	// engine-level tests once .sld files gain (description ...) clauses.
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name:     "nonexistent library returns false",
+			Code:     `(library-description '(nonexistent lib))`,
+			Expected: values.FalseValue,
+		},
+		{
+			Name:     "single-part library name returns false",
+			Code:     `(library-description '(nonexistent))`,
+			Expected: values.FalseValue,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
+func TestLibraryDescriptionErrors(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "empty library name", Code: `(library-description '())`},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
+
+// =============================================================================
 // apropos Tests
 // =============================================================================
 

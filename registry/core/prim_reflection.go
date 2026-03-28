@@ -352,6 +352,35 @@ func PrimDocTopic(mc *machine.MachineContext) error {
 	return nil
 }
 
+// PrimLibraryDescription implements (library-description library-name).
+// Returns the description string of a loaded library, or #f if none or not loaded.
+func PrimLibraryDescription(mc *machine.MachineContext) error {
+	nameList := mc.Arg(0)
+	libName, err := machine.ParseLibraryNameFromDatum(mc.Context(), nameList)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "library-description: invalid library name")
+	}
+
+	regAny := mc.EnvironmentFrame().LibraryRegistry()
+	if regAny == nil {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+	reg, ok := regAny.(*machine.LibraryRegistry)
+	if !ok {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+
+	lib := reg.Lookup(libName)
+	if lib == nil || lib.Description == "" {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+	mc.SetValue(values.NewString(lib.Description))
+	return nil
+}
+
 // PrimApropos implements (apropos pattern).
 // Returns a sorted list of symbols whose name, doc, or category contains
 // the pattern as a case-insensitive substring.

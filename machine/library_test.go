@@ -226,6 +226,77 @@ func TestCompileDefineLibrary_Empty(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 }
 
+func TestLibraryDescription(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		wantDesc    string
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:     "basic description",
+			input:    `(define-library (test desc) (description "A test library.") (export))`,
+			wantDesc: "A test library.",
+		},
+		{
+			name:     "no description",
+			input:    `(define-library (test nodesc) (export))`,
+			wantDesc: "",
+		},
+		{
+			name:        "non-string argument",
+			input:       `(define-library (test bad) (description 42))`,
+			wantErr:     true,
+			errContains: "description: argument must be a string",
+		},
+		{
+			name:        "extra arguments rejected",
+			input:       `(define-library (test extra) (description "hello" "world"))`,
+			wantErr:     true,
+			errContains: "description: expected exactly one string argument",
+		},
+		{
+			name:     "last description wins",
+			input:    `(define-library (test multi) (description "first") (description "second") (export))`,
+			wantDesc: "second",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			env := environment.NewNamespace().Runtime()
+			libDef := parseLibrarySyntax(t, env, tt.input)
+
+			libPair := libDef.(*syntax.SyntaxPair)
+			args := libPair.Cdr().(*syntax.SyntaxPair)
+
+			tpl := machine.NewNativeTemplate(0, 0, false)
+			ctc := machine.NewCompiletimeContinuation(tpl, env)
+
+			var compiledLib *machine.CompiledLibrary
+			ctc.SetLibraryCallback(func(lib *machine.CompiledLibrary) {
+				compiledLib = lib
+			})
+
+			ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+			err := ctc.CompileDefineLibrary(ctctx, args)
+
+			if tt.wantErr {
+				c.Assert(err, qt.IsNotNil)
+				c.Assert(err.Error(), qt.Contains, tt.errContains)
+				return
+			}
+
+			c.Assert(err, qt.IsNil)
+			c.Assert(compiledLib, qt.IsNotNil, qt.Commentf("library callback should have been called"))
+			c.Assert(compiledLib.Description, qt.Equals, tt.wantDesc)
+		})
+	}
+}
+
 func TestCompileImport_LibraryNotFound(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 

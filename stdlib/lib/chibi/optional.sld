@@ -1,5 +1,6 @@
 
 (define-library (chibi optional)
+  (description "Optional/Maybe type with pattern matching.")
   (export let-optionals let-optionals*
           opt-lambda opt-lambda*
           define-opt define-opt*

@@ -1,4 +1,5 @@
 (define-library (wile algebra)
+  (description "Algebraic structures: orders, lattices, monoids, semirings, groups, rings, fields.")
   (export
     ;; Partial orders
     make-partial-order partial-order?

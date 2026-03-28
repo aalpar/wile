@@ -1,4 +1,5 @@
 (define-library (wile algebra semiring)
+  (description "Semirings: boolean, tropical, counting, and lifted variants.")
   (export make-semiring semiring?
           semiring-plus semiring-times semiring-zero semiring-one
           semiring->additive-monoid semiring->multiplicative-monoid

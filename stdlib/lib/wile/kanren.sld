@@ -1,4 +1,5 @@
 (define-library (wile kanren)
+  (description "miniKanren relational programming: run, fresh, conde, ==.")
   (export
     ;; Re-export microKanren core
     var var? var=?
