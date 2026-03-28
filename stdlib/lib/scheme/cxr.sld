@@ -1,4 +1,5 @@
 (define-library (scheme cxr)
+  (description "Compositions of car and cdr up to four deep: caar, cadr, ..., cddddr.")
   (export
     caar cadr cdar cddr
     caaar caadr cadar caddr

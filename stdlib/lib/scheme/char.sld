@@ -1,4 +1,5 @@
 (define-library (scheme char)
+  (description "Unicode character procedures: char-alphabetic?, char-upcase, string-upcase, etc.")
   (export char-alphabetic?
           char-numeric?
           char-whitespace?

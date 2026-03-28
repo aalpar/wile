@@ -1,4 +1,5 @@
 (define-library (wile microkanren)
+  (description "microKanren core: minimal relational programming kernel.")
   (export var var? var=?
           walk ext-s unify
           == call/fresh disj conj

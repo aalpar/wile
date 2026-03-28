@@ -1,5 +1,6 @@
 
 (define-library (chibi diff)
+  (description "Sequence diff algorithm: LCS-based edit scripts.")
   (import (scheme base) (srfi 1) (chibi optional) (chibi term ansi))
   (export lcs lcs-with-positions
           diff write-diff diff->string

@@ -1,4 +1,5 @@
 (define-library (scheme r5rs)
+  (description "R5RS compatibility library: re-exports core R5RS bindings.")
   (import (scheme base)
           (scheme complex)
           (scheme cxr)

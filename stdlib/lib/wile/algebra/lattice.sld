@@ -1,4 +1,5 @@
 (define-library (wile algebra lattice)
+  (description "Lattice types: flat, powerset, product, map lattices with join/meet.")
   (export make-lattice lattice?
           lattice-join lattice-meet lattice-bottom lattice-top
           lattice-leq? lattice->partial-order

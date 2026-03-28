@@ -1,4 +1,5 @@
 (define-library (wile algebra galois)
+  (description "Galois connections between lattices.")
   (export make-galois-connection galois-connection?
           gc-alpha gc-gamma
           gc-concrete-po gc-abstract-lattice

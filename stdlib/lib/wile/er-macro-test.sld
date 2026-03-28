@@ -1,4 +1,5 @@
 (define-library (wile er-macro-test)
+  (description "Explicit-renaming macro test utilities.")
   (export my-or aif literal-check)
   (import (scheme base))
   (include "er-macro-test.scm"))

@@ -1,4 +1,5 @@
 (define-library (chibi term ansi)
+  (description "ANSI terminal escape codes: colors, styles, cursor control.")
   (export
 
    black-escape red-escape yellow-escape green-escape
