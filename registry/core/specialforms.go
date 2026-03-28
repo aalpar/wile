@@ -179,7 +179,7 @@ var compileTimeBindingSpecs = []registry.BindingSpec{
 
 // macroDocs provides documentation for bootstrap macros defined in Scheme.
 // These macros are loaded from bootstrap_macros.scm; their documentation
-// is registered here so it's accessible via procedure-documentation.
+// is registered here so it's accessible via the REPL's ,doc command.
 //
 //nolint:govet
 var macroDocs = []registry.DocEntry{

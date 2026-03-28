@@ -289,7 +289,8 @@ func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding,
 
 	doc := bnd.Doc()
 	if doc != "" {
-		fmt.Fprintf(w, "\n  %s\n", doc)
+		indented := strings.ReplaceAll(doc, "\n", "\n  ")
+		fmt.Fprintf(w, "\n  %s\n", indented)
 	}
 }
 
