@@ -21,6 +21,7 @@
 //	scheme --file file.scm        # Execute file (explicit flag)
 //	scheme --file file.scm -i     # Execute file, then enter REPL
 //	scheme --version              # Print version and exit
+//	scheme --mcp                  # Start MCP server on stdio
 //
 // Library search paths can be configured via the -L flag or SCHEME_LIBRARY_PATH
 // environment variable. The command uses BSD sysexits.h exit codes.

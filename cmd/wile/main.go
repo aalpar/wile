@@ -44,6 +44,7 @@ type Options struct {
 	LibraryPath string   `short:"L" long:"library-path" description:"Library search path (colon-separated, prepended to SCHEME_LIBRARY_PATH)"`
 	Version     bool     `short:"V" long:"version" description:"Print version information and exit"`
 	Quiet       bool     `short:"q" long:"quiet" description:"Suppress informational messages"`
+	MCP         bool     `long:"mcp" description:"Start as MCP server on stdio"`
 	CPUProfile  string   `long:"cpuprofile" description:"Write CPU profile to file"`
 	MemProfile  string   `long:"memprofile" description:"Write memory profile to file"`
 }
@@ -190,6 +191,12 @@ func main() {
 		system.SetCommandLine(cmdLine)
 	}
 
+	// --mcp is exclusive: check conflicts before any defer is registered.
+	if opts.MCP && (len(opts.Eval) > 0 || len(opts.File) > 0 || opts.Interactive) {
+		fmt.Fprintln(os.Stderr, "Error: --mcp cannot be combined with -e, -f, or -i")
+		os.Exit(1)
+	}
+
 	// CPU profiling
 	if opts.CPUProfile != "" {
 		f, err := os.Create(opts.CPUProfile)
@@ -211,6 +218,14 @@ func main() {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+
+	if opts.MCP {
+		err := doMCP(ctx)
+		if err != nil {
+			Failf(err, "MCP server error")
+		}
+		return
+	}
 
 	libPaths := buildLibraryPaths()
 	eng, err0 := wile.NewEngine(ctx,
