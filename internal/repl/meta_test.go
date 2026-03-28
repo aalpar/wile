@@ -188,7 +188,7 @@ func TestMetaCommandHandlerCommands(t *testing.T) {
 	qt.Assert(t, len(cmds) > 0, qt.IsTrue)
 
 	// Session commands
-	for _, expected := range []string{"help", "doc", "edit", "apropos", "topics", "topic"} {
+	for _, expected := range []string{"help", "doc", "edit", "apropos", "topics", "topic", "libraries", "libs"} {
 		qt.Assert(t, slices.Contains(cmds, expected), qt.IsTrue,
 			qt.Commentf("Commands() should contain session command %q, got %v", expected, cmds))
 	}
@@ -421,6 +421,60 @@ func TestCmdDocLibrary(t *testing.T) {
 		h.cmdDoc([]string{"(some", "lib)"}, &buf)
 		qt.Assert(t, strings.Contains(buf.String(), "no library registry"), qt.IsTrue,
 			qt.Commentf("output was: %q", buf.String()))
+	})
+}
+
+func TestCmdLibraries(t *testing.T) {
+	ctx := context.Background()
+	env, _, err := bootstrap.NewTopLevelWithRegistry(ctx)
+	qt.Assert(t, err, qt.IsNil)
+
+	reg := machine.NewLibraryRegistry()
+	lib := machine.NewCompiledLibrary(machine.NewLibraryName("test", "lib"), env)
+	lib.Description = "A test library."
+	err = reg.Register(lib)
+	qt.Assert(t, err, qt.IsNil)
+	env.SetLibraryRegistry(reg)
+
+	tcs := []struct {
+		name    string
+		contain string
+	}{
+		{"shows loaded count", "Loaded libraries (1)"},
+		{"shows library name", "(test lib)"},
+		{"shows description", "A test library."},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			h := NewMetaCommandHandler(env, nil, nil)
+			h.cmdLibraries(&buf)
+			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
+				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
+		})
+	}
+
+	t.Run("no env", func(t *testing.T) {
+		var buf bytes.Buffer
+		h := NewMetaCommandHandler(nil, nil, nil)
+		h.cmdLibraries(&buf)
+		qt.Assert(t, strings.Contains(buf.String(), "No environment"), qt.IsTrue)
+	})
+
+	t.Run("no registry", func(t *testing.T) {
+		noRegEnv, _, noRegErr := bootstrap.NewTopLevelWithRegistry(ctx)
+		qt.Assert(t, noRegErr, qt.IsNil)
+		var buf bytes.Buffer
+		h := NewMetaCommandHandler(noRegEnv, nil, nil)
+		h.cmdLibraries(&buf)
+		qt.Assert(t, strings.Contains(buf.String(), "No library registry"), qt.IsTrue)
+	})
+
+	t.Run("alias libs", func(t *testing.T) {
+		var buf bytes.Buffer
+		h := NewMetaCommandHandler(env, nil, nil)
+		h.Handle(",libs", &buf)
+		qt.Assert(t, strings.Contains(buf.String(), "(test lib)"), qt.IsTrue)
 	})
 }
 

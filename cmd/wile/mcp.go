@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"strings"
 	"sync"
 	"time"
@@ -47,9 +46,9 @@ type mcpServer struct {
 // doMCP starts a Model Context Protocol server on stdio, exposing the Wile
 // documentation, evaluation, and session management tools.
 func doMCP(ctx context.Context, timeoutSec float64) error {
-	ms := &mcpServer{}
+	srv := &mcpServer{}
 	if timeoutSec > 0 {
-		ms.defaultTimeout = time.Duration(timeoutSec * float64(time.Second))
+		srv.defaultTimeout = time.Duration(timeoutSec * float64(time.Second))
 	}
 
 	v := BuildVersion
@@ -85,7 +84,7 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 						"Use for long-running computations. 0 means no timeout."),
 			),
 		),
-		ms.handleEval,
+		srv.handleEval,
 	)
 
 	s.AddTool(
@@ -100,7 +99,7 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 				mcp.Description("Binding name (e.g. \"car\") or library name (e.g. \"(scheme base)\")"),
 			),
 		),
-		ms.handleDoc,
+		srv.handleDoc,
 	)
 
 	s.AddTool(
@@ -114,7 +113,7 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 				mcp.Description("Search pattern (substring, case-insensitive)"),
 			),
 		),
-		ms.handleApropos,
+		srv.handleApropos,
 	)
 
 	s.AddTool(
@@ -123,7 +122,7 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 				"List available documentation categories with entry counts. "+
 					"Use with the topic tool to browse by category."),
 		),
-		ms.handleTopics,
+		srv.handleTopics,
 	)
 
 	s.AddTool(
@@ -136,7 +135,7 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 				mcp.Description("Category name (use topics tool to see available categories)"),
 			),
 		),
-		ms.handleTopic,
+		srv.handleTopic,
 	)
 
 	s.AddTool(
@@ -146,7 +145,7 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 					"sorted alphabetically with their descriptions. "+
 					"Use doc with a library name (e.g. \"(scheme base)\") to see its exports."),
 		),
-		ms.handleLibraries,
+		srv.handleLibraries,
 	)
 
 	s.AddTool(
@@ -156,7 +155,7 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 					"The next tool call reinitializes the engine from scratch. "+
 					"Use this to start fresh without restarting the MCP server."),
 		),
-		ms.handleReset,
+		srv.handleReset,
 	)
 
 	s.AddTool(
@@ -170,10 +169,10 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 				mcp.Description("Timeout in seconds (0 = no timeout)"),
 			),
 		),
-		ms.handleSetTimeout,
+		srv.handleSetTimeout,
 	)
 
-	err := ms.registerPrompts(s)
+	err := srv.registerPrompts(s)
 	if err != nil {
 		return err
 	}
@@ -182,10 +181,10 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 }
 
 // initLocked lazily initializes the engine and meta-command handler.
-// The caller must hold ms.mu. Redirects current-output-port away from
+// The caller must hold p.mu. Redirects current-output-port away from
 // os.Stdout to prevent Scheme output from corrupting the MCP transport.
-func (ms *mcpServer) initLocked(ctx context.Context) error {
-	if ms.meta != nil {
+func (p *mcpServer) initLocked(ctx context.Context) error {
+	if p.meta != nil {
 		return nil
 	}
 	engine, err := wile.NewEngine(ctx,
@@ -197,7 +196,7 @@ func (ms *mcpServer) initLocked(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	ms.engine = engine
+	p.engine = engine
 
 	// Redirect output away from stdout (the MCP JSON-RPC transport).
 	// Each handleEval call captures into its own buffer; between evals,
@@ -205,7 +204,8 @@ func (ms *mcpServer) initLocked(ctx context.Context) error {
 	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(io.Discard))
 
 	docProv := repl.NewRegistryDocProvider(engine.Registry())
-	ms.meta = repl.NewMetaCommandHandler(engine.Environment(), nil, docProv)
+	p.meta = repl.NewMetaCommandHandler(engine.Environment(), nil, docProv)
+	p.meta.SetPager("") // disable paging for non-TTY MCP context
 	return nil
 }
 
@@ -215,23 +215,34 @@ type evalResult struct {
 	Value  string `json:"value,omitempty"`
 }
 
-func (ms *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (p *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (toolResult *mcp.CallToolResult, toolErr error) {
 	code := req.GetString("code", "")
 	if code == "" {
 		return mcp.NewToolResultError("code parameter is required"), nil
 	}
 
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	err := ms.initLocked(ctx)
+	// Recover from panics in the Scheme VM so a single bad eval
+	// does not crash the entire MCP server.
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		toolResult = mcp.NewToolResultError(fmt.Sprintf("internal error (panic): %v", r))
+		toolErr = nil
+	}()
+
+	err := p.initLocked(ctx)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("engine init failed: %v", err)), nil
 	}
 
 	// Apply timeout: per-call parameter overrides session default.
 	timeout := req.GetFloat("timeout", -1)
-	evalTimeout := ms.defaultTimeout
+	evalTimeout := p.defaultTimeout
 	if timeout > 0 {
 		evalTimeout = time.Duration(timeout * float64(time.Second))
 	} else if timeout == 0 {
@@ -252,7 +263,7 @@ func (ms *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (*
 	// matching the file execution pattern in runFile.
 	wrapped := "(begin " + code + "\n)"
 
-	val, evalErr := ms.engine.EvalMultiple(ctx, wrapped)
+	val, evalErr := p.engine.EvalMultipleWithSource(ctx, wrapped, "<mcp-eval>")
 
 	var result evalResult
 	output := buf.String()
@@ -263,7 +274,7 @@ func (ms *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (*
 		// Include any captured output alongside the error.
 		errMsg := evalErr.Error()
 		if output != "" {
-			errMsg = fmt.Sprintf("%s\n\n[stderr]\n%s", output, evalErr.Error())
+			errMsg = fmt.Sprintf("[stdout]\n%s\n[error]\n%s", output, evalErr.Error())
 		}
 		return mcp.NewToolResultError(errMsg), nil
 	}
@@ -280,81 +291,85 @@ func (ms *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (*
 
 // runMeta routes a comma-command through MetaCommandHandler, capturing output
 // in a strings.Builder and returning it as a tool result.
-func (ms *mcpServer) runMeta(ctx context.Context, line string) (*mcp.CallToolResult, error) {
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
-	err := ms.initLocked(ctx)
+func (p *mcpServer) runMeta(ctx context.Context, line string) (*mcp.CallToolResult, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	err := p.initLocked(ctx)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("engine init failed: %v", err)), nil
 	}
 	var sb strings.Builder
-	ms.meta.Handle(line, &sb)
+	p.meta.Handle(line, &sb)
 	return mcp.NewToolResultText(sb.String()), nil
 }
 
-func (ms *mcpServer) handleDoc(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (p *mcpServer) handleDoc(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	name := req.GetString("name", "")
 	if name == "" {
 		return mcp.NewToolResultError("name parameter is required"), nil
 	}
-	return ms.runMeta(ctx, ",doc "+name)
+	return p.runMeta(ctx, ",doc "+name)
 }
 
-func (ms *mcpServer) handleApropos(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (p *mcpServer) handleApropos(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	pattern := req.GetString("pattern", "")
 	if pattern == "" {
 		return mcp.NewToolResultError("pattern parameter is required"), nil
 	}
-	return ms.runMeta(ctx, ",apropos "+pattern)
+	return p.runMeta(ctx, ",apropos "+pattern)
 }
 
-func (ms *mcpServer) handleTopics(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return ms.runMeta(ctx, ",topics")
+func (p *mcpServer) handleTopics(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return p.runMeta(ctx, ",topics")
 }
 
-func (ms *mcpServer) handleTopic(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (p *mcpServer) handleTopic(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	category := req.GetString("category", "")
 	if category == "" {
 		return mcp.NewToolResultError("category parameter is required"), nil
 	}
-	return ms.runMeta(ctx, ",topic "+category)
+	return p.runMeta(ctx, ",topic "+category)
 }
 
-func (ms *mcpServer) handleLibraries(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return ms.runMeta(ctx, ",libraries")
+func (p *mcpServer) handleLibraries(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return p.runMeta(ctx, ",libraries")
 }
 
-func (ms *mcpServer) handleReset(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
-	if ms.engine != nil {
-		err := ms.engine.Close()
-		if err != nil {
-			log.Printf("reset: engine close: %v", err)
+func (p *mcpServer) handleReset(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.engine != nil {
+		closeErr := p.engine.Close()
+		p.engine = nil
+		p.meta = nil
+		ioext.ResetState()
+		if closeErr != nil {
+			return mcp.NewToolResultText(
+				fmt.Sprintf("Session reset with warning: engine close failed: %v. "+
+					"A fresh engine will be created on next use.", closeErr),
+			), nil
 		}
-		ms.engine = nil
-		ms.meta = nil
 	}
 	ioext.ResetState()
 	return mcp.NewToolResultText("Session reset. The next call will reinitialize the engine."), nil
 }
 
-func (ms *mcpServer) handleSetTimeout(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (p *mcpServer) handleSetTimeout(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	seconds := req.GetFloat("seconds", -1)
 	if seconds < 0 {
 		return mcp.NewToolResultError("seconds parameter is required"), nil
 	}
-	ms.mu.Lock()
-	defer ms.mu.Unlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if seconds == 0 {
-		ms.defaultTimeout = 0
+		p.defaultTimeout = 0
 		return mcp.NewToolResultText("Eval timeout disabled."), nil
 	}
-	ms.defaultTimeout = time.Duration(seconds * float64(time.Second))
-	return mcp.NewToolResultText(fmt.Sprintf("Eval timeout set to %s.", ms.defaultTimeout)), nil
+	p.defaultTimeout = time.Duration(seconds * float64(time.Second))
+	return mcp.NewToolResultText(fmt.Sprintf("Eval timeout set to %s.", p.defaultTimeout)), nil
 }
 
-func (ms *mcpServer) registerPrompts(s *server.MCPServer) error {
+func (p *mcpServer) registerPrompts(s *server.MCPServer) error {
 	type promptDef struct {
 		name        string
 		description string
@@ -378,23 +393,23 @@ func (ms *mcpServer) registerPrompts(s *server.MCPServer) error {
 		},
 	}
 
-	for _, p := range prompts {
-		content, readErr := fs.ReadFile(embeddedPrompts, p.file)
+	for _, pd := range prompts {
+		content, readErr := fs.ReadFile(embeddedPrompts, pd.file)
 		if readErr != nil {
-			return werr.WrapForeignErrorWithCause(werr.ErrFileNotFound, readErr, "reading prompt %s", p.file)
+			return werr.WrapForeignErrorWithCause(werr.ErrFileNotFound, readErr, "reading prompt %s", pd.file)
 		}
 		text := string(content)
-		promptOpts := append([]mcp.PromptOption{mcp.WithPromptDescription(p.description)}, p.args...)
+		promptOpts := append([]mcp.PromptOption{mcp.WithPromptDescription(pd.description)}, pd.args...)
 
 		s.AddPrompt(
-			mcp.NewPrompt(p.name, promptOpts...),
-			ms.makePromptHandler(text, p.argNames),
+			mcp.NewPrompt(pd.name, promptOpts...),
+			p.makePromptHandler(text, pd.argNames),
 		)
 	}
 	return nil
 }
 
-func (ms *mcpServer) makePromptHandler(template string, argNames []string) server.PromptHandlerFunc {
+func (p *mcpServer) makePromptHandler(template string, argNames []string) server.PromptHandlerFunc {
 	allowed := make(map[string]struct{}, len(argNames))
 	for _, n := range argNames {
 		allowed[n] = struct{}{}
