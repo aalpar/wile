@@ -872,3 +872,54 @@ This applies to local variables, parameters, and named return values — not str
 - Excessive abbreviations beyond established patterns
 - Documentation comments on trivial methods
 
+## Scheme Docstring Conventions
+
+Wile uses Guile-style docstrings: a string literal as the first expression in a
+`define`/`lambda` body (when the body has >1 expression) is treated as
+documentation. Retrieved at runtime via `(procedure-documentation proc)`.
+
+### Structure
+
+```scheme
+(define (fold kons knil lis1 . lists)
+  "Accumulate across LIS1 by applying KONS to each element.\n\nKONS receives the current element and accumulator. For multiple\nlists, KONS receives one element per list plus the accumulator.\nStops at the shortest list.\n\nExamples:\n  (fold + 0 '(1 2 3))      => 6\n  (fold cons '() '(1 2 3))  => (3 2 1)\n\nSee also: `fold-right', `reduce', `unfold'."
+  ...)
+```
+
+### Rules
+
+| Convention | Format | Example |
+|------------|--------|---------|
+| **First line** | Standalone summary sentence | `"Return the first element of LIST matching PRED."` |
+| **Parameters** | UPPER CASE | `KONS`, `KNIL`, `LIS1` |
+| **Cross-references** | Backtick + straight quote | `` `fold-right' `` |
+| **Paragraphs** | Separated by `\n\n` | `"Summary.\n\nDetails."` |
+| **Examples section** | `Examples:` header, indented code | `"Examples:\n  (foo 1 2)  => 3"` |
+| **See also** | `See also:` at end, comma-separated | `` "See also: `bar', `baz'." `` |
+| **Pre-formatted** | Indent with 2 spaces after `\n` | `"\n  (code here)"` |
+| **Trailing period** | End sentences with periods, including the last line | — |
+| **Math** | Self-contained, no assumed knowledge | Explain algebraic concepts inline |
+
+**Note:** Backtick (`` ` ``) is literal inside Scheme double-quoted strings — do NOT
+escape it with backslash. `\`` is an invalid R7RS escape sequence and will cause
+a tokenizer error.
+
+### When to Use Each Element
+
+- **Every docstring**: First-line summary + UPPER CASE parameters
+- **Non-trivial procedures**: Add a detail paragraph after the summary
+- **Procedures with non-obvious behavior**: Add `Examples:` section
+- **Procedures with related alternatives**: Add `See also:` line
+- **Trivial accessors/wrappers**: First-line summary is sufficient
+
+### What Gets Docstrings
+
+| Form | Eligible | Notes |
+|------|----------|-------|
+| `(define (name ...) body ...)` | Yes | Standard case |
+| `(define name (lambda (...) body ...))` | Yes | Docstring in lambda body |
+| `(define name (case-lambda ...))` | Yes | Docstring in first clause only |
+| `define-syntax` | No | No mechanism yet (see TODO.md) |
+| `define-record-type` | No | Generated accessors |
+| `(define name value)` | No | No body |
+

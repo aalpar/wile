@@ -9,21 +9,22 @@
   (leq? po-leq-fn))
 
 (define (po-leq? po a b)
+  "Test whether A is less than or equal to B under partial order PO.\nReturns #t if A precedes or equals B in the ordering, #f otherwise."
   ((po-leq-fn po) a b))
 
 (define (po-comparable? po a b)
+  "Test whether A and B are comparable under partial order PO.\nTwo elements are comparable if one precedes the other. In a\npartial order, some pairs may be incomparable (neither A <= B\nnor B <= A holds).\n\nSee also: `po-leq?'."
   (or (po-leq? po a b)
       (po-leq? po b a)))
 
 (define (po-monotone? po f a b)
-  ;; a ≤ b ⟹ f(a) ≤ f(b)
+  "Test whether function F preserves the ordering of A and B under PO.\nA function is monotone if A <= B implies F(A) <= F(B). Returns #t\nvacuously when A is not less than or equal to B, since the\nprecondition for the monotonicity check is not met.\n\nSee also: `po-leq?', `po-comparable?'."
   (if (po-leq? po a b)
       (po-leq? po (f a) (f b))
-      #t))  ; precondition not met, vacuously true
+      #t))
 
 (define (validate-partial-order po samples)
-  ;; Spot-check reflexivity, antisymmetry, transitivity on sample pairs.
-  ;; Returns #t or a list of (violation-type a b ...) entries.
+  "Spot-check that PO satisfies partial order laws on SAMPLES.\nTests reflexivity (A <= A) and transitivity (A <= B and B <= C\nimplies A <= C) for all elements and triples in SAMPLES.\nAntisymmetry is not checked because no equality predicate is\navailable. Returns #t if all tested laws hold, or a list of\n(violation-type element ...) entries describing failures.\n\nSee also: `make-partial-order', `po-leq?'."
   (let ((violations '()))
     (define (fail! type . args)
       (set! violations (cons (cons type args) violations)))
