@@ -469,10 +469,12 @@ func (p *MetaCommandHandler) cmdApropos(args []string, out io.Writer) {
 
 	results := searchProv.Search(pattern)
 
-	// Also search phase environment bindings
+	// Also search phase environment bindings and loaded libraries
 	if p.env != nil {
 		envResults := p.searchBindings(pattern)
 		results = mergeSearchResults(results, envResults)
+		libResults := p.searchLibraries(pattern)
+		results = mergeSearchResults(results, libResults)
 	}
 
 	if len(results) == 0 {
@@ -634,6 +636,36 @@ func mergeSearchResults(registryResults, envResults []DocSearchResult) []DocSear
 		return registryResults[i].Name < registryResults[j].Name
 	})
 	return registryResults
+}
+
+// searchLibraries searches loaded libraries for the pattern, matching against
+// the library name (e.g. "(wile algebra)") and its description.
+func (p *MetaCommandHandler) searchLibraries(pattern string) []DocSearchResult {
+	if p.env == nil {
+		return nil
+	}
+	regAny := p.env.LibraryRegistry()
+	if regAny == nil {
+		return nil
+	}
+	reg, ok := regAny.(*machine.LibraryRegistry)
+	if !ok {
+		return nil
+	}
+	lowerPattern := strings.ToLower(pattern)
+	var results []DocSearchResult
+	for _, lib := range reg.All() {
+		name := lib.Name.SchemeString()
+		if strings.Contains(strings.ToLower(name), lowerPattern) ||
+			strings.Contains(strings.ToLower(lib.Description), lowerPattern) {
+			results = append(results, DocSearchResult{
+				Name:     name,
+				Doc:      lib.Description,
+				Category: "library",
+			})
+		}
+	}
+	return results
 }
 
 // firstLine returns the first line of s, or s itself if single-line.

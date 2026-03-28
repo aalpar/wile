@@ -225,6 +225,18 @@ func (p *LibraryRegistry) Lookup(name LibraryName) *CompiledLibrary {
 	return p.libraries[name.Key()]
 }
 
+// All returns all loaded libraries, sorted by name key for determinism.
+func (p *LibraryRegistry) All() []*CompiledLibrary {
+	libs := make([]*CompiledLibrary, 0, len(p.libraries))
+	for _, lib := range p.libraries {
+		libs = append(libs, lib)
+	}
+	sort.Slice(libs, func(i, j int) bool {
+		return libs[i].Name.Key() < libs[j].Name.Key()
+	})
+	return libs
+}
+
 // IsLoading returns true if the library is currently being loaded.
 // Used to detect circular dependencies.
 func (p *LibraryRegistry) IsLoading(name LibraryName) bool {

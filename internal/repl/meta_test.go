@@ -295,6 +295,42 @@ func TestCmdApropos(t *testing.T) {
 	}
 }
 
+func TestCmdApropos_Library(t *testing.T) {
+	ctx := context.Background()
+	env, reg, err := bootstrap.NewTopLevelWithRegistry(ctx)
+	qt.Assert(t, err, qt.IsNil)
+	docProv := NewRegistryDocProvider(reg)
+
+	// Register a library in the env's library registry
+	libReg := machine.NewLibraryRegistry()
+	lib := machine.NewCompiledLibrary(machine.NewLibraryName("wile", "algebra"), env)
+	lib.Description = "Algebraic structures: orders, lattices, monoids."
+	err = libReg.Register(lib)
+	qt.Assert(t, err, qt.IsNil)
+	env.SetLibraryRegistry(libReg)
+
+	tcs := []struct {
+		name    string
+		pattern string
+		contain string
+	}{
+		{"matches library name part", "algebra", "(wile algebra)"},
+		{"matches library description", "lattices", "(wile algebra)"},
+		{"matches library prefix", "wile", "(wile algebra)"},
+		{"no match", "zzzzzzzzz", "No matches"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("PAGER", "")
+			var buf bytes.Buffer
+			h := NewMetaCommandHandler(env, nil, docProv)
+			h.cmdApropos([]string{tc.pattern}, &buf)
+			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
+				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
+		})
+	}
+}
+
 func TestCmdTopics(t *testing.T) {
 	ctx := context.Background()
 	_, reg, err := bootstrap.NewTopLevelWithRegistry(ctx)
