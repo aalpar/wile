@@ -49,6 +49,7 @@
 (define map
   (case-lambda
     ((f lst)
+     "Apply F to each element of LST, returning a list of results.\nWith multiple lists, F receives one element from each list per\ncall. Stops at the shortest list.\n\nSee also: `for-each', `vector-map', `string-map'."
      (let loop ((lst lst))
        (if (null? lst) '()
            (cons (f (car lst)) (loop (cdr lst))))))
@@ -65,6 +66,7 @@
 (define for-each
   (case-lambda
     ((f lst)
+     "Apply F to each element of LST for its side effects.\nWith multiple lists, F receives one element from each list per\ncall. Stops at the shortest list. Returns an unspecified value.\n\nSee also: `map', `vector-for-each', `string-for-each'."
      (let loop ((lst lst))
        (if (null? lst) (if #f #f)
            (begin (f (car lst)) (loop (cdr lst))))))
@@ -85,6 +87,7 @@
 (define vector-map
   (case-lambda
     ((f v)
+     "Apply F to each element of vector V, returning a new vector\nof results. With multiple vectors, F receives one element from\neach vector per call. The result length is the minimum of all\ninput lengths.\n\nSee also: `map', `vector-for-each'."
      (let ((len (vector-length v)))
        (let ((result (make-vector len)))
          (let loop ((i 0))
@@ -108,6 +111,7 @@
 (define vector-for-each
   (case-lambda
     ((f v)
+     "Apply F to each element of vector V for its side effects.\nWith multiple vectors, F receives one element from each vector\nper call. Processes the minimum of all input lengths.\n\nSee also: `for-each', `vector-map'."
      (let ((len (vector-length v)))
        (let loop ((i 0))
          (if (< i len)
@@ -128,6 +132,7 @@
 (define string-map
   (case-lambda
     ((f s)
+     "Apply F to each character of string S, returning a new string\nof results. F must return a character. With multiple strings,\nF receives one character from each string per call. The result\nlength is the minimum of all input lengths.\n\nSee also: `map', `string-for-each'."
      (let ((len (string-length s)))
        (let ((result (make-string len)))
          (let loop ((i 0))
@@ -151,6 +156,7 @@
 (define string-for-each
   (case-lambda
     ((f s)
+     "Apply F to each character of string S for its side effects.\nWith multiple strings, F receives one character from each string\nper call. Processes the minimum of all input lengths.\n\nSee also: `for-each', `string-map'."
      (let ((len (string-length s)))
        (let loop ((i 0))
          (if (< i len)
@@ -172,7 +178,9 @@
 
 (define member
   (case-lambda
-    ((obj lst) (member obj lst equal?))
+    ((obj lst)
+     "Return the first sublist of LST whose car equals OBJ, or #f\nif not found. Uses COMPARE for equality (default `equal?').\n\nExamples:\n  (member 3 '(1 2 3 4))      => (3 4)\n  (member 5 '(1 2 3))        => #f\n  (member 2.0 '(1 2 3) =)    => (2 3)\n\nSee also: `memq', `memv', `assoc'."
+     (member obj lst equal?))
     ((obj lst compare)
      (let loop ((lst lst))
        (cond
@@ -182,7 +190,9 @@
 
 (define assoc
   (case-lambda
-    ((obj alist) (assoc obj alist equal?))
+    ((obj alist)
+     "Return the first pair in ALIST whose car equals OBJ, or #f\nif not found. Uses COMPARE for equality (default `equal?').\n\nExamples:\n  (assoc 'b '((a 1) (b 2)))         => (b 2)\n  (assoc 2.0 '((1 a) (2 b)) =)      => (2 b)\n\nSee also: `assq', `assv', `member'."
+     (assoc obj alist equal?))
     ((obj alist compare)
      (let loop ((alist alist))
        (cond
@@ -192,19 +202,30 @@
 
 ;; Trivial predicates — pure compositions of existing primitives.
 
-(define (not x) (if x #f #t))
+(define (not x)
+  "Return #t if X is #f, #f otherwise."
+  (if x #f #t))
 
-(define (zero? z) (= z 0))
+(define (zero? z)
+  "Return #t if Z is zero."
+  (= z 0))
 
-(define (positive? x) (> x 0))
+(define (positive? x)
+  "Return #t if X is positive."
+  (> x 0))
 
-(define (negative? x) (< x 0))
+(define (negative? x)
+  "Return #t if X is negative."
+  (< x 0))
 
-(define (exact-integer? x) (and (integer? x) (exact? x)))
+(define (exact-integer? x)
+  "Return #t if X is both exact and an integer.\n\nSee also: `integer?', `exact?'."
+  (and (integer? x) (exact? x)))
 
 ;; list? — must detect cycles (R7RS §6.4: "Returns #t if obj is a proper list")
 ;; Uses tortoise-and-hare for cycle detection.
 (define (list? x)
+  "Return #t if X is a proper list. Detects cycles via the\ntortoise-and-hare algorithm.\n\nSee also: `pair?', `null?'."
   (let loop ((slow x) (fast x))
     (cond
       ((null? fast) #t)
@@ -219,6 +240,7 @@
 ;; car-of-non-pair error via (car #f) as a deliberate crash —
 ;; (error) is not available in core bootstrap.
 (define (boolean=? b1 b2 . rest)
+  "Return #t if all arguments are booleans and are equal.\nRaises an error if any argument is not a boolean.\n\nSee also: `symbol=?'."
   (define (check x) (if (boolean? x) x (car #f)))
   (check b1)
   (let loop ((prev b1) (args (cons b2 rest)))
@@ -230,6 +252,7 @@
 
 ;; symbol=? — same pattern
 (define (symbol=? s1 s2 . rest)
+  "Return #t if all arguments are symbols and are equal.\nRaises an error if any argument is not a symbol.\n\nSee also: `boolean=?'."
   (define (check x) (if (symbol? x) x (car #f)))
   (check s1)
   (let loop ((prev s1) (args (cons s2 rest)))
@@ -239,4 +262,6 @@
           (and (eq? prev curr)
                (loop curr (cdr args)))))))
 
-(define (square x) (* x x))
+(define (square x)
+  "Return the square of X."
+  (* x x))
