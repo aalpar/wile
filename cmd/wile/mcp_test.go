@@ -180,26 +180,23 @@ func TestHandleEval_ErrorWithOutput(t *testing.T) {
 		qt.Commentf("error result should include error message, got: %s", text))
 }
 
-func TestHandleEval_EmptyCode(t *testing.T) {
-	c := qt.New(t)
-	srv := newTestServer()
-	ctx := context.Background()
-
-	res, err := srv.handleEval(ctx, toolReq(map[string]any{"code": ""}))
-	c.Assert(err, qt.IsNil)
-	c.Assert(res.IsError, qt.IsTrue)
-	c.Assert(strings.Contains(resultText(c, res), "required"), qt.IsTrue)
-}
-
-func TestHandleEval_MissingCode(t *testing.T) {
-	c := qt.New(t)
-	srv := newTestServer()
-	ctx := context.Background()
-
-	res, err := srv.handleEval(ctx, toolReq(map[string]any{}))
-	c.Assert(err, qt.IsNil)
-	c.Assert(res.IsError, qt.IsTrue)
-	c.Assert(strings.Contains(resultText(c, res), "required"), qt.IsTrue)
+func TestHandleEval_MissingCodeParam(t *testing.T) {
+	tcs := []struct {
+		name string
+		args map[string]any
+	}{
+		{"empty string", map[string]any{"code": ""}},
+		{"missing key", map[string]any{}},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			res, err := newTestServer().handleEval(context.Background(), toolReq(tc.args))
+			c.Assert(err, qt.IsNil)
+			c.Assert(res.IsError, qt.IsTrue)
+			c.Assert(strings.Contains(resultText(c, res), "required"), qt.IsTrue)
+		})
+	}
 }
 
 func TestHandleEval_Timeout(t *testing.T) {
@@ -276,36 +273,50 @@ func TestHandleReset_BeforeInit(t *testing.T) {
 
 // --- handleSetTimeout tests ---
 
-func TestHandleSetTimeout_Set(t *testing.T) {
-	c := qt.New(t)
-	srv := newTestServer()
+func TestHandleSetTimeout(t *testing.T) {
+	tcs := []struct {
+		name            string
+		initTimeout     time.Duration
+		args            map[string]any
+		wantError       bool
+		wantTimeout     time.Duration
+		wantTextContain string
+	}{
+		{
+			name:        "set to 60s",
+			args:        map[string]any{"seconds": 60.0},
+			wantTimeout: 60 * time.Second,
+		},
+		{
+			name:            "disable with 0",
+			initTimeout:     30 * time.Second,
+			args:            map[string]any{"seconds": 0.0},
+			wantTimeout:     0,
+			wantTextContain: "disabled",
+		},
+		{
+			name:      "missing param",
+			args:      map[string]any{},
+			wantError: true,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			srv := newTestServer()
+			srv.defaultTimeout = tc.initTimeout
 
-	res, err := srv.handleSetTimeout(context.Background(), toolReq(map[string]any{"seconds": 60.0}))
-	c.Assert(err, qt.IsNil)
-	c.Assert(res.IsError, qt.IsFalse)
-	c.Assert(srv.defaultTimeout, qt.Equals, 60*time.Second)
-}
-
-func TestHandleSetTimeout_Disable(t *testing.T) {
-	c := qt.New(t)
-	srv := newTestServer()
-	srv.defaultTimeout = 30 * time.Second
-
-	res, err := srv.handleSetTimeout(context.Background(), toolReq(map[string]any{"seconds": 0.0}))
-	c.Assert(err, qt.IsNil)
-	c.Assert(res.IsError, qt.IsFalse)
-	c.Assert(srv.defaultTimeout, qt.Equals, time.Duration(0))
-	c.Assert(strings.Contains(resultText(c, res), "disabled"), qt.IsTrue,
-		qt.Commentf("expected disabled message, got: %s", resultText(c, res)))
-}
-
-func TestHandleSetTimeout_MissingParam(t *testing.T) {
-	c := qt.New(t)
-	srv := newTestServer()
-
-	res, err := srv.handleSetTimeout(context.Background(), toolReq(map[string]any{}))
-	c.Assert(err, qt.IsNil)
-	c.Assert(res.IsError, qt.IsTrue)
+			res, err := srv.handleSetTimeout(context.Background(), toolReq(tc.args))
+			c.Assert(err, qt.IsNil)
+			c.Assert(res.IsError, qt.Equals, tc.wantError)
+			if !tc.wantError {
+				c.Assert(srv.defaultTimeout, qt.Equals, tc.wantTimeout)
+			}
+			if tc.wantTextContain != "" {
+				c.Assert(strings.Contains(resultText(c, res), tc.wantTextContain), qt.IsTrue)
+			}
+		})
+	}
 }
 
 // --- meta-command tool tests ---
@@ -323,17 +334,6 @@ func TestHandleDoc_KnownBinding(t *testing.T) {
 		qt.Commentf("doc for car should mention 'car', got: %s", text))
 }
 
-func TestHandleDoc_MissingName(t *testing.T) {
-	c := qt.New(t)
-	srv := newTestServer()
-	ctx := context.Background()
-
-	res, err := srv.handleDoc(ctx, toolReq(map[string]any{}))
-	c.Assert(err, qt.IsNil)
-	c.Assert(res.IsError, qt.IsTrue)
-	c.Assert(strings.Contains(resultText(c, res), "required"), qt.IsTrue)
-}
-
 func TestHandleApropos_FindsResults(t *testing.T) {
 	c := qt.New(t)
 	srv := newTestServer()
@@ -345,17 +345,6 @@ func TestHandleApropos_FindsResults(t *testing.T) {
 	text := resultText(c, res)
 	c.Assert(strings.Contains(text, "string"), qt.IsTrue,
 		qt.Commentf("apropos for 'string' should find string-related bindings, got: %s", text))
-}
-
-func TestHandleApropos_MissingPattern(t *testing.T) {
-	c := qt.New(t)
-	srv := newTestServer()
-	ctx := context.Background()
-
-	res, err := srv.handleApropos(ctx, toolReq(map[string]any{}))
-	c.Assert(err, qt.IsNil)
-	c.Assert(res.IsError, qt.IsTrue)
-	c.Assert(strings.Contains(resultText(c, res), "required"), qt.IsTrue)
 }
 
 func TestHandleTopics(t *testing.T) {
@@ -384,15 +373,32 @@ func TestHandleTopic_ValidCategory(t *testing.T) {
 		qt.Commentf("topic 'list' should return bindings"))
 }
 
-func TestHandleTopic_MissingCategory(t *testing.T) {
-	c := qt.New(t)
-	srv := newTestServer()
-	ctx := context.Background()
-
-	res, err := srv.handleTopic(ctx, toolReq(map[string]any{}))
-	c.Assert(err, qt.IsNil)
-	c.Assert(res.IsError, qt.IsTrue)
-	c.Assert(strings.Contains(resultText(c, res), "required"), qt.IsTrue)
+func TestMetaTools_MissingParam(t *testing.T) {
+	tcs := []struct {
+		name    string
+		handler func(*mcpServer) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error)
+	}{
+		{"doc", func(s *mcpServer) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return s.handleDoc
+		}},
+		{"apropos", func(s *mcpServer) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return s.handleApropos
+		}},
+		{"topic", func(s *mcpServer) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return s.handleTopic
+		}},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			srv := newTestServer()
+			handler := tc.handler(srv)
+			res, err := handler(context.Background(), toolReq(map[string]any{}))
+			c.Assert(err, qt.IsNil)
+			c.Assert(res.IsError, qt.IsTrue)
+			c.Assert(strings.Contains(resultText(c, res), "required"), qt.IsTrue)
+		})
+	}
 }
 
 func TestHandleLibraries(t *testing.T) {
@@ -482,68 +488,49 @@ func TestRegisterPrompts_GetSubstitutesTask(t *testing.T) {
 
 // --- prompt handler tests ---
 
-func TestMakePromptHandler_Substitution(t *testing.T) {
-	c := qt.New(t)
-	srv := newTestServer()
-
-	handler := srv.makePromptHandler("Task: {{task}}", []string{"task"})
-
-	req := mcp.GetPromptRequest{
-		Params: mcp.GetPromptParams{
-			Arguments: map[string]string{"task": "compute fibonacci"},
+func TestMakePromptHandler(t *testing.T) {
+	tcs := []struct {
+		name        string
+		args        map[string]string
+		wantContain string
+		wantAbsent  string
+	}{
+		{
+			name:        "substitution",
+			args:        map[string]string{"task": "compute fibonacci"},
+			wantContain: "compute fibonacci",
+			wantAbsent:  "{{task}}",
+		},
+		{
+			name:        "missing arg gets default",
+			args:        map[string]string{},
+			wantContain: "(not specified)",
+		},
+		{
+			name:        "unknown arg ignored",
+			args:        map[string]string{"task": "do stuff", "unknown": "should be ignored"},
+			wantContain: "do stuff",
+			wantAbsent:  "should be ignored",
 		},
 	}
-	result, err := handler(context.Background(), req)
-	c.Assert(err, qt.IsNil)
-	c.Assert(result.Messages, qt.HasLen, 1)
-	tc, ok := result.Messages[0].Content.(mcp.TextContent)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(strings.Contains(tc.Text, "compute fibonacci"), qt.IsTrue)
-	c.Assert(strings.Contains(tc.Text, "{{task}}"), qt.IsFalse,
-		qt.Commentf("placeholder should be replaced"))
-}
-
-func TestMakePromptHandler_MissingArg(t *testing.T) {
-	c := qt.New(t)
-	srv := newTestServer()
-
-	handler := srv.makePromptHandler("Task: {{task}}", []string{"task"})
-
-	req := mcp.GetPromptRequest{
-		Params: mcp.GetPromptParams{
-			Arguments: map[string]string{},
-		},
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			handler := newTestServer().makePromptHandler("Task: {{task}}", []string{"task"})
+			req := mcp.GetPromptRequest{
+				Params: mcp.GetPromptParams{Arguments: tc.args},
+			}
+			result, err := handler(context.Background(), req)
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.Messages, qt.HasLen, 1)
+			text, ok := result.Messages[0].Content.(mcp.TextContent)
+			c.Assert(ok, qt.IsTrue)
+			c.Assert(strings.Contains(text.Text, tc.wantContain), qt.IsTrue)
+			if tc.wantAbsent != "" {
+				c.Assert(strings.Contains(text.Text, tc.wantAbsent), qt.IsFalse)
+			}
+		})
 	}
-	result, err := handler(context.Background(), req)
-	c.Assert(err, qt.IsNil)
-	c.Assert(result.Messages, qt.HasLen, 1)
-	tc, ok := result.Messages[0].Content.(mcp.TextContent)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(strings.Contains(tc.Text, "(not specified)"), qt.IsTrue,
-		qt.Commentf("missing arg should be replaced with default"))
-}
-
-func TestMakePromptHandler_UnknownArgIgnored(t *testing.T) {
-	c := qt.New(t)
-	srv := newTestServer()
-
-	handler := srv.makePromptHandler("Task: {{task}}", []string{"task"})
-
-	req := mcp.GetPromptRequest{
-		Params: mcp.GetPromptParams{
-			Arguments: map[string]string{
-				"task":    "do stuff",
-				"unknown": "should be ignored",
-			},
-		},
-	}
-	result, err := handler(context.Background(), req)
-	c.Assert(err, qt.IsNil)
-	tc, ok := result.Messages[0].Content.(mcp.TextContent)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(strings.Contains(tc.Text, "do stuff"), qt.IsTrue)
-	c.Assert(strings.Contains(tc.Text, "should be ignored"), qt.IsFalse,
-		qt.Commentf("unknown args should not appear in output"))
 }
 
 // --- resource handler tests ---

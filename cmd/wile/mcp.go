@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -191,7 +192,7 @@ func (p *mcpServer) initLocked(ctx context.Context) error {
 	if p.meta != nil {
 		return nil
 	}
-	engine, err := wile.NewEngine(ctx,
+	eng, err := wile.NewEngine(ctx,
 		wile.WithAllExtensions(),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
@@ -200,15 +201,15 @@ func (p *mcpServer) initLocked(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	p.engine = engine
+	p.engine = eng
 
 	// Redirect output away from stdout (the MCP JSON-RPC transport).
 	// Each handleEval call captures into its own buffer; between evals,
 	// output goes to discard.
 	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(io.Discard))
 
-	docProv := repl.NewRegistryDocProvider(engine.Registry())
-	p.meta = repl.NewMetaCommandHandler(engine.Environment(), nil, docProv)
+	docProv := repl.NewRegistryDocProvider(eng.Registry())
+	p.meta = repl.NewMetaCommandHandler(eng.Environment(), nil, docProv)
 	p.meta.SetPager("") // disable paging for non-TTY MCP context
 	return nil
 }
@@ -235,7 +236,13 @@ func (p *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (to
 		if r == nil {
 			return
 		}
-		toolResult = mcp.NewToolResultError(fmt.Sprintf("internal error (panic): %v", r))
+		// Log to stderr (not stdout, which is the MCP JSON-RPC transport).
+		fmt.Fprintf(os.Stderr, "mcp eval panic: %v\ncode: %s\n", r, code)
+		// Ensure output port is in a safe state after panic.
+		ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(io.Discard))
+		toolResult = mcp.NewToolResultError(fmt.Sprintf(
+			"internal error (panic): %v — session state may be corrupted; "+
+				"use the reset tool if subsequent calls fail", r))
 		toolErr = nil
 	}()
 
@@ -267,7 +274,15 @@ func (p *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (to
 	// matching the file execution pattern in runFile.
 	wrapped := "(begin " + code + "\n)"
 
-	val, evalErr := p.engine.EvalMultipleWithSource(ctx, wrapped, "<mcp-eval>")
+	expr, parseErr := p.engine.ParseWithSource(ctx, wrapped, "<mcp-eval>")
+	if parseErr != nil {
+		return mcp.NewToolResultError(parseErr.Error()), nil
+	}
+	compiled, compileErr := p.engine.Compile(ctx, expr)
+	if compileErr != nil {
+		return mcp.NewToolResultError(compileErr.Error()), nil
+	}
+	val, evalErr := p.engine.Run(ctx, compiled)
 
 	var result evalResult
 	output := buf.String()
@@ -295,9 +310,20 @@ func (p *mcpServer) handleEval(ctx context.Context, req mcp.CallToolRequest) (to
 
 // runMeta routes a comma-command through MetaCommandHandler, capturing output
 // in a strings.Builder and returning it as a tool result.
-func (p *mcpServer) runMeta(ctx context.Context, line string) (*mcp.CallToolResult, error) {
+func (p *mcpServer) runMeta(ctx context.Context, line string) (toolResult *mcp.CallToolResult, toolErr error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		fmt.Fprintf(os.Stderr, "mcp meta panic: %v\ncommand: %s\n", r, line)
+		toolResult = mcp.NewToolResultError(fmt.Sprintf("internal error (panic): %v", r))
+		toolErr = nil
+	}()
+
 	err := p.initLocked(ctx)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("engine init failed: %v", err)), nil
@@ -342,19 +368,19 @@ func (p *mcpServer) handleLibraries(ctx context.Context, _ mcp.CallToolRequest) 
 func (p *mcpServer) handleReset(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.engine != nil {
-		closeErr := p.engine.Close()
-		p.engine = nil
-		p.meta = nil
-		ioext.ResetState()
-		if closeErr != nil {
-			return mcp.NewToolResultText(
-				fmt.Sprintf("Session reset with warning: engine close failed: %v. "+
-					"A fresh engine will be created on next use.", closeErr),
-			), nil
-		}
+	if p.engine == nil {
+		return mcp.NewToolResultText("Session reset. The next call will reinitialize the engine."), nil
 	}
+	closeErr := p.engine.Close()
+	p.engine = nil
+	p.meta = nil
 	ioext.ResetState()
+	if closeErr != nil {
+		return mcp.NewToolResultError(
+			fmt.Sprintf("Session reset with warning: engine close failed: %v. "+
+				"A fresh engine will be created on next use.", closeErr),
+		), nil
+	}
 	return mcp.NewToolResultText("Session reset. The next call will reinitialize the engine."), nil
 }
 
@@ -531,7 +557,7 @@ func (p *mcpServer) handleLibrariesResource(ctx context.Context, _ mcp.ReadResou
 		return nil, err
 	}
 
-	var libs []libraryInfo
+	libs := make([]libraryInfo, 0)
 	reg, ok := p.engine.Environment().LibraryRegistry().(*machine.LibraryRegistry)
 	if ok {
 		for _, lib := range reg.All() {
