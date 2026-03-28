@@ -31,6 +31,7 @@ import (
 	"github.com/aalpar/wile"
 	ioext "github.com/aalpar/wile/internal/extensions/io"
 	"github.com/aalpar/wile/internal/repl"
+	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/stdlib"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
@@ -61,6 +62,7 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 		v,
 		server.WithToolCapabilities(true),
 		server.WithPromptCapabilities(true),
+		server.WithResourceCapabilities(true, false),
 	)
 
 	s.AddTool(
@@ -171,6 +173,8 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 		),
 		srv.handleSetTimeout,
 	)
+
+	srv.registerResources(s)
 
 	err := srv.registerPrompts(s)
 	if err != nil {
@@ -432,4 +436,155 @@ func (p *mcpServer) makePromptHandler(template string, argNames []string) server
 			},
 		}, nil
 	}
+}
+
+// --- resources ---
+
+// sessionState is the JSON shape for the wile://session resource.
+type sessionState struct {
+	Initialized    bool    `json:"initialized"`
+	LibraryCount   int     `json:"libraryCount,omitempty"`
+	PrimitiveCount int     `json:"primitiveCount,omitempty"`
+	TimeoutSeconds float64 `json:"timeoutSeconds"`
+}
+
+// libraryInfo is the JSON shape for each entry in the wile://libraries resource.
+type libraryInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
+// primitiveInfo is the JSON shape for each entry in the wile://primitives resource.
+type primitiveInfo struct {
+	Name       string `json:"name"`
+	Category   string `json:"category,omitempty"`
+	ParamCount int    `json:"paramCount"`
+	Variadic   bool   `json:"variadic,omitempty"`
+	Doc        string `json:"doc,omitempty"`
+}
+
+func (p *mcpServer) registerResources(s *server.MCPServer) {
+	s.AddResource(
+		mcp.Resource{
+			URI:         "wile://session",
+			Name:        "Session State",
+			Description: "Current Scheme session state: initialization, library count, timeout",
+			MIMEType:    "application/json",
+		},
+		p.handleSessionResource,
+	)
+	s.AddResource(
+		mcp.Resource{
+			URI:         "wile://libraries",
+			Name:        "Loaded Libraries",
+			Description: "All Scheme libraries available in the session with descriptions",
+			MIMEType:    "application/json",
+		},
+		p.handleLibrariesResource,
+	)
+	s.AddResource(
+		mcp.Resource{
+			URI:         "wile://primitives",
+			Name:        "Primitive Reference",
+			Description: "All registered Scheme primitives with signatures and documentation",
+			MIMEType:    "application/json",
+		},
+		p.handlePrimitivesResource,
+	)
+}
+
+func (p *mcpServer) handleSessionResource(_ context.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	state := sessionState{
+		TimeoutSeconds: p.defaultTimeout.Seconds(),
+	}
+	if p.engine != nil {
+		state.Initialized = true
+		state.PrimitiveCount = len(p.engine.Registry().Primitives())
+		reg, ok := p.engine.Environment().LibraryRegistry().(*machine.LibraryRegistry)
+		if ok {
+			state.LibraryCount = len(reg.All())
+		}
+	}
+
+	data, err := json.Marshal(state)
+	if err != nil {
+		return nil, err
+	}
+	return []mcp.ResourceContents{
+		mcp.TextResourceContents{
+			URI:      "wile://session",
+			MIMEType: "application/json",
+			Text:     string(data),
+		},
+	}, nil
+}
+
+func (p *mcpServer) handleLibrariesResource(ctx context.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	err := p.initLocked(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var libs []libraryInfo
+	reg, ok := p.engine.Environment().LibraryRegistry().(*machine.LibraryRegistry)
+	if ok {
+		for _, lib := range reg.All() {
+			libs = append(libs, libraryInfo{
+				Name:        lib.Name.SchemeString(),
+				Description: lib.Description,
+			})
+		}
+	}
+
+	data, err := json.Marshal(libs)
+	if err != nil {
+		return nil, err
+	}
+	return []mcp.ResourceContents{
+		mcp.TextResourceContents{
+			URI:      "wile://libraries",
+			MIMEType: "application/json",
+			Text:     string(data),
+		},
+	}, nil
+}
+
+func (p *mcpServer) handlePrimitivesResource(ctx context.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	err := p.initLocked(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	regs := p.engine.Registry().Primitives()
+	prims := make([]primitiveInfo, len(regs))
+	for i, reg := range regs {
+		prims[i] = primitiveInfo{
+			Name:       reg.Spec.Name,
+			Category:   reg.Spec.Category,
+			ParamCount: reg.Spec.ParamCount,
+			Variadic:   reg.Spec.IsVariadic,
+			Doc:        reg.Spec.Doc,
+		}
+	}
+
+	data, err := json.Marshal(prims)
+	if err != nil {
+		return nil, err
+	}
+	return []mcp.ResourceContents{
+		mcp.TextResourceContents{
+			URI:      "wile://primitives",
+			MIMEType: "application/json",
+			Text:     string(data),
+		},
+	}, nil
 }
