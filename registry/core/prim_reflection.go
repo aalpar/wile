@@ -15,6 +15,7 @@
 package core
 
 import (
+	"context"
 	"sort"
 	"strings"
 
@@ -349,6 +350,35 @@ func PrimDocTopic(mc *machine.MachineContext) error {
 		syms[i] = values.NewSymbol(n)
 	}
 	mc.SetValue(values.List(syms...))
+	return nil
+}
+
+// PrimLibraryDescription implements (library-description library-name).
+// Returns the description string of a loaded library, or #f if none or not loaded.
+func PrimLibraryDescription(mc *machine.MachineContext) error {
+	nameList := mc.Arg(0)
+	libName, err := machine.ParseLibraryNameFromDatum(context.Background(), nameList)
+	if err != nil {
+		return err
+	}
+
+	regAny := mc.EnvironmentFrame().LibraryRegistry()
+	if regAny == nil {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+	reg, ok := regAny.(*machine.LibraryRegistry)
+	if !ok {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+
+	lib := reg.Lookup(libName)
+	if lib == nil || lib.Description == "" {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+	mc.SetValue(values.NewString(lib.Description))
 	return nil
 }
 
