@@ -63,7 +63,7 @@
 
 ;; Stream operations (interleaving search)
 (define (mplus $1 $2)
-  "Interleave two answer streams $1 and $2.\nIf $1 is empty, return $2. If $1 is a suspension (procedure),\nreturn a suspension that swaps the arguments, ensuring fair\nenumeration of both branches. Otherwise cons the first answer\nof $1 and interleave the rest with $2.\n\nExamples:\n  (mplus '(a b) '(1 2))  => (a 1 b 2)\n  (mplus '() '(x y))  => (x y)\n\nSee also: `bind', `disj'."
+  "Interleave two answer streams $1 and $2.\nIf $1 is empty, return $2. If $1 is a suspension (procedure),\nreturn a suspension that swaps the arguments, ensuring fair\nenumeration of both branches. Otherwise cons the first answer\nof $1 and interleave the rest with $2.\n\nExamples:\n  (mplus '(a b) '(1 2))  => (a b 1 2)\n  (mplus '() '(x y))  => (x y)\n\nSee also: `bind', `disj'."
   (cond
     ((null? $1) $2)
     ((procedure? $1) (lambda () (mplus $2 ($1))))

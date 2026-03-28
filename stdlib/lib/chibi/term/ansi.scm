@@ -7,12 +7,12 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define (make-simple-escape-procedure parameter)
-  "Return a thunk that produces the ANSI SGR escape sequence for PARAMETER"
+  "Return a thunk that produces the ANSI SGR escape sequence for PARAMETER."
   (let ((code (string-append "\x1B;[" (number->string parameter) "m")))
     (lambda () code)))
 
 (define (make-wrap-procedure start-escape end-escape)
-  "Return a procedure that wraps a string in START-ESCAPE and END-ESCAPE.\nWhen ANSI escapes are disabled, the string is returned unchanged"
+  "Return a procedure that wraps a string in START-ESCAPE and END-ESCAPE.\nWhen ANSI escapes are disabled, the string is returned unchanged."
   (lambda (str)
     (if (not (string? str))
         (error "argument must be a string" str))
@@ -67,7 +67,7 @@
   (when (not (and (exact-integer? blue-level) (<= 0 blue-level 5)))
     (error "invalid blue-level value" blue-level))
   (string-append
-   "\x1B;[38;5;"
+   ";[38;5;"
    (number->string (+ (* 36 red-level) (* 6 green-level) blue-level 16))
    "m"))
 
@@ -101,7 +101,7 @@
   (when (not (and (exact-integer? blue-level) (<= 0 blue-level 255)))
     (error "invalid blue-level value" blue-level))
   (string-append
-   "\x1B;[38;2;"
+   ";[38;2;"
    (number->string red-level) ";"
    (number->string green-level) ";"
    (number->string blue-level)
@@ -232,7 +232,7 @@
   (when (not (and (exact-integer? blue-level) (<= 0 blue-level 5)))
     (error "invalid blue-level value" blue-level))
   (string-append
-   "\x1B;[48;5;"
+   ";[48;5;"
    (number->string (+ (* 36 red-level) (* 6 green-level) blue-level 16))
    "m"))
 
@@ -266,7 +266,7 @@
   (when (not (and (exact-integer? blue-level) (<= 0 blue-level 255)))
     (error "invalid blue-level value" blue-level))
   (string-append
-   "\x1B;[48;5;"
+   ";[48;5;"
    (number->string red-level) ";"
    (number->string green-level) ";"
    (number->string blue-level)

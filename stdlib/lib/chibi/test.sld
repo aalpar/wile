@@ -51,7 +51,7 @@
 
     ;; Indentation helper
     (define (indent)
-      "Display indentation spaces for the current group nesting level"
+      "Display indentation spaces for the current group nesting level."
       (let loop ((i 0))
         (when (< i *group-indent*)
           (display "  ")
@@ -80,11 +80,11 @@
 
     ;; Test result reporting - exported for macro use
     (define (%test-pass name)
-      "Record a passing test result for NAME"
+      "Record a passing test result for NAME."
       (set! *test-pass-count* (+ *test-pass-count* 1)))
 
     (define (%test-fail name expected actual)
-      "Record a failing test result for NAME and display EXPECTED vs ACTUAL"
+      "Record a failing test result for NAME and display EXPECTED vs ACTUAL."
       (set! *test-fail-count* (+ *test-fail-count* 1))
       (indent)
       (display "FAIL: ")
@@ -101,7 +101,7 @@
     ;; Uses relative difference like the original chibi test library.
     ;; Handles special cases: infinities and NaN
     (define (%approx-equal? a b epsilon)
-      "Return true if A and B are approximately equal within EPSILON.\nHandles infinities, NaN, zero, complex numbers, pairs, and vectors"
+      "Return true if A and B are approximately equal within EPSILON.\nHandles infinities, NaN, zero, complex numbers, pairs, and vectors."
       (cond
        ((and (number? a) (number? b))
         (cond

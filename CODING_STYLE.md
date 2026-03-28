@@ -896,13 +896,13 @@ documentation. Retrieved at runtime via `(procedure-documentation proc)`.
 | **Paragraphs** | Separated by `\n\n` | `"Summary.\n\nDetails."` |
 | **Examples section** | `Examples:` header, indented code | `"Examples:\n  (foo 1 2)  => 3"` |
 | **See also** | `See also:` at end, comma-separated | `` "See also: `bar', `baz'." `` |
+| **Pre-formatted** | Indent with 2 spaces after `\n` | `"\n  (code here)"` |
+| **Trailing period** | End sentences with periods, including the last line | — |
+| **Math** | Self-contained, no assumed knowledge | Explain algebraic concepts inline |
 
 **Note:** Backtick (`` ` ``) is literal inside Scheme double-quoted strings — do NOT
 escape it with backslash. `\`` is an invalid R7RS escape sequence and will cause
 a tokenizer error.
-| **Pre-formatted** | Indent with 2 spaces after `\n` | `"\n  (code here)"` |
-| **No trailing period** | Last line has no period | — |
-| **Math** | Self-contained, no assumed knowledge | Explain algebraic concepts inline |
 
 ### When to Use Each Element
 

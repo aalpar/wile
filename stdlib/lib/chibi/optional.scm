@@ -111,7 +111,7 @@
      (define name (opt-lambda* vars . body)))))
 
 (define (mem-key key ls)
-  "Search property list LS for KEY, returning the tail starting at KEY or #f"
+  "Search property list LS for KEY, returning the tail starting at KEY or #f."
   (and (pair? ls)
        (pair? (cdr ls))
        (if (eq? key (car ls))
@@ -141,7 +141,7 @@
      (cond ((mem-key key ls) => cadr) (else default)))))
 
 (define (symbol->keyword sym)
-  "Convert symbol SYM to a keyword symbol by appending a colon"
+  "Convert symbol SYM to a keyword symbol by appending a colon."
   (string->symbol (string-append (symbol->string sym) ":")))
 
 (define-syntax let-key*-to-let
@@ -222,7 +222,7 @@
 
 ;; Returns the plist ls filtering out key-values found in keywords.
 (define (remove-keywords ls keywords)
-  "Return property list LS with all key-value pairs matching KEYWORDS removed"
+  "Return property list LS with all key-value pairs matching KEYWORDS removed."
   (let lp ((ls ls) (res '()))
     (if (and (pair? ls) (pair? (cdr ls)))
         (if (memq (car ls) keywords)

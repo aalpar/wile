@@ -8,13 +8,13 @@
 
 ;; Simplified version of SRFI-1 any.
 (define (any pred ls)
-  "Return the first true result of applying PRED to elements of LS, or #f"
+  "Return the first true result of applying PRED to elements of LS, or #f."
   (and (pair? ls)
        (or (pred (car ls))
            (any pred (cdr ls)))))
 
 (define (safe-any pred ls . o)
-  "Like any but catches exceptions, printing DESC as a warning on error"
+  "Like any but catches exceptions, printing DESC as a warning on error."
   (let ((desc (or (and (pair? o) (car o)) "error in any")))
     (guard (exn
             (else
@@ -27,7 +27,7 @@
 ;; exception utilities
 
 (define (warning msg . args)
-  "Display MSG and ARGS as a warning to current-error-port"
+  "Display MSG and ARGS as a warning to current-error-port."
   (display msg (current-error-port))
   (for-each (lambda (x)
               (write-char #\space (current-error-port))
@@ -36,7 +36,7 @@
   (newline (current-error-port)))
 
 (define (exception-message exc)
-  "Extract the human-readable message from exception EXC, stripping any ERROR: prefix"
+  "Extract the human-readable message from exception EXC, stripping any ERROR: prefix."
   (let* ((s (let ((p (open-output-string)))
               (print-exception exc p)
               (get-output-string p)))
@@ -327,7 +327,7 @@
 
 ;; (name (prop . value) ...)
 (define (make-test-group name parent)
-  "Create a new test group alist with NAME and PARENT group"
+  "Create a new test group alist with NAME and PARENT group."
   (let* ((g (list name))
          (! (lambda (k v) (test-group-set! g k v))))
     (! 'start-time (current-second))
@@ -354,7 +354,7 @@
 ;;> Returns the name of a test group info object.
 
 (define (test-group-name group)
-  "Return the name of a test GROUP"
+  "Return the name of a test GROUP."
   (car group))
 
 ;;> Returns the value of a \var{field} in a test var{group} info
@@ -364,7 +364,7 @@
 ;;> \scheme{total-pass}, \scheme{total-fail}, \scheme{total-error}.
 
 (define (test-group-ref group field . o)
-  "Return the value of FIELD in test GROUP, or the optional default"
+  "Return the value of FIELD in test GROUP, or the optional default."
   (if group
       (apply assq-ref (cdr group) field o)
       (and (pair? o) (car o))))
@@ -372,7 +372,7 @@
 ;;> Sets the value of a \var{field} in a test \var{group} info object.
 
 (define (test-group-set! group field value)
-  "Set FIELD to VALUE in test GROUP"
+  "Set FIELD to VALUE in test GROUP."
   (cond
    ((assq field (cdr group))
     => (lambda (x) (set-cdr! x value)))
@@ -382,7 +382,7 @@
 ;;> object by \var{amount}, defaulting to 1.
 
 (define (test-group-inc! group field . o)
-  "Increment FIELD in test GROUP by AMOUNT (default 1)"
+  "Increment FIELD in test GROUP by AMOUNT (default 1)."
   (let ((amount (if (pair? o) (car o) 1)))
     (cond
      ((assq field (cdr group))
@@ -393,7 +393,7 @@
 ;;> \var{value} onto it.
 
 (define (test-group-push! group field value)
-  "Cons VALUE onto FIELD in test GROUP"
+  "Cons VALUE onto FIELD in test GROUP."
   (cond
    ((assq field (cdr group))
     => (lambda (x) (set-cdr! x (cons value (cdr x)))))
@@ -403,13 +403,13 @@
 ;; utilities
 
 (define (assq-ref ls key . o)
-  "Look up KEY in alist LS by eq?, returning the value or optional default"
+  "Look up KEY in alist LS by eq?, returning the value or optional default."
   (cond ((assq key ls) => cdr)
         ((pair? o) (car o))
         (else #f)))
 
 (define (approx-equal? a b epsilon)
-  "Return true if A and B are within relative EPSILON of each other"
+  "Return true if A and B are within relative EPSILON of each other."
   (cond
    ((> (abs a) (abs b))
     (approx-equal? b a epsilon))
@@ -419,14 +419,14 @@
     (< (abs (/ (- a b) b)) epsilon))))
 
 (define (call-with-output-string proc)
-  "Call PROC with an output string port and return the accumulated string"
+  "Call PROC with an output string port and return the accumulated string."
   (let ((out (open-output-string)))
     (proc out)
     (get-output-string out)))
 
 ;; partial pretty printing to abbreviate `quote' forms and the like
 (define (write-to-string x)
-  "Write X to a string with partial pretty-printing of quote forms"
+  "Write X to a string with partial pretty-printing of quote forms."
   (call-with-output-string
     (lambda (out)
       (let wr ((x x))
@@ -452,13 +452,13 @@
             (write x out))))))
 
 (define (display-to-string x)
-  "Convert X to its display string representation"
+  "Convert X to its display string representation."
   (if (string? x) x (call-with-output-string (lambda (out) (display x out)))))
 
 ;; if we need to truncate, try first dropping let's to get at the
 ;; heart of the expression
 (define (truncate-source x width . o)
-  "Truncate source expression X to fit within WIDTH columns, simplifying let forms"
+  "Truncate source expression X to fit within WIDTH columns, simplifying let forms."
   (let* ((str (write-to-string x))
          (len (string-length str)))
     (cond
@@ -485,7 +485,7 @@
        "...")))))
 
 (define (test-get-name! info)
-  "Get or generate a display name for test INFO, caching the result"
+  "Get or generate a display name for test INFO, caching the result."
   (or
    (assq-ref info 'name)
    (assq-ref info 'gen-name)
@@ -500,7 +500,7 @@
                  (write info (current-error-port))
                  (display "\n" (current-error-port))
                  (string-append
-                  "test-"
+                  "test-."
                   (number->string (test-group-ref g 'count 0)))))
            (else ""))))
      (if (pair? info)
@@ -508,7 +508,7 @@
      name)))
 
 (define (test-print-name info indent)
-  "Print the test name from INFO with dot-leader padding at INDENT level"
+  "Print the test name from INFO with dot-leader padding at INDENT level."
   (let* ((width (- (current-column-width) indent))
          (name (test-get-name! info))
          (diff (- width 9 (string-length name))))
@@ -525,7 +525,7 @@
     (flush-output-port)))
 
 (define (test-group-indent-width group)
-  "Compute the display indentation width in spaces for GROUP"
+  "Compute the display indentation width in spaces for GROUP."
   (let ((level (max 0 (+ 1 (- (test-group-ref group 'level 0)
                               (test-first-indentation))))))
     (* (current-group-indent) (min level (test-max-indentation)))))
@@ -547,7 +547,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define (test-expand-info info)
-  "Augment test INFO with source file and line number if available"
+  "Augment test INFO with source file and line number if available."
   (let ((expr (assq-ref info 'source)))
     (if (and (pair? expr)
              (pair-source expr)
@@ -559,7 +559,7 @@
         info)))
 
 (define (test-default-applier expect expr info)
-  "Evaluate EXPECT and EXPR thunks and report pass/fail/error to current-test-reporter"
+  "Evaluate EXPECT and EXPR thunks and report pass/fail/error to current-test-reporter."
   (let ((expect-val
          (guard
              (exn
@@ -592,11 +592,11 @@
           ((current-test-reporter) status info))))))
 
 (define (test-default-skipper info)
-  "Report a skipped test to current-test-reporter"
+  "Report a skipped test to current-test-reporter."
   ((current-test-reporter) 'SKIP info))
 
 (define (test-status-color status)
-  "Return the ANSI color function for STATUS"
+  "Return the ANSI color function for STATUS."
   (case status
     ((ERROR) (lambda (x) (underline (red x))))
     ((FAIL) red)
@@ -604,11 +604,11 @@
     (else (lambda (x) x))))
 
 (define (test-status-message status)
-  "Return the colored status name string for STATUS"
+  "Return the colored status name string for STATUS."
   ((test-status-color status) (symbol->string status)))
 
 (define (test-status-code status)
-  "Return a single-character colored status indicator for STATUS"
+  "Return a single-character colored status indicator for STATUS."
   ((test-status-color status)
    ;; alternatively: ❗, ✗, ‒, ✓
    ;; unfortunately, these have ambiguous width
@@ -619,7 +619,7 @@
      (else "."))))
 
 (define (display-expected/actual expected actual format)
-  "Display a colored diff between EXPECTED and ACTUAL values using FORMAT"
+  "Display a colored diff between EXPECTED and ACTUAL values using FORMAT."
   (let ((e-str (format expected))
         (a-str (format actual)))
     (if (and (equal? e-str a-str)
@@ -635,7 +635,7 @@
           ))))
 
 (define (test-print-explanation indent status info)
-  "Print the failure or error explanation for a test result"
+  "Print the failure or error explanation for a test result."
   (cond
    ((eq? status 'ERROR)
     (cond ((assq 'exception info)
@@ -679,7 +679,7 @@
                   names values))))))))
 
 (define (test-print-source indent status info)
-  "Print source location and variable bindings for failed or errored tests"
+  "Print source location and variable bindings for failed or errored tests."
   (case status
     ((FAIL ERROR)
      (cond
@@ -709,14 +709,14 @@
              v)))))))
 
 (define (test-print-failure indent status info)
-  "Print full failure details including explanation and source location"
+  "Print full failure details including explanation and source location."
   ;; display status explanation
   (test-print-explanation indent status info)
   ;; display line, source and values info
   (test-print-source indent status info))
 
 (define (test-group-line group open?)
-  "Generate the header or footer line string for a test GROUP"
+  "Generate the header or footer line string for a test GROUP."
   (let* ((name (test-group-name group))
          (spaces (test-group-indent-width group))
          (indent (indent-string spaces)))
@@ -724,14 +724,14 @@
         (let ((text (string-append
                      (if open? "" "done ")
                      (if (test-group-ref group 'skip-group?)
-                         "skipping "
+                         "skipping ."
                          "testing ")
                      name)))
           (string-append
            indent
-           "-- "
+           "-- ."
            (bold text)
-           " "
+           " ."
            (make-string
             (max 0 (- (current-column-width)
                       (string-length text) spaces 4))
@@ -741,7 +741,7 @@
          (bold (string-append name ": "))))))
 
 (define (start-test info)
-  "Print the test name at the start of a test case"
+  "Print the test name at the start of a test case."
   (let ((group (current-test-group)))
     (when (or (not group) (test-group-ref group 'verbose))
       (let ((indent (and group (test-group-indent-width group))))
@@ -750,7 +750,7 @@
         (test-print-name info (or indent 4))))))
 
 (define (stop-test status info)
-  "Record test result STATUS and update group counters and display"
+  "Record test result STATUS and update group counters and display."
   (define indent
     (indent-string
      (+ (current-group-indent)
@@ -799,13 +799,13 @@
   status)
 
 (define (test-default-reporter status info)
-  "Default test reporter dispatching BEGIN to start-test and results to stop-test"
+  "Default test reporter dispatching BEGIN to start-test and results to stop-test."
   (if (eq? status 'BEGIN)
       (start-test info)
       (stop-test status info)))
 
 (define (close-group group)
-  "Print the summary report for a completed test GROUP and propagate counts to parent"
+  "Print the summary report for a completed test GROUP and propagate counts to parent."
   (define (plural word n)
     (if (= n 1) word (string-append word "s")))
   (define (percent n d)
@@ -899,7 +899,7 @@
 (define test-default-group-reporter
   (case-lambda
     ((group)
-     "Report test group results: close with summary or open with header"
+     "Report test group results: close with summary or open with header."
      (close-group group))
     ((group parent)
      (display (test-group-line group 'open))
@@ -991,14 +991,14 @@
        5)))
 
 (define (string->info-matcher str)
-  "Return a predicate that matches test info whose name contains STR"
+  "Return a predicate that matches test info whose name contains STR."
   (lambda (info)
     (cond ((test-get-name! info)
            => (lambda (name) (and (string? name) (string-contains name str))))
           (else #f))))
 
 (define (string->group-matcher str)
-  "Return a predicate that matches test groups whose name contains STR"
+  "Return a predicate that matches test groups whose name contains STR."
   (lambda (group)
     (cond ((test-group-name group)
            => (lambda (name)
@@ -1007,7 +1007,7 @@
 
 ;; simplified version from SRFI 130
 (define (string-split str ch)
-  "Split STR into a list of substrings at each occurrence of character CH"
+  "Split STR into a list of substrings at each occurrence of character CH."
   (let ((end (string-length str)))
     (let lp ((from 0) (to 0) (res '()))
       (cond
@@ -1019,7 +1019,7 @@
         (lp from (+ to 1) res))))))
 
 (define (getenv-filter-list proc name)
-  "Parse environment variable NAME as comma-separated values, applying PROC to each"
+  "Parse environment variable NAME as comma-separated values, applying PROC to each."
   (cond
    ((get-environment-variable name)
     => (lambda (s)
@@ -1034,7 +1034,7 @@
                             (else
                              (warning
                               (string-append "invalid filter '" s
-                                             "' from environment variable: "
+                                             "' from environment variable: ."
                                              name))
                              (print-exception exn (current-error-port))
                              #f))

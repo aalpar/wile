@@ -1,7 +1,7 @@
 
 ;; utility for lcs-with-positions
 (define (max-seq . o)
-  "Return the sequence with the greatest length from zero or more (length elements) pairs"
+  "Return the sequence with the greatest length from zero or more (length elements) pairs."
   (if (null? o)
       (list 0 '())
       (let loop ((a (car o)) (ls (cdr o)))
@@ -60,7 +60,7 @@
     (cadr (vector-ref results 0))))
 
 (define (source->list x reader)
-  "Convert source X to a list by reading with READER.\nX may be a port or a string; strings are opened as input ports"
+  "Convert source X to a list by reading with READER.\nX may be a port or a string; strings are opened as input ports."
   (port->list
    reader
    (cond ((port? x) x)

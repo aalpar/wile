@@ -29,7 +29,7 @@ Key formatting elements (Emacs Lisp-inspired, within plain strings):
 - **See also:** `See also:` at end with comma-separated `` `name' `` references
 - **Pre-formatted:** Indent with 2 spaces after `\n`
 - **Math:** Self-contained, no assumed domain knowledge
-- **No trailing period** after the last line
+- **Trailing period** — end sentences with periods, including the last line
 
 Example:
 ```scheme
