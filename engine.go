@@ -515,6 +515,26 @@ func (p *Engine) Registry() *registry.Registry {
 	return p.registry.Clone()
 }
 
+// AvailableLibraries returns all importable library names by combining
+// filesystem discovery with registry-known libraries (synthetic extensions).
+// Returns a sorted, deduplicated list. If the library system is not enabled
+// (no WithLibraryPaths call), returns an empty list.
+func (p *Engine) AvailableLibraries(_ context.Context) ([]machine.LibraryName, error) {
+	regAny := p.env.LibraryRegistry()
+	if regAny == nil {
+		return nil, nil
+	}
+	reg, ok := regAny.(*machine.LibraryRegistry)
+	if !ok {
+		return nil, nil
+	}
+
+	resolverAny := p.env.FileResolver()
+	resolver, _ := resolverAny.(machine.FileResolver)
+
+	return machine.DiscoverAvailableLibraries(resolver, reg)
+}
+
 // internal helpers
 
 // registerExtensionLibraries registers each extension as a synthetic R7RS library

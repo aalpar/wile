@@ -42,6 +42,8 @@ func addPrimitives(r *registry.Registry) error {
 			Doc: "Returns #t if symbol has a binding in the given environment.", ParamNames: []string{"env", "symbol"}, Category: "introspection"},
 		{Name: "features", Impl: PrimFeatures,
 			Doc: "Returns a list of symbols representing implementation features (r7rs, wile, platform, architecture).", Category: "introspection"},
+		{Name: "available-libraries", Impl: PrimAvailableLibraries,
+			Doc: "Returns a sorted list of all importable library names. Each name is a list of symbols/integers in R7RS library name syntax.", Category: "introspection"},
 	}, registry.PhaseRuntime)
 	return nil
 }

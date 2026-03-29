@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile"
 	extintrospection "github.com/aalpar/wile/extensions/introspection"
+	"github.com/aalpar/wile/stdlib"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -208,5 +209,81 @@ func TestFeatures(t *testing.T) {
 
 	t.Run("wrong argument count", func(t *testing.T) {
 		evalExpectError(t, engine, `(features 42)`)
+	})
+}
+
+func TestAvailableLibraries(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("returns a list", func(t *testing.T) {
+		engine, err := wile.NewEngine(context.Background(),
+			wile.WithExtension(extintrospection.Extension),
+			wile.WithLibraryPaths("."),
+			wile.WithSourceFS(stdlib.FS),
+		)
+		c.Assert(err, qt.IsNil)
+		result := schemeEval(t, engine, `(list? (available-libraries))`)
+		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+	})
+
+	t.Run("contains scheme base", func(t *testing.T) {
+		engine, err := wile.NewEngine(context.Background(),
+			wile.WithExtension(extintrospection.Extension),
+			wile.WithLibraryPaths("."),
+			wile.WithSourceFS(stdlib.FS),
+		)
+		c.Assert(err, qt.IsNil)
+		result := schemeEval(t, engine, `
+			(let loop ((libs (available-libraries)))
+			  (cond
+			    ((null? libs) #f)
+			    ((equal? (car libs) '(scheme base)) #t)
+			    (else (loop (cdr libs)))))
+		`)
+		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+	})
+
+	t.Run("each element is a list", func(t *testing.T) {
+		engine, err := wile.NewEngine(context.Background(),
+			wile.WithExtension(extintrospection.Extension),
+			wile.WithLibraryPaths("."),
+			wile.WithSourceFS(stdlib.FS),
+		)
+		c.Assert(err, qt.IsNil)
+		result := schemeEval(t, engine, `
+			(let loop ((libs (available-libraries)) (ok #t))
+			  (if (null? libs)
+			      ok
+			      (loop (cdr libs) (and ok (list? (car libs))))))
+		`)
+		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+	})
+
+	t.Run("empty when library system disabled", func(t *testing.T) {
+		engine := newEngine(t)
+		result := schemeEval(t, engine, `(null? (available-libraries))`)
+		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+	})
+
+	t.Run("includes synthetic extension libraries", func(t *testing.T) {
+		engine, err := wile.NewEngine(context.Background(),
+			wile.WithExtension(extintrospection.Extension),
+			wile.WithLibraryPaths("."),
+			wile.WithSourceFS(stdlib.FS),
+		)
+		c.Assert(err, qt.IsNil)
+		result := schemeEval(t, engine, `
+			(let loop ((libs (available-libraries)))
+			  (cond
+			    ((null? libs) #f)
+			    ((equal? (car libs) '(wile introspection)) #t)
+			    (else (loop (cdr libs)))))
+		`)
+		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
+	})
+
+	t.Run("wrong argument count", func(t *testing.T) {
+		engine := newEngine(t)
+		evalExpectError(t, engine, `(available-libraries 42)`)
 	})
 }
