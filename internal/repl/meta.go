@@ -123,7 +123,13 @@ var metaCommands = []commandInfo{
 		"Usage: ,help [command]\n\nWith no arguments, lists all commands.\nWith a command name, shows detailed help for that command.",
 		"session"},
 	{"doc", nil, "Show documentation for a Scheme binding or library",
-		"Usage: ,doc <name> or ,doc (<library-name>)\n\nLooks up the named binding across all phase environments\n(runtime, expand, compile) and displays documentation.\nFor primitives, shows signature, description, and category.\nFor user bindings, shows type and current value.\nFor libraries, shows description, source, and export list.",
+		"Usage: ,doc [-x] <name> or ,doc (<library-name>)\n\n" +
+			"Looks up the named binding across all phase environments\n" +
+			"(runtime, expand, compile) and displays documentation.\n" +
+			"For primitives, shows signature, description, and category.\n" +
+			"For user bindings, shows type and current value.\n" +
+			"For libraries, shows description, source, and export list.\n\n" +
+			"Options:\n  -x    Include usage examples in the output",
 		"session"},
 	{"edit", nil, "Open file in $EDITOR",
 		"Usage: ,edit <file>\n\nOpens the given file in the editor specified by the $EDITOR\nenvironment variable. The REPL blocks until the editor exits.",
@@ -203,8 +209,18 @@ func containsString(ss []string, s string) bool {
 
 func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 	if len(args) == 0 {
-		fmt.Fprintln(out, "Usage: ,doc <name> or ,doc (<library-name>)")
+		fmt.Fprintln(out, "Usage: ,doc [-x] <name> or ,doc (<library-name>)")
 		return
+	}
+
+	showExamples := false
+	if args[0] == "-x" {
+		showExamples = true
+		args = args[1:]
+		if len(args) == 0 {
+			fmt.Fprintln(out, "Usage: ,doc [-x] <name> or ,doc (<library-name>)")
+			return
+		}
 	}
 
 	// Check if arguments form a library name like (scheme base)
@@ -242,13 +258,13 @@ func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 						if isForeign && p.docProv != nil {
 							info, found := p.docProv.LookupDoc(name)
 							if found {
-								formatPrimitiveDoc(&content, name, info)
+								formatPrimitiveDoc(&content, name, info, showExamples)
 								writeWithPager(out, content.String(), p.pager)
 								return
 							}
 						}
 					}
-					formatBindingDoc(&content, name, bnd, phase)
+					formatBindingDoc(&content, name, bnd, phase, showExamples)
 					writeWithPager(out, content.String(), p.pager)
 					return
 				}
@@ -260,7 +276,7 @@ func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 	if p.docProv != nil {
 		info, found := p.docProv.LookupDoc(name)
 		if found {
-			formatPrimitiveDoc(&content, name, info)
+			formatPrimitiveDoc(&content, name, info, showExamples)
 			writeWithPager(out, content.String(), p.pager)
 			return
 		}
@@ -328,7 +344,7 @@ func formatLibraryDoc(w *strings.Builder, lib *machine.CompiledLibrary) {
 	}
 }
 
-func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo) {
+func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo, showExamples bool) {
 	hasTypes := len(info.ParamTypes) > 0
 
 	// Signature line
@@ -346,8 +362,12 @@ func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo) {
 	fmt.Fprintln(w)
 
 	// Description
-	if info.Doc != "" {
-		fmt.Fprintf(w, "  %s\n", info.Doc)
+	doc := info.Doc
+	if !showExamples {
+		doc = StripExamples(doc)
+	}
+	if doc != "" {
+		fmt.Fprintf(w, "  %s\n", doc)
 	}
 
 	// Parameter types
@@ -382,7 +402,7 @@ func paramTypeForDoc(types []values.ValueType, i int) values.ValueType {
 	return values.TypeAny
 }
 
-func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding, phase int) {
+func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding, phase int, showExamples bool) {
 	phaseName := phaseLabel(phase)
 
 	switch bnd.BindingType() {
@@ -407,6 +427,9 @@ func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding,
 		doc = bnd.Doc()
 	}
 	if doc != "" {
+		if !showExamples {
+			doc = StripExamples(doc)
+		}
 		indented := strings.ReplaceAll(doc, "\n", "\n  ")
 		fmt.Fprintf(w, "\n  %s\n", indented)
 	}

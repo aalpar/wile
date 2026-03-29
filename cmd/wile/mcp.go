@@ -102,6 +102,9 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 				mcp.Required(),
 				mcp.Description("Binding name (e.g. \"car\") or library name (e.g. \"(scheme base)\")"),
 			),
+			mcp.WithBoolean("examples",
+				mcp.Description("Include usage examples in the output (default: false)"),
+			),
 		),
 		srv.handleDoc,
 	)
@@ -342,7 +345,11 @@ func (p *mcpServer) handleDoc(ctx context.Context, req mcp.CallToolRequest) (*mc
 	if name == "" {
 		return mcp.NewToolResultError("name parameter is required"), nil
 	}
-	return p.runMeta(ctx, ",doc "+name)
+	cmd := ",doc " + name
+	if req.GetBool("examples", false) {
+		cmd = ",doc -x " + name
+	}
+	return p.runMeta(ctx, cmd)
 }
 
 func (p *mcpServer) handleApropos(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

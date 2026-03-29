@@ -226,6 +226,63 @@ func TestMetaHandleUnknown(t *testing.T) {
 		qt.Commentf("output was: %q", buf.String()))
 }
 
+func TestStripExamples(t *testing.T) {
+	tcs := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"with examples", "Desc.\n\nExamples:\n  (f 1) => 2", "Desc."},
+		{"without examples", "Just a description.", "Just a description."},
+		{"empty string", "", ""},
+		{"examples at start", "\n\nExamples:\n  (f)", ""},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, StripExamples(tc.input), qt.Equals, tc.expected)
+		})
+	}
+}
+
+func TestCmdDoc_ExamplesFiltering(t *testing.T) {
+	ctx := context.Background()
+	env, reg, err := bootstrap.NewTopLevelWithRegistry(ctx)
+	qt.Assert(t, err, qt.IsNil)
+	docProv := NewRegistryDocProvider(reg)
+
+	t.Run("strips examples by default", func(t *testing.T) {
+		t.Setenv("PAGER", "")
+		var buf bytes.Buffer
+		h := NewMetaCommandHandler(env, nil, docProv)
+		h.cmdDoc([]string{"car"}, &buf)
+		output := buf.String()
+		qt.Assert(t, strings.Contains(output, "car"), qt.IsTrue,
+			qt.Commentf("output: %q", output))
+		qt.Assert(t, strings.Contains(output, "Examples:"), qt.IsFalse,
+			qt.Commentf(",doc car should not contain examples by default: %q", output))
+	})
+
+	t.Run("shows examples with -x", func(t *testing.T) {
+		t.Setenv("PAGER", "")
+		var buf bytes.Buffer
+		h := NewMetaCommandHandler(env, nil, docProv)
+		h.cmdDoc([]string{"-x", "car"}, &buf)
+		output := buf.String()
+		qt.Assert(t, strings.Contains(output, "car"), qt.IsTrue,
+			qt.Commentf("output: %q", output))
+		qt.Assert(t, strings.Contains(output, "Examples:"), qt.IsTrue,
+			qt.Commentf(",doc -x car should contain examples: %q", output))
+	})
+
+	t.Run("-x alone shows usage", func(t *testing.T) {
+		t.Setenv("PAGER", "")
+		var buf bytes.Buffer
+		h := NewMetaCommandHandler(env, nil, docProv)
+		h.cmdDoc([]string{"-x"}, &buf)
+		qt.Assert(t, strings.Contains(buf.String(), "Usage"), qt.IsTrue)
+	})
+}
+
 func TestFormatPrimitiveDoc_WithTypes(t *testing.T) {
 	c := qt.New(t)
 	var buf strings.Builder
@@ -237,7 +294,7 @@ func TestFormatPrimitiveDoc_WithTypes(t *testing.T) {
 		ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger},
 		ReturnType: values.TypeCharacter,
 	}
-	formatPrimitiveDoc(&buf, "string-ref", info)
+	formatPrimitiveDoc(&buf, "string-ref", info, true)
 	output := buf.String()
 	c.Assert(strings.Contains(output, "→ character"), qt.IsTrue,
 		qt.Commentf("output: %s", output))
@@ -258,7 +315,7 @@ func TestFormatPrimitiveDoc_WithoutTypes(t *testing.T) {
 		Category:   "strings",
 		ParamCount: 1,
 	}
-	formatPrimitiveDoc(&buf, "string-length", info)
+	formatPrimitiveDoc(&buf, "string-length", info, true)
 	output := buf.String()
 	// Without ParamTypes, should have no type annotations
 	c.Assert(strings.Contains(output, " : "), qt.IsFalse,

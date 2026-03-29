@@ -332,6 +332,24 @@ func TestHandleDoc_KnownBinding(t *testing.T) {
 	text := resultText(c, res)
 	c.Assert(strings.Contains(text, "car"), qt.IsTrue,
 		qt.Commentf("doc for car should mention 'car', got: %s", text))
+	c.Assert(strings.Contains(text, "Examples:"), qt.IsFalse,
+		qt.Commentf("doc without examples param should strip examples, got: %s", text))
+}
+
+func TestHandleDoc_WithExamples(t *testing.T) {
+	c := qt.New(t)
+	srv := newTestServer()
+	ctx := context.Background()
+
+	res, err := srv.handleDoc(ctx, toolReq(map[string]any{
+		"name":     "car",
+		"examples": true,
+	}))
+	c.Assert(err, qt.IsNil)
+	c.Assert(res.IsError, qt.IsFalse)
+	text := resultText(c, res)
+	c.Assert(strings.Contains(text, "Examples:"), qt.IsTrue,
+		qt.Commentf("doc with examples=true should include examples, got: %s", text))
 }
 
 func TestHandleApropos_FindsResults(t *testing.T) {
