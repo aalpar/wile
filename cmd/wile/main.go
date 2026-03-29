@@ -45,6 +45,7 @@ type Options struct {
 	Version     bool     `short:"V" long:"version" description:"Print version information and exit"`
 	Quiet       bool     `short:"q" long:"quiet" description:"Suppress informational messages"`
 	MCP         bool     `long:"mcp" description:"Start as MCP server on stdio"`
+	MCPTimeout  float64  `long:"mcp-timeout" description:"Default eval timeout in seconds for MCP mode (0 = no timeout)" default:"30"`
 	CPUProfile  string   `long:"cpuprofile" description:"Write CPU profile to file"`
 	MemProfile  string   `long:"memprofile" description:"Write memory profile to file"`
 }
@@ -196,6 +197,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Error: --mcp cannot be combined with -e, -f, or -i")
 		os.Exit(1)
 	}
+	if opts.MCPTimeout < 0 {
+		fmt.Fprintln(os.Stderr, "Error: --mcp-timeout must be non-negative")
+		os.Exit(1)
+	}
 
 	// CPU profiling
 	if opts.CPUProfile != "" {
@@ -220,7 +225,7 @@ func main() {
 	defer cancel()
 
 	if opts.MCP {
-		err := doMCP(ctx)
+		err := doMCP(ctx, opts.MCPTimeout)
 		if err != nil {
 			Failf(err, "MCP server error")
 		}
