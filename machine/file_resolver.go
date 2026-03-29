@@ -319,6 +319,112 @@ func (p *FSFileResolver) openChecked(resolvedPath string) (fs.File, string, erro
 	return f, resolvedPath, nil
 }
 
+// EnumerateLibraries walks the OS filesystem to discover importable libraries.
+// Walks library registry search paths, SCHEME_INCLUDE_PATH directories, and CWD,
+// matching the same search order used by ResolveAndOpen.
+func (p *OSFileResolver) EnumerateLibraries() ([]LibraryName, error) {
+	seen := make(map[string]bool)
+	var result []LibraryName
+
+	walkDir := func(baseDir string) {
+		filepath.WalkDir(baseDir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+			if d.IsDir() {
+				if path != baseDir && isHidden(d.Name()) {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if !isLibraryFile(d.Name()) {
+				return nil
+			}
+
+			relPath, relErr := filepath.Rel(baseDir, path)
+			if relErr != nil {
+				return nil
+			}
+			relPath = filepath.ToSlash(relPath)
+
+			name, nameErr := FilePathToLibraryName(relPath)
+			if nameErr != nil {
+				return nil
+			}
+
+			key := name.Key()
+			if seen[key] {
+				return nil
+			}
+			seen[key] = true
+			result = append(result, name)
+			return nil
+		})
+	}
+
+	// Library registry search paths (same priority as ResolveAndOpen).
+	regAny := p.env.LibraryRegistry()
+	if regAny != nil {
+		reg, ok := regAny.(*LibraryRegistry)
+		if ok {
+			for _, dir := range reg.GetSearchPaths() {
+				walkDir(dir)
+			}
+		}
+	}
+
+	// SCHEME_INCLUDE_PATH (same as ResolveAndOpen).
+	includePath := os.Getenv(SchemeIncludePathEnv)
+	if includePath != "" {
+		for _, dir := range filepath.SplitList(includePath) {
+			walkDir(dir)
+		}
+	}
+
+	// CWD fallback (same as ResolveAndOpen).
+	cwd, err := os.Getwd()
+	if err == nil {
+		walkDir(cwd)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Key() < result[j].Key()
+	})
+	return result, nil
+}
+
+// EnumerateLibraries unions library enumerations from all child resolvers
+// that implement LibraryEnumerator. First resolver wins on duplicate keys,
+// matching the resolution priority order.
+func (p *ChainFileResolver) EnumerateLibraries() ([]LibraryName, error) {
+	seen := make(map[string]bool)
+	var result []LibraryName
+
+	for _, r := range p.resolvers {
+		enumerator, ok := r.(LibraryEnumerator)
+		if !ok {
+			continue
+		}
+		libs, err := enumerator.EnumerateLibraries()
+		if err != nil {
+			continue
+		}
+		for _, lib := range libs {
+			key := lib.Key()
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			result = append(result, lib)
+		}
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Key() < result[j].Key()
+	})
+	return result, nil
+}
+
 // EnumerateLibraries walks the virtual filesystem to discover all libraries.
 // It uses the same search paths as resolution: library registry paths first,
 // then the FS root as fallback. Hidden directories (starting with ".") are
