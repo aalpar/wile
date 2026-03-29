@@ -21,6 +21,7 @@ import (
 	"os"
 	pathpkg "path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/aalpar/wile/environment"
@@ -35,6 +36,24 @@ type FileResolver interface {
 	// ResolveAndOpen finds a file by name and returns an open handle plus
 	// the resolved path (used for load-path-stack tracking and error messages).
 	ResolveAndOpen(ctx context.Context, path string) (fs.File, string, error)
+}
+
+// LibraryEnumerator is an optional interface that FileResolvers can implement
+// to support library discovery. Enumeration is the inverse of resolution:
+// same directories, same priority, but walking files instead of looking up
+// a specific name.
+type LibraryEnumerator interface {
+	EnumerateLibraries() ([]LibraryName, error)
+}
+
+// isLibraryFile returns true if the filename has a .sld or .scm extension.
+func isLibraryFile(name string) bool {
+	return strings.HasSuffix(name, ".sld") || strings.HasSuffix(name, ".scm")
+}
+
+// isHidden returns true if the name starts with ".".
+func isHidden(name string) bool {
+	return len(name) > 0 && name[0] == '.'
 }
 
 // OSFileResolver resolves files from the operating system filesystem,
@@ -298,4 +317,113 @@ func (p *FSFileResolver) openChecked(resolvedPath string) (fs.File, string, erro
 		)
 	}
 	return f, resolvedPath, nil
+}
+
+// EnumerateLibraries walks the virtual filesystem to discover all libraries.
+// It uses the same search paths as resolution: library registry paths first,
+// then the FS root as fallback. Hidden directories (starting with ".") are
+// skipped. Files with .sld or .scm extensions are converted to library names
+// via FilePathToLibraryName. Duplicate library names (same key from different
+// paths or extensions) are deduplicated, with earlier discovery winning.
+func (p *FSFileResolver) EnumerateLibraries() ([]LibraryName, error) {
+	seen := make(map[string]bool)
+	var result []LibraryName
+
+	addFromDir := func(baseDir string) error {
+		prefix := baseDir
+		if prefix == "." {
+			prefix = ""
+		}
+		return fs.WalkDir(p.fsys, baseDir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return nil // skip unreadable entries
+			}
+			if d.IsDir() {
+				if path != baseDir && isHidden(d.Name()) {
+					return fs.SkipDir
+				}
+				return nil
+			}
+			if !isLibraryFile(d.Name()) {
+				return nil
+			}
+
+			relPath := path
+			if prefix != "" {
+				relPath = strings.TrimPrefix(path, prefix+"/")
+			}
+
+			name, nameErr := FilePathToLibraryName(relPath)
+			if nameErr != nil {
+				return nil
+			}
+
+			key := name.Key()
+			if seen[key] {
+				return nil
+			}
+			seen[key] = true
+			result = append(result, name)
+			return nil
+		})
+	}
+
+	// Collect search paths and walk them first (same priority as resolution).
+	var searchPaths []string
+	regAny := p.env.LibraryRegistry()
+	if regAny != nil {
+		reg, ok := regAny.(*LibraryRegistry)
+		if ok {
+			searchPaths = reg.GetSearchPaths()
+			for _, dir := range searchPaths {
+				if dir == "" || dir == "." {
+					continue
+				}
+				_ = addFromDir(dir)
+			}
+		}
+	}
+
+	// Walk FS root as fallback (matches resolution strategy 3).
+	// Skip subdirectories that are already covered by search paths
+	// to avoid producing incorrect library names from path artifacts.
+	walkedPaths := make(map[string]bool, len(searchPaths))
+	for _, sp := range searchPaths {
+		if sp != "" && sp != "." {
+			walkedPaths[sp] = true
+		}
+	}
+
+	_ = fs.WalkDir(p.fsys, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if path != "." && (isHidden(d.Name()) || walkedPaths[path]) {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !isLibraryFile(d.Name()) {
+			return nil
+		}
+
+		name, nameErr := FilePathToLibraryName(path)
+		if nameErr != nil {
+			return nil
+		}
+
+		key := name.Key()
+		if seen[key] {
+			return nil
+		}
+		seen[key] = true
+		result = append(result, name)
+		return nil
+	})
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Key() < result[j].Key()
+	})
+	return result, nil
 }

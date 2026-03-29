@@ -685,6 +685,90 @@ func TestChainFileResolver_PanicsOnEmptyResolvers(t *testing.T) {
 	}, qt.PanicMatches, `.*resolvers must not be empty.*`)
 }
 
+// --- FSFileResolver EnumerateLibraries ---
+
+func TestFSFileResolverEnumerateLibraries(t *testing.T) {
+	c := qt.New(t)
+
+	fsys := fstest.MapFS{
+		"scheme/base.sld":  &fstest.MapFile{Data: []byte("(define-library (scheme base))")},
+		"scheme/write.sld": &fstest.MapFile{Data: []byte("(define-library (scheme write))")},
+		"chibi/test.scm":   &fstest.MapFile{Data: []byte("(define-library (chibi test))")},
+		".hidden/lib.sld":  &fstest.MapFile{Data: []byte("skip")},
+		"readme.txt":       &fstest.MapFile{Data: []byte("not a library")},
+	}
+
+	ns := environment.NewNamespace()
+	env := ns.Runtime()
+	reg := NewLibraryRegistry()
+	reg.SetSearchPaths([]string{"."})
+	ns.SetLibraryRegistry(reg)
+
+	resolver := NewFSFileResolver(fsys, env)
+
+	// Verify FSFileResolver satisfies LibraryEnumerator via interface variable.
+	var fr FileResolver = resolver
+	enumerator, ok := fr.(LibraryEnumerator)
+	c.Assert(ok, qt.IsTrue)
+
+	libs, err := enumerator.EnumerateLibraries()
+	c.Assert(err, qt.IsNil)
+
+	keys := make([]string, len(libs))
+	for i, lib := range libs {
+		keys[i] = lib.Key()
+	}
+	c.Assert(keys, qt.DeepEquals, []string{"chibi/test", "scheme/base", "scheme/write"})
+}
+
+func TestFSFileResolverEnumerateWithSearchPaths(t *testing.T) {
+	c := qt.New(t)
+
+	fsys := fstest.MapFS{
+		"lib/scheme/base.sld":  &fstest.MapFile{Data: []byte("")},
+		"lib/scheme/write.sld": &fstest.MapFile{Data: []byte("")},
+	}
+
+	ns := environment.NewNamespace()
+	env := ns.Runtime()
+	reg := NewLibraryRegistry()
+	reg.SetSearchPaths([]string{"lib"})
+	ns.SetLibraryRegistry(reg)
+
+	resolver := NewFSFileResolver(fsys, env)
+
+	libs, err := resolver.EnumerateLibraries()
+	c.Assert(err, qt.IsNil)
+
+	keys := make([]string, len(libs))
+	for i, lib := range libs {
+		keys[i] = lib.Key()
+	}
+	c.Assert(keys, qt.DeepEquals, []string{"scheme/base", "scheme/write"})
+}
+
+func TestFSFileResolverEnumerateSldBeatsScm(t *testing.T) {
+	c := qt.New(t)
+
+	fsys := fstest.MapFS{
+		"scheme/base.sld": &fstest.MapFile{Data: []byte("")},
+		"scheme/base.scm": &fstest.MapFile{Data: []byte("")},
+	}
+
+	ns := environment.NewNamespace()
+	env := ns.Runtime()
+	reg := NewLibraryRegistry()
+	reg.SetSearchPaths([]string{"."})
+	ns.SetLibraryRegistry(reg)
+
+	resolver := NewFSFileResolver(fsys, env)
+
+	libs, err := resolver.EnumerateLibraries()
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(libs), qt.Equals, 1)
+	c.Assert(libs[0].Key(), qt.Equals, "scheme/base")
+}
+
 // --- Interface compliance ---
 
 func TestFileResolverInterfaceCompliance(t *testing.T) {
