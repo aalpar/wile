@@ -21,6 +21,7 @@ import (
 	"os"
 	pathpkg "path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/aalpar/wile/environment"
@@ -35,6 +36,34 @@ type FileResolver interface {
 	// ResolveAndOpen finds a file by name and returns an open handle plus
 	// the resolved path (used for load-path-stack tracking and error messages).
 	ResolveAndOpen(ctx context.Context, path string) (fs.File, string, error)
+}
+
+// LibraryEnumerator is an optional interface that FileResolvers can implement
+// to support library discovery. Enumeration is the inverse of resolution:
+// same directories, same priority, but walking files instead of looking up
+// a specific name.
+type LibraryEnumerator interface {
+	EnumerateLibraries() ([]LibraryName, error)
+}
+
+// isLibraryFile returns true if the filename has a .sld or .scm extension.
+func isLibraryFile(name string) bool {
+	return strings.HasSuffix(name, ".sld") || strings.HasSuffix(name, ".scm")
+}
+
+// isHidden returns true if the name starts with ".".
+func isHidden(name string) bool {
+	return len(name) > 0 && name[0] == '.'
+}
+
+// isAuthorized returns true if the security authorizer permits loading the
+// given path. Returns true when no authorizer is configured (open sandbox).
+func isAuthorized(auth security.Authorizer, target string) bool {
+	return security.CheckWithAuthorizer(auth, security.AccessRequest{
+		Resource: security.ResourceCode,
+		Action:   security.ActionLoad,
+		Target:   target,
+	}) == nil
 }
 
 // OSFileResolver resolves files from the operating system filesystem,
@@ -298,4 +327,230 @@ func (p *FSFileResolver) openChecked(resolvedPath string) (fs.File, string, erro
 		)
 	}
 	return f, resolvedPath, nil
+}
+
+// EnumerateLibraries walks the OS filesystem to discover importable libraries.
+// Walks library registry search paths, SCHEME_INCLUDE_PATH directories, and CWD,
+// matching the same search order used by ResolveAndOpen.
+//
+// Best-effort: non-existent directories are skipped gracefully, and
+// unreadable subdirectories are skipped without failing the whole walk.
+// Only the security authorizer can exclude individual files.
+func (p *OSFileResolver) EnumerateLibraries() ([]LibraryName, error) {
+	auth, _ := p.env.Namespace().Authorizer().(security.Authorizer)
+	seen := make(map[string]bool)
+	var result []LibraryName
+
+	walkDir := func(baseDir string) {
+		_ = filepath.WalkDir(baseDir, func(path string, d fs.DirEntry, walkErr error) error {
+			if d == nil {
+				// Root does not exist or is unreadable — skip this search path.
+				return fs.SkipAll
+			}
+			if d.IsDir() {
+				if walkErr != nil {
+					return filepath.SkipDir
+				}
+				if path != baseDir && isHidden(d.Name()) {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if walkErr != nil || !isLibraryFile(d.Name()) || !isAuthorized(auth, path) {
+				return nil //nolint:nilerr // skip unreadable/irrelevant/denied files, continue walking
+			}
+
+			relPath, relErr := filepath.Rel(baseDir, path)
+			if relErr == nil {
+				relPath = filepath.ToSlash(relPath)
+				name, nameErr := FilePathToLibraryName(relPath)
+				if nameErr == nil {
+					key := name.Key()
+					if !seen[key] {
+						seen[key] = true
+						result = append(result, name)
+					}
+				}
+			}
+			return nil
+		})
+	}
+
+	// Library registry search paths (same priority as ResolveAndOpen).
+	regAny := p.env.LibraryRegistry()
+	if regAny != nil {
+		reg, ok := regAny.(*LibraryRegistry)
+		if ok {
+			for _, dir := range reg.GetSearchPaths() {
+				walkDir(dir)
+			}
+		}
+	}
+
+	// SCHEME_INCLUDE_PATH (same as ResolveAndOpen).
+	includePath := os.Getenv(SchemeIncludePathEnv)
+	if includePath != "" {
+		for _, dir := range filepath.SplitList(includePath) {
+			walkDir(dir)
+		}
+	}
+
+	// CWD fallback (same as ResolveAndOpen).
+	cwd, err := os.Getwd()
+	if err == nil {
+		walkDir(cwd)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Key() < result[j].Key()
+	})
+	return result, nil
+}
+
+// EnumerateLibraries unions library enumerations from all child resolvers
+// that implement LibraryEnumerator. First resolver wins on duplicate keys,
+// matching the resolution priority order. Errors from child resolvers
+// propagate immediately, matching ChainFileResolver.ResolveAndOpen behavior.
+func (p *ChainFileResolver) EnumerateLibraries() ([]LibraryName, error) {
+	seen := make(map[string]bool)
+	var result []LibraryName
+
+	for _, r := range p.resolvers {
+		enumerator, ok := r.(LibraryEnumerator)
+		if !ok {
+			continue
+		}
+		libs, err := enumerator.EnumerateLibraries()
+		if err != nil {
+			return nil, err
+		}
+		for _, lib := range libs {
+			key := lib.Key()
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			result = append(result, lib)
+		}
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Key() < result[j].Key()
+	})
+	return result, nil
+}
+
+// EnumerateLibraries walks the virtual filesystem to discover all libraries.
+// It uses the same search paths as resolution: library registry paths first,
+// then the FS root as fallback. Hidden directories (starting with ".") are
+// skipped. Files with .sld or .scm extensions are converted to library names
+// via FilePathToLibraryName. Duplicate library names (same key from different
+// paths or extensions) are deduplicated, with earlier discovery winning.
+//
+// Best-effort: non-existent directories are skipped gracefully, and
+// unreadable subdirectories are skipped without failing the whole walk.
+// Only the security authorizer can exclude individual files.
+func (p *FSFileResolver) EnumerateLibraries() ([]LibraryName, error) {
+	auth, _ := p.env.Namespace().Authorizer().(security.Authorizer)
+	seen := make(map[string]bool)
+	var result []LibraryName
+
+	walkDir := func(baseDir string) error {
+		prefix := baseDir
+		if prefix == "." {
+			prefix = ""
+		}
+		return fs.WalkDir(p.fsys, baseDir, func(path string, d fs.DirEntry, walkErr error) error {
+			if d == nil {
+				return fs.SkipAll
+			}
+			if d.IsDir() {
+				if walkErr != nil {
+					return fs.SkipDir
+				}
+				if path != baseDir && isHidden(d.Name()) {
+					return fs.SkipDir
+				}
+				return nil
+			}
+
+			relPath := path
+			if prefix != "" {
+				relPath = strings.TrimPrefix(path, prefix+"/")
+			}
+
+			if walkErr != nil || !isLibraryFile(d.Name()) || !isAuthorized(auth, relPath) {
+				return nil //nolint:nilerr // skip unreadable/irrelevant/denied files, continue walking
+			}
+
+			name, nameErr := FilePathToLibraryName(relPath)
+			if nameErr == nil {
+				key := name.Key()
+				if !seen[key] {
+					seen[key] = true
+					result = append(result, name)
+				}
+			}
+			return nil
+		})
+	}
+
+	// Collect search paths and walk them first (same priority as resolution).
+	var searchPaths []string
+	regAny := p.env.LibraryRegistry()
+	if regAny != nil {
+		reg, ok := regAny.(*LibraryRegistry)
+		if ok {
+			searchPaths = reg.GetSearchPaths()
+			for _, dir := range searchPaths {
+				if dir == "" || dir == "." {
+					continue
+				}
+				_ = walkDir(dir)
+			}
+		}
+	}
+
+	// Walk FS root as fallback (matches resolution strategy 3).
+	// Skip subdirectories that are already covered by search paths
+	// to avoid producing incorrect library names from path artifacts.
+	walkedPaths := make(map[string]bool, len(searchPaths))
+	for _, sp := range searchPaths {
+		if sp != "" && sp != "." {
+			walkedPaths[sp] = true
+		}
+	}
+
+	_ = fs.WalkDir(p.fsys, ".", func(path string, d fs.DirEntry, walkErr error) error {
+		if d == nil {
+			return fs.SkipAll
+		}
+		if d.IsDir() {
+			if walkErr != nil {
+				return fs.SkipDir
+			}
+			if path != "." && (isHidden(d.Name()) || walkedPaths[path]) {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if walkErr != nil || !isLibraryFile(d.Name()) || !isAuthorized(auth, path) {
+			return nil //nolint:nilerr // skip unreadable/irrelevant/denied files, continue walking
+		}
+
+		name, nameErr := FilePathToLibraryName(path)
+		if nameErr == nil {
+			key := name.Key()
+			if !seen[key] {
+				seen[key] = true
+				result = append(result, name)
+			}
+		}
+		return nil
+	})
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Key() < result[j].Key()
+	})
+	return result, nil
 }

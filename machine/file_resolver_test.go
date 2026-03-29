@@ -685,6 +685,182 @@ func TestChainFileResolver_PanicsOnEmptyResolvers(t *testing.T) {
 	}, qt.PanicMatches, `.*resolvers must not be empty.*`)
 }
 
+// --- FSFileResolver EnumerateLibraries ---
+
+func TestFSFileResolverEnumerateLibraries(t *testing.T) {
+	c := qt.New(t)
+
+	fsys := fstest.MapFS{
+		"scheme/base.sld":  &fstest.MapFile{Data: []byte("(define-library (scheme base))")},
+		"scheme/write.sld": &fstest.MapFile{Data: []byte("(define-library (scheme write))")},
+		"chibi/test.scm":   &fstest.MapFile{Data: []byte("(define-library (chibi test))")},
+		".hidden/lib.sld":  &fstest.MapFile{Data: []byte("skip")},
+		"readme.txt":       &fstest.MapFile{Data: []byte("not a library")},
+	}
+
+	ns := environment.NewNamespace()
+	env := ns.Runtime()
+	reg := NewLibraryRegistry()
+	reg.SetSearchPaths([]string{"."})
+	ns.SetLibraryRegistry(reg)
+
+	resolver := NewFSFileResolver(fsys, env)
+
+	// Verify FSFileResolver satisfies LibraryEnumerator via interface variable.
+	var fr FileResolver = resolver
+	enumerator, ok := fr.(LibraryEnumerator)
+	c.Assert(ok, qt.IsTrue)
+
+	libs, err := enumerator.EnumerateLibraries()
+	c.Assert(err, qt.IsNil)
+
+	keys := make([]string, len(libs))
+	for i, lib := range libs {
+		keys[i] = lib.Key()
+	}
+	c.Assert(keys, qt.DeepEquals, []string{"chibi/test", "scheme/base", "scheme/write"})
+}
+
+func TestFSFileResolverEnumerateWithSearchPaths(t *testing.T) {
+	c := qt.New(t)
+
+	fsys := fstest.MapFS{
+		"lib/scheme/base.sld":  &fstest.MapFile{Data: []byte("")},
+		"lib/scheme/write.sld": &fstest.MapFile{Data: []byte("")},
+	}
+
+	ns := environment.NewNamespace()
+	env := ns.Runtime()
+	reg := NewLibraryRegistry()
+	reg.SetSearchPaths([]string{"lib"})
+	ns.SetLibraryRegistry(reg)
+
+	resolver := NewFSFileResolver(fsys, env)
+
+	libs, err := resolver.EnumerateLibraries()
+	c.Assert(err, qt.IsNil)
+
+	keys := make([]string, len(libs))
+	for i, lib := range libs {
+		keys[i] = lib.Key()
+	}
+	c.Assert(keys, qt.DeepEquals, []string{"scheme/base", "scheme/write"})
+}
+
+func TestFSFileResolverEnumerateSldBeatsScm(t *testing.T) {
+	c := qt.New(t)
+
+	fsys := fstest.MapFS{
+		"scheme/base.sld": &fstest.MapFile{Data: []byte("")},
+		"scheme/base.scm": &fstest.MapFile{Data: []byte("")},
+	}
+
+	ns := environment.NewNamespace()
+	env := ns.Runtime()
+	reg := NewLibraryRegistry()
+	reg.SetSearchPaths([]string{"."})
+	ns.SetLibraryRegistry(reg)
+
+	resolver := NewFSFileResolver(fsys, env)
+
+	libs, err := resolver.EnumerateLibraries()
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(libs), qt.Equals, 1)
+	c.Assert(libs[0].Key(), qt.Equals, "scheme/base")
+}
+
+// --- OSFileResolver EnumerateLibraries ---
+
+func TestOSFileResolverEnumerateLibraries(t *testing.T) {
+	c := qt.New(t)
+
+	dir := realDir(t, t.TempDir())
+
+	libDir := filepath.Join(dir, "libs")
+	c.Assert(os.MkdirAll(filepath.Join(libDir, "scheme"), 0o755), qt.IsNil)
+	c.Assert(os.WriteFile(filepath.Join(libDir, "scheme", "base.sld"), []byte(""), 0o644), qt.IsNil)
+	c.Assert(os.WriteFile(filepath.Join(libDir, "scheme", "write.sld"), []byte(""), 0o644), qt.IsNil)
+
+	c.Assert(os.MkdirAll(filepath.Join(libDir, ".hidden"), 0o755), qt.IsNil)
+	c.Assert(os.WriteFile(filepath.Join(libDir, ".hidden", "skip.sld"), []byte(""), 0o644), qt.IsNil)
+
+	ns := environment.NewNamespace()
+	env := ns.Runtime()
+	reg := NewLibraryRegistry()
+	reg.SetSearchPaths([]string{libDir})
+	ns.SetLibraryRegistry(reg)
+
+	t.Setenv(SchemeIncludePathEnv, "")
+
+	// Chdir to an empty temp dir so CWD fallback doesn't find project libraries.
+	t.Chdir(t.TempDir())
+
+	resolver := NewOSFileResolver(env)
+	libs, err := resolver.EnumerateLibraries()
+	c.Assert(err, qt.IsNil)
+
+	keys := make([]string, len(libs))
+	for i, lib := range libs {
+		keys[i] = lib.Key()
+	}
+	c.Assert(keys, qt.DeepEquals, []string{"scheme/base", "scheme/write"})
+}
+
+func TestOSFileResolverEnumerateEmptySearchPaths(t *testing.T) {
+	c := qt.New(t)
+
+	ns := environment.NewNamespace()
+	env := ns.Runtime()
+	reg := NewLibraryRegistry()
+	reg.SetSearchPaths([]string{"/nonexistent/path"})
+	ns.SetLibraryRegistry(reg)
+
+	t.Setenv(SchemeIncludePathEnv, "")
+
+	// Chdir to an empty temp dir so CWD fallback doesn't find project libraries.
+	t.Chdir(t.TempDir())
+
+	resolver := NewOSFileResolver(env)
+	libs, err := resolver.EnumerateLibraries()
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(libs), qt.Equals, 0)
+}
+
+// --- ChainFileResolver EnumerateLibraries ---
+
+func TestChainFileResolverEnumerateLibraries(t *testing.T) {
+	c := qt.New(t)
+
+	fs1 := fstest.MapFS{
+		"scheme/base.sld": &fstest.MapFile{Data: []byte("")},
+		"my/lib.sld":      &fstest.MapFile{Data: []byte("")},
+	}
+	fs2 := fstest.MapFS{
+		"scheme/base.sld":  &fstest.MapFile{Data: []byte("")},
+		"scheme/write.sld": &fstest.MapFile{Data: []byte("")},
+	}
+
+	ns := environment.NewNamespace()
+	env := ns.Runtime()
+	reg := NewLibraryRegistry()
+	reg.SetSearchPaths([]string{"."})
+	ns.SetLibraryRegistry(reg)
+
+	chain := NewChainFileResolver([]FileResolver{
+		NewFSFileResolver(fs1, env),
+		NewFSFileResolver(fs2, env),
+	})
+
+	libs, err := chain.EnumerateLibraries()
+	c.Assert(err, qt.IsNil)
+
+	keys := make([]string, len(libs))
+	for i, lib := range libs {
+		keys[i] = lib.Key()
+	}
+	c.Assert(keys, qt.DeepEquals, []string{"my/lib", "scheme/base", "scheme/write"})
+}
+
 // --- Interface compliance ---
 
 func TestFileResolverInterfaceCompliance(t *testing.T) {
@@ -693,4 +869,9 @@ func TestFileResolverInterfaceCompliance(t *testing.T) {
 	var _ FileResolver = (*EmbedFileResolver)(nil)
 	var _ FileResolver = (*FSFileResolver)(nil)
 	var _ FileResolver = (*ChainFileResolver)(nil)
+
+	// Compile-time check that enumerator types satisfy LibraryEnumerator.
+	var _ LibraryEnumerator = (*FSFileResolver)(nil)
+	var _ LibraryEnumerator = (*OSFileResolver)(nil)
+	var _ LibraryEnumerator = (*ChainFileResolver)(nil)
 }

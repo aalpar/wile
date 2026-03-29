@@ -24,9 +24,11 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
 
@@ -67,6 +69,22 @@ func (p LibraryName) ToFilePath() string {
 // separator, suitable for fs.FS and FileResolver operations.
 func (p LibraryName) ToFSPath() string {
 	return strings.Join(p.Parts, "/") + ".sld"
+}
+
+// ToSchemeValue converts a LibraryName to a Scheme list.
+// Parts that parse as nonnegative integers become exact integers;
+// all others become symbols. Matches R7RS library name syntax.
+func (p LibraryName) ToSchemeValue() values.Value {
+	elems := make([]values.Value, len(p.Parts))
+	for i, part := range p.Parts {
+		n, err := strconv.ParseInt(part, 10, 64)
+		if err == nil && n >= 0 {
+			elems[i] = values.NewInteger(n)
+		} else {
+			elems[i] = values.NewSymbol(part)
+		}
+	}
+	return values.List(elems...)
 }
 
 // CompiledLibrary holds a loaded and compiled library.
@@ -237,6 +255,16 @@ func (p *LibraryRegistry) All() []*CompiledLibrary {
 	return libs
 }
 
+// AllNames returns the names of all registered libraries, sorted by key.
+func (p *LibraryRegistry) AllNames() []LibraryName {
+	libs := p.All()
+	names := make([]LibraryName, len(libs))
+	for i, lib := range libs {
+		names[i] = lib.Name
+	}
+	return names
+}
+
 // IsLoading returns true if the library is currently being loaded.
 // Used to detect circular dependencies.
 func (p *LibraryRegistry) IsLoading(name LibraryName) bool {
@@ -278,4 +306,29 @@ func (p *LibraryRegistry) FindLibraryFile(name LibraryName) (string, error) {
 
 	return "", werr.WrapForeignErrorf(werr.ErrLibraryNotFound, "findLibraryFile: library %s not found in search paths: %v",
 		name.SchemeString(), p.searchPaths)
+}
+
+// FilePathToLibraryName converts a forward-slash-separated file path with
+// .sld or .scm extension to a LibraryName. This is the inverse of ToFSPath().
+// Returns an error if the path has no recognized extension or is empty.
+func FilePathToLibraryName(path string) (LibraryName, error) {
+	if path == "" {
+		return LibraryName{}, werr.WrapForeignErrorf(
+			werr.ErrInvalidArgument, "filePathToLibraryName: empty path",
+		)
+	}
+	var trimmed string
+	switch {
+	case strings.HasSuffix(path, ".sld"):
+		trimmed = strings.TrimSuffix(path, ".sld")
+	case strings.HasSuffix(path, ".scm"):
+		trimmed = strings.TrimSuffix(path, ".scm")
+	default:
+		return LibraryName{}, werr.WrapForeignErrorf(
+			werr.ErrInvalidArgument,
+			"filePathToLibraryName: unrecognized extension in %q", path,
+		)
+	}
+	parts := strings.Split(trimmed, "/")
+	return NewLibraryName(parts...), nil
 }

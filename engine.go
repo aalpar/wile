@@ -515,6 +515,36 @@ func (p *Engine) Registry() *registry.Registry {
 	return p.registry.Clone()
 }
 
+// AvailableLibraries returns all importable library names by combining
+// filesystem discovery with registry-known libraries (synthetic extensions).
+// Returns a sorted, deduplicated list. If the library system is not enabled
+// (no WithLibraryPaths call), returns an empty list.
+func (p *Engine) AvailableLibraries(ctx context.Context) ([]machine.LibraryName, error) {
+	_ = ctx // reserved for future cancellation support
+
+	regAny := p.env.LibraryRegistry()
+	if regAny == nil {
+		return nil, nil
+	}
+	reg, ok := regAny.(*machine.LibraryRegistry)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration,
+			"AvailableLibraries: library registry has unexpected type %T", regAny)
+	}
+
+	resolverAny := p.env.FileResolver()
+	if resolverAny == nil {
+		return machine.DiscoverAvailableLibraries(nil, reg)
+	}
+	resolver, ok := resolverAny.(machine.FileResolver)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration,
+			"AvailableLibraries: file resolver has unexpected type %T", resolverAny)
+	}
+
+	return machine.DiscoverAvailableLibraries(resolver, reg)
+}
+
 // internal helpers
 
 // registerExtensionLibraries registers each extension as a synthetic R7RS library

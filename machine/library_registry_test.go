@@ -116,3 +116,75 @@ func TestCompiledLibraryGetInternalNameNotExported(t *testing.T) {
 
 	c.Assert(lib.GetInternalName("nonexistent"), qt.Equals, "")
 }
+
+func TestFilePathToLibraryName(t *testing.T) {
+	tests := []struct {
+		name    string
+		path    string
+		wantKey string
+		wantErr bool
+	}{
+		{"sld extension", "scheme/base.sld", "scheme/base", false},
+		{"scm extension", "chibi/test.scm", "chibi/test", false},
+		{"nested path", "wile/algebra/rewrite.sld", "wile/algebra/rewrite", false},
+		{"single component", "base.sld", "base", false},
+		{"no extension", "scheme/base", "", true},
+		{"wrong extension", "scheme/base.txt", "", true},
+		{"empty path", "", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			result, err := machine.FilePathToLibraryName(tt.path)
+			if tt.wantErr {
+				c.Assert(err, qt.IsNotNil)
+				return
+			}
+			c.Assert(err, qt.IsNil)
+			c.Assert(result.Key(), qt.Equals, tt.wantKey)
+		})
+	}
+}
+
+func TestLibraryNameToSchemeValue(t *testing.T) {
+	tests := []struct {
+		name   string
+		parts  []string
+		expect string
+	}{
+		{"symbol parts", []string{"scheme", "base"}, "(scheme base)"},
+		{"integer part", []string{"srfi", "1"}, "(srfi 1)"},
+		{"single part", []string{"base"}, "(base)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			ln := machine.NewLibraryName(tt.parts...)
+			result := ln.ToSchemeValue()
+			c.Assert(result.SchemeString(), qt.Equals, tt.expect)
+		})
+	}
+}
+
+func TestLibraryRegistryAllNames(t *testing.T) {
+	c := qt.New(t)
+	reg := machine.NewLibraryRegistry()
+	env := environment.NewNamespace().Runtime()
+
+	lib1 := machine.NewCompiledLibrary(machine.NewLibraryName("scheme", "base"), env)
+	c.Assert(reg.Register(lib1), qt.IsNil)
+	lib2 := machine.NewCompiledLibrary(machine.NewLibraryName("wile", "io"), env)
+	c.Assert(reg.Register(lib2), qt.IsNil)
+
+	names := reg.AllNames()
+	c.Assert(len(names), qt.Equals, 2)
+	c.Assert(names[0].Key(), qt.Equals, "scheme/base")
+	c.Assert(names[1].Key(), qt.Equals, "wile/io")
+}
+
+func TestLibraryRegistryAllNamesEmpty(t *testing.T) {
+	c := qt.New(t)
+	reg := machine.NewLibraryRegistry()
+	names := reg.AllNames()
+	c.Assert(len(names), qt.Equals, 0)
+}

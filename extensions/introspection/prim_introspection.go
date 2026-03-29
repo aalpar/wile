@@ -127,3 +127,46 @@ func PrimFeatures(mc *machine.MachineContext) error {
 	mc.SetValue(values.List(elems...))
 	return nil
 }
+
+// PrimAvailableLibraries implements the (available-libraries) primitive.
+// Returns a sorted list of all importable library names.
+// Each library name is a list of symbols/integers matching R7RS syntax.
+func PrimAvailableLibraries(mc *machine.MachineContext) error {
+	env := mc.EnvironmentFrame()
+
+	regAny := env.LibraryRegistry()
+	if regAny == nil {
+		mc.SetValue(values.EmptyList)
+		return nil
+	}
+	reg, ok := regAny.(*machine.LibraryRegistry)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrLibraryConfiguration,
+			"available-libraries: library registry has unexpected type %T", regAny)
+	}
+
+	var resolver machine.FileResolver
+	resolverAny := env.FileResolver()
+	if resolverAny != nil {
+		resolver, ok = resolverAny.(machine.FileResolver)
+		if !ok {
+			return werr.WrapForeignErrorf(werr.ErrLibraryConfiguration,
+				"available-libraries: file resolver has unexpected type %T", resolverAny)
+		}
+	}
+
+	libs, err := machine.DiscoverAvailableLibraries(resolver, reg)
+	if err != nil {
+		return werr.WrapForeignErrorWithCause(
+			werr.ErrLibraryConfiguration, err,
+			"available-libraries",
+		)
+	}
+
+	elems := make([]values.Value, len(libs))
+	for i, lib := range libs {
+		elems[i] = lib.ToSchemeValue()
+	}
+	mc.SetValue(values.List(elems...))
+	return nil
+}
