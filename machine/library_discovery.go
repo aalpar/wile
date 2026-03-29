@@ -29,6 +29,8 @@ func DiscoverAvailableLibraries(resolver FileResolver, reg *LibraryRegistry) ([]
 	var result []LibraryName
 
 	// Filesystem discovery via resolver chain.
+	// A nil resolver is safe: the nil interface assertion returns (nil, false).
+	// This happens when the environment has no file resolver configured.
 	enumerator, ok := resolver.(LibraryEnumerator)
 	if ok {
 		libs, err := enumerator.EnumerateLibraries()

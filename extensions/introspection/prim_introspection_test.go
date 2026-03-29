@@ -215,24 +215,19 @@ func TestFeatures(t *testing.T) {
 func TestAvailableLibraries(t *testing.T) {
 	c := qt.New(t)
 
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithExtension(extintrospection.Extension),
+		wile.WithLibraryPaths("."),
+		wile.WithSourceFS(stdlib.FS),
+	)
+	c.Assert(err, qt.IsNil)
+
 	t.Run("returns a list", func(t *testing.T) {
-		engine, err := wile.NewEngine(context.Background(),
-			wile.WithExtension(extintrospection.Extension),
-			wile.WithLibraryPaths("."),
-			wile.WithSourceFS(stdlib.FS),
-		)
-		c.Assert(err, qt.IsNil)
 		result := schemeEval(t, engine, `(list? (available-libraries))`)
 		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 	})
 
 	t.Run("contains scheme base", func(t *testing.T) {
-		engine, err := wile.NewEngine(context.Background(),
-			wile.WithExtension(extintrospection.Extension),
-			wile.WithLibraryPaths("."),
-			wile.WithSourceFS(stdlib.FS),
-		)
-		c.Assert(err, qt.IsNil)
 		result := schemeEval(t, engine, `
 			(let loop ((libs (available-libraries)))
 			  (cond
@@ -244,12 +239,6 @@ func TestAvailableLibraries(t *testing.T) {
 	})
 
 	t.Run("each element is a list", func(t *testing.T) {
-		engine, err := wile.NewEngine(context.Background(),
-			wile.WithExtension(extintrospection.Extension),
-			wile.WithLibraryPaths("."),
-			wile.WithSourceFS(stdlib.FS),
-		)
-		c.Assert(err, qt.IsNil)
 		result := schemeEval(t, engine, `
 			(let loop ((libs (available-libraries)) (ok #t))
 			  (if (null? libs)
@@ -260,18 +249,12 @@ func TestAvailableLibraries(t *testing.T) {
 	})
 
 	t.Run("empty when library system disabled", func(t *testing.T) {
-		engine := newEngine(t)
-		result := schemeEval(t, engine, `(null? (available-libraries))`)
+		noLibEngine := newEngine(t)
+		result := schemeEval(t, noLibEngine, `(null? (available-libraries))`)
 		c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 	})
 
 	t.Run("includes synthetic extension libraries", func(t *testing.T) {
-		engine, err := wile.NewEngine(context.Background(),
-			wile.WithExtension(extintrospection.Extension),
-			wile.WithLibraryPaths("."),
-			wile.WithSourceFS(stdlib.FS),
-		)
-		c.Assert(err, qt.IsNil)
 		result := schemeEval(t, engine, `
 			(let loop ((libs (available-libraries)))
 			  (cond
@@ -283,7 +266,6 @@ func TestAvailableLibraries(t *testing.T) {
 	})
 
 	t.Run("wrong argument count", func(t *testing.T) {
-		engine := newEngine(t)
 		evalExpectError(t, engine, `(available-libraries 42)`)
 	})
 }

@@ -79,3 +79,20 @@ func TestDiscoverAvailableLibrariesNilRegistry(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(libs), qt.Equals, 0)
 }
+
+func TestDiscoverAvailableLibrariesNilResolver(t *testing.T) {
+	c := qt.New(t)
+
+	ns := environment.NewNamespace()
+	env := ns.Runtime()
+	reg := NewLibraryRegistry()
+	ns.SetLibraryRegistry(reg)
+
+	syntheticLib := NewCompiledLibrary(NewLibraryName("wile", "io"), env)
+	c.Assert(reg.Register(syntheticLib), qt.IsNil)
+
+	libs, err := DiscoverAvailableLibraries(nil, reg)
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(libs), qt.Equals, 1)
+	c.Assert(libs[0].Key(), qt.Equals, "wile/io")
+}

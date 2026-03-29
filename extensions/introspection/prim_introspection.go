@@ -141,18 +141,25 @@ func PrimAvailableLibraries(mc *machine.MachineContext) error {
 	}
 	reg, ok := regAny.(*machine.LibraryRegistry)
 	if !ok {
-		mc.SetValue(values.EmptyList)
-		return nil
+		return werr.WrapForeignErrorf(werr.ErrLibraryConfiguration,
+			"available-libraries: library registry has unexpected type %T", regAny)
 	}
 
+	var resolver machine.FileResolver
 	resolverAny := env.FileResolver()
-	resolver, _ := resolverAny.(machine.FileResolver)
+	if resolverAny != nil {
+		resolver, ok = resolverAny.(machine.FileResolver)
+		if !ok {
+			return werr.WrapForeignErrorf(werr.ErrLibraryConfiguration,
+				"available-libraries: file resolver has unexpected type %T", resolverAny)
+		}
+	}
 
 	libs, err := machine.DiscoverAvailableLibraries(resolver, reg)
 	if err != nil {
-		return werr.WrapForeignErrorf(
-			werr.ErrLibraryConfiguration,
-			"available-libraries: %s", err,
+		return werr.WrapForeignErrorWithCause(
+			werr.ErrLibraryConfiguration, err,
+			"available-libraries",
 		)
 	}
 

@@ -15,7 +15,6 @@
 package machine_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/aalpar/wile/environment"
@@ -162,7 +161,7 @@ func TestLibraryNameToSchemeValue(t *testing.T) {
 			c := qt.New(t)
 			ln := machine.NewLibraryName(tt.parts...)
 			result := ln.ToSchemeValue()
-			c.Assert(fmt.Sprint(result), qt.Equals, tt.expect)
+			c.Assert(result.SchemeString(), qt.Equals, tt.expect)
 		})
 	}
 }
