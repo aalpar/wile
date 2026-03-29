@@ -54,14 +54,6 @@ else
 HOST_ARCH := $(RAW_ARCH)
 endif
 
-# Resolve the directory where 'go install' places binaries:
-# GOBIN if set, otherwise the first entry of $GOPATH/bin.
-# GOPATH can be colon-separated; use only the first path to avoid an invalid install dir.
-GOBIN := $(shell $(GO) env GOBIN)
-ifeq ($(GOBIN),)
-GOBIN := $(firstword $(subst :, ,$(shell $(GO) env GOPATH)))/bin
-endif
-
 .PHONY: build
 build: $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN)
 	@ln -sf $(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) $(DIST_DIR)/$(MY_BIN)
@@ -90,8 +82,7 @@ build-linux-amd64: $(DIST_DIR)/linux/amd64/$(MY_BIN)
 .PHONY: build-all
 build-all: build-darwin-arm64 build-darwin-amd64 build-linux-arm64 build-linux-amd64
 
-# Install prefix for non-Go files (libraries, data).
-# Binary is always installed to GOBIN; libraries to PREFIX/share/wile/lib.
+# Install prefix. Binary goes to PREFIX/bin, libraries to PREFIX/share/wile/lib.
 PREFIX ?= /usr/local
 DATADIR = $(PREFIX)/share/wile
 
@@ -100,9 +91,9 @@ DATADIR = $(PREFIX)/share/wile
 #   make install PREFIX=/opt/wile
 .PHONY: install
 install: build
-	@mkdir -p $(GOBIN)
-	cp $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) $(GOBIN)/$(MY_BIN)
-	@echo "Installed $(MY_BIN) to $(GOBIN)/$(MY_BIN)"
+	@mkdir -p $(PREFIX)/bin
+	cp $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) $(PREFIX)/bin/$(MY_BIN)
+	@echo "Installed $(MY_BIN) to $(PREFIX)/bin/$(MY_BIN)"
 	@mkdir -p $(DATADIR)
 	cp -R stdlib/lib $(DATADIR)/
 	@echo "Installed libraries to $(DATADIR)/lib/"
