@@ -28,39 +28,65 @@ var compileTimeBindingSpecs = []registry.BindingSpec{
 		"Syntax: (if <test> <consequent> <alternate>)\n" +
 			"Conditional expression. Evaluates <test>; if it yields a true value,\n" +
 			"<consequent> is evaluated and its value returned. Otherwise <alternate>\n" +
-			"is evaluated and returned, or void if omitted. R7RS §4.1.5."},
+			"is evaluated and returned, or void if omitted. R7RS §4.1.5.\n\n" +
+			"Examples:\n" +
+			"  (if #t 1 2)       => 1\n" +
+			"  (if #f 1 2)       => 2\n" +
+			"  (if (> 3 2) 'yes 'no)  => yes"},
 	{"lambda",
 		"Syntax: (lambda <formals> <body>)\n" +
 			"Creates an anonymous procedure. <formals> is a list of parameters,\n" +
 			"a single identifier for a rest arg, or a dotted pair for fixed+rest.\n" +
-			"<body> is one or more expressions evaluated in order. R7RS §4.1.4."},
+			"<body> is one or more expressions evaluated in order. R7RS §4.1.4.\n\n" +
+			"Examples:\n" +
+			"  ((lambda (x) (* x x)) 5)  => 25\n" +
+			"  ((lambda xs xs) 1 2 3)     => (1 2 3)"},
 	{"case-lambda",
 		"Syntax: (case-lambda (<formals> <body>) ...)\n" +
 			"Creates a procedure that dispatches on argument count. Each clause\n" +
 			"has its own formals and body; the first clause matching the call's\n" +
-			"arity is selected. R7RS §4.2.9."},
+			"arity is selected. R7RS §4.2.9.\n\n" +
+			"Examples:\n" +
+			"  (define f (case-lambda ((x) x) ((x y) (+ x y))))\n" +
+			"  (f 1)      => 1\n" +
+			"  (f 1 2)    => 3"},
 	{"quote",
 		"Syntax: (quote <datum>) or '<datum>\n" +
 			"Returns <datum> as a literal value without evaluating it.\n" +
-			"The quoted datum is immutable. R7RS §4.1.2."},
+			"The quoted datum is immutable. R7RS §4.1.2.\n\n" +
+			"Examples:\n" +
+			"  'a             => a\n" +
+			"  '(1 2 3)       => (1 2 3)\n" +
+			"  (quote (+ 1 2))  => (+ 1 2)"},
 	{"define",
 		"Syntax: (define <variable> <expression>) or (define (<variable> <formals>) <body>)\n" +
 			"Defines a variable binding. The first form binds the result of <expression>.\n" +
-			"The second form is shorthand for binding a lambda. R7RS §5.3."},
+			"The second form is shorthand for binding a lambda. R7RS §5.3.\n\n" +
+			"Examples:\n" +
+			"  (define x 42)\n" +
+			"  (define (square x) (* x x))\n" +
+			"  (square 5)  => 25"},
 	{"define-syntax",
 		"Syntax: (define-syntax <keyword> <transformer>)\n" +
 			"Defines a macro binding. <transformer> is typically a syntax-rules\n" +
-			"expression that specifies the macro's rewrite patterns. R7RS §5.4."},
+			"expression that specifies the macro's rewrite patterns. R7RS §5.4.\n\n" +
+			"Examples:\n" +
+			"  (define-syntax swap! (syntax-rules () ((swap! a b) (let ((t a)) (set! a b) (set! b t)))))\n" +
+			"  ;; (swap! x y) expands to a let-based swap"},
 	{"set!",
 		"Syntax: (set! <variable> <expression>)\n" +
 			"Assignment. Evaluates <expression> and stores the result in the\n" +
 			"location bound to <variable>. The variable must already be defined.\n" +
-			"R7RS §4.1.6."},
+			"R7RS §4.1.6.\n\n" +
+			"Examples:\n" +
+			"  (let ((x 1)) (set! x 2) x)  => 2"},
 	{"begin",
 		"Syntax: (begin <expression1> <expression2> ...)\n" +
 			"Sequences expressions, returning the value of the last one.\n" +
 			"At top level or in a body, splices its contents into the\n" +
-			"enclosing context. R7RS §4.2.3."},
+			"enclosing context. R7RS §4.2.3.\n\n" +
+			"Examples:\n" +
+			"  (begin 1 2 3)  => 3"},
 	{"include",
 		"Syntax: (include <filename1> <filename2> ...)\n" +
 			"Textual inclusion at expand time. Each <filename> is read and its\n" +
@@ -75,7 +101,10 @@ var compileTimeBindingSpecs = []registry.BindingSpec{
 		"Syntax: (quasiquote <template>) or `<template>\n" +
 			"Template construction. Like quote, but allows unquoted\n" +
 			"sub-expressions via unquote (,) and unquote-splicing (,@).\n" +
-			"R7RS §4.2.8."},
+			"R7RS §4.2.8.\n\n" +
+			"Examples:\n" +
+			"  `(1 ,(+ 1 1) 3)       => (1 2 3)\n" +
+			"  `(a ,@'(b c) d)       => (a b c d)"},
 	{"unquote",
 		"Syntax: (unquote <expression>) or ,<expression>\n" +
 			"Inside a quasiquote template, evaluates <expression> and inserts\n" +
@@ -134,11 +163,16 @@ var compileTimeBindingSpecs = []registry.BindingSpec{
 		"Syntax: (let ((<var> <init>) ...) <body>) or (let <name> ((<var> <init>) ...) <body>)\n" +
 			"Binding form. Evaluates all <init> expressions, then binds them\n" +
 			"to <var>s in a new scope for <body>. Named let creates a local\n" +
-			"recursive procedure. R7RS §4.2.2."},
+			"recursive procedure. R7RS §4.2.2.\n\n" +
+			"Examples:\n" +
+			"  (let ((x 1) (y 2)) (+ x y))  => 3\n" +
+			"  (let loop ((n 5) (acc 1)) (if (= n 0) acc (loop (- n 1) (* acc n))))  => 120"},
 	{"let*",
 		"Syntax: (let* ((<var> <init>) ...) <body>)\n" +
 			"Sequential binding form. Like let, but each <init> is evaluated\n" +
-			"in a scope that includes the preceding bindings. R7RS §4.2.2."},
+			"in a scope that includes the preceding bindings. R7RS §4.2.2.\n\n" +
+			"Examples:\n" +
+			"  (let* ((x 1) (y (+ x 1))) y)  => 2"},
 	{"letrec",
 		"Syntax: (letrec ((<var> <init>) ...) <body>)\n" +
 			"Recursive binding form. All <var>s are bound before any <init>\n" +
@@ -165,7 +199,11 @@ var compileTimeBindingSpecs = []registry.BindingSpec{
 		"Syntax: (syntax-rules (<literal> ...) <clause> ...)\n" +
 			"Defines a pattern-based macro transformer. Each clause has a\n" +
 			"pattern and template; the first matching pattern determines\n" +
-			"the expansion. R7RS §4.3.2."},
+			"the expansion. R7RS §4.3.2.\n\n" +
+			"Examples:\n" +
+			"  (define-syntax my-if\n" +
+			"    (syntax-rules (then else)\n" +
+			"      ((my-if test then c else a) (if test c a))))"},
 	// These are special identifiers in syntax-rules patterns
 	{"...",
 		"Auxiliary syntax for repetition in syntax-rules patterns and\n" +
@@ -243,52 +281,79 @@ var macroDocs = []registry.DocEntry{
 		"Syntax: (and <test1> ...)\n" +
 			"Short-circuit conjunction. Evaluates tests left-to-right;\n" +
 			"returns #f as soon as one yields false, otherwise returns\n" +
-			"the value of the last test. R7RS §4.2.1."},
+			"the value of the last test. R7RS §4.2.1.\n\n" +
+			"Examples:\n" +
+			"  (and 1 2 3)      => 3\n" +
+			"  (and 1 #f 3)     => #f\n" +
+			"  (and)            => #t"},
 	{"or",
 		"Syntax: (or <test1> ...)\n" +
 			"Short-circuit disjunction. Evaluates tests left-to-right;\n" +
 			"returns the first true value, or #f if all yield false.\n" +
-			"R7RS §4.2.1."},
+			"R7RS §4.2.1.\n\n" +
+			"Examples:\n" +
+			"  (or #f 2 3)      => 2\n" +
+			"  (or #f #f)       => #f\n" +
+			"  (or)             => #f"},
 	{"cond",
 		"Syntax: (cond <clause1> <clause2> ...)\n" +
 			"Multi-way conditional. Each clause is (<test> <expr> ...) or\n" +
 			"(<test> => <proc>). Evaluates tests in order; the first true\n" +
-			"test's expressions are evaluated. R7RS §4.2.1."},
+			"test's expressions are evaluated. R7RS §4.2.1.\n\n" +
+			"Examples:\n" +
+			"  (cond ((> 3 2) 'greater) ((< 3 2) 'less))  => greater\n" +
+			"  (cond (#f 1) (else 2))  => 2"},
 	{"case",
 		"Syntax: (case <key> <clause1> <clause2> ...)\n" +
 			"Datum dispatch. Evaluates <key>, then matches it via eqv? against\n" +
 			"datum lists in each clause. The matching clause's expressions\n" +
-			"are evaluated. R7RS §4.2.1."},
+			"are evaluated. R7RS §4.2.1.\n\n" +
+			"Examples:\n" +
+			"  (case (+ 1 1) ((1) 'one) ((2) 'two) (else 'other))  => two"},
 	{"when",
 		"Syntax: (when <test> <expression1> <expression2> ...)\n" +
 			"One-armed conditional. If <test> is true, evaluates the\n" +
 			"expressions in order and returns the last value. Returns\n" +
-			"void if <test> is false. R7RS §4.2.1."},
+			"void if <test> is false. R7RS §4.2.1.\n\n" +
+			"Examples:\n" +
+			"  (when #t 42)     => 42\n" +
+			"  (when #f 42)     => ; void"},
 	{"unless",
 		"Syntax: (unless <test> <expression1> <expression2> ...)\n" +
 			"One-armed conditional. If <test> is false, evaluates the\n" +
 			"expressions in order and returns the last value. Returns\n" +
-			"void if <test> is true. R7RS §4.2.1."},
+			"void if <test> is true. R7RS §4.2.1.\n\n" +
+			"Examples:\n" +
+			"  (unless #f 42)   => 42\n" +
+			"  (unless #t 42)   => ; void"},
 	{"do",
 		"Syntax: (do ((<var> <init> <step>) ...) (<test> <expr> ...) <command> ...)\n" +
 			"Iteration construct. Initializes variables, then repeatedly\n" +
 			"evaluates <command>s and advances <step>s until <test> is true.\n" +
-			"Returns the value of the last <expr>. R7RS §4.2.4."},
+			"Returns the value of the last <expr>. R7RS §4.2.4.\n\n" +
+			"Examples:\n" +
+			"  (do ((i 0 (+ i 1))) ((= i 3) i))  => 3"},
 	{"guard",
 		"Syntax: (guard (<var> <clause1> ...) <body>)\n" +
 			"Exception handling. Evaluates <body>; if an exception is raised,\n" +
 			"binds it to <var> and tests cond-style clauses. If no clause\n" +
-			"matches, the exception is re-raised. R7RS §4.2.7."},
+			"matches, the exception is re-raised. R7RS §4.2.7.\n\n" +
+			"Examples:\n" +
+			"  (guard (e (#t (error-object-message e))) (error \"oops\"))  => \"oops\""},
 	{"parameterize",
 		"Syntax: (parameterize ((<param> <value>) ...) <body>)\n" +
 			"Dynamic binding. Temporarily binds parameter objects to new\n" +
 			"values for the dynamic extent of <body>. Restored on exit,\n" +
-			"including non-local exits. R7RS §4.2.6."},
+			"including non-local exits. R7RS §4.2.6.\n\n" +
+			"Examples:\n" +
+			"  (let ((p (make-parameter 10))) (parameterize ((p 20)) (p)))  => 20"},
 	{"delay",
 		"Syntax: (delay <expression>)\n" +
 			"Creates a promise that will evaluate <expression> when forced.\n" +
 			"The result is memoized; subsequent forces return the cached\n" +
-			"value. R7RS §4.2.5."},
+			"value. R7RS §4.2.5.\n\n" +
+			"Examples:\n" +
+			"  (force (delay (+ 1 2)))  => 3"},
 	{"delay-force",
 		"Syntax: (delay-force <expression>)\n" +
 			"Creates an iterative lazy promise. Like delay, but <expression>\n" +
@@ -298,7 +363,10 @@ var macroDocs = []registry.DocEntry{
 		"Syntax: (define-record-type <name> <constructor> <pred> <field> ...)\n" +
 			"Defines a new record type with a constructor, predicate, and\n" +
 			"field accessors/mutators. Each <field> is (<name> <accessor>)\n" +
-			"or (<name> <accessor> <mutator>). R7RS §5.5."},
+			"or (<name> <accessor> <mutator>). R7RS §5.5.\n\n" +
+			"Examples:\n" +
+			"  (define-record-type <point> (make-point x y) point? (x point-x) (y point-y))\n" +
+			"  (point-x (make-point 1 2))  => 1"},
 	{"let-values",
 		"Syntax: (let-values (((<var> ...) <init>) ...) <body>)\n" +
 			"Multiple-value binding. Each <init> may return multiple values\n" +

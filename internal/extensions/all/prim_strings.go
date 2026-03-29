@@ -159,11 +159,11 @@ var stringCiCompareSpecs = []struct {
 	cmp  func(string, string) bool
 	doc  string
 }{
-	{"string-ci=?", func(a, b string) bool { return getCaseFolded(a) == getCaseFolded(b) }, "Returns #t if all strings are equal after case folding."},
-	{"string-ci<?", func(a, b string) bool { return getCaseFolded(a) < getCaseFolded(b) }, "Returns #t if strings are monotonically increasing after case folding."},
-	{"string-ci>?", func(a, b string) bool { return getCaseFolded(a) > getCaseFolded(b) }, "Returns #t if strings are monotonically decreasing after case folding."},
-	{"string-ci<=?", func(a, b string) bool { return getCaseFolded(a) <= getCaseFolded(b) }, "Returns #t if strings are monotonically non-decreasing after case folding."},
-	{"string-ci>=?", func(a, b string) bool { return getCaseFolded(a) >= getCaseFolded(b) }, "Returns #t if strings are monotonically non-increasing after case folding."},
+	{"string-ci=?", func(a, b string) bool { return getCaseFolded(a) == getCaseFolded(b) }, "Returns #t if all strings are equal after case folding.\n\nExamples:\n  (string-ci=? \"Hello\" \"hello\")  => #t\n  (string-ci=? \"a\" \"b\")          => #f"},
+	{"string-ci<?", func(a, b string) bool { return getCaseFolded(a) < getCaseFolded(b) }, "Returns #t if strings are monotonically increasing after case folding.\n\nExamples:\n  (string-ci<? \"a\" \"B\")  => #t"},
+	{"string-ci>?", func(a, b string) bool { return getCaseFolded(a) > getCaseFolded(b) }, "Returns #t if strings are monotonically decreasing after case folding.\n\nExamples:\n  (string-ci>? \"B\" \"a\")  => #t"},
+	{"string-ci<=?", func(a, b string) bool { return getCaseFolded(a) <= getCaseFolded(b) }, "Returns #t if strings are monotonically non-decreasing after case folding.\n\nExamples:\n  (string-ci<=? \"a\" \"A\")  => #t"},
+	{"string-ci>=?", func(a, b string) bool { return getCaseFolded(a) >= getCaseFolded(b) }, "Returns #t if strings are monotonically non-increasing after case folding.\n\nExamples:\n  (string-ci>=? \"A\" \"a\")  => #t"},
 }
 
 // makeStringCiComparePrimitive returns a ForeignFunction that performs a variadic

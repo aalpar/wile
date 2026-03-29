@@ -23,10 +23,10 @@ func addCharacters(r *registry.Registry) error {
 	// Character conversion
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "char->integer", ParamCount: 1, Impl: PrimCharToInteger,
-			Doc: "Returns the Unicode scalar value of char as an exact integer.", ParamNames: []string{"char"}, Category: "characters",
+			Doc: "Returns the Unicode scalar value of char as an exact integer.\n\nExamples:\n  (char->integer #\\a)    => 97\n  (char->integer #\\A)    => 65", ParamNames: []string{"char"}, Category: "characters",
 			ParamTypes: []values.ValueType{values.TypeCharacter}, ReturnType: values.TypeExactInteger},
 		{Name: "integer->char", ParamCount: 1, Impl: PrimIntegerToChar,
-			Doc: "Returns the character whose Unicode scalar value is n. Raises an error if n is not a valid Unicode scalar value.", ParamNames: []string{"n"}, Category: "characters",
+			Doc: "Returns the character whose Unicode scalar value is n. Raises an error if n is not a valid Unicode scalar value.\n\nExamples:\n  (integer->char 97)     => #\\a\n  (integer->char 65)     => #\\A", ParamNames: []string{"n"}, Category: "characters",
 			ParamTypes: []values.ValueType{values.TypeExactInteger}, ReturnType: values.TypeCharacter},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 

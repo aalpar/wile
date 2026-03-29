@@ -3,7 +3,7 @@
 ;; BSD-style license: http://synthcode.com/license.txt
 
 (define (take-while pred ls)
-  "Return the longest initial prefix of LS whose elements all\nsatisfy PRED. The result is a freshly allocated list.\n\nSee also: `drop-while', `span'."
+  "Return the longest initial prefix of LS whose elements all\nsatisfy PRED. The result is a freshly allocated list.\n\nExamples:\n  (take-while even? '(2 4 1 3 5))  => (2 4)\n  (take-while even? '(1 2 3))      => ()\n\nSee also: `drop-while', `span'."
   (let lp ((ls ls) (res '()))
     (if (and (pair? ls) (pred (car ls)))
         (lp (cdr ls) (cons (car ls) res))
@@ -12,7 +12,7 @@
 (define take-while! take-while)
 
 (define (drop-while pred ls)
-  "Skip the longest initial prefix of LS whose elements satisfy\nPRED and return the remaining tail. Shares structure with LS.\n\nSee also: `take-while', `span'."
+  "Skip the longest initial prefix of LS whose elements satisfy\nPRED and return the remaining tail. Shares structure with LS.\n\nExamples:\n  (drop-while even? '(2 4 1 3 5))  => (1 3 5)\n  (drop-while even? '(1 2 3))      => (1 2 3)\n\nSee also: `take-while', `span'."
   (or (find-tail (lambda (x) (not (pred x))) ls) '()))
 
 (define (span pred ls)
@@ -31,7 +31,7 @@
 (define break! break)
 
 (define (list-index pred ls . lists)
-  "Return the index of the first element of LS satisfying PRED,\nor #f if no element matches. For multiple lists, PRED receives\ncorresponding elements and the search stops at the shortest list.\n\nSee also: `find', `find-tail'."
+  "Return the index of the first element of LS satisfying PRED,\nor #f if no element matches. For multiple lists, PRED receives\ncorresponding elements and the search stops at the shortest list.\n\nExamples:\n  (list-index even? '(1 3 4 5))  => 2\n  (list-index even? '(1 3 5))    => #f\n\nSee also: `find', `find-tail'."
   (if (null? lists)
       (let lp ((ls ls) (n 0))
         (and (pair? ls) (if (pred (car ls)) n (lp (cdr ls) (+ n 1)))))

@@ -23,52 +23,52 @@ func addStrings(r *registry.Registry) error {
 	// String construction
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "string", ParamCount: 1, IsVariadic: true, Impl: PrimString,
-			Doc: "Returns a string composed of its character arguments. All arguments must be characters.", ParamNames: []string{"char"}, Category: "strings",
+			Doc: "Returns a string composed of its character arguments. All arguments must be characters.\n\nExamples:\n  (string #\\a #\\b #\\c)  => \"abc\"", ParamNames: []string{"char"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeCharacter}, ReturnType: values.TypeString},
 		{Name: "make-string", ParamCount: 2, IsVariadic: true, Impl: PrimMakeString,
-			Doc: "Returns a string of length k. If char is given, each position is filled with char; otherwise unspecified.", ParamNames: []string{"k", "char"}, Category: "strings",
+			Doc: "Returns a string of length k. If char is given, each position is filled with char; otherwise unspecified.\n\nExamples:\n  (make-string 3 #\\a)    => \"aaa\"", ParamNames: []string{"k", "char"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeExactInteger, values.TypeCharacter}, ReturnType: values.TypeString},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// String access
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "string-length", ParamCount: 1, Impl: PrimStringLength,
-			Doc: "Returns the number of characters in string.", ParamNames: []string{"string"}, Category: "strings",
+			Doc: "Returns the number of characters in string.\n\nExamples:\n  (string-length \"hello\")  => 5\n  (string-length \"\")       => 0", ParamNames: []string{"string"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeString}, ReturnType: values.TypeExactInteger},
 		{Name: "string-ref", ParamCount: 2, Impl: PrimStringRef,
-			Doc: "Returns the character at 0-based index k. Raises an error if k is out of range.", ParamNames: []string{"string", "k"}, Category: "strings",
+			Doc: "Returns the character at 0-based index k. Raises an error if k is out of range.\n\nExamples:\n  (string-ref \"hello\" 0)  => #\\h\n  (string-ref \"hello\" 4)  => #\\o", ParamNames: []string{"string", "k"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger}, ReturnType: values.TypeCharacter},
 		{Name: "string-set!", ParamCount: 3, Impl: PrimStringSet,
-			Doc: "Stores char at 0-based index k in string. The string must be mutable.", ParamNames: []string{"string", "k", "char"}, Category: "strings",
+			Doc: "Stores char at 0-based index k in string. The string must be mutable.\n\nExamples:\n  (let ((s (string-copy \"hello\"))) (string-set! s 0 #\\H) s)  => \"Hello\"", ParamNames: []string{"string", "k", "char"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger, values.TypeCharacter}, ReturnType: values.TypeVoid},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// String conversion
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "string->list", ParamCount: 2, IsVariadic: true, Impl: PrimStringToList,
-			Doc: "Returns a list of the characters in string from start to end. Start defaults to 0, end to string length.", ParamNames: []string{"string", "start"}, Category: "strings",
+			Doc: "Returns a list of the characters in string from start to end. Start defaults to 0, end to string length.\n\nExamples:\n  (string->list \"abc\")  => (#\\a #\\b #\\c)", ParamNames: []string{"string", "start"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger}, ReturnType: values.TypeList},
 		{Name: "list->string", ParamCount: 1, Impl: PrimListToString,
-			Doc: "Returns a string formed from a list of characters. All elements must be characters.", ParamNames: []string{"list"}, Category: "strings",
+			Doc: "Returns a string formed from a list of characters. All elements must be characters.\n\nExamples:\n  (list->string '(#\\a #\\b #\\c))  => \"abc\"", ParamNames: []string{"list"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeList}, ReturnType: values.TypeString},
 		{Name: "symbol->string", ParamCount: 1, Impl: PrimSymbolToString,
-			Doc: "Returns the name of symbol as an immutable string.", ParamNames: []string{"symbol"}, Category: "strings",
+			Doc: "Returns the name of symbol as an immutable string.\n\nExamples:\n  (symbol->string 'hello)  => \"hello\"", ParamNames: []string{"symbol"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeSymbol}, ReturnType: values.TypeString},
 		{Name: "string->symbol", ParamCount: 1, Impl: PrimStringToSymbol,
-			Doc: "Returns the symbol whose name is string. Symbols with the same name are always eq?.", ParamNames: []string{"string"}, Category: "strings",
+			Doc: "Returns the symbol whose name is string. Symbols with the same name are always eq?.\n\nExamples:\n  (string->symbol \"hello\")  => hello", ParamNames: []string{"string"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeString}, ReturnType: values.TypeSymbol},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// String operations
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "string-append", ParamCount: 1, IsVariadic: true, Impl: PrimStringAppend,
-			Doc: "Returns a newly allocated string formed by concatenating its arguments.", ParamNames: []string{"string"}, Category: "strings",
+			Doc: "Returns a newly allocated string formed by concatenating its arguments.\n\nExamples:\n  (string-append \"hello\" \" \" \"world\")  => \"hello world\"", ParamNames: []string{"string"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeString}, ReturnType: values.TypeString},
 		{Name: "substring", ParamCount: 3, Impl: PrimSubstring,
-			Doc: "Returns a newly allocated string containing characters from start (inclusive) to end (exclusive).", ParamNames: []string{"string", "start", "end"}, Category: "strings",
+			Doc: "Returns a newly allocated string containing characters from start (inclusive) to end (exclusive).\n\nExamples:\n  (substring \"hello\" 1 3)  => \"el\"", ParamNames: []string{"string", "start", "end"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger, values.TypeExactInteger}, ReturnType: values.TypeString},
 		{Name: "string-copy", ParamCount: 2, IsVariadic: true, Impl: PrimStringCopy,
-			Doc: "Returns a mutable copy of string from start to end. Start defaults to 0, end to string length.", ParamNames: []string{"string", "start"}, Category: "strings",
+			Doc: "Returns a mutable copy of string from start to end. Start defaults to 0, end to string length.\n\nExamples:\n  (string-copy \"hello\")      => \"hello\"\n  (string-copy \"hello\" 1 3)  => \"el\"", ParamNames: []string{"string", "start"}, Category: "strings",
 			ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger}, ReturnType: values.TypeString},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
