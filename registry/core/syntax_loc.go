@@ -22,22 +22,22 @@ import (
 func addSyntaxLoc(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "syntax-source", ParamCount: 1, Impl: PrimSyntaxSource,
-			Doc: "Returns the source file name of a syntax object as a string, or #f if unavailable.", ParamNames: []string{"stx"}, Category: "syntax",
+			Doc: "Returns the source file name of a syntax object as a string, or #f if unavailable.\n\nExamples:\n  ;; (syntax-source #'foo)  => \"test.scm\" or #f", ParamNames: []string{"stx"}, Category: "syntax",
 			ParamTypes: []values.ValueType{values.TypeAny}},
 		{Name: "syntax-line", ParamCount: 1, Impl: PrimSyntaxLine,
-			Doc: "Returns the 1-based line number of a syntax object, or #f if unavailable.", ParamNames: []string{"stx"}, Category: "syntax",
+			Doc: "Returns the 1-based line number of a syntax object, or #f if unavailable.\n\nExamples:\n  ;; (syntax-line #'foo)  => 5 or #f", ParamNames: []string{"stx"}, Category: "syntax",
 			ParamTypes: []values.ValueType{values.TypeAny}},
 		{Name: "syntax-column", ParamCount: 1, Impl: PrimSyntaxColumn,
-			Doc: "Returns the 0-based column number of a syntax object, or #f if unavailable.", ParamNames: []string{"stx"}, Category: "syntax",
+			Doc: "Returns the 0-based column number of a syntax object, or #f if unavailable.\n\nExamples:\n  ;; (syntax-column #'foo)  => 3 or #f", ParamNames: []string{"stx"}, Category: "syntax",
 			ParamTypes: []values.ValueType{values.TypeAny}},
 		{Name: "syntax-position", ParamCount: 1, Impl: PrimSyntaxPosition,
-			Doc: "Returns the 0-based byte offset of a syntax object in its source, or #f if unavailable.", ParamNames: []string{"stx"}, Category: "syntax",
+			Doc: "Returns the 0-based byte offset of a syntax object in its source, or #f if unavailable.\n\nExamples:\n  ;; (syntax-position #'foo)  => 42 or #f", ParamNames: []string{"stx"}, Category: "syntax",
 			ParamTypes: []values.ValueType{values.TypeAny}},
 		{Name: "syntax-span", ParamCount: 1, Impl: PrimSyntaxSpan,
-			Doc: "Returns the byte span (length) of a syntax object in its source, or #f if unavailable.", ParamNames: []string{"stx"}, Category: "syntax",
+			Doc: "Returns the byte span (length) of a syntax object in its source, or #f if unavailable.\n\nExamples:\n  ;; (syntax-span #'foo)  => 3 or #f", ParamNames: []string{"stx"}, Category: "syntax",
 			ParamTypes: []values.ValueType{values.TypeAny}},
 		{Name: "syntax->list", ParamCount: 1, Impl: PrimSyntaxToList,
-			Doc: "Converts a syntax pair chain to a list of individual syntax objects. Returns #f if not a proper syntax list.", ParamNames: []string{"stx"}, Category: "syntax",
+			Doc: "Converts a syntax pair chain to a list of individual syntax objects. Returns #f if not a proper syntax list.\n\nExamples:\n  ;; (length (syntax->list #'(a b c)))  => 3", ParamNames: []string{"stx"}, Category: "syntax",
 			ParamTypes: []values.ValueType{values.TypeAny}},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 

@@ -23,19 +23,19 @@ func addPairs(r *registry.Registry) error {
 	// Basic pair operations
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "cons", ParamCount: 2, Impl: PrimCons,
-			Doc: "Creates a new pair with obj1 as car and obj2 as cdr. If obj2 is a proper list, the result is a proper list.", ParamNames: []string{"obj1", "obj2"}, Category: "pairs",
+			Doc: "Creates a new pair with obj1 as car and obj2 as cdr. If obj2 is a proper list, the result is a proper list.\n\nExamples:\n  (cons 1 2)        => (1 . 2)\n  (cons 1 '(2 3))   => (1 2 3)\n  (cons 'a '())     => (a)", ParamNames: []string{"obj1", "obj2"}, Category: "pairs",
 			ParamTypes: []values.ValueType{values.TypeAny, values.TypeAny}, ReturnType: values.TypePair},
 		{Name: "car", ParamCount: 1, Impl: PrimCar,
-			Doc: "Returns the first element (car) of a pair. Raises an error if the argument is not a pair.", ParamNames: []string{"pair"}, Category: "pairs",
+			Doc: "Returns the first element (car) of a pair. Raises an error if the argument is not a pair.\n\nExamples:\n  (car '(1 2 3))    => 1\n  (car '(a . b))    => a", ParamNames: []string{"pair"}, Category: "pairs",
 			ParamTypes: []values.ValueType{values.TypePair}},
 		{Name: "cdr", ParamCount: 1, Impl: PrimCdr,
-			Doc: "Returns the second element (cdr) of a pair. For a proper list, returns the rest of the list.", ParamNames: []string{"pair"}, Category: "pairs",
+			Doc: "Returns the second element (cdr) of a pair. For a proper list, returns the rest of the list.\n\nExamples:\n  (cdr '(1 2 3))    => (2 3)\n  (cdr '(a . b))    => b", ParamNames: []string{"pair"}, Category: "pairs",
 			ParamTypes: []values.ValueType{values.TypePair}},
 		{Name: "set-car!", ParamCount: 2, Impl: PrimSetCar,
-			Doc: "Mutates the car field of pair to obj. The pair must be mutable.", ParamNames: []string{"pair", "obj"}, Category: "pairs",
+			Doc: "Mutates the car field of pair to obj. The pair must be mutable.\n\nExamples:\n  (let ((p (cons 1 2))) (set-car! p 3) p)  => (3 . 2)", ParamNames: []string{"pair", "obj"}, Category: "pairs",
 			ParamTypes: []values.ValueType{values.TypePair, values.TypeAny}, ReturnType: values.TypeVoid},
 		{Name: "set-cdr!", ParamCount: 2, Impl: PrimSetCdr,
-			Doc: "Mutates the cdr field of pair to obj. The pair must be mutable.", ParamNames: []string{"pair", "obj"}, Category: "pairs",
+			Doc: "Mutates the cdr field of pair to obj. The pair must be mutable.\n\nExamples:\n  (let ((p (cons 1 2))) (set-cdr! p 3) p)  => (1 . 3)", ParamNames: []string{"pair", "obj"}, Category: "pairs",
 			ParamTypes: []values.ValueType{values.TypePair, values.TypeAny}, ReturnType: values.TypeVoid},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 

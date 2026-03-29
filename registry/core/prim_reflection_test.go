@@ -397,7 +397,7 @@ func TestProcedureDocumentation(t *testing.T) {
 		{
 			Name:     "foreign procedure returns doc",
 			Code:     `(procedure-documentation car)`,
-			Expected: values.NewString("Returns the first element (car) of a pair. Raises an error if the argument is not a pair."),
+			Expected: values.NewString("Returns the first element (car) of a pair. Raises an error if the argument is not a pair.\n\nExamples:\n  (car '(1 2 3))    => 1\n  (car '(a . b))    => a"),
 		},
 		{
 			Name: "case-lambda with docstring in first clause",

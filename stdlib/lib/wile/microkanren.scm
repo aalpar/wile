@@ -3,13 +3,13 @@
 
 ;; Logic variables: represented as single-element vectors
 (define (var c)
-  "Create a logic variable identified by the integer C.\nLogic variables are represented as single-element vectors.\nTwo variables are the same if they have the same identifier."
+  "Create a logic variable identified by the integer C.\nLogic variables are represented as single-element vectors.\nTwo variables are the same if they have the same identifier.\n\nExamples:\n  (var 0)  => #(0)\n  (var 3)  => #(3)"
   (vector c))
 (define (var? x)
-  "Return #t if X is a logic variable (a vector), #f otherwise."
+  "Return #t if X is a logic variable (a vector), #f otherwise.\n\nExamples:\n  (var? (var 0))  => #t\n  (var? 'x)       => #f"
   (vector? x))
 (define (var=? x1 x2)
-  "Return #t if logic variables X1 and X2 have the same identifier."
+  "Return #t if logic variables X1 and X2 have the same identifier.\n\nExamples:\n  (var=? (var 0) (var 0))  => #t\n  (var=? (var 0) (var 1))  => #f"
   (= (vector-ref x1 0) (vector-ref x2 0)))
 
 ;; Substitution: association list of (var . value) pairs
@@ -19,7 +19,7 @@
     (if pr (walk (cdr pr) s) u)))
 
 (define (ext-s x v s)
-  "Extend substitution S by associating logic variable X with value V.\nReturns a new substitution (association list) with the binding prepended.\n\nSee also: `walk', `unify'."
+  "Extend substitution S by associating logic variable X with value V.\nReturns a new substitution (association list) with the binding prepended.\n\nExamples:\n  (ext-s (var 0) 5 '())  => (((#(0)) . 5))\n\nSee also: `walk', `unify'."
   (cons (cons x v) s))
 
 ;; Unification
@@ -37,28 +37,28 @@
 
 ;; Goals: state/counter → stream
 (define (== u v)
-  "Return a goal that unifies U and V.\nThe goal takes a state/counter pair and produces a singleton\nstream on success or the empty stream on failure.\n\nSee also: `unify', `unit', `mzero'."
+  "Return a goal that unifies U and V.\nThe goal takes a state/counter pair and produces a singleton\nstream on success or the empty stream on failure.\n\nExamples:\n  ((== 5 5) empty-state)     => ((() . 0))\n  ((== 5 6) empty-state)     => ()\n\nSee also: `unify', `unit', `mzero'."
   (lambda (s/c)
     (let ((s (unify u v (car s/c))))
       (if s (unit (cons s (cdr s/c))) mzero))))
 
 (define (unit s/c)
-  "Wrap state/counter S/C in a singleton answer stream."
+  "Wrap state/counter S/C in a singleton answer stream.\n\nExamples:\n  (unit empty-state)  => ((() . 0))"
   (cons s/c '()))
 (define mzero '())
 
 (define (call/fresh f)
-  "Return a goal that allocates a fresh logic variable and passes\nit to F. F must be a one-argument procedure returning a goal.\nThe variable counter in the state is incremented.\n\nSee also: `var', `=='."
+  "Return a goal that allocates a fresh logic variable and passes\nit to F. F must be a one-argument procedure returning a goal.\nThe variable counter in the state is incremented.\n\nExamples:\n  ((call/fresh (lambda (q) (== q 5))) empty-state)\n    => ((((#(0)) . 5) . 1))\n\nSee also: `var', `=='."
   (lambda (s/c)
     (let ((c (cdr s/c)))
       ((f (var c)) (cons (car s/c) (+ c 1))))))
 
 ;; Goal combinators
 (define (disj g1 g2)
-  "Return a goal that succeeds if either G1 or G2 succeeds.\nInterleaves the answer streams from both goals to ensure\nfair enumeration of results.\n\nSee also: `conj', `mplus'."
+  "Return a goal that succeeds if either G1 or G2 succeeds.\nInterleaves the answer streams from both goals to ensure\nfair enumeration of results.\n\nExamples:\n  ((disj (== 'x 1) (== 'x 2)) empty-state)  ; two answers\n\nSee also: `conj', `mplus'."
   (lambda (s/c) (mplus (g1 s/c) (g2 s/c))))
 (define (conj g1 g2)
-  "Return a goal that succeeds when both G1 and G2 succeed.\nRuns G1 first, then threads each of its answers through G2\nvia bind.\n\nSee also: `disj', `bind'."
+  "Return a goal that succeeds when both G1 and G2 succeed.\nRuns G1 first, then threads each of its answers through G2\nvia bind.\n\nExamples:\n  ((call/fresh\n     (lambda (q) (conj (== q 5) (== q 5))))\n   empty-state)  => ((((#(0)) . 5) . 1))\n\nSee also: `disj', `bind'."
   (lambda (s/c) (bind (g1 s/c) g2)))
 
 ;; Stream operations (interleaving search)
@@ -70,7 +70,7 @@
     (else (cons (car $1) (mplus (cdr $1) $2)))))
 
 (define (bind $ g)
-  "Apply goal G to every answer in stream $ and merge the results.\nIf $ is empty, return the empty stream. If $ is a suspension,\nreturn a suspension that continues binding after forcing.\nOtherwise apply G to the first answer and interleave with\nthe rest via mplus.\n\nSee also: `mplus', `conj'."
+  "Apply goal G to every answer in stream $ and merge the results.\nIf $ is empty, return the empty stream. If $ is a suspension,\nreturn a suspension that continues binding after forcing.\nOtherwise apply G to the first answer and interleave with\nthe rest via mplus.\n\nExamples:\n  (bind '() (== 'x 1))  => ()\n\nSee also: `mplus', `conj'."
   (cond
     ((null? $) mzero)
     ((procedure? $) (lambda () (bind ($) g)))

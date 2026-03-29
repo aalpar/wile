@@ -14,7 +14,7 @@
    (else
     (begin
       (define (port->list reader port)
-        "Read all values from PORT using READER until eof, returning them as a list."
+        "Read all values from PORT using READER until eof, returning them as a list.\n\nExamples:\n  (port->list read-char (open-input-string \"abc\"))  => (#\\a #\\b #\\c)"
         (let lp ((res '()))
           (let ((x (reader port)))
             (if (eof-object? x)

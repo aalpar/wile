@@ -57,11 +57,11 @@ var charCompareSpecs = []struct {
 	cmp  func(rune, rune) bool
 	doc  string
 }{
-	{"char=?", func(a, b rune) bool { return a == b }, "Returns #t if all character arguments have the same Unicode code point."},
-	{"char<?", func(a, b rune) bool { return a < b }, "Returns #t if character arguments are monotonically increasing by Unicode code point."},
-	{"char>?", func(a, b rune) bool { return a > b }, "Returns #t if character arguments are monotonically decreasing by Unicode code point."},
-	{"char<=?", func(a, b rune) bool { return a <= b }, "Returns #t if character arguments are monotonically non-decreasing by Unicode code point."},
-	{"char>=?", func(a, b rune) bool { return a >= b }, "Returns #t if character arguments are monotonically non-increasing by Unicode code point."},
+	{"char=?", func(a, b rune) bool { return a == b }, "Returns #t if all character arguments have the same Unicode code point.\n\nExamples:\n  (char=? #\\a #\\a)  => #t\n  (char=? #\\a #\\b)  => #f"},
+	{"char<?", func(a, b rune) bool { return a < b }, "Returns #t if character arguments are monotonically increasing by Unicode code point.\n\nExamples:\n  (char<? #\\a #\\b)  => #t\n  (char<? #\\b #\\a)  => #f"},
+	{"char>?", func(a, b rune) bool { return a > b }, "Returns #t if character arguments are monotonically decreasing by Unicode code point.\n\nExamples:\n  (char>? #\\b #\\a)  => #t\n  (char>? #\\a #\\b)  => #f"},
+	{"char<=?", func(a, b rune) bool { return a <= b }, "Returns #t if character arguments are monotonically non-decreasing by Unicode code point.\n\nExamples:\n  (char<=? #\\a #\\a)  => #t\n  (char<=? #\\a #\\b)  => #t"},
+	{"char>=?", func(a, b rune) bool { return a >= b }, "Returns #t if character arguments are monotonically non-increasing by Unicode code point.\n\nExamples:\n  (char>=? #\\b #\\a)  => #t\n  (char>=? #\\a #\\a)  => #t"},
 }
 
 // makeCharComparePrimitive returns a ForeignFunction that performs a variadic

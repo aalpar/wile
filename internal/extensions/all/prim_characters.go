@@ -34,11 +34,11 @@ var charCiCompareSpecs = []struct {
 	cmp  func(rune, rune) bool
 	doc  string
 }{
-	{"char-ci=?", func(a, b rune) bool { return simpleCaseFold(a) == simpleCaseFold(b) }, "Returns #t if all characters are equal after case folding."},
-	{"char-ci<?", func(a, b rune) bool { return simpleCaseFold(a) < simpleCaseFold(b) }, "Returns #t if characters are monotonically increasing after case folding."},
-	{"char-ci>?", func(a, b rune) bool { return simpleCaseFold(a) > simpleCaseFold(b) }, "Returns #t if characters are monotonically decreasing after case folding."},
-	{"char-ci<=?", func(a, b rune) bool { return simpleCaseFold(a) <= simpleCaseFold(b) }, "Returns #t if characters are monotonically non-decreasing after case folding."},
-	{"char-ci>=?", func(a, b rune) bool { return simpleCaseFold(a) >= simpleCaseFold(b) }, "Returns #t if characters are monotonically non-increasing after case folding."},
+	{"char-ci=?", func(a, b rune) bool { return simpleCaseFold(a) == simpleCaseFold(b) }, "Returns #t if all characters are equal after case folding.\n\nExamples:\n  (char-ci=? #\\A #\\a)  => #t"},
+	{"char-ci<?", func(a, b rune) bool { return simpleCaseFold(a) < simpleCaseFold(b) }, "Returns #t if characters are monotonically increasing after case folding.\n\nExamples:\n  (char-ci<? #\\a #\\B)  => #t"},
+	{"char-ci>?", func(a, b rune) bool { return simpleCaseFold(a) > simpleCaseFold(b) }, "Returns #t if characters are monotonically decreasing after case folding.\n\nExamples:\n  (char-ci>? #\\B #\\a)  => #t"},
+	{"char-ci<=?", func(a, b rune) bool { return simpleCaseFold(a) <= simpleCaseFold(b) }, "Returns #t if characters are monotonically non-decreasing after case folding.\n\nExamples:\n  (char-ci<=? #\\a #\\A)  => #t"},
+	{"char-ci>=?", func(a, b rune) bool { return simpleCaseFold(a) >= simpleCaseFold(b) }, "Returns #t if characters are monotonically non-increasing after case folding.\n\nExamples:\n  (char-ci>=? #\\A #\\a)  => #t"},
 }
 
 // makeCharCiComparePrimitive returns a ForeignFunction that performs a variadic

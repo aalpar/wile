@@ -10,7 +10,7 @@
   (identity monoid-identity))
 
 (define (monoid-op M a b)
-  "Apply monoid M's binary operation to A and B.\nA monoid operation is associative: combining A with the result\nof combining B and C gives the same result as combining the\nresult of A and B with C.\n\nSee also: `monoid-identity', `monoid-fold'."
+  "Apply monoid M's binary operation to A and B.\nA monoid operation is associative: combining A with the result\nof combining B and C gives the same result as combining the\nresult of A and B with C.\n\nExamples:\n  (monoid-op (make-monoid + 0) 3 4)          => 7\n  (monoid-op (make-monoid string-append \"\") \"a\" \"b\")  => \"ab\"\n\nSee also: `monoid-identity', `monoid-fold'."
   ((monoid-op-fn M) a b))
 
 (define (monoid-fold M lst)
@@ -34,7 +34,7 @@
          body ...)))))
 
 (define (validate-monoid M samples)
-  "Spot-check that M satisfies the monoid laws on SAMPLES.\nTests left identity, right identity, and associativity for all\nelements and triples in SAMPLES. Returns #t if all laws hold,\nor a list of (violation-type element ...) entries describing failures.\n\nSee also: `make-monoid', `monoid-op', `monoid-identity'."
+  "Spot-check that M satisfies the monoid laws on SAMPLES.\nTests left identity, right identity, and associativity for all\nelements and triples in SAMPLES. Returns #t if all laws hold,\nor a list of (violation-type element ...) entries describing failures.\n\nExamples:\n  (validate-monoid (make-monoid + 0) '(1 2 3))  => #t\n\nSee also: `make-monoid', `monoid-op', `monoid-identity'."
   (let ((violations '())
         (e (monoid-identity M)))
     (define (fail! type . args)

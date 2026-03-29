@@ -111,7 +111,7 @@
      (define name (opt-lambda* vars . body)))))
 
 (define (mem-key key ls)
-  "Search property list LS for KEY, returning the tail starting at KEY or #f."
+  "Search property list LS for KEY, returning the tail starting at KEY or #f.\n\nExamples:\n  (mem-key 'b: '(a: 1 b: 2 c: 3))  => (b: 2 c: 3)\n  (mem-key 'z: '(a: 1 b: 2))       => #f"
   (and (pair? ls)
        (pair? (cdr ls))
        (if (eq? key (car ls))
@@ -126,7 +126,7 @@
 ;;> \var{default}, or \scheme{#f}.
 
 (define (keyword-ref ls key . o)
-  "Look up KEY in property list LS and return its value, or the optional default.\n\nSee also: `keyword-ref*', `let-keywords', `let-keywords*'."
+  "Look up KEY in property list LS and return its value, or the optional default.\n\nExamples:\n  (keyword-ref '(a: 1 b: 2) 'b:)       => 2\n  (keyword-ref '(a: 1) 'z: 'missing)   => missing\n  (keyword-ref '(a: 1) 'z:)            => #f\n\nSee also: `keyword-ref*', `let-keywords', `let-keywords*'."
   (cond ((mem-key key ls) => (lambda (cell) (cadr cell)))
         (else (and (pair? o) (car o)))))
 
@@ -141,7 +141,7 @@
      (cond ((mem-key key ls) => cadr) (else default)))))
 
 (define (symbol->keyword sym)
-  "Convert symbol SYM to a keyword symbol by appending a colon."
+  "Convert symbol SYM to a keyword symbol by appending a colon.\n\nExamples:\n  (symbol->keyword 'name)  => name:\n  (symbol->keyword 'age)   => age:"
   (string->symbol (string-append (symbol->string sym) ":")))
 
 (define-syntax let-key*-to-let
@@ -222,7 +222,7 @@
 
 ;; Returns the plist ls filtering out key-values found in keywords.
 (define (remove-keywords ls keywords)
-  "Return property list LS with all key-value pairs matching KEYWORDS removed."
+  "Return property list LS with all key-value pairs matching KEYWORDS removed.\n\nExamples:\n  (remove-keywords '(a: 1 b: 2 c: 3) '(b:))  => (a: 1 c: 3)\n  (remove-keywords '(a: 1 b: 2) '(a: b:))     => ()"
   (let lp ((ls ls) (res '()))
     (if (and (pair? ls) (pair? (cdr ls)))
         (if (memq (car ls) keywords)
