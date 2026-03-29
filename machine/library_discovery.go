@@ -29,7 +29,8 @@ func DiscoverAvailableLibraries(resolver FileResolver, reg *LibraryRegistry) ([]
 	var result []LibraryName
 
 	// Filesystem discovery via resolver chain.
-	if enumerator, ok := resolver.(LibraryEnumerator); ok {
+	enumerator, ok := resolver.(LibraryEnumerator)
+	if ok {
 		libs, err := enumerator.EnumerateLibraries()
 		if err != nil {
 			return nil, err

@@ -327,8 +327,8 @@ func (p *OSFileResolver) EnumerateLibraries() ([]LibraryName, error) {
 	var result []LibraryName
 
 	walkDir := func(baseDir string) {
-		filepath.WalkDir(baseDir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
+		_ = filepath.WalkDir(baseDir, func(path string, d fs.DirEntry, _ error) error {
+			if d == nil {
 				return nil
 			}
 			if d.IsDir() {
@@ -342,22 +342,17 @@ func (p *OSFileResolver) EnumerateLibraries() ([]LibraryName, error) {
 			}
 
 			relPath, relErr := filepath.Rel(baseDir, path)
-			if relErr != nil {
-				return nil
+			if relErr == nil {
+				relPath = filepath.ToSlash(relPath)
+				name, nameErr := FilePathToLibraryName(relPath)
+				if nameErr == nil {
+					key := name.Key()
+					if !seen[key] {
+						seen[key] = true
+						result = append(result, name)
+					}
+				}
 			}
-			relPath = filepath.ToSlash(relPath)
-
-			name, nameErr := FilePathToLibraryName(relPath)
-			if nameErr != nil {
-				return nil
-			}
-
-			key := name.Key()
-			if seen[key] {
-				return nil
-			}
-			seen[key] = true
-			result = append(result, name)
 			return nil
 		})
 	}
@@ -440,9 +435,9 @@ func (p *FSFileResolver) EnumerateLibraries() ([]LibraryName, error) {
 		if prefix == "." {
 			prefix = ""
 		}
-		return fs.WalkDir(p.fsys, baseDir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return nil // skip unreadable entries
+		return fs.WalkDir(p.fsys, baseDir, func(path string, d fs.DirEntry, _ error) error {
+			if d == nil {
+				return nil
 			}
 			if d.IsDir() {
 				if path != baseDir && isHidden(d.Name()) {
@@ -460,16 +455,13 @@ func (p *FSFileResolver) EnumerateLibraries() ([]LibraryName, error) {
 			}
 
 			name, nameErr := FilePathToLibraryName(relPath)
-			if nameErr != nil {
-				return nil
+			if nameErr == nil {
+				key := name.Key()
+				if !seen[key] {
+					seen[key] = true
+					result = append(result, name)
+				}
 			}
-
-			key := name.Key()
-			if seen[key] {
-				return nil
-			}
-			seen[key] = true
-			result = append(result, name)
 			return nil
 		})
 	}
@@ -500,8 +492,8 @@ func (p *FSFileResolver) EnumerateLibraries() ([]LibraryName, error) {
 		}
 	}
 
-	_ = fs.WalkDir(p.fsys, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
+	_ = fs.WalkDir(p.fsys, ".", func(path string, d fs.DirEntry, _ error) error {
+		if d == nil {
 			return nil
 		}
 		if d.IsDir() {
@@ -515,16 +507,13 @@ func (p *FSFileResolver) EnumerateLibraries() ([]LibraryName, error) {
 		}
 
 		name, nameErr := FilePathToLibraryName(path)
-		if nameErr != nil {
-			return nil
+		if nameErr == nil {
+			key := name.Key()
+			if !seen[key] {
+				seen[key] = true
+				result = append(result, name)
+			}
 		}
-
-		key := name.Key()
-		if seen[key] {
-			return nil
-		}
-		seen[key] = true
-		result = append(result, name)
 		return nil
 	})
 
