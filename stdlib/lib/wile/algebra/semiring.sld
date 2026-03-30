@@ -3,7 +3,7 @@
   (export make-semiring semiring?
           semiring-plus semiring-times semiring-zero semiring-one
           semiring->additive-monoid semiring->multiplicative-monoid
-          boolean-semiring tropical-semiring counting-semiring
+          boolean-semiring tropical-semiring tropical-inf counting-semiring
           validate-semiring
           with-semiring)
   (import (scheme base)

@@ -43,9 +43,21 @@
     (lambda (a b) (and a b))
     #f #t))
 
+(define tropical-inf 'tropical-inf)
+
+(define (tropical-min a b)
+  (cond ((eq? a tropical-inf) b)
+        ((eq? b tropical-inf) a)
+        (else (min a b))))
+
+(define (tropical-add a b)
+  (cond ((eq? a tropical-inf) tropical-inf)
+        ((eq? b tropical-inf) tropical-inf)
+        (else (+ a b))))
+
 (define (tropical-semiring)
-  "Construct the tropical semiring where PLUS is min and TIMES is +.\nThe additive identity (zero) is +inf.0 and the multiplicative\nidentity (one) is 0. Useful for shortest-path problems.\n\nExamples:\n  (let ((T (tropical-semiring)))\n    (semiring-plus T 3 5))   => 3\n  (let ((T (tropical-semiring)))\n    (semiring-times T 3 5))  => 8\n\nSee also: `boolean-semiring', `counting-semiring', `make-semiring'."
-  (make-semiring min + +inf.0 0))
+  "Construct the tropical semiring where PLUS is min and TIMES is +.\nThe additive identity (zero) is tropical-inf and the multiplicative\nidentity (one) is 0. Useful for shortest-path problems.\nAll operations on finite values return exact results.\n\nExamples:\n  (let ((T (tropical-semiring)))\n    (semiring-plus T 3 5))   => 3\n  (let ((T (tropical-semiring)))\n    (semiring-times T 3 5))  => 8\n\nSee also: `boolean-semiring', `counting-semiring', `make-semiring'."
+  (make-semiring tropical-min tropical-add tropical-inf 0))
 
 (define (counting-semiring)
   "Construct the standard counting semiring over exact integers.\nPLUS is addition, TIMES is multiplication, zero is 0, one is 1.\n\nExamples:\n  (let ((C (counting-semiring)))\n    (semiring-plus C 3 4))   => 7\n  (let ((C (counting-semiring)))\n    (semiring-times C 3 4))  => 12\n\nSee also: `boolean-semiring', `tropical-semiring', `make-semiring'."

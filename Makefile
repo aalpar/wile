@@ -89,14 +89,24 @@ DATADIR = $(PREFIX)/share/wile
 # Install the wile binary and standard libraries.
 #   make install
 #   make install PREFIX=/opt/wile
-.PHONY: install
-install: build
+.PHONY: install-base
+install-base: build
 	@mkdir -p $(PREFIX)/bin
 	cp $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) $(PREFIX)/bin/$(MY_BIN)
 	@echo "Installed $(MY_BIN) to $(PREFIX)/bin/$(MY_BIN)"
 	@mkdir -p $(DATADIR)
 	cp -R stdlib/lib $(DATADIR)/
 	@echo "Installed libraries to $(DATADIR)/lib/"
+
+.PHONY: install-darwin
+install-darwin: install-base
+	codesign --force --sign - $(PREFIX)/bin/$(MY_BIN)
+
+.PHONY: install-linux
+install-linux: install-base
+
+.PHONY: install
+install: install-$(HOST_OS)
 
 # Build all embedding examples. Verifies that the public API compiles.
 #   make examples
