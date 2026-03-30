@@ -36,11 +36,11 @@ func compileScheme(t *testing.T, code string) *NativeTemplate {
 
 	tpl := NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
-	expanded, err := NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
+	expanded, err := NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator()).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
 	cctx := NewCompileTimeCallContext(context.Background(), false)
-	err = NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
+	err = NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
 	return tpl
@@ -110,10 +110,10 @@ func TestSourceRecording_Call(t *testing.T) {
 	stx, _ := p.ReadSyntax(context.TODO())
 	tpl := NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
-	expanded, err := NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
+	expanded, err := NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator()).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 	cctx := NewCompileTimeCallContext(context.Background(), false)
-	err = NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
+	err = NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Now compile a call to that function
@@ -123,10 +123,10 @@ func TestSourceRecording_Call(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl2 := NewNativeTemplate(0, 0, false)
-	expanded, err = NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
+	expanded, err = NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator()).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
-	err = NewCompiletimeContinuation(tpl2, env).CompileExpression(cctx, expanded)
+	err = NewCompiletimeContinuation(tpl2, env, NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 }
 
@@ -140,9 +140,9 @@ func TestSourceRecording_SetBang(t *testing.T) {
 	stx, _ := p.ReadSyntax(context.TODO())
 	tpl := NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
-	expanded, _ := NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
+	expanded, _ := NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator()).ExpandExpression(stx)
 	cctx := NewCompileTimeCallContext(context.Background(), false)
-	err := NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
+	err := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Now compile (set! x 2)
@@ -152,10 +152,10 @@ func TestSourceRecording_SetBang(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl2 := NewNativeTemplate(0, 0, false)
-	expanded, err = NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
+	expanded, err = NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator()).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
-	err = NewCompiletimeContinuation(tpl2, env).CompileExpression(cctx, expanded)
+	err = NewCompiletimeContinuation(tpl2, env, NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 }
 
@@ -179,11 +179,11 @@ func TestSourceRecording_SourceLocationPreserved(t *testing.T) {
 
 	tpl := NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
-	expanded, err := NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
+	expanded, err := NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator()).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
 	cctx := NewCompileTimeCallContext(context.Background(), false)
-	err = NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
+	err = NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Source should point to the correct file

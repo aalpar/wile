@@ -101,7 +101,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 
 	// Create a compiler for the library environment
 	libTemplate := NewNativeTemplate(0, 0, false)
-	libCompiler := NewCompiletimeContinuation(libTemplate, libEnv)
+	libCompiler := NewCompiletimeContinuation(libTemplate, libEnv, p.evaluator)
 	libCompiler.libraryScope = libScope
 
 	// Process each declaration

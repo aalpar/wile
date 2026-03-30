@@ -75,7 +75,7 @@ func TestCompileERMacroTransformer(t *testing.T) {
 		    (lambda (form rename compare) form)))
 	`)
 
-	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
+	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
 	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, form)
 	err := ctc.CompileDefineSyntax(ctctx, args)
@@ -103,7 +103,7 @@ func TestERMacro_EndToEnd_Constant(t *testing.T) {
 		    (lambda (form rename compare) 42)))
 	`)
 
-	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
+	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
 	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, form)
 	err := ctc.CompileDefineSyntax(ctctx, args)
@@ -111,7 +111,7 @@ func TestERMacro_EndToEnd_Constant(t *testing.T) {
 
 	// Expand: (my-const anything) — transformer returns 42 regardless
 	testForm := parseString(t, env, `(my-const anything)`)
-	etc := machine.NewExpanderTimeContinuation(context.Background(), env)
+	etc := machine.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
 	expanded, err := etc.ExpandExpression(testForm)
 	c.Assert(err, qt.IsNil)
 
@@ -134,7 +134,7 @@ func TestERMacro_InLetSyntax(t *testing.T) {
 		  (my-const anything))
 	`)
 
-	etc := machine.NewExpanderTimeContinuation(context.Background(), env)
+	etc := machine.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
 	expanded, err := etc.ExpandExpression(form)
 	c.Assert(err, qt.IsNil)
 

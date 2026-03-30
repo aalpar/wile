@@ -128,7 +128,7 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(_ *syntax.SyntaxSymbol
 		}
 
 		// Continue expansion with the child environment
-		childExpander := NewExpanderTimeContinuation(p.ctx, childExpandEnv)
+		childExpander := NewExpanderTimeContinuation(p.ctx, childExpandEnv, p.evaluator)
 		return childExpander.ExpandExpression(scopedBody)
 	}
 

@@ -120,7 +120,7 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 		// If define-syntax, compile it now for subsequent forms
 		if isSyntaxFormWithKeyword(expanded, "define-syntax") {
 			pair := expanded.(*syntax.SyntaxPair)
-			err = compileDefineSyntaxFromSyntax(p.ctx, p.env, pair, p.libraryScope)
+			err = compileDefineSyntaxFromSyntax(p.ctx, p.env, pair, p.libraryScope, p.evaluator)
 			if err != nil {
 				return nil, err
 			}
@@ -137,7 +137,7 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 // The env parameter is used for free identifier resolution during compilation (so macros
 // can see local bindings like lambda parameters), while the actual macro binding is stored
 // in env.Expand() for lookup during expansion.
-func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.EnvironmentFrame, dsPair *syntax.SyntaxPair, libraryScope *syntax.Scope) error {
+func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.EnvironmentFrame, dsPair *syntax.SyntaxPair, libraryScope *syntax.Scope, evaluator MacroEvaluator) error {
 	expandEnv := env.Expand()
 
 	// Extract: (define-syntax keyword transformer)
@@ -161,7 +161,7 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 	// Compile the transformer using the full environment for free identifier resolution
 	// This allows macros to see local bindings (e.g., lambda parameters, forward references)
 	// Supports both syntax-rules and lambda (procedural) transformers
-	closure, err := compileTransformerToMachineClosure(ctx, env, transformer, libraryScope)
+	closure, err := compileTransformerToMachineClosure(ctx, env, transformer, libraryScope, evaluator)
 	if err != nil {
 		return err
 	}

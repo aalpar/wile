@@ -41,7 +41,7 @@ func TestCompileTransformerToMachineClosure_SyntaxRules(t *testing.T) {
 	)
 	transformerStx := schemeutil.DatumToSyntaxValue(context.Background(), sctx, transformer)
 
-	closure, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil)
+	closure, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil, NewVMMacroEvaluator())
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, closure, qt.IsNotNil)
 }
@@ -58,7 +58,7 @@ func TestCompileTransformerToMachineClosure_Lambda(t *testing.T) {
 	)
 	transformerStx := schemeutil.DatumToSyntaxValue(context.Background(), sctx, transformer)
 
-	closure, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil)
+	closure, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil, NewVMMacroEvaluator())
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, closure, qt.IsNotNil)
 }
@@ -78,7 +78,7 @@ func TestCompileTransformerToMachineClosure_ERMacroTransformer(t *testing.T) {
 	)
 	transformerStx := schemeutil.DatumToSyntaxValue(context.Background(), sctx, transformer)
 
-	result, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil)
+	result, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil, NewVMMacroEvaluator())
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result, qt.IsNotNil)
 
@@ -97,7 +97,7 @@ func TestCompileTransformerToMachineClosure_UnsupportedType(t *testing.T) {
 	)
 	transformerStx := schemeutil.DatumToSyntaxValue(context.Background(), sctx, transformer)
 
-	closure, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil)
+	closure, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil, NewVMMacroEvaluator())
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, closure, qt.IsNil)
 	qt.Assert(t, err.Error(), qt.Contains, "unsupported transformer type")
@@ -110,7 +110,7 @@ func TestCompileTransformerToMachineClosure_NotAPair(t *testing.T) {
 	// Just a symbol, not a pair
 	transformerStx := schemeutil.DatumToSyntaxValue(context.Background(), sctx, values.NewSymbol("not-a-list"))
 
-	closure, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil)
+	closure, err := compileTransformerToMachineClosure(context.Background(), env, transformerStx, nil, NewVMMacroEvaluator())
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, closure, qt.IsNil)
 	qt.Assert(t, err.Error(), qt.Contains, "transformer must be a list")
@@ -142,7 +142,7 @@ func TestProceduralMacroExpandTimePath(t *testing.T) {
 	defineSyntaxStx := schemeutil.DatumToSyntaxValue(context.Background(), sctx, defineSyntaxExpr).(*syntax.SyntaxPair)
 
 	// Use the expand-time path to compile the define-syntax
-	err := compileDefineSyntaxFromSyntax(context.Background(), env, defineSyntaxStx, nil)
+	err := compileDefineSyntaxFromSyntax(context.Background(), env, defineSyntaxStx, nil, NewVMMacroEvaluator())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Verify the macro is stored in the expand environment

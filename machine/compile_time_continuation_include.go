@@ -143,7 +143,7 @@ func (p *CompileTimeContinuation) processFormsWithLetrecSemantics(ctctx CompileT
 	}
 
 	// Pass 1: Expand all forms, compiling define-syntax as encountered
-	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env)
+	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env, p.evaluator)
 	expander.libraryScope = p.libraryScope
 	expandedForms, err := expander.ExpandBodyWithDefineSyntax(forms)
 	if err != nil {

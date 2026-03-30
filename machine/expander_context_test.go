@@ -28,7 +28,7 @@ func TestNewExpanderContext(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	expander := NewExpanderTimeContinuation(context.Background(), env)
+	expander := NewExpanderTimeContinuation(context.Background(), env, NewVMMacroEvaluator())
 
 	ctx := NewExpanderContext(env, expander)
 
@@ -40,7 +40,7 @@ func TestExpanderContext_IntroductionScope(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	expander := NewExpanderTimeContinuation(context.Background(), env)
+	expander := NewExpanderTimeContinuation(context.Background(), env, NewVMMacroEvaluator())
 
 	ctx := NewExpanderContext(env, expander)
 
@@ -57,7 +57,7 @@ func TestExpanderContext_UseSiteScope(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	expander := NewExpanderTimeContinuation(context.Background(), env)
+	expander := NewExpanderTimeContinuation(context.Background(), env, NewVMMacroEvaluator())
 
 	ctx := NewExpanderContext(env, expander)
 

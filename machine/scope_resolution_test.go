@@ -72,13 +72,13 @@ func evalScope(t *testing.T, env *environment.EnvironmentFrame, code string) (va
 
 // evalScopeSyntax runs a parsed syntax value through expand → compile → run.
 func evalScopeSyntax(env *environment.EnvironmentFrame, sv syntax.SyntaxValue) (values.Value, error) {
-	expanded, err := machine.NewExpanderTimeContinuation(context.Background(), env).ExpandExpression(sv)
+	expanded, err := machine.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator()).ExpandExpression(sv)
 	if err != nil {
 		return nil, err
 	}
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
-	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(ctctx, expanded)
+	err = machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(ctctx, expanded)
 	if err != nil {
 		return nil, err
 	}

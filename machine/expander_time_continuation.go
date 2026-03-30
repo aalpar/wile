@@ -58,13 +58,17 @@ type ExpanderTimeContinuation struct {
 	// libraryScope is set when expanding inside a library body.
 	// Threaded to CompileSyntaxRules for cross-library macro hygiene.
 	libraryScope *syntax.Scope
+	// evaluator abstracts VM execution for transformer invocation
+	// so the expander can be tested without the concrete VM.
+	evaluator MacroEvaluator
 }
 
 // NewExpanderTimeContinuation creates a new ExpanderTimeContinuation.
-func NewExpanderTimeContinuation(ctx context.Context, env *environment.EnvironmentFrame) *ExpanderTimeContinuation {
+func NewExpanderTimeContinuation(ctx context.Context, env *environment.EnvironmentFrame, evaluator MacroEvaluator) *ExpanderTimeContinuation {
 	q := &ExpanderTimeContinuation{
-		ctx: ctx,
-		env: env,
+		ctx:       ctx,
+		env:       env,
+		evaluator: evaluator,
 	}
 	return q
 }
@@ -266,7 +270,7 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 // On success, the caller receives the MachineContext with the result in the
 // value register and must call ReleaseSubContext when done. On error, cleanup
 // is handled internally.
-func invokeTransformerClosure(ctx context.Context, cls Closure, inputForm syntax.SyntaxValue, expanderCtx *ExpanderContext) (*MachineContext, error) {
+func invokeTransformerClosure(ctx context.Context, cls Closure, inputForm syntax.SyntaxValue, expanderCtx ExpanderCtx) (*MachineContext, error) {
 	var mc *MachineContext
 	switch c := cls.(type) {
 	case *MachineClosure:
@@ -328,7 +332,7 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 	// determine that it shouldn't match the literal => in cond's pattern.
 	expanderCtx := NewExpanderContext(p.env, p)
 
-	mc, err := invokeTransformerClosure(p.ctx, cls, inputForm, expanderCtx)
+	mc, err := p.evaluator.InvokeTransformer(p.ctx, cls, inputForm, expanderCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -500,7 +504,7 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 
 	inputForm := syntax.NewSyntaxCons(sym, cdr, sym.SourceContext())
 
-	mc, err := invokeTransformerClosure(p.ctx, cls, inputForm, nil)
+	mc, err := p.evaluator.InvokeTransformer(p.ctx, cls, inputForm, nil)
 	if err != nil {
 		return nil, false, err
 	}

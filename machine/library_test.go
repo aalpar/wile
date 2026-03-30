@@ -200,7 +200,7 @@ func TestCompileDefineLibrary_Basic(t *testing.T) {
 
 	// Compile the library
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env)
+	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 
 	err := ctc.CompileDefineLibrary(ctctx, args)
@@ -219,7 +219,7 @@ func TestCompileDefineLibrary_Empty(t *testing.T) {
 
 	// Compile
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env)
+	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 
 	err := ctc.CompileDefineLibrary(ctctx, args)
@@ -274,7 +274,7 @@ func TestLibraryDescription(t *testing.T) {
 			args := libPair.Cdr().(*syntax.SyntaxPair)
 
 			tpl := machine.NewNativeTemplate(0, 0, false)
-			ctc := machine.NewCompiletimeContinuation(tpl, env)
+			ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 
 			var compiledLib *machine.CompiledLibrary
 			ctc.SetLibraryCallback(func(lib *machine.CompiledLibrary) {
@@ -314,7 +314,7 @@ func TestCompileImport_LibraryNotFound(t *testing.T) {
 
 	// Compile - should fail because (scheme base) doesn't exist
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env)
+	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 
 	err := ctc.CompileImport(ctctx, args)
@@ -335,7 +335,7 @@ func TestCompileImport_NoRegistry(t *testing.T) {
 
 	// Compile - should fail because no registry is configured
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env)
+	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 
 	err := ctc.CompileImport(ctctx, args)
@@ -355,7 +355,7 @@ func TestCompileExport_TopLevelError(t *testing.T) {
 
 	// Compile - should error at top level
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env)
+	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 
 	err := ctc.CompileExport(ctctx, args)
@@ -478,7 +478,7 @@ func TestImport_Simple(t *testing.T) {
 	args := importPair.Cdr().(syntax.SyntaxValue)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env)
+	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 
 	err := ctc.CompileImport(ctctx, args)
@@ -506,7 +506,7 @@ func TestImport_OnlyModifier(t *testing.T) {
 	args := importPair.Cdr().(syntax.SyntaxValue)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env)
+	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 
 	err := ctc.CompileImport(ctctx, args)
@@ -531,7 +531,7 @@ func TestImport_PrefixModifier(t *testing.T) {
 	args := importPair.Cdr().(syntax.SyntaxValue)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env)
+	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 
 	err := ctc.CompileImport(ctctx, args)
@@ -825,7 +825,7 @@ func TestLibraryForwardReferences(t *testing.T) {
 
 	// Create compiler and expand the library definition
 	ectx := context.Background()
-	expanded, err := machine.NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
+	expanded, err := machine.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	c.Assert(err, qt.IsNil)
 
 	// Compile the library - this should succeed with forward references
@@ -833,7 +833,7 @@ func TestLibraryForwardReferences(t *testing.T) {
 	// "no such local or global binding \"callee\""
 	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	compiler := machine.NewCompiletimeContinuation(tpl, env)
+	compiler := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	err = compiler.CompileExpression(ctctx, expanded)
 	c.Assert(err, qt.IsNil, qt.Commentf("Forward references should work with letrec* semantics"))
 }
@@ -868,7 +868,7 @@ func TestLoadLibrary_IncludeStampsLibraryScope(t *testing.T) {
 	args := importPair.Cdr().(syntax.SyntaxValue)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env)
+	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 
 	err = ctc.CompileImport(ctctx, args)
@@ -877,10 +877,10 @@ func TestLoadLibrary_IncludeStampsLibraryScope(t *testing.T) {
 	// Compile and run (double-base)
 	callExpr := parseLibrarySyntax(t, env, `(double-base)`)
 	callTpl := machine.NewNativeTemplate(0, 0, false)
-	callCtc := machine.NewCompiletimeContinuation(callTpl, env)
+	callCtc := machine.NewCompiletimeContinuation(callTpl, env, machine.NewVMMacroEvaluator())
 	callCtctx := machine.NewCompileTimeCallContext(context.Background(), false)
 
-	expanded, err := machine.NewExpanderTimeContinuation(context.Background(), env).ExpandExpression(callExpr)
+	expanded, err := machine.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator()).ExpandExpression(callExpr)
 	c.Assert(err, qt.IsNil)
 
 	err = callCtc.CompileExpression(callCtctx, expanded)

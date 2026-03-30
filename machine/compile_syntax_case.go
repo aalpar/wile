@@ -222,7 +222,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 
 	// Create environment with pattern variables bound (shared between fender and body)
 	bodyEnv := p.createPatternVarEnvironment(patternVars)
-	bodyCompiler := NewCompiletimeContinuation(p.template, bodyEnv)
+	bodyCompiler := NewCompiletimeContinuation(p.template, bodyEnv, p.evaluator)
 	// Inherit the parent compiler's current source so that operations emitted
 	// by bodyCompiler (like BindPatternVars) are tagged with the syntax-case
 	// form's source location.
@@ -232,7 +232,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	bodyCompiler.AppendOperations(NewOperationBindPatternVars(patternVars))
 
 	// Create expander for the body environment (to expand macros like let)
-	bodyExpander := NewExpanderTimeContinuation(ctctx.ctx, bodyEnv)
+	bodyExpander := NewExpanderTimeContinuation(ctctx.ctx, bodyEnv, p.evaluator)
 
 	// If there's a fender, evaluate it and branch to cleanup on false
 	var fenderBranchIdx int

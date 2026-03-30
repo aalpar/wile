@@ -40,12 +40,16 @@ type CompileTimeContinuation struct {
 	// Defaults to the resolver stored on Namespace (usually
 	// OSFileResolver); set to EmbedFileResolver for bootstrap.
 	fileResolver FileResolver
+	// evaluator abstracts VM execution for compile-time evaluation
+	// and transformer invocation so the compiler can be tested
+	// without the concrete VM.
+	evaluator MacroEvaluator
 }
 
 // NewCompiletimeContinuation creates a new CompileTimeContinuation.
 // The file resolver defaults to the one stored on the Namespace.
 // If none is set, falls back to a fresh OSFileResolver.
-func NewCompiletimeContinuation(tpl *NativeTemplate, env *environment.EnvironmentFrame) *CompileTimeContinuation {
+func NewCompiletimeContinuation(tpl *NativeTemplate, env *environment.EnvironmentFrame, evaluator MacroEvaluator) *CompileTimeContinuation {
 	var resolver FileResolver
 	if r, ok := env.FileResolver().(FileResolver); ok {
 		resolver = r
@@ -56,6 +60,7 @@ func NewCompiletimeContinuation(tpl *NativeTemplate, env *environment.Environmen
 		env:          env,
 		template:     tpl,
 		fileResolver: resolver,
+		evaluator:    evaluator,
 	}
 	return q
 }
@@ -236,7 +241,7 @@ func (p *CompileTimeContinuation) CompileMeta(ctctx CompileTimeCallContext, expr
 	}
 	// Get the expand environment and compile expressions in it
 	metaEnv := p.env.Expand()
-	metaCont := NewCompiletimeContinuation(p.template, metaEnv)
+	metaCont := NewCompiletimeContinuation(p.template, metaEnv, p.evaluator)
 	err := metaCont.compileExpressionList(ctctx, rest)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "failed to compile meta")

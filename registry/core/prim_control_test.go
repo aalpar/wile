@@ -619,12 +619,12 @@ func TestDynamicWindEscape(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	ectx := context.Background()
-	expanded, err := machine.NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
+	expanded, err := machine.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
-	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
+	err = machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))

@@ -174,7 +174,7 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 	tpl := NewNativeTemplate(0, 0, false)
 
 	// Expand the form
-	expanded, err := NewExpanderTimeContinuation(ctx, libEnv).ExpandExpression(stx)
+	expanded, err := NewExpanderTimeContinuation(ctx, libEnv, NewVMMacroEvaluator()).ExpandExpression(stx)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "error expanding library")
 	}
@@ -182,7 +182,7 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 	// Compile the form
 	// Use inTail=false for top-level expressions
 	cctx := NewCompileTimeCallContext(ctx, false)
-	compiler := NewCompiletimeContinuation(tpl, libEnv)
+	compiler := NewCompiletimeContinuation(tpl, libEnv, NewVMMacroEvaluator())
 
 	// Set up to capture the compiled library
 	var compiledLib *CompiledLibrary

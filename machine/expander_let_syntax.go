@@ -173,7 +173,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 		transformerExpr := transformerPair.SyntaxCar()
 
 		// Compile the transformer (supports syntax-rules, lambda, er-macro-transformer)
-		closure, err := compileTransformerToMachineClosure(p.ctx, p.env, transformerExpr, p.libraryScope)
+		closure, err := compileTransformerToMachineClosure(p.ctx, p.env, transformerExpr, p.libraryScope, p.evaluator)
 		if err != nil {
 			return nil, werr.WrapForeignErrorf(err, "%s: could not compile transformer for %s", formName, keyword.Key)
 		}
@@ -210,7 +210,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 	}
 
 	// Create expander with child expand environment for body expansion
-	childExpander := NewExpanderTimeContinuation(p.ctx, childExpandEnv)
+	childExpander := NewExpanderTimeContinuation(p.ctx, childExpandEnv, p.evaluator)
 
 	// Expand all body expressions and check for defines
 	var expandedExprs []syntax.SyntaxValue

@@ -237,7 +237,7 @@ func (p *ExpanderTimeContinuation) expandLetBindings(
 	var initExpander *ExpanderTimeContinuation
 	if scopeInits {
 		childEnv := p.createBindingEnv(scopedNames)
-		initExpander = NewExpanderTimeContinuation(p.ctx, childEnv)
+		initExpander = NewExpanderTimeContinuation(p.ctx, childEnv, p.evaluator)
 	} else {
 		initExpander = p
 	}
@@ -335,7 +335,7 @@ func (p *ExpanderTimeContinuation) expandLetStarBindings(
 		// Add scope to init so references can resolve to preceding bindings.
 		scopedInit := syntax.AddScopeToSyntax(initExpr, scope)
 
-		currentExpander := NewExpanderTimeContinuation(p.ctx, childEnv)
+		currentExpander := NewExpanderTimeContinuation(p.ctx, childEnv, p.evaluator)
 		expandedInit, err := currentExpander.ExpandExpression(scopedInit)
 		if err != nil {
 			return nil, nil, err
@@ -392,7 +392,7 @@ func (p *ExpanderTimeContinuation) expandBindingBody(
 		return nil, err
 	}
 
-	childExpander := NewExpanderTimeContinuation(p.ctx, env)
+	childExpander := NewExpanderTimeContinuation(p.ctx, env, p.evaluator)
 	expandedExprs, err := childExpander.ExpandBodyWithDefineSyntax(bodyExprs)
 	if err != nil {
 		return nil, err

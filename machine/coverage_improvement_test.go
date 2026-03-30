@@ -90,7 +90,7 @@ func TestCompileUnquoteSplicing(t *testing.T) {
 func TestCompileUnquoteDirectCall(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
-	ctc := NewCompiletimeContinuation(tpl, env)
+	ctc := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 	ctctx := NewCompileTimeCallContext(context.Background(), false)
 
 	sctx := syntax.NewZeroValueSourceContext()
@@ -105,7 +105,7 @@ func TestCompileUnquoteDirectCall(t *testing.T) {
 func TestCompileUnquoteSplicingDirectCall(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
-	ctc := NewCompiletimeContinuation(tpl, env)
+	ctc := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 	ctctx := NewCompileTimeCallContext(context.Background(), false)
 
 	sctx := syntax.NewZeroValueSourceContext()
