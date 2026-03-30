@@ -35,8 +35,8 @@
     (test 2 (semiring-plus ts 5 2))
     ;; times = +
     (test 7 (semiring-times ts 2 5))
-    ;; zero = +inf.0
-    (test +inf.0 (semiring-zero ts))
+    ;; zero = tropical-inf (symbol sentinel preserves exactness for finite values)
+    (test tropical-inf (semiring-zero ts))
     ;; one = 0
     (test 0 (semiring-one ts))))
 
