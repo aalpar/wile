@@ -40,11 +40,16 @@ type MacroEvaluator interface {
 }
 
 // vmMacroEvaluator implements MacroEvaluator using the real VM execution path.
+// Stateless — all call sites share a single instance via NewVMMacroEvaluator.
 type vmMacroEvaluator struct{}
+
+// sharedVMEvaluator is the singleton instance. vmMacroEvaluator is stateless,
+// so a single allocation serves all callers.
+var sharedVMEvaluator MacroEvaluator = &vmMacroEvaluator{}
 
 // NewVMMacroEvaluator returns a MacroEvaluator backed by the real VM.
 func NewVMMacroEvaluator() MacroEvaluator {
-	return &vmMacroEvaluator{}
+	return sharedVMEvaluator
 }
 
 func (p *vmMacroEvaluator) EvalTemplate(ctx context.Context, tpl *NativeTemplate, env *environment.EnvironmentFrame) (values.Value, error) {
