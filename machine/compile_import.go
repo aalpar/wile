@@ -45,7 +45,7 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 
 	// Process each import set
 	v, err := syntax.SyntaxForEach(ctctx.ctx, importSets, func(ctx context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
-		return ResolveAndInstallImportSet(ctx, importSetExpr.UnwrapAll(), p.env, environment.PhaseCompile)
+		return ResolveAndInstallImportSet(ctx, importSetExpr.UnwrapAll(), p.env, environment.PhaseCompile, p.evaluator)
 	})
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "import: error processing import sets")
@@ -74,7 +74,7 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 
 	// Process each import set
 	_, err := syntax.SyntaxForEach(ctctx.ctx, argsPair, func(ctx context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
-		res, err := resolveImportSet(ctx, importSetExpr.UnwrapAll(), p.env)
+		res, err := resolveImportSet(ctx, importSetExpr.UnwrapAll(), p.env, p.evaluator)
 		if err != nil {
 			return err
 		}

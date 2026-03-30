@@ -31,7 +31,7 @@ func TestCompileSyntax_SingleArg(t *testing.T) {
 
 	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	ccnt := NewCompiletimeContinuation(tpl, env)
+	ccnt := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 
 	// (syntax bindSymbolWithScopes) -> (bindSymbolWithScopes)
 	template := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)
@@ -47,7 +47,7 @@ func TestCompileSyntax_Error_NoArgs(t *testing.T) {
 
 	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	ccnt := NewCompiletimeContinuation(tpl, env)
+	ccnt := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 
 	// Empty args
 	expr := syntax.SyntaxEmptyList
@@ -63,7 +63,7 @@ func TestCompileSyntax_Error_TooManyArgs(t *testing.T) {
 
 	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	ccnt := NewCompiletimeContinuation(tpl, env)
+	ccnt := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 
 	// (syntax bindSymbolWithScopes bar) -> (bindSymbolWithScopes bar)
 	template := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)
@@ -177,7 +177,7 @@ func TestCompileSyntax_EscapeFormCompilesDirectly(t *testing.T) {
 
 	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	ccnt := NewCompiletimeContinuation(tpl, env)
+	ccnt := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 
 	// (syntax (... bindSymbolWithScopes)) - escape form should compile directly
 	ellipsis := syntax.NewSyntaxSymbol("...", nil)
@@ -205,7 +205,7 @@ func TestCompileSyntax_NonEscapeEllipsisUsesRuntimeExpansion(t *testing.T) {
 
 	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	ccnt := NewCompiletimeContinuation(tpl, env)
+	ccnt := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 
 	// (syntax (bindSymbolWithScopes ...)) - actual ellipsis, needs runtime expansion
 	foo := syntax.NewSyntaxSymbol("bindSymbolWithScopes", nil)

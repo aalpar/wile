@@ -61,7 +61,7 @@ func TestCompileBeginForSyntax_Error_NotPair(t *testing.T) {
 
 	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	ccnt := NewCompiletimeContinuation(tpl, env)
+	ccnt := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 
 	// Not a pair
 	expr := syntax.NewSyntaxSymbol("bad", nil)
@@ -76,7 +76,7 @@ func TestCompileBeginForSyntax_Empty(t *testing.T) {
 
 	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	ccnt := NewCompiletimeContinuation(tpl, env)
+	ccnt := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 
 	// Empty list singleton
 	exprPair := syntax.SyntaxEmptyList

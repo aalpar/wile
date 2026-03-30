@@ -38,6 +38,7 @@ func compileTransformerToMachineClosure(
 	env *environment.EnvironmentFrame,
 	transformerExpr syntax.SyntaxValue,
 	libraryScope *syntax.Scope,
+	evaluator MacroEvaluator,
 ) (values.Value, error) {
 	transformerPair, ok := transformerExpr.(*syntax.SyntaxPair)
 	if !ok {
@@ -69,10 +70,10 @@ func compileTransformerToMachineClosure(
 		return CompileSyntaxRules(ctx, env, transformerPair, libraryScope)
 
 	case "lambda":
-		return compileAndEvalLambdaTransformer(ctx, env, transformerPair)
+		return compileAndEvalLambdaTransformer(ctx, env, transformerPair, evaluator)
 
 	case "er-macro-transformer":
-		return compileERMacroTransformer(ctx, env, transformerPair)
+		return compileERMacroTransformer(ctx, env, transformerPair, evaluator)
 
 	default:
 		return nil, werr.WrapForeignErrorf(werr.ErrUnexpectedTransformer, "define-syntax: unsupported transformer type %q (expected syntax-rules, lambda, or er-macro-transformer)", symbol.Key)
@@ -81,31 +82,28 @@ func compileTransformerToMachineClosure(
 
 // compileAndEvalLambdaTransformer compiles a lambda expression and evaluates it at
 // compile time to produce a closure that can be used as a syntax transformer.
-func compileAndEvalLambdaTransformer(ctx context.Context, env *environment.EnvironmentFrame, lambdaExpr syntax.SyntaxValue) (*MachineClosure, error) {
+func compileAndEvalLambdaTransformer(ctx context.Context, env *environment.EnvironmentFrame, lambdaExpr syntax.SyntaxValue, evaluator MacroEvaluator) (*MachineClosure, error) {
 	tpl := NewNativeTemplate(0, 0, false)
 
 	expandEnv := env.Expand()
 
-	expandedExpr, err := NewExpanderTimeContinuation(ctx, expandEnv).ExpandExpression(lambdaExpr)
+	expandedExpr, err := NewExpanderTimeContinuation(ctx, expandEnv, evaluator).ExpandExpression(lambdaExpr)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "error expanding transformer")
 	}
 
 	cctx := NewCompileTimeCallContext(ctx, false)
-	compiler := NewCompiletimeContinuation(tpl, expandEnv)
+	compiler := NewCompiletimeContinuation(tpl, expandEnv, evaluator)
 	err = compiler.CompileExpression(cctx, expandedExpr)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "error compiling transformer")
 	}
 
-	cont := NewMachineContinuation(nil, tpl, expandEnv)
-	mc := NewMachineContext(ctx, cont)
-	err = mc.Run()
+	result, err := evaluator.EvalTemplate(ctx, tpl, expandEnv)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "error evaluating transformer")
 	}
 
-	result := mc.GetValue()
 	closure, ok := result.(*MachineClosure)
 	if !ok {
 		return nil, werr.WrapForeignErrorf(werr.ErrNotAProcedure, "define-syntax: transformer must evaluate to a procedure, got %T", result)

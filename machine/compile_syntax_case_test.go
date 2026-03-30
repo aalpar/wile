@@ -31,7 +31,7 @@ func TestCompileSyntaxCase_Error_NoArgs(t *testing.T) {
 
 	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	ccnt := NewCompiletimeContinuation(tpl, env)
+	ccnt := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 
 	// Empty args
 	expr := syntax.SyntaxEmptyList
@@ -47,7 +47,7 @@ func TestCompileSyntaxCase_Error_NoLiterals(t *testing.T) {
 
 	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	ccnt := NewCompiletimeContinuation(tpl, env)
+	ccnt := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 
 	// (input) - missing literals and clauses
 	input := syntax.NewSyntaxSymbol("x", nil)
@@ -63,7 +63,7 @@ func TestCompileSyntaxCase_Error_NoClauses(t *testing.T) {
 
 	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	ccnt := NewCompiletimeContinuation(tpl, env)
+	ccnt := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 
 	// (input ()) - missing clauses
 	input := syntax.NewSyntaxSymbol("x", nil)

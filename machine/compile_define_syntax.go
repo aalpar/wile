@@ -79,7 +79,7 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 	}
 
 	// Compile the transformer (supports syntax-rules and lambda)
-	closure, err := compileTransformerToMachineClosure(ctctx.ctx, p.env, transformerExpr, p.libraryScope)
+	closure, err := compileTransformerToMachineClosure(ctctx.ctx, p.env, transformerExpr, p.libraryScope, p.evaluator)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "could not compile transformer")
 	}
@@ -92,19 +92,21 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 		// Update existing binding
 		globalIndex = expandEnv.GetGlobalIndex(keyword)
 	}
-	if globalIndex != nil {
-		// Set scopes from the keyword symbol for hygiene
-		// This ensures local define-syntax bindings have correct scopes for lookup
-		symbolScopes := keywordSym.Scopes()
-		binding := expandEnv.GetGlobalBinding(globalIndex)
-		if binding != nil && symbolScopes != nil {
-			binding.SetScopes(symbolScopes)
-		}
+	if globalIndex == nil {
+		return werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-syntax: failed to create or find binding for %s", keyword.Key)
+	}
 
-		err = expandEnv.SetOwnGlobalValue(globalIndex, closure)
-		if err != nil {
-			return err
-		}
+	// Set scopes from the keyword symbol for hygiene
+	// This ensures local define-syntax bindings have correct scopes for lookup
+	symbolScopes := keywordSym.Scopes()
+	binding := expandEnv.GetGlobalBinding(globalIndex)
+	if binding != nil && symbolScopes != nil {
+		binding.SetScopes(symbolScopes)
+	}
+
+	err = expandEnv.SetOwnGlobalValue(globalIndex, closure)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "define-syntax: failed to store transformer for %s", keyword.Key)
 	}
 
 	// define-syntax is compile-time only, emit no runtime operations

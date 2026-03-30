@@ -139,7 +139,7 @@ func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, t
 // R7RS §5.3.2: Internal definitions use letrec* semantics - all defined names are visible
 // throughout the body, enabling forward references between defines.
 func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clause validate.ValidatedBodyAndParams, childEnv *environment.EnvironmentFrame, tpl *NativeTemplate) error {
-	childCompiler := NewCompiletimeContinuation(tpl, childEnv)
+	childCompiler := NewCompiletimeContinuation(tpl, childEnv, p.evaluator)
 	lambdaBodyContext := NewCompileTimeCallContext(ctctx.ctx, true)
 
 	body := clause.Body()

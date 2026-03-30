@@ -30,7 +30,7 @@ func TestCompileWithSyntax_Error_NoArgs(t *testing.T) {
 
 	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	ccnt := NewCompiletimeContinuation(tpl, env)
+	ccnt := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 
 	// Empty args
 	expr := syntax.SyntaxEmptyList
@@ -45,7 +45,7 @@ func TestCompileWithSyntax_Error_NoBody(t *testing.T) {
 
 	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	ccnt := NewCompiletimeContinuation(tpl, env)
+	ccnt := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 
 	// (()) - empty bindings list, no body
 	bindings := syntax.SyntaxEmptyList
@@ -61,7 +61,7 @@ func TestCompileWithSyntax_EmptyBindings(t *testing.T) {
 
 	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	ccnt := NewCompiletimeContinuation(tpl, env)
+	ccnt := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 
 	// (() body) - empty bindings, simple body
 	bindings := syntax.SyntaxEmptyList

@@ -58,13 +58,17 @@ type ExpanderTimeContinuation struct {
 	// libraryScope is set when expanding inside a library body.
 	// Threaded to CompileSyntaxRules for cross-library macro hygiene.
 	libraryScope *syntax.Scope
+	// evaluator abstracts VM execution for transformer invocation
+	// so the expander can be tested without the concrete VM.
+	evaluator MacroEvaluator
 }
 
 // NewExpanderTimeContinuation creates a new ExpanderTimeContinuation.
-func NewExpanderTimeContinuation(ctx context.Context, env *environment.EnvironmentFrame) *ExpanderTimeContinuation {
+func NewExpanderTimeContinuation(ctx context.Context, env *environment.EnvironmentFrame, evaluator MacroEvaluator) *ExpanderTimeContinuation {
 	q := &ExpanderTimeContinuation{
-		ctx: ctx,
-		env: env,
+		ctx:       ctx,
+		env:       env,
+		evaluator: evaluator,
 	}
 	return q
 }
@@ -260,13 +264,14 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 }
 
 // invokeTransformerClosure invokes a Closure (MachineClosure or ForeignClosure)
-// as a macro transformer with the given input form. If expanderCtx is non-nil,
-// it is set on the context for auxiliary syntax hygiene (R7RS §4.3.2).
+// as a macro transformer. If expanderCtx is non-nil, it is set on the context
+// for auxiliary syntax hygiene (R7RS §4.3.2). args are passed to Apply — one
+// arg for syntax-rules/lambda transformers, three for ER macros.
 //
 // On success, the caller receives the MachineContext with the result in the
 // value register and must call ReleaseSubContext when done. On error, cleanup
 // is handled internally.
-func invokeTransformerClosure(ctx context.Context, cls Closure, inputForm syntax.SyntaxValue, expanderCtx *ExpanderContext) (*MachineContext, error) {
+func invokeTransformerClosure(ctx context.Context, cls Closure, expanderCtx ExpanderCtx, args ...values.Value) (*MachineContext, error) {
 	var mc *MachineContext
 	switch c := cls.(type) {
 	case *MachineClosure:
@@ -274,7 +279,7 @@ func invokeTransformerClosure(ctx context.Context, cls Closure, inputForm syntax
 		if expanderCtx != nil {
 			mc.SetExpanderContext(expanderCtx)
 		}
-		_, err := mc.Apply(c, inputForm)
+		_, err := mc.Apply(c, args...)
 		if err != nil {
 			ReleaseSubContext(mc)
 			return nil, werr.WrapForeignErrorf(err, "failed to apply transformer")
@@ -291,7 +296,7 @@ func invokeTransformerClosure(ctx context.Context, cls Closure, inputForm syntax
 		if expanderCtx != nil {
 			mc.SetExpanderContext(expanderCtx)
 		}
-		_, err := mc.applyForeign(c, inputForm)
+		_, err := mc.applyForeign(c, args...)
 		if err != nil {
 			ReleaseSubContext(mc)
 			return nil, werr.WrapForeignErrorf(err, "failed to apply transformer")
@@ -328,7 +333,7 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 	// determine that it shouldn't match the literal => in cond's pattern.
 	expanderCtx := NewExpanderContext(p.env, p)
 
-	mc, err := invokeTransformerClosure(p.ctx, cls, inputForm, expanderCtx)
+	mc, err := p.evaluator.InvokeTransformer(p.ctx, cls, expanderCtx, inputForm)
 	if err != nil {
 		return nil, err
 	}
@@ -396,19 +401,9 @@ func (p *ExpanderTimeContinuation) invokeERTransformer(
 	expanderCtx := NewExpanderContext(p.env, p)
 
 	// Invoke the 3-arg transformer: (transformer form rename compare)
-	mc := acquireMacroContext(p.ctx, erTransformer.Closure())
-	mc.SetExpanderContext(expanderCtx)
-
-	_, err := mc.Apply(erTransformer.Closure(), rawForm, renameCls, compareCls)
+	mc, err := p.evaluator.InvokeTransformer(p.ctx, erTransformer.Closure(), expanderCtx, rawForm, renameCls, compareCls)
 	if err != nil {
-		ReleaseSubContext(mc)
-		return nil, werr.WrapForeignErrorf(err, "er-macro-transformer: failed to apply transformer")
-	}
-
-	err = mc.Run()
-	if err != nil {
-		ReleaseSubContext(mc)
-		return nil, werr.WrapForeignErrorf(err, "er-macro-transformer: transformer raised an error")
+		return nil, werr.WrapForeignErrorf(err, "er-macro-transformer: transformer failed")
 	}
 	defer ReleaseSubContext(mc)
 
@@ -500,7 +495,7 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 
 	inputForm := syntax.NewSyntaxCons(sym, cdr, sym.SourceContext())
 
-	mc, err := invokeTransformerClosure(p.ctx, cls, inputForm, nil)
+	mc, err := p.evaluator.InvokeTransformer(p.ctx, cls, nil, inputForm)
 	if err != nil {
 		return nil, false, err
 	}
@@ -549,14 +544,4 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxArgumentList(args syntax.SyntaxVa
 		return nil, werr.WrapForeignErrorf(werr.ErrNotASyntaxList, "expected a list of arguments, got %T", tail)
 	}
 	return q, nil
-}
-
-// ExpandQuasiquote handles the expansion of quasiquoted expressions.
-func (p *ExpanderTimeContinuation) ExpandQuasiquote(_ syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	return nil, nil
-}
-
-// ExpandQuote handles the expansion of quoted expressions.
-func (p *ExpanderTimeContinuation) ExpandQuote(_ syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	return nil, nil
 }

@@ -61,7 +61,7 @@ func TestCompileDefineForSyntax_Error_NoArgs(t *testing.T) {
 
 	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	ccnt := NewCompiletimeContinuation(tpl, env)
+	ccnt := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 
 	// Empty args
 	expr := syntax.SyntaxEmptyList
@@ -76,7 +76,7 @@ func TestCompileDefineForSyntax_Error_MissingExpression(t *testing.T) {
 
 	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	ccnt := NewCompiletimeContinuation(tpl, env)
+	ccnt := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 
 	// (name) - missing expression
 	name := syntax.NewSyntaxSymbol("x", nil)

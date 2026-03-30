@@ -161,13 +161,13 @@ type ResolvedImportSet struct {
 //
 // The env parameter is used only for library loading (to find the library
 // registry and resolve paths). It is NOT the target for binding installation.
-func resolveImportSet(ctx context.Context, datum values.Value, env *environment.EnvironmentFrame) (*ResolvedImportSet, error) {
+func resolveImportSet(ctx context.Context, datum values.Value, env *environment.EnvironmentFrame, evaluator MacroEvaluator) (*ResolvedImportSet, error) {
 	importSet, err := ParseImportSetFromDatum(ctx, datum)
 	if err != nil {
 		return nil, err
 	}
 
-	lib, err := LoadLibrary(ctx, importSet.LibraryName, env)
+	lib, err := LoadLibrary(ctx, importSet.LibraryName, env, evaluator)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "import: failed to load library %s",
 			importSet.LibraryName.SchemeString())
@@ -190,8 +190,8 @@ func resolveImportSet(ctx context.Context, datum values.Value, env *environment.
 // env at the appropriate phase. Used for top-level imports (both expander and
 // compiler). Library-internal imports share the resolution step (resolveImportSet)
 // but use copyLibraryBindingsDirect for installation.
-func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *environment.EnvironmentFrame, phase int) error {
-	res, err := resolveImportSet(ctx, datum, env)
+func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *environment.EnvironmentFrame, phase int, evaluator MacroEvaluator) error {
+	res, err := resolveImportSet(ctx, datum, env, evaluator)
 	if err != nil {
 		return err
 	}

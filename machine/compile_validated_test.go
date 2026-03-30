@@ -283,7 +283,7 @@ func TestCompileValidated_UnknownExprType(t *testing.T) {
 
 	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	ctc := NewCompiletimeContinuation(tpl, env)
+	ctc := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 	ctctx := NewCompileTimeCallContext(context.Background(), false)
 
 	// Create a mock ValidatedExpr that compileValidated doesn't know about

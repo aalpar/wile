@@ -51,13 +51,13 @@ func evalScheme(t *testing.T, code string) values.Value {
 
 		// Expand
 		ectx := context.Background()
-		expanded, err := machine.NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
+		expanded, err := machine.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 		qt.Assert(t, err, qt.IsNil)
 
 		// Compile
 		tpl := machine.NewNativeTemplate(0, 0, false)
 		cctx := machine.NewCompileTimeCallContext(context.Background(), false)
-		err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
+		err = machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 		qt.Assert(t, err, qt.IsNil)
 
 		// Run

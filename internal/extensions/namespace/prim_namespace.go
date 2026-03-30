@@ -76,7 +76,7 @@ func PrimMakeNamespace(mc *machine.MachineContext) error {
 			return werr.WrapForeignErrorf(parseErr, "make-namespace: invalid import spec")
 		}
 
-		lib, loadErr := machine.LoadLibrary(mc.Context(), importSet.LibraryName, callerEnv)
+		lib, loadErr := machine.LoadLibrary(mc.Context(), importSet.LibraryName, callerEnv, machine.NewVMMacroEvaluator())
 		if loadErr != nil {
 			return werr.WrapForeignErrorf(loadErr, "make-namespace: failed to load %s",
 				importSet.LibraryName.SchemeString())
@@ -255,7 +255,7 @@ func PrimNamespaceRequire(mc *machine.MachineContext) error {
 		return werr.WrapForeignErrorf(parseErr, "namespace-require: invalid import spec")
 	}
 
-	lib, loadErr := machine.LoadLibrary(mc.Context(), importSet.LibraryName, callerEnv)
+	lib, loadErr := machine.LoadLibrary(mc.Context(), importSet.LibraryName, callerEnv, machine.NewVMMacroEvaluator())
 	if loadErr != nil {
 		return werr.WrapForeignErrorf(loadErr, "namespace-require: failed to load %s",
 			importSet.LibraryName.SchemeString())

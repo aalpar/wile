@@ -628,13 +628,13 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 func expandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver machine.FileResolver) (*machine.NativeTemplate, error) {
 	tpl := machine.NewEmptyNativeTemplate()
 
-	expanded, err := machine.NewExpanderTimeContinuation(ctx, env).ExpandExpression(stx)
+	expanded, err := machine.NewExpanderTimeContinuation(ctx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	if err != nil {
 		return nil, err
 	}
 
 	cctx := machine.NewCompileTimeCallContext(ctx, false)
-	compiler := machine.NewCompiletimeContinuation(tpl, env)
+	compiler := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	if resolver != nil {
 		compiler.SetFileResolver(resolver)
 	}

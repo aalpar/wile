@@ -454,9 +454,9 @@ func TestSourceRecording_Symbol(t *testing.T) {
 	stx, _ := p.ReadSyntax(context.TODO())
 	tpl := NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
-	expanded, _ := NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
+	expanded, _ := NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator()).ExpandExpression(stx)
 	cctx := NewCompileTimeCallContext(context.Background(), false)
-	_ = NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
+	_ = NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 
 	// Now reference x
 	rdr = strings.NewReader("x")
@@ -465,10 +465,10 @@ func TestSourceRecording_Symbol(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	tpl2 := NewNativeTemplate(0, 0, false)
-	expanded, err = NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
+	expanded, err = NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator()).ExpandExpression(stx)
 	c.Assert(err, qt.IsNil)
 
-	err = NewCompiletimeContinuation(tpl2, env).CompileExpression(cctx, expanded)
+	err = NewCompiletimeContinuation(tpl2, env, NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	c.Assert(err, qt.IsNil)
 
 	source := tpl2.SourceAt(0)
@@ -487,11 +487,11 @@ func TestSourceRecording_Literal(t *testing.T) {
 
 	tpl := NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
-	expanded, err := NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
+	expanded, err := NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator()).ExpandExpression(stx)
 	c.Assert(err, qt.IsNil)
 
 	cctx := NewCompileTimeCallContext(context.Background(), false)
-	err = NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
+	err = NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	c.Assert(err, qt.IsNil)
 
 	source := tpl.SourceAt(0)

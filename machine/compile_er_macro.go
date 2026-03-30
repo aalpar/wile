@@ -28,6 +28,7 @@ func compileERMacroTransformer(
 	ctx context.Context,
 	env *environment.EnvironmentFrame,
 	erForm *syntax.SyntaxPair,
+	evaluator MacroEvaluator,
 ) (*ERMacroTransformer, error) {
 	// Extract the lambda expression from (er-macro-transformer <lambda>)
 	cdr := erForm.SyntaxCdr()
@@ -58,7 +59,7 @@ func compileERMacroTransformer(
 
 	// Compile and evaluate the lambda to get a MachineClosure.
 	// compileAndEvalLambdaTransformer handles expansion, compilation, and evaluation.
-	closure, err := compileAndEvalLambdaTransformer(ctx, env, lambdaExpr)
+	closure, err := compileAndEvalLambdaTransformer(ctx, env, lambdaExpr, evaluator)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(
 			err,

@@ -44,7 +44,7 @@ func RunProgramASTWithEnv(t *testing.T, env *environment.EnvironmentFrame, prog 
 	t.Helper()
 	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := machine.NewCompiletimeContinuation(tpl, env)
+	ccnt := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	sctx := syntax.NewZeroValueSourceContext()
 	err := ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
 	if err != nil {
@@ -76,14 +76,14 @@ func RunSchemeCodeWithEnvAndContext(ctx context.Context, t *testing.T, env *envi
 		return nil, err
 	}
 
-	expanded, err := machine.NewExpanderTimeContinuation(ctx, env).ExpandExpression(stx)
+	expanded, err := machine.NewExpanderTimeContinuation(ctx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	if err != nil {
 		return nil, err
 	}
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	cctx := machine.NewCompileTimeCallContext(ctx, false)
-	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
+	err = machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	if err != nil {
 		return nil, err
 	}

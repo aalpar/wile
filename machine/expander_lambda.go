@@ -92,7 +92,7 @@ func (p *ExpanderTimeContinuation) expandLambdaForm(sym *syntax.SyntaxSymbol, ex
 	unwrappedExprs, wasBeginWrapped := unwrapBeginBodyWithFlag(bodyExprs)
 
 	// Expand body in the child environment, compiling define-syntax as encountered
-	childExpander := NewExpanderTimeContinuation(p.ctx, childEnv)
+	childExpander := NewExpanderTimeContinuation(p.ctx, childEnv, p.evaluator)
 	expandedExprs, err := childExpander.ExpandBodyWithDefineSyntax(unwrappedExprs)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "lambda: failed to expand body")

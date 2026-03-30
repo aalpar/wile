@@ -38,14 +38,14 @@ func evalScheme(t *testing.T, env *environment.EnvironmentFrame, code string) (v
 	}
 
 	ectx := context.Background()
-	expanded, err := machine.NewExpanderTimeContinuation(ectx, env).ExpandExpression(stx)
+	expanded, err := machine.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	if err != nil {
 		return nil, err
 	}
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
-	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
+	err = machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	if err != nil {
 		return nil, err
 	}

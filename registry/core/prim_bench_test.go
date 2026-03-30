@@ -108,14 +108,14 @@ func benchCompile(ctx context.Context, b *testing.B, env *environment.Environmen
 		b.Fatal(err)
 	}
 
-	expanded, err := machine.NewExpanderTimeContinuation(ctx, env).ExpandExpression(stx)
+	expanded, err := machine.NewExpanderTimeContinuation(ctx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	if err != nil {
 		b.Fatal(err)
 	}
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
 	cctx := machine.NewCompileTimeCallContext(ctx, false)
-	err = machine.NewCompiletimeContinuation(tpl, env).CompileExpression(cctx, expanded)
+	err = machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	if err != nil {
 		b.Fatal(err)
 	}

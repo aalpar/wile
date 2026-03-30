@@ -71,7 +71,7 @@ func TestSyntaxRulesSimpleVariable(t *testing.T) {
 	args := extractDefineSyntaxArgs(t, defineSyntaxForm)
 
 	// Compile define-syntax
-	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
+	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
 	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
@@ -114,7 +114,7 @@ func TestSyntaxRulesWithLiteral(t *testing.T) {
 	args := extractDefineSyntaxArgs(t, defineSyntaxForm)
 
 	// Compile define-syntax
-	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
+	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
 	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
@@ -150,7 +150,7 @@ func TestSyntaxRulesWithEllipsis(t *testing.T) {
 	args := extractDefineSyntaxArgs(t, defineSyntaxForm)
 
 	// Compile define-syntax
-	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
+	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
 	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
@@ -191,7 +191,7 @@ func TestSyntaxRulesWithCustomEllipsis(t *testing.T) {
 	args := extractDefineSyntaxArgs(t, defineSyntaxForm)
 
 	// Compile define-syntax
-	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
+	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
 	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
@@ -232,7 +232,7 @@ func TestSyntaxRulesWithUnderscoreInLiterals(t *testing.T) {
 	args := extractDefineSyntaxArgs(t, defineSyntaxForm)
 
 	// Compile define-syntax
-	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
+	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
 	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	if err != nil {
@@ -270,7 +270,7 @@ func TestSyntaxRulesEllipsisInLiteralsAccepted(t *testing.T) {
 		args := extractDefineSyntaxArgs(t, defineSyntaxForm)
 
 		// Compile should succeed - ellipsis in literals disables ellipsis functionality
-		ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
+		ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
 		ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 		err := ctc.CompileDefineSyntax(ctctx, args)
 		if err != nil {
@@ -290,7 +290,7 @@ func TestSyntaxRulesEllipsisInLiteralsAccepted(t *testing.T) {
 		args := extractDefineSyntaxArgs(t, defineSyntaxForm)
 
 		// Compile should succeed - ellipsis in literals disables ellipsis functionality
-		ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env)
+		ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
 		ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
 		err := ctc.CompileDefineSyntax(ctctx, args)
 		if err != nil {

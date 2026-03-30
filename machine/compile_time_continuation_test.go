@@ -371,7 +371,7 @@ func evalSchemeString(code string) (values.Value, error) {
 
 		// Expand
 		ectx := context.Background()
-		econt := NewExpanderTimeContinuation(ectx, env)
+		econt := NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator())
 		expanded, err := econt.ExpandExpression(stx)
 		if err != nil {
 			return nil, err
@@ -379,7 +379,7 @@ func evalSchemeString(code string) (values.Value, error) {
 
 		// Compile
 		tpl := NewNativeTemplate(0, 0, false)
-		cctx := NewCompiletimeContinuation(tpl, env)
+		cctx := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 		cnt := NewCompileTimeCallContext(context.Background(), false)
 		err = cctx.CompileExpression(cnt, expanded)
 		if err != nil {
@@ -635,9 +635,9 @@ func TestCompileContext_CompileMeta(t *testing.T) {
 
 func newTopLevelThunk(prog syntax.SyntaxValue, env *environment.EnvironmentFrame) (*MachineContinuation, error) {
 	tpl := NewNativeTemplate(0, 0, false)
-	cctx := NewCompiletimeContinuation(tpl, env)
+	cctx := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 	ectx := context.Background()
-	econt := NewExpanderTimeContinuation(ectx, env)
+	econt := NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator())
 	prog, err := econt.ExpandExpression(prog)
 	if err != nil {
 		return nil, err
@@ -927,7 +927,7 @@ func TestExpandQuasiquoteAndQuote(t *testing.T) {
 	// Test quote expansion
 	quoteProg := values.List(values.NewSymbol("quote"), values.NewSymbol("x"))
 	ectx := context.Background()
-	econt := NewExpanderTimeContinuation(ectx, env)
+	econt := NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator())
 	expanded, err := econt.ExpandExpression(schemeutil.DatumToSyntaxValue(context.Background(), sctx, quoteProg))
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, expanded, qt.IsNotNil)
@@ -1113,45 +1113,6 @@ func TestCompileIfBranches(t *testing.T) {
 	mc2 := NewMachineContext(context.Background(), cont2)
 	err = mc2.Run()
 	qt.Assert(t, err, qt.IsNil)
-}
-
-// TestExpandQuasiquoteAndQuoteDirect tests the expander methods directly
-func TestExpandQuasiquoteAndQuoteDirect(t *testing.T) {
-	env := newNamespace(environment.NewNamespace().Runtime())
-	err := RegisterSyntaxCompilers(env)
-	qt.Assert(t, err, qt.IsNil)
-
-	econt := NewExpanderTimeContinuation(context.Background(), env)
-	sctx := syntax.NewZeroValueSourceContext()
-
-	// Test ExpandQuote - currently returns nil, nil
-	quoteExpr := syntax.NewSyntaxCons(
-		syntax.NewSyntaxSymbol("quote", sctx),
-		syntax.NewSyntaxCons(
-			syntax.NewSyntaxSymbol("x", sctx),
-			syntax.SyntaxEmptyList,
-			sctx,
-		),
-		sctx,
-	)
-	expanded, err := econt.ExpandQuote(quoteExpr)
-	// The function returns nil, nil (unimplemented)
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, expanded, qt.IsNil)
-
-	// Test ExpandQuasiquote - currently returns nil, nil
-	qqExpr := syntax.NewSyntaxCons(
-		syntax.NewSyntaxSymbol("quasiquote", sctx),
-		syntax.NewSyntaxCons(
-			syntax.NewSyntaxSymbol("y", sctx),
-			syntax.SyntaxEmptyList,
-			sctx,
-		),
-		sctx,
-	)
-	expanded, err = econt.ExpandQuasiquote(qqExpr)
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, expanded, qt.IsNil)
 }
 
 // TestCompileUnquoteError tests error when compiling unquote outside quasiquote
@@ -1810,7 +1771,7 @@ func TestCompileSelfEvaluatingNil(t *testing.T) {
 func TestCompileSelfEvaluatingNilDirect(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 	tpl := NewNativeTemplate(0, 0, false)
-	ctc := NewCompiletimeContinuation(tpl, env)
+	ctc := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 	ctctx := NewCompileTimeCallContext(context.Background(), false)
 
 	// Call with nil to test the nil branch
@@ -2047,7 +2008,7 @@ func TestFindFileCWDFallback(t *testing.T) {
 
 	env := newNamespace(environment.NewNamespace().Runtime())
 	ctctx := NewCompileTimeCallContext(context.Background(), false)
-	cont := NewCompiletimeContinuation(NewNativeTemplate(0, 0, false), env)
+	cont := NewCompiletimeContinuation(NewNativeTemplate(0, 0, false), env, NewVMMacroEvaluator())
 
 	// findFile should resolve "cwd-test.scm" via CWD fallback.
 	// Use filepath.EvalSymlinks on dir to normalize: on macOS, t.TempDir()
@@ -2066,7 +2027,7 @@ func TestFindFileCWDFallback(t *testing.T) {
 func TestFindFileEmptyPath(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())
 	ctctx := NewCompileTimeCallContext(context.Background(), false)
-	cont := NewCompiletimeContinuation(NewNativeTemplate(0, 0, false), env)
+	cont := NewCompiletimeContinuation(NewNativeTemplate(0, 0, false), env, NewVMMacroEvaluator())
 
 	_, _, err := findFile(cont, ctctx, "")
 	qt.Assert(t, err, qt.IsNotNil)

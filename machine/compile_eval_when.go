@@ -189,7 +189,7 @@ func (p *CompileTimeContinuation) evalWhenCompileForRuntime(ctctx CompileTimeCal
 	}
 
 	// Create expander for macro expansion
-	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env)
+	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env, p.evaluator)
 
 	// Collect all expressions
 	var exprs []syntax.SyntaxValue

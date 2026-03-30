@@ -90,7 +90,7 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	// Uses the expand-phase environment so the expression can access other
 	// define-for-syntax bindings and runtime primitives
 	expandEnv := p.env.Expand()
-	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env)
+	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env, p.evaluator)
 	result, err := p.expandCompileExecute(ctctx.ctx, ctctx, valueExpr, expandEnv, expander, "define-for-syntax")
 	if err != nil {
 		return err
@@ -98,11 +98,12 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 
 	// Store the result in the expand phase environment with BindingTypeVariable
 	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(nameSym, environment.BindingTypeVariable)
-	if globalIndex != nil {
-		err = expandEnv.SetOwnGlobalValue(globalIndex, result)
-		if err != nil {
-			return werr.WrapForeignErrorf(err, "define-for-syntax: failed to store value")
-		}
+	if globalIndex == nil {
+		return werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-for-syntax: failed to create binding for %s", nameSym.Key)
+	}
+	err = expandEnv.SetOwnGlobalValue(globalIndex, result)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "define-for-syntax: failed to store value for %s", nameSym.Key)
 	}
 
 	// define-for-syntax has no runtime effect - don't emit any operations

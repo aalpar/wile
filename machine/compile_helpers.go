@@ -45,21 +45,19 @@ func (p *CompileTimeContinuation) expandCompileExecute(
 	}
 
 	tmpTpl := NewNativeTemplate(0, 0, false)
-	tmpCcnt := NewCompiletimeContinuation(tmpTpl, expandEnv)
+	tmpCcnt := NewCompiletimeContinuation(tmpTpl, expandEnv, p.evaluator)
 
 	err = tmpCcnt.CompileExpression(ctctx, expandedExpr)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "%s: compilation failed", errPrefix)
 	}
 
-	cont := NewMachineContinuation(nil, tmpTpl, expandEnv)
-	mc := NewMachineContext(ctx, cont)
-	err = mc.Run()
+	result, err := p.evaluator.EvalTemplate(ctx, tmpTpl, expandEnv)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "%s: evaluation failed", errPrefix)
 	}
 
-	return mc.GetValue(), nil
+	return result, nil
 }
 
 // executeFormsAtCompileTime expands, compiles, and executes each expression
@@ -70,7 +68,7 @@ func (p *CompileTimeContinuation) executeFormsAtCompileTime(
 	bodyPair *syntax.SyntaxPair,
 ) error {
 	expandEnv := p.env.Expand()
-	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env)
+	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env, p.evaluator)
 
 	v, err := bodyPair.SyntaxForEach(ctctx.ctx, func(_ context.Context, _ int, _ bool, stxVal syntax.SyntaxValue) error {
 		_, err := p.expandCompileExecute(ctctx.ctx, ctctx, stxVal, expandEnv, expander, formName)

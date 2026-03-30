@@ -64,7 +64,7 @@ type MachineContext struct {
 	ctx context.Context
 	vmState
 	cont             *MachineContinuation // current continuation
-	expanderCtx      *ExpanderContext     // set during macro transformer execution for syntax-local-* access
+	expanderCtx      ExpanderCtx          // set during macro transformer execution for syntax-local-* access
 	exceptionHandler *ExceptionHandler    // current exception handler chain for R7RS exceptions
 	debugger         *Debugger            // optional debugger for breakpoints and stepping
 	parentMC         *MachineContext      // parent context for sub-contexts, enables call/cc escape tracking
@@ -820,12 +820,12 @@ func (p *MachineContext) Run() error {
 
 // SetExpanderContext sets the expander context for this machine context.
 // This is called when invoking macro transformers to enable syntax-local-* primitives.
-func (p *MachineContext) SetExpanderContext(ctx *ExpanderContext) {
+func (p *MachineContext) SetExpanderContext(ctx ExpanderCtx) {
 	p.expanderCtx = ctx
 }
 
 // ExpanderContext returns the expander context, or nil if not in expansion context.
-func (p *MachineContext) ExpanderContext() *ExpanderContext {
+func (p *MachineContext) ExpanderContext() ExpanderCtx {
 	return p.expanderCtx
 }
 

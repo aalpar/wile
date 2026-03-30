@@ -113,7 +113,7 @@ func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext
 	// (since cond-expand is not expanded, we must expand the body here)
 	_, err = syntax.SyntaxForEach(ctctx.ctx, bodyPair, func(_ context.Context, _ int, hasNext bool, expr syntax.SyntaxValue) error {
 		// Expand the expression
-		expanded, expandErr := NewExpanderTimeContinuation(ctctx.ctx, p.env).ExpandExpression(expr)
+		expanded, expandErr := NewExpanderTimeContinuation(ctctx.ctx, p.env, p.evaluator).ExpandExpression(expr)
 		if expandErr != nil {
 			return werr.WrapForeignErrorf(expandErr, "cond-expand: error expanding body expression")
 		}

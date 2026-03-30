@@ -63,7 +63,7 @@ func makeTestQuasisyntax(body syntax.SyntaxValue) *syntax.SyntaxPair {
 func newTestCompiler() (*CompileTimeContinuation, *environment.EnvironmentFrame) {
 	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	ccnt := NewCompiletimeContinuation(tpl, env)
+	ccnt := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 	return ccnt, env
 }
 
@@ -74,7 +74,7 @@ func TestCompileQuasisyntax_Error_NoArgs(t *testing.T) {
 
 	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	ccnt := NewCompiletimeContinuation(tpl, env)
+	ccnt := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 
 	// Empty args
 	expr := syntax.SyntaxEmptyList
@@ -89,7 +89,7 @@ func TestCompileUnsyntax_Error(t *testing.T) {
 
 	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	ccnt := NewCompiletimeContinuation(tpl, env)
+	ccnt := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 
 	expr := syntax.SyntaxEmptyList
 
@@ -103,7 +103,7 @@ func TestCompileUnsyntaxSplicing_Error(t *testing.T) {
 
 	env := newNamespace(environment.NewNamespace().Runtime())
 	tpl := NewNativeTemplate(0, 0, false)
-	ccnt := NewCompiletimeContinuation(tpl, env)
+	ccnt := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator())
 
 	expr := syntax.SyntaxEmptyList
 
