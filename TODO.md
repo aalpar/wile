@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-03-25
+**Last Updated**: 2026-03-30
 
 ### Current Project Status
 
@@ -23,11 +23,26 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 - [x] **Peephole optimizer double-restore** [High, Bug, Fixed]: `callForeignCached` and `applyForeign` would double-restore when PrimCallCC inline mode called `ApplyCallable` with a `ForeignClosure` (e.g., `(call/cc procedure?)`). Fixed with `savedCont` pointer-identity guard. `plans/OPTIMIZER-FIX.md`
 - [x] **Degenerate form pipeline tests** [Correctness, Done]: Full-pipeline tests (string → tokenize → parse → expand → compile → run) for degenerate forms of all core special forms and macro-based derived forms. PR #571.
+- [ ] **Sub-context winding stack inheritance hazard** [High, Correctness]: `NewSubContext()` does not inherit the winding stack. Every call site that runs user closures must manually call `sub.SetWindingStack(mc.WindingStack())`. Forgetting silently skips `dynamic-wind` before/after thunks on continuation re-invocation. Fix: require winding stack as a `NewSubContext` parameter, or add runtime assertion. `machine/machine_context_subcontext.go`.
+- [ ] **`cond-expand (library ...)` bypasses FileResolver** [High, S]: `machine/features.go:140-144` — `libraryRequirement.IsSatisfied()` uses `os.Stat` directly instead of FileResolver chain. Embedders using `WithSourceFS()` get incorrect feature detection. Fix: pass `FileResolver` into `FeatureRequirement` interface. (Moved from Nice-to-Haves.)
 - L7 (`char-ready?`/`u8-ready?` always `#t`) — documented semantic difference, no fix planned
 
 ---
 
 ## Refactoring
+
+### High Priority
+
+- [ ] **Extract interface types from `environment/` `any` fields** [High, M]: `FileResolver` and `LibraryRegistry` stored as `any` in `environment/namespace.go:68-75` to break circular import with `machine/`. Four methods traffic in untyped `any`; type safety lost at package boundary. Fix: extract interfaces to a shared package (e.g., `resolution/`) that both `environment/` and `machine/` import.
+- [ ] **`Stack.Pull()` is O(n) in VM hot path** [High, M]: `machine/stack.go:41-48` shifts all elements left via `copy()` on every non-tail procedure call (`OpPull`, `OpPullApply`). For typical 1-3 arg calls the cost is negligible, but `apply` with long argument lists pays O(n). Fix: replace with deque (circular buffer), or change calling convention to avoid Pull entirely.
+- [ ] **Split `ffi.go` by concern** [Medium, S]: 1010 lines mixing arg converter dispatch, composite converters (slice/map/struct/callback), return converters, and wrapper generation. Five independent concerns concatenated in one file. Split into `ffi.go` (spec), `ffi_arg_converters.go`, `ffi_ret_converters.go`, `ffi_wrapper.go`.
+- [ ] **Engine initialization order invariant** [Medium, S]: `engine.go:121-207` has implicit 6-step ordering (config → registry → namespace → bootstrap → file resolver → library system). Enforced by code sequence, not types. Add invariant comment and negative test validating order matters.
+
+### Medium Priority
+
+- [ ] **`machine/` mega-package decomposition** [Medium, L]: 102 files, 20.7K LOC mixing VM runtime, compiler, and expander. Can't reuse compiler without VM. Already tracked in `plans/ARCHITECTURE.md` as "module decomposition". When ready: extract `machine/compiler/` and `machine/expander/`.
+- [ ] **`file_resolver.go` chain of responsibility** [Medium, M]: 556 lines, each resolver mixes 6 concerns (load-path traversal, library lookup, `SCHEME_INCLUDE_PATH`, security, path normalization, CWD fallback). Adding a new resolver requires duplicating all 6 steps. Extract composable single-concern resolver types.
+- [ ] **Timing-dependent concurrency tests** [Medium, M]: 11 `time.Sleep` calls across 4 test files (`values/condition_variable_test.go` has 7). Replace with channel-based sync or polling with timeout to eliminate CI flakiness.
 
 ### Low Priority
 
@@ -124,7 +139,6 @@ No demand signal. Speculative or research-only.
 - [ ] **Disassembler** Implement a disassembler for Wile
 - [ ] **CompilationError** does not have source location, nor does it have an identity as a SchemeError and no Wrap* constructor.  Look into CompilationError and determine where it sits between Scheme and Foreign errors
 - [ ] **RuntimeError** does not have an identity as SchemeError or ForeignError.  It also does not have a constructor
-- [ ] **cond-expand (library ...) with fs.FS** `FindLibraryFile` in `features.go` uses `os.Stat` directly; `cond-expand (library ...)` cannot detect libraries in a virtual `fs.FS`. Requires passing `FileResolver` into the `FeatureRequirement` interface.
 - [ ] **Scheme Dissasembly** "What does this compile to?" — When debugging or implementing compiler changes, I reason about bytecode by reading Go compiler code. A disassemble command that shows the opcode sequence for a Scheme expression would let me verify compilation directly instead of tracing through `compile_*.go` by hand. The disassembly one would have the highest impact — I'd use it constantly when working on the compiler, optimizer, or debugging macro expansion.
 - [ ] **Primitive Search** "What primitives exist matching X?" — When implementing features or checking coverage, I grep across `registry/core/prim_*.go` files. A queryable primitive registry ("show me all string primitives" or "what's the signature of assoc?") would be faster.
 - [ ] **Expression Evaluation**  "Does this expression raise or return?" — Quick smoke tests. The eval tool covers this, but I'm not sure how much I actually use it vs. reading code. Honest question — does eval return error details, or just success/failure?
