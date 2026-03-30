@@ -394,7 +394,7 @@ func TestLoadLibrary_Simple(t *testing.T) {
 
 	// Load the simple library
 	name := machine.NewLibraryName("test", "simple")
-	lib, err := machine.LoadLibrary(context.Background(), name, env)
+	lib, err := machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNil)
 	c.Assert(lib, qt.IsNotNil)
 
@@ -414,10 +414,10 @@ func TestLoadLibrary_Cached(t *testing.T) {
 
 	// Load the same library twice
 	name := machine.NewLibraryName("test", "simple")
-	lib1, err := machine.LoadLibrary(context.Background(), name, env)
+	lib1, err := machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNil)
 
-	lib2, err := machine.LoadLibrary(context.Background(), name, env)
+	lib2, err := machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNil)
 
 	// Should return the same cached library
@@ -430,7 +430,7 @@ func TestLoadLibrary_WithImports(t *testing.T) {
 
 	// Load the importer library (which imports test/simple)
 	name := machine.NewLibraryName("test", "importer")
-	lib, err := machine.LoadLibrary(context.Background(), name, env)
+	lib, err := machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNil)
 	c.Assert(lib, qt.IsNotNil)
 
@@ -451,7 +451,7 @@ func TestLoadLibrary_CircularDependency(t *testing.T) {
 
 	// Try to load a library with circular dependency
 	name := machine.NewLibraryName("test", "circular-a")
-	_, err := machine.LoadLibrary(context.Background(), name, env)
+	_, err := machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "circular")
 }
@@ -462,7 +462,7 @@ func TestLoadLibrary_NotFound(t *testing.T) {
 
 	// Try to load a non-existent library
 	name := machine.NewLibraryName("nonexistent", "lib")
-	_, err := machine.LoadLibrary(context.Background(), name, env)
+	_, err := machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "not found")
 }
@@ -849,7 +849,7 @@ func TestLoadLibrary_IncludeStampsLibraryScope(t *testing.T) {
 
 	// Load the library that uses (include "include-body.scm")
 	name := machine.NewLibraryName("test", "include-lib")
-	lib, err := machine.LoadLibrary(context.Background(), name, env)
+	lib, err := machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNil)
 	c.Assert(lib, qt.IsNotNil)
 

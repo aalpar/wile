@@ -1115,45 +1115,6 @@ func TestCompileIfBranches(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 }
 
-// TestExpandQuasiquoteAndQuoteDirect tests the expander methods directly
-func TestExpandQuasiquoteAndQuoteDirect(t *testing.T) {
-	env := newNamespace(environment.NewNamespace().Runtime())
-	err := RegisterSyntaxCompilers(env)
-	qt.Assert(t, err, qt.IsNil)
-
-	econt := NewExpanderTimeContinuation(context.Background(), env, NewVMMacroEvaluator())
-	sctx := syntax.NewZeroValueSourceContext()
-
-	// Test ExpandQuote - currently returns nil, nil
-	quoteExpr := syntax.NewSyntaxCons(
-		syntax.NewSyntaxSymbol("quote", sctx),
-		syntax.NewSyntaxCons(
-			syntax.NewSyntaxSymbol("x", sctx),
-			syntax.SyntaxEmptyList,
-			sctx,
-		),
-		sctx,
-	)
-	expanded, err := econt.ExpandQuote(quoteExpr)
-	// The function returns nil, nil (unimplemented)
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, expanded, qt.IsNil)
-
-	// Test ExpandQuasiquote - currently returns nil, nil
-	qqExpr := syntax.NewSyntaxCons(
-		syntax.NewSyntaxSymbol("quasiquote", sctx),
-		syntax.NewSyntaxCons(
-			syntax.NewSyntaxSymbol("y", sctx),
-			syntax.SyntaxEmptyList,
-			sctx,
-		),
-		sctx,
-	)
-	expanded, err = econt.ExpandQuasiquote(qqExpr)
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, expanded, qt.IsNil)
-}
-
 // TestCompileUnquoteError tests error when compiling unquote outside quasiquote
 func TestCompileUnquoteError(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())

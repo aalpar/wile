@@ -98,11 +98,12 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 
 	// Store the result in the expand phase environment with BindingTypeVariable
 	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(nameSym, environment.BindingTypeVariable)
-	if globalIndex != nil {
-		err = expandEnv.SetOwnGlobalValue(globalIndex, result)
-		if err != nil {
-			return werr.WrapForeignErrorf(err, "define-for-syntax: failed to store value")
-		}
+	if globalIndex == nil {
+		return werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-for-syntax: failed to create binding for %s", nameSym.Key)
+	}
+	err = expandEnv.SetOwnGlobalValue(globalIndex, result)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "define-for-syntax: failed to store value for %s", nameSym.Key)
 	}
 
 	// define-for-syntax has no runtime effect - don't emit any operations

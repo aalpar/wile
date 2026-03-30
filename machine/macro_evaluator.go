@@ -18,7 +18,6 @@ import (
 	"context"
 
 	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 )
 
@@ -31,12 +30,14 @@ type MacroEvaluator interface {
 	// for define-syntax lambda transformers at compile time.
 	EvalTemplate(ctx context.Context, tpl *NativeTemplate, env *environment.EnvironmentFrame) (values.Value, error)
 
-	// InvokeTransformer calls a closure as a macro transformer with the given
-	// input form. expanderCtx is set on the VM context for auxiliary syntax
-	// hygiene (R7RS Section 4.3.2). On success, the caller receives the
-	// MachineContext with the result in the value register and must call
-	// ReleaseSubContext when done.
-	InvokeTransformer(ctx context.Context, cls Closure, input syntax.SyntaxValue, expanderCtx ExpanderCtx) (*MachineContext, error)
+	// InvokeTransformer calls a closure as a macro transformer.
+	// expanderCtx is set on the VM context for auxiliary syntax
+	// hygiene (R7RS Section 4.3.2); nil is valid when no hygiene context
+	// is needed (e.g. ExpandOnce). args are passed to Apply — one arg for
+	// syntax-rules/lambda transformers, three for ER macros (form, rename,
+	// compare). On success, the caller receives the MachineContext with the
+	// result in the value register and must call ReleaseSubContext when done.
+	InvokeTransformer(ctx context.Context, cls Closure, expanderCtx ExpanderCtx, args ...values.Value) (*MachineContext, error)
 }
 
 // vmMacroEvaluator implements MacroEvaluator using the real VM execution path.
@@ -57,12 +58,15 @@ func (p *vmMacroEvaluator) EvalTemplate(ctx context.Context, tpl *NativeTemplate
 	mc := NewMachineContext(ctx, cont)
 	err := mc.Run()
 	if err != nil {
+		ReleaseSubContext(mc)
 		return nil, err
 	}
-	return mc.GetValue(), nil
+	q := mc.GetValue()
+	ReleaseSubContext(mc)
+	return q, nil
 }
 
 // InvokeTransformer delegates to invokeTransformerClosure.
-func (p *vmMacroEvaluator) InvokeTransformer(ctx context.Context, cls Closure, input syntax.SyntaxValue, expanderCtx ExpanderCtx) (*MachineContext, error) {
-	return invokeTransformerClosure(ctx, cls, input, expanderCtx)
+func (p *vmMacroEvaluator) InvokeTransformer(ctx context.Context, cls Closure, expanderCtx ExpanderCtx, args ...values.Value) (*MachineContext, error) {
+	return invokeTransformerClosure(ctx, cls, expanderCtx, args...)
 }

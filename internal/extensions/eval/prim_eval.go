@@ -310,7 +310,7 @@ func PrimEnvironment(mc *machine.MachineContext) error {
 		}
 
 		// Load the library (uses callerEnv for registry access)
-		lib, err := machine.LoadLibrary(mc.Context(), importSet.LibraryName, callerEnv)
+		lib, err := machine.LoadLibrary(mc.Context(), importSet.LibraryName, callerEnv, machine.NewVMMacroEvaluator())
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "environment: failed to load %s",
 				importSet.LibraryName.SchemeString())

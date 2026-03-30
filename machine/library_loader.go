@@ -47,7 +47,7 @@ import (
 // 4. Parses and compiles the define-library form
 // 5. Executes the library to create runtime bindings
 // 6. Registers the library in the registry
-func LoadLibrary(ctx context.Context, name LibraryName, env *environment.EnvironmentFrame) (*CompiledLibrary, error) {
+func LoadLibrary(ctx context.Context, name LibraryName, env *environment.EnvironmentFrame, evaluator MacroEvaluator) (*CompiledLibrary, error) {
 	registryAny := env.LibraryRegistry()
 	if registryAny == nil {
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration, "load-library: no library registry configured")
@@ -95,7 +95,7 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 	}
 	defer f.Close() //nolint:errcheck
 
-	lib, err = loadLibraryFromReader(ctx, f, filePath, name, env)
+	lib, err = loadLibraryFromReader(ctx, f, filePath, name, env, evaluator)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err,
 			"error loading library %s from %s", name.SchemeString(), filePath)
@@ -111,7 +111,7 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 }
 
 // loadLibraryFromReader parses, compiles, and executes a library from an open reader.
-func loadLibraryFromReader(ctx context.Context, r io.Reader, filePath string, expectedName LibraryName, callerEnv *environment.EnvironmentFrame) (*CompiledLibrary, error) {
+func loadLibraryFromReader(ctx context.Context, r io.Reader, filePath string, expectedName LibraryName, callerEnv *environment.EnvironmentFrame, evaluator MacroEvaluator) (*CompiledLibrary, error) {
 	// Push to stack after successful open, pop on exit.
 	stack := callerEnv.LoadPathStack()
 	if stack != nil {
@@ -160,7 +160,7 @@ func loadLibraryFromReader(ctx context.Context, r io.Reader, filePath string, ex
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "expected define-library, got %s", symName)
 	}
 
-	lib, err := compileAndExecuteLibrary(ctx, stx, expectedName, libEnv, filePath)
+	lib, err := compileAndExecuteLibrary(ctx, stx, expectedName, libEnv, filePath, evaluator)
 	if err != nil {
 		return nil, err
 	}
@@ -169,12 +169,12 @@ func loadLibraryFromReader(ctx context.Context, r io.Reader, filePath string, ex
 }
 
 // compileAndExecuteLibrary compiles a define-library form and executes it.
-func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expectedName LibraryName, libEnv *environment.EnvironmentFrame, filePath string) (*CompiledLibrary, error) {
+func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expectedName LibraryName, libEnv *environment.EnvironmentFrame, filePath string, evaluator MacroEvaluator) (*CompiledLibrary, error) {
 	// Create a template for the top-level compilation (will be empty after define-library)
 	tpl := NewNativeTemplate(0, 0, false)
 
 	// Expand the form
-	expanded, err := NewExpanderTimeContinuation(ctx, libEnv, NewVMMacroEvaluator()).ExpandExpression(stx)
+	expanded, err := NewExpanderTimeContinuation(ctx, libEnv, evaluator).ExpandExpression(stx)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "error expanding library")
 	}
@@ -182,7 +182,7 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 	// Compile the form
 	// Use inTail=false for top-level expressions
 	cctx := NewCompileTimeCallContext(ctx, false)
-	compiler := NewCompiletimeContinuation(tpl, libEnv, NewVMMacroEvaluator())
+	compiler := NewCompiletimeContinuation(tpl, libEnv, evaluator)
 
 	// Set up to capture the compiled library
 	var compiledLib *CompiledLibrary
