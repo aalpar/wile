@@ -1,6 +1,10 @@
 package repl
 
-import "github.com/aalpar/wile/values"
+import (
+	"strings"
+
+	"github.com/aalpar/wile/values"
+)
 
 // DocInfo holds documentation for a primitive binding.
 type DocInfo struct {
@@ -25,6 +29,17 @@ type DocSearchResult struct {
 	Name     string
 	Doc      string
 	Category string
+}
+
+// StripExamples removes the Examples: section from a docstring.
+// Returns the description portion only. If no Examples: section
+// exists, returns the original string unchanged.
+func StripExamples(doc string) string {
+	before, _, found := strings.Cut(doc, "\n\nExamples:\n")
+	if !found {
+		return doc
+	}
+	return before
 }
 
 // DocSearchProvider extends DocProvider with search and category browsing.
