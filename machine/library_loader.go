@@ -208,9 +208,7 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 	// Execute the library's compiled template to populate bindings
 	// The library's code (begin blocks, defines) is in compiledLib.Template
 	if compiledLib.Template != nil && compiledLib.Template.CodeLen() > 0 {
-		cont := NewMachineContinuation(nil, compiledLib.Template, compiledLib.Env)
-		mc := NewMachineContext(ctx, cont)
-		err := mc.Run()
+		_, err = evaluator.EvalTemplate(ctx, compiledLib.Template, compiledLib.Env)
 		if err != nil {
 			return nil, werr.WrapForeignErrorf(err, "error executing library")
 		}
