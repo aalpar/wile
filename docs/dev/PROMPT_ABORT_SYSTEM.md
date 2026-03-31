@@ -206,8 +206,7 @@ PrimCallCC
   windingStack = mc.WindingStack().Copy()
   cc = NewComposableContinuation(segment, windingStack, threadID, barrierValid)
   contClosure = NewCapturedContinuation(cc, threadID, barrierValid)
-  sub = mc.NewSubContext()
-  sub.SetWindingStack(mc.WindingStack())
+  sub = mc.NewSubContext(mc.WindingStack())
   sub.Apply(mcls, contClosure)
   err = sub.Run()
   if err:
@@ -244,8 +243,7 @@ payload for someone else to handle.
 
 ```
 PrimCallWithContinuationPrompt(thunk, tag, handler)
-  sub = mc.NewSubContext()
-  sub.SetWindingStack(mc.WindingStack())
+  sub = mc.NewSubContext(mc.WindingStack())
   sub.SetPromptTag(tag)              // mark boundary
   sub.Apply(thunk)
   err = sub.Run()

@@ -158,9 +158,8 @@ func PrimCallWithImmediateContMark(mc *machine.MachineContext) error {
 			val = v
 		}
 	}
-	sub := mc.NewSubContext()
+	sub := mc.NewSubContext(mc.WindingStack())
 	defer machine.ReleaseSubContext(sub)
-	sub.SetWindingStack(mc.WindingStack())
 	_, err := sub.ApplyCallable(proc, val)
 	if err != nil {
 		return err

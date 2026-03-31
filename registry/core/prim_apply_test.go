@@ -190,6 +190,51 @@ func TestApplyWindingStackInheritance(t *testing.T) {
 			  before-count)`,
 			Expected: values.NewInteger(2),
 		},
+		{
+			Name: "call/cc inside with-exception-handler in dynamic-wind",
+			Code: `
+			(let ((k #f)
+			      (before-count 0))
+			  (call-with-continuation-prompt
+			    (lambda ()
+			      (dynamic-wind
+			        (lambda () (set! before-count (+ before-count 1)))
+			        (lambda ()
+			          (with-exception-handler
+			            (lambda (e) e)
+			            (lambda ()
+			              (call/cc (lambda (cont) (set! k cont) 'first)))))
+			        (lambda () #f)))
+			    (default-continuation-prompt-tag)
+			    #f)
+			  (call-with-continuation-prompt
+			    (lambda () (k 'second))
+			    (default-continuation-prompt-tag)
+			    (lambda (v) v))
+			  before-count)`,
+			Expected: values.NewInteger(2),
+		},
+		{
+			Name: "call/cc inside force in dynamic-wind",
+			Code: `
+			(let ((k #f)
+			      (before-count 0))
+			  (call-with-continuation-prompt
+			    (lambda ()
+			      (dynamic-wind
+			        (lambda () (set! before-count (+ before-count 1)))
+			        (lambda ()
+			          (force (delay (call/cc (lambda (cont) (set! k cont) 'first)))))
+			        (lambda () #f)))
+			    (default-continuation-prompt-tag)
+			    #f)
+			  (call-with-continuation-prompt
+			    (lambda () (k 'second))
+			    (default-continuation-prompt-tag)
+			    (lambda (v) v))
+			  before-count)`,
+			Expected: values.NewInteger(2),
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {

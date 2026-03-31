@@ -269,7 +269,7 @@ func PrimMakePromise(mc *machine.MachineContext) error {
 // executeThunk runs a promise thunk and returns its result.
 // The thunk is already validated as Callable when the promise was created.
 func executeThunk(mc *machine.MachineContext, thunk values.Callable) (values.Value, error) {
-	sub := mc.NewSubContext()
+	sub := mc.NewSubContext(mc.WindingStack())
 	defer machine.ReleaseSubContext(sub)
 	_, err := sub.ApplyCallable(thunk)
 	if err != nil {

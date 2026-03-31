@@ -27,8 +27,10 @@ package compilation
 // Reference: R7RS Section 4.2.1
 
 import (
+	"context"
 	"runtime"
 	"slices"
+	"strings"
 )
 
 // ImplementationName is the name of this Scheme implementation.
@@ -110,8 +112,10 @@ func IsFeatureSupported(feature string) bool {
 //   - (not <req>) - requirement must NOT be satisfied
 type FeatureRequirement interface {
 	// IsSatisfied returns true if this requirement is satisfied.
-	// The registry parameter is used to check library availability.
-	IsSatisfied(registry *LibraryRegistry) bool
+	// The registry parameter is used to check if a library is already loaded.
+	// The resolver parameter is used to check if a library file exists
+	// (via the FileResolver chain, supporting both OS and virtual fs.FS).
+	IsSatisfied(registry *LibraryRegistry, resolver FileResolver) bool
 }
 
 // featureIdentifier is a simple feature requirement.
@@ -119,7 +123,7 @@ type featureIdentifier struct {
 	name string
 }
 
-func (p *featureIdentifier) IsSatisfied(registry *LibraryRegistry) bool {
+func (p *featureIdentifier) IsSatisfied(registry *LibraryRegistry, resolver FileResolver) bool {
 	return IsFeatureSupported(p.name)
 }
 
@@ -128,20 +132,28 @@ type libraryRequirement struct {
 	name LibraryName
 }
 
-func (p *libraryRequirement) IsSatisfied(registry *LibraryRegistry) bool {
-	if registry == nil {
-		return false
-	}
-	// Check if library is already loaded
-	if registry.Lookup(p.name) != nil {
+func (p *libraryRequirement) IsSatisfied(registry *LibraryRegistry, resolver FileResolver) bool {
+	if registry != nil && registry.Lookup(p.name) != nil {
 		return true
 	}
-	// Check if library file exists on the OS filesystem.
-	// TODO: This uses os.Stat directly and does not consult the FileResolver,
-	// so cond-expand (library ...) cannot detect libraries in a virtual fs.FS.
-	// Fix requires passing FileResolver into the FeatureRequirement interface.
-	_, err := registry.FindLibraryFile(p.name)
-	return err == nil
+	if resolver == nil {
+		return false
+	}
+	// Check via the FileResolver chain (supports both OS and virtual fs.FS).
+	// Try .sld first, then .scm — same fallback order as library_loader.go.
+	sldPath := p.name.ToFSPath()
+	f, _, err := resolver.ResolveAndOpen(context.Background(), sldPath)
+	if err == nil {
+		f.Close() //nolint:errcheck
+		return true
+	}
+	scmPath := strings.TrimSuffix(sldPath, ".sld") + ".scm"
+	f, _, err = resolver.ResolveAndOpen(context.Background(), scmPath)
+	if err == nil {
+		f.Close() //nolint:errcheck
+		return true
+	}
+	return false
 }
 
 // andRequirement is satisfied if all sub-requirements are satisfied.
@@ -149,9 +161,9 @@ type andRequirement struct {
 	requirements []FeatureRequirement
 }
 
-func (p *andRequirement) IsSatisfied(registry *LibraryRegistry) bool {
+func (p *andRequirement) IsSatisfied(registry *LibraryRegistry, resolver FileResolver) bool {
 	for _, req := range p.requirements {
-		if !req.IsSatisfied(registry) {
+		if !req.IsSatisfied(registry, resolver) {
 			return false
 		}
 	}
@@ -163,9 +175,9 @@ type orRequirement struct {
 	requirements []FeatureRequirement
 }
 
-func (p *orRequirement) IsSatisfied(registry *LibraryRegistry) bool {
+func (p *orRequirement) IsSatisfied(registry *LibraryRegistry, resolver FileResolver) bool {
 	for _, req := range p.requirements {
-		if req.IsSatisfied(registry) {
+		if req.IsSatisfied(registry, resolver) {
 			return true
 		}
 	}
@@ -177,14 +189,14 @@ type notRequirement struct {
 	requirement FeatureRequirement
 }
 
-func (p *notRequirement) IsSatisfied(registry *LibraryRegistry) bool {
-	return !p.requirement.IsSatisfied(registry)
+func (p *notRequirement) IsSatisfied(registry *LibraryRegistry, resolver FileResolver) bool {
+	return !p.requirement.IsSatisfied(registry, resolver)
 }
 
 // elseRequirement is always satisfied (used for else clause).
 type elseRequirement struct{}
 
-func (p *elseRequirement) IsSatisfied(registry *LibraryRegistry) bool {
+func (p *elseRequirement) IsSatisfied(registry *LibraryRegistry, resolver FileResolver) bool {
 	return true
 }
 

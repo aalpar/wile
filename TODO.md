@@ -25,8 +25,8 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 - [x] **Peephole optimizer double-restore** [High, Bug, Fixed]: `callForeignCached` and `applyForeign` would double-restore when PrimCallCC inline mode called `ApplyCallable` with a `ForeignClosure` (e.g., `(call/cc procedure?)`). Fixed with `savedCont` pointer-identity guard. `plans/OPTIMIZER-FIX.md`
 - [x] **Degenerate form pipeline tests** [Correctness, Done]: Full-pipeline tests (string → tokenize → parse → expand → compile → run) for degenerate forms of all core special forms and macro-based derived forms. PR #571.
-- [ ] **Sub-context winding stack inheritance hazard** [High, Correctness]: `NewSubContext()` does not inherit the winding stack. Every call site that runs user closures must manually call `sub.SetWindingStack(mc.WindingStack())`. Forgetting silently skips `dynamic-wind` before/after thunks on continuation re-invocation. Fix: require winding stack as a `NewSubContext` parameter, or add runtime assertion. `machine/machine_context_subcontext.go`.
-- [ ] **`cond-expand (library ...)` bypasses FileResolver** [High, S]: `machine/features.go:140-144` — `libraryRequirement.IsSatisfied()` uses `os.Stat` directly instead of FileResolver chain. Embedders using `WithSourceFS()` get incorrect feature detection. Fix: pass `FileResolver` into `FeatureRequirement` interface. (Moved from Nice-to-Haves.)
+- [x] **Sub-context winding stack inheritance hazard** [High, Correctness, Fixed]: `NewSubContext(windingStack)` now requires the winding stack as a constructor parameter. Forgetting is a compile error. `machine/machine_context_subcontext.go`.
+- [x] **`cond-expand (library ...)` bypasses FileResolver** [High, S, Fixed]: `IsSatisfied` now accepts a `FileResolver` parameter. `libraryRequirement` uses `resolver.ResolveAndOpen` (with `.sld`/`.scm` fallback) instead of `os.Stat`. `machine/compilation/features.go`.
 - L7 (`char-ready?`/`u8-ready?` always `#t`) — documented semantic difference, no fix planned
 
 ---

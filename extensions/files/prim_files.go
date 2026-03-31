@@ -165,7 +165,7 @@ func callWithFile(
 
 	port := portCreator(file)
 
-	sub := mc.NewSubContext()
+	sub := mc.NewSubContext(mc.WindingStack())
 	defer machine.ReleaseSubContext(sub)
 	_, err = sub.ApplyCallable(proc, port)
 	if err != nil {

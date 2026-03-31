@@ -456,7 +456,7 @@ func (p *Engine) callCallable(ctx context.Context, callable values.Callable, arg
 	mc.SetMaxCallDepth(p.maxCallDepth)
 
 	// Create a sub-context, set up the call frame, and execute.
-	sub := mc.NewSubContext()
+	sub := mc.NewSubContext(mc.WindingStack())
 	defer machine.ReleaseTopLevelContext(mc)
 	defer machine.ReleaseSubContext(sub)
 	_, err := sub.ApplyCallable(callable, args...)

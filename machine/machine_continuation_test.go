@@ -458,7 +458,7 @@ func TestNewMachineContinuationFromMachineContext_CallDepth(t *testing.T) {
 			setup: func() *MachineContext {
 				cont := NewMachineContinuation(nil, tpl, env)
 				mc := NewMachineContext(context.Background(), cont)
-				return mc.NewSubContext()
+				return mc.NewSubContext(WindingStack{})
 			},
 			wantDepth: 0,
 		},

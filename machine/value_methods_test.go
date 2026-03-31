@@ -354,8 +354,7 @@ func TestMachineContext_WindingStack(t *testing.T) {
 
 	c.Assert(mc.WindingStack(), qt.HasLen, 0)
 
-	ws := machine.WindingStack{machine.NewDynamicWindFrame(nil, nil)}
-	mc.SetWindingStack(ws)
+	mc.PushWindingFrame(machine.NewDynamicWindFrame(nil, nil))
 	c.Assert(mc.WindingStack(), qt.HasLen, 1)
 }
 

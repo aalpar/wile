@@ -42,6 +42,7 @@ func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, a
 	if regAny != nil {
 		registry, _ = regAny.(*LibraryRegistry)
 	}
+	resolver := p.env.FileResolver()
 
 	var matchedClause syntax.SyntaxValue
 	_, err := syntax.SyntaxForEach(ctx, argsPair, func(_ context.Context, _ int, _ bool, clause syntax.SyntaxValue) error {
@@ -60,7 +61,7 @@ func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, a
 			return werr.WrapForeignErrorf(err, "cond-expand: invalid feature requirement")
 		}
 
-		if req.IsSatisfied(registry) {
+		if req.IsSatisfied(registry, resolver) {
 			matchedClause = clausePair
 		}
 

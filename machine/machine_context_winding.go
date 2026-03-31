@@ -19,11 +19,6 @@ func (p *MachineContext) WindingStack() WindingStack {
 	return p.windingStack
 }
 
-// SetWindingStack sets the winding stack (used by sub-contexts).
-func (p *MachineContext) SetWindingStack(stack WindingStack) {
-	p.windingStack = stack
-}
-
 // PushWindingFrame adds a frame to the winding stack.
 func (p *MachineContext) PushWindingFrame(frame *DynamicWindFrame) {
 	p.windingStack.Push(frame)
@@ -47,8 +42,7 @@ func (p *MachineContext) unwindStackTo(stack WindingStack, commonDepth int) erro
 	for i := len(stack) - 1; i >= commonDepth; i-- {
 		frame := stack[i]
 		if frame.After != nil {
-			sub := p.NewSubContext()
-			sub.windingStack = stack[:i:i] // Set stack to this level (cap to prevent aliasing)
+			sub := p.NewSubContext(stack[:i:i])
 			_, err := sub.ApplyCallable(frame.After)
 			if err != nil {
 				ReleaseSubContext(sub)
@@ -79,8 +73,7 @@ func (p *MachineContext) RewindTo(target WindingStack, commonDepth int) error {
 	for i := commonDepth; i < len(target); i++ {
 		frame := target[i]
 		if frame.Before != nil {
-			sub := p.NewSubContext()
-			sub.windingStack = p.windingStack // Current stack at this point
+			sub := p.NewSubContext(p.windingStack)
 			_, err := sub.ApplyCallable(frame.Before)
 			if err != nil {
 				ReleaseSubContext(sub)
