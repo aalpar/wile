@@ -98,9 +98,8 @@ func (p *MachineContext) applyCapturedContinuation(
 	val := args[0]
 	cc := capt.cc
 
-	sub := p.NewSubContext()
+	sub := p.NewSubContext(p.WindingStack())
 	defer ReleaseSubContext(sub)
-	sub.SetWindingStack(p.WindingStack())
 	// The composable continuation installs its own continuation chain via
 	// Restore, replacing whatever marks this sub-context might inherit.
 	// Prevent the parent's stale marks from bleeding through findParameterInMarks.

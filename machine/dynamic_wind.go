@@ -39,8 +39,8 @@ import (
 //	  ComposableContinuation), NOT stored per continuation frame.
 //	  W belongs to the dynamic extent, not the lexical continuation.
 //	Constrains: RestoreWithWindingFrom (must compute prefix and run
-//	  thunks in correct order), sub-contexts (must explicitly inherit W
-//	  via SetWindingStack or thunks are silently skipped).
+//	  thunks in correct order), sub-contexts (must pass W to
+//	  NewSubContext or thunks are silently skipped).
 //	Constrained by: CESK model (W is NOT part of K — it is orthogonal
 //	  state). PushWind/PopWind opcodes maintain W during normal execution.
 //

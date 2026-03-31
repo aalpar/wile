@@ -275,7 +275,7 @@ func TestRestoreWithWinding_UnwindAndRewind(t *testing.T) {
 	testMC := machine.NewMachineContext(ctx, cont)
 
 	// Start with source frame on stack
-	testMC.SetWindingStack(machine.WindingStack{srcFrame})
+	testMC.PushWindingFrame(srcFrame)
 
 	// Restore to target stack (should unwind source, rewind target)
 	err = testMC.RestoreWithWinding(nil, machine.WindingStack{tgtFrame})

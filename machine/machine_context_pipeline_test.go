@@ -60,7 +60,7 @@ func TestMachineContextNewSubContext_Pipeline(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), cont)
-	sub := mc.NewSubContext()
+	sub := mc.NewSubContext(machine.WindingStack{})
 	qt.Assert(t, sub, qt.IsNotNil)
 }
 

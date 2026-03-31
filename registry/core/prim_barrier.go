@@ -54,9 +54,8 @@ func PrimCallWithContinuationBarrier(mc *machine.MachineContext) error {
 	// to establish a new barrier scope. All further sub-contexts created during the
 	// thunk's execution will inherit this barrierValid, so continuations captured
 	// inside carry the same pointer and can be compared against it.
-	sub := mc.NewSubContext()
+	sub := mc.NewSubContext(mc.WindingStack())
 	defer machine.ReleaseSubContext(sub)
-	sub.SetWindingStack(mc.WindingStack())
 	sub.SetBarrierValid(barrierValid)
 
 	_, err = sub.ApplyCallable(thunkCls)

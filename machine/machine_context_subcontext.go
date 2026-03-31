@@ -25,6 +25,11 @@ import (
 // The sub-context shares the global environment but has a fresh call stack, eval stack, and value register.
 // This allows foreign functions to call Scheme closures without corrupting the parent context's state.
 //
+// The windingStack parameter is the dynamic-wind winding stack to inherit. Callers that run
+// user-provided closures should pass mc.WindingStack() so that continuations captured inside
+// the sub-context preserve the enclosing dynamic-wind context. Internal winding operations
+// (unwindStackTo, RewindTo) pass their computed stack directly.
+//
 // Note: Sub-contexts have isolated continuation chains (cont = nil). When call/cc captures a
 // continuation inside a sub-context, it captures mc.Parent() which refers to the sub-context's
 // chain (nil). For continuations to escape back to the outer context, the escape error propagates
@@ -35,7 +40,7 @@ import (
 //
 // The escapeCont field is inherited, allowing nested sub-contexts to know where execution
 // should continue after their completion (set by dynamic-wind and similar constructs).
-func (p *MachineContext) NewSubContext() *MachineContext {
+func (p *MachineContext) NewSubContext(windingStack WindingStack) *MachineContext {
 	p.counters.SubContextsCreated++
 	mc := acquireSubContext()
 	mc.ctx = p.ctx
@@ -49,6 +54,7 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 	mc.exceptionHandler = p.exceptionHandler
 	mc.maxCallDepth = p.maxCallDepth
 	mc.barrierValid = p.barrierValid // inherit barrier context
+	mc.windingStack = windingStack
 	return mc
 }
 
@@ -61,6 +67,7 @@ type SubContextParams struct {
 	EscapeCont       *MachineContinuation
 	ExceptionHandler *ExceptionHandler
 	MaxCallDepth     uint64
+	WindingStack     WindingStack
 }
 
 // CaptureSubContextParams extracts the state needed to create a sub-context in a different goroutine.
@@ -77,6 +84,7 @@ func (p *MachineContext) CaptureSubContextParams() SubContextParams {
 		EscapeCont:       p.escapeCont,
 		ExceptionHandler: p.exceptionHandler,
 		MaxCallDepth:     p.maxCallDepth,
+		WindingStack:     p.windingStack,
 	}
 }
 
@@ -91,8 +99,9 @@ func NewThreadSubContext(params SubContextParams, thread *values.Thread) *Machin
 	sub := &MachineContext{
 		ctx: params.Ctx,
 		vmState: vmState{
-			env:   params.Env,
-			evals: NewStack(),
+			env:          params.Env,
+			evals:        NewStack(),
+			windingStack: params.WindingStack,
 			// threadID will be set by SetThread below
 		},
 		parentMC:         params.ParentMC,

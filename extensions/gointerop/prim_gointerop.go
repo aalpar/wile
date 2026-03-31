@@ -417,7 +417,7 @@ func PrimOnceDo(mc *machine.MachineContext) error {
 			return // Can't execute non-closure
 		}
 
-		sub := mc.NewSubContext()
+		sub := mc.NewSubContext(mc.WindingStack())
 		defer machine.ReleaseSubContext(sub)
 		_, err := sub.ApplyCallable(cls)
 		if err != nil {
