@@ -483,9 +483,8 @@ func (p *MachineContext) Run() error {
 		// --- Wave 5: fused call operations ---
 
 		case OpPullApply:
-			mc.SetValue(mc.evals.Pull())
 			var err error
-			mc, err = mc.drainAndApply(mc.GetValue())
+			mc, err = mc.pullDrainAndApply()
 			if err != nil {
 				return err
 			}

@@ -229,12 +229,34 @@ func (p *MachineContext) ApplyCallable(callable values.Value, args ...values.Val
 
 // drainAndApply drains all arguments from the eval stack, updates counters,
 // and applies the callable. This is the common pattern shared by OpApply,
-// OpPullApply, OpCallLocal, and OpCallCachedBinding.
+// OpCallLocal, and OpCallCachedBinding.
 func (p *MachineContext) drainAndApply(callable values.Value) (*MachineContext, error) {
 	vs := p.evals.Drain()
 	p.counters.StackDrains++
 	p.counters.StackElementsDrained += uint64(len(vs))
 	p.counters.RecordStackDepth(len(vs))
+	result, err := p.ApplyCallable(callable, vs...)
+	if err != nil {
+		return nil, applyCallableError(p, err)
+	}
+	return result, nil
+}
+
+// pullDrainAndApply splits the eval stack into callable (position 0) and args
+// (positions 1..n) in O(1), then applies. Used by OpPullApply.
+//
+// Unlike drainAndApply (which takes the callable from the value register),
+// this method extracts the callable from the bottom of the eval stack —
+// matching the SECD calling convention where the procedure is evaluated
+// first and pushed first.
+func (p *MachineContext) pullDrainAndApply() (*MachineContext, error) {
+	callable, vs := p.evals.PullDrain()
+	p.counters.StackDrains++
+	// len(vs) counts args only, not the callable — matches drainAndApply
+	// where the callable comes from the value register, not the stack.
+	p.counters.StackElementsDrained += uint64(len(vs))
+	p.counters.RecordStackDepth(len(vs))
+	p.SetValue(callable)
 	result, err := p.ApplyCallable(callable, vs...)
 	if err != nil {
 		return nil, applyCallableError(p, err)

@@ -48,6 +48,26 @@ func (p *Stack) Pull() values.Value {
 	return q
 }
 
+// PullDrain removes and returns the bottom value (position 0) as the first
+// return, and all remaining values as the second return. The stack is cleared.
+// This is O(1) — no element shifting, just slice header arithmetic.
+//
+// The returned args slice shares the stack's backing array (same contract
+// as Drain). Valid only until the next stack mutation.
+func (p *Stack) PullDrain() (values.Value, []values.Value) {
+	n := len(*p)
+	if n == 0 {
+		panic(werr.WrapForeignErrorf(werr.ErrStackUnderflow, "Stack.PullDrain: stack is empty"))
+	}
+	first := (*p)[0]
+	var rest []values.Value
+	if n > 1 {
+		rest = (*p)[1:n:n]
+	}
+	*p = (*p)[:0]
+	return first, rest
+}
+
 // Pop removes and returns the top value from the stack.
 func (p *Stack) Pop() values.Value {
 	l := len(*p)
