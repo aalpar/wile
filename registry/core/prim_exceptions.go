@@ -140,7 +140,8 @@ func handleException(mc *machine.MachineContext, excErr *machine.ErrExceptionEsc
 			if frame.After == nil {
 				continue
 			}
-			sub := mc.NewSubContext(excErr.WindingStack[:i])
+			// Truncated stack: the after thunk runs at depth i during exception unwind.
+			sub := mc.NewSubContextWithWinding(excErr.WindingStack[:i])
 			_, err := sub.ApplyCallable(frame.After)
 			if err != nil {
 				machine.ReleaseSubContext(sub)

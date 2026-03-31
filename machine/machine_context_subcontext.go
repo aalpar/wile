@@ -53,7 +53,19 @@ func (p *MachineContext) NewSubContext(windingStack WindingStack) *MachineContex
 	mc.thread = p.thread
 	mc.exceptionHandler = p.exceptionHandler
 	mc.maxCallDepth = p.maxCallDepth
+	mc.windingStack = p.windingStack // inherit dynamic-wind extent
 	mc.barrierValid = p.barrierValid // inherit barrier context
+	mc.windingStack = windingStack
+	return mc
+}
+
+// NewSubContextWithWinding creates a sub-context with an explicit winding stack
+// instead of inheriting the parent's. Use this only when the sub-context must run
+// with a winding stack that differs from the parent — for example, a truncated
+// stack during unwind (machine_context_winding.go) or exception cleanup
+// (prim_exceptions.go). All other sub-context creation should use NewSubContext.
+func (p *MachineContext) NewSubContextWithWinding(windingStack WindingStack) *MachineContext {
+	mc := p.NewSubContext()
 	mc.windingStack = windingStack
 	return mc
 }
