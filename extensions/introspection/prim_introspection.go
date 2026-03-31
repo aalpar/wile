@@ -135,28 +135,18 @@ func PrimFeatures(mc *machine.MachineContext) error {
 func PrimAvailableLibraries(mc *machine.MachineContext) error {
 	env := mc.EnvironmentFrame()
 
-	regAny := env.LibraryRegistry()
-	if regAny == nil {
+	regSearcher := env.LibraryRegistry()
+	if regSearcher == nil {
 		mc.SetValue(values.EmptyList)
 		return nil
 	}
-	reg, ok := regAny.(*compilation.LibraryRegistry)
+	reg, ok := regSearcher.(*compilation.LibraryRegistry)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrLibraryConfiguration,
-			"available-libraries: library registry has unexpected type %T", regAny)
+			"available-libraries: library registry has unexpected type %T", regSearcher)
 	}
 
-	var resolver compilation.FileResolver
-	resolverAny := env.FileResolver()
-	if resolverAny != nil {
-		resolver, ok = resolverAny.(compilation.FileResolver)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrLibraryConfiguration,
-				"available-libraries: file resolver has unexpected type %T", resolverAny)
-		}
-	}
-
-	libs, err := compilation.DiscoverAvailableLibraries(resolver, reg)
+	libs, err := compilation.DiscoverAvailableLibraries(env.FileResolver(), reg)
 	if err != nil {
 		return werr.WrapForeignErrorWithCause(
 			werr.ErrLibraryConfiguration, err,

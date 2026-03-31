@@ -301,9 +301,8 @@ func (p *EnvironmentFrame) GlobalEnvironment() *GlobalEnvironmentFrame {
 }
 
 // FileResolver returns the file resolver from the Namespace.
-// The caller must type-assert to machine.FileResolver.
 // Returns nil if no resolver has been set or if namespace is nil.
-func (p *EnvironmentFrame) FileResolver() any {
+func (p *EnvironmentFrame) FileResolver() FileResolver {
 	if p.namespace == nil {
 		return nil
 	}
@@ -311,9 +310,8 @@ func (p *EnvironmentFrame) FileResolver() any {
 }
 
 // SetFileResolver sets the file resolver on the Namespace.
-// The resolver should be a machine.FileResolver.
 // No-op if namespace is nil.
-func (p *EnvironmentFrame) SetFileResolver(resolver any) {
+func (p *EnvironmentFrame) SetFileResolver(resolver FileResolver) {
 	if p.namespace == nil {
 		return
 	}
@@ -321,9 +319,9 @@ func (p *EnvironmentFrame) SetFileResolver(resolver any) {
 }
 
 // LibraryRegistry returns the library registry from the Namespace.
-// The caller must type-assert to *machine.LibraryRegistry.
 // Returns nil if no registry has been set or if namespace is nil.
-func (p *EnvironmentFrame) LibraryRegistry() any {
+// Callers needing the full *compilation.LibraryRegistry can type-assert.
+func (p *EnvironmentFrame) LibraryRegistry() LibrarySearcher {
 	if p.namespace == nil {
 		return nil
 	}
@@ -331,9 +329,8 @@ func (p *EnvironmentFrame) LibraryRegistry() any {
 }
 
 // SetLibraryRegistry sets the library registry on the Namespace.
-// The registry should be a *machine.LibraryRegistry.
 // No-op if namespace is nil.
-func (p *EnvironmentFrame) SetLibraryRegistry(registry any) {
+func (p *EnvironmentFrame) SetLibraryRegistry(registry LibrarySearcher) {
 	if p.namespace == nil {
 		return
 	}

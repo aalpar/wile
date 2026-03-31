@@ -120,8 +120,8 @@ func PrimLoad(mc *machine.MachineContext) error {
 	env := mc.EnvironmentFrame().TopLevel()
 
 	// Resolve and open via the shared FileResolver (same as include).
-	resolver, ok := env.FileResolver().(compilation.FileResolver)
-	if !ok {
+	resolver := env.FileResolver()
+	if resolver == nil {
 		return werr.WrapForeignErrorf(werr.ErrFileNotFound, "load: no file resolver configured")
 	}
 

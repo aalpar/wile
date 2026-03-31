@@ -52,17 +52,8 @@ type CompileTimeContinuation struct {
 // The file resolver defaults to the one stored on the Namespace.
 // If none is set, falls back to a fresh OSFileResolver.
 func NewCompileTimeContinuation(tpl *machine.NativeTemplate, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator) *CompileTimeContinuation {
-	var resolver FileResolver
-	envResolver := env.FileResolver()
-	if r, ok := envResolver.(FileResolver); ok {
-		resolver = r
-	} else if envResolver != nil {
-		// Environment has a resolver but it doesn't implement compilation.FileResolver.
-		// This is a configuration error — wrap the mismatch in a panic so it's
-		// caught early rather than silently falling back.
-		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-			"NewCompileTimeContinuation: env file resolver is %T, not compilation.FileResolver", envResolver))
-	} else {
+	resolver := env.FileResolver()
+	if resolver == nil {
 		resolver = NewOSFileResolver(env)
 	}
 	q := &CompileTimeContinuation{
@@ -78,16 +69,10 @@ func NewCompileTimeContinuation(tpl *machine.NativeTemplate, env *environment.En
 // Nil resets to the environment's resolver (or OSFileResolver as fallback).
 func (p *CompileTimeContinuation) SetFileResolver(r FileResolver) {
 	if r == nil {
-		envResolver := p.env.FileResolver()
-		if envR, ok := envResolver.(FileResolver); ok {
-			p.fileResolver = envR
-		} else if envResolver != nil {
-			panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-				"SetFileResolver: env file resolver is %T, not compilation.FileResolver", envResolver))
-		} else {
-			p.fileResolver = NewOSFileResolver(p.env)
+		r = p.env.FileResolver()
+		if r == nil {
+			r = NewOSFileResolver(p.env)
 		}
-		return
 	}
 	p.fileResolver = r
 }

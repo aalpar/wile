@@ -233,8 +233,7 @@ func (p *MachineContext) Authorizer() security.Authorizer {
 	if ns == nil {
 		return nil
 	}
-	auth, _ := ns.Authorizer().(security.Authorizer)
-	return auth
+	return ns.Authorizer()
 }
 
 func (p *MachineContext) Arg(index int) values.Value {
