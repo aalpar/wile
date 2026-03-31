@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// External test package to allow importing validate and machine
+// External test package to allow importing validate and machine/compilation
 // without creating an import cycle (forms is imported by both).
 package forms_test
 
@@ -20,20 +20,21 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/internal/forms"
+	"github.com/aalpar/wile/machine/compilation"
 
-	// Blank imports trigger init() registrations.
+	// Blank import triggers init() registration in validate.
 	_ "github.com/aalpar/wile/internal/validate"
-	_ "github.com/aalpar/wile/machine"
 
 	qt "github.com/frankban/quicktest"
 )
 
 // TestFormRegistrationConsistency verifies that every registered special form
-// has both a validator and a compiler (or is in the expand-time-only exception
-// list). This catches the "forgot to add the compiler" class of bug when
-// validators and compilers are registered from separate init() functions.
+// has a validator (forms.Verify) and a compiler (compilation.VerifyCompilers),
+// except for expand-time-only forms. This catches the "forgot to register"
+// class of bug when validators and compilers are registered from separate
+// init() functions in different packages.
 func TestFormRegistrationConsistency(t *testing.T) {
 	c := qt.New(t)
-	err := forms.Verify()
-	c.Assert(err, qt.IsNil)
+	c.Assert(forms.Verify(), qt.IsNil)
+	c.Assert(compilation.VerifyCompilers(), qt.IsNil)
 }

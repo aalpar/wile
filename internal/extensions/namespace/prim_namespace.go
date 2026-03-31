@@ -19,6 +19,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
@@ -71,12 +72,12 @@ func PrimMakeNamespace(mc *machine.MachineContext) error {
 	}
 
 	v, err := args.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, specVal values.Value) error {
-		importSet, parseErr := machine.ParseImportSetFromDatum(mc.Context(), specVal)
+		importSet, parseErr := compilation.ParseImportSetFromDatum(mc.Context(), specVal)
 		if parseErr != nil {
 			return werr.WrapForeignErrorf(parseErr, "make-namespace: invalid import spec")
 		}
 
-		lib, loadErr := machine.LoadLibrary(mc.Context(), importSet.LibraryName, callerEnv, machine.NewVMMacroEvaluator())
+		lib, loadErr := compilation.LoadLibrary(mc.Context(), importSet.LibraryName, callerEnv, machine.NewVMMacroEvaluator())
 		if loadErr != nil {
 			return werr.WrapForeignErrorf(loadErr, "make-namespace: failed to load %s",
 				importSet.LibraryName.SchemeString())
@@ -88,7 +89,7 @@ func PrimMakeNamespace(mc *machine.MachineContext) error {
 				importSet.LibraryName.SchemeString())
 		}
 
-		copyErr := machine.CopyLibraryBindingsToEnvAtPhase(lib, bindings, newEnv, importSet.PhaseShift)
+		copyErr := compilation.CopyLibraryBindingsToEnvAtPhase(lib, bindings, newEnv, importSet.PhaseShift)
 		if copyErr != nil {
 			return werr.WrapForeignErrorf(copyErr, "make-namespace: error copying bindings from %s",
 				importSet.LibraryName.SchemeString())
@@ -250,12 +251,12 @@ func PrimNamespaceRequire(mc *machine.MachineContext) error {
 	callerEnv := mc.EnvironmentFrame().TopLevel()
 	targetEnv := ns.Runtime()
 
-	importSet, parseErr := machine.ParseImportSetFromDatum(mc.Context(), specVal)
+	importSet, parseErr := compilation.ParseImportSetFromDatum(mc.Context(), specVal)
 	if parseErr != nil {
 		return werr.WrapForeignErrorf(parseErr, "namespace-require: invalid import spec")
 	}
 
-	lib, loadErr := machine.LoadLibrary(mc.Context(), importSet.LibraryName, callerEnv, machine.NewVMMacroEvaluator())
+	lib, loadErr := compilation.LoadLibrary(mc.Context(), importSet.LibraryName, callerEnv, machine.NewVMMacroEvaluator())
 	if loadErr != nil {
 		return werr.WrapForeignErrorf(loadErr, "namespace-require: failed to load %s",
 			importSet.LibraryName.SchemeString())
@@ -267,7 +268,7 @@ func PrimNamespaceRequire(mc *machine.MachineContext) error {
 			importSet.LibraryName.SchemeString())
 	}
 
-	copyErr := machine.CopyLibraryBindingsToEnvAtPhase(lib, bindings, targetEnv, importSet.PhaseShift)
+	copyErr := compilation.CopyLibraryBindingsToEnvAtPhase(lib, bindings, targetEnv, importSet.PhaseShift)
 	if copyErr != nil {
 		return werr.WrapForeignErrorf(copyErr, "namespace-require: error copying bindings from %s",
 			importSet.LibraryName.SchemeString())

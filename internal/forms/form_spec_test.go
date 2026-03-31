@@ -45,6 +45,8 @@ func saveRegistry(t *testing.T) {
 	t.Helper()
 	saved := make(map[string]*FormSpec, len(registry))
 	maps.Copy(saved, registry)
+	// Replace with empty registry so tests only see what they register.
+	registry = make(map[string]*FormSpec)
 	t.Cleanup(func() {
 		registry = saved
 	})
@@ -63,19 +65,16 @@ func TestRegister_And_Lookup(t *testing.T) {
 	validator := func(_ context.Context, _ *environment.EnvironmentFrame, _ *syntax.SyntaxPair, _ any) ValidatedExpr {
 		return &testExpr{tag: "validated"}
 	}
-	compiler := func(_ any, _ any, _ ValidatedExpr) error { return nil }
 
 	Register(&FormSpec{
 		Name:     "test-register",
 		Validate: validator,
-		Compile:  compiler,
 	})
 
 	spec := Lookup("test-register")
 	c.Assert(spec, qt.IsNotNil)
 	c.Assert(spec.Name, qt.Equals, "test-register")
 	c.Assert(spec.Validate, qt.IsNotNil)
-	c.Assert(spec.Compile, qt.IsNotNil)
 }
 
 func TestRegister_Replaces_Existing(t *testing.T) {
@@ -113,29 +112,13 @@ func TestRegisterValidator_Creates_New_Entry(t *testing.T) {
 	c.Assert(spec, qt.IsNotNil)
 	c.Assert(spec.Name, qt.Equals, "test-val-new")
 	c.Assert(spec.Validate, qt.IsNotNil)
-	c.Assert(spec.Compile, qt.IsNil)
-}
-
-func TestRegisterCompiler_Creates_New_Entry(t *testing.T) {
-	saveRegistry(t)
-	c := qt.New(t)
-
-	compiler := func(_ any, _ any, _ ValidatedExpr) error { return nil }
-	RegisterCompiler("test-comp-new", compiler)
-
-	spec := Lookup("test-comp-new")
-	c.Assert(spec, qt.IsNotNil)
-	c.Assert(spec.Name, qt.Equals, "test-comp-new")
-	c.Assert(spec.Validate, qt.IsNil)
-	c.Assert(spec.Compile, qt.IsNotNil)
 }
 
 func TestRegisterValidator_Sets_On_Existing(t *testing.T) {
 	saveRegistry(t)
 	c := qt.New(t)
 
-	compiler := func(_ any, _ any, _ ValidatedExpr) error { return nil }
-	Register(&FormSpec{Name: "test-val-existing", Compile: compiler})
+	Register(&FormSpec{Name: "test-val-existing"})
 
 	validator := func(_ context.Context, _ *environment.EnvironmentFrame, _ *syntax.SyntaxPair, _ any) ValidatedExpr {
 		return &testExpr{tag: "added"}
@@ -144,24 +127,6 @@ func TestRegisterValidator_Sets_On_Existing(t *testing.T) {
 
 	spec := Lookup("test-val-existing")
 	c.Assert(spec.Validate, qt.IsNotNil)
-	c.Assert(spec.Compile, qt.IsNotNil)
-}
-
-func TestRegisterCompiler_Sets_On_Existing(t *testing.T) {
-	saveRegistry(t)
-	c := qt.New(t)
-
-	validator := func(_ context.Context, _ *environment.EnvironmentFrame, _ *syntax.SyntaxPair, _ any) ValidatedExpr {
-		return &testExpr{tag: "v"}
-	}
-	Register(&FormSpec{Name: "test-comp-existing", Validate: validator})
-
-	compiler := func(_ any, _ any, _ ValidatedExpr) error { return nil }
-	RegisterCompiler("test-comp-existing", compiler)
-
-	spec := Lookup("test-comp-existing")
-	c.Assert(spec.Validate, qt.IsNotNil)
-	c.Assert(spec.Compile, qt.IsNotNil)
 }
 
 func TestNames_Returns_All_Registered(t *testing.T) {
@@ -183,53 +148,19 @@ func TestVerify_AllPaired(t *testing.T) {
 	validator := func(_ context.Context, _ *environment.EnvironmentFrame, _ *syntax.SyntaxPair, _ any) ValidatedExpr {
 		return &testExpr{tag: "v"}
 	}
-	compiler := func(_ any, _ any, _ ValidatedExpr) error {
-		return nil
-	}
-	Register(&FormSpec{Name: "test-verify-ok", Validate: validator, Compile: compiler})
+	Register(&FormSpec{Name: "test-verify-ok", Validate: validator})
 
 	err := Verify()
 	c.Assert(err, qt.IsNil)
-}
-
-func TestVerify_MissingCompiler(t *testing.T) {
-	saveRegistry(t)
-	c := qt.New(t)
-
-	validator := func(_ context.Context, _ *environment.EnvironmentFrame, _ *syntax.SyntaxPair, _ any) ValidatedExpr {
-		return &testExpr{tag: "v"}
-	}
-	Register(&FormSpec{Name: "test-verify-no-compiler", Validate: validator})
-
-	err := Verify()
-	c.Assert(err, qt.IsNotNil)
-	c.Assert(err.Error(), qt.Contains, "test-verify-no-compiler: missing compiler")
 }
 
 func TestVerify_MissingValidator(t *testing.T) {
 	saveRegistry(t)
 	c := qt.New(t)
 
-	compiler := func(_ any, _ any, _ ValidatedExpr) error {
-		return nil
-	}
-	Register(&FormSpec{Name: "test-verify-no-validator", Compile: compiler})
+	Register(&FormSpec{Name: "test-verify-no-validator"})
 
 	err := Verify()
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "test-verify-no-validator: missing validator")
-}
-
-func TestVerify_ExpandTimeOnlyAllowed(t *testing.T) {
-	saveRegistry(t)
-	c := qt.New(t)
-
-	validator := func(_ context.Context, _ *environment.EnvironmentFrame, _ *syntax.SyntaxPair, _ any) ValidatedExpr {
-		return &testExpr{tag: "v"}
-	}
-	// let-syntax is in expandTimeOnlyForms — no compiler needed.
-	Register(&FormSpec{Name: "let-syntax", Validate: validator})
-
-	err := Verify()
-	c.Assert(err, qt.IsNil)
 }

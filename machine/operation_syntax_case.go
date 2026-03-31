@@ -64,7 +64,7 @@ func NewOperationSyntaxCaseMatch() *OperationSyntaxCaseMatch {
 func (p *OperationSyntaxCaseMatch) Apply(mc *MachineContext) (*MachineContext, error) {
 	// Get the clause from value register
 	clauseVal := mc.GetValue()
-	clause, ok := clauseVal.(*syntaxCaseClause)
+	clause, ok := clauseVal.(*SyntaxCaseClause)
 	if !ok {
 		return nil, mc.Error(fmt.Sprintf("syntax-case: expected clause in value register, got %T", clauseVal))
 	}
@@ -77,7 +77,7 @@ func (p *OperationSyntaxCaseMatch) Apply(mc *MachineContext) (*MachineContext, e
 	input := sc.input
 
 	// Create a matcher
-	matcher := match.NewSyntaxMatcher(clause.patternVars, clause.bytecode, &match.SyntaxMatcherOpts{EllipsisVars: clause.ellipsisVars})
+	matcher := match.NewSyntaxMatcher(clause.PatternVars, clause.Bytecode, &match.SyntaxMatcherOpts{EllipsisVars: clause.EllipsisVars})
 
 	// Try to match
 	err := matcher.Match(mc.Context(), input)

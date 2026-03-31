@@ -29,15 +29,15 @@ import (
 	exteval "github.com/aalpar/wile/internal/extensions/eval"
 	"github.com/aalpar/wile/internal/extensions/io"
 	nsext "github.com/aalpar/wile/internal/extensions/namespace"
-	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/werr"
 )
 
 // LibraryImportEvent records what happened when a library was imported.
-// See machine.LibraryImportEvent for field documentation.
-type LibraryImportEvent = machine.LibraryImportEvent
+// See compilation.LibraryImportEvent for field documentation.
+type LibraryImportEvent = compilation.LibraryImportEvent
 
 // Phase constants for LibraryImportEvent.Phase.
 // Re-exported from environment for embedder convenience.
@@ -61,7 +61,7 @@ type engineConfig struct {
 
 // resolverFactory creates a FileResolver given the runtime environment.
 // Used internally by WithSourceFS and WithSourceOS to build the resolver chain.
-type resolverFactory func(*environment.EnvironmentFrame) machine.FileResolver
+type resolverFactory func(*environment.EnvironmentFrame) compilation.FileResolver
 
 // EngineOption configures an Engine.
 type EngineOption func(*engineConfig)
@@ -195,8 +195,8 @@ func WithSourceFS(fsys fs.FS) EngineOption {
 		panic(werr.WrapForeignErrorf(werr.ErrEngineInit, "WithSourceFS: fsys must not be nil"))
 	}
 	return func(cfg *engineConfig) {
-		cfg.resolverFactories = append(cfg.resolverFactories, func(env *environment.EnvironmentFrame) machine.FileResolver {
-			return machine.NewFSFileResolver(fsys, env)
+		cfg.resolverFactories = append(cfg.resolverFactories, func(env *environment.EnvironmentFrame) compilation.FileResolver {
+			return compilation.NewFSFileResolver(fsys, env)
 		})
 	}
 }
@@ -215,8 +215,8 @@ func WithSourceFS(fsys fs.FS) EngineOption {
 //	)
 func WithSourceOS() EngineOption {
 	return func(cfg *engineConfig) {
-		cfg.resolverFactories = append(cfg.resolverFactories, func(env *environment.EnvironmentFrame) machine.FileResolver {
-			return machine.NewOSFileResolver(env)
+		cfg.resolverFactories = append(cfg.resolverFactories, func(env *environment.EnvironmentFrame) compilation.FileResolver {
+			return compilation.NewOSFileResolver(env)
 		})
 	}
 }

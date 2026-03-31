@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -263,7 +264,7 @@ func TestAcquireMacroContext_Roundtrip(t *testing.T) {
 	mc := acquireMacroContext(ctx, cls)
 
 	// Simulate what a macro expansion does: set expanderCtx, run, get value.
-	mc.expanderCtx = &ExpanderContext{}
+	mc.expanderCtx = &stubExpanderCtx{}
 	mc.singleValue = values.NewInteger(42)
 
 	ReleaseSubContext(mc)
@@ -922,3 +923,16 @@ func TestEnvFramePool_SurvivesGC(t *testing.T) {
 
 	qt.Assert(t, after.Misses-before.Misses, qt.Equals, uint64(0))
 }
+
+// stubExpanderCtx is a minimal ExpanderCtx for testing pool reset behavior.
+type stubExpanderCtx struct{}
+
+func (p *stubExpanderCtx) Env() *environment.EnvironmentFrame                    { return nil }
+func (p *stubExpanderCtx) Expand(syntax.SyntaxValue) (syntax.SyntaxValue, error) { return nil, nil }
+func (p *stubExpanderCtx) ExpandOnce(syntax.SyntaxValue) (syntax.SyntaxValue, bool, error) {
+	return nil, false, nil
+}
+func (p *stubExpanderCtx) IntroductionScope() *syntax.Scope   { return nil }
+func (p *stubExpanderCtx) SetIntroductionScope(*syntax.Scope) {}
+func (p *stubExpanderCtx) UseSiteScope() *syntax.Scope        { return nil }
+func (p *stubExpanderCtx) SetUseSiteScope(*syntax.Scope)      {}

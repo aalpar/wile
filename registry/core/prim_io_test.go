@@ -26,6 +26,7 @@ import (
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
@@ -67,9 +68,9 @@ func TestDisplayWithBuffer(t *testing.T) {
 
 	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (display "hello")
@@ -94,9 +95,9 @@ func TestWriteWithBuffer(t *testing.T) {
 
 	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (write 42)
@@ -121,9 +122,9 @@ func TestWriteCharWithBuffer(t *testing.T) {
 
 	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (write-char #\A)
@@ -148,9 +149,9 @@ func TestNewlineWithBuffer(t *testing.T) {
 
 	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (newline)
@@ -175,9 +176,9 @@ func TestReadToken(t *testing.T) {
 
 	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (read-token)
@@ -204,9 +205,9 @@ func TestReadSyntax(t *testing.T) {
 
 	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (read-syntax)
@@ -234,9 +235,9 @@ func TestRead(t *testing.T) {
 
 	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (read)
@@ -263,9 +264,9 @@ func TestReadWithPort(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// We need to test read with an explicit port - use lambda to capture port
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// Create a program that reads from the port
@@ -296,9 +297,9 @@ func TestDisplayWithSymbol(t *testing.T) {
 
 	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (display 'hello) - symbol
@@ -324,9 +325,9 @@ func TestWriteWithString(t *testing.T) {
 
 	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (write "hello") - string with quotes
@@ -351,9 +352,9 @@ func TestWriteCharWithUnicode(t *testing.T) {
 
 	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (write-char #\λ) - unicode character
@@ -380,9 +381,9 @@ func TestReadMultipleTokens(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Read first token
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	prog := values.List(values.NewSymbol("read-token"))
@@ -407,9 +408,9 @@ func TestDisplayWithInteger(t *testing.T) {
 
 	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (display 123) - integer
@@ -434,9 +435,9 @@ func TestDisplayWithBoolean(t *testing.T) {
 
 	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (display #t)
@@ -461,9 +462,9 @@ func TestWriteWithSymbol(t *testing.T) {
 
 	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (write 'foo) - symbol
@@ -509,9 +510,9 @@ func TestDisplayWithList(t *testing.T) {
 
 	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (display '(1 2 3)) - list
@@ -538,9 +539,9 @@ func TestWriteWithList(t *testing.T) {
 
 	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	sctx := syntax.NewZeroValueSourceContext()
 
 	// (write '(a b c)) - list
@@ -575,12 +576,12 @@ func TestStringPorts(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	ectx := context.Background()
-	expanded, err := machine.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
+	expanded, err := compilation.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
-	err = machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
@@ -605,12 +606,12 @@ func TestStringInputPort(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	ectx := context.Background()
-	expanded, err := machine.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
+	expanded, err := compilation.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
-	err = machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
@@ -638,12 +639,12 @@ func TestBytevectorPorts(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	ectx := context.Background()
-	expanded, err := machine.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
+	expanded, err := compilation.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
-	err = machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
@@ -668,12 +669,12 @@ func TestBytevectorInputPort(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	ectx := context.Background()
-	expanded, err := machine.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
+	expanded, err := compilation.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
-	err = machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
@@ -750,12 +751,12 @@ func TestPortPredicates(t *testing.T) {
 			qt.Assert(t, err, qt.IsNil)
 
 			ectx := context.Background()
-			expanded, err := machine.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
+			expanded, err := compilation.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 			qt.Assert(t, err, qt.IsNil)
 
 			tpl := machine.NewNativeTemplate(0, 0, false)
-			cctx := machine.NewCompileTimeCallContext(context.Background(), false)
-			err = machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+			cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+			err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 			qt.Assert(t, err, qt.IsNil)
 
 			mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))

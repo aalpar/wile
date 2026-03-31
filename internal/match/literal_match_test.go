@@ -171,26 +171,30 @@ func TestCapturedValueToSyntax_FallbackPaths(t *testing.T) {
 
 // --- applyHygieneToSymbol tests ---
 
-// mockLocalScopes implements localScopesProvider for testing.
-type mockLocalScopes struct {
-	scopes []*syntax.Scope
+// mockFreeIdResolver implements FreeIdResolver for testing.
+// Set only the fields relevant to each test case; zero values mean "absent."
+type mockFreeIdResolver struct {
+	localScopes     []*syntax.Scope
+	global          *environment.GlobalIndex
+	hasLocalBinding bool
+	libScope        *syntax.Scope
 }
 
-func (p mockLocalScopes) GetLocalScopes() []*syntax.Scope { return p.scopes }
-
-// mockGlobalBinding implements globalBindingProvider for testing.
-type mockGlobalBinding struct {
-	binding *environment.GlobalIndex
+func (p mockFreeIdResolver) GetLocalScopes() []*syntax.Scope {
+	return p.localScopes
 }
 
-func (p mockGlobalBinding) GetGlobal() *environment.GlobalIndex { return p.binding }
-
-// mockHasLocalBinding implements hasLocalBindingProvider for testing.
-type mockHasLocalBinding struct {
-	has bool
+func (p mockFreeIdResolver) GetGlobal() *environment.GlobalIndex {
+	return p.global
 }
 
-func (p mockHasLocalBinding) GetHasLocalBinding() bool { return p.has }
+func (p mockFreeIdResolver) GetHasLocalBinding() bool {
+	return p.hasLocalBinding
+}
+
+func (p mockFreeIdResolver) GetLibraryScope() *syntax.Scope {
+	return p.libScope
+}
 
 func TestApplyHygieneToSymbol(t *testing.T) {
 	c := qt.New(t)
@@ -210,8 +214,8 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 
 	c.Run("free identifier with local scopes", func(c *qt.C) {
 		defScope := syntax.NewScope()
-		freeIds := map[string]any{
-			"bar": mockLocalScopes{scopes: []*syntax.Scope{defScope}},
+		freeIds := map[string]FreeIdResolver{
+			"bar": mockFreeIdResolver{localScopes: []*syntax.Scope{defScope}},
 		}
 		sym := syntax.NewSyntaxSymbol("bar", &syntax.SourceContext{Text: "bar"})
 		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, FreeIds: freeIds})
@@ -225,8 +229,8 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 
 	c.Run("free identifier with global binding", func(c *qt.C) {
 		globalIdx := environment.NewGlobalIndex(values.NewSymbol("baz"))
-		freeIds := map[string]any{
-			"baz": mockGlobalBinding{binding: globalIdx},
+		freeIds := map[string]FreeIdResolver{
+			"baz": mockFreeIdResolver{global: globalIdx},
 		}
 		sym := syntax.NewSyntaxSymbol("baz", &syntax.SourceContext{Text: "baz"})
 		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, FreeIds: freeIds})
@@ -236,8 +240,8 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 	})
 
 	c.Run("free identifier with hasLocalBinding true", func(c *qt.C) {
-		freeIds := map[string]any{
-			"qux": mockHasLocalBinding{has: true},
+		freeIds := map[string]FreeIdResolver{
+			"qux": mockFreeIdResolver{hasLocalBinding: true},
 		}
 		sym := syntax.NewSyntaxSymbol("qux", nil)
 		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, FreeIds: freeIds})
@@ -265,8 +269,8 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 
 	c.Run("global binding with existing scopes clears them", func(c *qt.C) {
 		globalIdx := environment.NewGlobalIndex(values.NewSymbol("baz"))
-		freeIds := map[string]any{
-			"baz": mockGlobalBinding{binding: globalIdx},
+		freeIds := map[string]FreeIdResolver{
+			"baz": mockFreeIdResolver{global: globalIdx},
 		}
 		existingScope := syntax.NewScope()
 		srcCtx := &syntax.SourceContext{

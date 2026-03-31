@@ -285,7 +285,7 @@ func TestSyntaxExpandWithIntroScope(t *testing.T) {
 
 	tcs := []struct {
 		name    string
-		freeIds map[string]any
+		freeIds map[string]FreeIdResolver
 		checkFn func(c *qt.C, result syntax.SyntaxValue, introScope *syntax.Scope)
 	}{
 		{
@@ -306,7 +306,7 @@ func TestSyntaxExpandWithIntroScope(t *testing.T) {
 			// but has no resolution. The implementation falls through to the default
 			// path which adds intro scope. Only non-nil resolutions with local/global
 			// binding providers skip the intro scope.
-			freeIds: map[string]any{"tmp": nil},
+			freeIds: map[string]FreeIdResolver{"tmp": nil},
 			checkFn: func(c *qt.C, result syntax.SyntaxValue, introScope *syntax.Scope) {
 				sym, ok := result.(*syntax.SyntaxSymbol)
 				c.Assert(ok, qt.IsTrue)
@@ -882,7 +882,7 @@ func TestExpandWithUseSite(t *testing.T) {
 
 	// Expand with use-site context
 	introScope := syntax.NewScope()
-	freeIds := map[string]any{"let": nil}
+	freeIds := map[string]FreeIdResolver{"let": nil}
 	result, err := matcher.Expand(template, ExpandOptions{IntroScope: introScope, FreeIds: freeIds, UseSiteCtx: useSiteSc})
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)

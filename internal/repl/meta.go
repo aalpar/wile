@@ -13,6 +13,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/values"
 )
 
@@ -294,7 +295,7 @@ func (p *MetaCommandHandler) cmdDocLibrary(nameStr string, out io.Writer) {
 		return
 	}
 
-	libName := machine.NewLibraryName(parts...)
+	libName := compilation.NewLibraryName(parts...)
 
 	if p.env == nil {
 		fmt.Fprintf(out, "Library %s: no environment available\n", libName.SchemeString())
@@ -306,7 +307,7 @@ func (p *MetaCommandHandler) cmdDocLibrary(nameStr string, out io.Writer) {
 		fmt.Fprintf(out, "Library %s: no library registry configured\n", libName.SchemeString())
 		return
 	}
-	reg, ok := regAny.(*machine.LibraryRegistry)
+	reg, ok := regAny.(*compilation.LibraryRegistry)
 	if !ok {
 		fmt.Fprintf(out, "Library %s: library registry unavailable\n", libName.SchemeString())
 		return
@@ -323,7 +324,7 @@ func (p *MetaCommandHandler) cmdDocLibrary(nameStr string, out io.Writer) {
 	writeWithPager(out, content.String(), p.pager)
 }
 
-func formatLibraryDoc(w *strings.Builder, lib *machine.CompiledLibrary) {
+func formatLibraryDoc(w *strings.Builder, lib *compilation.CompiledLibrary) {
 	fmt.Fprintf(w, "Library: %s\n", lib.Name.SchemeString())
 	if lib.Description != "" {
 		fmt.Fprintf(w, "\n  %s\n", lib.Description)
@@ -602,7 +603,7 @@ func (p *MetaCommandHandler) cmdLibraries(out io.Writer) {
 		fmt.Fprintln(out, "No library registry configured")
 		return
 	}
-	reg, ok := regAny.(*machine.LibraryRegistry)
+	reg, ok := regAny.(*compilation.LibraryRegistry)
 	if !ok {
 		fmt.Fprintln(out, "Library registry unavailable")
 		return
@@ -723,7 +724,7 @@ func (p *MetaCommandHandler) searchLibraries(pattern string) []DocSearchResult {
 	if regAny == nil {
 		return nil
 	}
-	reg, ok := regAny.(*machine.LibraryRegistry)
+	reg, ok := regAny.(*compilation.LibraryRegistry)
 	if !ok {
 		return nil
 	}

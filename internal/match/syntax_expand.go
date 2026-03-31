@@ -50,10 +50,10 @@ type ExpandOptions struct {
 	IntroScope *syntax.Scope
 
 	// FreeIds maps free identifier names to their pre-resolved bindings.
-	// Identifiers in this map do not receive the intro scope.
-	// Values use type any to avoid circular imports (implemented by machine.FreeIdResolution).
-	// A nil value means just skip intro scope; a non-nil value carries resolved binding info.
-	FreeIds map[string]any
+	// A non-nil value carries resolved binding info from macro definition time
+	// (local scopes, global index, library scope). A nil value is treated the
+	// same as an absent key — the identifier receives the intro scope normally.
+	FreeIds map[string]FreeIdResolver
 
 	// UseSiteCtx, if provided, is used for the source context of newly created syntax
 	// objects instead of the template's context. This allows error messages to point to
@@ -224,71 +224,57 @@ func (p *SyntaxMatcher) applyHygieneToSymbol(
 
 	// Check if this is a free identifier
 	var isFree bool
-	var resolution any
+	var resolution FreeIdResolver
 	if opts.FreeIds != nil {
 		resolution, isFree = opts.FreeIds[symVal.Key]
 	}
 
 	if isFree && resolution != nil {
 		// Handle free identifier resolution (local or global binding)
-		lsp, ok := resolution.(localScopesProvider)
-		if ok {
-			localScopes := lsp.GetLocalScopes()
-			if len(localScopes) > 0 {
-				// Local binding - use definition-site scopes
-				var scopedCtx *syntax.SourceContext
-				if srcCtx != nil {
-					scopedCtx = srcCtx.Clone()
-				} else {
-					scopedCtx = &syntax.SourceContext{}
-				}
-				scopedCtx.Scopes = localScopes
-				return syntax.NewSyntaxSymbol(symVal.Key, scopedCtx)
+		localScopes := resolution.GetLocalScopes()
+		if len(localScopes) > 0 {
+			// Local binding - use definition-site scopes
+			var scopedCtx *syntax.SourceContext
+			if srcCtx != nil {
+				scopedCtx = srcCtx.Clone()
+			} else {
+				scopedCtx = &syntax.SourceContext{}
 			}
+			scopedCtx.Scopes = localScopes
+			return syntax.NewSyntaxSymbol(symVal.Key, scopedCtx)
 		}
 
-		gbp, ok := resolution.(globalBindingProvider)
-		if ok {
-			globalBinding := gbp.GetGlobal()
-			if globalBinding != nil {
-				// Check if we have a library scope — if so, add it to the
-				// identifier so CompileSymbol can redirect to the library's env
-				// via the TLE scope registry. This replaces WithResolvedBinding
-				// for library-scoped bindings.
-				lscp, lscpOk := resolution.(libraryScopeProvider)
-				if lscpOk {
-					libScope := lscp.GetLibraryScope()
-					if libScope != nil {
-						symCtx := srcCtx
-						if srcCtx != nil && len(srcCtx.Scopes) > 0 {
-							symCtx = srcCtx.WithoutScopes()
-						}
-						newSym := syntax.NewSyntaxSymbol(symVal.Key, symCtx)
-						newSym = newSym.AddScope(libScope).(*syntax.SyntaxSymbol)
-						return newSym
-					}
-				}
-
-				// No library scope — fall back to WithResolvedBinding
-				// (backward compat for non-library macros or during transition)
+		globalBinding := resolution.GetGlobal()
+		if globalBinding != nil {
+			// Check if we have a library scope — if so, add it to the
+			// identifier so CompileSymbol can redirect to the library's env
+			// via the TLE scope registry.
+			libScope := resolution.GetLibraryScope()
+			if libScope != nil {
 				symCtx := srcCtx
 				if srcCtx != nil && len(srcCtx.Scopes) > 0 {
 					symCtx = srcCtx.WithoutScopes()
 				}
 				newSym := syntax.NewSyntaxSymbol(symVal.Key, symCtx)
-				return newSym.WithResolvedBinding(globalBinding)
+				newSym = newSym.AddScope(libScope).(*syntax.SyntaxSymbol)
+				return newSym
 			}
+
+			// No library scope — fall back to WithResolvedBinding
+			symCtx := srcCtx
+			if srcCtx != nil && len(srcCtx.Scopes) > 0 {
+				symCtx = srcCtx.WithoutScopes()
+			}
+			newSym := syntax.NewSyntaxSymbol(symVal.Key, symCtx)
+			return newSym.WithResolvedBinding(globalBinding)
 		}
 
-		hlp, ok := resolution.(hasLocalBindingProvider)
-		if ok && hlp.GetHasLocalBinding() {
+		if resolution.GetHasLocalBinding() {
 			return syntax.NewSyntaxSymbol(symVal.Key, srcCtx)
 		}
 
-		// If resolution is non-nil but matched none of the provider interfaces,
-		// a nil FreeIds value means "skip intro scope only" (see ExpandOptions.FreeIds doc).
-		// If it implements a provider but returns zero/nil, fall through to intro scope
-		// is intentional — the binding was unresolvable at definition time.
+		// Resolution is non-nil but all methods returned zero — the binding was
+		// unresolvable at definition time. Fall through to intro scope.
 	}
 
 	// Not a free identifier or unresolved - create symbol with intro scope

@@ -34,5 +34,5 @@ type ExpanderCtx interface {
 	SetUseSiteScope(*syntax.Scope)
 }
 
-// Compile-time check: *ExpanderContext satisfies ExpanderCtx.
-var _ ExpanderCtx = (*ExpanderContext)(nil)
+// Compile-time interface assertion lives in machine/compilation/expander_context.go:
+//   var _ machine.ExpanderCtx = (*ExpanderContext)(nil)

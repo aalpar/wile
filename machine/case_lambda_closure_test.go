@@ -270,8 +270,8 @@ func TestOperationMakeCaseLambdaClosure_EqualTo(t *testing.T) {
 // Tests moved from coverage_additional_test.go
 // TestClausesWrapperAdditional tests the clausesWrapper type
 func TestClausesWrapperAdditional(t *testing.T) {
-	cw := &clausesWrapper{
-		clauses: nil,
+	cw := &ClausesWrapper{
+		Clauses: nil,
 	}
 	qt.Assert(t, cw.IsVoid(), qt.IsFalse)
 	qt.Assert(t, cw.SchemeString(), qt.Contains, "syntax-rules-clauses")
@@ -279,21 +279,21 @@ func TestClausesWrapperAdditional(t *testing.T) {
 	// EqualTo always returns false because clauses are not comparable
 	qt.Assert(t, cw.EqualTo(cw), qt.IsFalse)
 
-	var nilCw *clausesWrapper
+	var nilCw *ClausesWrapper
 	qt.Assert(t, cw.EqualTo(nilCw), qt.IsFalse)
 }
 
 // TestClausesWrapperMethods tests clausesWrapper methods
 func TestClausesWrapperMethods(t *testing.T) {
-	cw := &clausesWrapper{
-		clauses: nil,
+	cw := &ClausesWrapper{
+		Clauses: nil,
 	}
 
 	qt.Assert(t, cw.SchemeString(), qt.Contains, "syntax-rules")
 	qt.Assert(t, cw.IsVoid(), qt.IsFalse)
 
 	// Test EqualTo - clausesWrapper always returns false (not comparable)
-	cw2 := &clausesWrapper{clauses: nil}
+	cw2 := &ClausesWrapper{Clauses: nil}
 	qt.Assert(t, cw.EqualTo(cw2), qt.IsFalse) // clauses are not comparable per implementation
 	qt.Assert(t, cw.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }

@@ -11,7 +11,7 @@ import (
 
 	"github.com/aalpar/wile/internal/bootstrap"
 	"github.com/aalpar/wile/internal/parser"
-	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 	wileruntime "github.com/aalpar/wile/runtime"
 	"github.com/aalpar/wile/values"
 )
@@ -359,8 +359,8 @@ func TestCmdApropos_Library(t *testing.T) {
 	docProv := NewRegistryDocProvider(reg)
 
 	// Register a library in the env's library registry
-	libReg := machine.NewLibraryRegistry()
-	lib := machine.NewCompiledLibrary(machine.NewLibraryName("wile", "algebra"), env)
+	libReg := compilation.NewLibraryRegistry()
+	lib := compilation.NewCompiledLibrary(compilation.NewLibraryName("wile", "algebra"), env)
 	lib.Description = "Algebraic structures: orders, lattices, monoids."
 	err = libReg.Register(lib)
 	qt.Assert(t, err, qt.IsNil)
@@ -438,8 +438,8 @@ func TestCmdDocLibrary(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Set up a library registry with a test library
-	reg := machine.NewLibraryRegistry()
-	lib := machine.NewCompiledLibrary(machine.NewLibraryName("test", "lib"), env)
+	reg := compilation.NewLibraryRegistry()
+	lib := compilation.NewCompiledLibrary(compilation.NewLibraryName("test", "lib"), env)
 	lib.Description = "A test library for documentation."
 	lib.AddExport("foo", "foo")
 	lib.AddExport("bar", "bar")
@@ -486,8 +486,8 @@ func TestCmdLibraries(t *testing.T) {
 	env, _, err := bootstrap.NewTopLevelWithRegistry(ctx)
 	qt.Assert(t, err, qt.IsNil)
 
-	reg := machine.NewLibraryRegistry()
-	lib := machine.NewCompiledLibrary(machine.NewLibraryName("test", "lib"), env)
+	reg := compilation.NewLibraryRegistry()
+	lib := compilation.NewCompiledLibrary(compilation.NewLibraryName("test", "lib"), env)
 	lib.Description = "A test library."
 	err = reg.Register(lib)
 	qt.Assert(t, err, qt.IsNil)

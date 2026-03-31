@@ -25,6 +25,7 @@ import (
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -53,15 +54,15 @@ func parseLibrarySyntax(t *testing.T, env *environment.EnvironmentFrame, input s
 func TestLibraryName(t *testing.T) {
 	c := qt.New(t)
 
-	// Test LibraryName creation and methods
-	name := machine.NewLibraryName("scheme", "base")
+	// Test compilation.LibraryName creation and methods
+	name := compilation.NewLibraryName("scheme", "base")
 	c.Assert(name.String(), qt.Equals, "scheme/base")
 	c.Assert(name.SchemeString(), qt.Equals, "(scheme base)")
 	c.Assert(name.Key(), qt.Equals, "scheme/base")
 	c.Assert(name.ToFilePath(), qt.Equals, "scheme/base.sld")
 
 	// Test multi-part name
-	name2 := machine.NewLibraryName("my", "lib", "utils")
+	name2 := compilation.NewLibraryName("my", "lib", "utils")
 	c.Assert(name2.String(), qt.Equals, "my/lib/utils")
 	c.Assert(name2.SchemeString(), qt.Equals, "(my lib utils)")
 }
@@ -69,7 +70,7 @@ func TestLibraryName(t *testing.T) {
 func TestLibraryRegistry(t *testing.T) {
 	c := qt.New(t)
 
-	registry := machine.NewLibraryRegistry()
+	registry := compilation.NewLibraryRegistry()
 
 	// Test that default search paths are set
 	paths := registry.GetSearchPaths()
@@ -90,8 +91,8 @@ func TestCompiledLibrary(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	name := machine.NewLibraryName("test", "lib")
-	lib := machine.NewCompiledLibrary(name, env)
+	name := compilation.NewLibraryName("test", "lib")
+	lib := compilation.NewCompiledLibrary(name, env)
 
 	// Test empty exports initially
 	c.Assert(lib.IsExported("bindSymbolWithScopes"), qt.IsFalse)
@@ -112,14 +113,14 @@ func TestImportSet(t *testing.T) {
 
 	// Create a library with exports
 	env := environment.NewNamespace().Runtime()
-	name := machine.NewLibraryName("test", "lib")
-	lib := machine.NewCompiledLibrary(name, env)
+	name := compilation.NewLibraryName("test", "lib")
+	lib := compilation.NewCompiledLibrary(name, env)
 	lib.AddExport("bindSymbolWithScopes", "")
 	lib.AddExport("bar", "")
 	lib.AddExport("baz", "")
 
 	// Test basic import set (all exports)
-	importSet := machine.NewImportSet(name)
+	importSet := compilation.NewImportSet(name)
 	bindings, err := importSet.ApplyToExports(lib)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(bindings), qt.Equals, 3)
@@ -128,7 +129,7 @@ func TestImportSet(t *testing.T) {
 	c.Assert(bindings["baz"], qt.Equals, "baz")
 
 	// Test 'only' filter
-	importSet2 := machine.NewImportSet(name)
+	importSet2 := compilation.NewImportSet(name)
 	importSet2.Only = map[string]struct{}{"bindSymbolWithScopes": {}, "bar": {}}
 	bindings2, err := importSet2.ApplyToExports(lib)
 	c.Assert(err, qt.IsNil)
@@ -137,14 +138,14 @@ func TestImportSet(t *testing.T) {
 	c.Assert(bindings2["bar"], qt.Equals, "bar")
 
 	// Test 'except' filter
-	importSet3 := machine.NewImportSet(name)
+	importSet3 := compilation.NewImportSet(name)
 	importSet3.Except = map[string]struct{}{"baz": {}}
 	bindings3, err := importSet3.ApplyToExports(lib)
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(bindings3), qt.Equals, 2)
 
 	// Test 'prefix' modifier
-	importSet4 := machine.NewImportSet(name)
+	importSet4 := compilation.NewImportSet(name)
 	importSet4.Prefix = "my:"
 	bindings4, err := importSet4.ApplyToExports(lib)
 	c.Assert(err, qt.IsNil)
@@ -152,7 +153,7 @@ func TestImportSet(t *testing.T) {
 	c.Assert(bindings4["my:bar"], qt.Equals, "bar")
 
 	// Test 'rename' modifier
-	importSet5 := machine.NewImportSet(name)
+	importSet5 := compilation.NewImportSet(name)
 	importSet5.Renames = map[string]string{"bindSymbolWithScopes": "renamed-bindSymbolWithScopes"}
 	bindings5, err := importSet5.ApplyToExports(lib)
 	c.Assert(err, qt.IsNil)
@@ -165,19 +166,19 @@ func TestImportSetErrors(t *testing.T) {
 
 	// Create a library with limited exports
 	env := environment.NewNamespace().Runtime()
-	name := machine.NewLibraryName("test", "lib")
-	lib := machine.NewCompiledLibrary(name, env)
+	name := compilation.NewLibraryName("test", "lib")
+	lib := compilation.NewCompiledLibrary(name, env)
 	lib.AddExport("bindSymbolWithScopes", "")
 
 	// Test 'only' with non-existent identifier
-	importSet := machine.NewImportSet(name)
+	importSet := compilation.NewImportSet(name)
 	importSet.Only = map[string]struct{}{"nonexistent": {}}
 	_, err := importSet.ApplyToExports(lib)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "nonexistent")
 
 	// Test 'except' with non-existent identifier
-	importSet2 := machine.NewImportSet(name)
+	importSet2 := compilation.NewImportSet(name)
 	importSet2.Except = map[string]struct{}{"nonexistent": {}}
 	_, err2 := importSet2.ApplyToExports(lib)
 	c.Assert(err2, qt.IsNotNil)
@@ -200,8 +201,8 @@ func TestCompileDefineLibrary_Basic(t *testing.T) {
 
 	// Compile the library
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	ctc := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 
 	err := ctc.CompileDefineLibrary(ctctx, args)
 	qt.Assert(t, err, qt.IsNil)
@@ -219,8 +220,8 @@ func TestCompileDefineLibrary_Empty(t *testing.T) {
 
 	// Compile
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	ctc := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 
 	err := ctc.CompileDefineLibrary(ctctx, args)
 	qt.Assert(t, err, qt.IsNil)
@@ -274,14 +275,14 @@ func TestLibraryDescription(t *testing.T) {
 			args := libPair.Cdr().(*syntax.SyntaxPair)
 
 			tpl := machine.NewNativeTemplate(0, 0, false)
-			ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+			ctc := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 
-			var compiledLib *machine.CompiledLibrary
-			ctc.SetLibraryCallback(func(lib *machine.CompiledLibrary) {
+			var compiledLib *compilation.CompiledLibrary
+			ctc.SetLibraryCallback(func(lib *compilation.CompiledLibrary) {
 				compiledLib = lib
 			})
 
-			ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+			ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 			err := ctc.CompileDefineLibrary(ctctx, args)
 
 			if tt.wantErr {
@@ -301,9 +302,9 @@ func TestCompileImport_LibraryNotFound(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 
 	// Set up a library registry (required for imports)
-	registry := machine.NewLibraryRegistry()
+	registry := compilation.NewLibraryRegistry()
 	env.SetLibraryRegistry(registry)
-	env.SetFileResolver(machine.NewOSFileResolver(env))
+	env.SetFileResolver(compilation.NewOSFileResolver(env))
 
 	// Parse an import declaration
 	importDef := parseLibrarySyntax(t, env, `(import (scheme base))`)
@@ -314,8 +315,8 @@ func TestCompileImport_LibraryNotFound(t *testing.T) {
 
 	// Compile - should fail because (scheme base) doesn't exist
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	ctc := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 
 	err := ctc.CompileImport(ctctx, args)
 	qt.Assert(t, err, qt.IsNotNil) // Library not found
@@ -335,8 +336,8 @@ func TestCompileImport_NoRegistry(t *testing.T) {
 
 	// Compile - should fail because no registry is configured
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	ctc := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 
 	err := ctc.CompileImport(ctctx, args)
 	qt.Assert(t, err, qt.IsNotNil)
@@ -355,8 +356,8 @@ func TestCompileExport_TopLevelError(t *testing.T) {
 
 	// Compile - should error at top level
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	ctc := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 
 	err := ctc.CompileExport(ctctx, args)
 	qt.Assert(t, err, qt.IsNotNil)
@@ -381,7 +382,7 @@ func setupLibraryTest(t *testing.T) *environment.EnvironmentFrame {
 	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
 	// Create and configure the library registry
-	registry := machine.NewLibraryRegistry()
+	registry := compilation.NewLibraryRegistry()
 	registry.SetSearchPaths([]string{getTestdataPath()})
 	env.SetLibraryRegistry(registry)
 
@@ -393,8 +394,8 @@ func TestLoadLibrary_Simple(t *testing.T) {
 	env := setupLibraryTest(t)
 
 	// Load the simple library
-	name := machine.NewLibraryName("test", "simple")
-	lib, err := machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
+	name := compilation.NewLibraryName("test", "simple")
+	lib, err := compilation.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNil)
 	c.Assert(lib, qt.IsNotNil)
 
@@ -413,11 +414,11 @@ func TestLoadLibrary_Cached(t *testing.T) {
 	env := setupLibraryTest(t)
 
 	// Load the same library twice
-	name := machine.NewLibraryName("test", "simple")
-	lib1, err := machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
+	name := compilation.NewLibraryName("test", "simple")
+	lib1, err := compilation.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNil)
 
-	lib2, err := machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
+	lib2, err := compilation.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNil)
 
 	// Should return the same cached library
@@ -429,8 +430,8 @@ func TestLoadLibrary_WithImports(t *testing.T) {
 	env := setupLibraryTest(t)
 
 	// Load the importer library (which imports test/simple)
-	name := machine.NewLibraryName("test", "importer")
-	lib, err := machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
+	name := compilation.NewLibraryName("test", "importer")
+	lib, err := compilation.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNil)
 	c.Assert(lib, qt.IsNotNil)
 
@@ -439,8 +440,8 @@ func TestLoadLibrary_WithImports(t *testing.T) {
 	c.Assert(lib.IsExported("get-secret"), qt.IsTrue)
 
 	// Verify that the dependency was also loaded
-	registry := env.LibraryRegistry().(*machine.LibraryRegistry)
-	simpleName := machine.NewLibraryName("test", "simple")
+	registry := env.Compile().LibraryRegistry().(*compilation.LibraryRegistry)
+	simpleName := compilation.NewLibraryName("test", "simple")
 	simpleLib := registry.Lookup(simpleName)
 	c.Assert(simpleLib, qt.IsNotNil)
 }
@@ -450,8 +451,8 @@ func TestLoadLibrary_CircularDependency(t *testing.T) {
 	env := setupLibraryTest(t)
 
 	// Try to load a library with circular dependency
-	name := machine.NewLibraryName("test", "circular-a")
-	_, err := machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
+	name := compilation.NewLibraryName("test", "circular-a")
+	_, err := compilation.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "circular")
 }
@@ -461,8 +462,8 @@ func TestLoadLibrary_NotFound(t *testing.T) {
 	env := setupLibraryTest(t)
 
 	// Try to load a non-existent library
-	name := machine.NewLibraryName("nonexistent", "lib")
-	_, err := machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
+	name := compilation.NewLibraryName("nonexistent", "lib")
+	_, err := compilation.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "not found")
 }
@@ -478,8 +479,8 @@ func TestImport_Simple(t *testing.T) {
 	args := importPair.Cdr().(syntax.SyntaxValue)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	ctc := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 
 	err := ctc.CompileImport(ctctx, args)
 	c.Assert(err, qt.IsNil)
@@ -506,8 +507,8 @@ func TestImport_OnlyModifier(t *testing.T) {
 	args := importPair.Cdr().(syntax.SyntaxValue)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	ctc := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 
 	err := ctc.CompileImport(ctctx, args)
 	c.Assert(err, qt.IsNil)
@@ -531,8 +532,8 @@ func TestImport_PrefixModifier(t *testing.T) {
 	args := importPair.Cdr().(syntax.SyntaxValue)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	ctc := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 
 	err := ctc.CompileImport(ctctx, args)
 	c.Assert(err, qt.IsNil)
@@ -551,8 +552,8 @@ func TestCopyLibraryBindingsToEnv(t *testing.T) {
 
 	// Create source library with runtime and syntax bindings
 	srcEnv := environment.NewNamespace().Runtime()
-	libName := machine.NewLibraryName("test", "copylib")
-	lib := machine.NewCompiledLibrary(libName, srcEnv)
+	libName := compilation.NewLibraryName("test", "copylib")
+	lib := compilation.NewCompiledLibrary(libName, srcEnv)
 
 	// Add runtime binding (variable)
 	foSym := values.NewSymbol("bindSymbolWithScopes")
@@ -580,7 +581,7 @@ func TestCopyLibraryBindingsToEnv(t *testing.T) {
 	}
 
 	// Copy bindings
-	err := machine.CopyLibraryBindingsToEnv(lib, bindings, targetEnv)
+	err := compilation.CopyLibraryBindingsToEnv(lib, bindings, targetEnv)
 	c.Assert(err, qt.IsNil)
 
 	// Verify runtime binding was copied
@@ -602,8 +603,8 @@ func TestCopyLibraryBindingsToEnv_WithRename(t *testing.T) {
 
 	// Create source library
 	srcEnv := environment.NewNamespace().Runtime()
-	libName := machine.NewLibraryName("test", "renamelib")
-	lib := machine.NewCompiledLibrary(libName, srcEnv)
+	libName := compilation.NewLibraryName("test", "renamelib")
+	lib := compilation.NewCompiledLibrary(libName, srcEnv)
 
 	// Add binding with internal name different from external
 	internalSym := values.NewSymbol("internal-bindSymbolWithScopes")
@@ -620,7 +621,7 @@ func TestCopyLibraryBindingsToEnv_WithRename(t *testing.T) {
 		"my-bindSymbolWithScopes": "bindSymbolWithScopes",
 	}
 
-	err := machine.CopyLibraryBindingsToEnv(lib, bindings, targetEnv)
+	err := compilation.CopyLibraryBindingsToEnv(lib, bindings, targetEnv)
 	c.Assert(err, qt.IsNil)
 
 	// Verify binding is accessible with local name
@@ -635,8 +636,8 @@ func TestCopyLibraryBindingsToEnv_MissingBinding(t *testing.T) {
 
 	// Create library with no bindings
 	srcEnv := environment.NewNamespace().Runtime()
-	libName := machine.NewLibraryName("test", "empty")
-	lib := machine.NewCompiledLibrary(libName, srcEnv)
+	libName := compilation.NewLibraryName("test", "empty")
+	lib := compilation.NewCompiledLibrary(libName, srcEnv)
 	lib.AddExport("missing", "")
 
 	targetEnv := environment.NewNamespace().Runtime()
@@ -646,15 +647,15 @@ func TestCopyLibraryBindingsToEnv_MissingBinding(t *testing.T) {
 	}
 
 	// Should error because binding doesn't exist
-	err := machine.CopyLibraryBindingsToEnv(lib, bindings, targetEnv)
+	err := compilation.CopyLibraryBindingsToEnv(lib, bindings, targetEnv)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "binding not found")
 }
 
 // Tests moved from coverage_additional_test.go
-// TestLibraryNameMethodsAdditional tests LibraryName methods
+// TestLibraryNameMethodsAdditional tests compilation.LibraryName methods
 func TestLibraryNameMethodsAdditional(t *testing.T) {
-	ln := machine.NewLibraryName("scheme", "base")
+	ln := compilation.NewLibraryName("scheme", "base")
 
 	qt.Assert(t, ln.String(), qt.Equals, "scheme/base")
 	qt.Assert(t, ln.SchemeString(), qt.Equals, "(scheme base)")
@@ -662,9 +663,9 @@ func TestLibraryNameMethodsAdditional(t *testing.T) {
 	qt.Assert(t, ln.ToFilePath(), qt.Contains, "scheme")
 }
 
-// TestLibraryNameMethods tests LibraryName methods
+// TestLibraryNameMethods tests compilation.LibraryName methods
 func TestLibraryNameMethods(t *testing.T) {
-	name := machine.NewLibraryName("scheme", "base")
+	name := compilation.NewLibraryName("scheme", "base")
 
 	qt.Assert(t, name.String(), qt.Equals, "scheme/base")
 	qt.Assert(t, name.SchemeString(), qt.Equals, "(scheme base)")
@@ -674,16 +675,16 @@ func TestLibraryNameMethods(t *testing.T) {
 
 // TestLibraryRegistryLookupNotFound tests looking up non-existent library
 func TestLibraryRegistryLookupNotFound(t *testing.T) {
-	registry := machine.NewLibraryRegistry()
-	lib := registry.Lookup(machine.NewLibraryName("nonexistent", "lib"))
+	registry := compilation.NewLibraryRegistry()
+	lib := registry.Lookup(compilation.NewLibraryName("nonexistent", "lib"))
 	qt.Assert(t, lib, qt.IsNil)
 }
 
 // TestLibraryRegistryRegister tests LibraryRegistry.Register
 func TestLibraryRegistryRegister(t *testing.T) {
-	registry := machine.NewLibraryRegistry()
-	name := machine.NewLibraryName("my", "lib")
-	lib := &machine.CompiledLibrary{Name: name}
+	registry := compilation.NewLibraryRegistry()
+	name := compilation.NewLibraryName("my", "lib")
+	lib := &compilation.CompiledLibrary{Name: name}
 
 	registry.Register(lib) //nolint:errcheck
 	result := registry.Lookup(name)
@@ -691,11 +692,11 @@ func TestLibraryRegistryRegister(t *testing.T) {
 	qt.Assert(t, result.Name.Key(), qt.Equals, name.Key())
 }
 
-// TestLibraryNamePathConversion tests LibraryName ToFilePath method
+// TestLibraryNamePathConversion tests compilation.LibraryName ToFilePath method
 func TestLibraryNamePathConversion(t *testing.T) {
-	name1 := machine.NewLibraryName("scheme", "base")
-	name2 := machine.NewLibraryName("scheme", "base")
-	name3 := machine.NewLibraryName("scheme", "write")
+	name1 := compilation.NewLibraryName("scheme", "base")
+	name2 := compilation.NewLibraryName("scheme", "base")
+	name3 := compilation.NewLibraryName("scheme", "write")
 
 	qt.Assert(t, name1.Key(), qt.Equals, name2.Key())
 	qt.Assert(t, name1.Key(), qt.Not(qt.Equals), name3.Key())
@@ -706,8 +707,8 @@ func TestLibraryNamePathConversion(t *testing.T) {
 
 // TestImportSetFields tests ImportSet fields
 func TestImportSetFields(t *testing.T) {
-	is := &machine.ImportSet{
-		LibraryName: machine.NewLibraryName("scheme", "base"),
+	is := &compilation.ImportSet{
+		LibraryName: compilation.NewLibraryName("scheme", "base"),
 		Only:        map[string]struct{}{"car": {}, "cdr": {}},
 		Except:      map[string]struct{}{"cons": {}},
 		Prefix:      "my-",
@@ -722,24 +723,24 @@ func TestImportSetFields(t *testing.T) {
 
 // TestLibraryNameToFilePath tests LibraryName.ToFilePath method
 func TestLibraryNameToFilePath(t *testing.T) {
-	ln := machine.NewLibraryName("scheme", "base")
+	ln := compilation.NewLibraryName("scheme", "base")
 	qt.Assert(t, strings.Contains(ln.ToFilePath(), "scheme"), qt.IsTrue)
 }
 
 // TestLibraryRegistryRegisterAndLookupAdditional tests Register and Lookup
 func TestLibraryRegistryRegisterAndLookupAdditional(t *testing.T) {
-	reg := machine.NewLibraryRegistry()
+	reg := compilation.NewLibraryRegistry()
 	env := environment.NewNamespace().Runtime()
-	lib := machine.NewCompiledLibrary(machine.NewLibraryName("test", "mylib"), env)
+	lib := compilation.NewCompiledLibrary(compilation.NewLibraryName("test", "mylib"), env)
 	reg.Register(lib) //nolint:errcheck
 
 	// Lookup existing
-	found := reg.Lookup(machine.NewLibraryName("test", "mylib"))
+	found := reg.Lookup(compilation.NewLibraryName("test", "mylib"))
 	qt.Assert(t, found, qt.IsNotNil)
 	qt.Assert(t, found.Name.String(), qt.Equals, "test/mylib")
 
 	// Lookup non-existing
-	notFound := reg.Lookup(machine.NewLibraryName("nonexistent"))
+	notFound := reg.Lookup(compilation.NewLibraryName("nonexistent"))
 	qt.Assert(t, notFound, qt.IsNil)
 }
 
@@ -751,8 +752,8 @@ func TestCopyLibraryBindingsToEnv_CompilePhase(t *testing.T) {
 
 	// Create source library with a compile-phase binding (auxiliary syntax)
 	srcEnv := environment.NewNamespace().Runtime()
-	libName := machine.NewLibraryName("test", "auxlib")
-	lib := machine.NewCompiledLibrary(libName, srcEnv)
+	libName := compilation.NewLibraryName("test", "auxlib")
+	lib := compilation.NewCompiledLibrary(libName, srcEnv)
 
 	// Register "else" in the compile environment (phase 2), mimicking
 	// how specialforms.go registers auxiliary syntax
@@ -772,7 +773,7 @@ func TestCopyLibraryBindingsToEnv_CompilePhase(t *testing.T) {
 	}
 
 	// Copy bindings
-	err := machine.CopyLibraryBindingsToEnv(lib, bindings, targetEnv)
+	err := compilation.CopyLibraryBindingsToEnv(lib, bindings, targetEnv)
 	c.Assert(err, qt.IsNil)
 
 	// Verify binding is present in runtime phase (phase 0)
@@ -817,7 +818,7 @@ func TestLibraryForwardReferences(t *testing.T) {
 	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
 	// Set up library registry
-	registry := machine.NewLibraryRegistry()
+	registry := compilation.NewLibraryRegistry()
 	env.SetLibraryRegistry(registry)
 
 	// Parse the library definition
@@ -825,15 +826,15 @@ func TestLibraryForwardReferences(t *testing.T) {
 
 	// Create compiler and expand the library definition
 	ectx := context.Background()
-	expanded, err := machine.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
+	expanded, err := compilation.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	c.Assert(err, qt.IsNil)
 
 	// Compile the library - this should succeed with forward references
 	// Before the letrec* semantics fix, this would fail with:
 	// "no such local or global binding \"callee\""
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	compiler := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	compiler := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	err = compiler.CompileExpression(ctctx, expanded)
 	c.Assert(err, qt.IsNil, qt.Commentf("Forward references should work with letrec* semantics"))
 }
@@ -848,8 +849,8 @@ func TestLoadLibrary_IncludeStampsLibraryScope(t *testing.T) {
 	env := setupLibraryTest(t)
 
 	// Load the library that uses (include "include-body.scm")
-	name := machine.NewLibraryName("test", "include-lib")
-	lib, err := machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
+	name := compilation.NewLibraryName("test", "include-lib")
+	lib, err := compilation.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNil)
 	c.Assert(lib, qt.IsNotNil)
 
@@ -868,8 +869,8 @@ func TestLoadLibrary_IncludeStampsLibraryScope(t *testing.T) {
 	args := importPair.Cdr().(syntax.SyntaxValue)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	ctc := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 
 	err = ctc.CompileImport(ctctx, args)
 	c.Assert(err, qt.IsNil)
@@ -877,10 +878,10 @@ func TestLoadLibrary_IncludeStampsLibraryScope(t *testing.T) {
 	// Compile and run (double-base)
 	callExpr := parseLibrarySyntax(t, env, `(double-base)`)
 	callTpl := machine.NewNativeTemplate(0, 0, false)
-	callCtc := machine.NewCompiletimeContinuation(callTpl, env, machine.NewVMMacroEvaluator())
-	callCtctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	callCtc := compilation.NewCompileTimeContinuation(callTpl, env, machine.NewVMMacroEvaluator())
+	callCtctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 
-	expanded, err := machine.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator()).ExpandExpression(callExpr)
+	expanded, err := compilation.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator()).ExpandExpression(callExpr)
 	c.Assert(err, qt.IsNil)
 
 	err = callCtc.CompileExpression(callCtctx, expanded)

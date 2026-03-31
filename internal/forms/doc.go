@@ -12,16 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package forms provides a unified registry for special form handlers.
+// Package forms provides a shared registry for special form validators.
 //
 // The package maps Scheme keywords (if, lambda, define, etc.) to their
-// validation and compilation functions. This decouples the validate and
-// machine packages by providing a shared dispatch table.
+// validation functions. This decouples the validate and machine/compilation
+// packages by providing a shared name table that both can reference.
+//
+// Compiler dispatch lives in machine/compilation with fully typed
+// function signatures (no [any] parameters).
 //
 // # Registration
 //
 //	forms.RegisterValidator("if", validateIf)
-//	forms.RegisterCompiler("if", compileIf)
 //
 // # Lookup
 //
@@ -29,7 +31,4 @@
 //	if spec != nil && spec.Validate != nil {
 //	    result := spec.Validate(ctx, env, pair, validationResult)
 //	}
-//
-// The registry uses [any] for function parameter types to break circular
-// import cycles. Type safety is enforced at call sites via runtime assertions.
 package forms

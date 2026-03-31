@@ -17,6 +17,7 @@ package introspection
 import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
@@ -117,7 +118,7 @@ func PrimEnvironmentBoundQ(mc *machine.MachineContext) error {
 // PrimFeatures implements the (features) primitive.
 // Returns list of implementation features.
 func PrimFeatures(mc *machine.MachineContext) error {
-	features := machine.AllFeatures()
+	features := compilation.AllFeatures()
 
 	elems := make([]values.Value, len(features))
 	for i, f := range features {
@@ -139,23 +140,23 @@ func PrimAvailableLibraries(mc *machine.MachineContext) error {
 		mc.SetValue(values.EmptyList)
 		return nil
 	}
-	reg, ok := regAny.(*machine.LibraryRegistry)
+	reg, ok := regAny.(*compilation.LibraryRegistry)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrLibraryConfiguration,
 			"available-libraries: library registry has unexpected type %T", regAny)
 	}
 
-	var resolver machine.FileResolver
+	var resolver compilation.FileResolver
 	resolverAny := env.FileResolver()
 	if resolverAny != nil {
-		resolver, ok = resolverAny.(machine.FileResolver)
+		resolver, ok = resolverAny.(compilation.FileResolver)
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrLibraryConfiguration,
 				"available-libraries: file resolver has unexpected type %T", resolverAny)
 		}
 	}
 
-	libs, err := machine.DiscoverAvailableLibraries(resolver, reg)
+	libs, err := compilation.DiscoverAvailableLibraries(resolver, reg)
 	if err != nil {
 		return werr.WrapForeignErrorWithCause(
 			werr.ErrLibraryConfiguration, err,

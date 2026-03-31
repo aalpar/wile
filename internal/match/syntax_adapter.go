@@ -39,30 +39,17 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-// localScopesProvider is an interface for getting local scopes from a free ID resolution.
-// Implemented by machine.FreeIdResolution to avoid circular imports.
-type localScopesProvider interface {
+// FreeIdResolver provides free identifier resolution information for
+// template expansion hygiene. Implemented by machine.FreeIdResolution.
+//
+// In ExpandOptions.FreeIds, a non-nil FreeIdResolver carries binding
+// information from macro definition time. A nil map value is treated
+// the same as an absent key (the identifier receives the intro scope).
+// Methods return zero values when that aspect of resolution is absent.
+type FreeIdResolver interface {
 	GetLocalScopes() []*syntax.Scope
-}
-
-// globalBindingProvider is an interface for getting global bindings from a free ID resolution.
-// Implemented by machine.FreeIdResolution to avoid circular imports.
-type globalBindingProvider interface {
 	GetGlobal() *environment.GlobalIndex
-}
-
-// hasLocalBindingProvider is an interface for checking if a local binding was found
-// at macro definition time, even if the binding has no scopes. This distinguishes
-// "local binding with empty scopes" from "no binding at all" - the former should NOT
-// get intro scope added during expansion.
-type hasLocalBindingProvider interface {
 	GetHasLocalBinding() bool
-}
-
-// libraryScopeProvider is an interface for getting the library scope from a free ID resolution.
-// When non-nil, the library scope is added to the identifier during expansion so the
-// compiler can redirect binding lookup to the library's environment.
-type libraryScopeProvider interface {
 	GetLibraryScope() *syntax.Scope
 }
 

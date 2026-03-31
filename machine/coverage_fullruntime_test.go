@@ -18,68 +18,27 @@
 package machine_test
 
 import (
-	"bufio"
 	"context"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/internal/bootstrap"
-	"github.com/aalpar/wile/internal/parser"
-	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
+	"github.com/aalpar/wile/machine/testutil"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
 	qt "github.com/frankban/quicktest"
 )
 
-// parseSchemeExprExt parses a Scheme expression
-func parseSchemeExprExt(t *testing.T, env *environment.EnvironmentFrame, code string) syntax.SyntaxValue {
-	reader := bufio.NewReader(strings.NewReader(code))
-	p := parser.NewParser(env, true, reader)
-	sv, err := p.ReadSyntax(context.TODO())
-	qt.Assert(t, err, qt.IsNil)
-	return sv
-}
-
-// newFullRuntimeEnv creates a full runtime environment with all primitives
-func newFullRuntimeEnv(t *testing.T) *environment.EnvironmentFrame {
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
-	qt.Assert(t, err, qt.IsNil)
-	return env
-}
-
-// newTopLevelThunkExt creates a top-level thunk from an expression using the expander and compiler
-func newTopLevelThunkExt(sv syntax.SyntaxValue, env *environment.EnvironmentFrame) (*machine.MachineContinuation, error) {
-	// Expand the expression
-	econt := machine.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
-	expanded, err := econt.ExpandExpression(sv)
-	if err != nil {
-		return nil, err
-	}
-
-	// Compile the expanded expression
-	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
-	err = ctc.CompileExpression(ctctx, expanded)
-	if err != nil {
-		return nil, err
-	}
-	// Note: do NOT add RestoreContinuation - the VM naturally halts when operations end
-
-	return machine.NewMachineContinuation(nil, tpl, env), nil
-}
-
 // TestQuasiquoteWithUnquoteSplicingFullEnv tests quasiquote with unquote-splicing using full runtime
 func TestQuasiquoteWithUnquoteSplicingFullEnv(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// unquote-splicing in list context with list primitive
-	sv := parseSchemeExprExt(t, env, "`(a ,@(list 1 2 3) b)")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "`(a ,@(list 1 2 3) b)")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -89,11 +48,11 @@ func TestQuasiquoteWithUnquoteSplicingFullEnv(t *testing.T) {
 
 // TestQuasiquoteWithMultipleUnquotes tests quasiquote with multiple unquotes
 func TestQuasiquoteWithMultipleUnquotes(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Multiple unquotes in a list
-	sv := parseSchemeExprExt(t, env, "`(,(+ 1 1) ,(+ 2 2) ,(+ 3 3))")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "`(,(+ 1 1) ,(+ 2 2) ,(+ 3 3))")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -103,7 +62,7 @@ func TestQuasiquoteWithMultipleUnquotes(t *testing.T) {
 
 // TestNestedQuasiquoteFullEnv tests deeply nested quasiquote
 func TestNestedQuasiquoteFullEnv(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	testCases := []struct {
 		name string
@@ -116,8 +75,8 @@ func TestNestedQuasiquoteFullEnv(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			sv := parseSchemeExprExt(t, env, tc.code)
-			cont, err := newTopLevelThunkExt(sv, env)
+			sv := testutil.ParseSchemeExpr(t, env, tc.code)
+			cont, err := testutil.NewTopLevelThunk(sv, env)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, cont, qt.IsNotNil)
 		})
@@ -126,24 +85,24 @@ func TestNestedQuasiquoteFullEnv(t *testing.T) {
 
 // TestCaseLambdaWithArithmetic tests case-lambda with + and other primitives
 func TestCaseLambdaWithArithmetic(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Define a case-lambda with arithmetic
-	sv := parseSchemeExprExt(t, env, `(define cl
+	sv := testutil.ParseSchemeExpr(t, env, `(define cl
 		(case-lambda
 			(() 0)
 			((x) x)
 			((x y) (+ x y))
 			((x y z) (+ x y z))))`)
-	cont, err := newTopLevelThunkExt(sv, env)
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Call with 2 args
-	sv = parseSchemeExprExt(t, env, "(cl 10 20)")
-	cont, err = newTopLevelThunkExt(sv, env)
+	sv = testutil.ParseSchemeExpr(t, env, "(cl 10 20)")
+	cont, err = testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -151,8 +110,8 @@ func TestCaseLambdaWithArithmetic(t *testing.T) {
 	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(30))
 
 	// Call with 3 args
-	sv = parseSchemeExprExt(t, env, "(cl 1 2 3)")
-	cont, err = newTopLevelThunkExt(sv, env)
+	sv = testutil.ParseSchemeExpr(t, env, "(cl 1 2 3)")
+	cont, err = testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -162,22 +121,22 @@ func TestCaseLambdaWithArithmetic(t *testing.T) {
 
 // TestDefineSyntaxWithMacroUsage tests define-syntax and macro expansion
 func TestDefineSyntaxWithMacroUsage(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Define a simple identity macro
 	macroCode := `(define-syntax my-id
 		(syntax-rules ()
 			((my-id x) x)))`
-	sv := parseSchemeExprExt(t, env, macroCode)
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, macroCode)
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Use the macro with an arithmetic expression
-	sv = parseSchemeExprExt(t, env, "(my-id (+ 10 20))")
-	cont, err = newTopLevelThunkExt(sv, env)
+	sv = testutil.ParseSchemeExpr(t, env, "(my-id (+ 10 20))")
+	cont, err = testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -187,10 +146,10 @@ func TestDefineSyntaxWithMacroUsage(t *testing.T) {
 
 // TestMapWithLambda tests map with lambda (exercises closure + multiple calls)
 func TestMapWithLambda(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
-	sv := parseSchemeExprExt(t, env, "(map (lambda (x) (* x 2)) '(1 2 3))")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(map (lambda (x) (* x 2)) '(1 2 3))")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -200,10 +159,10 @@ func TestMapWithLambda(t *testing.T) {
 
 // TestApplyWithPrimitives tests apply with various primitives
 func TestApplyWithPrimitives(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
-	sv := parseSchemeExprExt(t, env, "(apply + '(1 2 3 4 5))")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(apply + '(1 2 3 4 5))")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -213,7 +172,7 @@ func TestApplyWithPrimitives(t *testing.T) {
 
 // TestLetBindings tests let, let*, letrec forms
 func TestLetBindings(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	testCases := []struct {
 		name     string
@@ -227,8 +186,8 @@ func TestLetBindings(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			sv := parseSchemeExprExt(t, env, tc.code)
-			cont, err := newTopLevelThunkExt(sv, env)
+			sv := testutil.ParseSchemeExpr(t, env, tc.code)
+			cont, err := testutil.NewTopLevelThunk(sv, env)
 			qt.Assert(t, err, qt.IsNil)
 			mc := machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
@@ -240,10 +199,10 @@ func TestLetBindings(t *testing.T) {
 
 // TestCondForm tests cond expression
 func TestCondForm(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
-	sv := parseSchemeExprExt(t, env, "(cond ((= 1 2) 'no) ((= 2 2) 'yes) (else 'default))")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(cond ((= 1 2) 'no) ((= 2 2) 'yes) (else 'default))")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -252,11 +211,11 @@ func TestCondForm(t *testing.T) {
 
 // TestCondArrow tests cond with => clause (R7RS §4.2.1)
 func TestCondArrow(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Test cond with => - the result of the test is passed to the procedure
-	sv := parseSchemeExprExt(t, env, "(cond ((assq 'b '((a 1) (b 2) (c 3))) => cadr) (else 'not-found))")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(cond ((assq 'b '((a 1) (b 2) (c 3))) => cadr) (else 'not-found))")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -266,11 +225,11 @@ func TestCondArrow(t *testing.T) {
 
 // TestCondArrowFalseTest tests cond with => when test is false
 func TestCondArrowFalseTest(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Test cond with => - when test returns #f, fall through to else
-	sv := parseSchemeExprExt(t, env, "(cond ((assq 'z '((a 1) (b 2))) => cadr) (else 'not-found))")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(cond ((assq 'z '((a 1) (b 2))) => cadr) (else 'not-found))")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -280,11 +239,11 @@ func TestCondArrowFalseTest(t *testing.T) {
 
 // TestCondArrowWithLambda tests cond with => using a lambda
 func TestCondArrowWithLambda(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Test cond with => using inline lambda
-	sv := parseSchemeExprExt(t, env, "(cond ((memq 'b '(a b c)) => (lambda (x) (length x))) (else 0))")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(cond ((memq 'b '(a b c)) => (lambda (x) (length x))) (else 0))")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -294,11 +253,11 @@ func TestCondArrowWithLambda(t *testing.T) {
 
 // TestCaseArrow tests case with => clause (R7RS §4.2.1)
 func TestCaseArrow(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Test case with => - the key is passed to the procedure
-	sv := parseSchemeExprExt(t, env, "(case (* 2 3) ((2 3 5 7) => (lambda (x) (list 'prime x))) ((1 4 6 8 9) => (lambda (x) (list 'composite x))))")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(case (* 2 3) ((2 3 5 7) => (lambda (x) (list 'prime x))) ((1 4 6 8 9) => (lambda (x) (list 'composite x))))")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -310,11 +269,11 @@ func TestCaseArrow(t *testing.T) {
 
 // TestQuasiquoteComplexList tests compileQuasiquoteComplexList path
 func TestQuasiquoteComplexList(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// This should exercise the complex list path with append
-	sv := parseSchemeExprExt(t, env, "`(a ,@'(1 2) b ,@'(3 4) c)")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "`(a ,@'(1 2) b ,@'(3 4) c)")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -323,7 +282,7 @@ func TestQuasiquoteComplexList(t *testing.T) {
 
 // TestCompileSymbolWithScopesFullEnv tests symbol resolution with macros
 func TestCompileSymbolWithScopesFullEnv(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Define a simple macro for testing scope
 	macroCode := `(define-syntax swap!
@@ -332,38 +291,38 @@ func TestCompileSymbolWithScopesFullEnv(t *testing.T) {
 			 (let ((tmp a))
 			   (set! a b)
 			   (set! b tmp)))))`
-	sv := parseSchemeExprExt(t, env, macroCode)
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, macroCode)
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Test the macro with variables named tmp (hygiene test)
-	sv = parseSchemeExprExt(t, env, "(define x 1)")
-	cont, err = newTopLevelThunkExt(sv, env)
+	sv = testutil.ParseSchemeExpr(t, env, "(define x 1)")
+	cont, err = testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
-	sv = parseSchemeExprExt(t, env, "(define y 2)")
-	cont, err = newTopLevelThunkExt(sv, env)
+	sv = testutil.ParseSchemeExpr(t, env, "(define y 2)")
+	cont, err = testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
-	sv = parseSchemeExprExt(t, env, "(swap! x y)")
-	cont, err = newTopLevelThunkExt(sv, env)
+	sv = testutil.ParseSchemeExpr(t, env, "(swap! x y)")
+	cont, err = testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Check x is now 2
-	sv = parseSchemeExprExt(t, env, "x")
-	cont, err = newTopLevelThunkExt(sv, env)
+	sv = testutil.ParseSchemeExpr(t, env, "x")
+	cont, err = testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -373,11 +332,11 @@ func TestCompileSymbolWithScopesFullEnv(t *testing.T) {
 
 // TestQuasiquoteDirectUnquote tests direct unquote at top level of quasiquote
 func TestQuasiquoteDirectUnquote(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Direct unquote of a computed value
-	sv := parseSchemeExprExt(t, env, "`,(+ 1 2)")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "`,(+ 1 2)")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -387,22 +346,22 @@ func TestQuasiquoteDirectUnquote(t *testing.T) {
 
 // TestRecursiveFunction tests recursive function with full runtime
 func TestRecursiveFunction(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Define a recursive factorial
-	sv := parseSchemeExprExt(t, env, `(define (fact n)
+	sv := testutil.ParseSchemeExpr(t, env, `(define (fact n)
 		(if (= n 0)
 			1
 			(* n (fact (- n 1)))))`)
-	cont, err := newTopLevelThunkExt(sv, env)
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Call with 5
-	sv = parseSchemeExprExt(t, env, "(fact 5)")
-	cont, err = newTopLevelThunkExt(sv, env)
+	sv = testutil.ParseSchemeExpr(t, env, "(fact 5)")
+	cont, err = testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -412,15 +371,15 @@ func TestRecursiveFunction(t *testing.T) {
 
 // TestLetrecBindings tests letrec for mutual recursion
 func TestLetrecBindings(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// letrec with mutual recursion (even?/odd?)
-	sv := parseSchemeExprExt(t, env, `(letrec ((even? (lambda (n)
+	sv := testutil.ParseSchemeExpr(t, env, `(letrec ((even? (lambda (n)
 				(if (= n 0) #t (odd? (- n 1)))))
 			(odd? (lambda (n)
 				(if (= n 0) #f (even? (- n 1))))))
 		(even? 10))`)
-	cont, err := newTopLevelThunkExt(sv, env)
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -430,13 +389,13 @@ func TestLetrecBindings(t *testing.T) {
 
 // TestForEachWithSideEffects tests for-each primitive
 func TestForEachWithSideEffects(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// for-each with side effects - use a counter in a closure
-	sv := parseSchemeExprExt(t, env, `(let ((counter 0))
+	sv := testutil.ParseSchemeExpr(t, env, `(let ((counter 0))
 		(for-each (lambda (x) (set! counter (+ counter x))) '(1 2 3 4 5))
 		counter)`)
-	cont, err := newTopLevelThunkExt(sv, env)
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -446,10 +405,10 @@ func TestForEachWithSideEffects(t *testing.T) {
 
 // TestCallWithValues tests call-with-values
 func TestCallWithValues(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
-	sv := parseSchemeExprExt(t, env, "(call-with-values (lambda () (values 1 2 3)) +)")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(call-with-values (lambda () (values 1 2 3)) +)")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -459,10 +418,10 @@ func TestCallWithValues(t *testing.T) {
 
 // TestVectorOperations tests vector primitives
 func TestVectorOperations(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
-	sv := parseSchemeExprExt(t, env, "(let ((v (vector 1 2 3))) (vector-set! v 1 42) (vector-ref v 1))")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(let ((v (vector 1 2 3))) (vector-set! v 1 42) (vector-ref v 1))")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -472,10 +431,10 @@ func TestVectorOperations(t *testing.T) {
 
 // TestStringOperations tests string primitives
 func TestStringOperations(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
-	sv := parseSchemeExprExt(t, env, `(string-append "hello" " " "world")`)
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, `(string-append "hello" " " "world")`)
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -485,27 +444,27 @@ func TestStringOperations(t *testing.T) {
 
 // TestHigherOrderClosure tests closures captured in higher-order functions
 func TestHigherOrderClosure(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Define a function that returns a closure that adds n
-	sv := parseSchemeExprExt(t, env, `(define (make-adder n) (lambda (x) (+ x n)))`)
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, `(define (make-adder n) (lambda (x) (+ x n)))`)
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Create an adder that adds 10
-	sv = parseSchemeExprExt(t, env, `(define add10 (make-adder 10))`)
-	cont, err = newTopLevelThunkExt(sv, env)
+	sv = testutil.ParseSchemeExpr(t, env, `(define add10 (make-adder 10))`)
+	cont, err = testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Use it
-	sv = parseSchemeExprExt(t, env, `(add10 5)`)
-	cont, err = newTopLevelThunkExt(sv, env)
+	sv = testutil.ParseSchemeExpr(t, env, `(add10 5)`)
+	cont, err = testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -515,10 +474,10 @@ func TestHigherOrderClosure(t *testing.T) {
 
 // TestNestedConditions tests nested if/cond expressions
 func TestNestedConditions(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
-	sv := parseSchemeExprExt(t, env, "(if (> 5 3) (if (< 2 4) 'yes 'no) 'other)")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(if (> 5 3) (if (< 2 4) 'yes 'no) 'other)")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -527,7 +486,7 @@ func TestNestedConditions(t *testing.T) {
 
 // TestAndOrForms tests and/or special forms
 func TestAndOrForms(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	testCases := []struct {
 		name     string
@@ -546,8 +505,8 @@ func TestAndOrForms(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			sv := parseSchemeExprExt(t, env, tc.code)
-			cont, err := newTopLevelThunkExt(sv, env)
+			sv := testutil.ParseSchemeExpr(t, env, tc.code)
+			cont, err := testutil.NewTopLevelThunk(sv, env)
 			qt.Assert(t, err, qt.IsNil)
 			mc := machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
@@ -559,19 +518,19 @@ func TestAndOrForms(t *testing.T) {
 
 // TestWhenUnless tests when and unless forms
 func TestWhenUnless(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// when with true condition
-	sv := parseSchemeExprExt(t, env, "(when #t 'yes)")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(when #t 'yes)")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// unless with false condition
-	sv = parseSchemeExprExt(t, env, "(unless #f 'yes)")
-	cont, err = newTopLevelThunkExt(sv, env)
+	sv = testutil.ParseSchemeExpr(t, env, "(unless #f 'yes)")
+	cont, err = testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -580,11 +539,11 @@ func TestWhenUnless(t *testing.T) {
 
 // TestReduceWithMap tests map used for reduction
 func TestReduceWithMap(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Use map to double all numbers
-	sv := parseSchemeExprExt(t, env, "(map (lambda (x) (* x 2)) '(1 2 3 4 5))")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(map (lambda (x) (* x 2)) '(1 2 3 4 5))")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -594,14 +553,14 @@ func TestReduceWithMap(t *testing.T) {
 
 // TestComplexLambdaWithDefine tests define inside lambda body
 func TestComplexLambdaWithDefine(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Lambda with internal define
-	sv := parseSchemeExprExt(t, env, `((lambda ()
+	sv := testutil.ParseSchemeExpr(t, env, `((lambda ()
 		(define x 10)
 		(define y 20)
 		(+ x y)))`)
-	cont, err := newTopLevelThunkExt(sv, env)
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -611,11 +570,11 @@ func TestComplexLambdaWithDefine(t *testing.T) {
 
 // TestNestedLambdaClosure tests nested closures
 func TestNestedLambdaClosure(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Double nested closure - more careful with parentheses
-	sv := parseSchemeExprExt(t, env, `(((lambda (a) (lambda (b) (+ a b))) 1) 2)`)
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, `(((lambda (a) (lambda (b) (+ a b))) 1) 2)`)
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -625,11 +584,11 @@ func TestNestedLambdaClosure(t *testing.T) {
 
 // TestQuasiquoteWithDeepNesting tests deeply nested quasiquote structures
 func TestQuasiquoteWithDeepNesting(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Quasiquote with nested list structure
-	sv := parseSchemeExprExt(t, env, "`(a (b (c ,(+ 1 2))))")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "`(a (b (c ,(+ 1 2))))")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -638,20 +597,20 @@ func TestQuasiquoteWithDeepNesting(t *testing.T) {
 
 // TestVariadicLambda tests variadic lambda with rest args
 func TestVariadicLambda(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Define a variadic function
-	sv := parseSchemeExprExt(t, env, `(define (sum-all . args)
+	sv := testutil.ParseSchemeExpr(t, env, `(define (sum-all . args)
 		(apply + args))`)
-	cont, err := newTopLevelThunkExt(sv, env)
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Call it with various args
-	sv = parseSchemeExprExt(t, env, "(sum-all 1 2 3 4 5)")
-	cont, err = newTopLevelThunkExt(sv, env)
+	sv = testutil.ParseSchemeExpr(t, env, "(sum-all 1 2 3 4 5)")
+	cont, err = testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -661,7 +620,7 @@ func TestVariadicLambda(t *testing.T) {
 
 // TestListOperations tests various list operations
 func TestListOperations(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	testCases := []struct {
 		name     string
@@ -680,8 +639,8 @@ func TestListOperations(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			sv := parseSchemeExprExt(t, env, tc.code)
-			cont, err := newTopLevelThunkExt(sv, env)
+			sv := testutil.ParseSchemeExpr(t, env, tc.code)
+			cont, err := testutil.NewTopLevelThunk(sv, env)
 			qt.Assert(t, err, qt.IsNil)
 			mc := machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
@@ -693,7 +652,7 @@ func TestListOperations(t *testing.T) {
 
 // TestNumericOperations tests various numeric operations
 func TestNumericOperations(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	testCases := []struct {
 		name     string
@@ -715,8 +674,8 @@ func TestNumericOperations(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			sv := parseSchemeExprExt(t, env, tc.code)
-			cont, err := newTopLevelThunkExt(sv, env)
+			sv := testutil.ParseSchemeExpr(t, env, tc.code)
+			cont, err := testutil.NewTopLevelThunk(sv, env)
 			qt.Assert(t, err, qt.IsNil)
 			mc := machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
@@ -728,7 +687,7 @@ func TestNumericOperations(t *testing.T) {
 
 // TestNestedQuasiquoteUnquote tests deeply nested quasiquote with unquote (compileQuasiquotePair)
 func TestNestedQuasiquoteUnquote(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	testCases := []struct {
 		name string
@@ -748,8 +707,8 @@ func TestNestedQuasiquoteUnquote(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			sv := parseSchemeExprExt(t, env, tc.code)
-			cont, err := newTopLevelThunkExt(sv, env)
+			sv := testutil.ParseSchemeExpr(t, env, tc.code)
+			cont, err := testutil.NewTopLevelThunk(sv, env)
 			qt.Assert(t, err, qt.IsNil)
 			mc := machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
@@ -761,13 +720,13 @@ func TestNestedQuasiquoteUnquote(t *testing.T) {
 // TestFeaturesSupport tests feature detection for cond-expand
 func TestFeaturesSupport(t *testing.T) {
 	// Test basic features
-	qt.Assert(t, machine.IsFeatureSupported("r7rs"), qt.IsTrue)
-	qt.Assert(t, machine.IsFeatureSupported("wile"), qt.IsTrue)
-	qt.Assert(t, machine.IsFeatureSupported("full-unicode"), qt.IsTrue)
-	qt.Assert(t, machine.IsFeatureSupported("nonexistent-feature"), qt.IsFalse)
+	qt.Assert(t, compilation.IsFeatureSupported("r7rs"), qt.IsTrue)
+	qt.Assert(t, compilation.IsFeatureSupported("wile"), qt.IsTrue)
+	qt.Assert(t, compilation.IsFeatureSupported("full-unicode"), qt.IsTrue)
+	qt.Assert(t, compilation.IsFeatureSupported("nonexistent-feature"), qt.IsFalse)
 
-	// AllFeatures should include platform features
-	features := machine.AllFeatures()
+	// compilation.AllFeatures should include platform features
+	features := compilation.AllFeatures()
 	qt.Assert(t, len(features) > 0, qt.IsTrue)
 
 	// Should include at least one platform feature (we're running on some OS)
@@ -783,60 +742,60 @@ func TestFeaturesSupport(t *testing.T) {
 
 // TestFeatureRequirements tests feature requirement logic
 func TestFeatureRequirements(t *testing.T) {
-	registry := machine.NewLibraryRegistry()
+	registry := compilation.NewLibraryRegistry()
 
 	// Test featureIdentifier
-	reqR7rs := machine.NewFeatureIdentifier("r7rs")
+	reqR7rs := compilation.NewFeatureIdentifier("r7rs")
 	qt.Assert(t, reqR7rs.IsSatisfied(registry), qt.IsTrue)
 
-	reqNone := machine.NewFeatureIdentifier("nonexistent")
+	reqNone := compilation.NewFeatureIdentifier("nonexistent")
 	qt.Assert(t, reqNone.IsSatisfied(registry), qt.IsFalse)
 
 	// Test andRequirement
-	andReq := machine.NewAndRequirement(
-		machine.NewFeatureIdentifier("r7rs"),
-		machine.NewFeatureIdentifier("wile"),
+	andReq := compilation.NewAndRequirement(
+		compilation.NewFeatureIdentifier("r7rs"),
+		compilation.NewFeatureIdentifier("wile"),
 	)
 	qt.Assert(t, andReq.IsSatisfied(registry), qt.IsTrue)
 
-	andReqFalse := machine.NewAndRequirement(
-		machine.NewFeatureIdentifier("r7rs"),
-		machine.NewFeatureIdentifier("nonexistent"),
+	andReqFalse := compilation.NewAndRequirement(
+		compilation.NewFeatureIdentifier("r7rs"),
+		compilation.NewFeatureIdentifier("nonexistent"),
 	)
 	qt.Assert(t, andReqFalse.IsSatisfied(registry), qt.IsFalse)
 
 	// Test orRequirement
-	orReq := machine.NewOrRequirement(
-		machine.NewFeatureIdentifier("nonexistent"),
-		machine.NewFeatureIdentifier("r7rs"),
+	orReq := compilation.NewOrRequirement(
+		compilation.NewFeatureIdentifier("nonexistent"),
+		compilation.NewFeatureIdentifier("r7rs"),
 	)
 	qt.Assert(t, orReq.IsSatisfied(registry), qt.IsTrue)
 
-	orReqFalse := machine.NewOrRequirement(
-		machine.NewFeatureIdentifier("nonexistent"),
-		machine.NewFeatureIdentifier("also-nonexistent"),
+	orReqFalse := compilation.NewOrRequirement(
+		compilation.NewFeatureIdentifier("nonexistent"),
+		compilation.NewFeatureIdentifier("also-nonexistent"),
 	)
 	qt.Assert(t, orReqFalse.IsSatisfied(registry), qt.IsFalse)
 
 	// Test notRequirement
-	notReq := machine.NewNotRequirement(machine.NewFeatureIdentifier("nonexistent"))
+	notReq := compilation.NewNotRequirement(compilation.NewFeatureIdentifier("nonexistent"))
 	qt.Assert(t, notReq.IsSatisfied(registry), qt.IsTrue)
 
-	notReqFalse := machine.NewNotRequirement(machine.NewFeatureIdentifier("r7rs"))
+	notReqFalse := compilation.NewNotRequirement(compilation.NewFeatureIdentifier("r7rs"))
 	qt.Assert(t, notReqFalse.IsSatisfied(registry), qt.IsFalse)
 
 	// Test elseRequirement
-	elseReq := machine.NewElseRequirement()
+	elseReq := compilation.NewElseRequirement()
 	qt.Assert(t, elseReq.IsSatisfied(registry), qt.IsTrue)
 }
 
 // TestLibraryRequirement tests library requirement checking
 func TestLibraryRequirement(t *testing.T) {
-	registry := machine.NewLibraryRegistry()
+	registry := compilation.NewLibraryRegistry()
 
 	// Library requirement with nil registry
-	libName := machine.NewLibraryName("test", "lib")
-	req := machine.NewLibraryRequirement(libName)
+	libName := compilation.NewLibraryName("test", "lib")
+	req := compilation.NewLibraryRequirement(libName)
 	qt.Assert(t, req.IsSatisfied(nil), qt.IsFalse)
 
 	// Library requirement with registry but library not loaded
@@ -845,11 +804,11 @@ func TestLibraryRequirement(t *testing.T) {
 
 // TestQuasiquoteNestedUnquoteWithRuntimeEval tests the compileQuasiquoteNestedUnquote path
 func TestQuasiquoteNestedUnquoteWithRuntimeEval(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Define a variable to unquote
-	sv := parseSchemeExprExt(t, env, "(define x 5)")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(define x 5)")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -857,8 +816,8 @@ func TestQuasiquoteNestedUnquoteWithRuntimeEval(t *testing.T) {
 
 	// Test nested quasiquote with double unquote that requires runtime evaluation
 	// ``(a ,,x b) should produce `(a ,5 b) which produces (a 5 b)
-	sv = parseSchemeExprExt(t, env, "``(a ,,x b)")
-	cont, err = newTopLevelThunkExt(sv, env)
+	sv = testutil.ParseSchemeExpr(t, env, "``(a ,,x b)")
+	cont, err = testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -867,11 +826,11 @@ func TestQuasiquoteNestedUnquoteWithRuntimeEval(t *testing.T) {
 
 // TestQuasiquoteUnquoteSplicingAtDepth tests unquote-splicing at various depths
 func TestQuasiquoteUnquoteSplicingAtDepth(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Test unquote-splicing at depth > 1
-	sv := parseSchemeExprExt(t, env, "``(a ,@'(1 2 3) b)")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "``(a ,@'(1 2 3) b)")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -880,7 +839,7 @@ func TestQuasiquoteUnquoteSplicingAtDepth(t *testing.T) {
 
 // TestQuasiquotePairKeywords tests compileQuasiquotePair with various keyword positions
 func TestQuasiquotePairKeywords(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	testCases := []struct {
 		name string
@@ -900,8 +859,8 @@ func TestQuasiquotePairKeywords(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			sv := parseSchemeExprExt(t, env, tc.code)
-			cont, err := newTopLevelThunkExt(sv, env)
+			sv := testutil.ParseSchemeExpr(t, env, tc.code)
+			cont, err := testutil.NewTopLevelThunk(sv, env)
 			qt.Assert(t, err, qt.IsNil)
 			mc := machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
@@ -910,20 +869,20 @@ func TestQuasiquotePairKeywords(t *testing.T) {
 	}
 }
 
-// TestCompileSymbolVariants tests different symbol resolution paths
-func TestCompileSymbolVariants(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+// TestCompileSymbolVariants_FullRuntime tests different symbol resolution paths with full runtime
+func TestCompileSymbolVariants_FullRuntime(t *testing.T) {
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Test global symbol resolution
-	sv := parseSchemeExprExt(t, env, "(define global-var 100)")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(define global-var 100)")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
-	sv = parseSchemeExprExt(t, env, "global-var")
-	cont, err = newTopLevelThunkExt(sv, env)
+	sv = testutil.ParseSchemeExpr(t, env, "global-var")
+	cont, err = testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -931,8 +890,8 @@ func TestCompileSymbolVariants(t *testing.T) {
 	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(100))
 
 	// Test local symbol resolution
-	sv = parseSchemeExprExt(t, env, "(let ((local-var 50)) local-var)")
-	cont, err = newTopLevelThunkExt(sv, env)
+	sv = testutil.ParseSchemeExpr(t, env, "(let ((local-var 50)) local-var)")
+	cont, err = testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -942,11 +901,11 @@ func TestCompileSymbolVariants(t *testing.T) {
 
 // TestCondExpandFeature tests cond-expand with features
 func TestCondExpandFeature(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// cond-expand with r7rs feature
-	sv := parseSchemeExprExt(t, env, "(cond-expand (r7rs 'r7rs-supported))")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(cond-expand (r7rs 'r7rs-supported))")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -955,11 +914,11 @@ func TestCondExpandFeature(t *testing.T) {
 
 // TestCondExpandElse tests cond-expand with else clause
 func TestCondExpandElse(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// cond-expand with else clause
-	sv := parseSchemeExprExt(t, env, "(cond-expand (nonexistent-feature 'no) (else 'fallback))")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(cond-expand (nonexistent-feature 'no) (else 'fallback))")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -968,17 +927,17 @@ func TestCondExpandElse(t *testing.T) {
 
 // TestMutualRecursion tests mutual recursion using letrec
 func TestMutualRecursion(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Use letrec for mutual recursion - this is the classic is-even?/is-odd? pattern
 	// letrec creates all bindings first before evaluating initializers,
 	// allowing forward references between mutually recursive functions
-	sv := parseSchemeExprExt(t, env, `(letrec ((is-even? (lambda (n)
+	sv := testutil.ParseSchemeExpr(t, env, `(letrec ((is-even? (lambda (n)
 				(if (= n 0) #t (is-odd? (- n 1)))))
 			(is-odd? (lambda (n)
 				(if (= n 0) #f (is-even? (- n 1))))))
 		(is-even? 10))`)
-	cont, err := newTopLevelThunkExt(sv, env)
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -993,7 +952,7 @@ func TestMutualRecursion(t *testing.T) {
 // NativeTemplates (e.g., when a symbol appears both in a lambda body and
 // in the outer expression that calls the lambda).
 func TestSymbolIdentityAcrossCompilationBoundaries(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	testCases := []struct {
 		name string
@@ -1027,8 +986,8 @@ func TestSymbolIdentityAcrossCompilationBoundaries(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			sv := parseSchemeExprExt(t, env, tc.code)
-			cont, err := newTopLevelThunkExt(sv, env)
+			sv := testutil.ParseSchemeExpr(t, env, tc.code)
+			cont, err := testutil.NewTopLevelThunk(sv, env)
 			qt.Assert(t, err, qt.IsNil)
 			mc := machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
@@ -1043,7 +1002,7 @@ func TestSymbolIdentityAcrossCompilationBoundaries(t *testing.T) {
 // Regression test for bug in expandQuasiquoteImproperList where SyntaxCdr was called
 // instead of SyntaxCar, causing wrong results for dotted-pair quasiquote.
 func TestQuasiquoteImproperList(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	testCases := []struct {
 		name     string
@@ -1069,8 +1028,8 @@ func TestQuasiquoteImproperList(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			sv := parseSchemeExprExt(t, env, tc.code)
-			cont, err := newTopLevelThunkExt(sv, env)
+			sv := testutil.ParseSchemeExpr(t, env, tc.code)
+			cont, err := testutil.NewTopLevelThunk(sv, env)
 			qt.Assert(t, err, qt.IsNil)
 			mc := machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
@@ -1082,21 +1041,21 @@ func TestQuasiquoteImproperList(t *testing.T) {
 
 // TestCompileSyntaxCase_SimpleMatch tests syntax-case with a simple pattern match.
 func TestCompileSyntaxCase_SimpleMatch(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	macroCode := `(define-syntax my-add1
 		(lambda (stx)
 			(syntax-case stx ()
 				((_ x) (syntax (+ x 1))))))`
-	sv := parseSchemeExprExt(t, env, macroCode)
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, macroCode)
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
-	sv = parseSchemeExprExt(t, env, "(my-add1 10)")
-	cont, err = newTopLevelThunkExt(sv, env)
+	sv = testutil.ParseSchemeExpr(t, env, "(my-add1 10)")
+	cont, err = testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -1106,21 +1065,21 @@ func TestCompileSyntaxCase_SimpleMatch(t *testing.T) {
 
 // TestCompileSyntaxCase_PatternVars tests syntax-case with pattern variables in body.
 func TestCompileSyntaxCase_PatternVars(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	macroCode := `(define-syntax swap-pair
 		(lambda (stx)
 			(syntax-case stx ()
 				((_ a b) (syntax (list b a))))))`
-	sv := parseSchemeExprExt(t, env, macroCode)
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, macroCode)
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
-	sv = parseSchemeExprExt(t, env, "(swap-pair 1 2)")
-	cont, err = newTopLevelThunkExt(sv, env)
+	sv = testutil.ParseSchemeExpr(t, env, "(swap-pair 1 2)")
+	cont, err = testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -1131,23 +1090,23 @@ func TestCompileSyntaxCase_PatternVars(t *testing.T) {
 
 // TestCompileSyntaxCase_MultiClause tests syntax-case with multiple clauses.
 func TestCompileSyntaxCase_MultiClause(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	macroCode := `(define-syntax my-op
 		(lambda (stx)
 			(syntax-case stx ()
 				((_ x) (syntax x))
 				((_ x y) (syntax (+ x y))))))`
-	sv := parseSchemeExprExt(t, env, macroCode)
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, macroCode)
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Two args — must come first since single-arg is a more general match
-	sv = parseSchemeExprExt(t, env, "(my-op 3 4)")
-	cont, err = newTopLevelThunkExt(sv, env)
+	sv = testutil.ParseSchemeExpr(t, env, "(my-op 3 4)")
+	cont, err = testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -1157,21 +1116,21 @@ func TestCompileSyntaxCase_MultiClause(t *testing.T) {
 
 // TestCompileSyntaxCase_NoMatch tests syntax-case when no clause matches.
 func TestCompileSyntaxCase_NoMatch(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	macroCode := `(define-syntax strict-match
 		(lambda (stx)
 			(syntax-case stx ()
 				((_ x y) (syntax (+ x y))))))`
-	sv := parseSchemeExprExt(t, env, macroCode)
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, macroCode)
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
-	sv = parseSchemeExprExt(t, env, "(strict-match 1 2 3)")
-	cont, err = newTopLevelThunkExt(sv, env)
+	sv = testutil.ParseSchemeExpr(t, env, "(strict-match 1 2 3)")
+	cont, err = testutil.NewTopLevelThunk(sv, env)
 	if err != nil {
 		// Error during expansion — expected for no-match
 		return
@@ -1211,17 +1170,17 @@ func TestCompileQuasisyntax_RoundTrip(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := newFullRuntimeEnv(t)
+			env := testutil.NewFullRuntimeEnv(t)
 
-			sv := parseSchemeExprExt(t, env, tc.macroCode)
-			cont, err := newTopLevelThunkExt(sv, env)
+			sv := testutil.ParseSchemeExpr(t, env, tc.macroCode)
+			cont, err := testutil.NewTopLevelThunk(sv, env)
 			qt.Assert(t, err, qt.IsNil)
 			mc := machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
 			qt.Assert(t, err, qt.IsNil)
 
-			sv = parseSchemeExprExt(t, env, tc.useCode)
-			cont, err = newTopLevelThunkExt(sv, env)
+			sv = testutil.ParseSchemeExpr(t, env, tc.useCode)
+			cont, err = testutil.NewTopLevelThunk(sv, env)
 			qt.Assert(t, err, qt.IsNil)
 			mc = machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
@@ -1233,10 +1192,10 @@ func TestCompileQuasisyntax_RoundTrip(t *testing.T) {
 
 // TestCompileEvalWhen_ExpandPhase tests eval-when with run phase producing a runtime value.
 func TestCompileEvalWhen_ExpandPhase(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
-	sv := parseSchemeExprExt(t, env, "(eval-when (run) (+ 1 2))")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(eval-when (run) (+ 1 2))")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -1246,10 +1205,10 @@ func TestCompileEvalWhen_ExpandPhase(t *testing.T) {
 
 // TestCompileEvalWhen_MultiPhase tests eval-when with both expand and run phases.
 func TestCompileEvalWhen_MultiPhase(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
-	sv := parseSchemeExprExt(t, env, "(eval-when (expand run) (+ 10 20))")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(eval-when (expand run) (+ 10 20))")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -1259,10 +1218,10 @@ func TestCompileEvalWhen_MultiPhase(t *testing.T) {
 
 // TestCompileEvalWhen_MultiBody tests eval-when with a body expression that uses begin.
 func TestCompileEvalWhen_MultiBody(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
-	sv := parseSchemeExprExt(t, env, "(eval-when (run) (+ 3 4))")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(eval-when (run) (+ 3 4))")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -1272,10 +1231,10 @@ func TestCompileEvalWhen_MultiBody(t *testing.T) {
 
 // TestCompileBeginForSyntax_Success tests begin-for-syntax with expressions.
 func TestCompileBeginForSyntax_Success(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
-	sv := parseSchemeExprExt(t, env, "(begin-for-syntax (+ 1 2))")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(begin-for-syntax (+ 1 2))")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -1284,10 +1243,10 @@ func TestCompileBeginForSyntax_Success(t *testing.T) {
 
 // TestCompileBeginForSyntax_MultipleExpressions tests begin-for-syntax with multiple expressions.
 func TestCompileBeginForSyntax_MultipleExpressions(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
-	sv := parseSchemeExprExt(t, env, "(begin-for-syntax 1 2 3)")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(begin-for-syntax 1 2 3)")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -1296,10 +1255,10 @@ func TestCompileBeginForSyntax_MultipleExpressions(t *testing.T) {
 
 // TestCompileDefineForSyntax_SimpleValue tests define-for-syntax with a simple value.
 func TestCompileDefineForSyntax_SimpleValue(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
-	sv := parseSchemeExprExt(t, env, "(define-for-syntax ct-val 42)")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(define-for-syntax ct-val 42)")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -1308,10 +1267,10 @@ func TestCompileDefineForSyntax_SimpleValue(t *testing.T) {
 
 // TestCompileDefineForSyntax_Procedure tests define-for-syntax with procedure shorthand.
 func TestCompileDefineForSyntax_Procedure(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
-	sv := parseSchemeExprExt(t, env, "(define-for-syntax (ct-fn x) (+ x 1))")
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, "(define-for-syntax (ct-fn x) (+ x 1))")
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -1325,8 +1284,8 @@ func runSchemeExpr(t *testing.T, env *environment.EnvironmentFrame, code string)
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	sv := parseSchemeExprExt(t, env, code)
-	cont, err := newTopLevelThunkExt(sv, env)
+	sv := testutil.ParseSchemeExpr(t, env, code)
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	if err != nil {
 		return nil, err
 	}
@@ -1434,7 +1393,7 @@ func TestCoverageSyntaxRulesWithEllipsis(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			testEnv := newFullRuntimeEnv(t)
+			testEnv := testutil.NewFullRuntimeEnv(t)
 			for _, def := range tc.defs {
 				_, err := runSchemeExpr(t, testEnv, def)
 				qt.Assert(t, err, qt.IsNil)
@@ -1447,7 +1406,7 @@ func TestCoverageSyntaxRulesWithEllipsis(t *testing.T) {
 
 	// Test syntax-rules with literals (triggers literal matching paths)
 	t.Run("literals matching", func(t *testing.T) {
-		testEnv := newFullRuntimeEnv(t)
+		testEnv := testutil.NewFullRuntimeEnv(t)
 		_, err := runSchemeExpr(t, testEnv, `(define-syntax my-cond
 			(syntax-rules (else)
 				((my-cond (else body ...)) (begin body ...))
@@ -1522,7 +1481,7 @@ func TestCoverageLetSyntax(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			testEnv := newFullRuntimeEnv(t)
+			testEnv := testutil.NewFullRuntimeEnv(t)
 			mc, err := runSchemeExpr(t, testEnv, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
@@ -1597,7 +1556,7 @@ func TestCoverageDelimitedContinuations(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := newFullRuntimeEnv(t)
+			env := testutil.NewFullRuntimeEnv(t)
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
@@ -1608,7 +1567,7 @@ func TestCoverageDelimitedContinuations(t *testing.T) {
 // TestCoverageDynamicWindWithCallCC tests dynamic-wind interacting with call/cc.
 // Triggers UnwindTo, RewindTo, RestoreWithWinding, RestoreWithWindingFrom.
 func TestCoverageDynamicWindWithCallCC(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	t.Run("dynamic-wind with continuation escape", func(t *testing.T) {
 		mc, err := runSchemeExprs(t, env,
@@ -1631,7 +1590,7 @@ func TestCoverageDynamicWindWithCallCC(t *testing.T) {
 	})
 
 	t.Run("dynamic-wind basic", func(t *testing.T) {
-		testEnv := newFullRuntimeEnv(t)
+		testEnv := testutil.NewFullRuntimeEnv(t)
 		mc, err := runSchemeExprs(t, testEnv,
 			"(define result '())",
 			`(dynamic-wind
@@ -1705,7 +1664,7 @@ func TestCoverageParameterObjects(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := newFullRuntimeEnv(t)
+			env := testutil.NewFullRuntimeEnv(t)
 			mc, err := runSchemeExprs(t, env, tc.codes...)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
@@ -1745,7 +1704,7 @@ func TestCoverageWithSyntax(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := newFullRuntimeEnv(t)
+			env := testutil.NewFullRuntimeEnv(t)
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.expected != nil {
@@ -1756,7 +1715,7 @@ func TestCoverageWithSyntax(t *testing.T) {
 
 	// Test using with-syntax macros
 	t.Run("use with-syntax macro", func(t *testing.T) {
-		env := newFullRuntimeEnv(t)
+		env := testutil.NewFullRuntimeEnv(t)
 		_, err := runSchemeExpr(t, env, `(define-syntax add-ten
 			(syntax-rules ()
 				((add-ten x) (+ x 10))))`)
@@ -1805,7 +1764,7 @@ func TestCoverageQuasisyntax(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := newFullRuntimeEnv(t)
+			env := testutil.NewFullRuntimeEnv(t)
 			for _, def := range tc.defs {
 				_, err := runSchemeExpr(t, env, def)
 				qt.Assert(t, err, qt.IsNil)
@@ -1852,7 +1811,7 @@ func TestCoverageExceptionHandling(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := newFullRuntimeEnv(t)
+			env := testutil.NewFullRuntimeEnv(t)
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
@@ -1887,7 +1846,7 @@ func TestCoverageDoForm(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := newFullRuntimeEnv(t)
+			env := testutil.NewFullRuntimeEnv(t)
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			if tc.expected != nil {
@@ -1899,7 +1858,7 @@ func TestCoverageDoForm(t *testing.T) {
 
 // TestCoverageCondExpandLibrary tests cond-expand with library feature test.
 func TestCoverageCondExpandLibrary(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	testCases := []struct {
 		name     string
@@ -1942,7 +1901,7 @@ func TestCoverageCondExpandLibrary(t *testing.T) {
 // TestCoverageTailCallOptimization tests proper tail call optimization paths.
 // Exercises CompileValidatedCall in tail position.
 func TestCoverageTailCallOptimization(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	t.Run("tail recursive loop", func(t *testing.T) {
 		mc, err := runSchemeExprs(t, env,
@@ -1955,7 +1914,7 @@ func TestCoverageTailCallOptimization(t *testing.T) {
 	})
 
 	t.Run("mutual tail recursion", func(t *testing.T) {
-		testEnv := newFullRuntimeEnv(t)
+		testEnv := testutil.NewFullRuntimeEnv(t)
 		mc, err := runSchemeExpr(t, testEnv,
 			`(letrec ((my-even? (lambda (n) (if (= n 0) #t (my-odd? (- n 1)))))
 				  (my-odd? (lambda (n) (if (= n 0) #f (my-even? (- n 1))))))
@@ -1992,7 +1951,7 @@ func TestCoverageMultipleValues(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := newFullRuntimeEnv(t)
+			env := testutil.NewFullRuntimeEnv(t)
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
@@ -2033,7 +1992,7 @@ func TestCoverageNamedLet(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := newFullRuntimeEnv(t)
+			env := testutil.NewFullRuntimeEnv(t)
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
@@ -2066,7 +2025,7 @@ func TestCoverageLetValues(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := newFullRuntimeEnv(t)
+			env := testutil.NewFullRuntimeEnv(t)
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
@@ -2102,7 +2061,7 @@ func TestCoverageCallCCBasic(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := newFullRuntimeEnv(t)
+			env := testutil.NewFullRuntimeEnv(t)
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
@@ -2112,7 +2071,7 @@ func TestCoverageCallCCBasic(t *testing.T) {
 
 // TestCoveragePromptTagPredicate tests continuation-prompt-tag? predicate.
 func TestCoveragePromptTagPredicate(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExpr(t, env, "(continuation-prompt-tag? (default-continuation-prompt-tag))")
 	qt.Assert(t, err, qt.IsNil)
@@ -2129,7 +2088,7 @@ func TestCoveragePromptTagPredicate(t *testing.T) {
 
 // TestCoverageBoxOperations tests box operations (mutable cells).
 func TestCoverageBoxOperations(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
 		"(define b (box 10))",
@@ -2152,7 +2111,7 @@ func TestCoverageBoxOperations(t *testing.T) {
 
 // TestCoverageHashtableOperations tests hashtable operations.
 func TestCoverageHashtableOperations(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
 		"(define ht (make-hashtable))",
@@ -2171,7 +2130,7 @@ func TestCoverageHashtableOperations(t *testing.T) {
 // TestCoverageSyntaxCaseWithFender tests syntax-case with fender (guard) expressions.
 // Triggers the fender compilation path in compileSyntaxCaseClause.
 func TestCoverageSyntaxCaseWithFender(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Define a macro with fender
 	_, err := runSchemeExpr(t, env, `(define-syntax checked-add
@@ -2190,7 +2149,7 @@ func TestCoverageSyntaxCaseWithFender(t *testing.T) {
 // Exercises compileIncludeImpl and findFile.
 func TestCoverageInclude(t *testing.T) {
 	// We can't easily test include without actual files, but we can test error paths
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// include with non-existent file should error
 	_, err := runSchemeExpr(t, env, `(include "nonexistent-file-xyz.scm")`)
@@ -2199,7 +2158,7 @@ func TestCoverageInclude(t *testing.T) {
 
 // TestCoverageSyntaxError tests syntax-error form.
 func TestCoverageSyntaxError(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// syntax-error should produce a compile-time error
 	_, err := runSchemeExpr(t, env, `(syntax-error "test error message")`)
@@ -2210,7 +2169,7 @@ func TestCoverageSyntaxError(t *testing.T) {
 // multiple compilation paths simultaneously.
 func TestCoverageComplexMacroPatterns(t *testing.T) {
 	t.Run("swap macro with set!", func(t *testing.T) {
-		env := newFullRuntimeEnv(t)
+		env := testutil.NewFullRuntimeEnv(t)
 		mc, err := runSchemeExprs(t, env,
 			`(define-syntax swap!
 				(syntax-rules ()
@@ -2229,7 +2188,7 @@ func TestCoverageComplexMacroPatterns(t *testing.T) {
 	})
 
 	t.Run("while macro", func(t *testing.T) {
-		env := newFullRuntimeEnv(t)
+		env := testutil.NewFullRuntimeEnv(t)
 		mc, err := runSchemeExprs(t, env,
 			`(define-syntax my-while
 				(syntax-rules ()
@@ -2251,7 +2210,7 @@ func TestCoverageComplexMacroPatterns(t *testing.T) {
 // which is not available in the tiny test environment. We test the paths
 // that don't require external library loading.
 func TestCoverageDefineLibrary(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Define a library without importing external libraries
 	// Library bodies have their own environment so we use only simple values
@@ -2267,7 +2226,7 @@ func TestCoverageDefineLibrary(t *testing.T) {
 // registry which is not available in the tiny test environment.
 func TestCoverageImportSets(t *testing.T) {
 	t.Run("library with multiple exports", func(t *testing.T) {
-		testEnv := newFullRuntimeEnv(t)
+		testEnv := testutil.NewFullRuntimeEnv(t)
 		_, err := runSchemeExpr(t, testEnv, `(define-library (test lib1)
 			(export bindSymbolWithScopes bar)
 			(begin
@@ -2277,7 +2236,7 @@ func TestCoverageImportSets(t *testing.T) {
 	})
 
 	t.Run("library with begin body", func(t *testing.T) {
-		testEnv := newFullRuntimeEnv(t)
+		testEnv := testutil.NewFullRuntimeEnv(t)
 		_, err := runSchemeExpr(t, testEnv, `(define-library (test lib2)
 			(export val)
 			(begin
@@ -2286,7 +2245,7 @@ func TestCoverageImportSets(t *testing.T) {
 	})
 
 	t.Run("library with multiple begin sections", func(t *testing.T) {
-		testEnv := newFullRuntimeEnv(t)
+		testEnv := testutil.NewFullRuntimeEnv(t)
 		_, err := runSchemeExpr(t, testEnv, `(define-library (test lib3)
 			(export a b)
 			(begin (define a 1))
@@ -2298,7 +2257,7 @@ func TestCoverageImportSets(t *testing.T) {
 // TestCoverageRecordType tests define-record-type (bootstrap macro).
 // Exercises the record type bootstrap macro expansion.
 func TestCoverageRecordType(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
 		`(define-record-type <point>
@@ -2350,7 +2309,7 @@ func TestCoveragePromises(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := newFullRuntimeEnv(t)
+			env := testutil.NewFullRuntimeEnv(t)
 			mc, err := runSchemeExprs(t, env, tc.codes...)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
@@ -2362,7 +2321,7 @@ func TestCoveragePromises(t *testing.T) {
 // Exercises UnwindTo and RewindTo paths in machine_context.go.
 func TestCoverageDynamicWindFull(t *testing.T) {
 	t.Run("dynamic-wind basic", func(t *testing.T) {
-		env := newFullRuntimeEnv(t)
+		env := testutil.NewFullRuntimeEnv(t)
 		mc, err := runSchemeExprs(t, env,
 			"(define log '())",
 			`(dynamic-wind
@@ -2375,7 +2334,7 @@ func TestCoverageDynamicWindFull(t *testing.T) {
 	})
 
 	t.Run("dynamic-wind with callcc escape", func(t *testing.T) {
-		env := newFullRuntimeEnv(t)
+		env := testutil.NewFullRuntimeEnv(t)
 		mc, err := runSchemeExprs(t, env,
 			"(define log '())",
 			`(call-with-current-continuation
@@ -2392,7 +2351,7 @@ func TestCoverageDynamicWindFull(t *testing.T) {
 	})
 
 	t.Run("nested dynamic-wind", func(t *testing.T) {
-		env := newFullRuntimeEnv(t)
+		env := testutil.NewFullRuntimeEnv(t)
 		mc, err := runSchemeExpr(t, env,
 			`(let ((result '()))
 				(dynamic-wind
@@ -2412,7 +2371,7 @@ func TestCoverageDynamicWindFull(t *testing.T) {
 // TestCoverageCallCCReentry tests call/cc with continuation re-invocation.
 // Exercises RestoreWithWinding and FindEscapeContinuation paths.
 func TestCoverageCallCCReentry(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	t.Run("call/cc basic capture", func(t *testing.T) {
 		mc, err := runSchemeExpr(t, env,
@@ -2472,7 +2431,7 @@ func TestCoverageCondExpand(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := newFullRuntimeEnv(t)
+			env := testutil.NewFullRuntimeEnv(t)
 			mc, err := runSchemeExpr(t, env, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, tc.expected)
@@ -2511,7 +2470,7 @@ func TestCoverageQuasiquoteEdgeCases(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := newFullRuntimeEnv(t)
+			env := testutil.NewFullRuntimeEnv(t)
 			for _, def := range tc.defs {
 				_, err := runSchemeExpr(t, env, def)
 				qt.Assert(t, err, qt.IsNil)
@@ -2581,7 +2540,7 @@ func TestQuasiQuoteRegressions(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := newFullRuntimeEnv(t)
+			env := testutil.NewFullRuntimeEnv(t)
 			for _, def := range tc.defs {
 				_, err := runSchemeExpr(t, env, def)
 				qt.Assert(t, err, qt.IsNil)
@@ -2596,7 +2555,7 @@ func TestQuasiQuoteRegressions(t *testing.T) {
 // TestCoverageIncludeError tests the include form with nonexistent file.
 // Exercises CompileInclude error path in compile_time_continuation.go.
 func TestCoverageIncludeError(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// include with nonexistent file should error
 	_, err := runSchemeExpr(t, env, `(include "nonexistent-file-xxx.scm")`)
@@ -2612,7 +2571,7 @@ func TestCoverageIncludeError(t *testing.T) {
 // This test provides regression coverage for the jumpPatch refactoring (PR #285)
 // that eliminated redundant branch type inspection by storing branch type in the patch struct.
 func TestCoverageSyntaxCaseFender(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	_, err := runSchemeExpr(t, env, `(define-syntax check-positive
 		(lambda (stx)
@@ -2635,7 +2594,7 @@ func TestCoverageSyntaxCaseFender(t *testing.T) {
 // TestCoverageParameterObjectsExtended tests parameterize with nested scoping.
 // Exercises Parameter apply and parameterize form compilation.
 func TestCoverageParameterObjectsExtended(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
 		"(define my-param (make-parameter 10))",
@@ -2650,7 +2609,7 @@ func TestCoverageParameterObjectsExtended(t *testing.T) {
 // TestCoverageSyntaxCaseEllipsis tests syntax-case with ellipsis patterns.
 // Exercises ellipsis handling in syntax-case compilation.
 func TestCoverageSyntaxCaseEllipsis(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	_, err := runSchemeExpr(t, env, `(define-syntax my-list
 		(lambda (stx)
@@ -2667,7 +2626,7 @@ func TestCoverageSyntaxCaseEllipsis(t *testing.T) {
 // TestCoverageQuasisyntaxRuntime tests syntax-case based macros.
 // Exercises syntax-case template expansion paths.
 func TestCoverageQuasisyntaxRuntime(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Simple syntax-case macro that wraps in a list
 	_, err := runSchemeExpr(t, env, `(define-syntax wrap-in-list
@@ -2685,7 +2644,7 @@ func TestCoverageQuasisyntaxRuntime(t *testing.T) {
 // TestCoverageLetrecStar tests letrec* form.
 // Exercises CompileLetrecStar paths.
 func TestCoverageLetrecStar(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExpr(t, env,
 		`(letrec* ((x 1) (y (+ x 1))) (+ x y))`)
@@ -2695,7 +2654,7 @@ func TestCoverageLetrecStar(t *testing.T) {
 
 // TestCoverageWhenUnless tests when and unless forms.
 func TestCoverageWhenUnless(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExpr(t, env, "(when #t 42)")
 	qt.Assert(t, err, qt.IsNil)
@@ -2709,7 +2668,7 @@ func TestCoverageWhenUnless(t *testing.T) {
 // TestCoverageRaiseAndGuard tests raise with guard handler.
 // Exercises exception handler installation and exception escape paths.
 func TestCoverageRaiseAndGuard(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Test raise-continuable
 	mc, err := runSchemeExpr(t, env,
@@ -2725,7 +2684,7 @@ func TestCoverageRaiseAndGuard(t *testing.T) {
 // TestCoverageSyntaxRulesFreeIdentifiers tests syntax-rules with free identifier
 // references that have local bindings, triggering GetHasLocalBinding.
 func TestCoverageSyntaxRulesFreeIdentifiers(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
 		`(define secret 42)`,
@@ -2742,7 +2701,7 @@ func TestCoverageSyntaxRulesFreeIdentifiers(t *testing.T) {
 // TestCoverageQuasiquoteImproper tests quasiquote with improper list.
 // Exercises expandQuasiquoteImproperList in compile_time_continuation.go.
 func TestCoverageQuasiquoteImproper(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
 		"(define x 42)",
@@ -2759,7 +2718,7 @@ func TestCoverageQuasiquoteImproper(t *testing.T) {
 // with ErrNotAList instead of falling through to expandQuasiquoteImproperList.
 func TestCoverageQuasiquoteImproperWithUnquote(t *testing.T) {
 	t.Run("unquote before dotted tail", func(t *testing.T) {
-		env := newFullRuntimeEnv(t)
+		env := testutil.NewFullRuntimeEnv(t)
 		mc, err := runSchemeExprs(t, env,
 			"(define x 10)",
 			"`(a ,x . c)",
@@ -2773,7 +2732,7 @@ func TestCoverageQuasiquoteImproperWithUnquote(t *testing.T) {
 	})
 
 	t.Run("multiple unquotes before dotted tail", func(t *testing.T) {
-		env := newFullRuntimeEnv(t)
+		env := testutil.NewFullRuntimeEnv(t)
 		mc, err := runSchemeExprs(t, env,
 			"(define x 1)",
 			"(define y 2)",
@@ -2791,7 +2750,7 @@ func TestCoverageQuasiquoteImproperWithUnquote(t *testing.T) {
 // TestCoverageQuasiquoteSplicingInList tests unquote-splicing in middle of list.
 // Exercises expandQuasiquote list traversal paths.
 func TestCoverageQuasiquoteSplicingInList(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
 		"(define xs '(2 3))",
@@ -2805,7 +2764,7 @@ func TestCoverageQuasiquoteSplicingInList(t *testing.T) {
 // TestCoverageQuasiquoteNested tests nested quasiquote/unquote.
 // Exercises depth tracking in expandQuasiquote.
 func TestCoverageQuasiquoteNested(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Double-nested quasiquote
 	mc, err := runSchemeExpr(t, env, "`(a ,(+ 1 2) `(b ,(+ 3 4)))")
@@ -2815,7 +2774,7 @@ func TestCoverageQuasiquoteNested(t *testing.T) {
 
 // TestCoverageMultipleValuesExtended tests additional multiple-value paths.
 func TestCoverageMultipleValuesExtended(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// receive combines consumer
 	mc, err := runSchemeExpr(t, env,
@@ -2829,7 +2788,7 @@ func TestCoverageMultipleValuesExtended(t *testing.T) {
 // TestCoverageDefineValues tests define inside let/lambda body.
 // Exercises internal define handling and ExpandBodyWithDefineSyntax.
 func TestCoverageDefineValues(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Internal defines in lambda body
 	mc, err := runSchemeExpr(t, env,
@@ -2844,7 +2803,7 @@ func TestCoverageDefineValues(t *testing.T) {
 // TestCoverageInternalDefineSyntax tests internal define-syntax.
 // Exercises ExpandBodyWithDefineSyntax for internal macro definitions.
 func TestCoverageInternalDefineSyntax(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExpr(t, env,
 		`(let ()
@@ -2859,7 +2818,7 @@ func TestCoverageInternalDefineSyntax(t *testing.T) {
 // TestCoverageTailPosition tests various tail position scenarios.
 // Exercises CompileValidatedCall in tail position.
 func TestCoverageTailPosition(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// if in tail position
 	mc, err := runSchemeExpr(t, env,
@@ -2891,7 +2850,7 @@ func TestCoverageTailPosition(t *testing.T) {
 // TestCoverageDynamicWindReentry tests dynamic-wind with continuation re-entry.
 // Exercises UnwindTo and RewindTo paths thoroughly.
 func TestCoverageDynamicWindReentry(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
 		"(define log '())",
@@ -2912,7 +2871,7 @@ func TestCoverageDynamicWindReentry(t *testing.T) {
 // TestCoverageApplyProcedure tests apply with various argument patterns.
 // Exercises applyMachineClosure argument handling paths.
 func TestCoverageApplyProcedure(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Apply with explicit args and rest list
 	mc, err := runSchemeExpr(t, env, "(apply + 1 2 '(3 4))")
@@ -2936,7 +2895,7 @@ func TestCoverageApplyProcedure(t *testing.T) {
 // TestCoverageSetBangTop tests set! at top level.
 // Exercises CompileValidatedSetBang in definition mode.
 func TestCoverageSetBangTop(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
 		"(define x 1)",
@@ -2950,7 +2909,7 @@ func TestCoverageSetBangTop(t *testing.T) {
 // TestCoverageNamedLetLoop tests named let with a simple accumulator loop.
 // Exercises named-let compilation path.
 func TestCoverageNamedLetLoop(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExpr(t, env,
 		`(let loop ((i 0) (acc 0))
@@ -2964,7 +2923,7 @@ func TestCoverageNamedLetLoop(t *testing.T) {
 // continuation escape path in RunWithEscapeHandling, RestoreWithWindingFrom,
 // UnwindTo, and RewindTo.
 func TestCoverageCallCCEscapeThroughDynamicWind(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Capture continuation inside dynamic-wind thunk, invoke from outside.
 	// The before/after thunks track winding/unwinding.
@@ -2990,9 +2949,9 @@ func TestCoverageCallCCEscapeThroughDynamicWind(t *testing.T) {
 }
 
 // TestCoveragePromptAbortHandling tests abort-current-continuation which
-// exercises the ErrPromptAbort path in RunWithEscapeHandling.
+// exercises the machine.ErrPromptAbort path in RunWithEscapeHandling.
 func TestCoveragePromptAbortHandling(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Test call-with-continuation-prompt with abort
 	mc, err := runSchemeExpr(t, env,
@@ -3010,7 +2969,7 @@ func TestCoveragePromptAbortHandling(t *testing.T) {
 // TestCoveragePromptAbortIdentity tests abort with identity handler.
 // Exercises the handler invocation branch in RunWithEscapeHandling.
 func TestCoveragePromptAbortIdentity(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Handler receives abort value and returns it
 	mc, err := runSchemeExpr(t, env,
@@ -3028,7 +2987,7 @@ func TestCoveragePromptAbortIdentity(t *testing.T) {
 // TestCoverageParameterObjectConverter tests parameter objects with converter.
 // Exercises applyParameter converter path.
 func TestCoverageParameterObjectConverter(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// make-parameter with converter function
 	mc, err := runSchemeExprs(t, env,
@@ -3050,7 +3009,7 @@ func TestCoverageParameterObjectConverter(t *testing.T) {
 // TestCoverageParameterObjectSet tests parameter set! path.
 // Exercises applyParameter with 1 argument.
 func TestCoverageParameterObjectSet(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
 		`(define p (make-parameter 42))`,
@@ -3064,7 +3023,7 @@ func TestCoverageParameterObjectSet(t *testing.T) {
 // TestCoverageSyntaxRulesRecursive tests recursive macros with free identifiers.
 // This exercises collectFreeIdentifiersWithEllipsis and intro scope handling.
 func TestCoverageSyntaxRulesRecursive(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// A recursive macro — "my-and" references itself in expansion
 	mc, err := runSchemeExprs(t, env,
@@ -3087,7 +3046,7 @@ func TestCoverageSyntaxRulesRecursive(t *testing.T) {
 // TestCoverageVectorQuasiquoteSplicing tests quasiquote with unquote-splicing
 // inside vectors. Exercises expandQuasiquote vector branch.
 func TestCoverageVectorQuasiquoteSplicing(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
 		`(define xs '(2 3 4))`,
@@ -3108,7 +3067,7 @@ func TestCoverageVectorQuasiquoteSplicing(t *testing.T) {
 // TestCoverageNestedQuasiquoteDepth tests nested quasiquote at depth > 1.
 // Exercises expandQuasiquote depth tracking.
 func TestCoverageNestedQuasiquoteDepth(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Nested quasiquote: inner quasiquote preserved, outer unquote applied
 	mc, err := runSchemeExprs(t, env,
@@ -3125,7 +3084,7 @@ func TestCoverageNestedQuasiquoteDepth(t *testing.T) {
 // TestCoverageCondExpandFeatures tests cond-expand with various feature identifiers.
 // Exercises processCondExpand feature matching paths.
 func TestCoverageCondExpandFeatures(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// cond-expand with known feature
 	mc, err := runSchemeExpr(t, env,
@@ -3147,7 +3106,7 @@ func TestCoverageCondExpandFeatures(t *testing.T) {
 // TestCoverageEvalWhen tests eval-when form.
 // Exercises CompileEvalWhen and related phase parsing.
 func TestCoverageEvalWhen(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// eval-when at runtime
 	mc, err := runSchemeExpr(t, env,
@@ -3160,7 +3119,7 @@ func TestCoverageEvalWhen(t *testing.T) {
 // TestCoverageGuardWithCond tests guard with multiple clauses.
 // Exercises guard cond-clause expansion.
 func TestCoverageGuardWithCond(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExpr(t, env,
 		`(guard (exn
@@ -3174,7 +3133,7 @@ func TestCoverageGuardWithCond(t *testing.T) {
 // TestCoverageCaseLambdaDispatch tests case-lambda with multiple clauses.
 // Exercises CaseLambdaClosure dispatch and EqualTo.
 func TestCoverageCaseLambdaDispatch(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
 		`(define f
@@ -3197,7 +3156,7 @@ func TestCoverageCaseLambdaDispatch(t *testing.T) {
 // TestCoverageDoLoop tests do loop form.
 // Exercises do compilation path.
 func TestCoverageDoLoop(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExpr(t, env,
 		`(do ((i 0 (+ i 1))
@@ -3210,7 +3169,7 @@ func TestCoverageDoLoop(t *testing.T) {
 // TestCoverageLetValuesMultiBinding tests let-values with multiple bindings.
 // Exercises the let-values macro expansion with more clauses.
 func TestCoverageLetValuesMultiBinding(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExpr(t, env,
 		`(let-values (((a b) (values 1 2))
@@ -3223,7 +3182,7 @@ func TestCoverageLetValuesMultiBinding(t *testing.T) {
 // TestCoverageSyntaxCaseWithTemplate tests syntax-case with (syntax ...) template.
 // Exercises CompileSyntax and related template compilation.
 func TestCoverageSyntaxCaseWithTemplate(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
 		`(define-syntax swap!
@@ -3248,7 +3207,7 @@ func TestCoverageSyntaxCaseWithTemplate(t *testing.T) {
 // TestCoverageDynamicWindNested tests deeply nested dynamic-wind.
 // Exercises FindCommonWindingPrefix with diverging stacks.
 func TestCoverageDynamicWindNested(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
 		`(define trace '())`,
@@ -3274,7 +3233,7 @@ func TestCoverageDynamicWindNested(t *testing.T) {
 // TestCoverageExceptionReRaise tests exception re-raising with guard.
 // Exercises exception handler chaining through guard clauses.
 func TestCoverageExceptionReRaise(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Use guard (which uses raise-continuable internally) to test handler chaining
 	mc, err := runSchemeExpr(t, env,
@@ -3293,7 +3252,7 @@ func TestCoverageExceptionReRaise(t *testing.T) {
 // TestCoverageDefineRecordType tests define-record-type.
 // Exercises the define-record-type compilation path.
 func TestCoverageDefineRecordType(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
 		`(define-record-type <point>
@@ -3312,9 +3271,9 @@ func TestCoverageDefineRecordType(t *testing.T) {
 }
 
 // TestCoverageSyntaxRulesCustomEllipsis tests syntax-rules with custom ellipsis.
-// Exercises CompileSyntaxRules custom ellipsis path.
+// Exercises compilation.CompileSyntaxRules custom ellipsis path.
 func TestCoverageSyntaxRulesCustomEllipsis(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
 		`(define-syntax my-list2
@@ -3333,7 +3292,7 @@ func TestCoverageSyntaxRulesCustomEllipsis(t *testing.T) {
 // compiles and evaluates to the empty list. R7RS §4.1.2 specifies that the
 // empty list is a self-evaluating literal.
 func TestEmptyListExpression(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExpr(t, env, "()")
 	qt.Assert(t, err, qt.IsNil)

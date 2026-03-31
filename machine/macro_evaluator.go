@@ -19,6 +19,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // MacroEvaluator abstracts VM execution for the compiler and expander so that
@@ -69,4 +70,48 @@ func (p *vmMacroEvaluator) EvalTemplate(ctx context.Context, tpl *NativeTemplate
 // InvokeTransformer delegates to invokeTransformerClosure.
 func (p *vmMacroEvaluator) InvokeTransformer(ctx context.Context, cls Closure, expanderCtx ExpanderCtx, args ...values.Value) (*MachineContext, error) {
 	return invokeTransformerClosure(ctx, cls, expanderCtx, args...)
+}
+
+// invokeTransformerClosure invokes a Closure (MachineClosure or ForeignClosure)
+// as a macro transformer. If expanderCtx is non-nil, it is set on the context
+// for auxiliary syntax hygiene (R7RS §4.3.2). args are passed to Apply — one
+// arg for syntax-rules/lambda transformers, three for ER macros.
+//
+// On success, the caller receives the MachineContext with the result in the
+// value register and must call ReleaseSubContext when done. On error, cleanup
+// is handled internally.
+func invokeTransformerClosure(ctx context.Context, cls Closure, expanderCtx ExpanderCtx, args ...values.Value) (*MachineContext, error) {
+	var mc *MachineContext
+	switch c := cls.(type) {
+	case *MachineClosure:
+		mc = acquireMacroContext(ctx, c)
+		if expanderCtx != nil {
+			mc.SetExpanderContext(expanderCtx)
+		}
+		_, err := mc.Apply(c, args...)
+		if err != nil {
+			ReleaseSubContext(mc)
+			return nil, werr.WrapForeignErrorf(err, "failed to apply transformer")
+		}
+		err = mc.Run()
+		if err != nil {
+			ReleaseSubContext(mc)
+			return nil, err
+		}
+	case *ForeignClosure:
+		mc = acquireSubContext()
+		mc.ctx = ctx
+		mc.evals = acquireStack()
+		if expanderCtx != nil {
+			mc.SetExpanderContext(expanderCtx)
+		}
+		_, err := mc.applyForeign(c, args...)
+		if err != nil {
+			ReleaseSubContext(mc)
+			return nil, werr.WrapForeignErrorf(err, "failed to apply transformer")
+		}
+	default:
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAClosure, "unexpected closure type: %T", cls)
+	}
+	return mc, nil
 }

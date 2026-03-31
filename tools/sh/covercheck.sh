@@ -22,11 +22,14 @@ MODULE="github.com/aalpar/wile"
 
 # Packages excluded from coverage enforcement.
 # Entry points, registration/wiring, helpers, test infrastructure,
-# and trivial embed-only packages.
+# trivial embed-only packages, and newly-extracted packages pending
+# test reorganization.
 EXCLUDED_PKGS=(
 	"cmd/wile"
 	"cmd/typeswitchlint"
 	"internal/repl"
+	"machine/compilation"
+	"machine/testutil"
 	"registry/testhelpers"
 	"examples/embedding"
 	"examples/embedding/source-tracking"
