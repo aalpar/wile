@@ -349,7 +349,7 @@ func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 //	| parent: nil                                   |
 //	| phases: *PhaseRegistry ──► {0: envP}          |
 //	| runtime: envP ─────────────────────────────┐  |
-//	| libraryRegistry: *machine.LibraryRegistry  |  |
+//	| libraryRegistry: LibrarySearcher           |  |
 //	+--------------------------------------------│--+
 //	                                             │
 //	                                             ▼
@@ -399,11 +399,11 @@ func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 //
 // # Inherited state
 //
-// The child inherits the parent's libraryRegistry (the *machine.LibraryRegistry)
-// by value copy. This allows the child to load libraries via (import ...) without
-// requiring the caller to set the registry explicitly. The registry itself is a
-// shared pointer; mutations to the registry (e.g., registering a new library)
-// are visible to both parent and child.
+// The child inherits the parent's libraryRegistry (a LibrarySearcher, concretely
+// *compilation.LibraryRegistry) by value copy. This allows the child to load
+// libraries via (import ...) without requiring the caller to set the registry
+// explicitly. The registry itself is a shared pointer; mutations to the registry
+// (e.g., registering a new library) are visible to both parent and child.
 //
 // # Contrast with NewChildRuntime
 //

@@ -32,7 +32,7 @@ import (
 //	│                                                                         │
 //	│  syntaxInterns ──── map[Value]SyntaxValue (thread-safe)                 │
 //	│  phases ─────────── *PhaseRegistry                                      │
-//	│  libraryRegistry ── any (*machine.LibraryRegistry)                      │
+//	│  libraryRegistry ── LibrarySearcher (*compilation.LibraryRegistry)       │
 //	│  runtime ────────── *EnvironmentFrame (phase 0)                         │
 //	└─────────────────────────────────────────────────────────────────────────┘
 //	                                    │
