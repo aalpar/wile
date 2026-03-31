@@ -56,7 +56,6 @@ func PrimCallWithContinuationBarrier(mc *machine.MachineContext) error {
 	// inside carry the same pointer and can be compared against it.
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
-	sub.SetWindingStack(mc.WindingStack())
 	sub.SetBarrierValid(barrierValid)
 
 	_, err = sub.ApplyCallable(thunkCls)

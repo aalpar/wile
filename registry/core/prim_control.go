@@ -75,7 +75,6 @@ func PrimApply(mc *machine.MachineContext) error {
 
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
-	sub.SetWindingStack(mc.WindingStack())
 	_, err := sub.ApplyCallable(proc, prefixArgs...)
 	if err != nil {
 		return err
@@ -175,7 +174,6 @@ func PrimCallCC(mc *machine.MachineContext) error {
 	// sub-context mode acts as the implicit call-with-continuation-prompt.
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
-	sub.SetWindingStack(mc.WindingStack())
 	_, err = sub.ApplyCallable(mcls, capt)
 	if err != nil {
 		return err
@@ -233,7 +231,6 @@ func PrimDynamicWind(mc *machine.MachineContext) error {
 	// 1. Call before thunk (in current dynamic extent)
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
-	sub.SetWindingStack(mc.WindingStack())
 	_, err := sub.ApplyCallable(beforeCls)
 	if err != nil {
 		return err
@@ -255,8 +252,7 @@ func PrimDynamicWind(mc *machine.MachineContext) error {
 	// 4. Call main thunk (with new winding context and escape continuation)
 	sub2 := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub2)
-	sub2.SetWindingStack(mc.WindingStack()) // Include new frame
-	sub2.SetEscapeCont(escapeCont)          // Allow call/cc to find continuation
+	sub2.SetEscapeCont(escapeCont) // Allow call/cc to find continuation
 	_, err = sub2.ApplyCallable(thunkCls)
 	if err != nil {
 		mc.PopWindingFrame() // Clean up on Apply error
@@ -271,7 +267,6 @@ func PrimDynamicWind(mc *machine.MachineContext) error {
 	// 6. Call after thunk (back to original dynamic extent)
 	sub3 := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub3)
-	sub3.SetWindingStack(mc.WindingStack())
 	_, err = sub3.ApplyCallable(afterCls)
 	if err != nil {
 		return err
@@ -338,7 +333,6 @@ func PrimCallWithValues(mc *machine.MachineContext) error {
 	// Call producer with no arguments
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
-	sub.SetWindingStack(mc.WindingStack())
 	_, err = sub.ApplyCallable(producerCls)
 	if err != nil {
 		return err
@@ -354,7 +348,6 @@ func PrimCallWithValues(mc *machine.MachineContext) error {
 	// Call consumer with all produced values as arguments
 	sub2 := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub2)
-	sub2.SetWindingStack(mc.WindingStack())
 	_, err = sub2.ApplyCallable(consumerCls, producedValues...)
 	if err != nil {
 		return err

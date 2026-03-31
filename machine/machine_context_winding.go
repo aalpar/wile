@@ -19,7 +19,8 @@ func (p *MachineContext) WindingStack() WindingStack {
 	return p.windingStack
 }
 
-// SetWindingStack sets the winding stack (used by sub-contexts).
+// SetWindingStack sets the winding stack. Used by tests; production code
+// should prefer NewSubContextWithWinding for override sites.
 func (p *MachineContext) SetWindingStack(stack WindingStack) {
 	p.windingStack = stack
 }
@@ -47,8 +48,8 @@ func (p *MachineContext) unwindStackTo(stack WindingStack, commonDepth int) erro
 	for i := len(stack) - 1; i >= commonDepth; i-- {
 		frame := stack[i]
 		if frame.After != nil {
-			sub := p.NewSubContext()
-			sub.windingStack = stack[:i:i] // Set stack to this level (cap to prevent aliasing)
+			// Truncated stack: the after thunk runs at depth i, not the parent's full depth.
+			sub := p.NewSubContextWithWinding(stack[:i:i])
 			_, err := sub.ApplyCallable(frame.After)
 			if err != nil {
 				ReleaseSubContext(sub)
@@ -80,7 +81,6 @@ func (p *MachineContext) RewindTo(target WindingStack, commonDepth int) error {
 		frame := target[i]
 		if frame.Before != nil {
 			sub := p.NewSubContext()
-			sub.windingStack = p.windingStack // Current stack at this point
 			_, err := sub.ApplyCallable(frame.Before)
 			if err != nil {
 				ReleaseSubContext(sub)

@@ -75,7 +75,6 @@ func PrimCallWithExit(mc *machine.MachineContext) error {
 	// after thunks run when unwinding past any dynamic-wind frames on escape.
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
-	sub.SetWindingStack(mc.WindingStack())
 	_, err = sub.ApplyCallable(procCls, exitClosure)
 	if err != nil {
 		return err

@@ -98,7 +98,6 @@ func PrimCallWithContinuationPrompt(mc *machine.MachineContext) error {
 	// which catches it.
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
-	sub.SetWindingStack(mc.WindingStack())
 	sub.SetPromptTag(tag)
 
 	_, err = sub.ApplyCallable(thunkCls)
@@ -124,7 +123,6 @@ func PrimCallWithContinuationPrompt(mc *machine.MachineContext) error {
 			if handlerCls != nil {
 				handlerSub := mc.NewSubContext()
 				defer machine.ReleaseSubContext(handlerSub)
-				handlerSub.SetWindingStack(mc.WindingStack())
 				_, applyErr := handlerSub.ApplyCallable(handlerCls, abortErr.Values...)
 				if applyErr != nil {
 					return applyErr
@@ -247,7 +245,6 @@ func PrimCallWithComposableContinuation(mc *machine.MachineContext) error {
 	// The result of proc becomes the value delivered to the prompt boundary.
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
-	sub.SetWindingStack(mc.WindingStack())
 	_, err = sub.ApplyCallable(procCls, cc)
 	if err != nil {
 		return err

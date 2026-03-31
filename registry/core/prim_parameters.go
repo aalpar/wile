@@ -48,7 +48,6 @@ func PrimMakeParameter(mc *machine.MachineContext) error {
 			// Apply converter to initial value
 			sub := mc.NewSubContext()
 			defer machine.ReleaseSubContext(sub)
-			sub.SetWindingStack(mc.WindingStack())
 			_, err := sub.ApplyCallable(converterCls, init)
 			if err != nil {
 				return werr.WrapForeignErrorf(err, "make-parameter: failed to apply converter")
@@ -98,7 +97,6 @@ func PrimParameterConvert(mc *machine.MachineContext) error {
 	}
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
-	sub.SetWindingStack(mc.WindingStack())
 	_, err = sub.ApplyCallable(param.Converter(), val)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "%%parameter-convert: failed to apply converter")
