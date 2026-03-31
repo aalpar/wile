@@ -48,7 +48,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 ### Low Priority
 
-- [ ] **ExpanderTimeContinuation convention deviations** [Low, M]: wile-goast call-clustering found 40 deviations across 4 conventions (`SourceContext` 76%, `WrapForeignErrorf` 68%, `NewSyntaxCons` 64%, `IsSyntaxEmptyList` 60%). Some explained (let-syntax/letrec-syntax delegate to impl which wraps), others not yet checked.
+- [x] **ExpanderTimeContinuation convention deviations** [Low, M, Done]: Fixed 18 deviations in expander files: 13 bare `return nil, err` wrapped with `WrapForeignErrorf` context, 5 `.IsEmptyList()` replaced with `syntax.IsSyntaxEmptyList()`. SourceContext and NewSyntaxCons conventions were already followed in expander files; remaining deviations (if any) are in other compilation files.
 - [ ] **Error sentinel grouping** [Low, S]: ~109 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.
 
 ### Postponed

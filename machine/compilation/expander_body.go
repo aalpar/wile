@@ -116,7 +116,7 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 	for _, form := range forms {
 		expanded, err := p.ExpandExpression(form)
 		if err != nil {
-			return nil, err
+			return nil, werr.WrapForeignErrorf(err, "body: failed to expand expression")
 		}
 
 		// If define-syntax, compile it now for subsequent forms
@@ -124,7 +124,7 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 			pair := expanded.(*syntax.SyntaxPair)
 			err = compileDefineSyntaxFromSyntax(p.ctx, p.env, pair, p.libraryScope, p.evaluator)
 			if err != nil {
-				return nil, err
+				return nil, werr.WrapForeignErrorf(err, "body: failed to compile define-syntax")
 			}
 		}
 
@@ -165,7 +165,7 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 	// Supports both syntax-rules and lambda (procedural) transformers
 	closure, err := compileTransformerToMachineClosure(ctx, env, transformer, libraryScope, evaluator)
 	if err != nil {
-		return err
+		return werr.WrapForeignErrorf(err, "define-syntax: failed to compile transformer for %s", keyword.Key)
 	}
 
 	// Store in the expand environment (for macro lookup during expansion)

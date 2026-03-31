@@ -104,7 +104,7 @@ func (p *ExpanderTimeContinuation) ExpandExpression(expr syntax.SyntaxValue) (sy
 		cdr := stx.SyntaxCdr()
 		result, err = p.ExpandSyntaxOrProcedureCall(car, cdr)
 		if err != nil {
-			return nil, err
+			return nil, werr.WrapForeignErrorf(err, "expand: failed to expand list expression")
 		}
 		return result, nil
 	case *syntax.SyntaxSymbol:
@@ -296,7 +296,7 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 
 	mc, err := p.evaluator.InvokeTransformer(p.ctx, cls, expanderCtx, inputForm)
 	if err != nil {
-		return nil, err
+		return nil, werr.WrapForeignErrorf(err, "expand: syntax-rules transformer invocation failed")
 	}
 	defer machine.ReleaseSubContext(mc)
 
@@ -328,7 +328,7 @@ func (p *ExpanderTimeContinuation) expandERMacroInvocation(
 ) (syntax.SyntaxValue, error) {
 	wrapped, err := p.invokeERTransformer(sym, expr, erTransformer)
 	if err != nil {
-		return nil, err
+		return nil, werr.WrapForeignErrorf(err, "expand: er-macro-transformer expansion failed")
 	}
 	// Recursively expand the result
 	return p.ExpandExpression(wrapped)
@@ -443,7 +443,7 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 	if isER {
 		result, err := p.invokeERTransformer(sym, cdr, erTransformer)
 		if err != nil {
-			return nil, false, err
+			return nil, false, werr.WrapForeignErrorf(err, "expand-once: er-macro-transformer failed")
 		}
 		return result, true, nil
 	}
@@ -458,7 +458,7 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 
 	mc, err := p.evaluator.InvokeTransformer(p.ctx, cls, nil, inputForm)
 	if err != nil {
-		return nil, false, err
+		return nil, false, werr.WrapForeignErrorf(err, "expand-once: transformer invocation failed")
 	}
 	defer machine.ReleaseSubContext(mc)
 
