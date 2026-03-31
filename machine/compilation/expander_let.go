@@ -263,7 +263,7 @@ func (p *ExpanderTimeContinuation) expandLetBindings(
 
 		expandedInit, err := initExpander.ExpandExpression(initExpr)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, werr.WrapForeignErrorf(err, "let: failed to expand init expression")
 		}
 
 		sc := bPair.SourceContext()
@@ -338,7 +338,7 @@ func (p *ExpanderTimeContinuation) expandLetStarBindings(
 		currentExpander := NewExpanderTimeContinuation(p.ctx, childEnv, p.evaluator)
 		expandedInit, err := currentExpander.ExpandExpression(scopedInit)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, werr.WrapForeignErrorf(err, "let*: failed to expand init expression")
 		}
 
 		// Add scope to name AFTER expanding init
@@ -389,13 +389,13 @@ func (p *ExpanderTimeContinuation) expandBindingBody(
 
 	bodyExprs, err := collectBodyExpressions(bodyPair)
 	if err != nil {
-		return nil, err
+		return nil, werr.WrapForeignErrorf(err, "binding body: failed to collect expressions")
 	}
 
 	childExpander := NewExpanderTimeContinuation(p.ctx, env, p.evaluator)
 	expandedExprs, err := childExpander.ExpandBodyWithDefineSyntax(bodyExprs)
 	if err != nil {
-		return nil, err
+		return nil, werr.WrapForeignErrorf(err, "binding body: failed to expand")
 	}
 
 	return syntax.SyntaxList(bodyPair.SourceContext(), expandedExprs...), nil

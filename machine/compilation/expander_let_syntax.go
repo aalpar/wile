@@ -64,7 +64,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 
 	// expr is (<bindings> <body>) - args after keyword
 	argsPair, ok := expr.(*syntax.SyntaxPair)
-	if !ok || argsPair.IsEmptyList() {
+	if !ok || syntax.IsSyntaxEmptyList(argsPair) {
 		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "%s: expected bindings and body", formName)
 	}
 
@@ -83,7 +83,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 	// Get the body
 	bodyStx := argsPair.SyntaxCdr()
 	bodyPair, ok := bodyStx.(*syntax.SyntaxPair)
-	if !ok || bodyPair.IsEmptyList() {
+	if !ok || syntax.IsSyntaxEmptyList(bodyPair) {
 		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "%s: expected body expressions", formName)
 	}
 
@@ -124,7 +124,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 		for !syntax.IsSyntaxEmptyList(current) {
 			bindingStx := current.SyntaxCar()
 			bindingPair, ok := bindingStx.(*syntax.SyntaxPair)
-			if !ok || bindingPair.IsEmptyList() {
+			if !ok || syntax.IsSyntaxEmptyList(bindingPair) {
 				return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "%s: invalid binding", formName)
 			}
 			keywordStx := bindingPair.SyntaxCar()
@@ -152,7 +152,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 	for !bindingsEmpty && !syntax.IsSyntaxEmptyList(current) {
 		bindingStx := current.SyntaxCar()
 		bindingPair, ok := bindingStx.(*syntax.SyntaxPair)
-		if !ok || bindingPair.IsEmptyList() {
+		if !ok || syntax.IsSyntaxEmptyList(bindingPair) {
 			return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "%s: invalid binding", formName)
 		}
 
@@ -167,7 +167,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 		// Get transformer expression
 		transformerCdr := bindingPair.SyntaxCdr()
 		transformerPair, ok := transformerCdr.(*syntax.SyntaxPair)
-		if !ok || transformerPair.IsEmptyList() {
+		if !ok || syntax.IsSyntaxEmptyList(transformerPair) {
 			return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "%s: missing transformer expression", formName)
 		}
 		transformerExpr := transformerPair.SyntaxCar()
@@ -191,7 +191,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 		}
 		err = childExpandEnv.SetLocalValue(localIndex, closure)
 		if err != nil {
-			return nil, err
+			return nil, werr.WrapForeignErrorf(err, "%s: failed to store transformer for %s", formName, keyword.Key)
 		}
 
 		cdr := current.SyntaxCdr()
