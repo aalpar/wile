@@ -99,7 +99,7 @@ case OpPullApply:
 | `machine/stack.go` | Add `PullDrain()` |
 | `machine/machine_context_apply.go` | Add `pullDrainAndApply()` |
 | `machine/machine_context.go` | Change `OpPullApply` case |
-| `machine/operations_stack_test.go` | Tests for `PullDrain()` |
+| `machine/stack_test.go` | Tests for `PullDrain()` |
 
 ## Risk
 

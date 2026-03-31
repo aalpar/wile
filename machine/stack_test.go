@@ -254,9 +254,8 @@ func TestStackPull(t *testing.T) {
 }
 
 func TestStack_PullDrain(t *testing.T) {
-	c := qt.New(t)
-
 	t.Run("multiple elements", func(t *testing.T) {
+		c := qt.New(t)
 		s := NewStack()
 		s.Push(values.NewInteger(1))
 		s.Push(values.NewInteger(2))
@@ -271,6 +270,7 @@ func TestStack_PullDrain(t *testing.T) {
 	})
 
 	t.Run("single element", func(t *testing.T) {
+		c := qt.New(t)
 		s := NewStack()
 		s.Push(values.NewInteger(42))
 
@@ -281,6 +281,7 @@ func TestStack_PullDrain(t *testing.T) {
 	})
 
 	t.Run("empty stack panics", func(t *testing.T) {
+		c := qt.New(t)
 		s := NewStack()
 		c.Assert(func() { s.PullDrain() }, qt.PanicMatches, `.*stack is empty.*`)
 	})
