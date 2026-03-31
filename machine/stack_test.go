@@ -253,6 +253,39 @@ func TestStackPull(t *testing.T) {
 	qt.Assert(t, s.Len(), qt.Equals, 2)
 }
 
+func TestStack_PullDrain(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("multiple elements", func(t *testing.T) {
+		s := NewStack()
+		s.Push(values.NewInteger(1))
+		s.Push(values.NewInteger(2))
+		s.Push(values.NewInteger(3))
+
+		proc, args := s.PullDrain()
+		c.Assert(proc, valuestest.SchemeEquals, values.NewInteger(1))
+		c.Assert(len(args), qt.Equals, 2)
+		c.Assert(args[0], valuestest.SchemeEquals, values.NewInteger(2))
+		c.Assert(args[1], valuestest.SchemeEquals, values.NewInteger(3))
+		c.Assert(s.Len(), qt.Equals, 0)
+	})
+
+	t.Run("single element", func(t *testing.T) {
+		s := NewStack()
+		s.Push(values.NewInteger(42))
+
+		proc, args := s.PullDrain()
+		c.Assert(proc, valuestest.SchemeEquals, values.NewInteger(42))
+		c.Assert(args, qt.IsNil)
+		c.Assert(s.Len(), qt.Equals, 0)
+	})
+
+	t.Run("empty stack panics", func(t *testing.T) {
+		s := NewStack()
+		c.Assert(func() { s.PullDrain() }, qt.PanicMatches, `.*stack is empty.*`)
+	})
+}
+
 // TestStackPopN tests stack PopN operation
 func TestStackPopN(t *testing.T) {
 	s := NewStack()
