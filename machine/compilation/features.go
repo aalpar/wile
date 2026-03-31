@@ -115,7 +115,7 @@ type FeatureRequirement interface {
 	// The registry parameter is used to check if a library is already loaded.
 	// The resolver parameter is used to check if a library file exists
 	// (via the FileResolver chain, supporting both OS and virtual fs.FS).
-	IsSatisfied(registry *LibraryRegistry, resolver FileResolver) bool
+	IsSatisfied(ctx context.Context, registry *LibraryRegistry, resolver FileResolver) bool
 }
 
 // featureIdentifier is a simple feature requirement.
@@ -123,7 +123,7 @@ type featureIdentifier struct {
 	name string
 }
 
-func (p *featureIdentifier) IsSatisfied(registry *LibraryRegistry, resolver FileResolver) bool {
+func (p *featureIdentifier) IsSatisfied(_ context.Context, _ *LibraryRegistry, _ FileResolver) bool {
 	return IsFeatureSupported(p.name)
 }
 
@@ -132,7 +132,7 @@ type libraryRequirement struct {
 	name LibraryName
 }
 
-func (p *libraryRequirement) IsSatisfied(registry *LibraryRegistry, resolver FileResolver) bool {
+func (p *libraryRequirement) IsSatisfied(ctx context.Context, registry *LibraryRegistry, resolver FileResolver) bool {
 	if registry != nil && registry.Lookup(p.name) != nil {
 		return true
 	}
@@ -142,13 +142,13 @@ func (p *libraryRequirement) IsSatisfied(registry *LibraryRegistry, resolver Fil
 	// Check via the FileResolver chain (supports both OS and virtual fs.FS).
 	// Try .sld first, then .scm — same fallback order as library_loader.go.
 	sldPath := p.name.ToFSPath()
-	f, _, err := resolver.ResolveAndOpen(context.Background(), sldPath)
+	f, _, err := resolver.ResolveAndOpen(ctx, sldPath)
 	if err == nil {
 		f.Close() //nolint:errcheck
 		return true
 	}
 	scmPath := strings.TrimSuffix(sldPath, ".sld") + ".scm"
-	f, _, err = resolver.ResolveAndOpen(context.Background(), scmPath)
+	f, _, err = resolver.ResolveAndOpen(ctx, scmPath)
 	if err == nil {
 		f.Close() //nolint:errcheck
 		return true
@@ -161,9 +161,9 @@ type andRequirement struct {
 	requirements []FeatureRequirement
 }
 
-func (p *andRequirement) IsSatisfied(registry *LibraryRegistry, resolver FileResolver) bool {
+func (p *andRequirement) IsSatisfied(ctx context.Context, registry *LibraryRegistry, resolver FileResolver) bool {
 	for _, req := range p.requirements {
-		if !req.IsSatisfied(registry, resolver) {
+		if !req.IsSatisfied(ctx, registry, resolver) {
 			return false
 		}
 	}
@@ -175,9 +175,9 @@ type orRequirement struct {
 	requirements []FeatureRequirement
 }
 
-func (p *orRequirement) IsSatisfied(registry *LibraryRegistry, resolver FileResolver) bool {
+func (p *orRequirement) IsSatisfied(ctx context.Context, registry *LibraryRegistry, resolver FileResolver) bool {
 	for _, req := range p.requirements {
-		if req.IsSatisfied(registry, resolver) {
+		if req.IsSatisfied(ctx, registry, resolver) {
 			return true
 		}
 	}
@@ -189,14 +189,14 @@ type notRequirement struct {
 	requirement FeatureRequirement
 }
 
-func (p *notRequirement) IsSatisfied(registry *LibraryRegistry, resolver FileResolver) bool {
-	return !p.requirement.IsSatisfied(registry, resolver)
+func (p *notRequirement) IsSatisfied(ctx context.Context, registry *LibraryRegistry, resolver FileResolver) bool {
+	return !p.requirement.IsSatisfied(ctx, registry, resolver)
 }
 
 // elseRequirement is always satisfied (used for else clause).
 type elseRequirement struct{}
 
-func (p *elseRequirement) IsSatisfied(registry *LibraryRegistry, resolver FileResolver) bool {
+func (p *elseRequirement) IsSatisfied(_ context.Context, _ *LibraryRegistry, _ FileResolver) bool {
 	return true
 }
 

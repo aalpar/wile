@@ -15,6 +15,7 @@
 package compilation
 
 import (
+	"context"
 	"testing"
 
 	"github.com/aalpar/wile/environment"
@@ -75,11 +76,11 @@ func TestParseLibraryNameErrors(t *testing.T) {
 func TestLibraryRequirementIsSatisfiedAdditional(t *testing.T) {
 	// With nil registry
 	libReq := &libraryRequirement{name: NewLibraryName("scheme", "base")}
-	qt.Assert(t, libReq.IsSatisfied(nil, nil), qt.IsFalse)
+	qt.Assert(t, libReq.IsSatisfied(context.Background(), nil, nil), qt.IsFalse)
 
 	// With registry but library not loaded
 	registry := NewLibraryRegistry()
-	qt.Assert(t, libReq.IsSatisfied(registry, nil), qt.IsFalse)
+	qt.Assert(t, libReq.IsSatisfied(context.Background(), registry, nil), qt.IsFalse)
 
 	// With library registered
 	env := environment.NewNamespace().Runtime()
@@ -87,5 +88,5 @@ func TestLibraryRequirementIsSatisfiedAdditional(t *testing.T) {
 	registry.Register(lib) //nolint:errcheck
 
 	testLibReq := &libraryRequirement{name: NewLibraryName("test", "lib")}
-	qt.Assert(t, testLibReq.IsSatisfied(registry, nil), qt.IsTrue)
+	qt.Assert(t, testLibReq.IsSatisfied(context.Background(), registry, nil), qt.IsTrue)
 }
