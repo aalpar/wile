@@ -74,10 +74,10 @@ func TestPlatformFeatures(t *testing.T) {
 
 func TestFeatureIdentifier_IsSatisfied(t *testing.T) {
 	req := NewFeatureIdentifier("r7rs")
-	qt.Assert(t, req.IsSatisfied(nil, nil), qt.IsTrue)
+	qt.Assert(t, req.IsSatisfied(context.Background(), nil, nil), qt.IsTrue)
 
 	req2 := NewFeatureIdentifier("nonexistent")
-	qt.Assert(t, req2.IsSatisfied(nil, nil), qt.IsFalse)
+	qt.Assert(t, req2.IsSatisfied(context.Background(), nil, nil), qt.IsFalse)
 }
 
 func TestLibraryRequirement_IsSatisfied(t *testing.T) {
@@ -86,10 +86,10 @@ func TestLibraryRequirement_IsSatisfied(t *testing.T) {
 
 	// Library not loaded and file doesn't exist
 	req := NewLibraryRequirement(NewLibraryName("nonexistent", "lib"))
-	qt.Assert(t, req.IsSatisfied(registry, nil), qt.IsFalse)
+	qt.Assert(t, req.IsSatisfied(context.Background(), registry, nil), qt.IsFalse)
 
 	// Nil registry
-	qt.Assert(t, req.IsSatisfied(nil, nil), qt.IsFalse)
+	qt.Assert(t, req.IsSatisfied(context.Background(), nil, nil), qt.IsFalse)
 }
 
 func TestAndRequirement_IsSatisfied(t *testing.T) {
@@ -98,18 +98,18 @@ func TestAndRequirement_IsSatisfied(t *testing.T) {
 		NewFeatureIdentifier("r7rs"),
 		NewFeatureIdentifier("wile"),
 	)
-	qt.Assert(t, req.IsSatisfied(nil, nil), qt.IsTrue)
+	qt.Assert(t, req.IsSatisfied(context.Background(), nil, nil), qt.IsTrue)
 
 	// One requirement not satisfied
 	req2 := NewAndRequirement(
 		NewFeatureIdentifier("r7rs"),
 		NewFeatureIdentifier("nonexistent"),
 	)
-	qt.Assert(t, req2.IsSatisfied(nil, nil), qt.IsFalse)
+	qt.Assert(t, req2.IsSatisfied(context.Background(), nil, nil), qt.IsFalse)
 
 	// Empty and (all satisfied)
 	req3 := NewAndRequirement()
-	qt.Assert(t, req3.IsSatisfied(nil, nil), qt.IsTrue)
+	qt.Assert(t, req3.IsSatisfied(context.Background(), nil, nil), qt.IsTrue)
 }
 
 func TestOrRequirement_IsSatisfied(t *testing.T) {
@@ -118,33 +118,33 @@ func TestOrRequirement_IsSatisfied(t *testing.T) {
 		NewFeatureIdentifier("r7rs"),
 		NewFeatureIdentifier("nonexistent"),
 	)
-	qt.Assert(t, req.IsSatisfied(nil, nil), qt.IsTrue)
+	qt.Assert(t, req.IsSatisfied(context.Background(), nil, nil), qt.IsTrue)
 
 	// No requirements satisfied
 	req2 := NewOrRequirement(
 		NewFeatureIdentifier("nonexistent1"),
 		NewFeatureIdentifier("nonexistent2"),
 	)
-	qt.Assert(t, req2.IsSatisfied(nil, nil), qt.IsFalse)
+	qt.Assert(t, req2.IsSatisfied(context.Background(), nil, nil), qt.IsFalse)
 
 	// Empty or (none satisfied)
 	req3 := NewOrRequirement()
-	qt.Assert(t, req3.IsSatisfied(nil, nil), qt.IsFalse)
+	qt.Assert(t, req3.IsSatisfied(context.Background(), nil, nil), qt.IsFalse)
 }
 
 func TestNotRequirement_IsSatisfied(t *testing.T) {
 	// Not of unsupported feature
 	req := NewNotRequirement(NewFeatureIdentifier("nonexistent"))
-	qt.Assert(t, req.IsSatisfied(nil, nil), qt.IsTrue)
+	qt.Assert(t, req.IsSatisfied(context.Background(), nil, nil), qt.IsTrue)
 
 	// Not of supported feature
 	req2 := NewNotRequirement(NewFeatureIdentifier("r7rs"))
-	qt.Assert(t, req2.IsSatisfied(nil, nil), qt.IsFalse)
+	qt.Assert(t, req2.IsSatisfied(context.Background(), nil, nil), qt.IsFalse)
 }
 
 func TestElseRequirement_IsSatisfied(t *testing.T) {
 	req := NewElseRequirement()
-	qt.Assert(t, req.IsSatisfied(nil, nil), qt.IsTrue)
+	qt.Assert(t, req.IsSatisfied(context.Background(), nil, nil), qt.IsTrue)
 }
 
 func TestComplexFeatureRequirements(t *testing.T) {
@@ -156,7 +156,7 @@ func TestComplexFeatureRequirements(t *testing.T) {
 			NewFeatureIdentifier("nonexistent"),
 		),
 	)
-	qt.Assert(t, req.IsSatisfied(nil, nil), qt.IsTrue)
+	qt.Assert(t, req.IsSatisfied(context.Background(), nil, nil), qt.IsTrue)
 
 	// (and r7rs (not (or r6rs r5rs)))
 	req2 := NewAndRequirement(
@@ -168,14 +168,14 @@ func TestComplexFeatureRequirements(t *testing.T) {
 			),
 		),
 	)
-	qt.Assert(t, req2.IsSatisfied(nil, nil), qt.IsTrue)
+	qt.Assert(t, req2.IsSatisfied(context.Background(), nil, nil), qt.IsTrue)
 
 	// (and (not r7rs) wile) - should be false
 	req3 := NewAndRequirement(
 		NewNotRequirement(NewFeatureIdentifier("r7rs")),
 		NewFeatureIdentifier("wile"),
 	)
-	qt.Assert(t, req3.IsSatisfied(nil, nil), qt.IsFalse)
+	qt.Assert(t, req3.IsSatisfied(context.Background(), nil, nil), qt.IsFalse)
 }
 
 // Helper function to check if a slice contains a string
@@ -284,30 +284,30 @@ func TestFeatureRequirementIsSatisfied(t *testing.T) {
 
 	// FeatureIdentifier
 	r7rsFeat := NewFeatureIdentifier("r7rs")
-	qt.Assert(t, r7rsFeat.IsSatisfied(registry, nil), qt.IsTrue)
+	qt.Assert(t, r7rsFeat.IsSatisfied(context.Background(), registry, nil), qt.IsTrue)
 
 	nonExistent := NewFeatureIdentifier("nonexistent-feature")
-	qt.Assert(t, nonExistent.IsSatisfied(registry, nil), qt.IsFalse)
+	qt.Assert(t, nonExistent.IsSatisfied(context.Background(), registry, nil), qt.IsFalse)
 
 	// AndRequirement with single true (variadic function)
 	andReq := NewAndRequirement(r7rsFeat)
-	qt.Assert(t, andReq.IsSatisfied(registry, nil), qt.IsTrue)
+	qt.Assert(t, andReq.IsSatisfied(context.Background(), registry, nil), qt.IsTrue)
 
 	// AndRequirement with one false
 	andReqFail := NewAndRequirement(r7rsFeat, nonExistent)
-	qt.Assert(t, andReqFail.IsSatisfied(registry, nil), qt.IsFalse)
+	qt.Assert(t, andReqFail.IsSatisfied(context.Background(), registry, nil), qt.IsFalse)
 
 	// OrRequirement
 	orReq := NewOrRequirement(nonExistent, r7rsFeat)
-	qt.Assert(t, orReq.IsSatisfied(registry, nil), qt.IsTrue)
+	qt.Assert(t, orReq.IsSatisfied(context.Background(), registry, nil), qt.IsTrue)
 
 	// NotRequirement
 	notReq := NewNotRequirement(nonExistent)
-	qt.Assert(t, notReq.IsSatisfied(registry, nil), qt.IsTrue)
+	qt.Assert(t, notReq.IsSatisfied(context.Background(), registry, nil), qt.IsTrue)
 
 	// Library requirement
 	libReq := NewLibraryRequirement(NewLibraryName("nonexistent", "lib"))
-	qt.Assert(t, libReq.IsSatisfied(registry, nil), qt.IsFalse)
+	qt.Assert(t, libReq.IsSatisfied(context.Background(), registry, nil), qt.IsFalse)
 }
 
 // TestAllFeaturesFunction tests AllFeatures returns expected features
@@ -419,10 +419,10 @@ func TestLibraryRequirementWithFSResolver(t *testing.T) {
 	req := NewLibraryRequirement(NewLibraryName("mylib", "cool"))
 
 	// Without resolver: not found (library not loaded, no FS to check)
-	qt.Assert(t, req.IsSatisfied(registry, nil), qt.IsFalse)
+	qt.Assert(t, req.IsSatisfied(context.Background(), registry, nil), qt.IsFalse)
 
 	// With FS resolver: found via .sld
-	qt.Assert(t, req.IsSatisfied(registry, resolver), qt.IsTrue)
+	qt.Assert(t, req.IsSatisfied(context.Background(), registry, resolver), qt.IsTrue)
 
 	// Test .scm fallback
 	fsys2 := fstest.MapFS{
@@ -430,5 +430,5 @@ func TestLibraryRequirementWithFSResolver(t *testing.T) {
 	}
 	resolver2 := NewFSFileResolver(fsys2, env)
 	req2 := NewLibraryRequirement(NewLibraryName("other", "lib"))
-	qt.Assert(t, req2.IsSatisfied(registry, resolver2), qt.IsTrue)
+	qt.Assert(t, req2.IsSatisfied(context.Background(), registry, resolver2), qt.IsTrue)
 }

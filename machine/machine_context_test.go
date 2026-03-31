@@ -218,7 +218,7 @@ func TestMachineContext_NewSubContext(t *testing.T) {
 	mc.evals.Push(values.NewInteger(100))
 	mc.SaveContinuation(5)
 
-	subCtx := mc.NewSubContext(WindingStack{})
+	subCtx := mc.NewSubContext()
 
 	// Sub-context should have fresh state
 	qt.Assert(t, subCtx.template, qt.IsNil)
@@ -798,7 +798,7 @@ func TestMachineContextNewSubContextAdditional(t *testing.T) {
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(context.Background(), cont)
 
-	sub := mc.NewSubContext(WindingStack{})
+	sub := mc.NewSubContext()
 	qt.Assert(t, sub, qt.IsNotNil)
 
 	// Sub context should have its own environment
@@ -924,7 +924,7 @@ func TestApplyCallable_Parameter(t *testing.T) {
 			mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
 			// Sub-context: cont == nil
-			sub := mc.NewSubContext(WindingStack{})
+			sub := mc.NewSubContext()
 			_, err := sub.ApplyCallable(param, tc.args...)
 			c.Assert(err, qt.IsNil)
 
@@ -946,7 +946,7 @@ func TestApplyCallable_Parameter_WrongArgCount(t *testing.T) {
 	param := NewParameter(values.NewInteger(0), nil)
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
-	sub := mc.NewSubContext(WindingStack{})
+	sub := mc.NewSubContext()
 	_, err := sub.ApplyCallable(param, values.NewInteger(1), values.NewInteger(2))
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "expected 0 or 1 arguments")
@@ -1050,7 +1050,7 @@ func TestNewSubContext_InheritsExceptionHandler(t *testing.T) {
 	handler := NewParameter(values.NewInteger(42), nil)
 	parent.PushExceptionHandler(handler)
 
-	sub := parent.NewSubContext(WindingStack{})
+	sub := parent.NewSubContext()
 
 	c.Assert(sub.ExceptionHandler(), qt.Not(qt.IsNil))
 	c.Assert(sub.ExceptionHandler().Handler().EqualTo(handler), qt.IsTrue)
@@ -1070,7 +1070,7 @@ func TestNewSubContext_InheritsNestedHandlers(t *testing.T) {
 	parent.PushExceptionHandler(handler1)
 	parent.PushExceptionHandler(handler2)
 
-	sub := parent.NewSubContext(WindingStack{})
+	sub := parent.NewSubContext()
 
 	c.Assert(sub.ExceptionHandler(), qt.Not(qt.IsNil))
 	c.Assert(sub.ExceptionHandler().Handler().EqualTo(handler2), qt.IsTrue)
@@ -1086,7 +1086,7 @@ func TestNewSubContext_NoExceptionHandler(t *testing.T) {
 	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
 	parent := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
-	sub := parent.NewSubContext(WindingStack{})
+	sub := parent.NewSubContext()
 
 	c.Assert(sub.ExceptionHandler(), qt.IsNil)
 }
@@ -1230,7 +1230,7 @@ func TestNewSubContext_InheritsMaxCallDepth(t *testing.T) {
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 	mc.SetMaxCallDepth(42)
 
-	sub := mc.NewSubContext(mc.WindingStack())
+	sub := mc.NewSubContext()
 	if sub.MaxCallDepth() != 42 {
 		t.Fatalf("sub-context maxCallDepth = %d, want 42", sub.MaxCallDepth())
 	}

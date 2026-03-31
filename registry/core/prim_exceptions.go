@@ -44,7 +44,7 @@ func PrimWithExceptionHandler(mc *machine.MachineContext) error {
 
 	// Run thunk in sub-context
 	// Exception handler automatically inherited from parent (M3 fix)
-	sub := mc.NewSubContext(mc.WindingStack())
+	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
 
 	_, err := sub.ApplyCallable(thunk)
@@ -79,7 +79,7 @@ func PrimWithExceptionHandler(mc *machine.MachineContext) error {
 // or escaped via continuation.
 func callExceptionHandler(mc *machine.MachineContext, condition values.Value, handler values.Callable) (values.Value, error) {
 	// Exception handler automatically inherited from parent (M3 fix)
-	sub := mc.NewSubContext(mc.WindingStack())
+	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
 
 	_, err := sub.ApplyCallable(handler, condition)
@@ -107,7 +107,7 @@ func resumeFromContinuation(mc *machine.MachineContext, cont *machine.MachineCon
 	}
 
 	// Exception handler automatically inherited from parent (M3 fix)
-	resumeSub := mc.NewSubContext(mc.WindingStack())
+	resumeSub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(resumeSub)
 	resumeSub.Restore(cont)
 	resumeSub.SetValue(value)
@@ -140,7 +140,8 @@ func handleException(mc *machine.MachineContext, excErr *machine.ErrExceptionEsc
 			if frame.After == nil {
 				continue
 			}
-			sub := mc.NewSubContext(excErr.WindingStack[:i])
+			// Truncated stack: the after thunk runs at depth i during exception unwind.
+			sub := mc.NewSubContextWithWinding(excErr.WindingStack[:i])
 			_, err := sub.ApplyCallable(frame.After)
 			if err != nil {
 				machine.ReleaseSubContext(sub)

@@ -73,7 +73,7 @@ func PrimCallWithExit(mc *machine.MachineContext) error {
 	// Run proc in a sub-context with the exit closure as its argument.
 	// The sub-context inherits the current winding stack so dynamic-wind
 	// after thunks run when unwinding past any dynamic-wind frames on escape.
-	sub := mc.NewSubContext(mc.WindingStack())
+	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
 	_, err = sub.ApplyCallable(procCls, exitClosure)
 	if err != nil {

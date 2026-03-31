@@ -300,7 +300,7 @@ func (p *MachineContext) applyParameter(param *Parameter, args []values.Value) (
 
 		if param.HasConverter() {
 			converter := param.Converter()
-			sub := p.NewSubContext(p.WindingStack())
+			sub := p.NewSubContext()
 			defer ReleaseSubContext(sub)
 			_, err := sub.ApplyCallable(converter, newVal)
 			if err != nil {
@@ -334,7 +334,7 @@ func (p *MachineContext) applyParameter(param *Parameter, args []values.Value) (
 // Parameter reads walk the chain to find the nearest binding.
 //
 // The walk spans sub-context boundaries via parentMC, mirroring how dynamic-wind
-// extents are inherited through NewSubContext(windingStack). Without this, parameter bindings
+// extents are inherited by NewSubContext. Without this, parameter bindings
 // from an outer parameterize would be invisible inside sub-contexts created by
 // call-with-continuation-prompt, apply, call-with-values, etc.
 func (p *MachineContext) findParameterInMarks(param *Parameter) values.Value {

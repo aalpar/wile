@@ -61,7 +61,7 @@ func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, a
 			return werr.WrapForeignErrorf(err, "cond-expand: invalid feature requirement")
 		}
 
-		if req.IsSatisfied(registry, resolver) {
+		if req.IsSatisfied(ctx, registry, resolver) {
 			matchedClause = clausePair
 		}
 
