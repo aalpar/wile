@@ -42,9 +42,10 @@ import (
 // FreeIdResolver provides free identifier resolution information for
 // template expansion hygiene. Implemented by machine.FreeIdResolution.
 //
-// A nil map value in ExpandOptions.FreeIds means "skip intro scope only."
-// A non-nil FreeIdResolver carries binding information from macro definition
-// time. Methods return zero values when that aspect of resolution is absent.
+// In ExpandOptions.FreeIds, a non-nil FreeIdResolver carries binding
+// information from macro definition time. A nil map value is treated
+// the same as an absent key (the identifier receives the intro scope).
+// Methods return zero values when that aspect of resolution is absent.
 type FreeIdResolver interface {
 	GetLocalScopes() []*syntax.Scope
 	GetGlobal() *environment.GlobalIndex

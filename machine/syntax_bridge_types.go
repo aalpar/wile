@@ -92,8 +92,7 @@ type ClausesWrapper struct {
 }
 
 func (p *ClausesWrapper) EqualTo(other values.Value) bool {
-	_, ok := other.(*ClausesWrapper)
-	return ok && false
+	return false
 }
 
 func (p *ClausesWrapper) IsVoid() bool {

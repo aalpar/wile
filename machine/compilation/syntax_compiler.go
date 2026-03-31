@@ -28,7 +28,7 @@ import (
 //   - ctctx: The compile-time call context (tail position info, etc.)
 //   - expr: The expression arguments (everything after the keyword)
 //
-// The function should emit operations to ctc.Template and return nil on success.
+// The function should emit operations via ctc.AppendOperations and return nil on success.
 type SyntaxCompilerFunc func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error
 
 // SyntaxCompiler wraps a SyntaxCompilerFunc as a values.Value so it can

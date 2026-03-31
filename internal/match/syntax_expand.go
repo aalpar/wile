@@ -50,8 +50,9 @@ type ExpandOptions struct {
 	IntroScope *syntax.Scope
 
 	// FreeIds maps free identifier names to their pre-resolved bindings.
-	// Identifiers in this map do not receive the intro scope.
-	// A nil value means just skip intro scope; a non-nil value carries resolved binding info.
+	// A non-nil value carries resolved binding info from macro definition time
+	// (local scopes, global index, library scope). A nil value is treated the
+	// same as an absent key — the identifier receives the intro scope normally.
 	FreeIds map[string]FreeIdResolver
 
 	// UseSiteCtx, if provided, is used for the source context of newly created syntax
