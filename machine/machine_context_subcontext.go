@@ -25,10 +25,10 @@ import (
 // The sub-context shares the global environment but has a fresh call stack, eval stack, and value register.
 // This allows foreign functions to call Scheme closures without corrupting the parent context's state.
 //
-// The windingStack parameter is the dynamic-wind winding stack to inherit. Callers that run
-// user-provided closures should pass mc.WindingStack() so that continuations captured inside
-// the sub-context preserve the enclosing dynamic-wind context. Internal winding operations
-// (unwindStackTo, RewindTo) pass their computed stack directly.
+// The parent's dynamic-wind winding stack is inherited automatically so that continuations
+// captured inside the sub-context preserve the enclosing dynamic-wind context. For the rare
+// sites that need a different stack (unwind truncation, exception cleanup), use
+// NewSubContextWithWinding.
 //
 // Note: Sub-contexts have isolated continuation chains (cont = nil). When call/cc captures a
 // continuation inside a sub-context, it captures mc.Parent() which refers to the sub-context's
@@ -40,7 +40,7 @@ import (
 //
 // The escapeCont field is inherited, allowing nested sub-contexts to know where execution
 // should continue after their completion (set by dynamic-wind and similar constructs).
-func (p *MachineContext) NewSubContext(windingStack WindingStack) *MachineContext {
+func (p *MachineContext) NewSubContext() *MachineContext {
 	p.counters.SubContextsCreated++
 	mc := acquireSubContext()
 	mc.ctx = p.ctx
@@ -53,9 +53,8 @@ func (p *MachineContext) NewSubContext(windingStack WindingStack) *MachineContex
 	mc.thread = p.thread
 	mc.exceptionHandler = p.exceptionHandler
 	mc.maxCallDepth = p.maxCallDepth
-	mc.windingStack = p.windingStack // inherit dynamic-wind extent
 	mc.barrierValid = p.barrierValid // inherit barrier context
-	mc.windingStack = windingStack
+	mc.windingStack = p.windingStack
 	return mc
 }
 

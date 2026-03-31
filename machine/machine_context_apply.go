@@ -300,7 +300,7 @@ func (p *MachineContext) applyParameter(param *Parameter, args []values.Value) (
 
 		if param.HasConverter() {
 			converter := param.Converter()
-			sub := p.NewSubContext(p.WindingStack())
+			sub := p.NewSubContext()
 			defer ReleaseSubContext(sub)
 			_, err := sub.ApplyCallable(converter, newVal)
 			if err != nil {

@@ -46,7 +46,7 @@ func PrimMakeParameter(mc *machine.MachineContext) error {
 			}
 
 			// Apply converter to initial value
-			sub := mc.NewSubContext(mc.WindingStack())
+			sub := mc.NewSubContext()
 			defer machine.ReleaseSubContext(sub)
 			_, err := sub.ApplyCallable(converterCls, init)
 			if err != nil {
@@ -95,7 +95,7 @@ func PrimParameterConvert(mc *machine.MachineContext) error {
 		mc.SetValue(val)
 		return nil
 	}
-	sub := mc.NewSubContext(mc.WindingStack())
+	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
 	_, err = sub.ApplyCallable(param.Converter(), val)
 	if err != nil {
