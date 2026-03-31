@@ -23,6 +23,7 @@ import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/bootstrap"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -36,17 +37,17 @@ func TestLibraryLoaderNotFound(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
-	registry := machine.NewLibraryRegistry()
+	registry := compilation.NewLibraryRegistry()
 	registry.SetSearchPaths([]string{"/nonexistent/dir"})
 	env.SetLibraryRegistry(registry)
 
-	name := machine.NewLibraryName("no", "such", "library")
-	_, err = machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
+	name := compilation.NewLibraryName("no", "such", "library")
+	_, err = compilation.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "not found")
 }
 
-// TestLibraryLoaderNoRegistry tests that LoadLibrary fails gracefully when
+// TestLibraryLoaderNoRegistry tests that compilation.LoadLibrary fails gracefully when
 // no library registry is configured on the environment.
 func TestLibraryLoaderNoRegistry(t *testing.T) {
 	c := qt.New(t)
@@ -54,8 +55,8 @@ func TestLibraryLoaderNoRegistry(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 	// Intentionally NOT setting a library registry
 
-	name := machine.NewLibraryName("scheme", "base")
-	_, err := machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
+	name := compilation.NewLibraryName("scheme", "base")
+	_, err := compilation.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "no library registry")
 }
@@ -80,12 +81,12 @@ func TestLibraryLoaderMalformedFile(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
-	registry := machine.NewLibraryRegistry()
+	registry := compilation.NewLibraryRegistry()
 	registry.SetSearchPaths([]string{tmpDir})
 	env.SetLibraryRegistry(registry)
 
-	name := machine.NewLibraryName("bad", "lib")
-	_, err = machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
+	name := compilation.NewLibraryName("bad", "lib")
+	_, err = compilation.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNotNil)
 }
 
@@ -106,12 +107,12 @@ func TestLibraryLoaderEmptyFile(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
-	registry := machine.NewLibraryRegistry()
+	registry := compilation.NewLibraryRegistry()
 	registry.SetSearchPaths([]string{tmpDir})
 	env.SetLibraryRegistry(registry)
 
-	name := machine.NewLibraryName("empty", "lib")
-	_, err = machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
+	name := compilation.NewLibraryName("empty", "lib")
+	_, err = compilation.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "empty")
 }
@@ -139,12 +140,12 @@ func TestLibraryLoaderNameMismatch(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
-	registry := machine.NewLibraryRegistry()
+	registry := compilation.NewLibraryRegistry()
 	registry.SetSearchPaths([]string{tmpDir})
 	env.SetLibraryRegistry(registry)
 
-	name := machine.NewLibraryName("wrong", "lib")
-	_, err = machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
+	name := compilation.NewLibraryName("wrong", "lib")
+	_, err = compilation.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "mismatch")
 }
@@ -155,13 +156,13 @@ func TestLibraryLoaderCachedReturn(t *testing.T) {
 	c := qt.New(t)
 	env := setupLibraryTest(t)
 
-	name := machine.NewLibraryName("test", "simple")
+	name := compilation.NewLibraryName("test", "simple")
 
-	lib1, err := machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
+	lib1, err := compilation.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNil)
 	c.Assert(lib1, qt.IsNotNil)
 
-	lib2, err := machine.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
+	lib2, err := compilation.LoadLibrary(context.Background(), name, env, machine.NewVMMacroEvaluator())
 	c.Assert(err, qt.IsNil)
 
 	// Same pointer — returned from cache, not recompiled

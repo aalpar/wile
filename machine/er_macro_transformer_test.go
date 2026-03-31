@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -32,7 +33,7 @@ func TestERMacroTransformer_IsValue(t *testing.T) {
 	tpl := machine.NewNativeTemplate(3, 0, false)
 	cls := machine.NewClosureWithTemplate(tpl, env)
 
-	ert := machine.NewERMacroTransformer(cls, env)
+	ert := compilation.NewERMacroTransformer(cls, env)
 
 	// Satisfies values.Value
 	var v values.Value = ert
@@ -52,8 +53,8 @@ func TestERMacroTransformer_EqualTo(t *testing.T) {
 	tpl := machine.NewNativeTemplate(3, 0, false)
 	cls := machine.NewClosureWithTemplate(tpl, env)
 
-	ert1 := machine.NewERMacroTransformer(cls, env)
-	ert2 := machine.NewERMacroTransformer(cls, env)
+	ert1 := compilation.NewERMacroTransformer(cls, env)
+	ert2 := compilation.NewERMacroTransformer(cls, env)
 
 	// Identity semantics
 	c.Assert(ert1.EqualTo(ert1), qt.IsTrue)
@@ -75,18 +76,18 @@ func TestCompileERMacroTransformer(t *testing.T) {
 		    (lambda (form rename compare) form)))
 	`)
 
-	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, form)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	c.Assert(err, qt.IsNil)
 
-	// Verify the binding is an ERMacroTransformer
+	// Verify the binding is an compilation.ERMacroTransformer
 	expandEnv := env.Expand()
 	bnd := expandEnv.GetBinding(values.NewSymbol("my-id"))
 	c.Assert(bnd, qt.Not(qt.IsNil))
 
-	_, ok := bnd.Value().(*machine.ERMacroTransformer)
+	_, ok := bnd.Value().(*compilation.ERMacroTransformer)
 	c.Assert(ok, qt.IsTrue)
 }
 
@@ -103,15 +104,15 @@ func TestERMacro_EndToEnd_Constant(t *testing.T) {
 		    (lambda (form rename compare) 42)))
 	`)
 
-	ctc := machine.NewCompiletimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	ctc := compilation.NewCompileTimeContinuation(machine.NewNativeTemplate(0, 0, false), env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	args := extractDefineSyntaxArgs(t, form)
 	err := ctc.CompileDefineSyntax(ctctx, args)
 	c.Assert(err, qt.IsNil)
 
 	// Expand: (my-const anything) — transformer returns 42 regardless
 	testForm := parseString(t, env, `(my-const anything)`)
-	etc := machine.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
+	etc := compilation.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
 	expanded, err := etc.ExpandExpression(testForm)
 	c.Assert(err, qt.IsNil)
 
@@ -134,7 +135,7 @@ func TestERMacro_InLetSyntax(t *testing.T) {
 		  (my-const anything))
 	`)
 
-	etc := machine.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
+	etc := compilation.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
 	expanded, err := etc.ExpandExpression(form)
 	c.Assert(err, qt.IsNil)
 

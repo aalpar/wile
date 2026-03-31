@@ -32,8 +32,8 @@ import (
 func TestSyntaxCaseClause_EqualTo(t *testing.T) {
 	c := qt.New(t)
 
-	clause := &syntaxCaseClause{
-		patternVars: map[string]struct{}{"x": {}},
+	clause := &SyntaxCaseClause{
+		PatternVars: map[string]struct{}{"x": {}},
 	}
 
 	c.Assert(clause.EqualTo(clause), qt.IsFalse) // Always returns false
@@ -43,14 +43,14 @@ func TestSyntaxCaseClause_EqualTo(t *testing.T) {
 func TestSyntaxCaseClause_IsVoid(t *testing.T) {
 	c := qt.New(t)
 
-	clause := &syntaxCaseClause{}
+	clause := &SyntaxCaseClause{}
 	c.Assert(clause.IsVoid(), qt.IsFalse)
 }
 
 func TestSyntaxCaseClause_SchemeString(t *testing.T) {
 	c := qt.New(t)
 
-	clause := &syntaxCaseClause{}
+	clause := &SyntaxCaseClause{}
 	c.Assert(clause.SchemeString(), qt.Equals, "#<syntax-case-clause>")
 }
 

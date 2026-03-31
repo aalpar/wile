@@ -95,6 +95,16 @@ func (p *NativeTemplate) IsVariadic() bool {
 	return p.isVariadic
 }
 
+// IncrementParameterCount adds one to the parameter count.
+func (p *NativeTemplate) IncrementParameterCount() {
+	p.parameterCount++
+}
+
+// SetVariadic marks this template as accepting a variadic rest argument.
+func (p *NativeTemplate) SetVariadic() {
+	p.isVariadic = true
+}
+
 // Operations reconstructs the operation sequence from the bytecode.
 // Converts Instructions back to Operation values for compatibility with
 // existing code that expects Operations (e.g., tests, EqualTo).

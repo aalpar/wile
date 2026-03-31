@@ -27,6 +27,8 @@ EXCLUDED_PKGS=(
 	"cmd/wile"
 	"cmd/typeswitchlint"
 	"internal/repl"
+	"machine/compilation"
+	"machine/testutil"
 	"registry/testhelpers"
 	"examples/embedding"
 	"examples/embedding/source-tracking"

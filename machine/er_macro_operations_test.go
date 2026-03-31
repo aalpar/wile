@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -29,7 +30,7 @@ func TestERRename_Basic(t *testing.T) {
 	c := qt.New(t)
 
 	env := createHygieneTestEnv()
-	rename := machine.NewERRenameClosure(env.Expand(), syntax.NewScope())
+	rename := compilation.NewERRenameClosure(env.Expand(), syntax.NewScope())
 
 	mc := machine.NewMachineContext(
 		context.Background(),
@@ -51,7 +52,7 @@ func TestERRename_CachesResults(t *testing.T) {
 	c := qt.New(t)
 
 	env := createHygieneTestEnv()
-	rename := machine.NewERRenameClosure(env.Expand(), syntax.NewScope())
+	rename := compilation.NewERRenameClosure(env.Expand(), syntax.NewScope())
 
 	// First call.
 	mc1 := machine.NewMachineContext(
@@ -79,7 +80,7 @@ func TestERRename_SyntaxSymbolInput(t *testing.T) {
 	c := qt.New(t)
 
 	env := createHygieneTestEnv()
-	rename := machine.NewERRenameClosure(env.Expand(), syntax.NewScope())
+	rename := compilation.NewERRenameClosure(env.Expand(), syntax.NewScope())
 
 	// Pass a SyntaxSymbol instead of a plain Symbol.
 	sctx := syntax.NewSourceContext("", "", syntax.NewSourceIndexes(0, 0, 0), syntax.NewSourceIndexes(0, 0, 0))
@@ -102,7 +103,7 @@ func TestERRename_RejectsNonSymbol(t *testing.T) {
 	c := qt.New(t)
 
 	env := createHygieneTestEnv()
-	rename := machine.NewERRenameClosure(env.Expand(), syntax.NewScope())
+	rename := compilation.NewERRenameClosure(env.Expand(), syntax.NewScope())
 
 	mc := machine.NewMachineContext(
 		context.Background(),
@@ -117,7 +118,7 @@ func TestERCompare_SameUnboundSymbol(t *testing.T) {
 	c := qt.New(t)
 
 	env := createHygieneTestEnv()
-	compare := machine.NewERCompareClosure(env)
+	compare := compilation.NewERCompareClosure(env)
 
 	mc := machine.NewMachineContext(
 		context.Background(),
@@ -132,7 +133,7 @@ func TestERCompare_DifferentUnboundSymbols(t *testing.T) {
 	c := qt.New(t)
 
 	env := createHygieneTestEnv()
-	compare := machine.NewERCompareClosure(env)
+	compare := compilation.NewERCompareClosure(env)
 
 	mc := machine.NewMachineContext(
 		context.Background(),
@@ -147,7 +148,7 @@ func TestERCompare_BoundVsUnbound(t *testing.T) {
 	c := qt.New(t)
 
 	env := createHygieneTestEnv()
-	compare := machine.NewERCompareClosure(env)
+	compare := compilation.NewERCompareClosure(env)
 
 	// "if" is bound (registered as primitive expander), "nonexistent" is not.
 	mc := machine.NewMachineContext(
@@ -163,7 +164,7 @@ func TestERCompare_RejectsNonSymbol(t *testing.T) {
 	c := qt.New(t)
 
 	env := createHygieneTestEnv()
-	compare := machine.NewERCompareClosure(env)
+	compare := compilation.NewERCompareClosure(env)
 
 	mc := machine.NewMachineContext(
 		context.Background(),

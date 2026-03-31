@@ -12,12 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package machine
+package machine_test
 
 import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
+	"github.com/aalpar/wile/machine/testutil"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/parser"
@@ -29,9 +33,9 @@ import (
 
 // addOpsWithSource adds count placeholder operations tagged with the given source.
 // Used by tests that need a template with source-tagged operations.
-func addOpsWithSource(tpl *NativeTemplate, count int, source *syntax.SourceContext) {
+func addOpsWithSource(tpl *machine.NativeTemplate, count int, source *syntax.SourceContext) {
 	for range count {
-		tpl.AppendOperationsWithSource(source, NewOperationLoadVoid())
+		tpl.AppendOperationsWithSource(source, machine.NewOperationLoadVoid())
 	}
 }
 
@@ -43,7 +47,7 @@ func TestCaptureStackTrace_Empty(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, nil, env))
 
 	trace := mc.CaptureStackTrace(10)
 	c.Assert(len(trace), qt.Equals, 0)
@@ -53,7 +57,7 @@ func TestCaptureStackTrace_SingleFrame(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 	tpl.SetName("test-func")
 
 	source := &syntax.SourceContext{
@@ -62,7 +66,7 @@ func TestCaptureStackTrace_SingleFrame(t *testing.T) {
 	}
 	addOpsWithSource(tpl, 10, source)
 
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	trace := mc.CaptureStackTrace(10)
 	c.Assert(len(trace), qt.Equals, 1)
@@ -77,28 +81,28 @@ func TestCaptureStackTrace_MultipleFrames(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 
 	// Create templates with names and source maps
-	tpl1 := NewNativeTemplate(0, 0, false)
+	tpl1 := machine.NewNativeTemplate(0, 0, false)
 	tpl1.SetName("inner")
 	source1 := &syntax.SourceContext{File: "inner.scm", Start: syntax.NewSourceIndexes(5, 1, 50)}
 	addOpsWithSource(tpl1, 5, source1)
 
-	tpl2 := NewNativeTemplate(0, 0, false)
+	tpl2 := machine.NewNativeTemplate(0, 0, false)
 	tpl2.SetName("middle")
 	source2 := &syntax.SourceContext{File: "middle.scm", Start: syntax.NewSourceIndexes(10, 1, 100)}
 	addOpsWithSource(tpl2, 5, source2)
 
-	tpl3 := NewNativeTemplate(0, 0, false)
+	tpl3 := machine.NewNativeTemplate(0, 0, false)
 	tpl3.SetName("outer")
 	source3 := &syntax.SourceContext{File: "outer.scm", Start: syntax.NewSourceIndexes(15, 1, 150)}
 	addOpsWithSource(tpl3, 5, source3)
 
 	// Build continuation chain: outer -> middle -> inner
-	cont1 := NewMachineContinuation(nil, tpl3, env)
-	cont2 := NewMachineContinuation(cont1, tpl2, env)
-	cont2.pc = 2
-	cont1.pc = 3
+	cont1 := machine.NewMachineContinuation(nil, tpl3, env)
+	cont2 := machine.NewMachineContinuation(cont1, tpl2, env)
+	cont2.SetPC(2)
+	cont1.SetPC(3)
 
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(cont2, tpl1, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(cont2, tpl1, env))
 
 	trace := mc.CaptureStackTrace(10)
 	c.Assert(len(trace), qt.Equals, 3)
@@ -111,15 +115,15 @@ func TestCaptureStackTrace_MaxDepth(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 
 	// Build a deep continuation chain
-	var cont *MachineContinuation
+	var cont *machine.MachineContinuation
 	for range 50 {
-		cont = NewMachineContinuation(cont, tpl, env)
+		cont = machine.NewMachineContinuation(cont, tpl, env)
 	}
 
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(cont, tpl, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(cont, tpl, env))
 
 	// Limit to 5 frames
 	trace := mc.CaptureStackTrace(5)
@@ -131,10 +135,10 @@ func TestCaptureStackTrace_AnonymousFunction(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 	// No name set - should show as <anonymous>
 
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	trace := mc.CaptureStackTrace(10)
 	c.Assert(len(trace), qt.Equals, 1)
@@ -146,11 +150,11 @@ func TestCaptureStackTrace_NoSourceMap(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 	tpl.SetName("no-source")
 	// No source map entries
 
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	trace := mc.CaptureStackTrace(10)
 	c.Assert(len(trace), qt.Equals, 1)
@@ -164,11 +168,11 @@ func TestCaptureStackTrace_NoSourceMap(t *testing.T) {
 func TestDebugger_CheckBreakpoint_Match(t *testing.T) {
 	c := qt.New(t)
 
-	d := NewDebugger()
+	d := machine.NewDebugger()
 	d.SetBreakpoint("test.scm", 10, 0) // Any column
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 
 	// Add source at line 10 - NewSourceIndexes(index, column, line)
 	source := &syntax.SourceContext{
@@ -177,7 +181,7 @@ func TestDebugger_CheckBreakpoint_Match(t *testing.T) {
 	}
 	addOpsWithSource(tpl, 5, source)
 
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	bp := d.CheckBreakpoint(mc)
 	c.Assert(bp, qt.IsNotNil)
@@ -187,11 +191,11 @@ func TestDebugger_CheckBreakpoint_Match(t *testing.T) {
 func TestDebugger_CheckBreakpoint_MatchWithColumn(t *testing.T) {
 	c := qt.New(t)
 
-	d := NewDebugger()
+	d := machine.NewDebugger()
 	d.SetBreakpoint("test.scm", 10, 5) // Specific column
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 
 	// Add source at line 10, column 5 - NewSourceIndexes(index, column, line)
 	source := &syntax.SourceContext{
@@ -200,7 +204,7 @@ func TestDebugger_CheckBreakpoint_MatchWithColumn(t *testing.T) {
 	}
 	addOpsWithSource(tpl, 5, source)
 
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	bp := d.CheckBreakpoint(mc)
 	c.Assert(bp, qt.IsNotNil)
@@ -209,11 +213,11 @@ func TestDebugger_CheckBreakpoint_MatchWithColumn(t *testing.T) {
 func TestDebugger_CheckBreakpoint_NoMatch_WrongFile(t *testing.T) {
 	c := qt.New(t)
 
-	d := NewDebugger()
-	d.SetBreakpoint("other.scm", 10, 0) // Breakpoint at other.scm:10
+	d := machine.NewDebugger()
+	d.SetBreakpoint("other.scm", 10, 0) // machine.Breakpoint at other.scm:10
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 
 	// Source at test.scm:10 - same line but different file
 	source := &syntax.SourceContext{
@@ -222,7 +226,7 @@ func TestDebugger_CheckBreakpoint_NoMatch_WrongFile(t *testing.T) {
 	}
 	addOpsWithSource(tpl, 5, source)
 
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	bp := d.CheckBreakpoint(mc)
 	c.Assert(bp, qt.IsNil) // Should not match - wrong file
@@ -231,11 +235,11 @@ func TestDebugger_CheckBreakpoint_NoMatch_WrongFile(t *testing.T) {
 func TestDebugger_CheckBreakpoint_NoMatch_WrongLine(t *testing.T) {
 	c := qt.New(t)
 
-	d := NewDebugger()
-	d.SetBreakpoint("test.scm", 20, 0) // Breakpoint at line 20
+	d := machine.NewDebugger()
+	d.SetBreakpoint("test.scm", 20, 0) // machine.Breakpoint at line 20
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 
 	// Source at line 10 - different line
 	source := &syntax.SourceContext{
@@ -244,7 +248,7 @@ func TestDebugger_CheckBreakpoint_NoMatch_WrongLine(t *testing.T) {
 	}
 	addOpsWithSource(tpl, 5, source)
 
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	bp := d.CheckBreakpoint(mc)
 	c.Assert(bp, qt.IsNil) // Should not match - wrong line (20 != 10)
@@ -253,11 +257,11 @@ func TestDebugger_CheckBreakpoint_NoMatch_WrongLine(t *testing.T) {
 func TestDebugger_CheckBreakpoint_NoMatch_WrongColumn(t *testing.T) {
 	c := qt.New(t)
 
-	d := NewDebugger()
-	d.SetBreakpoint("test.scm", 10, 20) // Breakpoint at line 10, column 20
+	d := machine.NewDebugger()
+	d.SetBreakpoint("test.scm", 10, 20) // machine.Breakpoint at line 10, column 20
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 
 	// Source at line 10, column 5 - same line but different column
 	source := &syntax.SourceContext{
@@ -266,7 +270,7 @@ func TestDebugger_CheckBreakpoint_NoMatch_WrongColumn(t *testing.T) {
 	}
 	addOpsWithSource(tpl, 5, source)
 
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	bp := d.CheckBreakpoint(mc)
 	c.Assert(bp, qt.IsNil) // Should not match - wrong column (20 != 5)
@@ -275,12 +279,12 @@ func TestDebugger_CheckBreakpoint_NoMatch_WrongColumn(t *testing.T) {
 func TestDebugger_CheckBreakpoint_Disabled(t *testing.T) {
 	c := qt.New(t)
 
-	d := NewDebugger()
-	id := d.SetBreakpoint("test.scm", 10, 0) // Breakpoint at line 10
+	d := machine.NewDebugger()
+	id := d.SetBreakpoint("test.scm", 10, 0) // machine.Breakpoint at line 10
 	d.DisableBreakpoint(id)
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 
 	// Source at line 10 - matches but breakpoint is disabled
 	source := &syntax.SourceContext{
@@ -289,7 +293,7 @@ func TestDebugger_CheckBreakpoint_Disabled(t *testing.T) {
 	}
 	addOpsWithSource(tpl, 5, source)
 
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	bp := d.CheckBreakpoint(mc)
 	c.Assert(bp, qt.IsNil) // Should not match - breakpoint is disabled
@@ -298,13 +302,13 @@ func TestDebugger_CheckBreakpoint_Disabled(t *testing.T) {
 func TestDebugger_CheckBreakpoint_NoSource(t *testing.T) {
 	c := qt.New(t)
 
-	d := NewDebugger()
+	d := machine.NewDebugger()
 	d.SetBreakpoint("test.scm", 10, 0)
 
 	env := environment.NewNamespace().Runtime()
 
 	// No template - no source
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, nil, env))
 
 	bp := d.CheckBreakpoint(mc)
 	c.Assert(bp, qt.IsNil)
@@ -313,16 +317,16 @@ func TestDebugger_CheckBreakpoint_NoSource(t *testing.T) {
 func TestDebugger_ShouldStep_StepInto(t *testing.T) {
 	c := qt.New(t)
 
-	d := NewDebugger()
+	d := machine.NewDebugger()
 	d.StepInto()
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 
 	source := &syntax.SourceContext{File: "test.scm"}
 	addOpsWithSource(tpl, 5, source)
 
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	c.Assert(d.ShouldStep(mc), qt.IsTrue)
 }
@@ -330,14 +334,14 @@ func TestDebugger_ShouldStep_StepInto(t *testing.T) {
 func TestDebugger_ShouldStep_StepInto_NoSource(t *testing.T) {
 	c := qt.New(t)
 
-	d := NewDebugger()
+	d := machine.NewDebugger()
 	d.StepInto()
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 	// No source map entries
 
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	c.Assert(d.ShouldStep(mc), qt.IsFalse)
 }
@@ -346,13 +350,13 @@ func TestDebugger_ShouldStep_StepOver_SameDepth(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 	source := &syntax.SourceContext{File: "test.scm"}
 	addOpsWithSource(tpl, 5, source)
 
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
-	d := NewDebugger()
+	d := machine.NewDebugger()
 	d.StepOver(mc)
 
 	// Same depth - should step
@@ -363,13 +367,13 @@ func TestDebugger_ShouldStep_StepOver_DeeperFrame(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 	source := &syntax.SourceContext{File: "test.scm"}
 	addOpsWithSource(tpl, 5, source)
 
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
-	d := NewDebugger()
+	d := machine.NewDebugger()
 	d.StepOver(mc) // Depth 0
 
 	// Add a continuation to increase depth
@@ -383,18 +387,18 @@ func TestDebugger_ShouldStep_StepOver_ShallowerFrame(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 	source := &syntax.SourceContext{File: "test.scm"}
 	addOpsWithSource(tpl, 5, source)
 
 	// Create a continuation chain where we start at depth 1
-	parentCont := NewMachineContinuation(nil, tpl, env)
-	childCont := NewMachineContinuation(parentCont, tpl, env)
+	parentCont := machine.NewMachineContinuation(nil, tpl, env)
+	childCont := machine.NewMachineContinuation(parentCont, tpl, env)
 
-	mc := NewMachineContext(context.Background(), childCont)
+	mc := machine.NewMachineContext(context.Background(), childCont)
 	// mc now has cont pointing to parentCont, depth = 1
 
-	d := NewDebugger()
+	d := machine.NewDebugger()
 	d.StepOver(mc) // Set at depth 1
 
 	// Restore from parent (depth goes to 0)
@@ -408,14 +412,14 @@ func TestDebugger_ShouldStep_StepOut(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 	source := &syntax.SourceContext{File: "test.scm"}
 	addOpsWithSource(tpl, 5, source)
 
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 	mc.SaveContinuation(5)
 
-	d := NewDebugger()
+	d := machine.NewDebugger()
 	d.StepOut(mc) // Record current frame
 
 	// Still same frame - should NOT step
@@ -430,11 +434,11 @@ func TestDebugger_ShouldStep_StepOut(t *testing.T) {
 func TestDebugger_ShouldStep_NotStepping(t *testing.T) {
 	c := qt.New(t)
 
-	d := NewDebugger()
+	d := machine.NewDebugger()
 	// Not stepping
 
 	env := environment.NewNamespace().Runtime()
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, nil, env))
 
 	c.Assert(d.ShouldStep(mc), qt.IsFalse)
 }
@@ -446,17 +450,17 @@ func TestDebugger_ShouldStep_NotStepping(t *testing.T) {
 func TestSourceRecording_Symbol(t *testing.T) {
 	c := qt.New(t)
 
-	env := newNamespace(environment.NewNamespace().Runtime())
+	env := testutil.NewMinimalNamespace(environment.NewNamespace().Runtime())
 
 	// First define x
 	rdr := strings.NewReader("(define x 42)")
 	p := parser.NewParserWithFile(env, true, rdr, "test.scm")
 	stx, _ := p.ReadSyntax(context.TODO())
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
-	expanded, _ := NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator()).ExpandExpression(stx)
-	cctx := NewCompileTimeCallContext(context.Background(), false)
-	_ = NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+	expanded, _ := compilation.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	_ = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 
 	// Now reference x
 	rdr = strings.NewReader("x")
@@ -464,11 +468,11 @@ func TestSourceRecording_Symbol(t *testing.T) {
 	stx, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
 
-	tpl2 := NewNativeTemplate(0, 0, false)
-	expanded, err = NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator()).ExpandExpression(stx)
+	tpl2 := machine.NewNativeTemplate(0, 0, false)
+	expanded, err = compilation.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	c.Assert(err, qt.IsNil)
 
-	err = NewCompiletimeContinuation(tpl2, env, NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+	err = compilation.NewCompileTimeContinuation(tpl2, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	c.Assert(err, qt.IsNil)
 
 	source := tpl2.SourceAt(0)
@@ -479,19 +483,19 @@ func TestSourceRecording_Symbol(t *testing.T) {
 func TestSourceRecording_Literal(t *testing.T) {
 	c := qt.New(t)
 
-	env := newNamespace(environment.NewNamespace().Runtime())
+	env := testutil.NewMinimalNamespace(environment.NewNamespace().Runtime())
 	rdr := strings.NewReader("42")
 	p := parser.NewParserWithFile(env, true, rdr, "literal.scm")
 	stx, err := p.ReadSyntax(context.TODO())
 	c.Assert(err, qt.IsNil)
 
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
-	expanded, err := NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator()).ExpandExpression(stx)
+	expanded, err := compilation.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	c.Assert(err, qt.IsNil)
 
-	cctx := NewCompileTimeCallContext(context.Background(), false)
-	err = NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	c.Assert(err, qt.IsNil)
 
 	source := tpl.SourceAt(0)
@@ -518,21 +522,21 @@ func TestRun_WithDebugger_Breakpoint(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 
 	// Create a template that just loads a literal
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 	source := &syntax.SourceContext{
 		File:  "test.scm",
 		Start: syntax.NewSourceIndexes(100, 1, 10), // index, column, line
 	}
 	// Add operations with source tracking
 	lit := values.NewInteger(42)
-	tpl.literals = append(tpl.literals, lit)
+	tpl.MaybeAppendLiteral(lit)
 	tpl.AppendOperationsWithSource(source,
-		NewOperationLoadVoid(),
-		NewOperationLoadVoid(),
-		NewOperationLoadLiteralByLiteralIndexImmediate(0),
+		machine.NewOperationLoadVoid(),
+		machine.NewOperationLoadVoid(),
+		machine.NewOperationLoadLiteralByLiteralIndexImmediate(0),
 	)
 
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	// Verify the context has the template and source map
 	c.Assert(mc.Template(), qt.Equals, tpl)
@@ -541,11 +545,11 @@ func TestRun_WithDebugger_Breakpoint(t *testing.T) {
 	c.Assert(mc.Template().SourceAt(0).Start.Line(), qt.Equals, 10)
 
 	// Set up debugger with breakpoint
-	d := NewDebugger()
+	d := machine.NewDebugger()
 	d.SetBreakpoint("test.scm", 10, 0)
 
 	breakHit := false
-	d.OnBreak(func(ctx *MachineContext, bp *Breakpoint) {
+	d.OnBreak(func(ctx *machine.MachineContext, bp *machine.Breakpoint) {
 		breakHit = true
 		d.Continue() // Continue execution
 	})
@@ -564,28 +568,28 @@ func TestRun_WithDebugger_StepInto(t *testing.T) {
 
 	env := environment.NewNamespace().Runtime()
 
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 	source := &syntax.SourceContext{
 		File:  "test.scm",
 		Start: syntax.NewSourceIndexes(5, 1, 50),
 	}
 	// Add operations with source tracking
 	lit := values.NewInteger(42)
-	tpl.literals = append(tpl.literals, lit)
+	tpl.MaybeAppendLiteral(lit)
 	tpl.AppendOperationsWithSource(source,
-		NewOperationLoadVoid(),
-		NewOperationLoadVoid(),
-		NewOperationLoadLiteralByLiteralIndexImmediate(0),
-		NewOperationRestoreContinuation(),
+		machine.NewOperationLoadVoid(),
+		machine.NewOperationLoadVoid(),
+		machine.NewOperationLoadLiteralByLiteralIndexImmediate(0),
+		machine.NewOperationRestoreContinuation(),
 	)
 
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
-	d := NewDebugger()
+	d := machine.NewDebugger()
 	d.StepInto()
 
 	stepCount := 0
-	d.OnBreak(func(ctx *MachineContext, bp *Breakpoint) {
+	d.OnBreak(func(ctx *machine.MachineContext, bp *machine.Breakpoint) {
 		stepCount++
 		if stepCount >= 2 {
 			d.Continue()

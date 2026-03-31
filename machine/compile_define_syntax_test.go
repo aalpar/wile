@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/testutil"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -73,19 +74,19 @@ func TestCompileDefineSyntax(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
-			env := newFullRuntimeEnv(t)
+			env := testutil.NewFullRuntimeEnv(t)
 
 			// Step 1: Define the macro
-			sv := parseSchemeExprExt(t, env, tc.MacroDef)
-			cont, err := newTopLevelThunkExt(sv, env)
+			sv := testutil.ParseSchemeExpr(t, env, tc.MacroDef)
+			cont, err := testutil.NewTopLevelThunk(sv, env)
 			qt.Assert(t, err, qt.IsNil)
 			mc := machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
 			qt.Assert(t, err, qt.IsNil)
 
 			// Step 2: Use the macro
-			sv = parseSchemeExprExt(t, env, tc.UseCode)
-			cont, err = newTopLevelThunkExt(sv, env)
+			sv = testutil.ParseSchemeExpr(t, env, tc.UseCode)
+			cont, err = testutil.NewTopLevelThunk(sv, env)
 			qt.Assert(t, err, qt.IsNil)
 			mc = machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()

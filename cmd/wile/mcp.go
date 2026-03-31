@@ -33,7 +33,7 @@ import (
 	"github.com/aalpar/wile"
 	ioext "github.com/aalpar/wile/internal/extensions/io"
 	"github.com/aalpar/wile/internal/repl"
-	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/stdlib"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
@@ -547,7 +547,7 @@ func (p *mcpServer) handleSessionResource(_ context.Context, _ mcp.ReadResourceR
 	if p.engine != nil {
 		state.Initialized = true
 		state.PrimitiveCount = len(p.engine.Registry().Primitives())
-		reg, ok := p.engine.Environment().LibraryRegistry().(*machine.LibraryRegistry)
+		reg, ok := p.engine.Environment().LibraryRegistry().(*compilation.LibraryRegistry)
 		if ok {
 			state.LibraryCount = len(reg.All())
 		}
@@ -576,7 +576,7 @@ func (p *mcpServer) handleLibrariesResource(ctx context.Context, _ mcp.ReadResou
 	}
 
 	libs := make([]libraryInfo, 0)
-	reg, ok := p.engine.Environment().LibraryRegistry().(*machine.LibraryRegistry)
+	reg, ok := p.engine.Environment().LibraryRegistry().(*compilation.LibraryRegistry)
 	if ok {
 		for _, lib := range reg.All() {
 			libs = append(libs, libraryInfo{

@@ -26,7 +26,7 @@ import (
 
 	"github.com/aalpar/wile"
 	exteval "github.com/aalpar/wile/internal/extensions/eval"
-	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 )
 
 // Helper functions
@@ -288,7 +288,7 @@ func TestLoad_ResolvesViaSchemeIncludePath(t *testing.T) {
 	c.Assert(os.WriteFile(helperFile, []byte("(define include-helper-val 99)"), 0644), qt.IsNil)
 
 	// Set SCHEME_INCLUDE_PATH to the directory containing the file.
-	t.Setenv(machine.SchemeIncludePathEnv, libDir)
+	t.Setenv(compilation.SchemeIncludePathEnv, libDir)
 
 	// Move CWD somewhere else so it can't accidentally find the file.
 	otherDir, err := os.MkdirTemp("", "load-include-path-cwd-")
@@ -320,7 +320,7 @@ func TestLoad_ResolvesViaLibrarySearchPaths(t *testing.T) {
 	c.Assert(os.WriteFile(helperFile, []byte("(define lib-helper-val 77)"), 0644), qt.IsNil)
 
 	// Clear SCHEME_INCLUDE_PATH so only library paths apply.
-	t.Setenv(machine.SchemeIncludePathEnv, "")
+	t.Setenv(compilation.SchemeIncludePathEnv, "")
 
 	// Move CWD somewhere else.
 	otherDir, err := os.MkdirTemp("", "load-lib-path-cwd-")

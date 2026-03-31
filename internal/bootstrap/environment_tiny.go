@@ -47,6 +47,7 @@ import (
 	nsext "github.com/aalpar/wile/internal/extensions/namespace"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/registry/core"
 	"github.com/aalpar/wile/werr"
@@ -112,19 +113,19 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 	env.Namespace().SetRegistry(reg)
 
 	// Register syntax compilers in the compile environment
-	err = machine.RegisterSyntaxCompilers(env)
+	err = compilation.RegisterSyntaxCompilers(env)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "error registering syntax compilers")
 	}
 
 	// Register primitive expanders in the expand environment
-	err = machine.RegisterPrimitiveExpanders(env)
+	err = compilation.RegisterPrimitiveExpanders(env)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "error registering primitive expanders")
 	}
 
 	// Load bootstrap macros from registry
-	bootstrapResolver := machine.NewEmbedFileResolver(core.BootstrapFS)
+	bootstrapResolver := compilation.NewEmbedFileResolver(core.BootstrapFS)
 	err = loadBootstrapMacros(ctx, env, reg.MacroSources(), bootstrapResolver)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "error loading bootstrap macros")
@@ -132,7 +133,7 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 
 	// Set the default file resolver for runtime include/load operations.
 	// This must happen after bootstrap (which uses EmbedFileResolver).
-	env.SetFileResolver(machine.NewOSFileResolver(env))
+	env.SetFileResolver(compilation.NewOSFileResolver(env))
 
 	return reg, nil
 }
@@ -215,7 +216,7 @@ func NewLibraryEnvironmentFrame(ctx context.Context, callerEnv *environment.Envi
 //  2. Macro-expanded (which is a no-op for define-syntax at top level)
 //  3. Compiled to bytecode
 //  4. Executed to register the syntax transformer
-func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame, sources []string, resolver machine.FileResolver) error {
+func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame, sources []string, resolver compilation.FileResolver) error {
 	for _, source := range sources {
 		rdr := strings.NewReader(source)
 		p := parser.NewParser(env, true, rdr)
@@ -230,7 +231,7 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 			}
 
 			// Expand the syntax
-			expanded, err := machine.NewExpanderTimeContinuation(ctx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
+			expanded, err := compilation.NewExpanderTimeContinuation(ctx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 			if err != nil {
 				return werr.WrapForeignErrorf(err, "error expanding bootstrap macro")
 			}
@@ -238,8 +239,8 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 			// Compile and run
 			tpl := machine.NewNativeTemplate(0, 0, false)
 			// Use inTail=false for top-level expressions
-			cctx := machine.NewCompileTimeCallContext(ctx, false)
-			compiler := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+			cctx := compilation.NewCompileTimeCallContext(ctx, false)
+			compiler := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 			if resolver != nil {
 				compiler.SetFileResolver(resolver)
 			}

@@ -25,6 +25,7 @@ import (
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
@@ -73,15 +74,15 @@ func PrimEval(mc *machine.MachineContext) error {
 	stx := schemeutil.DatumToSyntaxValue(mc.Context(), sctx, expr)
 
 	// Expand the expression
-	expanded, err := machine.NewExpanderTimeContinuation(mc.Context(), env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
+	expanded, err := compilation.NewExpanderTimeContinuation(mc.Context(), env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "eval: expansion error")
 	}
 
 	// Compile the expression
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(mc.Context(), false)
-	err = machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+	cctx := compilation.NewCompileTimeCallContext(mc.Context(), false)
+	err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "eval: compilation error")
 	}
@@ -119,7 +120,7 @@ func PrimLoad(mc *machine.MachineContext) error {
 	env := mc.EnvironmentFrame().TopLevel()
 
 	// Resolve and open via the shared FileResolver (same as include).
-	resolver, ok := env.FileResolver().(machine.FileResolver)
+	resolver, ok := env.FileResolver().(compilation.FileResolver)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrFileNotFound, "load: no file resolver configured")
 	}
@@ -154,15 +155,15 @@ func PrimLoad(mc *machine.MachineContext) error {
 		}
 
 		// Expand the expression
-		expanded, err := machine.NewExpanderTimeContinuation(mc.Context(), env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
+		expanded, err := compilation.NewExpanderTimeContinuation(mc.Context(), env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "load: expansion error in %s", filename.Value)
 		}
 
 		// Compile the expression
 		tpl := machine.NewNativeTemplate(0, 0, false)
-		cctx := machine.NewCompileTimeCallContext(mc.Context(), false)
-		err = machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+		cctx := compilation.NewCompileTimeCallContext(mc.Context(), false)
+		err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "load: compilation error in %s", filename.Value)
 		}
@@ -304,13 +305,13 @@ func PrimEnvironment(mc *machine.MachineContext) error {
 	// Process each import spec
 	v, err := args.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, specVal values.Value) error {
 		// Parse the import set from datum
-		importSet, err := machine.ParseImportSetFromDatum(mc.Context(), specVal)
+		importSet, err := compilation.ParseImportSetFromDatum(mc.Context(), specVal)
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "environment: invalid import spec")
 		}
 
 		// Load the library (uses callerEnv for registry access)
-		lib, err := machine.LoadLibrary(mc.Context(), importSet.LibraryName, callerEnv, machine.NewVMMacroEvaluator())
+		lib, err := compilation.LoadLibrary(mc.Context(), importSet.LibraryName, callerEnv, machine.NewVMMacroEvaluator())
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "environment: failed to load %s",
 				importSet.LibraryName.SchemeString())
@@ -324,7 +325,7 @@ func PrimEnvironment(mc *machine.MachineContext) error {
 		}
 
 		// Copy bindings to new environment at the specified phase
-		err = machine.CopyLibraryBindingsToEnvAtPhase(lib, bindings, newEnv, importSet.PhaseShift)
+		err = compilation.CopyLibraryBindingsToEnvAtPhase(lib, bindings, newEnv, importSet.PhaseShift)
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "environment: error copying bindings from %s",
 				importSet.LibraryName.SchemeString())
@@ -368,7 +369,7 @@ func PrimExpand(mc *machine.MachineContext) error {
 
 	// Not in expansion phase - create temporary expander
 	env := mc.EnvironmentFrame()
-	expander := machine.NewExpanderTimeContinuation(mc.Context(), env, machine.NewVMMacroEvaluator())
+	expander := compilation.NewExpanderTimeContinuation(mc.Context(), env, machine.NewVMMacroEvaluator())
 	expanded, err := expander.ExpandExpression(syntaxVal)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "expand: expansion failed")
@@ -403,7 +404,7 @@ func PrimExpandOnce(mc *machine.MachineContext) error {
 
 	// Not in expansion phase - create temporary expander
 	env := mc.EnvironmentFrame()
-	expander := machine.NewExpanderTimeContinuation(mc.Context(), env, machine.NewVMMacroEvaluator())
+	expander := compilation.NewExpanderTimeContinuation(mc.Context(), env, machine.NewVMMacroEvaluator())
 	expanded, didExpand, err := expander.ExpandOnce(syntaxVal)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "expand-once: expansion failed")
@@ -442,7 +443,7 @@ func PrimCompile(mc *machine.MachineContext) error {
 	env := mc.EnvironmentFrame()
 
 	// Step 1: Expand the syntax object
-	expanded, err := machine.NewExpanderTimeContinuation(mc.Context(), env, machine.NewVMMacroEvaluator()).ExpandExpression(syntaxVal)
+	expanded, err := compilation.NewExpanderTimeContinuation(mc.Context(), env, machine.NewVMMacroEvaluator()).ExpandExpression(syntaxVal)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "compile: expansion failed")
 	}
@@ -450,8 +451,8 @@ func PrimCompile(mc *machine.MachineContext) error {
 	// Step 2: Compile to bytecode template
 	// Create a thunk template (0 params, 0 locals, not variadic)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(mc.Context(), false)
-	err = machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+	cctx := compilation.NewCompileTimeCallContext(mc.Context(), false)
+	err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "compile: compilation failed")
 	}

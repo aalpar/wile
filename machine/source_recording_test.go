@@ -12,12 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package machine
+package machine_test
 
 import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
+	"github.com/aalpar/wile/machine/testutil"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/parser"
@@ -26,21 +30,21 @@ import (
 )
 
 // Helper to compile Scheme code and return the template
-func compileScheme(t *testing.T, code string) *NativeTemplate {
-	env := newNamespace(environment.NewNamespace().Runtime())
+func compileScheme(t *testing.T, code string) *machine.NativeTemplate {
+	env := testutil.NewMinimalNamespace(environment.NewNamespace().Runtime())
 	rdr := strings.NewReader(code)
 	p := parser.NewParserWithFile(env, true, rdr, "test.scm")
 
 	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
-	expanded, err := NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator()).ExpandExpression(stx)
+	expanded, err := compilation.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
-	cctx := NewCompileTimeCallContext(context.Background(), false)
-	err = NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
 	return tpl
@@ -76,9 +80,9 @@ func TestSourceRecording_DefineFunction(t *testing.T) {
 
 	// The function template should have a name
 	// Find the child template in literals
-	var childTpl *NativeTemplate
-	for _, lit := range tpl.literals {
-		nt, ok := lit.(*NativeTemplate)
+	var childTpl *machine.NativeTemplate
+	for _, lit := range tpl.Literals() {
+		nt, ok := lit.(*machine.NativeTemplate)
 		if ok {
 			childTpl = nt
 			break
@@ -102,18 +106,18 @@ func TestSourceRecording_Begin(t *testing.T) {
 
 func TestSourceRecording_Call(t *testing.T) {
 	// First define a function, then call it
-	env := newNamespace(environment.NewNamespace().Runtime())
+	env := testutil.NewMinimalNamespace(environment.NewNamespace().Runtime())
 
 	// Define a simple function
 	rdr := strings.NewReader("(define (id x) x)")
 	p := parser.NewParserWithFile(env, true, rdr, "test.scm")
 	stx, _ := p.ReadSyntax(context.TODO())
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
-	expanded, err := NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator()).ExpandExpression(stx)
+	expanded, err := compilation.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
-	cctx := NewCompileTimeCallContext(context.Background(), false)
-	err = NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Now compile a call to that function
@@ -122,27 +126,27 @@ func TestSourceRecording_Call(t *testing.T) {
 	stx, err = p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
-	tpl2 := NewNativeTemplate(0, 0, false)
-	expanded, err = NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator()).ExpandExpression(stx)
+	tpl2 := machine.NewNativeTemplate(0, 0, false)
+	expanded, err = compilation.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
-	err = NewCompiletimeContinuation(tpl2, env, NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+	err = compilation.NewCompileTimeContinuation(tpl2, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 }
 
 func TestSourceRecording_SetBang(t *testing.T) {
 	// Define x first, then set!
-	env := newNamespace(environment.NewNamespace().Runtime())
+	env := testutil.NewMinimalNamespace(environment.NewNamespace().Runtime())
 
 	// First compile (define x 1)
 	rdr := strings.NewReader("(define x 1)")
 	p := parser.NewParserWithFile(env, true, rdr, "test.scm")
 	stx, _ := p.ReadSyntax(context.TODO())
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
-	expanded, _ := NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator()).ExpandExpression(stx)
-	cctx := NewCompileTimeCallContext(context.Background(), false)
-	err := NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+	expanded, _ := compilation.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	err := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Now compile (set! x 2)
@@ -151,11 +155,11 @@ func TestSourceRecording_SetBang(t *testing.T) {
 	stx, err = p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
-	tpl2 := NewNativeTemplate(0, 0, false)
-	expanded, err = NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator()).ExpandExpression(stx)
+	tpl2 := machine.NewNativeTemplate(0, 0, false)
+	expanded, err = compilation.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
-	err = NewCompiletimeContinuation(tpl2, env, NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+	err = compilation.NewCompileTimeContinuation(tpl2, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 }
 
@@ -170,20 +174,20 @@ func TestSourceRecording_SourceLocationPreserved(t *testing.T) {
 	code := `(define (identity a)
   a)`
 
-	env := newNamespace(environment.NewNamespace().Runtime())
+	env := testutil.NewMinimalNamespace(environment.NewNamespace().Runtime())
 	rdr := strings.NewReader(code)
 	p := parser.NewParserWithFile(env, true, rdr, "multiline.scm")
 
 	stx, err := p.ReadSyntax(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 	ectx := context.Background()
-	expanded, err := NewExpanderTimeContinuation(ectx, env, NewVMMacroEvaluator()).ExpandExpression(stx)
+	expanded, err := compilation.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	qt.Assert(t, err, qt.IsNil)
 
-	cctx := NewCompileTimeCallContext(context.Background(), false)
-	err = NewCompiletimeContinuation(tpl, env, NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	qt.Assert(t, err, qt.IsNil)
 
 	// Source should point to the correct file

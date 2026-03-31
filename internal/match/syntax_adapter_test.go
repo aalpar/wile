@@ -144,7 +144,7 @@ func TestSyntaxMatcher(t *testing.T) {
 
 		// Create intro scope
 		introScope := syntax.NewScope()
-		freeIds := make(map[string]any)
+		freeIds := make(map[string]FreeIdResolver)
 
 		template := syntax.NewSyntaxSymbol("x", srcCtx)
 		result, err := matcher.Expand(template, ExpandOptions{IntroScope: introScope, FreeIds: freeIds})

@@ -109,13 +109,13 @@ func (p *OperationSyntaxRulesTransform) Apply(mc *MachineContext) (*MachineConte
 	}
 
 	// Extract from wrapper
-	wrapper, ok := clausesVal.(*clausesWrapper)
+	wrapper, ok := clausesVal.(*ClausesWrapper)
 	if !ok {
 		// The value register might have the input if operations aren't running correctly
 		// Check if this is actually being called as the second operation
 		return nil, mc.Error(fmt.Sprintf("syntax-rules: expected clauses wrapper in value register, got %T (PC=%d)", clausesVal, mc.pc))
 	}
-	clauses := wrapper.clauses
+	clauses := wrapper.Clauses
 
 	// Get the input form from local parameter 0 (transformer is called with input as argument)
 	inputVal := mc.env.GetLocalBindingByIndex(0).Value()
@@ -185,32 +185,24 @@ func (p *OperationSyntaxRulesTransform) Apply(mc *MachineContext) (*MachineConte
 	// Try each clause in order
 	for i, clause := range clauses {
 		// Try to match the pattern with R7RS binding checking
-		err := clause.matcher.MatchWithBindingChecker(mc.Context(), input, bindingChecker)
+		err := clause.Matcher.MatchWithBindingChecker(mc.Context(), input, bindingChecker)
 		if err == nil {
 			// Create a fresh scope for this macro invocation
 			// This prevents variable capture between the macro and its use site
 			introScope := syntax.NewScopeWithLabel("intro")
 
-			// Convert freeIds from map[string]*environment.GlobalIndex to map[string]any
-			// This is needed because the match package uses any to avoid circular imports
-			freeIdsAny := make(map[string]any, len(clause.freeIds))
-			for k, v := range clause.freeIds {
-				freeIdsAny[k] = v
+			// Convert freeIds to match.FreeIdResolver map
+			freeIds := make(map[string]match.FreeIdResolver, len(clause.FreeIds))
+			for k, v := range clause.FreeIds {
+				freeIds[k] = v
 			}
 
-			// Expand the template with hygiene support:
-			// - Pattern variable substitutions preserve original syntax (with original scopes)
-			// - Newly created symbols from template get the intro scope
-			// - Free identifiers (like 'if', 'lambda') don't get intro scope but carry resolved bindings
-			// - Use-site context is used for newly created syntax objects (better error messages)
-			// - Origin info tracks the macro expansion chain
-			// - Pattern variable syntax enables nested macro hygiene via scope comparison
-			expanded, err := clause.matcher.Expand(clause.template, match.ExpandOptions{
+			expanded, err := clause.Matcher.Expand(clause.Template, match.ExpandOptions{
 				IntroScope:       introScope,
-				FreeIds:          freeIdsAny,
+				FreeIds:          freeIds,
 				UseSiteCtx:       useSiteCtx,
 				Origin:           origin,
-				PatternVarSyntax: clause.patternVarSyntax,
+				PatternVarSyntax: clause.PatternVarSyntax,
 			})
 			if err != nil {
 				return nil, mc.WrapError(err, fmt.Sprintf("syntax-rules: expansion error in clause %d", i+1))

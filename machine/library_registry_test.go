@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -28,10 +28,10 @@ import (
 func TestLibraryRegistryDuplicateRegister(t *testing.T) {
 	c := qt.New(t)
 
-	registry := machine.NewLibraryRegistry()
+	registry := compilation.NewLibraryRegistry()
 	env := environment.NewNamespace().Runtime()
-	name := machine.NewLibraryName("test", "duplib")
-	lib := machine.NewCompiledLibrary(name, env)
+	name := compilation.NewLibraryName("test", "duplib")
+	lib := compilation.NewCompiledLibrary(name, env)
 
 	err := registry.Register(lib)
 	c.Assert(err, qt.IsNil)
@@ -46,8 +46,8 @@ func TestLibraryRegistryDuplicateRegister(t *testing.T) {
 func TestLibraryRegistryLoadingCycle(t *testing.T) {
 	c := qt.New(t)
 
-	registry := machine.NewLibraryRegistry()
-	name := machine.NewLibraryName("test", "loading")
+	registry := compilation.NewLibraryRegistry()
+	name := compilation.NewLibraryName("test", "loading")
 
 	c.Assert(registry.IsLoading(name), qt.IsFalse)
 
@@ -63,10 +63,10 @@ func TestLibraryRegistryLoadingCycle(t *testing.T) {
 func TestLibraryRegistryFindLibraryFile(t *testing.T) {
 	c := qt.New(t)
 
-	registry := machine.NewLibraryRegistry()
+	registry := compilation.NewLibraryRegistry()
 	registry.SetSearchPaths([]string{"/nonexistent/path"})
 
-	name := machine.NewLibraryName("no", "such", "lib")
+	name := compilation.NewLibraryName("no", "such", "lib")
 	_, err := registry.FindLibraryFile(name)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "not found")
@@ -76,14 +76,14 @@ func TestLibraryRegistryFindLibraryFile(t *testing.T) {
 func TestLibraryRegistryImportObserver(t *testing.T) {
 	c := qt.New(t)
 
-	registry := machine.NewLibraryRegistry()
+	registry := compilation.NewLibraryRegistry()
 
 	// No observer initially
 	c.Assert(registry.ImportObserver(), qt.IsNil)
 
 	// Set an observer
 	var called bool
-	obs := func(event machine.LibraryImportEvent) {
+	obs := func(event compilation.LibraryImportEvent) {
 		called = true
 	}
 	registry.SetImportObserver(obs)
@@ -95,11 +95,11 @@ func TestLibraryRegistryImportObserver(t *testing.T) {
 	c.Assert(called, qt.IsFalse)
 }
 
-// TestLibraryNameSinglePart tests LibraryName with a single part.
+// TestLibraryNameSinglePart tests compilation.LibraryName with a single part.
 func TestLibraryNameSinglePart(t *testing.T) {
 	c := qt.New(t)
 
-	name := machine.NewLibraryName("solo")
+	name := compilation.NewLibraryName("solo")
 	c.Assert(name.String(), qt.Equals, "solo")
 	c.Assert(name.SchemeString(), qt.Equals, "(solo)")
 	c.Assert(name.Key(), qt.Equals, "solo")
@@ -111,8 +111,8 @@ func TestCompiledLibraryGetInternalNameNotExported(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	name := machine.NewLibraryName("test", "lib")
-	lib := machine.NewCompiledLibrary(name, env)
+	name := compilation.NewLibraryName("test", "lib")
+	lib := compilation.NewCompiledLibrary(name, env)
 
 	c.Assert(lib.GetInternalName("nonexistent"), qt.Equals, "")
 }
@@ -135,7 +135,7 @@ func TestFilePathToLibraryName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			result, err := machine.FilePathToLibraryName(tt.path)
+			result, err := compilation.FilePathToLibraryName(tt.path)
 			if tt.wantErr {
 				c.Assert(err, qt.IsNotNil)
 				return
@@ -159,7 +159,7 @@ func TestLibraryNameToSchemeValue(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			ln := machine.NewLibraryName(tt.parts...)
+			ln := compilation.NewLibraryName(tt.parts...)
 			result := ln.ToSchemeValue()
 			c.Assert(result.SchemeString(), qt.Equals, tt.expect)
 		})
@@ -168,12 +168,12 @@ func TestLibraryNameToSchemeValue(t *testing.T) {
 
 func TestLibraryRegistryAllNames(t *testing.T) {
 	c := qt.New(t)
-	reg := machine.NewLibraryRegistry()
+	reg := compilation.NewLibraryRegistry()
 	env := environment.NewNamespace().Runtime()
 
-	lib1 := machine.NewCompiledLibrary(machine.NewLibraryName("scheme", "base"), env)
+	lib1 := compilation.NewCompiledLibrary(compilation.NewLibraryName("scheme", "base"), env)
 	c.Assert(reg.Register(lib1), qt.IsNil)
-	lib2 := machine.NewCompiledLibrary(machine.NewLibraryName("wile", "io"), env)
+	lib2 := compilation.NewCompiledLibrary(compilation.NewLibraryName("wile", "io"), env)
 	c.Assert(reg.Register(lib2), qt.IsNil)
 
 	names := reg.AllNames()
@@ -184,7 +184,7 @@ func TestLibraryRegistryAllNames(t *testing.T) {
 
 func TestLibraryRegistryAllNamesEmpty(t *testing.T) {
 	c := qt.New(t)
-	reg := machine.NewLibraryRegistry()
+	reg := compilation.NewLibraryRegistry()
 	names := reg.AllNames()
 	c.Assert(len(names), qt.Equals, 0)
 }

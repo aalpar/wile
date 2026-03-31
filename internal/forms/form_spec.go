@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package forms provides a unified registry for special form handlers.
-// It maps keywords to their validation and compilation functions, allowing
-// both the validate and machine packages to share the same dispatch table.
 package forms
 
 import (
@@ -41,17 +38,13 @@ type ValidatedExpr interface {
 // validate imports forms, so forms cannot import validate.
 type ValidatorFunc func(ctx context.Context, env *environment.EnvironmentFrame, pair *syntax.SyntaxPair, result any) ValidatedExpr
 
-// CompilerFunc is the signature for compilation functions.
-// The ctc (*machine.CompileTimeContinuation) and ctctx (machine.CompileTimeCallContext)
-// parameters remain [any] because machine imports forms.
-type CompilerFunc func(ctc any, ctctx any, expr ValidatedExpr) error
-
-// FormSpec defines how a special form is validated and compiled.
+// FormSpec defines how a special form is validated.
 //
-// Parameters that cross the validate/machine boundary use [any] to break
-// import cycles. Type safety is restored at registration time:
-// validate/register.go wraps typed validators into [ValidatorFunc], and
-// machine/register.go wraps typed compilers into [CompilerFunc].
+// The result parameter in ValidatorFunc uses [any] to break the
+// forms → validate import cycle. Type safety is restored at registration
+// time in validate/register.go.
+//
+// Compiler dispatch lives in machine/compilation (typed, no [any]).
 type FormSpec struct {
 	// Name is the keyword that triggers this form (e.g., "if", "lambda").
 	Name string
@@ -59,10 +52,6 @@ type FormSpec struct {
 	// Validate is called during the validation phase to produce a ValidatedExpr.
 	// If nil, the form passes through as ValidatedLiteral.
 	Validate ValidatorFunc
-
-	// Compile is called during compilation to emit bytecode.
-	// If nil, the form cannot be compiled (error).
-	Compile CompilerFunc
 }
 
 // registry holds all registered special forms.
@@ -84,40 +73,22 @@ func RegisterValidator(name string, fn ValidatorFunc) {
 	spec.Validate = fn
 }
 
-// RegisterCompiler sets the compiler for an existing form or creates a new entry.
-func RegisterCompiler(name string, fn CompilerFunc) {
-	spec := registry[name]
-	if spec == nil {
-		spec = &FormSpec{Name: name}
-		registry[name] = spec
-	}
-	spec.Compile = fn
-}
-
 // Lookup returns the FormSpec for a keyword, or nil if not found.
 func Lookup(name string) *FormSpec {
 	return registry[name]
 }
 
-// expandTimeOnlyForms are forms handled entirely during expansion that
-// legitimately have no compiler. They never reach the compilation phase.
-var expandTimeOnlyForms = map[string]bool{
-	"let-syntax":    true, // primitive expander, wrapper disappears after expansion
-	"letrec-syntax": true, // primitive expander, wrapper disappears after expansion
-	"syntax-rules":  true, // compiled inline by CompileSyntaxRules within define-syntax
-}
-
-// Verify checks that every registered form has both a validator and a compiler,
-// except for forms that are handled entirely during expansion. Returns an error
-// listing any forms with missing handlers, or nil if all pairings are consistent.
+// Verify checks that every registered form has a validator. Returns an error
+// listing any forms with missing validators, or nil if all are consistent.
+//
+// Compiler registration consistency is checked separately by
+// machine/compilation.VerifyCompilers, which has access to the typed
+// compiler registry without requiring any type erasure.
 func Verify() error {
 	var missing []string
 	for name, spec := range registry {
 		if spec.Validate == nil {
 			missing = append(missing, name+": missing validator")
-		}
-		if spec.Compile == nil && !expandTimeOnlyForms[name] {
-			missing = append(missing, name+": missing compiler")
 		}
 	}
 	if len(missing) == 0 {

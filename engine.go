@@ -25,6 +25,7 @@ import (
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/registry/core"
 	"github.com/aalpar/wile/values"
@@ -101,7 +102,7 @@ func NewNamespace(ctx context.Context, opts ...EngineOption) (*environment.Names
 
 	env := ns.Runtime()
 	macroSources := reg.MacroSources()
-	bootstrapResolver := machine.NewEmbedFileResolver(core.BootstrapFS)
+	bootstrapResolver := compilation.NewEmbedFileResolver(core.BootstrapFS)
 	err = applyBaseEnvironment(ctx, env, reg, macroSources, bootstrapResolver)
 	if err != nil {
 		return nil, err
@@ -166,7 +167,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 
 		env := ns.Runtime()
 		macroSources := reg.MacroSources()
-		bootstrapResolver := machine.NewEmbedFileResolver(core.BootstrapFS)
+		bootstrapResolver := compilation.NewEmbedFileResolver(core.BootstrapFS)
 		err = applyBaseEnvironment(ctx, env, reg, macroSources, bootstrapResolver)
 		if err != nil {
 			return nil, err
@@ -185,7 +186,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 			env.SetFileResolver(newFileResolver(cfg, env))
 		}
 		macroSources := reg.MacroSources()
-		bootstrapResolver := machine.NewEmbedFileResolver(core.BootstrapFS)
+		bootstrapResolver := compilation.NewEmbedFileResolver(core.BootstrapFS)
 		err := setupLibrarySystem(cfg, reg, env, ns, macroSources, snapshots, bootstrapResolver)
 		if err != nil {
 			return nil, err
@@ -248,8 +249,8 @@ func buildRegistry(cfg *engineConfig) (*registry.Registry, []extSnapshot, []regi
 
 // setupLibrarySystem configures the R7RS library system: search paths,
 // import observer, extension libraries, and the library environment factory.
-func setupLibrarySystem(cfg *engineConfig, reg *registry.Registry, env *environment.EnvironmentFrame, ns *environment.Namespace, macroSources []string, snapshots []extSnapshot, bootstrapResolver machine.FileResolver) error {
-	libReg := machine.NewLibraryRegistry()
+func setupLibrarySystem(cfg *engineConfig, reg *registry.Registry, env *environment.EnvironmentFrame, ns *environment.Namespace, macroSources []string, snapshots []extSnapshot, bootstrapResolver compilation.FileResolver) error {
+	libReg := compilation.NewLibraryRegistry()
 
 	// Prepend user paths in reverse order so first path has highest priority.
 	// PrependSearchPath prepends, so reverse-iterating produces the correct order.
@@ -519,14 +520,14 @@ func (p *Engine) Registry() *registry.Registry {
 // filesystem discovery with registry-known libraries (synthetic extensions).
 // Returns a sorted, deduplicated list. If the library system is not enabled
 // (no WithLibraryPaths call), returns an empty list.
-func (p *Engine) AvailableLibraries(ctx context.Context) ([]machine.LibraryName, error) {
+func (p *Engine) AvailableLibraries(ctx context.Context) ([]compilation.LibraryName, error) {
 	_ = ctx // reserved for future cancellation support
 
 	regAny := p.env.LibraryRegistry()
 	if regAny == nil {
 		return nil, nil
 	}
-	reg, ok := regAny.(*machine.LibraryRegistry)
+	reg, ok := regAny.(*compilation.LibraryRegistry)
 	if !ok {
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration,
 			"AvailableLibraries: library registry has unexpected type %T", regAny)
@@ -534,22 +535,22 @@ func (p *Engine) AvailableLibraries(ctx context.Context) ([]machine.LibraryName,
 
 	resolverAny := p.env.FileResolver()
 	if resolverAny == nil {
-		return machine.DiscoverAvailableLibraries(nil, reg)
+		return compilation.DiscoverAvailableLibraries(nil, reg)
 	}
-	resolver, ok := resolverAny.(machine.FileResolver)
+	resolver, ok := resolverAny.(compilation.FileResolver)
 	if !ok {
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration,
 			"AvailableLibraries: file resolver has unexpected type %T", resolverAny)
 	}
 
-	return machine.DiscoverAvailableLibraries(resolver, reg)
+	return compilation.DiscoverAvailableLibraries(resolver, reg)
 }
 
 // internal helpers
 
 // registerExtensionLibraries registers each extension as a synthetic R7RS library
 // so Scheme code can selectively import extension primitives via (import (wile math)) etc.
-func registerExtensionLibraries(reg *registry.Registry, env *environment.EnvironmentFrame, libReg *machine.LibraryRegistry, snapshots []extSnapshot) error {
+func registerExtensionLibraries(reg *registry.Registry, env *environment.EnvironmentFrame, libReg *compilation.LibraryRegistry, snapshots []extSnapshot) error {
 	for _, snap := range snapshots {
 		names := reg.RuntimePrimitiveNamesRange(snap.startIndex, snap.endIndex)
 		if len(names) == 0 {
@@ -575,8 +576,8 @@ func registerExtensionLibraries(reg *registry.Registry, env *environment.Environ
 			)
 		}
 
-		libName := machine.NewLibraryName(parts...)
-		lib := machine.NewCompiledLibrary(libName, env)
+		libName := compilation.NewLibraryName(parts...)
+		lib := compilation.NewCompiledLibrary(libName, env)
 		for _, name := range names {
 			lib.AddExport(name, "")
 		}
@@ -593,18 +594,18 @@ func registerExtensionLibraries(reg *registry.Registry, env *environment.Environ
 // expanders, load bootstrap macros, and inject documentation into bindings.
 // Each step wraps errors with ErrEngineInit. The resolver controls how include/load
 // finds files during bootstrap; pass nil for OS filesystem defaults.
-func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.Registry, macroSources []string, resolver machine.FileResolver) error {
+func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.Registry, macroSources []string, resolver compilation.FileResolver) error {
 	err := reg.Apply(ctx, env)
 	if err != nil {
 		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "apply registry")
 	}
 
-	err = machine.RegisterSyntaxCompilers(env)
+	err = compilation.RegisterSyntaxCompilers(env)
 	if err != nil {
 		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "register syntax compilers")
 	}
 
-	err = machine.RegisterPrimitiveExpanders(env)
+	err = compilation.RegisterPrimitiveExpanders(env)
 	if err != nil {
 		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "register primitive expanders")
 	}
@@ -625,16 +626,16 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 // syntax value, returning the resulting template. An optional FileResolver
 // overrides how include/load finds files (nil uses the OS filesystem default).
 // Callers own error wrapping.
-func expandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver machine.FileResolver) (*machine.NativeTemplate, error) {
+func expandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver compilation.FileResolver) (*machine.NativeTemplate, error) {
 	tpl := machine.NewEmptyNativeTemplate()
 
-	expanded, err := machine.NewExpanderTimeContinuation(ctx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
+	expanded, err := compilation.NewExpanderTimeContinuation(ctx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	if err != nil {
 		return nil, err
 	}
 
-	cctx := machine.NewCompileTimeCallContext(ctx, false)
-	compiler := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	cctx := compilation.NewCompileTimeCallContext(ctx, false)
+	compiler := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	if resolver != nil {
 		compiler.SetFileResolver(resolver)
 	}
@@ -701,21 +702,21 @@ func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
 // When no resolver factories are configured, defaults to OSFileResolver.
 // A single factory returns its resolver directly; multiple factories
 // produce a ChainFileResolver that tries each in order.
-func newFileResolver(cfg *engineConfig, env *environment.EnvironmentFrame) machine.FileResolver {
+func newFileResolver(cfg *engineConfig, env *environment.EnvironmentFrame) compilation.FileResolver {
 	if len(cfg.resolverFactories) == 0 {
-		return machine.NewOSFileResolver(env)
+		return compilation.NewOSFileResolver(env)
 	}
 	if len(cfg.resolverFactories) == 1 {
 		return cfg.resolverFactories[0](env)
 	}
-	resolvers := make([]machine.FileResolver, len(cfg.resolverFactories))
+	resolvers := make([]compilation.FileResolver, len(cfg.resolverFactories))
 	for i, f := range cfg.resolverFactories {
 		resolvers[i] = f(env)
 	}
-	return machine.NewChainFileResolver(resolvers)
+	return compilation.NewChainFileResolver(resolvers)
 }
 
-func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame, sources []string, resolver machine.FileResolver) error {
+func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame, sources []string, resolver compilation.FileResolver) error {
 	for _, source := range sources {
 		reader := strings.NewReader(source)
 		pr := parser.NewParser(env, true, reader)
@@ -739,7 +740,7 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 }
 
 // runBootstrapMacroStx expands, compiles, and runs a single syntax value as part of the bootstrap process.
-func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver machine.FileResolver) error {
+func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver compilation.FileResolver) error {
 	tpl, err := expandAndCompile(ctx, env, stx, resolver)
 	if err != nil {
 		return err

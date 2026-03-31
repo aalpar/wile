@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/testutil"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -88,19 +89,19 @@ func TestCompileSyntaxRules_RoundTrip(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := newFullRuntimeEnv(t)
+			env := testutil.NewFullRuntimeEnv(t)
 
 			// Define the macro
-			sv := parseSchemeExprExt(t, env, tc.macroCode)
-			cont, err := newTopLevelThunkExt(sv, env)
+			sv := testutil.ParseSchemeExpr(t, env, tc.macroCode)
+			cont, err := testutil.NewTopLevelThunk(sv, env)
 			qt.Assert(t, err, qt.IsNil)
 			mc := machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
 			qt.Assert(t, err, qt.IsNil)
 
 			// Use the macro
-			sv = parseSchemeExprExt(t, env, tc.useCode)
-			cont, err = newTopLevelThunkExt(sv, env)
+			sv = testutil.ParseSchemeExpr(t, env, tc.useCode)
+			cont, err = testutil.NewTopLevelThunk(sv, env)
 			qt.Assert(t, err, qt.IsNil)
 			mc = machine.NewMachineContext(context.Background(), cont)
 			err = mc.Run()
@@ -115,22 +116,22 @@ func TestCompileSyntaxRules_RoundTrip(t *testing.T) {
 //
 // R7RS 4.3.2: literals are matched with bound-identifier=? semantics.
 func TestCompileSyntaxRules_LiteralsNonMatch(t *testing.T) {
-	env := newFullRuntimeEnv(t)
+	env := testutil.NewFullRuntimeEnv(t)
 
 	// Define a macro with a literal keyword
-	sv := parseSchemeExprExt(t, env, `(define-syntax m
+	sv := testutil.ParseSchemeExpr(t, env, `(define-syntax m
 		(syntax-rules (lit)
 			((m lit x) x)
 			((m other x) (+ x 1))))`)
-	cont, err := newTopLevelThunkExt(sv, env)
+	cont, err := testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
 	qt.Assert(t, err, qt.IsNil)
 
 	// Use with a non-literal identifier; should match the second clause
-	sv = parseSchemeExprExt(t, env, "(m bindSymbolWithScopes 10)")
-	cont, err = newTopLevelThunkExt(sv, env)
+	sv = testutil.ParseSchemeExpr(t, env, "(m bindSymbolWithScopes 10)")
+	cont, err = testutil.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	err = mc.Run()
@@ -154,9 +155,9 @@ func TestCompileSyntaxRules_Errors(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			env := newFullRuntimeEnv(t)
-			sv := parseSchemeExprExt(t, env, tc.code)
-			cont, err := newTopLevelThunkExt(sv, env)
+			env := testutil.NewFullRuntimeEnv(t)
+			sv := testutil.ParseSchemeExpr(t, env, tc.code)
+			cont, err := testutil.NewTopLevelThunk(sv, env)
 			if err != nil {
 				return // Error during expansion/compilation -- expected
 			}

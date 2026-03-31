@@ -12,11 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package machine
+package machine_test
 
 import (
 	"context"
 	"testing"
+
+	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
@@ -25,11 +28,11 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// --- Parameter ---
+// --- machine.Parameter ---
 
 func TestParameter_ValueAndSetValue(t *testing.T) {
 	c := qt.New(t)
-	p := NewParameter(values.NewInteger(42), nil)
+	p := machine.NewParameter(values.NewInteger(42), nil)
 	c.Assert(p.Value(), valuestest.SchemeEquals, values.NewInteger(42))
 
 	p.SetValue(values.NewString("hello"))
@@ -39,114 +42,114 @@ func TestParameter_ValueAndSetValue(t *testing.T) {
 func TestParameter_Converter(t *testing.T) {
 	c := qt.New(t)
 
-	p := NewParameter(values.NewInteger(1), nil)
+	p := machine.NewParameter(values.NewInteger(1), nil)
 	c.Assert(p.HasConverter(), qt.IsFalse)
 	c.Assert(p.Converter(), qt.IsNil)
 
 	env := environment.NewNamespace().Runtime()
-	conv := NewForeignClosure(env, 1, false, func(mc *MachineContext) error {
+	conv := machine.NewForeignClosure(env, 1, false, func(mc *machine.MachineContext) error {
 		mc.SetValue(values.Void)
 		return nil
 	})
-	p2 := NewParameter(values.NewInteger(1), conv)
+	p2 := machine.NewParameter(values.NewInteger(1), conv)
 	c.Assert(p2.HasConverter(), qt.IsTrue)
 	c.Assert(p2.Converter(), qt.Equals, conv)
 }
 
 func TestParameter_SchemeString(t *testing.T) {
-	p := NewParameter(values.NewInteger(1), nil)
+	p := machine.NewParameter(values.NewInteger(1), nil)
 	qt.Assert(t, p.SchemeString(), qt.Equals, "#<parameter>")
 }
 
 func TestParameter_IsVoid(t *testing.T) {
 	c := qt.New(t)
-	p := NewParameter(values.NewInteger(1), nil)
+	p := machine.NewParameter(values.NewInteger(1), nil)
 	c.Assert(p.IsVoid(), qt.IsFalse)
 
-	var nilParam *Parameter
+	var nilParam *machine.Parameter
 	c.Assert(nilParam.IsVoid(), qt.IsTrue)
 }
 
 func TestParameter_EqualTo(t *testing.T) {
 	c := qt.New(t)
-	p1 := NewParameter(values.NewInteger(1), nil)
-	p2 := NewParameter(values.NewInteger(1), nil)
+	p1 := machine.NewParameter(values.NewInteger(1), nil)
+	p2 := machine.NewParameter(values.NewInteger(1), nil)
 
 	c.Assert(p1.EqualTo(p1), qt.IsTrue)
 	c.Assert(p1.EqualTo(p2), qt.IsFalse) // identity, not structural
 	c.Assert(p1.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }
 
-// --- PromptTag ---
+// --- machine.PromptTag ---
 
 func TestPromptTag_SchemeString(t *testing.T) {
 	c := qt.New(t)
-	named := NewPromptTag("test")
+	named := machine.NewPromptTag("test")
 	c.Assert(named.SchemeString(), qt.Matches, `#<continuation-prompt-tag:test>`)
 
-	anon := NewPromptTag("")
+	anon := machine.NewPromptTag("")
 	c.Assert(anon.SchemeString(), qt.Matches, `#<continuation-prompt-tag:\d+>`)
 }
 
 func TestPromptTag_IsVoid(t *testing.T) {
 	c := qt.New(t)
-	tag := NewPromptTag("x")
+	tag := machine.NewPromptTag("x")
 	c.Assert(tag.IsVoid(), qt.IsFalse)
 
-	var nilTag *PromptTag
+	var nilTag *machine.PromptTag
 	c.Assert(nilTag.IsVoid(), qt.IsTrue)
 }
 
 func TestPromptTag_EqualTo(t *testing.T) {
 	c := qt.New(t)
-	t1 := NewPromptTag("a")
-	t2 := NewPromptTag("a")
+	t1 := machine.NewPromptTag("a")
+	t2 := machine.NewPromptTag("a")
 
 	c.Assert(t1.EqualTo(t1), qt.IsTrue)
 	c.Assert(t1.EqualTo(t2), qt.IsFalse) // identity, not name
 	c.Assert(t1.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }
 
-// --- ErrPromptAbort ---
+// --- machine.ErrPromptAbort ---
 
 func TestErrPromptAbort_Error(t *testing.T) {
-	tag := NewPromptTag("my-tag")
-	err := &ErrPromptAbort{Tag: tag, Values: nil}
+	tag := machine.NewPromptTag("my-tag")
+	err := &machine.ErrPromptAbort{Tag: tag, Values: nil}
 	qt.Assert(t, err.Error(), qt.Equals, "abort to prompt #<continuation-prompt-tag:my-tag>")
 }
 
-// --- ComposableContinuation ---
+// --- machine.ComposableContinuation ---
 
 func TestComposableContinuation_Accessors(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
-	cont := NewMachineContinuation(nil, tpl, env)
-	ws := WindingStack{NewDynamicWindFrame(nil, nil)}
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	cont := machine.NewMachineContinuation(nil, tpl, env)
+	ws := machine.WindingStack{machine.NewDynamicWindFrame(nil, nil)}
 
-	cc := NewComposableContinuation(cont, ws, 0, nil)
+	cc := machine.NewComposableContinuation(cont, ws, 0, nil)
 	c.Assert(cc.Cont(), qt.Equals, cont)
 	c.Assert(cc.WindingStack(), qt.HasLen, 1)
 }
 
 func TestComposableContinuation_SchemeString(t *testing.T) {
-	cc := NewComposableContinuation(nil, nil, 0, nil)
+	cc := machine.NewComposableContinuation(nil, nil, 0, nil)
 	qt.Assert(t, cc.SchemeString(), qt.Equals, "#<composable-continuation>")
 }
 
 func TestComposableContinuation_IsVoid(t *testing.T) {
 	c := qt.New(t)
-	cc := NewComposableContinuation(nil, nil, 0, nil)
+	cc := machine.NewComposableContinuation(nil, nil, 0, nil)
 	c.Assert(cc.IsVoid(), qt.IsFalse)
 
-	var nilCC *ComposableContinuation
+	var nilCC *machine.ComposableContinuation
 	c.Assert(nilCC.IsVoid(), qt.IsTrue)
 }
 
 func TestComposableContinuation_EqualTo(t *testing.T) {
 	c := qt.New(t)
-	cc1 := NewComposableContinuation(nil, nil, 0, nil)
-	cc2 := NewComposableContinuation(nil, nil, 0, nil)
+	cc1 := machine.NewComposableContinuation(nil, nil, 0, nil)
+	cc2 := machine.NewComposableContinuation(nil, nil, 0, nil)
 
 	c.Assert(cc1.EqualTo(cc1), qt.IsTrue)
 	c.Assert(cc1.EqualTo(cc2), qt.IsFalse)
@@ -156,25 +159,25 @@ func TestComposableContinuation_EqualTo(t *testing.T) {
 // --- PrimitiveExpander ---
 
 func TestPrimitiveExpander_Name(t *testing.T) {
-	pe := NewPrimitiveExpander("quote", nil)
+	pe := compilation.NewPrimitiveExpander("quote", nil)
 	qt.Assert(t, pe.Name(), qt.Equals, "quote")
 }
 
 func TestPrimitiveExpander_SchemeString(t *testing.T) {
-	pe := NewPrimitiveExpander("define", nil)
+	pe := compilation.NewPrimitiveExpander("define", nil)
 	qt.Assert(t, pe.SchemeString(), qt.Equals, "#<primitive-expander:define>")
 }
 
 func TestPrimitiveExpander_IsVoid(t *testing.T) {
-	pe := NewPrimitiveExpander("x", nil)
+	pe := compilation.NewPrimitiveExpander("x", nil)
 	qt.Assert(t, pe.IsVoid(), qt.IsFalse)
 }
 
 func TestPrimitiveExpander_EqualTo(t *testing.T) {
 	c := qt.New(t)
-	pe1 := NewPrimitiveExpander("if", nil)
-	pe2 := NewPrimitiveExpander("if", nil)
-	pe3 := NewPrimitiveExpander("begin", nil)
+	pe1 := compilation.NewPrimitiveExpander("if", nil)
+	pe2 := compilation.NewPrimitiveExpander("if", nil)
+	pe3 := compilation.NewPrimitiveExpander("begin", nil)
 
 	c.Assert(pe1.EqualTo(pe2), qt.IsTrue) // same name
 	c.Assert(pe1.EqualTo(pe3), qt.IsFalse)
@@ -186,67 +189,67 @@ func TestPrimitiveExpander_EqualTo(t *testing.T) {
 
 func TestOperationPushWind_Boilerplate(t *testing.T) {
 	c := qt.New(t)
-	op := NewOperationPushWind()
+	op := machine.NewOperationPushWind()
 	c.Assert(op.SchemeString(), qt.Equals, "#<machine-operation-push-wind>")
 	c.Assert(op.IsVoid(), qt.IsFalse)
-	c.Assert(op.EqualTo(NewOperationPushWind()), qt.IsTrue)
+	c.Assert(op.EqualTo(machine.NewOperationPushWind()), qt.IsTrue)
 	c.Assert(op.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }
 
 func TestOperationPopWind_Boilerplate(t *testing.T) {
 	c := qt.New(t)
-	op := NewOperationPopWind()
+	op := machine.NewOperationPopWind()
 	c.Assert(op.SchemeString(), qt.Equals, "#<machine-operation-pop-wind>")
 	c.Assert(op.IsVoid(), qt.IsFalse)
-	c.Assert(op.EqualTo(NewOperationPopWind()), qt.IsTrue)
+	c.Assert(op.EqualTo(machine.NewOperationPopWind()), qt.IsTrue)
 	c.Assert(op.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }
 
-// --- NativeTemplate ---
+// --- machine.NativeTemplate ---
 
 func TestNativeTemplate_SourceAt(t *testing.T) {
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 	qt.Assert(t, tpl.SourceAt(0), qt.IsNil)
 }
 
-// --- Operations ---
+// --- machine.Operations ---
 
 func TestOperations_AsList(t *testing.T) {
 	c := qt.New(t)
 
 	// Empty operations
-	var empty Operations
+	var empty machine.Operations
 	c.Assert(empty.AsList(), qt.IsNil)
 
 	// Non-empty operations
-	ops := Operations{NewOperationPush(), NewOperationPop()}
+	ops := machine.Operations{machine.NewOperationPush(), machine.NewOperationPop()}
 	result := ops.AsList()
 	c.Assert(result, qt.IsNotNil)
 }
 
-// --- DynamicWindFrame ---
+// --- machine.DynamicWindFrame ---
 
 func TestWindingStack_Depth(t *testing.T) {
 	c := qt.New(t)
 
-	var empty WindingStack
+	var empty machine.WindingStack
 	c.Assert(empty.Depth(), qt.Equals, 0)
 
-	ws := WindingStack{NewDynamicWindFrame(nil, nil)}
+	ws := machine.WindingStack{machine.NewDynamicWindFrame(nil, nil)}
 	c.Assert(ws.Depth(), qt.Equals, 1)
 
-	ws = append(ws, NewDynamicWindFrame(nil, nil))
+	ws = append(ws, machine.NewDynamicWindFrame(nil, nil))
 	c.Assert(ws.Depth(), qt.Equals, 2)
 }
 
-// --- MachineContext accessors ---
+// --- machine.MachineContext accessors ---
 
 func TestMachineContext_ParentMC(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
-	cont := NewMachineContinuation(nil, tpl, env)
-	mc := NewMachineContext(context.Background(), cont)
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	cont := machine.NewMachineContinuation(nil, tpl, env)
+	mc := machine.NewMachineContext(context.Background(), cont)
 
 	c.Assert(mc.ParentMC(), qt.IsNil)
 }
@@ -254,9 +257,9 @@ func TestMachineContext_ParentMC(t *testing.T) {
 func TestMachineContext_EscapeCont(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
-	cont := NewMachineContinuation(nil, tpl, env)
-	mc := NewMachineContext(context.Background(), cont)
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	cont := machine.NewMachineContinuation(nil, tpl, env)
+	mc := machine.NewMachineContext(context.Background(), cont)
 
 	c.Assert(mc.EscapeCont(), qt.IsNil)
 
@@ -266,9 +269,9 @@ func TestMachineContext_EscapeCont(t *testing.T) {
 
 func TestMachineContext_SetPC(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
-	cont := NewMachineContinuation(nil, tpl, env)
-	mc := NewMachineContext(context.Background(), cont)
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	cont := machine.NewMachineContinuation(nil, tpl, env)
+	mc := machine.NewMachineContext(context.Background(), cont)
 
 	mc.SetPC(42)
 	qt.Assert(t, mc.PC(), qt.Equals, 42)
@@ -277,10 +280,10 @@ func TestMachineContext_SetPC(t *testing.T) {
 func TestMachineContext_Context(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
-	cont := NewMachineContinuation(nil, tpl, env)
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	cont := machine.NewMachineContinuation(nil, tpl, env)
 	ctx := context.Background()
-	mc := NewMachineContext(ctx, cont)
+	mc := machine.NewMachineContext(ctx, cont)
 
 	c.Assert(mc.Context(), qt.Equals, ctx)
 
@@ -292,9 +295,9 @@ func TestMachineContext_Context(t *testing.T) {
 
 func TestMachineContext_ExpanderContext(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
-	cont := NewMachineContinuation(nil, tpl, env)
-	mc := NewMachineContext(context.Background(), cont)
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	cont := machine.NewMachineContinuation(nil, tpl, env)
+	mc := machine.NewMachineContext(context.Background(), cont)
 
 	// expanderCtx is nil by default
 	qt.Assert(t, mc.ExpanderContext(), qt.IsNil)
@@ -303,13 +306,13 @@ func TestMachineContext_ExpanderContext(t *testing.T) {
 func TestMachineContext_ExceptionHandler(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
-	cont := NewMachineContinuation(nil, tpl, env)
-	mc := NewMachineContext(context.Background(), cont)
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	cont := machine.NewMachineContinuation(nil, tpl, env)
+	mc := machine.NewMachineContext(context.Background(), cont)
 
 	c.Assert(mc.ExceptionHandler(), qt.IsNil)
 
-	h := NewExceptionHandler(NewParameter(values.NewString("handler"), nil), nil)
+	h := machine.NewExceptionHandler(machine.NewParameter(values.NewString("handler"), nil), nil)
 	mc.SetExceptionHandler(h)
 	c.Assert(mc.ExceptionHandler(), qt.Equals, h)
 }
@@ -317,16 +320,16 @@ func TestMachineContext_ExceptionHandler(t *testing.T) {
 func TestMachineContext_PushPopExceptionHandler(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
-	cont := NewMachineContinuation(nil, tpl, env)
-	mc := NewMachineContext(context.Background(), cont)
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	cont := machine.NewMachineContinuation(nil, tpl, env)
+	mc := machine.NewMachineContext(context.Background(), cont)
 
 	// Pop from empty returns nil
 	c.Assert(mc.PopExceptionHandler(), qt.IsNil)
 
 	// Push two handlers
-	p1 := NewParameter(values.NewString("h1"), nil)
-	p2 := NewParameter(values.NewString("h2"), nil)
+	p1 := machine.NewParameter(values.NewString("h1"), nil)
+	p2 := machine.NewParameter(values.NewString("h2"), nil)
 	mc.PushExceptionHandler(p1)
 	mc.PushExceptionHandler(p2)
 
@@ -345,13 +348,13 @@ func TestMachineContext_PushPopExceptionHandler(t *testing.T) {
 func TestMachineContext_WindingStack(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
-	cont := NewMachineContinuation(nil, tpl, env)
-	mc := NewMachineContext(context.Background(), cont)
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	cont := machine.NewMachineContinuation(nil, tpl, env)
+	mc := machine.NewMachineContext(context.Background(), cont)
 
 	c.Assert(mc.WindingStack(), qt.HasLen, 0)
 
-	ws := WindingStack{NewDynamicWindFrame(nil, nil)}
+	ws := machine.WindingStack{machine.NewDynamicWindFrame(nil, nil)}
 	mc.SetWindingStack(ws)
 	c.Assert(mc.WindingStack(), qt.HasLen, 1)
 }
@@ -359,33 +362,33 @@ func TestMachineContext_WindingStack(t *testing.T) {
 func TestMachineContext_PromptTag(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
-	cont := NewMachineContinuation(nil, tpl, env)
-	mc := NewMachineContext(context.Background(), cont)
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	cont := machine.NewMachineContinuation(nil, tpl, env)
+	mc := machine.NewMachineContext(context.Background(), cont)
 
 	c.Assert(mc.PromptTag(), qt.IsNil)
 
-	tag := NewPromptTag("test")
+	tag := machine.NewPromptTag("test")
 	mc.SetPromptTag(tag)
 	c.Assert(mc.PromptTag(), qt.Equals, tag)
 }
 
-// --- MachineContinuation prompt methods ---
+// --- machine.MachineContinuation prompt methods ---
 
 func TestMachineContinuation_PromptMethods(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
+	tpl := machine.NewNativeTemplate(0, 0, false)
 
-	cont := NewMachineContinuation(nil, tpl, env)
+	cont := machine.NewMachineContinuation(nil, tpl, env)
 	c.Assert(cont.PromptTag(), qt.IsNil)
 	c.Assert(cont.PromptHandler(), qt.IsNil)
 
-	tag := NewPromptTag("p")
+	tag := machine.NewPromptTag("p")
 	cont.SetPromptTag(tag)
 	c.Assert(cont.PromptTag(), qt.Equals, tag)
 
-	handler := NewForeignClosure(env, 0, false, func(mc *MachineContext) error {
+	handler := machine.NewForeignClosure(env, 0, false, func(mc *machine.MachineContext) error {
 		return nil
 	})
 	cont.SetPromptHandler(handler)
@@ -395,13 +398,13 @@ func TestMachineContinuation_PromptMethods(t *testing.T) {
 func TestNewMachineContinuationWithPrompt(t *testing.T) {
 	c := qt.New(t)
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
-	tag := NewPromptTag("p")
-	handler := NewForeignClosure(env, 0, false, func(mc *MachineContext) error {
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	tag := machine.NewPromptTag("p")
+	handler := machine.NewForeignClosure(env, 0, false, func(mc *machine.MachineContext) error {
 		return nil
 	})
 
-	cont := NewMachineContinuationWithPrompt(nil, tpl, env, tag, handler)
+	cont := machine.NewMachineContinuationWithPrompt(nil, tpl, env, tag, handler)
 	c.Assert(cont.PromptTag(), qt.Equals, tag)
 	c.Assert(cont.PromptHandler(), qt.Equals, handler)
 }

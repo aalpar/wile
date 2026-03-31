@@ -27,6 +27,7 @@ import (
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -54,7 +55,7 @@ func setupSchemeLibraryTest(t *testing.T) *environment.EnvironmentFrame {
 	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
 	// Create and configure the library registry with the scheme lib path
-	registry := machine.NewLibraryRegistry()
+	registry := compilation.NewLibraryRegistry()
 	registry.SetSearchPaths([]string{getSchemeLibPath()})
 	env.SetLibraryRegistry(registry)
 
@@ -76,7 +77,7 @@ func compileAndRun(t *testing.T, env *environment.EnvironmentFrame, sv syntax.Sy
 	t.Helper()
 
 	// Expand the expression
-	econt := machine.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
+	econt := compilation.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator())
 	expanded, err := econt.ExpandExpression(sv)
 	if err != nil {
 		return nil, err
@@ -84,8 +85,8 @@ func compileAndRun(t *testing.T, env *environment.EnvironmentFrame, sv syntax.Sy
 
 	// Compile the expanded expression
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	ctc := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	err = ctc.CompileExpression(ctctx, expanded)
 	if err != nil {
 		return nil, err
@@ -128,8 +129,8 @@ func TestSchemeLibraryImports(t *testing.T) {
 
 	// Compile the import
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	ctc := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 
 	err := ctc.CompileImport(ctctx, args)
 	c.Assert(err, qt.IsNil, qt.Commentf("import of all scheme libraries failed"))
@@ -204,8 +205,8 @@ func TestSchemeLibraryImportsWithUsage(t *testing.T) {
 	args := importPair.Cdr().(syntax.SyntaxValue)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	ctc := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	err := ctc.CompileImport(ctctx, args)
 	c.Assert(err, qt.IsNil)
 
@@ -256,17 +257,17 @@ func TestLibraryInternalMacroHygiene(t *testing.T) {
 
 	// Expand
 	ectx := context.Background()
-	expanded, err := machine.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(sv)
+	expanded, err := compilation.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(sv)
 	c.Assert(err, qt.IsNil, qt.Commentf("library expansion should succeed"))
 
-	// Compile with library callback to capture the CompiledLibrary
+	// Compile with library callback to capture the compilation.CompiledLibrary
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	compiler := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-	var compiledLib *machine.CompiledLibrary
-	compiler.SetLibraryCallback(func(lib *machine.CompiledLibrary) {
+	compiler := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	var compiledLib *compilation.CompiledLibrary
+	compiler.SetLibraryCallback(func(lib *compilation.CompiledLibrary) {
 		compiledLib = lib
 	})
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	err = compiler.CompileExpression(ctctx, expanded)
 	c.Assert(err, qt.IsNil, qt.Commentf("library compilation should succeed"))
 	c.Assert(compiledLib, qt.IsNotNil, qt.Commentf("library callback should have been called"))
@@ -281,7 +282,7 @@ func TestLibraryInternalMacroHygiene(t *testing.T) {
 
 	// Register the library so import can find it
 	registryAny := env.LibraryRegistry()
-	registry := registryAny.(*machine.LibraryRegistry)
+	registry := registryAny.(*compilation.LibraryRegistry)
 	err = registry.Register(compiledLib)
 	c.Assert(err, qt.IsNil)
 
@@ -332,8 +333,8 @@ func TestIndividualSchemeLibraries(t *testing.T) {
 			args := importPair.Cdr().(syntax.SyntaxValue)
 
 			tpl := machine.NewNativeTemplate(0, 0, false)
-			ctc := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-			ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+			ctc := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+			ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 			err := ctc.CompileImport(ctctx, args)
 			c.Assert(err, qt.IsNil, qt.Commentf("failed to import (scheme %s)", lib.name))
 
@@ -353,21 +354,21 @@ func TestIndividualSchemeLibraries(t *testing.T) {
 
 // compileAndRegisterLibrary is a test helper that compiles a library definition,
 // executes its template to populate bindings, and registers it in the registry.
-func compileAndRegisterLibrary(t *testing.T, env *environment.EnvironmentFrame, libCode string) *machine.CompiledLibrary {
+func compileAndRegisterLibrary(t *testing.T, env *environment.EnvironmentFrame, libCode string) *compilation.CompiledLibrary {
 	t.Helper()
 	c := qt.New(t)
 
 	sv := parseSchemeExpr(t, env, libCode)
-	expanded, err := machine.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator()).ExpandExpression(sv)
+	expanded, err := compilation.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator()).ExpandExpression(sv)
 	c.Assert(err, qt.IsNil)
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	compiler := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-	var compiledLib *machine.CompiledLibrary
-	compiler.SetLibraryCallback(func(lib *machine.CompiledLibrary) {
+	compiler := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	var compiledLib *compilation.CompiledLibrary
+	compiler.SetLibraryCallback(func(lib *compilation.CompiledLibrary) {
 		compiledLib = lib
 	})
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	err = compiler.CompileExpression(ctctx, expanded)
 	c.Assert(err, qt.IsNil)
 	c.Assert(compiledLib, qt.IsNotNil)
@@ -380,7 +381,7 @@ func compileAndRegisterLibrary(t *testing.T, env *environment.EnvironmentFrame, 
 	}
 
 	registryAny := env.LibraryRegistry()
-	registry := registryAny.(*machine.LibraryRegistry)
+	registry := registryAny.(*compilation.LibraryRegistry)
 	err = registry.Register(compiledLib)
 	c.Assert(err, qt.IsNil)
 

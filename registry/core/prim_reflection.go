@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
@@ -356,7 +357,7 @@ func PrimDocTopic(mc *machine.MachineContext) error {
 // Returns the description string of a loaded library, or #f if none or not loaded.
 func PrimLibraryDescription(mc *machine.MachineContext) error {
 	nameList := mc.Arg(0)
-	libName, err := machine.ParseLibraryNameFromDatum(mc.Context(), nameList)
+	libName, err := compilation.ParseLibraryNameFromDatum(mc.Context(), nameList)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "library-description: invalid library name")
 	}
@@ -366,7 +367,7 @@ func PrimLibraryDescription(mc *machine.MachineContext) error {
 		mc.SetValue(values.FalseValue)
 		return nil
 	}
-	reg, ok := regAny.(*machine.LibraryRegistry)
+	reg, ok := regAny.(*compilation.LibraryRegistry)
 	if !ok {
 		mc.SetValue(values.FalseValue)
 		return nil

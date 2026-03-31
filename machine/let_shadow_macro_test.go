@@ -23,6 +23,7 @@ import (
 	"github.com/aalpar/wile/internal/bootstrap"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -49,14 +50,14 @@ func runSchemeCodeWithEnvForShadowTest(t *testing.T, env *environment.Environmen
 	}
 
 	ectx := context.Background()
-	expanded, err := machine.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
+	expanded, err := compilation.NewExpanderTimeContinuation(ectx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	if err != nil {
 		return nil, err
 	}
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
-	err = machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	if err != nil {
 		return nil, err
 	}

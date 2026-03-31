@@ -25,6 +25,7 @@ import (
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/values"
 )
 
@@ -42,9 +43,9 @@ func RunProgramAST(t *testing.T, prog values.Value) (values.Value, error) {
 // RunProgramASTWithEnv compiles and runs a Scheme program AST with the given environment.
 func RunProgramASTWithEnv(t *testing.T, env *environment.EnvironmentFrame, prog values.Value) (values.Value, error) {
 	t.Helper()
-	cctx := machine.NewCompileTimeCallContext(context.Background(), false)
+	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ccnt := machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
+	ccnt := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
 	sctx := syntax.NewZeroValueSourceContext()
 	err := ccnt.CompileExpression(cctx, schemeutil.DatumToSyntaxValue(context.Background(), sctx, prog))
 	if err != nil {
@@ -76,14 +77,14 @@ func RunSchemeCodeWithEnvAndContext(ctx context.Context, t *testing.T, env *envi
 		return nil, err
 	}
 
-	expanded, err := machine.NewExpanderTimeContinuation(ctx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
+	expanded, err := compilation.NewExpanderTimeContinuation(ctx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	if err != nil {
 		return nil, err
 	}
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(ctx, false)
-	err = machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+	cctx := compilation.NewCompileTimeCallContext(ctx, false)
+	err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	if err != nil {
 		return nil, err
 	}

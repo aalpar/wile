@@ -159,6 +159,11 @@ func (p *MachineContext) Template() *NativeTemplate {
 	return p.template
 }
 
+// Evals returns the eval stack for inspection (primarily for testing).
+func (p *MachineContext) Evals() *Stack {
+	return p.evals
+}
+
 func (p *MachineContext) PC() int {
 	return p.pc
 }

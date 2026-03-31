@@ -23,6 +23,7 @@ import (
 	"github.com/aalpar/wile/internal/bootstrap"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 )
 
 // primBenchCase defines a single primitive benchmark. Setup code is eval'd
@@ -108,14 +109,14 @@ func benchCompile(ctx context.Context, b *testing.B, env *environment.Environmen
 		b.Fatal(err)
 	}
 
-	expanded, err := machine.NewExpanderTimeContinuation(ctx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
+	expanded, err := compilation.NewExpanderTimeContinuation(ctx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
 	if err != nil {
 		b.Fatal(err)
 	}
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := machine.NewCompileTimeCallContext(ctx, false)
-	err = machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+	cctx := compilation.NewCompileTimeCallContext(ctx, false)
+	err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
 	if err != nil {
 		b.Fatal(err)
 	}

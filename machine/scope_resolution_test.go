@@ -43,6 +43,7 @@ import (
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -72,13 +73,13 @@ func evalScope(t *testing.T, env *environment.EnvironmentFrame, code string) (va
 
 // evalScopeSyntax runs a parsed syntax value through expand → compile → run.
 func evalScopeSyntax(env *environment.EnvironmentFrame, sv syntax.SyntaxValue) (values.Value, error) {
-	expanded, err := machine.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator()).ExpandExpression(sv)
+	expanded, err := compilation.NewExpanderTimeContinuation(context.Background(), env, machine.NewVMMacroEvaluator()).ExpandExpression(sv)
 	if err != nil {
 		return nil, err
 	}
 	tpl := machine.NewNativeTemplate(0, 0, false)
-	ctctx := machine.NewCompileTimeCallContext(context.Background(), false)
-	err = machine.NewCompiletimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(ctctx, expanded)
+	ctctx := compilation.NewCompileTimeCallContext(context.Background(), false)
+	err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(ctctx, expanded)
 	if err != nil {
 		return nil, err
 	}

@@ -15,25 +15,29 @@
 package machine
 
 import (
-	"bufio"
-	"context"
-	"strings"
 	"testing"
 
 	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/internal/parser"
-	"github.com/aalpar/wile/internal/syntax"
+	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
 )
 
-// parseSchemeExpr is a test helper to parse Scheme code into syntax.
-func parseSchemeExpr(t *testing.T, env *environment.EnvironmentFrame, code string) syntax.SyntaxValue {
-	reader := bufio.NewReader(strings.NewReader(code))
-	p := parser.NewParser(env, true, reader)
-	sv, err := p.ReadSyntax(context.TODO())
-	qt.Assert(t, err, qt.IsNil)
-	return sv
+// newNamespace creates a minimal namespace with core special form bindings.
+// Does NOT register syntax compilers or primitive expanders (those moved to
+// compilation/). Tests that need the full pipeline should be external tests
+// using machine/testutil.
+func newNamespace(env *environment.EnvironmentFrame) *environment.EnvironmentFrame {
+	for _, name := range []string{
+		"if", "lambda", "quote", "quasiquote", "define",
+		"set!", "begin", "meta", "include", "include-ci",
+	} {
+		env.MaybeCreateOwnGlobalBinding(
+			values.NewSymbol(name),
+			environment.BindingTypePrimitive,
+		)
+	}
+	return env
 }
 
 func TestNewForeignClosure(t *testing.T) {
