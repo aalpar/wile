@@ -20,6 +20,7 @@ import (
 	"sync"
 
 	"github.com/aalpar/wile/internal/syntax"
+	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -65,14 +66,15 @@ type Namespace struct {
 	phases *PhaseRegistry
 
 	// fileResolver resolves and opens files for include/load operations.
-	// Stored as any to avoid circular dependency with machine package
-	// (the concrete type is machine.FileResolver).
-	fileResolver any
+	// The concrete implementations live in machine/compilation/;
+	// the interface is defined in this package to avoid a circular import.
+	fileResolver FileResolver
 
 	// libraryRegistry is the R7RS library registry.
-	// Stored as any to avoid circular dependency with machine package.
-	// TODO: consider defining an interface for library registries.
-	libraryRegistry any
+	// Stored as LibrarySearcher (the minimum interface environment/ needs)
+	// to avoid a circular import with machine/compilation/.
+	// Callers needing the full *compilation.LibraryRegistry can type-assert.
+	libraryRegistry LibrarySearcher
 
 	// libraryEnvFactory creates isolated library environments during
 	// R7RS library loading. Per-instance (not global) so multiple engines
@@ -92,9 +94,7 @@ type Namespace struct {
 	registry any
 
 	// authorizer is the security authorizer for this namespace.
-	// Stored as any to avoid circular dependency with security package.
-	// The concrete type is security.Authorizer.
-	authorizer any
+	authorizer security.Authorizer
 
 	// moduleInstances caches loaded and initialized library instances.
 	// Keyed by resolved library path (e.g., "(scheme base)").
@@ -189,10 +189,9 @@ func (p *Namespace) Phases() *PhaseRegistry {
 }
 
 // FileResolver returns the file resolver for include/load operations.
-// The caller must type-assert to machine.FileResolver.
 // Delegates to parent when non-nil, so child environments share the
 // root resolver. Returns nil if no resolver has been set.
-func (p *Namespace) FileResolver() any {
+func (p *Namespace) FileResolver() FileResolver {
 	if p.parent != nil {
 		return p.parent.FileResolver()
 	}
@@ -200,10 +199,9 @@ func (p *Namespace) FileResolver() any {
 }
 
 // SetFileResolver sets the file resolver for include/load operations.
-// The resolver should be a machine.FileResolver.
 // Delegates to parent when non-nil, matching the getter's delegation,
 // so the resolver is always stored on the root Namespace.
-func (p *Namespace) SetFileResolver(resolver any) {
+func (p *Namespace) SetFileResolver(resolver FileResolver) {
 	if p.parent != nil {
 		p.parent.SetFileResolver(resolver)
 		return
@@ -212,15 +210,14 @@ func (p *Namespace) SetFileResolver(resolver any) {
 }
 
 // LibraryRegistry returns the library registry for R7RS library loading.
-// The caller must type-assert to *machine.LibraryRegistry.
 // Returns nil if no registry has been set.
-func (p *Namespace) LibraryRegistry() any {
+// Callers needing the full *compilation.LibraryRegistry can type-assert.
+func (p *Namespace) LibraryRegistry() LibrarySearcher {
 	return p.libraryRegistry
 }
 
 // SetLibraryRegistry sets the library registry for R7RS library loading.
-// The registry should be a *machine.LibraryRegistry.
-func (p *Namespace) SetLibraryRegistry(registry any) {
+func (p *Namespace) SetLibraryRegistry(registry LibrarySearcher) {
 	p.libraryRegistry = registry
 }
 
@@ -257,13 +254,12 @@ func (p *Namespace) SetRegistry(reg any) {
 }
 
 // Authorizer returns the security authorizer for this namespace.
-// The caller must type-assert to security.Authorizer.
-func (p *Namespace) Authorizer() any {
+func (p *Namespace) Authorizer() security.Authorizer {
 	return p.authorizer
 }
 
 // SetAuthorizer sets the security authorizer for this namespace.
-func (p *Namespace) SetAuthorizer(auth any) {
+func (p *Namespace) SetAuthorizer(auth security.Authorizer) {
 	p.authorizer = auth
 }
 
@@ -353,7 +349,7 @@ func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 //	| parent: nil                                   |
 //	| phases: *PhaseRegistry ──► {0: envP}          |
 //	| runtime: envP ─────────────────────────────┐  |
-//	| libraryRegistry: *machine.LibraryRegistry  |  |
+//	| libraryRegistry: LibrarySearcher           |  |
 //	+--------------------------------------------│--+
 //	                                             │
 //	                                             ▼
@@ -403,11 +399,11 @@ func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 //
 // # Inherited state
 //
-// The child inherits the parent's libraryRegistry (the *machine.LibraryRegistry)
-// by value copy. This allows the child to load libraries via (import ...) without
-// requiring the caller to set the registry explicitly. The registry itself is a
-// shared pointer; mutations to the registry (e.g., registering a new library)
-// are visible to both parent and child.
+// The child inherits the parent's libraryRegistry (a LibrarySearcher, concretely
+// *compilation.LibraryRegistry) by value copy. This allows the child to load
+// libraries via (import ...) without requiring the caller to set the registry
+// explicitly. The registry itself is a shared pointer; mutations to the registry
+// (e.g., registering a new library) are visible to both parent and child.
 //
 // # Contrast with NewChildRuntime
 //
@@ -514,8 +510,8 @@ type NamespaceDeriveOption func(*NamespaceDeriveConfig)
 // NamespaceDeriveConfig holds options for DeriveWith.
 // Zero value means "inherit everything from parent."
 type NamespaceDeriveConfig struct {
-	Registry   any // if non-nil, overrides parent's registry
-	Authorizer any // if non-nil, overrides parent's authorizer
+	Registry   any                 // if non-nil, overrides parent's registry
+	Authorizer security.Authorizer // if non-nil, overrides parent's authorizer
 }
 
 // Derive creates a child namespace that shares syntax interning with

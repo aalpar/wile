@@ -30,13 +30,9 @@ import (
 )
 
 // FileResolver resolves and opens files for include/load operations.
-// Implementations control where files are found: the OS filesystem,
-// an embedded filesystem, or any other fs.FS.
-type FileResolver interface {
-	// ResolveAndOpen finds a file by name and returns an open handle plus
-	// the resolved path (used for load-path-stack tracking and error messages).
-	ResolveAndOpen(ctx context.Context, path string) (fs.File, string, error)
-}
+// The interface is defined in the environment package; this alias keeps
+// the name available in compilation without re-declaration.
+type FileResolver = environment.FileResolver
 
 // LibraryEnumerator is an optional interface that FileResolvers can implement
 // to support library discovery. Enumeration is the inverse of resolution:
@@ -90,12 +86,9 @@ func (p *OSFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.Fi
 	var fallbackDirs []string
 
 	// Library registry search paths (shared with import).
-	regAny := p.env.LibraryRegistry()
-	if regAny != nil {
-		reg, ok := regAny.(*LibraryRegistry)
-		if ok {
-			fallbackDirs = append(fallbackDirs, reg.GetSearchPaths()...)
-		}
+	reg := p.env.LibraryRegistry()
+	if reg != nil {
+		fallbackDirs = append(fallbackDirs, reg.GetSearchPaths()...)
 	}
 
 	// SCHEME_INCLUDE_PATH env var (backward compatibility).
@@ -115,7 +108,7 @@ func (p *OSFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.Fi
 		return nil, "", err
 	}
 
-	auth, _ := p.env.Namespace().Authorizer().(security.Authorizer)
+	auth := p.env.Namespace().Authorizer()
 	err = security.CheckWithAuthorizer(auth, security.AccessRequest{
 		Resource: security.ResourceCode,
 		Action:   security.ActionLoad,
@@ -210,23 +203,20 @@ func (p *FSFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.File
 	}
 
 	// Strategy 2: Try library registry search paths.
-	regAny := p.env.LibraryRegistry()
-	if regAny != nil {
-		reg, ok := regAny.(*LibraryRegistry)
-		if ok {
-			for _, dir := range reg.GetSearchPaths() {
-				if dir == "" {
-					continue
-				}
-				candidate, err := p.statCandidate(dir, path)
-				if err != nil {
-					return nil, "", err
-				}
-				if candidate != "" {
-					return p.openChecked(candidate)
-				}
-				searched = append(searched, dir+"/")
+	reg := p.env.LibraryRegistry()
+	if reg != nil {
+		for _, dir := range reg.GetSearchPaths() {
+			if dir == "" {
+				continue
 			}
+			candidate, err := p.statCandidate(dir, path)
+			if err != nil {
+				return nil, "", err
+			}
+			if candidate != "" {
+				return p.openChecked(candidate)
+			}
+			searched = append(searched, dir+"/")
 		}
 	}
 
@@ -307,7 +297,7 @@ func (p *ChainFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs
 
 // openChecked performs security authorization and opens a resolved path.
 func (p *FSFileResolver) openChecked(resolvedPath string) (fs.File, string, error) {
-	auth, _ := p.env.Namespace().Authorizer().(security.Authorizer)
+	auth := p.env.Namespace().Authorizer()
 	err := security.CheckWithAuthorizer(auth, security.AccessRequest{
 		Resource: security.ResourceCode,
 		Action:   security.ActionLoad,
@@ -337,7 +327,7 @@ func (p *FSFileResolver) openChecked(resolvedPath string) (fs.File, string, erro
 // unreadable subdirectories are skipped without failing the whole walk.
 // Only the security authorizer can exclude individual files.
 func (p *OSFileResolver) EnumerateLibraries() ([]LibraryName, error) {
-	auth, _ := p.env.Namespace().Authorizer().(security.Authorizer)
+	auth := p.env.Namespace().Authorizer()
 	seen := make(map[string]bool)
 	var result []LibraryName
 
@@ -377,13 +367,10 @@ func (p *OSFileResolver) EnumerateLibraries() ([]LibraryName, error) {
 	}
 
 	// Library registry search paths (same priority as ResolveAndOpen).
-	regAny := p.env.LibraryRegistry()
-	if regAny != nil {
-		reg, ok := regAny.(*LibraryRegistry)
-		if ok {
-			for _, dir := range reg.GetSearchPaths() {
-				walkDir(dir)
-			}
+	reg := p.env.LibraryRegistry()
+	if reg != nil {
+		for _, dir := range reg.GetSearchPaths() {
+			walkDir(dir)
 		}
 	}
 
@@ -451,7 +438,7 @@ func (p *ChainFileResolver) EnumerateLibraries() ([]LibraryName, error) {
 // unreadable subdirectories are skipped without failing the whole walk.
 // Only the security authorizer can exclude individual files.
 func (p *FSFileResolver) EnumerateLibraries() ([]LibraryName, error) {
-	auth, _ := p.env.Namespace().Authorizer().(security.Authorizer)
+	auth := p.env.Namespace().Authorizer()
 	seen := make(map[string]bool)
 	var result []LibraryName
 
@@ -497,17 +484,14 @@ func (p *FSFileResolver) EnumerateLibraries() ([]LibraryName, error) {
 
 	// Collect search paths and walk them first (same priority as resolution).
 	var searchPaths []string
-	regAny := p.env.LibraryRegistry()
-	if regAny != nil {
-		reg, ok := regAny.(*LibraryRegistry)
-		if ok {
-			searchPaths = reg.GetSearchPaths()
-			for _, dir := range searchPaths {
-				if dir == "" || dir == "." {
-					continue
-				}
-				_ = walkDir(dir)
+	reg := p.env.LibraryRegistry()
+	if reg != nil {
+		searchPaths = reg.GetSearchPaths()
+		for _, dir := range searchPaths {
+			if dir == "" || dir == "." {
+				continue
 			}
+			_ = walkDir(dir)
 		}
 	}
 

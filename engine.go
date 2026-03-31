@@ -523,27 +523,17 @@ func (p *Engine) Registry() *registry.Registry {
 func (p *Engine) AvailableLibraries(ctx context.Context) ([]compilation.LibraryName, error) {
 	_ = ctx // reserved for future cancellation support
 
-	regAny := p.env.LibraryRegistry()
-	if regAny == nil {
+	regSearcher := p.env.LibraryRegistry()
+	if regSearcher == nil {
 		return nil, nil
 	}
-	reg, ok := regAny.(*compilation.LibraryRegistry)
+	reg, ok := regSearcher.(*compilation.LibraryRegistry)
 	if !ok {
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration,
-			"AvailableLibraries: library registry has unexpected type %T", regAny)
+			"AvailableLibraries: library registry has unexpected type %T", regSearcher)
 	}
 
-	resolverAny := p.env.FileResolver()
-	if resolverAny == nil {
-		return compilation.DiscoverAvailableLibraries(nil, reg)
-	}
-	resolver, ok := resolverAny.(compilation.FileResolver)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration,
-			"AvailableLibraries: file resolver has unexpected type %T", resolverAny)
-	}
-
-	return compilation.DiscoverAvailableLibraries(resolver, reg)
+	return compilation.DiscoverAvailableLibraries(p.env.FileResolver(), reg)
 }
 
 // internal helpers

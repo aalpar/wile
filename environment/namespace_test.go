@@ -19,8 +19,23 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
 )
+
+// testAuthorizer is a no-op security.Authorizer for testing.
+type testAuthorizer struct{ name string }
+
+func (p *testAuthorizer) Authorize(_ security.AccessRequest) error {
+	return nil
+}
+
+// testLibrarySearcher is a minimal LibrarySearcher for testing.
+type testLibrarySearcher struct{ paths []string }
+
+func (p *testLibrarySearcher) GetSearchPaths() []string {
+	return p.paths
+}
 
 func TestNewNamespace(t *testing.T) {
 	c := qt.New(t)
@@ -69,13 +84,13 @@ func TestNamespace_LibraryRegistry(t *testing.T) {
 	// Initially nil
 	c.Assert(topLevel.LibraryRegistry(), qt.IsNil)
 
-	// Set a registry (using a placeholder)
-	placeholder := "test-registry"
-	topLevel.SetLibraryRegistry(placeholder)
-	c.Assert(topLevel.LibraryRegistry(), qt.Equals, placeholder)
+	// Set a registry
+	reg := &testLibrarySearcher{paths: []string{"/usr/local/lib"}}
+	topLevel.SetLibraryRegistry(reg)
+	c.Assert(topLevel.LibraryRegistry(), qt.Equals, reg)
 
 	// Runtime frame should also see it via delegation
-	c.Assert(topLevel.Runtime().LibraryRegistry(), qt.Equals, placeholder)
+	c.Assert(topLevel.Runtime().LibraryRegistry(), qt.Equals, reg)
 }
 
 func TestNewEnvironmentFrameWithParent_InheritsTopLevel(t *testing.T) {
@@ -189,8 +204,9 @@ func TestNamespace_AuthorizerField(t *testing.T) {
 	ns := NewNamespace()
 	c.Assert(ns.Authorizer(), qt.IsNil)
 
-	ns.SetAuthorizer("test-authorizer")
-	c.Assert(ns.Authorizer(), qt.Equals, "test-authorizer")
+	auth := &testAuthorizer{name: "test-authorizer"}
+	ns.SetAuthorizer(auth)
+	c.Assert(ns.Authorizer(), qt.Equals, auth)
 }
 
 func TestNamespace_Derive_SharesRegistryAndAuthorizer(t *testing.T) {
@@ -198,7 +214,8 @@ func TestNamespace_Derive_SharesRegistryAndAuthorizer(t *testing.T) {
 
 	parent := NewNamespace()
 	parent.SetRegistry("parent-registry")
-	parent.SetAuthorizer("parent-authorizer")
+	auth := &testAuthorizer{name: "parent-authorizer"}
+	parent.SetAuthorizer(auth)
 
 	child := parent.Derive()
 
@@ -213,7 +230,8 @@ func TestNamespace_DeriveWith_OverrideRegistry(t *testing.T) {
 
 	parent := NewNamespace()
 	parent.SetRegistry("parent-registry")
-	parent.SetAuthorizer("parent-authorizer")
+	auth := &testAuthorizer{name: "parent-authorizer"}
+	parent.SetAuthorizer(auth)
 
 	child := parent.DeriveWith(func(cfg *NamespaceDeriveConfig) {
 		cfg.Registry = "restricted-registry"
@@ -229,15 +247,17 @@ func TestNamespace_DeriveWith_OverrideAuthorizer(t *testing.T) {
 
 	parent := NewNamespace()
 	parent.SetRegistry("parent-registry")
-	parent.SetAuthorizer("parent-authorizer")
+	parentAuth := &testAuthorizer{name: "parent-authorizer"}
+	parent.SetAuthorizer(parentAuth)
 
+	childAuth := &testAuthorizer{name: "child-authorizer"}
 	child := parent.DeriveWith(func(cfg *NamespaceDeriveConfig) {
-		cfg.Authorizer = "child-authorizer"
+		cfg.Authorizer = childAuth
 	})
 
 	// Registry inherited when not overridden
 	c.Assert(child.Registry(), qt.Equals, parent.Registry())
-	c.Assert(child.Authorizer(), qt.Equals, "child-authorizer")
+	c.Assert(child.Authorizer(), qt.Equals, childAuth)
 }
 
 func TestNamespace_ModuleInstances(t *testing.T) {

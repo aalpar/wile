@@ -72,8 +72,8 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 	defer reg.FinishLoading(name)
 
 	// Resolve and open via FileResolver (supports both OS and virtual FS).
-	resolver, ok := env.FileResolver().(FileResolver)
-	if !ok {
+	resolver := env.FileResolver()
+	if resolver == nil {
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration,
 			"load-library: no file resolver configured")
 	}
