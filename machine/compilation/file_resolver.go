@@ -96,7 +96,11 @@ func openAuthorized(auth security.Authorizer, absPath string) (fs.File, string, 
 	}
 	f, err := os.Open(absPath)
 	if err != nil {
-		return nil, "", werr.WrapForeignErrorWithCause(werr.ErrFileNotFound, err, "open %s", absPath)
+		sentinel := werr.ErrFileOpen
+		if errors.Is(err, os.ErrNotExist) {
+			sentinel = werr.ErrFileNotFound
+		}
+		return nil, "", werr.WrapForeignErrorWithCause(sentinel, err, "open %s", absPath)
 	}
 	return f, absPath, nil
 }
@@ -104,9 +108,9 @@ func openAuthorized(auth security.Authorizer, absPath string) (fs.File, string, 
 // walkOSLibraries walks baseDir on the OS filesystem, calling fn with the
 // slash-separated path of each .sld/.scm file relative to baseDir.
 // Hidden directories and unauthorized files are silently skipped.
-// Non-existent or unreadable directories are skipped without error.
-func walkOSLibraries(baseDir string, auth security.Authorizer, fn func(relPath string)) {
-	_ = filepath.WalkDir(baseDir, func(path string, d fs.DirEntry, walkErr error) error {
+// Returns the WalkDir error so callers can observe unexpected walk failures.
+func walkOSLibraries(baseDir string, auth security.Authorizer, fn func(relPath string)) error {
+	return filepath.WalkDir(baseDir, func(path string, d fs.DirEntry, walkErr error) error {
 		if d == nil {
 			return fs.SkipAll
 		}
@@ -134,6 +138,7 @@ func walkOSLibraries(baseDir string, auth security.Authorizer, fn func(relPath s
 // .sld/.scm file relative to baseDir. Hidden directories and unauthorized
 // files are silently skipped. Non-existent directories are skipped (fs.SkipAll).
 // If skipSubdir is non-nil, subdirectory paths returning true are also skipped.
+// Returns the WalkDir error so callers can observe unexpected walk failures.
 func walkFSDir(fsys fs.FS, baseDir string, auth security.Authorizer, skipSubdir func(string) bool, fn func(relPath string)) error {
 	prefix := baseDir
 	if prefix == "." {
@@ -152,12 +157,15 @@ func walkFSDir(fsys fs.FS, baseDir string, auth security.Authorizer, skipSubdir 
 			}
 			return nil
 		}
-		if walkErr != nil || !isLibraryFile(d.Name()) || !isAuthorized(auth, path) {
-			return nil //nolint:nilerr // skip unreadable/irrelevant/denied files, continue walking
+		if walkErr != nil || !isLibraryFile(d.Name()) {
+			return nil //nolint:nilerr // skip unreadable/irrelevant files, continue walking
 		}
 		relPath := strings.TrimPrefix(path, prefix+"/")
 		if prefix == "" {
 			relPath = path
+		}
+		if !isAuthorized(auth, relPath) {
+			return nil
 		}
 		fn(relPath)
 		return nil
@@ -193,14 +201,16 @@ func (p *OSFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs.Fi
 // Searches the same directories as ResolveAndOpen: library registry paths,
 // SCHEME_INCLUDE_PATH, and CWD. First directory wins on duplicate library names.
 //
-// Best-effort: non-existent directories and unauthorized files are skipped silently.
+// Best-effort: non-existent directories and unauthorized files are skipped.
+// Walk errors are joined and returned alongside partial results.
 func (p *OSFileResolver) EnumerateLibraries() ([]LibraryName, error) {
 	auth := p.env.Namespace().Authorizer()
 	seen := make(map[string]bool)
 	var result []LibraryName
+	var walkErrs []error
 
 	for _, dir := range osSearchDirs(p.env) {
-		walkOSLibraries(dir, auth, func(relPath string) {
+		err := walkOSLibraries(dir, auth, func(relPath string) {
 			name, nameErr := FilePathToLibraryName(relPath)
 			if nameErr != nil {
 				return
@@ -211,12 +221,15 @@ func (p *OSFileResolver) EnumerateLibraries() ([]LibraryName, error) {
 				result = append(result, name)
 			}
 		})
+		if err != nil {
+			walkErrs = append(walkErrs, err)
+		}
 	}
 
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].Key() < result[j].Key()
 	})
-	return result, nil
+	return result, errors.Join(walkErrs...)
 }
 
 // --- EmbedFileResolver ---
@@ -264,7 +277,10 @@ func NewFSFileResolver(fsys fs.FS, env *environment.EnvironmentFrame) *FSFileRes
 	if fsys == nil {
 		panic(werr.WrapForeignErrorf(werr.ErrEngineInit, "NewFSFileResolver: fsys must not be nil"))
 	}
-	return &FSFileResolver{fsys: fsys, env: env}
+	return &FSFileResolver{
+		fsys: fsys,
+		env:  env,
+	}
 }
 
 // fsDirs returns the ordered list of base directories to search within the
@@ -346,7 +362,11 @@ func (p *FSFileResolver) openChecked(resolvedPath string) (fs.File, string, erro
 	}
 	f, err := p.fsys.Open(resolvedPath)
 	if err != nil {
-		return nil, "", werr.WrapForeignErrorWithCause(werr.ErrFileNotFound, err, "open %s", resolvedPath)
+		sentinel := werr.ErrFileOpen
+		if errors.Is(err, fs.ErrNotExist) {
+			sentinel = werr.ErrFileNotFound
+		}
+		return nil, "", werr.WrapForeignErrorWithCause(sentinel, err, "open %s", resolvedPath)
 	}
 	return f, resolvedPath, nil
 }
@@ -357,11 +377,13 @@ func (p *FSFileResolver) openChecked(resolvedPath string) (fs.File, string, erro
 // Duplicate library names (same key) are deduplicated with earlier discovery
 // winning. Hidden directories (starting with ".") are always skipped.
 //
-// Best-effort: non-existent directories and unauthorized files are skipped silently.
+// Best-effort: non-existent directories and unauthorized files are skipped.
+// Walk errors are joined and returned alongside partial results.
 func (p *FSFileResolver) EnumerateLibraries() ([]LibraryName, error) {
 	auth := p.env.Namespace().Authorizer()
 	seen := make(map[string]bool)
 	var result []LibraryName
+	var walkErrs []error
 
 	addLib := func(relPath string) {
 		name, nameErr := FilePathToLibraryName(relPath)
@@ -387,19 +409,25 @@ func (p *FSFileResolver) EnumerateLibraries() ([]LibraryName, error) {
 			continue
 		}
 		walkedPaths[dir] = true
-		_ = walkFSDir(p.fsys, dir, auth, nil, addLib)
+		err := walkFSDir(p.fsys, dir, auth, nil, addLib)
+		if err != nil {
+			walkErrs = append(walkErrs, err)
+		}
 	}
 
 	// Walk FS root, skipping subdirs already covered by search paths above
 	// to avoid producing incorrect relPath values from path prefix artifacts.
-	_ = walkFSDir(p.fsys, ".", auth, func(dir string) bool {
+	err := walkFSDir(p.fsys, ".", auth, func(dir string) bool {
 		return walkedPaths[dir]
 	}, addLib)
+	if err != nil {
+		walkErrs = append(walkErrs, err)
+	}
 
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].Key() < result[j].Key()
 	})
-	return result, nil
+	return result, errors.Join(walkErrs...)
 }
 
 // --- ChainFileResolver ---
