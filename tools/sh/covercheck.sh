@@ -29,6 +29,7 @@ EXCLUDED_PKGS=(
 	"cmd/typeswitchlint"
 	"internal/repl"
 	"machine/compilation"
+	"internal/testutil"
 	"machine/testutil"
 	"registry/testhelpers"
 	"examples/embedding"
