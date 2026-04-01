@@ -90,13 +90,15 @@ func TestInitOrder_LibraryWithoutBootstrap(t *testing.T) {
 
 	func() {
 		defer func() {
-			if r := recover(); r != nil {
+			r := recover()
+			if r != nil {
 				panicked = true
 				panicVal = fmt.Sprintf("%v", r)
 			}
 		}()
 
-		eng, creationErr := NewEngine(ctx, WithNamespace(ns), WithLibraryPaths("."))
+		var eng *Engine
+		eng, creationErr = NewEngine(ctx, WithNamespace(ns), WithLibraryPaths("."))
 		if creationErr != nil {
 			return
 		}
