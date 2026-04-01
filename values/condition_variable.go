@@ -35,8 +35,7 @@ type ConditionVariable struct {
 	specific Value // user data
 
 	mu      sync.Mutex
-	cond    *sync.Cond
-	waiters int // number of waiting threads
+	waitChs []chan struct{} // per-waiter notification channels
 }
 
 // NewConditionVariable creates a new condition variable
@@ -45,12 +44,10 @@ func NewConditionVariable(name string) *ConditionVariable {
 	if name == "" {
 		name = fmt.Sprintf("condvar-%d", id)
 	}
-	cv := &ConditionVariable{
+	return &ConditionVariable{
 		id:   id,
 		name: name,
 	}
-	cv.cond = sync.NewCond(&cv.mu)
-	return cv
 }
 
 // ID returns the condition variable's unique identifier
@@ -77,94 +74,72 @@ func (p *ConditionVariable) SetSpecific(v Value) {
 	p.specific = v
 }
 
-// Signal wakes one waiting thread
+// Signal wakes one waiting thread (FIFO order).
 func (p *ConditionVariable) Signal() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.cond.Signal()
+	if len(p.waitChs) > 0 {
+		close(p.waitChs[0])
+		p.waitChs = p.waitChs[1:]
+	}
 }
 
-// Broadcast wakes all waiting threads
+// Broadcast wakes all waiting threads.
 func (p *ConditionVariable) Broadcast() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.cond.Broadcast()
+	for _, ch := range p.waitChs {
+		close(ch)
+	}
+	p.waitChs = nil
 }
 
-// Wait waits on the condition variable
-// The mutex must be held when calling Wait
-// Returns true if signaled, false if timeout
+// Wait waits on the condition variable.
+// Returns true if signaled, false if timeout.
+//
+// Each waiter registers a per-waiter channel. Signal/Broadcast close
+// the channel to wake the waiter. Timeouts remove the channel from
+// the queue without disturbing other waiters.
 func (p *ConditionVariable) Wait(_ *Mutex, timeout *time.Duration) bool {
+	ch := make(chan struct{})
 	p.mu.Lock()
-	p.waiters++
+	p.waitChs = append(p.waitChs, ch)
 	p.mu.Unlock()
 
-	defer func() {
-		p.mu.Lock()
-		p.waiters--
-		p.mu.Unlock()
-	}()
-
 	if timeout == nil {
-		// Wait indefinitely
-		p.mu.Lock()
-		p.cond.Wait()
-		p.mu.Unlock()
+		<-ch
 		return true
 	}
 
-	// Wait with timeout
-	result := make(chan bool, 1)
-	timedout := make(chan struct{})
-	done := make(chan struct{})
 	timer := time.NewTimer(*timeout)
 	defer timer.Stop()
 
-	// Waiter goroutine
-	go func() {
-		p.mu.Lock()
-		p.cond.Wait()
-		p.mu.Unlock()
-
-		// Try to send result (non-blocking)
-		select {
-		case result <- true:
-			// Success: main goroutine received signal
-		default:
-			// Timeout already fired, channel full
-			// Goroutine exits cleanly
-		}
-	}()
-
-	// Timeout handler goroutine
-	go func() {
-		select {
-		case <-timer.C:
-			// Timeout fired - wake the waiter so it can exit
-			p.mu.Lock()
-			p.cond.Broadcast()
-			p.mu.Unlock()
-			close(timedout)
-		case <-done:
-			// Signaled before timeout - exit cleanly
-		}
-	}()
-
 	select {
-	case <-result:
-		close(done)
+	case <-ch:
 		return true
-	case <-timedout:
-		close(done)
-		return false
+	case <-timer.C:
+		// Try to remove our channel. If Signal/Broadcast already
+		// closed and removed it, the removal fails and we report
+		// signaled — the signal arrived at the timeout boundary.
+		p.mu.Lock()
+		removed := false
+		for i, c := range p.waitChs {
+			if c == ch {
+				p.waitChs = append(p.waitChs[:i], p.waitChs[i+1:]...)
+				removed = true
+				break
+			}
+		}
+		p.mu.Unlock()
+		return !removed
 	}
 }
 
-// WaiterCount returns the number of threads waiting on this condition variable
+// WaiterCount returns the number of threads waiting on this condition variable.
 func (p *ConditionVariable) WaiterCount() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.waiters
+	return len(p.waitChs)
 }
 
 // buf interface implementation

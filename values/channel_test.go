@@ -257,9 +257,9 @@ func TestChannelSelectBlocking(t *testing.T) {
 		{Channel: ch, Kind: values.SelectReceive},
 	}
 
-	// Send from another goroutine after a short delay
+	// Send from another goroutine — unbuffered channel semantics
+	// synchronize sender and receiver, so no sleep needed.
 	go func() {
-		time.Sleep(20 * time.Millisecond)
 		_ = ch.Send(values.NewInteger(99))
 	}()
 

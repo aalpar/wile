@@ -354,7 +354,7 @@ coverhtml:
 	open $(GO_BUILD_DIR)/coverage.html 2>/dev/null || xdg-open $(GO_BUILD_DIR)/coverage.html 2>/dev/null || echo "Open $(GO_BUILD_DIR)/coverage.html in your browser"
 
 # Run tests with coverage and enforce per-package threshold (80%).
-# Excluded packages: cmd, repl, forms, extensions/*, registry/helpers,
+# Excluded packages: cmd, repl, forms, extensions/*, internal/testutil,
 # registry/testhelpers, examples/embedding, integration.
 #   make covercheck
 .PHONY: covercheck

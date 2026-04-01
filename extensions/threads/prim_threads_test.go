@@ -21,6 +21,7 @@ import (
 
 	"github.com/aalpar/wile"
 	extthreads "github.com/aalpar/wile/extensions/threads"
+	"github.com/aalpar/wile/internal/testutil"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -217,27 +218,36 @@ func TestThreadSleep(t *testing.T) {
 
 func TestThreadSleepContextCancellation(t *testing.T) {
 	c := qt.New(t)
-	engine := newEngine(t)
 
 	tcs := []struct {
 		name string
 		code string
 	}{
 		{"cancel during integer sleep",
-			`(thread-sleep! 60)`},
+			`(begin (test-ready!) (thread-sleep! 60))`},
 		{"cancel during float sleep",
-			`(thread-sleep! 60.0)`},
+			`(begin (test-ready!) (thread-sleep! 60.0))`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
+			ext, ready := testutil.ReadyExtension()
+			engine, err := wile.NewEngine(context.Background(),
+				wile.WithExtension(extthreads.Extension),
+				wile.WithExtension(ext),
+			)
+			c.Assert(err, qt.IsNil)
+
 			ctx, cancel := context.WithCancel(context.Background())
 			done := make(chan error, 1)
 			go func() {
 				_, err := engine.Eval(ctx, engine.MustParse(ctx, tc.code))
 				done <- err
 			}()
-			// Cancel after a short delay to ensure the sleep has started
-			time.Sleep(20 * time.Millisecond)
+			select {
+			case <-ready:
+			case err := <-done:
+				t.Fatalf("Eval returned before ready signal: %v", err)
+			}
 			cancel()
 
 			select {
@@ -761,28 +771,30 @@ func TestMutexAbandonedOnTermination(t *testing.T) {
 // thread's VM loop to terminate via context.Canceled.
 func TestThreadParentContextCancellation(t *testing.T) {
 	c := qt.New(t)
-	engine := newEngine(t)
+	ext, ready := testutil.ReadyExtension()
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithExtension(extthreads.Extension),
+		wile.WithExtension(ext),
+	)
+	c.Assert(err, qt.IsNil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Run scheme code in a goroutine: starts an infinite-loop thread, then joins it.
-	// The join blocks until the thread terminates.
 	errCh := make(chan error, 1)
 	go func() {
-		// Note: engine.Eval is the Scheme interpreter's eval, not JavaScript eval.
-		// It compiles and runs Scheme source code on the Wile VM.
 		_, err := engine.Eval(ctx, engine.MustParse(ctx,
-			`(let ((th (make-thread (lambda () (let loop () (loop))))))
+			`(let ((th (make-thread (lambda () (begin (test-ready!) (let loop () (loop)))))))
 			   (thread-start! th)
 			   (thread-join! th))`))
 		errCh <- err
 	}()
 
-	// Give the thread time to start and enter its loop
-	time.Sleep(200 * time.Millisecond)
-
-	// Cancel the parent context — should propagate to thread's derived context
+	select {
+	case <-ready:
+	case err := <-errCh:
+		t.Fatalf("Eval returned before ready signal: %v", err)
+	}
 	cancel()
 
 	select {

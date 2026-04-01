@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aalpar/wile/internal/testutil"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/werr"
 
@@ -911,16 +912,20 @@ func TestEval_AlreadyCancelledContext(t *testing.T) {
 
 func TestEval_CancelDuringComputation(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine(context.Background())
+	ext, ready := testutil.ReadyExtension()
+	engine, err := NewEngine(context.Background(), WithExtension(ext))
 	c.Assert(err, qt.IsNil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		select {
+		case <-ready:
+		case <-time.After(5 * time.Second):
+		}
 		cancel()
 	}()
 
-	_, err = engine.Eval(ctx, engine.MustParse(ctx, "(let loop () (loop))"))
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, "(begin (test-ready!) (let loop () (loop)))"))
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, context.Canceled), qt.IsTrue)
 }
