@@ -123,7 +123,8 @@ func walkOSLibraries(baseDir string, auth security.Authorizer, fn func(relPath s
 			}
 			return nil
 		}
-		if walkErr != nil || !isLibraryFile(d.Name()) || !isAuthorized(auth, path) {
+		absPath, absErr := filepath.Abs(path)
+		if walkErr != nil || absErr != nil || !isLibraryFile(d.Name()) || !isAuthorized(auth, absPath) {
 			return nil //nolint:nilerr // skip unreadable/irrelevant/denied files, continue walking
 		}
 		rel, relErr := filepath.Rel(baseDir, path)
@@ -322,6 +323,11 @@ func (p *FSFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.File
 	for _, dir := range append(p.fsDirs(), ".") {
 		candidate := pathpkg.Join(dir, path)
 		if !fs.ValidPath(candidate) {
+			if dir == "." {
+				searched = append(searched, "<fs-root>/")
+			} else {
+				searched = append(searched, dir+"/")
+			}
 			continue
 		}
 		switch _, err := fs.Stat(p.fsys, candidate); {
