@@ -243,7 +243,11 @@ func TestThreadSleepContextCancellation(t *testing.T) {
 				_, err := engine.Eval(ctx, engine.MustParse(ctx, tc.code))
 				done <- err
 			}()
-			<-ready
+			select {
+			case <-ready:
+			case err := <-done:
+				t.Fatalf("Eval returned before ready signal: %v", err)
+			}
 			cancel()
 
 			select {
@@ -786,7 +790,11 @@ func TestThreadParentContextCancellation(t *testing.T) {
 		errCh <- err
 	}()
 
-	<-ready
+	select {
+	case <-ready:
+	case err := <-errCh:
+		t.Fatalf("Eval returned before ready signal: %v", err)
+	}
 	cancel()
 
 	select {

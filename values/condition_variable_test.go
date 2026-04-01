@@ -28,8 +28,10 @@ import (
 )
 
 // stableGoroutineCount polls runtime.NumGoroutine() until two consecutive
-// reads return the same value, or the deadline elapses.
-func stableGoroutineCount(deadline time.Duration) int {
+// reads return the same value, or the deadline elapses. Logs a warning if
+// stability is not achieved.
+func stableGoroutineCount(t testing.TB, deadline time.Duration) int {
+	t.Helper()
 	end := time.Now().Add(deadline)
 	prev := runtime.NumGoroutine()
 	for time.Now().Before(end) {
@@ -42,6 +44,7 @@ func stableGoroutineCount(deadline time.Duration) int {
 		}
 		prev = curr
 	}
+	t.Logf("stableGoroutineCount: count did not stabilize within %v (last=%d)", deadline, prev)
 	return prev
 }
 
@@ -109,7 +112,7 @@ func TestConditionVariable_Wait_NoGoroutineLeak(t *testing.T) {
 	c := qt.New(t)
 
 	// Measure baseline goroutine count
-	baseline := stableGoroutineCount(2 * time.Second)
+	baseline := stableGoroutineCount(t, 2*time.Second)
 
 	cv := values.NewConditionVariable("leak-test")
 	timeout := 10 * time.Millisecond
@@ -121,7 +124,7 @@ func TestConditionVariable_Wait_NoGoroutineLeak(t *testing.T) {
 	}
 
 	// Give goroutines time to exit
-	final := stableGoroutineCount(2 * time.Second)
+	final := stableGoroutineCount(t, 2*time.Second)
 	// Allow small variance (±2) for test framework overhead
 	c.Assert(final <= baseline+2, qt.IsTrue,
 		qt.Commentf("goroutine leak detected: baseline=%d final=%d", baseline, final))
@@ -134,7 +137,7 @@ func TestConditionVariable_Wait_SignalBeforeTimeout(t *testing.T) {
 
 	// Signal once the waiter is blocked
 	go func() {
-		testutil.PollUntil(func() bool {
+		testutil.PollUntil(t, func() bool {
 			return cv.WaiterCount() > 0
 		}, 2*time.Second)
 		cv.Signal()
@@ -170,7 +173,7 @@ func TestConditionVariable_Wait_BroadcastBeforeTimeout(t *testing.T) {
 	timeout := 1 * time.Second
 
 	go func() {
-		testutil.PollUntil(func() bool {
+		testutil.PollUntil(t, func() bool {
 			return cv.WaiterCount() > 0
 		}, 2*time.Second)
 		cv.Broadcast()
@@ -189,7 +192,7 @@ func TestConditionVariable_Wait_NilTimeout(t *testing.T) {
 	cv := values.NewConditionVariable("nil-timeout-test")
 
 	go func() {
-		testutil.PollUntil(func() bool {
+		testutil.PollUntil(t, func() bool {
 			return cv.WaiterCount() > 0
 		}, 2*time.Second)
 		cv.Signal()
@@ -232,7 +235,7 @@ func TestConditionVariable_Wait_ConcurrentWaiters(t *testing.T) {
 	}
 
 	// Broadcast once all waiters are blocked
-	testutil.PollUntil(func() bool {
+	testutil.PollUntil(t, func() bool {
 		return cv.WaiterCount() >= numWaiters
 	}, 2*time.Second)
 	cv.Broadcast()

@@ -918,7 +918,10 @@ func TestEval_CancelDuringComputation(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		<-ready
+		select {
+		case <-ready:
+		case <-time.After(5 * time.Second):
+		}
 		cancel()
 	}()
 
