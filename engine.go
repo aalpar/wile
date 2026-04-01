@@ -119,6 +119,27 @@ func NewNamespace(ctx context.Context, opts ...EngineOption) (*environment.Names
 // and ignores registry/extension/core options (they were applied when
 // the namespace was created). Library paths and other engine-specific
 // options still apply.
+//
+// Initialization Order Invariant
+//
+// NewEngine performs 6 initialization steps that MUST execute in this order.
+// Each step depends on prior steps; reordering causes silent failures or panics.
+//
+//   1. Config         — build engineConfig from options
+//   2. Registry       — buildRegistry(cfg): register core + extension primitives
+//   3. Namespace      — NewNamespace() + SetRegistry + SetAuthorizer
+//   4. Bootstrap      — applyBaseEnvironment: bind primitives, syntax compilers,
+//                        expanders, bootstrap macros (uses EmbedFileResolver, NOT
+//                        the runtime file resolver)
+//   5. File resolver  — env.SetFileResolver: runtime include/load resolver.
+//                        Must come AFTER bootstrap (step 4) so bootstrap uses its
+//                        own EmbedFileResolver, not the runtime resolver.
+//   6. Library system — setupLibrarySystem: search paths, extension libraries,
+//                        library env factory. Requires file resolver (step 5)
+//                        and bootstrap macros (step 4) for define-library parsing.
+//
+// The WithNamespace path (pre-built namespace) skips steps 2-5 and trusts that
+// the caller bootstrapped correctly. NewNamespace() performs steps 2-4.
 func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	cfg := &engineConfig{}
 	for _, opt := range opts {
