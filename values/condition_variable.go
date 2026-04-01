@@ -95,20 +95,14 @@ func (p *ConditionVariable) Broadcast() {
 // The mutex must be held when calling Wait
 // Returns true if signaled, false if timeout
 func (p *ConditionVariable) Wait(_ *Mutex, timeout *time.Duration) bool {
-	p.mu.Lock()
-	p.waiters++
-	p.mu.Unlock()
-
-	defer func() {
-		p.mu.Lock()
-		p.waiters--
-		p.mu.Unlock()
-	}()
-
 	if timeout == nil {
-		// Wait indefinitely
+		// Wait indefinitely. Increment waiters under the lock, immediately
+		// before cond.Wait, so WaiterCount reflects goroutines actually
+		// blocked — not merely intending to wait.
 		p.mu.Lock()
+		p.waiters++
 		p.cond.Wait()
+		p.waiters--
 		p.mu.Unlock()
 		return true
 	}
@@ -120,10 +114,15 @@ func (p *ConditionVariable) Wait(_ *Mutex, timeout *time.Duration) bool {
 	timer := time.NewTimer(*timeout)
 	defer timer.Stop()
 
-	// Waiter goroutine
+	// Waiter goroutine. Increment waiters under the lock just before
+	// cond.Wait so that WaiterCount > 0 guarantees the goroutine is
+	// either holding the lock (about to enter Wait) or already blocked.
+	// Lock serialization ensures Signal cannot fire in between.
 	go func() {
 		p.mu.Lock()
+		p.waiters++
 		p.cond.Wait()
+		p.waiters--
 		p.mu.Unlock()
 
 		// Try to send result (non-blocking)
