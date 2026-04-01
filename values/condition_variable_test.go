@@ -22,6 +22,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/internal/testutil"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 )
@@ -131,9 +132,11 @@ func TestConditionVariable_Wait_SignalBeforeTimeout(t *testing.T) {
 	cv := values.NewConditionVariable("signal-test")
 	timeout := 1 * time.Second
 
-	// Signal after 50ms
+	// Signal once the waiter is blocked
 	go func() {
-		time.Sleep(50 * time.Millisecond)
+		testutil.PollUntil(func() bool {
+			return cv.WaiterCount() > 0
+		}, 2*time.Second)
 		cv.Signal()
 	}()
 
@@ -167,7 +170,9 @@ func TestConditionVariable_Wait_BroadcastBeforeTimeout(t *testing.T) {
 	timeout := 1 * time.Second
 
 	go func() {
-		time.Sleep(50 * time.Millisecond)
+		testutil.PollUntil(func() bool {
+			return cv.WaiterCount() > 0
+		}, 2*time.Second)
 		cv.Broadcast()
 	}()
 
@@ -184,7 +189,9 @@ func TestConditionVariable_Wait_NilTimeout(t *testing.T) {
 	cv := values.NewConditionVariable("nil-timeout-test")
 
 	go func() {
-		time.Sleep(50 * time.Millisecond)
+		testutil.PollUntil(func() bool {
+			return cv.WaiterCount() > 0
+		}, 2*time.Second)
 		cv.Signal()
 	}()
 
@@ -224,8 +231,10 @@ func TestConditionVariable_Wait_ConcurrentWaiters(t *testing.T) {
 		}()
 	}
 
-	// Broadcast after 50ms (should wake all)
-	time.Sleep(50 * time.Millisecond)
+	// Broadcast once all waiters are blocked
+	testutil.PollUntil(func() bool {
+		return cv.WaiterCount() >= numWaiters
+	}, 2*time.Second)
 	cv.Broadcast()
 
 	// Collect results
