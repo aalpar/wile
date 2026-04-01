@@ -71,6 +71,7 @@ var (
 	ErrNotARecord                = NewStaticError("not a record")
 	ErrNotARecordType            = NewStaticError("not a record type")
 	ErrFileNotFound              = NewStaticError("file not found")
+	ErrFileOpen                  = NewStaticError("file open failed")
 	ErrLibraryNotFound           = NewStaticError("library not found")
 	ErrCircularDependency        = NewStaticError("circular library dependency")
 	ErrUnexportedIdentifier      = NewStaticError("identifier not exported")
