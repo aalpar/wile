@@ -73,7 +73,7 @@ func (s *ffiSpec) makeWrapper() ForeignFunction {
 				return fmtArgError(s.name, fixedCount+1, "proper list", varList)
 			}
 
-			_, err := values.ForEach(mc.Context(), varList, func(_ context.Context, _ int, _ bool, v values.Value) error {
+			tail, err := values.ForEach(mc.Context(), varList, func(_ context.Context, _ int, _ bool, v values.Value) error {
 				converted, convErr := variadicConv(mc, v)
 				if convErr != nil {
 					return convErr
@@ -83,6 +83,9 @@ func (s *ffiSpec) makeWrapper() ForeignFunction {
 			})
 			if err != nil {
 				return err
+			}
+			if !values.IsEmptyList(tail) {
+				return fmtArgError(s.name, fixedCount+1, "proper list", varList)
 			}
 		} else {
 			for i := range s.paramCount {

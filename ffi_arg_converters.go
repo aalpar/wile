@@ -165,7 +165,7 @@ func makeSliceArgConverter(name string, pos int, t reflect.Type) (argConverter, 
 			return reflect.Value{}, fmtArgError(name, pos, "proper list", v)
 		}
 		result := reflect.MakeSlice(sliceType, 0, 0)
-		_, walkErr := values.ForEach(mc.Context(), v, func(_ context.Context, _ int, _ bool, elem values.Value) error {
+		tail, walkErr := values.ForEach(mc.Context(), v, func(_ context.Context, _ int, _ bool, elem values.Value) error {
 			converted, convErr := elemConv(mc, elem)
 			if convErr != nil {
 				return convErr
@@ -175,6 +175,9 @@ func makeSliceArgConverter(name string, pos int, t reflect.Type) (argConverter, 
 		})
 		if walkErr != nil {
 			return reflect.Value{}, walkErr
+		}
+		if !values.IsEmptyList(tail) {
+			return reflect.Value{}, fmtArgError(name, pos, "proper list", v)
 		}
 		return result, nil
 	}, nil
@@ -258,7 +261,7 @@ func makeStructArgConverter(name string, pos int, t reflect.Type) (argConverter,
 			return reflect.Value{}, fmtArgError(name, pos, "proper list", v)
 		}
 		result := reflect.New(structType).Elem()
-		_, walkErr := values.ForEach(mc.Context(), v, func(_ context.Context, _ int, _ bool, elem values.Value) error {
+		tail, walkErr := values.ForEach(mc.Context(), v, func(_ context.Context, _ int, _ bool, elem values.Value) error {
 			entry, ok := elem.(values.Tuple)
 			if !ok {
 				return werr.WrapForeignErrorf(
@@ -287,6 +290,9 @@ func makeStructArgConverter(name string, pos int, t reflect.Type) (argConverter,
 		})
 		if walkErr != nil {
 			return reflect.Value{}, walkErr
+		}
+		if !values.IsEmptyList(tail) {
+			return reflect.Value{}, fmtArgError(name, pos, "proper list", v)
 		}
 		return result, nil
 	}, nil
