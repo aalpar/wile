@@ -229,21 +229,6 @@ func makeMapArgConverter(name string, pos int, t reflect.Type) (argConverter, er
 	}, nil
 }
 
-// isSupportedMapKeyType returns whether a Go type can serve as a map key
-// in FFI conversions. Only string, int64, int, and bool are allowed.
-//
-// Although float64 produces a Hashable Scheme value (*values.Float), it is
-// excluded because IEEE 754 NaN != NaN breaks hashtable lookup invariants,
-// and exact/inexact conversion can silently change keys during round-trips.
-func isSupportedMapKeyType(t reflect.Type) bool {
-	switch t.Kind() {
-	case reflect.String, reflect.Int64, reflect.Int, reflect.Bool:
-		return true
-	default:
-		return false
-	}
-}
-
 // makeStructArgConverter creates a converter for Go struct types.
 // Scheme alists ((FieldName . value) ...) are mapped to struct fields by
 // matching the car symbol against exported field names.
@@ -509,13 +494,4 @@ func callbackParameterResult(
 		)
 		return callbackErrorResult(funcType, hasErrorReturn, paramErr)
 	}
-}
-
-// fmtArgError creates a type conversion error for argument mismatches.
-func fmtArgError(name string, pos int, expected string, got values.Value) error {
-	return werr.WrapForeignErrorf(
-		werr.ErrTypeConversion,
-		"%s: argument %d: expected %s, got %s",
-		name, pos, expected, got.SchemeString(),
-	)
 }
