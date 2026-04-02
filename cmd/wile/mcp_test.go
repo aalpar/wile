@@ -405,6 +405,9 @@ func TestMetaTools_MissingParam(t *testing.T) {
 		{"topic", func(s *mcpServer) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return s.handleTopic
 		}},
+		{"disassemble", func(s *mcpServer) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return s.handleDisassemble
+		}},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -431,6 +434,53 @@ func TestHandleLibraries(t *testing.T) {
 	text := resultText(c, res)
 	c.Assert(len(text) > 0, qt.IsTrue,
 		qt.Commentf("libraries should return non-empty result"))
+}
+
+func TestHandleDisassemble_Success(t *testing.T) {
+	c := qt.New(t)
+	srv := newTestServer()
+	ctx := context.Background()
+
+	// Define a procedure first.
+	_, err := srv.handleEval(ctx, toolReq(map[string]any{
+		"code": "(define (add1 x) (+ x 1))",
+	}))
+	c.Assert(err, qt.IsNil)
+
+	res, err := srv.handleDisassemble(ctx, toolReq(map[string]any{
+		"name": "add1",
+	}))
+	c.Assert(err, qt.IsNil)
+	c.Assert(res.IsError, qt.IsFalse)
+	text := resultText(c, res)
+	c.Assert(strings.Contains(text, "OP"), qt.IsTrue,
+		qt.Commentf("expected column header, got: %q", text))
+}
+
+func TestHandleDisassemble_UnboundReturnsError(t *testing.T) {
+	c := qt.New(t)
+	srv := newTestServer()
+	ctx := context.Background()
+
+	res, err := srv.handleDisassemble(ctx, toolReq(map[string]any{
+		"name": "nonexistent-xyz",
+	}))
+	c.Assert(err, qt.IsNil)
+	c.Assert(res.IsError, qt.IsTrue)
+	text := resultText(c, res)
+	c.Assert(strings.Contains(text, "Unbound"), qt.IsTrue,
+		qt.Commentf("expected unbound error, got: %q", text))
+}
+
+func TestHandleDisassemble_MissingParam(t *testing.T) {
+	c := qt.New(t)
+	srv := newTestServer()
+	ctx := context.Background()
+
+	res, err := srv.handleDisassemble(ctx, toolReq(map[string]any{}))
+	c.Assert(err, qt.IsNil)
+	c.Assert(res.IsError, qt.IsTrue)
+	c.Assert(strings.Contains(resultText(c, res), "required"), qt.IsTrue)
 }
 
 // --- registerPrompts integration tests ---

@@ -19,21 +19,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aalpar/wile"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
 )
-
-// newAllEngine creates a Wile engine with all extensions enabled.
-func newAllEngine(t *testing.T) *wile.Engine {
-	t.Helper()
-	engine, err := wile.NewEngine(context.Background(),
-		wile.WithAllExtensions(),
-	)
-	qt.Assert(t, err, qt.IsNil)
-	return engine
-}
 
 // alistLookup finds a key in an alist (list of (key . value) pairs).
 // Returns the cdr of the matching pair and true, or nil and false.
@@ -57,7 +46,7 @@ func alistLookup(alist values.Tuple, key string) (values.Value, bool) {
 
 func TestPrimDisassemble_NativeClosure(t *testing.T) {
 	c := qt.New(t)
-	engine := newAllEngine(t)
+	engine := newEngine(t)
 
 	schemeEval(t, engine, `(define (add1 x) (+ x 1))`)
 	result := schemeEval(t, engine, `(disassemble add1)`)
@@ -82,7 +71,7 @@ func TestPrimDisassemble_NativeClosure(t *testing.T) {
 
 func TestPrimDisassemble_ForeignClosure(t *testing.T) {
 	c := qt.New(t)
-	engine := newAllEngine(t)
+	engine := newEngine(t)
 
 	result := schemeEval(t, engine, `(disassemble car)`)
 
@@ -102,7 +91,7 @@ func TestPrimDisassemble_ForeignClosure(t *testing.T) {
 
 func TestPrimDisassemble_CaseLambda(t *testing.T) {
 	c := qt.New(t)
-	engine := newAllEngine(t)
+	engine := newEngine(t)
 
 	schemeEval(t, engine, `(define f (case-lambda ((x) x) ((x y) (+ x y))))`)
 	result := schemeEval(t, engine, `(disassemble f)`)
@@ -123,7 +112,7 @@ func TestPrimDisassemble_CaseLambda(t *testing.T) {
 
 func TestPrimDisassemble_NotAProcedure(t *testing.T) {
 	c := qt.New(t)
-	engine := newAllEngine(t)
+	engine := newEngine(t)
 
 	expr, err := engine.Parse(context.Background(), `(disassemble 42)`)
 	if err != nil {
@@ -139,7 +128,7 @@ func TestPrimDisassemble_NotAProcedure(t *testing.T) {
 
 func TestPrimDisassemble_InstructionKeys(t *testing.T) {
 	c := qt.New(t)
-	engine := newAllEngine(t)
+	engine := newEngine(t)
 
 	schemeEval(t, engine, `(define (id x) x)`)
 	result := schemeEval(t, engine, `(disassemble id)`)

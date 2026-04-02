@@ -117,7 +117,7 @@ func instructionToScheme(instr machine.DisassembledInstruction) values.Value {
 		alistEntry("pc", values.NewInteger(int64(instr.PC))),
 		alistEntry("op", values.NewSymbol(instr.Op)))
 
-	if instr.Arg != 0 {
+	if instr.HasArg {
 		entries = append(entries, alistEntry("arg", values.NewInteger(int64(instr.Arg))))
 	}
 	if instr.Slot >= 0 {

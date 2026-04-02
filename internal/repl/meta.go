@@ -15,6 +15,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // MetaCommandHandler dispatches comma-prefixed meta-commands.
@@ -648,7 +649,18 @@ func (p *MetaCommandHandler) cmdDisassemble(args []string, out io.Writer) {
 		return
 	}
 
-	name := args[0]
+	content, err := p.DisassembleBinding(args[0])
+	if err != nil {
+		fmt.Fprintln(out, err.Error())
+		return
+	}
+	writeWithPager(out, content, p.pager)
+}
+
+// DisassembleBinding looks up a named binding and returns its formatted
+// disassembly. Returns an error if the name is unbound, nil, or not a
+// procedure. Exported for use by the MCP handler.
+func (p *MetaCommandHandler) DisassembleBinding(name string) (string, error) {
 	sym := values.NewSymbol(name)
 
 	var val values.Value
@@ -656,7 +668,9 @@ func (p *MetaCommandHandler) cmdDisassemble(args []string, out io.Writer) {
 		topLevel := p.env.Namespace()
 		if topLevel != nil {
 			phases := topLevel.Phases()
-			for _, phase := range phases.Phases() {
+			phaseIndices := phases.Phases()
+			sort.Ints(phaseIndices)
+			for _, phase := range phaseIndices {
 				phaseEnv := phases.Get(phase)
 				if phaseEnv == nil {
 					continue
@@ -671,15 +685,19 @@ func (p *MetaCommandHandler) cmdDisassemble(args []string, out io.Writer) {
 	}
 
 	if val == nil {
-		fmt.Fprintf(out, "Unbound identifier: %s\n", name)
-		return
+		return "", werr.NewForeignErrorf("Unbound identifier: %s", name)
 	}
 
-	var content string
 	switch c := val.(type) {
 	case *machine.MachineClosure:
-		content = machine.DisassembleString(c.Template())
+		if c == nil {
+			return "", werr.NewForeignErrorf("%s is bound to a nil closure", name)
+		}
+		return machine.DisassembleString(c.Template()), nil
 	case *machine.CaseLambdaClosure:
+		if c == nil {
+			return "", werr.NewForeignErrorf("%s is bound to a nil closure", name)
+		}
 		var sb strings.Builder
 		for i, clause := range c.Clauses() {
 			if i > 0 {
@@ -688,21 +706,21 @@ func (p *MetaCommandHandler) cmdDisassemble(args []string, out io.Writer) {
 			fmt.Fprintf(&sb, "--- clause %d ---\n", i)
 			sb.WriteString(machine.DisassembleString(clause.Template()))
 		}
-		content = sb.String()
+		return sb.String(), nil
 	case *machine.ForeignClosure:
+		if c == nil {
+			return "", werr.NewForeignErrorf("%s is bound to a nil closure", name)
+		}
 		var sb strings.Builder
 		fmt.Fprintf(&sb, "%s  (foreign, params: %d, variadic: %v)\n",
 			c.Name(), c.ParameterCount(), c.IsVariadic())
 		if c.Doc() != "" {
 			fmt.Fprintf(&sb, "doc: %s\n", c.Doc())
 		}
-		content = sb.String()
+		return sb.String(), nil
 	default:
-		fmt.Fprintf(out, "%s is not a procedure (type: %T)\n", name, val)
-		return
+		return "", werr.NewForeignErrorf("%s is not a procedure (type: %T)", name, val)
 	}
-
-	writeWithPager(out, content, p.pager)
 }
 
 // searchBindings searches phase environment bindings for the pattern.

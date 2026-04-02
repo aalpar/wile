@@ -395,7 +395,20 @@ func (p *mcpServer) handleDisassemble(ctx context.Context, req mcp.CallToolReque
 	if name == "" {
 		return mcp.NewToolResultError("name parameter is required"), nil
 	}
-	return p.runMeta(ctx, ",dis "+name)
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	err := p.initLocked(ctx)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("engine init failed: %v", err)), nil
+	}
+
+	result, disErr := p.meta.DisassembleBinding(name)
+	if disErr != nil {
+		return mcp.NewToolResultError(disErr.Error()), nil
+	}
+	return mcp.NewToolResultText(result), nil
 }
 
 func (p *mcpServer) handleReset(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {

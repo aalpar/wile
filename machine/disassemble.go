@@ -26,6 +26,7 @@ type DisassembledInstruction struct {
 	PC      int
 	Op      string
 	Arg     int32
+	HasArg  bool   // true when Arg is meaningful (distinguishes unused from Arg=0)
 	Slot    int    // decoded slot for local ops; -1 when not applicable
 	Depth   int    // decoded depth for local ops; -1 when not applicable
 	Target  int    // absolute PC for branch/save ops; -1 when not applicable
@@ -85,6 +86,7 @@ func Disassemble(tpl *NativeTemplate) DisassembledTemplate {
 			PC:     pc,
 			Op:     instr.Op.String(),
 			Arg:    instr.Arg,
+			HasArg: opcodeHasArg(instr.Op.String()),
 			Slot:   -1,
 			Depth:  -1,
 			Target: -1,
@@ -96,6 +98,8 @@ func Disassemble(tpl *NativeTemplate) DisassembledTemplate {
 			idx := int(instr.Arg)
 			if idx >= 0 && idx < len(literals) {
 				di.Literal = literals[idx].SchemeString()
+			} else {
+				di.Literal = fmt.Sprintf("<invalid-literal-index:%d>", idx)
 			}
 
 		// Global ops: the literal at Arg is the symbol name.
@@ -103,6 +107,8 @@ func Disassemble(tpl *NativeTemplate) DisassembledTemplate {
 			idx := int(instr.Arg)
 			if idx >= 0 && idx < len(literals) {
 				di.Literal = literals[idx].SchemeString()
+			} else {
+				di.Literal = fmt.Sprintf("<invalid-literal-index:%d>", idx)
 			}
 
 		// Local ops: bit-packed slot|depth.
@@ -122,6 +128,8 @@ func Disassemble(tpl *NativeTemplate) DisassembledTemplate {
 			idx := int(instr.Arg)
 			if idx >= 0 && idx < len(bindings) {
 				di.Binding = bindingName(bindings[idx])
+			} else {
+				di.Binding = fmt.Sprintf("<invalid-binding-index:%d>", idx)
 			}
 
 		// Promoted ops: Arg = index into cachedBindings.
@@ -145,6 +153,8 @@ func Disassemble(tpl *NativeTemplate) DisassembledTemplate {
 			idx := int(instr.Arg)
 			if idx >= 0 && idx < len(bindings) {
 				di.Binding = bindingName(bindings[idx])
+			} else {
+				di.Binding = fmt.Sprintf("<invalid-binding-index:%d>", idx)
 			}
 
 		// Side table complex ops.
@@ -152,6 +162,8 @@ func Disassemble(tpl *NativeTemplate) DisassembledTemplate {
 			idx := int(instr.Arg)
 			if idx >= 0 && idx < len(sideTable) {
 				di.SideOp = fmt.Sprint(sideTable[idx])
+			} else {
+				di.SideOp = fmt.Sprintf("<invalid-sidetable-index:%d>", idx)
 			}
 
 		// MakeClosure: annotate with the preceding literal's template name.
@@ -289,7 +301,7 @@ func DisassembleString(tpl *NativeTemplate) string {
 	// Instructions.
 	for _, di := range dt.Instructions {
 		argStr := ""
-		if opcodeHasArg(di.Op) {
+		if di.HasArg {
 			argStr = fmt.Sprintf("%d", di.Arg)
 		}
 		detail := formatDetail(di)
