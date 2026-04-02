@@ -79,6 +79,8 @@ func (p *MetaCommandHandler) Handle(line string, out io.Writer) bool {
 		p.cmdTopic(args, out)
 	case "libraries", "libs":
 		p.cmdLibraries(out)
+	case "disassemble", "dis":
+		p.cmdDisassemble(args, out)
 	default:
 		// Delegate to debug context
 		if p.debugCtx != nil && p.debugCtx.HandleDebugCommand(line, out) {
@@ -146,6 +148,14 @@ var metaCommands = []commandInfo{
 		"session"},
 	{"libraries", []string{"libs"}, "List loaded Scheme libraries",
 		"Usage: ,libraries\n\nLists all Scheme libraries currently loaded in the environment,\nsorted alphabetically, with their descriptions.",
+		"session"},
+	{"disassemble", []string{"dis"}, "Show bytecode disassembly of a procedure",
+		"Usage: ,disassemble <name> or ,dis <name>\n\n" +
+			"Looks up the named binding and displays its bytecode disassembly.\n" +
+			"For native closures, shows the instruction listing with annotations.\n" +
+			"For case-lambda, shows each clause separately.\n" +
+			"For foreign closures, shows name, arity, and documentation.\n\n" +
+			"For ad-hoc expressions, use (disassemble expr) at the REPL instead.",
 		"session"},
 }
 
@@ -630,6 +640,69 @@ func (p *MetaCommandHandler) cmdLibraries(out io.Writer) {
 		fmt.Fprintf(&content, "  %-*s  %s\n", maxName, name, desc)
 	}
 	writeWithPager(out, content.String(), p.pager)
+}
+
+func (p *MetaCommandHandler) cmdDisassemble(args []string, out io.Writer) {
+	if len(args) == 0 {
+		fmt.Fprintln(out, "Usage: ,disassemble <name>")
+		return
+	}
+
+	name := args[0]
+	sym := values.NewSymbol(name)
+
+	var val values.Value
+	if p.env != nil {
+		topLevel := p.env.Namespace()
+		if topLevel != nil {
+			phases := topLevel.Phases()
+			for _, phase := range phases.Phases() {
+				phaseEnv := phases.Get(phase)
+				if phaseEnv == nil {
+					continue
+				}
+				bnd := phaseEnv.GetBinding(sym)
+				if bnd != nil {
+					val = bnd.Value()
+					break
+				}
+			}
+		}
+	}
+
+	if val == nil {
+		fmt.Fprintf(out, "Unbound identifier: %s\n", name)
+		return
+	}
+
+	var content string
+	switch c := val.(type) {
+	case *machine.MachineClosure:
+		content = machine.DisassembleString(c.Template())
+	case *machine.CaseLambdaClosure:
+		var sb strings.Builder
+		for i, clause := range c.Clauses() {
+			if i > 0 {
+				sb.WriteString("\n")
+			}
+			fmt.Fprintf(&sb, "--- clause %d ---\n", i)
+			sb.WriteString(machine.DisassembleString(clause.Template()))
+		}
+		content = sb.String()
+	case *machine.ForeignClosure:
+		var sb strings.Builder
+		fmt.Fprintf(&sb, "%s  (foreign, params: %d, variadic: %v)\n",
+			c.Name(), c.ParameterCount(), c.IsVariadic())
+		if c.Doc() != "" {
+			fmt.Fprintf(&sb, "doc: %s\n", c.Doc())
+		}
+		content = sb.String()
+	default:
+		fmt.Fprintf(out, "%s is not a procedure (type: %T)\n", name, val)
+		return
+	}
+
+	writeWithPager(out, content, p.pager)
 }
 
 // searchBindings searches phase environment bindings for the pattern.
