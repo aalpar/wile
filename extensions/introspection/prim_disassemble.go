@@ -113,15 +113,17 @@ func templateToScheme(dis machine.DisassembledTemplate) values.Value {
 func instructionToScheme(instr machine.DisassembledInstruction) values.Value {
 	entries := make([]values.Value, 0, 10)
 
-	entries = append(entries, alistEntry("pc", values.NewInteger(int64(instr.PC))))
-	entries = append(entries, alistEntry("op", values.NewSymbol(instr.Op)))
+	entries = append(entries,
+		alistEntry("pc", values.NewInteger(int64(instr.PC))),
+		alistEntry("op", values.NewSymbol(instr.Op)))
 
 	if instr.Arg != 0 {
 		entries = append(entries, alistEntry("arg", values.NewInteger(int64(instr.Arg))))
 	}
 	if instr.Slot >= 0 {
-		entries = append(entries, alistEntry("slot", values.NewInteger(int64(instr.Slot))))
-		entries = append(entries, alistEntry("depth", values.NewInteger(int64(instr.Depth))))
+		entries = append(entries,
+			alistEntry("slot", values.NewInteger(int64(instr.Slot))),
+			alistEntry("depth", values.NewInteger(int64(instr.Depth))))
 	}
 	if instr.Target >= 0 {
 		entries = append(entries, alistEntry("target", values.NewInteger(int64(instr.Target))))
