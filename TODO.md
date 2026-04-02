@@ -38,13 +38,13 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 - [x] **Extract interface types from `environment/` `any` fields** [High, M, Done]: `FileResolver` interface defined in `environment/file_resolver.go` (stdlib types only); `machine/compilation/` adds type alias. `LibrarySearcher` interface (`GetSearchPaths() []string`) eliminates type assertions in `file_resolver.go`. `authorizer any` → `security.Authorizer` (security package only imports `werr`). 15 type assertions removed across 7 files. `plan: plans/2026-03-31-environment-any-fields.md`
 - [x] **`Stack.Pull()` is O(n) in VM hot path** [High, M, Done]: Replaced `Pull()` + `Drain()` in `OpPullApply` with O(1) `PullDrain()` that splits `stack[0]` (proc) from `stack[1:]` (args) without copying. Unfused `OpPull` unchanged (rare after peephole). `plans/2026-03-31-pulldrain-design.md`
 - [x] **Split `ffi.go` by concern** [Medium, S, Done]: 1010 lines split into `ffi.go` (spec), `ffi_arg_converters.go`, `ffi_ret_converters.go`, `ffi_wrapper.go`. PR #599.
-- [ ] **Engine initialization order invariant** [Medium, S]: `engine.go:121-207` has implicit 6-step ordering (config → registry → namespace → bootstrap → file resolver → library system). Enforced by code sequence, not types. Add invariant comment and negative test validating order matters.
+- [x] **Engine initialization order invariant** [Medium, S, Done]: `engine.go:122-142` documents the 6-step dependency DAG. Negative tests in `engine_init_order_test.go` verify unbootstrapped namespace fails eval and library system fails without bootstrap. `plans/2026-04-01-engine-init-order.md`
 
 ### Medium Priority
 
 - [x] **`machine/` mega-package decomposition** [Medium, L, Done]: Phase 1 (PR #592) — `MacroEvaluator` and `ExpanderCtx` interfaces. Phase 2 (PR #593) — 95 files moved to `machine/compilation/` subpackage; `typedCompiler` adapter deleted; bridge types in `machine/syntax_bridge_types.go`; shared test helpers in `machine/testutil/`. Compiler imports `machine`, never reverse. `plans/2026-03-30-machine-decomposition-design.md`
 - [x] **`file_resolver.go` chain of responsibility** [Medium, M, Done]: Extracted `osSearchDirs`, `openAuthorized`, `walkOSLibraries`, and `walkFSDir` as shared helpers. `OSFileResolver` and `FSFileResolver` now delegate to these instead of duplicating directory-collection and walk-callback logic. 541 → 469 lines.
-- [ ] **Timing-dependent concurrency tests** [Medium, M]: 11 `time.Sleep` calls across 4 test files (`values/condition_variable_test.go` has 7). Replace with channel-based sync or polling with timeout to eliminate CI flakiness.
+- [x] **Timing-dependent concurrency tests** [Medium, M, Done]: 10 of 11 `time.Sleep` calls replaced with observation-based synchronization (`internal/testutil` package: `PollUntil`, `ReadyExtension`, `stableGoroutineCount`). 1 deliberate-race sleep kept. PR #602. `plans/2026-04-01-timing-dependent-tests.md`
 
 ### Low Priority
 

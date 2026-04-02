@@ -156,6 +156,20 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 	)
 
 	s.AddTool(
+		mcp.NewTool("disassemble",
+			mcp.WithDescription(
+				"Show bytecode disassembly of a named procedure. "+
+					"Pass the name of a defined procedure (e.g. \"map\", \"my-function\"). "+
+					"Returns an annotated instruction listing with opcodes, literals, "+
+					"branch targets, cached binding names, and source locations."),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("Name of the procedure to disassemble")),
+		),
+		srv.handleDisassemble,
+	)
+
+	s.AddTool(
 		mcp.NewTool("reset",
 			mcp.WithDescription(
 				"Reset the Scheme session, discarding all definitions and imported libraries. "+
@@ -374,6 +388,27 @@ func (p *mcpServer) handleTopic(ctx context.Context, req mcp.CallToolRequest) (*
 
 func (p *mcpServer) handleLibraries(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return p.runMeta(ctx, ",libraries")
+}
+
+func (p *mcpServer) handleDisassemble(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	name := req.GetString("name", "")
+	if name == "" {
+		return mcp.NewToolResultError("name parameter is required"), nil
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	err := p.initLocked(ctx)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("engine init failed: %v", err)), nil
+	}
+
+	result, disErr := p.meta.DisassembleBinding(name)
+	if disErr != nil {
+		return mcp.NewToolResultError(disErr.Error()), nil
+	}
+	return mcp.NewToolResultText(result), nil
 }
 
 func (p *mcpServer) handleReset(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {

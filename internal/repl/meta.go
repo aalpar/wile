@@ -15,6 +15,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 // MetaCommandHandler dispatches comma-prefixed meta-commands.
@@ -79,6 +80,8 @@ func (p *MetaCommandHandler) Handle(line string, out io.Writer) bool {
 		p.cmdTopic(args, out)
 	case "libraries", "libs":
 		p.cmdLibraries(out)
+	case "disassemble", "dis":
+		p.cmdDisassemble(args, out)
 	default:
 		// Delegate to debug context
 		if p.debugCtx != nil && p.debugCtx.HandleDebugCommand(line, out) {
@@ -146,6 +149,14 @@ var metaCommands = []commandInfo{
 		"session"},
 	{"libraries", []string{"libs"}, "List loaded Scheme libraries",
 		"Usage: ,libraries\n\nLists all Scheme libraries currently loaded in the environment,\nsorted alphabetically, with their descriptions.",
+		"session"},
+	{"disassemble", []string{"dis"}, "Show bytecode disassembly of a procedure",
+		"Usage: ,disassemble <name> or ,dis <name>\n\n" +
+			"Looks up the named binding and displays its bytecode disassembly.\n" +
+			"For native closures, shows the instruction listing with annotations.\n" +
+			"For case-lambda, shows each clause separately.\n" +
+			"For foreign closures, shows name, arity, and documentation.\n\n" +
+			"For ad-hoc expressions, use (disassemble expr) at the REPL instead.",
 		"session"},
 }
 
@@ -630,6 +641,86 @@ func (p *MetaCommandHandler) cmdLibraries(out io.Writer) {
 		fmt.Fprintf(&content, "  %-*s  %s\n", maxName, name, desc)
 	}
 	writeWithPager(out, content.String(), p.pager)
+}
+
+func (p *MetaCommandHandler) cmdDisassemble(args []string, out io.Writer) {
+	if len(args) == 0 {
+		fmt.Fprintln(out, "Usage: ,disassemble <name>")
+		return
+	}
+
+	content, err := p.DisassembleBinding(args[0])
+	if err != nil {
+		fmt.Fprintln(out, err.Error())
+		return
+	}
+	writeWithPager(out, content, p.pager)
+}
+
+// DisassembleBinding looks up a named binding and returns its formatted
+// disassembly. Returns an error if the name is unbound, nil, or not a
+// procedure. Exported for use by the MCP handler.
+func (p *MetaCommandHandler) DisassembleBinding(name string) (string, error) {
+	sym := values.NewSymbol(name)
+
+	var val values.Value
+	if p.env != nil {
+		topLevel := p.env.Namespace()
+		if topLevel != nil {
+			phases := topLevel.Phases()
+			phaseIndices := phases.Phases()
+			sort.Ints(phaseIndices)
+			for _, phase := range phaseIndices {
+				phaseEnv := phases.Get(phase)
+				if phaseEnv == nil {
+					continue
+				}
+				bnd := phaseEnv.GetBinding(sym)
+				if bnd != nil {
+					val = bnd.Value()
+					break
+				}
+			}
+		}
+	}
+
+	if val == nil {
+		return "", werr.NewForeignErrorf("Unbound identifier: %s", name)
+	}
+
+	switch c := val.(type) {
+	case *machine.MachineClosure:
+		if c == nil {
+			return "", werr.NewForeignErrorf("%s is bound to a nil closure", name)
+		}
+		return machine.DisassembleString(c.Template()), nil
+	case *machine.CaseLambdaClosure:
+		if c == nil {
+			return "", werr.NewForeignErrorf("%s is bound to a nil closure", name)
+		}
+		var sb strings.Builder
+		for i, clause := range c.Clauses() {
+			if i > 0 {
+				sb.WriteString("\n")
+			}
+			fmt.Fprintf(&sb, "--- clause %d ---\n", i)
+			sb.WriteString(machine.DisassembleString(clause.Template()))
+		}
+		return sb.String(), nil
+	case *machine.ForeignClosure:
+		if c == nil {
+			return "", werr.NewForeignErrorf("%s is bound to a nil closure", name)
+		}
+		var sb strings.Builder
+		fmt.Fprintf(&sb, "%s  (foreign, params: %d, variadic: %v)\n",
+			c.Name(), c.ParameterCount(), c.IsVariadic())
+		if c.Doc() != "" {
+			fmt.Fprintf(&sb, "doc: %s\n", c.Doc())
+		}
+		return sb.String(), nil
+	default:
+		return "", werr.NewForeignErrorf("%s is not a procedure (type: %T)", name, val)
+	}
 }
 
 // searchBindings searches phase environment bindings for the pattern.

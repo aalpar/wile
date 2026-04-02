@@ -188,7 +188,7 @@ func TestMetaCommandHandlerCommands(t *testing.T) {
 	qt.Assert(t, len(cmds) > 0, qt.IsTrue)
 
 	// Session commands
-	for _, expected := range []string{"help", "doc", "edit", "apropos", "topics", "topic", "libraries", "libs"} {
+	for _, expected := range []string{"help", "doc", "edit", "apropos", "topics", "topic", "libraries", "libs", "disassemble", "dis"} {
 		qt.Assert(t, slices.Contains(cmds, expected), qt.IsTrue,
 			qt.Commentf("Commands() should contain session command %q, got %v", expected, cmds))
 	}
@@ -535,6 +535,67 @@ func TestCmdLibraries(t *testing.T) {
 		h.Handle(",libs", &buf)
 		qt.Assert(t, strings.Contains(buf.String(), "(test lib)"), qt.IsTrue)
 	})
+}
+
+func TestCmdDisassemble(t *testing.T) {
+	ctx := context.Background()
+	env, _, err := bootstrap.NewTopLevelWithRegistry(ctx)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Define a procedure so we can disassemble it.
+	rdr := strings.NewReader(`(define (add1 x) (+ x 1))`)
+	p := parser.NewParser(env, true, rdr)
+	stx, stxErr := p.ReadSyntax(ctx)
+	qt.Assert(t, stxErr, qt.IsNil)
+	tpl, compileErr := wileruntime.Compile(ctx, env, stx)
+	qt.Assert(t, compileErr, qt.IsNil)
+	_, runErr := wileruntime.Run(ctx, tpl, env)
+	qt.Assert(t, runErr, qt.IsNil)
+
+	tcs := []struct {
+		name    string
+		args    []string
+		contain string
+	}{
+		{"no args", nil, "Usage"},
+		{"native closure", []string{"add1"}, "OP"},
+		{"unbound identifier", []string{"nonexistent-xyz"}, "Unbound identifier"},
+		{"syntax binding", []string{"if"}, "not a procedure"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("PAGER", "")
+			var buf bytes.Buffer
+			h := NewMetaCommandHandler(env, nil, nil)
+			h.cmdDisassemble(tc.args, &buf)
+			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
+				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
+		})
+	}
+}
+
+func TestCmdDisassemble_ForeignClosure(t *testing.T) {
+	ctx := context.Background()
+	env, _, err := bootstrap.NewTopLevelWithRegistry(ctx)
+	qt.Assert(t, err, qt.IsNil)
+
+	t.Setenv("PAGER", "")
+	var buf bytes.Buffer
+	h := NewMetaCommandHandler(env, nil, nil)
+	h.cmdDisassemble([]string{"car"}, &buf)
+	output := buf.String()
+	qt.Assert(t, strings.Contains(output, "foreign"), qt.IsTrue,
+		qt.Commentf("output was: %q", output))
+	qt.Assert(t, strings.Contains(output, "car"), qt.IsTrue,
+		qt.Commentf("output was: %q", output))
+}
+
+func TestCmdDisassemble_Alias(t *testing.T) {
+	var buf bytes.Buffer
+	h := NewMetaCommandHandler(nil, nil, nil)
+	handled := h.Handle(",dis", &buf)
+	qt.Assert(t, handled, qt.IsTrue)
+	qt.Assert(t, strings.Contains(buf.String(), "Usage"), qt.IsTrue)
 }
 
 func TestMetaHandleDebugDelegation(t *testing.T) {
