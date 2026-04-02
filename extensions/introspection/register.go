@@ -46,11 +46,13 @@ func addPrimitives(r *registry.Registry) error {
 			Doc: "Returns a sorted list of all importable library names. Each name is a list of symbols/integers in R7RS library name syntax.", Category: "introspection"},
 		{Name: "disassemble", ParamCount: 1, Impl: PrimDisassemble,
 			Doc: "Returns structured disassembly of a procedure as a list of alists. " +
-				"The first element is a header with metadata (type, name, params, " +
-				"variadic, doc, literals, bindings). Remaining elements are instruction " +
-				"alists with keys: pc, op, arg, slot, depth, target, literal, binding, " +
-				"side-op, source. Works with native closures, case-lambda, and " +
-				"foreign closures.",
+				"The first element (car) is always a header alist with metadata " +
+				"(type, name, params, variadic, doc). For native closures, the header " +
+				"also includes literals and bindings vectors, and remaining elements " +
+				"are instruction alists with keys: pc, op, arg, slot, depth, target, " +
+				"literal, binding, side-op, source. For case-lambda, the header " +
+				"contains a clauses key with per-clause disassemblies. For foreign " +
+				"closures, the header is the only element.",
 			ParamNames: []string{"proc"}, Category: "introspection"},
 	}, registry.PhaseRuntime)
 	return nil

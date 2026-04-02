@@ -170,8 +170,8 @@ func Disassemble(tpl *NativeTemplate) DisassembledTemplate {
 		case OpMakeClosure:
 			di.Literal = makeClosureAnnotation(pc, code, literals)
 
-		// PushEnv: Arg = slot count (meaningful annotation handled by formatDetail).
-		// PeekK: Arg = depth (meaningful annotation handled by formatDetail).
+		// PushEnv: Arg = slot count (shown in ARG column).
+		// PeekK: Arg = depth (shown in ARG column).
 		default:
 			// No special annotation needed.
 		}
@@ -230,7 +230,7 @@ func makeClosureAnnotation(pc int, code []Instruction, literals MultipleValues) 
 	}
 	name := tpl.Name()
 	if name == "" {
-		name = "<anonymous>"
+		return "<lambda>"
 	}
 	return "<lambda:" + name + ">"
 }

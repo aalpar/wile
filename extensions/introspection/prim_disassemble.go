@@ -48,7 +48,7 @@ func disassembleMachineClosure(c *machine.MachineClosure) values.Value {
 }
 
 // disassembleCaseLambda disassembles a case-lambda closure into Scheme data.
-// Returns an alist with type and clauses keys.
+// Returns a list whose car is a header alist with type and clauses keys.
 func disassembleCaseLambda(c *machine.CaseLambdaClosure) values.Value {
 	clauses := c.Clauses()
 	clauseVals := make([]values.Value, len(clauses))
@@ -57,21 +57,24 @@ func disassembleCaseLambda(c *machine.CaseLambdaClosure) values.Value {
 		clauseVals[i] = templateToScheme(dis)
 	}
 
-	return values.List(
+	header := values.List(
 		alistEntry("type", values.NewSymbol("case-lambda-closure")),
 		alistEntry("clauses", values.List(clauseVals...)),
 	)
+	return values.List(header)
 }
 
 // disassembleForeign returns metadata for a foreign (Go-implemented) closure.
+// Returns a list whose car is a header alist with type, name, params, variadic, doc.
 func disassembleForeign(c *machine.ForeignClosure) values.Value {
-	return values.List(
+	header := values.List(
 		alistEntry("type", values.NewSymbol("foreign-closure")),
 		alistEntry("name", values.NewString(c.Name())),
 		alistEntry("params", values.NewInteger(int64(c.ParameterCount()))),
 		alistEntry("variadic", values.BoolToBoolean(c.IsVariadic())),
 		alistEntry("doc", values.NewString(c.Doc())),
 	)
+	return values.List(header)
 }
 
 // templateToScheme converts a DisassembledTemplate to a Scheme list.

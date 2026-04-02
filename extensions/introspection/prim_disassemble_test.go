@@ -77,13 +77,15 @@ func TestPrimDisassemble_ForeignClosure(t *testing.T) {
 
 	inner := result.Internal()
 
-	// Result is a pair.
+	// Result is a list whose car is the header alist.
 	outerPair, ok := inner.(*values.Pair)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("expected *Pair, got %T", inner))
 
-	// For foreign closures, the result itself is the alist.
-	typeVal, found := alistLookup(outerPair, "type")
-	c.Assert(found, qt.IsTrue, qt.Commentf("alist missing 'type' key"))
+	header, ok := outerPair.Car().(values.Tuple)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("expected header to be Tuple, got %T", outerPair.Car()))
+
+	typeVal, found := alistLookup(header, "type")
+	c.Assert(found, qt.IsTrue, qt.Commentf("header missing 'type' key"))
 	typeSym, ok := typeVal.(*values.Symbol)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("expected *Symbol for type value, got %T", typeVal))
 	c.Assert(typeSym.Key, qt.Equals, "foreign-closure")
@@ -98,13 +100,15 @@ func TestPrimDisassemble_CaseLambda(t *testing.T) {
 
 	inner := result.Internal()
 
-	// Result is a pair.
+	// Result is a list whose car is the header alist.
 	outerPair, ok := inner.(*values.Pair)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("expected *Pair, got %T", inner))
 
-	// For case-lambda, the result itself is the alist.
-	typeVal, found := alistLookup(outerPair, "type")
-	c.Assert(found, qt.IsTrue, qt.Commentf("alist missing 'type' key"))
+	header, ok := outerPair.Car().(values.Tuple)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("expected header to be Tuple, got %T", outerPair.Car()))
+
+	typeVal, found := alistLookup(header, "type")
+	c.Assert(found, qt.IsTrue, qt.Commentf("header missing 'type' key"))
 	typeSym, ok := typeVal.(*values.Symbol)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("expected *Symbol for type value, got %T", typeVal))
 	c.Assert(typeSym.Key, qt.Equals, "case-lambda-closure")
@@ -115,11 +119,8 @@ func TestPrimDisassemble_NotAProcedure(t *testing.T) {
 	engine := newEngine(t)
 
 	expr, err := engine.Parse(context.Background(), `(disassemble 42)`)
-	if err != nil {
-		// Parse error is acceptable — the primitive still rejected non-procedures.
-		c.Assert(strings.Contains(err.Error(), "disassemble"), qt.IsTrue)
-		return
-	}
+	c.Assert(err, qt.IsNil, qt.Commentf("(disassemble 42) should parse successfully"))
+
 	_, err = engine.Eval(context.Background(), expr)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(strings.Contains(err.Error(), "disassemble"), qt.IsTrue,
