@@ -583,6 +583,12 @@ func (p *NativeTemplate) SideTable() []InlinedOperation {
 	return p.sideTable
 }
 
+// CachedBindings returns the compile-time resolved bindings array.
+// Used by the disassembler to annotate binding references.
+func (p *NativeTemplate) CachedBindings() []*environment.Binding {
+	return p.cachedBindings
+}
+
 // CodeLen returns the current code[] length (number of instructions emitted).
 func (p *NativeTemplate) CodeLen() int {
 	return len(p.code)

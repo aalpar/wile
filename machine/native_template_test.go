@@ -19,6 +19,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -402,6 +403,23 @@ func TestMaybeAppendLiteral_DedupAfterCopy(t *testing.T) {
 	idx2 := copied.MaybeAppendLiteral(values.NewSymbol("foo"))
 	c.Assert(idx2, qt.Equals, idx1)
 	c.Assert(len(copied.literals), qt.Equals, 1)
+}
+
+func TestNativeTemplate_CachedBindings(t *testing.T) {
+	c := qt.New(t)
+	tpl := NewNativeTemplate(0, 0, false)
+
+	// Empty initially
+	c.Assert(tpl.CachedBindings(), qt.HasLen, 0)
+
+	// Add a binding and verify it's accessible
+	bd := environment.NewBinding(values.NewInteger(42), environment.BindingTypeVariable)
+	idx := tpl.AppendCachedBinding(bd)
+	c.Assert(idx, qt.Equals, int32(0))
+
+	bindings := tpl.CachedBindings()
+	c.Assert(bindings, qt.HasLen, 1)
+	c.Assert(bindings[0], qt.Equals, bd)
 }
 
 func BenchmarkMaybeAppendLiteral(b *testing.B) {
