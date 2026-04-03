@@ -148,6 +148,15 @@ func TestWalkSubExprs_Quote(t *testing.T) {
 	c.Assert(len(children), qt.Equals, 0)
 }
 
+func TestWalkSubExprs_Quasiquote(t *testing.T) {
+	c := qt.New(t)
+	expr := &ValidatedQuasiquote{
+		validatedBase: validatedBase{formName: "quasiquote"},
+	}
+	children := collectChildren(expr)
+	c.Assert(len(children), qt.Equals, 0)
+}
+
 func TestWalkSubExprs_Let(t *testing.T) {
 	c := qt.New(t)
 	init1 := lit()
