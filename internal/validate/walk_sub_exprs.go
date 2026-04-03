@@ -97,5 +97,10 @@ func WalkSubExprs(expr ValidatedExpr, fn func(child ValidatedExpr, callPosition 
 
 	case *ValidatedQuote, *ValidatedLiteral, *ValidatedQuasiquote, *ValidatedSymbol:
 		// No sub-expressions
+
+	default:
+		// Unknown form: no sub-expressions walked. If a new ValidatedExpr
+		// type has children, add a case here. Analysis passes that use
+		// WalkSubExprs will be incomplete until then.
 	}
 }

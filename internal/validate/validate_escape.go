@@ -41,6 +41,7 @@ func markEscapedBindings(
 		return
 	}
 
+	// Build BindingID → index map for the let bindings.
 	idToIdx := make(map[environment.BindingID]int, len(bindings))
 	for i, b := range bindings {
 		bid, ok := childEnv.ResolveBindingID(b.Name.Sym, b.Name.Scopes())
