@@ -17,6 +17,7 @@ package environment
 import (
 	"maps"
 
+	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
 )
 
@@ -77,6 +78,11 @@ func (p *LocalEnvironmentFrame) Keys() map[values.Symbol][]int {
 // If the keys map is shared (from Copy), it is cloned before mutation (CoW).
 // In practice, EnsureLocalBinding is only called during compilation, never at
 // runtime, so the CoW path is a safety net rather than a hot path.
+//
+// Note: With multi-slot keys, this returns slots[0] without scope discrimination.
+// It is only valid for single-slot keys (fresh environments for lambda params,
+// syntax-case pattern variables). Do not use on frames where MaybeCreateLocalBinding
+// has created scope-distinct slots for the same key.
 func (p *LocalEnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt BindingType) (*LocalIndex, bool) {
 	if p.keysShared {
 		p.keys = maps.Clone(p.keys)
@@ -90,6 +96,43 @@ func (p *LocalEnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt Bindin
 	p.keys[*key] = []int{i}
 	p.bindings = append(p.bindings, Binding{value: values.Void, bindingType: bt})
 	return &LocalIndex{i, 0}, true
+}
+
+// MaybeCreateLocalBinding creates a local binding with scope-aware deduplication.
+// Two bindings with the same key but incompatible scopes get separate slots;
+// compatible scopes reuse the existing slot. Nil scopes means "match any".
+//
+// If the keys map is shared (from Copy), it is cloned before mutation (CoW).
+// The three-index slice on append prevents mutating a shared backing array.
+func (p *LocalEnvironmentFrame) MaybeCreateLocalBinding(
+	key *values.Symbol, bt BindingType,
+	scopes []*syntax.Scope, source *syntax.SourceContext,
+) (*LocalIndex, bool) {
+	slots := p.keys[*key]
+	matchAny := scopes == nil
+	for _, i := range slots {
+		if matchAny || syntax.ScopesCompatible(p.bindings[i].Scopes(), scopes) {
+			if p.bindings[i].Scopes() == nil && scopes != nil {
+				p.bindings[i].SetScopes(scopes)
+			}
+			if p.bindings[i].Source() == nil && source != nil {
+				p.bindings[i].SetSource(source)
+			}
+			return NewLocalIndex(i, 0), false
+		}
+	}
+	if p.keysShared {
+		p.keys = maps.Clone(p.keys)
+		p.keysShared = false
+	}
+	i := len(p.bindings)
+	p.keys[*key] = append(slots[:len(slots):len(slots)], i)
+	b := Binding{value: values.Void, bindingType: bt}
+	if scopes != nil || source != nil {
+		b.meta = &BindingMeta{Scopes: scopes, Source: source}
+	}
+	p.bindings = append(p.bindings, b)
+	return NewLocalIndex(i, 0), true
 }
 
 // GetLocalIndex returns the LocalIndex for the given symbol in this local environment.

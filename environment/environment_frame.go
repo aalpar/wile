@@ -56,7 +56,7 @@ import (
 //	│  LocalEnvironmentFrame    │    │      GlobalEnvironmentFrame            │
 //	│  (Single scope bindings)  │    │  (Phase-wide global bindings)          │
 //	│                           │    │                                        │
-//	│  keys ─── map[Symbol]int  │    │  keys ──────── map[Symbol]int          │
+//	│  keys ── map[Symbol][]int │    │  keys ──────── map[Symbol]int          │
 //	│  bindings ── []*Binding   │    │  bindings ──── []*Binding              │
 //	└───────────────────────────┘    │  namespace ──── *Namespace             │
 //	                                 └────────────────────────────────────────┘
@@ -436,13 +436,43 @@ func (p *EnvironmentFrame) resolveGlobal(
 // chain), then globals.
 //
 // Nil scopes means "match any" (no scope filtering). Non-nil scopes enables
-// hygienic resolution per Flatt's model.
+// hygienic resolution per Flatt's model with maximal binding selection
+// (consistent with GetLocalIndex).
 func (p *EnvironmentFrame) GetBinding(key *values.Symbol, scopes []*syntax.Scope) *Binding {
-	result := p.resolveLocal(key, scopes, func(binding *Binding, _ int, _ int) any {
-		return binding
-	})
-	if result != nil {
-		return result.(*Binding)
+	if scopes == nil {
+		// Fast path: nil scopes — return first match
+		result := p.resolveLocal(key, nil, func(binding *Binding, _ int, _ int) any {
+			return binding
+		})
+		if result != nil {
+			return result.(*Binding)
+		}
+	} else {
+		// Scoped path: maximal binding resolution (Flatt model)
+		type candidate struct {
+			binding    *Binding
+			scopeCount int
+		}
+		var best candidate
+
+		p.resolveLocal(key, scopes, func(binding *Binding, _ int, _ int) any {
+			scopeCount := len(binding.Scopes())
+
+			// Perfect match — stop walking
+			if scopeCount > 0 && scopeCount == len(scopes) {
+				best = candidate{binding, scopeCount}
+				return true
+			}
+
+			if best.binding == nil || scopeCount > best.scopeCount {
+				best = candidate{binding, scopeCount}
+			}
+			return nil
+		})
+
+		if best.binding != nil {
+			return best.binding
+		}
 	}
 
 	matchAny := scopes == nil
@@ -483,27 +513,7 @@ func (p *EnvironmentFrame) MaybeCreateLocalBinding(
 	if p == nil || !p.hasLocal() {
 		return nil, false
 	}
-	slots := p.local.keys[*key]
-	matchAny := scopes == nil
-	for _, i := range slots {
-		if matchAny || syntax.ScopesCompatible(p.local.bindings[i].Scopes(), scopes) {
-			if p.local.bindings[i].Scopes() == nil && scopes != nil {
-				p.local.bindings[i].SetScopes(scopes)
-			}
-			if p.local.bindings[i].Source() == nil && source != nil {
-				p.local.bindings[i].SetSource(source)
-			}
-			return NewLocalIndex(i, 0), false
-		}
-	}
-	i := len(p.local.bindings)
-	p.local.keys[*key] = append(slots, i)
-	b := Binding{value: values.Void, bindingType: bt}
-	if scopes != nil || source != nil {
-		b.meta = &BindingMeta{Scopes: scopes, Source: source}
-	}
-	p.local.bindings = append(p.local.bindings, b)
-	return NewLocalIndex(i, 0), true
+	return p.local.MaybeCreateLocalBinding(key, bt, scopes, source)
 }
 
 // GetLocalIndex returns the LocalIndex of the binding for the given symbol
