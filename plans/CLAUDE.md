@@ -32,8 +32,12 @@ When investigating R7RS conformance issues:
 | `2026-03-25-algebra-rewrite-impl.md` | Term rewriting implementation plan (Phase 1: wile, Phase 2: wile-goast) | **Complete** (PR #576, wile v1.9.11) |
 | `AVAILABLE-LIBRARIES.md` | Library discovery design: `LibraryEnumerator` interface, `(available-libraries)` primitive | **Approved** (design) |
 | `2026-03-28-available-libraries-impl.md` | Library discovery implementation: 10 tasks, TDD | Open |
-| `CAPTURE-ANALYSIS.md` | Capture analysis design for let bindings | **Complete** |
-| `CAPTURE-ANALYSIS-IMPL.md` | Capture analysis implementation plan | **Complete** (PR #575) |
+| `CAPTURE-ANALYSIS.md` | Capture analysis design for let bindings (B1) | **Complete** |
+| `CAPTURE-ANALYSIS-IMPL.md` | Capture analysis implementation plan (B1) | **Complete** (PR #575) |
+| `ESCAPE-ANALYSIS.md` | Escape analysis design for let-bound closures (B2) | **Complete** (design) |
+| `ESCAPE-ANALYSIS-IMPL.md` | Escape analysis implementation plan (B2) | **Complete** (PR #604) |
+| `PROCEDURE-INLINING.md` | Procedure inlining for let-bound closures: synthetic let transform, BindingID-keyed candidate registry, configurable threshold | **Approved** (design) |
+| `PROCEDURE-INLINING-IMPL.md` | Procedure inlining implementation plan: 8 tasks, TDD, engine option plumbing | Open |
 | `2026-03-27-procedure-documentation-design.md` | `procedure-documentation` primitive: NativeTemplate doc field, compileBody extraction, Guile-style convention | **Complete** (PR #579) |
 | `2026-03-27-scheme-library-docstrings-design.md` | Scheme library docstrings design: conventions, phasing, scope (300 procs across 29 files) | **Complete** |
 | `2026-03-27-scheme-library-docstrings-impl.md` | Scheme library docstrings implementation: 4 phases (algebra, control/kanren, SRFI-1, chibi, CxR) | **Complete** (PR #582) |

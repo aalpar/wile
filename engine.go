@@ -50,13 +50,14 @@ const DefaultMaxCallDepth uint64 = 10000
 // SRFI-18 threads within a single Engine are safe — the VM handles
 // thread coordination internally.
 type Engine struct {
-	namespace    *environment.Namespace
-	env          *environment.EnvironmentFrame
-	registry     *registry.Registry
-	lastCounters machine.VMCounters
-	closers      []registry.Closeable
-	closed       bool
-	maxCallDepth uint64
+	namespace       *environment.Namespace
+	env             *environment.EnvironmentFrame
+	registry        *registry.Registry
+	lastCounters    machine.VMCounters
+	closers         []registry.Closeable
+	closed          bool
+	maxCallDepth    uint64
+	inlineThreshold int
 }
 
 // extSnapshot tracks the primitive index range for an extension so it can be
@@ -153,6 +154,13 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		cfg.maxCallDepth = DefaultMaxCallDepth
 	}
 
+	// Apply default inline threshold when the caller did not set one explicitly.
+	// WithInlineThreshold(0) disables inlining — inlineThresholdSet tracks
+	// whether the caller opted in, so we don't override an explicit zero.
+	if !cfg.inlineThresholdSet {
+		cfg.inlineThreshold = compilation.DefaultInlineThreshold
+	}
+
 	var ns *environment.Namespace
 	var reg *registry.Registry
 	var snapshots []extSnapshot
@@ -215,11 +223,12 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	}
 
 	q := &Engine{
-		namespace:    ns,
-		env:          env,
-		registry:     reg,
-		closers:      closers,
-		maxCallDepth: cfg.maxCallDepth,
+		namespace:       ns,
+		env:             env,
+		registry:        reg,
+		closers:         closers,
+		maxCallDepth:    cfg.maxCallDepth,
+		inlineThreshold: cfg.inlineThreshold,
 	}
 	return q, nil
 }
@@ -334,7 +343,7 @@ func (p *Engine) EvalIn(ctx context.Context, expr *Expression, ns *environment.N
 	}
 	env := ns.Runtime()
 
-	tpl, err := expandAndCompile(ctx, env, expr.stx, nil)
+	tpl, err := expandAndCompile(ctx, env, expr.stx, nil, p.inlineThreshold)
 	if err != nil {
 		return nil, &CompilationError{Message: "expand/compile error", Cause: err}
 	}
@@ -636,8 +645,10 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 // expandAndCompile runs the expand → compile → optimize pipeline for a single
 // syntax value, returning the resulting template. An optional FileResolver
 // overrides how include/load finds files (nil uses the OS filesystem default).
+// inlineThreshold controls procedure inlining: procedures with bodies longer
+// than this threshold are not inlined; 0 disables inlining entirely.
 // Callers own error wrapping.
-func expandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver compilation.FileResolver) (*machine.NativeTemplate, error) {
+func expandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver compilation.FileResolver, inlineThreshold int) (*machine.NativeTemplate, error) {
 	tpl := machine.NewEmptyNativeTemplate()
 
 	expanded, err := compilation.NewExpanderTimeContinuation(ctx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
@@ -650,6 +661,7 @@ func expandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, st
 	if resolver != nil {
 		compiler.SetFileResolver(resolver)
 	}
+	compiler.SetInlineThreshold(inlineThreshold)
 	err = compiler.CompileExpression(cctx, expanded)
 	if err != nil {
 		return nil, err
@@ -660,7 +672,7 @@ func expandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, st
 }
 
 func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*CompiledCode, error) {
-	tpl, err := expandAndCompile(ctx, p.env, stx, nil)
+	tpl, err := expandAndCompile(ctx, p.env, stx, nil, p.inlineThreshold)
 	if err != nil {
 		return nil, &CompilationError{Message: "expand/compile error", Cause: err}
 	}
@@ -752,7 +764,7 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 
 // runBootstrapMacroStx expands, compiles, and runs a single syntax value as part of the bootstrap process.
 func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver compilation.FileResolver) error {
-	tpl, err := expandAndCompile(ctx, env, stx, resolver)
+	tpl, err := expandAndCompile(ctx, env, stx, resolver, compilation.DefaultInlineThreshold)
 	if err != nil {
 		return err
 	}

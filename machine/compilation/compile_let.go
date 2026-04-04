@@ -57,6 +57,9 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 	// case, so that internal defines get their own scope boundary).
 	childEnv := p.createLetCompileEnv(v)
 
+	registeredBIDs := p.registerInlineCandidates(childEnv, v.Bindings)
+	defer p.unregisterInlineCandidates(registeredBIDs)
+
 	savedEnv := p.env
 	p.env = childEnv
 	defer func() {
@@ -177,5 +180,63 @@ func (p *CompileTimeContinuation) predeclareDefineFromValidatedRecursive(
 		for _, sub := range v.Body() {
 			p.predeclareDefineFromValidatedRecursive(sub)
 		}
+	}
+}
+
+// registerInlineCandidates scans let bindings for lambdas eligible for
+// call-site inlining. Returns the BindingIDs that were registered so
+// the caller can unregister them when the let scope exits.
+func (p *CompileTimeContinuation) registerInlineCandidates(
+	childEnv *environment.EnvironmentFrame,
+	bindings []validate.ValidatedLetBinding,
+) []environment.BindingID {
+	if p.inlineThreshold == 0 {
+		return nil
+	}
+
+	var registered []environment.BindingID
+	for i := range bindings {
+		b := &bindings[i]
+		if b.Mutable || b.Escapes {
+			continue
+		}
+
+		lam, ok := b.Init.(*validate.ValidatedLambda)
+		if !ok {
+			continue
+		}
+
+		params := lam.Params()
+		if params.Rest != nil {
+			continue
+		}
+
+		if len(lam.Body()) > p.inlineThreshold {
+			continue
+		}
+
+		bid, resolved := childEnv.ResolveBindingID(b.Name.Sym, b.Name.Scopes())
+		if !resolved {
+			continue
+		}
+
+		if p.inlineCandidates == nil {
+			p.inlineCandidates = make(map[environment.BindingID]inlineCandidate)
+		}
+		p.inlineCandidates[bid] = inlineCandidate{
+			lambda:  lam,
+			binding: b,
+			env:     childEnv,
+		}
+		registered = append(registered, bid)
+	}
+	return registered
+}
+
+// unregisterInlineCandidates removes previously registered inline candidates
+// when the enclosing let scope exits.
+func (p *CompileTimeContinuation) unregisterInlineCandidates(bids []environment.BindingID) {
+	for _, bid := range bids {
+		delete(p.inlineCandidates, bid)
 	}
 }

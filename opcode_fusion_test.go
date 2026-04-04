@@ -120,8 +120,10 @@ func TestOpcodeFusion(t *testing.T) {
 
 		// --- Wave 8: CallLocal / CallCachedBinding ---
 		{
-			name:       "tail CallLocal via let-bound lambda",
-			code:       "(let ((f (lambda (x) (string-length x)))) (f \"hello\"))",
+			// Escaped binding (passed as argument) prevents inlining,
+			// so the call goes through CallLocal.
+			name:       "tail CallLocal via escaped let-bound lambda",
+			code:       "(let ((f (lambda (x) (string-length x)))) (list f) (f \"hello\"))",
 			wantOps:    []machine.OpCode{machine.OpCallLocal},
 			wantResult: "5",
 		},
