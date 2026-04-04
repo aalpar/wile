@@ -193,8 +193,9 @@ type CompiledPattern struct {
 // CompilePatternOpts holds optional parameters for CompileSyntaxPattern.
 // A nil opts pointer means all defaults (no literals, default "...").
 type CompilePatternOpts struct {
-	Literals   map[string]struct{}
-	EllipsisID string
+	Literals         map[string]struct{}
+	EllipsisID       string
+	MatchAllElements bool // false (default): skip first element (R7RS syntax-rules macro keyword); true: match all elements (syntax-case)
 }
 
 // CompileSyntaxPattern compiles a syntax pattern into bytecode with optional
@@ -210,11 +211,15 @@ func CompileSyntaxPattern(
 ) (*CompiledPattern, error) {
 	ellipsisID := DefaultEllipsis
 	var literals map[string]struct{}
+	skipKeyword := true // R7RS §4.3.2 default: first element is macro keyword
 	if opts != nil {
 		if opts.EllipsisID != "" {
 			ellipsisID = opts.EllipsisID
 		}
 		literals = opts.Literals
+		if opts.MatchAllElements {
+			skipKeyword = false
+		}
 	}
 
 	// Pattern must be a syntax pair
@@ -229,9 +234,9 @@ func CompileSyntaxPattern(
 	if literals != nil {
 		compiler.literals = literals
 	}
-	// Enable macro keyword skipping for syntax-rules patterns.
-	// R7RS §4.3.2: The first subform of each pattern is the keyword of the macro.
-	compiler.SetSkipMacroKeyword(true)
+	// R7RS §4.3.2: For syntax-rules, the first subform is the macro keyword.
+	// For syntax-case, patterns don't have a leading keyword.
+	compiler.SetSkipMacroKeyword(skipKeyword)
 	err := compiler.Compile(ctx, pair)
 	if err != nil {
 		return nil, err

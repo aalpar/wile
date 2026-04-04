@@ -66,15 +66,19 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 	literalsExpr := rest.SyntaxCar()
 
 	literalSyntax := make(map[string]*syntax.SyntaxSymbol)
-	literalsPair, ok := literalsExpr.(*syntax.SyntaxPair)
-	if ok {
-		if !literalsPair.IsEmptyList() {
-			// syntax-case always uses the default ellipsis "..."
-			// Use extractLiteralsWithSyntax to enable scope-aware literal matching
-			err := extractLiteralsWithSyntax(ctctx.ctx, literalsPair, nil, literalSyntax, match.DefaultEllipsis)
-			if err != nil {
-				return werr.WrapForeignErrorf(err, "syntax-case: invalid literals list")
-			}
+	if !syntax.IsSyntaxEmptyList(literalsExpr) {
+		literalsPair, ok := literalsExpr.(*syntax.SyntaxPair)
+		if !ok {
+			return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-case: literals must be a list, got %T", literalsExpr)
+		}
+		// syntax-case always uses the default ellipsis "..."
+		// Use extractLiteralsWithSyntax to enable scope-aware literal matching.
+		// Pass a non-nil literals map because extractLiteralsWithSyntax
+		// unconditionally writes to it; only literalSyntax is used downstream.
+		literals := make(map[string]struct{})
+		err := extractLiteralsWithSyntax(ctctx.ctx, literalsPair, literals, literalSyntax, match.DefaultEllipsis)
+		if err != nil {
+			return werr.WrapForeignErrorf(err, "syntax-case: invalid literals list")
 		}
 	}
 
@@ -184,8 +188,21 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 		return err
 	}
 
-	// Compile the pattern to bytecode
-	compiled, err := match.CompileSyntaxPattern(ctctx.ctx, pattern, patternVars, nil)
+	// R7RS §4.3.2: _ is a wildcard that matches anything without binding.
+	// The pattern compiler handles _ as a non-capturing wildcard, but
+	// collectPatternVariables includes it. Remove it so BindPatternVars
+	// doesn't create a void binding for _.
+	_, wildcardIsLiteral := literalSyntax["_"]
+	if !wildcardIsLiteral {
+		delete(patternVars, "_")
+	}
+
+	// Compile the pattern to bytecode.
+	// syntax-case patterns don't have a leading macro keyword (unlike syntax-rules),
+	// so match all elements including the first.
+	compiled, err := match.CompileSyntaxPattern(ctctx.ctx, pattern, patternVars, &match.CompilePatternOpts{
+		MatchAllElements: true,
+	})
 	if err != nil {
 		return err
 	}

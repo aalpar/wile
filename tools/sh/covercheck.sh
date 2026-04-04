@@ -28,7 +28,6 @@ EXCLUDED_PKGS=(
 	"cmd/wile"
 	"cmd/typeswitchlint"
 	"internal/repl"
-	"machine/compilation"
 	"internal/testutil"
 	"machine/testutil"
 	"registry/testhelpers"
