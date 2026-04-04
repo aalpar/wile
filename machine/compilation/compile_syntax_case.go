@@ -71,7 +71,10 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 		if !literalsPair.IsEmptyList() {
 			// syntax-case always uses the default ellipsis "..."
 			// Use extractLiteralsWithSyntax to enable scope-aware literal matching
-			err := extractLiteralsWithSyntax(ctctx.ctx, literalsPair, nil, literalSyntax, match.DefaultEllipsis)
+			// Pass a non-nil literals map because extractLiteralsWithSyntax
+			// unconditionally writes to it; only literalSyntax is used downstream.
+			literals := make(map[string]struct{})
+			err := extractLiteralsWithSyntax(ctctx.ctx, literalsPair, literals, literalSyntax, match.DefaultEllipsis)
 			if err != nil {
 				return werr.WrapForeignErrorf(err, "syntax-case: invalid literals list")
 			}
@@ -184,8 +187,13 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 		return err
 	}
 
-	// Compile the pattern to bytecode
-	compiled, err := match.CompileSyntaxPattern(ctctx.ctx, pattern, patternVars, nil)
+	// Compile the pattern to bytecode.
+	// syntax-case patterns don't have a leading macro keyword (unlike syntax-rules),
+	// so disable macro keyword skipping.
+	skipKeyword := false
+	compiled, err := match.CompileSyntaxPattern(ctctx.ctx, pattern, patternVars, &match.CompilePatternOpts{
+		SkipMacroKeyword: &skipKeyword,
+	})
 	if err != nil {
 		return err
 	}
