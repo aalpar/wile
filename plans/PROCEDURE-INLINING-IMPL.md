@@ -1,6 +1,6 @@
 # Procedure Inlining Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> Implement this plan task-by-task, running relevant tests after each task.
 
 **Goal:** Inline let-bound lambda calls as synthetic `let` forms, eliminating closure allocation and call dispatch when `!Mutable && !Escapes && init is lambda`.
 

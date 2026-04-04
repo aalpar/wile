@@ -659,17 +659,28 @@ func (p *CompileTimeContinuation) tryInlineCall(
 	}
 
 	// Arity check: argument count must match parameter count exactly.
+	// The binding is !Mutable (no set!) so the lambda's parameter count is
+	// known at compile time. An arity mismatch is a guaranteed runtime error;
+	// report it now instead of deferring to the VM.
 	params := candidate.lambda.Params()
 	if len(v.Body()) != len(params.Required) {
-		return false, nil
+		return false, werr.WrapForeignErrorf(
+			werr.ErrWrongNumberOfArguments,
+			"inline call to %s: expected %d argument(s), got %d",
+			sym.Symbol.Sym, len(params.Required), len(v.Body()),
+		)
 	}
 
 	// Build synthetic let bindings: each parameter bound to the corresponding argument.
+	// Mark Escapes=true to prevent registerInlineCandidates from treating these
+	// synthetic bindings as inline candidates — their Mutable/Escapes flags have
+	// not been computed by the validator.
 	syntheticBindings := make([]validate.ValidatedLetBinding, len(params.Required))
 	for i, param := range params.Required {
 		syntheticBindings[i] = validate.ValidatedLetBinding{
-			Name: param,
-			Init: v.Body()[i],
+			Name:    param,
+			Init:    v.Body()[i],
+			Escapes: true,
 		}
 	}
 

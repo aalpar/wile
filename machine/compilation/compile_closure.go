@@ -141,6 +141,7 @@ func (p *CompileTimeContinuation) compileClosure(ctctx CompileTimeCallContext, t
 // throughout the body, enabling forward references between defines.
 func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clause validate.ValidatedBodyAndParams, childEnv *environment.EnvironmentFrame, tpl *machine.NativeTemplate) error {
 	childCompiler := NewCompileTimeContinuation(tpl, childEnv, p.evaluator)
+	childCompiler.SetInlineThreshold(p.inlineThreshold)
 	lambdaBodyContext := NewCompileTimeCallContext(ctctx.ctx, true)
 
 	body := clause.Body()

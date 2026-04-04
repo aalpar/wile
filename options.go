@@ -107,6 +107,9 @@ func WithMaxCallDepth(n uint64) EngineOption {
 // the engine uses compilation.DefaultInlineThreshold (5).
 func WithInlineThreshold(n int) EngineOption {
 	return func(cfg *engineConfig) {
+		if n < 0 {
+			n = 0
+		}
 		cfg.inlineThreshold = n
 		cfg.inlineThresholdSet = true
 	}

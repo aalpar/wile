@@ -72,11 +72,14 @@ Per inlined call site:
 
 | Before | After | Saving |
 |--------|-------|--------|
-| NativeTemplate allocation | — | One template per lambda |
-| MakeClosure opcode | — | Closure object allocation |
 | SaveContinuation | — | Continuation frame save/restore |
 | Apply dispatch | — | Arity check, env frame setup, PC reset |
 | OpPopEnv on return | OpPopEnv on body exit | Same cost |
+
+Note: the let binding's init expression (the lambda) is still compiled and
+produces a MakeClosure opcode. Dead code elimination of the unused closure
+is a separate optimization (not implemented). What v1 eliminates is the
+**call dispatch** overhead per inlined call site.
 
 What remains: one `OpPushEnv` frame for parameter bindings (pool-allocated).
 The body's tail calls become proper tail calls of the enclosing function.

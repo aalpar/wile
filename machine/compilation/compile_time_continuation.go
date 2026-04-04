@@ -28,8 +28,7 @@ import (
 
 // inlineCandidate holds a let-bound lambda eligible for call-site inlining.
 type inlineCandidate struct {
-	lambda  *validate.ValidatedLambda
-	binding *validate.ValidatedLetBinding
+	lambda *validate.ValidatedLambda
 	// env is the compile-time environment at registration. Inlining is only
 	// safe when the call site is in the same scope — nested scopes may shadow
 	// free variables that the lambda captured at its definition site.
@@ -272,6 +271,7 @@ func (p *CompileTimeContinuation) CompileMeta(ctctx CompileTimeCallContext, expr
 	// Get the expand environment and compile expressions in it
 	metaEnv := p.env.Expand()
 	metaCont := NewCompileTimeContinuation(p.template, metaEnv, p.evaluator)
+	metaCont.SetInlineThreshold(p.inlineThreshold)
 	err := metaCont.compileExpressionList(ctctx, rest)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "failed to compile meta")

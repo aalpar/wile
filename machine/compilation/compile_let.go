@@ -224,9 +224,8 @@ func (p *CompileTimeContinuation) registerInlineCandidates(
 			p.inlineCandidates = make(map[environment.BindingID]inlineCandidate)
 		}
 		p.inlineCandidates[bid] = inlineCandidate{
-			lambda:  lam,
-			binding: b,
-			env:     childEnv,
+			lambda: lam,
+			env:    childEnv,
 		}
 		registered = append(registered, bid)
 	}
