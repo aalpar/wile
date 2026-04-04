@@ -200,8 +200,8 @@ func PrimFreeIdentifierEqualQ(mc *machine.MachineContext) error {
 	sym1 := values.NewSymbol(id1.Sym.Key)
 
 	// Look up bindings for both identifiers
-	binding0 := env.GetBindingWithScopes(sym0, id0.Scopes())
-	binding1 := env.GetBindingWithScopes(sym1, id1.Scopes())
+	binding0 := env.GetBinding(sym0, id0.Scopes())
+	binding1 := env.GetBinding(sym1, id1.Scopes())
 
 	// Both unbound → compare names (free references to same global)
 	if binding0 == nil && binding1 == nil {

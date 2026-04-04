@@ -48,7 +48,7 @@ func TestApply_RuntimePrimitive(t *testing.T) {
 
 	// Verify the primitive is bound in the runtime environment
 	sym := values.NewSymbol("test-prim")
-	binding := env.GetBinding(sym)
+	binding := env.GetBinding(sym, nil)
 	c.Assert(binding, qt.IsNotNil)
 	c.Assert(binding.Value(), qt.IsNotNil)
 }
@@ -72,7 +72,7 @@ func TestApply_ExpandTimePrimitive(t *testing.T) {
 	// Verify the primitive is bound in the expand environment
 	expandEnv := env.Expand()
 	sym := values.NewSymbol("expand-prim")
-	binding := expandEnv.GetBinding(sym)
+	binding := expandEnv.GetBinding(sym, nil)
 	c.Assert(binding, qt.IsNotNil)
 	c.Assert(binding.Value(), qt.IsNotNil)
 }
@@ -92,7 +92,7 @@ func TestApply_CompileTimeBinding(t *testing.T) {
 	// Verify the binding exists in the compile environment
 	compileEnv := env.Compile()
 	sym := values.NewSymbol("special-form")
-	binding := compileEnv.GetBinding(sym)
+	binding := compileEnv.GetBinding(sym, nil)
 	c.Assert(binding, qt.IsNotNil)
 }
 
@@ -115,7 +115,7 @@ func TestApply_CompileOnlyPrimitive(t *testing.T) {
 	// Should have a compile-time binding
 	compileEnv := env.Compile()
 	sym := values.NewSymbol("compile-only")
-	binding := compileEnv.GetBinding(sym)
+	binding := compileEnv.GetBinding(sym, nil)
 	c.Assert(binding, qt.IsNotNil)
 }
 
@@ -156,12 +156,12 @@ func TestApply_MultiPhasePrimitive(t *testing.T) {
 
 	// Should exist in both runtime and expand environments
 	sym := values.NewSymbol("multi-phase")
-	runtimeBinding := env.GetBinding(sym)
+	runtimeBinding := env.GetBinding(sym, nil)
 	c.Assert(runtimeBinding, qt.IsNotNil)
 
 	expandEnv := env.Expand()
 	expandSym := values.NewSymbol("multi-phase")
-	expandBinding := expandEnv.GetBinding(expandSym)
+	expandBinding := expandEnv.GetBinding(expandSym, nil)
 	c.Assert(expandBinding, qt.IsNotNil)
 }
 
@@ -212,7 +212,7 @@ func TestApplyDocs(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			bnd := compileEnv.GetBinding(values.NewSymbol(tc.sym))
+			bnd := compileEnv.GetBinding(values.NewSymbol(tc.sym), nil)
 			c.Assert(bnd, qt.IsNotNil)
 			c.Assert(bnd.Doc(), qt.Equals, tc.wantDoc)
 		})
@@ -239,11 +239,11 @@ func TestApplyDocs_MultiPhase(t *testing.T) {
 
 	sym := values.NewSymbol("multi")
 
-	runtimeBnd := env.GetBinding(sym)
+	runtimeBnd := env.GetBinding(sym, nil)
 	c.Assert(runtimeBnd, qt.IsNotNil)
 	c.Assert(runtimeBnd.Doc(), qt.Equals, "Documented across phases.")
 
-	expandBnd := env.Expand().GetBinding(sym)
+	expandBnd := env.Expand().GetBinding(sym, nil)
 	c.Assert(expandBnd, qt.IsNotNil)
 	c.Assert(expandBnd.Doc(), qt.Equals, "Documented across phases.")
 }

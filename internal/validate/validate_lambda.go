@@ -65,7 +65,7 @@ func createLambdaValidationEnv(env *environment.EnvironmentFrame, params *Valida
 	// Bind required parameters
 	for _, paramSym := range params.Required {
 		// paramSym is already a *syntax.SyntaxSymbol
-		childEnv.MaybeCreateLocalBindingWithScopes(
+		childEnv.MaybeCreateLocalBinding(
 			paramSym.Sym,
 			environment.BindingTypeVariable,
 			paramSym.Scopes(),
@@ -75,7 +75,7 @@ func createLambdaValidationEnv(env *environment.EnvironmentFrame, params *Valida
 
 	// Bind rest parameter if present
 	if params.Rest != nil {
-		childEnv.MaybeCreateLocalBindingWithScopes(
+		childEnv.MaybeCreateLocalBinding(
 			params.Rest.Sym,
 			environment.BindingTypeVariable,
 			params.Rest.Scopes(),

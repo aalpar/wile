@@ -144,7 +144,7 @@ func (p *OperationBindPatternVars) Apply(mc *MachineContext) (*MachineContext, e
 	// which matches what the compiler does at compile time
 	for _, varName := range p.PatternVars {
 		sym := values.NewSymbol(varName)
-		li, _ := childEnv.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable)
+		li, _ := childEnv.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable, nil, nil)
 		stxVal, ok := sc.bindings[varName]
 		if ok && li == nil {
 			continue

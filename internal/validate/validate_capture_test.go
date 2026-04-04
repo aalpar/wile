@@ -35,7 +35,7 @@ func makeTestEnvAndBindings(names ...string) (
 	var bindings []ValidatedLetBinding
 	for _, name := range names {
 		ssym := syntax.NewSyntaxSymbol(name, nil)
-		env.MaybeCreateLocalBindingWithScopes(
+		env.MaybeCreateLocalBinding(
 			ssym.Sym,
 			environment.BindingTypeVariable,
 			nil,

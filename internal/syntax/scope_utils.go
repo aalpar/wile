@@ -72,6 +72,25 @@ func ScopesMatch(useScopes, bindingScopes []*Scope) bool {
 	return true
 }
 
+// ScopesCompatible checks whether a binding with bindingScopes can match a
+// reference with useScopes. A binding with no scopes (top-level / pre-hygiene)
+// matches any reference.
+//
+// Both the environment's resolveLocal and the validator's duplicate-binding
+// detection use this single function so scope resolution cannot diverge.
+//
+// Note: nil useScopes does NOT mean "match any" here. A nil reference scope
+// set means "this reference has no scopes" and behaves like an empty set —
+// only bindings with no scopes match. Callers that want "match any"
+// (replacing the old checkScopes=false pattern) guard with an explicit
+// nil check before calling this function.
+func ScopesCompatible(bindingScopes, useScopes []*Scope) bool {
+	if len(bindingScopes) == 0 {
+		return true
+	}
+	return ScopesMatch(useScopes, bindingScopes)
+}
+
 // HasScope checks if a scope set contains a specific scope
 func HasScope(scopes []*Scope, target *Scope) bool {
 	return slices.Contains(scopes, target)

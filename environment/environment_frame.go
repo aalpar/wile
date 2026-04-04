@@ -361,11 +361,13 @@ func (p *EnvironmentFrame) LocalEnvironment() *LocalEnvironmentFrame {
 }
 
 // resolveLocal walks local bindings up the parent chain, calling visitor
-// for each binding that matches key and optionally passes scope filtering.
+// for each binding that matches key and passes scope filtering.
 //
-// If checkScopes is true, only bindings whose scopes are empty (pre-hygiene)
-// or compatible via syntax.ScopesMatch are visited. If checkScopes is false,
-// all bindings with the given key are visited (no scope filtering).
+// Nil scopes means "match any" — this replaces the former checkScopes=false
+// pattern. Non-nil scopes (even empty) are checked via ScopesCompatible.
+//
+// When a key maps to multiple slots (same-name bindings with different
+// scope sets from hygienic expansion), all compatible slots are visited.
 //
 // The visitor receives the matching binding, its slot index within the
 // local frame, and the depth (number of parent frames traversed). Return
@@ -373,16 +375,15 @@ func (p *EnvironmentFrame) LocalEnvironment() *LocalEnvironmentFrame {
 func (p *EnvironmentFrame) resolveLocal(
 	key *values.Symbol,
 	scopes []*syntax.Scope,
-	checkScopes bool,
 	visitor func(binding *Binding, slot int, depth int) any,
 ) any {
 	env := p
 	depth := 0
+	matchAny := scopes == nil
 	for env != nil && env.hasLocal() {
-		i, ok := env.local.keys[*key]
-		if ok {
+		for _, i := range env.local.keys[*key] {
 			binding := &env.local.bindings[i]
-			if !checkScopes || scopesCompatible(binding, scopes) {
+			if matchAny || syntax.ScopesCompatible(binding.Scopes(), scopes) {
 				result := visitor(binding, i, depth)
 				if result != nil {
 					return result
@@ -396,18 +397,6 @@ func (p *EnvironmentFrame) resolveLocal(
 		depth++
 	}
 	return nil
-}
-
-// scopesCompatible returns true if the binding's scopes are compatible
-// with the reference scopes per Flatt's hygiene model.
-// A binding with no scopes (pre-hygiene) is always compatible.
-// Otherwise, the binding's scopes must be a subset of the reference scopes.
-func scopesCompatible(binding *Binding, scopes []*syntax.Scope) bool {
-	bs := binding.Scopes()
-	if len(bs) == 0 {
-		return true
-	}
-	return syntax.ScopesMatch(scopes, bs)
 }
 
 // resolveGlobal walks global bindings up the parent chain.
@@ -442,50 +431,24 @@ func (p *EnvironmentFrame) resolveGlobal(
 	return nil
 }
 
-// GetBinding returns the binding for the given symbol, searching local
-// bindings first (up the parent chain), then global bindings.
-// It returns nil if the binding does not exist.
-func (p *EnvironmentFrame) GetBinding(key *values.Symbol) *Binding {
-	// Search locals (no scope filtering)
-	result := p.resolveLocal(key, nil, false, func(binding *Binding, _ int, _ int) any {
-		return binding
-	})
-	if result != nil {
-		return result.(*Binding)
-	}
-
-	// Search globals
-	gResult := p.resolveGlobal(*key, func(g *GlobalEnvironmentFrame, i int) any {
-		return g.bindings[i]
-	})
-	if gResult != nil {
-		return gResult.(*Binding)
-	}
-	return nil
-}
-
-// GetBindingWithScopes returns the binding for the given symbol that matches
-// the provided scopes. This is used for hygienic variable resolution in macros.
-// It searches local bindings first (walking up the parent chain), then globals,
-// checking scope compatibility at each level.
+// GetBinding returns the binding for the given symbol that matches the
+// provided scopes. It searches local bindings first (walking up the parent
+// chain), then globals.
 //
-// For hygiene to work correctly with nested bindings of the same name:
-//   - Each let-bound variable has scopes from the binding site
-//   - A macro free identifier carries scopes from its definition site
-//   - We search ALL local bindings (not just innermost) to find one with matching scopes
-func (p *EnvironmentFrame) GetBindingWithScopes(key *values.Symbol, scopes []*syntax.Scope) *Binding {
-	// Search locals with scope matching
-	result := p.resolveLocal(key, scopes, true, func(binding *Binding, _ int, _ int) any {
+// Nil scopes means "match any" (no scope filtering). Non-nil scopes enables
+// hygienic resolution per Flatt's model.
+func (p *EnvironmentFrame) GetBinding(key *values.Symbol, scopes []*syntax.Scope) *Binding {
+	result := p.resolveLocal(key, scopes, func(binding *Binding, _ int, _ int) any {
 		return binding
 	})
 	if result != nil {
 		return result.(*Binding)
 	}
 
-	// Search globals with scope matching
+	matchAny := scopes == nil
 	gResult := p.resolveGlobal(*key, func(g *GlobalEnvironmentFrame, i int) any {
 		binding := g.bindings[i]
-		if binding != nil && scopesCompatible(binding, scopes) {
+		if binding != nil && (matchAny || syntax.ScopesCompatible(binding.Scopes(), scopes)) {
 			return binding
 		}
 		return nil
@@ -493,7 +456,6 @@ func (p *EnvironmentFrame) GetBindingWithScopes(key *values.Symbol, scopes []*sy
 	if gResult != nil {
 		return gResult.(*Binding)
 	}
-
 	return nil
 }
 
@@ -508,26 +470,34 @@ func (p *EnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt BindingType
 	return p.local.EnsureLocalBinding(key, bt)
 }
 
-// MaybeCreateLocalBindingWithScopes creates a new local binding with associated scopes in the current local environment.
-// It returns the LocalIndex of the new binding and a boolean indicating whether
-// the binding was created (true) or already existed (false).
-func (p *EnvironmentFrame) MaybeCreateLocalBindingWithScopes(key *values.Symbol, bt BindingType, scopes []*syntax.Scope, source *syntax.SourceContext) (*LocalIndex, bool) {
+// MaybeCreateLocalBinding creates a local binding with scope-aware
+// deduplication. Two bindings with the same key but incompatible scopes
+// get separate slots; compatible scopes reuse the existing slot.
+//
+// Nil scopes means "match any" during dedup (pre-hygiene callers).
+// Returns (index, true) if created, (index, false) if already existed.
+func (p *EnvironmentFrame) MaybeCreateLocalBinding(
+	key *values.Symbol, bt BindingType,
+	scopes []*syntax.Scope, source *syntax.SourceContext,
+) (*LocalIndex, bool) {
 	if p == nil || !p.hasLocal() {
 		return nil, false
 	}
-	i, ok := p.local.keys[*key]
-	if ok {
-		// Binding already exists - update scopes/source if needed
-		if p.local.bindings[i].Scopes() == nil && scopes != nil {
-			p.local.bindings[i].SetScopes(scopes)
+	slots := p.local.keys[*key]
+	matchAny := scopes == nil
+	for _, i := range slots {
+		if matchAny || syntax.ScopesCompatible(p.local.bindings[i].Scopes(), scopes) {
+			if p.local.bindings[i].Scopes() == nil && scopes != nil {
+				p.local.bindings[i].SetScopes(scopes)
+			}
+			if p.local.bindings[i].Source() == nil && source != nil {
+				p.local.bindings[i].SetSource(source)
+			}
+			return NewLocalIndex(i, 0), false
 		}
-		if p.local.bindings[i].Source() == nil && source != nil {
-			p.local.bindings[i].SetSource(source)
-		}
-		return NewLocalIndex(i, 0), false
 	}
-	i = len(p.local.bindings)
-	p.local.keys[*key] = i
+	i := len(p.local.bindings)
+	p.local.keys[*key] = append(slots, i)
 	b := Binding{value: values.Void, bindingType: bt}
 	if scopes != nil || source != nil {
 		b.meta = &BindingMeta{Scopes: scopes, Source: source}
@@ -536,42 +506,54 @@ func (p *EnvironmentFrame) MaybeCreateLocalBindingWithScopes(key *values.Symbol,
 	return NewLocalIndex(i, 0), true
 }
 
-// MaybeCreateLocalBinding creates a new local binding in the current local
-// environment or any parent local environment if it does not already exist.
-// It returns the LocalIndex of the binding and a boolean indicating whether
-// the binding was created (true) or already existed (false).
+// GetLocalIndex returns the LocalIndex of the binding for the given symbol
+// that matches the given scopes. Nil scopes means "match any".
 //
-// The parent-chain walk delegates to resolveLocal; creation uses
-// EnsureLocalBinding on the innermost frame.
-func (p *EnvironmentFrame) MaybeCreateLocalBinding(key *values.Symbol, bt BindingType) (*LocalIndex, bool) {
-	if !p.hasLocal() {
-		return nil, false
-	}
-	// Search existing bindings in current and parent frames
-	result := p.resolveLocal(key, nil, false, func(_ *Binding, slot int, depth int) any {
-		return NewLocalIndex(slot, depth)
-	})
-	if result != nil {
-		return result.(*LocalIndex), false
-	}
-	// Not found — create in the current (innermost) frame
-	return p.local.EnsureLocalBinding(key, bt)
-}
-
-// GetLocalIndex returns the LocalIndex of the binding for the given symbol,
-// searching local bindings in the current and parent environments.
-// It returns nil if the binding does not exist.
-func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol) *LocalIndex {
+// When scopes are provided, this implements Flatt's "maximal" binding
+// resolution: among all bindings whose scopes are a subset of the
+// reference's scopes, the one with the LARGEST scope set is returned.
+//
+// Returns nil if no matching local binding exists.
+func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, scopes []*syntax.Scope) *LocalIndex {
 	if p == nil || !p.hasLocal() {
 		return nil
 	}
-	result := p.resolveLocal(key, nil, false, func(_ *Binding, slot int, depth int) any {
-		return NewLocalIndex(slot, depth)
-	})
-	if result != nil {
-		return result.(*LocalIndex)
+
+	// Fast path: nil scopes — return first match (no maximal resolution needed)
+	if scopes == nil {
+		result := p.resolveLocal(key, nil, func(_ *Binding, slot int, depth int) any {
+			return NewLocalIndex(slot, depth)
+		})
+		if result != nil {
+			return result.(*LocalIndex)
+		}
+		return nil
 	}
-	return nil
+
+	// Scoped path: maximal binding resolution
+	type candidate struct {
+		index      *LocalIndex
+		scopeCount int
+	}
+	var best candidate
+
+	p.resolveLocal(key, scopes, func(binding *Binding, slot int, depth int) any {
+		scopeCount := len(binding.Scopes())
+
+		// Perfect match — stop walking
+		if scopeCount > 0 && scopeCount == len(scopes) {
+			best = candidate{NewLocalIndex(slot, depth), scopeCount}
+			return true
+		}
+
+		// Better candidate than current best?
+		if best.index == nil || scopeCount > best.scopeCount {
+			best = candidate{NewLocalIndex(slot, depth), scopeCount}
+		}
+		return nil
+	})
+
+	return best.index
 }
 
 // HasLocalVariableBinding reports whether sym has a local variable binding
@@ -587,55 +569,13 @@ func (p *EnvironmentFrame) HasLocalVariableBinding(sym *values.Symbol, scopes []
 	if p == nil {
 		return false
 	}
-	result := p.resolveLocal(sym, scopes, true, func(binding *Binding, _ int, _ int) any {
+	result := p.resolveLocal(sym, scopes, func(binding *Binding, _ int, _ int) any {
 		if binding.BindingType() == BindingTypeVariable {
 			return true
 		}
 		return nil
 	})
 	return result != nil
-}
-
-// GetLocalIndexWithScopes returns the LocalIndex of a local binding that
-// matches the given scopes.
-//
-// This implements Flatt's "maximal" binding resolution: among all bindings
-// whose scopes are a subset of the reference's scopes, we return the one
-// with the LARGEST scope set. This ensures that more specific bindings are
-// preferred over less specific ones.
-//
-// Returns nil if no matching local binding exists.
-func (p *EnvironmentFrame) GetLocalIndexWithScopes(
-	key *values.Symbol,
-	scopes []*syntax.Scope,
-) *LocalIndex {
-	if p == nil || !p.hasLocal() {
-		return nil
-	}
-
-	type candidate struct {
-		index      *LocalIndex
-		scopeCount int
-	}
-	var best candidate
-
-	p.resolveLocal(key, scopes, true, func(binding *Binding, slot int, depth int) any {
-		scopeCount := len(binding.Scopes())
-
-		// Perfect match — stop walking
-		if scopeCount > 0 && scopeCount == len(scopes) {
-			best = candidate{NewLocalIndex(slot, depth), scopeCount}
-			return true
-		}
-
-		// Better candidate than current best?
-		if best.index == nil || scopeCount > best.scopeCount {
-			best = candidate{NewLocalIndex(slot, depth), scopeCount}
-		}
-		return nil // continue collecting
-	})
-
-	return best.index
 }
 
 // GetLocalBinding returns the binding for the given LocalIndex.

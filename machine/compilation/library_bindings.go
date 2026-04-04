@@ -228,7 +228,7 @@ func findLibraryBinding(lib *CompiledLibrary, internalName string) (*environment
 		if src.env == nil {
 			continue
 		}
-		binding := src.env.GetBinding(libSym)
+		binding := src.env.GetBinding(libSym, nil)
 		if binding != nil {
 			return binding, src.phase
 		}

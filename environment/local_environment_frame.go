@@ -26,7 +26,7 @@ import (
 // Note: LocalEnvironmentFrame has no hierarchy of its own; the hierarchy is
 // managed by EnvironmentFrame via its parent field.
 type LocalEnvironmentFrame struct {
-	keys       map[values.Symbol]int
+	keys       map[values.Symbol][]int
 	bindings   []Binding
 	keysShared bool // true when keys map is shared with another frame (CoW)
 }
@@ -36,7 +36,7 @@ type LocalEnvironmentFrame struct {
 // binding of unknown type.
 func NewLocalEnvironment(pcnt int) *LocalEnvironmentFrame {
 	q := &LocalEnvironmentFrame{
-		keys:     make(map[values.Symbol]int, pcnt),
+		keys:     make(map[values.Symbol][]int, pcnt),
 		bindings: make([]Binding, pcnt),
 	}
 	for i := range pcnt {
@@ -56,10 +56,17 @@ func (p *LocalEnvironmentFrame) SetBindings(v []Binding) {
 }
 
 // Keys returns a copy of the symbol-to-index mapping for this local environment.
+// Each key maps to a slice of slot indices (common case: one element). Multiple
+// slots per key occur when hygienic expansion creates same-name bindings with
+// different scope sets in the same frame.
 // The returned map is safe to mutate without affecting internal state.
-func (p *LocalEnvironmentFrame) Keys() map[values.Symbol]int {
-	result := make(map[values.Symbol]int, len(p.keys))
-	maps.Copy(result, p.keys)
+func (p *LocalEnvironmentFrame) Keys() map[values.Symbol][]int {
+	result := make(map[values.Symbol][]int, len(p.keys))
+	for k, v := range p.keys {
+		cp := make([]int, len(v))
+		copy(cp, v)
+		result[k] = cp
+	}
 	return result
 }
 
@@ -75,24 +82,24 @@ func (p *LocalEnvironmentFrame) EnsureLocalBinding(key *values.Symbol, bt Bindin
 		p.keys = maps.Clone(p.keys)
 		p.keysShared = false
 	}
-	i, ok := p.keys[*key]
-	if ok {
-		return &LocalIndex{i, 0}, false
+	slots := p.keys[*key]
+	if len(slots) > 0 {
+		return &LocalIndex{slots[0], 0}, false
 	}
-	i = len(p.bindings)
-	p.keys[*key] = i
+	i := len(p.bindings)
+	p.keys[*key] = []int{i}
 	p.bindings = append(p.bindings, Binding{value: values.Void, bindingType: bt})
 	return &LocalIndex{i, 0}, true
 }
 
 // GetLocalIndex returns the LocalIndex for the given symbol in this local environment.
-// Returns nil if the symbol is not bound in this environment.
+// Returns the first slot for the key, or nil if not bound.
 func (p *LocalEnvironmentFrame) GetLocalIndex(key *values.Symbol) *LocalIndex {
-	i, ok := p.keys[*key]
-	if !ok {
+	slots := p.keys[*key]
+	if len(slots) == 0 {
 		return nil
 	}
-	return &LocalIndex{i, 0}
+	return &LocalIndex{slots[0], 0}
 }
 
 // GetLocalBinding returns the binding at the given LocalIndex.

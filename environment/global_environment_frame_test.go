@@ -166,7 +166,7 @@ func TestGlobalEnvironmentFrame_DeleteBinding(t *testing.T) {
 	c.Assert(created, qt.IsTrue)
 
 	// Verify binding exists
-	b := env.GetBinding(sym)
+	b := env.GetBinding(sym, nil)
 	c.Assert(b, qt.IsNotNil)
 
 	// Delete it

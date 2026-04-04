@@ -112,10 +112,16 @@ func (p *SyntaxSymbol) WithResolvedBinding(binding ResolvedRef) *SyntaxSymbol {
 	}
 }
 
-// Scopes returns the scopes of this syntax symbol
+// Scopes returns the scopes of this syntax symbol.
+// Always returns a non-nil slice (empty when the symbol has no scopes).
+// This guarantees that callers passing Scopes() to environment.GetBinding
+// trigger scope checking rather than the "match any" nil-scopes path.
 func (p *SyntaxSymbol) Scopes() []*Scope {
 	if p.sourceContext == nil {
-		return nil
+		return []*Scope{}
+	}
+	if p.sourceContext.Scopes == nil {
+		return []*Scope{}
 	}
 	return p.sourceContext.Scopes
 }

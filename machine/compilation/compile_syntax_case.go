@@ -314,7 +314,7 @@ func (p *CompileTimeContinuation) createPatternVarEnvironment(patternVars map[st
 	// Create bindings for each pattern variable in sorted order
 	for _, varName := range vars {
 		sym := values.NewSymbol(varName)
-		childEnv.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable)
+		childEnv.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable, nil, nil)
 	}
 
 	return childEnv

@@ -72,7 +72,7 @@ import (
 // predeclareDefineBindingFromValidated).
 func predeclareBinding(env *environment.EnvironmentFrame, name *values.Symbol, scopes []*syntax.Scope, source *syntax.SourceContext) {
 	if env.LocalEnvironment() != nil {
-		_, _ = env.MaybeCreateLocalBindingWithScopes(name, environment.BindingTypeVariable, scopes, source)
+		_, _ = env.MaybeCreateLocalBinding(name, environment.BindingTypeVariable, scopes, source)
 		return
 	}
 	gi, _ := env.MaybeCreateOwnGlobalBinding(name, environment.BindingTypeVariable)

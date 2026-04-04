@@ -309,7 +309,7 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 			if !isPatternVar {
 				// Resolve the free identifier to its definition-time binding.
 				// Check local binding first (for let-syntax hygiene)
-				li := env.GetLocalIndex(symVal)
+				li := env.GetLocalIndex(symVal, nil)
 				if li != nil {
 					binding := env.GetLocalBinding(li)
 					if binding != nil {

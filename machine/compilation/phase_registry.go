@@ -62,7 +62,7 @@ func LookupPhaseBinding[T any](
 	scopes []*syntax.Scope,
 ) T {
 	var zero T
-	bnd := phaseEnv.GetBindingWithScopes(sym, scopes)
+	bnd := phaseEnv.GetBinding(sym, scopes)
 	if bnd == nil {
 		return zero
 	}

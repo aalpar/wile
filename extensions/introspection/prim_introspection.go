@@ -83,7 +83,7 @@ func PrimEnvironmentRef(mc *machine.MachineContext) error {
 	}
 
 	env := topLevelEnv.Runtime()
-	binding := env.GetBinding(sym)
+	binding := env.GetBinding(sym, nil)
 	if binding == nil {
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "environment-ref: unbound symbol %s", sym.Key)
 	}
@@ -110,7 +110,7 @@ func PrimEnvironmentBoundQ(mc *machine.MachineContext) error {
 	}
 
 	env := topLevelEnv.Runtime()
-	binding := env.GetBinding(sym)
+	binding := env.GetBinding(sym, nil)
 	mc.SetValue(values.BoolToBoolean(binding != nil))
 	return nil
 }
