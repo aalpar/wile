@@ -4,13 +4,13 @@
 
 **Goal:** Fix three syntax-rules bugs that block SRFI-42 and violate R7RS conformance: scope-aware duplicate binding detection (A), cross-group ellipsis zipping (B), and nested ellipsis depth tracking (C).
 
-**Architecture:** Three independent fixes in order A → B → C. Bug A is in the validator (`validate_let.go`). Bugs B and C are in the match package (`match.go`, `syntax_expand.go`, `syntax_compiler.go`, `syntax_adapter.go`). Each fix is independently testable and shippable.
+**Architecture:** Three independent fixes in order A → B → C. Bug A spans the validator (`validate_let.go`), the environment storage layer (`local_environment_frame.go`, `environment_frame.go`), and the compiler (`compile_let.go`). Bugs B and C are in the match package (`match.go`, `syntax_expand.go`, `syntax_compiler.go`, `syntax_adapter.go`). Each fix is independently testable and shippable.
 
 **Tech Stack:** Go, `go-quicktest` (`qt`) for assertions, Wile's `internal/match` and `internal/validate` packages.
 
 ---
 
-### Task 1: Bug A — Failing tests for scope-aware duplicate binding detection
+### Task 1: Bug A — Failing tests for scope-aware duplicate binding detection ✓ (revise in Task 4)
 
 **Files:**
 - Test: `internal/validate/validate_test.go` (append new test)
@@ -43,7 +43,7 @@ Expected: FAIL — "duplicate binding name" error reported for scope-distinct bi
 
 ---
 
-### Task 2: Bug A — Implement scope-aware duplicate detection
+### Task 2: Bug A — Implement scope-aware duplicate detection ✓ (revise in Task 4)
 
 **Files:**
 - Modify: `internal/validate/validate_let.go` — functions at lines 390-401 and `checkDuplicateBindingNames` at lines 547-568
@@ -123,7 +123,221 @@ Expected: Clean.
 
 ---
 
-### Task 3: Bug B — Failing tests for cross-group ellipsis expansion
+### Task 3: Bug A — Failing tests for unified scoped bindings
+
+**Files:**
+- Test: `environment/environment_frame_test.go` (append new tests)
+
+**Step 1: Write failing test for same-key scope-distinct creation**
+
+Add `TestMaybeCreateLocalBinding_ScopeDistinctKeys` to `environment_frame_test.go`.
+Create two bindings with key "x" but different scope sets in the same frame:
+
+1. Create a child env with `NewLocalEnvironment(0)` + `NewEnvironmentFrameWithParent`
+2. Call `MaybeCreateLocalBinding(Symbol{"x"}, Variable, scopesA, nil)`
+   → expect `(slot 0, created=true)`
+3. Call `MaybeCreateLocalBinding(Symbol{"x"}, Variable, scopesB, nil)`
+   → expect `(slot 1, created=true)` — a NEW slot
+4. Verify `GetLocalIndex(Symbol{"x"}, scopesA)` → slot 0
+5. Verify `GetLocalIndex(Symbol{"x"}, scopesB)` → slot 1
+6. Verify the two bindings are independently settable/readable
+7. Verify same-key same-scopes returns existing slot (no double creation)
+8. Verify `GetLocalIndex(Symbol{"x"}, nil)` → slot 0 (nil = match first)
+
+**Step 2: Run tests to verify they fail**
+
+Run: `go test -v -run TestMaybeCreateLocalBinding_ScopeDistinctKeys ./environment/...`
+Expected: FAIL — compilation errors (API doesn't exist yet) or wrong slot.
+
+---
+
+### Task 4: Bug A — Unified scoped binding API
+
+**Principle:** One form for scoped bindings. Nil scopes = match any. No
+`checkScopes` boolean. No scope-aware/scope-unaware function pairs.
+
+**Files:**
+- Modify: `environment/local_environment_frame.go` — `keys` type
+- Modify: `environment/environment_frame.go` — `resolveLocal`, unified API
+- Modify: ~20 callers in `machine/compilation/` — add scopes arg
+- Modify: `environment/*_test.go` — signature updates
+
+**Step 1: Factor `scopesCompatible` into a shared location**
+
+`scopesCompatible` is the single scope resolution mechanism used by both the
+environment and the validator. Currently it lives in `environment_frame.go` as
+an unexported function. Either:
+- Export it from `environment` (e.g., `environment.ScopesCompatible`), or
+- Factor it into `syntax` (e.g., `syntax.ScopesCompatible`) since it wraps
+  `syntax.ScopesMatch` with nil handling.
+
+The function:
+```go
+func ScopesCompatible(bindingScopes, useScopes []*syntax.Scope) bool {
+    if useScopes == nil {
+        return true  // nil = match any
+    }
+    if len(bindingScopes) == 0 {
+        return true  // no scopes = matches any reference
+    }
+    return syntax.ScopesMatch(useScopes, bindingScopes)
+}
+```
+
+Note: the existing `scopesCompatible` takes `*Binding` and extracts scopes.
+The shared version takes `[]*Scope` directly so the validator can use it
+without constructing a Binding.
+
+**Step 2: Revise validator to use `scopesCompatible`**
+
+Remove `bindingIdentity`, `scopeFingerprint`, and `map[bindingIdentity]bool`
+from `validate_let.go` and `validate_define.go`. Replace with pairwise
+`scopesCompatible` checks:
+
+```go
+for i, a := range nameSyms {
+    for j := i + 1; j < len(nameSyms); j++ {
+        b := nameSyms[j]
+        if a.Sym.Key == b.Sym.Key &&
+            ScopesCompatible(a.Scopes(), b.Scopes()) {
+            // duplicate
+        }
+    }
+}
+```
+
+Four sites in `validate_let.go`, two in `validate_define.go`.
+
+**Step 3: Change `keys` type**
+
+`local_environment_frame.go:29`: change `keys map[values.Symbol]int` to
+`keys map[values.Symbol][]int`.
+
+Update `NewLocalEnvironment`, `EnsureLocalBinding`, `GetLocalIndex` (on
+`LocalEnvironmentFrame` — the internal single-frame versions) to work with
+`[]int` slices. These internal methods return the first slot for nil scopes.
+
+**Step 4: Remove `checkScopes` from `resolveLocal`**
+
+Change signature from `resolveLocal(key, scopes, checkScopes, visitor)` to
+`resolveLocal(key, scopes, visitor)`. Always check scopes. Iterate all slots:
+
+```go
+for _, i := range env.local.keys[*key] {
+    binding := &env.local.bindings[i]
+    if ScopesCompatible(binding.Scopes(), scopes) {
+        result := visitor(binding, i, depth)
+        if result != nil {
+            return result
+        }
+    }
+}
+```
+
+All callers of `resolveLocal` within `environment_frame.go` drop the boolean arg.
+The three `false` callers (`GetBinding`, `MaybeCreateLocalBinding`, `GetLocalIndex`)
+already pass `nil` scopes — `ScopesCompatible` with nil returns true immediately.
+
+**Step 5: Unify public API**
+
+Replace function pairs with single functions that take scopes:
+
+| Remove | Replace with |
+|--------|-------------|
+| `GetLocalIndex(key)` | `GetLocalIndex(key, scopes)` — nil = match any |
+| `GetLocalIndexWithScopes(key, scopes)` | same function |
+| `GetBinding(key)` | `GetBinding(key, scopes)` — nil = match any |
+| `GetBindingWithScopes(key, scopes)` | same function |
+| `MaybeCreateLocalBinding(key, bt)` | `MaybeCreateLocalBinding(key, bt, scopes, source)` |
+| `MaybeCreateLocalBindingWithScopes(...)` | same function |
+
+`HasLocalVariableBinding(sym, scopes)` — already takes scopes, unchanged.
+
+**Step 6: Unified `MaybeCreateLocalBinding` with scope-aware deduplication**
+
+```go
+func (p *EnvironmentFrame) MaybeCreateLocalBinding(
+    key *values.Symbol, bt BindingType,
+    scopes []*syntax.Scope, source *syntax.SourceContext,
+) (*LocalIndex, bool) {
+    slots := p.local.keys[*key]
+    for _, i := range slots {
+        if ScopesCompatible(p.local.bindings[i].Scopes(), scopes) {
+            // existing compatible binding — update metadata if needed
+            return NewLocalIndex(i, 0), false
+        }
+    }
+    // new slot
+    i := len(p.local.bindings)
+    p.local.keys[*key] = append(slots, i)
+    b := Binding{value: values.Void, bindingType: bt}
+    if scopes != nil || source != nil {
+        b.meta = &BindingMeta{Scopes: scopes, Source: source}
+    }
+    p.local.bindings = append(p.local.bindings, b)
+    return NewLocalIndex(i, 0), true
+}
+```
+
+**Step 7: Update callers**
+
+Callers of removed functions get the scopes arg added. Three categories:
+
+1. **Already have scopes** (via `SyntaxSymbol`): pass them.
+   `compile_let.go:80,96,116`, `compile_validated.go:477-483`,
+   `compile_time_continuation.go:188-196`, most `machine/compilation/` sites.
+
+2. **Don't have scopes** (runtime, tests): pass `nil`.
+   `GetBinding(key)` → `GetBinding(key, nil)` — behavior unchanged.
+
+3. **`CompileSymbol` fast path** (`compile_time_continuation.go:188-196`):
+   remove the branch. One call: `p.env.GetLocalIndex(sym, symbolScopes)`.
+   Both nil and non-nil scopes work.
+
+**Step 8: Update `Keys()` return type**
+
+`LocalEnvironmentFrame.Keys()`: change from `map[Symbol]int` to
+`map[Symbol][]int`. Check callers.
+
+**Step 9: Run tests**
+
+Run: `go test -v ./environment/...` — all pass.
+Run: `go test -v ./internal/validate/...` — all pass.
+Run: `go test -v ./machine/...` — all pass.
+Run: `make lint` — clean.
+
+---
+
+### Task 5: Bug A — End-to-end hygiene test
+
+**Files:**
+- Test: Scheme eval test (in `integration/` or `machine/hygiene_test.go`)
+
+**Step 1: Write end-to-end test**
+
+A macro that introduces a binding name colliding with a user-supplied name
+in the same `let`:
+
+```scheme
+(define-syntax my-let-with-i
+  (syntax-rules ()
+    ((_ body)
+     (let ((i 42) (j 99)) body))))
+
+(let ((i 7))
+  (my-let-with-i (list i j)))
+```
+
+Verify against Chez or Racket for expected R7RS behavior.
+
+**Step 2: Run full suite**
+
+Run: `make test` — all pass.
+Run: `make lint && make covercheck` — clean.
+
+---
+
+### Task 6: Bug B — Failing tests for cross-group ellipsis expansion ✓
 
 **Files:**
 - Test: `internal/match/syntax_expand_test.go` (append new test)
@@ -155,7 +369,7 @@ Expected: FAIL — `b` (and `c`) not recognized as pattern variables during expa
 
 ---
 
-### Task 4: Bug B — Implement cross-group ellipsis zipping
+### Task 7: Bug B — Implement cross-group ellipsis zipping ✓
 
 **Files:**
 - Modify: `internal/match/match.go` — add `findMatchingEllipsisIDs` (plural)
@@ -278,7 +492,7 @@ Expected: Clean.
 
 ---
 
-### Task 5: Bug B — Integration test via Wile eval
+### Task 8: Bug B — Integration test via Wile eval ✓
 
 **Files:**
 - Test: `integration/srfi42_test.go` (create new file) OR add to an existing integration test file
@@ -305,7 +519,7 @@ Expected: PASS
 
 ---
 
-### Task 6: Bug C — Failing tests for nested ellipsis expansion
+### Task 9: Bug C — Failing tests for nested ellipsis expansion ✓
 
 **Files:**
 - Test: `internal/match/syntax_expand_test.go` (append new test)
@@ -331,7 +545,7 @@ Expected: FAIL — outer ellipsis produces empty list.
 
 ---
 
-### Task 7: Bug C — Add depth tracking to pattern compiler
+### Task 10: Bug C — Add depth tracking to pattern compiler ✓
 
 **Files:**
 - Modify: `internal/match/syntax_compiler.go` — add `ellipsisDepth` field, track in `compileEllipsis`
@@ -398,7 +612,7 @@ Expected: All existing tests still pass. Depth test passes.
 
 ---
 
-### Task 8: Bug C — Depth-aware ID selection in template expansion
+### Task 11: Bug C — Depth-aware ID selection in template expansion ✓
 
 **Files:**
 - Modify: `internal/match/match.go` — update `findMatchingEllipsisID` for depth awareness
@@ -453,7 +667,7 @@ Expected: Clean.
 
 ---
 
-### Task 9: Full regression — all tests and SRFI-42 end-to-end
+### Task 12: Full regression — all tests and SRFI-42 end-to-end
 
 **Files:**
 - Test: integration test for SRFI-42 dispatch generator
@@ -490,7 +704,7 @@ Expected: No regressions. The common single-group path is unchanged.
 
 ---
 
-### Task 10: Update plans and documentation
+### Task 13: Update plans and documentation
 
 **Files:**
 - Modify: `plans/SRFI-42-SYNTAX-BUGS.md` — mark bugs as fixed

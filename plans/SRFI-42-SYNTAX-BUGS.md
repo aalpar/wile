@@ -1,6 +1,7 @@
 # SRFI-42 Syntax Expansion Bugs
 
-**Status:** Bugs B+C fixed. Bug A deferred — requires scope-aware environment storage.
+**Status:** Bugs B+C fixed. Bug A validator fixed, environment layer analysis in
+`2026-04-03-syntax-rules-ellipsis-hygiene-design.md` § "Bug A: Environment Layer".
 
 ## Background
 
