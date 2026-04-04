@@ -188,6 +188,15 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 		return err
 	}
 
+	// R7RS §4.3.2: _ is a wildcard that matches anything without binding.
+	// The pattern compiler handles _ as a non-capturing wildcard, but
+	// collectPatternVariables includes it. Remove it so BindPatternVars
+	// doesn't create a void binding for _.
+	_, wildcardIsLiteral := literalSyntax["_"]
+	if !wildcardIsLiteral {
+		delete(patternVars, "_")
+	}
+
 	// Compile the pattern to bytecode.
 	// syntax-case patterns don't have a leading macro keyword (unlike syntax-rules),
 	// so match all elements including the first.

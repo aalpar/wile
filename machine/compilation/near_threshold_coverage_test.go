@@ -32,11 +32,12 @@ import (
 func TestCondExpandCompoundRequirements(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// library requirement -- exercises the (library ...) parsing/evaluation branch.
-		// The test environment does not have a file-system library resolver, so even
-		// (scheme base) is not "found". Both cases exercise the branch; the second
-		// confirms an unknown library name falls through.
+		// library requirement — exercises the (library ...) parsing/evaluation
+		// branch. RunSchemeCode uses NewNamespaceFrameTiny which has no library
+		// registry, so all (library ...) checks return false regardless of name.
+		// This is intentionally testing the "no registry" fallback path.
 		{
-			Name:     "library requirement for scheme base (no resolver)",
+			Name:     "library requirement without registry",
 			Code:     `(cond-expand ((library (scheme base)) 'yes) (else 'no))`,
 			Expected: values.NewSymbol("no"),
 		},

@@ -233,8 +233,9 @@ func TestLoadLibrary_NoFileResolver(t *testing.T) {
 // no matching file exists on the filesystem.
 func TestLibraryRegistryFindLibraryFile(t *testing.T) {
 	reg := NewLibraryRegistry()
-	// Use a search path that won't contain any real library files.
-	reg.SetSearchPaths([]string{"/nonexistent/path"})
+	// Use an empty temp directory so the library is guaranteed not found,
+	// regardless of platform or working directory.
+	reg.SetSearchPaths([]string{t.TempDir()})
 	name := NewLibraryName("no", "such", "lib")
 	path, err := reg.FindLibraryFile(name)
 	qt.Assert(t, err, qt.IsNotNil)
