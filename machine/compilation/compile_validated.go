@@ -259,7 +259,7 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 		return sym
 	}
 	gi, created := p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
-	if created && symbolScopes == nil && symbolSource == nil {
+	if created && len(symbolScopes) == 0 && symbolSource == nil {
 		return sym
 	}
 	binding := p.env.GetGlobalBinding(gi)

@@ -133,9 +133,9 @@ func TestPhaseRegistry_Namespace_Coverage(t *testing.T) {
 	c.Assert(topLevel.Phases().Namespace(), qt.Equals, topLevel)
 }
 
-// GetLocalIndexWithScopes
+// GetLocalIndex (scoped)
 
-func TestGetLocalIndexWithScopes_Coverage(t *testing.T) {
+func TestGetLocalIndex_Coverage(t *testing.T) {
 	c := qt.New(t)
 
 	t.Run("nil environment", func(t *testing.T) {
@@ -197,9 +197,9 @@ func TestGetLocalIndexWithScopes_Coverage(t *testing.T) {
 	})
 }
 
-// GetBindingWithScopes partial coverage improvement
+// GetBinding (scoped) partial coverage improvement
 
-func TestGetBindingWithScopes_GlobalPhase_Coverage(t *testing.T) {
+func TestGetBinding_GlobalPhase_Coverage(t *testing.T) {
 	c := qt.New(t)
 	topLevel := NewNamespace()
 	env := topLevel.Runtime()
@@ -214,9 +214,9 @@ func TestGetBindingWithScopes_GlobalPhase_Coverage(t *testing.T) {
 	c.Assert(binding.Value().SchemeString(), qt.Equals, "42")
 }
 
-// GetLocalIndexWithScopes — maximality algorithm
+// GetLocalIndex — maximality algorithm
 
-func TestGetLocalIndexWithScopes_Maximality(t *testing.T) {
+func TestGetLocalIndex_Maximality(t *testing.T) {
 	c := qt.New(t)
 
 	t.Run("maximal scope count wins among competing candidates", func(t *testing.T) {

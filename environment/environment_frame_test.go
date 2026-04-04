@@ -356,7 +356,7 @@ func TestEnvironmentFrame_GetBinding(t *testing.T) {
 	qt.Assert(t, nb, qt.IsNil)
 }
 
-func TestEnvironmentFrame_GetBindingWithScopes(t *testing.T) {
+func TestEnvironmentFrame_GetBinding_Scoped(t *testing.T) {
 	env := NewNamespaceFrame()
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 
@@ -721,7 +721,7 @@ func TestEnvironmentFrame_PanicSentinels(t *testing.T) {
 	}
 }
 
-func TestMaybeCreateLocalBindingWithScopes_Source(t *testing.T) {
+func TestMaybeCreateLocalBinding_Source(t *testing.T) {
 	c := qt.New(t)
 
 	src := syntax.NewSourceContext("x", "test.scm",
@@ -740,7 +740,7 @@ func TestMaybeCreateLocalBindingWithScopes_Source(t *testing.T) {
 	c.Assert(binding.Source().File, qt.Equals, "test.scm")
 }
 
-func TestMaybeCreateLocalBindingWithScopes_NilSource(t *testing.T) {
+func TestMaybeCreateLocalBinding_NilSource(t *testing.T) {
 	c := qt.New(t)
 
 	topEnv := NewNamespaceFrame()
@@ -753,7 +753,7 @@ func TestMaybeCreateLocalBindingWithScopes_NilSource(t *testing.T) {
 	c.Assert(binding.Source(), qt.IsNil)
 }
 
-func TestMaybeCreateLocalBindingWithScopes_SourceWithOrigin(t *testing.T) {
+func TestMaybeCreateLocalBinding_SourceWithOrigin(t *testing.T) {
 	c := qt.New(t)
 
 	origin := &syntax.OriginInfo{
@@ -803,7 +803,7 @@ func TestGlobalBinding_SetSource(t *testing.T) {
 	c.Assert(binding.Source().File, qt.Equals, "global.scm")
 }
 
-func TestMaybeCreateLocalBindingWithScopes_ExistingBindingGetsSource(t *testing.T) {
+func TestMaybeCreateLocalBinding_ExistingBindingGetsSource(t *testing.T) {
 	c := qt.New(t)
 
 	topEnv := NewNamespaceFrame()
@@ -831,7 +831,7 @@ func TestMaybeCreateLocalBindingWithScopes_ExistingBindingGetsSource(t *testing.
 // Scope-distinct same-key bindings (Bug A: environment layer)
 // ---------------------------------------------------------------------------
 
-func TestMaybeCreateLocalBindingWithScopes_ScopeDistinctKeys(t *testing.T) {
+func TestMaybeCreateLocalBinding_ScopeDistinctKeys(t *testing.T) {
 	c := qt.New(t)
 
 	scopeA := syntax.NewScope()
@@ -878,7 +878,7 @@ func TestMaybeCreateLocalBindingWithScopes_ScopeDistinctKeys(t *testing.T) {
 	c.Assert(li0Again[0], qt.Equals, 0) // same slot as first binding
 }
 
-func TestGetLocalIndexWithScopes_ScopeDistinctSameFrame(t *testing.T) {
+func TestGetLocalIndex_ScopeDistinctSameFrame(t *testing.T) {
 	c := qt.New(t)
 
 	scopeA := syntax.NewScope()
@@ -1162,7 +1162,7 @@ func TestGetGlobalIndexAcrossPhases_ExpandPhaseBinding(t *testing.T) {
 	c.Assert(runtimeGi, qt.IsNil)
 }
 
-func TestGetLocalIndexWithScopes_MaximalBinding(t *testing.T) {
+func TestGetLocalIndex_MaximalBinding(t *testing.T) {
 	c := qt.New(t)
 
 	topLevel := NewNamespace()

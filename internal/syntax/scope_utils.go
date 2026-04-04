@@ -37,7 +37,8 @@ import "slices"
 //
 //	Invariant: {} ⊆ X for all X — top-level bindings (empty scope set)
 //	  match every reference. The argmax selects the most specific binding.
-//	Constrains: GetLocalIndexWithScopes (implements resolve/argmax),
+//	Constrains: GetLocalIndex (implements resolve/argmax),
+//	  GetBinding (maximal resolution for scoped lookups),
 //	  CompileSymbol (dispatches scoped vs unscoped lookup),
 //	  scopesCompatibleForSubstitution (bidirectional subset = set equality).
 //	Constrained by: NewScope (each macro invocation creates a fresh scope),
