@@ -27,7 +27,6 @@ import (
 // TestWithSyntax exercises CompileWithSyntax, compileWithSyntaxBody, and
 // buildWithSyntaxBegin through Scheme-level macros that use with-syntax
 // inside define-syntax + lambda + syntax-case transformers.
-//
 func TestWithSyntax(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{

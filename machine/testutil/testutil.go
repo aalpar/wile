@@ -21,6 +21,7 @@ package testutil
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"strings"
@@ -87,33 +88,12 @@ func EvalScheme(t *testing.T, code string) values.Value {
 }
 
 // EvalSchemeInEnv evaluates one or more Scheme expressions in the given
-// environment and returns the last value.
+// environment and returns the last value. Calls t.Fatal on any error.
 func EvalSchemeInEnv(t *testing.T, env *environment.EnvironmentFrame, code string) values.Value {
 	t.Helper()
-	ctx := context.Background()
-	rdr := strings.NewReader(code)
-	p := parser.NewParser(env, true, rdr)
-
-	var lastValue = values.Void
-
-	for {
-		stx, err := p.ReadSyntax(context.TODO())
-		if err == io.EOF {
-			break
-		}
-		qt.Assert(t, err, qt.IsNil)
-
-		cont, err := NewTopLevelThunk(stx, env)
-		qt.Assert(t, err, qt.IsNil)
-
-		mc := machine.NewMachineContext(ctx, cont)
-		err = mc.Run()
-		qt.Assert(t, err, qt.IsNil)
-
-		lastValue = mc.GetValue()
-	}
-
-	return lastValue
+	result, err := evalSchemeInEnvCore(env, code)
+	qt.Assert(t, err, qt.IsNil)
+	return result
 }
 
 // SetupLibraryTest creates a test environment with library loading
@@ -176,11 +156,9 @@ func SetupEngineTest(t *testing.T, fsys fs.FS) *environment.EnvironmentFrame {
 	return env
 }
 
-// EvalSchemeInEnvMayFail evaluates Scheme expressions in the given environment,
-// returning the last value and any error. Unlike EvalSchemeInEnv, this does not
-// call t.Fatal on errors — callers handle errors themselves.
-func EvalSchemeInEnvMayFail(t *testing.T, env *environment.EnvironmentFrame, code string) (values.Value, error) {
-	t.Helper()
+// evalSchemeInEnvCore is the shared eval loop used by both EvalSchemeInEnv
+// and EvalSchemeInEnvMayFail.
+func evalSchemeInEnvCore(env *environment.EnvironmentFrame, code string) (values.Value, error) {
 	ctx := context.Background()
 	rdr := strings.NewReader(code)
 	p := parser.NewParser(env, true, rdr)
@@ -211,6 +189,35 @@ func EvalSchemeInEnvMayFail(t *testing.T, env *environment.EnvironmentFrame, cod
 	}
 
 	return lastValue, nil
+}
+
+// panicError wraps a non-error panic value as an error.
+type panicError struct {
+	value any
+}
+
+func (p panicError) Error() string {
+	return fmt.Sprintf("panic: %v", p.value)
+}
+
+// EvalSchemeInEnvMayFail evaluates Scheme expressions in the given environment,
+// returning the last value and any error. VM panics are recovered and returned
+// as errors.
+func EvalSchemeInEnvMayFail(t *testing.T, env *environment.EnvironmentFrame, code string) (result values.Value, err error) {
+	t.Helper()
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		e, ok := r.(error)
+		if ok {
+			err = e
+		} else {
+			err = panicError{value: r}
+		}
+	}()
+	return evalSchemeInEnvCore(env, code)
 }
 
 // NewMinimalNamespace creates a minimal namespace with core special form

@@ -191,12 +191,11 @@ type CompiledPattern struct {
 }
 
 // CompilePatternOpts holds optional parameters for CompileSyntaxPattern.
-// A nil opts pointer means all defaults (no literals, default "...",
-// SkipMacroKeyword true for syntax-rules compatibility).
+// A nil opts pointer means all defaults (no literals, default "...").
 type CompilePatternOpts struct {
 	Literals         map[string]struct{}
 	EllipsisID       string
-	SkipMacroKeyword *bool // nil = true (R7RS syntax-rules default); false for syntax-case
+	MatchAllElements bool // false (default): skip first element (R7RS syntax-rules macro keyword); true: match all elements (syntax-case)
 }
 
 // CompileSyntaxPattern compiles a syntax pattern into bytecode with optional
@@ -218,8 +217,8 @@ func CompileSyntaxPattern(
 			ellipsisID = opts.EllipsisID
 		}
 		literals = opts.Literals
-		if opts.SkipMacroKeyword != nil {
-			skipKeyword = *opts.SkipMacroKeyword
+		if opts.MatchAllElements {
+			skipKeyword = false
 		}
 	}
 

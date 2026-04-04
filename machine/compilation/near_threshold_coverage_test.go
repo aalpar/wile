@@ -297,58 +297,6 @@ func TestSyntaxRulesCustomEllipsis(t *testing.T) {
 	}
 }
 
-// TestSyntaxCaseSchemeLevel exercises syntax-case compilation at the Scheme
-// level, hitting compileSyntaxCaseClause (0% coverage) and
-// createPatternVarEnvironment (0% coverage) in compile_syntax_case.go.
-func TestSyntaxCaseSchemeLevel(t *testing.T) {
-	tcs := []testhelpers.SchemeCodeTestCase{
-		{
-			Name: "syntax-case simple pattern",
-			Code: `(begin
-				(define-syntax my-const
-					(lambda (stx)
-						(syntax-case stx ()
-							((_ val) (syntax val)))))
-				(my-const 99))`,
-			Expected: values.NewInteger(99),
-		},
-		{
-			Name: "syntax-case with multiple clauses",
-			Code: `(begin
-				(define-syntax my-if
-					(lambda (stx)
-						(syntax-case stx ()
-							((_ test then)
-							 (syntax (if test then (void))))
-							((_ test then alt)
-							 (syntax (if test then alt))))))
-				(my-if #t 42 0))`,
-			Expected: values.NewInteger(42),
-		},
-		{
-			Name: "syntax-case with list construction",
-			Code: `(begin
-				(define-syntax swap
-					(lambda (stx)
-						(syntax-case stx ()
-							((_ a b)
-							 (syntax (list b a))))))
-				(swap 1 2))`,
-			Expected: values.List(
-				values.NewInteger(2),
-				values.NewInteger(1),
-			),
-		},
-	}
-	for _, tc := range tcs {
-		t.Run(tc.Name, func(t *testing.T) {
-			result, err := testhelpers.RunSchemeCode(t, tc.Code)
-			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
-		})
-	}
-}
-
 // TestBeginForSyntaxSchemeLevel exercises begin-for-syntax at the Scheme level,
 // hitting executeFormsAtCompileTime (0% coverage) in compile_helpers.go.
 //
