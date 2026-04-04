@@ -255,11 +255,11 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	symbolSource := v.Name().SourceContext()
 	// Create binding early for recursion support
 	if p.env.LocalEnvironment() != nil {
-		_, _ = p.env.MaybeCreateLocalBindingWithScopes(sym, environment.BindingTypeVariable, symbolScopes, symbolSource)
+		_, _ = p.env.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable, symbolScopes, symbolSource)
 		return sym
 	}
 	gi, created := p.env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
-	if created && symbolScopes == nil && symbolSource == nil {
+	if created && len(symbolScopes) == 0 && symbolSource == nil {
 		return sym
 	}
 	binding := p.env.GetGlobalBinding(gi)
@@ -466,7 +466,7 @@ func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallC
 	p.AppendOperations(machine.NewOperationPush())
 
 	// Use scope-aware binding resolution for validation
-	binding := p.env.GetBindingWithScopes(sym, symbolScopes)
+	binding := p.env.GetBinding(sym, symbolScopes)
 	if binding == nil {
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes for set!", sym.Key)
 	}
@@ -476,10 +476,10 @@ func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallC
 	var li *environment.LocalIndex
 	if len(symbolScopes) > 0 {
 		// Symbol has scopes (from macro expansion), use scope-aware lookup
-		li = p.env.GetLocalIndexWithScopes(sym, symbolScopes)
+		li = p.env.GetLocalIndex(sym, symbolScopes)
 	} else {
 		// Fast path: see CompileSymbol invariant — empty scopes implies no locals in scope.
-		li = p.env.GetLocalIndex(sym)
+		li = p.env.GetLocalIndex(sym, nil)
 	}
 
 	if li != nil {

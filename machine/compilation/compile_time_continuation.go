@@ -174,7 +174,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	// Get the scopes from the syntax symbol for hygiene checking.
 	// Both this path and the expander's hasLocalVariableBinding (expander_time_continuation.go)
 	// check bindingScopes ⊆ useScopes via syntax.ScopesMatch. This path uses the environment's
-	// maximality algorithm (GetLocalIndexWithScopes) to find the most specific binding for
+	// maximality algorithm (GetLocalIndex) to find the most specific binding for
 	// codegen dispatch; the expander only needs a yes/no shadow check for a single binding.
 	symbolScopes := expr.Scopes()
 
@@ -187,7 +187,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	// top level, where GetLocalIndex returns nil and falls through to globals.
 	if len(symbolScopes) == 0 {
 		// Try local binding first
-		li := p.env.GetLocalIndex(sym)
+		li := p.env.GetLocalIndex(sym, nil)
 		if li != nil {
 			p.AppendOperations(
 				machine.NewOperationLoadLocalByLocalIndexImmediate(li),
@@ -219,7 +219,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 
 	// Sym has scopes (from macro expansion), use scope-aware binding resolution
 	// Check if it's a local binding with matching scopes
-	li := p.env.GetLocalIndexWithScopes(sym, symbolScopes)
+	li := p.env.GetLocalIndex(sym, symbolScopes)
 	if li != nil {
 		// Found a local binding with matching scopes
 		p.AppendOperations(
@@ -231,7 +231,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	// Library scope lookup takes priority over general scope matching.
 	// When a macro's free identifier carries a library scope, we redirect
 	// to the library's env via the TLE scope registry. This must come
-	// before GetBindingWithScopes because the outer expansion of
+	// before GetBinding because the outer expansion of
 	// define-library may create placeholder bindings with empty scopes
 	// in the caller env, which would falsely match any reference scopes.
 	libGI := p.env.GetGlobalIndexFromLibraryScopes(sym, symbolScopes)
@@ -246,10 +246,10 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	}
 
 	// Check global binding with scope matching
-	globalBinding := p.env.GetBindingWithScopes(sym, symbolScopes)
+	globalBinding := p.env.GetBinding(sym, symbolScopes)
 	if globalBinding != nil {
 		// It must be a global binding (since local lookup failed).
-		// globalBinding was found by GetBindingWithScopes — use it directly
+		// globalBinding was found by GetBinding — use it directly
 		// as a cached binding to skip runtime map/lock overhead.
 		idx := p.template.AppendCachedBinding(globalBinding)
 		p.AppendOperations(

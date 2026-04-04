@@ -134,7 +134,7 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 			}
 			keyword := keywordSym.Unwrap().(*values.Symbol)
 			// Create binding with letScope so free identifier resolution works
-			_, _ = childExpandEnv.MaybeCreateLocalBindingWithScopes(keyword, environment.BindingTypeSyntax, []*syntax.Scope{letScope}, keywordSym.SourceContext())
+			_, _ = childExpandEnv.MaybeCreateLocalBinding(keyword, environment.BindingTypeSyntax, []*syntax.Scope{letScope}, keywordSym.SourceContext())
 
 			cdr := current.SyntaxCdr()
 			nextPair, ok := cdr.(*syntax.SyntaxPair)
@@ -179,9 +179,9 @@ func (p *ExpanderTimeContinuation) expandLetSyntaxImpl(sym *syntax.SyntaxSymbol,
 		}
 
 		// Store in child expand environment with letScope for free identifier resolution
-		localIndex, created := childExpandEnv.MaybeCreateLocalBindingWithScopes(keyword, environment.BindingTypeSyntax, []*syntax.Scope{letScope}, keywordSym.SourceContext())
+		localIndex, created := childExpandEnv.MaybeCreateLocalBinding(keyword, environment.BindingTypeSyntax, []*syntax.Scope{letScope}, keywordSym.SourceContext())
 		if !created {
-			localIndex = childExpandEnv.GetLocalIndex(keyword)
+			localIndex = childExpandEnv.GetLocalIndex(keyword, nil)
 		}
 		if localIndex == nil {
 			return nil, werr.WrapForeignErrorf(

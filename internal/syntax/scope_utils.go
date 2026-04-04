@@ -37,7 +37,8 @@ import "slices"
 //
 //	Invariant: {} ⊆ X for all X — top-level bindings (empty scope set)
 //	  match every reference. The argmax selects the most specific binding.
-//	Constrains: GetLocalIndexWithScopes (implements resolve/argmax),
+//	Constrains: GetLocalIndex (implements resolve/argmax),
+//	  GetBinding (maximal resolution for scoped lookups),
 //	  CompileSymbol (dispatches scoped vs unscoped lookup),
 //	  scopesCompatibleForSubstitution (bidirectional subset = set equality).
 //	Constrained by: NewScope (each macro invocation creates a fresh scope),
@@ -70,6 +71,25 @@ func ScopesMatch(useScopes, bindingScopes []*Scope) bool {
 		}
 	}
 	return true
+}
+
+// ScopesCompatible checks whether a binding with bindingScopes can match a
+// reference with useScopes. A binding with no scopes (top-level / pre-hygiene)
+// matches any reference.
+//
+// Both the environment's resolveLocal and the validator's duplicate-binding
+// detection use this single function so scope resolution cannot diverge.
+//
+// Note: nil useScopes does NOT mean "match any" here. A nil reference scope
+// set means "this reference has no scopes" and behaves like an empty set —
+// only bindings with no scopes match. Callers that want "match any"
+// (replacing the old checkScopes=false pattern) guard with an explicit
+// nil check before calling this function.
+func ScopesCompatible(bindingScopes, useScopes []*Scope) bool {
+	if len(bindingScopes) == 0 {
+		return true
+	}
+	return ScopesMatch(useScopes, bindingScopes)
 }
 
 // HasScope checks if a scope set contains a specific scope

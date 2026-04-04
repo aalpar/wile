@@ -77,7 +77,7 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 	case validate.LetKindLet:
 		// Inits already on stack — store in reverse (LIFO).
 		for i := n - 1; i >= 0; i-- {
-			li := childEnv.GetLocalIndex(v.Bindings[i].Name.Sym)
+			li := childEnv.GetLocalIndex(v.Bindings[i].Name.Sym, nil)
 			if li == nil {
 				return werr.WrapForeignErrorf(machine.ErrBindingNotFound,
 					"compile let: binding %q not found in local environment",
@@ -93,7 +93,7 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 			if err != nil {
 				return err
 			}
-			li := childEnv.GetLocalIndex(b.Name.Sym)
+			li := childEnv.GetLocalIndex(b.Name.Sym, nil)
 			if li == nil {
 				return werr.WrapForeignErrorf(machine.ErrBindingNotFound,
 					"compile %s: binding %q not found in local environment",
@@ -113,7 +113,7 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 			p.AppendOperations(machine.NewOperationPush())
 		}
 		for i := n - 1; i >= 0; i-- {
-			li := childEnv.GetLocalIndex(v.Bindings[i].Name.Sym)
+			li := childEnv.GetLocalIndex(v.Bindings[i].Name.Sym, nil)
 			if li == nil {
 				return werr.WrapForeignErrorf(machine.ErrBindingNotFound,
 					"compile letrec: binding %q not found in local environment",
@@ -146,7 +146,7 @@ func (p *CompileTimeContinuation) createLetCompileEnv(
 	// For let*: add ALL binding names upfront. The validator already
 	// enforced sequential visibility; the compiler only needs the slots.
 	for _, b := range v.Bindings {
-		childEnv.MaybeCreateLocalBindingWithScopes(
+		childEnv.MaybeCreateLocalBinding(
 			b.Name.Sym,
 			environment.BindingTypeVariable,
 			b.Name.Scopes(),

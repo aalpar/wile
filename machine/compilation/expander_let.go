@@ -161,12 +161,12 @@ func (p *ExpanderTimeContinuation) expandNamedLet(sym *syntax.SyntaxSymbol, args
 		environment.NewLocalEnvironment(0),
 		p.env,
 	)
-	childEnv.MaybeCreateLocalBindingWithScopes(
+	childEnv.MaybeCreateLocalBinding(
 		tagWithScope.Sym, environment.BindingTypeVariable,
 		tagWithScope.Scopes(), tagWithScope.SourceContext(),
 	)
 	for _, bs := range bindingSyms {
-		childEnv.MaybeCreateLocalBindingWithScopes(
+		childEnv.MaybeCreateLocalBinding(
 			bs.Sym, environment.BindingTypeVariable,
 			bs.Scopes(), bs.SourceContext(),
 		)
@@ -345,7 +345,7 @@ func (p *ExpanderTimeContinuation) expandLetStarBindings(
 		scopedName := syntax.AddScopeToSyntax(nameSym, scope).(*syntax.SyntaxSymbol)
 		scopedNames = append(scopedNames, scopedName)
 
-		childEnv.MaybeCreateLocalBindingWithScopes(
+		childEnv.MaybeCreateLocalBinding(
 			scopedName.Sym, environment.BindingTypeVariable,
 			scopedName.Scopes(), scopedName.SourceContext(),
 		)
@@ -369,7 +369,7 @@ func (p *ExpanderTimeContinuation) createBindingEnv(syms []*syntax.SyntaxSymbol)
 		p.env,
 	)
 	for _, s := range syms {
-		childEnv.MaybeCreateLocalBindingWithScopes(
+		childEnv.MaybeCreateLocalBinding(
 			s.Sym, environment.BindingTypeVariable,
 			s.Scopes(), s.SourceContext(),
 		)

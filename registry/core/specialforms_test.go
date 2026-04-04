@@ -58,7 +58,7 @@ func TestDocEntryNamesResolve(t *testing.T) {
 				if phaseEnv == nil {
 					continue
 				}
-				if phaseEnv.GetBinding(sym) != nil {
+				if phaseEnv.GetBinding(sym, nil) != nil {
 					return // resolved
 				}
 			}

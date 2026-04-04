@@ -213,12 +213,12 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 		var bnd *environment.Binding
 
 		// Check local bindings first (for let-syntax/letrec-syntax)
-		bnd = p.env.GetBinding(sym0)
+		bnd = p.env.GetBinding(sym0, nil)
 
 		// If not found locally, check the global expand environment
 		if bnd == nil || bnd.BindingType() != environment.BindingTypeSyntax {
 			expandEnv := p.env.Expand()
-			bnd = expandEnv.GetBinding(sym0)
+			bnd = expandEnv.GetBinding(sym0, nil)
 		}
 
 		// Check if it's a macro binding
@@ -238,7 +238,7 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 					continue
 				}
 				libExpandEnv := libEnv.Expand()
-				libBnd := libExpandEnv.GetBinding(sym0)
+				libBnd := libExpandEnv.GetBinding(sym0, nil)
 				if libBnd != nil && !values.IsVoid(libBnd) && libBnd.BindingType() == environment.BindingTypeSyntax {
 					return p.expandMacroInvocation(sym, expr, libBnd)
 				}
@@ -419,9 +419,14 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 		return expr, false, nil
 	}
 
-	// Look up syntax bindings in the expand phase environment
-	expandEnv := p.env.Expand()
-	bnd := expandEnv.GetBinding(sym0)
+	// Check local bindings first (for let-syntax/letrec-syntax),
+	// then fall back to the global expand environment.
+	// This mirrors ExpandSyntaxExpression's lookup order.
+	bnd := p.env.GetBinding(sym0, nil)
+	if bnd == nil || bnd.BindingType() != environment.BindingTypeSyntax {
+		expandEnv := p.env.Expand()
+		bnd = expandEnv.GetBinding(sym0, nil)
+	}
 
 	// Check if it's a macro binding
 	if values.IsVoid(bnd) || bnd.BindingType() != environment.BindingTypeSyntax {

@@ -55,11 +55,11 @@ func TestEnvironmentFrame_Locals(t *testing.T) {
 
 	tv0 := values.NewSymbol("testVar0")
 	// variable has not been added yet, so GetLocalIndex should return nil
-	li0 := env.GetLocalIndex(tv0)
+	li0 := env.GetLocalIndex(tv0, nil)
 	qt.Assert(t, li0, qt.IsNil)
 
 	// Test adding a binding
-	li0, ok := env.MaybeCreateLocalBinding(tv0, BindingTypeVariable)
+	li0, ok := env.MaybeCreateLocalBinding(tv0, BindingTypeVariable, nil, nil)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, li0[0], qt.Equals, 0)
 	qt.Assert(t, li0[1], qt.Equals, 0)
@@ -69,14 +69,14 @@ func TestEnvironmentFrame_Locals(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Re-adding the same binding should not change the index
-	li0, ok = env.MaybeCreateLocalBinding(tv0, BindingTypeVariable)
+	li0, ok = env.MaybeCreateLocalBinding(tv0, BindingTypeVariable, nil, nil)
 	qt.Assert(t, ok, qt.IsFalse)
 	qt.Assert(t, li0[0], qt.Equals, 0)
 	qt.Assert(t, li0[1], qt.Equals, 0)
 
 	// Adding a new binding should create a new index
 	tv1 := values.NewSymbol("testVar1")
-	li1, ok := env.MaybeCreateLocalBinding(tv1, BindingTypeVariable)
+	li1, ok := env.MaybeCreateLocalBinding(tv1, BindingTypeVariable, nil, nil)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, li1[0], qt.Equals, 1)
 	qt.Assert(t, li1[1], qt.Equals, 0)
@@ -148,7 +148,7 @@ func TestEnvironmentFrame_Bindings(t *testing.T) {
 	qt.Assert(t, env, qt.Not(qt.IsNil))
 	_, ok := env.MaybeCreateOwnGlobalBinding(tv0, BindingTypeVariable)
 	qt.Assert(t, ok, qt.IsTrue)
-	_, ok = env.MaybeCreateLocalBinding(tv0, BindingTypeVariable)
+	_, ok = env.MaybeCreateLocalBinding(tv0, BindingTypeVariable, nil, nil)
 	qt.Assert(t, ok, qt.IsTrue)
 
 	tv0 = values.NewSymbol("testVar0")
@@ -159,7 +159,7 @@ func TestEnvironmentFrame_Bindings(t *testing.T) {
 	qt.Assert(t, gb.value, valuestest.SchemeEquals, values.Void)
 
 	// check local environment
-	li0 := env.GetLocalIndex(tv0)
+	li0 := env.GetLocalIndex(tv0, nil)
 	qt.Assert(t, li0, qt.IsNotNil)
 	lb := env.GetLocalBinding(li0)
 	qt.Assert(t, lb.bindingType, qt.Equals, BindingTypeVariable)
@@ -338,25 +338,25 @@ func TestEnvironmentFrame_GetBinding(t *testing.T) {
 
 	// Create local binding
 	localSym := values.NewSymbol("local-var")
-	env.MaybeCreateLocalBinding(localSym, BindingTypeVariable)
+	env.MaybeCreateLocalBinding(localSym, BindingTypeVariable, nil, nil)
 
 	// Test GetBinding for global
-	gb := env.GetBinding(globalSym)
+	gb := env.GetBinding(globalSym, nil)
 	qt.Assert(t, gb, qt.Not(qt.IsNil))
 	qt.Assert(t, gb.BindingType(), qt.Equals, BindingTypeVariable)
 
 	// Test GetBinding for local
-	lb := env.GetBinding(localSym)
+	lb := env.GetBinding(localSym, nil)
 	qt.Assert(t, lb, qt.Not(qt.IsNil))
 	qt.Assert(t, lb.BindingType(), qt.Equals, BindingTypeVariable)
 
 	// Test GetBinding for non-existent
 	nonexistent := values.NewSymbol("nonexistent")
-	nb := env.GetBinding(nonexistent)
+	nb := env.GetBinding(nonexistent, nil)
 	qt.Assert(t, nb, qt.IsNil)
 }
 
-func TestEnvironmentFrame_GetBindingWithScopes(t *testing.T) {
+func TestEnvironmentFrame_GetBinding_Scoped(t *testing.T) {
 	env := NewNamespaceFrame()
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 
@@ -365,14 +365,14 @@ func TestEnvironmentFrame_GetBindingWithScopes(t *testing.T) {
 	li1, _ := env.EnsureLocalBinding(sym1, BindingTypeVariable)
 	env.SetLocalValue(li1, values.NewInteger(42)) //nolint:errcheck
 
-	// GetBindingWithScopes should return it (no scopes = always matches)
-	b1 := env.GetBindingWithScopes(sym1, nil)
+	// GetBinding should return it (no scopes = always matches)
+	b1 := env.GetBinding(sym1, nil)
 	qt.Assert(t, b1, qt.Not(qt.IsNil))
 	qt.Assert(t, b1.Value(), valuestest.SchemeEquals, values.NewInteger(42))
 
 	// Test with non-existent symbol
 	sym2 := values.NewSymbol("nonexistent")
-	b2 := env.GetBindingWithScopes(sym2, nil)
+	b2 := env.GetBinding(sym2, nil)
 	qt.Assert(t, b2, qt.IsNil)
 }
 
@@ -454,32 +454,32 @@ func TestEnvironmentFrame_HasLocalVariableBinding(t *testing.T) {
 				return
 			}
 
-			_, _ = env.MaybeCreateLocalBindingWithScopes(sym, tc.bindingType, tc.bindScopes, nil)
+			_, _ = env.MaybeCreateLocalBinding(sym, tc.bindingType, tc.bindScopes, nil)
 			got := env.HasLocalVariableBinding(sym, tc.useScopes)
 			qt.Assert(t, got, qt.Equals, tc.want)
 		})
 	}
 }
 
-func TestEnvironmentFrame_MaybeCreateLocalBindingWithScopes(t *testing.T) {
+func TestEnvironmentFrame_MaybeCreateLocalBinding(t *testing.T) {
 	env := NewNamespaceFrame()
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 
 	sym := values.NewSymbol("test-var")
 
 	// Create binding with scopes
-	li, created := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, nil)
+	li, created := env.MaybeCreateLocalBinding(sym, BindingTypeVariable, nil, nil)
 	qt.Assert(t, created, qt.IsTrue)
 	qt.Assert(t, li, qt.Not(qt.IsNil))
 
 	// Try to create again - should return existing
-	li2, created2 := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, nil)
+	li2, created2 := env.MaybeCreateLocalBinding(sym, BindingTypeVariable, nil, nil)
 	qt.Assert(t, created2, qt.IsFalse)
 	qt.Assert(t, li2, qt.DeepEquals, li)
 
 	// Test on environment with no local
 	topEnv := NewNamespaceFrame()
-	li3, created3 := topEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, nil)
+	li3, created3 := topEnv.MaybeCreateLocalBinding(sym, BindingTypeVariable, nil, nil)
 	qt.Assert(t, created3, qt.IsFalse)
 	qt.Assert(t, li3, qt.IsNil)
 }
@@ -582,7 +582,7 @@ func TestEnvironmentFrame_GetLocalIndex_NotFound(t *testing.T) {
 	env = NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
 
 	// GetLocalIndex for non-existent should return nil
-	idx := env.GetLocalIndex(values.NewSymbol("nonexistent"))
+	idx := env.GetLocalIndex(values.NewSymbol("nonexistent"), nil)
 	qt.Assert(t, idx, qt.IsNil)
 }
 
@@ -721,7 +721,7 @@ func TestEnvironmentFrame_PanicSentinels(t *testing.T) {
 	}
 }
 
-func TestMaybeCreateLocalBindingWithScopes_Source(t *testing.T) {
+func TestMaybeCreateLocalBinding_Source(t *testing.T) {
 	c := qt.New(t)
 
 	src := syntax.NewSourceContext("x", "test.scm",
@@ -731,7 +731,7 @@ func TestMaybeCreateLocalBindingWithScopes_Source(t *testing.T) {
 	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
 	sym := values.NewSymbol("x")
 
-	li, created := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, src)
+	li, created := env.MaybeCreateLocalBinding(sym, BindingTypeVariable, nil, src)
 	c.Assert(created, qt.IsTrue)
 	c.Assert(li, qt.IsNotNil)
 
@@ -740,20 +740,20 @@ func TestMaybeCreateLocalBindingWithScopes_Source(t *testing.T) {
 	c.Assert(binding.Source().File, qt.Equals, "test.scm")
 }
 
-func TestMaybeCreateLocalBindingWithScopes_NilSource(t *testing.T) {
+func TestMaybeCreateLocalBinding_NilSource(t *testing.T) {
 	c := qt.New(t)
 
 	topEnv := NewNamespaceFrame()
 	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
 	sym := values.NewSymbol("x")
 
-	li, created := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, nil)
+	li, created := env.MaybeCreateLocalBinding(sym, BindingTypeVariable, nil, nil)
 	c.Assert(created, qt.IsTrue)
 	binding := env.GetLocalBindingByIndex(li[0])
 	c.Assert(binding.Source(), qt.IsNil)
 }
 
-func TestMaybeCreateLocalBindingWithScopes_SourceWithOrigin(t *testing.T) {
+func TestMaybeCreateLocalBinding_SourceWithOrigin(t *testing.T) {
 	c := qt.New(t)
 
 	origin := &syntax.OriginInfo{
@@ -771,7 +771,7 @@ func TestMaybeCreateLocalBindingWithScopes_SourceWithOrigin(t *testing.T) {
 	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
 	sym := values.NewSymbol("temp")
 
-	li, created := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, src)
+	li, created := env.MaybeCreateLocalBinding(sym, BindingTypeVariable, nil, src)
 	c.Assert(created, qt.IsTrue)
 
 	binding := env.GetLocalBindingByIndex(li[0])
@@ -803,7 +803,7 @@ func TestGlobalBinding_SetSource(t *testing.T) {
 	c.Assert(binding.Source().File, qt.Equals, "global.scm")
 }
 
-func TestMaybeCreateLocalBindingWithScopes_ExistingBindingGetsSource(t *testing.T) {
+func TestMaybeCreateLocalBinding_ExistingBindingGetsSource(t *testing.T) {
 	c := qt.New(t)
 
 	topEnv := NewNamespaceFrame()
@@ -811,20 +811,106 @@ func TestMaybeCreateLocalBindingWithScopes_ExistingBindingGetsSource(t *testing.
 	sym := values.NewSymbol("x")
 
 	// First creation: no source
-	li, created := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, nil)
+	li, created := env.MaybeCreateLocalBinding(sym, BindingTypeVariable, nil, nil)
 	c.Assert(created, qt.IsTrue)
 	c.Assert(env.GetLocalBindingByIndex(li[0]).Source(), qt.IsNil)
 
 	// Second call with source: should update
 	src := syntax.NewSourceContext("x", "updated.scm",
 		syntax.NewSourceIndexes(0, 0, 1), syntax.NewSourceIndexes(1, 1, 1))
-	li2, created2 := env.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, nil, src)
+	li2, created2 := env.MaybeCreateLocalBinding(sym, BindingTypeVariable, nil, src)
 	c.Assert(created2, qt.IsFalse)
 	c.Assert(li2[0], qt.Equals, li[0])
 
 	binding := env.GetLocalBindingByIndex(li[0])
 	c.Assert(binding.Source(), qt.IsNotNil)
 	c.Assert(binding.Source().File, qt.Equals, "updated.scm")
+}
+
+// ---------------------------------------------------------------------------
+// Scope-distinct same-key bindings (Bug A: environment layer)
+// ---------------------------------------------------------------------------
+
+func TestMaybeCreateLocalBinding_ScopeDistinctKeys(t *testing.T) {
+	c := qt.New(t)
+
+	scopeA := syntax.NewScope()
+	scopeB := syntax.NewScope()
+
+	topEnv := NewNamespaceFrame()
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
+
+	sym := values.NewSymbol("x")
+
+	// First binding: x with scopeA → should get slot 0
+	li0, created0 := env.MaybeCreateLocalBinding(
+		sym, BindingTypeVariable, []*syntax.Scope{scopeA}, nil)
+	c.Assert(created0, qt.IsTrue)
+	c.Assert(li0, qt.IsNotNil)
+	c.Assert(li0[0], qt.Equals, 0) // slot 0
+
+	// Set a value so we can distinguish the two bindings at runtime
+	env.SetLocalValue(li0, values.NewInteger(10)) //nolint:errcheck
+
+	// Second binding: x with scopeB → should get slot 1 (NEW slot)
+	li1, created1 := env.MaybeCreateLocalBinding(
+		sym, BindingTypeVariable, []*syntax.Scope{scopeB}, nil)
+	c.Assert(created1, qt.IsTrue, qt.Commentf(
+		"scope-distinct binding should be created, not found as existing"))
+	c.Assert(li1, qt.IsNotNil)
+	c.Assert(li1[0], qt.Equals, 1, qt.Commentf(
+		"scope-distinct binding should get a new slot, not reuse slot 0"))
+
+	// Set a different value for the second binding
+	env.SetLocalValue(li1, values.NewInteger(20)) //nolint:errcheck
+
+	// Verify the two bindings are independently readable
+	b0 := env.GetLocalBindingByIndex(li0[0])
+	c.Assert(b0.Value(), valuestest.SchemeEquals, values.NewInteger(10))
+
+	b1 := env.GetLocalBindingByIndex(li1[0])
+	c.Assert(b1.Value(), valuestest.SchemeEquals, values.NewInteger(20))
+
+	// Same key + same scopes → should return the EXISTING slot (not create new)
+	li0Again, createdAgain := env.MaybeCreateLocalBinding(
+		sym, BindingTypeVariable, []*syntax.Scope{scopeA}, nil)
+	c.Assert(createdAgain, qt.IsFalse)
+	c.Assert(li0Again[0], qt.Equals, 0) // same slot as first binding
+}
+
+func TestGetLocalIndex_ScopeDistinctSameFrame(t *testing.T) {
+	c := qt.New(t)
+
+	scopeA := syntax.NewScope()
+	scopeB := syntax.NewScope()
+	scopeC := syntax.NewScope()
+
+	topEnv := NewNamespaceFrame()
+	env := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), topEnv)
+
+	sym := values.NewSymbol("x")
+
+	// Create two scope-distinct bindings for "x"
+	env.MaybeCreateLocalBinding(
+		sym, BindingTypeVariable, []*syntax.Scope{scopeA}, nil)
+	env.MaybeCreateLocalBinding(
+		sym, BindingTypeVariable, []*syntax.Scope{scopeB}, nil)
+
+	// Resolve with scopeA superset → should find binding at slot 0
+	idx0 := env.GetLocalIndex(sym, []*syntax.Scope{scopeA, scopeC})
+	c.Assert(idx0, qt.IsNotNil)
+	c.Assert(idx0[0], qt.Equals, 0, qt.Commentf(
+		"reference with scopeA should resolve to the scopeA binding"))
+
+	// Resolve with scopeB superset → should find binding at slot 1
+	idx1 := env.GetLocalIndex(sym, []*syntax.Scope{scopeB, scopeC})
+	c.Assert(idx1, qt.IsNotNil)
+	c.Assert(idx1[0], qt.Equals, 1, qt.Commentf(
+		"reference with scopeB should resolve to the scopeB binding"))
+
+	// The two resolutions must be different slots
+	c.Assert(idx0[0] != idx1[0], qt.IsTrue, qt.Commentf(
+		"scope-distinct bindings must resolve to different slots"))
 }
 
 // ---------------------------------------------------------------------------
@@ -975,11 +1061,11 @@ func TestHasLocalVariableBinding_OuterScopeCompatible(t *testing.T) {
 
 	// Outer: binding with [scopeA] — compatible with reference [scopeA]
 	outerEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
-	outerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeA}, nil)
+	outerEnv.MaybeCreateLocalBinding(sym, BindingTypeVariable, []*syntax.Scope{scopeA}, nil)
 
 	// Inner: binding with [scopeB] — incompatible with reference [scopeA]
 	innerEnv := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), outerEnv)
-	innerEnv.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable, []*syntax.Scope{scopeB}, nil)
+	innerEnv.MaybeCreateLocalBinding(sym, BindingTypeVariable, []*syntax.Scope{scopeB}, nil)
 
 	// Reference has [scopeA] — inner binding [scopeB] doesn't match,
 	// but outer binding [scopeA] does. Should return true.
@@ -1076,7 +1162,7 @@ func TestGetGlobalIndexAcrossPhases_ExpandPhaseBinding(t *testing.T) {
 	c.Assert(runtimeGi, qt.IsNil)
 }
 
-func TestGetLocalIndexWithScopes_MaximalBinding(t *testing.T) {
+func TestGetLocalIndex_MaximalBinding(t *testing.T) {
 	c := qt.New(t)
 
 	topLevel := NewNamespace()
@@ -1090,30 +1176,30 @@ func TestGetLocalIndexWithScopes_MaximalBinding(t *testing.T) {
 
 	// Outer: binding with [scopeA] — 1 scope
 	outer := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), env)
-	outer.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable,
+	outer.MaybeCreateLocalBinding(sym, BindingTypeVariable,
 		[]*syntax.Scope{scopeA}, nil)
 
 	// Inner: binding with [scopeA, scopeB] — 2 scopes
 	inner := NewEnvironmentFrameWithParent(NewLocalEnvironment(0), outer)
-	inner.MaybeCreateLocalBindingWithScopes(sym, BindingTypeVariable,
+	inner.MaybeCreateLocalBinding(sym, BindingTypeVariable,
 		[]*syntax.Scope{scopeA, scopeB}, nil)
 
 	// Reference [scopeA, scopeB, scopeC]: both bindings match,
 	// inner wins (more scopes = more specific)
-	idx := inner.GetLocalIndexWithScopes(sym,
+	idx := inner.GetLocalIndex(sym,
 		[]*syntax.Scope{scopeA, scopeB, scopeC})
 	c.Assert(idx, qt.IsNotNil)
 	c.Assert(idx[1], qt.Equals, 0) // depth 0 = inner
 
 	// Reference [scopeA, scopeC]: only outer matches
 	// (inner requires scopeB which reference doesn't have)
-	idx2 := inner.GetLocalIndexWithScopes(sym,
+	idx2 := inner.GetLocalIndex(sym,
 		[]*syntax.Scope{scopeA, scopeC})
 	c.Assert(idx2, qt.IsNotNil)
 	c.Assert(idx2[1], qt.Equals, 1) // depth 1 = outer
 
 	// No matching scopes
-	idx3 := inner.GetLocalIndexWithScopes(sym,
+	idx3 := inner.GetLocalIndex(sym,
 		[]*syntax.Scope{scopeC})
 	c.Assert(idx3, qt.IsNil)
 }

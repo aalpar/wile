@@ -120,7 +120,7 @@ func TestLocalEnvironmentFrame_Keys_DefensiveCopy(t *testing.T) {
 	keys := le.Keys()
 	// Mutating the returned map must not affect internal state.
 	bogus := values.NewSymbol("bogus")
-	keys[*bogus] = 99
+	keys[*bogus] = []int{99}
 
 	qt.Assert(t, le.Keys(), qt.HasLen, 1)
 	qt.Assert(t, le.GetLocalIndex(bogus), qt.IsNil)

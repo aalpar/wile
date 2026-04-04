@@ -78,7 +78,7 @@ func (p *ExpanderTimeContinuation) expandLambdaForm(sym *syntax.SyntaxSymbol, ex
 		p.env,
 	)
 	for _, fs := range formalSyms {
-		childEnv.MaybeCreateLocalBindingWithScopes(fs.sym, environment.BindingTypeVariable, fs.scopes, fs.source)
+		childEnv.MaybeCreateLocalBinding(fs.sym, environment.BindingTypeVariable, fs.scopes, fs.source)
 	}
 
 	// R7RS §5.3: Process define-syntax forms before expanding subsequent expressions

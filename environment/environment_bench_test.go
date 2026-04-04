@@ -33,7 +33,7 @@ func setupLocalEnv(n int) (*EnvironmentFrame, []*values.Symbol) {
 		sym := values.NewSymbol(fmt.Sprintf("x%d", i))
 		syms[i] = sym
 		env.EnsureLocalBinding(sym, BindingTypeVariable)
-		li := env.GetLocalIndex(sym)
+		li := env.GetLocalIndex(sym, nil)
 		env.SetLocalValue(li, values.NewInteger(int64(i)))
 	}
 	return env, syms
@@ -62,7 +62,7 @@ func BenchmarkLocalLookup(b *testing.B) {
 	sym := syms[5]
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = env.GetLocalIndex(sym)
+		_ = env.GetLocalIndex(sym, nil)
 	}
 }
 
@@ -70,7 +70,7 @@ func BenchmarkLocalLookup(b *testing.B) {
 // This is the VM hot path for reading local variables.
 func BenchmarkLocalBindingByIndex(b *testing.B) {
 	env, syms := setupLocalEnv(10)
-	li := env.GetLocalIndex(syms[5])
+	li := env.GetLocalIndex(syms[5], nil)
 	idx := li[0]
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -81,7 +81,7 @@ func BenchmarkLocalBindingByIndex(b *testing.B) {
 // BenchmarkLocalSet measures SetLocalValue — the VM hot path for writing local variables.
 func BenchmarkLocalSet(b *testing.B) {
 	env, syms := setupLocalEnv(10)
-	li := env.GetLocalIndex(syms[5])
+	li := env.GetLocalIndex(syms[5], nil)
 	val := values.NewInteger(99)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

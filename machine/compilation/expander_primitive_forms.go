@@ -124,7 +124,7 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(_ *syntax.SyntaxSymbol
 			newScopes[len(idScopes)] = bindingScope
 
 			sym := id.Sym
-			childExpandEnv.MaybeCreateLocalBindingWithScopes(sym, environment.BindingTypeVariable, newScopes, id.SourceContext())
+			childExpandEnv.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable, newScopes, id.SourceContext())
 		}
 
 		// Continue expansion with the child environment

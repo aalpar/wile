@@ -487,13 +487,13 @@ func TestImport_Simple(t *testing.T) {
 
 	// Verify that the exported names are now bound in the environment
 	makeAdder := values.NewSymbol("make-adder")
-	c.Assert(env.GetBinding(makeAdder), qt.IsNotNil)
+	c.Assert(env.GetBinding(makeAdder, nil), qt.IsNotNil)
 
 	double := values.NewSymbol("double")
-	c.Assert(env.GetBinding(double), qt.IsNotNil)
+	c.Assert(env.GetBinding(double, nil), qt.IsNotNil)
 
 	secretValue := values.NewSymbol("secret-value")
-	c.Assert(env.GetBinding(secretValue), qt.IsNotNil)
+	c.Assert(env.GetBinding(secretValue, nil), qt.IsNotNil)
 }
 
 func TestImport_OnlyModifier(t *testing.T) {
@@ -515,10 +515,10 @@ func TestImport_OnlyModifier(t *testing.T) {
 
 	// Verify only 'double' is bound
 	double := values.NewSymbol("double")
-	c.Assert(env.GetBinding(double), qt.IsNotNil)
+	c.Assert(env.GetBinding(double, nil), qt.IsNotNil)
 
 	makeAdder := values.NewSymbol("make-adder")
-	c.Assert(env.GetBinding(makeAdder), qt.IsNil)
+	c.Assert(env.GetBinding(makeAdder, nil), qt.IsNil)
 }
 
 func TestImport_PrefixModifier(t *testing.T) {
@@ -540,11 +540,11 @@ func TestImport_PrefixModifier(t *testing.T) {
 
 	// Verify prefixed names are bound
 	testDouble := values.NewSymbol("test:double")
-	c.Assert(env.GetBinding(testDouble), qt.IsNotNil)
+	c.Assert(env.GetBinding(testDouble, nil), qt.IsNotNil)
 
 	// Verify unprefixed names are NOT bound
 	double := values.NewSymbol("double")
-	c.Assert(env.GetBinding(double), qt.IsNil)
+	c.Assert(env.GetBinding(double, nil), qt.IsNil)
 }
 
 func TestCopyLibraryBindingsToEnv(t *testing.T) {
@@ -586,13 +586,13 @@ func TestCopyLibraryBindingsToEnv(t *testing.T) {
 
 	// Verify runtime binding was copied
 	fooTarget := values.NewSymbol("bindSymbolWithScopes")
-	fooBinding := targetEnv.GetBinding(fooTarget)
+	fooBinding := targetEnv.GetBinding(fooTarget, nil)
 	c.Assert(fooBinding, qt.IsNotNil)
 	c.Assert(fooBinding.Value(), valuestest.SchemeEquals, values.NewInteger(42))
 
 	// Verify syntax binding was copied
 	barTarget := values.NewSymbol("bar")
-	barBinding := targetEnv.Expand().GetBinding(barTarget)
+	barBinding := targetEnv.Expand().GetBinding(barTarget, nil)
 	c.Assert(barBinding, qt.IsNotNil)
 	c.Assert(barBinding.BindingType(), qt.Equals, environment.BindingTypeSyntax)
 	c.Assert(barBinding.Value(), valuestest.SchemeEquals, mockMacro)
@@ -626,7 +626,7 @@ func TestCopyLibraryBindingsToEnv_WithRename(t *testing.T) {
 
 	// Verify binding is accessible with local name
 	myFooSym := values.NewSymbol("my-bindSymbolWithScopes")
-	binding := targetEnv.GetBinding(myFooSym)
+	binding := targetEnv.GetBinding(myFooSym, nil)
 	c.Assert(binding, qt.IsNotNil)
 	c.Assert(binding.Value(), valuestest.SchemeEquals, values.NewInteger(99))
 }
@@ -778,14 +778,14 @@ func TestCopyLibraryBindingsToEnv_CompilePhase(t *testing.T) {
 
 	// Verify binding is present in runtime phase (phase 0)
 	elseTarget := values.NewSymbol("else")
-	runtimeBinding := targetEnv.GetBinding(elseTarget)
+	runtimeBinding := targetEnv.GetBinding(elseTarget, nil)
 	c.Assert(runtimeBinding, qt.IsNotNil, qt.Commentf("else should be in runtime phase"))
 	c.Assert(runtimeBinding.Value(), valuestest.SchemeEquals, mockValue)
 
 	// Verify binding is also present in compile phase (phase 2)
 	targetCompileEnv := targetEnv.AtPhase(2)
 	elseCompileSym := values.NewSymbol("else")
-	compileBinding := targetCompileEnv.GetBinding(elseCompileSym)
+	compileBinding := targetCompileEnv.GetBinding(elseCompileSym, nil)
 	c.Assert(compileBinding, qt.IsNotNil, qt.Commentf("else should be propagated to compile phase"))
 	c.Assert(compileBinding.Value(), valuestest.SchemeEquals, mockValue)
 }

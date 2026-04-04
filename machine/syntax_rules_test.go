@@ -81,7 +81,7 @@ func TestSyntaxRulesSimpleVariable(t *testing.T) {
 
 	// Check that the transformer was stored in the expand phase environment
 	fooSym := values.NewSymbol("bindSymbolWithScopes")
-	binding := env.Expand().GetBinding(fooSym)
+	binding := env.Expand().GetBinding(fooSym, nil)
 	if binding == nil {
 		t.Fatal("bindSymbolWithScopes not bound in expand phase environment")
 	}
@@ -124,7 +124,7 @@ func TestSyntaxRulesWithLiteral(t *testing.T) {
 
 	// Get the transformer from expand phase (syntax bindings live in expand phase)
 	myIfSym := values.NewSymbol("my-if")
-	binding := env.Expand().GetBinding(myIfSym)
+	binding := env.Expand().GetBinding(myIfSym, nil)
 	if binding == nil {
 		t.Fatal("my-if not bound in expand phase environment")
 	}
@@ -160,7 +160,7 @@ func TestSyntaxRulesWithEllipsis(t *testing.T) {
 
 	// Get the transformer from expand phase (syntax bindings live in expand phase)
 	listStarSym := values.NewSymbol("list*")
-	binding := env.Expand().GetBinding(listStarSym)
+	binding := env.Expand().GetBinding(listStarSym, nil)
 	if binding == nil {
 		t.Fatal("list* not bound in expand phase environment")
 	}
@@ -201,7 +201,7 @@ func TestSyntaxRulesWithCustomEllipsis(t *testing.T) {
 
 	// Get the transformer from expand phase
 	myListSym := values.NewSymbol("my-list")
-	binding := env.Expand().GetBinding(myListSym)
+	binding := env.Expand().GetBinding(myListSym, nil)
 	if binding == nil {
 		t.Fatal("my-list not bound in expand phase environment")
 	}
@@ -242,7 +242,7 @@ func TestSyntaxRulesWithUnderscoreInLiterals(t *testing.T) {
 
 	// Get the transformer from expand phase
 	testUnderscoreSym := values.NewSymbol("test-underscore")
-	binding := env.Expand().GetBinding(testUnderscoreSym)
+	binding := env.Expand().GetBinding(testUnderscoreSym, nil)
 	if binding == nil {
 		t.Fatal("test-underscore not bound in expand phase environment")
 	}

@@ -262,7 +262,7 @@ func validateLetStarFlat(
 
 		bindings = append(bindings, ValidatedLetBinding{Name: r.name, Init: init})
 
-		childEnv.MaybeCreateLocalBindingWithScopes(
+		childEnv.MaybeCreateLocalBinding(
 			r.name.Sym,
 			environment.BindingTypeVariable,
 			r.name.Scopes(),
@@ -314,7 +314,7 @@ func validateLetStarNested(
 
 		lenv := environment.NewLocalEnvironment(0)
 		childEnv := environment.NewEnvironmentFrameWithParent(lenv, currentEnv)
-		childEnv.MaybeCreateLocalBindingWithScopes(
+		childEnv.MaybeCreateLocalBinding(
 			r.name.Sym,
 			environment.BindingTypeVariable,
 			r.name.Scopes(),
@@ -411,7 +411,7 @@ func validateLetrecBindingsAndBody(
 		nameSyms = append(nameSyms, nameSym)
 		initExprs = append(initExprs, elems[1])
 
-		childEnv.MaybeCreateLocalBindingWithScopes(
+		childEnv.MaybeCreateLocalBinding(
 			nameSym.Sym,
 			environment.BindingTypeVariable,
 			nameSym.Scopes(),
@@ -513,7 +513,7 @@ func validateNamedLet(
 	// Create env with tag visible (for recursive calls in body)
 	lenv := environment.NewLocalEnvironment(0)
 	tagEnv := environment.NewEnvironmentFrameWithParent(lenv, env)
-	tagEnv.MaybeCreateLocalBindingWithScopes(
+	tagEnv.MaybeCreateLocalBinding(
 		tag.Sym,
 		environment.BindingTypeVariable,
 		tag.Scopes(),
@@ -679,7 +679,7 @@ func createLetValidationEnv(
 	lenv := environment.NewLocalEnvironment(0)
 	childEnv := environment.NewEnvironmentFrameWithParent(lenv, env)
 	for _, b := range bindings {
-		childEnv.MaybeCreateLocalBindingWithScopes(
+		childEnv.MaybeCreateLocalBinding(
 			b.Name.Sym,
 			environment.BindingTypeVariable,
 			b.Name.Scopes(),

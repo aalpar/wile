@@ -39,6 +39,7 @@
 //  1. Local phase: traverse local bindings up the parent chain
 //  2. Global phase: search global bindings up the parent chain
 //
-// [EnvironmentFrame.GetBindingWithScopes] adds hygiene awareness, using
-// [Scope] sets to match identifiers according to Flatt's algorithm.
+// When scopes are provided, [EnvironmentFrame.GetBinding] adds hygiene
+// awareness, using [Scope] sets to match identifiers according to Flatt's
+// algorithm with maximal binding selection.
 package environment

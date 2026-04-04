@@ -261,7 +261,7 @@ func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 				if phaseEnv == nil {
 					continue
 				}
-				bnd := phaseEnv.GetBinding(sym)
+				bnd := phaseEnv.GetBinding(sym, nil)
 				if bnd != nil {
 					// For foreign closures, prefer DocProvider's rich format
 					// (signature, types, category)
@@ -675,7 +675,7 @@ func (p *MetaCommandHandler) DisassembleBinding(name string) (string, error) {
 				if phaseEnv == nil {
 					continue
 				}
-				bnd := phaseEnv.GetBinding(sym)
+				bnd := phaseEnv.GetBinding(sym, nil)
 				if bnd != nil {
 					val = bnd.Value()
 					break

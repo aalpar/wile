@@ -24,8 +24,8 @@ package machine_test
 //
 //   Path 2 — Compiler (machine/compile_time_continuation.go)
 //     CompileSymbol: dispatches between local/global/scoped code generation.
-//     Checks use-site scopes for fast-path, then uses GetLocalIndexWithScopes /
-//     GetBindingWithScopes for scope-aware lookup.
+//     Checks use-site scopes for fast-path, then uses GetLocalIndex /
+//     GetBinding for scope-aware lookup.
 //
 // A bug fix in one path but not the other causes silent divergence. These tests
 // exercise identical scope scenarios through the full expand → validate → compile
@@ -243,9 +243,9 @@ func TestScopeResolution_LetShadowsMacro(t *testing.T) {
 //	Shadow:   HasLocalVariableBinding checks ScopesMatch for macro-introduced
 //	          bindings in both expander and validator contexts.
 //	Compiler: CompileSymbol scoped path (len(symbolScopes) > 0) →
-//	          GetLocalIndexWithScopes finds the correct scoped binding.
+//	          GetLocalIndex finds the correct scoped binding.
 //
-// Divergence detection: if the compiler's GetLocalIndexWithScopes disagrees with
+// Divergence detection: if the compiler's GetLocalIndex disagrees with
 // the expander's ScopesMatch about which binding a scoped symbol refers to,
 // the macro reads the wrong variable at runtime.
 func TestScopeResolution_MacroHygiene(t *testing.T) {
@@ -381,7 +381,7 @@ func TestScopeResolution_SpecialFormShadowing(t *testing.T) {
 //
 //	Shadow:   HasLocalVariableBinding must handle growing scope sets as each
 //	          macro invocation adds an intro scope.
-//	Compiler: CompileSymbol scoped path → GetLocalIndexWithScopes must find
+//	Compiler: CompileSymbol scoped path → GetLocalIndex must find
 //	          the maximally-specific binding among multiple scoped candidates.
 //
 // Divergence detection: if scope set accumulation differs between the expander
@@ -417,7 +417,7 @@ func TestScopeResolution_NestedMacros(t *testing.T) {
 		},
 		{
 			// Inner binding shadows outer with same name. The compiler's
-			// GetLocalIndexWithScopes must pick the maximally-specific binding.
+			// GetLocalIndex must pick the maximally-specific binding.
 			name: "inner same-name binding shadows outer through macro layers",
 			setup: []string{
 				`(define-syntax bind
@@ -453,7 +453,7 @@ func TestScopeResolution_NestedMacros(t *testing.T) {
 //	Shadow:   HasLocalVariableBinding returns false (free identifiers resolve
 //	          to definition-time globals, not local variables).
 //	Compiler: CompileSymbol → ResolvedBinding path for cross-scope references,
-//	          or GetBindingWithScopes for global bindings with scope metadata.
+//	          or GetBinding for global bindings with scope metadata.
 //
 // Divergence detection: if free identifier resolution differs between expander
 // (which sets ResolvedBinding) and compiler (which reads it), the macro

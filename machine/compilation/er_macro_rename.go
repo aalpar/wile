@@ -70,7 +70,7 @@ func NewERRenameClosure(
 // binding with the same name, preventing variable capture.
 func resolveRenamedSymbol(defExpandEnv *environment.EnvironmentFrame, sym *values.Symbol, introScope *syntax.Scope) *syntax.SyntaxSymbol {
 	// Try expand environment first.
-	bnd := defExpandEnv.GetBinding(sym)
+	bnd := defExpandEnv.GetBinding(sym, nil)
 	if bnd != nil {
 		return symbolWithBindingScopes(sym.Key, bnd, defExpandEnv)
 	}
@@ -78,7 +78,7 @@ func resolveRenamedSymbol(defExpandEnv *environment.EnvironmentFrame, sym *value
 	// Try runtime environment (phase 0).
 	runtimeEnv := findRuntimeEnv(defExpandEnv)
 	if runtimeEnv != nil {
-		bnd = runtimeEnv.GetBinding(sym)
+		bnd = runtimeEnv.GetBinding(sym, nil)
 		if bnd != nil {
 			return symbolWithBindingScopes(sym.Key, bnd, runtimeEnv)
 		}
