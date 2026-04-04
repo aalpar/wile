@@ -326,6 +326,30 @@ type ValidatedLet struct {
 	body     []ValidatedExpr
 }
 
+// NewValidatedLet constructs a ValidatedLet from pre-validated components.
+// Used by the compiler for synthetic let forms (e.g., procedure inlining).
+// Callers must ensure all bindings and body expressions are individually
+// validated — this constructor does not re-validate its inputs.
+//
+// This is the only exported constructor in the validate package. Other
+// validated types are constructed exclusively within the package. Add
+// exported constructors for other types only when an external consumer
+// requires them.
+func NewValidatedLet(
+	formName string,
+	source *syntax.SourceContext,
+	kind LetKind,
+	bindings []ValidatedLetBinding,
+	body []ValidatedExpr,
+) *ValidatedLet {
+	return &ValidatedLet{
+		validatedBase: validatedBase{formName: formName, source: source},
+		Kind:          kind,
+		Bindings:      bindings,
+		body:          body,
+	}
+}
+
 // Body returns the body expressions.
 func (p *ValidatedLet) Body() []ValidatedExpr {
 	return p.body

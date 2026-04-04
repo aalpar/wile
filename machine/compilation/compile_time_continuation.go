@@ -26,6 +26,15 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
+// inlineCandidate holds a let-bound lambda eligible for call-site inlining.
+type inlineCandidate struct {
+	lambda *validate.ValidatedLambda
+	// env is the compile-time environment at registration. Inlining is only
+	// safe when the call site is in the same scope — nested scopes may shadow
+	// free variables that the lambda captured at its definition site.
+	env *environment.EnvironmentFrame
+}
+
 // CompileTimeContinuation is a continuation used during the compilation phase
 type CompileTimeContinuation struct {
 	env         *environment.EnvironmentFrame
@@ -46,6 +55,17 @@ type CompileTimeContinuation struct {
 	// and transformer invocation so the compiler can be tested
 	// without the concrete VM.
 	evaluator machine.MacroEvaluator
+
+	// inlineCandidates maps BindingID → lambda for let-bound closures eligible
+	// for call-site inlining. Populated by CompileValidatedLet, consumed by
+	// compileValidatedCall. Keyed by BindingID for stable cross-scope identity.
+	inlineCandidates map[environment.BindingID]inlineCandidate
+	// currentlyInlining tracks bindings being inlined to prevent infinite
+	// recursion for self-referential letrec bindings.
+	currentlyInlining map[environment.BindingID]struct{}
+	// inlineThreshold is the maximum body length (in top-level expressions)
+	// for inlining eligibility. 0 disables inlining.
+	inlineThreshold int
 }
 
 // NewCompileTimeContinuation creates a new CompileTimeContinuation.
@@ -57,10 +77,11 @@ func NewCompileTimeContinuation(tpl *machine.NativeTemplate, env *environment.En
 		resolver = NewOSFileResolver(env)
 	}
 	q := &CompileTimeContinuation{
-		env:          env,
-		template:     tpl,
-		fileResolver: resolver,
-		evaluator:    evaluator,
+		env:             env,
+		template:        tpl,
+		fileResolver:    resolver,
+		evaluator:       evaluator,
+		inlineThreshold: DefaultInlineThreshold,
 	}
 	return q
 }
@@ -75,6 +96,16 @@ func (p *CompileTimeContinuation) SetFileResolver(r FileResolver) {
 		}
 	}
 	p.fileResolver = r
+}
+
+// DefaultInlineThreshold is the default maximum body length for procedure
+// inlining. A lambda body with more expressions than this is not inlined.
+const DefaultInlineThreshold = 5
+
+// SetInlineThreshold sets the maximum body length for procedure inlining.
+// 0 disables inlining entirely.
+func (p *CompileTimeContinuation) SetInlineThreshold(n int) {
+	p.inlineThreshold = n
 }
 
 // formArgs extracts the argument list from a compiled form's expression.
@@ -240,6 +271,7 @@ func (p *CompileTimeContinuation) CompileMeta(ctctx CompileTimeCallContext, expr
 	// Get the expand environment and compile expressions in it
 	metaEnv := p.env.Expand()
 	metaCont := NewCompileTimeContinuation(p.template, metaEnv, p.evaluator)
+	metaCont.SetInlineThreshold(p.inlineThreshold)
 	err := metaCont.compileExpressionList(ctctx, rest)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "failed to compile meta")

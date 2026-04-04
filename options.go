@@ -47,16 +47,18 @@ const (
 )
 
 type engineConfig struct {
-	registry          *registry.Registry
-	extensions        []registry.Extension
-	maxCallDepth      uint64
-	callDepthSet      bool // true if WithMaxCallDepth was explicitly called
-	libraryPaths      []string
-	libraryEnabled    bool // true when WithLibraryPaths was called
-	importObserver    func(LibraryImportEvent)
-	authorizer        security.Authorizer
-	namespace         *environment.Namespace // pre-built namespace (via WithNamespace)
-	resolverFactories []resolverFactory      // source file resolver chain (via WithSourceFS, WithSourceOS)
+	registry           *registry.Registry
+	extensions         []registry.Extension
+	maxCallDepth       uint64
+	callDepthSet       bool // true if WithMaxCallDepth was explicitly called
+	inlineThreshold    int
+	inlineThresholdSet bool // true if WithInlineThreshold was explicitly called
+	libraryPaths       []string
+	libraryEnabled     bool // true when WithLibraryPaths was called
+	importObserver     func(LibraryImportEvent)
+	authorizer         security.Authorizer
+	namespace          *environment.Namespace // pre-built namespace (via WithNamespace)
+	resolverFactories  []resolverFactory      // source file resolver chain (via WithSourceFS, WithSourceOS)
 }
 
 // resolverFactory creates a FileResolver given the runtime environment.
@@ -96,6 +98,20 @@ func WithMaxCallDepth(n uint64) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.maxCallDepth = n
 		cfg.callDepthSet = true
+	}
+}
+
+// WithInlineThreshold sets the maximum body length (in top-level expressions)
+// for procedure inlining. Procedures with bodies longer than this threshold
+// are not inlined. A value of 0 disables inlining entirely. When not called,
+// the engine uses compilation.DefaultInlineThreshold (5).
+func WithInlineThreshold(n int) EngineOption {
+	return func(cfg *engineConfig) {
+		if n < 0 {
+			n = 0
+		}
+		cfg.inlineThreshold = n
+		cfg.inlineThresholdSet = true
 	}
 }
 

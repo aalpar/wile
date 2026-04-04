@@ -572,6 +572,14 @@ func (p *CompileTimeContinuation) CompileValidatedBegin(ctctx CompileTimeCallCon
 //
 // See BIBLIOGRAPHY.md "Direct-Style Compilation".
 func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallContext, v *validate.ValidatedCall) error {
+	inlined, err := p.tryInlineCall(ctctx, v)
+	if err != nil {
+		return err
+	}
+	if inlined {
+		return nil
+	}
+
 	var operationSaveContinuationIndex int
 	if !ctctx.inTail {
 		// Non-tail call: save continuation so we can return here after the call
@@ -580,7 +588,7 @@ func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallCont
 	// Tail call: skip SaveContinuation - the callee will return directly to our caller
 
 	// Compile the procedure expression
-	err := p.compileValidated(ctctx.NotInTail(), v.Proc())
+	err = p.compileValidated(ctctx.NotInTail(), v.Proc())
 	if err != nil {
 		return err
 	}
@@ -588,7 +596,7 @@ func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallCont
 
 	// Compile arguments in order, pushing each to the stack
 	for _, arg := range v.Body() {
-		err := p.compileValidated(ctctx.NotInTail(), arg)
+		err = p.compileValidated(ctctx.NotInTail(), arg)
 		if err != nil {
 			return err
 		}
@@ -606,6 +614,94 @@ func (p *CompileTimeContinuation) compileValidatedCall(ctctx CompileTimeCallCont
 	}
 
 	return nil
+}
+
+// tryInlineCall checks whether a call can be inlined by substituting a
+// let-bound lambda's body at the call site. Returns (true, nil) if the
+// call was inlined, (false, nil) if inlining does not apply, or
+// (false, err) on compilation failure.
+func (p *CompileTimeContinuation) tryInlineCall(
+	ctctx CompileTimeCallContext,
+	v *validate.ValidatedCall,
+) (bool, error) {
+	if p.inlineCandidates == nil {
+		return false, nil
+	}
+
+	sym, ok := v.Proc().(*validate.ValidatedSymbol)
+	if !ok {
+		return false, nil
+	}
+
+	bid, resolved := p.env.ResolveBindingID(sym.Symbol.Sym, sym.Symbol.Scopes())
+	if !resolved {
+		return false, nil
+	}
+
+	candidate, found := p.inlineCandidates[bid]
+	if !found {
+		return false, nil
+	}
+
+	// Only inline when the call site is in the same scope as the
+	// registration site. Nested scopes (e.g., let* with duplicate names)
+	// may shadow free variables that the lambda captured at definition.
+	if p.env != candidate.env {
+		return false, nil
+	}
+
+	// Guard against recursive inlining.
+	if p.currentlyInlining != nil {
+		_, inlining := p.currentlyInlining[bid]
+		if inlining {
+			return false, nil
+		}
+	}
+
+	// Arity check: argument count must match parameter count exactly.
+	// The binding is !Mutable (no set!) so the lambda's parameter count is
+	// known at compile time. An arity mismatch is a guaranteed runtime error;
+	// report it now instead of deferring to the VM.
+	params := candidate.lambda.Params()
+	if len(v.Body()) != len(params.Required) {
+		return false, werr.WrapForeignErrorf(
+			werr.ErrWrongNumberOfArguments,
+			"inline call to %s: expected %d argument(s), got %d",
+			sym.Symbol.Sym, len(params.Required), len(v.Body()),
+		)
+	}
+
+	// Build synthetic let bindings: each parameter bound to the corresponding argument.
+	// Mark Escapes=true to prevent registerInlineCandidates from treating these
+	// synthetic bindings as inline candidates — their Mutable/Escapes flags have
+	// not been computed by the validator.
+	syntheticBindings := make([]validate.ValidatedLetBinding, len(params.Required))
+	for i, param := range params.Required {
+		syntheticBindings[i] = validate.ValidatedLetBinding{
+			Name:    param,
+			Init:    v.Body()[i],
+			Escapes: true,
+		}
+	}
+
+	syntheticLet := validate.NewValidatedLet(
+		"let",
+		v.Source(),
+		validate.LetKindLet,
+		syntheticBindings,
+		candidate.lambda.Body(),
+	)
+
+	// Set recursion guard.
+	if p.currentlyInlining == nil {
+		p.currentlyInlining = make(map[environment.BindingID]struct{})
+	}
+	p.currentlyInlining[bid] = struct{}{}
+	defer func() {
+		delete(p.currentlyInlining, bid)
+	}()
+
+	return true, p.CompileValidatedLet(ctctx, syntheticLet)
 }
 
 // compileValidatedLiteral handles self-evaluating values (numbers, strings, booleans, etc.).

@@ -48,6 +48,7 @@ func (p *CompileTimeContinuation) expandCompileExecute(
 
 	tmpTpl := machine.NewNativeTemplate(0, 0, false)
 	tmpCcnt := NewCompileTimeContinuation(tmpTpl, expandEnv, p.evaluator)
+	tmpCcnt.SetInlineThreshold(p.inlineThreshold)
 
 	err = tmpCcnt.CompileExpression(ctctx, expandedExpr)
 	if err != nil {
