@@ -250,9 +250,10 @@ func compileClauseWithEllipsisAndLiterals(
 	// Create matcher with ellipsis variable mapping, custom ellipsis, and literal syntax
 	// The literalSyntax enables scope-aware matching for auxiliary syntax hygiene
 	matcher := match.NewSyntaxMatcher(variables, compiled.Codes, &match.SyntaxMatcherOpts{
-		EllipsisVars:  compiled.EllipsisVars,
-		EllipsisID:    ellipsis,
-		LiteralSyntax: literalSyntax,
+		EllipsisVars:   compiled.EllipsisVars,
+		EllipsisDepths: compiled.EllipsisDepths,
+		EllipsisID:     ellipsis,
+		LiteralSyntax:  literalSyntax,
 	})
 
 	// Collect free identifiers from template (identifiers that are NOT pattern variables)

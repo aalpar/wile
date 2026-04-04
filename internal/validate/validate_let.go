@@ -16,10 +16,36 @@ package validate
 
 import (
 	"context"
+	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
 )
+
+// bindingIdentity uniquely identifies a binding by name and scope set.
+// Two identifiers with the same name but different scope sets (e.g., introduced
+// by different macro expansions) are considered distinct.
+type bindingIdentity struct {
+	key      string
+	scopeKey string
+}
+
+// scopeFingerprint builds a deterministic string from sorted scope IDs.
+// Identifiers with different scope sets produce different fingerprints,
+// allowing the duplicate-binding check to respect hygiene.
+func scopeFingerprint(scopes []*syntax.Scope) string {
+	if len(scopes) == 0 {
+		return ""
+	}
+	ids := make([]string, len(scopes))
+	for i, s := range scopes {
+		ids[i] = strconv.FormatUint(s.ID(), 10)
+	}
+	slices.Sort(ids)
+	return strings.Join(ids, ",")
+}
 
 // validateLetCommon validates all four binding forms (let, let*, letrec, letrec*).
 // The Kind parameter determines scoping and evaluation semantics.
@@ -185,15 +211,21 @@ func validateLetStarBindingsAndBody(
 	}
 
 	// Check for duplicate names — determines which code path to use.
+	// Uses scope-aware identity so hygienic bindings with the same name
+	// but different scopes are not falsely treated as duplicates.
 	hasDups := false
 	if len(raw) >= 2 {
-		seen := make(map[string]bool, len(raw))
+		seen := make(map[bindingIdentity]bool, len(raw))
 		for _, r := range raw {
-			if seen[r.name.Sym.Key] {
+			id := bindingIdentity{
+				key:      r.name.Sym.Key,
+				scopeKey: scopeFingerprint(r.name.Scopes()),
+			}
+			if seen[id] {
 				hasDups = true
 				break
 			}
-			seen[r.name.Sym.Key] = true
+			seen[id] = true
 		}
 	}
 
@@ -388,17 +420,22 @@ func validateLetrecBindingsAndBody(
 	}
 
 	// Check for duplicate binding names (R7RS §4.2.2)
+	// Uses scope-aware identity so that identifiers with the same name but
+	// different scope sets (introduced by hygienic macro expansion) are distinct.
 	if len(nameSyms) >= 2 {
-		seen := make(map[string]bool, len(nameSyms))
+		seen := make(map[bindingIdentity]bool, len(nameSyms))
 		for _, ns := range nameSyms {
-			key := ns.Sym.Key
-			if seen[key] {
+			id := bindingIdentity{
+				key:      ns.Sym.Key,
+				scopeKey: scopeFingerprint(ns.Scopes()),
+			}
+			if seen[id] {
 				result.addErrorf(getSourceContext(ns), formName,
-					"duplicate binding name %q", key)
+					"duplicate binding name %q", ns.Sym.Key)
 				allOk = false
 				continue
 			}
-			seen[key] = true
+			seen[id] = true
 		}
 		if !allOk {
 			return nil
@@ -552,17 +589,20 @@ func checkDuplicateBindingNames(
 	if len(bindings) < 2 {
 		return true
 	}
-	seen := make(map[string]bool, len(bindings))
+	seen := make(map[bindingIdentity]bool, len(bindings))
 	allOk := true
 	for _, b := range bindings {
-		key := b.Name.Sym.Key
-		if seen[key] {
+		id := bindingIdentity{
+			key:      b.Name.Sym.Key,
+			scopeKey: scopeFingerprint(b.Name.Scopes()),
+		}
+		if seen[id] {
 			result.addErrorf(getSourceContext(b.Name), formName,
-				"duplicate binding name %q", key)
+				"duplicate binding name %q", b.Name.Sym.Key)
 			allOk = false
 			continue
 		}
-		seen[key] = true
+		seen[id] = true
 	}
 	return allOk
 }

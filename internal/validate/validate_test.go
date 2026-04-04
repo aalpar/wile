@@ -1708,3 +1708,91 @@ func TestValidateWithContinuationMarkImproperList(t *testing.T) {
 	c.Assert(result.Ok(), qt.IsFalse)
 	c.Assert(result.Errors[0].Message, qt.Contains, "proper list")
 }
+
+// TestLetDuplicateBindingWithDifferentScopes tests that two bindings with the
+// same symbol key but different scope sets are NOT considered duplicates.
+// In a hygienic macro system (sets-of-scopes), two identifiers "x" introduced
+// by different macro expansions carry different scopes and are distinct.
+//
+// The current implementation uses bare string comparison (ns.Sym.Key) for
+// duplicate detection, which incorrectly rejects hygienically-distinct
+// identifiers as duplicates. This test documents that bug.
+func TestLetDuplicateBindingWithDifferentScopes(t *testing.T) {
+	env := environment.NewNamespace().Runtime()
+
+	// Create two distinct scopes to represent identifiers from different
+	// macro expansions.
+	scope1 := syntax.NewScope()
+	scope2 := syntax.NewScope()
+
+	sctx1 := &syntax.SourceContext{Scopes: []*syntax.Scope{scope1}}
+	sctx2 := &syntax.SourceContext{Scopes: []*syntax.Scope{scope2}}
+
+	// Build: (let ((x_scope1 1) (x_scope2 2)) x_scope1)
+	// where x_scope1 and x_scope2 are both "x" but with different scope sets.
+	xSym1 := syntax.NewSyntaxSymbol("x", sctx1)
+	xSym2 := syntax.NewSyntaxSymbol("x", sctx2)
+
+	letSym := syntax.NewSyntaxSymbol("let", nil)
+	int1 := syntax.NewSyntaxObject(values.NewInteger(1), nil)
+	int2 := syntax.NewSyntaxObject(values.NewInteger(2), nil)
+
+	// Build binding pairs: ((x_scope1 1) (x_scope2 2))
+	binding1 := syntax.SyntaxList(nil, xSym1, int1)
+	binding2 := syntax.SyntaxList(nil, xSym2, int2)
+	bindings := syntax.SyntaxList(nil, binding1, binding2)
+
+	// Build body reference to x_scope1
+	bodyRef := syntax.NewSyntaxSymbol("x", sctx1)
+
+	// Build full form: (let ((x 1) (x 2)) x)
+	form := syntax.SyntaxList(nil, letSym, bindings, bodyRef)
+
+	t.Run("different scopes should not be duplicate", func(t *testing.T) {
+		c := qt.New(t)
+		result := ValidateExpression(context.TODO(), env, form)
+		// This SHOULD pass: two "x" identifiers with different scopes are distinct.
+		// Currently FAILS because duplicate detection uses bare string keys.
+		c.Assert(result.Ok(), qt.IsTrue,
+			qt.Commentf("two 'x' bindings with different scopes should not be duplicates; errors: %v", result.Errors))
+	})
+
+	t.Run("same scopes should still be duplicate", func(t *testing.T) {
+		c := qt.New(t)
+
+		// Build: (let ((x_scope1 1) (x_scope1 2)) x_scope1)
+		// Both bindings have identical key AND scopes — genuine duplicate.
+		xDup1 := syntax.NewSyntaxSymbol("x", sctx1)
+		xDup2 := syntax.NewSyntaxSymbol("x", sctx1)
+
+		dupBinding1 := syntax.SyntaxList(nil, xDup1, int1)
+		dupBinding2 := syntax.SyntaxList(nil, xDup2, int2)
+		dupBindings := syntax.SyntaxList(nil, dupBinding1, dupBinding2)
+		dupBodyRef := syntax.NewSyntaxSymbol("x", sctx1)
+		dupForm := syntax.SyntaxList(nil, letSym, dupBindings, dupBodyRef)
+
+		result := ValidateExpression(context.TODO(), env, dupForm)
+		c.Assert(result.Ok(), qt.IsFalse,
+			qt.Commentf("two 'x' bindings with identical scopes should be flagged as duplicates"))
+		c.Assert(result.Errors[0].Message, qt.Contains, "duplicate binding name")
+	})
+
+	// Also test letrec, which has a separate inline duplicate check.
+	t.Run("letrec different scopes should not be duplicate", func(t *testing.T) {
+		c := qt.New(t)
+
+		letrecSym := syntax.NewSyntaxSymbol("letrec", nil)
+		xA := syntax.NewSyntaxSymbol("x", sctx1)
+		xB := syntax.NewSyntaxSymbol("x", sctx2)
+
+		bA := syntax.SyntaxList(nil, xA, int1)
+		bB := syntax.SyntaxList(nil, xB, int2)
+		bs := syntax.SyntaxList(nil, bA, bB)
+		bodyRefLetrec := syntax.NewSyntaxSymbol("x", sctx1)
+		letrecForm := syntax.SyntaxList(nil, letrecSym, bs, bodyRefLetrec)
+
+		result := ValidateExpression(context.TODO(), env, letrecForm)
+		c.Assert(result.Ok(), qt.IsTrue,
+			qt.Commentf("letrec: two 'x' bindings with different scopes should not be duplicates; errors: %v", result.Errors))
+	})
+}

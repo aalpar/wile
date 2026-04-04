@@ -90,6 +90,7 @@ func (p *SyntaxMatcher) Expand(template syntax.SyntaxValue, opts ExpandOptions) 
 		template,
 		p.matcher.captureStack[0],
 		nil, // ellipsisVars
+		nil, // excludeEllipsisIDs
 		&opts,
 	)
 }
@@ -97,10 +98,16 @@ func (p *SyntaxMatcher) Expand(template syntax.SyntaxValue, opts ExpandOptions) 
 // expandSyntaxValue recursively expands a syntax template with captured bindings,
 // preserving scope information and using scope comparison for pattern variable substitution.
 // This is the syntax-level expansion that correctly handles nested macro hygiene.
+//
+// The excludeEllipsisIDs parameter tracks ellipsis IDs that have already been consumed
+// by an outer expansion level. This prevents nested ellipsis from re-selecting the
+// same outer ID — e.g., for pattern ((a ...) ...) the outer ID is consumed first,
+// and the inner expansion selects the inner ID.
 func (p *SyntaxMatcher) expandSyntaxValue(
 	template syntax.SyntaxValue,
 	ctx *captureContext,
 	ellipsisVars map[string]struct{},
+	excludeEllipsisIDs map[int]struct{},
 	opts *ExpandOptions,
 ) (syntax.SyntaxValue, error) {
 	if template == nil {
@@ -140,17 +147,17 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 				if sym.Unwrap().(*values.Symbol).Key == p.ellipsisID {
 					// Found ellipsis - handle repetition
 					return p.expandSyntaxEllipsis(
-						car, cdrPair.SyntaxCdr(), ctx, ellipsisVars, opts)
+						car, cdrPair.SyntaxCdr(), ctx, ellipsisVars, excludeEllipsisIDs, opts)
 				}
 			}
 		}
 
 		// Regular pair - expand car and cdr
-		expandedCar, err := p.expandSyntaxValue(car, ctx, ellipsisVars, opts)
+		expandedCar, err := p.expandSyntaxValue(car, ctx, ellipsisVars, excludeEllipsisIDs, opts)
 		if err != nil {
 			return nil, err
 		}
-		expandedCdr, err := p.expandSyntaxValue(cdr, ctx, ellipsisVars, opts)
+		expandedCdr, err := p.expandSyntaxValue(cdr, ctx, ellipsisVars, excludeEllipsisIDs, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -170,7 +177,7 @@ func (p *SyntaxMatcher) expandSyntaxValue(
 		// Expand each element
 		expandedElements := make([]syntax.SyntaxValue, len(t.Values))
 		for i, elem := range t.Values {
-			expanded, err := p.expandSyntaxValue(elem, ctx, ellipsisVars, opts)
+			expanded, err := p.expandSyntaxValue(elem, ctx, ellipsisVars, excludeEllipsisIDs, opts)
 			if err != nil {
 				return nil, err
 			}
@@ -373,14 +380,16 @@ func (p *SyntaxMatcher) expandSyntaxEllipsis(
 	rest syntax.SyntaxValue,
 	ctx *captureContext,
 	ellipsisVars map[string]struct{},
+	excludeEllipsisIDs map[int]struct{},
 	opts *ExpandOptions,
 ) (syntax.SyntaxValue, error) {
 	// Find which variables in the pattern are bound in child contexts
 	patternVarsInTemplate := p.findSyntaxPatternVariables(pattern)
 
-	// Find the ellipsis ID that captured these variables
-	ellipsisID := p.matcher.findMatchingEllipsisID(patternVarsInTemplate)
-	if ellipsisID < 0 {
+	// Find ALL ellipsis IDs that contribute variables to this template,
+	// excluding any IDs already consumed by an outer expansion level.
+	matchingIDs := p.matcher.findMatchingEllipsisIDs(patternVarsInTemplate, excludeEllipsisIDs)
+	if len(matchingIDs) == 0 {
 		// No matching ellipsis — the pattern element contains no variables that
 		// were captured under any ellipsis, so it acts as a constant template
 		// (e.g., a literal symbol followed by `...`). R7RS §4.3.2: "It is an
@@ -388,40 +397,163 @@ func (p *SyntaxMatcher) expandSyntaxEllipsis(
 		// appear in the pattern." The pattern compiler validates this earlier;
 		// reaching here means the element has no pattern variables at all, so
 		// repeating it zero times (dropping it) is correct.
-		return p.expandSyntaxValue(rest, ctx, ellipsisVars, opts)
+		return p.expandSyntaxValue(rest, ctx, ellipsisVars, excludeEllipsisIDs, opts)
 	}
 
-	// Get children for this specific ellipsis ID
+	if len(matchingIDs) == 1 {
+		// Single-group fast path — no extra allocation.
+		return p.expandEllipsisSingleGroup(
+			pattern, rest, ctx, ellipsisVars, excludeEllipsisIDs, opts,
+			patternVarsInTemplate, matchingIDs[0],
+		)
+	}
+
+	// Multi-group path: variables span multiple ellipsis groups (cross-group zipping).
+	return p.expandEllipsisCrossGroup(
+		pattern, rest, ctx, ellipsisVars, excludeEllipsisIDs, opts,
+		patternVarsInTemplate, matchingIDs,
+	)
+}
+
+// expandEllipsisSingleGroup handles the common case where all template variables
+// come from a single ellipsis group.
+func (p *SyntaxMatcher) expandEllipsisSingleGroup(
+	pattern syntax.SyntaxValue,
+	rest syntax.SyntaxValue,
+	ctx *captureContext,
+	ellipsisVars map[string]struct{},
+	excludeEllipsisIDs map[int]struct{},
+	opts *ExpandOptions,
+	patternVarsInTemplate map[string]struct{},
+	ellipsisID int,
+) (syntax.SyntaxValue, error) {
 	children := ctx.children[ellipsisID]
 	if len(children) == 0 {
-		// No repetitions captured, just expand the rest
-		return p.expandSyntaxValue(rest, ctx, ellipsisVars, opts)
+		return p.expandSyntaxValue(rest, ctx, ellipsisVars, excludeEllipsisIDs, opts)
 	}
 
-	// Build result by repeating pattern for each child context
-	var results []syntax.SyntaxValue
+	// Add this ellipsis ID to the exclude set so nested ellipsis expansions
+	// within the children select the inner ID instead of re-selecting this one.
+	innerExclude := make(map[int]struct{}, len(excludeEllipsisIDs)+1)
+	for id := range excludeEllipsisIDs {
+		innerExclude[id] = struct{}{}
+	}
+	innerExclude[ellipsisID] = struct{}{}
+
+	results, err := p.expandEllipsisChildren(pattern, children, ellipsisVars, innerExclude, opts, patternVarsInTemplate)
+	if err != nil {
+		return nil, err
+	}
+
+	return p.combineEllipsisResults(results, rest, ctx, ellipsisVars, excludeEllipsisIDs, opts, pattern)
+}
+
+// expandEllipsisCrossGroup handles cross-group zipping where template variables
+// come from multiple ellipsis groups that must iterate in lockstep.
+func (p *SyntaxMatcher) expandEllipsisCrossGroup(
+	pattern syntax.SyntaxValue,
+	rest syntax.SyntaxValue,
+	ctx *captureContext,
+	ellipsisVars map[string]struct{},
+	excludeEllipsisIDs map[int]struct{},
+	opts *ExpandOptions,
+	patternVarsInTemplate map[string]struct{},
+	matchingIDs []int,
+) (syntax.SyntaxValue, error) {
+	// Verify all groups have the same iteration count.
+	count := len(ctx.children[matchingIDs[0]])
+	for _, id := range matchingIDs[1:] {
+		idCount := len(ctx.children[id])
+		if idCount != count {
+			return nil, werr.WrapForeignErrorf(
+				werr.ErrExpansion,
+				"expandSyntaxEllipsis: ellipsis groups have different repetition counts (%d vs %d)",
+				count, idCount,
+			)
+		}
+	}
+
+	if count == 0 {
+		return p.expandSyntaxValue(rest, ctx, ellipsisVars, excludeEllipsisIDs, opts)
+	}
+
+	// Build merged children: for each iteration k, combine bindings from all groups.
+	mergedChildren := make([]*captureContext, count)
+	for k := range count {
+		merged := &captureContext{
+			bindings: make(map[string]syntax.SyntaxValue),
+			children: make(map[int][]*captureContext),
+		}
+		for _, id := range matchingIDs {
+			child := ctx.children[id][k]
+			maps.Copy(merged.bindings, child.bindings)
+			for cid, cchildren := range child.children {
+				merged.children[cid] = append(merged.children[cid], cchildren...)
+			}
+		}
+		mergedChildren[k] = merged
+	}
+
+	// Add all matching IDs to the exclude set for recursive expansion.
+	innerExclude := make(map[int]struct{}, len(excludeEllipsisIDs)+len(matchingIDs))
+	for id := range excludeEllipsisIDs {
+		innerExclude[id] = struct{}{}
+	}
+	for _, id := range matchingIDs {
+		innerExclude[id] = struct{}{}
+	}
+
+	results, err := p.expandEllipsisChildren(pattern, mergedChildren, ellipsisVars, innerExclude, opts, patternVarsInTemplate)
+	if err != nil {
+		return nil, err
+	}
+
+	return p.combineEllipsisResults(results, rest, ctx, ellipsisVars, excludeEllipsisIDs, opts, pattern)
+}
+
+// expandEllipsisChildren expands the template pattern once for each child context,
+// returning the list of expanded results.
+func (p *SyntaxMatcher) expandEllipsisChildren(
+	pattern syntax.SyntaxValue,
+	children []*captureContext,
+	ellipsisVars map[string]struct{},
+	excludeEllipsisIDs map[int]struct{},
+	opts *ExpandOptions,
+	patternVarsInTemplate map[string]struct{},
+) ([]syntax.SyntaxValue, error) {
+	results := make([]syntax.SyntaxValue, 0, len(children))
 	for _, childCtx := range children {
-		// Create a new ellipsis variable set for this expansion
 		newEllipsisVars := make(map[string]struct{})
 		maps.Copy(newEllipsisVars, ellipsisVars)
 		for v := range patternVarsInTemplate {
 			newEllipsisVars[v] = struct{}{}
 		}
 
-		expanded, err := p.expandSyntaxValue(pattern, childCtx, newEllipsisVars, opts)
+		expanded, err := p.expandSyntaxValue(pattern, childCtx, newEllipsisVars, excludeEllipsisIDs, opts)
 		if err != nil {
 			return nil, err
 		}
 		results = append(results, expanded)
 	}
+	return results, nil
+}
 
-	// Expand the rest
-	expandedRest, err := p.expandSyntaxValue(rest, ctx, ellipsisVars, opts)
+// combineEllipsisResults expands the rest of the template and prepends
+// the ellipsis-expanded results.
+func (p *SyntaxMatcher) combineEllipsisResults(
+	results []syntax.SyntaxValue,
+	rest syntax.SyntaxValue,
+	ctx *captureContext,
+	ellipsisVars map[string]struct{},
+	excludeEllipsisIDs map[int]struct{},
+	opts *ExpandOptions,
+	pattern syntax.SyntaxValue,
+) (syntax.SyntaxValue, error) {
+	expandedRest, err := p.expandSyntaxValue(rest, ctx, ellipsisVars, excludeEllipsisIDs, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	// Combine results into a list and append the rest
 	srcCtx := opts.UseSiteCtx
 	if srcCtx == nil && pattern != nil {
 		srcCtx = pattern.SourceContext()

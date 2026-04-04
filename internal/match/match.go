@@ -56,12 +56,13 @@ const DefaultEllipsis = "..."
 // It executes compiled pattern bytecode against an input form,
 // capturing pattern variable bindings that can be used for template expansion.
 type Matcher struct {
-	variables    map[string]struct{}         // Known pattern variables
-	codes        []SyntaxCommand             // Compiled pattern bytecode
-	captureStack []*captureContext           // Binding capture stack (nesting for ellipsis)
-	syntaxStack  []syntaxPathEntry           // Input traversal stack (syntax-native)
-	ellipsisVars map[int]map[string]struct{} // ellipsisID -> captured pattern variables
-	ellipsisID   string                      // Custom ellipsis identifier (default "...")
+	variables      map[string]struct{}         // Known pattern variables
+	codes          []SyntaxCommand             // Compiled pattern bytecode
+	captureStack   []*captureContext           // Binding capture stack (nesting for ellipsis)
+	syntaxStack    []syntaxPathEntry           // Input traversal stack (syntax-native)
+	ellipsisVars   map[int]map[string]struct{} // ellipsisID -> captured pattern variables
+	ellipsisDepths map[int]int                 // ellipsisID -> nesting depth (0 = innermost)
+	ellipsisID     string                      // Custom ellipsis identifier (default "...")
 
 	// tailCountCache and tailCountPC cache the remaining element count for
 	// ByteCodeSkipIfTailCount to avoid re-walking the list on every loop
@@ -88,14 +89,38 @@ func NewMatcherWithEllipsisVars(variables map[string]struct{}, codes []SyntaxCom
 // The ellipsisID parameter specifies the identifier used for ellipsis patterns
 // (default is "..." per R7RS, but can be customized per R7RS §4.3.2).
 func NewMatcherFull(variables map[string]struct{}, codes []SyntaxCommand, ellipsisVars map[int]map[string]struct{}, ellipsisID string) *Matcher {
+	return NewMatcherFullWithDepths(variables, codes, ellipsisVars, nil, ellipsisID)
+}
+
+// NewMatcherFullWithDepths creates a matcher with all parameters including custom
+// ellipsis and depth metadata. The ellipsisDepths parameter maps each ellipsis ID
+// to its nesting depth (0 = innermost). When nil, depths are inferred from the
+// ellipsis ID ordering (higher ID = outer = higher depth).
+func NewMatcherFullWithDepths(
+	variables map[string]struct{},
+	codes []SyntaxCommand,
+	ellipsisVars map[int]map[string]struct{},
+	ellipsisDepths map[int]int,
+	ellipsisID string,
+) *Matcher {
 	if ellipsisID == "" {
 		ellipsisID = DefaultEllipsis
 	}
+	// When explicit depths are not provided, infer from ID ordering:
+	// the compiler assigns IDs sequentially, so inner ellipsis always gets
+	// a lower ID than outer ellipsis. Use the ID value as a depth proxy.
+	if ellipsisDepths == nil && len(ellipsisVars) > 0 {
+		ellipsisDepths = make(map[int]int, len(ellipsisVars))
+		for id := range ellipsisVars {
+			ellipsisDepths[id] = id
+		}
+	}
 	q := &Matcher{
-		variables:    variables,
-		codes:        codes,
-		ellipsisVars: ellipsisVars,
-		ellipsisID:   ellipsisID,
+		variables:      variables,
+		codes:          codes,
+		ellipsisVars:   ellipsisVars,
+		ellipsisDepths: ellipsisDepths,
+		ellipsisID:     ellipsisID,
 	}
 	return q
 }
@@ -489,54 +514,69 @@ func (p *Matcher) GetBindings() map[string]syntax.SyntaxValue {
 	return p.captureStack[0].bindings
 }
 
-// findMatchingEllipsisID finds the ellipsis ID that captured the given pattern variables.
-// Returns -1 if no matching ellipsis ID is found.
-// When multiple variables are requested, finds the ID that contains ALL of them.
-// This is important for nested ellipsis patterns like ((var init step ...) ...)
-// where step appears in both the inner (step only) and outer (var, init, step) IDs.
-func (p *Matcher) findMatchingEllipsisID(vars map[string]struct{}) int {
+// findMatchingEllipsisIDs returns ALL ellipsis IDs that contribute variables to the
+// template expression. In the common case where one ID covers all variables, a single-
+// element slice is returned. When variables span multiple groups (cross-group zipping),
+// every contributing ID is returned in sorted order.
+func (p *Matcher) findMatchingEllipsisIDs(vars map[string]struct{}, excludeIDs map[int]struct{}) []int {
 	if p.ellipsisVars == nil {
-		// Legacy mode: no ellipsis IDs, use ID 0
-		return 0
+		return []int{0}
 	}
 
-	// Collect and sort IDs for deterministic iteration order.
-	// Go map iteration order is non-deterministic, which could cause
-	// different ellipsis IDs to be returned on different runs when
-	// multiple IDs match. This led to intermittent hangs in macro expansion.
+	// Collect and sort IDs for deterministic order.
 	ids := make([]int, 0, len(p.ellipsisVars))
 	for id := range p.ellipsisVars {
+		if excludeIDs != nil {
+			_, excluded := excludeIDs[id]
+			if excluded {
+				continue
+			}
+		}
 		ids = append(ids, id)
 	}
 	sort.Ints(ids)
 
-	// Find the ID that contains ALL the requested variables
+	// Try single-ID match first (common case). When multiple IDs each contain
+	// all vars, prefer the one with the highest nesting depth (outermost first).
+	bestID := -1
+	bestDepth := -1
 	for _, id := range ids {
-		ellipsisVars := p.ellipsisVars[id]
 		allFound := true
 		for v := range vars {
-			_, ok := ellipsisVars[v]
+			_, ok := p.ellipsisVars[id][v]
 			if !ok {
 				allFound = false
 				break
 			}
 		}
-		if allFound {
-			return id
+		if !allFound {
+			continue
+		}
+		depth := p.ellipsisDepths[id]
+		if depth > bestDepth {
+			bestDepth = depth
+			bestID = id
 		}
 	}
+	if bestID >= 0 {
+		return []int{bestID}
+	}
 
-	// Fallback: find any ID that contains at least one variable
+	// Multi-group case: collect all IDs that contribute at least one variable.
+	var contributing []int
 	for _, id := range ids {
-		ellipsisVars := p.ellipsisVars[id]
 		for v := range vars {
-			_, ok := ellipsisVars[v]
+			_, ok := p.ellipsisVars[id][v]
 			if ok {
-				return id
+				contributing = append(contributing, id)
+				break
 			}
 		}
 	}
-	return -1
+	if len(contributing) == 0 {
+		return nil
+	}
+	return contributing
 }
 
 // countRemainingSyntaxElements counts the number of elements from the current position

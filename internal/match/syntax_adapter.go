@@ -103,9 +103,10 @@ type SyntaxMatcher struct {
 // SyntaxMatcherOpts holds optional parameters for NewSyntaxMatcher.
 // A nil opts pointer means all defaults (no ellipsis vars, default "...", no literals).
 type SyntaxMatcherOpts struct {
-	EllipsisVars  map[int]map[string]struct{}
-	EllipsisID    string
-	LiteralSyntax map[string]*syntax.SyntaxSymbol
+	EllipsisVars   map[int]map[string]struct{}
+	EllipsisDepths map[int]int // ellipsisID -> nesting depth (0 = innermost)
+	EllipsisID     string
+	LiteralSyntax  map[string]*syntax.SyntaxSymbol
 }
 
 // NewSyntaxMatcher creates a syntax-aware matcher that wraps the core Matcher
@@ -121,19 +122,21 @@ func NewSyntaxMatcher(
 	opts *SyntaxMatcherOpts,
 ) *SyntaxMatcher {
 	var (
-		ellipsisVars  map[int]map[string]struct{}
-		ellipsisID    = DefaultEllipsis
-		literalSyntax map[string]*syntax.SyntaxSymbol
+		ellipsisVars   map[int]map[string]struct{}
+		ellipsisDepths map[int]int
+		ellipsisID     = DefaultEllipsis
+		literalSyntax  map[string]*syntax.SyntaxSymbol
 	)
 	if opts != nil {
 		ellipsisVars = opts.EllipsisVars
+		ellipsisDepths = opts.EllipsisDepths
 		if opts.EllipsisID != "" {
 			ellipsisID = opts.EllipsisID
 		}
 		literalSyntax = opts.LiteralSyntax
 	}
 	return &SyntaxMatcher{
-		matcher:       NewMatcherFull(variables, codes, ellipsisVars, ellipsisID),
+		matcher:       NewMatcherFullWithDepths(variables, codes, ellipsisVars, ellipsisDepths, ellipsisID),
 		ellipsisID:    ellipsisID,
 		literalSyntax: literalSyntax,
 	}
@@ -181,9 +184,10 @@ func (p *SyntaxMatcher) MatchWithBindingChecker(ctx context.Context, input synta
 
 // CompiledPattern contains the compiled bytecode and ellipsis variable mapping.
 type CompiledPattern struct {
-	Codes        []SyntaxCommand
-	EllipsisVars map[int]map[string]struct{}
-	EllipsisID   string // The ellipsis identifier used during compilation
+	Codes          []SyntaxCommand
+	EllipsisVars   map[int]map[string]struct{}
+	EllipsisDepths map[int]int // ellipsisID -> nesting depth (0 = innermost)
+	EllipsisID     string      // The ellipsis identifier used during compilation
 }
 
 // CompilePatternOpts holds optional parameters for CompileSyntaxPattern.
@@ -234,9 +238,10 @@ func CompileSyntaxPattern(
 	}
 
 	return &CompiledPattern{
-		Codes:        compiler.codes,
-		EllipsisVars: compiler.ellipsisVars,
-		EllipsisID:   ellipsisID,
+		Codes:          compiler.codes,
+		EllipsisVars:   compiler.ellipsisVars,
+		EllipsisDepths: compiler.ellipsisDepths,
+		EllipsisID:     ellipsisID,
 	}, nil
 }
 

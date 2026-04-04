@@ -128,7 +128,7 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 	}
 
 	// Walk the list
-	seen := make(map[string]bool)
+	seen := make(map[bindingIdentity]bool)
 	var current values.Value = pair
 
 	for {
@@ -149,7 +149,8 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 
 				// Check for duplicate with rest param
 				symKey := sym.Unwrap().(*values.Symbol).Key
-				if seen[symKey] {
+				id := bindingIdentity{key: symKey, scopeKey: scopeFingerprint(sym.Scopes())}
+				if seen[id] {
 					result.addErrorf(getSourceContext(sv), params.formName, "duplicate parameter name: %s", symKey)
 					return nil
 				}
@@ -175,11 +176,12 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 
 		// Check for duplicates
 		symKey := sym.Unwrap().(*values.Symbol).Key
-		if seen[symKey] {
+		id := bindingIdentity{key: symKey, scopeKey: scopeFingerprint(sym.Scopes())}
+		if seen[id] {
 			result.addErrorf(getSourceContext(paramVal), params.formName, "duplicate parameter name: %s", symKey)
 			return nil
 		}
-		seen[symKey] = true
+		seen[id] = true
 
 		params.Required = append(params.Required, sym)
 		current = p.Cdr()
