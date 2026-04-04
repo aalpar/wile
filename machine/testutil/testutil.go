@@ -22,6 +22,7 @@ import (
 	"bufio"
 	"context"
 	"io"
+	"io/fs"
 	"strings"
 	"testing"
 
@@ -31,6 +32,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/machine/compilation"
+	"github.com/aalpar/wile/stdlib"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -128,6 +130,87 @@ func SetupLibraryTest(t *testing.T, testdataPath string) *environment.Environmen
 	registry.SetSearchPaths([]string{testdataPath})
 	env.SetLibraryRegistry(registry)
 	return env
+}
+
+// SetupEngineTest creates a test environment with full library loading support,
+// mirroring what wile.NewEngine(WithSourceFS(...)) does internally. The fsys
+// parameter provides the virtual filesystem for library resolution (use
+// testing/fstest.MapFS for inline .sld content). Pass nil to skip FS setup.
+//
+// This avoids importing the root wile package (which would create a circular
+// dependency) while providing the same library infrastructure.
+func SetupEngineTest(t *testing.T, fsys fs.FS) *environment.EnvironmentFrame {
+	t.Helper()
+	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	qt.Assert(t, err, qt.IsNil)
+
+	// Wire up library infrastructure (same as Engine internals).
+	reg := compilation.NewLibraryRegistry()
+	env.SetLibraryRegistry(reg)
+
+	if fsys != nil {
+		userResolver := compilation.NewFSFileResolver(fsys, env)
+		stdlibResolver := compilation.NewFSFileResolver(stdlib.FS, env)
+		resolver := compilation.NewChainFileResolver([]compilation.FileResolver{
+			userResolver,
+			stdlibResolver,
+		})
+		env.SetFileResolver(resolver)
+
+		// bootstrap.NewLibraryEnvironmentFrame calls initializeEnvironment
+		// which unconditionally sets an OSFileResolver on the namespace,
+		// overwriting our chain resolver. Wrap the factory to restore it
+		// after each library env creation.
+		env.Namespace().SetLibraryEnvFactory(func(ctx context.Context, callerEnv *environment.EnvironmentFrame, parts []string) (*environment.EnvironmentFrame, error) {
+			libEnv, err := bootstrap.NewLibraryEnvironmentFrame(ctx, callerEnv, parts)
+			if err != nil {
+				return nil, err
+			}
+			env.SetFileResolver(resolver)
+			return libEnv, nil
+		})
+	} else {
+		env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
+	}
+
+	return env
+}
+
+// EvalSchemeInEnvMayFail evaluates Scheme expressions in the given environment,
+// returning the last value and any error. Unlike EvalSchemeInEnv, this does not
+// call t.Fatal on errors — callers handle errors themselves.
+func EvalSchemeInEnvMayFail(t *testing.T, env *environment.EnvironmentFrame, code string) (values.Value, error) {
+	t.Helper()
+	ctx := context.Background()
+	rdr := strings.NewReader(code)
+	p := parser.NewParser(env, true, rdr)
+
+	var lastValue = values.Void
+
+	for {
+		stx, err := p.ReadSyntax(context.TODO())
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		cont, err := NewTopLevelThunk(stx, env)
+		if err != nil {
+			return nil, err
+		}
+
+		mc := machine.NewMachineContext(ctx, cont)
+		err = mc.Run()
+		if err != nil {
+			return nil, err
+		}
+
+		lastValue = mc.GetValue()
+	}
+
+	return lastValue, nil
 }
 
 // NewMinimalNamespace creates a minimal namespace with core special form
