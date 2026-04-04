@@ -75,14 +75,17 @@ counter to `SyntaxCompiler`, incremented on entering nested ellipsis, decremente
 exit. Store depth with each ID:
 
 ```go
-ellipsisDepths map[int]int  // ellipsisID -> nesting depth (0 = innermost)
+ellipsisDepths map[int]int  // ellipsisID -> compilation order (lower = inner)
 ```
 
-For `((a ...) ...)`: inner ID 0 → depth 0, outer ID 1 → depth 1.
-For `(a ... b ...)`: both ID 0 and ID 1 → depth 0 (siblings, not nested).
+The compiler assigns IDs and order values sequentially during depth-first traversal
+(inner patterns are compiled before outer patterns). For `((a ...) ...)`: inner ID 0
+→ order 0, outer ID 1 → order 1. Siblings like `(a ... b ...)` get different order
+values (0 and 1) but this is harmless: siblings capture different variables, so the
+order comparison in `findMatchingEllipsisIDs` never fires for them.
 
-**Fix — Step 2:** Depth-aware ID selection in template expansion. When multiple IDs
-match the same variables at different depths, select the highest-depth ID first (the
+**Fix — Step 2:** Order-aware ID selection in template expansion. When multiple IDs
+match the same variables, select the one with the highest compilation order (the
 outermost). The template is processed outside-in: the outer `...` expands first using
 `ctx.children[outerID]`, then the inner `...` expands within each child using
 `childCtx.children[innerID]`.

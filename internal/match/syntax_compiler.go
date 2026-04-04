@@ -87,8 +87,8 @@ type SyntaxCompiler struct {
 	analysis           *PatternAnalysis            // pattern analysis results
 	nextEllipsisID     int                         // counter for assigning unique ellipsis IDs
 	ellipsisVars       map[int]map[string]struct{} // ellipsisID -> captured pattern variables
-	ellipsisDepth      int                         // current nesting depth during compilation
-	ellipsisDepths     map[int]int                 // ellipsisID -> nesting depth (0 = innermost)
+	ellipsisDepth      int                         // monotonic counter: inner ellipsis < outer ellipsis
+	ellipsisDepths     map[int]int                 // ellipsisID -> compilation order (lower = inner)
 	ellipsis           string                      // custom ellipsis identifier (default "...")
 	skipMacroKeyword   bool                        // true = skip first element as macro keyword placeholder
 	macroKeywordPassed bool                        // true = first root element has been processed
@@ -344,6 +344,11 @@ func compileEllipsis(vis *SyntaxCompiler, entry *syntaxCompilerStackEntry) bool 
 	entry.vararg = true
 	ellipsisID := vis.nextEllipsisID
 	vis.nextEllipsisID++
+	// Record compilation order. The depth-first, inner-before-outer traversal
+	// guarantees inner ellipsis get lower values than outer ellipsis. Siblings
+	// at the same nesting level get different values, but this is harmless:
+	// siblings capture different variables, so the depth comparison in
+	// findMatchingEllipsisIDs never fires for them.
 	vis.ellipsisDepths[ellipsisID] = vis.ellipsisDepth
 	vis.ellipsisDepth++
 

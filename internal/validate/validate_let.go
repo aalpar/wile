@@ -41,6 +41,10 @@ func scopeFingerprint(scopes []*syntax.Scope) string {
 	}
 	ids := make([]string, len(scopes))
 	for i, s := range scopes {
+		if s == nil {
+			ids[i] = "0"
+			continue
+		}
 		ids[i] = strconv.FormatUint(s.ID(), 10)
 	}
 	slices.Sort(ids)

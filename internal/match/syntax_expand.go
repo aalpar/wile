@@ -390,13 +390,17 @@ func (p *SyntaxMatcher) expandSyntaxEllipsis(
 	// excluding any IDs already consumed by an outer expansion level.
 	matchingIDs := p.matcher.findMatchingEllipsisIDs(patternVarsInTemplate, excludeEllipsisIDs)
 	if len(matchingIDs) == 0 {
-		// No matching ellipsis — the pattern element contains no variables that
-		// were captured under any ellipsis, so it acts as a constant template
-		// (e.g., a literal symbol followed by `...`). R7RS §4.3.2: "It is an
-		// error if the template ... contains a pattern variable that does not
-		// appear in the pattern." The pattern compiler validates this earlier;
-		// reaching here means the element has no pattern variables at all, so
-		// repeating it zero times (dropping it) is correct.
+		if len(patternVarsInTemplate) > 0 {
+			// Pattern variables exist but all their ellipsis IDs were excluded
+			// by outer expansion levels. This indicates a bug in depth tracking
+			// or exclude-set propagation.
+			return nil, werr.WrapForeignErrorf(
+				werr.ErrExpansion,
+				"expandSyntaxEllipsis: pattern variables found but all ellipsis IDs excluded",
+			)
+		}
+		// No pattern variables at all — constant template followed by `...`.
+		// Repeating it zero times (dropping it) is correct per R7RS §4.3.2.
 		return p.expandSyntaxValue(rest, ctx, ellipsisVars, excludeEllipsisIDs, opts)
 	}
 
@@ -445,7 +449,7 @@ func (p *SyntaxMatcher) expandEllipsisSingleGroup(
 		return nil, err
 	}
 
-	return p.combineEllipsisResults(results, rest, ctx, ellipsisVars, excludeEllipsisIDs, opts, pattern)
+	return p.combineEllipsisResults(results, rest, ctx, ellipsisVars, excludeEllipsisIDs, pattern, opts)
 }
 
 // expandEllipsisCrossGroup handles cross-group zipping where template variables
@@ -508,7 +512,7 @@ func (p *SyntaxMatcher) expandEllipsisCrossGroup(
 		return nil, err
 	}
 
-	return p.combineEllipsisResults(results, rest, ctx, ellipsisVars, excludeEllipsisIDs, opts, pattern)
+	return p.combineEllipsisResults(results, rest, ctx, ellipsisVars, excludeEllipsisIDs, pattern, opts)
 }
 
 // expandEllipsisChildren expands the template pattern once for each child context,
@@ -546,8 +550,8 @@ func (p *SyntaxMatcher) combineEllipsisResults(
 	ctx *captureContext,
 	ellipsisVars map[string]struct{},
 	excludeEllipsisIDs map[int]struct{},
-	opts *ExpandOptions,
 	pattern syntax.SyntaxValue,
+	opts *ExpandOptions,
 ) (syntax.SyntaxValue, error) {
 	expandedRest, err := p.expandSyntaxValue(rest, ctx, ellipsisVars, excludeEllipsisIDs, opts)
 	if err != nil {

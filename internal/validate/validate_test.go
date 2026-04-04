@@ -1713,10 +1713,7 @@ func TestValidateWithContinuationMarkImproperList(t *testing.T) {
 // same symbol key but different scope sets are NOT considered duplicates.
 // In a hygienic macro system (sets-of-scopes), two identifiers "x" introduced
 // by different macro expansions carry different scopes and are distinct.
-//
-// The current implementation uses bare string comparison (ns.Sym.Key) for
-// duplicate detection, which incorrectly rejects hygienically-distinct
-// identifiers as duplicates. This test documents that bug.
+// The duplicate detection uses bindingIdentity (key + scope fingerprint).
 func TestLetDuplicateBindingWithDifferentScopes(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 
@@ -1751,8 +1748,6 @@ func TestLetDuplicateBindingWithDifferentScopes(t *testing.T) {
 	t.Run("different scopes should not be duplicate", func(t *testing.T) {
 		c := qt.New(t)
 		result := ValidateExpression(context.TODO(), env, form)
-		// This SHOULD pass: two "x" identifiers with different scopes are distinct.
-		// Currently FAILS because duplicate detection uses bare string keys.
 		c.Assert(result.Ok(), qt.IsTrue,
 			qt.Commentf("two 'x' bindings with different scopes should not be duplicates; errors: %v", result.Errors))
 	})

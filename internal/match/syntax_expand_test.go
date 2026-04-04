@@ -1382,8 +1382,8 @@ func TestExpandWithOrigin_PreservesPatternVars(t *testing.T) {
 //	   ((list a b) ...)))
 //
 // The template ellipsis should "zip" the two groups, iterating them in lockstep.
-// Currently findMatchingEllipsisID looks for a single ellipsis ID containing ALL
-// template variables, which fails when they span multiple pattern groups.
+// findMatchingEllipsisIDs (plural) returns all contributing IDs, and the
+// cross-group path merges their child contexts per iteration.
 func TestSyntaxExpandCrossGroupEllipsis(t *testing.T) {
 	c := qt.New(t)
 
@@ -1437,7 +1437,10 @@ func TestSyntaxExpandCrossGroupEllipsis(t *testing.T) {
 		sm := NewSyntaxMatcher(
 			variables,
 			compiled.Codes,
-			&SyntaxMatcherOpts{EllipsisVars: compiled.EllipsisVars},
+			&SyntaxMatcherOpts{
+				EllipsisVars:   compiled.EllipsisVars,
+				EllipsisDepths: compiled.EllipsisDepths,
+			},
 		)
 		err = sm.Match(context.Background(), input)
 		c.Assert(err, qt.IsNil)
@@ -1549,7 +1552,10 @@ func TestSyntaxExpandCrossGroupEllipsis(t *testing.T) {
 		sm := NewSyntaxMatcher(
 			variables,
 			compiled.Codes,
-			&SyntaxMatcherOpts{EllipsisVars: compiled.EllipsisVars},
+			&SyntaxMatcherOpts{
+				EllipsisVars:   compiled.EllipsisVars,
+				EllipsisDepths: compiled.EllipsisDepths,
+			},
 		)
 		err = sm.Match(context.Background(), input)
 		c.Assert(err, qt.IsNil)
@@ -1628,7 +1634,10 @@ func TestSyntaxExpandCrossGroupEllipsis(t *testing.T) {
 		sm := NewSyntaxMatcher(
 			variables,
 			compiled.Codes,
-			&SyntaxMatcherOpts{EllipsisVars: compiled.EllipsisVars},
+			&SyntaxMatcherOpts{
+				EllipsisVars:   compiled.EllipsisVars,
+				EllipsisDepths: compiled.EllipsisDepths,
+			},
 		)
 		err = sm.Match(context.Background(), input)
 		c.Assert(err, qt.IsNil)
@@ -1699,10 +1708,8 @@ func TestSyntaxExpandCrossGroupEllipsis(t *testing.T) {
 // handles nested ellipsis (depth > 1). For pattern (_ (a ...) ...) and
 // template ((list a ...) ...), the outer ellipsis should iterate over each
 // inner group, producing one (list ...) sub-list per outer repetition.
-//
-// The known bug: findMatchingEllipsisID returns ID 0 (the inner ellipsis)
-// for the template variable {a}, so the outer ellipsis iterates zero times
-// and produces () instead of the correct nested output.
+// The excludeEllipsisIDs mechanism ensures the outer expansion consumes
+// the outer ID first, then inner expansion selects the inner ID.
 func TestSyntaxExpandNestedEllipsis(t *testing.T) {
 	c := qt.New(t)
 
@@ -1767,7 +1774,10 @@ func TestSyntaxExpandNestedEllipsis(t *testing.T) {
 		sm := NewSyntaxMatcher(
 			variables,
 			compiled.Codes,
-			&SyntaxMatcherOpts{EllipsisVars: compiled.EllipsisVars},
+			&SyntaxMatcherOpts{
+				EllipsisVars:   compiled.EllipsisVars,
+				EllipsisDepths: compiled.EllipsisDepths,
+			},
 		)
 		err := sm.Match(context.Background(), input)
 		c.Assert(err, qt.IsNil)
@@ -1835,7 +1845,10 @@ func TestSyntaxExpandNestedEllipsis(t *testing.T) {
 		sm := NewSyntaxMatcher(
 			variables,
 			compiled.Codes,
-			&SyntaxMatcherOpts{EllipsisVars: compiled.EllipsisVars},
+			&SyntaxMatcherOpts{
+				EllipsisVars:   compiled.EllipsisVars,
+				EllipsisDepths: compiled.EllipsisDepths,
+			},
 		)
 		err := sm.Match(context.Background(), input)
 		c.Assert(err, qt.IsNil)
@@ -1863,7 +1876,10 @@ func TestSyntaxExpandNestedEllipsis(t *testing.T) {
 		sm := NewSyntaxMatcher(
 			variables,
 			compiled.Codes,
-			&SyntaxMatcherOpts{EllipsisVars: compiled.EllipsisVars},
+			&SyntaxMatcherOpts{
+				EllipsisVars:   compiled.EllipsisVars,
+				EllipsisDepths: compiled.EllipsisDepths,
+			},
 		)
 		err := sm.Match(context.Background(), input)
 		c.Assert(err, qt.IsNil)

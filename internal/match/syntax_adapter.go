@@ -104,7 +104,7 @@ type SyntaxMatcher struct {
 // A nil opts pointer means all defaults (no ellipsis vars, default "...", no literals).
 type SyntaxMatcherOpts struct {
 	EllipsisVars   map[int]map[string]struct{}
-	EllipsisDepths map[int]int // ellipsisID -> nesting depth (0 = innermost)
+	EllipsisDepths map[int]int // ellipsisID -> compilation order (lower = inner)
 	EllipsisID     string
 	LiteralSyntax  map[string]*syntax.SyntaxSymbol
 }
@@ -186,7 +186,7 @@ func (p *SyntaxMatcher) MatchWithBindingChecker(ctx context.Context, input synta
 type CompiledPattern struct {
 	Codes          []SyntaxCommand
 	EllipsisVars   map[int]map[string]struct{}
-	EllipsisDepths map[int]int // ellipsisID -> nesting depth (0 = innermost)
+	EllipsisDepths map[int]int // ellipsisID -> compilation order (lower = inner)
 	EllipsisID     string      // The ellipsis identifier used during compilation
 }
 

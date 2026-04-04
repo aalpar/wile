@@ -61,7 +61,7 @@ type Matcher struct {
 	captureStack   []*captureContext           // Binding capture stack (nesting for ellipsis)
 	syntaxStack    []syntaxPathEntry           // Input traversal stack (syntax-native)
 	ellipsisVars   map[int]map[string]struct{} // ellipsisID -> captured pattern variables
-	ellipsisDepths map[int]int                 // ellipsisID -> nesting depth (0 = innermost)
+	ellipsisDepths map[int]int                 // ellipsisID -> compilation order (lower = inner)
 	ellipsisID     string                      // Custom ellipsis identifier (default "...")
 
 	// tailCountCache and tailCountPC cache the remaining element count for
@@ -93,9 +93,10 @@ func NewMatcherFull(variables map[string]struct{}, codes []SyntaxCommand, ellips
 }
 
 // NewMatcherFullWithDepths creates a matcher with all parameters including custom
-// ellipsis and depth metadata. The ellipsisDepths parameter maps each ellipsis ID
-// to its nesting depth (0 = innermost). When nil, depths are inferred from the
-// ellipsis ID ordering (higher ID = outer = higher depth).
+// ellipsis and compilation-order metadata. The ellipsisDepths parameter maps each
+// ellipsis ID to its compilation order (lower = inner, higher = outer). When nil,
+// order is inferred from the ID values (the compiler assigns IDs sequentially,
+// inner-first).
 func NewMatcherFullWithDepths(
 	variables map[string]struct{},
 	codes []SyntaxCommand,
@@ -537,7 +538,7 @@ func (p *Matcher) findMatchingEllipsisIDs(vars map[string]struct{}, excludeIDs m
 	sort.Ints(ids)
 
 	// Try single-ID match first (common case). When multiple IDs each contain
-	// all vars, prefer the one with the highest nesting depth (outermost first).
+	// all vars, prefer the one with the highest compilation order (outermost).
 	bestID := -1
 	bestDepth := -1
 	for _, id := range ids {
