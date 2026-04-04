@@ -192,9 +192,10 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 
 	// Create a wrapper for the compiled pattern
 	clauseWrapper := &machine.SyntaxCaseClause{
-		Bytecode:     compiled.Codes,
-		PatternVars:  patternVars,
-		EllipsisVars: compiled.EllipsisVars,
+		Bytecode:       compiled.Codes,
+		PatternVars:    patternVars,
+		EllipsisVars:   compiled.EllipsisVars,
+		EllipsisDepths: compiled.EllipsisDepths,
 	}
 
 	// Store the clause in literals

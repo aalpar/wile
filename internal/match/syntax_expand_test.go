@@ -1372,3 +1372,563 @@ func TestExpandWithOrigin_PreservesPatternVars(t *testing.T) {
 	// Pattern variables keep their original context, so no origin should be added
 	c.Assert(resultSc.Origin, qt.IsNil)
 }
+
+// TestSyntaxExpandCrossGroupEllipsis verifies that template expansion correctly
+// handles pattern variables from different ellipsis groups used under a single
+// template ellipsis. For example:
+//
+//	(syntax-rules ()
+//	  ((_ (a ...) (b ...))
+//	   ((list a b) ...)))
+//
+// The template ellipsis should "zip" the two groups, iterating them in lockstep.
+// findMatchingEllipsisIDs (plural) returns all contributing IDs, and the
+// cross-group path merges their child contexts per iteration.
+func TestSyntaxExpandCrossGroupEllipsis(t *testing.T) {
+	c := qt.New(t)
+
+	c.Run("two groups zipped", func(c *qt.C) {
+		variables := map[string]struct{}{"a": {}, "b": {}}
+
+		// Pattern: (_ (a ...) (b ...))
+		// This has two sibling ellipsis groups.
+		pattern := syntax.NewSyntaxCons(
+			testSyntaxSym("_"),
+			syntax.NewSyntaxCons(
+				// (a ...)
+				syntax.NewSyntaxCons(
+					testSyntaxSym("a"),
+					syntax.NewSyntaxCons(
+						testSyntaxSym("..."),
+						syntax.SyntaxEmptyList,
+						nil,
+					),
+					nil,
+				),
+				syntax.NewSyntaxCons(
+					// (b ...)
+					syntax.NewSyntaxCons(
+						testSyntaxSym("b"),
+						syntax.NewSyntaxCons(
+							testSyntaxSym("..."),
+							syntax.SyntaxEmptyList,
+							nil,
+						),
+						nil,
+					),
+					syntax.SyntaxEmptyList,
+					nil,
+				),
+				nil,
+			),
+			nil,
+		)
+
+		compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
+		c.Assert(err, qt.IsNil)
+
+		// Input: (_ (1 2 3) (10 20 30))
+		input := testSyntaxList(
+			testSyntaxSym("_"),
+			testSyntaxList(testSyntaxInt(1), testSyntaxInt(2), testSyntaxInt(3)),
+			testSyntaxList(testSyntaxInt(10), testSyntaxInt(20), testSyntaxInt(30)),
+		)
+
+		sm := NewSyntaxMatcher(
+			variables,
+			compiled.Codes,
+			&SyntaxMatcherOpts{
+				EllipsisVars:   compiled.EllipsisVars,
+				EllipsisDepths: compiled.EllipsisDepths,
+			},
+		)
+		err = sm.Match(context.Background(), input)
+		c.Assert(err, qt.IsNil)
+
+		// Template: ((list a b) ...)
+		// Under the template ellipsis, both a and b should iterate in lockstep.
+		template := testSyntaxList(
+			testSyntaxList(testSyntaxSym("list"), testSyntaxSym("a"), testSyntaxSym("b")),
+			testSyntaxSym("..."),
+		)
+
+		result, err := sm.Expand(template, ExpandOptions{})
+		c.Assert(err, qt.IsNil)
+		c.Assert(result, qt.IsNotNil)
+
+		// Expected: ((list 1 10) (list 2 20) (list 3 30))
+		// Walk the result list and verify each element.
+		type triple struct {
+			Sym  string
+			Val1 int64
+			Val2 int64
+		}
+		var collected []triple
+		current := result
+		for {
+			pr, ok := current.(*syntax.SyntaxPair)
+			if !ok || syntax.IsSyntaxEmptyList(current) {
+				break
+			}
+
+			// Each element should be (list N M)
+			inner, ok := pr.SyntaxCar().(*syntax.SyntaxPair)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected pair for inner list, got %T", pr.SyntaxCar()))
+
+			// car = "list" symbol
+			sym, ok := inner.SyntaxCar().(*syntax.SyntaxSymbol)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected symbol for 'list', got %T", inner.SyntaxCar()))
+
+			// cadr = integer from group a
+			rest1, ok := inner.SyntaxCdr().(*syntax.SyntaxPair)
+			c.Assert(ok, qt.IsTrue)
+			obj1, ok := rest1.SyntaxCar().(*syntax.SyntaxObject)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected SyntaxObject for 'a' value, got %T", rest1.SyntaxCar()))
+			int1, ok := obj1.Datum().(*values.Integer)
+			c.Assert(ok, qt.IsTrue)
+
+			// caddr = integer from group b
+			rest2, ok := rest1.SyntaxCdr().(*syntax.SyntaxPair)
+			c.Assert(ok, qt.IsTrue)
+			obj2, ok := rest2.SyntaxCar().(*syntax.SyntaxObject)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected SyntaxObject for 'b' value, got %T", rest2.SyntaxCar()))
+			int2, ok := obj2.Datum().(*values.Integer)
+			c.Assert(ok, qt.IsTrue)
+
+			collected = append(collected, triple{Sym: sym.Sym.Key, Val1: int1.Value, Val2: int2.Value})
+			current = pr.SyntaxCdr()
+		}
+
+		c.Assert(len(collected), qt.Equals, 3)
+		c.Assert(collected[0], qt.DeepEquals, triple{Sym: "list", Val1: 1, Val2: 10})
+		c.Assert(collected[1], qt.DeepEquals, triple{Sym: "list", Val1: 2, Val2: 20})
+		c.Assert(collected[2], qt.DeepEquals, triple{Sym: "list", Val1: 3, Val2: 30})
+	})
+
+	c.Run("mismatched counts error", func(c *qt.C) {
+		variables := map[string]struct{}{"a": {}, "b": {}}
+
+		// Pattern: (_ (a ...) (b ...))
+		pattern := syntax.NewSyntaxCons(
+			testSyntaxSym("_"),
+			syntax.NewSyntaxCons(
+				syntax.NewSyntaxCons(
+					testSyntaxSym("a"),
+					syntax.NewSyntaxCons(
+						testSyntaxSym("..."),
+						syntax.SyntaxEmptyList,
+						nil,
+					),
+					nil,
+				),
+				syntax.NewSyntaxCons(
+					syntax.NewSyntaxCons(
+						testSyntaxSym("b"),
+						syntax.NewSyntaxCons(
+							testSyntaxSym("..."),
+							syntax.SyntaxEmptyList,
+							nil,
+						),
+						nil,
+					),
+					syntax.SyntaxEmptyList,
+					nil,
+				),
+				nil,
+			),
+			nil,
+		)
+
+		compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
+		c.Assert(err, qt.IsNil)
+
+		// Input: (_ (1 2) (10 20 30)) — mismatched lengths
+		input := testSyntaxList(
+			testSyntaxSym("_"),
+			testSyntaxList(testSyntaxInt(1), testSyntaxInt(2)),
+			testSyntaxList(testSyntaxInt(10), testSyntaxInt(20), testSyntaxInt(30)),
+		)
+
+		sm := NewSyntaxMatcher(
+			variables,
+			compiled.Codes,
+			&SyntaxMatcherOpts{
+				EllipsisVars:   compiled.EllipsisVars,
+				EllipsisDepths: compiled.EllipsisDepths,
+			},
+		)
+		err = sm.Match(context.Background(), input)
+		c.Assert(err, qt.IsNil)
+
+		// Template: ((list a b) ...)
+		template := testSyntaxList(
+			testSyntaxList(testSyntaxSym("list"), testSyntaxSym("a"), testSyntaxSym("b")),
+			testSyntaxSym("..."),
+		)
+
+		// Expansion should fail because a has 2 elements and b has 3.
+		_, err = sm.Expand(template, ExpandOptions{})
+		c.Assert(err, qt.IsNotNil, qt.Commentf("expected error for mismatched group lengths"))
+	})
+
+	c.Run("three groups zipped", func(c *qt.C) {
+		variables := map[string]struct{}{"a": {}, "b": {}, "c": {}}
+
+		// Pattern: (_ (a ...) (b ...) (c ...))
+		pattern := syntax.NewSyntaxCons(
+			testSyntaxSym("_"),
+			syntax.NewSyntaxCons(
+				// (a ...)
+				syntax.NewSyntaxCons(
+					testSyntaxSym("a"),
+					syntax.NewSyntaxCons(
+						testSyntaxSym("..."),
+						syntax.SyntaxEmptyList,
+						nil,
+					),
+					nil,
+				),
+				syntax.NewSyntaxCons(
+					// (b ...)
+					syntax.NewSyntaxCons(
+						testSyntaxSym("b"),
+						syntax.NewSyntaxCons(
+							testSyntaxSym("..."),
+							syntax.SyntaxEmptyList,
+							nil,
+						),
+						nil,
+					),
+					syntax.NewSyntaxCons(
+						// (c ...)
+						syntax.NewSyntaxCons(
+							testSyntaxSym("c"),
+							syntax.NewSyntaxCons(
+								testSyntaxSym("..."),
+								syntax.SyntaxEmptyList,
+								nil,
+							),
+							nil,
+						),
+						syntax.SyntaxEmptyList,
+						nil,
+					),
+					nil,
+				),
+				nil,
+			),
+			nil,
+		)
+
+		compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
+		c.Assert(err, qt.IsNil)
+
+		// Input: (_ (1 2) (10 20) (100 200))
+		input := testSyntaxList(
+			testSyntaxSym("_"),
+			testSyntaxList(testSyntaxInt(1), testSyntaxInt(2)),
+			testSyntaxList(testSyntaxInt(10), testSyntaxInt(20)),
+			testSyntaxList(testSyntaxInt(100), testSyntaxInt(200)),
+		)
+
+		sm := NewSyntaxMatcher(
+			variables,
+			compiled.Codes,
+			&SyntaxMatcherOpts{
+				EllipsisVars:   compiled.EllipsisVars,
+				EllipsisDepths: compiled.EllipsisDepths,
+			},
+		)
+		err = sm.Match(context.Background(), input)
+		c.Assert(err, qt.IsNil)
+
+		// Template: ((list a b c) ...)
+		template := testSyntaxList(
+			testSyntaxList(testSyntaxSym("list"), testSyntaxSym("a"), testSyntaxSym("b"), testSyntaxSym("c")),
+			testSyntaxSym("..."),
+		)
+
+		result, err := sm.Expand(template, ExpandOptions{})
+		c.Assert(err, qt.IsNil)
+		c.Assert(result, qt.IsNotNil)
+
+		// Expected: ((list 1 10 100) (list 2 20 200))
+		type quad struct {
+			Sym  string
+			Val1 int64
+			Val2 int64
+			Val3 int64
+		}
+		var collected []quad
+		current := result
+		for {
+			pr, ok := current.(*syntax.SyntaxPair)
+			if !ok || syntax.IsSyntaxEmptyList(current) {
+				break
+			}
+
+			inner, ok := pr.SyntaxCar().(*syntax.SyntaxPair)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected pair for inner list, got %T", pr.SyntaxCar()))
+
+			sym, ok := inner.SyntaxCar().(*syntax.SyntaxSymbol)
+			c.Assert(ok, qt.IsTrue)
+
+			rest1, ok := inner.SyntaxCdr().(*syntax.SyntaxPair)
+			c.Assert(ok, qt.IsTrue)
+			obj1, ok := rest1.SyntaxCar().(*syntax.SyntaxObject)
+			c.Assert(ok, qt.IsTrue)
+			int1, ok := obj1.Datum().(*values.Integer)
+			c.Assert(ok, qt.IsTrue)
+
+			rest2, ok := rest1.SyntaxCdr().(*syntax.SyntaxPair)
+			c.Assert(ok, qt.IsTrue)
+			obj2, ok := rest2.SyntaxCar().(*syntax.SyntaxObject)
+			c.Assert(ok, qt.IsTrue)
+			int2, ok := obj2.Datum().(*values.Integer)
+			c.Assert(ok, qt.IsTrue)
+
+			rest3, ok := rest2.SyntaxCdr().(*syntax.SyntaxPair)
+			c.Assert(ok, qt.IsTrue)
+			obj3, ok := rest3.SyntaxCar().(*syntax.SyntaxObject)
+			c.Assert(ok, qt.IsTrue)
+			int3, ok := obj3.Datum().(*values.Integer)
+			c.Assert(ok, qt.IsTrue)
+
+			collected = append(collected, quad{Sym: sym.Sym.Key, Val1: int1.Value, Val2: int2.Value, Val3: int3.Value})
+			current = pr.SyntaxCdr()
+		}
+
+		c.Assert(len(collected), qt.Equals, 2)
+		c.Assert(collected[0], qt.DeepEquals, quad{Sym: "list", Val1: 1, Val2: 10, Val3: 100})
+		c.Assert(collected[1], qt.DeepEquals, quad{Sym: "list", Val1: 2, Val2: 20, Val3: 200})
+	})
+}
+
+// TestSyntaxExpandNestedEllipsis verifies that template expansion correctly
+// handles nested ellipsis (depth > 1). For pattern (_ (a ...) ...) and
+// template ((list a ...) ...), the outer ellipsis should iterate over each
+// inner group, producing one (list ...) sub-list per outer repetition.
+// The excludeEllipsisIDs mechanism ensures the outer expansion consumes
+// the outer ID first, then inner expansion selects the inner ID.
+func TestSyntaxExpandNestedEllipsis(t *testing.T) {
+	c := qt.New(t)
+
+	// Helper to build the pattern and template shared by all sub-tests.
+	//
+	// Pattern: (_ (a ...) ...)
+	// This is: (cons "_" (cons (cons "a" (cons "..." nil)) (cons "..." nil)))
+	// The inner (a ...) captures a's at depth 0 within each outer repetition.
+	// The outer ... repeats the (a ...) sub-lists.
+	buildPatternAndTemplate := func(c *qt.C) (*CompiledPattern, map[string]struct{}) {
+		variables := map[string]struct{}{"a": {}}
+
+		pattern := syntax.NewSyntaxCons(
+			testSyntaxSym("_"),
+			syntax.NewSyntaxCons(
+				// (a ...)
+				syntax.NewSyntaxCons(
+					testSyntaxSym("a"),
+					syntax.NewSyntaxCons(
+						testSyntaxSym("..."),
+						syntax.SyntaxEmptyList,
+						nil,
+					),
+					nil,
+				),
+				syntax.NewSyntaxCons(
+					// outer ...
+					testSyntaxSym("..."),
+					syntax.SyntaxEmptyList,
+					nil,
+				),
+				nil,
+			),
+			nil,
+		)
+
+		compiled, err := CompileSyntaxPattern(context.TODO(), pattern, variables, nil)
+		c.Assert(err, qt.IsNil)
+		return compiled, variables
+	}
+
+	// Template: ((list a ...) ...)
+	// This is: (cons (cons "list" (cons "a" (cons "..." nil))) (cons "..." nil))
+	buildTemplate := func() *syntax.SyntaxPair {
+		return testSyntaxList(
+			testSyntaxList(testSyntaxSym("list"), testSyntaxSym("a"), testSyntaxSym("...")),
+			testSyntaxSym("..."),
+		)
+	}
+
+	c.Run("basic nested ellipsis", func(c *qt.C) {
+		compiled, variables := buildPatternAndTemplate(c)
+
+		// Input: (_ (1 2 3) (4 5))
+		// Two outer repetitions: first has 3 inner values, second has 2.
+		input := testSyntaxList(
+			testSyntaxSym("_"),
+			testSyntaxList(testSyntaxInt(1), testSyntaxInt(2), testSyntaxInt(3)),
+			testSyntaxList(testSyntaxInt(4), testSyntaxInt(5)),
+		)
+
+		sm := NewSyntaxMatcher(
+			variables,
+			compiled.Codes,
+			&SyntaxMatcherOpts{
+				EllipsisVars:   compiled.EllipsisVars,
+				EllipsisDepths: compiled.EllipsisDepths,
+			},
+		)
+		err := sm.Match(context.Background(), input)
+		c.Assert(err, qt.IsNil)
+
+		template := buildTemplate()
+		result, err := sm.Expand(template, ExpandOptions{})
+		c.Assert(err, qt.IsNil)
+		c.Assert(result, qt.IsNotNil)
+
+		// Expected: ((list 1 2 3) (list 4 5))
+		// Walk the outer list and collect each inner list's structure.
+		type innerResult struct {
+			Sym    string
+			Values []int64
+		}
+		var collected []innerResult
+		current := result
+		for {
+			pr, ok := current.(*syntax.SyntaxPair)
+			if !ok || syntax.IsSyntaxEmptyList(current) {
+				break
+			}
+
+			// Each outer element should be (list N M ...)
+			inner, ok := pr.SyntaxCar().(*syntax.SyntaxPair)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected pair for inner list, got %T", pr.SyntaxCar()))
+
+			// car = "list" symbol
+			sym, ok := inner.SyntaxCar().(*syntax.SyntaxSymbol)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected symbol for 'list', got %T", inner.SyntaxCar()))
+
+			// Walk the rest to collect integer values
+			var vals []int64
+			rest := inner.SyntaxCdr()
+			for {
+				rp, ok := rest.(*syntax.SyntaxPair)
+				if !ok || syntax.IsSyntaxEmptyList(rest) {
+					break
+				}
+				obj, ok := rp.SyntaxCar().(*syntax.SyntaxObject)
+				c.Assert(ok, qt.IsTrue, qt.Commentf("expected SyntaxObject for inner value, got %T", rp.SyntaxCar()))
+				intVal, ok := obj.Datum().(*values.Integer)
+				c.Assert(ok, qt.IsTrue)
+				vals = append(vals, intVal.Value)
+				rest = rp.SyntaxCdr()
+			}
+
+			collected = append(collected, innerResult{Sym: sym.Sym.Key, Values: vals})
+			current = pr.SyntaxCdr()
+		}
+
+		c.Assert(len(collected), qt.Equals, 2, qt.Commentf("expected 2 outer elements, got %d", len(collected)))
+		c.Assert(collected[0], qt.DeepEquals, innerResult{Sym: "list", Values: []int64{1, 2, 3}})
+		c.Assert(collected[1], qt.DeepEquals, innerResult{Sym: "list", Values: []int64{4, 5}})
+	})
+
+	c.Run("empty outer nested ellipsis", func(c *qt.C) {
+		compiled, variables := buildPatternAndTemplate(c)
+
+		// Input: (_) — no outer repetitions at all
+		input := testSyntaxList(
+			testSyntaxSym("_"),
+		)
+
+		sm := NewSyntaxMatcher(
+			variables,
+			compiled.Codes,
+			&SyntaxMatcherOpts{
+				EllipsisVars:   compiled.EllipsisVars,
+				EllipsisDepths: compiled.EllipsisDepths,
+			},
+		)
+		err := sm.Match(context.Background(), input)
+		c.Assert(err, qt.IsNil)
+
+		template := buildTemplate()
+		result, err := sm.Expand(template, ExpandOptions{})
+		c.Assert(err, qt.IsNil)
+		c.Assert(result, qt.IsNotNil)
+
+		// Expected: () — empty list
+		c.Assert(syntax.IsSyntaxEmptyList(result), qt.IsTrue,
+			qt.Commentf("expected empty list for zero outer repetitions, got %T", result))
+	})
+
+	c.Run("single outer repetition", func(c *qt.C) {
+		compiled, variables := buildPatternAndTemplate(c)
+
+		// Input: (_ (10 20))
+		// One outer repetition with two inner values.
+		input := testSyntaxList(
+			testSyntaxSym("_"),
+			testSyntaxList(testSyntaxInt(10), testSyntaxInt(20)),
+		)
+
+		sm := NewSyntaxMatcher(
+			variables,
+			compiled.Codes,
+			&SyntaxMatcherOpts{
+				EllipsisVars:   compiled.EllipsisVars,
+				EllipsisDepths: compiled.EllipsisDepths,
+			},
+		)
+		err := sm.Match(context.Background(), input)
+		c.Assert(err, qt.IsNil)
+
+		template := buildTemplate()
+		result, err := sm.Expand(template, ExpandOptions{})
+		c.Assert(err, qt.IsNil)
+		c.Assert(result, qt.IsNotNil)
+
+		// Expected: ((list 10 20))
+		// One outer element containing a list with two inner values.
+		type innerResult struct {
+			Sym    string
+			Values []int64
+		}
+		var collected []innerResult
+		current := result
+		for {
+			pr, ok := current.(*syntax.SyntaxPair)
+			if !ok || syntax.IsSyntaxEmptyList(current) {
+				break
+			}
+
+			inner, ok := pr.SyntaxCar().(*syntax.SyntaxPair)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected pair for inner list, got %T", pr.SyntaxCar()))
+
+			sym, ok := inner.SyntaxCar().(*syntax.SyntaxSymbol)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected symbol for 'list', got %T", inner.SyntaxCar()))
+
+			var vals []int64
+			rest := inner.SyntaxCdr()
+			for {
+				rp, ok := rest.(*syntax.SyntaxPair)
+				if !ok || syntax.IsSyntaxEmptyList(rest) {
+					break
+				}
+				obj, ok := rp.SyntaxCar().(*syntax.SyntaxObject)
+				c.Assert(ok, qt.IsTrue, qt.Commentf("expected SyntaxObject for inner value, got %T", rp.SyntaxCar()))
+				intVal, ok := obj.Datum().(*values.Integer)
+				c.Assert(ok, qt.IsTrue)
+				vals = append(vals, intVal.Value)
+				rest = rp.SyntaxCdr()
+			}
+
+			collected = append(collected, innerResult{Sym: sym.Sym.Key, Values: vals})
+			current = pr.SyntaxCdr()
+		}
+
+		c.Assert(len(collected), qt.Equals, 1, qt.Commentf("expected 1 outer element, got %d", len(collected)))
+		c.Assert(collected[0], qt.DeepEquals, innerResult{Sym: "list", Values: []int64{10, 20}})
+	})
+}

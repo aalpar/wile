@@ -106,9 +106,10 @@ func (p *ClausesWrapper) SchemeString() string {
 // SyntaxCaseClause wraps compiled pattern info for a syntax-case clause.
 // Created by the compiler, consumed by OperationSyntaxCaseMatch at runtime.
 type SyntaxCaseClause struct {
-	Bytecode     []match.SyntaxCommand
-	PatternVars  map[string]struct{}
-	EllipsisVars map[int]map[string]struct{}
+	Bytecode       []match.SyntaxCommand
+	PatternVars    map[string]struct{}
+	EllipsisVars   map[int]map[string]struct{}
+	EllipsisDepths map[int]int
 }
 
 func (p *SyntaxCaseClause) EqualTo(other values.Value) bool {
