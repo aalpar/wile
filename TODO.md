@@ -35,6 +35,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 ### High Priority
 
+- [ ] **`WalkSubExprs` for validated expression traversal** [High, S]: Standalone function `WalkSubExprs(expr ValidatedExpr, fn func(child ValidatedExpr, role ChildRole))` with `ChildRole` enum (`RoleNormal`, `RoleCallProc`, `RoleClosureBody`). Consolidates the per-form type switch into one location so analysis passes (B1 capture, B2 escape, future B3/constant-prop) plug in callbacks instead of duplicating structural recursion. B1 immediately-applied lambda case still needs special handling — `RoleCallProc` child that is a lambda should be walked at current depth, not `RoleClosureBody`. Unresolved: whether that's a role refinement or a B1-specific post-check.
 - [x] **Extract interface types from `environment/` `any` fields** [High, M, Done]: `FileResolver` interface defined in `environment/file_resolver.go` (stdlib types only); `machine/compilation/` adds type alias. `LibrarySearcher` interface (`GetSearchPaths() []string`) eliminates type assertions in `file_resolver.go`. `authorizer any` → `security.Authorizer` (security package only imports `werr`). 15 type assertions removed across 7 files. `plan: plans/2026-03-31-environment-any-fields.md`
 - [x] **`Stack.Pull()` is O(n) in VM hot path** [High, M, Done]: Replaced `Pull()` + `Drain()` in `OpPullApply` with O(1) `PullDrain()` that splits `stack[0]` (proc) from `stack[1:]` (args) without copying. Unfused `OpPull` unchanged (rare after peephole). `plans/2026-03-31-pulldrain-design.md`
 - [x] **Split `ffi.go` by concern** [Medium, S, Done]: 1010 lines split into `ffi.go` (spec), `ffi_arg_converters.go`, `ffi_ret_converters.go`, `ffi_wrapper.go`. PR #599.
@@ -73,7 +74,8 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 - [ ] **Procedure inlining** [Performance, Research]: Explore peephole inlining of known procedures at compile time. `plans/PERFORMANCE.md`
 - [ ] **Environment frame slimming** [Performance]: Reduce `EnvironmentFrame` struct for closure bodies that only need local bindings. `plans/PERFORMANCE.md`
-- [ ] **B2 escape analysis for let-bound closures** [Performance, Research]: Track whether a closure stored in a let binding escapes the let scope. Enables `!Captured` for patterns like `(let ((f (lambda () x))) (f))` where the closure is only called locally. Requires data flow analysis within the let body. Blocked by: B1 capture analysis (`plans/CAPTURE-ANALYSIS.md`).
+- [ ] **B2 escape analysis for let-bound closures** [Performance, Research]: Track whether a closure stored in a let binding escapes the let scope. Enables `!Captured` for patterns like `(let ((f (lambda () x))) (f))` where the closure is only called locally. Requires data flow analysis within the let body. Blocked by: B1 capture analysis (`plans/CAPTURE-ANALYSIS.md`). Design: `plans/ESCAPE-ANALYSIS.md`. Impl: `plans/ESCAPE-ANALYSIS-IMPL.md`
+- [ ] **B3 effective capture refinement** [Performance, Research]: Propagate B2 escape results back into B1 capture status. A binding marked `Captured` by B1 is effectively non-captured if every lambda that references it is stored in a non-escaping binding (B2). Cross-binding analysis over B1+B2 results. Blocked by: B2 (`plans/ESCAPE-ANALYSIS.md`).
 
 ### Research
 
