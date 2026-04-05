@@ -28,17 +28,14 @@ When investigating R7RS conformance issues:
 | `2026-03-25-algebra-library-design.md` | Algebra library design document | **Complete** |
 | `2026-03-25-algebra-rewrite-design.md` | Term rewriting library design | **Complete** |
 | `AVAILABLE-LIBRARIES.md` | Library discovery design: `LibraryEnumerator` interface, `(available-libraries)` primitive | **Approved** (design) |
-| `2026-03-28-available-libraries-impl.md` | Library discovery implementation: 10 tasks, TDD | Open |
 | `CAPTURE-ANALYSIS.md` | Capture analysis design for let bindings (B1) | **Complete** |
 | `ESCAPE-ANALYSIS.md` | Escape analysis design for let-bound closures (B2) | **Complete** (design) |
-| `PROCEDURE-INLINING.md` | Procedure inlining for let-bound closures: synthetic let transform, BindingID-keyed candidate registry, configurable threshold | **Approved** (design) |
-| `PROCEDURE-INLINING-IMPL.md` | Procedure inlining implementation plan: 8 tasks, TDD, engine option plumbing | Open |
+| `PROCEDURE-INLINING.md` | Procedure inlining for let-bound closures: synthetic let transform, BindingID-keyed candidate registry, configurable threshold | **Complete** (PR #605) |
 | `2026-03-27-procedure-documentation-design.md` | `procedure-documentation` primitive: NativeTemplate doc field, compileBody extraction, Guile-style convention | **Complete** (PR #579) |
 | `2026-03-27-scheme-library-docstrings-design.md` | Scheme library docstrings design: conventions, phasing, scope (300 procs across 29 files) | **Complete** |
-| `2026-03-27-special-form-macro-docstrings-design.md` | Special form & macro docstrings: `BindingMeta.Doc`, `BindingSpec`, `DocEntry`, post-bootstrap `ApplyDocs` | **Approved** (design) |
-| `2026-03-27-special-form-macro-docstrings-impl.md` | Special form & macro docstrings implementation: 8 tasks across environment, registry, core, repl, engine | Open |
+| `2026-03-27-special-form-macro-docstrings-design.md` | Special form & macro docstrings: `BindingMeta.Doc`, `BindingSpec`, `DocEntry`, post-bootstrap `ApplyDocs` | **Complete** |
 | `2026-03-26-extension-contracts-design.md` | Extension API contract system: ValueType enum, PrimitiveSpec type declarations, validation, doc integration | **Approved** (design) |
-| `2026-03-26-extension-contracts-impl.md` | Extension contracts implementation plan: 4 phases, 8 tasks in Phase 1 | Open |
+| `2026-03-26-extension-contracts-impl.md` | Extension contracts remaining work: Phases 2-4 outlines (Phase 1 complete) | Open |
 | `2026-03-26-environment-profiles.md` | Environment profiles design: named profiles (Tiny, Console, Small, KitchenSink), sandbox modifier | Draft |
 | `2026-03-26-environment-profiles-impl.md` | Environment profiles implementation plan | Draft |
 | `2026-03-26-wile-mcp-server-design.md` | Wile MCP server design: standalone binary exposing Scheme evaluation | Draft |
