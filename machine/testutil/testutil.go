@@ -43,7 +43,7 @@ import (
 // primitives and bootstrap macros registered.
 func NewFullRuntimeEnv(t *testing.T) *environment.EnvironmentFrame {
 	t.Helper()
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrameTiny(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 	return env
 }
@@ -53,7 +53,7 @@ func ParseSchemeExpr(t *testing.T, env *environment.EnvironmentFrame, code strin
 	t.Helper()
 	reader := bufio.NewReader(strings.NewReader(code))
 	p := parser.NewParser(env, true, reader)
-	sv, err := p.ReadSyntax(context.TODO())
+	sv, err := p.ReadSyntax(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 	return sv
 }
@@ -101,7 +101,7 @@ func EvalSchemeInEnv(t *testing.T, env *environment.EnvironmentFrame, code strin
 // library search path.
 func SetupLibraryTest(t *testing.T, testdataPath string) *environment.EnvironmentFrame {
 	t.Helper()
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrameTiny(context.Background())
 	if err != nil {
 		t.Fatalf("failed to create environment: %v", err)
 	}
@@ -121,7 +121,7 @@ func SetupLibraryTest(t *testing.T, testdataPath string) *environment.Environmen
 // dependency) while providing the same library infrastructure.
 func SetupEngineTest(t *testing.T, fsys fs.FS) *environment.EnvironmentFrame {
 	t.Helper()
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrameTiny(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Wire up library infrastructure (same as Engine internals).
@@ -166,7 +166,7 @@ func evalSchemeInEnvCore(env *environment.EnvironmentFrame, code string) (values
 	var lastValue = values.Void
 
 	for {
-		stx, err := p.ReadSyntax(context.TODO())
+		stx, err := p.ReadSyntax(context.Background())
 		if err == io.EOF {
 			break
 		}

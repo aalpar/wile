@@ -143,46 +143,46 @@ func NewPoolManager() *PoolManager {
 }
 
 // Register adds a pool to the manager.
-func (m *PoolManager) Register(h PoolHandle) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.pools = append(m.pools, h)
+func (p *PoolManager) Register(h PoolHandle) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.pools = append(p.pools, h)
 }
 
 // AllStats returns a snapshot of every registered pool's counters.
-func (m *PoolManager) AllStats() []PoolSnapshot {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	out := make([]PoolSnapshot, len(m.pools))
-	for i, p := range m.pools {
-		out[i] = p.Stats()
+func (p *PoolManager) AllStats() []PoolSnapshot {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	out := make([]PoolSnapshot, len(p.pools))
+	for i, h := range p.pools {
+		out[i] = h.Stats()
 	}
 	return out
 }
 
 // DrainAll triggers a garbage collection, which clears all sync.Pool
 // instances, then calls Drain on each registered pool.
-func (m *PoolManager) DrainAll() {
+func (p *PoolManager) DrainAll() {
 	runtime.GC()
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	for _, p := range m.pools {
-		p.Drain()
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	for _, h := range p.pools {
+		h.Drain()
 	}
 }
 
 // SetAllEnabled sets the enabled flag on every registered pool.
-func (m *PoolManager) SetAllEnabled(on bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	for _, p := range m.pools {
-		p.SetEnabled(on)
+func (p *PoolManager) SetAllEnabled(on bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	for _, h := range p.pools {
+		h.SetEnabled(on)
 	}
 }
 
 // String returns a tabular summary of all registered pools.
-func (m *PoolManager) String() string {
-	stats := m.AllStats()
+func (p *PoolManager) String() string {
+	stats := p.AllStats()
 	if len(stats) == 0 {
 		return "PoolManager: (no pools registered)"
 	}

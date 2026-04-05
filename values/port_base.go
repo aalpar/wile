@@ -53,19 +53,19 @@ type portBase struct {
 }
 
 // IsClosed returns true if the port has been closed.
-func (b *portBase) IsClosed() bool {
-	return b.closed
+func (p *portBase) IsClosed() bool {
+	return p.closed
 }
 
 // Close marks the port as closed and, if a closer was provided,
 // closes the underlying stream. Close is idempotent.
-func (b *portBase) Close() error {
-	if b.closed {
+func (p *portBase) Close() error {
+	if p.closed {
 		return nil
 	}
-	b.closed = true
-	if b.clsr != nil {
-		return b.clsr.Close()
+	p.closed = true
+	if p.clsr != nil {
+		return p.clsr.Close()
 	}
 	return nil
 }
@@ -73,17 +73,17 @@ func (b *portBase) Close() error {
 // setCloser checks if v implements io.Closer and, if so, stores it
 // for use when the port is closed. Used by port constructors to detect
 // closeable underlying streams.
-func (b *portBase) setCloser(v any) {
+func (p *portBase) setCloser(v any) {
 	closer, ok := v.(io.Closer)
 	if ok {
-		b.clsr = closer
+		p.clsr = closer
 	}
 }
 
 // guardClosed returns werr.ErrPortClosed if the port is closed.
 // I/O methods call this at the top to reject operations on closed ports.
-func (b *portBase) guardClosed() error {
-	if b.closed {
+func (p *portBase) guardClosed() error {
+	if p.closed {
 		return werr.ErrPortClosed
 	}
 	return nil
@@ -95,24 +95,24 @@ type portDatumProvider interface {
 	getPortBase() *portBase
 }
 
-func (b *portBase) getPortBase() *portBase {
-	return b
+func (p *portBase) getPortBase() *portBase {
+	return p
 }
 
 // EqualTo returns true if v is a port with the same kind and datum identity.
 // This works because Go's any equality checks both dynamic type and value,
 // so two ports sharing a kind but using different backing types (e.g.,
 // *bufio.Writer vs *bytes.Buffer) will never compare equal.
-func (b *portBase) EqualTo(v Value) bool {
+func (p *portBase) EqualTo(v Value) bool {
 	other, ok := v.(portDatumProvider)
 	if !ok {
 		return false
 	}
 	ob := other.getPortBase()
-	return b.kind == ob.kind && b.datum == ob.datum
+	return p.kind == ob.kind && p.datum == ob.datum
 }
 
 // SchemeString returns the Scheme external representation of the port.
-func (b *portBase) SchemeString() string {
-	return fmt.Sprintf("<%s %p>", b.kind, b.datum)
+func (p *portBase) SchemeString() string {
+	return fmt.Sprintf("<%s %p>", p.kind, p.datum)
 }

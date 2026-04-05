@@ -49,15 +49,15 @@ func NewLoadPathStack() *LoadPathStack {
 
 // Push adds a path to the top of the stack.
 // Returns a wrapped ErrInvalidLoadPath if the path is empty.
-func (s *LoadPathStack) Push(p string) error {
-	if p == "" {
+func (p *LoadPathStack) Push(s string) error {
+	if s == "" {
 		return werr.WrapForeignErrorf(werr.ErrInvalidLoadPath, "path must not be empty")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	s.paths = append(s.paths, p)
+	p.paths = append(p.paths, s)
 	return nil
 }
 
@@ -65,31 +65,31 @@ func (s *LoadPathStack) Push(p string) error {
 // Does nothing if the stack is empty (no error, no panic). This silent behavior
 // is intentional to support defer patterns where the depth cannot be checked
 // before popping.
-func (s *LoadPathStack) Pop() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (p *LoadPathStack) Pop() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	if len(s.paths) > 0 {
-		s.paths = s.paths[:len(s.paths)-1]
+	if len(p.paths) > 0 {
+		p.paths = p.paths[:len(p.paths)-1]
 	}
 }
 
 // Current returns the path at the top of the stack without removing it.
 // Returns empty string if the stack is empty.
-func (s *LoadPathStack) Current() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+func (p *LoadPathStack) Current() string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 
-	if len(s.paths) == 0 {
+	if len(p.paths) == 0 {
 		return ""
 	}
-	return s.paths[len(s.paths)-1]
+	return p.paths[len(p.paths)-1]
 }
 
 // CurrentDir returns the directory of the path at the top of the stack.
 // Returns empty string if the stack is empty.
-func (s *LoadPathStack) CurrentDir() string {
-	current := s.Current()
+func (p *LoadPathStack) CurrentDir() string {
+	current := p.Current()
 	if current == "" {
 		return ""
 	}
@@ -100,9 +100,9 @@ func (s *LoadPathStack) CurrentDir() string {
 }
 
 // Depth returns the number of paths on the stack.
-func (s *LoadPathStack) Depth() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+func (p *LoadPathStack) Depth() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 
-	return len(s.paths)
+	return len(p.paths)
 }

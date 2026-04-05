@@ -422,6 +422,27 @@ func TestNativeTemplate_CachedBindings(t *testing.T) {
 	c.Assert(bindings[0], qt.Equals, bd)
 }
 
+func TestOpcodeRoundTrip(t *testing.T) {
+	// Every opcode from OpInvalid+1 to opCount-1 must produce a non-nil
+	// result from instructionToOperation, EXCEPT OpComplex (which requires
+	// a side table entry and is not round-trippable).
+	for op := OpCode(1); op < opCount; op++ {
+		if op == OpComplex {
+			continue
+		}
+		name := opcodeTable[op].name
+		if name == "" {
+			t.Errorf("opcode %d has no name in opcodeTable", op)
+			continue
+		}
+		instr := Instruction{Op: op, Arg: 0}
+		result := instructionToOperation(instr)
+		if result == nil {
+			t.Errorf("instructionToOperation returned nil for %s (opcode %d)", name, op)
+		}
+	}
+}
+
 func BenchmarkMaybeAppendLiteral(b *testing.B) {
 	const n = 500
 	syms := make([]values.Value, n)
