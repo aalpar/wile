@@ -164,7 +164,7 @@ func PrimListToString(mc *machine.MachineContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "list->string: expected a list but got %T", o)
 	}
 	var runes []rune
-	v, err := tuple.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
+	err := helpers.MustList(mc.Context(), tuple, "list->string", func(_ context.Context, _ int, _ bool, v values.Value) error {
 		ch, ok := v.(*values.Character)
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotACharacter, "list->string: expected a character but got %T", v)
@@ -174,9 +174,6 @@ func PrimListToString(mc *machine.MachineContext) error {
 	})
 	if err != nil {
 		return err
-	}
-	if !values.IsEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "list->string: expected a proper list")
 	}
 	// R7RS §6.7: list->string returns a newly allocated mutable string
 	mc.SetValue(values.NewMutableString(string(runes)))
@@ -222,7 +219,7 @@ func PrimStringAppend(mc *machine.MachineContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "string-append: expected a list but got %T", o)
 	}
 	var sb strings.Builder
-	v, err := tuple.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, v values.Value) error {
+	err := helpers.MustList(mc.Context(), tuple, "string-append", func(_ context.Context, _ int, _ bool, v values.Value) error {
 		s, ok := v.(*values.String)
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotAString, "string-append: expected a string but got %T", v)
@@ -232,9 +229,6 @@ func PrimStringAppend(mc *machine.MachineContext) error {
 	})
 	if err != nil {
 		return err
-	}
-	if !values.IsEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "string-append: not a proper list")
 	}
 	// R7RS §6.7: string-append returns a newly allocated mutable string
 	mc.SetValue(values.NewMutableString(sb.String()))

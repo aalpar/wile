@@ -76,12 +76,7 @@ func PrimProcedureName(mc *machine.MachineContext) error {
 			"procedure-name: expected procedure")
 	}
 	if nc, ok := callable.(interface{ Name() string }); ok {
-		name := nc.Name()
-		if name == "" {
-			mc.SetValue(values.FalseValue)
-		} else {
-			mc.SetValue(values.NewString(name))
-		}
+		mc.SetValue(values.StringOrFalse(nc.Name()))
 	} else {
 		mc.SetValue(values.FalseValue)
 	}
@@ -220,12 +215,7 @@ func PrimProcedureDocumentation(mc *machine.MachineContext) error {
 			"procedure-documentation: expected procedure")
 	}
 	if dc, ok := callable.(interface{ Doc() string }); ok {
-		doc := dc.Doc()
-		if doc == "" {
-			mc.SetValue(values.FalseValue)
-		} else {
-			mc.SetValue(values.NewString(doc))
-		}
+		mc.SetValue(values.StringOrFalse(dc.Doc()))
 	} else {
 		mc.SetValue(values.FalseValue)
 	}

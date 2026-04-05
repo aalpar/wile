@@ -253,12 +253,15 @@ func PrimError(mc *machine.MachineContext) error {
 
 	// Convert irritants list to slice
 	var irritants []values.Value
-	_, err := values.ForEach(mc.Context(), irritantsList, func(_ context.Context, i int, hasNext bool, v values.Value) error {
+	v, err := values.ForEach(mc.Context(), irritantsList, func(_ context.Context, _ int, _ bool, v values.Value) error {
 		irritants = append(irritants, v)
 		return nil
 	})
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "error: invalid irritants list")
+	}
+	if v != nil && !values.IsEmptyList(v) {
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "error: irritants must be a proper list")
 	}
 
 	// Create error object and raise it
