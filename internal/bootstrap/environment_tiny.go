@@ -131,9 +131,12 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 		return nil, werr.WrapForeignErrorf(err, "error loading bootstrap macros")
 	}
 
-	// Set the default file resolver for runtime include/load operations.
+	// Set the default file resolver for runtime include/load operations,
+	// but only if no resolver has been configured (e.g., by WithSourceFS).
 	// This must happen after bootstrap (which uses EmbedFileResolver).
-	env.SetFileResolver(compilation.NewOSFileResolver(env))
+	if env.Namespace().FileResolver() == nil {
+		env.SetFileResolver(compilation.NewOSFileResolver(env))
+	}
 
 	return reg, nil
 }

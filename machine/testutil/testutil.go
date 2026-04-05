@@ -136,22 +136,9 @@ func SetupEngineTest(t *testing.T, fsys fs.FS) *environment.EnvironmentFrame {
 			stdlibResolver,
 		})
 		env.SetFileResolver(resolver)
-
-		// bootstrap.NewLibraryEnvironmentFrame calls initializeEnvironment
-		// which unconditionally sets an OSFileResolver on the namespace,
-		// overwriting our chain resolver. Wrap the factory to restore it
-		// after each library env creation.
-		env.Namespace().SetLibraryEnvFactory(func(ctx context.Context, callerEnv *environment.EnvironmentFrame, parts []string) (*environment.EnvironmentFrame, error) {
-			libEnv, err := bootstrap.NewLibraryEnvironmentFrame(ctx, callerEnv, parts)
-			if err != nil {
-				return nil, err
-			}
-			env.SetFileResolver(resolver)
-			return libEnv, nil
-		})
-	} else {
-		env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 	}
+
+	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
 	return env
 }
