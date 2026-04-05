@@ -26,27 +26,12 @@ func init() {
 	//
 	// Tier 1 forms (if, define, lambda, etc.) are dispatched by type switch
 	// in compileValidated (compile_validated.go) — no registry entry needed.
-	registerCompiler("syntax", syntaxCompiler((*CompileTimeContinuation).CompileSyntax))
-	registerCompiler("syntax-case", syntaxCompiler((*CompileTimeContinuation).CompileSyntaxCase))
-	registerCompiler("meta", syntaxCompiler((*CompileTimeContinuation).CompileMeta))
-	registerCompiler("include", syntaxCompiler((*CompileTimeContinuation).CompileInclude))
-	registerCompiler("include-ci", syntaxCompiler((*CompileTimeContinuation).CompileIncludeCi))
-	registerCompiler("define-syntax", syntaxCompiler((*CompileTimeContinuation).CompileDefineSyntax))
-	// syntax-rules is handled by define-syntax, not registered separately
-	registerCompiler("define-library", syntaxCompiler((*CompileTimeContinuation).CompileDefineLibrary))
-	registerCompiler("library", syntaxCompiler((*CompileTimeContinuation).CompileDefineLibrary)) // R6RS alias
-	registerCompiler("import", syntaxCompiler((*CompileTimeContinuation).CompileImport))
-	registerCompiler("export", syntaxCompiler((*CompileTimeContinuation).CompileExport))
-	registerCompiler("unquote", syntaxCompiler((*CompileTimeContinuation).CompileUnquote))
-	registerCompiler("unquote-splicing", syntaxCompiler((*CompileTimeContinuation).CompileUnquoteSplicing))
-	registerCompiler("quasisyntax", syntaxCompiler((*CompileTimeContinuation).CompileQuasisyntax))
-	registerCompiler("unsyntax", syntaxCompiler((*CompileTimeContinuation).CompileUnsyntax))
-	registerCompiler("unsyntax-splicing", syntaxCompiler((*CompileTimeContinuation).CompileUnsyntaxSplicing))
-	registerCompiler("with-syntax", syntaxCompiler((*CompileTimeContinuation).CompileWithSyntax))
-	registerCompiler("cond-expand", syntaxCompiler((*CompileTimeContinuation).CompileCondExpand))
-	registerCompiler("define-for-syntax", syntaxCompiler((*CompileTimeContinuation).CompileDefineForSyntax))
-	registerCompiler("begin-for-syntax", syntaxCompiler((*CompileTimeContinuation).CompileBeginForSyntax))
-	registerCompiler("eval-when", syntaxCompiler((*CompileTimeContinuation).CompileEvalWhen))
+	//
+	// Both this init() and RegisterSyntaxCompilers derive from
+	// syntaxCompilerEntries (syntax_compilers_registry.go) to stay in sync.
+	for _, entry := range syntaxCompilerEntries {
+		registerCompiler(entry.Name, syntaxCompiler(entry.Fn))
+	}
 }
 
 // syntaxCompiler adapts a SyntaxCompilerFunc into a CompilerFunc by unwrapping

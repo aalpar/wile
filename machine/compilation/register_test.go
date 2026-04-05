@@ -34,18 +34,32 @@ func TestTypeSwitchFormsRegistered(t *testing.T) {
 }
 
 func TestRegisterCompilers(t *testing.T) {
-	// Tier 2 syntax passthrough compilers are registered in compilerRegistry.
-	// Verify LookupCompiler returns non-nil for all expected forms.
-	for _, name := range []string{
-		"syntax", "syntax-case", "meta", "include", "include-ci",
-		"define-syntax", "define-library", "library", "import", "export",
-		"unquote", "unquote-splicing", "quasisyntax", "unsyntax",
-		"unsyntax-splicing", "with-syntax", "cond-expand",
-		"define-for-syntax", "begin-for-syntax", "eval-when",
-	} {
-		qt.Assert(t, LookupCompiler(name), qt.IsNotNil,
-			qt.Commentf("LookupCompiler(%q) returned nil", name))
+	// Tier 2 syntax passthrough compilers are registered in compilerRegistry
+	// via init() from syntaxCompilerEntries. Verify LookupCompiler returns
+	// non-nil for every entry in the shared slice.
+	for _, entry := range syntaxCompilerEntries {
+		qt.Assert(t, LookupCompiler(entry.Name), qt.IsNotNil,
+			qt.Commentf("LookupCompiler(%q) returned nil — init() and syntaxCompilerEntries out of sync", entry.Name))
 	}
+}
+
+func TestSyntaxCompilerRegistrationConsistency(t *testing.T) {
+	// Verify compilerRegistry contains exactly the entries from
+	// syntaxCompilerEntries (no extra, no missing). This guards against
+	// someone adding a registerCompiler call outside the shared slice.
+	entryNames := make(map[string]bool, len(syntaxCompilerEntries))
+	for _, entry := range syntaxCompilerEntries {
+		entryNames[entry.Name] = true
+	}
+
+	for name := range compilerRegistry {
+		qt.Assert(t, entryNames[name], qt.IsTrue,
+			qt.Commentf("compilerRegistry has %q which is not in syntaxCompilerEntries", name))
+	}
+
+	qt.Assert(t, len(compilerRegistry), qt.Equals, len(syntaxCompilerEntries),
+		qt.Commentf("compilerRegistry has %d entries but syntaxCompilerEntries has %d",
+			len(compilerRegistry), len(syntaxCompilerEntries)))
 }
 
 func TestLookupCompilerMiss(t *testing.T) {
