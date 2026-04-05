@@ -23,14 +23,14 @@ import (
 )
 
 type childEntry struct {
-	expr         ValidatedExpr
-	callPosition bool
+	expr ValidatedExpr
+	role ChildRole
 }
 
 func collectChildren(expr ValidatedExpr) []childEntry {
 	var result []childEntry
-	WalkSubExprs(expr, func(child ValidatedExpr, callPos bool) {
-		result = append(result, childEntry{child, callPos})
+	WalkSubExprs(expr, func(child ValidatedExpr, role ChildRole) {
+		result = append(result, childEntry{child, role})
 	})
 	return result
 }
@@ -44,11 +44,11 @@ func TestWalkSubExprs_Call(t *testing.T) {
 	children := collectChildren(expr)
 	c.Assert(len(children), qt.Equals, 3)
 	c.Assert(children[0].expr, qt.Equals, proc)
-	c.Assert(children[0].callPosition, qt.IsTrue)
+	c.Assert(children[0].role, qt.Equals, RoleCallProc)
 	c.Assert(children[1].expr, qt.Equals, arg1)
-	c.Assert(children[1].callPosition, qt.IsFalse)
+	c.Assert(children[1].role, qt.Equals, RoleNormal)
 	c.Assert(children[2].expr, qt.Equals, arg2)
-	c.Assert(children[2].callPosition, qt.IsFalse)
+	c.Assert(children[2].role, qt.Equals, RoleNormal)
 }
 
 func TestWalkSubExprs_Apply(t *testing.T) {
@@ -59,9 +59,9 @@ func TestWalkSubExprs_Apply(t *testing.T) {
 	expr := applyExpr(proc, []ValidatedExpr{prefix}, final)
 	children := collectChildren(expr)
 	c.Assert(len(children), qt.Equals, 3)
-	c.Assert(children[0].callPosition, qt.IsTrue)
-	c.Assert(children[1].callPosition, qt.IsFalse)
-	c.Assert(children[2].callPosition, qt.IsFalse)
+	c.Assert(children[0].role, qt.Equals, RoleCallProc)
+	c.Assert(children[1].role, qt.Equals, RoleNormal)
+	c.Assert(children[2].role, qt.Equals, RoleNormal)
 }
 
 func TestWalkSubExprs_Lambda(t *testing.T) {
@@ -71,8 +71,8 @@ func TestWalkSubExprs_Lambda(t *testing.T) {
 	expr := lam(b1, b2)
 	children := collectChildren(expr)
 	c.Assert(len(children), qt.Equals, 2)
-	c.Assert(children[0].callPosition, qt.IsFalse)
-	c.Assert(children[1].callPosition, qt.IsFalse)
+	c.Assert(children[0].role, qt.Equals, RoleClosureBody)
+	c.Assert(children[1].role, qt.Equals, RoleClosureBody)
 }
 
 func TestWalkSubExprs_CaseLambda(t *testing.T) {
@@ -81,7 +81,7 @@ func TestWalkSubExprs_CaseLambda(t *testing.T) {
 	expr := caseLam(b1)
 	children := collectChildren(expr)
 	c.Assert(len(children), qt.Equals, 1)
-	c.Assert(children[0].callPosition, qt.IsFalse)
+	c.Assert(children[0].role, qt.Equals, RoleClosureBody)
 }
 
 func TestWalkSubExprs_If(t *testing.T) {
@@ -98,7 +98,7 @@ func TestWalkSubExprs_If(t *testing.T) {
 	children := collectChildren(expr)
 	c.Assert(len(children), qt.Equals, 3)
 	for _, ch := range children {
-		c.Assert(ch.callPosition, qt.IsFalse)
+		c.Assert(ch.role, qt.Equals, RoleNormal)
 	}
 }
 
@@ -113,7 +113,7 @@ func TestWalkSubExprs_Begin(t *testing.T) {
 	children := collectChildren(expr)
 	c.Assert(len(children), qt.Equals, 2)
 	for _, ch := range children {
-		c.Assert(ch.callPosition, qt.IsFalse)
+		c.Assert(ch.role, qt.Equals, RoleNormal)
 	}
 }
 
@@ -124,7 +124,7 @@ func TestWalkSubExprs_SetBang(t *testing.T) {
 	children := collectChildren(expr)
 	c.Assert(len(children), qt.Equals, 1)
 	c.Assert(children[0].expr, qt.Equals, val)
-	c.Assert(children[0].callPosition, qt.IsFalse)
+	c.Assert(children[0].role, qt.Equals, RoleNormal)
 }
 
 func TestWalkSubExprs_Symbol(t *testing.T) {
@@ -170,7 +170,7 @@ func TestWalkSubExprs_Let(t *testing.T) {
 	children := collectChildren(expr)
 	c.Assert(len(children), qt.Equals, 3)
 	for _, ch := range children {
-		c.Assert(ch.callPosition, qt.IsFalse)
+		c.Assert(ch.role, qt.Equals, RoleNormal)
 	}
 }
 
@@ -185,7 +185,7 @@ func TestWalkSubExprs_DynamicWind(t *testing.T) {
 	children := collectChildren(expr)
 	c.Assert(len(children), qt.Equals, 3)
 	for _, ch := range children {
-		c.Assert(ch.callPosition, qt.IsFalse)
+		c.Assert(ch.role, qt.Equals, RoleNormal)
 	}
 }
 
@@ -200,7 +200,7 @@ func TestWalkSubExprs_WithContinuationMark(t *testing.T) {
 	children := collectChildren(expr)
 	c.Assert(len(children), qt.Equals, 3)
 	for _, ch := range children {
-		c.Assert(ch.callPosition, qt.IsFalse)
+		c.Assert(ch.role, qt.Equals, RoleNormal)
 	}
 }
 
@@ -211,7 +211,7 @@ func TestWalkSubExprs_DefineFunction(t *testing.T) {
 	children := collectChildren(expr)
 	c.Assert(len(children), qt.Equals, 1)
 	c.Assert(children[0].expr, qt.Equals, b1)
-	c.Assert(children[0].callPosition, qt.IsFalse)
+	c.Assert(children[0].role, qt.Equals, RoleClosureBody)
 }
 
 func TestWalkSubExprs_DefineValue(t *testing.T) {
@@ -221,11 +221,11 @@ func TestWalkSubExprs_DefineValue(t *testing.T) {
 	children := collectChildren(expr)
 	c.Assert(len(children), qt.Equals, 1)
 	c.Assert(children[0].expr, qt.Equals, val)
-	c.Assert(children[0].callPosition, qt.IsFalse)
+	c.Assert(children[0].role, qt.Equals, RoleNormal)
 }
 
 func TestWalkSubExprs_Nil(t *testing.T) {
-	WalkSubExprs(nil, func(child ValidatedExpr, callPos bool) {
+	WalkSubExprs(nil, func(child ValidatedExpr, role ChildRole) {
 		t.Fatal("should not be called")
 	})
 }
