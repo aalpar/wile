@@ -12,7 +12,6 @@ import (
 	"github.com/aalpar/wile/internal/bootstrap"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/machine/compilation"
-	wileruntime "github.com/aalpar/wile/runtime"
 	"github.com/aalpar/wile/values"
 )
 
@@ -167,9 +166,9 @@ func TestCmdDoc_ClosureDocstring(t *testing.T) {
 	p := parser.NewParser(env, true, rdr)
 	stx, err := p.ReadSyntax(ctx)
 	qt.Assert(t, err, qt.IsNil)
-	tpl, err := wileruntime.Compile(ctx, env, stx)
+	tpl, err := compile(ctx, env, stx)
 	qt.Assert(t, err, qt.IsNil)
-	_, err = wileruntime.Run(ctx, tpl, env)
+	_, err = run(ctx, tpl, env)
 	qt.Assert(t, err, qt.IsNil)
 
 	t.Setenv("PAGER", "")
@@ -547,9 +546,9 @@ func TestCmdDisassemble(t *testing.T) {
 	p := parser.NewParser(env, true, rdr)
 	stx, stxErr := p.ReadSyntax(ctx)
 	qt.Assert(t, stxErr, qt.IsNil)
-	tpl, compileErr := wileruntime.Compile(ctx, env, stx)
+	tpl, compileErr := compile(ctx, env, stx)
 	qt.Assert(t, compileErr, qt.IsNil)
-	_, runErr := wileruntime.Run(ctx, tpl, env)
+	_, runErr := run(ctx, tpl, env)
 	qt.Assert(t, runErr, qt.IsNil)
 
 	tcs := []struct {
