@@ -137,6 +137,22 @@ func TestSyntaxRules_Errors(t *testing.T) {
 			Name: "missing literals list",
 			Code: `(define-syntax bad (syntax-rules))`,
 		},
+		{
+			Name: "non-list clause",
+			Code: `(define-syntax bad (syntax-rules () 42))`,
+		},
+		{
+			Name: "clause with one element",
+			Code: `(define-syntax bad (syntax-rules () ((_))))`,
+		},
+		{
+			Name: "improper clause",
+			Code: `(define-syntax bad (syntax-rules () ((_ . x) . x)))`,
+		},
+		{
+			Name: "non-symbol in literals",
+			Code: `(define-syntax bad (syntax-rules (42) ((_ x) x)))`,
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {

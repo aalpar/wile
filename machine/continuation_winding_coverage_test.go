@@ -19,6 +19,7 @@ package machine_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -560,7 +561,7 @@ func TestUnwindTo_ApplyError(t *testing.T) {
 	// UnwindTo should propagate the Apply error
 	err := testMC.UnwindTo(0)
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(err.Error(), qt.Contains, "arguments")
+	c.Assert(errors.Is(err, werr.ErrWrongNumberOfArguments), qt.IsTrue)
 }
 
 // TestUnwindTo_RunError exercises the error path when an after thunk
@@ -601,7 +602,7 @@ func TestRewindTo_ApplyError(t *testing.T) {
 
 	err := testMC.RewindTo(machine.WindingStack{frame}, 0)
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(err.Error(), qt.Contains, "arguments")
+	c.Assert(errors.Is(err, werr.ErrWrongNumberOfArguments), qt.IsTrue)
 }
 
 // TestRewindTo_RunError exercises the error path when a before thunk
@@ -643,7 +644,7 @@ func TestRestoreWithWindingFrom_AfterThunkApplyError(t *testing.T) {
 		machine.WindingStack{},         // target: empty
 	)
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(err.Error(), qt.Contains, "arguments")
+	c.Assert(errors.Is(err, werr.ErrWrongNumberOfArguments), qt.IsTrue)
 }
 
 // TestRestoreWithWindingFrom_AfterThunkRunError exercises the Run error
@@ -688,7 +689,7 @@ func TestRestoreWithWindingFrom_RewindError(t *testing.T) {
 		machine.WindingStack{tgtFrame}, // target: has bad before thunk
 	)
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(err.Error(), qt.Contains, "arguments")
+	c.Assert(errors.Is(err, werr.ErrWrongNumberOfArguments), qt.IsTrue)
 }
 
 // --- RunWithEscapeHandling additional coverage ---

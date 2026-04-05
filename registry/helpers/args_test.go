@@ -69,7 +69,7 @@ func TestRequireType_Failure_ErrorMessage_Vector(t *testing.T) {
 	v := values.NewInteger(42)
 	_, err := RequireType[*values.Vector](v, werr.ErrNotAVector, "vector-length")
 	c.Assert(err, qt.IsNotNil)
-	c.Assert(err.Error(), qt.Matches, `vector-length: expected a vector but got \*values\.Integer.*`)
+	c.Assert(errors.Is(err, werr.ErrNotAVector), qt.IsTrue)
 }
 
 func TestRequireType_Failure_ErrorMessage_Integer(t *testing.T) {
@@ -77,8 +77,7 @@ func TestRequireType_Failure_ErrorMessage_Integer(t *testing.T) {
 	v := values.NewString("hello")
 	_, err := RequireType[*values.Integer](v, werr.ErrNotAnInteger, "exact")
 	c.Assert(err, qt.IsNotNil)
-	// ErrNotAnInteger.Error() = "not an integer" → TrimPrefix("not ") = "an integer"
-	c.Assert(err.Error(), qt.Matches, `exact: expected an integer but got \*values\.String.*`)
+	c.Assert(errors.Is(err, werr.ErrNotAnInteger), qt.IsTrue)
 }
 
 func TestRequireType_Failure_ErrorMessage_ByteVector(t *testing.T) {
@@ -86,8 +85,7 @@ func TestRequireType_Failure_ErrorMessage_ByteVector(t *testing.T) {
 	v := values.NewInteger(1)
 	_, err := RequireType[*values.ByteVector](v, werr.ErrNotAByteVector, "bytevector-length")
 	c.Assert(err, qt.IsNotNil)
-	// ErrNotAByteVector.Error() = "not a bytevector" → TrimPrefix("not ") = "a bytevector"
-	c.Assert(err.Error(), qt.Matches, `bytevector-length: expected a bytevector but got \*values\.Integer.*`)
+	c.Assert(errors.Is(err, werr.ErrNotAByteVector), qt.IsTrue)
 }
 
 func TestRequireType_Failure_NilValue(t *testing.T) {

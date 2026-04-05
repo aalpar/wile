@@ -38,34 +38,19 @@ Items that fail silently — wrong results, not crashes.
 
 ---
 
-## Phase 2: File Resolution Unification (High priority, medium effort)
+## Phase 2: File Resolution Unification (High priority, medium effort) — COMPLETE
 
-The `FileResolver` abstraction was introduced for embedded filesystems but legacy `os.Stat`
-paths were never migrated.
+### Task 2.1: ~~Make `ResolveFile` delegate to `FileResolver`~~ [Resolved — no change needed]
 
-### Task 2.1: Make `ResolveFile` delegate to `FileResolver`
+**Assessment (2026-04-05):** The stated problem was incorrect. `ResolveFile` has exactly one caller: `OSFileResolver.ResolveAndOpen` (`machine/compilation/file_resolver.go:194`). `FSFileResolver` has its own resolution logic (`file_resolver.go:310-357`) using `fs.Stat(p.fsys, candidate)` — it never calls `ResolveFile`. Embedders with `WithSourceFS()` get `FSFileResolver`, which never touches this code path. The `os.Stat` calls in `ResolveFile` are correct behavior for the OS filesystem resolver's internal implementation. Adding a `FileResolver` parameter would be complexity for no practical benefit since the two resolution strategies (OS absolute paths vs FS-relative paths) are fundamentally different.
 
-**Files:** `environment/resolve.go` (3 `os.Stat` calls at lines 26, 40, 58), `environment/file_resolver.go`
-**Problem:** `ResolveFile()` uses `os.Stat` directly, bypassing `FileResolver`. Embedders using `WithSourceFS()` without `WithSourceOS()` silently fail to resolve files through this path.
-**Fix:** Add a `FileResolver` parameter to `ResolveFile` (or retrieve it from the `LoadPathStack`'s owning namespace). When non-nil, delegate to `FileResolver.ResolveAndOpen` instead of `os.Stat`. Fall back to `os.Stat` only when no resolver is configured. Update all callers.
-**Effort:** M
-**Verify:** `make lint && make test ./environment/... ./machine/...`
+### Task 2.2: ~~Fix library search `os.Stat` bypass~~ [Done, c8cbdf57]
 
-### Task 2.2: Fix library search `os.Stat` bypass
+`FindLibraryFile` (the method with `os.Stat` bypasses) was deleted as dead code. `LoadLibrary` already resolves via `FileResolver` correctly, making `FindLibraryFile` unreachable. `ToFilePath` (only used by `FindLibraryFile`) was also deleted.
 
-**Files:** `machine/compilation/library_registry.go:293,303`
-**Problem:** Library file discovery uses `os.Stat` directly instead of `FileResolver`.
-**Fix:** Thread the `FileResolver` from the namespace through to `findLibraryFile`. Use `ResolveAndOpen` (from Task 2.1) or a stat-check wrapper.
-**Effort:** M (depends on 2.1)
-**Verify:** `make lint && make test ./machine/...`
+### Task 2.3: Fix `initializeEnvironment` resolver overwrite [Done, 19d14d39]
 
-### Task 2.3: Fix `initializeEnvironment` resolver overwrite
-
-**Files:** `internal/bootstrap/environment_tiny.go` (in `initializeEnvironment`)
-**Problem:** `initializeEnvironment` unconditionally sets an `OSFileResolver` on the namespace, overwriting any previously configured `ChainFileResolver`. The workaround in `machine/testutil/testutil.go:144-152` confirms this bites in practice.
-**Fix:** Only set `OSFileResolver` when `namespace.FileResolver()` is nil.
-**Effort:** S
-**Verify:** `make lint && make test ./machine/... ./internal/bootstrap/...`
+Bootstrap now only sets `OSFileResolver` when `namespace.FileResolver()` is nil, preserving any previously configured `ChainFileResolver`.
 
 ---
 
@@ -91,18 +76,17 @@ Three forms of registration drift that can cause silent bugs during feature work
 
 ---
 
-## Phase 4: Test Discipline (Medium priority, medium effort)
+## Phase 4: Test Discipline (Medium priority, medium effort) — COMPLETE
 
-Tests that assert on error message strings rather than sentinels, and missing
-integration tests.
+### Task 4.1: ~~Migrate error-string assertions to `errors.Is`~~ [Done]
 
-### Task 4.1: Migrate error-string assertions to `errors.Is`
+Migrated 25 sites across 4 files:
+- `registry/helpers/args_test.go` (3 sites): regex on Go type names → `errors.Is`
+- `machine/compilation/import_set_datum_test.go` (16 sites): `qt.Contains` → `errors.Is`
+- `environment/resolve_test.go` (2 sites): string check → `errors.Is(err, werr.ErrFileNotFound)`
+- `machine/continuation_winding_coverage_test.go` (4 sites): "arguments" → `errors.Is(err, werr.ErrWrongNumberOfArguments)`
 
-**Files:** `registry/helpers/args_test.go:72,81,90`, `machine/compilation/import_set_datum_test.go` (~15 sites), `environment/resolve_test.go:36-37`, `ffi_test.go:348,1056,1085`, `machine/continuation_winding_coverage_test.go:563,604,646,691`, `machine/exception_escape_test.go:35-68`
-**Problem:** Tests assert on `.Error()` string content or regex containing Go type names. Reformatting error messages (cosmetic) breaks tests; genuinely incorrect sentinels go undetected.
-**Fix:** Replace `err.Error()` contains/matches checks with `errors.Is(err, werr.ErrSomeSentinel)`. Prioritize `args_test.go` (type-name regexes) and `import_set_datum_test.go` (most sites).
-**Effort:** M
-**Verify:** `make test ./...`
+Skipped (valid string tests): `ffi_test.go` (tests error propagation quality, sentinels already present), `exception_escape_test.go` (tests `Error()` formatting output).
 
 ### Task 4.2: Add security gate integration tests
 
@@ -112,21 +96,13 @@ integration tests.
 **Effort:** S
 **Verify:** `go test -run TestSandbox ./...`
 
-### Task 4.3: Add rest-arg buffer aliasing regression test
+### Task 4.3: ~~Add rest-arg buffer aliasing regression test~~ [Done]
 
-**Files:** `machine/machine_context_apply.go:165-181`, `registry/core/prim_lists.go:29`
-**Problem:** The rest-arg list is backed by a reusable `PairBlock`. No test verifies that storing a rest-arg list across calls doesn't corrupt on the next variadic call.
-**Fix:** Write a test that calls a variadic primitive storing `Arg(N)`, calls it again with different arguments, and verifies the first stored list is intact.
-**Effort:** S
-**Verify:** `go test -run TestRestArgBuffer ./machine/...`
+Added `TestRestArgBufferAliasing` in `registry/core/prim_list_test.go`. Verifies `PrimList`'s spine copy prevents buffer aliasing across variadic calls.
 
-### Task 4.4: Add `validate/` clause-level syntax-rules error tests
+### Task 4.4: ~~Add `validate/` clause-level syntax-rules error tests~~ [Done]
 
-**Files:** `internal/validate/validate_macro.go:88-101`, `internal/validate/validate_macro_test.go`
-**Problem:** `TestSyntaxRules_Errors` has only one case ("missing literals list"). The clause-shape errors (non-list clause, improper clause, wrong element count) have zero test coverage.
-**Fix:** Add 3-4 table-driven test cases for clause-shape errors.
-**Effort:** S
-**Verify:** `go test -run TestSyntaxRules ./internal/validate/...`
+Added 4 cases to `TestSyntaxRules_Errors`: non-list clause, one-element clause, improper clause, non-symbol in literals. Note: three-element clause is silently accepted (compiler uses first two elements) — not an error condition.
 
 ---
 
@@ -244,9 +220,9 @@ These are longer-term items to tackle opportunistically when working in the area
 | Phase | Items | Effort | Theme |
 |-------|-------|--------|-------|
 | 1 | 3 tasks | S each | Silent limits — add overflow guards, exhaustiveness tests |
-| 2 | 3 tasks | S-M | File resolution — unify `os.Stat` paths with `FileResolver` |
+| 2 | 3 tasks | S-M | File resolution — ~~COMPLETE~~ (2.1 premise incorrect, 2.2+2.3 done) |
 | 3 | 2 tasks | M each | Registration — eliminate dual-source-of-truth patterns |
-| 4 | 4 tasks | S-M | Test discipline — sentinels over strings, integration coverage |
+| 4 | 4 tasks | S-M | Test discipline — ~~COMPLETE~~ (4.1-4.4 done, 4.2 was already done) |
 | 5 | 4 tasks | S-M | Missing abstractions — interfaces, helpers, convention enforcement |
 | 6 | 3 tasks | S each | Dead code and style cleanup |
 | 7 | 1 task | L | Test helper unification |

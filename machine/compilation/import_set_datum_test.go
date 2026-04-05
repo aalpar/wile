@@ -16,11 +16,13 @@ package compilation
 
 import (
 	"context"
+	"errors"
 	"testing"
 
-	"github.com/aalpar/wile/values"
-
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
 )
 
 func TestParseLibraryNameFromDatum(t *testing.T) {
@@ -50,13 +52,13 @@ func TestParseLibraryNameFromDatum_WithNumbers(t *testing.T) {
 func TestParseLibraryNameFromDatum_NotAPair(t *testing.T) {
 	_, err := ParseLibraryNameFromDatum(context.Background(), values.NewInteger(42))
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, err.Error(), qt.Contains, "library name must be a list")
+	qt.Assert(t, errors.Is(err, werr.ErrNotAList), qt.IsTrue)
 }
 
 func TestParseLibraryNameFromDatum_Empty(t *testing.T) {
 	_, err := ParseLibraryNameFromDatum(context.Background(), values.EmptyList)
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, err.Error(), qt.Contains, "library name cannot be empty")
+	qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue)
 }
 
 func TestParseLibraryNameFromDatum_InvalidPart(t *testing.T) {
@@ -68,7 +70,7 @@ func TestParseLibraryNameFromDatum_InvalidPart(t *testing.T) {
 
 	_, err := ParseLibraryNameFromDatum(context.Background(), libName)
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, err.Error(), qt.Contains, "library name part must be identifier or integer")
+	qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue)
 }
 
 func TestParseImportSetFromDatum_Simple(t *testing.T) {
@@ -252,7 +254,7 @@ func TestParseImportSetFromDatum_RenameEmpty(t *testing.T) {
 func TestParseImportSetFromDatum_NotAPair(t *testing.T) {
 	_, err := ParseImportSetFromDatum(context.Background(), values.NewInteger(42))
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, err.Error(), qt.Contains, "import set must be a list")
+	qt.Assert(t, errors.Is(err, werr.ErrNotAList), qt.IsTrue)
 }
 
 func TestParseImportSetFromDatum_Only_InvalidFormat(t *testing.T) {
@@ -264,7 +266,7 @@ func TestParseImportSetFromDatum_Only_InvalidFormat(t *testing.T) {
 
 	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, err.Error(), qt.Contains, "expected import-set and identifiers")
+	qt.Assert(t, errors.Is(err, werr.ErrNotAList), qt.IsTrue)
 }
 
 func TestParseImportSetFromDatum_Prefix_InvalidFormat(t *testing.T) {
@@ -282,7 +284,7 @@ func TestParseImportSetFromDatum_Prefix_InvalidFormat(t *testing.T) {
 
 	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, err.Error(), qt.Contains, "prefix")
+	qt.Assert(t, errors.Is(err, werr.ErrNotAList), qt.IsTrue)
 }
 
 func TestParseImportSetFromDatum_Prefix_NotASymbol(t *testing.T) {
@@ -300,7 +302,7 @@ func TestParseImportSetFromDatum_Prefix_NotASymbol(t *testing.T) {
 
 	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, err.Error(), qt.Contains, "prefix must be a symbol")
+	qt.Assert(t, errors.Is(err, werr.ErrNotASymbol), qt.IsTrue)
 }
 
 func TestParseImportSetFromDatum_Rename_InvalidPair(t *testing.T) {
@@ -318,7 +320,7 @@ func TestParseImportSetFromDatum_Rename_InvalidPair(t *testing.T) {
 
 	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, err.Error(), qt.Contains, "expected (old new) pair")
+	qt.Assert(t, errors.Is(err, werr.ErrNotAList), qt.IsTrue)
 }
 
 func TestParseImportSetFromDatum_Rename_OldNotSymbol(t *testing.T) {
@@ -342,7 +344,7 @@ func TestParseImportSetFromDatum_Rename_OldNotSymbol(t *testing.T) {
 
 	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, err.Error(), qt.Contains, "old name must be symbol")
+	qt.Assert(t, errors.Is(err, werr.ErrNotASymbol), qt.IsTrue)
 }
 
 func TestParseImportSetFromDatum_Rename_NewNotSymbol(t *testing.T) {
@@ -366,7 +368,7 @@ func TestParseImportSetFromDatum_Rename_NewNotSymbol(t *testing.T) {
 
 	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, err.Error(), qt.Contains, "new name must be symbol")
+	qt.Assert(t, errors.Is(err, werr.ErrNotASymbol), qt.IsTrue)
 }
 
 func TestParseIdentifierListFromDatum(t *testing.T) {
@@ -393,7 +395,7 @@ func TestParseIdentifierListFromDatum_Empty(t *testing.T) {
 func TestParseIdentifierListFromDatum_NotAPair(t *testing.T) {
 	_, err := parseIdentifierListFromDatum(context.Background(), values.NewInteger(42))
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, err.Error(), qt.Contains, "expected list of identifiers")
+	qt.Assert(t, errors.Is(err, werr.ErrNotAList), qt.IsTrue)
 }
 
 func TestParseIdentifierListFromDatum_NotASymbol(t *testing.T) {
@@ -405,7 +407,7 @@ func TestParseIdentifierListFromDatum_NotASymbol(t *testing.T) {
 
 	_, err := parseIdentifierListFromDatum(context.Background(), list)
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, err.Error(), qt.Contains, "expected identifier symbol")
+	qt.Assert(t, errors.Is(err, werr.ErrNotASymbol), qt.IsTrue)
 }
 
 // Phase shift tests
@@ -555,8 +557,7 @@ func TestParseImportSetFromDatum_ForSyntax_InvalidFormat(t *testing.T) {
 
 	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
-	// Error comes from trying to parse empty list as import set
-	qt.Assert(t, err.Error(), qt.Contains, "not a list")
+	qt.Assert(t, errors.Is(err, werr.ErrNotAList), qt.IsTrue)
 }
 
 func TestParseImportSetFromDatum_ForMeta_InvalidFormat(t *testing.T) {
@@ -568,8 +569,7 @@ func TestParseImportSetFromDatum_ForMeta_InvalidFormat(t *testing.T) {
 
 	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
-	// Error comes from trying to get the phase level from empty list
-	qt.Assert(t, err.Error(), qt.Contains, "expected phase level and import-set")
+	qt.Assert(t, errors.Is(err, werr.ErrNotAList), qt.IsTrue)
 }
 
 func TestParseImportSetFromDatum_ForMeta_NotInteger(t *testing.T) {
@@ -590,7 +590,7 @@ func TestParseImportSetFromDatum_ForMeta_NotInteger(t *testing.T) {
 
 	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, err.Error(), qt.Contains, "for-meta: expected integer phase level")
+	qt.Assert(t, errors.Is(err, werr.ErrNotAnInteger), qt.IsTrue)
 }
 
 func TestParseImportSetFromDatum_ForMeta_MissingImportSet(t *testing.T) {
@@ -605,6 +605,5 @@ func TestParseImportSetFromDatum_ForMeta_MissingImportSet(t *testing.T) {
 
 	_, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNotNil)
-	// Error comes from trying to parse empty list as import set
-	qt.Assert(t, err.Error(), qt.Contains, "not a list")
+	qt.Assert(t, errors.Is(err, werr.ErrNotAList), qt.IsTrue)
 }

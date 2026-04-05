@@ -311,9 +311,14 @@ style: normalize receiver names to p per project convention
 
 ---
 
-## Phase 2: File Resolution Unification (S-M)
+## Phase 2: File Resolution Unification (S-M) — COMPLETE
 
-### Task 2.3: Fix `initializeEnvironment` resolver overwrite (S)
+All three tasks resolved:
+- **2.3**: Done in commit `19d14d39` — bootstrap preserves pre-configured resolver.
+- **2.2**: Done in commit `c8cbdf57` — dead `FindLibraryFile` with `os.Stat` bypass deleted.
+- **2.1**: Resolved without code change — stated problem was incorrect. `ResolveFile` is only called by `OSFileResolver`, and `FSFileResolver` has its own resolution logic. See assessment in `TECH-DEBT-2026-04.md`.
+
+~~### Task 2.3: Fix `initializeEnvironment` resolver overwrite (S)~~
 
 **Do this first — it's the simplest and unblocks testing for 2.1/2.2.**
 
@@ -1029,10 +1034,10 @@ These are lower priority. Include here for completeness but expect them to be pi
 
 | Order | Phase | Tasks | Effort | Dependencies |
 |-------|-------|-------|--------|-------------|
-| 1st | Phase 1 | 1.1, 1.2, 1.3 | S each | None |
-| 2nd | Phase 6 | 6.1, 6.2, 6.3 | S each | None |
-| 3rd | Phase 2 | 2.3 → 2.1 → 2.2 | S, M, M | 2.2 depends on 2.1; 2.3 first |
-| 4th | Phase 4 | 4.1, 4.3, 4.4 | M, S, S | 4.2 already done |
+| 1st | Phase 1 | 1.1, 1.2, 1.3 | S each | **DONE** (ffa7b90a) |
+| 2nd | Phase 6 | 6.1, 6.2, 6.3 | S each | **DONE** (ffa7b90a, cb589b22) |
+| 3rd | Phase 2 | 2.3, 2.2, 2.1 | S, S, — | **DONE** (19d14d39, c8cbdf57; 2.1 N/A) |
+| 4th | Phase 4 | 4.1, 4.3, 4.4 | M, S, S | **DONE** (25 sentinel migrations + 2 regression tests) |
 | 5th | Phase 3 | 3.1 → 3.2 | M, M | 3.2 depends on 3.1 |
 | 6th | Phase 5 | 5.1, 5.2, 5.3, 5.4 | M, S, S, S | 5.2 partially depends on 5.1 |
 | 7th | Phase 7 | 7.1 | L | None but high blast radius |
