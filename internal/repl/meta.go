@@ -450,16 +450,9 @@ func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding,
 // callableDoc extracts the docstring from a callable value.
 // Uses the same logic as (procedure-documentation proc).
 func callableDoc(v values.Value) string {
-	switch c := v.(type) {
-	case *machine.MachineClosure:
-		return c.Template().Doc()
-	case *machine.ForeignClosure:
-		return c.Doc()
-	case *machine.CaseLambdaClosure:
-		clauses := c.Clauses()
-		if len(clauses) > 0 {
-			return clauses[0].Template().Doc()
-		}
+	dc, ok := v.(interface{ Doc() string })
+	if ok {
+		return dc.Doc()
 	}
 	return ""
 }
