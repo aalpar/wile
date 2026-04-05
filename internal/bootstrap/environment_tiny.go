@@ -112,16 +112,10 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 	// doc-topics) can access it via mc.EnvironmentFrame().Namespace().Registry().
 	env.Namespace().SetRegistry(reg)
 
-	// Register syntax compilers in the compile environment
-	err = compilation.RegisterSyntaxCompilers(env)
+	// Register syntax compilers (compile env) and primitive expanders (expand env).
+	err = compilation.RegisterAllPhaseHandlers(env)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "error registering syntax compilers")
-	}
-
-	// Register primitive expanders in the expand environment
-	err = compilation.RegisterPrimitiveExpanders(env)
-	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "error registering primitive expanders")
+		return nil, werr.WrapForeignErrorf(err, "error registering phase handlers")
 	}
 
 	// Load bootstrap macros from registry

@@ -15,10 +15,23 @@
 package compilation
 
 import (
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/internal/validate"
 	"github.com/aalpar/wile/werr"
 )
+
+// RegisterAllPhaseHandlers registers both syntax compilers (compile phase)
+// and primitive expanders (expand phase) in the correct order. Use this
+// instead of calling RegisterSyntaxCompilers and RegisterPrimitiveExpanders
+// separately at engine/bootstrap/test init sites.
+func RegisterAllPhaseHandlers(env *environment.EnvironmentFrame) error {
+	err := RegisterSyntaxCompilers(env)
+	if err != nil {
+		return err
+	}
+	return RegisterPrimitiveExpanders(env)
+}
 
 func init() {
 	// Tier 2: syntax passthrough compilers — syntaxCompiler unwraps

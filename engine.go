@@ -620,14 +620,9 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "apply registry")
 	}
 
-	err = compilation.RegisterSyntaxCompilers(env)
+	err = compilation.RegisterAllPhaseHandlers(env)
 	if err != nil {
-		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "register syntax compilers")
-	}
-
-	err = compilation.RegisterPrimitiveExpanders(env)
-	if err != nil {
-		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "register primitive expanders")
+		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "register phase handlers")
 	}
 
 	err = loadBootstrapMacros(ctx, env, macroSources, resolver)

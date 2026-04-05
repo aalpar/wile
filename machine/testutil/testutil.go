@@ -220,7 +220,6 @@ func NewMinimalNamespace(env *environment.EnvironmentFrame) *environment.Environ
 			environment.BindingTypePrimitive,
 		)
 	}
-	compilation.RegisterSyntaxCompilers(env)    //nolint:errcheck
-	compilation.RegisterPrimitiveExpanders(env) //nolint:errcheck
+	compilation.RegisterAllPhaseHandlers(env) //nolint:errcheck
 	return env
 }
