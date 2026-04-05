@@ -193,7 +193,7 @@ func NumericChainCompare(
 		mc.SetValue(values.BoolToBoolean(!fails(prev, curr)))
 		return nil
 	}
-	err := MustList(mc.Context(), pr, name, func(_ context.Context, _ int, _ bool, v values.Value) error {
+	err := ForEachList(mc.Context(), pr, name, func(_ context.Context, _ int, _ bool, v values.Value) error {
 		curr, ok := v.(values.Number)
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, v)
@@ -334,7 +334,7 @@ func NumericExtremum(
 	}
 
 	foundNaN := false
-	err := MustList(mc.Context(), pr, name, func(_ context.Context, _ int, _ bool, v values.Value) error {
+	err := ForEachList(mc.Context(), pr, name, func(_ context.Context, _ int, _ bool, v values.Value) error {
 		curr, ok := v.(values.Number)
 		if !ok {
 			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, v)
