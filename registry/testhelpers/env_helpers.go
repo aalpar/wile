@@ -12,16 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package testutil provides shared test helpers for both the machine/
-// and machine/compilation/ test suites. It exists to break the import
-// cycle between machine (which cannot import compilation) and tests
-// that need both packages.
-package testutil
+package testhelpers
 
 import (
 	"bufio"
 	"context"
-	"fmt"
+	"errors"
 	"io"
 	"io/fs"
 	"strings"
@@ -144,7 +140,7 @@ func SetupEngineTest(t *testing.T, fsys fs.FS) *environment.EnvironmentFrame {
 }
 
 // evalSchemeInEnvCore is the shared eval loop used by both EvalSchemeInEnv
-// and EvalSchemeInEnvMayFail.
+// and EvalSchemeInEnvMayFail. Supports multi-expression input.
 func evalSchemeInEnvCore(env *environment.EnvironmentFrame, code string) (values.Value, error) {
 	ctx := context.Background()
 	rdr := strings.NewReader(code)
@@ -154,7 +150,7 @@ func evalSchemeInEnvCore(env *environment.EnvironmentFrame, code string) (values
 
 	for {
 		stx, err := p.ReadSyntax(context.Background())
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -167,7 +163,7 @@ func evalSchemeInEnvCore(env *environment.EnvironmentFrame, code string) (values
 		}
 
 		mc := machine.NewMachineContext(ctx, cont)
-		err = mc.Run()
+		err = mc.RunWithEscapeHandling()
 		if err != nil {
 			return nil, err
 		}
@@ -176,15 +172,6 @@ func evalSchemeInEnvCore(env *environment.EnvironmentFrame, code string) (values
 	}
 
 	return lastValue, nil
-}
-
-// panicError wraps a non-error panic value as an error.
-type panicError struct {
-	value any
-}
-
-func (p panicError) Error() string {
-	return fmt.Sprintf("panic: %v", p.value)
 }
 
 // EvalSchemeInEnvMayFail evaluates Scheme expressions in the given environment,
@@ -201,7 +188,7 @@ func EvalSchemeInEnvMayFail(t *testing.T, env *environment.EnvironmentFrame, cod
 		if ok {
 			err = e
 		} else {
-			err = panicError{value: r}
+			err = panicNonError{v: r}
 		}
 	}()
 	return evalSchemeInEnvCore(env, code)

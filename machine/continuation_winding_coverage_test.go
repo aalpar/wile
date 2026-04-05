@@ -25,7 +25,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/machine/testutil"
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 	"github.com/aalpar/wile/werr"
@@ -49,7 +49,7 @@ func compileClosure(t *testing.T, env *environment.EnvironmentFrame, code string
 // frames with compiled Scheme closures and verifying after thunks are called.
 func TestUnwindTo_DirectCall(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	// Set up tracking variables
 	_, err := runSchemeExprs(t, env, "(define after1-called #f)", "(define after2-called #f)")
@@ -89,7 +89,7 @@ func TestUnwindTo_DirectCall(t *testing.T) {
 // unwinding only the innermost frames while preserving outer ones.
 func TestUnwindTo_PartialUnwind(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	_, err := runSchemeExprs(t, env, "(define outer-called #f)", "(define inner-called #f)")
 	c.Assert(err, qt.IsNil)
@@ -125,7 +125,7 @@ func TestUnwindTo_PartialUnwind(t *testing.T) {
 // are skipped without error during unwinding.
 func TestUnwindTo_NilAfterThunks(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	_, err := runSchemeExpr(t, env, "(define tracked #f)")
 	c.Assert(err, qt.IsNil)
@@ -157,7 +157,7 @@ func TestUnwindTo_NilAfterThunks(t *testing.T) {
 // UnwindTo in PrimCallWithContinuationPrompt.
 func TestUnwindTo_DynamicWindWithPromptAbort(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
 		"(define tag (make-continuation-prompt-tag 'test))",
@@ -185,7 +185,7 @@ func TestUnwindTo_DynamicWindWithPromptAbort(t *testing.T) {
 // multiple nested dynamic-wind frames inside a prompt.
 func TestUnwindTo_NestedDynamicWindWithPromptAbort(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
 		"(define tag2 (make-continuation-prompt-tag 'test2))",
@@ -225,7 +225,7 @@ func TestUnwindTo_NestedDynamicWindWithPromptAbort(t *testing.T) {
 // by calling it directly with a target winding stack that requires rewinding.
 func TestRestoreWithWinding_DirectCall(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	_, err := runSchemeExpr(t, env, "(define before-called #f)")
 	c.Assert(err, qt.IsNil)
@@ -255,7 +255,7 @@ func TestRestoreWithWinding_DirectCall(t *testing.T) {
 // both source and target stacks requiring unwind then rewind.
 func TestRestoreWithWinding_UnwindAndRewind(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	_, err := runSchemeExprs(t, env,
 		"(define src-after-called #f)",
@@ -403,7 +403,7 @@ func TestSliceContinuationAt_DeepChain(t *testing.T) {
 // winding stack from a common ancestor.
 func TestRewindTo_DirectCall(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	_, err := runSchemeExprs(t, env,
 		"(define rewind-log '())",
@@ -440,7 +440,7 @@ func TestRewindTo_DirectCall(t *testing.T) {
 // closures are added to the stack without error.
 func TestRewindTo_NilBeforeThunks(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	frame1 := machine.NewDynamicWindFrame(nil, nil)
 	frame2 := machine.NewDynamicWindFrame(nil, nil)
@@ -463,7 +463,7 @@ func TestRewindTo_NilBeforeThunks(t *testing.T) {
 // continuation re-entry into a dynamic-wind extent.
 func TestCallCC_DynamicWindReentry(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
 		"(define k #f)",
@@ -500,7 +500,7 @@ func TestCallCC_DynamicWindReentry(t *testing.T) {
 // through composable continuation application with winding stack changes.
 func TestComposableContinuation_DynamicWind(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	_, err := runSchemeExprs(t, env,
 		"(define cc-tag (make-continuation-prompt-tag 'cc-test))",
@@ -545,7 +545,7 @@ func TestComposableContinuation_DynamicWind(t *testing.T) {
 // has the wrong arity (Apply fails).
 func TestUnwindTo_ApplyError(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	// Compile a closure that takes 1 argument (not a thunk)
 	badAfter := compileClosure(t, env, "(lambda (x) x)")
@@ -568,7 +568,7 @@ func TestUnwindTo_ApplyError(t *testing.T) {
 // raises an exception during execution.
 func TestUnwindTo_RunError(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	// Compile a thunk that raises an error
 	badAfter := compileClosure(t, env, `(lambda () (error "after-thunk-failed"))`)
@@ -589,7 +589,7 @@ func TestUnwindTo_RunError(t *testing.T) {
 // has the wrong arity.
 func TestRewindTo_ApplyError(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	badBefore := compileClosure(t, env, "(lambda (x) x)")
 	frame := machine.NewDynamicWindFrame(badBefore, nil)
@@ -609,7 +609,7 @@ func TestRewindTo_ApplyError(t *testing.T) {
 // raises an exception during execution.
 func TestRewindTo_RunError(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	badBefore := compileClosure(t, env, `(lambda () (error "before-thunk-failed"))`)
 	frame := machine.NewDynamicWindFrame(badBefore, nil)
@@ -628,7 +628,7 @@ func TestRewindTo_RunError(t *testing.T) {
 // path in RestoreWithWindingFrom's unwind phase.
 func TestRestoreWithWindingFrom_AfterThunkApplyError(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	badAfter := compileClosure(t, env, "(lambda (x) x)")
 	srcFrame := machine.NewDynamicWindFrame(nil, badAfter)
@@ -651,7 +651,7 @@ func TestRestoreWithWindingFrom_AfterThunkApplyError(t *testing.T) {
 // path in RestoreWithWindingFrom's unwind phase.
 func TestRestoreWithWindingFrom_AfterThunkRunError(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	badAfter := compileClosure(t, env, `(lambda () (error "unwind-failed"))`)
 	srcFrame := machine.NewDynamicWindFrame(nil, badAfter)
@@ -673,7 +673,7 @@ func TestRestoreWithWindingFrom_AfterThunkRunError(t *testing.T) {
 // from RewindTo through RestoreWithWindingFrom.
 func TestRestoreWithWindingFrom_RewindError(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	badBefore := compileClosure(t, env, "(lambda (x) x)") // wrong arity
 	tgtFrame := machine.NewDynamicWindFrame(badBefore, nil)
@@ -698,7 +698,7 @@ func TestRestoreWithWindingFrom_RewindError(t *testing.T) {
 // no prompt matches the abort tag.
 func TestRunWithEscapeHandling_PromptAbortNotFound(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	tag := machine.NewPromptTag("nonexistent")
 
@@ -729,7 +729,7 @@ func TestRunWithEscapeHandling_PromptAbortNotFound(t *testing.T) {
 // returns the value directly (simplest handler).
 func TestRunWithEscapeHandling_PromptAbortNoHandler(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	// Test abort with handler that returns the abort value
 	mc, err := runSchemeExprs(t, env,
@@ -748,7 +748,7 @@ func TestRunWithEscapeHandling_PromptAbortNoHandler(t *testing.T) {
 // with multiple values and a handler that processes them.
 func TestRunWithEscapeHandling_PromptAbortWithMultipleValues(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	mc, err := runSchemeExprs(t, env,
 		"(define mv-tag (make-continuation-prompt-tag 'mv))",
@@ -766,7 +766,7 @@ func TestRunWithEscapeHandling_PromptAbortWithMultipleValues(t *testing.T) {
 // path where normal completion triggers unwinding of remaining winding frames.
 func TestRunWithEscapeHandling_NormalCompletionWithWindingStack(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	_, err := runSchemeExpr(t, env, "(define unwind-called #f)")
 	c.Assert(err, qt.IsNil)
@@ -794,7 +794,7 @@ func TestRunWithEscapeHandling_NormalCompletionWithWindingStack(t *testing.T) {
 // where an unrecognized error is returned directly.
 func TestRunWithEscapeHandling_OtherError(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	fn := func(mc *machine.MachineContext) error {
 		return werr.NewForeignErrorf("custom test error")
@@ -826,7 +826,7 @@ func TestRunWithEscapeHandling_OtherError(t *testing.T) {
 // wrong before/after thunks, breaking the dynamic-wind guarantee.
 func TestWindingStackAliasingBug_M2(t *testing.T) {
 	c := qt.New(t)
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	// Track before/after thunk invocations to verify no corruption
 	code := `

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package testutil_test
+package testhelpers_test
 
 import (
 	"testing"
@@ -20,12 +20,12 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/aalpar/wile/machine/testutil"
+	"github.com/aalpar/wile/registry/testhelpers"
 )
 
 func TestSetupEngineTest_SmokePlainArithmetic(t *testing.T) {
-	env := testutil.SetupEngineTest(t, nil)
-	result := testutil.EvalSchemeInEnv(t, env, "(+ 1 2)")
+	env := testhelpers.SetupEngineTest(t, nil)
+	result := testhelpers.EvalSchemeInEnv(t, env, "(+ 1 2)")
 	qt.Assert(t, result.SchemeString(), qt.Equals, "3")
 }
 
@@ -38,20 +38,20 @@ func TestSetupEngineTest_LibraryImport(t *testing.T) {
   (begin (define greeting "hello")))`),
 		},
 	}
-	env := testutil.SetupEngineTest(t, fs)
-	result := testutil.EvalSchemeInEnv(t, env, `(import (test greet)) greeting`)
+	env := testhelpers.SetupEngineTest(t, fs)
+	result := testhelpers.EvalSchemeInEnv(t, env, `(import (test greet)) greeting`)
 	qt.Assert(t, result.SchemeString(), qt.Equals, `"hello"`)
 }
 
 func TestEvalSchemeInEnvMayFail_ReturnsError(t *testing.T) {
-	env := testutil.SetupEngineTest(t, nil)
-	_, err := testutil.EvalSchemeInEnvMayFail(t, env, "(car 42)")
+	env := testhelpers.SetupEngineTest(t, nil)
+	_, err := testhelpers.EvalSchemeInEnvMayFail(t, env, "(car 42)")
 	qt.Assert(t, err, qt.IsNotNil)
 }
 
 func TestEvalSchemeInEnvMayFail_Success(t *testing.T) {
-	env := testutil.SetupEngineTest(t, nil)
-	result, err := testutil.EvalSchemeInEnvMayFail(t, env, "(+ 1 2)")
+	env := testhelpers.SetupEngineTest(t, nil)
+	result, err := testhelpers.EvalSchemeInEnvMayFail(t, env, "(+ 1 2)")
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.SchemeString(), qt.Equals, "3")
 }
