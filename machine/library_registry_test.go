@@ -58,20 +58,6 @@ func TestLibraryRegistryLoadingCycle(t *testing.T) {
 	c.Assert(registry.IsLoading(name), qt.IsFalse)
 }
 
-// TestLibraryRegistryFindLibraryFile tests that FindLibraryFile returns an error
-// when no matching file exists in the search paths.
-func TestLibraryRegistryFindLibraryFile(t *testing.T) {
-	c := qt.New(t)
-
-	registry := compilation.NewLibraryRegistry()
-	registry.SetSearchPaths([]string{"/nonexistent/path"})
-
-	name := compilation.NewLibraryName("no", "such", "lib")
-	_, err := registry.FindLibraryFile(name)
-	c.Assert(err, qt.IsNotNil)
-	c.Assert(err.Error(), qt.Contains, "not found")
-}
-
 // TestLibraryRegistryImportObserver tests the import observer mechanism.
 func TestLibraryRegistryImportObserver(t *testing.T) {
 	c := qt.New(t)

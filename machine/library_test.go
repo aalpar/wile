@@ -59,7 +59,7 @@ func TestLibraryName(t *testing.T) {
 	c.Assert(name.String(), qt.Equals, "scheme/base")
 	c.Assert(name.SchemeString(), qt.Equals, "(scheme base)")
 	c.Assert(name.Key(), qt.Equals, "scheme/base")
-	c.Assert(name.ToFilePath(), qt.Equals, "scheme/base.sld")
+	c.Assert(name.ToFSPath(), qt.Equals, "scheme/base.sld")
 
 	// Test multi-part name
 	name2 := compilation.NewLibraryName("my", "lib", "utils")
@@ -660,7 +660,7 @@ func TestLibraryNameMethodsAdditional(t *testing.T) {
 	qt.Assert(t, ln.String(), qt.Equals, "scheme/base")
 	qt.Assert(t, ln.SchemeString(), qt.Equals, "(scheme base)")
 	qt.Assert(t, ln.Key(), qt.Equals, "scheme/base")
-	qt.Assert(t, ln.ToFilePath(), qt.Contains, "scheme")
+	qt.Assert(t, ln.ToFSPath(), qt.Contains, "scheme")
 }
 
 // TestLibraryNameMethods tests compilation.LibraryName methods
@@ -669,8 +669,8 @@ func TestLibraryNameMethods(t *testing.T) {
 
 	qt.Assert(t, name.String(), qt.Equals, "scheme/base")
 	qt.Assert(t, name.SchemeString(), qt.Equals, "(scheme base)")
-	qt.Assert(t, name.Key(), qt.Equals, "scheme/base")            // Key uses "/" separator
-	qt.Assert(t, name.ToFilePath(), qt.Equals, "scheme/base.sld") // Includes .sld extension
+	qt.Assert(t, name.Key(), qt.Equals, "scheme/base")
+	qt.Assert(t, name.ToFSPath(), qt.Equals, "scheme/base.sld")
 }
 
 // TestLibraryRegistryLookupNotFound tests looking up non-existent library
@@ -692,7 +692,7 @@ func TestLibraryRegistryRegister(t *testing.T) {
 	qt.Assert(t, result.Name.Key(), qt.Equals, name.Key())
 }
 
-// TestLibraryNamePathConversion tests compilation.LibraryName ToFilePath method
+// TestLibraryNamePathConversion tests compilation.LibraryName ToFSPath method
 func TestLibraryNamePathConversion(t *testing.T) {
 	name1 := compilation.NewLibraryName("scheme", "base")
 	name2 := compilation.NewLibraryName("scheme", "base")
@@ -702,7 +702,7 @@ func TestLibraryNamePathConversion(t *testing.T) {
 	qt.Assert(t, name1.Key(), qt.Not(qt.Equals), name3.Key())
 	qt.Assert(t, name1.String(), qt.Equals, "scheme/base")
 	qt.Assert(t, name1.SchemeString(), qt.Equals, "(scheme base)")
-	qt.Assert(t, strings.Contains(name1.ToFilePath(), "scheme"), qt.IsTrue)
+	qt.Assert(t, strings.Contains(name1.ToFSPath(), "scheme"), qt.IsTrue)
 }
 
 // TestImportSetFields tests ImportSet fields
@@ -721,10 +721,10 @@ func TestImportSetFields(t *testing.T) {
 	qt.Assert(t, is.Renames["old"], qt.Equals, "new")
 }
 
-// TestLibraryNameToFilePath tests LibraryName.ToFilePath method
-func TestLibraryNameToFilePath(t *testing.T) {
+// TestLibraryNameToFSPath tests LibraryName.ToFSPath method
+func TestLibraryNameToFSPath(t *testing.T) {
 	ln := compilation.NewLibraryName("scheme", "base")
-	qt.Assert(t, strings.Contains(ln.ToFilePath(), "scheme"), qt.IsTrue)
+	qt.Assert(t, strings.Contains(ln.ToFSPath(), "scheme"), qt.IsTrue)
 }
 
 // TestLibraryRegistryRegisterAndLookupAdditional tests Register and Lookup

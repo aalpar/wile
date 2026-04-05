@@ -21,8 +21,6 @@ package compilation
 // search paths, and cycle detection.
 
 import (
-	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -60,15 +58,8 @@ func (p LibraryName) Key() string {
 	return strings.Join(p.Parts, "/")
 }
 
-// ToFilePath converts a library name to a file path.
-// (scheme base) -> "scheme/base.sld"
-func (p LibraryName) ToFilePath() string {
-	return strings.Join(p.Parts, string(os.PathSeparator)) + ".sld"
-}
-
 // ToFSPath returns the library name as a forward-slash-separated path
-// with .sld extension. Unlike ToFilePath, this always uses "/" as
-// separator, suitable for fs.FS and FileResolver operations.
+// with .sld extension, suitable for fs.FS and FileResolver operations.
 func (p LibraryName) ToFSPath() string {
 	return strings.Join(p.Parts, "/") + ".sld"
 }
@@ -281,33 +272,6 @@ func (p *LibraryRegistry) StartLoading(name LibraryName) {
 // FinishLoading marks a library as finished loading.
 func (p *LibraryRegistry) FinishLoading(name LibraryName) {
 	delete(p.loading, name.Key())
-}
-
-// FindLibraryFile searches for a library file in the search paths.
-// Returns the full path to the file, or an error if not found.
-func (p *LibraryRegistry) FindLibraryFile(name LibraryName) (string, error) {
-	relativePath := name.ToFilePath()
-
-	for _, searchPath := range p.searchPaths {
-		fullPath := filepath.Join(searchPath, relativePath)
-		_, err := os.Stat(fullPath)
-		if err == nil {
-			return fullPath, nil
-		}
-	}
-
-	// Also try .scm extension
-	relativePathScm := strings.TrimSuffix(relativePath, ".sld") + ".scm"
-	for _, searchPath := range p.searchPaths {
-		fullPath := filepath.Join(searchPath, relativePathScm)
-		_, err := os.Stat(fullPath)
-		if err == nil {
-			return fullPath, nil
-		}
-	}
-
-	return "", werr.WrapForeignErrorf(werr.ErrLibraryNotFound, "findLibraryFile: library %s not found in search paths: %v",
-		name.SchemeString(), p.searchPaths)
 }
 
 // FilePathToLibraryName converts a forward-slash-separated file path with
