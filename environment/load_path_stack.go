@@ -49,15 +49,15 @@ func NewLoadPathStack() *LoadPathStack {
 
 // Push adds a path to the top of the stack.
 // Returns a wrapped ErrInvalidLoadPath if the path is empty.
-func (p *LoadPathStack) Push(s string) error {
-	if s == "" {
+func (p *LoadPathStack) Push(path string) error {
+	if path == "" {
 		return werr.WrapForeignErrorf(werr.ErrInvalidLoadPath, "path must not be empty")
 	}
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	p.paths = append(p.paths, s)
+	p.paths = append(p.paths, path)
 	return nil
 }
 

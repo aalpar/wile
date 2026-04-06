@@ -127,6 +127,8 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 
 	// Set the default file resolver for runtime include/load operations,
 	// but only if no resolver has been configured (e.g., by WithSourceFS).
+	// Invariant: if FileResolver() is nil here after WithSourceFS was called,
+	// the WithSourceFS configuration was lost — that's a bug in the caller.
 	// This must happen after bootstrap (which uses EmbedFileResolver).
 	if env.Namespace().FileResolver() == nil {
 		env.SetFileResolver(compilation.NewOSFileResolver(env))

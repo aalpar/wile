@@ -101,6 +101,9 @@ func (p *captureWalker) walkExpr(expr ValidatedExpr, depth int) {
 		return
 	}
 	// set! target: mutation from inside a closure also captures.
+	// WalkSubExprs intentionally omits the set! target (it's mutation, not a reference),
+	// but capture analysis needs it because mutating a variable from inside a closure
+	// requires the variable to be captured just like reading it does.
 	setBang, ok := expr.(*ValidatedSetBang)
 	if ok {
 		p.checkSymbol(setBang.Name, depth)

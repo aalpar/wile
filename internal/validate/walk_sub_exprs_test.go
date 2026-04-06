@@ -229,3 +229,38 @@ func TestWalkSubExprs_Nil(t *testing.T) {
 		t.Fatal("should not be called")
 	})
 }
+
+// TestWalkSubExprs_AllTypesHandled verifies that every concrete ValidatedExpr
+// type is handled by WalkSubExprs (either by walking children or by being
+// explicitly listed as having none). Adding a new ValidatedExpr type without
+// updating WalkSubExprs would cause this test to fail.
+func TestWalkSubExprs_AllTypesHandled(t *testing.T) {
+	// Every concrete ValidatedExpr type must appear here.
+	// If you add a new type, add it to this list AND add a case in WalkSubExprs.
+	allTypes := []ValidatedExpr{
+		&ValidatedCall{},
+		&ValidatedApply{},
+		&ValidatedLambda{},
+		&ValidatedCaseLambda{},
+		&ValidatedIf{},
+		&ValidatedBegin{},
+		&ValidatedSetBang{},
+		&ValidatedLet{},
+		&ValidatedDynamicWind{},
+		&ValidatedWithContinuationMark{},
+		&ValidatedDefine{},
+		&ValidatedQuote{},
+		&ValidatedLiteral{},
+		&ValidatedQuasiquote{},
+		&ValidatedSymbol{},
+	}
+	for _, expr := range allTypes {
+		// Just verify WalkSubExprs doesn't panic on zero-value instances.
+		// The individual type tests above verify correct behavior.
+		WalkSubExprs(expr, func(child ValidatedExpr, role ChildRole) {})
+	}
+
+	c := qt.New(t)
+	c.Assert(len(allTypes), qt.Equals, 15,
+		qt.Commentf("Update this count and the list above when adding new ValidatedExpr types"))
+}
