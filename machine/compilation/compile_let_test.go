@@ -173,6 +173,44 @@ func TestLetCallCC(t *testing.T) {
 	qt.Assert(t, result, valuestest.SchemeEquals, values.NewInteger(42))
 }
 
+func TestLetStarSelfShadowCallCC(t *testing.T) {
+	// Regression: let* self-rebinding must not shadow the outer binding
+	// during init compilation. The init expression should see the OUTER k,
+	// not the new (void) slot. R7RS 4.2.2: "Semantically, a let* expression
+	// is equivalent to nested let expressions."
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name: "let* self-shadow with call/cc escape",
+			Code: `(call-with-current-continuation
+				(lambda (k)
+					(let* ((k (begin (k 'escaped) 'dead)))
+						k)))`,
+			Expected: values.NewSymbol("escaped"),
+		},
+		{
+			Name: "let* self-shadow reads outer value",
+			Code: `(let ((x 10))
+				(let* ((x (+ x 1)))
+					x))`,
+			Expected: values.NewInteger(11),
+		},
+		{
+			Name: "let* second binding sees first not self",
+			Code: `(let ((y 100))
+				(let* ((y 1) (y (+ y 1)))
+					y))`,
+			Expected: values.NewInteger(2),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
 func TestLetrecCallCC(t *testing.T) {
 	code := `(call-with-current-continuation
 		(lambda (k)

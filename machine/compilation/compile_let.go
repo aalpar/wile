@@ -53,8 +53,9 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 		}
 	}
 
-	// Build compile-time env with all bindings (even for empty-binding
-	// case, so that internal defines get their own scope boundary).
+	// Build compile-time env with bindings. For let*: bindings are
+	// deferred — added incrementally so each init only sees preceding
+	// bindings (R7RS 4.2.2: let* is equivalent to nested lets).
 	childEnv := p.createLetCompileEnv(v)
 
 	registeredBIDs := p.registerInlineCandidates(childEnv, v.Bindings)
@@ -68,7 +69,13 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 
 	// Predeclare body defines to count total slots needed.
 	p.predeclareBodyDefines(v.Body())
+
+	// For let*: binding names aren't in the env yet, so add their
+	// count to get the true total for OpPushEnv.
 	totalSlots := len(childEnv.LocalEnvironment().Bindings())
+	if v.Kind == validate.LetKindLetStar {
+		totalSlots += n
+	}
 
 	p.AppendOperations(machine.NewOperationPushEnv(totalSlots))
 
@@ -86,8 +93,34 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 			p.AppendOperations(machine.NewOperationStoreLocalByLocalIndexImmediate(li))
 		}
 
-	case validate.LetKindLetStar, validate.LetKindLetrecStar:
-		// Sequential: compile init, push, store — one at a time.
+	case validate.LetKindLetStar:
+		// Sequential with incremental visibility: compile init (sees
+		// only preceding bindings), THEN register the name so subsequent
+		// inits and the body can see it.
+		for _, b := range v.Bindings {
+			err := p.compileValidated(ctctx.NotInTail(), b.Init)
+			if err != nil {
+				return err
+			}
+			childEnv.MaybeCreateLocalBinding(
+				b.Name.Sym,
+				environment.BindingTypeVariable,
+				b.Name.Scopes(),
+				b.Name.SourceContext(),
+			)
+			li := childEnv.GetLocalIndex(b.Name.Sym, nil)
+			if li == nil {
+				return werr.WrapForeignErrorf(machine.ErrBindingNotFound,
+					"compile let*: binding %q not found in local environment",
+					b.Name.Sym)
+			}
+			p.AppendOperations(machine.NewOperationPush())
+			p.AppendOperations(machine.NewOperationStoreLocalByLocalIndexImmediate(li))
+		}
+
+	case validate.LetKindLetrecStar:
+		// Sequential: all bindings visible from the start (letrec*
+		// region includes all inits). Bindings already in env.
 		for _, b := range v.Bindings {
 			err := p.compileValidated(ctctx.NotInTail(), b.Init)
 			if err != nil {
@@ -96,8 +129,8 @@ func (p *CompileTimeContinuation) CompileValidatedLet(
 			li := childEnv.GetLocalIndex(b.Name.Sym, nil)
 			if li == nil {
 				return werr.WrapForeignErrorf(machine.ErrBindingNotFound,
-					"compile %s: binding %q not found in local environment",
-					v.Kind, b.Name.Sym)
+					"compile letrec*: binding %q not found in local environment",
+					b.Name.Sym)
 			}
 			p.AppendOperations(machine.NewOperationPush())
 			p.AppendOperations(machine.NewOperationStoreLocalByLocalIndexImmediate(li))
@@ -143,8 +176,12 @@ func (p *CompileTimeContinuation) createLetCompileEnv(
 	lenv := environment.NewLocalEnvironment(0)
 	childEnv := environment.NewEnvironmentFrameWithParent(lenv, p.env)
 
-	// For let*: add ALL binding names upfront. The validator already
-	// enforced sequential visibility; the compiler only needs the slots.
+	// For let*: DON'T add bindings here. They are added incrementally
+	// during compilation so each init only sees preceding bindings
+	// (R7RS 4.2.2). For all other kinds, add all bindings upfront.
+	if v.Kind == validate.LetKindLetStar {
+		return childEnv
+	}
 	for _, b := range v.Bindings {
 		childEnv.MaybeCreateLocalBinding(
 			b.Name.Sym,
