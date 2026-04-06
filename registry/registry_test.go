@@ -567,6 +567,78 @@ func TestRegistry_Clone_IncludesDocs(t *testing.T) {
 	c.Assert(r.Docs(), qt.HasLen, 1)
 }
 
+func TestRegistry_AddDocOnlyPrimitive(t *testing.T) {
+	c := qt.New(t)
+
+	tcs := []struct {
+		name       string
+		setup      func(r *Registry)
+		query      string
+		found      bool
+		wantPhases Phase
+		wantDoc    string
+	}{
+		{
+			name: "doc-only primitive is findable",
+			setup: func(r *Registry) {
+				r.AddDocOnlyPrimitive(PrimitiveSpec{
+					Name:     "map",
+					Doc:      "Apply proc to each element.",
+					Category: "lists",
+				})
+			},
+			query:      "map",
+			found:      true,
+			wantPhases: 0,
+			wantDoc:    "Apply proc to each element.",
+		},
+		{
+			name: "Go primitive takes precedence",
+			setup: func(r *Registry) {
+				r.AddPrimitive(PrimitiveSpec{
+					Name: "car",
+					Doc:  "Go car.",
+					Impl: func(_ machine.CallContext) error { return nil },
+				}, PhaseRuntime)
+				r.AddDocOnlyPrimitive(PrimitiveSpec{
+					Name: "car",
+					Doc:  "Scheme car.",
+				})
+			},
+			query:      "car",
+			found:      true,
+			wantPhases: PhaseRuntime,
+			wantDoc:    "Go car.",
+		},
+		{
+			name: "doc-only entry has zero phases",
+			setup: func(r *Registry) {
+				r.AddDocOnlyPrimitive(PrimitiveSpec{
+					Name:       "for-each",
+					Doc:        "Apply proc for side effects.",
+					ParamCount: 2,
+				})
+			},
+			query:      "for-each",
+			found:      true,
+			wantPhases: 0,
+			wantDoc:    "Apply proc for side effects.",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			r := NewRegistry()
+			tc.setup(r)
+			reg, ok := r.PrimitiveByName(tc.query)
+			c.Assert(ok, qt.Equals, tc.found)
+			if tc.found {
+				c.Assert(reg.Phases, qt.Equals, tc.wantPhases)
+				c.Assert(reg.Spec.Doc, qt.Equals, tc.wantDoc)
+			}
+		})
+	}
+}
+
 func TestExtension(t *testing.T) {
 	c := qt.New(t)
 

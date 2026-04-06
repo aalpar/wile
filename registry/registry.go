@@ -191,6 +191,27 @@ func (p *Registry) AddGlobalValue(name string, value values.Value) {
 	})
 }
 
+// AddDocOnlyPrimitive registers a documentation-only primitive entry.
+// It does not create a runtime binding — used for Scheme-defined procedures
+// that are already bound in the environment but need registry visibility
+// for apropos/topics. Skips registration if a primitive with the same name
+// already exists (Go primitives take precedence).
+func (p *Registry) AddDocOnlyPrimitive(spec PrimitiveSpec) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	for _, reg := range p.primitives {
+		if reg.Spec.Name == spec.Name {
+			return
+		}
+	}
+
+	p.primitives = append(p.primitives, PrimitiveRegistration{
+		Spec:   spec,
+		Phases: 0, // doc-only, not applied to environments
+	})
+}
+
 // PrimitiveCount returns the number of registered primitives.
 func (p *Registry) PrimitiveCount() int {
 	p.mu.RLock()
