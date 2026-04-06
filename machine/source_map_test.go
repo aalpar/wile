@@ -119,8 +119,9 @@ func TestInternSource_Nil(t *testing.T) {
 func TestInternSource_OverflowPanics(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 
-	// Fill the source table to capacity (index 0 is reserved for nil).
-	for i := 1; i < math.MaxUint16; i++ {
+	// Fill the source table to capacity (index 0 is the nil sentinel).
+	// Valid indices are 0..math.MaxUint16, so we fill through index 65535.
+	for i := 1; i <= math.MaxUint16; i++ {
 		src := &syntax.SourceContext{
 			File:  fmt.Sprintf("file%d.scm", i),
 			Start: syntax.NewSourceIndexes(i, 1, 0),

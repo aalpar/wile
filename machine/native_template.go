@@ -279,7 +279,7 @@ func (p *NativeTemplate) internSource(src *syntax.SourceContext) uint16 {
 			return uint16(i)
 		}
 	}
-	if len(p.sourceTable) >= math.MaxUint16 {
+	if len(p.sourceTable) > math.MaxUint16 {
 		panic(werr.WrapForeignErrorf(
 			werr.ErrInvalidArgument,
 			"internSource: source table overflow (%d entries)", len(p.sourceTable)))
