@@ -34,7 +34,7 @@ const (
 // R7RS §6.13.3: (read-u8 [port])
 // Reads the next byte from the given binary input port and returns it as an exact integer.
 // Returns eof-object at end of file.
-func PrimReadU8(mc *machine.MachineContext) error {
+func PrimReadU8(mc machine.CallContext) error {
 	p, _, err := getRequiredBinaryInputPort(mc.Arg(0), "read-u8")
 	if err != nil {
 		return err
@@ -55,7 +55,7 @@ func PrimReadU8(mc *machine.MachineContext) error {
 // PrimPeekU8 implements the peek-u8 primitive.
 // R7RS §6.13.3: (peek-u8 [port])
 // Like read-u8, but does not consume the byte from the port.
-func PrimPeekU8(mc *machine.MachineContext) error {
+func PrimPeekU8(mc machine.CallContext) error {
 	p, _, err := getRequiredBinaryInputPort(mc.Arg(0), "peek-u8")
 	if err != nil {
 		return err
@@ -81,7 +81,7 @@ func PrimPeekU8(mc *machine.MachineContext) error {
 // PrimU8ReadyQ implements the u8-ready? primitive.
 // R7RS §6.13.3: (u8-ready? [port])
 // Returns #t if a byte is available for reading from the binary input port.
-func PrimU8ReadyQ(mc *machine.MachineContext) error {
+func PrimU8ReadyQ(mc machine.CallContext) error {
 	// For now, assume a byte is always ready for bytevector input ports
 	// A more accurate implementation would need non-blocking I/O
 	mc.SetValue(values.TrueValue)
@@ -91,7 +91,7 @@ func PrimU8ReadyQ(mc *machine.MachineContext) error {
 // PrimWriteU8 implements the write-u8 primitive.
 // R7RS §6.13.3: (write-u8 byte [port])
 // Writes byte to the given binary output port and returns an unspecified value.
-func PrimWriteU8(mc *machine.MachineContext) error {
+func PrimWriteU8(mc machine.CallContext) error {
 	byteVal := mc.Arg(0)
 
 	// Validate byte argument (must be exact integer 0-255)
@@ -124,7 +124,7 @@ func PrimWriteU8(mc *machine.MachineContext) error {
 // R7RS §6.13.3: (read-bytevector k [port])
 // Reads the next k bytes from port into a newly allocated bytevector.
 // Returns eof-object if no bytes are available before end of file.
-func PrimReadBytevector(mc *machine.MachineContext) error {
+func PrimReadBytevector(mc machine.CallContext) error {
 	k, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotANumber, "read-bytevector")
 	if err != nil {
 		return err
@@ -178,7 +178,7 @@ func PrimReadBytevector(mc *machine.MachineContext) error {
 // R7RS §6.13.3: (read-bytevector! bytevector [port [start [end]]])
 // Reads bytes from port into an existing bytevector.
 // Returns the number of bytes read, or eof-object if no bytes available.
-func PrimReadBytevectorBang(mc *machine.MachineContext) error {
+func PrimReadBytevectorBang(mc machine.CallContext) error {
 	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, werr.ErrNotAByteVector, "read-bytevector!")
 	if err != nil {
 		return err
@@ -225,7 +225,7 @@ func PrimReadBytevectorBang(mc *machine.MachineContext) error {
 // PrimWriteBytevector implements the write-bytevector primitive.
 // R7RS §6.13.3: (write-bytevector bytevector [port [start [end]]])
 // Writes the bytes of bytevector to port.
-func PrimWriteBytevector(mc *machine.MachineContext) error {
+func PrimWriteBytevector(mc machine.CallContext) error {
 	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, werr.ErrNotAByteVector, "write-bytevector")
 	if err != nil {
 		return err

@@ -113,7 +113,7 @@ func TestDisassemble_CachedBinding(t *testing.T) {
 
 	// Create a ForeignClosure binding with a name.
 	env := environment.NewNamespace().Runtime()
-	fc := NewForeignClosure(env, 1, false, func(mc *MachineContext) error {
+	fc := NewForeignClosure(env, 1, false, func(_ CallContext) error {
 		return nil
 	})
 	fc.SetName("my-prim")

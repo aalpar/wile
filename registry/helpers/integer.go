@@ -93,7 +93,7 @@ var errNeedsBigInt = werr.NewStaticError("needs big int")
 //
 //	https://srfi.schemers.org/srfi-1/srfi-1.html
 func IntegerFold(
-	mc *machine.MachineContext,
+	mc machine.CallContext,
 	op FoldOp,
 	identity int64,
 	combiner func(acc, val int64) (int64, bool),
@@ -202,7 +202,7 @@ func IntegerFold(
 // integerFoldBig handles gcd/lcm with BigInteger support using big.Int.
 // Also handles inexact results when any argument was inexact.
 func integerFoldBig(
-	mc *machine.MachineContext,
+	mc machine.CallContext,
 	op FoldOp,
 	_ int64,
 	pr values.Tuple,

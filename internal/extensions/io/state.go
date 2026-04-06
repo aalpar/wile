@@ -184,7 +184,8 @@ func GetCurrentErrorPortParam() *machine.Parameter {
 // Panics with a wrapped error if the resolved value is not an OutputPort —
 // the panic is caught by OperationForeignFunctionCall's recover and converted
 // to a Scheme exception.
-func resolveCurrentOutputPort(mc *machine.MachineContext) values.OutputPort {
+func resolveCurrentOutputPort(cc machine.CallContext) values.OutputPort {
+	mc := cc.(*machine.MachineContext)
 	InitState()
 	v := mc.ResolveParameterValue(currentOutputPortParam)
 	port, ok := v.(values.OutputPort)
@@ -201,7 +202,8 @@ func resolveCurrentOutputPort(mc *machine.MachineContext) values.OutputPort {
 // Panics with a wrapped error if the resolved value is not a TextualReader —
 // the panic is caught by OperationForeignFunctionCall's recover and converted
 // to a Scheme exception.
-func resolveCurrentInputPort(mc *machine.MachineContext) values.TextualReader {
+func resolveCurrentInputPort(cc machine.CallContext) values.TextualReader {
+	mc := cc.(*machine.MachineContext)
 	InitState()
 	v := mc.ResolveParameterValue(currentInputPortParam)
 	port, ok := v.(values.TextualReader)

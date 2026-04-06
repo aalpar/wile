@@ -25,7 +25,7 @@ import (
 
 // PrimMakeBytevector implements the (make-bytevector) primitive.
 // Creates a bytevector of the given size, optionally filled with a specified byte value.
-func PrimMakeBytevector(mc *machine.MachineContext) error {
+func PrimMakeBytevector(mc machine.CallContext) error {
 	size, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotAnInteger, "make-bytevector")
 	if err != nil {
 		return err
@@ -52,7 +52,7 @@ func PrimMakeBytevector(mc *machine.MachineContext) error {
 
 // PrimBytevector implements the bytevector primitive.
 // Creates bytevector from byte arguments.
-func PrimBytevector(mc *machine.MachineContext) error {
+func PrimBytevector(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		bv := values.ByteVector{}
@@ -89,13 +89,13 @@ func PrimBytevector(mc *machine.MachineContext) error {
 
 // PrimBytevectorLength implements the bytevector-length primitive.
 // Returns length of bytevector.
-func PrimBytevectorLength(mc *machine.MachineContext) error {
+func PrimBytevectorLength(mc machine.CallContext) error {
 	return helpers.SequenceLength[*values.ByteVector](mc, werr.ErrNotAByteVector, "bytevector-length")
 }
 
 // PrimBytevectorU8Ref implements the bytevector-u8-ref primitive.
 // Returns byte at index as an exact integer (R7RS §6.9).
-func PrimBytevectorU8Ref(mc *machine.MachineContext) error {
+func PrimBytevectorU8Ref(mc machine.CallContext) error {
 	return helpers.SequenceRef(mc, werr.ErrNotAByteVector, "bytevector-u8-ref",
 		func(bv *values.ByteVector, idx int) values.Value {
 			return values.NewInteger(int64((*bv)[idx].Value))
@@ -105,9 +105,9 @@ func PrimBytevectorU8Ref(mc *machine.MachineContext) error {
 
 // PrimBytevectorU8Set implements the bytevector-u8-set! primitive.
 // Sets byte at index.
-func PrimBytevectorU8Set(mc *machine.MachineContext) error {
+func PrimBytevectorU8Set(mc machine.CallContext) error {
 	return helpers.SequenceSet(mc, werr.ErrNotAByteVector, "bytevector-u8-set!",
-		func(bv *values.ByteVector, idx int, mc *machine.MachineContext) error {
+		func(bv *values.ByteVector, idx int, mc machine.CallContext) error {
 			byteVal, err := helpers.RequireType[*values.Integer](mc.Arg(2), werr.ErrNotAnInteger, "bytevector-u8-set!")
 			if err != nil {
 				return err
@@ -124,7 +124,7 @@ func PrimBytevectorU8Set(mc *machine.MachineContext) error {
 
 // PrimBytevectorCopy implements the bytevector-copy primitive.
 // Returns a copy of a bytevector.
-func PrimBytevectorCopy(mc *machine.MachineContext) error {
+func PrimBytevectorCopy(mc machine.CallContext) error {
 	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, werr.ErrNotAByteVector, "bytevector-copy")
 	if err != nil {
 		return err
@@ -144,7 +144,7 @@ func PrimBytevectorCopy(mc *machine.MachineContext) error {
 
 // PrimBytevectorCopyBang implements the bytevector-copy! primitive.
 // Copies bytes between bytevectors.
-func PrimBytevectorCopyBang(mc *machine.MachineContext) error {
+func PrimBytevectorCopyBang(mc machine.CallContext) error {
 	toBv, err := helpers.RequireArg[*values.ByteVector](mc, 0, werr.ErrNotAByteVector, "bytevector-copy!")
 	if err != nil {
 		return err
@@ -175,7 +175,7 @@ func PrimBytevectorCopyBang(mc *machine.MachineContext) error {
 
 // PrimBytevectorAppend implements the bytevector-append primitive.
 // Concatenates bytevectors.
-func PrimBytevectorAppend(mc *machine.MachineContext) error {
+func PrimBytevectorAppend(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		bv := values.ByteVector{}
@@ -211,7 +211,7 @@ func PrimBytevectorAppend(mc *machine.MachineContext) error {
 // R7RS §6.9: (utf8->string bytevector [start [end]])
 // Decodes the bytes of a bytevector between start and end (byte positions) and
 // returns the corresponding string.
-func PrimUtf8ToString(mc *machine.MachineContext) error {
+func PrimUtf8ToString(mc machine.CallContext) error {
 	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, werr.ErrNotAByteVector, "utf8->string")
 	if err != nil {
 		return err
@@ -238,7 +238,7 @@ func PrimUtf8ToString(mc *machine.MachineContext) error {
 // R7RS §6.9: (string->utf8 string [start [end]])
 // Returns a newly allocated bytevector containing the UTF-8 encoding of the
 // characters in string between start and end (character positions, not byte positions).
-func PrimStringToUtf8(mc *machine.MachineContext) error {
+func PrimStringToUtf8(mc machine.CallContext) error {
 	str, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string->utf8")
 	if err != nil {
 		return err

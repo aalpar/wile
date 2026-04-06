@@ -27,7 +27,7 @@ import (
 // PrimCreateDirectory implements the (create-directory) primitive.
 // Creates a single directory level. Errors if it already exists or
 // the parent is missing (no recursive mkdir -p behavior).
-func PrimCreateDirectory(mc *machine.MachineContext) error {
+func PrimCreateDirectory(mc machine.CallContext) error {
 	path, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "create-directory")
 	if err != nil {
 		return err
@@ -50,7 +50,7 @@ func PrimCreateDirectory(mc *machine.MachineContext) error {
 
 // PrimDeleteDirectory implements the (delete-directory) primitive.
 // Removes an empty directory. Errors if not empty, nonexistent, or not a directory.
-func PrimDeleteDirectory(mc *machine.MachineContext) error {
+func PrimDeleteDirectory(mc machine.CallContext) error {
 	path, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "delete-directory")
 	if err != nil {
 		return err
@@ -84,7 +84,7 @@ func PrimDeleteDirectory(mc *machine.MachineContext) error {
 // PrimDirectoryFiles implements the (directory-files) primitive.
 // Returns a list of filename strings in the directory, excluding "." and "..".
 // Names are filenames only (not full paths).
-func PrimDirectoryFiles(mc *machine.MachineContext) error {
+func PrimDirectoryFiles(mc machine.CallContext) error {
 	path, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "directory-files")
 	if err != nil {
 		return err
@@ -115,7 +115,7 @@ func PrimDirectoryFiles(mc *machine.MachineContext) error {
 
 // PrimCurrentDirectory implements the (current-directory) primitive.
 // Returns the current working directory as a string.
-func PrimCurrentDirectory(mc *machine.MachineContext) error {
+func PrimCurrentDirectory(mc machine.CallContext) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return werr.WrapForeignFileError(err, "current-directory", ".")
@@ -130,7 +130,7 @@ func PrimCurrentDirectory(mc *machine.MachineContext) error {
 // process share a single working directory. Concurrent calls from different
 // goroutines race on the same OS state. This is inherent to POSIX — there
 // is no per-thread working directory.
-func PrimSetCurrentDirectory(mc *machine.MachineContext) error {
+func PrimSetCurrentDirectory(mc machine.CallContext) error {
 	path, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "set-current-directory!")
 	if err != nil {
 		return err

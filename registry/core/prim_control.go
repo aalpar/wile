@@ -26,7 +26,8 @@ import (
 
 // PrimApply implements the apply primitive.
 // Applies a procedure to a list of arguments.
-func PrimApply(mc *machine.MachineContext) error {
+func PrimApply(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	proc := mc.Arg(0)
 	restVal := mc.Arg(1)
 
@@ -136,7 +137,8 @@ func PrimApply(mc *machine.MachineContext) error {
 // Sub-context mode (mc.Parent() == nil): Falls back to running the lambda in an isolated
 // sub-context. Used when call/cc is invoked inside another foreign function's sub-context
 // (e.g., inside apply or dynamic-wind) where there's no saved continuation to return to.
-func PrimCallCC(mc *machine.MachineContext) error {
+func PrimCallCC(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	proc := mc.Arg(0)
 
 	mcls, err := helpers.RequireType[machine.Closure](proc, werr.ErrNotAProcedure, "call/cc")
@@ -149,9 +151,9 @@ func PrimCallCC(mc *machine.MachineContext) error {
 	// prompt, so SliceContinuationAt(nil) deep-copies the entire chain.
 	segment := mc.SliceContinuationAt(nil)
 	windingStack := mc.WindingStack().Copy()
-	cc := machine.NewComposableContinuation(segment, windingStack, mc.ThreadID(), mc.BarrierValid())
+	comp := machine.NewComposableContinuation(segment, windingStack, mc.ThreadID(), mc.BarrierValid())
 
-	capt := machine.NewCapturedContinuation(cc, mc.ThreadID(), mc.BarrierValid())
+	capt := machine.NewCapturedContinuation(comp, mc.ThreadID(), mc.BarrierValid())
 
 	if mc.Parent() != nil {
 		// Inline mode: apply the lambda directly in the current VM context.
@@ -205,7 +207,8 @@ func PrimCallCC(mc *machine.MachineContext) error {
 // R7RS §6.10: dynamic-wind calls thunk without arguments, returning the result(s).
 // Before is called whenever execution enters the dynamic extent of the call to thunk,
 // and after is called whenever it exits.
-func PrimDynamicWind(mc *machine.MachineContext) error {
+func PrimDynamicWind(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	before := mc.Arg(0)
 	thunk := mc.Arg(1)
 	after := mc.Arg(2)
@@ -288,7 +291,7 @@ func PrimDynamicWind(mc *machine.MachineContext) error {
 // PrimValues implements the values primitive.
 // Returns multiple values as specified by R7RS. With no arguments returns no values.
 // With one or more arguments, returns all arguments as multiple values.
-func PrimValues(mc *machine.MachineContext) error {
+func PrimValues(mc machine.CallContext) error {
 	restVal := mc.Arg(0)
 
 	// restVal is a list of all arguments (variadic)
@@ -316,7 +319,8 @@ func PrimValues(mc *machine.MachineContext) error {
 
 // PrimCallWithValues implements the call-with-values primitive.
 // Calls producer, passes results to consumer.
-func PrimCallWithValues(mc *machine.MachineContext) error {
+func PrimCallWithValues(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	producer := mc.Arg(0)
 	consumer := mc.Arg(1)
 

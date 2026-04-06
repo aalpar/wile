@@ -30,7 +30,7 @@ import (
 
 // PrimMakeChannel creates a new channel
 // (make-channel [buffer-size]) -> channel
-func PrimMakeChannel(mc *machine.MachineContext) error {
+func PrimMakeChannel(mc machine.CallContext) error {
 	restVal := mc.Arg(0)
 
 	bufferSize := 0
@@ -59,7 +59,7 @@ var PrimChannelQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 
 // PrimChannelSend sends a value on the channel (blocking)
 // (channel-send! ch value) -> void
-func PrimChannelSend(mc *machine.MachineContext) error {
+func PrimChannelSend(mc machine.CallContext) error {
 	ch, err := helpers.RequireArg[*values.Channel](mc, 0, werr.ErrNotAChannel, "channel-send!")
 	if err != nil {
 		return err
@@ -77,7 +77,7 @@ func PrimChannelSend(mc *machine.MachineContext) error {
 
 // PrimChannelReceive receives a value from the channel (blocking)
 // (channel-receive ch) -> value
-func PrimChannelReceive(mc *machine.MachineContext) error {
+func PrimChannelReceive(mc machine.CallContext) error {
 	ch, err := helpers.RequireArg[*values.Channel](mc, 0, werr.ErrNotAChannel, "channel-receive")
 	if err != nil {
 		return err
@@ -98,7 +98,7 @@ func PrimChannelReceive(mc *machine.MachineContext) error {
 
 // PrimChannelTrySend attempts to send without blocking
 // (channel-try-send! ch value) -> boolean
-func PrimChannelTrySend(mc *machine.MachineContext) error {
+func PrimChannelTrySend(mc machine.CallContext) error {
 	ch, err := helpers.RequireArg[*values.Channel](mc, 0, werr.ErrNotAChannel, "channel-try-send!")
 	if err != nil {
 		return err
@@ -116,7 +116,7 @@ func PrimChannelTrySend(mc *machine.MachineContext) error {
 
 // PrimChannelTryReceive attempts to receive without blocking
 // (channel-try-receive ch) -> (values value received? open?)
-func PrimChannelTryReceive(mc *machine.MachineContext) error {
+func PrimChannelTryReceive(mc machine.CallContext) error {
 	ch, err := helpers.RequireArg[*values.Channel](mc, 0, werr.ErrNotAChannel, "channel-try-receive")
 	if err != nil {
 		return err
@@ -152,7 +152,7 @@ func PrimChannelTryReceive(mc *machine.MachineContext) error {
 
 // PrimChannelClose closes the channel
 // (channel-close! ch) -> void
-func PrimChannelClose(mc *machine.MachineContext) error {
+func PrimChannelClose(mc machine.CallContext) error {
 	ch, err := helpers.RequireArg[*values.Channel](mc, 0, werr.ErrNotAChannel, "channel-close!")
 	if err != nil {
 		return err
@@ -169,7 +169,7 @@ func PrimChannelClose(mc *machine.MachineContext) error {
 
 // PrimChannelClosedQ tests if a channel is closed
 // (channel-closed? ch) -> boolean
-func PrimChannelClosedQ(mc *machine.MachineContext) error {
+func PrimChannelClosedQ(mc machine.CallContext) error {
 	ch, err := helpers.RequireArg[*values.Channel](mc, 0, werr.ErrNotAChannel, "channel-closed?")
 	if err != nil {
 		return err
@@ -181,7 +181,7 @@ func PrimChannelClosedQ(mc *machine.MachineContext) error {
 
 // PrimChannelLength returns the number of elements in the channel buffer
 // (channel-length ch) -> integer
-func PrimChannelLength(mc *machine.MachineContext) error {
+func PrimChannelLength(mc machine.CallContext) error {
 	ch, err := helpers.RequireArg[*values.Channel](mc, 0, werr.ErrNotAChannel, "channel-length")
 	if err != nil {
 		return err
@@ -193,7 +193,7 @@ func PrimChannelLength(mc *machine.MachineContext) error {
 
 // PrimChannelCapacity returns the channel's buffer capacity
 // (channel-capacity ch) -> integer
-func PrimChannelCapacity(mc *machine.MachineContext) error {
+func PrimChannelCapacity(mc machine.CallContext) error {
 	ch, err := helpers.RequireArg[*values.Channel](mc, 0, werr.ErrNotAChannel, "channel-capacity")
 	if err != nil {
 		return err
@@ -209,7 +209,7 @@ func PrimChannelCapacity(mc *machine.MachineContext) error {
 
 // PrimMakeWaitGroup creates a new WaitGroup
 // (make-wait-group) -> wait-group
-func PrimMakeWaitGroup(mc *machine.MachineContext) error {
+func PrimMakeWaitGroup(mc machine.CallContext) error {
 	wg := values.NewWaitGroup()
 	mc.SetValue(wg)
 	return nil
@@ -224,7 +224,7 @@ var PrimWaitGroupQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 
 // PrimWaitGroupAdd adds to the WaitGroup counter
 // (wait-group-add! wg n) -> void
-func PrimWaitGroupAdd(mc *machine.MachineContext) error {
+func PrimWaitGroupAdd(mc machine.CallContext) error {
 	wg, err := helpers.RequireArg[*values.WaitGroup](mc, 0, werr.ErrNotAWaitGroup, "wait-group-add!")
 	if err != nil {
 		return err
@@ -242,7 +242,7 @@ func PrimWaitGroupAdd(mc *machine.MachineContext) error {
 
 // PrimWaitGroupDone decrements the WaitGroup counter
 // (wait-group-done! wg) -> void
-func PrimWaitGroupDone(mc *machine.MachineContext) error {
+func PrimWaitGroupDone(mc machine.CallContext) error {
 	wg, err := helpers.RequireArg[*values.WaitGroup](mc, 0, werr.ErrNotAWaitGroup, "wait-group-done!")
 	if err != nil {
 		return err
@@ -255,7 +255,7 @@ func PrimWaitGroupDone(mc *machine.MachineContext) error {
 
 // PrimWaitGroupWait waits for the WaitGroup counter to reach zero
 // (wait-group-wait! wg) -> void
-func PrimWaitGroupWait(mc *machine.MachineContext) error {
+func PrimWaitGroupWait(mc machine.CallContext) error {
 	wg, err := helpers.RequireArg[*values.WaitGroup](mc, 0, werr.ErrNotAWaitGroup, "wait-group-wait!")
 	if err != nil {
 		return err
@@ -272,7 +272,7 @@ func PrimWaitGroupWait(mc *machine.MachineContext) error {
 
 // PrimMakeRWMutex creates a new RWMutex
 // (make-rw-mutex [name]) -> rw-mutex
-func PrimMakeRWMutex(mc *machine.MachineContext) error {
+func PrimMakeRWMutex(mc machine.CallContext) error {
 	restVal := mc.Arg(0)
 
 	name := ""
@@ -307,7 +307,7 @@ var PrimRWMutexQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 
 // PrimRWMutexReadLock acquires the read lock
 // (rw-mutex-read-lock! rwm) -> void
-func PrimRWMutexReadLock(mc *machine.MachineContext) error {
+func PrimRWMutexReadLock(mc machine.CallContext) error {
 	rwm, err := helpers.RequireArg[*values.RWMutex](mc, 0, werr.ErrNotARWMutex, "rw-mutex-read-lock!")
 	if err != nil {
 		return err
@@ -320,7 +320,7 @@ func PrimRWMutexReadLock(mc *machine.MachineContext) error {
 
 // PrimRWMutexReadUnlock releases the read lock
 // (rw-mutex-read-unlock! rwm) -> void
-func PrimRWMutexReadUnlock(mc *machine.MachineContext) error {
+func PrimRWMutexReadUnlock(mc machine.CallContext) error {
 	rwm, err := helpers.RequireArg[*values.RWMutex](mc, 0, werr.ErrNotARWMutex, "rw-mutex-read-unlock!")
 	if err != nil {
 		return err
@@ -333,7 +333,7 @@ func PrimRWMutexReadUnlock(mc *machine.MachineContext) error {
 
 // PrimRWMutexWriteLock acquires the write lock
 // (rw-mutex-write-lock! rwm) -> void
-func PrimRWMutexWriteLock(mc *machine.MachineContext) error {
+func PrimRWMutexWriteLock(mc machine.CallContext) error {
 	rwm, err := helpers.RequireArg[*values.RWMutex](mc, 0, werr.ErrNotARWMutex, "rw-mutex-write-lock!")
 	if err != nil {
 		return err
@@ -346,7 +346,7 @@ func PrimRWMutexWriteLock(mc *machine.MachineContext) error {
 
 // PrimRWMutexWriteUnlock releases the write lock
 // (rw-mutex-write-unlock! rwm) -> void
-func PrimRWMutexWriteUnlock(mc *machine.MachineContext) error {
+func PrimRWMutexWriteUnlock(mc machine.CallContext) error {
 	rwm, err := helpers.RequireArg[*values.RWMutex](mc, 0, werr.ErrNotARWMutex, "rw-mutex-write-unlock!")
 	if err != nil {
 		return err
@@ -359,7 +359,7 @@ func PrimRWMutexWriteUnlock(mc *machine.MachineContext) error {
 
 // PrimRWMutexTryReadLock tries to acquire the read lock
 // (rw-mutex-try-read-lock! rwm) -> boolean
-func PrimRWMutexTryReadLock(mc *machine.MachineContext) error {
+func PrimRWMutexTryReadLock(mc machine.CallContext) error {
 	rwm, err := helpers.RequireArg[*values.RWMutex](mc, 0, werr.ErrNotARWMutex, "rw-mutex-try-read-lock!")
 	if err != nil {
 		return err
@@ -371,7 +371,7 @@ func PrimRWMutexTryReadLock(mc *machine.MachineContext) error {
 
 // PrimRWMutexTryWriteLock tries to acquire the write lock
 // (rw-mutex-try-write-lock! rwm) -> boolean
-func PrimRWMutexTryWriteLock(mc *machine.MachineContext) error {
+func PrimRWMutexTryWriteLock(mc machine.CallContext) error {
 	rwm, err := helpers.RequireArg[*values.RWMutex](mc, 0, werr.ErrNotARWMutex, "rw-mutex-try-write-lock!")
 	if err != nil {
 		return err
@@ -387,7 +387,7 @@ func PrimRWMutexTryWriteLock(mc *machine.MachineContext) error {
 
 // PrimMakeOnce creates a new Once
 // (make-once) -> once
-func PrimMakeOnce(mc *machine.MachineContext) error {
+func PrimMakeOnce(mc machine.CallContext) error {
 	once := values.NewOnce()
 	mc.SetValue(once)
 	return nil
@@ -402,7 +402,8 @@ var PrimOnceQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 
 // PrimOnceDo executes the thunk only once
 // (once-do! once thunk) -> boolean (true if executed, false if already done)
-func PrimOnceDo(mc *machine.MachineContext) error {
+func PrimOnceDo(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	once, err := helpers.RequireArg[*values.Once](mc, 0, werr.ErrNotAOnce, "once-do!")
 	if err != nil {
 		return err
@@ -441,7 +442,7 @@ func PrimOnceDo(mc *machine.MachineContext) error {
 
 // PrimOnceDoneQ tests if the Once has been executed
 // (once-done? once) -> boolean
-func PrimOnceDoneQ(mc *machine.MachineContext) error {
+func PrimOnceDoneQ(mc machine.CallContext) error {
 	once, err := helpers.RequireArg[*values.Once](mc, 0, werr.ErrNotAOnce, "once-done?")
 	if err != nil {
 		return err
@@ -457,7 +458,7 @@ func PrimOnceDoneQ(mc *machine.MachineContext) error {
 
 // PrimMakeAtomic creates a new AtomicBox value
 // (make-atomic initial) -> atomic
-func PrimMakeAtomic(mc *machine.MachineContext) error {
+func PrimMakeAtomic(mc machine.CallContext) error {
 	initial := mc.Arg(0)
 
 	a := values.NewAtomicBox(initial)
@@ -474,7 +475,7 @@ var PrimAtomicQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 
 // PrimAtomicLoad atomically loads the value
 // (atomic-load a) -> value
-func PrimAtomicLoad(mc *machine.MachineContext) error {
+func PrimAtomicLoad(mc machine.CallContext) error {
 	a, err := helpers.RequireArg[*values.AtomicBox](mc, 0, werr.ErrNotAnAtomic, "atomic-load")
 	if err != nil {
 		return err
@@ -491,7 +492,7 @@ func PrimAtomicLoad(mc *machine.MachineContext) error {
 
 // PrimAtomicStore atomically stores a value
 // (atomic-store! a value) -> void
-func PrimAtomicStore(mc *machine.MachineContext) error {
+func PrimAtomicStore(mc machine.CallContext) error {
 	a, err := helpers.RequireArg[*values.AtomicBox](mc, 0, werr.ErrNotAnAtomic, "atomic-store!")
 	if err != nil {
 		return err
@@ -505,7 +506,7 @@ func PrimAtomicStore(mc *machine.MachineContext) error {
 
 // PrimAtomicSwap atomically swaps and returns the old value
 // (atomic-swap! a new) -> old
-func PrimAtomicSwap(mc *machine.MachineContext) error {
+func PrimAtomicSwap(mc machine.CallContext) error {
 	a, err := helpers.RequireArg[*values.AtomicBox](mc, 0, werr.ErrNotAnAtomic, "atomic-swap!")
 	if err != nil {
 		return err
@@ -523,7 +524,7 @@ func PrimAtomicSwap(mc *machine.MachineContext) error {
 
 // PrimAtomicCompareAndSwap atomically compares and swaps
 // (atomic-compare-and-swap! a old new) -> boolean
-func PrimAtomicCompareAndSwap(mc *machine.MachineContext) error {
+func PrimAtomicCompareAndSwap(mc machine.CallContext) error {
 	a, err := helpers.RequireArg[*values.AtomicBox](mc, 0, werr.ErrNotAnAtomic, "atomic-compare-and-swap!")
 	if err != nil {
 		return err

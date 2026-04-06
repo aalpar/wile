@@ -45,7 +45,7 @@ func TestRegistry_AddPrimitive(t *testing.T) {
 		Name:       "test-prim",
 		ParamCount: 1,
 		IsVariadic: false,
-		Impl:       func(_ *machine.MachineContext) error { return nil },
+		Impl:       func(_ machine.CallContext) error { return nil },
 	}
 
 	r.AddPrimitive(spec, PhaseRuntime)
@@ -498,7 +498,7 @@ func TestRegistry_PrimitiveSpecWithContract(t *testing.T) {
 	spec := PrimitiveSpec{
 		Name:       "test-contracted",
 		ParamCount: 2,
-		Impl: func(_ *machine.MachineContext) error {
+		Impl: func(_ machine.CallContext) error {
 			return nil
 		},
 		ParamTypes: []values.ValueType{values.TypeString, values.TypeInteger},

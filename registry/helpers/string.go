@@ -22,7 +22,7 @@ import (
 
 // StringCompare is a helper for binary string comparison primitives.
 // It extracts two strings from the primitive's arguments and applies the comparator.
-func StringCompare(mc *machine.MachineContext, name string, cmp func(a, b string) bool) error {
+func StringCompare(mc machine.CallContext, name string, cmp func(a, b string) bool) error {
 	s1 := mc.Arg(0)
 	s2 := mc.Arg(1)
 	str1, ok := s1.(*values.String)
@@ -39,7 +39,7 @@ func StringCompare(mc *machine.MachineContext, name string, cmp func(a, b string
 
 // StringCompareVariadic is a helper for variadic string comparison primitives.
 // It extracts strings from the variadic args and applies the comparator pairwise.
-func StringCompareVariadic(mc *machine.MachineContext, name string, cmp func(a, b string) bool) error {
+func StringCompareVariadic(mc machine.CallContext, name string, cmp func(a, b string) bool) error {
 	return variadicCompare(mc, name,
 		func(v values.Value) (*values.String, bool) {
 			s, ok := v.(*values.String)

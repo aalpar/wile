@@ -194,7 +194,8 @@ func BenchmarkDeferRecoverFib(b *testing.B) {
 }
 
 // stubLe is a minimal foreign function matching <=: compares two integers.
-func stubLe(mc *MachineContext) error {
+func stubLe(cc CallContext) error {
+	mc := cc.(*MachineContext)
 	bnds := mc.env.LocalEnvironment().Bindings()
 	a := bnds[0].Value().(*values.Integer)
 	b := bnds[1].Value().(*values.Integer)

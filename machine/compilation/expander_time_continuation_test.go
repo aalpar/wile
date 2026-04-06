@@ -78,7 +78,7 @@ func TestExpandExpression_List(t *testing.T) {
 	gi, ok := env.MaybeCreateOwnGlobalBinding(values.NewSymbol("bar"), environment.BindingTypeSyntax)
 	qt.Assert(t, ok, qt.Equals, true)
 	// Dummy transformer that reverses the arguments: (bar 10 20) -> (bar 20 10)
-	mcls := machine.NewForeignClosure(env, 1, false, func(mc *machine.MachineContext) error {
+	mcls := machine.NewForeignClosure(env, 1, false, func(mc machine.CallContext) error {
 		// The full form is pushed as a single item onto the eval stack
 		form, ok := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value().(syntax.SyntaxValue)
 		if !ok {

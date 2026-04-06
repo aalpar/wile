@@ -27,7 +27,7 @@ import (
 // The error message format is "<name>: expected <type> but got <actual>", where
 // <type> is derived from the sentinel message by trimming the "not " prefix
 // (e.g., ErrNotAVector "not a vector" → "a vector").
-func RequireArg[T any](mc *machine.MachineContext, index int, sentinel error, name string) (T, error) {
+func RequireArg[T any](mc machine.CallContext, index int, sentinel error, name string) (T, error) {
 	return RequireType[T](mc.Arg(index), sentinel, name)
 }
 
@@ -95,7 +95,7 @@ func CheckIndexBounds(idx int64, length int, name string) error {
 // it is in range [0, length). Accepts *Integer, *BigInteger, and integer-valued
 // *Rational via values.ExactInteger, which is more R7RS-correct than requiring
 // *Integer alone (R7RS §6.1: indices are exact non-negative integers).
-func RequireIndex(mc *machine.MachineContext, argIdx int, length int, name string) (int, error) {
+func RequireIndex(mc machine.CallContext, argIdx int, length int, name string) (int, error) {
 	k := mc.Arg(argIdx)
 	idx, ok := values.ExactInteger(k)
 	if !ok {

@@ -41,7 +41,7 @@ var PrimOutputPortQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 // Returns #t if input port is open.
 //
 // R7RS §6.13.1: Returns #t if port is still open and capable of performing input.
-func PrimInputPortOpenQ(mc *machine.MachineContext) error {
+func PrimInputPortOpenQ(mc machine.CallContext) error {
 	p, err := helpers.RequireArg[values.InputPort](mc, 0, werr.ErrNotAnInputPort, "input-port-open?")
 	if err != nil {
 		return err
@@ -54,7 +54,7 @@ func PrimInputPortOpenQ(mc *machine.MachineContext) error {
 // Returns #t if the output port is open, #f otherwise.
 //
 // R7RS §6.13.1: Returns #t if port is still open and capable of performing output.
-func PrimOutputPortOpenQ(mc *machine.MachineContext) error {
+func PrimOutputPortOpenQ(mc machine.CallContext) error {
 	p, err := helpers.RequireArg[values.OutputPort](mc, 0, werr.ErrNotAnOutputPort, "output-port-open?")
 	if err != nil {
 		return err
@@ -67,7 +67,7 @@ func PrimOutputPortOpenQ(mc *machine.MachineContext) error {
 // Closes an input or output port.
 //
 // R7RS §6.13.1: Closes the resource associated with port.
-func PrimClosePort(mc *machine.MachineContext) error {
+func PrimClosePort(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(values.Port)
 	if !ok {
@@ -85,7 +85,7 @@ func PrimClosePort(mc *machine.MachineContext) error {
 // Requires an input port; errors if given an output port.
 //
 // R7RS §6.13.1: close-input-port takes an input port.
-func PrimCloseInputPort(mc *machine.MachineContext) error {
+func PrimCloseInputPort(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(values.InputPort)
 	if !ok {
@@ -104,7 +104,7 @@ func PrimCloseInputPort(mc *machine.MachineContext) error {
 // Flushes buffered data before closing.
 //
 // R7RS §6.13.1: close-output-port takes an output port.
-func PrimCloseOutputPort(mc *machine.MachineContext) error {
+func PrimCloseOutputPort(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	p, ok := o.(values.OutputPort)
 	if !ok {
@@ -124,21 +124,21 @@ func PrimCloseOutputPort(mc *machine.MachineContext) error {
 
 // PrimEofObject implements the (eof-object) primitive.
 // Returns the EOF object.
-func PrimEofObject(mc *machine.MachineContext) error {
+func PrimEofObject(mc machine.CallContext) error {
 	mc.SetValue(values.EOFObject)
 	return nil
 }
 
 // PrimEofObjectQ implements the (eof-object?) primitive.
 // Returns #t if the argument is the EOF object.
-func PrimEofObjectQ(mc *machine.MachineContext) error {
+func PrimEofObjectQ(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	mc.SetValue(values.BoolToBoolean(o == values.EOFObject))
 	return nil
 }
 
 // PrimOpenInputString implements the Scheme open-input-string primitive.
-func PrimOpenInputString(mc *machine.MachineContext) error {
+func PrimOpenInputString(mc machine.CallContext) error {
 	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "open-input-string")
 	if err != nil {
 		return err
@@ -148,13 +148,13 @@ func PrimOpenInputString(mc *machine.MachineContext) error {
 }
 
 // PrimOpenOutputString implements the Scheme open-output-string primitive.
-func PrimOpenOutputString(mc *machine.MachineContext) error {
+func PrimOpenOutputString(mc machine.CallContext) error {
 	mc.SetValue(values.NewStringOutputPortWithBuffer(&bytes.Buffer{}))
 	return nil
 }
 
 // PrimGetOutputString implements the Scheme get-output-string primitive.
-func PrimGetOutputString(mc *machine.MachineContext) error {
+func PrimGetOutputString(mc machine.CallContext) error {
 	p, err := helpers.RequireArg[*values.StringOutputPort](mc, 0, werr.ErrNotAStringOutputPort, "get-output-string")
 	if err != nil {
 		return err
@@ -165,7 +165,7 @@ func PrimGetOutputString(mc *machine.MachineContext) error {
 }
 
 // PrimOpenInputBytevector implements the Scheme open-input-bytevector primitive.
-func PrimOpenInputBytevector(mc *machine.MachineContext) error {
+func PrimOpenInputBytevector(mc machine.CallContext) error {
 	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, werr.ErrNotAByteVector, "open-input-bytevector")
 	if err != nil {
 		return err
@@ -180,7 +180,7 @@ func PrimOpenInputBytevector(mc *machine.MachineContext) error {
 }
 
 // PrimOpenOutputBytevector implements the Scheme open-output-bytevector primitive.
-func PrimOpenOutputBytevector(mc *machine.MachineContext) error {
+func PrimOpenOutputBytevector(mc machine.CallContext) error {
 	tup, ok := mc.Arg(0).(values.Tuple)
 	if ok && tup.Length() > 1 {
 		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "open-output-bytevector: expected one or zero arguments but got %d", tup.Length())
@@ -198,7 +198,7 @@ func PrimOpenOutputBytevector(mc *machine.MachineContext) error {
 }
 
 // PrimGetOutputBytevector implements the Scheme get-output-bytevector primitive.
-func PrimGetOutputBytevector(mc *machine.MachineContext) error {
+func PrimGetOutputBytevector(mc machine.CallContext) error {
 	e, err := helpers.RequireArg[values.ByteVectorExtractor](mc, 0, werr.ErrNotABytevectorOutputPort, "get-output-bytevector")
 	if err != nil {
 		return err
@@ -213,7 +213,7 @@ func PrimGetOutputBytevector(mc *machine.MachineContext) error {
 
 // PrimTextualPortQ implements the textual-port? primitive.
 // R7RS §6.13.1: Returns #t if the port is a textual port, #f otherwise.
-func PrimTextualPortQ(mc *machine.MachineContext) error {
+func PrimTextualPortQ(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	_, isReader := o.(values.TextualReader)
 	_, isWriter := o.(values.TextualWriter)
@@ -223,7 +223,7 @@ func PrimTextualPortQ(mc *machine.MachineContext) error {
 
 // PrimBinaryPortQ implements the binary-port? primitive.
 // R7RS §6.13.1: Returns #t if the port is a binary port, #f otherwise.
-func PrimBinaryPortQ(mc *machine.MachineContext) error {
+func PrimBinaryPortQ(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	_, isReader := o.(values.BinaryReader)
 	_, isWriter := o.(values.BinaryWriter)

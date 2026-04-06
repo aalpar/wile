@@ -23,6 +23,10 @@ import (
 // This is a re-export of registry.PrimitiveSpec for convenience.
 type PrimitiveSpec = registry.PrimitiveSpec
 
+// CallContext is the extension-facing subset of MachineContext.
+// This is a re-export of machine.CallContext for convenience.
+type CallContext = machine.CallContext
+
 // ForeignFunction is the signature for primitive implementations.
 // This is a re-export of machine.ForeignFunction for convenience.
 type ForeignFunction = machine.ForeignFunction

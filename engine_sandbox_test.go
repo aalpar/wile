@@ -339,7 +339,7 @@ func TestWithAuthorizer_FlowsToNamespace(t *testing.T) {
 	engine.RegisterPrimitive(PrimitiveSpec{
 		Name:       "test-auth-check",
 		ParamCount: 0,
-		Impl: func(mc *MachineContext) error {
+		Impl: func(mc CallContext) error {
 			err := security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 				Resource: security.ResourceFile,
 				Action:   security.ActionRead,
@@ -374,7 +374,7 @@ func TestWithAuthorizer_DenyBlocksEval(t *testing.T) {
 	engine.RegisterPrimitive(PrimitiveSpec{
 		Name:       "test-auth-deny",
 		ParamCount: 0,
-		Impl: func(mc *MachineContext) error {
+		Impl: func(mc CallContext) error {
 			return security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 				Resource: security.ResourceFile,
 				Action:   security.ActionWrite,
@@ -400,7 +400,7 @@ func TestNoAuthorizer_AllowsByDefault(t *testing.T) {
 	engine.RegisterPrimitive(PrimitiveSpec{
 		Name:       "test-auth-open",
 		ParamCount: 0,
-		Impl: func(mc *MachineContext) error {
+		Impl: func(mc CallContext) error {
 			err := security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 				Resource: security.ResourceFile,
 				Action:   security.ActionWrite,

@@ -331,7 +331,7 @@ func evalSchemeString(code string) (values.Value, error) {
 	env.MaybeCreateOwnGlobalBinding(listSym, environment.BindingTypeVariable)
 	listIdx := env.GetGlobalIndex(listSym)
 	if listIdx != nil {
-		listClosure := machine.NewForeignClosure(env, 1, true, func(mc *machine.MachineContext) error {
+		listClosure := machine.NewForeignClosure(env, 1, true, func(mc machine.CallContext) error {
 			// The variadic args come as a list in the first local slot.
 			// Must copy the spine because the rest-arg list may be
 			// backed by the reusable restArgBuf.
@@ -678,7 +678,8 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 	// Register call-depth primitive: returns current continuation stack depth
 	callDepthSym := values.NewSymbol("call-depth")
 	env.MaybeCreateOwnGlobalBinding(callDepthSym, environment.BindingTypeVariable)
-	callDepthFn := func(mc *machine.MachineContext) error {
+	callDepthFn := func(cc machine.CallContext) error {
+		mc := cc.(*machine.MachineContext)
 		depth := mc.CallDepth()
 		if depth > maxCallDepth {
 			maxCallDepth = depth
@@ -692,7 +693,7 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 	// Register subtraction primitive: (- a b)
 	subSym := values.NewSymbol("-")
 	env.MaybeCreateOwnGlobalBinding(subSym, environment.BindingTypeVariable)
-	subFn := func(mc *machine.MachineContext) error {
+	subFn := func(mc machine.CallContext) error {
 		a := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value().(*values.Integer).Value
 		b := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value().(*values.Integer).Value
 		mc.SetValue(values.NewInteger(a - b))
@@ -704,7 +705,7 @@ func TestTailCallOptimization_CallDepthGrows(t *testing.T) {
 	// Register equality primitive: (= a b)
 	eqSym := values.NewSymbol("=")
 	env.MaybeCreateOwnGlobalBinding(eqSym, environment.BindingTypeVariable)
-	eqFn := func(mc *machine.MachineContext) error {
+	eqFn := func(mc machine.CallContext) error {
 		a := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value().(*values.Integer).Value
 		b := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value().(*values.Integer).Value
 		if a == b {

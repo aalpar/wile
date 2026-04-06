@@ -36,7 +36,7 @@ func ReadyExtension() (registry.Extension, <-chan struct{}) {
 		r.AddPrimitive(registry.PrimitiveSpec{
 			Name:       "test-ready!",
 			ParamCount: 0,
-			Impl: func(mc *machine.MachineContext) error {
+			Impl: func(mc machine.CallContext) error {
 				once.Do(func() {
 					close(ready)
 				})

@@ -24,7 +24,7 @@ import (
 )
 
 // PrimNumerator implements the numerator primitive.
-func PrimNumerator(mc *machine.MachineContext) error {
+func PrimNumerator(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Integer:
@@ -61,7 +61,7 @@ func PrimNumerator(mc *machine.MachineContext) error {
 }
 
 // PrimDenominator implements the (denominator) primitive.
-func PrimDenominator(mc *machine.MachineContext) error {
+func PrimDenominator(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Integer:
@@ -98,7 +98,7 @@ func PrimDenominator(mc *machine.MachineContext) error {
 }
 
 // PrimRationalize implements the (rationalize) primitive.
-func PrimRationalize(mc *machine.MachineContext) error {
+func PrimRationalize(mc machine.CallContext) error {
 	xArg := mc.Arg(0)
 	yArg := mc.Arg(1)
 
@@ -223,7 +223,7 @@ func floorRat(r *big.Rat) *big.Rat {
 //
 // R7RS §6.2.6: Returns two non-negative exact integers s and r where
 // n = s² + r and n < (s+1)².
-func PrimExactIntegerSqrt(mc *machine.MachineContext) error {
+func PrimExactIntegerSqrt(mc machine.CallContext) error {
 	o := mc.Arg(0)
 
 	switch v := o.(type) {

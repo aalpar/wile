@@ -27,7 +27,8 @@ import (
 // makeWrapper generates the ForeignFunction closure that bridges between
 // the VM calling convention and the Go function.
 func (p *ffiSpec) makeWrapper() ForeignFunction {
-	return func(mc *MachineContext) (returnErr error) {
+	return func(cc CallContext) (returnErr error) {
+		mc := cc.(*MachineContext)
 		defer func() {
 			r := recover()
 			if r == nil {

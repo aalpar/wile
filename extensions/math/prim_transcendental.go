@@ -30,7 +30,7 @@ import (
 // part is zero, otherwise Complex). Used for the six unary transcendental
 // functions that share identical structure.
 func makeComplexPrimitive(name string, fn func(complex128) complex128) machine.ForeignFunction {
-	return func(mc *machine.MachineContext) error {
+	return func(mc machine.CallContext) error {
 		z, err := helpers.ToComplex128(mc.Arg(0))
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "%s: %v", name, err)
@@ -51,7 +51,7 @@ var (
 )
 
 // PrimLog implements the (log z) and (log z1 z2) primitives.
-func PrimLog(mc *machine.MachineContext) error {
+func PrimLog(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	rest := mc.Arg(1)
 	z, err := helpers.ToComplex128(o)
@@ -78,7 +78,7 @@ func PrimLog(mc *machine.MachineContext) error {
 }
 
 // PrimAtan implements the (atan z) and (atan y x) primitives.
-func PrimAtan(mc *machine.MachineContext) error {
+func PrimAtan(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	rest := mc.Arg(1)
 
@@ -114,7 +114,7 @@ func PrimAtan(mc *machine.MachineContext) error {
 // R7RS §6.2.6: The branch cut for sqrt lies along the negative real axis,
 // continuous with quadrant II. This means for values on the negative real axis
 // (including those with -0.0 imaginary part), sqrt returns positive imaginary.
-func PrimSqrt(mc *machine.MachineContext) error {
+func PrimSqrt(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Integer:
@@ -248,7 +248,7 @@ func exptExact(num, denom *big.Int, exp int64) values.Number {
 }
 
 // PrimExpt implements the (expt) primitive.
-func PrimExpt(mc *machine.MachineContext) error {
+func PrimExpt(mc machine.CallContext) error {
 	base := mc.Arg(0)
 	exp := mc.Arg(1)
 	baseNum, ok := base.(values.Number)

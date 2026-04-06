@@ -23,7 +23,7 @@ import (
 // PrimEqQ implements the eq? predicate (R7RS §6.1).
 // Returns #t if both arguments are identical: pointer equality for most types,
 // string key comparison for symbols (R7RS §6.5).
-func PrimEqQ(mc *machine.MachineContext) error {
+func PrimEqQ(mc machine.CallContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 	mc.SetValue(values.BoolToBoolean(helpers.EqIdentity(o0, o1)))
@@ -38,7 +38,7 @@ func PrimEqQ(mc *machine.MachineContext) error {
 // Unlike eq?, eqv? treats equivalent numbers/characters as equal even if
 // they are different objects. Unlike equal?, eqv? does not recurse into
 // pairs, vectors, or strings.
-func PrimEqvQ(mc *machine.MachineContext) error {
+func PrimEqvQ(mc machine.CallContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 	mc.SetValue(values.BoolToBoolean(helpers.Eqv(o0, o1)))
@@ -47,7 +47,7 @@ func PrimEqvQ(mc *machine.MachineContext) error {
 
 // PrimEqualQ implements the equal? predicate for structural equality.
 // Returns #t if both arguments have the same structure and values.
-func PrimEqualQ(mc *machine.MachineContext) error {
+func PrimEqualQ(mc machine.CallContext) error {
 	o0 := mc.Arg(0)
 	o1 := mc.Arg(1)
 	mc.SetValue(values.BoolToBoolean(values.EqualTo(o0, o1)))

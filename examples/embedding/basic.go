@@ -63,7 +63,7 @@ func main() {
 	err = engine.RegisterPrimitive(wile.PrimitiveSpec{
 		Name:       "go-max",
 		ParamCount: 2,
-		Impl: func(mc *wile.MachineContext) error {
+		Impl: func(mc wile.CallContext) error {
 			a := mc.Arg(0).(*values.Integer).Value
 			b := mc.Arg(1).(*values.Integer).Value
 			if a > b {

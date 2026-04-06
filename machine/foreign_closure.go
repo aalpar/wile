@@ -9,9 +9,14 @@ import (
 )
 
 // ForeignFunction is the signature for Go-implemented Scheme primitives.
-// The MachineContext provides access to arguments, the value register,
+// The CallContext provides access to arguments, the value register,
 // and the cancellation context (via mc.Context()).
-type ForeignFunction func(mc *MachineContext) error
+//
+// Most implementations only need CallContext methods (Arg, SetValue,
+// SetValues, Authorizer, Context, EnvironmentFrame, Thread).
+// Implementations that need full VM access (sub-context creation,
+// continuation manipulation) should type-assert to *MachineContext.
+type ForeignFunction func(mc CallContext) error
 
 // goErrorToSchemeException converts a Go error to a Scheme exception escape.
 // It detects ForeignFileError and ForeignReadError to set the appropriate

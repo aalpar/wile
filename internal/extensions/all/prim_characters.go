@@ -44,7 +44,7 @@ var charCiCompareSpecs = []struct {
 // makeCharCiComparePrimitive returns a ForeignFunction that performs a variadic
 // case-insensitive character comparison using the given comparator.
 func makeCharCiComparePrimitive(name string, cmp func(rune, rune) bool) machine.ForeignFunction {
-	return func(mc *machine.MachineContext) error {
+	return func(mc machine.CallContext) error {
 		return helpers.CharCompareVariadic(mc, name, cmp)
 	}
 }
@@ -84,7 +84,7 @@ func simpleCaseFold(r rune) rune {
 // PrimDigitValue implements the (digit-value) primitive.
 // R7RS §6.6: Returns the numeric value (0-9) of a character that is a decimal digit
 // according to Unicode, or #f if it is not a decimal digit.
-func PrimDigitValue(mc *machine.MachineContext) error {
+func PrimDigitValue(mc machine.CallContext) error {
 	ch, err := helpers.RequireArg[*values.Character](mc, 0, werr.ErrNotACharacter, "digit-value")
 	if err != nil {
 		return err

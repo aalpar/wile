@@ -56,7 +56,7 @@ func TestRegistryDocProvider_ContractFields(t *testing.T) {
 	reg.AddPrimitive(registry.PrimitiveSpec{
 		Name:       "test-contracted",
 		ParamCount: 2,
-		Impl: func(_ *machine.MachineContext) error {
+		Impl: func(_ machine.CallContext) error {
 			return nil
 		},
 		Doc:        "A test.",

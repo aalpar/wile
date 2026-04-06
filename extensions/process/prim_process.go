@@ -29,7 +29,7 @@ import (
 
 // PrimSystem implements the (system) primitive.
 // Runs a shell command via /bin/sh -c and returns the exit code.
-func PrimSystem(mc *machine.MachineContext) error {
+func PrimSystem(mc machine.CallContext) error {
 	command, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "system")
 	if err != nil {
 		return err
@@ -58,7 +58,7 @@ func PrimSystem(mc *machine.MachineContext) error {
 
 // PrimProcessSpawn implements the (process-spawn) primitive.
 // Creates a subprocess with stdin/stdout/stderr pipes.
-func PrimProcessSpawn(mc *machine.MachineContext) error {
+func PrimProcessSpawn(mc machine.CallContext) error {
 	command, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "process-spawn")
 	if err != nil {
 		return err
@@ -135,7 +135,7 @@ func PrimProcessSpawn(mc *machine.MachineContext) error {
 }
 
 // PrimProcessStdout implements the (process-stdout) primitive.
-func PrimProcessStdout(mc *machine.MachineContext) error {
+func PrimProcessStdout(mc machine.CallContext) error {
 	proc, err := helpers.RequireArg[*values.Process](mc, 0, werr.ErrNotAProcess, "process-stdout")
 	if err != nil {
 		return err
@@ -145,7 +145,7 @@ func PrimProcessStdout(mc *machine.MachineContext) error {
 }
 
 // PrimProcessStderr implements the (process-stderr) primitive.
-func PrimProcessStderr(mc *machine.MachineContext) error {
+func PrimProcessStderr(mc machine.CallContext) error {
 	proc, err := helpers.RequireArg[*values.Process](mc, 0, werr.ErrNotAProcess, "process-stderr")
 	if err != nil {
 		return err
@@ -155,7 +155,7 @@ func PrimProcessStderr(mc *machine.MachineContext) error {
 }
 
 // PrimProcessStdin implements the (process-stdin) primitive.
-func PrimProcessStdin(mc *machine.MachineContext) error {
+func PrimProcessStdin(mc machine.CallContext) error {
 	proc, err := helpers.RequireArg[*values.Process](mc, 0, werr.ErrNotAProcess, "process-stdin")
 	if err != nil {
 		return err
@@ -166,7 +166,7 @@ func PrimProcessStdin(mc *machine.MachineContext) error {
 
 // PrimProcessWait implements the (process-wait) primitive.
 // Blocks until the process exits and returns the exit code.
-func PrimProcessWait(mc *machine.MachineContext) error {
+func PrimProcessWait(mc machine.CallContext) error {
 	proc, err := helpers.RequireArg[*values.Process](mc, 0, werr.ErrNotAProcess, "process-wait")
 	if err != nil {
 		return err
@@ -201,7 +201,7 @@ var signalMap = map[string]syscall.Signal{
 
 // PrimProcessKill implements the (process-kill) primitive.
 // Sends a signal to the process. Signal is a symbol: term, kill, int, hup.
-func PrimProcessKill(mc *machine.MachineContext) error {
+func PrimProcessKill(mc machine.CallContext) error {
 	proc, err := helpers.RequireArg[*values.Process](mc, 0, werr.ErrNotAProcess, "process-kill")
 	if err != nil {
 		return err
@@ -234,7 +234,7 @@ func PrimProcessKill(mc *machine.MachineContext) error {
 }
 
 // PrimProcessQ implements the (process?) predicate.
-func PrimProcessQ(mc *machine.MachineContext) error {
+func PrimProcessQ(mc machine.CallContext) error {
 	_, ok := mc.Arg(0).(*values.Process)
 	mc.SetValue(values.BoolToBoolean(ok))
 	return nil

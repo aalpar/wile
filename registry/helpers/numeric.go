@@ -27,7 +27,7 @@ import (
 // It takes a rest parameter at index 0 and folds with the binary operation.
 // Returns identity for empty list, first arg for single element.
 func NumericFoldVariadic(
-	mc *machine.MachineContext,
+	mc machine.CallContext,
 	name string,
 	identity values.Number,
 	binOp func(acc, val values.Number) (values.Number, error),
@@ -94,7 +94,7 @@ func NumericFoldVariadic(
 // NumericFoldWithFirst is a helper for arithmetic operations with required first arg (- and /).
 // First arg at index 0, rest at index 1. Applies unaryOp for single arg case.
 func NumericFoldWithFirst(
-	mc *machine.MachineContext,
+	mc machine.CallContext,
 	name string,
 	unaryOp func(val values.Number) (values.Number, error),
 	binOp func(acc, val values.Number) (values.Number, error),
@@ -165,7 +165,7 @@ func NumericFoldWithFirst(
 // First arg at index 0, rest at index 1. Returns true if all consecutive
 // pairs satisfy the comparator, false otherwise.
 func NumericChainCompare(
-	mc *machine.MachineContext,
+	mc machine.CallContext,
 	name string,
 	fails func(prev, curr values.Number) bool,
 ) error {
@@ -235,7 +235,7 @@ func isNonRealComplex(n values.Number) bool {
 // The fails callback should return true when the comparison fails (i.e. the pair
 // does not satisfy the ordering relation), false when it succeeds.
 func NumericChainCompareReal(
-	mc *machine.MachineContext,
+	mc machine.CallContext,
 	name string,
 	fails func(prev, curr values.Number) bool,
 ) error {
@@ -284,7 +284,7 @@ func NumericChainCompareReal(
 // where isBetter returns true if candidate should replace current.
 // Per R7RS, if any argument is inexact, the result is inexact.
 func NumericExtremum(
-	mc *machine.MachineContext,
+	mc machine.CallContext,
 	name string,
 	isBetter func(candidate, current values.Number) bool,
 ) error {

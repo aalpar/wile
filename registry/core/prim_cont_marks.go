@@ -23,7 +23,8 @@ import (
 
 // PrimCurrentContinuationMarks implements (current-continuation-marks [prompt-tag]).
 // Walks the continuation chain and returns a ContinuationMarkSet snapshot.
-func PrimCurrentContinuationMarks(mc *machine.MachineContext) error {
+func PrimCurrentContinuationMarks(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	tag := machine.DefaultPromptTag
 	v, ok := helpers.ParseOptionalArg(mc.Arg(0))
 	if ok {
@@ -39,7 +40,7 @@ func PrimCurrentContinuationMarks(mc *machine.MachineContext) error {
 
 // PrimContinuationMarkSetToList implements (continuation-mark-set->list mark-set key).
 // Extracts a list of values for key across all frames in the mark set.
-func PrimContinuationMarkSetToList(mc *machine.MachineContext) error {
+func PrimContinuationMarkSetToList(mc machine.CallContext) error {
 	cms, err := helpers.RequireType[*machine.ContinuationMarkSet](mc.Arg(0), werr.ErrNotAContinuationMarkSet, "continuation-mark-set->list")
 	if err != nil {
 		return err
@@ -50,7 +51,7 @@ func PrimContinuationMarkSetToList(mc *machine.MachineContext) error {
 
 // PrimContinuationMarkSetFirst implements (continuation-mark-set-first mark-set key [default]).
 // Returns the value for key from the nearest frame, or default (#f if omitted).
-func PrimContinuationMarkSetFirst(mc *machine.MachineContext) error {
+func PrimContinuationMarkSetFirst(mc machine.CallContext) error {
 	cms, err := helpers.RequireType[*machine.ContinuationMarkSet](mc.Arg(0), werr.ErrNotAContinuationMarkSet, "continuation-mark-set-first")
 	if err != nil {
 		return err
@@ -72,7 +73,7 @@ func PrimContinuationMarkSetFirst(mc *machine.MachineContext) error {
 // Missing keys use none-v (default #f).
 //
 // Racket §10.5: continuation-mark-set->list*
-func PrimContinuationMarkSetToListStar(mc *machine.MachineContext) error {
+func PrimContinuationMarkSetToListStar(mc machine.CallContext) error {
 	cms, err := helpers.RequireType[*machine.ContinuationMarkSet](mc.Arg(0), werr.ErrNotAContinuationMarkSet, "continuation-mark-set->list*")
 	if err != nil {
 		return err
@@ -114,7 +115,7 @@ var PrimContinuationMarkSetQ = helpers.MakeTypePredicate(func(o values.Value) bo
 // PrimContinuationMarks implements (continuation-marks cont [prompt-tag]).
 // Extracts a ContinuationMarkSet from a captured continuation (the result of
 // call/cc), optionally stopping at prompt-tag.
-func PrimContinuationMarks(mc *machine.MachineContext) error {
+func PrimContinuationMarks(mc machine.CallContext) error {
 	capt, err := helpers.RequireType[*machine.CapturedContinuation](mc.Arg(0), werr.ErrNotAContinuation, "continuation-marks")
 	if err != nil {
 		return err
@@ -147,7 +148,8 @@ var PrimContinuationQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 // continuation frame — covering both tail and non-tail compilation contexts.
 // In tail position, with-continuation-mark writes to mc.marks. In non-tail
 // position, SaveContinuation moves mc.marks to mc.cont before the call.
-func PrimCallWithImmediateContMark(mc *machine.MachineContext) error {
+func PrimCallWithImmediateContMark(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	key := mc.Arg(0)
 	proc := mc.Arg(1)
 	val := mc.GetImmediateMark(key)

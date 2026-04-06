@@ -23,7 +23,7 @@ import (
 // variadicCompare is a generic helper for variadic comparison primitives.
 // It extracts values, compares them pairwise, and returns a boolean result.
 func variadicCompare[T any, V values.Value](
-	mc *machine.MachineContext,
+	mc machine.CallContext,
 	name string,
 	extract func(values.Value) (V, bool),
 	getValue func(V) T,
@@ -64,7 +64,7 @@ func variadicCompare[T any, V values.Value](
 
 // CharCompare is a helper for binary character comparison primitives.
 // It extracts two characters from the primitive's arguments and applies the comparator.
-func CharCompare(mc *machine.MachineContext, name string, cmp func(a, b rune) bool) error {
+func CharCompare(mc machine.CallContext, name string, cmp func(a, b rune) bool) error {
 	c1 := mc.Arg(0)
 	c2 := mc.Arg(1)
 	ch1, ok := c1.(*values.Character)
@@ -81,7 +81,7 @@ func CharCompare(mc *machine.MachineContext, name string, cmp func(a, b rune) bo
 
 // CharCompareVariadic is a helper for variadic character comparison primitives.
 // It extracts characters from the variadic args and applies the comparator pairwise.
-func CharCompareVariadic(mc *machine.MachineContext, name string, cmp func(a, b rune) bool) error {
+func CharCompareVariadic(mc machine.CallContext, name string, cmp func(a, b rune) bool) error {
 	return variadicCompare(mc, name,
 		func(v values.Value) (*values.Character, bool) {
 			c, ok := v.(*values.Character)

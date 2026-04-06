@@ -27,7 +27,8 @@ import (
 // PrimWithExceptionHandler implements the with-exception-handler primitive.
 // (with-exception-handler handler thunk)
 // Installs handler as exception handler during thunk execution.
-func PrimWithExceptionHandler(mc *machine.MachineContext) error {
+func PrimWithExceptionHandler(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	handler, ok := mc.Arg(0).(values.Callable)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotAProcedure,
@@ -77,7 +78,8 @@ func PrimWithExceptionHandler(mc *machine.MachineContext) error {
 // callExceptionHandler invokes the exception handler with the given condition.
 // Returns the handler's return value, or an error if the handler raised an exception
 // or escaped via continuation.
-func callExceptionHandler(mc *machine.MachineContext, condition values.Value, handler values.Callable) (values.Value, error) {
+func callExceptionHandler(cc machine.CallContext, condition values.Value, handler values.Callable) (values.Value, error) {
+	mc := cc.(*machine.MachineContext)
 	// Exception handler automatically inherited from parent (M3 fix)
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
@@ -99,7 +101,8 @@ func callExceptionHandler(mc *machine.MachineContext, condition values.Value, ha
 // resumeFromContinuation resumes execution from a captured continuation with the given value.
 // Returns the result of the resumed execution, or an error.
 // If cont is nil (raise-continuable was in tail position), returns value directly.
-func resumeFromContinuation(mc *machine.MachineContext, cont *machine.MachineContinuation, value values.Value) (values.Value, error) {
+func resumeFromContinuation(cc machine.CallContext, cont *machine.MachineContinuation, value values.Value) (values.Value, error) {
+	mc := cc.(*machine.MachineContext)
 	if cont == nil {
 		// raise-continuable was in tail position - no continuation to resume
 		// The handler's return value becomes the final result
@@ -122,7 +125,8 @@ func resumeFromContinuation(mc *machine.MachineContext, cont *machine.MachineCon
 
 // handleException processes an exception by calling the handler and, for continuable
 // exceptions, resuming execution from the raise-continuable call site per R7RS §6.11.
-func handleException(mc *machine.MachineContext, excErr *machine.ErrExceptionEscape, handler values.Callable) error {
+func handleException(cc machine.CallContext, excErr *machine.ErrExceptionEscape, handler values.Callable) error {
+	mc := cc.(*machine.MachineContext)
 	// Pop this handler before calling it (so re-raises use parent handler per R7RS)
 	mc.PopExceptionHandler()
 
@@ -199,7 +203,8 @@ func handleException(mc *machine.MachineContext, excErr *machine.ErrExceptionEsc
 // PrimRaise implements the raise primitive.
 // (raise obj)
 // Raises a non-continuable exception with obj as the condition.
-func PrimRaise(mc *machine.MachineContext) error {
+func PrimRaise(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	obj := mc.Arg(0)
 
 	return &machine.ErrExceptionEscape{
@@ -217,7 +222,8 @@ func PrimRaise(mc *machine.MachineContext) error {
 // Raises a continuable exception with obj as the condition.
 // If the handler returns, its return value becomes the value of raise-continuable,
 // and execution continues from the call site per R7RS §6.11.
-func PrimRaiseContinuable(mc *machine.MachineContext) error {
+func PrimRaiseContinuable(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	obj := mc.Arg(0)
 
 	// Copy continuation to prevent mutation issues during handler execution.
@@ -241,7 +247,8 @@ func PrimRaiseContinuable(mc *machine.MachineContext) error {
 // PrimError implements the error primitive.
 // (error message irritant ...)
 // Creates an error object with the given message and irritants, then raises it.
-func PrimError(mc *machine.MachineContext) error {
+func PrimError(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	message := mc.Arg(0)
 	irritantsList := mc.Arg(1)
 
@@ -280,7 +287,7 @@ func PrimError(mc *machine.MachineContext) error {
 // PrimErrorObjectQ implements the error-object? predicate.
 // Returns #t if the argument is an error object created by (error ...),
 // #f otherwise.
-func PrimErrorObjectQ(mc *machine.MachineContext) error {
+func PrimErrorObjectQ(mc machine.CallContext) error {
 	obj := mc.Arg(0)
 	_, ok := obj.(*values.NativeError)
 	mc.SetValue(values.BoolToBoolean(ok))
@@ -289,7 +296,7 @@ func PrimErrorObjectQ(mc *machine.MachineContext) error {
 
 // PrimErrorObjectMessage implements the error-object-message accessor.
 // Returns the message string from an error object.
-func PrimErrorObjectMessage(mc *machine.MachineContext) error {
+func PrimErrorObjectMessage(mc machine.CallContext) error {
 	errObj, err := helpers.RequireArg[*values.NativeError](mc, 0, werr.ErrNotANativeError, "error-object-message")
 	if err != nil {
 		return err
@@ -300,7 +307,7 @@ func PrimErrorObjectMessage(mc *machine.MachineContext) error {
 
 // PrimErrorObjectIrritants implements the error-object-irritants accessor.
 // Returns the list of irritant objects from an error object.
-func PrimErrorObjectIrritants(mc *machine.MachineContext) error {
+func PrimErrorObjectIrritants(mc machine.CallContext) error {
 	errObj, err := helpers.RequireArg[*values.NativeError](mc, 0, werr.ErrNotANativeError, "error-object-irritants")
 	if err != nil {
 		return err
@@ -311,7 +318,7 @@ func PrimErrorObjectIrritants(mc *machine.MachineContext) error {
 
 // PrimReadErrorQ implements the read-error? predicate.
 // R7RS §6.11: Returns #t if obj is an error object raised during reading.
-func PrimReadErrorQ(mc *machine.MachineContext) error {
+func PrimReadErrorQ(mc machine.CallContext) error {
 	obj := mc.Arg(0)
 	errObj, ok := obj.(*values.NativeError)
 	mc.SetValue(values.BoolToBoolean(ok && errObj.IsReadError()))
@@ -320,7 +327,7 @@ func PrimReadErrorQ(mc *machine.MachineContext) error {
 
 // PrimFileErrorQ implements the file-error? predicate.
 // R7RS §6.11: Returns #t if obj is an error object raised during file operations.
-func PrimFileErrorQ(mc *machine.MachineContext) error {
+func PrimFileErrorQ(mc machine.CallContext) error {
 	obj := mc.Arg(0)
 	errObj, ok := obj.(*values.NativeError)
 	mc.SetValue(values.BoolToBoolean(ok && errObj.IsFileError()))

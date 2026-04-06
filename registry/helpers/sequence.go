@@ -23,7 +23,7 @@ import (
 // the machine context value to its length as an exact integer.
 // T must be a pointer type satisfying interface{ Length() int }.
 func SequenceLength[T interface{ Length() int }](
-	mc *machine.MachineContext,
+	mc machine.CallContext,
 	sentinel error,
 	name string,
 ) error {
@@ -40,7 +40,7 @@ func SequenceLength[T interface{ Length() int }](
 // to getElement(seq, idx). The getElement closure handles type-specific
 // element retrieval (e.g., Vector.Get vs ByteVector byte-to-integer conversion).
 func SequenceRef[T interface{ Length() int }](
-	mc *machine.MachineContext,
+	mc machine.CallContext,
 	sentinel error,
 	name string,
 	getElement func(T, int) values.Value,
@@ -61,10 +61,10 @@ func SequenceRef[T interface{ Length() int }](
 // exact integer index from arg 1, and delegates to setElement(seq, idx, mc)
 // for the type-specific mutation. Sets Void on success.
 func SequenceSet[T interface{ Length() int }](
-	mc *machine.MachineContext,
+	mc machine.CallContext,
 	sentinel error,
 	name string,
-	setElement func(T, int, *machine.MachineContext) error,
+	setElement func(T, int, machine.CallContext) error,
 ) error {
 	seq, err := RequireArg[T](mc, 0, sentinel, name)
 	if err != nil {

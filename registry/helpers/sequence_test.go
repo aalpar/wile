@@ -204,7 +204,7 @@ func TestSequenceRef_Errors(t *testing.T) {
 
 // ── SequenceSet ──────────────────────────────────────────────────────
 
-func vectorSet(v *values.Vector, i int, mc *machine.MachineContext) error {
+func vectorSet(v *values.Vector, i int, mc machine.CallContext) error {
 	val := mc.Arg(2)
 	return v.Set(i, val)
 }

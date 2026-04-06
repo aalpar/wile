@@ -37,7 +37,8 @@ import (
 //
 // With ParamCount: 1 and IsVariadic: true, all args arrive as a rest
 // list in mc.Arg(0).
-func PrimEval(mc *machine.MachineContext) error {
+func PrimEval(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	args := mc.Arg(0)
 
 	argList, ok := args.(values.Tuple)
@@ -109,7 +110,8 @@ func PrimEval(mc *machine.MachineContext) error {
 // include share the same search path priority:
 //
 //	LoadPathStack > LibraryRegistry > SCHEME_INCLUDE_PATH > CWD
-func PrimLoad(mc *machine.MachineContext) error {
+func PrimLoad(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	filenameVal := mc.Arg(0)
 	filename, err := helpers.RequireType[*values.String](filenameVal, werr.ErrNotAString, "load")
 	if err != nil {
@@ -189,7 +191,7 @@ func PrimLoad(mc *machine.MachineContext) error {
 // PrimCurrentLoadPath implements the (current-load-path) primitive.
 // Returns the path of the file currently being loaded, or #f if
 // no file is being loaded (e.g., REPL).
-func PrimCurrentLoadPath(mc *machine.MachineContext) error {
+func PrimCurrentLoadPath(mc machine.CallContext) error {
 	current := mc.EnvironmentFrame().Namespace().LoadPathStack().Current()
 	mc.SetValue(values.StringOrFalse(current))
 	return nil
@@ -198,7 +200,7 @@ func PrimCurrentLoadPath(mc *machine.MachineContext) error {
 // PrimCurrentLoadDirectory implements the (current-load-directory) primitive.
 // Returns the directory of the file currently being loaded, or #f if
 // no file is being loaded (e.g., REPL).
-func PrimCurrentLoadDirectory(mc *machine.MachineContext) error {
+func PrimCurrentLoadDirectory(mc machine.CallContext) error {
 	currentDir := mc.EnvironmentFrame().Namespace().LoadPathStack().CurrentDir()
 	mc.SetValue(values.StringOrFalse(currentDir))
 	return nil
@@ -207,7 +209,7 @@ func PrimCurrentLoadDirectory(mc *machine.MachineContext) error {
 // PrimCurrentLoadDepth implements the (current-load-depth) primitive.
 // Returns the current load stack depth (number of nested loads).
 // Returns 0 when not inside a load call.
-func PrimCurrentLoadDepth(mc *machine.MachineContext) error {
+func PrimCurrentLoadDepth(mc machine.CallContext) error {
 	depth := mc.EnvironmentFrame().Namespace().LoadPathStack().Depth()
 	mc.SetValue(values.NewInteger(int64(depth)))
 	return nil
@@ -215,7 +217,7 @@ func PrimCurrentLoadDepth(mc *machine.MachineContext) error {
 
 // PrimSchemeReportEnvironment implements the (scheme-report-environment) primitive.
 // Returns R5RS env.
-func PrimSchemeReportEnvironment(mc *machine.MachineContext) error {
+func PrimSchemeReportEnvironment(mc machine.CallContext) error {
 	version := mc.Arg(0)
 	versionInt, err := helpers.RequireType[*values.Integer](version, werr.ErrNotAnInteger, "scheme-report-environment")
 	if err != nil {
@@ -241,7 +243,7 @@ func PrimSchemeReportEnvironment(mc *machine.MachineContext) error {
 
 // PrimNullEnvironment implements the null-environment primitive.
 // Returns an empty R5RS environment with no bindings.
-func PrimNullEnvironment(mc *machine.MachineContext) error {
+func PrimNullEnvironment(mc machine.CallContext) error {
 	version := mc.Arg(0)
 	versionInt, err := helpers.RequireType[*values.Integer](version, werr.ErrNotAnInteger, "null-environment")
 	if err != nil {
@@ -271,7 +273,7 @@ func PrimNullEnvironment(mc *machine.MachineContext) error {
 //   - (environment '(for-syntax (scheme base)))       ; Phase 1 (expand)
 //   - (environment '(for-template (scheme base)))     ; Phase -1
 //   - (environment '(for-meta 2 (scheme base)))       ; Phase 2
-func PrimEnvironment(mc *machine.MachineContext) error {
+func PrimEnvironment(mc machine.CallContext) error {
 	// Get variadic import specs (collected as a list in arg 0)
 	argsVal := mc.Arg(0)
 
@@ -339,7 +341,8 @@ func PrimEnvironment(mc *machine.MachineContext) error {
 // PrimExpand implements the expand primitive.
 // Fully expands a syntax object and returns the expanded syntax.
 // (expand stx) -> expanded-stx
-func PrimExpand(mc *machine.MachineContext) error {
+func PrimExpand(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	stx := mc.Arg(0)
 
 	syntaxVal, ok := stx.(syntax.SyntaxValue)
@@ -374,7 +377,8 @@ func PrimExpand(mc *machine.MachineContext) error {
 // Performs a single step of macro expansion and returns both the
 // expanded syntax and a boolean indicating whether expansion occurred.
 // (expand-once stx) -> (values expanded-stx did-expand?)
-func PrimExpandOnce(mc *machine.MachineContext) error {
+func PrimExpandOnce(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	stx := mc.Arg(0)
 
 	syntaxVal, ok := stx.(syntax.SyntaxValue)
@@ -417,7 +421,7 @@ func PrimExpandOnce(mc *machine.MachineContext) error {
 // This is the final phase hook, completing the pipeline:
 //
 //	expand -> compile -> (execute via calling the returned thunk)
-func PrimCompile(mc *machine.MachineContext) error {
+func PrimCompile(mc machine.CallContext) error {
 	expr := mc.Arg(0)
 
 	// Accept either syntax object or datum
@@ -471,7 +475,8 @@ func PrimCompile(mc *machine.MachineContext) error {
 //
 // If the binding is a CompileTimeValue, it returns the unwrapped value.
 // This allows define-for-syntax bindings to be accessed from macro transformers.
-func PrimSyntaxLocalValue(mc *machine.MachineContext) error {
+func PrimSyntaxLocalValue(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	id := mc.Arg(0)
 
 	syntaxSym, ok := id.(*syntax.SyntaxSymbol)
@@ -516,7 +521,7 @@ func PrimSyntaxLocalValue(mc *machine.MachineContext) error {
 // must diverge.
 //
 // Racket §12.4: syntax-local-value/immediate
-func PrimSyntaxLocalValueImmediate(mc *machine.MachineContext) error {
+func PrimSyntaxLocalValueImmediate(mc machine.CallContext) error {
 	return PrimSyntaxLocalValue(mc)
 }
 
@@ -530,7 +535,7 @@ func PrimSyntaxLocalValueImmediate(mc *machine.MachineContext) error {
 //
 // When syntax-local-value retrieves a CompileTimeValue, it automatically unwraps
 // it to return the underlying value.
-func PrimMakeCompileTimeValue(mc *machine.MachineContext) error {
+func PrimMakeCompileTimeValue(mc machine.CallContext) error {
 	v := mc.Arg(0)
 
 	ctv := values.NewCompileTimeValue(v)
@@ -554,7 +559,8 @@ func PrimMakeCompileTimeValue(mc *machine.MachineContext) error {
 //
 // This primitive can only be called during macro expansion (when an
 // ExpanderContext is set on the MachineContext with an introduction scope).
-func PrimSyntaxLocalIntroduce(mc *machine.MachineContext) error {
+func PrimSyntaxLocalIntroduce(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	stx := mc.Arg(0)
 
 	syntaxVal, ok := stx.(syntax.SyntaxValue)
@@ -600,7 +606,8 @@ func PrimSyntaxLocalIntroduce(mc *machine.MachineContext) error {
 //
 // This primitive can only be called during macro expansion (when an
 // ExpanderContext is set on the MachineContext with a use-site scope).
-func PrimSyntaxLocalIdentifierAsBinding(mc *machine.MachineContext) error {
+func PrimSyntaxLocalIdentifierAsBinding(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	id := mc.Arg(0)
 
 	syntaxSym, ok := id.(*syntax.SyntaxSymbol)

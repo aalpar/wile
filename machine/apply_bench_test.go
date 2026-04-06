@@ -63,7 +63,8 @@ func BenchmarkOpcodeDispatch(b *testing.B) {
 }
 
 // stubAdd is a minimal foreign function: pops two integers, adds them.
-func stubAdd(mc *MachineContext) error {
+func stubAdd(cc CallContext) error {
+	mc := cc.(*MachineContext)
 	bnds := mc.env.LocalEnvironment().Bindings()
 	a := bnds[0].Value().(*values.Integer)
 	b := bnds[1].Value().(*values.Integer)

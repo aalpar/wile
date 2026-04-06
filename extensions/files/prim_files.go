@@ -28,7 +28,7 @@ import (
 // open-binary-{input,output}-file. It extracts the filename, checks security,
 // opens the file, and wraps it in a port via makePort.
 func openFilePort(
-	mc *machine.MachineContext, name string, action string,
+	mc machine.CallContext, name string, action string,
 	opener func(string) (*os.File, error), makePort func(*os.File) values.Value,
 ) error {
 	filename, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, name)
@@ -53,7 +53,7 @@ func openFilePort(
 
 // PrimOpenInputFile implements the open-input-file primitive.
 // Opens a file for reading and returns an input port.
-func PrimOpenInputFile(mc *machine.MachineContext) error {
+func PrimOpenInputFile(mc machine.CallContext) error {
 	return openFilePort(mc, "open-input-file", security.ActionRead, os.Open, func(f *os.File) values.Value {
 		return values.NewCharacterInputPortFromReader(f)
 	})
@@ -61,7 +61,7 @@ func PrimOpenInputFile(mc *machine.MachineContext) error {
 
 // PrimOpenOutputFile implements the open-output-file primitive.
 // Opens a file for writing and returns an output port.
-func PrimOpenOutputFile(mc *machine.MachineContext) error {
+func PrimOpenOutputFile(mc machine.CallContext) error {
 	return openFilePort(mc, "open-output-file", security.ActionWrite, os.Create, func(f *os.File) values.Value {
 		return values.NewCharacterOutputPortFromWriter(f)
 	})
@@ -69,7 +69,7 @@ func PrimOpenOutputFile(mc *machine.MachineContext) error {
 
 // PrimOpenBinaryInputFile implements the open-binary-input-file primitive (R7RS).
 // Opens a file for binary reading and returns a binary input port.
-func PrimOpenBinaryInputFile(mc *machine.MachineContext) error {
+func PrimOpenBinaryInputFile(mc machine.CallContext) error {
 	return openFilePort(mc, "open-binary-input-file", security.ActionRead, os.Open, func(f *os.File) values.Value {
 		return values.NewBinaryInputPortFromReader(f)
 	})
@@ -77,7 +77,7 @@ func PrimOpenBinaryInputFile(mc *machine.MachineContext) error {
 
 // PrimOpenBinaryOutputFile implements the open-binary-output-file primitive (R7RS).
 // Opens a file for binary writing and returns a binary output port.
-func PrimOpenBinaryOutputFile(mc *machine.MachineContext) error {
+func PrimOpenBinaryOutputFile(mc machine.CallContext) error {
 	return openFilePort(mc, "open-binary-output-file", security.ActionWrite, os.Create, func(f *os.File) values.Value {
 		return values.NewBinaryOutputPortFromWriter(f)
 	})
@@ -85,7 +85,7 @@ func PrimOpenBinaryOutputFile(mc *machine.MachineContext) error {
 
 // PrimFileExistsQ implements the (file-exists?) primitive.
 // Returns #t if file exists.
-func PrimFileExistsQ(mc *machine.MachineContext) error {
+func PrimFileExistsQ(mc machine.CallContext) error {
 	filename, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "file-exists?")
 	if err != nil {
 		return err
@@ -105,7 +105,7 @@ func PrimFileExistsQ(mc *machine.MachineContext) error {
 
 // PrimDeleteFile implements the (delete-file) primitive.
 // Deletes a file from the filesystem.
-func PrimDeleteFile(mc *machine.MachineContext) error {
+func PrimDeleteFile(mc machine.CallContext) error {
 	filename, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "delete-file")
 	if err != nil {
 		return err
@@ -181,7 +181,8 @@ func callWithFile(
 }
 
 // PrimCallWithInputFile implements the call-with-input-file primitive.
-func PrimCallWithInputFile(mc *machine.MachineContext) error {
+func PrimCallWithInputFile(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	return callWithFile(mc, "call-with-input-file", security.ActionRead, os.Open,
 		func(f *os.File) values.Value {
 			return values.NewCharacterInputPortFromReader(f)
@@ -189,7 +190,8 @@ func PrimCallWithInputFile(mc *machine.MachineContext) error {
 }
 
 // PrimCallWithOutputFile implements the call-with-output-file primitive.
-func PrimCallWithOutputFile(mc *machine.MachineContext) error {
+func PrimCallWithOutputFile(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	return callWithFile(mc, "call-with-output-file", security.ActionWrite, os.Create,
 		func(f *os.File) values.Value {
 			return values.NewCharacterOutputPortFromWriter(f)

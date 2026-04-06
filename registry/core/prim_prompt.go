@@ -28,7 +28,7 @@ import (
 // creates a named tag for debugging purposes.
 //
 // Follows Racket's make-continuation-prompt-tag.
-func PrimMakeContinuationPromptTag(mc *machine.MachineContext) error {
+func PrimMakeContinuationPromptTag(mc machine.CallContext) error {
 	restVal := mc.Arg(0)
 	name := ""
 	if !values.IsEmptyList(restVal) {
@@ -47,7 +47,7 @@ func PrimMakeContinuationPromptTag(mc *machine.MachineContext) error {
 }
 
 // PrimDefaultContinuationPromptTag returns the default continuation prompt tag.
-func PrimDefaultContinuationPromptTag(mc *machine.MachineContext) error {
+func PrimDefaultContinuationPromptTag(mc machine.CallContext) error {
 	mc.SetValue(machine.DefaultPromptTag)
 	return nil
 }
@@ -67,7 +67,8 @@ var PrimContinuationPromptTagQ = helpers.MakeTypePredicate(func(o values.Value) 
 // If the thunk returns normally, its value is the result.
 //
 // Follows Racket's call-with-continuation-prompt.
-func PrimCallWithContinuationPrompt(mc *machine.MachineContext) error {
+func PrimCallWithContinuationPrompt(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	thunk := mc.Arg(0)
 	tagVal := mc.Arg(1)
 	handlerVal := mc.Arg(2)
@@ -155,7 +156,7 @@ func PrimCallWithContinuationPrompt(mc *machine.MachineContext) error {
 //
 // Returns an ErrPromptAbort that propagates up through Run() to the
 // enclosing call-with-continuation-prompt or RunWithEscapeHandling.
-func PrimAbortCurrentContinuation(mc *machine.MachineContext) error {
+func PrimAbortCurrentContinuation(mc machine.CallContext) error {
 	tag, err := helpers.RequireArg[*machine.PromptTag](mc, 0, werr.ErrNotAPromptTag, "abort-current-continuation")
 	if err != nil {
 		return err
@@ -190,7 +191,8 @@ func PrimAbortCurrentContinuation(mc *machine.MachineContext) error {
 // continuation frames and the context-level prompt.
 //
 // Racket §10.4: continuation-prompt-available?
-func PrimContinuationPromptAvailableQ(mc *machine.MachineContext) error {
+func PrimContinuationPromptAvailableQ(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	tag, err := helpers.RequireArg[*machine.PromptTag](mc, 0, werr.ErrNotAPromptTag, "continuation-prompt-available?")
 	if err != nil {
 		return err
@@ -210,7 +212,8 @@ func PrimContinuationPromptAvailableQ(mc *machine.MachineContext) error {
 // applied, splices its frames onto the current continuation chain.
 //
 // Follows Racket's call-with-composable-continuation.
-func PrimCallWithComposableContinuation(mc *machine.MachineContext) error {
+func PrimCallWithComposableContinuation(cc machine.CallContext) error {
+	mc := cc.(*machine.MachineContext)
 	proc := mc.Arg(0)
 	tagVal := mc.Arg(1)
 
@@ -239,13 +242,13 @@ func PrimCallWithComposableContinuation(mc *machine.MachineContext) error {
 
 	// Create the composable continuation value, recording the barrier context at
 	// capture time so applyComposableContinuation can detect barrier crossings.
-	cc := machine.NewComposableContinuation(segment, windingStack, mc.ThreadID(), mc.BarrierValid())
+	comp := machine.NewComposableContinuation(segment, windingStack, mc.ThreadID(), mc.BarrierValid())
 
 	// Call proc with the composable continuation.
 	// The result of proc becomes the value delivered to the prompt boundary.
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
-	_, err = sub.ApplyCallable(procCls, cc)
+	_, err = sub.ApplyCallable(procCls, comp)
 	if err != nil {
 		return err
 	}
