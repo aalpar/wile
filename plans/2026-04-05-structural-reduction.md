@@ -1,6 +1,6 @@
 # Structural Reduction Analysis — April 2026
 
-**Status**: Phases 1, 3 Complete
+**Status**: Phases 1, 3, D5 Complete; Phase 2 Rejected; D1 Stale
 **Date**: 2026-04-05
 **Method**: Full-codebase structural analysis (40 packages, Martin's instability metrics, type precision audit)
 **Related**: `TECH-DEBT-2026-04.md` (Phases 5, 8), `2026-03-30-machine-decomposition-design.md`
@@ -135,102 +135,55 @@ make lint && make test ./machine/... ./registry/... ./extensions/...
 
 ---
 
-## Phase 2: Table-Driven Promoted Ops (Medium impact, small effort)
+## Phase 2: Table-Driven Promoted Ops — REJECTED (2026-04-06)
 
 ### Problem
 
-`machine/machine_context.go:566-741` has 24 case branches in the VM dispatch loop,
-each identical except for data:
+34 case branches (17 ops × tail/non-tail) in the VM dispatch loop, each identical
+except for data passed to `execPromoted`. Hand-unrolled loop per Bird & de Moor.
 
-```go
-case OpEqQ:
-    mc, err = execPromoted(mc, instr, "eq?", 2, false, inlineEq)
-case OpEqQTail:
-    mc, err = execPromoted(mc, instr, "eq?", 2, true, inlineEq)
-// ... 22 more identical patterns
-```
+### Experiment
 
-This is a hand-unrolled loop: N blocks differing only in `(name, arity, inlineFunc)` x
-`{tail=false, tail=true}`. See Bird & de Moor, *Algebra of Programming* — the transition
-from enumeration to induction.
+Replaced 34 switch cases with `promotedOpTable` array (17 entries) + range check
+in the `default:` branch. All tests passed. Benchmarked with `make bench-gabriel`
+(6 runs averaged, Apple M4 Max).
 
-Adding a new promoted op requires editing 4 locations: opcode enum, Run() (2 cases),
-disassembly, and operationToInstruction.
+### Results
 
-### Fix
+| Benchmark  | Baseline | Table  | Change |
+|------------|----------|--------|--------|
+| tak        | 0.1150   | 0.1172 | +1.9%  |
+| takl       | 1.0691   | 1.0743 | +0.5%  |
+| ctak       | 1.6177   | 1.6475 | +1.8%  |
+| cpstak     | 0.1868   | 0.1890 | +1.2%  |
+| fib        | 0.3793   | 0.3861 | +1.8%  |
+| triangl    | 0.0404   | 0.0407 | +0.7%  |
+| sum        | 0.0319   | 0.0317 | -0.6%  |
+| sumfp      | 1.0607   | 1.0813 | +1.9%  |
+| diviter    | 2.3788   | 2.4065 | +1.2%  |
+| divrec     | 0.8847   | 0.8931 | +0.9%  |
+| deriv      | 0.1064   | 0.1081 | +1.6%  |
+| ackermann  | 0.4602   | 0.4757 | +3.4%  |
+| sieve      | 0.0877   | 0.0892 | +1.7%  |
+| nqueens    | 1.6474   | 1.6808 | +2.0%  |
+| primes     | 0.2315   | 0.2359 | +1.9%  |
+| peval      | 0.0816   | 0.0817 | +0.1%  |
 
-**Step 1**: Add metadata to `opcodeInfo` in `machine/opcode.go`:
+Geo mean regression: ~1.5%. 15/16 benchmarks slower.
 
-```go
-type opcodeInfo struct {
-    name        string
-    writesValue bool
-    isBranch    bool
-    operandKind OperandKind   // NEW: none, literalIdx, localIdx, branchOffset, cachedBinding, promoted
-}
+### Why
 
-type OperandKind uint8
-const (
-    OperandNone OperandKind = iota
-    OperandLiteralIdx
-    OperandLocalIdx       // bit-packed slot+depth
-    OperandBranchOffset
-    OperandCachedBinding
-    OperandPromoted
-)
-```
+Go compiles a contiguous-integer switch to a jump table (single indexed indirect
+jump). Moving promoted ops to the `default:` branch replaces this with: range check,
+two integer divisions, pointer-chased array load, indirect function call through the
+loaded entry. The jump table avoids all of these.
 
-**Step 2**: Add promoted op lookup table in `machine/call_promoted.go`:
+### Decision
 
-```go
-type promotedOpInfo struct {
-    name   string
-    arity  int
-    inline func(*MachineContext, Instruction) (*MachineContext, error)
-}
-
-// Indexed by (OpCode - firstPromotedOp) / 2 — each promoted op has non-tail + tail variant.
-var promotedOps = [...]promotedOpInfo{
-    {"eq?", 2, inlineEq},
-    {"vector?", 1, inlineVectorP},
-    {"vector-ref", 2, inlineVectorRef},
-    // ... 12 entries total
-}
-```
-
-**Step 3**: Replace 24 case branches in `Run()` with:
-
-```go
-default:
-    if instr.Op >= firstPromotedOp && instr.Op < opCount {
-        idx := (instr.Op - firstPromotedOp) / 2
-        tail := (instr.Op-firstPromotedOp)%2 == 1
-        info := &promotedOps[idx]
-        mc, err = execPromoted(mc, instr, info.name, info.arity, tail, info.inline)
-        if err != nil {
-            return err
-        }
-    }
-```
-
-**Caveat**: The VM dispatch loop is the hot path. The Go compiler optimizes the current
-switch to a jump table. A table lookup adds one indirection. **Profile before and after**
-using `make bench-gabriel` to verify no regression. If the table approach is measurably
-slower, keep the switch but generate it from the table at code-gen time (or accept the
-maintenance cost).
-
-**Step 4**: Simplify `Disassemble()` using `operandKind` metadata instead of case branches.
-
-**Step 5**: Simplify `instructionToOperation()` similarly.
-
-### Verify
-
-```
-make bench-gabriel  # before and after
-make lint && make test ./machine/...
-```
-
-### Effort: S-M
+**Keep the hand-unrolled switch.** The ~1.5% regression is real and consistent.
+The maintenance cost (4 edit sites per new promoted op) is acceptable given the
+low frequency of adding new promoted ops. Accept the trade-off: readability cost
+is the price of hot-path performance.
 
 ---
 
@@ -301,16 +254,10 @@ make lint && make test ./values/... ./extensions/threads/...
 
 These are documented for reference. Execute when working in the affected area.
 
-### D1: PrimitiveSpec Dead Fields
+### D1: PrimitiveSpec Dead Fields — STALE (removed 2026-04-06)
 
-**Where**: `registry/registry.go:23-34`
-**Issue**: `ParamTypes` (5% usage across 115 specs) and `ReturnType` (2% usage) are nearly
-dead. They suggest a contract system that doesn't exist at runtime.
-**Fix**: Remove both fields. If contract checking is needed later, implement as a separate
-opt-in `PrimitiveContract` type.
-**Impact**: Spec shrinks from 9 to 7 fields. Removes misleading API surface.
-**Cross-ref**: Relates to `2026-03-26-extension-contracts-design.md` — if contract system
-moves forward, these fields may be revived in a different form. Coordinate.
+Extension contracts Phase 1 (PRs #577-578) populated `ParamTypes` (170 specs) and
+`ReturnType` (129 specs) broadly. These fields are alive. No action.
 
 ### D2: ForeignClosure Redundant Fields
 
@@ -332,25 +279,25 @@ unused fields are nil but representable — type precision ~50%.
 representation invariant comment. Don't split the type unless allocation pressure
 is measured. The type is internal (not public API), so documentation suffices.
 
-### D4: LocalIndex / BindingID Overlap
+### D4: LocalIndex / BindingID Overlap — AUDITED (2026-04-06), No action
 
 **Where**: `environment/local_index.go:19-33`, `environment/binding_id.go:19-33`
-**Issue**: Two representations of "which binding?" — `LocalIndex` (relative, compile-time)
-and `BindingID` (absolute, runtime). They're different views of the same concept.
-**Recommendation**: Audit whether `BindingID` is used outside environment/. If internal-only,
-consider replacing with `LocalIndex`. If both are needed, document which phase uses which.
+**Issue**: Two representations of "which binding?"
+**Audit result**: `BindingID` is used in `internal/validate` (mutation tracking, capture
+analysis B1, escape analysis B2) and `machine/compilation` (inline candidate registry,
+recursion guard). These are map-key use cases requiring *stable identity* — a binding
+must produce the same key regardless of which frame references it.
+**Conclusion**: Not replaceable. `LocalIndex` is relative (slot+depth from a reference
+frame — same binding, different keys from different depths). `BindingID` is absolute
+(frame pointer + slot — same binding, same key always). Both needed; overlap is superficial.
 
-### D5: Opcode Metadata Consolidation
+### D5: Opcode Metadata Consolidation — DONE (2026-04-06)
 
-**Where**: `machine/opcode.go:96-170`
-**Issue**: Three dispatch loops over OpCode (Run, instructionToOperation, Disassemble)
-each re-derive operand semantics via case branches. Adding a new opcode means updating
-3 switch statements.
-**Fix**: Add `operandKind OperandKind` to `opcodeInfo`. `Disassemble()` and
-`instructionToOperation()` use metadata instead of case branches. Run() stays as switch
-(hot path — don't add indirection).
-**Note**: Partially addressed by Phase 2. If Phase 2 is implemented, D5 covers the
-remaining non-promoted opcodes.
+Added `operandKind OperandKind` to `opcodeInfo` (7 categories: None, Raw, LiteralIdx,
+LocalIdx, BranchOffset, CachedBinding, SideTable). `Disassemble()` and
+`instructionToOperation()` now switch on `opcodeTable[op].operandKind` instead of
+per-opcode case branches. Run() untouched (hot path). Adding a new promoted op now
+requires only 3 files (opcode.go, machine_context.go, call_promoted.go) instead of 5.
 
 ### D6: Number Interface ISP
 
@@ -379,13 +326,13 @@ the correct place for OS filesystem access. `FSFileResolver` has its own resolut
 | Phase | Task | Effort | Impact | Metric |
 |-------|------|--------|--------|--------|
 | 1 | CallContext interface | M | High | 77% coupling surface reduction across 12 packages |
-| 2 | Promoted op table | S-M | Medium | 24 cases -> 1 loop + 12-entry table; O(1) new-op cost |
+| 2 | Promoted op table | S-M | Medium | **REJECTED** — ~1.5% geo mean regression from jump table → default branch |
 | 3 | Thread outcome sum type | S | Medium | ✅ Eliminates impossible `result AND exception` states |
-| D1 | PrimitiveSpec dead fields | S | Low | 9 -> 7 fields |
+| D1 | PrimitiveSpec dead fields | — | — | **STALE** — fields populated by extension contracts Phase 1 |
 | D2 | ForeignClosure denorm | S | Low | 7 -> 5 fields |
 | D3 | Namespace root/child docs | S | Low | Documentation only |
-| D4 | LocalIndex/BindingID audit | S | Low | Potential type elimination |
-| D5 | Opcode operandKind metadata | S | Medium | 3 dispatch loops -> metadata-driven |
+| D4 | LocalIndex/BindingID audit | S | — | Audited: both needed (relative vs absolute identity) |
+| D5 | Opcode operandKind metadata | S | Medium | ✅ Disassemble + instructionToOperation metadata-driven; promoted ops 5→3 edit sites |
 | D6 | Number interface ISP | — | — | Deliberately not fixed (trade-off documented) |
 | D7 | environment os import | — | — | Already investigated (TECH-DEBT Task 2.1) |
 

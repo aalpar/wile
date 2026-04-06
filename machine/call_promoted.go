@@ -12,6 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// ADDING A NEW PROMOTED OP
+//
+// Promoted ops inline hot primitives directly in the VM dispatch loop,
+// bypassing arity check, arg binding, and indirect function call.
+// Each promoted op has a non-tail and tail variant.
+//
+// The 34 switch cases in Run() are deliberately hand-unrolled: Go compiles
+// them to a jump table. A table-driven approach was benchmarked and rejected
+// (~1.5% geo mean regression). See plans/2026-04-05-structural-reduction.md.
+//
+// Edit sites (3 files):
+//  1. opcode.go           — add OpXxx + OpXxxTail constants; add two opcodeTable entries
+//     with operandKind: OperandCachedBinding
+//  2. machine_context.go  — add two case branches in Run() (non-tail + tail),
+//     each calling execPromoted(mc, instr, name, arity, tail, inlineFn)
+//  3. call_promoted.go    — implement inlineXxx function; add case in promotedOpForName()
+//     (or call_promoted_arithmetic.go for numeric ops)
+//
+// No changes needed in native_template.go or disassemble.go — both use
+// opcodeTable[op].operandKind metadata to handle OperandCachedBinding generically.
+// The peephole optimizer (peephole.go) also needs no changes — it uses
+// promotedOpForName() to discover promoted ops generically.
 package machine
 
 import (

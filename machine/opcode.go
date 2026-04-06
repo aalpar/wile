@@ -27,6 +27,9 @@ package machine
 //  5. compile_*.go — add compiler method to emit the new opcode
 //  6. Relevant _test.go files
 //  7. peephole.go — if the new op participates in fusion/chaining (e.g. loadToFusedPush)
+//
+// For promoted primitive ops specifically, see the guide comment at the top
+// of call_promoted.go — promoted ops have a different (smaller) set of edit sites.
 type OpCode uint16
 
 const (
@@ -130,13 +133,37 @@ const (
 	opCount
 )
 
+// OperandKind classifies what an opcode's Arg field means. Used by
+// cold-path consumers (Disassemble, instructionToOperation) to avoid
+// re-deriving operand semantics in per-opcode switch branches.
+type OperandKind uint8
+
+const (
+	// OperandNone means Arg is unused (zero-operand ops).
+	OperandNone OperandKind = iota
+	// OperandRaw means Arg is a meaningful integer but needs no resolution
+	// (e.g., PushEnv slot count, PeekK depth).
+	OperandRaw
+	// OperandLiteralIdx means Arg indexes into the literals pool.
+	OperandLiteralIdx
+	// OperandLocalIdx means Arg is a bit-packed (slot, depth) pair.
+	OperandLocalIdx
+	// OperandBranchOffset means Arg is a relative PC offset.
+	OperandBranchOffset
+	// OperandCachedBinding means Arg indexes into cachedBindings.
+	OperandCachedBinding
+	// OperandSideTable means Arg indexes into the side table.
+	OperandSideTable
+)
+
 // opcodeInfo holds metadata for a single opcode. All opcode properties are
 // centralized here so that adding a new opcode requires updating exactly one
 // table entry rather than maintaining parallel arrays and predicates.
 type opcodeInfo struct {
 	name        string
-	writesValue bool // unconditionally writes value register without reading it first
-	isBranch    bool // Arg is a relative PC offset that needs fixup
+	operandKind OperandKind // what Arg means (used by Disassemble, instructionToOperation)
+	writesValue bool        // unconditionally writes value register without reading it first
+	isBranch    bool        // Arg is a relative PC offset that needs fixup
 }
 
 // opcodeTable is the single source of truth for opcode metadata.
@@ -158,62 +185,62 @@ var opcodeTable = [opCount]opcodeInfo{
 	OpApply:                 {name: "Apply"},
 	OpUnpackListToStack:     {name: "UnpackListToStack"},
 	OpRestoreContinuation:   {name: "RestoreContinuation"},
-	OpBranchOnFalseValue:    {name: "BranchOnFalseValue", isBranch: true},
-	OpBranch:                {name: "Branch", isBranch: true},
-	OpSaveContinuation:      {name: "SaveContinuation", isBranch: true},
-	OpLoadLiteral:           {name: "LoadLiteral", writesValue: true},
-	OpLoadGlobal:            {name: "LoadGlobal", writesValue: true},
-	OpStoreGlobal:           {name: "StoreGlobal"},
-	OpPeekK:                 {name: "PeekK", writesValue: true},
-	OpPushEnv:               {name: "PushEnv"},
-	OpLoadLocal:             {name: "LoadLocal", writesValue: true},
-	OpStoreLocal:            {name: "StoreLocal"},
-	OpPushLiteral:           {name: "PushLiteral"},
-	OpPushGlobal:            {name: "PushGlobal"},
-	OpPushLocal:             {name: "PushLocal"},
+	OpBranchOnFalseValue:    {name: "BranchOnFalseValue", operandKind: OperandBranchOffset, isBranch: true},
+	OpBranch:                {name: "Branch", operandKind: OperandBranchOffset, isBranch: true},
+	OpSaveContinuation:      {name: "SaveContinuation", operandKind: OperandBranchOffset, isBranch: true},
+	OpLoadLiteral:           {name: "LoadLiteral", operandKind: OperandLiteralIdx, writesValue: true},
+	OpLoadGlobal:            {name: "LoadGlobal", operandKind: OperandLiteralIdx, writesValue: true},
+	OpStoreGlobal:           {name: "StoreGlobal", operandKind: OperandLiteralIdx},
+	OpPeekK:                 {name: "PeekK", operandKind: OperandRaw, writesValue: true},
+	OpPushEnv:               {name: "PushEnv", operandKind: OperandRaw},
+	OpLoadLocal:             {name: "LoadLocal", operandKind: OperandLocalIdx, writesValue: true},
+	OpStoreLocal:            {name: "StoreLocal", operandKind: OperandLocalIdx},
+	OpPushLiteral:           {name: "PushLiteral", operandKind: OperandLiteralIdx},
+	OpPushGlobal:            {name: "PushGlobal", operandKind: OperandLiteralIdx},
+	OpPushLocal:             {name: "PushLocal", operandKind: OperandLocalIdx},
 	OpPullApply:             {name: "PullApply"},
 	OpMakeClosure:           {name: "MakeClosure", writesValue: true},
-	OpLoadCachedBinding:     {name: "LoadCachedBinding", writesValue: true},
-	OpPushCachedBinding:     {name: "PushCachedBinding"},
-	OpCallForeignCached:     {name: "CallForeignCached"},
-	OpCallForeignCachedTail: {name: "CallForeignCachedTail"},
-	OpCallLocal:             {name: "CallLocal"},
-	OpCallCachedBinding:     {name: "CallCachedBinding"},
-	OpEqQ:                   {name: "EqQ"},
-	OpEqQTail:               {name: "EqQTail"},
-	OpVectorQ:               {name: "VectorQ"},
-	OpVectorQTail:           {name: "VectorQTail"},
-	OpVectorRef:             {name: "VectorRef"},
-	OpVectorRefTail:         {name: "VectorRefTail"},
-	OpNullQ:                 {name: "NullQ"},
-	OpNullQTail:             {name: "NullQTail"},
-	OpPairQ:                 {name: "PairQ"},
-	OpPairQTail:             {name: "PairQTail"},
-	OpCar:                   {name: "Car"},
-	OpCarTail:               {name: "CarTail"},
-	OpCdr:                   {name: "Cdr"},
-	OpCdrTail:               {name: "CdrTail"},
-	OpAdd:                   {name: "Add"},
-	OpAddTail:               {name: "AddTail"},
-	OpSub:                   {name: "Sub"},
-	OpSubTail:               {name: "SubTail"},
-	OpNumLt:                 {name: "NumLt"},
-	OpNumLtTail:             {name: "NumLtTail"},
-	OpNumLe:                 {name: "NumLe"},
-	OpNumLeTail:             {name: "NumLeTail"},
-	OpNumGt:                 {name: "NumGt"},
-	OpNumGtTail:             {name: "NumGtTail"},
-	OpNumGe:                 {name: "NumGe"},
-	OpNumGeTail:             {name: "NumGeTail"},
-	OpNumEq:                 {name: "NumEq"},
-	OpNumEqTail:             {name: "NumEqTail"},
-	OpCons:                  {name: "Cons"},
-	OpConsTail:              {name: "ConsTail"},
-	OpMul:                   {name: "Mul"},
-	OpMulTail:               {name: "MulTail"},
-	OpDiv:                   {name: "Div"},
-	OpDivTail:               {name: "DivTail"},
-	OpComplex:               {name: "Complex"},
+	OpLoadCachedBinding:     {name: "LoadCachedBinding", operandKind: OperandCachedBinding, writesValue: true},
+	OpPushCachedBinding:     {name: "PushCachedBinding", operandKind: OperandCachedBinding},
+	OpCallForeignCached:     {name: "CallForeignCached", operandKind: OperandCachedBinding},
+	OpCallForeignCachedTail: {name: "CallForeignCachedTail", operandKind: OperandCachedBinding},
+	OpCallLocal:             {name: "CallLocal", operandKind: OperandLocalIdx},
+	OpCallCachedBinding:     {name: "CallCachedBinding", operandKind: OperandCachedBinding},
+	OpEqQ:                   {name: "EqQ", operandKind: OperandCachedBinding},
+	OpEqQTail:               {name: "EqQTail", operandKind: OperandCachedBinding},
+	OpVectorQ:               {name: "VectorQ", operandKind: OperandCachedBinding},
+	OpVectorQTail:           {name: "VectorQTail", operandKind: OperandCachedBinding},
+	OpVectorRef:             {name: "VectorRef", operandKind: OperandCachedBinding},
+	OpVectorRefTail:         {name: "VectorRefTail", operandKind: OperandCachedBinding},
+	OpNullQ:                 {name: "NullQ", operandKind: OperandCachedBinding},
+	OpNullQTail:             {name: "NullQTail", operandKind: OperandCachedBinding},
+	OpPairQ:                 {name: "PairQ", operandKind: OperandCachedBinding},
+	OpPairQTail:             {name: "PairQTail", operandKind: OperandCachedBinding},
+	OpCar:                   {name: "Car", operandKind: OperandCachedBinding},
+	OpCarTail:               {name: "CarTail", operandKind: OperandCachedBinding},
+	OpCdr:                   {name: "Cdr", operandKind: OperandCachedBinding},
+	OpCdrTail:               {name: "CdrTail", operandKind: OperandCachedBinding},
+	OpAdd:                   {name: "Add", operandKind: OperandCachedBinding},
+	OpAddTail:               {name: "AddTail", operandKind: OperandCachedBinding},
+	OpSub:                   {name: "Sub", operandKind: OperandCachedBinding},
+	OpSubTail:               {name: "SubTail", operandKind: OperandCachedBinding},
+	OpNumLt:                 {name: "NumLt", operandKind: OperandCachedBinding},
+	OpNumLtTail:             {name: "NumLtTail", operandKind: OperandCachedBinding},
+	OpNumLe:                 {name: "NumLe", operandKind: OperandCachedBinding},
+	OpNumLeTail:             {name: "NumLeTail", operandKind: OperandCachedBinding},
+	OpNumGt:                 {name: "NumGt", operandKind: OperandCachedBinding},
+	OpNumGtTail:             {name: "NumGtTail", operandKind: OperandCachedBinding},
+	OpNumGe:                 {name: "NumGe", operandKind: OperandCachedBinding},
+	OpNumGeTail:             {name: "NumGeTail", operandKind: OperandCachedBinding},
+	OpNumEq:                 {name: "NumEq", operandKind: OperandCachedBinding},
+	OpNumEqTail:             {name: "NumEqTail", operandKind: OperandCachedBinding},
+	OpCons:                  {name: "Cons", operandKind: OperandCachedBinding},
+	OpConsTail:              {name: "ConsTail", operandKind: OperandCachedBinding},
+	OpMul:                   {name: "Mul", operandKind: OperandCachedBinding},
+	OpMulTail:               {name: "MulTail", operandKind: OperandCachedBinding},
+	OpDiv:                   {name: "Div", operandKind: OperandCachedBinding},
+	OpDivTail:               {name: "DivTail", operandKind: OperandCachedBinding},
+	OpComplex:               {name: "Complex", operandKind: OperandSideTable},
 }
 
 // String returns the human-readable name of the opcode.

@@ -52,6 +52,17 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 - [x] **ExpanderTimeContinuation convention deviations** [Low, M, Done]: Fixed 18 deviations in expander files: 13 bare `return nil, err` wrapped with `WrapForeignErrorf` context, 5 `.IsEmptyList()` replaced with `syntax.IsSyntaxEmptyList()`. SourceContext and NewSyntaxCons conventions were already followed in expander files; remaining deviations (if any) are in other compilation files.
 - [ ] **Error sentinel grouping** [Low, S]: ~109 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.
+- [x] **Opcode metadata consolidation (D5)** [Low, S, Done]: Added `OperandKind` enum (7 categories) to `opcodeInfo`. `Disassemble()` and `instructionToOperation()` now switch on metadata instead of per-opcode case branches. Adding a new promoted op dropped from 5 edit sites to 3. `Run()` untouched (hot path). `plans/2026-04-05-structural-reduction.md`
+
+### Structural Reduction — Investigated, No Action
+
+These items from `plans/2026-04-05-structural-reduction.md` were investigated and determined to not warrant changes:
+
+- [x] **Promoted op table (Phase 2)** [Rejected]: Replacing 34 switch cases with table-driven dispatch regressed ~1.5% geo mean across 16 Gabriel benchmarks (15/16 slower, worst ackermann +3.4%). Go compiles contiguous-integer switches to jump tables; the table-driven `default:` branch adds range check + array index + indirect load. The maintenance cost of hand-unrolled cases is the accepted trade-off.
+- [x] **PrimitiveSpec dead fields (D1)** [Stale]: Originally flagged as 5% `ParamTypes` / 2% `ReturnType` usage. Extension contracts Phase 1 (PRs #577-578) populated both fields broadly (170 and 129 specs respectively). No longer dead.
+- [x] **ForeignClosure redundant fields (D2)** [Accepted]: `doc` field duplicates `PrimitiveSpec.Doc` but costs only ~3.2KB total (8 bytes × ~400 closures), is set once at registration and cannot diverge. Removing requires circular import workarounds or Closure interface changes — complexity exceeds benefit. `validate` field is active (contract enforcement at dispatch).
+- [x] **Namespace root/child state waste (D3)** [Accepted]: Child namespaces have ~6 nil/unused fields out of 16. Not worth splitting: (1) every nil field has a delegation method, (2) splitting forces an interface (hot-path dispatch cost) or wrapper (indirection), (3) children are rare (~handful per VM lifetime), saving ~24 bytes is meaningless, (4) zero-value mutexes and nil maps cost nothing.
+- [x] **LocalIndex / BindingID overlap (D4)** [Audited]: `BindingID` used in `internal/validate` (mutation/capture/escape analysis) and `machine/compilation` (inline candidates). Not replaceable by `LocalIndex` — `LocalIndex` is relative (slot+depth from a reference frame, same binding gives different keys at different depths), `BindingID` is absolute (frame pointer + slot, stable identity). Both needed.
 
 ### Postponed
 

@@ -86,15 +86,15 @@ func Disassemble(tpl *NativeTemplate) DisassembledTemplate {
 			PC:     pc,
 			Op:     instr.Op.String(),
 			Arg:    instr.Arg,
-			HasArg: opcodeHasArg(instr.Op.String()),
+			HasArg: opcodeHasArg(instr.Op),
 			Slot:   -1,
 			Depth:  -1,
 			Target: -1,
 		}
 
-		switch instr.Op {
-		// Literal pool ops.
-		case OpLoadLiteral, OpPushLiteral:
+		// Annotate based on operand kind from opcode metadata.
+		switch opcodeTable[instr.Op].operandKind {
+		case OperandLiteralIdx:
 			idx := int(instr.Arg)
 			if idx >= 0 && idx < len(literals) {
 				di.Literal = literals[idx].SchemeString()
@@ -102,29 +102,15 @@ func Disassemble(tpl *NativeTemplate) DisassembledTemplate {
 				di.Literal = fmt.Sprintf("<invalid-literal-index:%d>", idx)
 			}
 
-		// Global ops: the literal at Arg is the symbol name.
-		case OpLoadGlobal, OpStoreGlobal, OpPushGlobal:
-			idx := int(instr.Arg)
-			if idx >= 0 && idx < len(literals) {
-				di.Literal = literals[idx].SchemeString()
-			} else {
-				di.Literal = fmt.Sprintf("<invalid-literal-index:%d>", idx)
-			}
-
-		// Local ops: bit-packed slot|depth.
-		case OpLoadLocal, OpStoreLocal, OpPushLocal, OpCallLocal:
+		case OperandLocalIdx:
 			slot, depth := DecodeLocalIndex(instr.Arg)
 			di.Slot = slot
 			di.Depth = depth
 
-		// Branch/save ops: relative offset -> absolute target.
-		case OpBranchOnFalseValue, OpBranch, OpSaveContinuation:
+		case OperandBranchOffset:
 			di.Target = pc + int(instr.Arg)
 
-		// Cached binding ops.
-		case OpLoadCachedBinding, OpPushCachedBinding,
-			OpCallForeignCached, OpCallForeignCachedTail,
-			OpCallCachedBinding:
+		case OperandCachedBinding:
 			idx := int(instr.Arg)
 			if idx >= 0 && idx < len(bindings) {
 				di.Binding = bindingName(bindings[idx])
@@ -132,33 +118,7 @@ func Disassemble(tpl *NativeTemplate) DisassembledTemplate {
 				di.Binding = fmt.Sprintf("<invalid-binding-index:%d>", idx)
 			}
 
-		// Promoted ops: Arg = index into cachedBindings.
-		case OpEqQ, OpEqQTail,
-			OpVectorQ, OpVectorQTail,
-			OpVectorRef, OpVectorRefTail,
-			OpNullQ, OpNullQTail,
-			OpPairQ, OpPairQTail,
-			OpCar, OpCarTail,
-			OpCdr, OpCdrTail,
-			OpAdd, OpAddTail,
-			OpSub, OpSubTail,
-			OpMul, OpMulTail,
-			OpDiv, OpDivTail,
-			OpNumLt, OpNumLtTail,
-			OpNumLe, OpNumLeTail,
-			OpNumGt, OpNumGtTail,
-			OpNumGe, OpNumGeTail,
-			OpNumEq, OpNumEqTail,
-			OpCons, OpConsTail:
-			idx := int(instr.Arg)
-			if idx >= 0 && idx < len(bindings) {
-				di.Binding = bindingName(bindings[idx])
-			} else {
-				di.Binding = fmt.Sprintf("<invalid-binding-index:%d>", idx)
-			}
-
-		// Side table complex ops.
-		case OpComplex:
+		case OperandSideTable:
 			idx := int(instr.Arg)
 			if idx >= 0 && idx < len(sideTable) {
 				di.SideOp = fmt.Sprint(sideTable[idx])
@@ -166,14 +126,13 @@ func Disassemble(tpl *NativeTemplate) DisassembledTemplate {
 				di.SideOp = fmt.Sprintf("<invalid-sidetable-index:%d>", idx)
 			}
 
-		// MakeClosure: annotate with the preceding literal's template name.
-		case OpMakeClosure:
-			di.Literal = makeClosureAnnotation(pc, code, literals)
-
-		// PushEnv: Arg = slot count (shown in ARG column).
-		// PeekK: Arg = depth (shown in ARG column).
-		default:
+		case OperandNone, OperandRaw:
 			// No special annotation needed.
+		}
+
+		// Special-case: MakeClosure annotates with the preceding literal's template name.
+		if instr.Op == OpMakeClosure {
+			di.Literal = makeClosureAnnotation(pc, code, literals)
 		}
 
 		// Source location.
@@ -237,15 +196,8 @@ func makeClosureAnnotation(pc int, code []Instruction, literals MultipleValues) 
 
 // opcodeHasArg returns true for opcodes where Arg=0 is still meaningful
 // and should be printed (as opposed to zero-operand ops where Arg is unused).
-func opcodeHasArg(op string) bool {
-	switch op {
-	case "Push", "Pop", "Pull", "LoadVoid", "Drop", "PopEnv",
-		"Apply", "UnpackListToStack", "RestoreContinuation",
-		"PullApply", "MakeClosure":
-		return false
-	default:
-		return true
-	}
+func opcodeHasArg(op OpCode) bool {
+	return opcodeTable[op].operandKind != OperandNone
 }
 
 // formatDetail builds the DETAIL column string from a DisassembledInstruction.
