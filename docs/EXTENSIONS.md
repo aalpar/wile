@@ -87,7 +87,7 @@ func addPrimitives(r *registry.Registry) error {
     return nil
 }
 
-func primDouble(mc *machine.MachineContext) error {
+func primDouble(mc machine.CallContext) error {
     n, ok := mc.Arg(0).(values.Number)
     if !ok {
         return werr.WrapForeignErrorf(werr.ErrNotANumber, "double: expected number")
@@ -314,13 +314,13 @@ A primitive implementation has the type `machine.ForeignFunction`:
 
 ```go
 // machine.ForeignFunction
-func(mc *machine.MachineContext) error
+func(mc machine.CallContext) error
 ```
 
 ### Accessing Arguments
 
 ```go
-func primAdd(mc *machine.MachineContext) error {
+func primAdd(mc machine.CallContext) error {
     a, ok := mc.Arg(0).(values.Number)
     if !ok {
         return werr.WrapForeignErrorf(werr.ErrNotANumber, "add: first argument")
@@ -342,7 +342,7 @@ a proper list of the excess arguments:
 
 ```go
 // (my-sum x ...) — ParamCount: 1, IsVariadic: true
-func primMySum(mc *machine.MachineContext) error {
+func primMySum(mc machine.CallContext) error {
     rest := mc.Arg(0) // proper list of all arguments
     // Walk the list...
 }

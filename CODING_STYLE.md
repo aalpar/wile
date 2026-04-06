@@ -687,7 +687,7 @@ func (p *SomeType) Add(o Number) Number {
 All primitives follow this pattern:
 
 ```go
-func PrimXxx(mc *machine.MachineContext) error {
+func PrimXxx(mc machine.CallContext) error {
     // 1. Extract arguments
     arg := mc.Arg(0)
 
@@ -715,7 +715,7 @@ For primitives accepting variable arguments, use `values.Tuple` (not `*values.Pa
 // mc.Arg(0) = first argument (direct)
 // mc.Arg(1) = rest of arguments as Tuple (Pair or EmptyList)
 
-func PrimXxxVariadic(mc *machine.MachineContext) error {
+func PrimXxxVariadic(mc machine.CallContext) error {
     first := mc.Arg(0)
     rest := mc.Arg(1)
 

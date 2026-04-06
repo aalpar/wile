@@ -48,7 +48,8 @@
 //
 // Go functions are exposed as [ForeignFunction] implementations:
 //
-//	type ForeignFunction func(*MachineContext) error
+//	type ForeignFunction func(CallContext) error
 //
+// [CallContext] is the narrow interface (7 methods) that extensions depend on.
 // The [ForeignClosure] type wraps these for the VM.
 package machine
