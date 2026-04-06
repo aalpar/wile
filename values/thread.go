@@ -92,6 +92,14 @@ func (p ThreadState) String() string {
 	}
 }
 
+// threadOutcome holds the terminal result of a thread's execution.
+// Nil until the thread terminates; then exactly one of value or err
+// is meaningful (err != nil means abnormal termination).
+type threadOutcome struct {
+	value Value
+	err   error
+}
+
 // Thread represents a Scheme thread (SRFI-18)
 type Thread struct {
 	id       uint64
@@ -102,9 +110,8 @@ type Thread struct {
 	mu    sync.Mutex
 	state ThreadState
 
-	// Execution result
-	result    Value // result when terminated normally
-	exception error // exception if terminated abnormally
+	// Execution outcome — nil until terminated, then non-nil.
+	outcome *threadOutcome
 
 	// Go runtime integration
 	ctx    context.Context
@@ -239,9 +246,9 @@ func (p *Thread) Start(parentCtx context.Context) error {
 				p.state = ThreadTerminated
 				switch v := r.(type) {
 				case error:
-					p.exception = werr.WrapForeignErrorWithCause(werr.ErrThreadPanic, v, "thread %q: panic recovery", p.name)
+					p.outcome = &threadOutcome{err: werr.WrapForeignErrorWithCause(werr.ErrThreadPanic, v, "thread %q: panic recovery", p.name)}
 				default:
-					p.exception = werr.WrapForeignErrorf(werr.ErrThreadPanic, "thread %q: panic recovery: %v", p.name, r)
+					p.outcome = &threadOutcome{err: werr.WrapForeignErrorf(werr.ErrThreadPanic, "thread %q: panic recovery: %v", p.name, r)}
 				}
 				p.mu.Unlock()
 			}
@@ -252,9 +259,9 @@ func (p *Thread) Start(parentCtx context.Context) error {
 		p.mu.Lock()
 		p.state = ThreadTerminated
 		if err != nil {
-			p.exception = err
+			p.outcome = &threadOutcome{err: err}
 		} else {
-			p.result = result
+			p.outcome = &threadOutcome{value: result}
 		}
 		p.mu.Unlock()
 	}()
@@ -279,10 +286,10 @@ func (p *Thread) Join(timeout *time.Duration) (Value, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.exception != nil {
-		return nil, &UncaughtThreadException{Reason: p.exception}
+	if p.outcome.err != nil {
+		return nil, &UncaughtThreadException{Reason: p.outcome.err}
 	}
-	return p.result, nil
+	return p.outcome.value, nil
 }
 
 // Terminate forcefully terminates the thread.
@@ -306,7 +313,7 @@ func (p *Thread) Terminate() {
 		p.cancel()
 	}
 	p.state = ThreadTerminated
-	p.exception = &TerminatedThreadException{Thread: p}
+	p.outcome = &threadOutcome{err: &TerminatedThreadException{Thread: p}}
 }
 
 // Yield yields execution to other threads
