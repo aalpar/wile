@@ -53,11 +53,11 @@ const (
 	TypeTextualOutputPort                  // TextualWriter interface
 	TypeBinaryInputPort                    // BinaryReader interface
 	TypeBinaryOutputPort                   // BinaryWriter interface
-	typeCount                              // sentinel — must be last
+	TypeCount                              // sentinel — must be last
 )
 
 // typeNames maps each ValueType to its display name.
-var typeNames = [typeCount]string{
+var typeNames = [TypeCount]string{
 	TypeAny:               "any",
 	TypeVoid:              "void",
 	TypeBoolean:           "boolean",
@@ -89,14 +89,14 @@ var typeNames = [typeCount]string{
 
 // String returns the Scheme-style name for the type (e.g., "integer", "pair").
 func (p ValueType) String() string {
-	if p >= typeCount {
+	if p >= TypeCount {
 		return "unknown"
 	}
 	return typeNames[p]
 }
 
 // typeDescriptions maps each ValueType to a human-readable description.
-var typeDescriptions = [typeCount]string{
+var typeDescriptions = [TypeCount]string{
 	TypeAny:               "any value",
 	TypeVoid:              "void (no meaningful return value)",
 	TypeBoolean:           "boolean (#t or #f)",
@@ -128,7 +128,7 @@ var typeDescriptions = [typeCount]string{
 
 // Description returns a human-readable description of the type constraint.
 func (p ValueType) Description() string {
-	if p >= typeCount {
+	if p >= TypeCount {
 		return "unknown type"
 	}
 	return typeDescriptions[p]
@@ -140,7 +140,7 @@ func (p ValueType) Description() string {
 type checkFunc func(Value) (any, bool, error)
 
 // checks is populated in init() with a checker for each ValueType.
-var checks [typeCount]checkFunc
+var checks [TypeCount]checkFunc
 
 func init() {
 	checks[TypeAny] = func(v Value) (any, bool, error) {
@@ -200,7 +200,7 @@ func init() {
 	checks[TypeBinaryOutputPort] = makeInterfaceCheck[BinaryWriter]("binary-output-port")
 
 	// Verify all slots are populated — catches missing entries when new types are added.
-	for i := range typeCount {
+	for i := range TypeCount {
 		if typeNames[i] == "" {
 			panic("values: missing typeNames entry for ValueType " + fmt.Sprint(i))
 		}
@@ -217,7 +217,7 @@ func init() {
 // On success, returns the narrowed value and true.
 // On failure, returns nil, false, and an error describing the mismatch.
 func (p ValueType) Check(v Value) (any, bool, error) {
-	if p >= typeCount {
+	if p >= TypeCount {
 		return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument, "invalid ValueType %d", p)
 	}
 	return checks[p](v)
