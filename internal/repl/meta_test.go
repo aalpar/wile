@@ -10,6 +10,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/internal/bootstrap"
+	"github.com/aalpar/wile/internal/docparse"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/values"
@@ -595,6 +596,39 @@ func TestCmdDisassemble_Alias(t *testing.T) {
 	handled := h.Handle(",dis", &buf)
 	qt.Assert(t, handled, qt.IsTrue)
 	qt.Assert(t, strings.Contains(buf.String(), "Usage"), qt.IsTrue)
+}
+
+func TestFormatPrimitiveDoc_FromDocparse(t *testing.T) {
+	c := qt.New(t)
+
+	raw := "Multiply two numbers.\nParameters:\n  x : number\n  y : number\nReturns: number\nCategory: arithmetic"
+	parsed := docparse.ParseDocstring(raw)
+	c.Assert(parsed.HasStructuredMetadata(), qt.IsTrue)
+
+	info := DocInfo{
+		Doc:        parsed.Doc,
+		ParamNames: parsed.ParamNames,
+		ParamTypes: parsed.ParamTypes,
+		ReturnType: parsed.ReturnType,
+		Category:   parsed.Category,
+	}
+
+	var buf strings.Builder
+	formatPrimitiveDoc(&buf, "my-multiply", info, false)
+	output := buf.String()
+
+	c.Assert(strings.Contains(output, "(my-multiply x y)"), qt.IsTrue,
+		qt.Commentf("should have signature: %s", output))
+	c.Assert(strings.Contains(output, "number"), qt.IsTrue,
+		qt.Commentf("should have return type: %s", output))
+	c.Assert(strings.Contains(output, "x : number"), qt.IsTrue,
+		qt.Commentf("should have param type for x: %s", output))
+	c.Assert(strings.Contains(output, "y : number"), qt.IsTrue,
+		qt.Commentf("should have param type for y: %s", output))
+	c.Assert(strings.Contains(output, "Category: arithmetic"), qt.IsTrue,
+		qt.Commentf("should have category: %s", output))
+	c.Assert(strings.Contains(output, "Multiply two numbers."), qt.IsTrue,
+		qt.Commentf("should have description: %s", output))
 }
 
 func TestMetaHandleDebugDelegation(t *testing.T) {

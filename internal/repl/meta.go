@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/internal/docparse"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/values"
@@ -424,6 +425,22 @@ func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding,
 		fmt.Fprintf(w, "%s: syntax transformer (%s)\n", name, phaseName)
 	case environment.BindingTypeVariable:
 		val := bnd.Value()
+
+		// Try structured docstring for closures.
+		if raw := callableDoc(val); raw != "" {
+			parsed := docparse.ParseDocstring(raw)
+			if parsed.HasStructuredMetadata() {
+				formatPrimitiveDoc(w, name, DocInfo{
+					Doc:        parsed.Doc,
+					ParamNames: parsed.ParamNames,
+					ParamTypes: parsed.ParamTypes,
+					ReturnType: parsed.ReturnType,
+					Category:   parsed.Category,
+				}, showExamples)
+				return
+			}
+		}
+
 		fmt.Fprintf(w, "%s: %s (%s)\n", name, val.SchemeString(), phaseName)
 	default:
 		fmt.Fprintf(w, "%s: bound in %s\n", name, phaseName)
