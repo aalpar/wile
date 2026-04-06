@@ -16,6 +16,7 @@ package compilation
 
 import (
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/internal/forms"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/internal/validate"
 	"github.com/aalpar/wile/werr"
@@ -31,6 +32,23 @@ func RegisterAllPhaseHandlers(env *environment.EnvironmentFrame) error {
 		return err
 	}
 	return RegisterPrimitiveExpanders(env)
+}
+
+// VerifyAllPhaseHandlers cross-checks all three phase registries:
+// form validators (internal/forms), compilers (Tier 1 + Tier 2), and
+// primitive expanders. Returns the first inconsistency found, or nil.
+//
+// Call from tests only — not on the production init path.
+func VerifyAllPhaseHandlers() error {
+	err := forms.Verify()
+	if err != nil {
+		return err
+	}
+	err = VerifyCompilers()
+	if err != nil {
+		return err
+	}
+	return VerifyExpanders()
 }
 
 func init() {

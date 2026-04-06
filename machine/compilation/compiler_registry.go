@@ -85,6 +85,29 @@ func VerifyCompilers() error {
 			missing = append(missing, name+": missing compiler")
 		}
 	}
+	return formatMissing("compiler", missing)
+}
+
+// VerifyExpanders checks that every Tier 2 syntax compiler entry has a
+// corresponding primitive expander entry. A Tier 2 form without an expander
+// is silently treated as a procedure call during expansion — the most
+// dangerous form of registration drift.
+func VerifyExpanders() error {
+	expanderNames := make(map[string]bool, len(primitiveExpanderEntries))
+	for _, e := range primitiveExpanderEntries {
+		expanderNames[e.Name] = true
+	}
+
+	var missing []string
+	for _, e := range syntaxCompilerEntries {
+		if !expanderNames[e.Name] {
+			missing = append(missing, e.Name+": syntax compiler has no expander")
+		}
+	}
+	return formatMissing("expander", missing)
+}
+
+func formatMissing(kind string, missing []string) error {
 	if len(missing) == 0 {
 		return nil
 	}
@@ -95,5 +118,5 @@ func VerifyCompilers() error {
 		b.WriteString(m)
 	}
 	return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-		"compiler registration inconsistencies:%s", b.String())
+		"%s registration inconsistencies:%s", kind, b.String())
 }

@@ -65,3 +65,22 @@ func TestSyntaxCompilerRegistrationConsistency(t *testing.T) {
 func TestLookupCompilerMiss(t *testing.T) {
 	qt.Assert(t, LookupCompiler("definitely-not-a-form"), qt.IsNil)
 }
+
+func TestVerifyAllPhaseHandlers(t *testing.T) {
+	err := VerifyAllPhaseHandlers()
+	qt.Assert(t, err, qt.IsNil)
+}
+
+func TestVerifyExpanders_SyntaxCompilersHaveExpanders(t *testing.T) {
+	// Every syntax compiler entry must have a corresponding expander.
+	// A Tier 2 form without an expander is silently treated as a
+	// procedure call during expansion.
+	expanderNames := make(map[string]bool, len(primitiveExpanderEntries))
+	for _, e := range primitiveExpanderEntries {
+		expanderNames[e.Name] = true
+	}
+	for _, e := range syntaxCompilerEntries {
+		qt.Assert(t, expanderNames[e.Name], qt.IsTrue,
+			qt.Commentf("syntax compiler %q has no primitive expander entry", e.Name))
+	}
+}

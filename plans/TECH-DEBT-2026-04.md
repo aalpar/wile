@@ -54,25 +54,17 @@ Bootstrap now only sets `OSFileResolver` when `namespace.FileResolver()` is nil,
 
 ---
 
-## Phase 3: Registration Unification (High priority, medium effort)
+## Phase 3: Registration Unification (High priority, medium effort) — COMPLETE
 
 Three forms of registration drift that can cause silent bugs during feature work.
 
-### Task 3.1: Unify syntax compiler dual registration
+### Task 3.1: ~~Unify syntax compiler dual registration~~ [Done]
 
-**Files:** `machine/compilation/register.go:23-50` (`init()` → `compilerRegistry`), `machine/compilation/syntax_compilers_registry.go:38-65` (`RegisterSyntaxCompilers()` → compile-time environment)
-**Problem:** The same 19 syntax compiler entries appear in two separate registration mechanisms. Both lists must stay in sync but nothing cross-checks them. A form added to one but missed in the other silently breaks either dispatch or library export.
-**Fix:** Build a single `[]struct{ name string; fn SyntaxCompilerFunc }` slice that feeds both registration paths. The `compilerRegistry` wraps each entry with the `syntaxCompiler()` adapter; `RegisterSyntaxCompilers` wraps with `NewSyntaxCompiler()`. Eliminate the `SyntaxCompilerFunc` / `CompilerFunc` adapter boilerplate.
-**Effort:** M
-**Verify:** `make lint && make test ./machine/...`
+Single `syntaxCompilerEntries` slice feeds both `compilerRegistry` (dispatch) and `RegisterSyntaxCompilers` (compile-time environment). `TestSyntaxCompilerRegistrationConsistency` guards against out-of-band registration.
 
-### Task 3.2: Consolidate phase registration calls
+### Task 3.2: ~~Consolidate phase registration calls~~ [Done]
 
-**Files:** `engine.go:623`, `internal/bootstrap/environment_tiny.go:116`, `machine/testutil/testutil.go:236`
-**Problem:** `RegisterSyntaxCompilers` and `RegisterPrimitiveExpanders` are called independently at 3+ engine-init sites. Tests can miss one registration call and still partially work.
-**Fix:** Create a single `RegisterAllPhaseHandlers(env)` that calls both in the correct order. Replace all call sites. Add `VerifyAllPhaseHandlers()` that cross-checks expanders, syntax compilers, and form validators.
-**Effort:** M (depends on 3.1)
-**Verify:** `make lint && make test ./...`
+`RegisterAllPhaseHandlers(env)` replaces separate calls at all init sites. `VerifyAllPhaseHandlers()` cross-checks all three registries: `forms.Verify()` (validators), `VerifyCompilers()` (Tier 1 + Tier 2), `VerifyExpanders()` (syntax compiler ↔ expander consistency). Stale `RegisterPrimitiveExpanders` call in `machine/hygiene_test.go` migrated. `primitiveExpanderEntries` extracted to package-level var (parallels `syntaxCompilerEntries`). Verification immediately caught 6 missing expander entries (`library`, `export`, `meta`, `define-for-syntax`, `begin-for-syntax`, `eval-when`) — added as `expandUnchanged`.
 
 ---
 
@@ -221,7 +213,7 @@ These are longer-term items to tackle opportunistically when working in the area
 |-------|-------|--------|-------|
 | 1 | 3 tasks | S each | Silent limits — add overflow guards, exhaustiveness tests |
 | 2 | 3 tasks | S-M | File resolution — ~~COMPLETE~~ (2.1 premise incorrect, 2.2+2.3 done) |
-| 3 | 2 tasks | M each | Registration — eliminate dual-source-of-truth patterns |
+| 3 | 2 tasks | M each | Registration — ~~COMPLETE~~ (3.1-3.2 done, found+fixed 6 missing expander entries) |
 | 4 | 4 tasks | S-M | Test discipline — ~~COMPLETE~~ (4.1-4.4 done, 4.2 was already done) |
 | 5 | 4 tasks | S-M | Missing abstractions — interfaces, helpers, convention enforcement |
 | 6 | 3 tasks | S each | Dead code and style cleanup |

@@ -1038,9 +1038,9 @@ These are lower priority. Include here for completeness but expect them to be pi
 | 2nd | Phase 6 | 6.1, 6.2, 6.3 | S each | **DONE** (ffa7b90a, cb589b22) |
 | 3rd | Phase 2 | 2.3, 2.2, 2.1 | S, S, — | **DONE** (19d14d39, c8cbdf57; 2.1 N/A) |
 | 4th | Phase 4 | 4.1, 4.3, 4.4 | M, S, S | **DONE** (25 sentinel migrations + 2 regression tests) |
-| 5th | Phase 3 | 3.1 → 3.2 | M, M | 3.2 depends on 3.1 |
-| 6th | Phase 5 | 5.1, 5.2, 5.3, 5.4 | M, S, S, S | 5.2 partially depends on 5.1 |
-| 7th | Phase 7 | 7.1 | L | None but high blast radius |
+| 5th | Phase 3 | 3.1 → 3.2 | M, M | **DONE** (8e7ef892, 69fdbd5f; VerifyAllPhaseHandlers caught 6 missing expanders) |
+| 6th | Phase 5 | 5.1, 5.2, 5.3, 5.4 | M, S, S, S | **DONE** (f08677b1, 837b27b4, d4179407) |
+| 7th | Phase 7 | 7.1 | L | **DONE** (c82bbd5e) |
 | 8th | Phase 8 | 8.1, 8.2, 8.3 | M each | Opportunistic |
 
 **Total: 22 tasks** (23 original minus Task 4.2 already complete).

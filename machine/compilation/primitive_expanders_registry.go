@@ -32,52 +32,64 @@ import (
 //   - define: expand value if simple define
 //   - lambda, case-lambda: expand body expressions
 //   - syntax-case, cond-expand: return unchanged (compile-time forms)
+//
+// primitiveExpanderEntries is the single source of truth for all primitive
+// expander registrations. Parallels syntaxCompilerEntries in
+// syntax_compilers_registry.go.
+//
+// ADDING A NEW PRIMITIVE EXPANDER: add one entry here.
+var primitiveExpanderEntries = []PhaseEntry[PrimitiveExpanderFunc]{
+	// Forms that return unchanged (no expansion needed at expand time)
+	{"quote", (*ExpanderTimeContinuation).expandUnchanged},
+	{"define-syntax", (*ExpanderTimeContinuation).expandUnchanged},
+	{"quasiquote", (*ExpanderTimeContinuation).expandUnchanged},
+	{"unquote", (*ExpanderTimeContinuation).expandUnchanged},
+	{"unquote-splicing", (*ExpanderTimeContinuation).expandUnchanged},
+	{"include", (*ExpanderTimeContinuation).expandUnchanged},
+	{"include-ci", (*ExpanderTimeContinuation).expandUnchanged},
+	{"define-library", (*ExpanderTimeContinuation).expandUnchanged},
+	{"cond-expand", (*ExpanderTimeContinuation).expandUnchanged},
+	{"syntax", (*ExpanderTimeContinuation).expandUnchanged},
+	{"syntax-case", (*ExpanderTimeContinuation).expandUnchanged},
+	{"er-macro-transformer", (*ExpanderTimeContinuation).expandUnchanged},
+	{"quasisyntax", (*ExpanderTimeContinuation).expandUnchanged},
+	{"unsyntax", (*ExpanderTimeContinuation).expandUnchanged},
+	{"unsyntax-splicing", (*ExpanderTimeContinuation).expandUnchanged},
+	{"with-syntax", (*ExpanderTimeContinuation).expandUnchanged},
+	{"library", (*ExpanderTimeContinuation).expandUnchanged},
+	{"export", (*ExpanderTimeContinuation).expandUnchanged},
+	{"meta", (*ExpanderTimeContinuation).expandUnchanged},
+	{"define-for-syntax", (*ExpanderTimeContinuation).expandUnchanged},
+	{"begin-for-syntax", (*ExpanderTimeContinuation).expandUnchanged},
+	{"eval-when", (*ExpanderTimeContinuation).expandUnchanged},
+	{"let-syntax", (*ExpanderTimeContinuation).expandLetSyntax},
+	{"letrec-syntax", (*ExpanderTimeContinuation).expandLetrecSyntax},
+
+	// Binding scope for hygienic let/letrec macros
+	{"with-binding-scope", (*ExpanderTimeContinuation).expandWithBindingScope},
+
+	// R7RS §4.3.1: syntax-error raises compile-time errors
+	{"syntax-error", (*ExpanderTimeContinuation).expandSyntaxError},
+
+	// Forms that expand their subexpressions
+	{"if", (*ExpanderTimeContinuation).expandIfForm},
+	{"begin", (*ExpanderTimeContinuation).expandBeginForm},
+	{"set!", (*ExpanderTimeContinuation).expandSetForm},
+	{"define", (*ExpanderTimeContinuation).expandDefineForm},
+	{"lambda", (*ExpanderTimeContinuation).expandLambdaForm},
+	{"case-lambda", (*ExpanderTimeContinuation).expandCaseLambdaForm},
+	{"with-continuation-mark", (*ExpanderTimeContinuation).expandWithContinuationMarkForm},
+	{"let", (*ExpanderTimeContinuation).expandLetForm},
+	{"let*", (*ExpanderTimeContinuation).expandLetStarForm},
+	{"letrec", (*ExpanderTimeContinuation).expandLetrecForm},
+	{"letrec*", (*ExpanderTimeContinuation).expandLetrecStarForm},
+
+	// Import: loads libraries and makes bindings available during expansion
+	{"import", (*ExpanderTimeContinuation).expandImportForm},
+}
+
 func RegisterPrimitiveExpanders(env *environment.EnvironmentFrame) error {
-	primitives := []PhaseEntry[PrimitiveExpanderFunc]{
-		// Forms that return unchanged (no expansion needed at expand time)
-		{"quote", (*ExpanderTimeContinuation).expandUnchanged},
-		{"define-syntax", (*ExpanderTimeContinuation).expandUnchanged},
-		{"quasiquote", (*ExpanderTimeContinuation).expandUnchanged},
-		{"unquote", (*ExpanderTimeContinuation).expandUnchanged},
-		{"unquote-splicing", (*ExpanderTimeContinuation).expandUnchanged},
-		{"include", (*ExpanderTimeContinuation).expandUnchanged},
-		{"include-ci", (*ExpanderTimeContinuation).expandUnchanged},
-		{"define-library", (*ExpanderTimeContinuation).expandUnchanged},
-		{"cond-expand", (*ExpanderTimeContinuation).expandUnchanged},
-		{"syntax", (*ExpanderTimeContinuation).expandUnchanged},
-		{"syntax-case", (*ExpanderTimeContinuation).expandUnchanged},
-		{"er-macro-transformer", (*ExpanderTimeContinuation).expandUnchanged},
-		{"quasisyntax", (*ExpanderTimeContinuation).expandUnchanged},
-		{"unsyntax", (*ExpanderTimeContinuation).expandUnchanged},
-		{"unsyntax-splicing", (*ExpanderTimeContinuation).expandUnchanged},
-		{"with-syntax", (*ExpanderTimeContinuation).expandUnchanged},
-		{"let-syntax", (*ExpanderTimeContinuation).expandLetSyntax},
-		{"letrec-syntax", (*ExpanderTimeContinuation).expandLetrecSyntax},
-
-		// Binding scope for hygienic let/letrec macros
-		{"with-binding-scope", (*ExpanderTimeContinuation).expandWithBindingScope},
-
-		// R7RS §4.3.1: syntax-error raises compile-time errors
-		{"syntax-error", (*ExpanderTimeContinuation).expandSyntaxError},
-
-		// Forms that expand their subexpressions
-		{"if", (*ExpanderTimeContinuation).expandIfForm},
-		{"begin", (*ExpanderTimeContinuation).expandBeginForm},
-		{"set!", (*ExpanderTimeContinuation).expandSetForm},
-		{"define", (*ExpanderTimeContinuation).expandDefineForm},
-		{"lambda", (*ExpanderTimeContinuation).expandLambdaForm},
-		{"case-lambda", (*ExpanderTimeContinuation).expandCaseLambdaForm},
-		{"with-continuation-mark", (*ExpanderTimeContinuation).expandWithContinuationMarkForm},
-		{"let", (*ExpanderTimeContinuation).expandLetForm},
-		{"let*", (*ExpanderTimeContinuation).expandLetStarForm},
-		{"letrec", (*ExpanderTimeContinuation).expandLetrecForm},
-		{"letrec*", (*ExpanderTimeContinuation).expandLetrecStarForm},
-
-		// Import: loads libraries and makes bindings available during expansion
-		{"import", (*ExpanderTimeContinuation).expandImportForm},
-	}
-
-	return RegisterPhaseBindings(env, env.Expand, primitives,
+	return RegisterPhaseBindings(env, env.Expand, primitiveExpanderEntries,
 		func(name string, fn PrimitiveExpanderFunc) values.Value {
 			return NewPrimitiveExpander(name, fn)
 		})
