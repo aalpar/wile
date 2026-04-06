@@ -121,7 +121,11 @@ func (p *NativeTemplate) Operations() Operations {
 }
 
 // instructionToOperation converts a direct instruction back to its
-// corresponding Operation value. Used by Operations for test support.
+// corresponding Operation value. Used by Operations() for test support.
+//
+// Fused and promoted opcodes (emitted by peephole only) are decomposed
+// back to their pre-fusion originals so tests can assert against the
+// compiler's logical output independent of peephole optimization.
 func instructionToOperation(instr Instruction) Operation {
 	switch instr.Op {
 	// --- Wave 1: zero-operand operations ---
@@ -151,109 +155,44 @@ func instructionToOperation(instr Instruction) Operation {
 		return NewOperationBranchOffsetImmediate(int(instr.Arg))
 	case OpSaveContinuation:
 		return NewOperationSaveContinuationOffsetImmediate(int(instr.Arg))
-	case OpLoadLiteral:
+	case OpLoadLiteral, OpPushLiteral:
 		return NewOperationLoadLiteralByLiteralIndexImmediate(LiteralIndex(instr.Arg))
-	case OpLoadGlobal:
+	case OpLoadGlobal, OpPushGlobal:
 		return NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(LiteralIndex(instr.Arg))
 	case OpStoreGlobal:
 		return NewOperationStoreGlobalByGlobalIndexLiteralIndexImmediate(LiteralIndex(instr.Arg))
-	case OpLoadCachedBinding:
-		return NewOperationLoadCachedBinding(instr.Arg)
 	case OpPeekK:
 		return NewOperationPeekK(int(instr.Arg))
 	case OpPushEnv:
 		return NewOperationPushEnv(int(instr.Arg))
 
-	// --- Wave 3: two-operand operations (bit-packed LocalIndex) ---
-	case OpLoadLocal:
-		slot, depth := DecodeLocalIndex(instr.Arg)
-		li := environment.NewLocalIndex(slot, depth)
-		return NewOperationLoadLocalByLocalIndexImmediate(li)
+	// --- Wave 3: StoreLocal (only LocalIdx op with a distinct decomposition) ---
 	case OpStoreLocal:
 		slot, depth := DecodeLocalIndex(instr.Arg)
 		li := environment.NewLocalIndex(slot, depth)
 		return NewOperationStoreLocalByLocalIndexImmediate(li)
 
-	// --- Wave 4: fused push operations ---
-	// Fused opcodes are decomposed back to their original Load operations
-	// so tests can assert against the compiler's logical output independent
-	// of peephole optimization. All call sites are test-only; no runtime,
-	// debugging, or further optimization passes consume this output.
-	case OpPushLiteral:
-		return NewOperationLoadLiteralByLiteralIndexImmediate(LiteralIndex(instr.Arg))
-	case OpPushGlobal:
-		return NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(LiteralIndex(instr.Arg))
-	case OpPushCachedBinding:
-		return NewOperationLoadCachedBinding(instr.Arg)
-	case OpPushLocal:
-		slot, depth := DecodeLocalIndex(instr.Arg)
-		li := environment.NewLocalIndex(slot, depth)
-		return NewOperationLoadLocalByLocalIndexImmediate(li)
-
-	// --- Wave 5: fused call operations ---
-	// Decomposed back to the first operation (Pull) for test assertions.
+	// --- Wave 5: fused zero-operand ops ---
 	case OpPullApply:
 		return NewOperationPull()
-
-	// --- Wave 7: direct foreign call operations ---
-	// Decomposed back to LoadCachedBinding for test assertions.
-	case OpCallForeignCached:
-		return NewOperationLoadCachedBinding(instr.Arg)
-	case OpCallForeignCachedTail:
-		return NewOperationLoadCachedBinding(instr.Arg)
-
-	// --- Wave 8: general call fusion ---
-	// Decomposed back to their original unfused forms for test assertions.
-	case OpCallLocal:
-		slot, depth := DecodeLocalIndex(instr.Arg)
-		li := environment.NewLocalIndex(slot, depth)
-		return NewOperationLoadLocalByLocalIndexImmediate(li)
-	case OpCallCachedBinding:
-		return NewOperationLoadCachedBinding(instr.Arg)
-
-	// --- Wave 9: promoted primitives ---
-	// Decomposed back to LoadCachedBinding for test assertions.
-	case OpEqQ, OpEqQTail:
-		return NewOperationLoadCachedBinding(instr.Arg)
-	case OpVectorQ, OpVectorQTail:
-		return NewOperationLoadCachedBinding(instr.Arg)
-	case OpVectorRef, OpVectorRefTail:
-		return NewOperationLoadCachedBinding(instr.Arg)
-	case OpNullQ, OpNullQTail:
-		return NewOperationLoadCachedBinding(instr.Arg)
-	case OpPairQ, OpPairQTail:
-		return NewOperationLoadCachedBinding(instr.Arg)
-	case OpCar, OpCarTail:
-		return NewOperationLoadCachedBinding(instr.Arg)
-	case OpCdr, OpCdrTail:
-		return NewOperationLoadCachedBinding(instr.Arg)
-	case OpAdd, OpAddTail:
-		return NewOperationLoadCachedBinding(instr.Arg)
-	case OpSub, OpSubTail:
-		return NewOperationLoadCachedBinding(instr.Arg)
-	case OpMul, OpMulTail:
-		return NewOperationLoadCachedBinding(instr.Arg)
-	case OpDiv, OpDivTail:
-		return NewOperationLoadCachedBinding(instr.Arg)
-	case OpNumLt, OpNumLtTail:
-		return NewOperationLoadCachedBinding(instr.Arg)
-	case OpNumLe, OpNumLeTail:
-		return NewOperationLoadCachedBinding(instr.Arg)
-	case OpNumGt, OpNumGtTail:
-		return NewOperationLoadCachedBinding(instr.Arg)
-	case OpNumGe, OpNumGeTail:
-		return NewOperationLoadCachedBinding(instr.Arg)
-	case OpNumEq, OpNumEqTail:
-		return NewOperationLoadCachedBinding(instr.Arg)
-	case OpCons, OpConsTail:
-		return NewOperationLoadCachedBinding(instr.Arg)
-
-	// --- Wave 5: promoted complex operations ---
 	case OpMakeClosure:
 		return NewOperationMakeClosure()
 
 	default:
-		return nil
+		// Metadata-driven decomposition for peephole-emitted opcodes.
+		// All OperandCachedBinding ops decompose to LoadCachedBinding.
+		// All OperandLocalIdx ops (except StoreLocal, handled above)
+		// decompose to LoadLocal.
+		switch opcodeTable[instr.Op].operandKind {
+		case OperandCachedBinding:
+			return NewOperationLoadCachedBinding(instr.Arg)
+		case OperandLocalIdx:
+			slot, depth := DecodeLocalIndex(instr.Arg)
+			li := environment.NewLocalIndex(slot, depth)
+			return NewOperationLoadLocalByLocalIndexImmediate(li)
+		default:
+			return nil
+		}
 	}
 }
 
