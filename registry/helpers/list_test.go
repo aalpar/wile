@@ -26,9 +26,9 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-// ── MustList ─────────────────────────────────────────────────────────
+// ── ForEachList ─────────────────────────────────────────────────────────
 
-func TestMustList(t *testing.T) {
+func TestForEachList(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -57,7 +57,7 @@ func TestMustList(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			var got []values.Value
-			err := MustList(ctx, tc.list, "test", func(_ context.Context, _ int, _ bool, v values.Value) error {
+			err := ForEachList(ctx, tc.list, "test", func(_ context.Context, _ int, _ bool, v values.Value) error {
 				got = append(got, v)
 				return nil
 			})
@@ -70,7 +70,7 @@ func TestMustList(t *testing.T) {
 	}
 }
 
-func TestMustList_Errors(t *testing.T) {
+func TestForEachList_Errors(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -92,7 +92,7 @@ func TestMustList_Errors(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			err := MustList(ctx, tc.list, "test", noop)
+			err := ForEachList(ctx, tc.list, "test", noop)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(errors.Is(err, tc.sentinel), qt.IsTrue)
 		})

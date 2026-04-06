@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-04-01
+**Last Updated**: 2026-04-05
 
 ### Current Project Status
 
@@ -27,6 +27,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 - [x] **Degenerate form pipeline tests** [Correctness, Done]: Full-pipeline tests (string → tokenize → parse → expand → compile → run) for degenerate forms of all core special forms and macro-based derived forms. PR #571.
 - [x] **Sub-context winding stack inheritance hazard** [High, Correctness, Fixed]: `NewSubContext(windingStack)` now requires the winding stack as a constructor parameter. Forgetting is a compile error. `machine/machine_context_subcontext.go`.
 - [x] **`cond-expand (library ...)` bypasses FileResolver** [High, S, Fixed]: `IsSatisfied` now accepts a `FileResolver` parameter. `libraryRequirement` uses `resolver.ResolveAndOpen` (with `.sld`/`.scm` fallback) instead of `os.Stat`. `machine/compilation/features.go`.
+- [x] **syntax-rules ellipsis and hygiene bugs** [High, Bug, Fixed]: Three bugs fixed — scope-aware duplicate binding detection (unified scoped binding API, PR #607), cross-group ellipsis zipping, and nested ellipsis depth tracking (PR #606). `plans/2026-04-03-syntax-rules-ellipsis-hygiene-design.md`
 - L7 (`char-ready?`/`u8-ready?` always `#t`) — documented semantic difference, no fix planned
 
 ---
@@ -35,7 +36,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 ### High Priority
 
-- [ ] **`WalkSubExprs` for validated expression traversal** [High, S]: Standalone function `WalkSubExprs(expr ValidatedExpr, fn func(child ValidatedExpr, role ChildRole))` with `ChildRole` enum (`RoleNormal`, `RoleCallProc`, `RoleClosureBody`). Consolidates the per-form type switch into one location so analysis passes (B1 capture, B2 escape, future B3/constant-prop) plug in callbacks instead of duplicating structural recursion. B1 immediately-applied lambda case still needs special handling — `RoleCallProc` child that is a lambda should be walked at current depth, not `RoleClosureBody`. Unresolved: whether that's a role refinement or a B1-specific post-check.
+- [x] **`WalkSubExprs` for validated expression traversal** [High, S, Done]: `WalkSubExprs(expr, fn(child, role))` with `ChildRole` enum (`RoleNormal`, `RoleCallProc`, `RoleClosureBody`). B1 capture analysis migrated to use it; immediately-applied lambda handled as B1-specific post-check in `RoleCallProc`.
 - [x] **Extract interface types from `environment/` `any` fields** [High, M, Done]: `FileResolver` interface defined in `environment/file_resolver.go` (stdlib types only); `machine/compilation/` adds type alias. `LibrarySearcher` interface (`GetSearchPaths() []string`) eliminates type assertions in `file_resolver.go`. `authorizer any` → `security.Authorizer` (security package only imports `werr`). 15 type assertions removed across 7 files. `plan: plans/2026-03-31-environment-any-fields.md`
 - [x] **`Stack.Pull()` is O(n) in VM hot path** [High, M, Done]: Replaced `Pull()` + `Drain()` in `OpPullApply` with O(1) `PullDrain()` that splits `stack[0]` (proc) from `stack[1:]` (args) without copying. Unfused `OpPull` unchanged (rare after peephole). `plans/2026-03-31-pulldrain-design.md`
 - [x] **Split `ffi.go` by concern** [Medium, S, Done]: 1010 lines split into `ffi.go` (spec), `ffi_arg_converters.go`, `ffi_ret_converters.go`, `ffi_wrapper.go`. PR #599.
@@ -72,10 +73,10 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 ### Actionable
 
-- [ ] **Procedure inlining** [Performance, Research]: Explore peephole inlining of known procedures at compile time. `plans/PERFORMANCE.md`
+- [x] **Procedure inlining** [Performance, Done]: Let-bound lambda calls inlined as synthetic let forms. PR #605. `plans/PROCEDURE-INLINING.md`
 - [ ] **Environment frame slimming** [Performance]: Reduce `EnvironmentFrame` struct for closure bodies that only need local bindings. `plans/PERFORMANCE.md`
-- [ ] **B2 escape analysis for let-bound closures** [Performance, Research]: Track whether a closure stored in a let binding escapes the let scope. Enables `!Captured` for patterns like `(let ((f (lambda () x))) (f))` where the closure is only called locally. Requires data flow analysis within the let body. Blocked by: B1 capture analysis (`plans/CAPTURE-ANALYSIS.md`). Design: `plans/ESCAPE-ANALYSIS.md`. Impl: `plans/ESCAPE-ANALYSIS-IMPL.md`
-- [ ] **B3 effective capture refinement** [Performance, Research]: Propagate B2 escape results back into B1 capture status. A binding marked `Captured` by B1 is effectively non-captured if every lambda that references it is stored in a non-escaping binding (B2). Cross-binding analysis over B1+B2 results. Blocked by: B2 (`plans/ESCAPE-ANALYSIS.md`).
+- [x] **B2 escape analysis for let-bound closures** [Performance, Done]: Tracks whether let-bound closures escape their scope. Enables `!Captured` optimization. PR #604. Design: `plans/ESCAPE-ANALYSIS.md`.
+- [ ] **B3 effective capture refinement** [Performance, Research]: Propagate B2 escape results back into B1 capture status. A binding marked `Captured` by B1 is effectively non-captured if every lambda that references it is stored in a non-escaping binding (B2). Cross-binding analysis over B1+B2 results.
 
 ### Research
 
@@ -100,6 +101,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
   - [ ] **Scribble-style `@` reader notation** [Reader extension, Low Priority]: Racket-style at-expressions for rich documentation markup. Reader recognizes `@cmd[datum ...]{text ...}` and desugars to S-expressions. Enables structured doc content beyond plain strings. Depends on docstring validation being in the validator layer (done in PR #584).
 - [ ] **Scheme linter** [Tooling, High, Needs Scoping]: Static analysis for Wile Scheme code — catch "plausible but wrong" before execution. Scope, design, and feasibility TBD. Potential checks: unused bindings, arity mismatches on known procedures, type mismatches at call sites, unreachable code after tail calls, style warnings. Research: what do Racket (Check Syntax), Guile, CHICKEN lint tools actually check? How much can be done at expand time vs requiring a separate pass? Interaction with the type system (if built) is a key design question.
 - [ ] **Extension API contracts** [Embedding, High, Phase 1 Done]: Stronger type/contract declarations on extension APIs. Phase 1 complete (PRs #577, #578): `ValueType` enum on `PrimitiveSpec` for param/return type declarations, contract validator infrastructure in `ForeignClosure` dispatch. Remaining: Phase 2 (auto-generated type-checking wrappers, contract enforcement at dispatch), integration with linter. `plans/2026-03-26-extension-contracts-design.md`
+- [ ] **Environment profiles** [Embedding]: Replace SafeExtensions/AllExtensions with named profiles (Tiny, Console, Small, KitchenSink), orthogonal sandbox modifier, virtual env map. `plans/2026-03-26-environment-profiles-impl.md`
 - [ ] **Go FFI Phase 3 — Plugin support** [Embedding]: Dynamic extension loading via registry pattern.
 - [x] **MCP server** [Tooling, Done]: Built-in MCP server mode (`wile --mcp`) exposing eval, doc, apropos, topic, libraries, and reset tools. Session hardening with configurable timeouts. PR #588. `plans/2026-03-26-wile-mcp-server-design.md`
 - [x] **`(available-libraries)` primitive** [Embedding, Done]: `LibraryEnumerator` interface, `Engine.AvailableLibraries()` Go API, `(available-libraries)` Scheme primitive. PR #590. `plans/AVAILABLE-LIBRARIES.md`
@@ -133,10 +135,10 @@ No demand signal. Speculative or research-only.
 - [ ] **Go AST extension Phase 3 — Comments & generics** [Standard library, S]: `Comment`/`CommentGroup` attachment for round-trip structural fidelity. `BadExpr`/`BadStmt`/`BadDecl` for error recovery. `IndexListExpr` for generics. `plans/GO-AST.md`
 - [ ] **Implement let-syntax*** [Core language, S]: Implement `let-syntax*`.
 - [ ] **User labels/tags to distinguish FS resolvers** Use tags or labels to distinguish bootstrap loadee from include/library loaders in fileResolver.
-- [ ] **Disassembler** Implement a disassembler for Wile
+- [x] **Disassembler** [Tooling, Done]: Bytecode disassembler — `(disassemble proc)` primitive, `,dis` REPL command, MCP tool. PR #603.
 - [ ] **CompilationError** does not have source location, nor does it have an identity as a SchemeError and no Wrap* constructor.  Look into CompilationError and determine where it sits between Scheme and Foreign errors
 - [ ] **RuntimeError** does not have an identity as SchemeError or ForeignError.  It also does not have a constructor
-- [ ] **Scheme Dissasembly** "What does this compile to?" — When debugging or implementing compiler changes, I reason about bytecode by reading Go compiler code. A disassemble command that shows the opcode sequence for a Scheme expression would let me verify compilation directly instead of tracing through `compile_*.go` by hand. The disassembly one would have the highest impact — I'd use it constantly when working on the compiler, optimizer, or debugging macro expansion.
+- [x] **Scheme Disassembly** [Tooling, Done]: Addressed by `(disassemble proc)` and `,dis` REPL command. PR #603.
 - [x] **Primitive Search** — addressed by `(apropos "pattern")` and `,apropos` REPL command (PR #585).
 - [x] **Expression Evaluation** — addressed by MCP server eval tool and `,doc` system (PR #588).
 - [x] **Proposal** — MCP server tool descriptions now accurate (PR #588).

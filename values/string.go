@@ -150,6 +150,15 @@ func (p *String) Set(i int, v Value) error {
 	return p.SetChar(i, v.(*Character).Value)
 }
 
+// StringOrFalse returns a Scheme string if s is non-empty, or #f if empty.
+// Follows the BoolToBoolean precedent for eliminating repeated if/else patterns.
+func StringOrFalse(s string) Value {
+	if s == "" {
+		return FalseValue
+	}
+	return NewString(s)
+}
+
 // Runes returns the string as a slice of runes.
 func (p *String) Runes() []rune {
 	return []rune(p.Value)

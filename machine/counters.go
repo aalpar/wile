@@ -89,33 +89,33 @@ func newCallCounts() map[string]uint64 {
 
 // RecordCall increments the call count for the named callee (foreign primitive
 // or Scheme-defined procedure). No-op when profiling is disabled (nil map).
-func (c *VMCounters) RecordCall(name string) {
-	if c.callCounts != nil {
-		c.callCounts[name]++
+func (p *VMCounters) RecordCall(name string) {
+	if p.callCounts != nil {
+		p.callCounts[name]++
 	}
 }
 
 // RecordStackDepth updates the depth histogram and max tracker.
-func (c *VMCounters) RecordStackDepth(n int) {
-	if uint64(n) > c.StackMaxDepth {
-		c.StackMaxDepth = uint64(n)
+func (p *VMCounters) RecordStackDepth(n int) {
+	if uint64(n) > p.StackMaxDepth {
+		p.StackMaxDepth = uint64(n)
 	}
 	switch {
 	case n <= 2:
-		c.StackDepth0to2++
+		p.StackDepth0to2++
 	case n <= 4:
-		c.StackDepth3to4++
+		p.StackDepth3to4++
 	case n <= 8:
-		c.StackDepth5to8++
+		p.StackDepth5to8++
 	case n <= 16:
-		c.StackDepth9to16++
+		p.StackDepth9to16++
 	default:
-		c.StackDepth17p++
+		p.StackDepth17p++
 	}
 }
 
 // String returns a tabular summary of all counters.
-func (c VMCounters) String() string {
+func (p VMCounters) String() string {
 	return fmt.Sprintf(
 		"ops_executed:                 %d\n"+
 			"closures_applied:             %d\n"+
@@ -140,37 +140,37 @@ func (c VMCounters) String() string {
 			"stack_depth_5to8:             %d\n"+
 			"stack_depth_9to16:            %d\n"+
 			"stack_depth_17p:              %d",
-		c.OpsExecuted,
-		c.ClosuresApplied,
-		c.EnvsCopied,
-		c.BindingsCopied,
-		c.ContinuationsSaved,
-		c.ContinuationsRestored,
-		c.StackDrains,
-		c.StackElementsDrained,
-		c.ForeignCalls,
-		c.SubContextsCreated,
-		c.StackPoolReleases,
-		c.SubContextPoolReleases,
-		c.ContinuationPoolReleases,
-		c.EnvFramePoolReleases,
-		c.SharedFrameRestores,
-		c.KeysShared,
-		c.InlineEvalsSaved,
-		c.StackMaxDepth,
-		c.StackDepth0to2,
-		c.StackDepth3to4,
-		c.StackDepth5to8,
-		c.StackDepth9to16,
-		c.StackDepth17p,
+		p.OpsExecuted,
+		p.ClosuresApplied,
+		p.EnvsCopied,
+		p.BindingsCopied,
+		p.ContinuationsSaved,
+		p.ContinuationsRestored,
+		p.StackDrains,
+		p.StackElementsDrained,
+		p.ForeignCalls,
+		p.SubContextsCreated,
+		p.StackPoolReleases,
+		p.SubContextPoolReleases,
+		p.ContinuationPoolReleases,
+		p.EnvFramePoolReleases,
+		p.SharedFrameRestores,
+		p.KeysShared,
+		p.InlineEvalsSaved,
+		p.StackMaxDepth,
+		p.StackDepth0to2,
+		p.StackDepth3to4,
+		p.StackDepth5to8,
+		p.StackDepth9to16,
+		p.StackDepth17p,
 	)
 }
 
 // OpcodeHistogram returns a formatted histogram of opcode hit counts,
 // sorted by frequency (descending). Only opcodes with non-zero hits
 // are included.
-func (c VMCounters) OpcodeHistogram() string {
-	if c.opcodeHits == nil {
+func (p VMCounters) OpcodeHistogram() string {
+	if p.opcodeHits == nil {
 		return ""
 	}
 	type entry struct {
@@ -179,10 +179,10 @@ func (c VMCounters) OpcodeHistogram() string {
 	}
 	var entries []entry
 	for i := range opCount {
-		if c.opcodeHits[i] > 0 {
+		if p.opcodeHits[i] > 0 {
 			entries = append(entries, entry{
 				name:  i.String(),
-				count: c.opcodeHits[i],
+				count: p.opcodeHits[i],
 			})
 		}
 	}
@@ -192,7 +192,7 @@ func (c VMCounters) OpcodeHistogram() string {
 
 	var b strings.Builder
 	for _, e := range entries {
-		pct := float64(e.count) / float64(c.OpsExecuted) * 100
+		pct := float64(e.count) / float64(p.OpsExecuted) * 100
 		fmt.Fprintf(&b, "  %-24s %10d  (%5.1f%%)\n", e.name, e.count, pct)
 	}
 	return b.String()
@@ -201,17 +201,17 @@ func (c VMCounters) OpcodeHistogram() string {
 // CallHistogram returns a formatted histogram of per-callee call counts
 // (both foreign primitives and named Scheme procedures), sorted by frequency
 // (descending). Returns empty string when profiling is disabled.
-func (c VMCounters) CallHistogram() string {
-	if c.callCounts == nil {
+func (p VMCounters) CallHistogram() string {
+	if p.callCounts == nil {
 		return ""
 	}
 	type entry struct {
 		name  string
 		count uint64
 	}
-	entries := make([]entry, 0, len(c.callCounts))
+	entries := make([]entry, 0, len(p.callCounts))
 	var total uint64
-	for name, count := range c.callCounts {
+	for name, count := range p.callCounts {
 		entries = append(entries, entry{name: name, count: count})
 		total += count
 	}

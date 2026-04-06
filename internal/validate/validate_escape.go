@@ -95,8 +95,8 @@ func (p *escapeWalker) walkExpr(expr ValidatedExpr) {
 		return
 	}
 	// Structural recursion via WalkSubExprs.
-	WalkSubExprs(expr, func(child ValidatedExpr, callPosition bool) {
-		if callPosition {
+	WalkSubExprs(expr, func(child ValidatedExpr, role ChildRole) {
+		if role == RoleCallProc {
 			sym, ok := child.(*ValidatedSymbol)
 			if ok {
 				bid, resolved := p.env.ResolveBindingID(sym.Symbol.Sym, sym.Symbol.Scopes())

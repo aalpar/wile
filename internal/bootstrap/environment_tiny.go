@@ -112,16 +112,10 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 	// doc-topics) can access it via mc.EnvironmentFrame().Namespace().Registry().
 	env.Namespace().SetRegistry(reg)
 
-	// Register syntax compilers in the compile environment
-	err = compilation.RegisterSyntaxCompilers(env)
+	// Register syntax compilers (compile env) and primitive expanders (expand env).
+	err = compilation.RegisterAllPhaseHandlers(env)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "error registering syntax compilers")
-	}
-
-	// Register primitive expanders in the expand environment
-	err = compilation.RegisterPrimitiveExpanders(env)
-	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "error registering primitive expanders")
+		return nil, werr.WrapForeignErrorf(err, "error registering phase handlers")
 	}
 
 	// Load bootstrap macros from registry
@@ -131,9 +125,14 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 		return nil, werr.WrapForeignErrorf(err, "error loading bootstrap macros")
 	}
 
-	// Set the default file resolver for runtime include/load operations.
+	// Set the default file resolver for runtime include/load operations,
+	// but only if no resolver has been configured (e.g., by WithSourceFS).
+	// Invariant: if FileResolver() is nil here after WithSourceFS was called,
+	// the WithSourceFS configuration was lost — that's a bug in the caller.
 	// This must happen after bootstrap (which uses EmbedFileResolver).
-	env.SetFileResolver(compilation.NewOSFileResolver(env))
+	if env.Namespace().FileResolver() == nil {
+		env.SetFileResolver(compilation.NewOSFileResolver(env))
+	}
 
 	return reg, nil
 }

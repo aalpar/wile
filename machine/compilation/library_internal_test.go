@@ -229,20 +229,6 @@ func TestLoadLibrary_NoFileResolver(t *testing.T) {
 	qt.Assert(t, err.Error(), qt.Contains, "no file resolver")
 }
 
-// TestLibraryRegistryFindLibraryFile tests FindLibraryFile behavior when
-// no matching file exists on the filesystem.
-func TestLibraryRegistryFindLibraryFile(t *testing.T) {
-	reg := NewLibraryRegistry()
-	// Use an empty temp directory so the library is guaranteed not found,
-	// regardless of platform or working directory.
-	reg.SetSearchPaths([]string{t.TempDir()})
-	name := NewLibraryName("no", "such", "lib")
-	path, err := reg.FindLibraryFile(name)
-	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, path, qt.Equals, "")
-	qt.Assert(t, errors.Is(err, werr.ErrLibraryNotFound), qt.IsTrue)
-}
-
 // TestCompiledLibrary_Methods exercises accessor methods on CompiledLibrary
 // and LibraryRegistry that are otherwise at 0% coverage.
 func TestCompiledLibrary_Methods(t *testing.T) {

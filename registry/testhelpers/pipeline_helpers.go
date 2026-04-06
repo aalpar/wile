@@ -33,7 +33,7 @@ import (
 // Uses a minimal top-level environment (bootstrap.NewNamespaceFrameTiny).
 func RunProgramAST(t *testing.T, prog values.Value) (values.Value, error) {
 	t.Helper()
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrameTiny(context.Background())
 	if err != nil {
 		return nil, err
 	}

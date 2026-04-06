@@ -31,21 +31,32 @@ func requireSyntaxValue(mc *machine.MachineContext, name string) (syntax.SyntaxV
 	return sv, nil
 }
 
+// requireSourceContext extracts the SourceContext from mc.Arg(0).
+// Returns (nil, nil) if the source context is nil, having already set
+// mc to #f. Returns (nil, err) on type error.
+func requireSourceContext(mc *machine.MachineContext, name string) (*syntax.SourceContext, error) {
+	sv, err := requireSyntaxValue(mc, name)
+	if err != nil {
+		return nil, err
+	}
+	sctx := sv.SourceContext()
+	if sctx == nil {
+		mc.SetValue(values.FalseValue)
+		return nil, nil
+	}
+	return sctx, nil
+}
+
 // PrimSyntaxSource returns the source file path of a syntax object, or #f
 // if the syntax object has no source location.
 //
 // Racket §12.2: syntax-source
 func PrimSyntaxSource(mc *machine.MachineContext) error {
-	sv, err := requireSyntaxValue(mc, "syntax-source")
-	if err != nil {
+	sctx, err := requireSourceContext(mc, "syntax-source")
+	if sctx == nil {
 		return err
 	}
-	sctx := sv.SourceContext()
-	if sctx == nil || sctx.File == "" {
-		mc.SetValue(values.FalseValue)
-		return nil
-	}
-	mc.SetValue(values.NewString(sctx.File))
+	mc.SetValue(values.StringOrFalse(sctx.File))
 	return nil
 }
 
@@ -53,14 +64,9 @@ func PrimSyntaxSource(mc *machine.MachineContext) error {
 //
 // Racket §12.2: syntax-line
 func PrimSyntaxLine(mc *machine.MachineContext) error {
-	sv, err := requireSyntaxValue(mc, "syntax-line")
-	if err != nil {
-		return err
-	}
-	sctx := sv.SourceContext()
+	sctx, err := requireSourceContext(mc, "syntax-line")
 	if sctx == nil {
-		mc.SetValue(values.FalseValue)
-		return nil
+		return err
 	}
 	mc.SetValue(values.NewInteger(int64(sctx.Start.Line())))
 	return nil
@@ -70,14 +76,9 @@ func PrimSyntaxLine(mc *machine.MachineContext) error {
 //
 // Racket §12.2: syntax-column
 func PrimSyntaxColumn(mc *machine.MachineContext) error {
-	sv, err := requireSyntaxValue(mc, "syntax-column")
-	if err != nil {
-		return err
-	}
-	sctx := sv.SourceContext()
+	sctx, err := requireSourceContext(mc, "syntax-column")
 	if sctx == nil {
-		mc.SetValue(values.FalseValue)
-		return nil
+		return err
 	}
 	mc.SetValue(values.NewInteger(int64(sctx.Start.Column())))
 	return nil
@@ -87,14 +88,9 @@ func PrimSyntaxColumn(mc *machine.MachineContext) error {
 //
 // Racket §12.2: syntax-position
 func PrimSyntaxPosition(mc *machine.MachineContext) error {
-	sv, err := requireSyntaxValue(mc, "syntax-position")
-	if err != nil {
-		return err
-	}
-	sctx := sv.SourceContext()
+	sctx, err := requireSourceContext(mc, "syntax-position")
 	if sctx == nil {
-		mc.SetValue(values.FalseValue)
-		return nil
+		return err
 	}
 	mc.SetValue(values.NewInteger(int64(sctx.Start.Index())))
 	return nil
@@ -104,14 +100,9 @@ func PrimSyntaxPosition(mc *machine.MachineContext) error {
 //
 // Racket §12.2: syntax-span
 func PrimSyntaxSpan(mc *machine.MachineContext) error {
-	sv, err := requireSyntaxValue(mc, "syntax-span")
-	if err != nil {
-		return err
-	}
-	sctx := sv.SourceContext()
+	sctx, err := requireSourceContext(mc, "syntax-span")
 	if sctx == nil {
-		mc.SetValue(values.FalseValue)
-		return nil
+		return err
 	}
 	span := sctx.End.Index() - sctx.Start.Index()
 	mc.SetValue(values.NewInteger(int64(span)))

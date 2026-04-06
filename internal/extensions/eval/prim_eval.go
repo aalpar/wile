@@ -191,11 +191,7 @@ func PrimLoad(mc *machine.MachineContext) error {
 // no file is being loaded (e.g., REPL).
 func PrimCurrentLoadPath(mc *machine.MachineContext) error {
 	current := mc.EnvironmentFrame().Namespace().LoadPathStack().Current()
-	if current == "" {
-		mc.SetValue(values.FalseValue)
-	} else {
-		mc.SetValue(values.NewString(current))
-	}
+	mc.SetValue(values.StringOrFalse(current))
 	return nil
 }
 
@@ -204,11 +200,7 @@ func PrimCurrentLoadPath(mc *machine.MachineContext) error {
 // no file is being loaded (e.g., REPL).
 func PrimCurrentLoadDirectory(mc *machine.MachineContext) error {
 	currentDir := mc.EnvironmentFrame().Namespace().LoadPathStack().CurrentDir()
-	if currentDir == "" {
-		mc.SetValue(values.FalseValue)
-	} else {
-		mc.SetValue(values.NewString(currentDir))
-	}
+	mc.SetValue(values.StringOrFalse(currentDir))
 	return nil
 }
 

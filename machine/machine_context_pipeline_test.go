@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/machine/testutil"
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -27,10 +27,10 @@ import (
 )
 
 func TestExecuteSimpleProcedureCall(t *testing.T) {
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
-	sv := testutil.ParseSchemeExpr(t, env, `((lambda (x) x) 42)`)
-	cont, err := testutil.NewTopLevelThunk(sv, env)
+	sv := testhelpers.ParseSchemeExpr(t, env, `((lambda (x) x) 42)`)
+	cont, err := testhelpers.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), cont)
@@ -40,10 +40,10 @@ func TestExecuteSimpleProcedureCall(t *testing.T) {
 }
 
 func TestExecuteVariadicProcedure(t *testing.T) {
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
-	sv := testutil.ParseSchemeExpr(t, env, `((lambda args args) 1 2 3)`)
-	cont, err := testutil.NewTopLevelThunk(sv, env)
+	sv := testhelpers.ParseSchemeExpr(t, env, `((lambda args args) 1 2 3)`)
+	cont, err := testhelpers.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), cont)
@@ -53,10 +53,10 @@ func TestExecuteVariadicProcedure(t *testing.T) {
 }
 
 func TestMachineContextNewSubContext_Pipeline(t *testing.T) {
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
-	sv := testutil.ParseSchemeExpr(t, env, `42`)
-	cont, err := testutil.NewTopLevelThunk(sv, env)
+	sv := testhelpers.ParseSchemeExpr(t, env, `42`)
+	cont, err := testhelpers.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), cont)
@@ -65,10 +65,10 @@ func TestMachineContextNewSubContext_Pipeline(t *testing.T) {
 }
 
 func TestMachineContextApplySimple_Pipeline(t *testing.T) {
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
-	sv := testutil.ParseSchemeExpr(t, env, `((lambda (x) x) 100)`)
-	cont, err := testutil.NewTopLevelThunk(sv, env)
+	sv := testhelpers.ParseSchemeExpr(t, env, `((lambda (x) x) 100)`)
+	cont, err := testhelpers.NewTopLevelThunk(sv, env)
 	qt.Assert(t, err, qt.IsNil)
 
 	mc := machine.NewMachineContext(context.Background(), cont)

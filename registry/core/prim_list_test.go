@@ -1732,3 +1732,22 @@ func TestAppend_Errors(t *testing.T) {
 		})
 	}
 }
+
+// TestRestArgBufferAliasing verifies that the rest-arg list returned by
+// variadic primitives is properly copied and not corrupted by subsequent
+// variadic calls. The rest-arg buffer (restArgBuf) is reused across calls;
+// PrimList copies the spine to prevent aliasing.
+func TestRestArgBufferAliasing(t *testing.T) {
+	code := `
+		(let ((first (list 1 2 3))
+		      (second (list 4 5 6)))
+		  (list first second))
+	`
+	result, err := testhelpers.RunSchemeCode(t, code)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, valuestest.SchemeEquals,
+		values.List(
+			values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)),
+			values.List(values.NewInteger(4), values.NewInteger(5), values.NewInteger(6)),
+		))
+}

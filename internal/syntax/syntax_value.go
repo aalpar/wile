@@ -107,8 +107,8 @@ type syntaxBase struct {
 }
 
 // SourceContext returns the source context.
-func (b *syntaxBase) SourceContext() *SourceContext {
-	return b.sourceContext
+func (p *syntaxBase) SourceContext() *SourceContext {
+	return p.sourceContext
 }
 
 // SyntaxObject wraps a non-compound Scheme value with source context.

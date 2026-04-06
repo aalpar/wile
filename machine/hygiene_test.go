@@ -47,10 +47,10 @@ func parseString(t *testing.T, env *environment.EnvironmentFrame, input string) 
 func createHygieneTestEnv() *environment.EnvironmentFrame {
 	env := environment.NewNamespace().Runtime()
 
-	// Register primitive expanders (for let-syntax, quote, if, etc.)
-	err := compilation.RegisterPrimitiveExpanders(env)
+	// Register all phase handlers (expanders + syntax compilers)
+	err := compilation.RegisterAllPhaseHandlers(env)
 	if err != nil {
-		panic("failed to register primitive expanders: " + err.Error())
+		panic("failed to register phase handlers: " + err.Error())
 	}
 
 	return env

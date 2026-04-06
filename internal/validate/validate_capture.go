@@ -94,94 +94,44 @@ func (p *captureWalker) walkExpr(expr ValidatedExpr, depth int) {
 	if expr == nil {
 		return
 	}
-	switch e := expr.(type) {
-	case *ValidatedSymbol:
-		p.checkSymbol(e.Symbol, depth)
+	// Leaf: check symbol reference.
+	sym, ok := expr.(*ValidatedSymbol)
+	if ok {
+		p.checkSymbol(sym.Symbol, depth)
+		return
+	}
+	// set! target: mutation from inside a closure also captures.
+	// WalkSubExprs intentionally omits the set! target (it's mutation, not a reference),
+	// but capture analysis needs it because mutating a variable from inside a closure
+	// requires the variable to be captured just like reading it does.
+	setBang, ok := expr.(*ValidatedSetBang)
+	if ok {
+		p.checkSymbol(setBang.Name, depth)
+	}
 
-	case *ValidatedLambda:
-		p.walkBody(e.Body(), depth+1)
-
-	case *ValidatedCaseLambda:
-		for _, clause := range e.Clauses() {
-			p.walkBody(clause.Body(), depth+1)
-		}
-
-	case *ValidatedCall:
-		switch proc := e.Proc().(type) {
-		case *ValidatedLambda:
-			// Immediately applied — walk body at current depth
-			p.walkBody(proc.Body(), depth)
-		case *ValidatedCaseLambda:
-			// Immediately applied — walk each clause at current depth
-			for _, clause := range proc.Clauses() {
-				p.walkBody(clause.Body(), depth)
+	WalkSubExprs(expr, func(child ValidatedExpr, role ChildRole) {
+		switch role {
+		case RoleClosureBody:
+			p.walkExpr(child, depth+1)
+		case RoleCallProc:
+			// Immediately-applied lambda: walk body at current depth,
+			// not depth+1, because the closure does not escape.
+			switch proc := child.(type) {
+			case *ValidatedLambda:
+				for _, b := range proc.Body() {
+					p.walkExpr(b, depth)
+				}
+			case *ValidatedCaseLambda:
+				for _, clause := range proc.Clauses() {
+					for _, b := range clause.Body() {
+						p.walkExpr(b, depth)
+					}
+				}
+			default:
+				p.walkExpr(child, depth)
 			}
 		default:
-			p.walkExpr(e.Proc(), depth)
+			p.walkExpr(child, depth)
 		}
-		// Walk args at current depth in all cases
-		for _, arg := range e.Body() {
-			p.walkExpr(arg, depth)
-		}
-
-	case *ValidatedIf:
-		p.walkExpr(e.Test, depth)
-		p.walkExpr(e.Conseq, depth)
-		p.walkExpr(e.Alt, depth)
-
-	case *ValidatedBegin:
-		p.walkBody(e.Body(), depth)
-
-	case *ValidatedSetBang:
-		p.checkSymbol(e.Name, depth)
-		p.walkExpr(e.SubExp(), depth)
-
-	case *ValidatedLet:
-		// Nested let: walk inits and body at current depth to find
-		// references to the OUTER let's bindings through lambdas in
-		// the inner scope. The inner let handles its own bindings via
-		// its own markCapturedBindings call at validation time.
-		for _, b := range e.Bindings {
-			p.walkExpr(b.Init, depth)
-		}
-		p.walkBody(e.Body(), depth)
-
-	case *ValidatedDynamicWind:
-		p.walkExpr(e.Before, depth)
-		p.walkExpr(e.Thunk, depth)
-		p.walkExpr(e.After, depth)
-
-	case *ValidatedWithContinuationMark:
-		p.walkExpr(e.Key, depth)
-		p.walkExpr(e.Val, depth)
-		p.walkExpr(e.Body, depth)
-
-	case *ValidatedApply:
-		p.walkExpr(e.Proc, depth)
-		for _, arg := range e.PrefixArgs {
-			p.walkExpr(arg, depth)
-		}
-		p.walkExpr(e.FinalList, depth)
-
-	case *ValidatedDefine:
-		if e.IsFunction {
-			// (define (f x) body) — the body is inside a closure
-			p.walkBody(e.Body(), depth+1)
-		} else {
-			p.walkExpr(e.SubExp(), depth)
-		}
-
-	case *ValidatedQuote, *ValidatedLiteral, *ValidatedQuasiquote:
-		// No sub-expressions to walk
-
-	default:
-		// Best-effort: unknown validated forms are conservatively ignored
-		// so capture analysis cannot take down validation.
-	}
-}
-
-func (p *captureWalker) walkBody(body []ValidatedExpr, depth int) {
-	for _, expr := range body {
-		p.walkExpr(expr, depth)
-	}
+	})
 }

@@ -20,7 +20,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/aalpar/wile/machine/testutil"
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 )
@@ -116,8 +116,8 @@ func TestLibrarySystemImport(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			env := testutil.SetupEngineTest(t, tc.fs)
-			result := testutil.EvalSchemeInEnv(t, env, tc.code)
+			env := testhelpers.SetupEngineTest(t, tc.fs)
+			result := testhelpers.EvalSchemeInEnv(t, env, tc.code)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
@@ -169,8 +169,8 @@ func TestLibrarySystemImportModifiers(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			env := testutil.SetupEngineTest(t, sharedFS)
-			result := testutil.EvalSchemeInEnv(t, env, tc.code)
+			env := testhelpers.SetupEngineTest(t, sharedFS)
+			result := testhelpers.EvalSchemeInEnv(t, env, tc.code)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.expected)
 		})
 	}
@@ -235,7 +235,7 @@ func TestLibrarySystemErrors(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			env := testutil.SetupEngineTest(t, tc.fs)
+			env := testhelpers.SetupEngineTest(t, tc.fs)
 
 			// Some library loading errors may manifest as panics from the VM.
 			// Use a recover wrapper to catch both returned errors and panics.
@@ -253,7 +253,7 @@ func TestLibrarySystemErrors(t *testing.T) {
 						}
 					}
 				}()
-				_, err = testutil.EvalSchemeInEnvMayFail(t, env, tc.code)
+				_, err = testhelpers.EvalSchemeInEnvMayFail(t, env, tc.code)
 			}()
 
 			qt.Assert(t, err, qt.IsNotNil, qt.Commentf("expected error for %s", tc.name))

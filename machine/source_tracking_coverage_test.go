@@ -21,7 +21,7 @@ import (
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/machine/compilation"
-	"github.com/aalpar/wile/machine/testutil"
+	"github.com/aalpar/wile/registry/testhelpers"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/parser"
@@ -450,7 +450,7 @@ func TestDebugger_ShouldStep_NotStepping(t *testing.T) {
 func TestSourceRecording_Symbol(t *testing.T) {
 	c := qt.New(t)
 
-	env := testutil.NewMinimalNamespace(environment.NewNamespace().Runtime())
+	env := testhelpers.NewMinimalNamespace(environment.NewNamespace().Runtime())
 
 	// First define x
 	rdr := strings.NewReader("(define x 42)")
@@ -483,7 +483,7 @@ func TestSourceRecording_Symbol(t *testing.T) {
 func TestSourceRecording_Literal(t *testing.T) {
 	c := qt.New(t)
 
-	env := testutil.NewMinimalNamespace(environment.NewNamespace().Runtime())
+	env := testhelpers.NewMinimalNamespace(environment.NewNamespace().Runtime())
 	rdr := strings.NewReader("42")
 	p := parser.NewParserWithFile(env, true, rdr, "literal.scm")
 	stx, err := p.ReadSyntax(context.TODO())

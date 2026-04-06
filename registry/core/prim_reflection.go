@@ -75,33 +75,9 @@ func PrimProcedureName(mc *machine.MachineContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAProcedure,
 			"procedure-name: expected procedure")
 	}
-	switch v := callable.(type) {
-	case *machine.MachineClosure:
-		name := v.Template().Name()
-		if name == "" {
-			mc.SetValue(values.FalseValue)
-		} else {
-			mc.SetValue(values.NewString(name))
-		}
-	case *machine.ForeignClosure:
-		name := v.Name()
-		if name == "" {
-			mc.SetValue(values.FalseValue)
-		} else {
-			mc.SetValue(values.NewString(name))
-		}
-	case *machine.CaseLambdaClosure:
-		clauses := v.Clauses()
-		name := ""
-		if len(clauses) > 0 {
-			name = clauses[0].Template().Name()
-		}
-		if name == "" {
-			mc.SetValue(values.FalseValue)
-		} else {
-			mc.SetValue(values.NewString(name))
-		}
-	default:
+	if nc, ok := callable.(interface{ Name() string }); ok {
+		mc.SetValue(values.StringOrFalse(nc.Name()))
+	} else {
 		mc.SetValue(values.FalseValue)
 	}
 	return nil
@@ -238,35 +214,9 @@ func PrimProcedureDocumentation(mc *machine.MachineContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAProcedure,
 			"procedure-documentation: expected procedure")
 	}
-	switch v := callable.(type) {
-	case *machine.MachineClosure:
-		doc := v.Template().Doc()
-		if doc == "" {
-			mc.SetValue(values.FalseValue)
-		} else {
-			mc.SetValue(values.NewString(doc))
-		}
-	case *machine.ForeignClosure:
-		doc := v.Doc()
-		if doc == "" {
-			mc.SetValue(values.FalseValue)
-		} else {
-			mc.SetValue(values.NewString(doc))
-		}
-	case *machine.CaseLambdaClosure:
-		clauses := v.Clauses()
-		doc := ""
-		if len(clauses) > 0 {
-			doc = clauses[0].Template().Doc()
-		}
-		if doc == "" {
-			mc.SetValue(values.FalseValue)
-		} else {
-			mc.SetValue(values.NewString(doc))
-		}
-	case *machine.Parameter, *machine.ComposableContinuation:
-		mc.SetValue(values.FalseValue)
-	default:
+	if dc, ok := callable.(interface{ Doc() string }); ok {
+		mc.SetValue(values.StringOrFalse(dc.Doc()))
+	} else {
 		mc.SetValue(values.FalseValue)
 	}
 	return nil

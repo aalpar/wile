@@ -20,6 +20,36 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
+// syntaxCompilerEntries is the single source of truth for all Tier 2 syntax
+// compiler registrations. Both the compilerRegistry (dispatch via init() in
+// register.go) and RegisterSyntaxCompilers (compile-time environment for
+// library export/hygiene) derive from this slice.
+//
+// ADDING A NEW SYNTAX COMPILER: add one entry here. Both registration paths
+// pick it up automatically.
+var syntaxCompilerEntries = []PhaseEntry[SyntaxCompilerFunc]{
+	{"syntax", (*CompileTimeContinuation).CompileSyntax},
+	{"syntax-case", (*CompileTimeContinuation).CompileSyntaxCase},
+	{"meta", (*CompileTimeContinuation).CompileMeta},
+	{"include", (*CompileTimeContinuation).CompileInclude},
+	{"include-ci", (*CompileTimeContinuation).CompileIncludeCi},
+	{"define-syntax", (*CompileTimeContinuation).CompileDefineSyntax},
+	{"define-library", (*CompileTimeContinuation).CompileDefineLibrary},
+	{"library", (*CompileTimeContinuation).CompileDefineLibrary}, // R6RS alias
+	{"import", (*CompileTimeContinuation).CompileImport},
+	{"export", (*CompileTimeContinuation).CompileExport},
+	{"unquote", (*CompileTimeContinuation).CompileUnquote},
+	{"unquote-splicing", (*CompileTimeContinuation).CompileUnquoteSplicing},
+	{"quasisyntax", (*CompileTimeContinuation).CompileQuasisyntax},
+	{"unsyntax", (*CompileTimeContinuation).CompileUnsyntax},
+	{"unsyntax-splicing", (*CompileTimeContinuation).CompileUnsyntaxSplicing},
+	{"with-syntax", (*CompileTimeContinuation).CompileWithSyntax},
+	{"cond-expand", (*CompileTimeContinuation).CompileCondExpand},
+	{"define-for-syntax", (*CompileTimeContinuation).CompileDefineForSyntax},
+	{"begin-for-syntax", (*CompileTimeContinuation).CompileBeginForSyntax},
+	{"eval-when", (*CompileTimeContinuation).CompileEvalWhen},
+}
+
 // RegisterSyntaxCompilers binds all syntax compilers in the compile-time
 // environment (env.Compile()). These bindings serve two purposes:
 //
@@ -29,36 +59,13 @@ import (
 //  2. Scope-aware lookup via LookupSyntaxCompiler for hygiene resolution.
 //
 // Compilation dispatch itself goes through the forms registry (register.go),
-// not through these bindings. The forms registry and the compile environment
-// are populated from the same source list to stay in sync.
+// not through these bindings. Both paths are populated from
+// syntaxCompilerEntries to stay in sync.
 //
 // The syntax compilers are bound with BindingTypePrimitive to distinguish them
 // from syntax transformers (BindingTypeSyntax) and regular variables.
 func RegisterSyntaxCompilers(env *environment.EnvironmentFrame) error {
-	compilers := []PhaseEntry[SyntaxCompilerFunc]{
-		{"syntax", (*CompileTimeContinuation).CompileSyntax},
-		{"syntax-case", (*CompileTimeContinuation).CompileSyntaxCase},
-		{"meta", (*CompileTimeContinuation).CompileMeta},
-		{"include", (*CompileTimeContinuation).CompileInclude},
-		{"include-ci", (*CompileTimeContinuation).CompileIncludeCi},
-		{"define-syntax", (*CompileTimeContinuation).CompileDefineSyntax},
-		{"define-library", (*CompileTimeContinuation).CompileDefineLibrary},
-		{"library", (*CompileTimeContinuation).CompileDefineLibrary}, // R6RS alias
-		{"import", (*CompileTimeContinuation).CompileImport},
-		{"export", (*CompileTimeContinuation).CompileExport},
-		{"unquote", (*CompileTimeContinuation).CompileUnquote},
-		{"unquote-splicing", (*CompileTimeContinuation).CompileUnquoteSplicing},
-		{"quasisyntax", (*CompileTimeContinuation).CompileQuasisyntax},
-		{"unsyntax", (*CompileTimeContinuation).CompileUnsyntax},
-		{"unsyntax-splicing", (*CompileTimeContinuation).CompileUnsyntaxSplicing},
-		{"with-syntax", (*CompileTimeContinuation).CompileWithSyntax},
-		{"cond-expand", (*CompileTimeContinuation).CompileCondExpand},
-		{"define-for-syntax", (*CompileTimeContinuation).CompileDefineForSyntax},
-		{"begin-for-syntax", (*CompileTimeContinuation).CompileBeginForSyntax},
-		{"eval-when", (*CompileTimeContinuation).CompileEvalWhen},
-	}
-
-	return RegisterPhaseBindings(env, env.Compile, compilers,
+	return RegisterPhaseBindings(env, env.Compile, syntaxCompilerEntries,
 		func(name string, fn SyntaxCompilerFunc) values.Value {
 			return NewSyntaxCompiler(name, fn)
 		})

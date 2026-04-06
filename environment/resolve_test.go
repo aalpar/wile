@@ -1,12 +1,15 @@
 package environment
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/werr"
 )
 
 func TestResolveFile_AbsolutePath(t *testing.T) {
@@ -33,8 +36,7 @@ func TestResolveFile_AbsolutePath_NotFound(t *testing.T) {
 	nonexistent := "/nonexistent/file.scm"
 	_, err := ResolveFile(stack, nonexistent, nil)
 	c.Assert(err, qt.Not(qt.IsNil))
-	c.Assert(err.Error(), qt.Contains, "not found")
-	c.Assert(err.Error(), qt.Contains, nonexistent)
+	c.Assert(errors.Is(err, werr.ErrFileNotFound), qt.IsTrue)
 }
 
 func TestResolveFile_StackRelative(t *testing.T) {

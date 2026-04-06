@@ -21,7 +21,7 @@ import (
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/machine/compilation"
-	"github.com/aalpar/wile/machine/testutil"
+	"github.com/aalpar/wile/registry/testhelpers"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/parser"
@@ -31,7 +31,7 @@ import (
 
 // Helper to compile Scheme code and return the template
 func compileScheme(t *testing.T, code string) *machine.NativeTemplate {
-	env := testutil.NewMinimalNamespace(environment.NewNamespace().Runtime())
+	env := testhelpers.NewMinimalNamespace(environment.NewNamespace().Runtime())
 	rdr := strings.NewReader(code)
 	p := parser.NewParserWithFile(env, true, rdr, "test.scm")
 
@@ -106,7 +106,7 @@ func TestSourceRecording_Begin(t *testing.T) {
 
 func TestSourceRecording_Call(t *testing.T) {
 	// First define a function, then call it
-	env := testutil.NewMinimalNamespace(environment.NewNamespace().Runtime())
+	env := testhelpers.NewMinimalNamespace(environment.NewNamespace().Runtime())
 
 	// Define a simple function
 	rdr := strings.NewReader("(define (id x) x)")
@@ -136,7 +136,7 @@ func TestSourceRecording_Call(t *testing.T) {
 
 func TestSourceRecording_SetBang(t *testing.T) {
 	// Define x first, then set!
-	env := testutil.NewMinimalNamespace(environment.NewNamespace().Runtime())
+	env := testhelpers.NewMinimalNamespace(environment.NewNamespace().Runtime())
 
 	// First compile (define x 1)
 	rdr := strings.NewReader("(define x 1)")
@@ -174,7 +174,7 @@ func TestSourceRecording_SourceLocationPreserved(t *testing.T) {
 	code := `(define (identity a)
   a)`
 
-	env := testutil.NewMinimalNamespace(environment.NewNamespace().Runtime())
+	env := testhelpers.NewMinimalNamespace(environment.NewNamespace().Runtime())
 	rdr := strings.NewReader(code)
 	p := parser.NewParserWithFile(env, true, rdr, "multiline.scm")
 

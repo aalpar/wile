@@ -14,85 +14,104 @@
 
 package validate
 
-// WalkSubExprs calls fn for every direct sub-expression of expr.
+// ChildRole describes the structural position of a sub-expression within its
+// parent validated form.
+type ChildRole int
+
+const (
+	// RoleNormal is the default: arguments, init expressions, branch arms,
+	// body of begin/let/dynamic-wind/with-continuation-mark, define-variable value.
+	RoleNormal ChildRole = iota
+
+	// RoleCallProc is the operator position of ValidatedCall and ValidatedApply.
+	RoleCallProc
+
+	// RoleClosureBody is a body expression inside a closure boundary:
+	// ValidatedLambda, ValidatedCaseLambda clause, or ValidatedDefine (function form).
+	RoleClosureBody
+)
+
+// WalkSubExprs calls fn for every direct sub-expression of expr, reporting
+// each child's structural role:
 //
-// callPosition is true only for the operator of ValidatedCall and
-// ValidatedApply. All other sub-expressions (arguments, bodies, inits,
-// branch arms, etc.) pass callPosition=false.
+//   - RoleCallProc: the operator of ValidatedCall and ValidatedApply
+//   - RoleClosureBody: body of ValidatedLambda, ValidatedCaseLambda clause,
+//     or ValidatedDefine (function form)
+//   - RoleNormal: everything else (arguments, inits, branches, sequence bodies)
 //
-// ValidatedSetBang: walks only the value expression (callPosition=false).
+// ValidatedSetBang: walks only the value expression (RoleNormal).
 // The set! target is mutation (tracked by Mutable), not a reference.
 //
 // ValidatedSymbol has no children — fn is not called. The caller handles
 // symbols directly before calling WalkSubExprs.
-func WalkSubExprs(expr ValidatedExpr, fn func(child ValidatedExpr, callPosition bool)) {
+func WalkSubExprs(expr ValidatedExpr, fn func(child ValidatedExpr, role ChildRole)) {
 	if expr == nil {
 		return
 	}
 	switch e := expr.(type) {
 	case *ValidatedCall:
-		fn(e.Proc(), true)
+		fn(e.Proc(), RoleCallProc)
 		for _, arg := range e.Body() {
-			fn(arg, false)
+			fn(arg, RoleNormal)
 		}
 
 	case *ValidatedApply:
-		fn(e.Proc, true)
+		fn(e.Proc, RoleCallProc)
 		for _, arg := range e.PrefixArgs {
-			fn(arg, false)
+			fn(arg, RoleNormal)
 		}
-		fn(e.FinalList, false)
+		fn(e.FinalList, RoleNormal)
 
 	case *ValidatedLambda:
 		for _, b := range e.Body() {
-			fn(b, false)
+			fn(b, RoleClosureBody)
 		}
 
 	case *ValidatedCaseLambda:
 		for _, clause := range e.Clauses() {
 			for _, b := range clause.Body() {
-				fn(b, false)
+				fn(b, RoleClosureBody)
 			}
 		}
 
 	case *ValidatedIf:
-		fn(e.Test, false)
-		fn(e.Conseq, false)
-		fn(e.Alt, false)
+		fn(e.Test, RoleNormal)
+		fn(e.Conseq, RoleNormal)
+		fn(e.Alt, RoleNormal)
 
 	case *ValidatedBegin:
 		for _, b := range e.Body() {
-			fn(b, false)
+			fn(b, RoleNormal)
 		}
 
 	case *ValidatedSetBang:
-		fn(e.SubExp(), false)
+		fn(e.SubExp(), RoleNormal)
 
 	case *ValidatedLet:
 		for _, b := range e.Bindings {
-			fn(b.Init, false)
+			fn(b.Init, RoleNormal)
 		}
 		for _, b := range e.Body() {
-			fn(b, false)
+			fn(b, RoleNormal)
 		}
 
 	case *ValidatedDynamicWind:
-		fn(e.Before, false)
-		fn(e.Thunk, false)
-		fn(e.After, false)
+		fn(e.Before, RoleNormal)
+		fn(e.Thunk, RoleNormal)
+		fn(e.After, RoleNormal)
 
 	case *ValidatedWithContinuationMark:
-		fn(e.Key, false)
-		fn(e.Val, false)
-		fn(e.Body, false)
+		fn(e.Key, RoleNormal)
+		fn(e.Val, RoleNormal)
+		fn(e.Body, RoleNormal)
 
 	case *ValidatedDefine:
 		if e.IsFunction {
 			for _, b := range e.Body() {
-				fn(b, false)
+				fn(b, RoleClosureBody)
 			}
 		} else {
-			fn(e.SubExp(), false)
+			fn(e.SubExp(), RoleNormal)
 		}
 
 	case *ValidatedQuote, *ValidatedLiteral, *ValidatedQuasiquote, *ValidatedSymbol:

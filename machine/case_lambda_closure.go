@@ -63,6 +63,22 @@ func (p *CaseLambdaClosure) AcceptsArity(n int) bool {
 	return ok
 }
 
+// Name returns the name from the first clause's template, or "" if no clauses.
+func (p *CaseLambdaClosure) Name() string {
+	if len(p.clauses) > 0 {
+		return p.clauses[0].Name()
+	}
+	return ""
+}
+
+// Doc returns the documentation from the first clause's template, or "" if no clauses.
+func (p *CaseLambdaClosure) Doc() string {
+	if len(p.clauses) > 0 {
+		return p.clauses[0].Doc()
+	}
+	return ""
+}
+
 // IsVoid reports whether this value represents the absence of a case-lambda
 // closure. A nil receiver is treated as a distinguished "void" closure value,
 // used as a sentinel to mean "no closure" rather than an error.

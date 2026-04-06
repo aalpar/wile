@@ -15,6 +15,8 @@
 package machine
 
 import (
+	"fmt"
+	"math"
 	"testing"
 
 	"github.com/aalpar/wile/internal/syntax"
@@ -112,6 +114,30 @@ func TestInternSource_Nil(t *testing.T) {
 
 	idx := tpl.internSource(nil)
 	c.Assert(idx, qt.Equals, uint16(0))
+}
+
+func TestInternSource_OverflowPanics(t *testing.T) {
+	tpl := NewNativeTemplate(0, 0, false)
+
+	// Fill the source table to capacity (index 0 is the nil sentinel).
+	// Valid indices are 0..math.MaxUint16, so we fill through index 65535.
+	for i := 1; i <= math.MaxUint16; i++ {
+		src := &syntax.SourceContext{
+			File:  fmt.Sprintf("file%d.scm", i),
+			Start: syntax.NewSourceIndexes(i, 1, 0),
+		}
+		tpl.internSource(src)
+	}
+
+	// The next intern should panic rather than silently wrapping.
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic on source table overflow")
+		}
+	}()
+	tpl.internSource(&syntax.SourceContext{File: "overflow.scm"})
+	t.Fatal("should not reach here")
 }
 
 func TestCopy_PreservesSourceRefs(t *testing.T) {

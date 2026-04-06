@@ -15,10 +15,41 @@
 package compilation
 
 import (
+	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/internal/forms"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/internal/validate"
 	"github.com/aalpar/wile/werr"
 )
+
+// RegisterAllPhaseHandlers registers both syntax compilers (compile phase)
+// and primitive expanders (expand phase) in the correct order. Use this
+// instead of calling RegisterSyntaxCompilers and RegisterPrimitiveExpanders
+// separately at engine/bootstrap/test init sites.
+func RegisterAllPhaseHandlers(env *environment.EnvironmentFrame) error {
+	err := RegisterSyntaxCompilers(env)
+	if err != nil {
+		return err
+	}
+	return RegisterPrimitiveExpanders(env)
+}
+
+// VerifyAllPhaseHandlers cross-checks all three phase registries:
+// form validators (internal/forms), compilers (Tier 1 + Tier 2), and
+// primitive expanders. Returns the first inconsistency found, or nil.
+//
+// Call from tests only — not on the production init path.
+func VerifyAllPhaseHandlers() error {
+	err := forms.Verify()
+	if err != nil {
+		return err
+	}
+	err = VerifyCompilers()
+	if err != nil {
+		return err
+	}
+	return VerifyExpanders()
+}
 
 func init() {
 	// Tier 2: syntax passthrough compilers — syntaxCompiler unwraps
@@ -26,27 +57,12 @@ func init() {
 	//
 	// Tier 1 forms (if, define, lambda, etc.) are dispatched by type switch
 	// in compileValidated (compile_validated.go) — no registry entry needed.
-	registerCompiler("syntax", syntaxCompiler((*CompileTimeContinuation).CompileSyntax))
-	registerCompiler("syntax-case", syntaxCompiler((*CompileTimeContinuation).CompileSyntaxCase))
-	registerCompiler("meta", syntaxCompiler((*CompileTimeContinuation).CompileMeta))
-	registerCompiler("include", syntaxCompiler((*CompileTimeContinuation).CompileInclude))
-	registerCompiler("include-ci", syntaxCompiler((*CompileTimeContinuation).CompileIncludeCi))
-	registerCompiler("define-syntax", syntaxCompiler((*CompileTimeContinuation).CompileDefineSyntax))
-	// syntax-rules is handled by define-syntax, not registered separately
-	registerCompiler("define-library", syntaxCompiler((*CompileTimeContinuation).CompileDefineLibrary))
-	registerCompiler("library", syntaxCompiler((*CompileTimeContinuation).CompileDefineLibrary)) // R6RS alias
-	registerCompiler("import", syntaxCompiler((*CompileTimeContinuation).CompileImport))
-	registerCompiler("export", syntaxCompiler((*CompileTimeContinuation).CompileExport))
-	registerCompiler("unquote", syntaxCompiler((*CompileTimeContinuation).CompileUnquote))
-	registerCompiler("unquote-splicing", syntaxCompiler((*CompileTimeContinuation).CompileUnquoteSplicing))
-	registerCompiler("quasisyntax", syntaxCompiler((*CompileTimeContinuation).CompileQuasisyntax))
-	registerCompiler("unsyntax", syntaxCompiler((*CompileTimeContinuation).CompileUnsyntax))
-	registerCompiler("unsyntax-splicing", syntaxCompiler((*CompileTimeContinuation).CompileUnsyntaxSplicing))
-	registerCompiler("with-syntax", syntaxCompiler((*CompileTimeContinuation).CompileWithSyntax))
-	registerCompiler("cond-expand", syntaxCompiler((*CompileTimeContinuation).CompileCondExpand))
-	registerCompiler("define-for-syntax", syntaxCompiler((*CompileTimeContinuation).CompileDefineForSyntax))
-	registerCompiler("begin-for-syntax", syntaxCompiler((*CompileTimeContinuation).CompileBeginForSyntax))
-	registerCompiler("eval-when", syntaxCompiler((*CompileTimeContinuation).CompileEvalWhen))
+	//
+	// Both this init() and RegisterSyntaxCompilers derive from
+	// syntaxCompilerEntries (syntax_compilers_registry.go) to stay in sync.
+	for _, entry := range syntaxCompilerEntries {
+		registerCompiler(entry.Name, syntaxCompiler(entry.Fn))
+	}
 }
 
 // syntaxCompiler adapts a SyntaxCompilerFunc into a CompilerFunc by unwrapping

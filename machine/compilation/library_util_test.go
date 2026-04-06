@@ -35,15 +35,6 @@ func TestLibraryName_Key(t *testing.T) {
 	qt.Assert(t, name.Key(), qt.Equals, "scheme/base")
 }
 
-func TestLibraryName_ToFilePath(t *testing.T) {
-	name := NewLibraryName("scheme", "base")
-	// Should end with .sld
-	path := name.ToFilePath()
-	qt.Assert(t, path, qt.Contains, "scheme")
-	qt.Assert(t, path, qt.Contains, "base")
-	qt.Assert(t, path, qt.Contains, ".sld")
-}
-
 func TestLibraryName_ToFSPath(t *testing.T) {
 	name := NewLibraryName("scheme", "base")
 	qt.Assert(t, name.ToFSPath(), qt.Equals, "scheme/base.sld")

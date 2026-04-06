@@ -92,6 +92,16 @@ func (p *MachineClosure) AcceptsArity(n int) bool {
 	return n == tpl.ParameterCount()
 }
 
+// Name returns the closure's name from its compiled template.
+func (p *MachineClosure) Name() string {
+	return p.template.Name()
+}
+
+// Doc returns the closure's documentation string from its compiled template.
+func (p *MachineClosure) Doc() string {
+	return p.template.Doc()
+}
+
 func (p *MachineClosure) EqualTo(o values.Value) bool {
 	v, ok := o.(*MachineClosure)
 	if !ok {

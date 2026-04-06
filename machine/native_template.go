@@ -219,6 +219,34 @@ func instructionToOperation(instr Instruction) Operation {
 		return NewOperationLoadCachedBinding(instr.Arg)
 	case OpVectorRef, OpVectorRefTail:
 		return NewOperationLoadCachedBinding(instr.Arg)
+	case OpNullQ, OpNullQTail:
+		return NewOperationLoadCachedBinding(instr.Arg)
+	case OpPairQ, OpPairQTail:
+		return NewOperationLoadCachedBinding(instr.Arg)
+	case OpCar, OpCarTail:
+		return NewOperationLoadCachedBinding(instr.Arg)
+	case OpCdr, OpCdrTail:
+		return NewOperationLoadCachedBinding(instr.Arg)
+	case OpAdd, OpAddTail:
+		return NewOperationLoadCachedBinding(instr.Arg)
+	case OpSub, OpSubTail:
+		return NewOperationLoadCachedBinding(instr.Arg)
+	case OpMul, OpMulTail:
+		return NewOperationLoadCachedBinding(instr.Arg)
+	case OpDiv, OpDivTail:
+		return NewOperationLoadCachedBinding(instr.Arg)
+	case OpNumLt, OpNumLtTail:
+		return NewOperationLoadCachedBinding(instr.Arg)
+	case OpNumLe, OpNumLeTail:
+		return NewOperationLoadCachedBinding(instr.Arg)
+	case OpNumGt, OpNumGtTail:
+		return NewOperationLoadCachedBinding(instr.Arg)
+	case OpNumGe, OpNumGeTail:
+		return NewOperationLoadCachedBinding(instr.Arg)
+	case OpNumEq, OpNumEqTail:
+		return NewOperationLoadCachedBinding(instr.Arg)
+	case OpCons, OpConsTail:
+		return NewOperationLoadCachedBinding(instr.Arg)
 
 	// --- Wave 5: promoted complex operations ---
 	case OpMakeClosure:
@@ -250,6 +278,11 @@ func (p *NativeTemplate) internSource(src *syntax.SourceContext) uint16 {
 		if s == src || sourceEqual(s, src) {
 			return uint16(i)
 		}
+	}
+	if len(p.sourceTable) > math.MaxUint16 {
+		panic(werr.WrapForeignErrorf(
+			werr.ErrInvalidArgument,
+			"internSource: source table overflow (%d entries)", len(p.sourceTable)))
 	}
 	idx := uint16(len(p.sourceTable))
 	p.sourceTable = append(p.sourceTable, src)

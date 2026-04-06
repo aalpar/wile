@@ -27,8 +27,10 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/parser"
+	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
-	wileruntime "github.com/aalpar/wile/runtime"
+	"github.com/aalpar/wile/machine/compilation"
+	"github.com/aalpar/wile/werr"
 
 	"github.com/ergochat/readline"
 )
@@ -211,7 +213,7 @@ func (p *REPL) Run(ctx context.Context) error {
 		rl.SetPrompt(p.prompt)
 
 		// Compile
-		tpl, compileErr := wileruntime.Compile(ctx, p.env, stx)
+		tpl, compileErr := compile(ctx, p.env, stx)
 		if compileErr != nil {
 			fmt.Fprintf(p.errOut, "Exception: %v\n", compileErr)
 			continue
@@ -274,14 +276,14 @@ func (p *REPL) RunSimple(ctx context.Context) error {
 
 		inputBuffer.Reset()
 
-		tpl, compileErr := wileruntime.Compile(ctx, p.env, stx)
+		tpl, compileErr := compile(ctx, p.env, stx)
 		if compileErr != nil {
 			fmt.Fprintf(p.errOut, "Exception: %v\n", compileErr)
 			fmt.Fprint(p.out, p.prompt)
 			continue
 		}
 
-		mv, runErr := wileruntime.Run(ctx, tpl, p.env)
+		mv, runErr := run(ctx, tpl, p.env)
 		if runErr != nil {
 			fmt.Fprintf(p.errOut, "Exception: %v\n", runErr)
 			fmt.Fprint(p.out, p.prompt)
@@ -304,6 +306,35 @@ func (p *REPL) runWithDebugger(ctx context.Context, tpl *machine.NativeTemplate)
 	cont := machine.NewMachineContinuation(nil, tpl, p.env)
 	mc := machine.NewMachineContext(ctx, cont)
 	mc.SetDebugger(p.debugCtx.Debugger())
+	err := mc.RunWithEscapeHandling()
+	if err != nil {
+		return nil, err
+	}
+	return mc.GetValues(), nil
+}
+
+// compile expands and compiles a syntax expression into an executable template.
+func compile(ctx context.Context, env *environment.EnvironmentFrame, expr syntax.SyntaxValue) (*machine.NativeTemplate, error) {
+	tpl := machine.NewNativeTemplate(0, 0, false)
+
+	expanded, err := compilation.NewExpanderTimeContinuation(ctx, env, machine.NewVMMacroEvaluator()).ExpandExpression(expr)
+	if err != nil {
+		return nil, werr.WrapForeignErrorWithCause(werr.ErrExpansion, err, "expansion error")
+	}
+
+	cctx := compilation.NewCompileTimeCallContext(ctx, false)
+	err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
+	if err != nil {
+		return nil, werr.WrapForeignErrorWithCause(werr.ErrCompilation, err, "compilation error")
+	}
+
+	return tpl, nil
+}
+
+// run executes a compiled template and returns the result values.
+func run(ctx context.Context, tpl *machine.NativeTemplate, env *environment.EnvironmentFrame) (machine.MultipleValues, error) {
+	cont := machine.NewMachineContinuation(nil, tpl, env)
+	mc := machine.NewMachineContext(ctx, cont)
 	err := mc.RunWithEscapeHandling()
 	if err != nil {
 		return nil, err

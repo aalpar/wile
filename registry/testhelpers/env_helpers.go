@@ -12,16 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package testutil provides shared test helpers for both the machine/
-// and machine/compilation/ test suites. It exists to break the import
-// cycle between machine (which cannot import compilation) and tests
-// that need both packages.
-package testutil
+package testhelpers
 
 import (
 	"bufio"
 	"context"
-	"fmt"
+	"errors"
 	"io"
 	"io/fs"
 	"strings"
@@ -43,7 +39,7 @@ import (
 // primitives and bootstrap macros registered.
 func NewFullRuntimeEnv(t *testing.T) *environment.EnvironmentFrame {
 	t.Helper()
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrameTiny(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 	return env
 }
@@ -53,7 +49,7 @@ func ParseSchemeExpr(t *testing.T, env *environment.EnvironmentFrame, code strin
 	t.Helper()
 	reader := bufio.NewReader(strings.NewReader(code))
 	p := parser.NewParser(env, true, reader)
-	sv, err := p.ReadSyntax(context.TODO())
+	sv, err := p.ReadSyntax(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 	return sv
 }
@@ -101,7 +97,7 @@ func EvalSchemeInEnv(t *testing.T, env *environment.EnvironmentFrame, code strin
 // library search path.
 func SetupLibraryTest(t *testing.T, testdataPath string) *environment.EnvironmentFrame {
 	t.Helper()
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrameTiny(context.Background())
 	if err != nil {
 		t.Fatalf("failed to create environment: %v", err)
 	}
@@ -121,7 +117,7 @@ func SetupLibraryTest(t *testing.T, testdataPath string) *environment.Environmen
 // dependency) while providing the same library infrastructure.
 func SetupEngineTest(t *testing.T, fsys fs.FS) *environment.EnvironmentFrame {
 	t.Helper()
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrameTiny(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Wire up library infrastructure (same as Engine internals).
@@ -136,28 +132,15 @@ func SetupEngineTest(t *testing.T, fsys fs.FS) *environment.EnvironmentFrame {
 			stdlibResolver,
 		})
 		env.SetFileResolver(resolver)
-
-		// bootstrap.NewLibraryEnvironmentFrame calls initializeEnvironment
-		// which unconditionally sets an OSFileResolver on the namespace,
-		// overwriting our chain resolver. Wrap the factory to restore it
-		// after each library env creation.
-		env.Namespace().SetLibraryEnvFactory(func(ctx context.Context, callerEnv *environment.EnvironmentFrame, parts []string) (*environment.EnvironmentFrame, error) {
-			libEnv, err := bootstrap.NewLibraryEnvironmentFrame(ctx, callerEnv, parts)
-			if err != nil {
-				return nil, err
-			}
-			env.SetFileResolver(resolver)
-			return libEnv, nil
-		})
-	} else {
-		env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 	}
+
+	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
 	return env
 }
 
 // evalSchemeInEnvCore is the shared eval loop used by both EvalSchemeInEnv
-// and EvalSchemeInEnvMayFail.
+// and EvalSchemeInEnvMayFail. Supports multi-expression input.
 func evalSchemeInEnvCore(env *environment.EnvironmentFrame, code string) (values.Value, error) {
 	ctx := context.Background()
 	rdr := strings.NewReader(code)
@@ -166,8 +149,8 @@ func evalSchemeInEnvCore(env *environment.EnvironmentFrame, code string) (values
 	var lastValue = values.Void
 
 	for {
-		stx, err := p.ReadSyntax(context.TODO())
-		if err == io.EOF {
+		stx, err := p.ReadSyntax(context.Background())
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -180,7 +163,7 @@ func evalSchemeInEnvCore(env *environment.EnvironmentFrame, code string) (values
 		}
 
 		mc := machine.NewMachineContext(ctx, cont)
-		err = mc.Run()
+		err = mc.RunWithEscapeHandling()
 		if err != nil {
 			return nil, err
 		}
@@ -189,15 +172,6 @@ func evalSchemeInEnvCore(env *environment.EnvironmentFrame, code string) (values
 	}
 
 	return lastValue, nil
-}
-
-// panicError wraps a non-error panic value as an error.
-type panicError struct {
-	value any
-}
-
-func (p panicError) Error() string {
-	return fmt.Sprintf("panic: %v", p.value)
 }
 
 // EvalSchemeInEnvMayFail evaluates Scheme expressions in the given environment,
@@ -214,7 +188,7 @@ func EvalSchemeInEnvMayFail(t *testing.T, env *environment.EnvironmentFrame, cod
 		if ok {
 			err = e
 		} else {
-			err = panicError{value: r}
+			err = panicNonError{v: r}
 		}
 	}()
 	return evalSchemeInEnvCore(env, code)
@@ -233,7 +207,9 @@ func NewMinimalNamespace(env *environment.EnvironmentFrame) *environment.Environ
 			environment.BindingTypePrimitive,
 		)
 	}
-	compilation.RegisterSyntaxCompilers(env)    //nolint:errcheck
-	compilation.RegisterPrimitiveExpanders(env) //nolint:errcheck
+	err := compilation.RegisterAllPhaseHandlers(env)
+	if err != nil {
+		panic("NewMinimalNamespace: " + err.Error())
+	}
 	return env
 }

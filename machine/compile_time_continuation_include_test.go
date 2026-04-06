@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/machine/testutil"
+	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -40,22 +40,22 @@ func TestCompileInclude(t *testing.T) {
 	err := os.WriteFile(schemeFile, []byte("(define included-val 99)\n"), 0644)
 	qt.Assert(t, err, qt.IsNil)
 
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 
 	// Set the SCHEME_INCLUDE_PATH so the file resolver can find the file
 	t.Setenv("SCHEME_INCLUDE_PATH", tmpDir)
 
 	// Step 1: Include the file
-	sv := testutil.ParseSchemeExpr(t, env, `(include "included.scm")`)
-	cont, contErr := testutil.NewTopLevelThunk(sv, env)
+	sv := testhelpers.ParseSchemeExpr(t, env, `(include "included.scm")`)
+	cont, contErr := testhelpers.NewTopLevelThunk(sv, env)
 	qt.Assert(t, contErr, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	runErr := mc.Run()
 	qt.Assert(t, runErr, qt.IsNil)
 
 	// Step 2: Reference the included binding
-	sv = testutil.ParseSchemeExpr(t, env, `included-val`)
-	cont, contErr = testutil.NewTopLevelThunk(sv, env)
+	sv = testhelpers.ParseSchemeExpr(t, env, `included-val`)
+	cont, contErr = testhelpers.NewTopLevelThunk(sv, env)
 	qt.Assert(t, contErr, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	runErr = mc.Run()
@@ -71,20 +71,20 @@ func TestCompileIncludeMultipleForms(t *testing.T) {
 	err := os.WriteFile(schemeFile, []byte("(define a 10)\n(define b (+ a 20))\n"), 0644)
 	qt.Assert(t, err, qt.IsNil)
 
-	env := testutil.NewFullRuntimeEnv(t)
+	env := testhelpers.NewFullRuntimeEnv(t)
 	t.Setenv("SCHEME_INCLUDE_PATH", tmpDir)
 
 	// Include the file
-	sv := testutil.ParseSchemeExpr(t, env, `(include "multi.scm")`)
-	cont, contErr := testutil.NewTopLevelThunk(sv, env)
+	sv := testhelpers.ParseSchemeExpr(t, env, `(include "multi.scm")`)
+	cont, contErr := testhelpers.NewTopLevelThunk(sv, env)
 	qt.Assert(t, contErr, qt.IsNil)
 	mc := machine.NewMachineContext(context.Background(), cont)
 	runErr := mc.Run()
 	qt.Assert(t, runErr, qt.IsNil)
 
 	// Check that both bindings are visible and b uses a
-	sv = testutil.ParseSchemeExpr(t, env, `b`)
-	cont, contErr = testutil.NewTopLevelThunk(sv, env)
+	sv = testhelpers.ParseSchemeExpr(t, env, `b`)
+	cont, contErr = testhelpers.NewTopLevelThunk(sv, env)
 	qt.Assert(t, contErr, qt.IsNil)
 	mc = machine.NewMachineContext(context.Background(), cont)
 	runErr = mc.Run()

@@ -42,7 +42,7 @@ func (p panicNonError) Error() string {
 // environment with all core primitives and extensions loaded.
 func RunSchemeCode(t *testing.T, code string) (values.Value, error) {
 	t.Helper()
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrameTiny(context.Background())
 	if err != nil {
 		return nil, err
 	}

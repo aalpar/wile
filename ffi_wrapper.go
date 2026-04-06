@@ -26,7 +26,7 @@ import (
 
 // makeWrapper generates the ForeignFunction closure that bridges between
 // the VM calling convention and the Go function.
-func (s *ffiSpec) makeWrapper() ForeignFunction {
+func (p *ffiSpec) makeWrapper() ForeignFunction {
 	return func(mc *MachineContext) (returnErr error) {
 		defer func() {
 			r := recover()
@@ -41,23 +41,23 @@ func (s *ffiSpec) makeWrapper() ForeignFunction {
 					return
 				}
 			}
-			panic(fmt.Sprintf("FFI %q: %v", s.name, r))
+			panic(fmt.Sprintf("FFI %q: %v", p.name, r))
 		}()
 
 		var args []reflect.Value
 
 		// Forward context if needed.
-		if s.hasContext {
+		if p.hasContext {
 			args = append(args, reflect.ValueOf(mc.Context()))
 		}
 
-		if s.isVariadic {
+		if p.isVariadic {
 			// Fixed args: mc.Arg(0) .. mc.Arg(paramCount-2)
 			// Variadic list: mc.Arg(paramCount-1)
-			fixedCount := s.paramCount - 1
+			fixedCount := p.paramCount - 1
 
 			for i := range fixedCount {
-				converted, err := s.argConvs[i](mc, mc.Arg(i))
+				converted, err := p.argConvs[i](mc, mc.Arg(i))
 				if err != nil {
 					return err
 				}
@@ -65,12 +65,12 @@ func (s *ffiSpec) makeWrapper() ForeignFunction {
 			}
 
 			// Walk the Scheme list for variadic args.
-			variadicConv := s.argConvs[s.paramCount-1]
+			variadicConv := p.argConvs[p.paramCount-1]
 			varList := mc.Arg(fixedCount)
 
 			_, isTuple := varList.(values.Tuple)
 			if !isTuple {
-				return fmtArgError(s.name, fixedCount+1, "proper list", varList)
+				return fmtArgError(p.name, fixedCount+1, "proper list", varList)
 			}
 
 			tail, err := values.ForEach(mc.Context(), varList, func(_ context.Context, _ int, _ bool, v values.Value) error {
@@ -85,11 +85,11 @@ func (s *ffiSpec) makeWrapper() ForeignFunction {
 				return err
 			}
 			if !values.IsEmptyList(tail) {
-				return fmtArgError(s.name, fixedCount+1, "proper list", varList)
+				return fmtArgError(p.name, fixedCount+1, "proper list", varList)
 			}
 		} else {
-			for i := range s.paramCount {
-				converted, err := s.argConvs[i](mc, mc.Arg(i))
+			for i := range p.paramCount {
+				converted, err := p.argConvs[i](mc, mc.Arg(i))
 				if err != nil {
 					return err
 				}
@@ -99,23 +99,23 @@ func (s *ffiSpec) makeWrapper() ForeignFunction {
 
 		// Call the Go function. Use Call (not CallSlice) since we've
 		// already expanded variadic args into individual reflect.Values.
-		results := s.fnValue.Call(args)
+		results := p.fnValue.Call(args)
 
 		// Process return values.
 		switch {
-		case s.retConv != nil && s.hasError:
+		case p.retConv != nil && p.hasError:
 			// (T, error)
 			errVal := results[1]
 			if !errVal.IsNil() {
 				return errVal.Interface().(error)
 			}
-			mc.SetValue(s.retConv(results[0]))
+			mc.SetValue(p.retConv(results[0]))
 
-		case s.retConv != nil:
+		case p.retConv != nil:
 			// T (no error)
-			mc.SetValue(s.retConv(results[0]))
+			mc.SetValue(p.retConv(results[0]))
 
-		case s.hasError:
+		case p.hasError:
 			// error only (void or error)
 			errVal := results[0]
 			if !errVal.IsNil() {
