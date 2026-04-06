@@ -207,7 +207,8 @@ func NewMinimalNamespace(env *environment.EnvironmentFrame) *environment.Environ
 			environment.BindingTypePrimitive,
 		)
 	}
-	if err := compilation.RegisterAllPhaseHandlers(env); err != nil {
+	err := compilation.RegisterAllPhaseHandlers(env)
+	if err != nil {
 		panic("NewMinimalNamespace: " + err.Error())
 	}
 	return env

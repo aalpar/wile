@@ -61,7 +61,8 @@ func newNamespace(env *environment.EnvironmentFrame) *environment.EnvironmentFra
 	for _, name := range []string{"if", "lambda", "quote", "quasiquote", "define", "set!", "begin", "meta", "include", "include-ci"} {
 		env.MaybeCreateOwnGlobalBinding(values.NewSymbol(name), environment.BindingTypePrimitive)
 	}
-	if err := RegisterAllPhaseHandlers(env); err != nil {
+	err := RegisterAllPhaseHandlers(env)
+	if err != nil {
 		panic("newNamespace: " + err.Error())
 	}
 	return env
