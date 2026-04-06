@@ -34,6 +34,7 @@ When investigating R7RS conformance issues:
 | `2026-03-27-procedure-documentation-design.md` | `procedure-documentation` primitive: NativeTemplate doc field, compileBody extraction, Guile-style convention | **Complete** (PR #579) |
 | `2026-03-27-scheme-library-docstrings-design.md` | Scheme library docstrings design: conventions, phasing, scope (300 procs across 29 files) | **Complete** |
 | `2026-03-27-special-form-macro-docstrings-design.md` | Special form & macro docstrings: `BindingMeta.Doc`, `BindingSpec`, `DocEntry`, post-bootstrap `ApplyDocs` | **Complete** |
+| `2026-04-06-structured-docstring-metadata-design.md` | Structured docstring metadata: parse `Parameters:`, `Returns:`, `Category:` from Guile-style docstrings for `,doc`/`,apropos`/`,topics` parity | **Approved** |
 | `2026-03-26-extension-contracts-design.md` | Extension API contract system: ValueType enum, PrimitiveSpec type declarations, validation, doc integration | **Approved** (design) |
 | `2026-03-26-extension-contracts-impl.md` | Extension contracts remaining work: Phases 2-4 outlines (Phase 1 complete) | Open |
 | `2026-03-26-environment-profiles.md` | Environment profiles design: named profiles (Tiny, Console, Small, KitchenSink), sandbox modifier | Draft |

@@ -427,7 +427,8 @@ func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding,
 		val := bnd.Value()
 
 		// Try structured docstring for closures.
-		if raw := callableDoc(val); raw != "" {
+		raw := callableDoc(val)
+		if raw != "" {
 			parsed := docparse.ParseDocstring(raw)
 			if parsed.HasStructuredMetadata() {
 				formatPrimitiveDoc(w, name, DocInfo{

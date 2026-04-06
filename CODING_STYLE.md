@@ -904,6 +904,40 @@ documentation. Retrieved at runtime via `(procedure-documentation proc)`.
 escape it with backslash. `\`` is an invalid R7RS escape sequence and will cause
 a tokenizer error.
 
+### Structured Metadata Sections
+
+Docstrings may include metadata sections that the documentation system parses into
+structured fields. These enable `,doc`, `,apropos`, and `,topics` to render
+Scheme-defined procedures with the same rich output as Go-implemented primitives.
+
+| Section | Format | Purpose |
+|---------|--------|---------|
+| `Parameters:` | Indented `name : type` lines | Parameter names and types |
+| `Returns:` | Single type name on same line | Return type |
+| `Category:` | Single category name on same line | Topic grouping for `,topics` |
+
+Sections may appear in any order. Place metadata sections after the prose description
+and before `Examples:` / `See also:` (which remain part of the prose text).
+
+Type names must match the `ValueType.String()` vocabulary: `any`, `boolean`, `number`,
+`integer`, `exact-integer`, `real`, `rational`, `complex`, `string`, `character`,
+`symbol`, `pair`, `list`, `vector`, `bytevector`, `hashtable`, `procedure`, `port`,
+`input-port`, `output-port`. Unknown names degrade gracefully to `any`.
+
+Example with all sections:
+```scheme
+(define (map f lst)
+  "Apply F to each element of LST, returning a list of results.\n\nParameters:\n  f : procedure\n  lst : list\nReturns: list\nCategory: lists\n\nSee also: `for-each', `vector-map'."
+  ...)
+```
+
+Minimal metadata (category only — makes the procedure visible in `,topics`):
+```scheme
+(define (not x)
+  "Return #t if X is #f, #f otherwise.\n\nCategory: predicates"
+  (if x #f #t))
+```
+
 ### When to Use Each Element
 
 - **Every docstring**: First-line summary + UPPER CASE parameters
@@ -911,6 +945,8 @@ a tokenizer error.
 - **Procedures with non-obvious behavior**: Add `Examples:` section
 - **Procedures with related alternatives**: Add `See also:` line
 - **Trivial accessors/wrappers**: First-line summary is sufficient
+- **All procedures in bootstrap/stdlib**: Add `Category:` at minimum for `,topics` visibility
+- **Procedures with typed contracts**: Add `Parameters:` and `Returns:` sections
 
 ### What Gets Docstrings
 

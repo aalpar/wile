@@ -156,3 +156,4 @@ No demand signal. Speculative or research-only.
 - [ ] **Consider ValueType Refactoring** ValueType does not seem to have a grounding in Scheme or Go, which begs the question of what sorts of type domains is it attempting to describe?  Ask specific questions of AI to determine the use and scope of the type domains
 - [ ] **Evaluate Need for Primitive Annotation Enforcement** — enforcement may not be needed.
 - [ ] **Namespace registry is `any`** - namespace's registry should have a type
+- [ ] **MCP eval fails on schelog `include`** — `(include "examples/logic/schelog/schelog.scm")` followed by `(solve-puzzle %houses)` produces `#!void` for `schelog:unbind-ref!` at line 113. CLI (`wile -f`) works fine. Likely an `include` resolution or session-state issue in MCP eval mode.
