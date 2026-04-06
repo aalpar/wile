@@ -44,7 +44,7 @@ When investigating R7RS conformance issues:
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |
 | `ARCHITECTURE.md` | Dialect system, module decomposition, plugin shadowing, environment introspection | All proposed |
 | `TEST-COVERAGE-AND-REFACTORING.md` | machine/ test coverage (52 files), engine.go tests, REPL tests, type switch linter, form dual-dispatch | Open |
-| `2026-04-05-structural-reduction.md` | Full-codebase structural reduction: CallContext interface, promoted op table, Thread outcome type, plus 7 deferred findings | Proposed |
+| `2026-04-05-structural-reduction.md` | Full-codebase structural reduction: CallContext interface, promoted op table, Thread outcome type, plus 7 deferred findings | Phases 1, 3 complete; Phase 2 deferred (perf-neutral path needed) |
 
 Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans).
 =======

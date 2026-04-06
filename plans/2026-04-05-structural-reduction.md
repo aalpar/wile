@@ -1,6 +1,6 @@
 # Structural Reduction Analysis — April 2026
 
-**Status**: Phase 1 Complete
+**Status**: Phases 1, 3 Complete
 **Date**: 2026-04-05
 **Method**: Full-codebase structural analysis (40 packages, Martin's instability metrics, type precision audit)
 **Related**: `TECH-DEBT-2026-04.md` (Phases 5, 8), `2026-03-30-machine-decomposition-design.md`
@@ -234,7 +234,11 @@ make lint && make test ./machine/...
 
 ---
 
-## Phase 3: Thread Outcome Sum Type (Medium impact, small effort)
+## Phase 3: Thread Outcome Sum Type (Medium impact, small effort) ✅
+
+**Completed**: Replaced `result Value` + `exception error` with `*threadOutcome` pointer.
+Nil until terminated, then `err != nil` discriminates success/failure. Eliminates
+impossible `result AND exception` state. 4 write sites, 1 read site, all internal.
 
 ### Problem
 
@@ -376,7 +380,7 @@ the correct place for OS filesystem access. `FSFileResolver` has its own resolut
 |-------|------|--------|--------|--------|
 | 1 | CallContext interface | M | High | 77% coupling surface reduction across 12 packages |
 | 2 | Promoted op table | S-M | Medium | 24 cases -> 1 loop + 12-entry table; O(1) new-op cost |
-| 3 | Thread outcome sum type | S | Medium | Eliminates impossible `result AND exception` states |
+| 3 | Thread outcome sum type | S | Medium | ✅ Eliminates impossible `result AND exception` states |
 | D1 | PrimitiveSpec dead fields | S | Low | 9 -> 7 fields |
 | D2 | ForeignClosure denorm | S | Low | 7 -> 5 fields |
 | D3 | Namespace root/child docs | S | Low | Documentation only |
