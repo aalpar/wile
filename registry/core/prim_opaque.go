@@ -30,7 +30,7 @@ var PrimOpaqueQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 
 // PrimOpaqueTag implements the opaque-tag primitive.
 // Returns the tag of an opaque value as a symbol.
-func PrimOpaqueTag(mc *machine.MachineContext) error {
+func PrimOpaqueTag(mc machine.CallContext) error {
 	o, ok := mc.Arg(0).(values.Opaque)
 	if !ok {
 		return werr.WrapForeignErrorf(

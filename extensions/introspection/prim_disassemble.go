@@ -22,7 +22,7 @@ import (
 
 // PrimDisassemble implements the (disassemble proc) primitive.
 // Returns structured disassembly of a procedure as a list of alists.
-func PrimDisassemble(mc *machine.MachineContext) error {
+func PrimDisassemble(mc machine.CallContext) error {
 	arg := mc.Arg(0)
 
 	switch c := arg.(type) {

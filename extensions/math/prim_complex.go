@@ -26,7 +26,7 @@ import (
 
 // PrimMakeRectangular implements make-rectangular.
 // R7RS §6.2.6: If both arguments are exact, the result is exact.
-func PrimMakeRectangular(mc *machine.MachineContext) error {
+func PrimMakeRectangular(mc machine.CallContext) error {
 	r := mc.Arg(0)
 	i := mc.Arg(1)
 
@@ -139,7 +139,7 @@ func toBigComplexPart(v values.Value, name string) (values.Number, error) {
 }
 
 // PrimMakePolar implements the (make-polar) primitive.
-func PrimMakePolar(mc *machine.MachineContext) error {
+func PrimMakePolar(mc machine.CallContext) error {
 	r := mc.Arg(0)
 	theta := mc.Arg(1)
 	rNum, rOk := r.(values.Number)
@@ -161,7 +161,7 @@ func PrimMakePolar(mc *machine.MachineContext) error {
 }
 
 // PrimRealPart implements the (real-part) primitive.
-func PrimRealPart(mc *machine.MachineContext) error {
+func PrimRealPart(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	c, ok := o.(values.ComplexNumber)
 	if ok {
@@ -178,7 +178,7 @@ func PrimRealPart(mc *machine.MachineContext) error {
 }
 
 // PrimImagPart implements the (imag-part) primitive.
-func PrimImagPart(mc *machine.MachineContext) error {
+func PrimImagPart(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	c, ok := o.(values.ComplexNumber)
 	if ok {
@@ -197,7 +197,7 @@ func PrimImagPart(mc *machine.MachineContext) error {
 }
 
 // PrimMagnitude implements the (magnitude) primitive.
-func PrimMagnitude(mc *machine.MachineContext) error {
+func PrimMagnitude(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Complex:
@@ -228,7 +228,7 @@ func PrimMagnitude(mc *machine.MachineContext) error {
 }
 
 // PrimAngle implements the angle primitive.
-func PrimAngle(mc *machine.MachineContext) error {
+func PrimAngle(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	switch v := o.(type) {
 	case *values.Complex:

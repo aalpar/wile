@@ -48,7 +48,7 @@ func newDynamicWindEnv() *environment.EnvironmentFrame {
 }
 
 // registerForeignFn registers a zero-argument foreign closure in the environment.
-func registerForeignFn(env *environment.EnvironmentFrame, name string, fn func(*machine.MachineContext) error) {
+func registerForeignFn(env *environment.EnvironmentFrame, name string, fn machine.ForeignFunction) {
 	sym := values.NewSymbol(name)
 	env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 	closure := machine.NewForeignClosure(env, 0, false, fn)
@@ -85,13 +85,13 @@ func TestCompileValidatedDynamicWind_ReturnValue(t *testing.T) {
 	env := newDynamicWindEnv()
 
 	// Register no-op thunks for before/after
-	registerForeignFn(env, "noop", func(mc *machine.MachineContext) error {
+	registerForeignFn(env, "noop", func(mc machine.CallContext) error {
 		mc.SetValue(values.Void)
 		return nil
 	})
 
 	// Register a thunk that returns 42
-	registerForeignFn(env, "ret42", func(mc *machine.MachineContext) error {
+	registerForeignFn(env, "ret42", func(mc machine.CallContext) error {
 		mc.SetValue(values.NewInteger(42))
 		return nil
 	})
@@ -107,19 +107,19 @@ func TestCompileValidatedDynamicWind_CallOrder(t *testing.T) {
 
 	var log []string
 
-	registerForeignFn(env, "before-fn", func(mc *machine.MachineContext) error {
+	registerForeignFn(env, "before-fn", func(mc machine.CallContext) error {
 		log = append(log, "before")
 		mc.SetValue(values.Void)
 		return nil
 	})
 
-	registerForeignFn(env, "thunk-fn", func(mc *machine.MachineContext) error {
+	registerForeignFn(env, "thunk-fn", func(mc machine.CallContext) error {
 		log = append(log, "thunk")
 		mc.SetValue(values.NewString("result"))
 		return nil
 	})
 
-	registerForeignFn(env, "after-fn", func(mc *machine.MachineContext) error {
+	registerForeignFn(env, "after-fn", func(mc machine.CallContext) error {
 		log = append(log, "after")
 		mc.SetValue(values.Void)
 		return nil
@@ -138,13 +138,13 @@ func TestCompileValidatedDynamicWind_WithLambdas(t *testing.T) {
 
 	var log []string
 
-	registerForeignFn(env, "log-before", func(mc *machine.MachineContext) error {
+	registerForeignFn(env, "log-before", func(mc machine.CallContext) error {
 		log = append(log, "before")
 		mc.SetValue(values.Void)
 		return nil
 	})
 
-	registerForeignFn(env, "log-after", func(mc *machine.MachineContext) error {
+	registerForeignFn(env, "log-after", func(mc machine.CallContext) error {
 		log = append(log, "after")
 		mc.SetValue(values.Void)
 		return nil
@@ -167,8 +167,8 @@ func TestCompileValidatedDynamicWind_Nested(t *testing.T) {
 
 	var log []string
 
-	makeFn := func(label string) func(*machine.MachineContext) error {
-		return func(mc *machine.MachineContext) error {
+	makeFn := func(label string) machine.ForeignFunction {
+		return func(mc machine.CallContext) error {
 			log = append(log, label)
 			mc.SetValue(values.Void)
 			return nil
@@ -179,7 +179,7 @@ func TestCompileValidatedDynamicWind_Nested(t *testing.T) {
 	registerForeignFn(env, "outer-after", makeFn("outer-after"))
 	registerForeignFn(env, "inner-before", makeFn("inner-before"))
 	registerForeignFn(env, "inner-after", makeFn("inner-after"))
-	registerForeignFn(env, "body", func(mc *machine.MachineContext) error {
+	registerForeignFn(env, "body", func(mc machine.CallContext) error {
 		log = append(log, "body")
 		mc.SetValue(values.NewInteger(7))
 		return nil
@@ -216,7 +216,7 @@ func newContMarkEnv() *environment.EnvironmentFrame {
 	// Register + primitive for body-is-call and nested tests
 	addSym := values.NewSymbol("+")
 	env.MaybeCreateOwnGlobalBinding(addSym, environment.BindingTypeVariable)
-	addFn := func(mc *machine.MachineContext) error {
+	addFn := func(mc machine.CallContext) error {
 		a := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value().(*values.Integer).Value
 		b := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value().(*values.Integer).Value
 		mc.SetValue(values.NewInteger(a + b))
@@ -373,7 +373,7 @@ func TestCompileValidatedCaseLambda_ZeroArgClause(t *testing.T) {
 	// Register + primitive for the test
 	addSym := values.NewSymbol("+")
 	env.MaybeCreateOwnGlobalBinding(addSym, environment.BindingTypeVariable)
-	addFn := func(mc *machine.MachineContext) error {
+	addFn := func(mc machine.CallContext) error {
 		a := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value().(*values.Integer).Value
 		b := mc.EnvironmentFrame().GetLocalBindingByIndex(1).Value().(*values.Integer).Value
 		mc.SetValue(values.NewInteger(a + b))

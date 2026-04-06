@@ -32,7 +32,7 @@ var PrimNamespaceQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 })
 
 // PrimNamespaceName implements (namespace-name ns).
-func PrimNamespaceName(mc *machine.MachineContext) error {
+func PrimNamespaceName(mc machine.CallContext) error {
 	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrInvalidArgument, "namespace-name")
 	if err != nil {
 		return err
@@ -48,7 +48,7 @@ func PrimNamespaceName(mc *machine.MachineContext) error {
 // PrimMakeNamespace implements (make-namespace . import-specs).
 // With no arguments, returns an empty namespace (kernel only).
 // With import specs, pre-loads the specified libraries.
-func PrimMakeNamespace(mc *machine.MachineContext) error {
+func PrimMakeNamespace(mc machine.CallContext) error {
 	argsVal := mc.Arg(0)
 
 	callerTopLevel := mc.EnvironmentFrame().Namespace()
@@ -109,7 +109,7 @@ func PrimMakeNamespace(mc *machine.MachineContext) error {
 }
 
 // PrimNamespaceDerive implements (namespace-derive ns).
-func PrimNamespaceDerive(mc *machine.MachineContext) error {
+func PrimNamespaceDerive(mc machine.CallContext) error {
 	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrInvalidArgument, "namespace-derive")
 	if err != nil {
 		return err
@@ -119,7 +119,7 @@ func PrimNamespaceDerive(mc *machine.MachineContext) error {
 }
 
 // PrimNamespaceDefine implements (namespace-define! ns sym val).
-func PrimNamespaceDefine(mc *machine.MachineContext) error {
+func PrimNamespaceDefine(mc machine.CallContext) error {
 	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrInvalidArgument, "namespace-define!")
 	if err != nil {
 		return err
@@ -144,7 +144,7 @@ func PrimNamespaceDefine(mc *machine.MachineContext) error {
 // With ParamCount: 2, IsVariadic: true:
 //
 //	Arg(0) = ns, Arg(1) = rest list (sym [default])
-func PrimNamespaceRef(mc *machine.MachineContext) error {
+func PrimNamespaceRef(mc machine.CallContext) error {
 	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrInvalidArgument, "namespace-ref")
 	if err != nil {
 		return err
@@ -189,7 +189,7 @@ func PrimNamespaceRef(mc *machine.MachineContext) error {
 }
 
 // PrimNamespaceBound implements (namespace-bound? ns sym).
-func PrimNamespaceBound(mc *machine.MachineContext) error {
+func PrimNamespaceBound(mc machine.CallContext) error {
 	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrInvalidArgument, "namespace-bound?")
 	if err != nil {
 		return err
@@ -206,7 +206,7 @@ func PrimNamespaceBound(mc *machine.MachineContext) error {
 }
 
 // PrimNamespaceUndefine implements (namespace-undefine! ns sym).
-func PrimNamespaceUndefine(mc *machine.MachineContext) error {
+func PrimNamespaceUndefine(mc machine.CallContext) error {
 	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrInvalidArgument, "namespace-undefine!")
 	if err != nil {
 		return err
@@ -222,7 +222,7 @@ func PrimNamespaceUndefine(mc *machine.MachineContext) error {
 }
 
 // PrimNamespaceBoundNames implements (namespace-bound-names ns).
-func PrimNamespaceBoundNames(mc *machine.MachineContext) error {
+func PrimNamespaceBoundNames(mc machine.CallContext) error {
 	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrInvalidArgument, "namespace-bound-names")
 	if err != nil {
 		return err
@@ -241,7 +241,7 @@ func PrimNamespaceBoundNames(mc *machine.MachineContext) error {
 }
 
 // PrimNamespaceRequire implements (namespace-require ns lib-spec).
-func PrimNamespaceRequire(mc *machine.MachineContext) error {
+func PrimNamespaceRequire(mc machine.CallContext) error {
 	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrInvalidArgument, "namespace-require")
 	if err != nil {
 		return err

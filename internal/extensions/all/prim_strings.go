@@ -48,7 +48,7 @@ func getCaseFolded(s string) string {
 
 // PrimStringCopyTo implements the string-copy! primitive.
 // R7RS §6.7: (string-copy! to at from [start [end]])
-func PrimStringCopyTo(mc *machine.MachineContext) error {
+func PrimStringCopyTo(mc machine.CallContext) error {
 	toArg := mc.Arg(0)
 	rest := mc.Arg(1)
 
@@ -114,7 +114,7 @@ func PrimStringCopyTo(mc *machine.MachineContext) error {
 
 // PrimStringFill implements the string-fill! primitive.
 // R7RS §6.7: (string-fill! string fill [start [end]])
-func PrimStringFill(mc *machine.MachineContext) error {
+func PrimStringFill(mc machine.CallContext) error {
 	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string-fill!")
 	if err != nil {
 		return err
@@ -169,7 +169,7 @@ var stringCiCompareSpecs = []struct {
 // makeStringCiComparePrimitive returns a ForeignFunction that performs a variadic
 // case-insensitive string comparison using the given comparator.
 func makeStringCiComparePrimitive(name string, cmp func(string, string) bool) machine.ForeignFunction {
-	return func(mc *machine.MachineContext) error {
+	return func(mc machine.CallContext) error {
 		return helpers.StringCompareVariadic(mc, name, cmp)
 	}
 }
@@ -177,7 +177,7 @@ func makeStringCiComparePrimitive(name string, cmp func(string, string) bool) ma
 // makeStringCaser creates a string case-mapping primitive that extracts
 // arg 0 as a String, applies a cases.Caser, and returns a new mutable string.
 func makeStringCaser(name string, makeCaser func() cases.Caser) machine.ForeignFunction {
-	return func(mc *machine.MachineContext) error {
+	return func(mc machine.CallContext) error {
 		str, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, name)
 		if err != nil {
 			return err

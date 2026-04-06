@@ -32,7 +32,7 @@ var PrimEnvironmentQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 
 // PrimInteractionEnvironment implements the (interaction-environment) primitive.
 // Returns the REPL environment (the current top-level environment).
-func PrimInteractionEnvironment(mc *machine.MachineContext) error {
+func PrimInteractionEnvironment(mc machine.CallContext) error {
 	topLevel := mc.EnvironmentFrame().Namespace()
 	if topLevel.Name == "" {
 		topLevel.Name = "interaction-environment"
@@ -44,7 +44,7 @@ func PrimInteractionEnvironment(mc *machine.MachineContext) error {
 // PrimEnvironmentBoundNames implements the (environment-bound-names) primitive.
 // Returns a list of all symbols bound in the given environment.
 // (environment-bound-names env) -> list
-func PrimEnvironmentBoundNames(mc *machine.MachineContext) error {
+func PrimEnvironmentBoundNames(mc machine.CallContext) error {
 	envVal := mc.Arg(0)
 
 	topLevelEnv, err := helpers.RequireType[*environment.Namespace](envVal, werr.ErrInvalidArgument, "environment-bound-names")
@@ -68,7 +68,7 @@ func PrimEnvironmentBoundNames(mc *machine.MachineContext) error {
 // Returns the value bound to a symbol in the given environment.
 // Signals an error if the symbol is unbound.
 // (environment-ref env symbol) -> value
-func PrimEnvironmentRef(mc *machine.MachineContext) error {
+func PrimEnvironmentRef(mc machine.CallContext) error {
 	envVal := mc.Arg(0)
 	symVal := mc.Arg(1)
 
@@ -95,7 +95,7 @@ func PrimEnvironmentRef(mc *machine.MachineContext) error {
 // PrimEnvironmentBoundQ implements the (environment-bound?) primitive.
 // Returns #t if the symbol is bound in the given environment, #f otherwise.
 // (environment-bound? env symbol) -> boolean
-func PrimEnvironmentBoundQ(mc *machine.MachineContext) error {
+func PrimEnvironmentBoundQ(mc machine.CallContext) error {
 	envVal := mc.Arg(0)
 	symVal := mc.Arg(1)
 
@@ -117,7 +117,7 @@ func PrimEnvironmentBoundQ(mc *machine.MachineContext) error {
 
 // PrimFeatures implements the (features) primitive.
 // Returns list of implementation features.
-func PrimFeatures(mc *machine.MachineContext) error {
+func PrimFeatures(mc machine.CallContext) error {
 	features := compilation.AllFeatures()
 
 	elems := make([]values.Value, len(features))
@@ -132,7 +132,7 @@ func PrimFeatures(mc *machine.MachineContext) error {
 // PrimAvailableLibraries implements the (available-libraries) primitive.
 // Returns a sorted list of all importable library names.
 // Each library name is a list of symbols/integers matching R7RS syntax.
-func PrimAvailableLibraries(mc *machine.MachineContext) error {
+func PrimAvailableLibraries(mc machine.CallContext) error {
 	env := mc.EnvironmentFrame()
 
 	regSearcher := env.LibraryRegistry()

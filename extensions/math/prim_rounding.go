@@ -32,8 +32,8 @@ type realNumberOp struct {
 	rationalOp   func(*values.Rational) values.Value
 }
 
-func makeRealNumberPrimitive(op realNumberOp) func(*machine.MachineContext) error {
-	return func(mc *machine.MachineContext) error {
+func makeRealNumberPrimitive(op realNumberOp) func(machine.CallContext) error {
+	return func(mc machine.CallContext) error {
 		o := mc.Arg(0)
 		switch v := o.(type) {
 		case *values.Integer:
@@ -110,7 +110,7 @@ const (
 // realDivision implements the shared logic for floor and truncate division
 // families (R7RS §6.2.6). The roundFn parameter selects the rounding mode
 // (math.Floor or math.Trunc), and result selects which values to return.
-func realDivision(mc *machine.MachineContext, name string, roundFn func(float64) float64, result divResult) error {
+func realDivision(mc machine.CallContext, name string, roundFn func(float64) float64, result divResult) error {
 	n0, exact0, err := helpers.ExtractReal(mc.Arg(0), name)
 	if err != nil {
 		return err
@@ -155,47 +155,47 @@ func realDivision(mc *machine.MachineContext, name string, roundFn func(float64)
 // PrimFloorDiv implements the (floor/) primitive.
 //
 // R7RS §6.2.6: Returns two values: floor quotient and floor remainder.
-func PrimFloorDiv(mc *machine.MachineContext) error {
+func PrimFloorDiv(mc machine.CallContext) error {
 	return realDivision(mc, "floor/", math.Floor, divBoth)
 }
 
 // PrimFloorQuotient implements the (floor-quotient) primitive.
 //
 // R7RS §6.2.6: Returns the floor quotient for any real numbers.
-func PrimFloorQuotient(mc *machine.MachineContext) error {
+func PrimFloorQuotient(mc machine.CallContext) error {
 	return realDivision(mc, "floor-quotient", math.Floor, divQuotient)
 }
 
 // PrimFloorRemainder implements the (floor-remainder) primitive.
 //
 // R7RS §6.2.6: Returns the floor remainder for any real numbers.
-func PrimFloorRemainder(mc *machine.MachineContext) error {
+func PrimFloorRemainder(mc machine.CallContext) error {
 	return realDivision(mc, "floor-remainder", math.Floor, divRemainder)
 }
 
 // PrimTruncateDiv implements the truncate/ primitive.
 //
 // R7RS §6.2.6: Returns two values: truncate quotient and truncate remainder.
-func PrimTruncateDiv(mc *machine.MachineContext) error {
+func PrimTruncateDiv(mc machine.CallContext) error {
 	return realDivision(mc, "truncate/", math.Trunc, divBoth)
 }
 
 // PrimTruncateQuotient implements the truncate-quotient primitive.
 //
 // R7RS §6.2.6: Returns the truncate quotient for any real numbers.
-func PrimTruncateQuotient(mc *machine.MachineContext) error {
+func PrimTruncateQuotient(mc machine.CallContext) error {
 	return realDivision(mc, "truncate-quotient", math.Trunc, divQuotient)
 }
 
 // PrimTruncateRemainder implements the truncate-remainder primitive.
 //
 // R7RS §6.2.6: Returns the truncate remainder for any real numbers.
-func PrimTruncateRemainder(mc *machine.MachineContext) error {
+func PrimTruncateRemainder(mc machine.CallContext) error {
 	return realDivision(mc, "truncate-remainder", math.Trunc, divRemainder)
 }
 
 // PrimFiniteQ implements the (finite?) primitive.
-func PrimFiniteQ(mc *machine.MachineContext) error {
+func PrimFiniteQ(mc machine.CallContext) error {
 	n, ok := mc.Arg(0).(values.Number)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotANumber, "finite?: expected a number but got %T", mc.Arg(0))
@@ -205,7 +205,7 @@ func PrimFiniteQ(mc *machine.MachineContext) error {
 }
 
 // PrimInfiniteQ implements the (infinite?) primitive.
-func PrimInfiniteQ(mc *machine.MachineContext) error {
+func PrimInfiniteQ(mc machine.CallContext) error {
 	n, ok := mc.Arg(0).(values.Number)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotANumber, "infinite?: expected a number but got %T", mc.Arg(0))
@@ -215,7 +215,7 @@ func PrimInfiniteQ(mc *machine.MachineContext) error {
 }
 
 // PrimNanQ implements the nan? primitive.
-func PrimNanQ(mc *machine.MachineContext) error {
+func PrimNanQ(mc machine.CallContext) error {
 	n, ok := mc.Arg(0).(values.Number)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotANumber, "nan?: expected a number but got %T", mc.Arg(0))

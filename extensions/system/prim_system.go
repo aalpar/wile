@@ -42,7 +42,7 @@ func SetCommandLine(args []string) {
 // PrimCommandLine implements the (command-line) primitive per R7RS §6.14.
 // Returns a list whose first element is the script name and the rest are
 // script arguments. Falls back to os.Args when no script is being executed.
-func PrimCommandLine(mc *machine.MachineContext) error {
+func PrimCommandLine(mc machine.CallContext) error {
 	args := commandLineArgs
 	if args == nil {
 		args = os.Args
@@ -59,7 +59,7 @@ func PrimCommandLine(mc *machine.MachineContext) error {
 // Both parse an optional status argument (#f → 1, integer → value, default → 0)
 // and call os.Exit. Currently identical; the distinction exists for R7RS
 // compliance (emergency-exit should skip cleanup, which is not yet implemented).
-func exitWithCode(mc *machine.MachineContext) error {
+func exitWithCode(mc machine.CallContext) error {
 	err := security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceProcess,
 		Action:   security.ActionExit,
@@ -88,19 +88,19 @@ func exitWithCode(mc *machine.MachineContext) error {
 
 // PrimExit implements the (exit) primitive.
 // Exits the program with an optional status code.
-func PrimExit(mc *machine.MachineContext) error {
+func PrimExit(mc machine.CallContext) error {
 	return exitWithCode(mc)
 }
 
 // PrimEmergencyExit implements the (emergency-exit) primitive.
 // Exits the program immediately without cleanup or finalization.
-func PrimEmergencyExit(mc *machine.MachineContext) error {
+func PrimEmergencyExit(mc machine.CallContext) error {
 	return exitWithCode(mc)
 }
 
 // PrimGetEnvironmentVariable implements the (get-environment-variable) primitive.
 // Gets environment variable value.
-func PrimGetEnvironmentVariable(mc *machine.MachineContext) error {
+func PrimGetEnvironmentVariable(mc machine.CallContext) error {
 	name, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "get-environment-variable")
 	if err != nil {
 		return err
@@ -124,7 +124,7 @@ func PrimGetEnvironmentVariable(mc *machine.MachineContext) error {
 
 // PrimGetEnvironmentVariables implements the (get-environment-variables) primitive.
 // Returns all environment variables.
-func PrimGetEnvironmentVariables(mc *machine.MachineContext) error {
+func PrimGetEnvironmentVariables(mc machine.CallContext) error {
 	err := security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
 		Resource: security.ResourceEnv,
 		Action:   security.ActionRead,
@@ -148,7 +148,7 @@ func PrimGetEnvironmentVariables(mc *machine.MachineContext) error {
 
 // PrimCurrentSecond implements the (current-second) primitive.
 // Returns current time in seconds since Unix epoch.
-func PrimCurrentSecond(mc *machine.MachineContext) error {
+func PrimCurrentSecond(mc machine.CallContext) error {
 	now := time.Now()
 	secs := float64(now.Unix()) + float64(now.Nanosecond())/1e9
 	mc.SetValue(values.NewFloat(secs))
@@ -157,7 +157,7 @@ func PrimCurrentSecond(mc *machine.MachineContext) error {
 
 // PrimCurrentJiffy implements the (current-jiffy) primitive.
 // Returns current time in jiffies since program start.
-func PrimCurrentJiffy(mc *machine.MachineContext) error {
+func PrimCurrentJiffy(mc machine.CallContext) error {
 	elapsed := time.Since(ProgramStartTime)
 	jiffies := elapsed.Nanoseconds()
 	mc.SetValue(values.NewInteger(jiffies))
@@ -166,7 +166,7 @@ func PrimCurrentJiffy(mc *machine.MachineContext) error {
 
 // PrimJiffiesPerSecond implements the (jiffies-per-second) primitive.
 // Returns the number of jiffies per second (1 billion nanoseconds).
-func PrimJiffiesPerSecond(mc *machine.MachineContext) error {
+func PrimJiffiesPerSecond(mc machine.CallContext) error {
 	mc.SetValue(values.NewInteger(1000000000)) // 1 billion nanoseconds per second
 	return nil
 }

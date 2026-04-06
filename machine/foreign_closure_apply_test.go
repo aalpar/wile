@@ -14,7 +14,7 @@ import (
 
 func TestApplyForeign_FixedArity(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
-	fn := func(mc *MachineContext) error {
+	fn := func(mc CallContext) error {
 		bnds := mc.EnvironmentFrame().LocalEnvironment().Bindings()
 		a := bnds[0].Value().(*values.Integer).Value
 		b := bnds[1].Value().(*values.Integer).Value
@@ -35,7 +35,7 @@ func TestApplyForeign_FixedArity(t *testing.T) {
 func TestApplyForeign_Variadic(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 	// (lambda (x . rest) rest) — returns the rest arg list
-	fn := func(mc *MachineContext) error {
+	fn := func(mc CallContext) error {
 		bnds := mc.EnvironmentFrame().LocalEnvironment().Bindings()
 		mc.SetValue(bnds[1].Value())
 		return nil
@@ -54,7 +54,7 @@ func TestApplyForeign_Variadic(t *testing.T) {
 
 func TestApplyForeign_ArityError(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
-	fn := func(mc *MachineContext) error {
+	fn := func(mc CallContext) error {
 		return nil
 	}
 	cls := newTestForeignClosure(env, 2, false, fn)
@@ -72,13 +72,13 @@ func TestApplyForeign_ValidatorCalled(t *testing.T) {
 	fnCalls := 0
 
 	env := environment.NewNamespace().Runtime()
-	fn := func(mc *MachineContext) error {
+	fn := func(mc CallContext) error {
 		fnCalls++
 		mc.SetValue(values.TrueValue)
 		return nil
 	}
 	cls := newTestForeignClosure(env, 0, false, fn)
-	cls.SetValidator(func(mc *MachineContext) error {
+	cls.SetValidator(func(mc CallContext) error {
 		validatorCalls++
 		return nil
 	})
@@ -97,13 +97,13 @@ func TestApplyForeign_ValidatorRejectsCall(t *testing.T) {
 	fnCalls := 0
 
 	env := environment.NewNamespace().Runtime()
-	fn := func(mc *MachineContext) error {
+	fn := func(mc CallContext) error {
 		fnCalls++
 		mc.SetValue(values.TrueValue)
 		return nil
 	}
 	cls := newTestForeignClosure(env, 0, false, fn)
-	cls.SetValidator(func(mc *MachineContext) error {
+	cls.SetValidator(func(mc CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAProcedure, "validator rejected")
 	})
 

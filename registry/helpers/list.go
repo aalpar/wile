@@ -38,7 +38,7 @@ func ForEachList(ctx context.Context, t values.Tuple, name string, fn func(conte
 }
 
 // ListToVector is a helper that converts a list argument to a vector.
-func ListToVector(mc *machine.MachineContext, name string) error {
+func ListToVector(mc machine.CallContext, name string) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		mc.SetValue(values.NewVector())
@@ -127,7 +127,7 @@ func CollectStrings(rest values.Value, name string) ([]*values.String, [][]rune,
 // Takes obj at index 0, list at index 1. Uses eq predicate to find match.
 // On match, returns the tail of the list starting at the matched element.
 func MemberLookup(
-	mc *machine.MachineContext,
+	mc machine.CallContext,
 	name string,
 	eq func(a, b values.Value) bool,
 ) error {
@@ -151,7 +151,7 @@ func MemberLookup(
 // AssocLookup is a helper for alist lookup primitives (assq, assv, assoc).
 // Takes key at index 0, alist at index 1. Uses eq predicate to find match.
 func AssocLookup(
-	mc *machine.MachineContext,
+	mc machine.CallContext,
 	name string,
 	eq func(a, b values.Value) bool,
 ) error {

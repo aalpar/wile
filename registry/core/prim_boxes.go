@@ -23,7 +23,7 @@ import (
 
 // PrimBox implements the box primitive.
 // Creates a new box containing the given value.
-func PrimBox(mc *machine.MachineContext) error {
+func PrimBox(mc machine.CallContext) error {
 	mc.SetValue(values.NewBox(mc.Arg(0)))
 	return nil
 }
@@ -37,7 +37,7 @@ var PrimBoxQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 
 // PrimUnbox implements the unbox primitive.
 // Returns the value contained in a box.
-func PrimUnbox(mc *machine.MachineContext) error {
+func PrimUnbox(mc machine.CallContext) error {
 	b, err := helpers.RequireArg[*values.Box](mc, 0, werr.ErrNotABox, "unbox")
 	if err != nil {
 		return err
@@ -48,7 +48,7 @@ func PrimUnbox(mc *machine.MachineContext) error {
 
 // PrimSetBox implements the set-box! primitive.
 // Sets the value contained in a box.
-func PrimSetBox(mc *machine.MachineContext) error {
+func PrimSetBox(mc machine.CallContext) error {
 	b, err := helpers.RequireArg[*values.Box](mc, 0, werr.ErrNotABox, "set-box!")
 	if err != nil {
 		return err

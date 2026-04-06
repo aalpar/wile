@@ -22,7 +22,7 @@ import (
 )
 
 // requireSyntaxValue extracts a SyntaxValue from mc.Arg(0) or returns an error.
-func requireSyntaxValue(mc *machine.MachineContext, name string) (syntax.SyntaxValue, error) {
+func requireSyntaxValue(mc machine.CallContext, name string) (syntax.SyntaxValue, error) {
 	sv, ok := mc.Arg(0).(syntax.SyntaxValue)
 	if !ok {
 		return nil, werr.WrapForeignErrorf(werr.ErrNotASyntaxObject,
@@ -34,7 +34,7 @@ func requireSyntaxValue(mc *machine.MachineContext, name string) (syntax.SyntaxV
 // requireSourceContext extracts the SourceContext from mc.Arg(0).
 // Returns (nil, nil) if the source context is nil, having already set
 // mc to #f. Returns (nil, err) on type error.
-func requireSourceContext(mc *machine.MachineContext, name string) (*syntax.SourceContext, error) {
+func requireSourceContext(mc machine.CallContext, name string) (*syntax.SourceContext, error) {
 	sv, err := requireSyntaxValue(mc, name)
 	if err != nil {
 		return nil, err
@@ -51,7 +51,7 @@ func requireSourceContext(mc *machine.MachineContext, name string) (*syntax.Sour
 // if the syntax object has no source location.
 //
 // Racket §12.2: syntax-source
-func PrimSyntaxSource(mc *machine.MachineContext) error {
+func PrimSyntaxSource(mc machine.CallContext) error {
 	sctx, err := requireSourceContext(mc, "syntax-source")
 	if sctx == nil {
 		return err
@@ -63,7 +63,7 @@ func PrimSyntaxSource(mc *machine.MachineContext) error {
 // PrimSyntaxLine returns the 1-based line number of a syntax object, or #f.
 //
 // Racket §12.2: syntax-line
-func PrimSyntaxLine(mc *machine.MachineContext) error {
+func PrimSyntaxLine(mc machine.CallContext) error {
 	sctx, err := requireSourceContext(mc, "syntax-line")
 	if sctx == nil {
 		return err
@@ -75,7 +75,7 @@ func PrimSyntaxLine(mc *machine.MachineContext) error {
 // PrimSyntaxColumn returns the 0-based column of a syntax object, or #f.
 //
 // Racket §12.2: syntax-column
-func PrimSyntaxColumn(mc *machine.MachineContext) error {
+func PrimSyntaxColumn(mc machine.CallContext) error {
 	sctx, err := requireSourceContext(mc, "syntax-column")
 	if sctx == nil {
 		return err
@@ -87,7 +87,7 @@ func PrimSyntaxColumn(mc *machine.MachineContext) error {
 // PrimSyntaxPosition returns the 0-based byte position of a syntax object, or #f.
 //
 // Racket §12.2: syntax-position
-func PrimSyntaxPosition(mc *machine.MachineContext) error {
+func PrimSyntaxPosition(mc machine.CallContext) error {
 	sctx, err := requireSourceContext(mc, "syntax-position")
 	if sctx == nil {
 		return err
@@ -99,7 +99,7 @@ func PrimSyntaxPosition(mc *machine.MachineContext) error {
 // PrimSyntaxSpan returns the byte span (end - start) of a syntax object, or #f.
 //
 // Racket §12.2: syntax-span
-func PrimSyntaxSpan(mc *machine.MachineContext) error {
+func PrimSyntaxSpan(mc machine.CallContext) error {
 	sctx, err := requireSourceContext(mc, "syntax-span")
 	if sctx == nil {
 		return err
@@ -114,7 +114,7 @@ func PrimSyntaxSpan(mc *machine.MachineContext) error {
 // Raises an error if the argument is not a syntax object at all.
 //
 // Racket §12.2: syntax->list
-func PrimSyntaxToList(mc *machine.MachineContext) error {
+func PrimSyntaxToList(mc machine.CallContext) error {
 	sv, err := requireSyntaxValue(mc, "syntax->list")
 	if err != nil {
 		return err

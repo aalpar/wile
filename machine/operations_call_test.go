@@ -75,7 +75,7 @@ func TestOperationsCall(t *testing.T) {
 		// --- ForeignFunctionCall ---
 		{
 			name: "ForeignFunctionCall/constructor",
-			op: NewOperationForeignFunctionCall(func(mc *MachineContext) error {
+			op: NewOperationForeignFunctionCall(func(_ CallContext) error {
 				return nil
 			}),
 			checkFn: func(t *testing.T, op Operation) {
@@ -84,7 +84,7 @@ func TestOperationsCall(t *testing.T) {
 		},
 		{
 			name: "ForeignFunctionCall/SchemeString",
-			op: NewOperationForeignFunctionCall(func(mc *MachineContext) error {
+			op: NewOperationForeignFunctionCall(func(_ CallContext) error {
 				return nil
 			}),
 			checkFn: func(t *testing.T, op Operation) {
@@ -93,7 +93,7 @@ func TestOperationsCall(t *testing.T) {
 		},
 		{
 			name: "ForeignFunctionCall/IsVoid",
-			op: NewOperationForeignFunctionCall(func(mc *MachineContext) error {
+			op: NewOperationForeignFunctionCall(func(_ CallContext) error {
 				return nil
 			}),
 			checkFn: func(t *testing.T, op Operation) {
@@ -102,19 +102,19 @@ func TestOperationsCall(t *testing.T) {
 		},
 		{
 			name: "ForeignFunctionCall/EqualTo_self",
-			op: NewOperationForeignFunctionCall(func(mc *MachineContext) error {
+			op: NewOperationForeignFunctionCall(func(_ CallContext) error {
 				return nil
 			}),
 			checkFn: func(t *testing.T, op Operation) {
 				// ForeignFunctionCall uses sameType, so two distinct instances are equal
-				qt.Assert(t, op.EqualTo(NewOperationForeignFunctionCall(func(mc *MachineContext) error {
+				qt.Assert(t, op.EqualTo(NewOperationForeignFunctionCall(func(_ CallContext) error {
 					return nil
 				})), qt.IsTrue)
 			},
 		},
 		{
 			name: "ForeignFunctionCall/EqualTo_different_type",
-			op: NewOperationForeignFunctionCall(func(mc *MachineContext) error {
+			op: NewOperationForeignFunctionCall(func(_ CallContext) error {
 				return nil
 			}),
 			checkFn: func(t *testing.T, op Operation) {
@@ -123,7 +123,7 @@ func TestOperationsCall(t *testing.T) {
 		},
 		{
 			name: "ForeignFunctionCall/EqualTo_nil",
-			op: NewOperationForeignFunctionCall(func(mc *MachineContext) error {
+			op: NewOperationForeignFunctionCall(func(_ CallContext) error {
 				return nil
 			}),
 			checkFn: func(t *testing.T, op Operation) {

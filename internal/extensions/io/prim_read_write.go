@@ -76,7 +76,7 @@ func fmtPrefix(name string) string {
 // getOptionalOutputPort extracts an optional output port from a variadic argument list.
 // If the list is empty, returns the current output port.
 // Otherwise, extracts and validates the port from the list's car.
-func getOptionalOutputPort(mc *machine.MachineContext, argIndex int) (values.OutputPort, error) {
+func getOptionalOutputPort(mc machine.CallContext, argIndex int) (values.OutputPort, error) {
 	p, _, found, err := extractPort[values.OutputPort](
 		mc.Arg(argIndex), "", werr.ErrNotAnOutputPort, "an output port",
 	)
@@ -92,7 +92,7 @@ func getOptionalOutputPort(mc *machine.MachineContext, argIndex int) (values.Out
 // getOptionalTextualOutputPort extracts an optional textual output port, rejecting
 // binary-only output ports. Use for textual operations (write, display, newline, etc.)
 // that must not accept binary ports. flush-output-port uses getOptionalOutputPort directly.
-func getOptionalTextualOutputPort(mc *machine.MachineContext, argIndex int) (values.OutputPort, error) {
+func getOptionalTextualOutputPort(mc machine.CallContext, argIndex int) (values.OutputPort, error) {
 	p, err := getOptionalOutputPort(mc, argIndex)
 	if err != nil {
 		return nil, err
@@ -108,7 +108,7 @@ func getOptionalTextualOutputPort(mc *machine.MachineContext, argIndex int) (val
 // getOptionalInputPort extracts an optional input port from a variadic argument list.
 // If the list is empty, returns the current input port.
 // Otherwise, extracts and validates the port from the list's car.
-func getOptionalInputPort(mc *machine.MachineContext, argIndex int) (values.TextualReader, error) {
+func getOptionalInputPort(mc machine.CallContext, argIndex int) (values.TextualReader, error) {
 	p, _, found, err := extractPort[values.TextualReader](
 		mc.Arg(argIndex), "", werr.ErrNotAnInputPort, "an input port",
 	)
@@ -159,7 +159,7 @@ func getRequiredBinaryOutputPort(o values.Value, name string) (values.BinaryWrit
 // Reads a Scheme datum from port.
 // Reads from the current input port if no port is specified.
 // R7RS §6.13.2: read uses datum labels to handle circular and shared structures.
-func PrimRead(mc *machine.MachineContext) error {
+func PrimRead(mc machine.CallContext) error {
 	port, err := getOptionalInputPort(mc, 0)
 	if err != nil {
 		return err
@@ -195,7 +195,7 @@ func PrimRead(mc *machine.MachineContext) error {
 // PrimReadToken implements the (read-token) primitive.
 // Reads a single token from port.
 // Reads from the current input port if no port is specified.
-func PrimReadToken(mc *machine.MachineContext) error {
+func PrimReadToken(mc machine.CallContext) error {
 	port, err := getOptionalInputPort(mc, 0)
 	if err != nil {
 		return err
@@ -227,7 +227,7 @@ func PrimReadToken(mc *machine.MachineContext) error {
 // PrimReadSyntax implements the (read-syntax) primitive.
 // Reads datum with source information.
 // Reads from the current input port if no port is specified.
-func PrimReadSyntax(mc *machine.MachineContext) error {
+func PrimReadSyntax(mc machine.CallContext) error {
 	port, err := getOptionalInputPort(mc, 0)
 	if err != nil {
 		return err
@@ -259,7 +259,7 @@ func PrimReadSyntax(mc *machine.MachineContext) error {
 // PrimReadChar implements the read-char primitive.
 // R7RS §6.13.2: (read-char [port])
 // Reads and returns a single character from the input port.
-func PrimReadChar(mc *machine.MachineContext) error {
+func PrimReadChar(mc machine.CallContext) error {
 	reader, err := getOptionalInputPort(mc, 0)
 	if err != nil {
 		return err
@@ -280,7 +280,7 @@ func PrimReadChar(mc *machine.MachineContext) error {
 // PrimPeekChar implements the peek-char primitive.
 // R7RS §6.13.2: (peek-char [port])
 // Reads and returns a single character from the input port without consuming it.
-func PrimPeekChar(mc *machine.MachineContext) error {
+func PrimPeekChar(mc machine.CallContext) error {
 	reader, err := getOptionalInputPort(mc, 0)
 	if err != nil {
 		return err
@@ -306,7 +306,7 @@ func PrimPeekChar(mc *machine.MachineContext) error {
 // PrimReadLine implements the read-line primitive.
 // R7RS §6.13.2: (read-line [port])
 // Reads a line of text from the input port, not including the line ending.
-func PrimReadLine(mc *machine.MachineContext) error {
+func PrimReadLine(mc machine.CallContext) error {
 	reader, err := getOptionalInputPort(mc, 0)
 	if err != nil {
 		return err
@@ -346,7 +346,7 @@ func PrimReadLine(mc *machine.MachineContext) error {
 // PrimCharReadyQ implements the char-ready? primitive.
 // R7RS §6.13.2: (char-ready? [port])
 // Returns #t if a character is ready on the input port, #f otherwise.
-func PrimCharReadyQ(mc *machine.MachineContext) error {
+func PrimCharReadyQ(mc machine.CallContext) error {
 	// For now, we assume a character is always ready for string input ports
 	// and the character input port (stdin may block, but we can't easily check)
 	// A more accurate implementation would need non-blocking I/O
@@ -357,7 +357,7 @@ func PrimCharReadyQ(mc *machine.MachineContext) error {
 // PrimReadString implements the read-string primitive.
 // R7RS §6.13.2: (read-string k [port])
 // Reads up to k characters from the input port and returns them as a string.
-func PrimReadString(mc *machine.MachineContext) error {
+func PrimReadString(mc machine.CallContext) error {
 	k, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotANumber, "read-string")
 	if err != nil {
 		return err

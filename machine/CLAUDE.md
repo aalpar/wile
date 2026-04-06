@@ -8,7 +8,9 @@ Key ops: Push/Pop (stack), Apply (dispatch), CallForeignCached/CallForeignCached
 
 ## Extensions
 
-Primitives: `registry/core/prim_*.go`. Signature: `func(*MachineContext) error` (type: `machine.ForeignFunction`).
+Primitives: `registry/core/prim_*.go`. Signature: `func(CallContext) error` (type: `machine.ForeignFunction`).
+
+`CallContext` interface (`call_context.go`) exposes 7 methods: `Arg`, `SetValue`, `SetValues`, `Authorizer`, `Context`, `EnvironmentFrame`, `Thread`. Primitives needing full VM access (sub-contexts, continuations, exception handling) type-assert to `*MachineContext`.
 
 Register: `r.AddPrimitive(PrimitiveSpec{Name, ParamCount, IsVariadic, Impl}, Phase)`. Phases: `PhaseRuntime | PhaseExpand | PhaseCompile`.
 

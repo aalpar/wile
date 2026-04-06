@@ -171,7 +171,7 @@ func TestMachineClosureEqualToNil(t *testing.T) {
 // TestForeignClosureSchemeString tests ForeignClosure methods
 func TestForeignClosureSchemeString(t *testing.T) {
 	env := newNamespace(environment.NewNamespace().Runtime())
-	fn := func(mc *MachineContext) error {
+	fn := func(_ CallContext) error {
 		return nil
 	}
 	cls := NewForeignClosure(env, 2, true, fn)

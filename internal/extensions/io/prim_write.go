@@ -26,7 +26,7 @@ import (
 // PrimWrite implements the write primitive.
 // Writes a machine-readable representation of an object to the current output port or to the specified port.
 // R7RS §6.13.3: write uses datum labels to handle circular and shared structures.
-func PrimWrite(mc *machine.MachineContext) error {
+func PrimWrite(mc machine.CallContext) error {
 	obj := mc.Arg(0)
 	writer, err := getOptionalTextualOutputPort(mc, 1)
 	if err != nil {
@@ -47,7 +47,7 @@ func PrimWrite(mc *machine.MachineContext) error {
 
 // PrimWriteChar implements the write-char primitive.
 // Writes a character to the current output port or to the specified output port.
-func PrimWriteChar(mc *machine.MachineContext) error {
+func PrimWriteChar(mc machine.CallContext) error {
 	ch, err := helpers.RequireArg[*values.Character](mc, 0, werr.ErrNotACharacter, "write-char")
 	if err != nil {
 		return err
@@ -72,7 +72,7 @@ func PrimWriteChar(mc *machine.MachineContext) error {
 // PrimDisplay implements the (display) primitive.
 // Writes a human-readable representation of an object to an output port.
 // R7RS §6.13.3: display uses datum labels to handle circular and shared structures.
-func PrimDisplay(mc *machine.MachineContext) error {
+func PrimDisplay(mc machine.CallContext) error {
 	obj := mc.Arg(0)
 	writer, err := getOptionalTextualOutputPort(mc, 1)
 	if err != nil {
@@ -93,7 +93,7 @@ func PrimDisplay(mc *machine.MachineContext) error {
 
 // PrimNewline implements the newline primitive.
 // Writes a newline character to the output port.
-func PrimNewline(mc *machine.MachineContext) error {
+func PrimNewline(mc machine.CallContext) error {
 	writer, err := getOptionalTextualOutputPort(mc, 0)
 	if err != nil {
 		return err
@@ -114,7 +114,7 @@ func PrimNewline(mc *machine.MachineContext) error {
 // Writes a machine-readable representation of an object without using datum labels
 // for shared or circular structure. This is the same as write for non-circular data.
 // (write-simple obj) or (write-simple obj port)
-func PrimWriteSimple(mc *machine.MachineContext) error {
+func PrimWriteSimple(mc machine.CallContext) error {
 	obj := mc.Arg(0)
 	writer, err := getOptionalTextualOutputPort(mc, 1)
 	if err != nil {
@@ -138,7 +138,7 @@ func PrimWriteSimple(mc *machine.MachineContext) error {
 // R7RS §6.13.3: write-shared always uses datum labels for shared structure.
 //
 // (write-shared obj) or (write-shared obj port)
-func PrimWriteShared(mc *machine.MachineContext) error {
+func PrimWriteShared(mc machine.CallContext) error {
 	obj := mc.Arg(0)
 	writer, err := getOptionalTextualOutputPort(mc, 1)
 	if err != nil {
@@ -160,7 +160,7 @@ func PrimWriteShared(mc *machine.MachineContext) error {
 // PrimWriteString implements the write-string primitive.
 // R7RS §6.13.3: (write-string string [port [start [end]]])
 // Writes the characters of string (optionally between start and end) to port.
-func PrimWriteString(mc *machine.MachineContext) error {
+func PrimWriteString(mc machine.CallContext) error {
 	str, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "write-string")
 	if err != nil {
 		return err
@@ -202,7 +202,7 @@ func PrimWriteString(mc *machine.MachineContext) error {
 // PrimFlushOutputPort implements the flush-output-port primitive.
 // R7RS §6.13.3: (flush-output-port [port])
 // Flushes any buffered output to the underlying output device.
-func PrimFlushOutputPort(mc *machine.MachineContext) error {
+func PrimFlushOutputPort(mc machine.CallContext) error {
 	port, err := getOptionalOutputPort(mc, 0)
 	if err != nil {
 		return err

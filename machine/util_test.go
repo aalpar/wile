@@ -43,7 +43,7 @@ func newNamespace(env *environment.EnvironmentFrame) *environment.EnvironmentFra
 func TestNewForeignClosure(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 
-	fn := func(mc *MachineContext) error {
+	fn := func(_ CallContext) error {
 		return nil
 	}
 
@@ -62,7 +62,7 @@ func TestNewForeignClosure(t *testing.T) {
 func TestNewForeignClosure_Variadic(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 
-	fn := func(mc *MachineContext) error {
+	fn := func(_ CallContext) error {
 		return nil
 	}
 

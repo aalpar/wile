@@ -28,7 +28,7 @@ import (
 //
 // The rest-arg list may be backed by a reusable buffer (restArgBuf),
 // so we must copy the spine to produce a persistent list.
-func PrimList(mc *machine.MachineContext) error {
+func PrimList(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		mc.SetValue(values.EmptyList)
@@ -47,7 +47,7 @@ func PrimList(mc *machine.MachineContext) error {
 }
 
 // PrimMakeList implements the Scheme make-list primitive.
-func PrimMakeList(mc *machine.MachineContext) error {
+func PrimMakeList(mc machine.CallContext) error {
 	k, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotAnInteger, "make-list")
 	if err != nil {
 		return err
@@ -75,7 +75,7 @@ func PrimMakeList(mc *machine.MachineContext) error {
 // the elements of the other lists. The last argument may be any object.
 // Benchmarked: kept in Go — Scheme impl is 4-9x slower on short lists
 // (benchmark gate: 20% threshold; actual regression was ~363% for Append).
-func PrimAppend(mc *machine.MachineContext) error {
+func PrimAppend(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		mc.SetValue(values.EmptyList)
@@ -132,7 +132,7 @@ func PrimAppend(mc *machine.MachineContext) error {
 
 // PrimReverse implements the (reverse) primitive.
 // Benchmarked: kept in Go — Scheme impl is 7x slower on short lists.
-func PrimReverse(mc *machine.MachineContext) error {
+func PrimReverse(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		mc.SetValue(values.EmptyList)
@@ -159,7 +159,7 @@ func PrimReverse(mc *machine.MachineContext) error {
 
 // PrimLength implements the (length) primitive.
 // Benchmarked: kept in Go — Scheme impl is 9x slower on short lists.
-func PrimLength(mc *machine.MachineContext) error {
+func PrimLength(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	if values.IsEmptyList(o) {
 		mc.SetValue(values.NewInteger(0))
@@ -187,7 +187,7 @@ func PrimLength(mc *machine.MachineContext) error {
 // PrimListRef implements the (list-ref) primitive.
 // Returns the element at the given index in a list.
 // R7RS §6.4: The index must be an exact non-negative integer.
-func PrimListRef(mc *machine.MachineContext) error {
+func PrimListRef(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	k := mc.Arg(1)
 	idx, ok := values.ExactInteger(k)
@@ -220,7 +220,7 @@ func PrimListRef(mc *machine.MachineContext) error {
 
 // PrimListSet implements the Scheme list-set! primitive.
 // R7RS §6.4: The index must be an exact non-negative integer.
-func PrimListSet(mc *machine.MachineContext) error {
+func PrimListSet(mc machine.CallContext) error {
 	p, err := helpers.RequireArg[*values.Pair](mc, 0, werr.ErrNotAList, "list-set!")
 	if err != nil {
 		return err
@@ -254,7 +254,7 @@ func PrimListSet(mc *machine.MachineContext) error {
 
 // PrimListTail implements the (list-tail) primitive.
 // Benchmarked: kept in Go — Scheme impl is 6x slower on short lists.
-func PrimListTail(mc *machine.MachineContext) error {
+func PrimListTail(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	k := mc.Arg(1)
 	idx, ok := values.ExactInteger(k)
@@ -296,7 +296,7 @@ func PrimListTail(mc *machine.MachineContext) error {
 
 // PrimListCopy implements the list-copy primitive.
 // Benchmarked: kept in Go — Scheme impl is 7x slower on short lists.
-func PrimListCopy(mc *machine.MachineContext) error {
+func PrimListCopy(mc machine.CallContext) error {
 	obj := mc.Arg(0)
 	if values.IsEmptyList(obj) {
 		mc.SetValue(values.EmptyList)
@@ -340,22 +340,22 @@ func PrimListCopy(mc *machine.MachineContext) error {
 
 // PrimMemq implements the memq primitive.
 // Finds an element in a list using eq? for comparison.
-func PrimMemq(mc *machine.MachineContext) error {
+func PrimMemq(mc machine.CallContext) error {
 	return helpers.MemberLookup(mc, "memq", helpers.EqIdentity)
 }
 
 // PrimMemv implements the memv primitive.
 // Finds an element in a list using eqv? for comparison.
-func PrimMemv(mc *machine.MachineContext) error {
+func PrimMemv(mc machine.CallContext) error {
 	return helpers.MemberLookup(mc, "memv", helpers.Eqv)
 }
 
 // PrimAssq implements the assq primitive.
-func PrimAssq(mc *machine.MachineContext) error {
+func PrimAssq(mc machine.CallContext) error {
 	return helpers.AssocLookup(mc, "assq", helpers.EqIdentity)
 }
 
 // PrimAssv implements the assv primitive.
-func PrimAssv(mc *machine.MachineContext) error {
+func PrimAssv(mc machine.CallContext) error {
 	return helpers.AssocLookup(mc, "assv", helpers.Eqv)
 }

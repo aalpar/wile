@@ -36,7 +36,7 @@ func NewERRenameClosure(
 ) *machine.ForeignClosure {
 	cache := make(map[string]*syntax.SyntaxSymbol)
 
-	fn := func(mc *machine.MachineContext) error {
+	fn := func(mc machine.CallContext) error {
 		arg := mc.Arg(0)
 		key, err := extractSymbolKey(arg)
 		if err != nil {

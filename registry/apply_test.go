@@ -25,7 +25,7 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-func noopImpl(mc *machine.MachineContext) error {
+func noopImpl(mc machine.CallContext) error {
 	mc.SetValue(values.Void)
 	return nil
 }

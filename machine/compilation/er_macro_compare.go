@@ -27,7 +27,7 @@ import (
 // The closure accepts two identifier arguments and returns #t if both resolve
 // to the same binding (pointer equality) or both are unbound with the same name.
 func NewERCompareClosure(useEnv *environment.EnvironmentFrame) *machine.ForeignClosure {
-	fn := func(mc *machine.MachineContext) error {
+	fn := func(mc machine.CallContext) error {
 		id1 := mc.Arg(0)
 		id2 := mc.Arg(1)
 

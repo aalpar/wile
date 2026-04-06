@@ -734,7 +734,7 @@ func TestIsPushOp(t *testing.T) {
 // for peephole tests. The closure's function body is a no-op.
 func makeForeignBinding() *environment.Binding {
 	env := environment.NewNamespace().Runtime()
-	fc := NewForeignClosure(env, 0, false, func(mc *MachineContext) error {
+	fc := NewForeignClosure(env, 0, false, func(_ CallContext) error {
 		return nil
 	})
 	return environment.NewBinding(fc, environment.BindingTypeVariable)
@@ -985,7 +985,7 @@ func TestFuseCallGeneric(t *testing.T) {
 // the given name and parameter count.
 func makeNamedForeignBinding(name string, paramCount int) *environment.Binding {
 	env := environment.NewNamespace().Runtime()
-	fc := NewForeignClosure(env, paramCount, false, func(mc *MachineContext) error {
+	fc := NewForeignClosure(env, paramCount, false, func(_ CallContext) error {
 		return nil
 	})
 	fc.SetName(name)

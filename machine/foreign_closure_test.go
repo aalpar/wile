@@ -22,7 +22,7 @@ func TestForeignClosure_ClosureInterface(t *testing.T) {
 
 func TestForeignClosure_SchemeString(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
-	fn := func(mc *MachineContext) error {
+	fn := func(mc CallContext) error {
 		return nil
 	}
 	cls := newTestForeignClosure(env, 2, false, fn)
@@ -31,7 +31,7 @@ func TestForeignClosure_SchemeString(t *testing.T) {
 
 func TestForeignClosure_IsVoid(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
-	fn := func(mc *MachineContext) error {
+	fn := func(mc CallContext) error {
 		return nil
 	}
 	cls := newTestForeignClosure(env, 1, false, fn)
@@ -43,7 +43,7 @@ func TestForeignClosure_IsVoid(t *testing.T) {
 
 func TestForeignClosure_AcceptsArity(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
-	fn := func(mc *MachineContext) error {
+	fn := func(mc CallContext) error {
 		return nil
 	}
 
@@ -75,7 +75,7 @@ func TestForeignClosure_AcceptsArity(t *testing.T) {
 
 func TestForeignClosure_EqualTo(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
-	fn := func(mc *MachineContext) error {
+	fn := func(mc CallContext) error {
 		return nil
 	}
 
@@ -97,7 +97,7 @@ func TestForeignClosure_EqualTo(t *testing.T) {
 
 func TestForeignClosure_Name(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
-	fn := func(mc *MachineContext) error {
+	fn := func(mc CallContext) error {
 		return nil
 	}
 	cls := newTestForeignClosure(env, 1, false, fn)
@@ -109,7 +109,7 @@ func TestForeignClosure_Name(t *testing.T) {
 
 func TestForeignClosure_SetValidator(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
-	cls := newTestForeignClosure(env, 1, false, func(mc *MachineContext) error {
+	cls := newTestForeignClosure(env, 1, false, func(mc CallContext) error {
 		return nil
 	})
 
@@ -118,7 +118,7 @@ func TestForeignClosure_SetValidator(t *testing.T) {
 
 	// Set a validator
 	called := false
-	cls.SetValidator(func(mc *MachineContext) error {
+	cls.SetValidator(func(mc CallContext) error {
 		called = true
 		return nil
 	})

@@ -44,7 +44,7 @@ func ensureInexactDecimal(s string) string {
 }
 
 // PrimNumberToString implements the number->string primitive.
-func PrimNumberToString(mc *machine.MachineContext) error {
+func PrimNumberToString(mc machine.CallContext) error {
 	n := mc.Arg(0)
 	rest := mc.Arg(1)
 	radix := 10
@@ -105,7 +105,7 @@ func PrimNumberToString(mc *machine.MachineContext) error {
 // R7RS §7.1.1: The string may contain prefix directives #b, #o, #d, #x
 // (radix) and #e, #i (exactness), in either order, up to one of each.
 // A radix prefix in the string overrides the radix argument.
-func PrimStringToNumber(mc *machine.MachineContext) error {
+func PrimStringToNumber(mc machine.CallContext) error {
 	s := mc.Arg(0)
 	rest := mc.Arg(1)
 	str, ok := s.(*values.String)

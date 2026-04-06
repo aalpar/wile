@@ -30,7 +30,8 @@ import (
 // foreignAddClosure creates a ForeignClosure that adds two integer arguments.
 func foreignAddClosure() *ForeignClosure {
 	env := environment.NewNamespace().Runtime()
-	return NewForeignClosure(env, 2, false, func(mc *MachineContext) error {
+	return NewForeignClosure(env, 2, false, func(cc CallContext) error {
+		mc := cc.(*MachineContext)
 		bnds := mc.env.LocalEnvironment().Bindings()
 		a := bnds[0].Value().(*values.Integer)
 		b := bnds[1].Value().(*values.Integer)
@@ -42,7 +43,7 @@ func foreignAddClosure() *ForeignClosure {
 // foreignErrorClosure creates a ForeignClosure that always returns an error.
 func foreignErrorClosure() *ForeignClosure {
 	env := environment.NewNamespace().Runtime()
-	return NewForeignClosure(env, 0, false, func(mc *MachineContext) error {
+	return NewForeignClosure(env, 0, false, func(_ CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAProcedure, "intentional test error")
 	})
 }
@@ -53,12 +54,12 @@ func TestCallForeignCached_ValidatorCalled(t *testing.T) {
 
 	env := environment.NewNamespace().Runtime()
 	closureEnv := environment.NewNamespace().Runtime()
-	fcls := NewForeignClosure(closureEnv, 0, false, func(mc *MachineContext) error {
+	fcls := NewForeignClosure(closureEnv, 0, false, func(mc CallContext) error {
 		fnCalls++
 		mc.SetValue(values.TrueValue)
 		return nil
 	})
-	fcls.SetValidator(func(mc *MachineContext) error {
+	fcls.SetValidator(func(_ CallContext) error {
 		validatorCalls++
 		return nil
 	})
@@ -84,12 +85,12 @@ func TestCallForeignCached_ValidatorRejectsCall(t *testing.T) {
 
 	env := environment.NewNamespace().Runtime()
 	closureEnv := environment.NewNamespace().Runtime()
-	fcls := NewForeignClosure(closureEnv, 0, false, func(mc *MachineContext) error {
+	fcls := NewForeignClosure(closureEnv, 0, false, func(mc CallContext) error {
 		fnCalls++
 		mc.SetValue(values.TrueValue)
 		return nil
 	})
-	fcls.SetValidator(func(mc *MachineContext) error {
+	fcls.SetValidator(func(_ CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAProcedure, "validator rejected")
 	})
 	bd := environment.NewBinding(fcls, environment.BindingTypeVariable)
@@ -191,7 +192,8 @@ func TestOpCallForeignCached(t *testing.T) {
 
 				// paramCount=2, isVariadic=true: bnds[0]=first required, bnds[1]=rest list
 				varEnv := environment.NewNamespace().Runtime()
-				fcls := NewForeignClosure(varEnv, 2, true, func(mc *MachineContext) error {
+				fcls := NewForeignClosure(varEnv, 2, true, func(cc CallContext) error {
+					mc := cc.(*MachineContext)
 					bnds := mc.env.LocalEnvironment().Bindings()
 					first := bnds[0].Value().(*values.Integer)
 					restVal := bnds[1].Value()
