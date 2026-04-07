@@ -162,6 +162,15 @@ func TestParseDocstring(t *testing.T) {
 			wantMeta:   true,
 		},
 		{
+			name:       "parameters followed by examples",
+			input:      "Do stuff.\nParameters:\n  x : number\n\nExamples:\n  (do-stuff 1) => 2",
+			wantDoc:    "Do stuff.\n\nExamples:\n  (do-stuff 1) => 2",
+			wantParams: []string{"x"},
+			wantTypes:  []values.ValueType{values.TypeNumber},
+			wantReturn: values.TypeAny,
+			wantMeta:   true,
+		},
+		{
 			name:       "syntax with examples preserved in prose",
 			input:      "Binding form. R7RS §4.2.2.\nSyntax: (let ((<var> <init>) ...) <body>)\nCategory: binding\n\nExamples:\n  (let ((x 1)) x)  => 1",
 			wantDoc:    "Binding form. R7RS §4.2.2.\n\nExamples:\n  (let ((x 1)) x)  => 1",

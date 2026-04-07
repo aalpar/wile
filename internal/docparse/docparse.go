@@ -103,7 +103,7 @@ func ParseDocstring(raw string) DocInfo {
 		// Blank lines end metadata sections and return to prose.
 		// This preserves blank-line separators before prose sections
 		// like "Examples:" so that StripExamples can find "\n\nExamples:\n".
-		if strings.TrimSpace(line) == "" && currentSection != "" && currentSection != "prose" && currentSection != "Parameters:" {
+		if strings.TrimSpace(line) == "" && currentSection != "" && currentSection != "prose" {
 			docLines = append(docLines, line)
 			currentSection = ""
 			continue
@@ -139,11 +139,7 @@ func ParseDocstring(raw string) DocInfo {
 		switch currentSection {
 		case "Parameters:":
 			// Parameter lines: "  name : type"
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" {
-				continue
-			}
-			parts := strings.SplitN(trimmed, ":", 2)
+			parts := strings.SplitN(strings.TrimSpace(line), ":", 2)
 			if len(parts) == 2 {
 				name := strings.TrimSpace(parts[0])
 				typeName := strings.TrimSpace(parts[1])
