@@ -38,11 +38,11 @@
 
 ;; Pull: force a stream to a list
 (define (pull $)
-  "Force a lazy answer stream $ to a concrete value.\nRepeatedly invokes $ while it is a suspension (procedure)\nuntil a pair or the empty list is obtained.\n\nExamples:\n  (pull '(a b))           => (a b)\n  (pull (lambda () '()))  => ()\n\nSee also: `take-inf', `take-all-inf'."
+  "Force a lazy answer stream $ to a concrete value.\nRepeatedly invokes $ while it is a suspension (procedure)\nuntil a pair or the empty list is obtained.\n\nExamples:\n  (pull '(a b))           => (a b)\n  (pull (lambda () '()))  => ()\n\nParameters:\n  $ : any\nReturns: any\nCategory: logic\n\nSee also: `take-inf', `take-all-inf'."
   (if (procedure? $) (pull ($)) $))
 
 (define (take-inf n $)
-  "Take at most N answers from the lazy stream $.\nForces suspensions via pull and collects results into a list.\nReturns fewer than N answers if the stream is exhausted.\n\nExamples:\n  (take-inf 2 '(a b c))  => (a b)\n  (take-inf 5 '(a))      => (a)\n\nSee also: `pull', `take-all-inf'."
+  "Take at most N answers from the lazy stream $.\nForces suspensions via pull and collects results into a list.\nReturns fewer than N answers if the stream is exhausted.\n\nExamples:\n  (take-inf 2 '(a b c))  => (a b)\n  (take-inf 5 '(a))      => (a)\n\nParameters:\n  n : integer\n  $ : any\nReturns: list\nCategory: logic\n\nSee also: `pull', `take-all-inf'."
   (cond
     ((zero? n) '())
     (else
@@ -52,7 +52,7 @@
          (else (cons (car $) (take-inf (- n 1) (cdr $)))))))))
 
 (define (take-all-inf $)
-  "Force the entire lazy stream $ and collect all answers into a list.\nWarning: diverges if the stream is infinite.\n\nExamples:\n  (take-all-inf '(a b c))  => (a b c)\n  (take-all-inf '())       => ()\n\nSee also: `pull', `take-inf'."
+  "Force the entire lazy stream $ and collect all answers into a list.\nWarning: diverges if the stream is infinite.\n\nExamples:\n  (take-all-inf '(a b c))  => (a b c)\n  (take-all-inf '())       => ()\n\nParameters:\n  $ : any\nReturns: list\nCategory: logic\n\nSee also: `pull', `take-inf'."
   (let (($ (pull $)))
     (cond
       ((null? $) '())
@@ -60,12 +60,12 @@
 
 ;; Reification
 (define (reify-name n)
-  "Generate a reification symbol for the Nth unnamed logic variable.\nProduces symbols of the form _.0, _.1, _.2, etc.\n\nExamples:\n  (reify-name 0)  => _.0\n  (reify-name 3)  => _.3"
+  "Generate a reification symbol for the Nth unnamed logic variable.\nProduces symbols of the form _.0, _.1, _.2, etc.\n\nExamples:\n  (reify-name 0)  => _.0\n  (reify-name 3)  => _.3\n\nParameters:\n  n : integer\nReturns: symbol\nCategory: logic"
   (string->symbol
     (string-append "_." (number->string n))))
 
 (define (walk* v s)
-  "Deeply walk value V under substitution S.\nLike walk, but recursively resolves variables inside pairs,\nproducing a fully ground term when possible.\n\nExamples:\n  (walk* '(#(0) #(1)) '(((#(0)) . a) ((#(1)) . b)))  => (a b)\n\nSee also: `walk', `reify-s', `reify'."
+  "Deeply walk value V under substitution S.\nLike walk, but recursively resolves variables inside pairs,\nproducing a fully ground term when possible.\n\nExamples:\n  (walk* '(#(0) #(1)) '(((#(0)) . a) ((#(1)) . b)))  => (a b)\n\nParameters:\n  v : any\n  s : list\nReturns: any\nCategory: logic\n\nSee also: `walk', `reify-s', `reify'."
   (let ((v (walk v s)))
     (cond
       ((var? v) v)
@@ -75,7 +75,7 @@
       (else v))))
 
 (define (reify-s v s)
-  "Build a reification substitution for value V.\nWalks V under S and maps each remaining free variable to a\nhuman-readable symbol (_.0, _.1, ...) using reify-name.\nRecurses into pairs to discover all unbound variables.\n\nExamples:\n  (reify-s (var 0) '())  => (((#(0)) . _.0))\n\nSee also: `walk*', `reify-name', `reify'."
+  "Build a reification substitution for value V.\nWalks V under S and maps each remaining free variable to a\nhuman-readable symbol (_.0, _.1, ...) using reify-name.\nRecurses into pairs to discover all unbound variables.\n\nExamples:\n  (reify-s (var 0) '())  => (((#(0)) . _.0))\n\nParameters:\n  v : any\n  s : list\nReturns: list\nCategory: logic\n\nSee also: `walk*', `reify-name', `reify'."
   (let ((v (walk v s)))
     (cond
       ((var? v) (ext-s v (reify-name (length s)) s))
@@ -83,11 +83,11 @@
       (else s))))
 
 (define (reify v)
-  "Reify value V by replacing all free logic variables with\nhuman-readable symbols (_.0, _.1, ...). Composes walk* and\nreify-s to produce a fully readable term.\n\nExamples:\n  (reify (var 0))  => _.0\n\nSee also: `walk*', `reify-s'."
+  "Reify value V by replacing all free logic variables with\nhuman-readable symbols (_.0, _.1, ...). Composes walk* and\nreify-s to produce a fully readable term.\n\nExamples:\n  (reify (var 0))  => _.0\n\nParameters:\n  v : any\nReturns: any\nCategory: logic\n\nSee also: `walk*', `reify-s'."
   (walk* v (reify-s v '())))
 
 (define (reify-1st s/c)
-  "Reify the first query variable (var 0) from state/counter S/C.\nExtracts the substitution, deeply walks variable 0, then\nreplaces remaining free variables with readable names.\nUsed by run and run* to present answers.\n\nExamples:\n  (reify-1st (cons '(((#(0)) . 5)) 1))  => 5\n\nSee also: `walk*', `reify-s', `reify'."
+  "Reify the first query variable (var 0) from state/counter S/C.\nExtracts the substitution, deeply walks variable 0, then\nreplaces remaining free variables with readable names.\nUsed by run and run* to present answers.\n\nExamples:\n  (reify-1st (cons '(((#(0)) . 5)) 1))  => 5\n\nParameters:\n  s/c : pair\nReturns: any\nCategory: logic\n\nSee also: `walk*', `reify-s', `reify'."
   (let ((v (walk* (var 0) (car s/c))))
     (walk* v (reify-s v '()))))
 
