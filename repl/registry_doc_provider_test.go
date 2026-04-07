@@ -148,6 +148,35 @@ func TestRegistryDocProvider_Categories_ExcludesEmpty(t *testing.T) {
 	c.Assert(cats, qt.HasLen, 0)
 }
 
+func TestStripExamples(t *testing.T) {
+	tcs := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "no examples section",
+			input:    "Returns the car of a pair.",
+			expected: "Returns the car of a pair.",
+		},
+		{
+			name:     "with examples section",
+			input:    "Returns the car of a pair.\n\nExamples:\n  (car '(1 2)) => 1",
+			expected: "Returns the car of a pair.",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, StripExamples(tc.input), qt.Equals, tc.expected)
+		})
+	}
+}
+
 func TestRegistryDocProvider_ByCategory(t *testing.T) {
 	tcs := []struct {
 		name     string
