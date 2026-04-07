@@ -109,6 +109,22 @@ func newRuntimeErrorWithCause(msg string, cause error) *RuntimeError {
 	return &RuntimeError{Message: msg, Cause: cause}
 }
 
+// IsIncompleteInput reports whether a parse error indicates the input
+// is a valid prefix of an expression that needs more input to complete.
+// This is useful for REPL implementations that accumulate multi-line input.
+//
+// Returns true for errors containing "unexpected EOF", "unterminated",
+// or "unclosed". Returns false for nil, plain io.EOF, and all other errors.
+func IsIncompleteInput(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "unexpected EOF") ||
+		strings.Contains(errStr, "unterminated") ||
+		strings.Contains(errStr, "unclosed")
+}
+
 // isEOF checks if an error represents end of input.
 func isEOF(err error) bool {
 	return errors.Is(err, io.EOF)
