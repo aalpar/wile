@@ -88,7 +88,7 @@
 (define map-in-order map)
 
 (define (pair-for-each f ls . lists)
-  "Apply F to each successive tail pair of LS for its side effects.\nLike for-each, but passes the pair (not the element) to F.\nFor multiple lists, passes corresponding tail pairs.\n\nExamples:\n  (let ((v '()))\n    (pair-for-each (lambda (p) (set! v (cons (car p) v))) '(a b c))\n    v)  => (c b a)\n\nParameters:\n  f : procedure\n  ls : list\nCategory: srfi-1"
+  "Apply F to each successive tail pair of LS for its side effects.\nLike for-each, but passes the pair (not the element) to F.\nFor multiple lists, passes corresponding tail pairs.\n\nExamples:\n  (let ((v '()))\n    (pair-for-each (lambda (p) (set! v (cons (car p) v))) '(a b c))\n    v)  => (c b a)\n\nParameters:\n  f : procedure\n  ls : list\nReturns: any\nCategory: srfi-1"
   (if (pair? lists)
       (apply pair-fold (lambda args (apply f (drop-right args 1))) #f ls lists)
       (pair-fold (lambda (x _) (f x)) #f ls)))
