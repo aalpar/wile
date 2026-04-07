@@ -54,6 +54,7 @@ type Engine struct {
 	namespace       *environment.Namespace
 	env             *environment.EnvironmentFrame
 	registry        *registry.Registry
+	debugger        *machine.Debugger
 	lastCounters    machine.VMCounters
 	closers         []registry.Closeable
 	closed          bool
@@ -548,6 +549,13 @@ func (p *Engine) Namespace() *environment.Namespace {
 	return p.namespace
 }
 
+// SetDebugger attaches a debugger to the engine. Subsequent [Engine.Run]
+// calls will execute with the debugger active, enabling breakpoints and
+// stepping. Pass nil to detach the debugger.
+func (p *Engine) SetDebugger(d *machine.Debugger) {
+	p.debugger = d
+}
+
 // Registry returns a clone of the engine's registry. The returned registry
 // can be filtered with Without, WithoutCategory, or WithoutBindings and
 // passed to NewEngine via WithRegistry to create a restricted engine.
@@ -691,6 +699,9 @@ func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, erro
 	mc := machine.AcquireTopLevelContext(ctx, cc.template, cc.env)
 	defer machine.ReleaseTopLevelContext(mc)
 	mc.SetMaxCallDepth(p.maxCallDepth)
+	if p.debugger != nil {
+		mc.SetDebugger(p.debugger)
+	}
 
 	err := mc.RunWithEscapeHandling()
 	p.lastCounters = mc.Counters()
