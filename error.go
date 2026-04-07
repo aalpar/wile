@@ -113,16 +113,25 @@ func newRuntimeErrorWithCause(msg string, cause error) *RuntimeError {
 // is a valid prefix of an expression that needs more input to complete.
 // This is useful for REPL implementations that accumulate multi-line input.
 //
-// Returns true for errors containing "unexpected EOF", "unterminated",
-// or "unclosed". Returns false for nil, plain io.EOF, and all other errors.
+// Returns true when the error wraps io.EOF (empty or truncated input),
+// or contains "unexpected EOF", "unterminated", "unclosed", or
+// "unknown token type" (partial token from premature EOF).
+// Returns false for nil and bare io.EOF.
 func IsIncompleteInput(err error) bool {
 	if err == nil {
 		return false
 	}
+	// Bare io.EOF means "stream ended normally" — not incomplete.
+	// Wrapped io.EOF (e.g. CompilationError{Cause: io.EOF}) means
+	// the parser ran out of input mid-expression.
+	if err != io.EOF && errors.Is(err, io.EOF) {
+		return true
+	}
 	errStr := err.Error()
 	return strings.Contains(errStr, "unexpected EOF") ||
 		strings.Contains(errStr, "unterminated") ||
-		strings.Contains(errStr, "unclosed")
+		strings.Contains(errStr, "unclosed") ||
+		strings.Contains(errStr, "unknown token type")
 }
 
 // isEOF checks if an error represents end of input.

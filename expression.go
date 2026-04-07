@@ -15,7 +15,9 @@
 package wile
 
 import (
+	"bufio"
 	"context"
+	"io"
 	"strings"
 
 	"github.com/aalpar/wile/internal/parser"
@@ -58,6 +60,37 @@ func (p *Engine) Parse(ctx context.Context, code string) (*Expression, error) {
 // and appears in error messages.
 func (p *Engine) ParseWithSource(ctx context.Context, code string, source string) (*Expression, error) {
 	return p.parse(ctx, code, source)
+}
+
+// ReadExpression reads a single complete expression from r.
+//
+// Unlike [Engine.Parse], ReadExpression does not require the reader to
+// contain exactly one expression — it reads the first complete expression
+// and stops. Trailing input in the reader is ignored (the reader position
+// advances past the consumed expression).
+//
+// Use [IsIncompleteInput] to check whether a returned error indicates the
+// input is a valid prefix of an expression that needs more input to complete.
+// This is the intended pattern for REPL implementations:
+//
+//	expr, err := eng.ReadExpression(ctx, r)
+//	if err != nil {
+//	    if wile.IsIncompleteInput(err) {
+//	        // prompt for more input
+//	    }
+//	    // real parse error
+//	}
+func (p *Engine) ReadExpression(ctx context.Context, r io.Reader) (*Expression, error) {
+	rr, ok := r.(io.RuneReader)
+	if !ok {
+		rr = bufio.NewReader(r)
+	}
+	pr := parser.NewParser(p.env, true, rr)
+	stx, err := pr.ReadSyntax(ctx)
+	if err != nil {
+		return nil, &CompilationError{Message: "parse error", Cause: err}
+	}
+	return &Expression{stx: stx}, nil
 }
 
 // MustParse is like Parse but panics on error.
