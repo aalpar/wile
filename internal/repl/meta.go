@@ -423,41 +423,39 @@ func paramTypeForDoc(types []values.ValueType, i int) values.ValueType {
 	return values.TypeAny
 }
 
+// tryStructuredBindingDoc attempts to parse a docstring and render it via
+// formatPrimitiveDoc when structured metadata is found. Returns true if
+// the structured path was taken (caller should return early).
+func tryStructuredBindingDoc(w *strings.Builder, name, doc, typeLabel string, showExamples bool) bool {
+	if doc == "" {
+		return false
+	}
+	parsed := docparse.ParseDocstring(doc)
+	if !parsed.HasStructuredMetadata() {
+		return false
+	}
+	formatPrimitiveDoc(w, name, DocInfo{
+		Doc:       parsed.Doc,
+		Syntax:    parsed.Syntax,
+		TypeLabel: typeLabel,
+		Category:  parsed.Category,
+	}, showExamples)
+	return true
+}
+
 func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding, phase int, showExamples bool) {
 	phaseName := phaseLabel(phase)
 
 	switch bnd.BindingType() {
 	case environment.BindingTypePrimitive:
-		// Try structured docstring for special forms.
-		doc := bnd.Doc()
-		if doc != "" {
-			parsed := docparse.ParseDocstring(doc)
-			if parsed.HasStructuredMetadata() {
-				formatPrimitiveDoc(w, name, DocInfo{
-					Doc:       parsed.Doc,
-					Syntax:    parsed.Syntax,
-					TypeLabel: "special form",
-					Category:  parsed.Category,
-				}, showExamples)
-				return
-			}
+		if tryStructuredBindingDoc(w, name, bnd.Doc(), "special form", showExamples) {
+			return
 		}
 		fmt.Fprintf(w, "%s: special form (%s)\n", name, phaseName)
 
 	case environment.BindingTypeSyntax:
-		// Try structured docstring for macros/syntax transformers.
-		doc := bnd.Doc()
-		if doc != "" {
-			parsed := docparse.ParseDocstring(doc)
-			if parsed.HasStructuredMetadata() {
-				formatPrimitiveDoc(w, name, DocInfo{
-					Doc:       parsed.Doc,
-					Syntax:    parsed.Syntax,
-					TypeLabel: "syntax",
-					Category:  parsed.Category,
-				}, showExamples)
-				return
-			}
+		if tryStructuredBindingDoc(w, name, bnd.Doc(), "syntax", showExamples) {
+			return
 		}
 		fmt.Fprintf(w, "%s: syntax transformer (%s)\n", name, phaseName)
 
@@ -471,6 +469,7 @@ func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding,
 			if parsed.HasStructuredMetadata() {
 				formatPrimitiveDoc(w, name, DocInfo{
 					Doc:        parsed.Doc,
+					Syntax:     parsed.Syntax,
 					ParamNames: parsed.ParamNames,
 					ParamTypes: parsed.ParamTypes,
 					ReturnType: parsed.ReturnType,
@@ -485,8 +484,9 @@ func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding,
 		fmt.Fprintf(w, "%s: bound in %s\n", name, phaseName)
 	}
 
-	// Try closure docstring first (same logic as procedure-documentation),
-	// then fall back to binding-level doc (special forms, macros).
+	// Fallback: raw doc display for bindings without structured metadata.
+	// All structured paths above return early, so this only runs for
+	// unstructured docstrings.
 	doc := ""
 	if bnd.BindingType() == environment.BindingTypeVariable {
 		doc = callableDoc(bnd.Value())
