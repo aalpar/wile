@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/aalpar/wile/extensions/files"
@@ -315,6 +316,150 @@ func TestImportObserver_OnlyModifier(t *testing.T) {
 		c.Assert(evt.Exports, qt.DeepEquals, []string{"alpha", "beta"})
 		c.Assert(evt.Imported, qt.DeepEquals, []string{"alpha"}) // only alpha was imported
 	}
+}
+
+// TestImportRegistersDocstrings verifies that importing a library with
+// structured docstrings makes those procedures visible to the documentation
+// system (,doc, ,topic, ,apropos).
+func TestImportRegistersDocstrings(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	libDir := t.TempDir()
+	err := writeTestFile(libDir+"/doclib.sld", `(define-library (doclib)
+  (export find-thing)
+  (begin
+    (define (find-thing pred ls)
+      "Return the first element of LS satisfying PRED.
+
+Parameters:
+  pred : procedure
+  ls : list
+Returns: any
+Category: search"
+      (cond ((null? ls) #f)
+            ((pred (car ls)) (car ls))
+            (else (find-thing pred (cdr ls)))))))`)
+	c.Assert(err, qt.IsNil)
+
+	engine, err := NewEngine(ctx, WithLibraryPaths(libDir))
+	c.Assert(err, qt.IsNil)
+
+	// Before import: find-thing should not be in the registry
+	regBefore := engine.Registry()
+	_, found := regBefore.FindPrimitive("find-thing", 0)
+	c.Assert(found, qt.IsFalse, qt.Commentf("find-thing should not be visible before import"))
+
+	// Import the library
+	_, err = engine.EvalMultiple(ctx, `(import (doclib))`)
+	c.Assert(err, qt.IsNil)
+
+	// After import: find-thing should be in the registry with correct metadata
+	reg := engine.Registry()
+	pr, found := reg.FindPrimitive("find-thing", 0)
+	c.Assert(found, qt.IsTrue, qt.Commentf("find-thing should be visible after import"))
+	c.Assert(pr.Spec.Category, qt.Equals, "search")
+	c.Assert(pr.Spec.ParamNames, qt.DeepEquals, []string{"pred", "ls"})
+
+	// The category should appear in PrimitivesByCategory
+	byCategory := reg.PrimitivesByCategory()
+	searchPrims := byCategory["search"]
+	c.Assert(len(searchPrims) > 0, qt.IsTrue, qt.Commentf("search category should exist"))
+
+	var names []string
+	for _, p := range searchPrims {
+		names = append(names, p.Spec.Name)
+	}
+	c.Assert(slices.Contains(names, "find-thing"), qt.IsTrue)
+}
+
+// TestImportRegistersDocstrings_UnexportedNotVisible verifies that
+// unexported bindings from imported libraries do NOT appear in docs.
+func TestImportRegistersDocstrings_UnexportedNotVisible(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	libDir := t.TempDir()
+	err := writeTestFile(libDir+"/partial.sld", `(define-library (partial)
+  (export public-fn)
+  (begin
+    (define (helper x)
+      "Internal helper.
+
+Parameters:
+  x : any
+Category: internal"
+      x)
+    (define (public-fn x)
+      "Public function.
+
+Parameters:
+  x : any
+Category: mylib"
+      (helper x))))`)
+	c.Assert(err, qt.IsNil)
+
+	engine, err := NewEngine(ctx, WithLibraryPaths(libDir))
+	c.Assert(err, qt.IsNil)
+
+	// Before import: neither should be visible
+	regBefore := engine.Registry()
+	_, found := regBefore.FindPrimitive("public-fn", 0)
+	c.Assert(found, qt.IsFalse)
+
+	_, err = engine.EvalMultiple(ctx, `(import (partial))`)
+	c.Assert(err, qt.IsNil)
+
+	reg := engine.Registry()
+
+	// Exported: visible
+	_, found = reg.FindPrimitive("public-fn", 0)
+	c.Assert(found, qt.IsTrue)
+
+	// Unexported: NOT visible
+	_, found = reg.FindPrimitive("helper", 0)
+	c.Assert(found, qt.IsFalse, qt.Commentf("unexported helper should not be in docs"))
+}
+
+// TestImportRegistersDocstrings_ChainsUserObserver verifies that the
+// doc registration observer chains with a user-provided import observer.
+func TestImportRegistersDocstrings_ChainsUserObserver(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	libDir := t.TempDir()
+	err := writeTestFile(libDir+"/chainlib.sld", `(define-library (chainlib)
+  (export thing)
+  (begin
+    (define (thing)
+      "A thing.
+
+Category: widgets"
+      42)))`)
+	c.Assert(err, qt.IsNil)
+
+	var observerCalled bool
+	engine, err := NewEngine(ctx,
+		WithLibraryPaths(libDir),
+		WithImportObserver(func(evt LibraryImportEvent) {
+			if evt.Library.Key() == "chainlib" {
+				observerCalled = true
+			}
+		}),
+	)
+	c.Assert(err, qt.IsNil)
+
+	_, err = engine.EvalMultiple(ctx, `(import (chainlib))`)
+	c.Assert(err, qt.IsNil)
+
+	// User observer was called
+	c.Assert(observerCalled, qt.IsTrue, qt.Commentf("user import observer should still fire"))
+
+	// Doc registration also happened
+	reg := engine.Registry()
+	pr, found := reg.FindPrimitive("thing", 0)
+	c.Assert(found, qt.IsTrue)
+	c.Assert(pr.Spec.Category, qt.Equals, "widgets")
 }
 
 // TestWithAuthorizer_FlowsToNamespace verifies that WithAuthorizer stores
