@@ -1,3 +1,17 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 //nolint:errcheck // Meta-command output doesn't need error handling
 package repl
 
@@ -11,8 +25,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/aalpar/wile"
+	"github.com/aalpar/wile/docparse"
 	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/internal/docparse"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/values"
@@ -23,24 +38,37 @@ import (
 // Session commands (help, doc, edit) are handled directly;
 // debug commands are delegated to DebugContext.
 type MetaCommandHandler struct {
-	env      *environment.EnvironmentFrame
+	eng      *wile.Engine
 	debugCtx *DebugContext
 	docProv  DocProvider
 	pager    string
 }
 
-// NewMetaCommandHandler creates a new meta-command handler.
-func NewMetaCommandHandler(
-	env *environment.EnvironmentFrame,
-	debugCtx *DebugContext,
-	docProv DocProvider,
-) *MetaCommandHandler {
-	return &MetaCommandHandler{
-		env:      env,
-		debugCtx: debugCtx,
-		docProv:  docProv,
-		pager:    os.Getenv("PAGER"),
+// MetaOption configures a MetaCommandHandler.
+type MetaOption func(*MetaCommandHandler)
+
+// WithMetaDocProvider sets the documentation provider for the meta handler.
+func WithMetaDocProvider(dp DocProvider) MetaOption {
+	return func(h *MetaCommandHandler) {
+		h.docProv = dp
 	}
+}
+
+// NewMetaCommandHandler creates a new meta-command handler.
+func NewMetaCommandHandler(eng *wile.Engine, opts ...MetaOption) *MetaCommandHandler {
+	q := &MetaCommandHandler{
+		eng:   eng,
+		pager: os.Getenv("PAGER"),
+	}
+	for _, opt := range opts {
+		opt(q)
+	}
+	return q
+}
+
+// SetDebugContext attaches a debug context for debug command delegation.
+func (p *MetaCommandHandler) SetDebugContext(dc *DebugContext) {
+	p.debugCtx = dc
 }
 
 // SetPager overrides the pager command used for long output.
@@ -174,6 +202,14 @@ func init() {
 	}
 }
 
+// env returns the engine's environment, or nil if the engine is nil.
+func (p *MetaCommandHandler) env() *environment.EnvironmentFrame {
+	if p.eng == nil {
+		return nil
+	}
+	return p.eng.Environment()
+}
+
 func (p *MetaCommandHandler) cmdHelp(args []string, out io.Writer) {
 	if len(args) > 0 {
 		p.cmdHelpSpecific(args[0], out)
@@ -249,8 +285,9 @@ func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 	var content strings.Builder
 
 	// Walk phase environments first — the binding's value is the source of truth
-	if p.env != nil {
-		topLevel := p.env.Namespace()
+	env := p.env()
+	if env != nil {
+		topLevel := env.Namespace()
 		if topLevel != nil {
 			phases := topLevel.Phases()
 			phaseIndices := phases.Phases()
@@ -309,12 +346,13 @@ func (p *MetaCommandHandler) cmdDocLibrary(nameStr string, out io.Writer) {
 
 	libName := compilation.NewLibraryName(parts...)
 
-	if p.env == nil {
+	env := p.env()
+	if env == nil {
 		fmt.Fprintf(out, "Library %s: no environment available\n", libName.SchemeString())
 		return
 	}
 
-	regAny := p.env.LibraryRegistry()
+	regAny := env.LibraryRegistry()
 	if regAny == nil {
 		fmt.Fprintf(out, "Library %s: no library registry configured\n", libName.SchemeString())
 		return
@@ -567,7 +605,8 @@ func (p *MetaCommandHandler) cmdApropos(args []string, out io.Writer) {
 	results := searchProv.Search(pattern)
 
 	// Also search phase environment bindings and loaded libraries
-	if p.env != nil {
+	env := p.env()
+	if env != nil {
 		envResults := p.searchBindings(pattern)
 		results = mergeSearchResults(results, envResults)
 		libResults := p.searchLibraries(pattern)
@@ -654,11 +693,12 @@ func (p *MetaCommandHandler) cmdTopic(args []string, out io.Writer) {
 }
 
 func (p *MetaCommandHandler) cmdLibraries(out io.Writer) {
-	if p.env == nil {
+	env := p.env()
+	if env == nil {
 		fmt.Fprintln(out, "No environment available")
 		return
 	}
-	regAny := p.env.LibraryRegistry()
+	regAny := env.LibraryRegistry()
 	if regAny == nil {
 		fmt.Fprintln(out, "No library registry configured")
 		return
@@ -713,8 +753,9 @@ func (p *MetaCommandHandler) DisassembleBinding(name string) (string, error) {
 	sym := values.NewSymbol(name)
 
 	var val values.Value
-	if p.env != nil {
-		topLevel := p.env.Namespace()
+	env := p.env()
+	if env != nil {
+		topLevel := env.Namespace()
 		if topLevel != nil {
 			phases := topLevel.Phases()
 			phaseIndices := phases.Phases()
@@ -774,11 +815,12 @@ func (p *MetaCommandHandler) DisassembleBinding(name string) (string, error) {
 
 // searchBindings searches phase environment bindings for the pattern.
 func (p *MetaCommandHandler) searchBindings(pattern string) []DocSearchResult {
-	if p.env == nil {
+	env := p.env()
+	if env == nil {
 		return nil
 	}
 	lowerPattern := strings.ToLower(pattern)
-	topLevel := p.env.Namespace()
+	topLevel := env.Namespace()
 	if topLevel == nil {
 		return nil
 	}
@@ -857,10 +899,11 @@ func mergeSearchResults(registryResults, envResults []DocSearchResult) []DocSear
 // searchLibraries searches loaded libraries for the pattern, matching against
 // the library name (e.g. "(wile algebra)") and its description.
 func (p *MetaCommandHandler) searchLibraries(pattern string) []DocSearchResult {
-	if p.env == nil {
+	env := p.env()
+	if env == nil {
 		return nil
 	}
-	regAny := p.env.LibraryRegistry()
+	regAny := env.LibraryRegistry()
 	if regAny == nil {
 		return nil
 	}

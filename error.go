@@ -109,6 +109,36 @@ func newRuntimeErrorWithCause(msg string, cause error) *RuntimeError {
 	return &RuntimeError{Message: msg, Cause: cause}
 }
 
+// IsIncompleteInput reports whether a parse error indicates the input
+// is a valid prefix of an expression that needs more input to complete.
+// This is useful for REPL implementations that accumulate multi-line input.
+//
+// Detection uses errors.Is where possible (wrapped io.EOF for truncated
+// input). String matching is used only for tokenizer/parser errors whose
+// types are internal and cannot be matched structurally from public code.
+// Returns false for nil and bare io.EOF.
+func IsIncompleteInput(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Bare io.EOF means "stream ended normally" — not incomplete.
+	// Wrapped io.EOF (e.g. CompilationError{Cause: io.EOF}) means
+	// the parser ran out of input mid-expression.
+	if err != io.EOF && errors.Is(err, io.EOF) {
+		return true
+	}
+	// The tokenizer and parser live in internal packages, so their error
+	// types cannot be matched with errors.Is/As from public code. Fall
+	// back to string matching for these specific patterns:
+	//   - "unterminated" — tokenizer: unterminated string/symbol
+	//   - "unclosed"     — tokenizer: unclosed block comment
+	//   - "unknown token type" — parser: partial token from premature EOF
+	errStr := err.Error()
+	return strings.Contains(errStr, "unterminated") ||
+		strings.Contains(errStr, "unclosed") ||
+		strings.Contains(errStr, "unknown token type")
+}
+
 // isEOF checks if an error represents end of input.
 func isEOF(err error) bool {
 	return errors.Is(err, io.EOF)

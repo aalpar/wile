@@ -1,3 +1,17 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package repl
 
 import (
@@ -146,6 +160,40 @@ func TestRegistryDocProvider_Categories_ExcludesEmpty(t *testing.T) {
 	provider := NewRegistryDocProvider(reg)
 	cats := provider.Categories()
 	c.Assert(cats, qt.HasLen, 0)
+}
+
+func TestStripExamples(t *testing.T) {
+	tcs := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "no examples section",
+			input:    "Returns the car of a pair.",
+			expected: "Returns the car of a pair.",
+		},
+		{
+			name:     "with examples section",
+			input:    "Returns the car of a pair.\n\nExamples:\n  (car '(1 2)) => 1",
+			expected: "Returns the car of a pair.",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "examples at start",
+			input:    "\n\nExamples:\n  (f)",
+			expected: "",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, StripExamples(tc.input), qt.Equals, tc.expected)
+		})
+	}
 }
 
 func TestRegistryDocProvider_ByCategory(t *testing.T) {

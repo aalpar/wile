@@ -1,3 +1,17 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package repl
 
 import (
@@ -6,29 +20,27 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile"
 )
 
-// SchemeCompleter implements readline.AutoCompleter for the Wile REPL.
-type SchemeCompleter struct {
-	env          *environment.EnvironmentFrame
+// Completer implements readline.AutoCompleter for a Wile REPL.
+// It completes Scheme bindings, meta-command names, and filenames.
+type Completer struct {
+	eng          *wile.Engine
 	metaCommands []string
 }
 
-// NewSchemeCompleter creates a completer that completes Scheme bindings
-// from all phase environments and meta-command names.
-func NewSchemeCompleter(
-	env *environment.EnvironmentFrame,
-	metaCommands []string,
-) *SchemeCompleter {
-	return &SchemeCompleter{
-		env:          env,
+// NewCompleter creates a completer. eng may be nil if only meta-command
+// completion is needed.
+func NewCompleter(eng *wile.Engine, metaCommands []string) *Completer {
+	return &Completer{
+		eng:          eng,
 		metaCommands: metaCommands,
 	}
 }
 
 // Do implements readline.AutoCompleter.
-func (p *SchemeCompleter) Do(line []rune, pos int) ([][]rune, int) {
+func (p *Completer) Do(line []rune, pos int) ([][]rune, int) {
 	lineStr := string(line[:pos])
 
 	// Context 1: after ",edit " — complete filenames
@@ -55,7 +67,7 @@ func (p *SchemeCompleter) Do(line []rune, pos int) ([][]rune, int) {
 
 // extractSymbolPrefix finds the Scheme symbol being typed at the cursor.
 // Walks backward from the end of the line until hitting a delimiter.
-func (p *SchemeCompleter) extractSymbolPrefix(line string) string {
+func (p *Completer) extractSymbolPrefix(line string) string {
 	delimiters := " \t\n\r()[]{}\"';,`"
 	i := len(line) - 1
 	for i >= 0 && !strings.ContainsRune(delimiters, rune(line[i])) {
@@ -65,12 +77,17 @@ func (p *SchemeCompleter) extractSymbolPrefix(line string) string {
 }
 
 // collectBindingNames walks all phase environments and returns unique binding names.
-func (p *SchemeCompleter) collectBindingNames() []string {
-	if p.env == nil {
+func (p *Completer) collectBindingNames() []string {
+	if p.eng == nil {
 		return nil
 	}
 
-	topLevel := p.env.Namespace()
+	env := p.eng.Environment()
+	if env == nil {
+		return nil
+	}
+
+	topLevel := env.Namespace()
 	if topLevel == nil {
 		return nil
 	}
@@ -105,7 +122,7 @@ func (p *SchemeCompleter) collectBindingNames() []string {
 }
 
 // completeFromList returns completions matching the given prefix.
-func (p *SchemeCompleter) completeFromList(prefix string, candidates []string) ([][]rune, int) {
+func (p *Completer) completeFromList(prefix string, candidates []string) ([][]rune, int) {
 	var matches [][]rune
 	for _, name := range candidates {
 		if strings.HasPrefix(name, prefix) {
@@ -117,7 +134,7 @@ func (p *SchemeCompleter) completeFromList(prefix string, candidates []string) (
 }
 
 // completeFilenames returns file/directory completions for the given prefix.
-func (p *SchemeCompleter) completeFilenames(prefix string) ([][]rune, int) {
+func (p *Completer) completeFilenames(prefix string) ([][]rune, int) {
 	matches, _ := filepath.Glob(prefix + "*")
 	var results [][]rune
 	for _, m := range matches {
@@ -132,7 +149,6 @@ func (p *SchemeCompleter) completeFilenames(prefix string) ([][]rune, int) {
 }
 
 // BindingNames returns all binding names visible in the environment.
-// Exposed for use by the REPL to provide hints.
-func (p *SchemeCompleter) BindingNames() []string {
+func (p *Completer) BindingNames() []string {
 	return p.collectBindingNames()
 }

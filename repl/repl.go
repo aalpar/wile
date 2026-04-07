@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package repl provides an interactive Read-Eval-Print Loop for Scheme.
-//
 //nolint:errcheck // REPL output doesn't need error handling
 package repl
 
@@ -25,11 +23,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/internal/parser"
-	"github.com/aalpar/wile/internal/syntax"
+	"github.com/aalpar/wile"
 	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/werr"
 
 	"github.com/ergochat/readline"
@@ -37,10 +32,10 @@ import (
 
 // REPL is an interactive Read-Eval-Print Loop.
 type REPL struct {
-	env         *environment.EnvironmentFrame
+	eng         *wile.Engine
 	debugCtx    *DebugContext
 	metaHandler *MetaCommandHandler
-	completer   *SchemeCompleter
+	completer   *Completer
 	docProvider DocProvider
 	historyFile string
 	prompt      string
@@ -94,11 +89,24 @@ func WithDocProvider(dp DocProvider) Option {
 	}
 }
 
-// New creates a new REPL with the given environment and options.
-func New(env *environment.EnvironmentFrame, opts ...Option) *REPL {
+// WithDebugContext sets an externally-created debug context.
+func WithDebugContext(dc *DebugContext) Option {
+	return func(r *REPL) {
+		r.debugCtx = dc
+	}
+}
+
+// WithCompleter sets an externally-created completer.
+func WithCompleter(c *Completer) Option {
+	return func(r *REPL) {
+		r.completer = c
+	}
+}
+
+// New creates a new REPL with the given engine and options.
+func New(eng *wile.Engine, opts ...Option) *REPL {
 	r := &REPL{
-		env:         env,
-		debugCtx:    NewDebugContext(),
+		eng:         eng,
 		historyFile: defaultHistoryFile(),
 		prompt:      "> ",
 		contPrompt:  "  ",
@@ -108,13 +116,31 @@ func New(env *environment.EnvironmentFrame, opts ...Option) *REPL {
 	for _, opt := range opts {
 		opt(r)
 	}
-	r.metaHandler = NewMetaCommandHandler(r.env, r.debugCtx, r.docProvider)
-	r.completer = NewSchemeCompleter(r.env, r.metaHandler.Commands())
+	if r.debugCtx == nil {
+		r.debugCtx = NewDebugContext()
+	}
+	if r.metaHandler == nil {
+		var metaOpts []MetaOption
+		if r.docProvider != nil {
+			metaOpts = append(metaOpts, WithMetaDocProvider(r.docProvider))
+		}
+		r.metaHandler = NewMetaCommandHandler(eng, metaOpts...)
+		r.metaHandler.SetDebugContext(r.debugCtx)
+	}
+	if r.completer == nil {
+		r.completer = NewCompleter(eng, r.metaHandler.Commands())
+	}
 	return r
 }
 
 // Run starts the REPL with readline support, falling back to simple mode if needed.
 func (p *REPL) Run(ctx context.Context) error {
+	if p.eng == nil {
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "repl: engine is required")
+	}
+	// Attach debugger to engine so Engine.Run picks it up.
+	p.eng.SetDebugger(p.debugCtx.Debugger())
+
 	rl, err := readline.NewFromConfig(&readline.Config{
 		Prompt:          p.prompt,
 		InterruptPrompt: "^C",
@@ -192,11 +218,10 @@ func (p *REPL) Run(ctx context.Context) error {
 		// Try to parse the accumulated input
 		input := inputBuffer.String()
 		rdr := strings.NewReader(input)
-		parser := parser.NewParser(p.env, true, rdr)
 
-		stx, parseErr := parser.ReadSyntax(ctx)
+		expr, parseErr := p.eng.ReadExpression(ctx, rdr)
 		if parseErr != nil {
-			if isIncompleteInput(parseErr) {
+			if wile.IsIncompleteInput(parseErr) {
 				// Incomplete expression - prompt for more input
 				rl.SetPrompt(p.contPrompt)
 				continue
@@ -213,28 +238,34 @@ func (p *REPL) Run(ctx context.Context) error {
 		rl.SetPrompt(p.prompt)
 
 		// Compile
-		tpl, compileErr := compile(ctx, p.env, stx)
+		cc, compileErr := p.eng.Compile(ctx, expr)
 		if compileErr != nil {
 			fmt.Fprintf(p.errOut, "Exception: %v\n", compileErr)
 			continue
 		}
 
-		// Run with debugger
-		mv, runErr := p.runWithDebugger(ctx, tpl)
+		// Run
+		val, runErr := p.eng.Run(ctx, cc)
 		if runErr != nil {
 			fmt.Fprintf(p.errOut, "Exception: %v\n", runErr)
 			continue
 		}
 
 		// Print result (unless void)
-		if !mv.IsVoid() {
-			fmt.Fprintln(p.out, mv.SchemeString())
+		if !val.IsVoid() {
+			fmt.Fprintln(p.out, val.SchemeString())
 		}
 	}
 }
 
 // RunSimple runs a basic REPL without readline support.
 func (p *REPL) RunSimple(ctx context.Context) error {
+	if p.eng == nil {
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "repl: engine is required")
+	}
+	// Attach debugger to engine so Engine.Run picks it up.
+	p.eng.SetDebugger(p.debugCtx.Debugger())
+
 	fmt.Fprint(p.out, p.prompt)
 	reader := newLineReader(os.Stdin)
 	var inputBuffer strings.Builder
@@ -260,11 +291,10 @@ func (p *REPL) RunSimple(ctx context.Context) error {
 		inputBuffer.WriteString("\n")
 		input := inputBuffer.String()
 		rdr := strings.NewReader(input)
-		parser := parser.NewParser(p.env, true, rdr)
 
-		stx, parseErr := parser.ReadSyntax(ctx)
+		expr, parseErr := p.eng.ReadExpression(ctx, rdr)
 		if parseErr != nil {
-			if isIncompleteInput(parseErr) {
+			if wile.IsIncompleteInput(parseErr) {
 				fmt.Fprint(p.out, p.contPrompt)
 				continue
 			}
@@ -276,22 +306,22 @@ func (p *REPL) RunSimple(ctx context.Context) error {
 
 		inputBuffer.Reset()
 
-		tpl, compileErr := compile(ctx, p.env, stx)
+		cc, compileErr := p.eng.Compile(ctx, expr)
 		if compileErr != nil {
 			fmt.Fprintf(p.errOut, "Exception: %v\n", compileErr)
 			fmt.Fprint(p.out, p.prompt)
 			continue
 		}
 
-		mv, runErr := run(ctx, tpl, p.env)
+		val, runErr := p.eng.Run(ctx, cc)
 		if runErr != nil {
 			fmt.Fprintf(p.errOut, "Exception: %v\n", runErr)
 			fmt.Fprint(p.out, p.prompt)
 			continue
 		}
 
-		if !mv.IsVoid() {
-			fmt.Fprintf(p.out, "%s\n", mv.SchemeString())
+		if !val.IsVoid() {
+			fmt.Fprintf(p.out, "%s\n", val.SchemeString())
 		}
 		fmt.Fprint(p.out, p.prompt)
 	}
@@ -300,60 +330,6 @@ func (p *REPL) RunSimple(ctx context.Context) error {
 // Debugger returns the REPL's debugger for external configuration.
 func (p *REPL) Debugger() *machine.Debugger {
 	return p.debugCtx.Debugger()
-}
-
-func (p *REPL) runWithDebugger(ctx context.Context, tpl *machine.NativeTemplate) (machine.MultipleValues, error) {
-	cont := machine.NewMachineContinuation(nil, tpl, p.env)
-	mc := machine.NewMachineContext(ctx, cont)
-	mc.SetDebugger(p.debugCtx.Debugger())
-	err := mc.RunWithEscapeHandling()
-	if err != nil {
-		return nil, err
-	}
-	return mc.GetValues(), nil
-}
-
-// compile expands and compiles a syntax expression into an executable template.
-func compile(ctx context.Context, env *environment.EnvironmentFrame, expr syntax.SyntaxValue) (*machine.NativeTemplate, error) {
-	tpl := machine.NewNativeTemplate(0, 0, false)
-
-	expanded, err := compilation.NewExpanderTimeContinuation(ctx, env, machine.NewVMMacroEvaluator()).ExpandExpression(expr)
-	if err != nil {
-		return nil, werr.WrapForeignErrorWithCause(werr.ErrExpansion, err, "expansion error")
-	}
-
-	cctx := compilation.NewCompileTimeCallContext(ctx, false)
-	err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
-	if err != nil {
-		return nil, werr.WrapForeignErrorWithCause(werr.ErrCompilation, err, "compilation error")
-	}
-
-	return tpl, nil
-}
-
-// run executes a compiled template and returns the result values.
-func run(ctx context.Context, tpl *machine.NativeTemplate, env *environment.EnvironmentFrame) (machine.MultipleValues, error) {
-	cont := machine.NewMachineContinuation(nil, tpl, env)
-	mc := machine.NewMachineContext(ctx, cont)
-	err := mc.RunWithEscapeHandling()
-	if err != nil {
-		return nil, err
-	}
-	return mc.GetValues(), nil
-}
-
-// isIncompleteInput checks if the parse error indicates incomplete input.
-func isIncompleteInput(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, io.EOF) {
-		return true
-	}
-	errStr := err.Error()
-	return strings.Contains(errStr, "unexpected EOF") ||
-		strings.Contains(errStr, "unterminated") ||
-		strings.Contains(errStr, "unclosed")
 }
 
 // defaultHistoryFile returns the default history file path.
@@ -365,7 +341,7 @@ func defaultHistoryFile() string {
 	return home + "/.wile_history"
 }
 
-// lineReader wraps a bufio.Reader for line-by-line reading.
+// lineReader wraps a reader for line-by-line reading.
 type lineReader struct {
 	r *strings.Builder
 	f io.Reader

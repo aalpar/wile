@@ -1,3 +1,17 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package repl
 
 import (
@@ -9,12 +23,18 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/aalpar/wile/internal/bootstrap"
-	"github.com/aalpar/wile/internal/docparse"
-	"github.com/aalpar/wile/internal/parser"
+	"github.com/aalpar/wile"
+	"github.com/aalpar/wile/docparse"
 	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/values"
 )
+
+func newTestEngine(t *testing.T) *wile.Engine {
+	t.Helper()
+	eng, err := wile.NewEngine(context.Background())
+	qt.Assert(t, err, qt.IsNil)
+	return eng
+}
 
 func TestMetaCommandHandler(t *testing.T) {
 	tcs := []struct {
@@ -32,11 +52,10 @@ func TestMetaCommandHandler(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			var debugCtx *DebugContext
+			h := NewMetaCommandHandler(nil)
 			if tc.debug {
-				debugCtx = NewDebugContext()
+				h.SetDebugContext(NewDebugContext())
 			}
-			h := NewMetaCommandHandler(nil, debugCtx, nil)
 			handled := h.Handle(tc.input, &buf)
 			qt.Assert(t, handled, qt.Equals, tc.handled)
 			if tc.contain != "" {
@@ -61,7 +80,7 @@ func TestCmdEdit(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("EDITOR", tc.editor)
 			var buf bytes.Buffer
-			h := NewMetaCommandHandler(nil, nil, nil)
+			h := NewMetaCommandHandler(nil)
 			h.cmdEdit(tc.args, &buf)
 			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
 				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
@@ -73,17 +92,15 @@ func TestCmdEdit_EditorExec(t *testing.T) {
 	// Use "true" as editor — it always succeeds and exits immediately
 	t.Setenv("EDITOR", "true")
 	var buf bytes.Buffer
-	h := NewMetaCommandHandler(nil, nil, nil)
+	h := NewMetaCommandHandler(nil)
 	h.cmdEdit([]string{"/dev/null"}, &buf)
 	// Should succeed silently
 	qt.Assert(t, buf.String(), qt.Equals, "")
 }
 
 func TestCmdDoc(t *testing.T) {
-	ctx := context.Background()
-	env, reg, err := bootstrap.NewTopLevelWithRegistry(ctx)
-	qt.Assert(t, err, qt.IsNil)
-	docProv := NewRegistryDocProvider(reg)
+	eng := newTestEngine(t)
+	docProv := NewRegistryDocProvider(eng.Registry())
 
 	tcs := []struct {
 		name    string
@@ -98,7 +115,7 @@ func TestCmdDoc(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("PAGER", "") // disable pager in tests
 			var buf bytes.Buffer
-			h := NewMetaCommandHandler(env, nil, docProv)
+			h := NewMetaCommandHandler(eng, WithMetaDocProvider(docProv))
 			h.cmdDoc(tc.args, &buf)
 			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
 				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
@@ -110,7 +127,7 @@ func TestCmdHelp(t *testing.T) {
 	t.Run("lists all commands", func(t *testing.T) {
 		t.Setenv("PAGER", "")
 		var buf bytes.Buffer
-		h := NewMetaCommandHandler(nil, nil, nil)
+		h := NewMetaCommandHandler(nil)
 		h.cmdHelp(nil, &buf)
 		output := buf.String()
 		for _, cmd := range []string{",doc", ",edit", ",help", ",break"} {
@@ -122,7 +139,7 @@ func TestCmdHelp(t *testing.T) {
 	t.Run("specific command detail", func(t *testing.T) {
 		t.Setenv("PAGER", "")
 		var buf bytes.Buffer
-		h := NewMetaCommandHandler(nil, nil, nil)
+		h := NewMetaCommandHandler(nil)
 		h.cmdHelp([]string{"doc"}, &buf)
 		output := buf.String()
 		qt.Assert(t, strings.Contains(output, ",doc"), qt.IsTrue)
@@ -134,21 +151,19 @@ func TestCmdHelp(t *testing.T) {
 	t.Run("unknown command help", func(t *testing.T) {
 		t.Setenv("PAGER", "")
 		var buf bytes.Buffer
-		h := NewMetaCommandHandler(nil, nil, nil)
+		h := NewMetaCommandHandler(nil)
 		h.cmdHelp([]string{"nonexistent"}, &buf)
 		qt.Assert(t, strings.Contains(buf.String(), "Unknown"), qt.IsTrue)
 	})
 }
 
 func TestCmdDoc_BindingLookup(t *testing.T) {
-	ctx := context.Background()
-	env, _, err := bootstrap.NewTopLevelWithRegistry(ctx)
-	qt.Assert(t, err, qt.IsNil)
+	eng := newTestEngine(t)
 
 	// No doc provider — falls through to environment lookup
 	t.Setenv("PAGER", "")
 	var buf bytes.Buffer
-	h := NewMetaCommandHandler(env, nil, nil)
+	h := NewMetaCommandHandler(eng)
 	// "if" is a syntax binding, should be found in phase environments
 	h.cmdDoc([]string{"if"}, &buf)
 	output := buf.String()
@@ -159,22 +174,15 @@ func TestCmdDoc_BindingLookup(t *testing.T) {
 
 func TestCmdDoc_ClosureDocstring(t *testing.T) {
 	ctx := context.Background()
-	env, _, err := bootstrap.NewTopLevelWithRegistry(ctx)
-	qt.Assert(t, err, qt.IsNil)
+	eng := newTestEngine(t)
 
 	// Define a procedure with a Guile-style docstring
-	rdr := strings.NewReader(`(define (f x) "Adds one to x." (+ x 1))`)
-	p := parser.NewParser(env, true, rdr)
-	stx, err := p.ReadSyntax(ctx)
-	qt.Assert(t, err, qt.IsNil)
-	tpl, err := compile(ctx, env, stx)
-	qt.Assert(t, err, qt.IsNil)
-	_, err = run(ctx, tpl, env)
+	_, err := eng.EvalMultiple(ctx, `(define (f x) "Adds one to x." (+ x 1))`)
 	qt.Assert(t, err, qt.IsNil)
 
 	t.Setenv("PAGER", "")
 	var buf bytes.Buffer
-	h := NewMetaCommandHandler(env, nil, nil)
+	h := NewMetaCommandHandler(eng)
 	h.cmdDoc([]string{"f"}, &buf)
 	output := buf.String()
 	qt.Assert(t, strings.Contains(output, "Adds one to x."), qt.IsTrue,
@@ -182,15 +190,12 @@ func TestCmdDoc_ClosureDocstring(t *testing.T) {
 }
 
 func TestCmdDoc_SpecialFormStructuredFormat(t *testing.T) {
-	ctx := context.Background()
-	env, reg, err := bootstrap.NewTopLevelWithRegistry(ctx)
-	qt.Assert(t, err, qt.IsNil)
-	reg.ApplyDocs(env) // Apply binding docs (engine does this; test helper doesn't)
-	docProv := NewRegistryDocProvider(reg)
+	eng := newTestEngine(t)
+	docProv := NewRegistryDocProvider(eng.Registry())
 
 	t.Setenv("PAGER", "")
 	var buf bytes.Buffer
-	h := NewMetaCommandHandler(env, nil, docProv)
+	h := NewMetaCommandHandler(eng, WithMetaDocProvider(docProv))
 	h.cmdDoc([]string{"if"}, &buf)
 	output := buf.String()
 
@@ -207,15 +212,12 @@ func TestCmdDoc_SpecialFormStructuredFormat(t *testing.T) {
 }
 
 func TestCmdDoc_MacroStructuredFormat(t *testing.T) {
-	ctx := context.Background()
-	env, reg, err := bootstrap.NewTopLevelWithRegistry(ctx)
-	qt.Assert(t, err, qt.IsNil)
-	reg.ApplyDocs(env) // Apply binding docs (engine does this; test helper doesn't)
-	docProv := NewRegistryDocProvider(reg)
+	eng := newTestEngine(t)
+	docProv := NewRegistryDocProvider(eng.Registry())
 
 	t.Setenv("PAGER", "")
 	var buf bytes.Buffer
-	h := NewMetaCommandHandler(env, nil, docProv)
+	h := NewMetaCommandHandler(eng, WithMetaDocProvider(docProv))
 	h.cmdDoc([]string{"and"}, &buf)
 	output := buf.String()
 
@@ -227,8 +229,8 @@ func TestCmdDoc_MacroStructuredFormat(t *testing.T) {
 }
 
 func TestMetaCommandHandlerCommands(t *testing.T) {
-	debugCtx := NewDebugContext()
-	h := NewMetaCommandHandler(nil, debugCtx, nil)
+	h := NewMetaCommandHandler(nil)
+	h.SetDebugContext(NewDebugContext())
 	cmds := h.Commands()
 	qt.Assert(t, len(cmds) > 0, qt.IsTrue)
 
@@ -252,7 +254,7 @@ func TestMetaCommandHandlerCommands(t *testing.T) {
 }
 
 func TestMetaCommandHandlerCommands_NoDebugCtx(t *testing.T) {
-	h := NewMetaCommandHandler(nil, nil, nil)
+	h := NewMetaCommandHandler(nil)
 	cmds := h.Commands()
 	// Should still have session commands
 	qt.Assert(t, slices.Contains(cmds, "help"), qt.IsTrue)
@@ -262,7 +264,7 @@ func TestMetaCommandHandlerCommands_NoDebugCtx(t *testing.T) {
 
 func TestMetaHandleUnknown(t *testing.T) {
 	var buf bytes.Buffer
-	h := NewMetaCommandHandler(nil, nil, nil)
+	h := NewMetaCommandHandler(nil)
 
 	// Unknown command still returns true (it's a meta-command, just unrecognized)
 	handled := h.Handle(",totally_unknown_cmd", &buf)
@@ -271,34 +273,14 @@ func TestMetaHandleUnknown(t *testing.T) {
 		qt.Commentf("output was: %q", buf.String()))
 }
 
-func TestStripExamples(t *testing.T) {
-	tcs := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{"with examples", "Desc.\n\nExamples:\n  (f 1) => 2", "Desc."},
-		{"without examples", "Just a description.", "Just a description."},
-		{"empty string", "", ""},
-		{"examples at start", "\n\nExamples:\n  (f)", ""},
-	}
-	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			qt.Assert(t, StripExamples(tc.input), qt.Equals, tc.expected)
-		})
-	}
-}
-
 func TestCmdDoc_ExamplesFiltering(t *testing.T) {
-	ctx := context.Background()
-	env, reg, err := bootstrap.NewTopLevelWithRegistry(ctx)
-	qt.Assert(t, err, qt.IsNil)
-	docProv := NewRegistryDocProvider(reg)
+	eng := newTestEngine(t)
+	docProv := NewRegistryDocProvider(eng.Registry())
 
 	t.Run("strips examples by default", func(t *testing.T) {
 		t.Setenv("PAGER", "")
 		var buf bytes.Buffer
-		h := NewMetaCommandHandler(env, nil, docProv)
+		h := NewMetaCommandHandler(eng, WithMetaDocProvider(docProv))
 		h.cmdDoc([]string{"car"}, &buf)
 		output := buf.String()
 		qt.Assert(t, strings.Contains(output, "car"), qt.IsTrue,
@@ -310,7 +292,7 @@ func TestCmdDoc_ExamplesFiltering(t *testing.T) {
 	t.Run("shows examples with -x", func(t *testing.T) {
 		t.Setenv("PAGER", "")
 		var buf bytes.Buffer
-		h := NewMetaCommandHandler(env, nil, docProv)
+		h := NewMetaCommandHandler(eng, WithMetaDocProvider(docProv))
 		h.cmdDoc([]string{"-x", "car"}, &buf)
 		output := buf.String()
 		qt.Assert(t, strings.Contains(output, "car"), qt.IsTrue,
@@ -322,7 +304,7 @@ func TestCmdDoc_ExamplesFiltering(t *testing.T) {
 	t.Run("-x alone shows usage", func(t *testing.T) {
 		t.Setenv("PAGER", "")
 		var buf bytes.Buffer
-		h := NewMetaCommandHandler(env, nil, docProv)
+		h := NewMetaCommandHandler(eng, WithMetaDocProvider(docProv))
 		h.cmdDoc([]string{"-x"}, &buf)
 		qt.Assert(t, strings.Contains(buf.String(), "Usage"), qt.IsTrue)
 	})
@@ -370,10 +352,8 @@ func TestFormatPrimitiveDoc_WithoutTypes(t *testing.T) {
 }
 
 func TestCmdApropos(t *testing.T) {
-	ctx := context.Background()
-	env, reg, err := bootstrap.NewTopLevelWithRegistry(ctx)
-	qt.Assert(t, err, qt.IsNil)
-	docProv := NewRegistryDocProvider(reg)
+	eng := newTestEngine(t)
+	docProv := NewRegistryDocProvider(eng.Registry())
 
 	tcs := []struct {
 		name    string
@@ -389,7 +369,7 @@ func TestCmdApropos(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("PAGER", "")
 			var buf bytes.Buffer
-			h := NewMetaCommandHandler(env, nil, docProv)
+			h := NewMetaCommandHandler(eng, WithMetaDocProvider(docProv))
 			h.cmdApropos(tc.args, &buf)
 			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
 				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
@@ -398,16 +378,15 @@ func TestCmdApropos(t *testing.T) {
 }
 
 func TestCmdApropos_Library(t *testing.T) {
-	ctx := context.Background()
-	env, reg, err := bootstrap.NewTopLevelWithRegistry(ctx)
-	qt.Assert(t, err, qt.IsNil)
-	docProv := NewRegistryDocProvider(reg)
+	eng := newTestEngine(t)
+	docProv := NewRegistryDocProvider(eng.Registry())
+	env := eng.Environment()
 
 	// Register a library in the env's library registry
 	libReg := compilation.NewLibraryRegistry()
 	lib := compilation.NewCompiledLibrary(compilation.NewLibraryName("wile", "algebra"), env)
 	lib.Description = "Algebraic structures: orders, lattices, monoids."
-	err = libReg.Register(lib)
+	err := libReg.Register(lib)
 	qt.Assert(t, err, qt.IsNil)
 	env.SetLibraryRegistry(libReg)
 
@@ -425,7 +404,7 @@ func TestCmdApropos_Library(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("PAGER", "")
 			var buf bytes.Buffer
-			h := NewMetaCommandHandler(env, nil, docProv)
+			h := NewMetaCommandHandler(eng, WithMetaDocProvider(docProv))
 			h.cmdApropos([]string{tc.pattern}, &buf)
 			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
 				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
@@ -434,14 +413,12 @@ func TestCmdApropos_Library(t *testing.T) {
 }
 
 func TestCmdTopics(t *testing.T) {
-	ctx := context.Background()
-	_, reg, err := bootstrap.NewTopLevelWithRegistry(ctx)
-	qt.Assert(t, err, qt.IsNil)
-	docProv := NewRegistryDocProvider(reg)
+	eng := newTestEngine(t)
+	docProv := NewRegistryDocProvider(eng.Registry())
 
 	t.Setenv("PAGER", "")
 	var buf bytes.Buffer
-	h := NewMetaCommandHandler(nil, nil, docProv)
+	h := NewMetaCommandHandler(nil, WithMetaDocProvider(docProv))
 	h.cmdTopics(&buf)
 	output := buf.String()
 	qt.Assert(t, strings.Contains(output, "arithmetic"), qt.IsTrue,
@@ -451,10 +428,8 @@ func TestCmdTopics(t *testing.T) {
 }
 
 func TestCmdTopic(t *testing.T) {
-	ctx := context.Background()
-	_, reg, err := bootstrap.NewTopLevelWithRegistry(ctx)
-	qt.Assert(t, err, qt.IsNil)
-	docProv := NewRegistryDocProvider(reg)
+	eng := newTestEngine(t)
+	docProv := NewRegistryDocProvider(eng.Registry())
 
 	tcs := []struct {
 		name    string
@@ -469,7 +444,7 @@ func TestCmdTopic(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("PAGER", "")
 			var buf bytes.Buffer
-			h := NewMetaCommandHandler(nil, nil, docProv)
+			h := NewMetaCommandHandler(nil, WithMetaDocProvider(docProv))
 			h.cmdTopic(tc.args, &buf)
 			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
 				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
@@ -478,9 +453,8 @@ func TestCmdTopic(t *testing.T) {
 }
 
 func TestCmdDocLibrary(t *testing.T) {
-	ctx := context.Background()
-	env, _, err := bootstrap.NewTopLevelWithRegistry(ctx)
-	qt.Assert(t, err, qt.IsNil)
+	eng := newTestEngine(t)
+	env := eng.Environment()
 
 	// Set up a library registry with a test library
 	reg := compilation.NewLibraryRegistry()
@@ -488,7 +462,7 @@ func TestCmdDocLibrary(t *testing.T) {
 	lib.Description = "A test library for documentation."
 	lib.AddExport("foo", "foo")
 	lib.AddExport("bar", "bar")
-	err = reg.Register(lib)
+	err := reg.Register(lib)
 	qt.Assert(t, err, qt.IsNil)
 	env.SetLibraryRegistry(reg)
 
@@ -506,20 +480,19 @@ func TestCmdDocLibrary(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("PAGER", "")
 			var buf bytes.Buffer
-			h := NewMetaCommandHandler(env, nil, nil)
+			h := NewMetaCommandHandler(eng)
 			h.cmdDoc(tc.args, &buf)
 			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
 				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
 		})
 	}
 
-	// Separate test: env without library registry
+	// Separate test: engine without library registry
 	t.Run("no registry configured", func(t *testing.T) {
 		t.Setenv("PAGER", "")
-		noRegEnv, _, err := bootstrap.NewTopLevelWithRegistry(ctx)
-		qt.Assert(t, err, qt.IsNil)
+		noRegEng := newTestEngine(t)
 		var buf bytes.Buffer
-		h := NewMetaCommandHandler(noRegEnv, nil, nil)
+		h := NewMetaCommandHandler(noRegEng)
 		h.cmdDoc([]string{"(some", "lib)"}, &buf)
 		qt.Assert(t, strings.Contains(buf.String(), "no library registry"), qt.IsTrue,
 			qt.Commentf("output was: %q", buf.String()))
@@ -527,14 +500,13 @@ func TestCmdDocLibrary(t *testing.T) {
 }
 
 func TestCmdLibraries(t *testing.T) {
-	ctx := context.Background()
-	env, _, err := bootstrap.NewTopLevelWithRegistry(ctx)
-	qt.Assert(t, err, qt.IsNil)
+	eng := newTestEngine(t)
+	env := eng.Environment()
 
 	reg := compilation.NewLibraryRegistry()
 	lib := compilation.NewCompiledLibrary(compilation.NewLibraryName("test", "lib"), env)
 	lib.Description = "A test library."
-	err = reg.Register(lib)
+	err := reg.Register(lib)
 	qt.Assert(t, err, qt.IsNil)
 	env.SetLibraryRegistry(reg)
 
@@ -549,7 +521,7 @@ func TestCmdLibraries(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			h := NewMetaCommandHandler(env, nil, nil)
+			h := NewMetaCommandHandler(eng)
 			h.SetPager("")
 			h.cmdLibraries(&buf)
 			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
@@ -559,23 +531,22 @@ func TestCmdLibraries(t *testing.T) {
 
 	t.Run("no env", func(t *testing.T) {
 		var buf bytes.Buffer
-		h := NewMetaCommandHandler(nil, nil, nil)
+		h := NewMetaCommandHandler(nil)
 		h.cmdLibraries(&buf)
 		qt.Assert(t, strings.Contains(buf.String(), "No environment"), qt.IsTrue)
 	})
 
 	t.Run("no registry", func(t *testing.T) {
-		noRegEnv, _, noRegErr := bootstrap.NewTopLevelWithRegistry(ctx)
-		qt.Assert(t, noRegErr, qt.IsNil)
+		noRegEng := newTestEngine(t)
 		var buf bytes.Buffer
-		h := NewMetaCommandHandler(noRegEnv, nil, nil)
+		h := NewMetaCommandHandler(noRegEng)
 		h.cmdLibraries(&buf)
 		qt.Assert(t, strings.Contains(buf.String(), "No library registry"), qt.IsTrue)
 	})
 
 	t.Run("alias libs", func(t *testing.T) {
 		var buf bytes.Buffer
-		h := NewMetaCommandHandler(env, nil, nil)
+		h := NewMetaCommandHandler(eng)
 		h.SetPager("")
 		h.Handle(",libs", &buf)
 		qt.Assert(t, strings.Contains(buf.String(), "(test lib)"), qt.IsTrue)
@@ -584,18 +555,11 @@ func TestCmdLibraries(t *testing.T) {
 
 func TestCmdDisassemble(t *testing.T) {
 	ctx := context.Background()
-	env, _, err := bootstrap.NewTopLevelWithRegistry(ctx)
-	qt.Assert(t, err, qt.IsNil)
+	eng := newTestEngine(t)
 
 	// Define a procedure so we can disassemble it.
-	rdr := strings.NewReader(`(define (add1 x) (+ x 1))`)
-	p := parser.NewParser(env, true, rdr)
-	stx, stxErr := p.ReadSyntax(ctx)
-	qt.Assert(t, stxErr, qt.IsNil)
-	tpl, compileErr := compile(ctx, env, stx)
-	qt.Assert(t, compileErr, qt.IsNil)
-	_, runErr := run(ctx, tpl, env)
-	qt.Assert(t, runErr, qt.IsNil)
+	_, err := eng.EvalMultiple(ctx, `(define (add1 x) (+ x 1))`)
+	qt.Assert(t, err, qt.IsNil)
 
 	tcs := []struct {
 		name    string
@@ -611,7 +575,7 @@ func TestCmdDisassemble(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("PAGER", "")
 			var buf bytes.Buffer
-			h := NewMetaCommandHandler(env, nil, nil)
+			h := NewMetaCommandHandler(eng)
 			h.cmdDisassemble(tc.args, &buf)
 			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
 				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
@@ -620,13 +584,11 @@ func TestCmdDisassemble(t *testing.T) {
 }
 
 func TestCmdDisassemble_ForeignClosure(t *testing.T) {
-	ctx := context.Background()
-	env, _, err := bootstrap.NewTopLevelWithRegistry(ctx)
-	qt.Assert(t, err, qt.IsNil)
+	eng := newTestEngine(t)
 
 	t.Setenv("PAGER", "")
 	var buf bytes.Buffer
-	h := NewMetaCommandHandler(env, nil, nil)
+	h := NewMetaCommandHandler(eng)
 	h.cmdDisassemble([]string{"car"}, &buf)
 	output := buf.String()
 	qt.Assert(t, strings.Contains(output, "foreign"), qt.IsTrue,
@@ -637,7 +599,7 @@ func TestCmdDisassemble_ForeignClosure(t *testing.T) {
 
 func TestCmdDisassemble_Alias(t *testing.T) {
 	var buf bytes.Buffer
-	h := NewMetaCommandHandler(nil, nil, nil)
+	h := NewMetaCommandHandler(nil)
 	handled := h.Handle(",dis", &buf)
 	qt.Assert(t, handled, qt.IsTrue)
 	qt.Assert(t, strings.Contains(buf.String(), "Usage"), qt.IsTrue)
@@ -735,8 +697,8 @@ func TestMetaHandleDebugDelegation(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			debugCtx := NewDebugContext()
-			h := NewMetaCommandHandler(nil, debugCtx, nil)
+			h := NewMetaCommandHandler(nil)
+			h.SetDebugContext(NewDebugContext())
 			var buf bytes.Buffer
 			handled := h.Handle(tc.input, &buf)
 			qt.Assert(t, handled, qt.IsTrue)
