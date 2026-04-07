@@ -361,16 +361,23 @@ func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo, showExamp
 	hasTypes := len(info.ParamTypes) > 0
 
 	// Signature line
-	fmt.Fprintf(w, "(%s", name)
-	for _, pn := range info.ParamNames {
-		fmt.Fprintf(w, " %s", pn)
-	}
-	if info.IsVariadic {
-		fmt.Fprint(w, " ...")
-	}
-	fmt.Fprint(w, ")")
-	if hasTypes && info.ReturnType != values.TypeAny {
-		fmt.Fprintf(w, " → %s", info.ReturnType.String())
+	if info.Syntax != "" {
+		fmt.Fprint(w, info.Syntax)
+		if info.TypeLabel != "" {
+			fmt.Fprintf(w, " — %s", info.TypeLabel)
+		}
+	} else {
+		fmt.Fprintf(w, "(%s", name)
+		for _, pn := range info.ParamNames {
+			fmt.Fprintf(w, " %s", pn)
+		}
+		if info.IsVariadic {
+			fmt.Fprint(w, " ...")
+		}
+		fmt.Fprint(w, ")")
+		if hasTypes && info.ReturnType != values.TypeAny {
+			fmt.Fprintf(w, " → %s", info.ReturnType.String())
+		}
 	}
 	fmt.Fprintln(w)
 
@@ -380,7 +387,8 @@ func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo, showExamp
 		doc = StripExamples(doc)
 	}
 	if doc != "" {
-		fmt.Fprintf(w, "  %s\n", doc)
+		indented := strings.ReplaceAll(doc, "\n", "\n  ")
+		fmt.Fprintf(w, "  %s\n", indented)
 	}
 
 	// Parameter types
@@ -420,9 +428,39 @@ func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding,
 
 	switch bnd.BindingType() {
 	case environment.BindingTypePrimitive:
+		// Try structured docstring for special forms.
+		doc := bnd.Doc()
+		if doc != "" {
+			parsed := docparse.ParseDocstring(doc)
+			if parsed.HasStructuredMetadata() {
+				formatPrimitiveDoc(w, name, DocInfo{
+					Doc:       parsed.Doc,
+					Syntax:    parsed.Syntax,
+					TypeLabel: "special form",
+					Category:  parsed.Category,
+				}, showExamples)
+				return
+			}
+		}
 		fmt.Fprintf(w, "%s: special form (%s)\n", name, phaseName)
+
 	case environment.BindingTypeSyntax:
+		// Try structured docstring for macros/syntax transformers.
+		doc := bnd.Doc()
+		if doc != "" {
+			parsed := docparse.ParseDocstring(doc)
+			if parsed.HasStructuredMetadata() {
+				formatPrimitiveDoc(w, name, DocInfo{
+					Doc:       parsed.Doc,
+					Syntax:    parsed.Syntax,
+					TypeLabel: "syntax",
+					Category:  parsed.Category,
+				}, showExamples)
+				return
+			}
+		}
 		fmt.Fprintf(w, "%s: syntax transformer (%s)\n", name, phaseName)
+
 	case environment.BindingTypeVariable:
 		val := bnd.Value()
 

@@ -181,6 +181,51 @@ func TestCmdDoc_ClosureDocstring(t *testing.T) {
 		qt.Commentf(",doc should show closure docstring: %q", output))
 }
 
+func TestCmdDoc_SpecialFormStructuredFormat(t *testing.T) {
+	ctx := context.Background()
+	env, reg, err := bootstrap.NewTopLevelWithRegistry(ctx)
+	qt.Assert(t, err, qt.IsNil)
+	reg.ApplyDocs(env) // Apply binding docs (engine does this; test helper doesn't)
+	docProv := NewRegistryDocProvider(reg)
+
+	t.Setenv("PAGER", "")
+	var buf bytes.Buffer
+	h := NewMetaCommandHandler(env, nil, docProv)
+	h.cmdDoc([]string{"if"}, &buf)
+	output := buf.String()
+
+	// Should use structured format: syntax as header, type label, category
+	qt.Assert(t, strings.Contains(output, "(if <test> <consequent> <alternate>)"), qt.IsTrue,
+		qt.Commentf("should have syntax pattern in header: %q", output))
+	qt.Assert(t, strings.Contains(output, "— special form"), qt.IsTrue,
+		qt.Commentf("should have type label: %q", output))
+	qt.Assert(t, strings.Contains(output, "Category: conditionals"), qt.IsTrue,
+		qt.Commentf("should have category: %q", output))
+	// Should NOT use old format
+	qt.Assert(t, strings.Contains(output, "if: special form"), qt.IsFalse,
+		qt.Commentf("should not use old header format: %q", output))
+}
+
+func TestCmdDoc_MacroStructuredFormat(t *testing.T) {
+	ctx := context.Background()
+	env, reg, err := bootstrap.NewTopLevelWithRegistry(ctx)
+	qt.Assert(t, err, qt.IsNil)
+	reg.ApplyDocs(env) // Apply binding docs (engine does this; test helper doesn't)
+	docProv := NewRegistryDocProvider(reg)
+
+	t.Setenv("PAGER", "")
+	var buf bytes.Buffer
+	h := NewMetaCommandHandler(env, nil, docProv)
+	h.cmdDoc([]string{"and"}, &buf)
+	output := buf.String()
+
+	// Bootstrap macros should also use structured format
+	qt.Assert(t, strings.Contains(output, "(and <test1> ...)"), qt.IsTrue,
+		qt.Commentf("should have syntax pattern: %q", output))
+	qt.Assert(t, strings.Contains(output, "Category: conditionals"), qt.IsTrue,
+		qt.Commentf("should have category: %q", output))
+}
+
 func TestMetaCommandHandlerCommands(t *testing.T) {
 	debugCtx := NewDebugContext()
 	h := NewMetaCommandHandler(nil, debugCtx, nil)
@@ -629,6 +674,52 @@ func TestFormatPrimitiveDoc_FromDocparse(t *testing.T) {
 		qt.Commentf("should have category: %s", output))
 	c.Assert(strings.Contains(output, "Multiply two numbers."), qt.IsTrue,
 		qt.Commentf("should have description: %s", output))
+}
+
+func TestFormatPrimitiveDoc_WithSyntax(t *testing.T) {
+	c := qt.New(t)
+
+	info := DocInfo{
+		Doc:       "Conditional expression. R7RS §4.1.5.",
+		Syntax:    "(if <test> <consequent> <alternate>)",
+		TypeLabel: "special form",
+		Category:  "conditionals",
+	}
+
+	var buf strings.Builder
+	formatPrimitiveDoc(&buf, "if", info, false)
+	output := buf.String()
+
+	c.Assert(strings.Contains(output, "(if <test> <consequent> <alternate>)"), qt.IsTrue,
+		qt.Commentf("should have syntax pattern: %s", output))
+	c.Assert(strings.Contains(output, "— special form"), qt.IsTrue,
+		qt.Commentf("should have type label: %s", output))
+	c.Assert(strings.Contains(output, "Conditional expression."), qt.IsTrue,
+		qt.Commentf("should have description: %s", output))
+	c.Assert(strings.Contains(output, "Category: conditionals"), qt.IsTrue,
+		qt.Commentf("should have category: %s", output))
+	// Should NOT build a signature from params
+	c.Assert(strings.Contains(output, "(if)"), qt.IsFalse,
+		qt.Commentf("should not have param-based signature: %s", output))
+}
+
+func TestFormatPrimitiveDoc_MultiLineDescription(t *testing.T) {
+	c := qt.New(t)
+
+	info := DocInfo{
+		Doc:       "First line.\nSecond line.\nThird line.",
+		Syntax:    "(foo <bar>)",
+		TypeLabel: "special form",
+		Category:  "test",
+	}
+
+	var buf strings.Builder
+	formatPrimitiveDoc(&buf, "foo", info, false)
+	output := buf.String()
+
+	// All description lines should be indented
+	c.Assert(strings.Contains(output, "  First line.\n  Second line.\n  Third line."), qt.IsTrue,
+		qt.Commentf("multi-line desc should be indented: %s", output))
 }
 
 func TestMetaHandleDebugDelegation(t *testing.T) {

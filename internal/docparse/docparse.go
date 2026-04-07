@@ -52,6 +52,7 @@ func ParseValueType(name string) values.ValueType {
 // DocInfo holds structured metadata extracted from a docstring.
 type DocInfo struct {
 	Doc        string
+	Syntax     string // extracted from "Syntax: ..." line
 	ParamNames []string
 	ParamTypes []values.ValueType
 	ReturnType values.ValueType
@@ -60,13 +61,14 @@ type DocInfo struct {
 
 // HasStructuredMetadata reports whether any structured metadata was extracted.
 func (p DocInfo) HasStructuredMetadata() bool {
-	return len(p.ParamNames) > 0 || p.ReturnType != values.TypeAny || p.Category != ""
+	return p.Syntax != "" || len(p.ParamNames) > 0 || p.ReturnType != values.TypeAny || p.Category != ""
 }
 
 // isMetadataHeader reports whether a line starts a metadata section
 // (content extracted from prose).
 func isMetadataHeader(line string) bool {
-	return strings.HasPrefix(line, "Parameters:") ||
+	return strings.HasPrefix(line, "Syntax:") ||
+		strings.HasPrefix(line, "Parameters:") ||
 		strings.HasPrefix(line, "Returns:") ||
 		strings.HasPrefix(line, "Category:")
 }
@@ -98,8 +100,21 @@ func ParseDocstring(raw string) DocInfo {
 	var currentSection string
 
 	for _, line := range lines {
+		// Blank lines end metadata sections and return to prose.
+		// This preserves blank-line separators before prose sections
+		// like "Examples:" so that StripExamples can find "\n\nExamples:\n".
+		if strings.TrimSpace(line) == "" && currentSection != "" && currentSection != "prose" && currentSection != "Parameters:" {
+			docLines = append(docLines, line)
+			currentSection = ""
+			continue
+		}
+
 		if isSectionHeader(line) {
 			switch {
+			case strings.HasPrefix(line, "Syntax:"):
+				info.Syntax = strings.TrimSpace(strings.TrimPrefix(line, "Syntax:"))
+				currentSection = "Syntax:"
+
 			case strings.HasPrefix(line, "Parameters:"):
 				// Parameter lines follow on subsequent indented lines.
 				currentSection = "Parameters:"
@@ -136,7 +151,7 @@ func ParseDocstring(raw string) DocInfo {
 				info.ParamTypes = append(info.ParamTypes, ParseValueType(typeName))
 			}
 
-		case "Returns:", "Category:":
+		case "Syntax:", "Returns:", "Category:":
 			// These are single-line sections; ignore continuation lines.
 			continue
 
