@@ -377,6 +377,38 @@ func TestCmdApropos(t *testing.T) {
 	}
 }
 
+func TestCmdApropos_SpecialFormCategory(t *testing.T) {
+	eng := newTestEngine(t)
+	docProv := NewRegistryDocProvider(eng.Registry())
+
+	// Special forms and macros should show [category] in apropos output.
+	// These are found via searchBindings (phase environments), not
+	// RegistryDocProvider, so category must be extracted from the docstring.
+	tcs := []struct {
+		name    string
+		pattern string
+		wantCat string
+	}{
+		{"special form: include-ci", "include-ci", "[libraries]"},
+		{"special form: if", "if", "[conditionals]"},
+		{"macro: case", "case", "[conditionals]"},
+		{"macro: guard", "guard", "[exceptions]"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("PAGER", "")
+			var buf bytes.Buffer
+			h := NewMetaCommandHandler(eng, WithMetaDocProvider(docProv))
+			h.cmdApropos([]string{tc.pattern}, &buf)
+			output := buf.String()
+			qt.Assert(t, strings.Contains(output, tc.pattern), qt.IsTrue,
+				qt.Commentf("output should contain %q: %q", tc.pattern, output))
+			qt.Assert(t, strings.Contains(output, tc.wantCat), qt.IsTrue,
+				qt.Commentf("output should contain category %q: %q", tc.wantCat, output))
+		})
+	}
+}
+
 func TestCmdApropos_Library(t *testing.T) {
 	eng := newTestEngine(t)
 	docProv := NewRegistryDocProvider(eng.Registry())

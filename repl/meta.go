@@ -863,11 +863,24 @@ func (p *MetaCommandHandler) searchBindings(pattern string) []DocSearchResult {
 				}
 			}
 
+			// Extract category from structured docstrings so that
+			// special forms and macros show [category] in ,apropos.
+			category := ""
+			displayDoc := doc
+			if doc != "" {
+				parsed := docparse.ParseDocstring(doc)
+				if parsed.HasStructuredMetadata() {
+					category = parsed.Category
+					displayDoc = parsed.Doc
+				}
+			}
+
 			if strings.Contains(strings.ToLower(name), lowerPattern) ||
 				strings.Contains(strings.ToLower(doc), lowerPattern) {
 				results = append(results, DocSearchResult{
-					Name: name,
-					Doc:  doc,
+					Name:     name,
+					Doc:      displayDoc,
+					Category: category,
 				})
 			}
 		}
