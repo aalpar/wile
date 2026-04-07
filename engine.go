@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/internal/docparse"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
@@ -634,6 +635,10 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 	// Must run after loadBootstrapMacros so define-syntax bindings exist.
 	reg.ApplyDocs(env)
 
+	// Register documentation-only entries for Scheme-defined procedures
+	// that have structured docstrings (parameters, return type, category).
+	registerSchemeDocstrings(env, reg)
+
 	return nil
 }
 
@@ -767,6 +772,63 @@ func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame
 	mc := machine.AcquireTopLevelContext(ctx, tpl, env)
 	defer machine.ReleaseTopLevelContext(mc)
 	return mc.Run()
+}
+
+// registerSchemeDocstrings walks runtime bindings and registers documentation-only
+// entries in the registry for Scheme-defined procedures with structured docstrings.
+func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.Registry) {
+	ns := env.Namespace()
+	if ns == nil {
+		return
+	}
+
+	runtime := ns.Phases().Get(0)
+	if runtime == nil {
+		return
+	}
+
+	global := runtime.GlobalEnvironment()
+	keys := global.Keys()
+	bindings := global.Bindings()
+
+	for sym, idx := range keys {
+		if idx >= len(bindings) {
+			continue
+		}
+		bnd := bindings[idx]
+		if bnd == nil || bnd.BindingType() != environment.BindingTypeVariable {
+			continue
+		}
+
+		raw := callableDocFromValue(bnd.Value())
+		if raw == "" {
+			continue
+		}
+
+		parsed := docparse.ParseDocstring(raw)
+		if !parsed.HasStructuredMetadata() {
+			continue
+		}
+
+		reg.AddDocOnlyPrimitive(registry.PrimitiveSpec{
+			Name:       sym.Key,
+			Doc:        parsed.Doc,
+			ParamNames: parsed.ParamNames,
+			ParamTypes: parsed.ParamTypes,
+			ReturnType: parsed.ReturnType,
+			Category:   parsed.Category,
+			ParamCount: len(parsed.ParamNames),
+		})
+	}
+}
+
+// callableDocFromValue extracts the docstring from a callable value.
+func callableDocFromValue(v values.Value) string {
+	dc, ok := v.(interface{ Doc() string })
+	if !ok {
+		return ""
+	}
+	return dc.Doc()
 }
 
 // LoadPath Stack API
