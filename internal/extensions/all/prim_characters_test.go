@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile"
-	extall "github.com/aalpar/wile/internal/extensions/all"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -30,7 +29,7 @@ import (
 func newEngine(t *testing.T) *wile.Engine {
 	t.Helper()
 	engine, err := wile.NewEngine(context.Background(),
-		wile.WithExtension(extall.Extension),
+		wile.WithAllExtensions(),
 	)
 	qt.New(t).Assert(err, qt.IsNil)
 	return engine

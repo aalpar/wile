@@ -69,6 +69,7 @@ func TestParseDocstring(t *testing.T) {
 		name       string
 		input      string
 		wantDoc    string
+		wantSyntax string
 		wantParams []string
 		wantTypes  []values.ValueType
 		wantReturn values.ValueType
@@ -145,6 +146,38 @@ func TestParseDocstring(t *testing.T) {
 			wantReturn: values.TypeNumber,
 			wantMeta:   true,
 		},
+		{
+			name:       "syntax with category — special form style",
+			input:      "Conditional expression. R7RS §4.1.5.\nSyntax: (if <test> <consequent> <alternate>)\nCategory: conditionals",
+			wantDoc:    "Conditional expression. R7RS §4.1.5.",
+			wantSyntax: "(if <test> <consequent> <alternate>)",
+			wantCat:    "conditionals",
+			wantMeta:   true,
+		},
+		{
+			name:       "syntax only — no category",
+			input:      "Short description.\nSyntax: (lambda <formals> <body>)",
+			wantDoc:    "Short description.",
+			wantSyntax: "(lambda <formals> <body>)",
+			wantMeta:   true,
+		},
+		{
+			name:       "parameters followed by examples",
+			input:      "Do stuff.\nParameters:\n  x : number\n\nExamples:\n  (do-stuff 1) => 2",
+			wantDoc:    "Do stuff.\n\nExamples:\n  (do-stuff 1) => 2",
+			wantParams: []string{"x"},
+			wantTypes:  []values.ValueType{values.TypeNumber},
+			wantReturn: values.TypeAny,
+			wantMeta:   true,
+		},
+		{
+			name:       "syntax with examples preserved in prose",
+			input:      "Binding form. R7RS §4.2.2.\nSyntax: (let ((<var> <init>) ...) <body>)\nCategory: binding\n\nExamples:\n  (let ((x 1)) x)  => 1",
+			wantDoc:    "Binding form. R7RS §4.2.2.\n\nExamples:\n  (let ((x 1)) x)  => 1",
+			wantSyntax: "(let ((<var> <init>) ...) <body>)",
+			wantCat:    "binding",
+			wantMeta:   true,
+		},
 	}
 
 	for _, tc := range tcs {
@@ -153,6 +186,7 @@ func TestParseDocstring(t *testing.T) {
 			info := docparse.ParseDocstring(tc.input)
 
 			c.Assert(info.Doc, qt.Equals, tc.wantDoc)
+			c.Assert(info.Syntax, qt.Equals, tc.wantSyntax)
 			c.Assert(info.ParamNames, qt.DeepEquals, tc.wantParams)
 			c.Assert(info.ParamTypes, qt.DeepEquals, tc.wantTypes)
 			c.Assert(info.ReturnType, qt.Equals, tc.wantReturn)

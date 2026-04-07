@@ -14,9 +14,9 @@
 
 // Package docparse parses structured metadata from Guile-style docstrings.
 //
-// Docstrings may contain metadata sections (Parameters:, Returns:, Category:)
-// that are extracted into structured fields, and prose sections (Examples:,
-// See also:) that remain in the Doc text.
+// Docstrings may contain metadata sections (Syntax:, Parameters:, Returns:,
+// Category:) that are extracted into structured fields, and prose sections
+// (Examples:, See also:) that remain in the Doc text.
 package docparse
 
 import (
@@ -52,6 +52,7 @@ func ParseValueType(name string) values.ValueType {
 // DocInfo holds structured metadata extracted from a docstring.
 type DocInfo struct {
 	Doc        string
+	Syntax     string // extracted from "Syntax: ..." line
 	ParamNames []string
 	ParamTypes []values.ValueType
 	ReturnType values.ValueType
@@ -60,13 +61,14 @@ type DocInfo struct {
 
 // HasStructuredMetadata reports whether any structured metadata was extracted.
 func (p DocInfo) HasStructuredMetadata() bool {
-	return len(p.ParamNames) > 0 || p.ReturnType != values.TypeAny || p.Category != ""
+	return p.Syntax != "" || len(p.ParamNames) > 0 || p.ReturnType != values.TypeAny || p.Category != ""
 }
 
 // isMetadataHeader reports whether a line starts a metadata section
 // (content extracted from prose).
 func isMetadataHeader(line string) bool {
-	return strings.HasPrefix(line, "Parameters:") ||
+	return strings.HasPrefix(line, "Syntax:") ||
+		strings.HasPrefix(line, "Parameters:") ||
 		strings.HasPrefix(line, "Returns:") ||
 		strings.HasPrefix(line, "Category:")
 }
@@ -84,8 +86,8 @@ func isSectionHeader(line string) bool {
 }
 
 // ParseDocstring parses a raw docstring into structured metadata.
-// Metadata sections (Parameters:, Returns:, Category:) are extracted into
-// typed fields. Prose sections (Examples:, See also:) remain in the Doc text.
+// Metadata sections (Syntax:, Parameters:, Returns:, Category:) are extracted
+// into typed fields. Prose sections (Examples:, See also:) remain in the Doc text.
 func ParseDocstring(raw string) DocInfo {
 	if raw == "" {
 		return DocInfo{}
@@ -98,8 +100,21 @@ func ParseDocstring(raw string) DocInfo {
 	var currentSection string
 
 	for _, line := range lines {
+		// Blank lines end metadata sections and return to prose.
+		// This preserves blank-line separators before prose sections
+		// like "Examples:" so that StripExamples can find "\n\nExamples:\n".
+		if strings.TrimSpace(line) == "" && currentSection != "" && currentSection != "prose" {
+			docLines = append(docLines, line)
+			currentSection = ""
+			continue
+		}
+
 		if isSectionHeader(line) {
 			switch {
+			case strings.HasPrefix(line, "Syntax:"):
+				info.Syntax = strings.TrimSpace(strings.TrimPrefix(line, "Syntax:"))
+				currentSection = "Syntax:"
+
 			case strings.HasPrefix(line, "Parameters:"):
 				// Parameter lines follow on subsequent indented lines.
 				currentSection = "Parameters:"
@@ -124,11 +139,7 @@ func ParseDocstring(raw string) DocInfo {
 		switch currentSection {
 		case "Parameters:":
 			// Parameter lines: "  name : type"
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" {
-				continue
-			}
-			parts := strings.SplitN(trimmed, ":", 2)
+			parts := strings.SplitN(strings.TrimSpace(line), ":", 2)
 			if len(parts) == 2 {
 				name := strings.TrimSpace(parts[0])
 				typeName := strings.TrimSpace(parts[1])
@@ -136,7 +147,7 @@ func ParseDocstring(raw string) DocInfo {
 				info.ParamTypes = append(info.ParamTypes, ParseValueType(typeName))
 			}
 
-		case "Returns:", "Category:":
+		case "Syntax:", "Returns:", "Category:":
 			// These are single-line sections; ignore continuation lines.
 			continue
 

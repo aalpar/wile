@@ -9,6 +9,8 @@ import (
 // DocInfo holds documentation for a primitive binding.
 type DocInfo struct {
 	Doc        string
+	Syntax     string // e.g. "(if <test> <consequent> <alternate>)"
+	TypeLabel  string // e.g. "special form", "syntax"
 	ParamNames []string
 	Category   string
 	ParamCount int

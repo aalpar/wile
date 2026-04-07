@@ -19,8 +19,6 @@ import (
 	"testing"
 
 	wile "github.com/aalpar/wile"
-	"github.com/aalpar/wile/extensions/introspection"
-	"github.com/aalpar/wile/internal/extensions/all"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -29,8 +27,7 @@ func newEngine(t *testing.T) *wile.Engine {
 	t.Helper()
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
-		wile.WithExtension(all.Extension),
-		wile.WithExtension(introspection.Extension),
+		wile.WithAllExtensions(),
 		wile.WithLibraryPaths(),
 	)
 	qt.Assert(t, err, qt.IsNil)
