@@ -32,8 +32,8 @@ import (
 
 	"github.com/aalpar/wile"
 	ioext "github.com/aalpar/wile/internal/extensions/io"
-	"github.com/aalpar/wile/internal/repl"
 	"github.com/aalpar/wile/machine/compilation"
+	"github.com/aalpar/wile/repl"
 	"github.com/aalpar/wile/stdlib"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
@@ -227,7 +227,7 @@ func (p *mcpServer) initLocked(ctx context.Context) error {
 	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(io.Discard))
 
 	docProv := repl.NewRegistryDocProvider(eng.Registry())
-	p.meta = repl.NewMetaCommandHandler(eng.Environment(), nil, docProv)
+	p.meta = repl.NewMetaCommandHandler(eng, repl.WithMetaDocProvider(docProv))
 	p.meta.SetPager("") // disable paging for non-TTY MCP context
 	return nil
 }
