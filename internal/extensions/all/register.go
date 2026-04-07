@@ -28,8 +28,11 @@ import (
 	"github.com/aalpar/wile/registry"
 )
 
-// Extension includes all standard extensions.
-var Extension = registry.NewExtension("all", AddToRegistry)
+// Extension registers the primitives defined in this package (records, promises,
+// strings, characters) under the name "all". When used in AllExtensions() where
+// sub-extensions are listed individually, this avoids double-registration.
+// Use Builder.AddToRegistry for standalone use that includes all sub-extensions.
+var Extension = registry.NewExtension("all", SafeBuilder.AddToRegistry)
 
 // Builder aggregates all extension registration functions.
 var Builder = registry.NewRegistryBuilder(
