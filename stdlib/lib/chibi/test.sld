@@ -52,7 +52,7 @@
 
     ;; Indentation helper
     (define (indent)
-      "Display indentation spaces for the current group nesting level.\n\nExamples:\n  (indent)  ; outputs spaces based on *group-indent*"
+      "Display indentation spaces for the current group nesting level.\n\nExamples:\n  (indent)  ; outputs spaces based on *group-indent*\n\nCategory: testing"
       (let loop ((i 0))
         (when (< i *group-indent*)
           (display "  ")
@@ -60,7 +60,7 @@
 
     ;; Begin a test group
     (define (test-begin name . args)
-      "Begin a new test group with NAME and increase nesting level.\n\nExamples:\n  (test-begin \"arithmetic\")\n  (test 4 (+ 2 2))\n  (test-end \"arithmetic\")\n\nSee also: `test-end', `test-group', `test-exit'."
+      "Begin a new test group with NAME and increase nesting level.\n\nExamples:\n  (test-begin \"arithmetic\")\n  (test 4 (+ 2 2))\n  (test-end \"arithmetic\")\n\nParameters:\n  name : string\nCategory: testing\n\nSee also: `test-end', `test-group', `test-exit'."
       (indent)
       (display "Testing ")
       (display name)
@@ -71,7 +71,7 @@
 
     ;; End a test group
     (define (test-end . args)
-      "End the current test group and decrease nesting level.\n\nExamples:\n  (test-begin \"math\")\n  (test 4 (+ 2 2))\n  (test-end \"math\")\n\nSee also: `test-begin', `test-group', `test-exit'."
+      "End the current test group and decrease nesting level.\n\nExamples:\n  (test-begin \"math\")\n  (test 4 (+ 2 2))\n  (test-end \"math\")\n\nCategory: testing\n\nSee also: `test-begin', `test-group', `test-exit'."
       (when (pair? *test-group-stack*)
         (set! *test-group-stack* (cdr *test-group-stack*))
         (set! *group-indent* (max 0 (- *group-indent* 1)))
@@ -81,11 +81,11 @@
 
     ;; Test result reporting - exported for macro use
     (define (%test-pass name)
-      "Record a passing test result for NAME.\n\nExamples:\n  (%test-pass \"add\")  ; increments pass counter"
+      "Record a passing test result for NAME.\n\nExamples:\n  (%test-pass \"add\")  ; increments pass counter\n\nParameters:\n  name : any\nCategory: testing"
       (set! *test-pass-count* (+ *test-pass-count* 1)))
 
     (define (%test-fail name expected actual)
-      "Record a failing test result for NAME and display EXPECTED vs ACTUAL.\n\nExamples:\n  (%test-fail \"add\" 4 5)  ; prints FAIL message"
+      "Record a failing test result for NAME and display EXPECTED vs ACTUAL.\n\nExamples:\n  (%test-fail \"add\" 4 5)  ; prints FAIL message\n\nParameters:\n  name : any\n  expected : any\n  actual : any\nCategory: testing"
       (set! *test-fail-count* (+ *test-fail-count* 1))
       (indent)
       (display "FAIL: ")
@@ -102,7 +102,7 @@
     ;; Uses relative difference like the original chibi test library.
     ;; Handles special cases: infinities and NaN
     (define (%approx-equal? a b epsilon)
-      "Return true if A and B are approximately equal within EPSILON.\nHandles infinities, NaN, zero, complex numbers, pairs, and vectors.\n\nExamples:\n  (%approx-equal? 1.0 1.001 0.01)  => #t\n  (%approx-equal? 1.0 2.0 0.01)    => #f\n  (%approx-equal? +inf.0 +inf.0 0.01)  => #t"
+      "Return true if A and B are approximately equal within EPSILON.\nHandles infinities, NaN, zero, complex numbers, pairs, and vectors.\n\nExamples:\n  (%approx-equal? 1.0 1.001 0.01)  => #t\n  (%approx-equal? 1.0 2.0 0.01)    => #f\n  (%approx-equal? +inf.0 +inf.0 0.01)  => #t\n\nParameters:\n  a : any\n  b : any\n  epsilon : real\nReturns: boolean\nCategory: testing"
       (cond
        ((and (number? a) (number? b))
         (cond
@@ -141,7 +141,7 @@
 
     ;; Exit with summary
     (define (test-exit . args)
-      "Print test summary and exit with status 1 if any tests failed.\n\nExamples:\n  (test-begin \"suite\")\n  (test 4 (+ 2 2))\n  (test-end)\n  (test-exit)  ; exits 0 if all passed\n\nSee also: `test-begin', `test-end', `test-failure-count'."
+      "Print test summary and exit with status 1 if any tests failed.\n\nExamples:\n  (test-begin \"suite\")\n  (test 4 (+ 2 2))\n  (test-end)\n  (test-exit)  ; exits 0 if all passed\n\nCategory: testing\n\nSee also: `test-begin', `test-end', `test-failure-count'."
       (newline)
       (display "Test Summary:")
       (newline)

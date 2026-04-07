@@ -45,7 +45,7 @@
 ;; handler reinstalls the same prompt around the abort thunk.
 ;; Used by prompt-at, reset-at, prompt, reset.
 (define (%prompt-reinstall tag thunk)
-  "Install a continuation prompt tagged TAG, run THUNK, and\nreinstall the same prompt if an abort delivers a new thunk.\nUsed internally by prompt-at, reset-at, prompt, and reset to\nprovide handler-reinstalling behavior.\n\nExamples:\n  (%prompt-reinstall (default-continuation-prompt-tag)\n    (lambda () 42))  => 42\n\nSee also: `call-with-continuation-prompt', `abort-current-continuation'."
+  "Install a continuation prompt tagged TAG, run THUNK, and\nreinstall the same prompt if an abort delivers a new thunk.\nUsed internally by prompt-at, reset-at, prompt, and reset to\nprovide handler-reinstalling behavior.\n\nExamples:\n  (%prompt-reinstall (default-continuation-prompt-tag)\n    (lambda () 42))  => 42\n\nParameters:\n  tag : any\n  thunk : procedure\nReturns: any\nCategory: control\n\nSee also: `call-with-continuation-prompt', `abort-current-continuation'."
   (call-with-continuation-prompt
     thunk
     tag
@@ -241,7 +241,7 @@
 ;; vector per frame on each call, or #f when exhausted.
 ;; Built on continuation-mark-set->list*.
 (define (continuation-mark-set->iterator cms keys . args)
-  "Return a stateful iterator over continuation mark set CMS.\nEach call to the returned procedure yields one vector of mark\nvalues for KEYS from the next frame, or #f when exhausted.\nThe optional third argument supplies the value used for frames\nthat lack a given key (defaults to #f).\n\nExamples:\n  (with-continuation-mark 'k 1\n    (let ((it (continuation-mark-set->iterator\n                (current-continuation-marks) '(k))))\n      (it)))  => #(1)\n\nSee also: `continuation-mark-set->context', `continuation-mark-set->list*'."
+  "Return a stateful iterator over continuation mark set CMS.\nEach call to the returned procedure yields one vector of mark\nvalues for KEYS from the next frame, or #f when exhausted.\nThe optional third argument supplies the value used for frames\nthat lack a given key (defaults to #f).\n\nExamples:\n  (with-continuation-mark 'k 1\n    (let ((it (continuation-mark-set->iterator\n                (current-continuation-marks) '(k))))\n      (it)))  => #(1)\n\nParameters:\n  cms : any\n  keys : list\nReturns: procedure\nCategory: control\n\nSee also: `continuation-mark-set->context', `continuation-mark-set->list*'."
   (let ((none-v (if (pair? args) (car args) #f)))
     (let ((remaining (continuation-mark-set->list* cms keys none-v)))
       (lambda ()
@@ -255,5 +255,5 @@
 ;; well-known key 'wile/source-location. Users can install marks with this
 ;; key via with-continuation-mark; this function collects them.
 (define (continuation-mark-set->context marks)
-  "Extract source-location marks from continuation mark set MARKS.\nCollects all values stored under the well-known key\n'wile/source-location, returning them as a list ordered from\ninnermost frame outward.\n\nExamples:\n  (with-continuation-mark 'wile/source-location \"foo.scm:10\"\n    (continuation-mark-set->context\n      (current-continuation-marks)))  => (\"foo.scm:10\")\n\nSee also: `continuation-mark-set->iterator', `continuation-mark-set->list'."
+  "Extract source-location marks from continuation mark set MARKS.\nCollects all values stored under the well-known key\n'wile/source-location, returning them as a list ordered from\ninnermost frame outward.\n\nExamples:\n  (with-continuation-mark 'wile/source-location \"foo.scm:10\"\n    (continuation-mark-set->context\n      (current-continuation-marks)))  => (\"foo.scm:10\")\n\nParameters:\n  marks : any\nReturns: list\nCategory: control\n\nSee also: `continuation-mark-set->iterator', `continuation-mark-set->list'."
   (continuation-mark-set->list marks 'wile/source-location))
