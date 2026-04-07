@@ -8,13 +8,13 @@
 
 ;; Simplified version of SRFI-1 any.
 (define (any pred ls)
-  "Return the first true result of applying PRED to elements of LS, or #f.\n\nExamples:\n  (any even? '(1 2 3))  => #t\n  (any even? '(1 3 5))  => #f"
+  "Return the first true result of applying PRED to elements of LS, or #f.\n\nExamples:\n  (any even? '(1 2 3))  => #t\n  (any even? '(1 3 5))  => #f\n\nParameters:\n  pred : procedure\n  ls : list\nReturns: any\nCategory: testing"
   (and (pair? ls)
        (or (pred (car ls))
            (any pred (cdr ls)))))
 
 (define (safe-any pred ls . o)
-  "Like any but catches exceptions, printing DESC as a warning on error.\n\nExamples:\n  (safe-any string? '(1 \"a\" 3))  => #t"
+  "Like any but catches exceptions, printing DESC as a warning on error.\n\nExamples:\n  (safe-any string? '(1 \"a\" 3))  => #t\n\nParameters:\n  pred : procedure\n  ls : list\n  o : list\nReturns: any\nCategory: testing"
   (let ((desc (or (and (pair? o) (car o)) "error in any")))
     (guard (exn
             (else
@@ -27,7 +27,7 @@
 ;; exception utilities
 
 (define (warning msg . args)
-  "Display MSG and ARGS as a warning to current-error-port.\n\nExamples:\n  (warning \"value out of range\" 42)  ; prints to stderr"
+  "Display MSG and ARGS as a warning to current-error-port.\n\nExamples:\n  (warning \"value out of range\" 42)  ; prints to stderr\n\nParameters:\n  msg : any\n  args : list\nReturns: any\nCategory: testing"
   (display msg (current-error-port))
   (for-each (lambda (x)
               (write-char #\space (current-error-port))
@@ -36,7 +36,7 @@
   (newline (current-error-port)))
 
 (define (exception-message exc)
-  "Extract the human-readable message from exception EXC, stripping any ERROR: prefix.\n\nExamples:\n  (guard (e (else (exception-message e)))\n    (error \"bad value\"))  => \"bad value\""
+  "Extract the human-readable message from exception EXC, stripping any ERROR: prefix.\n\nExamples:\n  (guard (e (else (exception-message e)))\n    (error \"bad value\"))  => \"bad value\"\n\nParameters:\n  exc : any\nReturns: string\nCategory: testing"
   (let* ((s (let ((p (open-output-string)))
               (print-exception exc p)
               (get-output-string p)))
@@ -187,7 +187,7 @@
 ;;> test reporting.
 
 (define (test-run expect expr info)
-  "Run a single test case.\nEXPECT and EXPR are thunks, INFO is an alist of test properties.\nApplies filters/removers, then delegates to current-test-applier\nor current-test-skipper.\n\nExamples:\n  (test-run (lambda () 4) (lambda () (+ 2 2)) '((name . \"add\")))  => PASS\n\nSee also: `test', `current-test-applier', `current-test-skipper'."
+  "Run a single test case.\nEXPECT and EXPR are thunks, INFO is an alist of test properties.\nApplies filters/removers, then delegates to current-test-applier\nor current-test-skipper.\n\nExamples:\n  (test-run (lambda () 4) (lambda () (+ 2 2)) '((name . \"add\")))  => PASS\n\nParameters:\n  expect : procedure\n  expr : procedure\n  info : list\nReturns: symbol\nCategory: testing\n\nSee also: `test', `current-test-applier', `current-test-skipper'."
   (let ((info (test-expand-info info)))
     ((current-test-reporter) 'BEGIN info)
     (if (and (cond ((current-test-group)
@@ -214,7 +214,7 @@
 ;;> \scheme{current-test-epsilon} of \var{expect}.
 
 (define (test-equal? expect res)
-  "Return true if EXPECT equals RES.\nLike equal? but also accepts inexact values within\ncurrent-test-epsilon of EXPECT.\n\nExamples:\n  (test-equal? 1.0 1.00001)  => #t\n  (test-equal? 1.0 2.0)      => #f\n  (test-equal? \"abc\" \"abc\")  => #t\n\nSee also: `current-test-comparator', `current-test-epsilon'."
+  "Return true if EXPECT equals RES.\nLike equal? but also accepts inexact values within\ncurrent-test-epsilon of EXPECT.\n\nExamples:\n  (test-equal? 1.0 1.00001)  => #t\n  (test-equal? 1.0 2.0)      => #f\n  (test-equal? \"abc\" \"abc\")  => #t\n\nParameters:\n  expect : any\n  res : any\nReturns: boolean\nCategory: testing\n\nSee also: `current-test-comparator', `current-test-epsilon'."
   (or (equal? expect res)
       (if (real? expect)
           (and (inexact? expect)
@@ -272,7 +272,7 @@
 ;;> Begin testing a new group until the closing \scheme{(test-end)}.
 
 (define-opt (test-begin (name ""))
-  "Begin a new test group with NAME.\nCreates a nested group under the current group and sets it as active.\n\nExamples:\n  (test-begin \"arithmetic\")\n  (test 4 (+ 2 2))\n  (test-end \"arithmetic\")\n\nSee also: `test-end', `test-group', `test-exit'."
+  "Begin a new test group with NAME.\nCreates a nested group under the current group and sets it as active.\n\nExamples:\n  (test-begin \"arithmetic\")\n  (test 4 (+ 2 2))\n  (test-end \"arithmetic\")\n\nParameters:\n  name : string\nReturns: any\nCategory: testing\n\nSee also: `test-end', `test-group', `test-exit'."
   (let* ((parent (current-test-group))
          (group (make-test-group name parent)))
     ((current-test-group-reporter) group parent)
@@ -284,7 +284,7 @@
 ;;> or a warning is printed.
 
 (define-opt (test-end (name #f))
-  "End the current test group and print its summary.\nIf NAME is provided, it must match the corresponding test-begin name.\n\nExamples:\n  (test-begin \"math\")\n  (test 4 (+ 2 2))\n  (test-end \"math\")\n\nSee also: `test-begin', `test-group', `test-exit'."
+  "End the current test group and print its summary.\nIf NAME is provided, it must match the corresponding test-begin name.\n\nExamples:\n  (test-begin \"math\")\n  (test 4 (+ 2 2))\n  (test-end \"math\")\n\nParameters:\n  name : any\nReturns: any\nCategory: testing\n\nSee also: `test-begin', `test-group', `test-exit'."
   (let ((group (current-test-group)))
     (when group
       (when (and name (not (equal? name (test-group-name group))))
@@ -307,7 +307,7 @@
 ;;> and a successful status otherwise.
 
 (define (test-exit)
-  "Exit the process with a failure status if any tests failed, success otherwise.\n\nExamples:\n  (test-begin \"suite\")\n  (test 4 (+ 2 2))\n  (test-end)\n  (test-exit)  ; exits with status 0 if all passed\n\nSee also: `test-begin', `test-end', `test-failure-count'."
+  "Exit the process with a failure status if any tests failed, success otherwise.\n\nExamples:\n  (test-begin \"suite\")\n  (test 4 (+ 2 2))\n  (test-end)\n  (test-exit)  ; exits with status 0 if all passed\n\nReturns: any\nCategory: testing\n\nSee also: `test-begin', `test-end', `test-failure-count'."
   (when (current-test-group)
     (warning "calling test-exit with unfinished test group:"
              (test-group-name (current-test-group))))
@@ -327,7 +327,7 @@
 
 ;; (name (prop . value) ...)
 (define (make-test-group name parent)
-  "Create a new test group alist with NAME and PARENT group.\n\nExamples:\n  (test-group-name (make-test-group \"math\" #f))  => \"math\""
+  "Create a new test group alist with NAME and PARENT group.\n\nExamples:\n  (test-group-name (make-test-group \"math\" #f))  => \"math\"\n\nParameters:\n  name : string\n  parent : any\nReturns: list\nCategory: testing"
   (let* ((g (list name))
          (! (lambda (k v) (test-group-set! g k v))))
     (! 'start-time (current-second))
@@ -354,7 +354,7 @@
 ;;> Returns the name of a test group info object.
 
 (define (test-group-name group)
-  "Return the name of a test GROUP.\n\nExamples:\n  (test-group-name (make-test-group \"arith\" #f))  => \"arith\""
+  "Return the name of a test GROUP.\n\nExamples:\n  (test-group-name (make-test-group \"arith\" #f))  => \"arith\"\n\nParameters:\n  group : list\nReturns: string\nCategory: testing"
   (car group))
 
 ;;> Returns the value of a \var{field} in a test var{group} info
@@ -364,7 +364,7 @@
 ;;> \scheme{total-pass}, \scheme{total-fail}, \scheme{total-error}.
 
 (define (test-group-ref group field . o)
-  "Return the value of FIELD in test GROUP, or the optional default.\n\nExamples:\n  (let ((g (make-test-group \"g\" #f)))\n    (test-group-ref g 'level 0))  => 0"
+  "Return the value of FIELD in test GROUP, or the optional default.\n\nExamples:\n  (let ((g (make-test-group \"g\" #f)))\n    (test-group-ref g 'level 0))  => 0\n\nParameters:\n  group : list\n  field : symbol\n  o : list\nReturns: any\nCategory: testing"
   (if group
       (apply assq-ref (cdr group) field o)
       (and (pair? o) (car o))))
@@ -372,7 +372,7 @@
 ;;> Sets the value of a \var{field} in a test \var{group} info object.
 
 (define (test-group-set! group field value)
-  "Set FIELD to VALUE in test GROUP.\n\nExamples:\n  (let ((g (make-test-group \"g\" #f)))\n    (test-group-set! g 'verbose #t)\n    (test-group-ref g 'verbose))  => #t"
+  "Set FIELD to VALUE in test GROUP.\n\nExamples:\n  (let ((g (make-test-group \"g\" #f)))\n    (test-group-set! g 'verbose #t)\n    (test-group-ref g 'verbose))  => #t\n\nParameters:\n  group : list\n  field : symbol\n  value : any\nReturns: any\nCategory: testing"
   (cond
    ((assq field (cdr group))
     => (lambda (x) (set-cdr! x value)))
@@ -382,7 +382,7 @@
 ;;> object by \var{amount}, defaulting to 1.
 
 (define (test-group-inc! group field . o)
-  "Increment FIELD in test GROUP by AMOUNT (default 1).\n\nExamples:\n  (let ((g (make-test-group \"g\" #f)))\n    (test-group-inc! g 'count)\n    (test-group-ref g 'count))  => 1"
+  "Increment FIELD in test GROUP by AMOUNT (default 1).\n\nExamples:\n  (let ((g (make-test-group \"g\" #f)))\n    (test-group-inc! g 'count)\n    (test-group-ref g 'count))  => 1\n\nParameters:\n  group : list\n  field : symbol\n  o : list\nReturns: any\nCategory: testing"
   (let ((amount (if (pair? o) (car o) 1)))
     (cond
      ((assq field (cdr group))
@@ -393,7 +393,7 @@
 ;;> \var{value} onto it.
 
 (define (test-group-push! group field value)
-  "Cons VALUE onto FIELD in test GROUP.\n\nExamples:\n  (let ((g (make-test-group \"g\" #f)))\n    (test-group-push! g 'failures 'err1)\n    (test-group-ref g 'failures))  => (err1)"
+  "Cons VALUE onto FIELD in test GROUP.\n\nExamples:\n  (let ((g (make-test-group \"g\" #f)))\n    (test-group-push! g 'failures 'err1)\n    (test-group-ref g 'failures))  => (err1)\n\nParameters:\n  group : list\n  field : symbol\n  value : any\nReturns: any\nCategory: testing"
   (cond
    ((assq field (cdr group))
     => (lambda (x) (set-cdr! x (cons value (cdr x)))))
@@ -403,13 +403,13 @@
 ;; utilities
 
 (define (assq-ref ls key . o)
-  "Look up KEY in alist LS by eq?, returning the value or optional default.\n\nExamples:\n  (assq-ref '((a . 1) (b . 2)) 'b)       => 2\n  (assq-ref '((a . 1)) 'z 'missing)      => missing"
+  "Look up KEY in alist LS by eq?, returning the value or optional default.\n\nExamples:\n  (assq-ref '((a . 1) (b . 2)) 'b)       => 2\n  (assq-ref '((a . 1)) 'z 'missing)      => missing\n\nParameters:\n  ls : list\n  key : any\n  o : list\nReturns: any\nCategory: testing"
   (cond ((assq key ls) => cdr)
         ((pair? o) (car o))
         (else #f)))
 
 (define (approx-equal? a b epsilon)
-  "Return true if A and B are within relative EPSILON of each other.\n\nExamples:\n  (approx-equal? 1.0 1.001 0.01)  => #t\n  (approx-equal? 1.0 2.0 0.01)    => #f"
+  "Return true if A and B are within relative EPSILON of each other.\n\nExamples:\n  (approx-equal? 1.0 1.001 0.01)  => #t\n  (approx-equal? 1.0 2.0 0.01)    => #f\n\nParameters:\n  a : real\n  b : real\n  epsilon : real\nReturns: boolean\nCategory: testing"
   (cond
    ((> (abs a) (abs b))
     (approx-equal? b a epsilon))
@@ -419,14 +419,14 @@
     (< (abs (/ (- a b) b)) epsilon))))
 
 (define (call-with-output-string proc)
-  "Call PROC with an output string port and return the accumulated string.\n\nExamples:\n  (call-with-output-string\n    (lambda (p) (display \"hi\" p)))  => \"hi\""
+  "Call PROC with an output string port and return the accumulated string.\n\nExamples:\n  (call-with-output-string\n    (lambda (p) (display \"hi\" p)))  => \"hi\"\n\nParameters:\n  proc : procedure\nReturns: string\nCategory: testing"
   (let ((out (open-output-string)))
     (proc out)
     (get-output-string out)))
 
 ;; partial pretty printing to abbreviate `quote' forms and the like
 (define (write-to-string x)
-  "Write X to a string with partial pretty-printing of quote forms.\n\nExamples:\n  (write-to-string '(quote x))  => \"'x\"\n  (write-to-string '(+ 1 2))    => \"(+ 1 2)\""
+  "Write X to a string with partial pretty-printing of quote forms.\n\nExamples:\n  (write-to-string '(quote x))  => \"'x\"\n  (write-to-string '(+ 1 2))    => \"(+ 1 2)\"\n\nParameters:\n  x : any\nReturns: string\nCategory: testing"
   (call-with-output-string
     (lambda (out)
       (let wr ((x x))
@@ -452,13 +452,13 @@
             (write x out))))))
 
 (define (display-to-string x)
-  "Convert X to its display string representation.\n\nExamples:\n  (display-to-string 42)     => \"42\"\n  (display-to-string \"hi\")   => \"hi\""
+  "Convert X to its display string representation.\n\nExamples:\n  (display-to-string 42)     => \"42\"\n  (display-to-string \"hi\")   => \"hi\"\n\nParameters:\n  x : any\nReturns: string\nCategory: testing"
   (if (string? x) x (call-with-output-string (lambda (out) (display x out)))))
 
 ;; if we need to truncate, try first dropping let's to get at the
 ;; heart of the expression
 (define (truncate-source x width . o)
-  "Truncate source expression X to fit within WIDTH columns, simplifying let forms.\n\nExamples:\n  (truncate-source '(+ 1 2) 30)  => \"(+ 1 2)\""
+  "Truncate source expression X to fit within WIDTH columns, simplifying let forms.\n\nExamples:\n  (truncate-source '(+ 1 2) 30)  => \"(+ 1 2)\"\n\nParameters:\n  x : any\n  width : integer\n  o : list\nReturns: string\nCategory: testing"
   (let* ((str (write-to-string x))
          (len (string-length str)))
     (cond
@@ -485,7 +485,7 @@
        "...")))))
 
 (define (test-get-name! info)
-  "Get or generate a display name for test INFO, caching the result.\n\nExamples:\n  (test-get-name! '((name . \"add test\")))  => \"add test\""
+  "Get or generate a display name for test INFO, caching the result.\n\nExamples:\n  (test-get-name! '((name . \"add test\")))  => \"add test\"\n\nParameters:\n  info : list\nReturns: string\nCategory: testing"
   (or
    (assq-ref info 'name)
    (assq-ref info 'gen-name)
@@ -508,7 +508,7 @@
      name)))
 
 (define (test-print-name info indent)
-  "Print the test name from INFO with dot-leader padding at INDENT level.\n\nExamples:\n  (test-print-name '((name . \"add\")) 0)  ; prints \"add ...... \""
+  "Print the test name from INFO with dot-leader padding at INDENT level.\n\nExamples:\n  (test-print-name '((name . \"add\")) 0)  ; prints \"add ...... \"\n\nParameters:\n  info : list\n  indent : integer\nReturns: any\nCategory: testing"
   (let* ((width (- (current-column-width) indent))
          (name (test-get-name! info))
          (diff (- width 9 (string-length name))))
@@ -525,7 +525,7 @@
     (flush-output-port)))
 
 (define (test-group-indent-width group)
-  "Compute the display indentation width in spaces for GROUP.\n\nExamples:\n  (test-group-indent-width (make-test-group \"g\" #f))  => 4"
+  "Compute the display indentation width in spaces for GROUP.\n\nExamples:\n  (test-group-indent-width (make-test-group \"g\" #f))  => 4\n\nParameters:\n  group : list\nReturns: integer\nCategory: testing"
   (let ((level (max 0 (+ 1 (- (test-group-ref group 'level 0)
                               (test-first-indentation))))))
     (* (current-group-indent) (min level (test-max-indentation)))))
@@ -547,7 +547,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define (test-expand-info info)
-  "Augment test INFO with source file and line number if available.\n\nExamples:\n  (pair? (test-expand-info '((name . \"t\"))))  => #t"
+  "Augment test INFO with source file and line number if available.\n\nExamples:\n  (pair? (test-expand-info '((name . \"t\"))))  => #t\n\nParameters:\n  info : list\nReturns: list\nCategory: testing"
   (let ((expr (assq-ref info 'source)))
     (if (and (pair? expr)
              (pair-source expr)
@@ -559,7 +559,7 @@
         info)))
 
 (define (test-default-applier expect expr info)
-  "Evaluate EXPECT and EXPR thunks and report pass/fail/error to current-test-reporter.\n\nExamples:\n  (test-default-applier (lambda () 4) (lambda () (+ 2 2)) '())  => PASS"
+  "Evaluate EXPECT and EXPR thunks and report pass/fail/error to current-test-reporter.\n\nExamples:\n  (test-default-applier (lambda () 4) (lambda () (+ 2 2)) '())  => PASS\n\nParameters:\n  expect : procedure\n  expr : procedure\n  info : list\nReturns: symbol\nCategory: testing"
   (let ((expect-val
          (guard
              (exn
@@ -592,11 +592,11 @@
           ((current-test-reporter) status info))))))
 
 (define (test-default-skipper info)
-  "Report a skipped test to current-test-reporter.\n\nExamples:\n  (test-default-skipper '((name . \"skipped\")))  => SKIP"
+  "Report a skipped test to current-test-reporter.\n\nExamples:\n  (test-default-skipper '((name . \"skipped\")))  => SKIP\n\nParameters:\n  info : list\nReturns: symbol\nCategory: testing"
   ((current-test-reporter) 'SKIP info))
 
 (define (test-status-color status)
-  "Return the ANSI color function for STATUS.\n\nExamples:\n  (procedure? (test-status-color 'PASS))  => #t\n  (procedure? (test-status-color 'FAIL))  => #t"
+  "Return the ANSI color function for STATUS.\n\nExamples:\n  (procedure? (test-status-color 'PASS))  => #t\n  (procedure? (test-status-color 'FAIL))  => #t\n\nParameters:\n  status : symbol\nReturns: procedure\nCategory: testing"
   (case status
     ((ERROR) (lambda (x) (underline (red x))))
     ((FAIL) red)
@@ -604,11 +604,11 @@
     (else (lambda (x) x))))
 
 (define (test-status-message status)
-  "Return the colored status name string for STATUS.\n\nExamples:\n  (string? (test-status-message 'PASS))  => #t"
+  "Return the colored status name string for STATUS.\n\nExamples:\n  (string? (test-status-message 'PASS))  => #t\n\nParameters:\n  status : symbol\nReturns: string\nCategory: testing"
   ((test-status-color status) (symbol->string status)))
 
 (define (test-status-code status)
-  "Return a single-character colored status indicator for STATUS.\n\nExamples:\n  (string? (test-status-code 'PASS))   => #t\n  (string? (test-status-code 'FAIL))   => #t"
+  "Return a single-character colored status indicator for STATUS.\n\nExamples:\n  (string? (test-status-code 'PASS))   => #t\n  (string? (test-status-code 'FAIL))   => #t\n\nParameters:\n  status : symbol\nReturns: string\nCategory: testing"
   ((test-status-color status)
    ;; alternatively: ❗, ✗, ‒, ✓
    ;; unfortunately, these have ambiguous width
@@ -619,7 +619,7 @@
      (else "."))))
 
 (define (display-expected/actual expected actual format)
-  "Display a colored diff between EXPECTED and ACTUAL values using FORMAT.\n\nExamples:\n  (display-expected/actual 4 5 write-to-string)  ; prints diff to stdout"
+  "Display a colored diff between EXPECTED and ACTUAL values using FORMAT.\n\nExamples:\n  (display-expected/actual 4 5 write-to-string)  ; prints diff to stdout\n\nParameters:\n  expected : any\n  actual : any\n  format : procedure\nReturns: any\nCategory: testing"
   (let ((e-str (format expected))
         (a-str (format actual)))
     (if (and (equal? e-str a-str)
@@ -635,7 +635,7 @@
           ))))
 
 (define (test-print-explanation indent status info)
-  "Print the failure or error explanation for a test result.\n\nExamples:\n  (test-print-explanation \"  \" 'FAIL\n    '((expected . 4) (result . 5)))  ; prints diff"
+  "Print the failure or error explanation for a test result.\n\nExamples:\n  (test-print-explanation \"  \" 'FAIL\n    '((expected . 4) (result . 5)))  ; prints diff\n\nParameters:\n  indent : string\n  status : symbol\n  info : list\nReturns: any\nCategory: testing"
   (cond
    ((eq? status 'ERROR)
     (cond ((assq 'exception info)
@@ -679,7 +679,7 @@
                   names values))))))))
 
 (define (test-print-source indent status info)
-  "Print source location and variable bindings for failed or errored tests.\n\nExamples:\n  (test-print-source \"  \" 'FAIL\n    '((line-number . 42) (file-name . \"test.scm\")))  ; prints location"
+  "Print source location and variable bindings for failed or errored tests.\n\nExamples:\n  (test-print-source \"  \" 'FAIL\n    '((line-number . 42) (file-name . \"test.scm\")))  ; prints location\n\nParameters:\n  indent : string\n  status : symbol\n  info : list\nReturns: any\nCategory: testing"
   (case status
     ((FAIL ERROR)
      (cond
@@ -709,14 +709,14 @@
              v)))))))
 
 (define (test-print-failure indent status info)
-  "Print full failure details including explanation and source location.\n\nExamples:\n  (test-print-failure \"  \" 'FAIL\n    '((expected . 4) (result . 5)))  ; prints explanation + source"
+  "Print full failure details including explanation and source location.\n\nExamples:\n  (test-print-failure \"  \" 'FAIL\n    '((expected . 4) (result . 5)))  ; prints explanation + source\n\nParameters:\n  indent : string\n  status : symbol\n  info : list\nReturns: any\nCategory: testing"
   ;; display status explanation
   (test-print-explanation indent status info)
   ;; display line, source and values info
   (test-print-source indent status info))
 
 (define (test-group-line group open?)
-  "Generate the header or footer line string for a test GROUP.\n\nExamples:\n  (string? (test-group-line (make-test-group \"g\" #f) #t))  => #t"
+  "Generate the header or footer line string for a test GROUP.\n\nExamples:\n  (string? (test-group-line (make-test-group \"g\" #f) #t))  => #t\n\nParameters:\n  group : list\n  open? : any\nReturns: string\nCategory: testing"
   (let* ((name (test-group-name group))
          (spaces (test-group-indent-width group))
          (indent (indent-string spaces)))
@@ -741,7 +741,7 @@
          (bold (string-append name ": "))))))
 
 (define (start-test info)
-  "Print the test name at the start of a test case.\n\nExamples:\n  (start-test '((name . \"add\")))  ; prints test name with padding"
+  "Print the test name at the start of a test case.\n\nExamples:\n  (start-test '((name . \"add\")))  ; prints test name with padding\n\nParameters:\n  info : list\nReturns: any\nCategory: testing"
   (let ((group (current-test-group)))
     (when (or (not group) (test-group-ref group 'verbose))
       (let ((indent (and group (test-group-indent-width group))))
@@ -750,7 +750,7 @@
         (test-print-name info (or indent 4))))))
 
 (define (stop-test status info)
-  "Record test result STATUS and update group counters and display.\n\nExamples:\n  (stop-test 'PASS '((name . \"add\")))  => PASS"
+  "Record test result STATUS and update group counters and display.\n\nExamples:\n  (stop-test 'PASS '((name . \"add\")))  => PASS\n\nParameters:\n  status : symbol\n  info : list\nReturns: symbol\nCategory: testing"
   (define indent
     (indent-string
      (+ (current-group-indent)
@@ -799,13 +799,13 @@
   status)
 
 (define (test-default-reporter status info)
-  "Default test reporter dispatching BEGIN to start-test and results to stop-test.\n\nExamples:\n  (test-default-reporter 'PASS '((name . \"add\")))  => PASS"
+  "Default test reporter dispatching BEGIN to start-test and results to stop-test.\n\nExamples:\n  (test-default-reporter 'PASS '((name . \"add\")))  => PASS\n\nParameters:\n  status : symbol\n  info : list\nReturns: any\nCategory: testing"
   (if (eq? status 'BEGIN)
       (start-test info)
       (stop-test status info)))
 
 (define (close-group group)
-  "Print the summary report for a completed test GROUP and propagate counts to parent.\n\nExamples:\n  (close-group (make-test-group \"suite\" #f))  ; prints pass/fail summary"
+  "Print the summary report for a completed test GROUP and propagate counts to parent.\n\nExamples:\n  (close-group (make-test-group \"suite\" #f))  ; prints pass/fail summary\n\nParameters:\n  group : list\nReturns: any\nCategory: testing"
   (define (plural word n)
     (if (= n 1) word (string-append word "s")))
   (define (percent n d)
@@ -899,7 +899,7 @@
 (define test-default-group-reporter
   (case-lambda
     ((group)
-     "Report test group results: close with summary or open with header.\n\nExamples:\n  (test-default-group-reporter (make-test-group \"g\" #f))  ; prints summary"
+     "Report test group results: close with summary or open with header.\n\nExamples:\n  (test-default-group-reporter (make-test-group \"g\" #f))  ; prints summary\n\nParameters:\n  group : list\nReturns: any\nCategory: testing"
      (close-group group))
     ((group parent)
      (display (test-group-line group 'open))
@@ -991,14 +991,14 @@
        5)))
 
 (define (string->info-matcher str)
-  "Return a predicate that matches test info whose name contains STR.\n\nExamples:\n  ((string->info-matcher \"add\") '((name . \"test-add\")))  => \"add\""
+  "Return a predicate that matches test info whose name contains STR.\n\nExamples:\n  ((string->info-matcher \"add\") '((name . \"test-add\")))  => \"add\"\n\nParameters:\n  str : string\nReturns: procedure\nCategory: testing"
   (lambda (info)
     (cond ((test-get-name! info)
            => (lambda (name) (and (string? name) (string-contains name str))))
           (else #f))))
 
 (define (string->group-matcher str)
-  "Return a predicate that matches test groups whose name contains STR.\n\nExamples:\n  ((string->group-matcher \"math\") (make-test-group \"math-ops\" #f))  ; truthy"
+  "Return a predicate that matches test groups whose name contains STR.\n\nExamples:\n  ((string->group-matcher \"math\") (make-test-group \"math-ops\" #f))  ; truthy\n\nParameters:\n  str : string\nReturns: procedure\nCategory: testing"
   (lambda (group)
     (cond ((test-group-name group)
            => (lambda (name)
@@ -1007,7 +1007,7 @@
 
 ;; simplified version from SRFI 130
 (define (string-split str ch)
-  "Split STR into a list of substrings at each occurrence of character CH.\n\nExamples:\n  (string-split \"a,b,c\" #\\,)  => (\"a\" \"b\" \"c\")\n  (string-split \"hello\" #\\,)  => (\"hello\")"
+  "Split STR into a list of substrings at each occurrence of character CH.\n\nExamples:\n  (string-split \"a,b,c\" #\\,)  => (\"a\" \"b\" \"c\")\n  (string-split \"hello\" #\\,)  => (\"hello\")\n\nParameters:\n  str : string\n  ch : character\nReturns: list\nCategory: testing"
   (let ((end (string-length str)))
     (let lp ((from 0) (to 0) (res '()))
       (cond
@@ -1019,7 +1019,7 @@
         (lp from (+ to 1) res))))))
 
 (define (getenv-filter-list proc name)
-  "Parse environment variable NAME as comma-separated values, applying PROC to each.\n\nExamples:\n  (getenv-filter-list string->info-matcher \"TEST_FILTER\")  ; list of predicates"
+  "Parse environment variable NAME as comma-separated values, applying PROC to each.\n\nExamples:\n  (getenv-filter-list string->info-matcher \"TEST_FILTER\")  ; list of predicates\n\nParameters:\n  proc : procedure\n  name : string\nReturns: list\nCategory: testing"
   (cond
    ((get-environment-variable name)
     => (lambda (s)
