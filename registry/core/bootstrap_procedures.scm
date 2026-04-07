@@ -235,7 +235,7 @@
 (define member
   (case-lambda
     ((obj lst)
-     "Return the first sublist of LST whose car equals OBJ, or #f\nif not found. Uses COMPARE for equality (default `equal?').\n\nExamples:\n  (member 3 '(1 2 3 4))      => (3 4)\n  (member 5 '(1 2 3))        => #f\n  (member 2.0 '(1 2 3) =)    => (2 3)\n\nParameters:\n  obj : any\n  lst : list\nReturns: list\nCategory: lists\n\nSee also: `memq', `memv', `assoc'."
+     "Return the first sublist of LST whose car equals OBJ, or #f\nif not found. Uses COMPARE for equality (default `equal?').\n\nExamples:\n  (member 3 '(1 2 3 4))      => (3 4)\n  (member 5 '(1 2 3))        => #f\n  (member 2.0 '(1 2 3) =)    => (2 3)\n\nParameters:\n  obj : any\n  lst : list\nReturns: any\nCategory: lists\n\nSee also: `memq', `memv', `assoc'."
      (member obj lst equal?))
     ((obj lst compare)
      (let loop ((lst lst))
@@ -247,7 +247,7 @@
 (define assoc
   (case-lambda
     ((obj alist)
-     "Return the first pair in ALIST whose car equals OBJ, or #f\nif not found. Uses COMPARE for equality (default `equal?').\n\nExamples:\n  (assoc 'b '((a 1) (b 2)))         => (b 2)\n  (assoc 2.0 '((1 a) (2 b)) =)      => (2 b)\n\nParameters:\n  obj : any\n  alist : list\nReturns: pair\nCategory: lists\n\nSee also: `assq', `assv', `member'."
+     "Return the first pair in ALIST whose car equals OBJ, or #f\nif not found. Uses COMPARE for equality (default `equal?').\n\nExamples:\n  (assoc 'b '((a 1) (b 2)))         => (b 2)\n  (assoc 2.0 '((1 a) (2 b)) =)      => (2 b)\n\nParameters:\n  obj : any\n  alist : list\nReturns: any\nCategory: lists\n\nSee also: `assq', `assv', `member'."
      (assoc obj alist equal?))
     ((obj alist compare)
      (let loop ((alist alist))
@@ -296,7 +296,7 @@
 ;; car-of-non-pair error via (car #f) as a deliberate crash —
 ;; (error) is not available in core bootstrap.
 (define (boolean=? b1 b2 . rest)
-  "Return #t if all arguments are booleans and are equal.\nRaises an error if any argument is not a boolean.\n\nParameters:\n  b : boolean\nReturns: boolean\nCategory: predicates\n\nSee also: `symbol=?'."
+  "Return #t if all arguments are booleans and are equal.\nRaises an error if any argument is not a boolean.\n\nParameters:\n  b1 : boolean\n  b2 : boolean\nReturns: boolean\nCategory: predicates\n\nSee also: `symbol=?'."
   (define (check x) (if (boolean? x) x (car #f)))
   (check b1)
   (let loop ((prev b1) (args (cons b2 rest)))
@@ -308,7 +308,7 @@
 
 ;; symbol=? — same pattern
 (define (symbol=? s1 s2 . rest)
-  "Return #t if all arguments are symbols and are equal.\nRaises an error if any argument is not a symbol.\n\nParameters:\n  s : symbol\nReturns: boolean\nCategory: predicates\n\nSee also: `boolean=?'."
+  "Return #t if all arguments are symbols and are equal.\nRaises an error if any argument is not a symbol.\n\nParameters:\n  s1 : symbol\n  s2 : symbol\nReturns: boolean\nCategory: predicates\n\nSee also: `boolean=?'."
   (define (check x) (if (symbol? x) x (car #f)))
   (check s1)
   (let loop ((prev s1) (args (cons s2 rest)))
@@ -319,5 +319,5 @@
                (loop curr (cdr args)))))))
 
 (define (square x)
-  "Return the square of X.\n\nParameters:\n  z : number\nReturns: number\nCategory: arithmetic"
+  "Return the square of X.\n\nParameters:\n  x : number\nReturns: number\nCategory: arithmetic"
   (* x x))
