@@ -11,7 +11,7 @@
   (map (lambda (x) (cons (car x) (cdr x))) ls))
 
 (define (alist-delete key ls . o)
-  "Remove all associations from LS whose key is equal to KEY.\nThe optional third argument is the equality predicate,\ndefaulting to equal?.\n\nExamples:\n  (alist-delete 'b '((a . 1) (b . 2) (c . 3)))  => ((a . 1) (c . 3))\n  (alist-delete 'z '((a . 1) (b . 2)))           => ((a . 1) (b . 2))\n\nParameters:\n  key : any\n  ls : list\nReturns: list\nCategory: srfi-1"
+  "Remove all associations from LS whose key is equal to KEY.\nThe optional third argument is the equality predicate,\ndefaulting to equal?.\n\nExamples:\n  (alist-delete 'b '((a . 1) (b . 2) (c . 3)))  => ((a . 1) (c . 3))\n  (alist-delete 'z '((a . 1) (b . 2)))           => ((a . 1) (b . 2))\n\nParameters:\n  key : any\n  ls : list\n  o : list\nReturns: list\nCategory: srfi-1"
   (let ((eq (if (pair? o) (car o) equal?)))
     (remove (lambda (x) (eq key (car x))) ls)))
 

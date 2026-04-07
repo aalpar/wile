@@ -65,7 +65,7 @@
           (map fifth ls)))
 
 (define (count pred ls . lists)
-  "Count the number of elements in LS that satisfy PRED.\nFor multiple lists, PRED receives corresponding elements\nand counting stops at the shortest list.\n\nExamples:\n  (count even? '(1 2 3 4 5))  => 2\n  (count < '(1 2 3) '(2 1 4))  => 2\n\nParameters:\n  pred : procedure\n  ls : list\nReturns: integer\nCategory: srfi-1"
+  "Count the number of elements in LS that satisfy PRED.\nFor multiple lists, PRED receives corresponding elements\nand counting stops at the shortest list.\n\nExamples:\n  (count even? '(1 2 3 4 5))  => 2\n  (count < '(1 2 3) '(2 1 4))  => 2\n\nParameters:\n  pred : procedure\n  ls : list\n  lists : list\nReturns: integer\nCategory: srfi-1"
   (if (null? lists)
       (let lp ((ls ls) (res 0))
         (if (pair? ls) (lp (cdr ls) (if (pred (car ls)) (+ res 1) res)) res))

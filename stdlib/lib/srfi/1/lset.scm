@@ -21,7 +21,7 @@
        (apply lset<= (lambda (b a) (eq a b)) (reverse sets))))
 
 (define (lset-adjoin eq set . elts)
-  "Add each element in ELTS to SET if not already present,\nusing EQ as the equality predicate. Returns the augmented set.\n\nExamples:\n  (lset-adjoin eq? '(a b) 'c 'd)    => (d c a b)\n  (lset-adjoin eq? '(a b) 'a 'c)    => (c a b)\n\nParameters:\n  eq : procedure\n  set : list\nReturns: list\nCategory: srfi-1"
+  "Add each element in ELTS to SET if not already present,\nusing EQ as the equality predicate. Returns the augmented set.\n\nExamples:\n  (lset-adjoin eq? '(a b) 'c 'd)    => (d c a b)\n  (lset-adjoin eq? '(a b) 'a 'c)    => (c a b)\n\nParameters:\n  eq : procedure\n  set : list\n  elts : list\nReturns: list\nCategory: srfi-1"
   (lset-union2 eq set elts))
 
 (define (lset-union2 eq a b)

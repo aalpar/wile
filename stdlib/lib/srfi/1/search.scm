@@ -31,7 +31,7 @@
 (define break! break)
 
 (define (list-index pred ls . lists)
-  "Return the index of the first element of LS satisfying PRED,\nor #f if no element matches. For multiple lists, PRED receives\ncorresponding elements and the search stops at the shortest list.\n\nExamples:\n  (list-index even? '(1 3 4 5))  => 2\n  (list-index even? '(1 3 5))    => #f\n\nParameters:\n  pred : procedure\n  ls : list\nReturns: any\nCategory: srfi-1\n\nSee also: `find', `find-tail'."
+  "Return the index of the first element of LS satisfying PRED,\nor #f if no element matches. For multiple lists, PRED receives\ncorresponding elements and the search stops at the shortest list.\n\nExamples:\n  (list-index even? '(1 3 4 5))  => 2\n  (list-index even? '(1 3 5))    => #f\n\nParameters:\n  pred : procedure\n  ls : list\n  lists : list\nReturns: any\nCategory: srfi-1\n\nSee also: `find', `find-tail'."
   (if (null? lists)
       (let lp ((ls ls) (n 0))
         (and (pair? ls) (if (pred (car ls)) n (lp (cdr ls) (+ n 1)))))
