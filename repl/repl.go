@@ -23,8 +23,9 @@ import (
 	"os"
 	"strings"
 
-	wile "github.com/aalpar/wile"
+	"github.com/aalpar/wile"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/werr"
 
 	"github.com/ergochat/readline"
 )
@@ -134,6 +135,9 @@ func New(eng *wile.Engine, opts ...Option) *REPL {
 
 // Run starts the REPL with readline support, falling back to simple mode if needed.
 func (p *REPL) Run(ctx context.Context) error {
+	if p.eng == nil {
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "repl: engine is required")
+	}
 	// Attach debugger to engine so Engine.Run picks it up.
 	p.eng.SetDebugger(p.debugCtx.Debugger())
 
@@ -256,6 +260,9 @@ func (p *REPL) Run(ctx context.Context) error {
 
 // RunSimple runs a basic REPL without readline support.
 func (p *REPL) RunSimple(ctx context.Context) error {
+	if p.eng == nil {
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "repl: engine is required")
+	}
 	// Attach debugger to engine so Engine.Run picks it up.
 	p.eng.SetDebugger(p.debugCtx.Debugger())
 

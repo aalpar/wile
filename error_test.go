@@ -26,7 +26,7 @@ import (
 func TestIsIncompleteInput(t *testing.T) {
 	c := qt.New(t)
 
-	tests := []struct {
+	tcs := []struct {
 		name string
 		err  error
 		want bool
@@ -42,8 +42,16 @@ func TestIsIncompleteInput(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "unexpected EOF in list",
-			err:  errors.New("unexpected EOF in list"),
+			name: "wrapped io.EOF via fmt.Errorf",
+			err:  fmt.Errorf("parse failed: %w", io.EOF),
+			want: true,
+		},
+		{
+			name: "CompilationError wrapping io.EOF",
+			err: &CompilationError{
+				Message: "parse error",
+				Cause:   io.EOF,
+			},
 			want: true,
 		},
 		{
@@ -52,8 +60,21 @@ func TestIsIncompleteInput(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "unclosed parenthesis",
-			err:  errors.New("unclosed parenthesis"),
+			name: "unclosed block comment",
+			err:  errors.New("unclosed block comment"),
+			want: true,
+		},
+		{
+			name: "unknown token type",
+			err:  errors.New("unknown token type: StringStart"),
+			want: true,
+		},
+		{
+			name: "CompilationError wrapping unterminated",
+			err: &CompilationError{
+				Message: "parse error",
+				Cause:   errors.New("unterminated string"),
+			},
 			want: true,
 		},
 		{
@@ -61,24 +82,11 @@ func TestIsIncompleteInput(t *testing.T) {
 			err:  errors.New("undefined variable"),
 			want: false,
 		},
-		{
-			name: "wrapped error containing unexpected EOF",
-			err:  fmt.Errorf("parse failed: %w", errors.New("unexpected EOF")),
-			want: true,
-		},
-		{
-			name: "CompilationError wrapping incomplete error",
-			err: &CompilationError{
-				Message: "compile",
-				Cause:   errors.New("unterminated string"),
-			},
-			want: true,
-		},
 	}
 
-	for _, tt := range tests {
-		c.Run(tt.name, func(c *qt.C) {
-			c.Assert(IsIncompleteInput(tt.err), qt.Equals, tt.want)
+	for _, tc := range tcs {
+		c.Run(tc.name, func(c *qt.C) {
+			c.Assert(IsIncompleteInput(tc.err), qt.Equals, tc.want)
 		})
 	}
 }

@@ -113,9 +113,9 @@ func newRuntimeErrorWithCause(msg string, cause error) *RuntimeError {
 // is a valid prefix of an expression that needs more input to complete.
 // This is useful for REPL implementations that accumulate multi-line input.
 //
-// Returns true when the error wraps io.EOF (empty or truncated input),
-// or contains "unexpected EOF", "unterminated", "unclosed", or
-// "unknown token type" (partial token from premature EOF).
+// Detection uses errors.Is where possible (wrapped io.EOF for truncated
+// input). String matching is used only for tokenizer/parser errors whose
+// types are internal and cannot be matched structurally from public code.
 // Returns false for nil and bare io.EOF.
 func IsIncompleteInput(err error) bool {
 	if err == nil {
@@ -127,9 +127,14 @@ func IsIncompleteInput(err error) bool {
 	if err != io.EOF && errors.Is(err, io.EOF) {
 		return true
 	}
+	// The tokenizer and parser live in internal packages, so their error
+	// types cannot be matched with errors.Is/As from public code. Fall
+	// back to string matching for these specific patterns:
+	//   - "unterminated" — tokenizer: unterminated string/symbol
+	//   - "unclosed"     — tokenizer: unclosed block comment
+	//   - "unknown token type" — parser: partial token from premature EOF
 	errStr := err.Error()
-	return strings.Contains(errStr, "unexpected EOF") ||
-		strings.Contains(errStr, "unterminated") ||
+	return strings.Contains(errStr, "unterminated") ||
 		strings.Contains(errStr, "unclosed") ||
 		strings.Contains(errStr, "unknown token type")
 }

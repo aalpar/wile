@@ -20,7 +20,7 @@ import (
 	"sort"
 	"strings"
 
-	wile "github.com/aalpar/wile"
+	"github.com/aalpar/wile"
 )
 
 // Completer implements readline.AutoCompleter for a Wile REPL.
