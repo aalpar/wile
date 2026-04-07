@@ -21,8 +21,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/aalpar/wile/docparse"
 	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/internal/docparse"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"

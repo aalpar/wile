@@ -11,8 +11,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/aalpar/wile/docparse"
 	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/internal/docparse"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/values"

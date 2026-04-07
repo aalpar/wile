@@ -9,8 +9,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/docparse"
 	"github.com/aalpar/wile/internal/bootstrap"
-	"github.com/aalpar/wile/internal/docparse"
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/values"

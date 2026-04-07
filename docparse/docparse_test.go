@@ -17,7 +17,7 @@ package docparse_test
 import (
 	"testing"
 
-	"github.com/aalpar/wile/internal/docparse"
+	"github.com/aalpar/wile/docparse"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
