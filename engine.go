@@ -289,8 +289,16 @@ func setupLibrarySystem(cfg *engineConfig, reg *registry.Registry, env *environm
 		libReg.PrependSearchPath(cfg.libraryPaths[i])
 	}
 
+	// Register docstrings from imported libraries so that `,topic` and
+	// `,apropos` reflect Scheme-defined procedures as they become visible.
+	docObserver := makeDocRegistrationObserver(libReg, reg)
 	if cfg.importObserver != nil {
-		libReg.SetImportObserver(cfg.importObserver)
+		libReg.SetImportObserver(func(evt compilation.LibraryImportEvent) {
+			docObserver(evt)
+			cfg.importObserver(evt)
+		})
+	} else {
+		libReg.SetImportObserver(docObserver)
 	}
 
 	env.SetLibraryRegistry(libReg)
@@ -772,6 +780,53 @@ func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame
 	mc := machine.AcquireTopLevelContext(ctx, tpl, env)
 	defer machine.ReleaseTopLevelContext(mc)
 	return mc.Run()
+}
+
+// makeDocRegistrationObserver returns an import observer that scans each
+// imported library's exported bindings for structured docstrings and
+// registers them as doc-only entries in the primitive registry. This makes
+// Scheme-defined procedures from imported libraries visible to ,topic,
+// ,apropos, and ,doc without requiring a full environment rescan.
+func makeDocRegistrationObserver(libReg *compilation.LibraryRegistry, reg *registry.Registry) func(compilation.LibraryImportEvent) {
+	return func(evt compilation.LibraryImportEvent) {
+		lib := libReg.Lookup(evt.Library)
+		if lib == nil {
+			return
+		}
+
+		for _, name := range evt.Imported {
+			internalName := lib.GetInternalName(name)
+			if internalName == "" {
+				internalName = name
+			}
+
+			sym := values.NewSymbol(internalName)
+			bnd := lib.Env.GetBinding(sym, nil)
+			if bnd == nil || bnd.BindingType() != environment.BindingTypeVariable {
+				continue
+			}
+
+			raw := callableDocFromValue(bnd.Value())
+			if raw == "" {
+				continue
+			}
+
+			parsed := docparse.ParseDocstring(raw)
+			if !parsed.HasStructuredMetadata() {
+				continue
+			}
+
+			reg.AddDocOnlyPrimitive(registry.PrimitiveSpec{
+				Name:       name,
+				Doc:        parsed.Doc,
+				ParamNames: parsed.ParamNames,
+				ParamTypes: parsed.ParamTypes,
+				ReturnType: parsed.ReturnType,
+				Category:   parsed.Category,
+				ParamCount: len(parsed.ParamNames),
+			})
+		}
+	}
 }
 
 // registerSchemeDocstrings walks runtime bindings and registers documentation-only
