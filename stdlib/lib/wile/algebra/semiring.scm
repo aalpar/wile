@@ -46,11 +46,13 @@
 (define tropical-inf 'tropical-inf)
 
 (define (tropical-min a b)
+  "Return the lesser of A and B under tropical arithmetic.\nIn the tropical semiring, addition is defined as min.\nReturns B if A is tropical-inf, A if B is tropical-inf.\n\nParameters:\n  a : any\n  b : any\nReturns: any\nCategory: algebra\n\nSee also: `tropical-semiring', `tropical-add'."
   (cond ((eq? a tropical-inf) b)
         ((eq? b tropical-inf) a)
         (else (min a b))))
 
 (define (tropical-add a b)
+  "Return the sum of A and B under tropical arithmetic.\nIn the tropical semiring, multiplication is defined as +.\nReturns tropical-inf if either argument is tropical-inf.\n\nParameters:\n  a : any\n  b : any\nReturns: any\nCategory: algebra\n\nSee also: `tropical-semiring', `tropical-min'."
   (cond ((eq? a tropical-inf) tropical-inf)
         ((eq? b tropical-inf) tropical-inf)
         (else (+ a b))))

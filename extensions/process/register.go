@@ -19,7 +19,9 @@ import (
 )
 
 // Extension is the process execution extension.
-var Extension = registry.NewExtension("process", AddToRegistry)
+var Extension = registry.NewDescribedExtension("process",
+	"OS processes: command execution, exit, environment variables.",
+	AddToRegistry)
 
 // Builder aggregates all process registration functions.
 var Builder = registry.NewRegistryBuilder(addPrimitives)

@@ -32,7 +32,9 @@ import (
 // strings, characters) under the name "all". When used in AllExtensions() where
 // sub-extensions are listed individually, this avoids double-registration.
 // Use Builder.AddToRegistry for standalone use that includes all sub-extensions.
-var Extension = registry.NewExtension("all", SafeBuilder.AddToRegistry)
+var Extension = registry.NewDescribedExtension("all",
+	"All Wile extensions combined.",
+	SafeBuilder.AddToRegistry)
 
 // Builder aggregates all extension registration functions.
 var Builder = registry.NewRegistryBuilder(

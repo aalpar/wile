@@ -20,7 +20,9 @@ import (
 )
 
 // Extension is the system extension.
-var Extension = registry.NewExtension("system", AddToRegistry)
+var Extension = registry.NewDescribedExtension("system",
+	"System primitives: time, sleep, features, command line.",
+	AddToRegistry)
 
 // Builder aggregates all system registration functions.
 var Builder = registry.NewRegistryBuilder(addPrimitives)

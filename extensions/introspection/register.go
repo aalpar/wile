@@ -20,7 +20,9 @@ import (
 )
 
 // Extension is the introspection extension.
-var Extension = registry.NewExtension("introspection", AddToRegistry)
+var Extension = registry.NewDescribedExtension("introspection",
+	"Runtime introspection: procedure metadata, disassembly, environment inspection.",
+	AddToRegistry)
 
 // Builder aggregates all introspection registration functions.
 var Builder = registry.NewRegistryBuilder(addPrimitives)

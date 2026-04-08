@@ -20,7 +20,9 @@ import (
 )
 
 // Extension is the threads extension.
-var Extension = registry.NewExtension("threads", AddToRegistry)
+var Extension = registry.NewDescribedExtension("threads",
+	"Concurrency: SRFI-18 threads, mutexes, condition variables, channels.",
+	AddToRegistry)
 
 // Builder aggregates all threading registration functions.
 var Builder = registry.NewRegistryBuilder(addThreads, addMutexes, addConditionVariables, addTime)

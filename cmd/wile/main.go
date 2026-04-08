@@ -31,6 +31,7 @@ import (
 
 	"github.com/aalpar/wile"
 	"github.com/aalpar/wile/extensions/system"
+	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/repl"
 	"github.com/aalpar/wile/stdlib"
 
@@ -403,7 +404,8 @@ func runEval(ctx context.Context, eng *wile.Engine, exprs []string) {
 
 // runREPL runs an interactive Read-Eval-Print Loop using the repl package
 func runREPL(ctx context.Context, eng *wile.Engine) {
-	docProv := repl.NewRegistryDocProvider(eng.Registry())
+	docProv := repl.NewRegistryDocProvider(
+		eng.Environment().Namespace().Registry().(*registry.Registry))
 	r := repl.New(eng, repl.WithDocProvider(docProv))
 	err := r.Run(ctx)
 	if err != nil {
