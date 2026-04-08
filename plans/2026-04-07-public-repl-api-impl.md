@@ -751,7 +751,7 @@ Copy `internal/repl/meta_test.go` to `repl/meta_test.go`. Change package to `rep
 - Replace `bootstrap.NewTopLevelWithRegistry(ctx)` with `wile.NewEngine(ctx)`
 - Replace `parser.NewParser` + `compile` + `run` with `eng.EvalMultiple(ctx, code)`
 - Replace `NewMetaCommandHandler(env, debugCtx, docProv)` with `repl.NewMetaCommandHandler(eng, repl.WithMetaDocProvider(docProv))`
-- Replace `NewRegistryDocProvider(reg)` with `repl.NewRegistryDocProvider(eng.Registry())`
+- Replace `NewRegistryDocProvider(reg)` with live-registry pattern: `reg, _ := eng.Environment().Namespace().Registry().(*registry.Registry)` then `repl.NewRegistryDocProvider(reg)`
 
 Key test rewrites (representative):
 
@@ -765,7 +765,8 @@ func newTestEngine(t *testing.T) *wile.Engine {
 
 func TestCmdDoc(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := repl.NewRegistryDocProvider(eng.Registry())
+	reg, _ := eng.Environment().Namespace().Registry().(*registry.Registry)
+	docProv := repl.NewRegistryDocProvider(reg)
 
 	tcs := []struct {
 		name    string
@@ -989,13 +990,15 @@ To:
 Change:
 ```go
 func runREPL(ctx context.Context, eng *wile.Engine) {
-	docProv := repl.NewRegistryDocProvider(eng.Registry())
+	reg, _ := eng.Environment().Namespace().Registry().(*registry.Registry)
+	docProv := repl.NewRegistryDocProvider(reg)
 	r := repl.New(eng.Environment(), repl.WithDocProvider(docProv))
 ```
 To:
 ```go
 func runREPL(ctx context.Context, eng *wile.Engine) {
-	docProv := repl.NewRegistryDocProvider(eng.Registry())
+	reg, _ := eng.Environment().Namespace().Registry().(*registry.Registry)
+	docProv := repl.NewRegistryDocProvider(reg)
 	r := repl.New(eng, repl.WithDocProvider(docProv))
 ```
 
@@ -1019,12 +1022,14 @@ Same import change as Task 4.1.
 
 Change (around line 230):
 ```go
-docProv := repl.NewRegistryDocProvider(eng.Registry())
+reg, _ := eng.Environment().Namespace().Registry().(*registry.Registry)
+	docProv := repl.NewRegistryDocProvider(reg)
 p.meta = repl.NewMetaCommandHandler(eng.Environment(), nil, docProv)
 ```
 To:
 ```go
-docProv := repl.NewRegistryDocProvider(eng.Registry())
+reg, _ := eng.Environment().Namespace().Registry().(*registry.Registry)
+	docProv := repl.NewRegistryDocProvider(reg)
 p.meta = repl.NewMetaCommandHandler(eng, repl.WithMetaDocProvider(docProv))
 ```
 

@@ -65,7 +65,9 @@ import (
 )
 
 // Extension is the package's entry point.
-var Extension = registry.NewExtension("myext", AddToRegistry)
+var Extension = registry.NewDescribedExtension("myext",
+    "Brief description of what this extension provides.",
+    AddToRegistry)
 
 // Builder composes registration functions.
 var Builder = registry.NewRegistryBuilder(addPrimitives)
@@ -136,13 +138,15 @@ type Extension interface {
 
 ### `ExtensionFunc` Adapter
 
-For simple extensions, `registry.NewExtension` wraps a function:
+For simple extensions, `registry.NewDescribedExtension` wraps a function:
 
 ```go
-var Extension = registry.NewExtension("myext", func(r *registry.Registry) error {
-    r.AddPrimitive(spec, registry.PhaseRuntime)
-    return nil
-})
+var Extension = registry.NewDescribedExtension("myext",
+    "Brief description of this extension.",
+    func(r *registry.Registry) error {
+        r.AddPrimitive(spec, registry.PhaseRuntime)
+        return nil
+    })
 ```
 
 ### Optional Interfaces
@@ -151,6 +155,7 @@ Extensions can implement additional interfaces for extra behavior:
 
 | Interface | Method | Purpose |
 |-----------|--------|---------|
+| `Describer` | `Description() string` | Human-readable description shown in `,doc` and `,libraries` |
 | `LibraryNamer` | `LibraryName() []string` | Custom R7RS library name (default: `(wile <name>)`) |
 | `Closeable` | `Close() error` | Resource cleanup when `Engine.Close()` is called |
 
@@ -300,7 +305,9 @@ var Builder = registry.NewRegistryBuilder(
 )
 
 var AddToRegistry = Builder.AddToRegistry
-var Extension = registry.NewExtension("math", AddToRegistry)
+var Extension = registry.NewDescribedExtension("math",
+    "Extended math: trigonometry, logarithms, bitwise operations.",
+    AddToRegistry)
 ```
 
 Each function receives the same `*Registry` and can independently register its

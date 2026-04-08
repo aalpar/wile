@@ -68,7 +68,9 @@ var SafeBuilder = registry.NewRegistryBuilder(
 
 // SafeExtension includes records, promises, and additional string/character
 // operations without any privileged sub-extensions.
-var SafeExtension = registry.NewExtension("all-safe", SafeBuilder.AddToRegistry)
+var SafeExtension = registry.NewDescribedExtension("all-safe",
+	"Safe subset: records, promises, strings, characters (no filesystem, eval, or system).",
+	SafeBuilder.AddToRegistry)
 
 func addRecords(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
