@@ -256,6 +256,17 @@ func containsString(ss []string, s string) bool {
 	return slices.Contains(ss, s)
 }
 
+// containsKeywordLower reports whether any keyword contains the pattern
+// as a case-insensitive substring.
+func containsKeywordLower(keywords []string, pattern string) bool {
+	for _, kw := range keywords {
+		if strings.Contains(strings.ToLower(kw), pattern) {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 	if len(args) == 0 {
 		fmt.Fprintln(out, "Usage: ,doc [-x] <name> or ,doc (<library-name>)")
@@ -453,6 +464,11 @@ func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo, showExamp
 	if info.Category != "" {
 		fmt.Fprintf(w, "  Category: %s\n", info.Category)
 	}
+
+	// Keywords
+	if len(info.Keywords) > 0 {
+		fmt.Fprintf(w, "  Keywords: %s\n", strings.Join(info.Keywords, ", "))
+	}
 }
 
 // paramTypeForDoc returns the ValueType for parameter position i.
@@ -486,6 +502,7 @@ func tryStructuredBindingDoc(w *strings.Builder, name, doc, typeLabel string, sh
 		ParamTypes: parsed.ParamTypes,
 		ReturnType: parsed.ReturnType,
 		Category:   parsed.Category,
+		Keywords:   parsed.Keywords,
 	}, showExamples)
 	return true
 }
@@ -522,6 +539,7 @@ func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding,
 					ParamTypes: parsed.ParamTypes,
 					ReturnType: parsed.ReturnType,
 					Category:   parsed.Category,
+					Keywords:   parsed.Keywords,
 				}, showExamples)
 				return
 			}
@@ -885,24 +903,29 @@ func (p *MetaCommandHandler) searchBindings(pattern string) []DocSearchResult {
 				}
 			}
 
-			// Extract category from structured docstrings so that
-			// special forms and macros show [category] in ,apropos.
+			// Extract category and keywords from structured docstrings so that
+			// special forms and macros show [category] in ,apropos and
+			// keywords are searchable.
 			category := ""
+			var keywords []string
 			displayDoc := doc
 			if doc != "" {
 				parsed := docparse.ParseDocstring(doc)
 				if parsed.HasStructuredMetadata() {
 					category = parsed.Category
+					keywords = parsed.Keywords
 					displayDoc = parsed.Doc
 				}
 			}
 
 			if strings.Contains(strings.ToLower(name), lowerPattern) ||
-				strings.Contains(strings.ToLower(doc), lowerPattern) {
+				strings.Contains(strings.ToLower(doc), lowerPattern) ||
+				containsKeywordLower(keywords, lowerPattern) {
 				results = append(results, DocSearchResult{
 					Name:     name,
 					Doc:      displayDoc,
 					Category: category,
+					Keywords: keywords,
 				})
 			}
 		}

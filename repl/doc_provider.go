@@ -31,6 +31,7 @@ type DocInfo struct {
 	IsVariadic bool
 	ParamTypes []values.ValueType
 	ReturnType values.ValueType
+	Keywords   []string
 }
 
 // DocProvider looks up documentation for named bindings.
@@ -45,6 +46,7 @@ type DocSearchResult struct {
 	Name     string
 	Doc      string
 	Category string
+	Keywords []string
 }
 
 // StripExamples removes the Examples: section from a docstring.

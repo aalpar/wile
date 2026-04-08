@@ -42,6 +42,13 @@ func buildTestRegistry() *registry.Registry {
 			Doc:        "Returns the sum of its arguments.",
 			Category:   "arithmetic",
 		},
+		{
+			Name:       "list-sort",
+			ParamCount: 2,
+			Doc:        "Sort a list.",
+			Category:   "lists",
+			Keywords:   []string{"sort", "ordering", "comparison"},
+		},
 	}, registry.PhaseRuntime)
 	return reg
 }
@@ -165,6 +172,16 @@ func TestRegistryDocProvider_Search(t *testing.T) {
 			expected: []string{"string-append"},
 		},
 		{
+			name:     "match by keyword",
+			pattern:  "ordering",
+			expected: []string{"list-sort"},
+		},
+		{
+			name:     "keyword partial match",
+			pattern:  "compar",
+			expected: []string{"list-sort"},
+		},
+		{
 			name:     "no match",
 			pattern:  "zzzzzzz",
 			expected: []string{},
@@ -188,7 +205,7 @@ func TestRegistryDocProvider_Categories(t *testing.T) {
 	c := qt.New(t)
 	provider := NewRegistryDocProvider(buildTestRegistry())
 	cats := provider.Categories()
-	c.Assert(cats, qt.DeepEquals, []string{"arithmetic", "strings"})
+	c.Assert(cats, qt.DeepEquals, []string{"arithmetic", "lists", "strings"})
 }
 
 func TestRegistryDocProvider_Categories_ExcludesEmpty(t *testing.T) {
@@ -428,4 +445,38 @@ func TestRegistryDocProvider_PrimitiveTakesPriorityOverBindingSpec(t *testing.T)
 		}
 	}
 	c.Assert(count, qt.Equals, 1, qt.Commentf("apply should appear exactly once in search"))
+}
+
+func TestRegistryDocProvider_KeywordsInLookup(t *testing.T) {
+	c := qt.New(t)
+	reg := registry.NewRegistry()
+	reg.AddPrimitive(registry.PrimitiveSpec{
+		Name:       "list-sort",
+		ParamCount: 2,
+		Doc:        "Sort a list.",
+		Category:   "lists",
+		Keywords:   []string{"sort", "ordering"},
+	}, registry.PhaseRuntime)
+	prov := NewRegistryDocProvider(reg)
+	info, found := prov.LookupDoc("list-sort")
+	c.Assert(found, qt.IsTrue)
+	c.Assert(info.Keywords, qt.DeepEquals, []string{"sort", "ordering"})
+}
+
+func TestRegistryDocProvider_KeywordsFromDocstring(t *testing.T) {
+	c := qt.New(t)
+	reg := registry.NewRegistry()
+	reg.AddDocumentation("my-sort",
+		"Sort things.\nKeywords: sort, ordering\nCategory: lists")
+	prov := NewRegistryDocProvider(reg)
+	info, found := prov.LookupDoc("my-sort")
+	c.Assert(found, qt.IsTrue)
+	c.Assert(info.Keywords, qt.DeepEquals, []string{"sort", "ordering"})
+
+	results := prov.Search("ordering")
+	names := make([]string, len(results))
+	for i, r := range results {
+		names[i] = r.Name
+	}
+	c.Assert(slices.Contains(names, "my-sort"), qt.IsTrue)
 }

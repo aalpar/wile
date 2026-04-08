@@ -354,7 +354,8 @@ func PrimApropos(mc machine.CallContext) error {
 		spec := pr.Spec
 		if strings.Contains(strings.ToLower(spec.Name), pattern) ||
 			strings.Contains(strings.ToLower(spec.Doc), pattern) ||
-			strings.Contains(strings.ToLower(spec.Category), pattern) {
+			strings.Contains(strings.ToLower(spec.Category), pattern) ||
+			containsKeyword(spec.Keywords, pattern) {
 			names = append(names, spec.Name)
 		}
 	}
@@ -366,4 +367,15 @@ func PrimApropos(mc machine.CallContext) error {
 	}
 	mc.SetValue(values.List(syms...))
 	return nil
+}
+
+// containsKeyword reports whether any keyword contains the pattern
+// as a case-insensitive substring.
+func containsKeyword(keywords []string, pattern string) bool {
+	for _, kw := range keywords {
+		if strings.Contains(strings.ToLower(kw), pattern) {
+			return true
+		}
+	}
+	return false
 }

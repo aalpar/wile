@@ -48,6 +48,7 @@ func (p *RegistryDocProvider) LookupDoc(name string) (DocInfo, bool) {
 			IsVariadic: pr.Spec.IsVariadic,
 			ParamTypes: pr.Spec.ParamTypes,
 			ReturnType: pr.Spec.ReturnType,
+			Keywords:   pr.Spec.Keywords,
 		}, true
 	}
 
@@ -71,6 +72,7 @@ func (p *RegistryDocProvider) lookupNonPrimitiveDoc(name string) (DocInfo, bool)
 				ParamTypes: parsed.ParamTypes,
 				ReturnType: parsed.ReturnType,
 				Category:   parsed.Category,
+				Keywords:   parsed.Keywords,
 			}, true
 		}
 	}
@@ -84,6 +86,7 @@ func (p *RegistryDocProvider) lookupNonPrimitiveDoc(name string) (DocInfo, bool)
 				ParamTypes: parsed.ParamTypes,
 				ReturnType: parsed.ReturnType,
 				Category:   parsed.Category,
+				Keywords:   parsed.Keywords,
 			}, true
 		}
 	}
@@ -105,11 +108,12 @@ func (p *RegistryDocProvider) Search(pattern string) []DocSearchResult {
 	primNames := make(map[string]bool, len(prims))
 	for _, pr := range prims {
 		primNames[pr.Spec.Name] = true
-		if matchesFields(pr.Spec.Name, pr.Spec.Doc, pr.Spec.Category, lowerPattern) {
+		if matchesFields(pr.Spec.Name, pr.Spec.Doc, pr.Spec.Category, pr.Spec.Keywords, lowerPattern) {
 			results = append(results, DocSearchResult{
 				Name:     pr.Spec.Name,
 				Doc:      pr.Spec.Doc,
 				Category: pr.Spec.Category,
+				Keywords: pr.Spec.Keywords,
 			})
 		}
 	}
@@ -119,7 +123,7 @@ func (p *RegistryDocProvider) Search(pattern string) []DocSearchResult {
 		if primNames[r.Name] || seen[r.Name] {
 			continue
 		}
-		if matchesFields(r.Name, r.Doc, r.Category, lowerPattern) {
+		if matchesFields(r.Name, r.Doc, r.Category, r.Keywords, lowerPattern) {
 			seen[r.Name] = true
 			results = append(results, r)
 		}
@@ -165,6 +169,7 @@ func (p *RegistryDocProvider) ByCategory(category string) []DocSearchResult {
 			Name:     pr.Spec.Name,
 			Doc:      pr.Spec.Doc,
 			Category: pr.Spec.Category,
+			Keywords: pr.Spec.Keywords,
 		})
 	}
 
@@ -197,6 +202,7 @@ func (p *RegistryDocProvider) nonPrimitiveDocs() []DocSearchResult {
 			Name:     bs.Name,
 			Doc:      parsed.Doc,
 			Category: parsed.Category,
+			Keywords: parsed.Keywords,
 		})
 	}
 	for _, de := range p.reg.Docs() {
@@ -205,15 +211,24 @@ func (p *RegistryDocProvider) nonPrimitiveDocs() []DocSearchResult {
 			Name:     de.Name,
 			Doc:      parsed.Doc,
 			Category: parsed.Category,
+			Keywords: parsed.Keywords,
 		})
 	}
 	return results
 }
 
-// matchesFields returns true if any of name, doc, or category
+// matchesFields returns true if any of name, doc, category, or keywords
 // contains the given lowercase pattern.
-func matchesFields(name, doc, category, pattern string) bool {
-	return strings.Contains(strings.ToLower(name), pattern) ||
+func matchesFields(name, doc, category string, keywords []string, pattern string) bool {
+	if strings.Contains(strings.ToLower(name), pattern) ||
 		strings.Contains(strings.ToLower(doc), pattern) ||
-		strings.Contains(strings.ToLower(category), pattern)
+		strings.Contains(strings.ToLower(category), pattern) {
+		return true
+	}
+	for _, kw := range keywords {
+		if strings.Contains(strings.ToLower(kw), pattern) {
+			return true
+		}
+	}
+	return false
 }

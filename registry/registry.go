@@ -33,6 +33,7 @@ type PrimitiveSpec struct {
 	Category   string             // optional: grouping category
 	ParamTypes []values.ValueType // optional: type contract per parameter
 	ReturnType values.ValueType   // optional: return type (zero = TypeAny)
+	Keywords   []string           // optional: searchable tags
 }
 
 // PrimitiveRegistration holds a primitive and its phases.
