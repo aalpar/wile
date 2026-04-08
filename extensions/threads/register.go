@@ -49,11 +49,11 @@ func addThreads(r *registry.Registry) error {
 		{Name: "thread-yield!", Impl: PrimThreadYield,
 			Doc: "Voluntarily yields the current thread to the Go scheduler.", Category: "threads"},
 		{Name: "thread-sleep!", ParamCount: 1, Impl: PrimThreadSleep,
-			Doc: "Suspends the current thread for the specified duration. Accepts time objects, integers, or floats (seconds).", ParamNames: []string{"timeout"}, Category: "threads"},
+			Doc: "Suspends the current thread for TIMEOUT duration. Accepts time objects, integers, or floats (seconds).", ParamNames: []string{"timeout"}, Category: "threads"},
 		{Name: "thread-terminate!", ParamCount: 1, Impl: PrimThreadTerminate,
 			Doc: "Terminates THREAD. Abandoned mutexes are automatically released.", ParamNames: []string{"thread"}, Category: "threads"},
 		{Name: "thread-join!", ParamCount: 2, IsVariadic: true, Impl: PrimThreadJoin,
-			Doc: "Waits for THREAD to complete and returns its result. Optional TIMEOUT and timeout-val.", ParamNames: []string{"thread", "timeout"}, Category: "threads"},
+			Doc: "Waits for THREAD to complete and returns its result. Optional TIMEOUT and default value.", ParamNames: []string{"thread", "timeout"}, Category: "threads"},
 	}, registry.PhaseRuntime)
 	return nil
 }

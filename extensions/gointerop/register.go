@@ -65,7 +65,7 @@ func addWaitGroup(r *registry.Registry) error {
 		{Name: "wait-group-add!", ParamCount: 2, Impl: PrimWaitGroupAdd,
 			Doc: "Adds DELTA to the wait group counter. DELTA may be negative.", ParamNames: []string{"wg", "delta"}, Category: "waitgroups"},
 		{Name: "wait-group-done!", ParamCount: 1, Impl: PrimWaitGroupDone,
-			Doc: "Decrements the wait group counter by one. Equivalent to (wait-group-add! wg -1).", ParamNames: []string{"wg"}, Category: "waitgroups"},
+			Doc: "Decrements the wait group counter by one. Equivalent to (wait-group-add! WG -1).", ParamNames: []string{"wg"}, Category: "waitgroups"},
 		{Name: "wait-group-wait!", ParamCount: 1, Impl: PrimWaitGroupWait,
 			Doc: "Blocks until the wait group counter reaches zero.", ParamNames: []string{"wg"}, Category: "waitgroups"},
 	}, registry.PhaseRuntime)
