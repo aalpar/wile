@@ -16,12 +16,15 @@ package core_test
 
 import (
 	"context"
+	"regexp"
 	"testing"
 
-	"github.com/aalpar/wile/internal/bootstrap"
-	"github.com/aalpar/wile/values"
-
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/docparse"
+	"github.com/aalpar/wile/internal/bootstrap"
+	"github.com/aalpar/wile/repl"
+	"github.com/aalpar/wile/values"
 )
 
 // TestDocEntryNamesResolve verifies that every name with a doc string in the
@@ -63,6 +66,107 @@ func TestDocEntryNamesResolve(t *testing.T) {
 				}
 			}
 			t.Errorf("doc entry %q does not resolve to a binding in any phase", name)
+		})
+	}
+}
+
+// angleParamPattern matches angle-bracket metavariables like <key>, <test>, etc.
+// Excludes <point> which is legitimate R7RS record type syntax in examples.
+var angleParamPattern = regexp.MustCompile(`<[a-z][-a-z0-9]*>`)
+
+// TestDocStringsNoAngleBracketParams is a regression test ensuring that
+// doc strings use ALL-CAPS metavariables (KEY, TEST, BODY) instead of
+// angle-bracket notation (<key>, <test>, <body>).
+func TestDocStringsNoAngleBracketParams(t *testing.T) {
+	_, reg, err := bootstrap.NewTopLevelWithRegistry(context.Background())
+	qt.Assert(t, err, qt.IsNil)
+
+	for _, bs := range reg.BindingSpecs() {
+		if bs.Doc == "" {
+			continue
+		}
+		t.Run("binding/"+bs.Name, func(t *testing.T) {
+			matches := angleParamPattern.FindAllString(bs.Doc, -1)
+			for _, m := range matches {
+				// Allow <point> in examples (R7RS record type convention)
+				if m == "<point>" {
+					continue
+				}
+				t.Errorf("doc string for %q uses angle-bracket param %s — use ALL-CAPS instead", bs.Name, m)
+			}
+		})
+	}
+
+	for _, de := range reg.Docs() {
+		t.Run("doc/"+de.Name, func(t *testing.T) {
+			matches := angleParamPattern.FindAllString(de.Doc, -1)
+			for _, m := range matches {
+				if m == "<point>" {
+					continue
+				}
+				t.Errorf("doc string for %q uses angle-bracket param %s — use ALL-CAPS instead", de.Name, m)
+			}
+		})
+	}
+}
+
+// TestDocStringCategoriesVisible verifies that every Category: declared in
+// a doc string actually appears in the RegistryDocProvider's category list.
+// This catches the original bug: doc strings declaring "Category: conditionals"
+// while ,topics didn't list "conditionals".
+func TestDocStringCategoriesVisible(t *testing.T) {
+	_, reg, err := bootstrap.NewTopLevelWithRegistry(context.Background())
+	qt.Assert(t, err, qt.IsNil)
+
+	provider := repl.NewRegistryDocProvider(reg)
+	categories := provider.Categories()
+	catSet := make(map[string]bool, len(categories))
+	for _, cat := range categories {
+		catSet[cat] = true
+	}
+
+	// Check binding specs
+	for _, bs := range reg.BindingSpecs() {
+		if bs.Doc == "" {
+			continue
+		}
+		parsed := docparse.ParseDocstring(bs.Doc)
+		if parsed.Category == "" {
+			continue
+		}
+		t.Run("binding/"+bs.Name, func(t *testing.T) {
+			qt.Assert(t, catSet[parsed.Category], qt.IsTrue,
+				qt.Commentf("category %q from %q not in Categories() list: %v",
+					parsed.Category, bs.Name, categories))
+		})
+	}
+
+	// Check doc entries
+	for _, de := range reg.Docs() {
+		parsed := docparse.ParseDocstring(de.Doc)
+		if parsed.Category == "" {
+			continue
+		}
+		t.Run("doc/"+de.Name, func(t *testing.T) {
+			qt.Assert(t, catSet[parsed.Category], qt.IsTrue,
+				qt.Commentf("category %q from %q not in Categories() list: %v",
+					parsed.Category, de.Name, categories))
+		})
+	}
+}
+
+// TestDocStringCategoriesNonEmpty verifies that every category returned by
+// Categories() has at least one entry in ByCategory().
+func TestDocStringCategoriesNonEmpty(t *testing.T) {
+	_, reg, err := bootstrap.NewTopLevelWithRegistry(context.Background())
+	qt.Assert(t, err, qt.IsNil)
+
+	provider := repl.NewRegistryDocProvider(reg)
+	for _, cat := range provider.Categories() {
+		t.Run(cat, func(t *testing.T) {
+			results := provider.ByCategory(cat)
+			qt.Assert(t, len(results) > 0, qt.IsTrue,
+				qt.Commentf("category %q is empty", cat))
 		})
 	}
 }

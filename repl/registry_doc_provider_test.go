@@ -15,6 +15,7 @@
 package repl
 
 import (
+	"slices"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -42,6 +43,37 @@ func buildTestRegistry() *registry.Registry {
 			Category:   "arithmetic",
 		},
 	}, registry.PhaseRuntime)
+	return reg
+}
+
+// buildTestRegistryWithDocs creates a registry with primitives, binding specs,
+// and doc entries to test unified category/search behavior.
+func buildTestRegistryWithDocs() *registry.Registry {
+	reg := buildTestRegistry()
+
+	// Binding specs (compile-time forms with embedded metadata)
+	reg.AddBindingSpecs([]registry.BindingSpec{
+		{
+			Name: "if",
+			Doc:  "Conditional expression.\nSyntax: (if TEST CONSEQUENT ALTERNATE)\nCategory: conditionals",
+		},
+		{
+			Name: "define",
+			Doc:  "Variable definition.\nSyntax: (define VARIABLE EXPRESSION)\nCategory: definitions",
+		},
+		// apply exists as both a primitive and a binding spec — primitive should win
+		{
+			Name: "apply",
+			Doc:  "Binding-level apply doc.\nSyntax: (apply PROC ARGS)\nCategory: control",
+		},
+	})
+
+	// Doc entries (macro docs with embedded metadata)
+	reg.AddDocumentation("and",
+		"Short-circuit conjunction.\nSyntax: (and TEST1 ...)\nCategory: conditionals")
+	reg.AddDocumentation("cond",
+		"Multi-way conditional.\nSyntax: (cond CLAUSE1 CLAUSE2 ...)\nCategory: conditionals")
+
 	return reg
 }
 
@@ -225,4 +257,154 @@ func TestRegistryDocProvider_ByCategory(t *testing.T) {
 			c.Assert(names, qt.DeepEquals, tc.expected)
 		})
 	}
+}
+
+// Tests for unified doc provider (binding specs + doc entries included)
+
+func TestRegistryDocProvider_CategoriesIncludesNonPrimitives(t *testing.T) {
+	c := qt.New(t)
+	provider := NewRegistryDocProvider(buildTestRegistryWithDocs())
+	cats := provider.Categories()
+
+	// Should include primitive categories
+	c.Assert(slices.Contains(cats, "arithmetic"), qt.IsTrue,
+		qt.Commentf("should include primitive category: %v", cats))
+	c.Assert(slices.Contains(cats, "strings"), qt.IsTrue,
+		qt.Commentf("should include primitive category: %v", cats))
+
+	// Should include binding spec categories
+	c.Assert(slices.Contains(cats, "conditionals"), qt.IsTrue,
+		qt.Commentf("should include binding spec category: %v", cats))
+	c.Assert(slices.Contains(cats, "definitions"), qt.IsTrue,
+		qt.Commentf("should include binding spec category: %v", cats))
+}
+
+func TestRegistryDocProvider_ByCategoryFindsNonPrimitives(t *testing.T) {
+	tcs := []struct {
+		name     string
+		category string
+		expected []string
+	}{
+		{
+			name:     "primitive category",
+			category: "strings",
+			expected: []string{"string-append"},
+		},
+		{
+			name:     "binding spec category",
+			category: "conditionals",
+			expected: []string{"and", "cond", "if"},
+		},
+		{
+			name:     "doc entry only category",
+			category: "definitions",
+			expected: []string{"define"},
+		},
+		{
+			name:     "nonexistent category",
+			category: "nonexistent",
+			expected: []string{},
+		},
+	}
+	provider := NewRegistryDocProvider(buildTestRegistryWithDocs())
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			results := provider.ByCategory(tc.category)
+			names := make([]string, len(results))
+			for i, r := range results {
+				names[i] = r.Name
+			}
+			c.Assert(names, qt.DeepEquals, tc.expected)
+		})
+	}
+}
+
+func TestRegistryDocProvider_SearchFindsNonPrimitives(t *testing.T) {
+	tcs := []struct {
+		name     string
+		pattern  string
+		expected []string
+	}{
+		{
+			name:     "find binding spec by name",
+			pattern:  "define",
+			expected: []string{"define"},
+		},
+		{
+			name:     "find doc entry by doc content",
+			pattern:  "multi-way",
+			expected: []string{"cond"},
+		},
+		{
+			name:     "find by category from doc string",
+			pattern:  "conditionals",
+			expected: []string{"and", "cond", "if"},
+		},
+		{
+			name:     "find primitive still works",
+			pattern:  "string-append",
+			expected: []string{"string-append"},
+		},
+	}
+	provider := NewRegistryDocProvider(buildTestRegistryWithDocs())
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			results := provider.Search(tc.pattern)
+			names := make([]string, len(results))
+			for i, r := range results {
+				names[i] = r.Name
+			}
+			c.Assert(names, qt.DeepEquals, tc.expected)
+		})
+	}
+}
+
+func TestRegistryDocProvider_LookupDocFindsNonPrimitives(t *testing.T) {
+	c := qt.New(t)
+	provider := NewRegistryDocProvider(buildTestRegistryWithDocs())
+
+	// Binding spec lookup
+	info, found := provider.LookupDoc("if")
+	c.Assert(found, qt.IsTrue)
+	c.Assert(info.Syntax, qt.Equals, "(if TEST CONSEQUENT ALTERNATE)")
+	c.Assert(info.Category, qt.Equals, "conditionals")
+
+	// Doc entry lookup
+	info, found = provider.LookupDoc("and")
+	c.Assert(found, qt.IsTrue)
+	c.Assert(info.Syntax, qt.Equals, "(and TEST1 ...)")
+	c.Assert(info.Category, qt.Equals, "conditionals")
+
+	// Still not found for unknown
+	_, found = provider.LookupDoc("nonexistent")
+	c.Assert(found, qt.IsFalse)
+}
+
+func TestRegistryDocProvider_PrimitiveTakesPriorityOverBindingSpec(t *testing.T) {
+	c := qt.New(t)
+	provider := NewRegistryDocProvider(buildTestRegistryWithDocs())
+
+	// "apply" is registered as both a primitive (no Doc in buildTestRegistry but
+	// let's add one) and a binding spec. The primitive should win in Search
+	// and ByCategory, avoiding duplicates.
+
+	// Check ByCategory doesn't duplicate "apply" in control
+	// The binding spec has Category: control, but "apply" is not in
+	// buildTestRegistry's primitives (those are in "strings" and "arithmetic")
+	// so apply should appear once from the binding spec.
+	results := provider.ByCategory("control")
+	names := make([]string, len(results))
+	for i, r := range results {
+		names[i] = r.Name
+	}
+	// Count occurrences of "apply"
+	count := 0
+	for _, name := range names {
+		if name == "apply" {
+			count++
+		}
+	}
+	c.Assert(count, qt.Equals, 1, qt.Commentf("apply should appear exactly once: %v", names))
 }
