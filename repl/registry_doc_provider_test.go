@@ -51,6 +51,15 @@ func buildTestRegistry() *registry.Registry {
 func buildTestRegistryWithDocs() *registry.Registry {
 	reg := buildTestRegistry()
 
+	// Add an "apply" primitive so we can test primitive-over-binding-spec precedence.
+	reg.AddPrimitive(registry.PrimitiveSpec{
+		Name:       "apply",
+		ParamCount: 2,
+		IsVariadic: true,
+		Doc:        "Apply PROC to ARGS.",
+		Category:   "control",
+	}, registry.PhaseRuntime)
+
 	// Binding specs (compile-time forms with embedded metadata)
 	reg.AddBindingSpecs([]registry.BindingSpec{
 		{
@@ -61,7 +70,7 @@ func buildTestRegistryWithDocs() *registry.Registry {
 			Name: "define",
 			Doc:  "Variable definition.\nSyntax: (define VARIABLE EXPRESSION)\nCategory: definitions",
 		},
-		// apply exists as both a primitive and a binding spec — primitive should win
+		// apply exists as both a primitive and a binding spec — primitive should win.
 		{
 			Name: "apply",
 			Doc:  "Binding-level apply doc.\nSyntax: (apply PROC ARGS)\nCategory: control",
@@ -386,25 +395,36 @@ func TestRegistryDocProvider_PrimitiveTakesPriorityOverBindingSpec(t *testing.T)
 	c := qt.New(t)
 	provider := NewRegistryDocProvider(buildTestRegistryWithDocs())
 
-	// "apply" is registered as both a primitive (no Doc in buildTestRegistry but
-	// let's add one) and a binding spec. The primitive should win in Search
-	// and ByCategory, avoiding duplicates.
+	// "apply" is registered as both a primitive and a binding spec.
+	// The primitive should win everywhere.
 
-	// Check ByCategory doesn't duplicate "apply" in control
-	// The binding spec has Category: control, but "apply" is not in
-	// buildTestRegistry's primitives (those are in "strings" and "arithmetic")
-	// so apply should appear once from the binding spec.
+	// LookupDoc should return the primitive's doc, not the binding spec's.
+	info, found := provider.LookupDoc("apply")
+	c.Assert(found, qt.IsTrue)
+	c.Assert(info.Doc, qt.Equals, "Apply PROC to ARGS.",
+		qt.Commentf("LookupDoc should return primitive doc, not binding spec doc"))
+
+	// ByCategory should show apply exactly once from the primitive.
 	results := provider.ByCategory("control")
-	names := make([]string, len(results))
-	for i, r := range results {
-		names[i] = r.Name
-	}
-	// Count occurrences of "apply"
 	count := 0
-	for _, name := range names {
-		if name == "apply" {
+	for _, r := range results {
+		if r.Name == "apply" {
 			count++
+			c.Assert(r.Doc, qt.Equals, "Apply PROC to ARGS.",
+				qt.Commentf("ByCategory entry should be from primitive"))
 		}
 	}
-	c.Assert(count, qt.Equals, 1, qt.Commentf("apply should appear exactly once: %v", names))
+	c.Assert(count, qt.Equals, 1, qt.Commentf("apply should appear exactly once"))
+
+	// Search should return apply exactly once from the primitive.
+	searchResults := provider.Search("apply")
+	count = 0
+	for _, r := range searchResults {
+		if r.Name == "apply" {
+			count++
+			c.Assert(r.Doc, qt.Equals, "Apply PROC to ARGS.",
+				qt.Commentf("Search entry should be from primitive"))
+		}
+	}
+	c.Assert(count, qt.Equals, 1, qt.Commentf("apply should appear exactly once in search"))
 }

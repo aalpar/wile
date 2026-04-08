@@ -71,8 +71,23 @@ func TestDocEntryNamesResolve(t *testing.T) {
 }
 
 // angleParamPattern matches angle-bracket metavariables like <key>, <test>, etc.
-// Excludes <point> which is legitimate R7RS record type syntax in examples.
-var angleParamPattern = regexp.MustCompile(`<[a-z][-a-z0-9]*>`)
+// The optional preceding character is captured so we can skip Scheme display
+// representations (#<eof>, #<namespace>, etc.) and R7RS record type names (<point>).
+var angleParamPattern = regexp.MustCompile(`(.?)<([a-z][-a-z0-9]*)>`)
+
+// checkAngleBracketParams reports angle-bracket metavariables in doc that are
+// not Scheme display representations (#<...>) or the R7RS record type <point>.
+func checkAngleBracketParams(t *testing.T, name, doc string) {
+	t.Helper()
+	for _, m := range angleParamPattern.FindAllStringSubmatch(doc, -1) {
+		prefix := m[1]
+		inner := m[2]
+		if prefix == "#" || inner == "point" {
+			continue
+		}
+		t.Errorf("doc string for %q uses angle-bracket param <%s> — use ALL-CAPS instead", name, inner)
+	}
+}
 
 // TestDocStringsNoAngleBracketParams is a regression test ensuring that
 // doc strings use ALL-CAPS metavariables (KEY, TEST, BODY) instead of
@@ -86,26 +101,22 @@ func TestDocStringsNoAngleBracketParams(t *testing.T) {
 			continue
 		}
 		t.Run("binding/"+bs.Name, func(t *testing.T) {
-			matches := angleParamPattern.FindAllString(bs.Doc, -1)
-			for _, m := range matches {
-				// Allow <point> in examples (R7RS record type convention)
-				if m == "<point>" {
-					continue
-				}
-				t.Errorf("doc string for %q uses angle-bracket param %s — use ALL-CAPS instead", bs.Name, m)
-			}
+			checkAngleBracketParams(t, bs.Name, bs.Doc)
 		})
 	}
 
 	for _, de := range reg.Docs() {
 		t.Run("doc/"+de.Name, func(t *testing.T) {
-			matches := angleParamPattern.FindAllString(de.Doc, -1)
-			for _, m := range matches {
-				if m == "<point>" {
-					continue
-				}
-				t.Errorf("doc string for %q uses angle-bracket param %s — use ALL-CAPS instead", de.Name, m)
-			}
+			checkAngleBracketParams(t, de.Name, de.Doc)
+		})
+	}
+
+	for _, pr := range reg.Primitives() {
+		if pr.Spec.Doc == "" {
+			continue
+		}
+		t.Run("primitive/"+pr.Spec.Name, func(t *testing.T) {
+			checkAngleBracketParams(t, pr.Spec.Name, pr.Spec.Doc)
 		})
 	}
 }

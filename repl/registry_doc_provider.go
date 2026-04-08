@@ -91,14 +91,20 @@ func (p *RegistryDocProvider) lookupNonPrimitiveDoc(name string) (DocInfo, bool)
 
 // Search returns entries whose name, doc, or category contains pattern
 // (case-insensitive substring match). Results are sorted by name.
+// Primitives always take precedence over binding specs and doc entries:
+// if a name exists as a primitive, non-primitive entries with the same
+// name are suppressed regardless of whether the primitive matched the pattern.
 func (p *RegistryDocProvider) Search(pattern string) []DocSearchResult {
 	lowerPattern := strings.ToLower(pattern)
-	seen := make(map[string]bool)
 	var results []DocSearchResult
 
-	for _, pr := range p.reg.Primitives() {
+	// Build complete set of primitive names so non-primitives with the same
+	// name are always suppressed, even when the primitive doesn't match.
+	prims := p.reg.Primitives()
+	primNames := make(map[string]bool, len(prims))
+	for _, pr := range prims {
+		primNames[pr.Spec.Name] = true
 		if matchesFields(pr.Spec.Name, pr.Spec.Doc, pr.Spec.Category, lowerPattern) {
-			seen[pr.Spec.Name] = true
 			results = append(results, DocSearchResult{
 				Name:     pr.Spec.Name,
 				Doc:      pr.Spec.Doc,
@@ -107,8 +113,9 @@ func (p *RegistryDocProvider) Search(pattern string) []DocSearchResult {
 		}
 	}
 
+	seen := make(map[string]bool)
 	for _, r := range p.nonPrimitiveDocs() {
-		if seen[r.Name] {
+		if primNames[r.Name] || seen[r.Name] {
 			continue
 		}
 		if matchesFields(r.Name, r.Doc, r.Category, lowerPattern) {

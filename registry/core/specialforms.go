@@ -275,7 +275,7 @@ var compileTimeBindingSpecs = []registry.BindingSpec{
 	{"syntax-case",
 		"Pattern-matching macro transformer (R6RS). Each clause is\n" +
 			"(PATTERN BODY) or (PATTERN FENDER BODY). Pattern\n" +
-			"variables are bound in BODY. Use (syntax template) to\n" +
+			"variables are bound in BODY. Use (syntax TEMPLATE) to\n" +
 			"construct syntax output.\n" +
 			"Syntax: (syntax-case EXPRESSION (LITERAL ...) CLAUSE ...)\n" +
 			"Category: macros"},
