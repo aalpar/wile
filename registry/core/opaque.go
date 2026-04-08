@@ -22,10 +22,10 @@ import (
 func addOpaque(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "opaque?", ParamCount: 1, Impl: PrimOpaqueQ,
-			Doc: "Returns #t if obj is an opaque value wrapping a Go object.\n\nExamples:\n  (opaque? 42)           => #f", ParamNames: []string{"obj"}, Category: "opaque",
+			Doc: "Returns #t if OBJ is an opaque value wrapping a Go object.\n\nExamples:\n  (opaque? 42)           => #f", ParamNames: []string{"obj"}, Category: "opaque",
 			ParamTypes: []values.ValueType{values.TypeAny}, ReturnType: values.TypeBoolean},
 		{Name: "opaque-tag", ParamCount: 1, Impl: PrimOpaqueTag,
-			Doc: "Returns the symbolic tag identifying the type of an opaque value. Raises an error if obj is not opaque.\n\nExamples:\n  ;; (opaque-tag my-opaque)  => my-type  ; if tagged 'my-type", ParamNames: []string{"obj"}, Category: "opaque",
+			Doc: "Returns the symbolic tag identifying the type of an opaque value. Raises an error if OBJ is not opaque.\n\nExamples:\n  ;; (opaque-tag my-opaque)  => my-type  ; if tagged 'my-type", ParamNames: []string{"obj"}, Category: "opaque",
 			ParamTypes: []values.ValueType{values.TypeAny}, ReturnType: values.TypeSymbol},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 

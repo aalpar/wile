@@ -407,7 +407,7 @@ func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo, showExamp
 	} else {
 		fmt.Fprintf(w, "(%s", name)
 		for _, pn := range info.ParamNames {
-			fmt.Fprintf(w, " %s", pn)
+			fmt.Fprintf(w, " %s", strings.ToUpper(pn))
 		}
 		if info.IsVariadic {
 			fmt.Fprint(w, " ...")
@@ -434,7 +434,7 @@ func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo, showExamp
 		fmt.Fprintln(w, "  Parameters:")
 		for i, pn := range info.ParamNames {
 			vt := paramTypeForDoc(info.ParamTypes, i)
-			fmt.Fprintf(w, "    %s : %s\n", pn, vt.String())
+			fmt.Fprintf(w, "    %s : %s\n", strings.ToUpper(pn), vt.String())
 		}
 	}
 

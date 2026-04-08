@@ -200,7 +200,7 @@ func TestCmdDoc_SpecialFormStructuredFormat(t *testing.T) {
 	output := buf.String()
 
 	// Should use structured format: syntax as header, type label, category
-	qt.Assert(t, strings.Contains(output, "(if <test> <consequent> <alternate>)"), qt.IsTrue,
+	qt.Assert(t, strings.Contains(output, "(if TEST CONSEQUENT ALTERNATE)"), qt.IsTrue,
 		qt.Commentf("should have syntax pattern in header: %q", output))
 	qt.Assert(t, strings.Contains(output, "— special form"), qt.IsTrue,
 		qt.Commentf("should have type label: %q", output))
@@ -222,7 +222,7 @@ func TestCmdDoc_MacroStructuredFormat(t *testing.T) {
 	output := buf.String()
 
 	// Bootstrap macros should also use structured format
-	qt.Assert(t, strings.Contains(output, "(and <test1> ...)"), qt.IsTrue,
+	qt.Assert(t, strings.Contains(output, "(and TEST1 ...)"), qt.IsTrue,
 		qt.Commentf("should have syntax pattern: %q", output))
 	qt.Assert(t, strings.Contains(output, "Category: conditionals"), qt.IsTrue,
 		qt.Commentf("should have category: %q", output))
@@ -325,9 +325,9 @@ func TestFormatPrimitiveDoc_WithTypes(t *testing.T) {
 	output := buf.String()
 	c.Assert(strings.Contains(output, "→ character"), qt.IsTrue,
 		qt.Commentf("output: %s", output))
-	c.Assert(strings.Contains(output, "string : string"), qt.IsTrue,
+	c.Assert(strings.Contains(output, "STRING : string"), qt.IsTrue,
 		qt.Commentf("output: %s", output))
-	c.Assert(strings.Contains(output, "k : exact-integer"), qt.IsTrue,
+	c.Assert(strings.Contains(output, "K : exact-integer"), qt.IsTrue,
 		qt.Commentf("output: %s", output))
 	c.Assert(strings.Contains(output, "Returns: character"), qt.IsTrue,
 		qt.Commentf("output: %s", output))
@@ -656,14 +656,14 @@ func TestFormatPrimitiveDoc_FromDocparse(t *testing.T) {
 	formatPrimitiveDoc(&buf, "my-multiply", info, false)
 	output := buf.String()
 
-	c.Assert(strings.Contains(output, "(my-multiply x y)"), qt.IsTrue,
+	c.Assert(strings.Contains(output, "(my-multiply X Y)"), qt.IsTrue,
 		qt.Commentf("should have signature: %s", output))
 	c.Assert(strings.Contains(output, "number"), qt.IsTrue,
 		qt.Commentf("should have return type: %s", output))
-	c.Assert(strings.Contains(output, "x : number"), qt.IsTrue,
-		qt.Commentf("should have param type for x: %s", output))
-	c.Assert(strings.Contains(output, "y : number"), qt.IsTrue,
-		qt.Commentf("should have param type for y: %s", output))
+	c.Assert(strings.Contains(output, "X : number"), qt.IsTrue,
+		qt.Commentf("should have param type for X: %s", output))
+	c.Assert(strings.Contains(output, "Y : number"), qt.IsTrue,
+		qt.Commentf("should have param type for Y: %s", output))
 	c.Assert(strings.Contains(output, "Category: arithmetic"), qt.IsTrue,
 		qt.Commentf("should have category: %s", output))
 	c.Assert(strings.Contains(output, "Multiply two numbers."), qt.IsTrue,

@@ -58,7 +58,7 @@ func addArithmetic(r *registry.Registry) error {
 	// Basic numeric operations
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "abs", ParamCount: 1, Impl: PrimAbs,
-			Doc: "Returns the absolute value of x. The result has the same exactness as the argument.\n\nExamples:\n  (abs -7)       => 7\n  (abs 7)        => 7\n  (abs -3.5)     => 3.5", ParamNames: []string{"x"}, Category: "arithmetic",
+			Doc: "Returns the absolute value of X. The result has the same exactness as the argument.\n\nExamples:\n  (abs -7)       => 7\n  (abs 7)        => 7\n  (abs -3.5)     => 3.5", ParamNames: []string{"x"}, Category: "arithmetic",
 			ParamTypes: []values.ValueType{values.TypeReal}, ReturnType: values.TypeReal},
 		{Name: "min", ParamCount: 2, IsVariadic: true, Impl: PrimMin,
 			Doc: "Returns the smallest of its arguments. If any argument is inexact, the result is inexact.\n\nExamples:\n  (min 3 1 2)    => 1\n  (min 1 2.0)    => 1.0", ParamNames: []string{"x1", "x2"}, Category: "arithmetic",
@@ -70,13 +70,13 @@ func addArithmetic(r *registry.Registry) error {
 		// but implementations accept inexact integers (e.g., 7.0) via helpers.ExtractInteger.
 		// Before enabling runtime enforcement, widen to TypeNumber or introduce TypeIntegerValue.
 		{Name: "quotient", ParamCount: 2, Impl: PrimQuotient,
-			Doc: "Returns the integer quotient of n1 divided by n2, truncated toward zero. Both arguments must be integers.\n\nExamples:\n  (quotient 7 3)    => 2\n  (quotient -7 3)   => -2\n  (quotient 7 -3)   => -2", ParamNames: []string{"n1", "n2"}, Category: "arithmetic",
+			Doc: "Returns the integer quotient of N1 divided by N2, truncated toward zero. Both arguments must be integers.\n\nExamples:\n  (quotient 7 3)    => 2\n  (quotient -7 3)   => -2\n  (quotient 7 -3)   => -2", ParamNames: []string{"n1", "n2"}, Category: "arithmetic",
 			ParamTypes: []values.ValueType{values.TypeInteger, values.TypeInteger}, ReturnType: values.TypeInteger},
 		{Name: "remainder", ParamCount: 2, Impl: PrimRemainder,
-			Doc: "Returns the remainder of n1 divided by n2. The sign of the result matches the sign of n1.\n\nExamples:\n  (remainder 7 3)    => 1\n  (remainder -7 3)   => -1\n  (remainder 7 -3)   => 1", ParamNames: []string{"n1", "n2"}, Category: "arithmetic",
+			Doc: "Returns the remainder of N1 divided by N2. The sign of the result matches the sign of N1.\n\nExamples:\n  (remainder 7 3)    => 1\n  (remainder -7 3)   => -1\n  (remainder 7 -3)   => 1", ParamNames: []string{"n1", "n2"}, Category: "arithmetic",
 			ParamTypes: []values.ValueType{values.TypeInteger, values.TypeInteger}, ReturnType: values.TypeInteger},
 		{Name: "modulo", ParamCount: 2, Impl: PrimModulo,
-			Doc: "Returns n1 modulo n2. The sign of the result matches the sign of n2.\n\nExamples:\n  (modulo 7 3)     => 1\n  (modulo -7 3)    => 2\n  (modulo 7 -3)    => -2", ParamNames: []string{"n1", "n2"}, Category: "arithmetic",
+			Doc: "Returns N1 modulo N2. The sign of the result matches the sign of N2.\n\nExamples:\n  (modulo 7 3)     => 1\n  (modulo -7 3)    => 2\n  (modulo 7 -3)    => -2", ParamNames: []string{"n1", "n2"}, Category: "arithmetic",
 			ParamTypes: []values.ValueType{values.TypeInteger, values.TypeInteger}, ReturnType: values.TypeInteger},
 		{Name: "gcd", ParamCount: 1, IsVariadic: true, Impl: PrimGcd,
 			Doc: "Returns the greatest common divisor of its arguments. With no arguments, returns 0.\n\nExamples:\n  (gcd)            => 0\n  (gcd 12 8)       => 4\n  (gcd 12 8 6)     => 2", ParamNames: []string{"n"}, Category: "arithmetic",
@@ -89,16 +89,16 @@ func addArithmetic(r *registry.Registry) error {
 	// Exactness conversion
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "exact", ParamCount: 1, Impl: PrimExact,
-			Doc: "Converts z to exact representation. Returns the closest exact number that is numerically equal.\n\nExamples:\n  (exact 1.0)      => 1\n  (exact 1/3)      => 1/3\n  (exact 1.5)      => 3/2", ParamNames: []string{"z"}, Category: "arithmetic",
+			Doc: "Converts Z to exact representation. Returns the closest exact number that is numerically equal.\n\nExamples:\n  (exact 1.0)      => 1\n  (exact 1/3)      => 1/3\n  (exact 1.5)      => 3/2", ParamNames: []string{"z"}, Category: "arithmetic",
 			ParamTypes: []values.ValueType{values.TypeNumber}, ReturnType: values.TypeNumber},
 		{Name: "inexact", ParamCount: 1, Impl: PrimInexact,
-			Doc: "Converts z to inexact (floating-point) representation. May lose precision for large exact integers.\n\nExamples:\n  (inexact 1)      => 1.0\n  (inexact 1/3)    => 0.3333333333333333", ParamNames: []string{"z"}, Category: "arithmetic",
+			Doc: "Converts Z to inexact (floating-point) representation. May lose precision for large exact integers.\n\nExamples:\n  (inexact 1)      => 1.0\n  (inexact 1/3)    => 0.3333333333333333", ParamNames: []string{"z"}, Category: "arithmetic",
 			ParamTypes: []values.ValueType{values.TypeNumber}, ReturnType: values.TypeNumber},
 		{Name: "exact->inexact", ParamCount: 1, Impl: PrimInexact,
-			Doc: "R5RS alias for inexact. Converts z to inexact representation.\n\nExamples:\n  (exact->inexact 1)  => 1.0", ParamNames: []string{"z"}, Category: "arithmetic",
+			Doc: "R5RS alias for inexact. Converts Z to inexact representation.\n\nExamples:\n  (exact->inexact 1)  => 1.0", ParamNames: []string{"z"}, Category: "arithmetic",
 			ParamTypes: []values.ValueType{values.TypeNumber}, ReturnType: values.TypeNumber},
 		{Name: "inexact->exact", ParamCount: 1, Impl: PrimExact,
-			Doc: "R5RS alias for exact. Converts z to exact representation.\n\nExamples:\n  (inexact->exact 1.5)  => 3/2", ParamNames: []string{"z"}, Category: "arithmetic",
+			Doc: "R5RS alias for exact. Converts Z to exact representation.\n\nExamples:\n  (inexact->exact 1.5)  => 3/2", ParamNames: []string{"z"}, Category: "arithmetic",
 			ParamTypes: []values.ValueType{values.TypeNumber}, ReturnType: values.TypeNumber},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
