@@ -41,6 +41,7 @@ func (p *RegistryDocProvider) LookupDoc(name string) (DocInfo, bool) {
 	if found {
 		return DocInfo{
 			Doc:        pr.Spec.Doc,
+			TypeLabel:  "primitive",
 			ParamNames: pr.Spec.ParamNames,
 			Category:   pr.Spec.Category,
 			ParamCount: pr.Spec.ParamCount,

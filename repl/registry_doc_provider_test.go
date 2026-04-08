@@ -123,6 +123,7 @@ func TestRegistryDocProvider_ContractFields(t *testing.T) {
 	prov := NewRegistryDocProvider(reg)
 	info, found := prov.LookupDoc("test-contracted")
 	c.Assert(found, qt.IsTrue)
+	c.Assert(info.TypeLabel, qt.Equals, "primitive")
 	c.Assert(info.ParamTypes, qt.HasLen, 2)
 	c.Assert(info.ParamTypes[0], qt.Equals, values.TypeString)
 	c.Assert(info.ParamTypes[1], qt.Equals, values.TypeInteger)

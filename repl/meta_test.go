@@ -202,8 +202,8 @@ func TestCmdDoc_SpecialFormStructuredFormat(t *testing.T) {
 	// Should use structured format: syntax as header, type label, category
 	qt.Assert(t, strings.Contains(output, "(if TEST CONSEQUENT ALTERNATE)"), qt.IsTrue,
 		qt.Commentf("should have syntax pattern in header: %q", output))
-	qt.Assert(t, strings.Contains(output, "— special form"), qt.IsTrue,
-		qt.Commentf("should have type label: %q", output))
+	qt.Assert(t, strings.Contains(output, "Form: special form"), qt.IsTrue,
+		qt.Commentf("should have form type: %q", output))
 	qt.Assert(t, strings.Contains(output, "Category: conditionals"), qt.IsTrue,
 		qt.Commentf("should have category: %q", output))
 	// Should NOT use old format
@@ -224,6 +224,8 @@ func TestCmdDoc_MacroStructuredFormat(t *testing.T) {
 	// Bootstrap macros should also use structured format
 	qt.Assert(t, strings.Contains(output, "(and TEST1 ...)"), qt.IsTrue,
 		qt.Commentf("should have syntax pattern: %q", output))
+	qt.Assert(t, strings.Contains(output, "Form: syntax"), qt.IsTrue,
+		qt.Commentf("should have form type: %q", output))
 	qt.Assert(t, strings.Contains(output, "Category: conditionals"), qt.IsTrue,
 		qt.Commentf("should have category: %q", output))
 }
@@ -315,6 +317,7 @@ func TestFormatPrimitiveDoc_WithTypes(t *testing.T) {
 	var buf strings.Builder
 	info := DocInfo{
 		Doc:        "Returns the kth character of string.",
+		TypeLabel:  "primitive",
 		ParamNames: []string{"string", "k"},
 		Category:   "strings",
 		ParamCount: 2,
@@ -324,6 +327,8 @@ func TestFormatPrimitiveDoc_WithTypes(t *testing.T) {
 	formatPrimitiveDoc(&buf, "string-ref", info, true)
 	output := buf.String()
 	c.Assert(strings.Contains(output, "→ character"), qt.IsTrue,
+		qt.Commentf("output: %s", output))
+	c.Assert(strings.Contains(output, "Form: primitive"), qt.IsTrue,
 		qt.Commentf("output: %s", output))
 	c.Assert(strings.Contains(output, "STRING : string"), qt.IsTrue,
 		qt.Commentf("output: %s", output))
@@ -686,8 +691,8 @@ func TestFormatPrimitiveDoc_WithSyntax(t *testing.T) {
 
 	c.Assert(strings.Contains(output, "(if <test> <consequent> <alternate>)"), qt.IsTrue,
 		qt.Commentf("should have syntax pattern: %s", output))
-	c.Assert(strings.Contains(output, "— special form"), qt.IsTrue,
-		qt.Commentf("should have type label: %s", output))
+	c.Assert(strings.Contains(output, "Form: special form"), qt.IsTrue,
+		qt.Commentf("should have form type: %s", output))
 	c.Assert(strings.Contains(output, "Conditional expression."), qt.IsTrue,
 		qt.Commentf("should have description: %s", output))
 	c.Assert(strings.Contains(output, "Category: conditionals"), qt.IsTrue,

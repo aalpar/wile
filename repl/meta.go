@@ -398,13 +398,10 @@ func formatLibraryDoc(w *strings.Builder, lib *compilation.CompiledLibrary) {
 func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo, showExamples bool) {
 	hasTypes := len(info.ParamTypes) > 0
 
-	// Signature line
-	if info.Syntax != "" {
-		fmt.Fprint(w, info.Syntax)
-		if info.TypeLabel != "" {
-			fmt.Fprintf(w, " — %s", info.TypeLabel)
-		}
-	} else {
+	// Line 1: syntax + return type.
+	// Builder approach: prefer structured ParamNames, Syntax as override.
+	switch {
+	case len(info.ParamNames) > 0:
 		fmt.Fprintf(w, "(%s", name)
 		for _, pn := range info.ParamNames {
 			fmt.Fprintf(w, " %s", strings.ToUpper(pn))
@@ -413,11 +410,20 @@ func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo, showExamp
 			fmt.Fprint(w, " ...")
 		}
 		fmt.Fprint(w, ")")
-		if hasTypes && info.ReturnType != values.TypeAny {
-			fmt.Fprintf(w, " → %s", info.ReturnType.String())
-		}
+	case info.Syntax != "":
+		fmt.Fprint(w, info.Syntax)
+	default:
+		fmt.Fprintf(w, "(%s)", name)
+	}
+	if hasTypes && info.ReturnType != values.TypeAny {
+		fmt.Fprintf(w, " → %s", info.ReturnType.String())
 	}
 	fmt.Fprintln(w)
+
+	// Form type
+	if info.TypeLabel != "" {
+		fmt.Fprintf(w, "  Form: %s\n", info.TypeLabel)
+	}
 
 	// Description
 	doc := info.Doc
@@ -473,10 +479,13 @@ func tryStructuredBindingDoc(w *strings.Builder, name, doc, typeLabel string, sh
 		return false
 	}
 	formatPrimitiveDoc(w, name, DocInfo{
-		Doc:       parsed.Doc,
-		Syntax:    parsed.Syntax,
-		TypeLabel: typeLabel,
-		Category:  parsed.Category,
+		Doc:        parsed.Doc,
+		Syntax:     parsed.Syntax,
+		TypeLabel:  typeLabel,
+		ParamNames: parsed.ParamNames,
+		ParamTypes: parsed.ParamTypes,
+		ReturnType: parsed.ReturnType,
+		Category:   parsed.Category,
 	}, showExamples)
 	return true
 }
@@ -508,6 +517,7 @@ func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding,
 				formatPrimitiveDoc(w, name, DocInfo{
 					Doc:        parsed.Doc,
 					Syntax:     parsed.Syntax,
+					TypeLabel:  formTypeLabel(val),
 					ParamNames: parsed.ParamNames,
 					ParamTypes: parsed.ParamTypes,
 					ReturnType: parsed.ReturnType,
@@ -549,6 +559,18 @@ func callableDoc(v values.Value) string {
 		return dc.Doc()
 	}
 	return ""
+}
+
+// formTypeLabel returns the form type label for a callable value.
+func formTypeLabel(v values.Value) string {
+	switch v.(type) {
+	case *machine.ForeignClosure:
+		return "primitive"
+	case *machine.MachineClosure, *machine.CaseLambdaClosure:
+		return "procedure"
+	default:
+		return ""
+	}
 }
 
 func phaseLabel(phase int) string {
