@@ -63,8 +63,8 @@ Finish codebase reading and exploration before the session ends. If a plan is to
 2. **Execution**: Bytecode VM with explicit PC loop (`MachineContext.Run()` in `machine_context.go`), separate eval stack — NOT tree-walking interpreter
 3. **Continuations**: Explicit `MachineContinuation` linked list — NOT Go call stack; enables `call/cc`, dynamic-wind, delimited continuations
 4. **Pipeline**: `Tokenizer → Parser → Expression → Expander → Compiler → VM` (string → tokens → SyntaxValue → *Expression → bytecode → execution)
-5. **Packages (public)**: `wile/` (Engine, embedding API), `values/` (Scheme types), `werr/` (error infrastructure), `registry/` (primitives/extensions), `security/` (authorization), `extensions/` (public extensions)
-6. **Packages (internal)**: `machine/` (VM/compiler/expander), `environment/` (bindings/scopes), `internal/{tokenizer,parser,syntax,match,repl,bootstrap,validate,schemeutil,forms,extensions}`
+5. **Packages (public)**: `wile/` (Engine, embedding API), `values/` (Scheme types), `werr/` (error infrastructure), `registry/` (primitives/extensions), `security/` (authorization), `extensions/` (public extensions), `repl/` (REPL for embedders), `docparse/` (docstring parsing)
+6. **Packages (internal)**: `machine/` (VM/compiler/expander), `environment/` (bindings/scopes), `internal/{tokenizer,parser,syntax,match,bootstrap,validate,schemeutil,forms,extensions}`
 7. **Values**: Go heap objects managed by Go GC — pure Go, no CGo, no custom allocator
 8. **Error handling**: Sentinel + wrap pattern — `werr.NewStaticError` for sentinels, `werr.WrapForeignErrorf` for context; never `fmt.Errorf`
 9. **Hygiene**: Identifiers carry scope sets, resolution checks `bindingScopes ⊆ useScopes`; free template identifiers skip intro scope
@@ -91,13 +91,13 @@ partial consumption of multi-expression input. See `expression.go`.
 ### Package Layering
 
 ```
-werr/ → values/ → environment/ → internal/{tokenizer,parser,syntax,schemeutil,validate,match,bootstrap,extensions,forms,repl}
-  → machine/ + security/ → registry/ → extensions/ → wile/ (root)
+werr/ → values/ → docparse/ → environment/ → internal/{tokenizer,parser,syntax,schemeutil,validate,match,bootstrap,extensions,forms}
+  → machine/ + security/ → registry/ → extensions/ → wile/ (root) → repl/
 ```
 
 Note: `machine/` and `security/` are peers — `machine/` imports `security/` for authorization gate sites, but `security/` has no dependency on `machine/`.
 
-Public API (embedders): `wile/`, `values/`, `werr/`, `registry/`, `security/`, `extensions/*`. Internal: `internal/*`. Machine: public but rarely used directly.
+Public API (embedders): `wile/`, `values/`, `werr/`, `registry/`, `security/`, `extensions/*`, `repl/`, `docparse/`. Internal: `internal/*`. Machine: public but rarely used directly.
 
 ### Security Model
 
