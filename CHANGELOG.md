@@ -7,6 +7,105 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-04-07
+
+### Added
+
+- Add public `repl/` package — Engine-centric REPL with completer, meta-command handler, debug support, and doc provider for embedders (#617)
+- Add public `docparse/` package — structured metadata parsing for Guile-style docstrings
+- Add `Engine.SetDebugger` for session-scoped debugging
+- Add `Engine.ReadExpression` for reader-based single-expression parsing (no EOF required)
+- Add `IsIncompleteInput` helper for REPL multi-line input detection
+
+### Fixed
+
+- Use live registry for doc provider — documentation now reflects runtime state including imported libraries (#619)
+- Show categories for special forms and macros in `,apropos` (#618)
+- Register docstrings from imported libraries at import time (#616)
+
+### Refactored
+
+- Migrate `internal/repl` to public `repl/` package, delete `internal/repl`
+- Promote `docparse` from internal to public package
+
+## [1.10.0] - 2026-04-01
+
+### Added
+
+- Add bytecode disassembler (#603)
+- Add escape analysis for let-bound closures (#604)
+- Add inline let-bound lambda calls as synthetic let forms (#605)
+- Add unified scoped binding API with multi-slot keys to environment package (#607)
+- Add structured docstring metadata for Scheme-defined procedures and stdlib libraries (#613, #614)
+- Add `CallContext` interface for extension decoupling from machine internals (#610)
+- Add opcode metadata consolidation with `OperandKind` enum (#612)
+
+### Fixed
+
+- Fix cross-group and nested ellipsis in syntax-rules expansion (#606)
+- Fix syntax-case pattern binding and compilation coverage (#608)
+- Fix recursive let* binding
+- Eliminate duplicate primitives in topic/apropos listings (#615)
+
+### Refactored
+
+- Tech debt April 2026: Phases 1-7 — machine decomposition, typed Namespace fields, compilation subpackage, expander conventions, PullDrain optimization, winding stack inheritance, FileResolver helpers (#592-#600, #609)
+- Thread outcome sum type — eliminate impossible states (#611)
+
+## [1.10.3] - 2026-03-29
+
+### Added
+
+- Add `procedure-documentation` primitive — Guile-style docstrings for all procedures (#579, #581)
+- Add `apropos`, `doc-topics`, `doc-topic` for documentation search and browsing (#585)
+- Add library-level documentation with `(description)` clause (#586)
+- Add `(available-libraries)` primitive and `Engine.AvailableLibraries` API (#590)
+- Add extension API contract system with contract validator infrastructure (#577, #578)
+- Add Wile MCP server with `eval`, `doc`, `apropos`, `libraries`, `reset` tools and prompts (#588)
+- Add examples to all primitive and library docstrings (#589)
+- Filter examples from `,doc` output by default (#591)
+
+### Refactored
+
+- Move docstring detection from compiler to validator (#584)
+- Extract body annotation passes from machine package (#580)
+- Add Guile-style docstrings to bootstrap procedures, stdlib libraries, and CxR accessors (#582, #583, #587)
+
+## [1.9.11] - 2026-03-25
+
+### Added
+
+- Add `(wile algebra rewrite)` term rewriting library (#576)
+- Add capture analysis for let bindings (#575)
+- Add `StdLibFS` — exported embedded standard library filesystem for embedders
+- Add embedded stdlib with `fs.Sub`-based path resolution, CLI migration to public Engine API, optimizer double-restore fix (#573)
+
+### Changed
+
+- Wire process extension into `AllExtensions` and bootstrap (#574)
+
+## [1.9.5] - 2026-03-25
+
+### Added
+
+- Add `(wile algebra)` composable algebraic structures library (#572)
+- Make `let`, `let*`, `letrec`, `letrec*` core compiled forms with `ValidatedLet`/`LetKind` enum (#570)
+- Add opaque value system for Go object wrapping (#566)
+- Add OS primitives — directory operations and process extension (#565)
+- Add full-pipeline degenerate form tests (#571)
+
+### Fixed
+
+- Harden I/O port resolution, error wrapping, and load path handling (#568)
+- Reject malformed bindings in expander (#570)
+- Predeclare defines from begin blocks in let bodies (#570)
+- Address crosscheck findings across codebase (#567)
+
+### Performance
+
+- Replace `sync.Pool` with `FreeList` for env frames — -14% geo mean (#563)
+- Reduce GC pressure via FreeList migration and pre-sized bindings — -8.9% geo mean (#563)
+
 ## [1.9.0] - 2026-03-22
 
 ### Changed (Breaking)
