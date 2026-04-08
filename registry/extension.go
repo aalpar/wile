@@ -53,8 +53,7 @@ type ExtensionFunc struct {
 
 // NewExtension creates an Extension from a name and function.
 func NewExtension(name string, fn func(*Registry) error) Extension {
-	q := &ExtensionFunc{name: name, fn: fn}
-	return q
+	return NewDescribedExtension(name, "", fn)
 }
 
 // NewDescribedExtension creates an Extension with a human-readable description.

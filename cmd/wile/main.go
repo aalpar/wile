@@ -404,8 +404,11 @@ func runEval(ctx context.Context, eng *wile.Engine, exprs []string) {
 
 // runREPL runs an interactive Read-Eval-Print Loop using the repl package
 func runREPL(ctx context.Context, eng *wile.Engine) {
-	docProv := repl.NewRegistryDocProvider(
-		eng.Environment().Namespace().Registry().(*registry.Registry))
+	reg, ok := eng.Environment().Namespace().Registry().(*registry.Registry)
+	if !ok {
+		Failf(nil, "internal error: namespace registry has unexpected type")
+	}
+	docProv := repl.NewRegistryDocProvider(reg)
 	r := repl.New(eng, repl.WithDocProvider(docProv))
 	err := r.Run(ctx)
 	if err != nil {

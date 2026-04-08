@@ -622,7 +622,7 @@ func registerExtensionLibraries(reg *registry.Registry, env *environment.Environ
 
 		libName := compilation.NewLibraryName(parts...)
 		lib := compilation.NewCompiledLibrary(libName, env)
-		if snap.describer != nil {
+		if snap.describer != nil && snap.describer.Description() != "" {
 			lib.Description = snap.describer.Description()
 		}
 		for _, name := range names {
