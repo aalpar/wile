@@ -199,7 +199,8 @@ names := completer.BindingNames()
 **MetaCommandHandler alone** (MCP server):
 ```go
 eng, _ := wile.NewEngine(ctx)
-docProv := repl.NewRegistryDocProvider(eng.Registry())
+reg, _ := eng.Environment().Namespace().Registry().(*registry.Registry)
+docProv := repl.NewRegistryDocProvider(reg)
 meta := repl.NewMetaCommandHandler(eng, repl.WithMetaDocProvider(docProv))
 meta.SetPager("")
 meta.Handle(",doc map", os.Stdout)
@@ -214,7 +215,8 @@ eng.SetDebugger(dbg.Debugger())
 
 **DocProvider alone** (documentation tooling):
 ```go
-docProv := repl.NewRegistryDocProvider(eng.Registry())
+reg, _ := eng.Environment().Namespace().Registry().(*registry.Registry)
+docProv := repl.NewRegistryDocProvider(reg)
 info, found := docProv.LookupDoc("map")
 results := docProv.Search("list")
 ```
@@ -222,7 +224,8 @@ results := docProv.Search("list")
 **Full REPL** (batteries included):
 ```go
 eng, _ := wile.NewEngine(ctx, wile.WithAllExtensions())
-docProv := repl.NewRegistryDocProvider(eng.Registry())
+reg, _ := eng.Environment().Namespace().Registry().(*registry.Registry)
+docProv := repl.NewRegistryDocProvider(reg)
 r := repl.New(eng, repl.WithDocProvider(docProv))
 r.Run(ctx)
 ```
@@ -230,7 +233,8 @@ r.Run(ctx)
 **Full REPL** (customized):
 ```go
 eng, _ := wile.NewEngine(ctx, wile.WithAllExtensions())
-docProv := repl.NewRegistryDocProvider(eng.Registry())
+reg, _ := eng.Environment().Namespace().Registry().(*registry.Registry)
+docProv := repl.NewRegistryDocProvider(reg)
 dbg := repl.NewDebugContext()
 meta := repl.NewMetaCommandHandler(eng, repl.WithMetaDocProvider(docProv))
 completer := repl.NewCompleter(eng, meta.Commands())

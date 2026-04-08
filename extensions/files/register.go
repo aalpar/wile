@@ -31,7 +31,9 @@ import (
 var withFileMacroSource string
 
 // Extension is the file I/O extension.
-var Extension = registry.NewExtension("files", AddToRegistry)
+var Extension = registry.NewDescribedExtension("files",
+	"Filesystem operations: file I/O, directory traversal, temporary files.",
+	AddToRegistry)
 
 // Builder aggregates all file registration functions.
 var Builder = registry.NewRegistryBuilder(addPrimitives, addMacros)
@@ -74,5 +76,9 @@ func addPrimitives(r *registry.Registry) error {
 
 func addMacros(r *registry.Registry) error {
 	r.AddMacroSource(withFileMacroSource)
+	r.AddDocumentation("with-input-from-file",
+		"Open FILENAME for input and call THUNK with current-input-port\nbound to the opened port. Closes the port when THUNK returns.\n\nCategory: files")
+	r.AddDocumentation("with-output-to-file",
+		"Open FILENAME for output and call THUNK with current-output-port\nbound to the opened port. Closes the port when THUNK returns.\n\nCategory: files")
 	return nil
 }

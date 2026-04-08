@@ -32,7 +32,9 @@ import (
 // strings, characters) under the name "all". When used in AllExtensions() where
 // sub-extensions are listed individually, this avoids double-registration.
 // Use Builder.AddToRegistry for standalone use that includes all sub-extensions.
-var Extension = registry.NewExtension("all", SafeBuilder.AddToRegistry)
+var Extension = registry.NewDescribedExtension("all",
+	"All Wile extensions combined.",
+	SafeBuilder.AddToRegistry)
 
 // Builder aggregates all extension registration functions.
 var Builder = registry.NewRegistryBuilder(
@@ -66,7 +68,9 @@ var SafeBuilder = registry.NewRegistryBuilder(
 
 // SafeExtension includes records, promises, and additional string/character
 // operations without any privileged sub-extensions.
-var SafeExtension = registry.NewExtension("all-safe", SafeBuilder.AddToRegistry)
+var SafeExtension = registry.NewDescribedExtension("all-safe",
+	"Safe subset: records, promises, strings, characters (no filesystem, eval, or system).",
+	SafeBuilder.AddToRegistry)
 
 func addRecords(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{

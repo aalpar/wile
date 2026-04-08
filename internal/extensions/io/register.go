@@ -30,7 +30,9 @@ import (
 var portProcSource string
 
 // Extension is the I/O extension.
-var Extension = registry.NewExtension("io", AddToRegistry)
+var Extension = registry.NewDescribedExtension("io",
+	"I/O ports: reading, writing, string/bytevector ports, display, write.",
+	AddToRegistry)
 
 // Builder aggregates all I/O registration functions.
 var Builder = registry.NewRegistryBuilder(
@@ -153,6 +155,12 @@ func addPortState(r *registry.Registry) error {
 	r.AddGlobalValue("current-input-port", GetCurrentInputPortParam())
 	r.AddGlobalValue("current-output-port", GetCurrentOutputPortParam())
 	r.AddGlobalValue("current-error-port", GetCurrentErrorPortParam())
+	r.AddDocumentation("current-input-port",
+		"Parameter holding the default input port.\nParameterize to redirect standard input within a dynamic extent.\n\nCategory: ports")
+	r.AddDocumentation("current-output-port",
+		"Parameter holding the default output port.\nParameterize to redirect standard output within a dynamic extent.\n\nCategory: ports")
+	r.AddDocumentation("current-error-port",
+		"Parameter holding the default error port.\nParameterize to redirect standard error within a dynamic extent.\n\nCategory: ports")
 	return nil
 }
 

@@ -20,7 +20,9 @@ import (
 )
 
 // Extension is the namespace extension.
-var Extension = registry.NewExtension("namespace", AddToRegistry)
+var Extension = registry.NewDescribedExtension("namespace",
+	"Namespace management: environment creation, binding inspection.",
+	AddToRegistry)
 
 // Builder aggregates all namespace registration functions.
 var Builder = registry.NewRegistryBuilder(addPrimitives)

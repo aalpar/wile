@@ -20,7 +20,9 @@ import (
 )
 
 // Extension is the eval extension.
-var Extension = registry.NewExtension("eval", AddToRegistry)
+var Extension = registry.NewDescribedExtension("eval",
+	"Code evaluation: eval, load, include, macroexpand.",
+	AddToRegistry)
 
 // Builder aggregates all eval registration functions.
 var Builder = registry.NewRegistryBuilder(addPrimitives)

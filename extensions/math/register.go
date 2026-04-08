@@ -22,7 +22,9 @@ import (
 )
 
 // Extension is the math extension.
-var Extension = registry.NewExtension("math", AddToRegistry)
+var Extension = registry.NewDescribedExtension("math",
+	"Extended math: trigonometry, logarithms, bitwise operations.",
+	AddToRegistry)
 
 // Builder aggregates all math registration functions.
 var Builder = registry.NewRegistryBuilder(addPrimitives)

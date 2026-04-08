@@ -29,6 +29,13 @@ type LibraryNamer interface {
 	LibraryName() []string
 }
 
+// Describer is an optional interface that extensions can implement
+// to provide a human-readable library description. The description
+// is shown by ,doc (wile <ext>) and ,libraries in the REPL.
+type Describer interface {
+	Description() string
+}
+
 // Closeable is an opt-in interface for extensions that hold resources
 // (goroutines, file handles, connections) and need cleanup when the
 // engine is shut down. Extensions that implement this interface will
@@ -39,19 +46,35 @@ type Closeable interface {
 
 // ExtensionFunc adapts a function to the Extension interface.
 type ExtensionFunc struct {
-	name string
-	fn   func(*Registry) error
+	name        string
+	description string
+	fn          func(*Registry) error
 }
 
 // NewExtension creates an Extension from a name and function.
 func NewExtension(name string, fn func(*Registry) error) Extension {
-	q := &ExtensionFunc{name: name, fn: fn}
+	return NewDescribedExtension(name, "", fn)
+}
+
+// NewDescribedExtension creates an Extension with a human-readable description.
+// The description is surfaced by ,doc and ,libraries in the REPL.
+func NewDescribedExtension(name, description string, fn func(*Registry) error) Extension {
+	q := &ExtensionFunc{
+		name:        name,
+		description: description,
+		fn:          fn,
+	}
 	return q
 }
 
 // Name returns the extension name.
 func (p *ExtensionFunc) Name() string {
 	return p.name
+}
+
+// Description returns the extension's human-readable description.
+func (p *ExtensionFunc) Description() string {
+	return p.description
 }
 
 // AddToRegistry registers primitives with the registry.

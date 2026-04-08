@@ -69,6 +69,7 @@ type extSnapshot struct {
 	startIndex int
 	endIndex   int
 	namer      registry.LibraryNamer // nil if not implemented
+	describer  registry.Describer    // nil if not implemented
 }
 
 // NewNamespace creates a fully initialized namespace with a registry,
@@ -263,11 +264,17 @@ func buildRegistry(cfg *engineConfig) (*registry.Registry, []extSnapshot, []regi
 		if ok {
 			namer = n
 		}
+		var describer registry.Describer
+		d, ok := ext.(registry.Describer)
+		if ok {
+			describer = d
+		}
 		snapshots = append(snapshots, extSnapshot{
 			name:       ext.Name(),
 			startIndex: startIdx,
 			endIndex:   endIdx,
 			namer:      namer,
+			describer:  describer,
 		})
 
 		c, ok := ext.(registry.Closeable)
@@ -615,6 +622,9 @@ func registerExtensionLibraries(reg *registry.Registry, env *environment.Environ
 
 		libName := compilation.NewLibraryName(parts...)
 		lib := compilation.NewCompiledLibrary(libName, env)
+		if snap.describer != nil && snap.describer.Description() != "" {
+			lib.Description = snap.describer.Description()
+		}
 		for _, name := range names {
 			lib.AddExport(name, "")
 		}
