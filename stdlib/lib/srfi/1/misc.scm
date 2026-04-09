@@ -44,7 +44,7 @@
         head)))
 
 (define (zip . lists)
-  "Return a list of lists, where the i-th sublist contains the\ni-th element from each of LISTS. Stops at the shortest list.\nEquivalent to (map list list1 list2 ...).\n\nExamples:\n  (zip '(a b c) '(1 2 3))  => ((a 1) (b 2) (c 3))\n  (zip '(a b) '(1 2 3))    => ((a 1) (b 2))\n\nParameters:\n  lists : list\nReturns: list\nCategory: srfi-1"
+  "Return a list of lists, where the i-th sublist contains the\ni-th element from each of LISTS. Stops at the shortest list.\nEquivalent to (map list list1 list2 ...).\n\nExamples:\n  (zip '(a b c) '(1 2 3))  => ((a 1) (b 2) (c 3))\n  (zip '(a b) '(1 2 3))    => ((a 1) (b 2))\n\nParameters:\n  lists : list\nReturns: list\nCategory: srfi-1\nKeywords: interleave, transpose, pair up, combine lists"
   (apply map list lists))
 
 (define (unzip1 ls)

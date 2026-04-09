@@ -3,7 +3,7 @@
 ;; BSD-style license: http://synthcode.com/license.txt
 
 (define (fold kons knil ls . lists)
-  "Accumulate across LS by applying KONS to each element and\nthe running accumulator, starting from KNIL. For a single list,\ncomputes (kons eN ... (kons e1 knil)) left-to-right.\nFor multiple lists, KONS receives one element from each list\nplus the accumulator. Stops at the shortest list.\n\nExamples:\n  (fold + 0 '(1 2 3))          => 6\n  (fold cons '() '(1 2 3))     => (3 2 1)\n  (fold cons '(4 5) '(1 2 3))  => (3 2 1 4 5)\n\nParameters:\n  kons : procedure\n  knil : any\n  ls : list\n  lists : list\nReturns: any\nCategory: srfi-1\n\nSee also: `fold-right', `reduce', `pair-fold'."
+  "Accumulate across LS by applying KONS to each element and\nthe running accumulator, starting from KNIL. For a single list,\ncomputes (kons eN ... (kons e1 knil)) left-to-right.\nFor multiple lists, KONS receives one element from each list\nplus the accumulator. Stops at the shortest list.\n\nExamples:\n  (fold + 0 '(1 2 3))          => 6\n  (fold cons '() '(1 2 3))     => (3 2 1)\n  (fold cons '(4 5) '(1 2 3))  => (3 2 1 4 5)\n\nParameters:\n  kons : procedure\n  knil : any\n  ls : list\n  lists : list\nReturns: any\nCategory: srfi-1\nKeywords: accumulate, foldl, left fold, aggregate, inject\n\nSee also: `fold-right', `reduce', `pair-fold'."
   (if (null? lists)
       (let lp ((ls ls) (acc knil))
         (if (pair? ls) (lp (cdr ls) (kons (car ls) acc)) acc))
@@ -43,7 +43,7 @@
             knil))))
 
 (define (reduce f identity ls)
-  "Reduce LS using binary function F with IDENTITY as the\ndefault for the empty list. For non-empty lists, uses the\nfirst element as the initial accumulator and folds over the\nrest, so F need not be applied to IDENTITY.\n\nExamples:\n  (reduce + 0 '(1 2 3))  => 6\n  (reduce max 0 '(3 1 4 1 5))  => 5\n  (reduce + 0 '())       => 0\n\nParameters:\n  f : procedure\n  identity : any\n  ls : list\nReturns: any\nCategory: srfi-1\n\nSee also: `fold', `reduce-right'."
+  "Reduce LS using binary function F with IDENTITY as the\ndefault for the empty list. For non-empty lists, uses the\nfirst element as the initial accumulator and folds over the\nrest, so F need not be applied to IDENTITY.\n\nExamples:\n  (reduce + 0 '(1 2 3))  => 6\n  (reduce max 0 '(3 1 4 1 5))  => 5\n  (reduce + 0 '())       => 0\n\nParameters:\n  f : procedure\n  identity : any\n  ls : list\nReturns: any\nCategory: srfi-1\nKeywords: aggregate, accumulate, collapse\n\nSee also: `fold', `reduce-right'."
   (if (null? ls) identity (fold f (car ls) (cdr ls))))
 
 (define (reduce-right f identity ls)
@@ -117,11 +117,11 @@
           (if (pair? rev) (append-reverse rev ls) ls)))))
 
 (define (filter pred ls)
-  "Return a list containing every element of LS that satisfies\nPRED. Preserves element order. The complement of remove.\n\nExamples:\n  (filter even? '(1 2 3 4 5))  => (2 4)\n  (filter string? '(1 \"a\" 2 \"b\"))  => (\"a\" \"b\")\n\nParameters:\n  pred : procedure\n  ls : list\nReturns: list\nCategory: srfi-1\n\nSee also: `remove', `partition'."
+  "Return a list containing every element of LS that satisfies\nPRED. Preserves element order. The complement of remove.\n\nExamples:\n  (filter even? '(1 2 3 4 5))  => (2 4)\n  (filter string? '(1 \"a\" 2 \"b\"))  => (\"a\" \"b\")\n\nParameters:\n  pred : procedure\n  ls : list\nReturns: list\nCategory: srfi-1\nKeywords: select, where, keep, grep\n\nSee also: `remove', `partition'."
   (remove (lambda (x) (not (pred x))) ls))
 
 (define (partition pred ls)
-  "Partition LS into two lists: elements satisfying PRED and\nelements that do not. Returns two values preserving the\noriginal order within each partition.\n\nExamples:\n  (partition even? '(1 2 3 4 5))  => (2 4) (1 3 5)\n\nParameters:\n  pred : procedure\n  ls : list\nReturns: list\nCategory: srfi-1\n\nSee also: `filter', `remove'."
+  "Partition LS into two lists: elements satisfying PRED and\nelements that do not. Returns two values preserving the\noriginal order within each partition.\n\nExamples:\n  (partition even? '(1 2 3 4 5))  => (2 4) (1 3 5)\n\nParameters:\n  pred : procedure\n  ls : list\nReturns: list\nCategory: srfi-1\nKeywords: split, separate, classify, group by predicate\n\nSee also: `filter', `remove'."
   (let lp ((ls ls) (good '()) (bad '()))
     (cond ((null? ls) (values (reverse! good) (reverse! bad)))
           ((pred (car ls)) (lp (cdr ls) (cons (car ls) good) bad))

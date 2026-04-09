@@ -16,7 +16,7 @@
 (define delete! delete)
 
 (define (delete-duplicates ls . o)
-  "Remove duplicate elements from LS, preserving the first\noccurrence of each element. The optional second argument is\nthe equality predicate, defaulting to equal?.\n\nExamples:\n  (delete-duplicates '(1 2 1 3 2 4))  => (1 2 3 4)\n  (delete-duplicates '(a a b b c))    => (a b c)\n\nParameters:\n  ls : list\n  o : list\nReturns: list\nCategory: srfi-1\n\nSee also: `delete'."
+  "Remove duplicate elements from LS, preserving the first\noccurrence of each element. The optional second argument is\nthe equality predicate, defaulting to equal?.\n\nExamples:\n  (delete-duplicates '(1 2 1 3 2 4))  => (1 2 3 4)\n  (delete-duplicates '(a a b b c))    => (a b c)\n\nParameters:\n  ls : list\n  o : list\nReturns: list\nCategory: srfi-1\nKeywords: unique, deduplicate, distinct, uniq, nub\n\nSee also: `delete'."
   (let ((eq (if (pair? o) (car o) equal?)))
     (let lp ((ls ls) (res '()))
       (if (pair? ls)

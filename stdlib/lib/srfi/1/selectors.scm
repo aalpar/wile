@@ -34,7 +34,7 @@
   (values (car x) (cdr x)))
 
 (define (take ls i)
-  "Return a freshly allocated list of the first I elements of LS.\nIt is an error if LS has fewer than I elements.\n\nExamples:\n  (take '(a b c d e) 3)  => (a b c)\n  (take '(1 2 3) 0)      => ()\n\nParameters:\n  ls : list\n  i : integer\nReturns: list\nCategory: srfi-1\n\nSee also: `drop', `split-at', `take-right'."
+  "Return a freshly allocated list of the first I elements of LS.\nIt is an error if LS has fewer than I elements.\n\nExamples:\n  (take '(a b c d e) 3)  => (a b c)\n  (take '(1 2 3) 0)      => ()\n\nParameters:\n  ls : list\n  i : integer\nReturns: list\nCategory: srfi-1\nKeywords: first n, prefix, head, slice\n\nSee also: `drop', `split-at', `take-right'."
   (let lp ((i i) (ls ls) (res '()))
     (if (<= i 0)
         (reverse! res)
@@ -49,7 +49,7 @@
         ls)))
 
 (define (drop ls i)
-  "Return the tail of LS after skipping the first I elements.\nShares structure with the tail of LS.\n\nExamples:\n  (drop '(a b c d e) 2)  => (c d e)\n  (drop '(1 2 3) 0)      => (1 2 3)\n\nParameters:\n  ls : list\n  i : integer\nReturns: list\nCategory: srfi-1\n\nSee also: `take', `split-at', `drop-right'."
+  "Return the tail of LS after skipping the first I elements.\nShares structure with the tail of LS.\n\nExamples:\n  (drop '(a b c d e) 2)  => (c d e)\n  (drop '(1 2 3) 0)      => (1 2 3)\n\nParameters:\n  ls : list\n  i : integer\nReturns: list\nCategory: srfi-1\nKeywords: skip, tail from, remove prefix\n\nSee also: `take', `split-at', `drop-right'."
   (if (<= i 0) ls (drop (cdr ls) (- i 1))))
 
 (define (take-right ls i)

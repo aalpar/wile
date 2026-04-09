@@ -33,7 +33,8 @@ var AddToRegistry = Builder.AddToRegistry
 func addChannels(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "make-channel", ParamCount: 1, IsVariadic: true, Impl: PrimMakeChannel,
-			Doc: "Creates a new Go channel. Optional buffer size (default 0 for unbuffered).", ParamNames: []string{"size"}, Category: "channels"},
+			Doc: "Creates a new Go channel. Optional buffer size (default 0 for unbuffered).", ParamNames: []string{"size"}, Category: "channels",
+			Keywords: []string{"queue", "message passing", "pipe", "concurrent"}},
 		{Name: "channel?", ParamCount: 1, Impl: PrimChannelQ,
 			Doc: "Returns #t if OBJ is a Go channel.", ParamNames: []string{"obj"}, Category: "channels"},
 		{Name: "channel-send!", ParamCount: 2, Impl: PrimChannelSend,
@@ -111,7 +112,8 @@ func addOnce(r *registry.Registry) error {
 func addAtomic(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "make-atomic", ParamCount: 1, Impl: PrimMakeAtomic,
-			Doc: "Creates a new atomic value box initialized with VALUE. Provides lock-free concurrent access.", ParamNames: []string{"value"}, Category: "atomic"},
+			Doc: "Creates a new atomic value box initialized with VALUE. Provides lock-free concurrent access.", ParamNames: []string{"value"}, Category: "atomic",
+			Keywords: []string{"lock-free", "CAS", "compare-and-swap", "concurrent"}},
 		{Name: "atomic?", ParamCount: 1, Impl: PrimAtomicQ,
 			Doc: "Returns #t if OBJ is an atomic value box.", ParamNames: []string{"obj"}, Category: "atomic"},
 		{Name: "atomic-load", ParamCount: 1, Impl: PrimAtomicLoad,
