@@ -54,19 +54,24 @@ func addPrimitives(r *registry.Registry) error {
 		{Name: "sqrt", ParamCount: 1, Impl: PrimSqrt,
 			Doc: "Returns the square root of Z. Returns a complex number for negative real arguments.", ParamNames: []string{"z"}, Category: "math"},
 		{Name: "expt", ParamCount: 2, Impl: PrimExpt,
-			Doc: "Returns Z1 raised to the power Z2. Uses exact arithmetic when both arguments are exact integers.", ParamNames: []string{"z1", "z2"}, Category: "math"},
+			Doc: "Returns Z1 raised to the power Z2. Uses exact arithmetic when both arguments are exact integers.", ParamNames: []string{"z1", "z2"}, Category: "math",
+			Keywords: []string{"power", "exponentiation", "raise", "pow"}},
 	}, registry.PhaseRuntime)
 
 	// Rounding and division
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "floor", ParamCount: 1, Impl: PrimFloor,
-			Doc: "Returns the largest integer not greater than X (rounds toward -infinity). Preserves exactness.", ParamNames: []string{"x"}, Category: "math"},
+			Doc: "Returns the largest integer not greater than X (rounds toward -infinity). Preserves exactness.", ParamNames: []string{"x"}, Category: "math",
+			Keywords: []string{"round down", "toward negative infinity"}},
 		{Name: "ceiling", ParamCount: 1, Impl: PrimCeiling,
-			Doc: "Returns the smallest integer not less than X (rounds toward +infinity). Preserves exactness.", ParamNames: []string{"x"}, Category: "math"},
+			Doc: "Returns the smallest integer not less than X (rounds toward +infinity). Preserves exactness.", ParamNames: []string{"x"}, Category: "math",
+			Keywords: []string{"round up", "ceil", "toward positive infinity"}},
 		{Name: "truncate", ParamCount: 1, Impl: PrimTruncate,
-			Doc: "Returns the integer closest to X toward zero. Preserves exactness.", ParamNames: []string{"x"}, Category: "math"},
+			Doc: "Returns the integer closest to X toward zero. Preserves exactness.", ParamNames: []string{"x"}, Category: "math",
+			Keywords: []string{"round toward zero", "trunc", "int"}},
 		{Name: "round", ParamCount: 1, Impl: PrimRound,
-			Doc: "Returns the closest integer to X, rounding ties to even (banker's rounding). Preserves exactness.", ParamNames: []string{"x"}, Category: "math"},
+			Doc: "Returns the closest integer to X, rounding ties to even (banker's rounding). Preserves exactness.", ParamNames: []string{"x"}, Category: "math",
+			Keywords: []string{"round to nearest", "banker's rounding", "round half even"}},
 		{Name: "floor/", ParamCount: 2, Impl: PrimFloorDiv,
 			Doc: "Returns two values: the floor quotient and floor remainder of N1 divided by N2.", ParamNames: []string{"n1", "n2"}, Category: "math"},
 		{Name: "floor-quotient", ParamCount: 2, Impl: PrimFloorQuotient,
@@ -122,9 +127,11 @@ func addPrimitives(r *registry.Registry) error {
 	// Number/string conversion
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "number->string", ParamCount: 2, IsVariadic: true, Impl: PrimNumberToString,
-			Doc: "Converts Z to its string representation. Optional RADIX (2, 8, 10, or 16) controls the base for integers.", ParamNames: []string{"z", "radix"}, Category: "math"},
+			Doc: "Converts Z to its string representation. Optional RADIX (2, 8, 10, or 16) controls the base for integers.", ParamNames: []string{"z", "radix"}, Category: "math",
+			Keywords: []string{"format number", "serialize", "to string", "radix conversion"}},
 		{Name: "string->number", ParamCount: 2, IsVariadic: true, Impl: PrimStringToNumber,
-			Doc: "Parses STRING as a number. Returns #f if STRING is not a valid number. Optional RADIX overrides the default base 10.", ParamNames: []string{"string", "radix"}, Category: "math"},
+			Doc: "Parses STRING as a number. Returns #f if STRING is not a valid number. Optional RADIX overrides the default base 10.", ParamNames: []string{"string", "radix"}, Category: "math",
+			Keywords: []string{"parse number", "deserialize", "from string", "atoi"}},
 	}, registry.PhaseRuntime)
 
 	return nil

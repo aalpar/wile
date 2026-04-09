@@ -32,9 +32,11 @@ var AddToRegistry = Builder.AddToRegistry
 func addPrimitives(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "system", ParamCount: 1, Impl: PrimSystem,
-			Doc: "Runs COMMAND as a shell command via /bin/sh -c. Returns the exit code as an exact integer.", ParamNames: []string{"command"}, Category: "process"},
+			Doc: "Runs COMMAND as a shell command via /bin/sh -c. Returns the exit code as an exact integer.", ParamNames: []string{"command"}, Category: "process",
+			Keywords: []string{"shell", "exec", "run command", "subprocess"}},
 		{Name: "process-spawn", ParamCount: 2, IsVariadic: true, Impl: PrimProcessSpawn,
-			Doc: "Starts a child process with piped stdin/stdout/stderr. Returns a process object.", ParamNames: []string{"command", "args"}, Category: "process"},
+			Doc: "Starts a child process with piped stdin/stdout/stderr. Returns a process object.", ParamNames: []string{"command", "args"}, Category: "process",
+			Keywords: []string{"fork", "exec", "launch", "subprocess", "popen"}},
 		{Name: "process-stdout", ParamCount: 1, Impl: PrimProcessStdout,
 			Doc: "Returns the stdout of PROCESS as a textual input port.", ParamNames: []string{"process"}, Category: "process"},
 		{Name: "process-stderr", ParamCount: 1, Impl: PrimProcessStderr,
