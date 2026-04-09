@@ -114,12 +114,9 @@ func (p *RegistryDocProvider) lookupNonPrimitiveDoc(name string) (DocInfo, bool)
 	return DocInfo{}, false
 }
 
-// Search returns entries whose name, doc, or category contains pattern
-// (case-insensitive substring match). Results are sorted by name.
-// Delegates to registry.SearchDoc for unified search across all sources.
-// On first call, lazily builds a LibraryExportIndex so unloaded library
-// exports are discoverable via apropos.
-func (p *RegistryDocProvider) Search(ctx context.Context, pattern string) []registry.DocSearchResult {
+// ensureExportIndex builds the LibraryExportIndex on first call (via sync.Once).
+// Subsequent calls are no-ops. Safe for concurrent use.
+func (p *RegistryDocProvider) ensureExportIndex(ctx context.Context) {
 	p.indexOnce.Do(func() {
 		if p.env == nil {
 			return
@@ -135,7 +132,35 @@ func (p *RegistryDocProvider) Search(ctx context.Context, pattern string) []regi
 		}
 		p.exportIndex = idx
 	})
+}
+
+// Search returns entries whose name, doc, or category contains pattern
+// (case-insensitive substring match). Results are sorted by name.
+// Delegates to registry.SearchDoc for unified search across all sources.
+// On first call, lazily builds a LibraryExportIndex so unloaded library
+// exports are discoverable via apropos.
+func (p *RegistryDocProvider) Search(ctx context.Context, pattern string) []registry.DocSearchResult {
+	p.ensureExportIndex(ctx)
 	return registry.SearchDoc(p.reg, p.env, p.libraryRegistry(), p.exportIndex, pattern)
+}
+
+// UnloadedLibraries returns summaries of libraries that are discoverable via
+// the file resolver but not yet imported. Returns nil if no export index is
+// available. Libraries already present in the library registry are excluded.
+func (p *RegistryDocProvider) UnloadedLibraries(ctx context.Context) []*compilation.LibrarySummary {
+	p.ensureExportIndex(ctx)
+	if p.exportIndex == nil {
+		return nil
+	}
+	libReg := p.libraryRegistry()
+	var q []*compilation.LibrarySummary
+	for _, summary := range p.exportIndex.Entries() {
+		if libReg != nil && libReg.Lookup(summary.Name) != nil {
+			continue
+		}
+		q = append(q, summary)
+	}
+	return q
 }
 
 // Categories returns sorted category names, excluding the empty-string category.

@@ -612,6 +612,33 @@ func TestCmdLibraries(t *testing.T) {
 	})
 }
 
+func TestCmdLibraries_UnloadedFromExportIndex(t *testing.T) {
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx,
+		wile.WithAllExtensions(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithLibraryPaths("."),
+	)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Do NOT import (wile algebra) — it should appear as an available library.
+	env := eng.Environment()
+	reg, ok := env.Namespace().Registry().(*registry.Registry)
+	qt.Assert(t, ok, qt.IsTrue)
+	docProv := NewRegistryDocProvider(reg, env)
+
+	var buf bytes.Buffer
+	h := NewMetaCommandHandler(eng, WithMetaDocProvider(docProv))
+	h.SetPager("")
+	h.cmdLibraries(&buf)
+	output := buf.String()
+
+	qt.Assert(t, strings.Contains(output, "Available libraries"), qt.IsTrue,
+		qt.Commentf("should show unloaded libraries section; got: %q", output))
+	qt.Assert(t, strings.Contains(output, "(wile algebra)"), qt.IsTrue,
+		qt.Commentf("should list (wile algebra) as available; got: %q", output))
+}
+
 func TestCmdDisassemble(t *testing.T) {
 	ctx := context.Background()
 	eng := newTestEngine(t)
