@@ -211,6 +211,46 @@ func TestSearchDoc_EnvironmentBindings(t *testing.T) {
 	c.Assert(slices.Contains(names, "car"), qt.IsTrue)
 }
 
+func TestSearchDoc_CoreKeywordsDiscovery(t *testing.T) {
+	c := qt.New(t)
+	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	c.Assert(err, qt.IsNil)
+
+	reg, ok := env.Namespace().Registry().(*registry.Registry)
+	c.Assert(ok, qt.IsTrue)
+
+	// Verify that common-name keywords on core primitives are discoverable
+	// via SearchDoc. Each case searches a term that does NOT appear in the
+	// primitive's name, doc, or category — only in its Keywords field.
+	tcs := []struct {
+		name    string
+		pattern string
+		expect  string
+	}{
+		{name: "dictionary finds make-hashtable", pattern: "dictionary", expect: "make-hashtable"},
+		{name: "slice finds substring", pattern: "slice", expect: "substring"},
+		{name: "head finds car", pattern: "head", expect: "car"},
+		{name: "tail finds cdr", pattern: "tail", expect: "cdr"},
+		{name: "ord finds char->integer", pattern: "ord", expect: "char->integer"},
+		{name: "concat finds string-append", pattern: "concat", expect: "string-append"},
+		{name: "greatest common divisor finds gcd", pattern: "greatest common divisor", expect: "gcd"},
+		{name: "float finds inexact", pattern: "float", expect: "inexact"},
+		{name: "integer division finds quotient", pattern: "integer division", expect: "quotient"},
+		{name: "nth finds list-ref", pattern: "nth", expect: "list-ref"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			results := registry.SearchDoc(reg, nil, nil, nil, tc.pattern)
+			names := make([]string, len(results))
+			for i, r := range results {
+				names[i] = r.Name
+			}
+			c.Assert(slices.Contains(names, tc.expect), qt.IsTrue,
+				qt.Commentf("searching %q should find %q; got %v", tc.pattern, tc.expect, names))
+		})
+	}
+}
+
 func TestSearchDoc_Libraries(t *testing.T) {
 	c := qt.New(t)
 	reg := registry.NewRegistry()
