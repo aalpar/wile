@@ -33,9 +33,11 @@ var AddToRegistry = Builder.AddToRegistry
 func addPrimitives(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "eval", ParamCount: 1, IsVariadic: true, Impl: PrimEval,
-			Doc: "Evaluates expression in the current or given environment. With one argument, uses the current namespace.\n\nExamples:\n  (eval '(+ 1 2))                                   => 3\n  (eval '(* 6 7) (scheme-report-environment 7))      => 42", ParamNames: []string{"expr"}, Category: "eval"},
+			Doc: "Evaluates expression in the current or given environment. With one argument, uses the current namespace.\n\nExamples:\n  (eval '(+ 1 2))                                   => 3\n  (eval '(* 6 7) (scheme-report-environment 7))      => 42", ParamNames: []string{"expr"}, Category: "eval",
+			Keywords: []string{"evaluate", "execute", "interpret", "run expression"}},
 		{Name: "load", ParamCount: 1, Impl: PrimLoad,
-			Doc: "Reads and evaluates all expressions from a Scheme source file in the current environment.\n\nExamples:\n  (load \"lib.scm\")  ; evaluates all forms in lib.scm", ParamNames: []string{"filename"}, Category: "eval"},
+			Doc: "Reads and evaluates all expressions from a Scheme source file in the current environment.\n\nExamples:\n  (load \"lib.scm\")  ; evaluates all forms in lib.scm", ParamNames: []string{"filename"}, Category: "eval",
+			Keywords: []string{"source", "include file", "run file"}},
 		{Name: "current-load-path", Impl: PrimCurrentLoadPath,
 			Doc: "Returns the full path of the file currently being loaded, or #f if not inside load.\n\nExamples:\n  (current-load-path)  ; inside load => \"/path/to/file.scm\"\n  (current-load-path)  ; at REPL => #f", Category: "eval"},
 		{Name: "current-load-directory", Impl: PrimCurrentLoadDirectory,
@@ -49,7 +51,8 @@ func addPrimitives(r *registry.Registry) error {
 		{Name: "environment", ParamCount: 1, IsVariadic: true, Impl: PrimEnvironment,
 			Doc: "Creates an environment populated by the given import specs. Each spec names a library to import.\n\nExamples:\n  (eval '(+ 1 2) (environment '(scheme base)))  => 3", ParamNames: []string{"import-spec"}, Category: "eval"},
 		{Name: "expand", ParamCount: 1, Impl: PrimExpand,
-			Doc: "Fully macro-expands a syntax object or datum. Returns the expanded syntax.\n\nExamples:\n  (expand '(and a b))  ; => expanded form using if", ParamNames: []string{"stx"}, Category: "eval"},
+			Doc: "Fully macro-expands a syntax object or datum. Returns the expanded syntax.\n\nExamples:\n  (expand '(and a b))  ; => expanded form using if", ParamNames: []string{"stx"}, Category: "eval",
+			Keywords: []string{"macroexpand", "macro expansion", "expand macros"}},
 		{Name: "expand-once", ParamCount: 1, Impl: PrimExpandOnce,
 			Doc: "Expands one level of macros. Returns two values: the expanded form and a boolean indicating whether expansion occurred.\n\nExamples:\n  (expand-once '(and a b))  ; => (values <one-step expansion> #t)", ParamNames: []string{"stx"}, Category: "eval"},
 		{Name: "compile", ParamCount: 1, Impl: PrimCompile,

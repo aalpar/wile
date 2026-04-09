@@ -48,7 +48,8 @@ var AddToRegistry = Builder.AddToRegistry
 func addReadWrite(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "read", ParamCount: 1, IsVariadic: true, Impl: PrimRead,
-			Doc: "Reads and parses one S-expression from PORT. Defaults to current-input-port. Returns eof-object at end of input.\n\nExamples:\n  (read (open-input-string \"42\"))        => 42\n  (read (open-input-string \"(a b c)\"))   => (a b c)", ParamNames: []string{"port"}, Category: "io"},
+			Doc: "Reads and parses one S-expression from PORT. Defaults to current-input-port. Returns eof-object at end of input.\n\nExamples:\n  (read (open-input-string \"42\"))        => 42\n  (read (open-input-string \"(a b c)\"))   => (a b c)", ParamNames: []string{"port"}, Category: "io",
+			Keywords: []string{"parse", "input", "deserialize", "s-expression"}},
 		{Name: "read-token", ParamCount: 1, IsVariadic: true, Impl: PrimReadToken,
 			Doc: "Reads a single lexical token from PORT. Defaults to current-input-port. Returns eof-object at end of input.\n\nExamples:\n  (read-token (open-input-string \"hello\"))  => hello", ParamNames: []string{"port"}, Category: "io"},
 		{Name: "read-syntax", ParamCount: 1, IsVariadic: true, Impl: PrimReadSyntax,
@@ -58,19 +59,22 @@ func addReadWrite(r *registry.Registry) error {
 		{Name: "peek-char", ParamCount: 1, IsVariadic: true, Impl: PrimPeekChar,
 			Doc: "Returns the next character from PORT without consuming it. Defaults to current-input-port.\n\nExamples:\n  (let ((p (open-input-string \"hi\"))) (peek-char p) (read-char p))  => #\\h", ParamNames: []string{"port"}, Category: "io"},
 		{Name: "read-line", ParamCount: 1, IsVariadic: true, Impl: PrimReadLine,
-			Doc: "Reads a line of text from PORT up to a newline or end of input. Defaults to current-input-port.\n\nExamples:\n  (read-line (open-input-string \"hello\\nworld\"))  => \"hello\"", ParamNames: []string{"port"}, Category: "io"},
+			Doc: "Reads a line of text from PORT up to a newline or end of input. Defaults to current-input-port.\n\nExamples:\n  (read-line (open-input-string \"hello\\nworld\"))  => \"hello\"", ParamNames: []string{"port"}, Category: "io",
+			Keywords: []string{"getline", "readline", "input line"}},
 		{Name: "read-string", ParamCount: 2, IsVariadic: true, Impl: PrimReadString,
 			Doc: "Reads up to K characters from PORT and returns them as a string. Returns eof-object if no characters available.\n\nExamples:\n  (read-string 3 (open-input-string \"hello\"))  => \"hel\"", ParamNames: []string{"k", "port"}, Category: "io"},
 		{Name: "char-ready?", ParamCount: 1, IsVariadic: true, Impl: PrimCharReadyQ,
 			Doc: "Returns #t if a character is available for reading on PORT without blocking. Defaults to current-input-port.\n\nExamples:\n  (char-ready? (open-input-string \"x\"))  => #t", ParamNames: []string{"port"}, Category: "io"},
 		{Name: "write", ParamCount: 2, IsVariadic: true, Impl: PrimWrite,
-			Doc: "Writes a machine-readable (write) representation of OBJ to PORT. Strings are quoted, characters use #\\ notation.\n\nExamples:\n  (let ((p (open-output-string))) (write \"hi\" p) (get-output-string p))  => \"\\\"hi\\\"\"", ParamNames: []string{"obj", "port"}, Category: "io"},
+			Doc: "Writes a machine-readable (write) representation of OBJ to PORT. Strings are quoted, characters use #\\ notation.\n\nExamples:\n  (let ((p (open-output-string))) (write \"hi\" p) (get-output-string p))  => \"\\\"hi\\\"\"", ParamNames: []string{"obj", "port"}, Category: "io",
+			Keywords: []string{"serialize", "output", "machine-readable"}},
 		{Name: "write-char", ParamCount: 2, IsVariadic: true, Impl: PrimWriteChar,
 			Doc: "Writes CHAR to PORT. Defaults to current-output-port.\n\nExamples:\n  (let ((p (open-output-string))) (write-char #\\A p) (get-output-string p))  => \"A\"", ParamNames: []string{"char", "port"}, Category: "io"},
 		{Name: "write-string", ParamCount: 2, IsVariadic: true, Impl: PrimWriteString,
 			Doc: "Writes characters of STRING to PORT, optionally limited to the range from start to end.\n\nExamples:\n  (let ((p (open-output-string))) (write-string \"hello\" p) (get-output-string p))  => \"hello\"", ParamNames: []string{"string", "port"}, Category: "io"},
 		{Name: "display", ParamCount: 2, IsVariadic: true, Impl: PrimDisplay,
-			Doc: "Writes a human-readable representation of OBJ to PORT. Strings are not quoted, characters are written directly.\n\nExamples:\n  (let ((p (open-output-string))) (display \"hi\" p) (get-output-string p))  => \"hi\"\n  (display 42)  ; prints: 42", ParamNames: []string{"obj", "port"}, Category: "io"},
+			Doc: "Writes a human-readable representation of OBJ to PORT. Strings are not quoted, characters are written directly.\n\nExamples:\n  (let ((p (open-output-string))) (display \"hi\" p) (get-output-string p))  => \"hi\"\n  (display 42)  ; prints: 42", ParamNames: []string{"obj", "port"}, Category: "io",
+			Keywords: []string{"print", "output", "show", "human-readable"}},
 		{Name: "newline", ParamCount: 1, IsVariadic: true, Impl: PrimNewline,
 			Doc: "Writes a newline character to PORT. Defaults to current-output-port.\n\nExamples:\n  (newline)  ; prints a blank line", ParamNames: []string{"port"}, Category: "io"},
 		{Name: "write-simple", ParamCount: 2, IsVariadic: true, Impl: PrimWriteSimple,
@@ -130,11 +134,14 @@ func addPorts(r *registry.Registry) error {
 	// String ports
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "open-input-string", ParamCount: 1, Impl: PrimOpenInputString,
-			Doc: "Returns a textual input port that reads characters from STRING.\n\nExamples:\n  (read (open-input-string \"42\"))  => 42", ParamNames: []string{"string"}, Category: "ports"},
+			Doc: "Returns a textual input port that reads characters from STRING.\n\nExamples:\n  (read (open-input-string \"42\"))  => 42", ParamNames: []string{"string"}, Category: "ports",
+			Keywords: []string{"string port", "memory input", "from string"}},
 		{Name: "open-output-string", Impl: PrimOpenOutputString,
-			Doc: "Returns a textual output port that accumulates characters into a string.\n\nExamples:\n  (let ((p (open-output-string))) (display \"hi\" p) (get-output-string p))  => \"hi\"", Category: "ports"},
+			Doc: "Returns a textual output port that accumulates characters into a string.\n\nExamples:\n  (let ((p (open-output-string))) (display \"hi\" p) (get-output-string p))  => \"hi\"", Category: "ports",
+			Keywords: []string{"string port", "memory output", "string builder", "to string"}},
 		{Name: "get-output-string", ParamCount: 1, Impl: PrimGetOutputString,
-			Doc: "Returns the accumulated string from an output string port. The port remains open.\n\nExamples:\n  (let ((p (open-output-string))) (display 42 p) (get-output-string p))  => \"42\"", ParamNames: []string{"port"}, Category: "ports"},
+			Doc: "Returns the accumulated string from an output string port. The port remains open.\n\nExamples:\n  (let ((p (open-output-string))) (display 42 p) (get-output-string p))  => \"42\"", ParamNames: []string{"port"}, Category: "ports",
+			Keywords: []string{"extract string", "string builder result"}},
 	}, registry.PhaseRuntime)
 
 	// Bytevector ports

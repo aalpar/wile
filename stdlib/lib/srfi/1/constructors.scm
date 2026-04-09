@@ -14,7 +14,7 @@
         (lp (cons x rev) (car ls) (cdr ls)))))
 
 (define (list-tabulate n proc)
-  "Return a list of N elements produced by applying PROC to indices 0 through N-1.\nEquivalent to (list (proc 0) (proc 1) ... (proc (- n 1))).\n\nExamples:\n  (list-tabulate 4 values)           => (0 1 2 3)\n  (list-tabulate 3 (lambda (i) (* i i)))  => (0 1 4)\n\nParameters:\n  n : integer\n  proc : procedure\nReturns: list\nCategory: srfi-1"
+  "Return a list of N elements produced by applying PROC to indices 0 through N-1.\nEquivalent to (list (proc 0) (proc 1) ... (proc (- n 1))).\n\nExamples:\n  (list-tabulate 4 values)           => (0 1 2 3)\n  (list-tabulate 3 (lambda (i) (* i i)))  => (0 1 4)\n\nParameters:\n  n : integer\n  proc : procedure\nReturns: list\nCategory: srfi-1\nKeywords: generate, build list, map index, list comprehension"
   (let lp ((n (- n 1)) (res '()))
     (if (< n 0) res (lp (- n 1) (cons (proc n) res)))))
 
@@ -25,7 +25,7 @@
     res))
 
 (define (iota count . o)
-  "Return a list of COUNT numbers starting from START with step STEP.\nSTART defaults to 0, STEP defaults to 1. For example,\n(iota 5) produces (0 1 2 3 4) and (iota 3 1 2) produces (1 3 5).\n\nExamples:\n  (iota 5)      => (0 1 2 3 4)\n  (iota 3 1 2)  => (1 3 5)\n\nParameters:\n  count : integer\n  o : list\nReturns: list\nCategory: srfi-1"
+  "Return a list of COUNT numbers starting from START with step STEP.\nSTART defaults to 0, STEP defaults to 1. For example,\n(iota 5) produces (0 1 2 3 4) and (iota 3 1 2) produces (1 3 5).\n\nExamples:\n  (iota 5)      => (0 1 2 3 4)\n  (iota 3 1 2)  => (1 3 5)\n\nParameters:\n  count : integer\n  o : list\nReturns: list\nCategory: srfi-1\nKeywords: range, sequence, enumerate, arange, linspace"
   (let ((start (if (pair? o) (car o) 0))
         (step (if (and (pair? o) (pair? (cdr o))) (cadr o) 1)))
     (let lp ((i count) (res '()))
