@@ -102,19 +102,30 @@ func ParseLibrarySummary(ctx context.Context, r io.Reader, filePath string, name
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "ParseLibrarySummary: expected define-library or library, got %s", symName)
 	}
 
+	// Require and validate the library name (2nd element).
+	cdr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed,
+			"ParseLibrarySummary: missing library name in %s", filePath)
+	}
+
+	parsedName, err := ParseLibraryNameFromDatum(ctx, cdr.SyntaxCar().UnwrapAll())
+	if err != nil {
+		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed,
+			"ParseLibrarySummary: malformed library name in %s", filePath)
+	}
+	if parsedName.Key() != name.Key() {
+		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed,
+			"ParseLibrarySummary: name mismatch in %s: expected %s, got %s",
+			filePath, name.SchemeString(), parsedName.SchemeString())
+	}
+
 	q := &LibrarySummary{
-		Name:       name,
+		Name:       parsedName,
 		SourceFile: filePath,
 	}
 
-	// Skip the library name (2nd element) and walk remaining declarations.
-	cdr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
-	if !ok {
-		// (define-library) with no name or declarations — valid but empty.
-		return q, nil
-	}
-
-	// Skip library name — advance to declarations.
+	// Advance past the library name to the declarations.
 	declList := cdr.SyntaxCdr()
 
 	err = syntax.SyntaxWalk(ctx, declList, func(v syntax.SyntaxValue) error {

@@ -104,6 +104,18 @@ func TestParseSummary(t *testing.T) {
 			wantErr: werr.ErrLibraryFormMalformed,
 		},
 		{
+			name:    "no library name",
+			input:   `(define-library)`,
+			libName: NewLibraryName("any"),
+			wantErr: werr.ErrLibraryFormMalformed,
+		},
+		{
+			name:    "library name mismatch",
+			input:   `(define-library (actual name) (export x))`,
+			libName: NewLibraryName("wrong", "name"),
+			wantErr: werr.ErrLibraryFormMalformed,
+		},
+		{
 			name: "unknown declarations skipped",
 			input: `(define-library (skip)
 				(import (scheme base))
