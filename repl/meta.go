@@ -645,12 +645,17 @@ func (p *MetaCommandHandler) cmdApropos(args []string, out io.Writer) {
 		}
 	}
 	for _, r := range results {
-		cat := ""
-		if r.Category != "" {
-			cat = fmt.Sprintf("[%s]", r.Category)
+		tag := ""
+		if r.Category == "library" {
+			// Libraries use "library" as a pseudo-category to identify their
+			// result type, not as an actual topic. Render distinctly so users
+			// don't try ",topic library".
+			tag = "library"
+		} else if r.Category != "" {
+			tag = fmt.Sprintf("[%s]", r.Category)
 		}
 		doc := firstLine(r.Doc)
-		fmt.Fprintf(&content, "  %-*s  %-14s %s\n", maxName, r.Name, cat, doc)
+		fmt.Fprintf(&content, "  %-*s  %-14s %s\n", maxName, r.Name, tag, doc)
 	}
 	writeWithPager(out, content.String(), p.pager)
 }

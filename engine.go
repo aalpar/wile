@@ -844,6 +844,7 @@ func makeDocRegistrationObserver(libReg *compilation.LibraryRegistry, reg *regis
 				ParamTypes: parsed.ParamTypes,
 				ReturnType: parsed.ReturnType,
 				Category:   parsed.Category,
+				Keywords:   parsed.Keywords,
 				ParamCount: len(parsed.ParamNames),
 			})
 		}
@@ -893,6 +894,7 @@ func registerSchemeDocstrings(env *environment.EnvironmentFrame, reg *registry.R
 			ParamTypes: parsed.ParamTypes,
 			ReturnType: parsed.ReturnType,
 			Category:   parsed.Category,
+			Keywords:   parsed.Keywords,
 			ParamCount: len(parsed.ParamNames),
 		})
 	}
