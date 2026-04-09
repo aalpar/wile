@@ -399,7 +399,7 @@ func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo, showExamp
 	hasTypes := len(info.ParamTypes) > 0
 
 	// Line 1: syntax + return type.
-	// Builder approach: prefer structured ParamNames, Syntax as override.
+	// Builder approach: prefer structured ParamNames, fall back to Syntax.
 	switch {
 	case len(info.ParamNames) > 0:
 		fmt.Fprintf(w, "(%s", name)
@@ -415,7 +415,7 @@ func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo, showExamp
 	default:
 		fmt.Fprintf(w, "(%s)", name)
 	}
-	if hasTypes && info.ReturnType != values.TypeAny {
+	if info.ReturnType != values.TypeAny {
 		fmt.Fprintf(w, " → %s", info.ReturnType.String())
 	}
 	fmt.Fprintln(w)
@@ -445,7 +445,7 @@ func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo, showExamp
 	}
 
 	// Return type
-	if hasTypes && info.ReturnType != values.TypeAny {
+	if info.ReturnType != values.TypeAny {
 		fmt.Fprintf(w, "  Returns: %s\n", info.ReturnType.String())
 	}
 

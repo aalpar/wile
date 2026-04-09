@@ -356,6 +356,24 @@ func TestFormatPrimitiveDoc_WithoutTypes(t *testing.T) {
 		qt.Commentf("output should have no return type: %s", output))
 }
 
+func TestFormatPrimitiveDoc_ReturnTypeWithoutParamTypes(t *testing.T) {
+	c := qt.New(t)
+	var buf strings.Builder
+	info := DocInfo{
+		Doc:        "Returns a new empty hashtable.",
+		Category:   "hashtables",
+		ReturnType: values.TypeHashtable,
+	}
+	formatPrimitiveDoc(&buf, "make-hashtable", info, true)
+	output := buf.String()
+	c.Assert(strings.Contains(output, "→ hashtable"), qt.IsTrue,
+		qt.Commentf("should show return type even without ParamTypes: %s", output))
+	c.Assert(strings.Contains(output, "Returns: hashtable"), qt.IsTrue,
+		qt.Commentf("should show Returns section: %s", output))
+	c.Assert(strings.Contains(output, " : "), qt.IsFalse,
+		qt.Commentf("should have no parameter type annotations: %s", output))
+}
+
 func TestCmdApropos(t *testing.T) {
 	eng := newTestEngine(t)
 	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
