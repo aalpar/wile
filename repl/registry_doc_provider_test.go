@@ -15,6 +15,7 @@
 package repl
 
 import (
+	"context"
 	"slices"
 	"testing"
 
@@ -191,7 +192,7 @@ func TestRegistryDocProvider_Search(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			results := provider.Search(tc.pattern)
+			results := provider.Search(context.Background(), tc.pattern)
 			names := make([]string, len(results))
 			for i, r := range results {
 				names[i] = r.Name
@@ -378,7 +379,7 @@ func TestRegistryDocProvider_SearchFindsNonPrimitives(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			results := provider.Search(tc.pattern)
+			results := provider.Search(context.Background(), tc.pattern)
 			names := make([]string, len(results))
 			for i, r := range results {
 				names[i] = r.Name
@@ -435,7 +436,7 @@ func TestRegistryDocProvider_PrimitiveTakesPriorityOverBindingSpec(t *testing.T)
 	c.Assert(count, qt.Equals, 1, qt.Commentf("apply should appear exactly once"))
 
 	// Search should return apply exactly once from the primitive.
-	searchResults := provider.Search("apply")
+	searchResults := provider.Search(context.Background(), "apply")
 	count = 0
 	for _, r := range searchResults {
 		if r.Name == "apply" {
@@ -473,7 +474,7 @@ func TestRegistryDocProvider_KeywordsFromDocstring(t *testing.T) {
 	c.Assert(found, qt.IsTrue)
 	c.Assert(info.Keywords, qt.DeepEquals, []string{"sort", "ordering"})
 
-	results := prov.Search("ordering")
+	results := prov.Search(context.Background(), "ordering")
 	names := make([]string, len(results))
 	for i, r := range results {
 		names[i] = r.Name

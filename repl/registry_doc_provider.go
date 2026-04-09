@@ -15,7 +15,11 @@
 package repl
 
 import (
+	"context"
+	"fmt"
+	"os"
 	"sort"
+	"sync"
 
 	"github.com/aalpar/wile/docparse"
 	"github.com/aalpar/wile/environment"
@@ -28,6 +32,10 @@ type RegistryDocProvider struct {
 	reg    *registry.Registry
 	env    *environment.EnvironmentFrame
 	libReg *compilation.LibraryRegistry
+
+	// Lazy export index — built on first Search() call.
+	indexOnce   sync.Once
+	exportIndex *compilation.LibraryExportIndex
 }
 
 // NewRegistryDocProvider creates a DocProvider backed by the given registry.
@@ -103,8 +111,25 @@ func (p *RegistryDocProvider) lookupNonPrimitiveDoc(name string) (DocInfo, bool)
 // Search returns entries whose name, doc, or category contains pattern
 // (case-insensitive substring match). Results are sorted by name.
 // Delegates to registry.SearchDoc for unified search across all sources.
-func (p *RegistryDocProvider) Search(pattern string) []registry.DocSearchResult {
-	return registry.SearchDoc(p.reg, p.env, p.libReg, pattern)
+// On first call, lazily builds a LibraryExportIndex so unloaded library
+// exports are discoverable via apropos.
+func (p *RegistryDocProvider) Search(ctx context.Context, pattern string) []registry.DocSearchResult {
+	p.indexOnce.Do(func() {
+		if p.env == nil {
+			return
+		}
+		resolver := p.env.FileResolver()
+		if resolver == nil {
+			return
+		}
+		idx, err := compilation.BuildExportIndex(ctx, resolver, p.libReg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: library export index failed: %v\n", err)
+			return
+		}
+		p.exportIndex = idx
+	})
+	return registry.SearchDoc(p.reg, p.env, p.libReg, p.exportIndex, pattern)
 }
 
 // Categories returns sorted category names, excluding the empty-string category.

@@ -79,7 +79,7 @@ func (p *MetaCommandHandler) SetPager(pager string) {
 
 // Handle processes a line starting with ",". Returns true if the line was
 // a meta-command (even if unrecognized), false if it's not a meta-command.
-func (p *MetaCommandHandler) Handle(line string, out io.Writer) bool {
+func (p *MetaCommandHandler) Handle(ctx context.Context, line string, out io.Writer) bool {
 	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, ",") {
 		return false
@@ -102,11 +102,11 @@ func (p *MetaCommandHandler) Handle(line string, out io.Writer) bool {
 	case "edit":
 		p.cmdEdit(args, out)
 	case "apropos", "a":
-		p.cmdApropos(args, out)
+		p.cmdApropos(ctx, args, out)
 	case "topics":
-		p.cmdTopics(out)
+		p.cmdTopics(ctx, out)
 	case "topic":
-		p.cmdTopic(args, out)
+		p.cmdTopic(ctx, args, out)
 	case "libraries", "libs":
 		p.cmdLibraries(out)
 	case "disassemble", "dis":
@@ -618,7 +618,7 @@ func (p *MetaCommandHandler) cmdEdit(args []string, out io.Writer) {
 	}
 }
 
-func (p *MetaCommandHandler) cmdApropos(args []string, out io.Writer) {
+func (p *MetaCommandHandler) cmdApropos(ctx context.Context, args []string, out io.Writer) {
 	if len(args) == 0 {
 		fmt.Fprintln(out, "Usage: ,apropos <pattern>")
 		return
@@ -631,7 +631,7 @@ func (p *MetaCommandHandler) cmdApropos(args []string, out io.Writer) {
 		return
 	}
 
-	results := searchProv.Search(pattern)
+	results := searchProv.Search(ctx, pattern)
 	if len(results) == 0 {
 		fmt.Fprintf(out, "No matches for %q\n", pattern)
 		return
@@ -660,7 +660,7 @@ func (p *MetaCommandHandler) cmdApropos(args []string, out io.Writer) {
 	writeWithPager(out, content.String(), p.pager)
 }
 
-func (p *MetaCommandHandler) cmdTopics(out io.Writer) {
+func (p *MetaCommandHandler) cmdTopics(_ context.Context, out io.Writer) {
 	searchProv, ok := p.docProv.(DocSearchProvider)
 	if !ok {
 		fmt.Fprintln(out, "Topics not available")
@@ -682,7 +682,7 @@ func (p *MetaCommandHandler) cmdTopics(out io.Writer) {
 	writeWithPager(out, content.String(), p.pager)
 }
 
-func (p *MetaCommandHandler) cmdTopic(args []string, out io.Writer) {
+func (p *MetaCommandHandler) cmdTopic(_ context.Context, args []string, out io.Writer) {
 	if len(args) == 0 {
 		fmt.Fprintln(out, "Usage: ,topic <category>")
 		return

@@ -350,7 +350,7 @@ func PrimApropos(mc machine.CallContext) error {
 	}
 
 	env := mc.EnvironmentFrame()
-	results := registry.SearchDoc(reg, env, registry.ExtractLibraryRegistry(env), s.Value)
+	results := registry.SearchDoc(reg, env, registry.ExtractLibraryRegistry(env), nil, s.Value)
 	syms := make([]values.Value, len(results))
 	for i, r := range results {
 		syms[i] = values.NewSymbol(r.Name)
