@@ -773,6 +773,31 @@ func TestCmdApropos_KeywordMatchAfterLibraryImport(t *testing.T) {
 		qt.Commentf("apropos should find make-group via keyword match; got: %q", output))
 }
 
+func TestCmdApropos_UnloadedLibraryNameMatch(t *testing.T) {
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx,
+		wile.WithAllExtensions(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithLibraryPaths("."),
+	)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Do NOT import (wile algebra) — it must be found via the export index.
+	env := eng.Environment()
+	reg, ok := env.Namespace().Registry().(*registry.Registry)
+	qt.Assert(t, ok, qt.IsTrue)
+	docProv := NewRegistryDocProvider(reg, env)
+
+	t.Setenv("PAGER", "")
+	var buf bytes.Buffer
+	h := NewMetaCommandHandler(eng, WithMetaDocProvider(docProv))
+	h.cmdApropos(ctx, []string{"algebra"}, &buf)
+	output := buf.String()
+
+	qt.Assert(t, strings.Contains(output, "(wile algebra)"), qt.IsTrue,
+		qt.Commentf("apropos should find (wile algebra) by library name when not imported; got: %q", output))
+}
+
 func TestMetaHandleDebugDelegation(t *testing.T) {
 	tcs := []struct {
 		name    string
