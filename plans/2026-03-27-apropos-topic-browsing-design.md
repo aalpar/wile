@@ -1,5 +1,8 @@
 # Apropos & Topic Browsing Design
 
+**Status:** Complete
+**Current-state doc:** `plans/DOCUMENTATION-SEARCH.md`
+
 ## Problem
 
 No way to search for procedures by keyword or browse by category. Docstrings are

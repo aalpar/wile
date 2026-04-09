@@ -1,6 +1,7 @@
 # Unified Apropos Search Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+**Status:** Complete
+**Current-state doc:** `plans/DOCUMENTATION-SEARCH.md`
 
 **Goal:** Consolidate the Scheme `(apropos)` and REPL `,apropos` into a single search function so both produce identical results.
 
