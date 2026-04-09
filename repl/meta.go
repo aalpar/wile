@@ -398,13 +398,10 @@ func formatLibraryDoc(w *strings.Builder, lib *compilation.CompiledLibrary) {
 func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo, showExamples bool) {
 	hasTypes := len(info.ParamTypes) > 0
 
-	// Signature line
-	if info.Syntax != "" {
-		fmt.Fprint(w, info.Syntax)
-		if info.TypeLabel != "" {
-			fmt.Fprintf(w, " — %s", info.TypeLabel)
-		}
-	} else {
+	// Line 1: syntax + return type.
+	// Builder approach: prefer structured ParamNames, fall back to Syntax.
+	switch {
+	case len(info.ParamNames) > 0:
 		fmt.Fprintf(w, "(%s", name)
 		for _, pn := range info.ParamNames {
 			fmt.Fprintf(w, " %s", strings.ToUpper(pn))
@@ -413,11 +410,20 @@ func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo, showExamp
 			fmt.Fprint(w, " ...")
 		}
 		fmt.Fprint(w, ")")
-		if hasTypes && info.ReturnType != values.TypeAny {
-			fmt.Fprintf(w, " → %s", info.ReturnType.String())
-		}
+	case info.Syntax != "":
+		fmt.Fprint(w, info.Syntax)
+	default:
+		fmt.Fprintf(w, "(%s)", name)
+	}
+	if info.ReturnType != values.TypeAny {
+		fmt.Fprintf(w, " → %s", info.ReturnType.String())
 	}
 	fmt.Fprintln(w)
+
+	// Form type
+	if info.TypeLabel != "" {
+		fmt.Fprintf(w, "  Form: %s\n", info.TypeLabel)
+	}
 
 	// Description
 	doc := info.Doc
@@ -439,13 +445,18 @@ func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo, showExamp
 	}
 
 	// Return type
-	if hasTypes && info.ReturnType != values.TypeAny {
+	if info.ReturnType != values.TypeAny {
 		fmt.Fprintf(w, "  Returns: %s\n", info.ReturnType.String())
 	}
 
 	// Category
 	if info.Category != "" {
 		fmt.Fprintf(w, "  Category: %s\n", info.Category)
+	}
+
+	// Keywords
+	if len(info.Keywords) > 0 {
+		fmt.Fprintf(w, "  Keywords: %s\n", strings.Join(info.Keywords, ", "))
 	}
 }
 
@@ -473,10 +484,14 @@ func tryStructuredBindingDoc(w *strings.Builder, name, doc, typeLabel string, sh
 		return false
 	}
 	formatPrimitiveDoc(w, name, DocInfo{
-		Doc:       parsed.Doc,
-		Syntax:    parsed.Syntax,
-		TypeLabel: typeLabel,
-		Category:  parsed.Category,
+		Doc:        parsed.Doc,
+		Syntax:     parsed.Syntax,
+		TypeLabel:  typeLabel,
+		ParamNames: parsed.ParamNames,
+		ParamTypes: parsed.ParamTypes,
+		ReturnType: parsed.ReturnType,
+		Category:   parsed.Category,
+		Keywords:   parsed.Keywords,
 	}, showExamples)
 	return true
 }
@@ -508,10 +523,12 @@ func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding,
 				formatPrimitiveDoc(w, name, DocInfo{
 					Doc:        parsed.Doc,
 					Syntax:     parsed.Syntax,
+					TypeLabel:  formTypeLabel(val),
 					ParamNames: parsed.ParamNames,
 					ParamTypes: parsed.ParamTypes,
 					ReturnType: parsed.ReturnType,
 					Category:   parsed.Category,
+					Keywords:   parsed.Keywords,
 				}, showExamples)
 				return
 			}
@@ -549,6 +566,18 @@ func callableDoc(v values.Value) string {
 		return dc.Doc()
 	}
 	return ""
+}
+
+// formTypeLabel returns the form type label for a callable value.
+func formTypeLabel(v values.Value) string {
+	switch v.(type) {
+	case *machine.ForeignClosure:
+		return "primitive"
+	case *machine.MachineClosure, *machine.CaseLambdaClosure:
+		return "procedure"
+	default:
+		return ""
+	}
 }
 
 func phaseLabel(phase int) string {
@@ -603,16 +632,6 @@ func (p *MetaCommandHandler) cmdApropos(args []string, out io.Writer) {
 	}
 
 	results := searchProv.Search(pattern)
-
-	// Also search phase environment bindings and loaded libraries
-	env := p.env()
-	if env != nil {
-		envResults := p.searchBindings(pattern)
-		results = mergeSearchResults(results, envResults)
-		libResults := p.searchLibraries(pattern)
-		results = mergeSearchResults(results, libResults)
-	}
-
 	if len(results) == 0 {
 		fmt.Fprintf(out, "No matches for %q\n", pattern)
 		return
@@ -811,133 +830,6 @@ func (p *MetaCommandHandler) DisassembleBinding(name string) (string, error) {
 	default:
 		return "", werr.NewForeignErrorf("%s is not a procedure (type: %T)", name, val)
 	}
-}
-
-// searchBindings searches phase environment bindings for the pattern.
-func (p *MetaCommandHandler) searchBindings(pattern string) []DocSearchResult {
-	env := p.env()
-	if env == nil {
-		return nil
-	}
-	lowerPattern := strings.ToLower(pattern)
-	topLevel := env.Namespace()
-	if topLevel == nil {
-		return nil
-	}
-	phases := topLevel.Phases()
-	phaseIndices := phases.Phases()
-
-	seen := make(map[string]bool)
-	var results []DocSearchResult
-	for _, phase := range phaseIndices {
-		phaseEnv := phases.Get(phase)
-		if phaseEnv == nil {
-			continue
-		}
-		global := phaseEnv.GlobalEnvironment()
-		if global == nil {
-			continue
-		}
-		// Keys() and Bindings() are separate locked snapshots. A concurrent
-		// define could add a key whose index exceeds the bindings snapshot
-		// length. The idx < len(bindings) guard below prevents a panic;
-		// the skipped entry is acceptable for a best-effort REPL search.
-		keys := global.Keys()
-		bindings := global.Bindings()
-		for sym, idx := range keys {
-			name := sym.Key
-			if seen[name] {
-				continue
-			}
-			seen[name] = true
-
-			doc := ""
-			if idx < len(bindings) {
-				bnd := bindings[idx]
-				if bnd == nil {
-					continue
-				}
-				doc = bnd.Doc()
-				if doc == "" && bnd.BindingType() == environment.BindingTypeVariable {
-					doc = callableDoc(bnd.Value())
-				}
-			}
-
-			// Extract category from structured docstrings so that
-			// special forms and macros show [category] in ,apropos.
-			category := ""
-			displayDoc := doc
-			if doc != "" {
-				parsed := docparse.ParseDocstring(doc)
-				if parsed.HasStructuredMetadata() {
-					category = parsed.Category
-					displayDoc = parsed.Doc
-				}
-			}
-
-			if strings.Contains(strings.ToLower(name), lowerPattern) ||
-				strings.Contains(strings.ToLower(doc), lowerPattern) {
-				results = append(results, DocSearchResult{
-					Name:     name,
-					Doc:      displayDoc,
-					Category: category,
-				})
-			}
-		}
-	}
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Name < results[j].Name
-	})
-	return results
-}
-
-// mergeSearchResults merges registry and environment results, deduplicating by name.
-// Registry results take precedence (richer metadata).
-func mergeSearchResults(registryResults, envResults []DocSearchResult) []DocSearchResult {
-	seen := make(map[string]bool, len(registryResults))
-	for _, r := range registryResults {
-		seen[r.Name] = true
-	}
-	for _, r := range envResults {
-		if !seen[r.Name] {
-			registryResults = append(registryResults, r)
-		}
-	}
-	sort.Slice(registryResults, func(i, j int) bool {
-		return registryResults[i].Name < registryResults[j].Name
-	})
-	return registryResults
-}
-
-// searchLibraries searches loaded libraries for the pattern, matching against
-// the library name (e.g. "(wile algebra)") and its description.
-func (p *MetaCommandHandler) searchLibraries(pattern string) []DocSearchResult {
-	env := p.env()
-	if env == nil {
-		return nil
-	}
-	regAny := env.LibraryRegistry()
-	if regAny == nil {
-		return nil
-	}
-	reg, ok := regAny.(*compilation.LibraryRegistry)
-	if !ok {
-		return nil
-	}
-	lowerPattern := strings.ToLower(pattern)
-	var results []DocSearchResult
-	for _, lib := range reg.All() {
-		name := lib.Name.SchemeString()
-		if strings.Contains(strings.ToLower(name), lowerPattern) ||
-			strings.Contains(strings.ToLower(lib.Description), lowerPattern) {
-			results = append(results, DocSearchResult{
-				Name:     name,
-				Doc:      lib.Description,
-				Category: "library",
-			})
-		}
-	}
-	return results
 }
 
 // firstLine returns the first line of s, or s itself if single-line.

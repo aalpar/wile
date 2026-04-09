@@ -57,11 +57,12 @@ type DocInfo struct {
 	ParamTypes []values.ValueType
 	ReturnType values.ValueType
 	Category   string
+	Keywords   []string
 }
 
 // HasStructuredMetadata reports whether any structured metadata was extracted.
 func (p DocInfo) HasStructuredMetadata() bool {
-	return p.Syntax != "" || len(p.ParamNames) > 0 || p.ReturnType != values.TypeAny || p.Category != ""
+	return p.Syntax != "" || len(p.ParamNames) > 0 || p.ReturnType != values.TypeAny || p.Category != "" || len(p.Keywords) > 0
 }
 
 // isMetadataHeader reports whether a line starts a metadata section
@@ -70,7 +71,8 @@ func isMetadataHeader(line string) bool {
 	return strings.HasPrefix(line, "Syntax:") ||
 		strings.HasPrefix(line, "Parameters:") ||
 		strings.HasPrefix(line, "Returns:") ||
-		strings.HasPrefix(line, "Category:")
+		strings.HasPrefix(line, "Category:") ||
+		strings.HasPrefix(line, "Keywords:")
 }
 
 // isProseHeader reports whether a line starts a prose section
@@ -128,6 +130,19 @@ func ParseDocstring(raw string) DocInfo {
 				info.Category = strings.TrimSpace(strings.TrimPrefix(line, "Category:"))
 				currentSection = "Category:"
 
+			case strings.HasPrefix(line, "Keywords:"):
+				kwRaw := strings.TrimSpace(strings.TrimPrefix(line, "Keywords:"))
+				parts := strings.Split(kwRaw, ",")
+				keywords := make([]string, 0, len(parts))
+				for _, part := range parts {
+					trimmed := strings.TrimSpace(part)
+					if trimmed != "" {
+						keywords = append(keywords, trimmed)
+					}
+				}
+				info.Keywords = keywords
+				currentSection = "Keywords:"
+
 			default:
 				// Prose section header — include in doc.
 				docLines = append(docLines, line)
@@ -147,7 +162,7 @@ func ParseDocstring(raw string) DocInfo {
 				info.ParamTypes = append(info.ParamTypes, ParseValueType(typeName))
 			}
 
-		case "Syntax:", "Returns:", "Category:":
+		case "Syntax:", "Returns:", "Category:", "Keywords:":
 			// These are single-line sections; ignore continuation lines.
 			continue
 

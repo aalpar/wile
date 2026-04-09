@@ -100,7 +100,7 @@ func TestCmdEdit_EditorExec(t *testing.T) {
 
 func TestCmdDoc(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry())
+	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
 
 	tcs := []struct {
 		name    string
@@ -191,7 +191,7 @@ func TestCmdDoc_ClosureDocstring(t *testing.T) {
 
 func TestCmdDoc_SpecialFormStructuredFormat(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry())
+	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
 
 	t.Setenv("PAGER", "")
 	var buf bytes.Buffer
@@ -202,8 +202,8 @@ func TestCmdDoc_SpecialFormStructuredFormat(t *testing.T) {
 	// Should use structured format: syntax as header, type label, category
 	qt.Assert(t, strings.Contains(output, "(if TEST CONSEQUENT ALTERNATE)"), qt.IsTrue,
 		qt.Commentf("should have syntax pattern in header: %q", output))
-	qt.Assert(t, strings.Contains(output, "— special form"), qt.IsTrue,
-		qt.Commentf("should have type label: %q", output))
+	qt.Assert(t, strings.Contains(output, "Form: special form"), qt.IsTrue,
+		qt.Commentf("should have form type: %q", output))
 	qt.Assert(t, strings.Contains(output, "Category: conditionals"), qt.IsTrue,
 		qt.Commentf("should have category: %q", output))
 	// Should NOT use old format
@@ -213,7 +213,7 @@ func TestCmdDoc_SpecialFormStructuredFormat(t *testing.T) {
 
 func TestCmdDoc_MacroStructuredFormat(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry())
+	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
 
 	t.Setenv("PAGER", "")
 	var buf bytes.Buffer
@@ -224,6 +224,8 @@ func TestCmdDoc_MacroStructuredFormat(t *testing.T) {
 	// Bootstrap macros should also use structured format
 	qt.Assert(t, strings.Contains(output, "(and TEST1 ...)"), qt.IsTrue,
 		qt.Commentf("should have syntax pattern: %q", output))
+	qt.Assert(t, strings.Contains(output, "Form: syntax"), qt.IsTrue,
+		qt.Commentf("should have form type: %q", output))
 	qt.Assert(t, strings.Contains(output, "Category: conditionals"), qt.IsTrue,
 		qt.Commentf("should have category: %q", output))
 }
@@ -275,7 +277,7 @@ func TestMetaHandleUnknown(t *testing.T) {
 
 func TestCmdDoc_ExamplesFiltering(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry())
+	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
 
 	t.Run("strips examples by default", func(t *testing.T) {
 		t.Setenv("PAGER", "")
@@ -315,6 +317,7 @@ func TestFormatPrimitiveDoc_WithTypes(t *testing.T) {
 	var buf strings.Builder
 	info := DocInfo{
 		Doc:        "Returns the kth character of string.",
+		TypeLabel:  "primitive",
 		ParamNames: []string{"string", "k"},
 		Category:   "strings",
 		ParamCount: 2,
@@ -324,6 +327,8 @@ func TestFormatPrimitiveDoc_WithTypes(t *testing.T) {
 	formatPrimitiveDoc(&buf, "string-ref", info, true)
 	output := buf.String()
 	c.Assert(strings.Contains(output, "→ character"), qt.IsTrue,
+		qt.Commentf("output: %s", output))
+	c.Assert(strings.Contains(output, "Form: primitive"), qt.IsTrue,
 		qt.Commentf("output: %s", output))
 	c.Assert(strings.Contains(output, "STRING : string"), qt.IsTrue,
 		qt.Commentf("output: %s", output))
@@ -351,9 +356,27 @@ func TestFormatPrimitiveDoc_WithoutTypes(t *testing.T) {
 		qt.Commentf("output should have no return type: %s", output))
 }
 
+func TestFormatPrimitiveDoc_ReturnTypeWithoutParamTypes(t *testing.T) {
+	c := qt.New(t)
+	var buf strings.Builder
+	info := DocInfo{
+		Doc:        "Returns a new empty hashtable.",
+		Category:   "hashtables",
+		ReturnType: values.TypeHashtable,
+	}
+	formatPrimitiveDoc(&buf, "make-hashtable", info, true)
+	output := buf.String()
+	c.Assert(strings.Contains(output, "→ hashtable"), qt.IsTrue,
+		qt.Commentf("should show return type even without ParamTypes: %s", output))
+	c.Assert(strings.Contains(output, "Returns: hashtable"), qt.IsTrue,
+		qt.Commentf("should show Returns section: %s", output))
+	c.Assert(strings.Contains(output, " : "), qt.IsFalse,
+		qt.Commentf("should have no parameter type annotations: %s", output))
+}
+
 func TestCmdApropos(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry())
+	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
 
 	tcs := []struct {
 		name    string
@@ -379,11 +402,11 @@ func TestCmdApropos(t *testing.T) {
 
 func TestCmdApropos_SpecialFormCategory(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry())
+	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
 
 	// Special forms and macros should show [category] in apropos output.
-	// These are found via searchBindings (phase environments), not
-	// RegistryDocProvider, so category must be extracted from the docstring.
+	// These are found via registry binding specs and doc entries;
+	// category is extracted from the embedded docstring metadata.
 	tcs := []struct {
 		name    string
 		pattern string
@@ -411,7 +434,6 @@ func TestCmdApropos_SpecialFormCategory(t *testing.T) {
 
 func TestCmdApropos_Library(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry())
 	env := eng.Environment()
 
 	// Register a library in the env's library registry
@@ -421,6 +443,9 @@ func TestCmdApropos_Library(t *testing.T) {
 	err := libReg.Register(lib)
 	qt.Assert(t, err, qt.IsNil)
 	env.SetLibraryRegistry(libReg)
+
+	// Create provider after library setup so it sees env and libReg.
+	docProv := NewRegistryDocProvider(eng.Registry(), env, libReg)
 
 	tcs := []struct {
 		name    string
@@ -446,7 +471,7 @@ func TestCmdApropos_Library(t *testing.T) {
 
 func TestCmdTopics(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry())
+	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
 
 	t.Setenv("PAGER", "")
 	var buf bytes.Buffer
@@ -461,7 +486,7 @@ func TestCmdTopics(t *testing.T) {
 
 func TestCmdTopic(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry())
+	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
 
 	tcs := []struct {
 		name    string
@@ -686,8 +711,8 @@ func TestFormatPrimitiveDoc_WithSyntax(t *testing.T) {
 
 	c.Assert(strings.Contains(output, "(if <test> <consequent> <alternate>)"), qt.IsTrue,
 		qt.Commentf("should have syntax pattern: %s", output))
-	c.Assert(strings.Contains(output, "— special form"), qt.IsTrue,
-		qt.Commentf("should have type label: %s", output))
+	c.Assert(strings.Contains(output, "Form: special form"), qt.IsTrue,
+		qt.Commentf("should have form type: %s", output))
 	c.Assert(strings.Contains(output, "Conditional expression."), qt.IsTrue,
 		qt.Commentf("should have description: %s", output))
 	c.Assert(strings.Contains(output, "Category: conditionals"), qt.IsTrue,

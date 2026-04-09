@@ -129,7 +129,7 @@ func TestDocStringCategoriesVisible(t *testing.T) {
 	_, reg, err := bootstrap.NewTopLevelWithRegistry(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
-	provider := repl.NewRegistryDocProvider(reg)
+	provider := repl.NewRegistryDocProvider(reg, nil, nil)
 	categories := provider.Categories()
 	catSet := make(map[string]bool, len(categories))
 	for _, cat := range categories {
@@ -172,7 +172,7 @@ func TestDocStringCategoriesNonEmpty(t *testing.T) {
 	_, reg, err := bootstrap.NewTopLevelWithRegistry(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
-	provider := repl.NewRegistryDocProvider(reg)
+	provider := repl.NewRegistryDocProvider(reg, nil, nil)
 	for _, cat := range provider.Categories() {
 		t.Run(cat, func(t *testing.T) {
 			results := provider.ByCategory(cat)

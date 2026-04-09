@@ -16,21 +16,28 @@ package repl
 
 import (
 	"sort"
-	"strings"
 
 	"github.com/aalpar/wile/docparse"
+	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/registry"
 )
 
 // RegistryDocProvider adapts a registry.Registry to the DocProvider interface.
 type RegistryDocProvider struct {
-	reg *registry.Registry
+	reg    *registry.Registry
+	env    *environment.EnvironmentFrame
+	libReg *compilation.LibraryRegistry
 }
 
 // NewRegistryDocProvider creates a DocProvider backed by the given registry.
-func NewRegistryDocProvider(reg *registry.Registry) *RegistryDocProvider {
+// env and libReg may be nil; when non-nil, Search includes environment
+// bindings and loaded libraries respectively.
+func NewRegistryDocProvider(reg *registry.Registry, env *environment.EnvironmentFrame, libReg *compilation.LibraryRegistry) *RegistryDocProvider {
 	return &RegistryDocProvider{
-		reg: reg,
+		reg:    reg,
+		env:    env,
+		libReg: libReg,
 	}
 }
 
@@ -41,12 +48,14 @@ func (p *RegistryDocProvider) LookupDoc(name string) (DocInfo, bool) {
 	if found {
 		return DocInfo{
 			Doc:        pr.Spec.Doc,
+			TypeLabel:  "primitive",
 			ParamNames: pr.Spec.ParamNames,
 			Category:   pr.Spec.Category,
 			ParamCount: pr.Spec.ParamCount,
 			IsVariadic: pr.Spec.IsVariadic,
 			ParamTypes: pr.Spec.ParamTypes,
 			ReturnType: pr.Spec.ReturnType,
+			Keywords:   pr.Spec.Keywords,
 		}, true
 	}
 
@@ -70,6 +79,7 @@ func (p *RegistryDocProvider) lookupNonPrimitiveDoc(name string) (DocInfo, bool)
 				ParamTypes: parsed.ParamTypes,
 				ReturnType: parsed.ReturnType,
 				Category:   parsed.Category,
+				Keywords:   parsed.Keywords,
 			}, true
 		}
 	}
@@ -83,6 +93,7 @@ func (p *RegistryDocProvider) lookupNonPrimitiveDoc(name string) (DocInfo, bool)
 				ParamTypes: parsed.ParamTypes,
 				ReturnType: parsed.ReturnType,
 				Category:   parsed.Category,
+				Keywords:   parsed.Keywords,
 			}, true
 		}
 	}
@@ -91,43 +102,9 @@ func (p *RegistryDocProvider) lookupNonPrimitiveDoc(name string) (DocInfo, bool)
 
 // Search returns entries whose name, doc, or category contains pattern
 // (case-insensitive substring match). Results are sorted by name.
-// Primitives always take precedence over binding specs and doc entries:
-// if a name exists as a primitive, non-primitive entries with the same
-// name are suppressed regardless of whether the primitive matched the pattern.
-func (p *RegistryDocProvider) Search(pattern string) []DocSearchResult {
-	lowerPattern := strings.ToLower(pattern)
-	var results []DocSearchResult
-
-	// Build complete set of primitive names so non-primitives with the same
-	// name are always suppressed, even when the primitive doesn't match.
-	prims := p.reg.Primitives()
-	primNames := make(map[string]bool, len(prims))
-	for _, pr := range prims {
-		primNames[pr.Spec.Name] = true
-		if matchesFields(pr.Spec.Name, pr.Spec.Doc, pr.Spec.Category, lowerPattern) {
-			results = append(results, DocSearchResult{
-				Name:     pr.Spec.Name,
-				Doc:      pr.Spec.Doc,
-				Category: pr.Spec.Category,
-			})
-		}
-	}
-
-	seen := make(map[string]bool)
-	for _, r := range p.nonPrimitiveDocs() {
-		if primNames[r.Name] || seen[r.Name] {
-			continue
-		}
-		if matchesFields(r.Name, r.Doc, r.Category, lowerPattern) {
-			seen[r.Name] = true
-			results = append(results, r)
-		}
-	}
-
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Name < results[j].Name
-	})
-	return results
+// Delegates to registry.SearchDoc for unified search across all sources.
+func (p *RegistryDocProvider) Search(pattern string) []registry.DocSearchResult {
+	return registry.SearchDoc(p.reg, p.env, p.libReg, pattern)
 }
 
 // Categories returns sorted category names, excluding the empty-string category.
@@ -138,7 +115,7 @@ func (p *RegistryDocProvider) Categories() []string {
 			cats[pr.Spec.Category] = true
 		}
 	}
-	for _, r := range p.nonPrimitiveDocs() {
+	for _, r := range registry.NonPrimitiveDocs(p.reg) {
 		if r.Category != "" {
 			cats[r.Category] = true
 		}
@@ -153,21 +130,22 @@ func (p *RegistryDocProvider) Categories() []string {
 }
 
 // ByCategory returns entries in the named category, sorted by name.
-func (p *RegistryDocProvider) ByCategory(category string) []DocSearchResult {
+func (p *RegistryDocProvider) ByCategory(category string) []registry.DocSearchResult {
 	seen := make(map[string]bool)
-	var results []DocSearchResult
+	var results []registry.DocSearchResult
 
 	byCategory := p.reg.PrimitivesByCategory()
 	for _, pr := range byCategory[category] {
 		seen[pr.Spec.Name] = true
-		results = append(results, DocSearchResult{
+		results = append(results, registry.DocSearchResult{
 			Name:     pr.Spec.Name,
 			Doc:      pr.Spec.Doc,
 			Category: pr.Spec.Category,
+			Keywords: pr.Spec.Keywords,
 		})
 	}
 
-	for _, r := range p.nonPrimitiveDocs() {
+	for _, r := range registry.NonPrimitiveDocs(p.reg) {
 		if r.Category == category && !seen[r.Name] {
 			seen[r.Name] = true
 			results = append(results, r)
@@ -181,38 +159,4 @@ func (p *RegistryDocProvider) ByCategory(category string) []DocSearchResult {
 		return results[i].Name < results[j].Name
 	})
 	return results
-}
-
-// nonPrimitiveDocs returns doc search results from binding specs and doc entries.
-// These are parsed via docparse to extract structured metadata.
-func (p *RegistryDocProvider) nonPrimitiveDocs() []DocSearchResult {
-	var results []DocSearchResult
-	for _, bs := range p.reg.BindingSpecs() {
-		if bs.Doc == "" {
-			continue
-		}
-		parsed := docparse.ParseDocstring(bs.Doc)
-		results = append(results, DocSearchResult{
-			Name:     bs.Name,
-			Doc:      parsed.Doc,
-			Category: parsed.Category,
-		})
-	}
-	for _, de := range p.reg.Docs() {
-		parsed := docparse.ParseDocstring(de.Doc)
-		results = append(results, DocSearchResult{
-			Name:     de.Name,
-			Doc:      parsed.Doc,
-			Category: parsed.Category,
-		})
-	}
-	return results
-}
-
-// matchesFields returns true if any of name, doc, or category
-// contains the given lowercase pattern.
-func matchesFields(name, doc, category, pattern string) bool {
-	return strings.Contains(strings.ToLower(name), pattern) ||
-		strings.Contains(strings.ToLower(doc), pattern) ||
-		strings.Contains(strings.ToLower(category), pattern)
 }

@@ -66,15 +66,16 @@ func TestParseValueType(t *testing.T) {
 
 func TestParseDocstring(t *testing.T) {
 	tcs := []struct {
-		name       string
-		input      string
-		wantDoc    string
-		wantSyntax string
-		wantParams []string
-		wantTypes  []values.ValueType
-		wantReturn values.ValueType
-		wantCat    string
-		wantMeta   bool
+		name         string
+		input        string
+		wantDoc      string
+		wantSyntax   string
+		wantParams   []string
+		wantTypes    []values.ValueType
+		wantReturn   values.ValueType
+		wantCat      string
+		wantKeywords []string
+		wantMeta     bool
 	}{
 		{
 			name:     "empty string",
@@ -178,6 +179,37 @@ func TestParseDocstring(t *testing.T) {
 			wantCat:    "binding",
 			wantMeta:   true,
 		},
+		{
+			name:         "keywords single",
+			input:        "Sort a list.\nKeywords: sort\nCategory: lists",
+			wantDoc:      "Sort a list.",
+			wantCat:      "lists",
+			wantKeywords: []string{"sort"},
+			wantMeta:     true,
+		},
+		{
+			name:         "keywords multiple",
+			input:        "Sort a list.\nKeywords: sort, ordering, comparison\nCategory: lists",
+			wantDoc:      "Sort a list.",
+			wantCat:      "lists",
+			wantKeywords: []string{"sort", "ordering", "comparison"},
+			wantMeta:     true,
+		},
+		{
+			name:         "keywords with extra whitespace",
+			input:        "Sort a list.\nKeywords:  sort ,  ordering , comparison \nCategory: lists",
+			wantDoc:      "Sort a list.",
+			wantCat:      "lists",
+			wantKeywords: []string{"sort", "ordering", "comparison"},
+			wantMeta:     true,
+		},
+		{
+			name:         "keywords without category",
+			input:        "Sort a list.\nKeywords: sort, ordering",
+			wantDoc:      "Sort a list.",
+			wantKeywords: []string{"sort", "ordering"},
+			wantMeta:     true,
+		},
 	}
 
 	for _, tc := range tcs {
@@ -191,6 +223,7 @@ func TestParseDocstring(t *testing.T) {
 			c.Assert(info.ParamTypes, qt.DeepEquals, tc.wantTypes)
 			c.Assert(info.ReturnType, qt.Equals, tc.wantReturn)
 			c.Assert(info.Category, qt.Equals, tc.wantCat)
+			c.Assert(info.Keywords, qt.DeepEquals, tc.wantKeywords)
 			c.Assert(info.HasStructuredMetadata(), qt.Equals, tc.wantMeta)
 		})
 	}
