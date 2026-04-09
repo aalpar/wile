@@ -31,11 +31,11 @@
       (lset-union2 eq (if (member (car b) a eq) a (cons (car b) a)) (cdr b))))
 
 (define (lset-union eq . sets)
-  "Return the union of all SETS, using EQ as the element equality\npredicate. Elements from later sets are added to earlier ones,\nskipping duplicates.\n\nExamples:\n  (lset-union eq? '(a b) '(b c) '(c d))  => (d c a b)\n\nParameters:\n  eq : procedure\nReturns: list\nCategory: srfi-1\n\nSee also: `lset-intersection', `lset-difference', `lset-xor'."
+  "Return the union of all SETS, using EQ as the element equality\npredicate. Elements from later sets are added to earlier ones,\nskipping duplicates.\n\nExamples:\n  (lset-union eq? '(a b) '(b c) '(c d))  => (d c a b)\n\nParameters:\n  eq : procedure\nReturns: list\nCategory: srfi-1\nKeywords: set union, merge, combine, set operations\n\nSee also: `lset-intersection', `lset-difference', `lset-xor'."
   (reduce (lambda (a b) (lset-union2 eq b a)) '() sets))
 
 (define (lset-intersection eq . sets)
-  "Return the intersection of all SETS, using EQ as the element\nequality predicate. The result contains only elements present\nin every set.\n\nExamples:\n  (lset-intersection eq? '(a b c) '(b c d))  => (b c)\n  (lset-intersection eq? '(a b) '(c d))      => ()\n\nParameters:\n  eq : procedure\nReturns: list\nCategory: srfi-1\n\nSee also: `lset-union', `lset-difference', `lset-diff+intersection'."
+  "Return the intersection of all SETS, using EQ as the element\nequality predicate. The result contains only elements present\nin every set.\n\nExamples:\n  (lset-intersection eq? '(a b c) '(b c d))  => (b c)\n  (lset-intersection eq? '(a b) '(c d))      => ()\n\nParameters:\n  eq : procedure\nReturns: list\nCategory: srfi-1\nKeywords: set intersection, common elements, set operations\n\nSee also: `lset-union', `lset-difference', `lset-diff+intersection'."
   (reduce (lambda (a b) (filter (lambda (x) (member x a eq)) b)) '() sets))
 
 (define (lset-diff2 eq a b)
@@ -43,11 +43,11 @@
   (remove (lambda (x) (member x a eq)) b))
 
 (define (lset-difference eq . sets)
-  "Return elements of the first set not present in any of the\nremaining SETS, using EQ as the element equality predicate.\n\nExamples:\n  (lset-difference eq? '(a b c d) '(b c))  => (a d)\n  (lset-difference eq? '(a b c) '(a) '(c))  => (b)\n\nParameters:\n  eq : procedure\nReturns: list\nCategory: srfi-1\n\nSee also: `lset-union', `lset-intersection', `lset-diff+intersection'."
+  "Return elements of the first set not present in any of the\nremaining SETS, using EQ as the element equality predicate.\n\nExamples:\n  (lset-difference eq? '(a b c d) '(b c))  => (a d)\n  (lset-difference eq? '(a b c) '(a) '(c))  => (b)\n\nParameters:\n  eq : procedure\nReturns: list\nCategory: srfi-1\nKeywords: set difference, subtract, set minus, set operations\n\nSee also: `lset-union', `lset-intersection', `lset-diff+intersection'."
   (reduce (lambda (a b) (lset-diff2 eq a b)) '() sets))
 
 (define (lset-xor eq . sets)
-  "Return the symmetric difference of all SETS using EQ as the\nequality predicate. The result contains elements that appear\nin exactly one of each pairwise reduction.\n\nExamples:\n  (lset-xor eq? '(a b c) '(b c d))      => (d a)\n  (lset-xor eq? '(a b) '(b c) '(a c))   => ()\n\nParameters:\n  eq : procedure\nReturns: list\nCategory: srfi-1\n\nSee also: `lset-union', `lset-difference', `lset-intersection'."
+  "Return the symmetric difference of all SETS using EQ as the\nequality predicate. The result contains elements that appear\nin exactly one of each pairwise reduction.\n\nExamples:\n  (lset-xor eq? '(a b c) '(b c d))      => (d a)\n  (lset-xor eq? '(a b) '(b c) '(a c))   => ()\n\nParameters:\n  eq : procedure\nReturns: list\nCategory: srfi-1\nKeywords: symmetric difference, exclusive or, set operations\n\nSee also: `lset-union', `lset-difference', `lset-intersection'."
   (reduce (lambda (a b) (append (lset-diff2 eq a b) (lset-diff2 eq b a)))
           '()
           sets))
