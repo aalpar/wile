@@ -115,7 +115,7 @@ func (p *RegistryDocProvider) Categories() []string {
 			cats[pr.Spec.Category] = true
 		}
 	}
-	for _, r := range p.nonPrimitiveDocs() {
+	for _, r := range registry.NonPrimitiveDocs(p.reg) {
 		if r.Category != "" {
 			cats[r.Category] = true
 		}
@@ -145,7 +145,7 @@ func (p *RegistryDocProvider) ByCategory(category string) []registry.DocSearchRe
 		})
 	}
 
-	for _, r := range p.nonPrimitiveDocs() {
+	for _, r := range registry.NonPrimitiveDocs(p.reg) {
 		if r.Category == category && !seen[r.Name] {
 			seen[r.Name] = true
 			results = append(results, r)
@@ -158,33 +158,5 @@ func (p *RegistryDocProvider) ByCategory(category string) []registry.DocSearchRe
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Name < results[j].Name
 	})
-	return results
-}
-
-// nonPrimitiveDocs returns doc search results from binding specs and doc entries.
-// These are parsed via docparse to extract structured metadata.
-func (p *RegistryDocProvider) nonPrimitiveDocs() []registry.DocSearchResult {
-	var results []registry.DocSearchResult
-	for _, bs := range p.reg.BindingSpecs() {
-		if bs.Doc == "" {
-			continue
-		}
-		parsed := docparse.ParseDocstring(bs.Doc)
-		results = append(results, registry.DocSearchResult{
-			Name:     bs.Name,
-			Doc:      parsed.Doc,
-			Category: parsed.Category,
-			Keywords: parsed.Keywords,
-		})
-	}
-	for _, de := range p.reg.Docs() {
-		parsed := docparse.ParseDocstring(de.Doc)
-		results = append(results, registry.DocSearchResult{
-			Name:     de.Name,
-			Doc:      parsed.Doc,
-			Category: parsed.Category,
-			Keywords: parsed.Keywords,
-		})
-	}
 	return results
 }

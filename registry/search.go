@@ -23,6 +23,19 @@ import (
 	"github.com/aalpar/wile/machine/compilation"
 )
 
+// ExtractLibraryRegistry extracts the *compilation.LibraryRegistry from an
+// environment frame, returning nil if unavailable or a different concrete type.
+func ExtractLibraryRegistry(env *environment.EnvironmentFrame) *compilation.LibraryRegistry {
+	if env == nil {
+		return nil
+	}
+	lr, ok := env.LibraryRegistry().(*compilation.LibraryRegistry)
+	if !ok {
+		return nil
+	}
+	return lr
+}
+
 // DocSearchResult holds one search hit from SearchDoc.
 type DocSearchResult struct {
 	Name     string
@@ -45,7 +58,7 @@ type DocSearchResult struct {
 // Results are sorted by name. env and libReg may be nil.
 func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libReg *compilation.LibraryRegistry, pattern string) []DocSearchResult {
 	lowerPattern := strings.ToLower(pattern)
-	var results []DocSearchResult
+	var q []DocSearchResult
 
 	// 1. Registry primitives — always take precedence.
 	prims := reg.Primitives()
@@ -53,7 +66,7 @@ func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libReg *compila
 	for _, pr := range prims {
 		primNames[pr.Spec.Name] = true
 		if matchesDoc(pr.Spec.Name, pr.Spec.Doc, pr.Spec.Category, pr.Spec.Keywords, lowerPattern) {
-			results = append(results, DocSearchResult{
+			q = append(q, DocSearchResult{
 				Name:     pr.Spec.Name,
 				Doc:      pr.Spec.Doc,
 				Category: pr.Spec.Category,
@@ -64,13 +77,13 @@ func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libReg *compila
 
 	// 2-3. Binding specs and doc entries (non-primitive docs).
 	seen := make(map[string]bool)
-	for _, r := range nonPrimitiveDocs(reg) {
+	for _, r := range NonPrimitiveDocs(reg) {
 		if primNames[r.Name] || seen[r.Name] {
 			continue
 		}
 		if matchesDoc(r.Name, r.Doc, r.Category, r.Keywords, lowerPattern) {
 			seen[r.Name] = true
-			results = append(results, r)
+			q = append(q, r)
 		}
 	}
 
@@ -81,7 +94,7 @@ func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libReg *compila
 				continue
 			}
 			seen[r.Name] = true
-			results = append(results, r)
+			q = append(q, r)
 		}
 	}
 
@@ -92,25 +105,26 @@ func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libReg *compila
 				continue
 			}
 			seen[r.Name] = true
-			results = append(results, r)
+			q = append(q, r)
 		}
 	}
 
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Name < results[j].Name
+	sort.Slice(q, func(i, j int) bool {
+		return q[i].Name < q[j].Name
 	})
-	return results
+	return q
 }
 
-// nonPrimitiveDocs returns doc search results from binding specs and doc entries.
-func nonPrimitiveDocs(reg *Registry) []DocSearchResult {
-	var results []DocSearchResult
+// NonPrimitiveDocs returns doc search results from binding specs and doc entries.
+// Each entry's Doc, Category, and Keywords are extracted via docparse.ParseDocstring.
+func NonPrimitiveDocs(reg *Registry) []DocSearchResult {
+	var q []DocSearchResult
 	for _, bs := range reg.BindingSpecs() {
 		if bs.Doc == "" {
 			continue
 		}
 		parsed := docparse.ParseDocstring(bs.Doc)
-		results = append(results, DocSearchResult{
+		q = append(q, DocSearchResult{
 			Name:     bs.Name,
 			Doc:      parsed.Doc,
 			Category: parsed.Category,
@@ -119,14 +133,14 @@ func nonPrimitiveDocs(reg *Registry) []DocSearchResult {
 	}
 	for _, de := range reg.Docs() {
 		parsed := docparse.ParseDocstring(de.Doc)
-		results = append(results, DocSearchResult{
+		q = append(q, DocSearchResult{
 			Name:     de.Name,
 			Doc:      parsed.Doc,
 			Category: parsed.Category,
 			Keywords: parsed.Keywords,
 		})
 	}
-	return results
+	return q
 }
 
 // searchEnvironmentBindings walks phase environment bindings for matches.
@@ -139,7 +153,7 @@ func searchEnvironmentBindings(env *environment.EnvironmentFrame, lowerPattern s
 	phaseIndices := phases.Phases()
 
 	seen := make(map[string]bool)
-	var results []DocSearchResult
+	var q []DocSearchResult
 	for _, phase := range phaseIndices {
 		phaseEnv := phases.Get(phase)
 		if phaseEnv == nil {
@@ -149,6 +163,10 @@ func searchEnvironmentBindings(env *environment.EnvironmentFrame, lowerPattern s
 		if global == nil {
 			continue
 		}
+		// Keys() and Bindings() are separate locked snapshots. A concurrent
+		// define could add a key whose index exceeds the bindings snapshot
+		// length. The idx < len(bindings) guard below prevents a panic;
+		// the skipped entry is acceptable for a best-effort search.
 		keys := global.Keys()
 		bindings := global.Bindings()
 		for sym, idx := range keys {
@@ -186,7 +204,7 @@ func searchEnvironmentBindings(env *environment.EnvironmentFrame, lowerPattern s
 			}
 
 			if matchesDoc(name, doc, category, keywords, lowerPattern) {
-				results = append(results, DocSearchResult{
+				q = append(q, DocSearchResult{
 					Name:     name,
 					Doc:      displayDoc,
 					Category: category,
@@ -195,24 +213,24 @@ func searchEnvironmentBindings(env *environment.EnvironmentFrame, lowerPattern s
 			}
 		}
 	}
-	return results
+	return q
 }
 
 // searchLibraries searches loaded libraries for matches.
 func searchLibraries(libReg *compilation.LibraryRegistry, lowerPattern string) []DocSearchResult {
-	var results []DocSearchResult
+	var q []DocSearchResult
 	for _, lib := range libReg.All() {
 		name := lib.Name.SchemeString()
 		if strings.Contains(strings.ToLower(name), lowerPattern) ||
 			strings.Contains(strings.ToLower(lib.Description), lowerPattern) {
-			results = append(results, DocSearchResult{
+			q = append(q, DocSearchResult{
 				Name:     name,
 				Doc:      lib.Description,
 				Category: "library",
 			})
 		}
 	}
-	return results
+	return q
 }
 
 // matchesDoc reports whether any of name, doc, category, or keywords

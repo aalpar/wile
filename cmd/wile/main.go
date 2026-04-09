@@ -31,7 +31,6 @@ import (
 
 	"github.com/aalpar/wile"
 	"github.com/aalpar/wile/extensions/system"
-	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/repl"
 	"github.com/aalpar/wile/stdlib"
@@ -410,12 +409,7 @@ func runREPL(ctx context.Context, eng *wile.Engine) {
 		Failf(nil, "internal error: namespace registry has unexpected type")
 	}
 	env := eng.Environment()
-	var libReg *compilation.LibraryRegistry
-	lr, ok := env.LibraryRegistry().(*compilation.LibraryRegistry)
-	if ok {
-		libReg = lr
-	}
-	docProv := repl.NewRegistryDocProvider(reg, env, libReg)
+	docProv := repl.NewRegistryDocProvider(reg, env, registry.ExtractLibraryRegistry(env))
 	r := repl.New(eng, repl.WithDocProvider(docProv))
 	err := r.Run(ctx)
 	if err != nil {

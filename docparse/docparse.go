@@ -131,11 +131,11 @@ func ParseDocstring(raw string) DocInfo {
 				currentSection = "Category:"
 
 			case strings.HasPrefix(line, "Keywords:"):
-				raw := strings.TrimSpace(strings.TrimPrefix(line, "Keywords:"))
-				parts := strings.Split(raw, ",")
+				kwRaw := strings.TrimSpace(strings.TrimPrefix(line, "Keywords:"))
+				parts := strings.Split(kwRaw, ",")
 				keywords := make([]string, 0, len(parts))
-				for _, p := range parts {
-					trimmed := strings.TrimSpace(p)
+				for _, part := range parts {
+					trimmed := strings.TrimSpace(part)
 					if trimmed != "" {
 						keywords = append(keywords, trimmed)
 					}
