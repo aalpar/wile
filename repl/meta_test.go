@@ -582,7 +582,7 @@ func TestCmdLibraries(t *testing.T) {
 			var buf bytes.Buffer
 			h := NewMetaCommandHandler(eng)
 			h.SetPager("")
-			h.cmdLibraries(&buf)
+			h.cmdLibraries(context.Background(), &buf)
 			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
 				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
 		})
@@ -591,7 +591,7 @@ func TestCmdLibraries(t *testing.T) {
 	t.Run("no env", func(t *testing.T) {
 		var buf bytes.Buffer
 		h := NewMetaCommandHandler(nil)
-		h.cmdLibraries(&buf)
+		h.cmdLibraries(context.Background(), &buf)
 		qt.Assert(t, strings.Contains(buf.String(), "No environment"), qt.IsTrue)
 	})
 
@@ -599,7 +599,7 @@ func TestCmdLibraries(t *testing.T) {
 		noRegEng := newTestEngine(t)
 		var buf bytes.Buffer
 		h := NewMetaCommandHandler(noRegEng)
-		h.cmdLibraries(&buf)
+		h.cmdLibraries(context.Background(), &buf)
 		qt.Assert(t, strings.Contains(buf.String(), "No library registry"), qt.IsTrue)
 	})
 
@@ -630,7 +630,7 @@ func TestCmdLibraries_UnloadedFromExportIndex(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewMetaCommandHandler(eng, WithMetaDocProvider(docProv))
 	h.SetPager("")
-	h.cmdLibraries(&buf)
+	h.cmdLibraries(context.Background(), &buf)
 	output := buf.String()
 
 	qt.Assert(t, strings.Contains(output, "Available libraries"), qt.IsTrue,

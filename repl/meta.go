@@ -108,7 +108,7 @@ func (p *MetaCommandHandler) Handle(ctx context.Context, line string, out io.Wri
 	case "topic":
 		p.cmdTopic(ctx, args, out)
 	case "libraries", "libs":
-		p.cmdLibraries(out)
+		p.cmdLibraries(ctx, out)
 	case "disassemble", "dis":
 		p.cmdDisassemble(args, out)
 	default:
@@ -716,7 +716,7 @@ func (p *MetaCommandHandler) cmdTopic(_ context.Context, args []string, out io.W
 	writeWithPager(out, content.String(), p.pager)
 }
 
-func (p *MetaCommandHandler) cmdLibraries(out io.Writer) {
+func (p *MetaCommandHandler) cmdLibraries(ctx context.Context, out io.Writer) {
 	env := p.env()
 	if env == nil {
 		fmt.Fprintln(out, "No environment available")
@@ -739,7 +739,7 @@ func (p *MetaCommandHandler) cmdLibraries(out io.Writer) {
 	var unloaded []*compilation.LibrarySummary
 	rdp, ok := p.docProv.(*RegistryDocProvider)
 	if ok {
-		unloaded = rdp.UnloadedLibraries(context.Background())
+		unloaded = rdp.UnloadedLibraries(ctx)
 	}
 
 	if len(libs) == 0 && len(unloaded) == 0 {

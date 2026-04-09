@@ -122,7 +122,8 @@ If the resolver does not implement `LibraryEnumerator`, returns an empty index.
 ### Lazy Construction — `RegistryDocProvider`
 
 `RegistryDocProvider` (`repl/registry_doc_provider.go`) builds the index lazily
-on the first `Search()` call via `sync.Once`. The library registry is read
+on first use via `sync.Once` in `ensureExportIndex`. Both `Search()` and
+`UnloadedLibraries()` trigger initialization. The library registry is read
 dynamically from the environment on each call (not cached at construction time),
 so libraries loaded after provider construction are visible.
 
@@ -138,6 +139,12 @@ type RegistryDocProvider struct {
 
 Constructor takes `(reg, env)` — no `libReg` parameter. The library registry
 is retrieved dynamically via `registry.ExtractLibraryRegistry(env)`.
+
+Key methods:
+- `ensureExportIndex(ctx)` — builds the index on first call (shared by Search and UnloadedLibraries)
+- `Search(ctx, pattern)` — delegates to `registry.SearchDoc` with all six sources
+- `UnloadedLibraries(ctx)` — returns `[]*compilation.LibrarySummary` for libraries
+  discoverable via the resolver but not yet imported (used by `,libraries`)
 
 ## Entry Points
 
@@ -163,6 +170,28 @@ Returns a flat list of symbols (names from all matching results).
 
 Delegates to `,apropos` via the REPL meta-command handler. Gets full search
 coverage including unloaded libraries.
+
+### REPL `,libraries` / MCP `libraries` tool (`repl/meta.go`)
+
+`cmdLibraries` shows two sections:
+
+1. **Loaded libraries** — from the `LibraryRegistry` (libraries already imported)
+2. **Available libraries** — from the `LibraryExportIndex` via
+   `RegistryDocProvider.UnloadedLibraries()` (discoverable but not yet imported)
+
+```
+Loaded libraries (3):
+  (scheme base)   R7RS base library...
+
+Available libraries (12):
+  (wile algebra)           Algebraic structures: orders, lattices, ...
+  (wile algebra galois)    Galois connections between lattices.
+  ...
+```
+
+The MCP `libraries` tool delegates to `,libraries` via `runMeta`. The
+`wile://libraries` MCP resource still only reports loaded libraries (it reads
+the `LibraryRegistry` directly without going through `cmdLibraries`).
 
 ## Topic Browsing
 
@@ -219,7 +248,7 @@ discovery mechanism.
 | `machine/compilation/library_export_index.go` | `LibrarySummary`, `LibraryExportIndex`, `ParseLibrarySummary`, `BuildExportIndex` |
 | `machine/compilation/library_export_index_test.go` | Unit tests for static parsing and index building |
 | `repl/registry_doc_provider.go` | `RegistryDocProvider` with lazy export index |
-| `repl/meta.go` | `,apropos`, `,topics`, `,topic` commands |
+| `repl/meta.go` | `,apropos`, `,topics`, `,topic`, `,libraries` commands |
 | `registry/core/prim_reflection.go` | `PrimApropos`, `PrimDocTopics`, `PrimDocTopic` |
 | `docparse/docparse.go` | `ParseDocstring` — extracts Category, Keywords, Parameters, etc. |
 
@@ -252,4 +281,4 @@ discovery mechanism.
 | #622 | Propagate Keywords through doc-only primitive registration |
 | #623 | Library export index for unloaded library discovery in apropos |
 | #624 | Read library registry dynamically in RegistryDocProvider |
-| #625 | Search unloaded library names and descriptions in apropos |
+| #625 | Search unloaded library names/descriptions in apropos; show available libraries in `,libraries` |
