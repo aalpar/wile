@@ -17,6 +17,7 @@ package registry_test
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -125,7 +126,7 @@ func TestSearchDoc(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			results := registry.SearchDoc(reg, nil, nil, tc.pattern)
+			results := registry.SearchDoc(reg, nil, nil, nil, tc.pattern)
 			names := make([]string, len(results))
 			for i, r := range results {
 				names[i] = r.Name
@@ -146,7 +147,7 @@ func TestSearchDoc_PrimitivePrecedence(t *testing.T) {
 		{Name: "apply", Doc: "Binding-level apply.\nCategory: control"},
 	})
 
-	results := registry.SearchDoc(reg, nil, nil, "apply")
+	results := registry.SearchDoc(reg, nil, nil, nil, "apply")
 	count := 0
 	for _, r := range results {
 		if r.Name == "apply" {
@@ -163,7 +164,7 @@ func TestSearchDoc_NilEnvAndLibReg(t *testing.T) {
 	reg.AddPrimitive(registry.PrimitiveSpec{
 		Name: "car", ParamCount: 1, Doc: "First of pair.", Category: "pairs",
 	}, registry.PhaseRuntime)
-	results := registry.SearchDoc(reg, nil, nil, "car")
+	results := registry.SearchDoc(reg, nil, nil, nil, "car")
 	c.Assert(len(results), qt.Equals, 1)
 	c.Assert(results[0].Name, qt.Equals, "car")
 }
@@ -171,7 +172,7 @@ func TestSearchDoc_NilEnvAndLibReg(t *testing.T) {
 func TestSearchDoc_KeywordsInResult(t *testing.T) {
 	c := qt.New(t)
 	reg := buildSearchTestRegistry()
-	results := registry.SearchDoc(reg, nil, nil, "list-sort")
+	results := registry.SearchDoc(reg, nil, nil, nil, "list-sort")
 	c.Assert(len(results), qt.Equals, 1)
 	c.Assert(results[0].Keywords, qt.DeepEquals, []string{"sort", "ordering", "comparison"})
 }
@@ -179,7 +180,7 @@ func TestSearchDoc_KeywordsInResult(t *testing.T) {
 func TestSearchDoc_DocEntryKeywordsParsed(t *testing.T) {
 	c := qt.New(t)
 	reg := buildSearchTestRegistry()
-	results := registry.SearchDoc(reg, nil, nil, "boolean")
+	results := registry.SearchDoc(reg, nil, nil, nil, "boolean")
 	found := false
 	for _, r := range results {
 		if r.Name == "and" {
@@ -202,7 +203,7 @@ func TestSearchDoc_EnvironmentBindings(t *testing.T) {
 	// Search for "car" — should find it via environment bindings even though
 	// the env path is now exercised (car is also a primitive, so the primitive
 	// path covers it too). Search for something that's only in the environment.
-	results := registry.SearchDoc(reg, env, nil, "car")
+	results := registry.SearchDoc(reg, env, nil, nil, "car")
 	names := make([]string, len(results))
 	for i, r := range results {
 		names[i] = r.Name
@@ -221,7 +222,7 @@ func TestSearchDoc_Libraries(t *testing.T) {
 	err := libReg.Register(lib)
 	c.Assert(err, qt.IsNil)
 
-	results := registry.SearchDoc(reg, nil, libReg, "math")
+	results := registry.SearchDoc(reg, nil, libReg, nil, "math")
 	c.Assert(len(results), qt.Equals, 1)
 	c.Assert(results[0].Name, qt.Equals, "(test math)")
 	c.Assert(results[0].Category, qt.Equals, "library")
@@ -239,7 +240,7 @@ func TestSearchDoc_LibraryByDescription(t *testing.T) {
 	err := libReg.Register(lib)
 	c.Assert(err, qt.IsNil)
 
-	results := registry.SearchDoc(reg, nil, libReg, "lattice")
+	results := registry.SearchDoc(reg, nil, libReg, nil, "lattice")
 	c.Assert(len(results), qt.Equals, 1)
 	c.Assert(results[0].Name, qt.Equals, "(wile algebra)")
 }
@@ -270,7 +271,7 @@ func TestSearchDoc_EnvironmentBindingKeywordsFromValue(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Search by keyword — should find make-widget via its closure's docstring.
-	results := registry.SearchDoc(reg, env, nil, "abelian")
+	results := registry.SearchDoc(reg, env, nil, nil, "abelian")
 	names := make([]string, len(results))
 	for i, r := range results {
 		names[i] = r.Name
@@ -285,5 +286,75 @@ func TestSearchDoc_EnvironmentBindingKeywordsFromValue(t *testing.T) {
 				qt.Commentf("result should have parsed keywords: %v", r.Keywords))
 			c.Assert(r.Category, qt.Equals, "widgets")
 		}
+	}
+}
+
+func TestSearchDoc_UnloadedExports(t *testing.T) {
+	c := qt.New(t)
+
+	reg := registry.NewRegistry()
+	idx := compilation.NewLibraryExportIndexFromEntries(map[string]*compilation.LibrarySummary{
+		"srfi/1": {
+			Name:        compilation.NewLibraryName("srfi", "1"),
+			Description: "SRFI 1: List library.",
+			Exports:     []string{"fold", "unfold", "partition"},
+		},
+	})
+
+	results := registry.SearchDoc(reg, nil, nil, idx, "partition")
+	c.Assert(len(results), qt.Equals, 1)
+	c.Assert(results[0].Name, qt.Equals, "partition")
+	c.Assert(results[0].Category, qt.Equals, "not imported")
+	c.Assert(strings.Contains(results[0].Doc, "(srfi 1)"), qt.IsTrue)
+	c.Assert(strings.Contains(results[0].Doc, "SRFI 1: List library."), qt.IsTrue)
+}
+
+func TestSearchDoc_LoadedTakesPrecedenceOverUnloaded(t *testing.T) {
+	c := qt.New(t)
+
+	reg := registry.NewRegistry()
+	// Register "fold" as a primitive so it appears as a loaded binding.
+	reg.AddPrimitive(registry.PrimitiveSpec{
+		Name:       "fold",
+		ParamCount: 3,
+		Doc:        "Fold over a list.",
+		Category:   "lists",
+	}, registry.PhaseRuntime)
+
+	// Also put "fold" in the unloaded export index.
+	idx := compilation.NewLibraryExportIndexFromEntries(map[string]*compilation.LibrarySummary{
+		"srfi/1": {
+			Name:        compilation.NewLibraryName("srfi", "1"),
+			Description: "SRFI 1: List library.",
+			Exports:     []string{"fold", "unfold", "partition"},
+		},
+	})
+
+	// Search for "fold" — matches both "fold" and "unfold" as substrings.
+	results := registry.SearchDoc(reg, nil, nil, idx, "fold")
+
+	// "fold" should appear exactly once — the primitive wins via primNames.
+	foldCount := 0
+	for _, r := range results {
+		if r.Name == "fold" {
+			foldCount++
+			c.Assert(r.Category, qt.Equals, "lists")
+		}
+	}
+	c.Assert(foldCount, qt.Equals, 1)
+
+	// "unfold" should appear from the unloaded index (substring match on "fold").
+	unfoldFound := false
+	for _, r := range results {
+		if r.Name == "unfold" {
+			unfoldFound = true
+			c.Assert(r.Category, qt.Equals, "not imported")
+		}
+	}
+	c.Assert(unfoldFound, qt.IsTrue)
+
+	// "partition" should NOT appear (doesn't match "fold").
+	for _, r := range results {
+		c.Assert(r.Name != "partition", qt.IsTrue)
 	}
 }

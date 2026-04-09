@@ -15,6 +15,7 @@
 package registry
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -53,10 +54,11 @@ type DocSearchResult struct {
 //  3. Registry doc entries (parsed via docparse)
 //  4. Environment bindings (if env is non-nil)
 //  5. Loaded libraries (if libReg is non-nil)
+//  6. Unloaded library exports (if exportIndex is non-nil)
 //
 // Primitives take precedence over non-primitives with the same name.
-// Results are sorted by name. env and libReg may be nil.
-func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libReg *compilation.LibraryRegistry, pattern string) []DocSearchResult {
+// Results are sorted by name. env, libReg, and exportIndex may be nil.
+func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libReg *compilation.LibraryRegistry, exportIndex *compilation.LibraryExportIndex, pattern string) []DocSearchResult {
 	lowerPattern := strings.ToLower(pattern)
 	var q []DocSearchResult
 
@@ -102,6 +104,17 @@ func SearchDoc(reg *Registry, env *environment.EnvironmentFrame, libReg *compila
 	if libReg != nil {
 		for _, r := range searchLibraries(libReg, lowerPattern) {
 			if seen[r.Name] {
+				continue
+			}
+			seen[r.Name] = true
+			q = append(q, r)
+		}
+	}
+
+	// 6. Unloaded library exports.
+	if exportIndex != nil {
+		for _, r := range searchUnloadedExports(exportIndex, libReg, lowerPattern) {
+			if primNames[r.Name] || seen[r.Name] {
 				continue
 			}
 			seen[r.Name] = true
@@ -227,6 +240,36 @@ func searchLibraries(libReg *compilation.LibraryRegistry, lowerPattern string) [
 				Name:     name,
 				Doc:      lib.Description,
 				Category: "library",
+			})
+		}
+	}
+	return q
+}
+
+// searchUnloadedExports searches the export index for matching export names
+// from libraries that are not yet loaded. Libraries already present in libReg
+// are skipped (they were imported after the index was built).
+func searchUnloadedExports(idx *compilation.LibraryExportIndex, libReg *compilation.LibraryRegistry, lowerPattern string) []DocSearchResult {
+	if idx == nil {
+		return nil
+	}
+	var q []DocSearchResult
+	for _, summary := range idx.Entries() {
+		if libReg != nil && libReg.Lookup(summary.Name) != nil {
+			continue
+		}
+		for _, export := range summary.Exports {
+			if !strings.Contains(strings.ToLower(export), lowerPattern) {
+				continue
+			}
+			doc := summary.Name.SchemeString()
+			if summary.Description != "" {
+				doc = fmt.Sprintf("%s — %s", doc, summary.Description)
+			}
+			q = append(q, DocSearchResult{
+				Name:     export,
+				Category: "not imported",
+				Doc:      doc,
 			})
 		}
 	}
