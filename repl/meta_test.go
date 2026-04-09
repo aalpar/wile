@@ -102,7 +102,7 @@ func TestCmdEdit_EditorExec(t *testing.T) {
 
 func TestCmdDoc(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
+	docProv := NewRegistryDocProvider(eng.Registry(), nil)
 
 	tcs := []struct {
 		name    string
@@ -193,7 +193,7 @@ func TestCmdDoc_ClosureDocstring(t *testing.T) {
 
 func TestCmdDoc_SpecialFormStructuredFormat(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
+	docProv := NewRegistryDocProvider(eng.Registry(), nil)
 
 	t.Setenv("PAGER", "")
 	var buf bytes.Buffer
@@ -215,7 +215,7 @@ func TestCmdDoc_SpecialFormStructuredFormat(t *testing.T) {
 
 func TestCmdDoc_MacroStructuredFormat(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
+	docProv := NewRegistryDocProvider(eng.Registry(), nil)
 
 	t.Setenv("PAGER", "")
 	var buf bytes.Buffer
@@ -279,7 +279,7 @@ func TestMetaHandleUnknown(t *testing.T) {
 
 func TestCmdDoc_ExamplesFiltering(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
+	docProv := NewRegistryDocProvider(eng.Registry(), nil)
 
 	t.Run("strips examples by default", func(t *testing.T) {
 		t.Setenv("PAGER", "")
@@ -378,7 +378,7 @@ func TestFormatPrimitiveDoc_ReturnTypeWithoutParamTypes(t *testing.T) {
 
 func TestCmdApropos(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
+	docProv := NewRegistryDocProvider(eng.Registry(), nil)
 
 	tcs := []struct {
 		name    string
@@ -404,7 +404,7 @@ func TestCmdApropos(t *testing.T) {
 
 func TestCmdApropos_SpecialFormCategory(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
+	docProv := NewRegistryDocProvider(eng.Registry(), nil)
 
 	// Special forms and macros should show [category] in apropos output.
 	// These are found via registry binding specs and doc entries;
@@ -447,7 +447,7 @@ func TestCmdApropos_Library(t *testing.T) {
 	env.SetLibraryRegistry(libReg)
 
 	// Create provider after library setup so it sees env and libReg.
-	docProv := NewRegistryDocProvider(eng.Registry(), env, libReg)
+	docProv := NewRegistryDocProvider(eng.Registry(), env)
 
 	tcs := []struct {
 		name    string
@@ -473,7 +473,7 @@ func TestCmdApropos_Library(t *testing.T) {
 
 func TestCmdTopics(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
+	docProv := NewRegistryDocProvider(eng.Registry(), nil)
 
 	t.Setenv("PAGER", "")
 	var buf bytes.Buffer
@@ -488,7 +488,7 @@ func TestCmdTopics(t *testing.T) {
 
 func TestCmdTopic(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
+	docProv := NewRegistryDocProvider(eng.Registry(), nil)
 
 	tcs := []struct {
 		name    string
@@ -760,8 +760,7 @@ func TestCmdApropos_KeywordMatchAfterLibraryImport(t *testing.T) {
 	env := eng.Environment()
 	reg, ok := env.Namespace().Registry().(*registry.Registry)
 	qt.Assert(t, ok, qt.IsTrue)
-	libReg := registry.ExtractLibraryRegistry(env)
-	docProv := NewRegistryDocProvider(reg, env, libReg)
+	docProv := NewRegistryDocProvider(reg, env)
 
 	// Search for "abelian" — make-group has it only in Keywords, not in name or doc prose.
 	t.Setenv("PAGER", "")
