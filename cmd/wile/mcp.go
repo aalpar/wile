@@ -358,7 +358,7 @@ func (p *mcpServer) runMeta(ctx context.Context, line string) (toolResult *mcp.C
 		return mcp.NewToolResultError(fmt.Sprintf("engine init failed: %v", err)), nil
 	}
 	var sb strings.Builder
-	p.meta.Handle(line, &sb)
+	p.meta.Handle(ctx, line, &sb)
 	return mcp.NewToolResultText(sb.String()), nil
 }
 

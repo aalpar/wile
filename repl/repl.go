@@ -205,7 +205,7 @@ func (p *REPL) Run(ctx context.Context) error {
 		// Check for meta-commands before parsing as Scheme
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, ",") && inputBuffer.Len() == 0 {
-			p.metaHandler.Handle(trimmed, p.out)
+			p.metaHandler.Handle(ctx, trimmed, p.out)
 			continue
 		}
 

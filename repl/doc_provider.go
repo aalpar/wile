@@ -15,6 +15,7 @@
 package repl
 
 import (
+	"context"
 	"strings"
 
 	"github.com/aalpar/wile/registry"
@@ -58,7 +59,7 @@ type DocSearchProvider interface {
 	DocProvider
 	// Search returns entries whose name, doc, or category contains pattern
 	// (case-insensitive substring match). Results are sorted by name.
-	Search(pattern string) []registry.DocSearchResult
+	Search(ctx context.Context, pattern string) []registry.DocSearchResult
 	// Categories returns sorted category names.
 	Categories() []string
 	// ByCategory returns entries in the named category, sorted by name.

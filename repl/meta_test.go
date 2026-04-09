@@ -58,7 +58,7 @@ func TestMetaCommandHandler(t *testing.T) {
 			if tc.debug {
 				h.SetDebugContext(NewDebugContext())
 			}
-			handled := h.Handle(tc.input, &buf)
+			handled := h.Handle(context.Background(), tc.input, &buf)
 			qt.Assert(t, handled, qt.Equals, tc.handled)
 			if tc.contain != "" {
 				qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
@@ -271,7 +271,7 @@ func TestMetaHandleUnknown(t *testing.T) {
 	h := NewMetaCommandHandler(nil)
 
 	// Unknown command still returns true (it's a meta-command, just unrecognized)
-	handled := h.Handle(",totally_unknown_cmd", &buf)
+	handled := h.Handle(context.Background(), ",totally_unknown_cmd", &buf)
 	qt.Assert(t, handled, qt.IsTrue)
 	qt.Assert(t, strings.Contains(buf.String(), "Unknown command"), qt.IsTrue,
 		qt.Commentf("output was: %q", buf.String()))
@@ -395,7 +395,7 @@ func TestCmdApropos(t *testing.T) {
 			t.Setenv("PAGER", "")
 			var buf bytes.Buffer
 			h := NewMetaCommandHandler(eng, WithMetaDocProvider(docProv))
-			h.cmdApropos(tc.args, &buf)
+			h.cmdApropos(context.Background(), tc.args, &buf)
 			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
 				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
 		})
@@ -424,7 +424,7 @@ func TestCmdApropos_SpecialFormCategory(t *testing.T) {
 			t.Setenv("PAGER", "")
 			var buf bytes.Buffer
 			h := NewMetaCommandHandler(eng, WithMetaDocProvider(docProv))
-			h.cmdApropos([]string{tc.pattern}, &buf)
+			h.cmdApropos(context.Background(), []string{tc.pattern}, &buf)
 			output := buf.String()
 			qt.Assert(t, strings.Contains(output, tc.pattern), qt.IsTrue,
 				qt.Commentf("output should contain %q: %q", tc.pattern, output))
@@ -464,7 +464,7 @@ func TestCmdApropos_Library(t *testing.T) {
 			t.Setenv("PAGER", "")
 			var buf bytes.Buffer
 			h := NewMetaCommandHandler(eng, WithMetaDocProvider(docProv))
-			h.cmdApropos([]string{tc.pattern}, &buf)
+			h.cmdApropos(context.Background(), []string{tc.pattern}, &buf)
 			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
 				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
 		})
@@ -478,7 +478,7 @@ func TestCmdTopics(t *testing.T) {
 	t.Setenv("PAGER", "")
 	var buf bytes.Buffer
 	h := NewMetaCommandHandler(nil, WithMetaDocProvider(docProv))
-	h.cmdTopics(&buf)
+	h.cmdTopics(context.Background(), &buf)
 	output := buf.String()
 	qt.Assert(t, strings.Contains(output, "arithmetic"), qt.IsTrue,
 		qt.Commentf("output: %q", output))
@@ -504,7 +504,7 @@ func TestCmdTopic(t *testing.T) {
 			t.Setenv("PAGER", "")
 			var buf bytes.Buffer
 			h := NewMetaCommandHandler(nil, WithMetaDocProvider(docProv))
-			h.cmdTopic(tc.args, &buf)
+			h.cmdTopic(context.Background(), tc.args, &buf)
 			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
 				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
 		})
@@ -607,7 +607,7 @@ func TestCmdLibraries(t *testing.T) {
 		var buf bytes.Buffer
 		h := NewMetaCommandHandler(eng)
 		h.SetPager("")
-		h.Handle(",libs", &buf)
+		h.Handle(context.Background(), ",libs", &buf)
 		qt.Assert(t, strings.Contains(buf.String(), "(test lib)"), qt.IsTrue)
 	})
 }
@@ -659,7 +659,7 @@ func TestCmdDisassemble_ForeignClosure(t *testing.T) {
 func TestCmdDisassemble_Alias(t *testing.T) {
 	var buf bytes.Buffer
 	h := NewMetaCommandHandler(nil)
-	handled := h.Handle(",dis", &buf)
+	handled := h.Handle(context.Background(), ",dis", &buf)
 	qt.Assert(t, handled, qt.IsTrue)
 	qt.Assert(t, strings.Contains(buf.String(), "Usage"), qt.IsTrue)
 }
@@ -767,7 +767,7 @@ func TestCmdApropos_KeywordMatchAfterLibraryImport(t *testing.T) {
 	t.Setenv("PAGER", "")
 	var buf bytes.Buffer
 	h := NewMetaCommandHandler(eng, WithMetaDocProvider(docProv))
-	h.cmdApropos([]string{"abelian"}, &buf)
+	h.cmdApropos(ctx, []string{"abelian"}, &buf)
 	output := buf.String()
 
 	qt.Assert(t, strings.Contains(output, "make-group"), qt.IsTrue,
@@ -790,7 +790,7 @@ func TestMetaHandleDebugDelegation(t *testing.T) {
 			h := NewMetaCommandHandler(nil)
 			h.SetDebugContext(NewDebugContext())
 			var buf bytes.Buffer
-			handled := h.Handle(tc.input, &buf)
+			handled := h.Handle(context.Background(), tc.input, &buf)
 			qt.Assert(t, handled, qt.IsTrue)
 			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
 				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))

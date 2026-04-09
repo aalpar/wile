@@ -16,6 +16,8 @@ package repl
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"sort"
 	"sync"
 
@@ -111,7 +113,7 @@ func (p *RegistryDocProvider) lookupNonPrimitiveDoc(name string) (DocInfo, bool)
 // Delegates to registry.SearchDoc for unified search across all sources.
 // On first call, lazily builds a LibraryExportIndex so unloaded library
 // exports are discoverable via apropos.
-func (p *RegistryDocProvider) Search(pattern string) []registry.DocSearchResult {
+func (p *RegistryDocProvider) Search(ctx context.Context, pattern string) []registry.DocSearchResult {
 	p.indexOnce.Do(func() {
 		if p.env == nil {
 			return
@@ -120,8 +122,12 @@ func (p *RegistryDocProvider) Search(pattern string) []registry.DocSearchResult 
 		if resolver == nil {
 			return
 		}
-		p.exportIndex, _ = compilation.BuildExportIndex(
-			context.Background(), resolver, p.libReg)
+		idx, err := compilation.BuildExportIndex(ctx, resolver, p.libReg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: library export index failed: %v\n", err)
+			return
+		}
+		p.exportIndex = idx
 	})
 	return registry.SearchDoc(p.reg, p.env, p.libReg, p.exportIndex, pattern)
 }

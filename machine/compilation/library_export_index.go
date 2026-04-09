@@ -81,42 +81,42 @@ func ParseLibrarySummary(ctx context.Context, r io.Reader, filePath string, name
 	stx, err := p.ReadSyntax(ctx)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "ParseLibrarySummary: library file is empty: %s", filePath)
+			return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "define-library: file is empty: %s", filePath)
 		}
-		return nil, werr.WrapForeignErrorf(err, "ParseLibrarySummary: could not parse library file: %s", filePath)
+		return nil, werr.WrapForeignErrorf(err, "define-library: could not parse: %s", filePath)
 	}
 
 	pair, ok := stx.(*syntax.SyntaxPair)
 	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "ParseLibrarySummary: expected list form, got %T", stx)
+		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "define-library: expected list form, got %T", stx)
 	}
 
 	carStx := pair.SyntaxCar()
 	carSym, ok := carStx.(*syntax.SyntaxSymbol)
 	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "ParseLibrarySummary: expected define-library or library keyword, got %T", carStx)
+		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "define-library: expected keyword, got %T", carStx)
 	}
 
 	symName := carSym.Sym.Key
 	if symName != "define-library" && symName != "library" {
-		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "ParseLibrarySummary: expected define-library or library, got %s", symName)
+		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed, "define-library: expected define-library or library, got %s", symName)
 	}
 
 	// Require and validate the library name (2nd element).
 	cdr, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok {
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed,
-			"ParseLibrarySummary: missing library name in %s", filePath)
+			"define-library: missing library name in %s", filePath)
 	}
 
 	parsedName, err := ParseLibraryNameFromDatum(ctx, cdr.SyntaxCar().UnwrapAll())
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed,
-			"ParseLibrarySummary: malformed library name in %s", filePath)
+			"define-library: malformed library name in %s", filePath)
 	}
 	if parsedName.Key() != name.Key() {
 		return nil, werr.WrapForeignErrorf(werr.ErrLibraryFormMalformed,
-			"ParseLibrarySummary: name mismatch in %s: expected %s, got %s",
+			"define-library: name mismatch in %s: expected %s, got %s",
 			filePath, name.SchemeString(), parsedName.SchemeString())
 	}
 
@@ -256,11 +256,15 @@ func BuildExportIndex(ctx context.Context, resolver FileResolver, reg *LibraryRe
 
 	libs, err := enumerator.EnumerateLibraries()
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "BuildExportIndex: enumerate libraries")
+		return nil, werr.WrapForeignErrorf(err, "library-index: enumerate libraries")
 	}
 
 	entries := make(map[string]*LibrarySummary)
 	for _, name := range libs {
+		err = ctx.Err()
+		if err != nil {
+			return nil, werr.WrapForeignErrorf(err, "library-index: context cancelled")
+		}
 		if reg != nil && reg.Lookup(name) != nil {
 			continue
 		}
