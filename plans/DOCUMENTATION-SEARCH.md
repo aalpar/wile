@@ -2,8 +2,17 @@
 
 **Status:** Current (consolidated from earlier design docs)
 **Date:** 2026-04-09
-**Supersedes:** Earlier design docs listed below. Those remain as historical records
-of design decisions; this file describes the implemented system.
+
+**Supersedes** (these remain as historical records of design decisions; this file
+describes the implemented system):
+- `2026-03-27-apropos-topic-browsing-design.md` — original apropos & topic design
+- `2026-04-08-doc-keywords-design.md` — Keywords field design
+- `2026-04-08-doc-keywords-impl.md` — Keywords implementation plan
+- `2026-04-08-unified-apropos-design.md` — unified `SearchDoc` design
+- `2026-04-08-unified-apropos-impl.md` — unified search implementation plan
+- `2026-04-08-eager-doc-index-design.md` — eager library metadata scan (superseded by export index)
+- `LIBRARY-EXPORT-INDEX.md` — export index design
+- `LIBRARY-EXPORT-INDEX-IMPL.md` — export index implementation plan
 
 ## Overview
 
