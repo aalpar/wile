@@ -409,7 +409,7 @@ func runREPL(ctx context.Context, eng *wile.Engine) {
 		Failf(nil, "internal error: namespace registry has unexpected type")
 	}
 	env := eng.Environment()
-	docProv := repl.NewRegistryDocProvider(reg, env, registry.ExtractLibraryRegistry(env))
+	docProv := repl.NewRegistryDocProvider(reg, env)
 	r := repl.New(eng, repl.WithDocProvider(docProv))
 	err := r.Run(ctx)
 	if err != nil {

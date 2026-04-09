@@ -234,7 +234,7 @@ func (p *mcpServer) initLocked(ctx context.Context) error {
 			eng.Environment().Namespace().Registry())
 	}
 	env := eng.Environment()
-	docProv := repl.NewRegistryDocProvider(reg, env, registry.ExtractLibraryRegistry(env))
+	docProv := repl.NewRegistryDocProvider(reg, env)
 	p.meta = repl.NewMetaCommandHandler(eng, repl.WithMetaDocProvider(docProv))
 	p.meta.SetPager("") // disable paging for non-TTY MCP context
 	return nil

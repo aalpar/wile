@@ -105,7 +105,7 @@ func TestRegistryDocProvider_Found(t *testing.T) {
 		Category:   "test",
 	}, registry.PhaseRuntime)
 
-	provider := NewRegistryDocProvider(reg, nil, nil)
+	provider := NewRegistryDocProvider(reg, nil)
 	info, found := provider.LookupDoc("test-prim")
 	c.Assert(found, qt.IsTrue)
 	c.Assert(info.Doc, qt.Equals, "A test primitive.")
@@ -128,7 +128,7 @@ func TestRegistryDocProvider_ContractFields(t *testing.T) {
 		ParamTypes: []values.ValueType{values.TypeString, values.TypeInteger},
 		ReturnType: values.TypeCharacter,
 	}, registry.PhaseRuntime)
-	prov := NewRegistryDocProvider(reg, nil, nil)
+	prov := NewRegistryDocProvider(reg, nil)
 	info, found := prov.LookupDoc("test-contracted")
 	c.Assert(found, qt.IsTrue)
 	c.Assert(info.TypeLabel, qt.Equals, "primitive")
@@ -141,7 +141,7 @@ func TestRegistryDocProvider_ContractFields(t *testing.T) {
 func TestRegistryDocProvider_NotFound(t *testing.T) {
 	c := qt.New(t)
 	reg := registry.NewRegistry()
-	provider := NewRegistryDocProvider(reg, nil, nil)
+	provider := NewRegistryDocProvider(reg, nil)
 	_, found := provider.LookupDoc("nonexistent")
 	c.Assert(found, qt.IsFalse)
 }
@@ -188,7 +188,7 @@ func TestRegistryDocProvider_Search(t *testing.T) {
 			expected: []string{},
 		},
 	}
-	provider := NewRegistryDocProvider(buildTestRegistry(), nil, nil)
+	provider := NewRegistryDocProvider(buildTestRegistry(), nil)
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
@@ -204,7 +204,7 @@ func TestRegistryDocProvider_Search(t *testing.T) {
 
 func TestRegistryDocProvider_Categories(t *testing.T) {
 	c := qt.New(t)
-	provider := NewRegistryDocProvider(buildTestRegistry(), nil, nil)
+	provider := NewRegistryDocProvider(buildTestRegistry(), nil)
 	cats := provider.Categories()
 	c.Assert(cats, qt.DeepEquals, []string{"arithmetic", "lists", "strings"})
 }
@@ -217,7 +217,7 @@ func TestRegistryDocProvider_Categories_ExcludesEmpty(t *testing.T) {
 		ParamCount: 0,
 		Doc:        "Has no category.",
 	}, registry.PhaseRuntime)
-	provider := NewRegistryDocProvider(reg, nil, nil)
+	provider := NewRegistryDocProvider(reg, nil)
 	cats := provider.Categories()
 	c.Assert(cats, qt.HasLen, 0)
 }
@@ -273,7 +273,7 @@ func TestRegistryDocProvider_ByCategory(t *testing.T) {
 			expected: []string{},
 		},
 	}
-	provider := NewRegistryDocProvider(buildTestRegistry(), nil, nil)
+	provider := NewRegistryDocProvider(buildTestRegistry(), nil)
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
@@ -291,7 +291,7 @@ func TestRegistryDocProvider_ByCategory(t *testing.T) {
 
 func TestRegistryDocProvider_CategoriesIncludesNonPrimitives(t *testing.T) {
 	c := qt.New(t)
-	provider := NewRegistryDocProvider(buildTestRegistryWithDocs(), nil, nil)
+	provider := NewRegistryDocProvider(buildTestRegistryWithDocs(), nil)
 	cats := provider.Categories()
 
 	// Should include primitive categories
@@ -334,7 +334,7 @@ func TestRegistryDocProvider_ByCategoryFindsNonPrimitives(t *testing.T) {
 			expected: []string{},
 		},
 	}
-	provider := NewRegistryDocProvider(buildTestRegistryWithDocs(), nil, nil)
+	provider := NewRegistryDocProvider(buildTestRegistryWithDocs(), nil)
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
@@ -375,7 +375,7 @@ func TestRegistryDocProvider_SearchFindsNonPrimitives(t *testing.T) {
 			expected: []string{"string-append"},
 		},
 	}
-	provider := NewRegistryDocProvider(buildTestRegistryWithDocs(), nil, nil)
+	provider := NewRegistryDocProvider(buildTestRegistryWithDocs(), nil)
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
@@ -391,7 +391,7 @@ func TestRegistryDocProvider_SearchFindsNonPrimitives(t *testing.T) {
 
 func TestRegistryDocProvider_LookupDocFindsNonPrimitives(t *testing.T) {
 	c := qt.New(t)
-	provider := NewRegistryDocProvider(buildTestRegistryWithDocs(), nil, nil)
+	provider := NewRegistryDocProvider(buildTestRegistryWithDocs(), nil)
 
 	// Binding spec lookup
 	info, found := provider.LookupDoc("if")
@@ -412,7 +412,7 @@ func TestRegistryDocProvider_LookupDocFindsNonPrimitives(t *testing.T) {
 
 func TestRegistryDocProvider_PrimitiveTakesPriorityOverBindingSpec(t *testing.T) {
 	c := qt.New(t)
-	provider := NewRegistryDocProvider(buildTestRegistryWithDocs(), nil, nil)
+	provider := NewRegistryDocProvider(buildTestRegistryWithDocs(), nil)
 
 	// "apply" is registered as both a primitive and a binding spec.
 	// The primitive should win everywhere.
@@ -458,7 +458,7 @@ func TestRegistryDocProvider_KeywordsInLookup(t *testing.T) {
 		Category:   "lists",
 		Keywords:   []string{"sort", "ordering"},
 	}, registry.PhaseRuntime)
-	prov := NewRegistryDocProvider(reg, nil, nil)
+	prov := NewRegistryDocProvider(reg, nil)
 	info, found := prov.LookupDoc("list-sort")
 	c.Assert(found, qt.IsTrue)
 	c.Assert(info.Keywords, qt.DeepEquals, []string{"sort", "ordering"})
@@ -469,7 +469,7 @@ func TestRegistryDocProvider_KeywordsFromDocstring(t *testing.T) {
 	reg := registry.NewRegistry()
 	reg.AddDocumentation("my-sort",
 		"Sort things.\nKeywords: sort, ordering\nCategory: lists")
-	prov := NewRegistryDocProvider(reg, nil, nil)
+	prov := NewRegistryDocProvider(reg, nil)
 	info, found := prov.LookupDoc("my-sort")
 	c.Assert(found, qt.IsTrue)
 	c.Assert(info.Keywords, qt.DeepEquals, []string{"sort", "ordering"})

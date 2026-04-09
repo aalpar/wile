@@ -29,9 +29,8 @@ import (
 
 // RegistryDocProvider adapts a registry.Registry to the DocProvider interface.
 type RegistryDocProvider struct {
-	reg    *registry.Registry
-	env    *environment.EnvironmentFrame
-	libReg *compilation.LibraryRegistry
+	reg *registry.Registry
+	env *environment.EnvironmentFrame
 
 	// Lazy export index — built on first Search() call.
 	indexOnce   sync.Once
@@ -39,14 +38,21 @@ type RegistryDocProvider struct {
 }
 
 // NewRegistryDocProvider creates a DocProvider backed by the given registry.
-// env and libReg may be nil; when non-nil, Search includes environment
-// bindings and loaded libraries respectively.
-func NewRegistryDocProvider(reg *registry.Registry, env *environment.EnvironmentFrame, libReg *compilation.LibraryRegistry) *RegistryDocProvider {
+// env may be nil; when non-nil, Search includes environment bindings and
+// loaded libraries. The library registry is read dynamically from the
+// environment on each call to ensure libraries loaded after construction
+// are visible.
+func NewRegistryDocProvider(reg *registry.Registry, env *environment.EnvironmentFrame) *RegistryDocProvider {
 	return &RegistryDocProvider{
-		reg:    reg,
-		env:    env,
-		libReg: libReg,
+		reg: reg,
+		env: env,
 	}
+}
+
+// libraryRegistry returns the live library registry from the environment.
+// Returns nil if the environment is nil or the registry is not available.
+func (p *RegistryDocProvider) libraryRegistry() *compilation.LibraryRegistry {
+	return registry.ExtractLibraryRegistry(p.env)
 }
 
 // LookupDoc returns documentation for the named binding from the registry.
@@ -122,14 +128,14 @@ func (p *RegistryDocProvider) Search(ctx context.Context, pattern string) []regi
 		if resolver == nil {
 			return
 		}
-		idx, err := compilation.BuildExportIndex(ctx, resolver, p.libReg)
+		idx, err := compilation.BuildExportIndex(ctx, resolver, p.libraryRegistry())
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: library export index failed: %v\n", err)
 			return
 		}
 		p.exportIndex = idx
 	})
-	return registry.SearchDoc(p.reg, p.env, p.libReg, p.exportIndex, pattern)
+	return registry.SearchDoc(p.reg, p.env, p.libraryRegistry(), p.exportIndex, pattern)
 }
 
 // Categories returns sorted category names, excluding the empty-string category.
