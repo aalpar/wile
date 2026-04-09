@@ -51,10 +51,12 @@ func addBytevectors(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "utf8->string", ParamCount: 2, IsVariadic: true, Impl: PrimUtf8ToString,
 			Doc: "Decodes BYTEVECTOR as UTF-8 to a string from START to end. Raises an error on invalid UTF-8.\n\nExamples:\n  (utf8->string #u8(104 105))  => \"hi\"", ParamNames: []string{"bytevector", "start"}, Category: "bytevectors",
-			ParamTypes: []values.ValueType{values.TypeByteVector, values.TypeExactInteger}, ReturnType: values.TypeString},
+			ParamTypes: []values.ValueType{values.TypeByteVector, values.TypeExactInteger}, ReturnType: values.TypeString,
+			Keywords: []string{"decode", "bytes to text", "UTF-8 decode"}},
 		{Name: "string->utf8", ParamCount: 2, IsVariadic: true, Impl: PrimStringToUtf8,
 			Doc: "Encodes the characters of STRING from START to end as a UTF-8 bytevector.\n\nExamples:\n  (string->utf8 \"hi\")  => #u8(104 105)", ParamNames: []string{"string", "start"}, Category: "bytevectors",
-			ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger}, ReturnType: values.TypeByteVector},
+			ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger}, ReturnType: values.TypeByteVector,
+			Keywords: []string{"encode", "text to bytes", "UTF-8 encode"}},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil

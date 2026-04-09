@@ -47,29 +47,36 @@ func addStrings(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "string->list", ParamCount: 2, IsVariadic: true, Impl: PrimStringToList,
 			Doc: "Returns a list of the characters in STRING from START to end. START defaults to 0, end to string length.\n\nExamples:\n  (string->list \"abc\")  => (#\\a #\\b #\\c)", ParamNames: []string{"string", "start"}, Category: "strings",
-			ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger}, ReturnType: values.TypeList},
+			ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger}, ReturnType: values.TypeList,
+			Keywords: []string{"split", "explode", "characters"}},
 		{Name: "list->string", ParamCount: 1, Impl: PrimListToString,
 			Doc: "Returns a string formed from LIST. All elements must be characters.\n\nExamples:\n  (list->string '(#\\a #\\b #\\c))  => \"abc\"", ParamNames: []string{"list"}, Category: "strings",
-			ParamTypes: []values.ValueType{values.TypeList}, ReturnType: values.TypeString},
+			ParamTypes: []values.ValueType{values.TypeList}, ReturnType: values.TypeString,
+			Keywords: []string{"join", "implode", "from characters"}},
 		{Name: "symbol->string", ParamCount: 1, Impl: PrimSymbolToString,
 			Doc: "Returns the name of SYMBOL as an immutable string.\n\nExamples:\n  (symbol->string 'hello)  => \"hello\"", ParamNames: []string{"symbol"}, Category: "strings",
-			ParamTypes: []values.ValueType{values.TypeSymbol}, ReturnType: values.TypeString},
+			ParamTypes: []values.ValueType{values.TypeSymbol}, ReturnType: values.TypeString,
+			Keywords: []string{"symbol name", "identifier name"}},
 		{Name: "string->symbol", ParamCount: 1, Impl: PrimStringToSymbol,
 			Doc: "Returns the symbol whose name is STRING. Symbols with the same name are always eq?.\n\nExamples:\n  (string->symbol \"hello\")  => hello", ParamNames: []string{"string"}, Category: "strings",
-			ParamTypes: []values.ValueType{values.TypeString}, ReturnType: values.TypeSymbol},
+			ParamTypes: []values.ValueType{values.TypeString}, ReturnType: values.TypeSymbol,
+			Keywords: []string{"intern", "make symbol"}},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// String operations
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "string-append", ParamCount: 1, IsVariadic: true, Impl: PrimStringAppend,
 			Doc: "Returns a newly allocated string formed by concatenating its arguments.\n\nExamples:\n  (string-append \"hello\" \" \" \"world\")  => \"hello world\"", ParamNames: []string{"string"}, Category: "strings",
-			ParamTypes: []values.ValueType{values.TypeString}, ReturnType: values.TypeString},
+			ParamTypes: []values.ValueType{values.TypeString}, ReturnType: values.TypeString,
+			Keywords: []string{"concat", "concatenate", "join"}},
 		{Name: "substring", ParamCount: 3, Impl: PrimSubstring,
 			Doc: "Returns a newly allocated string containing characters of STRING from START (inclusive) to END (exclusive).\n\nExamples:\n  (substring \"hello\" 1 3)  => \"el\"", ParamNames: []string{"string", "start", "end"}, Category: "strings",
-			ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger, values.TypeExactInteger}, ReturnType: values.TypeString},
+			ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger, values.TypeExactInteger}, ReturnType: values.TypeString,
+			Keywords: []string{"slice", "substr", "extract", "range"}},
 		{Name: "string-copy", ParamCount: 2, IsVariadic: true, Impl: PrimStringCopy,
 			Doc: "Returns a mutable copy of STRING from START to end. START defaults to 0, end to string length.\n\nExamples:\n  (string-copy \"hello\")      => \"hello\"\n  (string-copy \"hello\" 1 3)  => \"el\"", ParamNames: []string{"string", "start"}, Category: "strings",
-			ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger}, ReturnType: values.TypeString},
+			ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger}, ReturnType: values.TypeString,
+			Keywords: []string{"clone", "duplicate"}},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// String comparison (generated from stringCompareSpecs table)

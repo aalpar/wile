@@ -23,13 +23,16 @@ func addEquality(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "eq?", ParamCount: 2, Impl: PrimEqQ,
 			Doc: "Returns #t if OBJ1 and OBJ2 are the same object (pointer identity). Reliable for symbols, booleans, and the empty list.\n\nExamples:\n  (eq? 'a 'a)           => #t\n  (eq? '() '())         => #t\n  (eq? (list 1) (list 1))  => #f", ParamNames: []string{"obj1", "obj2"}, Category: "equality",
-			ParamTypes: []values.ValueType{values.TypeAny, values.TypeAny}, ReturnType: values.TypeBoolean},
+			ParamTypes: []values.ValueType{values.TypeAny, values.TypeAny}, ReturnType: values.TypeBoolean,
+			Keywords: []string{"identity", "pointer equality", "same object"}},
 		{Name: "eqv?", ParamCount: 2, Impl: PrimEqvQ,
 			Doc: "Returns #t if OBJ1 and OBJ2 are operationally equivalent. Extends eq? with numeric and character value comparison.\n\nExamples:\n  (eqv? 1 1)            => #t\n  (eqv? #\\a #\\a)        => #t\n  (eqv? 1 1.0)          => #f", ParamNames: []string{"obj1", "obj2"}, Category: "equality",
-			ParamTypes: []values.ValueType{values.TypeAny, values.TypeAny}, ReturnType: values.TypeBoolean},
+			ParamTypes: []values.ValueType{values.TypeAny, values.TypeAny}, ReturnType: values.TypeBoolean,
+			Keywords: []string{"equivalence", "value equality"}},
 		{Name: "equal?", ParamCount: 2, Impl: PrimEqualQ,
 			Doc: "Returns #t if OBJ1 and OBJ2 have the same structure and contents. Recursively compares pairs, vectors, strings, and bytevectors.\n\nExamples:\n  (equal? '(1 2 3) '(1 2 3))  => #t\n  (equal? \"abc\" \"abc\")         => #t\n  (equal? '(1 2) '(1 3))      => #f", ParamNames: []string{"obj1", "obj2"}, Category: "equality",
-			ParamTypes: []values.ValueType{values.TypeAny, values.TypeAny}, ReturnType: values.TypeBoolean},
+			ParamTypes: []values.ValueType{values.TypeAny, values.TypeAny}, ReturnType: values.TypeBoolean,
+			Keywords: []string{"structural equality", "deep equality", "recursive compare"}},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	return nil
