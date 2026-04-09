@@ -17,6 +17,7 @@ package repl
 import (
 	"strings"
 
+	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/values"
 )
 
@@ -41,14 +42,6 @@ type DocProvider interface {
 	LookupDoc(name string) (info DocInfo, found bool)
 }
 
-// DocSearchResult holds one search hit.
-type DocSearchResult struct {
-	Name     string
-	Doc      string
-	Category string
-	Keywords []string
-}
-
 // StripExamples removes the Examples: section from a docstring.
 // Returns the description portion only. If no Examples: section
 // exists, returns the original string unchanged.
@@ -65,9 +58,9 @@ type DocSearchProvider interface {
 	DocProvider
 	// Search returns entries whose name, doc, or category contains pattern
 	// (case-insensitive substring match). Results are sorted by name.
-	Search(pattern string) []DocSearchResult
+	Search(pattern string) []registry.DocSearchResult
 	// Categories returns sorted category names.
 	Categories() []string
 	// ByCategory returns entries in the named category, sorted by name.
-	ByCategory(category string) []DocSearchResult
+	ByCategory(category string) []registry.DocSearchResult
 }

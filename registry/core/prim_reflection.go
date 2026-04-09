@@ -16,7 +16,6 @@ package core
 
 import (
 	"sort"
-	"strings"
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/machine/compilation"
@@ -334,14 +333,15 @@ func PrimLibraryDescription(mc machine.CallContext) error {
 
 // PrimApropos implements (apropos pattern).
 // Returns a sorted list of symbols whose name, doc, or category contains
-// the pattern as a case-insensitive substring.
+// the pattern as a case-insensitive substring. Searches all documentation
+// sources: primitives, binding specs, doc entries, environment bindings,
+// and loaded libraries.
 func PrimApropos(mc machine.CallContext) error {
 	s, ok := mc.Arg(0).(*values.String)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotAString,
 			"apropos: expected string pattern")
 	}
-	pattern := strings.ToLower(s.Value)
 
 	reg := registryFromContext(mc)
 	if reg == nil {
@@ -349,33 +349,20 @@ func PrimApropos(mc machine.CallContext) error {
 		return nil
 	}
 
-	var names []string
-	for _, pr := range reg.Primitives() {
-		spec := pr.Spec
-		if strings.Contains(strings.ToLower(spec.Name), pattern) ||
-			strings.Contains(strings.ToLower(spec.Doc), pattern) ||
-			strings.Contains(strings.ToLower(spec.Category), pattern) ||
-			containsKeyword(spec.Keywords, pattern) {
-			names = append(names, spec.Name)
+	env := mc.EnvironmentFrame()
+	var libReg *compilation.LibraryRegistry
+	if env != nil {
+		lr, ok := env.LibraryRegistry().(*compilation.LibraryRegistry)
+		if ok {
+			libReg = lr
 		}
 	}
-	sort.Strings(names)
 
-	syms := make([]values.Value, len(names))
-	for i, n := range names {
-		syms[i] = values.NewSymbol(n)
+	results := registry.SearchDoc(reg, env, libReg, s.Value)
+	syms := make([]values.Value, len(results))
+	for i, r := range results {
+		syms[i] = values.NewSymbol(r.Name)
 	}
 	mc.SetValue(values.List(syms...))
 	return nil
-}
-
-// containsKeyword reports whether any keyword contains the pattern
-// as a case-insensitive substring.
-func containsKeyword(keywords []string, pattern string) bool {
-	for _, kw := range keywords {
-		if strings.Contains(strings.ToLower(kw), pattern) {
-			return true
-		}
-	}
-	return false
 }

@@ -256,17 +256,6 @@ func containsString(ss []string, s string) bool {
 	return slices.Contains(ss, s)
 }
 
-// containsKeywordLower reports whether any keyword contains the pattern
-// as a case-insensitive substring.
-func containsKeywordLower(keywords []string, pattern string) bool {
-	for _, kw := range keywords {
-		if strings.Contains(strings.ToLower(kw), pattern) {
-			return true
-		}
-	}
-	return false
-}
-
 func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 	if len(args) == 0 {
 		fmt.Fprintln(out, "Usage: ,doc [-x] <name> or ,doc (<library-name>)")
@@ -643,16 +632,6 @@ func (p *MetaCommandHandler) cmdApropos(args []string, out io.Writer) {
 	}
 
 	results := searchProv.Search(pattern)
-
-	// Also search phase environment bindings and loaded libraries
-	env := p.env()
-	if env != nil {
-		envResults := p.searchBindings(pattern)
-		results = mergeSearchResults(results, envResults)
-		libResults := p.searchLibraries(pattern)
-		results = mergeSearchResults(results, libResults)
-	}
-
 	if len(results) == 0 {
 		fmt.Fprintf(out, "No matches for %q\n", pattern)
 		return
@@ -851,138 +830,6 @@ func (p *MetaCommandHandler) DisassembleBinding(name string) (string, error) {
 	default:
 		return "", werr.NewForeignErrorf("%s is not a procedure (type: %T)", name, val)
 	}
-}
-
-// searchBindings searches phase environment bindings for the pattern.
-func (p *MetaCommandHandler) searchBindings(pattern string) []DocSearchResult {
-	env := p.env()
-	if env == nil {
-		return nil
-	}
-	lowerPattern := strings.ToLower(pattern)
-	topLevel := env.Namespace()
-	if topLevel == nil {
-		return nil
-	}
-	phases := topLevel.Phases()
-	phaseIndices := phases.Phases()
-
-	seen := make(map[string]bool)
-	var results []DocSearchResult
-	for _, phase := range phaseIndices {
-		phaseEnv := phases.Get(phase)
-		if phaseEnv == nil {
-			continue
-		}
-		global := phaseEnv.GlobalEnvironment()
-		if global == nil {
-			continue
-		}
-		// Keys() and Bindings() are separate locked snapshots. A concurrent
-		// define could add a key whose index exceeds the bindings snapshot
-		// length. The idx < len(bindings) guard below prevents a panic;
-		// the skipped entry is acceptable for a best-effort REPL search.
-		keys := global.Keys()
-		bindings := global.Bindings()
-		for sym, idx := range keys {
-			name := sym.Key
-			if seen[name] {
-				continue
-			}
-			seen[name] = true
-
-			doc := ""
-			if idx < len(bindings) {
-				bnd := bindings[idx]
-				if bnd == nil {
-					continue
-				}
-				doc = bnd.Doc()
-				if doc == "" && bnd.BindingType() == environment.BindingTypeVariable {
-					doc = callableDoc(bnd.Value())
-				}
-			}
-
-			// Extract category and keywords from structured docstrings so that
-			// special forms and macros show [category] in ,apropos and
-			// keywords are searchable.
-			category := ""
-			var keywords []string
-			displayDoc := doc
-			if doc != "" {
-				parsed := docparse.ParseDocstring(doc)
-				if parsed.HasStructuredMetadata() {
-					category = parsed.Category
-					keywords = parsed.Keywords
-					displayDoc = parsed.Doc
-				}
-			}
-
-			if strings.Contains(strings.ToLower(name), lowerPattern) ||
-				strings.Contains(strings.ToLower(doc), lowerPattern) ||
-				containsKeywordLower(keywords, lowerPattern) {
-				results = append(results, DocSearchResult{
-					Name:     name,
-					Doc:      displayDoc,
-					Category: category,
-					Keywords: keywords,
-				})
-			}
-		}
-	}
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Name < results[j].Name
-	})
-	return results
-}
-
-// mergeSearchResults merges registry and environment results, deduplicating by name.
-// Registry results take precedence (richer metadata).
-func mergeSearchResults(registryResults, envResults []DocSearchResult) []DocSearchResult {
-	seen := make(map[string]bool, len(registryResults))
-	for _, r := range registryResults {
-		seen[r.Name] = true
-	}
-	for _, r := range envResults {
-		if !seen[r.Name] {
-			registryResults = append(registryResults, r)
-		}
-	}
-	sort.Slice(registryResults, func(i, j int) bool {
-		return registryResults[i].Name < registryResults[j].Name
-	})
-	return registryResults
-}
-
-// searchLibraries searches loaded libraries for the pattern, matching against
-// the library name (e.g. "(wile algebra)") and its description.
-func (p *MetaCommandHandler) searchLibraries(pattern string) []DocSearchResult {
-	env := p.env()
-	if env == nil {
-		return nil
-	}
-	regAny := env.LibraryRegistry()
-	if regAny == nil {
-		return nil
-	}
-	reg, ok := regAny.(*compilation.LibraryRegistry)
-	if !ok {
-		return nil
-	}
-	lowerPattern := strings.ToLower(pattern)
-	var results []DocSearchResult
-	for _, lib := range reg.All() {
-		name := lib.Name.SchemeString()
-		if strings.Contains(strings.ToLower(name), lowerPattern) ||
-			strings.Contains(strings.ToLower(lib.Description), lowerPattern) {
-			results = append(results, DocSearchResult{
-				Name:     name,
-				Doc:      lib.Description,
-				Category: "library",
-			})
-		}
-	}
-	return results
 }
 
 // firstLine returns the first line of s, or s itself if single-line.

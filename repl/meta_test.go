@@ -100,7 +100,7 @@ func TestCmdEdit_EditorExec(t *testing.T) {
 
 func TestCmdDoc(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry())
+	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
 
 	tcs := []struct {
 		name    string
@@ -191,7 +191,7 @@ func TestCmdDoc_ClosureDocstring(t *testing.T) {
 
 func TestCmdDoc_SpecialFormStructuredFormat(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry())
+	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
 
 	t.Setenv("PAGER", "")
 	var buf bytes.Buffer
@@ -213,7 +213,7 @@ func TestCmdDoc_SpecialFormStructuredFormat(t *testing.T) {
 
 func TestCmdDoc_MacroStructuredFormat(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry())
+	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
 
 	t.Setenv("PAGER", "")
 	var buf bytes.Buffer
@@ -277,7 +277,7 @@ func TestMetaHandleUnknown(t *testing.T) {
 
 func TestCmdDoc_ExamplesFiltering(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry())
+	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
 
 	t.Run("strips examples by default", func(t *testing.T) {
 		t.Setenv("PAGER", "")
@@ -358,7 +358,7 @@ func TestFormatPrimitiveDoc_WithoutTypes(t *testing.T) {
 
 func TestCmdApropos(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry())
+	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
 
 	tcs := []struct {
 		name    string
@@ -384,11 +384,11 @@ func TestCmdApropos(t *testing.T) {
 
 func TestCmdApropos_SpecialFormCategory(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry())
+	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
 
 	// Special forms and macros should show [category] in apropos output.
-	// These are found via searchBindings (phase environments), not
-	// RegistryDocProvider, so category must be extracted from the docstring.
+	// These are found via registry binding specs and doc entries;
+	// category is extracted from the embedded docstring metadata.
 	tcs := []struct {
 		name    string
 		pattern string
@@ -416,7 +416,6 @@ func TestCmdApropos_SpecialFormCategory(t *testing.T) {
 
 func TestCmdApropos_Library(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry())
 	env := eng.Environment()
 
 	// Register a library in the env's library registry
@@ -426,6 +425,9 @@ func TestCmdApropos_Library(t *testing.T) {
 	err := libReg.Register(lib)
 	qt.Assert(t, err, qt.IsNil)
 	env.SetLibraryRegistry(libReg)
+
+	// Create provider after library setup so it sees env and libReg.
+	docProv := NewRegistryDocProvider(eng.Registry(), env, libReg)
 
 	tcs := []struct {
 		name    string
@@ -451,7 +453,7 @@ func TestCmdApropos_Library(t *testing.T) {
 
 func TestCmdTopics(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry())
+	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
 
 	t.Setenv("PAGER", "")
 	var buf bytes.Buffer
@@ -466,7 +468,7 @@ func TestCmdTopics(t *testing.T) {
 
 func TestCmdTopic(t *testing.T) {
 	eng := newTestEngine(t)
-	docProv := NewRegistryDocProvider(eng.Registry())
+	docProv := NewRegistryDocProvider(eng.Registry(), nil, nil)
 
 	tcs := []struct {
 		name    string
