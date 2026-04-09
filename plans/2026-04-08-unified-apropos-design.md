@@ -1,5 +1,8 @@
 # Unified Apropos Search
 
+**Status:** Complete
+**Current-state doc:** `plans/DOCUMENTATION-SEARCH.md`
+
 Consolidate the two apropos search paths (Scheme `(apropos)` and REPL `,apropos`)
 into a single search function so both produce identical results.
 

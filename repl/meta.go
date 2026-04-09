@@ -108,7 +108,7 @@ func (p *MetaCommandHandler) Handle(ctx context.Context, line string, out io.Wri
 	case "topic":
 		p.cmdTopic(ctx, args, out)
 	case "libraries", "libs":
-		p.cmdLibraries(out)
+		p.cmdLibraries(ctx, out)
 	case "disassemble", "dis":
 		p.cmdDisassemble(args, out)
 	default:
@@ -716,7 +716,7 @@ func (p *MetaCommandHandler) cmdTopic(_ context.Context, args []string, out io.W
 	writeWithPager(out, content.String(), p.pager)
 }
 
-func (p *MetaCommandHandler) cmdLibraries(out io.Writer) {
+func (p *MetaCommandHandler) cmdLibraries(ctx context.Context, out io.Writer) {
 	env := p.env()
 	if env == nil {
 		fmt.Fprintln(out, "No environment available")
@@ -734,13 +734,20 @@ func (p *MetaCommandHandler) cmdLibraries(out io.Writer) {
 	}
 
 	libs := reg.All()
-	if len(libs) == 0 {
+
+	// Collect unloaded libraries from the export index if available.
+	var unloaded []*compilation.LibrarySummary
+	rdp, ok := p.docProv.(*RegistryDocProvider)
+	if ok {
+		unloaded = rdp.UnloadedLibraries(ctx)
+	}
+
+	if len(libs) == 0 && len(unloaded) == 0 {
 		fmt.Fprintln(out, "No libraries loaded")
 		return
 	}
 
-	var content strings.Builder
-	fmt.Fprintf(&content, "Loaded libraries (%d):\n", len(libs))
+	// Compute max name width across both sections for consistent alignment.
 	maxName := 0
 	for _, lib := range libs {
 		n := len(lib.Name.SchemeString())
@@ -748,11 +755,35 @@ func (p *MetaCommandHandler) cmdLibraries(out io.Writer) {
 			maxName = n
 		}
 	}
-	for _, lib := range libs {
-		name := lib.Name.SchemeString()
-		desc := firstLine(lib.Description)
-		fmt.Fprintf(&content, "  %-*s  %s\n", maxName, name, desc)
+	for _, summary := range unloaded {
+		n := len(summary.Name.SchemeString())
+		if n > maxName {
+			maxName = n
+		}
 	}
+
+	var content strings.Builder
+	if len(libs) > 0 {
+		fmt.Fprintf(&content, "Loaded libraries (%d):\n", len(libs))
+		for _, lib := range libs {
+			name := lib.Name.SchemeString()
+			desc := firstLine(lib.Description)
+			fmt.Fprintf(&content, "  %-*s  %s\n", maxName, name, desc)
+		}
+	}
+
+	if len(unloaded) > 0 {
+		if len(libs) > 0 {
+			content.WriteString("\n")
+		}
+		fmt.Fprintf(&content, "Available libraries (%d):\n", len(unloaded))
+		for _, summary := range unloaded {
+			name := summary.Name.SchemeString()
+			desc := firstLine(summary.Description)
+			fmt.Fprintf(&content, "  %-*s  %s\n", maxName, name, desc)
+		}
+	}
+
 	writeWithPager(out, content.String(), p.pager)
 }
 

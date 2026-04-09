@@ -1,5 +1,8 @@
 # Documentation Keywords
 
+**Status:** Complete
+**Current-state doc:** `plans/DOCUMENTATION-SEARCH.md`
+
 Add a `Keywords` field to the documentation system so `apropos` and `,apropos`
 can match on curated tags rather than relying on name/prose/category substring hits.
 

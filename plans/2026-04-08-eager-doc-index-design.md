@@ -1,5 +1,8 @@
 # Eager Documentation Index
 
+**Status:** Superseded by `LIBRARY-EXPORT-INDEX.md` (simpler version implemented)
+**Current-state doc:** `plans/DOCUMENTATION-SEARCH.md`
+
 ## Problem
 
 Documentation is only discoverable through live bindings. An LLM calling

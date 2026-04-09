@@ -1,6 +1,7 @@
 # Library Export Index Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+**Status:** Complete (PRs #623, #624, #625)
+**Current-state doc:** `plans/DOCUMENTATION-SEARCH.md`
 
 **Goal:** Make `apropos` discover procedures in unloaded libraries by building a static export index from `.sld` files.
 

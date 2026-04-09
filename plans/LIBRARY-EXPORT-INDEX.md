@@ -1,7 +1,8 @@
 # Library Export Index — Apropos for Unloaded Libraries
 
-**Status:** Approved (design)
+**Status:** Complete (PRs #623, #625)
 **Date:** 2026-04-09
+**Current-state doc:** `plans/DOCUMENTATION-SEARCH.md`
 
 ## Problem
 
@@ -133,9 +134,23 @@ No changes to `NewRegistryDocProvider` signature. No changes to `mcp.go`.
 | `registry/search_test.go` | Tests for unloaded export search |
 | `repl/registry_doc_provider.go` | `RegistryDocProvider` gains lazy index; `Search()` builds on first call |
 
+## Implementation Notes
+
+PR #625 extended `searchUnloadedExports` to also match library names and
+descriptions (not just export names), mirroring `searchLibraries` for loaded
+libraries. Results use category `"library (not imported)"` for library-level
+matches and `"not imported"` for export-level matches.
+
+PR #624 changed `RegistryDocProvider` to read the library registry dynamically
+from the environment on each `Search()` call, rather than caching it at
+construction time. This ensures libraries loaded after provider construction
+are visible.
+
 ## Not In Scope
 
 - `doc` for unloaded libraries (stays "not loaded")
 - Per-binding docs from unloaded libraries (requires compilation)
+- Per-export keywords from unloaded libraries (requires parsing implementation files)
 - Cache invalidation (session-lifetime cache is sufficient)
 - `topic`/`topics` integration (unloaded exports have no category)
+- Scheme-level `(apropos)` export index access (see `PRIM-APROPOS-EXPORT-INDEX.md`)

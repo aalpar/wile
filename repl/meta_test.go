@@ -582,7 +582,7 @@ func TestCmdLibraries(t *testing.T) {
 			var buf bytes.Buffer
 			h := NewMetaCommandHandler(eng)
 			h.SetPager("")
-			h.cmdLibraries(&buf)
+			h.cmdLibraries(context.Background(), &buf)
 			qt.Assert(t, strings.Contains(buf.String(), tc.contain), qt.IsTrue,
 				qt.Commentf("output %q should contain %q", buf.String(), tc.contain))
 		})
@@ -591,7 +591,7 @@ func TestCmdLibraries(t *testing.T) {
 	t.Run("no env", func(t *testing.T) {
 		var buf bytes.Buffer
 		h := NewMetaCommandHandler(nil)
-		h.cmdLibraries(&buf)
+		h.cmdLibraries(context.Background(), &buf)
 		qt.Assert(t, strings.Contains(buf.String(), "No environment"), qt.IsTrue)
 	})
 
@@ -599,7 +599,7 @@ func TestCmdLibraries(t *testing.T) {
 		noRegEng := newTestEngine(t)
 		var buf bytes.Buffer
 		h := NewMetaCommandHandler(noRegEng)
-		h.cmdLibraries(&buf)
+		h.cmdLibraries(context.Background(), &buf)
 		qt.Assert(t, strings.Contains(buf.String(), "No library registry"), qt.IsTrue)
 	})
 
@@ -610,6 +610,33 @@ func TestCmdLibraries(t *testing.T) {
 		h.Handle(context.Background(), ",libs", &buf)
 		qt.Assert(t, strings.Contains(buf.String(), "(test lib)"), qt.IsTrue)
 	})
+}
+
+func TestCmdLibraries_UnloadedFromExportIndex(t *testing.T) {
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx,
+		wile.WithAllExtensions(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithLibraryPaths("."),
+	)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Do NOT import (wile algebra) — it should appear as an available library.
+	env := eng.Environment()
+	reg, ok := env.Namespace().Registry().(*registry.Registry)
+	qt.Assert(t, ok, qt.IsTrue)
+	docProv := NewRegistryDocProvider(reg, env)
+
+	var buf bytes.Buffer
+	h := NewMetaCommandHandler(eng, WithMetaDocProvider(docProv))
+	h.SetPager("")
+	h.cmdLibraries(context.Background(), &buf)
+	output := buf.String()
+
+	qt.Assert(t, strings.Contains(output, "Available libraries"), qt.IsTrue,
+		qt.Commentf("should show unloaded libraries section; got: %q", output))
+	qt.Assert(t, strings.Contains(output, "(wile algebra)"), qt.IsTrue,
+		qt.Commentf("should list (wile algebra) as available; got: %q", output))
 }
 
 func TestCmdDisassemble(t *testing.T) {
@@ -771,6 +798,31 @@ func TestCmdApropos_KeywordMatchAfterLibraryImport(t *testing.T) {
 
 	qt.Assert(t, strings.Contains(output, "make-group"), qt.IsTrue,
 		qt.Commentf("apropos should find make-group via keyword match; got: %q", output))
+}
+
+func TestCmdApropos_UnloadedLibraryNameMatch(t *testing.T) {
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx,
+		wile.WithAllExtensions(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithLibraryPaths("."),
+	)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Do NOT import (wile algebra) — it must be found via the export index.
+	env := eng.Environment()
+	reg, ok := env.Namespace().Registry().(*registry.Registry)
+	qt.Assert(t, ok, qt.IsTrue)
+	docProv := NewRegistryDocProvider(reg, env)
+
+	t.Setenv("PAGER", "")
+	var buf bytes.Buffer
+	h := NewMetaCommandHandler(eng, WithMetaDocProvider(docProv))
+	h.cmdApropos(ctx, []string{"algebra"}, &buf)
+	output := buf.String()
+
+	qt.Assert(t, strings.Contains(output, "(wile algebra)"), qt.IsTrue,
+		qt.Commentf("apropos should find (wile algebra) by library name when not imported; got: %q", output))
 }
 
 func TestMetaHandleDebugDelegation(t *testing.T) {

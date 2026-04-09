@@ -246,9 +246,10 @@ func searchLibraries(libReg *compilation.LibraryRegistry, lowerPattern string) [
 	return q
 }
 
-// searchUnloadedExports searches the export index for matching export names
-// from libraries that are not yet loaded. Libraries already present in libReg
-// are skipped (they were imported after the index was built).
+// searchUnloadedExports searches the export index for matching library names,
+// descriptions, and export names from libraries that are not yet loaded.
+// Libraries already present in libReg are skipped (they were imported after
+// the index was built).
 func searchUnloadedExports(idx *compilation.LibraryExportIndex, libReg *compilation.LibraryRegistry, lowerPattern string) []DocSearchResult {
 	if idx == nil {
 		return nil
@@ -258,13 +259,28 @@ func searchUnloadedExports(idx *compilation.LibraryExportIndex, libReg *compilat
 		if libReg != nil && libReg.Lookup(summary.Name) != nil {
 			continue
 		}
+
+		libName := summary.Name.SchemeString()
+
+		// Library-level match: check name and description, mirroring
+		// searchLibraries for loaded libraries.
+		if strings.Contains(strings.ToLower(libName), lowerPattern) ||
+			strings.Contains(strings.ToLower(summary.Description), lowerPattern) {
+			q = append(q, DocSearchResult{
+				Name:     libName,
+				Doc:      summary.Description,
+				Category: "library (not imported)",
+			})
+		}
+
+		// Export-level match: check individual export names.
 		for _, export := range summary.Exports {
 			if !strings.Contains(strings.ToLower(export), lowerPattern) {
 				continue
 			}
-			doc := summary.Name.SchemeString()
+			doc := libName
 			if summary.Description != "" {
-				doc = fmt.Sprintf("%s — %s", doc, summary.Description)
+				doc = fmt.Sprintf("%s — %s", libName, summary.Description)
 			}
 			q = append(q, DocSearchResult{
 				Name:     export,

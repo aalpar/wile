@@ -34,7 +34,7 @@ When investigating R7RS conformance issues:
 | `2026-03-27-procedure-documentation-design.md` | `procedure-documentation` primitive: NativeTemplate doc field, compileBody extraction, Guile-style convention | **Complete** (PR #579) |
 | `2026-03-27-scheme-library-docstrings-design.md` | Scheme library docstrings design: conventions, phasing, scope (300 procs across 29 files) | **Complete** |
 | `2026-03-27-special-form-macro-docstrings-design.md` | Special form & macro docstrings: `BindingMeta.Doc`, `BindingSpec`, `DocEntry`, post-bootstrap `ApplyDocs` | **Complete** |
-| `2026-04-06-structured-docstring-metadata-design.md` | Structured docstring metadata: parse `Parameters:`, `Returns:`, `Category:` from Guile-style docstrings for `,doc`/`,apropos`/`,topics` parity | **Approved** |
+| `2026-04-06-structured-docstring-metadata-design.md` | Structured docstring metadata: parse `Parameters:`, `Returns:`, `Category:` from Guile-style docstrings for `,doc`/`,apropos`/`,topics` parity | **Complete** |
 | `2026-03-26-extension-contracts-design.md` | Extension API contract system: ValueType enum, PrimitiveSpec type declarations, validation, doc integration | **Approved** (design) |
 | `2026-03-26-extension-contracts-impl.md` | Extension contracts remaining work: Phases 2-4 outlines (Phase 1 complete) | Open |
 | `2026-03-26-environment-profiles.md` | Environment profiles design: named profiles (Tiny, Console, Small, KitchenSink), sandbox modifier | Draft |
@@ -46,26 +46,31 @@ When investigating R7RS conformance issues:
 | `ARCHITECTURE.md` | Dialect system, module decomposition, plugin shadowing, environment introspection | All proposed |
 | `TEST-COVERAGE-AND-REFACTORING.md` | machine/ test coverage (52 files), engine.go tests, REPL tests, type switch linter, form dual-dispatch | Open |
 | `2026-04-05-structural-reduction.md` | Full-codebase structural reduction: CallContext interface, promoted op table, Thread outcome type, plus 7 deferred findings | Phases 1, 3 complete; Phase 2 rejected (benchmarked ~1.5% regression) |
-
-Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans).
-=======
-| `ARCHITECTURE.md` | Dialect system, module decomposition, plugin shadowing | Open items remain |
 | `FIX-GUARD-MULTIPLE-VALUES.md` | `guard` body drops multiple values — `call-with-values` fix | Draft |
 | `FIX-TUPLE-FOREACH-NIL.md` | Tuple ForEach nil returns Void instead of EmptyList | Draft |
-| `UNIFY-ESCAPE-MECHANISMS.md` | Unified `call-with-exit` and prompt/abort escape paths | Completed (#418) |
-| `MACHINE-TECH-DEBT.md` | Machine package debt: arity dedup, expander decomposition, letrec* unification, file splits | Complete (#444) |
+| `UNIFY-ESCAPE-MECHANISMS.md` | Unified `call-with-exit` and prompt/abort escape paths | **Complete** (#418) |
+| `MACHINE-TECH-DEBT.md` | Machine package debt: arity dedup, expander decomposition, letrec* unification, file splits | **Complete** (#444) |
 | `CONTINUATION_MARKS.md` | Racket-style per-frame key-value annotations on the continuation chain | Proposed |
 | `REMOVE-SYMBOL-INTERNING.md` | Remove symbol canonicalization, compare by string key | Proposed |
 | `ENVIRONMENT-CLEANUP.md` | Environment package cleanup: constructor duplication, dead delegation, semantic inconsistency | Proposed |
-| `GO-AST.md` | Go AST extension design and phased implementation | Phases 1, 2 & 4 complete; Phase 3 not started |
-| `GO-STATIC-ANALYSIS.md` | Go static analysis extensions umbrella design (SSA, callgraph, CFG, lint) | Phases 1-3 complete; Phase 4 not started |
-| `GO-SSA-PHASE-1A.md` | SSA extension Phase 1A implementation plan (core instructions) | Complete |
-| `GO-SSA-PHASE-1BC.md` | SSA extension Phase 1B+1C implementation plan (collections, type ops, closures) | Complete |
-| `GO-CALLGRAPH-PHASE-2.md` | Callgraph extension implementation plan (Phase 2 of GO-STATIC-ANALYSIS) | Complete |
-| `GO-CFG-PHASE-3.md` | CFG + dominance extension implementation plan (Phase 3 of GO-STATIC-ANALYSIS) | Complete |
-| `GO-LINT-PHASE-4.md` | Analysis passes extension implementation plan (Phase 4 of GO-STATIC-ANALYSIS) | Not started |
-| `GO-AST-PHASE-2.md` | AST extension Phase 2 implementation plan (concurrency, switch, advanced) | Complete (#480) |
-| `GO-AST-PHASE-3.md` | AST extension Phase 3 implementation plan (comments, error recovery, generics) | Not started |
+| **Documentation Search** | | |
+| `DOCUMENTATION-SEARCH.md` | Current-state architecture doc for doc search: `SearchDoc`, export index, keywords, topic browsing | **Current** — consolidated reference |
+| `2026-03-27-apropos-topic-browsing-design.md` | Original apropos & topic browsing design | **Complete** |
+| `2026-04-08-doc-keywords-design.md` | Keywords field design | **Complete** |
+| `2026-04-08-doc-keywords-impl.md` | Keywords implementation plan | **Complete** |
+| `2026-04-08-unified-apropos-design.md` | Unified `SearchDoc` design (Scheme + REPL) | **Complete** |
+| `2026-04-08-unified-apropos-impl.md` | Unified search implementation plan | **Complete** |
+| `2026-04-08-eager-doc-index-design.md` | Eager library metadata scan design | **Superseded** by `LIBRARY-EXPORT-INDEX.md` |
+| `LIBRARY-EXPORT-INDEX.md` | Static export index design for unloaded library discovery | **Complete** (PRs #623, #625) |
+| `LIBRARY-EXPORT-INDEX-IMPL.md` | Export index implementation plan | **Complete** (PRs #623, #624, #625) |
+| `PRIM-APROPOS-EXPORT-INDEX.md` | Fix Scheme-level `(apropos)` asymmetry (export index on Namespace) | Proposed (deferred) |
+| `2026-04-06-structured-docstring-metadata-design.md` | Structured docstring metadata: `Parameters:`, `Returns:`, `Category:` from Guile-style docstrings | **Complete** |
+| `2026-04-06-structured-docstring-metadata-impl.md` | Structured docstring metadata implementation plan | **Complete** |
+| `2026-03-28-library-level-documentation-design.md` | Library-level documentation (description fields, metadata) | **Complete** |
+| `2026-03-29-doc-examples-filtering.md` | Example filtering in documentation display | **Complete** |
+| `2026-04-07-documentation-gaps-plan.md` | Documentation coverage gap analysis | Open |
+
+Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans).
 
 ## Before Starting Work
 

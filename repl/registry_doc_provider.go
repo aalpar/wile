@@ -16,8 +16,6 @@ package repl
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"sort"
 	"sync"
 
@@ -32,8 +30,11 @@ type RegistryDocProvider struct {
 	reg *registry.Registry
 	env *environment.EnvironmentFrame
 
-	// Lazy export index — built on first Search() call.
-	indexOnce   sync.Once
+	// Lazy export index — built on first Search() or UnloadedLibraries() call.
+	// Uses mutex + flag instead of sync.Once so transient failures (context
+	// cancellation, slow filesystem) can retry on the next call.
+	indexMu     sync.Mutex
+	indexBuilt  bool
 	exportIndex *compilation.LibraryExportIndex
 }
 
@@ -114,28 +115,60 @@ func (p *RegistryDocProvider) lookupNonPrimitiveDoc(name string) (DocInfo, bool)
 	return DocInfo{}, false
 }
 
+// ensureExportIndex builds the LibraryExportIndex on first successful call.
+// Retries on subsequent calls if a previous attempt failed (e.g., context
+// cancellation, slow filesystem). Permanent conditions (nil env, nil resolver)
+// are marked as built to avoid repeated nil checks. Safe for concurrent use.
+func (p *RegistryDocProvider) ensureExportIndex(ctx context.Context) {
+	p.indexMu.Lock()
+	defer p.indexMu.Unlock()
+	if p.indexBuilt {
+		return
+	}
+	if p.env == nil {
+		p.indexBuilt = true
+		return
+	}
+	resolver := p.env.FileResolver()
+	if resolver == nil {
+		p.indexBuilt = true
+		return
+	}
+	idx, err := compilation.BuildExportIndex(ctx, resolver, p.libraryRegistry())
+	if err != nil {
+		return // transient failure — retry on next call
+	}
+	p.exportIndex = idx
+	p.indexBuilt = true
+}
+
 // Search returns entries whose name, doc, or category contains pattern
 // (case-insensitive substring match). Results are sorted by name.
 // Delegates to registry.SearchDoc for unified search across all sources.
 // On first call, lazily builds a LibraryExportIndex so unloaded library
 // exports are discoverable via apropos.
 func (p *RegistryDocProvider) Search(ctx context.Context, pattern string) []registry.DocSearchResult {
-	p.indexOnce.Do(func() {
-		if p.env == nil {
-			return
-		}
-		resolver := p.env.FileResolver()
-		if resolver == nil {
-			return
-		}
-		idx, err := compilation.BuildExportIndex(ctx, resolver, p.libraryRegistry())
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "warning: library export index failed: %v\n", err)
-			return
-		}
-		p.exportIndex = idx
-	})
+	p.ensureExportIndex(ctx)
 	return registry.SearchDoc(p.reg, p.env, p.libraryRegistry(), p.exportIndex, pattern)
+}
+
+// UnloadedLibraries returns summaries of libraries that are discoverable via
+// the file resolver but not yet imported. Returns nil if no export index is
+// available. Libraries already present in the library registry are excluded.
+func (p *RegistryDocProvider) UnloadedLibraries(ctx context.Context) []*compilation.LibrarySummary {
+	p.ensureExportIndex(ctx)
+	if p.exportIndex == nil {
+		return nil
+	}
+	libReg := p.libraryRegistry()
+	var q []*compilation.LibrarySummary
+	for _, summary := range p.exportIndex.Entries() {
+		if libReg != nil && libReg.Lookup(summary.Name) != nil {
+			continue
+		}
+		q = append(q, summary)
+	}
+	return q
 }
 
 // Categories returns sorted category names, excluding the empty-string category.

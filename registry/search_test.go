@@ -309,6 +309,74 @@ func TestSearchDoc_UnloadedExports(t *testing.T) {
 	c.Assert(strings.Contains(results[0].Doc, "SRFI 1: List library."), qt.IsTrue)
 }
 
+func TestSearchDoc_UnloadedLibraryByName(t *testing.T) {
+	c := qt.New(t)
+
+	reg := registry.NewRegistry()
+	idx := compilation.NewLibraryExportIndexFromEntries(map[string]*compilation.LibrarySummary{
+		"wile/algebra": {
+			Name:        compilation.NewLibraryName("wile", "algebra"),
+			Description: "Algebraic structures: rings, fields, lattices.",
+			Exports:     []string{"make-group", "make-ring", "make-field"},
+		},
+	})
+
+	// "algebra" matches the library name but none of the export names.
+	results := registry.SearchDoc(reg, nil, nil, idx, "algebra")
+	c.Assert(len(results), qt.Equals, 1)
+	c.Assert(results[0].Name, qt.Equals, "(wile algebra)")
+	c.Assert(results[0].Category, qt.Equals, "library (not imported)")
+	c.Assert(results[0].Doc, qt.Equals, "Algebraic structures: rings, fields, lattices.")
+}
+
+func TestSearchDoc_UnloadedLibraryByDescription(t *testing.T) {
+	c := qt.New(t)
+
+	reg := registry.NewRegistry()
+	idx := compilation.NewLibraryExportIndexFromEntries(map[string]*compilation.LibrarySummary{
+		"wile/algebra": {
+			Name:        compilation.NewLibraryName("wile", "algebra"),
+			Description: "Algebraic structures: rings, fields, lattices.",
+			Exports:     []string{"make-group", "make-ring", "make-field"},
+		},
+	})
+
+	// "lattice" matches the description and also the export "make-lattice"
+	// (not in this test data, but confirms description-only matching).
+	results := registry.SearchDoc(reg, nil, nil, idx, "lattice")
+	c.Assert(len(results), qt.Equals, 1)
+	c.Assert(results[0].Name, qt.Equals, "(wile algebra)")
+	c.Assert(results[0].Category, qt.Equals, "library (not imported)")
+}
+
+func TestSearchDoc_UnloadedLibraryNameAndExportBothMatch(t *testing.T) {
+	c := qt.New(t)
+
+	reg := registry.NewRegistry()
+	idx := compilation.NewLibraryExportIndexFromEntries(map[string]*compilation.LibrarySummary{
+		"test/foo": {
+			Name:        compilation.NewLibraryName("test", "foo"),
+			Description: "A foo library.",
+			Exports:     []string{"foo-bar", "foo-baz", "quux"},
+		},
+	})
+
+	// "foo" matches the library name AND two export names.
+	results := registry.SearchDoc(reg, nil, nil, idx, "foo")
+	names := make([]string, len(results))
+	for i, r := range results {
+		names[i] = r.Name
+	}
+	c.Assert(slices.Contains(names, "(test foo)"), qt.IsTrue,
+		qt.Commentf("should include library-level result; got %v", names))
+	c.Assert(slices.Contains(names, "foo-bar"), qt.IsTrue,
+		qt.Commentf("should include export-level result; got %v", names))
+	c.Assert(slices.Contains(names, "foo-baz"), qt.IsTrue,
+		qt.Commentf("should include export-level result; got %v", names))
+	c.Assert(!slices.Contains(names, "quux"), qt.IsTrue,
+		qt.Commentf("quux should not match; got %v", names))
+}
+
 func TestSearchDoc_LoadedTakesPrecedenceOverUnloaded(t *testing.T) {
 	c := qt.New(t)
 
