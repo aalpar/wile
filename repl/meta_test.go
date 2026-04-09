@@ -26,6 +26,8 @@ import (
 	"github.com/aalpar/wile"
 	"github.com/aalpar/wile/docparse"
 	"github.com/aalpar/wile/machine/compilation"
+	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/stdlib"
 	"github.com/aalpar/wile/values"
 )
 
@@ -739,6 +741,37 @@ func TestFormatPrimitiveDoc_MultiLineDescription(t *testing.T) {
 	// All description lines should be indented
 	c.Assert(strings.Contains(output, "  First line.\n  Second line.\n  Third line."), qt.IsTrue,
 		qt.Commentf("multi-line desc should be indented: %s", output))
+}
+
+func TestCmdApropos_KeywordMatchAfterLibraryImport(t *testing.T) {
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx,
+		wile.WithAllExtensions(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithLibraryPaths("."),
+	)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Import the algebra library so its bindings are in the environment.
+	_, err = eng.EvalMultiple(ctx, `(import (wile algebra))`)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Build a doc provider with the live environment (as the MCP server does).
+	env := eng.Environment()
+	reg, ok := env.Namespace().Registry().(*registry.Registry)
+	qt.Assert(t, ok, qt.IsTrue)
+	libReg := registry.ExtractLibraryRegistry(env)
+	docProv := NewRegistryDocProvider(reg, env, libReg)
+
+	// Search for "abelian" — make-group has it only in Keywords, not in name or doc prose.
+	t.Setenv("PAGER", "")
+	var buf bytes.Buffer
+	h := NewMetaCommandHandler(eng, WithMetaDocProvider(docProv))
+	h.cmdApropos([]string{"abelian"}, &buf)
+	output := buf.String()
+
+	qt.Assert(t, strings.Contains(output, "make-group"), qt.IsTrue,
+		qt.Commentf("apropos should find make-group via keyword match; got: %q", output))
 }
 
 func TestMetaHandleDebugDelegation(t *testing.T) {

@@ -23,8 +23,10 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/bootstrap"
+	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/values"
 )
 
 func buildSearchTestRegistry() *registry.Registry {
@@ -240,4 +242,48 @@ func TestSearchDoc_LibraryByDescription(t *testing.T) {
 	results := registry.SearchDoc(reg, nil, libReg, "lattice")
 	c.Assert(len(results), qt.Equals, 1)
 	c.Assert(results[0].Name, qt.Equals, "(wile algebra)")
+}
+
+func TestSearchDoc_EnvironmentBindingKeywordsFromValue(t *testing.T) {
+	c := qt.New(t)
+
+	// Create an environment with a ForeignClosure whose Doc() contains Keywords.
+	// This simulates Scheme-defined closures imported from a library: the binding
+	// itself has no doc, but the closure value carries a structured docstring.
+	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	c.Assert(err, qt.IsNil)
+
+	reg, ok := env.Namespace().Registry().(*registry.Registry)
+	c.Assert(ok, qt.IsTrue)
+
+	// Create a ForeignClosure with a docstring containing Keywords.
+	fc := machine.NewForeignClosure(env, 1, false, func(mc machine.CallContext) error {
+		return nil
+	})
+	fc.SetName("make-widget")
+	fc.SetDoc("Construct a widget.\nKeywords: factory, builder, abelian\nCategory: widgets")
+
+	// Bind it in the global environment.
+	sym := values.NewSymbol("make-widget")
+	gi, _ := env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+	err = env.SetOwnGlobalValue(gi, fc)
+	c.Assert(err, qt.IsNil)
+
+	// Search by keyword — should find make-widget via its closure's docstring.
+	results := registry.SearchDoc(reg, env, nil, "abelian")
+	names := make([]string, len(results))
+	for i, r := range results {
+		names[i] = r.Name
+	}
+	c.Assert(slices.Contains(names, "make-widget"), qt.IsTrue,
+		qt.Commentf("SearchDoc should match environment bindings by keyword from value Doc(); got %v", names))
+
+	// Verify keywords were parsed and included in the result.
+	for _, r := range results {
+		if r.Name == "make-widget" {
+			c.Assert(slices.Contains(r.Keywords, "abelian"), qt.IsTrue,
+				qt.Commentf("result should have parsed keywords: %v", r.Keywords))
+			c.Assert(r.Category, qt.Equals, "widgets")
+		}
+	}
 }
