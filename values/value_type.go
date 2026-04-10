@@ -20,6 +20,13 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
+// Compile-time interface assertions.
+var (
+	_ TypeConstraint = ValueType(0)
+	_ TypeConstraint = (*NamedTypeConstraint)(nil)
+	_ TypeConstraint = (*RecordTypeConstraint)(nil)
+)
+
 // TypeConstraint describes a type expectation for documentation and validation.
 // Built-in types are represented by ValueType constants.
 // User-defined types (e.g., record types) implement this interface directly.
@@ -358,8 +365,12 @@ type RecordTypeConstraint struct {
 }
 
 // NewRecordTypeConstraint creates a RecordTypeConstraint for the given
-// record type descriptor.
+// record type descriptor. Panics if rtd is nil.
 func NewRecordTypeConstraint(rtd *RecordType) *RecordTypeConstraint {
+	if rtd == nil {
+		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"NewRecordTypeConstraint: rtd must not be nil"))
+	}
 	return &RecordTypeConstraint{rtd: rtd}
 }
 
@@ -386,7 +397,11 @@ func (p *RecordTypeConstraint) Check(v Value) (any, bool, error) {
 			return rec, true, nil
 		}
 	}
+	gotName := "unknown"
+	if rec.RecordType() != nil {
+		gotName = rec.RecordType().Name().Key
+	}
 	return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 		"expected %s record, got %s record",
-		p.rtd.Name().Key, rec.RecordType().Name().Key)
+		p.rtd.Name().Key, gotName)
 }

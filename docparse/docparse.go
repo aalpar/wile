@@ -42,7 +42,11 @@ func init() {
 // ParseValueType converts a Scheme-style type name to a TypeConstraint.
 // Known names return the corresponding ValueType constant.
 // Unknown names return a NamedTypeConstraint preserving the original name.
+// Empty names return nil (unspecified).
 func ParseValueType(name string) values.TypeConstraint {
+	if name == "" {
+		return nil
+	}
 	vt, ok := typeNameToValueType[name]
 	if ok {
 		return vt

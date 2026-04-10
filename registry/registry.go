@@ -32,7 +32,7 @@ type PrimitiveSpec struct {
 	ParamNames []string                // optional: parameter names
 	Category   string                  // optional: grouping category
 	ParamTypes []values.TypeConstraint // optional: type contract per parameter
-	ReturnType values.TypeConstraint   // optional: return type (zero = TypeAny)
+	ReturnType values.TypeConstraint   // optional: return type (nil = unspecified)
 	Keywords   []string                // optional: searchable tags
 }
 

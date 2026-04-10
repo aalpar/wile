@@ -49,11 +49,6 @@ func TestParseValueType(t *testing.T) {
 			input:        "frobnicate",
 			expectedName: "frobnicate",
 		},
-		{
-			name:         "empty string",
-			input:        "",
-			expectedName: "",
-		},
 	}
 
 	for _, tc := range tcs {
@@ -63,6 +58,12 @@ func TestParseValueType(t *testing.T) {
 			c.Assert(result.Name(), qt.Equals, tc.expectedName)
 		})
 	}
+
+	// Empty string returns nil (unspecified).
+	t.Run("empty string returns nil", func(t *testing.T) {
+		c := qt.New(t)
+		c.Assert(docparse.ParseValueType(""), qt.IsNil)
+	})
 
 	// Known types return ValueType constants.
 	t.Run("known type returns ValueType", func(t *testing.T) {

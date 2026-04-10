@@ -388,3 +388,9 @@ func TestRecordTypeConstraint(t *testing.T) {
 		})
 	}
 }
+
+func TestNewRecordTypeConstraintNilPanics(t *testing.T) {
+	qt.Assert(t, func() {
+		values.NewRecordTypeConstraint(nil)
+	}, qt.PanicMatches, `.*rtd must not be nil.*`)
+}
