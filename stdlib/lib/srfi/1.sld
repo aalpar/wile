@@ -27,13 +27,13 @@
     (begin
       (define reverse! reverse)
       (define (find-tail pred ls)
-        "Return the first tail of LS whose car satisfies PRED,\nor #f if no element matches. The returned value is the\npair itself, sharing structure with LS.\n\nExamples:\n  (find-tail even? '(1 3 4 5))  => (4 5)\n  (find-tail even? '(1 3 5))    => #f\n\nParameters:\n  pred : procedure\n  ls : list\nReturns: any\nCategory: srfi-1\n\nSee also: `find', `any', `list-index'."
+        "Return the first tail of LS whose car satisfies PRED,\nor #f if no element matches. The returned value is the\npair itself, sharing structure with LS.\n\nExamples:\n  (find-tail even? '(1 3 4 5))  => (4 5)\n  (find-tail even? '(1 3 5))    => #f\n\nParameters:\n  pred : procedure\n  ls : list\nReturns: any\nCategory: srfi-1\nKeywords: locate, search, first match tail\n\nSee also: `find', `any', `list-index'."
         (and (pair? ls) (if (pred (car ls)) ls (find-tail pred (cdr ls)))))
       (define (find pred ls)
-        "Return the first element of LS satisfying predicate PRED,\nor #f if no element matches. Note: cannot distinguish between\n#f as a found value and #f as not-found. Use find-tail when\nthe list may contain #f.\n\nExamples:\n  (find even? '(1 3 4 5))  => 4\n  (find even? '(1 3 5))    => #f\n\nParameters:\n  pred : procedure\n  ls : list\nReturns: any\nCategory: srfi-1\n\nSee also: `find-tail', `any', `every'."
+        "Return the first element of LS satisfying predicate PRED,\nor #f if no element matches. Note: cannot distinguish between\n#f as a found value and #f as not-found. Use find-tail when\nthe list may contain #f.\n\nExamples:\n  (find even? '(1 3 4 5))  => 4\n  (find even? '(1 3 5))    => #f\n\nParameters:\n  pred : procedure\n  ls : list\nReturns: any\nCategory: srfi-1\nKeywords: search, locate, detect, first match, lookup\n\nSee also: `find-tail', `any', `every'."
         (cond ((find-tail pred ls) => car) (else #f)))
       (define (any pred ls . lol)
-        "Return the first true value produced by applying PRED to\nelements of LS, or #f if no element satisfies PRED. The\nreturn value is the actual result from PRED, not necessarily\n#t. For multiple lists, PRED receives corresponding elements\nand the search stops at the shortest list.\n\nExamples:\n  (any even? '(1 3 4 5))       => #t\n  (any even? '(1 3 5))         => #f\n  (any number? '(a 1 b))       => #t\n\nParameters:\n  pred : procedure\n  ls : list\nReturns: any\nCategory: srfi-1\n\nSee also: `every', `find', `find-tail'."
+        "Return the first true value produced by applying PRED to\nelements of LS, or #f if no element satisfies PRED. The\nreturn value is the actual result from PRED, not necessarily\n#t. For multiple lists, PRED receives corresponding elements\nand the search stops at the shortest list.\n\nExamples:\n  (any even? '(1 3 4 5))       => #t\n  (any even? '(1 3 5))         => #f\n  (any number? '(a 1 b))       => #t\n\nParameters:\n  pred : procedure\n  ls : list\nReturns: any\nCategory: srfi-1\nKeywords: some, exists, ormap, any match, satisfies\n\nSee also: `every', `find', `find-tail'."
         (define (any1 pred ls)
           (if (pair? (cdr ls))
               ((lambda (x) (if x x (any1 pred (cdr ls)))) (pred (car ls)))
@@ -47,7 +47,7 @@
             (if (pair? ls) (any1 pred ls) #f)
             (anyn pred (cons ls lol))))
       (define (every pred ls . lol)
-        "Return #f if any element of LS fails to satisfy PRED.\nOtherwise return the result of PRED on the last element,\nor #t for the empty list. For multiple lists, PRED receives\ncorresponding elements and stops at the shortest list.\n\nExamples:\n  (every even? '(2 4 6))       => #t\n  (every even? '(2 3 4))       => #f\n  (every number? '(1 2 3))     => #t\n\nParameters:\n  pred : procedure\n  ls : list\nReturns: any\nCategory: srfi-1\n\nSee also: `any', `find', `find-tail'."
+        "Return #f if any element of LS fails to satisfy PRED.\nOtherwise return the result of PRED on the last element,\nor #t for the empty list. For multiple lists, PRED receives\ncorresponding elements and stops at the shortest list.\n\nExamples:\n  (every even? '(2 4 6))       => #t\n  (every even? '(2 3 4))       => #f\n  (every number? '(1 2 3))     => #t\n\nParameters:\n  pred : procedure\n  ls : list\nReturns: any\nCategory: srfi-1\nKeywords: all, forall, andmap, all match, every element\n\nSee also: `any', `find', `find-tail'."
         (define (every1 pred ls)
           (if (null? (cdr ls))
               (pred (car ls))

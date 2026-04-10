@@ -72,7 +72,8 @@ func addPredicates(r *registry.Registry) error {
 			ParamTypes: []values.ValueType{values.TypeAny}, ReturnType: values.TypeBoolean},
 		{Name: "procedure?", ParamCount: 1, Impl: PrimProcedureQ,
 			Doc: "Returns #t if OBJ is a procedure. Includes lambdas, primitives, continuations, and parameters.\n\nExamples:\n  (procedure? car)       => #t\n  (procedure? 42)        => #f", ParamNames: []string{"obj"}, Category: "predicates",
-			ParamTypes: []values.ValueType{values.TypeAny}, ReturnType: values.TypeBoolean},
+			ParamTypes: []values.ValueType{values.TypeAny}, ReturnType: values.TypeBoolean,
+			Keywords: []string{"callable", "function", "lambda"}},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
 	// Numeric predicates
