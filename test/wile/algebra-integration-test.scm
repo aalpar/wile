@@ -89,5 +89,77 @@
         (test 1 (cdr (assoc 'x result)))
         (test 2 (cdr (assoc 'y result)))))))
 
+;; -- Projection chain: boolean → heyting → lattice → partial-order --
+
+(test-group "order-theoretic-projection-chain"
+  (let* ((B (powerset-boolean '(x y z)))
+         (H (boolean->heyting B))
+         (L (heyting->lattice H))
+         (PO (lattice->partial-order L)))
+    (test #t (boolean-algebra? B))
+    (test #t (heyting-algebra? H))
+    (test #t (lattice? L))
+    (test #t (partial-order? PO))
+    ;; Operations agree through the chain
+    (test #t (boolean-leq? B '(x) '(x y)))
+    (test #t (heyting-leq? H '(x) '(x y)))
+    (test #t (lattice-leq? L '(x) '(x y)))
+    (test #t (po-leq? PO '(x) '(x y)))
+    ;; Heyting implies agrees with Boolean complement + join
+    (let ((h-imp (heyting-implies H '(x) '(x y)))
+          (b-imp (boolean-join B (boolean-complement B '(x)) '(x y))))
+      (test (length h-imp) (length b-imp))
+      (for-each
+        (lambda (e) (test #t (and (member e b-imp) #t)))
+        h-imp))))
+
+;; -- Boolean↔Ring bridge --
+
+(test-group "boolean-ring-bridge"
+  (let* ((B (powerset-boolean '(a b c)))
+         (R (boolean->ring B))
+         (S (ring->semiring R)))
+    (test #t (ring? R))
+    (test #t (semiring? S))
+    ;; Semiring operations agree with ring
+    (let ((r1 (ring-plus R '(a b) '(b c)))
+          (s1 (semiring-plus S '(a b) '(b c))))
+      (test (length r1) (length s1))
+      (for-each
+        (lambda (e) (test #t (and (member e s1) #t)))
+        r1))
+    ;; Ring times = Boolean meet
+    (test '(b) (ring-times R '(a b) '(b c)))
+    (test '(b) (boolean-meet B '(a b) '(b c)))))
+
+;; -- Powerset round-trip: complement + join recovers universe --
+
+(test-group "powerset-complement-roundtrip"
+  (let ((B (powerset-boolean '(1 2 3 4 5))))
+    (let* ((s '(1 3 5))
+           (comp (boolean-complement B s))
+           (whole (boolean-join B s comp)))
+      ;; complement is {2, 4}
+      (test 2 (length comp))
+      (test #t (and (member 2 comp) (member 4 comp) #t))
+      ;; union recovers universe
+      (test 5 (length whole)))))
+
+;; -- Fixpoint on Heyting lattice --
+
+(test-group "fixpoint-on-heyting"
+  ;; powerset-heyting projects to a lattice that fixpoint can use
+  (let* ((H (powerset-heyting '(a b c)))
+         (L (heyting->lattice H)))
+    (let ((result (fixpoint L
+                    (lambda (s)
+                      (cond ((null? s) '(a))
+                            ((and (member 'a s) (not (member 'b s)))
+                             (cons 'b s))
+                            (else s)))
+                    '())))
+      (test #t (and (member 'a result) (member 'b result) #t))
+      (test 2 (length result)))))
+
 (test-end)
 (test-exit)

@@ -1,5 +1,5 @@
 (define-library (wile algebra)
-  (description "Algebraic structures: orders, lattices, monoids, semirings, groups, rings, fields.")
+  (description "Algebraic structures: orders, lattices, Heyting/Boolean algebras, monoids, semirings, groups, rings, fields.")
   (export
     ;; Partial orders
     make-partial-order partial-order?
@@ -12,6 +12,20 @@
     flat-lattice powerset-lattice product-lattice map-lattice
     fixpoint fixpoint/widen
     validate-lattice with-lattice
+    ;; Heyting algebras
+    make-heyting-algebra heyting-algebra?
+    heyting-join heyting-meet heyting-bottom heyting-top
+    heyting-leq? heyting-implies heyting-negate
+    heyting->lattice
+    powerset-heyting map-heyting
+    validate-heyting-algebra with-heyting
+    ;; Boolean algebras
+    make-boolean-algebra boolean-algebra?
+    boolean-join boolean-meet boolean-bottom boolean-top
+    boolean-leq? boolean-complement
+    boolean->heyting boolean->lattice boolean->ring
+    powerset-boolean
+    validate-boolean-algebra with-boolean
     ;; Monoids
     make-monoid monoid?
     monoid-op monoid-identity monoid-fold monoid-power
@@ -58,6 +72,8 @@
     make-normalizer)
   (import (wile algebra order)
           (wile algebra lattice)
+          (wile algebra heyting)
+          (wile algebra boolean)
           (wile algebra monoid)
           (wile algebra semiring)
           (wile algebra group)
