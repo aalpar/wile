@@ -12,6 +12,7 @@
     ;; Rewrite steps
     make-rewrite-step rewrite-step?
     step-rule-name step-general-form step-before step-after
+    fuel-exhausted-step?
     ;; Term protocol
     sexp-term-protocol
     ;; Recursive normalizer

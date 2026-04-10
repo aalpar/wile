@@ -108,6 +108,7 @@
     theory-filter theory-exclude theory-prioritize theory-merge
     make-rewrite-step rewrite-step?
     step-rule-name step-general-form step-before step-after
+    fuel-exhausted-step?
     sexp-term-protocol
     make-recursive-normalizer
     monoid->theory lattice->theory boolean->theory

@@ -13,7 +13,12 @@
     (lambda (term new-args)
       (cons (car term) new-args))
     (lambda (a b)
-      (string<? (symbol->string a) (symbol->string b)))))
+      (cond
+        ((and (symbol? a) (symbol? b))
+         (string<? (symbol->string a) (symbol->string b)))
+        ((symbol? a) #t)
+        ((symbol? b) #f)
+        (else #f)))))
 
 (define (zero? x)
   (eq? x 'zero))
@@ -135,6 +140,15 @@
     (test 'x (norm '(+ x zero)))
     ;; Commutativity fires when identity doesn't
     (test '(+ a b) (norm '(+ b a)))))
+
+;; ─── Atom terms ───────────────────────────
+
+(test-group "atom-terms"
+  (let ((norm (make-normalizer (list (make-identity-axiom '+ zero?)) proto)))
+    ;; Atoms return #f (no match), not crash
+    (test #f (norm 'x))
+    (test #f (norm 42))
+    (test #f (norm #t))))
 
 ;; ─── No-match sentinel ─────────────────────
 

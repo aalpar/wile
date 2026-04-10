@@ -500,7 +500,7 @@ func TestEngine_EmbeddedStdlib_RewriteAssociativityAlreadyRight(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "#f")
 }
 
-func TestEngine_EmbeddedStdlib_DirectionalAxiom(t *testing.T) {
+func TestEngine_EmbeddedStdlib_RewriteDirectionalAxiom(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 

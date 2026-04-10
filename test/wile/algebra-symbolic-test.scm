@@ -224,7 +224,7 @@
     (let-values (((result trace) (norm '(or (and x (or x y)) (not (not z))))))
       (test '(or x z) result))))
 
-(define (string-contains s sub)
+(define (string-includes? s sub)
   (let ((slen (string-length s))
         (sublen (string-length sub)))
     (let loop ((i 0))
@@ -240,7 +240,7 @@
     (let-values (((result trace) (norm '(and x (or x y)))))
       (let ((formatted (format-trace trace)))
         (test #t (> (length formatted) 0))
-        (test #t (string-contains
+        (test #t (string-includes?
                    (apply string-append formatted)
                    "absorption"))))))
 
@@ -258,8 +258,7 @@
       (test #t (> (length trace) 0))
       ;; Last trace entry should be fuel-exhausted
       (let ((last-step (list-ref trace (- (length trace) 1))))
-        (test "fuel-exhausted" (step-rule-name last-step))
-        (test "rewrite limit exceeded" (step-general-form last-step))))))
+        (test #t (fuel-exhausted-step? last-step))))))
 
 (test-end)
 (test-exit)

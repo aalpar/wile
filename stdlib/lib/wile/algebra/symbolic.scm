@@ -19,12 +19,13 @@
 
 (define (keep pred lst)
   "Return elements of LST for which PRED returns true.\nLocal helper — equivalent to SRFI-1 filter.\n\nParameters:\n  pred : procedure\n  lst : list\nReturns: list\nCategory: algebra"
-  (cond
-    ((null? lst) '())
-    ((pred (car lst))
-     (cons (car lst) (keep pred (cdr lst))))
-    (else
-     (keep pred (cdr lst)))))
+  (let loop ((remaining lst) (acc '()))
+    (cond
+      ((null? remaining) (reverse acc))
+      ((pred (car remaining))
+       (loop (cdr remaining) (cons (car remaining) acc)))
+      (else
+       (loop (cdr remaining) acc)))))
 
 (define (remove pred lst)
   "Return elements of LST for which PRED returns false.\nLocal helper — complement of keep.\n\nParameters:\n  pred : procedure\n  lst : list\nReturns: list\nCategory: algebra"
@@ -96,6 +97,14 @@
   (general-form step-general-form)
   (before       step-before)
   (after        step-after))
+
+;; Sentinel for fuel-exhausted steps — identity-unique like *no-match*.
+(define *fuel-exhausted-name* (list 'fuel-exhausted))
+
+(define (fuel-exhausted-step? step)
+  "Test whether STEP is a fuel-exhaustion marker.\nThe recursive normalizer appends this step when the iteration\nlimit is reached before a fixed point.  Use this predicate\ninstead of comparing step-rule-name to a string.\n\nParameters:\n  step : rewrite-step\nReturns: boolean\nCategory: algebra\nKeywords: fuel, exhaustion, normalizer, limit"
+  (and (rewrite-step? step)
+       (eq? (step-rule-name step) *fuel-exhausted-name*)))
 
 ;; ─── Term protocol ────────────────────────
 
@@ -184,7 +193,7 @@ Category: algebra"
                (values current
                        (reverse
                          (cons (make-rewrite-step
-                                 "fuel-exhausted"
+                                 *fuel-exhausted-name*
                                  "rewrite limit exceeded"
                                  current current)
                                rev-trace)))
