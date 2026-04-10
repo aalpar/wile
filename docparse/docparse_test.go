@@ -25,57 +25,88 @@ import (
 
 func TestParseValueType(t *testing.T) {
 	tcs := []struct {
-		name     string
-		input    string
-		expected values.ValueType
+		name         string
+		input        string
+		expectedName string
 	}{
 		{
-			name:     "known type procedure",
-			input:    "procedure",
-			expected: values.TypeProcedure,
+			name:         "known type procedure",
+			input:        "procedure",
+			expectedName: "procedure",
 		},
 		{
-			name:     "known type list",
-			input:    "list",
-			expected: values.TypeList,
+			name:         "known type list",
+			input:        "list",
+			expectedName: "list",
 		},
 		{
-			name:     "known type exact-integer",
-			input:    "exact-integer",
-			expected: values.TypeExactInteger,
+			name:         "known type exact-integer",
+			input:        "exact-integer",
+			expectedName: "exact-integer",
 		},
 		{
-			name:     "unknown type",
-			input:    "frobnicate",
-			expected: values.TypeAny,
+			name:         "unknown type",
+			input:        "frobnicate",
+			expectedName: "frobnicate",
 		},
 		{
-			name:     "empty string",
-			input:    "",
-			expected: values.TypeAny,
+			name:         "empty string",
+			input:        "",
+			expectedName: "",
 		},
 	}
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			c.Assert(docparse.ParseValueType(tc.input), qt.Equals, tc.expected)
+			result := docparse.ParseValueType(tc.input)
+			c.Assert(result.Name(), qt.Equals, tc.expectedName)
 		})
 	}
+
+	// Known types return ValueType constants.
+	t.Run("known type returns ValueType", func(t *testing.T) {
+		c := qt.New(t)
+		c.Assert(
+			docparse.ParseValueType("integer"),
+			qt.Equals,
+			values.TypeConstraint(values.TypeInteger),
+		)
+	})
+
+	// Unknown types return *NamedTypeConstraint.
+	t.Run("unknown type returns NamedTypeConstraint", func(t *testing.T) {
+		c := qt.New(t)
+		result := docparse.ParseValueType("frobnicate")
+		_, isNamed := result.(*values.NamedTypeConstraint)
+		c.Assert(isNamed, qt.IsTrue)
+	})
+}
+
+// typeNames extracts Name() from each TypeConstraint for assertion convenience.
+func typeNames(tcs []values.TypeConstraint) []string {
+	if tcs == nil {
+		return nil
+	}
+	names := make([]string, len(tcs))
+	for i, tc := range tcs {
+		names[i] = tc.Name()
+	}
+	return names
 }
 
 func TestParseDocstring(t *testing.T) {
 	tcs := []struct {
-		name         string
-		input        string
-		wantDoc      string
-		wantSyntax   string
-		wantParams   []string
-		wantTypes    []values.ValueType
-		wantReturn   values.ValueType
-		wantCat      string
-		wantKeywords []string
-		wantMeta     bool
+		name           string
+		input          string
+		wantDoc        string
+		wantSyntax     string
+		wantParams     []string
+		wantTypeNames  []string
+		wantReturnName string // empty means nil ReturnType
+		wantCat        string
+		wantKeywords   []string
+		wantMeta       bool
 	}{
 		{
 			name:     "empty string",
@@ -90,32 +121,31 @@ func TestParseDocstring(t *testing.T) {
 			wantMeta: false,
 		},
 		{
-			name:       "full structured",
-			input:      "Apply proc to each element of lst.\nParameters:\n  proc : procedure\n  lst : list\nReturns: list\nCategory: lists",
-			wantDoc:    "Apply proc to each element of lst.",
-			wantParams: []string{"proc", "lst"},
-			wantTypes:  []values.ValueType{values.TypeProcedure, values.TypeList},
-			wantReturn: values.TypeList,
-			wantCat:    "lists",
-			wantMeta:   true,
+			name:           "full structured",
+			input:          "Apply proc to each element of lst.\nParameters:\n  proc : procedure\n  lst : list\nReturns: list\nCategory: lists",
+			wantDoc:        "Apply proc to each element of lst.",
+			wantParams:     []string{"proc", "lst"},
+			wantTypeNames:  []string{"procedure", "list"},
+			wantReturnName: "list",
+			wantCat:        "lists",
+			wantMeta:       true,
 		},
 		{
-			name:       "category only",
-			input:      "Add two numbers.\nCategory: arithmetic",
-			wantDoc:    "Add two numbers.",
-			wantReturn: values.TypeAny,
-			wantCat:    "arithmetic",
-			wantMeta:   true,
+			name:     "category only",
+			input:    "Add two numbers.\nCategory: arithmetic",
+			wantDoc:  "Add two numbers.",
+			wantCat:  "arithmetic",
+			wantMeta: true,
 		},
 		{
-			name:       "flexible ordering — category before parameters",
-			input:      "Transform a list.\nCategory: lists\nParameters:\n  proc : procedure\n  lst : list\nReturns: list",
-			wantDoc:    "Transform a list.",
-			wantParams: []string{"proc", "lst"},
-			wantTypes:  []values.ValueType{values.TypeProcedure, values.TypeList},
-			wantReturn: values.TypeList,
-			wantCat:    "lists",
-			wantMeta:   true,
+			name:           "flexible ordering — category before parameters",
+			input:          "Transform a list.\nCategory: lists\nParameters:\n  proc : procedure\n  lst : list\nReturns: list",
+			wantDoc:        "Transform a list.",
+			wantParams:     []string{"proc", "lst"},
+			wantTypeNames:  []string{"procedure", "list"},
+			wantReturnName: "list",
+			wantCat:        "lists",
+			wantMeta:       true,
 		},
 		{
 			name:     "examples section preserved in prose",
@@ -130,22 +160,21 @@ func TestParseDocstring(t *testing.T) {
 			wantMeta: false,
 		},
 		{
-			name:       "unknown param type becomes TypeAny",
-			input:      "Do something.\nParameters:\n  x : frobnicate",
-			wantDoc:    "Do something.",
-			wantParams: []string{"x"},
-			wantTypes:  []values.ValueType{values.TypeAny},
-			wantReturn: values.TypeAny,
-			wantMeta:   true,
+			name:          "unknown param type preserves name",
+			input:         "Do something.\nParameters:\n  x : frobnicate",
+			wantDoc:       "Do something.",
+			wantParams:    []string{"x"},
+			wantTypeNames: []string{"frobnicate"},
+			wantMeta:      true,
 		},
 		{
-			name:       "parameters with no prose before them",
-			input:      "Parameters:\n  x : number\nReturns: number",
-			wantDoc:    "",
-			wantParams: []string{"x"},
-			wantTypes:  []values.ValueType{values.TypeNumber},
-			wantReturn: values.TypeNumber,
-			wantMeta:   true,
+			name:           "parameters with no prose before them",
+			input:          "Parameters:\n  x : number\nReturns: number",
+			wantDoc:        "",
+			wantParams:     []string{"x"},
+			wantTypeNames:  []string{"number"},
+			wantReturnName: "number",
+			wantMeta:       true,
 		},
 		{
 			name:       "syntax with category — special form style",
@@ -163,13 +192,12 @@ func TestParseDocstring(t *testing.T) {
 			wantMeta:   true,
 		},
 		{
-			name:       "parameters followed by examples",
-			input:      "Do stuff.\nParameters:\n  x : number\n\nExamples:\n  (do-stuff 1) => 2",
-			wantDoc:    "Do stuff.\n\nExamples:\n  (do-stuff 1) => 2",
-			wantParams: []string{"x"},
-			wantTypes:  []values.ValueType{values.TypeNumber},
-			wantReturn: values.TypeAny,
-			wantMeta:   true,
+			name:          "parameters followed by examples",
+			input:         "Do stuff.\nParameters:\n  x : number\n\nExamples:\n  (do-stuff 1) => 2",
+			wantDoc:       "Do stuff.\n\nExamples:\n  (do-stuff 1) => 2",
+			wantParams:    []string{"x"},
+			wantTypeNames: []string{"number"},
+			wantMeta:      true,
 		},
 		{
 			name:       "syntax with examples preserved in prose",
@@ -220,8 +248,12 @@ func TestParseDocstring(t *testing.T) {
 			c.Assert(info.Doc, qt.Equals, tc.wantDoc)
 			c.Assert(info.Syntax, qt.Equals, tc.wantSyntax)
 			c.Assert(info.ParamNames, qt.DeepEquals, tc.wantParams)
-			c.Assert(info.ParamTypes, qt.DeepEquals, tc.wantTypes)
-			c.Assert(info.ReturnType, qt.Equals, tc.wantReturn)
+			c.Assert(typeNames(info.ParamTypes), qt.DeepEquals, tc.wantTypeNames)
+			if tc.wantReturnName == "" {
+				c.Assert(info.ReturnType, qt.IsNil)
+			} else {
+				c.Assert(info.ReturnType.Name(), qt.Equals, tc.wantReturnName)
+			}
 			c.Assert(info.Category, qt.Equals, tc.wantCat)
 			c.Assert(info.Keywords, qt.DeepEquals, tc.wantKeywords)
 			c.Assert(info.HasStructuredMetadata(), qt.Equals, tc.wantMeta)

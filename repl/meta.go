@@ -415,8 +415,8 @@ func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo, showExamp
 	default:
 		fmt.Fprintf(w, "(%s)", name)
 	}
-	if info.ReturnType != values.TypeAny {
-		fmt.Fprintf(w, " → %s", info.ReturnType.String())
+	if info.ReturnType != nil {
+		fmt.Fprintf(w, " → %s", info.ReturnType.Name())
 	}
 	fmt.Fprintln(w)
 
@@ -440,13 +440,17 @@ func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo, showExamp
 		fmt.Fprintln(w, "  Parameters:")
 		for i, pn := range info.ParamNames {
 			vt := paramTypeForDoc(info.ParamTypes, i)
-			fmt.Fprintf(w, "    %s : %s\n", strings.ToUpper(pn), vt.String())
+			if vt != nil {
+				fmt.Fprintf(w, "    %s : %s\n", strings.ToUpper(pn), vt.Name())
+			} else {
+				fmt.Fprintf(w, "    %s\n", strings.ToUpper(pn))
+			}
 		}
 	}
 
 	// Return type
-	if info.ReturnType != values.TypeAny {
-		fmt.Fprintf(w, "  Returns: %s\n", info.ReturnType.String())
+	if info.ReturnType != nil {
+		fmt.Fprintf(w, "  Returns: %s\n", info.ReturnType.Name())
 	}
 
 	// Category
@@ -460,16 +464,17 @@ func formatPrimitiveDoc(w *strings.Builder, name string, info DocInfo, showExamp
 	}
 }
 
-// paramTypeForDoc returns the ValueType for parameter position i.
+// paramTypeForDoc returns the TypeConstraint for parameter position i.
 // For variadic primitives, positions beyond len(types)-1 use the last entry.
-func paramTypeForDoc(types []values.ValueType, i int) values.ValueType {
+// Returns nil when no type information is available.
+func paramTypeForDoc(types []values.TypeConstraint, i int) values.TypeConstraint {
 	if i < len(types) {
 		return types[i]
 	}
 	if len(types) > 0 {
 		return types[len(types)-1]
 	}
-	return values.TypeAny
+	return nil
 }
 
 // tryStructuredBindingDoc attempts to parse a docstring and render it via

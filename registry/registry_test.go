@@ -501,7 +501,7 @@ func TestRegistry_PrimitiveSpecWithContract(t *testing.T) {
 		Impl: func(_ machine.CallContext) error {
 			return nil
 		},
-		ParamTypes: []values.ValueType{values.TypeString, values.TypeInteger},
+		ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeInteger},
 		ReturnType: values.TypeCharacter,
 		Doc:        "Test primitive with contract.",
 		ParamNames: []string{"s", "k"},

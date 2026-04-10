@@ -19,18 +19,35 @@ import "fmt"
 var _ Value = (*RecordType)(nil)
 
 // RecordType represents a record type descriptor as defined by R7RS define-record-type.
-// It holds the type name and the ordered list of field names.
+// It holds the type name, the ordered list of field names, and an optional parent type
+// for record inheritance.
 type RecordType struct {
 	name       *Symbol
 	fieldNames []*Symbol
+	parent     *RecordType
 }
 
 // NewRecordType creates a new RecordType with the given name and field names.
+// The parent defaults to nil (no inheritance).
 func NewRecordType(name *Symbol, fieldNames []*Symbol) *RecordType {
 	return &RecordType{
 		name:       name,
 		fieldNames: fieldNames,
 	}
+}
+
+// NewDerivedRecordType creates a new RecordType that inherits from the given parent.
+func NewDerivedRecordType(name *Symbol, parent *RecordType, fieldNames []*Symbol) *RecordType {
+	return &RecordType{
+		name:       name,
+		parent:     parent,
+		fieldNames: fieldNames,
+	}
+}
+
+// Parent returns the parent record type, or nil if this is a base type.
+func (p *RecordType) Parent() *RecordType {
+	return p.parent
 }
 
 // Name returns the record type's name symbol.

@@ -125,7 +125,7 @@ func TestRegistryDocProvider_ContractFields(t *testing.T) {
 		Doc:        "A test.",
 		ParamNames: []string{"s", "k"},
 		Category:   "test",
-		ParamTypes: []values.ValueType{values.TypeString, values.TypeInteger},
+		ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeInteger},
 		ReturnType: values.TypeCharacter,
 	}, registry.PhaseRuntime)
 	prov := NewRegistryDocProvider(reg, nil)

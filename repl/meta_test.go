@@ -323,7 +323,7 @@ func TestFormatPrimitiveDoc_WithTypes(t *testing.T) {
 		ParamNames: []string{"string", "k"},
 		Category:   "strings",
 		ParamCount: 2,
-		ParamTypes: []values.ValueType{values.TypeString, values.TypeExactInteger},
+		ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeExactInteger},
 		ReturnType: values.TypeCharacter,
 	}
 	formatPrimitiveDoc(&buf, "string-ref", info, true)
