@@ -45,15 +45,15 @@
 ;; -- Closed lattice --------------------------------------
 
 (define (closure->closed-lattice C samples)
-  "Construct the lattice of closed elements from closure operator C.\nThe closed elements (fixed points of C) form a lattice where:\n  - join is inherited from the underlying lattice\n  - meet is cl(meet_L(a, b)) -- lattice meet composed with closure\n  - bottom is cl(bottom_L)\n  - top is cl(top_L)\n  - leq is inherited from the underlying lattice\nSAMPLES is not used in the construction but documents the\nintended domain; the lattice operations work on any closed elements.\n\nExamples:\n  ;; (let ((CL (closure->closed-lattice C '(() (2) (1 2 3)))))\n  ;;   (lattice? CL))  => #t\n\nParameters:\n  C : any\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: closed lattice, fixed point lattice, sublattice, Moore family\n\nSee also: `closed-elements', `closure-close'."
+  "Construct the lattice of closed elements from closure operator C.\nThe closed elements (fixed points of C) form a lattice where:\n  - join is cl(join_L(a, b)) -- lattice join composed with closure\n  - meet is inherited from the underlying lattice\n  - bottom is cl(bottom_L)\n  - top is cl(top_L)\n  - leq is inherited from the underlying lattice\nThe join of two closed elements is not necessarily closed under\nthe underlying lattice join (Moore family property), so closure\nmust be applied.  Meet of closed elements IS always closed.\nSAMPLES is not used in the construction but documents the\nintended domain; the lattice operations work on any closed elements.\n\nExamples:\n  ;; (let ((CL (closure->closed-lattice C '(() (2) (1 2 3)))))\n  ;;   (lattice? CL))  => #t\n\nParameters:\n  C : any\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: closed lattice, fixed point lattice, sublattice, Moore family\n\nSee also: `closed-elements', `closure-close'."
   (let ((L (closure-lattice C)))
     (make-lattice
-      ;; join: inherited from L
+      ;; join: cl(join_L(a, b)) — join of closed elements may not be closed
       (lambda (a b)
-        (lattice-join L a b))
-      ;; meet: cl(meet_L(a, b))
+        (closure-close C (lattice-join L a b)))
+      ;; meet: inherited from L — meet of closed elements is always closed
       (lambda (a b)
-        (closure-close C (lattice-meet L a b)))
+        (lattice-meet L a b))
       ;; bottom: cl(bottom_L)
       (closure-close C (lattice-bottom L))
       ;; top: cl(top_L)
@@ -66,14 +66,6 @@
 
 (define (downward-closure-operator po universe)
   "Construct a downward closure operator on the powerset lattice of UNIVERSE.\nGiven a set S, cl(S) = S union {y in UNIVERSE : exists x in S, y <= x under PO}.\nThis adds all elements below existing elements according to the\npartial order, forming a downward-closed (lower) set.\n\nExamples:\n  ;; With <= on integers:\n  ;; (closure-close C '(3))  => (1 2 3)\n  ;; (closure-close C '(1))  => (1)\n\nParameters:\n  po : any\n  universe : list\nReturns: any\nCategory: algebra\nKeywords: downward closure, lower set, downset, order ideal, principal ideal\n\nSee also: `make-closure-operator', `powerset-lattice'."
-  (define (subset? a b)
-    (cond ((null? a) #t)
-          ((member (car a) b) (subset? (cdr a) b))
-          (else #f)))
-  (define (union a b)
-    (cond ((null? a) b)
-          ((member (car a) b) (union (cdr a) b))
-          (else (cons (car a) (union (cdr a) b)))))
   (define (downward-close s)
     ;; cl(S) = S union {y in universe : exists x in S, po-leq? po y x}
     (let loop ((us universe) (result s))

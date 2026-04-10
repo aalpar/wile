@@ -95,16 +95,57 @@
     (test '() (lattice-bottom CL))
     ;; top = cl({1,2,3}) = {1,2,3}
     (test #t (set-equal? '(1 2 3) (lattice-top CL)))
-    ;; join: inherited from L (union)
+    ;; join: cl(join_L(a,b)) — closure applied after union
+    ;; join({2}, {3}) = cl(union({2},{3})) = cl({2,3}) = {2,3} (no 1, unchanged)
     (test #t (set-equal? '(2 3) (lattice-join CL '(2) '(3))))
-    ;; meet: cl(meet_L(a,b)) -- intersection then close
-    ;; meet({2,3}, {1,2,3}) = cl(intersect({2,3},{1,2,3})) = cl({2,3}) = {2,3}
+    ;; meet: inherited from L (intersection) — meet of closed elts is closed
+    ;; meet({2,3}, {1,2,3}) = intersect({2,3},{1,2,3}) = {2,3}
     (test #t (set-equal? '(2 3) (lattice-meet CL '(2 3) '(1 2 3))))
-    ;; meet({2}, {3}) = cl(intersect({2},{3})) = cl({}) = {}
+    ;; meet({2}, {3}) = intersect({2},{3}) = {}
     (test '() (lattice-meet CL '(2) '(3)))
     ;; leq: inherited from L (subset)
     (test #t (lattice-leq? CL '(2) '(2 3)))
     (test #f (lattice-leq? CL '(2 3) '(2)))))
+
+;; ---- closed-lattice join requires closure ----
+;; This tests the case where join_L(a,b) is NOT closed,
+;; so cl() must be applied. With the if-1-add-all closure:
+;; join_L({2}, {1,2,3}) = union = {1,2,3} which IS closed.
+;; We need a closure where two closed elements join to something non-closed.
+;;
+;; Closure: cl(S) = S union {2} if 3 is in S, else S.
+;; Closed elements include {3,2}, {}, {2}. But join_L({},{3,2}) = {3,2}
+;; which is closed. We need something trickier.
+;;
+;; Closure on powerset({a,b,c}): cl(S) = S if |S| != 1, else {a,b,c}.
+;; Singletons expand to the full set. Closed: {}, all pairs, {a,b,c}.
+;; join_L({a,b}, {b,c}) = {a,b,c} — closed, not interesting.
+;; join_L({}, {a,b}) = {a,b} — closed.
+;; Actually: any union of non-singletons is a non-singleton, so always closed.
+;;
+;; Better: closure on powerset({1,2,3}) where
+;; cl(S) = S union {3} whenever both 1 and 2 are in S.
+;; Closed elements: anything without both 1 and 2, plus {1,2,3}.
+;; join_L({1}, {2}) = {1,2} which is NOT closed (cl({1,2}) = {1,2,3}).
+;; This is the case we need.
+
+(test-group "closed-lattice-join-needs-closure"
+  (define L2 (powerset-lattice '(1 2 3)))
+  (define (cl-add-3-if-1-and-2 s)
+    (if (and (member 1 s) (member 2 s) (not (member 3 s)))
+        (append s '(3))
+        s))
+  (define C2 (make-closure-operator cl-add-3-if-1-and-2 L2))
+  ;; Verify the closure is valid
+  (test #t (validate-closure-operator C2 '(() (1) (2) (3) (1 2) (1 3) (2 3) (1 2 3))))
+  ;; {1} and {2} are closed (neither has both 1 and 2)
+  (test #t (closure-closed? C2 '(1)))
+  (test #t (closure-closed? C2 '(2)))
+  ;; join_L({1},{2}) = {1,2} which is NOT closed
+  (test #f (closure-closed? C2 (lattice-join L2 '(1) '(2))))
+  ;; But the closed lattice join should apply closure: cl({1,2}) = {1,2,3}
+  (let ((CL2 (closure->closed-lattice C2 '(() (1) (2) (3) (1 3) (2 3) (1 2 3)))))
+    (test #t (set-equal? '(1 2 3) (lattice-join CL2 '(1) '(2))))))
 
 ;; ---- downward-closure ----
 
