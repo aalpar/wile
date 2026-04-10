@@ -17,17 +17,17 @@
   (implies-fn heyting-implies-fn))
 
 (define (make-heyting-algebra join meet bottom top leq? implies)
-  "Construct a Heyting algebra from lattice operations and IMPLIES.\nA Heyting algebra is a bounded distributive lattice where every\npair (a, b) has a relative pseudo-complement: the largest c\nsuch that a ∧ c ≤ b. IMPLIES computes this c.\n\nExamples:\n  (let ((H (powerset-heyting '(x y z))))\n    (heyting-implies H '(x) '(x y)))  => (x y z)\n\nParameters:\n  join : procedure\n  meet : procedure\n  bottom : any\n  top : any\n  leq? : procedure\n  implies : procedure\nReturns: any\nCategory: algebra\nKeywords: Heyting, implication, pseudo-complement, intuitionistic, distributive lattice\n\nSee also: `powerset-heyting', `validate-heyting-algebra'."
+  "Construct a Heyting algebra from lattice operations and IMPLIES.\nA Heyting algebra is a bounded distributive lattice where every\npair (a, b) has a relative pseudo-complement: the largest c\nsuch that a ∧ c ≤ b. IMPLIES computes this c.\n\nExamples:\n  (heyting-algebra? (powerset-heyting '(x y z)))  => #t\n  (let ((H (powerset-heyting '(x y z))))\n    (heyting-leq? H '(x) '(x y)))  => #t\n\nParameters:\n  join : procedure\n  meet : procedure\n  bottom : any\n  top : any\n  leq? : procedure\n  implies : procedure\nReturns: any\nCategory: algebra\nKeywords: Heyting, implication, pseudo-complement, intuitionistic, distributive lattice\n\nSee also: `powerset-heyting', `validate-heyting-algebra'."
   (make-heyting-algebra* join meet bottom top leq? implies))
 
 ;; ─── Core operations ─────────────────────────
 
 (define (heyting-join H a b)
-  "Compute the join (least upper bound) of A and B in Heyting algebra H.\n\nExamples:\n  (let ((H (powerset-heyting '(x y z))))\n    (heyting-join H '(x) '(y)))  => (x y)\n\nParameters:\n  H : any\n  a : any\n  b : any\nReturns: any\nCategory: algebra\nKeywords: join, supremum, lub, least upper bound, union, vee"
+  "Compute the join (least upper bound) of A and B in Heyting algebra H.\n\nExamples:\n  (let ((H (powerset-heyting '(x y z))))\n    (heyting-leq? H '(x) (heyting-join H '(x) '(y))))  => #t\n\nParameters:\n  H : any\n  a : any\n  b : any\nReturns: any\nCategory: algebra\nKeywords: join, supremum, lub, least upper bound, union, vee"
   ((heyting-join-fn H) a b))
 
 (define (heyting-meet H a b)
-  "Compute the meet (greatest lower bound) of A and B in Heyting algebra H.\n\nExamples:\n  (let ((H (powerset-heyting '(x y z))))\n    (heyting-meet H '(x y) '(y z)))  => (y)\n\nParameters:\n  H : any\n  a : any\n  b : any\nReturns: any\nCategory: algebra\nKeywords: meet, infimum, glb, greatest lower bound, intersection, wedge"
+  "Compute the meet (greatest lower bound) of A and B in Heyting algebra H.\n\nExamples:\n  (let ((H (powerset-heyting '(x y z))))\n    (heyting-meet H '(x y) '(y z)))  => (y)\n  (let ((H (powerset-heyting '(x y z))))\n    (heyting-meet H '(x) '(y)))      => ()\n\nParameters:\n  H : any\n  a : any\n  b : any\nReturns: any\nCategory: algebra\nKeywords: meet, infimum, glb, greatest lower bound, intersection, wedge"
   ((heyting-meet-fn H) a b))
 
 (define (heyting-leq? H a b)
@@ -35,7 +35,7 @@
   ((heyting-leq-fn H) a b))
 
 (define (heyting-implies H a b)
-  "Compute the Heyting implication A → B in Heyting algebra H.\nReturns the largest element c such that a ∧ c ≤ b.\nSatisfies the adjunction: c ≤ (a → b) iff a ∧ c ≤ b.\n\nExamples:\n  (let ((H (powerset-heyting '(x y z))))\n    (heyting-implies H '(x) '(x y)))  => (x y z)\n  (let ((H (powerset-heyting '(x y z))))\n    (heyting-implies H '(x y) '(y)))  => (y z)\n\nParameters:\n  H : any\n  a : any\n  b : any\nReturns: any\nCategory: algebra\nKeywords: implication, relative pseudo-complement, residuation, adjunction, arrow, entailment, conditional\n\nSee also: `heyting-negate', `heyting-meet'."
+  "Compute the Heyting implication A → B in Heyting algebra H.\nReturns the largest element c such that a ∧ c ≤ b.\nSatisfies the adjunction: c ≤ (a → b) iff a ∧ c ≤ b.\n\nExamples:\n  (let ((H (powerset-heyting '(x y z))))\n    (heyting-implies H '(x y z) '(x)))  => (x)\n  (let ((H (powerset-heyting '(x y z))))\n    (heyting-implies H '(x y z) '()))   => ()\n\nParameters:\n  H : any\n  a : any\n  b : any\nReturns: any\nCategory: algebra\nKeywords: implication, relative pseudo-complement, residuation, adjunction, arrow, entailment, conditional\n\nSee also: `heyting-negate', `heyting-meet'."
   ((heyting-implies-fn H) a b))
 
 (define (heyting-negate H a)
@@ -45,7 +45,7 @@
 ;; ─── Projection ──────────────────────────────
 
 (define (heyting->lattice H)
-  "Project Heyting algebra H to its underlying lattice, forgetting implication.\nThe resulting lattice has the same join, meet, bottom, top, and leq?.\n\nExamples:\n  (let* ((H (powerset-heyting '(x y z)))\n         (L (heyting->lattice H)))\n    (lattice-join L '(x) '(y)))  => (x y)\n\nParameters:\n  H : any\nReturns: any\nCategory: algebra\nKeywords: forgetful functor, projection, underlying lattice, extract\n\nSee also: `make-lattice', `heyting-join'."
+  "Project Heyting algebra H to its underlying lattice, forgetting implication.\nThe resulting lattice has the same join, meet, bottom, top, and leq?.\n\nExamples:\n  (let* ((H (powerset-heyting '(x y z)))\n         (L (heyting->lattice H)))\n    (lattice-leq? L '(x) '(x y)))  => #t\n\nParameters:\n  H : any\nReturns: any\nCategory: algebra\nKeywords: forgetful functor, projection, underlying lattice, extract\n\nSee also: `make-lattice', `heyting-join'."
   (make-lattice (heyting-join-fn H) (heyting-meet-fn H)
                 (heyting-bottom H) (heyting-top H)
                 (heyting-leq-fn H)))
@@ -73,7 +73,7 @@
 ;; ─── Constructors ────────────────────────────
 
 (define (powerset-heyting universe)
-  "Construct the Heyting algebra of subsets of UNIVERSE.\nElements are lists representing subsets. Join is set union,\nmeet is set intersection, implication is (complement(a) ∪ b),\nbottom is the empty set, and top is UNIVERSE.\nThis is also a Boolean algebra, but the Heyting view provides\nimplication without requiring an explicit complement operation.\n\nExamples:\n  (let ((H (powerset-heyting '(x y z))))\n    (heyting-implies H '(x) '(x y)))  => (x y z)\n  (let ((H (powerset-heyting '(x y z))))\n    (heyting-negate H '(x y)))         => (z)\n\nParameters:\n  universe : list\nReturns: any\nCategory: algebra\nKeywords: powerset, set, subset, power set, set lattice, Heyting\n\nSee also: `powerset-lattice', `powerset-boolean'."
+  "Construct the Heyting algebra of subsets of UNIVERSE.\nElements are lists representing subsets. Join is set union,\nmeet is set intersection, implication is (complement(a) ∪ b),\nbottom is the empty set, and top is UNIVERSE.\nThis is also a Boolean algebra, but the Heyting view provides\nimplication without requiring an explicit complement operation.\n\nExamples:\n  (let ((H (powerset-heyting '(x y z))))\n    (heyting-negate H '(x y)))         => (z)\n  (let ((H (powerset-heyting '(x y z))))\n    (heyting-negate H '(x)))           => (y z)\n\nParameters:\n  universe : list\nReturns: any\nCategory: algebra\nKeywords: powerset, set, subset, power set, set lattice, Heyting\n\nSee also: `powerset-lattice', `powerset-boolean'."
   (define (subset? a b)
     (cond ((null? a) #t)
           ((member (car a) b) (subset? (cdr a) b))
@@ -137,16 +137,15 @@
           (lambda (b)
             (let ((imp (heyting-implies H a b)))
               (unless (heyting-leq? H (heyting-meet H a imp) b)
-                (fail! 'modus-ponens a b)))
-            ;; Adjunction: for all c, c ≤ (a → b) iff a ∧ c ≤ b
-            (for-each
-              (lambda (c)
-                (let* ((imp (heyting-implies H a b))
-                       (lhs (heyting-leq? H c imp))
-                       (rhs (heyting-leq? H (heyting-meet H a c) b)))
-                  (unless (eq? lhs rhs)
-                    (fail! 'adjunction a b c))))
-              samples))
+                (fail! 'modus-ponens a b))
+              ;; Adjunction: for all c, c ≤ (a → b) iff a ∧ c ≤ b
+              (for-each
+                (lambda (c)
+                  (let ((lhs (heyting-leq? H c imp))
+                        (rhs (heyting-leq? H (heyting-meet H a c) b)))
+                    (unless (eq? lhs rhs)
+                      (fail! 'adjunction a b c))))
+                samples)))
           samples))
       samples)
     (if (null? violations) #t (reverse violations))))

@@ -41,7 +41,7 @@
 ;; ─── Projections ─────────────────────────────
 
 (define (boolean->heyting B)
-  "Project Boolean algebra B to a Heyting algebra.\nImplication is derived from complement: a → b = ¬a ∨ b.\nIn a Boolean algebra, the pseudo-complement equals the\ntrue complement, so Heyting negation agrees with Boolean\ncomplement.\n\nExamples:\n  (let* ((B (powerset-boolean '(x y z)))\n         (H (boolean->heyting B)))\n    (heyting-implies H '(x) '(x y)))  => (x y z)\n\nParameters:\n  B : any\nReturns: any\nCategory: algebra\nKeywords: forgetful functor, projection, Heyting, implication derived\n\nSee also: `make-heyting-algebra', `boolean-complement'."
+  "Project Boolean algebra B to a Heyting algebra.\nImplication is derived from complement: a → b = ¬a ∨ b.\nIn a Boolean algebra, the pseudo-complement equals the\ntrue complement, so Heyting negation agrees with Boolean\ncomplement.\n\nExamples:\n  (let* ((B (powerset-boolean '(x y z)))\n         (H (boolean->heyting B)))\n    (heyting-negate H '(x)))  => (y z)\n\nParameters:\n  B : any\nReturns: any\nCategory: algebra\nKeywords: forgetful functor, projection, Heyting, implication derived\n\nSee also: `make-heyting-algebra', `boolean-complement'."
   (make-heyting-algebra
     (boolean-join-fn B) (boolean-meet-fn B)
     (boolean-bottom B) (boolean-top B)
