@@ -2,7 +2,8 @@
 
 (import (scheme base)
         (chibi test)
-        (wile algebra order))
+        (wile algebra order)
+        (wile algebra setoid))
 
 (test-begin "partial-orders")
 
@@ -55,6 +56,17 @@
     (test #f (eq? #t result))  ; should return violations, not #t
     ;; Each violation should be (reflexivity x)
     (test 'reflexivity (caar result))))
+
+(test-group "validate-partial-order/setoid"
+  ;; Valid: numeric order with numeric equality
+  (test #t (validate-partial-order/setoid
+             (make-partial-order <=) (numeric-setoid) '(1 2 3)))
+  ;; Invalid: <= is not antisymmetric under eqv? for 1 and 1.0
+  ;; because (<= 1 1.0) and (<= 1.0 1) but (eqv? 1 1.0) is #f
+  (let ((result (validate-partial-order/setoid
+                  (make-partial-order <=) (eqv-setoid) '(1 1.0))))
+    (test #f (eq? #t result))
+    (test 'antisymmetry (caar result))))
 
 (test-end)
 (test-exit)
