@@ -28,12 +28,12 @@ type PrimitiveSpec struct {
 	ParamCount int
 	IsVariadic bool
 	Impl       machine.ForeignFunction
-	Doc        string             // optional: brief description
-	ParamNames []string           // optional: parameter names
-	Category   string             // optional: grouping category
-	ParamTypes []values.ValueType // optional: type contract per parameter
-	ReturnType values.ValueType   // optional: return type (zero = TypeAny)
-	Keywords   []string           // optional: searchable tags
+	Doc        string                  // optional: brief description
+	ParamNames []string                // optional: parameter names
+	Category   string                  // optional: grouping category
+	ParamTypes []values.TypeConstraint // optional: type contract per parameter
+	ReturnType values.TypeConstraint   // optional: return type (nil = unspecified)
+	Keywords   []string                // optional: searchable tags
 }
 
 // PrimitiveRegistration holds a primitive and its phases.

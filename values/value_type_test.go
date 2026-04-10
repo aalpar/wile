@@ -277,3 +277,120 @@ func TestValueType_CheckOutOfRange(t *testing.T) {
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, err.Error(), qt.Matches, "invalid ValueType.*")
 }
+
+func TestValueTypeImplementsTypeConstraint(t *testing.T) {
+	// ValueType must satisfy TypeConstraint via Name(), Description(), Check().
+	var tc values.TypeConstraint = values.TypeInteger
+	qt.Assert(t, tc.Name(), qt.Equals, "integer")
+	qt.Assert(t, tc.Description(), qt.Equals, "exact integer")
+
+	result, ok, err := tc.Check(values.NewInteger(42))
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, qt.IsNotNil)
+
+	_, ok, err = tc.Check(values.NewString("hello"))
+	qt.Assert(t, ok, qt.IsFalse)
+	qt.Assert(t, err, qt.IsNotNil)
+}
+
+func TestTypeAnyVsNil(t *testing.T) {
+	// nil TypeConstraint means "unspecified" (no type info declared).
+	var unspecified values.TypeConstraint
+	qt.Assert(t, unspecified, qt.IsNil)
+
+	// TypeAny means "explicitly accepts any value."
+	var anyType values.TypeConstraint = values.TypeAny
+	qt.Assert(t, anyType, qt.IsNotNil)
+	qt.Assert(t, anyType.Name(), qt.Equals, "any")
+
+	result, ok, err := anyType.Check(values.NewString("hello"))
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, qt.IsNotNil)
+}
+
+func TestNamedTypeConstraint(t *testing.T) {
+	nc := values.NewNamedTypeConstraint("point")
+
+	qt.Assert(t, nc.Name(), qt.Equals, "point")
+	qt.Assert(t, nc.Description(), qt.Equals, "point")
+
+	// Check always fails — this is an unresolved type name.
+	_, ok, err := nc.Check(values.NewInteger(1))
+	qt.Assert(t, ok, qt.IsFalse)
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, err.Error(), qt.Matches, `.*unresolved type constraint "point".*`)
+}
+
+func TestRecordTypeConstraint(t *testing.T) {
+	pointName := values.NewSymbol("point")
+	pointRT := values.NewRecordType(pointName, []*values.Symbol{
+		values.NewSymbol("x"),
+		values.NewSymbol("y"),
+	})
+
+	colorPointName := values.NewSymbol("color-point")
+	colorPointRT := values.NewDerivedRecordType(colorPointName, pointRT, []*values.Symbol{
+		values.NewSymbol("color"),
+	})
+
+	otherName := values.NewSymbol("other")
+	otherRT := values.NewRecordType(otherName, []*values.Symbol{
+		values.NewSymbol("a"),
+	})
+
+	pointConstraint := values.NewRecordTypeConstraint(pointRT)
+
+	qt.Assert(t, pointConstraint.Name(), qt.Equals, "point")
+	qt.Assert(t, pointConstraint.Description(), qt.Equals, "point record")
+
+	tcs := []struct {
+		name    string
+		val     values.Value
+		match   bool
+		wantErr bool
+	}{
+		{
+			name:  "direct match",
+			val:   values.NewRecord(pointRT, []values.Value{values.NewInteger(1), values.NewInteger(2)}),
+			match: true,
+		},
+		{
+			name:  "subtype match via parent chain",
+			val:   values.NewRecord(colorPointRT, []values.Value{values.NewString("red")}),
+			match: true,
+		},
+		{
+			name:    "non-record fails",
+			val:     values.NewInteger(42),
+			match:   false,
+			wantErr: true,
+		},
+		{
+			name:    "wrong record type fails",
+			val:     values.NewRecord(otherRT, []values.Value{values.NewInteger(1)}),
+			match:   false,
+			wantErr: true,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result, ok, err := pointConstraint.Check(tc.val)
+			qt.Assert(t, ok, qt.Equals, tc.match)
+			if tc.match {
+				qt.Assert(t, err, qt.IsNil)
+				qt.Assert(t, result, qt.IsNotNil)
+			}
+			if tc.wantErr {
+				qt.Assert(t, err, qt.IsNotNil)
+			}
+		})
+	}
+}
+
+func TestNewRecordTypeConstraintNilPanics(t *testing.T) {
+	qt.Assert(t, func() {
+		values.NewRecordTypeConstraint(nil)
+	}, qt.PanicMatches, `.*rtd must not be nil.*`)
+}

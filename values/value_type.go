@@ -20,6 +20,30 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
+// Compile-time interface assertions.
+var (
+	_ TypeConstraint = ValueType(0)
+	_ TypeConstraint = (*NamedTypeConstraint)(nil)
+	_ TypeConstraint = (*RecordTypeConstraint)(nil)
+)
+
+// TypeConstraint describes a type expectation for documentation and validation.
+// Built-in types are represented by ValueType constants.
+// User-defined types (e.g., record types) implement this interface directly.
+//
+// A nil TypeConstraint means "unspecified" (no type info declared).
+// TypeAny means "explicitly accepts any value."
+type TypeConstraint interface {
+	// Name returns the Scheme-facing type name (e.g., "integer", "point").
+	Name() string
+	// Description returns a human-readable description.
+	Description() string
+	// Check tests whether v satisfies this constraint.
+	// On success, returns the narrowed value and true.
+	// On failure, returns nil, false, and an error describing the mismatch.
+	Check(Value) (any, bool, error)
+}
+
 // ValueType represents a Scheme type constraint for extension API contracts.
 // Each constant maps to either a concrete Go type or an interface in the
 // values package.
@@ -93,6 +117,11 @@ func (p ValueType) String() string {
 		return "unknown"
 	}
 	return typeNames[p]
+}
+
+// Name returns the Scheme-facing type name, satisfying the TypeConstraint interface.
+func (p ValueType) Name() string {
+	return p.String()
 }
 
 // typeDescriptions maps each ValueType to a human-readable description.
@@ -299,4 +328,80 @@ func makeInterfaceCheck[T any](typeName string) checkFunc {
 		return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 			"expected %s, got %s", typeName, SchemeTypeName(v))
 	}
+}
+
+// NamedTypeConstraint represents an unresolved type name from a docstring
+// (e.g., "point"). It is documentation-only — Check always fails because the
+// constraint has not been resolved to a concrete type.
+type NamedTypeConstraint struct {
+	name string
+}
+
+// NewNamedTypeConstraint creates a NamedTypeConstraint with the given name.
+func NewNamedTypeConstraint(name string) *NamedTypeConstraint {
+	return &NamedTypeConstraint{name: name}
+}
+
+// Name returns the unresolved type name.
+func (p *NamedTypeConstraint) Name() string {
+	return p.name
+}
+
+// Description returns the unresolved type name as its description.
+func (p *NamedTypeConstraint) Description() string {
+	return p.name
+}
+
+// Check always fails — the constraint is unresolved and cannot validate values.
+func (p *NamedTypeConstraint) Check(v Value) (any, bool, error) {
+	return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+		"unresolved type constraint %q", p.name)
+}
+
+// RecordTypeConstraint validates that a value is a Record whose RecordType
+// matches (or inherits from) a specific record type descriptor.
+type RecordTypeConstraint struct {
+	rtd *RecordType
+}
+
+// NewRecordTypeConstraint creates a RecordTypeConstraint for the given
+// record type descriptor. Panics if rtd is nil.
+func NewRecordTypeConstraint(rtd *RecordType) *RecordTypeConstraint {
+	if rtd == nil {
+		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"NewRecordTypeConstraint: rtd must not be nil"))
+	}
+	return &RecordTypeConstraint{rtd: rtd}
+}
+
+// Name returns the Scheme-facing name of the record type.
+func (p *RecordTypeConstraint) Name() string {
+	return p.rtd.Name().Key
+}
+
+// Description returns a human-readable description of the record type constraint.
+func (p *RecordTypeConstraint) Description() string {
+	return p.rtd.Name().Key + " record"
+}
+
+// Check tests whether v is a Record whose type matches (or inherits from) the
+// target record type descriptor. Walks the parent chain for subtype matching.
+func (p *RecordTypeConstraint) Check(v Value) (any, bool, error) {
+	rec, ok := v.(*Record)
+	if !ok {
+		return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"expected %s record, got %s", p.rtd.Name().Key, SchemeTypeName(v))
+	}
+	for rt := rec.RecordType(); rt != nil; rt = rt.Parent() {
+		if rt == p.rtd {
+			return rec, true, nil
+		}
+	}
+	gotName := "unknown"
+	if rec.RecordType() != nil {
+		gotName = rec.RecordType().Name().Key
+	}
+	return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+		"expected %s record, got %s record",
+		p.rtd.Name().Key, gotName)
 }

@@ -23,6 +23,26 @@ import (
 	"github.com/aalpar/wile/values/valuestest"
 )
 
+func TestRecordTypeParent(t *testing.T) {
+	pointName := values.NewSymbol("point")
+	fieldX := values.NewSymbol("x")
+	fieldY := values.NewSymbol("y")
+	pointRT := values.NewRecordType(pointName, []*values.Symbol{fieldX, fieldY})
+
+	// Base type has nil parent.
+	qt.Assert(t, pointRT.Parent(), qt.IsNil)
+
+	colorPointName := values.NewSymbol("color-point")
+	fieldColor := values.NewSymbol("color")
+	colorPointRT := values.NewDerivedRecordType(colorPointName, pointRT, []*values.Symbol{fieldColor})
+
+	// Derived type has the expected parent.
+	qt.Assert(t, colorPointRT.Parent(), qt.Equals, pointRT)
+	qt.Assert(t, colorPointRT.Name(), qt.Equals, colorPointName)
+	qt.Assert(t, colorPointRT.FieldCount(), qt.Equals, 1)
+	qt.Assert(t, colorPointRT.FieldNames()[0], qt.Equals, fieldColor)
+}
+
 func TestRecordTypeCreation(t *testing.T) {
 	name := values.NewSymbol("point")
 	fieldX := values.NewSymbol("x")

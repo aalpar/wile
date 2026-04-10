@@ -31,8 +31,8 @@ type DocInfo struct {
 	Category   string
 	ParamCount int
 	IsVariadic bool
-	ParamTypes []values.ValueType
-	ReturnType values.ValueType
+	ParamTypes []values.TypeConstraint
+	ReturnType values.TypeConstraint
 	Keywords   []string
 }
 

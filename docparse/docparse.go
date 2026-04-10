@@ -39,14 +39,19 @@ func init() {
 	}
 }
 
-// ParseValueType converts a Scheme-style type name to a ValueType constant.
-// Unknown names return TypeAny.
-func ParseValueType(name string) values.ValueType {
+// ParseValueType converts a Scheme-style type name to a TypeConstraint.
+// Known names return the corresponding ValueType constant.
+// Unknown names return a NamedTypeConstraint preserving the original name.
+// Empty names return nil (unspecified).
+func ParseValueType(name string) values.TypeConstraint {
+	if name == "" {
+		return nil
+	}
 	vt, ok := typeNameToValueType[name]
 	if ok {
 		return vt
 	}
-	return values.TypeAny
+	return values.NewNamedTypeConstraint(name)
 }
 
 // DocInfo holds structured metadata extracted from a docstring.
@@ -54,15 +59,15 @@ type DocInfo struct {
 	Doc        string
 	Syntax     string // extracted from "Syntax: ..." line
 	ParamNames []string
-	ParamTypes []values.ValueType
-	ReturnType values.ValueType
+	ParamTypes []values.TypeConstraint
+	ReturnType values.TypeConstraint
 	Category   string
 	Keywords   []string
 }
 
 // HasStructuredMetadata reports whether any structured metadata was extracted.
 func (p DocInfo) HasStructuredMetadata() bool {
-	return p.Syntax != "" || len(p.ParamNames) > 0 || p.ReturnType != values.TypeAny || p.Category != "" || len(p.Keywords) > 0
+	return p.Syntax != "" || len(p.ParamNames) > 0 || p.ReturnType != nil || p.Category != "" || len(p.Keywords) > 0
 }
 
 // isMetadataHeader reports whether a line starts a metadata section
