@@ -156,36 +156,44 @@ Category: algebra"
                              (rule-loop (cdr rules))
                              (cons na result)))))))))
 
-       (define (normalize-once term)
-         (if (not (term-compound? proto term))
-             (values term '())
+       ;; normalize-once threads fuel: each rewrite step decrements it.
+       ;; Returns (values term trace remaining-fuel).
+       (define (normalize-once term remaining)
+         (if (or (not (term-compound? proto term))
+                 (<= remaining 0))
+             (values term '() remaining)
              (let ((operands (term-get-operands proto term)))
-               ;; Normalize all children bottom-up, accumulating trace
-               ;; in reverse to avoid quadratic append.
-               (let child-loop ((remaining operands)
+               (let child-loop ((remaining-ops operands)
                                 (rev-children '())
-                                (rev-trace '()))
-                 (if (null? remaining)
-                     (let* ((new-children (reverse rev-children))
-                            (rebuilt (term-make-term proto term new-children))
-                            (hit (try-named-rules rebuilt)))
-                       (if hit
-                           (let ((na (car hit))
-                                 (rewritten (cdr hit)))
-                             (values rewritten
-                                     (reverse
-                                       (cons (make-rewrite-step
-                                               (named-axiom-name na)
-                                               (named-axiom-general-form na)
-                                               rebuilt
-                                               rewritten)
-                                             rev-trace))))
-                           (values rebuilt (reverse rev-trace))))
-                     (let-values (((norm-child sub-trace)
-                                   (normalize-once (car remaining))))
-                       (child-loop (cdr remaining)
+                                (rev-trace '())
+                                (fuel-left remaining))
+                 (if (or (null? remaining-ops) (<= fuel-left 0))
+                     ;; Copy any unprocessed children as-is when fuel exhausted
+                     (let* ((done (append (reverse rev-children)
+                                          remaining-ops))
+                            (rebuilt (term-make-term proto term done)))
+                       (if (<= fuel-left 0)
+                           (values rebuilt (reverse rev-trace) fuel-left)
+                           (let ((hit (try-named-rules rebuilt)))
+                             (if hit
+                                 (let ((na (car hit))
+                                       (rewritten (cdr hit)))
+                                   (values rewritten
+                                           (reverse
+                                             (cons (make-rewrite-step
+                                                     (named-axiom-name na)
+                                                     (named-axiom-general-form na)
+                                                     rebuilt
+                                                     rewritten)
+                                                   rev-trace))
+                                           (- fuel-left 1)))
+                                 (values rebuilt (reverse rev-trace) fuel-left)))))
+                     (let-values (((norm-child sub-trace child-fuel)
+                                   (normalize-once (car remaining-ops) fuel-left)))
+                       (child-loop (cdr remaining-ops)
                                    (cons norm-child rev-children)
-                                   (append (reverse sub-trace) rev-trace))))))))
+                                   (append (reverse sub-trace) rev-trace)
+                                   child-fuel)))))))
 
        (lambda (term)
          (let loop ((current term) (rev-trace '()) (remaining fuel))
@@ -197,12 +205,13 @@ Category: algebra"
                                  "rewrite limit exceeded"
                                  current current)
                                rev-trace)))
-               (let-values (((result trace) (normalize-once current)))
+               (let-values (((result trace new-fuel)
+                             (normalize-once current remaining)))
                  (if (null? trace)
                      (values result (reverse rev-trace))
                      (loop result
                            (append (reverse trace) rev-trace)
-                           (- remaining (length trace))))))))))))
+                           new-fuel))))))))))
 
 ;; ─── Theory projections ──────────────────
 
