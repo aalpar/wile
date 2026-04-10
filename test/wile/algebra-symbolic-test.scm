@@ -244,5 +244,22 @@
                    (apply string-append formatted)
                    "absorption"))))))
 
-(test-end "symbolic-algebra")
+;; ─── Fuel exhaustion ────────────────────────
+
+(test-group "recursive-normalizer-fuel-exhaustion"
+  ;; Deeply nested identity: requires many steps, fuel=1 forces early stop
+  (let* ((theory (make-theory
+                   (list (make-named-axiom "identity" "a + 0 = a"
+                           (make-identity-axiom '+ (lambda (x) (eq? x 'zero)))))
+                   '(+)))
+         (norm (make-recursive-normalizer theory sym-proto 1)))
+    (let-values (((result trace) (norm '(+ (+ (+ x zero) zero) zero))))
+      ;; Should not fully normalize — fuel too low
+      (test #t (> (length trace) 0))
+      ;; Last trace entry should be fuel-exhausted
+      (let ((last-step (list-ref trace (- (length trace) 1))))
+        (test "fuel-exhausted" (step-rule-name last-step))
+        (test "rewrite limit exceeded" (step-general-form last-step))))))
+
+(test-end)
 (test-exit)

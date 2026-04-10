@@ -11,8 +11,8 @@
 ;;;
 ;;; The normalizer returns #f for "no match." Internally, rule lambdas use
 ;;; *no-match* (a unique identity object checked via eq?) to distinguish
-;;; "no match" from a legitimate #f rewrite result. This sentinel is not
-;;; exported; callers never see it.
+;;; "no match" from a legitimate #f rewrite result. The sentinel and its
+;;; predicate no-match? are exported for use by (wile algebra symbolic).
 
 ;; ─── No-match sentinel ──────────────────────
 
@@ -105,7 +105,7 @@
   (associativity-axiom? x))
 
 (define (axiom? x)
-  "Test whether X is a recognized axiom type.\nReturns #t for identity, commutativity, absorbing, idempotence,\nor involution axiom records.\n\nExamples:\n  (axiom? (make-identity-axiom '+ zero?))     => #t\n  (axiom? (make-commutativity-axiom '+))       => #t\n  (axiom? 42)                                  => #f\n\nParameters:\n  x : any\nReturns: boolean\nCategory: algebra\nKeywords: axiom, rewrite rule, equational, algebraic law\n\nSee also: `make-identity-axiom', `make-commutativity-axiom', `make-absorbing-axiom'."
+  "Test whether X is a recognized axiom type.\nReturns #t for identity, commutativity, absorbing, idempotence,\ninvolution, absorption, or associativity axiom records.\n\nExamples:\n  (axiom? (make-identity-axiom '+ zero?))     => #t\n  (axiom? (make-commutativity-axiom '+))       => #t\n  (axiom? 42)                                  => #f\n\nParameters:\n  x : any\nReturns: boolean\nCategory: algebra\nKeywords: axiom, rewrite rule, equational, algebraic law\n\nSee also: `make-identity-axiom', `make-commutativity-axiom', `make-absorbing-axiom'."
   (or (identity-axiom? x)
       (commutativity-axiom? x)
       (absorbing-axiom? x)
@@ -211,31 +211,51 @@
     ((absorption-axiom? axiom)
      (let ((outer-op (absorption-axiom-op-outer axiom))
            (inner-op (absorption-axiom-op-inner axiom)))
+       ;; Absorption: op1(a, op2(a, b)) → a
+       ;; The shared element a can appear in either position of the inner
+       ;; term, and the inner term can be either operand of the outer term.
+       ;; Four rules cover all combinations.
+       (define (absorption-match? op args inner-idx outer-idx inner-pos)
+         ;; inner-idx: which outer arg is the inner compound (0 or 1)
+         ;; outer-idx: which outer arg is the shared element (0 or 1)
+         ;; inner-pos: which inner operand matches the shared element (0 or 1)
+         (and (equal? op outer-op)
+              (= (length args) 2)
+              (let ((inner (list-ref args inner-idx))
+                    (shared (list-ref args outer-idx)))
+                (and (term-compound? proto inner)
+                     (equal? (term-get-operator proto inner) inner-op)
+                     (= (length (term-get-operands proto inner)) 2)
+                     (equal? shared
+                             (list-ref (term-get-operands proto inner)
+                                       inner-pos))))))
        (list
-         ;; op1(a, op2(a, b)) → a
+         ;; op1(a, op2(a, b)) → a  [shared in first position of inner]
          (lambda (term)
            (let ((op (term-get-operator proto term))
                  (args (term-get-operands proto term)))
-             (if (and (equal? op outer-op)
-                      (= (length args) 2)
-                      (term-compound? proto (cadr args))
-                      (equal? (term-get-operator proto (cadr args)) inner-op)
-                      (= (length (term-get-operands proto (cadr args))) 2)
-                      (equal? (car args)
-                              (car (term-get-operands proto (cadr args)))))
+             (if (absorption-match? op args 1 0 0)
                  (car args)
                  *no-match*)))
-         ;; op1(op2(a, b), a) → a
+         ;; op1(a, op2(b, a)) → a  [shared in second position of inner]
          (lambda (term)
            (let ((op (term-get-operator proto term))
                  (args (term-get-operands proto term)))
-             (if (and (equal? op outer-op)
-                      (= (length args) 2)
-                      (term-compound? proto (car args))
-                      (equal? (term-get-operator proto (car args)) inner-op)
-                      (= (length (term-get-operands proto (car args))) 2)
-                      (equal? (cadr args)
-                              (car (term-get-operands proto (car args)))))
+             (if (absorption-match? op args 1 0 1)
+                 (car args)
+                 *no-match*)))
+         ;; op1(op2(a, b), a) → a  [inner first, shared in first position]
+         (lambda (term)
+           (let ((op (term-get-operator proto term))
+                 (args (term-get-operands proto term)))
+             (if (absorption-match? op args 0 1 0)
+                 (cadr args)
+                 *no-match*)))
+         ;; op1(op2(b, a), a) → a  [inner first, shared in second position]
+         (lambda (term)
+           (let ((op (term-get-operator proto term))
+                 (args (term-get-operands proto term)))
+             (if (absorption-match? op args 0 1 1)
                  (cadr args)
                  *no-match*))))))
 
@@ -264,7 +284,7 @@
 ;; ─── Normalizer ─────────────────────────────
 
 (define (make-normalizer theory proto)
-  "Compile a list of axioms (THEORY) into a single normalizer function.\nReturns a procedure (term -> value-or-#f) that tries each compiled\nrule in order. The first matching rule's result is returned; #f is\nreturned if no rule applies. The internal *no-match* sentinel is\ntranslated to #f so callers never see it.\n\nExamples:\n  ;; With a list-based protocol, identity axiom for +/0:\n  ;; (let ((norm (make-normalizer\n  ;;              (list (make-identity-axiom '+ zero?))\n  ;;              proto)))\n  ;;   (norm '(+ 0 5)))  => 5\n  ;;   (norm '(* 2 3))   => #f   ; no matching rule\n\nParameters:\n  theory : list\n  proto : any\nReturns: procedure\nCategory: algebra\nKeywords: normalizer, simplify, rewrite, reduce, canonical form, simplification\n\nSee also: `axiom->rules', `make-term-protocol'."
+  "Compile a list of axioms (THEORY) into a single normalizer function.\nReturns a procedure (term -> value-or-#f) that tries each compiled\nrule in order. The first matching rule's result is returned; #f is\nreturned if no rule applies. The internal *no-match* sentinel is\ntranslated to #f at the API boundary.\n\nNote: because #f means \"no match,\" a rule that rewrites a term to\nliteral #f is indistinguishable from no-match. If your domain includes\n#f as a valid term, use make-recursive-normalizer from (wile algebra\nsymbolic) instead — it returns (values result trace) where (null? trace)\nunambiguously indicates no rewriting occurred.\n\nExamples:\n  ;; With a list-based protocol, identity axiom for +/0:\n  ;; (let ((norm (make-normalizer\n  ;;              (list (make-identity-axiom '+ zero?))\n  ;;              proto)))\n  ;;   (norm '(+ 0 5)))  => 5\n  ;;   (norm '(* 2 3))   => #f   ; no matching rule\n\nParameters:\n  theory : list\n  proto : any\nReturns: procedure\nCategory: algebra\nKeywords: normalizer, simplify, rewrite, reduce, canonical form, simplification\n\nSee also: `axiom->rules', `make-term-protocol', `make-recursive-normalizer'."
   (let ((rules (apply append
                  (map (lambda (ax) (axiom->rules ax proto)) theory))))
     (lambda (term)

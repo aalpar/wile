@@ -103,6 +103,10 @@
   "Construct a term protocol for S-expression terms.
 Compound terms are pairs (op arg ...). Atoms are leaves.
 COMPARE orders atoms for commutativity normalization.
+COMPARE must handle all atom types that appear in terms —
+if terms contain numbers or strings alongside symbols,
+COMPARE must dispatch on type (e.g., via cond on symbol?,
+number?, string?) rather than assuming all atoms are symbols.
 
 Parameters:
   compare : procedure
@@ -123,16 +127,21 @@ Category: algebra"
     ((theory proto)
      (make-recursive-normalizer theory proto 100))
     ((theory proto fuel)
-     (let ((named-axioms (theory-axioms theory)))
+     ;; Precompile rules once at construction time — each entry is
+     ;; (named-axiom . compiled-rule-list), avoiding per-term allocation.
+     (let ((compiled
+             (map (lambda (na)
+                    (cons na (axiom->rules (named-axiom-axiom na) proto)))
+                  (theory-axioms theory))))
 
        (define (try-named-rules term)
-         (let na-loop ((nas named-axioms))
-           (if (null? nas)
+         (let na-loop ((entries compiled))
+           (if (null? entries)
                #f
-               (let ((na (car nas)))
-                 (let rule-loop ((rules (axiom->rules (named-axiom-axiom na) proto)))
+               (let ((na (caar entries)))
+                 (let rule-loop ((rules (cdar entries)))
                    (if (null? rules)
-                       (na-loop (cdr nas))
+                       (na-loop (cdr entries))
                        (let ((result ((car rules) term)))
                          (if (no-match? result)
                              (rule-loop (cdr rules))
@@ -142,10 +151,11 @@ Category: algebra"
          (if (not (term-compound? proto term))
              (values term '())
              (let ((operands (term-get-operands proto term)))
-               ;; Normalize all children bottom-up
+               ;; Normalize all children bottom-up, accumulating trace
+               ;; in reverse to avoid quadratic append.
                (let child-loop ((remaining operands)
                                 (rev-children '())
-                                (child-trace '()))
+                                (rev-trace '()))
                  (if (null? remaining)
                      (let* ((new-children (reverse rev-children))
                             (rebuilt (term-make-term proto term new-children))
@@ -154,33 +164,36 @@ Category: algebra"
                            (let ((na (car hit))
                                  (rewritten (cdr hit)))
                              (values rewritten
-                                     (append child-trace
-                                             (list (make-rewrite-step
-                                                     (named-axiom-name na)
-                                                     (named-axiom-general-form na)
-                                                     rebuilt
-                                                     rewritten)))))
-                           (values rebuilt child-trace)))
+                                     (reverse
+                                       (cons (make-rewrite-step
+                                               (named-axiom-name na)
+                                               (named-axiom-general-form na)
+                                               rebuilt
+                                               rewritten)
+                                             rev-trace))))
+                           (values rebuilt (reverse rev-trace))))
                      (let-values (((norm-child sub-trace)
                                    (normalize-once (car remaining))))
                        (child-loop (cdr remaining)
                                    (cons norm-child rev-children)
-                                   (append child-trace sub-trace))))))))
+                                   (append (reverse sub-trace) rev-trace))))))))
 
        (lambda (term)
-         (let loop ((current term) (all-trace '()) (remaining fuel))
+         (let loop ((current term) (rev-trace '()) (remaining fuel))
            (if (<= remaining 0)
                (values current
-                       (append all-trace
-                               (list (make-rewrite-step
-                                       "fuel-exhausted" "" current current))))
+                       (reverse
+                         (cons (make-rewrite-step
+                                 "fuel-exhausted"
+                                 "rewrite limit exceeded"
+                                 current current)
+                               rev-trace)))
                (let-values (((result trace) (normalize-once current)))
                  (if (null? trace)
-                     (values result all-trace)
-                     (loop result (append all-trace trace)
+                     (values result (reverse rev-trace))
+                     (loop result
+                           (append (reverse trace) rev-trace)
                            (- remaining (length trace))))))))))))
-
-;; ─── Reporter ─────────────────────────────
 
 ;; ─── Theory projections ──────────────────
 

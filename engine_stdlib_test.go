@@ -538,8 +538,7 @@ func TestEngine_EmbeddedStdlib_SymbolicBooleanNormalization(t *testing.T) {
 
 	result, err := eng.EvalMultiple(ctx, `
 		(import (wile algebra boolean)
-		        (wile algebra symbolic)
-		        (wile algebra rewrite))
+		        (wile algebra symbolic))
 
 		(let* ((B (powerset-boolean '(x y z)))
 		       (th (boolean->theory B 'or 'and 'not))
