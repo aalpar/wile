@@ -50,6 +50,8 @@ laws against user-supplied samples:
 (wile algebra)           re-exports all sub-libraries
 (wile algebra order)     partial orders
 (wile algebra lattice)   lattices, constructors, fixpoint
+(wile algebra heyting)   Heyting algebras (implication)
+(wile algebra boolean)   Boolean algebras (complement)
 (wile algebra monoid)    monoids
 (wile algebra semiring)  semirings + pre-built instances
 (wile algebra group)     groups
@@ -67,7 +69,9 @@ field ──→ ring ──→ semiring ──→ additive-monoid
             │                └→ multiplicative-monoid
             └→ additive-group ──→ monoid
 
-lattice ──→ partial-order
+boolean-algebra ──→ heyting-algebra ──→ lattice ──→ partial-order
+        │
+        └→ ring (characteristic 2)
 ```
 
 ## API

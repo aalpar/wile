@@ -27,6 +27,7 @@ When investigating R7RS conformance issues:
 | `2026-03-25-degenerate-form-tests.md` | Degenerate form full-pipeline tests | **Complete** (PR #571) |
 | `2026-03-25-algebra-library-design.md` | Algebra library design document | **Complete** |
 | `2026-03-25-algebra-rewrite-design.md` | Term rewriting library design | **Complete** |
+| `2026-04-09-orthogonal-algebra-types.md` | Orthogonal algebra types: Heyting algebra, Boolean algebra (Monoid Action / Module deferred) | **Implemented** |
 | `AVAILABLE-LIBRARIES.md` | Library discovery design: `LibraryEnumerator` interface, `(available-libraries)` primitive | **Approved** (design) |
 | `CAPTURE-ANALYSIS.md` | Capture analysis design for let bindings (B1) | **Complete** |
 | `ESCAPE-ANALYSIS.md` | Escape analysis design for let-bound closures (B2) | **Complete** (design) |

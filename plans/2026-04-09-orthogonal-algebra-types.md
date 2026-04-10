@@ -1,7 +1,7 @@
 # Orthogonal Algebra Types
 
 **Date:** 2026-04-09
-**Status:** Proposal
+**Status:** Implemented
 **Depends on:** 2026-03-25-algebra-library-design.md
 
 ## Context
@@ -298,25 +298,355 @@ small additions that enrich the existing lattice constructors. Action is
 structurally novel but simple. Module is the most complex due to the two-sorted
 API pattern being new to the library.
 
-## Open Questions
+## Scope Decision
 
-1. **Should Heyting/Boolean extend lattice or wrap it?** Extending
-   `<lattice>` to `<heyting-algebra>` with an extra slot is simpler but
-   breaks the existing record hierarchy (R7RS records don't support
-   inheritance). Wrapping (store a lattice field inside the Heyting record)
-   matches the existing pattern — ring stores its operations separately and
-   offers `ring->semiring` to project. Wrapping is the likely answer.
+**Implement Heyting + Boolean only.** Monoid Action and Module are deferred.
 
-2. **Module API: embed ring or pass externally?** See discussion in Module
-   section above.
+| Type           | Verdict      | Rationale                                                |
+|----------------|--------------|----------------------------------------------------------|
+| Heyting        | **Yes**      | Enables WP reasoning on existing lattice constructors    |
+| Boolean        | **Yes**      | Must/may duality on powerset-lattice                     |
+| Monoid Action  | Deferred     | Needs interprocedural analysis to be load-bearing        |
+| Module         | Deferred     | No numerical abstract domains exist in wile-goast        |
 
-3. **Should action carry a predicate for X?** The existing structures don't
-   type-check their carrier sets (monoid-op accepts anything). Consistency
-   says: no predicate, just trust the caller. But actions are the first type
-   where the two carriers could be confused.
+**Key observation:** `flat-lattice` with 3+ elements is NOT distributive
+(verified: `a ∧ (b ∨ c) ≠ (a ∧ b) ∨ (a ∧ c)` when a, b, c are
+incomparable). Therefore `flat-lattice` is NOT a Heyting algebra. Only
+`powerset-lattice` and `map-lattice` (over a distributive value-lattice) get
+lifted constructors.
 
-4. **Lattice constructor upgrades.** `powerset-lattice` already produces a
-   Boolean algebra. Should the existing constructor be left alone and
-   `powerset-boolean` added alongside, or should `powerset-lattice` return a
-   `<boolean-algebra>` (which projects to lattice)? The former is less
-   disruptive; the latter is more correct.
+## Resolved Questions
+
+### Q1: Wrap or extend?
+
+**Wrap.** Store a lattice inside the Heyting/Boolean record. This matches the
+existing pattern — `<ring>` stores its own operation slots and offers
+`ring->semiring` to project. R7RS `define-record-type` has no inheritance, so
+wrapping is the only composable option.
+
+The wrapping stores operation closures, not a lattice record. This keeps
+Heyting/Boolean records flat (no indirection to access join/meet) and lets
+`heyting->lattice` / `boolean->lattice` reconstruct a `<lattice>` from the
+stored closures — exactly how `ring->semiring` works.
+
+### Q2: Lattice constructor upgrades
+
+**Add alongside, don't change.** `powerset-lattice` continues to return
+`<lattice>`. New constructors `powerset-heyting` and `powerset-boolean` return
+the richer types. Rationale:
+
+- No existing code breaks
+- Existing callers that only need lattice operations pay no conceptual cost
+- The upgrade path is explicit: `(powerset-boolean U)` instead of
+  `(powerset-lattice U)` when you need complement
+
+`map-heyting` lifts a Heyting value-lattice to a Heyting map-lattice. No
+`map-boolean` — the map-lattice complement requires enumerating the value
+domain, which is only sound for finite value lattices. Callers can construct
+one manually if they know their domain is finite.
+
+### Q3: Boolean→Heyting derivation
+
+`boolean->heyting` derives implies from complement:
+`a → b = ¬a ∨ b`. This is a one-line derivation, not a stored field.
+
+### Q4: Boolean→Ring derivation
+
+`boolean->ring` constructs a ring of characteristic 2:
+- plus = symmetric difference = `(a ∨ b) ∧ ¬(a ∧ b)`
+- times = meet
+- zero = ⊥, one = ⊤
+- negate = identity (every element is its own additive inverse)
+
+This bridges the lattice tower and the algebraic tower at a concrete point.
+
+## Concrete API
+
+### Heyting Algebra — `(wile algebra heyting)`
+
+```scheme
+;; Record: flat, stores closures + constants directly
+(define-record-type <heyting-algebra>
+  (make-heyting-algebra* join-fn meet-fn bottom top leq-fn implies-fn)
+  heyting-algebra?
+  (join-fn    heyting-join-fn)
+  (meet-fn    heyting-meet-fn)
+  (bottom     heyting-bottom)
+  (top        heyting-top)
+  (leq-fn     heyting-leq-fn)
+  (implies-fn heyting-implies-fn))
+
+;; Constructor
+(make-heyting-algebra join meet bottom top leq? implies)
+  → <heyting-algebra>
+
+;; Operations
+(heyting-join H a b)       → element
+(heyting-meet H a b)       → element
+(heyting-leq? H a b)       → boolean
+(heyting-implies H a b)    → element   ; a → b
+(heyting-negate H a)       → element   ; a → ⊥ (pseudo-complement, derived)
+
+;; Projection
+(heyting->lattice H)       → <lattice>
+
+;; Constructors
+(powerset-heyting universe)             → <heyting-algebra>
+  ;; implies: (U \ a) ∪ b
+(map-heyting keys value-heyting)        → <heyting-algebra>
+  ;; implies: pointwise on values
+
+;; Validation
+(validate-heyting-algebra H samples)    → #t | violations
+  ;; checks: lattice laws (delegates to validate-lattice)
+  ;;       + modus ponens: a ∧ (a → b) ≤ b
+  ;;       + adjunction: for all c in samples,
+  ;;           c ≤ (a → b) iff a ∧ c ≤ b
+
+;; Macro
+(with-heyting H (join meet bottom top leq? implies) body ...)
+```
+
+### Boolean Algebra — `(wile algebra boolean)`
+
+```scheme
+;; Record: flat, stores closures + constants directly
+(define-record-type <boolean-algebra>
+  (make-boolean-algebra* join-fn meet-fn bottom top leq-fn complement-fn)
+  boolean-algebra?
+  (join-fn       boolean-join-fn)
+  (meet-fn       boolean-meet-fn)
+  (bottom        boolean-bottom)
+  (top           boolean-top)
+  (leq-fn        boolean-leq-fn)
+  (complement-fn boolean-complement-fn))
+
+;; Constructor
+(make-boolean-algebra join meet bottom top leq? complement)
+  → <boolean-algebra>
+
+;; Operations
+(boolean-join B a b)        → element
+(boolean-meet B a b)        → element
+(boolean-leq? B a b)        → boolean
+(boolean-complement B a)    → element
+
+;; Projections
+(boolean->heyting B)        → <heyting-algebra>
+  ;; implies derived: ¬a ∨ b
+(boolean->lattice B)        → <lattice>
+(boolean->ring B)           → <ring>
+  ;; plus = symmetric-difference, times = meet, zero = ⊥, one = ⊤
+
+;; Constructors
+(powerset-boolean universe) → <boolean-algebra>
+  ;; complement: set difference from universe
+
+;; Validation
+(validate-boolean-algebra B samples) → #t | violations
+  ;; checks: lattice laws (delegates to validate-lattice)
+  ;;       + complement:      a ∧ ¬a = ⊥, a ∨ ¬a = ⊤
+  ;;       + distributivity:  a ∧ (b ∨ c) = (a ∧ b) ∨ (a ∧ c)
+
+;; Macro
+(with-boolean B (join meet bottom top leq? complement) body ...)
+```
+
+## Library Organization
+
+New sub-libraries:
+
+```
+stdlib/lib/wile/algebra/heyting.sld   → (wile algebra heyting)
+stdlib/lib/wile/algebra/heyting.scm
+stdlib/lib/wile/algebra/boolean.sld   → (wile algebra boolean)
+stdlib/lib/wile/algebra/boolean.scm
+```
+
+Dependency chain:
+
+```
+(wile algebra order)
+  ↑
+(wile algebra lattice)
+  ↑
+(wile algebra heyting)     imports: (scheme base), (wile algebra lattice)
+  ↑
+(wile algebra boolean)     imports: (scheme base), (wile algebra heyting),
+                                    (wile algebra lattice),
+                                    (wile algebra ring)
+```
+
+`boolean.scm` imports `(wile algebra ring)` for `boolean->ring`. This creates
+a cross-tower dependency — the first in the library. It's justified because
+Boolean algebra genuinely IS the bridge point between the two towers.
+
+Umbrella `(wile algebra)` adds both to its imports and exports.
+
+## Test Plan
+
+New test files:
+
+```
+test/wile/algebra-heyting-test.scm
+test/wile/algebra-boolean-test.scm
+```
+
+### Heyting tests
+
+1. **Construction:** `heyting-algebra?` predicate, non-Heyting returns `#f`
+2. **powerset-heyting:**
+   - `heyting-implies` on concrete sets (e.g., `{a} → {a,b} = U`)
+   - `heyting-negate` (`{a} → ⊥ = {b,c}` = complement)
+   - Modus ponens: `a ∧ (a → b) ≤ b` for sample pairs
+3. **map-heyting:** pointwise implication, bottom/top behavior
+4. **heyting->lattice:** resulting lattice agrees with direct operations
+5. **validate-heyting-algebra:** passes on `powerset-heyting`, catches a
+   broken implies function
+6. **with-heyting:** macro destructuring
+
+### Boolean tests
+
+1. **Construction:** `boolean-algebra?` predicate
+2. **powerset-boolean:**
+   - `boolean-complement` on concrete sets
+   - Non-contradiction: `a ∧ ¬a = ⊥`
+   - Excluded middle: `a ∨ ¬a = ⊤`
+   - Involution: `¬¬a = a`
+3. **boolean->heyting:** implies agrees with `¬a ∨ b`
+4. **boolean->lattice:** projects correctly
+5. **boolean->ring:** symmetric difference is commutative, associative;
+   `meet` distributes over it; identity `a + a = ⊥`
+6. **validate-boolean-algebra:** passes on `powerset-boolean`, catches
+   non-distributive lattice or broken complement
+7. **with-boolean:** macro destructuring
+
+### Integration test additions
+
+Add to `algebra-integration-test.scm`:
+
+1. **Projection chain:** `boolean->heyting->lattice->partial-order`
+2. **Boolean↔Ring bridge:** `boolean->ring` then `ring->semiring`, verify
+   operations agree
+3. **Powerset round-trip:** `powerset-boolean` complement + join recovers
+   universe
+
+## Implementation Phases
+
+### Phase 1: Heyting Algebra
+
+Files: `heyting.sld`, `heyting.scm`, `algebra-heyting-test.scm`
+
+1. Record type and constructor
+2. Core operations: `heyting-join`, `heyting-meet`, `heyting-leq?`,
+   `heyting-implies`, `heyting-negate` (derived: `implies H a (heyting-bottom H)`)
+3. `heyting->lattice` projection
+4. `powerset-heyting` constructor — implies = `(union (set-diff universe a) b)`
+5. `map-heyting` constructor — implies = pointwise
+6. `validate-heyting-algebra` — delegates lattice laws + checks modus ponens
+   and adjunction
+7. `with-heyting` macro
+8. Tests
+9. Add to umbrella `(wile algebra)` exports and imports
+
+### Phase 2: Boolean Algebra
+
+Files: `boolean.sld`, `boolean.scm`, `algebra-boolean-test.scm`
+
+1. Record type and constructor
+2. Core operations: `boolean-join`, `boolean-meet`, `boolean-leq?`,
+   `boolean-complement`
+3. `boolean->heyting` — derives implies from complement: `(join (complement a) b)`
+4. `boolean->lattice` projection
+5. `boolean->ring` — symmetric difference, meet, identity negate
+6. `powerset-boolean` constructor — complement = set difference from universe
+7. `validate-boolean-algebra` — delegates lattice laws + checks complement
+   and distributivity
+8. `with-boolean` macro
+9. Tests
+10. Add to umbrella exports/imports
+
+### Phase 3: Integration tests + cleanup
+
+1. Add cross-tower tests to `algebra-integration-test.scm`
+2. `make lint && make covercheck`
+3. Docstrings on all public procedures (follow existing Guile-style pattern)
+
+## Internal Helpers
+
+Both `powerset-heyting` and `powerset-boolean` need `set-diff`. The existing
+`powerset-lattice` already defines internal `union`, `intersect`, `subset?`.
+Rather than duplicate, each constructor defines its own local set operations
+(they're 3-4 lines each). No shared utility — consistent with how
+`powerset-lattice` already works.
+
+```scheme
+;; set-diff: elements of a not in b
+(define (set-diff a b)
+  (cond ((null? a) '())
+        ((member (car a) b) (set-diff (cdr a) b))
+        (else (cons (car a) (set-diff (cdr a) b)))))
+```
+
+## Deferred Work
+
+### Monoid Action
+
+Deferred until wile-goast needs interprocedural analysis (function summaries
+as composed transfer functions). The current worklist solver applies transfers
+one block at a time and never composes them.
+
+### Module / Vector Space
+
+Deferred indefinitely. Requires numerical abstract domains (polyhedra,
+intervals, octagons) that don't exist in wile-goast and aren't on the
+roadmap.
+
+### FCA concept lattice as Heyting algebra (wile-goast follow-up)
+
+wile-goast's FCA library (`fca.scm`) hand-implements intent/extent as a
+Galois connection and computes concept lattices via NextClosure. Every concept
+lattice is a complete lattice, hence a Heyting algebra. The Galois connection
+already provides the ingredients — the missing piece is the implication
+operation.
+
+**What it upgrades.** The current `cross-boundary-concepts` filter answers a
+symmetric, binary question: "which field groupings span multiple struct
+types?" Heyting implication adds a directional one: "does accessing field set
+A imply accessing field set B?" The pseudo-complement (`heyting-negate`)
+identifies functions that are structurally excluded from a coupling pattern —
+**evidence against merging**.
+
+Example: given functions that access `{Cache.Entries, Index.Keys}` together
+and functions that access only one, the pseudo-complement of the cross-
+boundary concept identifies the single-struct functions — the ones that prove
+the coupling isn't universal and would break if the structs were merged. The
+current boundary report doesn't surface this.
+
+**Concept lattice operations.** Meet and join on concepts are computable
+directly from `intent`, `extent`, and `fca-close` (all exist in `fca.scm`):
+
+```
+meet(C₁, C₂)  =  (A₁ ∩ A₂, close(B₁ ∪ B₂))
+join(C₁, C₂)  =  (extent(close(B₁ ∩ B₂)), close(B₁ ∩ B₂))
+```
+
+Heyting implication `C₁ → C₂` = largest concept `C₃` where `C₁ ∧ C₃ ≤ C₂`,
+computable by enumeration over the (finite, already-computed) concept lattice.
+
+**Implementation shape.** A thin adapter in wile-goast's `fca.scm`, not in
+wile itself:
+
+```scheme
+(define (concept-lattice->heyting ctx lat)
+  (make-heyting-algebra
+    (lambda (a b) (fca-concept-join ctx a b))
+    (lambda (a b) (fca-concept-meet ctx a b))
+    bottom-concept top-concept
+    (lambda (a b) (subset? (concept-extent a) (concept-extent b)))
+    (lambda (a b) (fca-concept-implies ctx lat a b))))
+```
+
+This depends on `(wile algebra heyting)` shipping first. No new Go primitives
+needed — ~30 lines of Scheme on top of existing FCA infrastructure.
+
