@@ -329,6 +329,87 @@ func TestEngine_EmbeddedStdlib_RewriteInvolution(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "x")
 }
 
+func TestEngine_EmbeddedStdlib_RewriteAbsorptionRight(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	eng, err := wile.NewEngine(ctx,
+		wile.WithAllExtensions(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceOS(),
+		wile.WithLibraryPaths(),
+	)
+	c.Assert(err, qt.IsNil)
+	defer eng.Close()
+
+	result, err := eng.EvalMultiple(ctx, `
+		(import (wile algebra rewrite))
+		(define proto
+		  (make-term-protocol pair? car cdr
+		    (lambda (term new-args) (cons (car term) new-args))
+		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
+		(define normalize (make-normalizer (list (make-absorption-axiom 'and 'or)) proto))
+		;; (and x (or x y)) → x
+		(normalize '(and x (or x y)))
+	`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "x")
+}
+
+func TestEngine_EmbeddedStdlib_RewriteAbsorptionLeft(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	eng, err := wile.NewEngine(ctx,
+		wile.WithAllExtensions(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceOS(),
+		wile.WithLibraryPaths(),
+	)
+	c.Assert(err, qt.IsNil)
+	defer eng.Close()
+
+	result, err := eng.EvalMultiple(ctx, `
+		(import (wile algebra rewrite))
+		(define proto
+		  (make-term-protocol pair? car cdr
+		    (lambda (term new-args) (cons (car term) new-args))
+		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
+		(define normalize (make-normalizer (list (make-absorption-axiom 'and 'or)) proto))
+		;; (and (or x y) x) → x
+		(normalize '(and (or x y) x))
+	`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "x")
+}
+
+func TestEngine_EmbeddedStdlib_RewriteAbsorptionNoMatch(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	eng, err := wile.NewEngine(ctx,
+		wile.WithAllExtensions(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceOS(),
+		wile.WithLibraryPaths(),
+	)
+	c.Assert(err, qt.IsNil)
+	defer eng.Close()
+
+	result, err := eng.EvalMultiple(ctx, `
+		(import (wile algebra rewrite))
+		(define proto
+		  (make-term-protocol pair? car cdr
+		    (lambda (term new-args) (cons (car term) new-args))
+		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
+		(define normalize (make-normalizer (list (make-absorption-axiom 'and 'or)) proto))
+		;; (and x y) → #f (no match)
+		(normalize '(and x y))
+	`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "#f")
+}
+
 func TestEngine_EmbeddedStdlib_RewriteComposed(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
@@ -363,6 +444,118 @@ func TestEngine_EmbeddedStdlib_RewriteComposed(t *testing.T) {
 	`)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "(x zero (+ a y))")
+}
+
+func TestEngine_EmbeddedStdlib_RewriteAssociativity(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	eng, err := wile.NewEngine(ctx,
+		wile.WithAllExtensions(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceOS(),
+		wile.WithLibraryPaths(),
+	)
+	c.Assert(err, qt.IsNil)
+	defer eng.Close()
+
+	result, err := eng.EvalMultiple(ctx, `
+		(import (wile algebra rewrite))
+		(define proto
+		  (make-term-protocol pair? car cdr
+		    (lambda (term new-args) (cons (car term) new-args))
+		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
+		(define normalize (make-normalizer (list (make-associativity-axiom '+)) proto))
+		;; (+ (+ a b) c) → (+ a (+ b c))
+		(normalize '(+ (+ a b) c))
+	`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "(+ a (+ b c))")
+}
+
+func TestEngine_EmbeddedStdlib_RewriteAssociativityAlreadyRight(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	eng, err := wile.NewEngine(ctx,
+		wile.WithAllExtensions(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceOS(),
+		wile.WithLibraryPaths(),
+	)
+	c.Assert(err, qt.IsNil)
+	defer eng.Close()
+
+	result, err := eng.EvalMultiple(ctx, `
+		(import (wile algebra rewrite))
+		(define proto
+		  (make-term-protocol pair? car cdr
+		    (lambda (term new-args) (cons (car term) new-args))
+		    (lambda (a b) (string<? (symbol->string a) (symbol->string b)))))
+		(define normalize (make-normalizer (list (make-associativity-axiom '+)) proto))
+		;; (+ a (+ b c)) — already right-associated, no match
+		(normalize '(+ a (+ b c)))
+	`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "#f")
+}
+
+func TestEngine_EmbeddedStdlib_DirectionalAxiom(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	eng, err := wile.NewEngine(ctx,
+		wile.WithAllExtensions(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceOS(),
+		wile.WithLibraryPaths(),
+	)
+	c.Assert(err, qt.IsNil)
+	defer eng.Close()
+
+	result, err := eng.EvalMultiple(ctx, `
+		(import (wile algebra rewrite))
+		(define zero? (lambda (x) (eq? x 'zero)))
+		(list (directional-axiom? (make-associativity-axiom '+))
+		      (directional-axiom? (make-identity-axiom '+ zero?)))
+	`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "(#t #f)")
+}
+
+func TestEngine_EmbeddedStdlib_SymbolicBooleanNormalization(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	eng, err := wile.NewEngine(ctx,
+		wile.WithAllExtensions(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceOS(),
+		wile.WithLibraryPaths(),
+	)
+	c.Assert(err, qt.IsNil)
+	defer eng.Close()
+
+	result, err := eng.EvalMultiple(ctx, `
+		(import (wile algebra boolean)
+		        (wile algebra symbolic)
+		        (wile algebra rewrite))
+
+		(let* ((B (powerset-boolean '(x y z)))
+		       (th (boolean->theory B 'or 'and 'not))
+		       (proto (sexp-term-protocol
+		                (lambda (a b)
+		                  (cond
+		                    ((and (symbol? a) (symbol? b))
+		                     (string<? (symbol->string a) (symbol->string b)))
+		                    ((symbol? a) #t)
+		                    (else #f)))))
+		       (norm (make-recursive-normalizer th proto)))
+		  (let-values (((result trace) (norm '(and x (or x y)))))
+		    (list result (length trace) (step-rule-name (car trace)))))
+	`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, `(x 1 "absorption-meet/join")`)
 }
 
 // TestEngine_EmbeddedStdlib_NoOSFallback verifies that the embedded FS
