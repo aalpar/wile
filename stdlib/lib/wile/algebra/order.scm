@@ -51,7 +51,7 @@
     (if (null? violations) #t (reverse violations))))
 
 (define (validate-partial-order/setoid po setoid samples)
-  "Spot-check partial order PO laws on SAMPLES, including antisymmetry via SETOID.\nExtends validate-partial-order by also checking antisymmetry:\nif a <= b and b <= a, then a and b must be equivalent under SETOID.\nThis is the check that validate-partial-order cannot perform without\nan explicit equality predicate.\n\nExamples:\n  (validate-partial-order/setoid\n    (make-partial-order <=) numeric-setoid '(1 2 3))  => #t\n\nParameters:\n  po : any\n  setoid : any\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: antisymmetry, partial order, equivalence, validation, law checking\n\nSee also: `validate-partial-order', `make-setoid'."
+  "Spot-check partial order PO laws on SAMPLES, including antisymmetry via SETOID.\nExtends validate-partial-order by also checking antisymmetry:\nif a <= b and b <= a, then a and b must be equivalent under SETOID.\nThis is the check that validate-partial-order cannot perform without\nan explicit equality predicate.\n\nExamples:\n  (validate-partial-order/setoid\n    (make-partial-order <=) (numeric-setoid) '(1 2 3))  => #t\n\nParameters:\n  po : any\n  setoid : any\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: antisymmetry, partial order, equivalence, validation, law checking\n\nSee also: `validate-partial-order', `make-setoid'."
   (let ((violations '()))
     (define (fail! type . args)
       (set! violations (cons (cons type args) violations)))
