@@ -28,6 +28,8 @@ When investigating R7RS conformance issues:
 | `2026-03-25-algebra-library-design.md` | Algebra library design document | **Complete** |
 | `2026-03-25-algebra-rewrite-design.md` | Term rewriting library design | **Complete** |
 | `2026-04-09-orthogonal-algebra-types.md` | Orthogonal algebra types: Heyting algebra, Boolean algebra (Monoid Action / Module deferred) | **Implemented** |
+| `2026-04-10-orthogonal-algebra-phase2-design.md` | Orthogonal algebra phase 2: Setoid, Category, Closure Operator, Differential Ring | **Implemented** |
+| `2026-04-10-orthogonal-algebra-phase2-impl.md` | Phase 2 implementation plan | **Implemented** |
 | `AVAILABLE-LIBRARIES.md` | Library discovery design: `LibraryEnumerator` interface, `(available-libraries)` primitive | **Approved** (design) |
 | `CAPTURE-ANALYSIS.md` | Capture analysis design for let bindings (B1) | **Complete** |
 | `ESCAPE-ANALYSIS.md` | Escape analysis design for let-bound closures (B2) | **Complete** (design) |
