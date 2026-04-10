@@ -161,5 +161,49 @@
       (test #t (and (member 'a result) (member 'b result) #t))
       (test 2 (length result)))))
 
+;; -- Setoid + partial order: antisymmetry check --
+
+(test-group "setoid-partial-order-antisymmetry"
+  (let ((po (make-partial-order <=))
+        (S (numeric-setoid)))
+    (test #t (validate-partial-order/setoid po S '(1 2 3)))))
+
+;; -- Category -> endomorphism monoid -> validate-monoid --
+
+(test-group "category-endomorphism-validation"
+  (let* ((C (procedure-category))
+         (M (category->endomorphism-monoid C 'any)))
+    (test #t (monoid? M))
+    ;; Fold a chain of +1 operations
+    (let ((add3 (monoid-fold M (list (lambda (x) (+ x 1))
+                                     (lambda (x) (+ x 1))
+                                     (lambda (x) (+ x 1))))))
+      (test 13 (add3 10)))))
+
+;; -- Closure -> closed-lattice -> validate-lattice --
+
+(test-group "closure-closed-lattice-validation"
+  (let* ((L (powerset-lattice '(1 2 3)))
+         (C (make-closure-operator
+              (lambda (s) (if (member 1 s) '(1 2 3) s))
+              L))
+         (CL (closure->closed-lattice C '())))
+    (test #t (lattice? CL))
+    ;; Closed elements: {}, {2}, {3}, {2,3}, {1,2,3}
+    (test #t (validate-lattice CL '(() (2) (3) (2 3) (1 2 3))))))
+
+;; -- Differential + ring: dual numbers verify derivative --
+
+(test-group "dual-number-ad-integration"
+  ;; f(x) = x^2 + x + 1, f'(x) = 2x + 1, f'(3) = 7
+  (let* ((D (dual-number-ring))
+         (R (differential-ring-ring D))
+         (x (cons 3 1))
+         (x2 (ring-times R x x))
+         (one (ring-one R))
+         (result (ring-plus R (ring-plus R x2 x) one)))
+    (test 13 (car result))     ;; f(3) = 9 + 3 + 1 = 13
+    (test 7 (cdr result))))    ;; f'(3) = 6 + 1 = 7
+
 (test-end)
 (test-exit)

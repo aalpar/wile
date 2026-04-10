@@ -1,10 +1,16 @@
 (define-library (wile algebra)
-  (description "Algebraic structures: orders, lattices, Heyting/Boolean algebras, monoids, semirings, groups, rings, fields.")
+  (description "Algebraic structures: setoids, orders, lattices, closure operators, Heyting/Boolean algebras, monoids, categories, semirings, groups, rings, differential rings, fields.")
   (export
+    ;; Setoids
+    make-setoid setoid?
+    setoid-equiv?
+    default-setoid numeric-setoid string-setoid eqv-setoid
+    setoid-equivalence-class
+    validate-setoid with-setoid
     ;; Partial orders
     make-partial-order partial-order?
     po-leq? po-comparable? po-monotone?
-    validate-partial-order
+    validate-partial-order validate-partial-order/setoid
     ;; Lattices
     make-lattice lattice?
     lattice-join lattice-meet lattice-bottom lattice-top
@@ -12,6 +18,13 @@
     flat-lattice powerset-lattice product-lattice map-lattice
     fixpoint fixpoint/widen
     validate-lattice with-lattice
+    ;; Closure operators
+    make-closure-operator closure-operator?
+    closure-close closure-closed? closure-lattice
+    closed-elements
+    closure->closed-lattice
+    downward-closure-operator
+    validate-closure-operator with-closure
     ;; Heyting algebras
     make-heyting-algebra heyting-algebra?
     heyting-join heyting-meet heyting-bottom heyting-top
@@ -30,6 +43,12 @@
     make-monoid monoid?
     monoid-op monoid-identity monoid-fold monoid-power
     validate-monoid with-monoid
+    ;; Categories
+    make-category category?
+    category-compose category-identity category-equiv?
+    category->endomorphism-monoid
+    procedure-category
+    validate-category with-category
     ;; Semirings
     make-semiring semiring?
     semiring-plus semiring-times semiring-zero semiring-one
@@ -48,6 +67,13 @@
     ring->semiring ring->additive-group
     integer-ring modular-ring
     validate-ring with-ring
+    ;; Differential rings
+    make-differential-ring differential-ring?
+    differential-deriv differential-ring-ring
+    differential-nth-deriv differential-constant?
+    differential-ring->ring
+    dual-number-ring polynomial-derivation
+    validate-differential-ring with-differential
     ;; Fields
     make-field field?
     field-plus field-times field-zero field-one
@@ -70,13 +96,17 @@
     make-involution-axiom involution-axiom?
     axiom?
     make-normalizer)
-  (import (wile algebra order)
+  (import (wile algebra setoid)
+          (wile algebra order)
           (wile algebra lattice)
+          (wile algebra closure)
           (wile algebra heyting)
           (wile algebra boolean)
           (wile algebra monoid)
+          (wile algebra category)
           (wile algebra semiring)
           (wile algebra group)
           (wile algebra ring)
+          (wile algebra differential)
           (wile algebra galois)
           (wile algebra rewrite)))
