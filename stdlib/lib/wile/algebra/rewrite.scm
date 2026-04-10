@@ -89,13 +89,30 @@
   involution-axiom?
   (op involution-axiom-op))
 
+(define-record-type <absorption-axiom>
+  (make-absorption-axiom op-outer op-inner)
+  absorption-axiom?
+  (op-outer absorption-axiom-op-outer)
+  (op-inner absorption-axiom-op-inner))
+
+(define-record-type <associativity-axiom>
+  (make-associativity-axiom op)
+  associativity-axiom?
+  (op associativity-axiom-op))
+
+(define (directional-axiom? x)
+  "Test whether X is a directional axiom — one whose rule rewrites\nin a single direction (not symmetric like commutativity).\nCurrently only associativity axioms are directional.\n\nExamples:\n  (directional-axiom? (make-associativity-axiom '+))         => #t\n  (directional-axiom? (make-identity-axiom '+ zero?))        => #f\n\nParameters:\n  x : any\nReturns: boolean\nCategory: algebra\nKeywords: axiom, directional, associativity, rewrite direction"
+  (associativity-axiom? x))
+
 (define (axiom? x)
   "Test whether X is a recognized axiom type.\nReturns #t for identity, commutativity, absorbing, idempotence,\nor involution axiom records.\n\nExamples:\n  (axiom? (make-identity-axiom '+ zero?))     => #t\n  (axiom? (make-commutativity-axiom '+))       => #t\n  (axiom? 42)                                  => #f\n\nParameters:\n  x : any\nReturns: boolean\nCategory: algebra\nKeywords: axiom, rewrite rule, equational, algebraic law\n\nSee also: `make-identity-axiom', `make-commutativity-axiom', `make-absorbing-axiom'."
   (or (identity-axiom? x)
       (commutativity-axiom? x)
       (absorbing-axiom? x)
       (idempotence-axiom? x)
-      (involution-axiom? x)))
+      (involution-axiom? x)
+      (absorption-axiom? x)
+      (associativity-axiom? x)))
 
 ;; ─── Axiom → rewrite rules ─────────────────
 
@@ -189,6 +206,56 @@
                             (= (length (term-get-operands proto inner)) 1))
                        (car (term-get-operands proto inner))
                        *no-match*))
+                 *no-match*))))))
+
+    ((absorption-axiom? axiom)
+     (let ((outer-op (absorption-axiom-op-outer axiom))
+           (inner-op (absorption-axiom-op-inner axiom)))
+       (list
+         ;; op1(a, op2(a, b)) → a
+         (lambda (term)
+           (let ((op (term-get-operator proto term))
+                 (args (term-get-operands proto term)))
+             (if (and (equal? op outer-op)
+                      (= (length args) 2)
+                      (term-compound? proto (cadr args))
+                      (equal? (term-get-operator proto (cadr args)) inner-op)
+                      (= (length (term-get-operands proto (cadr args))) 2)
+                      (equal? (car args)
+                              (car (term-get-operands proto (cadr args)))))
+                 (car args)
+                 *no-match*)))
+         ;; op1(op2(a, b), a) → a
+         (lambda (term)
+           (let ((op (term-get-operator proto term))
+                 (args (term-get-operands proto term)))
+             (if (and (equal? op outer-op)
+                      (= (length args) 2)
+                      (term-compound? proto (car args))
+                      (equal? (term-get-operator proto (car args)) inner-op)
+                      (= (length (term-get-operands proto (car args))) 2)
+                      (equal? (cadr args)
+                              (car (term-get-operands proto (car args)))))
+                 (cadr args)
+                 *no-match*))))))
+
+    ((associativity-axiom? axiom)
+     (let ((target-op (associativity-axiom-op axiom)))
+       (list
+         ;; op(op(a, b), c) → op(a, op(b, c))  (right-associate)
+         (lambda (term)
+           (let ((op (term-get-operator proto term))
+                 (args (term-get-operands proto term)))
+             (if (and (equal? op target-op)
+                      (= (length args) 2)
+                      (term-compound? proto (car args))
+                      (equal? (term-get-operator proto (car args)) target-op)
+                      (= (length (term-get-operands proto (car args))) 2))
+                 (let ((inner-args (term-get-operands proto (car args))))
+                   (term-make-term proto term
+                     (list (car inner-args)
+                           (term-make-term proto (car args)
+                             (list (cadr inner-args) (cadr args))))))
                  *no-match*))))))
 
     (else
