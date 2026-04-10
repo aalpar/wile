@@ -95,7 +95,7 @@
     (lambda (a b) (union (set-diff universe a) b))))
 
 (define (map-heyting keys value-heyting)
-  "Construct a Heyting algebra of alists mapping KEYS to elements of VALUE-HEYTING.\nAll operations apply pointwise. Implication is computed per-key\nusing VALUE-HEYTING's implication.\n\nExamples:\n  (let* ((H (powerset-heyting '(1 2)))\n         (M (map-heyting '(x y) H)))\n    (heyting-implies M\n      (list (cons 'x '(1)) (cons 'y '(1 2)))\n      (list (cons 'x '(1 2)) (cons 'y '(1)))))\n    ;; => ((x . (1 2)) (y . (1)))\n\nParameters:\n  keys : list\n  value-heyting : any\nReturns: any\nCategory: algebra\nKeywords: map, dictionary, pointwise, association, key-value, Heyting\n\nSee also: `map-lattice', `powerset-heyting'."
+  "Construct a Heyting algebra of alists mapping KEYS to elements of VALUE-HEYTING.\nAll operations apply pointwise. Implication is computed per-key\nusing VALUE-HEYTING's implication. Missing keys are treated as\nVALUE-HEYTING's bottom element.\n\nExamples:\n  (let* ((H (powerset-heyting '(1 2)))\n         (M (map-heyting '(x y) H)))\n    (heyting-implies M\n      (list (cons 'x '(1)) (cons 'y '(1 2)))\n      (list (cons 'x '(1 2)) (cons 'y '(1)))))\n    ;; => ((x . (1 2)) (y . (1)))\n\nParameters:\n  keys : list\n  value-heyting : any\nReturns: any\nCategory: algebra\nKeywords: map, dictionary, pointwise, association, key-value, Heyting\n\nSee also: `map-lattice', `powerset-heyting'."
   (let ((vbot (heyting-bottom value-heyting))
         (vtop (heyting-top value-heyting)))
     (define (lookup key alist)
