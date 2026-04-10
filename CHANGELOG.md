@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-04-09
+
+### Added
+
+- Add `Keywords` field to primitives for LLM discovery — `apropos` finds operations by alternate names (#626, #627, #628)
+- Add extensible type constraints — `TypeConstraint` interface replaces `ValueType` enum for parameter validation (#629)
+- Add library export index for unloaded library discovery in `apropos` (#623)
+
+### Fixed
+
+- Unify documentation conventions and output format across special forms and primitives (#620, #621)
+- Propagate Keywords through doc-only primitive registration (#622)
+- Read library registry dynamically in RegistryDocProvider (#624)
+- Search unloaded library names and descriptions in `apropos` (#625)
+- Nil guards, stale comment, empty-string edge case (crosscheck findings)
+
 ## [1.11.0] - 2026-04-07
 
 ### Added
