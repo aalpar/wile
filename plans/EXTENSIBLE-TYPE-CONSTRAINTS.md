@@ -1,6 +1,6 @@
 # Extensible Type Constraints
 
-**Status:** Design approved, not yet implemented
+**Status:** Implemented (PR #629)
 **Date:** 2026-04-09
 **Branch:** TBD
 
