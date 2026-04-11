@@ -92,14 +92,13 @@ func PrimEval(cc machine.CallContext) error {
 	// NewSubContextWithTemplate propagates all parent fields automatically
 	// (exception handler, winding stack, barrier, escape continuation, etc.).
 	sub := mc.NewSubContextWithTemplate(tpl, env)
+	defer machine.ReleaseSubContext(sub)
 	err = sub.Run()
 	if err != nil {
-		machine.ReleaseSubContext(sub)
 		return err
 	}
 
 	mc.SetValues(sub.GetValues()...)
-	machine.ReleaseSubContext(sub)
 	return nil
 }
 
@@ -172,15 +171,19 @@ func PrimLoad(cc machine.CallContext) error {
 
 		// Run the compiled code.
 		// NewSubContextWithTemplate propagates all parent fields automatically.
-		sub := mc.NewSubContextWithTemplate(tpl, env)
-		err = sub.Run()
+		err = func() error {
+			sub := mc.NewSubContextWithTemplate(tpl, env)
+			defer machine.ReleaseSubContext(sub)
+			err := sub.Run()
+			if err != nil {
+				return werr.WrapForeignErrorf(err, "load: runtime error in %s", filename.Value)
+			}
+			lastValue = sub.GetValue()
+			return nil
+		}()
 		if err != nil {
-			machine.ReleaseSubContext(sub)
-			return werr.WrapForeignErrorf(err, "load: runtime error in %s", filename.Value)
+			return err
 		}
-
-		lastValue = sub.GetValue()
-		machine.ReleaseSubContext(sub)
 	}
 
 	mc.SetValue(lastValue)
