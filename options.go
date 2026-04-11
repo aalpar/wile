@@ -51,6 +51,7 @@ type engineConfig struct {
 	extensions         []registry.Extension
 	maxCallDepth       uint64
 	callDepthSet       bool // true if WithMaxCallDepth was explicitly called
+	maxStackSize       uint64
 	inlineThreshold    int
 	inlineThresholdSet bool // true if WithInlineThreshold was explicitly called
 	libraryPaths       []string
@@ -98,6 +99,16 @@ func WithMaxCallDepth(n uint64) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.maxCallDepth = n
 		cfg.callDepthSet = true
+	}
+}
+
+// WithMaxStackSize sets the maximum eval stack size for the VM.
+// When the eval stack exceeds this size, ErrStackOverflow is returned.
+// This is opt-in: a value of 0 means unlimited (no stack size check).
+// There is no default — when not called, the stack is unlimited.
+func WithMaxStackSize(n uint64) EngineOption {
+	return func(cfg *engineConfig) {
+		cfg.maxStackSize = n
 	}
 }
 

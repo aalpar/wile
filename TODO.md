@@ -54,7 +54,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 - [x] **Task 1.1: `uint16` source table index overflow** [High, S, Done]: Changed `sourceRefs` to `uint32` across `native_template.go`, `edit_plan.go`, `peephole.go`.
 - [x] **Task 1.2: Opcode round-trip exhaustiveness test** [High, S, Done]: Already existed at `machine/native_template_test.go:425`.
 - [x] **Task 1.3: Extension list consistency test** [High, S, Done]: Already existed at `extension_consistency_test.go:29`.
-- [ ] **Task 1.4: Eval stack size limit** [Medium, S]: Eval stack grows without bound. Add `WithMaxStackSize(n)` engine option for sandboxed embedders.
+- [x] **Task 1.4: Eval stack size limit** [Medium, S, Done]: Added `WithMaxStackSize(n)` engine option. `checkStackSize()` enforced at 5 push opcodes in `Run()`. Propagated through sub-contexts and `eval`/`load` primitives. `plans/2026-04-11-eval-stack-limit-design.md`
 
 **Phase 4 — Test Discipline (remaining):**
 - [x] **Task 4.2: Security gate integration tests** [Medium, S, Done]: Already existed — 12+ tests in `engine_sandbox_test.go`.
@@ -80,6 +80,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 - [ ] **Task 8.2: Evaluate `wile.Value` wrapper** [Low, M]: Wrapper provides minimal methods beyond `Internal()` escape hatch.
 - [ ] **Task 8.3: Fix REPL importing `machine/compilation`** [Medium, M]: Presentation layer reaches into compilation internals via type assertions.
 - [ ] **Task 8.4: Make `DefaultBigFloatPrecision` configurable** [Low, M]: 256-bit precision hardcoded across 12 call sites. No engine option.
+- [ ] **Task 8.5: Funnel `prim_eval.go` through `NewSubContext`** [Medium, M]: `eval`/`load` construct `MachineContext` directly, bypassing `NewSubContext` propagation. Every new field on `MachineContext` requires manual propagation at these sites (same class of bug as the windingStack hazard fixed in PR #597). Add a `NewSubContextWithTemplate(tpl, env)` constructor so all production context creation goes through methods that propagate automatically.
 
 ### Low Priority
 

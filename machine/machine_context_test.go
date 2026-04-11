@@ -1251,6 +1251,33 @@ func TestNewThreadSubContext_InheritsMaxCallDepth(t *testing.T) {
 	}
 }
 
+func TestNewSubContext_InheritsMaxStackSize(t *testing.T) {
+	topEnv := environment.NewNamespace().Runtime()
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+	mc.SetMaxStackSize(500)
+
+	sub := mc.NewSubContext()
+	if sub.MaxStackSize() != 500 {
+		t.Fatalf("sub-context maxStackSize = %d, want 500", sub.MaxStackSize())
+	}
+}
+
+func TestNewThreadSubContext_InheritsMaxStackSize(t *testing.T) {
+	topEnv := environment.NewNamespace().Runtime()
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+	mc.SetMaxStackSize(750)
+
+	params := mc.CaptureSubContextParams()
+	thunk := NewParameter(nil, nil)
+	thread := values.NewThread(thunk, "test-thread")
+	sub := NewThreadSubContext(params, thread)
+	if sub.MaxStackSize() != 750 {
+		t.Fatalf("thread sub-context maxStackSize = %d, want 750", sub.MaxStackSize())
+	}
+}
+
 // --- Dispatch tests (Phase 6) ---
 
 func TestRunDispatch_InitialOperations(t *testing.T) {

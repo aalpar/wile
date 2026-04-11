@@ -93,6 +93,7 @@ func PrimEval(cc machine.CallContext) error {
 	sub := machine.NewMachineContext(mc.Context(), cont)
 	sub.SetExceptionHandler(mc.ExceptionHandler())
 	sub.SetMaxCallDepth(mc.MaxCallDepth())
+	sub.SetMaxStackSize(mc.MaxStackSize())
 	sub.SetThread(mc.Thread())
 	err = sub.Run()
 	if err != nil {
@@ -175,6 +176,7 @@ func PrimLoad(cc machine.CallContext) error {
 		sub := machine.NewMachineContext(mc.Context(), cont)
 		sub.SetExceptionHandler(mc.ExceptionHandler())
 		sub.SetMaxCallDepth(mc.MaxCallDepth())
+		sub.SetMaxStackSize(mc.MaxStackSize())
 		sub.SetThread(mc.Thread())
 		err = sub.Run()
 		if err != nil {
