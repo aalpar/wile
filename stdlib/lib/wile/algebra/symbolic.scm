@@ -349,6 +349,12 @@ Parameters:
 Returns: theory
 Category: algebra
 Keywords: group, projection, theory, inverse, involution"
+  (if (not (group? G))
+      (error "group->theory: expected group" G))
+  (if (not (symbol? op-symbol))
+      (error "group->theory: op-symbol must be a symbol" op-symbol))
+  (if (not (symbol? inv-symbol))
+      (error "group->theory: inv-symbol must be a symbol" inv-symbol))
   (let ((monoid-th (monoid->theory (group->monoid G) op-symbol))
         (inv-str (symbol->string inv-symbol)))
     (theory-merge
@@ -364,6 +370,10 @@ Keywords: group, projection, theory, inverse, involution"
 associativity for both operations, commutativity for addition,
 and absorbing element for multiplication.
 
+Note: equal? is type-sensitive for numbers (0 and 0.0 are not equal?).
+If terms mix exact and inexact numbers, construct the theory manually
+with an appropriate predicate instead of using this projection.
+
 Parameters:
   S : semiring
   plus-sym : symbol
@@ -371,40 +381,46 @@ Parameters:
 Returns: theory
 Category: algebra
 Keywords: semiring, projection, theory, distributive, absorbing"
+  (if (not (semiring? S))
+      (error "semiring->theory: expected semiring" S))
+  (if (not (symbol? plus-sym))
+      (error "semiring->theory: plus-sym must be a symbol" plus-sym))
+  (if (not (symbol? times-sym))
+      (error "semiring->theory: times-sym must be a symbol" times-sym))
   (let ((z (semiring-zero S))
         (o (semiring-one S))
-        (ps (symbol->string plus-sym))
-        (ts (symbol->string times-sym)))
+        (plus-str (symbol->string plus-sym))
+        (times-str (symbol->string times-sym)))
     (make-theory
       (list
         ;; Additive identity
         (make-named-axiom "identity-plus"
-          (string-append ps "(a, 0) = a")
+          (string-append plus-str "(a, 0) = a")
           (make-identity-axiom plus-sym
             (lambda (x) (equal? x z))))
         ;; Multiplicative identity
         (make-named-axiom "identity-times"
-          (string-append ts "(a, 1) = a")
+          (string-append times-str "(a, 1) = a")
           (make-identity-axiom times-sym
             (lambda (x) (equal? x o))))
         ;; Additive commutativity
         (make-named-axiom "commutativity-plus"
-          (string-append ps "(a, b) = " ps "(b, a)")
+          (string-append plus-str "(a, b) = " plus-str "(b, a)")
           (make-commutativity-axiom plus-sym))
         ;; Multiplicative absorbing element
         (make-named-axiom "absorbing-times"
-          (string-append ts "(a, 0) = 0")
+          (string-append times-str "(a, 0) = 0")
           (make-absorbing-axiom times-sym
             (lambda (x) (equal? x z))))
         ;; Additive associativity
         (make-named-axiom "associativity-plus"
-          (string-append ps "(a, " ps "(b, c)) = "
-                         ps "(" ps "(a, b), c)")
+          (string-append plus-str "(a, " plus-str "(b, c)) = "
+                         plus-str "(" plus-str "(a, b), c)")
           (make-associativity-axiom plus-sym))
         ;; Multiplicative associativity
         (make-named-axiom "associativity-times"
-          (string-append ts "(a, " ts "(b, c)) = "
-                         ts "(" ts "(a, b), c)")
+          (string-append times-str "(a, " times-str "(b, c)) = "
+                         times-str "(" times-str "(a, b), c)")
           (make-associativity-axiom times-sym)))
       (list plus-sym times-sym))))
 
@@ -420,13 +436,17 @@ Parameters:
 Returns: theory
 Category: algebra
 Keywords: ring, projection, theory, negation, involution"
+  (if (not (ring? R))
+      (error "ring->theory: expected ring" R))
+  (if (not (symbol? neg-sym))
+      (error "ring->theory: neg-sym must be a symbol" neg-sym))
   (let ((semi-th (semiring->theory (ring->semiring R) plus-sym times-sym))
-        (ns (symbol->string neg-sym)))
+        (neg-str (symbol->string neg-sym)))
     (theory-merge
       semi-th
       (make-theory
         (list (make-named-axiom "negate-involution"
-                (string-append ns "(" ns "(a)) = a")
+                (string-append neg-str "(" neg-str "(a)) = a")
                 (make-involution-axiom neg-sym)))
         '()))))
 
@@ -443,13 +463,17 @@ Parameters:
 Returns: theory
 Category: algebra
 Keywords: field, projection, theory, reciprocal, involution"
+  (if (not (field? F))
+      (error "field->theory: expected field" F))
+  (if (not (symbol? recip-sym))
+      (error "field->theory: recip-sym must be a symbol" recip-sym))
   (let ((ring-th (ring->theory (field->ring F) plus-sym times-sym neg-sym))
-        (rs (symbol->string recip-sym)))
+        (recip-str (symbol->string recip-sym)))
     (theory-merge
       ring-th
       (make-theory
         (list (make-named-axiom "reciprocal-involution"
-                (string-append rs "(" rs "(a)) = a")
+                (string-append recip-str "(" recip-str "(a)) = a")
                 (make-involution-axiom recip-sym)))
         '()))))
 
@@ -466,6 +490,12 @@ Parameters:
 Returns: theory
 Category: algebra
 Keywords: Heyting, projection, theory, intuitionistic, lattice"
+  (if (not (heyting-algebra? H))
+      (error "heyting->theory: expected heyting-algebra" H))
+  (if (not (symbol? join-sym))
+      (error "heyting->theory: join-sym must be a symbol" join-sym))
+  (if (not (symbol? meet-sym))
+      (error "heyting->theory: meet-sym must be a symbol" meet-sym))
   (lattice->theory (heyting->lattice H) join-sym meet-sym))
 
 (define (boolean->theory B join-sym meet-sym comp-sym)
@@ -493,7 +523,14 @@ Keywords: Boolean, projection, theory, complement, involution, lattice"
 
 ;; ─── Equivalence discovery ────────────────
 
-(define (discover-equivalences theory proto term)
+(define discover-equivalences
+  (case-lambda
+    ((theory proto term)
+     (discover-equivalences theory proto term 100))
+    ((theory proto term fuel)
+     (discover-equivalences* theory proto term fuel))))
+
+(define (discover-equivalences* theory proto term fuel)
   "Find distinct normal forms by running TERM through the full theory
 and each non-directional single-rule sub-theory.  Returns a list of
 (normal-form . trace) pairs, deduplicated by equal? on normal-form.
@@ -501,10 +538,15 @@ and each non-directional single-rule sub-theory.  Returns a list of
 Directional axioms (e.g. associativity) are not explored individually —
 they would produce combinatorial bracketings without reducing term size.
 
+If a sub-theory normalizer exhausts its fuel, the partially-normalized
+form is included in the results.  Callers can detect this by checking
+the trace for fuel-exhausted-step? entries.
+
 Parameters:
   theory : theory
   proto : term-protocol
   term : any
+  fuel : integer
 Returns: list
 Category: algebra
 Keywords: equivalence, discovery, normal form, exploration"
@@ -515,7 +557,7 @@ Keywords: equivalence, discovery, normal form, exploration"
   (let ((seen '())
         (results '()))
     (define (try-theory th)
-      (let ((norm (make-recursive-normalizer th proto)))
+      (let ((norm (make-recursive-normalizer th proto fuel)))
         (let-values (((result trace) (norm term)))
           (unless (member result seen)
             (set! seen (cons result seen))

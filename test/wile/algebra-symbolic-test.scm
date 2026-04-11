@@ -457,5 +457,36 @@
   (test-error (theory-merge "not a theory" (make-theory '() '())))
   (test-error (theory-merge (make-theory '() '()) "not a theory")))
 
+(test-group "validation-projections"
+  ;; group->theory with non-group
+  (test-error (group->theory "not a group" '+ 'neg))
+  ;; group->theory with non-symbol
+  (test-error (group->theory (make-group + 0 -) "plus" 'neg))
+  ;; semiring->theory with non-semiring
+  (test-error (semiring->theory "not a semiring" '+ '*))
+  ;; ring->theory with non-ring
+  (test-error (ring->theory "not a ring" '+ '* 'neg))
+  ;; field->theory with non-field
+  (test-error (field->theory "not a field" '+ '* 'neg 'recip))
+  ;; heyting->theory with non-heyting
+  (test-error (heyting->theory "not a heyting" 'join 'meet)))
+
+(test-group "validation-discover-equivalences"
+  ;; non-theory
+  (test-error (discover-equivalences "not a theory" sym-proto 'x))
+  ;; non-protocol
+  (let ((th (make-theory '() '())))
+    (test-error (discover-equivalences th "not a proto" 'x))))
+
+(test-group "discover-equivalences-custom-fuel"
+  ;; Verify fuel parameter is forwarded
+  (let* ((th (make-theory
+               (list (make-named-axiom "identity" "a + 0 = a"
+                       (make-identity-axiom '+ (lambda (x) (eq? x 'zero)))))
+               '(+)))
+         (equivs (discover-equivalences th sym-proto '(+ x zero) 50)))
+    (test #t (>= (length equivs) 1))
+    (test 'x (caar equivs))))
+
 (test-end)
 (test-exit)
