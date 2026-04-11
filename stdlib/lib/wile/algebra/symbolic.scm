@@ -380,7 +380,7 @@ Parameters:
   times-sym : symbol
 Returns: theory
 Category: algebra
-Keywords: semiring, projection, theory, distributive, absorbing"
+Keywords: semiring, projection, theory, absorbing"
   (if (not (semiring? S))
       (error "semiring->theory: expected semiring" S))
   (if (not (symbol? plus-sym))
@@ -453,6 +453,11 @@ Keywords: ring, projection, theory, negation, involution"
 (define (field->theory F plus-sym times-sym neg-sym recip-sym)
   "Project field F into a theory with 8 axioms: the 7 ring axioms
 plus involution for reciprocal.
+
+Note: the reciprocal involution recip(recip(a)) = a is valid for all
+nonzero elements.  Terms containing recip applied to zero are already
+undefined in the field — the rewrite does not introduce unsoundness.
+Callers must ensure terms are well-typed (no recip of zero).
 
 Parameters:
   F : field
@@ -532,7 +537,7 @@ Keywords: Boolean, projection, theory, complement, involution, lattice"
 
 (define (discover-equivalences* theory proto term fuel)
   "Find distinct normal forms by running TERM through the full theory
-and each non-directional single-rule sub-theory.  Returns a list of
+and each non-directional single-axiom sub-theory.  Returns a list of
 (normal-form . trace) pairs, deduplicated by equal? on normal-form.
 
 Directional axioms (e.g. associativity) are not explored individually —

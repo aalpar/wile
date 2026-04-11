@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - Add theory projections for group, semiring, ring, field, and Heyting algebra in `(wile algebra symbolic)`
-- Add `discover-equivalences` — explore distinct normal forms by running terms through single-rule sub-theories
+- Add `discover-equivalences` — explore distinct normal forms by running terms through single-axiom sub-theories
 
 ## [1.13.0] - 2026-04-10
 
