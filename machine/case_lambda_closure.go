@@ -18,7 +18,10 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-var _ values.Callable = (*CaseLambdaClosure)(nil)
+var (
+	_ values.Callable = (*CaseLambdaClosure)(nil)
+	_ NamedCallable   = (*CaseLambdaClosure)(nil)
+)
 
 // CaseLambdaClosure dispatches to the first clause whose arity matches
 // the argument count. Each clause is a MachineClosure with its own

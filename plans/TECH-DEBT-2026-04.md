@@ -8,33 +8,29 @@ forcing type-switch proliferation, (3) silent limits with no enforcement.
 
 ---
 
-## Phase 1: Silent Limits & Safety (High priority, low effort)
+## Phase 1: Silent Limits & Safety (High priority, low effort) — Mostly Complete
 
 Items that fail silently — wrong results, not crashes.
 
-### Task 1.1: Fix `uint16` source table index overflow
+### Task 1.1: ~~Fix `uint16` source table index overflow~~ [Done]
 
-**Files:** `machine/native_template.go` (lines 245–257, `internSource`; `sourceRefs []uint16`), `machine/edit_plan.go:217`
-**Problem:** `internSource()` returns `uint16`. After 65,536 distinct source locations per template the index wraps to 0 silently — no bounds check, no panic, no error. Stack traces and error messages silently point to wrong source lines.
-**Fix:** Change `sourceRefs []uint16` to `[]uint32` and return type of `internSource` to `uint32`. Update `edit_plan.go:217` `rewriteCode` which also uses `[]uint16`. Add a test that interns >65536 sources and verifies the index is correct.
+Changed `sourceRefs []uint16` → `[]uint32` and `internSource` return type to `uint32` across `native_template.go`, `edit_plan.go`, `peephole.go`, and all test files. Overflow guard updated from `MaxUint16` to `MaxUint32`. Test `TestInternSource_LargeIndex` verifies 70K source entries work correctly.
+
+### Task 1.2: ~~Add opcode round-trip exhaustiveness test~~ [Done — already existed]
+
+`TestOpcodeRoundTrip` at `machine/native_template_test.go:425`. Iterates all opcodes, skips `OpComplex`, verifies `instructionToOperation` returns non-nil.
+
+### Task 1.3: ~~Add extension list consistency test~~ [Done — already existed]
+
+`TestExtensionListConsistency` at `extension_consistency_test.go:29`. Verifies `(wile <name>)` library set matches expected extensions via `AvailableLibraries`.
+
+### Task 1.4: Add eval stack size limit for sandboxed embedders
+
+**Files:** `machine/stack.go`, `machine/machine_context.go`, `engine.go` (new option)
+**Problem:** The eval stack (`[]values.Value`) grows without bound. A program like `(f a1 a2 ... a1000000)` allocates a million-element slice. Call depth is configurable (`WithMaxCallDepth`), but stack size is not. Sandboxed embedders running untrusted code have no protection against OOM via huge argument lists.
+**Fix:** Add `WithMaxStackSize(n int)` engine option. Check on push only when limit is set (zero = unlimited, matching `WithMaxCallDepth` convention).
 **Effort:** S
-**Verify:** `make lint && make test ./machine/...`
-
-### Task 1.2: Add opcode round-trip exhaustiveness test
-
-**Files:** `machine/native_template.go:126-229` (`instructionToOperation`), `machine/native_template.go:284-341` (`operationToInstruction`), `machine/opcode.go`
-**Problem:** Two parallel hand-maintained switches over all opcodes. A new opcode added to the `const` block but missing from either switch returns `nil` / `(Instruction{}, false)` silently. No compile-time check for exhaustiveness.
-**Fix:** Add `TestOpcodeRoundTrip` in `machine/native_template_test.go` that creates an `Instruction` for every opcode value `< opCount` and asserts `instructionToOperation` returns non-nil for all non-side-table opcodes.
-**Effort:** S
-**Verify:** `go test -run TestOpcodeRoundTrip ./machine/...`
-
-### Task 1.3: Add extension list consistency test
-
-**Files:** `options.go:311-325` (`AllExtensions()`), `internal/bootstrap/environment_tiny.go:67-79` (`allExtensions`)
-**Problem:** Two lists of extensions — one for the public API, one for bootstrap — not derived from each other. A new extension added to one but not the other causes divergence between CLI and embedded engine behavior.
-**Fix:** Add `TestExtensionListConsistency` that compares sorted extension names from both lists.
-**Effort:** S
-**Verify:** `go test -run TestExtensionListConsistency ./...`
+**Verify:** `make lint && make test ./machine/... && go test -run TestStackLimit ./...`
 
 ---
 
@@ -68,7 +64,7 @@ Single `syntaxCompilerEntries` slice feeds both `compilerRegistry` (dispatch) an
 
 ---
 
-## Phase 4: Test Discipline (Medium priority, medium effort) — COMPLETE
+## Phase 4: Test Discipline (Medium priority, medium effort) — Mostly Complete
 
 ### Task 4.1: ~~Migrate error-string assertions to `errors.Is`~~ [Done]
 
@@ -80,13 +76,9 @@ Migrated 25 sites across 4 files:
 
 Skipped (valid string tests): `ffi_test.go` (tests error propagation quality, sentinels already present), `exception_escape_test.go` (tests `Error()` formatting output).
 
-### Task 4.2: Add security gate integration tests
+### Task 4.2: ~~Add security gate integration tests~~ [Done — already existed]
 
-**Files:** `extensions/system/prim_system.go:63-69,108-114`, `extensions/files/prim_files.go`, `engine_sandbox_test.go`
-**Problem:** No test creates an engine with `DenyAll()` authorizer and verifies that system/file extension primitives are actually blocked end-to-end.
-**Fix:** Add tests in `engine_sandbox_test.go` calling `(exit)`, `(get-environment-variable "PATH")`, and `(open-input-file "/etc/passwd")` with a `DenyAll()` authorizer, verifying `ErrAccessDenied`.
-**Effort:** S
-**Verify:** `go test -run TestSandbox ./...`
+**Assessment (2026-04-11):** `engine_sandbox_test.go` already contains 12+ tests covering `DenyAll()`, `ReadOnly()`, `FilesystemRoot()`, and selective authorization policies against files, system, eval, and import primitives. Tests: `TestAuthorizer_DenyBlocksFileRead`, `TestAuthorizer_DenyBlocksFileWrite`, `TestAuthorizer_DenyBlocksDelete`, `TestAuthorizer_DenyBlocksEnvVar`, `TestAuthorizer_DenyBlocksExit`, `TestAuthorizer_DenyBlocksLoad`, `TestAuthorizer_DenyBlocksImport`, etc.
 
 ### Task 4.3: ~~Add rest-arg buffer aliasing regression test~~ [Done]
 
@@ -103,13 +95,11 @@ Added 4 cases to `TestSyntaxRules_Errors`: non-list clause, one-element clause, 
 Interfaces and helpers that would eliminate type-switch proliferation and
 hand-unrolled patterns.
 
-### Task 5.1: Add `Name()`/`Doc()` to `Closure` interface
+### Task 5.1: ~~Add `Name()`/`Doc()` to `Closure` interface~~ [Done]
 
-**Files:** `machine/closure.go` (interface), `machine/machine_closure.go`, `machine/foreign_closure.go`, `machine/case_lambda_closure.go`, `registry/core/prim_reflection.go` (6 switches), `internal/repl/meta.go` (3 switches), `extensions/introspection/prim_disassemble.go` (1 switch)
-**Problem:** Nine type switches over the same three closure types extracting name and documentation. Every new callable type requires updating all 9+ sites.
-**Fix:** Add `Name() string` and `Doc() string` to the `Closure` interface. All three concrete types already have these methods. Update `prim_reflection.go`, `meta.go`, and `prim_disassemble.go` to use the interface methods instead of type switches. Keep type switches only where type-specific behavior differs (e.g., `CaseLambdaClosure` template access).
-**Effort:** M
-**Verify:** `make lint && make test ./machine/... ./registry/core/... ./internal/repl/... ./extensions/introspection/...`
+Added `NamedCallable` interface (`Name() string`, `Doc() string`) to `machine/closure.go`. Embedded in `Closure`. Compile-time checks for `MachineClosure` and `CaseLambdaClosure`. Replaced anonymous interfaces in `prim_reflection.go` with `machine.NamedCallable`.
+
+**Assessment (2026-04-11):** `PrimProcedureName` and `PrimProcedureDocumentation` already used anonymous interfaces (`interface{ Name() string }`). The remaining type switches in prim_reflection.go, meta.go, and prim_disassemble.go extract type-specific data (arity, template, source location, disassembly) that genuinely differs per type — Name()/Doc() cannot simplify those further.
 
 ### Task 5.2: Add `SetStringOrFalse` helper
 
@@ -135,25 +125,29 @@ hand-unrolled patterns.
 **Effort:** S
 **Verify:** `make lint && make test ./registry/core/...`
 
+### Task 5.5: Complete `RequireArg[T]` migration
+
+**Files:** 16 manual `mc.Arg(n).(Type)` + `if !ok` sites: `registry/core/prim_reflection.go` (2), `prim_exceptions.go` (2), `prim_predicates.go` (2), `prim_syntax_loc.go` (1), `prim_opaque.go` (1), `extensions/math/prim_rounding.go` (3), `extensions/threads/prim_threads.go` (1), `extensions/process/prim_process.go` (1), `internal/extensions/namespace/prim_namespace.go` (1), `internal/extensions/all/prim_all.go` (1), `internal/extensions/io/prim_ports.go` (1)
+**Problem:** `helpers.RequireArg[T]` (130 usages across 25 files) is the standard pattern. 16 sites still use manual 3-line assertion. Two ways to do the same thing confuses contributors.
+**Fix:** Migrate sites where semantics match. Leave predicate-style sites that branch on `ok` for non-error paths (e.g., `prim_predicates.go`).
+**Effort:** S
+**Verify:** `make lint && make test ./registry/... ./extensions/... ./internal/extensions/...`
+
 ---
 
 ## Phase 6: Dead Code & Cleanup (Medium priority, low effort)
 
-### Task 6.1: Delete `runtime/` package
+### Task 6.1: ~~Delete `runtime/` package~~ [Done]
 
-**Files:** `runtime/runtime.go`, `runtime/doc.go`, `runtime/runtime_test.go`
-**Problem:** Exports `Compile`, `Run`, and `Load` duplicating Engine API. Imported by zero packages. Doc comments reference internal API.
-**Fix:** Delete the entire `runtime/` directory.
-**Effort:** S
+Already deleted. Package no longer exists.
+
+### Task 6.2: Replace `context.TODO()` in test files
+
+**Files:** 431 occurrences across 39 test files. Largest concentrations: `internal/parser/parser_coverage_test.go` (104), `internal/parser/parser_test.go` (62), `internal/validate/validate_test.go` (44), `internal/bootstrap/multithreading_test.go` (30), `registry/core/prim_io_test.go` (27), `internal/match/syntax_expand_test.go` (23).
+**Problem:** `context.TODO()` signals "haven't decided yet" — the correct answer in test code is `context.Background()`. Originally scoped to 7 sites in test helpers; actual scope is 431 sites across the full test suite.
+**Fix:** Project-wide `context.TODO()` → `context.Background()` replacement in `*_test.go` files.
+**Effort:** S (mechanical)
 **Verify:** `make lint && make test ./...`
-
-### Task 6.2: Replace `context.TODO()` in test helpers
-
-**Files:** `machine/testutil/testutil.go` (5 sites), `registry/testhelpers/pipeline_helpers.go` (1 site), `registry/testhelpers/helpers.go` (1 site)
-**Problem:** `context.TODO()` signals "haven't decided yet" — the correct answer in test helpers is `context.Background()`.
-**Fix:** Replace all 7 `context.TODO()` with `context.Background()`.
-**Effort:** S
-**Verify:** `make lint && make test ./machine/testutil/... ./registry/testhelpers/...`
 
 ### Task 6.3: Fix receiver naming on production types
 
@@ -162,6 +156,14 @@ hand-unrolled patterns.
 **Fix:** Rename receivers to `p`. Use `gofmt` or editor rename to avoid mistakes.
 **Effort:** S
 **Verify:** `make lint && make test ./...`
+
+### Task 6.4: Add `typeswitchlint` to "ADDING A NEW VALUE TYPE" guide
+
+**Files:** `values/values.go:86` (guide comment), `cmd/typeswitchlint/main.go:46` (`knownValueTypes`)
+**Problem:** The guide comment lists 7 steps for adding a new value type. Step 8 — updating `cmd/typeswitchlint/main.go:knownValueTypes` — is missing. A new value type added by following the guide will silently escape lint coverage.
+**Fix:** Add "8. cmd/typeswitchlint/main.go — add to knownValueTypes" to the guide comment.
+**Effort:** S
+**Verify:** Read the guide comment, verify all 8 steps match reality.
 
 ---
 
@@ -200,10 +202,18 @@ These are longer-term items to tackle opportunistically when working in the area
 ### Task 8.3: Fix `internal/repl` importing `machine/compilation`
 
 **Files:** `internal/repl/meta.go:17-18`
-**Problem:** REPL (presentation layer) imports `machine/compilation` (deep internal) to type-assert `LibraryRegistry` and access `CompiledLibrary` fields.
+**Problem:** REPL (presentation layer) imports `machine/compilation` (deep internal) to type-assert `LibraryRegistry` and access `CompiledLibrary` fields. Also `registry/core/prim_reflection.go` imports for `ParseLibraryNameFromDatum`.
 **Fix:** Widen `LibrarySearcher` interface to expose operations used at each call site (`Lookup`, `All`, `IsLoading`), or extract a `LibraryInfo` value type that `meta.go` consumes without importing `compilation`.
 **Effort:** M
 **Verify:** `make lint && make test ./internal/repl/... ./machine/...`
+
+### Task 8.4: Make `DefaultBigFloatPrecision` configurable
+
+**Files:** `values/big_float.go:32` (`DefaultBigFloatPrecision = 256`), 12 call sites across `values/big_float.go`, `values/big_complex.go`, `values/promotion.go`
+**Problem:** All BigFloat arithmetic uses a hardcoded 256-bit precision. No engine option exists to change it. Users doing high-precision numerical work (financial, scientific) have no recourse without forking. Architecturally awkward because `values/` is below `machine/`, so threading config requires either a context-local value or a field on MachineContext propagated during arithmetic.
+**Fix:** Add `WithBigFloatPrecision(bits uint)` engine option. Thread precision through a field readable during promotion/construction. The 12 call sites would accept a precision parameter or read from a context.
+**Effort:** M
+**Verify:** `make lint && make test ./values/... ./machine/...`
 
 ---
 
@@ -211,13 +221,15 @@ These are longer-term items to tackle opportunistically when working in the area
 
 | Phase | Items | Effort | Theme |
 |-------|-------|--------|-------|
-| 1 | 3 tasks | S each | Silent limits — add overflow guards, exhaustiveness tests |
+| 1 | 4 tasks (1.1-1.4) | S each | Silent limits — overflow guards, exhaustiveness tests, stack limit |
 | 2 | 3 tasks | S-M | File resolution — ~~COMPLETE~~ (2.1 premise incorrect, 2.2+2.3 done) |
 | 3 | 2 tasks | M each | Registration — ~~COMPLETE~~ (3.1-3.2 done, found+fixed 6 missing expander entries) |
-| 4 | 4 tasks | S-M | Test discipline — ~~COMPLETE~~ (4.1-4.4 done, 4.2 was already done) |
-| 5 | 4 tasks | S-M | Missing abstractions — interfaces, helpers, convention enforcement |
-| 6 | 3 tasks | S each | Dead code and style cleanup |
+| 4 | 4 tasks | S-M | Test discipline — Mostly complete (4.1, 4.3, 4.4 done; 4.2 open) |
+| 5 | 5 tasks (5.1-5.5) | S-M | Missing abstractions — interfaces, helpers, convention enforcement |
+| 6 | 4 tasks (6.1-6.4) | S each | Dead code and style cleanup (6.1 done) |
 | 7 | 1 task | L | Test helper unification |
-| 8 | 3 tasks | M each | Architectural improvements (opportunistic) |
+| 8 | 4 tasks (8.1-8.4) | M each | Architectural improvements (opportunistic) |
 
-**Recommended execution order:** Phase 1 (cheap safety wins) → Phase 6 (cheap cleanup) → Phase 2 (file resolution, high impact for embedding) → Phase 4 (test discipline) → Phase 3 (registration) → Phase 5 (abstractions) → Phase 7 → Phase 8.
+**Recommended execution order:** Phase 1 (cheap safety wins) → Phase 6 (cheap cleanup) → Phase 5 (abstractions) → Phase 7 (test helpers) → Phase 8 (architecture).
+
+**Last updated:** 2026-04-11 (added Tasks 1.4, 5.5, 6.4, 8.4 from full-codebase reassessment; marked 6.1 done; expanded 6.2 scope from 7 to 431 sites).

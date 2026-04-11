@@ -113,7 +113,7 @@ var loadToFusedPush = [opCount]OpCode{
 // the Push may be a convergence point for multiple control flow paths
 // (e.g., both branches of an `if` expression that share a Push to push
 // the result). Fusing would bind the Push to only the Load's value.
-func fuseLoadPush(code []Instruction, sourceRefs []uint16, plan *EditPlan) {
+func fuseLoadPush(code []Instruction, sourceRefs []uint32, plan *EditPlan) {
 	targets := branchTargets(code)
 	for i := 0; i < len(code)-1; i++ {
 		fused := loadToFusedPush[code[i].Op]
@@ -129,7 +129,7 @@ func fuseLoadPush(code []Instruction, sourceRefs []uint16, plan *EditPlan) {
 
 // fusePullApply fuses Pull + Apply into a single OpPullApply instruction.
 // Every function call emits this pair; fusing saves one dispatch per call.
-func fusePullApply(code []Instruction, sourceRefs []uint16, plan *EditPlan) {
+func fusePullApply(code []Instruction, sourceRefs []uint32, plan *EditPlan) {
 	targets := branchTargets(code)
 	for i := 0; i < len(code)-1; i++ {
 		if code[i].Op == OpPull && code[i+1].Op == OpApply && !targets[i+1] {
