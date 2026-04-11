@@ -1,7 +1,7 @@
 # Symbolic Algebra — Connecting Structures to Rewriting
 
 **Date:** 2026-04-10
-**Status:** Approved
+**Status:** Implemented (PRs #632, #633)
 **Depends on:** 2026-03-25-algebra-library-design.md, 2026-03-25-algebra-rewrite-design.md, 2026-04-09-orthogonal-algebra-types.md
 
 ## Problem

@@ -15,7 +15,7 @@ When investigating R7RS conformance issues:
 
 | File | Contents | Status |
 |------|----------|--------|
-| `PERFORMANCE.md` | Remaining optimizations (procedure inlining, env frame slimming), benchmark baseline, fused lexing research | Procedure inlining + env frame slimming open; NaN-boxing blocked by unsafe |
+| `PERFORMANCE.md` | Remaining optimizations (env frame slimming), benchmark baseline, fused lexing research | Procedure inlining **Complete** (PR #605); env frame slimming open; NaN-boxing blocked by unsafe |
 | `UNBOXED-FLOAT-PIPELINE.md` | Three-layer unboxed float pipeline (value register, tagged stack, binding unboxing) to eliminate Float heap allocations in arithmetic loops | Proposed — 4 phases |
 | `GC-PRESSURE-REDUCTION.md` | FreeList migration, pre-sized bindings, env frame leak fix | **Complete** (PRs #562-563) |
 | `CORE-LET.md` | Core-let design: `let`/`let*`/`letrec`/`letrec*` as ValidatedExpr forms | **Complete** (design) |
@@ -30,18 +30,24 @@ When investigating R7RS conformance issues:
 | `2026-04-09-orthogonal-algebra-types.md` | Orthogonal algebra types: Heyting algebra, Boolean algebra (Monoid Action / Module deferred) | **Implemented** |
 | `2026-04-10-orthogonal-algebra-phase2-design.md` | Orthogonal algebra phase 2: Setoid, Category, Closure Operator, Differential Ring | **Implemented** |
 | `2026-04-10-orthogonal-algebra-phase2-impl.md` | Phase 2 implementation plan | **Implemented** |
-| `2026-04-10-symbolic-algebra-design.md` | Symbolic algebra design: theory projections, recursive normalizer, traced rewriting | **Complete** |
+| `2026-04-10-symbolic-algebra-design.md` | Symbolic algebra design: theory projections, recursive normalizer, traced rewriting | **Implemented** (PRs #632, #633) |
 | `2026-04-10-symbolic-algebra-impl.md` | Symbolic algebra implementation plan | **Phases 1-2 complete**; Phase 3 (wile-goast integration) in wile-goast |
 | `AVAILABLE-LIBRARIES.md` | Library discovery design: `LibraryEnumerator` interface, `(available-libraries)` primitive | **Approved** (design) |
 | `CAPTURE-ANALYSIS.md` | Capture analysis design for let bindings (B1) | **Complete** |
+| `CAPTURE-ANALYSIS-IMPL.md` | Capture analysis implementation plan | **Complete** |
 | `ESCAPE-ANALYSIS.md` | Escape analysis design for let-bound closures (B2) | **Complete** (design) |
+| `ESCAPE-ANALYSIS-IMPL.md` | Escape analysis implementation plan | **Complete** |
 | `PROCEDURE-INLINING.md` | Procedure inlining for let-bound closures: synthetic let transform, BindingID-keyed candidate registry, configurable threshold | **Complete** (PR #605) |
 | `2026-03-27-procedure-documentation-design.md` | `procedure-documentation` primitive: NativeTemplate doc field, compileBody extraction, Guile-style convention | **Complete** (PR #579) |
 | `2026-03-27-scheme-library-docstrings-design.md` | Scheme library docstrings design: conventions, phasing, scope (300 procs across 29 files) | **Complete** |
 | `2026-03-27-special-form-macro-docstrings-design.md` | Special form & macro docstrings: `BindingMeta.Doc`, `BindingSpec`, `DocEntry`, post-bootstrap `ApplyDocs` | **Complete** |
 | `2026-04-06-structured-docstring-metadata-design.md` | Structured docstring metadata: parse `Parameters:`, `Returns:`, `Category:` from Guile-style docstrings for `,doc`/`,apropos`/`,topics` parity | **Complete** |
 | `2026-03-26-extension-contracts-design.md` | Extension API contract system: ValueType enum, PrimitiveSpec type declarations, validation, doc integration | **Approved** (design) |
+| `EXTENSIBLE-TYPE-CONSTRAINTS.md` | Extensible type constraint system: `TypeConstraint` interface replacing closed `ValueType` enum | **Implemented** (PR #629) |
+| `2026-04-09-extensible-type-constraints-impl.md` | TypeConstraint interface implementation plan | **Implemented** (PR #629) |
 | `2026-03-26-extension-contracts-impl.md` | Extension contracts remaining work: Phases 2-4 outlines (Phase 1 complete) | Open |
+| `2026-03-26-extension-contracts-phase2-design.md` | Extension contracts phase 2 design: ForeignClosure validation, auto-coercion | Open |
+| `2026-03-26-extension-contracts-phase2-impl.md` | Extension contracts phase 2 implementation plan | Open |
 | `2026-03-26-environment-profiles.md` | Environment profiles design: named profiles (Tiny, Console, Small, KitchenSink), sandbox modifier | Draft |
 | `2026-03-26-environment-profiles-impl.md` | Environment profiles implementation plan | Draft |
 | `2026-03-26-wile-mcp-server-design.md` | Wile MCP server design: standalone binary exposing Scheme evaluation | Draft |
@@ -49,8 +55,23 @@ When investigating R7RS conformance issues:
 | `MACRO_SYSTEM.md` | Hygiene debugging, macro expansion tracing | Planned — not started |
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |
 | `ARCHITECTURE.md` | Dialect system, module decomposition, plugin shadowing, environment introspection | All proposed |
+| `TECH-DEBT-2026-04.md` | Tech debt assessment: sentinel migration, error handling, documentation gaps | Assessment document |
+| `TECH-DEBT-2026-04-IMPL.md` | Tech debt implementation: 7 phases complete, Phase 8 opportunistic | **Phases 1-7 Complete** |
+| `2026-03-30-machine-decomposition-design.md` | Machine package decomposition: compiler/VM/expander separation | **Approved** (design) |
+| `2026-03-31-environment-any-fields.md` | Replace `any` fields in Namespace with typed interfaces | **Complete** (PR #594) |
+| `2026-03-31-high-risk-bugfixes.md` | Sub-context winding stack hazard + cond-expand FileResolver bypass | **Complete** (PR #597) |
+| `2026-03-31-pulldrain-design.md` | O(1) PullDrain for OpPullApply dispatch | **Complete** (PRs #596, #598) |
+| `2026-04-01-disassembler-design.md` | Bytecode disassembler: Go layer, Scheme primitive, REPL `,disasm`, MCP tool | **Complete** (PR #603) |
+| `2026-04-01-engine-init-order.md` | Engine initialization order invariant: document + negative tests | **Complete** (PR #601) |
+| `2026-04-01-timing-dependent-tests.md` | Replace timing-dependent `time.Sleep` with observation-based sync | **Complete** (PR #602) |
+| `2026-04-03-syntax-rules-ellipsis-hygiene-design.md` | syntax-rules ellipsis + hygiene bug analysis (3 bugs from SRFI-42) | Bugs B+C complete; Bug A partial |
+| `2026-04-03-syntax-rules-ellipsis-hygiene-impl.md` | syntax-rules bug fix implementation plan | Bugs B+C complete; Bug A partial |
+| `2026-04-04-compilation-coverage.md` | machine/compilation coverage improvement (68.6% → 80%) | Partial (PR #608) |
+| `2026-04-05-walk-sub-exprs-design.md` | Shared ChildRole visitor for macro expansion sub-expressions | **Approved** (design) |
+| `COMPILATION-COVERAGE.md` | Compilation test coverage plan | Draft |
+| `MCP-EVAL-HARDENING.md` | MCP eval tool hardening: timeout, output limits | **Complete** |
 | `TEST-COVERAGE-AND-REFACTORING.md` | machine/ test coverage (52 files), engine.go tests, REPL tests, type switch linter, form dual-dispatch | Open |
-| `2026-04-05-structural-reduction.md` | Full-codebase structural reduction: CallContext interface, promoted op table, Thread outcome type, plus 7 deferred findings | Phases 1, 3 complete; Phase 2 rejected (benchmarked ~1.5% regression) |
+| `2026-04-05-structural-reduction.md` | Full-codebase structural reduction: CallContext interface, promoted op table, Thread outcome type, plus 7 deferred findings | Phases 1, 3, D5 complete; Phase 2 rejected; D1 stale |
 | `FIX-GUARD-MULTIPLE-VALUES.md` | `guard` body drops multiple values — `call-with-values` fix | Draft |
 | `FIX-TUPLE-FOREACH-NIL.md` | Tuple ForEach nil returns Void instead of EmptyList | Draft |
 | `UNIFY-ESCAPE-MECHANISMS.md` | Unified `call-with-exit` and prompt/abort escape paths | **Complete** (#418) |
@@ -69,11 +90,13 @@ When investigating R7RS conformance issues:
 | `LIBRARY-EXPORT-INDEX.md` | Static export index design for unloaded library discovery | **Complete** (PRs #623, #625) |
 | `LIBRARY-EXPORT-INDEX-IMPL.md` | Export index implementation plan | **Complete** (PRs #623, #624, #625) |
 | `PRIM-APROPOS-EXPORT-INDEX.md` | Fix Scheme-level `(apropos)` asymmetry (export index on Namespace) | Proposed (deferred) |
+| `2026-04-07-public-repl-api-design.md` | Public REPL API for embedders: Engine-centric components, docparse promotion | **Implemented** (PR #617) |
+| `2026-04-07-public-repl-api-impl.md` | Public REPL API implementation plan | **Implemented** (PR #617) |
 | `2026-04-06-structured-docstring-metadata-design.md` | Structured docstring metadata: `Parameters:`, `Returns:`, `Category:` from Guile-style docstrings | **Complete** |
 | `2026-04-06-structured-docstring-metadata-impl.md` | Structured docstring metadata implementation plan | **Complete** |
 | `2026-03-28-library-level-documentation-design.md` | Library-level documentation (description fields, metadata) | **Complete** |
 | `2026-03-29-doc-examples-filtering.md` | Example filtering in documentation display | **Complete** |
-| `2026-04-07-documentation-gaps-plan.md` | Documentation coverage gap analysis | Open |
+| `2026-04-07-documentation-gaps-plan.md` | Documentation coverage gap analysis | **Phases 1-4 Complete** |
 
 Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wile-goast/tree/master/plans).
 
