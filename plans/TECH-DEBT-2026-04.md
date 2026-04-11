@@ -8,7 +8,7 @@ forcing type-switch proliferation, (3) silent limits with no enforcement.
 
 ---
 
-## Phase 1: Silent Limits & Safety (High priority, low effort) — Mostly Complete
+## Phase 1: Silent Limits & Safety (High priority, low effort) — Complete
 
 Items that fail silently — wrong results, not crashes.
 
@@ -24,13 +24,9 @@ Changed `sourceRefs []uint16` → `[]uint32` and `internSource` return type to `
 
 `TestExtensionListConsistency` at `extension_consistency_test.go:29`. Verifies `(wile <name>)` library set matches expected extensions via `AvailableLibraries`.
 
-### Task 1.4: Add eval stack size limit for sandboxed embedders
+### Task 1.4: ~~Add eval stack size limit for sandboxed embedders~~ [Done]
 
-**Files:** `machine/stack.go`, `machine/machine_context.go`, `engine.go` (new option)
-**Problem:** The eval stack (`[]values.Value`) grows without bound. A program like `(f a1 a2 ... a1000000)` allocates a million-element slice. Call depth is configurable (`WithMaxCallDepth`), but stack size is not. Sandboxed embedders running untrusted code have no protection against OOM via huge argument lists.
-**Fix:** Add `WithMaxStackSize(n int)` engine option. Check on push only when limit is set (zero = unlimited, matching `WithMaxCallDepth` convention).
-**Effort:** S
-**Verify:** `make lint && make test ./machine/... && go test -run TestStackLimit ./...`
+Added `WithMaxStackSize(n uint64)` engine option. `checkStackSize()` helper enforced at 6 push opcodes (`OpPush`, `OpPushLiteral`, `OpPushGlobal`, `OpPushLocal`, `OpPushCachedBinding`, `OpUnpackListToStack`) in `Run()`. Propagated through `NewSubContext`, `NewThreadSubContext`, and `eval`/`load` primitives in `prim_eval.go`. New sentinel `ErrStackOverflow`. Design: `plans/2026-04-11-eval-stack-limit-design.md`.
 
 ---
 
@@ -221,7 +217,7 @@ These are longer-term items to tackle opportunistically when working in the area
 
 | Phase | Items | Effort | Theme |
 |-------|-------|--------|-------|
-| 1 | 4 tasks (1.1-1.4) | S each | Silent limits — overflow guards, exhaustiveness tests, stack limit |
+| 1 | 4 tasks (1.1-1.4) | S each | Silent limits — ~~COMPLETE~~ (1.1-1.3 pre-existing, 1.4 stack limit done) |
 | 2 | 3 tasks | S-M | File resolution — ~~COMPLETE~~ (2.1 premise incorrect, 2.2+2.3 done) |
 | 3 | 2 tasks | M each | Registration — ~~COMPLETE~~ (3.1-3.2 done, found+fixed 6 missing expander entries) |
 | 4 | 4 tasks | S-M | Test discipline — Mostly complete (4.1, 4.3, 4.4 done; 4.2 open) |

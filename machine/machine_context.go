@@ -79,6 +79,7 @@ type MachineContext struct {
 	thread        *values.Thread
 	syntaxCase    *syntaxCaseState // per-context syntax-case expansion state; nil when not in syntax-case
 	maxCallDepth  uint64           // 0 = unlimited (default), otherwise max continuation depth
+	maxStackSize  uint64           // 0 = unlimited (default), otherwise max eval stack entries
 	restArgBuf    values.PairBlock // reusable buffer for variadic rest-arg list construction (ForeignClosure calls)
 	isolatedMarks bool             // when true, findParameterInMarks does not walk parentMC; set by applyCapturedContinuation
 }
@@ -313,6 +314,12 @@ func (p *MachineContext) Run() error {
 			} else if mc.singleValue != nil {
 				mc.evals.Push(mc.singleValue)
 			}
+			if mc.maxStackSize > 0 {
+				err := mc.checkStackSize()
+				if err != nil {
+					return err
+				}
+			}
 			mc.pc++
 
 		case OpPop:
@@ -371,6 +378,12 @@ func (p *MachineContext) Run() error {
 			if !values.IsEmptyList(sentinel) {
 				return applyCallableError(mc, werr.WrapForeignErrorf(werr.ErrNotAList,
 					"apply: final argument is an improper list"))
+			}
+			if mc.maxStackSize > 0 {
+				errStack := mc.checkStackSize()
+				if errStack != nil {
+					return errStack
+				}
 			}
 			mc.pc++
 
@@ -462,6 +475,12 @@ func (p *MachineContext) Run() error {
 
 		case OpPushLiteral:
 			mc.evals.Push(mc.template.literals[instr.Arg])
+			if mc.maxStackSize > 0 {
+				err := mc.checkStackSize()
+				if err != nil {
+					return err
+				}
+			}
 			mc.pc++
 
 		case OpPushGlobal:
@@ -470,6 +489,12 @@ func (p *MachineContext) Run() error {
 				return err
 			}
 			mc.evals.Push(bd.Value())
+			if mc.maxStackSize > 0 {
+				errStack := mc.checkStackSize()
+				if errStack != nil {
+					return errStack
+				}
+			}
 			mc.pc++
 
 		case OpPushLocal:
@@ -478,6 +503,12 @@ func (p *MachineContext) Run() error {
 				return err
 			}
 			mc.evals.Push(bd.Value())
+			if mc.maxStackSize > 0 {
+				errStack := mc.checkStackSize()
+				if errStack != nil {
+					return errStack
+				}
+			}
 			mc.pc++
 
 		// --- Wave 5: fused call operations ---
@@ -522,6 +553,12 @@ func (p *MachineContext) Run() error {
 
 		case OpPushCachedBinding:
 			mc.evals.Push(mc.template.cachedBindings[instr.Arg].Value())
+			if mc.maxStackSize > 0 {
+				err := mc.checkStackSize()
+				if err != nil {
+					return err
+				}
+			}
 			mc.pc++
 
 		// --- Wave 7: direct foreign call operations ---
@@ -1037,6 +1074,26 @@ func (p *MachineContext) MaxCallDepth() uint64 {
 // SetMaxCallDepth sets the maximum call depth limit. 0 means unlimited.
 func (p *MachineContext) SetMaxCallDepth(n uint64) {
 	p.maxCallDepth = n
+}
+
+// MaxStackSize returns the maximum eval stack size limit. 0 means unlimited.
+func (p *MachineContext) MaxStackSize() uint64 {
+	return p.maxStackSize
+}
+
+// SetMaxStackSize sets the maximum eval stack size limit. 0 means unlimited.
+func (p *MachineContext) SetMaxStackSize(n uint64) {
+	p.maxStackSize = n
+}
+
+// checkStackSize returns ErrStackOverflow if the eval stack has exceeded
+// the configured maximum. Called after opcodes that push to the eval stack.
+func (p *MachineContext) checkStackSize() error {
+	if p.maxStackSize > 0 && uint64(p.evals.Len()) > p.maxStackSize {
+		return werr.WrapForeignErrorf(werr.ErrStackOverflow,
+			"eval stack size %d exceeds limit %d", p.evals.Len(), p.maxStackSize)
+	}
+	return nil
 }
 
 // SetThread sets the SRFI-18 thread identity on this context.

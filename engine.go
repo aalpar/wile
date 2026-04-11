@@ -59,6 +59,7 @@ type Engine struct {
 	closers         []registry.Closeable
 	closed          bool
 	maxCallDepth    uint64
+	maxStackSize    uint64
 	inlineThreshold int
 }
 
@@ -231,6 +232,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		registry:        reg,
 		closers:         closers,
 		maxCallDepth:    cfg.maxCallDepth,
+		maxStackSize:    cfg.maxStackSize,
 		inlineThreshold: cfg.inlineThreshold,
 	}
 	return q, nil
@@ -501,6 +503,7 @@ func (p *Engine) callCallable(ctx context.Context, callable values.Callable, arg
 	tpl := machine.NewEmptyNativeTemplate()
 	mc := machine.AcquireTopLevelContext(ctx, tpl, p.env)
 	mc.SetMaxCallDepth(p.maxCallDepth)
+	mc.SetMaxStackSize(p.maxStackSize)
 
 	// Create a sub-context, set up the call frame, and execute.
 	sub := mc.NewSubContext()
@@ -709,6 +712,7 @@ func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, erro
 	mc := machine.AcquireTopLevelContext(ctx, cc.template, cc.env)
 	defer machine.ReleaseTopLevelContext(mc)
 	mc.SetMaxCallDepth(p.maxCallDepth)
+	mc.SetMaxStackSize(p.maxStackSize)
 	if p.debugger != nil {
 		mc.SetDebugger(p.debugger)
 	}

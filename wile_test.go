@@ -1118,3 +1118,67 @@ func TestWithMaxCallDepth(t *testing.T) {
 		})
 	}
 }
+
+func TestWithMaxStackSize(t *testing.T) {
+	tests := []struct {
+		name        string
+		code        string
+		stackSize   uint64
+		wantErr     bool
+		errSentinel error
+	}{
+		{
+			name:        "large argument list exceeds limit",
+			code:        "(list 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20)",
+			stackSize:   10,
+			wantErr:     true,
+			errSentinel: werr.ErrStackOverflow,
+		},
+		{
+			name:      "small argument list within limit",
+			code:      "(list 1 2 3)",
+			stackSize: 50,
+			wantErr:   false,
+		},
+		{
+			name:      "zero means unlimited",
+			code:      "(list 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20)",
+			stackSize: 0,
+			wantErr:   false,
+		},
+		{
+			name:        "vector with many args exceeds limit",
+			code:        "(vector 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15)",
+			stackSize:   8,
+			wantErr:     true,
+			errSentinel: werr.ErrStackOverflow,
+		},
+		{
+			name:        "apply with long list exceeds limit via OpUnpackListToStack",
+			code:        "(apply list (make-list 50 0))",
+			stackSize:   20,
+			wantErr:     true,
+			errSentinel: werr.ErrStackOverflow,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			eng, engErr := NewEngine(context.Background(), WithMaxStackSize(tt.stackSize))
+			if engErr != nil {
+				t.Fatalf("NewEngine: %v", engErr)
+			}
+			_, err := eng.Eval(context.Background(), eng.MustParse(context.Background(), tt.code))
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if !errors.Is(err, tt.errSentinel) {
+					t.Fatalf("expected %v, got: %v", tt.errSentinel, err)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}

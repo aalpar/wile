@@ -53,6 +53,7 @@ func (p *MachineContext) NewSubContext() *MachineContext {
 	mc.thread = p.thread
 	mc.exceptionHandler = p.exceptionHandler
 	mc.maxCallDepth = p.maxCallDepth
+	mc.maxStackSize = p.maxStackSize
 	mc.barrierValid = p.barrierValid // inherit barrier context
 	mc.windingStack = p.windingStack
 	return mc
@@ -78,6 +79,7 @@ type SubContextParams struct {
 	EscapeCont       *MachineContinuation
 	ExceptionHandler *ExceptionHandler
 	MaxCallDepth     uint64
+	MaxStackSize     uint64
 	WindingStack     WindingStack
 }
 
@@ -95,6 +97,7 @@ func (p *MachineContext) CaptureSubContextParams() SubContextParams {
 		EscapeCont:       p.escapeCont,
 		ExceptionHandler: p.exceptionHandler,
 		MaxCallDepth:     p.maxCallDepth,
+		MaxStackSize:     p.maxStackSize,
 		WindingStack:     p.windingStack,
 	}
 }
@@ -119,6 +122,7 @@ func NewThreadSubContext(params SubContextParams, thread *values.Thread) *Machin
 		escapeCont:       params.EscapeCont,
 		exceptionHandler: params.ExceptionHandler,
 		maxCallDepth:     params.MaxCallDepth,
+		maxStackSize:     params.MaxStackSize,
 		// thread will be set by SetThread below
 	}
 	sub.SetThread(thread) // Sets both thread object and threadID from thread.ID()
