@@ -18,12 +18,19 @@
     ;; Recursive normalizer
     make-recursive-normalizer
     ;; Theory projections
-    monoid->theory lattice->theory boolean->theory
+    monoid->theory group->theory semiring->theory ring->theory
+    field->theory lattice->theory heyting->theory boolean->theory
+    ;; Equivalence discovery
+    discover-equivalences
     ;; Reporter
     format-trace)
   (import (scheme base)
           (wile algebra rewrite)
           (wile algebra monoid)
+          (wile algebra group)
+          (wile algebra semiring)
+          (wile algebra ring)
           (wile algebra lattice)
+          (wile algebra heyting)
           (wile algebra boolean))
   (include "symbolic.scm"))

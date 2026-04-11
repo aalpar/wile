@@ -31,7 +31,7 @@ When investigating R7RS conformance issues:
 | `2026-04-10-orthogonal-algebra-phase2-design.md` | Orthogonal algebra phase 2: Setoid, Category, Closure Operator, Differential Ring | **Implemented** |
 | `2026-04-10-orthogonal-algebra-phase2-impl.md` | Phase 2 implementation plan | **Implemented** |
 | `2026-04-10-symbolic-algebra-design.md` | Symbolic algebra design: theory projections, recursive normalizer, traced rewriting | **Complete** |
-| `2026-04-10-symbolic-algebra-impl.md` | Symbolic algebra implementation plan | **Phase 1 complete**; Phase 2 (remaining projections, discover-equivalences) open; Phase 3 in wile-goast |
+| `2026-04-10-symbolic-algebra-impl.md` | Symbolic algebra implementation plan | **Phases 1-2 complete**; Phase 3 (wile-goast integration) in wile-goast |
 | `AVAILABLE-LIBRARIES.md` | Library discovery design: `LibraryEnumerator` interface, `(available-libraries)` primitive | **Approved** (design) |
 | `CAPTURE-ANALYSIS.md` | Capture analysis design for let bindings (B1) | **Complete** |
 | `ESCAPE-ANALYSIS.md` | Escape analysis design for let-bound closures (B2) | **Complete** (design) |

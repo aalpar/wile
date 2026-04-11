@@ -111,7 +111,9 @@
     fuel-exhausted-step?
     sexp-term-protocol
     make-recursive-normalizer
-    monoid->theory lattice->theory boolean->theory
+    monoid->theory group->theory semiring->theory ring->theory
+    field->theory lattice->theory heyting->theory boolean->theory
+    discover-equivalences
     format-trace)
   (import (wile algebra setoid)
           (wile algebra order)

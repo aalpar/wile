@@ -337,6 +337,137 @@ Keywords: lattice, projection, theory, absorption, idempotence, commutativity"
           (make-associativity-axiom meet-sym)))
       (list join-sym meet-sym))))
 
+(define (group->theory G op-symbol inv-symbol)
+  "Project group G into a theory with identity, associativity, and
+involution (inverse) axioms. OP-SYMBOL names the binary operation,
+INV-SYMBOL names the inverse operation in the consumer's term language.
+
+Parameters:
+  G : group
+  op-symbol : symbol
+  inv-symbol : symbol
+Returns: theory
+Category: algebra
+Keywords: group, projection, theory, inverse, involution"
+  (let ((monoid-th (monoid->theory (group->monoid G) op-symbol))
+        (inv-str (symbol->string inv-symbol)))
+    (theory-merge
+      monoid-th
+      (make-theory
+        (list (make-named-axiom "inverse-involution"
+                (string-append inv-str "(" inv-str "(a)) = a")
+                (make-involution-axiom inv-symbol)))
+        '()))))
+
+(define (semiring->theory S plus-sym times-sym)
+  "Project semiring S into a theory with 6 axioms: identity and
+associativity for both operations, commutativity for addition,
+and absorbing element for multiplication.
+
+Parameters:
+  S : semiring
+  plus-sym : symbol
+  times-sym : symbol
+Returns: theory
+Category: algebra
+Keywords: semiring, projection, theory, distributive, absorbing"
+  (let ((z (semiring-zero S))
+        (o (semiring-one S))
+        (ps (symbol->string plus-sym))
+        (ts (symbol->string times-sym)))
+    (make-theory
+      (list
+        ;; Additive identity
+        (make-named-axiom "identity-plus"
+          (string-append ps "(a, 0) = a")
+          (make-identity-axiom plus-sym
+            (lambda (x) (equal? x z))))
+        ;; Multiplicative identity
+        (make-named-axiom "identity-times"
+          (string-append ts "(a, 1) = a")
+          (make-identity-axiom times-sym
+            (lambda (x) (equal? x o))))
+        ;; Additive commutativity
+        (make-named-axiom "commutativity-plus"
+          (string-append ps "(a, b) = " ps "(b, a)")
+          (make-commutativity-axiom plus-sym))
+        ;; Multiplicative absorbing element
+        (make-named-axiom "absorbing-times"
+          (string-append ts "(a, 0) = 0")
+          (make-absorbing-axiom times-sym
+            (lambda (x) (equal? x z))))
+        ;; Additive associativity
+        (make-named-axiom "associativity-plus"
+          (string-append ps "(a, " ps "(b, c)) = "
+                         ps "(" ps "(a, b), c)")
+          (make-associativity-axiom plus-sym))
+        ;; Multiplicative associativity
+        (make-named-axiom "associativity-times"
+          (string-append ts "(a, " ts "(b, c)) = "
+                         ts "(" ts "(a, b), c)")
+          (make-associativity-axiom times-sym)))
+      (list plus-sym times-sym))))
+
+(define (ring->theory R plus-sym times-sym neg-sym)
+  "Project ring R into a theory with 7 axioms: the 6 semiring axioms
+plus involution for negation.
+
+Parameters:
+  R : ring
+  plus-sym : symbol
+  times-sym : symbol
+  neg-sym : symbol
+Returns: theory
+Category: algebra
+Keywords: ring, projection, theory, negation, involution"
+  (let ((semi-th (semiring->theory (ring->semiring R) plus-sym times-sym))
+        (ns (symbol->string neg-sym)))
+    (theory-merge
+      semi-th
+      (make-theory
+        (list (make-named-axiom "negate-involution"
+                (string-append ns "(" ns "(a)) = a")
+                (make-involution-axiom neg-sym)))
+        '()))))
+
+(define (field->theory F plus-sym times-sym neg-sym recip-sym)
+  "Project field F into a theory with 8 axioms: the 7 ring axioms
+plus involution for reciprocal.
+
+Parameters:
+  F : field
+  plus-sym : symbol
+  times-sym : symbol
+  neg-sym : symbol
+  recip-sym : symbol
+Returns: theory
+Category: algebra
+Keywords: field, projection, theory, reciprocal, involution"
+  (let ((ring-th (ring->theory (field->ring F) plus-sym times-sym neg-sym))
+        (rs (symbol->string recip-sym)))
+    (theory-merge
+      ring-th
+      (make-theory
+        (list (make-named-axiom "reciprocal-involution"
+                (string-append rs "(" rs "(a)) = a")
+                (make-involution-axiom recip-sym)))
+        '()))))
+
+(define (heyting->theory H join-sym meet-sym)
+  "Project Heyting algebra H into a theory via its underlying lattice.
+Produces the same 10 lattice axioms. Heyting implication is not
+included as a rewrite axiom — it is a derived operation, not an
+equational simplification rule.
+
+Parameters:
+  H : heyting-algebra
+  join-sym : symbol
+  meet-sym : symbol
+Returns: theory
+Category: algebra
+Keywords: Heyting, projection, theory, intuitionistic, lattice"
+  (lattice->theory (heyting->lattice H) join-sym meet-sym))
+
 (define (boolean->theory B join-sym meet-sym comp-sym)
   "Project Boolean algebra B into a theory with 11 axioms: the 10 lattice
 axioms from the underlying lattice plus complement involution.
@@ -359,6 +490,46 @@ Keywords: Boolean, projection, theory, complement, involution, lattice"
                                  (make-involution-axiom comp-sym)))
                          '())))
     (theory-merge lattice-th involution-th)))
+
+;; ─── Equivalence discovery ────────────────
+
+(define (discover-equivalences theory proto term)
+  "Find distinct normal forms by running TERM through the full theory
+and each non-directional single-rule sub-theory.  Returns a list of
+(normal-form . trace) pairs, deduplicated by equal? on normal-form.
+
+Directional axioms (e.g. associativity) are not explored individually —
+they would produce combinatorial bracketings without reducing term size.
+
+Parameters:
+  theory : theory
+  proto : term-protocol
+  term : any
+Returns: list
+Category: algebra
+Keywords: equivalence, discovery, normal form, exploration"
+  (if (not (theory? theory))
+      (error "discover-equivalences: expected theory" theory))
+  (if (not (term-protocol? proto))
+      (error "discover-equivalences: expected term-protocol" proto))
+  (let ((seen '())
+        (results '()))
+    (define (try-theory th)
+      (let ((norm (make-recursive-normalizer th proto)))
+        (let-values (((result trace) (norm term)))
+          (unless (member result seen)
+            (set! seen (cons result seen))
+            (set! results (cons (cons result trace) results))))))
+    ;; Full theory first
+    (try-theory theory)
+    ;; Each non-directional single-rule theory
+    (for-each
+      (lambda (na)
+        (unless (directional-axiom? (named-axiom-axiom na))
+          (try-theory (make-theory (list na)
+                                   (theory-associative-ops theory)))))
+      (theory-axioms theory))
+    (reverse results)))
 
 ;; ─── Reporter ─────────────────────────────
 

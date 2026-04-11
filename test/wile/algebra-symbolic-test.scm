@@ -5,7 +5,11 @@
         (wile algebra rewrite)
         (wile algebra symbolic)
         (wile algebra monoid)
+        (wile algebra group)
+        (wile algebra semiring)
+        (wile algebra ring)
         (wile algebra lattice)
+        (wile algebra heyting)
         (wile algebra boolean))
 
 (test-begin "symbolic-algebra")
@@ -291,6 +295,153 @@
   (let ((th (make-theory '() '())))
     (test-error (make-recursive-normalizer th sym-proto 0))
     (test-error (make-recursive-normalizer th sym-proto -1))))
+
+;; ─── group->theory ─────────────────────────
+
+(test-group "group->theory-construction"
+  (let* ((G (make-group + 0 -))
+         (th (group->theory G '+ 'neg)))
+    (test 3 (length (theory-axioms th)))
+    (test "identity" (named-axiom-name (car (theory-axioms th))))
+    (test "associativity" (named-axiom-name (cadr (theory-axioms th))))
+    (test "inverse-involution" (named-axiom-name (caddr (theory-axioms th))))))
+
+(test-group "group->theory-involution"
+  (let* ((G (make-group + 0 -))
+         (th (group->theory G '+ 'neg))
+         (norm (make-recursive-normalizer th sym-proto)))
+    (let-values (((result trace) (norm '(neg (neg x)))))
+      (test 'x result)
+      (test 1 (length trace)))))
+
+;; ─── semiring->theory ──────────────────────
+
+(test-group "semiring->theory-construction"
+  (let* ((S (make-semiring + * 0 1))
+         (th (semiring->theory S '+ '*)))
+    (test 6 (length (theory-axioms th)))
+    (test '(+ *) (theory-associative-ops th))))
+
+(test-group "semiring->theory-absorbing"
+  (let* ((S (make-semiring + * 0 1))
+         (th (semiring->theory S '+ '*))
+         (norm (make-recursive-normalizer th sym-proto)))
+    ;; (* 0 y) → 0
+    (let-values (((result trace) (norm '(* 0 y))))
+      (test 0 result))))
+
+(test-group "semiring->theory-identity"
+  (let* ((S (make-semiring + * 0 1))
+         (th (semiring->theory S '+ '*))
+         (norm (make-recursive-normalizer th sym-proto)))
+    ;; (+ x 0) → x
+    (let-values (((result trace) (norm '(+ x 0))))
+      (test 'x result))))
+
+;; ─── ring->theory ──────────────────────────
+
+(test-group "ring->theory-construction"
+  (let* ((R (integer-ring))
+         (th (ring->theory R '+ '* 'neg)))
+    (test 7 (length (theory-axioms th)))))
+
+(test-group "ring->theory-cross-rule-normalization"
+  ;; (+ (* 0 y) (+ x 0)) → x  using absorbing(×) + identity(+)
+  (let* ((R (integer-ring))
+         (th (ring->theory R '+ '* 'neg))
+         (norm (make-recursive-normalizer th sym-proto)))
+    (let-values (((result trace) (norm '(+ (* 0 y) (+ x 0)))))
+      (test 'x result)
+      (test #t (> (length trace) 1)))))
+
+;; ─── field->theory ─────────────────────────
+
+(test-group "field->theory-construction"
+  (let* ((F (rational-field))
+         (th (field->theory F '+ '* 'neg 'recip)))
+    (test 8 (length (theory-axioms th)))))
+
+(test-group "field->theory-reciprocal-involution"
+  (let* ((F (rational-field))
+         (th (field->theory F '+ '* 'neg 'recip))
+         (norm (make-recursive-normalizer th sym-proto)))
+    (let-values (((result trace) (norm '(recip (recip x)))))
+      (test 'x result)
+      (test 1 (length trace)))))
+
+;; ─── heyting->theory ───────────────────────
+
+(test-group "heyting->theory-construction"
+  (let* ((H (powerset-heyting '(a b c)))
+         (th (heyting->theory H 'join 'meet)))
+    (test 10 (length (theory-axioms th)))
+    (test '(join meet) (theory-associative-ops th))))
+
+(test-group "heyting->theory-absorption"
+  (let* ((H (powerset-heyting '(a b c)))
+         (th (heyting->theory H 'join 'meet))
+         (norm (make-recursive-normalizer th sym-proto)))
+    (let-values (((result trace) (norm '(join x (meet x y)))))
+      (test 'x result))))
+
+;; ─── discover-equivalences ──────────────────
+
+(test-group "discover-equivalences-basic"
+  ;; Boolean absorption: only one normal form expected
+  (let* ((B (powerset-boolean '(x y z)))
+         (th (boolean->theory B 'or 'and 'not))
+         (equivs (discover-equivalences th sym-proto '(and x (or x y)))))
+    ;; At least the full-theory result
+    (test #t (> (length equivs) 0))
+    ;; First result should be the fully-normalized form
+    (test 'x (caar equivs))))
+
+(test-group "discover-equivalences-dedup"
+  ;; Same normal form should not appear twice
+  (let* ((B (powerset-boolean '(x y z)))
+         (th (boolean->theory B 'or 'and 'not))
+         (equivs (discover-equivalences th sym-proto '(and x (or x y))))
+         (forms (map car equivs)))
+    (let check ((remaining forms))
+      (unless (null? remaining)
+        (test #f (member (car remaining) (cdr remaining)))
+        (check (cdr remaining))))))
+
+(test-group "discover-equivalences-directional-skip"
+  ;; Associativity is directional — should not be explored as a
+  ;; standalone sub-theory (would generate extra bracketings without
+  ;; simplification). Verify by checking that all discovered forms
+  ;; are simpler or equal, not just re-bracketed.
+  (let* ((R (integer-ring))
+         (th (ring->theory R '+ '* 'neg))
+         (equivs (discover-equivalences th sym-proto '(+ (+ a b) c)))
+         (forms (map car equivs)))
+    ;; The full theory normalizes via associativity.
+    ;; But associativity alone should NOT appear as a separate result
+    ;; since it's directional. So we should not see multiple bracketings.
+    (test #t (<= (length forms) 2))))
+
+(test-group "discover-equivalences-already-normal"
+  ;; An already-normal term should produce exactly one entry
+  (let* ((B (powerset-boolean '(x y z)))
+         (th (boolean->theory B 'or 'and 'not))
+         (equivs (discover-equivalences th sym-proto 'x)))
+    (test 1 (length equivs))
+    (test 'x (caar equivs))))
+
+(test-group "discover-equivalences-multiple-forms"
+  ;; With identity only (no commutativity), (+ 0 x) normalizes to x.
+  ;; With commutativity only, (+ 0 x) normalizes to (+ x 0) — different.
+  ;; So we should get at least 2 distinct normal forms.
+  (let* ((th (make-theory
+               (list
+                 (make-named-axiom "identity" "a + 0 = a"
+                   (make-identity-axiom '+ (lambda (x) (eq? x 'zero))))
+                 (make-named-axiom "commutativity" "a + b = b + a"
+                   (make-commutativity-axiom '+)))
+               '(+)))
+         (equivs (discover-equivalences th sym-proto '(+ zero x))))
+    (test #t (>= (length equivs) 2))))
 
 (test-group "validation-theory-combinators"
   ;; theory-filter with non-theory
