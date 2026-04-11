@@ -377,6 +377,10 @@ func (p *MachineContext) Run() error {
 				return applyCallableError(mc, werr.WrapForeignErrorf(werr.ErrNotAList,
 					"apply: final argument is an improper list"))
 			}
+			errStack := mc.checkStackSize()
+			if errStack != nil {
+				return errStack
+			}
 			mc.pc++
 
 		case OpRestoreContinuation:

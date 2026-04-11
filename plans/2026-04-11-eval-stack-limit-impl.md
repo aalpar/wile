@@ -36,7 +36,7 @@ Expected: clean build.
 ### Task 2: Add `WithMaxStackSize` engine option
 
 **Files:**
-- Modify: `options.go` — add `stackSizeSet bool` and `maxStackSize uint64` to `engineConfig`, add `WithMaxStackSize` function
+- Modify: `options.go` — add `maxStackSize uint64` to `engineConfig`, add `WithMaxStackSize` function
 - Modify: `engine.go` — add `maxStackSize uint64` field to `Engine` struct, wire config into `Engine` at construction, set on `MachineContext` at the two `SetMaxCallDepth` sites
 
 **Step 1: Add fields to `engineConfig` (options.go)**
@@ -44,9 +44,11 @@ Expected: clean build.
 In `engineConfig` struct, after `callDepthSet`:
 
 ```go
-maxStackSize  uint64
-stackSizeSet  bool // true if WithMaxStackSize was explicitly called
+maxStackSize uint64
 ```
+
+No `stackSizeSet bool` needed — unlike `maxCallDepth` there is no default
+value, so zero-value = not called = unlimited.
 
 **Step 2: Add `WithMaxStackSize` function (options.go)**
 
@@ -60,7 +62,6 @@ After `WithMaxCallDepth`:
 func WithMaxStackSize(n uint64) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.maxStackSize = n
-		cfg.stackSizeSet = true
 	}
 }
 ```

@@ -25,8 +25,8 @@ New sentinel `ErrStackOverflow` in `werr/werr.go`.
 ### Engine Option
 
 `WithMaxStackSize(n uint64)` in `options.go`. Opt-in only — no default limit.
-Zero = unlimited. Uses `stackSizeSet bool` on `engineConfig` to distinguish
-"not called" from "called with 0".
+Zero = unlimited. No `stackSizeSet bool` needed — unlike `maxCallDepth` there
+is no default value, so zero-value = not called = unlimited.
 
 ### MachineContext
 
@@ -37,14 +37,16 @@ Accessor pair: `MaxStackSize() uint64`, `SetMaxStackSize(n uint64)`.
 
 ### Enforcement Points
 
-Four opcode sites in `MachineContext.Run()`:
+Six opcode sites in `MachineContext.Run()`:
 
 | Opcode | Growth | Check |
 |--------|--------|-------|
 | `OpPush` | `Push` (single value) or `PushAll` (multi-value) | After push/pushAll |
-| `OpPushLocal` | `Push` (fused load+push) | After push |
-| `OpPushCachedBinding` | `Push` (fused cached load+push) | After push |
 | `OpPushLiteral` | `Push` (fused literal load+push) | After push |
+| `OpPushGlobal` | `Push` (fused global load+push) | After push |
+| `OpPushLocal` | `Push` (fused local load+push) | After push |
+| `OpPushCachedBinding` | `Push` (fused cached load+push) | After push |
+| `OpUnpackListToStack` | `Push` per element (apply rest-arg) | After ForEach loop |
 
 Check at each site:
 
@@ -61,6 +63,14 @@ Foreign functions and complex operations that push directly to the eval stack
 (e.g., `operation_cont_mark.go`). These pushes are bounded by bytecode
 structure, not user input, and the next VM-loop push will catch any
 accumulated growth.
+
+### PushAll Multi-Value Behavior
+
+`OpPush` with `PushAll` (the multi-value path from `(values ...)`) pushes the
+entire slice before a single `checkStackSize()` runs. The stack may
+temporarily exceed the limit by the number of multi-values in a single Push.
+This is acceptable for a resource cap — the check still fires and returns the
+error.
 
 ### Sub-Context Propagation
 
@@ -80,7 +90,7 @@ same as `maxCallDepth`.
 | File | Change |
 |------|--------|
 | `werr/werr.go` | Add `ErrStackOverflow` sentinel |
-| `options.go` | Add `WithMaxStackSize`, `stackSizeSet` field |
+| `options.go` | Add `WithMaxStackSize` |
 | `engine.go` | Wire `maxStackSize` into `MachineContext` |
 | `machine/machine_context.go` | Add field, accessors, enforcement in `Run()` |
 | `machine/machine_context_subcontext.go` | Propagate to sub-contexts |

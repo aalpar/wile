@@ -1153,6 +1153,13 @@ func TestWithMaxStackSize(t *testing.T) {
 			wantErr:     true,
 			errSentinel: werr.ErrStackOverflow,
 		},
+		{
+			name:        "apply with long list exceeds limit via OpUnpackListToStack",
+			code:        "(apply list (make-list 50 0))",
+			stackSize:   20,
+			wantErr:     true,
+			errSentinel: werr.ErrStackOverflow,
+		},
 	}
 
 	for _, tt := range tests {

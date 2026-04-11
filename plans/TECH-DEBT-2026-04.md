@@ -26,7 +26,7 @@ Changed `sourceRefs []uint16` → `[]uint32` and `internSource` return type to `
 
 ### Task 1.4: ~~Add eval stack size limit for sandboxed embedders~~ [Done]
 
-Added `WithMaxStackSize(n uint64)` engine option. `checkStackSize()` helper enforced at 5 push opcodes (`OpPush`, `OpPushLiteral`, `OpPushGlobal`, `OpPushLocal`, `OpPushCachedBinding`) in `Run()`. Propagated through `NewSubContext`, `NewThreadSubContext`, and `eval`/`load` primitives in `prim_eval.go`. New sentinel `ErrStackOverflow`. Design: `plans/2026-04-11-eval-stack-limit-design.md`.
+Added `WithMaxStackSize(n uint64)` engine option. `checkStackSize()` helper enforced at 6 push opcodes (`OpPush`, `OpPushLiteral`, `OpPushGlobal`, `OpPushLocal`, `OpPushCachedBinding`, `OpUnpackListToStack`) in `Run()`. Propagated through `NewSubContext`, `NewThreadSubContext`, and `eval`/`load` primitives in `prim_eval.go`. New sentinel `ErrStackOverflow`. Design: `plans/2026-04-11-eval-stack-limit-design.md`.
 
 ---
 

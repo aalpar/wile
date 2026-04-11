@@ -54,7 +54,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 - [x] **Task 1.1: `uint16` source table index overflow** [High, S, Done]: Changed `sourceRefs` to `uint32` across `native_template.go`, `edit_plan.go`, `peephole.go`.
 - [x] **Task 1.2: Opcode round-trip exhaustiveness test** [High, S, Done]: Already existed at `machine/native_template_test.go:425`.
 - [x] **Task 1.3: Extension list consistency test** [High, S, Done]: Already existed at `extension_consistency_test.go:29`.
-- [x] **Task 1.4: Eval stack size limit** [Medium, S, Done]: Added `WithMaxStackSize(n)` engine option. `checkStackSize()` enforced at 5 push opcodes in `Run()`. Propagated through sub-contexts and `eval`/`load` primitives. `plans/2026-04-11-eval-stack-limit-design.md`
+- [x] **Task 1.4: Eval stack size limit** [Medium, S, Done]: Added `WithMaxStackSize(n)` engine option. `checkStackSize()` enforced at 6 push opcodes in `Run()` (including `OpUnpackListToStack`). Propagated through sub-contexts and `eval`/`load` primitives. `plans/2026-04-11-eval-stack-limit-design.md`
 
 **Phase 4 — Test Discipline (remaining):**
 - [x] **Task 4.2: Security gate integration tests** [Medium, S, Done]: Already existed — 12+ tests in `engine_sandbox_test.go`.
