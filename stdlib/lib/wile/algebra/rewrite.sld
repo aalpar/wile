@@ -17,7 +17,7 @@
     ;; Rule compilation
     axiom->rules
     ;; No-match sentinel
-    *no-match* no-match?
+    no-match?
     ;; Normalizer
     make-normalizer)
   (import (scheme base))

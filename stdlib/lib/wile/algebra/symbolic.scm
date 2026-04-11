@@ -59,6 +59,12 @@
 
 (define (theory-filter theory names)
   "Return a new theory containing only the named axioms whose\nnames appear in NAMES.  Preserves associative-ops unchanged.\n\nExamples:\n  (theory-filter th '(\"identity\"))\n    => theory with only the identity axiom\n\nParameters:\n  theory : theory\n  names : list\nReturns: theory\nCategory: algebra\nKeywords: filter, project, select, subset"
+  (if (not (theory? theory))
+      (error "theory-filter: expected theory" theory))
+  (for-each (lambda (n)
+              (if (not (string? n))
+                  (error "theory-filter: names must be strings" n)))
+            names)
   (make-theory
     (keep (named-axiom-name-in? names)
           (theory-axioms theory))
@@ -66,6 +72,12 @@
 
 (define (theory-exclude theory names)
   "Return a new theory with named axioms whose names appear in\nNAMES removed.  Preserves associative-ops unchanged.\n\nExamples:\n  (theory-exclude th '(\"commutativity\"))\n    => theory without commutativity\n\nParameters:\n  theory : theory\n  names : list\nReturns: theory\nCategory: algebra\nKeywords: exclude, remove, drop"
+  (if (not (theory? theory))
+      (error "theory-exclude: expected theory" theory))
+  (for-each (lambda (n)
+              (if (not (string? n))
+                  (error "theory-exclude: names must be strings" n)))
+            names)
   (make-theory
     (remove (named-axiom-name-in? names)
             (theory-axioms theory))
@@ -73,6 +85,12 @@
 
 (define (theory-prioritize theory names)
   "Return a new theory with axioms whose names appear in NAMES\nmoved to the front, preserving relative order within each group.\nThis controls rule application order in the normalizer.\n\nExamples:\n  (theory-prioritize th '(\"commutativity\"))\n    => theory with commutativity tried first\n\nParameters:\n  theory : theory\n  names : list\nReturns: theory\nCategory: algebra\nKeywords: prioritize, reorder, rule order, strategy"
+  (if (not (theory? theory))
+      (error "theory-prioritize: expected theory" theory))
+  (for-each (lambda (n)
+              (if (not (string? n))
+                  (error "theory-prioritize: names must be strings" n)))
+            names)
   (let ((pred (named-axiom-name-in? names))
         (axs  (theory-axioms theory)))
     (make-theory
@@ -82,6 +100,10 @@
 
 (define (theory-merge theory1 theory2)
   "Combine two theories by appending their axiom lists and\nassociative-ops lists.  Does not deduplicate.\n\nExamples:\n  (theory-merge plus-theory times-theory)\n    => theory with axioms from both\n\nParameters:\n  theory1 : theory\n  theory2 : theory\nReturns: theory\nCategory: algebra\nKeywords: merge, combine, union, compose"
+  (if (not (theory? theory1))
+      (error "theory-merge: expected theory" theory1))
+  (if (not (theory? theory2))
+      (error "theory-merge: expected theory" theory2))
   (make-theory
     (append (theory-axioms theory1)
             (theory-axioms theory2))
@@ -136,6 +158,12 @@ Category: algebra"
     ((theory proto)
      (make-recursive-normalizer theory proto 100))
     ((theory proto fuel)
+     (if (not (theory? theory))
+         (error "make-recursive-normalizer: expected theory" theory))
+     (if (not (term-protocol? proto))
+         (error "make-recursive-normalizer: expected term-protocol" proto))
+     (if (not (and (integer? fuel) (> fuel 0)))
+         (error "make-recursive-normalizer: fuel must be a positive integer" fuel))
      ;; Precompile rules once at construction time — each entry is
      ;; (named-axiom . compiled-rule-list), avoiding per-term allocation.
      (let ((compiled
@@ -220,6 +248,10 @@ Category: algebra"
 The identity predicate matches elements equal? to M's identity element.
 General-form strings include OP-SYMBOL for readability.
 
+Note: equal? is type-sensitive for numbers (0 and 0.0 are not equal?).
+If terms mix exact and inexact numbers, construct the theory manually
+with an appropriate predicate instead of using this projection.
+
 Parameters:
   M : monoid
   op-symbol : symbol
@@ -245,6 +277,9 @@ Keywords: monoid, projection, theory, identity, associativity"
   "Project lattice L into a theory with 10 axioms covering identity,
 commutativity, idempotence, absorption, and associativity for both
 join and meet operations. Join identity is bottom, meet identity is top.
+
+Note: identity predicates use equal?, which is type-sensitive for numbers.
+See monoid->theory for details.
 
 Parameters:
   L : lattice
@@ -346,10 +381,13 @@ Parameters:
 Returns: list
 Category: algebra"
   (map (lambda (step)
-         (string-append
-           (step-rule-name step)
-           " (" (step-general-form step) "): "
-           (display-to-string (step-before step))
-           " → "
-           (display-to-string (step-after step))))
+         (if (fuel-exhausted-step? step)
+             (string-append "[fuel exhausted] "
+               (display-to-string (step-before step)))
+             (string-append
+               (step-rule-name step)
+               " (" (step-general-form step) "): "
+               (display-to-string (step-before step))
+               " → "
+               (display-to-string (step-after step)))))
        trace))

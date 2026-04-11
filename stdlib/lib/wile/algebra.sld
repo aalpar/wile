@@ -1,5 +1,5 @@
 (define-library (wile algebra)
-  (description "Algebraic structures: setoids, orders, lattices, closure operators, Heyting/Boolean algebras, monoids, categories, semirings, groups, rings, differential rings, fields.")
+  (description "Algebraic structures, equational rewriting, and symbolic normalization. Structures: setoids, orders, lattices, closure operators, Heyting/Boolean algebras, monoids, categories, semirings, groups, rings, differential rings, fields. Rewriting: axiom-driven term normalization. Symbolic: theory projections, recursive normalization, transformation tracing.")
   (export
     ;; Setoids
     make-setoid setoid?
@@ -98,7 +98,7 @@
     make-associativity-axiom associativity-axiom?
     directional-axiom? axiom?
     axiom->rules
-    *no-match* no-match?
+    no-match?
     make-normalizer
     ;; Symbolic algebra
     make-named-axiom named-axiom?

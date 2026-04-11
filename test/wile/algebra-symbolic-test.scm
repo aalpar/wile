@@ -260,5 +260,51 @@
       (let ((last-step (list-ref trace (- (length trace) 1))))
         (test #t (fuel-exhausted-step? last-step))))))
 
+;; ─── format-trace with fuel exhaustion ────
+
+(test-group "format-trace-fuel-exhaustion"
+  ;; format-trace must handle fuel-exhausted steps (list sentinel, not string)
+  (let* ((theory (make-theory
+                   (list (make-named-axiom "identity" "a + 0 = a"
+                           (make-identity-axiom '+ (lambda (x) (eq? x 'zero)))))
+                   '(+)))
+         (norm (make-recursive-normalizer theory sym-proto 1)))
+    (let-values (((result trace) (norm '(+ (+ (+ x zero) zero) zero))))
+      (let ((formatted (format-trace trace)))
+        (test #t (> (length formatted) 0))
+        ;; Every entry must be a string (was crashing before fix)
+        (for-each (lambda (s) (test #t (string? s))) formatted)
+        ;; Last entry should mention fuel exhaustion
+        (test #t (string-includes?
+                   (list-ref formatted (- (length formatted) 1))
+                   "fuel exhausted"))))))
+
+;; ─── Validation errors ───────────────────
+
+(test-group "validation-make-recursive-normalizer"
+  ;; Passing non-theory should error
+  (test-error (make-recursive-normalizer "not a theory" sym-proto))
+  ;; Passing non-protocol should error
+  (let ((th (make-theory '() '())))
+    (test-error (make-recursive-normalizer th "not a proto")))
+  ;; Passing non-positive fuel should error
+  (let ((th (make-theory '() '())))
+    (test-error (make-recursive-normalizer th sym-proto 0))
+    (test-error (make-recursive-normalizer th sym-proto -1))))
+
+(test-group "validation-theory-combinators"
+  ;; theory-filter with non-theory
+  (test-error (theory-filter "not a theory" '("identity")))
+  ;; theory-filter with symbol names instead of strings
+  (let ((th (make-theory '() '())))
+    (test-error (theory-filter th '(identity))))
+  ;; theory-exclude with non-theory
+  (test-error (theory-exclude "not a theory" '("identity")))
+  ;; theory-prioritize with non-theory
+  (test-error (theory-prioritize "not a theory" '("identity")))
+  ;; theory-merge with non-theories
+  (test-error (theory-merge "not a theory" (make-theory '() '())))
+  (test-error (theory-merge (make-theory '() '()) "not a theory")))
+
 (test-end)
 (test-exit)

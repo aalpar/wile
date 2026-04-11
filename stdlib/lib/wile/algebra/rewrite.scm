@@ -11,8 +11,9 @@
 ;;;
 ;;; The normalizer returns #f for "no match." Internally, rule lambdas use
 ;;; *no-match* (a unique identity object checked via eq?) to distinguish
-;;; "no match" from a legitimate #f rewrite result. The sentinel and its
-;;; predicate no-match? are exported for use by (wile algebra symbolic).
+;;; "no match" from a legitimate #f rewrite result. The predicate
+;;; no-match? is exported for use by (wile algebra symbolic); the
+;;; sentinel itself stays internal.
 
 ;; ─── No-match sentinel ──────────────────────
 
@@ -119,8 +120,7 @@
 (define (axiom->rules axiom proto)
   "Compile AXIOM into a list of rewrite-rule procedures using term protocol PROTO.\nEach rule is a procedure (term -> value-or-*no-match*) that attempts\none rewriting step. Identity axioms produce two rules (left and right),\ncommutativity produces one rule that normalizes by term ordering,\nand involution produces one rule that collapses f(f(x)) to x.\n\nExamples:\n  (axiom->rules (make-identity-axiom '+ zero?) proto)\n    => list of two rule procedures (left and right identity)\n  (axiom->rules (make-involution-axiom 'neg) proto)\n    => list of one rule: neg(neg(x)) => x\n\nParameters:\n  axiom : any\n  proto : any\nReturns: list\nCategory: algebra\nKeywords: compile, rewrite rules, term rewriting, normalization\n\nSee also: `make-normalizer', `axiom?', `make-term-protocol'."
   (if (not (term-protocol? proto))
-      (error "axiom->rules: expected term-protocol" proto)
-      #f)
+      (error "axiom->rules: expected term-protocol" proto))
   (cond
     ((identity-axiom? axiom)
      (let ((target-op (identity-axiom-op axiom))

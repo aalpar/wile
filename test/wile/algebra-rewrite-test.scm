@@ -153,7 +153,10 @@
 ;; ─── No-match sentinel ─────────────────────
 
 (test-group "no-match-sentinel"
-  (test #t (no-match? *no-match*))
+  ;; Verify via axiom->rules: a rule on a non-matching term returns the sentinel
+  (let* ((rules (axiom->rules (make-identity-axiom '+ zero?) proto))
+         (result ((car rules) '(* a b))))
+    (test #t (no-match? result)))
   (test #f (no-match? #f))
   (test #f (no-match? '()))
   (test #f (no-match? 42)))
