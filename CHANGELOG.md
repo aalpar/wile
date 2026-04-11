@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-04-10
+
+### Added
+
+- Add Heyting and Boolean algebra types — bounded distributive lattices, pseudo-complement, powerset/map constructors, ring bridge projections (#630)
+- Add orthogonal algebra types — setoid, category, closure, differential with validation and projections (#631)
+- Add symbolic algebra library — theory projections from operational structures, recursive bottom-up normalizer, traced rewriting with human-readable explanations (#632)
+- Add absorption and associativity axiom types to rewrite library (#632)
+
 ## [1.12.0] - 2026-04-09
 
 ### Added
