@@ -314,9 +314,11 @@ func (p *MachineContext) Run() error {
 			} else if mc.singleValue != nil {
 				mc.evals.Push(mc.singleValue)
 			}
-			err := mc.checkStackSize()
-			if err != nil {
-				return err
+			if mc.maxStackSize > 0 {
+				err := mc.checkStackSize()
+				if err != nil {
+					return err
+				}
 			}
 			mc.pc++
 
@@ -377,9 +379,11 @@ func (p *MachineContext) Run() error {
 				return applyCallableError(mc, werr.WrapForeignErrorf(werr.ErrNotAList,
 					"apply: final argument is an improper list"))
 			}
-			errStack := mc.checkStackSize()
-			if errStack != nil {
-				return errStack
+			if mc.maxStackSize > 0 {
+				errStack := mc.checkStackSize()
+				if errStack != nil {
+					return errStack
+				}
 			}
 			mc.pc++
 
@@ -471,9 +475,11 @@ func (p *MachineContext) Run() error {
 
 		case OpPushLiteral:
 			mc.evals.Push(mc.template.literals[instr.Arg])
-			err := mc.checkStackSize()
-			if err != nil {
-				return err
+			if mc.maxStackSize > 0 {
+				err := mc.checkStackSize()
+				if err != nil {
+					return err
+				}
 			}
 			mc.pc++
 
@@ -483,9 +489,11 @@ func (p *MachineContext) Run() error {
 				return err
 			}
 			mc.evals.Push(bd.Value())
-			errStack := mc.checkStackSize()
-			if errStack != nil {
-				return errStack
+			if mc.maxStackSize > 0 {
+				errStack := mc.checkStackSize()
+				if errStack != nil {
+					return errStack
+				}
 			}
 			mc.pc++
 
@@ -495,9 +503,11 @@ func (p *MachineContext) Run() error {
 				return err
 			}
 			mc.evals.Push(bd.Value())
-			errStack := mc.checkStackSize()
-			if errStack != nil {
-				return errStack
+			if mc.maxStackSize > 0 {
+				errStack := mc.checkStackSize()
+				if errStack != nil {
+					return errStack
+				}
 			}
 			mc.pc++
 
@@ -543,9 +553,11 @@ func (p *MachineContext) Run() error {
 
 		case OpPushCachedBinding:
 			mc.evals.Push(mc.template.cachedBindings[instr.Arg].Value())
-			err := mc.checkStackSize()
-			if err != nil {
-				return err
+			if mc.maxStackSize > 0 {
+				err := mc.checkStackSize()
+				if err != nil {
+					return err
+				}
 			}
 			mc.pc++
 
