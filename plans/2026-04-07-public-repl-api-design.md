@@ -1,7 +1,7 @@
 # Public REPL API Design
 
 **Date:** 2026-04-07
-**Status:** Approved
+**Status:** Implemented (PR #617)
 **Goal:** Make REPL functionality available to external embedders as independently composable components.
 
 ## Summary

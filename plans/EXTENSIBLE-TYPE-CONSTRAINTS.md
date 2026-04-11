@@ -2,7 +2,7 @@
 
 **Status:** Implemented (PR #629)
 **Date:** 2026-04-09
-**Branch:** TBD
+**Branch:** feat/extensible-type-constraints (merged)
 
 ## Problem
 

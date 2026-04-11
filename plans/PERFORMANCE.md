@@ -4,7 +4,7 @@
 
 ### Procedure Inlining
 
-**Status:** Open — needs design document
+**Status:** **Complete** (PR #605)
 **Requires `unsafe`:** No. Compiler-level bytecode transformation.
 
 Wile performs no compile-time inlining of known procedures. Racket/Chez inline small known procedures at call sites when the binding is immutable.
