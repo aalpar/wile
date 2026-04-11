@@ -88,19 +88,18 @@ func PrimEval(cc machine.CallContext) error {
 		return werr.WrapForeignErrorf(err, "eval: compilation error")
 	}
 
-	// Run the compiled code in a sub-context
-	cont := machine.NewMachineContinuation(nil, tpl, env)
-	sub := machine.NewMachineContext(mc.Context(), cont)
-	sub.SetExceptionHandler(mc.ExceptionHandler())
-	sub.SetMaxCallDepth(mc.MaxCallDepth())
-	sub.SetMaxStackSize(mc.MaxStackSize())
-	sub.SetThread(mc.Thread())
+	// Run the compiled code in a sub-context.
+	// NewSubContextWithTemplate propagates all parent fields automatically
+	// (exception handler, winding stack, barrier, escape continuation, etc.).
+	sub := mc.NewSubContextWithTemplate(tpl, env)
 	err = sub.Run()
 	if err != nil {
+		machine.ReleaseSubContext(sub)
 		return err
 	}
 
 	mc.SetValues(sub.GetValues()...)
+	machine.ReleaseSubContext(sub)
 	return nil
 }
 
@@ -171,19 +170,17 @@ func PrimLoad(cc machine.CallContext) error {
 			return werr.WrapForeignErrorf(err, "load: compilation error in %s", filename.Value)
 		}
 
-		// Run the compiled code
-		cont := machine.NewMachineContinuation(nil, tpl, env)
-		sub := machine.NewMachineContext(mc.Context(), cont)
-		sub.SetExceptionHandler(mc.ExceptionHandler())
-		sub.SetMaxCallDepth(mc.MaxCallDepth())
-		sub.SetMaxStackSize(mc.MaxStackSize())
-		sub.SetThread(mc.Thread())
+		// Run the compiled code.
+		// NewSubContextWithTemplate propagates all parent fields automatically.
+		sub := mc.NewSubContextWithTemplate(tpl, env)
 		err = sub.Run()
 		if err != nil {
+			machine.ReleaseSubContext(sub)
 			return werr.WrapForeignErrorf(err, "load: runtime error in %s", filename.Value)
 		}
 
 		lastValue = sub.GetValue()
+		machine.ReleaseSubContext(sub)
 	}
 
 	mc.SetValue(lastValue)
