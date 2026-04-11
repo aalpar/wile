@@ -10,7 +10,14 @@
     make-absorbing-axiom absorbing-axiom?
     make-idempotence-axiom idempotence-axiom?
     make-involution-axiom involution-axiom?
+    make-absorption-axiom absorption-axiom?
+    make-associativity-axiom associativity-axiom?
+    directional-axiom?
     axiom?
+    ;; Rule compilation
+    axiom->rules
+    ;; No-match sentinel
+    no-match?
     ;; Normalizer
     make-normalizer)
   (import (scheme base))

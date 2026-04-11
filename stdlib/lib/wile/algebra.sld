@@ -1,5 +1,5 @@
 (define-library (wile algebra)
-  (description "Algebraic structures: setoids, orders, lattices, closure operators, Heyting/Boolean algebras, monoids, categories, semirings, groups, rings, differential rings, fields.")
+  (description "Algebraic structures, equational rewriting, and symbolic normalization. Structures: setoids, orders, lattices, closure operators, Heyting/Boolean algebras, monoids, categories, semirings, groups, rings, differential rings, fields. Rewriting: axiom-driven term normalization. Symbolic: theory projections, recursive normalization, transformation tracing.")
   (export
     ;; Setoids
     make-setoid setoid?
@@ -94,8 +94,25 @@
     make-absorbing-axiom absorbing-axiom?
     make-idempotence-axiom idempotence-axiom?
     make-involution-axiom involution-axiom?
-    axiom?
-    make-normalizer)
+    make-absorption-axiom absorption-axiom?
+    make-associativity-axiom associativity-axiom?
+    directional-axiom? axiom?
+    axiom->rules
+    no-match?
+    make-normalizer
+    ;; Symbolic algebra
+    make-named-axiom named-axiom?
+    named-axiom-name named-axiom-general-form named-axiom-axiom
+    make-theory theory?
+    theory-axioms theory-associative-ops
+    theory-filter theory-exclude theory-prioritize theory-merge
+    make-rewrite-step rewrite-step?
+    step-rule-name step-general-form step-before step-after
+    fuel-exhausted-step?
+    sexp-term-protocol
+    make-recursive-normalizer
+    monoid->theory lattice->theory boolean->theory
+    format-trace)
   (import (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice)
@@ -109,4 +126,5 @@
           (wile algebra ring)
           (wile algebra differential)
           (wile algebra galois)
-          (wile algebra rewrite)))
+          (wile algebra rewrite)
+          (wile algebra symbolic)))
