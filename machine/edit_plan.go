@@ -42,7 +42,7 @@ type EditPlan struct {
 type edit struct {
 	start, end int           // [start, end) range in original code to replace
 	replace    []Instruction // replacement instructions (nil = pure deletion)
-	sourceRef  uint16        // source ref for all replacement instructions
+	sourceRef  uint32        // source ref for all replacement instructions
 }
 
 // NewEditPlan creates a new edit plan for the given template.
@@ -59,7 +59,7 @@ func (p *EditPlan) AddLiteral(v values.Value) int32 {
 
 // Replace marks the range [start, end) for replacement with instrs.
 // src is the source reference for all inserted instructions.
-func (p *EditPlan) Replace(start, end int, instrs []Instruction, src uint16) {
+func (p *EditPlan) Replace(start, end int, instrs []Instruction, src uint32) {
 	p.edits = append(p.edits, edit{
 		start:     start,
 		end:       end,
@@ -74,7 +74,7 @@ func (p *EditPlan) Delete(start, end int) {
 }
 
 // Insert inserts instrs before the instruction at position at.
-func (p *EditPlan) Insert(at int, instrs []Instruction, src uint16) {
+func (p *EditPlan) Insert(at int, instrs []Instruction, src uint32) {
 	p.Replace(at, at, instrs, src)
 }
 
@@ -214,7 +214,7 @@ func fixSurvivingBranches(code []Instruction, edits []edit, remap []int) {
 
 // rewriteCode builds new code and sourceRefs arrays by copying surviving
 // segments and splicing in replacement instructions from each edit.
-func rewriteCode(code []Instruction, sourceRefs []uint16, edits []edit) ([]Instruction, []uint16) {
+func rewriteCode(code []Instruction, sourceRefs []uint32, edits []edit) ([]Instruction, []uint32) {
 	// Compute new length.
 	newLen := len(code)
 	for _, e := range edits {
@@ -222,7 +222,7 @@ func rewriteCode(code []Instruction, sourceRefs []uint16, edits []edit) ([]Instr
 	}
 
 	newCode := make([]Instruction, 0, newLen)
-	newRefs := make([]uint16, 0, newLen)
+	newRefs := make([]uint32, 0, newLen)
 	prev := 0
 
 	for _, e := range edits {

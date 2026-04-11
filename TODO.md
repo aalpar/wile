@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-04-05
+**Last Updated**: 2026-04-11
 
 ### Current Project Status
 
@@ -48,6 +48,39 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 - [x] **`file_resolver.go` chain of responsibility** [Medium, M, Done]: Extracted `osSearchDirs`, `openAuthorized`, `walkOSLibraries`, and `walkFSDir` as shared helpers. `OSFileResolver` and `FSFileResolver` now delegate to these instead of duplicating directory-collection and walk-callback logic. 541 → 469 lines.
 - [x] **Timing-dependent concurrency tests** [Medium, M, Done]: 10 of 11 `time.Sleep` calls replaced with observation-based synchronization (`internal/testutil` package: `PollUntil`, `ReadyExtension`, `stableGoroutineCount`). 1 deliberate-race sleep kept. PR #602. `plans/2026-04-01-timing-dependent-tests.md`
 
+### Tech Debt (open items from `plans/TECH-DEBT-2026-04.md`)
+
+**Phase 1 — Silent Limits (S each):**
+- [x] **Task 1.1: `uint16` source table index overflow** [High, S, Done]: Changed `sourceRefs` to `uint32` across `native_template.go`, `edit_plan.go`, `peephole.go`.
+- [x] **Task 1.2: Opcode round-trip exhaustiveness test** [High, S, Done]: Already existed at `machine/native_template_test.go:425`.
+- [x] **Task 1.3: Extension list consistency test** [High, S, Done]: Already existed at `extension_consistency_test.go:29`.
+- [ ] **Task 1.4: Eval stack size limit** [Medium, S]: Eval stack grows without bound. Add `WithMaxStackSize(n)` engine option for sandboxed embedders.
+
+**Phase 4 — Test Discipline (remaining):**
+- [x] **Task 4.2: Security gate integration tests** [Medium, S, Done]: Already existed — 12+ tests in `engine_sandbox_test.go`.
+
+**Phase 5 — Missing Abstractions (S-M):**
+- [x] **Task 5.1: Closure interface `Name()`/`Doc()`** [Medium, M, Done]: Added `NamedCallable` interface; remaining switches need type-specific behavior.
+- [ ] **Task 5.2: `SetStringOrFalse` helper** [Low, S]: 9+ sites with identical `if s == "" { FalseValue } else { NewString(s) }` pattern.
+- [ ] **Task 5.3: `MustList` for proper-list enforcement** [Low, S]: 3 sites silently accept improper lists where R7RS requires errors.
+- [ ] **Task 5.4: Extract `requireSourceContext` helper** [Low, S]: 5 functions with identical guard in `prim_syntax_loc.go`.
+- [ ] **Task 5.5: Complete `RequireArg[T]` migration** [Low, S]: 16 manual type-assertion sites remain alongside 130 `RequireArg[T]` usages.
+
+**Phase 6 — Cleanup (S each):**
+- [x] **Task 6.1: Delete `runtime/` package** [Done]: Already deleted.
+- [ ] **Task 6.2: Replace `context.TODO()` in tests** [Low, S]: 431 occurrences across 39 test files. Mechanical `→ context.Background()`.
+- [ ] **Task 6.3: Fix receiver naming** [Low, S]: 6 production types use non-`p` receivers.
+- [ ] **Task 6.4: Add `typeswitchlint` to value type guide** [Low, S]: Guide comment missing step for `cmd/typeswitchlint/main.go:knownValueTypes`.
+
+**Phase 7 — Test Helpers (L):**
+- [ ] **Task 7.1: Unify `machine/testutil` and `registry/testhelpers`** [Low, L]: Two near-identical test pipelines; `testutil` skips escape handling.
+
+**Phase 8 — Architecture (M each, opportunistic):**
+- [ ] **Task 8.1: Extract `machine/compilation/resolver/`** [Low, M]: FileResolver implementations are I/O infrastructure, not compilation logic.
+- [ ] **Task 8.2: Evaluate `wile.Value` wrapper** [Low, M]: Wrapper provides minimal methods beyond `Internal()` escape hatch.
+- [ ] **Task 8.3: Fix REPL importing `machine/compilation`** [Medium, M]: Presentation layer reaches into compilation internals via type assertions.
+- [ ] **Task 8.4: Make `DefaultBigFloatPrecision` configurable** [Low, M]: 256-bit precision hardcoded across 12 call sites. No engine option.
+
 ### Low Priority
 
 - [x] **ExpanderTimeContinuation convention deviations** [Low, M, Done]: Fixed 18 deviations in expander files: 13 bare `return nil, err` wrapped with `WrapForeignErrorf` context, 5 `.IsEmptyList()` replaced with `syntax.IsSyntaxEmptyList()`. SourceContext and NewSyntaxCons conventions were already followed in expander files; remaining deviations (if any) are in other compilation files.
@@ -88,6 +121,7 @@ These items from `plans/2026-04-05-structural-reduction.md` were investigated an
 - [ ] **Environment frame slimming** [Performance]: Reduce `EnvironmentFrame` struct for closure bodies that only need local bindings. `plans/PERFORMANCE.md`
 - [x] **B2 escape analysis for let-bound closures** [Performance, Done]: Tracks whether let-bound closures escape their scope. Enables `!Captured` optimization. PR #604. Design: `plans/ESCAPE-ANALYSIS.md`.
 - [ ] **B3 effective capture refinement** [Performance, Research]: Propagate B2 escape results back into B1 capture status. A binding marked `Captured` by B1 is effectively non-captured if every lambda that references it is stored in a non-escaping binding (B2). Cross-binding analysis over B1+B2 results.
+- [ ] **Benchmark coverage gaps** [Performance, S-M]: No benchmarks for compiler, expander (syntax-rules expansion), library import resolution, or continuation capture/restore cycle. Existing benchmarks cover VM dispatch, fibonacci, tokenizer, parser, environment, and symbol interning. The missing benchmarks cover operations most likely to regress during optimization work.
 
 ### Research
 

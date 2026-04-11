@@ -19,7 +19,10 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-var _ values.Callable = (*MachineClosure)(nil)
+var (
+	_ values.Callable = (*MachineClosure)(nil)
+	_ NamedCallable   = (*MachineClosure)(nil)
+)
 
 // Linked closure (Church 1936, Landin 1964, Cardelli 1983). A closure is
 // a pair of compiled code and the lexical environment at definition time.

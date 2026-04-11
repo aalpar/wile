@@ -31,7 +31,7 @@ type NativeTemplate struct {
 	valueCount     int
 	isVariadic     bool
 	literals       MultipleValues
-	sourceRefs     []uint16                // parallel to code, index into sourceTable
+	sourceRefs     []uint32                // parallel to code, index into sourceTable
 	sourceTable    []*syntax.SourceContext // index 0 = nil (no source)
 	name           string                  // Function name (for stack traces)
 	doc            string                  // Guile-style docstring from leading string literal in body
@@ -67,7 +67,7 @@ func NewNativeTemplate(pcnt int, vcnt int, vd bool, operations ...Operation) *Na
 		isVariadic:     vd,
 		sourceTable:    []*syntax.SourceContext{nil}, // index 0 = nil (no source)
 		code:           make([]Instruction, 0, initialOpsCap),
-		sourceRefs:     make([]uint16, 0, initialOpsCap),
+		sourceRefs:     make([]uint32, 0, initialOpsCap),
 	}
 	if len(operations) > 0 {
 		// Direct construction with initial operations (e.g., test fixtures).
@@ -209,21 +209,21 @@ func (p *NativeTemplate) SourceAt(pc int) *syntax.SourceContext {
 // internSource deduplicates a source context and returns its index in the sourceTable.
 // Uses pointer equality first (fast path), then structural equality via sourceEqual.
 // Index 0 is reserved for nil (no source).
-func (p *NativeTemplate) internSource(src *syntax.SourceContext) uint16 {
+func (p *NativeTemplate) internSource(src *syntax.SourceContext) uint32 {
 	if src == nil {
 		return 0
 	}
 	for i, s := range p.sourceTable {
 		if s == src || sourceEqual(s, src) {
-			return uint16(i)
+			return uint32(i)
 		}
 	}
-	if len(p.sourceTable) > math.MaxUint16 {
+	if len(p.sourceTable) > math.MaxUint32 {
 		panic(werr.WrapForeignErrorf(
 			werr.ErrInvalidArgument,
 			"internSource: source table overflow (%d entries)", len(p.sourceTable)))
 	}
-	idx := uint16(len(p.sourceTable))
+	idx := uint32(len(p.sourceTable))
 	p.sourceTable = append(p.sourceTable, src)
 	return idx
 }

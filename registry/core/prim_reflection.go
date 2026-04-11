@@ -74,7 +74,7 @@ func PrimProcedureName(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAProcedure,
 			"procedure-name: expected procedure")
 	}
-	if nc, ok := callable.(interface{ Name() string }); ok {
+	if nc, ok := callable.(machine.NamedCallable); ok {
 		mc.SetValue(values.StringOrFalse(nc.Name()))
 	} else {
 		mc.SetValue(values.FalseValue)
@@ -213,7 +213,7 @@ func PrimProcedureDocumentation(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAProcedure,
 			"procedure-documentation: expected procedure")
 	}
-	if dc, ok := callable.(interface{ Doc() string }); ok {
+	if dc, ok := callable.(machine.NamedCallable); ok {
 		mc.SetValue(values.StringOrFalse(dc.Doc()))
 	} else {
 		mc.SetValue(values.FalseValue)
