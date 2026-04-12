@@ -2,6 +2,8 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
+**Status:** **Complete** (PR #541 + subsequent). All 12 phases implemented including typeswitchlint (`cmd/typeswitchlint/`) and form consistency verification (`internal/forms/consistency_test.go`).
+
 **Goal:** Complete all high and medium TODO items: machine/ test coverage (52 files), engine.go tests, REPL tests, type switch exhaustiveness linter, special form dual-dispatch unification.
 
 **Architecture:** 12 phases grouped by testability. machine/ files are batched by concern (types, operations, compilation, expansion, VM runtime, library, macros, infrastructure). Each phase produces test files following existing patterns (`package machine`, `qt` assertions, table-driven). Refactoring phases (11-12) come last to avoid changing code under test.
