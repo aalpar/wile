@@ -20,6 +20,7 @@ import (
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -268,10 +269,9 @@ func PrimDocTopics(mc machine.CallContext) error {
 // PrimDocTopic implements (doc-topic category).
 // Returns a sorted list of symbols in the named category.
 func PrimDocTopic(mc machine.CallContext) error {
-	s, ok := mc.Arg(0).(*values.String)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAString,
-			"doc-topic: expected string category name")
+	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "doc-topic")
+	if err != nil {
+		return err
 	}
 	category := s.Value
 
@@ -337,10 +337,9 @@ func PrimLibraryDescription(mc machine.CallContext) error {
 // sources: primitives, binding specs, doc entries, environment bindings,
 // and loaded libraries.
 func PrimApropos(mc machine.CallContext) error {
-	s, ok := mc.Arg(0).(*values.String)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAString,
-			"apropos: expected string pattern")
+	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "apropos")
+	if err != nil {
+		return err
 	}
 
 	reg := registryFromContext(mc)

@@ -29,15 +29,13 @@ import (
 // Installs handler as exception handler during thunk execution.
 func PrimWithExceptionHandler(cc machine.CallContext) error {
 	mc := cc.(*machine.MachineContext)
-	handler, ok := mc.Arg(0).(values.Callable)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAProcedure,
-			"with-exception-handler: handler must be a procedure")
+	handler, err := helpers.RequireArg[values.Callable](mc, 0, werr.ErrNotAProcedure, "with-exception-handler")
+	if err != nil {
+		return err
 	}
-	thunk, ok := mc.Arg(1).(values.Callable)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAProcedure,
-			"with-exception-handler: thunk must be a procedure")
+	thunk, err := helpers.RequireArg[values.Callable](mc, 1, werr.ErrNotAProcedure, "with-exception-handler")
+	if err != nil {
+		return err
 	}
 
 	// Push handler onto exception handler stack
@@ -48,7 +46,7 @@ func PrimWithExceptionHandler(cc machine.CallContext) error {
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
 
-	_, err := sub.ApplyCallable(thunk)
+	_, err = sub.ApplyCallable(thunk)
 	if err != nil {
 		mc.PopExceptionHandler()
 		return err

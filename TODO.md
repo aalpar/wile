@@ -5,7 +5,7 @@ TODO
 
 ### Current Project Status
 
-**Version**: v1.10.3 (released)
+**Version**: v1.13.11 (released)
 **Core Language**: R7RS-small complete with hygienic macros, composable continuations, numeric tower, core-compiled let forms
 **Extensions**: 11 extension packages — 7 public (files, math, process, system, threads, gointerop, introspection), 4 internal (io, eval, namespace, all); all importable as R7RS `(wile <name>)` libraries. Extension API contracts (ValueType enum, PrimitiveSpec type declarations) in Phase 1. Go static analysis extensions extracted to [wile-goast](https://github.com/aalpar/wile-goast).
 **Embedding**: CLI uses public Engine API; embedded stdlib via `stdlib.FS` (`go:embed` + `fs.Sub`); `AllExtensions()`/`WithAllExtensions()` convenience options; `Engine.AvailableLibraries()` API for library discovery.
@@ -61,26 +61,26 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 
 **Phase 5 — Missing Abstractions (S-M):**
 - [x] **Task 5.1: Closure interface `Name()`/`Doc()`** [Medium, M, Done]: Added `NamedCallable` interface; remaining switches need type-specific behavior.
-- [ ] **Task 5.2: `SetStringOrFalse` helper** [Low, S]: 9+ sites with identical `if s == "" { FalseValue } else { NewString(s) }` pattern.
-- [ ] **Task 5.3: `MustList` for proper-list enforcement** [Low, S]: 3 sites silently accept improper lists where R7RS requires errors.
-- [ ] **Task 5.4: Extract `requireSourceContext` helper** [Low, S]: 5 functions with identical guard in `prim_syntax_loc.go`.
-- [ ] **Task 5.5: Complete `RequireArg[T]` migration** [Low, S]: 16 manual type-assertion sites remain alongside 130 `RequireArg[T]` usages.
+- [x] **Task 5.2: `StringOrFalse` helper** [Low, S, Done]: Implemented as `StringOrFalse` (returns value) in `registry/core/prim_reflection.go` and `prim_syntax_loc.go`. PR #609.
+- [x] **Task 5.3: `ForEachList` for proper-list enforcement** [Low, S, Done]: Implemented as `ForEachList` (renamed from `MustList`). Adopted in `prim_strings.go` and helpers. PR #609.
+- [x] **Task 5.4: Extract `requireSourceContext` helper** [Low, S, Done]: Extracted in `prim_syntax_loc.go` — all 5 functions now call shared helper. PR #609.
+- [x] **Task 5.5: Complete `RequireArg[T]` migration** [Low, S, Done]: 5 sites migrated (`prim_reflection.go` ×2, `prim_exceptions.go` ×2, `prim_opaque.go` ×1). 3 intentional deviations remain: `prim_predicates.go` ×2 (return `#f` on non-match, not error — R7RS semantics) and `prim_syntax_loc.go` ×1 (inside shared `requireSyntaxValue` helper).
 
 **Phase 6 — Cleanup (S each):**
 - [x] **Task 6.1: Delete `runtime/` package** [Done]: Already deleted.
 - [ ] **Task 6.2: Replace `context.TODO()` in tests** [Low, S]: 431 occurrences across 39 test files. Mechanical `→ context.Background()`.
-- [ ] **Task 6.3: Fix receiver naming** [Low, S]: 6 production types use non-`p` receivers.
+- [x] **Task 6.3: Fix receiver naming** [Low, S, Done]: All 6 production types normalized to `p` receivers. PR #609.
 - [ ] **Task 6.4: Add `typeswitchlint` to value type guide** [Low, S]: Guide comment missing step for `cmd/typeswitchlint/main.go:knownValueTypes`.
 
 **Phase 7 — Test Helpers (L):**
-- [ ] **Task 7.1: Unify `machine/testutil` and `registry/testhelpers`** [Low, L]: Two near-identical test pipelines; `testutil` skips escape handling.
+- [x] **Task 7.1: Unify `machine/testutil` and `registry/testhelpers`** [Low, L, Done]: `machine/testutil` eliminated; unified into `registry/testhelpers`. All eval paths now use `RunWithEscapeHandling`. PR #609.
 
 **Phase 8 — Architecture (M each, opportunistic):**
 - [ ] **Task 8.1: Extract `machine/compilation/resolver/`** [Low, M]: FileResolver implementations are I/O infrastructure, not compilation logic.
 - [ ] **Task 8.2: Evaluate `wile.Value` wrapper** [Low, M]: Wrapper provides minimal methods beyond `Internal()` escape hatch.
 - [ ] **Task 8.3: Fix REPL importing `machine/compilation`** [Medium, M]: Presentation layer reaches into compilation internals via type assertions.
 - [ ] **Task 8.4: Make `DefaultBigFloatPrecision` configurable** [Low, M]: 256-bit precision hardcoded across 12 call sites. No engine option.
-- [ ] **Task 8.5: Funnel `prim_eval.go` through `NewSubContext`** [Medium, M]: `eval`/`load` construct `MachineContext` directly, bypassing `NewSubContext` propagation. Every new field on `MachineContext` requires manual propagation at these sites (same class of bug as the windingStack hazard fixed in PR #597). Add a `NewSubContextWithTemplate(tpl, env)` constructor so all production context creation goes through methods that propagate automatically.
+- [x] **Task 8.5: Funnel `prim_eval.go` through `NewSubContext`** [Medium, M, Done]: Added `NewSubContextWithTemplate(tpl, env)` to `MachineContext`. Both `PrimEval` and `PrimLoad` migrated from manual `NewMachineContext` + field propagation to single `NewSubContextWithTemplate` call with pool-backed `ReleaseSubContext`. Eliminates the "forgotten field" bug class. PR #637. `plans/2026-04-11-eval-subcontext-design.md`
 
 ### Low Priority
 
