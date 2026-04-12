@@ -97,37 +97,21 @@ Added `NamedCallable` interface (`Name() string`, `Doc() string`) to `machine/cl
 
 **Assessment (2026-04-11):** `PrimProcedureName` and `PrimProcedureDocumentation` already used anonymous interfaces (`interface{ Name() string }`). The remaining type switches in prim_reflection.go, meta.go, and prim_disassemble.go extract type-specific data (arity, template, source location, disassembly) that genuinely differs per type — Name()/Doc() cannot simplify those further.
 
-### Task 5.2: Add `SetStringOrFalse` helper
+### Task 5.2: ~~Add `StringOrFalse` helper~~ [Done]
 
-**Files:** `registry/helpers/` (new helper), `registry/core/prim_reflection.go` (6 sites), `internal/extensions/eval/prim_eval.go` (2 sites), `registry/core/prim_syntax_loc.go` (5 sites)
-**Problem:** `if s == "" { SetValue(FalseValue) } else { SetValue(NewString(s)) }` appears 9+ times. `BoolToBoolean` established the precedent for this kind of helper.
-**Fix:** Add `func SetStringOrFalse(mc *machine.MachineContext, s string)` to `registry/helpers/`. Replace all applicable sites.
-**Effort:** S
-**Verify:** `make lint && make test ./registry/...`
+Implemented as `StringOrFalse` (returns `values.Value` rather than calling `SetValue`). Adopted in `prim_reflection.go` and `prim_syntax_loc.go`. PR #609.
 
-### Task 5.3: Replace raw `ForEach` with `MustList` for proper-list enforcement
+### Task 5.3: ~~Replace raw `ForEach` with `ForEachList`~~ [Done]
 
-**Files:** `registry/core/prim_exceptions.go`, `registry/core/prim_control.go`, `registry/core/prim_strings.go`, `registry/helpers/list.go:29` (`MustList`)
-**Problem:** These primitives call `t.ForEach(ctx, fn)` directly without the improper-list guard that `MustList` provides. They silently accept improper lists where R7RS requires errors.
-**Fix:** Replace raw `ForEach` with `MustList` at the 3 affected sites.
-**Effort:** S
-**Verify:** `make lint && make test ./registry/core/...`
+Implemented as `ForEachList` (renamed from `MustList`). Adopted in `prim_strings.go` (`list->string`, `string-append`) with missing tail check added. PR #609.
 
-### Task 5.4: Extract `requireSourceContext` helper in `prim_syntax_loc.go`
+### Task 5.4: ~~Extract `requireSourceContext` helper~~ [Done]
 
-**Files:** `registry/core/prim_syntax_loc.go` (5 functions with identical guard)
-**Problem:** Five functions share identical steps 1 and 2 (require syntax value, check source context nil → return `#f`). Step 2 is copy-pasted in each.
-**Fix:** Extract `requireSourceContext(mc, sv, name) (*SourceContext, bool)` returning `(nil, true)` when source context is nil (having already set `FalseValue`). Each function then calls this helper and dispatches on the accessor.
-**Effort:** S
-**Verify:** `make lint && make test ./registry/core/...`
+Extracted `requireSourceContext(mc, name) (*SourceContext, error)` in `prim_syntax_loc.go`. All 5 functions now call shared helper. PR #609.
 
-### Task 5.5: Complete `RequireArg[T]` migration
+### Task 5.5: ~~Complete `RequireArg[T]` migration~~ [Done]
 
-**Files:** 16 manual `mc.Arg(n).(Type)` + `if !ok` sites: `registry/core/prim_reflection.go` (2), `prim_exceptions.go` (2), `prim_predicates.go` (2), `prim_syntax_loc.go` (1), `prim_opaque.go` (1), `extensions/math/prim_rounding.go` (3), `extensions/threads/prim_threads.go` (1), `extensions/process/prim_process.go` (1), `internal/extensions/namespace/prim_namespace.go` (1), `internal/extensions/all/prim_all.go` (1), `internal/extensions/io/prim_ports.go` (1)
-**Problem:** `helpers.RequireArg[T]` (130 usages across 25 files) is the standard pattern. 16 sites still use manual 3-line assertion. Two ways to do the same thing confuses contributors.
-**Fix:** Migrate sites where semantics match. Leave predicate-style sites that branch on `ok` for non-error paths (e.g., `prim_predicates.go`).
-**Effort:** S
-**Verify:** `make lint && make test ./registry/... ./extensions/... ./internal/extensions/...`
+5 sites migrated in `registry/core/`: `prim_reflection.go` (2: doc-topic, apropos), `prim_exceptions.go` (2: handler, thunk), `prim_opaque.go` (1: opaque-tag). 3 intentional deviations remain: `prim_predicates.go` ×2 (return `#f` on non-match per R7RS, not error) and `prim_syntax_loc.go` ×1 (inside shared `requireSyntaxValue` helper — already encapsulates the pattern).
 
 ---
 
@@ -145,13 +129,9 @@ Already deleted. Package no longer exists.
 **Effort:** S (mechanical)
 **Verify:** `make lint && make test ./...`
 
-### Task 6.3: Fix receiver naming on production types
+### Task 6.3: ~~Fix receiver naming on production types~~ [Done]
 
-**Files:** `machine/pool_generic.go:146` (`m`→`p`), `machine/counters.go:92,99` (`c`→`p`), `environment/load_path_stack.go:52-103` (`s`→`p`), `ffi_wrapper.go:29` (`s`→`p`), `values/port_base.go:56-116` (`b`→`p`), `internal/syntax/syntax_value.go:110` (`b`→`p`)
-**Problem:** Six production types use non-`p` receivers, violating the project convention.
-**Fix:** Rename receivers to `p`. Use `gofmt` or editor rename to avoid mistakes.
-**Effort:** S
-**Verify:** `make lint && make test ./...`
+All 6 production types normalized to `p` receivers. PR #609.
 
 ### Task 6.4: Add `typeswitchlint` to "ADDING A NEW VALUE TYPE" guide
 
@@ -165,13 +145,9 @@ Already deleted. Package no longer exists.
 
 ## Phase 7: Unify Test Helpers (Medium priority, medium effort)
 
-### Task 7.1: Unify `machine/testutil` and `registry/testhelpers`
+### Task 7.1: ~~Unify `machine/testutil` and `registry/testhelpers`~~ [Done]
 
-**Files:** `machine/testutil/testutil.go`, `registry/testhelpers/helpers.go`, `registry/testhelpers/pipeline_helpers.go`
-**Problem:** Two test helper packages provide near-identical pipelines. Key behavioral difference: `testutil` uses `mc.Run()` (no escape handling) while `testhelpers` uses `mc.RunWithEscapeHandling()`. This means tests using `testutil` don't exercise production escape handling.
-**Fix:** Consolidate to one package (probably `testutil` since it handles library setup). Ensure all evaluation paths use `RunWithEscapeHandling()` to match production. Update all imports.
-**Effort:** L (many files import these)
-**Verify:** `make lint && make test ./...`
+`machine/testutil` eliminated; unified into `registry/testhelpers`. All eval paths now use `RunWithEscapeHandling` to match production behavior. PR #609. Note: stale reference to `machine/testutil` remains in `tools/sh/covercheck.sh`.
 
 ---
 
@@ -203,6 +179,10 @@ These are longer-term items to tackle opportunistically when working in the area
 **Effort:** M
 **Verify:** `make lint && make test ./internal/repl/... ./machine/...`
 
+### Task 8.5: ~~Funnel `prim_eval.go` through `NewSubContext`~~ [Done]
+
+Added `NewSubContextWithTemplate(tpl, env)` to `MachineContext`. Both `PrimEval` and `PrimLoad` migrated from manual `NewMachineContext` + 4-field propagation to single call. Pool-backed with `ReleaseSubContext`. Eliminates "forgotten field" bug class (windingStack, parentMC, escapeCont, barrierValid). PR #637. Design: `plans/2026-04-11-eval-subcontext-design.md`.
+
 ### Task 8.4: Make `DefaultBigFloatPrecision` configurable
 
 **Files:** `values/big_float.go:32` (`DefaultBigFloatPrecision = 256`), 12 call sites across `values/big_float.go`, `values/big_complex.go`, `values/promotion.go`
@@ -220,12 +200,12 @@ These are longer-term items to tackle opportunistically when working in the area
 | 1 | 4 tasks (1.1-1.4) | S each | Silent limits — ~~COMPLETE~~ (1.1-1.3 pre-existing, 1.4 stack limit done) |
 | 2 | 3 tasks | S-M | File resolution — ~~COMPLETE~~ (2.1 premise incorrect, 2.2+2.3 done) |
 | 3 | 2 tasks | M each | Registration — ~~COMPLETE~~ (3.1-3.2 done, found+fixed 6 missing expander entries) |
-| 4 | 4 tasks | S-M | Test discipline — Mostly complete (4.1, 4.3, 4.4 done; 4.2 open) |
-| 5 | 5 tasks (5.1-5.5) | S-M | Missing abstractions — interfaces, helpers, convention enforcement |
-| 6 | 4 tasks (6.1-6.4) | S each | Dead code and style cleanup (6.1 done) |
-| 7 | 1 task | L | Test helper unification |
-| 8 | 4 tasks (8.1-8.4) | M each | Architectural improvements (opportunistic) |
+| 4 | 4 tasks | S-M | Test discipline — ~~COMPLETE~~ (4.1, 4.3, 4.4 done; 4.2 pre-existing) |
+| 5 | 5 tasks (5.1-5.5) | S-M | Missing abstractions — ~~COMPLETE~~ (5 migrated, 3 intentional deviations) |
+| 6 | 4 tasks (6.1-6.4) | S each | Dead code and style cleanup — ~~6.1, 6.3 COMPLETE~~; 6.2 (431 sites), 6.4 open |
+| 7 | 1 task | L | Test helper unification — ~~COMPLETE~~ |
+| 8 | 5 tasks (8.1-8.5) | M each | Architectural improvements — ~~8.5 COMPLETE~~; 8.1-8.4 opportunistic |
 
 **Recommended execution order:** Phase 1 (cheap safety wins) → Phase 6 (cheap cleanup) → Phase 5 (abstractions) → Phase 7 (test helpers) → Phase 8 (architecture).
 
-**Last updated:** 2026-04-11 (added Tasks 1.4, 5.5, 6.4, 8.4 from full-codebase reassessment; marked 6.1 done; expanded 6.2 scope from 7 to 431 sites).
+**Last updated:** 2026-04-11 (marked 5.2-5.4, 6.3, 7.1, 8.5 done; added Task 8.5 from PR #637; updated 5.5 count 16→8).

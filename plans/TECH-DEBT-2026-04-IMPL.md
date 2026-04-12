@@ -230,6 +230,21 @@ Ensures AllExtensions() and bootstrap's allExtensions stay in sync.
 
 ---
 
+### Task 1.4: Add eval stack size limit — COMPLETE (PR #636)
+
+**Files:**
+- Modify: `werr/werr.go` (new `ErrStackOverflow` sentinel)
+- Modify: `options.go` (new `WithMaxStackSize(n uint64)` engine option)
+- Modify: `machine/machine_context.go` (`checkStackSize()` helper, `maxStackSize` field)
+- Modify: `machine/machine_context_subcontext.go` (propagate through `NewSubContext`, `NewThreadSubContext`)
+- Modify: `internal/extensions/eval/prim_eval.go` (propagate through `PrimEval`/`PrimLoad`)
+
+**Design:** Follows the `maxCallDepth` pattern exactly. `checkStackSize()` is called at 6 push opcodes (`OpPush`, `OpPushLiteral`, `OpPushGlobal`, `OpPushLocal`, `OpPushCachedBinding`, `OpUnpackListToStack`) in `Run()`. Opt-in only — zero = unlimited.
+
+**Status:** Complete. PR #636. Design: `plans/2026-04-11-eval-stack-limit-design.md`.
+
+---
+
 ## Phase 6: Dead Code & Cleanup (S each)
 
 ### Task 6.1: Delete `runtime/` package
@@ -262,25 +277,37 @@ Duplicated Engine API. Imported by zero packages.
 
 ---
 
-### Task 6.2: Replace `context.TODO()` in test helpers
+### Task 6.2: Replace `context.TODO()` in test files
 
-**Files:**
-- Modify: `machine/testutil/testutil.go` (lines 46, 56, 104, 124, 169)
-- Modify: `registry/testhelpers/pipeline_helpers.go` (line 36)
-- Modify: `registry/testhelpers/helpers.go` (line 45)
+**Original scope (7 sites in test helpers):** COMPLETE — replaced in `machine/testutil/testutil.go`, `registry/testhelpers/pipeline_helpers.go`, `registry/testhelpers/helpers.go`. (Note: `machine/testutil` subsequently eliminated by Task 7.1.)
 
-**Step 1: Replace all 7 occurrences**
+**Expanded scope (431 sites across 39 test files):** OPEN
 
-Find-and-replace `context.TODO()` → `context.Background()` in all three files.
+The assessment expanded this from 7 helper sites to 431 test-file sites. Largest concentrations:
+- `internal/parser/parser_coverage_test.go` (104)
+- `internal/parser/parser_test.go` (62)
+- `internal/validate/validate_test.go` (44)
+- `internal/bootstrap/multithreading_test.go` (30)
+- `registry/core/prim_io_test.go` (27)
+- `internal/match/syntax_expand_test.go` (23)
+
+**Step 1: Project-wide replacement**
+
+```bash
+find . -name '*_test.go' -exec sed -i '' 's/context\.TODO()/context.Background()/g' {} +
+```
 
 **Step 2: Run full suite**
 
-Run: `make lint && make test ./machine/testutil/... ./registry/testhelpers/...`
+Run: `make lint && make test ./...`
 
 **Step 3: Commit**
 
 ```
-chore: replace context.TODO() with context.Background() in test helpers
+chore: replace context.TODO() with context.Background() in test files
+
+431 occurrences across 39 test files. context.TODO() signals "haven't
+decided yet" — test code should use context.Background().
 ```
 
 ---
@@ -307,6 +334,40 @@ Run: `make lint && make test ./...`
 
 ```
 style: normalize receiver names to p per project convention
+```
+
+---
+
+### Task 6.4: Add `typeswitchlint` to value type guide (S)
+
+**Files:**
+- Modify: `values/values.go:86` (guide comment)
+
+**Step 1: Add step 8 to the guide comment**
+
+The current guide lists 7 steps for "ADDING A NEW VALUE TYPE". Add step 8:
+
+```go
+//  8. cmd/typeswitchlint/main.go — add to knownValueTypes (lint coverage)
+```
+
+Insert after the existing step 7 (`machine/native_template.go — if it can appear as a compile-time literal`).
+
+**Step 2: Verify accuracy**
+
+Read `cmd/typeswitchlint/main.go:46` and confirm `knownValueTypes` matches the current set of value types in the codebase.
+
+**Step 3: Run lint**
+
+Run: `make lint`
+
+**Step 4: Commit**
+
+```
+docs: add typeswitchlint to "ADDING A NEW VALUE TYPE" guide
+
+Step 8 was missing — a new value type added by following the guide
+would silently escape lint coverage.
 ```
 
 ---
@@ -941,6 +1002,71 @@ Eliminates 5x copy-pasted guard pattern.
 
 ---
 
+### Task 5.5: Complete `RequireArg[T]` migration (S)
+
+**Files (8 remaining sites):**
+- `registry/core/prim_syntax_loc.go:26` — `mc.Arg(0).(syntax.SyntaxValue)` — used inside `requireSourceContext` helper
+- `registry/core/prim_reflection.go:271,340` — `mc.Arg(0).(*values.String)` — `string->symbol`, `string->number`
+- `registry/core/prim_exceptions.go:32,37` — `mc.Arg(0/1).(values.Callable)` — `with-exception-handler` args
+- `registry/core/prim_predicates.go:120,152` — `mc.Arg(0).(values.Number)` — `exact?`, `inexact?`
+- `registry/core/prim_opaque.go:34` — `mc.Arg(0).(values.Opaque)` — `opaque-tag`
+
+**Assessment:** Original count was 16 sites; 8 have been migrated. The remaining 8 fall into two categories:
+
+1. **Predicate-style branches (leave as-is):** `prim_predicates.go` sites branch on `ok` for non-error logic (`exact?`/`inexact?` return `#f` for non-numbers). These aren't error paths — `RequireArg[T]` would be wrong here.
+
+2. **Migratable:** `prim_reflection.go` (2), `prim_exceptions.go` (2), `prim_opaque.go` (1) follow the standard `if !ok { return error }` pattern compatible with `RequireArg[T]`.
+
+3. **Edge case:** `prim_syntax_loc.go:26` asserts to `syntax.SyntaxValue` (interface, not pointer), which is inside the shared `requireSourceContext` helper. Could use `RequireArg[syntax.SyntaxValue]` if the generic constraint permits interfaces.
+
+**Step 1: Migrate `prim_reflection.go` sites**
+
+Replace lines 271 and 340:
+```go
+// Before:
+s, ok := mc.Arg(0).(*values.String)
+if !ok {
+    return werr.WrapForeignErrorf(werr.ErrNotAString, ...)
+}
+
+// After:
+s, err := helpers.RequireArg[*values.String](mc, 0)
+if err != nil {
+    return werr.WrapForeignErrorf(err, ...)
+}
+```
+
+**Step 2: Migrate `prim_exceptions.go` sites**
+
+Replace lines 32 and 37 with `RequireArg[values.Callable]`.
+
+**Step 3: Migrate `prim_opaque.go` site**
+
+Replace line 34 with `RequireArg[values.Opaque]`.
+
+**Step 4: Leave predicate sites**
+
+`prim_predicates.go:120,152` — intentional non-error branching. Document as accepted deviation.
+
+**Step 5: Evaluate `prim_syntax_loc.go` site**
+
+Check if `RequireArg[syntax.SyntaxValue]` works (interface constraint). If yes, migrate. If not, leave with comment.
+
+**Step 6: Run full suite**
+
+Run: `make lint && make test ./registry/core/...`
+
+**Step 7: Commit**
+
+```
+refactor: migrate remaining RequireArg[T] sites in registry/core
+
+5 manual type-assertion sites migrated. 3 intentional predicate-style
+branches left as accepted deviations (prim_predicates.go, prim_syntax_loc.go).
+```
+
+---
+
 ## Phase 7: Unify Test Helpers (L)
 
 ### Task 7.1: Unify `machine/testutil` and `registry/testhelpers`
@@ -1030,18 +1156,81 @@ These are lower priority. Include here for completeness but expect them to be pi
 
 ---
 
+### Task 8.4: Make `DefaultBigFloatPrecision` configurable (M)
+
+**Files:**
+- Modify: `values/big_float.go:32` (`DefaultBigFloatPrecision = 256`)
+- Modify: `options.go` (new `WithBigFloatPrecision(bits uint)` engine option)
+- Modify: 12 call sites across `values/big_float.go`, `values/big_complex.go`, `values/promotion.go`
+
+**Design challenge:** `values/` is below `machine/` in the package layering. Threading config requires either:
+- **(a)** A context-local value readable during promotion/construction
+- **(b)** A field on `MachineContext` propagated to arithmetic helpers
+- **(c)** A package-level default settable at engine init (simplest but not goroutine-safe)
+
+**Step 1: Decide threading approach**
+
+Read the 12 call sites to understand how precision flows. Most are in `values/` which cannot import `machine/`. Option (a) using `context.Context` is the most layering-friendly but adds overhead per allocation.
+
+**Step 2: Add engine option**
+
+```go
+func WithBigFloatPrecision(bits uint) EngineOption {
+    return func(cfg *engineConfig) error {
+        cfg.bigFloatPrecision = bits
+        return nil
+    }
+}
+```
+
+**Step 3: Thread precision to call sites**
+
+Replace `DefaultBigFloatPrecision` references with the configured value at all 12 sites.
+
+**Step 4: Run full suite**
+
+Run: `make lint && make test ./values/... ./machine/...`
+
+**Step 5: Commit**
+
+```
+feat: add WithBigFloatPrecision engine option
+
+Allows embedders to configure BigFloat precision (default 256 bits).
+```
+
+---
+
+### Task 8.5: Funnel `prim_eval.go` through `NewSubContext` — COMPLETE (PR #637)
+
+**Files:**
+- Modify: `machine/machine_context_subcontext.go` (new `NewSubContextWithTemplate` method)
+- Modify: `internal/extensions/eval/prim_eval.go` (`PrimEval`, `PrimLoad`)
+- Test: `machine/machine_context_test.go` (`TestNewSubContextWithTemplate`)
+
+**Design:** `NewSubContextWithTemplate(tpl, env)` delegates to `NewSubContext()` then overrides `template` and `env`. Replaces 6-line manual `NewMachineContext` + field propagation in both `PrimEval` and `PrimLoad`. Pool-backed with explicit `ReleaseSubContext`. Eliminates the "forgotten field" bug class — `windingStack`, `parentMC`, `escapeCont`, `barrierValid` now propagate automatically.
+
+**Status:** Complete. PR #637. Design: `plans/2026-04-11-eval-subcontext-design.md`.
+
+---
+
 ## Execution Summary
 
-| Order | Phase | Tasks | Effort | Dependencies |
-|-------|-------|-------|--------|-------------|
-| 1st | Phase 1 | 1.1, 1.2, 1.3 | S each | **DONE** (ffa7b90a) |
-| 2nd | Phase 6 | 6.1, 6.2, 6.3 | S each | **DONE** (ffa7b90a, cb589b22) |
+| Order | Phase | Tasks | Effort | Status |
+|-------|-------|-------|--------|--------|
+| 1st | Phase 1 | 1.1, 1.2, 1.3, 1.4 | S each | **DONE** (1.1-1.3: ffa7b90a; 1.4: PR #636) |
+| 2nd | Phase 6 | 6.1, 6.2, 6.3, 6.4 | S each | 6.1, 6.3 **DONE**; 6.2 partial (7/431 sites), 6.4 open |
 | 3rd | Phase 2 | 2.3, 2.2, 2.1 | S, S, — | **DONE** (19d14d39, c8cbdf57; 2.1 N/A) |
 | 4th | Phase 4 | 4.1, 4.3, 4.4 | M, S, S | **DONE** (25 sentinel migrations + 2 regression tests) |
-| 5th | Phase 3 | 3.1 → 3.2 | M, M | **DONE** (8e7ef892, 69fdbd5f; VerifyAllPhaseHandlers caught 6 missing expanders) |
-| 6th | Phase 5 | 5.1, 5.2, 5.3, 5.4 | M, S, S, S | **DONE** (f08677b1, 837b27b4, d4179407) |
+| 5th | Phase 3 | 3.1 → 3.2 | M, M | **DONE** (8e7ef892, 69fdbd5f) |
+| 6th | Phase 5 | 5.1, 5.2, 5.3, 5.4, 5.5 | M, S, S, S, S | **DONE** (5.5: 5 migrated, 3 intentional deviations) |
 | 7th | Phase 7 | 7.1 | L | **DONE** (c82bbd5e) |
-| 8th | Phase 8 | 8.1, 8.2, 8.3 | M each | Opportunistic |
+| 8th | Phase 8 | 8.1, 8.2, 8.3, 8.4, 8.5 | M each | 8.5 **DONE** (PR #637); 8.1-8.4 opportunistic |
 
-**Total: 22 tasks** (23 original minus Task 4.2 already complete).
-**Estimated commits: 18** (some small tasks can share commits within a phase).
+**Total: 27 tasks** (original 22 + 5 added from reassessment: 1.4, 5.5, 6.4, 8.4, 8.5).
+
+| Status | Count | Tasks |
+|--------|-------|-------|
+| Complete | 22 | 1.1-1.4, 2.1-2.3, 3.1-3.2, 4.1-4.4, 5.1-5.5, 6.1, 6.3, 7.1, 8.5 |
+| Open | 2 | 6.2 (expanded), 6.4 |
+| Opportunistic | 4 | 8.1, 8.2, 8.3, 8.4 |
