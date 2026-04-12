@@ -1006,7 +1006,7 @@ Eliminates 5x copy-pasted guard pattern.
 
 **Files (8 remaining sites):**
 - `registry/core/prim_syntax_loc.go:26` — `mc.Arg(0).(syntax.SyntaxValue)` — used inside `requireSourceContext` helper
-- `registry/core/prim_reflection.go:271,340` — `mc.Arg(0).(*values.String)` — `string->symbol`, `string->number`
+- `registry/core/prim_reflection.go:271,340` — `mc.Arg(0).(*values.String)` — `doc-topic`, `apropos`
 - `registry/core/prim_exceptions.go:32,37` — `mc.Arg(0/1).(values.Callable)` — `with-exception-handler` args
 - `registry/core/prim_predicates.go:120,152` — `mc.Arg(0).(values.Number)` — `exact?`, `inexact?`
 - `registry/core/prim_opaque.go:34` — `mc.Arg(0).(values.Opaque)` — `opaque-tag`
@@ -1030,9 +1030,9 @@ if !ok {
 }
 
 // After:
-s, err := helpers.RequireArg[*values.String](mc, 0)
+s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "doc-topic")
 if err != nil {
-    return werr.WrapForeignErrorf(err, ...)
+    return err
 }
 ```
 

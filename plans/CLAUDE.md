@@ -58,7 +58,7 @@ When investigating R7RS conformance issues:
 | `MACRO_SYSTEM.md` | Hygiene debugging, macro expansion tracing | Planned — not started |
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |
 | `ARCHITECTURE.md` | Dialect system, module decomposition, plugin shadowing, environment introspection | All proposed |
-| `TECH-DEBT-2026-04.md` | Tech debt assessment: 8 phases, 23 tasks. Phases 1-7 complete; Phase 8.5 done, 8.1-8.4 opportunistic | Assessment document |
+| `TECH-DEBT-2026-04.md` | Tech debt assessment: 8 phases, 27 tasks. Phases 1-7 complete; Phase 8.5 done, 8.1-8.4 opportunistic | Assessment document |
 | `TECH-DEBT-2026-04-IMPL.md` | Tech debt implementation: Phases 1-7 complete, Phase 8.5 complete (PR #637) | **Phases 1-7 + 8.5 Complete** |
 | `2026-03-30-machine-decomposition-design.md` | Machine package decomposition: compiler/VM/expander separation | **Approved** (design) |
 | `2026-03-31-environment-any-fields.md` | Replace `any` fields in Namespace with typed interfaces | **Complete** (PR #594) |
