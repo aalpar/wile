@@ -205,17 +205,23 @@ for reproducibility.
 tools/sage/verify_algebra.sage               — main harness
 tools/sage/README.md                         — usage docs
 test/wile/sage-generated/
-  structures-integer-ring.scm
-  structures-rational-field.scm
-  structures-modular-ring.scm
-  structures-powerset-lattice.scm
-  structures-powerset-boolean.scm
-  structures-flat-lattice.scm
-  structures-boolean-semiring.scm
-  structures-tropical-semiring.scm
-  structures-counting-semiring.scm
-  rewriting-integer-ring.scm
-  rewriting-rational-field.scm
-  rewriting-boolean-algebra.scm
-  rewriting-powerset-lattice.scm
+  sage-structures-integer-ring-test.scm
+  sage-structures-rational-field-test.scm
+  sage-structures-modular-ring-test.scm
+  sage-structures-powerset-lattice-test.scm
+  sage-structures-boolean-semiring-test.scm
+  sage-structures-tropical-semiring-test.scm
+  sage-rewriting-integer-ring-test.scm
+  sage-rewriting-rational-field-test.scm
+  sage-rewriting-boolean-algebra-test.scm
+  sage-rewriting-lattice-test.scm
 ```
+
+### Structures Not Yet Implemented
+
+The following structures from the original design are not yet validated
+(no corresponding Wile algebraic structure exists):
+
+- `powerset-boolean` — complement operations
+- `flat-lattice` — custom `FinitePoset`
+- `counting-semiring` — `ZZ` as semiring
