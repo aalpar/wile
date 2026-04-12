@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package machine
+package compilation
 
 import (
 	"context"
@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
+	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -71,8 +72,8 @@ func TestOperationBuildSyntaxList_Apply_Empty(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	op := NewOperationBuildSyntaxList(0)
 	result, err := op.Apply(mc)
@@ -89,14 +90,14 @@ func TestOperationBuildSyntaxList_Apply_WithSyntaxValues(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	// Push syntax values to stack
 	stx1 := syntax.NewSyntaxSymbol("a", nil)
 	stx2 := syntax.NewSyntaxSymbol("b", nil)
-	mc.evals.Push(stx1)
-	mc.evals.Push(stx2)
+	mc.Evals().Push(stx1)
+	mc.Evals().Push(stx2)
 
 	op := NewOperationBuildSyntaxList(2)
 	result, err := op.Apply(mc)
@@ -113,12 +114,12 @@ func TestOperationBuildSyntaxList_Apply_WithValues(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	// Push regular values to stack
-	mc.evals.Push(values.NewInteger(1))
-	mc.evals.Push(values.NewInteger(2))
+	mc.Evals().Push(values.NewInteger(1))
+	mc.Evals().Push(values.NewInteger(2))
 
 	op := NewOperationBuildSyntaxList(2)
 	result, err := op.Apply(mc)

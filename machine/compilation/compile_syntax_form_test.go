@@ -173,7 +173,7 @@ func TestTemplateContainsEllipsis_BareEllipsisNotEscapeForm(t *testing.T) {
 
 // TestCompileSyntax_EscapeFormCompilesDirectly verifies that escape forms
 // are compiled to direct bytecode operations rather than falling back to
-// runtime expansion via machine.OperationSyntaxTemplateExpand.
+// runtime expansion via OperationSyntaxTemplateExpand.
 func TestCompileSyntax_EscapeFormCompilesDirectly(t *testing.T) {
 	c := qt.New(t)
 
@@ -191,12 +191,12 @@ func TestCompileSyntax_EscapeFormCompilesDirectly(t *testing.T) {
 	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false), expr)
 	c.Assert(err, qt.IsNil)
 
-	// Verify NO machine.OperationSyntaxTemplateExpand was generated
+	// Verify NO OperationSyntaxTemplateExpand was generated
 	// (escape forms should compile to direct literal loads, not runtime expansion)
 	for _, op := range tpl.Operations() {
-		_, isTemplateExpand := op.(*machine.OperationSyntaxTemplateExpand)
+		_, isTemplateExpand := op.(*OperationSyntaxTemplateExpand)
 		c.Assert(isTemplateExpand, qt.IsFalse,
-			qt.Commentf("escape form should not generate machine.OperationSyntaxTemplateExpand"))
+			qt.Commentf("escape form should not generate OperationSyntaxTemplateExpand"))
 	}
 }
 
@@ -219,15 +219,15 @@ func TestCompileSyntax_NonEscapeEllipsisUsesRuntimeExpansion(t *testing.T) {
 	err := ccnt.CompileSyntax(NewCompileTimeCallContext(context.Background(), false), expr)
 	c.Assert(err, qt.IsNil)
 
-	// Verify machine.OperationSyntaxTemplateExpand WAS generated
+	// Verify OperationSyntaxTemplateExpand WAS generated
 	hasTemplateExpand := false
 	for _, op := range tpl.Operations() {
-		_, ok := op.(*machine.OperationSyntaxTemplateExpand)
+		_, ok := op.(*OperationSyntaxTemplateExpand)
 		if ok {
 			hasTemplateExpand = true
 			break
 		}
 	}
 	c.Assert(hasTemplateExpand, qt.IsTrue,
-		qt.Commentf("non-escape ellipsis should generate machine.OperationSyntaxTemplateExpand"))
+		qt.Commentf("non-escape ellipsis should generate OperationSyntaxTemplateExpand"))
 }

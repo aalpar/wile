@@ -63,7 +63,7 @@ func (*OperationSetContMark) Apply(mc *MachineContext) (*MachineContext, error) 
 
 func (p *OperationSetContMark) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationSetContMark)
-	return sameType(p, v, ok)
+	return SameType(p, v, ok)
 }
 
 // OperationSaveContMark saves the previous mark value and sets a new one.
@@ -97,7 +97,7 @@ func (*OperationSaveContMark) Apply(mc *MachineContext) (*MachineContext, error)
 
 func (p *OperationSaveContMark) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationSaveContMark)
-	return sameType(p, v, ok)
+	return SameType(p, v, ok)
 }
 
 // OperationRestoreContMark restores the previous mark value after body evaluation.
@@ -129,5 +129,5 @@ func (*OperationRestoreContMark) Apply(mc *MachineContext) (*MachineContext, err
 
 func (p *OperationRestoreContMark) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationRestoreContMark)
-	return sameType(p, v, ok)
+	return SameType(p, v, ok)
 }

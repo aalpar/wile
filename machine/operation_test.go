@@ -475,16 +475,6 @@ func TestOperations_Length(t *testing.T) {
 	qt.Assert(t, emptyOps.Len(), qt.Equals, 0)
 }
 
-// TestOperationSyntaxRulesTransformMethods tests syntax rules transform operation methods
-func TestOperationSyntaxRulesTransformMethods(t *testing.T) {
-	op := NewOperationSyntaxRulesTransform()
-	qt.Assert(t, op.String(), qt.Contains, "SyntaxRulesTransform")
-	qt.Assert(t, op.SchemeString(), qt.Contains, "syntax-rules-transform")
-	qt.Assert(t, op.IsVoid(), qt.IsFalse)
-	qt.Assert(t, op.EqualTo(op), qt.IsTrue)
-	qt.Assert(t, op.EqualTo(NewOperationPush()), qt.IsFalse)
-}
-
 // TestOperationUnpackListToStack_EqualTo tests that two instances are equal
 // and that a different operation type is not equal.
 func TestOperationUnpackListToStack_EqualTo(t *testing.T) {
@@ -916,16 +906,6 @@ func TestOperationsEqualTo(t *testing.T) {
 	qt.Assert(t, ops1.EqualTo(ops3), qt.IsFalse)
 
 	qt.Assert(t, ops1.EqualTo(values.NewInteger(1)), qt.IsFalse)
-}
-
-// TestOperationSyntaxRulesTransformApply tests OperationSyntaxRulesTransform.Apply
-func TestOperationSyntaxRulesTransformApply(t *testing.T) {
-	op := NewOperationSyntaxRulesTransform()
-	qt.Assert(t, op.String(), qt.Equals, "SyntaxRulesTransform")
-	qt.Assert(t, op.SchemeString(), qt.Contains, "syntax-rules")
-	qt.Assert(t, op.IsVoid(), qt.IsFalse)
-	qt.Assert(t, op.EqualTo(NewOperationSyntaxRulesTransform()), qt.IsTrue)
-	qt.Assert(t, op.EqualTo(values.NewInteger(1)), qt.IsFalse)
 }
 
 // TestOperationSaveContinuationEqualToAdditional tests additional save continuation paths

@@ -95,7 +95,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 	}
 
 	// Store input in global for clause matching (not on eval stack to avoid interference with body procedure calls)
-	p.AppendOperations(machine.NewOperationStoreSyntaxCaseInput())
+	p.AppendOperations(NewOperationStoreSyntaxCaseInput())
 
 	// Collect jump addresses that need to be patched after all clauses are compiled
 	var successJumps []jumpPatch // Jumps to end after successful match
@@ -150,7 +150,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 	}
 
 	// Add error operation for when no clause matches
-	p.AppendOperations(machine.NewOperationSyntaxCaseNoMatch())
+	p.AppendOperations(NewOperationSyntaxCaseNoMatch())
 
 	// Patch all success jumps to point here (end of syntax-case)
 	endIndex := p.template.CodeLen()
@@ -159,7 +159,7 @@ func (p *CompileTimeContinuation) CompileSyntaxCase(ctctx CompileTimeCallContext
 	}
 
 	// Clear the syntax-case input global
-	p.AppendOperations(machine.NewOperationClearSyntaxCaseInput())
+	p.AppendOperations(NewOperationClearSyntaxCaseInput())
 
 	return nil
 }
@@ -208,7 +208,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	}
 
 	// Create a wrapper for the compiled pattern
-	clauseWrapper := &machine.SyntaxCaseClause{
+	clauseWrapper := &SyntaxCaseClause{
 		Bytecode:       compiled.Codes,
 		PatternVars:    patternVars,
 		EllipsisVars:   compiled.EllipsisVars,
@@ -233,7 +233,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 
 	// Match operation: takes clause from value reg, peeks input from eval stack
 	// Result (#t or #f) goes into value register
-	p.AppendOperations(machine.NewOperationSyntaxCaseMatch())
+	p.AppendOperations(NewOperationSyntaxCaseMatch())
 
 	// Branch on match failure (reads value register directly, no Push needed)
 	failBranchIdx := p.template.CodeLen()
@@ -250,7 +250,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	bodyCompiler.pushSource(p.currentSource())
 
 	// Bind pattern variables from the match result
-	bodyCompiler.AppendOperations(machine.NewOperationBindPatternVars(patternVars))
+	bodyCompiler.AppendOperations(NewOperationBindPatternVars(patternVars))
 
 	// Create expander for the body environment (to expand macros like let)
 	bodyExpander := NewExpanderTimeContinuation(ctctx.ctx, bodyEnv, p.evaluator)

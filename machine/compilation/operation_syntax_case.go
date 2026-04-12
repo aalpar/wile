@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package machine
+package compilation
 
 import (
 	"fmt"
@@ -22,6 +22,7 @@ import (
 	"github.com/aalpar/wile/internal/match"
 	"github.com/aalpar/wile/internal/schemeutil"
 	"github.com/aalpar/wile/internal/syntax"
+	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 )
 
@@ -35,7 +36,7 @@ import (
 //   - If match succeeds: value register = #t, pattern bindings stored in context
 //   - If match fails: value register = #f
 type OperationSyntaxCaseMatch struct {
-	OperationBase
+	machine.OperationBase
 }
 
 // syntaxCaseState holds per-context state for syntax-case expansion.
@@ -48,20 +49,23 @@ type syntaxCaseState struct {
 }
 
 // ensureSyntaxCaseState lazily initializes the syntaxCaseState on the context.
-func ensureSyntaxCaseState(mc *MachineContext) *syntaxCaseState {
-	if mc.syntaxCase == nil {
-		mc.syntaxCase = &syntaxCaseState{}
+func ensureSyntaxCaseState(mc *machine.MachineContext) *syntaxCaseState {
+	sc, ok := mc.SyntaxCaseState().(*syntaxCaseState)
+	if ok {
+		return sc
 	}
-	return mc.syntaxCase
+	sc = &syntaxCaseState{}
+	mc.SetSyntaxCaseState(sc)
+	return sc
 }
 
 func NewOperationSyntaxCaseMatch() *OperationSyntaxCaseMatch {
 	return &OperationSyntaxCaseMatch{
-		OperationBase: NewOperationBaseWithGoName("operation:syntax-case-match", "SyntaxCaseMatch"),
+		OperationBase: machine.NewOperationBaseWithGoName("operation:syntax-case-match", "SyntaxCaseMatch"),
 	}
 }
 
-func (p *OperationSyntaxCaseMatch) Apply(mc *MachineContext) (*MachineContext, error) {
+func (p *OperationSyntaxCaseMatch) Apply(mc *machine.MachineContext) (*machine.MachineContext, error) {
 	// Get the clause from value register
 	clauseVal := mc.GetValue()
 	clause, ok := clauseVal.(*SyntaxCaseClause)
@@ -70,7 +74,7 @@ func (p *OperationSyntaxCaseMatch) Apply(mc *MachineContext) (*MachineContext, e
 	}
 
 	// Get input from per-context state (set by OperationStoreSyntaxCaseInput)
-	sc := mc.syntaxCase
+	sc, _ := mc.SyntaxCaseState().(*syntaxCaseState)
 	if sc == nil || sc.input == nil {
 		return nil, mc.Error("syntax-case: no input available")
 	}
@@ -87,7 +91,7 @@ func (p *OperationSyntaxCaseMatch) Apply(mc *MachineContext) (*MachineContext, e
 	if err != nil {
 		// Match failed
 		mc.SetValue(values.FalseValue)
-		mc.pc++
+		mc.IncrPC()
 		// Intentionally clear the matcher error: a failed match is normal control flow for syntax-case,
 		// so we record #f in the value register and return no runtime error.
 		return mc, nil // nolint:errcheck, nilerr
@@ -97,13 +101,13 @@ func (p *OperationSyntaxCaseMatch) Apply(mc *MachineContext) (*MachineContext, e
 	sc.bindings = matcher.GetBindings()
 	sc.matcher = matcher
 	mc.SetValue(values.TrueValue)
-	mc.pc++
+	mc.IncrPC()
 	return mc, nil
 }
 
 func (p *OperationSyntaxCaseMatch) EqualTo(other values.Value) bool {
 	v, ok := other.(*OperationSyntaxCaseMatch)
-	return sameType(p, v, ok)
+	return machine.SameType(p, v, ok)
 }
 
 // OperationBindPatternVars binds pattern variables from the last match
@@ -112,7 +116,7 @@ func (p *OperationSyntaxCaseMatch) EqualTo(other values.Value) bool {
 // This operation creates a new environment frame with local slots for each
 // pattern variable, binds the matched values, and makes this the current environment.
 type OperationBindPatternVars struct {
-	OperationBase
+	machine.OperationBase
 	PatternVars []string // Ordered list for consistent indexing
 }
 
@@ -125,20 +129,20 @@ func NewOperationBindPatternVars(patternVars map[string]struct{}) *OperationBind
 	// Sort for consistent ordering
 	sort.Strings(vars)
 	return &OperationBindPatternVars{
-		OperationBase: NewOperationBaseWithGoName("operation:bind-pattern-vars", "BindPatternVars"),
+		OperationBase: machine.NewOperationBaseWithGoName("operation:bind-pattern-vars", "BindPatternVars"),
 		PatternVars:   vars,
 	}
 }
 
-func (p *OperationBindPatternVars) Apply(mc *MachineContext) (*MachineContext, error) {
-	sc := mc.syntaxCase
+func (p *OperationBindPatternVars) Apply(mc *machine.MachineContext) (*machine.MachineContext, error) {
+	sc, _ := mc.SyntaxCaseState().(*syntaxCaseState)
 	if sc == nil || sc.bindings == nil {
 		return nil, mc.Error("syntax-case: no pattern bindings available")
 	}
 
 	// Create a new local environment frame with slots for pattern variables
 	localEnv := environment.NewLocalEnvironment(len(p.PatternVars))
-	childEnv := environment.NewEnvironmentFrameWithParent(localEnv, mc.env)
+	childEnv := environment.NewEnvironmentFrameWithParent(localEnv, mc.EnvironmentFrame())
 
 	// Bind each pattern variable - use MaybeCreateLocalBinding to get the actual slot
 	// which matches what the compiler does at compile time
@@ -158,15 +162,15 @@ func (p *OperationBindPatternVars) Apply(mc *MachineContext) (*MachineContext, e
 	// Switch to the new environment. childEnv was heap-allocated (not from
 	// envFramePool), so clear envPooled to prevent RestoreAndRelease from
 	// recycling it. See vm_state.go envPooled write-site table.
-	mc.env = childEnv
-	mc.envPooled = false
-	mc.pc++
+	mc.SetEnvironmentFrame(childEnv)
+	mc.SetEnvPooled(false)
+	mc.IncrPC()
 	return mc, nil
 }
 
 func (p *OperationBindPatternVars) EqualTo(other values.Value) bool {
 	v, ok := other.(*OperationBindPatternVars)
-	return sliceMatches(p, v, ok,
+	return machine.SliceMatches(p, v, ok,
 		func(op *OperationBindPatternVars) []string {
 			return op.PatternVars
 		})
@@ -174,22 +178,22 @@ func (p *OperationBindPatternVars) EqualTo(other values.Value) bool {
 
 // OperationSyntaxCaseNoMatch is emitted at the end of syntax-case when no clause matches.
 type OperationSyntaxCaseNoMatch struct {
-	OperationBase
+	machine.OperationBase
 }
 
 func NewOperationSyntaxCaseNoMatch() *OperationSyntaxCaseNoMatch {
 	return &OperationSyntaxCaseNoMatch{
-		OperationBase: NewOperationBaseWithGoName("operation:syntax-case-no-match", "SyntaxCaseNoMatch"),
+		OperationBase: machine.NewOperationBaseWithGoName("operation:syntax-case-no-match", "SyntaxCaseNoMatch"),
 	}
 }
 
-func (p *OperationSyntaxCaseNoMatch) Apply(mc *MachineContext) (*MachineContext, error) {
+func (p *OperationSyntaxCaseNoMatch) Apply(mc *machine.MachineContext) (*machine.MachineContext, error) {
 	return nil, mc.Error("syntax-case: no matching clause")
 }
 
 func (p *OperationSyntaxCaseNoMatch) EqualTo(other values.Value) bool {
 	v, ok := other.(*OperationSyntaxCaseNoMatch)
-	return sameType(p, v, ok)
+	return machine.SameType(p, v, ok)
 }
 
 // OperationSyntaxTemplateExpand expands a syntax template using the current
@@ -199,17 +203,17 @@ func (p *OperationSyntaxCaseNoMatch) EqualTo(other values.Value) bool {
 // The template is stored in the value register (loaded from literals).
 // The result is the expanded syntax object, left in the value register.
 type OperationSyntaxTemplateExpand struct {
-	OperationBase
+	machine.OperationBase
 }
 
 func NewOperationSyntaxTemplateExpand() *OperationSyntaxTemplateExpand {
 	return &OperationSyntaxTemplateExpand{
-		OperationBase: NewOperationBaseWithGoName("operation:syntax-template-expand", "SyntaxTemplateExpand"),
+		OperationBase: machine.NewOperationBaseWithGoName("operation:syntax-template-expand", "SyntaxTemplateExpand"),
 	}
 }
 
-func (p *OperationSyntaxTemplateExpand) Apply(mc *MachineContext) (*MachineContext, error) {
-	sc := mc.syntaxCase
+func (p *OperationSyntaxTemplateExpand) Apply(mc *machine.MachineContext) (*machine.MachineContext, error) {
+	sc, _ := mc.SyntaxCaseState().(*syntaxCaseState)
 	if sc == nil || sc.matcher == nil {
 		return nil, mc.Error("syntax: no pattern matcher available for template expansion")
 	}
@@ -229,28 +233,28 @@ func (p *OperationSyntaxTemplateExpand) Apply(mc *MachineContext) (*MachineConte
 	}
 
 	mc.SetValue(expanded)
-	mc.pc++
+	mc.IncrPC()
 	return mc, nil
 }
 
 func (p *OperationSyntaxTemplateExpand) EqualTo(other values.Value) bool {
 	v, ok := other.(*OperationSyntaxTemplateExpand)
-	return sameType(p, v, ok)
+	return machine.SameType(p, v, ok)
 }
 
 // OperationStoreSyntaxCaseInput stores the value register into the per-context
 // syntaxCaseState for use by OperationSyntaxCaseMatch.
 type OperationStoreSyntaxCaseInput struct {
-	OperationBase
+	machine.OperationBase
 }
 
 func NewOperationStoreSyntaxCaseInput() *OperationStoreSyntaxCaseInput {
 	return &OperationStoreSyntaxCaseInput{
-		OperationBase: NewOperationBaseWithGoName("operation:store-syntax-case-input", "StoreSyntaxCaseInput"),
+		OperationBase: machine.NewOperationBaseWithGoName("operation:store-syntax-case-input", "StoreSyntaxCaseInput"),
 	}
 }
 
-func (p *OperationStoreSyntaxCaseInput) Apply(mc *MachineContext) (*MachineContext, error) {
+func (p *OperationStoreSyntaxCaseInput) Apply(mc *machine.MachineContext) (*machine.MachineContext, error) {
 	sc := ensureSyntaxCaseState(mc)
 	val := mc.GetValue()
 	// Convert to syntax value if needed (handles Pairs, Vectors, etc.)
@@ -260,34 +264,34 @@ func (p *OperationStoreSyntaxCaseInput) Apply(mc *MachineContext) (*MachineConte
 	} else {
 		sc.input = schemeutil.DatumToSyntaxValue(mc.Context(), nil, val)
 	}
-	mc.pc++
+	mc.IncrPC()
 	return mc, nil
 }
 
 func (p *OperationStoreSyntaxCaseInput) EqualTo(other values.Value) bool {
 	v, ok := other.(*OperationStoreSyntaxCaseInput)
-	return sameType(p, v, ok)
+	return machine.SameType(p, v, ok)
 }
 
 // OperationClearSyntaxCaseInput clears the per-context syntax-case state.
 // This is called at the end of a syntax-case form.
 type OperationClearSyntaxCaseInput struct {
-	OperationBase
+	machine.OperationBase
 }
 
 func NewOperationClearSyntaxCaseInput() *OperationClearSyntaxCaseInput {
 	return &OperationClearSyntaxCaseInput{
-		OperationBase: NewOperationBaseWithGoName("operation:clear-syntax-case-input", "ClearSyntaxCaseInput"),
+		OperationBase: machine.NewOperationBaseWithGoName("operation:clear-syntax-case-input", "ClearSyntaxCaseInput"),
 	}
 }
 
-func (p *OperationClearSyntaxCaseInput) Apply(mc *MachineContext) (*MachineContext, error) {
-	mc.syntaxCase = nil
-	mc.pc++
+func (p *OperationClearSyntaxCaseInput) Apply(mc *machine.MachineContext) (*machine.MachineContext, error) {
+	mc.SetSyntaxCaseState(nil)
+	mc.IncrPC()
 	return mc, nil
 }
 
 func (p *OperationClearSyntaxCaseInput) EqualTo(other values.Value) bool {
 	v, ok := other.(*OperationClearSyntaxCaseInput)
-	return sameType(p, v, ok)
+	return machine.SameType(p, v, ok)
 }

@@ -74,7 +74,7 @@ func TestSameType(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			got := sameType(tc.p, tc.v, tc.ok)
+			got := SameType(tc.p, tc.v, tc.ok)
 			qt.Assert(t, got, qt.Equals, tc.want)
 		})
 	}
@@ -141,7 +141,7 @@ func TestFieldMatches(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			got := fieldMatches(tc.p, tc.v, tc.ok, getter)
+			got := FieldMatches(tc.p, tc.v, tc.ok, getter)
 			qt.Assert(t, got, qt.Equals, tc.want)
 		})
 	}
@@ -271,7 +271,7 @@ func TestSliceMatches(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			got := sliceMatches(tc.p, tc.v, tc.ok, getter)
+			got := SliceMatches(tc.p, tc.v, tc.ok, getter)
 			qt.Assert(t, got, qt.Equals, tc.want)
 		})
 	}

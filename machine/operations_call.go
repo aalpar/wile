@@ -42,7 +42,7 @@ func NewOperationApply() *OperationApply {
 // EqualTo returns true if o is also an OperationApply (identity by type).
 func (p *OperationApply) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationApply)
-	return sameType(p, v, ok)
+	return SameType(p, v, ok)
 }
 
 // --- ForeignFunctionCall ---
@@ -101,7 +101,7 @@ func (p *OperationForeignFunctionCall) Apply(mc *MachineContext) (rmc *MachineCo
 
 func (p *OperationForeignFunctionCall) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationForeignFunctionCall)
-	return sameType(p, v, ok)
+	return SameType(p, v, ok)
 }
 
 // --- UnpackListToStack ---
@@ -126,5 +126,5 @@ func NewOperationUnpackListToStack() *OperationUnpackListToStack {
 // EqualTo returns true if o is also an OperationUnpackListToStack (identity by type).
 func (p *OperationUnpackListToStack) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationUnpackListToStack)
-	return sameType(p, v, ok)
+	return SameType(p, v, ok)
 }

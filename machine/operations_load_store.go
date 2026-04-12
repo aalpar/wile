@@ -37,7 +37,7 @@ func NewOperationLoadVoid() *OperationLoadVoid {
 
 func (p *OperationLoadVoid) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationLoadVoid)
-	return sameType(p, v, ok)
+	return SameType(p, v, ok)
 }
 
 // --- LoadLiteral ---
@@ -64,7 +64,7 @@ func (p *OperationLoadLiteralByLiteralIndexImmediate) SchemeString() string {
 // EqualTo returns true if both operations have the same literal index.
 func (p *OperationLoadLiteralByLiteralIndexImmediate) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationLoadLiteralByLiteralIndexImmediate)
-	return fieldMatches(p, v, ok, func(op *OperationLoadLiteralByLiteralIndexImmediate) LiteralIndex { return op.LiteralIndex })
+	return FieldMatches(p, v, ok, func(op *OperationLoadLiteralByLiteralIndexImmediate) LiteralIndex { return op.LiteralIndex })
 }
 
 // --- LoadGlobal ---
@@ -91,7 +91,7 @@ func (p *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate) SchemeString() s
 // EqualTo returns true if both operations have the same literal index.
 func (p *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationLoadGlobalByGlobalIndexLiteralIndexImmediate)
-	return fieldMatches(p, v, ok, func(op *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate) LiteralIndex { return op.LiteralIndex })
+	return FieldMatches(p, v, ok, func(op *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate) LiteralIndex { return op.LiteralIndex })
 }
 
 // --- LoadLocal ---
@@ -149,7 +149,7 @@ func (p *OperationLoadCachedBinding) SchemeString() string {
 // EqualTo returns true if both operations have the same binding index.
 func (p *OperationLoadCachedBinding) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationLoadCachedBinding)
-	return fieldMatches(p, v, ok, func(op *OperationLoadCachedBinding) int32 {
+	return FieldMatches(p, v, ok, func(op *OperationLoadCachedBinding) int32 {
 		return op.BindingIndex
 	})
 }
@@ -206,5 +206,5 @@ func (p *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate) SchemeString() 
 
 func (p *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationStoreGlobalByGlobalIndexLiteralIndexImmediate)
-	return fieldMatches(p, v, ok, func(op *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate) LiteralIndex { return op.LiteralIndex })
+	return FieldMatches(p, v, ok, func(op *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate) LiteralIndex { return op.LiteralIndex })
 }

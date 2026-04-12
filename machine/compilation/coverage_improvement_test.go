@@ -36,8 +36,8 @@ import (
 
 // TestClausesWrapper_EqualTo tests the EqualTo method of ClausesWrapper.
 func TestClausesWrapper_EqualTo(t *testing.T) {
-	c1 := &machine.ClausesWrapper{Clauses: []*machine.SyntaxRulesClause{}}
-	c2 := &machine.ClausesWrapper{Clauses: []*machine.SyntaxRulesClause{}}
+	c1 := &ClausesWrapper{Clauses: []*SyntaxRulesClause{}}
+	c2 := &ClausesWrapper{Clauses: []*SyntaxRulesClause{}}
 
 	// Clauses are never equal (by design)
 	qt.Assert(t, c1.EqualTo(c2), qt.IsFalse)
@@ -48,13 +48,13 @@ func TestClausesWrapper_EqualTo(t *testing.T) {
 
 // TestClausesWrapper_IsVoid tests the IsVoid method of ClausesWrapper.
 func TestClausesWrapper_IsVoid(t *testing.T) {
-	c := &machine.ClausesWrapper{Clauses: []*machine.SyntaxRulesClause{}}
+	c := &ClausesWrapper{Clauses: []*SyntaxRulesClause{}}
 	qt.Assert(t, c.IsVoid(), qt.IsFalse)
 }
 
 // TestClausesWrapper_SchemeString tests the SchemeString method of ClausesWrapper.
 func TestClausesWrapper_SchemeString(t *testing.T) {
-	c := &machine.ClausesWrapper{Clauses: []*machine.SyntaxRulesClause{}}
+	c := &ClausesWrapper{Clauses: []*SyntaxRulesClause{}}
 	qt.Assert(t, c.SchemeString(), qt.Equals, "#<syntax-rules-clauses>")
 }
 

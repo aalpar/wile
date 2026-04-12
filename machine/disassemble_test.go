@@ -132,8 +132,8 @@ func TestDisassemble_CachedBinding(t *testing.T) {
 func TestDisassemble_SideTable(t *testing.T) {
 	tpl := NewNativeTemplate(0, 0, false)
 
-	bsl := NewOperationBuildSyntaxList(3)
-	instr := tpl.AppendSideTableOp(bsl)
+	scm := NewOperationSetContMark()
+	instr := tpl.AppendSideTableOp(scm)
 	tpl.code = append(tpl.code, instr)
 	tpl.sourceRefs = append(tpl.sourceRefs, 0)
 
@@ -141,7 +141,7 @@ func TestDisassemble_SideTable(t *testing.T) {
 	qt.Assert(t, dt.Instructions, qt.HasLen, 1)
 	qt.Assert(t, dt.Instructions[0].Op, qt.Equals, "Complex")
 	qt.Assert(t, dt.Instructions[0].SideOp, qt.Not(qt.Equals), "")
-	qt.Assert(t, strings.Contains(dt.Instructions[0].SideOp, "BuildSyntaxList"), qt.IsTrue)
+	qt.Assert(t, strings.Contains(dt.Instructions[0].SideOp, "cont-mark"), qt.IsTrue)
 }
 
 func TestDisassemble_MakeClosureAnnotation(t *testing.T) {

@@ -43,7 +43,7 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-// machine.FreeIdResolution stores the resolution info for a free identifier in a macro template.
+// FreeIdResolution stores the resolution info for a free identifier in a macro template.
 // Free identifiers can be resolved to either global bindings (via GlobalIndex) or
 // local bindings (via their scope set at macro definition time).
 // FreeIdResolution, SyntaxRulesClause, and ClausesWrapper are defined in
@@ -162,7 +162,7 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 	}
 
 	// Compile each clause
-	var clauses []*machine.SyntaxRulesClause
+	var clauses []*SyntaxRulesClause
 	v, err := clausesList.SyntaxForEach(ctx, func(_ context.Context, _ int, _ bool, clause syntax.SyntaxValue) error {
 		clausePair, ok := clause.(*syntax.SyntaxPair)
 		if !ok {
@@ -227,7 +227,7 @@ func compileClauseWithEllipsisAndLiterals(
 	literalSyntax map[string]*syntax.SyntaxSymbol,
 	ellipsis string,
 	libraryScope *syntax.Scope,
-) (*machine.SyntaxRulesClause, error) {
+) (*SyntaxRulesClause, error) {
 	// Determine pattern variables (anything not a literal, keyword, or ellipsis)
 	// Use literalSyntax for scope-aware literal matching (R7RS bound-identifier=? semantics)
 	// Also collect pattern variable syntax for nested macro hygiene
@@ -262,10 +262,10 @@ func compileClauseWithEllipsisAndLiterals(
 	// Resolve each free identifier to its definition-time binding:
 	// - For global bindings: store GlobalIndex for cross-library hygiene
 	// - For local bindings: store scopes so the identifier resolves to definition-time binding
-	freeIds := make(map[string]*machine.FreeIdResolution)
+	freeIds := make(map[string]*FreeIdResolution)
 	collectFreeIdentifiersWithEllipsis(env, template, variables, freeIds, ellipsis, libraryScope)
 
-	return &machine.SyntaxRulesClause{
+	return &SyntaxRulesClause{
 		Template:         template,
 		Bytecode:         compiled.Codes,
 		Matcher:          matcher,
@@ -294,7 +294,7 @@ func compileClauseWithEllipsisAndLiterals(
 // Resolves each free identifier to either:
 // - LocalScopes (for local bindings) - enables hygiene for let-syntax capturing local vars
 // - GlobalIndex (for global bindings) - enables cross-library macro hygiene
-func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]*machine.FreeIdResolution, ellipsis string, libraryScope *syntax.Scope) {
+func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, template syntax.SyntaxValue, patternVars map[string]struct{}, freeIds map[string]*FreeIdResolution, ellipsis string, libraryScope *syntax.Scope) {
 	switch t := template.(type) {
 	case *syntax.SyntaxSymbol:
 		sym := t.Unwrap()
@@ -316,7 +316,7 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 						// Local binding found - store scopes for hygiene
 						// Set HasLocalBinding=true even if scopes are empty,
 						// so expansion knows not to add intro scope.
-						freeIds[symVal.Key] = &machine.FreeIdResolution{
+						freeIds[symVal.Key] = &FreeIdResolution{
 							LocalScopes:     binding.Scopes(),
 							HasLocalBinding: true,
 						}
@@ -329,7 +329,7 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 				gi := env.GetGlobalIndexAcrossPhases(symVal)
 				// Store the resolved GlobalIndex (may be nil if unbound, which is ok -
 				// unbound free identifiers like special forms will be handled normally)
-				freeIds[symVal.Key] = &machine.FreeIdResolution{
+				freeIds[symVal.Key] = &FreeIdResolution{
 					Global:   gi,
 					LibScope: libraryScope,
 				}
@@ -517,7 +517,7 @@ func extractLiteralsWithSyntax(ctx context.Context,
 }
 
 // createTransformerClosure creates a closure that implements the transformer
-func createTransformerClosure(env *environment.EnvironmentFrame, clauses []*machine.SyntaxRulesClause, literals map[string]struct{}) (*machine.MachineClosure, error) { //nolint:unparam
+func createTransformerClosure(env *environment.EnvironmentFrame, clauses []*SyntaxRulesClause, literals map[string]struct{}) (*machine.MachineClosure, error) { //nolint:unparam
 	// Create a native template that implements the transformer logic
 	// This will be called with the input form on the eval stack
 
@@ -537,11 +537,11 @@ func createTransformerClosure(env *environment.EnvironmentFrame, clauses []*mach
 
 	// For now, store the clauses as a literal and use a special operation
 	// Need to create a values.Value wrapper for the clauses
-	clausesValue := &machine.ClausesWrapper{Clauses: clauses}
+	clausesValue := &ClausesWrapper{Clauses: clauses}
 	clausesIdx := template.MaybeAppendLiteral(clausesValue)
 	template.AppendOperations(
 		machine.NewOperationLoadLiteralByLiteralIndexImmediate(clausesIdx),
-		machine.NewOperationSyntaxRulesTransform(), // New operation type needed
+		NewOperationSyntaxRulesTransform(), // New operation type needed
 	)
 	template.Optimize()
 
