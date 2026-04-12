@@ -1,7 +1,7 @@
 # WalkSubExprs ChildRole Refinement
 
 **Date**: 2026-04-05
-**Status**: Approved
+**Status**: **Complete** — `ChildRole` enum and `WalkSubExprs` implemented.
 **TODO.md ref**: Refactoring > High Priority > `WalkSubExprs for validated expression traversal`
 
 ## Problem

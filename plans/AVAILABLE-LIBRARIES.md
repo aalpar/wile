@@ -1,7 +1,7 @@
 # Design: `available-libraries` — Library Discovery
 
 **Date:** 2026-03-28
-**Status:** Approved — Implementation plan: `2026-03-28-available-libraries-impl.md`
+**Status:** **Complete** (PR #590). Go API: `Engine.AvailableLibraries`, Scheme API: `(available-libraries)`.
 
 ## Problem
 

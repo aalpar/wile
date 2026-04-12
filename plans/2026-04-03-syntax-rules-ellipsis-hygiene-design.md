@@ -1,8 +1,7 @@
 # syntax-rules Ellipsis and Hygiene Bug Fixes
 
 **Date:** 2026-04-03
-**Status:** Bugs B+C complete. Bug A: validator partially fixed (Tasks 1-2, to be revised
-in Task 4 for consistency), environment layer designed (Tasks 3-5).
+**Status:** **Complete** (PRs #606, #607). All three bugs fixed.
 
 ## Background
 
