@@ -1,6 +1,6 @@
 # Plan: Bring machine/compilation Coverage to 80%
 
-**Status:** Draft
+**Status:** **Superseded** by `2026-04-04-compilation-coverage.md` (Complete, PR #608)
 **Created:** 2026-04-04
 **Current coverage:** 68.6% (2550/3718 statements covered)
 **Target:** 80% (2974 statements) → need 424 more covered statements

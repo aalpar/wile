@@ -1,5 +1,7 @@
 # Wile MCP Server Design
 
+**Status:** **Complete** (PR #588). Implemented as integrated `--mcp` flag in `cmd/wile` rather than standalone binary. Tools: `eval`, `disassemble`, `doc`, `apropos`, `topic`, `topics`, `libraries`, `reset`.
+
 ## Summary
 
 A standalone MCP server binary (`wile-mcp`) that exposes the Wile Scheme

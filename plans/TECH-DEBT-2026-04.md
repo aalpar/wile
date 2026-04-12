@@ -171,13 +171,9 @@ These are longer-term items to tackle opportunistically when working in the area
 **Effort:** M
 **Verify:** `make lint && make test ./...`
 
-### Task 8.3: Fix `internal/repl` importing `machine/compilation`
+### Task 8.3: ~~Fix `internal/repl` importing `machine/compilation`~~ [Done]
 
-**Files:** `internal/repl/meta.go:17-18`
-**Problem:** REPL (presentation layer) imports `machine/compilation` (deep internal) to type-assert `LibraryRegistry` and access `CompiledLibrary` fields. Also `registry/core/prim_reflection.go` imports for `ParseLibraryNameFromDatum`.
-**Fix:** Widen `LibrarySearcher` interface to expose operations used at each call site (`Lookup`, `All`, `IsLoading`), or extract a `LibraryInfo` value type that `meta.go` consumes without importing `compilation`.
-**Effort:** M
-**Verify:** `make lint && make test ./internal/repl/... ./machine/...`
+Resolved by PR #617 (public REPL API for embedders). `internal/repl` was deleted entirely; consumers migrated to public `repl/` package which uses Engine-level APIs instead of importing `machine/compilation` internals.
 
 ### Task 8.5: ~~Funnel `prim_eval.go` through `NewSubContext`~~ [Done]
 
@@ -204,8 +200,8 @@ Added `NewSubContextWithTemplate(tpl, env)` to `MachineContext`. Both `PrimEval`
 | 5 | 5 tasks (5.1-5.5) | S-M | Missing abstractions — ~~COMPLETE~~ (5 migrated, 3 intentional deviations) |
 | 6 | 4 tasks (6.1-6.4) | S each | Dead code and style cleanup — ~~6.1, 6.3 COMPLETE~~; 6.2 (431 sites), 6.4 open |
 | 7 | 1 task | L | Test helper unification — ~~COMPLETE~~ |
-| 8 | 5 tasks (8.1-8.5) | M each | Architectural improvements — ~~8.5 COMPLETE~~; 8.1-8.4 opportunistic |
+| 8 | 5 tasks (8.1-8.5) | M each | Architectural improvements — ~~8.3, 8.5 COMPLETE~~; 8.1, 8.2, 8.4 opportunistic |
 
 **Recommended execution order:** Phase 1 (cheap safety wins) → Phase 6 (cheap cleanup) → Phase 5 (abstractions) → Phase 7 (test helpers) → Phase 8 (architecture).
 
-**Last updated:** 2026-04-11 (marked 5.2-5.4, 6.3, 7.1, 8.5 done; added Task 8.5 from PR #637; updated 5.5 count 16→8).
+**Last updated:** 2026-04-11 (marked 8.3 done via PR #617; 23/27 tasks complete, 2 open, 3 opportunistic).
