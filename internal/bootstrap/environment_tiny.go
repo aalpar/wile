@@ -229,7 +229,7 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 				return werr.WrapForeignErrorf(err, "error parsing bootstrap macros")
 			}
 
-			tpl, err := compilation.ExpandAndCompile(ctx, env, stx, resolver, 0)
+			tpl, err := compilation.ExpandAndCompile(ctx, env, stx, resolver, compilation.DefaultInlineThreshold)
 			if err != nil {
 				return werr.WrapForeignErrorf(err, "error expanding/compiling bootstrap macro")
 			}

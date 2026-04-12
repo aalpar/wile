@@ -101,7 +101,7 @@ func compileTransformerToMachineClosure(
 func compileAndEvalLambdaTransformer(ctx context.Context, env *environment.EnvironmentFrame, lambdaExpr syntax.SyntaxValue, evaluator machine.MacroEvaluator) (*machine.MachineClosure, error) {
 	expandEnv := env.Expand()
 
-	tpl, err := ExpandAndCompile(ctx, expandEnv, lambdaExpr, nil, 0)
+	tpl, err := ExpandAndCompile(ctx, expandEnv, lambdaExpr, nil, DefaultInlineThreshold)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(err, "transformer")
 	}
