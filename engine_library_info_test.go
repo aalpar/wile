@@ -28,7 +28,8 @@ func TestEngine_LoadedLibraries_Empty(t *testing.T) {
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)
-	libs := eng.LoadedLibraries()
+	libs, libErr := eng.LoadedLibraries()
+	qt.Assert(t, libErr, qt.IsNil)
 	qt.Assert(t, len(libs), qt.Equals, 0)
 }
 
@@ -44,7 +45,8 @@ func TestEngine_LoadedLibraries_AfterImport(t *testing.T) {
 	_, err = eng.EvalMultiple(ctx, `(import (scheme base))`)
 	qt.Assert(t, err, qt.IsNil)
 
-	libs := eng.LoadedLibraries()
+	libs, libErr := eng.LoadedLibraries()
+	qt.Assert(t, libErr, qt.IsNil)
 	qt.Assert(t, len(libs) > 0, qt.IsTrue)
 
 	var found bool
@@ -62,7 +64,8 @@ func TestEngine_LookupLibrary_NotFound(t *testing.T) {
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)
-	info := eng.LookupLibrary("nonexistent", "lib")
+	info, lookupErr := eng.LookupLibrary("nonexistent", "lib")
+	qt.Assert(t, lookupErr, qt.IsNil)
 	qt.Assert(t, info, qt.IsNil)
 }
 
@@ -78,7 +81,8 @@ func TestEngine_LookupLibrary_Found(t *testing.T) {
 	_, err = eng.EvalMultiple(ctx, `(import (scheme base))`)
 	qt.Assert(t, err, qt.IsNil)
 
-	info := eng.LookupLibrary("scheme", "base")
+	info, lookupErr := eng.LookupLibrary("scheme", "base")
+	qt.Assert(t, lookupErr, qt.IsNil)
 	qt.Assert(t, info, qt.IsNotNil)
 	qt.Assert(t, info.Name, qt.Equals, "(scheme base)")
 }

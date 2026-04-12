@@ -348,7 +348,11 @@ func (p *MetaCommandHandler) cmdDocLibrary(nameStr string, out io.Writer) {
 		return
 	}
 
-	lib := p.eng.LookupLibrary(parts...)
+	lib, lookupErr := p.eng.LookupLibrary(parts...)
+	if lookupErr != nil {
+		fmt.Fprintf(out, "Library (%s): %v\n", strings.Join(parts, " "), lookupErr)
+		return
+	}
 	if lib == nil {
 		fmt.Fprintf(out, "Library (%s): not loaded\n", strings.Join(parts, " "))
 		return
@@ -698,7 +702,11 @@ func (p *MetaCommandHandler) cmdLibraries(ctx context.Context, out io.Writer) {
 		return
 	}
 
-	loaded := p.eng.LoadedLibraries()
+	loaded, loadErr := p.eng.LoadedLibraries()
+	if loadErr != nil {
+		fmt.Fprintf(out, "Error loading libraries: %v\n", loadErr)
+		return
+	}
 	unloaded := p.eng.UnloadedLibraries(ctx)
 
 	if len(loaded) == 0 && len(unloaded) == 0 {
@@ -785,11 +793,13 @@ func (p *MetaCommandHandler) DisassembleBinding(name string) (string, error) {
 	}
 
 	if val == nil {
-		return "", werr.NewForeignErrorf("Unbound identifier: %s", name)
+		return "", werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"DisassembleBinding: unbound identifier: %s", name)
 	}
 
 	if p.eng == nil {
-		return "", werr.NewForeignErrorf("%s: engine not available for disassembly", name)
+		return "", werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"DisassembleBinding: engine not available for disassembly")
 	}
 
 	return p.eng.DisassembleValue(wile.WrapValue(val))

@@ -16,9 +16,11 @@ package wile
 
 import (
 	"context"
+	"errors"
 	"sort"
 
 	"github.com/aalpar/wile/machine/compilation"
+	"github.com/aalpar/wile/werr"
 )
 
 // LibraryInfo holds read-only metadata about a Scheme library.
@@ -30,26 +32,35 @@ type LibraryInfo struct {
 }
 
 // LookupLibrary returns info for a loaded library identified by its
-// name parts (e.g., "scheme", "base"). Returns nil if not loaded.
-func (p *Engine) LookupLibrary(parts ...string) *LibraryInfo {
-	reg := p.libraryRegistry()
+// name parts (e.g., "scheme", "base"). Returns (nil, nil) if no library
+// registry is configured. Returns a non-nil error if the registry has
+// an unexpected type.
+func (p *Engine) LookupLibrary(parts ...string) (*LibraryInfo, error) {
+	reg, err := p.libraryRegistry()
+	if err != nil {
+		return nil, err
+	}
 	if reg == nil {
-		return nil
+		return nil, nil
 	}
 	name := compilation.NewLibraryName(parts...)
 	lib := reg.Lookup(name)
 	if lib == nil {
-		return nil
+		return nil, nil
 	}
-	return compiledLibraryToInfo(lib)
+	return compiledLibraryToInfo(lib), nil
 }
 
 // LoadedLibraries returns metadata for all currently loaded libraries,
-// sorted by name.
-func (p *Engine) LoadedLibraries() []*LibraryInfo {
-	reg := p.libraryRegistry()
+// sorted by name. Returns (nil, nil) if no library registry is
+// configured.
+func (p *Engine) LoadedLibraries() ([]*LibraryInfo, error) {
+	reg, err := p.libraryRegistry()
+	if err != nil {
+		return nil, err
+	}
 	if reg == nil {
-		return nil
+		return nil, nil
 	}
 	libs := reg.All()
 	q := make([]*LibraryInfo, len(libs))
@@ -59,7 +70,7 @@ func (p *Engine) LoadedLibraries() []*LibraryInfo {
 	sort.Slice(q, func(i, j int) bool {
 		return q[i].Name < q[j].Name
 	})
-	return q
+	return q, nil
 }
 
 // UnloadedLibraries returns metadata for libraries discoverable via the
@@ -70,10 +81,10 @@ func (p *Engine) UnloadedLibraries(ctx context.Context) []*LibraryInfo {
 	if idx == nil {
 		return nil
 	}
-	libReg := p.libraryRegistry()
+	reg, _ := p.libraryRegistry()
 	var q []*LibraryInfo
 	for _, summary := range idx.Entries() {
-		if libReg != nil && libReg.Lookup(summary.Name) != nil {
+		if reg != nil && reg.Lookup(summary.Name) != nil {
 			continue
 		}
 		q = append(q, &LibraryInfo{
@@ -87,23 +98,26 @@ func (p *Engine) UnloadedLibraries(ctx context.Context) []*LibraryInfo {
 }
 
 // libraryRegistry extracts the concrete LibraryRegistry from the
-// environment, returning nil if unavailable.
-func (p *Engine) libraryRegistry() *compilation.LibraryRegistry {
+// environment. Returns (nil, nil) if no registry is configured.
+// Returns a non-nil error if the registry has an unexpected concrete
+// type, consistent with AvailableLibraries.
+func (p *Engine) libraryRegistry() (*compilation.LibraryRegistry, error) {
 	regSearcher := p.env.LibraryRegistry()
 	if regSearcher == nil {
-		return nil
+		return nil, nil
 	}
 	reg, ok := regSearcher.(*compilation.LibraryRegistry)
 	if !ok {
-		return nil
+		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration,
+			"libraryRegistry: unexpected type %T", regSearcher)
 	}
-	return reg
+	return reg, nil
 }
 
 // ensureExportIndex lazily builds the library export index on first
-// successful call. Retries on transient failures (context cancellation,
-// slow filesystem). Permanent conditions (nil env, nil resolver) are
-// marked as built to avoid repeated nil checks.
+// successful call. Retries on context cancellation/deadline. Permanent
+// failures (permissions, corrupt .sld, etc.) are marked as built to
+// avoid repeated retries.
 func (p *Engine) ensureExportIndex(ctx context.Context) *compilation.LibraryExportIndex {
 	p.exportIndexMu.Lock()
 	defer p.exportIndexMu.Unlock()
@@ -115,9 +129,15 @@ func (p *Engine) ensureExportIndex(ctx context.Context) *compilation.LibraryExpo
 		p.exportIndexBuilt = true
 		return nil
 	}
-	idx, err := compilation.BuildExportIndex(ctx, resolver, p.libraryRegistry())
+	reg, _ := p.libraryRegistry()
+	idx, err := compilation.BuildExportIndex(ctx, resolver, reg)
 	if err != nil {
-		return nil // transient failure — retry next call
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil // transient — retry next call
+		}
+		// Permanent failure (permissions, corrupt .sld, etc.) — stop retrying.
+		p.exportIndexBuilt = true
+		return nil
 	}
 	p.exportIndex = idx
 	p.exportIndexBuilt = true

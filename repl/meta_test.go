@@ -651,7 +651,7 @@ func TestCmdDisassemble(t *testing.T) {
 	}{
 		{"no args", nil, "Usage"},
 		{"native closure", []string{"add1"}, "OP"},
-		{"unbound identifier", []string{"nonexistent-xyz"}, "Unbound identifier"},
+		{"unbound identifier", []string{"nonexistent-xyz"}, "unbound identifier"},
 		{"syntax binding", []string{"if"}, "not a procedure"},
 	}
 	for _, tc := range tcs {

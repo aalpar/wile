@@ -111,6 +111,11 @@ func (p *RegistryDocProvider) lookupNonPrimitiveDoc(name string) (DocInfo, bool)
 // (case-insensitive substring match). Results are sorted by name.
 // Delegates to registry.SearchDoc for non-library results, then appends
 // library results from the Engine's loaded and unloaded library methods.
+//
+// The library matching logic here mirrors registry.SearchDoc's
+// searchLibraries/searchUnloadedExports functions but operates on
+// wile.LibraryInfo instead of compilation.* types. This duplication
+// is a structural consequence of decoupling repl/ from machine/compilation/.
 func (p *RegistryDocProvider) Search(ctx context.Context, pattern string) []registry.DocSearchResult {
 	// Get non-library results from the registry (passing nil for library params).
 	q := registry.SearchDoc(p.reg, p.env(), nil, nil, pattern)
@@ -124,7 +129,8 @@ func (p *RegistryDocProvider) Search(ctx context.Context, pattern string) []regi
 		}
 
 		// Loaded libraries.
-		for _, lib := range p.eng.LoadedLibraries() {
+		loaded, _ := p.eng.LoadedLibraries()
+		for _, lib := range loaded {
 			if seen[lib.Name] {
 				continue
 			}

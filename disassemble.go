@@ -1,3 +1,17 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package wile
 
 import (
@@ -11,13 +25,24 @@ import (
 // FormLabel returns a human-readable type label for a value:
 // "primitive" for foreign (Go-implemented) closures,
 // "procedure" for compiled Scheme closures,
-// "" for non-callable values.
+// "" for non-callable values (including typed nils).
 func (p *Engine) FormLabel(v Value) string {
 	inner := unwrapValue(v)
-	switch inner.(type) {
+	switch c := inner.(type) {
 	case *machine.ForeignClosure:
+		if c == nil {
+			return ""
+		}
 		return "primitive"
-	case *machine.MachineClosure, *machine.CaseLambdaClosure:
+	case *machine.MachineClosure:
+		if c == nil {
+			return ""
+		}
+		return "procedure"
+	case *machine.CaseLambdaClosure:
+		if c == nil {
+			return ""
+		}
 		return "procedure"
 	default:
 		return ""
