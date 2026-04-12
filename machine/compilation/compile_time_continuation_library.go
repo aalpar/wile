@@ -28,12 +28,8 @@ import (
 // references like (define any ...(every pair? lol)...) where every is
 // defined later in the body.
 //
-// R7RS §5.3: Internal define-syntax forms must be processed before expanding
-// subsequent body expressions so that locally-defined macros are visible.
-//
-// This function performs two passes:
-//  1. Expansion pass: Expand all forms, compiling define-syntax as encountered
-//  2. Compilation pass: Pre-declare define bindings, then compile all expressions
+// Collects forms from the syntax pair and delegates to processFormsWithLetrecSemantics,
+// which handles library scope stamping, expansion, predeclaration, and compilation.
 func (p *CompileTimeContinuation) compileLibraryBegin(ctctx CompileTimeCallContext, expr *syntax.SyntaxPair) error {
 	if !expr.IsList() {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "expected a list of expressions, got %T", expr)
@@ -49,41 +45,5 @@ func (p *CompileTimeContinuation) compileLibraryBegin(ctctx CompileTimeCallConte
 		return werr.WrapForeignErrorf(err, "failed to collect library body forms")
 	}
 
-	// Flatt §3.3: all forms in a library body carry the library scope.
-	// This ensures bindings and references within the library are scoped,
-	// enabling bindingScopes ⊆ useScopes for intra-library resolution.
-	// Scopes propagate to bindings via nameSym.Scopes() → binding.SetScopes()
-	// in both predeclareDefineBinding and ExpandBodyWithDefineSyntax.
-	if p.libraryScope != nil {
-		for i, form := range forms {
-			forms[i] = syntax.AddScopeToSyntax(form, p.libraryScope)
-		}
-	}
-
-	// Pass 1: Expand all forms, compiling define-syntax as encountered
-	expander := NewExpanderTimeContinuation(ctctx.ctx, p.env, p.evaluator)
-	expander.libraryScope = p.libraryScope
-	expandedForms, err := expander.ExpandBodyWithDefineSyntax(forms)
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "library: error expanding forms")
-	}
-
-	// Pre-declare all define bindings for letrec* semantics
-	for _, expanded := range expandedForms {
-		p.predeclareDefineBinding(expanded)
-	}
-
-	// Pass 2: Compile all expanded expressions
-	for i, expanded := range expandedForms {
-		ctctx0 := ctctx
-		if i < len(expandedForms)-1 {
-			ctctx0 = ctctx.NotInTail()
-		}
-		compileErr := p.CompileExpression(ctctx0, expanded)
-		if compileErr != nil {
-			return werr.WrapForeignErrorf(compileErr, "library: error compiling form")
-		}
-	}
-
-	return nil
+	return p.processFormsWithLetrecSemantics(ctctx, forms, "library")
 }

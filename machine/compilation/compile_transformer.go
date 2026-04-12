@@ -25,6 +25,13 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
+const (
+	// TransformerSyntaxRules is the leading symbol for (syntax-rules ...) transformers.
+	TransformerSyntaxRules = "syntax-rules"
+	// TransformerERMacro is the leading symbol for (er-macro-transformer ...) transformers.
+	TransformerERMacro = "er-macro-transformer"
+)
+
 // compileTransformerToMachineClosure compiles a define-syntax transformer expression
 // into a values.Value for storage in the expand environment.
 //
@@ -68,13 +75,13 @@ func compileTransformerToMachineClosure(
 	}
 
 	switch symbol.Key {
-	case "syntax-rules":
+	case TransformerSyntaxRules:
 		return CompileSyntaxRules(ctx, env, transformerPair, libraryScope)
 
 	case "lambda":
 		return compileAndEvalLambdaTransformer(ctx, env, transformerPair, evaluator)
 
-	case "er-macro-transformer":
+	case TransformerERMacro:
 		return compileERMacroTransformer(ctx, env, transformerPair, evaluator)
 
 	default:

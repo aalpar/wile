@@ -367,7 +367,7 @@ func (p *Engine) EvalIn(ctx context.Context, expr *Expression, ns *environment.N
 	}
 	env := ns.Runtime()
 
-	tpl, err := expandAndCompile(ctx, env, expr.stx, nil, p.inlineThreshold)
+	tpl, err := expandAndCompileOptimized(ctx, env, expr.stx, nil, p.inlineThreshold)
 	if err != nil {
 		return nil, &CompilationError{Message: "expand/compile error", Cause: err}
 	}
@@ -676,37 +676,20 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 	return nil
 }
 
-// expandAndCompile runs the expand → compile → optimize pipeline for a single
-// syntax value, returning the resulting template. An optional FileResolver
-// overrides how include/load finds files (nil uses the OS filesystem default).
-// inlineThreshold controls procedure inlining: procedures with bodies longer
-// than this threshold are not inlined; 0 disables inlining entirely.
-// Callers own error wrapping.
-func expandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver compilation.FileResolver, inlineThreshold int) (*machine.NativeTemplate, error) {
-	tpl := machine.NewEmptyNativeTemplate()
-
-	expanded, err := compilation.NewExpanderTimeContinuation(ctx, env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
+// expandAndCompileOptimized runs the expand → compile → optimize pipeline for a
+// single syntax value. Thin wrapper around compilation.ExpandAndCompile that adds
+// the Optimize() call used by the public Engine API.
+func expandAndCompileOptimized(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver compilation.FileResolver, inlineThreshold int) (*machine.NativeTemplate, error) {
+	tpl, err := compilation.ExpandAndCompile(ctx, env, stx, resolver, inlineThreshold)
 	if err != nil {
 		return nil, err
 	}
-
-	cctx := compilation.NewCompileTimeCallContext(ctx, false)
-	compiler := compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator())
-	if resolver != nil {
-		compiler.SetFileResolver(resolver)
-	}
-	compiler.SetInlineThreshold(inlineThreshold)
-	err = compiler.CompileExpression(cctx, expanded)
-	if err != nil {
-		return nil, err
-	}
-
 	tpl.Optimize()
 	return tpl, nil
 }
 
 func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*CompiledCode, error) {
-	tpl, err := expandAndCompile(ctx, p.env, stx, nil, p.inlineThreshold)
+	tpl, err := expandAndCompileOptimized(ctx, p.env, stx, nil, p.inlineThreshold)
 	if err != nil {
 		return nil, &CompilationError{Message: "expand/compile error", Cause: err}
 	}
@@ -802,7 +785,7 @@ func loadBootstrapMacros(ctx context.Context, env *environment.EnvironmentFrame,
 
 // runBootstrapMacroStx expands, compiles, and runs a single syntax value as part of the bootstrap process.
 func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver compilation.FileResolver) error {
-	tpl, err := expandAndCompile(ctx, env, stx, resolver, compilation.DefaultInlineThreshold)
+	tpl, err := expandAndCompileOptimized(ctx, env, stx, resolver, compilation.DefaultInlineThreshold)
 	if err != nil {
 		return err
 	}

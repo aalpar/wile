@@ -38,10 +38,11 @@ import (
 // With ParamCount: 1 and IsVariadic: true, all args arrive as a rest
 // list in mc.Arg(0).
 func PrimEval(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
-	args := mc.Arg(0)
-
-	argList, ok := args.(values.Tuple)
+	mc, ok := cc.(*machine.MachineContext)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAMachineContext, "eval: expected MachineContext, got %T", cc)
+	}
+	argList, ok := mc.Arg(0).(values.Tuple)
 	if !ok || argList.IsEmptyList() {
 		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "eval: expected 1 or 2 arguments")
 	}
@@ -70,22 +71,13 @@ func PrimEval(cc machine.CallContext) error {
 
 	env := topLevelEnv.Runtime()
 
-	// Convert datum to syntax value
+	// Convert datum to syntax value, expand, and compile.
 	sctx := syntax.NewZeroValueSourceContext()
 	stx := schemeutil.DatumToSyntaxValue(mc.Context(), sctx, expr)
 
-	// Expand the expression
-	expanded, err := compilation.NewExpanderTimeContinuation(mc.Context(), env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
+	tpl, err := compilation.ExpandAndCompile(mc.Context(), env, stx, nil, 0)
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "eval: expansion error")
-	}
-
-	// Compile the expression
-	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := compilation.NewCompileTimeCallContext(mc.Context(), false)
-	err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "eval: compilation error")
+		return werr.WrapForeignErrorf(err, "eval")
 	}
 
 	// Run the compiled code in a sub-context.
@@ -155,18 +147,9 @@ func PrimLoad(cc machine.CallContext) error {
 			return werr.WrapForeignErrorf(err, "load: parse error in %s", filename.Value)
 		}
 
-		// Expand the expression
-		expanded, err := compilation.NewExpanderTimeContinuation(mc.Context(), env, machine.NewVMMacroEvaluator()).ExpandExpression(stx)
+		tpl, err := compilation.ExpandAndCompile(mc.Context(), env, stx, nil, 0)
 		if err != nil {
-			return werr.WrapForeignErrorf(err, "load: expansion error in %s", filename.Value)
-		}
-
-		// Compile the expression
-		tpl := machine.NewNativeTemplate(0, 0, false)
-		cctx := compilation.NewCompileTimeCallContext(mc.Context(), false)
-		err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
-		if err != nil {
-			return werr.WrapForeignErrorf(err, "load: compilation error in %s", filename.Value)
+			return werr.WrapForeignErrorf(err, "load: in %s", filename.Value)
 		}
 
 		// Run the compiled code.
@@ -437,22 +420,12 @@ func PrimCompile(mc machine.CallContext) error {
 		syntaxVal = schemeutil.DatumToSyntaxValue(mc.Context(), sctx, expr)
 	}
 
-	// Get the environment for expansion and compilation
+	// Expand and compile to bytecode template.
 	env := mc.EnvironmentFrame()
 
-	// Step 1: Expand the syntax object
-	expanded, err := compilation.NewExpanderTimeContinuation(mc.Context(), env, machine.NewVMMacroEvaluator()).ExpandExpression(syntaxVal)
+	tpl, err := compilation.ExpandAndCompile(mc.Context(), env, syntaxVal, nil, 0)
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "compile: expansion failed")
-	}
-
-	// Step 2: Compile to bytecode template
-	// Create a thunk template (0 params, 0 locals, not variadic)
-	tpl := machine.NewNativeTemplate(0, 0, false)
-	cctx := compilation.NewCompileTimeCallContext(mc.Context(), false)
-	err = compilation.NewCompileTimeContinuation(tpl, env, machine.NewVMMacroEvaluator()).CompileExpression(cctx, expanded)
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "compile: compilation failed")
+		return werr.WrapForeignErrorf(err, "compile")
 	}
 
 	// Add return operation so the thunk properly returns its value

@@ -98,7 +98,7 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 			}
 
 			// Process forms with letrec* semantics: pre-declare all bindings first
-			err = p.processFormsWithLetrecSemantics(ctctx, forms, fn.Value)
+			err = p.processFormsWithLetrecSemantics(ctctx, forms, "include "+fn.Value)
 			if err != nil {
 				return err
 			}
@@ -130,7 +130,9 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 // so that subsequent forms can use the macro during their expansion.
 // R7RS §5.3: Internal define-syntax forms must be processed before expanding
 // subsequent body expressions.
-func (p *CompileTimeContinuation) processFormsWithLetrecSemantics(ctctx CompileTimeCallContext, forms []syntax.SyntaxValue, filename string) error {
+//
+// errContext identifies the call site for error messages (e.g. "include", "library").
+func (p *CompileTimeContinuation) processFormsWithLetrecSemantics(ctctx CompileTimeCallContext, forms []syntax.SyntaxValue, errContext string) error {
 	// Flatt §3.3: when including inside a library, stamp all forms with the
 	// library scope so that bindings and references carry the same scope set
 	// as forms in the library's (begin ...) body. Without this, included
@@ -147,7 +149,7 @@ func (p *CompileTimeContinuation) processFormsWithLetrecSemantics(ctctx CompileT
 	expander.libraryScope = p.libraryScope
 	expandedForms, err := expander.ExpandBodyWithDefineSyntax(forms)
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "include: error expanding forms from %q", filename)
+		return werr.WrapForeignErrorf(err, "%s: error expanding forms", errContext)
 	}
 
 	// Pre-declare all define bindings for letrec* semantics
@@ -155,11 +157,16 @@ func (p *CompileTimeContinuation) processFormsWithLetrecSemantics(ctctx CompileT
 		p.predeclareDefineBinding(expanded)
 	}
 
-	// Pass 2: Compile all forms (define-syntax already compiled, will be skipped)
-	for _, expanded := range expandedForms {
-		compileErr := p.CompileExpression(ctctx, expanded)
+	// Pass 2: Compile all forms (define-syntax already compiled, will be skipped).
+	// Only the last form inherits the caller's tail position; all others are NotInTail.
+	for i, expanded := range expandedForms {
+		exprCtx := ctctx.NotInTail()
+		if i == len(expandedForms)-1 {
+			exprCtx = ctctx
+		}
+		compileErr := p.CompileExpression(exprCtx, expanded)
 		if compileErr != nil {
-			return werr.WrapForeignErrorf(compileErr, "include: error compiling form from %q", filename)
+			return werr.WrapForeignErrorf(compileErr, "%s: error compiling form", errContext)
 		}
 	}
 

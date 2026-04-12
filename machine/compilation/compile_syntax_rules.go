@@ -350,7 +350,7 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 						// Skip nested syntax-rules and define-syntax forms
 						// These define their own scope and shouldn't pollute the
 						// outer macro's free identifier set
-						if sym.Key == "syntax-rules" || sym.Key == "define-syntax" {
+						if sym.Key == TransformerSyntaxRules || sym.Key == "define-syntax" {
 							return
 						}
 					}
