@@ -40,6 +40,7 @@ var (
 	ErrNotAList                  = NewStaticError("not a list")
 	ErrNotACloseParen            = NewStaticError("not a close parenthesis")
 	ErrWrongNumberOfArguments    = NewStaticError("wrong number of arguments")
+	ErrNotAMachineContext        = NewStaticError("not a machine context")
 	ErrNotAPair                  = NewStaticError("not a pair")
 	ErrNotACons                  = NewStaticError("not a cons")
 	ErrNotACharacter             = NewStaticError("not a character")

@@ -67,9 +67,9 @@ var typeSwitchForms = map[string]bool{
 // expandTimeOnlyForms are forms handled entirely during expansion that
 // legitimately have no compiler. They never reach the compilation phase.
 var expandTimeOnlyForms = map[string]bool{
-	"let-syntax":    true,
-	"letrec-syntax": true,
-	"syntax-rules":  true,
+	"let-syntax":           true,
+	"letrec-syntax":        true,
+	TransformerSyntaxRules: true,
 }
 
 // VerifyCompilers checks that every form registered in the forms package

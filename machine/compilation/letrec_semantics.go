@@ -33,7 +33,7 @@ package compilation
 //
 //   Compiler (include/library bodies):
 //     compile_time_continuation_include.go: processFormsWithLetrecSemantics
-//     compile_time_continuation_library.go: CompileLibraryBeginBody
+//     compile_time_continuation_library.go: compileLibraryBegin (delegates to processFormsWithLetrecSemantics)
 //     Input: []syntax.SyntaxValue (post-expansion)
 //     Pre-scan: extractDefineName -> predeclareBinding (via predeclareDefineBinding)
 //     Process: CompileExpression
