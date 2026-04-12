@@ -78,7 +78,7 @@ Sections are ordered: bugs/correctness first, then performance, refactoring (by 
 **Phase 8 — Architecture (M each, opportunistic):**
 - [ ] **Task 8.1: Extract `machine/compilation/resolver/`** [Low, M]: FileResolver implementations are I/O infrastructure, not compilation logic.
 - [ ] **Task 8.2: Evaluate `wile.Value` wrapper** [Low, M]: Wrapper provides minimal methods beyond `Internal()` escape hatch.
-- [ ] **Task 8.3: Fix REPL importing `machine/compilation`** [Medium, M]: Presentation layer reaches into compilation internals via type assertions.
+- [x] **Task 8.3: Fix REPL importing `machine/compilation`** [Medium, M, Done]: Presentation layer decoupled from compilation internals. `Engine.FormLabel`, `Engine.DisassembleValue`, `Engine.LookupLibrary`, `wile.Debugger` wrapper, `values.DebugState` interface replace all type assertions. PR #639. `plans/2026-04-11-repl-decoupling-design.md`
 - [ ] **Task 8.4: Make `DefaultBigFloatPrecision` configurable** [Low, M]: 256-bit precision hardcoded across 12 call sites. No engine option.
 - [x] **Task 8.5: Funnel `prim_eval.go` through `NewSubContext`** [Medium, M, Done]: Added `NewSubContextWithTemplate(tpl, env)` to `MachineContext`. Both `PrimEval` and `PrimLoad` migrated from manual `NewMachineContext` + field propagation to single `NewSubContextWithTemplate` call with pool-backed `ReleaseSubContext`. Eliminates the "forgotten field" bug class. PR #637. `plans/2026-04-11-eval-subcontext-design.md`
 
