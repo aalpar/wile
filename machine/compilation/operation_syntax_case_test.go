@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package machine
+package compilation
 
 import (
 	"context"
@@ -20,6 +20,7 @@ import (
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
+	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -191,8 +192,8 @@ func TestOperationSyntaxCaseNoMatch_Apply(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	op := NewOperationSyntaxCaseNoMatch()
 	_, err := op.Apply(mc)
@@ -289,8 +290,8 @@ func TestOperationStoreSyntaxCaseInput_Apply_SyntaxValue(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	stx := syntax.NewSyntaxSymbol("test", nil)
 	mc.SetValue(stx)
@@ -300,17 +301,18 @@ func TestOperationStoreSyntaxCaseInput_Apply_SyntaxValue(t *testing.T) {
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
-	c.Assert(mc.syntaxCase, qt.IsNotNil)
-	c.Assert(mc.syntaxCase.input, qt.IsNotNil)
-	c.Assert(mc.pc, qt.Equals, 1)
+	c.Assert(mc.SyntaxCaseState(), qt.IsNotNil)
+	sc := mc.SyntaxCaseState().(*syntaxCaseState)
+	c.Assert(sc.input, qt.IsNotNil)
+	c.Assert(mc.PC(), qt.Equals, 1)
 }
 
 func TestOperationStoreSyntaxCaseInput_Apply_NonSyntaxValue(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	// Set a non-syntax value
 	mc.SetValue(values.NewInteger(42))
@@ -320,8 +322,9 @@ func TestOperationStoreSyntaxCaseInput_Apply_NonSyntaxValue(t *testing.T) {
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
-	c.Assert(mc.syntaxCase, qt.IsNotNil)
-	c.Assert(mc.syntaxCase.input, qt.IsNotNil)
+	c.Assert(mc.SyntaxCaseState(), qt.IsNotNil)
+	sc := mc.SyntaxCaseState().(*syntaxCaseState)
+	c.Assert(sc.input, qt.IsNotNil)
 }
 
 // =============================================================================
@@ -370,19 +373,19 @@ func TestOperationClearSyntaxCaseInput_Apply(t *testing.T) {
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
-	tpl := NewNativeTemplate(0, 0, false)
-	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
 
 	// Set up some input via the per-context state
-	mc.syntaxCase = &syntaxCaseState{
+	mc.SetSyntaxCaseState(&syntaxCaseState{
 		input: syntax.NewSyntaxSymbol("test", nil),
-	}
+	})
 
 	op := NewOperationClearSyntaxCaseInput()
 	result, err := op.Apply(mc)
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.IsNotNil)
-	c.Assert(mc.syntaxCase, qt.IsNil)
-	c.Assert(mc.pc, qt.Equals, 1)
+	c.Assert(mc.SyntaxCaseState(), qt.IsNil)
+	c.Assert(mc.PC(), qt.Equals, 1)
 }

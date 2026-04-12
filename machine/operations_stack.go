@@ -34,7 +34,7 @@ func NewOperationPush() *OperationPush {
 
 func (p *OperationPush) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationPush)
-	return sameType(p, v, ok)
+	return SameType(p, v, ok)
 }
 
 // --- Pop ---
@@ -51,7 +51,7 @@ func NewOperationPop() *OperationPop {
 
 func (p *OperationPop) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationPop)
-	return sameType(p, v, ok)
+	return SameType(p, v, ok)
 }
 
 // --- Pull ---
@@ -68,7 +68,7 @@ func NewOperationPull() *OperationPull {
 
 func (p *OperationPull) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationPull)
-	return sameType(p, v, ok)
+	return SameType(p, v, ok)
 }
 
 // --- Drop ---
@@ -88,7 +88,7 @@ func NewOperationDrop() *OperationDrop {
 
 func (p *OperationDrop) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationDrop)
-	return sameType(p, v, ok)
+	return SameType(p, v, ok)
 }
 
 // --- PeekK ---
@@ -112,5 +112,5 @@ func (p *OperationPeekK) SchemeString() string {
 
 func (p *OperationPeekK) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationPeekK)
-	return fieldMatches(p, v, ok, func(op *OperationPeekK) int { return op.Depth })
+	return FieldMatches(p, v, ok, func(op *OperationPeekK) int { return op.Depth })
 }

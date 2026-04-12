@@ -80,7 +80,7 @@ type MachineContext struct {
 	// continuations. See the comment on vmState.threadID for the full
 	// design and invariant.
 	thread        *values.Thread
-	syntaxCase    *syntaxCaseState // per-context syntax-case expansion state; nil when not in syntax-case
+	syntaxCase    any              // *compilation.syntaxCaseState; nil when not in syntax-case
 	maxCallDepth  uint64           // 0 = unlimited (default), otherwise max continuation depth
 	maxStackSize  uint64           // 0 = unlimited (default), otherwise max eval stack entries
 	restArgBuf    values.PairBlock // reusable buffer for variadic rest-arg list construction (ForeignClosure calls)
@@ -177,6 +177,11 @@ func (p *MachineContext) SetPC(v int) {
 	p.pc = v
 }
 
+// IncrPC increments the program counter by one.
+func (p *MachineContext) IncrPC() {
+	p.pc++
+}
+
 // SetValues sets the value register. For a single value this uses the
 // zero-allocation fast path (singleValue); for multiple values it falls
 // back to the multiValues slice.
@@ -228,6 +233,19 @@ func (p *MachineContext) GetValues() MultipleValues {
 
 func (p *MachineContext) EnvironmentFrame() *environment.EnvironmentFrame {
 	return p.env
+}
+
+// SetEnvironmentFrame replaces the current environment frame.
+// Used by operations that push new scopes (e.g., OperationBindPatternVars).
+func (p *MachineContext) SetEnvironmentFrame(env *environment.EnvironmentFrame) {
+	p.env = env
+}
+
+// SetEnvPooled controls whether the current environment frame will be
+// recycled by RestoreAndRelease. Set to false after replacing env with
+// a heap-allocated frame that must not be returned to envFramePool.
+func (p *MachineContext) SetEnvPooled(v bool) {
+	p.envPooled = v
 }
 
 // Authorizer returns the security authorizer from this context's namespace,
@@ -870,6 +888,17 @@ func (p *MachineContext) SetExpanderContext(ctx ExpanderCtx) {
 // ExpanderContext returns the expander context, or nil if not in expansion context.
 func (p *MachineContext) ExpanderContext() ExpanderCtx {
 	return p.expanderCtx
+}
+
+// SyntaxCaseState returns the opaque syntax-case expansion state.
+// Returns nil when not in a syntax-case expansion.
+func (p *MachineContext) SyntaxCaseState() any {
+	return p.syntaxCase
+}
+
+// SetSyntaxCaseState sets the opaque syntax-case expansion state.
+func (p *MachineContext) SetSyntaxCaseState(v any) {
+	p.syntaxCase = v
 }
 
 // ExceptionHandler returns the current exception handler chain.

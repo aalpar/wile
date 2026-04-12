@@ -43,7 +43,7 @@ func (p *CompileTimeContinuation) CompileSyntax(_ CompileTimeCallContext, expr s
 		// Store template in literals and emit runtime expansion operation
 		litIdx := p.template.MaybeAppendLiteral(template)
 		p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
-		p.AppendOperations(machine.NewOperationSyntaxTemplateExpand())
+		p.AppendOperations(NewOperationSyntaxTemplateExpand())
 		return nil
 	}
 
@@ -204,6 +204,6 @@ func (p *CompileTimeContinuation) compileSyntaxTemplateListToOps(pair *syntax.Sy
 	}
 
 	// Build the list
-	p.AppendOperations(machine.NewOperationBuildSyntaxList(len(elements)))
+	p.AppendOperations(NewOperationBuildSyntaxList(len(elements)))
 	return nil
 }

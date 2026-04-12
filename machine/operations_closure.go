@@ -81,7 +81,7 @@ func (p *OperationMakeClosure) Apply(mc *MachineContext) (*MachineContext, error
 
 func (p *OperationMakeClosure) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationMakeClosure)
-	return sameType(p, v, ok)
+	return SameType(p, v, ok)
 }
 
 // --- MakeCaseLambdaClosure ---
@@ -125,5 +125,5 @@ func (p *OperationMakeCaseLambdaClosure) Apply(mc *MachineContext) (*MachineCont
 
 func (p *OperationMakeCaseLambdaClosure) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationMakeCaseLambdaClosure)
-	return fieldMatches(p, v, ok, func(op *OperationMakeCaseLambdaClosure) int { return op.closureCount })
+	return FieldMatches(p, v, ok, func(op *OperationMakeCaseLambdaClosure) int { return op.closureCount })
 }

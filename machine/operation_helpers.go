@@ -16,16 +16,16 @@ package machine
 
 import "slices"
 
-// sameType is a helper for EqualTo methods on zero-field operations.
+// SameType is a helper for EqualTo methods on zero-field operations.
 // The caller must perform the type assertion and pass the result.
 //
 // Usage:
 //
 //	func (p *OperationType) EqualTo(o values.Value) bool {
 //	    v, ok := o.(*OperationType)
-//	    return sameType(p, v, ok)
+//	    return SameType(p, v, ok)
 //	}
-func sameType[T any](p, v *T, ok bool) bool {
+func SameType[T any](p, v *T, ok bool) bool {
 	if !ok {
 		return false
 	}
@@ -35,16 +35,16 @@ func sameType[T any](p, v *T, ok bool) bool {
 	return true
 }
 
-// fieldMatches is a helper for EqualTo methods on single-field operations.
+// FieldMatches is a helper for EqualTo methods on single-field operations.
 // The caller must perform the type assertion and pass the result.
 //
 // Usage:
 //
 //	func (p *OperationType) EqualTo(o values.Value) bool {
 //	    v, ok := o.(*OperationType)
-//	    return fieldMatches(p, v, ok, func(op *OperationType) int { return op.Field })
+//	    return FieldMatches(p, v, ok, func(op *OperationType) int { return op.Field })
 //	}
-func fieldMatches[T comparable, Op any](p, v *Op, ok bool, getField func(*Op) T) bool {
+func FieldMatches[T comparable, Op any](p, v *Op, ok bool, getField func(*Op) T) bool {
 	if !ok {
 		return false
 	}
@@ -75,16 +75,16 @@ func fieldMethodMatches[T any, Op any](p, v *Op, ok bool, getField func(*Op) T, 
 	return eq(getField(p), getField(v))
 }
 
-// sliceMatches is a helper for EqualTo methods on operations with a single
+// SliceMatches is a helper for EqualTo methods on operations with a single
 // comparable-element slice field.
 //
 // Usage:
 //
 //	func (p *OperationType) EqualTo(o values.Value) bool {
 //	    v, ok := o.(*OperationType)
-//	    return sliceMatches(p, v, ok, func(op *OperationType) []string { return op.Items })
+//	    return SliceMatches(p, v, ok, func(op *OperationType) []string { return op.Items })
 //	}
-func sliceMatches[T comparable, Op any](p, v *Op, ok bool, getField func(*Op) []T) bool {
+func SliceMatches[T comparable, Op any](p, v *Op, ok bool, getField func(*Op) []T) bool {
 	if !ok {
 		return false
 	}

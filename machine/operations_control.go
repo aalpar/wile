@@ -41,7 +41,7 @@ func (p *OperationBranchOffsetImmediate) SchemeString() string {
 
 func (p *OperationBranchOffsetImmediate) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationBranchOffsetImmediate)
-	return fieldMatches(p, v, ok, func(op *OperationBranchOffsetImmediate) int { return op.Offset })
+	return FieldMatches(p, v, ok, func(op *OperationBranchOffsetImmediate) int { return op.Offset })
 }
 
 // --- BranchOnFalseValue ---
@@ -75,7 +75,7 @@ func (p *OperationBranchOnFalseValueOffsetImmediate) SchemeString() string {
 
 func (p *OperationBranchOnFalseValueOffsetImmediate) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationBranchOnFalseValueOffsetImmediate)
-	return fieldMatches(p, v, ok, func(op *OperationBranchOnFalseValueOffsetImmediate) int {
+	return FieldMatches(p, v, ok, func(op *OperationBranchOnFalseValueOffsetImmediate) int {
 		return op.Offset
 	})
 }
@@ -101,7 +101,7 @@ func (p *OperationSaveContinuationOffsetImmediate) SchemeString() string {
 
 func (p *OperationSaveContinuationOffsetImmediate) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationSaveContinuationOffsetImmediate)
-	return fieldMatches(p, v, ok, func(op *OperationSaveContinuationOffsetImmediate) int { return op.Offset })
+	return FieldMatches(p, v, ok, func(op *OperationSaveContinuationOffsetImmediate) int { return op.Offset })
 }
 
 // --- RestoreContinuation ---
@@ -118,5 +118,5 @@ func NewOperationRestoreContinuation() *OperationRestoreContinuation {
 
 func (p *OperationRestoreContinuation) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationRestoreContinuation)
-	return sameType(p, v, ok)
+	return SameType(p, v, ok)
 }

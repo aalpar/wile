@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package machine
+package compilation
 
 // operation_syntax_rules_transform.go implements the runtime behavior of syntax-rules.
 //
@@ -47,6 +47,7 @@ import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/match"
 	"github.com/aalpar/wile/internal/syntax"
+	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 )
 
@@ -92,16 +93,16 @@ func (p *envBindingChecker) GetBinding(sym string, scopes []*syntax.Scope) *envi
 //
 // The operation is part of the transformer closure created by CompileSyntaxRules.
 type OperationSyntaxRulesTransform struct {
-	OperationBase
+	machine.OperationBase
 }
 
 func NewOperationSyntaxRulesTransform() *OperationSyntaxRulesTransform {
 	return &OperationSyntaxRulesTransform{
-		OperationBase: NewOperationBaseWithGoName("operation:syntax-rules-transform", "SyntaxRulesTransform"),
+		OperationBase: machine.NewOperationBaseWithGoName("operation:syntax-rules-transform", "SyntaxRulesTransform"),
 	}
 }
 
-func (p *OperationSyntaxRulesTransform) Apply(mc *MachineContext) (*MachineContext, error) {
+func (p *OperationSyntaxRulesTransform) Apply(mc *machine.MachineContext) (*machine.MachineContext, error) {
 	// Get the clauses from the value register
 	clausesVal := mc.GetValue()
 	if clausesVal == nil {
@@ -113,12 +114,12 @@ func (p *OperationSyntaxRulesTransform) Apply(mc *MachineContext) (*MachineConte
 	if !ok {
 		// The value register might have the input if operations aren't running correctly
 		// Check if this is actually being called as the second operation
-		return nil, mc.Error(fmt.Sprintf("syntax-rules: expected clauses wrapper in value register, got %T (PC=%d)", clausesVal, mc.pc))
+		return nil, mc.Error(fmt.Sprintf("syntax-rules: expected clauses wrapper in value register, got %T (PC=%d)", clausesVal, mc.PC()))
 	}
 	clauses := wrapper.Clauses
 
 	// Get the input form from local parameter 0 (transformer is called with input as argument)
-	inputVal := mc.env.GetLocalBindingByIndex(0).Value()
+	inputVal := mc.EnvironmentFrame().GetLocalBindingByIndex(0).Value()
 	if inputVal == nil {
 		return nil, mc.Error("syntax-rules: invalid input form")
 	}
@@ -173,12 +174,12 @@ func (p *OperationSyntaxRulesTransform) Apply(mc *MachineContext) (*MachineConte
 	// has been locally bound, in which case it shouldn't match the pattern literal.
 	//
 	// We use the expander context's environment (the use-site environment) rather
-	// than mc.env (the macro definition-time environment). This is critical for
+	// than mc.EnvironmentFrame() (the macro definition-time environment). This is critical for
 	// checking if identifiers like => are bound by enclosing forms (like lambda
 	// from let expansion) at the macro use site.
-	bindingEnv := mc.env
-	if mc.expanderCtx != nil && mc.expanderCtx.Env() != nil {
-		bindingEnv = mc.expanderCtx.Env()
+	bindingEnv := mc.EnvironmentFrame()
+	if mc.ExpanderContext() != nil && mc.ExpanderContext().Env() != nil {
+		bindingEnv = mc.ExpanderContext().Env()
 	}
 	bindingChecker := &envBindingChecker{env: bindingEnv}
 
@@ -210,7 +211,7 @@ func (p *OperationSyntaxRulesTransform) Apply(mc *MachineContext) (*MachineConte
 
 			// Set the expanded result as the value
 			mc.SetValue(expanded)
-			mc.pc++ // Important: increment PC to avoid infinite loop
+			mc.IncrPC() // Important: increment PC to avoid infinite loop
 			return mc, nil
 		}
 		// If no match, try next clause
@@ -222,5 +223,5 @@ func (p *OperationSyntaxRulesTransform) Apply(mc *MachineContext) (*MachineConte
 
 func (p *OperationSyntaxRulesTransform) EqualTo(other values.Value) bool {
 	v, ok := other.(*OperationSyntaxRulesTransform)
-	return sameType(p, v, ok)
+	return machine.SameType(p, v, ok)
 }

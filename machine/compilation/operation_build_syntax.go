@@ -12,42 +12,43 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package machine
+package compilation
 
 import (
 	"github.com/aalpar/wile/internal/syntax"
+	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 )
 
 // OperationBuildSyntaxList builds a syntax list from elements on the eval stack.
 // n elements are popped from the stack (in reverse order) and consed into a list.
 type OperationBuildSyntaxList struct {
-	OperationBase
+	machine.OperationBase
 	Count int
 }
 
 // NewOperationBuildSyntaxList creates a new OperationBuildSyntaxList.
 func NewOperationBuildSyntaxList(count int) *OperationBuildSyntaxList {
 	return &OperationBuildSyntaxList{
-		OperationBase: NewOperationBaseWithGoName("operation:build-syntax-list", "BuildSyntaxList"),
+		OperationBase: machine.NewOperationBaseWithGoName("operation:build-syntax-list", "BuildSyntaxList"),
 		Count:         count,
 	}
 }
 
 // Apply implements the Operation interface.
-func (p *OperationBuildSyntaxList) Apply(mc *MachineContext) (*MachineContext, error) {
+func (p *OperationBuildSyntaxList) Apply(mc *machine.MachineContext) (*machine.MachineContext, error) {
 	// Batch pop all elements from stack and build a list
 	var result syntax.SyntaxValue = syntax.SyntaxEmptyList
 
 	if p.Count == 0 {
 		mc.SetValue(result)
-		mc.pc++
+		mc.IncrPC()
 		return mc, nil
 	}
 
 	// PopN returns elements in stack order (bottom to top)
 	// We iterate backwards to build the list in reverse
-	elements := mc.evals.PopN(p.Count)
+	elements := mc.Evals().PopN(p.Count)
 	for i := len(elements) - 1; i >= 0; i-- {
 		elem := elements[i]
 		// Wrap non-syntax values
@@ -63,13 +64,13 @@ func (p *OperationBuildSyntaxList) Apply(mc *MachineContext) (*MachineContext, e
 	}
 
 	mc.SetValue(result)
-	mc.pc++
+	mc.IncrPC()
 	return mc, nil
 }
 
 func (p *OperationBuildSyntaxList) EqualTo(other values.Value) bool {
 	v, ok := other.(*OperationBuildSyntaxList)
-	return fieldMatches(p, v, ok,
+	return machine.FieldMatches(p, v, ok,
 		func(op *OperationBuildSyntaxList) int {
 			return op.Count
 		})

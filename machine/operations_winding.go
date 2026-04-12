@@ -68,7 +68,7 @@ func (*OperationPushWind) Apply(mc *MachineContext) (*MachineContext, error) {
 
 func (p *OperationPushWind) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationPushWind)
-	return sameType(p, v, ok)
+	return SameType(p, v, ok)
 }
 
 // --- PopWind ---
@@ -101,7 +101,7 @@ func (*OperationPopWind) Apply(mc *MachineContext) (*MachineContext, error) {
 
 func (p *OperationPopWind) EqualTo(o values.Value) bool {
 	v, ok := o.(*OperationPopWind)
-	return sameType(p, v, ok)
+	return SameType(p, v, ok)
 }
 
 // --- PopEnv ---
@@ -123,7 +123,7 @@ func NewOperationPopEnv() *OperationPopEnv {
 
 func (p *OperationPopEnv) EqualTo(other values.Value) bool {
 	v, ok := other.(*OperationPopEnv)
-	return sameType(p, v, ok)
+	return SameType(p, v, ok)
 }
 
 // --- PushEnv ---
@@ -145,7 +145,7 @@ func NewOperationPushEnv(slotCount int) *OperationPushEnv {
 
 func (p *OperationPushEnv) EqualTo(other values.Value) bool {
 	v, ok := other.(*OperationPushEnv)
-	return fieldMatches(p, v, ok, func(op *OperationPushEnv) int {
+	return FieldMatches(p, v, ok, func(op *OperationPushEnv) int {
 		return op.SlotCount
 	})
 }

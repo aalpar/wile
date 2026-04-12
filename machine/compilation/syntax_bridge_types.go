@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package machine
+package compilation
 
 // Bridge types shared between the compiler (machine/compilation) and the
 // runtime (machine). The compiler creates instances and stores them in
