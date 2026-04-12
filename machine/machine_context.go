@@ -42,6 +42,9 @@ const contextCheckMask = 1023
 var ErrMachineDoNotAdvancePC = werr.NewStaticError("machine do not advance PC: operation did not advance program counter")
 var ErrInvalidProgramCounter = werr.NewStaticError("invalid program counter")
 
+// Compile-time assertion: *MachineContext must satisfy values.DebugState.
+var _ values.DebugState = (*MachineContext)(nil)
+
 var ErrInvalidLiteralIndex = werr.NewStaticError("invalid literal index")
 var ErrInvalidGlobalIndex = werr.NewStaticError("literal is not a global index")
 var ErrBindingNotFound = werr.NewStaticError("binding not found")
@@ -980,6 +983,28 @@ func countFrames(cont *MachineContinuation) int {
 		cont = cont.parent
 	}
 	return count
+}
+
+// CurrentLocation returns the current source location as a
+// values.DebugLocation, or nil if no source info is available.
+// Implements values.DebugState.
+func (p *MachineContext) CurrentLocation() *values.DebugLocation {
+	src := p.CurrentSource()
+	if src == nil {
+		return nil
+	}
+	return &values.DebugLocation{
+		File:   src.File,
+		Line:   src.Start.Line(),
+		Column: src.Start.Column(),
+	}
+}
+
+// FormatStackTrace returns a human-readable stack trace string.
+// Implements values.DebugState.
+func (p *MachineContext) FormatStackTrace(maxDepth int) string {
+	trace := p.CaptureStackTrace(maxDepth)
+	return trace.String()
 }
 
 // resolveGlobalIndex extracts and validates the GlobalIndex from the

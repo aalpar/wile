@@ -468,7 +468,7 @@ func TestHandleDisassemble_UnboundReturnsError(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(res.IsError, qt.IsTrue)
 	text := resultText(c, res)
-	c.Assert(strings.Contains(text, "Unbound"), qt.IsTrue,
+	c.Assert(strings.Contains(text, "unbound"), qt.IsTrue,
 		qt.Commentf("expected unbound error, got: %q", text))
 }
 

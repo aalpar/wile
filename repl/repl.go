@@ -24,7 +24,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile"
-	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 
 	"github.com/ergochat/readline"
@@ -156,20 +156,20 @@ func (p *REPL) Run(ctx context.Context) error {
 	defer rl.Close() //nolint:errcheck
 
 	// Set up break callback
-	p.debugCtx.Debugger().OnBreak(func(mc *machine.MachineContext, bp *machine.Breakpoint) {
-		p.debugCtx.SetCurrentMC(mc)
+	p.debugCtx.Debugger().OnBreak(func(state values.DebugState, bp *wile.BreakpointInfo) {
+		p.debugCtx.SetCurrentState(state)
 		if bp != nil {
 			fmt.Fprintf(p.out, "\nBreakpoint %d hit", bp.ID)
-			source := mc.CurrentSource()
-			if source != nil {
-				fmt.Fprintf(p.out, " at %s:%d:%d", source.File, source.Start.Line(), source.Start.Column())
+			loc := state.CurrentLocation()
+			if loc != nil {
+				fmt.Fprintf(p.out, " at %s:%d:%d", loc.File, loc.Line, loc.Column)
 			}
 			fmt.Fprintln(p.out)
 		} else {
 			fmt.Fprint(p.out, "\nStepped")
-			source := mc.CurrentSource()
-			if source != nil {
-				fmt.Fprintf(p.out, " to %s:%d:%d", source.File, source.Start.Line(), source.Start.Column())
+			loc := state.CurrentLocation()
+			if loc != nil {
+				fmt.Fprintf(p.out, " to %s:%d:%d", loc.File, loc.Line, loc.Column)
 			}
 			fmt.Fprintln(p.out)
 		}
@@ -328,7 +328,7 @@ func (p *REPL) RunSimple(ctx context.Context) error {
 }
 
 // Debugger returns the REPL's debugger for external configuration.
-func (p *REPL) Debugger() *machine.Debugger {
+func (p *REPL) Debugger() *wile.Debugger {
 	return p.debugCtx.Debugger()
 }
 

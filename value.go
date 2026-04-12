@@ -67,6 +67,13 @@ func unwrapValue(v Value) values.Value {
 	return v.internal()
 }
 
+// WrapValue wraps a values.Value as a wile.Value for use with Engine
+// methods that accept Value (FormLabel, DisassembleValue, etc.).
+// Returns nil if v is nil.
+func WrapValue(v values.Value) Value {
+	return wrapValue(v)
+}
+
 // Helper constructors for creating Scheme values from Go values
 
 // NewInteger creates a Scheme integer.

@@ -25,8 +25,6 @@ import (
 
 	"github.com/aalpar/wile"
 	"github.com/aalpar/wile/docparse"
-	"github.com/aalpar/wile/machine/compilation"
-	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/stdlib"
 	"github.com/aalpar/wile/values"
 )
@@ -435,19 +433,19 @@ func TestCmdApropos_SpecialFormCategory(t *testing.T) {
 }
 
 func TestCmdApropos_Library(t *testing.T) {
-	eng := newTestEngine(t)
-	env := eng.Environment()
-
-	// Register a library in the env's library registry
-	libReg := compilation.NewLibraryRegistry()
-	lib := compilation.NewCompiledLibrary(compilation.NewLibraryName("wile", "algebra"), env)
-	lib.Description = "Algebraic structures: orders, lattices, monoids."
-	err := libReg.Register(lib)
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx,
+		wile.WithAllExtensions(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithLibraryPaths("."),
+	)
 	qt.Assert(t, err, qt.IsNil)
-	env.SetLibraryRegistry(libReg)
 
-	// Create provider after library setup so it sees env and libReg.
-	docProv := NewRegistryDocProvider(eng.Registry(), env)
+	// Import a real library so it's loaded.
+	_, err = eng.EvalMultiple(ctx, `(import (wile algebra))`)
+	qt.Assert(t, err, qt.IsNil)
+
+	docProv := NewRegistryDocProvider(eng.Registry(), eng)
 
 	tcs := []struct {
 		name    string
@@ -512,26 +510,25 @@ func TestCmdTopic(t *testing.T) {
 }
 
 func TestCmdDocLibrary(t *testing.T) {
-	eng := newTestEngine(t)
-	env := eng.Environment()
-
-	// Set up a library registry with a test library
-	reg := compilation.NewLibraryRegistry()
-	lib := compilation.NewCompiledLibrary(compilation.NewLibraryName("test", "lib"), env)
-	lib.Description = "A test library for documentation."
-	lib.AddExport("foo", "foo")
-	lib.AddExport("bar", "bar")
-	err := reg.Register(lib)
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx,
+		wile.WithAllExtensions(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithLibraryPaths("."),
+	)
 	qt.Assert(t, err, qt.IsNil)
-	env.SetLibraryRegistry(reg)
+
+	// Import a real library with known properties.
+	_, err = eng.EvalMultiple(ctx, `(import (wile algebra))`)
+	qt.Assert(t, err, qt.IsNil)
 
 	tcs := []struct {
 		name    string
 		args    []string
 		contain string
 	}{
-		{"library with description", []string{"(test", "lib)"}, "A test library"},
-		{"library exports", []string{"(test", "lib)"}, "Exports (2)"},
+		{"library with description", []string{"(wile", "algebra)"}, "Algebraic structures"},
+		{"library exports", []string{"(wile", "algebra)"}, "Exports"},
 		{"unknown library", []string{"(unknown", "lib)"}, "not loaded"},
 		{"empty parens", []string{"()"}, "Usage"},
 	}
@@ -546,36 +543,37 @@ func TestCmdDocLibrary(t *testing.T) {
 		})
 	}
 
-	// Separate test: engine without library registry
+	// Engine without library registry: LookupLibrary returns nil -> "not loaded"
 	t.Run("no registry configured", func(t *testing.T) {
 		t.Setenv("PAGER", "")
 		noRegEng := newTestEngine(t)
 		var buf bytes.Buffer
 		h := NewMetaCommandHandler(noRegEng)
 		h.cmdDoc([]string{"(some", "lib)"}, &buf)
-		qt.Assert(t, strings.Contains(buf.String(), "no library registry"), qt.IsTrue,
+		qt.Assert(t, strings.Contains(buf.String(), "not loaded"), qt.IsTrue,
 			qt.Commentf("output was: %q", buf.String()))
 	})
 }
 
 func TestCmdLibraries(t *testing.T) {
-	eng := newTestEngine(t)
-	env := eng.Environment()
-
-	reg := compilation.NewLibraryRegistry()
-	lib := compilation.NewCompiledLibrary(compilation.NewLibraryName("test", "lib"), env)
-	lib.Description = "A test library."
-	err := reg.Register(lib)
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx,
+		wile.WithAllExtensions(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithLibraryPaths("."),
+	)
 	qt.Assert(t, err, qt.IsNil)
-	env.SetLibraryRegistry(reg)
+
+	_, err = eng.EvalMultiple(ctx, `(import (wile algebra))`)
+	qt.Assert(t, err, qt.IsNil)
 
 	tcs := []struct {
 		name    string
 		contain string
 	}{
-		{"shows loaded count", "Loaded libraries (1)"},
-		{"shows library name", "(test lib)"},
-		{"shows description", "A test library."},
+		{"shows loaded count", "Loaded libraries"},
+		{"shows library name", "(wile algebra)"},
+		{"shows description", "Algebraic structures"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -595,12 +593,14 @@ func TestCmdLibraries(t *testing.T) {
 		qt.Assert(t, strings.Contains(buf.String(), "No environment"), qt.IsTrue)
 	})
 
-	t.Run("no registry", func(t *testing.T) {
+	t.Run("no registry — shows no libraries", func(t *testing.T) {
 		noRegEng := newTestEngine(t)
 		var buf bytes.Buffer
 		h := NewMetaCommandHandler(noRegEng)
 		h.cmdLibraries(context.Background(), &buf)
-		qt.Assert(t, strings.Contains(buf.String(), "No library registry"), qt.IsTrue)
+		// Engine with no library registry returns nil from LoadedLibraries
+		qt.Assert(t, strings.Contains(buf.String(), "No libraries loaded"), qt.IsTrue,
+			qt.Commentf("output was: %q", buf.String()))
 	})
 
 	t.Run("alias libs", func(t *testing.T) {
@@ -608,7 +608,7 @@ func TestCmdLibraries(t *testing.T) {
 		h := NewMetaCommandHandler(eng)
 		h.SetPager("")
 		h.Handle(context.Background(), ",libs", &buf)
-		qt.Assert(t, strings.Contains(buf.String(), "(test lib)"), qt.IsTrue)
+		qt.Assert(t, strings.Contains(buf.String(), "(wile algebra)"), qt.IsTrue)
 	})
 }
 
@@ -622,10 +622,7 @@ func TestCmdLibraries_UnloadedFromExportIndex(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Do NOT import (wile algebra) — it should appear as an available library.
-	env := eng.Environment()
-	reg, ok := env.Namespace().Registry().(*registry.Registry)
-	qt.Assert(t, ok, qt.IsTrue)
-	docProv := NewRegistryDocProvider(reg, env)
+	docProv := NewRegistryDocProvider(eng.Registry(), eng)
 
 	var buf bytes.Buffer
 	h := NewMetaCommandHandler(eng, WithMetaDocProvider(docProv))
@@ -654,7 +651,7 @@ func TestCmdDisassemble(t *testing.T) {
 	}{
 		{"no args", nil, "Usage"},
 		{"native closure", []string{"add1"}, "OP"},
-		{"unbound identifier", []string{"nonexistent-xyz"}, "Unbound identifier"},
+		{"unbound identifier", []string{"nonexistent-xyz"}, "unbound identifier"},
 		{"syntax binding", []string{"if"}, "not a procedure"},
 	}
 	for _, tc := range tcs {
@@ -783,11 +780,8 @@ func TestCmdApropos_KeywordMatchAfterLibraryImport(t *testing.T) {
 	_, err = eng.EvalMultiple(ctx, `(import (wile algebra))`)
 	qt.Assert(t, err, qt.IsNil)
 
-	// Build a doc provider with the live environment (as the MCP server does).
-	env := eng.Environment()
-	reg, ok := env.Namespace().Registry().(*registry.Registry)
-	qt.Assert(t, ok, qt.IsTrue)
-	docProv := NewRegistryDocProvider(reg, env)
+	// Build a doc provider with the live engine (as the MCP server does).
+	docProv := NewRegistryDocProvider(eng.Registry(), eng)
 
 	// Search for "abelian" — make-group has it only in Keywords, not in name or doc prose.
 	t.Setenv("PAGER", "")
@@ -810,10 +804,7 @@ func TestCmdApropos_UnloadedLibraryNameMatch(t *testing.T) {
 	qt.Assert(t, err, qt.IsNil)
 
 	// Do NOT import (wile algebra) — it must be found via the export index.
-	env := eng.Environment()
-	reg, ok := env.Namespace().Registry().(*registry.Registry)
-	qt.Assert(t, ok, qt.IsTrue)
-	docProv := NewRegistryDocProvider(reg, env)
+	docProv := NewRegistryDocProvider(eng.Registry(), eng)
 
 	t.Setenv("PAGER", "")
 	var buf bytes.Buffer
