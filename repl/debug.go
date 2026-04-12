@@ -23,35 +23,36 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile"
+	"github.com/aalpar/wile/values"
 )
 
 // DebugContext holds the state for debug commands.
 type DebugContext struct {
-	debugger  *machine.Debugger
-	currentMC *machine.MachineContext
+	debugger     *wile.Debugger
+	currentState values.DebugState
 }
 
 // NewDebugContext creates a new debug context.
 func NewDebugContext() *DebugContext {
 	return &DebugContext{
-		debugger: machine.NewDebugger(),
+		debugger: wile.NewDebugger(),
 	}
 }
 
 // Debugger returns the debugger instance.
-func (p *DebugContext) Debugger() *machine.Debugger {
+func (p *DebugContext) Debugger() *wile.Debugger {
 	return p.debugger
 }
 
-// SetCurrentMC sets the current machine context (for inspection commands).
-func (p *DebugContext) SetCurrentMC(mc *machine.MachineContext) {
-	p.currentMC = mc
+// SetCurrentState sets the current debug state (for inspection commands).
+func (p *DebugContext) SetCurrentState(state values.DebugState) {
+	p.currentState = state
 }
 
 // debugCommandMeta is the single source of truth for debug command metadata.
 // Separated from DebugCommandInfo so init() can read metadata without
-// allocating a DebugContext (and its machine.Debugger).
+// allocating a DebugContext (and its wile.Debugger).
 type debugCommandMeta struct {
 	Name    string
 	Aliases []string
@@ -166,7 +167,7 @@ func (p *DebugContext) cmdBreak(args []string, out io.Writer) {
 }
 
 // breakpointAction parses a breakpoint ID from args and applies the given action.
-func (p *DebugContext) breakpointAction(args []string, out io.Writer, verb string, action func(machine.BreakpointID) bool) {
+func (p *DebugContext) breakpointAction(args []string, out io.Writer, verb string, action func(int) bool) {
 	if len(args) < 1 {
 		fmt.Fprintf(out, "Usage: ,%s ID\n", verb)
 		return
@@ -178,7 +179,7 @@ func (p *DebugContext) breakpointAction(args []string, out io.Writer, verb strin
 		return
 	}
 
-	if action(machine.BreakpointID(id)) {
+	if action(id) {
 		fmt.Fprintf(out, "Breakpoint %d %sd\n", id, verb)
 	} else {
 		fmt.Fprintf(out, "Breakpoint %d not found\n", id)
@@ -235,21 +236,21 @@ func (p *DebugContext) cmdStep(_ []string, out io.Writer) {
 
 // cmdNext steps over (same frame).
 func (p *DebugContext) cmdNext(_ []string, out io.Writer) {
-	if p.currentMC == nil {
+	if p.currentState == nil {
 		fmt.Fprintln(out, "No active execution context")
 		return
 	}
-	p.debugger.StepOver(p.currentMC)
+	p.debugger.StepOver()
 	fmt.Fprintln(out, "Will step over to next expression")
 }
 
 // cmdFinish steps out of current function.
 func (p *DebugContext) cmdFinish(_ []string, out io.Writer) {
-	if p.currentMC == nil {
+	if p.currentState == nil {
 		fmt.Fprintln(out, "No active execution context")
 		return
 	}
-	p.debugger.StepOut(p.currentMC)
+	p.debugger.StepOut()
 	fmt.Fprintln(out, "Will step out of current function")
 }
 
@@ -261,35 +262,35 @@ func (p *DebugContext) cmdContinue(_ []string, out io.Writer) {
 
 // cmdBacktrace shows the current stack trace.
 func (p *DebugContext) cmdBacktrace(_ []string, out io.Writer) {
-	if p.currentMC == nil {
+	if p.currentState == nil {
 		fmt.Fprintln(out, "No active execution context")
 		return
 	}
 
-	trace := p.currentMC.CaptureStackTrace(20)
-	if len(trace) == 0 {
+	trace := p.currentState.FormatStackTrace(20)
+	if trace == "" {
 		fmt.Fprintln(out, "Empty stack trace")
 		return
 	}
 
 	fmt.Fprintln(out, "Stack trace:")
-	fmt.Fprint(out, trace.String())
+	fmt.Fprint(out, trace)
 }
 
 // cmdWhere shows the current source location.
 func (p *DebugContext) cmdWhere(_ []string, out io.Writer) {
-	if p.currentMC == nil {
+	if p.currentState == nil {
 		fmt.Fprintln(out, "No active execution context")
 		return
 	}
 
-	source := p.currentMC.CurrentSource()
-	if source == nil {
+	loc := p.currentState.CurrentLocation()
+	if loc == nil {
 		fmt.Fprintln(out, "No source location available")
 		return
 	}
 
-	fmt.Fprintf(out, "At %s:%d:%d\n", source.File, source.Start.Line(), source.Start.Column())
+	fmt.Fprintf(out, "At %s:%d:%d\n", loc.File, loc.Line, loc.Column)
 }
 
 // cmdHelp shows available debug commands.

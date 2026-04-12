@@ -21,7 +21,6 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/values"
 )
@@ -119,9 +118,6 @@ func TestRegistryDocProvider_ContractFields(t *testing.T) {
 	reg.AddPrimitive(registry.PrimitiveSpec{
 		Name:       "test-contracted",
 		ParamCount: 2,
-		Impl: func(_ machine.CallContext) error {
-			return nil
-		},
 		Doc:        "A test.",
 		ParamNames: []string{"s", "k"},
 		Category:   "test",

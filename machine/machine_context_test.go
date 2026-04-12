@@ -2319,3 +2319,16 @@ func TestMachineContext_Run_NegativePC(t *testing.T) {
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, ErrInvalidProgramCounter), qt.IsTrue)
 }
+
+func TestMachineContext_CurrentLocation_Nil(t *testing.T) {
+	// An empty MachineContext with no template has no source location.
+	c := qt.New(t)
+	mc := &MachineContext{}
+	c.Assert(mc.CurrentLocation(), qt.IsNil)
+}
+
+func TestMachineContext_FormatStackTrace_Empty(t *testing.T) {
+	c := qt.New(t)
+	mc := &MachineContext{}
+	c.Assert(mc.FormatStackTrace(10), qt.Equals, "")
+}

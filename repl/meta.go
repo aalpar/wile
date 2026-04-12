@@ -28,8 +28,6 @@ import (
 	"github.com/aalpar/wile"
 	"github.com/aalpar/wile/docparse"
 	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -304,7 +302,8 @@ func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 					// For foreign closures, prefer DocProvider's rich format
 					// (signature, types, category)
 					if bnd.BindingType() == environment.BindingTypeVariable {
-						_, isForeign := bnd.Value().(*machine.ForeignClosure)
+						isForeign := p.eng != nil &&
+							p.eng.FormLabel(wile.WrapValue(bnd.Value())) == "primitive"
 						if isForeign && p.docProv != nil {
 							info, found := p.docProv.LookupDoc(name)
 							if found {
@@ -314,7 +313,7 @@ func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 							}
 						}
 					}
-					formatBindingDoc(&content, name, bnd, phase, showExamples)
+					formatBindingDoc(&content, name, bnd, phase, p.eng, showExamples)
 					writeWithPager(out, content.String(), p.pager)
 					return
 				}
@@ -344,28 +343,14 @@ func (p *MetaCommandHandler) cmdDocLibrary(nameStr string, out io.Writer) {
 		return
 	}
 
-	libName := compilation.NewLibraryName(parts...)
-
-	env := p.env()
-	if env == nil {
-		fmt.Fprintf(out, "Library %s: no environment available\n", libName.SchemeString())
+	if p.eng == nil {
+		fmt.Fprintf(out, "Library (%s): no environment available\n", strings.Join(parts, " "))
 		return
 	}
 
-	regAny := env.LibraryRegistry()
-	if regAny == nil {
-		fmt.Fprintf(out, "Library %s: no library registry configured\n", libName.SchemeString())
-		return
-	}
-	reg, ok := regAny.(*compilation.LibraryRegistry)
-	if !ok {
-		fmt.Fprintf(out, "Library %s: library registry unavailable\n", libName.SchemeString())
-		return
-	}
-
-	lib := reg.Lookup(libName)
+	lib := p.eng.LookupLibrary(parts...)
 	if lib == nil {
-		fmt.Fprintf(out, "Library %s: not loaded\n", libName.SchemeString())
+		fmt.Fprintf(out, "Library (%s): not loaded\n", strings.Join(parts, " "))
 		return
 	}
 
@@ -374,8 +359,8 @@ func (p *MetaCommandHandler) cmdDocLibrary(nameStr string, out io.Writer) {
 	writeWithPager(out, content.String(), p.pager)
 }
 
-func formatLibraryDoc(w *strings.Builder, lib *compilation.CompiledLibrary) {
-	fmt.Fprintf(w, "Library: %s\n", lib.Name.SchemeString())
+func formatLibraryDoc(w *strings.Builder, lib *wile.LibraryInfo) {
+	fmt.Fprintf(w, "Library: %s\n", lib.Name)
 	if lib.Description != "" {
 		fmt.Fprintf(w, "\n  %s\n", lib.Description)
 	}
@@ -383,14 +368,8 @@ func formatLibraryDoc(w *strings.Builder, lib *compilation.CompiledLibrary) {
 		fmt.Fprintf(w, "\nSource: %s\n", lib.SourceFile)
 	}
 
-	exports := make([]string, 0, len(lib.Exports))
-	for name := range lib.Exports {
-		exports = append(exports, name)
-	}
-	sort.Strings(exports)
-
-	fmt.Fprintf(w, "\nExports (%d):\n", len(exports))
-	for _, name := range exports {
+	fmt.Fprintf(w, "\nExports (%d):\n", len(lib.Exports))
+	for _, name := range lib.Exports {
 		fmt.Fprintf(w, "  %s\n", name)
 	}
 }
@@ -501,7 +480,7 @@ func tryStructuredBindingDoc(w *strings.Builder, name, doc, typeLabel string, sh
 	return true
 }
 
-func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding, phase int, showExamples bool) {
+func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding, phase int, eng *wile.Engine, showExamples bool) {
 	phaseName := phaseLabel(phase)
 
 	switch bnd.BindingType() {
@@ -525,10 +504,14 @@ func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding,
 		if raw != "" {
 			parsed := docparse.ParseDocstring(raw)
 			if parsed.HasStructuredMetadata() {
+				typeLabel := ""
+				if eng != nil {
+					typeLabel = eng.FormLabel(wile.WrapValue(val))
+				}
 				formatPrimitiveDoc(w, name, DocInfo{
 					Doc:        parsed.Doc,
 					Syntax:     parsed.Syntax,
-					TypeLabel:  formTypeLabel(val),
+					TypeLabel:  typeLabel,
 					ParamNames: parsed.ParamNames,
 					ParamTypes: parsed.ParamTypes,
 					ReturnType: parsed.ReturnType,
@@ -571,18 +554,6 @@ func callableDoc(v values.Value) string {
 		return dc.Doc()
 	}
 	return ""
-}
-
-// formTypeLabel returns the form type label for a callable value.
-func formTypeLabel(v values.Value) string {
-	switch v.(type) {
-	case *machine.ForeignClosure:
-		return "primitive"
-	case *machine.MachineClosure, *machine.CaseLambdaClosure:
-		return "procedure"
-	default:
-		return ""
-	}
 }
 
 func phaseLabel(phase int) string {
@@ -722,70 +693,49 @@ func (p *MetaCommandHandler) cmdTopic(_ context.Context, args []string, out io.W
 }
 
 func (p *MetaCommandHandler) cmdLibraries(ctx context.Context, out io.Writer) {
-	env := p.env()
-	if env == nil {
+	if p.eng == nil {
 		fmt.Fprintln(out, "No environment available")
 		return
 	}
-	regAny := env.LibraryRegistry()
-	if regAny == nil {
-		fmt.Fprintln(out, "No library registry configured")
-		return
-	}
-	reg, ok := regAny.(*compilation.LibraryRegistry)
-	if !ok {
-		fmt.Fprintln(out, "Library registry unavailable")
-		return
-	}
 
-	libs := reg.All()
+	loaded := p.eng.LoadedLibraries()
+	unloaded := p.eng.UnloadedLibraries(ctx)
 
-	// Collect unloaded libraries from the export index if available.
-	var unloaded []*compilation.LibrarySummary
-	rdp, ok := p.docProv.(*RegistryDocProvider)
-	if ok {
-		unloaded = rdp.UnloadedLibraries(ctx)
-	}
-
-	if len(libs) == 0 && len(unloaded) == 0 {
+	if len(loaded) == 0 && len(unloaded) == 0 {
 		fmt.Fprintln(out, "No libraries loaded")
 		return
 	}
 
 	// Compute max name width across both sections for consistent alignment.
 	maxName := 0
-	for _, lib := range libs {
-		n := len(lib.Name.SchemeString())
-		if n > maxName {
-			maxName = n
+	for _, lib := range loaded {
+		if len(lib.Name) > maxName {
+			maxName = len(lib.Name)
 		}
 	}
-	for _, summary := range unloaded {
-		n := len(summary.Name.SchemeString())
-		if n > maxName {
-			maxName = n
+	for _, lib := range unloaded {
+		if len(lib.Name) > maxName {
+			maxName = len(lib.Name)
 		}
 	}
 
 	var content strings.Builder
-	if len(libs) > 0 {
-		fmt.Fprintf(&content, "Loaded libraries (%d):\n", len(libs))
-		for _, lib := range libs {
-			name := lib.Name.SchemeString()
+	if len(loaded) > 0 {
+		fmt.Fprintf(&content, "Loaded libraries (%d):\n", len(loaded))
+		for _, lib := range loaded {
 			desc := firstLine(lib.Description)
-			fmt.Fprintf(&content, "  %-*s  %s\n", maxName, name, desc)
+			fmt.Fprintf(&content, "  %-*s  %s\n", maxName, lib.Name, desc)
 		}
 	}
 
 	if len(unloaded) > 0 {
-		if len(libs) > 0 {
+		if len(loaded) > 0 {
 			content.WriteString("\n")
 		}
 		fmt.Fprintf(&content, "Available libraries (%d):\n", len(unloaded))
-		for _, summary := range unloaded {
-			name := summary.Name.SchemeString()
-			desc := firstLine(summary.Description)
-			fmt.Fprintf(&content, "  %-*s  %s\n", maxName, name, desc)
+		for _, lib := range unloaded {
+			desc := firstLine(lib.Description)
+			fmt.Fprintf(&content, "  %-*s  %s\n", maxName, lib.Name, desc)
 		}
 	}
 
@@ -838,39 +788,11 @@ func (p *MetaCommandHandler) DisassembleBinding(name string) (string, error) {
 		return "", werr.NewForeignErrorf("Unbound identifier: %s", name)
 	}
 
-	switch c := val.(type) {
-	case *machine.MachineClosure:
-		if c == nil {
-			return "", werr.NewForeignErrorf("%s is bound to a nil closure", name)
-		}
-		return machine.DisassembleString(c.Template()), nil
-	case *machine.CaseLambdaClosure:
-		if c == nil {
-			return "", werr.NewForeignErrorf("%s is bound to a nil closure", name)
-		}
-		var sb strings.Builder
-		for i, clause := range c.Clauses() {
-			if i > 0 {
-				sb.WriteString("\n")
-			}
-			fmt.Fprintf(&sb, "--- clause %d ---\n", i)
-			sb.WriteString(machine.DisassembleString(clause.Template()))
-		}
-		return sb.String(), nil
-	case *machine.ForeignClosure:
-		if c == nil {
-			return "", werr.NewForeignErrorf("%s is bound to a nil closure", name)
-		}
-		var sb strings.Builder
-		fmt.Fprintf(&sb, "%s  (foreign, params: %d, variadic: %v)\n",
-			c.Name(), c.ParameterCount(), c.IsVariadic())
-		if c.Doc() != "" {
-			fmt.Fprintf(&sb, "doc: %s\n", c.Doc())
-		}
-		return sb.String(), nil
-	default:
-		return "", werr.NewForeignErrorf("%s is not a procedure (type: %T)", name, val)
+	if p.eng == nil {
+		return "", werr.NewForeignErrorf("%s: engine not available for disassembly", name)
 	}
+
+	return p.eng.DisassembleValue(wile.WrapValue(val))
 }
 
 // firstLine returns the first line of s, or s itself if single-line.

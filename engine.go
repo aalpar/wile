@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/aalpar/wile/docparse"
 	"github.com/aalpar/wile/environment"
@@ -54,13 +55,17 @@ type Engine struct {
 	namespace       *environment.Namespace
 	env             *environment.EnvironmentFrame
 	registry        *registry.Registry
-	debugger        *machine.Debugger
+	debugger        *Debugger
 	lastCounters    machine.VMCounters
 	closers         []registry.Closeable
 	closed          bool
 	maxCallDepth    uint64
 	maxStackSize    uint64
 	inlineThreshold int
+
+	exportIndexMu    sync.Mutex
+	exportIndexBuilt bool
+	exportIndex      *compilation.LibraryExportIndex
 }
 
 // extSnapshot tracks the primitive index range for an extension so it can be
@@ -562,7 +567,7 @@ func (p *Engine) Namespace() *environment.Namespace {
 // SetDebugger attaches a debugger to the engine. Subsequent [Engine.Run]
 // calls will execute with the debugger active, enabling breakpoints and
 // stepping. Pass nil to detach the debugger.
-func (p *Engine) SetDebugger(d *machine.Debugger) {
+func (p *Engine) SetDebugger(d *Debugger) {
 	p.debugger = d
 }
 
@@ -714,7 +719,7 @@ func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, erro
 	mc.SetMaxCallDepth(p.maxCallDepth)
 	mc.SetMaxStackSize(p.maxStackSize)
 	if p.debugger != nil {
-		mc.SetDebugger(p.debugger)
+		mc.SetDebugger(p.debugger.machineDebugger())
 	}
 
 	err := mc.RunWithEscapeHandling()

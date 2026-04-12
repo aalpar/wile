@@ -17,43 +17,35 @@ package repl
 import (
 	"context"
 	"sort"
-	"sync"
+	"strings"
 
+	"github.com/aalpar/wile"
 	"github.com/aalpar/wile/docparse"
 	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/registry"
 )
 
 // RegistryDocProvider adapts a registry.Registry to the DocProvider interface.
 type RegistryDocProvider struct {
 	reg *registry.Registry
-	env *environment.EnvironmentFrame
-
-	// Lazy export index — built on first Search() or UnloadedLibraries() call.
-	// Uses mutex + flag instead of sync.Once so transient failures (context
-	// cancellation, slow filesystem) can retry on the next call.
-	indexMu     sync.Mutex
-	indexBuilt  bool
-	exportIndex *compilation.LibraryExportIndex
+	eng *wile.Engine
 }
 
 // NewRegistryDocProvider creates a DocProvider backed by the given registry.
-// env may be nil; when non-nil, Search includes environment bindings and
-// loaded libraries. The library registry is read dynamically from the
-// environment on each call to ensure libraries loaded after construction
-// are visible.
-func NewRegistryDocProvider(reg *registry.Registry, env *environment.EnvironmentFrame) *RegistryDocProvider {
+// eng may be nil; when non-nil, Search includes loaded and unloaded libraries.
+func NewRegistryDocProvider(reg *registry.Registry, eng *wile.Engine) *RegistryDocProvider {
 	return &RegistryDocProvider{
 		reg: reg,
-		env: env,
+		eng: eng,
 	}
 }
 
-// libraryRegistry returns the live library registry from the environment.
-// Returns nil if the environment is nil or the registry is not available.
-func (p *RegistryDocProvider) libraryRegistry() *compilation.LibraryRegistry {
-	return registry.ExtractLibraryRegistry(p.env)
+// env returns the engine's environment, or nil if the engine is nil.
+func (p *RegistryDocProvider) env() *environment.EnvironmentFrame {
+	if p.eng == nil {
+		return nil
+	}
+	return p.eng.Environment()
 }
 
 // LookupDoc returns documentation for the named binding from the registry.
@@ -115,60 +107,91 @@ func (p *RegistryDocProvider) lookupNonPrimitiveDoc(name string) (DocInfo, bool)
 	return DocInfo{}, false
 }
 
-// ensureExportIndex builds the LibraryExportIndex on first successful call.
-// Retries on subsequent calls if a previous attempt failed (e.g., context
-// cancellation, slow filesystem). Permanent conditions (nil env, nil resolver)
-// are marked as built to avoid repeated nil checks. Safe for concurrent use.
-func (p *RegistryDocProvider) ensureExportIndex(ctx context.Context) {
-	p.indexMu.Lock()
-	defer p.indexMu.Unlock()
-	if p.indexBuilt {
-		return
-	}
-	if p.env == nil {
-		p.indexBuilt = true
-		return
-	}
-	resolver := p.env.FileResolver()
-	if resolver == nil {
-		p.indexBuilt = true
-		return
-	}
-	idx, err := compilation.BuildExportIndex(ctx, resolver, p.libraryRegistry())
-	if err != nil {
-		return // transient failure — retry on next call
-	}
-	p.exportIndex = idx
-	p.indexBuilt = true
-}
-
 // Search returns entries whose name, doc, or category contains pattern
 // (case-insensitive substring match). Results are sorted by name.
-// Delegates to registry.SearchDoc for unified search across all sources.
-// On first call, lazily builds a LibraryExportIndex so unloaded library
-// exports are discoverable via apropos.
+// Delegates to registry.SearchDoc for non-library results, then appends
+// library results from the Engine's loaded and unloaded library methods.
 func (p *RegistryDocProvider) Search(ctx context.Context, pattern string) []registry.DocSearchResult {
-	p.ensureExportIndex(ctx)
-	return registry.SearchDoc(p.reg, p.env, p.libraryRegistry(), p.exportIndex, pattern)
+	// Get non-library results from the registry (passing nil for library params).
+	q := registry.SearchDoc(p.reg, p.env(), nil, nil, pattern)
+
+	// Append library results from the Engine.
+	if p.eng != nil {
+		lowerPattern := strings.ToLower(pattern)
+		seen := make(map[string]bool, len(q))
+		for _, r := range q {
+			seen[r.Name] = true
+		}
+
+		// Loaded libraries.
+		for _, lib := range p.eng.LoadedLibraries() {
+			if seen[lib.Name] {
+				continue
+			}
+			if strings.Contains(strings.ToLower(lib.Name), lowerPattern) ||
+				strings.Contains(strings.ToLower(lib.Description), lowerPattern) {
+				seen[lib.Name] = true
+				q = append(q, registry.DocSearchResult{
+					Name:     lib.Name,
+					Doc:      lib.Description,
+					Category: "library",
+				})
+			}
+		}
+
+		// Unloaded libraries.
+		for _, lib := range p.eng.UnloadedLibraries(ctx) {
+			if seen[lib.Name] {
+				continue
+			}
+			if strings.Contains(strings.ToLower(lib.Name), lowerPattern) ||
+				strings.Contains(strings.ToLower(lib.Description), lowerPattern) {
+				seen[lib.Name] = true
+				q = append(q, registry.DocSearchResult{
+					Name:     lib.Name,
+					Doc:      lib.Description,
+					Category: "library (not imported)",
+				})
+			}
+
+			// Export-level match: check individual export names.
+			for _, export := range lib.Exports {
+				if seen[export] {
+					continue
+				}
+				if !strings.Contains(strings.ToLower(export), lowerPattern) {
+					continue
+				}
+				seen[export] = true
+				doc := lib.Name
+				if lib.Description != "" {
+					doc = lib.Name + " — " + lib.Description
+				}
+				q = append(q, registry.DocSearchResult{
+					Name:     export,
+					Category: "not imported",
+					Doc:      doc,
+				})
+			}
+		}
+
+		// Re-sort after appending library results.
+		sort.Slice(q, func(i, j int) bool {
+			return q[i].Name < q[j].Name
+		})
+	}
+
+	return q
 }
 
-// UnloadedLibraries returns summaries of libraries that are discoverable via
-// the file resolver but not yet imported. Returns nil if no export index is
-// available. Libraries already present in the library registry are excluded.
-func (p *RegistryDocProvider) UnloadedLibraries(ctx context.Context) []*compilation.LibrarySummary {
-	p.ensureExportIndex(ctx)
-	if p.exportIndex == nil {
+// UnloadedLibraries returns info for libraries that are discoverable via
+// the file resolver but not yet imported. Returns nil if no engine is
+// available.
+func (p *RegistryDocProvider) UnloadedLibraries(ctx context.Context) []*wile.LibraryInfo {
+	if p.eng == nil {
 		return nil
 	}
-	libReg := p.libraryRegistry()
-	var q []*compilation.LibrarySummary
-	for _, summary := range p.exportIndex.Entries() {
-		if libReg != nil && libReg.Lookup(summary.Name) != nil {
-			continue
-		}
-		q = append(q, summary)
-	}
-	return q
+	return p.eng.UnloadedLibraries(ctx)
 }
 
 // Categories returns sorted category names, excluding the empty-string category.

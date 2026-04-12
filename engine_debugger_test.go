@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile"
-	"github.com/aalpar/wile/machine"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -29,7 +28,7 @@ func TestSetDebugger(t *testing.T) {
 	eng, err := wile.NewEngine(ctx)
 	qt.Assert(t, err, qt.IsNil)
 
-	dbg := machine.NewDebugger()
+	dbg := wile.NewDebugger()
 	eng.SetDebugger(dbg)
 
 	// Basic eval still works with debugger attached.
