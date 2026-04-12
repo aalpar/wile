@@ -36,5 +36,8 @@ Thumbs.db
 .serena/
 REVIEW.md
 
+# Sage compiled files
+*.sage.py
+
 # Git worktrees
 .worktrees/
