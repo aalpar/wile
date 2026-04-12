@@ -1278,6 +1278,43 @@ func TestNewThreadSubContext_InheritsMaxStackSize(t *testing.T) {
 	}
 }
 
+func TestNewSubContextWithTemplate(t *testing.T) {
+	c := qt.New(t)
+	topEnv := environment.NewNamespace().Runtime()
+	env := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+	parent := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	// Set up parent state that should propagate
+	parent.SetMaxCallDepth(100)
+	parent.SetMaxStackSize(200)
+	handler := NewParameter(values.NewSymbol("test-handler"), nil)
+	parent.PushExceptionHandler(handler)
+	parent.windingStack = WindingStack{{}}
+
+	// Target template and env for sub-context
+	tpl := NewNativeTemplate(0, 0, false)
+	targetEnv := environment.NewEnvironmentFrameWithParent(nil, topEnv)
+
+	sub := parent.NewSubContextWithTemplate(tpl, targetEnv)
+	defer ReleaseSubContext(sub)
+
+	// Template and env come from arguments, not parent
+	c.Assert(sub.template, qt.Equals, tpl)
+	c.Assert(sub.env, qt.Equals, targetEnv)
+	c.Assert(sub.pc, qt.Equals, 0)
+
+	// All NewSubContext fields propagate from parent
+	c.Assert(sub.parentMC, qt.Equals, parent)
+	c.Assert(sub.maxCallDepth, qt.Equals, uint64(100))
+	c.Assert(sub.maxStackSize, qt.Equals, uint64(200))
+	c.Assert(sub.ExceptionHandler(), qt.Not(qt.IsNil))
+	c.Assert(len(sub.windingStack), qt.Equals, 1)
+
+	// Fresh state
+	c.Assert(sub.evals.Len(), qt.Equals, 0)
+	c.Assert(sub.cont, qt.IsNil)
+}
+
 // --- Dispatch tests (Phase 6) ---
 
 func TestRunDispatch_InitialOperations(t *testing.T) {

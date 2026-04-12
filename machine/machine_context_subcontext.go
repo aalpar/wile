@@ -70,6 +70,24 @@ func (p *MachineContext) NewSubContextWithWinding(windingStack WindingStack) *Ma
 	return mc
 }
 
+// NewSubContextWithTemplate creates a sub-context configured to execute the
+// given template in the given environment. This is the correct way for
+// primitives like eval and load to create execution contexts — it propagates
+// all parent fields automatically via NewSubContext, preventing the "forgotten
+// field" bug class that NewMachineContext + manual setters is vulnerable to.
+//
+// The template and env override NewSubContext's defaults (nil template,
+// parent's TopLevel env). pc starts at 0 (pool zero-value).
+func (p *MachineContext) NewSubContextWithTemplate(
+	tpl *NativeTemplate,
+	env *environment.EnvironmentFrame,
+) *MachineContext {
+	mc := p.NewSubContext()
+	mc.template = tpl
+	mc.env = env
+	return mc
+}
+
 // SubContextParams holds the parent state needed to create a thread's sub-context.
 // This is used to avoid race conditions when creating sub-contexts across goroutine boundaries.
 type SubContextParams struct {
