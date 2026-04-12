@@ -32,6 +32,9 @@ When investigating R7RS conformance issues:
 | `2026-04-10-orthogonal-algebra-phase2-impl.md` | Phase 2 implementation plan | **Implemented** |
 | `2026-04-10-symbolic-algebra-design.md` | Symbolic algebra design: theory projections, recursive normalizer, traced rewriting | **Implemented** (PRs #632, #633) |
 | `2026-04-10-symbolic-algebra-impl.md` | Symbolic algebra implementation plan | **Phases 1-2 complete**; Phase 3 (wile-goast integration) in wile-goast |
+| `2026-04-11-eval-stack-limit-design.md` | Eval stack size limit: `WithMaxStackSize`, `checkStackSize`, `ErrStackOverflow` | **Complete** (PR #636) |
+| `2026-04-11-eval-stack-limit-impl.md` | Eval stack limit implementation plan | **Complete** (PR #636) |
+| `2026-04-11-eval-subcontext-design.md` | Funnel `prim_eval.go` through `NewSubContext`: `NewSubContextWithTemplate`, pool-backed release | **Complete** (PR #637) |
 | `AVAILABLE-LIBRARIES.md` | Library discovery design: `LibraryEnumerator` interface, `(available-libraries)` primitive | **Approved** (design) |
 | `CAPTURE-ANALYSIS.md` | Capture analysis design for let bindings (B1) | **Complete** |
 | `CAPTURE-ANALYSIS-IMPL.md` | Capture analysis implementation plan | **Complete** |
@@ -55,8 +58,8 @@ When investigating R7RS conformance issues:
 | `MACRO_SYSTEM.md` | Hygiene debugging, macro expansion tracing | Planned — not started |
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | Proposed |
 | `ARCHITECTURE.md` | Dialect system, module decomposition, plugin shadowing, environment introspection | All proposed |
-| `TECH-DEBT-2026-04.md` | Tech debt assessment: sentinel migration, error handling, documentation gaps | Assessment document |
-| `TECH-DEBT-2026-04-IMPL.md` | Tech debt implementation: 7 phases complete, Phase 8 opportunistic | **Phases 1-7 Complete** |
+| `TECH-DEBT-2026-04.md` | Tech debt assessment: 8 phases, 27 tasks. Phases 1-7 complete; Phase 8.5 done, 8.1-8.4 opportunistic | Assessment document |
+| `TECH-DEBT-2026-04-IMPL.md` | Tech debt implementation: Phases 1-7 complete, Phase 8.5 complete (PR #637) | **Phases 1-7 + 8.5 Complete** |
 | `2026-03-30-machine-decomposition-design.md` | Machine package decomposition: compiler/VM/expander separation | **Approved** (design) |
 | `2026-03-31-environment-any-fields.md` | Replace `any` fields in Namespace with typed interfaces | **Complete** (PR #594) |
 | `2026-03-31-high-risk-bugfixes.md` | Sub-context winding stack hazard + cond-expand FileResolver bypass | **Complete** (PR #597) |
