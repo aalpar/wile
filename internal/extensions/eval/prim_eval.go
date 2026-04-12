@@ -102,7 +102,10 @@ func PrimEval(cc machine.CallContext) error {
 //
 //	LoadPathStack > LibraryRegistry > SCHEME_INCLUDE_PATH > CWD
 func PrimLoad(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, ok := cc.(*machine.MachineContext)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAMachineContext, "load: expected MachineContext, got %T", cc)
+	}
 	filenameVal := mc.Arg(0)
 	filename, err := helpers.RequireType[*values.String](filenameVal, werr.ErrNotAString, "load")
 	if err != nil {
@@ -327,7 +330,10 @@ func PrimEnvironment(mc machine.CallContext) error {
 // Fully expands a syntax object and returns the expanded syntax.
 // (expand stx) -> expanded-stx
 func PrimExpand(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, ok := cc.(*machine.MachineContext)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAMachineContext, "expand: expected MachineContext, got %T", cc)
+	}
 	stx := mc.Arg(0)
 
 	syntaxVal, ok := stx.(syntax.SyntaxValue)
@@ -363,7 +369,10 @@ func PrimExpand(cc machine.CallContext) error {
 // expanded syntax and a boolean indicating whether expansion occurred.
 // (expand-once stx) -> (values expanded-stx did-expand?)
 func PrimExpandOnce(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, ok := cc.(*machine.MachineContext)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAMachineContext, "expand-once: expected MachineContext, got %T", cc)
+	}
 	stx := mc.Arg(0)
 
 	syntaxVal, ok := stx.(syntax.SyntaxValue)
@@ -451,7 +460,10 @@ func PrimCompile(mc machine.CallContext) error {
 // If the binding is a CompileTimeValue, it returns the unwrapped value.
 // This allows define-for-syntax bindings to be accessed from macro transformers.
 func PrimSyntaxLocalValue(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, ok := cc.(*machine.MachineContext)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAMachineContext, "syntax-local-value: expected MachineContext, got %T", cc)
+	}
 	id := mc.Arg(0)
 
 	syntaxSym, ok := id.(*syntax.SyntaxSymbol)
@@ -535,7 +547,10 @@ func PrimMakeCompileTimeValue(mc machine.CallContext) error {
 // This primitive can only be called during macro expansion (when an
 // ExpanderContext is set on the MachineContext with an introduction scope).
 func PrimSyntaxLocalIntroduce(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, ok := cc.(*machine.MachineContext)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAMachineContext, "syntax-local-introduce: expected MachineContext, got %T", cc)
+	}
 	stx := mc.Arg(0)
 
 	syntaxVal, ok := stx.(syntax.SyntaxValue)
@@ -582,7 +597,10 @@ func PrimSyntaxLocalIntroduce(cc machine.CallContext) error {
 // This primitive can only be called during macro expansion (when an
 // ExpanderContext is set on the MachineContext with a use-site scope).
 func PrimSyntaxLocalIdentifierAsBinding(cc machine.CallContext) error {
-	mc := cc.(*machine.MachineContext)
+	mc, ok := cc.(*machine.MachineContext)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAMachineContext, "syntax-local-identifier-as-binding: expected MachineContext, got %T", cc)
+	}
 	id := mc.Arg(0)
 
 	syntaxSym, ok := id.(*syntax.SyntaxSymbol)

@@ -1,3 +1,17 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package compilation
 
 import (
@@ -6,6 +20,7 @@ import (
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/werr"
 )
 
 // ExpandAndCompile runs the expand+compile pipeline on a single syntax value,
@@ -13,14 +28,15 @@ import (
 //
 // A single MacroEvaluator is shared across both phases. If resolver is non-nil,
 // it is set on the compiler for include/load file resolution. inlineThreshold
-// controls procedure inlining (0 disables). Callers own error wrapping and may
-// call tpl.Optimize() on the returned template if desired.
+// controls procedure inlining (0 disables). Errors are wrapped with phase
+// context ("expansion" or "compilation"); callers may add site-specific context
+// on top. Callers may call tpl.Optimize() on the returned template if desired.
 func ExpandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver FileResolver, inlineThreshold int) (*machine.NativeTemplate, error) {
 	evaluator := machine.NewVMMacroEvaluator()
 
 	expanded, err := NewExpanderTimeContinuation(ctx, env, evaluator).ExpandExpression(stx)
 	if err != nil {
-		return nil, err
+		return nil, werr.WrapForeignErrorf(err, "expansion")
 	}
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -32,7 +48,7 @@ func ExpandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, st
 	compiler.SetInlineThreshold(inlineThreshold)
 	err = compiler.CompileExpression(cctx, expanded)
 	if err != nil {
-		return nil, err
+		return nil, werr.WrapForeignErrorf(err, "compilation")
 	}
 
 	return tpl, nil

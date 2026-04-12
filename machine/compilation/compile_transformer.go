@@ -30,6 +30,8 @@ const (
 	TransformerSyntaxRules = "syntax-rules"
 	// TransformerERMacro is the leading symbol for (er-macro-transformer ...) transformers.
 	TransformerERMacro = "er-macro-transformer"
+	// FormDefineSyntax is the form name for (define-syntax ...) definitions.
+	FormDefineSyntax = "define-syntax"
 )
 
 // compileTransformerToMachineClosure compiles a define-syntax transformer expression
@@ -91,21 +93,17 @@ func compileTransformerToMachineClosure(
 
 // compileAndEvalLambdaTransformer compiles a lambda expression and evaluates it at
 // compile time to produce a closure that can be used as a syntax transformer.
+//
+// Unlike other ExpandAndCompile callers that operate on runtime environments,
+// this function uses env.Expand() — transformers see expansion-time bindings,
+// not runtime bindings. The extra EvalTemplate step (absent from ExpandAndCompile)
+// executes the compiled lambda at compile time to produce the transformer closure.
 func compileAndEvalLambdaTransformer(ctx context.Context, env *environment.EnvironmentFrame, lambdaExpr syntax.SyntaxValue, evaluator machine.MacroEvaluator) (*machine.MachineClosure, error) {
-	tpl := machine.NewNativeTemplate(0, 0, false)
-
 	expandEnv := env.Expand()
 
-	expandedExpr, err := NewExpanderTimeContinuation(ctx, expandEnv, evaluator).ExpandExpression(lambdaExpr)
+	tpl, err := ExpandAndCompile(ctx, expandEnv, lambdaExpr, nil, 0)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "error expanding transformer")
-	}
-
-	cctx := NewCompileTimeCallContext(ctx, false)
-	compiler := NewCompileTimeContinuation(tpl, expandEnv, evaluator)
-	err = compiler.CompileExpression(cctx, expandedExpr)
-	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "error compiling transformer")
+		return nil, werr.WrapForeignErrorf(err, "transformer")
 	}
 
 	result, err := evaluator.EvalTemplate(ctx, tpl, expandEnv)
