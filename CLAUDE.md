@@ -172,6 +172,7 @@ See `cmd/CLAUDE.md` for full build commands, dist/ structure, and REPL usage.
 
 ## References
 
+- `memory/` — Historical design decisions, failed experiments, and lessons learned (Claude Code auto-memory). Exists to prevent re-treading old territory or repeating past mistakes. **Check before proposing optimizations or architectural changes.**
 - `TODO.md` — Pending tasks, missing R7RS features, future extensions
 - `CODING_STYLE.md` — Comprehensive style guide
 - `PRIMITIVES.md` — Complete primitives reference
