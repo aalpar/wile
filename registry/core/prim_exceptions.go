@@ -29,12 +29,11 @@ import (
 // Installs handler as exception handler during thunk execution.
 func PrimWithExceptionHandler(cc machine.CallContext) error {
 	mc := cc.(*machine.MachineContext)
-	handler, err := helpers.RequireArg[values.Callable](cc, 0, werr.ErrNotAProcedure, "with-exception-handler (handler)")
+	handler, err := helpers.RequireArg[values.Callable](mc, 0, werr.ErrNotAProcedure, "with-exception-handler")
 	if err != nil {
 		return err
 	}
-	var thunk values.Callable
-	thunk, err = helpers.RequireArg[values.Callable](cc, 1, werr.ErrNotAProcedure, "with-exception-handler (thunk)")
+	thunk, err := helpers.RequireArg[values.Callable](mc, 1, werr.ErrNotAProcedure, "with-exception-handler")
 	if err != nil {
 		return err
 	}
