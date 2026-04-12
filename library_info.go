@@ -87,11 +87,13 @@ func (p *Engine) UnloadedLibraries(ctx context.Context) []*LibraryInfo {
 		if reg != nil && reg.Lookup(summary.Name) != nil {
 			continue
 		}
+		exports := append([]string(nil), summary.Exports...)
+		sort.Strings(exports)
 		q = append(q, &LibraryInfo{
 			Name:        summary.Name.SchemeString(),
 			Description: summary.Description,
 			SourceFile:  summary.SourceFile,
-			Exports:     summary.Exports,
+			Exports:     exports,
 		})
 	}
 	return q

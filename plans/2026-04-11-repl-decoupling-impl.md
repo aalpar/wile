@@ -14,7 +14,7 @@
 
 ## Phase 1: Foundation Types in `values/`
 
-### Task 1: Add SourceLocation and DebugState to values/
+### Task 1: Add DebugLocation and DebugState to values/
 
 **Files:**
 - Create: `values/debug.go`
@@ -34,8 +34,8 @@ import (
     "github.com/aalpar/wile/values"
 )
 
-func TestSourceLocation_Fields(t *testing.T) {
-    loc := &values.SourceLocation{File: "test.scm", Line: 10, Column: 5}
+func TestDebugLocation_Fields(t *testing.T) {
+    loc := &values.DebugLocation{File: "test.scm", Line: 10, Column: 5}
     qt.Assert(t, loc.File, qt.Equals, "test.scm")
     qt.Assert(t, loc.Line, qt.Equals, 10)
     qt.Assert(t, loc.Column, qt.Equals, 5)
@@ -44,8 +44,8 @@ func TestSourceLocation_Fields(t *testing.T) {
 
 **Step 2: Run test to verify it fails**
 
-Run: `go test -v -run TestSourceLocation ./values/...`
-Expected: FAIL — `values.SourceLocation` undefined
+Run: `go test -v -run TestDebugLocation ./values/...`
+Expected: FAIL — `values.DebugLocation` undefined
 
 **Step 3: Write implementation**
 
@@ -53,8 +53,8 @@ Expected: FAIL — `values.SourceLocation` undefined
 // values/debug.go
 package values
 
-// SourceLocation holds file/line/column for debug and error display.
-type SourceLocation struct {
+// DebugLocation holds file/line/column for debug and error display.
+type DebugLocation struct {
     File   string
     Line   int
     Column int
@@ -66,7 +66,7 @@ type SourceLocation struct {
 type DebugState interface {
     // CurrentLocation returns the source location at the current
     // execution point, or nil if no source info is available.
-    CurrentLocation() *SourceLocation
+    CurrentLocation() *DebugLocation
 
     // FormatStackTrace returns a human-readable stack trace string,
     // walking at most maxDepth frames.
@@ -76,7 +76,7 @@ type DebugState interface {
 
 **Step 4: Run tests**
 
-Run: `go test -v -run TestSourceLocation ./values/...`
+Run: `go test -v -run TestDebugLocation ./values/...`
 Expected: PASS
 
 **Step 5: Commit**
@@ -124,14 +124,14 @@ Add to `machine/machine_context.go` near `CurrentSource()`:
 
 ```go
 // CurrentLocation returns the current source location as a
-// values.SourceLocation, or nil if no source info is available.
+// values.DebugLocation, or nil if no source info is available.
 // Implements values.DebugState.
-func (p *MachineContext) CurrentLocation() *values.SourceLocation {
+func (p *MachineContext) CurrentLocation() *values.DebugLocation {
     src := p.CurrentSource()
     if src == nil {
         return nil
     }
-    return &values.SourceLocation{
+    return &values.DebugLocation{
         File:   src.File,
         Line:   src.Start.Line(),
         Column: src.Start.Column(),
