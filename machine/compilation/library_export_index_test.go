@@ -293,7 +293,7 @@ func TestBuildExportIndex_SkipsLoadedLibraries(t *testing.T) {
 	c.Assert(utils.Exports, qt.DeepEquals, []string{"helper"})
 }
 
-func TestBuildExportIndex_SkipsMalformedFiles(t *testing.T) {
+func TestBuildExportIndex_MalformedFilesReturnError(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
@@ -316,14 +316,16 @@ func TestBuildExportIndex_SkipsMalformedFiles(t *testing.T) {
 	resolver := NewFSFileResolver(fsys, env)
 
 	idx, err := BuildExportIndex(ctx, resolver, reg)
-	c.Assert(err, qt.IsNil)
+	// Parse errors are surfaced alongside partial results.
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, werr.ErrLibraryFormMalformed), qt.IsTrue)
 
-	// Good library should be indexed.
+	// Good library should still be indexed (partial results).
 	good := idx.Lookup(NewLibraryName("good", "lib"))
 	c.Assert(good, qt.IsNotNil)
 	c.Assert(good.Exports, qt.DeepEquals, []string{"working"})
 
-	// Bad library should be silently skipped.
+	// Bad library is not indexed.
 	c.Assert(idx.Lookup(NewLibraryName("bad", "lib")), qt.IsNil)
 }
 

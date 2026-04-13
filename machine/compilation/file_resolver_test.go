@@ -732,9 +732,7 @@ func TestFSFileResolverEnumerateFiles(t *testing.T) {
 	var keys []string
 	for _, path := range files {
 		name, nameErr := FilePathToLibraryName(path)
-		if nameErr != nil {
-			continue
-		}
+		c.Assert(nameErr, qt.IsNil)
 		keys = append(keys, name.Key())
 	}
 	c.Assert(keys, qt.DeepEquals, []string{"chibi/test", "scheme/base", "scheme/write"})
@@ -762,9 +760,7 @@ func TestFSFileResolverEnumerateWithSearchPaths(t *testing.T) {
 	var keys []string
 	for _, path := range files {
 		name, nameErr := FilePathToLibraryName(path)
-		if nameErr != nil {
-			continue
-		}
+		c.Assert(nameErr, qt.IsNil)
 		keys = append(keys, name.Key())
 	}
 	c.Assert(keys, qt.DeepEquals, []string{"scheme/base", "scheme/write"})
@@ -794,9 +790,7 @@ func TestFSFileResolverEnumerateSldAndScm(t *testing.T) {
 	var keys []string
 	for _, path := range files {
 		name, nameErr := FilePathToLibraryName(path)
-		if nameErr != nil {
-			continue
-		}
+		c.Assert(nameErr, qt.IsNil)
 		key := name.Key()
 		if !seen[key] {
 			seen[key] = true
@@ -840,9 +834,7 @@ func TestOSFileResolverEnumerateFiles(t *testing.T) {
 	var keys []string
 	for _, path := range files {
 		name, nameErr := FilePathToLibraryName(path)
-		if nameErr != nil {
-			continue
-		}
+		c.Assert(nameErr, qt.IsNil)
 		keys = append(keys, name.Key())
 	}
 	c.Assert(keys, qt.DeepEquals, []string{"scheme/base", "scheme/write"})
@@ -900,9 +892,7 @@ func TestChainFileResolverEnumerateFiles(t *testing.T) {
 	var keys []string
 	for _, path := range files {
 		name, nameErr := FilePathToLibraryName(path)
-		if nameErr != nil {
-			continue
-		}
+		c.Assert(nameErr, qt.IsNil)
 		key := name.Key()
 		if !seen[key] {
 			seen[key] = true

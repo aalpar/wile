@@ -15,6 +15,7 @@
 package compilation
 
 import (
+	"errors"
 	"sort"
 
 	"github.com/aalpar/wile/machine/compilation/resolver"
@@ -35,6 +36,7 @@ func DiscoverAvailableLibraries(res FileResolver, reg *LibraryRegistry) ([]Libra
 	// Filesystem discovery via resolver chain.
 	// A nil resolver is safe: the nil interface assertion returns (nil, false).
 	// This happens when the environment has no file resolver configured.
+	var pathErrs []error
 	fileEnum, ok := res.(resolver.FileEnumerator)
 	if ok {
 		files, err := fileEnum.EnumerateFiles()
@@ -44,6 +46,7 @@ func DiscoverAvailableLibraries(res FileResolver, reg *LibraryRegistry) ([]Libra
 		for _, path := range files {
 			name, nameErr := FilePathToLibraryName(path)
 			if nameErr != nil {
+				pathErrs = append(pathErrs, nameErr)
 				continue
 			}
 			key := name.Key()
@@ -68,5 +71,5 @@ func DiscoverAvailableLibraries(res FileResolver, reg *LibraryRegistry) ([]Libra
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].Key() < result[j].Key()
 	})
-	return result, nil
+	return result, errors.Join(pathErrs...)
 }

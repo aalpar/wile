@@ -29,8 +29,8 @@ import (
 // SchemeIncludePathEnv is the environment variable name for the Scheme include path.
 const SchemeIncludePathEnv = "SCHEME_INCLUDE_PATH"
 
-// IsSchemeFile reports whether the filename has a .sld or .scm extension.
-func IsSchemeFile(name string) bool {
+// isSchemeFile reports whether the filename has a .sld or .scm extension.
+func isSchemeFile(name string) bool {
 	return strings.HasSuffix(name, ".sld") || strings.HasSuffix(name, ".scm")
 }
 
@@ -49,10 +49,10 @@ func isAuthorized(auth security.Authorizer, target string) bool {
 	}) == nil
 }
 
-// OSSearchDirs returns the fallback directory list for OS-based file search.
+// osSearchDirs returns the fallback directory list for OS-based file search.
 // Search order: library registry paths, SCHEME_INCLUDE_PATH, CWD.
 // This order is shared by OSFileResolver.ResolveAndOpen and EnumerateFiles.
-func OSSearchDirs(env *environment.EnvironmentFrame) []string {
+func osSearchDirs(env *environment.EnvironmentFrame) []string {
 	var dirs []string
 	reg := env.LibraryRegistry()
 	if reg != nil {
@@ -69,8 +69,8 @@ func OSSearchDirs(env *environment.EnvironmentFrame) []string {
 	return dirs
 }
 
-// OpenAuthorized performs security authorization then opens absPath on the OS filesystem.
-func OpenAuthorized(auth security.Authorizer, absPath string) (fs.File, string, error) {
+// openAuthorized performs security authorization then opens absPath on the OS filesystem.
+func openAuthorized(auth security.Authorizer, absPath string) (fs.File, string, error) {
 	err := security.CheckWithAuthorizer(auth, security.AccessRequest{
 		Resource: security.ResourceCode,
 		Action:   security.ActionLoad,
@@ -109,7 +109,7 @@ func WalkOSSchemeFiles(baseDir string, auth security.Authorizer, fn func(relPath
 			return nil
 		}
 		absPath, absErr := filepath.Abs(path)
-		if walkErr != nil || absErr != nil || !IsSchemeFile(d.Name()) || !isAuthorized(auth, absPath) {
+		if walkErr != nil || absErr != nil || !isSchemeFile(d.Name()) || !isAuthorized(auth, absPath) {
 			return nil //nolint:nilerr // skip unreadable/irrelevant/denied files, continue walking
 		}
 		rel, relErr := filepath.Rel(baseDir, path)
@@ -143,7 +143,7 @@ func WalkFSSchemeFiles(fsys fs.FS, baseDir string, auth security.Authorizer, ski
 			}
 			return nil
 		}
-		if walkErr != nil || !IsSchemeFile(d.Name()) {
+		if walkErr != nil || !isSchemeFile(d.Name()) {
 			return nil //nolint:nilerr // skip unreadable/irrelevant files, continue walking
 		}
 		relPath := strings.TrimPrefix(path, prefix+"/")

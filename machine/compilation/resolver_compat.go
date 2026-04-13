@@ -25,6 +25,9 @@ type EmbedFileResolver = resolver.EmbedFileResolver
 type FSFileResolver = resolver.FSFileResolver
 type ChainFileResolver = resolver.ChainFileResolver
 
+// SchemeIncludePathEnv is the environment variable name for the Scheme include path.
+const SchemeIncludePathEnv = resolver.SchemeIncludePathEnv
+
 var (
 	NewOSFileResolver    = resolver.NewOSFileResolver
 	NewEmbedFileResolver = resolver.NewEmbedFileResolver

@@ -137,9 +137,9 @@ func (p *Engine) ensureExportIndex(ctx context.Context) *compilation.LibraryExpo
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return nil // transient — retry next call
 		}
-		// Permanent failure (permissions, corrupt .sld, etc.) — stop retrying.
-		p.exportIndexBuilt = true
-		return nil
+		// Non-transient errors (malformed .sld, permissions, etc.):
+		// use partial results since BuildExportIndex returns valid
+		// entries alongside the error.
 	}
 	p.exportIndex = idx
 	p.exportIndexBuilt = true

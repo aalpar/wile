@@ -43,11 +43,11 @@ func (p *OSFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.File
 	if path == "" {
 		return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "resolve: empty filename")
 	}
-	absPath, err := environment.ResolveFile(p.env.LoadPathStack(), path, OSSearchDirs(p.env))
+	absPath, err := environment.ResolveFile(p.env.LoadPathStack(), path, osSearchDirs(p.env))
 	if err != nil {
 		return nil, "", err
 	}
-	return OpenAuthorized(p.env.Namespace().Authorizer(), absPath)
+	return openAuthorized(p.env.Namespace().Authorizer(), absPath)
 }
 
 // EnumerateFiles walks the OS filesystem to discover .sld/.scm files.
@@ -61,7 +61,7 @@ func (p *OSFileResolver) EnumerateFiles() ([]string, error) {
 	var result []string
 	var walkErrs []error
 
-	for _, dir := range OSSearchDirs(p.env) {
+	for _, dir := range osSearchDirs(p.env) {
 		err := WalkOSSchemeFiles(dir, auth, func(relPath string) {
 			result = append(result, relPath)
 		})

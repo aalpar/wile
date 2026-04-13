@@ -22,7 +22,7 @@ import (
 )
 
 // EmbedFileResolver resolves files from an embedded filesystem (or any fs.FS).
-// No path resolution or security checks -- paths are looked up directly.
+// No path resolution or security checks — paths are looked up directly.
 //
 // EmbedFileResolver does NOT implement FileEnumerator because embedded
 // filesystems typically contain a known, fixed set of files that do not
@@ -32,7 +32,11 @@ type EmbedFileResolver struct {
 }
 
 // NewEmbedFileResolver creates a resolver backed by the given filesystem.
+// Panics if fsys is nil.
 func NewEmbedFileResolver(fsys fs.FS) *EmbedFileResolver {
+	if fsys == nil {
+		panic(werr.WrapForeignErrorf(werr.ErrEngineInit, "NewEmbedFileResolver: fsys must not be nil"))
+	}
 	return &EmbedFileResolver{
 		fsys: fsys,
 	}

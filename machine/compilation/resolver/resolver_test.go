@@ -259,7 +259,7 @@ func TestOSFileResolver_NoAuthorizerAllowsByDefault(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 	r := NewOSFileResolver(env)
 
-	// No authorizer on context -- open by default.
+	// No authorizer on context — open by default.
 	f, resolved, err := r.ResolveAndOpen(context.Background(), absPath)
 	qt.Assert(t, err, qt.IsNil)
 	defer f.Close()
@@ -272,7 +272,7 @@ func TestOSFileResolver_FallbackPriority(t *testing.T) {
 	regDir := realDir(t, t.TempDir())
 	includeDir := realDir(t, t.TempDir())
 
-	// Only create the file in the registry dir -- if the resolver
+	// Only create the file in the registry dir — if the resolver
 	// checked SCHEME_INCLUDE_PATH or CWD first, it wouldn't find it.
 	err := os.WriteFile(filepath.Join(regDir, "priority.scm"), []byte("reg"), 0o644)
 	qt.Assert(t, err, qt.IsNil)
@@ -294,7 +294,7 @@ func TestOSFileResolver_LoadPathStackPriorityOverFallbacks(t *testing.T) {
 	stackDir := realDir(t, t.TempDir())
 	fallbackDir := realDir(t, t.TempDir())
 
-	// File exists in both -- stack dir should win.
+	// File exists in both — stack dir should win.
 	err := os.WriteFile(filepath.Join(stackDir, "dup.scm"), []byte("stack"), 0o644)
 	qt.Assert(t, err, qt.IsNil)
 	err = os.WriteFile(filepath.Join(fallbackDir, "dup.scm"), []byte("fallback"), 0o644)
@@ -376,7 +376,7 @@ func TestEmbedFileResolver_ReturnedPathIsRelative(t *testing.T) {
 }
 
 func TestEmbedFileResolver_IgnoresContext(t *testing.T) {
-	// EmbedFileResolver doesn't perform security checks -- even a
+	// EmbedFileResolver doesn't perform security checks — even a
 	// deny-all authorizer should not prevent access.
 	fsys := fstest.MapFS{
 		"safe.scm": &fstest.MapFile{Data: []byte("ok")},
@@ -643,7 +643,7 @@ func TestChainFileResolver_FallsThrough(t *testing.T) {
 		NewEmbedFileResolver(fs2),
 	})
 
-	// File only in fs2 -- falls through fs1.
+	// File only in fs2 — falls through fs1.
 	f, resolved, err := r.ResolveAndOpen(context.Background(), "only-in-fs2.scm")
 	qt.Assert(t, err, qt.IsNil)
 	defer f.Close()
@@ -665,7 +665,7 @@ func TestChainFileResolver_AllMiss(t *testing.T) {
 }
 
 func TestChainFileResolver_SecurityDenialStopsChain(t *testing.T) {
-	// First resolver denies access -- chain should NOT fall through.
+	// First resolver denies access — chain should NOT fall through.
 	fsys := fstest.MapFS{"secret.scm": {Data: []byte("classified")}}
 	ns := environment.NewNamespace()
 	ns.SetAuthorizer(security.DenyAll())
@@ -841,7 +841,7 @@ func TestChainFileResolverEnumerateFiles(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Results are concatenated from child resolvers (fs1 first, then fs2).
-	// No dedup -- scheme/base.sld appears from both.
+	// No dedup — scheme/base.sld appears from both.
 	// Verify all paths from both children are present.
 	sort.Strings(files)
 

@@ -261,6 +261,7 @@ func BuildExportIndex(ctx context.Context, res FileResolver, reg *LibraryRegistr
 	}
 
 	entries := make(map[string]*LibrarySummary)
+	var pathErrs []error
 	for _, path := range files {
 		err = ctx.Err()
 		if err != nil {
@@ -268,42 +269,55 @@ func BuildExportIndex(ctx context.Context, res FileResolver, reg *LibraryRegistr
 		}
 		name, nameErr := FilePathToLibraryName(path)
 		if nameErr != nil {
+			pathErrs = append(pathErrs, nameErr)
+			continue
+		}
+		key := name.Key()
+		if entries[key] != nil {
 			continue
 		}
 		if reg != nil && reg.Lookup(name) != nil {
 			continue
 		}
-		summary := tryParseLibrary(ctx, res, name)
+		summary, parseErr := tryParseLibrary(ctx, res, name)
+		if parseErr != nil {
+			pathErrs = append(pathErrs, parseErr)
+			continue
+		}
 		if summary == nil {
 			continue
 		}
-		entries[name.Key()] = summary
+		entries[key] = summary
 	}
 
-	return NewLibraryExportIndexFromEntries(entries), nil
+	return NewLibraryExportIndexFromEntries(entries), errors.Join(pathErrs...)
 }
 
 // tryParseLibrary opens and parses a single library file, returning its
-// summary. Returns nil on any error (best-effort). Tries .sld first,
-// falling back to .scm on file-not-found.
-func tryParseLibrary(ctx context.Context, resolver FileResolver, name LibraryName) *LibrarySummary {
+// summary. Tries .sld first, falling back to .scm on file-not-found.
+// Returns (nil, nil) when neither file exists. Returns a non-nil error
+// for security denials, I/O failures, or parse errors.
+func tryParseLibrary(ctx context.Context, resolver FileResolver, name LibraryName) (*LibrarySummary, error) {
 	sldPath := name.ToFSPath()
 	f, filePath, err := resolver.ResolveAndOpen(ctx, sldPath)
 	if err != nil {
 		if !errors.Is(err, werr.ErrFileNotFound) {
-			return nil
+			return nil, err
 		}
 		scmPath := strings.TrimSuffix(sldPath, ".sld") + ".scm"
 		f, filePath, err = resolver.ResolveAndOpen(ctx, scmPath)
 		if err != nil {
-			return nil
+			if errors.Is(err, werr.ErrFileNotFound) {
+				return nil, nil
+			}
+			return nil, err
 		}
 	}
 	defer f.Close() //nolint:errcheck
 
 	summary, err := ParseLibrarySummary(ctx, f, filePath, name)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return summary
+	return summary, nil
 }
