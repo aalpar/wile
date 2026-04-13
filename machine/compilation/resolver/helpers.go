@@ -29,9 +29,18 @@ import (
 // SchemeIncludePathEnv is the environment variable name for the Scheme include path.
 const SchemeIncludePathEnv = "SCHEME_INCLUDE_PATH"
 
-// isSchemeFile reports whether the filename has a .sld or .scm extension.
+// LibraryExtensions lists recognized file extensions for Scheme library files,
+// in resolution priority order. .sld (R7RS) first, .scm fallback for older code.
+var LibraryExtensions = []string{".sld", ".scm"}
+
+// isSchemeFile reports whether the filename has a recognized library extension.
 func isSchemeFile(name string) bool {
-	return strings.HasSuffix(name, ".sld") || strings.HasSuffix(name, ".scm")
+	for _, ext := range LibraryExtensions {
+		if strings.HasSuffix(name, ext) {
+			return true
+		}
+	}
+	return false
 }
 
 // isHidden reports whether the name starts with ".".

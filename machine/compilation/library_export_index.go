@@ -20,7 +20,6 @@ import (
 	"errors"
 	"io"
 	"sort"
-	"strings"
 
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
@@ -298,20 +297,12 @@ func BuildExportIndex(ctx context.Context, res FileResolver, reg *LibraryRegistr
 // Returns (nil, nil) when neither file exists. Returns a non-nil error
 // for security denials, I/O failures, or parse errors.
 func tryParseLibrary(ctx context.Context, resolver FileResolver, name LibraryName) (*LibrarySummary, error) {
-	sldPath := name.ToFSPath()
-	f, filePath, err := resolver.ResolveAndOpen(ctx, sldPath)
+	f, filePath, err := ResolveLibraryFile(ctx, resolver, name)
 	if err != nil {
-		if !errors.Is(err, werr.ErrFileNotFound) {
-			return nil, err
+		if errors.Is(err, werr.ErrFileNotFound) {
+			return nil, nil
 		}
-		scmPath := strings.TrimSuffix(sldPath, ".sld") + ".scm"
-		f, filePath, err = resolver.ResolveAndOpen(ctx, scmPath)
-		if err != nil {
-			if errors.Is(err, werr.ErrFileNotFound) {
-				return nil, nil
-			}
-			return nil, err
-		}
+		return nil, err
 	}
 	defer f.Close() //nolint:errcheck
 
