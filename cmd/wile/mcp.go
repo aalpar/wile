@@ -66,6 +66,27 @@ func doMCP(ctx context.Context, timeoutSec float64) error {
 		server.WithToolCapabilities(true),
 		server.WithPromptCapabilities(true),
 		server.WithResourceCapabilities(true, false),
+		server.WithInstructions(
+			"# The Wile Scheme MCP server\n\n"+
+				"Use this server for Scheme-level tasks: evaluating expressions, "+
+				"testing runtime behavior, looking up primitives, and exploring libraries.\n\n"+
+				"## When to use\n\n"+
+				"- Testing Scheme expressions or verifying runtime behavior → `eval`\n"+
+				"- Looking up a primitive's signature, parameters, or description → `doc`\n"+
+				"- Discovering related primitives by keyword → `apropos`\n"+
+				"- Browsing primitives by category → `topics` then `topic`\n"+
+				"- Checking which libraries are available → `libraries`\n"+
+				"- Inspecting compiled bytecode → `disassemble`\n\n"+
+				"Prefer these tools over reading Go source when the question is about "+
+				"Scheme-level behavior, signatures, or semantics.\n\n"+
+				"## When NOT to use\n\n"+
+				"- Go static analysis (AST queries, call graphs, SSA, belief checks) → use wile-goast instead\n"+
+				"- Go code navigation (find symbol, references, diagnostics) → use gopls instead\n\n"+
+				"## Session model\n\n"+
+				"The eval tool runs in a persistent session. Definitions, imports, and state "+
+				"carry forward across calls. Use `reset` to start fresh. "+
+				"Multiple top-level definitions in a single eval can reference each other.\n",
+		),
 	)
 
 	s.AddTool(

@@ -193,3 +193,139 @@ No demand signal. Speculative or research-only.
 - [ ] **Evaluate Need for Primitive Annotation Enforcement** — enforcement may not be needed.
 - [ ] **Namespace registry is `any`** - namespace's registry should have a type
 - [ ] **MCP eval fails on schelog `include`** — `(include "examples/logic/schelog/schelog.scm")` followed by `(solve-puzzle %houses)` produces `#!void` for `schelog:unbind-ref!` at line 113. CLI (`wile -f`) works fine. Likely an `include` resolution or session-state issue in MCP eval mode.
+
+- [ ] **FCA refactoring** — I now have detailed findings on all FCA-flagged pairs. Let me synthesize the assessment.
+      ---
+      Staff Engineer Technical Debt Assessment: wile
+
+      [Priority: High] — vmState field-addition has 6 unguarded copy sites
+
+      Where:
+      - machine/machine_context_continuation.go:31-224 (Restore, RestoreAndRelease, PopContinuation, SaveContinuation)
+      - machine/machine_continuation.go:96-113 (NewMachineContinuationFromMachineContext)
+      - machine/machine_continuation.go:157-183 (Copy)
+      - machine/machine_context.go:93-110 (NewMachineContext)
+
+      What: Adding a field to vmState requires updating 6 functions across 3 files, each with different copy semantics (transfer, clone, skip, force-false). No compile-time guard ensures all sites are updated. The
+      documentation table at vm_state.go:78-93 is the only safety net — and it's comments.
+
+      Why it matters: Every field you've added has had to be reasoned about independently at each site. The envPooled column alone has four different behaviors. The marks field uses cloneMarks in some paths and direct
+      assignment in others. Miss one site → silent state corruption that manifests as a wrong continuation restore, which is extremely hard to debug.
+
+      Suggested fix: Add a reflection-based test that enumerates vmState fields and asserts each appears in a coverage table keyed by operation, forcing the author to explicitly declare "this field is intentionally
+      skipped here."
+
+      Effort: S
+
+      ---
+      [Priority: High] — No two transfer operations agree on which fields to copy
+
+      Where: machine/machine_context_continuation.go — all four operations
+
+      What: The four operations (Save, Restore, RestoreAndRelease, Pop) each copy a different subset of vmState. The non-uniformity isn't accidental — singleValue/multiValues are preserved by Pop but not Restore
+      (because the caller sets them before restoring), threadID is saved but never restored (invoking thread keeps its own), windingStack/promptTag are never transferred. But each deviation is a semantic decision
+      documented only in comments.
+
+      The deeper issue: vmState is treated as three implicit partitions (always-transfer, conditionally-transfer, never-transfer) but there's no type-level encoding of this. The partitions exist only in the
+      programmer's head and in that comment table.
+
+      Why it matters: The evals field alone has four distinct ownership modes across the four operations: pool-acquire (Save), copy (Restore), transfer-or-copy-if-shared (RestoreAndRelease), direct-assign (Pop). This
+      is the most complex field to get right, and it's replicated four times with no shared abstraction.
+
+      Suggested fix: Consider whether a vmState.transferCore(dst *vmState) method for the always-transfer partition (env, template, pc, callDepth) would reduce the copy surface, while leaving the conditional fields
+      explicit. Won't eliminate all hand-copying but would make "forgot to add field X to the core transfer" a compile error if transferCore uses struct assignment of a sub-struct.
+
+      Effort: M
+
+      ---
+      [Priority: Medium] — Opcode extension requires 7 coordinated edits
+
+      Where:
+      - machine/opcode.go (constant + table entry)
+      - machine/machine_context.go:305-329 (dispatch switch)
+      - machine/native_template.go:129+, 256+ (both conversion directions)
+      - machine/operation_*.go (new Operation type)
+      - machine/compilation/*.go (compiler emission)
+      - machine/peephole.go (if fused)
+
+      What: Adding a new opcode touches 7 mandatory sites. The opcode table at opcode.go centralizes metadata (name, operand kind, flags), which is good. But the two conversion functions in native_template.go
+      (operationToInstruction and instructionToOperation) are mirror switches that must stay synchronized — add one case, must add the other.
+
+      Why it matters: This is the most frequent extension point in the project. Each new opcode is a feature. The friction isn't catastrophic (the sites are well-documented per the comment at opcode.go:22-29), but the
+      bidirectional conversion switch is an accident waiting to happen.
+
+      Suggested fix: Consider a registration pattern where each Operation type declares its own conversion, or at minimum, a test that the two switch statements cover the same set of opcodes.
+
+      Effort: M
+
+      ---
+      [Priority: Medium] — LocalEnvironmentFrame pointer ambiguity
+
+      Where: environment/local_environment_frame.go:29-33, environment/environment_frame.go:93-108
+
+      What: LocalEnvironmentFrame is embedded by value in EnvironmentFrame (for heap allocation savings), but NewLocalEnvironment() returns *LocalEnvironmentFrame (heap-allocated). The LocalEnvironment() accessor
+      returns a pointer into the EnvironmentFrame's memory. Same type, two different ownership semantics. 28 call sites follow the two-step construction ceremony: create LocalEnvironmentFrame, populate it, wrap in
+      EnvironmentFrame.
+
+      Why it matters: The value-vs-pointer ambiguity is a cognitive tax on readers. The by-value embedding is a justified optimization, but the API doesn't make ownership obvious. A reader seeing *LocalEnvironmentFrame
+       doesn't know if it's a standalone heap object or a pointer into an EnvironmentFrame.
+
+      Suggested fix: Consider type aliasing or naming convention (localEnvBuilder for the heap-allocated construction phase vs. the embedded result), or accept the status quo with a doc comment on NewLocalEnvironment
+      explaining the lifecycle.
+
+      Effort: S
+
+      ---
+      [Priority: Low] — Binding/BindingMeta is well-designed, not debt
+
+      Where: environment/binding.go:22-38
+
+      What: FCA flagged 10 cross-boundary concepts. Actual examination shows this is a clean lazy-initialization pattern: BindingMeta behind a pointer to keep Binding copies at 32 bytes. All access through Binding's
+      getters/setters. BindingMeta is never used independently.
+
+      Why it matters: It doesn't — this is correctly factored. Including here to record the FCA false positive for calibration.
+
+      Suggested fix: None.
+
+      Effort: —
+
+      ---
+      [Priority: Low] — PrimitiveRegistration/PrimitiveSpec is clean separation
+
+      Where: registry/registry.go:25-43
+
+      What: FCA flagged 6 concepts. Only 3 functions access both types. PrimitiveRegistration = PrimitiveSpec + Phase, which separates "what a primitive is" from "when it's available."
+
+      Why it matters: It doesn't — this is orthogonal concerns properly separated. Another FCA false positive in the "this is coupling" sense, though it correctly detected the co-access.
+
+      Suggested fix: None.
+
+      Effort: —
+
+      ---
+      [Priority: Low] — CompileTimeCallContext is a value-type parameter, not coupling
+
+      Where: machine/compilation/compile_time_call_context.go:48-53
+
+      What: FCA flagged 7 concepts between CompileTimeCallContext and CompileTimeContinuation. In reality, CompileTimeCallContext is a 2-field value type (ctx, inTail) passed by value to every Compile* method. It's the
+       "is this a tail position?" flag threaded through compilation. Not coupling — it's a parameter.
+
+      Suggested fix: None.
+
+      Effort: —
+
+      ---
+      State of the Code
+
+      Wile's machine package is well-documented and intentionally designed, but carries real evolution risk in the vmState transfer operations. The CESK architecture is sound — vmState as an embedded register set
+      shared between MachineContext and MachineContinuation is textbook. The debt isn't in the abstraction, it's in the hand-unrolled field copying where each of 6 functions implements a different subset of a 12-field
+      copy with different ownership semantics, guarded only by a comment table. The FCA correctly identified the coupling hotspot (109 concepts) but misdiagnosed the cause — it's not a false boundary, it's a transfer
+      protocol that should be partially mechanized. Outside the VM core, the other FCA-flagged pairs (Binding/BindingMeta, PrimitiveRegistration/PrimitiveSpec, CompileTimeCallContext/CompileTimeContinuation) are all
+      well-factored and correctly separated.
+
+      Top 3 to Tackle First
+
+      1. Reflection-based field coverage test for vmState — lowest effort, highest safety ROI. Prevents silent state corruption when fields are added. Do this before any other vmState changes.
+      2. Extract vmCore sub-struct for always-transfer fields — converts 4 hand-copied field assignments into 1 struct assignment at each site. Reduces the blast radius from 6×12 decisions to 6×8 decisions. The
+      always-transfer set (env, template, pc, callDepth) is stable.
+      3. Bidirectional opcode conversion test — verify operationToInstruction and instructionToOperation cover the same opcode set. Low effort, catches the most likely extension error.
