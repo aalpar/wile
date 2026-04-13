@@ -74,8 +74,9 @@ Phase 1 infrastructure complete (PRs #577-578): `ForeignClosure.SetValidator/Val
 
 | File | Contents | Status |
 |------|----------|--------|
-| `TECH-DEBT-2026-04.md` | Tech debt assessment: 8 phases, 27 tasks | Phases 1-7 **complete**; Phase 8.5 **complete** (PR #637); Phase 8.3 **complete** (PR #617); Phases 8.1-8.2, 8.4 opportunistic |
-| `TECH-DEBT-2026-04-IMPL.md` | Tech debt implementation tracker | ~24/27 tasks complete |
+| `TECH-DEBT-2026-04.md` | Tech debt assessment: 8 phases, 27 tasks | Phases 1-7 **complete**; Phase 8.1, 8.3, 8.5 **complete**; Phases 8.2, 8.4 opportunistic |
+| `TECH-DEBT-2026-04-IMPL.md` | Tech debt implementation tracker | 24/27 tasks complete |
+| `2026-04-13-resolver-extraction-impl.md` | Resolver extraction: FileResolver → `machine/compilation/resolver/` | **Complete** |
 
 ---
 

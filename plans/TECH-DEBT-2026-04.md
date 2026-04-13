@@ -155,13 +155,9 @@ All 6 production types normalized to `p` receivers. PR #609.
 
 These are longer-term items to tackle opportunistically when working in the area.
 
-### Task 8.1: Extract `machine/compilation/resolver/`
+### Task 8.1: ~~Extract `machine/compilation/resolver/`~~ [Done]
 
-**Files:** `machine/compilation/file_resolver.go` (500 lines, 4 implementations)
-**Problem:** `FileResolver` implementations are pure I/O infrastructure with no compilation logic, but live inside the 23K-line `compilation` package.
-**Fix:** Extract `OSFileResolver`, `FSFileResolver`, `EmbedFileResolver`, `ChainFileResolver` into `machine/compilation/resolver/` sub-package.
-**Effort:** M
-**Verify:** `make lint && make test ./machine/...`
+Extracted 4 FileResolver implementations into `machine/compilation/resolver/` sub-package. `LibraryEnumerator` (returning `[]LibraryName`) replaced with `FileEnumerator` (returning `[]string` file paths) — library-level interpretation stays in compilation. Type aliases in `compilation/resolver_compat.go` for backward compat. `plans/2026-04-13-resolver-extraction-impl.md`.
 
 ### Task 8.2: Evaluate `wile.Value` wrapper utility
 
@@ -200,8 +196,8 @@ Added `NewSubContextWithTemplate(tpl, env)` to `MachineContext`. Both `PrimEval`
 | 5 | 5 tasks (5.1-5.5) | S-M | Missing abstractions — ~~COMPLETE~~ (5 migrated, 3 intentional deviations) |
 | 6 | 4 tasks (6.1-6.4) | S each | Dead code and style cleanup — ~~6.1, 6.3 COMPLETE~~; 6.2 (431 sites), 6.4 open |
 | 7 | 1 task | L | Test helper unification — ~~COMPLETE~~ |
-| 8 | 5 tasks (8.1-8.5) | M each | Architectural improvements — ~~8.3, 8.5 COMPLETE~~; 8.1, 8.2, 8.4 opportunistic |
+| 8 | 5 tasks (8.1-8.5) | M each | Architectural improvements — ~~8.1, 8.3, 8.5 COMPLETE~~; 8.2, 8.4 opportunistic |
 
 **Recommended execution order:** Phase 1 (cheap safety wins) → Phase 6 (cheap cleanup) → Phase 5 (abstractions) → Phase 7 (test helpers) → Phase 8 (architecture).
 
-**Last updated:** 2026-04-11 (marked 8.3 done via PR #617; 23/27 tasks complete, 2 open, 3 opportunistic).
+**Last updated:** 2026-04-13 (marked 8.1 done; 24/27 tasks complete, 2 open, 2 opportunistic).

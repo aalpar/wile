@@ -1220,12 +1220,12 @@ Allows embedders to configure BigFloat precision (default 256 bits).
 | 5th | Phase 3 | 3.1 → 3.2 | M, M | **DONE** (8e7ef892, 69fdbd5f) |
 | 6th | Phase 5 | 5.1, 5.2, 5.3, 5.4, 5.5 | M, S, S, S, S | **DONE** (5.5: 5 migrated, 3 intentional deviations) |
 | 7th | Phase 7 | 7.1 | L | **DONE** (c82bbd5e) |
-| 8th | Phase 8 | 8.1, 8.2, 8.3, 8.4, 8.5 | M each | 8.3, 8.5 **DONE** (PRs #617, #637); 8.1, 8.2, 8.4 opportunistic |
+| 8th | Phase 8 | 8.1, 8.2, 8.3, 8.4, 8.5 | M each | 8.1, 8.3, 8.5 **DONE**; 8.2, 8.4 opportunistic |
 
 **Total: 27 tasks** (original 22 + 5 added from reassessment: 1.4, 5.5, 6.4, 8.4, 8.5).
 
 | Status | Count | Tasks |
 |--------|-------|-------|
-| Complete | 23 | 1.1-1.4, 2.1-2.3, 3.1-3.2, 4.1-4.4, 5.1-5.5, 6.1, 6.3, 7.1, 8.3, 8.5 |
+| Complete | 24 | 1.1-1.4, 2.1-2.3, 3.1-3.2, 4.1-4.4, 5.1-5.5, 6.1, 6.3, 7.1, 8.1, 8.3, 8.5 |
 | Open | 2 | 6.2 (expanded), 6.4 |
-| Opportunistic | 3 | 8.1, 8.2, 8.4 |
+| Opportunistic | 2 | 8.2, 8.4 |
