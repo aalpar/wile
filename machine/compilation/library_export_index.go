@@ -24,6 +24,7 @@ import (
 
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
+	"github.com/aalpar/wile/machine/compilation/resolver"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -244,31 +245,35 @@ func parseSummaryDescription(summary *LibrarySummary, args syntax.SyntaxValue) {
 }
 
 // BuildExportIndex scans all discoverable library files via the resolver's
-// LibraryEnumerator, parses their exports, and returns a LibraryExportIndex.
+// FileEnumerator, parses their exports, and returns a LibraryExportIndex.
 // Libraries already loaded in reg are skipped (their metadata is already
 // available via the registry). If the resolver does not implement
-// LibraryEnumerator, an empty index is returned (not an error).
-func BuildExportIndex(ctx context.Context, resolver FileResolver, reg *LibraryRegistry) (*LibraryExportIndex, error) {
-	enumerator, ok := resolver.(LibraryEnumerator)
+// FileEnumerator, an empty index is returned (not an error).
+func BuildExportIndex(ctx context.Context, res FileResolver, reg *LibraryRegistry) (*LibraryExportIndex, error) {
+	fileEnum, ok := res.(resolver.FileEnumerator)
 	if !ok {
 		return NewLibraryExportIndexFromEntries(nil), nil
 	}
 
-	libs, err := enumerator.EnumerateLibraries()
+	files, err := fileEnum.EnumerateFiles()
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "library-index: enumerate libraries")
+		return nil, werr.WrapForeignErrorf(err, "library-index: enumerate files")
 	}
 
 	entries := make(map[string]*LibrarySummary)
-	for _, name := range libs {
+	for _, path := range files {
 		err = ctx.Err()
 		if err != nil {
 			return nil, werr.WrapForeignErrorf(err, "library-index: context cancelled")
 		}
+		name, nameErr := FilePathToLibraryName(path)
+		if nameErr != nil {
+			continue
+		}
 		if reg != nil && reg.Lookup(name) != nil {
 			continue
 		}
-		summary := tryParseLibrary(ctx, resolver, name)
+		summary := tryParseLibrary(ctx, res, name)
 		if summary == nil {
 			continue
 		}

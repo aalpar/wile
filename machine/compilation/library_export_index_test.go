@@ -331,7 +331,7 @@ func TestBuildExportIndex_NoEnumerator(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
-	// EmbedFileResolver does not implement LibraryEnumerator.
+	// EmbedFileResolver does not implement FileEnumerator.
 	resolver := NewEmbedFileResolver(fstest.MapFS{})
 
 	idx, err := BuildExportIndex(ctx, resolver, nil)

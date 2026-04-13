@@ -25,6 +25,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/machine/compilation/resolver"
 	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/werr"
 )
@@ -699,9 +700,9 @@ func TestChainFileResolver_PanicsOnEmptyResolvers(t *testing.T) {
 	}, qt.PanicMatches, `.*resolvers must not be empty.*`)
 }
 
-// --- FSFileResolver EnumerateLibraries ---
+// --- FSFileResolver EnumerateFiles ---
 
-func TestFSFileResolverEnumerateLibraries(t *testing.T) {
+func TestFSFileResolverEnumerateFiles(t *testing.T) {
 	c := qt.New(t)
 
 	fsys := fstest.MapFS{
@@ -718,19 +719,23 @@ func TestFSFileResolverEnumerateLibraries(t *testing.T) {
 	reg.SetSearchPaths([]string{"."})
 	ns.SetLibraryRegistry(reg)
 
-	resolver := NewFSFileResolver(fsys, env)
+	res := NewFSFileResolver(fsys, env)
 
-	// Verify FSFileResolver satisfies LibraryEnumerator via interface variable.
-	var fr FileResolver = resolver
-	enumerator, ok := fr.(LibraryEnumerator)
+	// Verify FSFileResolver satisfies FileEnumerator via interface variable.
+	var fr FileResolver = res
+	fileEnum, ok := fr.(resolver.FileEnumerator)
 	c.Assert(ok, qt.IsTrue)
 
-	libs, err := enumerator.EnumerateLibraries()
+	files, err := fileEnum.EnumerateFiles()
 	c.Assert(err, qt.IsNil)
 
-	keys := make([]string, len(libs))
-	for i, lib := range libs {
-		keys[i] = lib.Key()
+	var keys []string
+	for _, path := range files {
+		name, nameErr := FilePathToLibraryName(path)
+		if nameErr != nil {
+			continue
+		}
+		keys = append(keys, name.Key())
 	}
 	c.Assert(keys, qt.DeepEquals, []string{"chibi/test", "scheme/base", "scheme/write"})
 }
@@ -749,19 +754,23 @@ func TestFSFileResolverEnumerateWithSearchPaths(t *testing.T) {
 	reg.SetSearchPaths([]string{"lib"})
 	ns.SetLibraryRegistry(reg)
 
-	resolver := NewFSFileResolver(fsys, env)
+	res := NewFSFileResolver(fsys, env)
 
-	libs, err := resolver.EnumerateLibraries()
+	files, err := res.EnumerateFiles()
 	c.Assert(err, qt.IsNil)
 
-	keys := make([]string, len(libs))
-	for i, lib := range libs {
-		keys[i] = lib.Key()
+	var keys []string
+	for _, path := range files {
+		name, nameErr := FilePathToLibraryName(path)
+		if nameErr != nil {
+			continue
+		}
+		keys = append(keys, name.Key())
 	}
 	c.Assert(keys, qt.DeepEquals, []string{"scheme/base", "scheme/write"})
 }
 
-func TestFSFileResolverEnumerateSldBeatsScm(t *testing.T) {
+func TestFSFileResolverEnumerateSldAndScm(t *testing.T) {
 	c := qt.New(t)
 
 	fsys := fstest.MapFS{
@@ -775,17 +784,32 @@ func TestFSFileResolverEnumerateSldBeatsScm(t *testing.T) {
 	reg.SetSearchPaths([]string{"."})
 	ns.SetLibraryRegistry(reg)
 
-	resolver := NewFSFileResolver(fsys, env)
+	res := NewFSFileResolver(fsys, env)
 
-	libs, err := resolver.EnumerateLibraries()
+	files, err := res.EnumerateFiles()
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(libs), qt.Equals, 1)
-	c.Assert(libs[0].Key(), qt.Equals, "scheme/base")
+	// EnumerateFiles returns both .sld and .scm; dedup is caller's job.
+	// Convert to library names and deduplicate.
+	seen := make(map[string]bool)
+	var keys []string
+	for _, path := range files {
+		name, nameErr := FilePathToLibraryName(path)
+		if nameErr != nil {
+			continue
+		}
+		key := name.Key()
+		if !seen[key] {
+			seen[key] = true
+			keys = append(keys, key)
+		}
+	}
+	c.Assert(len(keys), qt.Equals, 1)
+	c.Assert(keys[0], qt.Equals, "scheme/base")
 }
 
-// --- OSFileResolver EnumerateLibraries ---
+// --- OSFileResolver EnumerateFiles ---
 
-func TestOSFileResolverEnumerateLibraries(t *testing.T) {
+func TestOSFileResolverEnumerateFiles(t *testing.T) {
 	c := qt.New(t)
 
 	dir := realDir(t, t.TempDir())
@@ -809,13 +833,17 @@ func TestOSFileResolverEnumerateLibraries(t *testing.T) {
 	// Chdir to an empty temp dir so CWD fallback doesn't find project libraries.
 	t.Chdir(t.TempDir())
 
-	resolver := NewOSFileResolver(env)
-	libs, err := resolver.EnumerateLibraries()
+	res := NewOSFileResolver(env)
+	files, err := res.EnumerateFiles()
 	c.Assert(err, qt.IsNil)
 
-	keys := make([]string, len(libs))
-	for i, lib := range libs {
-		keys[i] = lib.Key()
+	var keys []string
+	for _, path := range files {
+		name, nameErr := FilePathToLibraryName(path)
+		if nameErr != nil {
+			continue
+		}
+		keys = append(keys, name.Key())
 	}
 	c.Assert(keys, qt.DeepEquals, []string{"scheme/base", "scheme/write"})
 }
@@ -834,15 +862,15 @@ func TestOSFileResolverEnumerateEmptySearchPaths(t *testing.T) {
 	// Chdir to an empty temp dir so CWD fallback doesn't find project libraries.
 	t.Chdir(t.TempDir())
 
-	resolver := NewOSFileResolver(env)
-	libs, err := resolver.EnumerateLibraries()
+	res := NewOSFileResolver(env)
+	files, err := res.EnumerateFiles()
 	c.Assert(err, qt.IsNil)
-	c.Assert(len(libs), qt.Equals, 0)
+	c.Assert(len(files), qt.Equals, 0)
 }
 
-// --- ChainFileResolver EnumerateLibraries ---
+// --- ChainFileResolver EnumerateFiles ---
 
-func TestChainFileResolverEnumerateLibraries(t *testing.T) {
+func TestChainFileResolverEnumerateFiles(t *testing.T) {
 	c := qt.New(t)
 
 	fs1 := fstest.MapFS{
@@ -865,12 +893,21 @@ func TestChainFileResolverEnumerateLibraries(t *testing.T) {
 		NewFSFileResolver(fs2, env),
 	})
 
-	libs, err := chain.EnumerateLibraries()
+	files, err := chain.EnumerateFiles()
 	c.Assert(err, qt.IsNil)
 
-	keys := make([]string, len(libs))
-	for i, lib := range libs {
-		keys[i] = lib.Key()
+	seen := make(map[string]bool)
+	var keys []string
+	for _, path := range files {
+		name, nameErr := FilePathToLibraryName(path)
+		if nameErr != nil {
+			continue
+		}
+		key := name.Key()
+		if !seen[key] {
+			seen[key] = true
+			keys = append(keys, key)
+		}
 	}
 	c.Assert(keys, qt.DeepEquals, []string{"my/lib", "scheme/base", "scheme/write"})
 }
@@ -884,8 +921,8 @@ func TestFileResolverInterfaceCompliance(t *testing.T) {
 	var _ FileResolver = (*FSFileResolver)(nil)
 	var _ FileResolver = (*ChainFileResolver)(nil)
 
-	// Compile-time check that enumerator types satisfy LibraryEnumerator.
-	var _ LibraryEnumerator = (*FSFileResolver)(nil)
-	var _ LibraryEnumerator = (*OSFileResolver)(nil)
-	var _ LibraryEnumerator = (*ChainFileResolver)(nil)
+	// Compile-time check that enumerator types satisfy FileEnumerator.
+	var _ resolver.FileEnumerator = (*FSFileResolver)(nil)
+	var _ resolver.FileEnumerator = (*OSFileResolver)(nil)
+	var _ resolver.FileEnumerator = (*ChainFileResolver)(nil)
 }
