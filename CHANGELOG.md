@@ -7,10 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.13.21] - 2026-04-12
+
 ### Added
 
-- Add theory projections for group, semiring, ring, field, and Heyting algebra in `(wile algebra symbolic)`
-- Add `discover-equivalences` — explore distinct normal forms by running terms through single-axiom sub-theories
+- Add theory projections for group, semiring, ring, field, and Heyting algebra in `(wile algebra symbolic)` (#633)
+- Add `discover-equivalences` — explore distinct normal forms by running terms through single-axiom sub-theories (#633)
+- Add `WithMaxStackSize` engine option for eval stack limits (#636)
+- Add SageMath oracle for algebra library validation (#643)
+
+### Fixed
+
+- Widen `sourceRefs` to `uint32`, add `NamedCallable` interface (#634)
+- Crosscheck review findings for sage algebra validation (#643)
+- Restore `DefaultInlineThreshold` at `ExpandAndCompile` call sites (#642)
+
+### Refactored
+
+- Extract `ExpandAndCompile` and unify expand→compile pipeline (#642)
+- Move expansion operations to `machine/compilation` subpackage (#644)
+- Complete `RequireArg[T]` migration across primitives (tech debt 5.5) (#638)
+- Decouple `repl/` from `machine/` internals (task 8.3) (#639)
+- Funnel `prim_eval.go` through `NewSubContext` (tech debt 8.5) (#637)
 
 ## [1.13.0] - 2026-04-10
 
@@ -597,7 +615,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CI builds all four OS/architecture combinations
 - R7RS conformance test suite running in CI
 
-[Unreleased]: https://github.com/aalpar/wile/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/aalpar/wile/compare/v1.13.21...HEAD
+[1.13.21]: https://github.com/aalpar/wile/compare/v1.13.0...v1.13.21
+[1.13.0]: https://github.com/aalpar/wile/compare/v1.12.0...v1.13.0
+[1.12.0]: https://github.com/aalpar/wile/compare/v1.11.0...v1.12.0
+[1.11.0]: https://github.com/aalpar/wile/compare/v1.10.0...v1.11.0
+[1.10.0]: https://github.com/aalpar/wile/compare/v1.10.3...v1.10.0
+[1.10.3]: https://github.com/aalpar/wile/compare/v1.9.11...v1.10.3
+[1.9.11]: https://github.com/aalpar/wile/compare/v1.9.5...v1.9.11
+[1.9.5]: https://github.com/aalpar/wile/compare/v1.9.0...v1.9.5
 [1.9.0]: https://github.com/aalpar/wile/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/aalpar/wile/compare/v1.7.2...v1.8.0
 [1.7.2]: https://github.com/aalpar/wile/compare/v1.7.1...v1.7.2
