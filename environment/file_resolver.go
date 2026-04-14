@@ -24,7 +24,8 @@ import (
 // an embedded filesystem, or any other fs.FS.
 //
 // The concrete implementations (OSFileResolver, FSFileResolver,
-// EmbedFileResolver, ChainFileResolver) live in machine/compilation/resolver/.
+// EmbedFileResolver, ChainFileResolver) live in machine/compilation/resolver/,
+// backed by sourceload.Finder for file search.
 // This interface is defined here so environment/ can store it without
 // creating a circular import.
 type FileResolver interface {
