@@ -951,7 +951,8 @@ func (p *Engine) CurrentLoadDirectory() string {
 }
 
 // PushLoadPath pushes a path onto the load path stack.
-// Returns an error if the stack is nil or the path is empty.
+// Returns an error if the path is empty. Returns nil (no-op) if the stack
+// is not configured — path tracking requires SetLoadPathStack on the Namespace.
 //
 // Advanced embedders who need fine-grained control can use Push/Pop directly,
 // but most should use WithLoadPath for automatic cleanup.

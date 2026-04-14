@@ -9,13 +9,16 @@ import (
 // Walk traverses fsys under each search directory, calling fn for every
 // file where accept returns true. Hidden directories (name starting with
 // ".") are skipped. Non-existent directories are silently skipped.
+// Other root-level errors (permission, I/O) are propagated.
 //
 // accept receives the filename (not the full path).
 // fn receives the slash-separated path relative to the search directory.
 //
 // No "." fallback — only walks directories explicitly provided.
 // No deduplication — caller handles domain-specific identity.
-// Errors are accumulated via errors.Join and returned alongside partial results.
+// Per-directory errors are accumulated via errors.Join and returned
+// alongside partial results. Individual file-level errors within a
+// directory are skipped (best-effort enumeration).
 func Walk(fsys fs.FS, searchDirs []string, accept func(name string) bool, fn func(relPath string)) error {
 	var errs []error
 	for _, dir := range searchDirs {
@@ -33,7 +36,13 @@ func Walk(fsys fs.FS, searchDirs []string, accept func(name string) bool, fn fun
 func walkDir(fsys fs.FS, baseDir string, accept func(name string) bool, fn func(relPath string)) error {
 	err := fs.WalkDir(fsys, baseDir, func(filePath string, d fs.DirEntry, walkErr error) error {
 		if d == nil {
-			return fs.SkipAll
+			// d is nil when the root itself fails to open.
+			// Non-existent dirs are expected (silently skip).
+			// Other errors (permission, I/O) propagate.
+			if walkErr != nil && errors.Is(walkErr, fs.ErrNotExist) {
+				return fs.SkipAll
+			}
+			return walkErr
 		}
 		if walkErr != nil {
 			if d.IsDir() {

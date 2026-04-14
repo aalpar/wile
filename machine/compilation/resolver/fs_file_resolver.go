@@ -156,9 +156,9 @@ func (p *FSFileResolver) buildSearchedList(registryDirs []string) []string {
 }
 
 // EnumerateFiles walks the virtual filesystem to discover all .sld/.scm files.
-// Registry search paths are walked with paths relative to each search dir.
-// The FS root "." is always included. Hidden directories (starting with ".")
-// are skipped.
+// When registry search paths are configured, only those directories are walked.
+// When no registry paths exist, the FS root "." is walked as a fallback.
+// Hidden directories (starting with ".") are skipped.
 //
 // Best-effort: non-existent directories and unauthorized files are skipped.
 // Walk errors are joined and returned alongside partial results.
