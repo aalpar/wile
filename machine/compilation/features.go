@@ -30,7 +30,6 @@ import (
 	"context"
 	"runtime"
 	"slices"
-	"strings"
 )
 
 // ImplementationName is the name of this Scheme implementation.
@@ -140,20 +139,12 @@ func (p *libraryRequirement) IsSatisfied(ctx context.Context, registry *LibraryR
 		return false
 	}
 	// Check via the FileResolver chain (supports both OS and virtual fs.FS).
-	// Try .sld first, then .scm — same fallback order as library_loader.go.
-	sldPath := p.name.ToFSPath()
-	f, _, err := resolver.ResolveAndOpen(ctx, sldPath)
-	if err == nil {
-		f.Close() //nolint:errcheck
-		return true
+	f, _, err := ResolveLibraryFile(ctx, resolver, p.name)
+	if err != nil {
+		return false
 	}
-	scmPath := strings.TrimSuffix(sldPath, ".sld") + ".scm"
-	f, _, err = resolver.ResolveAndOpen(ctx, scmPath)
-	if err == nil {
-		f.Close() //nolint:errcheck
-		return true
-	}
-	return false
+	f.Close() //nolint:errcheck
+	return true
 }
 
 // andRequirement is satisfied if all sub-requirements are satisfied.

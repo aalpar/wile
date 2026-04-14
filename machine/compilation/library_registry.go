@@ -21,11 +21,15 @@ package compilation
 // search paths, and cycle detection.
 
 import (
+	"context"
+	"errors"
+	"io/fs"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/machine/compilation/resolver"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
@@ -283,18 +287,37 @@ func FilePathToLibraryName(path string) (LibraryName, error) {
 			werr.ErrInvalidArgument, "filePathToLibraryName: empty path",
 		)
 	}
-	var trimmed string
-	switch {
-	case strings.HasSuffix(path, ".sld"):
-		trimmed = strings.TrimSuffix(path, ".sld")
-	case strings.HasSuffix(path, ".scm"):
-		trimmed = strings.TrimSuffix(path, ".scm")
-	default:
-		return LibraryName{}, werr.WrapForeignErrorf(
-			werr.ErrInvalidArgument,
-			"filePathToLibraryName: unrecognized extension in %q", path,
-		)
+	for _, ext := range libraryExtensions {
+		trimmed, ok := strings.CutSuffix(path, ext)
+		if ok {
+			parts := strings.Split(trimmed, "/")
+			return NewLibraryName(parts...), nil
+		}
 	}
-	parts := strings.Split(trimmed, "/")
-	return NewLibraryName(parts...), nil
+	return LibraryName{}, werr.WrapForeignErrorf(
+		werr.ErrInvalidArgument,
+		"filePathToLibraryName: unrecognized extension in %q", path,
+	)
+}
+
+// libraryExtensions caches the recognized library file extensions at init time.
+var libraryExtensions = resolver.LibraryExtensions()
+
+// ResolveLibraryFile resolves a library name to an open file handle,
+// trying each extension in libraryExtensions order.
+// Non-file-not-found errors (security denial, I/O) propagate immediately.
+func ResolveLibraryFile(ctx context.Context, res FileResolver, name LibraryName) (fs.File, string, error) {
+	basePath := name.Key()
+	var lastErr error
+	for _, ext := range libraryExtensions {
+		f, filePath, err := res.ResolveAndOpen(ctx, basePath+ext)
+		if err == nil {
+			return f, filePath, nil
+		}
+		if !errors.Is(err, werr.ErrFileNotFound) {
+			return nil, "", err
+		}
+		lastErr = err
+	}
+	return nil, "", lastErr
 }

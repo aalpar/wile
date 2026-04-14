@@ -26,11 +26,6 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-const (
-	// SchemeIncludePathEnv is the environment variable name for the Scheme include path
-	SchemeIncludePathEnv = "SCHEME_INCLUDE_PATH"
-)
-
 func findFile(p *CompileTimeContinuation, ctctx CompileTimeCallContext, path string) (fs.File, string, error) {
 	return p.fileResolver.ResolveAndOpen(ctctx.Context(), path)
 }

@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-04-11
+**Last Updated**: 2026-04-12
 
 ### Current Project Status
 
@@ -17,315 +17,260 @@ TODO
 
 ### Ordering
 
-Sections are ordered: bugs/correctness first, then performance, refactoring (by dependency), features, nice-to-haves last. Within refactoring, high-priority items that block other work come first; low-priority cosmetic items come last.
+Items ordered by perceived priority for the project's success as an embedding product. Tiers: Security/Correctness → Embedding API → Tooling/DX → Performance → Tech Debt → Deferred → Nice-to-Haves. Completed items at the bottom for reference.
 
 ---
 
-## Bugs & Correctness
+## Tier 1 — Security & Correctness
 
-- [x] **Peephole optimizer double-restore** [High, Bug, Fixed]: `callForeignCached` and `applyForeign` would double-restore when PrimCallCC inline mode called `ApplyCallable` with a `ForeignClosure` (e.g., `(call/cc procedure?)`). Fixed with `savedCont` pointer-identity guard. `plans/OPTIMIZER-FIX.md`
-- [x] **Degenerate form pipeline tests** [Correctness, Done]: Full-pipeline tests (string → tokenize → parse → expand → compile → run) for degenerate forms of all core special forms and macro-based derived forms. PR #571.
-- [x] **Sub-context winding stack inheritance hazard** [High, Correctness, Fixed]: `NewSubContext(windingStack)` now requires the winding stack as a constructor parameter. Forgetting is a compile error. `machine/machine_context_subcontext.go`.
-- [x] **`cond-expand (library ...)` bypasses FileResolver** [High, S, Fixed]: `IsSatisfied` now accepts a `FileResolver` parameter. `libraryRequirement` uses `resolver.ResolveAndOpen` (with `.sld`/`.scm` fallback) instead of `os.Stat`. `machine/compilation/features.go`.
-- [x] **syntax-rules ellipsis and hygiene bugs** [High, Bug, Fixed]: Three bugs fixed — scope-aware duplicate binding detection (unified scoped binding API, PR #607), cross-group ellipsis zipping, and nested ellipsis depth tracking (PR #606). `plans/2026-04-03-syntax-rules-ellipsis-hygiene-design.md`
-- L7 (`char-ready?`/`u8-ready?` always `#t`) — documented semantic difference, no fix planned
-
----
-
-## Refactoring
-
-### High Priority
-
-- [x] **`WalkSubExprs` for validated expression traversal** [High, S, Done]: `WalkSubExprs(expr, fn(child, role))` with `ChildRole` enum (`RoleNormal`, `RoleCallProc`, `RoleClosureBody`). B1 capture analysis migrated to use it; immediately-applied lambda handled as B1-specific post-check in `RoleCallProc`.
-- [x] **Extract interface types from `environment/` `any` fields** [High, M, Done]: `FileResolver` interface defined in `environment/file_resolver.go` (stdlib types only); `machine/compilation/` adds type alias. `LibrarySearcher` interface (`GetSearchPaths() []string`) eliminates type assertions in `file_resolver.go`. `authorizer any` → `security.Authorizer` (security package only imports `werr`). 15 type assertions removed across 7 files. `plan: plans/2026-03-31-environment-any-fields.md`
-- [x] **`Stack.Pull()` is O(n) in VM hot path** [High, M, Done]: Replaced `Pull()` + `Drain()` in `OpPullApply` with O(1) `PullDrain()` that splits `stack[0]` (proc) from `stack[1:]` (args) without copying. Unfused `OpPull` unchanged (rare after peephole). `plans/2026-03-31-pulldrain-design.md`
-- [x] **Split `ffi.go` by concern** [Medium, S, Done]: 1010 lines split into `ffi.go` (spec), `ffi_arg_converters.go`, `ffi_ret_converters.go`, `ffi_wrapper.go`. PR #599.
-- [x] **Engine initialization order invariant** [Medium, S, Done]: `engine.go:122-142` documents the 6-step dependency DAG. Negative tests in `engine_init_order_test.go` verify unbootstrapped namespace fails eval and library system fails without bootstrap. `plans/2026-04-01-engine-init-order.md`
-
-### Medium Priority
-
-- [x] **`machine/` mega-package decomposition** [Medium, L, Done]: Phase 1 (PR #592) — `MacroEvaluator` and `ExpanderCtx` interfaces. Phase 2 (PR #593) — 95 files moved to `machine/compilation/` subpackage; `typedCompiler` adapter deleted; bridge types in `machine/syntax_bridge_types.go`; shared test helpers in `machine/testutil/`. Compiler imports `machine`, never reverse. `plans/2026-03-30-machine-decomposition-design.md`
-- [x] **`file_resolver.go` chain of responsibility** [Medium, M, Done]: Extracted `osSearchDirs`, `openAuthorized`, `walkOSLibraries`, and `walkFSDir` as shared helpers. `OSFileResolver` and `FSFileResolver` now delegate to these instead of duplicating directory-collection and walk-callback logic. 541 → 469 lines.
-- [x] **Timing-dependent concurrency tests** [Medium, M, Done]: 10 of 11 `time.Sleep` calls replaced with observation-based synchronization (`internal/testutil` package: `PollUntil`, `ReadyExtension`, `stableGoroutineCount`). 1 deliberate-race sleep kept. PR #602. `plans/2026-04-01-timing-dependent-tests.md`
-
-### Tech Debt (open items from `plans/TECH-DEBT-2026-04.md`)
-
-**Phase 1 — Silent Limits (S each):**
-- [x] **Task 1.1: `uint16` source table index overflow** [High, S, Done]: Changed `sourceRefs` to `uint32` across `native_template.go`, `edit_plan.go`, `peephole.go`.
-- [x] **Task 1.2: Opcode round-trip exhaustiveness test** [High, S, Done]: Already existed at `machine/native_template_test.go:425`.
-- [x] **Task 1.3: Extension list consistency test** [High, S, Done]: Already existed at `extension_consistency_test.go:29`.
-- [x] **Task 1.4: Eval stack size limit** [Medium, S, Done]: Added `WithMaxStackSize(n)` engine option. `checkStackSize()` enforced at 6 push opcodes in `Run()` (including `OpUnpackListToStack`). Propagated through sub-contexts and `eval`/`load` primitives. `plans/2026-04-11-eval-stack-limit-design.md`
-
-**Phase 4 — Test Discipline (remaining):**
-- [x] **Task 4.2: Security gate integration tests** [Medium, S, Done]: Already existed — 12+ tests in `engine_sandbox_test.go`.
-
-**Phase 5 — Missing Abstractions (S-M):**
-- [x] **Task 5.1: Closure interface `Name()`/`Doc()`** [Medium, M, Done]: Added `NamedCallable` interface; remaining switches need type-specific behavior.
-- [x] **Task 5.2: `StringOrFalse` helper** [Low, S, Done]: Implemented as `StringOrFalse` (returns value) in `registry/core/prim_reflection.go` and `prim_syntax_loc.go`. PR #609.
-- [x] **Task 5.3: `ForEachList` for proper-list enforcement** [Low, S, Done]: Implemented as `ForEachList` (renamed from `MustList`). Adopted in `prim_strings.go` and helpers. PR #609.
-- [x] **Task 5.4: Extract `requireSourceContext` helper** [Low, S, Done]: Extracted in `prim_syntax_loc.go` — all 5 functions now call shared helper. PR #609.
-- [x] **Task 5.5: Complete `RequireArg[T]` migration** [Low, S, Done]: 5 sites migrated (`prim_reflection.go` ×2, `prim_exceptions.go` ×2, `prim_opaque.go` ×1). 3 intentional deviations remain: `prim_predicates.go` ×2 (return `#f` on non-match, not error — R7RS semantics) and `prim_syntax_loc.go` ×1 (inside shared `requireSyntaxValue` helper).
-
-**Phase 6 — Cleanup (S each):**
-- [x] **Task 6.1: Delete `runtime/` package** [Done]: Already deleted.
-- [ ] **Task 6.2: Replace `context.TODO()` in tests** [Low, S]: 431 occurrences across 39 test files. Mechanical `→ context.Background()`.
-- [x] **Task 6.3: Fix receiver naming** [Low, S, Done]: All 6 production types normalized to `p` receivers. PR #609.
-- [ ] **Task 6.4: Add `typeswitchlint` to value type guide** [Low, S]: Guide comment missing step for `cmd/typeswitchlint/main.go:knownValueTypes`.
-
-**Phase 7 — Test Helpers (L):**
-- [x] **Task 7.1: Unify `machine/testutil` and `registry/testhelpers`** [Low, L, Done]: `machine/testutil` eliminated; unified into `registry/testhelpers`. All eval paths now use `RunWithEscapeHandling`. PR #609.
-
-**Phase 8 — Architecture (M each, opportunistic):**
-- [ ] **Task 8.1: Extract `machine/compilation/resolver/`** [Low, M]: FileResolver implementations are I/O infrastructure, not compilation logic.
-- [ ] **Task 8.2: Evaluate `wile.Value` wrapper** [Low, M]: Wrapper provides minimal methods beyond `Internal()` escape hatch.
-- [x] **Task 8.3: Fix REPL importing `machine/compilation`** [Medium, M, Done]: Presentation layer decoupled from compilation internals. `Engine.FormLabel`, `Engine.DisassembleValue`, `Engine.LookupLibrary`, `wile.Debugger` wrapper, `values.DebugState` interface replace all type assertions. PR #639. `plans/2026-04-11-repl-decoupling-design.md`
-- [ ] **Task 8.4: Make `DefaultBigFloatPrecision` configurable** [Low, M]: 256-bit precision hardcoded across 12 call sites. No engine option.
-- [x] **Task 8.5: Funnel `prim_eval.go` through `NewSubContext`** [Medium, M, Done]: Added `NewSubContextWithTemplate(tpl, env)` to `MachineContext`. Both `PrimEval` and `PrimLoad` migrated from manual `NewMachineContext` + field propagation to single `NewSubContextWithTemplate` call with pool-backed `ReleaseSubContext`. Eliminates the "forgotten field" bug class. PR #637. `plans/2026-04-11-eval-subcontext-design.md`
-
-### Low Priority
-
-- [x] **ExpanderTimeContinuation convention deviations** [Low, M, Done]: Fixed 18 deviations in expander files: 13 bare `return nil, err` wrapped with `WrapForeignErrorf` context, 5 `.IsEmptyList()` replaced with `syntax.IsSyntaxEmptyList()`. SourceContext and NewSyntaxCons conventions were already followed in expander files; remaining deviations (if any) are in other compilation files.
-- [ ] **Error sentinel grouping** [Low, S]: ~109 sentinels in flat list with comment grouping only. Consider category-specific files or typed constant blocks if count exceeds ~150.
-- [x] **Opcode metadata consolidation (D5)** [Low, S, Done]: Added `OperandKind` enum (7 categories) to `opcodeInfo`. `Disassemble()` and `instructionToOperation()` now switch on metadata instead of per-opcode case branches. Adding a new promoted op dropped from 5 edit sites to 3. `Run()` untouched (hot path). `plans/2026-04-05-structural-reduction.md`
-
-### Structural Reduction — Investigated, No Action
-
-These items from `plans/2026-04-05-structural-reduction.md` were investigated and determined to not warrant changes:
-
-- [x] **Promoted op table (Phase 2)** [Rejected]: Replacing 34 switch cases with table-driven dispatch regressed ~1.5% geo mean across 16 Gabriel benchmarks (15/16 slower, worst ackermann +3.4%). Go compiles contiguous-integer switches to jump tables; the table-driven `default:` branch adds range check + array index + indirect load. The maintenance cost of hand-unrolled cases is the accepted trade-off.
-- [x] **PrimitiveSpec dead fields (D1)** [Stale]: Originally flagged as 5% `ParamTypes` / 2% `ReturnType` usage. Extension contracts Phase 1 (PRs #577-578) populated both fields broadly (170 and 129 specs respectively). No longer dead.
-- [x] **ForeignClosure redundant fields (D2)** [Accepted]: `doc` field duplicates `PrimitiveSpec.Doc` but costs only ~3.2KB total (8 bytes × ~400 closures), is set once at registration and cannot diverge. Removing requires circular import workarounds or Closure interface changes — complexity exceeds benefit. `validate` field is active (contract enforcement at dispatch).
-- [x] **Namespace root/child state waste (D3)** [Accepted]: Child namespaces have ~6 nil/unused fields out of 16. Not worth splitting: (1) every nil field has a delegation method, (2) splitting forces an interface (hot-path dispatch cost) or wrapper (indirection), (3) children are rare (~handful per VM lifetime), saving ~24 bytes is meaningless, (4) zero-value mutexes and nil maps cost nothing.
-- [x] **LocalIndex / BindingID overlap (D4)** [Audited]: `BindingID` used in `internal/validate` (mutation/capture/escape analysis) and `machine/compilation` (inline candidates). Not replaceable by `LocalIndex` — `LocalIndex` is relative (slot+depth from a reference frame, same binding gives different keys at different depths), `BindingID` is absolute (frame pointer + slot, stable identity). Both needed.
-
-### Postponed
-
-- [ ] **F11: Promote internal extensions** [Low, Postponed]: `internal/extensions/{io,eval,all}` invisible to embedders. Promote to `extensions/{io,eval}/` when extension API stabilizes and external consumers exist.
-- [ ] **Parser: unify readList + readLabeledList** [Low, Postponed]: High risk — datum labels require in-place mutation of placeholder pairs. The structural difference is semantic, not accidental. Unifying requires careful design to handle the placeholder protocol.
-- [ ] **VM dispatch loop extraction** [Low, Postponed]: `MachineContext.Run()` is 547 lines with 65 inlined opcode cases. Extraction adds indirection without clear benefit — Go has no computed goto, and method dispatch adds measurable overhead on the hot path. The two-tier model (inlined ops + `OpComplex` side table for 16 complex ops) already extracts the most complex operations. Intentional performance-over-readability trade-off.
-- [ ] **Match: consolidate bytecode type files** [Low, Postponed]: Pure cosmetic reorganization.
-- [ ] **Extensions: standardize registration patterns** [Low, Postponed]: Requires design decision on the canonical pattern. Worth a separate discussion, not a mechanical refactoring.
-- [ ] **Schemeutil: grab-bag reorganization** [Low, Postponed]: Moving functions risks import cycle issues. Needs careful dependency analysis.
-
----
-
-## Performance & CI
-
-### Completed
-
-- [x] **GC pressure reduction** [Performance, Done]: FreeList migration for continuation/stack pools, pre-sized binding arrays in env frame pool, env frame leak fix in context release. -8.9% geo mean. PRs #562-563. `plans/GC-PRESSURE-REDUCTION.md`
-- [x] **Core-let compilation** [Performance, Done]: `let`, `let*`, `letrec`, `letrec*` compiled as core forms with `ValidatedLet` + `OpPushEnv`, eliminating lambda overhead for all binding forms. PR #570. `plans/CORE-LET-IMPL.md`
-
-### Actionable
-
-- [x] **Procedure inlining** [Performance, Done]: Let-bound lambda calls inlined as synthetic let forms. PR #605. `plans/PROCEDURE-INLINING.md`
-- [ ] **Environment frame slimming** [Performance]: Reduce `EnvironmentFrame` struct for closure bodies that only need local bindings. `plans/PERFORMANCE.md`
-- [x] **B2 escape analysis for let-bound closures** [Performance, Done]: Tracks whether let-bound closures escape their scope. Enables `!Captured` optimization. PR #604. Design: `plans/ESCAPE-ANALYSIS.md`.
-- [ ] **B3 effective capture refinement** [Performance, Research]: Propagate B2 escape results back into B1 capture status. A binding marked `Captured` by B1 is effectively non-captured if every lambda that references it is stored in a non-escaping binding (B2). Cross-binding analysis over B1+B2 results.
-- [ ] **Benchmark coverage gaps** [Performance, S-M]: No benchmarks for compiler, expander (syntax-rules expansion), library import resolution, or continuation capture/restore cycle. Existing benchmarks cover VM dispatch, fibonacci, tokenizer, parser, environment, and symbol interning. The missing benchmarks cover operations most likely to regress during optimization work.
-
-### Research
-
-- [ ] **Fused lexing/parsing** [Performance, Research]: Flap paper (PLDI 2023) — fuse tokenizer and parser into single character-level pass, eliminating per-token heap allocation. 6-phase incremental plan written. Gated on profiling confirming tokenizer is a bottleneck. `plans/PERFORMANCE.md`
-
----
-
-## Features
+Items that block production embedded use or prevent silent state corruption.
 
 - [ ] **Opcode resource limits** [Security, Design]: Per-category limits for match/expand/continuation copy. Completes defense-in-depth for embedded use. `plans/SECURITY.md`
-- [ ] **Module decomposition Phase 1** [Architecture]: Decompose `internal/extensions/all/` into records, promises, core. Enables future module extraction. `plans/ARCHITECTURE.md`
+- [ ] **vmState field coverage test** [High, S]: Reflection-based test enumerating vmState fields, asserting each appears in a coverage table keyed by operation. Prevents silent state corruption when fields are added. See [FCA Assessment](#fca-assessment) below.
+- [ ] **Error type identity** [Medium]: `CompilationError` has no source location, no identity as SchemeError, and no `Wrap*` constructor. `RuntimeError` has no identity as SchemeError or ForeignError and no constructor. Determine where each sits between Scheme and Foreign errors.
+- [ ] **Exceptions and error stack traces** [Medium]: Both Foreign and Native errors should track stacktraces with source code references. Includes foreign stack trace entries for Native → Foreign → Native callback crossings.
+- [ ] **MCP eval fails on schelog `include`** [Bug]: `(include "examples/logic/schelog/schelog.scm")` followed by `(solve-puzzle %houses)` produces `#!void` for `schelog:unbind-ref!` at line 113. CLI (`wile -f`) works fine. Likely include resolution or session-state issue in MCP eval mode.
+
+---
+
+## Tier 2 — Embedding API & Product Value
+
+The embedding experience that differentiates Wile.
+
+- [ ] **Extension API contracts Phase 2+** [Embedding, High]: Compile-time (compiler consults `ParamTypes` for static call sites — error before execution, zero runtime cost) and runtime (`buildValidator` wires `ParamTypes` → `SetValidator`). Integration with linter. `plans/2026-03-26-extension-contracts-design.md`
+- [ ] **Environment profiles** [Embedding]: Replace SafeExtensions/AllExtensions with named profiles (Tiny, Console, Small, KitchenSink), orthogonal sandbox modifier, virtual env map. `plans/2026-03-26-environment-profiles-impl.md`
+- [ ] **Eager documentation index** [Tooling, High]: Scan `.sld` files at engine init to populate doc index before any library is imported. LLMs (primary doc consumers) can't discover library functions via `apropos`/`doc` until the library is loaded — this makes all available libraries searchable from the first tool call. `plans/2026-04-08-eager-doc-index-design.md`
 - [ ] **Network libraries** [Standard library]: TCP/UDP, HTTP, TLS, DNS. Required for real-world embedded use cases.
   - TCP/UDP sockets (tcp-connect, tcp-listen, tcp-accept, tcp-close)
   - HTTP client/server primitives
   - SSL/TLS support
   - DNS resolution
-- [ ] **Debugger / DAP integration** [Tooling]: Debug Adapter Protocol. Inline traps + snap-to-next designs ready in `plans/DEBUGGER.md`
-- [ ] **POSIX API / SRFI-170** [Standard library, 10 phases]: Comprehensive OS access — stat, permissions, links, temp files, env vars, subprocess, signals, user/group, terminal, error handling. Phase 1 (directory ops + process extension) completed in PR #565; remaining phases not started.
-- [x] **Algebra library** [Standard library]: General-purpose algebraic structures as an R7RS library `(wile algebra)`. Partial orders, lattices (flat, powerset, product, map), fixpoint (Kleene + widening), monoids, semirings (boolean, tropical, counting), groups, rings (integer, modular), fields (rational), Galois connections. Design: `plans/2026-03-25-algebra-library-design.md`. 158 tests across 8 test files.
-
-- [x] **Documentation system** [Tooling, High, Done]: REPL-accessible documentation for all Scheme bindings. Complete infrastructure: `procedure-documentation` primitive (PRs #579, #581); `,doc` REPL command (unified path via `callableDoc()`); `,apropos` / `,a` search (PR #585); `,topics` / `,topic` category browsing; library-level `(description)` clause (PR #586); `(available-libraries)` primitive (PR #590); docstring examples with filtering (PRs #589, #591). All 397 primitive specs + ~243 stdlib procedures + 29 special forms + 15 macros + 11 syntax compilers + 34 library descriptions documented. CxR accessors (28) also documented (PR #587).
-  - [ ] **Eager documentation index** [Tooling, High]: Scan `.sld` files at engine init to populate a doc index before any library is imported. LLMs (the primary doc consumers) can't discover library functions via `apropos`/`doc` until the library is loaded — this makes all available libraries searchable from the first tool call. `plans/2026-04-08-eager-doc-index-design.md`
-  - [ ] **Scribble-style `@` reader notation** [Reader extension, Low Priority]: Racket-style at-expressions for rich documentation markup. Reader recognizes `@cmd[datum ...]{text ...}` and desugars to S-expressions. Enables structured doc content beyond plain strings. Depends on docstring validation being in the validator layer (done in PR #584).
-- [ ] **Scheme linter** [Tooling, High, Needs Scoping]: Static analysis for Wile Scheme code — catch "plausible but wrong" before execution. Scope, design, and feasibility TBD. Potential checks: unused bindings, arity mismatches on known procedures, type mismatches at call sites, unreachable code after tail calls, style warnings. Research: what do Racket (Check Syntax), Guile, CHICKEN lint tools actually check? How much can be done at expand time vs requiring a separate pass? Interaction with the type system (if built) is a key design question.
-- [ ] **Extension API contracts** [Embedding, High, Phase 1 Done]: Stronger type/contract declarations on extension APIs. Phase 1 complete (PRs #577, #578): `ValueType` enum on `PrimitiveSpec` for param/return type declarations, contract validator infrastructure in `ForeignClosure` dispatch. Remaining: Phase 2 compile-time (compiler consults `ParamTypes` for static call sites — error before execution, zero runtime cost) and runtime (`buildValidator` wires `ParamTypes` → `SetValidator` for dynamically-constructed calls), integration with linter. `plans/2026-03-26-extension-contracts-design.md`
-- [ ] **Environment profiles** [Embedding]: Replace SafeExtensions/AllExtensions with named profiles (Tiny, Console, Small, KitchenSink), orthogonal sandbox modifier, virtual env map. `plans/2026-03-26-environment-profiles-impl.md`
+- [ ] **Module decomposition Phase 1** [Architecture]: Decompose `internal/extensions/all/` into records, promises, core. Enables future module extraction. `plans/ARCHITECTURE.md`
 - [ ] **Go FFI Phase 3 — Plugin support** [Embedding]: Dynamic extension loading via registry pattern.
-- [x] **MCP server** [Tooling, Done]: Built-in MCP server mode (`wile --mcp`) exposing eval, doc, apropos, topic, libraries, and reset tools. Session hardening with configurable timeouts. PR #588. `plans/2026-03-26-wile-mcp-server-design.md`
-- [x] **`(available-libraries)` primitive** [Embedding, Done]: `LibraryEnumerator` interface, `Engine.AvailableLibraries()` Go API, `(available-libraries)` Scheme primitive. PR #590. `plans/AVAILABLE-LIBRARIES.md`
-- [x] **OpaqueValue type** [Values, Embedding]: Generic opaque wrapper for Go objects in Scheme. `SchemeString()` → `#<tag:id>`, identity-based equality, `opaque?` and `opaque-tag` predicates. Enables wile-goast shared sessions (Track A1) and other Go-object-wrapping use cases.
 
 ---
 
-## Nice-to-Haves
+## Tier 3 — Tooling & Developer Experience
+
+- [ ] **Scheme linter** [Tooling, High, Needs Scoping]: Static analysis for Wile Scheme code — catch "plausible but wrong" before execution. Potential checks: unused bindings, arity mismatches, type mismatches, unreachable code, style warnings. Research needed: what do Racket (Check Syntax), Guile, CHICKEN lint tools actually check? How much at expand time vs separate pass? Interaction with type system is a key design question.
+- [ ] **Debugger / DAP integration** [Tooling]: Debug Adapter Protocol. Inline traps + snap-to-next designs ready in `plans/DEBUGGER.md`
+- [ ] **Source file tracking in Syntax Objects** [Tooling]: Utilities for finding source locations and providing source lines.
+- [ ] **POSIX API / SRFI-170 remaining phases** [Standard library, 9 phases]: Phases 2-10 not started. Phase 1 (directory ops + process extension) completed in PR #565.
+
+---
+
+## Tier 4 — Performance
+
+- [ ] **Environment frame slimming** [Performance]: Reduce `EnvironmentFrame` struct for closure bodies that only need local bindings. `plans/PERFORMANCE.md`
+- [ ] **B3 effective capture refinement** [Performance, Research]: Propagate B2 escape results back into B1 capture status. A binding marked `Captured` by B1 is effectively non-captured if every lambda that references it is stored in a non-escaping binding (B2). Cross-binding analysis over B1+B2 results.
+- [ ] **Benchmark coverage gaps** [Performance, S-M]: No benchmarks for compiler, expander (syntax-rules expansion), library import resolution, or continuation capture/restore cycle. Existing benchmarks cover VM dispatch, fibonacci, tokenizer, parser, environment, and symbol interning.
+- [ ] **Fused lexing/parsing** [Performance, Research]: Flap paper (PLDI 2023) — fuse tokenizer and parser into single character-level pass, eliminating per-token heap allocation. Gated on profiling confirming tokenizer is a bottleneck. `plans/PERFORMANCE.md`
+
+---
+
+## Tier 5 — Tech Debt
+
+### FCA-Derived
+
+- [ ] **vmCore sub-struct extraction** [High, M]: Extract always-transfer fields (env, template, pc, callDepth) into sub-struct. Converts 4 hand-copied assignments to 1 struct assignment at each of 6 copy sites. See [FCA Assessment](#fca-assessment).
+- [ ] **Bidirectional opcode conversion test** [Medium, S]: Verify `operationToInstruction` and `instructionToOperation` cover the same opcode set.
+- [ ] **LocalEnvironmentFrame pointer ambiguity** [Low, S]: Doc comment on `NewLocalEnvironment` explaining lifecycle (value-vs-pointer ownership).
+
+### Tech Debt Plan (remaining)
+
+- [ ] **Task 6.2: Replace `context.TODO()` in tests** [Low, S]: 431 occurrences across 39 test files. Mechanical `→ context.Background()`.
+- [ ] **Task 6.4: Add `typeswitchlint` to value type guide** [Low, S]: Guide comment missing step for `cmd/typeswitchlint/main.go:knownValueTypes`.
+- [x] **Task 8.1: Extract `machine/compilation/resolver/`** [Done]: FileResolver implementations extracted. `LibraryEnumerator` replaced with `FileEnumerator.EnumerateFiles` (returns paths, not `LibraryName`). Type aliases in compilation for backward compat. `plans/2026-04-13-resolver-extraction-impl.md`
+- [ ] **Task 8.2: Evaluate `wile.Value` wrapper** [Low, M]: Wrapper provides minimal methods beyond `Internal()` escape hatch.
+- [ ] **Task 8.4: Make `DefaultBigFloatPrecision` configurable** [Low, M]: 256-bit precision hardcoded across 12 call sites. No engine option.
+- [ ] **Error sentinel grouping** [Low, S]: ~109 sentinels in flat list. Consider category-specific files if count exceeds ~150.
+- [ ] **Namespace registry typing** [Low, S]: Namespace's registry should have a type instead of `any`.
+- [ ] **ValueType refactoring** [Low]: ValueType doesn't have grounding in Scheme or Go — determine use and scope of type domains.
+- [ ] **Evaluate need for Primitive Annotation Enforcement** [Low]: Enforcement may not be needed.
+
+### Postponed
+
+Items deferred for stated reasons. Re-evaluate when preconditions change.
+
+- [ ] **F11: Promote internal extensions** [Postponed]: `internal/extensions/{io,eval,all}` invisible to embedders. Promote when extension API stabilizes and external consumers exist.
+- [ ] **Parser: unify readList + readLabeledList** [Postponed]: High risk — datum labels require in-place mutation of placeholder pairs. Structural difference is semantic, not accidental.
+- [ ] **VM dispatch loop extraction** [Postponed]: `MachineContext.Run()` is 547 lines with 65 inlined opcode cases. Go has no computed goto; method dispatch adds measurable overhead on hot path. Intentional performance-over-readability trade-off.
+- [ ] **Match: consolidate bytecode type files** [Postponed]: Pure cosmetic reorganization.
+- [ ] **Extensions: standardize registration patterns** [Postponed]: Requires design decision on canonical pattern.
+- [ ] **Schemeutil: grab-bag reorganization** [Postponed]: Moving functions risks import cycle issues.
+
+---
+
+## Tier 6 — Nice-to-Haves
 
 No demand signal. Speculative or research-only.
 
-- [ ] **Hygiene debugging** [Tooling, Planned]: Scope introspection for macro authors. `plans/MACRO_SYSTEM.md`
-- [ ] **Macro expansion tracing** [Tooling, Planned]: Trace generated code back to macro invocation/template. `plans/MACRO_SYSTEM.md`
-- [ ] **Dialect system** [Architecture, Proposed]: De-globalize forms registry, `WithDialect()` option, extract R7RS as default dialect. `plans/ARCHITECTURE.md`
-- [ ] **Plugin shadowing** [Architecture, Proposed]: Extension primitive shadowing. Depends on public extensions. `plans/ARCHITECTURE.md`
-- [ ] **Programmatic tokenization/parsing** [Tooling]: Expose tokenizer/parser to Scheme code. 4 phases: token introspection, syntax introspection, EOF handling, advanced reader control.
-- [ ] **Logging library** [Standard library]: Levels, structured output, handlers.
-- [ ] **Event callbacks** [Tooling]: Hooks for expansion, compilation, debugging. IDE integration, profiling.
-- [ ] **Feature flags (3-tier)** [Runtime]: Compile-time, runtime global, extension-defined. No demand signal yet.
-- [ ] **Scribble syntax (@-expressions)** [Syntax]: Racket-style text processing. No demand signal yet.
-- [ ] **Hashtable SRFI compliance** [Standard library]: Current implementation is a custom API (10 primitives, fixed FNV-1a hash, fixed `EqualTo` comparison). Not R7RS-small (hashtables aren't in the spec) but doesn't conform to any SRFI either. Gaps vs SRFI-125: no custom hash/equality functions in constructor, no `hash-table-update!`, no `hash-table-fold`/`hash-table-map`, no immutable variant, no `hash-table->alist`/`alist->hash-table` conversion, naming uses `hashtable-*` not `hash-table-*`. Decide: target SRFI-125 (broader ecosystem compat) or keep custom API. Internal design issue: bucket chaining over `map[uint64][]entry` could be replaced with native Go map.
-- [ ] **Unit testing expansion**: Regression test files (`test/regression/`), library-specific tests (`stdlib/lib/*/test/`), new test cases for features not covered by Go test extraction.
-- [ ] **Type system**: type system that covers all the base types and can be expanded.  Discover useful properties of types to track (if any).  Types should be a distinct type (exists at the top of the hierarchy) - except for maybe some generic object type.
-- [ ] **Parser unit tests**: unit tests for parser.
-- [ ] **Source file tracking in Syntax Objects**: need some utilities around finding source locations and providing source lines.
-- [ ] **Exceptions and Error stack traces**: Both Foreign and Native errors should track stacktraces with source code references.
-- [ ] **Foreign Stack trace entry in stack traces that cross from Native -> Foreign -> Native callback.**
-- [ ] **Area for blog articles** Git blog area in repo
-- [ ] **Finish blog article** Finish blog article on appropriateness of Scheme for sandboxing.
-- [x] **Go AST extension Phase 2 — Advanced** [Standard library, S]: Concurrency (`GoStmt`, `DeferStmt`, `SelectStmt`, `CommClause`), switch (`SwitchStmt`, `TypeSwitchStmt`, `CaseClause`), `SliceExpr`, `TypeAssertExpr`, `ChanType`, `Ellipsis`, `LabeledStmt`. 13 node types. PR #480. `plans/GO-AST.md`
-- [ ] **Go AST extension Phase 3 — Comments & generics** [Standard library, S]: `Comment`/`CommentGroup` attachment for round-trip structural fidelity. `BadExpr`/`BadStmt`/`BadDecl` for error recovery. `IndexListExpr` for generics. `plans/GO-AST.md`
-- [ ] **Implement let-syntax*** [Core language, S]: Implement `let-syntax*`.
-- [ ] **User labels/tags to distinguish FS resolvers** Use tags or labels to distinguish bootstrap loadee from include/library loaders in fileResolver.
-- [x] **Disassembler** [Tooling, Done]: Bytecode disassembler — `(disassemble proc)` primitive, `,dis` REPL command, MCP tool. PR #603.
-- [ ] **CompilationError** does not have source location, nor does it have an identity as a SchemeError and no Wrap* constructor.  Look into CompilationError and determine where it sits between Scheme and Foreign errors
-- [ ] **RuntimeError** does not have an identity as SchemeError or ForeignError.  It also does not have a constructor
-- [x] **Scheme Disassembly** [Tooling, Done]: Addressed by `(disassemble proc)` and `,dis` REPL command. PR #603.
-- [x] **Primitive Search** — addressed by `(apropos "pattern")` and `,apropos` REPL command (PR #585).
-- [x] **Expression Evaluation** — addressed by MCP server eval tool and `,doc` system (PR #588).
-- [x] **Proposal** — MCP server tool descriptions now accurate (PR #588).
-- [ ] **Consider ValueType Refactoring** ValueType does not seem to have a grounding in Scheme or Go, which begs the question of what sorts of type domains is it attempting to describe?  Ask specific questions of AI to determine the use and scope of the type domains
-- [ ] **Evaluate Need for Primitive Annotation Enforcement** — enforcement may not be needed.
-- [ ] **Namespace registry is `any`** - namespace's registry should have a type
-- [ ] **MCP eval fails on schelog `include`** — `(include "examples/logic/schelog/schelog.scm")` followed by `(solve-puzzle %houses)` produces `#!void` for `schelog:unbind-ref!` at line 113. CLI (`wile -f`) works fine. Likely an `include` resolution or session-state issue in MCP eval mode.
+### Tooling
+- [ ] **Hygiene debugging** [Planned]: Scope introspection for macro authors. `plans/MACRO_SYSTEM.md`
+- [ ] **Macro expansion tracing** [Planned]: Trace generated code back to macro invocation/template. `plans/MACRO_SYSTEM.md`
+- [ ] **Programmatic tokenization/parsing**: Expose tokenizer/parser to Scheme. 4 phases: token introspection, syntax introspection, EOF handling, advanced reader control.
+- [ ] **Event callbacks**: Hooks for expansion, compilation, debugging. IDE integration, profiling.
 
-- [ ] **FCA refactoring** — I now have detailed findings on all FCA-flagged pairs. Let me synthesize the assessment.
-      ---
-      Staff Engineer Technical Debt Assessment: wile
+### Standard Library
+- [ ] **Hashtable SRFI compliance**: Current custom API (10 primitives) doesn't conform to any SRFI. Gaps vs SRFI-125: no custom hash/equality, no `hash-table-update!`, no fold/map, no immutable variant, naming uses `hashtable-*` not `hash-table-*`. Decide: SRFI-125 or keep custom.
+- [ ] **Logging library**: Levels, structured output, handlers.
+- [ ] **Go AST Phase 3 — Comments & generics** [S]: `Comment`/`CommentGroup` attachment, `BadExpr`/`BadStmt`/`BadDecl` error recovery, `IndexListExpr` for generics. `plans/GO-AST.md`
 
-      [Priority: High] — vmState field-addition has 6 unguarded copy sites
+### Core Language
+- [ ] **Type system**: Covers base types, expandable. Discover useful type properties. Types as distinct top-level concept.
+- [ ] **let-syntax*** [S]: Implement `let-syntax*`.
+- [ ] **Scribble-style `@` reader notation** [Reader extension]: Racket-style at-expressions for rich documentation markup. `@cmd[datum ...]{text ...}` desugars to S-expressions.
 
-      Where:
-      - machine/machine_context_continuation.go:31-224 (Restore, RestoreAndRelease, PopContinuation, SaveContinuation)
-      - machine/machine_continuation.go:96-113 (NewMachineContinuationFromMachineContext)
-      - machine/machine_continuation.go:157-183 (Copy)
-      - machine/machine_context.go:93-110 (NewMachineContext)
+### Architecture
+- [ ] **Dialect system** [Proposed]: De-globalize forms registry, `WithDialect()`, extract R7RS as default dialect. `plans/ARCHITECTURE.md`
+- [ ] **Plugin shadowing** [Proposed]: Extension primitive shadowing. Depends on public extensions. `plans/ARCHITECTURE.md`
+- [ ] **Feature flags (3-tier)** [Runtime]: Compile-time, runtime global, extension-defined.
+- [ ] **User labels/tags for FS resolvers**: Distinguish bootstrap from include/library loaders in fileResolver.
 
-      What: Adding a field to vmState requires updating 6 functions across 3 files, each with different copy semantics (transfer, clone, skip, force-false). No compile-time guard ensures all sites are updated. The
-      documentation table at vm_state.go:78-93 is the only safety net — and it's comments.
+### Testing & Quality
+- [ ] **Unit testing expansion**: Regression test files (`test/regression/`), library-specific tests (`stdlib/lib/*/test/`), new test cases.
+- [ ] **Parser unit tests**: Unit tests for parser.
 
-      Why it matters: Every field you've added has had to be reasoned about independently at each site. The envPooled column alone has four different behaviors. The marks field uses cloneMarks in some paths and direct
-      assignment in others. Miss one site → silent state corruption that manifests as a wrong continuation restore, which is extremely hard to debug.
+### Content
+- [ ] **Blog area in repo**: Git blog area.
+- [ ] **Finish blog article**: Scheme for sandboxing.
 
-      Suggested fix: Add a reflection-based test that enumerates vmState fields and asserts each appears in a coverage table keyed by operation, forcing the author to explicitly declare "this field is intentionally
-      skipped here."
+---
 
-      Effort: S
+## Documented Exceptions
 
-      ---
-      [Priority: High] — No two transfer operations agree on which fields to copy
+- L7 (`char-ready?`/`u8-ready?` always `#t`) — documented semantic difference, no fix planned
 
-      Where: machine/machine_context_continuation.go — all four operations
+---
 
-      What: The four operations (Save, Restore, RestoreAndRelease, Pop) each copy a different subset of vmState. The non-uniformity isn't accidental — singleValue/multiValues are preserved by Pop but not Restore
-      (because the caller sets them before restoring), threadID is saved but never restored (invoking thread keeps its own), windingStack/promptTag are never transferred. But each deviation is a semantic decision
-      documented only in comments.
+## Investigated & Rejected
 
-      The deeper issue: vmState is treated as three implicit partitions (always-transfer, conditionally-transfer, never-transfer) but there's no type-level encoding of this. The partitions exist only in the
-      programmer's head and in that comment table.
+These items were investigated and determined not to warrant changes:
 
-      Why it matters: The evals field alone has four distinct ownership modes across the four operations: pool-acquire (Save), copy (Restore), transfer-or-copy-if-shared (RestoreAndRelease), direct-assign (Pop). This
-      is the most complex field to get right, and it's replicated four times with no shared abstraction.
+- [x] **Promoted op table**: Table-driven dispatch regressed ~1.5% geo mean (15/16 Gabriel benchmarks slower). Go compiles contiguous-integer switches to jump tables; table-driven adds overhead. `plans/2026-04-05-structural-reduction.md`
+- [x] **PrimitiveSpec dead fields (D1)**: Originally 5%/2% usage. Extension contracts Phase 1 populated both broadly. No longer dead.
+- [x] **ForeignClosure redundant fields (D2)**: `doc` duplicates `PrimitiveSpec.Doc` but costs ~3.2KB total, set once, cannot diverge. Removing requires circular import workarounds.
+- [x] **Namespace root/child state waste (D3)**: ~6 nil fields in children. Not worth splitting — zero-value costs nothing, children are rare.
+- [x] **LocalIndex / BindingID overlap (D4)**: `LocalIndex` is relative (slot+depth), `BindingID` is absolute (frame pointer + slot). Both needed.
+- [x] **Binding/BindingMeta (FCA)**: Clean lazy-initialization pattern. FCA false positive.
+- [x] **PrimitiveRegistration/PrimitiveSpec (FCA)**: Orthogonal concerns properly separated. FCA false positive.
+- [x] **CompileTimeCallContext (FCA)**: 2-field value type parameter, not coupling. FCA false positive.
 
-      Suggested fix: Consider whether a vmState.transferCore(dst *vmState) method for the always-transfer partition (env, template, pc, callDepth) would reduce the copy surface, while leaving the conditional fields
-      explicit. Won't eliminate all hand-copying but would make "forgot to add field X to the core transfer" a compile error if transferCore uses struct assignment of a sub-struct.
+---
 
-      Effort: M
+## FCA Assessment
 
-      ---
-      [Priority: Medium] — Opcode extension requires 7 coordinated edits
+Detailed staff-engineer assessment of cross-boundary coupling. Actionable items extracted into Tier 1 and Tier 5 above.
 
-      Where:
-      - machine/opcode.go (constant + table entry)
-      - machine/machine_context.go:305-329 (dispatch switch)
-      - machine/native_template.go:129+, 256+ (both conversion directions)
-      - machine/operation_*.go (new Operation type)
-      - machine/compilation/*.go (compiler emission)
-      - machine/peephole.go (if fused)
+<details>
+<summary>Full FCA findings (click to expand)</summary>
 
-      What: Adding a new opcode touches 7 mandatory sites. The opcode table at opcode.go centralizes metadata (name, operand kind, flags), which is good. But the two conversion functions in native_template.go
-      (operationToInstruction and instructionToOperation) are mirror switches that must stay synchronized — add one case, must add the other.
+**[Priority: High] — vmState field-addition has 6 unguarded copy sites**
 
-      Why it matters: This is the most frequent extension point in the project. Each new opcode is a feature. The friction isn't catastrophic (the sites are well-documented per the comment at opcode.go:22-29), but the
-      bidirectional conversion switch is an accident waiting to happen.
+Where:
+- machine/machine_context_continuation.go:31-224 (Restore, RestoreAndRelease, PopContinuation, SaveContinuation)
+- machine/machine_continuation.go:96-113 (NewMachineContinuationFromMachineContext)
+- machine/machine_continuation.go:157-183 (Copy)
+- machine/machine_context.go:93-110 (NewMachineContext)
 
-      Suggested fix: Consider a registration pattern where each Operation type declares its own conversion, or at minimum, a test that the two switch statements cover the same set of opcodes.
+What: Adding a field to vmState requires updating 6 functions across 3 files, each with different copy semantics (transfer, clone, skip, force-false). No compile-time guard ensures all sites are updated. The documentation table at vm_state.go:78-93 is the only safety net — and it's comments.
 
-      Effort: M
+Why it matters: Every field added has to be reasoned about independently at each site. The envPooled column alone has four different behaviors. The marks field uses cloneMarks in some paths and direct assignment in others. Miss one site → silent state corruption.
 
-      ---
-      [Priority: Medium] — LocalEnvironmentFrame pointer ambiguity
+---
 
-      Where: environment/local_environment_frame.go:29-33, environment/environment_frame.go:93-108
+**[Priority: High] — No two transfer operations agree on which fields to copy**
 
-      What: LocalEnvironmentFrame is embedded by value in EnvironmentFrame (for heap allocation savings), but NewLocalEnvironment() returns *LocalEnvironmentFrame (heap-allocated). The LocalEnvironment() accessor
-      returns a pointer into the EnvironmentFrame's memory. Same type, two different ownership semantics. 28 call sites follow the two-step construction ceremony: create LocalEnvironmentFrame, populate it, wrap in
-      EnvironmentFrame.
+Where: machine/machine_context_continuation.go — all four operations
 
-      Why it matters: The value-vs-pointer ambiguity is a cognitive tax on readers. The by-value embedding is a justified optimization, but the API doesn't make ownership obvious. A reader seeing *LocalEnvironmentFrame
-       doesn't know if it's a standalone heap object or a pointer into an EnvironmentFrame.
+What: Save, Restore, RestoreAndRelease, Pop each copy a different subset of vmState. The non-uniformity isn't accidental — each deviation is a semantic decision documented only in comments. vmState is treated as three implicit partitions (always-transfer, conditionally-transfer, never-transfer) but there's no type-level encoding.
 
-      Suggested fix: Consider type aliasing or naming convention (localEnvBuilder for the heap-allocated construction phase vs. the embedded result), or accept the status quo with a doc comment on NewLocalEnvironment
-      explaining the lifecycle.
+The deeper issue: The evals field alone has four distinct ownership modes across the four operations.
 
-      Effort: S
+---
 
-      ---
-      [Priority: Low] — Binding/BindingMeta is well-designed, not debt
+**[Priority: Medium] — Opcode extension requires 7 coordinated edits**
 
-      Where: environment/binding.go:22-38
+Where:
+- machine/opcode.go (constant + table entry)
+- machine/machine_context.go:305-329 (dispatch switch)
+- machine/native_template.go:129+, 256+ (both conversion directions)
+- machine/operation_*.go (new Operation type)
+- machine/compilation/*.go (compiler emission)
+- machine/peephole.go (if fused)
 
-      What: FCA flagged 10 cross-boundary concepts. Actual examination shows this is a clean lazy-initialization pattern: BindingMeta behind a pointer to keep Binding copies at 32 bytes. All access through Binding's
-      getters/setters. BindingMeta is never used independently.
+What: Adding a new opcode touches 7 mandatory sites. The bidirectional conversion switches must stay synchronized.
 
-      Why it matters: It doesn't — this is correctly factored. Including here to record the FCA false positive for calibration.
+---
 
-      Suggested fix: None.
+**[Priority: Medium] — LocalEnvironmentFrame pointer ambiguity**
 
-      Effort: —
+Where: environment/local_environment_frame.go:29-33, environment/environment_frame.go:93-108
 
-      ---
-      [Priority: Low] — PrimitiveRegistration/PrimitiveSpec is clean separation
+What: LocalEnvironmentFrame is embedded by value in EnvironmentFrame (for heap savings), but NewLocalEnvironment() returns *LocalEnvironmentFrame (heap-allocated). Same type, two ownership semantics.
 
-      Where: registry/registry.go:25-43
+---
 
-      What: FCA flagged 6 concepts. Only 3 functions access both types. PrimitiveRegistration = PrimitiveSpec + Phase, which separates "what a primitive is" from "when it's available."
+**State of the Code**: Wile's machine package is well-documented and intentionally designed, but carries real evolution risk in vmState transfer operations. The CESK architecture is sound. The debt isn't in the abstraction — it's in hand-unrolled field copying where each of 6 functions implements a different subset of a 12-field copy with different ownership semantics, guarded only by a comment table.
 
-      Why it matters: It doesn't — this is orthogonal concerns properly separated. Another FCA false positive in the "this is coupling" sense, though it correctly detected the co-access.
+</details>
 
-      Suggested fix: None.
+---
 
-      Effort: —
+## Completed
 
-      ---
-      [Priority: Low] — CompileTimeCallContext is a value-type parameter, not coupling
+<details>
+<summary>Completed items (click to expand)</summary>
 
-      Where: machine/compilation/compile_time_call_context.go:48-53
+### Bugs & Correctness
+- [x] **Peephole optimizer double-restore** [Fixed]: `savedCont` pointer-identity guard. `plans/OPTIMIZER-FIX.md`
+- [x] **Degenerate form pipeline tests** [Done]: Full-pipeline tests for all core special forms. PR #571.
+- [x] **Sub-context winding stack inheritance hazard** [Fixed]: Constructor parameter requirement. `machine/machine_context_subcontext.go`.
+- [x] **`cond-expand (library ...)` bypasses FileResolver** [Fixed]: `machine/compilation/features.go`.
+- [x] **syntax-rules ellipsis and hygiene bugs** [Fixed]: Three bugs — scope-aware duplicate binding detection (PR #607), cross-group ellipsis zipping, nested ellipsis depth tracking (PR #606).
 
-      What: FCA flagged 7 concepts between CompileTimeCallContext and CompileTimeContinuation. In reality, CompileTimeCallContext is a 2-field value type (ctx, inTail) passed by value to every Compile* method. It's the
-       "is this a tail position?" flag threaded through compilation. Not coupling — it's a parameter.
+### Refactoring
+- [x] **`WalkSubExprs` for validated expression traversal** [Done]: `ChildRole` enum, B1 capture analysis migrated.
+- [x] **Extract interface types from `environment/` `any` fields** [Done]: 15 type assertions removed across 7 files. `plans/2026-03-31-environment-any-fields.md`
+- [x] **`Stack.Pull()` O(1) replacement** [Done]: `PullDrain()` in `OpPullApply`. `plans/2026-03-31-pulldrain-design.md`
+- [x] **Split `ffi.go` by concern** [Done]: 1010 lines → 4 files. PR #599.
+- [x] **Engine initialization order invariant** [Done]: 6-step DAG documented. `plans/2026-04-01-engine-init-order.md`
+- [x] **`machine/` mega-package decomposition** [Done]: PRs #592, #593. `plans/2026-03-30-machine-decomposition-design.md`
+- [x] **`file_resolver.go` chain of responsibility** [Done]: 541 → 469 lines.
+- [x] **Timing-dependent concurrency tests** [Done]: PR #602. `plans/2026-04-01-timing-dependent-tests.md`
+- [x] **ExpanderTimeContinuation convention deviations** [Done]: 18 deviations fixed.
+- [x] **Opcode metadata consolidation (D5)** [Done]: `OperandKind` enum. `plans/2026-04-05-structural-reduction.md`
 
-      Suggested fix: None.
+### Tech Debt
+- [x] Task 1.1: `uint16` source table index overflow → `uint32`
+- [x] Task 1.2: Opcode round-trip exhaustiveness test (already existed)
+- [x] Task 1.3: Extension list consistency test (already existed)
+- [x] Task 1.4: Eval stack size limit — `WithMaxStackSize(n)`. `plans/2026-04-11-eval-stack-limit-design.md`
+- [x] Task 4.2: Security gate integration tests (already existed)
+- [x] Task 5.1: `NamedCallable` interface
+- [x] Task 5.2: `StringOrFalse` helper. PR #609.
+- [x] Task 5.3: `ForEachList` for proper-list enforcement. PR #609.
+- [x] Task 5.4: `requireSourceContext` helper. PR #609.
+- [x] Task 5.5: `RequireArg[T]` migration (5 sites, 3 intentional deviations). PR #609.
+- [x] Task 6.1: Delete `runtime/` package
+- [x] Task 6.3: Receiver naming normalized. PR #609.
+- [x] Task 7.1: Unified `machine/testutil` into `registry/testhelpers`. PR #609.
+- [x] Task 8.3: REPL decoupled from `machine/compilation`. PR #639. `plans/2026-04-11-repl-decoupling-design.md`
+- [x] Task 8.5: `prim_eval.go` funneled through `NewSubContext`. PR #637. `plans/2026-04-11-eval-subcontext-design.md`
 
-      Effort: —
+### Performance
+- [x] **GC pressure reduction** [Done]: -8.9% geo mean. PRs #562-563. `plans/GC-PRESSURE-REDUCTION.md`
+- [x] **Core-let compilation** [Done]: PR #570. `plans/CORE-LET-IMPL.md`
+- [x] **Procedure inlining** [Done]: PR #605. `plans/PROCEDURE-INLINING.md`
+- [x] **B2 escape analysis** [Done]: PR #604. `plans/ESCAPE-ANALYSIS.md`
 
-      ---
-      State of the Code
+### Features
+- [x] **Algebra library** [Done]: `(wile algebra)`. 158 tests. `plans/2026-03-25-algebra-library-design.md`
+- [x] **Documentation system** [Done]: Full infrastructure — `,doc`, `,apropos`, `,topics`, `,topic`, library descriptions, docstring examples. PRs #579-591.
+- [x] **MCP server** [Done]: `wile --mcp`. PR #588. `plans/2026-03-26-wile-mcp-server-design.md`
+- [x] **`(available-libraries)` primitive** [Done]: PR #590. `plans/AVAILABLE-LIBRARIES.md`
+- [x] **OpaqueValue type** [Done]: Generic opaque wrapper for Go objects in Scheme.
+- [x] **Disassembler** [Done]: `(disassemble proc)`, `,dis`, MCP tool. PR #603.
+- [x] **Go AST Phase 2** [Done]: 13 node types. PR #480. `plans/GO-AST.md`
 
-      Wile's machine package is well-documented and intentionally designed, but carries real evolution risk in the vmState transfer operations. The CESK architecture is sound — vmState as an embedded register set
-      shared between MachineContext and MachineContinuation is textbook. The debt isn't in the abstraction, it's in the hand-unrolled field copying where each of 6 functions implements a different subset of a 12-field
-      copy with different ownership semantics, guarded only by a comment table. The FCA correctly identified the coupling hotspot (109 concepts) but misdiagnosed the cause — it's not a false boundary, it's a transfer
-      protocol that should be partially mechanized. Outside the VM core, the other FCA-flagged pairs (Binding/BindingMeta, PrimitiveRegistration/PrimitiveSpec, CompileTimeCallContext/CompileTimeContinuation) are all
-      well-factored and correctly separated.
-
-      Top 3 to Tackle First
-
-      1. Reflection-based field coverage test for vmState — lowest effort, highest safety ROI. Prevents silent state corruption when fields are added. Do this before any other vmState changes.
-      2. Extract vmCore sub-struct for always-transfer fields — converts 4 hand-copied field assignments into 1 struct assignment at each site. Reduces the blast radius from 6×12 decisions to 6×8 decisions. The
-      always-transfer set (env, template, pc, callDepth) is stable.
-      3. Bidirectional opcode conversion test — verify operationToInstruction and instructionToOperation cover the same opcode set. Low effort, catches the most likely extension error.
+</details>

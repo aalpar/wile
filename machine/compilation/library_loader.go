@@ -29,7 +29,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"strings"
 
 	"github.com/aalpar/wile/machine"
 
@@ -78,22 +77,10 @@ func LoadLibrary(ctx context.Context, name LibraryName, env *environment.Environ
 			"load-library: no file resolver configured")
 	}
 
-	// Try .sld first, then .scm.
-	// Only fall through to .scm on file-not-found; propagate other
-	// errors (e.g. security denial) immediately.
-	sldPath := name.ToFSPath()
-	f, filePath, err := resolver.ResolveAndOpen(ctx, sldPath)
+	f, filePath, err := ResolveLibraryFile(ctx, resolver, name)
 	if err != nil {
-		if !errors.Is(err, werr.ErrFileNotFound) {
-			return nil, werr.WrapForeignErrorf(err,
-				"could not load library %s", name.SchemeString())
-		}
-		scmPath := strings.TrimSuffix(sldPath, ".sld") + ".scm"
-		f, filePath, err = resolver.ResolveAndOpen(ctx, scmPath)
-		if err != nil {
-			return nil, werr.WrapForeignErrorf(err,
-				"could not find library %s", name.SchemeString())
-		}
+		return nil, werr.WrapForeignErrorf(err,
+			"load-library: %s", name.SchemeString())
 	}
 	defer f.Close() //nolint:errcheck
 

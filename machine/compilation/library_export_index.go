@@ -20,10 +20,10 @@ import (
 	"errors"
 	"io"
 	"sort"
-	"strings"
 
 	"github.com/aalpar/wile/internal/parser"
 	"github.com/aalpar/wile/internal/syntax"
+	"github.com/aalpar/wile/machine/compilation/resolver"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -244,61 +244,71 @@ func parseSummaryDescription(summary *LibrarySummary, args syntax.SyntaxValue) {
 }
 
 // BuildExportIndex scans all discoverable library files via the resolver's
-// LibraryEnumerator, parses their exports, and returns a LibraryExportIndex.
+// FileEnumerator, parses their exports, and returns a LibraryExportIndex.
 // Libraries already loaded in reg are skipped (their metadata is already
 // available via the registry). If the resolver does not implement
-// LibraryEnumerator, an empty index is returned (not an error).
-func BuildExportIndex(ctx context.Context, resolver FileResolver, reg *LibraryRegistry) (*LibraryExportIndex, error) {
-	enumerator, ok := resolver.(LibraryEnumerator)
+// FileEnumerator, an empty index is returned (not an error).
+func BuildExportIndex(ctx context.Context, res FileResolver, reg *LibraryRegistry) (*LibraryExportIndex, error) {
+	fileEnum, ok := res.(resolver.FileEnumerator)
 	if !ok {
 		return NewLibraryExportIndexFromEntries(nil), nil
 	}
 
-	libs, err := enumerator.EnumerateLibraries()
+	files, err := fileEnum.EnumerateFiles()
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "library-index: enumerate libraries")
+		return nil, werr.WrapForeignErrorf(err, "library-index: enumerate files")
 	}
 
 	entries := make(map[string]*LibrarySummary)
-	for _, name := range libs {
+	var pathErrs []error
+	for _, path := range files {
 		err = ctx.Err()
 		if err != nil {
 			return nil, werr.WrapForeignErrorf(err, "library-index: context cancelled")
 		}
+		name, nameErr := FilePathToLibraryName(path)
+		if nameErr != nil {
+			pathErrs = append(pathErrs, nameErr)
+			continue
+		}
+		key := name.Key()
+		if entries[key] != nil {
+			continue
+		}
 		if reg != nil && reg.Lookup(name) != nil {
 			continue
 		}
-		summary := tryParseLibrary(ctx, resolver, name)
+		summary, parseErr := tryParseLibrary(ctx, res, name)
+		if parseErr != nil {
+			pathErrs = append(pathErrs, parseErr)
+			continue
+		}
 		if summary == nil {
 			continue
 		}
-		entries[name.Key()] = summary
+		entries[key] = summary
 	}
 
-	return NewLibraryExportIndexFromEntries(entries), nil
+	return NewLibraryExportIndexFromEntries(entries), errors.Join(pathErrs...)
 }
 
 // tryParseLibrary opens and parses a single library file, returning its
-// summary. Returns nil on any error (best-effort). Tries .sld first,
-// falling back to .scm on file-not-found.
-func tryParseLibrary(ctx context.Context, resolver FileResolver, name LibraryName) *LibrarySummary {
-	sldPath := name.ToFSPath()
-	f, filePath, err := resolver.ResolveAndOpen(ctx, sldPath)
+// summary. Tries .sld first, falling back to .scm on file-not-found.
+// Returns (nil, nil) when neither file exists. Returns a non-nil error
+// for security denials, I/O failures, or parse errors.
+func tryParseLibrary(ctx context.Context, resolver FileResolver, name LibraryName) (*LibrarySummary, error) {
+	f, filePath, err := ResolveLibraryFile(ctx, resolver, name)
 	if err != nil {
-		if !errors.Is(err, werr.ErrFileNotFound) {
-			return nil
+		if errors.Is(err, werr.ErrFileNotFound) {
+			return nil, nil
 		}
-		scmPath := strings.TrimSuffix(sldPath, ".sld") + ".scm"
-		f, filePath, err = resolver.ResolveAndOpen(ctx, scmPath)
-		if err != nil {
-			return nil
-		}
+		return nil, err
 	}
 	defer f.Close() //nolint:errcheck
 
 	summary, err := ParseLibrarySummary(ctx, f, filePath, name)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return summary
+	return summary, nil
 }

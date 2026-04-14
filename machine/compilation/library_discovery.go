@@ -14,34 +14,45 @@
 
 package compilation
 
-import "sort"
+import (
+	"errors"
+	"sort"
+
+	"github.com/aalpar/wile/machine/compilation/resolver"
+)
 
 // DiscoverAvailableLibraries returns all importable library names by
-// combining filesystem discovery (via the resolver's LibraryEnumerator)
+// combining filesystem discovery (via the resolver's FileEnumerator)
 // with registry-known libraries (synthetic extension libraries).
 // Returns a sorted, deduplicated list.
 //
-// If the resolver does not implement LibraryEnumerator, only registry
+// If the resolver does not implement FileEnumerator, only registry
 // libraries are returned. If reg is nil, only filesystem libraries are
 // returned.
-func DiscoverAvailableLibraries(resolver FileResolver, reg *LibraryRegistry) ([]LibraryName, error) {
+func DiscoverAvailableLibraries(res FileResolver, reg *LibraryRegistry) ([]LibraryName, error) {
 	seen := make(map[string]bool)
 	var result []LibraryName
 
 	// Filesystem discovery via resolver chain.
 	// A nil resolver is safe: the nil interface assertion returns (nil, false).
 	// This happens when the environment has no file resolver configured.
-	enumerator, ok := resolver.(LibraryEnumerator)
+	var pathErrs []error
+	fileEnum, ok := res.(resolver.FileEnumerator)
 	if ok {
-		libs, err := enumerator.EnumerateLibraries()
+		files, err := fileEnum.EnumerateFiles()
 		if err != nil {
 			return nil, err
 		}
-		for _, lib := range libs {
-			key := lib.Key()
+		for _, path := range files {
+			name, nameErr := FilePathToLibraryName(path)
+			if nameErr != nil {
+				pathErrs = append(pathErrs, nameErr)
+				continue
+			}
+			key := name.Key()
 			if !seen[key] {
 				seen[key] = true
-				result = append(result, lib)
+				result = append(result, name)
 			}
 		}
 	}
@@ -60,5 +71,5 @@ func DiscoverAvailableLibraries(resolver FileResolver, reg *LibraryRegistry) ([]
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].Key() < result[j].Key()
 	})
-	return result, nil
+	return result, errors.Join(pathErrs...)
 }
