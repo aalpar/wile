@@ -106,6 +106,21 @@ Threading, synchronization, and message passing backed by Go's runtime.
 
 **Key Feature**: Wile threads map directly to Go goroutines. Channels provide CSP-style message passing. Mutexes prevent race conditions on shared state.
 
+### Algebra
+
+Algebraic structures, equational rewriting, and symbolic normalization.
+
+| File | Description |
+|------|-------------|
+| [getting-started.scm](algebra/getting-started.scm) | Monoids - fold, power, validation, the simplest algebraic structure |
+| [structures.scm](algebra/structures.scm) | Lattices, rings, fields, Boolean algebras, and forgetful projections |
+| [rewriting.scm](algebra/rewriting.scm) | Term protocols, axiom types, single-step normalization |
+| [symbolic.scm](algebra/symbolic.scm) | Theories, recursive normalizer, transformation traces |
+| [boolean-simplifier.scm](algebra/boolean-simplifier.scm) | End-to-end Boolean expression simplification with traced output |
+| [equivalence-discovery.scm](algebra/equivalence-discovery.scm) | Exploring normal forms across different axiom sets |
+
+**Key Feature**: Algebraic structures are composable records with automatic validation, equational rewriting, and traced symbolic normalization. Build a structure, project it to a theory, and simplify expressions with step-by-step explanations. See [docs/ALGEBRA.md](../docs/ALGEBRA.md) for the full guide.
+
 ### Applications
 
 Real-world use cases and domain-specific applications.
@@ -245,6 +260,7 @@ Tail-recursive functions run in constant space. Compare tail vs non-tail in [bas
 2. [concurrency/channels.scm](concurrency/channels.scm) - Go integration
 3. [numeric-tower/symbolic-diff.scm](numeric-tower/symbolic-diff.scm) - Exact arithmetic
 4. [logic/schelog/](logic/schelog/) - Logic programming embedding
+5. [algebra/getting-started.scm](algebra/getting-started.scm) - Algebraic structures and rewriting
 
 **Go developer?** Embedding examples:
 1. [embedding/basic.go](embedding/basic.go) - API overview
