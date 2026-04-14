@@ -128,7 +128,10 @@
     ;; Interval arithmetic
     interval-lattice
     interval-add interval-sub interval-mul
-    inf<= inf-min inf-max inf+ inf- inf*)
+    inf<= inf-min inf-max inf+ inf- inf*
+    ;; Graph algorithms
+    make-graph-analysis graph-analysis?
+    graph-query graph-query-all)
   (import (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice)
@@ -146,4 +149,5 @@
           (wile algebra symbolic)
           (wile algebra fca)
           (wile algebra pareto)
-          (wile algebra interval)))
+          (wile algebra interval)
+          (wile algebra graph)))
