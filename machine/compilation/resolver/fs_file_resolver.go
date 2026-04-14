@@ -166,8 +166,9 @@ func (p *FSFileResolver) EnumerateFiles() ([]string, error) {
 		searchPaths = reg.GetSearchPaths()
 	}
 	walkedPaths := make(map[string]bool, len(searchPaths))
-	for _, dir := range searchPaths {
-		if dir == "" || dir == "." {
+	for _, raw := range searchPaths {
+		dir := pathpkg.Clean(raw)
+		if dir == "." {
 			continue
 		}
 		walkedPaths[dir] = true
