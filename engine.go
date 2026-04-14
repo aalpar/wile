@@ -216,11 +216,11 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	// This must happen after bootstrap (which uses EmbedFileResolver).
 	// Pre-built namespaces (WithNamespace) may already have a resolver.
 	if env.FileResolver() == nil {
-		env.SetFileResolver(newFileResolver(cfg, env))
+		env.SetFileResolver(newFileResolver(cfg.resolverFactories, env))
 	}
 
 	if cfg.libraryEnabled {
-		err := setupLibrarySystem(cfg, reg, env, ns, snapshots)
+		err := setupLibrarySystem(cfg.libraryPaths, cfg.importObserver, reg, env, ns, snapshots)
 		if err != nil {
 			return nil, err
 		}
@@ -290,22 +290,22 @@ func buildRegistry(cfg *engineConfig) (*registry.Registry, []extSnapshot, []regi
 
 // setupLibrarySystem configures the R7RS library system: search paths,
 // import observer, extension libraries, and the library environment factory.
-func setupLibrarySystem(cfg *engineConfig, reg *registry.Registry, env *environment.EnvironmentFrame, ns *environment.Namespace, snapshots []extSnapshot) error {
+func setupLibrarySystem(libraryPaths []string, importObserver func(LibraryImportEvent), reg *registry.Registry, env *environment.EnvironmentFrame, ns *environment.Namespace, snapshots []extSnapshot) error {
 	libReg := compilation.NewLibraryRegistry()
 
 	// Prepend user paths in reverse order so first path has highest priority.
 	// PrependSearchPath prepends, so reverse-iterating produces the correct order.
-	for i := len(cfg.libraryPaths) - 1; i >= 0; i-- {
-		libReg.PrependSearchPath(cfg.libraryPaths[i])
+	for i := len(libraryPaths) - 1; i >= 0; i-- {
+		libReg.PrependSearchPath(libraryPaths[i])
 	}
 
 	// Register docstrings from imported libraries so that `,topic` and
 	// `,apropos` reflect Scheme-defined procedures as they become visible.
 	docObserver := makeDocRegistrationObserver(libReg, reg)
-	if cfg.importObserver != nil {
+	if importObserver != nil {
 		libReg.SetImportObserver(func(evt compilation.LibraryImportEvent) {
 			docObserver(evt)
-			cfg.importObserver(evt)
+			importObserver(evt)
 		})
 	} else {
 		libReg.SetImportObserver(docObserver)
@@ -752,19 +752,19 @@ func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
 	return newRuntimeErrorWithCause("runtime error", err)
 }
 
-// newFileResolver creates the appropriate FileResolver based on engine config.
-// When no resolver factories are configured, defaults to OSFileResolver.
+// newFileResolver creates the appropriate FileResolver from resolver factories.
+// When no factories are provided, defaults to OSFileResolver.
 // A single factory returns its resolver directly; multiple factories
 // produce a ChainFileResolver that tries each in order.
-func newFileResolver(cfg *engineConfig, env *environment.EnvironmentFrame) compilation.FileResolver {
-	if len(cfg.resolverFactories) == 0 {
+func newFileResolver(factories []resolverFactory, env *environment.EnvironmentFrame) compilation.FileResolver {
+	if len(factories) == 0 {
 		return compilation.NewOSFileResolver(env)
 	}
-	if len(cfg.resolverFactories) == 1 {
-		return cfg.resolverFactories[0](env)
+	if len(factories) == 1 {
+		return factories[0](env)
 	}
-	resolvers := make([]compilation.FileResolver, len(cfg.resolverFactories))
-	for i, f := range cfg.resolverFactories {
+	resolvers := make([]compilation.FileResolver, len(factories))
+	for i, f := range factories {
 		resolvers[i] = f(env)
 	}
 	return compilation.NewChainFileResolver(resolvers)
