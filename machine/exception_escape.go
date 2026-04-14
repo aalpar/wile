@@ -15,7 +15,6 @@
 package machine
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/aalpar/wile/internal/syntax"
@@ -44,12 +43,11 @@ func (p *ErrExceptionEscape) Error() string {
 	var b strings.Builder
 
 	// Format the source prefix if available
-	hasSource := p.Source != nil && p.Source.File != ""
+	loc := p.Source.Location()
+	hasSource := loc != ""
 	if hasSource {
-		fmt.Fprintf(&b, "%s:%d:%d: ",
-			p.Source.File,
-			p.Source.Start.Line(),
-			p.Source.Start.Column())
+		b.WriteString(loc)
+		b.WriteString(": ")
 	}
 
 	// Format the condition

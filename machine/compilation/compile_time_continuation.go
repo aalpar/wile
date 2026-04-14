@@ -316,10 +316,15 @@ func (p *CompileTimeContinuation) CompileExpression(ctctx CompileTimeCallContext
 	// of special forms (R7RS §4.2.2)
 	result := validate.ValidateExpression(ctctx.ctx, p.env, expr)
 	if !result.Ok() {
-		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "%s", result.Error())
+		return p.wrapCompilationError(
+			werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "%s", result.Error()))
 	}
 	// Compile the validated form
-	return p.compileValidated(ctctx, result.Expr)
+	err := p.compileValidated(ctctx, result.Expr)
+	if err != nil {
+		return p.wrapCompilationError(err)
+	}
+	return nil
 }
 
 // validateQuotedLiteral recursively walks a quoted literal value to detect
@@ -456,4 +461,14 @@ func (p *CompileTimeContinuation) currentSource() *syntax.SourceContext {
 		return nil
 	}
 	return p.sourceStack[len(p.sourceStack)-1]
+}
+
+// wrapCompilationError attaches the current source location to a compilation error.
+// If no source context is available, returns the error unchanged.
+func (p *CompileTimeContinuation) wrapCompilationError(err error) error {
+	src := p.currentSource()
+	if src == nil {
+		return err
+	}
+	return &SourcedError{Source: src, Cause: err}
 }

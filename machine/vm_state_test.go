@@ -15,6 +15,8 @@
 package machine
 
 import (
+	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/aalpar/wile/values"
@@ -83,6 +85,12 @@ func TestVmState(t *testing.T) {
 			},
 		},
 		{
+			name: "field coverage: every vmState field documented in every operation",
+			checkFn: func(t *testing.T) {
+				testVmStateFieldCoverage(t)
+			},
+		},
+		{
 			name: "windingStack can be set",
 			checkFn: func(t *testing.T) {
 				var s vmState
@@ -105,5 +113,166 @@ func TestVmState(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.checkFn(t)
 		})
+	}
+}
+
+// vmStateFieldCoverage documents how each transfer operation handles every
+// vmState field. When a field is added to vmState, this table must be updated
+// for every operation — the test below enforces this via reflection.
+//
+// Values describe the handling semantics:
+//
+//	"copy"          — field value copied directly
+//	"copy+offset"   — copied with arithmetic adjustment
+//	"clone"         — deep/shallow copy (slices, marks)
+//	"transfer"      — ownership moved, source zeroed
+//	"conditional"   — behavior depends on runtime state (e.g., shared flag)
+//	"derived"       — computed from other state, not copied directly
+//	"skip"          — intentionally not transferred
+//	"zero"          — receives Go zero value (fresh struct)
+//	"force false"   — explicitly set to false regardless of source
+var vmStateFieldCoverage = map[string]map[string]string{
+	// NewMachineContinuationFromMachineContext: mc → continuation (SaveContinuation path)
+	"NewMachineContinuationFromMachineContext": {
+		"env":          "copy",
+		"template":     "copy",
+		"singleValue":  "copy",
+		"multiValues":  "copy",
+		"evals":        "copy (alias; caller decides inline vs transfer)",
+		"pc":           "copy+offset",
+		"windingStack": "skip (not saved per-frame)",
+		"promptTag":    "skip (not saved per-frame)",
+		"threadID":     "copy",
+		"callDepth":    "derived (from mc.cont parent chain)",
+		"envPooled":    "copy",
+		"marks":        "copy (SaveContinuation nils mc.marks after)",
+	},
+	// Restore: continuation → mc (call/cc re-entry, composable continuation)
+	"Restore": {
+		"env":          "copy",
+		"template":     "copy",
+		"singleValue":  "skip (caller's value preserved)",
+		"multiValues":  "skip (caller's value preserved)",
+		"evals":        "clone (must copy for re-invocation safety)",
+		"pc":           "copy",
+		"windingStack": "skip (winding restored separately)",
+		"promptTag":    "skip (prompt context unchanged)",
+		"threadID":     "skip (invoking thread keeps its own)",
+		"callDepth":    "copy (from continuation's cached depth)",
+		"envPooled":    "force false (shared continuation, env must not be pooled)",
+		"marks":        "clone",
+	},
+	// RestoreAndRelease: continuation → mc (normal function return fast path)
+	"RestoreAndRelease": {
+		"env":          "copy",
+		"template":     "copy",
+		"singleValue":  "skip (caller's value preserved)",
+		"multiValues":  "skip (caller's value preserved)",
+		"evals":        "conditional (transfer if unshared, clone if shared)",
+		"pc":           "copy",
+		"windingStack": "skip (winding restored separately)",
+		"promptTag":    "skip (prompt context unchanged)",
+		"threadID":     "skip (invoking thread keeps its own)",
+		"callDepth":    "copy",
+		"envPooled":    "conditional (from cont if unshared, force false if shared)",
+		"marks":        "conditional (transfer if unshared, clone if shared)",
+	},
+	// PopContinuation: continuation → mc (used by Run loop after RestoreContinuation opcode)
+	"PopContinuation": {
+		"env":          "copy",
+		"template":     "copy",
+		"singleValue":  "copy",
+		"multiValues":  "copy",
+		"evals":        "transfer (no copy; continuation consumed once)",
+		"pc":           "copy",
+		"windingStack": "skip (not per-frame)",
+		"promptTag":    "skip (not per-frame)",
+		"threadID":     "skip (thread identity unchanged)",
+		"callDepth":    "derived (decremented before pop)",
+		"envPooled":    "copy",
+		"marks":        "transfer",
+	},
+	// Copy: continuation → continuation (for DeepCopy, SliceContinuationAt)
+	"Copy": {
+		"env":          "copy",
+		"template":     "copy",
+		"singleValue":  "copy",
+		"multiValues":  "clone (slices.Clone)",
+		"evals":        "conditional (evals.Copy if non-nil, else nil)",
+		"pc":           "copy",
+		"windingStack": "conditional (windingStack.Copy if non-empty)",
+		"promptTag":    "copy",
+		"threadID":     "copy",
+		"callDepth":    "copy",
+		"envPooled":    "zero (false; copy shares env, must not release)",
+		"marks":        "clone",
+	},
+	// NewMachineContext: continuation → mc (top-level context creation)
+	"NewMachineContext": {
+		"env":          "copy",
+		"template":     "copy",
+		"singleValue":  "copy",
+		"multiValues":  "copy",
+		"evals":        "copy (or reconstruct from inline slots)",
+		"pc":           "copy",
+		"windingStack": "zero (fresh context)",
+		"promptTag":    "zero (fresh context)",
+		"threadID":     "zero (primordial thread)",
+		"callDepth":    "zero (fresh call stack)",
+		"envPooled":    "zero (false; not from pool)",
+		"marks":        "zero (fresh context)",
+	},
+	// NewSubContext: mc → mc (sub-context for foreign calls)
+	"NewSubContext": {
+		"env":          "derived (parent.env.TopLevel())",
+		"template":     "zero (no template; caller sets via Apply)",
+		"singleValue":  "zero (fresh value register)",
+		"multiValues":  "zero (fresh value register)",
+		"evals":        "zero (fresh stack from pool)",
+		"pc":           "zero (fresh context)",
+		"windingStack": "copy (inherit parent's winding stack)",
+		"promptTag":    "zero (no prompt on sub-context)",
+		"threadID":     "copy",
+		"callDepth":    "zero (fresh call stack)",
+		"envPooled":    "zero (false; top-level env)",
+		"marks":        "zero (fresh context)",
+	},
+}
+
+// testVmStateFieldCoverage uses reflection to enumerate vmState fields and
+// verifies every field appears in every operation's coverage entry. This
+// prevents silent state corruption when fields are added to vmState without
+// updating all transfer operations.
+func testVmStateFieldCoverage(t *testing.T) {
+	typ := reflect.TypeFor[vmState]()
+	var fieldNames []string
+	for i := range typ.NumField() {
+		fieldNames = append(fieldNames, typ.Field(i).Name)
+	}
+	sort.Strings(fieldNames)
+
+	// Check 1: every field documented in every operation.
+	for opName, handling := range vmStateFieldCoverage {
+		for _, field := range fieldNames {
+			_, ok := handling[field]
+			if !ok {
+				t.Errorf("operation %q does not document handling of vmState field %q — "+
+					"add an entry to vmStateFieldCoverage", opName, field)
+			}
+		}
+	}
+
+	// Check 2: no stale entries (fields removed from vmState but still in table).
+	fieldSet := make(map[string]bool, len(fieldNames))
+	for _, f := range fieldNames {
+		fieldSet[f] = true
+	}
+	for opName, handling := range vmStateFieldCoverage {
+		for field := range handling {
+			if !fieldSet[field] {
+				t.Errorf("operation %q documents field %q which no longer exists in vmState — "+
+					"remove the stale entry from vmStateFieldCoverage", opName, field)
+			}
+		}
 	}
 }

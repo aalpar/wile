@@ -644,6 +644,36 @@ func TestCompilationError_Unwrap(t *testing.T) {
 	c.Assert(e.Unwrap(), qt.Equals, cause)
 }
 
+func TestCompilationError_SourceLocation(t *testing.T) {
+	c := qt.New(t)
+	engine, err := NewEngine(context.Background())
+	c.Assert(err, qt.IsNil)
+
+	ctx := context.Background()
+
+	t.Run("undefined binding has source", func(t *testing.T) {
+		expr, parseErr := engine.ParseWithSource(ctx, "undefined-var", "test.scm")
+		c.Assert(parseErr, qt.IsNil)
+
+		_, compileErr := engine.Compile(ctx, expr)
+		c.Assert(compileErr, qt.IsNotNil)
+
+		var ce *CompilationError
+		c.Assert(errors.As(compileErr, &ce), qt.IsTrue)
+		c.Assert(ce.Source, qt.Not(qt.Equals), "")
+		c.Assert(strings.Contains(ce.Source, "test.scm"), qt.IsTrue)
+	})
+
+	t.Run("source included in Error() output", func(t *testing.T) {
+		e := &CompilationError{
+			Message: "compile error",
+			Source:  "foo.scm:3:5",
+			Cause:   errors.New("bad stuff"),
+		}
+		c.Assert(e.Error(), qt.Equals, "foo.scm:3:5: compile error: bad stuff")
+	})
+}
+
 func TestRuntimeError_DivisionByZero(t *testing.T) {
 	c := qt.New(t)
 	engine, err := NewEngine(context.Background())

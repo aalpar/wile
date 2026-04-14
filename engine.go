@@ -99,10 +99,22 @@ func NewNamespace(ctx context.Context, opts ...EngineOption) (*environment.Names
 	for _, opt := range opts {
 		opt(cfg)
 	}
-
-	reg, _, _, err := buildRegistry(cfg)
+	ns, _, _, err := bootstrapNamespace(ctx, cfg)
 	if err != nil {
 		return nil, err
+	}
+	return ns, nil
+}
+
+// bootstrapNamespace creates a new namespace from engine config: builds the
+// registry, creates the namespace, binds primitives, and loads bootstrap macros.
+// Returns the snapshots and closers from buildRegistry for callers that need them
+// (NewEngine uses snapshots for extension library registration and closers for
+// Engine.Close).
+func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Namespace, []extSnapshot, []registry.Closeable, error) {
+	reg, snapshots, closers, err := buildRegistry(cfg)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
 	ns := environment.NewNamespace()
@@ -113,14 +125,12 @@ func NewNamespace(ctx context.Context, opts ...EngineOption) (*environment.Names
 	}
 
 	env := ns.Runtime()
-	macroSources := reg.MacroSources()
-	bootstrapResolver := compilation.NewEmbedFileResolver(core.BootstrapFS)
-	err = applyBaseEnvironment(ctx, env, reg, macroSources, bootstrapResolver)
+	err = applyBaseEnvironment(ctx, env, reg)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
-	return ns, nil
+	return ns, snapshots, closers, nil
 }
 
 // NewEngine creates a new Wile engine.
@@ -192,43 +202,25 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 				"WithNamespace: namespace registry is %T, expected *registry.Registry", regAny)
 		}
 	} else {
-		// Build namespace from engine options (backward compat)
 		var err error
-		reg, snapshots, closers, err = buildRegistry(cfg)
+		ns, snapshots, closers, err = bootstrapNamespace(ctx, cfg)
 		if err != nil {
 			return nil, err
 		}
-
-		ns = environment.NewNamespace()
-		ns.SetRegistry(reg)
-		ns.SetLoadPathStack(sourceload.NewLoadStack())
-		if cfg.authorizer != nil {
-			ns.SetAuthorizer(cfg.authorizer)
-		}
-
-		env := ns.Runtime()
-		macroSources := reg.MacroSources()
-		bootstrapResolver := compilation.NewEmbedFileResolver(core.BootstrapFS)
-		err = applyBaseEnvironment(ctx, env, reg, macroSources, bootstrapResolver)
-		if err != nil {
-			return nil, err
-		}
-
-		// Set the default file resolver for runtime include/load operations.
-		// This must happen after bootstrap (which uses EmbedFileResolver).
-		env.SetFileResolver(newFileResolver(cfg, env))
+		reg = ns.Registry().(*registry.Registry)
 	}
 
 	env := ns.Runtime()
 
+	// Set the default file resolver for runtime include/load operations.
+	// This must happen after bootstrap (which uses EmbedFileResolver).
+	// Pre-built namespaces (WithNamespace) may already have a resolver.
+	if env.FileResolver() == nil {
+		env.SetFileResolver(newFileResolver(cfg.resolverFactories, env))
+	}
+
 	if cfg.libraryEnabled {
-		// File resolver must be set before library loading
-		if env.FileResolver() == nil {
-			env.SetFileResolver(newFileResolver(cfg, env))
-		}
-		macroSources := reg.MacroSources()
-		bootstrapResolver := compilation.NewEmbedFileResolver(core.BootstrapFS)
-		err := setupLibrarySystem(cfg, reg, env, ns, macroSources, snapshots, bootstrapResolver)
+		err := setupLibrarySystem(cfg.libraryPaths, cfg.importObserver, reg, env, ns, snapshots)
 		if err != nil {
 			return nil, err
 		}
@@ -298,22 +290,22 @@ func buildRegistry(cfg *engineConfig) (*registry.Registry, []extSnapshot, []regi
 
 // setupLibrarySystem configures the R7RS library system: search paths,
 // import observer, extension libraries, and the library environment factory.
-func setupLibrarySystem(cfg *engineConfig, reg *registry.Registry, env *environment.EnvironmentFrame, ns *environment.Namespace, macroSources []string, snapshots []extSnapshot, bootstrapResolver compilation.FileResolver) error {
+func setupLibrarySystem(libraryPaths []string, importObserver func(LibraryImportEvent), reg *registry.Registry, env *environment.EnvironmentFrame, ns *environment.Namespace, snapshots []extSnapshot) error {
 	libReg := compilation.NewLibraryRegistry()
 
 	// Prepend user paths in reverse order so first path has highest priority.
 	// PrependSearchPath prepends, so reverse-iterating produces the correct order.
-	for i := len(cfg.libraryPaths) - 1; i >= 0; i-- {
-		libReg.PrependSearchPath(cfg.libraryPaths[i])
+	for i := len(libraryPaths) - 1; i >= 0; i-- {
+		libReg.PrependSearchPath(libraryPaths[i])
 	}
 
 	// Register docstrings from imported libraries so that `,topic` and
 	// `,apropos` reflect Scheme-defined procedures as they become visible.
 	docObserver := makeDocRegistrationObserver(libReg, reg)
-	if cfg.importObserver != nil {
+	if importObserver != nil {
 		libReg.SetImportObserver(func(evt compilation.LibraryImportEvent) {
 			docObserver(evt)
-			cfg.importObserver(evt)
+			importObserver(evt)
 		})
 	} else {
 		libReg.SetImportObserver(docObserver)
@@ -336,7 +328,7 @@ func setupLibrarySystem(cfg *engineConfig, reg *registry.Registry, env *environm
 
 		libEnv := callerTopLevel.NewChildRuntime()
 
-		applyErr := applyBaseEnvironment(ctx, libEnv, reg, macroSources, bootstrapResolver)
+		applyErr := applyBaseEnvironment(ctx, libEnv, reg)
 		if applyErr != nil {
 			return nil, applyErr
 		}
@@ -372,7 +364,7 @@ func (p *Engine) EvalIn(ctx context.Context, expr *Expression, ns *environment.N
 
 	tpl, err := expandAndCompileOptimized(ctx, env, expr.stx, nil, p.inlineThreshold)
 	if err != nil {
-		return nil, &CompilationError{Message: "expand/compile error", Cause: err}
+		return nil, wrapCompilationError("expand/compile error", err)
 	}
 
 	cc := &CompiledCode{template: tpl, env: env}
@@ -402,7 +394,7 @@ func (p *Engine) evalMultiple(ctx context.Context, code string, source string) (
 			if isEOF(err) {
 				break
 			}
-			return nil, &CompilationError{Message: "parse error", Cause: err}
+			return nil, wrapCompilationError("parse error", err)
 		}
 
 		compiled, err := p.compileExpr(ctx, stx)
@@ -650,9 +642,8 @@ func registerExtensionLibraries(reg *registry.Registry, env *environment.Environ
 // applyBaseEnvironment performs the five-step setup that every usable environment
 // requires: apply registry bindings, register syntax compilers, register primitive
 // expanders, load bootstrap macros, and inject documentation into bindings.
-// Each step wraps errors with ErrEngineInit. The resolver controls how include/load
-// finds files during bootstrap; pass nil for OS filesystem defaults.
-func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.Registry, macroSources []string, resolver compilation.FileResolver) error {
+// Each step wraps errors with ErrEngineInit.
+func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.Registry) error {
 	err := reg.Apply(ctx, env)
 	if err != nil {
 		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "apply registry")
@@ -663,7 +654,9 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "register phase handlers")
 	}
 
-	err = loadBootstrapMacros(ctx, env, macroSources, resolver)
+	macroSources := reg.MacroSources()
+	bootstrapResolver := compilation.NewEmbedFileResolver(core.BootstrapFS)
+	err = loadBootstrapMacros(ctx, env, macroSources, bootstrapResolver)
 	if err != nil {
 		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "load bootstrap macros")
 	}
@@ -694,7 +687,7 @@ func expandAndCompileOptimized(ctx context.Context, env *environment.Environment
 func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*CompiledCode, error) {
 	tpl, err := expandAndCompileOptimized(ctx, p.env, stx, nil, p.inlineThreshold)
 	if err != nil {
-		return nil, &CompilationError{Message: "expand/compile error", Cause: err}
+		return nil, wrapCompilationError("expand/compile error", err)
 	}
 	return &CompiledCode{template: tpl, env: p.env}, nil
 }
@@ -723,6 +716,25 @@ func (p *Engine) LastCounters() machine.VMCounters {
 	return p.lastCounters
 }
 
+// wrapCompilationError creates a CompilationError, extracting the innermost
+// source location from the SourcedError chain. The innermost location points
+// at the actual error site (e.g., the undefined variable), not the enclosing
+// form. The full chain remains available via Cause for outer context.
+func wrapCompilationError(msg string, cause error) *CompilationError {
+	ce := &CompilationError{Message: msg, Cause: cause}
+	var se *compilation.SourcedError
+	for err := cause; errors.As(err, &se); err = se.Cause {
+		loc := se.Source.Location()
+		if loc != "" {
+			ce.Source = loc
+		}
+	}
+	return ce
+}
+
+// wrapRuntimeError creates a RuntimeError from a VM execution error, extracting
+// source location, stack trace, and condition value from ErrExceptionEscape when
+// present. Falls back to a plain RuntimeError for non-exception errors.
 func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
 	var ee *machine.ErrExceptionEscape
 	if errors.As(err, &ee) {
@@ -731,12 +743,7 @@ func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
 			Cause:     err,
 			Condition: wrapValue(ee.Condition),
 		}
-		if ee.Source != nil && ee.Source.File != "" {
-			re.Source = fmt.Sprintf("%s:%d:%d",
-				ee.Source.File,
-				ee.Source.Start.Line(),
-				ee.Source.Start.Column())
-		}
+		re.Source = ee.Source.Location()
 		if len(ee.StackTrace) > 0 {
 			re.StackTrace = ee.StackTrace.String()
 		}
@@ -745,19 +752,19 @@ func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
 	return newRuntimeErrorWithCause("runtime error", err)
 }
 
-// newFileResolver creates the appropriate FileResolver based on engine config.
-// When no resolver factories are configured, defaults to OSFileResolver.
+// newFileResolver creates the appropriate FileResolver from resolver factories.
+// When no factories are provided, defaults to OSFileResolver.
 // A single factory returns its resolver directly; multiple factories
 // produce a ChainFileResolver that tries each in order.
-func newFileResolver(cfg *engineConfig, env *environment.EnvironmentFrame) compilation.FileResolver {
-	if len(cfg.resolverFactories) == 0 {
+func newFileResolver(factories []resolverFactory, env *environment.EnvironmentFrame) compilation.FileResolver {
+	if len(factories) == 0 {
 		return compilation.NewOSFileResolver(env)
 	}
-	if len(cfg.resolverFactories) == 1 {
-		return cfg.resolverFactories[0](env)
+	if len(factories) == 1 {
+		return factories[0](env)
 	}
-	resolvers := make([]compilation.FileResolver, len(cfg.resolverFactories))
-	for i, f := range cfg.resolverFactories {
+	resolvers := make([]compilation.FileResolver, len(factories))
+	for i, f := range factories {
 		resolvers[i] = f(env)
 	}
 	return compilation.NewChainFileResolver(resolvers)

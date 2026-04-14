@@ -85,6 +85,15 @@ func (p *SourceContext) Clone() *SourceContext {
 	return &c
 }
 
+// Location returns the source location formatted as "file:line:col".
+// Returns empty string if the receiver is nil or has no file.
+func (p *SourceContext) Location() string {
+	if p == nil || p.File == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s:%d:%d", p.File, p.Start.Line(), p.Start.Column())
+}
+
 // SchemeString returns the Scheme representation of the source context.
 func (p *SourceContext) SchemeString() string {
 	return fmt.Sprintf("<source-context %s:%d-%d>", p.File, p.Start, p.End)
@@ -218,9 +227,9 @@ func FormatOriginChain(origin *OriginInfo, maxDepth int) string {
 			break
 		}
 		fmt.Fprintf(&result, "\n  expanded from '%s'", o.Identifier)
-		if o.Location != nil && o.Location.File != "" {
-			fmt.Fprintf(&result, " at %s:%d:%d",
-				o.Location.File, o.Location.Start.Line(), o.Location.Start.Column())
+		loc := o.Location.Location()
+		if loc != "" {
+			fmt.Fprintf(&result, " at %s", loc)
 		}
 	}
 	return result.String()
