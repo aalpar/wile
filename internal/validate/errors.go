@@ -40,10 +40,8 @@ func (p ValidationError) Error() string {
 // ErrorWithMaxOriginDepth returns the error message with a configurable origin chain depth.
 func (p ValidationError) ErrorWithMaxOriginDepth(maxDepth int) string {
 	var msg string
-	if p.Source != nil {
-		msg = fmt.Sprintf("%s:%d:%d: %s in %s form",
-			p.Source.File, p.Source.Start.Line(), p.Source.Start.Column(),
-			p.Message, p.Form)
+	if loc := p.Source.Location(); loc != "" {
+		msg = fmt.Sprintf("%s: %s in %s form", loc, p.Message, p.Form)
 
 		// Add origin chain if present
 		if p.Source.Origin != nil {

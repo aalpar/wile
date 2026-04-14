@@ -274,3 +274,8 @@ What: LocalEnvironmentFrame is embedded by value in EnvironmentFrame (for heap s
 - [x] **Go AST Phase 2** [Done]: 13 node types. PR #480. `plans/GO-AST.md`
 
 </details>
+
+- [ ] **Important refactoring**
+    - When few fields are referenced from a struct within a function, pass in the field - do not pass in the struct or a reference to the struct
+
+

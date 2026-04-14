@@ -316,13 +316,13 @@ func (p *CompileTimeContinuation) CompileExpression(ctctx CompileTimeCallContext
 	// of special forms (R7RS §4.2.2)
 	result := validate.ValidateExpression(ctctx.ctx, p.env, expr)
 	if !result.Ok() {
-		return p.wrapCompileError(
+		return p.wrapCompilationError(
 			werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "%s", result.Error()))
 	}
 	// Compile the validated form
 	err := p.compileValidated(ctctx, result.Expr)
 	if err != nil {
-		return p.wrapCompileError(err)
+		return p.wrapCompilationError(err)
 	}
 	return nil
 }
@@ -463,12 +463,12 @@ func (p *CompileTimeContinuation) currentSource() *syntax.SourceContext {
 	return p.sourceStack[len(p.sourceStack)-1]
 }
 
-// wrapCompileError attaches the current source location to a compilation error.
+// wrapCompilationError attaches the current source location to a compilation error.
 // If no source context is available, returns the error unchanged.
-func (p *CompileTimeContinuation) wrapCompileError(err error) error {
+func (p *CompileTimeContinuation) wrapCompilationError(err error) error {
 	src := p.currentSource()
 	if src == nil {
 		return err
 	}
-	return &SourcedError{Source: src, Err: err}
+	return &SourcedError{Source: src, Cause: err}
 }

@@ -25,7 +25,7 @@ Three sub-problems, ordered by dependency:
 ~332 sites across 43 other files in `compilation/`) don't include the source location
 from `currentSource()`.
 
-**Approach:** Add a `wrapCompileError` method to `CompileTimeContinuation` that wraps
+**Approach:** Add a `wrapCompilationError` method to `CompileTimeContinuation` that wraps
 errors with the current source context. Define a `SourcedError` type in `compilation/`
 that carries `*syntax.SourceContext` alongside the error.
 
@@ -33,21 +33,21 @@ that carries `*syntax.SourceContext` alongside the error.
 // compilation/sourced_error.go
 type SourcedError struct {
     Source *syntax.SourceContext
-    Err    error
+    Cause error
 }
 
 func (p *SourcedError) Error() string { ... }
-func (p *SourcedError) Unwrap() error { return p.Err }
+func (p *SourcedError) Unwrap() error { return p.Cause }
 ```
 
 ```go
 // On CompileTimeContinuation:
-func (p *CompileTimeContinuation) wrapCompileError(err error) error {
+func (p *CompileTimeContinuation) wrapCompilationError(err error) error {
     src := p.currentSource()
     if src == nil {
         return err
     }
-    return &SourcedError{Source: src, Err: err}
+    return &SourcedError{Source: src, Cause: err}
 }
 ```
 
@@ -109,7 +109,7 @@ creation and augmenting `CaptureStackTrace` to walk `parentMC` chains.
 
 ## Implementation Order
 
-1. `SourcedError` type + `wrapCompileError` method
+1. `SourcedError` type + `wrapCompilationError` method
 2. Phase 1 migration (core compiler, ~23 sites)
 3. `CompilationError.Source` field + extraction
 4. Tests: verify source locations appear in `CompilationError` for common errors

@@ -34,7 +34,7 @@ func TestSourcedError(t *testing.T) {
 			Start: syntax.NewSourceIndexes(10, 3, 5),
 		}
 		inner := werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q", "foo")
-		se := &SourcedError{Source: src, Err: inner}
+		se := &SourcedError{Source: src, Cause: inner}
 
 		c.Assert(se.Error(), qt.Matches, `test\.scm:5:3: .*no such binding.*`)
 		c.Assert(errors.Is(se, werr.ErrNoSuchBinding), qt.IsTrue)
@@ -43,7 +43,7 @@ func TestSourcedError(t *testing.T) {
 
 	t.Run("with nil source", func(t *testing.T) {
 		inner := errors.New("some error")
-		se := &SourcedError{Source: nil, Err: inner}
+		se := &SourcedError{Source: nil, Cause: inner}
 
 		c.Assert(se.Error(), qt.Equals, "some error")
 		c.Assert(errors.Unwrap(se), qt.Equals, inner)
@@ -55,7 +55,7 @@ func TestSourcedError(t *testing.T) {
 			Start: syntax.NewSourceIndexes(0, 1, 0),
 		}
 		inner := errors.New("error")
-		se := &SourcedError{Source: src, Err: inner}
+		se := &SourcedError{Source: src, Cause: inner}
 
 		// No file → no prefix
 		c.Assert(se.Error(), qt.Equals, "error")
@@ -68,7 +68,7 @@ func TestSourcedError(t *testing.T) {
 			Start: syntax.NewSourceIndexes(20, 5, 10),
 		}
 		inner := errors.New("inner")
-		se := &SourcedError{Source: src, Err: inner}
+		se := &SourcedError{Source: src, Cause: inner}
 
 		// Wrap further to simulate real error chains
 		wrapped := werr.WrapForeignErrorf(se, "compilation failed")

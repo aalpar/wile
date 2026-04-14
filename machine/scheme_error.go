@@ -51,11 +51,10 @@ func (p *SchemeError) Error() string {
 	var b strings.Builder
 
 	// Location prefix
-	if p.Source != nil {
-		fmt.Fprintf(&b, "%s:%d:%d: ",
-			p.Source.File,
-			p.Source.Start.Line(),
-			p.Source.Start.Column())
+	loc := p.Source.Location()
+	if loc != "" {
+		b.WriteString(loc)
+		b.WriteString(": ")
 	}
 
 	// Message

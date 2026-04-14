@@ -15,14 +15,12 @@
 package compilation
 
 import (
-	"fmt"
-
 	"github.com/aalpar/wile/internal/syntax"
 )
 
 // SourcedError wraps a compilation error with the source location where it
 // occurred. The compiler tracks source context via pushSource/popSource;
-// wrapCompileError attaches the current source to errors so that callers
+// wrapCompilationError attaches the current source to errors so that callers
 // (especially the public Engine API) can report file:line:col.
 //
 // Use errors.As to extract the source from an error chain:
@@ -31,20 +29,17 @@ import (
 //	if errors.As(err, &se) && se.Source != nil { ... }
 type SourcedError struct {
 	Source *syntax.SourceContext
-	Err    error
+	Cause  error
 }
 
 func (p *SourcedError) Error() string {
-	if p.Source != nil && p.Source.File != "" {
-		return fmt.Sprintf("%s:%d:%d: %s",
-			p.Source.File,
-			p.Source.Start.Line(),
-			p.Source.Start.Column(),
-			p.Err.Error())
+	loc := p.Source.Location()
+	if loc != "" {
+		return loc + ": " + p.Cause.Error()
 	}
-	return p.Err.Error()
+	return p.Cause.Error()
 }
 
 func (p *SourcedError) Unwrap() error {
-	return p.Err
+	return p.Cause
 }
