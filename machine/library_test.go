@@ -30,6 +30,7 @@ import (
 	"github.com/aalpar/wile/values/valuestest"
 
 	"github.com/aalpar/wile/internal/bootstrap"
+	"github.com/aalpar/wile/machine/compilation/sourceload"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -377,6 +378,9 @@ func setupLibraryTest(t *testing.T) *environment.EnvironmentFrame {
 	if err != nil {
 		t.Fatalf("failed to create environment: %v", err)
 	}
+
+	// Set up the load path stack so include/load can resolve relative paths.
+	env.Namespace().SetLoadPathStack(sourceload.NewLoadStack())
 
 	// Set up the factory for creating library environments
 	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)

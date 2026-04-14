@@ -60,7 +60,7 @@ type Namespace struct {
 	// loadPathStack tracks files currently being loaded for relative path
 	// resolution. Only exists on the root Namespace (nil in children).
 	// Children access via LoadPathStack() which delegates to parent.
-	loadPathStack *LoadPathStack
+	loadPathStack PathTracker
 
 	// phases is the phase registry for O(1) access to any phase environment.
 	phases *PhaseRegistry
@@ -113,10 +113,10 @@ type ModuleInstance struct {
 
 // NewNamespace creates a new Namespace.
 // This is the primary entry point for creating an isolated Wile VM instance.
+// Call SetLoadPathStack before any file loading operations.
 func NewNamespace() *Namespace {
 	q := &Namespace{
 		syntaxInterns: make(map[values.Value]syntax.SyntaxValue),
-		loadPathStack: NewLoadPathStack(),
 		scopeRegistry: make(map[*syntax.Scope]*EnvironmentFrame),
 	}
 	initRuntimeFrame(q, newGlobalEnvironmentFrameForNamespace(q))
@@ -232,10 +232,16 @@ func (p *Namespace) SetLibraryEnvFactory(f LibraryEnvFactory) {
 	p.libraryEnvFactory = f
 }
 
-// LoadPathStack returns the load path stack for tracking files currently
+// SetLoadPathStack sets the load path tracker for this namespace.
+// Must be called before any file loading operations.
+func (p *Namespace) SetLoadPathStack(s PathTracker) {
+	p.loadPathStack = s
+}
+
+// LoadPathStack returns the load path tracker for tracking files currently
 // being loaded. Delegates to parent when non-nil, ensuring child environments
 // share the same stack as the root Namespace.
-func (p *Namespace) LoadPathStack() *LoadPathStack {
+func (p *Namespace) LoadPathStack() PathTracker {
 	if p.parent != nil {
 		return p.parent.LoadPathStack()
 	}

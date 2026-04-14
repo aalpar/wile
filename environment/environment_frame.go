@@ -337,9 +337,9 @@ func (p *EnvironmentFrame) SetLibraryRegistry(registry LibrarySearcher) {
 	p.namespace.SetLibraryRegistry(registry)
 }
 
-// LoadPathStack returns the load path stack for tracking files currently
+// LoadPathStack returns the load path tracker for tracking files currently
 // being loaded, or nil if this frame has no Namespace.
-func (p *EnvironmentFrame) LoadPathStack() *LoadPathStack {
+func (p *EnvironmentFrame) LoadPathStack() PathTracker {
 	if p.namespace == nil {
 		return nil
 	}

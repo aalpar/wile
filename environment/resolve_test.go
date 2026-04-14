@@ -21,7 +21,7 @@ func TestResolveFile_AbsolutePath(t *testing.T) {
 	defer os.Remove(tmpFile.Name())
 	tmpFile.Close()
 
-	stack := NewLoadPathStack()
+	stack := &testPathTracker{}
 
 	// Absolute path should be returned as-is (after verification it exists)
 	result, err := ResolveFile(stack, tmpFile.Name(), nil)
@@ -31,7 +31,7 @@ func TestResolveFile_AbsolutePath(t *testing.T) {
 
 func TestResolveFile_AbsolutePath_NotFound(t *testing.T) {
 	c := qt.New(t)
-	stack := NewLoadPathStack()
+	stack := &testPathTracker{}
 
 	nonexistent := "/nonexistent/file.scm"
 	_, err := ResolveFile(stack, nonexistent, nil)
@@ -60,8 +60,8 @@ func TestResolveFile_StackRelative(t *testing.T) {
 	helperFile := filepath.Join(subDir, "helper.scm")
 	c.Assert(os.WriteFile(helperFile, []byte(""), 0644), qt.IsNil)
 
-	stack := NewLoadPathStack()
-	c.Assert(stack.Push(mainFile), qt.IsNil)
+	stack := &testPathTracker{}
+	stack.Push(mainFile)
 
 	// Resolve "sub/helper.scm" relative to main.scm's directory
 	result, err := ResolveFile(stack, "sub/helper.scm", nil)
@@ -87,7 +87,7 @@ func TestResolveFile_FallbackDirectories(t *testing.T) {
 	file2 := filepath.Join(tmpDir2, "util.scm")
 	c.Assert(os.WriteFile(file2, []byte(""), 0644), qt.IsNil)
 
-	stack := NewLoadPathStack()
+	stack := &testPathTracker{}
 	fallbacks := []string{tmpDir1, tmpDir2}
 
 	// File in first fallback directory
@@ -122,8 +122,8 @@ func TestResolveFile_StackTakesPrecedenceOverFallback(t *testing.T) {
 	fallbackCommon := filepath.Join(fallbackDir, "common.scm")
 	c.Assert(os.WriteFile(fallbackCommon, []byte("fallback"), 0644), qt.IsNil)
 
-	stack := NewLoadPathStack()
-	c.Assert(stack.Push(stackFile), qt.IsNil)
+	stack := &testPathTracker{}
+	stack.Push(stackFile)
 
 	// Should resolve to stack directory, not fallback
 	result, err := ResolveFile(stack, "common.scm", []string{fallbackDir})
@@ -145,8 +145,8 @@ func TestResolveFile_NotFound_ErrorMessage(t *testing.T) {
 	mainFile := filepath.Join(tmpDir1, "main.scm")
 	c.Assert(os.WriteFile(mainFile, []byte(""), 0644), qt.IsNil)
 
-	stack := NewLoadPathStack()
-	c.Assert(stack.Push(mainFile), qt.IsNil)
+	stack := &testPathTracker{}
+	stack.Push(mainFile)
 
 	fallbacks := []string{tmpDir2}
 
@@ -165,7 +165,7 @@ func TestResolveFile_NotFound_ErrorMessage(t *testing.T) {
 func TestResolveFile_EmptyStackAndFallbacks(t *testing.T) {
 	c := qt.New(t)
 
-	stack := NewLoadPathStack()
+	stack := &testPathTracker{}
 
 	_, err := ResolveFile(stack, "helper.scm", nil)
 	c.Assert(err, qt.Not(qt.IsNil))
@@ -183,7 +183,7 @@ func TestResolveFile_EmptyFallbacksSkipped(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "test.scm")
 	c.Assert(os.WriteFile(testFile, []byte(""), 0644), qt.IsNil)
 
-	stack := NewLoadPathStack()
+	stack := &testPathTracker{}
 
 	// Empty strings in fallbacks should be skipped
 	fallbacks := []string{"", tmpDir, ""}
@@ -203,7 +203,7 @@ func TestResolveFile_ReturnsAbsolutePath(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "test.scm")
 	c.Assert(os.WriteFile(testFile, []byte(""), 0644), qt.IsNil)
 
-	stack := NewLoadPathStack()
+	stack := &testPathTracker{}
 
 	tcs := []struct {
 		name      string
@@ -214,7 +214,7 @@ func TestResolveFile_ReturnsAbsolutePath(t *testing.T) {
 			setupFunc: func() (string, []string) {
 				mainFile := filepath.Join(tmpDir, "main.scm")
 				c.Assert(os.WriteFile(mainFile, []byte(""), 0644), qt.IsNil)
-				c.Assert(stack.Push(mainFile), qt.IsNil)
+				stack.Push(mainFile)
 				return "test.scm", nil
 			},
 		},
@@ -270,39 +270,39 @@ func TestResolveFile_ErrorMessageHint(t *testing.T) {
 
 	tcs := []struct {
 		name      string
-		setupFunc func() (*LoadPathStack, []string)
+		setupFunc func() (PathTracker, []string)
 		wantHint  bool
 	}{
 		{
 			name: "empty stack with fallback shows hint",
-			setupFunc: func() (*LoadPathStack, []string) {
-				return NewLoadPathStack(), []string{tmpDir1}
+			setupFunc: func() (PathTracker, []string) {
+				return &testPathTracker{}, []string{tmpDir1}
 			},
 			wantHint: true,
 		},
 		{
 			name: "nil stack with fallback shows hint",
-			setupFunc: func() (*LoadPathStack, []string) {
+			setupFunc: func() (PathTracker, []string) {
 				return nil, []string{tmpDir1}
 			},
 			wantHint: true,
 		},
 		{
 			name: "stack with current dir shows no hint",
-			setupFunc: func() (*LoadPathStack, []string) {
+			setupFunc: func() (PathTracker, []string) {
 				mainFile := filepath.Join(tmpDir1, "main.scm")
 				c.Assert(os.WriteFile(mainFile, []byte(""), 0644), qt.IsNil)
 
-				s := NewLoadPathStack()
-				c.Assert(s.Push(mainFile), qt.IsNil)
+				s := &testPathTracker{}
+				s.Push(mainFile)
 				return s, []string{tmpDir2}
 			},
 			wantHint: false,
 		},
 		{
 			name: "no search paths at all - different error",
-			setupFunc: func() (*LoadPathStack, []string) {
-				return NewLoadPathStack(), nil
+			setupFunc: func() (PathTracker, []string) {
+				return &testPathTracker{}, nil
 			},
 			wantHint: false, // "no search paths available" not "searched: ..."
 		},

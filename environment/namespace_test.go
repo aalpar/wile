@@ -15,6 +15,7 @@
 package environment
 
 import (
+	"path"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -22,6 +23,41 @@ import (
 	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
 )
+
+// testPathTracker is a minimal PathTracker for testing, avoiding an import of
+// machine/compilation/sourceload (which would create a circular dependency).
+type testPathTracker struct {
+	paths []string
+}
+
+func (t *testPathTracker) Push(p string) {
+	t.paths = append(t.paths, p)
+}
+
+func (t *testPathTracker) Pop() {
+	if len(t.paths) > 0 {
+		t.paths = t.paths[:len(t.paths)-1]
+	}
+}
+
+func (t *testPathTracker) Current() string {
+	if len(t.paths) == 0 {
+		return ""
+	}
+	return t.paths[len(t.paths)-1]
+}
+
+func (t *testPathTracker) CurrentDir() string {
+	c := t.Current()
+	if c == "" {
+		return ""
+	}
+	return path.Dir(c)
+}
+
+func (t *testPathTracker) Depth() int {
+	return len(t.paths)
+}
 
 // testAuthorizer is a no-op security.Authorizer for testing.
 type testAuthorizer struct{ name string }
@@ -111,6 +147,7 @@ func TestNamespace_ChildSharesLoadPathStack(t *testing.T) {
 	c := qt.New(t)
 
 	parent := NewNamespace()
+	parent.SetLoadPathStack(&testPathTracker{})
 	child := parent.NewChildNamespace()
 
 	// Verify both have non-nil stacks
@@ -121,12 +158,12 @@ func TestNamespace_ChildSharesLoadPathStack(t *testing.T) {
 	c.Assert(child.LoadPathStack(), qt.Equals, parent.LoadPathStack())
 
 	// Push to parent, verify child sees it
-	c.Assert(parent.LoadPathStack().Push("/parent/file.scm"), qt.IsNil)
+	parent.LoadPathStack().Push("/parent/file.scm")
 	c.Assert(child.LoadPathStack().Current(), qt.Equals, "/parent/file.scm")
 	c.Assert(child.LoadPathStack().Depth(), qt.Equals, 1)
 
 	// Push to child, verify parent sees it
-	c.Assert(child.LoadPathStack().Push("/child/file.scm"), qt.IsNil)
+	child.LoadPathStack().Push("/child/file.scm")
 	c.Assert(parent.LoadPathStack().Current(), qt.Equals, "/child/file.scm")
 	c.Assert(parent.LoadPathStack().Depth(), qt.Equals, 2)
 
@@ -143,6 +180,7 @@ func TestNamespace_NestedChildSharesLoadPathStack(t *testing.T) {
 	c := qt.New(t)
 
 	root := NewNamespace()
+	root.SetLoadPathStack(&testPathTracker{})
 	child1 := root.NewChildNamespace()
 	child2 := child1.NewChildNamespace()
 
@@ -151,7 +189,7 @@ func TestNamespace_NestedChildSharesLoadPathStack(t *testing.T) {
 	c.Assert(child2.LoadPathStack(), qt.Equals, root.LoadPathStack())
 
 	// Push to deepest child
-	c.Assert(child2.LoadPathStack().Push("/deep/file.scm"), qt.IsNil)
+	child2.LoadPathStack().Push("/deep/file.scm")
 
 	// All should see it
 	c.Assert(root.LoadPathStack().Current(), qt.Equals, "/deep/file.scm")

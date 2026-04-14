@@ -129,11 +129,10 @@ func PrimLoad(cc machine.CallContext) error {
 
 	// Push to stack after successful open, pop on exit.
 	stack := env.LoadPathStack()
-	err = stack.Push(resolvedPath)
-	if err != nil {
-		return err
+	if stack != nil {
+		stack.Push(resolvedPath)
+		defer stack.Pop()
 	}
-	defer stack.Pop()
 
 	// Create parser with file tracking for source locations
 	rdr := bufio.NewReader(f)

@@ -20,7 +20,7 @@ import (
 // preserved (not resolved to their target). For example, if /app/lib is a
 // symlink to /usr/local/lib, resolving "foo.scm" from /app/lib/ will return
 // /app/lib/foo.scm, not /usr/local/lib/foo.scm.
-func ResolveFile(stack *LoadPathStack, path string, fallbackDirs []string) (string, error) {
+func ResolveFile(stack PathTracker, path string, fallbackDirs []string) (string, error) {
 	// Strategy 1: Absolute path - use as-is
 	if filepath.IsAbs(path) {
 		_, err := os.Stat(path)
