@@ -18,8 +18,13 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/machine/compilation/sourceload"
+	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/werr"
 )
 
@@ -39,15 +44,103 @@ func NewOSFileResolver(env *environment.EnvironmentFrame) *OSFileResolver {
 
 // ResolveAndOpen finds a file by name and returns an open handle plus the
 // resolved path.
+//
+// Absolute paths bypass the Finder — fs.FS does not support them — and are
+// opened directly via openAuthorized. Relative paths are searched through a
+// sourceload.Finder backed by os.DirFS("/"), which searches the current load
+// directory (from the load path stack), library registry paths,
+// SCHEME_INCLUDE_PATH, and CWD in that order.
 func (p *OSFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.File, string, error) {
 	if path == "" {
 		return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "resolve: empty filename")
 	}
-	absPath, err := environment.ResolveFile(p.env.LoadPathStack(), path, osSearchDirs(p.env))
+	if filepath.IsAbs(path) {
+		return openAuthorized(p.env.Namespace().Authorizer(), path)
+	}
+	return p.resolveRelative(path)
+}
+
+// resolveRelative uses sourceload.Finder to locate a relative path across
+// OS search directories, then enforces security authorization on the result.
+//
+// The search list is built as:
+//  1. Current load directory from the load path stack (stack-relative, highest priority)
+//  2. Configured OS search dirs (library registry, SCHEME_INCLUDE_PATH, CWD)
+//
+// All absolute OS paths are stripped of their leading "/" before being passed
+// to the Finder, because os.DirFS("/") requires relative paths. The
+// canonicalize function adds "/" back and resolves the final absolute path.
+func (p *OSFileResolver) resolveRelative(path string) (fs.File, string, error) {
+	searchDirs := p.osFSSearchDirs()
+	finder := sourceload.NewFinder(
+		os.DirFS("/"),
+		searchDirs,
+		sourceload.WithCanonicalize(canonicalizeOSPath),
+	)
+
+	f, resolved, err := finder.Open(path)
 	if err != nil {
+		if errors.Is(err, sourceload.ErrNotFound) {
+			return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "file %q not found", path)
+		}
 		return nil, "", err
 	}
-	return openAuthorized(p.env.Namespace().Authorizer(), absPath)
+
+	// Authorization check on the resolved absolute path. Close the file
+	// on denial — the caller never sees it.
+	authErr := security.CheckWithAuthorizer(p.env.Namespace().Authorizer(), security.AccessRequest{
+		Resource: security.ResourceCode,
+		Action:   security.ActionLoad,
+		Target:   resolved,
+	})
+	if authErr != nil {
+		f.Close()
+		return nil, "", authErr
+	}
+
+	return f, resolved, nil
+}
+
+// osFSSearchDirs returns the ordered list of fs.FS-compatible search directories
+// for os.DirFS("/"): load-path-stack current dir first (if set), then the
+// configured OS search dirs. All absolute paths have their leading "/" stripped.
+func (p *OSFileResolver) osFSSearchDirs() []string {
+	var dirs []string
+
+	tracker := p.env.LoadPathStack()
+	if ls, ok := tracker.(*sourceload.LoadStack); ok {
+		cur := ls.CurrentDir()
+		if cur != "" && cur != "." {
+			dirs = append(dirs, strings.TrimPrefix(cur, "/"))
+		}
+	}
+
+	dirs = append(dirs, stripLeadingSlash(osSearchDirs(p.env))...)
+	return dirs
+}
+
+// canonicalizeOSPath converts an fs.FS-relative path (no leading slash) back
+// to an absolute OS path, then resolves it to a clean absolute form via
+// filepath.Abs. The leading slash was stripped so os.DirFS("/") could accept
+// the path; this function restores it.
+func canonicalizeOSPath(fsPath string) string {
+	abs := "/" + fsPath
+	resolved, err := filepath.Abs(abs)
+	if err != nil {
+		return abs
+	}
+	return resolved
+}
+
+// stripLeadingSlash converts a slice of absolute OS paths (e.g. "/usr/local/lib")
+// to fs.FS-compatible relative paths ("usr/local/lib") by trimming the leading "/".
+// Paths that do not start with "/" are passed through unchanged.
+func stripLeadingSlash(dirs []string) []string {
+	q := make([]string, len(dirs))
+	for i, d := range dirs {
+		q[i] = strings.TrimPrefix(d, "/")
+	}
+	return q
 }
 
 // EnumerateFiles walks the OS filesystem to discover .sld/.scm files.

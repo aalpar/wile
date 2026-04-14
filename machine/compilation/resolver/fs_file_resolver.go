@@ -18,11 +18,12 @@ import (
 	"context"
 	"errors"
 	"io/fs"
-	pathpkg "path"
 	"path/filepath"
+	pathpkg "path"
 	"strings"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/machine/compilation/sourceload"
 	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/werr"
 )
@@ -52,27 +53,35 @@ func NewFSFileResolver(fsys fs.FS, env *environment.EnvironmentFrame) *FSFileRes
 	}
 }
 
-// fsDirs returns the ordered list of base directories to search within the
-// virtual filesystem: load-path stack current dir (if set), then registry
-// search paths. The FS root (".") is appended by callers as the final fallback.
-func (p *FSFileResolver) fsDirs() []string {
+// fsRegistryDirs returns the registry search paths (non-empty entries only).
+// The load-path-stack current dir is NOT included here — it is injected into
+// the Finder via WithStack so the Finder handles directory-relative resolution.
+func (p *FSFileResolver) fsRegistryDirs() []string {
+	reg := p.env.LibraryRegistry()
+	if reg == nil {
+		return nil
+	}
 	var dirs []string
-	stack := p.env.LoadPathStack()
-	if stack != nil {
-		d := stack.CurrentDir()
-		if d != "" && d != "." {
+	for _, d := range reg.GetSearchPaths() {
+		if d != "" {
 			dirs = append(dirs, d)
 		}
 	}
-	reg := p.env.LibraryRegistry()
-	if reg != nil {
-		for _, d := range reg.GetSearchPaths() {
-			if d != "" {
-				dirs = append(dirs, d)
-			}
-		}
-	}
 	return dirs
+}
+
+// loadStack returns the *sourceload.LoadStack from env.LoadPathStack() if
+// the PathTracker is a *sourceload.LoadStack; otherwise returns nil.
+func (p *FSFileResolver) loadStack() *sourceload.LoadStack {
+	tracker := p.env.LoadPathStack()
+	if tracker == nil {
+		return nil
+	}
+	s, ok := tracker.(*sourceload.LoadStack)
+	if !ok {
+		return nil
+	}
+	return s
 }
 
 // ResolveAndOpen finds a file by name and returns an open handle plus the
@@ -89,35 +98,35 @@ func (p *FSFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.File
 		)
 	}
 
-	var searched []string
-	for _, dir := range append(p.fsDirs(), ".") {
-		candidate := pathpkg.Join(dir, path)
-		if !fs.ValidPath(candidate) {
-			if dir == "." {
-				searched = append(searched, "<fs-root>/")
-			} else {
-				searched = append(searched, dir+"/")
-			}
-			continue
+	registryDirs := p.fsRegistryDirs()
+	var opts []sourceload.FinderOption
+	if s := p.loadStack(); s != nil {
+		opts = append(opts, sourceload.WithStack(s))
+	}
+	finder := sourceload.NewFinder(p.fsys, registryDirs, opts...)
+
+	f, resolved, err := finder.Open(path)
+	if err == nil {
+		// Security check after finding the file; close and deny if rejected.
+		authErr := security.CheckWithAuthorizer(p.env.Namespace().Authorizer(), security.AccessRequest{
+			Resource: security.ResourceCode,
+			Action:   security.ActionLoad,
+			Target:   resolved,
+		})
+		if authErr != nil {
+			f.Close()
+			return nil, "", authErr
 		}
-		switch _, err := fs.Stat(p.fsys, candidate); {
-		case err == nil:
-			return p.openChecked(candidate)
-		case errors.Is(err, fs.ErrNotExist):
-			// not here; try next dir
-		default:
-			return nil, "", werr.WrapForeignErrorWithCause(
-				werr.ErrFileNotFound, err,
-				"stat %s in virtual filesystem", candidate,
-			)
-		}
-		if dir == "." {
-			searched = append(searched, "<fs-root>/")
-		} else {
-			searched = append(searched, dir+"/")
-		}
+		return f, resolved, nil
 	}
 
+	if !errors.Is(err, sourceload.ErrNotFound) {
+		return nil, "", werr.WrapForeignErrorWithCause(werr.ErrFileNotFound, err, "resolve %s in virtual filesystem", path)
+	}
+
+	// Build the searched-dirs list for the not-found error, mirroring what
+	// Finder.buildSearchDirs() would have tried: stack dir, registry dirs, root.
+	searched := p.buildSearchedList(registryDirs)
 	return nil, "", werr.WrapForeignErrorf(
 		werr.ErrFileNotFound,
 		"file %q not found in virtual filesystem; searched: %s",
@@ -126,70 +135,75 @@ func (p *FSFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.File
 	)
 }
 
-// openChecked performs security authorization and opens a resolved FS path.
-func (p *FSFileResolver) openChecked(resolvedPath string) (fs.File, string, error) {
-	err := security.CheckWithAuthorizer(p.env.Namespace().Authorizer(), security.AccessRequest{
-		Resource: security.ResourceCode,
-		Action:   security.ActionLoad,
-		Target:   resolvedPath,
-	})
-	if err != nil {
-		return nil, "", err
-	}
-	f, err := p.fsys.Open(resolvedPath)
-	if err != nil {
-		sentinel := werr.ErrFileOpen
-		if errors.Is(err, fs.ErrNotExist) {
-			sentinel = werr.ErrFileNotFound
+// buildSearchedList returns human-readable labels for the directories that
+// were searched, matching Finder.buildSearchDirs() order: stack dir (if any),
+// registry dirs, then root.
+func (p *FSFileResolver) buildSearchedList(registryDirs []string) []string {
+	var searched []string
+	tracker := p.env.LoadPathStack()
+	if tracker != nil {
+		cur := tracker.CurrentDir()
+		if cur != "" && cur != "." {
+			searched = append(searched, cur+"/")
 		}
-		return nil, "", werr.WrapForeignErrorWithCause(sentinel, err, "open %s", resolvedPath)
 	}
-	return f, resolvedPath, nil
+	for _, d := range registryDirs {
+		searched = append(searched, d+"/")
+	}
+	searched = append(searched, "<fs-root>/")
+	return searched
 }
 
 // EnumerateFiles walks the virtual filesystem to discover all .sld/.scm files.
-// Library registry search paths are walked first (each with its own relPath
-// base), then the FS root is walked to find files not under any search path.
-// Hidden directories (starting with ".") are always skipped.
+// Registry search paths are walked with paths relative to each search dir.
+// The FS root "." is always included. Hidden directories (starting with ".")
+// are skipped.
 //
 // Best-effort: non-existent directories and unauthorized files are skipped.
 // Walk errors are joined and returned alongside partial results.
 func (p *FSFileResolver) EnumerateFiles() ([]string, error) {
 	auth := p.env.Namespace().Authorizer()
 	var result []string
-	var walkErrs []error
 
-	// Walk each registry search path first (relPath relative to each search dir).
-	var searchPaths []string
+	// Build deduplicated search dirs: registry paths (cleaned) then "." root.
+	// Dedup is needed so that a registry path of "." doesn't cause duplicate
+	// results when "." is also appended as the fallback root.
+	searchDirs := p.buildEnumSearchDirs()
+
+	err := sourceload.Walk(p.fsys, searchDirs, isSchemeFile, func(relPath string) {
+		if isAuthorized(auth, relPath) {
+			result = append(result, relPath)
+		}
+	})
+
+	return result, err
+}
+
+// buildEnumSearchDirs returns the deduplicated, ordered list of directories
+// to walk for EnumerateFiles. Registry paths (cleaned) are used when present;
+// "." is the fallback when no registry paths are available. This avoids
+// walking both a named search path and the FS root, which would yield the
+// same file under two different relative paths.
+func (p *FSFileResolver) buildEnumSearchDirs() []string {
 	reg := p.env.LibraryRegistry()
-	if reg != nil {
-		searchPaths = reg.GetSearchPaths()
+	if reg == nil {
+		return []string{"."}
 	}
-	walkedPaths := make(map[string]bool, len(searchPaths))
-	for _, raw := range searchPaths {
+
+	var dirs []string
+	seen := make(map[string]bool)
+	for _, raw := range reg.GetSearchPaths() {
 		dir := pathpkg.Clean(raw)
-		if dir == "." {
+		if dir == "" {
 			continue
 		}
-		walkedPaths[dir] = true
-		err := WalkFSSchemeFiles(p.fsys, dir, auth, nil, func(relPath string) {
-			result = append(result, relPath)
-		})
-		if err != nil {
-			walkErrs = append(walkErrs, err)
+		if !seen[dir] {
+			seen[dir] = true
+			dirs = append(dirs, dir)
 		}
 	}
-
-	// Walk FS root, skipping subdirs already covered by search paths above
-	// to avoid producing incorrect relPath values from path prefix artifacts.
-	err := WalkFSSchemeFiles(p.fsys, ".", auth, func(dir string) bool {
-		return walkedPaths[dir]
-	}, func(relPath string) {
-		result = append(result, relPath)
-	})
-	if err != nil {
-		walkErrs = append(walkErrs, err)
+	if len(dirs) == 0 {
+		return []string{"."}
 	}
-
-	return result, errors.Join(walkErrs...)
+	return dirs
 }
