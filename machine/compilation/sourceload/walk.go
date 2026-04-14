@@ -61,11 +61,8 @@ func walkDir(fsys fs.FS, baseDir string, accept func(name string) bool, fn func(
 	})
 	// fs.WalkDir returns an error if the root directory does not exist.
 	// Treat that as a silent skip — non-existent search dirs are allowed.
-	if err != nil {
-		var pathErr *fs.PathError
-		if errors.As(err, &pathErr) {
-			return nil
-		}
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		return nil // non-existent search dir: skip silently
 	}
 	return err
 }

@@ -30,33 +30,33 @@ type testPathTracker struct {
 	paths []string
 }
 
-func (t *testPathTracker) Push(p string) {
-	t.paths = append(t.paths, p)
+func (p *testPathTracker) Push(filePath string) {
+	p.paths = append(p.paths, filePath)
 }
 
-func (t *testPathTracker) Pop() {
-	if len(t.paths) > 0 {
-		t.paths = t.paths[:len(t.paths)-1]
+func (p *testPathTracker) Pop() {
+	if len(p.paths) > 0 {
+		p.paths = p.paths[:len(p.paths)-1]
 	}
 }
 
-func (t *testPathTracker) Current() string {
-	if len(t.paths) == 0 {
+func (p *testPathTracker) Current() string {
+	if len(p.paths) == 0 {
 		return ""
 	}
-	return t.paths[len(t.paths)-1]
+	return p.paths[len(p.paths)-1]
 }
 
-func (t *testPathTracker) CurrentDir() string {
-	c := t.Current()
+func (p *testPathTracker) CurrentDir() string {
+	c := p.Current()
 	if c == "" {
 		return ""
 	}
 	return path.Dir(c)
 }
 
-func (t *testPathTracker) Depth() int {
-	return len(t.paths)
+func (p *testPathTracker) Depth() int {
+	return len(p.paths)
 }
 
 // testAuthorizer is a no-op security.Authorizer for testing.

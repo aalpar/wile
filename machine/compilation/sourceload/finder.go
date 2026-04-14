@@ -1,6 +1,7 @@
 package sourceload
 
 import (
+	"errors"
 	"io/fs"
 	"path"
 )
@@ -73,11 +74,17 @@ func (p *Finder) Open(name string) (fs.File, string, error) {
 		}
 		_, err := fs.Stat(p.fsys, candidate)
 		if err != nil {
-			continue
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			return nil, "", err
 		}
 		f, err := p.fsys.Open(candidate)
 		if err != nil {
-			continue
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			return nil, "", err
 		}
 		resolved := candidate
 		if p.canonicalize != nil {

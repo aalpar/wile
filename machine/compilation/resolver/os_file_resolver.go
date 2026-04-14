@@ -115,9 +115,8 @@ func (p *OSFileResolver) osFSSearchDirs() []string {
 	var dirs []string
 
 	tracker := p.env.LoadPathStack()
-	ls, ok := tracker.(*sourceload.LoadStack)
-	if ok {
-		cur := ls.CurrentDir()
+	if tracker != nil {
+		cur := tracker.CurrentDir()
 		if cur != "" && cur != "." {
 			dirs = append(dirs, cur)
 		}
