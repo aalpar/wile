@@ -81,7 +81,13 @@ func (p *OSFileResolver) resolveRelative(path string) (fs.File, string, error) {
 	f, resolved, err := finder.Open(path)
 	if err != nil {
 		if errors.Is(err, sourceload.ErrNotFound) {
-			return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound, "file %q not found", path)
+			searched := p.buildSearchedList(searchDirs)
+			if len(searched) == 0 {
+				return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound,
+					"file %q not found (no search paths available)", path)
+			}
+			return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound,
+				"file %q not found; searched: %s", path, strings.Join(searched, ", "))
 		}
 		return nil, "", err
 	}
@@ -103,7 +109,8 @@ func (p *OSFileResolver) resolveRelative(path string) (fs.File, string, error) {
 
 // osFSSearchDirs returns the ordered list of fs.FS-compatible search directories
 // for os.DirFS("/"): load-path-stack current dir first (if set), then the
-// configured OS search dirs. All absolute paths have their leading "/" stripped.
+// configured OS search dirs. All paths are absolutized (to resolve ".." etc.)
+// then have their leading "/" stripped for fs.FS compatibility.
 func (p *OSFileResolver) osFSSearchDirs() []string {
 	var dirs []string
 
@@ -111,12 +118,22 @@ func (p *OSFileResolver) osFSSearchDirs() []string {
 	if ls, ok := tracker.(*sourceload.LoadStack); ok {
 		cur := ls.CurrentDir()
 		if cur != "" && cur != "." {
-			dirs = append(dirs, strings.TrimPrefix(cur, "/"))
+			dirs = append(dirs, cur)
 		}
 	}
 
-	dirs = append(dirs, stripLeadingSlash(osSearchDirs(p.env))...)
-	return dirs
+	dirs = append(dirs, osSearchDirs(p.env)...)
+	return absolutizeAndStrip(dirs)
+}
+
+// buildSearchedList returns the OS-absolute directories that were searched,
+// for inclusion in not-found error messages.
+func (p *OSFileResolver) buildSearchedList(fsDirs []string) []string {
+	q := make([]string, len(fsDirs))
+	for i, d := range fsDirs {
+		q[i] = "/" + d + "/"
+	}
+	return q
 }
 
 // canonicalizeOSPath converts an fs.FS-relative path (no leading slash) back
@@ -132,13 +149,17 @@ func canonicalizeOSPath(fsPath string) string {
 	return resolved
 }
 
-// stripLeadingSlash converts a slice of absolute OS paths (e.g. "/usr/local/lib")
-// to fs.FS-compatible relative paths ("usr/local/lib") by trimming the leading "/".
-// Paths that do not start with "/" are passed through unchanged.
-func stripLeadingSlash(dirs []string) []string {
-	q := make([]string, len(dirs))
-	for i, d := range dirs {
-		q[i] = strings.TrimPrefix(d, "/")
+// absolutizeAndStrip converts OS paths to fs.FS-compatible paths for os.DirFS("/").
+// Each path is made absolute via filepath.Abs (resolving ".." and relative paths),
+// then the leading "/" is stripped. Paths that fail Abs are dropped.
+func absolutizeAndStrip(dirs []string) []string {
+	q := make([]string, 0, len(dirs))
+	for _, d := range dirs {
+		abs, err := filepath.Abs(d)
+		if err != nil {
+			continue
+		}
+		q = append(q, strings.TrimPrefix(abs, "/"))
 	}
 	return q
 }
