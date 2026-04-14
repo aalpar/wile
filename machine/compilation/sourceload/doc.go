@@ -1,12 +1,12 @@
-// Package sourceload provides isolated, dependency-free file-finding
-// utilities for locating Scheme source files across virtual filesystems.
+// Package sourceload provides file-finding and load-stack tracking
+// for locating source files across virtual filesystems.
 //
-// It is intentionally kept free of project imports so it can be tested
-// and reasoned about independently of the rest of the machine package.
+// The package is focused on file-path traversal, file loading, and
+// load-stack management — isolated from Scheme evaluation concerns.
 package sourceload
 
-import "errors"
+import "github.com/aalpar/wile/werr"
 
 // ErrNotFound is returned when no matching file can be located across
 // all provided search directories.
-var ErrNotFound = errors.New("sourceload: file not found") //nolint:gocritic // intentional: zero project deps
+var ErrNotFound = werr.NewStaticError("sourceload: file not found")

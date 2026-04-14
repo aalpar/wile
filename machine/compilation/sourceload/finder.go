@@ -4,6 +4,8 @@ import (
 	"errors"
 	"io/fs"
 	"path"
+
+	"github.com/aalpar/wile/werr"
 )
 
 // Finder locates files within an fs.FS by searching an ordered list of
@@ -40,7 +42,7 @@ func WithCanonicalize(fn func(string) string) FinderOption {
 // It panics if fsys is nil.
 func NewFinder(fsys fs.FS, searchDirs []string, opts ...FinderOption) *Finder {
 	if fsys == nil {
-		panic("sourceload: NewFinder called with nil fsys")
+		panic(werr.WrapForeignErrorf(werr.ErrEngineInit, "NewFinder: fsys must not be nil"))
 	}
 	p := &Finder{
 		fsys:       fsys,

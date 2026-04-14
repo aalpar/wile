@@ -3,6 +3,8 @@ package sourceload
 import (
 	"path"
 	"sync"
+
+	"github.com/aalpar/wile/werr"
 )
 
 // LoadStack tracks the chain of source files currently being loaded.
@@ -28,7 +30,7 @@ func NewLoadStack() *LoadStack {
 // only meaningful, non-empty paths should appear on the stack.
 func (p *LoadStack) Push(path string) {
 	if path == "" {
-		panic("sourceload: LoadStack.Push called with empty path")
+		panic(werr.WrapForeignErrorf(werr.ErrInvalidLoadPath, "LoadStack.Push: empty path"))
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
