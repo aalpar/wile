@@ -122,7 +122,9 @@
     concept-lattice concept-extent concept-intent
     concept-lattice->algebra-lattice concept-relationship
     set-add set-intersect set-union set-subset? set-member? set-before
-    sort-strings)
+    sort-strings
+    ;; Pareto dominance
+    dominates? pareto-frontier factor-leq? factor-less?)
   (import (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice)
@@ -138,4 +140,5 @@
           (wile algebra galois)
           (wile algebra rewrite)
           (wile algebra symbolic)
-          (wile algebra fca)))
+          (wile algebra fca)
+          (wile algebra pareto)))
