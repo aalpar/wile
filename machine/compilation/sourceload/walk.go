@@ -45,7 +45,7 @@ func walkDir(fsys fs.FS, baseDir string, accept func(name string) bool, fn func(
 			// Skip hidden subdirectories, but never skip the walk root itself.
 			// The walk root can be "." whose Name() is "." and would otherwise
 			// match the hidden check.
-			if filePath != baseDir && isHidden(d.Name()) {
+			if filePath != baseDir && IsHidden(d.Name()) {
 				return fs.SkipDir
 			}
 			return nil
@@ -81,7 +81,7 @@ func relativeToBase(baseDir, filePath string) string {
 	return path.Base(filePath)
 }
 
-// isHidden reports whether name is a hidden file or directory (starts with ".").
-func isHidden(name string) bool {
+// IsHidden reports whether name is a hidden file or directory (starts with ".").
+func IsHidden(name string) bool {
 	return len(name) > 0 && name[0] == '.'
 }

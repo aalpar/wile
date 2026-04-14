@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/machine/compilation/sourceload"
 	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/werr"
 )
@@ -46,11 +47,6 @@ func isSchemeFile(name string) bool {
 		}
 	}
 	return false
-}
-
-// isHidden reports whether the name starts with ".".
-func isHidden(name string) bool {
-	return len(name) > 0 && name[0] == '.'
 }
 
 // isAuthorized reports whether the security authorizer permits loading the
@@ -117,7 +113,7 @@ func WalkOSSchemeFiles(baseDir string, auth security.Authorizer, fn func(relPath
 			if walkErr != nil {
 				return filepath.SkipDir
 			}
-			if path != baseDir && isHidden(d.Name()) {
+			if path != baseDir && sourceload.IsHidden(d.Name()) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -152,7 +148,7 @@ func WalkFSSchemeFiles(fsys fs.FS, baseDir string, auth security.Authorizer, ski
 			if walkErr != nil {
 				return fs.SkipDir
 			}
-			if path != baseDir && (isHidden(d.Name()) || (skipSubdir != nil && skipSubdir(path))) {
+			if path != baseDir && (sourceload.IsHidden(d.Name()) || (skipSubdir != nil && skipSubdir(path))) {
 				return fs.SkipDir
 			}
 			return nil
