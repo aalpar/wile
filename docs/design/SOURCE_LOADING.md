@@ -271,24 +271,48 @@ eng, err := wile.NewEngine(ctx,
 with `SCHEME_LIBRARY_PATH` environment variable paths. These prepend to
 the default search paths.
 
-### Known Limitation
+## Architecture Layers
 
-`cond-expand (library ...)` uses `os.Stat` directly and cannot detect
-libraries in a virtual `fs.FS`. This requires threading `FileResolver`
-into the `FeatureRequirement` interface.
+```
+┌─────────────────────────────────────────────────────┐
+│  Scheme evaluation (machine/compilation/)           │
+│  include, load, import → parse, expand, compile     │
+└──────────────────────┬──────────────────────────────┘
+                       │ calls ResolveAndOpen
+┌──────────────────────▼──────────────────────────────┐
+│  Resolver adapters (machine/compilation/resolver/)  │
+│  Builds search-dir lists from Scheme-specific       │
+│  sources (registry, env vars, CWD).                 │
+│  Wraps with security authorization and werr errors. │
+└──────────────────────┬──────────────────────────────┘
+                       │ delegates to
+┌──────────────────────▼──────────────────────────────┐
+│  sourceload (machine/compilation/sourceload/)       │
+│  Pure file finding: fs.FS + search dirs → open.     │
+│  LoadStack for relative path tracking.              │
+│  Walk for file enumeration.                         │
+│  Dependencies: io/fs, path, sync, errors. Nothing   │
+│  else — zero Scheme knowledge.                      │
+└─────────────────────────────────────────────────────┘
+```
 
 ## Code Locations
 
 | Component | File |
 |-----------|------|
-| `FileResolver` interface | `machine/file_resolver.go` |
-| `OSFileResolver` | `machine/file_resolver.go` |
-| `FSFileResolver` | `machine/file_resolver.go` |
-| `EmbedFileResolver` | `machine/file_resolver.go` |
-| `ChainFileResolver` | `machine/file_resolver.go` |
+| `Finder` (file search) | `machine/compilation/sourceload/finder.go` |
+| `LoadStack` (load tracking) | `machine/compilation/sourceload/load_stack.go` |
+| `Walk` (file enumeration) | `machine/compilation/sourceload/walk.go` |
+| `ErrNotFound` sentinel | `machine/compilation/sourceload/doc.go` |
+| `FileResolver` interface | `environment/file_resolver.go` |
+| `PathTracker` interface | `environment/file_resolver.go` |
+| `OSFileResolver` | `machine/compilation/resolver/os_file_resolver.go` |
+| `FSFileResolver` | `machine/compilation/resolver/fs_file_resolver.go` |
+| `EmbedFileResolver` | `machine/compilation/resolver/embed_file_resolver.go` |
+| `ChainFileResolver` | `machine/compilation/resolver/chain_file_resolver.go` |
 | Engine resolver wiring | `engine.go` (`newFileResolver`) |
 | Engine options | `options.go` (`WithSourceFS`, `WithSourceOS`) |
-| Library loader | `machine/library_loader.go` |
-| Library registry / search paths | `machine/library_registry.go` |
+| Library loader | `machine/compilation/library_loader.go` |
+| Library registry / search paths | `machine/compilation/library_registry.go` |
 | Embedded stdlib | `stdlib/stdlib.go` |
 | CLI configuration | `cmd/wile/main.go` |
