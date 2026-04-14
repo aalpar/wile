@@ -185,26 +185,37 @@
      (re-raise))))
 
 ;; Records (SRFI-9 / R7RS define-record-type)
+;;
+;; Both define-record-type and define-opaque-record-type delegate to
+;; define-record-type-impl, passing the maker procedure as the first
+;; template variable. Opaque records are hidden from record? and
+;; record-type but their type-specific predicates and accessors work
+;; normally.
 (define-syntax define-record-type
   (syntax-rules ()
     ((define-record-type type (constructor constructor-tag ...) predicate field-spec ...)
-     (define-record-type-impl type (constructor constructor-tag ...) predicate () () field-spec ...))))
+     (define-record-type-impl make-record-type type (constructor constructor-tag ...) predicate () () field-spec ...))))
+
+(define-syntax define-opaque-record-type
+  (syntax-rules ()
+    ((define-opaque-record-type type (constructor constructor-tag ...) predicate field-spec ...)
+     (define-record-type-impl make-opaque-record-type type (constructor constructor-tag ...) predicate () () field-spec ...))))
 
 (define-syntax define-record-type-impl
   (syntax-rules ()
-    ((define-record-type-impl type (constructor constructor-tag ...) predicate (field-name ...) (defn ...))
+    ((define-record-type-impl maker type (constructor constructor-tag ...) predicate (field-name ...) (defn ...))
      (begin
-       (define type (make-record-type 'type '(field-name ...)))
+       (define type (maker 'type '(field-name ...)))
        (define constructor (record-constructor type '(constructor-tag ...)))
        (define predicate (record-predicate type))
        defn ...))
-    ((define-record-type-impl type (constructor constructor-tag ...) predicate (field-name ...) (defn ...) (field-tag accessor) rest ...)
-     (define-record-type-impl type (constructor constructor-tag ...) predicate
+    ((define-record-type-impl maker type (constructor constructor-tag ...) predicate (field-name ...) (defn ...) (field-tag accessor) rest ...)
+     (define-record-type-impl maker type (constructor constructor-tag ...) predicate
        (field-name ... field-tag)
        (defn ... (define accessor (record-accessor type 'field-tag)))
        rest ...))
-    ((define-record-type-impl type (constructor constructor-tag ...) predicate (field-name ...) (defn ...) (field-tag accessor modifier) rest ...)
-     (define-record-type-impl type (constructor constructor-tag ...) predicate
+    ((define-record-type-impl maker type (constructor constructor-tag ...) predicate (field-name ...) (defn ...) (field-tag accessor modifier) rest ...)
+     (define-record-type-impl maker type (constructor constructor-tag ...) predicate
        (field-name ... field-tag)
        (defn ... (begin (define accessor (record-accessor type 'field-tag)) (define modifier (record-modifier type 'field-tag))))
        rest ...))))

@@ -271,3 +271,43 @@ func TestRecordSchemeString(t *testing.T) {
 	var nilR *values.Record
 	qt.Assert(t, nilR.SchemeString(), qt.Equals, "#<record>")
 }
+
+func TestOpaqueRecordType(t *testing.T) {
+	name := values.NewSymbol("stack")
+	fieldItems := values.NewSymbol("items")
+	rt := values.NewOpaqueRecordType(name, []*values.Symbol{fieldItems})
+
+	qt.Assert(t, rt.IsOpaque(), qt.IsTrue)
+	qt.Assert(t, rt.Name(), qt.Equals, name)
+	qt.Assert(t, rt.FieldCount(), qt.Equals, 1)
+
+	// Non-opaque record type is not opaque
+	normalRT := values.NewRecordType(name, []*values.Symbol{fieldItems})
+	qt.Assert(t, normalRT.IsOpaque(), qt.IsFalse)
+
+	// Nil receiver
+	var nilRT *values.RecordType
+	qt.Assert(t, nilRT.IsOpaque(), qt.IsFalse)
+}
+
+func TestOpaqueRecordSchemeString(t *testing.T) {
+	name := values.NewSymbol("stack")
+	fieldItems := values.NewSymbol("items")
+	rt := values.NewOpaqueRecordType(name, []*values.Symbol{fieldItems})
+
+	r := values.NewRecord(rt, []values.Value{values.EmptyList})
+	// Opaque records omit "record:" prefix
+	qt.Assert(t, r.SchemeString(), qt.Equals, "#<stack>")
+}
+
+func TestOpaqueRecordFieldAccess(t *testing.T) {
+	name := values.NewSymbol("stack")
+	fieldItems := values.NewSymbol("items")
+	rt := values.NewOpaqueRecordType(name, []*values.Symbol{fieldItems})
+
+	r := values.NewRecord(rt, []values.Value{values.NewInteger(42)})
+
+	// Field access still works — opacity doesn't block Go-level access
+	qt.Assert(t, r.Field(0), valuestest.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, r.FieldByName(fieldItems), valuestest.SchemeEquals, values.NewInteger(42))
+}

@@ -25,6 +25,7 @@ type RecordType struct {
 	name       *Symbol
 	fieldNames []*Symbol
 	parent     *RecordType
+	opaque     bool
 }
 
 // NewRecordType creates a new RecordType with the given name and field names.
@@ -36,6 +37,17 @@ func NewRecordType(name *Symbol, fieldNames []*Symbol) *RecordType {
 	}
 }
 
+// NewOpaqueRecordType creates a new RecordType that is opaque to generic inspection.
+// Instances of opaque record types are not recognized by record? and cannot be
+// inspected via record-type. Type-specific predicates and accessors still work.
+func NewOpaqueRecordType(name *Symbol, fieldNames []*Symbol) *RecordType {
+	return &RecordType{
+		name:       name,
+		fieldNames: fieldNames,
+		opaque:     true,
+	}
+}
+
 // NewDerivedRecordType creates a new RecordType that inherits from the given parent.
 func NewDerivedRecordType(name *Symbol, parent *RecordType, fieldNames []*Symbol) *RecordType {
 	return &RecordType{
@@ -43,6 +55,11 @@ func NewDerivedRecordType(name *Symbol, parent *RecordType, fieldNames []*Symbol
 		parent:     parent,
 		fieldNames: fieldNames,
 	}
+}
+
+// IsOpaque returns true if this record type is opaque to generic inspection.
+func (p *RecordType) IsOpaque() bool {
+	return p != nil && p.opaque
 }
 
 // Parent returns the parent record type, or nil if this is a base type.

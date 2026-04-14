@@ -76,6 +76,8 @@ func addRecords(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "make-record-type", ParamCount: 2, Impl: PrimMakeRecordType,
 			Doc: "Creates a new record type descriptor with the given NAME (symbol) and FIELD-NAMES (list of symbols).\n\nExamples:\n  (make-record-type 'point '(x y))  => #<record-type point>", ParamNames: []string{"name", "field-names"}, Category: "records"},
+		{Name: "make-opaque-record-type", ParamCount: 2, Impl: PrimMakeOpaqueRecordType,
+			Doc: "Creates an opaque record type descriptor. Instances are hidden from record? and record-type.\n\nExamples:\n  (make-opaque-record-type 'stack '(items))  => #<record-type stack>", ParamNames: []string{"name", "field-names"}, Category: "records"},
 		{Name: "record-type?", ParamCount: 1, Impl: PrimIsRecordType,
 			Doc: "Returns #t if OBJ is a record type descriptor.\n\nExamples:\n  (record-type? (make-record-type 'point '(x y)))  => #t\n  (record-type? 42)                                 => #f", ParamNames: []string{"obj"}, Category: "records"},
 		{Name: "record?", ParamCount: 1, Impl: PrimIsRecord,

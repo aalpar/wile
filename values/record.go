@@ -103,12 +103,16 @@ func (p *Record) EqualTo(v Value) bool {
 }
 
 // SchemeString returns the Scheme external representation of the record.
+// Opaque records omit the "record:" prefix to avoid revealing their implementation.
 func (p *Record) SchemeString() string {
 	if p == nil {
 		return "#<record>"
 	}
 	if p.recordType == nil {
 		return "#<record>"
+	}
+	if p.recordType.IsOpaque() {
+		return fmt.Sprintf("#<%s>", p.recordType.Name().SchemeString())
 	}
 	return fmt.Sprintf("#<record:%s>", p.recordType.Name().SchemeString())
 }

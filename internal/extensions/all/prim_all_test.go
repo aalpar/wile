@@ -703,3 +703,144 @@ func TestR7RSPromiseSemantics(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// Opaque Records
+// =============================================================================
+
+func TestMakeOpaqueRecordType(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"is a record type", `(record-type? (make-opaque-record-type 'stack '(items)))`, values.TrueValue},
+		{"record? false for opaque instance", `
+			(let* ((rt (make-opaque-record-type 'stack '(items)))
+			       (ctor (record-constructor rt '(items)))
+			       (s (ctor '(1 2 3))))
+			  (record? s))`, values.FalseValue},
+		{"record? true for normal instance", `
+			(let* ((rt (make-record-type 'point '(x y)))
+			       (ctor (record-constructor rt '(x y)))
+			       (p (ctor 1 2)))
+			  (record? p))`, values.TrueValue},
+		{"type-specific predicate works", `
+			(let* ((rt (make-opaque-record-type 'stack '(items)))
+			       (pred (record-predicate rt))
+			       (ctor (record-constructor rt '(items)))
+			       (s (ctor '(1 2 3))))
+			  (pred s))`, values.TrueValue},
+		{"type-specific predicate rejects other types", `
+			(let* ((rt (make-opaque-record-type 'stack '(items)))
+			       (pred (record-predicate rt)))
+			  (pred 42))`, values.FalseValue},
+		{"accessor works on opaque record", `
+			(let* ((rt (make-opaque-record-type 'stack '(items)))
+			       (ctor (record-constructor rt '(items)))
+			       (get-items (record-accessor rt 'items))
+			       (s (ctor '(1 2 3))))
+			  (get-items s))`, values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))},
+		{"modifier works on opaque record", `
+			(let* ((rt (make-opaque-record-type 'stack '(items)))
+			       (ctor (record-constructor rt '(items)))
+			       (get-items (record-accessor rt 'items))
+			       (set-items! (record-modifier rt 'items))
+			       (s (ctor '(1 2 3))))
+			  (set-items! s '(4 5))
+			  (get-items s))`, values.List(values.NewInteger(4), values.NewInteger(5))},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
+		})
+	}
+}
+
+func TestOpaqueRecordTypeError(t *testing.T) {
+	engine := newEngine(t)
+
+	// record-type should error on opaque records
+	evalExpectError(t, engine, `
+		(let* ((rt (make-opaque-record-type 'stack '(items)))
+		       (ctor (record-constructor rt '(items)))
+		       (s (ctor '(1 2 3))))
+		  (record-type s))`)
+}
+
+func TestDefineOpaqueRecordType(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	tcs := []struct {
+		name string
+		code string
+		want values.Value
+	}{
+		{"construct and access", `
+			(begin
+			  (define-opaque-record-type <stack>
+			    (make-stack items)
+			    stack?
+			    (items stack-items))
+			  (stack-items (make-stack '(1 2 3))))`,
+			values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))},
+		{"predicate true", `
+			(begin
+			  (define-opaque-record-type <stack>
+			    (make-stack items)
+			    stack?
+			    (items stack-items))
+			  (stack? (make-stack '())))`, values.TrueValue},
+		{"predicate false for non-record", `
+			(begin
+			  (define-opaque-record-type <stack>
+			    (make-stack items)
+			    stack?
+			    (items stack-items))
+			  (stack? 42))`, values.FalseValue},
+		{"record? false for opaque", `
+			(begin
+			  (define-opaque-record-type <stack>
+			    (make-stack items)
+			    stack?
+			    (items stack-items))
+			  (record? (make-stack '())))`, values.FalseValue},
+		{"mutable opaque field", `
+			(begin
+			  (define-opaque-record-type <stack>
+			    (make-stack items)
+			    stack?
+			    (items stack-items set-stack-items!))
+			  (let ((s (make-stack '(1 2))))
+			    (set-stack-items! s '(3 4 5))
+			    (stack-items s)))`,
+			values.List(values.NewInteger(3), values.NewInteger(4), values.NewInteger(5))},
+		{"opaque and normal records coexist", `
+			(begin
+			  (define-opaque-record-type <stack>
+			    (make-stack items)
+			    stack?
+			    (items stack-items))
+			  (define-record-type <point>
+			    (make-point x y)
+			    point?
+			    (x point-x)
+			    (y point-y))
+			  (list (record? (make-stack '()))
+			        (record? (make-point 1 2))
+			        (stack? (make-point 1 2))
+			        (point? (make-stack '()))))`,
+			values.List(values.FalseValue, values.TrueValue, values.FalseValue, values.FalseValue)},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			result := eval(t, engine, tc.code)
+			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
+		})
+	}
+}
