@@ -24,7 +24,8 @@ import (
 // an embedded filesystem, or any other fs.FS.
 //
 // The concrete implementations (OSFileResolver, FSFileResolver,
-// EmbedFileResolver, ChainFileResolver) live in machine/compilation/resolver/.
+// EmbedFileResolver, ChainFileResolver) live in machine/compilation/resolver/,
+// backed by sourceload.Finder for file search.
 // This interface is defined here so environment/ can store it without
 // creating a circular import.
 type FileResolver interface {
@@ -42,4 +43,19 @@ type FileResolver interface {
 // Callers that need the full registry can type-assert from LibrarySearcher.
 type LibrarySearcher interface {
 	GetSearchPaths() []string
+}
+
+// PathTracker tracks the stack of files currently being loaded.
+// Implementations provide relative path resolution for include/load
+// and load provenance introspection.
+//
+// The concrete implementation is sourceload.LoadStack. This interface
+// is defined here so environment/ can store it without importing
+// machine/compilation/sourceload/.
+type PathTracker interface {
+	Push(path string)
+	Pop()
+	Current() string
+	CurrentDir() string
+	Depth() int
 }

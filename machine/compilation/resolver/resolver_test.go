@@ -26,9 +26,19 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/machine/compilation/sourceload"
 	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/werr"
 )
+
+// newTestNamespace returns a Namespace with a load stack initialized.
+// Tests that call LoadPathStack().Push() must use this instead of
+// environment.NewNamespace() to avoid a nil dereference.
+func newTestNamespace() *environment.Namespace {
+	ns := environment.NewNamespace()
+	ns.SetLoadPathStack(sourceload.NewLoadStack())
+	return ns
+}
 
 // realDir normalizes a temp directory path to account for macOS symlinks
 // (/tmp -> /private/tmp). Without this, paths from t.TempDir() and
@@ -91,10 +101,10 @@ func TestOSFileResolver_RelativeViaLoadPathStack(t *testing.T) {
 	err := os.WriteFile(filepath.Join(dir, "found.scm"), []byte("ok"), 0o644)
 	qt.Assert(t, err, qt.IsNil)
 
-	env := environment.NewNamespace().Runtime()
+	env := newTestNamespace().Runtime()
 	stack := env.LoadPathStack()
 	// Push a file path in the target directory so CurrentDir() returns dir.
-	qt.Assert(t, stack.Push(filepath.Join(dir, "parent.scm")), qt.IsNil)
+	stack.Push(filepath.Join(dir, "parent.scm"))
 	defer stack.Pop()
 
 	t.Setenv(SchemeIncludePathEnv, "")
@@ -302,9 +312,9 @@ func TestOSFileResolver_LoadPathStackPriorityOverFallbacks(t *testing.T) {
 
 	t.Setenv(SchemeIncludePathEnv, fallbackDir)
 
-	env := environment.NewNamespace().Runtime()
+	env := newTestNamespace().Runtime()
 	stack := env.LoadPathStack()
-	qt.Assert(t, stack.Push(filepath.Join(stackDir, "parent.scm")), qt.IsNil)
+	stack.Push(filepath.Join(stackDir, "parent.scm"))
 	defer stack.Pop()
 
 	r := NewOSFileResolver(env)
@@ -327,9 +337,9 @@ func TestOSFileResolver_DotDotResolution(t *testing.T) {
 
 	t.Setenv(SchemeIncludePathEnv, "")
 
-	env := environment.NewNamespace().Runtime()
+	env := newTestNamespace().Runtime()
 	stack := env.LoadPathStack()
-	qt.Assert(t, stack.Push(filepath.Join(deepDir, "parent.scm")), qt.IsNil)
+	stack.Push(filepath.Join(deepDir, "parent.scm"))
 	defer stack.Pop()
 
 	r := NewOSFileResolver(env)
@@ -435,9 +445,9 @@ func TestFSFileResolver_RelativeToLoadPathStack(t *testing.T) {
 		"lib/main.sld":   {Data: []byte("(define-library (main))")},
 		"lib/helper.scm": {Data: []byte("42")},
 	}
-	env := environment.NewNamespace().Runtime()
+	env := newTestNamespace().Runtime()
 	stack := env.LoadPathStack()
-	qt.Assert(t, stack.Push("lib/main.sld"), qt.IsNil)
+	stack.Push("lib/main.sld")
 	defer stack.Pop()
 
 	r := NewFSFileResolver(fsys, env)
@@ -491,12 +501,12 @@ func TestFSFileResolver_LoadPathStackPriorityOverSearchPaths(t *testing.T) {
 		"stack-dir/util.scm":  {Data: []byte("from-stack")},
 		"search-dir/util.scm": {Data: []byte("from-search")},
 	}
-	ns := environment.NewNamespace()
+	ns := newTestNamespace()
 	ns.SetLibraryRegistry(&testSearcher{paths: []string{"search-dir"}})
 	env := ns.Runtime()
 
 	stack := env.LoadPathStack()
-	qt.Assert(t, stack.Push("stack-dir/parent.scm"), qt.IsNil)
+	stack.Push("stack-dir/parent.scm")
 	defer stack.Pop()
 
 	r := NewFSFileResolver(fsys, env)
@@ -559,9 +569,9 @@ func TestFSFileResolver_DotDotTraversal(t *testing.T) {
 		"sibling.scm":     {Data: []byte("found")},
 		"sub/current.scm": {Data: []byte("here")},
 	}
-	env := environment.NewNamespace().Runtime()
+	env := newTestNamespace().Runtime()
 	stack := env.LoadPathStack()
-	qt.Assert(t, stack.Push("sub/current.scm"), qt.IsNil)
+	stack.Push("sub/current.scm")
 	defer stack.Pop()
 
 	r := NewFSFileResolver(fsys, env)
@@ -577,9 +587,9 @@ func TestFSFileResolver_FallsThroughToRoot(t *testing.T) {
 		"root-only.scm": {Data: []byte("at-root")},
 		"sub/other.scm": {Data: []byte("other")},
 	}
-	env := environment.NewNamespace().Runtime()
+	env := newTestNamespace().Runtime()
 	stack := env.LoadPathStack()
-	qt.Assert(t, stack.Push("sub/other.scm"), qt.IsNil)
+	stack.Push("sub/other.scm")
 	defer stack.Pop()
 
 	r := NewFSFileResolver(fsys, env)
@@ -593,12 +603,12 @@ func TestFSFileResolver_FallsThroughToRoot(t *testing.T) {
 
 func TestFSFileResolver_NotFoundListsSearchedPaths(t *testing.T) {
 	fsys := fstest.MapFS{}
-	ns := environment.NewNamespace()
+	ns := newTestNamespace()
 	ns.SetLibraryRegistry(&testSearcher{paths: []string{"lib", "vendor"}})
 	env := ns.Runtime()
 
 	stack := env.LoadPathStack()
-	qt.Assert(t, stack.Push("src/main.scm"), qt.IsNil)
+	stack.Push("src/main.scm")
 	defer stack.Pop()
 
 	r := NewFSFileResolver(fsys, env)

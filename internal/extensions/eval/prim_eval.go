@@ -129,11 +129,10 @@ func PrimLoad(cc machine.CallContext) error {
 
 	// Push to stack after successful open, pop on exit.
 	stack := env.LoadPathStack()
-	err = stack.Push(resolvedPath)
-	if err != nil {
-		return err
+	if stack != nil {
+		stack.Push(resolvedPath)
+		defer stack.Pop()
 	}
-	defer stack.Pop()
 
 	// Create parser with file tracking for source locations
 	rdr := bufio.NewReader(f)
@@ -180,8 +179,12 @@ func PrimLoad(cc machine.CallContext) error {
 // Returns the path of the file currently being loaded, or #f if
 // no file is being loaded (e.g., REPL).
 func PrimCurrentLoadPath(mc machine.CallContext) error {
-	current := mc.EnvironmentFrame().Namespace().LoadPathStack().Current()
-	mc.SetValue(values.StringOrFalse(current))
+	stack := mc.EnvironmentFrame().Namespace().LoadPathStack()
+	if stack == nil {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+	mc.SetValue(values.StringOrFalse(stack.Current()))
 	return nil
 }
 
@@ -189,8 +192,12 @@ func PrimCurrentLoadPath(mc machine.CallContext) error {
 // Returns the directory of the file currently being loaded, or #f if
 // no file is being loaded (e.g., REPL).
 func PrimCurrentLoadDirectory(mc machine.CallContext) error {
-	currentDir := mc.EnvironmentFrame().Namespace().LoadPathStack().CurrentDir()
-	mc.SetValue(values.StringOrFalse(currentDir))
+	stack := mc.EnvironmentFrame().Namespace().LoadPathStack()
+	if stack == nil {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+	mc.SetValue(values.StringOrFalse(stack.CurrentDir()))
 	return nil
 }
 
@@ -198,8 +205,12 @@ func PrimCurrentLoadDirectory(mc machine.CallContext) error {
 // Returns the current load stack depth (number of nested loads).
 // Returns 0 when not inside a load call.
 func PrimCurrentLoadDepth(mc machine.CallContext) error {
-	depth := mc.EnvironmentFrame().Namespace().LoadPathStack().Depth()
-	mc.SetValue(values.NewInteger(int64(depth)))
+	stack := mc.EnvironmentFrame().Namespace().LoadPathStack()
+	if stack == nil {
+		mc.SetValue(values.NewInteger(0))
+		return nil
+	}
+	mc.SetValue(values.NewInteger(int64(stack.Depth())))
 	return nil
 }
 

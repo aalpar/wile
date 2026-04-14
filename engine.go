@@ -28,6 +28,7 @@ import (
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/machine/compilation"
+	"github.com/aalpar/wile/machine/compilation/sourceload"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/registry/core"
 	"github.com/aalpar/wile/values"
@@ -106,6 +107,7 @@ func NewNamespace(ctx context.Context, opts ...EngineOption) (*environment.Names
 
 	ns := environment.NewNamespace()
 	ns.SetRegistry(reg)
+	ns.SetLoadPathStack(sourceload.NewLoadStack())
 	if cfg.authorizer != nil {
 		ns.SetAuthorizer(cfg.authorizer)
 	}
@@ -199,6 +201,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 
 		ns = environment.NewNamespace()
 		ns.SetRegistry(reg)
+		ns.SetLoadPathStack(sourceload.NewLoadStack())
 		if cfg.authorizer != nil {
 			ns.SetAuthorizer(cfg.authorizer)
 		}
@@ -948,7 +951,8 @@ func (p *Engine) CurrentLoadDirectory() string {
 }
 
 // PushLoadPath pushes a path onto the load path stack.
-// Returns an error if the path is empty.
+// Returns an error if the path is empty. Returns nil (no-op) if the stack
+// is not configured — path tracking requires SetLoadPathStack on the Namespace.
 //
 // Advanced embedders who need fine-grained control can use Push/Pop directly,
 // but most should use WithLoadPath for automatic cleanup.
@@ -957,7 +961,11 @@ func (p *Engine) PushLoadPath(filePath string) error {
 	if stack == nil {
 		return nil
 	}
-	return stack.Push(filePath)
+	if filePath == "" {
+		return werr.WrapForeignErrorf(werr.ErrInvalidLoadPath, "path must not be empty")
+	}
+	stack.Push(filePath)
+	return nil
 }
 
 // PopLoadPath removes the top path from the load path stack.

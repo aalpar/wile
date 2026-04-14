@@ -68,10 +68,7 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 			// Push to stack after successful open, pop on exit.
 			stack := p.env.LoadPathStack()
 			if stack != nil {
-				pushErr := stack.Push(filePath)
-				if pushErr != nil {
-					return werr.WrapForeignErrorf(pushErr, "include: push load path for %q", fn.Value)
-				}
+				stack.Push(filePath)
 				defer stack.Pop()
 			}
 

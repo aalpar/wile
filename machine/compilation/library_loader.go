@@ -104,10 +104,7 @@ func loadLibraryFromReader(ctx context.Context, r io.Reader, filePath string, ex
 	// Push to stack after successful open, pop on exit.
 	stack := callerEnv.LoadPathStack()
 	if stack != nil {
-		pushErr := stack.Push(filePath)
-		if pushErr != nil {
-			return nil, werr.WrapForeignErrorf(pushErr, "load library %s: push load path", expectedName.SchemeString())
-		}
+		stack.Push(filePath)
 		defer stack.Pop()
 	}
 
