@@ -21,16 +21,30 @@ import (
 )
 
 // CompilationError wraps errors from parsing, expanding, or compiling Scheme code.
+//
+// # Source
+//
+// Source provides the source location ("file:line:col") where the error occurred,
+// when available. Compilation errors from the core compiler include source locations;
+// parse errors and some edge cases may have an empty Source.
 type CompilationError struct {
 	Message string
+	Source  string // formatted source location ("file:line:col"), empty if unavailable
 	Cause   error
 }
 
 func (p *CompilationError) Error() string {
-	if p.Cause != nil {
-		return p.Message + ": " + p.Cause.Error()
+	var b strings.Builder
+	if p.Source != "" {
+		b.WriteString(p.Source)
+		b.WriteString(": ")
 	}
-	return p.Message
+	b.WriteString(p.Message)
+	if p.Cause != nil {
+		b.WriteString(": ")
+		b.WriteString(p.Cause.Error())
+	}
+	return b.String()
 }
 
 func (p *CompilationError) Unwrap() error {

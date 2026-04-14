@@ -45,7 +45,8 @@ Open designs and implementation work. These are the active items.
 | `2026-03-30-machine-decomposition-design.md` | Machine package decomposition: compiler/VM/expander separation | **Approved** (design) -- partial work via PR #593 (compilation subpackage) |
 | `2026-04-13-sourceload-design.md` | Isolated file-finding package: `sourceload/` under `machine/compilation/` | **Complete** |
 | `2026-04-13-sourceload-impl.md` | sourceload implementation plan | **Complete** |
-| `SECURITY.md` | Opcode resource limits (match steps, expand steps, continuation copy depth) | **Proposed** -- not started |
+| `SECURITY.md` | Opcode resource limits (match steps, expand steps, continuation copy depth) | **Rejected** -- existing limits sufficient (call depth + stack size + context timeout) |
+| `2026-04-14-error-stack-traces-design.md` | Error stack traces: SourcedError, CompilationError.Source, cross-boundary traces | **Phase 1 complete** -- core compiler wrapping done; Phases 2-4 (remaining files) + P3 (cross-boundary) open |
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | **Proposed** -- not started |
 | `MACRO_SYSTEM.md` | Hygiene debugging, macro expansion tracing | **Planned** -- OriginInfo core fields exist (PR #324); extended fields + hygiene debugging tools not started |
 

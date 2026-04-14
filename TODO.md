@@ -25,11 +25,10 @@ Items ordered by perceived priority for the project's success as an embedding pr
 
 Items that block production embedded use or prevent silent state corruption.
 
-- [ ] **Opcode resource limits** [Security, Design]: Per-category limits for match/expand/continuation copy. Completes defense-in-depth for embedded use. `plans/SECURITY.md`
-- [ ] **vmState field coverage test** [High, S]: Reflection-based test enumerating vmState fields, asserting each appears in a coverage table keyed by operation. Prevents silent state corruption when fields are added. See [FCA Assessment](#fca-assessment) below.
-- [ ] **Error type identity** [Medium]: `CompilationError` has no source location, no identity as SchemeError, and no `Wrap*` constructor. `RuntimeError` has no identity as SchemeError or ForeignError and no constructor. Determine where each sits between Scheme and Foreign errors.
-- [ ] **Exceptions and error stack traces** [Medium]: Both Foreign and Native errors should track stacktraces with source code references. Includes foreign stack trace entries for Native → Foreign → Native callback crossings.
-- [ ] **MCP eval fails on schelog `include`** [Bug]: `(include "examples/logic/schelog/schelog.scm")` followed by `(solve-puzzle %houses)` produces `#!void` for `schelog:unbind-ref!` at line 113. CLI (`wile -f`) works fine. Likely include resolution or session-state issue in MCP eval mode.
+- [x] **vmState field coverage test** [High, S]: Reflection-based test enumerating vmState fields, asserting each appears in a coverage table keyed by operation. Prevents silent state corruption when fields are added. See [FCA Assessment](#fca-assessment) below.
+- [x] **Error type identity** [Medium]: Determined: `CompilationError` and `RuntimeError` are **public boundary types** — they translate internal errors (`werr.ForeignError`, `machine.SchemeError`, `machine.ErrExceptionEscape`) to the embedder API. They should NOT implement `SchemeError` or `ForeignError`. Embedders use `errors.As` to match them. `RuntimeError` already has `Source`/`StackTrace`; `CompilationError` lacks source because the compiler doesn't propagate `SourceContext` into its errors — fix belongs in "error stack traces" below.
+- [ ] **Exceptions and error stack traces** [Medium, In Progress]: Phase 1 done: `SourcedError` type in `compilation/`, `CompileExpression` wraps errors with source context, `CompilationError.Source` field populated from cause chain. Remaining: (1) migrate remaining ~320 `WrapForeignErrorf` sites across 43 compilation files (Phases 2-4 in `plans/2026-04-14-error-stack-traces-design.md`), (2) foreign stack trace entries for Native → Foreign → Native callback crossings (P3, deferred).
+- [x] **MCP eval fails on schelog `include`** [Not a bug]: Original report was missing `puzzle.scm` include and `(set! *schelog-use-occurs-check?* #t)`. Without occurs check, the puzzle infinite-loops and hits MCP timeout. With correct setup, MCP eval produces the correct answer.
 
 ---
 
@@ -155,6 +154,7 @@ These items were investigated and determined not to warrant changes:
 - [x] **Binding/BindingMeta (FCA)**: Clean lazy-initialization pattern. FCA false positive.
 - [x] **PrimitiveRegistration/PrimitiveSpec (FCA)**: Orthogonal concerns properly separated. FCA false positive.
 - [x] **CompileTimeCallContext (FCA)**: 2-field value type parameter, not coupling. FCA false positive.
+- [x] **Opcode resource limits**: Per-category limits (match steps, expand steps, continuation copy depth). Existing mechanisms sufficient: `WithMaxCallDepth` bounds recursion, `WithMaxStackSize` bounds stack growth, `context.WithTimeout` checked every 1024 ops in VM and match loops. Deterministic per-category budgets are niche; timeout is an adequate proxy.
 
 ---
 

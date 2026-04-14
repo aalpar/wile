@@ -88,7 +88,7 @@ func (p *Engine) ReadExpression(ctx context.Context, r io.Reader) (*Expression, 
 	pr := parser.NewParser(p.env, true, rr)
 	stx, err := pr.ReadSyntax(ctx)
 	if err != nil {
-		return nil, &CompilationError{Message: "parse error", Cause: err}
+		return nil, wrapCompilationError("parse error", err)
 	}
 	return &Expression{stx: stx}, nil
 }
@@ -117,15 +117,14 @@ func (p *Engine) parse(ctx context.Context, code string, source string) (*Expres
 
 	stx, err := pr.ReadSyntax(ctx)
 	if err != nil {
-		return nil, &CompilationError{Message: "parse error", Cause: err}
+		return nil, wrapCompilationError("parse error", err)
 	}
 
 	// Reject trailing expressions — Parse is a single-expression API.
 	_, trailing := pr.ReadSyntax(ctx)
 	if trailing == nil || !isEOF(trailing) {
-		return nil, &CompilationError{
-			Message: "trailing input after expression (use EvalMultiple for multiple expressions)",
-		}
+		return nil, wrapCompilationError(
+			"trailing input after expression (use EvalMultiple for multiple expressions)", nil)
 	}
 
 	return &Expression{

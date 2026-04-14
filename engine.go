@@ -372,7 +372,7 @@ func (p *Engine) EvalIn(ctx context.Context, expr *Expression, ns *environment.N
 
 	tpl, err := expandAndCompileOptimized(ctx, env, expr.stx, nil, p.inlineThreshold)
 	if err != nil {
-		return nil, &CompilationError{Message: "expand/compile error", Cause: err}
+		return nil, wrapCompilationError("expand/compile error", err)
 	}
 
 	cc := &CompiledCode{template: tpl, env: env}
@@ -402,7 +402,7 @@ func (p *Engine) evalMultiple(ctx context.Context, code string, source string) (
 			if isEOF(err) {
 				break
 			}
-			return nil, &CompilationError{Message: "parse error", Cause: err}
+			return nil, wrapCompilationError("parse error", err)
 		}
 
 		compiled, err := p.compileExpr(ctx, stx)
@@ -694,7 +694,7 @@ func expandAndCompileOptimized(ctx context.Context, env *environment.Environment
 func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*CompiledCode, error) {
 	tpl, err := expandAndCompileOptimized(ctx, p.env, stx, nil, p.inlineThreshold)
 	if err != nil {
-		return nil, &CompilationError{Message: "expand/compile error", Cause: err}
+		return nil, wrapCompilationError("expand/compile error", err)
 	}
 	return &CompiledCode{template: tpl, env: p.env}, nil
 }
@@ -721,6 +721,20 @@ func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, erro
 // Run or Eval call. Sub-context counters are not aggregated.
 func (p *Engine) LastCounters() machine.VMCounters {
 	return p.lastCounters
+}
+
+// wrapCompilationError creates a CompilationError, extracting source location
+// from SourcedError in the cause chain when available.
+func wrapCompilationError(msg string, cause error) *CompilationError {
+	ce := &CompilationError{Message: msg, Cause: cause}
+	var se *compilation.SourcedError
+	if errors.As(cause, &se) && se.Source != nil && se.Source.File != "" {
+		ce.Source = fmt.Sprintf("%s:%d:%d",
+			se.Source.File,
+			se.Source.Start.Line(),
+			se.Source.Start.Column())
+	}
+	return ce
 }
 
 func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
