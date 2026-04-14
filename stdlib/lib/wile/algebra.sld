@@ -114,7 +114,15 @@
     monoid->theory group->theory semiring->theory ring->theory
     field->theory lattice->theory heyting->theory boolean->theory
     discover-equivalences
-    format-trace)
+    format-trace
+    ;; Formal Concept Analysis
+    make-context context-from-alist fca-context?
+    context-objects context-attributes
+    intent extent
+    concept-lattice concept-extent concept-intent
+    concept-lattice->algebra-lattice concept-relationship
+    set-add set-intersect set-union set-subset? set-member? set-before
+    sort-strings)
   (import (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice)
@@ -129,4 +137,5 @@
           (wile algebra differential)
           (wile algebra galois)
           (wile algebra rewrite)
-          (wile algebra symbolic)))
+          (wile algebra symbolic)
+          (wile algebra fca)))
