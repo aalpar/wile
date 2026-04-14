@@ -164,7 +164,7 @@ func WalkFSSchemeFiles(fsys fs.FS, baseDir string, auth security.Authorizer, ski
 		if prefix == "" {
 			relPath = path
 		}
-		if !isAuthorized(auth, relPath) {
+		if !isAuthorized(auth, path) {
 			return nil
 		}
 		fn(relPath)

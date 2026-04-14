@@ -14,7 +14,12 @@
 
 package compilation
 
-import "github.com/aalpar/wile/machine/compilation/resolver"
+import (
+	"io/fs"
+
+	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/machine/compilation/resolver"
+)
 
 // Backward-compatible type aliases for resolver types.
 // External callers (engine.go, options.go, bootstrap) continue using
@@ -28,9 +33,22 @@ type ChainFileResolver = resolver.ChainFileResolver
 // SchemeIncludePathEnv is the environment variable name for the Scheme include path.
 const SchemeIncludePathEnv = resolver.SchemeIncludePathEnv
 
-var (
-	NewOSFileResolver    = resolver.NewOSFileResolver
-	NewEmbedFileResolver = resolver.NewEmbedFileResolver
-	NewFSFileResolver    = resolver.NewFSFileResolver
-	NewChainFileResolver = resolver.NewChainFileResolver
-)
+// NewOSFileResolver creates a resolver backed by the OS filesystem.
+func NewOSFileResolver(env *environment.EnvironmentFrame) *OSFileResolver {
+	return resolver.NewOSFileResolver(env)
+}
+
+// NewEmbedFileResolver creates a resolver backed by an embedded filesystem.
+func NewEmbedFileResolver(fsys fs.FS) *EmbedFileResolver {
+	return resolver.NewEmbedFileResolver(fsys)
+}
+
+// NewFSFileResolver creates a resolver backed by a virtual filesystem.
+func NewFSFileResolver(fsys fs.FS, env *environment.EnvironmentFrame) *FSFileResolver {
+	return resolver.NewFSFileResolver(fsys, env)
+}
+
+// NewChainFileResolver creates a resolver that searches multiple resolvers.
+func NewChainFileResolver(resolvers []environment.FileResolver) *ChainFileResolver {
+	return resolver.NewChainFileResolver(resolvers)
+}

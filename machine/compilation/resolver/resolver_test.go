@@ -259,7 +259,7 @@ func TestOSFileResolver_NoAuthorizerAllowsByDefault(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 	r := NewOSFileResolver(env)
 
-	// No authorizer on context — open by default.
+	// No authorizer on namespace — open by default.
 	f, resolved, err := r.ResolveAndOpen(context.Background(), absPath)
 	qt.Assert(t, err, qt.IsNil)
 	defer f.Close()
@@ -762,6 +762,26 @@ func TestFSFileResolverEnumerateSldAndScm(t *testing.T) {
 	c.Assert(len(files), qt.Equals, 2)
 	sort.Strings(files)
 	c.Assert(files, qt.DeepEquals, []string{"scheme/base.scm", "scheme/base.sld"})
+}
+
+func TestFSFileResolverEnumerateDotSlashSearchPath(t *testing.T) {
+	c := qt.New(t)
+
+	fsys := fstest.MapFS{
+		"stdlib/lib/scheme/base.sld": &fstest.MapFile{Data: []byte("")},
+	}
+
+	// "./stdlib/lib" has a leading "./" that is invalid for fs.ValidPath.
+	// EnumerateFiles must clean it to "stdlib/lib" before walking.
+	ns := environment.NewNamespace()
+	ns.SetLibraryRegistry(&testSearcher{paths: []string{"./stdlib/lib"}})
+	env := ns.Runtime()
+
+	resolver := NewFSFileResolver(fsys, env)
+
+	files, err := resolver.EnumerateFiles()
+	c.Assert(err, qt.IsNil)
+	c.Assert(files, qt.Contains, "scheme/base.sld")
 }
 
 // --- OSFileResolver EnumerateFiles ---

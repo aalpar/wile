@@ -36,6 +36,9 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
+// libraryExtensions caches the recognized library file extensions at init time.
+var libraryExtensions = resolver.LibraryExtensions()
+
 // LibraryName represents an R7RS library name like (scheme base) or (my lib).
 // Library names are lists of identifiers used to uniquely identify a library.
 type LibraryName struct {
@@ -299,9 +302,6 @@ func FilePathToLibraryName(path string) (LibraryName, error) {
 		"filePathToLibraryName: unrecognized extension in %q", path,
 	)
 }
-
-// libraryExtensions caches the recognized library file extensions at init time.
-var libraryExtensions = resolver.LibraryExtensions()
 
 // ResolveLibraryFile resolves a library name to an open file handle,
 // trying each extension in libraryExtensions order.
