@@ -438,11 +438,11 @@ Rings equipped with a derivation satisfying the Leibniz rule.
 
 ---
 
-## Field -- `(wile algebra field)`
+## Field -- `(wile algebra ring)`
 
 Rings where every nonzero element has a multiplicative inverse.
 
-Note: Field types are defined in `(wile algebra ring)` and re-exported by the umbrella library.
+Field types are defined alongside ring types in `(wile algebra ring)` and re-exported by the umbrella library.
 
 ### Constructors
 
@@ -547,7 +547,7 @@ Axiom-driven term rewriting via abstract term protocols.
 
 ### Normalizer
 
-- `(make-normalizer theory proto)` -- compile a list of axioms into a single normalizer (term -> value-or-#f); tries each rule in order, returns first match or `#f`
+- `(make-normalizer axioms proto)` -- compile a list of axioms into a single normalizer (term -> value-or-#f); tries each rule in order, returns first match or `#f`
 
 ### Sentinel
 

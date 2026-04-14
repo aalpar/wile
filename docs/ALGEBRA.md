@@ -120,10 +120,10 @@ instead of `(ring-times Z (ring-plus Z a b) (ring-plus Z a (ring-negate Z
 b)))`. The names are yours to choose.
 
 **Forgetful projections.** Functions like `ring->semiring`, `group->monoid`,
-`boolean->heyting->lattice` extract simpler structures from richer ones.
-They build new records from the relevant fields of the source. Code that
-only needs a monoid can accept one projected from a group, ring, or
-semiring -- no adapter needed.
+and `boolean->heyting`, then `heyting->lattice`, extract simpler structures
+from richer ones. They build new records from the relevant fields of the
+source. Code that only needs a monoid can accept one projected from a
+group, ring, or semiring -- no adapter needed.
 
 **Predicate-based matching.** Axiom constructors like `make-identity-axiom`
 and `make-absorbing-axiom` take a predicate, not a value. The identity

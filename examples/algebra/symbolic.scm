@@ -122,10 +122,16 @@
 
 ;; Build a term protocol for S-expression terms.
 ;; The compare function orders atoms for commutativity normalization.
+;; It must handle both symbols and compound terms safely.
 (define proto
   (sexp-term-protocol
     (lambda (a b)
-      (string<? (symbol->string a) (symbol->string b)))))
+      (cond
+        ((and (symbol? a) (symbol? b))
+         (string<? (symbol->string a) (symbol->string b)))
+        ((symbol? a) #t)
+        ((symbol? b) #f)
+        (else #f)))))
 
 (define normalize (make-recursive-normalizer add-theory proto))
 

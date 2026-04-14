@@ -1,7 +1,5 @@
 # Algebra Library Documentation Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Create user-facing documentation and examples for the `(wile algebra)` library.
 
 **Architecture:** Three deliverables: 6 runnable example files in `examples/algebra/`, an introduction doc at `docs/ALGEBRA.md`, and an API reference at `docs/ALGEBRA_REFERENCE.md`. Examples are written first (they inform what the docs need to explain), then docs, then README update.
