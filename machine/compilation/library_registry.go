@@ -288,7 +288,8 @@ func FilePathToLibraryName(path string) (LibraryName, error) {
 		)
 	}
 	for _, ext := range libraryExtensions {
-		if trimmed, ok := strings.CutSuffix(path, ext); ok {
+		trimmed, ok := strings.CutSuffix(path, ext)
+		if ok {
 			parts := strings.Split(trimmed, "/")
 			return NewLibraryName(parts...), nil
 		}
@@ -299,8 +300,8 @@ func FilePathToLibraryName(path string) (LibraryName, error) {
 	)
 }
 
-// libraryExtensions is the single list of recognized library file extensions.
-var libraryExtensions = resolver.LibraryExtensions
+// libraryExtensions caches the recognized library file extensions at init time.
+var libraryExtensions = resolver.LibraryExtensions()
 
 // ResolveLibraryFile resolves a library name to an open file handle,
 // trying each extension in libraryExtensions order.

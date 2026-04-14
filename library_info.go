@@ -117,9 +117,9 @@ func (p *Engine) libraryRegistry() (*compilation.LibraryRegistry, error) {
 }
 
 // ensureExportIndex lazily builds the library export index on first
-// successful call. Retries on context cancellation/deadline. Permanent
-// failures (permissions, corrupt .sld, etc.) are marked as built to
-// avoid repeated retries.
+// successful call. Retries on context cancellation/deadline. Non-transient
+// errors store whatever partial index was returned (may be nil if
+// enumeration itself failed) and stop retrying.
 func (p *Engine) ensureExportIndex(ctx context.Context) *compilation.LibraryExportIndex {
 	p.exportIndexMu.Lock()
 	defer p.exportIndexMu.Unlock()
@@ -138,8 +138,8 @@ func (p *Engine) ensureExportIndex(ctx context.Context) *compilation.LibraryExpo
 			return nil // transient — retry next call
 		}
 		// Non-transient errors (malformed .sld, permissions, etc.):
-		// use partial results since BuildExportIndex returns valid
-		// entries alongside the error.
+		// store whatever was returned (partial index or nil) and
+		// stop retrying. idx may be nil if enumeration itself failed.
 	}
 	p.exportIndex = idx
 	p.exportIndexBuilt = true

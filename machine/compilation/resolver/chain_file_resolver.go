@@ -61,10 +61,11 @@ func (p *ChainFileResolver) ResolveAndOpen(ctx context.Context, path string) (fs
 // EnumerateFiles unions file enumerations from all child resolvers that
 // implement FileEnumerator. Results are concatenated in resolver order
 // with no deduplication; ordering implies priority.
-// Errors from child resolvers propagate immediately, matching
-// ChainFileResolver.ResolveAndOpen behavior for non-file-not-found errors.
+// Best-effort: walk errors are accumulated and returned alongside
+// partial results, matching OSFileResolver and FSFileResolver semantics.
 func (p *ChainFileResolver) EnumerateFiles() ([]string, error) {
 	var result []string
+	var chainErrs []error
 
 	for _, r := range p.resolvers {
 		enumerator, ok := r.(FileEnumerator)
@@ -72,11 +73,11 @@ func (p *ChainFileResolver) EnumerateFiles() ([]string, error) {
 			continue
 		}
 		files, err := enumerator.EnumerateFiles()
-		if err != nil {
-			return nil, err
-		}
 		result = append(result, files...)
+		if err != nil {
+			chainErrs = append(chainErrs, err)
+		}
 	}
 
-	return result, nil
+	return result, errors.Join(chainErrs...)
 }

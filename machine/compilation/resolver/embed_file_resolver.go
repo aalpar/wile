@@ -16,6 +16,7 @@ package resolver
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 
 	"github.com/aalpar/wile/werr"
@@ -50,7 +51,11 @@ func (p *EmbedFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.F
 	}
 	f, err := p.fsys.Open(path)
 	if err != nil {
-		return nil, "", werr.WrapForeignErrorWithCause(werr.ErrFileNotFound, err, "resolve: %s", path)
+		sentinel := werr.ErrFileOpen
+		if errors.Is(err, fs.ErrNotExist) {
+			sentinel = werr.ErrFileNotFound
+		}
+		return nil, "", werr.WrapForeignErrorWithCause(sentinel, err, "resolve: %s", path)
 	}
 	return f, path, nil
 }
