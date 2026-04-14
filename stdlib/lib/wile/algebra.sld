@@ -124,7 +124,11 @@
     set-add set-intersect set-union set-subset? set-member? set-before
     sort-strings
     ;; Pareto dominance
-    dominates? pareto-frontier factor-leq? factor-less?)
+    dominates? pareto-frontier factor-leq? factor-less?
+    ;; Interval arithmetic
+    interval-lattice
+    interval-add interval-sub interval-mul
+    inf<= inf-min inf-max inf+ inf- inf*)
   (import (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice)
@@ -141,4 +145,5 @@
           (wile algebra rewrite)
           (wile algebra symbolic)
           (wile algebra fca)
-          (wile algebra pareto)))
+          (wile algebra pareto)
+          (wile algebra interval)))
