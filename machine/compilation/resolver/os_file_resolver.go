@@ -100,7 +100,7 @@ func (p *OSFileResolver) resolveRelative(path string) (fs.File, string, error) {
 		Target:   resolved,
 	})
 	if authErr != nil {
-		f.Close()
+		f.Close() //nolint:errcheck // closing on denial; error irrelevant
 		return nil, "", authErr
 	}
 
@@ -115,7 +115,8 @@ func (p *OSFileResolver) osFSSearchDirs() []string {
 	var dirs []string
 
 	tracker := p.env.LoadPathStack()
-	if ls, ok := tracker.(*sourceload.LoadStack); ok {
+	ls, ok := tracker.(*sourceload.LoadStack)
+	if ok {
 		cur := ls.CurrentDir()
 		if cur != "" && cur != "." {
 			dirs = append(dirs, cur)

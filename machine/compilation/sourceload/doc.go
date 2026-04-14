@@ -9,4 +9,4 @@ import "errors"
 
 // ErrNotFound is returned when no matching file can be located across
 // all provided search directories.
-var ErrNotFound = errors.New("sourceload: file not found")
+var ErrNotFound = errors.New("sourceload: file not found") //nolint:gocritic // intentional: zero project deps

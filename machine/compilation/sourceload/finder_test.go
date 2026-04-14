@@ -124,7 +124,7 @@ func TestFinder_NilStack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open with nil stack: unexpected error: %v", err)
 	}
-	defer file.Close()
+	file.Close() //nolint:errcheck
 }
 
 func TestFinder_FileContent(t *testing.T) {

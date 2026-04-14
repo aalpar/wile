@@ -19,7 +19,8 @@ import (
 func Walk(fsys fs.FS, searchDirs []string, accept func(name string) bool, fn func(relPath string)) error {
 	var errs []error
 	for _, dir := range searchDirs {
-		if err := walkDir(fsys, dir, accept, fn); err != nil {
+		err := walkDir(fsys, dir, accept, fn)
+		if err != nil {
 			errs = append(errs, err)
 		}
 	}

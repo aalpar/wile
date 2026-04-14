@@ -18,8 +18,8 @@ import (
 	"context"
 	"errors"
 	"io/fs"
-	"path/filepath"
 	pathpkg "path"
+	"path/filepath"
 	"strings"
 
 	"github.com/aalpar/wile/environment"
@@ -100,7 +100,8 @@ func (p *FSFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.File
 
 	registryDirs := p.fsRegistryDirs()
 	var opts []sourceload.FinderOption
-	if s := p.loadStack(); s != nil {
+	s := p.loadStack()
+	if s != nil {
 		opts = append(opts, sourceload.WithStack(s))
 	}
 	finder := sourceload.NewFinder(p.fsys, registryDirs, opts...)
@@ -114,7 +115,7 @@ func (p *FSFileResolver) ResolveAndOpen(_ context.Context, path string) (fs.File
 			Target:   resolved,
 		})
 		if authErr != nil {
-			f.Close()
+			f.Close() //nolint:errcheck // closing on denial; error irrelevant
 			return nil, "", authErr
 		}
 		return f, resolved, nil
