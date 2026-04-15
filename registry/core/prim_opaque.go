@@ -22,16 +22,16 @@ import (
 )
 
 // PrimOpaqueQ implements the opaque? predicate.
-// Returns #t if the argument satisfies the Opaque interface.
+// Returns #t if the argument is an OpaqueValue.
 var PrimOpaqueQ = helpers.MakeTypePredicate(func(o values.Value) bool {
-	_, ok := o.(values.Opaque)
+	_, ok := o.(*values.OpaqueValue)
 	return ok
 })
 
 // PrimOpaqueTag implements the opaque-tag primitive.
 // Returns the tag of an opaque value as a symbol.
 func PrimOpaqueTag(mc machine.CallContext) error {
-	o, err := helpers.RequireArg[values.Opaque](mc, 0, werr.ErrNotAnOpaqueValue, "opaque-tag")
+	o, err := helpers.RequireArg[*values.OpaqueValue](mc, 0, werr.ErrNotAnOpaqueValue, "opaque-tag")
 	if err != nil {
 		return err
 	}

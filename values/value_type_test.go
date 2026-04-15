@@ -353,12 +353,12 @@ func TestRecordTypeConstraint(t *testing.T) {
 	}{
 		{
 			name:  "direct match",
-			val:   values.NewRecord(pointRT, []values.Value{values.NewInteger(1), values.NewInteger(2)}),
+			val:   mustNewRecord(pointRT, []values.Value{values.NewInteger(1), values.NewInteger(2)}),
 			match: true,
 		},
 		{
 			name:  "subtype match via parent chain",
-			val:   values.NewRecord(colorPointRT, []values.Value{values.NewString("red")}),
+			val:   mustNewRecord(colorPointRT, []values.Value{values.NewString("red")}),
 			match: true,
 		},
 		{
@@ -369,7 +369,7 @@ func TestRecordTypeConstraint(t *testing.T) {
 		},
 		{
 			name:    "wrong record type fails",
-			val:     values.NewRecord(otherRT, []values.Value{values.NewInteger(1)}),
+			val:     mustNewRecord(otherRT, []values.Value{values.NewInteger(1)}),
 			match:   false,
 			wantErr: true,
 		},

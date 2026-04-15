@@ -72,6 +72,7 @@ var (
 	ErrNotANativeError           = NewStaticError("not an error object")
 	ErrNotARecord                = NewStaticError("not a record")
 	ErrNotARecordType            = NewStaticError("not a record type")
+	ErrOpaqueRecord              = NewStaticError("record type is opaque")
 	ErrFileNotFound              = NewStaticError("file not found")
 	ErrFileOpen                  = NewStaticError("file open failed")
 	ErrLibraryNotFound           = NewStaticError("library not found")

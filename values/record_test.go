@@ -23,6 +23,15 @@ import (
 	"github.com/aalpar/wile/values/valuestest"
 )
 
+// mustNewRecord calls NewRecord and panics on error. Test-only helper.
+func mustNewRecord(rt *values.RecordType, fields []values.Value) *values.Record {
+	r, err := values.NewRecord(rt, fields)
+	if err != nil {
+		panic(err)
+	}
+	return r
+}
+
 func TestRecordTypeParent(t *testing.T) {
 	pointName := values.NewSymbol("point")
 	fieldX := values.NewSymbol("x")
@@ -120,7 +129,7 @@ func TestRecordCreation(t *testing.T) {
 	fieldY := values.NewSymbol("y")
 	rt := values.NewRecordType(name, []*values.Symbol{fieldX, fieldY})
 
-	r := values.NewRecord(rt, []values.Value{values.NewInteger(3), values.NewInteger(4)})
+	r := mustNewRecord(rt, []values.Value{values.NewInteger(3), values.NewInteger(4)})
 
 	qt.Assert(t, r, qt.Not(qt.IsNil))
 	qt.Assert(t, r.RecordType(), qt.Equals, rt)
@@ -134,7 +143,7 @@ func TestRecordFieldAccess(t *testing.T) {
 	fieldY := values.NewSymbol("y")
 	rt := values.NewRecordType(name, []*values.Symbol{fieldX, fieldY})
 
-	r := values.NewRecord(rt, []values.Value{values.NewInteger(3), values.NewInteger(4)})
+	r := mustNewRecord(rt, []values.Value{values.NewInteger(3), values.NewInteger(4)})
 
 	// By index
 	qt.Assert(t, r.Field(0), valuestest.SchemeEquals, values.NewInteger(3))
@@ -154,7 +163,7 @@ func TestRecordFieldMutation(t *testing.T) {
 	fieldY := values.NewSymbol("y")
 	rt := values.NewRecordType(name, []*values.Symbol{fieldX, fieldY})
 
-	r := values.NewRecord(rt, []values.Value{values.NewInteger(3), values.NewInteger(4)})
+	r := mustNewRecord(rt, []values.Value{values.NewInteger(3), values.NewInteger(4)})
 
 	// Mutate by index
 	r.SetField(0, values.NewInteger(10))
@@ -184,7 +193,7 @@ func TestRecordIsVoid(t *testing.T) {
 		},
 		{
 			name: "valid record is not void",
-			in:   values.NewRecord(rt, []values.Value{}),
+			in:   mustNewRecord(rt, []values.Value{}),
 			out:  false,
 		},
 	}
@@ -202,6 +211,7 @@ func TestRecordEqualTo(t *testing.T) {
 	fieldY := values.NewSymbol("y")
 	rt := values.NewRecordType(name, []*values.Symbol{fieldX, fieldY})
 	rt2 := values.NewRecordType(values.NewSymbol("point2"), []*values.Symbol{fieldX, fieldY})
+	rtEmpty := values.NewRecordType(values.NewSymbol("empty"), []*values.Symbol{})
 
 	tcs := []struct {
 		name string
@@ -211,31 +221,31 @@ func TestRecordEqualTo(t *testing.T) {
 	}{
 		{
 			name: "equal records same type and fields",
-			a:    values.NewRecord(rt, []values.Value{values.NewInteger(1), values.NewInteger(2)}),
-			b:    values.NewRecord(rt, []values.Value{values.NewInteger(1), values.NewInteger(2)}),
+			a:    mustNewRecord(rt, []values.Value{values.NewInteger(1), values.NewInteger(2)}),
+			b:    mustNewRecord(rt, []values.Value{values.NewInteger(1), values.NewInteger(2)}),
 			out:  true,
 		},
 		{
 			name: "different field values",
-			a:    values.NewRecord(rt, []values.Value{values.NewInteger(1), values.NewInteger(2)}),
-			b:    values.NewRecord(rt, []values.Value{values.NewInteger(1), values.NewInteger(3)}),
+			a:    mustNewRecord(rt, []values.Value{values.NewInteger(1), values.NewInteger(2)}),
+			b:    mustNewRecord(rt, []values.Value{values.NewInteger(1), values.NewInteger(3)}),
 			out:  false,
 		},
 		{
 			name: "different record types",
-			a:    values.NewRecord(rt, []values.Value{values.NewInteger(1), values.NewInteger(2)}),
-			b:    values.NewRecord(rt2, []values.Value{values.NewInteger(1), values.NewInteger(2)}),
+			a:    mustNewRecord(rt, []values.Value{values.NewInteger(1), values.NewInteger(2)}),
+			b:    mustNewRecord(rt2, []values.Value{values.NewInteger(1), values.NewInteger(2)}),
 			out:  false,
 		},
 		{
 			name: "comparison with non-record",
-			a:    values.NewRecord(rt, []values.Value{values.NewInteger(1), values.NewInteger(2)}),
+			a:    mustNewRecord(rt, []values.Value{values.NewInteger(1), values.NewInteger(2)}),
 			b:    values.NewInteger(1),
 			out:  false,
 		},
 		{
 			name: "comparison with nil record",
-			a:    values.NewRecord(rt, []values.Value{values.NewInteger(1), values.NewInteger(2)}),
+			a:    mustNewRecord(rt, []values.Value{values.NewInteger(1), values.NewInteger(2)}),
 			b:    (*values.Record)(nil),
 			out:  false,
 		},
@@ -247,8 +257,8 @@ func TestRecordEqualTo(t *testing.T) {
 		},
 		{
 			name: "empty records same type equal",
-			a:    values.NewRecord(rt, []values.Value{}),
-			b:    values.NewRecord(rt, []values.Value{}),
+			a:    mustNewRecord(rtEmpty, []values.Value{}),
+			b:    mustNewRecord(rtEmpty, []values.Value{}),
 			out:  true,
 		},
 	}
@@ -265,9 +275,106 @@ func TestRecordSchemeString(t *testing.T) {
 	fieldX := values.NewSymbol("x")
 	rt := values.NewRecordType(name, []*values.Symbol{fieldX})
 
-	r := values.NewRecord(rt, []values.Value{values.NewInteger(42)})
+	r := mustNewRecord(rt, []values.Value{values.NewInteger(42)})
 	qt.Assert(t, r.SchemeString(), qt.Equals, "#<record:point>")
 
 	var nilR *values.Record
 	qt.Assert(t, nilR.SchemeString(), qt.Equals, "#<record>")
+}
+
+func TestOpaqueRecordType(t *testing.T) {
+	name := values.NewSymbol("stack")
+	fieldItems := values.NewSymbol("items")
+	rt := values.NewOpaqueRecordType(name, []*values.Symbol{fieldItems})
+
+	qt.Assert(t, rt.IsOpaque(), qt.IsTrue)
+	qt.Assert(t, rt.Name(), qt.Equals, name)
+	qt.Assert(t, rt.FieldCount(), qt.Equals, 1)
+
+	// Non-opaque record type is not opaque
+	normalRT := values.NewRecordType(name, []*values.Symbol{fieldItems})
+	qt.Assert(t, normalRT.IsOpaque(), qt.IsFalse)
+
+	// Nil receiver
+	var nilRT *values.RecordType
+	qt.Assert(t, nilRT.IsOpaque(), qt.IsFalse)
+}
+
+func TestOpaqueRecordSchemeString(t *testing.T) {
+	name := values.NewSymbol("stack")
+	fieldItems := values.NewSymbol("items")
+	rt := values.NewOpaqueRecordType(name, []*values.Symbol{fieldItems})
+
+	// Opaque type descriptor hides record-type nature
+	qt.Assert(t, rt.SchemeString(), qt.Equals, "#<type:stack>")
+
+	// Opaque instance hides record nature
+	r := mustNewRecord(rt, []values.Value{values.EmptyList})
+	qt.Assert(t, r.SchemeString(), qt.Equals, "#<stack>")
+}
+
+func TestOpaqueRecordFieldAccess(t *testing.T) {
+	name := values.NewSymbol("stack")
+	fieldItems := values.NewSymbol("items")
+	rt := values.NewOpaqueRecordType(name, []*values.Symbol{fieldItems})
+
+	r := mustNewRecord(rt, []values.Value{values.NewInteger(42)})
+
+	// Field access still works — opacity doesn't block Go-level access
+	qt.Assert(t, r.Field(0), valuestest.SchemeEquals, values.NewInteger(42))
+	qt.Assert(t, r.FieldByName(fieldItems), valuestest.SchemeEquals, values.NewInteger(42))
+}
+
+func TestNewRecordFieldCountValidation(t *testing.T) {
+	rt := values.NewRecordType(values.NewSymbol("point"), []*values.Symbol{
+		values.NewSymbol("x"),
+		values.NewSymbol("y"),
+	})
+
+	// Correct count succeeds
+	r, err := values.NewRecord(rt, []values.Value{values.NewInteger(1), values.NewInteger(2)})
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, r, qt.Not(qt.IsNil))
+
+	// Wrong count errors
+	_, err = values.NewRecord(rt, []values.Value{values.NewInteger(1)})
+	qt.Assert(t, err, qt.Not(qt.IsNil))
+
+	_, err = values.NewRecord(rt, []values.Value{values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)})
+	qt.Assert(t, err, qt.Not(qt.IsNil))
+
+	// Nil record type errors
+	_, err = values.NewRecord(nil, []values.Value{})
+	qt.Assert(t, err, qt.Not(qt.IsNil))
+}
+
+func TestNewOpaqueRecordTypeNilNamePanics(t *testing.T) {
+	qt.Assert(t, func() {
+		values.NewOpaqueRecordType(nil, []*values.Symbol{})
+	}, qt.PanicMatches, `.*name must not be nil.*`)
+}
+
+func TestDerivedRecordTypeInheritsOpaque(t *testing.T) {
+	parent := values.NewOpaqueRecordType(
+		values.NewSymbol("base"),
+		[]*values.Symbol{values.NewSymbol("x")},
+	)
+	child := values.NewDerivedRecordType(
+		values.NewSymbol("derived"),
+		parent,
+		[]*values.Symbol{values.NewSymbol("y")},
+	)
+	qt.Assert(t, child.IsOpaque(), qt.IsTrue)
+
+	// Non-opaque parent produces non-opaque child
+	normalParent := values.NewRecordType(
+		values.NewSymbol("normal"),
+		[]*values.Symbol{values.NewSymbol("a")},
+	)
+	normalChild := values.NewDerivedRecordType(
+		values.NewSymbol("normal-derived"),
+		normalParent,
+		[]*values.Symbol{values.NewSymbol("b")},
+	)
+	qt.Assert(t, normalChild.IsOpaque(), qt.IsFalse)
 }

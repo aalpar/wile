@@ -20,8 +20,7 @@ import (
 )
 
 var (
-	_ Value  = (*OpaqueValue)(nil)
-	_ Opaque = (*OpaqueValue)(nil)
+	_ Value = (*OpaqueValue)(nil)
 
 	opaqueValueIDCounter atomic.Uint64
 )

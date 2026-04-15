@@ -100,8 +100,7 @@ func TestOpaqueValue_UniqueIDs(t *testing.T) {
 		qt.Commentf("expected different IDs: %s vs %s", a.SchemeString(), b.SchemeString()))
 }
 
-func TestOpaqueValue_ImplementsOpaque(t *testing.T) {
-	v := values.NewOpaqueValue("tag", nil)
-	var o values.Opaque = v
-	qt.Assert(t, o.OpaqueTag(), qt.Equals, "tag")
+func TestOpaqueValue_OpaqueTag_NilReceiver(t *testing.T) {
+	var v *values.OpaqueValue
+	qt.Assert(t, v.OpaqueTag(), qt.Equals, "")
 }

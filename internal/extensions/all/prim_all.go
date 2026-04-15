@@ -51,6 +51,27 @@ func PrimMakeRecordType(mc machine.CallContext) error {
 	return nil
 }
 
+// PrimMakeOpaqueRecordType implements the (make-opaque-record-type name field-names) primitive.
+// Creates an opaque record type descriptor that is hidden from generic inspection.
+func PrimMakeOpaqueRecordType(mc machine.CallContext) error {
+	nameArg := mc.Arg(0)
+	fieldNamesArg := mc.Arg(1)
+
+	name, err := helpers.RequireType[*values.Symbol](nameArg, werr.ErrNotASymbol, "make-opaque-record-type")
+	if err != nil {
+		return err
+	}
+
+	fieldNames, err := listToSymbols(mc.Context(), fieldNamesArg)
+	if err != nil {
+		return werr.WrapForeignErrorf(err, "make-opaque-record-type: field-names")
+	}
+
+	rt := values.NewOpaqueRecordType(name, fieldNames)
+	mc.SetValue(rt)
+	return nil
+}
+
 // PrimIsRecordType implements the (record-type? obj) primitive.
 var PrimIsRecordType = helpers.MakeTypePredicate(func(o values.Value) bool {
 	_, ok := o.(*values.RecordType)
@@ -58,17 +79,22 @@ var PrimIsRecordType = helpers.MakeTypePredicate(func(o values.Value) bool {
 })
 
 // PrimIsRecord implements the (record? obj) primitive.
+// Returns #f for instances of opaque record types.
 var PrimIsRecord = helpers.MakeTypePredicate(func(o values.Value) bool {
-	_, ok := o.(*values.Record)
-	return ok
+	rec, ok := o.(*values.Record)
+	return ok && !rec.RecordType().IsOpaque()
 })
 
 // PrimRecordType implements the (record-type record) primitive.
 // Returns the record type of a record instance.
+// Errors if the record's type is opaque.
 func PrimRecordType(mc machine.CallContext) error {
 	rec, err := helpers.RequireArg[*values.Record](mc, 0, werr.ErrNotARecord, "record-type")
 	if err != nil {
 		return err
+	}
+	if rec.RecordType().IsOpaque() {
+		return werr.WrapForeignErrorf(werr.ErrOpaqueRecord, "record-type: cannot inspect opaque record")
 	}
 	mc.SetValue(rec.RecordType())
 	return nil
@@ -187,7 +213,10 @@ func newRecordConstructorClosure(env *environment.EnvironmentFrame, rt *values.R
 			val := innerMC.EnvironmentFrame().GetLocalBindingByIndex(i).Value()
 			fields[fieldIdx] = val
 		}
-		rec := values.NewRecord(rt, fields)
+		rec, err := values.NewRecord(rt, fields)
+		if err != nil {
+			return err
+		}
 		innerMC.SetValue(rec)
 		return nil
 	}
