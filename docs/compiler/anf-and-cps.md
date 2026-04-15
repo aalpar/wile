@@ -1,6 +1,6 @@
 # CPS and ANF as Intermediate Forms — Would They Help Wile?
 
-The previous document ([SSA for Scheme Compilers](ssa-for-scheme-compilers.md)) argued that SSA doesn't fit Wile's architecture. But SSA comes from the world of C and Fortran compilers. Scheme has its *own* intermediate representations, developed specifically for languages with first-class continuations and closures:
+The previous document ([SSA for Scheme Compilers](ssa.md)) argued that SSA doesn't fit Wile's architecture. But SSA comes from the world of C and Fortran compilers. Scheme has its *own* intermediate representations, developed specifically for languages with first-class continuations and closures:
 
 - **CPS** (Continuation-Passing Style) — Steele 1978, Appel 1992
 - **ANF** (A-Normal Form) — Flanagan et al. 1993

@@ -1,0 +1,30 @@
+# Wile Documentation
+
+Documentation is organized by topic. Each directory collects design documents,
+implementation notes, and educational articles for a single subsystem.
+
+| Topic | Description |
+|-------|-------------|
+| [algebra/](algebra/) | Algebraic structures library -- composable records, equational rewriting, symbolic normalization |
+| [compiler/](compiler/) | Compiler internals -- macro system, peephole optimizer, IR design (SSA, ANF/CPS, core-let, inlining) |
+| [continuations/](continuations/) | Continuation system -- concepts, marks, VM implementation, delimited continuations, prompt/abort |
+| [dev/](dev/) | Developer guides -- debug methodology, object pooling, foreign closures, project board |
+| [embedding/](embedding/) | Embedding Wile in Go -- public API design, source loading (FileResolver), MCP server |
+| [environment/](environment/) | Environment and namespace system -- binding scopes, phase hierarchy, environment diagram |
+| [extensions/](extensions/) | Extension system -- architecture, authoring, R7RS library integration |
+| [numeric/](numeric/) | Numeric tower -- architecture, precision guarantees, NaN-boxing |
+| [reference/](reference/) | Language reference -- Scheme language spec, R7RS differences, implementation notes |
+| [security/](security/) | Sandboxing -- capability-based security, extension-level and fine-grained authorization |
+| [types/](types/) | Type system -- records, abstract data types, existential types, Racket structs |
+
+## Conventions
+
+See [CLAUDE.md](CLAUDE.md) for documentation notation, R7RS citation format, and
+influence citation guidelines.
+
+## See Also
+
+- [`PRIMITIVES.md`](../PRIMITIVES.md) -- Complete reference of types and primitives
+- [`BIBLIOGRAPHY.md`](../BIBLIOGRAPHY.md) -- Academic papers, specifications, canonical references
+- [`CODING_STYLE.md`](../CODING_STYLE.md) -- Go code style guide
+- [`TOC.md`](TOC.md) -- Flat listing of every document

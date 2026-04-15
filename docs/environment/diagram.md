@@ -2,7 +2,7 @@
 
 Visual map of all environment types, their relationships, and how they flow through the compilation/expansion/execution pipeline.
 
-See [ENVIRONMENT_SYSTEM.md](ENVIRONMENT_SYSTEM.md) for detailed API documentation.
+See [system.md](system.md) for detailed API documentation.
 
 ---
 

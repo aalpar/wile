@@ -471,7 +471,7 @@ Argues that lexical scoping + first-class procedures = a capability-safe languag
 
 - **Paper**: Jonathan Rees, "A Security Kernel Based on the Lambda Calculus", AI Memo 1564, MIT, 1996
 - **URL**: https://dspace.mit.edu/handle/1721.1/5944
-- **Location**: `docs/SANDBOXING.md` (extension-level sandboxing), `engine.go` (registry construction)
+- **Location**: `docs/security/sandboxing.md` (extension-level sandboxing), `engine.go` (registry construction)
 
 ### Saltzer & Schroeder, "The Protection of Information in Computer Systems" (1975)
 

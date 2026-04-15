@@ -1,6 +1,6 @@
 # Continuations in Wile
 
-> **Prerequisite**: [Continuations (general concept)](../learn/continuations.md). This document assumes you understand what a continuation is and how `call/cc` works at the Scheme level. Here we explain how Wile makes it happen inside a bytecode VM written in Go.
+> **Prerequisite**: [Continuations (general concept)](concepts.md). This document assumes you understand what a continuation is and how `call/cc` works at the Scheme level. Here we explain how Wile makes it happen inside a bytecode VM written in Go.
 
 Picture this: Wile's VM is a `for` loop in Go, stepping through bytecode instructions one at a time. It has a program counter, a value register, an eval stack, and — most importantly — a continuation chain. When you call a function, the VM saves its current state as a link in this chain. When the function returns, it pops the link and resumes.
 

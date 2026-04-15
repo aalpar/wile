@@ -126,9 +126,9 @@ This is the standard progression. You can't do ANF without `let` — ANF *is* `l
 The plan is moving Wile from the "pedagogical interpreter" design (where `let` is a macro) to the "production compiler" design (where `let` is core). Every Scheme implementation that grew beyond educational use made this move at some point. It's not an optimization — it's infrastructure.
 
 > For how ANF and CPS use `let` as their fundamental building block, see
-> [CPS and ANF as Intermediate Forms](anf-and-cps-for-scheme-compilers.md).
+> [CPS and ANF as Intermediate Forms](anf-and-cps.md).
 > For why SSA (the non-Scheme equivalent) doesn't fit Wile's architecture, see
-> [Would SSA Help the Wile Compiler?](ssa-for-scheme-compilers.md).
+> [Would SSA Help the Wile Compiler?](ssa.md).
 
 ## Further Reading
 

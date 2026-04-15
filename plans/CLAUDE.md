@@ -217,21 +217,21 @@ Go AST/static analysis plans moved to [wile-goast](https://github.com/aalpar/wil
 
 | File | Purpose |
 |------|---------|
-| `docs/design/DESIGN.md` | Macro system design (three-layer architecture) |
-| `docs/design/EMBEDDING.md` | Embedding API design (Engine, Value boundary, interop) |
-| `docs/design/CONTINUATION_ESCAPE_DESIGN.md` | First-class continuation escape mechanism |
-| `docs/design/DELIMITED_CONTINUATIONS.md` | Delimited continuations: prompts, abort, composable |
-| `docs/design/SOURCE_LOADING.md` | FileResolver chain, embedded stdlib, library import resolution |
-| `docs/design/PEEPHOLE_OPTIMIZER.md` | Superinstruction formation, 3-pass pipeline, EditPlan, promoted opcodes, savedCont invariant |
-| `docs/dev/ENVIRONMENT_SYSTEM.md` | Environment system architecture |
-| `docs/dev/NUMERIC_TOWER.md` | Numeric tower (direct dispatch, lattice model) |
-| `docs/dev/R7RS_SEMANTIC_DIFFERENCES.md` | Documented R7RS specification deviations |
-| `docs/EXTENSIONS.md` | Extension system: architecture, authoring, registry, phases, FFI |
-| `docs/EXTENSION_LIBRARIES.md` | R7RS library integration for extensions |
+| `docs/compiler/macro-system.md` | Macro system design (three-layer architecture) |
+| `docs/embedding/api-design.md` | Embedding API design (Engine, Value boundary, interop) |
+| `docs/continuations/escape-design.md` | First-class continuation escape mechanism |
+| `docs/continuations/delimited.md` | Delimited continuations: prompts, abort, composable |
+| `docs/embedding/source-loading.md` | FileResolver chain, embedded stdlib, library import resolution |
+| `docs/compiler/peephole-optimizer.md` | Superinstruction formation, 3-pass pipeline, EditPlan, promoted opcodes, savedCont invariant |
+| `docs/environment/system.md` | Environment system architecture |
+| `docs/numeric/tower.md` | Numeric tower (direct dispatch, lattice model) |
+| `docs/reference/r7rs-differences.md` | Documented R7RS specification deviations |
+| `docs/extensions/architecture.md` | Extension system: architecture, authoring, registry, phases, FFI |
+| `docs/extensions/libraries.md` | R7RS library integration for extensions |
 
 ## Developer Documentation (outside plans/)
 
 | File | Purpose |
 |------|---------|
-| `docs/dev/CONTINUATION_WORKLOAD_OPTIMIZATIONS.md` | Performance optimization guide |
-| `docs/dev/DEBUG_METHODOLOGY.md` | Systematic debug logging methodology and Go gotchas |
+| `docs/continuations/optimizations.md` | Performance optimization guide |
+| `docs/dev/debug-methodology.md` | Systematic debug logging methodology and Go gotchas |

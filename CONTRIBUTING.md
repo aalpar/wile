@@ -228,7 +228,7 @@ string → Tokenizer → Parser → SyntaxValue
 - **`CODING_STYLE.md`** — Style guide
 - **`PRIMITIVES.md`** — Complete primitives reference
 - **`plans/`** — Design documents for major features
-- **`docs/dev/`** — Architecture documentation (environment system, numeric tower, etc.)
+- **`docs/`** — Architecture documentation organized by topic (see `docs/INDEX.md`)
 
 ## Contribution Guidelines
 

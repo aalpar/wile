@@ -94,4 +94,4 @@ without `RunWithEscapeHandling` (e.g., threads that call `Run()` directly).
 | `RestoreWithWindingFrom` | `machine/machine_context.go` |
 
 For operational details (error propagation paths, RunWithEscapeHandling
-pseudocode, end-to-end examples), see `docs/dev/PROMPT_ABORT_SYSTEM.md`.
+pseudocode, end-to-end examples), see [`prompt-abort.md`](prompt-abort.md).

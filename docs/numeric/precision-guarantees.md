@@ -10,7 +10,7 @@ Scheme's numeric tower is biased toward algebra — symbolic manipulation and ex
 
 This document's tier model reflects that boundary. Tier 1 (exact) and Tier 2 (inherently inexact) are the algebraic core. Tiers 3 and 4 are where machine-type limitations create precision gaps — gaps that are acknowledged, scoped, and (in the future) controllable via precision mode settings or machine-type constraint flags.
 
-See `docs/dev/NUMERIC_TOWER.md` § "Design Philosophy" for the full architectural rationale.
+See [`tower.md`](tower.md) § "Design Philosophy" for the full architectural rationale.
 
 ## R7RS Foundation
 
@@ -79,7 +79,7 @@ Precision loss at system boundaries (FFI, I/O, Go interop) is unavoidable when t
 | `BigFloat(Inf) op BigFloat` | `BigFloat` | IEEE 754 rules apply |
 | `BigComplex(Inf real) op BigComplex` | `BigComplex` | IEEE 754 rules apply to each component |
 
-**No blanket precision loss is acceptable at this tier.** The type system can represent all results without domain switching. See `docs/dev/NUMERIC_TOWER.md` § "IEEE 754 Semantic Uniformity".
+**No blanket precision loss is acceptable at this tier.** The type system can represent all results without domain switching. See [`tower.md`](tower.md) § "IEEE 754 Semantic Uniformity".
 
 **Go `math/big.Float` limitations:** Go's `big.Float` supports Inf (`SetInf`) but not NaN. Wile's `values.BigFloat` extends beyond `big.Float` with internal state to track NaN. See #362 plan for implementation details.
 
