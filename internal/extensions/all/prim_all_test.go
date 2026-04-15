@@ -759,17 +759,22 @@ func TestMakeOpaqueRecordType(t *testing.T) {
 			c.Assert(result.Internal(), valuestest.SchemeEquals, tc.want)
 		})
 	}
-}
 
-func TestOpaqueRecordTypeError(t *testing.T) {
-	engine := newEngine(t)
-
-	// record-type should error on opaque records
-	evalExpectError(t, engine, `
-		(let* ((rt (make-opaque-record-type 'stack '(items)))
-		       (ctor (record-constructor rt '(items)))
-		       (s (ctor '(1 2 3))))
-		  (record-type s))`)
+	errs := []struct {
+		name string
+		code string
+	}{
+		{"record-type errors on opaque record", `
+			(let* ((rt (make-opaque-record-type 'stack '(items)))
+			       (ctor (record-constructor rt '(items)))
+			       (s (ctor '(1 2 3))))
+			  (record-type s))`},
+	}
+	for _, tc := range errs {
+		t.Run(tc.name, func(t *testing.T) {
+			evalExpectError(t, engine, tc.code)
+		})
+	}
 }
 
 func TestDefineOpaqueRecordType(t *testing.T) {

@@ -213,7 +213,10 @@ func newRecordConstructorClosure(env *environment.EnvironmentFrame, rt *values.R
 			val := innerMC.EnvironmentFrame().GetLocalBindingByIndex(i).Value()
 			fields[fieldIdx] = val
 		}
-		rec := values.NewRecord(rt, fields)
+		rec, err := values.NewRecord(rt, fields)
+		if err != nil {
+			return err
+		}
 		innerMC.SetValue(rec)
 		return nil
 	}

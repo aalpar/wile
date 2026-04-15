@@ -14,7 +14,11 @@
 
 package values
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/aalpar/wile/werr"
+)
 
 var _ Value = (*Record)(nil)
 
@@ -26,12 +30,19 @@ type Record struct {
 }
 
 // NewRecord creates a new Record with the given type and field values.
-// The fields slice should have the same length as the record type's field count.
-func NewRecord(rt *RecordType, fields []Value) *Record {
+// Returns an error if len(fields) does not match rt.FieldCount().
+func NewRecord(rt *RecordType, fields []Value) (*Record, error) {
+	if len(fields) != rt.FieldCount() {
+		return nil, werr.WrapForeignErrorf(
+			werr.ErrInvalidArgument,
+			"NewRecord: got %d fields, record type %s requires %d",
+			len(fields), rt.Name().SchemeString(), rt.FieldCount(),
+		)
+	}
 	return &Record{
 		recordType: rt,
 		fields:     fields,
-	}
+	}, nil
 }
 
 // RecordType returns the record's type descriptor.
