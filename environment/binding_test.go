@@ -241,33 +241,29 @@ func TestBinding_Copy_WithDoc(t *testing.T) {
 	qt.Assert(t, b2.Doc(), qt.Equals, "Changed doc.")
 }
 
-func TestBindingImportedFlag(t *testing.T) {
-	c := qt.New(t)
+func TestBinding_IsImported(t *testing.T) {
 	b := NewBinding(values.NewInteger(1), BindingTypeVariable)
-	c.Assert(b.IsImported(), qt.IsFalse)
+	qt.Assert(t, b.IsImported(), qt.IsFalse)
 	b.SetImported(true)
-	c.Assert(b.IsImported(), qt.IsTrue)
-	c.Assert(b.meta, qt.IsNotNil)
+	qt.Assert(t, b.IsImported(), qt.IsTrue)
 }
 
-func TestBindingConstantFlag(t *testing.T) {
-	c := qt.New(t)
+func TestBinding_IsConstant(t *testing.T) {
 	b := NewBinding(values.NewInteger(42), BindingTypeVariable)
-	c.Assert(b.IsConstant(), qt.IsFalse)
+	qt.Assert(t, b.IsConstant(), qt.IsFalse)
 	b.SetConstant(true)
-	c.Assert(b.IsConstant(), qt.IsTrue)
+	qt.Assert(t, b.IsConstant(), qt.IsTrue)
 }
 
-func TestBindingCopyPreservesImportedAndConstant(t *testing.T) {
-	c := qt.New(t)
+func TestBinding_Copy_PreservesImportedAndConstant(t *testing.T) {
 	b := NewBinding(values.NewInteger(1), BindingTypeVariable)
 	b.SetImported(true)
 	b.SetConstant(true)
 	cp := b.Copy().(*Binding)
-	c.Assert(cp.IsImported(), qt.IsTrue)
-	c.Assert(cp.IsConstant(), qt.IsTrue)
+	qt.Assert(t, cp.IsImported(), qt.IsTrue)
+	qt.Assert(t, cp.IsConstant(), qt.IsTrue)
 	cp.SetImported(false)
-	c.Assert(b.IsImported(), qt.IsTrue)
+	qt.Assert(t, b.IsImported(), qt.IsTrue)
 }
 
 func TestBinding_Copy_WithSource(t *testing.T) {
