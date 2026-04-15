@@ -77,13 +77,16 @@ func addPrimitives(r *registry.Registry) error {
 		{Name: "floor-quotient", ParamCount: 2, Impl: PrimFloorQuotient,
 			Doc: "Returns the quotient of N1/N2 rounded toward -infinity.", ParamNames: []string{"n1", "n2"}, Category: "math"},
 		{Name: "floor-remainder", ParamCount: 2, Impl: PrimFloorRemainder,
-			Doc: "Returns the remainder after floor division. The sign matches N2.", ParamNames: []string{"n1", "n2"}, Category: "math"},
+			Doc: "Returns the remainder after floor division. The sign matches N2.", ParamNames: []string{"n1", "n2"}, Category: "math",
+			Keywords: []string{"modulo", "mod"}},
 		{Name: "truncate/", ParamCount: 2, Impl: PrimTruncateDiv,
 			Doc: "Returns two values: the truncate quotient and truncate remainder of N1 divided by N2.", ParamNames: []string{"n1", "n2"}, Category: "math"},
 		{Name: "truncate-quotient", ParamCount: 2, Impl: PrimTruncateQuotient,
-			Doc: "Returns the quotient of N1/N2 rounded toward zero.", ParamNames: []string{"n1", "n2"}, Category: "math"},
+			Doc: "Returns the quotient of N1/N2 rounded toward zero.", ParamNames: []string{"n1", "n2"}, Category: "math",
+			Keywords: []string{"quotient"}},
 		{Name: "truncate-remainder", ParamCount: 2, Impl: PrimTruncateRemainder,
-			Doc: "Returns the remainder after truncate division. The sign matches N1.", ParamNames: []string{"n1", "n2"}, Category: "math"},
+			Doc: "Returns the remainder after truncate division. The sign matches N1.", ParamNames: []string{"n1", "n2"}, Category: "math",
+			Keywords: []string{"remainder"}},
 	}, registry.PhaseRuntime)
 
 	// Numeric predicates
