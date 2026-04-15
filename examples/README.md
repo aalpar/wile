@@ -119,7 +119,7 @@ Algebraic structures, equational rewriting, and symbolic normalization.
 | [boolean-simplifier.scm](algebra/boolean-simplifier.scm) | End-to-end Boolean expression simplification with traced output |
 | [equivalence-discovery.scm](algebra/equivalence-discovery.scm) | Exploring normal forms across different axiom sets |
 
-**Key Feature**: Algebraic structures are composable records with automatic validation, equational rewriting, and traced symbolic normalization. Build a structure, project it to a theory, and simplify expressions with step-by-step explanations. See [docs/ALGEBRA.md](../docs/ALGEBRA.md) for the full guide.
+**Key Feature**: Algebraic structures are composable records with automatic validation, equational rewriting, and traced symbolic normalization. Build a structure, project it to a theory, and simplify expressions with step-by-step explanations. See [docs/algebra/overview.md](../docs/algebra/overview.md) for the full guide.
 
 ### Applications
 
@@ -271,7 +271,7 @@ Tail-recursive functions run in constant space. Compare tail vs non-tail in [bas
 
 - **Language Reference**: See R7RS specification at https://small.r7rs.org/
 - **Primitives**: See `PRIMITIVES.md` in the repository root
-- **Implementation**: See `docs/dev/` for architecture and design documents
+- **Implementation**: See `docs/` for architecture and design documents (organized by topic)
 
 ## Contributing Examples
 

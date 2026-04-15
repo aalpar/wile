@@ -179,7 +179,7 @@ Wile provides two independent sandboxing layers.
 
 **Layer 2: Fine-grained authorization (runtime).** The `security.Authorizer` interface gates privileged operations at runtime using a K8s-style resource+action vocabulary (`file`, `code`, `env`, `process` x `read`, `write`, `delete`, `stat`, `load`, `exit`). Set via `WithAuthorizer(auth)`. Gate sites include file I/O, system calls, `eval`/`load`, `include`, and library loading. Without an authorizer, all operations are allowed (open by default). Built-in authorizers: `DenyAll()`, `ReadOnly()`, `FilesystemRoot(path)`, `All(authorizers...)`.
 
-The two layers complement each other: layer 1 removes entire categories of capability at zero runtime cost; layer 2 fine-tunes what remains. See [`docs/SANDBOXING.md`](../SANDBOXING.md) for the full security model.
+The two layers complement each other: layer 1 removes entire categories of capability at zero runtime cost; layer 2 fine-tunes what remains. See [`security/sandboxing.md`](../security/sandboxing.md) for the full security model.
 
 ## Virtual Filesystem
 

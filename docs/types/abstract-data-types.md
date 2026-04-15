@@ -265,7 +265,7 @@ abstraction your design requires.
 See also:
 - [Records as Formal Types](records-as-formal-types.md) — introduction/elimination
   rules for records
-- [Scheme Types, Records, and the MOP Question](scheme-types-records-and-mop.md) —
+- [Scheme Types, Records, and the MOP Question](scheme-types-records-mop.md) —
   practical landscape of record systems
 
 Sources:

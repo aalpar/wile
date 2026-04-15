@@ -56,7 +56,7 @@ Creates a GitHub Project board via CLI. Prints manual steps for web UI configura
 ./scripts/create-project-board.sh
 ```
 
-**Recommendation:** Use the web UI instead. Follow `docs/PROJECT_BOARD_SETUP.md` for detailed instructions (updated for 2026 GitHub Projects v2 UI).
+**Recommendation:** Use the web UI instead. Follow `docs/dev/project-board-setup.md` for detailed instructions (updated for 2026 GitHub Projects v2 UI).
 
 ---
 
@@ -76,7 +76,7 @@ Creates a GitHub Project board via CLI. Prints manual steps for web UI configura
    ```
 
 3. **Set up project board:**
-   - Follow `docs/PROJECT_BOARD_SETUP.md` (web UI recommended)
+   - Follow `docs/dev/project-board-setup.md` (web UI recommended)
    - Or run `./scripts/create-project-board.sh` and complete manual steps
 
 ### Ongoing Maintenance
@@ -105,8 +105,8 @@ scripts/
 ├── create-plan-issues.sh          # plans/*.md → GitHub issues
 └── create-project-board.sh        # Project board creation (CLI)
 
-docs/
-└── PROJECT_BOARD_SETUP.md         # Project board setup (web UI, recommended)
+docs/dev/
+└── project-board-setup.md         # Project board setup (web UI, recommended)
 
 private/
 ├── SETUP_SUMMARY.md               # Full deployment guide

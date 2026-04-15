@@ -367,7 +367,7 @@ With the library system enabled (`WithLibraryPaths`), Go extensions import as `(
 | `(wile system)` | System interaction (environment, process) |
 | `(wile gointerop)` | Go concurrency primitives (channels, wait groups, atomics) |
 | `(wile introspection)` | Reflection and introspection |
-See [`docs/EXTENSION_LIBRARIES.md`](docs/EXTENSION_LIBRARIES.md) for import syntax and modifiers.
+See [`docs/extensions/libraries.md`](docs/extensions/libraries.md) for import syntax and modifiers.
 
 Go static analysis extensions (AST, SSA, CFG, callgraph, lint) have been extracted to [wile-goast](https://github.com/aalpar/wile-goast).
 
@@ -514,23 +514,23 @@ engine, err := wile.NewEngine(ctx,
 
 Built-in authorizers: `DenyAll()`, `ReadOnly()`, `FilesystemRoot(path)`, `All(authorizers...)` (AND-composition).
 
-See [`docs/SANDBOXING.md`](docs/SANDBOXING.md) for the full security model, extension classification, known gaps, and custom authorizer examples.
+See [`docs/security/sandboxing.md`](docs/security/sandboxing.md) for the full security model, extension classification, known gaps, and custom authorizer examples.
 
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
-| [`docs/SCHEME_REFERENCE.md`](docs/SCHEME_REFERENCE.md) | Complete Scheme language reference |
-| [`docs/SANDBOXING.md`](docs/SANDBOXING.md) | Sandboxing and security model |
-| [`docs/EXTENSIONS.md`](docs/EXTENSIONS.md) | Extension system architecture and authoring guide |
-| [`docs/EXTENSION_LIBRARIES.md`](docs/EXTENSION_LIBRARIES.md) | R7RS library integration for extensions |
+| [`docs/reference/scheme.md`](docs/reference/scheme.md) | Complete Scheme language reference |
+| [`docs/security/sandboxing.md`](docs/security/sandboxing.md) | Sandboxing and security model |
+| [`docs/extensions/architecture.md`](docs/extensions/architecture.md) | Extension system architecture and authoring guide |
+| [`docs/extensions/libraries.md`](docs/extensions/libraries.md) | R7RS library integration for extensions |
 | [`PRIMITIVES.md`](PRIMITIVES.md) | Complete reference of types and primitives |
-| [`docs/design/DESIGN.md`](docs/design/DESIGN.md) | Macro system design |
-| [`docs/design/EMBEDDING.md`](docs/design/EMBEDDING.md) | Embedding API design |
-| [`docs/design/DELIMITED_CONTINUATIONS.md`](docs/design/DELIMITED_CONTINUATIONS.md) | Delimited continuation implementation |
-| [`docs/dev/NUMERIC_TOWER.md`](docs/dev/NUMERIC_TOWER.md) | Numeric tower architecture |
-| [`docs/dev/ENVIRONMENT_SYSTEM.md`](docs/dev/ENVIRONMENT_SYSTEM.md) | Environment system architecture |
-| [`docs/dev/R7RS_SEMANTIC_DIFFERENCES.md`](docs/dev/R7RS_SEMANTIC_DIFFERENCES.md) | Documented differences from R7RS |
+| [`docs/compiler/macro-system.md`](docs/compiler/macro-system.md) | Macro system design |
+| [`docs/embedding/api-design.md`](docs/embedding/api-design.md) | Embedding API design |
+| [`docs/continuations/delimited.md`](docs/continuations/delimited.md) | Delimited continuation implementation |
+| [`docs/numeric/tower.md`](docs/numeric/tower.md) | Numeric tower architecture |
+| [`docs/environment/system.md`](docs/environment/system.md) | Environment system architecture |
+| [`docs/reference/r7rs-differences.md`](docs/reference/r7rs-differences.md) | Documented differences from R7RS |
 | [`BIBLIOGRAPHY.md`](BIBLIOGRAPHY.md) | Academic references |
 | [`CHANGELOG.md`](CHANGELOG.md) | Release history |
 

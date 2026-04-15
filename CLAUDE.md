@@ -177,12 +177,12 @@ See `cmd/CLAUDE.md` for full build commands, dist/ structure, and REPL usage.
 - `CODING_STYLE.md` — Comprehensive style guide
 - `PRIMITIVES.md` — Complete primitives reference
 - `BIBLIOGRAPHY.md` — Academic papers, specifications, canonical references
-- `docs/dev/R7RS_SEMANTIC_DIFFERENCES.md` — Documented R7RS specification deviations
-- `docs/dev/ENVIRONMENT_SYSTEM.md` — Environment system architecture
-- `docs/dev/NUMERIC_TOWER.md` — Numeric tower architecture
-- `docs/dev/DEBUG_METHODOLOGY.md` — Systematic debug logging methodology and Go gotchas
-- `docs/EXTENSIONS.md` — Extension system architecture and authoring guide
-- `docs/EXTENSION_LIBRARIES.md` — R7RS library integration for extensions
-- `docs/design/SOURCE_LOADING.md` — FileResolver chain, embedded stdlib, library import resolution
-- `docs/design/PEEPHOLE_OPTIMIZER.md` — Superinstruction formation, 3-pass pipeline, promoted opcodes
+- `docs/reference/r7rs-differences.md` — Documented R7RS specification deviations
+- `docs/environment/system.md` — Environment system architecture
+- `docs/numeric/tower.md` — Numeric tower architecture
+- `docs/dev/debug-methodology.md` — Systematic debug logging methodology and Go gotchas
+- `docs/extensions/architecture.md` — Extension system architecture and authoring guide
+- `docs/extensions/libraries.md` — R7RS library integration for extensions
+- `docs/embedding/source-loading.md` — FileResolver chain, embedded stdlib, library import resolution
+- `docs/compiler/peephole-optimizer.md` — Superinstruction formation, 3-pass pipeline, promoted opcodes
 - `plans/CLAUDE.md` — Active plan files and design documents

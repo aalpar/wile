@@ -195,7 +195,7 @@ provides high-level sandboxing, but the core mechanism is:
 
 1. Create a namespace with only the bindings you want to expose
 2. Set resource limits (via custodians — see
-   [racket-low-level-primitives.md](racket-low-level-primitives.md))
+   [racket-primitives.md](../continuations/racket-primitives.md))
 3. Evaluate untrusted code in that namespace
 
 ```scheme
@@ -248,5 +248,5 @@ what *bindings* are available, it controls what *extensions* are loaded
 The effect is similar — untrusted code can't call `delete-file` — but the mechanism
 is at the Go embedding layer rather than the Scheme namespace layer.
 
-See [racket-low-level-primitives.md](racket-low-level-primitives.md) §3 for the
+See [racket-primitives.md](../continuations/racket-primitives.md) §3 for the
 full primitive reference and Wile feasibility assessment.

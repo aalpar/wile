@@ -4,8 +4,8 @@ This document describes the implementation of the prompt/abort system,
 including error propagation, handler dispatch, dynamic-wind integration,
 and the unification of `call/cc` escapes with delimited continuations.
 
-For design rationale, see `docs/design/DELIMITED_CONTINUATIONS.md` and
-`docs/design/CONTINUATION_ESCAPE_DESIGN.md`.
+For design rationale, see [`delimited.md`](delimited.md) and
+[`escape-design.md`](escape-design.md).
 
 ## Error propagation path
 

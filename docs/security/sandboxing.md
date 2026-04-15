@@ -216,6 +216,6 @@ Isolation invariants are verified in `engine_sandbox_test.go`:
 
 ## Related
 
-- `docs/EXTENSIONS.md` — Extension system architecture, engine options reference
-- `docs/design/EMBEDDING.md` — Public embedding API, sandboxing subsection
+- [`extensions/architecture.md`](../extensions/architecture.md) — Extension system architecture, engine options reference
+- [`embedding/api-design.md`](../embedding/api-design.md) — Public embedding API, sandboxing subsection
 - `plans/SECURITY.md` — Opcode resource limits (match steps, expand steps, continuation copy depth)

@@ -56,42 +56,41 @@ The library organizes into three layers: a lattice-theoretic foundation,
 an algebraic tower, and a rewriting/symbolic layer. Arrows indicate
 forgetful projections (the target forgets some structure).
 
+**Foundation**
+
+```mermaid
+graph BT
+    PO["Partial Order"] -->|"forgets ordering"| Setoid
+    Lat[Lattice] -->|"forgets meet/join"| PO
+    Hey["Heyting Algebra"] -->|"forgets implication"| Lat
+    Bool["Boolean Algebra"] -->|"forgets complement"| Hey
+    Bool -->|"char 2, sym. diff."| Ring
+    Lat -.->|"induces"| CO["Closure Operator<br>(closed sublattice)"]
 ```
-Foundation
-----------
-Setoid
-  |
-Partial Order  <--  Lattice  -->  Closure Operator
-                      |                  |
-                      |           closed-lattice
-                      |
-                   Heyting
-                      |
-                   Boolean  -->  Ring (char 2, via symmetric difference)
 
-Algebra
--------
-Monoid  <--  Group
-  ^            ^
-  |            |
-  |       additive-group
-  |            |
-Semiring  <--  Ring  <--  Field
-  |              |
-  |        Differential Ring
-  |
-  +--  additive-monoid
-  +--  multiplicative-monoid
+**Algebra**
 
-Category  -->  Monoid (endomorphism monoid at a fixed object)
+```mermaid
+graph BT
+    Group -->|"forgets inverse"| Monoid
+    Semi[Semiring] -->|"additive monoid"| Monoid
+    Semi -->|"multiplicative monoid"| Monoid
+    Ring -->|"forgets negation"| Semi
+    Ring -->|"additive group"| Group
+    Field -->|"forgets reciprocal"| Ring
+    DiffRing["Differential Ring"] -->|"forgets derivation"| Ring
+    Cat[Category] -->|"endo. monoid at object"| Monoid
+```
 
-Rewriting
----------
-Axiom objects  +  Term protocol  -->  Normalizer (single-step)
-Named axiom  +  Theory  -->  Recursive normalizer (to fixed point, with trace)
-Structure-to-theory projections:
-  monoid->theory, group->theory, semiring->theory, ring->theory,
-  field->theory, lattice->theory, heyting->theory, boolean->theory
+**Rewriting**
+
+```mermaid
+graph LR
+    Ax["Axiom objects"] --> Norm["Normalizer (single-step)"]
+    TP["Term protocol"] --> Norm
+    NA["Named axiom"] --> Theory
+    Theory --> RNorm["Recursive normalizer<br>(to fixed point, with trace)"]
+    Structs["monoid, group, semiring, ring,<br>field, lattice, heyting, boolean"] -->|"→theory"| Theory
 ```
 
 Each arrow discards exactly one capability. `field->ring` forgets the
@@ -140,39 +139,39 @@ applying until the result is `#f`.
 
 The examples build on each other. Work through them in order.
 
-1. **[`examples/algebra/getting-started.scm`](../examples/algebra/getting-started.scm)** --
+1. **[`examples/algebra/getting-started.scm`](../../examples/algebra/getting-started.scm)** --
    Monoids from scratch. Covers `make-monoid`, `monoid-fold`, `monoid-power`,
    `validate-monoid`, and `with-monoid`. Demonstrates that monoids work on
    strings, not just numbers.
 
-2. **[`examples/algebra/structures.scm`](../examples/algebra/structures.scm)** --
+2. **[`examples/algebra/structures.scm`](../../examples/algebra/structures.scm)** --
    Lattices, rings, fields, Boolean algebras, and forgetful projections.
    Shows the two-step chain `boolean->heyting->lattice` and the cross-tower
    projection `boolean->ring`.
 
-3. **[`examples/algebra/rewriting.scm`](../examples/algebra/rewriting.scm)** --
+3. **[`examples/algebra/rewriting.scm`](../../examples/algebra/rewriting.scm)** --
    Term protocols and all seven axiom types: identity, commutativity,
    absorbing, idempotence, involution, absorption, associativity. Builds
    composed normalizers from multiple axioms.
 
-4. **[`examples/algebra/symbolic.scm`](../examples/algebra/symbolic.scm)** --
+4. **[`examples/algebra/symbolic.scm`](../../examples/algebra/symbolic.scm)** --
    Named axioms, theories, theory combinators (`filter`, `exclude`,
    `prioritize`, `merge`), the recursive normalizer, transformation traces
    via `format-trace`, structure-to-theory projections, and fuel exhaustion.
 
-5. **[`examples/algebra/boolean-simplifier.scm`](../examples/algebra/boolean-simplifier.scm)** --
+5. **[`examples/algebra/boolean-simplifier.scm`](../../examples/algebra/boolean-simplifier.scm)** --
    End-to-end workflow: build a Boolean algebra, derive its theory, simplify
    expressions, and compare what Boolean algebras can simplify versus what
    Heyting algebras cannot (double negation elimination).
 
-6. **[`examples/algebra/equivalence-discovery.scm`](../examples/algebra/equivalence-discovery.scm)** --
+6. **[`examples/algebra/equivalence-discovery.scm`](../../examples/algebra/equivalence-discovery.scm)** --
    `discover-equivalences` explores distinct normal forms across sub-theories.
    Shows how different axiom subsets produce different results, and what
    "equivalence depends on which laws you assume" means concretely.
 
 ## See Also
 
-- `docs/ALGEBRA_REFERENCE.md` -- Complete API reference for all structures,
+- [`reference.md`](reference.md) -- Complete API reference for all structures,
   projections, rewriting, and symbolic operations.
 - `BIBLIOGRAPHY.md` -- Academic references (abstract algebra, lattice
   theory, term rewriting).

@@ -307,7 +307,7 @@ type-theorist's sense of the phrase.
 
 ---
 
-See also: [Scheme Types, Records, and the MOP Question](scheme-types-records-and-mop.md)
+See also: [Scheme Types, Records, and the MOP Question](scheme-types-records-mop.md)
 for the practical landscape of record systems in Scheme.
 
 Sources:

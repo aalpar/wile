@@ -347,7 +347,7 @@ The recommended path:
 4. **Measure** — run Gabriel benchmarks. The binding-heavy programs (fib, ackermann, nqueens) should benefit most.
 5. **Extend** — raise the body size threshold, add cross-module inlining, add constant propagation.
 
-> See [Core `let` in Compiler Design](core-let-in-compiler-design.md) for why core
-> `let` is the standard approach. See [CPS and ANF](anf-and-cps-for-scheme-compilers.md)
+> See [Core `let` in Compiler Design](core-let.md) for why core
+> `let` is the standard approach. See [CPS and ANF](anf-and-cps.md)
 > for how intermediate representations relate to binding structure. See
 > `plans/CORE-LET.md` for the core `let` implementation plan.
