@@ -471,6 +471,15 @@ func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallC
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes for set!", sym.Key)
 	}
 
+	// R7RS 5.2: reject set! on imported bindings.
+	if binding.IsImported() {
+		return werr.WrapForeignErrorf(
+			werr.ErrImmutableBinding,
+			"set!: cannot mutate imported binding %q",
+			sym.Key,
+		)
+	}
+
 	// Check if it's a local binding
 	// M1 fix: Use scope-aware lookup when symbol has scopes (matches CompileSymbol pattern)
 	var li *environment.LocalIndex
