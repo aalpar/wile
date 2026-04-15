@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-04-14
+
+### Added
+
+- Add opaque record types for abstract data type support — record types with hidden constructors/accessors for encapsulation (#650)
+- Add four algebra library modules: formal concept analysis, pareto dominance, interval arithmetic, and semiring graph algorithms
+- Add `sourceload` package for unified fs.FS-based file search with `LoadStack`, `Walk`, and `Finder` (#647)
+- Add `PathTracker` interface to environment package for decoupled path management (#647)
+- Add algebra library documentation, examples, and API reference (#649)
+
+### Fixed
+
+- Guard `NewRecord` against nil record type (#650)
+- Harden opaque record types with validation and doc corrections (#650)
+- Resolve Tier 1 security/correctness items (#648)
+- Resolve Tier 1 error reporting and source location items (#648)
+- Absolutize OS search dirs before passing to sourceload.Finder (#647)
+
+### Refactored
+
+- Extract `machine/compilation/resolver` package — unified library file extension handling and tighter API (#645, #646)
+- Extract `machine/compilation/sourceload` package — migrate Namespace to PathTracker interface, wire resolvers to sourceload.Finder, deduplicate isHidden (#647)
+- Narrow `setupLibrarySystem` and `newFileResolver` parameters (#648)
+
 ## [1.13.21] - 2026-04-12
 
 ### Added
@@ -615,7 +639,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - CI builds all four OS/architecture combinations
 - R7RS conformance test suite running in CI
 
-[Unreleased]: https://github.com/aalpar/wile/compare/v1.13.21...HEAD
+[Unreleased]: https://github.com/aalpar/wile/compare/v1.14.0...HEAD
+[1.14.0]: https://github.com/aalpar/wile/compare/v1.13.21...v1.14.0
 [1.13.21]: https://github.com/aalpar/wile/compare/v1.13.0...v1.13.21
 [1.13.0]: https://github.com/aalpar/wile/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/aalpar/wile/compare/v1.11.0...v1.12.0
