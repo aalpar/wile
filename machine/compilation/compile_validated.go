@@ -266,6 +266,13 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	if binding == nil {
 		return sym
 	}
+	// Top-level define supersedes an imported binding (R7RS §5.3.1).
+	// The define overwrites the value in the same slot; clear the import
+	// flags so that subsequent set! on this binding is permitted.
+	if binding.IsImported() {
+		binding.SetImported(false)
+		binding.SetConstant(false)
+	}
 	binding.SetScopes(symbolScopes)
 	if symbolSource != nil {
 		binding.SetSource(symbolSource)

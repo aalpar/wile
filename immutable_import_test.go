@@ -73,10 +73,22 @@ func TestSetBangOnLocalDefineAllowed(t *testing.T) {
 	c.Assert(result.SchemeString(), qt.Equals, "2")
 }
 
+// TestDefineThenSetBangOnImportAllowed verifies that top-level define
+// supersedes an imported binding, clearing the Imported flag so that
+// a subsequent set! on the same binding succeeds (R7RS §5.3.1).
+func TestDefineThenSetBangOnImportAllowed(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	eng := newEngineWithStdlib(t)
+
+	result, err := eng.EvalMultiple(ctx,
+		`(import (scheme base)) (define cons 99) (set! cons 42) cons`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "42")
+}
+
 // TestSetBangOnShadowedImportAllowed verifies that a lexical binding
 // shadows the imported binding, and set! on the shadow succeeds.
-// Top-level (define cons ...) reuses the existing imported binding, so
-// true shadowing requires a new lexical scope via let.
 func TestSetBangOnShadowedImportAllowed(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
