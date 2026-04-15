@@ -69,7 +69,7 @@ Accessors follow the existing `SetDoc`/`Doc` pattern, lazily allocating `Binding
 One new sentinel in `werr/werr.go`:
 
 ```go
-var ErrImmutableBinding = NewStaticError("immutable binding")
+var ErrImmutableBinding = NewStaticError("cannot mutate immutable binding")
 ```
 
 Named `ErrImmutableBinding` rather than `ErrImportedBinding` so the same sentinel
