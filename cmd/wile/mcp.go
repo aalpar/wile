@@ -260,7 +260,8 @@ func (p *mcpServer) initLocked(ctx context.Context) error {
 		if compErr != nil {
 			return werr.WrapForeignErrorf(werr.ErrEngineInit, "preimport %s: %v", lib, compErr)
 		}
-		if _, runErr := eng.Run(ctx, compiled); runErr != nil {
+		_, runErr := eng.Run(ctx, compiled)
+		if runErr != nil {
 			return werr.WrapForeignErrorf(werr.ErrEngineInit, "preimport %s: %v", lib, runErr)
 		}
 	}
