@@ -266,6 +266,13 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	if binding == nil {
 		return sym
 	}
+	// Top-level define supersedes an imported binding (R7RS §5.3.1).
+	// The define overwrites the value in the same slot; clear the import
+	// flags so that subsequent set! on this binding is permitted.
+	if binding.IsImported() {
+		binding.SetImported(false)
+		binding.SetConstant(false)
+	}
 	binding.SetScopes(symbolScopes)
 	if symbolSource != nil {
 		binding.SetSource(symbolSource)
@@ -469,6 +476,15 @@ func (p *CompileTimeContinuation) CompileValidatedSetBang(ctctx CompileTimeCallC
 	binding := p.env.GetBinding(sym, symbolScopes)
 	if binding == nil {
 		return werr.WrapForeignErrorf(werr.ErrNoSuchBinding, "no such binding %q with compatible scopes for set!", sym.Key)
+	}
+
+	// R7RS 5.2: reject set! on imported bindings.
+	if binding.IsImported() {
+		return werr.WrapForeignErrorf(
+			werr.ErrImmutableBinding,
+			"set!: cannot mutate imported binding %q",
+			sym.Key,
+		)
 	}
 
 	// Check if it's a local binding

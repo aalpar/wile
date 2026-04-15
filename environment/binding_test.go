@@ -241,6 +241,31 @@ func TestBinding_Copy_WithDoc(t *testing.T) {
 	qt.Assert(t, b2.Doc(), qt.Equals, "Changed doc.")
 }
 
+func TestBinding_IsImported(t *testing.T) {
+	b := NewBinding(values.NewInteger(1), BindingTypeVariable)
+	qt.Assert(t, b.IsImported(), qt.IsFalse)
+	b.SetImported(true)
+	qt.Assert(t, b.IsImported(), qt.IsTrue)
+}
+
+func TestBinding_IsConstant(t *testing.T) {
+	b := NewBinding(values.NewInteger(42), BindingTypeVariable)
+	qt.Assert(t, b.IsConstant(), qt.IsFalse)
+	b.SetConstant(true)
+	qt.Assert(t, b.IsConstant(), qt.IsTrue)
+}
+
+func TestBinding_Copy_PreservesImportedAndConstant(t *testing.T) {
+	b := NewBinding(values.NewInteger(1), BindingTypeVariable)
+	b.SetImported(true)
+	b.SetConstant(true)
+	cp := b.Copy().(*Binding)
+	qt.Assert(t, cp.IsImported(), qt.IsTrue)
+	qt.Assert(t, cp.IsConstant(), qt.IsTrue)
+	cp.SetImported(false)
+	qt.Assert(t, b.IsImported(), qt.IsTrue)
+}
+
 func TestBinding_Copy_WithSource(t *testing.T) {
 	source := &syntax.SourceContext{
 		File:  "test.scm",

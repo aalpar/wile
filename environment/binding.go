@@ -23,9 +23,11 @@ import (
 // is never read during VM execution. Stored behind a pointer so that runtime
 // Binding copies (the hot path) move 32 bytes instead of 56.
 type BindingMeta struct {
-	Scopes []*syntax.Scope
-	Source *syntax.SourceContext
-	Doc    string
+	Scopes   []*syntax.Scope
+	Source   *syntax.SourceContext
+	Doc      string
+	Imported bool
+	Constant bool
 }
 
 // Binding represents a variable binding in the environment.
@@ -140,6 +142,38 @@ func (p *Binding) SetDoc(doc string) {
 	p.meta.Doc = doc
 }
 
+// IsImported returns whether this binding was imported from a library.
+func (p *Binding) IsImported() bool {
+	if p.meta == nil {
+		return false
+	}
+	return p.meta.Imported
+}
+
+// SetImported marks this binding as imported from a library.
+func (p *Binding) SetImported(v bool) {
+	if p.meta == nil {
+		p.meta = &BindingMeta{}
+	}
+	p.meta.Imported = v
+}
+
+// IsConstant returns whether this binding's value is known at compile time.
+func (p *Binding) IsConstant() bool {
+	if p.meta == nil {
+		return false
+	}
+	return p.meta.Constant
+}
+
+// SetConstant marks this binding's value as known at compile time.
+func (p *Binding) SetConstant(v bool) {
+	if p.meta == nil {
+		p.meta = &BindingMeta{}
+	}
+	p.meta.Constant = v
+}
+
 // SchemeString returns a string representation of this binding.
 func (p *Binding) SchemeString() string {
 	return "#<binding>"
@@ -176,9 +210,11 @@ func (p *Binding) Copy() values.Value {
 	}
 	if p.meta != nil {
 		b.meta = &BindingMeta{
-			Scopes: p.meta.Scopes,
-			Source: p.meta.Source,
-			Doc:    p.meta.Doc,
+			Scopes:   p.meta.Scopes,
+			Source:   p.meta.Source,
+			Doc:      p.meta.Doc,
+			Imported: p.meta.Imported,
+			Constant: p.meta.Constant,
 		}
 	}
 	return b

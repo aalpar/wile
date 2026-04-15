@@ -30,6 +30,18 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
+// markBindingImported sets the Imported and Constant flags on a binding
+// installed by library import. A nil binding is silently ignored.
+func markBindingImported(b *environment.Binding) {
+	if b == nil {
+		return
+	}
+	b.SetImported(true)
+	if b.Value() != nil {
+		b.SetConstant(true)
+	}
+}
+
 // ImportSet represents a parsed import specification.
 // It can be a simple library reference or include modifiers.
 //
@@ -260,6 +272,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 				return werr.WrapForeignErrorf(err, "failed to set binding for %s at phase %d", localName, targetPhase)
 			}
 		}
+		markBindingImported(phaseEnv.GetBinding(localSym, nil))
 
 		// Propagate to the source phase in the target so the binding is available
 		// in the same phase it originated from. Syntax bindings (phase 1) need to
@@ -273,6 +286,7 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 			if propagateIdx != nil {
 				_ = propagateEnv.SetOwnGlobalValue(propagateIdx, libBinding.Value())
 			}
+			markBindingImported(propagateEnv.GetBinding(propagateSym, nil))
 		}
 	}
 	return nil
@@ -308,6 +322,7 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 				return werr.WrapForeignErrorf(err, "import: failed to set binding for %s", localName)
 			}
 		}
+		markBindingImported(targetEnv.GetBinding(localSym, nil))
 
 		// Syntax bindings must also be available in the expand phase.
 		if importedBinding.BindingType() == environment.BindingTypeSyntax {
@@ -317,6 +332,7 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 			if expandIdx != nil {
 				_ = expandEnv.SetOwnGlobalValue(expandIdx, importedBinding.Value())
 			}
+			markBindingImported(expandEnv.GetBinding(localSym, nil))
 		}
 	}
 	return nil
