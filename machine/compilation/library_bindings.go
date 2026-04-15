@@ -260,6 +260,13 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 				return werr.WrapForeignErrorf(err, "failed to set binding for %s at phase %d", localName, targetPhase)
 			}
 		}
+		targetBinding := phaseEnv.GetBinding(localSym, nil)
+		if targetBinding != nil {
+			targetBinding.SetImported(true)
+			if targetBinding.Value() != nil {
+				targetBinding.SetConstant(true)
+			}
+		}
 
 		// Propagate to the source phase in the target so the binding is available
 		// in the same phase it originated from. Syntax bindings (phase 1) need to
@@ -272,6 +279,13 @@ func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]s
 			propagateIdx := propagateEnv.GetGlobalIndex(propagateSym)
 			if propagateIdx != nil {
 				_ = propagateEnv.SetOwnGlobalValue(propagateIdx, libBinding.Value())
+			}
+			propagateBinding := propagateEnv.GetBinding(propagateSym, nil)
+			if propagateBinding != nil {
+				propagateBinding.SetImported(true)
+				if propagateBinding.Value() != nil {
+					propagateBinding.SetConstant(true)
+				}
 			}
 		}
 	}
@@ -308,6 +322,13 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 				return werr.WrapForeignErrorf(err, "import: failed to set binding for %s", localName)
 			}
 		}
+		directBinding := targetEnv.GetBinding(localSym, nil)
+		if directBinding != nil {
+			directBinding.SetImported(true)
+			if directBinding.Value() != nil {
+				directBinding.SetConstant(true)
+			}
+		}
 
 		// Syntax bindings must also be available in the expand phase.
 		if importedBinding.BindingType() == environment.BindingTypeSyntax {
@@ -316,6 +337,13 @@ func copyLibraryBindingsDirect(lib *CompiledLibrary, bindings map[string]string,
 			expandIdx := expandEnv.GetGlobalIndex(localSym)
 			if expandIdx != nil {
 				_ = expandEnv.SetOwnGlobalValue(expandIdx, importedBinding.Value())
+			}
+			expandBinding := expandEnv.GetBinding(localSym, nil)
+			if expandBinding != nil {
+				expandBinding.SetImported(true)
+				if expandBinding.Value() != nil {
+					expandBinding.SetConstant(true)
+				}
 			}
 		}
 	}
