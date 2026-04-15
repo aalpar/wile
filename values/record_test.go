@@ -342,6 +342,10 @@ func TestNewRecordFieldCountValidation(t *testing.T) {
 
 	_, err = values.NewRecord(rt, []values.Value{values.NewInteger(1), values.NewInteger(2), values.NewInteger(3)})
 	qt.Assert(t, err, qt.Not(qt.IsNil))
+
+	// Nil record type errors
+	_, err = values.NewRecord(nil, []values.Value{})
+	qt.Assert(t, err, qt.Not(qt.IsNil))
 }
 
 func TestNewOpaqueRecordTypeNilNamePanics(t *testing.T) {

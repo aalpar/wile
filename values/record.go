@@ -30,8 +30,14 @@ type Record struct {
 }
 
 // NewRecord creates a new Record with the given type and field values.
-// Returns an error if len(fields) does not match rt.FieldCount().
+// Returns an error if rt is nil or len(fields) does not match rt.FieldCount().
 func NewRecord(rt *RecordType, fields []Value) (*Record, error) {
+	if rt == nil {
+		return nil, werr.WrapForeignErrorf(
+			werr.ErrInvalidArgument,
+			"NewRecord: record type must not be nil",
+		)
+	}
 	if len(fields) != rt.FieldCount() {
 		return nil, werr.WrapForeignErrorf(
 			werr.ErrInvalidArgument,
