@@ -405,7 +405,6 @@ Source → Tokenizer → Parser → Expander → Compiler → VM
 | [`internal/validate/`](internal/validate/) | Syntax validation |
 | [`internal/forms/`](internal/forms/) | Compiled form definitions |
 | [`internal/schemeutil/`](internal/schemeutil/) | Scheme utility functions |
-| [`internal/repl/`](internal/repl/) | Interactive REPL with debugger |
 | [`internal/bootstrap/`](internal/bootstrap/) | Environment initialization |
 | [`internal/extensions/`](internal/extensions/) | Internal extension wiring (io, eval, aggregate registration) |
 
@@ -419,6 +418,7 @@ These packages form the public API and follow [Go module versioning](https://go.
 - **[`registry`](https://pkg.go.dev/github.com/aalpar/wile/registry)** — `Registry`, `Extension`, `PrimitiveSpec`, phase constants
 - **[`security`](https://pkg.go.dev/github.com/aalpar/wile/security)** — `Authorizer`, `AccessRequest`, built-in authorizers
 - **[`extensions/*`](https://pkg.go.dev/github.com/aalpar/wile/extensions)** — Public extensions (files, math, threads, system, etc.)
+- **[`repl`](https://pkg.go.dev/github.com/aalpar/wile/repl)** — Interactive REPL with debugger
 
 All other packages ([`machine/`](https://pkg.go.dev/github.com/aalpar/wile/machine), [`environment/`](https://pkg.go.dev/github.com/aalpar/wile/environment), [`internal/`](internal/)) are implementation details and may change without notice. The `machine` package is importable but carries no compatibility guarantees.
 
