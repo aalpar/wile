@@ -61,7 +61,7 @@ func addExceptions(r *registry.Registry) error {
 			Doc: "Returns the source location string from CTX, or #f if unavailable.\n\nExamples:\n  (error-context-source ctx)  => \"file.scm:10:5\"", ParamNames: []string{"ctx"}, Category: "exceptions",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}},
 		{Name: "error-context-stack-trace", ParamCount: 1, Impl: PrimErrorContextStackTrace,
-			Doc: "Returns the stack trace from CTX as a list of alists.\nEach alist has keys: name, file, line, column.\n\nExamples:\n  (error-context-stack-trace ctx)  => (((name . \"f\") (file . \"test.scm\") ...))", ParamNames: []string{"ctx"}, Category: "exceptions",
+			Doc: "Returns the stack trace from CTX as a list of alists.\nEach alist always has key name; keys file, line, column are present only when source information is available.\n\nExamples:\n  (error-context-stack-trace ctx)  => (((name . \"f\") (file . \"test.scm\") ...))", ParamNames: []string{"ctx"}, Category: "exceptions",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeList},
 		{Name: "error-context-marks", ParamCount: 1, Impl: PrimErrorContextMarks,
 			Doc: "Returns the continuation mark set from CTX, or #f if not captured.\n\nExamples:\n  (error-context-marks ctx)  => #f", ParamNames: []string{"ctx"}, Category: "exceptions",
@@ -71,7 +71,7 @@ func addExceptions(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
 			Keywords:   []string{"error location", "source location", "error diagnostics"}},
 		{Name: "error-object-stack-trace", ParamCount: 1, Impl: PrimErrorObjectStackTrace,
-			Doc: "Returns the stack trace from ERROR-OBJ as a list of alists, or () if unavailable.\nEach alist has keys: name, file, line, column.\n\nExamples:\n  (guard (e (#t (error-object-stack-trace e))) (error \"oops\"))  => (((name . \"...\") ...))", ParamNames: []string{"error-obj"}, Category: "exceptions",
+			Doc: "Returns the stack trace from ERROR-OBJ as a list of alists, or () if unavailable.\nEach alist always has key name; keys file, line, column are present only when source information is available.\n\nExamples:\n  (guard (e (#t (error-object-stack-trace e))) (error \"oops\"))  => (((name . \"...\") ...))", ParamNames: []string{"error-obj"}, Category: "exceptions",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeList,
 			Keywords: []string{"error stack trace", "error diagnostics", "backtrace"}},
 	}, registry.PhaseRuntime)

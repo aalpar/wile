@@ -87,6 +87,18 @@ func TestNativeErrorEnrichment(t *testing.T) {
 			Name: "error-object-stack-trace wrong type",
 			Code: `(error-object-stack-trace "not-an-error")`,
 		},
+		{
+			Name: "error-context-source wrong type",
+			Code: `(error-context-source 42)`,
+		},
+		{
+			Name: "error-context-stack-trace wrong type",
+			Code: `(error-context-stack-trace "nope")`,
+		},
+		{
+			Name: "error-context-marks wrong type",
+			Code: `(error-context-marks #t)`,
+		},
 	}
 	for _, tc := range errorTcs {
 		t.Run(tc.Name, func(t *testing.T) {

@@ -56,7 +56,7 @@ func (p *ErrorContext) Source() *syntax.SourceContext {
 // SourceLocation returns the formatted source location string ("file:line:col"),
 // or "" if unavailable.
 func (p *ErrorContext) SourceLocation() string {
-	if p == nil {
+	if p == nil || p.source == nil {
 		return ""
 	}
 	return p.source.Location()

@@ -90,8 +90,9 @@ func callExceptionHandler(cc machine.CallContext, condition values.Value, handle
 		// Enrich NativeError conditions with source location and stack trace
 		// so error-object-source and error-object-stack-trace can access them
 		// without needing the ErrorContext.
+		// Enrich only once — preserve the original raise site if re-raised.
 		ne, ok := condition.(*values.NativeError)
-		if ok {
+		if ok && ne.SourceLocation() == "" {
 			ne.SetSourceLocation(errCtx.SourceLocation())
 			ne.SetStackTraceValue(stackTraceToSchemeList(errCtx.StackTraceFrames()))
 		}
