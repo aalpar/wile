@@ -123,6 +123,11 @@ func TestKanren(t *testing.T) {
 	runSchemeTest(t, "kanren-tests.scm", 2*time.Minute, "kanren tests")
 }
 
+// TestSRFI132 runs the SRFI-132 sort library integration tests.
+func TestSRFI132(t *testing.T) {
+	runSchemeTest(t, "srfi-132-tests.scm", 2*time.Minute, "SRFI-132 sort library")
+}
+
 // extractTestSummary extracts the test summary from chibi-test output.
 func extractTestSummary(output string) string {
 	// Look for "Test Summary:" section
