@@ -407,6 +407,18 @@
   (test 0 (vector-select! < v 0))
   (test 99 (vector-select! < (vector-copy v) 99)))
 
+;; Non-numeric comparator: proves comparator isn't applied to indices
+(let ((v (vector "cherry" "apple" "banana" "date" "elderberry")))
+  (test "apple" (vector-select! string<? v 0))
+  (test "elderberry" (vector-select! string<? (vector-copy v) 4))
+  (test "cherry" (vector-select! string<? (vector-copy v) 2)))
+
+(let ((v (vector "cherry" "apple" "banana" "date")))
+  (vector-separate! string<? v 2)
+  ;; first 2 positions are {"apple","banana"} in some order
+  (test '("apple" "banana")
+        (list-sort string<? (list (vector-ref v 0) (vector-ref v 1)))))
+
 (test-end "select")
 
 ;; ============================================================
@@ -454,6 +466,13 @@
 
 ;; even length with all-equal elements
 (test 5 (vector-find-median < #(5 5 5 5) 0))
+
+;; Non-numeric comparator: proves comparator isn't applied to indices
+;; Odd length: median is the middle element (no mean needed)
+(test "cherry" (vector-find-median string<? '#("apple" "cherry" "elderberry") "none"))
+;; Even length with custom mean: pick the lesser (since default mean does arithmetic)
+(test "banana" (vector-find-median string<? '#("apple" "banana" "cherry" "date") "none"
+                (lambda (a b) (if (string<? a b) a b))))
 
 ;; large odd-length vector
 (let ((v (let ((v (make-vector 101)))
