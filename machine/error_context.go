@@ -103,10 +103,27 @@ func (p *ErrorContext) EqualTo(other values.Value) bool {
 	return p == o
 }
 
-// errorContextKey is the continuation mark key used to attach ErrorContext
-// to the handler frame during exception dispatch. It is a fresh uninterned
-// symbol — the $ prefix signals internal use.
-var errorContextKey = values.NewSymbol("$error-context")
+// errorContextKeyType is a private sentinel type used as the continuation mark
+// key for error context. Because it is unexported, Scheme code cannot forge it
+// — identity is pointer equality, not string comparison.
+type errorContextKeyType struct{}
+
+func (errorContextKeyType) SchemeString() string {
+	return "#<error-context-key>"
+}
+
+func (errorContextKeyType) IsVoid() bool {
+	return false
+}
+
+func (errorContextKeyType) EqualTo(other values.Value) bool {
+	_, ok := other.(errorContextKeyType)
+	return ok
+}
+
+// errorContextKey is the singleton mark key. Compared by type identity —
+// no Scheme code can construct an errorContextKeyType.
+var errorContextKey errorContextKeyType
 
 // ErrorContextKey returns the continuation mark key for error context.
 // Exposed for use by registry primitives that read the mark.

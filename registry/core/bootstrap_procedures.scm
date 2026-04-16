@@ -321,3 +321,24 @@
 (define (square x)
   "Return the square of X.\n\nParameters:\n  x : number\nReturns: number\nCategory: arithmetic"
   (* x x))
+
+;; Sorting
+;; Top-down merge sort. Non-destructive and stable.
+
+(define (sort less? lst)
+  "Return a list containing the elements of LST sorted according\nto the comparison procedure LESS?. The input list is not modified.\nUses a stable merge sort: equal elements preserve their original\norder.\n\nExamples:\n  (sort < '(3 1 4 1 5 9 2 6))  => (1 1 2 3 4 5 6 9)\n  (sort > '(1 2 3))              => (3 2 1)\n  (sort < '())                   => ()\n\nParameters:\n  less? : procedure -- a two-argument comparison predicate\n  lst : list\nReturns: list\nCategory: lists\nKeywords: sort, order, merge sort, stable, list\n\nSee also: `list-sort' (srfi 132)."
+  (define (merge a b)
+    (cond
+      ((null? a) b)
+      ((null? b) a)
+      ((less? (car b) (car a))
+       (cons (car b) (merge a (cdr b))))
+      (else
+       (cons (car a) (merge (cdr a) b)))))
+  (define (msort lst n)
+    (if (<= n 1)
+        (if (= n 1) (list (car lst)) '())
+        (let ((half (quotient n 2)))
+          (merge (msort lst half)
+                 (msort (list-tail lst half) (- n half))))))
+  (msort lst (length lst)))
