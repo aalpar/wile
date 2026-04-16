@@ -24,6 +24,70 @@ import (
 )
 
 func TestNativeError_EqualTo(t *testing.T) {
+	c := qt.New(t)
+
+	a := values.NewErrorObject("test")
+	b := values.NewErrorObject("test")
+	c.Assert(a.EqualTo(b), qt.IsTrue)
+
+	// Different messages
+	d := values.NewErrorObject("other")
+	c.Assert(a.EqualTo(d), qt.IsFalse)
+}
+
+func TestNativeError_SourceAndStackTrace_ZeroValues(t *testing.T) {
+	c := qt.New(t)
+
+	ne := values.NewErrorObject("test error", values.NewInteger(42))
+
+	// Initially zero values
+	c.Assert(ne.SourceLocation(), qt.Equals, "")
+	c.Assert(ne.StackTraceValue(), qt.IsNil)
+}
+
+func TestNativeError_SourceAndStackTrace_Roundtrip(t *testing.T) {
+	c := qt.New(t)
+
+	ne := values.NewErrorObject("test error", values.NewInteger(42))
+
+	// Set source location
+	ne.SetSourceLocation("test.scm:5:3")
+	c.Assert(ne.SourceLocation(), qt.Equals, "test.scm:5:3")
+
+	// Set stack trace (as arbitrary Value — will be a Scheme list in practice)
+	traceList := values.List(values.NewInteger(1))
+	ne.SetStackTraceValue(traceList)
+	c.Assert(ne.StackTraceValue(), qt.IsNotNil)
+}
+
+func TestNativeError_EqualTo_IgnoresSourceAndTrace(t *testing.T) {
+	c := qt.New(t)
+
+	a := values.NewErrorObject("test")
+	b := values.NewErrorObject("test")
+
+	a.SetSourceLocation("a.scm:1:0")
+	b.SetSourceLocation("b.scm:2:0")
+
+	a.SetStackTraceValue(values.List(values.NewInteger(1)))
+	b.SetStackTraceValue(values.List(values.NewInteger(2)))
+
+	// Source and stack trace do not affect equality
+	c.Assert(a.EqualTo(b), qt.IsTrue)
+}
+
+func TestNativeError_NilReceiver_SourceAndTrace(t *testing.T) {
+	c := qt.New(t)
+
+	var ne *values.NativeError
+
+	// Nil receiver returns zero values, does not panic
+	c.Assert(ne.SourceLocation(), qt.Equals, "")
+	c.Assert(ne.StackTraceValue(), qt.IsNil)
+
+	// Setters on nil receiver do not panic
+	ne.SetSourceLocation("x.scm:1:0")
+	ne.SetStackTraceValue(values.NewInteger(1))
 }
 
 func TestNewFileError_SetsKindFile(t *testing.T) {
