@@ -34,10 +34,12 @@ const (
 // It contains a message string and a list of irritant objects that
 // provide additional context about the error. It can also wrap a Go error.
 type NativeError struct {
-	message   *String
-	irritants Value           // List of irritant objects (may be EmptyList)
-	kind      NativeErrorKind // Type of error for R7RS predicates
-	err       error           // Wrapped Go error (optional)
+	message        *String
+	irritants      Value           // List of irritant objects (may be EmptyList)
+	kind           NativeErrorKind // Type of error for R7RS predicates
+	err            error           // Wrapped Go error (optional)
+	sourceLocation string          // "file:line:col", empty if error hasn't been raised
+	stackTraceVal  Value           // Scheme list of stack frame alists, nil if not raised
 }
 
 // newNativeError is the core constructor for all NativeError variants.
@@ -137,6 +139,38 @@ func (p *NativeError) Unwrap() error {
 		return nil
 	}
 	return p.err
+}
+
+// SourceLocation returns the formatted source location string, or "".
+func (p *NativeError) SourceLocation() string {
+	if p == nil {
+		return ""
+	}
+	return p.sourceLocation
+}
+
+// SetSourceLocation sets the source location string.
+func (p *NativeError) SetSourceLocation(loc string) {
+	if p == nil {
+		return
+	}
+	p.sourceLocation = loc
+}
+
+// StackTraceValue returns the stack trace as a Scheme value, or nil.
+func (p *NativeError) StackTraceValue() Value {
+	if p == nil {
+		return nil
+	}
+	return p.stackTraceVal
+}
+
+// SetStackTraceValue sets the stack trace Scheme value.
+func (p *NativeError) SetStackTraceValue(v Value) {
+	if p == nil {
+		return
+	}
+	p.stackTraceVal = v
 }
 
 // Error implements the error interface.

@@ -74,13 +74,29 @@ func PrimWithExceptionHandler(cc machine.CallContext) error {
 }
 
 // callExceptionHandler invokes the exception handler with the given condition.
+// If errCtx is non-nil, it is set as a continuation mark on the sub-context
+// so that (current-error-context) can retrieve it inside the handler.
 // Returns the handler's return value, or an error if the handler raised an exception
 // or escaped via continuation.
-func callExceptionHandler(cc machine.CallContext, condition values.Value, handler values.Callable) (values.Value, error) {
+func callExceptionHandler(cc machine.CallContext, condition values.Value, handler values.Callable, errCtx *machine.ErrorContext) (values.Value, error) {
 	mc := cc.(*machine.MachineContext)
 	// Exception handler automatically inherited from parent (M3 fix)
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
+
+	if errCtx != nil {
+		sub.SetMark(machine.ErrorContextKey(), errCtx)
+
+		// Enrich NativeError conditions with source location and stack trace
+		// so error-object-source and error-object-stack-trace can access them
+		// without needing the ErrorContext.
+		// Enrich only once — preserve the original raise site if re-raised.
+		ne, ok := condition.(*values.NativeError)
+		if ok && ne.SourceLocation() == "" {
+			ne.SetSourceLocation(errCtx.SourceLocation())
+			ne.SetStackTraceValue(stackTraceToSchemeList(errCtx.StackTraceFrames()))
+		}
+	}
 
 	_, err := sub.ApplyCallable(handler, condition)
 	if err != nil {
@@ -157,9 +173,12 @@ func handleException(cc machine.CallContext, excErr *machine.ErrExceptionEscape,
 		}
 	}
 
+	// Build error context from the exception's diagnostic info.
+	errCtx := machine.NewErrorContext(excErr.Source, excErr.StackTrace, nil)
+
 	for {
 		// Call handler with the condition
-		handlerResult, err := callExceptionHandler(mc, excErr.Condition, handler)
+		handlerResult, err := callExceptionHandler(mc, excErr.Condition, handler, errCtx)
 		if err != nil {
 			return err
 		}
@@ -181,6 +200,7 @@ func handleException(cc machine.CallContext, excErr *machine.ErrExceptionEscape,
 			// Pop handler (will be pushed again when we loop)
 			mc.PopExceptionHandler()
 			excErr = newExcErr
+			errCtx = machine.NewErrorContext(newExcErr.Source, newExcErr.StackTrace, nil)
 			continue // Loop to handle new exception
 		}
 
