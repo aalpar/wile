@@ -244,10 +244,10 @@ func (p *CompileTimeContinuation) quasiquoteNeedsRuntimeList(pair *syntax.Syntax
 
 // CompileUnquote errors - unquote outside of quasiquote
 func (p *CompileTimeContinuation) CompileUnquote(_ CompileTimeCallContext, _ syntax.SyntaxValue) error {
-	return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unquote: not in quasiquote context")
+	return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unquote: not in quasiquote context"))
 }
 
 // CompileUnquoteSplicing errors - unquote-splicing outside of quasiquote
 func (p *CompileTimeContinuation) CompileUnquoteSplicing(_ CompileTimeCallContext, _ syntax.SyntaxValue) error {
-	return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unquote-splicing: not in quasiquote context")
+	return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unquote-splicing: not in quasiquote context"))
 }

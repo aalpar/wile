@@ -15,6 +15,8 @@
 package compilation
 
 import (
+	"errors"
+
 	"github.com/aalpar/wile/internal/syntax"
 )
 
@@ -35,7 +37,15 @@ type SourcedError struct {
 func (p *SourcedError) Error() string {
 	loc := p.Source.Location()
 	if loc != "" {
-		return loc + ": " + p.Cause.Error()
+		// Only prepend this level's location when no deeper SourcedError
+		// exists. With deep wrapping the innermost location is the most
+		// specific (e.g. the exact sub-expression vs the enclosing form).
+		// Outer SourcedErrors stay in the chain for programmatic extraction
+		// via errors.As but don't duplicate the prefix in the string.
+		var inner *SourcedError
+		if !errors.As(p.Cause, &inner) {
+			return loc + ": " + p.Cause.Error()
+		}
 	}
 	return p.Cause.Error()
 }
@@ -48,7 +58,7 @@ func (p *SourcedError) Unwrap() error {
 // For use in standalone functions that lack a CompileTimeContinuation receiver.
 // If src is nil, returns the error unchanged.
 func wrapSourcedError(src *syntax.SourceContext, err error) error {
-	if src == nil {
+	if err == nil || src == nil {
 		return err
 	}
 	return &SourcedError{Source: src, Cause: err}
