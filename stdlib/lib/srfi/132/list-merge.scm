@@ -23,16 +23,16 @@ Category: srfi-132
 Keywords: merge, combine, sorted, stable, list
 
 See also: `list-merge!', `list-sort'."
-  (if (null? lis1) lis2
-      (if (null? lis2) lis1
+  (if (null? lis1) (list-copy lis2)
+      (if (null? lis2) (list-copy lis1)
           (let ((head (list #f)))
             (let loop ((tail head) (a lis1) (b lis2))
               (cond
                 ((null? a)
-                 (set-cdr! tail b)
+                 (set-cdr! tail (list-copy b))
                  (cdr head))
                 ((null? b)
-                 (set-cdr! tail a)
+                 (set-cdr! tail (list-copy a))
                  (cdr head))
                 ((less? (car b) (car a))
                  (set-cdr! tail (list (car b)))

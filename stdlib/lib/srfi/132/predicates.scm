@@ -16,11 +16,11 @@ Category: srfi-132
 Keywords: validation, bounds, range, vector, internal"
   (let ((len (vector-length v)))
     (when (< start 0)
-      (error who "start index negative" start))
+      (error (string-append who ": start index negative") start))
     (when (> end len)
-      (error who "end index exceeds vector length" end len))
+      (error (string-append who ": end index exceeds vector length") end len))
     (when (> start end)
-      (error who "start index exceeds end index" start end))))
+      (error (string-append who ": start index exceeds end index") start end))))
 
 (define (list-sorted? less? lis)
   "Return #t if LIS is sorted according to the comparison
