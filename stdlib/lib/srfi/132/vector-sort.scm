@@ -3,7 +3,17 @@
 
 (define (%vector-sort! less? v start end)
   "Internal: sort v[start..end) in place using bottom-up merge sort
-with buffer alternation."
+with buffer alternation. Uses %vector-merge-into! for each merge
+pass.
+
+Parameters:
+  less? : procedure -- a two-argument comparison predicate
+  v : vector (mutated)
+  start : integer -- start index (inclusive)
+  end : integer -- end index (exclusive)
+Returns: unspecified
+Category: srfi-132
+Keywords: sort, merge sort, stable, vector, internal"
   (let ((len (- end start)))
     (when (> len 1)
       (let ((temp (make-vector len)))
@@ -77,8 +87,11 @@ Keywords: sort, order, merge sort, stable, destructive, vector
 See also: `vector-sort', `vector-stable-sort!', `list-sort!'."
      (%vector-sort! less? v 0 (vector-length v)))
     ((less? v start)
-     (%vector-sort! less? v start (vector-length v)))
+     (let ((end (vector-length v)))
+       (%check-range "vector-sort!" v start end)
+       (%vector-sort! less? v start end)))
     ((less? v start end)
+     (%check-range "vector-sort!" v start end)
      (%vector-sort! less? v start end))))
 
 (define vector-sort
@@ -111,10 +124,13 @@ See also: `vector-sort!', `vector-stable-sort', `list-sort'."
        (%vector-sort! less? copy 0 (vector-length copy))
        copy))
     ((less? v start)
-     (let ((copy (vector-copy v start)))
-       (%vector-sort! less? copy 0 (vector-length copy))
-       copy))
+     (let ((end (vector-length v)))
+       (%check-range "vector-sort" v start end)
+       (let ((copy (vector-copy v start)))
+         (%vector-sort! less? copy 0 (vector-length copy))
+         copy)))
     ((less? v start end)
+     (%check-range "vector-sort" v start end)
      (let ((copy (vector-copy v start end)))
        (%vector-sort! less? copy 0 (vector-length copy))
        copy))))

@@ -72,7 +72,16 @@ See also: `list-delete-neighbor-dups', `vector-delete-neighbor-dups!'."
 
 (define (%vector-delete-neighbor-dups = v start end)
   "Internal: compact v[start..end) removing adjacent duplicates.
-Returns a freshly allocated vector containing the compacted result."
+Returns a freshly allocated vector containing the compacted result.
+
+Parameters:
+  = : procedure -- a two-argument equality predicate
+  v : vector
+  start : integer -- start index (inclusive)
+  end : integer -- end index (exclusive)
+Returns: vector -- freshly allocated compacted vector
+Category: srfi-132
+Keywords: dedup, deduplicate, unique, neighbor, vector, internal"
   (if (>= start end)
       (vector)
       (let ((temp (make-vector (- end start))))
@@ -119,13 +128,25 @@ Keywords: dedup, deduplicate, unique, neighbor, adjacent, vector
 See also: `vector-delete-neighbor-dups!', `list-delete-neighbor-dups'."
      (%vector-delete-neighbor-dups = v 0 (vector-length v)))
     ((= v start)
-     (%vector-delete-neighbor-dups = v start (vector-length v)))
+     (let ((end (vector-length v)))
+       (%check-range "vector-delete-neighbor-dups" v start end)
+       (%vector-delete-neighbor-dups = v start end)))
     ((= v start end)
+     (%check-range "vector-delete-neighbor-dups" v start end)
      (%vector-delete-neighbor-dups = v start end))))
 
 (define (%vector-delete-neighbor-dups! = v start end)
   "Internal: compact v[start..end) in place, removing adjacent
-duplicates. Returns the new logical end index (integer)."
+duplicates. Returns the new logical end index (integer).
+
+Parameters:
+  = : procedure -- a two-argument equality predicate
+  v : vector (mutated)
+  start : integer -- start index (inclusive)
+  end : integer -- end index (exclusive)
+Returns: integer -- the new logical end index
+Category: srfi-132
+Keywords: dedup, deduplicate, unique, neighbor, destructive, vector, internal"
   (if (>= start end)
       start
       (let loop ((i (+ start 1)) (j (+ start 1)))
@@ -168,6 +189,9 @@ Keywords: dedup, deduplicate, unique, neighbor, adjacent, destructive, vector
 See also: `vector-delete-neighbor-dups', `list-delete-neighbor-dups!'."
      (%vector-delete-neighbor-dups! = v 0 (vector-length v)))
     ((= v start)
-     (%vector-delete-neighbor-dups! = v start (vector-length v)))
+     (let ((end (vector-length v)))
+       (%check-range "vector-delete-neighbor-dups!" v start end)
+       (%vector-delete-neighbor-dups! = v start end)))
     ((= v start end)
+     (%check-range "vector-delete-neighbor-dups!" v start end)
      (%vector-delete-neighbor-dups! = v start end))))

@@ -4,7 +4,21 @@
 (define (%vector-merge-into! less? target tstart v1 s1 e1 v2 s2 e2)
   "Internal: merge v1[s1..e1) and v2[s2..e2) into TARGET starting
 at index TSTART. Two-pointer merge. Stable: when elements compare
-equal, the element from v1 is taken first."
+equal, the element from v1 is taken first.
+
+Parameters:
+  less? : procedure -- a two-argument comparison predicate
+  target : vector (mutated) -- destination vector
+  tstart : integer -- write offset in target
+  v1 : vector -- first sorted source vector
+  s1 : integer -- start index in v1 (inclusive)
+  e1 : integer -- end index in v1 (exclusive)
+  v2 : vector -- second sorted source vector
+  s2 : integer -- start index in v2 (inclusive)
+  e2 : integer -- end index in v2 (exclusive)
+Returns: unspecified
+Category: srfi-132
+Keywords: merge, vector, two-pointer, stable, internal"
   (let loop ((i tstart) (j s1) (k s2))
     (cond
       ((>= j e1)
@@ -30,7 +44,19 @@ equal, the element from v1 is taken first."
 
 (define (%vector-merge less? v1 s1 e1 v2 s2 e2)
   "Internal: allocate a fresh vector and merge v1[s1..e1) with
-v2[s2..e2) into it. Returns the new vector."
+v2[s2..e2) into it. Returns the new vector.
+
+Parameters:
+  less? : procedure -- a two-argument comparison predicate
+  v1 : vector -- first sorted source vector
+  s1 : integer -- start index in v1 (inclusive)
+  e1 : integer -- end index in v1 (exclusive)
+  v2 : vector -- second sorted source vector
+  s2 : integer -- start index in v2 (inclusive)
+  e2 : integer -- end index in v2 (exclusive)
+Returns: vector -- freshly allocated merged vector
+Category: srfi-132
+Keywords: merge, vector, allocate, stable, internal"
   (let* ((len1 (- e1 s1))
          (len2 (- e2 s2))
          (result (make-vector (+ len1 len2))))
@@ -72,15 +98,21 @@ See also: `vector-merge!', `vector-sort', `list-merge'."
      (%vector-merge less? v1 0 (vector-length v1)
                           v2 0 (vector-length v2)))
     ((less? v1 v2 start1)
+     (%check-range "vector-merge" v1 start1 (vector-length v1))
      (%vector-merge less? v1 start1 (vector-length v1)
                           v2 0 (vector-length v2)))
     ((less? v1 v2 start1 end1)
+     (%check-range "vector-merge" v1 start1 end1)
      (%vector-merge less? v1 start1 end1
                           v2 0 (vector-length v2)))
     ((less? v1 v2 start1 end1 start2)
+     (%check-range "vector-merge" v1 start1 end1)
+     (%check-range "vector-merge" v2 start2 (vector-length v2))
      (%vector-merge less? v1 start1 end1
                           v2 start2 (vector-length v2)))
     ((less? v1 v2 start1 end1 start2 end2)
+     (%check-range "vector-merge" v1 start1 end1)
+     (%check-range "vector-merge" v2 start2 end2)
      (%vector-merge less? v1 start1 end1
                           v2 start2 end2))))
 
@@ -116,26 +148,52 @@ Category: srfi-132
 Keywords: merge, combine, sorted, stable, destructive, vector
 
 See also: `vector-merge', `vector-sort!', `list-merge!'."
-     (%vector-merge-into! less? to 0
-                          from1 0 (vector-length from1)
-                          from2 0 (vector-length from2)))
+     (let ((len1 (vector-length from1))
+           (len2 (vector-length from2)))
+       (when (> (+ len1 len2) (vector-length to))
+         (error "vector-merge!: target too small" (vector-length to) (+ len1 len2)))
+       (%vector-merge-into! less? to 0
+                            from1 0 len1
+                            from2 0 len2)))
     ((less? to from1 from2 tstart)
-     (%vector-merge-into! less? to tstart
-                          from1 0 (vector-length from1)
-                          from2 0 (vector-length from2)))
+     (let ((len1 (vector-length from1))
+           (len2 (vector-length from2)))
+       (when (> (+ tstart len1 len2) (vector-length to))
+         (error "vector-merge!: target too small" (vector-length to) (+ tstart len1 len2)))
+       (%vector-merge-into! less? to tstart
+                            from1 0 len1
+                            from2 0 len2)))
     ((less? to from1 from2 tstart start1)
-     (%vector-merge-into! less? to tstart
-                          from1 start1 (vector-length from1)
-                          from2 0 (vector-length from2)))
+     (let ((e1 (vector-length from1))
+           (e2 (vector-length from2)))
+       (%check-range "vector-merge!" from1 start1 e1)
+       (when (> (+ tstart (- e1 start1) e2) (vector-length to))
+         (error "vector-merge!: target too small" (vector-length to) (+ tstart (- e1 start1) e2)))
+       (%vector-merge-into! less? to tstart
+                            from1 start1 e1
+                            from2 0 e2)))
     ((less? to from1 from2 tstart start1 end1)
-     (%vector-merge-into! less? to tstart
-                          from1 start1 end1
-                          from2 0 (vector-length from2)))
+     (let ((e2 (vector-length from2)))
+       (%check-range "vector-merge!" from1 start1 end1)
+       (when (> (+ tstart (- end1 start1) e2) (vector-length to))
+         (error "vector-merge!: target too small" (vector-length to) (+ tstart (- end1 start1) e2)))
+       (%vector-merge-into! less? to tstart
+                            from1 start1 end1
+                            from2 0 e2)))
     ((less? to from1 from2 tstart start1 end1 start2)
-     (%vector-merge-into! less? to tstart
-                          from1 start1 end1
-                          from2 start2 (vector-length from2)))
+     (let ((e2 (vector-length from2)))
+       (%check-range "vector-merge!" from1 start1 end1)
+       (%check-range "vector-merge!" from2 start2 e2)
+       (when (> (+ tstart (- end1 start1) (- e2 start2)) (vector-length to))
+         (error "vector-merge!: target too small" (vector-length to) (+ tstart (- end1 start1) (- e2 start2))))
+       (%vector-merge-into! less? to tstart
+                            from1 start1 end1
+                            from2 start2 e2)))
     ((less? to from1 from2 tstart start1 end1 start2 end2)
+     (%check-range "vector-merge!" from1 start1 end1)
+     (%check-range "vector-merge!" from2 start2 end2)
+     (when (> (+ tstart (- end1 start1) (- end2 start2)) (vector-length to))
+       (error "vector-merge!: target too small" (vector-length to) (+ tstart (- end1 start1) (- end2 start2))))
      (%vector-merge-into! less? to tstart
                           from1 start1 end1
                           from2 start2 end2))))

@@ -2,7 +2,14 @@
 ;; Part of SRFI 132: Sort Libraries
 
 (define (%reverse-segment! head)
-  "Internal: destructively reverse the list starting at HEAD.\nReturns the new head (former last pair)."
+  "Internal: destructively reverse the list starting at HEAD.
+Returns the new head (former last pair).
+
+Parameters:
+  head : list -- the first pair of the segment to reverse
+Returns: list -- the new head (former last pair)
+Category: srfi-132
+Keywords: reverse, destructive, list, segment, internal"
   (let loop ((prev '()) (cur head))
     (if (null? cur)
         prev
@@ -11,7 +18,17 @@
           (loop cur next)))))
 
 (define (%collect-runs less? lis)
-  "Internal: scan LIS for ascending and descending runs.\nDescending runs are reversed in place. Each run is\nterminated by setting the cdr of its last pair to '().\nReturns a list of sorted sublists."
+  "Internal: scan LIS for ascending and descending runs.
+Descending runs are reversed in place. Each run is
+terminated by setting the cdr of its last pair to '().
+Returns a list of sorted sublists.
+
+Parameters:
+  less? : procedure -- a two-argument comparison predicate
+  lis : list -- the input list (consumed/mutated)
+Returns: list -- a list of sorted sublists
+Category: srfi-132
+Keywords: runs, natural merge sort, ascending, descending, internal"
   (if (or (null? lis) (null? (cdr lis)))
       (list lis)
       (let outer ((rest lis) (runs '()))
@@ -42,7 +59,15 @@
                                      (cons head runs))))))))))))
 
 (define (%merge-pairs less? runs)
-  "Internal: pairwise merge the list of sorted runs using\nlist-merge! until one sorted list remains."
+  "Internal: pairwise merge the list of sorted runs using
+list-merge! until one sorted list remains.
+
+Parameters:
+  less? : procedure -- a two-argument comparison predicate
+  runs : list -- a list of sorted sublists to merge
+Returns: list -- a single merged sorted list
+Category: srfi-132
+Keywords: merge, pairwise, natural merge sort, internal"
   (if (null? (cdr runs))
       (car runs)
       (%merge-pairs

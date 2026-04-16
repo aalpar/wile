@@ -427,10 +427,10 @@
 (test 3 (vector-find-median < #(3 1 4 1 5) 0))
 (test 3 (vector-find-median! < (vector 3 1 4 1 5) 0))
 
-;; even length with default mean (returns lesser of two middles)
-;; elements sorted: 1 1 3 4 5 9, two middles: 3 and 4, default returns 3
-(test 3 (vector-find-median < #(3 1 4 1 5 9) 0))
-(test 3 (vector-find-median! < (vector 3 1 4 1 5 9) 0))
+;; even length with default mean (arithmetic mean of two middles)
+;; elements sorted: 1 1 3 4 5 9, two middles: 3 and 4, default returns 7/2
+(test 7/2 (vector-find-median < #(3 1 4 1 5 9) 0))
+(test 7/2 (vector-find-median! < (vector 3 1 4 1 5 9) 0))
 
 ;; even length with custom arithmetic mean
 (test 7/2 (vector-find-median < #(3 1 4 1 5 9) 0
@@ -448,7 +448,7 @@
 (test 3 (vector-find-median! < (vector 3 1 4 1 5) 0))
 
 ;; two elements: even length, exercises upper-middle scan
-(test 1 (vector-find-median < #(2 1) 0))  ;; default mean: lesser
+(test 3/2 (vector-find-median < #(2 1) 0))  ;; default mean: arithmetic
 (test 3/2 (vector-find-median < #(2 1) 0
             (lambda (a b) (/ (+ a b) 2))))
 
