@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.14.14] - 2026-04-15
+
+### Added
+
+- Implement SRFI-132 sort libraries — 20 procedures for list/vector sorting, merging, deduplication, selection, and median with 142 tests (#655)
+- Constant bindings — mark imported bindings with `Imported` and `Constant` flags, reject `set!` on imported bindings per R7RS 5.2 (#651)
+- Add `ErrImmutableBinding` sentinel for immutability enforcement (#651)
+
+### Fixed
+
+- Clear `Imported`/`Constant` flags when top-level `define` supersedes import (#651)
+- SRFI-132 spec compliance and safety fixes from crosscheck review (#655)
+
+### Documentation
+
+- Reorganize documentation by topic with `INDEX.md` and `TOC.md` (#652)
+- Add R5RS/R6RS keyword aliases to procedure docstrings (#653)
+- Add SRFI-132 design and implementation plan (#655)
+
 ## [1.14.0] - 2026-04-14
 
 ### Added
