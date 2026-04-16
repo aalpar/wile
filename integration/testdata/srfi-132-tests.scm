@@ -36,6 +36,15 @@
 (test #f (vector-sorted? < #(1 3 2 4) 1 3))
 (test-end "vector-sorted?")
 
+;; equal neighbors: all-same list
+(test #t (list-sorted? < '(3 3 3 3)))
+;; two elements
+(test #t (list-sorted? < '(1 2)))
+(test #f (list-sorted? < '(2 1)))
+
+;; vector-sorted? with start only (2-arg optional)
+(test #t (vector-sorted? < #(9 1 2 3) 1))
+
 (test-end "predicates")
 
 ;; ============================================================
@@ -70,6 +79,19 @@
 ;; list-stable-sort alias
 (test '(1 2 3) (list-stable-sort < '(3 2 1)))
 
+;; Mixed ascending/descending runs exercise %collect-runs fully:
+;; (3 2 1) descending, (4 5 6) ascending, (2 1) descending
+(test '(1 1 2 2 3 4 5 6) (list-sort < '(3 2 1 4 5 6 2 1)))
+
+;; All-equal input: single ascending run, no reversal
+(test '(7 7 7 7) (list-sort < '(7 7 7 7)))
+
+;; Two elements (smallest merge-pairs case)
+(test '(1 2) (list-sort < '(2 1)))
+
+;; Alternating high-low pattern exercises many short runs
+(test '(1 2 3 4 5 6 7 8) (list-sort < '(2 1 4 3 6 5 8 7)))
+
 (test-end "list-sort")
 
 ;; ============================================================
@@ -84,6 +106,12 @@
 
 ;; list-stable-sort! alias
 (test '(1 2 3) (list-stable-sort! < (list 3 1 2)))
+
+;; sort! on already-sorted (single run, no merging)
+(test '(1 2 3 4 5) (list-sort! < (list 1 2 3 4 5)))
+
+;; sort! on descending (single reversed run)
+(test '(1 2 3 4 5) (list-sort! < (list 5 4 3 2 1)))
 
 (test-end "list-sort!")
 
@@ -115,6 +143,25 @@
 ;; vector-stable-sort alias
 (test #(1 2 3) (vector-stable-sort < #(3 2 1)))
 
+;; Power-of-2 length (even merge passes → result in original buffer)
+(test #(1 2 3 4) (vector-sort < #(4 3 2 1)))
+
+;; Non-power-of-2 length (odd merge passes → copy-back from temp)
+(test #(1 2 3) (vector-sort < #(3 2 1)))
+(test #(1 2 3 4 5) (vector-sort < #(5 4 3 2 1)))
+
+;; Length 7: exercises the "one run left, copy as-is" branch in merge-runs
+(test #(1 2 3 4 5 6 7) (vector-sort < #(7 6 5 4 3 2 1)))
+
+;; All-equal vector
+(test #(5 5 5 5) (vector-sort < #(5 5 5 5)))
+
+;; Already sorted
+(test #(1 2 3 4 5) (vector-sort < #(1 2 3 4 5)))
+
+;; vector-sort with start-only arity
+(test #(1 2 3) (vector-sort < #(9 3 1 2) 1))
+
 (test-end "vector-sort")
 
 ;; ============================================================
@@ -137,6 +184,21 @@
 (let ((v (vector 3 1 2)))
   (vector-stable-sort! < v)
   (test #(1 2 3) v))
+
+;; sort! subrange with start-only arity
+(let ((v (vector 9 3 1 2)))
+  (vector-sort! < v 1)
+  (test #(9 1 2 3) v))
+
+;; sort! on single element (base case, no temp allocation)
+(let ((v (vector 42)))
+  (vector-sort! < v)
+  (test #(42) v))
+
+;; sort! on empty (base case)
+(let ((v (vector)))
+  (vector-sort! < v)
+  (test #() v))
 
 (test-end "vector-sort!")
 
@@ -162,6 +224,15 @@
 (test '(1 2 3 4 5 6) (list-merge! < (list 1 3 5) (list 2 4 6)))
 (test '(1 2) (list-merge! < (list 1 2) '()))
 (test '(3 4) (list-merge! < '() (list 3 4)))
+
+;; merge! both empty
+(test '() (list-merge! < '() '()))
+
+;; merge interleaved: both branches of set-cdr! exercised
+(test '(1 2 3 4) (list-merge! < (list 1 3) (list 2 4)))
+
+;; merge with many duplicates (stability stress)
+(test '(1 1 1 2 2 2) (list-merge < '(1 1 2 2) '(1 2)))
 
 (test-end "list-merge")
 
@@ -194,6 +265,17 @@
   (test 2 (vector-ref target 3))
   (test 3 (vector-ref target 4))
   (test 4 (vector-ref target 5)))
+
+;; vector-merge stability: tagged pairs, equal keys from v1 first
+(let ((result (vector-merge (lambda (a b) (< (car a) (car b)))
+                            #((1 . a) (3 . a))
+                            #((1 . b) (2 . b)))))
+  (test #((1 . a) (1 . b) (2 . b) (3 . a)) result))
+
+;; vector-merge! with subranges for both from1 and from2
+(let ((target (make-vector 4 0)))
+  (vector-merge! < target #(9 1 3 9) #(9 2 4 9) 0 1 3 1 3)
+  (test #(1 2 3 4) target))
 
 (test-end "vector-merge")
 
@@ -246,6 +328,21 @@
   (test 3 (vector-delete-neighbor-dups! equal? v)))
 (test-end "vector-delete-neighbor-dups!")
 
+;; vector dedup with subrange: start-only arity
+(test #(2 3) (vector-delete-neighbor-dups equal? #(1 1 2 3 3) 2))
+
+;; vector dedup! on subrange
+(let ((v (vector 0 1 1 2 2 0)))
+  (let ((end (vector-delete-neighbor-dups! equal? v 1 5)))
+    ;; compacted [1,2] in v[1..end), returns end=3
+    (test 3 end)
+    (test 1 (vector-ref v 1))
+    (test 2 (vector-ref v 2))))
+
+;; list dedup with custom equality
+(test '("a" "B" "c")
+      (list-delete-neighbor-dups string-ci=? '("a" "A" "B" "b" "c")))
+
 (test-end "dedup")
 
 ;; ============================================================
@@ -284,6 +381,32 @@
   ;; vector should still contain same elements
   (test 3 (vector-length v)))
 
+;; select on 2-element vector (minimal quickselect)
+(test 1 (let ((v (vector 2 1))) (vector-select! < v 0)))
+(test 2 (let ((v (vector 2 1))) (vector-select! < v 1)))
+
+;; select with many duplicates (exercises the equal partition in partition3!)
+(let ((v (vector 3 3 3 1 3 3)))
+  (test 3 (vector-select! < v 5)))  ;; max is 3
+(let ((v (vector 3 3 3 1 3 3)))
+  (test 1 (vector-select! < v 0)))  ;; min is 1
+
+;; separate with all-equal (entire vector is equal partition)
+(let ((v (vector 5 5 5 5)))
+  (vector-separate! < v 2)
+  ;; all 5s, nothing to reorder
+  (test #(5 5 5 5) v))
+
+;; select on large vector (exercises recursion depth)
+(let ((v (let ((v (make-vector 100)))
+           (let loop ((i 0))
+             (when (< i 100)
+               (vector-set! v i (- 99 i))
+               (loop (+ i 1))))
+           v)))
+  (test 0 (vector-select! < v 0))
+  (test 99 (vector-select! < (vector-copy v) 99)))
+
 (test-end "select")
 
 ;; ============================================================
@@ -320,6 +443,26 @@
   (let ((med (vector-find-median < v 0)))
     (test 3 med)
     (test #(5 3 1 4 2) v)))
+
+;; find-median! returns correct answer
+(test 3 (vector-find-median! < (vector 3 1 4 1 5) 0))
+
+;; two elements: even length, exercises upper-middle scan
+(test 1 (vector-find-median < #(2 1) 0))  ;; default mean: lesser
+(test 3/2 (vector-find-median < #(2 1) 0
+            (lambda (a b) (/ (+ a b) 2))))
+
+;; even length with all-equal elements
+(test 5 (vector-find-median < #(5 5 5 5) 0))
+
+;; large odd-length vector
+(let ((v (let ((v (make-vector 101)))
+           (let loop ((i 0))
+             (when (< i 101)
+               (vector-set! v i (- 100 i))
+               (loop (+ i 1))))
+           v)))
+  (test 50 (vector-find-median < v -1)))
 
 (test-end "median")
 
