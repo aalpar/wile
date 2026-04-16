@@ -45,18 +45,18 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext
 		var ok bool
 		bindingsPair, ok = bindingsList.(*syntax.SyntaxPair)
 		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-syntax: bindings must be a list")
+			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-syntax: bindings must be a list"))
 		}
 	}
 
 	// Get the body (CDR of args)
 	bodyCdr := argsPair.SyntaxCdr()
 	if values.IsEmptyList(bodyCdr) {
-		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-syntax: expected body expressions")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-syntax: expected body expressions"))
 	}
 	bodyList, ok := bodyCdr.(*syntax.SyntaxPair)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-syntax: expected body expressions")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-syntax: expected body expressions"))
 	}
 
 	// Transform to syntax-case form
@@ -77,7 +77,7 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext
 		binding := current.SyntaxCar()
 		bindingPair, ok := binding.(*syntax.SyntaxPair)
 		if !ok || bindingPair.IsEmptyList() {
-			return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-syntax: each binding must be (pattern expr)")
+			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-syntax: each binding must be (pattern expr)"))
 		}
 
 		// Get pattern (first element)
@@ -87,7 +87,7 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext
 		// Get expr (second element)
 		rest, ok := bindingPair.SyntaxCdr().(*syntax.SyntaxPair)
 		if !ok || rest.IsEmptyList() {
-			return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-syntax: each binding must be (pattern expr)")
+			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-syntax: each binding must be (pattern expr)"))
 		}
 		expr = rest.SyntaxCar()
 		exprs = append(exprs, expr)
@@ -133,7 +133,7 @@ func (p *CompileTimeContinuation) CompileWithSyntax(ctctx CompileTimeCallContext
 // compileWithSyntaxBody compiles the body of with-syntax when there are no bindings.
 func (p *CompileTimeContinuation) compileWithSyntaxBody(ctctx CompileTimeCallContext, bodyList *syntax.SyntaxPair) error {
 	if bodyList.IsEmptyList() {
-		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-syntax: expected body expressions")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-syntax: expected body expressions"))
 	}
 
 	// Compile each body expression, the last one in tail position

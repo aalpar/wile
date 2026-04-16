@@ -49,14 +49,14 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 	// expr is ((lib-name) <declaration> ...) - args after 'define-library' keyword
 	rest, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAPair, "define-library: expected library name and declarations")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "define-library: expected library name and declarations"))
 	}
 
 	// Parse library name: (lib-name) is a list of identifiers
 	libNameExpr := rest.SyntaxCar()
 	libName, err := ParseLibraryNameFromDatum(ctctx.ctx, libNameExpr.UnwrapAll())
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "define-library: invalid library name")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "define-library: invalid library name"))
 	}
 
 	// Create isolated library environment with primitives
@@ -66,7 +66,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 	if factory != nil {
 		libEnv, err = factory(ctctx.ctx, p.env, libName.Parts)
 		if err != nil {
-			return werr.WrapForeignErrorf(err, "define-library: could not create library environment")
+			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "define-library: could not create library environment"))
 		}
 		// Share the library registry with the new environment so nested imports work
 		libEnv.SetLibraryRegistry(p.env.LibraryRegistry())
@@ -98,7 +98,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 
 	decls, ok := declsExpr.(*syntax.SyntaxPair)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAPair, "define-library: expected list of declarations")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "define-library: expected list of declarations"))
 	}
 
 	// Create a compiler for the library environment
@@ -112,7 +112,7 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 		return libCompiler.processLibraryDeclaration(ctctx, lib, decl)
 	})
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "define-library: error processing declarations")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "define-library: error processing declarations"))
 	}
 
 	// Peephole optimization on the library template.
@@ -134,14 +134,14 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 func (p *CompileTimeContinuation) processLibraryDeclaration(ctctx CompileTimeCallContext, lib *CompiledLibrary, decl syntax.SyntaxValue) error {
 	declPair, ok := decl.(*syntax.SyntaxPair)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAPair, "library declaration must be a list")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "library declaration must be a list"))
 	}
 
 	// Get the declaration keyword
 	keywordExpr := declPair.SyntaxCar()
 	keywordSym, ok := keywordExpr.(*syntax.SyntaxSymbol)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "library declaration must start with symbol")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "library declaration must start with symbol"))
 	}
 
 	keyword := keywordSym.Unwrap().(*values.Symbol).Key
@@ -161,7 +161,7 @@ func (p *CompileTimeContinuation) processLibraryDeclaration(ctctx CompileTimeCal
 			if syntax.IsSyntaxEmptyList(argsExpr) {
 				return nil // empty begin is valid
 			}
-			return werr.WrapForeignErrorf(werr.ErrNotAPair, "begin: expected list of expressions")
+			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "begin: expected list of expressions"))
 		}
 		return p.compileLibraryBegin(ctctx, beginPair)
 	case "include":
@@ -175,7 +175,7 @@ func (p *CompileTimeContinuation) processLibraryDeclaration(ctctx CompileTimeCal
 	case "description":
 		return p.processLibraryDescription(lib, argsExpr)
 	default:
-		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unknown library declaration: %s", keyword)
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unknown library declaration: %s", keyword))
 	}
 }
 
@@ -187,7 +187,7 @@ func (p *CompileTimeContinuation) processLibraryExport(ctx context.Context, lib 
 
 	argsPair, ok := args.(*syntax.SyntaxPair)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAPair, "export: expected list of export specs")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "export: expected list of export specs"))
 	}
 
 	_, err := syntax.SyntaxForEach(ctx, argsPair, func(_ context.Context, _ int, _ bool, spec syntax.SyntaxValue) error {
@@ -199,19 +199,19 @@ func (p *CompileTimeContinuation) processLibraryExport(ctx context.Context, lib 
 // processLibraryDescription handles (description <string>) within a library.
 func (p *CompileTimeContinuation) processLibraryDescription(lib *CompiledLibrary, args syntax.SyntaxValue) error {
 	if syntax.IsSyntaxEmptyList(args) {
-		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "description: expected a string argument")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "description: expected a string argument"))
 	}
 	argsPair, ok := args.(*syntax.SyntaxPair)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAPair, "description: expected a string argument")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "description: expected a string argument"))
 	}
 	strExpr := argsPair.SyntaxCar()
 	str, ok := strExpr.UnwrapAll().(*values.String)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAString, "description: argument must be a string")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAString, "description: argument must be a string"))
 	}
 	if !syntax.IsSyntaxEmptyList(argsPair.SyntaxCdr()) {
-		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "description: expected exactly one string argument")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "description: expected exactly one string argument"))
 	}
 	// Last-writer-wins: multiple description declarations are allowed;
 	// the last one takes effect.
@@ -240,31 +240,31 @@ func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
 		carExpr := s.SyntaxCar()
 		carSym, ok := carExpr.(*syntax.SyntaxSymbol)
 		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "export: expected symbol")
+			return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "export: expected symbol"))
 		}
 
 		if carSym.Unwrap().(*values.Symbol).Key == "rename" {
 			// (rename internal external)
 			cdrExpr, ok := s.SyntaxCdr().(*syntax.SyntaxPair)
 			if !ok {
-				return werr.WrapForeignErrorf(werr.ErrNotAPair, "export rename: expected internal and external names")
+				return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotAPair, "export rename: expected internal and external names"))
 			}
 
 			internalExpr := cdrExpr.SyntaxCar()
 			internalSym, ok := internalExpr.(*syntax.SyntaxSymbol)
 			if !ok {
-				return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "export rename: internal name must be symbol")
+				return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "export rename: internal name must be symbol"))
 			}
 
 			cdrCdr, ok := cdrExpr.SyntaxCdr().(*syntax.SyntaxPair)
 			if !ok {
-				return werr.WrapForeignErrorf(werr.ErrNotAPair, "export rename: expected external name")
+				return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotAPair, "export rename: expected external name"))
 			}
 
 			externalExpr := cdrCdr.SyntaxCar()
 			externalSym, ok := externalExpr.(*syntax.SyntaxSymbol)
 			if !ok {
-				return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "export rename: external name must be symbol")
+				return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "export rename: external name must be symbol"))
 			}
 
 			internalName := internalSym.Unwrap().(*values.Symbol).Key
@@ -273,10 +273,10 @@ func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
 			return nil
 		}
 
-		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "export: invalid spec form")
+		return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "export: invalid spec form"))
 
 	default:
-		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "export: expected symbol or rename form")
+		return wrapSourcedError(spec.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "export: expected symbol or rename form"))
 	}
 }
 
@@ -284,7 +284,7 @@ func parseExportSpec(lib *CompiledLibrary, spec syntax.SyntaxValue) error {
 //
 // This is only valid within a library definition. At top-level, it's an error.
 func (p *CompileTimeContinuation) CompileExport(_ CompileTimeCallContext, _ syntax.SyntaxValue) error {
-	return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "export: only valid within define-library")
+	return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "export: only valid within define-library"))
 }
 
 // processIncludeLibraryDeclarations handles (include-library-declarations <string> ...) within a library.
@@ -296,23 +296,23 @@ func (p *CompileTimeContinuation) processIncludeLibraryDeclarations(ctctx Compil
 
 	argsPair, ok := args.(*syntax.SyntaxPair)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAPair, "include-library-declarations: expected list of filenames")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "include-library-declarations: expected list of filenames"))
 	}
 
 	// Process each filename
 	_, err := syntax.SyntaxForEach(ctctx.ctx, argsPair, func(ctx context.Context, _ int, _ bool, v syntax.SyntaxValue) error {
 		fn, ok := v.Unwrap().(*values.String)
 		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAString, "include-library-declarations: expected string filename")
+			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAString, "include-library-declarations: expected string filename"))
 		}
 
 		// Find and open the file
 		file, filePath, err := findFile(p, ctctx, fn.Value)
 		if err != nil {
-			return werr.WrapForeignErrorf(err, "include-library-declarations: failed to find file %q", fn.Value)
+			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "include-library-declarations: failed to find file %q", fn.Value))
 		}
 		if file == nil {
-			return werr.WrapForeignErrorf(werr.ErrFileNotFound, "include-library-declarations: file not found: %q", fn.Value)
+			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrFileNotFound, "include-library-declarations: file not found: %q", fn.Value))
 		}
 		defer file.Close() //nolint:errcheck
 
@@ -327,13 +327,13 @@ func (p *CompileTimeContinuation) processIncludeLibraryDeclarations(ctctx Compil
 				if errors.Is(readErr, io.EOF) {
 					break
 				}
-				return werr.WrapForeignErrorf(readErr, "include-library-declarations: error reading %q", fn.Value)
+				return p.wrapCompilationError(werr.WrapForeignErrorf(readErr, "include-library-declarations: error reading %q", fn.Value))
 			}
 
 			// Process the form as a library declaration
 			err := p.processLibraryDeclaration(ctctx, lib, stx)
 			if err != nil {
-				return werr.WrapForeignErrorf(err, "include-library-declarations: error processing declaration from %q", fn.Value)
+				return p.wrapCompilationError(werr.WrapForeignErrorf(err, "include-library-declarations: error processing declaration from %q", fn.Value))
 			}
 		}
 

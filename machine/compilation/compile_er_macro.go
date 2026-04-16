@@ -36,45 +36,45 @@ func compileERMacroTransformer(
 	cdr := erForm.SyntaxCdr()
 	argsPair, ok := cdr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(cdr) {
-		return nil, werr.WrapForeignErrorf(
+		return nil, wrapSourcedError(erForm.SourceContext(), werr.WrapForeignErrorf(
 			werr.ErrInvalidSyntax,
 			"er-macro-transformer: expected a lambda expression",
-		)
+		))
 	}
 
 	lambdaExpr := argsPair.SyntaxCar()
 	if lambdaExpr == nil {
-		return nil, werr.WrapForeignErrorf(
+		return nil, wrapSourcedError(erForm.SourceContext(), werr.WrapForeignErrorf(
 			werr.ErrUnexpectedNil,
 			"er-macro-transformer: lambda expression is nil",
-		)
+		))
 	}
 
 	// Reject extra arguments: (er-macro-transformer <lambda>) must have exactly one arg.
 	rest := argsPair.SyntaxCdr()
 	if !syntax.IsSyntaxEmptyList(rest) {
-		return nil, werr.WrapForeignErrorf(
+		return nil, wrapSourcedError(erForm.SourceContext(), werr.WrapForeignErrorf(
 			werr.ErrInvalidSyntax,
 			"er-macro-transformer: expected exactly one argument (lambda expression), got extra forms",
-		)
+		))
 	}
 
 	// Compile and evaluate the lambda to get a machine.MachineClosure.
 	// compileAndEvalLambdaTransformer handles expansion, compilation, and evaluation.
 	closure, err := compileAndEvalLambdaTransformer(ctx, env, lambdaExpr, evaluator)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(
+		return nil, wrapSourcedError(erForm.SourceContext(), werr.WrapForeignErrorf(
 			err,
 			"er-macro-transformer: failed to compile lambda",
-		)
+		))
 	}
 
 	// Validate arity: the lambda must accept exactly 3 parameters (form, rename, compare)
 	if !closure.AcceptsArity(3) {
-		return nil, werr.WrapForeignErrorf(
+		return nil, wrapSourcedError(erForm.SourceContext(), werr.WrapForeignErrorf(
 			werr.ErrWrongNumberOfArguments,
 			"er-macro-transformer: lambda must accept exactly 3 arguments (form rename compare)",
-		)
+		))
 	}
 
 	// Wrap in ERMacroTransformer with the definition-site expand environment

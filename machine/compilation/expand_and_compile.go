@@ -36,7 +36,7 @@ func ExpandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, st
 
 	expanded, err := NewExpanderTimeContinuation(ctx, env, evaluator).ExpandExpression(stx)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "expansion")
+		return nil, wrapSourcedError(stx.SourceContext(), werr.WrapForeignErrorf(err, "expansion"))
 	}
 
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -48,7 +48,7 @@ func ExpandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, st
 	compiler.SetInlineThreshold(inlineThreshold)
 	err = compiler.CompileExpression(cctx, expanded)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "compilation")
+		return nil, wrapSourcedError(stx.SourceContext(), werr.WrapForeignErrorf(err, "compilation"))
 	}
 
 	return tpl, nil

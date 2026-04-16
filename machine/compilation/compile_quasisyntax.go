@@ -38,7 +38,7 @@ func (p *CompileTimeContinuation) CompileQuasisyntax(ctctx CompileTimeCallContex
 	// So expr = (template)
 	argsPair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || argsPair.IsEmptyList() {
-		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "quasisyntax: expected exactly one argument")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "quasisyntax: expected exactly one argument"))
 	}
 
 	// Get the template (CAR of the args list)
@@ -46,7 +46,7 @@ func (p *CompileTimeContinuation) CompileQuasisyntax(ctctx CompileTimeCallContex
 
 	// Check no extra arguments
 	if !syntax.IsSyntaxEmptyList(argsPair.SyntaxCdr()) {
-		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "quasisyntax: expected exactly one argument")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "quasisyntax: expected exactly one argument"))
 	}
 
 	// Compile the quasisyntax template at depth 1
@@ -158,10 +158,10 @@ func (p *CompileTimeContinuation) expandQuasisyntaxList(ctx context.Context, pai
 
 // CompileUnsyntax errors - unsyntax outside of quasisyntax
 func (p *CompileTimeContinuation) CompileUnsyntax(_ CompileTimeCallContext, _ syntax.SyntaxValue) error {
-	return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unsyntax: not in quasisyntax context")
+	return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unsyntax: not in quasisyntax context"))
 }
 
 // CompileUnsyntaxSplicing errors - unsyntax-splicing outside of quasisyntax
 func (p *CompileTimeContinuation) CompileUnsyntaxSplicing(_ CompileTimeCallContext, _ syntax.SyntaxValue) error {
-	return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unsyntax-splicing: not in quasisyntax context")
+	return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unsyntax-splicing: not in quasisyntax context"))
 }

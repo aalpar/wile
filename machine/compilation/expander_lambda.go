@@ -85,20 +85,20 @@ func (p *ExpanderTimeContinuation) expandLambdaForm(sym *syntax.SyntaxSymbol, ex
 	// This makes locally-defined macros visible to later body expressions
 	bodyExprs, err := collectBodyExpressions(bodyWithScope)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "lambda: invalid body expression")
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "lambda: invalid body expression"))
 	}
 
 	// Handle the case where body is wrapped in (begin ...) - common from let macro
 	unwrappedExprs, wasBeginWrapped, err := unwrapBeginBodyWithFlag(bodyExprs)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "lambda: invalid body")
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "lambda: invalid body"))
 	}
 
 	// Expand body in the child environment, compiling define-syntax as encountered
 	childExpander := NewExpanderTimeContinuation(p.ctx, childEnv, p.evaluator)
 	expandedExprs, err := childExpander.ExpandBodyWithDefineSyntax(unwrappedExprs)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "lambda: failed to expand body")
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "lambda: failed to expand body"))
 	}
 
 	// Rebuild the body as a syntax list
@@ -132,7 +132,7 @@ func collectBodyExpressions(body *syntax.SyntaxPair) ([]syntax.SyntaxValue, erro
 		} else if syntax.IsSyntaxEmptyList(cdr) {
 			break
 		} else {
-			return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "body must be a proper list")
+			return nil, wrapSourcedError(body.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotAList, "body must be a proper list"))
 		}
 	}
 	return exprs, nil
@@ -165,7 +165,7 @@ func unwrapBeginBodyWithFlag(exprs []syntax.SyntaxValue) ([]syntax.SyntaxValue, 
 	}
 	innerExprs, err := collectBodyExpressions(cdrPair)
 	if err != nil {
-		return nil, false, werr.WrapForeignErrorf(err, "begin: malformed body")
+		return nil, false, wrapSourcedError(cdrPair.SourceContext(), werr.WrapForeignErrorf(err, "begin: malformed body"))
 	}
 	return innerExprs, true, nil
 }
@@ -280,7 +280,7 @@ func (p *ExpanderTimeContinuation) expandCaseLambdaForm(sym *syntax.SyntaxSymbol
 			} else {
 				expandedBody, err := p.ExpandSyntaxArgumentList(cdrPair)
 				if err != nil {
-					return nil, werr.WrapForeignErrorf(err, "case-lambda: failed to expand clause body")
+					return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "case-lambda: failed to expand clause body"))
 				}
 
 				// Build (formals expanded-body...)

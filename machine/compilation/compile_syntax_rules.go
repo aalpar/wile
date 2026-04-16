@@ -71,20 +71,21 @@ import (
 func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, syntaxRulesForm syntax.SyntaxValue, libraryScope *syntax.Scope) (*machine.MachineClosure, error) {
 	// syntaxRulesForm should be (syntax-rules (literals...) clause1 clause2 ...)
 	// or (syntax-rules <ellipsis> (literals...) clause1 clause2 ...)
+	src := syntaxRulesForm.SourceContext()
 	formPair, ok := syntaxRulesForm.(*syntax.SyntaxPair)
 	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "syntax-rules: expected a list")
+		return nil, wrapSourcedError(src, werr.WrapForeignErrorf(werr.ErrNotAList, "syntax-rules: expected a list"))
 	}
 
 	// Skip 'syntax-rules' keyword
 	cdr := formPair.SyntaxCdr()
 	if cdr == nil {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: missing literals list and clauses")
+		return nil, wrapSourcedError(src, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: missing literals list and clauses"))
 	}
 
 	argsPair, ok := cdr.(*syntax.SyntaxPair)
 	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: expected literals list and clauses")
+		return nil, wrapSourcedError(src, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: expected literals list and clauses"))
 	}
 
 	// Check for optional custom ellipsis identifier
@@ -92,7 +93,7 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 	ellipsis := match.DefaultEllipsis
 	firstArg := argsPair.SyntaxCar()
 	if firstArg == nil {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: missing literals list")
+		return nil, wrapSourcedError(src, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: missing literals list"))
 	}
 
 	var literalsStx syntax.SyntaxValue
@@ -110,11 +111,11 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 		// Move to next element for literals list
 		nextCdr := argsPair.SyntaxCdr()
 		if nextCdr == nil {
-			return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: missing literals list after ellipsis identifier")
+			return nil, wrapSourcedError(src, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: missing literals list after ellipsis identifier"))
 		}
 		nextPair, ok := nextCdr.(*syntax.SyntaxPair)
 		if !ok {
-			return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: expected literals list after ellipsis identifier")
+			return nil, wrapSourcedError(src, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: expected literals list after ellipsis identifier"))
 		}
 
 		literalsStx = nextPair.SyntaxCar()
@@ -126,7 +127,7 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 	}
 
 	if literalsStx == nil {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: missing literals list")
+		return nil, wrapSourcedError(src, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: missing literals list"))
 	}
 
 	literals := make(map[string]struct{})
@@ -137,7 +138,7 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 	if ok && !syntax.IsSyntaxEmptyList(literalsList) {
 		err := extractLiteralsWithSyntax(ctx, literalsList, literals, literalSyntax, ellipsis)
 		if err != nil {
-			return nil, werr.WrapForeignErrorf(err, "syntax-rules: invalid literals list")
+			return nil, wrapSourcedError(src, werr.WrapForeignErrorf(err, "syntax-rules: invalid literals list"))
 		}
 	}
 	// Empty literals list is also valid
@@ -153,40 +154,41 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 
 	// Process clauses
 	if clausesCdr == nil {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: no clauses provided")
+		return nil, wrapSourcedError(src, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: no clauses provided"))
 	}
 
 	clausesList, ok := clausesCdr.(*syntax.SyntaxPair)
 	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "syntax-rules: expected clause list")
+		return nil, wrapSourcedError(src, werr.WrapForeignErrorf(werr.ErrNotAList, "syntax-rules: expected clause list"))
 	}
 
 	// Compile each clause
 	var clauses []*SyntaxRulesClause
 	v, err := clausesList.SyntaxForEach(ctx, func(_ context.Context, _ int, _ bool, clause syntax.SyntaxValue) error {
+		clauseSrc := clause.SourceContext()
 		clausePair, ok := clause.(*syntax.SyntaxPair)
 		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAList, "syntax-rules: clause must be a list")
+			return wrapSourcedError(clauseSrc, werr.WrapForeignErrorf(werr.ErrNotAList, "syntax-rules: clause must be a list"))
 		}
 
 		// Extract pattern and template
 		pattern := clausePair.SyntaxCar()
 		if pattern == nil {
-			return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: missing pattern in clause")
+			return wrapSourcedError(clauseSrc, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: missing pattern in clause"))
 		}
 
 		cdrVal := clausePair.SyntaxCdr()
 		if cdrVal == nil {
-			return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: missing template in clause")
+			return wrapSourcedError(clauseSrc, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: missing template in clause"))
 		}
 		templateCdr, ok := cdrVal.(*syntax.SyntaxPair)
 		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAList, "syntax-rules: template must be in a list")
+			return wrapSourcedError(clauseSrc, werr.WrapForeignErrorf(werr.ErrNotAList, "syntax-rules: template must be in a list"))
 		}
 
 		template := templateCdr.SyntaxCar()
 		if template == nil {
-			return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: missing template in clause")
+			return wrapSourcedError(clauseSrc, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: missing template in clause"))
 		}
 
 		// Compile the pattern with custom ellipsis
@@ -194,21 +196,21 @@ func CompileSyntaxRules(ctx context.Context, env *environment.EnvironmentFrame, 
 		// Pass literalSyntax for scope-aware literal matching (hygiene)
 		compiledClause, err := compileClauseWithEllipsisAndLiterals(ctx, env, pattern, template, literals, literalSyntax, ellipsis, libraryScope)
 		if err != nil {
-			return werr.WrapForeignErrorf(err, "syntax-rules: error compiling clause")
+			return wrapSourcedError(clauseSrc, werr.WrapForeignErrorf(err, "syntax-rules: error compiling clause"))
 		}
 
 		clauses = append(clauses, compiledClause)
 		return nil
 	})
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "syntax-rules: error compiling clause")
+		return nil, wrapSourcedError(src, werr.WrapForeignErrorf(err, "syntax-rules: error compiling clause"))
 	}
 	if !syntax.IsSyntaxEmptyList(v) {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "syntax-rules: expected proper list of clauses")
+		return nil, wrapSourcedError(src, werr.WrapForeignErrorf(werr.ErrNotAList, "syntax-rules: expected proper list of clauses"))
 	}
 
 	if len(clauses) == 0 {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: no valid clauses")
+		return nil, wrapSourcedError(src, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-rules: no valid clauses"))
 	}
 
 	// Create transformer closure
@@ -492,13 +494,13 @@ func extractLiteralsWithSyntax(ctx context.Context,
 	v, err := literalsList.SyntaxForEach(ctx, func(_ context.Context, _ int, _ bool, literal syntax.SyntaxValue) error {
 		sym, ok := literal.(*syntax.SyntaxSymbol)
 		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotASymbol, "extractLiterals: literal must be a symbol")
+			return wrapSourcedError(literal.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASymbol, "extractLiterals: literal must be a symbol"))
 		}
 
 		symVal := sym.Unwrap()
 		symbol, ok := symVal.(*values.Symbol)
 		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotASymbol, "extractLiterals: literal must be a symbol")
+			return wrapSourcedError(literal.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASymbol, "extractLiterals: literal must be a symbol"))
 		}
 		literals[symbol.Key] = struct{}{}
 		// Store syntax symbol for scope-aware matching if map provided
@@ -508,10 +510,10 @@ func extractLiteralsWithSyntax(ctx context.Context,
 		return nil
 	})
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "extractLiterals: literals must be a symbol")
+		return wrapSourcedError(literalsList.SourceContext(), werr.WrapForeignErrorf(err, "extractLiterals: literals must be a symbol"))
 	}
 	if !syntax.IsSyntaxEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "extractLiterals: literals must be a list")
+		return wrapSourcedError(literalsList.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotAList, "extractLiterals: literals must be a list"))
 	}
 	return nil
 }

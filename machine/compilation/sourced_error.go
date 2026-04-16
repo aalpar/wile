@@ -43,3 +43,13 @@ func (p *SourcedError) Error() string {
 func (p *SourcedError) Unwrap() error {
 	return p.Cause
 }
+
+// wrapSourcedError attaches source location to an error.
+// For use in standalone functions that lack a CompileTimeContinuation receiver.
+// If src is nil, returns the error unchanged.
+func wrapSourcedError(src *syntax.SourceContext, err error) error {
+	if src == nil {
+		return err
+	}
+	return &SourcedError{Source: src, Cause: err}
+}

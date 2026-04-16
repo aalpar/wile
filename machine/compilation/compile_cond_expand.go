@@ -29,12 +29,12 @@ import (
 // matching. Returns the matched clause pair whose cdr contains the body forms.
 func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, args syntax.SyntaxValue) (*syntax.SyntaxPair, error) {
 	if syntax.IsSyntaxEmptyList(args) {
-		return nil, werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no clauses")
+		return nil, p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no clauses"))
 	}
 
 	argsPair, ok := args.(*syntax.SyntaxPair)
 	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: expected list of clauses")
+		return nil, p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: expected list of clauses"))
 	}
 
 	var registry *LibraryRegistry
@@ -52,13 +52,13 @@ func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, a
 
 		clausePair, ok := clause.(*syntax.SyntaxPair)
 		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: clause must be a list")
+			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: clause must be a list"))
 		}
 
 		reqExpr := clausePair.SyntaxCar()
 		req, err := parseFeatureRequirement(ctx, reqExpr)
 		if err != nil {
-			return werr.WrapForeignErrorf(err, "cond-expand: invalid feature requirement")
+			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "cond-expand: invalid feature requirement"))
 		}
 
 		if req.IsSatisfied(ctx, registry, resolver) {
@@ -72,7 +72,7 @@ func (p *CompileTimeContinuation) resolveCondExpandClause(ctx context.Context, a
 	}
 
 	if matchedClause == nil {
-		return nil, werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no matching clause")
+		return nil, p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no matching clause"))
 	}
 
 	return matchedClause.(*syntax.SyntaxPair), nil
@@ -109,7 +109,7 @@ func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext
 
 	bodyPair, ok := bodyExpr.(*syntax.SyntaxPair)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: expected list of expressions")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: expected list of expressions"))
 	}
 
 	// Expand and compile each body expression
@@ -118,7 +118,7 @@ func (p *CompileTimeContinuation) CompileCondExpand(ctctx CompileTimeCallContext
 		// Expand the expression
 		expanded, expandErr := NewExpanderTimeContinuation(ctctx.ctx, p.env, p.evaluator).ExpandExpression(expr)
 		if expandErr != nil {
-			return werr.WrapForeignErrorf(expandErr, "cond-expand: error expanding body expression")
+			return p.wrapCompilationError(werr.WrapForeignErrorf(expandErr, "cond-expand: error expanding body expression"))
 		}
 
 		// Compile the expanded expression
@@ -149,7 +149,7 @@ func (p *CompileTimeContinuation) processCondExpand(ctctx CompileTimeCallContext
 
 	declsPair, ok := declsExpr.(*syntax.SyntaxPair)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: expected list of declarations")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: expected list of declarations"))
 	}
 
 	// Process each declaration
@@ -178,13 +178,13 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 
 	case *syntax.SyntaxPair:
 		if syntax.IsSyntaxEmptyList(v) {
-			return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "empty feature requirement")
+			return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "empty feature requirement"))
 		}
 
 		carExpr := v.SyntaxCar()
 		carSym, ok := carExpr.(*syntax.SyntaxSymbol)
 		if !ok {
-			return nil, werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "feature requirement must start with symbol")
+			return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "feature requirement must start with symbol"))
 		}
 
 		keyword := carSym.Unwrap().(*values.Symbol).Key
@@ -194,12 +194,12 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 			// (library <library-name>)
 			argsPair, ok := argsExpr.(*syntax.SyntaxPair)
 			if !ok || syntax.IsSyntaxEmptyList(argsPair) {
-				return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "library: expected library name")
+				return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "library: expected library name"))
 			}
 			libNameExpr := argsPair.SyntaxCar()
 			libName, err := ParseLibraryNameFromDatum(ctx, libNameExpr.UnwrapAll())
 			if err != nil {
-				return nil, werr.WrapForeignErrorf(err, "library: invalid library name")
+				return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "library: invalid library name"))
 			}
 			return NewLibraryRequirement(libName), nil
 
@@ -207,7 +207,7 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 			// (and <req> ...)
 			reqs, err := parseFeatureRequirementList(ctx, argsExpr)
 			if err != nil {
-				return nil, werr.WrapForeignErrorf(err, "and: invalid requirements")
+				return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "and: invalid requirements"))
 			}
 			return NewAndRequirement(reqs...), nil
 
@@ -215,7 +215,7 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 			// (or <req> ...)
 			reqs, err := parseFeatureRequirementList(ctx, argsExpr)
 			if err != nil {
-				return nil, werr.WrapForeignErrorf(err, "or: invalid requirements")
+				return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "or: invalid requirements"))
 			}
 			return NewOrRequirement(reqs...), nil
 
@@ -223,21 +223,21 @@ func parseFeatureRequirement(ctx context.Context, expr syntax.SyntaxValue) (Feat
 			// (not <req>)
 			argsPair, ok := argsExpr.(*syntax.SyntaxPair)
 			if !ok || syntax.IsSyntaxEmptyList(argsPair) {
-				return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "not: expected one requirement")
+				return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "not: expected one requirement"))
 			}
 			reqExpr := argsPair.SyntaxCar()
 			req, err := parseFeatureRequirement(ctx, reqExpr)
 			if err != nil {
-				return nil, werr.WrapForeignErrorf(err, "not: invalid requirement")
+				return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "not: invalid requirement"))
 			}
 			return NewNotRequirement(req), nil
 
 		default:
-			return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unknown feature requirement keyword: %s", keyword)
+			return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unknown feature requirement keyword: %s", keyword))
 		}
 
 	default:
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument, "invalid feature requirement type: %T", expr)
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidArgument, "invalid feature requirement type: %T", expr))
 	}
 }
 
@@ -249,7 +249,7 @@ func parseFeatureRequirementList(ctx context.Context, expr syntax.SyntaxValue) (
 
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAPair, "expected list of requirements")
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotAPair, "expected list of requirements"))
 	}
 
 	var reqs []FeatureRequirement

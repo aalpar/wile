@@ -35,7 +35,7 @@ func (p *CompileTimeContinuation) CompileBeginForSyntax(ctctx CompileTimeCallCon
 	}
 	exprPair, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "begin-for-syntax: expected expressions")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "begin-for-syntax: expected expressions"))
 	}
 
 	return p.executeFormsAtCompileTime(ctctx, "begin-for-syntax", exprPair)

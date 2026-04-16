@@ -162,7 +162,7 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 	// Expand the form
 	expanded, err := NewExpanderTimeContinuation(ctx, libEnv, evaluator).ExpandExpression(stx)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "error expanding library")
+		return nil, wrapSourcedError(stx.SourceContext(), werr.WrapForeignErrorf(err, "error expanding library"))
 	}
 
 	// Compile the form
@@ -178,17 +178,17 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 
 	err = compiler.CompileExpression(cctx, expanded)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "error compiling library")
+		return nil, wrapSourcedError(stx.SourceContext(), werr.WrapForeignErrorf(err, "error compiling library"))
 	}
 
 	if compiledLib == nil {
-		return nil, werr.WrapForeignErrorf(werr.ErrLibraryConfiguration, "library was not produced by compilation")
+		return nil, wrapSourcedError(stx.SourceContext(), werr.WrapForeignErrorf(werr.ErrLibraryConfiguration, "library was not produced by compilation"))
 	}
 
 	// Verify the library name matches what was expected
 	if compiledLib.Name.Key() != expectedName.Key() {
-		return nil, werr.WrapForeignErrorf(werr.ErrLibraryNameMismatch, "library name mismatch: expected %s, got %s",
-			expectedName.SchemeString(), compiledLib.Name.SchemeString())
+		return nil, wrapSourcedError(stx.SourceContext(), werr.WrapForeignErrorf(werr.ErrLibraryNameMismatch, "library name mismatch: expected %s, got %s",
+			expectedName.SchemeString(), compiledLib.Name.SchemeString()))
 	}
 
 	// Execute the library's compiled template to populate bindings
@@ -196,7 +196,7 @@ func compileAndExecuteLibrary(ctx context.Context, stx syntax.SyntaxValue, expec
 	if compiledLib.Template != nil && compiledLib.Template.CodeLen() > 0 {
 		_, err = evaluator.EvalTemplate(ctx, compiledLib.Template, compiledLib.Env)
 		if err != nil {
-			return nil, werr.WrapForeignErrorf(err, "error executing library")
+			return nil, wrapSourcedError(stx.SourceContext(), werr.WrapForeignErrorf(err, "error executing library"))
 		}
 	}
 
