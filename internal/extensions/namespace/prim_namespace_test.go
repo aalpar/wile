@@ -27,7 +27,7 @@ func newEngine(t *testing.T) *wile.Engine {
 	t.Helper()
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithLibraryPaths(),
 	)
 	qt.Assert(t, err, qt.IsNil)

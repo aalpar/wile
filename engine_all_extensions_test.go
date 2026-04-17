@@ -9,11 +9,11 @@ import (
 	"github.com/aalpar/wile"
 )
 
-func TestAllExtensions_EngineCreation(t *testing.T) {
+func TestKitchenSink_EngineCreation(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
-	eng, err := wile.NewEngine(ctx, wile.WithAllExtensions())
+	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
 	c.Assert(err, qt.IsNil)
 	defer eng.Close()
 
@@ -34,11 +34,11 @@ func TestAllExtensions_EngineCreation(t *testing.T) {
 	}
 }
 
-func TestWithAllExtensions_EquivalentToAllExtensions(t *testing.T) {
+func TestKitchenSink_Smoke(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
-	eng, err := wile.NewEngine(ctx, wile.WithAllExtensions())
+	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
 	c.Assert(err, qt.IsNil)
 	defer eng.Close()
 

@@ -12,7 +12,7 @@ import (
 func TestCallCC_Procedure(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
-	eng, err := wile.NewEngine(ctx, wile.WithAllExtensions())
+	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
 	c.Assert(err, qt.IsNil)
 	defer eng.Close()
 	result, err := eng.EvalMultiple(ctx, `(call-with-current-continuation procedure?)`)
@@ -71,7 +71,7 @@ func TestCallCC_FusedCallForeignCached(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			eng, err := wile.NewEngine(ctx, wile.WithAllExtensions())
+			eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
 			c.Assert(err, qt.IsNil)
 			defer eng.Close()
 

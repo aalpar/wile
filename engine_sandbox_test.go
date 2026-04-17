@@ -34,28 +34,30 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// TestSafeEngine_RejectsPrivileged verifies that an engine with only safe
-// extensions rejects privileged primitives at compile time.
-func TestSafeEngine_RejectsPrivileged(t *testing.T) {
+// TestConsole_RejectsPrivileged verifies that the Console profile rejects
+// privileged primitives. Extensions not included in Console (eval, system,
+// gointerop) produce compile-time errors for their primitives. Files extension
+// IS included under Console but the ConsoleAuthorizer restricts file
+// operations to /tmp, so reads/writes outside /tmp fail at runtime with
+// ErrAccessDenied.
+func TestConsole_RejectsPrivileged(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
-	engine, err := NewEngine(ctx, WithSafeExtensions())
+	engine, err := NewEngine(ctx, WithProfile(Console))
 	c.Assert(err, qt.IsNil)
 
-	// These primitives come from privileged extensions and should not exist.
-	privileged := []struct {
+	// Compile-time rejection: primitives from extensions absent in Console.
+	compileTimeRejected := []struct {
 		name string
 		code string
 	}{
-		{"open-input-file (files)", `(open-input-file "x")`},
 		{"eval (eval)", `(eval '(+ 1 2))`},
 		{"exit (system)", `(exit 0)`},
 		{"make-channel (gointerop)", `(make-channel 1)`},
 		{"load (eval)", `(load "x")`},
-		{"delete-file (files)", `(delete-file "x")`},
 	}
-	for _, tc := range privileged {
+	for _, tc := range compileTimeRejected {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := engine.Eval(ctx, engine.MustParse(ctx, tc.code))
 			var compErr *CompilationError
@@ -63,15 +65,33 @@ func TestSafeEngine_RejectsPrivileged(t *testing.T) {
 				qt.Commentf("expected CompilationError for %s, got %T: %v", tc.name, err, err))
 		})
 	}
+
+	// Runtime rejection: files extension IS registered, but operations
+	// outside /tmp are denied by ConsoleAuthorizer.
+	runtimeDenied := []struct {
+		name string
+		code string
+	}{
+		{"open-input-file outside /tmp", `(open-input-file "/etc/passwd")`},
+		{"delete-file outside /tmp", `(delete-file "/etc/passwd")`},
+	}
+	for _, tc := range runtimeDenied {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := engine.Eval(ctx, engine.MustParse(ctx, tc.code))
+			c.Assert(err, qt.IsNotNil, qt.Commentf("expected error for %s", tc.name))
+			c.Assert(errors.Is(err, security.ErrAccessDenied), qt.IsTrue,
+				qt.Commentf("expected ErrAccessDenied for %s, got: %v", tc.name, err))
+		})
+	}
 }
 
-// TestSafeEngine_AllowsSafe verifies that safe primitives work in a
-// sandboxed engine.
-func TestSafeEngine_AllowsSafe(t *testing.T) {
+// TestConsole_AllowsSafe verifies that safe primitives work in the
+// Console profile.
+func TestConsole_AllowsSafe(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
-	engine, err := NewEngine(ctx, WithSafeExtensions())
+	engine, err := NewEngine(ctx, WithProfile(Console))
 	c.Assert(err, qt.IsNil)
 
 	safe := []struct {
@@ -93,9 +113,6 @@ func TestSafeEngine_AllowsSafe(t *testing.T) {
 		{"make-record-type (all-safe)", `(record-type? (make-record-type 'point '(x y)))`, "#t"},
 		// all-safe: promises
 		{"force (all-safe)", "(force (make-promise 42))", "42"},
-		// introspection
-		{"environment? (introspection)", "(environment? 42)", "#f"},
-		{"environment-bound? (introspection)", "(environment-bound? (interaction-environment) '+)", "#t"},
 	}
 	for _, tc := range safe {
 		t.Run(tc.name, func(t *testing.T) {
@@ -150,30 +167,32 @@ func TestWithoutCore_PlusExtension(t *testing.T) {
 	c.Assert(errors.As(err, &compErr), qt.IsTrue)
 }
 
-// TestSafeEngine_LibraryPropagation verifies that library environments
-// created by a safe engine also lack privileged primitives.
-func TestSafeEngine_LibraryPropagation(t *testing.T) {
+// TestConsole_LibraryPropagation verifies that library environments
+// created by a Console-profile engine inherit the authorizer — so libraries
+// that attempt privileged operations are still blocked at runtime.
+func TestConsole_LibraryPropagation(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
-	// Create a temp directory with a library that tries to use open-input-file
+	// Create a temp directory with a library that tries to use eval,
+	// which is absent from the Console profile entirely.
 	libDir := t.TempDir()
 	libFile := libDir + "/bad.sld"
 	err := writeTestFile(libFile, `(define-library (bad)
-  (export try-open)
+  (export try-eval)
   (begin
-    (define (try-open) (open-input-file "x"))))`)
+    (define (try-eval) (eval '(+ 1 2)))))`)
 	c.Assert(err, qt.IsNil)
 
 	engine, err := NewEngine(ctx,
-		WithSafeExtensions(),
+		WithProfile(Console),
 		WithLibraryPaths(libDir),
 	)
 	c.Assert(err, qt.IsNil)
 
-	// Importing and calling the library should fail because open-input-file
-	// is not in the restricted engine's registry.
-	_, err = engine.EvalMultiple(ctx, `(import (bad)) (try-open)`)
+	// Importing and calling the library should fail because eval is not
+	// in the Console-profile registry.
+	_, err = engine.EvalMultiple(ctx, `(import (bad)) (try-eval)`)
 	c.Assert(err, qt.IsNotNil,
 		qt.Commentf("expected error from library using privileged primitive"))
 }

@@ -15,7 +15,7 @@ func TestEngine_EmbeddedStdlib_SchemeBase(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
@@ -36,7 +36,7 @@ func TestEngine_EmbeddedStdlib_ChibiTest(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
@@ -58,7 +58,7 @@ func TestEngine_EmbeddedStdlib_SRFI1(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
@@ -79,7 +79,7 @@ func TestEngine_EmbeddedStdlib_WileAlgebra(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
@@ -100,7 +100,7 @@ func TestEngine_EmbeddedStdlib_RewriteIdentityRight(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
@@ -136,7 +136,7 @@ func TestEngine_EmbeddedStdlib_RewriteIdentityLeft(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
@@ -167,7 +167,7 @@ func TestEngine_EmbeddedStdlib_RewriteNoMatch(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
@@ -198,7 +198,7 @@ func TestEngine_EmbeddedStdlib_RewriteCommutativity(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
@@ -225,7 +225,7 @@ func TestEngine_EmbeddedStdlib_RewriteCommutativityOrdered(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
@@ -252,7 +252,7 @@ func TestEngine_EmbeddedStdlib_RewriteAbsorbing(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
@@ -280,7 +280,7 @@ func TestEngine_EmbeddedStdlib_RewriteIdempotence(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
@@ -307,7 +307,7 @@ func TestEngine_EmbeddedStdlib_RewriteInvolution(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
@@ -334,7 +334,7 @@ func TestEngine_EmbeddedStdlib_RewriteAbsorptionRight(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
@@ -361,7 +361,7 @@ func TestEngine_EmbeddedStdlib_RewriteAbsorptionLeft(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
@@ -388,7 +388,7 @@ func TestEngine_EmbeddedStdlib_RewriteAbsorptionNoMatch(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
@@ -415,7 +415,7 @@ func TestEngine_EmbeddedStdlib_RewriteComposed(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
@@ -451,7 +451,7 @@ func TestEngine_EmbeddedStdlib_RewriteAssociativity(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
@@ -478,7 +478,7 @@ func TestEngine_EmbeddedStdlib_RewriteAssociativityAlreadyRight(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
@@ -505,7 +505,7 @@ func TestEngine_EmbeddedStdlib_RewriteDirectionalAxiom(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
@@ -528,7 +528,7 @@ func TestEngine_EmbeddedStdlib_SymbolicBooleanNormalization(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),
@@ -565,7 +565,7 @@ func TestEngine_EmbeddedStdlib_NoOSFallback(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithLibraryPaths(),
 	)
@@ -585,7 +585,7 @@ func TestEngine_LibraryDescription(t *testing.T) {
 	ctx := context.Background()
 
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(),

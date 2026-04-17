@@ -159,7 +159,7 @@ func TestCallCC_InsideCallback(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			engine, err := wile.NewEngine(context.Background(), wile.WithSafeExtensions())
+			engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.Console))
 			c.Assert(err, qt.IsNil)
 
 			result, err := engine.Eval(context.Background(), engine.MustParse(context.Background(), tc.code))

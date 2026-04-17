@@ -435,7 +435,7 @@ func TestCmdApropos_SpecialFormCategory(t *testing.T) {
 func TestCmdApropos_Library(t *testing.T) {
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithLibraryPaths("."),
 	)
@@ -512,7 +512,7 @@ func TestCmdTopic(t *testing.T) {
 func TestCmdDocLibrary(t *testing.T) {
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithLibraryPaths("."),
 	)
@@ -558,7 +558,7 @@ func TestCmdDocLibrary(t *testing.T) {
 func TestCmdLibraries(t *testing.T) {
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithLibraryPaths("."),
 	)
@@ -615,7 +615,7 @@ func TestCmdLibraries(t *testing.T) {
 func TestCmdLibraries_UnloadedFromExportIndex(t *testing.T) {
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithLibraryPaths("."),
 	)
@@ -770,7 +770,7 @@ func TestFormatPrimitiveDoc_MultiLineDescription(t *testing.T) {
 func TestCmdApropos_KeywordMatchAfterLibraryImport(t *testing.T) {
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithLibraryPaths("."),
 	)
@@ -797,7 +797,7 @@ func TestCmdApropos_KeywordMatchAfterLibraryImport(t *testing.T) {
 func TestCmdApropos_UnloadedLibraryNameMatch(t *testing.T) {
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithLibraryPaths("."),
 	)

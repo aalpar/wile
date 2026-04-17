@@ -235,7 +235,7 @@ func main() {
 
 	libPaths := buildLibraryPaths()
 	eng, err0 := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(libPaths...),

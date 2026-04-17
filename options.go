@@ -19,18 +19,6 @@ import (
 	"maps"
 
 	"github.com/aalpar/wile/environment"
-	exteval "github.com/aalpar/wile/extensions/eval"
-	"github.com/aalpar/wile/extensions/files"
-	"github.com/aalpar/wile/extensions/gointerop"
-	"github.com/aalpar/wile/extensions/introspection"
-	"github.com/aalpar/wile/extensions/math"
-	"github.com/aalpar/wile/extensions/process"
-	"github.com/aalpar/wile/extensions/system"
-	"github.com/aalpar/wile/extensions/threads"
-	"github.com/aalpar/wile/internal/extensions/all"
-	"github.com/aalpar/wile/internal/extensions/envvars"
-	"github.com/aalpar/wile/internal/extensions/io"
-	nsext "github.com/aalpar/wile/internal/extensions/namespace"
 	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/security"
@@ -248,109 +236,6 @@ func WithSourceOS() EngineOption {
 		cfg.resolverFactories = append(cfg.resolverFactories, func(env *environment.EnvironmentFrame) compilation.FileResolver {
 			return compilation.NewOSFileResolver(env)
 		})
-	}
-}
-
-// SafeExtensions returns engine options that add extensions suitable for
-// sandboxed engines: io, exceptions, math, introspection, and the safe
-// subset of all (records, promises, strings, characters).
-//
-// These provide R7RS functionality without filesystem, eval, system, Go
-// interop, or threading access. Core primitives are still added by default
-// unless WithoutCore is also used.
-//
-// Principle of Least Authority (Saltzer & Schroeder 1975).
-//
-//	authority(engine) = ∪ { caps(ext) : ext ∈ extensions }
-//
-//	SafeExtensions() ⊂ AllExtensions() — the safe set excludes
-//	filesystem, eval, system, Go interop, and threading capabilities.
-//	WithoutCore() produces authority(engine) = ∅.
-//
-//	Invariant: absent capabilities produce compile-time errors, not
-//	  runtime checks. If a name has no binding, compilation fails.
-//	  No runtime check can be bypassed because no runtime check exists.
-//	Constrains: NewEngine (applies the registry), LibraryEnvFactory
-//	  (closes over registry — transitive confinement per Lampson 1973).
-//	Constrained by: Registry.Without/WithoutCategory (capability
-//	  attenuation — derived registries never gain authority).
-//
-// See BIBLIOGRAPHY.md "Saltzer & Schroeder".
-//
-// Example:
-//
-//	eng, err := wile.NewEngine(ctx,
-//	    append(wile.SafeExtensions(),
-//	        wile.WithLibraryPaths("./stdlib/lib"),
-//	    )...,
-//	)
-func SafeExtensions() []EngineOption {
-	return []EngineOption{
-		WithExtension(io.Extension),
-		WithExtension(math.Extension),
-		WithExtension(introspection.Extension),
-		WithExtension(all.SafeExtension),
-	}
-}
-
-// WithSafeExtensions adds the safe extension set to the engine.
-// This is a convenience wrapper around SafeExtensions for the common case
-// where no additional options need to be appended.
-//
-// Example:
-//
-//	eng, err := wile.NewEngine(ctx, wile.WithSafeExtensions())
-func WithSafeExtensions() EngineOption {
-	return func(cfg *engineConfig) {
-		for _, opt := range SafeExtensions() {
-			opt(cfg)
-		}
-	}
-}
-
-// AllExtensions returns the complete set of engine options that add every
-// available extension. This matches the extension set loaded by the CLI
-// binary (io, files, math, introspection, eval, namespace, threads,
-// gointerop, all, system, process, envvars).
-//
-// Use [WithAllExtensions] when no additional options need to be appended.
-//
-// Example:
-//
-//	eng, err := wile.NewEngine(ctx,
-//	    append(wile.AllExtensions(),
-//	        wile.WithLibraryPaths("./stdlib/lib"),
-//	    )...,
-//	)
-func AllExtensions() []EngineOption {
-	return []EngineOption{
-		WithExtension(io.Extension),
-		WithExtension(files.Extension),
-		WithExtension(math.Extension),
-		WithExtension(introspection.Extension),
-		WithExtension(exteval.Extension),
-		WithExtension(nsext.Extension),
-		WithExtension(threads.Extension),
-		WithExtension(gointerop.Extension),
-		WithExtension(all.Extension),
-		WithExtension(system.Extension),
-		WithExtension(process.Extension),
-		WithExtension(envvars.Extension),
-	}
-}
-
-// WithAllExtensions adds every available extension to the engine.
-// This is a convenience wrapper around AllExtensions for the common case
-// where no additional options need to be appended.
-//
-// Example:
-//
-//	eng, err := wile.NewEngine(ctx, wile.WithAllExtensions())
-func WithAllExtensions() EngineOption {
-	return func(cfg *engineConfig) {
-		for _, opt := range AllExtensions() {
-			opt(cfg)
-		}
 	}
 }
 

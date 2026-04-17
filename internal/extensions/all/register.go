@@ -29,8 +29,8 @@ import (
 )
 
 // Extension registers the primitives defined in this package (records, promises,
-// strings, characters) under the name "all". When used in AllExtensions() where
-// sub-extensions are listed individually, this avoids double-registration.
+// strings, characters) under the name "all". When used in WithProfile(KitchenSink)
+// where sub-extensions are listed individually, this avoids double-registration.
 // Use Builder.AddToRegistry for standalone use that includes all sub-extensions.
 var Extension = registry.NewDescribedExtension("all",
 	"All Wile extensions combined.",

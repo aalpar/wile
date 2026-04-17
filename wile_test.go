@@ -326,7 +326,7 @@ func TestNewNamespace_WithExtension(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
-	ns, err := NewNamespace(ctx, WithSafeExtensions())
+	ns, err := NewNamespace(ctx, WithProfile(Console))
 	c.Assert(err, qt.IsNil)
 
 	eng, err := NewEngine(ctx, WithNamespace(ns))
@@ -1073,9 +1073,9 @@ func TestWithoutCore(t *testing.T) {
 	c.Assert(errors.As(err, &compErr), qt.IsTrue)
 }
 
-func TestWithSafeExtensions(t *testing.T) {
+func TestWithProfile_Console(t *testing.T) {
 	c := qt.New(t)
-	engine, err := NewEngine(context.Background(), WithSafeExtensions())
+	engine, err := NewEngine(context.Background(), WithProfile(Console))
 	c.Assert(err, qt.IsNil)
 	c.Assert(engine, qt.IsNotNil)
 
@@ -1086,17 +1086,18 @@ func TestWithSafeExtensions(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "2")
 
-	// Privileged primitives absent
-	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(open-input-file "x")`))
+	// Privileged primitives from extensions absent in Console compile fine
+	// (files IS in Console) but fail at runtime when outside /tmp.
+	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(eval '(+ 1 2))`))
 	var compErr *CompilationError
-	c.Assert(errors.As(err, &compErr), qt.IsTrue)
+	c.Assert(errors.As(err, &compErr), qt.IsTrue,
+		qt.Commentf("expected CompilationError for eval (not in Console), got %T: %v", err, err))
 }
 
-func TestSafeExtensions(t *testing.T) {
+func TestProfile_Console_Extensions(t *testing.T) {
 	c := qt.New(t)
-	opts := SafeExtensions()
-	// io, math, introspection, all-safe (exceptions moved to core)
-	c.Assert(len(opts), qt.Equals, 4)
+	// Console profile includes: io, files, math, all-safe, envvars.
+	c.Assert(len(Console.extensions()), qt.Equals, 5)
 }
 
 func TestWithMaxCallDepth(t *testing.T) {

@@ -162,7 +162,7 @@ The [`values`](https://pkg.go.dev/github.com/aalpar/wile/values) package provide
 |---|---|
 | `wile.WithExtension(ext)` | Add a single extension |
 | `wile.WithExtensions(exts...)` | Add multiple extensions |
-| `wile.WithSafeExtensions()` | Add safe extension set (no filesystem, eval, system, threads, Go interop) |
+| `wile.WithProfile(p)` | Apply a named profile (`Tiny`, `Console`, `ConsoleWithLoad`, `Small`, `KitchenSink`) |
 | `wile.WithoutCore()` | Skip core primitives — bare engine with only explicit extensions |
 | `wile.WithLibraryPaths(paths...)` | Enable R7RS library system with search paths |
 | `wile.WithMaxCallDepth(n)` | Set maximum VM recursion depth |
@@ -480,17 +480,16 @@ Wile sandboxes embedded engines with two independent, composable layers.
 Primitives not loaded into the engine don't exist. Attempts to use them produce compile-time errors — there are no runtime checks to bypass.
 
 ```go
-// Safe sandbox: no filesystem, eval, system, threading, or Go interop
-engine, err := wile.NewEngine(ctx, wile.WithSafeExtensions())
+// Console profile: I/O, math, and files restricted to /tmp via ConsoleAuthorizer
+engine, err := wile.NewEngine(ctx, wile.WithProfile(wile.Console))
 ```
 
 Compose with specific privileged extensions:
 
 ```go
 engine, err := wile.NewEngine(ctx,
-    append(wile.SafeExtensions(),
-        wile.WithExtension(files.Extension),
-    )...,
+    wile.WithProfile(wile.Console),
+    wile.WithExtension(files.Extension),
 )
 ```
 
@@ -502,7 +501,7 @@ The `security.Authorizer` interface gates privileged operations with K8s-style r
 
 ```go
 engine, err := wile.NewEngine(ctx,
-    wile.WithSafeExtensions(),
+    wile.WithProfile(wile.Console),
     wile.WithExtension(files.Extension),
     wile.WithAuthorizer(security.All(
         security.ReadOnly(),

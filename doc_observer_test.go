@@ -14,7 +14,7 @@ import (
 func TestDocRegistrationObserver_ImportUpdatesLiveRegistry(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
-	eng, err := NewEngine(ctx, WithAllExtensions(), WithSourceFS(stdlib.FS), WithSourceOS(), WithLibraryPaths("."))
+	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithSourceFS(stdlib.FS), WithSourceOS(), WithLibraryPaths("."))
 	c.Assert(err, qt.IsNil)
 	defer eng.Close()
 
@@ -51,7 +51,7 @@ func TestDocRegistrationObserver_ImportUpdatesLiveRegistry(t *testing.T) {
 func TestDocRegistrationObserver_CloneSnapshotBehavior(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
-	eng, err := NewEngine(ctx, WithAllExtensions(), WithSourceFS(stdlib.FS), WithSourceOS(), WithLibraryPaths("."))
+	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithSourceFS(stdlib.FS), WithSourceOS(), WithLibraryPaths("."))
 	c.Assert(err, qt.IsNil)
 	defer eng.Close()
 
