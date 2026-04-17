@@ -25,7 +25,7 @@ import (
 )
 
 // TestCompileImport tests import compilation. The bootstrap environment
-// (NewNamespaceFrameTiny) already imports (scheme base) implicitly,
+// (NewNamespaceFrame) already imports (scheme base) implicitly,
 // so these tests verify that the primitives are available.
 //
 // Source: compile_import.go (CompileImport, processLibraryImport).

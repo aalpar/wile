@@ -27,7 +27,7 @@ import (
 
 // TestNewEnvironmentTiny tests that the top-level environment can be created successfully.
 func TestNewEnvironmentTiny(t *testing.T) {
-	env, err := NewNamespaceFrameTiny(context.TODO())
+	env, err := NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, env, qt.IsNotNil)
 }

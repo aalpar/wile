@@ -39,7 +39,7 @@ import (
 // primitives and bootstrap macros registered.
 func NewFullRuntimeEnv(t *testing.T) *environment.EnvironmentFrame {
 	t.Helper()
-	env, err := bootstrap.NewNamespaceFrameTiny(context.Background())
+	env, err := bootstrap.NewNamespaceFrame(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 	return env
 }
@@ -97,7 +97,7 @@ func EvalSchemeInEnv(t *testing.T, env *environment.EnvironmentFrame, code strin
 // library search path.
 func SetupLibraryTest(t *testing.T, testdataPath string) *environment.EnvironmentFrame {
 	t.Helper()
-	env, err := bootstrap.NewNamespaceFrameTiny(context.Background())
+	env, err := bootstrap.NewNamespaceFrame(context.Background())
 	if err != nil {
 		t.Fatalf("failed to create environment: %v", err)
 	}
@@ -117,7 +117,7 @@ func SetupLibraryTest(t *testing.T, testdataPath string) *environment.Environmen
 // dependency) while providing the same library infrastructure.
 func SetupEngineTest(t *testing.T, fsys fs.FS) *environment.EnvironmentFrame {
 	t.Helper()
-	env, err := bootstrap.NewNamespaceFrameTiny(context.Background())
+	env, err := bootstrap.NewNamespaceFrame(context.Background())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Wire up library infrastructure (same as Engine internals).

@@ -66,7 +66,7 @@ func TestDisplayWithBuffer(t *testing.T) {
 	buf := &bytes.Buffer{}
 	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -93,7 +93,7 @@ func TestWriteWithBuffer(t *testing.T) {
 	buf := &bytes.Buffer{}
 	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -120,7 +120,7 @@ func TestWriteCharWithBuffer(t *testing.T) {
 	buf := &bytes.Buffer{}
 	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -147,7 +147,7 @@ func TestNewlineWithBuffer(t *testing.T) {
 	buf := &bytes.Buffer{}
 	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -174,7 +174,7 @@ func TestReadToken(t *testing.T) {
 	input := strings.NewReader("hello 42")
 	ioext.SetCurrentInputPort(values.NewCharacterInputPortFromReader(input))
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -203,7 +203,7 @@ func TestReadSyntax(t *testing.T) {
 	input := strings.NewReader("(+ 1 2)")
 	ioext.SetCurrentInputPort(values.NewCharacterInputPortFromReader(input))
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -233,7 +233,7 @@ func TestRead(t *testing.T) {
 	input := strings.NewReader("(a b c)")
 	ioext.SetCurrentInputPort(values.NewCharacterInputPortFromReader(input))
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -260,7 +260,7 @@ func TestReadWithPort(t *testing.T) {
 	input := strings.NewReader("42")
 	port := values.NewCharacterInputPortFromReader(input)
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	// We need to test read with an explicit port - use lambda to capture port
@@ -295,7 +295,7 @@ func TestDisplayWithSymbol(t *testing.T) {
 	buf := &bytes.Buffer{}
 	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -323,7 +323,7 @@ func TestWriteWithString(t *testing.T) {
 	buf := &bytes.Buffer{}
 	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -350,7 +350,7 @@ func TestWriteCharWithUnicode(t *testing.T) {
 	buf := &bytes.Buffer{}
 	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -377,7 +377,7 @@ func TestReadMultipleTokens(t *testing.T) {
 	input := strings.NewReader("foo bar 123")
 	ioext.SetCurrentInputPort(values.NewCharacterInputPortFromReader(input))
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Read first token
@@ -406,7 +406,7 @@ func TestDisplayWithInteger(t *testing.T) {
 	buf := &bytes.Buffer{}
 	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -433,7 +433,7 @@ func TestDisplayWithBoolean(t *testing.T) {
 	buf := &bytes.Buffer{}
 	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -460,7 +460,7 @@ func TestWriteWithSymbol(t *testing.T) {
 	buf := &bytes.Buffer{}
 	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -508,7 +508,7 @@ func TestDisplayWithList(t *testing.T) {
 	buf := &bytes.Buffer{}
 	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -537,7 +537,7 @@ func TestWriteWithList(t *testing.T) {
 	buf := &bytes.Buffer{}
 	ioext.SetCurrentOutputPort(values.NewCharacterOutputPortFromWriter(buf))
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	cctx := compilation.NewCompileTimeCallContext(context.Background(), false)
 	tpl := machine.NewNativeTemplate(0, 0, false)
@@ -558,7 +558,7 @@ func TestWriteWithList(t *testing.T) {
 }
 
 func TestStringPorts(t *testing.T) {
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Test string output port round-trip:
@@ -592,7 +592,7 @@ func TestStringPorts(t *testing.T) {
 }
 
 func TestStringInputPort(t *testing.T) {
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Test string input port:
@@ -624,7 +624,7 @@ func TestStringInputPort(t *testing.T) {
 }
 
 func TestBytevectorPorts(t *testing.T) {
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Test bytevector output port:
@@ -657,7 +657,7 @@ func TestBytevectorPorts(t *testing.T) {
 }
 
 func TestBytevectorInputPort(t *testing.T) {
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	// Test bytevector input port with open-input-bytevector and input-port?:
@@ -743,7 +743,7 @@ func TestPortPredicates(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+			env, err := bootstrap.NewNamespaceFrame(context.TODO())
 			qt.Assert(t, err, qt.IsNil)
 
 			p := parser.NewParser(env, true, strings.NewReader(tc.prog))

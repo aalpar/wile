@@ -86,7 +86,7 @@ func runRoundTripsEscape(t *testing.T, cases []roundTripCase) {
 func runRoundTripsWith(t *testing.T, eval evalFunc, cases []roundTripCase) {
 	t.Helper()
 	c := qt.New(t)
-	env, err := NewNamespaceFrameTiny(context.TODO())
+	env, err := NewNamespaceFrame(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	for _, tt := range cases {
@@ -111,7 +111,7 @@ func runRoundTripsBoolEscape(t *testing.T, cases []struct{ name, code string }) 
 func runRoundTripsBoolWith(t *testing.T, eval evalFunc, cases []struct{ name, code string }) {
 	t.Helper()
 	c := qt.New(t)
-	env, err := NewNamespaceFrameTiny(context.TODO())
+	env, err := NewNamespaceFrame(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	for _, tt := range cases {

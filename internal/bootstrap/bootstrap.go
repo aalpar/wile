@@ -60,7 +60,7 @@ import (
 //
 //  1. extensions/<name>/             — new package implementing registry.Extension
 //  2. extensions/<name>/register.go  — Builder + Extension var, AddToRegistry
-//  3. internal/bootstrap/environment_tiny.go — add to allExtensions slice (this file)
+//  3. internal/bootstrap/bootstrap.go — add to allExtensions slice (this file)
 //  4. profile.go KitchenSink.extensions() — add to the full profile extension set
 //  5. profile.go Console.extensions()     — add if safe (no ambient authority)
 //  6. CLAUDE.md                      — update extension count and list
@@ -83,12 +83,10 @@ var allExtensions = []registry.Extension{
 // initializeEnvironmentWithRegistry is the shared initialization sequence for environment creation.
 // It creates a registry, adds the specified extensions, applies primitives, registers
 // compilers/expanders, loads bootstrap macros, and returns the populated registry.
-// If exts is nil, all extensions are loaded (backward compatible).
+// The caller must pass the exact extension set to load; a nil slice registers no
+// extensions beyond core primitives (this is deliberate — the public Engine
+// path now drives extension selection through Profile).
 func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.EnvironmentFrame, exts []registry.Extension) (*registry.Registry, error) {
-	if exts == nil {
-		exts = allExtensions
-	}
-
 	// Create registry with core primitives
 	reg := registry.NewRegistry()
 	err := core.AddToRegistry(reg)
@@ -143,11 +141,11 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 // It creates a registry, adds all extensions, applies primitives, registers compilers/expanders,
 // and loads bootstrap macros.
 func initializeEnvironment(ctx context.Context, env *environment.EnvironmentFrame) error {
-	_, err := initializeEnvironmentWithRegistry(ctx, env, nil)
+	_, err := initializeEnvironmentWithRegistry(ctx, env, allExtensions)
 	return err
 }
 
-// NewNamespaceFrameTiny creates and initializes a complete Scheme runtime environment.
+// NewNamespaceFrame creates and initializes a complete Scheme runtime environment.
 //
 // This function:
 //  1. Creates a registry with core primitives
@@ -159,7 +157,7 @@ func initializeEnvironment(ctx context.Context, env *environment.EnvironmentFram
 //
 // The resulting environment is ready for parsing, expanding, compiling, and executing
 // Scheme programs.
-func NewNamespaceFrameTiny(ctx context.Context) (*environment.EnvironmentFrame, error) {
+func NewNamespaceFrame(ctx context.Context) (*environment.EnvironmentFrame, error) {
 	env, _, err := NewTopLevelWithRegistry(ctx)
 	if err != nil {
 		return nil, err
@@ -175,7 +173,7 @@ func NewTopLevelWithRegistry(ctx context.Context) (*environment.EnvironmentFrame
 	env := topLevel.Runtime()
 
 	// Initialize with shared sequence, keeping the registry
-	reg, err := initializeEnvironmentWithRegistry(ctx, env, nil)
+	reg, err := initializeEnvironmentWithRegistry(ctx, env, allExtensions)
 	if err != nil {
 		return nil, nil, err
 	}

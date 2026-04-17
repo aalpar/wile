@@ -37,7 +37,7 @@ func TestNewLibraryEnvironmentFrame_Basic(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	callerEnv, err := NewNamespaceFrameTiny(ctx)
+	callerEnv, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv, nil)
@@ -52,7 +52,7 @@ func TestNewLibraryEnvironmentFrame_SharedNamespace(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	callerEnv, err := NewNamespaceFrameTiny(ctx)
+	callerEnv, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv, nil)
@@ -72,7 +72,7 @@ func TestNewLibraryEnvironmentFrame_SymbolIdentity(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	callerEnv, err := NewNamespaceFrameTiny(ctx)
+	callerEnv, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	_, err = NewLibraryEnvironmentFrame(ctx, callerEnv, nil)
@@ -93,7 +93,7 @@ func TestNewLibraryEnvironmentFrame_BindingIsolation(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	callerEnv, err := NewNamespaceFrameTiny(ctx)
+	callerEnv, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv, nil)
@@ -119,7 +119,7 @@ func TestNewLibraryEnvironmentFrame_PrimitivesAvailable(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	callerEnv, err := NewNamespaceFrameTiny(ctx)
+	callerEnv, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv, nil)
@@ -137,7 +137,7 @@ func TestNewLibraryEnvironmentFrame_BootstrapMacrosAvailable(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	callerEnv, err := NewNamespaceFrameTiny(ctx)
+	callerEnv, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv, nil)
@@ -170,7 +170,7 @@ func TestNewLibraryEnvironmentFrame_IndependentMutation(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	callerEnv, err := NewNamespaceFrameTiny(ctx)
+	callerEnv, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	libEnv, err := NewLibraryEnvironmentFrame(ctx, callerEnv, nil)
@@ -198,16 +198,16 @@ func TestNewLibraryEnvironmentFrame_IndependentMutation(t *testing.T) {
 // Multiple Independent Top-Level Environment Tests
 // ===========================================================================
 
-// TestNewNamespaceFrameTiny_IndependentEnvironments verifies that
+// TestNewNamespaceFrame_IndependentEnvironments verifies that
 // two separately created top-level environments are fully independent.
-func TestNewNamespaceFrameTiny_IndependentEnvironments(t *testing.T) {
+func TestNewNamespaceFrame_IndependentEnvironments(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	env1, err := NewNamespaceFrameTiny(ctx)
+	env1, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
-	env2, err := NewNamespaceFrameTiny(ctx)
+	env2, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	// Different Namespace instances
@@ -226,13 +226,13 @@ func TestNewNamespaceFrameTiny_IndependentEnvironments(t *testing.T) {
 	c.Assert(err, qt.IsNotNil)
 }
 
-// TestNewNamespaceFrameTiny_BootstrapMacrosLoaded verifies that all
+// TestNewNamespaceFrame_BootstrapMacrosLoaded verifies that all
 // expected bootstrap macros are functional after environment creation.
-func TestNewNamespaceFrameTiny_BootstrapMacrosLoaded(t *testing.T) {
+func TestNewNamespaceFrame_BootstrapMacrosLoaded(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	env, err := NewNamespaceFrameTiny(ctx)
+	env, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	tests := []struct {
@@ -273,7 +273,7 @@ func TestLoadBootstrapMacros_EmptySources(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	env, err := NewNamespaceFrameTiny(ctx)
+	env, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	err = loadBootstrapMacros(ctx, env, []string{}, nil)
@@ -289,7 +289,7 @@ func TestLoadBootstrapMacros_InvalidExpansion(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	env, err := NewNamespaceFrameTiny(ctx)
+	env, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	// A define-syntax with a non-transformer value should fail during expansion.
@@ -305,7 +305,7 @@ func TestLoadBootstrapMacros_CompileError(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	env, err := NewNamespaceFrameTiny(ctx)
+	env, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	// A define-syntax with an invalid transformer spec should fail during
@@ -325,7 +325,7 @@ func TestLoadBootstrapMacros_ValidMacro(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	env, err := NewNamespaceFrameTiny(ctx)
+	env, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	// Load a custom macro
@@ -348,7 +348,7 @@ func TestLoadBootstrapMacros_MultipleSources(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	env, err := NewNamespaceFrameTiny(ctx)
+	env, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	err = loadBootstrapMacros(ctx, env, []string{
@@ -378,16 +378,16 @@ func (p brokenExtension) AddToRegistry(_ *registry.Registry) error {
 	return fmt.Errorf("intentional failure")
 }
 
-// TestNewNamespaceFrameTiny_ExtensionError verifies that a failing
-// extension produces an error from NewNamespaceFrameTiny.
-func TestNewNamespaceFrameTiny_ExtensionError(t *testing.T) {
+// TestNewNamespaceFrame_ExtensionError verifies that a failing
+// extension produces an error from NewNamespaceFrame.
+func TestNewNamespaceFrame_ExtensionError(t *testing.T) {
 	c := qt.New(t)
 
 	saved := allExtensions
 	allExtensions = []registry.Extension{brokenExtension{}}
 	defer func() { allExtensions = saved }()
 
-	_, err := NewNamespaceFrameTiny(context.TODO())
+	_, err := NewNamespaceFrame(context.TODO())
 	c.Assert(err, qt.IsNotNil)
 }
 
@@ -397,7 +397,7 @@ func TestNewLibraryEnvironmentFrame_ExtensionError(t *testing.T) {
 	c := qt.New(t)
 
 	// First create a valid parent with the real extensions
-	parent, err := NewNamespaceFrameTiny(context.TODO())
+	parent, err := NewNamespaceFrame(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	// Then break extensions for the library creation

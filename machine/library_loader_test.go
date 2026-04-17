@@ -33,7 +33,7 @@ import (
 func TestLibraryLoaderNotFound(t *testing.T) {
 	c := qt.New(t)
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	c.Assert(err, qt.IsNil)
 	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
@@ -77,7 +77,7 @@ func TestLibraryLoaderMalformedFile(t *testing.T) {
 	err = os.WriteFile(malformedPath, []byte(`(not-a-library "hello")`), 0o644)
 	c.Assert(err, qt.IsNil)
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	c.Assert(err, qt.IsNil)
 	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
@@ -103,7 +103,7 @@ func TestLibraryLoaderEmptyFile(t *testing.T) {
 	err = os.WriteFile(emptyPath, []byte(""), 0o644)
 	c.Assert(err, qt.IsNil)
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	c.Assert(err, qt.IsNil)
 	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 
@@ -136,7 +136,7 @@ func TestLibraryLoaderNameMismatch(t *testing.T) {
 	err = os.WriteFile(libPath, []byte(libContent), 0o644)
 	c.Assert(err, qt.IsNil)
 
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	c.Assert(err, qt.IsNil)
 	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 

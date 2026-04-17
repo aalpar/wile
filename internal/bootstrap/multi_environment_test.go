@@ -36,10 +36,10 @@ func TestMultiEnv_PrimitiveMutationIsolation(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	env1, err := NewNamespaceFrameTiny(ctx)
+	env1, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
-	env2, err := NewNamespaceFrameTiny(ctx)
+	env2, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	// Redefine + in env1 to always return 0
@@ -64,10 +64,10 @@ func TestMultiEnv_SymbolNonIdentityAcrossTopLevels(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	env1, err := NewNamespaceFrameTiny(ctx)
+	env1, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
-	env2, err := NewNamespaceFrameTiny(ctx)
+	env2, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	sym1 := values.NewSymbol("cross-env-sym")
@@ -86,10 +86,10 @@ func TestMultiEnv_ConcurrentTopLevelUse(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	env1, err := NewNamespaceFrameTiny(ctx)
+	env1, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
-	env2, err := NewNamespaceFrameTiny(ctx)
+	env2, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	var wg sync.WaitGroup
@@ -129,10 +129,10 @@ func TestMultiEnv_UserMacroIsolation(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	env1, err := NewNamespaceFrameTiny(ctx)
+	env1, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
-	env2, err := NewNamespaceFrameTiny(ctx)
+	env2, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	// Define a macro in env1
@@ -159,7 +159,7 @@ func TestMultiEnv_SiblingLibraryIsolation(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	parent, err := NewNamespaceFrameTiny(ctx)
+	parent, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	lib1, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
@@ -207,7 +207,7 @@ func TestMultiEnv_SiblingLibrarySymbolIdentity(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	parent, err := NewNamespaceFrameTiny(ctx)
+	parent, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	_, err = NewLibraryEnvironmentFrame(ctx, parent, nil)
@@ -229,7 +229,7 @@ func TestMultiEnv_SiblingLibrarySharedPrimitives(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	parent, err := NewNamespaceFrameTiny(ctx)
+	parent, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	lib1, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
@@ -263,7 +263,7 @@ func TestMultiEnv_SiblingLibraryMacroIsolation(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	parent, err := NewNamespaceFrameTiny(ctx)
+	parent, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	lib1, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
@@ -302,7 +302,7 @@ func TestMultiEnv_NestedLibraryCreation(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	topLevel, err := NewNamespaceFrameTiny(ctx)
+	topLevel, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	outerLib, err := NewLibraryEnvironmentFrame(ctx, topLevel, nil)
@@ -324,7 +324,7 @@ func TestMultiEnv_NestedLibrarySymbolIdentity(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	topLevel, err := NewNamespaceFrameTiny(ctx)
+	topLevel, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	outerLib, err := NewLibraryEnvironmentFrame(ctx, topLevel, nil)
@@ -345,7 +345,7 @@ func TestMultiEnv_NestedLibraryBindingIsolation(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	topLevel, err := NewNamespaceFrameTiny(ctx)
+	topLevel, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	outerLib, err := NewLibraryEnvironmentFrame(ctx, topLevel, nil)
@@ -382,7 +382,7 @@ func TestMultiEnv_NestedLibraryPrimitivesAvailable(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	topLevel, err := NewNamespaceFrameTiny(ctx)
+	topLevel, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	outerLib, err := NewLibraryEnvironmentFrame(ctx, topLevel, nil)
@@ -411,7 +411,7 @@ func TestMultiEnv_ValuesCrossEnvironmentBoundary(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	parent, err := NewNamespaceFrameTiny(ctx)
+	parent, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	lib, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
@@ -448,7 +448,7 @@ func TestMultiEnv_ClosureCapturesDefiningEnvironment(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	parent, err := NewNamespaceFrameTiny(ctx)
+	parent, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	lib, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
@@ -490,7 +490,7 @@ func TestMultiEnv_ParameterObjectAcrossEnvironments(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	parent, err := NewNamespaceFrameTiny(ctx)
+	parent, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	lib, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
@@ -536,7 +536,7 @@ func TestMultiEnv_ConcurrentLibraryUse(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	parent, err := NewNamespaceFrameTiny(ctx)
+	parent, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	const numLibs = 4
@@ -588,7 +588,7 @@ func TestMultiEnv_LibraryPrimitiveAvailability(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	parent, err := NewNamespaceFrameTiny(ctx)
+	parent, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	lib, err := NewLibraryEnvironmentFrame(ctx, parent, nil)
@@ -748,7 +748,7 @@ func TestMultiEnv_NestedLibraryPrimitiveAvailability(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.TODO()
 
-	topLevel, err := NewNamespaceFrameTiny(ctx)
+	topLevel, err := NewNamespaceFrame(ctx)
 	c.Assert(err, qt.IsNil)
 
 	outerLib, err := NewLibraryEnvironmentFrame(ctx, topLevel, nil)
