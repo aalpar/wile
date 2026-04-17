@@ -66,6 +66,16 @@ func PrimWithTimeout(cc machine.CallContext) error {
 			"with-timeout: milliseconds must be non-negative, got %d", ms,
 		)
 	}
+	// time.Duration is int64 nanoseconds; multiplying by time.Millisecond
+	// (1e6) overflows for ms > ~9.2e12, wrapping negative and causing an
+	// immediate spurious timeout. Cap at the representable maximum.
+	const maxMilliseconds = int64(time.Duration(1<<63-1) / time.Millisecond)
+	if ms > maxMilliseconds {
+		return werr.WrapForeignErrorf(
+			werr.ErrInvalidArgument,
+			"with-timeout: milliseconds %d exceeds maximum representable duration", ms,
+		)
+	}
 	duration := time.Duration(ms) * time.Millisecond
 
 	// Create a child context with a cause-tagged timeout deadline.

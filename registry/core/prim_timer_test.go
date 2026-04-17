@@ -61,6 +61,7 @@ func TestWithTimeoutErrors(t *testing.T) {
 		{Name: "thunk not procedure", Code: `(with-timeout 100 (lambda (k) k) 42)`},
 		{Name: "negative ms", Code: `(with-timeout -1 (lambda (k) k) (lambda () 1))`},
 		{Name: "wrong arity", Code: `(with-timeout 100 (lambda (k) k))`},
+		{Name: "ms overflow", Code: `(with-timeout 9999999999999999 (lambda (k) k) (lambda () 1))`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {

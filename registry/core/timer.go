@@ -26,9 +26,9 @@ func addTimer(r *registry.Registry) error { //nolint:govet
 				"If the thunk completes before the deadline, returns its result. " +
 				"If the timer expires, suspends the thunk and calls HANDLER with a " +
 				"composable continuation that, when invoked, resumes the suspended computation.\n\n" +
-				"Parameters:\n  ms — exact non-negative integer (milliseconds)\n" +
-				"  handler — (lambda (resumable-continuation) ...)\n" +
-				"  thunk — (lambda () ...)\n\n" +
+				"Parameters:\n  ms: integer — exact non-negative (milliseconds)\n" +
+				"  handler: procedure — (lambda (resumable-continuation) ...)\n" +
+				"  thunk: procedure — (lambda () ...)\n\n" +
 				"Examples:\n" +
 				"  (with-timeout 5000 (lambda (k) 'timeout) (lambda () 42))  => 42\n" +
 				"  (with-timeout 1 (lambda (k) 'expired) (lambda () (let loop () (loop))))  => expired",
