@@ -76,12 +76,16 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 	_, err := syntax.SyntaxForEach(ctctx.ctx, argsPair, func(ctx context.Context, _ int, _ bool, importSetExpr syntax.SyntaxValue) error {
 		res, err := resolveImportSet(ctx, importSetExpr.UnwrapAll(), p.env, p.evaluator)
 		if err != nil {
-			return err
+			return wrapSourcedError(importSetExpr.SourceContext(), err)
 		}
 
 		fireImportObserver(p.env, res.Library, res.Bindings, lib.Name, environment.PhaseCompile)
 
-		return copyLibraryBindingsDirect(res.Library, res.Bindings, lib.Env)
+		err = copyLibraryBindingsDirect(res.Library, res.Bindings, lib.Env)
+		if err != nil {
+			return wrapSourcedError(importSetExpr.SourceContext(), err)
+		}
+		return nil
 	})
 	return err
 }

@@ -1,6 +1,6 @@
 # Error Diagnostics Design
 
-**Status:** Layers 1-2 complete; Layer 3 (compiler error migration Phases 2-4) incomplete
+**Status:** All layers complete
 **Date:** 2026-04-16
 
 > **Completed:** Layer 1 (ErrorContext via continuation marks), Layer 2 (NativeError enrichment with source/stackTrace).

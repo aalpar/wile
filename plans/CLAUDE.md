@@ -43,11 +43,9 @@ Open designs and implementation work. These are the active items.
 |------|----------|--------|
 | `ARCHITECTURE.md` | Dialect system, module decomposition, plugin shadowing, environment introspection | Env introspection **complete**; other 3 sections **proposed** -- not started |
 | `SECURITY.md` | Opcode resource limits (match steps, expand steps, continuation copy depth) | **Rejected** -- existing limits sufficient (call depth + stack size + context timeout) |
-| `2026-04-16-timer-interrupts-design.md` | Wall-clock timer interrupts with continuation capture for embedders (engines, bounded eval) | **Implemented** -- branch `feature/timer-interrupts` |
-| `2026-04-16-timer-interrupts-impl.md` | Timer interrupts 8-task implementation plan (sub-context approach) | **8/8 tasks complete** -- pending PR |
 | `2026-04-14-error-stack-traces-design.md` | Error stack traces: SourcedError, CompilationError.Source, cross-boundary traces | **Phases 1-4 complete** -- all compiler/syntax/library/expander wrapping done; P3 (cross-boundary) deferred |
-| `2026-04-16-error-diagnostics-design.md` | Error context + NativeError enrichment + compiler Phase 2-4 migration | **Layers 1-2 complete**; Layer 3 (compiler wrapping Phases 2-4) incomplete |
-| `2026-04-16-error-diagnostics-impl.md` | Error diagnostics 10-task implementation | **9/10 complete**; Task 10 (compiler Phase 2-4 wrapping ~100+ sites) incomplete |
+| `2026-04-16-error-diagnostics-design.md` | Error context + NativeError enrichment + compiler Phase 2-4 migration | **All layers complete** |
+| `2026-04-16-error-diagnostics-impl.md` | Error diagnostics 10-task implementation | **10/10 complete** |
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | **Proposed** -- not started |
 | `MACRO_SYSTEM.md` | Hygiene debugging, macro expansion tracing | **Planned** -- OriginInfo core fields exist (PR #324); extended fields + hygiene debugging tools not started |
 
@@ -118,6 +116,8 @@ Historical reference. Work has shipped; plans preserved for design context.
 | `2026-04-13-sourceload-design.md` | sourceload package design (moved to `memory/`) | Implemented |
 | `2026-04-13-sourceload-impl.md` | sourceload 10-task impl (moved to `memory/`) | Implemented |
 | `2026-04-13-resolver-extraction-impl.md` | Resolver extraction impl (moved to `memory/`) | Implemented |
+| `2026-04-16-timer-interrupts-design.md` | Wall-clock timer interrupts with continuation capture (moved to `memory/`) | PR #659 |
+| `2026-04-16-timer-interrupts-impl.md` | Timer interrupts 8-task implementation plan (moved to `memory/`) | PR #659 |
 
 ### Compiler Optimizations
 

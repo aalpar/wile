@@ -2,10 +2,10 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Status:** 9/10 tasks complete; Task 10 substantially incomplete
+**Status:** 10/10 tasks complete
 
-> **Completed:** Tasks 1-9 (ErrorContext type, mark key, exception dispatch, current-error-context, accessors, NativeError fields, enrichment wiring, error-object-source/stack-trace, integration tests).
-> **Incomplete:** Task 10 — compiler error Phases 2-4 source location wrapping. Phase 2: compile_syntax_rules.go (23 unwrapped sites). Phase 3: import_set_datum.go (29), library_loader.go (19), library_bindings.go (9). Phase 4: all 6 expander files (~76 unwrapped sites). Several Phase 2/3 files partially wrapped.
+> **Completed:** Tasks 1-10 (all layers complete).
+> Task 10 note: Phases 2 (syntax/macro) and 4 (expander) were wrapped via `wrapSourcedError` in PR #657. Phase 3 datum-level functions (`import_set_datum.go`, `library_loader.go`, `library_bindings.go`) operate on `values.Value` without syntax context — their callers in the compiler/expander wrap errors with source. `processLibraryImport` precision improved to wrap per-import-set source.
 
 **Goal:** Make runtime error context (source location, stack trace, continuation marks) accessible from Scheme code via continuation marks and NativeError enrichment.
 
