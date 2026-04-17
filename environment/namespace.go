@@ -96,6 +96,17 @@ type Namespace struct {
 	// authorizer is the security authorizer for this namespace.
 	authorizer security.Authorizer
 
+	// exportIndex is the cached library export index for searching
+	// unloaded library exports. Stored as any to avoid a circular
+	// import with machine/compilation/. The concrete type is
+	// *compilation.LibraryExportIndex. Callers type-assert at use.
+	// Protected by exportIndexMu for lazy initialization.
+	// exportIndexBuilt is set to true after the first build attempt
+	// (successful or non-transient failure) to prevent redundant retries.
+	exportIndex      any
+	exportIndexBuilt bool
+	exportIndexMu    sync.RWMutex
+
 	// moduleInstances caches loaded and initialized library instances.
 	// Keyed by resolved library path (e.g., "(scheme base)").
 	// Nil until the first module is loaded.
@@ -267,6 +278,34 @@ func (p *Namespace) Authorizer() security.Authorizer {
 // SetAuthorizer sets the security authorizer for this namespace.
 func (p *Namespace) SetAuthorizer(auth security.Authorizer) {
 	p.authorizer = auth
+}
+
+// ExportIndex returns the cached library export index and whether a
+// build has been attempted. Returns (nil, false) if no build has run.
+// Delegates to parent when non-nil, so child namespaces share the
+// root's index. The concrete type is *compilation.LibraryExportIndex.
+func (p *Namespace) ExportIndex() (any, bool) {
+	if p.parent != nil {
+		return p.parent.ExportIndex()
+	}
+	p.exportIndexMu.RLock()
+	defer p.exportIndexMu.RUnlock()
+	return p.exportIndex, p.exportIndexBuilt
+}
+
+// SetExportIndex stores the library export index on this namespace
+// and marks it as built, preventing subsequent build attempts.
+// Delegates to parent when non-nil, matching the getter's delegation,
+// so the index is always stored on the root Namespace.
+func (p *Namespace) SetExportIndex(idx any) {
+	if p.parent != nil {
+		p.parent.SetExportIndex(idx)
+		return
+	}
+	p.exportIndexMu.Lock()
+	defer p.exportIndexMu.Unlock()
+	p.exportIndex = idx
+	p.exportIndexBuilt = true
 }
 
 // ModuleInstance returns the cached module instance for the given path,

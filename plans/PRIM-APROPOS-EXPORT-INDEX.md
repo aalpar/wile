@@ -1,9 +1,9 @@
 # PrimApropos Export Index — Closing the Scheme-Level Asymmetry
 
-**Status:** Deferred — not started
+**Status:** Complete
 **Date:** 2026-04-09
 
-> **Incomplete:** ExportIndex()/SetExportIndex() on Namespace, RegistryDocProvider wiring, PrimApropos update. Explicitly deferred — MCP tool covers the LLM discovery gap.
+> Implemented: ExportIndex()/SetExportIndex() on Namespace, Engine stores on Namespace after building, PrimApropos lazy-builds and passes to SearchDoc.
 **Context:** Crosscheck finding from PR #623
 
 ## Problem
@@ -85,5 +85,5 @@ the existing `LibraryRegistry()` / `SetLibraryRegistry()` pair exactly.
 
 ## Decision
 
-Deferred — not blocking PR #623. The MCP path (where LLM discovery matters most)
-is already covered. The Scheme-level `(apropos)` asymmetry is a polish item.
+Implemented. The asymmetry is closed: both REPL/MCP and Scheme-level `(apropos)`
+now search unloaded library exports via the same `SearchDoc` + `LibraryExportIndex` path.

@@ -247,6 +247,50 @@ func TestNamespace_AuthorizerField(t *testing.T) {
 	c.Assert(ns.Authorizer(), qt.Equals, auth)
 }
 
+func TestNamespace_ExportIndex(t *testing.T) {
+	c := qt.New(t)
+
+	ns := NewNamespace()
+	idx, built := ns.ExportIndex()
+	c.Assert(idx, qt.IsNil)
+	c.Assert(built, qt.IsFalse)
+
+	ns.SetExportIndex("mock-export-index")
+	idx, built = ns.ExportIndex()
+	c.Assert(idx, qt.Equals, "mock-export-index")
+	c.Assert(built, qt.IsTrue)
+}
+
+func TestNamespace_ExportIndex_DelegatesToParent(t *testing.T) {
+	c := qt.New(t)
+
+	parent := NewNamespace()
+	parent.SetExportIndex("parent-export-index")
+
+	child := parent.NewChildNamespace()
+	idx, built := child.ExportIndex()
+	c.Assert(idx, qt.Equals, "parent-export-index")
+	c.Assert(built, qt.IsTrue)
+
+	// Setting on child delegates to parent.
+	child.SetExportIndex("updated-export-index")
+	idx, _ = parent.ExportIndex()
+	c.Assert(idx, qt.Equals, "updated-export-index")
+	idx, _ = child.ExportIndex()
+	c.Assert(idx, qt.Equals, "updated-export-index")
+}
+
+func TestNamespace_ExportIndex_NilStopsRetry(t *testing.T) {
+	c := qt.New(t)
+
+	ns := NewNamespace()
+	// Storing nil marks as built — prevents redundant retry.
+	ns.SetExportIndex(nil)
+	idx, built := ns.ExportIndex()
+	c.Assert(idx, qt.IsNil)
+	c.Assert(built, qt.IsTrue)
+}
+
 func TestNamespace_Derive_SharesRegistryAndAuthorizer(t *testing.T) {
 	c := qt.New(t)
 

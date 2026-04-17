@@ -15,6 +15,8 @@
 package core
 
 import (
+	"context"
+	"errors"
 	"sort"
 
 	"github.com/aalpar/wile/machine"
@@ -335,7 +337,7 @@ func PrimLibraryDescription(mc machine.CallContext) error {
 // Returns a sorted list of symbols whose name, doc, or category contains
 // the pattern as a case-insensitive substring. Searches all documentation
 // sources: primitives, binding specs, doc entries, environment bindings,
-// and loaded libraries.
+// loaded libraries, and unloaded library exports.
 func PrimApropos(mc machine.CallContext) error {
 	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "apropos")
 	if err != nil {
@@ -349,11 +351,59 @@ func PrimApropos(mc machine.CallContext) error {
 	}
 
 	env := mc.EnvironmentFrame()
-	results := registry.SearchDoc(reg, env, registry.ExtractLibraryRegistry(env), nil, s.Value)
+	exportIndex := ensureExportIndex(mc)
+	results := registry.SearchDoc(reg, env, registry.ExtractLibraryRegistry(env), exportIndex, s.Value)
 	syms := make([]values.Value, len(results))
 	for i, r := range results {
 		syms[i] = values.NewSymbol(r.Name)
 	}
 	mc.SetValue(values.List(syms...))
 	return nil
+}
+
+// ensureExportIndex returns the cached library export index from the
+// namespace, lazily building it on first call. Returns a partial index
+// when some .sld files are malformed (matching Engine.ensureExportIndex
+// semantics). Returns nil only on transient errors or missing resolver.
+// Non-transient failures store their result (even nil) to stop retrying.
+func ensureExportIndex(mc machine.CallContext) *compilation.LibraryExportIndex {
+	ns := mc.EnvironmentFrame().Namespace()
+	if ns == nil {
+		return nil
+	}
+	cached, built := ns.ExportIndex()
+	if built {
+		idx, _ := cached.(*compilation.LibraryExportIndex)
+		return idx
+	}
+	// Index not yet built — build it now.
+	resolver := ns.FileResolver()
+	if resolver == nil {
+		return nil
+	}
+	regAny := ns.LibraryRegistry()
+	if regAny == nil {
+		return nil
+	}
+	lr, ok := regAny.(*compilation.LibraryRegistry)
+	if !ok {
+		return nil
+	}
+	result, err := compilation.BuildExportIndex(mc.Context(), resolver, lr)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil // transient — retry next call
+		}
+		// Non-transient errors (malformed .sld files, etc.):
+		// store whatever partial index was returned and stop retrying.
+	}
+	// Re-check: another goroutine may have stored an index while we
+	// were building. Prefer the existing one to avoid redundant writes.
+	cached, built = ns.ExportIndex()
+	if built {
+		idx, _ := cached.(*compilation.LibraryExportIndex)
+		return idx
+	}
+	ns.SetExportIndex(result)
+	return result
 }

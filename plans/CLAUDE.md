@@ -78,7 +78,7 @@ Phase 1 infrastructure complete (PRs #577-578): `ForeignClosure.SetValidator/Val
 
 | File | Contents | Status |
 |------|----------|--------|
-| `PRIM-APROPOS-EXPORT-INDEX.md` | Fix Scheme-level `(apropos)` asymmetry (export index on Namespace) | **Deferred** -- MCP tool covers LLM discovery gap; small change when prioritized |
+| `PRIM-APROPOS-EXPORT-INDEX.md` | Fix Scheme-level `(apropos)` asymmetry (export index on Namespace) | **Complete** -- ExportIndex on Namespace, lazy build in PrimApropos |
 
 ### Tech Debt
 
