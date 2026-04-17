@@ -40,6 +40,9 @@ func TestConsoleAuthorizer(t *testing.T) {
 		{"load code", security.AccessRequest{Resource: security.ResourceCode, Action: security.ActionLoad, Target: "file.scm"}, false},
 		{"exec process", security.AccessRequest{Resource: security.ResourceProcess, Action: security.ActionExec, Target: "ls"}, false},
 		{"path traversal /tmp/../etc", security.AccessRequest{Resource: security.ResourceFile, Action: security.ActionRead, Target: "/tmp/../etc/passwd"}, false},
+		// Prefix-trap cases: the /tmp/ check must not admit sibling directories.
+		{"prefix trap /tmp2", security.AccessRequest{Resource: security.ResourceFile, Action: security.ActionRead, Target: "/tmp2/foo"}, false},
+		{"prefix trap /tmpfoo", security.AccessRequest{Resource: security.ResourceFile, Action: security.ActionRead, Target: "/tmpfoo"}, false},
 	}
 	for _, tt := range tests {
 		c.Run(tt.name, func(c *qt.C) {

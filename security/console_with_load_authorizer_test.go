@@ -42,6 +42,9 @@ func TestConsoleWithLoadAuthorizer(t *testing.T) {
 		{"load /tmp/sub/lib.scm", security.AccessRequest{Resource: security.ResourceCode, Action: security.ActionLoad, Target: "/tmp/sub/lib.scm"}, true},
 		{"load /etc/lib.scm", security.AccessRequest{Resource: security.ResourceCode, Action: security.ActionLoad, Target: "/etc/lib.scm"}, false},
 		{"load path traversal /tmp/../etc/lib.scm", security.AccessRequest{Resource: security.ResourceCode, Action: security.ActionLoad, Target: "/tmp/../etc/lib.scm"}, false},
+		// Prefix-trap cases: applies to both file and code — sibling dirs must not match.
+		{"prefix trap /tmp2 file", security.AccessRequest{Resource: security.ResourceFile, Action: security.ActionRead, Target: "/tmp2/foo"}, false},
+		{"prefix trap /tmpfoo code", security.AccessRequest{Resource: security.ResourceCode, Action: security.ActionLoad, Target: "/tmpfoo/lib.scm"}, false},
 		// Process: still denied
 		{"exec process", security.AccessRequest{Resource: security.ResourceProcess, Action: security.ActionExec, Target: "ls"}, false},
 	}
