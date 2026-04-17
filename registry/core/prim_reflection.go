@@ -351,7 +351,7 @@ func PrimApropos(mc machine.CallContext) error {
 	}
 
 	env := mc.EnvironmentFrame()
-	exportIndex := exportIndexFromContext(mc)
+	exportIndex := ensureExportIndex(mc)
 	results := registry.SearchDoc(reg, env, registry.ExtractLibraryRegistry(env), exportIndex, s.Value)
 	syms := make([]values.Value, len(results))
 	for i, r := range results {
@@ -361,10 +361,11 @@ func PrimApropos(mc machine.CallContext) error {
 	return nil
 }
 
-// exportIndexFromContext retrieves the cached library export index from
-// the namespace. If no index has been built yet, it builds one lazily
-// using the namespace's file resolver and library registry.
-func exportIndexFromContext(mc machine.CallContext) *compilation.LibraryExportIndex {
+// ensureExportIndex returns the cached library export index from the
+// namespace, lazily building it on first call. Returns a partial index
+// when some .sld files are malformed (matching Engine.ensureExportIndex
+// semantics). Returns nil only on transient errors or missing resolver.
+func ensureExportIndex(mc machine.CallContext) *compilation.LibraryExportIndex {
 	ns := mc.EnvironmentFrame().Namespace()
 	if ns == nil {
 		return nil
@@ -378,7 +379,14 @@ func exportIndexFromContext(mc machine.CallContext) *compilation.LibraryExportIn
 	if resolver == nil {
 		return nil
 	}
-	lr, _ := ns.LibraryRegistry().(*compilation.LibraryRegistry)
+	regAny := ns.LibraryRegistry()
+	if regAny == nil {
+		return nil
+	}
+	lr, ok := regAny.(*compilation.LibraryRegistry)
+	if !ok {
+		return nil
+	}
 	built, err := compilation.BuildExportIndex(mc.Context(), resolver, lr)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -389,6 +397,12 @@ func exportIndexFromContext(mc machine.CallContext) *compilation.LibraryExportIn
 	}
 	if built == nil {
 		return nil
+	}
+	// Re-check: another goroutine may have stored an index while we
+	// were building. Prefer the existing one to avoid redundant writes.
+	existing, ok := ns.ExportIndex().(*compilation.LibraryExportIndex)
+	if ok {
+		return existing
 	}
 	ns.SetExportIndex(built)
 	return built

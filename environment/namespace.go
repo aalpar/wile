@@ -102,7 +102,7 @@ type Namespace struct {
 	// *compilation.LibraryExportIndex. Callers type-assert at use.
 	// Protected by exportIndexMu for lazy initialization.
 	exportIndex   any
-	exportIndexMu sync.Mutex
+	exportIndexMu sync.RWMutex
 
 	// moduleInstances caches loaded and initialized library instances.
 	// Keyed by resolved library path (e.g., "(scheme base)").
@@ -285,8 +285,8 @@ func (p *Namespace) ExportIndex() any {
 	if p.parent != nil {
 		return p.parent.ExportIndex()
 	}
-	p.exportIndexMu.Lock()
-	defer p.exportIndexMu.Unlock()
+	p.exportIndexMu.RLock()
+	defer p.exportIndexMu.RUnlock()
 	return p.exportIndex
 }
 
