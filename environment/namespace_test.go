@@ -247,6 +247,34 @@ func TestNamespace_AuthorizerField(t *testing.T) {
 	c.Assert(ns.Authorizer(), qt.Equals, auth)
 }
 
+func TestNamespace_ExportIndex(t *testing.T) {
+	c := qt.New(t)
+
+	ns := NewNamespace()
+	c.Assert(ns.ExportIndex(), qt.IsNil)
+
+	idx := "mock-export-index"
+	ns.SetExportIndex(idx)
+	c.Assert(ns.ExportIndex(), qt.Equals, idx)
+}
+
+func TestNamespace_ExportIndex_DelegatesToParent(t *testing.T) {
+	c := qt.New(t)
+
+	parent := NewNamespace()
+	idx := "parent-export-index"
+	parent.SetExportIndex(idx)
+
+	child := parent.NewChildNamespace()
+	c.Assert(child.ExportIndex(), qt.Equals, idx)
+
+	// Setting on child delegates to parent.
+	newIdx := "updated-export-index"
+	child.SetExportIndex(newIdx)
+	c.Assert(parent.ExportIndex(), qt.Equals, newIdx)
+	c.Assert(child.ExportIndex(), qt.Equals, newIdx)
+}
+
 func TestNamespace_Derive_SharesRegistryAndAuthorizer(t *testing.T) {
 	c := qt.New(t)
 

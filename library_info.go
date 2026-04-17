@@ -143,6 +143,9 @@ func (p *Engine) ensureExportIndex(ctx context.Context) *compilation.LibraryExpo
 	}
 	p.exportIndex = idx
 	p.exportIndexBuilt = true
+	if idx != nil {
+		p.namespace.SetExportIndex(idx)
+	}
 	return idx
 }
 

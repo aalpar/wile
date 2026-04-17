@@ -15,6 +15,8 @@
 package core
 
 import (
+	"context"
+	"errors"
 	"sort"
 
 	"github.com/aalpar/wile/machine"
@@ -335,7 +337,7 @@ func PrimLibraryDescription(mc machine.CallContext) error {
 // Returns a sorted list of symbols whose name, doc, or category contains
 // the pattern as a case-insensitive substring. Searches all documentation
 // sources: primitives, binding specs, doc entries, environment bindings,
-// and loaded libraries.
+// loaded libraries, and unloaded library exports.
 func PrimApropos(mc machine.CallContext) error {
 	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "apropos")
 	if err != nil {
@@ -349,11 +351,45 @@ func PrimApropos(mc machine.CallContext) error {
 	}
 
 	env := mc.EnvironmentFrame()
-	results := registry.SearchDoc(reg, env, registry.ExtractLibraryRegistry(env), nil, s.Value)
+	exportIndex := exportIndexFromContext(mc)
+	results := registry.SearchDoc(reg, env, registry.ExtractLibraryRegistry(env), exportIndex, s.Value)
 	syms := make([]values.Value, len(results))
 	for i, r := range results {
 		syms[i] = values.NewSymbol(r.Name)
 	}
 	mc.SetValue(values.List(syms...))
 	return nil
+}
+
+// exportIndexFromContext retrieves the cached library export index from
+// the namespace. If no index has been built yet, it builds one lazily
+// using the namespace's file resolver and library registry.
+func exportIndexFromContext(mc machine.CallContext) *compilation.LibraryExportIndex {
+	ns := mc.EnvironmentFrame().Namespace()
+	if ns == nil {
+		return nil
+	}
+	idx, ok := ns.ExportIndex().(*compilation.LibraryExportIndex)
+	if ok {
+		return idx
+	}
+	// Index not yet built — build it now.
+	resolver := ns.FileResolver()
+	if resolver == nil {
+		return nil
+	}
+	lr, _ := ns.LibraryRegistry().(*compilation.LibraryRegistry)
+	built, err := compilation.BuildExportIndex(mc.Context(), resolver, lr)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil // transient — retry next call
+		}
+		// Non-transient errors (malformed .sld files, etc.):
+		// store whatever partial index was returned and stop retrying.
+	}
+	if built == nil {
+		return nil
+	}
+	ns.SetExportIndex(built)
+	return built
 }

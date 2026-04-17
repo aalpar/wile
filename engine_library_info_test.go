@@ -106,3 +106,43 @@ func TestEngine_UnloadedLibraries(t *testing.T) {
 	qt.Assert(t, found, qt.IsTrue,
 		qt.Commentf("should find (wile algebra) as unloaded"))
 }
+
+func TestEngine_UnloadedLibraries_StoresExportIndexOnNamespace(t *testing.T) {
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx,
+		wile.WithAllExtensions(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithLibraryPaths("."),
+	)
+	qt.Assert(t, err, qt.IsNil)
+
+	// Before any library scan, namespace should have no export index.
+	ns := eng.Environment().Namespace()
+	qt.Assert(t, ns.ExportIndex(), qt.IsNil)
+
+	// Trigger the export index build.
+	libs := eng.UnloadedLibraries(ctx)
+	qt.Assert(t, len(libs) > 0, qt.IsTrue)
+
+	// Namespace should now have the export index.
+	qt.Assert(t, ns.ExportIndex(), qt.IsNotNil)
+}
+
+func TestEngine_AproposFindsUnloadedExports(t *testing.T) {
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx,
+		wile.WithAllExtensions(),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithSourceOS(),
+		wile.WithLibraryPaths("."),
+	)
+	qt.Assert(t, err, qt.IsNil)
+
+	// "vector-stable-sort" is exported only by (srfi 132), which has not
+	// been imported. PrimApropos lazily builds the export index from the
+	// file resolver and passes it to SearchDoc.
+	result, err := eng.EvalMultiple(ctx, `(apropos "vector-stable-sort")`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Not(qt.Equals), "()",
+		qt.Commentf("apropos should find vector-stable-sort in unloaded libraries"))
+}
