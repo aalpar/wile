@@ -273,9 +273,12 @@ What: LocalEnvironmentFrame is embedded by value in EnvironmentFrame (for heap s
 - [x] **Disassembler** [Done]: `(disassemble proc)`, `,dis`, MCP tool. PR #603.
 - [x] **Go AST Phase 2** [Done]: 13 node types. PR #480. `plans/GO-AST.md`
 
-</details>
-
+### Other
 - [ ] **Important refactoring**
     - When few fields are referenced from a struct within a function, pass in the field - do not pass in the struct or a reference to the struct
+
+- [x] **Promote `eval` extension to public** [Done]: Moved `internal/extensions/eval/` → `extensions/eval/`, importable as `github.com/aalpar/wile/extensions/eval`. Required by wile-goast and any embedder wanting sandboxed `(eval ...)` / `(load ...)`. The naive composition `WithProfile(Console) + WithExtension(eval.Extension)` does **not** work — `ConsoleAuthorizer` denies `code:load`, so `(load ...)` fails. The fix is a baked `ConsoleWithLoad` profile (extensions + matching authorizer that allows `code:load` under `/tmp`), now part of `plans/2026-03-26-environment-profiles-impl.md`.
+
+</details>
 
 

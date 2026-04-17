@@ -26,7 +26,7 @@ import (
 	"github.com/aalpar/wile/extensions/system"
 	"github.com/aalpar/wile/extensions/threads"
 	"github.com/aalpar/wile/internal/extensions/all"
-	exteval "github.com/aalpar/wile/internal/extensions/eval"
+	exteval "github.com/aalpar/wile/extensions/eval"
 	"github.com/aalpar/wile/internal/extensions/io"
 	nsext "github.com/aalpar/wile/internal/extensions/namespace"
 	"github.com/aalpar/wile/machine/compilation"

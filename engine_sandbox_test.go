@@ -26,7 +26,7 @@ import (
 	"github.com/aalpar/wile/extensions/files"
 	"github.com/aalpar/wile/extensions/math"
 	"github.com/aalpar/wile/extensions/system"
-	eval "github.com/aalpar/wile/internal/extensions/eval"
+	eval "github.com/aalpar/wile/extensions/eval"
 	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
 

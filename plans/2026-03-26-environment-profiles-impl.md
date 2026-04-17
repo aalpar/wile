@@ -4,7 +4,7 @@
 
 **Status:** 0/10 tasks complete
 
-> **Incomplete items:** All 10 tasks. No Profile type, no ConsoleAuthorizer, no Sandbox modifier, no envvars split, no virtual env map, no old API removed, no file renames, no Scheme-level support, no tests, no docs.
+> **Incomplete items:** All 10 tasks. No Profile type (Tiny/Console/ConsoleWithLoad/Small/KitchenSink), no ConsoleAuthorizer, no ConsoleWithLoadAuthorizer, no Sandbox modifier, no envvars split, no virtual env map, no old API removed, no file renames, no Scheme-level support, no tests, no docs. (Prerequisite: eval extension promotion to `extensions/eval/` already complete.)
 
 **Goal:** Replace the SafeExtensions/AllExtensions API with named profiles (Tiny, Console, Small, KitchenSink), an orthogonal sandbox modifier, and a virtual environment map for capability-oriented configuration.
 
@@ -13,6 +13,36 @@
 **Tech Stack:** Go, existing `security.Authorizer` interface, `registry.Extension` pattern.
 
 **Design Doc:** `plans/2026-03-26-environment-profiles.md`
+
+**Prerequisite status (2026-04-17):** The `eval` extension was promoted out of
+`internal/extensions/eval/` to public `extensions/eval/` (separate work,
+satisfying the wile-goast requirement noted in `TODO.md`). All references in
+this plan use the public path `github.com/aalpar/wile/extensions/eval`. The
+`exteval` import alias is no longer needed -- import as plain `eval`.
+
+**Embedder composition pattern (wile-goast and similar callers):** This plan
+ships `ConsoleWithLoad` as a baked profile because the naive composition
+
+```go
+// WRONG -- (eval ...) works but (load ...) fails: ConsoleAuthorizer denies code:load
+wile.NewEngine(ctx, wile.WithProfile(wile.Console), wile.WithExtension(eval.Extension))
+```
+
+does not work. `ConsoleAuthorizer` blocks `code:load` (the gate used by the
+file resolvers when `(load ...)`/`include`/library-import reads from disk),
+so adding `eval.Extension` alone leaves `(load ...)` unusable. The fix is
+not extension composition but a different authorizer that allows `code:load`
+under the same `/tmp` envelope as files. That coupling is what makes
+`ConsoleWithLoad` a distinct profile rather than a one-line append.
+
+Correct usage:
+
+```go
+eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.ConsoleWithLoad))
+```
+
+Embedders that want a different envelope (e.g. `/var/wile/scripts` instead
+of `/tmp`) should still use `WithProfile(Console) + WithAuthorizer(custom)`.
 
 ---
 
@@ -43,6 +73,7 @@ func TestProfile_String(t *testing.T) {
 	}{
 		{Tiny, "tiny"},
 		{Console, "console"},
+		{ConsoleWithLoad, "console-with-load"},
 		{Small, "small"},
 		{KitchenSink, "kitchen-sink"},
 	}
@@ -57,6 +88,14 @@ func TestProfile_Extensions_Tiny(t *testing.T) {
 	c := qt.New(t)
 	exts := Tiny.extensions()
 	c.Assert(exts, qt.HasLen, 0)
+}
+
+func TestProfile_Extensions_ConsoleWithLoad_HasEval(t *testing.T) {
+	c := qt.New(t)
+	consoleExts := Console.extensions()
+	cwlExts := ConsoleWithLoad.extensions()
+	// ConsoleWithLoad is Console + eval -- exactly one more extension
+	c.Assert(len(cwlExts), qt.Equals, len(consoleExts)+1)
 }
 
 func TestProfile_Extensions_KitchenSink(t *testing.T) {
@@ -78,6 +117,7 @@ Expected: FAIL -- `Profile` type not defined
 package wile
 
 import (
+	"github.com/aalpar/wile/extensions/eval"
 	"github.com/aalpar/wile/extensions/files"
 	"github.com/aalpar/wile/extensions/gointerop"
 	"github.com/aalpar/wile/extensions/introspection"
@@ -86,7 +126,6 @@ import (
 	"github.com/aalpar/wile/extensions/system"
 	"github.com/aalpar/wile/extensions/threads"
 	"github.com/aalpar/wile/internal/extensions/all"
-	exteval "github.com/aalpar/wile/internal/extensions/eval"
 	ioext "github.com/aalpar/wile/internal/extensions/io"
 	nsext "github.com/aalpar/wile/internal/extensions/namespace"
 	"github.com/aalpar/wile/registry"
@@ -108,6 +147,14 @@ const (
 	// virtual env map only (no os.Getenv fallthrough).
 	Console
 
+	// ConsoleWithLoad is Console plus the eval extension, with an
+	// authorizer that allows `code:load` under /tmp (in addition to
+	// file r/w/d under /tmp). Enables (eval ...) and (load ...) within
+	// the same /tmp security envelope. Process execution still denied.
+	// Primary consumer: wile-goast and similar embedders that stage
+	// Scheme files into /tmp and load them.
+	ConsoleWithLoad
+
 	// Small is R7RS-small complete -- all 16 (scheme ...) libraries.
 	// Includes file I/O, system interface. No threads, no Go interop.
 	Small
@@ -124,6 +171,8 @@ func (p Profile) String() string {
 		return "tiny"
 	case Console:
 		return "console"
+	case ConsoleWithLoad:
+		return "console-with-load"
 	case Small:
 		return "small"
 	case KitchenSink:
@@ -147,13 +196,22 @@ func (p Profile) extensions() []registry.Extension {
 			all.SafeExtension,
 			// envvars.Extension added in Task 4
 		}
+	case ConsoleWithLoad:
+		return []registry.Extension{
+			ioext.Extension,
+			files.Extension,
+			math.Extension,
+			all.SafeExtension,
+			eval.Extension,
+			// envvars.Extension added in Task 4
+		}
 	case Small:
 		return []registry.Extension{
 			ioext.Extension,
 			files.Extension,
 			math.Extension,
 			introspection.Extension,
-			exteval.Extension,
+			eval.Extension,
 			all.Extension,
 			system.Extension,
 			// envvars.Extension added in Task 4
@@ -164,7 +222,7 @@ func (p Profile) extensions() []registry.Extension {
 			files.Extension,
 			math.Extension,
 			introspection.Extension,
-			exteval.Extension,
+			eval.Extension,
 			nsext.Extension,
 			threads.Extension,
 			gointerop.Extension,
@@ -212,12 +270,14 @@ feat(profiles): add Profile type with Tiny, Console, Small, KitchenSink constant
 
 ---
 
-### Task 2: Console Authorizer
+### Task 2: Console + ConsoleWithLoad Authorizers
 
 **Files:**
 - Create: `security/console_authorizer.go`
 - Test: `security/console_authorizer_test.go`
-- Modify: `profile.go` -- wire Console authorizer
+- Create: `security/console_with_load_authorizer.go`
+- Test: `security/console_with_load_authorizer_test.go`
+- Modify: `profile.go` -- wire Console and ConsoleWithLoad authorizers
 
 **Step 1: Write the failing test**
 
@@ -308,7 +368,102 @@ func ConsoleAuthorizer() Authorizer {
 Run: `go test -v -run TestConsoleAuthorizer ./security/...`
 Expected: PASS
 
-**Step 5: Wire Console authorizer to profile**
+**Step 5: Write the failing test for ConsoleWithLoadAuthorizer**
+
+```go
+// security/console_with_load_authorizer_test.go
+package security_test
+
+import (
+	"testing"
+
+	qt "github.com/frankban/quicktest"
+	"github.com/aalpar/wile/security"
+)
+
+func TestConsoleWithLoadAuthorizer(t *testing.T) {
+	c := qt.New(t)
+	auth := security.ConsoleWithLoadAuthorizer()
+
+	tests := []struct {
+		name    string
+		req     security.AccessRequest
+		allowed bool
+	}{
+		// File ops: same /tmp envelope as Console
+		{"read /tmp/foo", security.AccessRequest{Resource: security.ResourceFile, Action: security.ActionRead, Target: "/tmp/foo"}, true},
+		{"write /tmp/bar", security.AccessRequest{Resource: security.ResourceFile, Action: security.ActionWrite, Target: "/tmp/bar"}, true},
+		{"delete /tmp/baz", security.AccessRequest{Resource: security.ResourceFile, Action: security.ActionDelete, Target: "/tmp/baz"}, true},
+		{"read /etc/passwd", security.AccessRequest{Resource: security.ResourceFile, Action: security.ActionRead, Target: "/etc/passwd"}, false},
+		// Env: same as Console
+		{"read env", security.AccessRequest{Resource: security.ResourceEnv, Action: security.ActionRead, Target: "APP_MODE"}, true},
+		// Code load: NEW capability vs Console -- allowed under /tmp
+		{"load /tmp/lib.scm", security.AccessRequest{Resource: security.ResourceCode, Action: security.ActionLoad, Target: "/tmp/lib.scm"}, true},
+		{"load /tmp/sub/lib.scm", security.AccessRequest{Resource: security.ResourceCode, Action: security.ActionLoad, Target: "/tmp/sub/lib.scm"}, true},
+		{"load /etc/lib.scm", security.AccessRequest{Resource: security.ResourceCode, Action: security.ActionLoad, Target: "/etc/lib.scm"}, false},
+		{"load path traversal /tmp/../etc/lib.scm", security.AccessRequest{Resource: security.ResourceCode, Action: security.ActionLoad, Target: "/tmp/../etc/lib.scm"}, false},
+		// Process: still denied
+		{"exec process", security.AccessRequest{Resource: security.ResourceProcess, Action: security.ActionExec, Target: "ls"}, false},
+	}
+	for _, tt := range tests {
+		c.Run(tt.name, func(c *qt.C) {
+			err := auth.Authorize(tt.req)
+			if tt.allowed {
+				c.Assert(err, qt.IsNil)
+			} else {
+				c.Assert(err, qt.IsNotNil)
+			}
+		})
+	}
+}
+```
+
+**Step 6: Run test to verify it fails**
+
+Run: `go test -v -run TestConsoleWithLoadAuthorizer ./security/...`
+Expected: FAIL -- `ConsoleWithLoadAuthorizer` not defined
+
+**Step 7: Write ConsoleWithLoadAuthorizer**
+
+```go
+// security/console_with_load_authorizer.go
+package security
+
+import (
+	"path/filepath"
+	"strings"
+)
+
+// ConsoleWithLoadAuthorizer returns an Authorizer for the ConsoleWithLoad
+// profile. File operations and code loading are both restricted to /tmp.
+// Environment variable reads are allowed. Process execution is denied.
+//
+// This is the security envelope wile-goast and similar embedders use to
+// run sandboxed (eval ...) and (load ...) on Scheme files staged in /tmp.
+func ConsoleWithLoadAuthorizer() Authorizer {
+	return AuthorizerFunc(func(req AccessRequest) error {
+		switch req.Resource {
+		case ResourceFile, ResourceCode:
+			cleaned := filepath.Clean(req.Target)
+			if !strings.HasPrefix(cleaned, "/tmp/") && cleaned != "/tmp" {
+				return ErrAccessDenied
+			}
+			return nil
+		case ResourceEnv:
+			return nil
+		default:
+			return ErrAccessDenied
+		}
+	})
+}
+```
+
+**Step 8: Run test to verify it passes**
+
+Run: `go test -v -run TestConsoleWithLoadAuthorizer ./security/...`
+Expected: PASS
+
+**Step 9: Wire authorizers to profiles**
 
 Update `profile.go` -- replace the stub `authorizer()` method:
 
@@ -317,16 +472,18 @@ func (p Profile) authorizer() security.Authorizer {
 	switch p {
 	case Console:
 		return security.ConsoleAuthorizer()
+	case ConsoleWithLoad:
+		return security.ConsoleWithLoadAuthorizer()
 	default:
 		return nil
 	}
 }
 ```
 
-**Step 6: Commit**
+**Step 10: Commit**
 
 ```
-feat(security): add ConsoleAuthorizer for /tmp-only file access
+feat(security): add Console and ConsoleWithLoad authorizers (/tmp-only)
 ```
 
 ---
@@ -935,10 +1092,11 @@ if cfg.envMap != nil {
 }
 ```
 
-**Step 6: Console ensures non-nil envMap**
+**Step 6: Sandboxed profiles ensure non-nil envMap**
 
-In `profile.go`, update `WithProfile` to ensure Console always has a virtual
-env map so the envvars primitive never falls through to `os.Getenv`:
+In `profile.go`, update `WithProfile` to ensure Console and ConsoleWithLoad
+always have a virtual env map so the envvars primitive never falls through
+to `os.Getenv`:
 
 ```go
 func WithProfile(p Profile) EngineOption {
@@ -948,7 +1106,7 @@ func WithProfile(p Profile) EngineOption {
 		if auth != nil {
 			cfg.authorizer = auth
 		}
-		if p == Console && cfg.envMap == nil {
+		if (p == Console || p == ConsoleWithLoad) && cfg.envMap == nil {
 			cfg.envMap = make(map[string]string)
 		}
 	}
@@ -1009,7 +1167,7 @@ Files to update:
 - `example_test.go`
 - `integration/callcc_callback_test.go`
 - `integration/circular_test.go`
-- `internal/extensions/eval/load_path_integration_test.go`
+- `extensions/eval/load_path_integration_test.go`
 - `doc.go`
 
 For `wile_test.go` functions `TestWithSafeExtensions` and `TestSafeExtensions`:
@@ -1095,13 +1253,13 @@ refactor(bootstrap): rename environment_tiny to bootstrap
 ### Task 8: Scheme-Level (environment '(wile ...)) Support
 
 **Files:**
-- Modify: `internal/extensions/eval/prim_eval.go` -- update `PrimEnvironment` (line 281)
+- Modify: `extensions/eval/prim_eval.go` -- update `PrimEnvironment` (line 281)
 - Modify: `internal/bootstrap/bootstrap.go` -- expose profile environment factory
-- Test: `internal/extensions/eval/prim_eval_test.go`
+- Test: `extensions/eval/prim_eval_test.go`
 
 **Step 1: Write the failing test**
 
-Add to `internal/extensions/eval/prim_eval_test.go`:
+Add to `extensions/eval/prim_eval_test.go`:
 
 ```go
 func TestEnvironment_WileProfiles(t *testing.T) {
@@ -1125,6 +1283,19 @@ func TestEnvironment_WileProfiles(t *testing.T) {
 		c.Assert(result.String(), qt.Equals, "3")
 	})
 
+	t.Run("wile console-with-load has eval", func(t *testing.T) {
+		result := evalExpr(t, engine,
+			`(eval '(+ 1 2) (environment '(wile console-with-load)))`)
+		c.Assert(result.String(), qt.Equals, "3")
+	})
+
+	t.Run("wile console-with-load supports nested eval", func(t *testing.T) {
+		// eval-of-eval works: ConsoleWithLoad provides eval.Extension
+		result := evalExpr(t, engine,
+			`(eval '(eval '(+ 2 3) (environment '(wile tiny))) (environment '(wile console-with-load)))`)
+		c.Assert(result.String(), qt.Equals, "5")
+	})
+
 	t.Run("wile small", func(t *testing.T) {
 		result := evalExpr(t, engine,
 			`(eval '(+ 1 2) (environment '(wile small)))`)
@@ -1145,7 +1316,7 @@ func TestEnvironment_WileProfiles(t *testing.T) {
 
 **Step 2: Run test to verify it fails**
 
-Run: `go test -v -run TestEnvironment_WileProfiles ./internal/extensions/eval/...`
+Run: `go test -v -run TestEnvironment_WileProfiles ./extensions/eval/...`
 Expected: FAIL -- `(wile tiny)` not recognized
 
 **Step 3: Expose profile environment factory**
@@ -1247,6 +1418,8 @@ func tryWileProfile(
 		exts = nil // core only
 	case "console":
 		exts = wile.Console.extensions() // need to resolve import path
+	case "console-with-load":
+		exts = wile.ConsoleWithLoad.extensions()
 	case "small":
 		exts = wile.Small.extensions()
 	case "kitchen-sink":
@@ -1274,15 +1447,19 @@ func tryWileProfile(
 ```
 
 Note: The profile extension lists will need to be accessible from the eval
-package. Options: (a) duplicate the lists, (b) expose a function on a shared
-package, (c) put profile-to-extensions mapping in `internal/bootstrap`. Option
-(c) is cleanest -- the bootstrap package already knows about all extensions.
-Add a `ProfileExtensions(name string) ([]registry.Extension, error)` function
-there.
+package (now public at `extensions/eval`). The root `wile` package imports
+`extensions/eval`, so `eval` cannot import the root -- the import-cycle
+constraint is unchanged by the public promotion. Options: (a) duplicate the
+lists, (b) expose a function on a shared package, (c) put
+profile-to-extensions mapping in `internal/bootstrap`. Option (c) is
+cleanest -- the bootstrap package already knows about all extensions. Add a
+`ProfileExtensions(name string) ([]registry.Extension, error)` function
+there. `extensions/eval` is allowed to import `internal/bootstrap` because
+both live under the `github.com/aalpar/wile` module root.
 
 **Step 5: Run test**
 
-Run: `go test -v -run TestEnvironment_WileProfiles ./internal/extensions/eval/...`
+Run: `go test -v -run TestEnvironment_WileProfiles ./extensions/eval/...`
 Expected: PASS
 
 **Step 6: Commit**
@@ -1306,6 +1483,8 @@ package wile
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -1357,6 +1536,46 @@ func TestProfile_Console_FileSandbox(t *testing.T) {
 	c.Assert(err, qt.IsNotNil)
 }
 
+func TestProfile_ConsoleWithLoad_EvalAndLoad(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	eng, err := NewEngine(ctx, WithProfile(ConsoleWithLoad))
+	c.Assert(err, qt.IsNil)
+
+	// (eval ...) works
+	result, err := eng.EvalString(ctx,
+		`(eval '(+ 1 2) (interaction-environment))`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.String(), qt.Equals, "3")
+
+	// (load ...) of a /tmp file works
+	tmpFile, err := os.CreateTemp("/tmp", "wile-cwl-*.scm")
+	c.Assert(err, qt.IsNil)
+	defer os.Remove(tmpFile.Name())
+	_, err = tmpFile.WriteString("(define cwl-loaded-value 42)\n")
+	c.Assert(err, qt.IsNil)
+	c.Assert(tmpFile.Close(), qt.IsNil)
+
+	_, err = eng.EvalString(ctx, fmt.Sprintf(`(load %q)`, tmpFile.Name()))
+	c.Assert(err, qt.IsNil)
+	result, err = eng.EvalString(ctx, `cwl-loaded-value`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.String(), qt.Equals, "42")
+}
+
+func TestProfile_ConsoleWithLoad_DeniesLoadOutsideTmp(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	eng, err := NewEngine(ctx, WithProfile(ConsoleWithLoad))
+	c.Assert(err, qt.IsNil)
+
+	// load outside /tmp is denied even though eval is enabled
+	_, err = eng.EvalString(ctx, `(load "/etc/hosts")`)
+	c.Assert(err, qt.IsNotNil)
+}
+
 func TestProfile_Small_R7RS(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
@@ -1387,12 +1606,14 @@ func TestProfile_Superset_Invariant(t *testing.T) {
 
 	tinyExts := Tiny.extensions()
 	consoleExts := Console.extensions()
+	cwlExts := ConsoleWithLoad.extensions()
 	smallExts := Small.extensions()
 	kitchenExts := KitchenSink.extensions()
 
 	c.Assert(len(tinyExts), qt.Equals, 0)
 	c.Assert(len(consoleExts) > len(tinyExts), qt.IsTrue)
-	c.Assert(len(smallExts) > len(consoleExts), qt.IsTrue)
+	c.Assert(len(cwlExts) > len(consoleExts), qt.IsTrue)
+	c.Assert(len(smallExts) > len(cwlExts), qt.IsTrue)
 	c.Assert(len(kitchenExts) > len(smallExts), qt.IsTrue)
 }
 
@@ -1462,12 +1683,16 @@ profile-based examples:
 //	    wile.WithProfile(wile.Console),
 //	    wile.WithEnv("APP_MODE", "production"),
 //	)
+//
+//	// Sandboxed eval/load (wile-goast pattern):
+//	eng, err := wile.NewEngine(ctx, wile.WithProfile(wile.ConsoleWithLoad))
 ```
 
 **Step 2: Update CLAUDE.md**
 
 - Architecture section: mention profiles as the primary API
-- Security Model section: add Console authorizer, WithSandbox, virtual env map
+- Security Model section: add Console authorizer, ConsoleWithLoad authorizer,
+  WithSandbox, virtual env map
 - Update extension count
 
 **Step 3: Update TODO.md if applicable**
@@ -1526,9 +1751,18 @@ Tasks 2, 3, 4 can run in parallel after Task 1.
   is a separate extension added by profiles.
 
 - **`PrimEnvironment` profile constructor** needs access to bootstrap
-  initialization. This crosses a package boundary (`internal/extensions/eval`
-  to `internal/bootstrap`). Consider exposing a factory function via the
-  `machine` package (which both depend on) to avoid a direct dependency.
+  initialization. This crosses a package boundary (`extensions/eval`
+  to `internal/bootstrap`). Both packages live under the `github.com/aalpar/wile`
+  module root, so the import is permitted by Go's `internal` rule. Consider
+  exposing a factory function via the `machine` package (which both depend on)
+  to avoid a direct dependency if the bootstrap surface area grows.
+
+- **eval extension is now public.** Embedders (e.g. wile-goast) can compose
+  `eval.Extension` onto any profile via `WithExtension(eval.Extension)`. This
+  is intentional -- the security boundary is opt-in capability, not package
+  visibility. Profiles that omit `eval.Extension` (currently Tiny, Console)
+  do not provide `(eval ...)` or `(load ...)`; profiles that include it
+  (Small, KitchenSink) do. See "Embedder composition pattern" in the header.
 
 - **Test count.** ~20 test files reference the old API. Budget time for Task 6.
 
