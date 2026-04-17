@@ -138,11 +138,18 @@ func (p Profile) extensions() []registry.Extension {
 }
 
 // authorizer returns the built-in authorizer for this profile, or nil.
-// Console and ConsoleWithLoad have built-in authorizers wired in Task 2.
-// Other profiles have no built-in restrictions.
+// Console uses ConsoleAuthorizer (/tmp file access, deny code/process).
+// ConsoleWithLoad uses ConsoleWithLoadAuthorizer (Console + /tmp code load).
+// Other profiles have no built-in authorizer.
 func (p Profile) authorizer() security.Authorizer {
-	// Stub: Console / ConsoleWithLoad authorizers wired in Task 2
-	return nil
+	switch p {
+	case Console:
+		return security.ConsoleAuthorizer()
+	case ConsoleWithLoad:
+		return security.ConsoleWithLoadAuthorizer()
+	default:
+		return nil
+	}
 }
 
 // WithProfile configures the engine with the named profile's
