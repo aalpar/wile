@@ -38,7 +38,7 @@ The embedding experience that differentiates Wile.
 
 - [ ] **Extension API contracts Phase 2+** [Embedding, High]: Compile-time (compiler consults `ParamTypes` for static call sites — error before execution, zero runtime cost) and runtime (`buildValidator` wires `ParamTypes` → `SetValidator`). Integration with linter. `plans/2026-03-26-extension-contracts-design.md`
 - [ ] **Environment profiles** [Embedding]: Replace SafeExtensions/AllExtensions with named profiles (Tiny, Console, Small, KitchenSink), orthogonal sandbox modifier, virtual env map. `plans/2026-03-26-environment-profiles-impl.md`
-- [ ] **Eager documentation index** [Tooling, High]: Scan `.sld` files at engine init to populate doc index before any library is imported. LLMs (primary doc consumers) can't discover library functions via `apropos`/`doc` until the library is loaded — this makes all available libraries searchable from the first tool call. `plans/2026-04-08-eager-doc-index-design.md`
+- [x] **Eager documentation index** [Tooling, Done]: Shipped as lazy-build-and-cache rather than eager scan. `LibraryExportIndex` is built on first `apropos`/`doc` query and cached on `Namespace`; Scheme-level `(apropos)`, REPL `,apropos`, and MCP share the same index, so LLMs can discover unloaded-library procedures from the first query. See PRs #623–625 (`memory/LIBRARY-EXPORT-INDEX.md`) and post-#623 asymmetry fix (`memory/PRIM-APROPOS-EXPORT-INDEX.md`). Original eager-scan design (`2026-04-08-eager-doc-index-design.md`) was superseded before any code shipped.
 - [ ] **Network libraries** [Standard library]: TCP/UDP, HTTP, TLS, DNS. Required for real-world embedded use cases.
   - TCP/UDP sockets (tcp-connect, tcp-listen, tcp-accept, tcp-close)
   - HTTP client/server primitives
