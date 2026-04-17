@@ -123,6 +123,9 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	if cfg.authorizer != nil {
 		ns.SetAuthorizer(cfg.authorizer)
 	}
+	if cfg.envMap != nil {
+		ns.SetEnvMap(cfg.envMap)
+	}
 
 	env := ns.Runtime()
 	err = applyBaseEnvironment(ctx, env, reg)

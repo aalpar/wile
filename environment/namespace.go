@@ -290,6 +290,12 @@ func (p *Namespace) EnvMap() map[string]string {
 	return p.envMap
 }
 
+// SetEnvMap sets the virtual environment variable map.
+// When set, envvars primitives read from this map instead of os.Getenv.
+func (p *Namespace) SetEnvMap(m map[string]string) {
+	p.envMap = m
+}
+
 // SetAuthorizer sets the security authorizer for this namespace.
 func (p *Namespace) SetAuthorizer(auth security.Authorizer) {
 	p.authorizer = auth

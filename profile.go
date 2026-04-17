@@ -158,12 +158,21 @@ func (p Profile) authorizer() security.Authorizer {
 // it appends the profile's extensions to any already configured via
 // WithExtension/WithExtensions, and sets the profile's authorizer
 // only if one is defined (otherwise leaves any prior authorizer in place).
+//
+// For Console and ConsoleWithLoad, WithProfile ensures the virtual
+// environment variable map is non-nil so envvars primitives never fall
+// through to os.Getenv. When WithEnv/WithEnvMap is combined with
+// WithProfile(Console*), the caller-supplied contents are preserved:
+// WithProfile only allocates an empty map when none is set.
 func WithProfile(p Profile) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.extensions = append(cfg.extensions, p.extensions()...)
 		auth := p.authorizer()
 		if auth != nil {
 			cfg.authorizer = auth
+		}
+		if (p == Console || p == ConsoleWithLoad) && cfg.envMap == nil {
+			cfg.envMap = make(map[string]string)
 		}
 	}
 }

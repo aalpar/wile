@@ -16,6 +16,7 @@ package wile
 
 import (
 	"io/fs"
+	"maps"
 
 	"github.com/aalpar/wile/environment"
 	exteval "github.com/aalpar/wile/extensions/eval"
@@ -61,6 +62,7 @@ type engineConfig struct {
 	authorizer         security.Authorizer
 	namespace          *environment.Namespace // pre-built namespace (via WithNamespace)
 	resolverFactories  []resolverFactory      // source file resolver chain (via WithSourceFS, WithSourceOS)
+	envMap             map[string]string      // virtual env vars (via WithEnv, WithEnvMap)
 }
 
 // resolverFactory creates a FileResolver given the runtime environment.
@@ -349,5 +351,26 @@ func WithAllExtensions() EngineOption {
 		for _, opt := range AllExtensions() {
 			opt(cfg)
 		}
+	}
+}
+
+// WithEnv adds a single virtual environment variable.
+// When any virtual env var is set, the envvars extension reads from
+// the virtual map instead of os.Getenv.
+func WithEnv(key, value string) EngineOption {
+	return func(cfg *engineConfig) {
+		if cfg.envMap == nil {
+			cfg.envMap = make(map[string]string)
+		}
+		cfg.envMap[key] = value
+	}
+}
+
+// WithEnvMap sets the complete virtual environment variable map.
+// Replaces any previously set virtual env vars.
+func WithEnvMap(m map[string]string) EngineOption {
+	return func(cfg *engineConfig) {
+		cfg.envMap = make(map[string]string, len(m))
+		maps.Copy(cfg.envMap, m)
 	}
 }

@@ -17,8 +17,9 @@ package security_test
 import (
 	"testing"
 
-	"github.com/aalpar/wile/security"
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/security"
 )
 
 func TestConsoleWithLoadAuthorizer(t *testing.T) {
