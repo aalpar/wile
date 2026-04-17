@@ -17,6 +17,7 @@ package environment
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync"
 
 	"github.com/aalpar/wile/internal/syntax"
@@ -292,8 +293,21 @@ func (p *Namespace) EnvMap() map[string]string {
 
 // SetEnvMap sets the virtual environment variable map.
 // When set, envvars primitives read from this map instead of os.Getenv.
+//
+// The provided map is defensively copied so that subsequent mutation by the
+// caller does not leak into the VM's sandbox state. A nil argument clears
+// the virtual map (falls back to os.Getenv, gated by the authorizer).
+//
+// Note: EnvMap() still returns the internal map by reference for zero-cost
+// primitive access. Callers who reach for EnvMap() must treat the result as
+// read-only; mutating it bypasses the defensive copy applied here.
 func (p *Namespace) SetEnvMap(m map[string]string) {
-	p.envMap = m
+	if m == nil {
+		p.envMap = nil
+		return
+	}
+	p.envMap = make(map[string]string, len(m))
+	maps.Copy(p.envMap, m)
 }
 
 // SetAuthorizer sets the security authorizer for this namespace.

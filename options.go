@@ -368,8 +368,21 @@ func WithEnv(key, value string) EngineOption {
 
 // WithEnvMap sets the complete virtual environment variable map.
 // Replaces any previously set virtual env vars.
+//
+// Passing nil clears the virtual env map so envvars primitives fall back to
+// os.Getenv (still gated by the authorizer). This is symmetric with
+// WithAuthorizer(nil): the zero value means "no restriction", not "empty
+// sandbox". To explicitly sandbox with no visible env, pass an empty map.
+//
+// Note: when combined with WithProfile(Console) or WithProfile(ConsoleWithLoad),
+// option order matters. WithProfile fills in an empty map only if envMap is
+// currently nil; a later WithEnvMap(nil) re-nils it and opens the sandbox.
 func WithEnvMap(m map[string]string) EngineOption {
 	return func(cfg *engineConfig) {
+		if m == nil {
+			cfg.envMap = nil
+			return
+		}
 		cfg.envMap = make(map[string]string, len(m))
 		maps.Copy(cfg.envMap, m)
 	}

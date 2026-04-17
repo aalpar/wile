@@ -159,11 +159,17 @@ func (p Profile) authorizer() security.Authorizer {
 // WithExtension/WithExtensions, and sets the profile's authorizer
 // only if one is defined (otherwise leaves any prior authorizer in place).
 //
-// For Console and ConsoleWithLoad, WithProfile ensures the virtual
-// environment variable map is non-nil so envvars primitives never fall
-// through to os.Getenv. When WithEnv/WithEnvMap is combined with
-// WithProfile(Console*), the caller-supplied contents are preserved:
-// WithProfile only allocates an empty map when none is set.
+// Per-profile envMap behavior (all five current profiles):
+//   - Tiny: envMap untouched; profile registers no extensions, so envvars primitives are absent.
+//   - Console: allocates empty envMap when unset; sandboxes to the virtual map (no os.Getenv fallthrough).
+//   - ConsoleWithLoad: same as Console (empty envMap when unset).
+//   - Small: envMap untouched. envvars primitives are registered and fall through to os.Getenv when envMap is nil, gated by the authorizer (if any).
+//   - KitchenSink: same fallthrough behavior as Small.
+//
+// When WithEnv/WithEnvMap is combined with WithProfile(Console*), the
+// caller-supplied contents are preserved: WithProfile only allocates an
+// empty map when none is set. Option order matters — a later WithEnvMap(nil)
+// re-nils the map and opens the sandbox.
 func WithProfile(p Profile) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.extensions = append(cfg.extensions, p.extensions()...)
