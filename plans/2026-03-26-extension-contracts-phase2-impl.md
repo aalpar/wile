@@ -2,6 +2,11 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
+**Status:** 3/8 tasks complete (Tasks 1-3 only)
+
+> **Completed:** Task 1 (ForeignClosure.validate field), Task 2 (callForeignCached dispatch), Task 3 (applyForeign dispatch).
+> **Incomplete:** Task 4 (buildValidator in registry/contract.go), Task 5 (WithContractEnforcement + Apply threading), Task 6 (integration tests), Task 7 (files extension ParamTypes/ReturnType), Task 8 (lint/verify).
+
 **Goal:** Add opt-in runtime contract enforcement to the dispatch path and annotate
 `extensions/files/` as proof-of-concept. This proves the full stack (annotation →
 registration → enforcement → error) end-to-end with the smallest extension package.

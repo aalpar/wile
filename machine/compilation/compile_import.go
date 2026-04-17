@@ -40,7 +40,7 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 
 	importSets, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAPair, "import: expected list of import sets")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "import: expected list of import sets"))
 	}
 
 	// Process each import set
@@ -48,10 +48,10 @@ func (p *CompileTimeContinuation) CompileImport(ctctx CompileTimeCallContext, ex
 		return ResolveAndInstallImportSet(ctx, importSetExpr.UnwrapAll(), p.env, environment.PhaseCompile, p.evaluator)
 	})
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "import: error processing import sets")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "import: error processing import sets"))
 	}
 	if !syntax.IsSyntaxEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "import: unexpected return value")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAList, "import: unexpected return value"))
 	}
 	return nil
 }
@@ -69,7 +69,7 @@ func (p *CompileTimeContinuation) processLibraryImport(ctctx CompileTimeCallCont
 
 	argsPair, ok := args.(*syntax.SyntaxPair)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAPair, "import: expected list of import sets")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "import: expected list of import sets"))
 	}
 
 	// Process each import set

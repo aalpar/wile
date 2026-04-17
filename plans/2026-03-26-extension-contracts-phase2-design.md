@@ -1,8 +1,11 @@
 # Extension Contracts Phase 2+ Design
 
 **Date**: 2026-03-26
-**Status**: Draft
+**Status**: Partially realized — infrastructure done, builder/engine option/annotations not started
 **Depends on**: PR #577 (Phase 1 infrastructure + Phase 2 core annotations)
+
+> **Completed:** ForeignClosure.validate field, dispatch path changes.
+> **Incomplete:** `buildValidator` (registry/contract.go), `WithContractEnforcement` engine option, extension primitive annotations (228 primitives).
 
 ## Problem
 

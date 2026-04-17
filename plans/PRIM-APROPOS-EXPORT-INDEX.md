@@ -1,7 +1,9 @@
 # PrimApropos Export Index — Closing the Scheme-Level Asymmetry
 
-**Status:** Proposed
+**Status:** Deferred — not started
 **Date:** 2026-04-09
+
+> **Incomplete:** ExportIndex()/SetExportIndex() on Namespace, RegistryDocProvider wiring, PrimApropos update. Explicitly deferred — MCP tool covers the LLM discovery gap.
 **Context:** Crosscheck finding from PR #623
 
 ## Problem

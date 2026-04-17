@@ -466,6 +466,9 @@ func (p *CompileTimeContinuation) currentSource() *syntax.SourceContext {
 // wrapCompilationError attaches the current source location to a compilation error.
 // If no source context is available, returns the error unchanged.
 func (p *CompileTimeContinuation) wrapCompilationError(err error) error {
+	if err == nil {
+		return nil
+	}
 	src := p.currentSource()
 	if src == nil {
 		return err

@@ -1,7 +1,9 @@
 # Timer Interrupts Design
 
-**Status:** Draft
+**Status:** Draft — not started
 **Date:** 2026-04-16
+
+> **Incomplete:** All items. No ErrTimerInterrupt type, no timerHandler/timerCancel fields, no interrupt points, no RunWithEscapeHandling dispatch, no with-timeout primitive.
 
 ## Problem
 

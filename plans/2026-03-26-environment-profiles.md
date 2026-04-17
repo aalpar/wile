@@ -1,7 +1,9 @@
 # Environment Profiles Design
 
 **Date:** 2026-03-26
-**Status:** Draft
+**Status:** Draft — 0% implemented
+
+> **Incomplete items:** All. No `Profile` type, `WithProfile`, `WithSandbox`, `WithEnv`, `WithEnvMap`, or `ConsoleAuthorizer` exist. `SafeExtensions`/`AllExtensions` still in use (21 files). See companion impl plan.
 
 ## Problem
 

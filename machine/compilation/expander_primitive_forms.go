@@ -80,7 +80,7 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(_ *syntax.SyntaxSymbol
 	// which is ((id ...) body)
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(pair) {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-binding-scope: expected (with-binding-scope (id ...) body)")
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-binding-scope: expected (with-binding-scope (id ...) body)"))
 	}
 
 	// Get the identifier list - these are the identifiers being bound
@@ -90,7 +90,7 @@ func (p *ExpanderTimeContinuation) expandWithBindingScope(_ *syntax.SyntaxSymbol
 	cdr := pair.SyntaxCdr()
 	bodyPair, ok := cdr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(bodyPair) {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-binding-scope: missing body")
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-binding-scope: missing body"))
 	}
 	body := bodyPair.SyntaxCar()
 
@@ -151,7 +151,7 @@ func (p *ExpanderTimeContinuation) expandSyntaxError(_ *syntax.SyntaxSymbol, exp
 	// Extract message (required first argument)
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(pair) {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-error: missing message argument")
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-error: missing message argument"))
 	}
 
 	// Get the message
@@ -186,9 +186,9 @@ func (p *ExpanderTimeContinuation) expandSyntaxError(_ *syntax.SyntaxSymbol, exp
 
 	// Format the error message
 	if len(irritants) > 0 {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-error: %s: %s", message, formatIrritants(irritants))
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-error: %s: %s", message, formatIrritants(irritants)))
 	}
-	return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-error: %s", message)
+	return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "syntax-error: %s", message))
 }
 
 // formatIrritants joins irritants with commas for error display.
@@ -205,14 +205,14 @@ func (p *ExpanderTimeContinuation) expandBeginForm(sym *syntax.SyntaxSymbol, exp
 		// Collect forms from the begin body
 		forms, err := collectBodyExpressions(exprPair)
 		if err != nil {
-			return nil, werr.WrapForeignErrorf(err, "failed to collect begin body")
+			return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "failed to collect begin body"))
 		}
 
 		// Use ExpandBodyWithDefineSyntax to compile define-syntax forms immediately
 		// This ensures macros defined in begin are available to subsequent forms
 		expandedForms, err := p.ExpandBodyWithDefineSyntax(forms)
 		if err != nil {
-			return nil, werr.WrapForeignErrorf(err, "failed to expand begin body")
+			return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "failed to expand begin body"))
 		}
 
 		// Rebuild the begin form with expanded contents
@@ -235,18 +235,18 @@ func (p *ExpanderTimeContinuation) expandIfForm(sym *syntax.SyntaxSymbol, expr s
 	// Expand test
 	expandedTest, err := p.ExpandExpression(pair.SyntaxCar())
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "if: failed to expand test")
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "if: failed to expand test"))
 	}
 
 	// Get consequent
 	cdrPair, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(cdrPair) {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "if: missing consequent")
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "if: missing consequent"))
 	}
 
 	expandedConseq, err := p.ExpandExpression(cdrPair.SyntaxCar())
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "if: failed to expand consequent")
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "if: failed to expand consequent"))
 	}
 
 	// Check for alternative
@@ -260,7 +260,7 @@ func (p *ExpanderTimeContinuation) expandIfForm(sym *syntax.SyntaxSymbol, expr s
 	// Expand alternative
 	expandedAlt, err := p.ExpandExpression(altPair.SyntaxCar())
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "if: failed to expand alternative")
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "if: failed to expand alternative"))
 	}
 
 	// Build (if test conseq alt)
@@ -286,7 +286,7 @@ func (p *ExpanderTimeContinuation) expandSetForm(sym *syntax.SyntaxSymbol, expr 
 
 	expandedValue, err := p.ExpandExpression(cdrPair.SyntaxCar())
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "set!: failed to expand value")
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "set!: failed to expand value"))
 	}
 
 	// Build (set! var expanded-value)
@@ -314,7 +314,7 @@ func (p *ExpanderTimeContinuation) expandDefineForm(sym *syntax.SyntaxSymbol, ex
 		// Expand the body expressions
 		expandedBody, err := p.ExpandSyntaxArgumentList(cdrPair)
 		if err != nil {
-			return nil, werr.WrapForeignErrorf(err, "define: failed to expand body")
+			return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "define: failed to expand body"))
 		}
 		args := syntax.NewSyntaxCons(first, expandedBody, sym.SourceContext())
 		return syntax.NewSyntaxCons(sym, args, sym.SourceContext()), nil
@@ -323,7 +323,7 @@ func (p *ExpanderTimeContinuation) expandDefineForm(sym *syntax.SyntaxSymbol, ex
 	// Simple definition (define var value)
 	expandedValue, err := p.ExpandExpression(cdrPair.SyntaxCar())
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "define: failed to expand value")
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "define: failed to expand value"))
 	}
 
 	// Build (define var expanded-value)
@@ -347,7 +347,7 @@ func (p *ExpanderTimeContinuation) expandImportForm(sym *syntax.SyntaxSymbol, ex
 
 	importSets, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "import: expected list of import sets")
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "import: expected list of import sets"))
 	}
 
 	// Process each import set to load libraries and copy bindings
@@ -356,7 +356,7 @@ func (p *ExpanderTimeContinuation) expandImportForm(sym *syntax.SyntaxSymbol, ex
 	})
 
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "import: failed to resolve import set")
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "import: failed to resolve import set"))
 	}
 
 	// Return the import form unchanged for later compilation
@@ -374,27 +374,27 @@ func (p *ExpanderTimeContinuation) expandWithContinuationMarkForm(sym *syntax.Sy
 	// Expand key
 	expandedKey, err := p.ExpandExpression(pair.SyntaxCar())
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "with-continuation-mark: failed to expand key")
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "with-continuation-mark: failed to expand key"))
 	}
 
 	// Get val pair
 	valPair, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(valPair) {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-continuation-mark: missing value")
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-continuation-mark: missing value"))
 	}
 	expandedVal, err := p.ExpandExpression(valPair.SyntaxCar())
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "with-continuation-mark: failed to expand value")
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "with-continuation-mark: failed to expand value"))
 	}
 
 	// Get body pair
 	bodyPair, ok := valPair.SyntaxCdr().(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(bodyPair) {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-continuation-mark: missing body")
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "with-continuation-mark: missing body"))
 	}
 	expandedBody, err := p.ExpandExpression(bodyPair.SyntaxCar())
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "with-continuation-mark: failed to expand body")
+		return nil, wrapSourcedError(expr.SourceContext(), werr.WrapForeignErrorf(err, "with-continuation-mark: failed to expand body"))
 	}
 
 	args := syntax.SyntaxList(sym.SourceContext(), expandedKey, expandedVal, expandedBody)

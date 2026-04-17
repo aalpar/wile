@@ -2,6 +2,10 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
+**Status:** 0/10 tasks complete
+
+> **Incomplete items:** All 10 tasks. No Profile type, no ConsoleAuthorizer, no Sandbox modifier, no envvars split, no virtual env map, no old API removed, no file renames, no Scheme-level support, no tests, no docs.
+
 **Goal:** Replace the SafeExtensions/AllExtensions API with named profiles (Tiny, Console, Small, KitchenSink), an orthogonal sandbox modifier, and a virtual environment map for capability-oriented configuration.
 
 **Architecture:** Profile enum maps to extension lists + optional authorizer. Sandbox composes via `security.All()` (most-restrictive-wins). Virtual env map lives on `engineConfig`, flows to envvars primitives via namespace. `(environment '(wile tiny))` etc. recognized in `PrimEnvironment`.

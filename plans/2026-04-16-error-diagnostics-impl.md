@@ -2,6 +2,11 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
+**Status:** 9/10 tasks complete; Task 10 substantially incomplete
+
+> **Completed:** Tasks 1-9 (ErrorContext type, mark key, exception dispatch, current-error-context, accessors, NativeError fields, enrichment wiring, error-object-source/stack-trace, integration tests).
+> **Incomplete:** Task 10 — compiler error Phases 2-4 source location wrapping. Phase 2: compile_syntax_rules.go (23 unwrapped sites). Phase 3: import_set_datum.go (29), library_loader.go (19), library_bindings.go (9). Phase 4: all 6 expander files (~76 unwrapped sites). Several Phase 2/3 files partially wrapped.
+
 **Goal:** Make runtime error context (source location, stack trace, continuation marks) accessible from Scheme code via continuation marks and NativeError enrichment.
 
 **Architecture:** Two-layer approach. Layer 1: `raise` sets a continuation mark with an `ErrorContext` value before calling exception handlers. Layer 2: if the condition is a `NativeError`, copy source and stack trace into it so they persist after the handler returns. Both layers are wired into the existing `callExceptionHandler` dispatch in `registry/core/prim_exceptions.go`.

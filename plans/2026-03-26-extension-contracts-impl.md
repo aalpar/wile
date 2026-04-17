@@ -1,6 +1,9 @@
 # Extension API Contract System — Remaining Work
 
-**Status:** Phase 1 complete (PRs #577, #578). Phases 2-4 open.
+**Status:** Phase 1 complete (PRs #577, #578). Phases 2-4 open. 3/8 Phase 2+ tasks done.
+
+> **Completed:** Tasks 1-3 (ForeignClosure.validate field, dispatch path in callForeignCached, dispatch path in applyForeign).
+> **Incomplete:** Task 4 (validator builder in registry/contract.go), Task 5 (WithContractEnforcement engine option), Task 6 (integration tests), Task 7 (files extension annotations), Task 8 (lint/verify).
 
 **Design doc:** `plans/2026-03-26-extension-contracts-design.md`
 **Phase 2+ impl:** `plans/2026-03-26-extension-contracts-phase2-impl.md`

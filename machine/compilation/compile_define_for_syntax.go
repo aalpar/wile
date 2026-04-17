@@ -45,14 +45,14 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	// Get the first element - either a symbol (simple define) or a pair (function define)
 	first := argsPair.SyntaxCar()
 	if first == nil {
-		return werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-for-syntax: missing name")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-for-syntax: missing name"))
 	}
 
 	// Get the rest (value expression or body)
 	restVal := argsPair.SyntaxCdr()
 	restPair, ok := restVal.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(restPair) {
-		return werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "define-for-syntax: missing expression")
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxPair, "define-for-syntax: missing expression"))
 	}
 
 	var nameSym *values.Symbol
@@ -65,7 +65,7 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 		nameStx := firstPair.SyntaxCar()
 		nameSyntaxSym, ok := nameStx.(*syntax.SyntaxSymbol)
 		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "define-for-syntax: function name must be a symbol")
+			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "define-for-syntax: function name must be a symbol"))
 		}
 		nameSym = nameSyntaxSym.Unwrap().(*values.Symbol)
 
@@ -78,7 +78,7 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 		// Simple definition: (define-for-syntax name expr)
 		nameSyntaxSym, ok := first.(*syntax.SyntaxSymbol)
 		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "define-for-syntax: name must be a symbol")
+			return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotASyntaxSymbol, "define-for-syntax: name must be a symbol"))
 		}
 		nameSym = nameSyntaxSym.Unwrap().(*values.Symbol)
 
@@ -99,11 +99,11 @@ func (p *CompileTimeContinuation) CompileDefineForSyntax(ctctx CompileTimeCallCo
 	// Store the result in the expand phase environment with BindingTypeVariable
 	globalIndex, _ := expandEnv.MaybeCreateOwnGlobalBinding(nameSym, environment.BindingTypeVariable)
 	if globalIndex == nil {
-		return werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-for-syntax: failed to create binding for %s", nameSym.Key)
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "define-for-syntax: failed to create binding for %s", nameSym.Key))
 	}
 	err = expandEnv.SetOwnGlobalValue(globalIndex, result)
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "define-for-syntax: failed to store value for %s", nameSym.Key)
+		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "define-for-syntax: failed to store value for %s", nameSym.Key))
 	}
 
 	// define-for-syntax has no runtime effect - don't emit any operations

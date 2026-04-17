@@ -116,7 +116,7 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 	for _, form := range forms {
 		expanded, err := p.ExpandExpression(form)
 		if err != nil {
-			return nil, werr.WrapForeignErrorf(err, "body: failed to expand expression")
+			return nil, wrapSourcedError(form.SourceContext(), werr.WrapForeignErrorf(err, "body: failed to expand expression"))
 		}
 
 		// If define-syntax, compile it now for subsequent forms
@@ -124,7 +124,7 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 			pair := expanded.(*syntax.SyntaxPair)
 			err = compileDefineSyntaxFromSyntax(p.ctx, p.env, pair, p.libraryScope, p.evaluator)
 			if err != nil {
-				return nil, werr.WrapForeignErrorf(err, "body: failed to compile define-syntax")
+				return nil, wrapSourcedError(expanded.SourceContext(), werr.WrapForeignErrorf(err, "body: failed to compile define-syntax"))
 			}
 		}
 
@@ -145,18 +145,18 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 	// Extract: (define-syntax keyword transformer)
 	cdr, ok := dsPair.Cdr().(*syntax.SyntaxPair)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "define-syntax: malformed")
+		return wrapSourcedError(dsPair.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "define-syntax: malformed"))
 	}
 	keywordSym, ok := cdr.SyntaxCar().(*syntax.SyntaxSymbol)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotASymbol, "define-syntax: keyword must be a symbol")
+		return wrapSourcedError(dsPair.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASymbol, "define-syntax: keyword must be a symbol"))
 	}
 	keyword := keywordSym.Unwrap().(*values.Symbol)
 	symbolScopes := keywordSym.Scopes()
 
 	transformerCdr, ok := cdr.Cdr().(*syntax.SyntaxPair)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "define-syntax: missing transformer")
+		return wrapSourcedError(dsPair.SourceContext(), werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "define-syntax: missing transformer"))
 	}
 	transformer := transformerCdr.SyntaxCar()
 
@@ -165,7 +165,7 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 	// Supports both syntax-rules and lambda (procedural) transformers
 	closure, err := compileTransformerToMachineClosure(ctx, env, transformer, libraryScope, evaluator)
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "define-syntax: failed to compile transformer for %s", keyword.Key)
+		return wrapSourcedError(dsPair.SourceContext(), werr.WrapForeignErrorf(err, "define-syntax: failed to compile transformer for %s", keyword.Key))
 	}
 
 	// Store in the expand environment (for macro lookup during expansion)

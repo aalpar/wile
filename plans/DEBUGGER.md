@@ -1,5 +1,9 @@
 # Debugger Plans
 
+**Status:** Both proposals unstarted
+
+> **Incomplete:** Inline Breakpoint Traps (all 4 phases — no OperationBreakpointTrap, no template registry, no hot-loop check removal). Breakpoint Snap-to-Next (all phases — no NearestSourceLine, no RequestedLine, no Verified fields).
+
 ---
 
 # Inline Breakpoint Traps

@@ -1,5 +1,10 @@
 # Architecture Plans
 
+**Status:** 1/4 sections complete
+
+> **Completed:** Environment Introspection Phase 1 (PrimEnvironmentQ, PrimEnvironmentBoundNames, PrimEnvironmentRef, PrimEnvironmentBoundQ in extensions/introspection/).
+> **Incomplete:** Dialect System (all 4 phases — no FormRegistry, no WithDialect), Module Decomposition (all 5 phases), Plugin Shadowing (all 4 phases — no primitiveOverrides).
+
 # Dialect System
 
 **Status**: Proposed

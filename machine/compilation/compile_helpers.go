@@ -43,7 +43,7 @@ func (p *CompileTimeContinuation) expandCompileExecute(
 ) (values.Value, error) {
 	expandedExpr, err := expander.ExpandExpression(expr)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "%s: expansion failed", errPrefix)
+		return nil, p.wrapCompilationError(werr.WrapForeignErrorf(err, "%s: expansion failed", errPrefix))
 	}
 
 	tmpTpl := machine.NewNativeTemplate(0, 0, false)
@@ -52,12 +52,12 @@ func (p *CompileTimeContinuation) expandCompileExecute(
 
 	err = tmpCcnt.CompileExpression(ctctx, expandedExpr)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "%s: compilation failed", errPrefix)
+		return nil, p.wrapCompilationError(werr.WrapForeignErrorf(err, "%s: compilation failed", errPrefix))
 	}
 
 	result, err := p.evaluator.EvalTemplate(ctx, tmpTpl, expandEnv)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "%s: evaluation failed", errPrefix)
+		return nil, p.wrapCompilationError(werr.WrapForeignErrorf(err, "%s: evaluation failed", errPrefix))
 	}
 
 	return result, nil
@@ -78,10 +78,10 @@ func (p *CompileTimeContinuation) executeFormsAtCompileTime(
 		return err
 	})
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "%s: error processing body expressions", formName)
+		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "%s: error processing body expressions", formName))
 	}
 	if !syntax.IsSyntaxEmptyList(v) {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: improper body expressions list", formName)
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAList, "%s: improper body expressions list", formName))
 	}
 	return nil
 }
@@ -91,10 +91,10 @@ func (p *CompileTimeContinuation) executeFormsAtCompileTime(
 // eval-when) must call this before accessing p.env or p.template.
 func (p *CompileTimeContinuation) ensureState(formName string) error {
 	if p.env == nil {
-		return werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "%s: nil environment", formName)
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "%s: nil environment", formName))
 	}
 	if p.template == nil {
-		return werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "%s: nil template", formName)
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "%s: nil template", formName))
 	}
 	return nil
 }
