@@ -85,6 +85,9 @@ type MachineContext struct {
 	maxStackSize  uint64           // 0 = unlimited (default), otherwise max eval stack entries
 	restArgBuf    values.PairBlock // reusable buffer for variadic rest-arg list construction (ForeignClosure calls)
 	isolatedMarks bool             // when true, findParameterInMarks does not walk parentMC; set by applyCapturedContinuation
+
+	timerHandler values.Callable    // nil = no timer active
+	timerCancel  context.CancelFunc // cancels the child timeout context; nil when no timer
 }
 
 // NewMachineContext creates a new machine context with the given context and continuation.
@@ -273,6 +276,26 @@ func (p *MachineContext) Context() context.Context {
 	return p.ctx
 }
 
+// TimerHandler returns the current timer interrupt handler, or nil if no timer is active.
+func (p *MachineContext) TimerHandler() values.Callable {
+	return p.timerHandler
+}
+
+// SetTimerHandler installs or clears the timer interrupt handler.
+func (p *MachineContext) SetTimerHandler(h values.Callable) {
+	p.timerHandler = h
+}
+
+// TimerCancel returns the cancel function for the active timer context, or nil.
+func (p *MachineContext) TimerCancel() context.CancelFunc {
+	return p.timerCancel
+}
+
+// SetTimerCancel installs or clears the timer cancel function.
+func (p *MachineContext) SetTimerCancel(cancel context.CancelFunc) {
+	p.timerCancel = cancel
+}
+
 // Run executes the VM loop starting from the current pc.
 // The pc is NOT reset here - callers are responsible for ensuring the correct initial pc:
 //   - NewMachineContext copies pc from the continuation (typically 0 for fresh execution)
@@ -306,6 +329,9 @@ func (p *MachineContext) Run() error {
 		if mc.counters.OpsExecuted&contextCheckMask == 0 {
 			select {
 			case <-mc.ctx.Done():
+				if mc.timerHandler != nil {
+					return &ErrTimerInterrupt{Handler: mc.timerHandler}
+				}
 				return mc.ctx.Err()
 			default:
 			}
@@ -1310,6 +1336,33 @@ func (p *MachineContext) RunWithEscapeHandling() error {
 				if prompt == nil {
 					return nil
 				}
+			}
+			continue
+		}
+
+		var timerErr *ErrTimerInterrupt
+		if errors.As(err, &timerErr) {
+			// Capture the full computation as a composable continuation.
+			segment := p.CaptureInterruptContinuation()
+			windingCopy := p.WindingStack().Copy()
+			resumable := NewComposableContinuation(
+				segment, windingCopy, p.threadID, p.barrierValid,
+			)
+
+			// Clear timer state (prevent re-entry from stale handler).
+			if p.timerCancel != nil {
+				p.timerCancel()
+			}
+			p.timerHandler = nil
+			p.timerCancel = nil
+
+			// Install a fresh context (the timed-out context is cancelled).
+			p.SetContext(context.Background())
+
+			// Call the handler with the resumable continuation.
+			_, applyErr := p.ApplyCallable(timerErr.Handler, resumable)
+			if applyErr != nil {
+				return applyErr
 			}
 			continue
 		}

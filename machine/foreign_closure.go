@@ -54,6 +54,10 @@ func applyCallableError(mc *MachineContext, err error) error {
 	if errors.As(err, &abortErr) {
 		return err
 	}
+	var timerErr *ErrTimerInterrupt
+	if errors.As(err, &timerErr) {
+		return err
+	}
 	return goErrorToSchemeException(mc, err)
 }
 

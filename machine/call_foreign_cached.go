@@ -84,6 +84,15 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 		return nil, applyCallableError(mc, err)
 	}
 
+	// Immediate timeout check after foreign call returns successfully.
+	if mc.timerHandler != nil {
+		select {
+		case <-mc.ctx.Done():
+			return nil, &ErrTimerInterrupt{Handler: mc.timerHandler}
+		default:
+		}
+	}
+
 	// If the foreign function changed the template (e.g., PrimCallCC inline
 	// mode calling Apply on a MachineClosure), let the VM continue from
 	// wherever it pointed — the closure's RestoreContinuation will handle
