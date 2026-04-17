@@ -15,6 +15,7 @@
 package machine
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -130,7 +131,7 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 
 	err = fcls.fn(p)
 	if err != nil {
-		// Propagate prompt aborts and exception escapes as-is.
+		// Propagate prompt aborts, exception escapes, and timer interrupts as-is.
 		var abortErr *ErrPromptAbort
 		if errors.As(err, &abortErr) {
 			return nil, err
@@ -139,7 +140,24 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 		if errors.As(err, &excErr) {
 			return nil, err
 		}
+		var timerErr *ErrTimerInterrupt
+		if errors.As(err, &timerErr) {
+			return nil, err
+		}
 		return nil, goErrorToSchemeException(p, err)
+	}
+
+	// Immediate timeout check after foreign call returns successfully.
+	// Closes the latency gap: a foreign function that blocks for seconds
+	// triggers the handler immediately, not after 1024 more bytecode ops.
+	if p.timerHandler != nil {
+		select {
+		case <-p.ctx.Done():
+			if errors.Is(context.Cause(p.ctx), ErrTimerExpired) {
+				return nil, &ErrTimerInterrupt{Handler: p.timerHandler}
+			}
+		default:
+		}
 	}
 
 	// If the foreign function changed the template (e.g., via Apply/ApplyCallable),

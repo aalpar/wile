@@ -114,6 +114,43 @@ func TestCallForeignCached_ValidatorRejectsCall(t *testing.T) {
 		qt.Commentf("fn must not be called when validator rejects"))
 }
 
+func TestCallForeignCached_TimerInterruptAfterSuccess(t *testing.T) {
+	// A foreign function completes successfully, but the timer context has
+	// expired (cause = ErrTimerExpired). The post-call interrupt check must
+	// return *ErrTimerInterrupt, not swallow the expiry.
+	c := qt.New(t)
+
+	env := environment.NewNamespace().Runtime()
+	closureEnv := environment.NewNamespace().Runtime()
+	fcls := NewForeignClosure(closureEnv, 0, false, func(cc CallContext) error {
+		cc.SetValue(values.TrueValue)
+		return nil
+	})
+	bd := environment.NewBinding(fcls, environment.BindingTypeVariable)
+
+	tpl := NewNativeTemplate(0, 0, false)
+	cbIdx := tpl.AppendCachedBinding(bd)
+	tpl.AppendInstruction(Instruction{Op: OpSaveContinuation, Arg: 2})
+	tpl.AppendInstruction(Instruction{Op: OpCallForeignCached, Arg: cbIdx})
+
+	// Pre-expire the context with ErrTimerExpired as the cause.
+	ctx, cancel := context.WithTimeoutCause(context.Background(), 0, ErrTimerExpired)
+	defer cancel()
+
+	mc := AcquireTopLevelContext(ctx, tpl, env)
+	defer ReleaseTopLevelContext(mc)
+
+	handler := NewClosureWithTemplate(NewEmptyNativeTemplate(), env)
+	mc.SetTimerHandler(handler)
+
+	err := mc.Run()
+
+	var timerErr *ErrTimerInterrupt
+	c.Assert(errors.As(err, &timerErr), qt.IsTrue,
+		qt.Commentf("expected *ErrTimerInterrupt, got %v", err))
+	c.Assert(timerErr.Handler, qt.Equals, handler)
+}
+
 func TestOpCallForeignCached(t *testing.T) {
 	tests := []struct {
 		name      string

@@ -46,12 +46,16 @@ func goErrorToSchemeException(mc *MachineContext, err error) error {
 // Errors that are already Scheme-level control flow (exception escapes,
 // prompt aborts) pass through unchanged.
 func applyCallableError(mc *MachineContext, err error) error {
+	var abortErr *ErrPromptAbort
+	if errors.As(err, &abortErr) {
+		return err
+	}
 	var excErr *ErrExceptionEscape
 	if errors.As(err, &excErr) {
 		return err
 	}
-	var abortErr *ErrPromptAbort
-	if errors.As(err, &abortErr) {
+	var timerErr *ErrTimerInterrupt
+	if errors.As(err, &timerErr) {
 		return err
 	}
 	return goErrorToSchemeException(mc, err)

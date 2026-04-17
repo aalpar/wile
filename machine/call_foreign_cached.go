@@ -15,6 +15,9 @@
 package machine
 
 import (
+	"context"
+	"errors"
+
 	"github.com/aalpar/wile/values"
 )
 
@@ -82,6 +85,17 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 	err = fcls.fn(mc)
 	if err != nil {
 		return nil, applyCallableError(mc, err)
+	}
+
+	// Immediate timeout check after foreign call returns successfully.
+	if mc.timerHandler != nil {
+		select {
+		case <-mc.ctx.Done():
+			if errors.Is(context.Cause(mc.ctx), ErrTimerExpired) {
+				return nil, &ErrTimerInterrupt{Handler: mc.timerHandler}
+			}
+		default:
+		}
 	}
 
 	// If the foreign function changed the template (e.g., PrimCallCC inline

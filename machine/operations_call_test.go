@@ -15,8 +15,11 @@
 package machine
 
 import (
+	"context"
+	"errors"
 	"testing"
 
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
 
 	qt "github.com/frankban/quicktest"
@@ -181,4 +184,34 @@ func TestOperationsCall(t *testing.T) {
 			tc.checkFn(t, tc.op)
 		})
 	}
+}
+
+func TestForeignFunctionCall_PanicTimerInterruptPassThrough(t *testing.T) {
+	// When a foreign function panics with *ErrTimerInterrupt, the panic
+	// recovery in OperationForeignFunctionCall.Apply must pass the error
+	// through unchanged — not wrap it in goErrorToSchemeException, which
+	// would turn it into a catchable Scheme exception and break the
+	// timer interrupt's role as a VM-level signal.
+	c := qt.New(t)
+
+	env := environment.NewNamespace().Runtime()
+	handler := NewClosureWithTemplate(NewEmptyNativeTemplate(), env)
+	panicErr := &ErrTimerInterrupt{Handler: handler}
+
+	op := NewOperationForeignFunctionCall(func(_ CallContext) error {
+		panic(panicErr)
+	})
+
+	tpl := NewNativeTemplate(0, 0, false)
+	tpl.AppendSideTableOp(op)
+
+	mc := AcquireTopLevelContext(context.Background(), tpl, env)
+	defer ReleaseTopLevelContext(mc)
+
+	_, err := op.Apply(mc)
+
+	var timerErr *ErrTimerInterrupt
+	c.Assert(errors.As(err, &timerErr), qt.IsTrue,
+		qt.Commentf("expected *ErrTimerInterrupt pass-through, got %T: %v", err, err))
+	c.Assert(timerErr.Handler, qt.Equals, handler)
 }

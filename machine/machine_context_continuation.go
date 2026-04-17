@@ -289,6 +289,33 @@ func GraftContinuation(segment, target *MachineContinuation) {
 	current.parent = target
 }
 
+// CaptureInterruptContinuation captures the full VM execution state at an
+// interrupt point as a deep-copied continuation chain. Unlike SliceContinuationAt,
+// this includes the live registers (template, pc, env, evals, value) that haven't
+// been saved by a SaveContinuation instruction.
+//
+// The MachineContext is not modified. The returned chain is a deep copy suitable
+// for wrapping in a ComposableContinuation.
+func (p *MachineContext) CaptureInterruptContinuation() *MachineContinuation {
+	// Push a synthetic continuation frame with the live state, copy
+	// the full chain via SliceContinuationAt, then pop the frame.
+	liveFrame := NewMachineContinuationFromMachineContext(p, 0)
+	savedCont := p.cont
+	p.cont = liveFrame
+
+	segment := p.SliceContinuationAt(nil)
+
+	p.cont = savedCont
+	// liveFrame.evals aliases p.evals: NewMachineContinuationFromMachineContext
+	// copies the pointer, not the contents. SliceContinuationAt has already
+	// deep-copied the eval stack into the segment, so we clear the alias before
+	// releasing liveFrame to prevent releaseContinuation from returning p.evals
+	// to the stack pool while p still owns it.
+	liveFrame.evals = nil
+	releaseContinuation(liveFrame)
+	return segment
+}
+
 // SetPromptTag sets the prompt tag on this context. Used by
 // call-with-continuation-prompt to mark sub-contexts as prompt boundaries.
 func (p *MachineContext) SetPromptTag(tag *PromptTag) {

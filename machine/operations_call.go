@@ -80,6 +80,23 @@ func (p *OperationForeignFunctionCall) Apply(mc *MachineContext) (rmc *MachineCo
 			err = werr.WrapForeignErrorf(werr.ErrPanicRecovery, "foreign function call: %v", v)
 		}
 		rmc = nil
+		// Pass through VM signal types — they must not be wrapped as
+		// Scheme exceptions. Mirrors the error-return checks below.
+		var abortErr *ErrPromptAbort
+		if errors.As(err, &abortErr) {
+			rerr = err
+			return
+		}
+		var excErr *ErrExceptionEscape
+		if errors.As(err, &excErr) {
+			rerr = err
+			return
+		}
+		var timerErr *ErrTimerInterrupt
+		if errors.As(err, &timerErr) {
+			rerr = err
+			return
+		}
 		rerr = goErrorToSchemeException(mc, err)
 	}()
 	mc.counters.ForeignCalls++
@@ -91,6 +108,10 @@ func (p *OperationForeignFunctionCall) Apply(mc *MachineContext) (rmc *MachineCo
 		}
 		var excErr *ErrExceptionEscape
 		if errors.As(err, &excErr) {
+			return nil, err
+		}
+		var timerErr *ErrTimerInterrupt
+		if errors.As(err, &timerErr) {
 			return nil, err
 		}
 		return nil, goErrorToSchemeException(mc, err)
