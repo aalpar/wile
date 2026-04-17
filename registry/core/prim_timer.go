@@ -45,14 +45,14 @@ func PrimWithTimeout(cc machine.CallContext) error {
 		return err
 	}
 
-	handlerVal, err := helpers.RequireType[machine.Closure](
+	handlerVal, err := helpers.RequireType[values.Callable](
 		mc.Arg(1), werr.ErrNotAProcedure, "with-timeout",
 	)
 	if err != nil {
 		return err
 	}
 
-	thunkVal, err := helpers.RequireType[machine.Closure](
+	thunkVal, err := helpers.RequireType[values.Callable](
 		mc.Arg(2), werr.ErrNotAProcedure, "with-timeout",
 	)
 	if err != nil {
@@ -68,8 +68,10 @@ func PrimWithTimeout(cc machine.CallContext) error {
 	}
 	duration := time.Duration(ms) * time.Millisecond
 
-	// Create a child context with the timeout deadline.
-	timerCtx, timerCancel := context.WithTimeout(mc.Context(), duration)
+	// Create a child context with a cause-tagged timeout deadline.
+	// The cause (ErrTimerExpired) lets interrupt check sites distinguish
+	// timer expiry from external cancellation (e.g. Ctrl+C).
+	timerCtx, timerCancel := context.WithTimeoutCause(mc.Context(), duration, machine.ErrTimerExpired)
 
 	// Run the thunk in a sub-context with the timer installed.
 	sub := mc.NewSubContext()

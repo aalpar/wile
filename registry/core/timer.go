@@ -19,31 +19,23 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
-func addTimer(r *registry.Registry) error {
-	r.AddPrimitives(
-		[]registry.PrimitiveSpec{ //nolint:govet
-			{
-				Name:       "with-timeout",
-				ParamCount: 3,
-				IsVariadic: false,
-				Impl:       PrimWithTimeout,
-				Doc: "Runs THUNK with a wall-clock timeout of MS milliseconds. " +
-					"If the thunk completes before the deadline, returns its result. " +
-					"If the timer expires, suspends the thunk and calls HANDLER with a " +
-					"composable continuation that, when invoked, resumes the suspended computation.\n\n" +
-					"Parameters:\n  ms — exact non-negative integer (milliseconds)\n" +
-					"  handler — (lambda (resumable-continuation) ...)\n" +
-					"  thunk — (lambda () ...)\n\n" +
-					"Examples:\n" +
-					"  (with-timeout 5000 (lambda (k) 'timeout) (lambda () 42))  => 42\n" +
-					"  (with-timeout 1 (lambda (k) 'expired) (lambda () (let loop () (loop))))  => expired",
-				ParamNames: []string{"ms", "handler", "thunk"},
-				ParamTypes: []values.TypeConstraint{values.TypeInteger, values.TypeProcedure, values.TypeProcedure},
-				Category:   "control",
-				Keywords:   []string{"timeout", "timer", "engine", "fuel", "bounded-eval", "preemption"},
-			},
-		},
-		registry.PhaseRuntime,
-	)
+func addTimer(r *registry.Registry) error { //nolint:govet
+	r.AddPrimitives([]registry.PrimitiveSpec{
+		{Name: "with-timeout", ParamCount: 3, Impl: PrimWithTimeout,
+			Doc: "Runs THUNK with a wall-clock timeout of MS milliseconds. " +
+				"If the thunk completes before the deadline, returns its result. " +
+				"If the timer expires, suspends the thunk and calls HANDLER with a " +
+				"composable continuation that, when invoked, resumes the suspended computation.\n\n" +
+				"Parameters:\n  ms — exact non-negative integer (milliseconds)\n" +
+				"  handler — (lambda (resumable-continuation) ...)\n" +
+				"  thunk — (lambda () ...)\n\n" +
+				"Examples:\n" +
+				"  (with-timeout 5000 (lambda (k) 'timeout) (lambda () 42))  => 42\n" +
+				"  (with-timeout 1 (lambda (k) 'expired) (lambda () (let loop () (loop))))  => expired",
+			ParamNames: []string{"ms", "handler", "thunk"},
+			ParamTypes: []values.TypeConstraint{values.TypeInteger, values.TypeProcedure, values.TypeProcedure},
+			Category:   "control", Keywords: []string{"timeout", "timer", "engine", "fuel", "bounded-eval", "preemption"}},
+	}, registry.PhaseRuntime)
+
 	return nil
 }

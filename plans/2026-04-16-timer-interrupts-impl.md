@@ -2,31 +2,55 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** All 8 tasks complete. Branch: `feature/timer-interrupts`.
+
 **Goal:** Add wall-clock timer interrupts that capture the suspended computation as a resumable continuation and deliver it to a Scheme handler, enabling bounded evaluation and Chez-style engines.
 
 **Architecture:** The timer installs a handler on `MachineContext`. When the deadline expires, the bytecode loop (or post-foreign-call check) returns `ErrTimerInterrupt`. The `with-timeout` primitive runs the thunk in a sub-context, catches the interrupt, captures the sub-context's full execution state as a composable continuation, and calls the handler with it. `RunWithEscapeHandling` provides a safety-net branch for interrupts that escape without a `with-timeout` wrapper.
 
-**Tech Stack:** Go `context.WithTimeout`, existing composable continuation machinery (`SliceContinuationAt`, `NewComposableContinuation`), sub-context pattern (same as `call-with-continuation-barrier`).
+**Tech Stack:** Go `context.WithTimeoutCause` (with `ErrTimerExpired` sentinel), existing composable continuation machinery (`SliceContinuationAt`, `NewComposableContinuation`, `CaptureInterruptContinuation`), sub-context pattern (same as `call-with-continuation-barrier`).
 
 **Design document:** `plans/2026-04-16-timer-interrupts-design.md`
+
+### Implementation Deviations from Plan
+
+1. **`context.WithTimeoutCause` instead of `context.WithTimeout`** — The implementation uses the `Cause` variant with an `ErrTimerExpired` sentinel (`werr.NewStaticError`) to distinguish timer expiry from external cancellation (e.g. Ctrl+C). The plan specified plain `context.WithTimeout`.
+
+2. **`ErrTimerExpired` sentinel added** — Not in the original plan. A `werr.NewStaticError("timer expired")` global in `timer_interrupt.go` serves as the cause for `context.WithTimeoutCause`.
+
+3. **`OperationForeignFunctionCall` panic recovery pass-through** — The plan didn't cover the panic recovery `defer` block in `operations_call.go`. The implementation adds pass-through for `ErrPromptAbort`, `ErrExceptionEscape`, and `ErrTimerInterrupt` in the panic recovery path, preventing VM signal types from being wrapped as Scheme exceptions when recovered from panics.
+
+4. **Type validation uses `helpers.RequireType`** — The plan showed manual type assertions; the implementation uses `helpers.RequireType[T]` with `ParamTypes` on the `PrimitiveSpec` for declarative validation.
+
+5. **`PrimitiveSpec` metadata** — The plan's `timer.go` registration was minimal. The implementation adds `Doc`, `ParamNames`, `ParamTypes`, `Category`, and `Keywords` fields.
+
+6. **`msVal.Value` not `msVal.ToInt64()`** — The plan used `.ToInt64()`; the implementation accesses `.Value` directly.
+
+7. **`werr.ErrInvalidArgument` not `werr.ErrOutOfRange`** — The plan used `ErrOutOfRange` for negative milliseconds; the implementation uses `ErrInvalidArgument`.
+
+8. **`valuestest.SchemeEquals` not `qt.DeepEquals`** — Tests use the project's value comparison checker.
+
+9. **`RunSchemeCodeWithTimeout` takes `time.Duration`** — The plan passed an integer (seconds); the actual helper takes `time.Duration`.
 
 ---
 
 ## File Map
 
-| Action | File | Responsibility |
-|--------|------|----------------|
-| Create | `machine/timer_interrupt.go` | `ErrTimerInterrupt` error type |
-| Create | `machine/timer_interrupt_test.go` | Unit tests for the error type |
-| Modify | `machine/machine_context.go` | Timer fields, accessors, bytecode loop change, `RunWithEscapeHandling` dispatch |
-| Modify | `machine/machine_context_apply.go` | `ErrTimerInterrupt` pass-through + post-call check in `applyForeign` |
-| Modify | `machine/call_foreign_cached.go` | Post-call timer check in `callForeignCached` |
-| Modify | `machine/foreign_closure.go` | `ErrTimerInterrupt` pass-through in `applyCallableError` |
-| Create | `machine/machine_context_test.go` additions | Tests for bytecode loop + `RunWithEscapeHandling` interrupt handling |
-| Create | `registry/core/timer.go` | `addTimer` registration function |
-| Create | `registry/core/prim_timer.go` | `PrimWithTimeout` implementation |
-| Modify | `registry/core/register.go` | Add `addTimer` to Builder |
-| Create | `registry/core/prim_timer_test.go` | Table-driven tests for `with-timeout` |
+| Action | File | Responsibility | Status |
+|--------|------|----------------|--------|
+| Create | `machine/timer_interrupt.go` | `ErrTimerInterrupt` error type + `ErrTimerExpired` sentinel | Done |
+| Create | `machine/timer_interrupt_test.go` | Unit tests for the error type | Done |
+| Modify | `machine/machine_context.go` | Timer fields, accessors, bytecode loop change, `RunWithEscapeHandling` dispatch | Done |
+| Modify | `machine/machine_context_apply.go` | `ErrTimerInterrupt` pass-through + post-call check in `applyForeign` | Done |
+| Modify | `machine/call_foreign_cached.go` | Post-call timer check in `callForeignCached` | Done |
+| Modify | `machine/foreign_closure.go` | `ErrTimerInterrupt` pass-through in `applyCallableError` | Done |
+| Modify | `machine/operations_call.go` | VM signal pass-through in `OperationForeignFunctionCall` panic recovery | Done (unstaged) |
+| Modify | `machine/machine_context_continuation.go` | `CaptureInterruptContinuation` helper | Done |
+| Modify | `machine/machine_context_test.go` | Tests: timer state, bytecode loop, `RunWithEscapeHandling`, error propagation | Done |
+| Create | `registry/core/timer.go` | `addTimer` registration with full `PrimitiveSpec` metadata | Done |
+| Create | `registry/core/prim_timer.go` | `PrimWithTimeout` implementation | Done |
+| Modify | `registry/core/register.go` | Add `addTimer` to Builder | Done |
+| Create | `registry/core/prim_timer_test.go` | Table-driven tests: basic, errors, nesting, resumption, dynamic-wind, threads | Done |
 
 ---
 
@@ -36,7 +60,7 @@
 - Create: `machine/timer_interrupt.go`
 - Create: `machine/timer_interrupt_test.go`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 In `machine/timer_interrupt_test.go`:
 
@@ -80,12 +104,12 @@ func TestErrTimerInterrupt_NilHandler(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test -v -run TestErrTimerInterrupt ./machine/`
 Expected: FAIL — `ErrTimerInterrupt` is undefined.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `machine/timer_interrupt.go`:
 
@@ -109,17 +133,17 @@ func (p *ErrTimerInterrupt) Error() string {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `go test -v -run TestErrTimerInterrupt ./machine/`
 Expected: PASS (all 4 tests).
 
-- [ ] **Step 5: Run lint**
+- [x] **Step 5: Run lint**
 
 Run: `make lint`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```
 feat(machine): add ErrTimerInterrupt error type
@@ -137,7 +161,7 @@ infrastructure rather than Scheme exception handlers.
 - Modify: `machine/machine_context.go`
 - Modify: `machine/machine_context_test.go` (or create section)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `machine/machine_context_test.go`:
 
@@ -172,12 +196,12 @@ func TestMachineContext_TimerState(t *testing.T) {
 
 Note: If `newTestMachineContext` does not exist in the test file, find the existing helper pattern used in `machine/machine_context_test.go` for creating test MCs and use it.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test -v -run TestMachineContext_TimerState ./machine/`
 Expected: FAIL — `TimerHandler`, `SetTimerHandler`, etc. are undefined.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `machine/machine_context.go`, add two fields to the `MachineContext` struct after `isolatedMarks`:
 
@@ -215,17 +239,17 @@ func (p *MachineContext) SetTimerCancel(cancel context.CancelFunc) {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `go test -v -run TestMachineContext_TimerState ./machine/`
 Expected: PASS.
 
-- [ ] **Step 5: Run lint**
+- [x] **Step 5: Run lint**
 
 Run: `make lint`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```
 feat(machine): add timer state fields to MachineContext
@@ -243,7 +267,7 @@ SetContext/Context pattern.
 - Modify: `machine/machine_context.go` (the `ctx.Done()` check in `Run()`)
 - Add test to: `machine/machine_context_test.go`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `machine/machine_context_test.go`:
 
@@ -299,12 +323,12 @@ func TestRun_ContextCancelWithoutTimerHandler(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test -v -run "TestRun_TimerInterrupt|TestRun_ContextCancel" ./machine/`
 Expected: `TestRun_TimerInterruptFromBytecodeLoop` FAILS (returns `context.Canceled` instead of `ErrTimerInterrupt`). `TestRun_ContextCancelWithoutTimerHandler` should already PASS (existing behavior).
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `machine/machine_context.go`, modify the `ctx.Done()` check in the `Run()` method. Find (approximately line 306-312):
 
@@ -333,22 +357,22 @@ if mc.counters.OpsExecuted&contextCheckMask == 0 {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `go test -v -run "TestRun_TimerInterrupt|TestRun_ContextCancel" ./machine/`
 Expected: PASS (both tests).
 
-- [ ] **Step 5: Run full machine test suite**
+- [x] **Step 5: Run full machine test suite**
 
 Run: `go test -v ./machine/...`
 Expected: PASS — no regressions. The change is backward-compatible: when `timerHandler` is nil (the default), the existing `ctx.Err()` path is taken.
 
-- [ ] **Step 6: Run lint**
+- [x] **Step 6: Run lint**
 
 Run: `make lint`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```
 feat(machine): add timer interrupt to bytecode loop context check
@@ -370,7 +394,7 @@ current code paths).
 
 `ErrTimerInterrupt` must pass through error-wrapping sites (same priority as `ErrPromptAbort` and `ErrExceptionEscape`) and be checked immediately after foreign function calls return successfully.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `machine/machine_context_test.go` (or a new `machine/timer_propagation_test.go`):
 
@@ -388,12 +412,12 @@ func TestApplyCallableError_PassesThroughTimerInterrupt(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `go test -v -run TestApplyCallableError_PassesThroughTimerInterrupt ./machine/`
 Expected: FAIL — currently `applyCallableError` wraps it via `goErrorToSchemeException`.
 
-- [ ] **Step 3: Add ErrTimerInterrupt pass-through to `applyCallableError`**
+- [x] **Step 3: Add ErrTimerInterrupt pass-through to `applyCallableError`**
 
 In `machine/foreign_closure.go`, find the `applyCallableError` function. Add the `ErrTimerInterrupt` check after the existing `ErrPromptAbort` check:
 
@@ -415,12 +439,12 @@ func applyCallableError(mc *MachineContext, err error) error {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `go test -v -run TestApplyCallableError_PassesThroughTimerInterrupt ./machine/`
 Expected: PASS.
 
-- [ ] **Step 5: Add ErrTimerInterrupt pass-through to `applyForeign`**
+- [x] **Step 5: Add ErrTimerInterrupt pass-through to `applyForeign`**
 
 In `machine/machine_context_apply.go`, find the error-handling block after `err = fcls.fn(p)` (around line 131-143). Add the `ErrTimerInterrupt` check:
 
@@ -443,7 +467,7 @@ if err != nil {
 }
 ```
 
-- [ ] **Step 6: Add post-foreign-call timer check to `applyForeign`**
+- [x] **Step 6: Add post-foreign-call timer check to `applyForeign`**
 
 In the same function, after the error check block and before the template-change check (around line 145), add the post-call timer check:
 
@@ -460,7 +484,7 @@ if p.timerHandler != nil {
 }
 ```
 
-- [ ] **Step 7: Add post-foreign-call timer check to `callForeignCached`**
+- [x] **Step 7: Add post-foreign-call timer check to `callForeignCached`**
 
 In `machine/call_foreign_cached.go`, find the success path after `err = fcls.fn(mc)` (around line 82-85). Add the timer check after the nil-error check:
 
@@ -480,17 +504,17 @@ if mc.timerHandler != nil {
 }
 ```
 
-- [ ] **Step 8: Run full machine test suite**
+- [x] **Step 8: Run full machine test suite**
 
 Run: `go test -v ./machine/...`
 Expected: PASS — no regressions. The new checks are no-ops when `timerHandler` is nil.
 
-- [ ] **Step 9: Run lint**
+- [x] **Step 9: Run lint**
 
 Run: `make lint`
 Expected: PASS.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```
 feat(machine): add ErrTimerInterrupt error propagation paths
@@ -519,7 +543,7 @@ after 1024 more bytecode ops.
 
 This task adds the safety-net timer interrupt handler in `RunWithEscapeHandling`. The primary interrupt handling happens in the `with-timeout` primitive (Task 6), but this branch catches any `ErrTimerInterrupt` that propagates past the primitive (defensive programming).
 
-- [ ] **Step 1: Add `captureInterruptContinuation` helper**
+- [x] **Step 1: Add `captureInterruptContinuation` helper**
 
 In `machine/machine_context_continuation.go`, add:
 
@@ -546,7 +570,7 @@ func (p *MachineContext) captureInterruptContinuation() *MachineContinuation {
 }
 ```
 
-- [ ] **Step 2: Write the failing test for RunWithEscapeHandling**
+- [x] **Step 2: Write the failing test for RunWithEscapeHandling**
 
 Add to `machine/machine_context_test.go`:
 
@@ -606,7 +630,7 @@ func TestRunWithEscapeHandling_TimerInterrupt(t *testing.T) {
 
 Note: `newTestForeignClosure` is a helper that creates a `ForeignClosure` with a given name, param count, and implementation function. If this helper does not exist, create it or use the existing pattern for building test ForeignClosures in the machine test files.
 
-- [ ] **Step 2a: Verify the test helper exists or create it**
+- [x] **Step 2a: Verify the test helper exists or create it**
 
 Search `machine/` test files for patterns used to create test `ForeignClosure` values. Use the same pattern. A minimal helper:
 
@@ -616,12 +640,12 @@ func newTestForeignClosure(name string, paramCount int, fn ForeignFunction) *For
 }
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 Run: `go test -v -run TestRunWithEscapeHandling_TimerInterrupt ./machine/`
 Expected: FAIL — `RunWithEscapeHandling` returns the `ErrTimerInterrupt` error unhandled (via the final `return err`).
 
-- [ ] **Step 4: Add the ErrTimerInterrupt branch to RunWithEscapeHandling**
+- [x] **Step 4: Add the ErrTimerInterrupt branch to RunWithEscapeHandling**
 
 In `machine/machine_context.go`, in `RunWithEscapeHandling()`, find the final `return err` (around line 1317). Insert the timer interrupt branch BEFORE it:
 
@@ -660,22 +684,22 @@ In `machine/machine_context.go`, in `RunWithEscapeHandling()`, find the final `r
 		return err
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `go test -v -run TestRunWithEscapeHandling_TimerInterrupt ./machine/`
 Expected: PASS.
 
-- [ ] **Step 6: Run full machine test suite**
+- [x] **Step 6: Run full machine test suite**
 
 Run: `go test -v ./machine/...`
 Expected: PASS — no regressions.
 
-- [ ] **Step 7: Run lint**
+- [x] **Step 7: Run lint**
 
 Run: `make lint`
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```
 feat(machine): add ErrTimerInterrupt dispatch to RunWithEscapeHandling
@@ -698,7 +722,7 @@ branch catches any interrupt that propagates past the primitive.
 - Modify: `registry/core/register.go` (add `addTimer` to Builder)
 - Create: `registry/core/prim_timer_test.go` (tests)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `registry/core/prim_timer_test.go`:
 
@@ -760,12 +784,12 @@ func TestWithTimeoutErrors(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `go test -v -run "TestWithTimeout" ./registry/core/`
 Expected: FAIL — `with-timeout` is not defined.
 
-- [ ] **Step 3: Create registration file**
+- [x] **Step 3: Create registration file**
 
 Create `registry/core/timer.go`:
 
@@ -791,7 +815,7 @@ func addTimer(r *registry.Registry) error {
 }
 ```
 
-- [ ] **Step 4: Add `addTimer` to Builder**
+- [x] **Step 4: Add `addTimer` to Builder**
 
 In `registry/core/register.go`, add `addTimer` to the `Builder` variable, after `addContMarks` and before `addBootstrapSources`:
 
@@ -804,7 +828,7 @@ var Builder = registry.NewRegistryBuilder(
 )
 ```
 
-- [ ] **Step 5: Create the implementation**
+- [x] **Step 5: Create the implementation**
 
 Create `registry/core/prim_timer.go`:
 
@@ -921,28 +945,28 @@ func PrimWithTimeout(cc machine.CallContext) error {
 }
 ```
 
-- [ ] **Step 5a: Export captureInterruptContinuation**
+- [x] **Step 5a: Export captureInterruptContinuation**
 
 The method added in Task 5 is unexported (`captureInterruptContinuation`). Since `prim_timer.go` is in package `core` (not `machine`), it needs to be exported. In `machine/machine_context_continuation.go`, rename to `CaptureInterruptContinuation`:
 
 Change the method name from `captureInterruptContinuation` to `CaptureInterruptContinuation`, and update the call site in `RunWithEscapeHandling` accordingly.
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [x] **Step 6: Run tests to verify they pass**
 
 Run: `go test -v -run "TestWithTimeout" ./registry/core/`
 Expected: PASS (all tests including normal completion, handler-returns-value, and handler-receives-continuation).
 
-- [ ] **Step 7: Run full test suite**
+- [x] **Step 7: Run full test suite**
 
 Run: `go test ./...`
 Expected: PASS — no regressions.
 
-- [ ] **Step 8: Run lint**
+- [x] **Step 8: Run lint**
 
 Run: `make lint`
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```
 feat(core): add with-timeout primitive
@@ -967,7 +991,7 @@ as a ComposableContinuation via CaptureInterruptContinuation.
 
 The sub-context approach naturally supports nesting because each `with-timeout` call creates its own sub-context with its own timer state. The inner timer context is derived from `mc.Context()`, which is the parent MC's context — not the outer timer's sub-context. This means Go's context hierarchy handles deadline ordering correctly.
 
-- [ ] **Step 1: Write the nesting tests**
+- [x] **Step 1: Write the nesting tests**
 
 Add to `registry/core/prim_timer_test.go`:
 
@@ -1009,12 +1033,12 @@ func TestWithTimeoutNesting(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run nesting tests**
+- [x] **Step 2: Run nesting tests**
 
 Run: `go test -v -run TestWithTimeoutNesting ./registry/core/`
 Expected: PASS — nesting works naturally with the sub-context approach because each level has its own timer state. If any tests fail, diagnose and fix.
 
-- [ ] **Step 3: Commit (if tests passed without changes)**
+- [x] **Step 3: Commit (if tests passed without changes)**
 
 ```
 test(core): add nesting tests for with-timeout
@@ -1032,7 +1056,7 @@ state and Go's context hierarchy handles deadline ordering.
 **Files:**
 - Add to: `registry/core/prim_timer_test.go`
 
-- [ ] **Step 1: Add continuation resumption test**
+- [x] **Step 1: Add continuation resumption test**
 
 ```go
 func TestWithTimeoutResumption(t *testing.T) {
@@ -1117,7 +1141,7 @@ func TestWithTimeoutResumption(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Add dynamic-wind interaction tests**
+- [x] **Step 2: Add dynamic-wind interaction tests**
 
 ```go
 func TestWithTimeoutDynamicWind(t *testing.T) {
@@ -1161,7 +1185,7 @@ func TestWithTimeoutDynamicWind(t *testing.T) {
 }
 ```
 
-- [ ] **Step 3: Add thread isolation test**
+- [x] **Step 3: Add thread isolation test**
 
 `NewNamespaceFrameTiny` loads all extensions including threads/sync, so no `(import ...)` needed.
 
@@ -1196,17 +1220,17 @@ func TestWithTimeoutThreadIsolation(t *testing.T) {
 }
 ```
 
-- [ ] **Step 4: Run all timer tests**
+- [x] **Step 4: Run all timer tests**
 
 Run: `go test -v -run "TestWithTimeout" ./registry/core/`
 Expected: PASS.
 
-- [ ] **Step 5: Run full test suite**
+- [x] **Step 5: Run full test suite**
 
 Run: `make lint && go test ./...`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```
 test(core): add integration tests for with-timeout

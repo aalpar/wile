@@ -2366,15 +2366,16 @@ func TestMachineContext_FormatStackTrace_Empty(t *testing.T) {
 }
 
 func TestRun_TimerInterruptFromBytecodeLoop(t *testing.T) {
-	// When a timerHandler is installed and the context is already cancelled,
+	// When a timerHandler is installed and the timer context has expired,
 	// Run() must return *ErrTimerInterrupt (not the raw context error).
+	// Uses WithTimeoutCause so context.Cause returns ErrTimerExpired.
 	c := qt.New(t)
 
 	env := environment.NewNamespace().Runtime()
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+	ctx, cancel := context.WithTimeoutCause(context.Background(), 0, ErrTimerExpired)
+	defer cancel()
 	mc.SetContext(ctx)
 
 	handler := NewClosureWithTemplate(NewEmptyNativeTemplate(), env)
@@ -2418,10 +2419,11 @@ func TestRunWithEscapeHandling_TimerInterrupt(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
 
-	// Set up a cancelled context so Run() triggers the timer interrupt path
-	// on the first context check (OpsExecuted == 0).
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+	// Set up an immediately-expired timer context so Run() triggers the timer
+	// interrupt path on the first context check (OpsExecuted == 0).
+	// Uses WithTimeoutCause so context.Cause returns ErrTimerExpired.
+	ctx, cancel := context.WithTimeoutCause(context.Background(), 0, ErrTimerExpired)
+	defer cancel()
 	mc.SetContext(ctx)
 
 	// Install a template with a single op so Run() enters the dispatch loop.
@@ -2431,13 +2433,15 @@ func TestRunWithEscapeHandling_TimerInterrupt(t *testing.T) {
 
 	// Track whether the handler was called and what argument it received.
 	var (
-		handlerCalled bool
-		handlerArg    values.Value
+		handlerCalled    bool
+		handlerArg       values.Value
+		handlerCtxActive bool // context was live during handler execution
 	)
 
 	handler := NewForeignClosure(env, 1, false, func(cc CallContext) error {
 		handlerCalled = true
 		handlerArg = cc.Arg(0)
+		handlerCtxActive = cc.Context().Err() == nil
 		return nil
 	})
 
@@ -2453,8 +2457,9 @@ func TestRunWithEscapeHandling_TimerInterrupt(t *testing.T) {
 	// Handler ran successfully — no error propagated.
 	c.Assert(err, qt.IsNil)
 
-	// Handler was invoked.
+	// Handler was invoked with a live (non-cancelled) context.
 	c.Assert(handlerCalled, qt.IsTrue)
+	c.Assert(handlerCtxActive, qt.IsTrue)
 
 	// Handler received a ComposableContinuation.
 	_, ok := handlerArg.(*ComposableContinuation)
@@ -2466,9 +2471,6 @@ func TestRunWithEscapeHandling_TimerInterrupt(t *testing.T) {
 
 	// The old cancel func was called.
 	c.Assert(cancelCalled, qt.IsTrue)
-
-	// Fresh context installed (not the cancelled one).
-	c.Assert(mc.Context().Err(), qt.IsNil)
 }
 
 func TestApplyCallableError_PassesThroughTimerInterrupt(t *testing.T) {

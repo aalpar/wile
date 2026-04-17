@@ -14,7 +14,15 @@
 
 package machine
 
-import "github.com/aalpar/wile/values"
+import (
+	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
+)
+
+// ErrTimerExpired is the context cause set by with-timeout via
+// context.WithTimeoutCause. Interrupt check sites compare against this
+// to distinguish timer expiry from external cancellation (e.g. Ctrl+C).
+var ErrTimerExpired = werr.NewStaticError("timer expired")
 
 // ErrTimerInterrupt signals that a wall-clock timer has expired.
 // It propagates through the Go error return path and is handled by

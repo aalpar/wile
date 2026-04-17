@@ -329,7 +329,7 @@ func (p *MachineContext) Run() error {
 		if mc.counters.OpsExecuted&contextCheckMask == 0 {
 			select {
 			case <-mc.ctx.Done():
-				if mc.timerHandler != nil {
+				if mc.timerHandler != nil && errors.Is(context.Cause(mc.ctx), ErrTimerExpired) {
 					return &ErrTimerInterrupt{Handler: mc.timerHandler}
 				}
 				return mc.ctx.Err()
@@ -1273,6 +1273,16 @@ func (p *MachineContext) DeleteMark(key values.Value) {
 // frames on the winding stack are unwound (after thunks are called).
 func (p *MachineContext) RunWithEscapeHandling() error {
 	p.promptTag = DefaultPromptTag // install default prompt for call/cc escapes
+
+	// freshCancel tracks the cancel function for any recovery context
+	// installed after a timer interrupt. Cleaned up on function exit.
+	var freshCancel context.CancelFunc
+	defer func() {
+		if freshCancel != nil {
+			freshCancel()
+		}
+	}()
+
 	for {
 		err := p.Run()
 
@@ -1356,12 +1366,19 @@ func (p *MachineContext) RunWithEscapeHandling() error {
 			p.timerHandler = nil
 			p.timerCancel = nil
 
-			// Install a fresh context (the timed-out context is cancelled).
-			p.SetContext(context.Background())
+			// Install a fresh cancellable context (the timed-out context is done).
+			// Cancel any previous recovery context before creating a new one.
+			if freshCancel != nil {
+				freshCancel()
+			}
+			ctx, fc := context.WithCancel(context.Background())
+			freshCancel = fc
+			p.SetContext(ctx)
 
 			// Call the handler with the resumable continuation.
 			_, applyErr := p.ApplyCallable(timerErr.Handler, resumable)
 			if applyErr != nil {
+				freshCancel()
 				return applyErr
 			}
 			continue

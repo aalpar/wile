@@ -43,8 +43,8 @@ Open designs and implementation work. These are the active items.
 |------|----------|--------|
 | `ARCHITECTURE.md` | Dialect system, module decomposition, plugin shadowing, environment introspection | Env introspection **complete**; other 3 sections **proposed** -- not started |
 | `SECURITY.md` | Opcode resource limits (match steps, expand steps, continuation copy depth) | **Rejected** -- existing limits sufficient (call depth + stack size + context timeout) |
-| `2026-04-16-timer-interrupts-design.md` | Wall-clock timer interrupts with continuation capture for embedders (engines, bounded eval) | **Draft** -- not started |
-| `2026-04-16-timer-interrupts-impl.md` | Timer interrupts 8-task implementation plan (sub-context approach) | **0/8 tasks** -- not started |
+| `2026-04-16-timer-interrupts-design.md` | Wall-clock timer interrupts with continuation capture for embedders (engines, bounded eval) | **Implemented** -- branch `feature/timer-interrupts` |
+| `2026-04-16-timer-interrupts-impl.md` | Timer interrupts 8-task implementation plan (sub-context approach) | **8/8 tasks complete** -- pending PR |
 | `2026-04-14-error-stack-traces-design.md` | Error stack traces: SourcedError, CompilationError.Source, cross-boundary traces | **Phases 1-4 complete** -- all compiler/syntax/library/expander wrapping done; P3 (cross-boundary) deferred |
 | `2026-04-16-error-diagnostics-design.md` | Error context + NativeError enrichment + compiler Phase 2-4 migration | **Layers 1-2 complete**; Layer 3 (compiler wrapping Phases 2-4) incomplete |
 | `2026-04-16-error-diagnostics-impl.md` | Error diagnostics 10-task implementation | **9/10 complete**; Task 10 (compiler Phase 2-4 wrapping ~100+ sites) incomplete |

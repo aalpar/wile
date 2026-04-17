@@ -1,9 +1,10 @@
 # Timer Interrupts Design
 
-**Status:** Draft — not started
+**Status:** Implemented
 **Date:** 2026-04-16
+**Branch:** `feature/timer-interrupts`
 
-> **Incomplete:** All items. No ErrTimerInterrupt type, no timerHandler/timerCancel fields, no interrupt points, no RunWithEscapeHandling dispatch, no with-timeout primitive.
+> **Complete:** All items implemented. `ErrTimerInterrupt` type, `ErrTimerExpired` sentinel, `timerHandler`/`timerCancel` fields, bytecode loop + post-foreign-call interrupt points, `RunWithEscapeHandling` dispatch, `with-timeout` primitive, nesting, dynamic-wind interaction, thread isolation. See impl plan for task-level status.
 
 ## Problem
 
@@ -35,22 +36,34 @@ whether to resume, discard, or re-fuel the suspended computation.
 
 ### Interrupt Delivery via ErrTimerInterrupt
 
-New error type following the `ErrExceptionEscape` / `ErrPromptAbort` pattern:
+Two types following the `ErrExceptionEscape` / `ErrPromptAbort` pattern:
 
 ```go
 // machine/timer_interrupt.go
+
+// ErrTimerExpired is the context cause set by with-timeout via
+// context.WithTimeoutCause. Interrupt check sites compare against this
+// to distinguish timer expiry from external cancellation (e.g. Ctrl+C).
+var ErrTimerExpired = werr.NewStaticError("timer expired")
+
+// ErrTimerInterrupt signals that a wall-clock timer has expired.
 type ErrTimerInterrupt struct {
     Handler values.Callable
 }
 
-func (e *ErrTimerInterrupt) Error() string {
+func (p *ErrTimerInterrupt) Error() string {
     return "timer interrupt"
 }
 ```
 
-This is a signal, not an exception. It propagates through the same Go error
-return path but is handled by the VM loop (or `RunWithEscapeHandling`), not
-by Scheme exception handlers.
+`ErrTimerInterrupt` is a signal, not an exception. It propagates through the
+same Go error return path but is handled by the VM loop (or
+`RunWithEscapeHandling`), not by Scheme exception handlers.
+
+`ErrTimerExpired` is a static sentinel used as the `cause` argument to
+`context.WithTimeoutCause`. This lets interrupt check sites distinguish
+timer expiry from external cancellation (e.g. Ctrl+C, parent context
+cancelled) by checking `context.Cause(ctx) == ErrTimerExpired`.
 
 ### Timer State on MachineContext
 
@@ -259,23 +272,24 @@ If the inner handler resumes and the outer timeout also fires, the outer
 handler receives a continuation that includes the inner computation.
 
 Implementation: each `with-timeout` derives a child context from the
-current one (`context.WithTimeout(mc.ctx, duration)`). Go's context
-hierarchy ensures the inner deadline fires first when it's shorter.
-The `timerHandler` field is saved and restored via `dynamic-wind`
-(or a dedicated save/restore in the primitive implementation).
+current one (`context.WithTimeoutCause(mc.ctx, duration, ErrTimerExpired)`).
+Go's context hierarchy ensures the inner deadline fires first when it's
+shorter. The sub-context pattern (same as `call-with-continuation-barrier`)
+isolates each timer's state naturally — no explicit save/restore needed.
 
-## Implementation Order
+## Implementation Order (all complete)
 
-1. `ErrTimerInterrupt` type (`machine/timer_interrupt.go`)
-2. `timerHandler` + `timerCancel` fields on `MachineContext`
+1. `ErrTimerInterrupt` type + `ErrTimerExpired` sentinel (`machine/timer_interrupt.go`)
+2. `timerHandler` + `timerCancel` fields on `MachineContext` with accessors
 3. Bytecode loop interrupt point (modify existing `ctx.Done()` check)
-4. Post-foreign-call interrupt point (modify `applyForeign`)
-5. `RunWithEscapeHandling` dispatch (new `errors.As` branch)
-6. `with-timeout` primitive (`registry/core/prim_timer.go`)
-7. Timer state save/restore for nesting
+4. Post-foreign-call interrupt points (`applyForeign`, `callForeignCached`)
+5. Error propagation: `applyCallableError` pass-through, `OperationForeignFunctionCall` panic recovery pass-through
+6. `RunWithEscapeHandling` dispatch (new `errors.As` branch, safety-net)
+7. `with-timeout` primitive (`registry/core/prim_timer.go`) — primary interrupt handler via sub-context pattern
+8. Nesting — works naturally via sub-context isolation (no extra code needed)
 
-Steps 1-5 are machine infrastructure. Step 6 is the Scheme-visible API.
-Step 7 is correctness for nested timeouts.
+Steps 1-6 are machine infrastructure. Step 7 is the Scheme-visible API.
+Step 8 is correctness for nested timeouts (validated by tests, no additional code).
 
 ## Out of Scope
 
