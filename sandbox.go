@@ -32,11 +32,17 @@ func SandboxEnvPrefix(prefix string) SandboxOption {
 }
 
 // WithSandbox layers a restrictive authorizer on top of any profile.
-// File writes are denied. Environment variable reads are prefix-filtered
-// (default "WILE_"). Code loading and process execution are denied.
+// File reads and stats are allowed; file writes and deletes are denied.
+// Environment variable reads are prefix-filtered (default "WILE_").
+// Code loading and process execution are denied.
 //
 // When composed with a profile's built-in authorizer, the result is
 // the intersection (most-restrictive-wins) via security.All().
+//
+// Ordering matters: WithSandbox must appear AFTER WithProfile and any
+// WithAuthorizer calls. WithAuthorizer assigns the authorizer rather
+// than composing, so placing it after WithSandbox would silently
+// overwrite the sandbox restriction.
 func WithSandbox(opts ...SandboxOption) EngineOption {
 	scfg := &sandboxConfig{envPrefix: "WILE_"}
 	for _, opt := range opts {
