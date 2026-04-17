@@ -49,7 +49,7 @@ func TestExtensionListConsistency(t *testing.T) {
 	// in internal/bootstrap/environment_tiny.go must be updated together.
 	expected := []string{
 		"io", "files", "math", "introspection", "eval",
-		"namespace", "threads", "gointerop", "all", "system", "process",
+		"namespace", "threads", "gointerop", "all", "system", "process", "envvars",
 	}
 	for _, name := range expected {
 		c.Assert(wileLibs[name], qt.IsTrue,

@@ -24,6 +24,7 @@ import (
 	"github.com/aalpar/wile/extensions/system"
 	"github.com/aalpar/wile/extensions/threads"
 	"github.com/aalpar/wile/internal/extensions/all"
+	"github.com/aalpar/wile/internal/extensions/envvars"
 	ioext "github.com/aalpar/wile/internal/extensions/io"
 	nsext "github.com/aalpar/wile/internal/extensions/namespace"
 	"github.com/aalpar/wile/registry"
@@ -95,7 +96,7 @@ func (p Profile) extensions() []registry.Extension {
 			files.Extension,
 			math.Extension,
 			all.SafeExtension,
-			// envvars.Extension added in Task 4
+			envvars.Extension,
 		}
 	case ConsoleWithLoad:
 		return []registry.Extension{
@@ -104,7 +105,7 @@ func (p Profile) extensions() []registry.Extension {
 			math.Extension,
 			all.SafeExtension,
 			exteval.Extension,
-			// envvars.Extension added in Task 4
+			envvars.Extension,
 		}
 	case Small:
 		return []registry.Extension{
@@ -115,7 +116,7 @@ func (p Profile) extensions() []registry.Extension {
 			exteval.Extension,
 			all.Extension,
 			system.Extension,
-			// envvars.Extension added in Task 4
+			envvars.Extension,
 		}
 	case KitchenSink:
 		return []registry.Extension{
@@ -130,7 +131,7 @@ func (p Profile) extensions() []registry.Extension {
 			all.Extension,
 			system.Extension,
 			process.Extension,
-			// envvars.Extension added in Task 4
+			envvars.Extension,
 		}
 	default:
 		return nil

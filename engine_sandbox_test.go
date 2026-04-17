@@ -27,6 +27,7 @@ import (
 	"github.com/aalpar/wile/extensions/files"
 	"github.com/aalpar/wile/extensions/math"
 	"github.com/aalpar/wile/extensions/system"
+	"github.com/aalpar/wile/internal/extensions/envvars"
 	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
 
@@ -657,7 +658,7 @@ func TestAuthorizer_DenyBlocksEnvVar(t *testing.T) {
 	})
 	engine, err := NewEngine(ctx,
 		WithAuthorizer(auth),
-		WithExtension(system.Extension),
+		WithExtension(envvars.Extension),
 	)
 	c.Assert(err, qt.IsNil)
 

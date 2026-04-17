@@ -19,8 +19,9 @@
 //   - command-line: return command-line arguments as list
 //   - exit: terminate with exit status
 //   - emergency-exit: terminate immediately without cleanup
-//   - get-environment-variable: get environment variable value
-//   - get-environment-variables: get all environment variables
+//
+// Environment variable access (get-environment-variable,
+// get-environment-variables) lives in the envvars extension.
 //
 // # Features
 //

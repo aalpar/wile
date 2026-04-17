@@ -114,6 +114,13 @@ type Namespace struct {
 
 	// runtime is the phase 0 (runtime) environment frame.
 	runtime *EnvironmentFrame
+
+	// envMap is an optional virtual environment variable map.
+	// When non-nil, envvars primitives read from this map instead of
+	// the process environment (os.Getenv/os.Environ), bypassing the
+	// authorizer gate. Nil means "fall through to OS, gated by authorizer".
+	// Set via WithEnvMap (Task 5).
+	envMap map[string]string
 }
 
 // ModuleInstance represents a loaded and initialized library.
@@ -273,6 +280,14 @@ func (p *Namespace) SetRegistry(reg any) {
 // Authorizer returns the security authorizer for this namespace.
 func (p *Namespace) Authorizer() security.Authorizer {
 	return p.authorizer
+}
+
+// EnvMap returns the virtual environment variable map for this namespace,
+// or nil if none has been configured. When non-nil, envvars primitives
+// read from this map instead of the process environment, bypassing the
+// authorizer gate.
+func (p *Namespace) EnvMap() map[string]string {
+	return p.envMap
 }
 
 // SetAuthorizer sets the security authorizer for this namespace.
