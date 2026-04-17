@@ -365,13 +365,15 @@ func PrimApropos(mc machine.CallContext) error {
 // namespace, lazily building it on first call. Returns a partial index
 // when some .sld files are malformed (matching Engine.ensureExportIndex
 // semantics). Returns nil only on transient errors or missing resolver.
+// Non-transient failures store their result (even nil) to stop retrying.
 func ensureExportIndex(mc machine.CallContext) *compilation.LibraryExportIndex {
 	ns := mc.EnvironmentFrame().Namespace()
 	if ns == nil {
 		return nil
 	}
-	idx, ok := ns.ExportIndex().(*compilation.LibraryExportIndex)
-	if ok {
+	cached, built := ns.ExportIndex()
+	if built {
+		idx, _ := cached.(*compilation.LibraryExportIndex)
 		return idx
 	}
 	// Index not yet built — build it now.
@@ -387,7 +389,7 @@ func ensureExportIndex(mc machine.CallContext) *compilation.LibraryExportIndex {
 	if !ok {
 		return nil
 	}
-	built, err := compilation.BuildExportIndex(mc.Context(), resolver, lr)
+	result, err := compilation.BuildExportIndex(mc.Context(), resolver, lr)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return nil // transient — retry next call
@@ -395,15 +397,13 @@ func ensureExportIndex(mc machine.CallContext) *compilation.LibraryExportIndex {
 		// Non-transient errors (malformed .sld files, etc.):
 		// store whatever partial index was returned and stop retrying.
 	}
-	if built == nil {
-		return nil
-	}
 	// Re-check: another goroutine may have stored an index while we
 	// were building. Prefer the existing one to avoid redundant writes.
-	existing, ok := ns.ExportIndex().(*compilation.LibraryExportIndex)
-	if ok {
-		return existing
+	cached, built = ns.ExportIndex()
+	if built {
+		idx, _ := cached.(*compilation.LibraryExportIndex)
+		return idx
 	}
-	ns.SetExportIndex(built)
-	return built
+	ns.SetExportIndex(result)
+	return result
 }

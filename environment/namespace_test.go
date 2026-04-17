@@ -251,28 +251,44 @@ func TestNamespace_ExportIndex(t *testing.T) {
 	c := qt.New(t)
 
 	ns := NewNamespace()
-	c.Assert(ns.ExportIndex(), qt.IsNil)
+	idx, built := ns.ExportIndex()
+	c.Assert(idx, qt.IsNil)
+	c.Assert(built, qt.IsFalse)
 
-	idx := "mock-export-index"
-	ns.SetExportIndex(idx)
-	c.Assert(ns.ExportIndex(), qt.Equals, idx)
+	ns.SetExportIndex("mock-export-index")
+	idx, built = ns.ExportIndex()
+	c.Assert(idx, qt.Equals, "mock-export-index")
+	c.Assert(built, qt.IsTrue)
 }
 
 func TestNamespace_ExportIndex_DelegatesToParent(t *testing.T) {
 	c := qt.New(t)
 
 	parent := NewNamespace()
-	idx := "parent-export-index"
-	parent.SetExportIndex(idx)
+	parent.SetExportIndex("parent-export-index")
 
 	child := parent.NewChildNamespace()
-	c.Assert(child.ExportIndex(), qt.Equals, idx)
+	idx, built := child.ExportIndex()
+	c.Assert(idx, qt.Equals, "parent-export-index")
+	c.Assert(built, qt.IsTrue)
 
 	// Setting on child delegates to parent.
-	newIdx := "updated-export-index"
-	child.SetExportIndex(newIdx)
-	c.Assert(parent.ExportIndex(), qt.Equals, newIdx)
-	c.Assert(child.ExportIndex(), qt.Equals, newIdx)
+	child.SetExportIndex("updated-export-index")
+	idx, _ = parent.ExportIndex()
+	c.Assert(idx, qt.Equals, "updated-export-index")
+	idx, _ = child.ExportIndex()
+	c.Assert(idx, qt.Equals, "updated-export-index")
+}
+
+func TestNamespace_ExportIndex_NilStopsRetry(t *testing.T) {
+	c := qt.New(t)
+
+	ns := NewNamespace()
+	// Storing nil marks as built — prevents redundant retry.
+	ns.SetExportIndex(nil)
+	idx, built := ns.ExportIndex()
+	c.Assert(idx, qt.IsNil)
+	c.Assert(built, qt.IsTrue)
 }
 
 func TestNamespace_Derive_SharesRegistryAndAuthorizer(t *testing.T) {

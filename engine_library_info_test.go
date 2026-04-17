@@ -118,14 +118,18 @@ func TestEngine_UnloadedLibraries_StoresExportIndexOnNamespace(t *testing.T) {
 
 	// Before any library scan, namespace should have no export index.
 	ns := eng.Environment().Namespace()
-	qt.Assert(t, ns.ExportIndex(), qt.IsNil)
+	idx, built := ns.ExportIndex()
+	qt.Assert(t, idx, qt.IsNil)
+	qt.Assert(t, built, qt.IsFalse)
 
 	// Trigger the export index build.
 	libs := eng.UnloadedLibraries(ctx)
 	qt.Assert(t, len(libs) > 0, qt.IsTrue)
 
 	// Namespace should now have the export index.
-	qt.Assert(t, ns.ExportIndex(), qt.IsNotNil)
+	idx, built = ns.ExportIndex()
+	qt.Assert(t, idx, qt.IsNotNil)
+	qt.Assert(t, built, qt.IsTrue)
 }
 
 func TestEngine_AproposFindsUnloadedExports(t *testing.T) {
@@ -133,7 +137,6 @@ func TestEngine_AproposFindsUnloadedExports(t *testing.T) {
 	eng, err := wile.NewEngine(ctx,
 		wile.WithAllExtensions(),
 		wile.WithSourceFS(stdlib.FS),
-		wile.WithSourceOS(),
 		wile.WithLibraryPaths("."),
 	)
 	qt.Assert(t, err, qt.IsNil)
