@@ -37,7 +37,8 @@ type Profile int
 
 const (
 	// Tiny is a pure computational Scheme -- core primitives only.
-	// No I/O, no filesystem, no threads. LCD of all profiles.
+	// No I/O, no filesystem, no threads. The lowest common denominator:
+	// every other profile is a superset of Tiny.
 	Tiny Profile = iota
 
 	// Console adds I/O and sandboxed file access to Tiny.
@@ -145,7 +146,10 @@ func (p Profile) authorizer() security.Authorizer {
 }
 
 // WithProfile configures the engine with the named profile's
-// extensions and authorization constraints.
+// extensions and authorization constraints. WithProfile is additive:
+// it appends the profile's extensions to any already configured via
+// WithExtension/WithExtensions, and sets the profile's authorizer
+// only if one is defined (otherwise leaves any prior authorizer in place).
 func WithProfile(p Profile) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.extensions = append(cfg.extensions, p.extensions()...)
