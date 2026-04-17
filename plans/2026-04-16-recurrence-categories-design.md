@@ -1,5 +1,9 @@
 # Recurrence Categories Design
 
+**Status:** Design only — no implementation started
+
+> **Incomplete:** All 3 categories (set_closure, graph_reachability, matrix_ops). matrix_ops blocked on `(wile algebra matrix)` library. See companion impl plan.
+
 Three new benchmark categories testing recurrence-related reasoning.
 Two use existing Wile algebra primitives; one requires a new matrix library.
 

@@ -41,13 +41,12 @@ Open designs and implementation work. These are the active items.
 
 | File | Contents | Status |
 |------|----------|--------|
-| `ARCHITECTURE.md` | Dialect system, module decomposition, plugin shadowing, environment introspection | **Proposed** -- all 4 features unimplemented |
-| `2026-03-30-machine-decomposition-design.md` | Machine package decomposition: compiler/VM/expander separation | **Approved** (design) -- partial work via PR #593 (compilation subpackage) |
-| `2026-04-13-sourceload-design.md` | Isolated file-finding package: `sourceload/` under `machine/compilation/` | **Complete** |
-| `2026-04-13-sourceload-impl.md` | sourceload implementation plan | **Complete** |
+| `ARCHITECTURE.md` | Dialect system, module decomposition, plugin shadowing, environment introspection | Env introspection **complete**; other 3 sections **proposed** -- not started |
 | `SECURITY.md` | Opcode resource limits (match steps, expand steps, continuation copy depth) | **Rejected** -- existing limits sufficient (call depth + stack size + context timeout) |
 | `2026-04-16-timer-interrupts-design.md` | Wall-clock timer interrupts with continuation capture for embedders (engines, bounded eval) | **Draft** -- not started |
-| `2026-04-14-error-stack-traces-design.md` | Error stack traces: SourcedError, CompilationError.Source, cross-boundary traces | **Phase 1 complete** -- core compiler wrapping done; Phases 2-4 (remaining files) + P3 (cross-boundary) open |
+| `2026-04-14-error-stack-traces-design.md` | Error stack traces: SourcedError, CompilationError.Source, cross-boundary traces | **Phases 1-4 complete** -- all compiler/syntax/library/expander wrapping done; P3 (cross-boundary) deferred |
+| `2026-04-16-error-diagnostics-design.md` | Error context + NativeError enrichment + compiler Phase 2-4 migration | **Layers 1-2 complete**; Layer 3 (compiler wrapping Phases 2-4) incomplete |
+| `2026-04-16-error-diagnostics-impl.md` | Error diagnostics 10-task implementation | **9/10 complete**; Task 10 (compiler Phase 2-4 wrapping ~100+ sites) incomplete |
 | `DEBUGGER.md` | Inline breakpoint traps, snap-to-next breakpoint resolution | **Proposed** -- not started |
 | `MACRO_SYSTEM.md` | Hygiene debugging, macro expansion tracing | **Planned** -- OriginInfo core fields exist (PR #324); extended fields + hygiene debugging tools not started |
 
@@ -59,7 +58,7 @@ Phase 1 infrastructure complete (PRs #577-578): `ForeignClosure.SetValidator/Val
 |------|----------|--------|
 | `2026-03-26-extension-contracts-impl.md` | Extension contracts remaining work: Phases 2-4 outlines | **Open** -- Phase 1 done, Phases 2-4 not started |
 | `2026-03-26-extension-contracts-phase2-design.md` | Phase 2 design: ForeignClosure validation, auto-coercion | **Open** |
-| `2026-03-26-extension-contracts-phase2-impl.md` | Phase 2 implementation plan | **Open** -- 0/8 tasks completed |
+| `2026-03-26-extension-contracts-phase2-impl.md` | Phase 2 implementation plan | **Open** -- 3/8 tasks completed (1-3 done: validate field + dispatch paths) |
 
 ### Environment Profiles
 
@@ -67,6 +66,13 @@ Phase 1 infrastructure complete (PRs #577-578): `ForeignClosure.SetValidator/Val
 |------|----------|--------|
 | `2026-03-26-environment-profiles.md` | Named profiles (Tiny, Console, Small, KitchenSink), sandbox modifier | **Draft** -- design complete, no implementation |
 | `2026-03-26-environment-profiles-impl.md` | Environment profiles implementation plan (10 tasks) | **Draft** -- 0/10 tasks completed |
+
+### Benchmarks
+
+| File | Contents | Status |
+|------|----------|--------|
+| `2026-04-16-recurrence-categories-design.md` | Set closure, graph reachability, matrix ops benchmark categories | **Design only** -- no implementation started; matrix_ops blocked on `(wile algebra matrix)` |
+| `2026-04-16-recurrence-impl-plan.md` | 5-task impl for set_closure + graph_reachability generators | **0/5 tasks** -- generate.py unchanged |
 
 ### Documentation & Discovery
 
@@ -78,9 +84,8 @@ Phase 1 infrastructure complete (PRs #577-578): `ForeignClosure.SetValidator/Val
 
 | File | Contents | Status |
 |------|----------|--------|
-| `TECH-DEBT-2026-04.md` | Tech debt assessment: 8 phases, 27 tasks | Phases 1-7 **complete**; Phase 8.1, 8.3, 8.5 **complete**; Phases 8.2, 8.4 opportunistic |
-| `TECH-DEBT-2026-04-IMPL.md` | Tech debt implementation tracker | 24/27 tasks complete |
-| `2026-04-13-resolver-extraction-impl.md` | Resolver extraction: FileResolver → `machine/compilation/resolver/` | **Complete** |
+| `TECH-DEBT-2026-04.md` | Tech debt assessment: 8 phases, 27 tasks | 24/27 complete; 6.2, 6.4 **open**; 8.2, 8.4 opportunistic |
+| `TECH-DEBT-2026-04-IMPL.md` | Tech debt implementation tracker | 24/27 complete; 6.2 (context.TODO), 6.4 (typeswitchlint guide) **open** |
 
 ---
 
@@ -101,9 +106,17 @@ Historical reference. Work has shipped; plans preserved for design context.
 | `2026-04-01-timing-dependent-tests.md` | Replace timing-dependent `time.Sleep` with observation-based sync | PR #602 |
 | `2026-04-01-disassembler-design.md` | Bytecode disassembler: Go layer, Scheme primitive, REPL `,disasm`, MCP tool | PR #603 |
 | `2026-03-31-environment-any-fields.md` | Replace `any` fields in Namespace with typed interfaces | PR #594 |
+| `CONSTANT-BINDINGS.md` | Constant/imported binding flag design (moved to `memory/`) | Implemented |
+| `CONSTANT-BINDINGS-IMPL.md` | Constant bindings implementation plan (moved to `memory/`) | Implemented |
 | `2026-04-11-eval-stack-limit-design.md` | Eval stack size limit: `WithMaxStackSize`, `checkStackSize`, `ErrStackOverflow` | PR #636 |
 | `2026-04-11-eval-stack-limit-impl.md` | Eval stack limit implementation plan | PR #636 |
 | `2026-04-11-eval-subcontext-design.md` | Funnel `prim_eval.go` through `NewSubContext`: pool-backed release | PR #637 |
+| `2026-03-30-machine-decomposition-design.md` | Machine package decomposition design (moved to `memory/`) | Implemented (PR #593 + compilation subpackage) |
+| `2026-04-12-expansion-ops-to-compilation-design.md` | Move expansion ops to compilation/ design (moved to `memory/`) | Implemented |
+| `2026-04-12-expansion-ops-to-compilation-impl.md` | Expansion ops move 5-task impl (moved to `memory/`) | Implemented |
+| `2026-04-13-sourceload-design.md` | sourceload package design (moved to `memory/`) | Implemented |
+| `2026-04-13-sourceload-impl.md` | sourceload 10-task impl (moved to `memory/`) | Implemented |
+| `2026-04-13-resolver-extraction-impl.md` | Resolver extraction impl (moved to `memory/`) | Implemented |
 
 ### Compiler Optimizations
 
@@ -146,6 +159,8 @@ Historical reference. Work has shipped; plans preserved for design context.
 | `AVAILABLE-LIBRARIES.md` | Library discovery: `LibraryEnumerator`, `(available-libraries)` | PR #590 |
 | `2026-03-26-wile-mcp-server-design.md` | Wile MCP server design (implemented as integrated `--mcp` flag in `cmd/wile`) | PR #588 |
 | `MCP-EVAL-HARDENING.md` | MCP eval tool hardening: timeout, output limits | Implemented |
+| `2026-04-15-srfi-132-design.md` | SRFI-132 Sort Libraries design (moved to `memory/`) | Implemented |
+| `2026-04-15-srfi-132-impl.md` | SRFI-132 10-task impl plan (moved to `memory/`) | Implemented |
 
 ### Algebra Libraries
 
@@ -158,6 +173,10 @@ Historical reference. Work has shipped; plans preserved for design context.
 | `2026-04-10-orthogonal-algebra-phase2-impl.md` | Phase 2 implementation plan | PR #631 |
 | `2026-04-10-symbolic-algebra-design.md` | Symbolic algebra: theory projections, recursive normalizer, traced rewriting | PRs #632-633 |
 | `2026-04-10-symbolic-algebra-impl.md` | Symbolic algebra implementation plan (Phases 1-2 complete; Phase 3 in wile-goast) | PRs #632-633 |
+| `2026-04-12-sage-algebra-validation-design.md` | Sage algebra validation harness design (moved to `memory/`) | Implemented |
+| `2026-04-12-sage-algebra-validation-impl.md` | Sage validation 9-task impl plan (moved to `memory/`) | Implemented |
+| `2026-04-14-algebra-documentation-design.md` | Algebra user-facing docs + examples design (moved to `memory/`) | Implemented |
+| `2026-04-14-algebra-documentation-impl.md` | Algebra documentation 10-task impl plan (moved to `memory/`) | Implemented |
 
 ### Documentation System
 

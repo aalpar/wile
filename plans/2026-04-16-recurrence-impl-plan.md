@@ -2,6 +2,10 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
+**Status:** 0/5 tasks complete
+
+> **Incomplete:** All 5 tasks. generate.py is unchanged — no `(srfi 1)` import, no gen_set_closure, no gen_graph_reachability, no recurrence_problems.json.
+
 **Goal:** Add two new benchmark categories (`set_closure` and `graph_reachability`) to the algebra accuracy benchmark.
 
 **Architecture:** Each category gets a generator function in `generate.py` following the existing pattern: produce `Problem` objects with `scheme_expression` (ground truth via Wile) and `natural_language` (LLM prompt). Both use `answer_type="set"`. The `build_scheme_script` function needs `(srfi 1)` added to its import header for `lset-union`. No changes to `evaluate.py` — the `set` answer type already exists.

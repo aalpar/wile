@@ -1,5 +1,9 @@
 # Macro System Plans
 
+**Status:** Both sections unstarted
+
+> **Incomplete:** Hygiene Debugging (all 4 phases — no ScopeReason, no NewScopeWithProvenance, no debugging primitives identifier-scopes/scope-info/binding-info/scope?/scope=?). Macro Expansion Tracing (no extended OriginInfo fields, no syntax-origin primitive).
+
 ---
 
 # Hygiene Debugging Design

@@ -1,5 +1,11 @@
 # Performance Plans
 
+**Status:** 1 complete, 1 open, 1 rejected
+
+> **Completed:** Procedure Inlining (PR #605).
+> **Incomplete:** Environment Frame Slimming (no floatVal, stackEntry, PushFloat, or lightweight frame type).
+> **Rejected:** NaN-Boxing (requires `unsafe`, hard constraint).
+
 ## Remaining Optimization Opportunities
 
 ### Procedure Inlining

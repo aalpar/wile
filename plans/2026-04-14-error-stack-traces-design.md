@@ -1,7 +1,10 @@
 # Error Stack Traces Design
 
-**Status:** Design
+**Status:** Phases 1-4 compiler wrapping complete; P3 cross-boundary deferred
 **Date:** 2026-04-14
+
+> **Completed:** SourcedError type, wrapSourcedError method (95 call sites), CompilationError.Source field, all Phase 1-4 compiler/syntax/library/expander files wrapped.
+> **Incomplete:** P3 — cross-boundary stack traces (connecting sub-context traces to parent context). Explicitly deferred.
 **TODO Item:** Tier 1 — Exceptions and error stack traces
 
 ## Problem

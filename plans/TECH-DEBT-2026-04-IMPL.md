@@ -2,6 +2,12 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
+**Status:** 24/27 tasks complete
+
+> **Completed:** Phases 1-5, 6.1, 6.3, 7.1, 8.1, 8.3, 8.5.
+> **Incomplete:** Task 6.2 (context.TODO() → real contexts in 39 test files), Task 6.4 (add typeswitchlint to values/values.go guide comment).
+> **Opportunistic:** Tasks 8.2, 8.4 (deferred — low priority).
+
 **Goal:** Systematically resolve 22 tech debt items from `TECH-DEBT-2026-04.md` (Task 4.2 already complete).
 
 **Architecture:** Each task is self-contained with TDD steps. Tasks within a phase can be done in any order unless noted. Phases follow the recommended execution order from the assessment: 1 → 6 → 2 → 4 → 3 → 5 → 7 → 8.

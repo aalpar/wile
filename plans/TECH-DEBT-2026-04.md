@@ -3,6 +3,12 @@
 > Full-codebase assessment: 437K lines Go, 1695 files, 39 packages.
 > All tests passing, median coverage ~87%.
 
+**Status:** 24/27 tasks complete
+
+> **Completed:** Phases 1-5 (all), Phase 6.1, 6.3, Phase 7.1, Phase 8.1, 8.3, 8.5.
+> **Incomplete:** Task 6.2 (431 context.TODO() sites across 39 test files), Task 6.4 (typeswitchlint step missing from values/values.go guide comment).
+> **Opportunistic:** Tasks 8.2, 8.4 (intentionally deferred).
+
 **Themes:** (1) dual-path legacy from incremental evolution, (2) missing interfaces
 forcing type-switch proliferation, (3) silent limits with no enforcement.
 

@@ -1,7 +1,9 @@
 # Unboxed Float Pipeline
 
-**Status:** Proposed
+**Status:** Proposed — all 4 phases unstarted
 **Requires `unsafe`:** No. Pure Go struct changes and VM dispatch.
+
+> **Incomplete:** Phase 1 (value register — no floatVal/hasFloat in vmState), Phase 2 (tagged eval stack — stack.go still uses values.Value), Phase 3 (binding unboxing — no floatVal in Binding), Phase 4 (validation/benchmarking).
 **Thread safety:** Preserved. All modified state is per-MachineContext (one per SRFI-18 thread).
 
 ## Motivation

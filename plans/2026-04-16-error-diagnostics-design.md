@@ -1,7 +1,10 @@
 # Error Diagnostics Design
 
-**Status:** Approved
+**Status:** Layers 1-2 complete; Layer 3 (compiler error migration Phases 2-4) incomplete
 **Date:** 2026-04-16
+
+> **Completed:** Layer 1 (ErrorContext via continuation marks), Layer 2 (NativeError enrichment with source/stackTrace).
+> **Incomplete:** Layer 3 — compiler error source location wrapping for Phases 2-4 (compile_syntax_rules.go, Phase 3 import/library files, Phase 4 expander files: ~100+ unwrapped sites).
 **Depends on:** `2026-04-14-error-stack-traces-design.md` (Phase 1 complete)
 
 ## Problem
