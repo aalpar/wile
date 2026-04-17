@@ -22,8 +22,8 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile"
-	extintrospection "github.com/aalpar/wile/extensions/introspection"
 	exteval "github.com/aalpar/wile/extensions/eval"
+	extintrospection "github.com/aalpar/wile/extensions/introspection"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -431,8 +431,8 @@ func TestEvalDynamicContextInheritance(t *testing.T) {
 func TestEnvironmentWithLibraryRegistry(t *testing.T) {
 	c := qt.New(t)
 
-	// stdlib/lib/ is at repo root, test is at internal/extensions/eval/
-	libDir := filepath.Join("..", "..", "..", "stdlib", "lib")
+	// stdlib/lib/ is at repo root, test is at extensions/eval/
+	libDir := filepath.Join("..", "..", "stdlib", "lib")
 	engine, err := wile.NewEngine(context.Background(),
 		wile.WithExtension(exteval.Extension),
 		wile.WithLibraryPaths(libDir),

@@ -34,6 +34,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/extensions/eval"
 	"github.com/aalpar/wile/extensions/files"
 	"github.com/aalpar/wile/extensions/gointerop"
 	"github.com/aalpar/wile/extensions/introspection"
@@ -42,7 +43,6 @@ import (
 	"github.com/aalpar/wile/extensions/system"
 	"github.com/aalpar/wile/extensions/threads"
 	"github.com/aalpar/wile/internal/extensions/all"
-	"github.com/aalpar/wile/extensions/eval"
 	ioext "github.com/aalpar/wile/internal/extensions/io"
 	nsext "github.com/aalpar/wile/internal/extensions/namespace"
 	"github.com/aalpar/wile/internal/parser"

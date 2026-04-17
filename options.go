@@ -18,6 +18,7 @@ import (
 	"io/fs"
 
 	"github.com/aalpar/wile/environment"
+	exteval "github.com/aalpar/wile/extensions/eval"
 	"github.com/aalpar/wile/extensions/files"
 	"github.com/aalpar/wile/extensions/gointerop"
 	"github.com/aalpar/wile/extensions/introspection"
@@ -26,7 +27,6 @@ import (
 	"github.com/aalpar/wile/extensions/system"
 	"github.com/aalpar/wile/extensions/threads"
 	"github.com/aalpar/wile/internal/extensions/all"
-	exteval "github.com/aalpar/wile/extensions/eval"
 	"github.com/aalpar/wile/internal/extensions/io"
 	nsext "github.com/aalpar/wile/internal/extensions/namespace"
 	"github.com/aalpar/wile/machine/compilation"
