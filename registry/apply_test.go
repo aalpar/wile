@@ -263,3 +263,49 @@ func TestApplyDocs_NonexistentBinding(t *testing.T) {
 	reg.ApplyDocs(env)
 	c.Assert(true, qt.IsTrue)
 }
+
+// TestApply_ContractEnforcement verifies that WithContractEnforcement
+// installs a validator on each primitive that declares ParamTypes, and
+// leaves ForeignClosure.validate nil otherwise. This covers both the
+// enforcement-on and enforcement-off branches of registerRuntimePrimitive.
+func TestApply_ContractEnforcement(t *testing.T) {
+	spec := PrimitiveSpec{
+		Name:       "test-enforced",
+		ParamCount: 1,
+		Impl:       noopImpl,
+		ParamTypes: []values.TypeConstraint{values.TypeString},
+	}
+
+	tcs := []struct {
+		name          string
+		opts          []ApplyOption
+		wantValidator bool
+	}{
+		{"enforcement off by default", nil, false},
+		{"enforcement on", []ApplyOption{WithContractEnforcement()}, true},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			reg := NewRegistry()
+			reg.AddPrimitive(spec, PhaseRuntime)
+
+			topLevel := environment.NewNamespace()
+			env := topLevel.Runtime()
+			err := reg.Apply(context.Background(), env, tc.opts...)
+			c.Assert(err, qt.IsNil)
+
+			sym := values.NewSymbol("test-enforced")
+			binding := env.GetBinding(sym, nil)
+			c.Assert(binding, qt.IsNotNil)
+
+			fcls, ok := binding.Value().(*machine.ForeignClosure)
+			c.Assert(ok, qt.IsTrue)
+			if tc.wantValidator {
+				c.Assert(fcls.Validator(), qt.IsNotNil)
+			} else {
+				c.Assert(fcls.Validator(), qt.IsNil)
+			}
+		})
+	}
+}

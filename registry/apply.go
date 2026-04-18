@@ -23,9 +23,35 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
+// ApplyOption configures the behavior of Registry.Apply. Options are applied
+// in order; later options override earlier ones.
+type ApplyOption func(*applyConfig)
+
+// applyConfig holds tunables for Apply. New knobs should extend this struct
+// and be set via an ApplyOption constructor.
+type applyConfig struct {
+	contractEnforcement bool
+}
+
+// WithContractEnforcement installs a type-checking validator on each
+// registered primitive whose spec declares ParamTypes. The validator runs
+// after argument binding and before the implementation, rejecting
+// mismatched types with a wrapped error. Disabled by default — validators
+// cost nothing when not installed (ForeignClosure.validate stays nil).
+func WithContractEnforcement() ApplyOption {
+	return func(cfg *applyConfig) {
+		cfg.contractEnforcement = true
+	}
+}
+
 // Apply materializes registry contents into an environment: compile-time bindings,
 // runtime/expand-time primitives, global values, and init functions (in that order).
-func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame) error {
+func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame, opts ...ApplyOption) error {
+	var cfg applyConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -50,7 +76,7 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame)
 	// Register runtime primitives
 	for _, reg := range p.primitives {
 		if reg.Phases.HasRuntime() {
-			err := registerRuntimePrimitive(env, reg.Spec)
+			err := registerRuntimePrimitive(env, reg.Spec, cfg.contractEnforcement)
 			if err != nil {
 				return err
 			}
@@ -60,7 +86,7 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame)
 	// Register expand-time primitives
 	for _, reg := range p.primitives {
 		if reg.Phases.HasExpand() {
-			err := registerExpandTimePrimitive(env, reg.Spec)
+			err := registerExpandTimePrimitive(env, reg.Spec, cfg.contractEnforcement)
 			if err != nil {
 				return err
 			}
@@ -94,7 +120,7 @@ func registerCompileTimeBinding(env *environment.EnvironmentFrame, spec BindingS
 	return nil
 }
 
-func registerRuntimePrimitive(env *environment.EnvironmentFrame, spec PrimitiveSpec) error {
+func registerRuntimePrimitive(env *environment.EnvironmentFrame, spec PrimitiveSpec, contractEnforcement bool) error {
 	sym := values.NewSymbol(spec.Name)
 	env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 
@@ -106,6 +132,9 @@ func registerRuntimePrimitive(env *environment.EnvironmentFrame, spec PrimitiveS
 	)
 	closure.SetName(spec.Name)
 	closure.SetDoc(spec.Doc)
+	if contractEnforcement {
+		closure.SetValidator(BuildValidator(spec))
+	}
 
 	err := env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
 	if err != nil {
@@ -125,7 +154,7 @@ func registerGlobalValue(env *environment.EnvironmentFrame, name string, value v
 	return nil
 }
 
-func registerExpandTimePrimitive(env *environment.EnvironmentFrame, spec PrimitiveSpec) error {
+func registerExpandTimePrimitive(env *environment.EnvironmentFrame, spec PrimitiveSpec, contractEnforcement bool) error {
 	expandEnv := env.Expand()
 	sym := values.NewSymbol(spec.Name)
 	expandEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
@@ -138,6 +167,9 @@ func registerExpandTimePrimitive(env *environment.EnvironmentFrame, spec Primiti
 	)
 	closure.SetName(spec.Name)
 	closure.SetDoc(spec.Doc)
+	if contractEnforcement {
+		closure.SetValidator(BuildValidator(spec))
+	}
 
 	err := expandEnv.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
 	if err != nil {

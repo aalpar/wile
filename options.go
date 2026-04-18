@@ -51,6 +51,10 @@ type engineConfig struct {
 	namespace          *environment.Namespace // pre-built namespace (via WithNamespace)
 	resolverFactories  []resolverFactory      // source file resolver chain (via WithSourceFS, WithSourceOS)
 	envMap             map[string]string      // virtual env vars (via WithEnv, WithEnvMap)
+
+	// contractEnforcement installs type-checking validators on primitives
+	// whose specs declare ParamTypes. Enabled via WithContractEnforcement.
+	contractEnforcement bool
 }
 
 // resolverFactory creates a FileResolver given the runtime environment.
@@ -79,6 +83,21 @@ func WithExtension(ext registry.Extension) EngineOption {
 func WithExtensions(exts ...registry.Extension) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.extensions = append(cfg.extensions, exts...)
+	}
+}
+
+// WithContractEnforcement enables runtime type validation for primitives
+// that declare ParamTypes contracts. When enabled, each contracted primitive
+// validates its arguments against declared types before calling the
+// implementation and returns a typed error on mismatch.
+//
+// Disabled by default. Intended as a correctness-verification aid for
+// extension authors — production extensions should perform their own
+// argument checks (e.g., via helpers.RequireArg) rather than depend on
+// this option, since enabling it adds a per-call validator invocation.
+func WithContractEnforcement() EngineOption {
+	return func(cfg *engineConfig) {
+		cfg.contractEnforcement = true
 	}
 }
 
