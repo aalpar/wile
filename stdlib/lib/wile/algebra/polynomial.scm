@@ -141,20 +141,17 @@
     (let ((cs (poly-coeffs p)))
       (if (or (null? cs) (null? (cdr cs)))
           (poly-zero R)
-          (let ((rz (ring-zero R))
-                (ro (ring-one R)))
-            ;; Build ring-element representing natural number k.
-            (define (ring-nat k)
-              (let loop ((i 0) (acc rz))
-                (if (>= i k)
-                    acc
-                    (loop (+ i 1) (ring-plus R acc ro)))))
+          (let ((ro (ring-one R)))
+            ;; Thread the natural-number multiplier as a ring element,
+            ;; incrementing by ring-one each step. This keeps the
+            ;; derivative O(n) ring additions rather than O(n^2).
+            ;; Characteristic-safe because we build k inside R itself.
             (make-poly R
-              (let loop ((xs (cdr cs)) (k 1))
+              (let loop ((xs (cdr cs)) (k ro))
                 (if (null? xs)
                     '()
-                    (cons (ring-times R (ring-nat k) (car xs))
-                          (loop (cdr xs) (+ k 1)))))))))))
+                    (cons (ring-times R k (car xs))
+                          (loop (cdr xs) (ring-plus R k ro)))))))))))
 
 ;; ─── Division with remainder ───────────────
 ;;
