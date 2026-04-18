@@ -26,6 +26,7 @@ import (
 	"github.com/aalpar/wile/internal/extensions/io"
 	nsext "github.com/aalpar/wile/internal/extensions/namespace"
 	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/values"
 )
 
 // Extension registers the primitives defined in this package (records, promises,
@@ -73,25 +74,43 @@ var SafeExtension = registry.NewDescribedExtension("all-safe",
 	SafeBuilder.AddToRegistry)
 
 func addRecords(r *registry.Registry) error {
+	// TODO(contracts): *values.Record and *values.RecordType have no
+	// ValueType enum entries, so record-* primitives fall back to TypeAny
+	// for those positions. Impl-level RequireArg still rejects mismatches.
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "make-record-type", ParamCount: 2, Impl: PrimMakeRecordType,
-			Doc: "Creates a new record type descriptor with the given NAME (symbol) and FIELD-NAMES (list of symbols).\n\nExamples:\n  (make-record-type 'point '(x y))  => #<record-type:point>", ParamNames: []string{"name", "field-names"}, Category: "records"},
+			Doc: "Creates a new record type descriptor with the given NAME (symbol) and FIELD-NAMES (list of symbols).\n\nExamples:\n  (make-record-type 'point '(x y))  => #<record-type:point>", ParamNames: []string{"name", "field-names"}, Category: "records",
+			ParamTypes: []values.TypeConstraint{values.TypeSymbol, values.TypeList}},
 		{Name: "make-opaque-record-type", ParamCount: 2, Impl: PrimMakeOpaqueRecordType,
-			Doc: "Creates an opaque record type descriptor. Instances are hidden from record? and record-type.\n\nExamples:\n  (make-opaque-record-type 'stack '(items))  => #<type:stack>", ParamNames: []string{"name", "field-names"}, Category: "records"},
+			Doc: "Creates an opaque record type descriptor. Instances are hidden from record? and record-type.\n\nExamples:\n  (make-opaque-record-type 'stack '(items))  => #<type:stack>", ParamNames: []string{"name", "field-names"}, Category: "records",
+			ParamTypes: []values.TypeConstraint{values.TypeSymbol, values.TypeList}},
 		{Name: "record-type?", ParamCount: 1, Impl: PrimIsRecordType,
-			Doc: "Returns #t if OBJ is a record type descriptor.\n\nExamples:\n  (record-type? (make-record-type 'point '(x y)))  => #t\n  (record-type? 42)                                 => #f", ParamNames: []string{"obj"}, Category: "records"},
+			Doc: "Returns #t if OBJ is a record type descriptor.\n\nExamples:\n  (record-type? (make-record-type 'point '(x y)))  => #t\n  (record-type? 42)                                 => #f", ParamNames: []string{"obj"}, Category: "records",
+			ParamTypes: []values.TypeConstraint{values.TypeAny},
+			ReturnType: values.TypeBoolean},
 		{Name: "record?", ParamCount: 1, Impl: PrimIsRecord,
-			Doc: "Returns #t if OBJ is a record instance of a non-opaque record type. Returns #f for opaque record instances.\n\nExamples:\n  ; (define-record-type <point> (make-point x y) point? (x point-x) (y point-y))\n  ; (record? (make-point 1 2))  => #t", ParamNames: []string{"obj"}, Category: "records"},
+			Doc: "Returns #t if OBJ is a record instance of a non-opaque record type. Returns #f for opaque record instances.\n\nExamples:\n  ; (define-record-type <point> (make-point x y) point? (x point-x) (y point-y))\n  ; (record? (make-point 1 2))  => #t", ParamNames: []string{"obj"}, Category: "records",
+			ParamTypes: []values.TypeConstraint{values.TypeAny},
+			ReturnType: values.TypeBoolean},
 		{Name: "record-type", ParamCount: 1, Impl: PrimRecordType,
-			Doc: "Returns the record type descriptor of a record instance. Errors if the record's type is opaque.\n\nExamples:\n  ; (record-type my-record)  => #<record-type:point>", ParamNames: []string{"record"}, Category: "records"},
+			Doc: "Returns the record type descriptor of a record instance. Errors if the record's type is opaque.\n\nExamples:\n  ; (record-type my-record)  => #<record-type:point>", ParamNames: []string{"record"}, Category: "records",
+			ParamTypes: []values.TypeConstraint{values.TypeAny}},
 		{Name: "record-constructor", ParamCount: 2, Impl: PrimRecordConstructor,
-			Doc: "Returns a constructor procedure for RTD that initializes the fields named in FIELD-TAGS.\n\nExamples:\n  (let* ((rt (make-record-type 'point '(x y)))\n         (mk (record-constructor rt '(x y))))\n    (mk 3 4))  => #<record point>", ParamNames: []string{"rtd", "field-tags"}, Category: "records"},
+			Doc: "Returns a constructor procedure for RTD that initializes the fields named in FIELD-TAGS.\n\nExamples:\n  (let* ((rt (make-record-type 'point '(x y)))\n         (mk (record-constructor rt '(x y))))\n    (mk 3 4))  => #<record point>", ParamNames: []string{"rtd", "field-tags"}, Category: "records",
+			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeList},
+			ReturnType: values.TypeProcedure},
 		{Name: "record-predicate", ParamCount: 1, Impl: PrimRecordPredicate,
-			Doc: "Returns a predicate procedure that returns #t for instances of RTD.\n\nExamples:\n  (let* ((rt (make-record-type 'point '(x y)))\n         (point? (record-predicate rt)))\n    (point? 42))  => #f", ParamNames: []string{"rtd"}, Category: "records"},
+			Doc: "Returns a predicate procedure that returns #t for instances of RTD.\n\nExamples:\n  (let* ((rt (make-record-type 'point '(x y)))\n         (point? (record-predicate rt)))\n    (point? 42))  => #f", ParamNames: []string{"rtd"}, Category: "records",
+			ParamTypes: []values.TypeConstraint{values.TypeAny},
+			ReturnType: values.TypeProcedure},
 		{Name: "record-accessor", ParamCount: 2, Impl: PrimRecordAccessor,
-			Doc: "Returns an accessor procedure that retrieves FIELD-TAG from instances of RTD.\n\nExamples:\n  ; (let ((get-x (record-accessor rt 'x))) (get-x my-point))  => 3", ParamNames: []string{"rtd", "field-tag"}, Category: "records"},
+			Doc: "Returns an accessor procedure that retrieves FIELD-TAG from instances of RTD.\n\nExamples:\n  ; (let ((get-x (record-accessor rt 'x))) (get-x my-point))  => 3", ParamNames: []string{"rtd", "field-tag"}, Category: "records",
+			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeSymbol},
+			ReturnType: values.TypeProcedure},
 		{Name: "record-modifier", ParamCount: 2, Impl: PrimRecordModifier,
-			Doc: "Returns a modifier procedure that sets FIELD-TAG on instances of RTD.\n\nExamples:\n  ; (let ((set-x! (record-modifier rt 'x))) (set-x! my-point 10))", ParamNames: []string{"rtd", "field-tag"}, Category: "records"},
+			Doc: "Returns a modifier procedure that sets FIELD-TAG on instances of RTD.\n\nExamples:\n  ; (let ((set-x! (record-modifier rt 'x))) (set-x! my-point 10))", ParamNames: []string{"rtd", "field-tag"}, Category: "records",
+			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeSymbol},
+			ReturnType: values.TypeProcedure},
 	}, registry.PhaseRuntime)
 	return nil
 }
@@ -99,13 +118,18 @@ func addRecords(r *registry.Registry) error {
 func addPromises(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "promise?", ParamCount: 1, Impl: PrimPromiseQ,
-			Doc: "Returns #t if OBJ is a promise (created by delay, delay-force, or make-promise).\n\nExamples:\n  (promise? (delay 42))      => #t\n  (promise? (make-promise 1)) => #t\n  (promise? 42)              => #f", ParamNames: []string{"obj"}, Category: "promises"},
+			Doc: "Returns #t if OBJ is a promise (created by delay, delay-force, or make-promise).\n\nExamples:\n  (promise? (delay 42))      => #t\n  (promise? (make-promise 1)) => #t\n  (promise? 42)              => #f", ParamNames: []string{"obj"}, Category: "promises",
+			ParamTypes: []values.TypeConstraint{values.TypeAny},
+			ReturnType: values.TypeBoolean},
 		{Name: "make-promise", ParamCount: 1, Impl: PrimMakePromise,
-			Doc: "Returns an eager (already-forced) promise wrapping OBJ. If OBJ is already a promise, returns it unchanged.\n\nExamples:\n  (force (make-promise 42))  => 42", ParamNames: []string{"obj"}, Category: "promises"},
+			Doc: "Returns an eager (already-forced) promise wrapping OBJ. If OBJ is already a promise, returns it unchanged.\n\nExamples:\n  (force (make-promise 42))  => 42", ParamNames: []string{"obj"}, Category: "promises",
+			ParamTypes: []values.TypeConstraint{values.TypeAny}},
 		{Name: "force", ParamCount: 1, Impl: PrimForce,
-			Doc: "Forces evaluation of PROMISE and returns its memoized value. Non-promise arguments are returned unchanged.\n\nExamples:\n  (force (delay (+ 1 2)))  => 3\n  (force 42)              => 42", ParamNames: []string{"promise"}, Category: "promises"},
+			Doc: "Forces evaluation of PROMISE and returns its memoized value. Non-promise arguments are returned unchanged.\n\nExamples:\n  (force (delay (+ 1 2)))  => 3\n  (force 42)              => 42", ParamNames: []string{"promise"}, Category: "promises",
+			ParamTypes: []values.TypeConstraint{values.TypeAny}},
 		{Name: "%make-lazy-promise", ParamCount: 1, Impl: PrimMakeLazyPromise,
-			Doc: "Internal: creates a lazy promise from THUNK. Used by the delay macro.\n\nExamples:\n  ; (%make-lazy-promise (lambda () 42))  ; used internally by (delay 42)", ParamNames: []string{"thunk"}, Category: "promises"},
+			Doc: "Internal: creates a lazy promise from THUNK. Used by the delay macro.\n\nExamples:\n  ; (%make-lazy-promise (lambda () 42))  ; used internally by (delay 42)", ParamNames: []string{"thunk"}, Category: "promises",
+			ParamTypes: []values.TypeConstraint{values.TypeProcedure}},
 	}, registry.PhaseRuntime)
 	return nil
 }
@@ -113,17 +137,25 @@ func addPromises(r *registry.Registry) error {
 func addMoreStrings(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "string-copy!", ParamCount: 2, IsVariadic: true, Impl: PrimStringCopyTo,
-			Doc: "Copies characters from the from string into TO starting at position AT.\n\nExamples:\n  (let ((s (string-copy \"abcde\"))) (string-copy! s 1 \"xy\") s)  => \"axyde\"", ParamNames: []string{"to", "at"}, Category: "strings"},
+			Doc: "Copies characters from the from string into TO starting at position AT.\n\nExamples:\n  (let ((s (string-copy \"abcde\"))) (string-copy! s 1 \"xy\") s)  => \"axyde\"", ParamNames: []string{"to", "at"}, Category: "strings",
+			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeAny}},
 		{Name: "string-fill!", ParamCount: 2, IsVariadic: true, Impl: PrimStringFill,
-			Doc: "Fills STRING positions from start to end with CHAR. Start defaults to 0, end to STRING length.\n\nExamples:\n  (let ((s (string-copy \"hello\"))) (string-fill! s #\\x) s)  => \"xxxxx\"", ParamNames: []string{"string", "char"}, Category: "strings"},
+			Doc: "Fills STRING positions from start to end with CHAR. Start defaults to 0, end to STRING length.\n\nExamples:\n  (let ((s (string-copy \"hello\"))) (string-fill! s #\\x) s)  => \"xxxxx\"", ParamNames: []string{"string", "char"}, Category: "strings",
+			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeAny}},
 		{Name: "string-upcase", ParamCount: 1, Impl: PrimStringUpcase,
 			Doc: "Returns a new string with all characters converted to uppercase using full Unicode case mapping.\n\nExamples:\n  (string-upcase \"hello\")  => \"HELLO\"\n  (string-upcase \"straße\") => \"STRASSE\"", ParamNames: []string{"string"}, Category: "strings",
-			Keywords: []string{"uppercase", "toupper", "capitalize"}},
+			Keywords:   []string{"uppercase", "toupper", "capitalize"},
+			ParamTypes: []values.TypeConstraint{values.TypeString},
+			ReturnType: values.TypeString},
 		{Name: "string-downcase", ParamCount: 1, Impl: PrimStringDowncase,
 			Doc: "Returns a new string with all characters converted to lowercase using full Unicode case mapping.\n\nExamples:\n  (string-downcase \"HELLO\")  => \"hello\"", ParamNames: []string{"string"}, Category: "strings",
-			Keywords: []string{"lowercase", "tolower"}},
+			Keywords:   []string{"lowercase", "tolower"},
+			ParamTypes: []values.TypeConstraint{values.TypeString},
+			ReturnType: values.TypeString},
 		{Name: "string-foldcase", ParamCount: 1, Impl: PrimStringFoldcase,
-			Doc: "Returns a new string with full Unicode case folding applied. Useful for case-insensitive comparison.\n\nExamples:\n  (string-foldcase \"HELLO\")  => \"hello\"\n  (string-foldcase \"Straße\") => \"strasse\"", ParamNames: []string{"string"}, Category: "strings"},
+			Doc: "Returns a new string with full Unicode case folding applied. Useful for case-insensitive comparison.\n\nExamples:\n  (string-foldcase \"HELLO\")  => \"hello\"\n  (string-foldcase \"Straße\") => \"strasse\"", ParamNames: []string{"string"}, Category: "strings",
+			ParamTypes: []values.TypeConstraint{values.TypeString},
+			ReturnType: values.TypeString},
 	}, registry.PhaseRuntime)
 
 	// Case-insensitive string comparisons (generated from stringCiCompareSpecs table)
@@ -134,6 +166,8 @@ func addMoreStrings(r *registry.Registry) error {
 			Impl:       makeStringCiComparePrimitive(spec.name, spec.cmp),
 			Doc:        spec.doc,
 			ParamNames: []string{"s1", "s2"}, Category: "strings",
+			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeString},
+			ReturnType: values.TypeBoolean,
 		}
 	}
 	r.AddPrimitives(stringCiPrims, registry.PhaseRuntime)
@@ -149,6 +183,8 @@ func addMoreChars(r *registry.Registry) error {
 			Impl:       makeCharCiComparePrimitive(spec.name, spec.cmp),
 			Doc:        spec.doc,
 			ParamNames: []string{"c1", "c2"}, Category: "characters",
+			ParamTypes: []values.TypeConstraint{values.TypeCharacter, values.TypeCharacter},
+			ReturnType: values.TypeBoolean,
 		}
 	}
 	r.AddPrimitives(charCiPrims, registry.PhaseRuntime)
@@ -156,27 +192,44 @@ func addMoreChars(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "char-alphabetic?", ParamCount: 1, Impl: PrimCharAlphabeticQ,
 			Doc: "Returns #t if CHAR is a Unicode letter (Lu, Ll, Lt, Lm, Lo categories).\n\nExamples:\n  (char-alphabetic? #\\a)  => #t\n  (char-alphabetic? #\\1)  => #f", ParamNames: []string{"char"}, Category: "characters",
-			Keywords: []string{"letter", "alpha", "is-letter"}},
+			Keywords:   []string{"letter", "alpha", "is-letter"},
+			ParamTypes: []values.TypeConstraint{values.TypeCharacter},
+			ReturnType: values.TypeBoolean},
 		{Name: "char-numeric?", ParamCount: 1, Impl: PrimCharNumericQ,
 			Doc: "Returns #t if CHAR is a Unicode decimal digit.\n\nExamples:\n  (char-numeric? #\\5)  => #t\n  (char-numeric? #\\a)  => #f", ParamNames: []string{"char"}, Category: "characters",
-			Keywords: []string{"digit", "is-digit", "number character"}},
+			Keywords:   []string{"digit", "is-digit", "number character"},
+			ParamTypes: []values.TypeConstraint{values.TypeCharacter},
+			ReturnType: values.TypeBoolean},
 		{Name: "char-whitespace?", ParamCount: 1, Impl: PrimCharWhitespaceQ,
 			Doc: "Returns #t if CHAR is a Unicode whitespace character.\n\nExamples:\n  (char-whitespace? #\\space)  => #t\n  (char-whitespace? #\\a)      => #f", ParamNames: []string{"char"}, Category: "characters",
-			Keywords: []string{"space", "blank", "is-space"}},
+			Keywords:   []string{"space", "blank", "is-space"},
+			ParamTypes: []values.TypeConstraint{values.TypeCharacter},
+			ReturnType: values.TypeBoolean},
 		{Name: "char-upper-case?", ParamCount: 1, Impl: PrimCharUpperCaseQ,
-			Doc: "Returns #t if CHAR is an uppercase Unicode letter.\n\nExamples:\n  (char-upper-case? #\\A)  => #t\n  (char-upper-case? #\\a)  => #f", ParamNames: []string{"char"}, Category: "characters"},
+			Doc: "Returns #t if CHAR is an uppercase Unicode letter.\n\nExamples:\n  (char-upper-case? #\\A)  => #t\n  (char-upper-case? #\\a)  => #f", ParamNames: []string{"char"}, Category: "characters",
+			ParamTypes: []values.TypeConstraint{values.TypeCharacter},
+			ReturnType: values.TypeBoolean},
 		{Name: "char-lower-case?", ParamCount: 1, Impl: PrimCharLowerCaseQ,
-			Doc: "Returns #t if CHAR is a lowercase Unicode letter.\n\nExamples:\n  (char-lower-case? #\\a)  => #t\n  (char-lower-case? #\\A)  => #f", ParamNames: []string{"char"}, Category: "characters"},
+			Doc: "Returns #t if CHAR is a lowercase Unicode letter.\n\nExamples:\n  (char-lower-case? #\\a)  => #t\n  (char-lower-case? #\\A)  => #f", ParamNames: []string{"char"}, Category: "characters",
+			ParamTypes: []values.TypeConstraint{values.TypeCharacter},
+			ReturnType: values.TypeBoolean},
 		{Name: "char-upcase", ParamCount: 1, Impl: PrimCharUpcase,
 			Doc: "Returns the uppercase form of CHAR. Simple (1:1) Unicode case mapping.\n\nExamples:\n  (char-upcase #\\a)  => #\\A", ParamNames: []string{"char"}, Category: "characters",
-			Keywords: []string{"uppercase", "toupper"}},
+			Keywords:   []string{"uppercase", "toupper"},
+			ParamTypes: []values.TypeConstraint{values.TypeCharacter},
+			ReturnType: values.TypeCharacter},
 		{Name: "char-downcase", ParamCount: 1, Impl: PrimCharDowncase,
 			Doc: "Returns the lowercase form of CHAR. Simple (1:1) Unicode case mapping.\n\nExamples:\n  (char-downcase #\\A)  => #\\a", ParamNames: []string{"char"}, Category: "characters",
-			Keywords: []string{"lowercase", "tolower"}},
+			Keywords:   []string{"lowercase", "tolower"},
+			ParamTypes: []values.TypeConstraint{values.TypeCharacter},
+			ReturnType: values.TypeCharacter},
 		{Name: "char-foldcase", ParamCount: 1, Impl: PrimCharFoldcase,
-			Doc: "Returns the case-folded form of CHAR for case-insensitive comparison.\n\nExamples:\n  (char-foldcase #\\A)  => #\\a", ParamNames: []string{"char"}, Category: "characters"},
+			Doc: "Returns the case-folded form of CHAR for case-insensitive comparison.\n\nExamples:\n  (char-foldcase #\\A)  => #\\a", ParamNames: []string{"char"}, Category: "characters",
+			ParamTypes: []values.TypeConstraint{values.TypeCharacter},
+			ReturnType: values.TypeCharacter},
 		{Name: "digit-value", ParamCount: 1, Impl: PrimDigitValue,
-			Doc: "Returns the numeric value (0-9) of a Unicode decimal digit character, or #f if not a digit.\n\nExamples:\n  (digit-value #\\3)  => 3\n  (digit-value #\\a)  => #f", ParamNames: []string{"char"}, Category: "characters"},
+			Doc: "Returns the numeric value (0-9) of a Unicode decimal digit character, or #f if not a digit.\n\nExamples:\n  (digit-value #\\3)  => 3\n  (digit-value #\\a)  => #f", ParamNames: []string{"char"}, Category: "characters",
+			ParamTypes: []values.TypeConstraint{values.TypeCharacter}},
 	}, registry.PhaseRuntime)
 	return nil
 }
