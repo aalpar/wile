@@ -229,17 +229,10 @@ func addPorts(r *registry.Registry) error {
 			Keywords:   []string{"open-bytevector-input-port"},
 			ParamTypes: []values.TypeConstraint{values.TypeByteVector},
 			ReturnType: values.TypeBinaryInputPort},
-		// With no argument, constructs a fresh buffered bytevector output
-		// port. With one argument, PrimOpenOutputBytevector expects an
-		// existing output port and returns it unchanged — the doc/ParamNames
-		// previously labelled this as a "capacity hint," which did not match
-		// the implementation. Because the pass-through branch accepts any
-		// OutputPort (textual or binary), the return type is TypeAny, not
-		// TypeBinaryOutputPort.
-		{Name: "open-output-bytevector", ParamCount: 1, IsVariadic: true, Impl: PrimOpenOutputBytevector,
-			Doc: "Returns a binary output port that accumulates bytes. With an optional OUTPUT-PORT argument, returns that port unchanged (pass-through).\n\nExamples:\n  (let ((p (open-output-bytevector))) (write-u8 1 p) (get-output-bytevector p))  => #u8(1)", ParamNames: []string{"output-port"}, Category: "ports",
+		{Name: "open-output-bytevector", Impl: PrimOpenOutputBytevector,
+			Doc: "Returns a fresh binary output port that accumulates bytes for retrieval by get-output-bytevector.\n\nExamples:\n  (let ((p (open-output-bytevector))) (write-u8 1 p) (get-output-bytevector p))  => #u8(1)", Category: "ports",
 			Keywords:   []string{"open-bytevector-output-port"},
-			ParamTypes: []values.TypeConstraint{values.TypeOutputPort}, ReturnType: values.TypeAny},
+			ReturnType: values.TypeBinaryOutputPort},
 		{Name: "get-output-bytevector", ParamCount: 1, Impl: PrimGetOutputBytevector,
 			Doc: "Returns the accumulated bytes from an output bytevector port as a bytevector.\n\nExamples:\n  (let ((p (open-output-bytevector))) (write-u8 10 p) (write-u8 20 p) (get-output-bytevector p))  => #u8(10 20)", ParamNames: []string{"port"}, Category: "ports",
 			ParamTypes: []values.TypeConstraint{values.TypeOutputPort},
