@@ -22,6 +22,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/aalpar/wile/coverage"
 	"github.com/aalpar/wile/docparse"
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/parser"
@@ -64,6 +65,7 @@ type Engine struct {
 	maxStackSize        uint64
 	inlineThreshold     int
 	contractEnforcement bool // propagated to RegisterPrimitive via cfg
+	coverageCollector   *coverage.Collector
 
 	exportIndexMu    sync.Mutex
 	exportIndexBuilt bool
@@ -251,6 +253,7 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 		maxStackSize:        cfg.maxStackSize,
 		inlineThreshold:     cfg.inlineThreshold,
 		contractEnforcement: cfg.contractEnforcement,
+		coverageCollector:   cfg.coverageCollector,
 	}
 	return q, nil
 }
@@ -385,6 +388,7 @@ func (p *Engine) EvalIn(ctx context.Context, expr *Expression, ns *environment.N
 	if err != nil {
 		return nil, wrapCompilationError("expand/compile error", err)
 	}
+	trackTemplateTree(p.coverageCollector, tpl)
 
 	cc := &CompiledCode{template: tpl, env: env}
 	return p.runCompiled(ctx, cc)
@@ -712,6 +716,7 @@ func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*Comp
 	if err != nil {
 		return nil, wrapCompilationError("expand/compile error", err)
 	}
+	trackTemplateTree(p.coverageCollector, tpl)
 	return &CompiledCode{template: tpl, env: p.env}, nil
 }
 
@@ -826,6 +831,37 @@ func runBootstrapMacroStx(ctx context.Context, env *environment.EnvironmentFrame
 	mc := machine.AcquireTopLevelContext(ctx, tpl, env)
 	defer machine.ReleaseTopLevelContext(mc)
 	return mc.Run()
+}
+
+// trackTemplateTree registers tpl and every *machine.NativeTemplate
+// reachable via its literals pool with the given collector. Sub-templates
+// (lambda bodies, etc.) appear as *NativeTemplate values in each parent
+// template's literals pool; OpMakeClosure reads them from there at runtime.
+// BFS with a visited set cuts cycles (possible via self-referencing closures).
+func trackTemplateTree(col *coverage.Collector, root *machine.NativeTemplate) {
+	if col == nil || root == nil {
+		return
+	}
+	visited := make(map[*machine.NativeTemplate]bool)
+	queue := []*machine.NativeTemplate{root}
+	for len(queue) > 0 {
+		tpl := queue[0]
+		queue = queue[1:]
+		if visited[tpl] {
+			continue
+		}
+		visited[tpl] = true
+		col.Track(tpl)
+		for _, lit := range tpl.Literals() {
+			child, ok := lit.(*machine.NativeTemplate)
+			if !ok {
+				continue
+			}
+			if !visited[child] {
+				queue = append(queue, child)
+			}
+		}
+	}
 }
 
 // makeDocRegistrationObserver returns an import observer that scans each
