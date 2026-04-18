@@ -36,6 +36,19 @@ func newEngine(t *testing.T) *wile.Engine {
 	return engine
 }
 
+// newSandboxedEngine creates a Wile engine with envvars extension and a
+// virtual env map. Used to exercise the namespaceEnvMap branch in the
+// primitives instead of the os.LookupEnv branch.
+func newSandboxedEngine(t *testing.T, env map[string]string) *wile.Engine {
+	t.Helper()
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithExtension(envvars.Extension),
+		wile.WithEnvMap(env),
+	)
+	qt.Assert(t, err, qt.IsNil)
+	return engine
+}
+
 // runScheme runs Scheme code and returns the result.
 func runScheme(t *testing.T, engine *wile.Engine, code string) wile.Value {
 	t.Helper()
@@ -125,5 +138,88 @@ func TestGetEnvironmentVariables(t *testing.T) {
 
 	t.Run("wrong argument count", func(t *testing.T) {
 		runSchemeExpectError(t, engine, `(get-environment-variables 42)`)
+	})
+}
+
+// TestGetEnvironmentVariable_VirtualMap exercises the namespaceEnvMap branch
+// of PrimGetEnvironmentVariable. When the Namespace has a non-nil EnvMap,
+// lookups read from the virtual map and bypass os.LookupEnv (and the
+// authorizer gate that wraps it).
+func TestGetEnvironmentVariable_VirtualMap(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("hit returns mapped value", func(t *testing.T) {
+		engine := newSandboxedEngine(t, map[string]string{
+			"VIRT_KEY": "virt-value",
+		})
+		result := runScheme(t, engine, `(get-environment-variable "VIRT_KEY")`)
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewString("virt-value"))
+	})
+
+	t.Run("miss returns false even if process has it", func(t *testing.T) {
+		t.Setenv("VIRT_SHADOWED", "from-os")
+		engine := newSandboxedEngine(t, map[string]string{
+			"OTHER_KEY": "x",
+		})
+		result := runScheme(t, engine, `(get-environment-variable "VIRT_SHADOWED")`)
+		c.Assert(result.Internal(), qt.Equals, values.FalseValue)
+	})
+
+	t.Run("empty map yields no entries", func(t *testing.T) {
+		engine := newSandboxedEngine(t, map[string]string{})
+		result := runScheme(t, engine, `(get-environment-variable "ANYTHING")`)
+		c.Assert(result.Internal(), qt.Equals, values.FalseValue)
+	})
+}
+
+// TestGetEnvironmentVariables_VirtualMap exercises the namespaceEnvMap branch
+// of PrimGetEnvironmentVariables. The returned alist should reflect exactly
+// the virtual map's contents, ignoring the process environment.
+func TestGetEnvironmentVariables_VirtualMap(t *testing.T) {
+	c := qt.New(t)
+
+	t.Run("returns mapped entries", func(t *testing.T) {
+		engine := newSandboxedEngine(t, map[string]string{
+			"K1": "v1",
+			"K2": "v2",
+		})
+		// Build an alist length to verify both entries are present.
+		// Map iteration order is unspecified, so check membership via lookup.
+		result := runScheme(t, engine, `(length (get-environment-variables))`)
+		c.Assert(result.SchemeString(), qt.Equals, "2")
+
+		result = runScheme(t, engine, `
+			(let ((vars (get-environment-variables)))
+			  (cdr (assoc "K1" vars)))
+		`)
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewString("v1"))
+
+		result = runScheme(t, engine, `
+			(let ((vars (get-environment-variables)))
+			  (cdr (assoc "K2" vars)))
+		`)
+		c.Assert(result.Internal(), valuestest.SchemeEquals, values.NewString("v2"))
+	})
+
+	t.Run("empty map returns empty list", func(t *testing.T) {
+		engine := newSandboxedEngine(t, map[string]string{})
+		result := runScheme(t, engine, `(get-environment-variables)`)
+		c.Assert(result.Internal(), qt.Equals, values.EmptyList)
+	})
+
+	t.Run("ignores process environment", func(t *testing.T) {
+		t.Setenv("VIRT_NOT_INCLUDED", "from-os")
+		engine := newSandboxedEngine(t, map[string]string{
+			"ONLY_VIRT": "yes",
+		})
+		// VIRT_NOT_INCLUDED must not appear in the returned alist.
+		result := runScheme(t, engine, `
+			(let loop ((vars (get-environment-variables)))
+			  (cond
+			    ((null? vars) #f)
+			    ((string=? (car (car vars)) "VIRT_NOT_INCLUDED") #t)
+			    (else (loop (cdr vars)))))
+		`)
+		c.Assert(result.Internal(), qt.Equals, values.FalseValue)
 	})
 }

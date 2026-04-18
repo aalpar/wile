@@ -485,6 +485,13 @@ func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 // explicitly. The registry itself is a shared pointer; mutations to the registry
 // (e.g., registering a new library) are visible to both parent and child.
 //
+// The child also inherits the parent's envMap (virtual environment variable
+// map) by reference. envMap is capability state — it constrains what the
+// envvars primitives can read — so derived namespaces must not silently
+// widen capability by acquiring a nil map that falls through to os.Getenv.
+// The reference is safe to share because SetEnvMap always reassigns the
+// field rather than mutating the existing map.
+//
 // # Contrast with NewChildRuntime
 //
 // NewChildRuntime returns an *EnvironmentFrame that shares the parent's
@@ -533,6 +540,7 @@ func (p *Namespace) NewChildNamespace() *Namespace {
 		libraryEnvFactory: p.libraryEnvFactory,
 		registry:          p.registry,
 		authorizer:        p.authorizer,
+		envMap:            p.envMap,
 		parent:            p,
 	}
 	initRuntimeFrame(q, newGlobalEnvironmentFrameForNamespace(q))
@@ -553,6 +561,7 @@ func (p *Namespace) NewSchemeReportNamespace() *Namespace {
 		libraryEnvFactory: p.libraryEnvFactory,
 		registry:          p.registry,
 		authorizer:        p.authorizer,
+		envMap:            p.envMap,
 		parent:            p,
 	}
 

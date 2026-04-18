@@ -1086,8 +1086,10 @@ func TestWithProfile_Console(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "2")
 
-	// Privileged primitives from extensions absent in Console compile fine
-	// (files IS in Console) but fail at runtime when outside /tmp.
+	// Primitives from extensions NOT included in Console (e.g. eval) are
+	// rejected at compile time because the binding is absent from the
+	// namespace. Runtime-gated primitives (like file ops outside /tmp)
+	// would fail later via the authorizer; this case fails earlier.
 	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(eval '(+ 1 2))`))
 	var compErr *CompilationError
 	c.Assert(errors.As(err, &compErr), qt.IsTrue,

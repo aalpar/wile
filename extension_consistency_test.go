@@ -46,7 +46,7 @@ func TestExtensionListConsistency(t *testing.T) {
 
 	// Every extension must produce a (wile <name>) library.
 	// If this list needs updating, both KitchenSink.extensions() in profile.go
-	// and allExtensions in internal/bootstrap/environment_tiny.go must be updated
+	// and allExtensions in internal/bootstrap/bootstrap.go must be updated
 	// together.
 	expected := []string{
 		"io", "files", "math", "introspection", "eval",
