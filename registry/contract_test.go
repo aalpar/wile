@@ -33,13 +33,13 @@ type stubCallContext struct {
 	args []values.Value
 }
 
-func (p *stubCallContext) Arg(i int) values.Value                              { return p.args[i] }
-func (p *stubCallContext) SetValue(values.Value)                               {}
-func (p *stubCallContext) SetValues(...values.Value)                           {}
-func (p *stubCallContext) Authorizer() security.Authorizer                     { return nil }
-func (p *stubCallContext) Context() context.Context                            { return context.Background() }
-func (p *stubCallContext) EnvironmentFrame() *environment.EnvironmentFrame     { return nil }
-func (p *stubCallContext) Thread() *values.Thread                              { return nil }
+func (p *stubCallContext) Arg(i int) values.Value                          { return p.args[i] }
+func (p *stubCallContext) SetValue(values.Value)                           {}
+func (p *stubCallContext) SetValues(...values.Value)                       {}
+func (p *stubCallContext) Authorizer() security.Authorizer                 { return nil }
+func (p *stubCallContext) Context() context.Context                        { return context.Background() }
+func (p *stubCallContext) EnvironmentFrame() *environment.EnvironmentFrame { return nil }
+func (p *stubCallContext) Thread() *values.Thread                          { return nil }
 
 // Compile-time assertion: stubCallContext satisfies CallContext.
 var _ machine.CallContext = (*stubCallContext)(nil)
