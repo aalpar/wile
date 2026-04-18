@@ -21,18 +21,24 @@ import (
 
 func addReflection(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
+		// procedure-arity returns a pair for ordinary closures, a list of
+		// pairs for case-lambda, an integer for composable continuations,
+		// and #f for callables with unknown arity — TypeAny covers the union.
 		{Name: "procedure-arity", ParamCount: 1, Impl: PrimProcedureArity,
 			Doc: "Returns a pair (count . variadic?) describing PROC's arity. Count is the number of required parameters.\n\nExamples:\n  (procedure-arity car)   => (1 . #f)\n  (procedure-arity +)     => (0 . #t)", ParamNames: []string{"proc"}, Category: "reflection",
-			ParamTypes: []values.TypeConstraint{values.TypeProcedure}},
+			ParamTypes: []values.TypeConstraint{values.TypeProcedure}, ReturnType: values.TypeAny},
+		// procedure-name, procedure-source-location, procedure-bound-symbols
+		// return a string/list or #f when unavailable — TypeAny covers the
+		// union.
 		{Name: "procedure-name", ParamCount: 1, Impl: PrimProcedureName,
 			Doc: "Returns the name of PROC as a string, or #f if anonymous.\n\nExamples:\n  (procedure-name car)              => \"car\"\n  (procedure-name (lambda (x) x))  => #f", ParamNames: []string{"proc"}, Category: "reflection",
-			ParamTypes: []values.TypeConstraint{values.TypeProcedure}},
+			ParamTypes: []values.TypeConstraint{values.TypeProcedure}, ReturnType: values.TypeAny},
 		{Name: "procedure-source-location", ParamCount: 1, Impl: PrimProcedureSourceLocation,
 			Doc: "Returns a list (file line column) for PROC's definition site, or #f if unavailable.\n\nExamples:\n  (procedure-source-location car)  => #f  ; foreign procedure", ParamNames: []string{"proc"}, Category: "reflection",
-			ParamTypes: []values.TypeConstraint{values.TypeProcedure}},
+			ParamTypes: []values.TypeConstraint{values.TypeProcedure}, ReturnType: values.TypeAny},
 		{Name: "procedure-bound-symbols", ParamCount: 1, Impl: PrimProcedureBoundSymbols,
 			Doc: "Returns the list of symbols bound in PROC's captured environment, or #f for foreign procedures.\n\nExamples:\n  (procedure-bound-symbols car)  => #f  ; foreign procedure", ParamNames: []string{"proc"}, Category: "reflection",
-			ParamTypes: []values.TypeConstraint{values.TypeProcedure}},
+			ParamTypes: []values.TypeConstraint{values.TypeProcedure}, ReturnType: values.TypeAny},
 		{Name: "procedure-type", ParamCount: 1, Impl: PrimProcedureType,
 			Doc: "Returns a symbol classifying PROC: closure, foreign, case-lambda, parameter, or continuation.\n\nExamples:\n  (procedure-type car)              => foreign\n  (procedure-type (lambda (x) x))  => closure", ParamNames: []string{"proc"}, Category: "reflection",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure}, ReturnType: values.TypeSymbol},

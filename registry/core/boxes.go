@@ -21,15 +21,17 @@ import (
 
 func addBoxes(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
+		// box/unbox use TypeAny for both param and return since there is no
+		// TypeBox enum entry. The impl checks the concrete Box type.
 		{Name: "box", ParamCount: 1, Impl: PrimBox,
 			Doc: "Returns a new mutable box containing OBJ. Boxes are single-element mutable containers.\n\nExamples:\n  (unbox (box 42))       => 42", ParamNames: []string{"obj"}, Category: "boxes",
-			ParamTypes: []values.TypeConstraint{values.TypeAny}},
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "box?", ParamCount: 1, Impl: PrimBoxQ,
 			Doc: "Returns #t if OBJ is a box created by box.\n\nExamples:\n  (box? (box 1))         => #t\n  (box? 42)              => #f", ParamNames: []string{"obj"}, Category: "boxes",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
 		{Name: "unbox", ParamCount: 1, Impl: PrimUnbox,
 			Doc: "Returns the current value stored in BOX. Raises an error if the argument is not a box.\n\nExamples:\n  (unbox (box 42))       => 42", ParamNames: []string{"box"}, Category: "boxes",
-			ParamTypes: []values.TypeConstraint{values.TypeAny}},
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "set-box!", ParamCount: 2, Impl: PrimSetBox,
 			Doc: "Replaces the contents of BOX with OBJ.\n\nExamples:\n  (let ((b (box 1))) (set-box! b 2) (unbox b))  => 2", ParamNames: []string{"box", "obj"}, Category: "boxes",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}, ReturnType: values.TypeVoid},

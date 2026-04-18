@@ -25,12 +25,14 @@ func addSyntax(r *registry.Registry) error {
 		{Name: "identifier?", ParamCount: 1, Impl: PrimIdentifierQ,
 			Doc: "Returns #t if OBJ is a syntax object wrapping a symbol (an identifier).\n\nExamples:\n  ;; Used inside syntax-case transformers:\n  ;; (identifier? #'foo)  => #t", ParamNames: []string{"obj"}, Category: "syntax",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
+		// Syntax objects have no dedicated ValueType enum; annotate datum
+		// accessors/constructors as TypeAny.
 		{Name: "syntax->datum", ParamCount: 1, Impl: PrimSyntaxToDatum,
 			Doc: "Recursively strips all syntax information from STX, returning the underlying datum (symbols, pairs, etc.).\n\nExamples:\n  ;; (syntax->datum #'(+ 1 2))  => (+ 1 2)", ParamNames: []string{"stx"}, Category: "syntax",
-			ParamTypes: []values.TypeConstraint{values.TypeAny}},
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "datum->syntax", ParamCount: 2, Impl: PrimDatumToSyntax,
 			Doc: "Wraps DATUM as a syntax object inheriting lexical context (scopes) from TEMPLATE-ID.\n\nExamples:\n  ;; (datum->syntax #'here 'my-var)  => syntax object for my-var", ParamNames: []string{"template-id", "datum"}, Category: "syntax",
-			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}},
+			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "generate-temporaries", ParamCount: 1, Impl: PrimGenerateTemporaries,
 			Doc: "Returns a list of unique temporary identifiers, one per element in STX-LIST. Used in syntax-case macros.\n\nExamples:\n  ;; (length (generate-temporaries '(a b c)))  => 3", ParamNames: []string{"stx-list"}, Category: "syntax",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeList},

@@ -34,7 +34,8 @@ var AddToRegistry = Builder.AddToRegistry
 func addPrimitives(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "interaction-environment", Impl: PrimInteractionEnvironment,
-			Doc: "Returns the current top-level interaction environment as an environment object.", Category: "introspection"},
+			Doc: "Returns the current top-level interaction environment as an environment object.", Category: "introspection",
+			ReturnType: values.TypeAny},
 		{Name: "environment?", ParamCount: 1, Impl: PrimEnvironmentQ,
 			Doc: "Returns #t if OBJ is an environment object (created by environment, scheme-report-environment, etc.).", ParamNames: []string{"obj"}, Category: "introspection",
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
@@ -48,7 +49,7 @@ func addPrimitives(r *registry.Registry) error {
 			ReturnType: values.TypeList},
 		{Name: "environment-ref", ParamCount: 2, Impl: PrimEnvironmentRef,
 			Doc: "Returns the value bound to SYMBOL in ENV. Raises an error if unbound.", ParamNames: []string{"env", "symbol"}, Category: "introspection",
-			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeSymbol}},
+			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeSymbol}, ReturnType: values.TypeAny},
 		{Name: "environment-bound?", ParamCount: 2, Impl: PrimEnvironmentBoundQ,
 			Doc: "Returns #t if SYMBOL has a binding in ENV.", ParamNames: []string{"env", "symbol"}, Category: "introspection",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeSymbol},

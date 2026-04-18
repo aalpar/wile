@@ -179,21 +179,12 @@ func PrimOpenInputBytevector(mc machine.CallContext) error {
 	return nil
 }
 
-// PrimOpenOutputBytevector implements the Scheme open-output-bytevector primitive.
+// PrimOpenOutputBytevector implements the Scheme open-output-bytevector
+// primitive. Per R7RS §6.13.2 it takes no arguments and returns a fresh
+// binary output port that accumulates bytes for retrieval by
+// get-output-bytevector.
 func PrimOpenOutputBytevector(mc machine.CallContext) error {
-	tup, ok := mc.Arg(0).(values.Tuple)
-	if ok && tup.Length() > 1 {
-		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "open-output-bytevector: expected one or zero arguments but got %d", tup.Length())
-	}
-	if tup.Length() == 0 {
-		mc.SetValue(values.NewByteVectorBufferedOutputPort())
-		return nil
-	}
-	bvec, ok := tup.Car().(values.OutputPort)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAnOutputPort, "open-output-bytevector: expected an output port but got %T", tup.Car())
-	}
-	mc.SetValue(bvec)
+	mc.SetValue(values.NewByteVectorBufferedOutputPort())
 	return nil
 }
 

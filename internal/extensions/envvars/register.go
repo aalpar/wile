@@ -35,7 +35,7 @@ func addPrimitives(r *registry.Registry) error {
 		{Name: "get-environment-variable", ParamCount: 1, Impl: PrimGetEnvironmentVariable,
 			Doc: "Returns the value of the named environment variable as a string, or #f if not set.", ParamNames: []string{"name"}, Category: "envvars",
 			Keywords:   []string{"getenv", "env var", "environment lookup"},
-			ParamTypes: []values.TypeConstraint{values.TypeString}},
+			ParamTypes: []values.TypeConstraint{values.TypeString}, ReturnType: values.TypeAny},
 		{Name: "get-environment-variables", Impl: PrimGetEnvironmentVariables,
 			Doc: "Returns all environment variables as an association list of (name . value) pairs.", Category: "envvars",
 			Keywords:   []string{"environ", "env vars", "all environment"},
