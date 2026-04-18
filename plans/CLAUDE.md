@@ -68,6 +68,12 @@ Moved to **Completed Plans** below.
 | `2026-04-16-recurrence-categories-design.md` | Set closure, graph reachability, matrix ops benchmark categories | **Design only** -- no implementation started; matrix_ops blocked on `(wile algebra matrix)` |
 | `2026-04-16-recurrence-impl-plan.md` | 5-task impl for set_closure + graph_reachability generators | **0/5 tasks** -- generate.py unchanged |
 
+### MCP Server
+
+| File | Contents | Status |
+|------|----------|--------|
+| `2026-04-17-mcp-server-sota-design.md` | Bring `cmd/wile/mcp.go` to current MCP best-practices: progress notifications, doc/rationale polish, opt-in streamable-HTTP transport, elicitation capability | **Proposed** -- 5 phases, not started |
+
 ### Tech Debt
 
 | File | Contents | Status |
