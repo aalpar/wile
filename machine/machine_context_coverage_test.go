@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/environment"
+
 	qt "github.com/frankban/quicktest"
 )
 
