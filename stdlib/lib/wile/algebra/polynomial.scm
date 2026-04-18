@@ -232,7 +232,7 @@
 ;; is R[x][y], i.e., bivariate polynomials.
 
 (define (polynomial-ring R)
-  "Construct the ring of polynomials over coefficient ring R.\nElements of the resulting ring are <polynomial> records whose\ncoefficients live in R. Since the result is itself a ring,\niteration gives multivariate polynomial rings:\n(polynomial-ring (polynomial-ring R)) is R[x][y].\n\nExamples:\n  (let ((PR (polynomial-ring (integer-ring))))\n    (ring? PR))  => #t\n  (let* ((PR (polynomial-ring (integer-ring)))\n         (p  (make-poly (integer-ring) '(1 2))))\n    (poly-coeffs (ring-plus PR p p)))  => (2 4)\n\nParameters:\n  R : any\nReturns: any\nCategory: algebra\nKeywords: polynomial ring, R[x], formal power series ring, coefficient ring, multivariate recursion\n\nSee also: `make-poly', `make-ring'."
+  "Construct the ring of polynomials over coefficient ring R.\nElements of the resulting ring are <polynomial> records whose\ncoefficients live in R. Since the result is itself a ring,\niteration gives multivariate polynomial rings:\n(polynomial-ring (polynomial-ring R)) is R[x][y].\n\nExamples:\n  (let ((PR (polynomial-ring (integer-ring))))\n    (ring? PR))  => #t\n  (let* ((R  (integer-ring))\n         (PR (polynomial-ring R))\n         (p  (make-poly R '(1 2))))\n    (poly-coeffs (ring-plus PR p p)))  => (2 4)\n\nParameters:\n  R : any\nReturns: any\nCategory: algebra\nKeywords: polynomial ring, R[x], formal power series ring, coefficient ring, multivariate recursion\n\nSee also: `make-poly', `make-ring'."
   (make-ring
     poly-plus
     poly-times

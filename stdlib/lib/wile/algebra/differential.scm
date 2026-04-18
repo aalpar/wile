@@ -75,7 +75,7 @@
 ;; ─── Polynomial derivation ──────────────────
 
 (define (polynomial-derivation R)
-  "Construct a differential ring of polynomials over ring R.\nElements are <polynomial> records (see (wile algebra polynomial)).\nThe underlying ring is (polynomial-ring R); the derivation is the\nformal derivative poly-derivative.\n\nExamples:\n  (let* ((D (polynomial-derivation (integer-ring)))\n         (p (make-poly (integer-ring) '(3 2 1))))\n    (poly-coeffs (differential-deriv D p)))  => (2 2)\n\nParameters:\n  R : any\nReturns: any\nCategory: algebra\nKeywords: polynomial, formal derivative, differential ring, polynomial derivation\n\nSee also: `dual-number-ring', `make-differential-ring', `polynomial-ring'."
+  "Construct a differential ring of polynomials over ring R.\nElements are <polynomial> records (see (wile algebra polynomial)).\nThe underlying ring is (polynomial-ring R); the derivation is the\nformal derivative poly-derivative.\n\nExamples:\n  (let* ((R (integer-ring))\n         (D (polynomial-derivation R))\n         (p (make-poly R '(3 2 1))))\n    (poly-coeffs (differential-deriv D p)))  => (2 2)\n\nParameters:\n  R : any\nReturns: any\nCategory: algebra\nKeywords: polynomial, formal derivative, differential ring, polynomial derivation\n\nSee also: `dual-number-ring', `make-differential-ring', `polynomial-ring'."
   (make-differential-ring (polynomial-ring R) poly-derivative))
 
 ;; ─── Differential ring validation ───────────
