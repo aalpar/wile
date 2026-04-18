@@ -36,7 +36,7 @@ func TestEngine_LoadedLibraries_Empty(t *testing.T) {
 func TestEngine_LoadedLibraries_AfterImport(t *testing.T) {
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithLibraryPaths("."),
 	)
@@ -72,7 +72,7 @@ func TestEngine_LookupLibrary_NotFound(t *testing.T) {
 func TestEngine_LookupLibrary_Found(t *testing.T) {
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithLibraryPaths("."),
 	)
@@ -90,7 +90,7 @@ func TestEngine_LookupLibrary_Found(t *testing.T) {
 func TestEngine_UnloadedLibraries(t *testing.T) {
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithLibraryPaths("."),
 	)
@@ -110,7 +110,7 @@ func TestEngine_UnloadedLibraries(t *testing.T) {
 func TestEngine_UnloadedLibraries_StoresExportIndexOnNamespace(t *testing.T) {
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithLibraryPaths("."),
 	)
@@ -135,7 +135,7 @@ func TestEngine_UnloadedLibraries_StoresExportIndexOnNamespace(t *testing.T) {
 func TestEngine_AproposFindsUnloadedExports(t *testing.T) {
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithLibraryPaths("."),
 	)

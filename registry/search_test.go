@@ -194,7 +194,7 @@ func TestSearchDoc_DocEntryKeywordsParsed(t *testing.T) {
 func TestSearchDoc_EnvironmentBindings(t *testing.T) {
 	c := qt.New(t)
 	// bootstrap creates an environment with core primitives (car, cdr, cons, etc.)
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	reg, ok := env.Namespace().Registry().(*registry.Registry)
@@ -213,7 +213,7 @@ func TestSearchDoc_EnvironmentBindings(t *testing.T) {
 
 func TestSearchDoc_CoreKeywordsDiscovery(t *testing.T) {
 	c := qt.New(t)
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	reg, ok := env.Namespace().Registry().(*registry.Registry)
@@ -291,7 +291,7 @@ func TestSearchDoc_EnvironmentBindingKeywordsFromValue(t *testing.T) {
 	// Create an environment with a ForeignClosure whose Doc() contains Keywords.
 	// This simulates Scheme-defined closures imported from a library: the binding
 	// itself has no doc, but the closure value carries a structured docstring.
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	c.Assert(err, qt.IsNil)
 
 	reg, ok := env.Namespace().Registry().(*registry.Registry)

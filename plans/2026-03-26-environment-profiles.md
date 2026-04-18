@@ -15,7 +15,7 @@ configurations — from Go or from Scheme.
 
 ## Design
 
-Four named **profiles** define which extensions are loaded and what authorization
+Five named **profiles** define which extensions are loaded and what authorization
 constraints apply. An orthogonal **sandbox** modifier restricts authority on any
 profile. A **virtual environment map** provides capability-oriented configuration
 without leaking host state.
@@ -23,17 +23,24 @@ without leaking host state.
 ### Profiles
 
 ```
-Tiny  <  Console  <  Small  <  KitchenSink
+Tiny  <  Console  <  ConsoleWithLoad  <  Small  <  KitchenSink
 ```
 
-| Profile     | Extensions                                                        | Authorizer               |
-|-------------|-------------------------------------------------------------------|--------------------------|
-| Tiny        | *(core only)*                                                     | nil                      |
-| Console     | io, files, math, envvars, all-safe                                | /tmp-only file, deny code/process |
-| Small       | io, files, math, introspection, eval, envvars, all, system        | nil                      |
-| KitchenSink | io, files, math, introspection, eval, namespace, threads, gointerop, envvars, all, system, process | nil |
+| Profile         | Extensions                                                        | Authorizer                                              |
+|-----------------|-------------------------------------------------------------------|---------------------------------------------------------|
+| Tiny            | *(core only)*                                                     | nil                                                     |
+| Console         | io, files, math, envvars, all-safe                                | /tmp-only file, deny code/process                       |
+| ConsoleWithLoad | io, files, math, envvars, all-safe, eval                          | /tmp-only file, /tmp-only code load, deny process       |
+| Small           | io, files, math, introspection, eval, envvars, all, system        | nil                                                     |
+| KitchenSink     | io, files, math, introspection, eval, namespace, threads, gointerop, envvars, all, system, process | nil                            |
 
 Tiny is the LCD of all profiles — every profile is a superset of Tiny.
+
+`ConsoleWithLoad` codifies the embedder composition pattern (Console plus
+`eval.Extension`) for callers that want sandboxed `(eval ...)` and `(load ...)`.
+It is not a strict capability ladder above Console — it widens authority to
+include `code:load` under `/tmp` — but its security envelope is still bounded
+to `/tmp`. wile-goast and similar embedders are the primary consumers.
 
 ### Profile Type
 
@@ -43,10 +50,11 @@ Tiny is the LCD of all profiles — every profile is a superset of Tiny.
 type Profile int
 
 const (
-    Tiny        Profile = iota // core only, pure computation
-    Console                    // core + I/O + /tmp sandbox
-    Small                      // R7RS-small complete
-    KitchenSink                // every extension
+    Tiny            Profile = iota // core only, pure computation
+    Console                        // core + I/O + /tmp sandbox
+    ConsoleWithLoad                // Console + eval/load, sandboxed to /tmp
+    Small                          // R7RS-small complete
+    KitchenSink                    // every extension
 )
 
 func WithProfile(p Profile) EngineOption { ... }
@@ -93,6 +101,26 @@ Console bakes in its own authorizer as part of the profile definition:
 Standard ports (stdin/stdout/stderr) bypass the authorizer — they are pre-created
 `Parameter` objects in the `io` extension, not opened via file primitives.
 
+### ConsoleWithLoad Authorizer
+
+ConsoleWithLoad mirrors Console for files and env, but allows `code:load`
+within the same `/tmp` envelope. Loading code outside `/tmp` is denied — the
+`/tmp` boundary is the entire security envelope.
+
+| Resource  | Action   | Decision                                      |
+|-----------|----------|-----------------------------------------------|
+| `file`    | `read`   | Allow if path under `/tmp`, deny otherwise    |
+| `file`    | `write`  | Allow if path under `/tmp`, deny otherwise    |
+| `file`    | `delete` | Allow if path under `/tmp`, deny otherwise    |
+| `env`     | `read`   | Allow (virtual map only, no OS fallthrough)   |
+| `code`    | `load`   | Allow if path under `/tmp`, deny otherwise    |
+| `process` | `*`      | Deny                                          |
+
+This is the security model wile-goast and similar embedders need: an engine
+that can `(eval ...)` arbitrary expressions and `(load ...)` Scheme files
+the embedder has staged into `/tmp`, without granting access to the broader
+filesystem or process execution.
+
 ### Virtual Environment Map
 
 Environment variables are ambient authority. For sandboxed profiles, the Go
@@ -133,10 +161,11 @@ it; otherwise fall through to `os.Getenv` (subject to authorizer).
 Extend `(environment ...)` to recognize profile specifiers:
 
 ```scheme
-(environment '(wile tiny))           ; pure computation
-(environment '(wile console))        ; I/O + /tmp sandbox
-(environment '(wile small))          ; R7RS-small
-(environment '(wile kitchen-sink))   ; everything
+(environment '(wile tiny))                ; pure computation
+(environment '(wile console))             ; I/O + /tmp sandbox
+(environment '(wile console-with-load))   ; Console + sandboxed eval/load
+(environment '(wile small))               ; R7RS-small
+(environment '(wile kitchen-sink))        ; everything
 ```
 
 These construct a new environment with the profile's extension set. The new
@@ -158,7 +187,7 @@ extension set.
 | Symbol | Location | Purpose |
 |--------|----------|---------|
 | `Profile` | `profile.go` | Named environment configuration type |
-| `Tiny`, `Console`, `Small`, `KitchenSink` | `profile.go` | Profile constants |
+| `Tiny`, `Console`, `ConsoleWithLoad`, `Small`, `KitchenSink` | `profile.go` | Profile constants |
 | `WithProfile(Profile)` | `profile.go` | Engine option |
 | `WithSandbox(...SandboxOption)` | `sandbox.go` | Orthogonal security modifier |
 | `SandboxOption` | `sandbox.go` | Sandbox configuration type |
@@ -192,6 +221,7 @@ extension set.
 | `profile.go` | `Profile` type, constants, `WithProfile()`, profile-to-extensions mapping |
 | `sandbox.go` | `WithSandbox()`, `SandboxOption`, `SandboxEnvPrefix()` |
 | `security/console_authorizer.go` | Console /tmp + virtual-env-only authorizer |
+| `security/console_with_load_authorizer.go` | ConsoleWithLoad /tmp file + /tmp code-load authorizer |
 | `security/sandbox_authorizer.go` | Configurable sandbox authorizer |
 | `internal/extensions/envvars/` | `get-environment-variable`, `get-environment-variables` |
 
@@ -228,6 +258,12 @@ eng, _ := wile.NewEngine(ctx,
     wile.WithEnv("APP_MODE", "production"),
 )
 
+// ConsoleWithLoad: Console + sandboxed eval/load (wile-goast pattern)
+eng, _ := wile.NewEngine(ctx,
+    wile.WithProfile(wile.ConsoleWithLoad),
+    wile.WithEnv("APP_MODE", "production"),
+)
+
 // Small: full R7RS-small
 eng, _ := wile.NewEngine(ctx, wile.WithProfile(wile.Small))
 
@@ -257,3 +293,9 @@ eng, _ := wile.NewEngine(ctx,
 6. **`environment_tiny` renamed** — historical name no longer accurate
 7. **envvars split from system** — environment variables are configuration, not system interface
 8. **v1.x, zero consumers** — delete old API outright, no deprecation ceremony
+9. **`ConsoleWithLoad` is a baked profile, not just a composition pattern** — wile-goast
+   needs `Console + eval.Extension` with an authorizer that allows `code:load` under
+   `/tmp`. The authorizer change (not the extension list) is what makes this distinct;
+   `WithProfile(Console) + WithExtension(eval.Extension)` would still have `code:load`
+   denied by `ConsoleAuthorizer`. Encoding the (extensions, authorizer) pair as one
+   profile keeps the security envelope coherent and discoverable.

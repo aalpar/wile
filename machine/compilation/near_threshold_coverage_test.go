@@ -33,7 +33,7 @@ func TestCondExpandCompoundRequirements(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{
 		// library requirement -- exercises the (library ...) parsing/evaluation branch.
 		// library requirement — exercises the (library ...) parsing/evaluation
-		// branch. RunSchemeCode uses NewNamespaceFrameTiny which has no library
+		// branch. RunSchemeCode uses NewNamespaceFrame which has no library
 		// registry, so all (library ...) checks return false regardless of name.
 		// This is intentionally testing the "no registry" fallback path.
 		{

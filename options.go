@@ -16,19 +16,9 @@ package wile
 
 import (
 	"io/fs"
+	"maps"
 
 	"github.com/aalpar/wile/environment"
-	"github.com/aalpar/wile/extensions/files"
-	"github.com/aalpar/wile/extensions/gointerop"
-	"github.com/aalpar/wile/extensions/introspection"
-	"github.com/aalpar/wile/extensions/math"
-	"github.com/aalpar/wile/extensions/process"
-	"github.com/aalpar/wile/extensions/system"
-	"github.com/aalpar/wile/extensions/threads"
-	"github.com/aalpar/wile/internal/extensions/all"
-	exteval "github.com/aalpar/wile/internal/extensions/eval"
-	"github.com/aalpar/wile/internal/extensions/io"
-	nsext "github.com/aalpar/wile/internal/extensions/namespace"
 	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/security"
@@ -60,6 +50,7 @@ type engineConfig struct {
 	authorizer         security.Authorizer
 	namespace          *environment.Namespace // pre-built namespace (via WithNamespace)
 	resolverFactories  []resolverFactory      // source file resolver chain (via WithSourceFS, WithSourceOS)
+	envMap             map[string]string      // virtual env vars (via WithEnv, WithEnvMap)
 }
 
 // resolverFactory creates a FileResolver given the runtime environment.
@@ -248,104 +239,36 @@ func WithSourceOS() EngineOption {
 	}
 }
 
-// SafeExtensions returns engine options that add extensions suitable for
-// sandboxed engines: io, exceptions, math, introspection, and the safe
-// subset of all (records, promises, strings, characters).
-//
-// These provide R7RS functionality without filesystem, eval, system, Go
-// interop, or threading access. Core primitives are still added by default
-// unless WithoutCore is also used.
-//
-// Principle of Least Authority (Saltzer & Schroeder 1975).
-//
-//	authority(engine) = ∪ { caps(ext) : ext ∈ extensions }
-//
-//	SafeExtensions() ⊂ AllExtensions() — the safe set excludes
-//	filesystem, eval, system, Go interop, and threading capabilities.
-//	WithoutCore() produces authority(engine) = ∅.
-//
-//	Invariant: absent capabilities produce compile-time errors, not
-//	  runtime checks. If a name has no binding, compilation fails.
-//	  No runtime check can be bypassed because no runtime check exists.
-//	Constrains: NewEngine (applies the registry), LibraryEnvFactory
-//	  (closes over registry — transitive confinement per Lampson 1973).
-//	Constrained by: Registry.Without/WithoutCategory (capability
-//	  attenuation — derived registries never gain authority).
-//
-// See BIBLIOGRAPHY.md "Saltzer & Schroeder".
-//
-// Example:
-//
-//	eng, err := wile.NewEngine(ctx,
-//	    append(wile.SafeExtensions(),
-//	        wile.WithLibraryPaths("./stdlib/lib"),
-//	    )...,
-//	)
-func SafeExtensions() []EngineOption {
-	return []EngineOption{
-		WithExtension(io.Extension),
-		WithExtension(math.Extension),
-		WithExtension(introspection.Extension),
-		WithExtension(all.SafeExtension),
-	}
-}
-
-// WithSafeExtensions adds the safe extension set to the engine.
-// This is a convenience wrapper around SafeExtensions for the common case
-// where no additional options need to be appended.
-//
-// Example:
-//
-//	eng, err := wile.NewEngine(ctx, wile.WithSafeExtensions())
-func WithSafeExtensions() EngineOption {
+// WithEnv adds a single virtual environment variable.
+// When any virtual env var is set, the envvars extension reads from
+// the virtual map instead of os.Getenv.
+func WithEnv(key, value string) EngineOption {
 	return func(cfg *engineConfig) {
-		for _, opt := range SafeExtensions() {
-			opt(cfg)
+		if cfg.envMap == nil {
+			cfg.envMap = make(map[string]string)
 		}
+		cfg.envMap[key] = value
 	}
 }
 
-// AllExtensions returns the complete set of engine options that add every
-// available extension. This matches the extension set loaded by the CLI
-// binary (io, files, math, introspection, eval, namespace, threads,
-// gointerop, all, system, process).
+// WithEnvMap sets the complete virtual environment variable map.
+// Replaces any previously set virtual env vars.
 //
-// Use [WithAllExtensions] when no additional options need to be appended.
+// Passing nil clears the virtual env map so envvars primitives fall back to
+// os.Getenv (still gated by the authorizer). This is symmetric with
+// WithAuthorizer(nil): the zero value means "no restriction", not "empty
+// sandbox". To explicitly sandbox with no visible env, pass an empty map.
 //
-// Example:
-//
-//	eng, err := wile.NewEngine(ctx,
-//	    append(wile.AllExtensions(),
-//	        wile.WithLibraryPaths("./stdlib/lib"),
-//	    )...,
-//	)
-func AllExtensions() []EngineOption {
-	return []EngineOption{
-		WithExtension(io.Extension),
-		WithExtension(files.Extension),
-		WithExtension(math.Extension),
-		WithExtension(introspection.Extension),
-		WithExtension(exteval.Extension),
-		WithExtension(nsext.Extension),
-		WithExtension(threads.Extension),
-		WithExtension(gointerop.Extension),
-		WithExtension(all.Extension),
-		WithExtension(system.Extension),
-		WithExtension(process.Extension),
-	}
-}
-
-// WithAllExtensions adds every available extension to the engine.
-// This is a convenience wrapper around AllExtensions for the common case
-// where no additional options need to be appended.
-//
-// Example:
-//
-//	eng, err := wile.NewEngine(ctx, wile.WithAllExtensions())
-func WithAllExtensions() EngineOption {
+// Note: when combined with WithProfile(Console) or WithProfile(ConsoleWithLoad),
+// option order matters. WithProfile fills in an empty map only if envMap is
+// currently nil; a later WithEnvMap(nil) re-nils it and opens the sandbox.
+func WithEnvMap(m map[string]string) EngineOption {
 	return func(cfg *engineConfig) {
-		for _, opt := range AllExtensions() {
-			opt(cfg)
+		if m == nil {
+			cfg.envMap = nil
+			return
 		}
+		cfg.envMap = make(map[string]string, len(m))
+		maps.Copy(cfg.envMap, m)
 	}
 }

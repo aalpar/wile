@@ -453,7 +453,7 @@ func TestProcedureDocumentationErrors(t *testing.T) {
 // =============================================================================
 
 func TestLibraryDescription(t *testing.T) {
-	// Note: The test environment (NewNamespaceFrameTiny) does not configure a
+	// Note: The test environment (NewNamespaceFrame) does not configure a
 	// library registry, so (import ...) is unavailable. Tests for loaded
 	// libraries with/without descriptions belong in integration/ or
 	// engine-level tests once .sld files gain (description ...) clauses.

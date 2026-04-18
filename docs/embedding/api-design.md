@@ -159,13 +159,14 @@ Engine behavior can be customized via functional options:
 |---|---|
 | `WithExtension(ext)` | Add a single extension |
 | `WithExtensions(exts...)` | Add multiple extensions |
-| `WithSafeExtensions()` | Add the safe extension set (see Sandboxing below) |
+| `WithProfile(p)` | Apply a named profile bundle (`Tiny`, `Console`, `ConsoleWithLoad`, `Small`, `KitchenSink`) |
 | `WithoutCore()` | Skip core primitives — bare engine with only explicit extensions |
 | `WithRegistry(r)` | Use a custom registry (skips automatic core registration) |
 | `WithAuthorizer(auth)` | Set fine-grained runtime authorization policy |
+| `WithSandbox()` | Compose the sandbox env-prefix wrapper with the current authorizer |
+| `WithEnv(k, v)`, `WithEnvMap(m)` | Install a virtual environment-variable map |
 | `WithSourceFS(fsys)` | Add a virtual `fs.FS` layer to the source resolver chain |
 | `WithSourceOS()` | Add OS filesystem to the source resolver chain |
-| `WithAllExtensions()` | Add all available extensions (matches CLI) |
 | `WithLibraryPaths(paths...)` | Set R7RS library search paths |
 | `WithNamespace(ns)` | Use a pre-built namespace |
 
@@ -175,7 +176,7 @@ Extensions implement `registry.Extension` and register primitives, macros, and c
 
 Wile provides two independent sandboxing layers.
 
-**Layer 1: Extension-based (compile-time).** Primitives not in the registry don't exist — there's no runtime check to bypass (Rees, "A Security Kernel Based on the Lambda Calculus", 1996; Miller, "Robust Composition", 2006). `WithSafeExtensions()` adds only extensions with no ambient authority: io (in-memory ports, no filesystem), math, introspection, and the safe subset of all (records, promises, strings, characters). Privileged extensions (files, eval, system) and context-dependent extensions (gointerop, threads) are excluded. `WithoutCore()` goes further — it produces an engine with zero primitives. Library environments inherit the engine's registry, so restrictions propagate transitively to loaded libraries.
+**Layer 1: Extension-based (compile-time).** Primitives not in the registry don't exist — there's no runtime check to bypass (Rees, "A Security Kernel Based on the Lambda Calculus", 1996; Miller, "Robust Composition", 2006). `WithProfile(Console)` selects a curated bundle (io with in-memory ports, files, math, the safe subset of `all`, and envvars) plus a matching `ConsoleAuthorizer` that restricts file ops to `/tmp` and denies code/process. `WithProfile(Tiny)` registers no extensions beyond core; `WithProfile(KitchenSink)` registers every extension and matches the CLI. `WithoutCore()` goes further — it produces an engine with zero primitives. Library environments inherit the engine's registry, so restrictions propagate transitively to loaded libraries.
 
 **Layer 2: Fine-grained authorization (runtime).** The `security.Authorizer` interface gates privileged operations at runtime using a K8s-style resource+action vocabulary (`file`, `code`, `env`, `process` x `read`, `write`, `delete`, `stat`, `load`, `exit`). Set via `WithAuthorizer(auth)`. Gate sites include file I/O, system calls, `eval`/`load`, `include`, and library loading. Without an authorizer, all operations are allowed (open by default). Built-in authorizers: `DenyAll()`, `ReadOnly()`, `FilesystemRoot(path)`, `All(authorizers...)`.
 

@@ -22,8 +22,8 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile"
+	exteval "github.com/aalpar/wile/extensions/eval"
 	extintrospection "github.com/aalpar/wile/extensions/introspection"
-	exteval "github.com/aalpar/wile/internal/extensions/eval"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
 
@@ -431,8 +431,8 @@ func TestEvalDynamicContextInheritance(t *testing.T) {
 func TestEnvironmentWithLibraryRegistry(t *testing.T) {
 	c := qt.New(t)
 
-	// stdlib/lib/ is at repo root, test is at internal/extensions/eval/
-	libDir := filepath.Join("..", "..", "..", "stdlib", "lib")
+	// stdlib/lib/ is at repo root, test is at extensions/eval/
+	libDir := filepath.Join("..", "..", "stdlib", "lib")
 	engine, err := wile.NewEngine(context.Background(),
 		wile.WithExtension(exteval.Extension),
 		wile.WithLibraryPaths(libDir),
@@ -630,5 +630,50 @@ func TestLoadRuntimeError(t *testing.T) {
 	t.Run("runtime error in loaded file propagates", func(t *testing.T) {
 		path := writeTestFile(t, dir, "runtime-err.scm", `(/ 1 0)`)
 		evalExpectError(t, engine, fmt.Sprintf(`(load %q)`, path))
+	})
+}
+
+func TestEnvironment_WileProfiles(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+
+	runProfile := func(name, expr string) string {
+		t.Helper()
+		code := fmt.Sprintf("(%s %s (environment '(wile %s)))", "eval", expr, name)
+		return eval(t, engine, code).SchemeString()
+	}
+
+	t.Run("tiny has arithmetic", func(t *testing.T) {
+		c.Assert(runProfile("tiny", "'(+ 1 2)"), qt.Equals, "3")
+	})
+
+	t.Run("tiny has no io", func(t *testing.T) {
+		code := fmt.Sprintf("(%s '(display \"hi\") (environment '(wile tiny)))", "eval")
+		evalExpectError(t, engine, code)
+	})
+
+	t.Run("console", func(t *testing.T) {
+		c.Assert(runProfile("console", "'(+ 1 2)"), qt.Equals, "3")
+	})
+
+	t.Run("console-with-load", func(t *testing.T) {
+		c.Assert(runProfile("console-with-load", "'(+ 1 2)"), qt.Equals, "3")
+	})
+
+	t.Run("console-with-load supports nested", func(t *testing.T) {
+		nested := fmt.Sprintf("'(%s '(+ 2 3) (environment '(wile tiny)))", "eval")
+		c.Assert(runProfile("console-with-load", nested), qt.Equals, "5")
+	})
+
+	t.Run("small", func(t *testing.T) {
+		c.Assert(runProfile("small", "'(+ 1 2)"), qt.Equals, "3")
+	})
+
+	t.Run("kitchen-sink", func(t *testing.T) {
+		c.Assert(runProfile("kitchen-sink", "'(+ 1 2)"), qt.Equals, "3")
+	})
+
+	t.Run("unknown profile errors", func(t *testing.T) {
+		evalExpectError(t, engine, `(environment '(wile unknown))`)
 	})
 }

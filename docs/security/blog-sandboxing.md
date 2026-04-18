@@ -62,8 +62,8 @@ I built [Wile](https://github.com/aalpar/wile), a Scheme interpreter designed fo
 The entire mechanism is this: you register primitives at engine construction time. If you don't register the filesystem extension, `open-input-file` has no binding. The compiler encounters it as an unbound variable and produces a compile-time error. No runtime checks. No permission callbacks. No stack walking. The capability simply doesn't exist.
 
 ```go
-// Safe sandbox: only arithmetic, lists, strings, control flow
-engine, err := wile.NewEngine(ctx, wile.WithSafeExtensions())
+// Bare sandbox: only arithmetic, lists, strings, control flow — no I/O.
+engine, err := wile.NewEngine(ctx, wile.WithProfile(wile.Tiny))
 
 // This produces a compile-time error — open-input-file is unbound
 _, err = engine.Eval(ctx, engine.MustParse(ctx, `(open-input-file "/etc/passwd")`))

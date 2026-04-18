@@ -374,7 +374,7 @@ func setupLibraryTest(t *testing.T) *environment.EnvironmentFrame {
 	t.Helper()
 
 	// Create the top-level environment
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	if err != nil {
 		t.Fatalf("failed to create environment: %v", err)
 	}
@@ -817,7 +817,7 @@ func TestLibraryForwardReferences(t *testing.T) {
 	`
 
 	// Set up environment with library registry
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	c.Assert(err, qt.IsNil)
 	env.Namespace().SetLibraryEnvFactory(bootstrap.NewLibraryEnvironmentFrame)
 

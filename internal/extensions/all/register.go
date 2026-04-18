@@ -16,21 +16,21 @@
 package all
 
 import (
+	"github.com/aalpar/wile/extensions/eval"
 	"github.com/aalpar/wile/extensions/files"
 	"github.com/aalpar/wile/extensions/gointerop"
 	"github.com/aalpar/wile/extensions/math"
 	"github.com/aalpar/wile/extensions/process"
 	"github.com/aalpar/wile/extensions/system"
 	"github.com/aalpar/wile/extensions/threads"
-	"github.com/aalpar/wile/internal/extensions/eval"
 	"github.com/aalpar/wile/internal/extensions/io"
 	nsext "github.com/aalpar/wile/internal/extensions/namespace"
 	"github.com/aalpar/wile/registry"
 )
 
 // Extension registers the primitives defined in this package (records, promises,
-// strings, characters) under the name "all". When used in AllExtensions() where
-// sub-extensions are listed individually, this avoids double-registration.
+// strings, characters) under the name "all". When used in WithProfile(KitchenSink)
+// where sub-extensions are listed individually, this avoids double-registration.
 // Use Builder.AddToRegistry for standalone use that includes all sub-extensions.
 var Extension = registry.NewDescribedExtension("all",
 	"All Wile extensions combined.",

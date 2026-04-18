@@ -42,7 +42,8 @@ func TestWithSourceFS_Include(t *testing.T) {
 	}
 
 	engine, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithProfile(wile.Console),
+		wile.WithAuthorizer(nil), // override Console authorizer: test exercises include/import
 		wile.WithSourceFS(fsys),
 	)
 	c.Assert(err, qt.IsNil)
@@ -70,7 +71,8 @@ func TestWithSourceFS_NestedInclude(t *testing.T) {
 	}
 
 	engine, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithProfile(wile.Console),
+		wile.WithAuthorizer(nil), // override Console authorizer: test exercises include/import
 		wile.WithSourceFS(fsys),
 	)
 	c.Assert(err, qt.IsNil)
@@ -96,7 +98,8 @@ func TestWithSourceFS_LibraryImport(t *testing.T) {
 	}
 
 	engine, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithProfile(wile.Console),
+		wile.WithAuthorizer(nil), // override Console authorizer: test exercises include/import
 		wile.WithSourceFS(fsys),
 		wile.WithLibraryPaths("lib"),
 	)
@@ -126,7 +129,8 @@ func TestWithSourceFS_IncludeInLibrary(t *testing.T) {
 	}
 
 	engine, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithProfile(wile.Console),
+		wile.WithAuthorizer(nil), // override Console authorizer: test exercises include/import
 		wile.WithSourceFS(fsys),
 		wile.WithLibraryPaths("lib"),
 	)
@@ -151,7 +155,8 @@ func TestWithSourceFS_IncludeRejectsAbsolutePath(t *testing.T) {
 	}
 
 	engine, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithProfile(wile.Console),
+		wile.WithAuthorizer(nil), // override Console authorizer: test exercises include/import
 		wile.WithSourceFS(fsys),
 	)
 	c.Assert(err, qt.IsNil)
@@ -168,7 +173,7 @@ func TestWithSourceFS_NotSet_UsesOSFilesystem(t *testing.T) {
 	c := qt.New(t)
 	ctx := context.Background()
 
-	engine, err := wile.NewEngine(ctx, wile.WithSafeExtensions())
+	engine, err := wile.NewEngine(ctx, wile.WithProfile(wile.Console))
 	c.Assert(err, qt.IsNil)
 
 	_, err = engine.Eval(ctx, engine.MustParse(ctx, `(include "definitely-nonexistent-file.scm")`))
@@ -191,7 +196,8 @@ func TestWithSourceFS_LibraryScmFallback(t *testing.T) {
 	}
 
 	engine, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithProfile(wile.Console),
+		wile.WithAuthorizer(nil), // override Console authorizer: test exercises include/import
 		wile.WithSourceFS(fsys),
 		wile.WithLibraryPaths("lib"),
 	)
@@ -224,7 +230,8 @@ func TestWithSourceFS_TransitiveLibraryImport(t *testing.T) {
 	}
 
 	engine, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithProfile(wile.Console),
+		wile.WithAuthorizer(nil), // override Console authorizer: test exercises include/import
 		wile.WithSourceFS(fsys),
 		wile.WithLibraryPaths("lib"),
 	)
@@ -254,7 +261,8 @@ func TestWithSourceFS_MultipleFS(t *testing.T) {
 	}
 
 	engine, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithProfile(wile.Console),
+		wile.WithAuthorizer(nil), // override Console authorizer: test exercises include/import
 		wile.WithSourceFS(fs1),
 		wile.WithSourceFS(fs2),
 	)
@@ -284,7 +292,8 @@ func TestWithSourceFS_ChainPriority(t *testing.T) {
 	}
 
 	engine, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithProfile(wile.Console),
+		wile.WithAuthorizer(nil), // override Console authorizer: test exercises include/import
 		wile.WithSourceFS(fs1),
 		wile.WithSourceFS(fs2),
 	)
@@ -309,7 +318,8 @@ func TestWithSourceOS_Fallback(t *testing.T) {
 	}
 
 	engine, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithProfile(wile.Console),
+		wile.WithAuthorizer(nil), // override Console authorizer: test exercises include/import
 		wile.WithSourceFS(fsys),
 		wile.WithSourceOS(),
 	)
@@ -339,7 +349,8 @@ func TestWithSourceFS_ExcludesOSByDefault(t *testing.T) {
 	}
 
 	engine, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithProfile(wile.Console),
+		wile.WithAuthorizer(nil), // override Console authorizer: test exercises include/import
 		wile.WithSourceFS(fsys),
 	)
 	c.Assert(err, qt.IsNil)
@@ -373,7 +384,8 @@ func TestWithSourceFS_LibraryAcrossLayers(t *testing.T) {
 	}
 
 	engine, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithProfile(wile.Console),
+		wile.WithAuthorizer(nil), // override Console authorizer: test exercises include/import
 		wile.WithSourceFS(fs1),
 		wile.WithSourceFS(fs2),
 		wile.WithLibraryPaths("lib"),
@@ -406,7 +418,8 @@ func TestWithSourceFS_DeeplyNestedInclude(t *testing.T) {
 	}
 
 	engine, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithProfile(wile.Console),
+		wile.WithAuthorizer(nil), // override Console authorizer: test exercises include/import
 		wile.WithSourceFS(fsys),
 	)
 	c.Assert(err, qt.IsNil)
@@ -436,7 +449,8 @@ func TestWithSourceFS_IncludeDotDotTraversal(t *testing.T) {
 	}
 
 	engine, err := wile.NewEngine(ctx,
-		wile.WithSafeExtensions(),
+		wile.WithProfile(wile.Console),
+		wile.WithAuthorizer(nil), // override Console authorizer: test exercises include/import
 		wile.WithSourceFS(fsys),
 		wile.WithLibraryPaths("lib"),
 	)

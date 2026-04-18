@@ -17,6 +17,7 @@ package environment
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync"
 
 	"github.com/aalpar/wile/internal/syntax"
@@ -114,6 +115,13 @@ type Namespace struct {
 
 	// runtime is the phase 0 (runtime) environment frame.
 	runtime *EnvironmentFrame
+
+	// envMap is an optional virtual environment variable map.
+	// When non-nil, envvars primitives read from this map instead of
+	// the process environment (os.Getenv/os.Environ), bypassing the
+	// authorizer gate. Nil means "fall through to OS, gated by authorizer".
+	// Set via WithEnvMap (Task 5).
+	envMap map[string]string
 }
 
 // ModuleInstance represents a loaded and initialized library.
@@ -273,6 +281,33 @@ func (p *Namespace) SetRegistry(reg any) {
 // Authorizer returns the security authorizer for this namespace.
 func (p *Namespace) Authorizer() security.Authorizer {
 	return p.authorizer
+}
+
+// EnvMap returns the virtual environment variable map for this namespace,
+// or nil if none has been configured. When non-nil, envvars primitives
+// read from this map instead of the process environment, bypassing the
+// authorizer gate.
+func (p *Namespace) EnvMap() map[string]string {
+	return p.envMap
+}
+
+// SetEnvMap sets the virtual environment variable map.
+// When set, envvars primitives read from this map instead of os.Getenv.
+//
+// The provided map is defensively copied so that subsequent mutation by the
+// caller does not leak into the VM's sandbox state. A nil argument clears
+// the virtual map (falls back to os.Getenv, gated by the authorizer).
+//
+// Note: EnvMap() still returns the internal map by reference for zero-cost
+// primitive access. Callers who reach for EnvMap() must treat the result as
+// read-only; mutating it bypasses the defensive copy applied here.
+func (p *Namespace) SetEnvMap(m map[string]string) {
+	if m == nil {
+		p.envMap = nil
+		return
+	}
+	p.envMap = make(map[string]string, len(m))
+	maps.Copy(p.envMap, m)
 }
 
 // SetAuthorizer sets the security authorizer for this namespace.
@@ -450,6 +485,13 @@ func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 // explicitly. The registry itself is a shared pointer; mutations to the registry
 // (e.g., registering a new library) are visible to both parent and child.
 //
+// The child also inherits the parent's envMap (virtual environment variable
+// map) by reference. envMap is capability state — it constrains what the
+// envvars primitives can read — so derived namespaces must not silently
+// widen capability by acquiring a nil map that falls through to os.Getenv.
+// The reference is safe to share because SetEnvMap always reassigns the
+// field rather than mutating the existing map.
+//
 // # Contrast with NewChildRuntime
 //
 // NewChildRuntime returns an *EnvironmentFrame that shares the parent's
@@ -498,6 +540,7 @@ func (p *Namespace) NewChildNamespace() *Namespace {
 		libraryEnvFactory: p.libraryEnvFactory,
 		registry:          p.registry,
 		authorizer:        p.authorizer,
+		envMap:            p.envMap,
 		parent:            p,
 	}
 	initRuntimeFrame(q, newGlobalEnvironmentFrameForNamespace(q))
@@ -518,6 +561,7 @@ func (p *Namespace) NewSchemeReportNamespace() *Namespace {
 		libraryEnvFactory: p.libraryEnvFactory,
 		registry:          p.registry,
 		authorizer:        p.authorizer,
+		envMap:            p.envMap,
 		parent:            p,
 	}
 

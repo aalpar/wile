@@ -32,7 +32,7 @@ func newEngineWithStdlib(t *testing.T) *wile.Engine {
 	t.Helper()
 	ctx := context.Background()
 	eng, err := wile.NewEngine(ctx,
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithLibraryPaths("."),
 	)

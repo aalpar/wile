@@ -46,7 +46,7 @@ func setupSchemeLibraryTest(t *testing.T) *environment.EnvironmentFrame {
 	t.Helper()
 
 	// Create the top-level environment
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	if err != nil {
 		t.Fatalf("failed to create environment: %v", err)
 	}

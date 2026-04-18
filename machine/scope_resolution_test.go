@@ -54,7 +54,7 @@ import (
 // (and, or, let, when, unless, cond, etc.).
 func scopeResolutionEnv(t *testing.T) *environment.EnvironmentFrame {
 	t.Helper()
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 	return env
 }

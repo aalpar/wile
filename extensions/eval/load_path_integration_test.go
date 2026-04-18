@@ -25,7 +25,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile"
-	exteval "github.com/aalpar/wile/internal/extensions/eval"
+	exteval "github.com/aalpar/wile/extensions/eval"
 	"github.com/aalpar/wile/machine/compilation"
 )
 
@@ -454,7 +454,8 @@ func TestLoad_MixedChain_EmbedThenOS(t *testing.T) {
 	}
 
 	engine, err := wile.NewEngine(context.Background(),
-		wile.WithSafeExtensions(),
+		wile.WithProfile(wile.Console),
+		wile.WithAuthorizer(nil), // override Console authorizer: test exercises load/include
 		wile.WithExtension(exteval.Extension),
 		wile.WithSourceFS(embedFS),
 		wile.WithSourceOS(),
@@ -491,7 +492,8 @@ func TestLoad_MixedChain_EmbedWinsOverOS(t *testing.T) {
 	}
 
 	engine, err := wile.NewEngine(context.Background(),
-		wile.WithSafeExtensions(),
+		wile.WithProfile(wile.Console),
+		wile.WithAuthorizer(nil), // override Console authorizer: test exercises load/include
 		wile.WithExtension(exteval.Extension),
 		wile.WithSourceFS(embedFS),
 		wile.WithSourceOS(),
@@ -523,7 +525,8 @@ func TestInclude_MixedChain_EmbedThenOS(t *testing.T) {
 	}
 
 	engine, err := wile.NewEngine(context.Background(),
-		wile.WithSafeExtensions(),
+		wile.WithProfile(wile.Console),
+		wile.WithAuthorizer(nil), // override Console authorizer: test exercises load/include
 		wile.WithExtension(exteval.Extension),
 		wile.WithSourceFS(embedFS),
 		wile.WithSourceOS(),
@@ -561,7 +564,8 @@ func TestInclude_MixedChain_EmbedWinsOverOS(t *testing.T) {
 	}
 
 	engine, err := wile.NewEngine(context.Background(),
-		wile.WithSafeExtensions(),
+		wile.WithProfile(wile.Console),
+		wile.WithAuthorizer(nil), // override Console authorizer: test exercises load/include
 		wile.WithExtension(exteval.Extension),
 		wile.WithSourceFS(embedFS),
 		wile.WithSourceOS(),
@@ -600,7 +604,8 @@ func TestLibraryImport_MixedChain_AcrossLayers(t *testing.T) {
 	}
 
 	engine, err := wile.NewEngine(context.Background(),
-		wile.WithSafeExtensions(),
+		wile.WithProfile(wile.Console),
+		wile.WithAuthorizer(nil), // override Console authorizer: test exercises load/include
 		wile.WithExtension(exteval.Extension),
 		wile.WithSourceFS(embedFS),
 		wile.WithSourceOS(),

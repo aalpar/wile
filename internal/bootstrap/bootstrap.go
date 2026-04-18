@@ -34,6 +34,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/extensions/eval"
 	"github.com/aalpar/wile/extensions/files"
 	"github.com/aalpar/wile/extensions/gointerop"
 	"github.com/aalpar/wile/extensions/introspection"
@@ -42,7 +43,7 @@ import (
 	"github.com/aalpar/wile/extensions/system"
 	"github.com/aalpar/wile/extensions/threads"
 	"github.com/aalpar/wile/internal/extensions/all"
-	"github.com/aalpar/wile/internal/extensions/eval"
+	"github.com/aalpar/wile/internal/extensions/envvars"
 	ioext "github.com/aalpar/wile/internal/extensions/io"
 	nsext "github.com/aalpar/wile/internal/extensions/namespace"
 	"github.com/aalpar/wile/internal/parser"
@@ -53,17 +54,19 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-// allExtensions returns all available extensions for the full runtime environment.
+// allExtensions is the KitchenSink-equivalent — every extension registered.
+// Retained as a package-level var so tests can override (see bootstrap_test.go)
+// and so internal callers (NewLibraryEnvironmentFrame, NewTopLevelWithRegistry)
+// do not re-resolve through the string-keyed ProfileExtensions table.
 //
 // ADDING A NEW EXTENSION requires updates in these locations:
 //
 //  1. extensions/<name>/             — new package implementing registry.Extension
 //  2. extensions/<name>/register.go  — Builder + Extension var, AddToRegistry
-//  3. internal/bootstrap/environment_tiny.go — add to allExtensions slice (this file)
-//  4. options.go AllExtensions()     — add to public engine extension set
-//  5. options.go SafeExtensions()    — add if applicable (safe = no ambient authority)
-//  6. CLAUDE.md                      — update extension count and list
-//  7. TODO.md                        — update extension count in project status
+//  3. internal/bootstrap/bootstrap.go — add to allExtensions AND ProfileExtensions("kitchen-sink")
+//  4. internal/bootstrap/bootstrap.go — add to ProfileExtensions("small") if safe
+//  5. CLAUDE.md                      — update extension count and list
+//  6. TODO.md                        — update extension count in project status
 var allExtensions = []registry.Extension{
 	ioext.Extension,
 	files.Extension,
@@ -76,17 +79,71 @@ var allExtensions = []registry.Extension{
 	all.Extension,
 	system.Extension,
 	process.Extension,
+	envvars.Extension,
 }
+
+// ProfileExtensions returns the extension set for a named profile. It is the
+// single source of truth for profile→extensions mapping; callers in the
+// public wile package (profile.go Profile.extensions) and in extensions/eval
+// (tryWileProfile, for Scheme-level (environment '(wile <name>))) both
+// dispatch through here.
+//
+// Valid names: "tiny", "console", "console-with-load", "small", "kitchen-sink".
+// An unknown name returns ErrUnknownProfile wrapped with the offending string.
+func ProfileExtensions(name string) ([]registry.Extension, error) {
+	switch name {
+	case "tiny":
+		return nil, nil
+	case "console":
+		return []registry.Extension{
+			ioext.Extension,
+			files.Extension,
+			math.Extension,
+			all.SafeExtension,
+			envvars.Extension,
+		}, nil
+	case "console-with-load":
+		return []registry.Extension{
+			ioext.Extension,
+			files.Extension,
+			math.Extension,
+			all.SafeExtension,
+			eval.Extension,
+			envvars.Extension,
+		}, nil
+	case "small":
+		return []registry.Extension{
+			ioext.Extension,
+			files.Extension,
+			math.Extension,
+			introspection.Extension,
+			eval.Extension,
+			all.Extension,
+			system.Extension,
+			envvars.Extension,
+		}, nil
+	case "kitchen-sink":
+		// Return a copy so callers cannot mutate the underlying slice.
+		q := make([]registry.Extension, len(allExtensions))
+		copy(q, allExtensions)
+		return q, nil
+	default:
+		return nil, werr.WrapForeignErrorf(ErrUnknownProfile,
+			"ProfileExtensions: unknown profile name %q", name)
+	}
+}
+
+// ErrUnknownProfile is returned by ProfileExtensions when given a name outside
+// the known set (tiny, console, console-with-load, small, kitchen-sink).
+var ErrUnknownProfile = werr.NewStaticError("unknown profile")
 
 // initializeEnvironmentWithRegistry is the shared initialization sequence for environment creation.
 // It creates a registry, adds the specified extensions, applies primitives, registers
 // compilers/expanders, loads bootstrap macros, and returns the populated registry.
-// If exts is nil, all extensions are loaded (backward compatible).
+// The caller must pass the exact extension set to load; a nil slice registers no
+// extensions beyond core primitives (this is deliberate — the public Engine
+// path now drives extension selection through Profile).
 func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.EnvironmentFrame, exts []registry.Extension) (*registry.Registry, error) {
-	if exts == nil {
-		exts = allExtensions
-	}
-
 	// Create registry with core primitives
 	reg := registry.NewRegistry()
 	err := core.AddToRegistry(reg)
@@ -141,11 +198,11 @@ func initializeEnvironmentWithRegistry(ctx context.Context, env *environment.Env
 // It creates a registry, adds all extensions, applies primitives, registers compilers/expanders,
 // and loads bootstrap macros.
 func initializeEnvironment(ctx context.Context, env *environment.EnvironmentFrame) error {
-	_, err := initializeEnvironmentWithRegistry(ctx, env, nil)
+	_, err := initializeEnvironmentWithRegistry(ctx, env, allExtensions)
 	return err
 }
 
-// NewNamespaceFrameTiny creates and initializes a complete Scheme runtime environment.
+// NewNamespaceFrame creates and initializes a complete Scheme runtime environment.
 //
 // This function:
 //  1. Creates a registry with core primitives
@@ -157,7 +214,7 @@ func initializeEnvironment(ctx context.Context, env *environment.EnvironmentFram
 //
 // The resulting environment is ready for parsing, expanding, compiling, and executing
 // Scheme programs.
-func NewNamespaceFrameTiny(ctx context.Context) (*environment.EnvironmentFrame, error) {
+func NewNamespaceFrame(ctx context.Context) (*environment.EnvironmentFrame, error) {
 	env, _, err := NewTopLevelWithRegistry(ctx)
 	if err != nil {
 		return nil, err
@@ -173,12 +230,41 @@ func NewTopLevelWithRegistry(ctx context.Context) (*environment.EnvironmentFrame
 	env := topLevel.Runtime()
 
 	// Initialize with shared sequence, keeping the registry
-	reg, err := initializeEnvironmentWithRegistry(ctx, env, nil)
+	reg, err := initializeEnvironmentWithRegistry(ctx, env, allExtensions)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	return env, reg, nil
+}
+
+// NewProfileEnvironment creates a new *environment.Namespace initialized with the
+// given extension set. It shares symbol interning with callerNS but has its own
+// bindings so the caller's top-level definitions do not leak in. Intended for
+// Scheme-level (environment '(wile <profile>)) construction.
+func NewProfileEnvironment(ctx context.Context, callerNS *environment.Namespace, exts []registry.Extension) (*environment.Namespace, error) {
+	newNS := callerNS.NewChildNamespace()
+	env := newNS.Runtime()
+	_, err := initializeEnvironmentWithRegistry(ctx, env, exts)
+	if err != nil {
+		return nil, werr.WrapForeignErrorf(err, "NewProfileEnvironment: initialization failed")
+	}
+	return newNS, nil
+}
+
+// init wires the ProfileFactory callback in extensions/eval so that
+// (environment '(wile <name>)) can construct a namespace for a named profile.
+// This indirection exists because bootstrap imports eval (for allExtensions)
+// and eval cannot reciprocally import bootstrap without an import cycle.
+func init() {
+	eval.ProfileFactory = func(ctx context.Context, callerNS *environment.Namespace, profileName string) (*environment.Namespace, error) {
+		exts, err := ProfileExtensions(profileName)
+		if err != nil {
+			return nil, werr.WrapForeignErrorf(err,
+				"ProfileFactory: unknown wile profile %q", profileName)
+		}
+		return NewProfileEnvironment(ctx, callerNS, exts)
+	}
 }
 
 // NewLibraryEnvironmentFrame creates a new environment for a library that shares

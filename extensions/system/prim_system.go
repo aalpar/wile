@@ -16,14 +16,11 @@ package system
 
 import (
 	"os"
-	"strings"
 	"time"
 
 	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/security"
 	"github.com/aalpar/wile/values"
-	"github.com/aalpar/wile/werr"
 )
 
 // ProgramStartTime is used for current-jiffy to measure elapsed time.
@@ -96,54 +93,6 @@ func PrimExit(mc machine.CallContext) error {
 // Exits the program immediately without cleanup or finalization.
 func PrimEmergencyExit(mc machine.CallContext) error {
 	return exitWithCode(mc)
-}
-
-// PrimGetEnvironmentVariable implements the (get-environment-variable) primitive.
-// Gets environment variable value.
-func PrimGetEnvironmentVariable(mc machine.CallContext) error {
-	name, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "get-environment-variable")
-	if err != nil {
-		return err
-	}
-	err = security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
-		Resource: security.ResourceEnv,
-		Action:   security.ActionRead,
-		Target:   name.Value,
-	})
-	if err != nil {
-		return err
-	}
-	val, exists := os.LookupEnv(name.Value)
-	if exists {
-		mc.SetValue(values.NewString(val))
-	} else {
-		mc.SetValue(values.FalseValue)
-	}
-	return nil
-}
-
-// PrimGetEnvironmentVariables implements the (get-environment-variables) primitive.
-// Returns all environment variables.
-func PrimGetEnvironmentVariables(mc machine.CallContext) error {
-	err := security.CheckWithAuthorizer(mc.Authorizer(), security.AccessRequest{
-		Resource: security.ResourceEnv,
-		Action:   security.ActionRead,
-		Target:   "*",
-	})
-	if err != nil {
-		return err
-	}
-	env := os.Environ()
-	list := values.EmptyList
-	for i := len(env) - 1; i >= 0; i-- {
-		parts := strings.SplitN(env[i], "=", 2)
-		if len(parts) == 2 {
-			pair := values.NewCons(values.NewString(parts[0]), values.NewString(parts[1]))
-			list = values.NewCons(pair, list)
-		}
-	}
-	mc.SetValue(list)
-	return nil
 }
 
 // PrimCurrentSecond implements the (current-second) primitive.

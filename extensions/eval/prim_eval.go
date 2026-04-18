@@ -31,6 +31,17 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
+// ProfileFactory is the callback used by (environment '(wile <name>)) to
+// construct a namespace for a named Wile profile. It is set by
+// internal/bootstrap at init time (bootstrap cannot be imported here because
+// bootstrap already imports this package). When nil, (wile <name>) specs
+// return ErrWileProfilesNotRegistered.
+var ProfileFactory func(ctx context.Context, callerNS *environment.Namespace, profileName string) (*environment.Namespace, error)
+
+// ErrWileProfilesNotRegistered is returned when tryWileProfile dispatches on
+// a (wile <name>) spec but no ProfileFactory has been registered.
+var ErrWileProfilesNotRegistered = werr.NewStaticError("wile profiles not registered")
+
 // PrimEval implements the (eval) primitive.
 // 1-arg form: (eval expr) — uses current namespace (interaction-environment).
 // 2-arg form: (eval expr env) — uses the given environment.
@@ -272,9 +283,79 @@ func PrimNullEnvironment(mc machine.CallContext) error {
 //   - (environment '(for-syntax (scheme base)))       ; Phase 1 (expand)
 //   - (environment '(for-template (scheme base)))     ; Phase -1
 //   - (environment '(for-meta 2 (scheme base)))       ; Phase 2
+//
+// tryWileProfile checks whether argsVal is a single-element list whose only
+// element is (wile <name>). If so, it dispatches to bootstrap to construct a
+// fresh namespace for that profile. Returns (ns, true, nil) on match,
+// (nil, false, nil) if the spec is not a profile constructor (caller falls
+// through to standard import-spec handling), or (nil, true, err) if the
+// match succeeded but construction failed.
+func tryWileProfile(mc machine.CallContext, argsVal values.Value) (*environment.Namespace, bool, error) {
+	if values.IsEmptyList(argsVal) {
+		return nil, false, nil
+	}
+	args, ok := argsVal.(values.Tuple)
+	if !ok {
+		return nil, false, nil
+	}
+	first := args.Car()
+	if !values.IsEmptyList(args.Cdr()) {
+		return nil, false, nil
+	}
+	spec, ok := first.(values.Tuple)
+	if !ok {
+		return nil, false, nil
+	}
+	headSym, ok := spec.Car().(*values.Symbol)
+	if !ok || headSym.Key != "wile" {
+		return nil, false, nil
+	}
+	rest, ok := spec.Cdr().(values.Tuple)
+	if !ok {
+		return nil, false, nil
+	}
+	nameSym, ok := rest.Car().(*values.Symbol)
+	if !ok {
+		return nil, true, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"environment: expected profile name after 'wile, got %T", rest.Car())
+	}
+	if !values.IsEmptyList(rest.Cdr()) {
+		return nil, true, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"environment: (wile %s ...) takes exactly one profile name", nameSym.Key)
+	}
+
+	if ProfileFactory == nil {
+		return nil, true, werr.WrapForeignErrorf(ErrWileProfilesNotRegistered,
+			"environment: (wile %s) requires bootstrap to register ProfileFactory", nameSym.Key)
+	}
+
+	callerNS := mc.EnvironmentFrame().Namespace()
+	ns, err := ProfileFactory(mc.Context(), callerNS, nameSym.Key)
+	if err != nil {
+		return nil, true, werr.WrapForeignErrorf(err,
+			"environment: failed to create wile profile %q", nameSym.Key)
+	}
+	ns.Name = "environment"
+	em := callerNS.EnvMap()
+	if em != nil {
+		ns.SetEnvMap(em)
+	}
+	return ns, true, nil
+}
+
 func PrimEnvironment(mc machine.CallContext) error {
 	// Get variadic import specs (collected as a list in arg 0)
 	argsVal := mc.Arg(0)
+
+	// Check for (wile <profile>) profile constructor as the sole spec.
+	profileNS, handled, err := tryWileProfile(mc, argsVal)
+	if err != nil {
+		return err
+	}
+	if handled {
+		mc.SetValue(profileNS)
+		return nil
+	}
 
 	// Create child top-level environment sharing the caller's symbol interning
 	// and library registry for R7RS §6.5 symbol identity.

@@ -30,10 +30,11 @@ import (
 )
 
 // RunProgramAST compiles and runs a Scheme program from a pre-built values.Value AST.
-// Uses a minimal top-level environment (bootstrap.NewNamespaceFrameTiny).
+// Uses a fully-bootstrapped top-level environment (bootstrap.NewNamespaceFrame),
+// which loads the full kitchen-sink extension set.
 func RunProgramAST(t *testing.T, prog values.Value) (values.Value, error) {
 	t.Helper()
-	env, err := bootstrap.NewNamespaceFrameTiny(context.Background())
+	env, err := bootstrap.NewNamespaceFrame(context.Background())
 	if err != nil {
 		return nil, err
 	}

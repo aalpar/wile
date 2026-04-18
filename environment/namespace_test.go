@@ -406,3 +406,73 @@ func TestNamespace_SymbolEquality(t *testing.T) {
 	c.Assert(sym1.EqualTo(sym2), qt.IsTrue)
 	c.Assert(sym1.Key, qt.Equals, sym2.Key)
 }
+
+// TestNamespace_NewChildNamespace_InheritsEnvMap verifies that a child
+// namespace inherits the parent's virtual env-var map. envMap is capability
+// state — derived namespaces must not silently widen capability by reverting
+// to nil (which would fall through to os.Getenv in the envvars primitives).
+func TestNamespace_NewChildNamespace_InheritsEnvMap(t *testing.T) {
+	c := qt.New(t)
+
+	tests := []struct {
+		name   string
+		envMap map[string]string
+		expect map[string]string
+	}{
+		{
+			name:   "non-nil map propagates",
+			envMap: map[string]string{"K": "V"},
+			expect: map[string]string{"K": "V"},
+		},
+		{
+			name:   "empty map propagates as empty (not nil)",
+			envMap: map[string]string{},
+			expect: map[string]string{},
+		},
+		{
+			name:   "nil parent map yields nil child map",
+			envMap: nil,
+			expect: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			parent := NewNamespace()
+			parent.SetEnvMap(tc.envMap)
+
+			child := parent.NewChildNamespace()
+			c.Assert(child.EnvMap(), qt.DeepEquals, tc.expect)
+		})
+	}
+}
+
+// TestNamespace_NewSchemeReportNamespace_InheritsEnvMap mirrors the
+// NewChildNamespace contract for the R7RS scheme-report-environment path.
+// Same justification: capability state inherits.
+func TestNamespace_NewSchemeReportNamespace_InheritsEnvMap(t *testing.T) {
+	c := qt.New(t)
+
+	parent := NewNamespace()
+	parent.SetEnvMap(map[string]string{"X": "1"})
+
+	child := parent.NewSchemeReportNamespace()
+	c.Assert(child.EnvMap(), qt.DeepEquals, map[string]string{"X": "1"})
+}
+
+// TestNamespace_ChildEnvMapIsolatedFromParentMutation verifies that calling
+// SetEnvMap on a child after creation does not retroactively affect the
+// parent. SetEnvMap reassigns the field (defensively copies), so the shared
+// reference at construction time is broken once either side mutates.
+func TestNamespace_ChildEnvMapIsolatedFromParentMutation(t *testing.T) {
+	c := qt.New(t)
+
+	parent := NewNamespace()
+	parent.SetEnvMap(map[string]string{"P": "parent"})
+
+	child := parent.NewChildNamespace()
+	child.SetEnvMap(map[string]string{"C": "child"})
+
+	c.Assert(parent.EnvMap(), qt.DeepEquals, map[string]string{"P": "parent"})
+	c.Assert(child.EnvMap(), qt.DeepEquals, map[string]string{"C": "child"})
+}

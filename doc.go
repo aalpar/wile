@@ -23,16 +23,25 @@
 //	result, err := engine.Eval(ctx, engine.MustParse(ctx, "(+ 1 2 3)"))
 //	fmt.Println(result) // 6
 //
-// With extensions:
+// Profile-based configuration:
+//
+//	engine, err := wile.NewEngine(ctx, wile.WithProfile(wile.Small))
+//
+//	engine, err := wile.NewEngine(ctx,
+//	    wile.WithProfile(wile.Console),
+//	    wile.WithEnv("APP_MODE", "production"),
+//	)
+//
+// Sandboxed eval/load (wile-goast pattern):
+//
+//	engine, err := wile.NewEngine(ctx, wile.WithProfile(wile.ConsoleWithLoad))
+//
+// Ad-hoc extension selection (bypasses profiles):
 //
 //	engine, err := wile.NewEngine(ctx,
 //	    wile.WithExtension(io.Extension),
 //	    wile.WithExtension(system.Extension),
 //	)
-//
-// Sandboxed engine (no filesystem, eval, system, or Go interop):
-//
-//	engine, err := wile.NewEngine(ctx, wile.WithSafeExtensions())
 //
 // Custom primitives:
 //

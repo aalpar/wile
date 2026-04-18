@@ -14,8 +14,9 @@
 
 // Package process provides subprocess execution primitives.
 //
-// This extension is NOT included in SafeExtensions(). Embedders must
-// opt in explicitly with WithExtension(process.Extension).
+// This extension is NOT included in the Console profile. Embedders must
+// opt in explicitly with WithExtension(process.Extension) or use
+// WithProfile(KitchenSink).
 //
 // Two security actions gate process creation:
 //   - security.ActionExec gates process-spawn (structured, no shell)

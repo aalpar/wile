@@ -8,7 +8,7 @@ TODO
 **Version**: v1.13.16 (released)
 **Core Language**: R7RS-small complete with hygienic macros, composable continuations, numeric tower, core-compiled let forms
 **Extensions**: 11 extension packages — 7 public (files, math, process, system, threads, gointerop, introspection), 4 internal (io, eval, namespace, all); all importable as R7RS `(wile <name>)` libraries. Extension API contracts (ValueType enum, PrimitiveSpec type declarations) in Phase 1. Go static analysis extensions extracted to [wile-goast](https://github.com/aalpar/wile-goast).
-**Embedding**: CLI uses public Engine API; embedded stdlib via `stdlib.FS` (`go:embed` + `fs.Sub`); `AllExtensions()`/`WithAllExtensions()` convenience options; `Engine.AvailableLibraries()` API for library discovery.
+**Embedding**: CLI uses public Engine API; embedded stdlib via `stdlib.FS` (`go:embed` + `fs.Sub`); named profiles (`Tiny`, `Console`, `ConsoleWithLoad`, `Small`, `KitchenSink`) via `WithProfile`; orthogonal `WithSandbox` modifier; virtual env map (`WithEnv`, `WithEnvMap`); `Engine.AvailableLibraries()` API for library discovery.
 **Documentation**: Complete documentation system — `procedure-documentation`, `,doc`, `,apropos`, `,topics`, `,topic`, library-level `(description)` clause, docstring examples, examples filtering. All 397 primitive specs + ~243 stdlib procedures + 29 special forms + 15 macros + 11 syntax compilers + 34 library descriptions documented.
 **MCP Server**: Built-in MCP server mode (`wile --mcp`) with eval, doc, apropos, topic, libraries, and reset tools.
 **Examples**: 75 examples across 13 categories, 23 benchmarks (16 Gabriel + Larceny R7RS + Schelog + miniKanren)
@@ -37,7 +37,7 @@ Items that block production embedded use or prevent silent state corruption.
 The embedding experience that differentiates Wile.
 
 - [ ] **Extension API contracts Phase 2+** [Embedding, High]: Compile-time (compiler consults `ParamTypes` for static call sites — error before execution, zero runtime cost) and runtime (`buildValidator` wires `ParamTypes` → `SetValidator`). Integration with linter. `plans/2026-03-26-extension-contracts-design.md`
-- [ ] **Environment profiles** [Embedding]: Replace SafeExtensions/AllExtensions with named profiles (Tiny, Console, Small, KitchenSink), orthogonal sandbox modifier, virtual env map. `plans/2026-03-26-environment-profiles-impl.md`
+- [x] **Environment profiles** [Embedding, Done]: Named profiles (Tiny, Console, ConsoleWithLoad, Small, KitchenSink) via `WithProfile`; orthogonal `WithSandbox` modifier; virtual env map (`WithEnv`, `WithEnvMap`); Scheme-level `(environment '(wile <profile>))` support; `SafeExtensions`/`AllExtensions` removed. `plans/2026-03-26-environment-profiles-impl.md`
 - [x] **Eager documentation index** [Tooling, Done]: Shipped as lazy-build-and-cache rather than eager scan. `LibraryExportIndex` is built on first `apropos`/`doc` query and cached on `Namespace`; Scheme-level `(apropos)`, REPL `,apropos`, and MCP share the same index, so LLMs can discover unloaded-library procedures from the first query. See PRs #623–625 (`memory/LIBRARY-EXPORT-INDEX.md`) and post-#623 asymmetry fix (`memory/PRIM-APROPOS-EXPORT-INDEX.md`). Original eager-scan design (`2026-04-08-eager-doc-index-design.md`) was superseded before any code shipped.
 - [ ] **Network libraries** [Standard library]: TCP/UDP, HTTP, TLS, DNS. Required for real-world embedded use cases.
   - TCP/UDP sockets (tcp-connect, tcp-listen, tcp-accept, tcp-close)
@@ -273,9 +273,12 @@ What: LocalEnvironmentFrame is embedded by value in EnvironmentFrame (for heap s
 - [x] **Disassembler** [Done]: `(disassemble proc)`, `,dis`, MCP tool. PR #603.
 - [x] **Go AST Phase 2** [Done]: 13 node types. PR #480. `plans/GO-AST.md`
 
-</details>
-
+### Other
 - [ ] **Important refactoring**
     - When few fields are referenced from a struct within a function, pass in the field - do not pass in the struct or a reference to the struct
+
+- [x] **Promote `eval` extension to public** [Done]: Moved `internal/extensions/eval/` → `extensions/eval/`, importable as `github.com/aalpar/wile/extensions/eval`. Required by wile-goast and any embedder wanting sandboxed `(eval ...)` / `(load ...)`. The naive composition `WithProfile(Console) + WithExtension(eval.Extension)` does **not** work — `ConsoleAuthorizer` denies `code:load`, so `(load ...)` fails. The fix is a baked `ConsoleWithLoad` profile (extensions + matching authorizer that allows `code:load` under `/tmp`), now part of `plans/2026-03-26-environment-profiles-impl.md`.
+
+</details>
 
 

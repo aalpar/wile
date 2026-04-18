@@ -103,8 +103,8 @@ Public API (embedders): `wile/`, `values/`, `werr/`, `registry/`, `security/`, `
 
 Two-layer sandboxing for embedded use:
 
-1. **Extension-level** (zero-cost): Extensions opt-in via `WithExtension()`. Unprovided extensions don't exist at compile time. `SafeExtensions()` provides a safe sandbox (no filesystem, eval, system, threads, Go interop).
-2. **Fine-grained authorization**: `security.Authorizer` interface gates privileged operations at runtime. K8s-style vocabulary: Resource (`file`, `code`, `env`, `process`) + Action (`read`, `write`, `delete`, `load`, `exit`). Set via `WithAuthorizer()` engine option. Gate sites: files, system, eval extensions; `include`; library import.
+1. **Profile-based** (primary API): `WithProfile(p)` selects a named bundle of extensions + authorizer. Profiles: `Tiny` (core only), `Console` (I/O + /tmp files + sandboxed env), `ConsoleWithLoad` (Console + eval/load under /tmp), `Small` (R7RS-small baseline), `KitchenSink` (everything). Orthogonal modifier `WithSandbox()` wraps the authorizer with an env-map restriction. Ad-hoc `WithExtension()` still available for callers who need a custom mix.
+2. **Fine-grained authorization**: `security.Authorizer` interface gates privileged operations at runtime. K8s-style vocabulary: Resource (`file`, `code`, `env`, `process`) + Action (`read`, `write`, `delete`, `load`, `exit`). Built-in authorizers: `ConsoleAuthorizer` (/tmp file access, deny code/process), `ConsoleWithLoadAuthorizer` (Console + /tmp code:load). Set via `WithAuthorizer()` or via a profile. Gate sites: files, system, eval extensions; `include`; library import. Scheme-level `(environment '(wile <profile>))` constructs a fresh namespace for a named profile.
 
 ## Code & Style
 

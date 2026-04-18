@@ -28,7 +28,7 @@ import (
 // produces datum-label notation via SchemeWriter (already cycle-aware).
 func TestCircularPair_Write(t *testing.T) {
 	c := qt.New(t)
-	engine, err := wile.NewEngine(context.Background(), wile.WithSafeExtensions())
+	engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.Console))
 	c.Assert(err, qt.IsNil)
 
 	result, err := engine.Eval(context.Background(), engine.MustParse(context.Background(), `
@@ -50,7 +50,7 @@ func TestCircularPair_Write(t *testing.T) {
 // terminates (DisplayValueToString is already cycle-aware).
 func TestCircularPair_Display(t *testing.T) {
 	c := qt.New(t)
-	engine, err := wile.NewEngine(context.Background(), wile.WithSafeExtensions())
+	engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.Console))
 	c.Assert(err, qt.IsNil)
 
 	result, err := engine.Eval(context.Background(), engine.MustParse(context.Background(), `

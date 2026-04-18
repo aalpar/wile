@@ -62,7 +62,7 @@ func TestPrimOpaqueTag_Errors(t *testing.T) {
 // envWithOpaque creates a fresh test environment with an opaque value bound to the given name.
 func envWithOpaque(t *testing.T, name string, opaque values.Value) *environment.EnvironmentFrame {
 	t.Helper()
-	env, err := bootstrap.NewNamespaceFrameTiny(context.TODO())
+	env, err := bootstrap.NewNamespaceFrame(context.TODO())
 	qt.Assert(t, err, qt.IsNil)
 
 	sym := values.NewSymbol(name)

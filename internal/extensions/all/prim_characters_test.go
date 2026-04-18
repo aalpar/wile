@@ -29,7 +29,7 @@ import (
 func newEngine(t *testing.T) *wile.Engine {
 	t.Helper()
 	engine, err := wile.NewEngine(context.Background(),
-		wile.WithAllExtensions(),
+		wile.WithProfile(wile.KitchenSink),
 	)
 	qt.New(t).Assert(err, qt.IsNil)
 	return engine

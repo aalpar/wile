@@ -42,7 +42,7 @@ func (p panicNonError) Error() string {
 // environment with all core primitives and extensions loaded.
 func RunSchemeCode(t *testing.T, code string) (values.Value, error) {
 	t.Helper()
-	env, err := bootstrap.NewNamespaceFrameTiny(context.Background())
+	env, err := bootstrap.NewNamespaceFrame(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +123,7 @@ func RunSchemeCodeWithTimeout(t *testing.T, code string, timeout time.Duration) 
 // The context enables cancellation/timeout - the VM loop checks ctx.Done() on each iteration.
 func RunSchemeCodeWithContext(ctx context.Context, t *testing.T, code string) (values.Value, error) {
 	t.Helper()
-	env, err := bootstrap.NewNamespaceFrameTiny(ctx)
+	env, err := bootstrap.NewNamespaceFrame(ctx)
 	if err != nil {
 		return nil, err
 	}
