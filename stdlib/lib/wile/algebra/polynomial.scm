@@ -244,6 +244,16 @@
     (poly-one R)
     poly-negate))
 
+;; ─── Pre-built polynomial-ring instances ────
+
+(define (integer-polynomials)
+  "Construct the polynomial ring Z[x] over the integers.\nShortcut for (polynomial-ring (integer-ring)).\n\nExamples:\n  (ring? (integer-polynomials))  => #t\n\nReturns: any\nCategory: algebra\nKeywords: Z[x], integer polynomials, polynomial ring over integers\n\nSee also: `polynomial-ring', `integer-ring', `rational-polynomials'."
+  (polynomial-ring (integer-ring)))
+
+(define (rational-polynomials)
+  "Construct the polynomial ring Q[x] over the rationals.\nShortcut for (polynomial-ring (field->ring (rational-field))).\n\nExamples:\n  (ring? (rational-polynomials))  => #t\n\nReturns: any\nCategory: algebra\nKeywords: Q[x], rational polynomials, polynomial ring over rationals\n\nSee also: `polynomial-ring', `rational-field', `integer-polynomials'."
+  (polynomial-ring (field->ring (rational-field))))
+
 ;; ─── Destructuring macro ────────────────────
 
 (define-syntax with-polynomial

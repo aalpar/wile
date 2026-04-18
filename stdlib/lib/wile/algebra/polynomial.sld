@@ -8,9 +8,9 @@
           poly-times
           poly-eval
           poly-derivative
-          poly-divmod
-          poly-gcd
+          poly-divmod poly-gcd
           polynomial-ring
+          integer-polynomials rational-polynomials
           with-polynomial)
   (import (scheme base)
           (wile algebra ring))

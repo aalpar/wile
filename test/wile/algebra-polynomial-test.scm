@@ -192,5 +192,19 @@
                         (make-poly R '(-1 0 1)))))
     (test #t (validate-ring PR samples))))
 
+(test-group "pre-built integer-polynomials"
+  (let ((PR (integer-polynomials)))
+    (test #t (ring? PR))
+    ;; Elements must be polynomials over integer-ring
+    (let ((p (make-poly (integer-ring) '(1 2)))
+          (q (make-poly (integer-ring) '(3 4))))
+      (test '(4 6) (poly-coeffs (ring-plus PR p q))))))
+
+(test-group "pre-built rational-polynomials"
+  (let ((PR (rational-polynomials)))
+    (test #t (ring? PR))
+    (let ((p (make-poly (field->ring (rational-field)) '(1/2 1/3))))
+      (test '(1 2/3) (poly-coeffs (ring-plus PR p p))))))
+
 (test-end)
 (test-exit)
