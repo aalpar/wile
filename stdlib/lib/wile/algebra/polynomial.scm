@@ -104,13 +104,12 @@
                   (make-poly R (vector->list acc))
                   (begin
                     (let loop-j ((j 0) (ys ys))
-                      (if (null? ys)
-                          (if #f #f)  ; unspecified
-                          (let ((k (+ i j)))
-                            (vector-set! acc k
-                              (ring-plus R (vector-ref acc k)
-                                           (ring-times R (car xs) (car ys))))
-                            (loop-j (+ j 1) (cdr ys)))))
+                      (unless (null? ys)
+                        (let ((k (+ i j)))
+                          (vector-set! acc k
+                            (ring-plus R (vector-ref acc k)
+                                         (ring-times R (car xs) (car ys))))
+                          (loop-j (+ j 1) (cdr ys)))))
                     (loop-i (+ i 1) (cdr xs)))))))))))
 
 ;; ─── Evaluation (Horner's method) ──────────
