@@ -80,10 +80,10 @@ func addRecords(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "make-record-type", ParamCount: 2, Impl: PrimMakeRecordType,
 			Doc: "Creates a new record type descriptor with the given NAME (symbol) and FIELD-NAMES (list of symbols).\n\nExamples:\n  (make-record-type 'point '(x y))  => #<record-type:point>", ParamNames: []string{"name", "field-names"}, Category: "records",
-			ParamTypes: []values.TypeConstraint{values.TypeSymbol, values.TypeList}},
+			ParamTypes: []values.TypeConstraint{values.TypeSymbol, values.TypeList}, ReturnType: values.TypeAny},
 		{Name: "make-opaque-record-type", ParamCount: 2, Impl: PrimMakeOpaqueRecordType,
 			Doc: "Creates an opaque record type descriptor. Instances are hidden from record? and record-type.\n\nExamples:\n  (make-opaque-record-type 'stack '(items))  => #<type:stack>", ParamNames: []string{"name", "field-names"}, Category: "records",
-			ParamTypes: []values.TypeConstraint{values.TypeSymbol, values.TypeList}},
+			ParamTypes: []values.TypeConstraint{values.TypeSymbol, values.TypeList}, ReturnType: values.TypeAny},
 		{Name: "record-type?", ParamCount: 1, Impl: PrimIsRecordType,
 			Doc: "Returns #t if OBJ is a record type descriptor.\n\nExamples:\n  (record-type? (make-record-type 'point '(x y)))  => #t\n  (record-type? 42)                                 => #f", ParamNames: []string{"obj"}, Category: "records",
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
@@ -94,7 +94,7 @@ func addRecords(r *registry.Registry) error {
 			ReturnType: values.TypeBoolean},
 		{Name: "record-type", ParamCount: 1, Impl: PrimRecordType,
 			Doc: "Returns the record type descriptor of a record instance. Errors if the record's type is opaque.\n\nExamples:\n  ; (record-type my-record)  => #<record-type:point>", ParamNames: []string{"record"}, Category: "records",
-			ParamTypes: []values.TypeConstraint{values.TypeAny}},
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "record-constructor", ParamCount: 2, Impl: PrimRecordConstructor,
 			Doc: "Returns a constructor procedure for RTD that initializes the fields named in FIELD-TAGS.\n\nExamples:\n  (let* ((rt (make-record-type 'point '(x y)))\n         (mk (record-constructor rt '(x y))))\n    (mk 3 4))  => #<record point>", ParamNames: []string{"rtd", "field-tags"}, Category: "records",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeList},
@@ -121,15 +121,17 @@ func addPromises(r *registry.Registry) error {
 			Doc: "Returns #t if OBJ is a promise (created by delay, delay-force, or make-promise).\n\nExamples:\n  (promise? (delay 42))      => #t\n  (promise? (make-promise 1)) => #t\n  (promise? 42)              => #f", ParamNames: []string{"obj"}, Category: "promises",
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
 			ReturnType: values.TypeBoolean},
+		// Promises and forced values have no dedicated ValueType enum —
+		// TypeAny.
 		{Name: "make-promise", ParamCount: 1, Impl: PrimMakePromise,
 			Doc: "Returns an eager (already-forced) promise wrapping OBJ. If OBJ is already a promise, returns it unchanged.\n\nExamples:\n  (force (make-promise 42))  => 42", ParamNames: []string{"obj"}, Category: "promises",
-			ParamTypes: []values.TypeConstraint{values.TypeAny}},
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "force", ParamCount: 1, Impl: PrimForce,
 			Doc: "Forces evaluation of PROMISE and returns its memoized value. Non-promise arguments are returned unchanged.\n\nExamples:\n  (force (delay (+ 1 2)))  => 3\n  (force 42)              => 42", ParamNames: []string{"promise"}, Category: "promises",
-			ParamTypes: []values.TypeConstraint{values.TypeAny}},
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "%make-lazy-promise", ParamCount: 1, Impl: PrimMakeLazyPromise,
 			Doc: "Internal: creates a lazy promise from THUNK. Used by the delay macro.\n\nExamples:\n  ; (%make-lazy-promise (lambda () 42))  ; used internally by (delay 42)", ParamNames: []string{"thunk"}, Category: "promises",
-			ParamTypes: []values.TypeConstraint{values.TypeProcedure}},
+			ParamTypes: []values.TypeConstraint{values.TypeProcedure}, ReturnType: values.TypeAny},
 	}, registry.PhaseRuntime)
 	return nil
 }
@@ -138,10 +140,10 @@ func addMoreStrings(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "string-copy!", ParamCount: 2, IsVariadic: true, Impl: PrimStringCopyTo,
 			Doc: "Copies characters from the from string into TO starting at position AT.\n\nExamples:\n  (let ((s (string-copy \"abcde\"))) (string-copy! s 1 \"xy\") s)  => \"axyde\"", ParamNames: []string{"to", "at"}, Category: "strings",
-			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeAny}},
+			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeAny}, ReturnType: values.TypeVoid},
 		{Name: "string-fill!", ParamCount: 2, IsVariadic: true, Impl: PrimStringFill,
 			Doc: "Fills STRING positions from start to end with CHAR. Start defaults to 0, end to STRING length.\n\nExamples:\n  (let ((s (string-copy \"hello\"))) (string-fill! s #\\x) s)  => \"xxxxx\"", ParamNames: []string{"string", "char"}, Category: "strings",
-			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeAny}},
+			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeAny}, ReturnType: values.TypeVoid},
 		{Name: "string-upcase", ParamCount: 1, Impl: PrimStringUpcase,
 			Doc: "Returns a new string with all characters converted to uppercase using full Unicode case mapping.\n\nExamples:\n  (string-upcase \"hello\")  => \"HELLO\"\n  (string-upcase \"straße\") => \"STRASSE\"", ParamNames: []string{"string"}, Category: "strings",
 			Keywords:   []string{"uppercase", "toupper", "capitalize"},
@@ -227,9 +229,10 @@ func addMoreChars(r *registry.Registry) error {
 			Doc: "Returns the case-folded form of CHAR for case-insensitive comparison.\n\nExamples:\n  (char-foldcase #\\A)  => #\\a", ParamNames: []string{"char"}, Category: "characters",
 			ParamTypes: []values.TypeConstraint{values.TypeCharacter},
 			ReturnType: values.TypeCharacter},
+		// digit-value returns an integer or #f — TypeAny covers the union.
 		{Name: "digit-value", ParamCount: 1, Impl: PrimDigitValue,
 			Doc: "Returns the numeric value (0-9) of a Unicode decimal digit character, or #f if not a digit.\n\nExamples:\n  (digit-value #\\3)  => 3\n  (digit-value #\\a)  => #f", ParamNames: []string{"char"}, Category: "characters",
-			ParamTypes: []values.TypeConstraint{values.TypeCharacter}},
+			ParamTypes: []values.TypeConstraint{values.TypeCharacter}, ReturnType: values.TypeAny},
 	}, registry.PhaseRuntime)
 	return nil
 }

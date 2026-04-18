@@ -36,7 +36,7 @@ func addParameters(r *registry.Registry) error {
 		// Used by parameterize to pre-convert the value before storing as a continuation mark.
 		{Name: "%parameter-convert", ParamCount: 2, Impl: PrimParameterConvert,
 			Doc: "Internal: applies the parameter's converter to VAL without setting it. Used by parameterize to pre-convert.", ParamNames: []string{"param", "val"}, Category: "parameters",
-			ParamTypes: []values.TypeConstraint{values.TypeProcedure, values.TypeAny}},
+			ParamTypes: []values.TypeConstraint{values.TypeProcedure, values.TypeAny}, ReturnType: values.TypeAny},
 	}, registry.PhaseRuntime)
 
 	return nil

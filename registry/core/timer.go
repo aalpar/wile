@@ -34,6 +34,7 @@ func addTimer(r *registry.Registry) error { //nolint:govet
 				"  (with-timeout 1 (lambda (k) 'expired) (lambda () (let loop () (loop))))  => expired",
 			ParamNames: []string{"ms", "handler", "thunk"},
 			ParamTypes: []values.TypeConstraint{values.TypeInteger, values.TypeProcedure, values.TypeProcedure},
+			ReturnType: values.TypeAny,
 			Category:   "control", Keywords: []string{"timeout", "timer", "engine", "fuel", "bounded-eval", "preemption"}},
 	}, registry.PhaseRuntime)
 

@@ -43,7 +43,7 @@ func addPrimitives(r *registry.Registry) error {
 		{Name: "process-spawn", ParamCount: 2, IsVariadic: true, Impl: PrimProcessSpawn,
 			Doc: "Starts a child process with piped stdin/stdout/stderr. Returns a process object.", ParamNames: []string{"command", "args"}, Category: "process",
 			Keywords:   []string{"fork", "exec", "launch", "subprocess", "popen"},
-			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeString}},
+			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeString}, ReturnType: values.TypeAny},
 		{Name: "process-stdout", ParamCount: 1, Impl: PrimProcessStdout,
 			Doc: "Returns the stdout of PROCESS as a textual input port.", ParamNames: []string{"process"}, Category: "process",
 			ParamTypes: []values.TypeConstraint{values.TypeAny},

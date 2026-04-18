@@ -37,12 +37,14 @@ func addPrimitives(r *registry.Registry) error {
 			Doc: "Returns the command-line arguments as a list of strings, including the program name.", Category: "system",
 			Keywords:   []string{"argv", "args", "command-line arguments"},
 			ReturnType: values.TypeList},
+		// exit and emergency-exit never return — ReturnType is TypeAny as a
+		// nominal annotation.
 		{Name: "exit", ParamCount: 1, IsVariadic: true, Impl: PrimExit,
 			Doc: "Exits the process. With no argument or #t, exits with code 0. With #f, exits with code 1. With an integer, uses that code.", ParamNames: []string{"status"}, Category: "system",
-			ParamTypes: []values.TypeConstraint{values.TypeAny}},
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "emergency-exit", ParamCount: 1, IsVariadic: true, Impl: PrimEmergencyExit,
 			Doc: "Exits the process immediately without running cleanup. Same argument handling as exit.", ParamNames: []string{"status"}, Category: "system",
-			ParamTypes: []values.TypeConstraint{values.TypeAny}},
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "current-second", Impl: PrimCurrentSecond,
 			Doc: "Returns the current time as seconds since the Unix epoch as an inexact real number.", Category: "system",
 			Keywords:   []string{"time now", "Unix timestamp", "epoch", "wall clock"},
