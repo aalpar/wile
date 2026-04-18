@@ -145,6 +145,41 @@ func TestBuildValidator_Variadic(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 }
 
+// TestBuildValidator_VariadicShortParamTypes verifies that when
+// len(ParamTypes) < ParamCount for a variadic spec, the last declared
+// constraint applies to all unspecified fixed positions as well as to
+// rest-list elements. validateParamTypes permits this shape (n in
+// [1, ParamCount]); BuildValidator must honor it.
+func TestBuildValidator_VariadicShortParamTypes(t *testing.T) {
+	// ParamCount=3, IsVariadic=true, len(ParamTypes)=1 -> every arg
+	// (two fixed positions + rest elements) must be TypeString.
+	spec := PrimitiveSpec{
+		Name:       "all-strings",
+		ParamCount: 3,
+		IsVariadic: true,
+		ParamTypes: []values.TypeConstraint{values.TypeString},
+	}
+	v := BuildValidator(spec)
+	c := qt.New(t)
+	c.Assert(v, qt.IsNotNil)
+
+	// All fixed positions + rest elements are strings: pass.
+	rest := values.List(values.NewString("c"))
+	err := v(newStub(values.NewString("a"), values.NewString("b"), rest))
+	c.Assert(err, qt.IsNil)
+
+	// Second fixed position (not covered by explicit types[1]) wrong: fail.
+	err = v(newStub(values.NewString("a"), values.NewInteger(42), values.EmptyList))
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "all-strings: argument 1")
+
+	// Rest element wrong: fail.
+	rest = values.List(values.NewInteger(99))
+	err = v(newStub(values.NewString("a"), values.NewString("b"), rest))
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "all-strings: argument 2")
+}
+
 func TestBuildValidator_VariadicWithFixedArgs(t *testing.T) {
 	// Synthetic: ParamCount=2, IsVariadic=true.
 	// Arg(0) is fixed (TypeNumber); Arg(1) is rest list of TypeNumber.

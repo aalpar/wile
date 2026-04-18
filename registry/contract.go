@@ -39,8 +39,10 @@ import (
 // are checked directly via mc.Arg(i). Position ParamCount-1 holds the
 // rest list (a values.Tuple); each rest element is checked against the
 // last entry in ParamTypes. When len(ParamTypes) is shorter than
-// ParamCount (permitted by validateParamTypes), the last entry is used
-// both for the final fixed slot and for the rest elements.
+// ParamCount (permitted by validateParamTypes), any fixed position i
+// beyond len(ParamTypes)-1 reuses types[len(ParamTypes)-1] — the last
+// declared constraint acts as the catch-all for unspecified fixed slots
+// and for rest-list elements.
 func BuildValidator(spec PrimitiveSpec) machine.ForeignFunction {
 	if len(spec.ParamTypes) == 0 {
 		return nil
@@ -75,11 +77,13 @@ func validateFixed(mc machine.CallContext, types []values.TypeConstraint, name s
 
 // validateVariadic checks fixed args at positions 0..paramCount-2 and
 // iterates the rest list at mc.Arg(paramCount-1), checking each element
-// against the last entry in types.
+// against the last entry in types. For fixed positions past the end of
+// types, the last entry is reused as the catch-all constraint.
 func validateVariadic(mc machine.CallContext, types []values.TypeConstraint, name string, paramCount int) error {
 	fixedCount := paramCount - 1
-	for i := 0; i < fixedCount && i < len(types); i++ {
-		tc := types[i]
+	lastIdx := len(types) - 1
+	for i := range fixedCount {
+		tc := types[min(i, lastIdx)]
 		if tc == nil {
 			continue
 		}
@@ -89,7 +93,7 @@ func validateVariadic(mc machine.CallContext, types []values.TypeConstraint, nam
 		}
 	}
 
-	restType := types[len(types)-1]
+	restType := types[lastIdx]
 	if restType == nil {
 		return nil
 	}
