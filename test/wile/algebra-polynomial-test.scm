@@ -33,5 +33,23 @@
          (p (make-poly R '(1 2 3))))
     (test #t (ring? (poly-ring p)))))
 
+(test-group "poly-zero and poly-one"
+  (let ((R (integer-ring)))
+    (test '()  (poly-coeffs (poly-zero R)))
+    (test '(1) (poly-coeffs (poly-one R)))))
+
+(test-group "poly-degree"
+  (let ((R (integer-ring)))
+    (test -1 (poly-degree (make-poly R '())))        ; zero poly: -1 by convention
+    (test 0  (poly-degree (make-poly R '(5))))       ; constant
+    (test 2  (poly-degree (make-poly R '(1 2 3))))   ; 1 + 2x + 3x^2
+    (test 1  (poly-degree (make-poly R '(1 2 0)))))) ; normalized to (1 2)
+
+(test-group "poly-leading-coeff"
+  (let ((R (integer-ring)))
+    (test 0 (poly-leading-coeff (make-poly R '())))   ; zero poly → ring-zero
+    (test 5 (poly-leading-coeff (make-poly R '(5))))
+    (test 3 (poly-leading-coeff (make-poly R '(1 2 3))))))
+
 (test-end)
 (test-exit)
