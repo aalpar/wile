@@ -26,7 +26,8 @@ func addControl(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "apply", ParamCount: 2, IsVariadic: true, Impl: PrimApply,
 			Doc: "Calls PROC with the elements of the final list argument as individual arguments. Intermediate arguments are prepended.\n\nExamples:\n  (apply + '(1 2 3))      => 6\n  (apply + 1 '(2 3))      => 6\n  (apply list 'a 'b '(c))  => (a b c)", ParamNames: []string{"proc", "arg1", "args"}, Category: "control",
-			Keywords: []string{"invoke", "call with list", "spread", "splat"}},
+			ParamTypes: []values.TypeConstraint{values.TypeProcedure, values.TypeAny},
+			Keywords:   []string{"invoke", "call with list", "spread", "splat"}},
 	}, registry.PhaseRuntime)
 
 	// Continuations
