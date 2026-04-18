@@ -87,5 +87,17 @@
     ;; One is identity
     (test '(1 2 3) (poly-coeffs (poly-times (poly-one R) (make-poly R '(1 2 3)))))))
 
+(test-group "poly-eval (Horner)"
+  (let ((R (integer-ring)))
+    ;; p(x) = 1 + 2x + 3x^2; p(0) = 1, p(1) = 6, p(2) = 17
+    (let ((p (make-poly R '(1 2 3))))
+      (test 1  (poly-eval p 0))
+      (test 6  (poly-eval p 1))
+      (test 17 (poly-eval p 2)))
+    ;; Zero polynomial evaluates to ring-zero
+    (test 0 (poly-eval (poly-zero R) 42))
+    ;; Constant polynomial evaluates to its constant
+    (test 5 (poly-eval (make-poly R '(5)) 99))))
+
 (test-end)
 (test-exit)

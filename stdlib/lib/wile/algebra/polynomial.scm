@@ -112,3 +112,18 @@
                                            (ring-times R (car xs) (car ys))))
                             (loop-j (+ j 1) (cdr ys)))))
                     (loop-i (+ i 1) (cdr xs)))))))))))
+
+;; ─── Evaluation (Horner's method) ──────────
+;;
+;; For coeffs in ascending order (a0 a1 ... an), Horner's scheme
+;; computes p(x) = a0 + x(a1 + x(a2 + ... + x*an)) using n
+;; multiplications and n additions — O(n) rather than the O(n^2)
+;; of naive power-accumulation.
+
+(define (poly-eval p x)
+  "Evaluate polynomial P at point X via Horner's method.\nUses n multiplications and n additions under the coefficient\nring for a degree-n polynomial — O(n) rather than the O(n^2)\nof naive power accumulation. The point X must belong to the\ncoefficient ring (or a ring extension where ring-plus and\nring-times remain meaningful).\n\nExamples:\n  (let ((R (integer-ring)))\n    (poly-eval (make-poly R '(1 2 3)) 2))  => 17\n  ; because 1 + 2*2 + 3*4 = 17\n\nParameters:\n  p : any\n  x : any\nReturns: any\nCategory: algebra\nKeywords: polynomial evaluation, Horner's method, Horner scheme, synthetic substitution\n\nSee also: `poly-plus', `poly-times'."
+  (let ((R (poly-ring p)))
+    (let loop ((cs (reverse (poly-coeffs p))) (acc (ring-zero R)))
+      (if (null? cs)
+          acc
+          (loop (cdr cs) (ring-plus R (car cs) (ring-times R x acc)))))))
