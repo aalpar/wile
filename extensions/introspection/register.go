@@ -17,6 +17,7 @@ package introspection
 
 import (
 	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/values"
 )
 
 // Extension is the introspection extension.
@@ -35,17 +36,29 @@ func addPrimitives(r *registry.Registry) error {
 		{Name: "interaction-environment", Impl: PrimInteractionEnvironment,
 			Doc: "Returns the current top-level interaction environment as an environment object.", Category: "introspection"},
 		{Name: "environment?", ParamCount: 1, Impl: PrimEnvironmentQ,
-			Doc: "Returns #t if OBJ is an environment object (created by environment, scheme-report-environment, etc.).", ParamNames: []string{"obj"}, Category: "introspection"},
+			Doc: "Returns #t if OBJ is an environment object (created by environment, scheme-report-environment, etc.).", ParamNames: []string{"obj"}, Category: "introspection",
+			ParamTypes: []values.TypeConstraint{values.TypeAny},
+			ReturnType: values.TypeBoolean},
+		// TODO(contracts): environment-* primitives take *environment.Namespace
+		// which is not a ValueType enum. Falling back to TypeAny so enforcement
+		// passes; the impl's RequireType still catches mismatches.
 		{Name: "environment-bound-names", ParamCount: 1, Impl: PrimEnvironmentBoundNames,
-			Doc: "Returns a list of all symbols that have bindings in ENV.", ParamNames: []string{"env"}, Category: "introspection"},
+			Doc: "Returns a list of all symbols that have bindings in ENV.", ParamNames: []string{"env"}, Category: "introspection",
+			ParamTypes: []values.TypeConstraint{values.TypeAny},
+			ReturnType: values.TypeList},
 		{Name: "environment-ref", ParamCount: 2, Impl: PrimEnvironmentRef,
-			Doc: "Returns the value bound to SYMBOL in ENV. Raises an error if unbound.", ParamNames: []string{"env", "symbol"}, Category: "introspection"},
+			Doc: "Returns the value bound to SYMBOL in ENV. Raises an error if unbound.", ParamNames: []string{"env", "symbol"}, Category: "introspection",
+			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeSymbol}},
 		{Name: "environment-bound?", ParamCount: 2, Impl: PrimEnvironmentBoundQ,
-			Doc: "Returns #t if SYMBOL has a binding in ENV.", ParamNames: []string{"env", "symbol"}, Category: "introspection"},
+			Doc: "Returns #t if SYMBOL has a binding in ENV.", ParamNames: []string{"env", "symbol"}, Category: "introspection",
+			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeSymbol},
+			ReturnType: values.TypeBoolean},
 		{Name: "features", Impl: PrimFeatures,
-			Doc: "Returns a list of symbols representing implementation features (r7rs, wile, platform, architecture).", Category: "introspection"},
+			Doc: "Returns a list of symbols representing implementation features (r7rs, wile, platform, architecture).", Category: "introspection",
+			ReturnType: values.TypeList},
 		{Name: "available-libraries", Impl: PrimAvailableLibraries,
-			Doc: "Returns a sorted list of all importable library names. Each name is a list of symbols/integers in R7RS library name syntax.", Category: "introspection"},
+			Doc: "Returns a sorted list of all importable library names. Each name is a list of symbols/integers in R7RS library name syntax.", Category: "introspection",
+			ReturnType: values.TypeList},
 		{Name: "disassemble", ParamCount: 1, Impl: PrimDisassemble,
 			Doc: "Returns structured disassembly of a procedure as a list of alists. " +
 				"The first element (car) is always a header alist with metadata " +
@@ -55,7 +68,9 @@ func addPrimitives(r *registry.Registry) error {
 				"literal, binding, side-op, source. For case-lambda, the header " +
 				"contains a clauses key with per-clause disassemblies. For foreign " +
 				"closures, the header is the only element.",
-			ParamNames: []string{"proc"}, Category: "introspection"},
+			ParamNames: []string{"proc"}, Category: "introspection",
+			ParamTypes: []values.TypeConstraint{values.TypeProcedure},
+			ReturnType: values.TypeList},
 	}, registry.PhaseRuntime)
 	return nil
 }

@@ -16,6 +16,7 @@ package envvars
 
 import (
 	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/values"
 )
 
 // Extension is the envvars extension.
@@ -33,10 +34,12 @@ func addPrimitives(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "get-environment-variable", ParamCount: 1, Impl: PrimGetEnvironmentVariable,
 			Doc: "Returns the value of the named environment variable as a string, or #f if not set.", ParamNames: []string{"name"}, Category: "envvars",
-			Keywords: []string{"getenv", "env var", "environment lookup"}},
+			Keywords:   []string{"getenv", "env var", "environment lookup"},
+			ParamTypes: []values.TypeConstraint{values.TypeString}},
 		{Name: "get-environment-variables", Impl: PrimGetEnvironmentVariables,
 			Doc: "Returns all environment variables as an association list of (name . value) pairs.", Category: "envvars",
-			Keywords: []string{"environ", "env vars", "all environment"}},
+			Keywords:   []string{"environ", "env vars", "all environment"},
+			ReturnType: values.TypeList},
 	}, registry.PhaseRuntime)
 	return nil
 }

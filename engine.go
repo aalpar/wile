@@ -53,16 +53,17 @@ const DefaultMaxCallDepth uint64 = 10000
 // SRFI-18 threads within a single Engine are safe — the VM handles
 // thread coordination internally.
 type Engine struct {
-	namespace       *environment.Namespace
-	env             *environment.EnvironmentFrame
-	registry        *registry.Registry
-	debugger        *Debugger
-	lastCounters    machine.VMCounters
-	closers         []registry.Closeable
-	closed          bool
-	maxCallDepth    uint64
-	maxStackSize    uint64
-	inlineThreshold int
+	namespace           *environment.Namespace
+	env                 *environment.EnvironmentFrame
+	registry            *registry.Registry
+	debugger            *Debugger
+	lastCounters        machine.VMCounters
+	closers             []registry.Closeable
+	closed              bool
+	maxCallDepth        uint64
+	maxStackSize        uint64
+	inlineThreshold     int
+	contractEnforcement bool // propagated to RegisterPrimitive via cfg
 
 	exportIndexMu    sync.Mutex
 	exportIndexBuilt bool
@@ -128,12 +129,24 @@ func bootstrapNamespace(ctx context.Context, cfg *engineConfig) (*environment.Na
 	}
 
 	env := ns.Runtime()
-	err = applyBaseEnvironment(ctx, env, reg)
+	err = applyBaseEnvironment(ctx, env, reg, applyOptionsFromConfig(cfg)...)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	return ns, snapshots, closers, nil
+}
+
+// applyOptionsFromConfig translates engineConfig into the ApplyOption slice
+// consumed by registry.Apply. Centralizing this keeps new enforcement-style
+// toggles in one place instead of scattered across applyBaseEnvironment
+// call sites (initial bootstrap and the library env factory).
+func applyOptionsFromConfig(cfg *engineConfig) []registry.ApplyOption {
+	var opts []registry.ApplyOption
+	if cfg.contractEnforcement {
+		opts = append(opts, registry.WithContractEnforcement())
+	}
+	return opts
 }
 
 // NewEngine creates a new Wile engine.
@@ -223,20 +236,21 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	}
 
 	if cfg.libraryEnabled {
-		err := setupLibrarySystem(cfg.libraryPaths, cfg.importObserver, reg, env, ns, snapshots)
+		err := setupLibrarySystem(cfg.libraryPaths, cfg.importObserver, reg, env, ns, snapshots, applyOptionsFromConfig(cfg))
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	q := &Engine{
-		namespace:       ns,
-		env:             env,
-		registry:        reg,
-		closers:         closers,
-		maxCallDepth:    cfg.maxCallDepth,
-		maxStackSize:    cfg.maxStackSize,
-		inlineThreshold: cfg.inlineThreshold,
+		namespace:           ns,
+		env:                 env,
+		registry:            reg,
+		closers:             closers,
+		maxCallDepth:        cfg.maxCallDepth,
+		maxStackSize:        cfg.maxStackSize,
+		inlineThreshold:     cfg.inlineThreshold,
+		contractEnforcement: cfg.contractEnforcement,
 	}
 	return q, nil
 }
@@ -293,7 +307,9 @@ func buildRegistry(cfg *engineConfig) (*registry.Registry, []extSnapshot, []regi
 
 // setupLibrarySystem configures the R7RS library system: search paths,
 // import observer, extension libraries, and the library environment factory.
-func setupLibrarySystem(libraryPaths []string, importObserver func(LibraryImportEvent), reg *registry.Registry, env *environment.EnvironmentFrame, ns *environment.Namespace, snapshots []extSnapshot) error {
+// applyOpts propagates registry.Apply toggles (e.g., contract enforcement)
+// into child library environments so they mirror the parent's configuration.
+func setupLibrarySystem(libraryPaths []string, importObserver func(LibraryImportEvent), reg *registry.Registry, env *environment.EnvironmentFrame, ns *environment.Namespace, snapshots []extSnapshot, applyOpts []registry.ApplyOption) error {
 	libReg := compilation.NewLibraryRegistry()
 
 	// Prepend user paths in reverse order so first path has highest priority.
@@ -331,7 +347,7 @@ func setupLibrarySystem(libraryPaths []string, importObserver func(LibraryImport
 
 		libEnv := callerTopLevel.NewChildRuntime()
 
-		applyErr := applyBaseEnvironment(ctx, libEnv, reg)
+		applyErr := applyBaseEnvironment(ctx, libEnv, reg, applyOpts...)
 		if applyErr != nil {
 			return nil, applyErr
 		}
@@ -457,6 +473,9 @@ func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
 	)
 	closure.SetName(spec.Name)
 	closure.SetDoc(spec.Doc)
+	if p.contractEnforcement {
+		closure.SetValidator(registry.BuildValidator(spec))
+	}
 
 	return p.env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
 }
@@ -645,9 +664,10 @@ func registerExtensionLibraries(reg *registry.Registry, env *environment.Environ
 // applyBaseEnvironment performs the five-step setup that every usable environment
 // requires: apply registry bindings, register syntax compilers, register primitive
 // expanders, load bootstrap macros, and inject documentation into bindings.
-// Each step wraps errors with ErrEngineInit.
-func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.Registry) error {
-	err := reg.Apply(ctx, env)
+// Each step wraps errors with ErrEngineInit. Additional registry.ApplyOption
+// values are forwarded to the registry Apply call.
+func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame, reg *registry.Registry, opts ...registry.ApplyOption) error {
+	err := reg.Apply(ctx, env, opts...)
 	if err != nil {
 		return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, err, "apply registry")
 	}
