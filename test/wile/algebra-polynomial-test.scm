@@ -51,5 +51,28 @@
     (test 5 (poly-leading-coeff (make-poly R '(5))))
     (test 3 (poly-leading-coeff (make-poly R '(1 2 3))))))
 
+(test-group "poly-plus"
+  (let ((R (integer-ring)))
+    ;; (1 + 2x) + (3 + 4x + 5x^2) = 4 + 6x + 5x^2
+    (test '(4 6 5) (poly-coeffs (poly-plus (make-poly R '(1 2))
+                                           (make-poly R '(3 4 5)))))
+    ;; Zero identity
+    (test '(1 2 3) (poly-coeffs (poly-plus (poly-zero R)
+                                           (make-poly R '(1 2 3)))))
+    ;; Cancellation normalizes: (1 + x) + (-1 - x) = 0
+    (test '() (poly-coeffs (poly-plus (make-poly R '(1 1))
+                                      (make-poly R '(-1 -1)))))))
+
+(test-group "poly-negate"
+  (let ((R (integer-ring)))
+    (test '(-1 -2 -3) (poly-coeffs (poly-negate (make-poly R '(1 2 3)))))
+    (test '() (poly-coeffs (poly-negate (poly-zero R))))))
+
+(test-group "poly-minus"
+  (let ((R (integer-ring)))
+    ;; (3 + 4x) - (1 + 2x) = 2 + 2x
+    (test '(2 2) (poly-coeffs (poly-minus (make-poly R '(3 4))
+                                          (make-poly R '(1 2)))))))
+
 (test-end)
 (test-exit)

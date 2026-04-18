@@ -55,3 +55,27 @@
         (ring-zero (poly-ring p))
         (let loop ((xs cs))
           (if (null? (cdr xs)) (car xs) (loop (cdr xs)))))))
+
+;; ─── Additive structure ─────────────────────
+
+(define (poly-plus p q)
+  "Add polynomials P and Q. Both must share the same coefficient ring.\nResult is normalized (trailing zeros stripped after coefficient-wise add).\n\nExamples:\n  (let ((R (integer-ring)))\n    (poly-coeffs (poly-plus (make-poly R '(1 2)) (make-poly R '(3 4 5)))))\n  => (4 6 5)\n\nParameters:\n  p : any\n  q : any\nReturns: any\nCategory: algebra\nKeywords: polynomial addition, add, sum, plus\n\nSee also: `poly-minus', `poly-negate'."
+  (let ((R (poly-ring p)))
+    (make-poly R
+      (let loop ((xs (poly-coeffs p)) (ys (poly-coeffs q)))
+        (cond
+          ((null? xs) ys)
+          ((null? ys) xs)
+          (else
+            (cons (ring-plus R (car xs) (car ys))
+                  (loop (cdr xs) (cdr ys)))))))))
+
+(define (poly-negate p)
+  "Return the additive inverse of polynomial P.\nNegates every coefficient under the coefficient ring's negation.\n\nExamples:\n  (let ((R (integer-ring)))\n    (poly-coeffs (poly-negate (make-poly R '(1 2 3)))))  => (-1 -2 -3)\n\nParameters:\n  p : any\nReturns: any\nCategory: algebra\nKeywords: polynomial negation, additive inverse, unary minus\n\nSee also: `poly-plus', `poly-minus'."
+  (let ((R (poly-ring p)))
+    (make-poly* R
+      (map (lambda (c) (ring-negate R c)) (poly-coeffs p)))))
+
+(define (poly-minus p q)
+  "Subtract polynomial Q from P. Computed as P plus negation of Q.\n\nExamples:\n  (let ((R (integer-ring)))\n    (poly-coeffs (poly-minus (make-poly R '(3 4)) (make-poly R '(1 2)))))\n  => (2 2)\n\nParameters:\n  p : any\n  q : any\nReturns: any\nCategory: algebra\nKeywords: polynomial subtraction, subtract, difference, minus\n\nSee also: `poly-plus', `poly-negate'."
+  (poly-plus p (poly-negate q)))

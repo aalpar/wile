@@ -3,7 +3,8 @@
   (export make-poly polynomial?
           poly-ring poly-coeffs
           poly-zero poly-one
-          poly-degree poly-leading-coeff)
+          poly-degree poly-leading-coeff
+          poly-plus poly-negate poly-minus)
   (import (scheme base)
           (wile algebra ring))
   (include "polynomial.scm"))
