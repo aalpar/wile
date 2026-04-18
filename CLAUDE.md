@@ -185,4 +185,5 @@ See `cmd/CLAUDE.md` for full build commands, dist/ structure, and REPL usage.
 - `docs/extensions/libraries.md` — R7RS library integration for extensions
 - `docs/embedding/source-loading.md` — FileResolver chain, embedded stdlib, library import resolution
 - `docs/compiler/peephole-optimizer.md` — Superinstruction formation, 3-pass pipeline, promoted opcodes
+- `docs/coverage/scheme-coverage.md` — Scheme-level line coverage (`--cover`, `coverage` package)
 - `plans/CLAUDE.md` — Active plan files and design documents
