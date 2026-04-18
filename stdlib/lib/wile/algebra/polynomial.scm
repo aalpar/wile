@@ -243,3 +243,16 @@
     (poly-zero R)
     (poly-one R)
     poly-negate))
+
+;; ─── Destructuring macro ────────────────────
+
+(define-syntax with-polynomial
+  (syntax-rules ()
+    ((with-polynomial R (plus times zero one negate) body ...)
+     (let ((tmp R))
+       (let ((plus   poly-plus)
+             (times  poly-times)
+             (zero   (poly-zero tmp))
+             (one    (poly-one tmp))
+             (negate poly-negate))
+         body ...)))))

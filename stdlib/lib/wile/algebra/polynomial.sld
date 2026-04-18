@@ -10,7 +10,8 @@
           poly-derivative
           poly-divmod
           poly-gcd
-          polynomial-ring)
+          polynomial-ring
+          with-polynomial)
   (import (scheme base)
           (wile algebra ring))
   (include "polynomial.scm"))

@@ -173,5 +173,24 @@
                             (make-poly R '(1))))))  ; y
       (test #t (polynomial? y-plus-x)))))
 
+(test-group "with-polynomial macro"
+  (let ((R (integer-ring)))
+    (test '(2 4) (poly-coeffs
+                   (with-polynomial R (plus times zero one negate)
+                     (plus (make-poly R '(1 2)) (make-poly R '(1 2))))))))
+
+(test-group "validate-polynomial-ring"
+  ;; Over the rational field (a field is a ring), polynomial laws must hold
+  ;; on a small sample of polynomials.
+  (let* ((F  (rational-field))
+         (R  (field->ring F))
+         (PR (polynomial-ring R))
+         (samples (list (make-poly R '())
+                        (make-poly R '(1))
+                        (make-poly R '(1 2))
+                        (make-poly R '(0 1))
+                        (make-poly R '(-1 0 1)))))
+    (test #t (validate-ring PR samples))))
+
 (test-end)
 (test-exit)
