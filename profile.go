@@ -15,18 +15,7 @@
 package wile
 
 import (
-	exteval "github.com/aalpar/wile/extensions/eval"
-	"github.com/aalpar/wile/extensions/files"
-	"github.com/aalpar/wile/extensions/gointerop"
-	"github.com/aalpar/wile/extensions/introspection"
-	"github.com/aalpar/wile/extensions/math"
-	"github.com/aalpar/wile/extensions/process"
-	"github.com/aalpar/wile/extensions/system"
-	"github.com/aalpar/wile/extensions/threads"
-	"github.com/aalpar/wile/internal/extensions/all"
-	"github.com/aalpar/wile/internal/extensions/envvars"
-	ioext "github.com/aalpar/wile/internal/extensions/io"
-	nsext "github.com/aalpar/wile/internal/extensions/namespace"
+	"github.com/aalpar/wile/internal/bootstrap"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/security"
 )
@@ -83,59 +72,19 @@ func (p Profile) String() string {
 	}
 }
 
-// extensions returns the registry extensions for this profile.
-// Tiny returns nil (core only). envvars.Extension will be added
-// to each non-Tiny profile's list in Task 4 of this plan.
+// extensions returns the registry extensions for this profile. Delegates to
+// bootstrap.ProfileExtensions so the mapping has a single source of truth
+// shared with (environment '(wile <name>)) dispatch in extensions/eval.
 func (p Profile) extensions() []registry.Extension {
-	switch p {
-	case Tiny:
-		return nil
-	case Console:
-		return []registry.Extension{
-			ioext.Extension,
-			files.Extension,
-			math.Extension,
-			all.SafeExtension,
-			envvars.Extension,
-		}
-	case ConsoleWithLoad:
-		return []registry.Extension{
-			ioext.Extension,
-			files.Extension,
-			math.Extension,
-			all.SafeExtension,
-			exteval.Extension,
-			envvars.Extension,
-		}
-	case Small:
-		return []registry.Extension{
-			ioext.Extension,
-			files.Extension,
-			math.Extension,
-			introspection.Extension,
-			exteval.Extension,
-			all.Extension,
-			system.Extension,
-			envvars.Extension,
-		}
-	case KitchenSink:
-		return []registry.Extension{
-			ioext.Extension,
-			files.Extension,
-			math.Extension,
-			introspection.Extension,
-			exteval.Extension,
-			nsext.Extension,
-			threads.Extension,
-			gointerop.Extension,
-			all.Extension,
-			system.Extension,
-			process.Extension,
-			envvars.Extension,
-		}
-	default:
+	exts, err := bootstrap.ProfileExtensions(p.String())
+	if err != nil {
+		// Unreachable for valid Profile values: p.String() returns "unknown"
+		// for out-of-range, which ProfileExtensions rejects. Out-of-range
+		// profiles already yielded nil in the prior implementation; keep
+		// that behavior rather than panicking.
 		return nil
 	}
+	return exts
 }
 
 // authorizer returns the built-in authorizer for this profile, or nil.
