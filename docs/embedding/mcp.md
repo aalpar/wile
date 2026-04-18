@@ -197,8 +197,8 @@ what the AI assistant should accomplish.
 
 - **Persistent state**: Definitions, imports, and bindings accumulate across
   `eval` calls within a single MCP session.
-- **All extensions loaded**: The engine starts with `AllExtensions()` — filesystem,
-  math, system, threads, eval, Go interop, introspection, and more.
+- **All extensions loaded**: The engine starts with the `KitchenSink` profile —
+  filesystem, math, system, threads, eval, Go interop, introspection, and more.
 - **Stdout isolation**: Scheme output (`display`, `write`) is captured per-call and
   returned in the `output` field. It never reaches the MCP JSON-RPC transport.
 - **Panic recovery**: VM panics (e.g. uncaught `raise`) are caught and returned as
@@ -212,7 +212,7 @@ The MCP server creates an engine equivalent to the CLI:
 
 ```go
 wile.NewEngine(ctx,
-    wile.WithAllExtensions(),
+    wile.WithProfile(wile.KitchenSink),
     wile.WithSourceFS(stdlib.FS),
     wile.WithSourceOS(),
     wile.WithLibraryPaths(...),

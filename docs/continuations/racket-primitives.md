@@ -594,7 +594,7 @@ already covers the security guard use case with a more Go-native API.
 | Racket concept | Wile equivalent | Notes |
 |----------------|-----------------|-------|
 | Security guards | `security.Authorizer` interface | K8s-style Resource + Action vocabulary. Hierarchical: `WithAuthorizer()` engine option. Gate sites at files, system, eval, `include`, library import. |
-| Sandboxed eval | `SafeExtensions()` + `WithAuthorizer()` | Extension-level: unprovided extensions don't exist at compile time. Fine-grained: authorizer gates privileged ops at runtime. |
+| Sandboxed eval | `WithProfile(Console)` (or `Tiny`) + `WithAuthorizer()` | Extension-level: unprovided extensions don't exist at compile time. Fine-grained: authorizer gates privileged ops at runtime. |
 
 ## The Design Principle
 

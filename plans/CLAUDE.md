@@ -59,10 +59,7 @@ Phase 1 infrastructure complete (PRs #577-578): `ForeignClosure.SetValidator/Val
 
 ### Environment Profiles
 
-| File | Contents | Status |
-|------|----------|--------|
-| `2026-03-26-environment-profiles.md` | Named profiles (Tiny, Console, Small, KitchenSink), sandbox modifier | **Draft** -- design complete, no implementation |
-| `2026-03-26-environment-profiles-impl.md` | Environment profiles implementation plan (10 tasks) | **Draft** -- 0/10 tasks completed |
+Moved to **Completed Plans** below.
 
 ### Benchmarks
 
@@ -143,6 +140,13 @@ Historical reference. Work has shipped; plans preserved for design context.
 | `2026-03-24-opaque-values-design.md` | OpaqueValue design document | PR #566 |
 | `EXTENSIBLE-TYPE-CONSTRAINTS.md` | Extensible type constraint system: `TypeConstraint` interface replacing closed `ValueType` enum | PR #629 |
 | `2026-04-09-extensible-type-constraints-impl.md` | TypeConstraint interface implementation plan | PR #629 |
+
+### Environment Profiles
+
+| File | Contents | Completed |
+|------|----------|-----------|
+| `2026-03-26-environment-profiles.md` | Named profiles (Tiny, Console, ConsoleWithLoad, Small, KitchenSink), sandbox modifier | PR #662 |
+| `2026-03-26-environment-profiles-impl.md` | Environment profiles 10-task implementation plan | PR #662 |
 
 ### OS & Extensions
 

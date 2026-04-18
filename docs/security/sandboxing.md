@@ -28,35 +28,55 @@ This restriction is **transitive**: when the library system is enabled (`WithLib
 
 ## API
 
-### Safe sandbox (recommended for untrusted code)
+### Named profiles (recommended)
+
+The primary API is `WithProfile`, which bundles an extension set with a matching authorizer:
+
+| Profile | Extensions | Authorizer |
+|---------|-----------|------------|
+| `Tiny` | core only | none |
+| `Console` | core + io + files + math + all-safe + envvars | `ConsoleAuthorizer` (file ops restricted to `/tmp`, env reads allowed, no code-load) |
+| `ConsoleWithLoad` | Console set + eval | `ConsoleWithLoadAuthorizer` (Console + `code:load` under `/tmp`) |
+| `Small` | R7RS-small baseline (io, files, math, introspection, eval, all, system, envvars) | none |
+| `KitchenSink` | every extension | none |
 
 ```go
-engine, err := wile.NewEngine(ctx, wile.WithSafeExtensions())
+engine, err := wile.NewEngine(ctx, wile.WithProfile(wile.Console))
 ```
 
-This includes core + io + math + introspection + records/promises/strings/characters. No filesystem, no eval, no system calls, no Go concurrency (gointerop, threads).
+Use `Console` for untrusted code that needs basic I/O without filesystem escape. Use `ConsoleWithLoad` when you also need `(load ...)` from a `/tmp`-staged source. Use `KitchenSink` to match the CLI's full surface.
 
-### Safe sandbox with library support
+### Profile with library support
 
 ```go
 engine, err := wile.NewEngine(ctx,
-    wile.WithSafeExtensions(),
+    wile.WithProfile(wile.Console),
     wile.WithLibraryPaths("./stdlib/lib"),
 )
 ```
 
-Libraries loaded from `./stdlib/lib` inherit the safe restriction. A library that tries to call `open-input-file` gets a compile-time error.
+Libraries loaded from `./stdlib/lib` inherit the profile's restrictions transitively. A library that tries to call `open-input-file` outside `/tmp` is denied at runtime by the authorizer; primitives absent from the profile are unbound and fail at compile time.
 
-### Composable: safe + specific extensions
+### Profile + extra extensions
 
-`SafeExtensions()` returns `[]EngineOption`, so you can compose:
+`WithProfile` composes with subsequent `WithExtension` calls. Order matters when you also override the authorizer (`WithAuthorizer(nil)` opens fully):
 
 ```go
 engine, err := wile.NewEngine(ctx,
-    append(wile.SafeExtensions(),
-        wile.WithExtension(threads.Extension),
-        wile.WithLibraryPaths("./stdlib/lib"),
-    )...,
+    wile.WithProfile(wile.Console),
+    wile.WithExtension(threads.Extension),
+    wile.WithLibraryPaths("./stdlib/lib"),
+)
+```
+
+### Virtual environment variables
+
+`WithEnv(k, v)` and `WithEnvMap(m)` install a virtual env-var map. When set, `get-environment-variable` reads from this map instead of `os.Getenv`. `Console`/`ConsoleWithLoad` allocate an empty map by default, so OS env vars are sandboxed unless explicitly populated:
+
+```go
+engine, err := wile.NewEngine(ctx,
+    wile.WithProfile(wile.Console),
+    wile.WithEnv("APP_MODE", "production"),
 )
 ```
 

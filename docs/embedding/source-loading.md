@@ -220,7 +220,7 @@ Embedders get zero-configuration library support:
 
 ```go
 eng, err := wile.NewEngine(ctx,
-    wile.WithAllExtensions(),
+    wile.WithProfile(wile.KitchenSink),
     wile.WithSourceFS(stdlib.FS),   // embedded libs
     wile.WithSourceOS(),            // user files on disk
 )
@@ -260,7 +260,7 @@ The CLI (`cmd/wile/main.go`) configures the full chain:
 
 ```go
 eng, err := wile.NewEngine(ctx,
-    wile.WithAllExtensions(),
+    wile.WithProfile(wile.KitchenSink),
     wile.WithSourceFS(stdlib.FS),          // embedded standard library
     wile.WithSourceOS(),                   // user files on disk
     wile.WithLibraryPaths(libPaths...),    // -L flag + SCHEME_LIBRARY_PATH

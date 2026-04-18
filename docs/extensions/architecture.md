@@ -494,15 +494,16 @@ Not importable by external code:
 |--------|-------------|
 | `WithExtension(ext)` | Add a single extension |
 | `WithExtensions(ext...)` | Add multiple extensions |
-| `WithAllExtensions()` | Add all available extensions (matches CLI set) |
-| `WithSafeExtensions()` | Add the safe extension set (io, math, introspection, records, promises, strings, characters) |
+| `WithProfile(p)` | Apply a named profile bundle: `Tiny`, `Console`, `ConsoleWithLoad`, `Small`, `KitchenSink` |
 | `WithoutCore()` | Skip core primitives — creates a bare engine with only explicitly added extensions |
 | `WithLibraryPaths(paths...)` | Enable R7RS library system with optional search paths |
 | `WithRegistry(reg)` | Use a custom registry (skips core primitives) |
 | `WithMaxCallDepth(n)` | Set maximum VM recursion depth |
 | `WithAuthorizer(auth)` | Set fine-grained runtime authorization policy (see [`sandboxing.md`](../security/sandboxing.md)) |
+| `WithSandbox()` | Compose the sandbox env-prefix wrapper with the current authorizer |
+| `WithEnv(k, v)`, `WithEnvMap(m)` | Install a virtual environment-variable map |
 
-`SafeExtensions()` is also available as a function returning `[]EngineOption`, useful when composing with other options via `append`.
+`WithProfile(KitchenSink)` matches the CLI's full extension set; `WithProfile(Console)` is the safe-by-default bundle (io with in-memory ports, files restricted to `/tmp`, math, the safe subset of `all`, and envvars) plus a matching `ConsoleAuthorizer`. See [`sandboxing.md`](../security/sandboxing.md) for the full profile table.
 
 ---
 

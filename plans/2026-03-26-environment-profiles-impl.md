@@ -2,9 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Status:** 0/10 tasks complete
+**Status:** 10/10 tasks complete (implemented on `promote-eval-extension`, PR #662)
 
-> **Incomplete items:** All 10 tasks. No Profile type (Tiny/Console/ConsoleWithLoad/Small/KitchenSink), no ConsoleAuthorizer, no ConsoleWithLoadAuthorizer, no Sandbox modifier, no envvars split, no virtual env map, no old API removed, no file renames, no Scheme-level support, no tests, no docs. (Prerequisite: eval extension promotion to `extensions/eval/` already complete.)
+> All ten tasks landed: Profile type (Tiny/Console/ConsoleWithLoad/Small/KitchenSink), ConsoleAuthorizer, ConsoleWithLoadAuthorizer, Sandbox modifier, envvars split out of system, virtual env map (`WithEnv`/`WithEnvMap`), retirement of `SafeExtensions`/`AllExtensions`/`WithSafeExtensions`/`WithAllExtensions`, `environment_tiny.go` → `bootstrap.go` rename, Scheme-level `(environment '(wile <profile>))` via `eval.ProfileFactory` callback, integration tests, and documentation updates. This file is retained as a historical record of the work.
 
 **Goal:** Replace the SafeExtensions/AllExtensions API with named profiles (Tiny, Console, Small, KitchenSink), an orthogonal sandbox modifier, and a virtual environment map for capability-oriented configuration.
 
