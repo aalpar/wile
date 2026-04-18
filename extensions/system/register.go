@@ -17,6 +17,7 @@ package system
 
 import (
 	"github.com/aalpar/wile/registry"
+	"github.com/aalpar/wile/values"
 )
 
 // Extension is the system extension.
@@ -34,19 +35,25 @@ func addPrimitives(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "command-line", Impl: PrimCommandLine,
 			Doc: "Returns the command-line arguments as a list of strings, including the program name.", Category: "system",
-			Keywords: []string{"argv", "args", "command-line arguments"}},
+			Keywords:   []string{"argv", "args", "command-line arguments"},
+			ReturnType: values.TypeList},
 		{Name: "exit", ParamCount: 1, IsVariadic: true, Impl: PrimExit,
-			Doc: "Exits the process. With no argument or #t, exits with code 0. With #f, exits with code 1. With an integer, uses that code.", ParamNames: []string{"status"}, Category: "system"},
+			Doc: "Exits the process. With no argument or #t, exits with code 0. With #f, exits with code 1. With an integer, uses that code.", ParamNames: []string{"status"}, Category: "system",
+			ParamTypes: []values.TypeConstraint{values.TypeAny}},
 		{Name: "emergency-exit", ParamCount: 1, IsVariadic: true, Impl: PrimEmergencyExit,
-			Doc: "Exits the process immediately without running cleanup. Same argument handling as exit.", ParamNames: []string{"status"}, Category: "system"},
+			Doc: "Exits the process immediately without running cleanup. Same argument handling as exit.", ParamNames: []string{"status"}, Category: "system",
+			ParamTypes: []values.TypeConstraint{values.TypeAny}},
 		{Name: "current-second", Impl: PrimCurrentSecond,
 			Doc: "Returns the current time as seconds since the Unix epoch as an inexact real number.", Category: "system",
-			Keywords: []string{"time now", "Unix timestamp", "epoch", "wall clock"}},
+			Keywords:   []string{"time now", "Unix timestamp", "epoch", "wall clock"},
+			ReturnType: values.TypeFlonum},
 		{Name: "current-jiffy", Impl: PrimCurrentJiffy,
 			Doc: "Returns the number of nanoseconds since program start, using the monotonic clock.", Category: "system",
-			Keywords: []string{"monotonic time", "nanoseconds", "timer", "benchmark"}},
+			Keywords:   []string{"monotonic time", "nanoseconds", "timer", "benchmark"},
+			ReturnType: values.TypeExactInteger},
 		{Name: "jiffies-per-second", Impl: PrimJiffiesPerSecond,
-			Doc: "Returns 1000000000, the number of jiffies (nanoseconds) per second.", Category: "system"},
+			Doc: "Returns 1000000000, the number of jiffies (nanoseconds) per second.", Category: "system",
+			ReturnType: values.TypeExactInteger},
 	}, registry.PhaseRuntime)
 	return nil
 }
