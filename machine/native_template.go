@@ -51,6 +51,13 @@ type NativeTemplate struct {
 	// (closures, macros, FFI) are in sideTable and dispatched via OpComplex.
 	code      []Instruction      // bytecode instructions
 	sideTable []InlinedOperation // complex ops referenced by OpComplex
+
+	// executed tracks per-PC execution when coverage is enabled.
+	// Nil means coverage is off (the default). When non-nil, its length
+	// is kept equal to len(code) via AppendInstruction/AppendInstructionWithSource.
+	// Writes in the VM dispatch loop are benign-racy: a bool transitioning
+	// false → true does not need synchronization.
+	executed []bool
 }
 
 // initialOpsCap is the pre-allocated capacity for the operations and sourceRefs
@@ -247,6 +254,9 @@ func (p *NativeTemplate) AppendOperationsWithSource(src *syntax.SourceContext, o
 		}
 		p.code = append(p.code, instr)
 		p.sourceRefs = append(p.sourceRefs, idx)
+		if p.executed != nil {
+			p.executed = append(p.executed, false)
+		}
 	}
 }
 
@@ -524,12 +534,18 @@ func (p *NativeTemplate) AppendInstructionWithSource(src *syntax.SourceContext, 
 	idx := p.internSource(src)
 	p.code = append(p.code, instr)
 	p.sourceRefs = append(p.sourceRefs, idx)
+	if p.executed != nil {
+		p.executed = append(p.executed, false)
+	}
 }
 
 // AppendInstruction appends a single instruction with no source attribution.
 func (p *NativeTemplate) AppendInstruction(instr Instruction) {
 	p.code = append(p.code, instr)
 	p.sourceRefs = append(p.sourceRefs, 0)
+	if p.executed != nil {
+		p.executed = append(p.executed, false)
+	}
 }
 
 // AppendSideTableOp adds a complex operation to the side table and returns
@@ -564,6 +580,28 @@ func (p *NativeTemplate) CachedBindings() []*environment.Binding {
 // CodeLen returns the current code[] length (number of instructions emitted).
 func (p *NativeTemplate) CodeLen() int {
 	return len(p.code)
+}
+
+// EnableCoverage allocates the per-PC executed array (if not already allocated)
+// so the VM dispatch loop will record executions. Length is kept parallel to
+// code via AppendInstruction. Idempotent: safe to call multiple times; an
+// existing array is preserved.
+func (p *NativeTemplate) EnableCoverage() {
+	if p.executed != nil {
+		return
+	}
+	p.executed = make([]bool, len(p.code))
+}
+
+// Executed returns the per-PC executed array, or nil if coverage is disabled.
+// Returned slice aliases internal state; callers must not resize it.
+func (p *NativeTemplate) Executed() []bool {
+	return p.executed
+}
+
+// IsCoverageEnabled reports whether coverage tracking is active on this template.
+func (p *NativeTemplate) IsCoverageEnabled() bool {
+	return p.executed != nil
 }
 
 // PatchInstructionArg updates the Arg field of the instruction at code[codeIdx].
@@ -637,6 +675,13 @@ func (p *NativeTemplate) Copy() *NativeTemplate {
 			len(p.code), len(p.sourceRefs),
 		))
 	}
+	if p.executed != nil && len(p.executed) != len(p.code) {
+		panic(werr.WrapForeignErrorf(
+			werr.ErrInvalidArgument,
+			"native_template: code/executed length invariant violated (len(code)=%d, len(executed)=%d)",
+			len(p.code), len(p.executed),
+		))
+	}
 	q := &NativeTemplate{
 		parameterCount: p.parameterCount,
 		valueCount:     p.valueCount,
@@ -650,5 +695,6 @@ func (p *NativeTemplate) Copy() *NativeTemplate {
 	q.sideTable = slices.Clone(p.sideTable)
 	q.sourceRefs = slices.Clone(p.sourceRefs)
 	q.sourceTable = slices.Clone(p.sourceTable)
+	q.executed = slices.Clone(p.executed)
 	return q
 }
