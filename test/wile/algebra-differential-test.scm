@@ -3,6 +3,7 @@
 (import (scheme base)
         (chibi test)
         (wile algebra ring)
+        (wile algebra polynomial)
         (wile algebra differential))
 
 (test-begin "differential-rings")
@@ -82,47 +83,55 @@
 ;; ──────────────────────────────────────────────
 
 (test-group "polynomial-ring-arithmetic"
-  (let* ((D (polynomial-derivation (integer-ring)))
-         (R (differential-ring-ring D)))
+  (let* ((IR (integer-ring))
+         (D  (polynomial-derivation IR))
+         (R  (differential-ring-ring D))
+         (mk (lambda (cs) (make-poly IR cs))))
     ;; plus: (1 2) + (3 4) = (4 6)
-    (test '(4 6) (ring-plus R '(1 2) '(3 4)))
+    (test '(4 6) (poly-coeffs (ring-plus R (mk '(1 2)) (mk '(3 4)))))
     ;; plus with different lengths: (1 2 3) + (4 5) = (5 7 3)
-    (test '(5 7 3) (ring-plus R '(1 2 3) '(4 5)))
+    (test '(5 7 3) (poly-coeffs (ring-plus R (mk '(1 2 3)) (mk '(4 5)))))
     ;; times: (1 1) * (1 1) = 1 + 2x + x² = (1 2 1)
-    (test '(1 2 1) (ring-times R '(1 1) '(1 1)))
+    (test '(1 2 1) (poly-coeffs (ring-times R (mk '(1 1)) (mk '(1 1)))))
     ;; zero
-    (test '() (ring-zero R))
+    (test '() (poly-coeffs (ring-zero R)))
     ;; one
-    (test '(1) (ring-one R))
+    (test '(1) (poly-coeffs (ring-one R)))
     ;; negate: -(1 2 3) = (-1 -2 -3)
-    (test '(-1 -2 -3) (ring-negate R '(1 2 3)))))
+    (test '(-1 -2 -3) (poly-coeffs (ring-negate R (mk '(1 2 3)))))))
 
 (test-group "polynomial-deriv"
-  (let ((D (polynomial-derivation (integer-ring))))
+  (let* ((IR (integer-ring))
+         (D  (polynomial-derivation IR))
+         (mk (lambda (cs) (make-poly IR cs))))
     ;; D(3 + 2x + x²) = 2 + 2x = (2 2)
-    (test '(2 2) (differential-deriv D '(3 2 1)))
+    (test '(2 2) (poly-coeffs (differential-deriv D (mk '(3 2 1)))))
     ;; D(5) = 0 = ()
-    (test '() (differential-deriv D '(5)))
+    (test '() (poly-coeffs (differential-deriv D (mk '(5)))))
     ;; D(x) = 1 = (1)
-    (test '(1) (differential-deriv D '(0 1)))
+    (test '(1) (poly-coeffs (differential-deriv D (mk '(0 1)))))
     ;; D(x³) = 3x² = (0 0 3)
-    (test '(0 0 3) (differential-deriv D '(0 0 0 1)))))
+    (test '(0 0 3) (poly-coeffs (differential-deriv D (mk '(0 0 0 1)))))))
 
 (test-group "polynomial-nth-deriv"
-  (let ((D (polynomial-derivation (integer-ring))))
+  (let* ((IR (integer-ring))
+         (D  (polynomial-derivation IR))
+         (mk (lambda (cs) (make-poly IR cs))))
     ;; D²(3 + 2x + x²) = D(2 + 2x) = (2)
-    (test '(2) (differential-nth-deriv D 2 '(3 2 1)))
+    (test '(2) (poly-coeffs (differential-nth-deriv D 2 (mk '(3 2 1)))))
     ;; D³(3 + 2x + x²) = D(2) = ()
-    (test '() (differential-nth-deriv D 3 '(3 2 1)))))
+    (test '() (poly-coeffs (differential-nth-deriv D 3 (mk '(3 2 1)))))))
 
 (test-group "polynomial-constant?"
-  (let ((D (polynomial-derivation (integer-ring))))
-    ;; (5) is constant: D(5) = ()
-    (test #t (differential-constant? D '(5)))
-    ;; () is constant: D(()) = ()
-    (test #t (differential-constant? D '()))
-    ;; (1 1) is not constant: D(1+x) = (1) ≠ ()
-    (test #f (differential-constant? D '(1 1)))))
+  (let* ((IR (integer-ring))
+         (D  (polynomial-derivation IR))
+         (mk (lambda (cs) (make-poly IR cs))))
+    ;; (5) is constant: D(5) = 0
+    (test #t (differential-constant? D (mk '(5))))
+    ;; () is constant: D(()) = 0
+    (test #t (differential-constant? D (mk '())))
+    ;; (1 1) is not constant: D(1+x) = (1) ≠ 0
+    (test #f (differential-constant? D (mk '(1 1))))))
 
 ;; ──────────────────────────────────────────────
 ;; General operations
@@ -163,9 +172,11 @@
              (dual-number-ring)
              (list (cons 0 0) (cons 1 0) (cons 0 1) (cons 2 3))))
   ;; Valid: polynomial derivation over integers
-  (test #t (validate-differential-ring
-             (polynomial-derivation (integer-ring))
-             (list '() '(1) '(0 1) '(1 1))))
+  (let* ((IR (integer-ring))
+         (mk (lambda (cs) (make-poly IR cs))))
+    (test #t (validate-differential-ring
+               (polynomial-derivation IR)
+               (list (mk '()) (mk '(1)) (mk '(0 1)) (mk '(1 1))))))
   ;; Invalid: D(x)=1 (constant derivation breaks additivity and Leibniz)
   ;; Additivity: D(a+b)=1 but D(a)+D(b)=1+1=2
   ;; Leibniz: D(a*b)=1 but D(a)*b+a*D(b)=b+a
