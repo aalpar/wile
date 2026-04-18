@@ -110,5 +110,27 @@
     ;; D(x) = 1
     (test '(1) (poly-coeffs (poly-derivative (make-poly R '(0 1)))))))
 
+(test-group "poly-divmod (rational field)"
+  (let* ((F (rational-field))
+         (R (field->ring F)))
+    ;; (x^2 - 1) / (x - 1) = (x + 1), remainder 0
+    (let-values (((q r) (poly-divmod (make-poly R '(-1 0 1))
+                                     (make-poly R '(-1 1))
+                                     F)))
+      (test '(1 1) (poly-coeffs q))
+      (test '()    (poly-coeffs r)))
+    ;; (x^2 + 1) / (x) = (x), remainder 1
+    (let-values (((q r) (poly-divmod (make-poly R '(1 0 1))
+                                     (make-poly R '(0 1))
+                                     F)))
+      (test '(0 1) (poly-coeffs q))
+      (test '(1)   (poly-coeffs r)))
+    ;; Dividing smaller by larger: quotient 0, remainder is dividend
+    (let-values (((q r) (poly-divmod (make-poly R '(1 2))
+                                     (make-poly R '(1 2 3))
+                                     F)))
+      (test '()    (poly-coeffs q))
+      (test '(1 2) (poly-coeffs r)))))
+
 (test-end)
 (test-exit)

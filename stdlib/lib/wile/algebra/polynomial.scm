@@ -155,3 +155,52 @@
                     '()
                     (cons (ring-times R (ring-nat k) (car xs))
                           (loop (cdr xs) (+ k 1)))))))))))
+
+;; ─── Division with remainder ───────────────
+;;
+;; poly-divmod requires the coefficient structure to be a FIELD (not
+;; merely a ring) because long division must divide each leading term
+;; of the remainder by the divisor's leading coefficient, which needs
+;; a multiplicative inverse. The divisor must be non-zero. Returns
+;; (values quotient remainder) satisfying
+;;   p = q*d + r,  (poly-degree r) < (poly-degree d).
+
+(define (poly-divmod p d F)
+  "Divide polynomial P by non-zero polynomial D over field F.\nReturns two values: the quotient Q and remainder R satisfying\nP = Q*D + R with (poly-degree R) < (poly-degree D).\nRequires F to be a field (for reciprocal of D's leading coefficient).\nThe polynomial records P and D carry their own coefficient ring,\nbut F provides the field structure needed for division; typically\nF is the field whose underlying ring matches (poly-ring P).\n\nExamples:\n  (let* ((F (rational-field)) (R (field->ring F)))\n    (call-with-values\n      (lambda () (poly-divmod (make-poly R '(-1 0 1)) (make-poly R '(-1 1)) F))\n      (lambda (q r) (list (poly-coeffs q) (poly-coeffs r)))))\n  => ((1 1) ())   ; (x^2 - 1) / (x - 1) = x + 1\n\nParameters:\n  p : any\n  d : any\n  F : any\nReturns: (values any any)\nCategory: algebra\nKeywords: polynomial division, long division, divmod, quotient, remainder, Euclidean division\n\nSee also: `poly-gcd', `field-reciprocal'."
+  (let ((R (poly-ring p)))
+    (when (null? (poly-coeffs d))
+      (error "poly-divmod: division by zero polynomial"))
+    (let ((lead-d-inv (field-reciprocal F (poly-leading-coeff d)))
+          (deg-d      (poly-degree d))
+          (deg-p      (poly-degree p)))
+      ;; Quotient capacity: highest shift is (deg-p - deg-d) from the
+      ;; first iteration, so vector size is (deg-p - deg-d) + 1.
+      ;; Clamp to 0 when deg-p < deg-d (no iterations run).
+      (let ((cap (max 0 (+ 1 (- deg-p deg-d)))))
+        (let loop ((rem p)
+                   (q-coeffs-rev '()))
+          (let ((deg-r (poly-degree rem)))
+            (if (< deg-r deg-d)
+                (values (make-poly R (reverse-pad q-coeffs-rev R cap))
+                        rem)
+                (let* ((lead-r  (poly-leading-coeff rem))
+                       (coeff   (ring-times R lead-r lead-d-inv))
+                       (shift   (- deg-r deg-d))
+                       ;; term = coeff * x^shift, as a polynomial
+                       (term    (make-poly R
+                                  (append (make-list shift (ring-zero R))
+                                          (list coeff))))
+                       (rem*    (poly-minus rem (poly-times term d))))
+                  (loop rem* (cons (cons shift coeff) q-coeffs-rev))))))))))
+
+;; Internal helper: given a list of (shift . coeff) entries produced
+;; by long division, materialize the quotient's ascending coefficient
+;; list of length N, filling unassigned slots with ring-zero. Order
+;; of entries does not matter — each entry places its coeff at index
+;; shift directly via vector-set!.
+(define (reverse-pad entries R n)
+  (let ((acc (make-vector n (ring-zero R))))
+    (for-each
+      (lambda (e) (vector-set! acc (car e) (cdr e)))
+      entries)
+    (vector->list acc)))

@@ -7,7 +7,8 @@
           poly-plus poly-negate poly-minus
           poly-times
           poly-eval
-          poly-derivative)
+          poly-derivative
+          poly-divmod)
   (import (scheme base)
           (wile algebra ring))
   (include "polynomial.scm"))
