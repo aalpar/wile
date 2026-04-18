@@ -99,5 +99,16 @@
     ;; Constant polynomial evaluates to its constant
     (test 5 (poly-eval (make-poly R '(5)) 99))))
 
+(test-group "poly-derivative"
+  (let ((R (integer-ring)))
+    ;; D(1 + 2x + 3x^2) = 2 + 6x
+    (test '(2 6) (poly-coeffs (poly-derivative (make-poly R '(1 2 3)))))
+    ;; D(constant) = 0
+    (test '() (poly-coeffs (poly-derivative (make-poly R '(42)))))
+    ;; D(0) = 0
+    (test '() (poly-coeffs (poly-derivative (poly-zero R))))
+    ;; D(x) = 1
+    (test '(1) (poly-coeffs (poly-derivative (make-poly R '(0 1)))))))
+
 (test-end)
 (test-exit)

@@ -6,7 +6,8 @@
           poly-degree poly-leading-coeff
           poly-plus poly-negate poly-minus
           poly-times
-          poly-eval)
+          poly-eval
+          poly-derivative)
   (import (scheme base)
           (wile algebra ring))
   (include "polynomial.scm"))

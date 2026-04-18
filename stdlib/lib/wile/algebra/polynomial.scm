@@ -127,3 +127,31 @@
       (if (null? cs)
           acc
           (loop (cdr cs) (ring-plus R (car cs) (ring-times R x acc)))))))
+
+;; ─── Formal derivative ──────────────────────
+;;
+;; The formal derivative is purely symbolic — no limits, no analysis.
+;; For coeffs (a0 a1 a2 ... an) in ascending order, the derivative is
+;; (a1 2*a2 3*a3 ... n*an). In rings without natural integer embedding
+;; (e.g., GF(p)), the "k" factor is built by repeated addition of ring-one.
+
+(define (poly-derivative p)
+  "Return the formal derivative of polynomial P.\nPurely symbolic: for (a0 a1 a2 ... an), produces\n(a1 2*a2 3*a3 ... n*an). The integer multiplier k is realized\ninside the coefficient ring by summing ring-one k times, so this\nworks correctly over rings of positive characteristic (e.g., GF(p)).\n\nExamples:\n  (let ((R (integer-ring)))\n    (poly-coeffs (poly-derivative (make-poly R '(1 2 3)))))  => (2 6)\n  (let ((R (integer-ring)))\n    (poly-coeffs (poly-derivative (make-poly R '(42)))))     => ()\n\nParameters:\n  p : any\nReturns: any\nCategory: algebra\nKeywords: formal derivative, symbolic derivative, differentiation, polynomial derivative\n\nSee also: `poly-plus', `poly-eval'."
+  (let ((R (poly-ring p)))
+    (let ((cs (poly-coeffs p)))
+      (if (or (null? cs) (null? (cdr cs)))
+          (poly-zero R)
+          (let ((rz (ring-zero R))
+                (ro (ring-one R)))
+            ;; Build ring-element representing natural number k.
+            (define (ring-nat k)
+              (let loop ((i 0) (acc rz))
+                (if (>= i k)
+                    acc
+                    (loop (+ i 1) (ring-plus R acc ro)))))
+            (make-poly R
+              (let loop ((xs (cdr cs)) (k 1))
+                (if (null? xs)
+                    '()
+                    (cons (ring-times R (ring-nat k) (car xs))
+                          (loop (cdr xs) (+ k 1)))))))))))
