@@ -8,7 +8,8 @@
           poly-times
           poly-eval
           poly-derivative
-          poly-divmod)
+          poly-divmod
+          poly-gcd)
   (import (scheme base)
           (wile algebra ring))
   (include "polynomial.scm"))

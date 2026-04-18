@@ -132,5 +132,21 @@
       (test '()    (poly-coeffs q))
       (test '(1 2) (poly-coeffs r)))))
 
+(test-group "poly-gcd (rational field)"
+  (let* ((F (rational-field))
+         (R (field->ring F)))
+    ;; gcd(x^2 - 1, x - 1) = x - 1 (monic)
+    (test '(-1 1) (poly-coeffs (poly-gcd (make-poly R '(-1 0 1))
+                                         (make-poly R '(-1 1))
+                                         F)))
+    ;; gcd(x^2 - 1, x^2 - 2x + 1) = x - 1 (monic)
+    (test '(-1 1) (poly-coeffs (poly-gcd (make-poly R '(-1 0 1))
+                                         (make-poly R '(1 -2 1))
+                                         F)))
+    ;; gcd(2 + 2x, 0) = 1 + x (monic-normalized from 2 + 2x)
+    (test '(1 1) (poly-coeffs (poly-gcd (make-poly R '(2 2))
+                                        (poly-zero R)
+                                        F)))))
+
 (test-end)
 (test-exit)

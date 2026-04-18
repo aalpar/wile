@@ -204,3 +204,26 @@
       (lambda (e) (vector-set! acc (car e) (cdr e)))
       entries)
     (vector->list acc)))
+
+;; ─── GCD (Euclidean algorithm) ──────────────
+;;
+;; The Euclidean algorithm terminates because poly-divmod strictly
+;; decreases the remainder's degree. We normalize the final result
+;; to be monic so GCD is uniquely determined (otherwise it is defined
+;; only up to multiplication by a unit).
+
+(define (poly-monic p F)
+  (let ((cs (poly-coeffs p)))
+    (if (null? cs)
+        p
+        (let* ((R        (poly-ring p))
+               (lead-inv (field-reciprocal F (poly-leading-coeff p))))
+          (make-poly R (map (lambda (c) (ring-times R c lead-inv)) cs))))))
+
+(define (poly-gcd p q F)
+  "Return the monic greatest common divisor of polynomials P and Q over field F.\nComputed by the Euclidean algorithm: repeatedly replace (p, q) with\n(q, p mod q) until the second argument is zero. The final non-zero\nremainder is normalized to monic form (leading coefficient = 1) so\nthe result is unique rather than defined up to a unit.\n\nExamples:\n  (let* ((F (rational-field)) (R (field->ring F)))\n    (poly-coeffs (poly-gcd (make-poly R '(-1 0 1))\n                           (make-poly R '(-1 1)) F)))\n  => (-1 1)   ; x - 1\n\nParameters:\n  p : any\n  q : any\n  F : any\nReturns: any\nCategory: algebra\nKeywords: polynomial GCD, greatest common divisor, Euclidean algorithm, monic\n\nSee also: `poly-divmod'."
+  (let loop ((a p) (b q))
+    (if (null? (poly-coeffs b))
+        (poly-monic a F)
+        (let-values (((_q r) (poly-divmod a b F)))
+          (loop b r)))))
