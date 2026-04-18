@@ -74,5 +74,18 @@
     (test '(2 2) (poly-coeffs (poly-minus (make-poly R '(3 4))
                                           (make-poly R '(1 2)))))))
 
+(test-group "poly-times"
+  (let ((R (integer-ring)))
+    ;; (1 + x)(1 + x) = 1 + 2x + x^2
+    (test '(1 2 1) (poly-coeffs (poly-times (make-poly R '(1 1))
+                                            (make-poly R '(1 1)))))
+    ;; (1 - x)(1 + x) = 1 - x^2
+    (test '(1 0 -1) (poly-coeffs (poly-times (make-poly R '(1 -1))
+                                             (make-poly R '(1 1)))))
+    ;; Zero annihilates
+    (test '() (poly-coeffs (poly-times (poly-zero R) (make-poly R '(1 2 3)))))
+    ;; One is identity
+    (test '(1 2 3) (poly-coeffs (poly-times (poly-one R) (make-poly R '(1 2 3)))))))
+
 (test-end)
 (test-exit)

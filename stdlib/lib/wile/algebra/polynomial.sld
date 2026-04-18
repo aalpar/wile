@@ -4,7 +4,8 @@
           poly-ring poly-coeffs
           poly-zero poly-one
           poly-degree poly-leading-coeff
-          poly-plus poly-negate poly-minus)
+          poly-plus poly-negate poly-minus
+          poly-times)
   (import (scheme base)
           (wile algebra ring))
   (include "polynomial.scm"))

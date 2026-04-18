@@ -79,3 +79,36 @@
 (define (poly-minus p q)
   "Subtract polynomial Q from P. Computed as P plus negation of Q.\n\nExamples:\n  (let ((R (integer-ring)))\n    (poly-coeffs (poly-minus (make-poly R '(3 4)) (make-poly R '(1 2)))))\n  => (2 2)\n\nParameters:\n  p : any\n  q : any\nReturns: any\nCategory: algebra\nKeywords: polynomial subtraction, subtract, difference, minus\n\nSee also: `poly-plus', `poly-negate'."
   (poly-plus p (poly-negate q)))
+
+;; ─── Multiplication ─────────────────────────
+;;
+;; Naive O(n·m) schoolbook multiplication. Karatsuba/FFT would lower
+;; this to O(n^1.58) / O(n log n) but are not warranted until a real
+;; benchmark justifies the added complexity.
+
+(define (poly-times p q)
+  "Multiply polynomials P and Q. Both must share the same coefficient ring.\nComputed via schoolbook multiplication in O(n*m) coefficient operations.\n\nExamples:\n  (let ((R (integer-ring)))\n    (poly-coeffs (poly-times (make-poly R '(1 1)) (make-poly R '(1 1)))))\n  => (1 2 1)\n\nParameters:\n  p : any\n  q : any\nReturns: any\nCategory: algebra\nKeywords: polynomial multiplication, multiply, product, times, convolution\n\nSee also: `poly-plus', `poly-eval'."
+  (let ((R  (poly-ring p))
+        (xs (poly-coeffs p))
+        (ys (poly-coeffs q)))
+    (cond
+      ((null? xs) (poly-zero R))
+      ((null? ys) (poly-zero R))
+      (else
+        (let ((rz (ring-zero R))
+              (n  (+ (length xs) (length ys) -1)))
+          ;; Accumulate into a vector of length n, then convert.
+          (let ((acc (make-vector n rz)))
+            (let loop-i ((i 0) (xs xs))
+              (if (null? xs)
+                  (make-poly R (vector->list acc))
+                  (begin
+                    (let loop-j ((j 0) (ys ys))
+                      (if (null? ys)
+                          (if #f #f)  ; unspecified
+                          (let ((k (+ i j)))
+                            (vector-set! acc k
+                              (ring-plus R (vector-ref acc k)
+                                           (ring-times R (car xs) (car ys))))
+                            (loop-j (+ j 1) (cdr ys)))))
+                    (loop-i (+ i 1) (cdr xs)))))))))))
