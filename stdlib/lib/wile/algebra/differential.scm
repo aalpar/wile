@@ -75,71 +75,8 @@
 ;; ─── Polynomial derivation ──────────────────
 
 (define (polynomial-derivation R)
-  "Construct a differential ring of polynomials over ring R.\nElements are coefficient lists in ascending power order:\n(a0 a1 a2 ...) represents a0 + a1*x + a2*x² + ...\nThe empty list represents the zero polynomial.\nThe derivation is the formal derivative:\nD(a0 + a1*x + ... + an*x^n) = a1 + 2*a2*x + ... + n*an*x^(n-1).\n\nExamples:\n  (let ((D (polynomial-derivation (integer-ring))))\n    (differential-deriv D '(3 2 1)))  => (2 2)\n  (let ((D (polynomial-derivation (integer-ring))))\n    (differential-deriv D '(5)))      => ()\n\nParameters:\n  R : any\nReturns: any\nCategory: algebra\nKeywords: polynomial, formal derivative, coefficient list, power series\n\nSee also: `dual-number-ring', `make-differential-ring'."
-  (let ((rz (ring-zero R))
-        (ro (ring-one R)))
-
-    ;; Strip trailing zeros from coefficient list
-    (define (normalize coeffs)
-      (let loop ((cs (reverse coeffs)))
-        (cond
-          ((null? cs) '())
-          ((equal? (car cs) rz) (loop (cdr cs)))
-          (else (reverse cs)))))
-
-    ;; Polynomial addition
-    (define (poly+ a b)
-      (normalize
-        (let loop ((xs a) (ys b))
-          (cond
-            ((null? xs) ys)
-            ((null? ys) xs)
-            (else
-              (cons (ring-plus R (car xs) (car ys))
-                    (loop (cdr xs) (cdr ys))))))))
-
-    ;; Polynomial negation
-    (define (poly-neg a)
-      (map (lambda (c) (ring-negate R c)) a))
-
-    ;; Scale a polynomial by a ring element
-    (define (poly-scale s p)
-      (map (lambda (c) (ring-times R s c)) p))
-
-    ;; Shift polynomial by one power (multiply by x)
-    (define (poly-shift p)
-      (if (null? p)
-          '()
-          (cons rz p)))
-
-    ;; Polynomial multiplication
-    (define (poly* a b)
-      (if (null? a)
-          '()
-          (normalize
-            (poly+ (poly-scale (car a) b)
-                   (poly* (cdr a) (poly-shift b))))))
-
-    ;; Build ring-element k by summing ring-one k times
-    (define (ring-nat k)
-      (let loop ((i 0) (acc rz))
-        (if (>= i k)
-            acc
-            (loop (+ i 1) (ring-plus R acc ro)))))
-
-    ;; Formal derivative
-    (define (poly-deriv coeffs)
-      (if (or (null? coeffs) (null? (cdr coeffs)))
-          '()
-          (normalize
-            (let loop ((cs (cdr coeffs)) (k 1))
-              (if (null? cs)
-                  '()
-                  (cons (ring-times R (ring-nat k) (car cs))
-                        (loop (cdr cs) (+ k 1))))))))
-
-    (let ((poly-ring (make-ring poly+ poly* (list) (list ro) poly-neg)))
-      (make-differential-ring poly-ring poly-deriv))))
+  "Construct a differential ring of polynomials over ring R.\nElements are <polynomial> records (see (wile algebra polynomial)).\nThe underlying ring is (polynomial-ring R); the derivation is the\nformal derivative poly-derivative.\n\nExamples:\n  (let* ((R (integer-ring))\n         (D (polynomial-derivation R))\n         (p (make-poly R '(3 2 1))))\n    (poly-coeffs (differential-deriv D p)))  => (2 2)\n\nParameters:\n  R : any\nReturns: any\nCategory: algebra\nKeywords: polynomial, formal derivative, differential ring, polynomial derivation\n\nSee also: `dual-number-ring', `make-differential-ring', `polynomial-ring'."
+  (make-differential-ring (polynomial-ring R) poly-derivative))
 
 ;; ─── Differential ring validation ───────────
 
