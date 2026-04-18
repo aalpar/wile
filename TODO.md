@@ -52,6 +52,13 @@ The embedding experience that differentiates Wile.
 - [ ] **Module decomposition Phase 1** [Architecture]: Decompose `internal/extensions/all/` into records, promises, core. Enables future module extraction. `plans/ARCHITECTURE.md`
 - [ ] **Go FFI Phase 3 — Plugin support** [Embedding]: Dynamic extension loading via registry pattern.
 
+### Algebra & Analytics Roadmap
+
+Directions documents — identify prioritized capability extensions. Gated on funding decisions, not scoped as individual tasks.
+
+- [ ] **Algebra library roadmap** [Directions]: `plans/2026-04-17-algebra-foundations-directions.md` identifies 6 prioritized directions extending `(wile algebra ...)`. Sharpest single win is §5.1 `(wile algebra matrix)` — semiring-parameterized matrix ops (tropical / Boolean / counting), independently blocked on by `plans/2026-04-16-recurrence-categories-design.md:5`. §5.3 AC-matching is the accuracy prize for wile-goast's `symbolic.scm` / `rewrite.scm` (replaces exponential `discover-equivalences` workaround with polynomial AC-match; depends on §5.1). §5.2 Möbius / incidence algebra (~150 LOC) is the smallest principled fix — formalizes ad-hoc overlap handling in belief-DSL predicates.
+- [ ] **gonum analytics integration** [Directions]: `plans/2026-04-18-gonum-integration-directions.md` identifies generic graph analytics gaps in wile-goast (SCC, Louvain community detection, centrality, all-pairs reachability) and benchmark-statistics gap in wile. Architecture: `x/tools` builds language-aware graphs, gonum analyzes them — they do not compete. §5.1 `goastgraph/` ships ~300–500 LOC; §5.2 `bench-stats/` ships ~100–150 LOC; independent tracks. Pure Go, no CGo, one `go.mod` entry per project. Distinct algebraic setting from `(wile algebra matrix)`: gonum is field-valued (ℝ/ℂ), not semiring-parameterized.
+
 ---
 
 ## Tier 3 — Tooling & Developer Experience
