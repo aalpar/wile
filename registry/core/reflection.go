@@ -21,9 +21,12 @@ import (
 
 func addReflection(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
+		// procedure-arity returns a pair for ordinary closures, a list of
+		// pairs for case-lambda, an integer for composable continuations,
+		// and #f for callables with unknown arity — TypeAny covers the union.
 		{Name: "procedure-arity", ParamCount: 1, Impl: PrimProcedureArity,
 			Doc: "Returns a pair (count . variadic?) describing PROC's arity. Count is the number of required parameters.\n\nExamples:\n  (procedure-arity car)   => (1 . #f)\n  (procedure-arity +)     => (0 . #t)", ParamNames: []string{"proc"}, Category: "reflection",
-			ParamTypes: []values.TypeConstraint{values.TypeProcedure}, ReturnType: values.TypePair},
+			ParamTypes: []values.TypeConstraint{values.TypeProcedure}, ReturnType: values.TypeAny},
 		// procedure-name, procedure-source-location, procedure-bound-symbols
 		// return a string/list or #f when unavailable — TypeAny covers the
 		// union.
