@@ -148,5 +148,30 @@
                                         (poly-zero R)
                                         F)))))
 
+(test-group "polynomial-ring constructor"
+  (let* ((R   (integer-ring))
+         (PR  (polynomial-ring R))
+         (p   (make-poly R '(1 2)))    ; 1 + 2x
+         (q   (make-poly R '(3 4))))   ; 3 + 4x
+    (test #t (ring? PR))
+    ;; PR's operations should agree with poly-plus/poly-times
+    (test '(4 6)   (poly-coeffs (ring-plus PR p q)))
+    (test '(3 10 8) (poly-coeffs (ring-times PR p q)))
+    (test '() (poly-coeffs (ring-zero PR)))
+    (test '(1) (poly-coeffs (ring-one PR)))
+    (test '(-1 -2) (poly-coeffs (ring-negate PR p)))))
+
+(test-group "polynomial-ring enables recursion (bivariate via R[x][y])"
+  (let* ((R   (integer-ring))
+         (Rx  (polynomial-ring R))           ; Z[x]
+         (Rxy (polynomial-ring Rx)))         ; Z[x][y]
+    (test #t (ring? Rxy))
+    ;; Element of Z[x][y] has poly-over-R coefficients
+    (let ((x (make-poly R '(0 1)))            ; x
+          (y-plus-x (make-poly Rx
+                      (list (make-poly R '(0 1))  ; x
+                            (make-poly R '(1))))))  ; y
+      (test #t (polynomial? y-plus-x)))))
+
 (test-end)
 (test-exit)
