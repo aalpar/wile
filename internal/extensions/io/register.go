@@ -56,7 +56,7 @@ func addReadWrite(r *registry.Registry) error {
 			Keywords:   []string{"get-datum", "parse", "input", "deserialize", "s-expression"},
 			ParamTypes: []values.TypeConstraint{values.TypeTextualInputPort}, ReturnType: values.TypeAny},
 		{Name: "read-token", ParamCount: 1, IsVariadic: true, Impl: PrimReadToken,
-			Doc: "Reads a single lexical token from PORT. Defaults to current-input-port. Returns eof-object at end of input.\n\nExamples:\n  (read-token (open-input-string \"hello\"))  => hello", ParamNames: []string{"port"}, Category: "io",
+			Doc: "Reads a single lexical token from PORT. Defaults to current-input-port. Returns an opaque tokenizer-SimpleToken at each call; returns eof-object at end of input.\n\nExamples:\n  ;; (read-token (open-input-string \"hello\"))  =>  #<simple-token>", ParamNames: []string{"port"}, Category: "io",
 			ParamTypes: []values.TypeConstraint{values.TypeTextualInputPort}, ReturnType: values.TypeAny},
 		{Name: "read-syntax", ParamCount: 1, IsVariadic: true, Impl: PrimReadSyntax,
 			Doc: "Reads one S-expression as a syntax object with source location from PORT. Defaults to current-input-port.\n\nExamples:\n  (read-syntax (open-input-string \"(+ 1 2)\"))  => #<syntax (+ 1 2)>", ParamNames: []string{"port"}, Category: "io",

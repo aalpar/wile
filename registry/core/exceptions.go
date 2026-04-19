@@ -22,7 +22,7 @@ import (
 func addExceptions(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "with-exception-handler", ParamCount: 2, Impl: PrimWithExceptionHandler,
-			Doc: "Installs HANDLER as the current exception handler for the dynamic extent of THUNK. HANDLER receives the raised object.\n\nExamples:\n  (with-exception-handler\n    (lambda (e) 42)\n    (lambda () (raise \"oops\"))\n    'replace)  => 42", ParamNames: []string{"handler", "thunk"}, Category: "exceptions",
+			Doc: "Installs HANDLER as the current exception handler for the dynamic extent of THUNK. HANDLER receives the raised object.\n\nExamples:\n  (with-exception-handler\n    (lambda (e) 42)\n    (lambda () (raise-continuable \"oops\")))  => 42", ParamNames: []string{"handler", "thunk"}, Category: "exceptions",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure, values.TypeProcedure}, ReturnType: values.TypeAny,
 			Keywords: []string{"try", "catch", "error handler", "trap"}},
 		// raise/error never return normally — ReturnType is a nominal TypeAny.
@@ -61,13 +61,13 @@ func addExceptions(r *registry.Registry) error {
 		// Source/marks accessors return a string, context, or #f — TypeAny
 		// covers the union.
 		{Name: "error-context-source", ParamCount: 1, Impl: PrimErrorContextSource,
-			Doc: "Returns the source location string from CTX, or #f if unavailable.\n\nExamples:\n  (error-context-source ctx)  => \"file.scm:10:5\"", ParamNames: []string{"ctx"}, Category: "exceptions",
+			Doc: "Returns the source location string from CTX, or #f if unavailable.\n\nExamples:\n  ;; (error-context-source ctx)  =>  \"file.scm:10:5\"", ParamNames: []string{"ctx"}, Category: "exceptions",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "error-context-stack-trace", ParamCount: 1, Impl: PrimErrorContextStackTrace,
-			Doc: "Returns the stack trace from CTX as a list of alists.\nEach alist always has key name; keys file, line, column are present only when source information is available.\n\nExamples:\n  (error-context-stack-trace ctx)  => (((name . \"f\") (file . \"test.scm\") ...))", ParamNames: []string{"ctx"}, Category: "exceptions",
+			Doc: "Returns the stack trace from CTX as a list of alists.\nEach alist always has key name; keys file, line, column are present only when source information is available.\n\nExamples:\n  ;; (error-context-stack-trace ctx)  =>  (((name . \"f\") (file . \"test.scm\") ...))", ParamNames: []string{"ctx"}, Category: "exceptions",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeList},
 		{Name: "error-context-marks", ParamCount: 1, Impl: PrimErrorContextMarks,
-			Doc: "Returns the continuation mark set from CTX, or #f if not captured.\nNote: mark capture is not yet implemented; currently always returns #f.\n\nExamples:\n  (error-context-marks ctx)  => #f", ParamNames: []string{"ctx"}, Category: "exceptions",
+			Doc: "Returns the continuation mark set from CTX, or #f if not captured.\nNote: mark capture is not yet implemented; currently always returns #f.\n\nExamples:\n  ;; (error-context-marks ctx)  =>  #f", ParamNames: []string{"ctx"}, Category: "exceptions",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "error-object-source", ParamCount: 1, Impl: PrimErrorObjectSource,
 			Doc: "Returns the source location string from ERROR-OBJ, or #f if unavailable.\nThe source location is populated when the error is raised via (error ...) or (raise ...).\n\nExamples:\n  (guard (e (#t (error-object-source e))) (error \"oops\"))  => \"eval:1:41\"", ParamNames: []string{"error-obj"}, Category: "exceptions",
