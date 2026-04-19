@@ -52,11 +52,13 @@ Either **impl bug** (foreign closures should also return a pair) or **impl incon
 
 ### Category C — docstring typos / incomplete examples (6)
 
-**C.1–C.3 Stray `))` at end of example** — three continuation-mark primitives:
-- `call-with-immediate-continuation-mark`
-- `continuation-mark-set->list`
-- `continuation-mark-set-first`
-Each has an extra `)` in the example line. Trivial fix.
+**C.1–C.3 Continuation-mark example claims reassessed.**
+The original finding described these as "stray `))` at end of example." Re-verification showed parens balance in all three. Running each example individually:
+- `call-with-immediate-continuation-mark` — works (returns 42).
+- `continuation-mark-set->list` — works (returns `(1)`).
+- `continuation-mark-set-first` — **fails**, but not as a typo: the example passes `#f` as `mark-set`, and the impl rejects non-mark-set values. This is a semantic bug in the example (Category A shape), not a paren typo.
+**Fix applied**: `continuation-mark-set-first` example updated to pass `(current-continuation-marks)` as the mark-set (see `registry/core/cont_marks.go`). The other two left as-is — they worked.
+Root cause of the original mis-classification: the audit harness does not verify wrapped examples (top form ≠ primitive), so Phase 1 triage inspected by eye. Lesson logged; Phase 3 tooling (axis B) should verify wrapped examples automatically.
 
 **C.4–C.6 Undefined `ctx` placeholder** — three error-context primitives:
 - `error-context-marks`
@@ -64,6 +66,7 @@ Each has an extra `)` in the example line. Trivial fix.
 - `error-context-stack-trace`
 Examples reference free variable `ctx` which isn't bound anywhere.
 **Fix**: change to semicolon-prefixed sketches (`;; (error-context-marks ctx)  =>  #f`) so the harness skips them, or restructure as a self-contained example.
+**Status**: applied in commit `0e2c0138` (docs(registry): fix docstring drift surfaced by primitive audit).
 
 ### Category D — harness limitation (1)
 
@@ -77,13 +80,13 @@ Docstring: `=> hello`. Actual: `*tokenizer.SimpleToken:<simple-token "hello" {0 
 Category C is the shortest path to a clean first signal (trivial textual fixes). Category A needs investigation — each finding is a micro-bug with its own root cause. Category B is between. Category D is one line of docstring or a harness exception.
 
 Suggested order:
-1. **C** — fix docstring typos and placeholder-var examples (one commit, ~8 lines changed).
-2. **A.1** — fix `bytevector-u8-ref` annotation (one-line annotation change + possibly a comment).
-3. **A.2, A.3** — investigate `procedure-arity` and `procedure-type`. These are related (both in `prim_reflection.go`) and may share a root cause.
-4. **B** — update stale docstring output literals.
-5. **D** — rewrite or exclude.
+1. **C** — *complete*. C.4–C.6 fixed in `0e2c0138`. C.1–C.3 reassessed: C.1/C.2 were false positives, C.3 fixed (`current-continuation-marks` substituted for `#f`).
+2. **B** — *complete*. B.1 (`inexact 1/3` → `inexact 1/4`), B.2 (`namespace-name`), B.3 (`procedure-arity`) all fixed in `0e2c0138`.
+3. **D** — *complete*. D.1 (`read-token`) fixed in `0e2c0138` via `;;` skip-marker prefix.
+4. **A.1** — fix `bytevector-u8-ref` annotation (one-line annotation change + possibly a comment). **Open.**
+5. **A.2, A.3** — investigate `procedure-arity` and `procedure-type`. These are related (both in `prim_reflection.go`) and may share a root cause. **Open.**
 
-After all these land, re-run the harness. Expected result: 0 findings (excluding the 72 wrapped-example non-findings, which are a separate concern Phase 3 tackles via axis B tooling).
+Current audit harness state: **0 findings** from self-call verification (`prims=475 with-examples=251 examples=403 self-call=328 verified=328`). Remaining work is Category A (impl bugs, not doc drift) and Phase 3 wrapped-example coverage.
 
 ## What Phase 1 did not catch (by design)
 
