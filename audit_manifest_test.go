@@ -295,6 +295,63 @@ func TestFormatManifest(t *testing.T) {
 	}
 }
 
+// TestManifestSanity spot-checks well-known primitives to catch
+// regressions where a primitive's Impl resolves to the wrong function
+// (e.g., a helper or closure). If this test starts failing, the
+// underlying cause is almost certainly that a primitive was re-registered
+// through a closure or wrapper layer.
+func TestManifestSanity(t *testing.T) {
+	entries := buildManifest(t)
+	byName := make(map[string]manifestEntry, len(entries))
+	for _, e := range entries {
+		byName[e.Name] = e
+	}
+
+	tcs := []struct {
+		name           string
+		pkgSubstr      string // must appear in GoFunction
+		sourceContains string // must appear in SourceFile
+	}{
+		{name: "car", pkgSubstr: "wile/registry/core", sourceContains: "registry/core/"},
+		{name: "cdr", pkgSubstr: "wile/registry/core", sourceContains: "registry/core/"},
+		{name: "cons", pkgSubstr: "wile/registry/core", sourceContains: "registry/core/"},
+		{name: "+", pkgSubstr: "wile/registry/core", sourceContains: "registry/core/"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			e, ok := byName[tc.name]
+			if !ok {
+				t.Fatalf("primitive %q not in manifest", tc.name)
+			}
+			if !strings.Contains(e.GoFunction, tc.pkgSubstr) {
+				t.Errorf("%s GoFunction %q does not contain %q",
+					tc.name, e.GoFunction, tc.pkgSubstr)
+			}
+			if !strings.Contains(e.SourceFile, tc.sourceContains) {
+				t.Errorf("%s SourceFile %q does not contain %q",
+					tc.name, e.SourceFile, tc.sourceContains)
+			}
+		})
+	}
+}
+
+// TestManifestStability asserts buildManifest is deterministic across
+// repeated invocations in the same process. Non-determinism here would
+// cause AXIS_B_UPDATE runs to produce unstable diffs.
+func TestManifestStability(t *testing.T) {
+	first := buildManifest(t)
+	second := buildManifest(t)
+	if len(first) != len(second) {
+		t.Fatalf("count differs across runs: %d vs %d", len(first), len(second))
+	}
+	for i := range first {
+		if first[i] != second[i] {
+			t.Errorf("entry %d differs: %+v vs %+v", i, first[i], second[i])
+			break
+		}
+	}
+}
+
 // repoRoot returns the absolute path of the wile repo root, inferred from
 // this test file's location.
 func repoRoot() string {
