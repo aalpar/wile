@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-04-13
+**Last Updated**: 2026-04-18
 
 ### Current Project Status
 
@@ -13,7 +13,7 @@ TODO
 **MCP Server**: Built-in MCP server mode (`wile --mcp`) with eval, doc, apropos, topic, libraries, and reset tools.
 **Examples**: 75 examples across 13 categories, 23 benchmarks (16 Gabriel + Larceny R7RS + Schelog + miniKanren)
 **Tests**: Go test suite comprehensive; Scheme test suite: 3,852 lines across 19 files (11 scheme + 8 algebra) + R7RS conformance suite
-**Libraries**: (chibi test), (chibi optional), (chibi diff), (chibi term ansi), (srfi 1), (wile algebra) complete; stdlib embedded in binary
+**Libraries**: (chibi test), (chibi optional), (chibi diff), (chibi term ansi), (srfi 1), (wile algebra) complete including `(wile algebra polynomial)` (ring-parameterized univariate polynomials); stdlib embedded in binary
 
 ### Ordering
 
@@ -51,6 +51,7 @@ The embedding experience that differentiates Wile.
   - DNS resolution
 - [ ] **Module decomposition Phase 1** [Architecture]: Decompose `internal/extensions/all/` into records, promises, core. Enables future module extraction. `plans/ARCHITECTURE.md`
 - [ ] **Go FFI Phase 3 — Plugin support** [Embedding]: Dynamic extension loading via registry pattern.
+- [ ] **MCP triggering rewrite (Lever A)** [Embedding, Text-only]: Rewrite `cmd/wile/mcp.go` `WithInstructions`, 9 tool descriptions, and `prompts/wile-scheme.md` to trigger LLM tool use on algebra/modular/polynomial domains. Correct misleading `libraries` description (currently claims "loaded only" but tool returns full catalog). Validation via `algebra-accuracy` benchmark: closes `powerset_lattice` regression. No code logic changes. `plans/2026-04-18-mcp-triggering-rewrite.md`
 
 ---
 
@@ -58,6 +59,7 @@ The embedding experience that differentiates Wile.
 
 - [ ] **Scheme linter** [Tooling, High, Needs Scoping]: Static analysis for Wile Scheme code — catch "plausible but wrong" before execution. Potential checks: unused bindings, arity mismatches, type mismatches, unreachable code, style warnings. Research needed: what do Racket (Check Syntax), Guile, CHICKEN lint tools actually check? How much at expand time vs separate pass? Interaction with type system is a key design question.
 - [ ] **Debugger / DAP integration** [Tooling]: Debug Adapter Protocol. Inline traps + snap-to-next designs ready in `plans/DEBUGGER.md`
+- [ ] **Scheme-side line coverage** [Tooling, M]: `executed []bool` on `NativeTemplate`, `WithCoverage` engine option, `--cover PATH` CLI flag, Go cover v1 output consumable by `go tool cover -html`. Design locked-in. Active branch: `feat/scheme-coverage`. `plans/2026-04-18-scheme-line-coverage.md`
 - [ ] **Source file tracking in Syntax Objects** [Tooling]: Utilities for finding source locations and providing source lines.
 - [ ] **POSIX API / SRFI-170 remaining phases** [Standard library, 9 phases]: Phases 2-10 not started. Phase 1 (directory ops + process extension) completed in PR #565.
 
@@ -271,6 +273,7 @@ What: LocalEnvironmentFrame is embedded by value in EnvironmentFrame (for heap s
 
 ### Features
 - [x] **Algebra library** [Done]: `(wile algebra)`. 158 tests. `plans/2026-03-25-algebra-library-design.md`
+- [x] **`(wile algebra polynomial)` library** [Done]: Ring-parameterized univariate polynomials. 12/12 tasks. 60 tests passing. poly-plus/negate/minus/times, Horner evaluation, formal derivative (characteristic-safe, O(n) via accumulator threading), divmod (field-required), GCD (Euclidean, monic-normalized), polynomial-ring capstone (enables recursive rings R[x][y]), `with-polynomial` macro. Commits `69b98203`..`78bb7e2f`. `plans/2026-04-18-polynomial-library.md`
 - [x] **Documentation system** [Done]: Full infrastructure — `,doc`, `,apropos`, `,topics`, `,topic`, library descriptions, docstring examples. PRs #579-591.
 - [x] **MCP server** [Done]: `wile --mcp`. PR #588. `plans/2026-03-26-wile-mcp-server-design.md`
 - [x] **`(available-libraries)` primitive** [Done]: PR #590. `plans/AVAILABLE-LIBRARIES.md`
