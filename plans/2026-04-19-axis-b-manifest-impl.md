@@ -4,7 +4,7 @@
 
 **Goal:** Produce `plans/axis-b-manifest.scm` — an S-expression list of `(name declared-return-type go-function-name go-source-location)` tuples, one per primitive — plus a Go test that regenerates it on demand and verifies the committed file is current.
 
-**Architecture:** A test at the wile repo root walks `Engine.Registry().Primitives()` under `WithProfile(KitchenSink)`, resolves each primitive's Impl function to a Go function name and source location via `reflect.ValueOf(Impl).Pointer()` + `runtime.FuncForPC`, sorts entries alphabetically by name, and emits them as a Scheme S-expression list. The test compares generated output against the committed file, failing if they differ; setting `AXIS_B_UPDATE=1` rewrites the file.
+**Architecture:** A test at the wile repo root walks `Engine.Registry().Primitives()` under `WithProfile(KitchenSink)`, resolves each primitive's Impl function to a Go function name and source location via `reflect.ValueOf(Impl).Pointer()` + `runtime.FuncForPC`, sorts entries alphabetically by name, and emits them as a Scheme S-expression list. The test compares generated output against the committed file, failing if they differ; setting `WILE_AXIS_B_UPDATE=1` rewrites the file.
 
 **Tech Stack:** Go 1.24 standard library only — `reflect`, `runtime`, `path/filepath`, `strings`, `sort`, `os`, `testing`, plus the wile public API (`wile.NewEngine`, `WithProfile`, `Registry().Primitives()`) and `values.TypeConstraint.Name()`.
 
@@ -62,7 +62,7 @@ Create `/Users/aalpar/projects/wile-workspace/wile/audit_manifest_test.go`:
 //
 // Writes plans/axis-b-manifest.scm — an S-expression list of
 // (name declared-return-type go-function-name go-source-location) tuples.
-// Run with AXIS_B_UPDATE=1 to regenerate after adding/removing primitives.
+// Run with WILE_AXIS_B_UPDATE=1 to regenerate after adding/removing primitives.
 
 package wile
 
@@ -629,7 +629,7 @@ See plans/2026-04-19-axis-b-manifest-impl.md Task 5."
 ## Task 6: Round-trip the manifest against `plans/axis-b-manifest.scm`
 
 **Files:**
-- Modify: `audit_manifest_test.go` — extend test to compare against committed file; support `AXIS_B_UPDATE=1`
+- Modify: `audit_manifest_test.go` — extend test to compare against committed file; support `WILE_AXIS_B_UPDATE=1`
 - Create: `plans/axis-b-manifest.scm` (via update flow)
 
 - [ ] **Step 1: Extend the test to round-trip against the committed file**
@@ -695,7 +695,7 @@ func TestBuildAxisBManifest(t *testing.T) {
 	generated := formatManifest(entries)
 	path := filepath.Join(repoRoot(), axisBManifestPath)
 
-	if os.Getenv("AXIS_B_UPDATE") != "" {
+	if os.Getenv("WILE_AXIS_B_UPDATE") != "" {
 		err := os.WriteFile(path, []byte(generated), 0644)
 		if err != nil {
 			t.Fatalf("write manifest: %v", err)
@@ -706,11 +706,11 @@ func TestBuildAxisBManifest(t *testing.T) {
 
 	committed, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("read %s: %v (run with AXIS_B_UPDATE=1 to generate)",
+		t.Fatalf("read %s: %v (run with WILE_AXIS_B_UPDATE=1 to generate)",
 			axisBManifestPath, err)
 	}
 	if string(committed) != generated {
-		t.Errorf("%s is out of date\nrun: AXIS_B_UPDATE=1 go test -run TestBuildAxisBManifest .",
+		t.Errorf("%s is out of date\nrun: WILE_AXIS_B_UPDATE=1 go test -run TestBuildAxisBManifest .",
 			axisBManifestPath)
 	}
 }
@@ -720,11 +720,11 @@ func TestBuildAxisBManifest(t *testing.T) {
 
 Run: `go test -v -run TestBuildAxisBManifest .`
 
-Expected: FAIL with `read plans/axis-b-manifest.scm: open ...: no such file or directory (run with AXIS_B_UPDATE=1 to generate)`.
+Expected: FAIL with `read plans/axis-b-manifest.scm: open ...: no such file or directory (run with WILE_AXIS_B_UPDATE=1 to generate)`.
 
 - [ ] **Step 3: Generate the manifest file**
 
-Run: `AXIS_B_UPDATE=1 go test -v -run TestBuildAxisBManifest .`
+Run: `WILE_AXIS_B_UPDATE=1 go test -v -run TestBuildAxisBManifest .`
 
 Expected: PASS with log line `updated plans/axis-b-manifest.scm (475 entries)` (the exact count is whatever the current registry holds).
 
@@ -741,7 +741,7 @@ Expected:
 - First line begins with `(("` (the open paren of the list, then the open paren of the first tuple, then the open quote).
 - Line count equals entry count (one tuple per line after the first).
 
-- [ ] **Step 5: Re-run the test without `AXIS_B_UPDATE` to confirm round-trip passes**
+- [ ] **Step 5: Re-run the test without `WILE_AXIS_B_UPDATE` to confirm round-trip passes**
 
 Run: `go test -v -run TestBuildAxisBManifest .`
 
@@ -759,7 +759,7 @@ plans/axis-b-manifest.scm is the generated S-expression list consumed
 by the wile-goast axis-b analyzer (Phase 3.B, separate plan).
 
 TestBuildAxisBManifest compares the runtime-generated manifest against
-the committed file; AXIS_B_UPDATE=1 rewrites the file when primitives
+the committed file; WILE_AXIS_B_UPDATE=1 rewrites the file when primitives
 are added, removed, or renamed.
 
 See plans/2026-04-19-axis-b-analyzer-design.md for the overall audit design.
@@ -820,7 +820,7 @@ func TestManifestSanity(t *testing.T) {
 
 // TestManifestStability asserts buildManifest is deterministic across
 // repeated invocations in the same process. Non-determinism here would
-// cause AXIS_B_UPDATE runs to produce unstable diffs.
+// cause WILE_AXIS_B_UPDATE runs to produce unstable diffs.
 func TestManifestStability(t *testing.T) {
 	first := buildManifest(t)
 	second := buildManifest(t)
@@ -857,7 +857,7 @@ functions in registry/core, catching any registration wrapping that
 would obscure real Impl locations.
 
 TestManifestStability asserts buildManifest is deterministic so that
-AXIS_B_UPDATE produces stable diffs.
+WILE_AXIS_B_UPDATE produces stable diffs.
 
 See plans/2026-04-19-axis-b-manifest-impl.md Task 7."
 ```

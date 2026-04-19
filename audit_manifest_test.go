@@ -18,7 +18,7 @@
 //
 // Writes plans/axis-b-manifest.scm — an S-expression list of
 // (name declared-return-type go-function-name go-source-location) tuples.
-// Run with AXIS_B_UPDATE=1 to regenerate after adding/removing primitives.
+// Run with WILE_AXIS_B_UPDATE=1 to regenerate after adding/removing primitives.
 
 package wile
 
@@ -33,7 +33,31 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/werr"
+)
+
+var errResolveImpl = werr.NewStaticError("audit manifest: resolveImpl")
+
+const (
+	// axisBManifestPath is the repo-relative path of the committed manifest.
+	axisBManifestPath = "plans/axis-b-manifest.scm"
+
+	// axisBUpdateEnvVar toggles regeneration of the committed manifest.
+	// Set to any non-empty value to overwrite axisBManifestPath with the
+	// freshly-computed contents instead of comparing for equality.
+	axisBUpdateEnvVar = "WILE_AXIS_B_UPDATE"
+
+	// maxBindingOnlyPrimitives bounds the expected number of primitives
+	// with nil Impl. Current count is ~47 (binding-only entries like assoc,
+	// member, map, caar, boolean=?). Exceeding this cap likely signals
+	// that real Impls were accidentally nulled — the test fails rather
+	// than silently skipping validation for all of them.
+	maxBindingOnlyPrimitives = 60
+
+	// maxReportedDiffs caps how many differences are reported from
+	// order- and stability-check loops before the loop breaks. Keeps
+	// failure output readable while still exposing systemic drift.
+	maxReportedDiffs = 5
 )
 
 // manifestEntry is a single primitive's line in the manifest.
@@ -52,57 +76,74 @@ func buildManifest(t *testing.T) []manifestEntry {
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithLibraryPaths())
 	if err != nil {
-		t.Fatalf("new engine: %v", err)
+		t.Fatalf("new engine (profile=KitchenSink, no library paths): %v", err)
 	}
 	prims := eng.Registry().Primitives()
+	root := repoRoot(t)
 
-	entries := make([]manifestEntry, 0, len(prims))
+	q := make([]manifestEntry, 0, len(prims))
 	for _, pr := range prims {
-		goName, absFile, line := resolveImpl(pr.Spec.Impl)
-		entries = append(entries, manifestEntry{
+		returnType := ""
+		if pr.Spec.ReturnType != nil {
+			returnType = pr.Spec.ReturnType.Name()
+		}
+		goName, absFile, line, impErr := resolveImpl(pr.Spec.Impl)
+		if impErr != nil {
+			t.Errorf("resolveImpl(%q): %v", pr.Spec.Name, impErr)
+		}
+		q = append(q, manifestEntry{
 			Name:       pr.Spec.Name,
-			ReturnType: renderManifestType(pr.Spec.ReturnType),
+			ReturnType: returnType,
 			GoFunction: goName,
-			SourceFile: stripRoot(absFile),
+			SourceFile: stripRoot(t, root, absFile),
 			SourceLine: line,
 		})
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Name < entries[j].Name
+	sort.Slice(q, func(i, j int) bool {
+		return q[i].Name < q[j].Name
 	})
-	return entries
-}
-
-// renderManifestType mirrors renderType in audit_annotations_test.go, but we
-// name it distinctly to avoid colliding if both files are edited in the same
-// session. "" (not "<nil>") is emitted for unspecified return types so the
-// S-expression reader sees an empty string rather than a literal name.
-func renderManifestType(t values.TypeConstraint) string {
-	if t == nil {
-		return ""
-	}
-	return t.Name()
+	return q
 }
 
 // resolveImpl returns the fully-qualified Go function name and absolute
-// source file:line for a primitive's Impl function. If reflection cannot
-// recover either piece (e.g., the Impl is a closure with no source info),
-// the returned strings are empty and line is 0.
-func resolveImpl(fn any) (name, file string, line int) {
+// source file:line for a primitive's Impl function.
+//
+// Returns ("", "", 0, nil) legitimately for binding-only primitives —
+// either untyped nil or a typed-nil ForeignFunction value. The wile
+// registry uses typed-nil Impls for names like assoc, member, caar,
+// boolean=? that are declared but have no Go body. A typed nil passed
+// through an interface satisfies fn != nil but v.IsNil() == true.
+//
+// Returns a non-nil error for unexpected states — wrong kind, missing
+// runtime symbol for a non-nil function, empty FileLine — each of
+// which signals that something upstream is broken rather than a
+// binding-only registration. Callers should fail the test on non-nil
+// err while still recording the entry so the manifest diff surfaces
+// which primitive triggered the failure.
+func resolveImpl(fn any) (name, file string, line int, err error) {
 	if fn == nil {
-		return "", "", 0
+		return "", "", 0, nil
 	}
 	v := reflect.ValueOf(fn)
 	if v.Kind() != reflect.Func {
-		return "", "", 0
+		return "", "", 0, werr.WrapForeignErrorf(errResolveImpl,
+			"Impl is not a function: kind=%s", v.Kind())
+	}
+	if v.IsNil() {
+		return "", "", 0, nil
 	}
 	pc := v.Pointer()
 	rf := runtime.FuncForPC(pc)
 	if rf == nil {
-		return "", "", 0
+		return "", "", 0, werr.WrapForeignErrorf(errResolveImpl,
+			"runtime.FuncForPC returned nil for pc=%x", pc)
 	}
 	file, line = rf.FileLine(pc)
-	return rf.Name(), file, line
+	if file == "" || line == 0 {
+		return rf.Name(), "", 0, werr.WrapForeignErrorf(errResolveImpl,
+			"FileLine empty/zero for %s", rf.Name())
+	}
+	return rf.Name(), file, line, nil
 }
 
 // formatManifest renders entries as a Scheme S-expression list, one tuple
@@ -150,8 +191,6 @@ func writeSchemeString(b *strings.Builder, s string) {
 	b.WriteByte('"')
 }
 
-const axisBManifestPath = "plans/axis-b-manifest.scm"
-
 func TestBuildAxisBManifest(t *testing.T) {
 	entries := buildManifest(t)
 	if len(entries) < 400 {
@@ -159,6 +198,7 @@ func TestBuildAxisBManifest(t *testing.T) {
 	}
 
 	seen := make(map[string]int, len(entries))
+	bindingOnly := 0
 	for i, e := range entries {
 		if e.Name == "" {
 			t.Errorf("entry %d has empty Name", i)
@@ -176,6 +216,7 @@ func TestBuildAxisBManifest(t *testing.T) {
 		// the wile-goast analyzer skips them. Only non-empty GoFunction
 		// values must be package-qualified.
 		if e.GoFunction == "" {
+			bindingOnly++
 			continue
 		}
 		if !strings.Contains(e.GoFunction, "/") {
@@ -200,15 +241,27 @@ func TestBuildAxisBManifest(t *testing.T) {
 		}
 	}
 
+	if bindingOnly > maxBindingOnlyPrimitives {
+		t.Errorf("binding-only primitives (%d) exceeds expected max (%d) — "+
+			"possible Impl registration regression",
+			bindingOnly, maxBindingOnlyPrimitives)
+	}
+
+	sortDiffs := 0
 	for i := 1; i < len(entries); i++ {
 		if entries[i-1].Name > entries[i].Name {
 			t.Errorf("entries not sorted: %q > %q at positions %d, %d",
 				entries[i-1].Name, entries[i].Name, i-1, i)
-			break
+			sortDiffs++
+			if sortDiffs >= maxReportedDiffs {
+				t.Errorf("... additional sort violations suppressed after %d",
+					maxReportedDiffs)
+				break
+			}
 		}
 	}
 
-	t.Logf("manifest: %d entries", len(entries))
+	t.Logf("manifest: %d entries (%d binding-only)", len(entries), bindingOnly)
 	for _, name := range []string{"car", "cdr", "cons", "+"} {
 		idx, ok := seen[name]
 		if !ok {
@@ -221,9 +274,9 @@ func TestBuildAxisBManifest(t *testing.T) {
 	}
 
 	generated := formatManifest(entries)
-	path := filepath.Join(repoRoot(), axisBManifestPath)
+	path := filepath.Join(repoRoot(t), axisBManifestPath)
 
-	if os.Getenv("AXIS_B_UPDATE") != "" {
+	if os.Getenv(axisBUpdateEnvVar) != "" {
 		err := os.WriteFile(path, []byte(generated), 0644)
 		if err != nil {
 			t.Fatalf("write manifest: %v", err)
@@ -234,12 +287,12 @@ func TestBuildAxisBManifest(t *testing.T) {
 
 	committed, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("read %s: %v (run with AXIS_B_UPDATE=1 to generate)",
-			axisBManifestPath, err)
+		t.Fatalf("read %s: %v (run with %s=1 to generate)",
+			axisBManifestPath, err, axisBUpdateEnvVar)
 	}
 	if string(committed) != generated {
-		t.Errorf("%s is out of date\nrun: AXIS_B_UPDATE=1 go test -run TestBuildAxisBManifest .",
-			axisBManifestPath)
+		t.Errorf("%s is out of date\nrun: %s=1 go test -run TestBuildAxisBManifest .",
+			axisBManifestPath, axisBUpdateEnvVar)
 	}
 }
 
@@ -352,32 +405,55 @@ func TestManifestSanity(t *testing.T) {
 
 // TestManifestStability asserts buildManifest is deterministic across
 // repeated invocations in the same process. Non-determinism here would
-// cause AXIS_B_UPDATE runs to produce unstable diffs.
+// cause WILE_AXIS_B_UPDATE runs to produce unstable diffs.
 func TestManifestStability(t *testing.T) {
 	first := buildManifest(t)
 	second := buildManifest(t)
 	if len(first) != len(second) {
 		t.Fatalf("count differs across runs: %d vs %d", len(first), len(second))
 	}
+	diffs := 0
 	for i := range first {
 		if first[i] != second[i] {
 			t.Errorf("entry %d differs: %+v vs %+v", i, first[i], second[i])
-			break
+			diffs++
+			if diffs >= maxReportedDiffs {
+				t.Errorf("... additional diffs suppressed after %d", maxReportedDiffs)
+				break
+			}
 		}
 	}
 }
 
 // repoRoot returns the absolute path of the wile repo root, inferred from
-// this test file's location.
-func repoRoot() string {
-	_, thisFile, _, _ := runtime.Caller(0)
+// this test file's location. Fails the test if runtime.Caller reports no
+// symbol info — otherwise stripRoot would silently corrupt every source
+// path in the generated manifest.
+func repoRoot(t *testing.T) string {
+	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatalf("runtime.Caller(0) failed — cannot infer repo root")
+	}
 	return filepath.Dir(thisFile)
 }
 
-// stripRoot strips the repo root prefix from an absolute path, yielding a
-// repo-relative path such as "registry/core/lists.go".
-func stripRoot(abs string) string {
-	root := repoRoot()
-	trimmed := strings.TrimPrefix(abs, root)
-	return strings.TrimPrefix(trimmed, string(filepath.Separator))
+// stripRoot returns abs as a repo-relative path. If abs is empty (the
+// legitimate no-source case from resolveImpl on a binding-only primitive),
+// returns "". Fails the test if abs is non-empty but does not live under
+// root — that indicates either repo-root detection is wrong or the
+// primitive's Impl resolved to a function outside the repo tree (e.g.,
+// a vendored module cache or a symlink target). Silent rewriting of such
+// a path would commit a corrupt manifest.
+func stripRoot(t *testing.T, root, abs string) string {
+	t.Helper()
+	if abs == "" {
+		return ""
+	}
+	prefix := root + string(filepath.Separator)
+	if !strings.HasPrefix(abs, prefix) {
+		t.Errorf("stripRoot: %q is not under repo root %q", abs, root)
+		return abs
+	}
+	return strings.TrimPrefix(abs, prefix)
 }
