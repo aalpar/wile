@@ -146,7 +146,8 @@ make lint
 make test
 
 # Check coverage (optional)
-make cover
+make cover-go     # Go-side coverage
+make cover-scm    # Scheme-side coverage
 ```
 
 ### 5. Commit Your Changes
