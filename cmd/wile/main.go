@@ -366,7 +366,7 @@ func main() {
 func writeCoverageFile(path string, col *coverage.Collector, includeStdlib bool) error {
 	f, err := os.Create(path)
 	if err != nil {
-		return werr.WrapForeignErrorf(werr.ErrFileOpen, "writeCoverageFile: create %s", path)
+		return werr.WrapForeignErrorWithCause(werr.ErrFileOpen, err, "writeCoverageFile: create %s", path)
 	}
 	defer func() {
 		_ = f.Close()
@@ -380,7 +380,7 @@ func writeCoverageFile(path string, col *coverage.Collector, includeStdlib bool)
 func writeSummaryFile(path string, col *coverage.Collector, includeStdlib bool) error {
 	f, err := os.Create(path)
 	if err != nil {
-		return werr.WrapForeignErrorf(werr.ErrFileOpen, "writeSummaryFile: create %s", path)
+		return werr.WrapForeignErrorWithCause(werr.ErrFileOpen, err, "writeSummaryFile: create %s", path)
 	}
 	defer func() {
 		_ = f.Close()
