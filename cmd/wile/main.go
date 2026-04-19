@@ -30,25 +30,30 @@ import (
 	"syscall"
 
 	"github.com/aalpar/wile"
+	"github.com/aalpar/wile/coverage"
 	"github.com/aalpar/wile/extensions/system"
 	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/repl"
 	"github.com/aalpar/wile/stdlib"
+	"github.com/aalpar/wile/werr"
 
 	"github.com/jessevdk/go-flags"
 )
 
 type Options struct {
-	Eval        []string `short:"e" long:"eval" description:"Evaluate Scheme expression (repeatable)"`
-	File        []string `short:"f" long:"file" description:"Scheme file(s) to load (can be repeated)"`
-	Interactive bool     `short:"i" long:"interactive" description:"Enter REPL after loading file(s)"`
-	LibraryPath string   `short:"L" long:"library-path" description:"Library search path (colon-separated, prepended to SCHEME_LIBRARY_PATH)"`
-	Version     bool     `short:"V" long:"version" description:"Print version information and exit"`
-	Quiet       bool     `short:"q" long:"quiet" description:"Suppress informational messages"`
-	MCP         bool     `long:"mcp" description:"Start as MCP server on stdio"`
-	MCPTimeout  float64  `long:"mcp-timeout" description:"Default eval timeout in seconds for MCP mode (0 = no timeout)" default:"30"`
-	CPUProfile  string   `long:"cpuprofile" description:"Write CPU profile to file"`
-	MemProfile  string   `long:"memprofile" description:"Write memory profile to file"`
+	Eval         []string `short:"e" long:"eval" description:"Evaluate Scheme expression (repeatable)"`
+	File         []string `short:"f" long:"file" description:"Scheme file(s) to load (can be repeated)"`
+	Interactive  bool     `short:"i" long:"interactive" description:"Enter REPL after loading file(s)"`
+	LibraryPath  string   `short:"L" long:"library-path" description:"Library search path (colon-separated, prepended to SCHEME_LIBRARY_PATH)"`
+	Version      bool     `short:"V" long:"version" description:"Print version information and exit"`
+	Quiet        bool     `short:"q" long:"quiet" description:"Suppress informational messages"`
+	MCP          bool     `long:"mcp" description:"Start as MCP server on stdio"`
+	MCPTimeout   float64  `long:"mcp-timeout" description:"Default eval timeout in seconds for MCP mode (0 = no timeout)" default:"30"`
+	CPUProfile   string   `long:"cpuprofile" description:"Write CPU profile to file"`
+	MemProfile   string   `long:"memprofile" description:"Write memory profile to file"`
+	Cover        string   `long:"cover" description:"Write Scheme-level coverage report to file (Go cover format)"`
+	CoverStdlib  bool     `long:"cover-stdlib" description:"Include stdlib files in --cover output (default excludes scheme/, wile/, srfi/)"`
+	CoverSummary string   `long:"cover-summary" description:"Write human-readable coverage summary to file"`
 }
 
 var (
@@ -233,13 +238,22 @@ func main() {
 		return
 	}
 
+	var coverageCollector *coverage.Collector
+	if opts.Cover != "" || opts.CoverSummary != "" {
+		coverageCollector = coverage.NewCollector()
+	}
+
 	libPaths := buildLibraryPaths()
-	eng, err0 := wile.NewEngine(ctx,
+	engineOpts := []wile.EngineOption{
 		wile.WithProfile(wile.KitchenSink),
 		wile.WithSourceFS(stdlib.FS),
 		wile.WithSourceOS(),
 		wile.WithLibraryPaths(libPaths...),
-	)
+	}
+	if coverageCollector != nil {
+		engineOpts = append(engineOpts, wile.WithCoverage(coverageCollector))
+	}
+	eng, err0 := wile.NewEngine(ctx, engineOpts...)
 	if err0 != nil {
 		Failf(err0, "Cannot create engine")
 	}
@@ -331,6 +345,50 @@ func main() {
 			Failf(err, "Cannot write memory profile")
 		}
 	}
+
+	// Coverage reporting (written at exit after all work is done)
+	if coverageCollector != nil {
+		if opts.Cover != "" {
+			err := writeCoverageFile(opts.Cover, coverageCollector, opts.CoverStdlib)
+			if err != nil {
+				Failf(err, "writing coverage file")
+			}
+		}
+		if opts.CoverSummary != "" {
+			err := writeSummaryFile(opts.CoverSummary, coverageCollector, opts.CoverStdlib)
+			if err != nil {
+				Failf(err, "writing coverage summary")
+			}
+		}
+	}
+}
+
+func writeCoverageFile(path string, col *coverage.Collector, includeStdlib bool) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return werr.WrapForeignErrorf(werr.ErrFileOpen, "writeCoverageFile: create %s", path)
+	}
+	defer func() {
+		_ = f.Close()
+	}()
+	if includeStdlib {
+		return coverage.WriteGoCoverIncludingStdlib(f, col)
+	}
+	return coverage.WriteGoCover(f, col)
+}
+
+func writeSummaryFile(path string, col *coverage.Collector, includeStdlib bool) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return werr.WrapForeignErrorf(werr.ErrFileOpen, "writeSummaryFile: create %s", path)
+	}
+	defer func() {
+		_ = f.Close()
+	}()
+	if includeStdlib {
+		return coverage.WriteSummaryIncludingStdlib(f, col)
+	}
+	return coverage.WriteSummary(f, col)
 }
 
 // runFile processes a Scheme file, exiting on errors.

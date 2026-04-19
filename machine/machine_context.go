@@ -352,6 +352,10 @@ func (p *MachineContext) Run() error {
 			mc.counters.opcodeHits[instr.Op]++
 		}
 
+		if mc.template.executed != nil {
+			mc.template.executed[mc.pc] = true
+		}
+
 		switch instr.Op {
 		// --- Wave 1: zero-operand operations ---
 

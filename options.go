@@ -18,6 +18,7 @@ import (
 	"io/fs"
 	"maps"
 
+	"github.com/aalpar/wile/coverage"
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/machine/compilation"
 	"github.com/aalpar/wile/registry"
@@ -55,6 +56,10 @@ type engineConfig struct {
 	// contractEnforcement installs type-checking validators on primitives
 	// whose specs declare ParamTypes. Enabled via WithContractEnforcement.
 	contractEnforcement bool
+
+	// coverageCollector, when non-nil, receives every NativeTemplate produced
+	// by the compiler so per-s-expression execution can be tracked.
+	coverageCollector *coverage.Collector
 }
 
 // resolverFactory creates a FileResolver given the runtime environment.
@@ -267,6 +272,19 @@ func WithEnv(key, value string) EngineOption {
 			cfg.envMap = make(map[string]string)
 		}
 		cfg.envMap[key] = value
+	}
+}
+
+// WithCoverage enables Scheme-side line coverage collection. After each
+// compilation, the engine registers the resulting top-level template
+// and every sub-template reachable via its literals pool with the
+// given collector. Per-s-expression execution is then aggregated into
+// the collector's Entries.
+//
+// Zero hot-path cost when not set (nil check in VM dispatch).
+func WithCoverage(c *coverage.Collector) EngineOption {
+	return func(cfg *engineConfig) {
+		cfg.coverageCollector = c
 	}
 }
 
