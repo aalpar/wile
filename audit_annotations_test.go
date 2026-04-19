@@ -52,7 +52,8 @@ type auditFinding struct {
 
 func stripInlineComment(s string) string {
 	q := s
-	if i := strings.Index(q, " ;"); i >= 0 {
+	i := strings.Index(q, " ;")
+	if i >= 0 {
 		q = q[:i]
 	}
 	return strings.TrimSpace(q)
@@ -108,7 +109,8 @@ func TestAuditPrimitiveAnnotations(t *testing.T) {
 			expected := stripInlineComment(m[2])
 
 			head := ""
-			if hm := callHeadRe.FindStringSubmatch(call); len(hm) > 1 {
+			hm := callHeadRe.FindStringSubmatch(call)
+			if len(hm) > 1 {
 				head = hm[1]
 			}
 			if head != spec.Name {
