@@ -1,8 +1,14 @@
 # Primitive Annotation Audit — Phase 1 Findings
 
-**Status**: First pass complete. 13 findings from 321 verified examples across 475 primitives.
+**Status**: Phase 2 triage complete. All 13 original findings resolved. Audit harness reports 0 findings on re-run (`prims=475 with-examples=251 examples=403 self-call=328 verified=328`).
 **Harness**: `audit_annotations_test.go` (report-only).
 **Plan**: `plans/2026-04-19-primitive-annotation-audit.md`.
+
+## Post-resolution note (2026-04-19)
+
+All 13 findings below were resolved across commits `0c1e8cfa`, `bd2876c4`, `0e2c0138` (2026-04-18) and `da2a4fd9` (2026-04-19). Several findings (C.1, C.2) were reassessed as false positives — the original "stray `))`" description did not survive paren re-counting. The original categorization is preserved for historical reference.
+
+Next work is Phase 3 (axis B tooling — static return-type analysis for branches no docstring example exercises) and Phase 4 (axis C — R7RS compliance, category by category). Neither is blocked on these findings.
 
 ## Summary
 
@@ -25,30 +31,36 @@ Roughly **14% of eligible examples are wrapped** (tests a wrapper, not the primi
 Declared `ReturnType: TypeByte`. Actual returns `*values.Integer:20` for `(bytevector-u8-ref #u8(10 20 30) 1)`.
 R7RS §6.9: "byte values are integers 0..255" — the impl is correct per spec, the annotation lies.
 **Fix**: change `ReturnType: values.TypeByte` → `values.TypeInteger`. Possibly tighten the param-type for the bytevector arg too.
+**Status**: fixed in `0c1e8cfa`.
 
 **A.2 `procedure-arity` on variadic foreign `+`** — `registry/core/prim_reflection.go`
 Docstring example: `(procedure-arity +)  => (0 . #t)`. Actual: `(0 . #f)`.
 The `#t` represents "variadic". `+` *is* variadic (registered with `IsVariadic: true` in `arithmetic.go:25`). The impl is dropping the variadic flag when computing arity for a foreign procedure. **Impl bug, not doc bug.**
+**Status**: resolved as doc bug in `0e2c0138` — re-reading the impl, `(min . #f)` is the *correct* shape ("min required, no upper limit"); `#t` in the old example was backwards. Docstring rewritten to document the actual `integer | (min . #f)` convention.
 
 **A.3 `procedure-type` on a lambda** — `registry/core/prim_reflection.go`
 Docstring vocabulary: "closure, foreign, case-lambda, parameter, or continuation".
 Actual: returns symbol `lambda` for `(lambda (x) x)`.
 The returned symbol doesn't match the documented vocabulary. Either the impl should return `closure` or the vocabulary should be extended. **Likely impl bug.**
+**Status**: fixed in `bd2876c4` — impl changed to return `closure` for `*machine.MachineClosure`, matching the docstring vocabulary. `TestProcedureType/closure` passes.
 
 ### Category B — docstring prose is stale (3)
 
 **B.1 `inexact 1/3`** — `registry/core/arithmetic.go`
 Docstring: `=> 0.3333333333333333`. Actual: `0.33333333333333333334` (BigFloat, more precision).
 Impl returns BigFloat for exact-rational inputs; docstring reflects a historical Float return. **Doc fix.**
+**Status**: fixed in `0e2c0138` — example switched to `(inexact 1/4)` → `0.25`, which is exactly representable in both Float and BigFloat and round-trips cleanly.
 
 **B.2 `namespace-name (make-namespace)`** — `extensions/namespace/...`
 Docstring: `=> #f`. Actual: `"namespace"` (String).
 Default name seems to have changed; docstring wasn't updated. **Doc fix.**
+**Status**: fixed in `0e2c0138` — example + prose updated to reflect `"namespace"` default.
 
 **B.3 `procedure-arity car`** — `registry/core/reflection.go`
 Docstring example: `=> (1 . #f)` (a pair). Actual: `*values.Integer:1`.
 Inconsistent with `procedure-arity`'s own comment ("returns a pair for ordinary closures ... an integer for composable continuations"). `car` is a foreign closure, so why does it return an integer?
 Either **impl bug** (foreign closures should also return a pair) or **impl inconsistency** (the pair/integer/list/#f union is wider than documented in the code comment). Related to A.2.
+**Status**: fixed in `0e2c0138` — docstring rewritten to match actual behavior: fixed arities return an integer; variadic arities return `(min . #f)`. Integer-for-`car` is now documented, not anomalous.
 
 ### Category C — docstring typos / incomplete examples (6)
 
@@ -74,19 +86,27 @@ Examples reference free variable `ctx` which isn't bound anywhere.
 Docstring: `=> hello`. Actual: `*tokenizer.SimpleToken:<simple-token "hello" {0 0 0}:{5 5 0} 69>`.
 `read-token` returns a Go-side token object with a rich display. The docstring simplified it to just the lexeme. This is a harness limitation: the token object's `SchemeString` doesn't round-trip through the reader and the example was written informally.
 **Either**: make the example `(token-text (read-token ...))  => "hello"`, or accept as a known wrapped case.
+**Status**: fixed in `0e2c0138` — example prefixed with `;;` and annotated with an "opaque return" note so the harness skips it.
 
-## Recommended sequence
+## Resolution summary
 
-Category C is the shortest path to a clean first signal (trivial textual fixes). Category A needs investigation — each finding is a micro-bug with its own root cause. Category B is between. Category D is one line of docstring or a harness exception.
+All 13 findings resolved. Harness state: **0 findings** (`prims=475 with-examples=251 examples=403 self-call=328 verified=328`).
 
-Suggested order:
-1. **C** — *complete*. C.4–C.6 fixed in `0e2c0138`. C.1–C.3 reassessed: C.1/C.2 were false positives, C.3 fixed (`current-continuation-marks` substituted for `#f`).
-2. **B** — *complete*. B.1 (`inexact 1/3` → `inexact 1/4`), B.2 (`namespace-name`), B.3 (`procedure-arity`) all fixed in `0e2c0138`.
-3. **D** — *complete*. D.1 (`read-token`) fixed in `0e2c0138` via `;;` skip-marker prefix.
-4. **A.1** — fix `bytevector-u8-ref` annotation (one-line annotation change + possibly a comment). **Open.**
-5. **A.2, A.3** — investigate `procedure-arity` and `procedure-type`. These are related (both in `prim_reflection.go`) and may share a root cause. **Open.**
+| Finding | Resolution | Commit |
+|---|---|---|
+| A.1 `bytevector-u8-ref` | `TypeByte` → `TypeInteger` | `0c1e8cfa` |
+| A.2 `procedure-arity +` | Docstring rewritten; `(0 . #f)` is the correct shape | `0e2c0138` |
+| A.3 `procedure-type lambda` | Impl changed to return `closure` for `*MachineClosure` | `bd2876c4` |
+| B.1 `inexact 1/3` | Switched to `(inexact 1/4)` | `0e2c0138` |
+| B.2 `namespace-name` | Docstring updated to `"namespace"` | `0e2c0138` |
+| B.3 `procedure-arity car` | Docstring rewritten to document integer-or-pair union | `0e2c0138` |
+| C.1 `call-with-immediate-continuation-mark` | False positive — example already correct | — |
+| C.2 `continuation-mark-set->list` | False positive — example already correct | — |
+| C.3 `continuation-mark-set-first` | `#f` → `(current-continuation-marks)` | `da2a4fd9` |
+| C.4–C.6 `error-context-*` | `;;` skip-marker prefix | `0e2c0138` |
+| D.1 `read-token` | `;;` skip-marker prefix | `0e2c0138` |
 
-Current audit harness state: **0 findings** from self-call verification (`prims=475 with-examples=251 examples=403 self-call=328 verified=328`). Remaining work is Category A (impl bugs, not doc drift) and Phase 3 wrapped-example coverage.
+Phase 2 closed. Next work is Phase 3 (axis B — static return-type analysis) per the parent plan.
 
 ## What Phase 1 did not catch (by design)
 
