@@ -67,6 +67,19 @@
     ring->semiring ring->additive-group
     integer-ring modular-ring
     validate-ring with-ring
+    ;; Polynomials
+    make-poly polynomial?
+    poly-ring poly-coeffs
+    poly-zero poly-one
+    poly-degree poly-leading-coeff
+    poly-plus poly-negate poly-minus
+    poly-times
+    poly-eval
+    poly-derivative
+    poly-divmod poly-gcd
+    polynomial-ring
+    integer-polynomials rational-polynomials
+    with-polynomial
     ;; Differential rings
     make-differential-ring differential-ring?
     differential-deriv differential-ring-ring
@@ -143,6 +156,7 @@
           (wile algebra semiring)
           (wile algebra group)
           (wile algebra ring)
+          (wile algebra polynomial)
           (wile algebra differential)
           (wile algebra galois)
           (wile algebra rewrite)
