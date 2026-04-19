@@ -73,6 +73,20 @@ Moved to **Completed Plans** below.
 | File | Contents | Status |
 |------|----------|--------|
 | `2026-04-17-mcp-server-sota-design.md` | Bring `cmd/wile/mcp.go` to current MCP best-practices: progress notifications, doc/rationale polish, opt-in streamable-HTTP transport, elicitation capability | **Proposed** -- 5 phases, not started |
+| `2026-04-18-mcp-triggering-rewrite.md` | Rewrite MCP server instructions + 9 tool descriptions + wile-scheme prompt to trigger LLM tool use on algebra/modular/polynomial domains. Text-only, no code logic changes. Closes `powerset_lattice` regression | **Design awaiting user review** -- not implemented |
+
+### Coverage & Tooling
+
+| File | Contents | Status |
+|------|----------|--------|
+| `2026-04-18-scheme-line-coverage.md` | Scheme-side line coverage: `executed []bool` on `NativeTemplate`, `WithCoverage` engine option, `--cover PATH` CLI flag, Go cover v1 output | **Design locked-in** -- active branch `feat/scheme-coverage`; 0/56 steps complete |
+
+### Algebra Roadmap
+
+| File | Contents | Status |
+|------|----------|--------|
+| `2026-04-17-algebra-foundations-directions.md` | 6 prioritized directions extending `(wile algebra ...)`: §5.1 matrix (semiring-parameterized), §5.2 Möbius/incidence, §5.3 AC-matching, etc. | **Directions** -- funding-gated roadmap |
+| `2026-04-18-gonum-integration-directions.md` | Generic graph analytics via gonum (SCC, Louvain, centrality) + benchmark statistics. Two independent tracks: `goastgraph/` and `bench-stats/` | **Directions** -- funding-gated roadmap |
 
 ### Tech Debt
 
@@ -182,6 +196,7 @@ Historical reference. Work has shipped; plans preserved for design context.
 | `2026-04-12-sage-algebra-validation-impl.md` | Sage validation 9-task impl plan (moved to `memory/`) | Implemented |
 | `2026-04-14-algebra-documentation-design.md` | Algebra user-facing docs + examples design (moved to `memory/`) | Implemented |
 | `2026-04-14-algebra-documentation-impl.md` | Algebra documentation 10-task impl plan (moved to `memory/`) | Implemented |
+| `2026-04-18-polynomial-library.md` | `(wile algebra polynomial)` — ring-parameterized univariate polynomials: plus/negate/minus/times, Horner eval, formal derivative, divmod, GCD, polynomial-ring capstone, `with-polynomial` macro | 12/12 tasks, 60 tests passing (commits `69b98203`..`78bb7e2f` on `feat/scheme-coverage`) |
 
 ### Documentation System
 
