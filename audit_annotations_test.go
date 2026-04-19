@@ -29,16 +29,107 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/aalpar/wile/values"
 )
 
-// exampleRe matches `  (call ...)  => expected` lines in docstrings.
-// Group 1: call form. Group 2: expected-result literal.
-var exampleRe = regexp.MustCompile(`(?m)^\s*(\(.+?\))\s+=>\s+(\S[^\n]*?)\s*$`)
-
 // callHeadRe extracts the head symbol of a parenthesized call.
 var callHeadRe = regexp.MustCompile(`^\(\s*([^\s()]+)`)
+
+// extractExamples parses (call, expected) pairs from a docstring.
+// Multi-line calls are supported: the extractor anchors on "=>" and
+// walks backward across lines, balance-counting parens, to find the
+// matching open of the call form. This matters because examples like
+//
+//	(with-continuation-mark 'k 42
+//	  (call-with-immediate-continuation-mark 'k values #f))  => 42
+//
+// span two lines — a single-line regex grabs only the inner form plus
+// the outer form's stray close paren, producing spurious eval errors.
+//
+// expected is the text after "=>" up to end-of-line (with inline
+// semicolon comments stripped by the caller).
+//
+// This extractor does not handle string or character literals, since
+// Wile's docstring examples don't contain them.
+func extractExamples(doc string) [][2]string {
+	var out [][2]string
+	cursor := 0
+	for cursor < len(doc) {
+		j := strings.Index(doc[cursor:], "=>")
+		if j < 0 {
+			return out
+		}
+		arrow := cursor + j
+		cursor = arrow + 2
+		if arrow == 0 || !unicode.IsSpace(rune(doc[arrow-1])) {
+			continue
+		}
+		end := arrow - 1
+		for end >= 0 && unicode.IsSpace(rune(doc[end])) {
+			end--
+		}
+		if end < 0 || doc[end] != ')' {
+			continue
+		}
+		start := balancedFormStart(doc, end)
+		if start < 0 {
+			continue
+		}
+		// `;;` at the start of the line containing the open paren
+		// marks the example as illustrative-only — skip.
+		if lineIsCommented(doc, start) {
+			continue
+		}
+		nl := strings.Index(doc[cursor:], "\n")
+		var expected string
+		if nl < 0 {
+			expected = strings.TrimSpace(doc[cursor:])
+		} else {
+			expected = strings.TrimSpace(doc[cursor : cursor+nl])
+		}
+		if expected == "" {
+			continue
+		}
+		out = append(out, [2]string{doc[start : end+1], expected})
+	}
+	return out
+}
+
+// lineIsCommented reports whether the line containing pos begins
+// (after leading whitespace) with ';'. Used to skip illustrative-only
+// examples marked `;; (call ...)  => <prose>` in docstrings.
+func lineIsCommented(doc string, pos int) bool {
+	lineStart := pos
+	for lineStart > 0 && doc[lineStart-1] != '\n' {
+		lineStart--
+	}
+	for lineStart < pos && unicode.IsSpace(rune(doc[lineStart])) {
+		lineStart++
+	}
+	return lineStart < len(doc) && doc[lineStart] == ';'
+}
+
+// balancedFormStart walks backward from endIdx (which must index a
+// ')') and returns the index of the matching '(' in doc. Returns -1
+// if parens don't balance. String and character literals are not
+// tracked — docstring examples don't contain them.
+func balancedFormStart(doc string, endIdx int) int {
+	depth := 1
+	for i := endIdx - 1; i >= 0; i-- {
+		switch doc[i] {
+		case ')':
+			depth++
+		case '(':
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
+}
 
 type auditFinding struct {
 	Primitive string
@@ -116,16 +207,16 @@ func TestAuditPrimitiveAnnotations(t *testing.T) {
 		if spec.ReturnType == nil {
 			continue
 		}
-		matches := exampleRe.FindAllStringSubmatch(spec.Doc, -1)
-		if len(matches) == 0 {
+		examples := extractExamples(spec.Doc)
+		if len(examples) == 0 {
 			continue
 		}
 		primsWithExamples++
 
-		for _, m := range matches {
+		for _, ex := range examples {
 			exampleCount++
-			call := strings.TrimSpace(m[1])
-			expected := stripInlineComment(m[2])
+			call := strings.TrimSpace(ex[0])
+			expected := stripInlineComment(ex[1])
 
 			head := ""
 			hm := callHeadRe.FindStringSubmatch(call)
