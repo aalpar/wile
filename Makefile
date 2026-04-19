@@ -333,14 +333,33 @@ profile-mem:
 		echo "No benchmarks found"; \
 	fi
 
-# Run tests with coverage and print per-function coverage summary.
+# Run Go tests with coverage and print per-function coverage summary.
 # Writes coverage profile to ./build/coverage.out.
-#   make cover
-.PHONY: cover
-cover:
+#   make cover-go
+.PHONY: cover-go
+cover-go:
 	@mkdir -p ./build
 	$(GO_TEST) -coverprofile=$(GO_BUILD_DIR)/coverage.out ./...
 	$(GO) tool cover -func=$(GO_BUILD_DIR)/coverage.out
+
+# Run the Scheme-level test suite with Scheme-side line coverage.
+# Writes a merged Go-format coverage profile to ./build/scheme-coverage.out
+# and prints a per-file covered/total summary. Stdlib files are included
+# via --cover-stdlib so coverage of the embedded test library is visible.
+#
+# Note: the merged profile is NOT compatible with `go tool cover -func`
+# (which parses referenced files as Go). `-html` works for files with
+# repo-relative paths (e.g., test/scheme/*.scm) but will fail on stdlib
+# paths like chibi/test.sld that are only resolvable inside the embed FS.
+#   make cover-scm
+.PHONY: cover-scm
+cover-scm: build
+	@mkdir -p $(GO_BUILD_DIR)
+	@SCHEME=$(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) \
+		COVERAGE_OUT=$(GO_BUILD_DIR)/scheme-coverage.out \
+		$(SH_TOOLS_DIR)/cover-scm.sh
+	@echo ""
+	@echo "Scheme coverage profile: $(GO_BUILD_DIR)/scheme-coverage.out"
 
 # Run tests with coverage and open an HTML report in the browser.
 # Writes coverage profile to ./build/coverage.out and HTML to ./build/coverage.html.

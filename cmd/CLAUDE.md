@@ -50,7 +50,8 @@ make build-all        # Build for all platforms (darwin/linux x arm64/amd64)
 make test             # Run all tests (go test -v ./...)
 make lint             # Run golangci-lint
 make fix              # Run golangci-lint with --fix
-make cover            # Run tests with coverage
+make cover-go         # Run Go tests with coverage
+make cover-scm        # Run Scheme tests with Scheme-side coverage
 make format           # Format code with golangci-lint
 make tidy             # Tidy go.mod
 make release-check    # Validate .goreleaser.yml syntax
