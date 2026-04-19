@@ -32,7 +32,7 @@ func addBytevectors(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeByteVector}, ReturnType: values.TypeExactInteger},
 		{Name: "bytevector-u8-ref", ParamCount: 2, Impl: PrimBytevectorU8Ref,
 			Doc: "Returns the byte at 0-based index K in BYTEVECTOR as an exact integer (0-255). Raises an error if K is out of range.\n\nExamples:\n  (bytevector-u8-ref #u8(10 20 30) 1)  => 20", ParamNames: []string{"bytevector", "k"}, Category: "bytevectors",
-			ParamTypes: []values.TypeConstraint{values.TypeByteVector, values.TypeExactInteger}, ReturnType: values.TypeByte},
+			ParamTypes: []values.TypeConstraint{values.TypeByteVector, values.TypeExactInteger}, ReturnType: values.TypeInteger},
 		{Name: "bytevector-u8-set!", ParamCount: 3, Impl: PrimBytevectorU8Set,
 			Doc: "Stores BYTE (0-255) at 0-based index K in BYTEVECTOR. Raises an error if K is out of range.\n\nExamples:\n  (let ((bv (bytevector 1 2 3))) (bytevector-u8-set! bv 1 99) bv)  => #u8(1 99 3)", ParamNames: []string{"bytevector", "k", "byte"}, Category: "bytevectors",
 			ParamTypes: []values.TypeConstraint{values.TypeByteVector, values.TypeExactInteger, values.TypeByte}, ReturnType: values.TypeVoid},
