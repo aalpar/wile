@@ -438,22 +438,47 @@ func repoRoot(t *testing.T) string {
 	return filepath.Dir(thisFile)
 }
 
-// stripRoot returns abs as a repo-relative path. If abs is empty (the
-// legitimate no-source case from resolveImpl on a binding-only primitive),
-// returns "". Fails the test if abs is non-empty but does not live under
-// root — that indicates either repo-root detection is wrong or the
-// primitive's Impl resolved to a function outside the repo tree (e.g.,
-// a vendored module cache or a symlink target). Silent rewriting of such
-// a path would commit a corrupt manifest.
+// stripRoot returns abs as a repo-relative, forward-slash-separated path.
+// If abs is empty (the legitimate no-source case from resolveImpl on a
+// binding-only primitive), returns "". Fails the test if abs is non-empty
+// but does not live under root — that indicates either repo-root detection
+// is wrong or the primitive's Impl resolved to a function outside the repo
+// tree (e.g., a vendored module cache).
+//
+// Both root and abs are canonicalized via filepath.EvalSymlinks before the
+// relative-path computation: runtime.Caller(0) and runtime.FuncForPC.FileLine
+// can disagree on symlink resolution (macOS /Users ↔ /private/Users, or a
+// repo checked out through a symlink), and a naive string-prefix trim would
+// then silently emit absolute paths that fail the caller's IsAbs check.
+// EvalSymlinks falls through to the raw path on error so a genuinely out-of-
+// tree source still hits the loud-failure branch below rather than masking it.
 func stripRoot(t *testing.T, root, abs string) string {
 	t.Helper()
 	if abs == "" {
 		return ""
 	}
-	prefix := root + string(filepath.Separator)
-	if !strings.HasPrefix(abs, prefix) {
+	canonRoot := evalSymlinksOrRaw(root)
+	canonAbs := evalSymlinksOrRaw(abs)
+	rel, err := filepath.Rel(canonRoot, canonAbs)
+	if err != nil {
+		t.Errorf("stripRoot: filepath.Rel(%q, %q): %v", canonRoot, canonAbs, err)
+		return abs
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		t.Errorf("stripRoot: %q is not under repo root %q", abs, root)
 		return abs
 	}
-	return strings.TrimPrefix(abs, prefix)
+	return filepath.ToSlash(rel)
+}
+
+// evalSymlinksOrRaw returns filepath.EvalSymlinks(p), or p unchanged if
+// EvalSymlinks fails (e.g., target doesn't exist on disk). Callers should
+// still validate the resulting path — this helper is a defensive canonicalizer,
+// not a correctness guarantee.
+func evalSymlinksOrRaw(p string) string {
+	resolved, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		return p
+	}
+	return resolved
 }
