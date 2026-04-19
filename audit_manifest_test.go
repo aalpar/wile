@@ -56,11 +56,13 @@ func buildManifest(t *testing.T) []manifestEntry {
 
 	entries := make([]manifestEntry, 0, len(prims))
 	for _, pr := range prims {
-		goName, _, _ := resolveImpl(pr.Spec.Impl)
+		goName, absFile, line := resolveImpl(pr.Spec.Impl)
 		entries = append(entries, manifestEntry{
 			Name:       pr.Spec.Name,
 			ReturnType: renderManifestType(pr.Spec.ReturnType),
 			GoFunction: goName,
+			SourceFile: stripRoot(absFile),
+			SourceLine: line,
 		})
 	}
 	sort.Slice(entries, func(i, j int) bool {
@@ -136,6 +138,22 @@ func TestBuildAxisBManifest(t *testing.T) {
 			t.Errorf("entry %d (%q) GoFunction %q lacks package path",
 				i, e.Name, e.GoFunction)
 		}
+		if e.SourceFile == "" {
+			t.Errorf("entry %d (%q) has populated GoFunction but empty SourceFile",
+				i, e.Name)
+		}
+		if filepath.IsAbs(e.SourceFile) {
+			t.Errorf("entry %d (%q) SourceFile %q is absolute (should be repo-relative)",
+				i, e.Name, e.SourceFile)
+		}
+		if e.SourceLine <= 0 {
+			t.Errorf("entry %d (%q) SourceLine %d is not positive",
+				i, e.Name, e.SourceLine)
+		}
+		if !strings.HasSuffix(e.SourceFile, ".go") {
+			t.Errorf("entry %d (%q) SourceFile %q is not a .go file",
+				i, e.Name, e.SourceFile)
+		}
 	}
 
 	for i := 1; i < len(entries); i++ {
@@ -144,6 +162,17 @@ func TestBuildAxisBManifest(t *testing.T) {
 				entries[i-1].Name, entries[i].Name, i-1, i)
 			break
 		}
+	}
+
+	t.Logf("manifest: %d entries", len(entries))
+	for _, name := range []string{"car", "cdr", "cons", "+"} {
+		idx, ok := seen[name]
+		if !ok {
+			continue
+		}
+		e := entries[idx]
+		t.Logf("  %-10s return=%-12s fn=%s loc=%s:%d",
+			e.Name, e.ReturnType, e.GoFunction, e.SourceFile, e.SourceLine)
 	}
 }
 
