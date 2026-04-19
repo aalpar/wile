@@ -368,29 +368,41 @@ See plans/2026-04-19-axis-b-manifest-impl.md Task 3."
 **Files:**
 - Modify: `audit_manifest_test.go` — use `resolveImpl`'s file/line returns; call `stripRoot`
 
+**Note on binding-only primitives** (discovered during Task 3 implementation):
+47 primitives (`assoc`, `member`, `map`, `for-each`, `ca...r` variants, `boolean=?`, etc.)
+are registered with `Impl == nil` — they're binding-only entries for symbol resolution,
+with no Go body to analyze. Task 3's test skips GoFunction assertions for entries with
+`GoFunction == ""`. Task 4 inherits the same skip: an entry without a GoFunction also has
+no SourceFile, and the axis-b analyzer skips both together.
+
 - [ ] **Step 1: Extend the test to verify source locations are populated and relative**
 
-Add to `TestBuildAxisBManifest`, immediately after the GoFunction assertions:
+Fold the assertions INTO the existing per-entry loop (right after the GoFunction block,
+still inside the `continue`-on-empty guard). Do NOT add a second independent loop:
 
 ```go
-for i, e := range entries {
-	if e.SourceFile == "" {
-		t.Errorf("entry %d (%q) has empty SourceFile", i, e.Name)
-	}
-	if filepath.IsAbs(e.SourceFile) {
-		t.Errorf("entry %d (%q) SourceFile %q is absolute (should be repo-relative)",
-			i, e.Name, e.SourceFile)
-	}
-	if e.SourceLine <= 0 {
-		t.Errorf("entry %d (%q) SourceLine %d is not positive",
-			i, e.Name, e.SourceLine)
-	}
-	if !strings.HasSuffix(e.SourceFile, ".go") {
-		t.Errorf("entry %d (%q) SourceFile %q is not a .go file",
-			i, e.Name, e.SourceFile)
-	}
+// After the existing GoFunction package-path check, still inside the loop body:
+if e.SourceFile == "" {
+	t.Errorf("entry %d (%q) has populated GoFunction but empty SourceFile",
+		i, e.Name)
+}
+if filepath.IsAbs(e.SourceFile) {
+	t.Errorf("entry %d (%q) SourceFile %q is absolute (should be repo-relative)",
+		i, e.Name, e.SourceFile)
+}
+if e.SourceLine <= 0 {
+	t.Errorf("entry %d (%q) SourceLine %d is not positive",
+		i, e.Name, e.SourceLine)
+}
+if !strings.HasSuffix(e.SourceFile, ".go") {
+	t.Errorf("entry %d (%q) SourceFile %q is not a .go file",
+		i, e.Name, e.SourceFile)
 }
 ```
+
+Because the `if e.GoFunction == "" { continue }` guard from Task 3 sits above these
+assertions, binding-only primitives (nil Impl) skip the entire source-file block —
+which is correct, since they have no Go source location to record.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -645,15 +657,19 @@ func TestBuildAxisBManifest(t *testing.T) {
 		}
 		seen[e.Name] = i
 
+		// Binding-only primitives (nil Impl — assoc, member, map, caar,
+		// boolean=?, etc.) are kept in the manifest but have no Go body
+		// to analyze. Skip the source-resolution assertions for them.
 		if e.GoFunction == "" {
-			t.Errorf("entry %d (%q) has empty GoFunction", i, e.Name)
+			continue
 		}
 		if !strings.Contains(e.GoFunction, "/") {
 			t.Errorf("entry %d (%q) GoFunction %q lacks package path",
 				i, e.Name, e.GoFunction)
 		}
 		if e.SourceFile == "" {
-			t.Errorf("entry %d (%q) has empty SourceFile", i, e.Name)
+			t.Errorf("entry %d (%q) has populated GoFunction but empty SourceFile",
+				i, e.Name)
 		}
 		if filepath.IsAbs(e.SourceFile) {
 			t.Errorf("entry %d (%q) SourceFile %q is absolute", i, e.Name, e.SourceFile)

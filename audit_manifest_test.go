@@ -25,6 +25,7 @@ package wile
 import (
 	"context"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"sort"
 	"strings"
@@ -55,9 +56,11 @@ func buildManifest(t *testing.T) []manifestEntry {
 
 	entries := make([]manifestEntry, 0, len(prims))
 	for _, pr := range prims {
+		goName, _, _ := resolveImpl(pr.Spec.Impl)
 		entries = append(entries, manifestEntry{
 			Name:       pr.Spec.Name,
 			ReturnType: renderManifestType(pr.Spec.ReturnType),
+			GoFunction: goName,
 		})
 	}
 	sort.Slice(entries, func(i, j int) bool {
@@ -75,6 +78,27 @@ func renderManifestType(t values.TypeConstraint) string {
 		return ""
 	}
 	return t.Name()
+}
+
+// resolveImpl returns the fully-qualified Go function name and absolute
+// source file:line for a primitive's Impl function. If reflection cannot
+// recover either piece (e.g., the Impl is a closure with no source info),
+// the returned strings are empty and line is 0.
+func resolveImpl(fn interface{}) (name, file string, line int) {
+	if fn == nil {
+		return "", "", 0
+	}
+	v := reflect.ValueOf(fn)
+	if v.Kind() != reflect.Func {
+		return "", "", 0
+	}
+	pc := v.Pointer()
+	rf := runtime.FuncForPC(pc)
+	if rf == nil {
+		return "", "", 0
+	}
+	file, line = rf.FileLine(pc)
+	return rf.Name(), file, line
 }
 
 // formatManifest renders entries as a Scheme S-expression list.
@@ -99,6 +123,19 @@ func TestBuildAxisBManifest(t *testing.T) {
 				e.Name, prev, i)
 		}
 		seen[e.Name] = i
+
+		// Binding-only primitives (nil Impl — e.g., assoc, member, map,
+		// caar, boolean=?) are registered for symbol resolution but have
+		// no Go body. They stay in the manifest with empty GoFunction;
+		// the wile-goast analyzer skips them. Only non-empty GoFunction
+		// values must be package-qualified.
+		if e.GoFunction == "" {
+			continue
+		}
+		if !strings.Contains(e.GoFunction, "/") {
+			t.Errorf("entry %d (%q) GoFunction %q lacks package path",
+				i, e.Name, e.GoFunction)
+		}
 	}
 
 	for i := 1; i < len(entries); i++ {
