@@ -24,6 +24,7 @@ package wile
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -149,6 +150,8 @@ func writeSchemeString(b *strings.Builder, s string) {
 	b.WriteByte('"')
 }
 
+const axisBManifestPath = "plans/axis-b-manifest.scm"
+
 func TestBuildAxisBManifest(t *testing.T) {
 	entries := buildManifest(t)
 	if len(entries) < 400 {
@@ -214,6 +217,28 @@ func TestBuildAxisBManifest(t *testing.T) {
 		e := entries[idx]
 		t.Logf("  %-10s return=%-12s fn=%s loc=%s:%d",
 			e.Name, e.ReturnType, e.GoFunction, e.SourceFile, e.SourceLine)
+	}
+
+	generated := formatManifest(entries)
+	path := filepath.Join(repoRoot(), axisBManifestPath)
+
+	if os.Getenv("AXIS_B_UPDATE") != "" {
+		err := os.WriteFile(path, []byte(generated), 0644)
+		if err != nil {
+			t.Fatalf("write manifest: %v", err)
+		}
+		t.Logf("updated %s (%d entries)", axisBManifestPath, len(entries))
+		return
+	}
+
+	committed, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v (run with AXIS_B_UPDATE=1 to generate)",
+			axisBManifestPath, err)
+	}
+	if string(committed) != generated {
+		t.Errorf("%s is out of date\nrun: AXIS_B_UPDATE=1 go test -run TestBuildAxisBManifest .",
+			axisBManifestPath)
 	}
 }
 
