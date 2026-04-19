@@ -23,10 +23,14 @@
 package wile
 
 import (
+	"context"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
+
+	"github.com/aalpar/wile/values"
 )
 
 // manifestEntry is a single primitive's line in the manifest.
@@ -42,7 +46,35 @@ type manifestEntry struct {
 // sorted by primitive name.
 func buildManifest(t *testing.T) []manifestEntry {
 	t.Helper()
-	return nil
+	ctx := context.Background()
+	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithLibraryPaths())
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+	prims := eng.Registry().Primitives()
+
+	entries := make([]manifestEntry, 0, len(prims))
+	for _, pr := range prims {
+		entries = append(entries, manifestEntry{
+			Name:       pr.Spec.Name,
+			ReturnType: renderManifestType(pr.Spec.ReturnType),
+		})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Name < entries[j].Name
+	})
+	return entries
+}
+
+// renderManifestType mirrors renderType in audit_annotations_test.go, but we
+// name it distinctly to avoid colliding if both files are edited in the same
+// session. "" (not "<nil>") is emitted for unspecified return types so the
+// S-expression reader sees an empty string rather than a literal name.
+func renderManifestType(t values.TypeConstraint) string {
+	if t == nil {
+		return ""
+	}
+	return t.Name()
 }
 
 // formatManifest renders entries as a Scheme S-expression list.
@@ -52,12 +84,29 @@ func formatManifest(entries []manifestEntry) string {
 
 func TestBuildAxisBManifest(t *testing.T) {
 	entries := buildManifest(t)
-	if len(entries) != 0 {
-		t.Fatalf("expected empty manifest from scaffold, got %d entries", len(entries))
+	if len(entries) < 400 {
+		t.Fatalf("expected at least 400 primitives, got %d", len(entries))
 	}
-	out := formatManifest(entries)
-	if out != "()\n" {
-		t.Fatalf("expected scaffold output %q, got %q", "()\n", out)
+
+	seen := make(map[string]int, len(entries))
+	for i, e := range entries {
+		if e.Name == "" {
+			t.Errorf("entry %d has empty Name", i)
+		}
+		prev, dup := seen[e.Name]
+		if dup {
+			t.Errorf("duplicate primitive name %q at entries[%d] and entries[%d]",
+				e.Name, prev, i)
+		}
+		seen[e.Name] = i
+	}
+
+	for i := 1; i < len(entries); i++ {
+		if entries[i-1].Name > entries[i].Name {
+			t.Errorf("entries not sorted: %q > %q at positions %d, %d",
+				entries[i-1].Name, entries[i].Name, i-1, i)
+			break
+		}
 	}
 }
 
