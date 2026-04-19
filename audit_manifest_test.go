@@ -88,7 +88,7 @@ func renderManifestType(t values.TypeConstraint) string {
 // source file:line for a primitive's Impl function. If reflection cannot
 // recover either piece (e.g., the Impl is a closure with no source info),
 // the returned strings are empty and line is 0.
-func resolveImpl(fn interface{}) (name, file string, line int) {
+func resolveImpl(fn any) (name, file string, line int) {
 	if fn == nil {
 		return "", "", 0
 	}
