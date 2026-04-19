@@ -31,7 +31,7 @@ func addContMarks(r *registry.Registry) error {
 			Doc: "Returns a list of all values associated with KEY in MARK-SET, from outermost to innermost frame.\n\nExamples:\n  (with-continuation-mark 'k 1\n    (continuation-mark-set->list (current-continuation-marks) 'k))  => (1)", ParamNames: []string{"mark-set", "key"}, Category: "continuations",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}, ReturnType: values.TypeList},
 		{Name: "continuation-mark-set-first", ParamCount: 3, IsVariadic: true, Impl: PrimContinuationMarkSetFirst,
-			Doc: "Returns the first (innermost) value for KEY in MARK-SET, or DEFAULT if no mark with KEY exists.\n\nExamples:\n  (with-continuation-mark 'k 42\n    (continuation-mark-set-first #f 'k #f))  => 42", ParamNames: []string{"mark-set", "key", "default"}, Category: "continuations",
+			Doc: "Returns the first (innermost) value for KEY in MARK-SET, or DEFAULT if no mark with KEY exists.\n\nExamples:\n  (with-continuation-mark 'k 42\n    (continuation-mark-set-first (current-continuation-marks) 'k #f))  => 42", ParamNames: []string{"mark-set", "key", "default"}, Category: "continuations",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny, values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "continuation-mark-set?", ParamCount: 1, Impl: PrimContinuationMarkSetQ,
 			Doc: "Returns #t if OBJ is a continuation mark set.\n\nExamples:\n  (continuation-mark-set? (current-continuation-marks))  => #t\n  (continuation-mark-set? 42)  => #f", ParamNames: []string{"obj"}, Category: "continuations",
