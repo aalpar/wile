@@ -212,6 +212,7 @@ func TestBuildAxisBManifest(t *testing.T) {
 	for _, name := range []string{"car", "cdr", "cons", "+"} {
 		idx, ok := seen[name]
 		if !ok {
+			t.Logf("  %-10s (not found in manifest)", name)
 			continue
 		}
 		e := entries[idx]
@@ -312,10 +313,24 @@ func TestManifestSanity(t *testing.T) {
 		pkgSubstr      string // must appear in GoFunction
 		sourceContains string // must appear in SourceFile
 	}{
+		// Core primitives — registered as plain Go functions.
 		{name: "car", pkgSubstr: "wile/registry/core", sourceContains: "registry/core/"},
 		{name: "cdr", pkgSubstr: "wile/registry/core", sourceContains: "registry/core/"},
 		{name: "cons", pkgSubstr: "wile/registry/core", sourceContains: "registry/core/"},
 		{name: "+", pkgSubstr: "wile/registry/core", sourceContains: "registry/core/"},
+
+		// Extension primitives — one per major extension package. If any
+		// of these starts resolving to the wrong package, it means the
+		// extension changed how it registers its primitive (e.g., through
+		// a new wrapper helper whose source location masks the real Impl).
+		// sin in particular goes through makeComplexPrimitive.func10; the
+		// package substring still holds because closures inherit their
+		// enclosing package, but a registration refactor that moved the
+		// wrapper out of extensions/math would surface here.
+		{name: "file-exists?", pkgSubstr: "wile/extensions/files", sourceContains: "extensions/files/"},
+		{name: "sin", pkgSubstr: "wile/extensions/math", sourceContains: "extensions/math/"},
+		{name: "read-char", pkgSubstr: "wile/internal/extensions/io", sourceContains: "internal/extensions/io/"},
+		{name: "current-time", pkgSubstr: "wile/extensions/threads", sourceContains: "extensions/threads/"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
