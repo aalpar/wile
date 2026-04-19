@@ -73,6 +73,25 @@ func schemeRepr(v values.Value) string {
 	return fmt.Sprintf("%T:%s", v, v.SchemeString())
 }
 
+// evalIsolated evaluates a single example in a fresh Engine so that
+// top-level mutations (define, set!, parameterize on current-*-port)
+// cannot leak into later examples. A full engine is required — both
+// NewSchemeReportNamespace (runtime-only copy) and NewChildNamespace
+// (empty runtime) drop the compile/expand-phase bindings that bootstrap
+// macros (delay, guard, quote handling for dotted pairs) rely on.
+func evalIsolated(ctx context.Context, call string, tag string) (values.Value, error) {
+	source := "<audit:" + tag + ">"
+	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithLibraryPaths())
+	if err != nil {
+		return nil, err
+	}
+	wrapped, err := eng.EvalMultipleWithSource(ctx, call, source)
+	if err != nil {
+		return nil, err
+	}
+	return wrapped.Internal(), nil
+}
+
 func TestAuditPrimitiveAnnotations(t *testing.T) {
 	ctx := context.Background()
 	eng, err := NewEngine(ctx, WithProfile(KitchenSink), WithLibraryPaths())
@@ -118,8 +137,11 @@ func TestAuditPrimitiveAnnotations(t *testing.T) {
 			}
 			selfCallExamples++
 
-			actualWrapped, evalErr := eng.EvalMultipleWithSource(
-				ctx, call, "<audit:"+spec.Name+">")
+			// Isolate each example in a fresh Namespace snapshotted from
+			// the engine's base. R7RS §6.12 semantics: all primitives are
+			// still bound, but top-level mutations (define, set!) in one
+			// example do not leak into the next.
+			actual, evalErr := evalIsolated(ctx, call, spec.Name)
 			if evalErr != nil {
 				findings = append(findings, auditFinding{
 					Primitive: spec.Name, Kind: "eval-error",
@@ -129,7 +151,6 @@ func TestAuditPrimitiveAnnotations(t *testing.T) {
 				})
 				continue
 			}
-			actual := actualWrapped.Internal()
 
 			_, ok, checkErr := spec.ReturnType.Check(actual)
 			if !ok {
@@ -156,9 +177,9 @@ func TestAuditPrimitiveAnnotations(t *testing.T) {
 				verified++
 				continue
 			}
-			expectedWrapped, expErr := eng.EvalMultipleWithSource(
-				ctx, "(quote "+expected+")",
-				"<audit-expected:"+spec.Name+">")
+			expectedVal, expErr := evalIsolated(ctx,
+				"(quote "+expected+")",
+				"expected:"+spec.Name)
 			if expErr != nil {
 				findings = append(findings, auditFinding{
 					Primitive: spec.Name, Kind: "expected-unparseable",
@@ -168,7 +189,7 @@ func TestAuditPrimitiveAnnotations(t *testing.T) {
 				})
 				continue
 			}
-			if !actual.EqualTo(expectedWrapped.Internal()) {
+			if !actual.EqualTo(expectedVal) {
 				findings = append(findings, auditFinding{
 					Primitive: spec.Name, Kind: "value-mismatch",
 					Call: call, Expected: expected,

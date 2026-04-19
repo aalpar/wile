@@ -89,8 +89,9 @@ A regex `(?m)^\s*(\(.+?\))\s+=>\s+(.+?)\s*$` captures call / expected pairs. Mul
 
 For each `(call, expected)`:
 
-- Evaluate `call` in a fresh Engine via `testhelpers.RunSchemeCode`.
-- Parse `expected` as a Scheme datum and evaluate to a `values.Value`.
+- Construct a fresh `Engine` with `WithProfile(KitchenSink)` per example. This is the only isolation that preserves every phase's bindings — `NewSchemeReportNamespace` copies only the runtime phase (bootstrap macros like `delay`/`guard` and the compile-phase `quote` handling for dotted pairs are dropped, producing false-positive eval-errors), and `NewChildNamespace` starts empty. The cost (≈3s for ~334 examples) is an acceptable price for determinism.
+- Evaluate `call` in that engine via `EvalMultipleWithSource`.
+- Parse `expected` as a Scheme datum via the same pattern (`(quote expected)` in a fresh engine).
 - Assertion 1 (soundness): `spec.ReturnType.Check(actual)` must succeed, or the annotation is wrong.
 - Assertion 2 (doc correctness): `actual.EqualTo(expectedValue)` must hold, or the docstring example is stale.
 
@@ -106,7 +107,7 @@ Excluded primitives go onto a list for Phase 3 (axis B).
 
 ### Output
 
-`registry/audit_annotations_test.go` — a test (not a binary) so it runs under `make test` and fails the build on regressions. Produces a JSON or table report on failure listing: primitive name, call, declared type, actual type, actual value.
+`audit_annotations_test.go` at repo root — a test (not a binary) so it runs under `make test`. Deliberately report-only in this phase: logs every finding via `t.Log` and never calls `t.Error`/`t.Fatal`. Findings are categorized (type-mismatch, value-mismatch, eval-error, expected-unparseable) with per-finding detail (primitive name, call, declared type, actual type, expected literal, actual value). Promotion of specific categories to hard failures is a separate downstream decision once Phase 2 triage shapes expectations.
 
 ### What Phase 1 will *not* catch
 
@@ -159,7 +160,7 @@ Frame Phase 2's triage output as two parallel deliverables:
 
 ## 8. Deliverables
 
-- `registry/audit_annotations_test.go` (Phase 1).
+- `audit_annotations_test.go` (Phase 1).
 - `plans/2026-04-19-audit-findings-phase1.md` — Phase 2 output, categorized.
 - Follow-up plan files per Phase 4 category as needed.
 - Decision record in this file's §6 once you pick the union-type direction.
