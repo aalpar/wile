@@ -28,6 +28,7 @@ import (
 	"reflect"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -103,9 +104,49 @@ func resolveImpl(fn interface{}) (name, file string, line int) {
 	return rf.Name(), file, line
 }
 
-// formatManifest renders entries as a Scheme S-expression list.
+// formatManifest renders entries as a Scheme S-expression list, one tuple
+// per line. Each tuple is (name return-type go-function source-location)
+// with all fields quoted as Scheme strings. Double quotes and backslashes
+// in any field are escaped.
 func formatManifest(entries []manifestEntry) string {
-	return "()\n"
+	if len(entries) == 0 {
+		return "()\n"
+	}
+	var b strings.Builder
+	b.WriteByte('(')
+	for i, e := range entries {
+		if i > 0 {
+			b.WriteString("\n ")
+		}
+		b.WriteByte('(')
+		writeSchemeString(&b, e.Name)
+		b.WriteByte(' ')
+		writeSchemeString(&b, e.ReturnType)
+		b.WriteByte(' ')
+		writeSchemeString(&b, e.GoFunction)
+		b.WriteByte(' ')
+		loc := e.SourceFile
+		if e.SourceLine > 0 {
+			loc = e.SourceFile + ":" + strconv.Itoa(e.SourceLine)
+		}
+		writeSchemeString(&b, loc)
+		b.WriteByte(')')
+	}
+	b.WriteString(")\n")
+	return b.String()
+}
+
+// writeSchemeString writes s as a Scheme string literal into b, escaping
+// embedded double quotes and backslashes.
+func writeSchemeString(b *strings.Builder, s string) {
+	b.WriteByte('"')
+	for _, r := range s {
+		if r == '"' || r == '\\' {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	b.WriteByte('"')
 }
 
 func TestBuildAxisBManifest(t *testing.T) {
@@ -173,6 +214,59 @@ func TestBuildAxisBManifest(t *testing.T) {
 		e := entries[idx]
 		t.Logf("  %-10s return=%-12s fn=%s loc=%s:%d",
 			e.Name, e.ReturnType, e.GoFunction, e.SourceFile, e.SourceLine)
+	}
+}
+
+func TestFormatManifest(t *testing.T) {
+	tcs := []struct {
+		name     string
+		input    []manifestEntry
+		expected string
+	}{
+		{
+			name:     "empty",
+			input:    nil,
+			expected: "()\n",
+		},
+		{
+			name: "single entry",
+			input: []manifestEntry{
+				{
+					Name:       "car",
+					ReturnType: "any",
+					GoFunction: "github.com/aalpar/wile/registry/core.primCar",
+					SourceFile: "registry/core/lists.go",
+					SourceLine: 42,
+				},
+			},
+			expected: "(" +
+				`("car" "any" "github.com/aalpar/wile/registry/core.primCar" "registry/core/lists.go:42")` +
+				")\n",
+		},
+		{
+			name: "multiple entries",
+			input: []manifestEntry{
+				{Name: "a", ReturnType: "x", GoFunction: "pkg.A", SourceFile: "a.go", SourceLine: 1},
+				{Name: "b", ReturnType: "", GoFunction: "pkg.B", SourceFile: "b.go", SourceLine: 2},
+			},
+			expected: `(("a" "x" "pkg.A" "a.go:1")` + "\n" +
+				` ("b" "" "pkg.B" "b.go:2"))` + "\n",
+		},
+		{
+			name: "escapes double-quote and backslash in names",
+			input: []manifestEntry{
+				{Name: `weird"name\here`, ReturnType: "x", GoFunction: "pkg.F", SourceFile: "f.go", SourceLine: 1},
+			},
+			expected: `(("weird\"name\\here" "x" "pkg.F" "f.go:1"))` + "\n",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got := formatManifest(tc.input)
+			if got != tc.expected {
+				t.Errorf("formatManifest mismatch\nwant: %q\ngot:  %q", tc.expected, got)
+			}
+		})
 	}
 }
 
