@@ -89,16 +89,7 @@ func buildManifest(t *testing.T) []manifestEntry {
 		}
 		goName, absFile, line, impErr := resolveImpl(pr.Spec.Impl)
 		if impErr != nil {
-			// resolveImpl already signals the failure via the returned
-			// error; recording it as an entry would conflate it with
-			// binding-only primitives (empty GoFunction), potentially
-			// tripping maxBindingOnlyPrimitives with a misleading
-			// secondary error. Skip the append — the test has already
-			// failed, and the manifest diff against the committed file
-			// will surface the missing primitive if the caller proceeds
-			// with WILE_AXIS_B_UPDATE.
 			t.Errorf("resolveImpl(%q): %v", pr.Spec.Name, impErr)
-			continue
 		}
 		q = append(q, manifestEntry{
 			Name:       pr.Spec.Name,
