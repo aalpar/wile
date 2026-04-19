@@ -1,7 +1,7 @@
 # Primitive Annotation Audit — Phase 1 Findings
 
 **Status**: Phase 2 triage complete. All 13 original findings resolved. Audit harness reports 0 findings on re-run (`prims=475 with-examples=251 examples=403 self-call=328 verified=328`).
-**Harness**: `audit_annotations_test.go` (report-only).
+**Harness**: repo-root `audit_annotations_test.go` (report-only; not in `registry/core/` where the primitives themselves live).
 **Plan**: `plans/2026-04-19-primitive-annotation-audit.md`.
 
 ## Post-resolution note (2026-04-19)
@@ -10,9 +10,11 @@ All 13 findings below were resolved across commits `0c1e8cfa`, `bd2876c4`, `0e2c
 
 Next work is Phase 3 (axis B tooling — static return-type analysis for branches no docstring example exercises) and Phase 4 (axis C — R7RS compliance, category by category). Neither is blocked on these findings.
 
-## Summary
+## Summary (pre-resolution snapshot)
 
-| Bucket | Count |
+The table below is the original triage snapshot from the first harness run, before the 2026-04-18 fix batch and before the harness gained multi-line-example + `;;`-skip support in commit `212c534a`. Numbers differ from the post-resolution header above (`examples=403`, `verified=328`, `with-examples=251`) because the harness revision is different, not because the findings were unresolved. Kept for historical reference only; current state is the header.
+
+| Bucket | Count (pre-resolution) |
 |---|---|
 | Verified (type and value both match) | 321 |
 | Type-mismatch (annotation is wrong) | 1 |
@@ -62,7 +64,7 @@ Inconsistent with `procedure-arity`'s own comment ("returns a pair for ordinary 
 Either **impl bug** (foreign closures should also return a pair) or **impl inconsistency** (the pair/integer/list/#f union is wider than documented in the code comment). Related to A.2.
 **Status**: fixed in `0e2c0138` — docstring rewritten to match actual behavior: fixed arities return an integer; variadic arities return `(min . #f)`. Integer-for-`car` is now documented, not anomalous.
 
-### Category C — docstring typos / incomplete examples (6)
+### Category C — docstring typos / incomplete examples (6 originally; post-triage: 4 C-shaped, 1 A-shaped, 2 false positives)
 
 **C.1–C.3 Continuation-mark example claims reassessed.**
 The original finding described these as "stray `))` at end of example." Re-verification showed parens balance in all three. Running each example individually:
@@ -70,7 +72,7 @@ The original finding described these as "stray `))` at end of example." Re-verif
 - `continuation-mark-set->list` — works (returns `(1)`).
 - `continuation-mark-set-first` — **fails**, but not as a typo: the example passes `#f` as `mark-set`, and the impl rejects non-mark-set values. This is a semantic bug in the example (Category A shape), not a paren typo.
 **Fix applied**: `continuation-mark-set-first` example updated to pass `(current-continuation-marks)` as the mark-set (see `registry/core/cont_marks.go`). The other two left as-is — they worked.
-Root cause of the original mis-classification: the audit harness does not verify wrapped examples (top form ≠ primitive), so Phase 1 triage inspected by eye. Lesson logged; Phase 3 tooling (axis B) should verify wrapped examples automatically.
+Root cause of the original mis-classification: the audit harness does not verify wrapped examples (top form ≠ primitive), so Phase 1 triage inspected by eye. Lesson logged. Fix scope: axis A harness extension (multi-form eval of wrapped examples), not axis B (which is annotation ↔ impl static analysis — a separate gap).
 
 **C.4–C.6 Undefined `ctx` placeholder** — three error-context primitives:
 - `error-context-marks`
@@ -110,6 +112,6 @@ Phase 2 closed. Next work is Phase 3 (axis B — static return-type analysis) pe
 
 ## What Phase 1 did not catch (by design)
 
-- 72 wrapped examples — top form isn't the primitive itself. Phase 3 addresses via impl-side analysis.
-- 221 primitives with no examples. Report from `primsWithExamples=254` vs `totalPrims=475`. About half the surface. Phase 3's static analysis covers this gap.
-- ParamType annotations — only ReturnType is checked. Could be extended with a second pass that fuzzes input types against declared `ParamTypes`.
+- **Wrapped examples** — top form ≠ primitive. The harness only verifies self-call examples. Fix is an axis A harness extension: eval multi-form examples and isolate the primitive's actual call. Pre-resolution snapshot had 72; post-resolution self-call count is 328 of 403 examples, so ~75 remain wrapped.
+- **Primitives with no examples** — roughly half the 475-primitive surface. Post-resolution: 251 have examples, ~224 do not. Axis B (static return-path analysis, Phase 3) is the right tool here: it can verify annotations against impl return paths without requiring a docstring example.
+- **ParamType annotations** — only ReturnType is checked. Could be extended with a second pass that fuzzes input types against declared `ParamTypes`.
