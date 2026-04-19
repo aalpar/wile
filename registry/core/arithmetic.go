@@ -102,7 +102,7 @@ func addArithmetic(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeNumber}, ReturnType: values.TypeNumber,
 			Keywords: []string{"inexact->exact", "rational", "fraction", "arbitrary precision", "convert"}},
 		{Name: "inexact", ParamCount: 1, Impl: PrimInexact,
-			Doc: "Converts Z to inexact (floating-point) representation. May lose precision for large exact integers.\n\nExamples:\n  (inexact 1)      => 1.0\n  (inexact 1/3)    => 0.3333333333333333", ParamNames: []string{"z"}, Category: "arithmetic",
+			Doc: "Converts Z to inexact (floating-point) representation. Terminating rationals become Float; non-terminating rationals widen to BigFloat for precision.\n\nExamples:\n  (inexact 1)      => 1.0\n  (inexact 1/4)    => 0.25", ParamNames: []string{"z"}, Category: "arithmetic",
 			ParamTypes: []values.TypeConstraint{values.TypeNumber}, ReturnType: values.TypeNumber,
 			Keywords: []string{"exact->inexact", "float", "double", "floating-point", "convert"}},
 		{Name: "exact->inexact", ParamCount: 1, Impl: PrimInexact,

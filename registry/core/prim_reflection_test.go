@@ -311,9 +311,9 @@ func TestProcedureBoundSymbolsErrors(t *testing.T) {
 func TestProcedureType(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{
-			Name:     "lambda",
+			Name:     "closure",
 			Code:     `(procedure-type (lambda (x) x))`,
-			Expected: values.NewSymbol("lambda"),
+			Expected: values.NewSymbol("closure"),
 		},
 		{
 			Name:     "foreign",

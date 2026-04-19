@@ -189,7 +189,7 @@ func PrimProcedureType(mc machine.CallContext) error {
 	var typeName string
 	switch callable.(type) {
 	case *machine.MachineClosure:
-		typeName = "lambda"
+		typeName = "closure"
 	case *machine.ForeignClosure:
 		typeName = "foreign"
 	case *machine.CaseLambdaClosure:

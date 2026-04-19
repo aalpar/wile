@@ -25,7 +25,7 @@ func addReflection(r *registry.Registry) error {
 		// pairs for case-lambda, an integer for composable continuations,
 		// and #f for callables with unknown arity — TypeAny covers the union.
 		{Name: "procedure-arity", ParamCount: 1, Impl: PrimProcedureArity,
-			Doc: "Returns a pair (count . variadic?) describing PROC's arity. Count is the number of required parameters.\n\nExamples:\n  (procedure-arity car)   => (1 . #f)\n  (procedure-arity +)     => (0 . #t)", ParamNames: []string{"proc"}, Category: "reflection",
+			Doc: "Returns PROC's arity. For fixed-arity procedures, returns an integer — the parameter count. For variadic procedures, returns a pair (min . #f) where min is the required-argument count and #f signals no upper limit. Case-lambda returns a list of such arity descriptors. Composable continuations return 1.\n\nExamples:\n  (procedure-arity car)   => 1\n  (procedure-arity +)     => (0 . #f)", ParamNames: []string{"proc"}, Category: "reflection",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure}, ReturnType: values.TypeAny},
 		// procedure-name, procedure-source-location, procedure-bound-symbols
 		// return a string/list or #f when unavailable — TypeAny covers the

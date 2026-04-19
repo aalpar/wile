@@ -41,7 +41,7 @@ func addPrimitives(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
 			ReturnType: values.TypeBoolean},
 		{Name: "namespace-name", ParamCount: 1, Impl: PrimNamespaceName,
-			Doc: "Returns the name of NS as a string, or #f if unnamed.\n\nExamples:\n  (namespace-name (make-namespace))  => #f", ParamNames: []string{"ns"}, Category: "namespace",
+			Doc: "Returns the name of NS as a string, or #f if unnamed. A fresh namespace from (make-namespace) is named \"namespace\" by default.\n\nExamples:\n  (namespace-name (make-namespace))  => \"namespace\"", ParamNames: []string{"ns"}, Category: "namespace",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "make-namespace", ParamCount: 1, IsVariadic: true, Impl: PrimMakeNamespace,
 			Doc: "Creates a new namespace, optionally pre-loaded with libraries specified by import-specs.\n\nExamples:\n  (make-namespace)                      => #<namespace>\n  (make-namespace '(scheme base))       => #<namespace>  ; with (scheme base) imported", ParamNames: []string{"import-spec"}, Category: "namespace",
