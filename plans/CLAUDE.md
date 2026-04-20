@@ -56,7 +56,7 @@ Phase 1 infrastructure complete (PRs #577-578): `ForeignClosure.SetValidator/Val
 | `2026-03-26-extension-contracts-impl.md` | Extension contracts remaining work: Phases 2-4 outlines | **Open** -- Phase 1 done, Phases 2-4 not started |
 | `2026-03-26-extension-contracts-phase2-design.md` | Phase 2 design: ForeignClosure validation, auto-coercion | **Open** |
 | `2026-03-26-extension-contracts-phase2-impl.md` | Phase 2 implementation plan | **Open** -- 3/8 tasks completed (1-3 done: validate field + dispatch paths) |
-| `2026-04-20-paramtypes-audit-design.md` | Phase 5 design: audit `ParamTypes` across 500 primitives; per-slot analysis, extractor table, declared-too-narrow is load-bearing under Phase-2 enforcement | **Design -- 2/3 decisions ratified (§7.1 doc comment applied; §7.2 unified cleanup PR). §7.3 (consolidation with Phase 3 Cat C) deferred until Phase 5.C data** |
+| `2026-04-20-paramtypes-audit-design.md` | Phase 5 design: audit `ParamTypes` across 500 primitives; per-slot analysis, extractor table, declared-too-narrow is load-bearing under Phase-2 enforcement | **Phase 5.A shipped (PR #678). Phase 5.B shipped: analyzer at `audit/wile-axis-b-params.scm`; outputs `plans/paramtypes-raw.scm` + `plans/2026-04-20-paramtypes-inventory.md` (65 Single-strict, 99 Single-coercing, 3 Declared-too-narrow (all FP — post-gate filters), 118 Declared-too-wide, 19 Union, 93 Variadic-rest, 79 Unguarded (16%, below kill criterion)). §7.3 deferred until 5.C** |
 
 ### Environment Profiles
 
