@@ -12,13 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Manifest generator for axis-b analyzer (Phase 3.A).
+// Manifest generator for axis-b analyzer (Phase 3.A + Phase 5.A).
 //
-// See plans/2026-04-19-axis-b-analyzer-design.md §6.2, §8.A.
+// See plans/2026-04-19-axis-b-analyzer-design.md §6.2, §8.A for the
+// return-type pass, and plans/2026-04-20-paramtypes-audit-design.md
+// §3.1 for the ParamTypes extension.
 //
 // Writes plans/axis-b-manifest.scm — an S-expression list of
-// (name declared-return-type go-function-name go-source-location) tuples.
+// (name return-type param-types go-function go-source-location) tuples.
 // Run with WILE_AXIS_B_UPDATE=1 to regenerate after adding/removing primitives.
+//
+// ParamTypes slot format:
+//   - One string per fixed parameter slot, containing the TypeConstraint.Name().
+//   - For variadic primitives, the last slot is prefixed "..." to mark it as
+//     the per-element type of the rest list (convention per registry.go:34 and
+//     plans/2026-04-20-paramtypes-audit-design.md §7.1).
+//   - nil TypeConstraint emitted as "" (unspecified slot, analogous to the
+//     return-type convention).
+//   - Primitives with no ParamTypes (len==0) emit the empty list ().
 
 package wile
 
@@ -33,6 +44,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
 
@@ -61,9 +73,15 @@ const (
 )
 
 // manifestEntry is a single primitive's line in the manifest.
+//
+// ParamTypes is the pre-formatted per-slot list: each entry is a
+// TypeConstraint.Name() string (or "" for a nil slot). For variadic
+// primitives, the last element is prefixed "..." to distinguish the
+// rest-element annotation from a fixed slot.
 type manifestEntry struct {
 	Name       string
 	ReturnType string
+	ParamTypes []string
 	GoFunction string
 	SourceFile string
 	SourceLine int
@@ -103,6 +121,7 @@ func buildManifest(t *testing.T) []manifestEntry {
 		q = append(q, manifestEntry{
 			Name:       pr.Spec.Name,
 			ReturnType: returnType,
+			ParamTypes: formatParamTypes(pr.Spec.ParamTypes, pr.Spec.IsVariadic),
 			GoFunction: goName,
 			SourceFile: stripRoot(t, root, absFile),
 			SourceLine: line,
@@ -111,6 +130,39 @@ func buildManifest(t *testing.T) []manifestEntry {
 	sort.Slice(q, func(i, j int) bool {
 		return q[i].Name < q[j].Name
 	})
+	return q
+}
+
+// formatParamTypes renders a PrimitiveSpec.ParamTypes slice into per-slot
+// strings using the Phase 5.A convention:
+//
+//   - Each slot's string is the TypeConstraint.Name() value, or "" for a nil
+//     TypeConstraint (unspecified slot).
+//   - When isVariadic is true, the last slot is prefixed "..." to mark it as
+//     the per-element type of the rest list (not the rest list itself).
+//     See registry/registry.go:34 and plans/2026-04-20-paramtypes-audit-design.md §7.1.
+//   - An empty input returns nil; formatManifest renders it as "()".
+//
+// Survey (2026-04-20) of the 484-primitive registry found zero short variadic
+// cases — every variadic primitive has len(ParamTypes) == ParamCount when
+// ParamTypes is populated. The permissive validation range [1, ParamCount] in
+// registry.validateParamTypes is future-proofing; this formatter handles the
+// short case correctly but it isn't currently exercised.
+func formatParamTypes(types []values.TypeConstraint, isVariadic bool) []string {
+	if len(types) == 0 {
+		return nil
+	}
+	q := make([]string, len(types))
+	for i, tc := range types {
+		name := ""
+		if tc != nil {
+			name = tc.Name()
+		}
+		if isVariadic && i == len(types)-1 {
+			name = "..." + name
+		}
+		q[i] = name
+	}
 	return q
 }
 
@@ -156,9 +208,14 @@ func resolveImpl(fn any) (name, file string, line int, err error) {
 }
 
 // formatManifest renders entries as a Scheme S-expression list, one tuple
-// per line. Each tuple is (name return-type go-function source-location)
-// with all fields quoted as Scheme strings. Double quotes and backslashes
-// in any field are escaped.
+// per line. Each tuple is:
+//
+//	(name return-type (param-types...) go-function source-location)
+//
+// All scalar fields are quoted as Scheme strings. The param-types slot is a
+// parenthesized list of quoted strings — empty "()" for primitives with no
+// ParamTypes annotation. Double quotes and backslashes in any field are
+// escaped.
 func formatManifest(entries []manifestEntry) string {
 	if len(entries) == 0 {
 		return "()\n"
@@ -174,6 +231,8 @@ func formatManifest(entries []manifestEntry) string {
 		b.WriteByte(' ')
 		writeSchemeString(&b, e.ReturnType)
 		b.WriteByte(' ')
+		writeParamTypesList(&b, e.ParamTypes)
+		b.WriteByte(' ')
 		writeSchemeString(&b, e.GoFunction)
 		b.WriteByte(' ')
 		loc := e.SourceFile
@@ -185,6 +244,19 @@ func formatManifest(entries []manifestEntry) string {
 	}
 	b.WriteString(")\n")
 	return b.String()
+}
+
+// writeParamTypesList writes the param-types slot as "(s1 s2 ... sN)" with
+// each string quoted. Empty input produces "()".
+func writeParamTypesList(b *strings.Builder, types []string) {
+	b.WriteByte('(')
+	for i, s := range types {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		writeSchemeString(b, s)
+	}
+	b.WriteByte(')')
 }
 
 // writeSchemeString writes s as a Scheme string literal into b, escaping
@@ -278,8 +350,9 @@ func TestBuildAxisBManifest(t *testing.T) {
 			continue
 		}
 		e := entries[idx]
-		t.Logf("  %-10s return=%-12s fn=%s loc=%s:%d",
-			e.Name, e.ReturnType, e.GoFunction, e.SourceFile, e.SourceLine)
+		t.Logf("  %-10s return=%-12s params=%-30s fn=%s loc=%s:%d",
+			e.Name, e.ReturnType, "("+strings.Join(e.ParamTypes, " ")+")",
+			e.GoFunction, e.SourceFile, e.SourceLine)
 	}
 
 	generated := formatManifest(entries)
@@ -317,7 +390,7 @@ func TestFormatManifest(t *testing.T) {
 			expected: "()\n",
 		},
 		{
-			name: "single entry",
+			name: "single entry no ParamTypes",
 			input: []manifestEntry{
 				{
 					Name:       "car",
@@ -328,24 +401,52 @@ func TestFormatManifest(t *testing.T) {
 				},
 			},
 			expected: "(" +
-				`("car" "any" "github.com/aalpar/wile/registry/core.primCar" "registry/core/lists.go:42")` +
+				`("car" "any" () "github.com/aalpar/wile/registry/core.primCar" "registry/core/lists.go:42")` +
 				")\n",
+		},
+		{
+			name: "fixed ParamTypes",
+			input: []manifestEntry{
+				{
+					Name: "vector-set!", ReturnType: "void",
+					ParamTypes: []string{"vector", "exact-integer", "any"},
+					GoFunction: "pkg.PrimVectorSet", SourceFile: "f.go", SourceLine: 1,
+				},
+			},
+			expected: `(("vector-set!" "void" ("vector" "exact-integer" "any") "pkg.PrimVectorSet" "f.go:1"))` + "\n",
+		},
+		{
+			name: "variadic rest-slot prefix",
+			input: []manifestEntry{
+				{
+					Name: "+", ReturnType: "number",
+					ParamTypes: []string{"...number"},
+					GoFunction: "pkg.PrimAdd", SourceFile: "a.go", SourceLine: 28,
+				},
+				{
+					Name: "-", ReturnType: "number",
+					ParamTypes: []string{"number", "...number"},
+					GoFunction: "pkg.PrimSub", SourceFile: "a.go", SourceLine: 29,
+				},
+			},
+			expected: `(("+" "number" ("...number") "pkg.PrimAdd" "a.go:28")` + "\n" +
+				` ("-" "number" ("number" "...number") "pkg.PrimSub" "a.go:29"))` + "\n",
 		},
 		{
 			name: "multiple entries",
 			input: []manifestEntry{
-				{Name: "a", ReturnType: "x", GoFunction: "pkg.A", SourceFile: "a.go", SourceLine: 1},
+				{Name: "a", ReturnType: "x", ParamTypes: []string{"y"}, GoFunction: "pkg.A", SourceFile: "a.go", SourceLine: 1},
 				{Name: "b", ReturnType: "", GoFunction: "pkg.B", SourceFile: "b.go", SourceLine: 2},
 			},
-			expected: `(("a" "x" "pkg.A" "a.go:1")` + "\n" +
-				` ("b" "" "pkg.B" "b.go:2"))` + "\n",
+			expected: `(("a" "x" ("y") "pkg.A" "a.go:1")` + "\n" +
+				` ("b" "" () "pkg.B" "b.go:2"))` + "\n",
 		},
 		{
 			name: "escapes double-quote and backslash in names",
 			input: []manifestEntry{
 				{Name: `weird"name\here`, ReturnType: "x", GoFunction: "pkg.F", SourceFile: "f.go", SourceLine: 1},
 			},
-			expected: `(("weird\"name\\here" "x" "pkg.F" "f.go:1"))` + "\n",
+			expected: `(("weird\"name\\here" "x" () "pkg.F" "f.go:1"))` + "\n",
 		},
 	}
 	for _, tc := range tcs {
@@ -353,6 +454,66 @@ func TestFormatManifest(t *testing.T) {
 			got := formatManifest(tc.input)
 			if got != tc.expected {
 				t.Errorf("formatManifest mismatch\nwant: %q\ngot:  %q", tc.expected, got)
+			}
+		})
+	}
+}
+
+func TestFormatParamTypes(t *testing.T) {
+	tcs := []struct {
+		name       string
+		types      []values.TypeConstraint
+		isVariadic bool
+		want       []string
+	}{
+		{
+			name:       "empty",
+			types:      nil,
+			isVariadic: false,
+			want:       nil,
+		},
+		{
+			name:       "non-variadic single slot",
+			types:      []values.TypeConstraint{values.TypeExactInteger},
+			isVariadic: false,
+			want:       []string{"exact-integer"},
+		},
+		{
+			name:       "non-variadic multiple slots",
+			types:      []values.TypeConstraint{values.TypeVector, values.TypeExactInteger, values.TypeAny},
+			isVariadic: false,
+			want:       []string{"vector", "exact-integer", "any"},
+		},
+		{
+			name:       "variadic sole rest slot",
+			types:      []values.TypeConstraint{values.TypeNumber},
+			isVariadic: true,
+			want:       []string{"...number"},
+		},
+		{
+			name:       "variadic fixed + rest",
+			types:      []values.TypeConstraint{values.TypeNumber, values.TypeNumber},
+			isVariadic: true,
+			want:       []string{"number", "...number"},
+		},
+		{
+			name:       "nil slot rendered as empty string",
+			types:      []values.TypeConstraint{values.TypeExactInteger, nil},
+			isVariadic: false,
+			want:       []string{"exact-integer", ""},
+		},
+		{
+			name:       "nil rest slot still gets prefix",
+			types:      []values.TypeConstraint{nil},
+			isVariadic: true,
+			want:       []string{"..."},
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got := formatParamTypes(tc.types, tc.isVariadic)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("formatParamTypes mismatch\nwant: %v\ngot:  %v", tc.want, got)
 			}
 		})
 	}
@@ -372,14 +533,17 @@ func TestManifestSanity(t *testing.T) {
 
 	tcs := []struct {
 		name           string
-		pkgSubstr      string // must appear in GoFunction
-		sourceContains string // must appear in SourceFile
+		pkgSubstr      string   // must appear in GoFunction
+		sourceContains string   // must appear in SourceFile
+		paramTypes     []string // nil = skip check; otherwise exact match
 	}{
 		// Core primitives — registered as plain Go functions.
-		{name: "car", pkgSubstr: "wile/registry/core", sourceContains: "registry/core/"},
-		{name: "cdr", pkgSubstr: "wile/registry/core", sourceContains: "registry/core/"},
-		{name: "cons", pkgSubstr: "wile/registry/core", sourceContains: "registry/core/"},
-		{name: "+", pkgSubstr: "wile/registry/core", sourceContains: "registry/core/"},
+		{name: "car", pkgSubstr: "wile/registry/core", sourceContains: "registry/core/", paramTypes: []string{"pair"}},
+		{name: "cdr", pkgSubstr: "wile/registry/core", sourceContains: "registry/core/", paramTypes: []string{"pair"}},
+		{name: "cons", pkgSubstr: "wile/registry/core", sourceContains: "registry/core/", paramTypes: []string{"any", "any"}},
+		// `+` is variadic: ParamCount=1, IsVariadic=true, ParamTypes=[TypeNumber].
+		// The lone slot is the rest-element type; rendered with "..." prefix.
+		{name: "+", pkgSubstr: "wile/registry/core", sourceContains: "registry/core/", paramTypes: []string{"...number"}},
 
 		// Extension primitives — one per major extension package. If any
 		// of these starts resolving to the wrong package, it means the
@@ -408,6 +572,10 @@ func TestManifestSanity(t *testing.T) {
 				t.Errorf("%s SourceFile %q does not contain %q",
 					tc.name, e.SourceFile, tc.sourceContains)
 			}
+			if tc.paramTypes != nil && !reflect.DeepEqual(e.ParamTypes, tc.paramTypes) {
+				t.Errorf("%s ParamTypes mismatch\nwant: %v\ngot:  %v",
+					tc.name, tc.paramTypes, e.ParamTypes)
+			}
 		})
 	}
 }
@@ -423,7 +591,9 @@ func TestManifestStability(t *testing.T) {
 	}
 	diffs := 0
 	for i := range first {
-		if first[i] != second[i] {
+		// ParamTypes is a slice, so struct != doesn't compile.
+		// reflect.DeepEqual compares by value including slice contents.
+		if !reflect.DeepEqual(first[i], second[i]) {
 			t.Errorf("entry %d differs: %+v vs %+v", i, first[i], second[i])
 			diffs++
 			if diffs >= maxReportedDiffs {
