@@ -193,12 +193,12 @@ func addMoreChars(r *registry.Registry) error {
 
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "char-alphabetic?", ParamCount: 1, Impl: PrimCharAlphabeticQ,
-			Doc: "Returns #t if CHAR is a Unicode letter (Lu, Ll, Lt, Lm, Lo categories).\n\nExamples:\n  (char-alphabetic? #\\a)  => #t\n  (char-alphabetic? #\\1)  => #f", ParamNames: []string{"char"}, Category: "characters",
+			Doc: "Returns #t if CHAR is alphabetic per R7RS §6.6 (Unicode categories Lu, Ll, Lt, Lm, Lo, Nl).\n\nExamples:\n  (char-alphabetic? #\\a)  => #t\n  (char-alphabetic? #\\1)  => #f", ParamNames: []string{"char"}, Category: "characters",
 			Keywords:   []string{"letter", "alpha", "is-letter"},
 			ParamTypes: []values.TypeConstraint{values.TypeCharacter},
 			ReturnType: values.TypeBoolean},
 		{Name: "char-numeric?", ParamCount: 1, Impl: PrimCharNumericQ,
-			Doc: "Returns #t if CHAR is a Unicode decimal digit.\n\nExamples:\n  (char-numeric? #\\5)  => #t\n  (char-numeric? #\\a)  => #f", ParamNames: []string{"char"}, Category: "characters",
+			Doc: "Returns #t if CHAR satisfies the Unicode Numeric property per R7RS §6.6 (categories Nd, Nl, No — includes decimal digits, letter numerals, and fractions).\n\nExamples:\n  (char-numeric? #\\5)  => #t\n  (char-numeric? #\\a)  => #f", ParamNames: []string{"char"}, Category: "characters",
 			Keywords:   []string{"digit", "is-digit", "number character"},
 			ParamTypes: []values.TypeConstraint{values.TypeCharacter},
 			ReturnType: values.TypeBoolean},

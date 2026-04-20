@@ -689,7 +689,8 @@ func TestCharAlphabeticUnicode(t *testing.T) {
 
 // TestCharNumericUnicode tests char-numeric? with Unicode characters from
 // multiple numeral systems. Per R7RS §6.6, char-numeric? returns #t for
-// characters with the Unicode "Numeric_Type=Decimal" property.
+// characters in Unicode categories Nd (decimal digits), Nl (letter
+// numerals), or No (other numerics including fractions and superscripts).
 func TestCharNumericUnicode(t *testing.T) {
 	tcs := []struct {
 		name string
@@ -737,14 +738,14 @@ func TestCharNumericUnicode(t *testing.T) {
 			out:  values.FalseValue,
 		},
 		{
-			name: "Roman numeral V is not numeric (Nl category, not Nd)",
+			name: "Roman numeral V is numeric (Nl category)",
 			prog: values.List(values.NewSymbol("char-numeric?"), values.NewCharacter('Ⅴ')), // U+2164
-			out:  values.FalseValue,
+			out:  values.TrueValue,
 		},
 		{
-			name: "superscript 2 is not numeric (No category, not Nd)",
+			name: "superscript 2 is numeric (No category)",
 			prog: values.List(values.NewSymbol("char-numeric?"), values.NewCharacter('²')), // U+00B2
-			out:  values.FalseValue,
+			out:  values.TrueValue,
 		},
 		{
 			name: "Turkish dotted capital I is not numeric",

@@ -50,8 +50,19 @@ func makeCharCiComparePrimitive(name string, cmp func(rune, rune) bool) machine.
 }
 
 // Character classification predicates — all use MakeCharPredicate factory.
-var PrimCharAlphabeticQ = helpers.MakeCharPredicate("char-alphabetic?", unicode.IsLetter)
-var PrimCharNumericQ = helpers.MakeCharPredicate("char-numeric?", unicode.IsDigit)
+//
+// R7RS §6.6 category requirements:
+//
+//	alphabetic: Lu, Ll, Lt, Lm, Lo, Nl   (Go's unicode.IsLetter omits Nl)
+//	numeric:    Nd, Nl, No                (Go's unicode.IsDigit is Nd only;
+//	                                        unicode.IsNumber covers Nd|Nl|No)
+//	whitespace: Zs, Zl, Zp + TAB LF VT FF CR NEL (unicode.IsSpace matches)
+//	upper case: Lu                        (unicode.IsUpper)
+//	lower case: Ll                        (unicode.IsLower)
+var PrimCharAlphabeticQ = helpers.MakeCharPredicate("char-alphabetic?", func(r rune) bool {
+	return unicode.IsLetter(r) || unicode.In(r, unicode.Nl)
+})
+var PrimCharNumericQ = helpers.MakeCharPredicate("char-numeric?", unicode.IsNumber)
 var PrimCharWhitespaceQ = helpers.MakeCharPredicate("char-whitespace?", unicode.IsSpace)
 var PrimCharUpperCaseQ = helpers.MakeCharPredicate("char-upper-case?", unicode.IsUpper)
 var PrimCharLowerCaseQ = helpers.MakeCharPredicate("char-lower-case?", unicode.IsLower)
