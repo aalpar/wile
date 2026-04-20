@@ -8,20 +8,22 @@ Total parameter slots: 476
 
 | Bucket | Count | % |
 |---|---|---|
-| Single-strict | 65 | 13% |
-| Single-coercing | 99 | 20% |
-| Declared-too-narrow | 3 | 0% |
-| Declared-too-wide | 118 | 24% |
-| Union | 19 | 3% |
+| Single-strict | 71 | 14% |
+| Single-coercing | 110 | 23% |
+| Declared-too-narrow | 3 | <1% |
+| Declared-too-wide | 107 | 22% |
+| Union | 13 | 2% |
 | Variadic-rest | 93 | 19% |
 | Unguarded | 79 | 16% |
 
-## Single-strict (65)
+## Single-strict (71)
 
 Single strict gate (RequireArg[*T]), declared matches scanned. Clean.
 
 | Primitive | Slot | Declared | Scanned | Source | go-source |
 |---|---|---|---|---|---|
+| `%parameter-convert` | 0 | procedure | procedure | requirearg | `registry/core/prim_parameters.go:89` |
+| `%parameter-raw-set!` | 0 | procedure | procedure | requirearg | `registry/core/prim_parameters.go:73` |
 | `apropos` | 0 | string | string | requirearg | `registry/core/prim_reflection.go:397` |
 | `bytevector-copy` | 0 | bytevector | bytevector | requirearg | `registry/core/prim_byte_vectors.go:128` |
 | `bytevector-copy!` | 0 | bytevector | bytevector | requirearg | `registry/core/prim_byte_vectors.go:148` |
@@ -50,9 +52,11 @@ Single strict gate (RequireArg[*T]), declared matches scanned. Clean.
 | `hashtable-values` | 0 | hashtable | hashtable | requirearg | `registry/core/prim_hashtables.go:114` |
 | `inexact` | 0 | number | number | requirearg | `registry/core/prim_arithmetic.go:358` |
 | `inexact->exact` | 0 | number | number | requirearg | `registry/core/prim_arithmetic.go:340` |
+| `input-port-open?` | 0 | input-port | input-port | requirearg | `internal/extensions/io/prim_ports.go:44` |
 | `list-set!` | 0 | pair | pair | requirearg | `registry/core/prim_lists.go:226` |
 | `open-input-bytevector` | 0 | bytevector | bytevector | requirearg | `internal/extensions/io/prim_ports.go:168` |
 | `open-input-string` | 0 | string | string | requirearg | `internal/extensions/io/prim_ports.go:141` |
+| `output-port-open?` | 0 | output-port | output-port | requirearg | `internal/extensions/io/prim_ports.go:57` |
 | `process-kill` | 1 | symbol | symbol | requirearg | `extensions/process/prim_process.go:204` |
 | `process-spawn` | 0 | string | string | requirearg | `extensions/process/prim_process.go:61` |
 | `read-bytevector` | 0 | integer | integer | requirearg | `internal/extensions/io/prim_binary.go:127` |
@@ -84,16 +88,19 @@ Single strict gate (RequireArg[*T]), declared matches scanned. Clean.
 | `vector-copy!` | 0 | vector | vector | requirearg | `registry/core/prim_vectors.go:131` |
 | `vector-fill!` | 0 | vector | vector | requirearg | `registry/core/prim_vectors.go:174` |
 | `wait-group-add!` | 1 | integer | integer | requirearg | `extensions/gointerop/prim_gointerop.go:227` |
+| `with-exception-handler` | 0 | procedure | procedure | requirearg | `registry/core/prim_exceptions.go:30` |
+| `with-exception-handler` | 1 | procedure | procedure | requirearg | `registry/core/prim_exceptions.go:30` |
 | `write-bytevector` | 0 | bytevector | bytevector | requirearg | `internal/extensions/io/prim_binary.go:228` |
 | `write-char` | 0 | character | character | requirearg | `internal/extensions/io/prim_write.go:50` |
 | `write-string` | 0 | string | string | requirearg | `internal/extensions/io/prim_write.go:163` |
 
-## Single-coercing (99)
+## Single-coercing (110)
 
 Single coercing extractor/delegator, declared matches accepted domain. Clean.
 
 | Primitive | Slot | Declared | Scanned | Source | go-source |
 |---|---|---|---|---|---|
+| `%make-lazy-promise` | 0 | procedure | procedure | typeassert | `internal/extensions/all/prim_all.go:369` |
 | `%parameter-raw-set!` | 1 | any | — | unguarded-direct | `registry/core/prim_parameters.go:73` |
 | `-` | 0 | number | number | delegator | `registry/core/prim_arithmetic.go:36` |
 | `/` | 0 | number | number | delegator | `registry/core/prim_arithmetic.go:55` |
@@ -115,6 +122,9 @@ Single coercing extractor/delegator, declared matches accepted domain. Clean.
 | `bytevector-u8-set!` | 1 | exact-integer | exact-integer | delegator | `registry/core/prim_byte_vectors.go:109` |
 | `channel-send!` | 1 | any | — | unguarded-direct | `extensions/gointerop/prim_gointerop.go:62` |
 | `channel-try-send!` | 1 | any | — | unguarded-direct | `extensions/gointerop/prim_gointerop.go:101` |
+| `close-input-port` | 0 | input-port | input-port | typeassert | `internal/extensions/io/prim_ports.go:88` |
+| `close-output-port` | 0 | output-port | output-port | typeassert | `internal/extensions/io/prim_ports.go:107` |
+| `close-port` | 0 | port | port | typeassert | `internal/extensions/io/prim_ports.go:70` |
 | `condition-variable-specific-set!` | 1 | any | — | unguarded-direct | `extensions/threads/prim_threads.go:564` |
 | `cons` | 0 | any | — | unguarded-direct | `registry/core/prim_pairs.go:26` |
 | `cons` | 1 | any | — | unguarded-direct | `registry/core/prim_pairs.go:26` |
@@ -125,6 +135,7 @@ Single coercing extractor/delegator, declared matches accepted domain. Clean.
 | `continuation-mark-set-first` | 1 | any | — | unguarded-direct | `registry/core/prim_cont_marks.go:56` |
 | `continuation-marks` | 0 | any | — | unguarded-direct | `registry/core/prim_cont_marks.go:126` |
 | `datum->syntax` | 1 | any | — | unguarded-direct | `registry/core/prim_syntax.go:62` |
+| `disassemble` | 0 | procedure | procedure | typeassert | `extensions/introspection/prim_disassemble.go:25` |
 | `display` | 0 | any | — | unguarded-direct | `internal/extensions/io/prim_write.go:75` |
 | `environment-bound-names` | 0 | any | — | unguarded-direct | `extensions/introspection/prim_introspection.go:47` |
 | `environment-bound?` | 0 | any | — | unguarded-direct | `extensions/introspection/prim_introspection.go:98` |
@@ -172,6 +183,12 @@ Single coercing extractor/delegator, declared matches accepted domain. Clean.
 | `namespace-undefine!` | 0 | any | — | unguarded-direct | `internal/extensions/namespace/prim_namespace.go:209` |
 | `nan?` | 0 | number | number | typeassert | `extensions/math/prim_rounding.go:218` |
 | `null?` | 0 | any | — | unguarded-direct | `registry/core/prim_predicates.go:98` |
+| `procedure-arity` | 0 | procedure | procedure | typeassert | `registry/core/prim_reflection.go:97` |
+| `procedure-bound-symbols` | 0 | procedure | procedure | typeassert | `registry/core/prim_reflection.go:214` |
+| `procedure-documentation` | 0 | procedure | procedure | typeassert | `registry/core/prim_reflection.go:268` |
+| `procedure-name` | 0 | procedure | procedure | typeassert | `registry/core/prim_reflection.go:129` |
+| `procedure-source-location` | 0 | procedure | procedure | typeassert | `registry/core/prim_reflection.go:162` |
+| `procedure-type` | 0 | procedure | procedure | typeassert | `registry/core/prim_reflection.go:238` |
 | `record-constructor` | 0 | any | — | unguarded-direct | `internal/extensions/all/prim_all.go:105` |
 | `set-box!` | 1 | any | — | unguarded-direct | `registry/core/prim_boxes.go:51` |
 | `set-car!` | 1 | any | — | unguarded-direct | `registry/core/prim_pairs.go:66` |
@@ -196,7 +213,7 @@ Single coercing extractor/delegator, declared matches accepted domain. Clean.
 
 ## Declared-too-narrow (3)
 
-Declared ValueType is strictly narrower than scanned accepted domain. **Unsound under Phase-2 enforcement — valid calls would be rejected.** High priority for Phase 5.D cleanup.
+Declared ValueType is strictly narrower than scanned accepted domain. **Potentially unsound under Phase-2 enforcement** — but note: v1 analyzer does not trace post-gate filters, so entries using `RequireArg[Wider] + in-body filter` (e.g., `abs`, `make-polar` using `RequireArg[Number]` + `isRealNumber` reject) are false positives — the declared type matches the *effective* post-filter domain. Manual review required per entry before any annotation change.
 
 | Primitive | Slot | Declared | Scanned | Source | go-source |
 |---|---|---|---|---|---|
@@ -204,20 +221,18 @@ Declared ValueType is strictly narrower than scanned accepted domain. **Unsound 
 | `make-polar` | 0 | real | number | typeassert | `extensions/math/prim_complex.go:142` |
 | `make-polar` | 1 | real | number | typeassert | `extensions/math/prim_complex.go:142` |
 
-## Declared-too-wide (118)
+## Declared-too-wide (107)
 
 Declared is wider than scanned (e.g., TypeAny where impl strictly requires TypeString). Imprecise but sound. Lower-priority tightening.
 
 | Primitive | Slot | Declared | Scanned | Source | go-source |
 |---|---|---|---|---|---|
-| `%make-lazy-promise` | 0 | procedure | github.com/aalpar/wile/values.Callable | typeassert | `internal/extensions/all/prim_all.go:369` |
-| `%parameter-convert` | 0 | procedure | *github.com/aalpar/wile/machine.Parameter | requirearg | `registry/core/prim_parameters.go:89` |
-| `%parameter-raw-set!` | 0 | procedure | *github.com/aalpar/wile/machine.Parameter | requirearg | `registry/core/prim_parameters.go:73` |
 | `abort-current-continuation` | 0 | any | *github.com/aalpar/wile/machine.PromptTag | requirearg | `registry/core/prim_prompt.go:159` |
 | `atomic-compare-and-swap!` | 0 | any | *github.com/aalpar/wile/values.AtomicBox | requirearg | `extensions/gointerop/prim_gointerop.go:527` |
 | `atomic-load` | 0 | any | *github.com/aalpar/wile/values.AtomicBox | requirearg | `extensions/gointerop/prim_gointerop.go:478` |
 | `atomic-store!` | 0 | any | *github.com/aalpar/wile/values.AtomicBox | requirearg | `extensions/gointerop/prim_gointerop.go:495` |
 | `atomic-swap!` | 0 | any | *github.com/aalpar/wile/values.AtomicBox | requirearg | `extensions/gointerop/prim_gointerop.go:509` |
+| `binary-port?` | 0 | any | github.com/aalpar/wile/values.BinaryReader, github.com/aalpar/wile/values.BinaryWriter | typeassert | `internal/extensions/io/prim_ports.go:217` |
 | `bound-identifier=?` | 0 | any | *github.com/aalpar/wile/internal/syntax.SyntaxSymbol | typeassert | `registry/core/prim_syntax.go:155` |
 | `bound-identifier=?` | 1 | any | *github.com/aalpar/wile/internal/syntax.SyntaxSymbol | typeassert | `registry/core/prim_syntax.go:155` |
 | `bytevector-copy!` | 1 | exact-integer | integer | requirearg | `registry/core/prim_byte_vectors.go:148` |
@@ -233,9 +248,6 @@ Declared is wider than scanned (e.g., TypeAny where impl strictly requires TypeS
 | `channel-send!` | 0 | any | *github.com/aalpar/wile/values.Channel | requirearg | `extensions/gointerop/prim_gointerop.go:62` |
 | `channel-try-receive` | 0 | any | *github.com/aalpar/wile/values.Channel | requirearg | `extensions/gointerop/prim_gointerop.go:119` |
 | `channel-try-send!` | 0 | any | *github.com/aalpar/wile/values.Channel | requirearg | `extensions/gointerop/prim_gointerop.go:101` |
-| `close-input-port` | 0 | input-port | github.com/aalpar/wile/values.InputPort | typeassert | `internal/extensions/io/prim_ports.go:88` |
-| `close-output-port` | 0 | output-port | github.com/aalpar/wile/values.OutputPort | typeassert | `internal/extensions/io/prim_ports.go:107` |
-| `close-port` | 0 | port | github.com/aalpar/wile/values.Port | typeassert | `internal/extensions/io/prim_ports.go:70` |
 | `compile` | 0 | any | github.com/aalpar/wile/internal/syntax.SyntaxValue | typeassert | `extensions/eval/prim_eval.go:510` |
 | `condition-variable-broadcast!` | 0 | any | *github.com/aalpar/wile/values.ConditionVariable | requirearg | `extensions/threads/prim_threads.go:590` |
 | `condition-variable-name` | 0 | any | *github.com/aalpar/wile/values.ConditionVariable | requirearg | `extensions/threads/prim_threads.go:537` |
@@ -244,6 +256,7 @@ Declared is wider than scanned (e.g., TypeAny where impl strictly requires TypeS
 | `condition-variable-specific-set!` | 0 | any | *github.com/aalpar/wile/values.ConditionVariable | requirearg | `extensions/threads/prim_threads.go:564` |
 | `continuation-mark-set->list*` | 1 | list | pair | typeassert | `registry/core/prim_cont_marks.go:81` |
 | `continuation-prompt-available?` | 0 | any | *github.com/aalpar/wile/machine.PromptTag | requirearg | `registry/core/prim_prompt.go:194` |
+| `datum->syntax` | 0 | any | *github.com/aalpar/wile/internal/syntax.SyntaxSymbol, github.com/aalpar/wile/internal/syntax.SyntaxValue | typeassert | `registry/core/prim_syntax.go:62` |
 | `error-context-marks` | 0 | any | *github.com/aalpar/wile/machine.ErrorContext | requirearg | `registry/core/prim_error_context.go:74` |
 | `error-context-source` | 0 | any | *github.com/aalpar/wile/machine.ErrorContext | requirearg | `registry/core/prim_error_context.go:44` |
 | `error-context-stack-trace` | 0 | any | *github.com/aalpar/wile/machine.ErrorContext | requirearg | `registry/core/prim_error_context.go:62` |
@@ -257,9 +270,8 @@ Declared is wider than scanned (e.g., TypeAny where impl strictly requires TypeS
 | `free-identifier=?` | 0 | any | *github.com/aalpar/wile/internal/syntax.SyntaxSymbol | typeassert | `registry/core/prim_syntax.go:185` |
 | `free-identifier=?` | 1 | any | *github.com/aalpar/wile/internal/syntax.SyntaxSymbol | typeassert | `registry/core/prim_syntax.go:185` |
 | `generate-temporaries` | 0 | any | pair | typeassert | `registry/core/prim_syntax.go:127` |
-| `get-output-bytevector` | 0 | output-port | github.com/aalpar/wile/values.ByteVectorExtractor | requirearg | `internal/extensions/io/prim_ports.go:192` |
+| `get-output-bytevector` | 0 | output-port | binary-output-port | requirearg | `internal/extensions/io/prim_ports.go:192` |
 | `identifier?` | 0 | any | *github.com/aalpar/wile/internal/syntax.SyntaxSymbol | typeassert | `registry/core/prim_syntax.go:32` |
-| `input-port-open?` | 0 | input-port | github.com/aalpar/wile/values.InputPort | requirearg | `internal/extensions/io/prim_ports.go:44` |
 | `integer->char` | 0 | exact-integer | integer | requirearg | `registry/core/prim_characters.go:40` |
 | `integer?` | 0 | any | number | typeassert | `registry/core/prim_predicates.go:119` |
 | `length` | 0 | list | pair | typeassert | `registry/core/prim_lists.go:165` |
@@ -281,14 +293,7 @@ Declared is wider than scanned (e.g., TypeAny where impl strictly requires TypeS
 | `once-do!` | 0 | any | *github.com/aalpar/wile/values.Once | requirearg | `extensions/gointerop/prim_gointerop.go:405` |
 | `once-done?` | 0 | any | *github.com/aalpar/wile/values.Once | requirearg | `extensions/gointerop/prim_gointerop.go:445` |
 | `opaque-tag` | 0 | any | opaque | requirearg | `registry/core/prim_opaque.go:33` |
-| `output-port-open?` | 0 | output-port | github.com/aalpar/wile/values.OutputPort | requirearg | `internal/extensions/io/prim_ports.go:57` |
 | `pair?` | 0 | any | pair | typeassert | `registry/core/prim_predicates.go:108` |
-| `procedure-arity` | 0 | procedure | github.com/aalpar/wile/values.Callable | typeassert | `registry/core/prim_reflection.go:97` |
-| `procedure-bound-symbols` | 0 | procedure | github.com/aalpar/wile/values.Callable | typeassert | `registry/core/prim_reflection.go:214` |
-| `procedure-documentation` | 0 | procedure | github.com/aalpar/wile/values.Callable | typeassert | `registry/core/prim_reflection.go:268` |
-| `procedure-name` | 0 | procedure | github.com/aalpar/wile/values.Callable | typeassert | `registry/core/prim_reflection.go:129` |
-| `procedure-source-location` | 0 | procedure | github.com/aalpar/wile/values.Callable | typeassert | `registry/core/prim_reflection.go:162` |
-| `procedure-type` | 0 | procedure | github.com/aalpar/wile/values.Callable | typeassert | `registry/core/prim_reflection.go:238` |
 | `process-kill` | 0 | any | *github.com/aalpar/wile/values.Process | requirearg | `extensions/process/prim_process.go:204` |
 | `process-stderr` | 0 | any | *github.com/aalpar/wile/values.Process | requirearg | `extensions/process/prim_process.go:148` |
 | `process-stdin` | 0 | any | *github.com/aalpar/wile/values.Process | requirearg | `extensions/process/prim_process.go:158` |
@@ -297,6 +302,7 @@ Declared is wider than scanned (e.g., TypeAny where impl strictly requires TypeS
 | `process?` | 0 | any | *github.com/aalpar/wile/values.Process | typeassert | `extensions/process/prim_process.go:237` |
 | `rational?` | 0 | any | number | typeassert | `registry/core/prim_predicates.go:151` |
 | `read-error?` | 0 | any | *github.com/aalpar/wile/values.NativeError | typeassert | `registry/core/prim_exceptions.go:339` |
+| `real?` | 0 | any | real, complex | typeassert | `registry/core/prim_predicates.go:133` |
 | `record-predicate` | 0 | any | record-type | requirearg | `internal/extensions/all/prim_all.go:137` |
 | `record-type` | 0 | any | record | requirearg | `internal/extensions/all/prim_all.go:91` |
 | `reverse` | 0 | list | pair | typeassert | `registry/core/prim_lists.go:138` |
@@ -311,8 +317,10 @@ Declared is wider than scanned (e.g., TypeAny where impl strictly requires TypeS
 | `substring` | 1 | exact-integer | integer | requirearg | `registry/core/prim_strings.go:240` |
 | `substring` | 2 | exact-integer | integer | requirearg | `registry/core/prim_strings.go:240` |
 | `syntax->datum` | 0 | any | github.com/aalpar/wile/internal/syntax.SyntaxValue | typeassert | `registry/core/prim_syntax.go:43` |
+| `textual-port?` | 0 | any | github.com/aalpar/wile/values.TextualReader, github.com/aalpar/wile/values.TextualWriter | typeassert | `internal/extensions/io/prim_ports.go:207` |
 | `thread-join!` | 0 | any | *github.com/aalpar/wile/values.Thread | requirearg | `extensions/threads/prim_threads.go:261` |
 | `thread-name` | 0 | any | *github.com/aalpar/wile/values.Thread | requirearg | `extensions/threads/prim_threads.go:153` |
+| `thread-sleep!` | 0 | any | *github.com/aalpar/wile/values.Time, integer, flonum | typeassert | `extensions/threads/prim_threads.go:220` |
 | `thread-specific` | 0 | any | *github.com/aalpar/wile/values.Thread | requirearg | `extensions/threads/prim_threads.go:164` |
 | `thread-specific-set!` | 0 | any | *github.com/aalpar/wile/values.Thread | requirearg | `extensions/threads/prim_threads.go:180` |
 | `thread-start!` | 0 | any | *github.com/aalpar/wile/values.Thread | requirearg | `extensions/threads/prim_threads.go:194` |
@@ -326,20 +334,15 @@ Declared is wider than scanned (e.g., TypeAny where impl strictly requires TypeS
 | `wait-group-add!` | 0 | any | *github.com/aalpar/wile/values.WaitGroup | requirearg | `extensions/gointerop/prim_gointerop.go:227` |
 | `wait-group-done!` | 0 | any | *github.com/aalpar/wile/values.WaitGroup | requirearg | `extensions/gointerop/prim_gointerop.go:245` |
 | `wait-group-wait!` | 0 | any | *github.com/aalpar/wile/values.WaitGroup | requirearg | `extensions/gointerop/prim_gointerop.go:258` |
-| `with-exception-handler` | 0 | procedure | github.com/aalpar/wile/values.Callable | requirearg | `registry/core/prim_exceptions.go:30` |
-| `with-exception-handler` | 1 | procedure | github.com/aalpar/wile/values.Callable | requirearg | `registry/core/prim_exceptions.go:30` |
 
-## Union (19)
+## Union (13)
 
 Scanned accepts multiple types; no single ValueType covers the union. Feeds TypeUnion / TypeMaybe extension evidence.
 
 | Primitive | Slot | Declared | Scanned | Source | go-source |
 |---|---|---|---|---|---|
 | `angle` | 0 | number | complex, integer, flonum, rational | typeassert | `extensions/math/prim_complex.go:231` |
-| `binary-port?` | 0 | any | github.com/aalpar/wile/values.BinaryReader, github.com/aalpar/wile/values.BinaryWriter | typeassert | `internal/extensions/io/prim_ports.go:217` |
-| `datum->syntax` | 0 | any | *github.com/aalpar/wile/internal/syntax.SyntaxSymbol, github.com/aalpar/wile/internal/syntax.SyntaxValue | typeassert | `registry/core/prim_syntax.go:62` |
 | `denominator` | 0 | real | integer, rational, flonum | typeassert | `extensions/math/prim_rational.go:64` |
-| `disassemble` | 0 | procedure | *github.com/aalpar/wile/machine.MachineClosure, *github.com/aalpar/wile/machine.CaseLambdaClosure, *github.com/aalpar/wile/machine.ForeignClosure | typeassert | `extensions/introspection/prim_disassemble.go:25` |
 | `imag-part` | 0 | number | complex, integer, rational, flonum | typeassert | `extensions/math/prim_complex.go:181` |
 | `magnitude` | 0 | number | complex, integer, flonum, rational | typeassert | `extensions/math/prim_complex.go:200` |
 | `make-rectangular` | 0 | real | number, flonum | typeassert | `extensions/math/prim_complex.go:29` |
@@ -349,11 +352,8 @@ Scanned accepts multiple types; no single ValueType covers the union. Feeds Type
 | `rationalize` | 0 | real | integer, rational, flonum | typeassert | `extensions/math/prim_rational.go:101` |
 | `rationalize` | 1 | real | integer, rational, flonum | typeassert | `extensions/math/prim_rational.go:101` |
 | `real-part` | 0 | number | complex, integer, flonum, rational | typeassert | `extensions/math/prim_complex.go:164` |
-| `real?` | 0 | any | real, complex | typeassert | `registry/core/prim_predicates.go:133` |
 | `seconds->time` | 0 | number | integer, flonum | typeassert | `extensions/threads/prim_threads.go:631` |
 | `sqrt` | 0 | number | integer, flonum, rational, complex | typeassert | `extensions/math/prim_transcendental.go:117` |
-| `textual-port?` | 0 | any | github.com/aalpar/wile/values.TextualReader, github.com/aalpar/wile/values.TextualWriter | typeassert | `internal/extensions/io/prim_ports.go:207` |
-| `thread-sleep!` | 0 | any | *github.com/aalpar/wile/values.Time, integer, flonum | typeassert | `extensions/threads/prim_threads.go:220` |
 
 ## Variadic-rest (93)
 

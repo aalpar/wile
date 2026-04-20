@@ -374,6 +374,19 @@
     ("github.com/aalpar/wile/values.ByteVectorOutputPort" . "binary-output-port")
     ("github.com/aalpar/wile/values.MachineClosure"      . "procedure")
     ("github.com/aalpar/wile/values.CaseLambdaClosure"   . "procedure")
+    ;; Procedure-class interfaces + machine-level closure types. In Wile,
+    ;; anything Callable is exposed as `procedure` at the Scheme level.
+    ("github.com/aalpar/wile/values.Callable"            . "procedure")
+    ("github.com/aalpar/wile/machine.MachineClosure"     . "procedure")
+    ("github.com/aalpar/wile/machine.CaseLambdaClosure"  . "procedure")
+    ("github.com/aalpar/wile/machine.ForeignClosure"     . "procedure")
+    ("github.com/aalpar/wile/machine.Parameter"          . "procedure")
+    ;; Port interfaces — map to the generic port family, relying on
+    ;; narrower? to relate textual/binary variants when appropriate.
+    ("github.com/aalpar/wile/values.InputPort"           . "input-port")
+    ("github.com/aalpar/wile/values.OutputPort"          . "output-port")
+    ("github.com/aalpar/wile/values.Port"                . "port")
+    ("github.com/aalpar/wile/values.ByteVectorExtractor" . "binary-output-port")
     ("github.com/aalpar/wile/values.Value"               . "any")
     ("github.com/aalpar/wile/values.Record"              . "record")
     ("github.com/aalpar/wile/values.RecordType"          . "record-type")
@@ -504,10 +517,13 @@
 ;;   Unguarded           — no gate detected
 ;;   Variadic-rest       — rest slot; analysis done per-element (aggregated)
 
-;; Very rough type-narrower-than test: real < number, integer < real < number,
-;; etc. Tightening this is its own subtask — the initial pass uses equality
-;; and a small precedence table. Unknown relationships classify as "unrelated"
-;; which falls into Declared-too-wide if declared is "any" else Union.
+;; Rough type-narrower-than test: real < number, integer < real < number,
+;; pair < list, {textual,binary}-{input,output}-port < {input,output}-port <
+;; port, etc. Tightening this is its own subtask — the initial pass uses
+;; equality and a small precedence table. Relationships outside the table
+;; are conservatively classified as Declared-too-wide (not Union) because
+;; the analyzer cannot confirm alignment and treating "don't know" as
+;; "type-system gap" would inflate the Union bucket with noise.
 
 (define narrow-than-table
   ;; (narrower . wider) pairs; transitively closed below.
@@ -548,6 +564,23 @@
       (narrower? a b)
       (narrower? b a)))
 
+;; covers? — does declared subsume scanned? True if declared="any", declared
+;; equals scanned, or declared is a strict ancestor of scanned.
+(define (covers? declared scanned)
+  (or (string=? declared "any")
+      (string=? declared scanned)
+      (narrower? scanned declared)))
+
+;; covers-all? — does declared cover every scanned type in the union?
+;; Used to distinguish "declared-any-over-a-union" (Declared-too-wide) from
+;; "real type-system gap" (Union).
+(define (covers-all? declared scanned-types)
+  (let loop ((ts scanned-types))
+    (cond
+      ((null? ts) #t)
+      ((covers? declared (car ts)) (loop (cdr ts)))
+      (else #f))))
+
 ;; classify-slot returns a bucket symbol.
 ;;   declared: single type-name string (or "any")
 ;;   gate:     result of derive-slot-gate — alist
@@ -581,6 +614,12 @@
               ((narrower? scanned declared) 'Declared-too-wide)
               ;; no relation: conservatively declared-too-wide (analyzer uncertain)
               (else 'Declared-too-wide))))
+         ;; Multi-type: if declared covers every scanned member, the union is
+         ;; representable by the existing declared type (predicate dispatch,
+         ;; TypeAny-with-variant-branches). That's imprecise but sound —
+         ;; bucket as Declared-too-wide. Only when declared fails to cover
+         ;; the full union is it a genuine type-system gap → Union.
+         ((covers-all? declared types) 'Declared-too-wide)
          (else 'Union))))))
 
 ;; ---------------------------------------------------------------------------
@@ -714,7 +753,7 @@
 (define bucket-descriptions
   '((Single-strict       . "Single strict gate (RequireArg[*T]), declared matches scanned. Clean.")
     (Single-coercing     . "Single coercing extractor/delegator, declared matches accepted domain. Clean.")
-    (Declared-too-narrow . "Declared ValueType is strictly narrower than scanned accepted domain. **Unsound under Phase-2 enforcement — valid calls would be rejected.** High priority for Phase 5.D cleanup.")
+    (Declared-too-narrow . "Declared ValueType is strictly narrower than scanned accepted domain. **Potentially unsound under Phase-2 enforcement** — but note: v1 analyzer does not trace post-gate filters, so entries using `RequireArg[Wider] + in-body filter` (e.g., `abs`, `make-polar` using `RequireArg[Number]` + `isRealNumber` reject) are false positives — the declared type matches the *effective* post-filter domain. Manual review required per entry before any annotation change.")
     (Declared-too-wide   . "Declared is wider than scanned (e.g., TypeAny where impl strictly requires TypeString). Imprecise but sound. Lower-priority tightening.")
     (Union               . "Scanned accepts multiple types; no single ValueType covers the union. Feeds TypeUnion / TypeMaybe extension evidence.")
     (Variadic-rest       . "Rest slot; analysis applies per-element. Aggregate stats computed separately.")
@@ -750,6 +789,17 @@
   (let ((hit (assq b groups)))
     (if hit (reverse (cdr hit)) '())))
 
+;; pct-string formats n/total as "X%", or "<1%" for small non-zero ratios
+;; (prevents signal loss on buckets like 3/476 which truncate to 0%).
+(define (pct-string n total)
+  (cond
+    ((or (= total 0) (= n 0)) "0%")
+    (else
+     (let ((pct (quotient (* n 100) total)))
+       (cond
+         ((= pct 0) "<1%")
+         (else (string-append (number->string pct) "%")))))))
+
 (define (display-list-joined port xs sep)
   (let loop ((xs xs) (first? #t))
     (cond
@@ -774,12 +824,11 @@
     (for-each
       (lambda (b)
         (let* ((slots (bucket-slots groups b))
-               (n (length slots))
-               (pct (if (= n-slots 0) 0 (quotient (* n 100) n-slots))))
+               (n (length slots)))
           (display "| " port) (display b port)
           (display " | " port) (display n port)
-          (display " | " port) (display pct port)
-          (display "% |\n" port)))
+          (display " | " port) (display (pct-string n n-slots) port)
+          (display " |\n" port)))
       bucket-order)
     (newline port)
     (for-each
@@ -838,7 +887,7 @@
     (let ((unguarded (length (bucket-slots groups 'Unguarded))))
       (when (> n-slots 0)
         (let ((pct (quotient (* unguarded 100) n-slots)))
-          (display "\nUnguarded: ") (display pct) (display "% ")
+          (display "\nUnguarded: ") (display (pct-string unguarded n-slots)) (display " ")
           (cond
             ((> pct 30)
              (display "— EXCEEDS KILL CRITERION (30%) — expand extractor table\n"))
