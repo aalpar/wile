@@ -242,7 +242,7 @@
   (declared-return-type "any")
   (narrowed-return-types ())
   (confidence widened)
-  (reasons (interface-method-dispatch))
+  (reasons (callee-no-returns slice-deref-load))
   (bucket Helper-widened))
 (primitive
   (name "cdr")
@@ -252,7 +252,7 @@
   (declared-return-type "any")
   (narrowed-return-types ())
   (confidence widened)
-  (reasons (interface-method-dispatch))
+  (reasons (callee-no-returns slice-deref-load))
   (bucket Helper-widened))
 (primitive
   (name "set-car!")
@@ -298,7 +298,7 @@
   (name "append")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimAppend")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:78"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:81"))
   (declared-return-type "list")
   (narrowed-return-types ("list" "pair"))
   (confidence widened)
@@ -308,7 +308,7 @@
   (name "reverse")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimReverse")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:135"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:138"))
   (declared-return-type "list")
   (narrowed-return-types ("list"))
   (confidence narrow)
@@ -318,7 +318,7 @@
   (name "length")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimLength")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:162"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:165"))
   (declared-return-type "exact-integer")
   (narrowed-return-types ("integer"))
   (confidence narrow)
@@ -328,17 +328,17 @@
   (name "list-ref")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimListRef")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:190"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:193"))
   (declared-return-type "any")
   (narrowed-return-types ())
   (confidence widened)
-  (reasons (interface-method-dispatch))
+  (reasons (callee-no-returns slice-deref-load))
   (bucket Helper-widened))
 (primitive
   (name "list-set!")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimListSet")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:223"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:226"))
   (declared-return-type "void")
   (narrowed-return-types ("github.com/aalpar/wile/values.voidType"))
   (confidence narrow)
@@ -348,27 +348,27 @@
   (name "list-tail")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimListTail")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:257"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:260"))
   (declared-return-type "any")
-  (narrowed-return-types ("list"))
+  (narrowed-return-types ("github.com/aalpar/wile/values.voidType" "list"))
   (confidence widened)
-  (reasons (interface-method-dispatch interface-result))
+  (reasons (parameter interface-result callee-no-returns slice-deref-load))
   (bucket Helper-widened))
 (primitive
   (name "list-copy")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimListCopy")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:299"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:302"))
   (declared-return-type "list")
-  (narrowed-return-types ("list" "pair"))
+  (narrowed-return-types ("list" "github.com/aalpar/wile/values.voidType" "pair"))
   (confidence widened)
-  (reasons (interface-method-dispatch cycle nil-constant))
+  (reasons (parameter cycle nil-constant))
   (bucket Helper-widened))
 (primitive
   (name "memq")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimMemq")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:343"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:346"))
   (declared-return-type "any")
   (narrowed-return-types ())
   (confidence no-paths)
@@ -378,7 +378,7 @@
   (name "memv")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimMemv")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:349"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:352"))
   (declared-return-type "any")
   (narrowed-return-types ())
   (confidence no-paths)
@@ -388,7 +388,7 @@
   (name "assq")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimAssq")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:354"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:357"))
   (declared-return-type "any")
   (narrowed-return-types ())
   (confidence no-paths)
@@ -398,7 +398,7 @@
   (name "assv")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimAssv")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:359"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_lists.go:362"))
   (declared-return-type "any")
   (narrowed-return-types ())
   (confidence no-paths)
@@ -500,10 +500,10 @@
     (go-function "github.com/aalpar/wile/registry/core.PrimAbs")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_arithmetic.go:176"))
   (declared-return-type "real")
-  (narrowed-return-types ())
-  (confidence widened)
-  (reasons (interface-method-dispatch))
-  (bucket Helper-widened))
+  (narrowed-return-types ("flonum" "integer" "rational"))
+  (confidence narrow)
+  (reasons ())
+  (bucket Narrow-union))
 (primitive
   (name "min")
   (impl
@@ -529,7 +529,7 @@
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimQuotient")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_arithmetic.go:266"))
-  (declared-return-type "integer")
+  (declared-return-type "real")
   (narrowed-return-types ())
   (confidence no-paths)
   (reasons ())
@@ -539,7 +539,7 @@
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimRemainder")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_arithmetic.go:277"))
-  (declared-return-type "integer")
+  (declared-return-type "real")
   (narrowed-return-types ())
   (confidence no-paths)
   (reasons ())
@@ -549,7 +549,7 @@
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimModulo")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_arithmetic.go:308"))
-  (declared-return-type "integer")
+  (declared-return-type "real")
   (narrowed-return-types ())
   (confidence no-paths)
   (reasons ())
@@ -559,7 +559,7 @@
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimGcd")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_arithmetic.go:313"))
-  (declared-return-type "integer")
+  (declared-return-type "real")
   (narrowed-return-types ())
   (confidence no-paths)
   (reasons ())
@@ -569,7 +569,7 @@
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimLcm")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_arithmetic.go:320"))
-  (declared-return-type "integer")
+  (declared-return-type "real")
   (narrowed-return-types ())
   (confidence no-paths)
   (reasons ())
@@ -580,40 +580,40 @@
     (go-function "github.com/aalpar/wile/registry/core.PrimExact")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_arithmetic.go:340"))
   (declared-return-type "number")
-  (narrowed-return-types ())
-  (confidence widened)
-  (reasons (interface-method-dispatch))
-  (bucket Helper-widened))
+  (narrowed-return-types ("(github.com/aalpar/wile/values.Number, error)"))
+  (confidence narrow)
+  (reasons ())
+  (bucket Single))
 (primitive
   (name "inexact")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimInexact")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_arithmetic.go:358"))
   (declared-return-type "number")
-  (narrowed-return-types ())
-  (confidence widened)
-  (reasons (interface-method-dispatch))
-  (bucket Helper-widened))
+  (narrowed-return-types ("complex" "flonum"))
+  (confidence narrow)
+  (reasons ())
+  (bucket Narrow-union))
 (primitive
   (name "exact->inexact")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimInexact")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_arithmetic.go:358"))
   (declared-return-type "number")
-  (narrowed-return-types ())
-  (confidence widened)
-  (reasons (interface-method-dispatch))
-  (bucket Helper-widened))
+  (narrowed-return-types ("complex" "flonum"))
+  (confidence narrow)
+  (reasons ())
+  (bucket Narrow-union))
 (primitive
   (name "inexact->exact")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimExact")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_arithmetic.go:340"))
   (declared-return-type "number")
-  (narrowed-return-types ())
-  (confidence widened)
-  (reasons (interface-method-dispatch))
-  (bucket Helper-widened))
+  (narrowed-return-types ("(github.com/aalpar/wile/values.Number, error)"))
+  (confidence narrow)
+  (reasons ())
+  (bucket Single))
 (primitive
   (name "apply")
   (impl
@@ -670,9 +670,9 @@
     (go-function "github.com/aalpar/wile/registry/core.PrimValues")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_control.go:294"))
   (declared-return-type "any")
-  (narrowed-return-types ())
+  (narrowed-return-types ("[]github.com/aalpar/wile/values.Value"))
   (confidence widened)
-  (reasons (narrow-error nil-constant unresolvable-callee))
+  (reasons (narrow-error nil-constant))
   (bucket Helper-widened))
 (primitive
   (name "call-with-values")
@@ -888,7 +888,7 @@
   (name "vector")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimVector")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:48"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:51"))
   (declared-return-type "vector")
   (narrowed-return-types ())
   (confidence no-paths)
@@ -898,7 +898,7 @@
   (name "vector-length")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimVectorLength")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:54"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:57"))
   (declared-return-type "exact-integer")
   (narrowed-return-types ())
   (confidence no-paths)
@@ -908,7 +908,7 @@
   (name "vector-ref")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimVectorRef")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:61"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:64"))
   (declared-return-type "any")
   (narrowed-return-types ())
   (confidence no-paths)
@@ -918,7 +918,7 @@
   (name "vector-set!")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimVectorSet")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:70"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:73"))
   (declared-return-type "void")
   (narrowed-return-types ())
   (confidence no-paths)
@@ -928,7 +928,7 @@
   (name "vector->list")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimVectorToList")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:81"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:84"))
   (declared-return-type "list")
   (narrowed-return-types ("pair" "list"))
   (confidence narrow)
@@ -938,7 +938,7 @@
   (name "list->vector")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimListToVector")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:98"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:101"))
   (declared-return-type "vector")
   (narrowed-return-types ())
   (confidence no-paths)
@@ -948,7 +948,7 @@
   (name "vector-copy")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimVectorCopy")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:105"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:108"))
   (declared-return-type "vector")
   (narrowed-return-types ("vector"))
   (confidence narrow)
@@ -958,7 +958,7 @@
   (name "vector-copy!")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimVectorCopyTo")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:128"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:131"))
   (declared-return-type "void")
   (narrowed-return-types ("github.com/aalpar/wile/values.voidType"))
   (confidence narrow)
@@ -968,7 +968,7 @@
   (name "vector-fill!")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimVectorFill")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:171"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:174"))
   (declared-return-type "void")
   (narrowed-return-types ("github.com/aalpar/wile/values.voidType"))
   (confidence narrow)
@@ -978,7 +978,7 @@
   (name "vector-append")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimVectorAppend")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:195"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:198"))
   (declared-return-type "vector")
   (narrowed-return-types ("vector"))
   (confidence narrow)
@@ -988,7 +988,7 @@
   (name "vector->string")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimVectorToString")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:220"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:223"))
   (declared-return-type "string")
   (narrowed-return-types ("string"))
   (confidence narrow)
@@ -998,7 +998,7 @@
   (name "string->vector")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimStringToVector")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:249"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_vectors.go:252"))
   (declared-return-type "vector")
   (narrowed-return-types ("vector"))
   (confidence narrow)
@@ -1248,7 +1248,7 @@
   (name "make-bytevector")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimMakeBytevector")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_byte_vectors.go:28"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_byte_vectors.go:29"))
   (declared-return-type "bytevector")
   (narrowed-return-types ("bytevector"))
   (confidence narrow)
@@ -1258,7 +1258,7 @@
   (name "bytevector")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimBytevector")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_byte_vectors.go:55"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_byte_vectors.go:56"))
   (declared-return-type "bytevector")
   (narrowed-return-types ("bytevector"))
   (confidence narrow)
@@ -1268,7 +1268,7 @@
   (name "bytevector-length")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimBytevectorLength")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_byte_vectors.go:92"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_byte_vectors.go:93"))
   (declared-return-type "exact-integer")
   (narrowed-return-types ())
   (confidence no-paths)
@@ -1278,7 +1278,7 @@
   (name "bytevector-u8-ref")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimBytevectorU8Ref")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_byte_vectors.go:98"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_byte_vectors.go:99"))
   (declared-return-type "integer")
   (narrowed-return-types ())
   (confidence no-paths)
@@ -1288,7 +1288,7 @@
   (name "bytevector-u8-set!")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimBytevectorU8Set")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_byte_vectors.go:108"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_byte_vectors.go:109"))
   (declared-return-type "void")
   (narrowed-return-types ())
   (confidence no-paths)
@@ -1298,7 +1298,7 @@
   (name "bytevector-copy")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimBytevectorCopy")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_byte_vectors.go:127"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_byte_vectors.go:128"))
   (declared-return-type "bytevector")
   (narrowed-return-types ("bytevector"))
   (confidence narrow)
@@ -1308,7 +1308,7 @@
   (name "bytevector-copy!")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimBytevectorCopyBang")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_byte_vectors.go:147"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_byte_vectors.go:148"))
   (declared-return-type "void")
   (narrowed-return-types ("github.com/aalpar/wile/values.voidType"))
   (confidence narrow)
@@ -1318,7 +1318,7 @@
   (name "bytevector-append")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimBytevectorAppend")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_byte_vectors.go:178"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_byte_vectors.go:179"))
   (declared-return-type "bytevector")
   (narrowed-return-types ("bytevector"))
   (confidence narrow)
@@ -1328,7 +1328,7 @@
   (name "utf8->string")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimUtf8ToString")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_byte_vectors.go:214"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_byte_vectors.go:215"))
   (declared-return-type "string")
   (narrowed-return-types ("string"))
   (confidence narrow)
@@ -1338,7 +1338,7 @@
   (name "string->utf8")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimStringToUtf8")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_byte_vectors.go:241"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_byte_vectors.go:247"))
   (declared-return-type "bytevector")
   (narrowed-return-types ("bytevector"))
   (confidence narrow)
@@ -1360,9 +1360,9 @@
     (go-function "github.com/aalpar/wile/registry/core.PrimSyntaxToDatum")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_syntax.go:43"))
   (declared-return-type "any")
-  (narrowed-return-types ())
+  (narrowed-return-types ("github.com/aalpar/wile/values.voidType" "(github.com/aalpar/wile/values.Value, bool)" "integer" "pair" "string" "symbol" "vector" "list"))
   (confidence widened)
-  (reasons (interface-method-dispatch))
+  (reasons (parameter cycle))
   (bucket Helper-widened))
 (primitive
   (name "datum->syntax")
@@ -1600,9 +1600,9 @@
     (go-function "github.com/aalpar/wile/registry/core.PrimUnbox")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_boxes.go:40"))
   (declared-return-type "any")
-  (narrowed-return-types ())
+  (narrowed-return-types ("github.com/aalpar/wile/values.voidType"))
   (confidence widened)
-  (reasons (field-deref-load))
+  (reasons (parameter))
   (bucket Helper-widened))
 (primitive
   (name "set-box!")
@@ -1662,7 +1662,7 @@
   (declared-return-type "any")
   (narrowed-return-types ("(github.com/aalpar/wile/values.Value, bool, error)"))
   (confidence widened)
-  (reasons (interface-method-dispatch))
+  (reasons (callee-no-returns slice-deref-load))
   (bucket Helper-widened))
 (primitive
   (name "hashtable-set!")
@@ -1800,10 +1800,10 @@
     (go-function "github.com/aalpar/wile/registry/core.PrimErrorObjectIrritants")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_exceptions.go:328"))
   (declared-return-type "list")
-  (narrowed-return-types ("list"))
-  (confidence widened)
-  (reasons (field-deref-load))
-  (bucket Helper-widened))
+  (narrowed-return-types ("pair" "list"))
+  (confidence narrow)
+  (reasons ())
+  (bucket Maybe))
 (primitive
   (name "read-error?")
   (impl
@@ -1892,7 +1892,7 @@
   (declared-return-type "list")
   (narrowed-return-types ("list"))
   (confidence widened)
-  (reasons (field-deref-load nil-constant))
+  (reasons (field-no-stores nil-constant))
   (bucket Helper-widened))
 (primitive
   (name "current-continuation-marks")
@@ -1908,7 +1908,7 @@
   (name "continuation-mark-set->list")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimContinuationMarkSetToList")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_cont_marks.go:43"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_cont_marks.go:45"))
   (declared-return-type "list")
   (narrowed-return-types ("pair" "list"))
   (confidence narrow)
@@ -1918,11 +1918,11 @@
   (name "continuation-mark-set-first")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimContinuationMarkSetFirst")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_cont_marks.go:54"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_cont_marks.go:56"))
   (declared-return-type "any")
   (narrowed-return-types ())
   (confidence widened)
-  (reasons (field-deref-load parameter))
+  (reasons (field-no-stores parameter))
   (bucket Helper-widened))
 (primitive
   (name "continuation-mark-set?")
@@ -1938,7 +1938,7 @@
   (name "call-with-immediate-continuation-mark")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimCallWithImmediateContMark")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_cont_marks.go:151"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_cont_marks.go:162"))
   (declared-return-type "any")
   (narrowed-return-types ("*github.com/aalpar/wile/machine.MachineContext"))
   (confidence narrow)
@@ -1948,7 +1948,7 @@
   (name "continuation-marks")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimContinuationMarks")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_cont_marks.go:118"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_cont_marks.go:126"))
   (declared-return-type "any")
   (narrowed-return-types ("*github.com/aalpar/wile/machine.ContinuationMarkSet"))
   (confidence narrow)
@@ -1968,7 +1968,7 @@
   (name "continuation-mark-set->list*")
   (impl
     (go-function "github.com/aalpar/wile/registry/core.PrimContinuationMarkSetToListStar")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_cont_marks.go:76"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/core/prim_cont_marks.go:81"))
   (declared-return-type "list")
   (narrowed-return-types ("pair" "list"))
   (confidence narrow)
@@ -1992,7 +1992,7 @@
   (declared-return-type "any")
   (narrowed-return-types ("(github.com/aalpar/wile/values.Value, bool)" "integer" "pair" "string" "symbol" "vector" "list" "github.com/aalpar/wile/values.voidType" "github.com/aalpar/wile/values.eofType"))
   (confidence widened)
-  (reasons (cycle field-deref-load interface-method-dispatch))
+  (reasons (cycle parameter))
   (bucket Helper-widened))
 (primitive
   (name "read-token")
@@ -2809,7 +2809,7 @@
   (impl
     (go-function "github.com/aalpar/wile/extensions/math.PrimMakePolar")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/extensions/math/prim_complex.go:142"))
-  (declared-return-type "number")
+  (declared-return-type "complex")
   (narrowed-return-types ("complex"))
   (confidence narrow)
   (reasons ())
@@ -2820,9 +2820,9 @@
     (go-function "github.com/aalpar/wile/extensions/math.PrimRealPart")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/extensions/math/prim_complex.go:164"))
   (declared-return-type "real")
-  (narrowed-return-types ())
+  (narrowed-return-types ("flonum" "integer" "github.com/aalpar/wile/values.voidType"))
   (confidence widened)
-  (reasons (interface-method-dispatch))
+  (reasons (parameter))
   (bucket Helper-widened))
 (primitive
   (name "imag-part")
@@ -2830,9 +2830,9 @@
     (go-function "github.com/aalpar/wile/extensions/math.PrimImagPart")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/extensions/math/prim_complex.go:181"))
   (declared-return-type "real")
-  (narrowed-return-types ("integer" "flonum"))
+  (narrowed-return-types ("flonum" "integer"))
   (confidence widened)
-  (reasons (interface-method-dispatch))
+  (reasons (parameter))
   (bucket Helper-widened))
 (primitive
   (name "magnitude")
@@ -2849,7 +2849,7 @@
   (impl
     (go-function "github.com/aalpar/wile/extensions/math.PrimAngle")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/extensions/math/prim_complex.go:231"))
-  (declared-return-type "real")
+  (declared-return-type "flonum")
   (narrowed-return-types ("flonum"))
   (confidence narrow)
   (reasons ())
@@ -2910,9 +2910,9 @@
     (go-function "github.com/aalpar/wile/extensions/introspection.PrimEnvironmentRef")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/extensions/introspection/prim_introspection.go:71"))
   (declared-return-type "any")
-  (narrowed-return-types ())
+  (narrowed-return-types ("github.com/aalpar/wile/values.voidType"))
   (confidence widened)
-  (reasons (field-deref-load))
+  (reasons (parameter))
   (bucket Helper-widened))
 (primitive
   (name "environment-bound?")
@@ -3170,9 +3170,9 @@
     (go-function "github.com/aalpar/wile/internal/extensions/namespace.PrimNamespaceRef")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/namespace/prim_namespace.go:147"))
   (declared-return-type "any")
-  (narrowed-return-types ())
+  (narrowed-return-types ("github.com/aalpar/wile/values.voidType"))
   (confidence widened)
-  (reasons (field-deref-load interface-method-dispatch nil-constant))
+  (reasons (parameter callee-no-returns nil-constant slice-deref-load))
   (bucket Helper-widened))
 (primitive
   (name "namespace-bound?")
@@ -3220,10 +3220,10 @@
     (go-function "github.com/aalpar/wile/extensions/threads.PrimCurrentThread")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/extensions/threads/prim_threads.go:83"))
   (declared-return-type "any")
-  (narrowed-return-types ("symbol"))
-  (confidence widened)
-  (reasons (interface-method-dispatch))
-  (bucket Helper-widened))
+  (narrowed-return-types ("symbol" "*github.com/aalpar/wile/values.Thread"))
+  (confidence narrow)
+  (reasons ())
+  (bucket Narrow-union))
 (primitive
   (name "thread?")
   (impl
@@ -3249,7 +3249,7 @@
   (impl
     (go-function "github.com/aalpar/wile/extensions/threads.PrimThreadName")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/extensions/threads/prim_threads.go:153"))
-  (declared-return-type "any")
+  (declared-return-type "string")
   (narrowed-return-types ("string"))
   (confidence narrow)
   (reasons ())
@@ -3262,7 +3262,7 @@
   (declared-return-type "any")
   (narrowed-return-types ("github.com/aalpar/wile/values.voidType"))
   (confidence widened)
-  (reasons (field-deref-load))
+  (reasons (field-no-stores))
   (bucket Helper-widened))
 (primitive
   (name "thread-specific-set!")
@@ -3322,7 +3322,7 @@
   (declared-return-type "any")
   (narrowed-return-types ("github.com/aalpar/wile/values.voidType" "(github.com/aalpar/wile/values.Value, error)"))
   (confidence widened)
-  (reasons (interface-method-dispatch nil-constant))
+  (reasons (callee-no-returns nil-constant slice-deref-load))
   (bucket Helper-widened))
 (primitive
   (name "mutex?")
@@ -3349,7 +3349,7 @@
   (impl
     (go-function "github.com/aalpar/wile/extensions/threads.PrimMutexName")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/extensions/threads/prim_threads.go:341"))
-  (declared-return-type "any")
+  (declared-return-type "string")
   (narrowed-return-types ("string"))
   (confidence narrow)
   (reasons ())
@@ -3362,7 +3362,7 @@
   (declared-return-type "any")
   (narrowed-return-types ("github.com/aalpar/wile/values.voidType"))
   (confidence widened)
-  (reasons (field-deref-load))
+  (reasons (field-no-stores))
   (bucket Helper-widened))
 (primitive
   (name "mutex-specific-set!")
@@ -3429,7 +3429,7 @@
   (impl
     (go-function "github.com/aalpar/wile/extensions/threads.PrimConditionVariableName")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/extensions/threads/prim_threads.go:537"))
-  (declared-return-type "any")
+  (declared-return-type "string")
   (narrowed-return-types ("string"))
   (confidence narrow)
   (reasons ())
@@ -3442,7 +3442,7 @@
   (declared-return-type "any")
   (narrowed-return-types ("github.com/aalpar/wile/values.voidType"))
   (confidence widened)
-  (reasons (field-deref-load))
+  (reasons (field-no-stores))
   (bucket Helper-widened))
 (primitive
   (name "condition-variable-specific-set!")
@@ -3867,7 +3867,7 @@
 (primitive
   (name "record-type?")
   (impl
-    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeTypePredicate.func17")
+    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeTypePredicate.func18")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/helpers/type.go:26"))
   (declared-return-type "boolean")
   (narrowed-return-types ())
@@ -3877,7 +3877,7 @@
 (primitive
   (name "record?")
   (impl
-    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeTypePredicate.func18")
+    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeTypePredicate.func19")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/helpers/type.go:26"))
   (declared-return-type "boolean")
   (narrowed-return-types ())
@@ -3937,7 +3937,7 @@
 (primitive
   (name "promise?")
   (impl
-    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeTypePredicate.func19")
+    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeTypePredicate.func20")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/helpers/type.go:26"))
   (declared-return-type "boolean")
   (narrowed-return-types ())
@@ -3988,7 +3988,7 @@
   (name "string-fill!")
   (impl
     (go-function "github.com/aalpar/wile/internal/extensions/all.PrimStringFill")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/all/prim_strings.go:117"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/all/prim_strings.go:94"))
   (declared-return-type "void")
   (narrowed-return-types ("github.com/aalpar/wile/values.voidType"))
   (confidence narrow)
@@ -3997,8 +3997,8 @@
 (primitive
   (name "string-upcase")
   (impl
-    (go-function "github.com/aalpar/wile/internal/extensions/all.init.makeStringCaser.func28")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/all/prim_strings.go:180"))
+    (go-function "github.com/aalpar/wile/internal/extensions/all.init.makeStringCaser.func29")
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/all/prim_strings.go:145"))
   (declared-return-type "string")
   (narrowed-return-types ())
   (confidence no-paths)
@@ -4007,8 +4007,8 @@
 (primitive
   (name "string-downcase")
   (impl
-    (go-function "github.com/aalpar/wile/internal/extensions/all.init.makeStringCaser.func29")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/all/prim_strings.go:180"))
+    (go-function "github.com/aalpar/wile/internal/extensions/all.init.makeStringCaser.func30")
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/all/prim_strings.go:145"))
   (declared-return-type "string")
   (narrowed-return-types ())
   (confidence no-paths)
@@ -4017,8 +4017,8 @@
 (primitive
   (name "string-foldcase")
   (impl
-    (go-function "github.com/aalpar/wile/internal/extensions/all.init.makeStringCaser.func30")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/all/prim_strings.go:180"))
+    (go-function "github.com/aalpar/wile/internal/extensions/all.init.makeStringCaser.func31")
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/all/prim_strings.go:145"))
   (declared-return-type "string")
   (narrowed-return-types ())
   (confidence no-paths)
@@ -4028,7 +4028,7 @@
   (name "string-ci=?")
   (impl
     (go-function "github.com/aalpar/wile/internal/extensions/all.addMoreStrings.makeStringCiComparePrimitive.func1")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/all/prim_strings.go:172"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/all/prim_strings.go:137"))
   (declared-return-type "boolean")
   (narrowed-return-types ())
   (confidence no-paths)
@@ -4038,7 +4038,7 @@
   (name "string-ci<?")
   (impl
     (go-function "github.com/aalpar/wile/internal/extensions/all.addMoreStrings.makeStringCiComparePrimitive.func1")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/all/prim_strings.go:172"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/all/prim_strings.go:137"))
   (declared-return-type "boolean")
   (narrowed-return-types ())
   (confidence no-paths)
@@ -4048,7 +4048,7 @@
   (name "string-ci>?")
   (impl
     (go-function "github.com/aalpar/wile/internal/extensions/all.addMoreStrings.makeStringCiComparePrimitive.func1")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/all/prim_strings.go:172"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/all/prim_strings.go:137"))
   (declared-return-type "boolean")
   (narrowed-return-types ())
   (confidence no-paths)
@@ -4058,7 +4058,7 @@
   (name "string-ci<=?")
   (impl
     (go-function "github.com/aalpar/wile/internal/extensions/all.addMoreStrings.makeStringCiComparePrimitive.func1")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/all/prim_strings.go:172"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/all/prim_strings.go:137"))
   (declared-return-type "boolean")
   (narrowed-return-types ())
   (confidence no-paths)
@@ -4068,7 +4068,7 @@
   (name "string-ci>=?")
   (impl
     (go-function "github.com/aalpar/wile/internal/extensions/all.addMoreStrings.makeStringCiComparePrimitive.func1")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/all/prim_strings.go:172"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/all/prim_strings.go:137"))
   (declared-return-type "boolean")
   (narrowed-return-types ())
   (confidence no-paths)
@@ -4127,7 +4127,7 @@
 (primitive
   (name "char-alphabetic?")
   (impl
-    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeCharPredicate.func20")
+    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeCharPredicate.func21")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/helpers/type.go:57"))
   (declared-return-type "boolean")
   (narrowed-return-types ())
@@ -4137,7 +4137,7 @@
 (primitive
   (name "char-numeric?")
   (impl
-    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeCharPredicate.func21")
+    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeCharPredicate.func22")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/helpers/type.go:57"))
   (declared-return-type "boolean")
   (narrowed-return-types ())
@@ -4147,7 +4147,7 @@
 (primitive
   (name "char-whitespace?")
   (impl
-    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeCharPredicate.func22")
+    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeCharPredicate.func23")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/helpers/type.go:57"))
   (declared-return-type "boolean")
   (narrowed-return-types ())
@@ -4157,7 +4157,7 @@
 (primitive
   (name "char-upper-case?")
   (impl
-    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeCharPredicate.func23")
+    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeCharPredicate.func24")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/helpers/type.go:57"))
   (declared-return-type "boolean")
   (narrowed-return-types ())
@@ -4167,7 +4167,7 @@
 (primitive
   (name "char-lower-case?")
   (impl
-    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeCharPredicate.func24")
+    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeCharPredicate.func25")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/helpers/type.go:57"))
   (declared-return-type "boolean")
   (narrowed-return-types ())
@@ -4177,7 +4177,7 @@
 (primitive
   (name "char-upcase")
   (impl
-    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeCharTransform.func25")
+    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeCharTransform.func26")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/helpers/type.go:70"))
   (declared-return-type "character")
   (narrowed-return-types ())
@@ -4187,7 +4187,7 @@
 (primitive
   (name "char-downcase")
   (impl
-    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeCharTransform.func26")
+    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeCharTransform.func27")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/helpers/type.go:70"))
   (declared-return-type "character")
   (narrowed-return-types ())
@@ -4197,7 +4197,7 @@
 (primitive
   (name "char-foldcase")
   (impl
-    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeCharTransform.func27")
+    (go-function "github.com/aalpar/wile/internal/extensions/all.init.MakeCharTransform.func28")
     (go-source "/Users/aalpar/projects/wile-workspace/wile/registry/helpers/type.go:70"))
   (declared-return-type "character")
   (narrowed-return-types ())
@@ -4208,7 +4208,7 @@
   (name "digit-value")
   (impl
     (go-function "github.com/aalpar/wile/internal/extensions/all.PrimDigitValue")
-    (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/all/prim_characters.go:87"))
+    (go-source "/Users/aalpar/projects/wile-workspace/wile/internal/extensions/all/prim_characters.go:98"))
   (declared-return-type "any")
   (narrowed-return-types ("boolean" "integer"))
   (confidence narrow)
@@ -4375,46 +4375,6 @@
   (reasons (cycle))
   (bucket Helper-widened))
 (primitive
-  (name "assoc")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "any")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
-  (name "for-each")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
-  (name "call-with-port")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "any")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
-  (name "caddr")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
   (name "cdaar")
   (impl
     (go-function "")
@@ -4425,11 +4385,21 @@
   (reasons ())
   (bucket Unresolved))
 (primitive
-  (name "caaadr")
+  (name "negative?")
   (impl
     (go-function "")
     (go-source ""))
-  (declared-return-type "")
+  (declared-return-type "boolean")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "not")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "boolean")
   (narrowed-return-types ())
   (confidence no-paths)
   (reasons ())
@@ -4445,17 +4415,7 @@
   (reasons ())
   (bucket Unresolved))
 (primitive
-  (name "vector-map")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "vector")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
-  (name "cdadr")
+  (name "caaddr")
   (impl
     (go-function "")
     (go-source ""))
@@ -4475,37 +4435,17 @@
   (reasons ())
   (bucket Unresolved))
 (primitive
-  (name "cddaar")
+  (name "sort")
   (impl
     (go-function "")
     (go-source ""))
-  (declared-return-type "")
+  (declared-return-type "list")
   (narrowed-return-types ())
   (confidence no-paths)
   (reasons ())
   (bucket Unresolved))
 (primitive
-  (name "cddddr")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
-  (name "caadar")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
-  (name "cdddr")
+  (name "cadddr")
   (impl
     (go-function "")
     (go-source ""))
@@ -4535,136 +4475,6 @@
   (reasons ())
   (bucket Unresolved))
 (primitive
-  (name "cddadr")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
-  (name "cadar")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
-  (name "negative?")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "boolean")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
-  (name "caddar")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
-  (name "cdadar")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
-  (name "cadddr")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
-  (name "vector-for-each")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
-  (name "sort")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "list")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
-  (name "exact-integer?")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "boolean")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
-  (name "cdar")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
-  (name "cdddar")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
-  (name "cadr")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
-  (name "cdaaar")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
   (name "string-for-each")
   (impl
     (go-function "")
@@ -4675,7 +4485,7 @@
   (reasons ())
   (bucket Unresolved))
 (primitive
-  (name "caaar")
+  (name "cddadr")
   (impl
     (go-function "")
     (go-source ""))
@@ -4685,7 +4495,17 @@
   (reasons ())
   (bucket Unresolved))
 (primitive
-  (name "cddr")
+  (name "assoc")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "any")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "cdddar")
   (impl
     (go-function "")
     (go-source ""))
@@ -4705,11 +4525,181 @@
   (reasons ())
   (bucket Unresolved))
 (primitive
+  (name "caar")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
   (name "cddar")
   (impl
     (go-function "")
     (go-source ""))
   (declared-return-type "")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "caaar")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "string-map")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "string")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "vector-for-each")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "caadr")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "for-each")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "cdar")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "exact-integer?")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "boolean")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "call-with-port")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "any")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "cddr")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "caddr")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "caadar")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "vector-map")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "vector")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "cdaadr")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "cddaar")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "symbol=?")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "boolean")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "map")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "list")
   (narrowed-return-types ())
   (confidence no-paths)
   (reasons ())
@@ -4725,7 +4715,7 @@
   (reasons ())
   (bucket Unresolved))
 (primitive
-  (name "caar")
+  (name "cdddr")
   (impl
     (go-function "")
     (go-source ""))
@@ -4755,17 +4745,7 @@
   (reasons ())
   (bucket Unresolved))
 (primitive
-  (name "map")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "list")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
-  (name "cdaadr")
+  (name "cadr")
   (impl
     (go-function "")
     (go-source ""))
@@ -4775,27 +4755,57 @@
   (reasons ())
   (bucket Unresolved))
 (primitive
-  (name "member")
+  (name "cddddr")
   (impl
     (go-function "")
     (go-source ""))
-  (declared-return-type "any")
+  (declared-return-type "")
   (narrowed-return-types ())
   (confidence no-paths)
   (reasons ())
   (bucket Unresolved))
 (primitive
-  (name "not")
+  (name "cdaaar")
   (impl
     (go-function "")
     (go-source ""))
-  (declared-return-type "boolean")
+  (declared-return-type "")
   (narrowed-return-types ())
   (confidence no-paths)
   (reasons ())
   (bucket Unresolved))
 (primitive
-  (name "caadr")
+  (name "cdadar")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "caddar")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "cadar")
+  (impl
+    (go-function "")
+    (go-source ""))
+  (declared-return-type "")
+  (narrowed-return-types ())
+  (confidence no-paths)
+  (reasons ())
+  (bucket Unresolved))
+(primitive
+  (name "cdadr")
   (impl
     (go-function "")
     (go-source ""))
@@ -4815,17 +4825,7 @@
   (reasons ())
   (bucket Unresolved))
 (primitive
-  (name "symbol=?")
-  (impl
-    (go-function "")
-    (go-source ""))
-  (declared-return-type "boolean")
-  (narrowed-return-types ())
-  (confidence no-paths)
-  (reasons ())
-  (bucket Unresolved))
-(primitive
-  (name "caaddr")
+  (name "caaadr")
   (impl
     (go-function "")
     (go-source ""))
@@ -4835,11 +4835,11 @@
   (reasons ())
   (bucket Unresolved))
 (primitive
-  (name "string-map")
+  (name "member")
   (impl
     (go-function "")
     (go-source ""))
-  (declared-return-type "string")
+  (declared-return-type "any")
   (narrowed-return-types ())
   (confidence no-paths)
   (reasons ())

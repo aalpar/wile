@@ -6,15 +6,15 @@ Total primitives analyzed: 500
 
 | Bucket | Count |
 |---|---|
-| Single | 215 |
-| Maybe | 32 |
-| Narrow-union | 22 |
+| Single | 217 |
+| Maybe | 33 |
+| Narrow-union | 26 |
 | Broad-union | 3 |
-| Helper-widened | 36 |
+| Helper-widened | 29 |
 | Side-effecting | 52 |
 | Unresolved | 140 |
 
-## Single (215)
+## Single (217)
 
 Exactly one concrete wile type across all paths — no type-system gap.
 
@@ -35,6 +35,8 @@ Exactly one concrete wile type across all paths — no type-system gap.
 | `reverse` | list | list | — |
 | `length` | exact-integer | integer | — |
 | `list-set!` | void | github.com/aalpar/wile/values.voidType | — |
+| `exact` | number | (github.com/aalpar/wile/values.Number, error) | — |
+| `inexact->exact` | number | (github.com/aalpar/wile/values.Number, error) | — |
 | `apply` | any | *github.com/aalpar/wile/machine.MachineContext | — |
 | `call-with-current-continuation` | any | *github.com/aalpar/wile/machine.MachineContext | — |
 | `call/cc` | any | *github.com/aalpar/wile/machine.MachineContext | — |
@@ -146,8 +148,8 @@ Exactly one concrete wile type across all paths — no type-system gap.
 | `infinite?` | boolean | boolean | — |
 | `nan?` | boolean | boolean | — |
 | `exact-integer-sqrt` |  | []github.com/aalpar/wile/values.Value | — |
-| `make-polar` | number | complex | — |
-| `angle` | real | flonum | — |
+| `make-polar` | complex | complex | — |
+| `angle` | flonum | flonum | — |
 | `number->string` | string | string | — |
 | `interaction-environment` | any | *github.com/aalpar/wile/environment.Namespace | — |
 | `environment-bound?` | boolean | boolean | — |
@@ -171,19 +173,19 @@ Exactly one concrete wile type across all paths — no type-system gap.
 | `namespace-undefine!` | void | github.com/aalpar/wile/values.voidType | — |
 | `namespace-require` | void | github.com/aalpar/wile/values.voidType | — |
 | `make-thread` | any | *github.com/aalpar/wile/machine.MachineContext | — |
-| `thread-name` | any | string | — |
+| `thread-name` | string | string | — |
 | `thread-specific-set!` | void | github.com/aalpar/wile/values.voidType | — |
 | `thread-start!` | any | *github.com/aalpar/wile/values.Thread | — |
 | `thread-yield!` | void | github.com/aalpar/wile/values.voidType | — |
 | `thread-sleep!` | void | github.com/aalpar/wile/values.voidType | — |
 | `thread-terminate!` | void | github.com/aalpar/wile/values.voidType | — |
 | `make-mutex` | any | *github.com/aalpar/wile/values.Mutex | — |
-| `mutex-name` | any | string | — |
+| `mutex-name` | string | string | — |
 | `mutex-specific-set!` | void | github.com/aalpar/wile/values.voidType | — |
 | `mutex-lock!` | boolean | boolean | — |
 | `mutex-unlock!` | boolean | boolean | — |
 | `make-condition-variable` | any | *github.com/aalpar/wile/values.ConditionVariable | — |
-| `condition-variable-name` | any | string | — |
+| `condition-variable-name` | string | string | — |
 | `condition-variable-specific-set!` | void | github.com/aalpar/wile/values.voidType | — |
 | `condition-variable-signal!` | void | github.com/aalpar/wile/values.voidType | — |
 | `condition-variable-broadcast!` | void | github.com/aalpar/wile/values.voidType | — |
@@ -236,7 +238,7 @@ Exactly one concrete wile type across all paths — no type-system gap.
 | `process-kill` | void | github.com/aalpar/wile/values.voidType | — |
 | `process?` | boolean | boolean | — |
 
-## Maybe (32)
+## Maybe (33)
 
 Two types where one is boolean (Racket #f-sentinel pattern) — candidate for Maybe(T) in TypeConstraint vocabulary.
 
@@ -257,6 +259,7 @@ Two types where one is boolean (Racket #f-sentinel pattern) — candidate for Ma
 | `syntax-source` | any | boolean, string | — |
 | `hashtable-keys` | list | pair, list | — |
 | `hashtable-values` | list | pair, list | — |
+| `error-object-irritants` | list | pair, list | — |
 | `error-context-source` | any | boolean, string | — |
 | `error-context-stack-trace` | list | pair, list | — |
 | `error-context-marks` | any | boolean, *github.com/aalpar/wile/machine.ContinuationMarkSet | — |
@@ -275,12 +278,15 @@ Two types where one is boolean (Racket #f-sentinel pattern) — candidate for Ma
 | `command-line` | list | pair, list | — |
 | `get-environment-variable` | any | string, boolean | — |
 
-## Narrow-union (22)
+## Narrow-union (26)
 
 2-3 distinct types — candidate for enumerated TypeUnion with small arity.
 
 | Primitive | Declared | Narrowed | Reasons |
 |---|---|---|---|
+| `abs` | real | flonum, integer, rational | — |
+| `inexact` | number | complex, flonum | — |
+| `exact->inexact` | number | complex, flonum | — |
 | `procedure-source-location` | any | boolean, pair, list | — |
 | `procedure-bound-symbols` | any | boolean, pair, list | — |
 | `syntax->list` | any | pair, list, boolean | — |
@@ -300,6 +306,7 @@ Two types where one is boolean (Racket #f-sentinel pattern) — candidate for Ma
 | `denominator` | real | integer, rational, flonum | — |
 | `rationalize` | real | flonum, rational, integer | — |
 | `magnitude` | real | flonum, integer, rational | — |
+| `current-thread` | any | symbol, *github.com/aalpar/wile/values.Thread | — |
 | `mutex-state` | any | symbol, *github.com/aalpar/wile/values.Thread | — |
 | `channel-receive` | any | github.com/aalpar/wile/values.voidType, (github.com/aalpar/wile/values.Value, bool) | — |
 | `string-copy!` | void | string, github.com/aalpar/wile/values.voidType | — |
@@ -314,45 +321,38 @@ Two types where one is boolean (Racket #f-sentinel pattern) — candidate for Ma
 | `sqrt` | number | complex, integer, flonum, rational | — |
 | `make-rectangular` | number | integer, rational, complex, (github.com/aalpar/wile/values.Number, error) | — |
 
-## Helper-widened (36)
+## Helper-widened (29)
 
 Analyzer couldn't narrow — typically interface-method dispatch, sub-context delegation, or helper return of interface-typed values. Not a type-system gap; an analysis-tool gap.
 
 | Primitive | Declared | Narrowed | Reasons |
 |---|---|---|---|
-| `car` | any | — | interface-method-dispatch |
-| `cdr` | any | — | interface-method-dispatch |
+| `car` | any | — | callee-no-returns, slice-deref-load |
+| `cdr` | any | — | callee-no-returns, slice-deref-load |
 | `append` | list | list, pair | cycle, slice-deref-load |
-| `list-ref` | any | — | interface-method-dispatch |
-| `list-tail` | any | list | interface-method-dispatch, interface-result |
-| `list-copy` | list | list, pair | interface-method-dispatch, cycle, nil-constant |
-| `abs` | real | — | interface-method-dispatch |
-| `exact` | number | — | interface-method-dispatch |
-| `inexact` | number | — | interface-method-dispatch |
-| `exact->inexact` | number | — | interface-method-dispatch |
-| `inexact->exact` | number | — | interface-method-dispatch |
-| `values` | any | — | narrow-error, nil-constant, unresolvable-callee |
-| `syntax->datum` | any | — | interface-method-dispatch |
+| `list-ref` | any | — | callee-no-returns, slice-deref-load |
+| `list-tail` | any | github.com/aalpar/wile/values.voidType, list | parameter, interface-result, callee-no-returns, slice-deref-load |
+| `list-copy` | list | list, github.com/aalpar/wile/values.voidType, pair | parameter, cycle, nil-constant |
+| `values` | any | []github.com/aalpar/wile/values.Value | narrow-error, nil-constant |
+| `syntax->datum` | any | github.com/aalpar/wile/values.voidType, (github.com/aalpar/wile/values.Value, bool), integer, pair, string, symbol, vector, list | parameter, cycle |
 | `datum->syntax` | any | *github.com/aalpar/wile/internal/syntax.SyntaxObject, *github.com/aalpar/wile/internal/syntax.SyntaxPair, *github.com/aalpar/wile/internal/syntax.SyntaxSymbol, *github.com/aalpar/wile/internal/syntax.SyntaxVector, *github.com/aalpar/wile/internal/syntax.syntaxEmptyListType | interface-result |
-| `unbox` | any | — | field-deref-load |
-| `hashtable-ref` | any | (github.com/aalpar/wile/values.Value, bool, error) | interface-method-dispatch |
-| `error-object-irritants` | list | list | field-deref-load |
-| `error-object-stack-trace` | list | list | field-deref-load, nil-constant |
-| `continuation-mark-set-first` | any | — | field-deref-load, parameter |
-| `read` | any | (github.com/aalpar/wile/values.Value, bool), integer, pair, string, symbol, vector, list, github.com/aalpar/wile/values.voidType, github.com/aalpar/wile/values.eofType | cycle, field-deref-load, interface-method-dispatch |
+| `unbox` | any | github.com/aalpar/wile/values.voidType | parameter |
+| `hashtable-ref` | any | (github.com/aalpar/wile/values.Value, bool, error) | callee-no-returns, slice-deref-load |
+| `error-object-stack-trace` | list | list | field-no-stores, nil-constant |
+| `continuation-mark-set-first` | any | — | field-no-stores, parameter |
+| `read` | any | (github.com/aalpar/wile/values.Value, bool), integer, pair, string, symbol, vector, list, github.com/aalpar/wile/values.voidType, github.com/aalpar/wile/values.eofType | cycle, parameter |
 | `read-token` | any | github.com/aalpar/wile/values.eofType | interface-result |
 | `directory-files` | list | pair, list | cycle |
 | `expt` | number | integer, complex, flonum | cycle, parameter |
-| `real-part` | real | — | interface-method-dispatch |
-| `imag-part` | real | integer, flonum | interface-method-dispatch |
+| `real-part` | real | flonum, integer, github.com/aalpar/wile/values.voidType | parameter |
+| `imag-part` | real | flonum, integer | parameter |
 | `string->number` | any | boolean, (github.com/aalpar/wile/values.Number, bool), integer, flonum | cycle, nil-constant, parameter |
-| `environment-ref` | any | — | field-deref-load |
-| `namespace-ref` | any | — | field-deref-load, interface-method-dispatch, nil-constant |
-| `current-thread` | any | symbol | interface-method-dispatch |
-| `thread-specific` | any | github.com/aalpar/wile/values.voidType | field-deref-load |
-| `thread-join!` | any | github.com/aalpar/wile/values.voidType, (github.com/aalpar/wile/values.Value, error) | interface-method-dispatch, nil-constant |
-| `mutex-specific` | any | github.com/aalpar/wile/values.voidType | field-deref-load |
-| `condition-variable-specific` | any | github.com/aalpar/wile/values.voidType | field-deref-load |
+| `environment-ref` | any | github.com/aalpar/wile/values.voidType | parameter |
+| `namespace-ref` | any | github.com/aalpar/wile/values.voidType | parameter, callee-no-returns, nil-constant, slice-deref-load |
+| `thread-specific` | any | github.com/aalpar/wile/values.voidType | field-no-stores |
+| `thread-join!` | any | github.com/aalpar/wile/values.voidType, (github.com/aalpar/wile/values.Value, error) | callee-no-returns, nil-constant, slice-deref-load |
+| `mutex-specific` | any | github.com/aalpar/wile/values.voidType | field-no-stores |
+| `condition-variable-specific` | any | github.com/aalpar/wile/values.voidType | field-no-stores |
 | `atomic-load` | any | github.com/aalpar/wile/values.voidType | interface-result, nil-constant |
 | `atomic-swap!` | any | github.com/aalpar/wile/values.voidType | interface-result, nil-constant |
 | `get-environment-variables` | list | pair, list | cycle |
@@ -380,11 +380,11 @@ No result-writing sink reached — likely error-only returns, panic-terminated p
 | `>=` | boolean | — | — |
 | `min` | real | — | — |
 | `max` | real | — | — |
-| `quotient` | integer | — | — |
-| `remainder` | integer | — | — |
-| `modulo` | integer | — | — |
-| `gcd` | integer | — | — |
-| `lcm` | integer | — | — |
+| `quotient` | real | — | — |
+| `remainder` | real | — | — |
+| `modulo` | real | — | — |
+| `gcd` | real | — | — |
+| `lcm` | real | — | — |
 | `vector` | vector | — | — |
 | `vector-length` | exact-integer | — | — |
 | `vector-ref` | any | — | — |
@@ -499,53 +499,53 @@ Go function not found in loaded SSA packages (binding-only primitive or missing 
 | `char-upcase` | character | — | — |
 | `char-downcase` | character | — | — |
 | `char-foldcase` | character | — | — |
-| `assoc` | any | — | — |
-| `for-each` |  | — | — |
-| `call-with-port` | any | — | — |
-| `caddr` |  | — | — |
 | `cdaar` |  | — | — |
-| `caaadr` |  | — | — |
+| `negative?` | boolean | — | — |
+| `not` | boolean | — | — |
 | `zero?` | boolean | — | — |
-| `vector-map` | vector | — | — |
-| `cdadr` |  | — | — |
+| `caaddr` |  | — | — |
 | `cadaar` |  | — | — |
-| `cddaar` |  | — | — |
-| `cddddr` |  | — | — |
-| `caadar` |  | — | — |
-| `cdddr` |  | — | — |
+| `sort` | list | — | — |
+| `cadddr` |  | — | — |
 | `cdaddr` |  | — | — |
 | `square` | number | — | — |
-| `cddadr` |  | — | — |
-| `cadar` |  | — | — |
-| `negative?` | boolean | — | — |
-| `caddar` |  | — | — |
-| `cdadar` |  | — | — |
-| `cadddr` |  | — | — |
-| `vector-for-each` |  | — | — |
-| `sort` | list | — | — |
-| `exact-integer?` | boolean | — | — |
-| `cdar` |  | — | — |
-| `cdddar` |  | — | — |
-| `cadr` |  | — | — |
-| `cdaaar` |  | — | — |
 | `string-for-each` |  | — | — |
-| `caaar` |  | — | — |
-| `cddr` |  | — | — |
+| `cddadr` |  | — | — |
+| `assoc` | any | — | — |
+| `cdddar` |  | — | — |
 | `boolean=?` | boolean | — | — |
-| `cddar` |  | — | — |
-| `positive?` | boolean | — | — |
 | `caar` |  | — | — |
+| `cddar` |  | — | — |
+| `caaar` |  | — | — |
+| `string-map` | string | — | — |
+| `vector-for-each` |  | — | — |
+| `caadr` |  | — | — |
+| `for-each` |  | — | — |
+| `cdar` |  | — | — |
+| `exact-integer?` | boolean | — | — |
+| `call-with-port` | any | — | — |
+| `cddr` |  | — | — |
+| `caddr` |  | — | — |
+| `caadar` |  | — | — |
+| `vector-map` | vector | — | — |
+| `cdaadr` |  | — | — |
+| `cddaar` |  | — | — |
+| `symbol=?` | boolean | — | — |
+| `map` | list | — | — |
+| `positive?` | boolean | — | — |
+| `cdddr` |  | — | — |
 | `cadadr` |  | — | — |
 | `caaaar` |  | — | — |
-| `map` | list | — | — |
-| `cdaadr` |  | — | — |
-| `member` | any | — | — |
-| `not` | boolean | — | — |
-| `caadr` |  | — | — |
+| `cadr` |  | — | — |
+| `cddddr` |  | — | — |
+| `cdaaar` |  | — | — |
+| `cdadar` |  | — | — |
+| `caddar` |  | — | — |
+| `cadar` |  | — | — |
+| `cdadr` |  | — | — |
 | `list?` | boolean | — | — |
-| `symbol=?` | boolean | — | — |
-| `caaddr` |  | — | — |
-| `string-map` | string | — | — |
+| `caaadr` |  | — | — |
+| `member` | any | — | — |
 | `ast-splice` | list | — | — |
 | `ast-transform` | list | — | — |
 | `drop` | list | — | — |
@@ -565,83 +565,8 @@ Go function not found in loaded SSA packages (binding-only primitive or missing 
 
 ## Type-system recommendations
 
-Axis-B output (wile-goast) ran against 500 primitives. Reconciling against Phase 1/2 axis-A findings (`2026-04-19-audit-findings-phase1.md` — 0 live findings after resolution) and spot-checks on every declared-vs-narrowed mismatch in Single/Helper-widened: **zero real annotation lies surfaced by axis-B.** The buckets measure vocabulary gaps and analyzer reach, not annotation correctness.
+TODO — distill from the bucket counts above. Typical questions:
 
-Per audit plan §6 Option A (2026-04-19), union narrowing is out of audit scope — findings here feed a **separate** downstream plan on `TypeConstraint` extensions. The text below is that plan's input.
-
-### Bucket-by-bucket synthesis
-
-**Single (162)** — cleanly narrowed to exactly one type. All declared-vs-narrowed mismatches in this bucket reduce to one of two noise patterns:
-
-1. **`TypeExactInteger` vs `integer`** (~15 entries, e.g. `length`, `string-length`, `char->integer`, `hashtable-size`): cosmetic. `TypeExactInteger` is literally `checks[TypeInteger]` (`values/value_type.go:201`). No fix; the vocabulary is a single type with two names.
-2. **`CallContext.SetValue(v)` idiom** (~20 entries, e.g. `once-do!` declared `boolean` narrowed `*MachineContext`, `continuation-prompt-available?` same, `%parameter-raw-set!` declared `void` narrowed `*Parameter`): the primitive sets its result via side-effect on the CallContext rather than Go return, so SSA narrowing latches onto whatever the last local was (loaded arg, sub-context, etc.). Verified on 4 suspects; all had correct declarations matching the actual `mc.SetValue(...)` call. **Strongest candidates for compile-time type checking** in Extension Contracts Phase 2 — these 162 annotations are now verified by two independent checks (axis-A example-based + axis-B SSA).
-
-**Maybe (12)** — uniform `T | #f` pattern. Every entry fits `TypeMaybe(T)`:
-
-| T | Primitives |
-|---|---|
-| string | `procedure-name`, `procedure-documentation`, `library-description`, `syntax-source`, `error-context-source`, `error-object-source`, `current-load-path`, `current-load-directory`, `namespace-name`, `get-environment-variable` |
-| integer | `digit-value` |
-| `ContinuationMarkSet` | `error-context-marks` |
-
-**Recommendation:** `TypeMaybe(T)` is the highest-value vocabulary extension — 12 entries, uniform shape, drop-in check (`v == FalseValue || checks[T](v)`). If exactly one `TypeConstraint` constructor ships, this is it.
-
-**Narrow-union (7)** — two shape families:
-
-| Shape | Primitives | Source |
-|---|---|---|
-| `complex \| flonum` | `log`, `atan` | transcendental, branch on negative real |
-| `integer \| rational \| flonum` | `numerator`, `denominator`, `rationalize`, `magnitude` | `Simplify()` output of real ops |
-| `symbol \| *Thread` | `mutex-state` | R7RS mutex states + owner |
-
-**Recommendation:** do NOT introduce a general `TypeUnion`. The 6 numeric entries are already soundly declared `real` / `number`; `mutex-state` is soundly declared `any`. A `TypeUnion` constructor would need to cover arity 2–4 and handle disjoint unions (the `symbol | thread` case crosses type families). Cost exceeds benefit given only 7 entries and zero demonstrated consumer pressure.
-
-**Broad-union (2)** — `sqrt`, `make-rectangular`. Declared `number` (sound). No action.
-
-**Helper-widened (125)** — analyzer reach limitation, not a type-system gap. Reason-tag distribution (informal count from inventory):
-
-| Reason-tag | Count (approx) | Pattern |
-|---|---|---|
-| `global-load` | ~80 | result built from global helper returning interface |
-| `interface-method-dispatch` | ~25 | result from `Tuple.Car()`, `Number.Add()`, etc. |
-| `field-deref-load` | ~15 | result from struct field (e.g. `mc.template.name`) |
-| `nil-constant` | ~10 | early return with nil as placeholder |
-| `cycle` | ~8 | SSA hit a back-edge and stopped |
-| `slice-deref-load` | ~4 | result from slice element |
-
-**Recommendation:** the single analyzer improvement with the highest ROI is **follow `CallContext.SetValue(v)` back to `v`'s SSA type**. That one pattern would convert ~20 Helper-widened entries into Single. Beyond that, narrowing through `Tuple` / `Number` interface methods is a much larger undertaking with diminishing returns. Defer.
-
-**Side-effecting (52)** — no result-writing sink reached. Three sub-patterns:
-
-1. **Comparison/predicate primitives** (`=`, `<`, `>`, `odd?`, `even?`, `memq`, `assq`, ...): analyzer sees the panic-terminated error path without seeing the success path's `SetValue`. Same `CallContext` idiom as above.
-2. **Control-flow primitives** (`raise`, `error`, `abort-current-continuation`, `exit`, `emergency-exit`, `call-with-composable-continuation`, `call-with-exit`): genuinely never return normally. `any` declaration is the right floor; `never` / bottom type would be more honest but adds a constraint for zero real benefit.
-3. **File open primitives** (`open-input-file`, `open-output-file`, ...): analyzer loses the port through interface construction. Not a type-system gap.
-
-No action.
-
-**Unresolved (140)** — Go function not found in loaded SSA packages. Mix:
-
-1. **Type predicates via `helpers.MakeTypePredicate`** (~100 entries, e.g. `boolean?`, `number?`, `symbol?`, all `char-*?`, `string-ci*?`): registered as `var` assignments from a factory function. SSA analyzer doesn't follow the factory. All declared `boolean`, all sound by construction of the factory.
-2. **Scheme-level stdlib procedures** (~40 entries, e.g. `filter`, `take`, `drop`, `map`, `sort`, `caar`, `cadar`, `vector-for-each`, `for-each`, `string-map`, `string-for-each`, `ast-splice`, `ast-transform`): not Go functions at all. Out of axis-B's scope by construction.
-
-**Recommendation:** axis-B's Phase 3 follow-up could special-case `helpers.MakeTypePredicate` returns (analyzer knows they produce `boolean`). Stdlib-procedure return-type analysis is a separate tool — a Scheme-level successor to axis-B, gated on a real consumer ask.
-
-### Actionable output for Extension Contracts Phase 2
-
-`plans/2026-03-26-extension-contracts-phase2-impl.md` can now proceed on an evidence-backed subset:
-
-1. **Ship compile-time checking first on the 162 Single primitives.** Their `ReturnType` annotations are verified by two independent checks; the risk of wrongly-rejecting-valid-programs is minimal.
-2. **Defer the 125 Helper-widened + 52 Side-effecting primitives** until axis-B grows `CallContext.SetValue(v)` following. That one improvement handles the bulk.
-3. **Skip the 140 Unresolved primitives** until a Scheme-level analyzer exists.
-
-### Actionable output for TypeConstraint vocabulary
-
-If and only if compile-time checking on the Single-bucket 162 creates demonstrated pressure for more precision:
-
-1. **Ship `TypeMaybe(T)`** first — 12 drop-in customers, uniform shape, one-line `Check` implementation. `values.Maybe(values.TypeString)` reads naturally.
-2. **Do not ship `TypeUnion`** without at least 15–20 distinct customers. Current inventory has 7 narrow-union entries across 3 disjoint shape families; not enough.
-3. **Do not ship a bottom / `TypeNever` type** without a demonstrated type-checker consumer. 6 control-flow primitives would be its customers, none of whom lose expressiveness by staying `any`.
-
-### What was *not* an action item
-
-No code changes to primitive annotations. Axis-A (Phase 1/2) already drove them to zero findings on re-run. Axis-B's value is strategic, not tactical.
+- Does `Maybe` have enough entries to justify a `TypeMaybe(T)` constructor?
+- Is `Narrow-union` dominated by 2-3 recurring pairs that could be named?
+- What's the Helper-widened reason-tag distribution pointing to for PR-2'?
