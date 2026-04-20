@@ -120,6 +120,14 @@ func TestOptionalArg(t *testing.T) {
 			rest:    &values.Pair{values.NewString("bad"), values.EmptyList},
 			wantErr: werr.ErrNotAnInteger,
 		},
+		{
+			name: "extra args rejected",
+			rest: &values.Pair{
+				values.NewInteger(1),
+				&values.Pair{values.NewInteger(2), values.EmptyList},
+			},
+			wantErr: werr.ErrWrongNumberOfArguments,
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -132,6 +140,21 @@ func TestOptionalArg(t *testing.T) {
 			c.Assert(result.Value, qt.Equals, tc.wantVal)
 		})
 	}
+}
+
+func TestParseOptionalStartEnd_ExtraArgsRejected(t *testing.T) {
+	c := qt.New(t)
+	// (start end extra) — three ints in the rest list, one too many.
+	rest := &values.Pair{
+		values.NewInteger(1),
+		&values.Pair{
+			values.NewInteger(2),
+			&values.Pair{values.NewInteger(99), values.EmptyList},
+		},
+	}
+	_, _, err := ParseOptionalStartEnd(rest, 10, "test")
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, werr.ErrWrongNumberOfArguments), qt.IsTrue)
 }
 
 func TestRequireType_Failure_SentinelPreserved(t *testing.T) {

@@ -82,6 +82,48 @@ func TestStrings_ArityErrors(t *testing.T) {
 	}
 }
 
+// TestSubstring_IntegerSentinel verifies that substring reports a
+// "not an integer" error (not "not a number") when passed non-integer
+// start/end. See F2 in the strings audit.
+func TestSubstring_IntegerSentinel(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "non-integer start", Code: `(substring "hello" "0" 3)`},
+		{Name: "non-integer end", Code: `(substring "hello" 0 "3")`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			testhelpers.RunSchemeCodeExpectError(t, tc.Code)
+		})
+	}
+}
+
+// TestStrings_ExcessArgRejection verifies that primitives with an optional-arg
+// upper bound (R7RS §6.7) reject trailing arguments beyond their spec'd max
+// arity. Historically these were silently accepted because
+// helpers.ParseOptionalArg / ParseOptionalStartEnd did not check the rest
+// list's tail. See F1 in the strings audit.
+func TestStrings_ExcessArgRejection(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		// make-string: k [char] — at most 2 args
+		{Name: "make-string three args", Code: `(make-string 3 #\a #\b)`},
+		// string->list: string [start [end]] — at most 3 args
+		{Name: "string->list four args", Code: `(string->list "hello" 1 3 99)`},
+		// string-copy: string [start [end]] — at most 3 args
+		{Name: "string-copy four args", Code: `(string-copy "hello" 1 3 99)`},
+		// string-copy!: to at from [start [end]] — at most 5 args
+		{Name: "string-copy! six args",
+			Code: `(let ((s (string-copy "abcde"))) (string-copy! s 0 "xyz" 0 2 99))`},
+		// string-fill!: string fill [start [end]] — at most 4 args
+		{Name: "string-fill! five args",
+			Code: `(let ((s (string-copy "hello"))) (string-fill! s #\x 0 5 99))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			testhelpers.RunSchemeCodeExpectError(t, tc.Code)
+		})
+	}
+}
+
 // TestStrings_VariadicZeroArgs verifies that variadic string primitives
 // accepting zero arguments produce the correct results per R7RS.
 func TestStrings_VariadicZeroArgs(t *testing.T) {

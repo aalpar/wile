@@ -26,9 +26,11 @@ import (
 func PrimCurrentContinuationMarks(cc machine.CallContext) error {
 	mc := cc.(*machine.MachineContext)
 	tag := machine.DefaultPromptTag
-	v, ok := helpers.ParseOptionalArg(mc.Arg(0))
+	v, ok, err := helpers.ParseOptionalArg(mc.Arg(0), "current-continuation-marks")
+	if err != nil {
+		return err
+	}
 	if ok {
-		var err error
 		tag, err = helpers.RequireType[*machine.PromptTag](v, werr.ErrNotAPromptTag, "current-continuation-marks")
 		if err != nil {
 			return err
@@ -58,7 +60,10 @@ func PrimContinuationMarkSetFirst(mc machine.CallContext) error {
 	}
 	key := mc.Arg(1)
 	defaultVal := values.Value(values.FalseValue)
-	v, ok := helpers.ParseOptionalArg(mc.Arg(2))
+	v, ok, err := helpers.ParseOptionalArg(mc.Arg(2), "continuation-mark-set-first")
+	if err != nil {
+		return err
+	}
 	if ok {
 		defaultVal = v
 	}
@@ -97,7 +102,10 @@ func PrimContinuationMarkSetToListStar(mc machine.CallContext) error {
 	}
 
 	noneVal := values.Value(values.FalseValue)
-	v, ok := helpers.ParseOptionalArg(mc.Arg(2))
+	v, ok, err := helpers.ParseOptionalArg(mc.Arg(2), "continuation-mark-set->list*")
+	if err != nil {
+		return err
+	}
 	if ok {
 		noneVal = v
 	}
@@ -121,7 +129,10 @@ func PrimContinuationMarks(mc machine.CallContext) error {
 		return err
 	}
 	tag := machine.DefaultPromptTag
-	v, ok := helpers.ParseOptionalArg(mc.Arg(1))
+	v, ok, err := helpers.ParseOptionalArg(mc.Arg(1), "continuation-marks")
+	if err != nil {
+		return err
+	}
 	if ok {
 		tag, err = helpers.RequireType[*machine.PromptTag](v, werr.ErrNotAPromptTag, "continuation-marks")
 		if err != nil {
@@ -155,7 +166,10 @@ func PrimCallWithImmediateContMark(cc machine.CallContext) error {
 	val := mc.GetImmediateMark(key)
 	if val == nil {
 		val = values.FalseValue
-		v, ok := helpers.ParseOptionalArg(mc.Arg(2))
+		v, ok, err := helpers.ParseOptionalArg(mc.Arg(2), "call-with-immediate-continuation-mark")
+		if err != nil {
+			return err
+		}
 		if ok {
 			val = v
 		}

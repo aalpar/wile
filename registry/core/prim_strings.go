@@ -242,11 +242,11 @@ func PrimSubstring(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	startIdx, err := helpers.RequireArg[*values.Integer](mc, 1, werr.ErrNotANumber, "substring")
+	startIdx, err := helpers.RequireArg[*values.Integer](mc, 1, werr.ErrNotAnInteger, "substring")
 	if err != nil {
 		return err
 	}
-	endIdx, err := helpers.RequireArg[*values.Integer](mc, 2, werr.ErrNotANumber, "substring")
+	endIdx, err := helpers.RequireArg[*values.Integer](mc, 2, werr.ErrNotAnInteger, "substring")
 	if err != nil {
 		return err
 	}
