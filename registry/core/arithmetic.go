@@ -70,28 +70,35 @@ func addArithmetic(r *registry.Registry) error {
 		{Name: "max", ParamCount: 2, IsVariadic: true, Impl: PrimMax,
 			Doc: "Returns the largest of its arguments. If any argument is inexact, the result is inexact.\n\nExamples:\n  (max 3 1 2)    => 3\n  (max 1 2.0)    => 2.0", ParamNames: []string{"x1", "x2"}, Category: "arithmetic",
 			ParamTypes: []values.TypeConstraint{values.TypeReal, values.TypeReal}, ReturnType: values.TypeReal},
-		// TODO(Phase 4): quotient/remainder/modulo/gcd/lcm contracts declare TypeInteger,
-		// but implementations accept inexact integers (e.g., 7.0) via helpers.ExtractInteger.
-		// Before enabling runtime enforcement, widen to TypeNumber or introduce TypeIntegerValue.
+		// quotient/remainder/modulo/gcd/lcm: R7RS §6.2.6 requires integer args,
+		// but "integer" in R7RS means the value space (includes integer-valued
+		// inexact numbers like 7.0), not the wile *Integer type. The impl uses
+		// helpers.ExtractInteger which accepts *Integer, *BigInteger, and
+		// integer-valued *Float. Declaring TypeInteger would wrongly reject
+		// (quotient 7.0 3.0) once Phase-2 validation wires up. Widening to
+		// TypeReal is the narrowest type in the current vocabulary that covers
+		// the impl's domain; BigFloat and non-integer Rationals still caught at
+		// impl level. A future TypeIntegerValue (integer-valued real) would be
+		// more precise but requires TypeConstraint vocabulary extension.
 		{Name: "quotient", ParamCount: 2, Impl: PrimQuotient,
 			Doc: "Returns the integer quotient of N1 divided by N2, truncated toward zero. Both arguments must be integers.\n\nExamples:\n  (quotient 7 3)    => 2\n  (quotient -7 3)   => -2\n  (quotient 7 -3)   => -2", ParamNames: []string{"n1", "n2"}, Category: "arithmetic",
-			ParamTypes: []values.TypeConstraint{values.TypeInteger, values.TypeInteger}, ReturnType: values.TypeInteger,
+			ParamTypes: []values.TypeConstraint{values.TypeReal, values.TypeReal}, ReturnType: values.TypeReal,
 			Keywords: []string{"truncate-quotient", "integer division", "truncate division", "div"}},
 		{Name: "remainder", ParamCount: 2, Impl: PrimRemainder,
 			Doc: "Returns the remainder of N1 divided by N2. The sign of the result matches the sign of N1.\n\nExamples:\n  (remainder 7 3)    => 1\n  (remainder -7 3)   => -1\n  (remainder 7 -3)   => 1", ParamNames: []string{"n1", "n2"}, Category: "arithmetic",
-			ParamTypes: []values.TypeConstraint{values.TypeInteger, values.TypeInteger}, ReturnType: values.TypeInteger,
+			ParamTypes: []values.TypeConstraint{values.TypeReal, values.TypeReal}, ReturnType: values.TypeReal,
 			Keywords: []string{"truncate-remainder", "mod", "modular"}},
 		{Name: "modulo", ParamCount: 2, Impl: PrimModulo,
 			Doc: "Returns N1 modulo N2. The sign of the result matches the sign of N2.\n\nExamples:\n  (modulo 7 3)     => 1\n  (modulo -7 3)    => 2\n  (modulo 7 -3)    => -2", ParamNames: []string{"n1", "n2"}, Category: "arithmetic",
-			ParamTypes: []values.TypeConstraint{values.TypeInteger, values.TypeInteger}, ReturnType: values.TypeInteger,
+			ParamTypes: []values.TypeConstraint{values.TypeReal, values.TypeReal}, ReturnType: values.TypeReal,
 			Keywords: []string{"floor-remainder", "mod", "modular arithmetic", "euclidean"}},
 		{Name: "gcd", ParamCount: 1, IsVariadic: true, Impl: PrimGcd,
 			Doc: "Returns the greatest common divisor of its arguments. With no arguments, returns 0.\n\nExamples:\n  (gcd)            => 0\n  (gcd 12 8)       => 4\n  (gcd 12 8 6)     => 2", ParamNames: []string{"n"}, Category: "arithmetic",
-			ParamTypes: []values.TypeConstraint{values.TypeInteger}, ReturnType: values.TypeInteger,
+			ParamTypes: []values.TypeConstraint{values.TypeReal}, ReturnType: values.TypeReal,
 			Keywords: []string{"greatest common divisor", "common factor", "coprime"}},
 		{Name: "lcm", ParamCount: 1, IsVariadic: true, Impl: PrimLcm,
 			Doc: "Returns the least common multiple of its arguments. With no arguments, returns 1.\n\nExamples:\n  (lcm)            => 1\n  (lcm 4 6)        => 12\n  (lcm 4 6 10)     => 60", ParamNames: []string{"n"}, Category: "arithmetic",
-			ParamTypes: []values.TypeConstraint{values.TypeInteger}, ReturnType: values.TypeInteger,
+			ParamTypes: []values.TypeConstraint{values.TypeReal}, ReturnType: values.TypeReal,
 			Keywords: []string{"least common multiple"}},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 
