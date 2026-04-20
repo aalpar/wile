@@ -32,9 +32,13 @@ func addLists(r *registry.Registry) error {
 
 	// List operations
 	r.AddPrimitives([]registry.PrimitiveSpec{
+		// append's last argument may be any object (R7RS §6.4), so ParamTypes
+		// widens to TypeAny. Non-last args must be lists, but the positional
+		// type vocabulary cannot express "list for non-last, any for last"
+		// inside a variadic rest. Soundness over precision per audit §6.
 		{Name: "append", ParamCount: 1, IsVariadic: true, Impl: PrimAppend,
 			Doc: "Returns a list formed by concatenating the argument lists. The last argument may be any object and becomes the cdr of the final pair.\n\nExamples:\n  (append '(1 2) '(3 4))      => (1 2 3 4)\n  (append '(a) '(b) '(c))     => (a b c)\n  (append '(a b) 'c)          => (a b . c)", ParamNames: []string{"list"}, Category: "lists",
-			ParamTypes: []values.TypeConstraint{values.TypeList}, ReturnType: values.TypeList},
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeList},
 		{Name: "reverse", ParamCount: 1, Impl: PrimReverse,
 			Doc: "Returns a newly allocated list with the elements of LIST in reverse order. LIST is not modified.\n\nExamples:\n  (reverse '(1 2 3))   => (3 2 1)\n  (reverse '())        => ()", ParamNames: []string{"list"}, Category: "lists",
 			ParamTypes: []values.TypeConstraint{values.TypeList}, ReturnType: values.TypeList},

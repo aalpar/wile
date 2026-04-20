@@ -10,10 +10,11 @@ This document catalogs differences between the current implementation and the R7
 
 ## Summary
 
-Three known differences exist:
+Four known differences exist:
 1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Conservative safe behavior with minimal practical impact.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
 3. `set-current-directory!` changes the process-global working directory via `os.Chdir`, which is inherently shared across all Wile engines and goroutines in the same OS process.
+4. Pair and vector literals are **mutable** (R7RS permits "it is an error" detection or non-detection). String literals are correctly immutable. Asymmetric by type.
 
 ---
 
@@ -79,6 +80,54 @@ Use Go channels or goroutines for non-blocking I/O patterns:
 This difference is observable only when code mutates a parameter via `(p val)` inside a `parameterize` body — a rare pattern. The standard pattern of reading `(p)` inside `parameterize` is unaffected.
 
 **Impact:** **LOW** — standard R7RS programs use `parameterize` for scoped binding, not direct mutation. The marks-based approach matches Racket's semantics and is correct for composable continuations.
+
+---
+
+## Mutable Pair and Vector Literals
+
+**Affected Primitives:** `set-car!`, `set-cdr!`, `list-set!`, `vector-set!`, `vector-fill!`
+
+**R7RS §6.4 Requirement:**
+> It is an error to attempt to store in a literal.
+
+R7RS §1.3.2 clarifies "it is an error" as a case implementations are not required to detect, but "encouraged to detect ... so as to help the programmer detect them."
+
+**Wile Behavior:** Mutation of pair and vector literals silently succeeds. Mutation of string literals correctly raises an error (strings have an internal immutability flag; pairs and vectors do not).
+
+```scheme
+(set-car! '(a b c) 999)        ; silently mutates
+(vector-set! '#(1 2 3) 0 'x)   ; silently mutates
+(string-set! "abc" 0 #\X)      ; correctly raises error
+```
+
+Compounding factor: `(eq? '(a b c) '(a b c)) → #t`. Wile shares structure for same-shape literals (R7RS-permissible), so mutating one literal is visible through all syntactically identical quotations.
+
+**Rationale:**
+
+Wile's `*values.Pair` and `*values.Vector` types have no immutability flag, unlike `*values.String`. Adding one would require:
+1. A flag field on `Pair` / `Vector` (+1 word each, ~8 bytes × many allocations)
+2. Wrap `SetCar`/`SetCdr`/`Set` with a check
+3. Mark quoted-literal results as immutable in the compiler (`QuoteOp` / constant folding path)
+4. Update any internal code that reuses literal structures for scratch storage
+
+Given no demand signal and R7RS's explicit permission not to detect, the current behavior is acceptable.
+
+**Workaround:**
+
+Programs that must mutate should construct with `list`, `cons`, `make-vector`, or `vector-copy` to obtain an allocation not shared with any literal:
+
+```scheme
+;; Wrong — may or may not be detected across Schemes:
+(let ((xs '(1 2 3))) (set-car! xs 99) xs)
+
+;; Right — guaranteed mutable, no aliasing with literals:
+(let ((xs (list 1 2 3))) (set-car! xs 99) xs)
+(let ((v (vector-copy '#(1 2 3)))) (vector-set! v 0 99) v)
+```
+
+**Impact:** **LOW** — programs that mutate literals are already non-portable across R7RS implementations and fragile due to literal structure sharing. The standard practice (construct before mutating) avoids the issue entirely.
+
+**Estimated implementation effort:** 4-8 hours across pair.go, vector.go, compile_quote.go, plus tests.
 
 ---
 
