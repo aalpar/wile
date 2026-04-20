@@ -58,6 +58,47 @@ func addReflection(r *registry.Registry) error {
 			Doc:        "Returns the description string of LIBRARY-NAME, or #f if none or not loaded.\n\nExamples:\n  ;; (library-description '(scheme base))  => \"R7RS base library\" or #f",
 			ParamNames: []string{"library-name"}, Category: "reflection",
 			ParamTypes: []values.TypeConstraint{values.TypeList}, ReturnType: values.TypeAny},
+
+		// PrimitiveSpec introspection — operate on wile's PrimitiveSpec
+		// registry. These let Scheme code enumerate and inspect the
+		// primitives registered in the current namespace without going
+		// through the Go API. Used by audit/wile-axis-b.scm among others.
+		{Name: "registered-primitives", ParamCount: 0, Impl: PrimRegisteredPrimitives,
+			Doc:        "Returns a list of primitive-spec values — one per primitive registered in the current namespace. Each spec is an opaque value queryable via primitive-spec-name, -return-type, -param-count, -variadic?, -go-function, -go-source, -category.\n\nExamples:\n  (length (registered-primitives))  ; => 475 (or similar)\n  (primitive-spec-name (car (registered-primitives)))  ; => some name\n\nSee also: `primitive-spec?', `primitive-spec-name'.",
+			Category:   "reflection",
+			ReturnType: values.TypeList},
+		{Name: "primitive-spec?", ParamCount: 1, Impl: PrimPrimitiveSpecQ,
+			Doc:        "Returns #t if V is a primitive-spec value (as returned by registered-primitives), #f otherwise.\n\nExamples:\n  (primitive-spec? (car (registered-primitives)))  ; => #t\n  (primitive-spec? 42)  ; => #f",
+			ParamNames: []string{"v"}, Category: "reflection",
+			ReturnType: values.TypeBoolean},
+		{Name: "primitive-spec-name", ParamCount: 1, Impl: PrimPrimitiveSpecName,
+			Doc:        "Returns the primitive's Scheme-level name as a string.\n\nExamples:\n  (primitive-spec-name (car (registered-primitives)))  ; => \"cons\"",
+			ParamNames: []string{"spec"}, Category: "reflection",
+			ReturnType: values.TypeString},
+		{Name: "primitive-spec-return-type", ParamCount: 1, Impl: PrimPrimitiveSpecReturnType,
+			Doc:        "Returns the primitive's declared ReturnType name (\"integer\", \"pair\", \"any\", ...), or the empty string if no type is declared.\n\nExamples:\n  (primitive-spec-return-type SPEC)  ; => \"pair\" (or \"\")",
+			ParamNames: []string{"spec"}, Category: "reflection",
+			ReturnType: values.TypeString},
+		{Name: "primitive-spec-param-count", ParamCount: 1, Impl: PrimPrimitiveSpecParamCount,
+			Doc:        "Returns the primitive's declared ParamCount as an integer.\n\nExamples:\n  (primitive-spec-param-count SPEC)  ; => 2",
+			ParamNames: []string{"spec"}, Category: "reflection",
+			ReturnType: values.TypeInteger},
+		{Name: "primitive-spec-variadic?", ParamCount: 1, Impl: PrimPrimitiveSpecVariadicQ,
+			Doc:        "Returns #t if the primitive is declared variadic (IsVariadic), #f otherwise.\n\nExamples:\n  (primitive-spec-variadic? SPEC)  ; => #f",
+			ParamNames: []string{"spec"}, Category: "reflection",
+			ReturnType: values.TypeBoolean},
+		{Name: "primitive-spec-go-function", ParamCount: 1, Impl: PrimPrimitiveSpecGoFunction,
+			Doc:        "Returns the fully-qualified Go function name of the primitive's Impl (as resolved via runtime.FuncForPC), or the empty string for binding-only primitives (nil Impl).\n\nExamples:\n  (primitive-spec-go-function SPEC)  ; => \"github.com/aalpar/wile/registry/core.PrimCons\"",
+			ParamNames: []string{"spec"}, Category: "reflection",
+			ReturnType: values.TypeString},
+		{Name: "primitive-spec-go-source", ParamCount: 1, Impl: PrimPrimitiveSpecGoSource,
+			Doc:        "Returns the \"file:line\" source location of the primitive's Impl (absolute path), or the empty string for binding-only primitives.\n\nExamples:\n  (primitive-spec-go-source SPEC)  ; => \"/path/to/prim_pairs.go:22\"",
+			ParamNames: []string{"spec"}, Category: "reflection",
+			ReturnType: values.TypeString},
+		{Name: "primitive-spec-category", ParamCount: 1, Impl: PrimPrimitiveSpecCategory,
+			Doc:        "Returns the primitive's Category as a string (e.g., \"reflection\", \"arithmetic\"), or the empty string if unset.\n\nExamples:\n  (primitive-spec-category SPEC)  ; => \"reflection\"",
+			ParamNames: []string{"spec"}, Category: "reflection",
+			ReturnType: values.TypeString},
 	}, registry.PhaseRuntime)
 
 	return nil

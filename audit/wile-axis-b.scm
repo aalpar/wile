@@ -14,7 +14,9 @@
 
 ;;; wile-axis-b.scm — Phase 3.B analyzer script.
 ;;;
-;;; Consumes plans/axis-b-manifest.scm + go-ssa-narrow to produce:
+;;; Enumerates wile's PrimitiveSpec registry via (registered-primitives)
+;;; and narrows each primitive's result-writing sinks via go-ssa-narrow
+;;; to produce:
 ;;;   - plans/axis-b-raw.scm                 (structured per-primitive data)
 ;;;   - plans/2026-04-19-axis-b-inventory.md (bucketed markdown inventory)
 ;;;   - stdout summary                       (bucket counts + reason tally)
@@ -23,15 +25,17 @@
 ;;;   wile-goast -f audit/wile-axis-b.scm
 ;;;
 ;;; Env overrides:
-;;;   WILE_AXIS_B_MANIFEST   — manifest path (default: plans/axis-b-manifest.scm)
+;;;   WILE_AXIS_B_NAMES      — comma-separated allowlist (default: all)
+;;;                            Example: WILE_AXIS_B_NAMES=cons,null?,length,car
 ;;;   WILE_AXIS_B_RAW_OUTPUT — raw output path (default: plans/axis-b-raw.scm)
 ;;;   WILE_AXIS_B_INVENTORY  — inventory path  (default: plans/2026-04-19-axis-b-inventory.md)
 ;;;
 ;;; This script lives in wile because the analysis it performs is
-;;; wile-specific (sink methods on wile's CallContext, Go→wile value-type
-;;; mapping, declared-return-type comparison against wile's TypeConstraint
-;;; vocabulary). The generic Go-SSA primitives it invokes — go-ssa-build
-;;; and go-ssa-narrow — live in wile-goast.
+;;; wile-specific. It iterates wile's PrimitiveSpec values (via the
+;;; (registered-primitives) / primitive-spec-* wile primitives) and
+;;; classifies them using wile's TypeConstraint vocabulary. The generic
+;;; Go-SSA primitives it invokes — go-ssa-build and go-ssa-narrow —
+;;; live in wile-goast.
 ;;;
 ;;; See plans/2026-04-19-axis-b-analyzer-design.md for the overall design.
 
@@ -50,34 +54,80 @@
         v
         default)))
 
-(define default-manifest-path   "plans/axis-b-manifest.scm")
 (define default-raw-output-path "plans/axis-b-raw.scm")
 (define default-inventory-path  "plans/2026-04-19-axis-b-inventory.md")
 
-(define (manifest-path)   (env-or "WILE_AXIS_B_MANIFEST"   default-manifest-path))
 (define (raw-output-path) (env-or "WILE_AXIS_B_RAW_OUTPUT" default-raw-output-path))
 (define (inventory-path)  (env-or "WILE_AXIS_B_INVENTORY"  default-inventory-path))
 
 ;; ---------------------------------------------------------------------------
-;; Manifest parsing
+;; Entry construction — fed by (registered-primitives), the wile
+;; introspection primitive for the PrimitiveSpec registry.
 ;; ---------------------------------------------------------------------------
 
-;; read-manifest reads the manifest S-expression list. Each entry is:
-;;   ("name" "declared-return-type" "go-function-name" "source-file:line")
-;; The manifest file contains exactly one list; we read it directly.
-(define (read-manifest path)
-  (let* ((port (open-input-file path))
-         (data (read port)))
-    (close-input-port port)
-    (if (list? data)
-        data
-        (error "manifest is not a list" path))))
+;; spec->entry builds a (name declared-return go-function go-source) tuple
+;; from a primitive-spec value — the same shape the earlier static manifest
+;; file used, so the rest of the pipeline is unchanged.
+(define (spec->entry spec)
+  (list (primitive-spec-name spec)
+        (primitive-spec-return-type spec)
+        (primitive-spec-go-function spec)
+        (primitive-spec-go-source spec)))
 
-;; manifest-entry accessors.
 (define (entry-name e)            (list-ref e 0))
 (define (entry-declared-return e) (list-ref e 1))
 (define (entry-go-function e)     (list-ref e 2))
 (define (entry-go-source e)       (list-ref e 3))
+
+;; split-comma splits a comma-separated string into a list of strings.
+;; Returns () for an empty input.
+(define (split-comma s)
+  (let ((n (string-length s)))
+    (if (= n 0) '()
+        (let loop ((i 0) (start 0) (acc '()))
+          (cond
+            ((= i n) (reverse (cons (substring s start n) acc)))
+            ((char=? (string-ref s i) #\,)
+             (loop (+ i 1) (+ i 1) (cons (substring s start i) acc)))
+            (else (loop (+ i 1) start acc)))))))
+
+;; string-prefix? — true if s starts with prefix.
+(define (string-prefix? prefix s)
+  (let ((pn (string-length prefix))
+        (sn (string-length s)))
+    (and (<= pn sn)
+         (string=? prefix (substring s 0 pn)))))
+
+;; wile-primitive? — a registered primitive is "wile's" if its Impl
+;; resolves to a function under github.com/aalpar/wile/, OR if it has
+;; no Impl (binding-only — assoc, caar, etc. — all registered by wile).
+;; Primitives under github.com/aalpar/wile-goast/ are wile-goast's and
+;; must be excluded from wile's own audit.
+(define wile-package-prefix "github.com/aalpar/wile/")
+
+(define (wile-primitive? entry)
+  (let ((go-fn (entry-go-function entry)))
+    (or (string=? go-fn "")
+        (string-prefix? wile-package-prefix go-fn))))
+
+;; load-entries returns the (name declared go-fn go-src) list for every
+;; wile primitive in the registry, filtered by WILE_AXIS_B_NAMES if set.
+;; Excludes wile-goast's own primitives (go-ssa-*, go-parse-*, etc.)
+;; since those aren't part of wile's primitive surface.
+(define (load-entries)
+  (let* ((all (map spec->entry (registered-primitives)))
+         (wile-only (filter wile-primitive? all))
+         (filter-str (env-or "WILE_AXIS_B_NAMES" "")))
+    (cond
+      ((string=? filter-str "") wile-only)
+      (else
+       (let ((allowed (split-comma filter-str)))
+         (let loop ((es wile-only) (acc '()))
+           (cond
+             ((null? es) (reverse acc))
+             ((member (entry-name (car es)) allowed)
+              (loop (cdr es) (cons (car es) acc)))
+             (else (loop (cdr es) acc)))))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Sink-call enumeration
@@ -614,12 +664,10 @@
 ;; ---------------------------------------------------------------------------
 
 (define (main)
-  (let* ((mpath (manifest-path))
-         (entries (read-manifest mpath)))
+  (let ((entries (load-entries)))
     (display "wile-axis-b: loaded ")
     (display (length entries))
-    (display " primitives from ")
-    (display mpath)
+    (display " primitives from (registered-primitives)")
     (newline)
     (parameterize ((current-go-target "github.com/aalpar/wile/..."))
       (display "wile-axis-b: building SSA for wile/... (this takes a minute)")

@@ -676,3 +676,59 @@ func TestDocTopicErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestRegisteredPrimitives(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name:     "returns a non-empty list",
+			Code:     `(> (length (registered-primitives)) 100)`,
+			Expected: values.TrueValue,
+		},
+		{
+			Name:     "car of list satisfies primitive-spec?",
+			Code:     `(primitive-spec? (car (registered-primitives)))`,
+			Expected: values.TrueValue,
+		},
+		{
+			Name:     "primitive-spec? rejects non-specs",
+			Code:     `(primitive-spec? 42)`,
+			Expected: values.FalseValue,
+		},
+		{
+			Name:     "cons's spec has name cons",
+			Code:     "(let loop ((ps (registered-primitives)))\n  (cond ((null? ps) #f)\n        ((string=? (primitive-spec-name (car ps)) \"cons\") #t)\n        (else (loop (cdr ps)))))",
+			Expected: values.TrueValue,
+		},
+		{
+			Name:     "cons param-count is 2",
+			Code:     "(let loop ((ps (registered-primitives)))\n  (cond ((null? ps) -1)\n        ((string=? (primitive-spec-name (car ps)) \"cons\")\n         (primitive-spec-param-count (car ps)))\n        (else (loop (cdr ps)))))",
+			Expected: values.NewInteger(2),
+		},
+		{
+			Name:     "cons go-function is non-empty",
+			Code:     "(let loop ((ps (registered-primitives)))\n  (cond ((null? ps) #f)\n        ((string=? (primitive-spec-name (car ps)) \"cons\")\n         (> (string-length (primitive-spec-go-function (car ps))) 0))\n        (else (loop (cdr ps)))))",
+			Expected: values.TrueValue,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
+func TestRegisteredPrimitivesErrors(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "accessor on non-spec", Code: `(primitive-spec-name 42)`},
+		{Name: "accessor on wrong-tag opaque", Code: `(primitive-spec-name "hello")`},
+		{Name: "return-type on non-spec", Code: `(primitive-spec-return-type '())`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}

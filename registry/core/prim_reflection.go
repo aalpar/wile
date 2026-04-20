@@ -17,7 +17,10 @@ package core
 import (
 	"context"
 	"errors"
+	"reflect"
+	"runtime"
 	"sort"
+	"strconv"
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/machine/compilation"
@@ -26,6 +29,59 @@ import (
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
+
+// primitiveSpecTag is the OpaqueValue tag for registry.PrimitiveRegistration
+// wrappers returned by PrimRegisteredPrimitives.
+const primitiveSpecTag = "primitive-spec"
+
+// errNotPrimitiveSpec is the sentinel for accessor calls on non-spec values.
+var errNotPrimitiveSpec = werr.NewStaticError("not a primitive-spec")
+
+// unwrapPrimitiveSpec extracts a *registry.PrimitiveRegistration from a
+// Scheme value, returning a descriptive error if the value has the wrong
+// type, tag, or payload.
+func unwrapPrimitiveSpec(v values.Value, op string) (*registry.PrimitiveRegistration, error) {
+	o, ok := v.(*values.OpaqueValue)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(errNotPrimitiveSpec,
+			"%s: expected primitive-spec, got %T", op, v)
+	}
+	if o.OpaqueTag() != primitiveSpecTag {
+		return nil, werr.WrapForeignErrorf(errNotPrimitiveSpec,
+			"%s: expected primitive-spec, got opaque tag %q", op, o.OpaqueTag())
+	}
+	reg, ok := o.Unwrap().(*registry.PrimitiveRegistration)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(errNotPrimitiveSpec,
+			"%s: corrupted primitive-spec payload", op)
+	}
+	return reg, nil
+}
+
+// resolveImplLocation returns the fully-qualified Go function name and
+// "file:line" source location for a PrimitiveSpec.Impl, or empty strings
+// for binding-only primitives (nil Impl). Callers mirror the wile repo
+// audit_manifest_test.go resolveImpl logic — this is the runtime
+// equivalent, exposed to Scheme.
+func resolveImplLocation(impl machine.ForeignFunction) (goFunc, goSource string) {
+	if impl == nil {
+		return "", ""
+	}
+	v := reflect.ValueOf(impl)
+	if v.Kind() != reflect.Func || v.IsNil() {
+		return "", ""
+	}
+	pc := v.Pointer()
+	rf := runtime.FuncForPC(pc)
+	if rf == nil {
+		return "", ""
+	}
+	file, line := rf.FileLine(pc)
+	if file == "" || line == 0 {
+		return rf.Name(), ""
+	}
+	return rf.Name(), file + ":" + strconv.Itoa(line)
+}
 
 // closureArity returns the Scheme arity value for a single closure.
 // Fixed arity -> integer, variadic -> (min . #f).
@@ -406,4 +462,117 @@ func ensureExportIndex(mc machine.CallContext) *compilation.LibraryExportIndex {
 	}
 	ns.SetExportIndex(result)
 	return result
+}
+
+// PrimRegisteredPrimitives implements (registered-primitives).
+// Returns a list of opaque primitive-spec values wrapping the current
+// namespace's registry entries. Each value can be queried via the
+// primitive-spec-* accessors below.
+func PrimRegisteredPrimitives(mc machine.CallContext) error {
+	reg := registryFromContext(mc)
+	if reg == nil {
+		mc.SetValue(values.EmptyList)
+		return nil
+	}
+	prims := reg.Primitives()
+	result := make([]values.Value, len(prims))
+	for i := range prims {
+		// Copy the registration into a heap-allocated value so the
+		// OpaqueValue payload is stable — reg.Primitives() returns a
+		// defensive copy, but we still want a stable pointer identity
+		// across multiple calls for the same index.
+		r := prims[i]
+		result[i] = values.NewOpaqueValue(primitiveSpecTag, &r)
+	}
+	mc.SetValue(values.List(result...))
+	return nil
+}
+
+// PrimPrimitiveSpecQ implements (primitive-spec? v).
+func PrimPrimitiveSpecQ(mc machine.CallContext) error {
+	o, ok := mc.Arg(0).(*values.OpaqueValue)
+	mc.SetValue(values.BoolToBoolean(ok && o.OpaqueTag() == primitiveSpecTag))
+	return nil
+}
+
+// PrimPrimitiveSpecName implements (primitive-spec-name spec).
+func PrimPrimitiveSpecName(mc machine.CallContext) error {
+	reg, err := unwrapPrimitiveSpec(mc.Arg(0), "primitive-spec-name")
+	if err != nil {
+		return err
+	}
+	mc.SetValue(values.NewString(reg.Spec.Name))
+	return nil
+}
+
+// PrimPrimitiveSpecReturnType implements (primitive-spec-return-type spec).
+// Returns the declared ReturnType name, or the empty string if unset.
+func PrimPrimitiveSpecReturnType(mc machine.CallContext) error {
+	reg, err := unwrapPrimitiveSpec(mc.Arg(0), "primitive-spec-return-type")
+	if err != nil {
+		return err
+	}
+	name := ""
+	if reg.Spec.ReturnType != nil {
+		name = reg.Spec.ReturnType.Name()
+	}
+	mc.SetValue(values.NewString(name))
+	return nil
+}
+
+// PrimPrimitiveSpecParamCount implements (primitive-spec-param-count spec).
+func PrimPrimitiveSpecParamCount(mc machine.CallContext) error {
+	reg, err := unwrapPrimitiveSpec(mc.Arg(0), "primitive-spec-param-count")
+	if err != nil {
+		return err
+	}
+	mc.SetValue(values.NewInteger(int64(reg.Spec.ParamCount)))
+	return nil
+}
+
+// PrimPrimitiveSpecVariadicQ implements (primitive-spec-variadic? spec).
+func PrimPrimitiveSpecVariadicQ(mc machine.CallContext) error {
+	reg, err := unwrapPrimitiveSpec(mc.Arg(0), "primitive-spec-variadic?")
+	if err != nil {
+		return err
+	}
+	mc.SetValue(values.BoolToBoolean(reg.Spec.IsVariadic))
+	return nil
+}
+
+// PrimPrimitiveSpecGoFunction implements (primitive-spec-go-function spec).
+// Returns the fully-qualified Go function name, or the empty string for
+// binding-only primitives (nil Impl).
+func PrimPrimitiveSpecGoFunction(mc machine.CallContext) error {
+	reg, err := unwrapPrimitiveSpec(mc.Arg(0), "primitive-spec-go-function")
+	if err != nil {
+		return err
+	}
+	goFunc, _ := resolveImplLocation(reg.Spec.Impl)
+	mc.SetValue(values.NewString(goFunc))
+	return nil
+}
+
+// PrimPrimitiveSpecGoSource implements (primitive-spec-go-source spec).
+// Returns "file:line" (absolute path), or the empty string for
+// binding-only primitives. Callers wanting a repo-relative path should
+// strip the known workspace prefix themselves.
+func PrimPrimitiveSpecGoSource(mc machine.CallContext) error {
+	reg, err := unwrapPrimitiveSpec(mc.Arg(0), "primitive-spec-go-source")
+	if err != nil {
+		return err
+	}
+	_, goSource := resolveImplLocation(reg.Spec.Impl)
+	mc.SetValue(values.NewString(goSource))
+	return nil
+}
+
+// PrimPrimitiveSpecCategory implements (primitive-spec-category spec).
+func PrimPrimitiveSpecCategory(mc machine.CallContext) error {
+	reg, err := unwrapPrimitiveSpec(mc.Arg(0), "primitive-spec-category")
+	if err != nil {
+		return err
+	}
+	mc.SetValue(values.NewString(reg.Spec.Category))
+	return nil
 }

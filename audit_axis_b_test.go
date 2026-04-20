@@ -14,13 +14,13 @@
 
 // Axis-B analyzer regression guard (Phase 3.B).
 //
-// Runs audit/wile-axis-b.scm against a 4-entry fixture manifest and
-// asserts the raw output contains bucket classifications for all four
-// primitives. The script and its fixture live here in wile because the
-// analysis it performs is wile-specific (sink methods, Go→wile type
-// mapping, declared-return-type comparison). The generic Go-SSA
-// primitives it invokes — go-ssa-build and go-ssa-narrow — live in the
-// wile-goast repo.
+// Runs audit/wile-axis-b.scm filtered to 4 well-known primitives via
+// WILE_AXIS_B_NAMES and asserts the raw output contains bucket
+// classifications for each. The script lives in wile because the
+// analysis is wile-specific (sink methods, Go→wile type mapping,
+// declared-return-type comparison against wile's TypeConstraint
+// vocabulary). The generic Go-SSA primitives it invokes — go-ssa-build
+// and go-ssa-narrow — live in the wile-goast repo.
 //
 // The test invokes wile-goast via `go run` against the workspace
 // go.work, so no pre-built binary is required.
@@ -39,11 +39,11 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// TestAxisBSmoke runs audit/wile-axis-b.scm against a 4-entry fixture
-// and asserts each fixture primitive appears in the raw output. Does not
-// pin bucket assignments — those evolve with narrowing improvements in
-// wile-goast. Guards against script crashes, missing entries, or output
-// format drift.
+// TestAxisBSmoke runs audit/wile-axis-b.scm filtered via WILE_AXIS_B_NAMES
+// to 4 well-known primitives and asserts each appears in the raw output.
+// Does not pin bucket assignments — those evolve with narrowing
+// improvements in wile-goast. Guards against script crashes, missing
+// entries, or output format drift.
 func TestAxisBSmoke(t *testing.T) {
 	if testing.Short() {
 		t.Skip("smoke test runs go build + script — slow")
@@ -53,12 +53,9 @@ func TestAxisBSmoke(t *testing.T) {
 	_, thisFile, _, _ := runtime.Caller(0)
 	repoRoot := filepath.Dir(thisFile)
 	script := filepath.Join(repoRoot, "audit", "wile-axis-b.scm")
-	fixture := filepath.Join(repoRoot, "audit", "testdata", "axis-b-fixture-manifest.scm")
 
-	for _, path := range []string{script, fixture} {
-		_, err := os.Stat(path)
-		c.Assert(err, qt.IsNil, qt.Commentf("required file missing: %s", path))
-	}
+	_, err := os.Stat(script)
+	c.Assert(err, qt.IsNil, qt.Commentf("script missing: %s", script))
 
 	rawOut := filepath.Join(t.TempDir(), "axis-b-raw.scm")
 	invOut := filepath.Join(t.TempDir(), "axis-b-inventory.md")
@@ -71,7 +68,7 @@ func TestAxisBSmoke(t *testing.T) {
 		"-f", script)
 	cmd.Dir = repoRoot
 	cmd.Env = append(os.Environ(),
-		"WILE_AXIS_B_MANIFEST="+fixture,
+		"WILE_AXIS_B_NAMES=cons,null?,length,car",
 		"WILE_AXIS_B_RAW_OUTPUT="+rawOut,
 		"WILE_AXIS_B_INVENTORY="+invOut,
 	)
