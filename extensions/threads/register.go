@@ -48,11 +48,12 @@ func addThreads(r *registry.Registry) error {
 			Doc: "Creates a new thread that will execute THUNK when started. Optional NAME for debugging.", ParamNames: []string{"thunk", "name"}, Category: "threads",
 			Keywords:   []string{"spawn", "goroutine", "create thread", "concurrent"},
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure, values.TypeAny}, ReturnType: values.TypeAny},
-		// thread-name returns a string or #f; specific accessors return any
-		// stored value — TypeAny covers the union.
+		// {thread,mutex,condition-variable}-name unconditionally wrap the stored
+		// Go-side name (possibly "") via values.NewString — always a string.
+		// specific accessors return the stored Value → TypeAny.
 		{Name: "thread-name", ParamCount: 1, Impl: PrimThreadName,
-			Doc: "Returns the name of THREAD as a string, or #f if unnamed.", ParamNames: []string{"thread"}, Category: "threads",
-			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
+			Doc: "Returns the name of THREAD as a string. Unnamed threads have the empty string.", ParamNames: []string{"thread"}, Category: "threads",
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeString},
 		{Name: "thread-specific", ParamCount: 1, Impl: PrimThreadSpecific,
 			Doc: "Returns the thread-local specific value associated with THREAD.", ParamNames: []string{"thread"}, Category: "threads",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
@@ -92,8 +93,8 @@ func addMutexes(r *registry.Registry) error {
 			Keywords:   []string{"lock", "synchronization", "critical section"},
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "mutex-name", ParamCount: 1, Impl: PrimMutexName,
-			Doc: "Returns the name of MUTEX, or #f if unnamed.", ParamNames: []string{"mutex"}, Category: "mutexes",
-			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
+			Doc: "Returns the name of MUTEX as a string. Unnamed mutexes have the empty string.", ParamNames: []string{"mutex"}, Category: "mutexes",
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeString},
 		{Name: "mutex-specific", ParamCount: 1, Impl: PrimMutexSpecific,
 			Doc: "Returns the mutex-local specific value.", ParamNames: []string{"mutex"}, Category: "mutexes",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
@@ -126,8 +127,8 @@ func addConditionVariables(r *registry.Registry) error {
 			Doc: "Creates a new condition variable. Optional NAME for debugging.", ParamNames: []string{"name"}, Category: "condvars",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
 		{Name: "condition-variable-name", ParamCount: 1, Impl: PrimConditionVariableName,
-			Doc: "Returns the name of CONDVAR, or #f if unnamed.", ParamNames: []string{"condvar"}, Category: "condvars",
-			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
+			Doc: "Returns the name of CONDVAR as a string. Unnamed condition variables have the empty string.", ParamNames: []string{"condvar"}, Category: "condvars",
+			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeString},
 		{Name: "condition-variable-specific", ParamCount: 1, Impl: PrimConditionVariableSpecific,
 			Doc: "Returns the condition-variable-local specific value.", ParamNames: []string{"condvar"}, Category: "condvars",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
