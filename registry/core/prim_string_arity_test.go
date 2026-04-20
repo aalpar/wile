@@ -15,11 +15,13 @@
 package core_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -78,6 +80,54 @@ func TestStrings_ArityErrors(t *testing.T) {
 	for _, tc := range variadicMinErrors {
 		t.Run(tc.name, func(t *testing.T) {
 			testhelpers.RunSchemeCodeExpectError(t, tc.code)
+		})
+	}
+}
+
+// TestSubstring_IntegerSentinel verifies that substring reports a
+// "not an integer" error (not "not a number") when passed non-integer
+// start/end. See F2 in the strings audit.
+func TestSubstring_IntegerSentinel(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "non-integer start", Code: `(substring "hello" "0" 3)`},
+		{Name: "non-integer end", Code: `(substring "hello" 0 "3")`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			err := testhelpers.RunSchemeCodeExpectError(t, tc.Code)
+			qt.Assert(t, errors.Is(err, werr.ErrNotAnInteger), qt.IsTrue,
+				qt.Commentf("expected ErrNotAnInteger, got: %v", err))
+			qt.Assert(t, errors.Is(err, werr.ErrNotANumber), qt.IsFalse,
+				qt.Commentf("should not be ErrNotANumber (F2 drift), got: %v", err))
+		})
+	}
+}
+
+// TestStrings_ExcessArgRejection verifies that primitives with an optional-arg
+// upper bound (R7RS §6.7) reject trailing arguments beyond their spec'd max
+// arity. Historically these were silently accepted because
+// helpers.ParseOptionalArg / ParseOptionalStartEnd did not check the rest
+// list's tail. See F1 in the strings audit.
+func TestStrings_ExcessArgRejection(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		// make-string: k [char] — at most 2 args
+		{Name: "make-string three args", Code: `(make-string 3 #\a #\b)`},
+		// string->list: string [start [end]] — at most 3 args
+		{Name: "string->list four args", Code: `(string->list "hello" 1 3 99)`},
+		// string-copy: string [start [end]] — at most 3 args
+		{Name: "string-copy four args", Code: `(string-copy "hello" 1 3 99)`},
+		// string-copy!: to at from [start [end]] — at most 5 args
+		{Name: "string-copy! six args",
+			Code: `(let ((s (string-copy "abcde"))) (string-copy! s 0 "xyz" 0 2 99))`},
+		// string-fill!: string fill [start [end]] — at most 4 args
+		{Name: "string-fill! five args",
+			Code: `(let ((s (string-copy "hello"))) (string-fill! s #\x 0 5 99))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			err := testhelpers.RunSchemeCodeExpectError(t, tc.Code)
+			qt.Assert(t, errors.Is(err, werr.ErrWrongNumberOfArguments), qt.IsTrue,
+				qt.Commentf("expected ErrWrongNumberOfArguments, got: %v", err))
 		})
 	}
 }

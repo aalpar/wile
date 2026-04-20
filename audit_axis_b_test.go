@@ -57,6 +57,18 @@ func TestAxisBSmoke(t *testing.T) {
 	_, err := os.Stat(script)
 	c.Assert(err, qt.IsNil, qt.Commentf("script missing: %s", script))
 
+	// wile-goast is resolved via the workspace-level go.work. In bare
+	// checkouts (CI, `go install` consumers) the module isn't available.
+	// Probe resolvability and skip if not present — the smoke test is a
+	// local dev-loop guard, not a CI gate.
+	probe := exec.CommandContext(context.Background(), "go", "list", "-m",
+		"github.com/aalpar/wile-goast")
+	probe.Dir = repoRoot
+	_, probeErr := probe.CombinedOutput()
+	if probeErr != nil {
+		t.Skipf("wile-goast module not resolvable (no go.work?): %v", probeErr)
+	}
+
 	rawOut := filepath.Join(t.TempDir(), "axis-b-raw.scm")
 	invOut := filepath.Join(t.TempDir(), "axis-b-inventory.md")
 

@@ -76,6 +76,16 @@ func ParseOptionalStartEnd(rest values.Value, defaultEnd int64, name string) (in
 			return 0, 0, werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: end must be an integer but got %T", name, tuple2.Car())
 		}
 		end = endVal.Value
+		tail := tuple2.Cdr()
+		if !values.IsEmptyList(tail) {
+			_, ok := tail.(values.Tuple)
+			if !ok {
+				return 0, 0, werr.WrapForeignErrorf(werr.ErrNotAList,
+					"%s: improper argument list", name)
+			}
+			return 0, 0, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
+				"%s: too many arguments after end", name)
+		}
 	}
 
 	return start, end, nil
@@ -136,24 +146,42 @@ func ParseSubrange(rest values.Value, length int, name string) (int, int, error)
 }
 
 // ParseOptionalArg extracts a single optional argument from variadic rest args.
-// Returns the value and true if present, or nil and false if rest is empty or
-// not a valid argument list.
-func ParseOptionalArg(rest values.Value) (values.Value, bool) {
+// Returns (value, true, nil) if exactly one argument is present.
+// Returns (nil, false, nil) if rest is empty.
+// Returns an error if rest is not a proper list or contains more than one element.
+// name is used in error messages (e.g., "make-vector").
+func ParseOptionalArg(rest values.Value, name string) (values.Value, bool, error) {
 	if values.IsEmptyList(rest) {
-		return nil, false
+		return nil, false, nil
 	}
 	tuple, ok := rest.(values.Tuple)
 	if !ok {
-		return nil, false
+		return nil, false, werr.WrapForeignErrorf(werr.ErrNotAList,
+			"%s: improper argument list", name)
 	}
-	return tuple.Car(), true
+	tail := tuple.Cdr()
+	if !values.IsEmptyList(tail) {
+		_, ok := tail.(values.Tuple)
+		if !ok {
+			return nil, false, werr.WrapForeignErrorf(werr.ErrNotAList,
+				"%s: improper argument list", name)
+		}
+		return nil, false, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
+			"%s: too many arguments", name)
+	}
+	return tuple.Car(), true, nil
 }
 
 // OptionalArg extracts an optional typed argument from variadic rest args.
 // If no argument is present, defaultVal is returned. If present but not of
-// type T, an error using sentinel and name is returned.
+// type T, an error using sentinel and name is returned. Extra arguments in
+// rest produce an ErrWrongNumberOfArguments error.
 func OptionalArg[T any](rest values.Value, defaultVal T, sentinel error, name string) (T, error) {
-	v, ok := ParseOptionalArg(rest)
+	v, ok, err := ParseOptionalArg(rest, name)
+	if err != nil {
+		var zero T
+		return zero, err
+	}
 	if !ok {
 		return defaultVal, nil
 	}

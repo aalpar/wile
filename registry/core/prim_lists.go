@@ -57,7 +57,10 @@ func PrimMakeList(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "make-list: k must be non-negative")
 	}
 	fill := values.Value(values.FalseValue)
-	v, ok := helpers.ParseOptionalArg(mc.Arg(1))
+	v, ok, err := helpers.ParseOptionalArg(mc.Arg(1), "make-list")
+	if err != nil {
+		return err
+	}
 	if ok {
 		fill = v
 	}
