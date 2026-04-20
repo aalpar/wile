@@ -10,12 +10,11 @@ This document catalogs differences between the current implementation and the R7
 
 ## Summary
 
-Five known differences exist:
+Four known differences exist:
 1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Conservative safe behavior with minimal practical impact.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
 3. `set-current-directory!` changes the process-global working directory via `os.Chdir`, which is inherently shared across all Wile engines and goroutines in the same OS process.
 4. Pair and vector literals are **mutable** (R7RS permits "it is an error" detection or non-detection). String literals are correctly immutable. Asymmetric by type.
-5. `read` on mid-parse EOF in pair and vector readers returns the EOF object instead of raising a `read-error?`-satisfying exception. String reader correctly raises.
 
 ---
 
@@ -129,39 +128,6 @@ Programs that must mutate should construct with `list`, `cons`, `make-vector`, o
 **Impact:** **LOW** — programs that mutate literals are already non-portable across R7RS implementations and fragile due to literal structure sharing. The standard practice (construct before mutating) avoids the issue entirely.
 
 **Estimated implementation effort:** 4-8 hours across pair.go, vector.go, compile_quote.go, plus tests.
-
----
-
-## Mid-Parse EOF in `read` Returns EOF Instead of `read-error?`
-
-**Affected Primitives:** `read`, `read-syntax` (pair and vector readers)
-
-**R7RS §6.13.2 Requirement:**
-> If an end of file is encountered in the input before any characters are found that can begin an object, then an end of file object is returned. [...] Exceptional situations that are detected by the read procedures shall be signaled by raising a non-continuable exception whose condition satisfies read-error?.
-
-Encountering EOF mid-parse of a compound datum (opening `(` or `#(` without the closing delimiter) is an "exceptional situation" by the second clause — the reader began parsing an object but could not complete it. R7RS expects a `read-error?`-satisfying exception.
-
-**Wile Behavior:** Mid-parse EOF in pair and vector readers silently returns the EOF object.
-
-```scheme
-(read (open-input-string "("))        ; => #!eof  (should raise read-error)
-(read (open-input-string "(1 2"))     ; => #!eof
-(read (open-input-string "#("))       ; => #!eof
-
-(read (open-input-string "\"unterm")) ; correctly raises read-error
-```
-
-The string reader correctly raises a read-error on unterminated strings; the pair and vector readers don't. The inconsistency is the load-bearing part of the finding — string is right, pair/vector are wrong.
-
-**Root Cause:**
-
-`internal/parser/parser.go:179` returns `io.EOF` for both clean EOF (at token boundary) and mid-parse EOF (inside an unclosed compound form). `internal/extensions/io/prim_read_write.go:179` treats `errors.Is(err, io.EOF)` as a clean EOF and returns `values.EOFObject` without raising. The parser does not distinguish the two cases.
-
-A proper fix introduces a new sentinel (e.g., `werr.ErrUnterminatedDatum` or use `io.ErrUnexpectedEOF`) returned by `readList`, `readVector`, `readByteVector` when they hit EOF before the closing delimiter. `PrimRead`/`PrimReadSyntax` wrap that as a read-error; only the outer "nothing left to read" case returns `values.EOFObject`.
-
-**Impact:** **LOW-MEDIUM**. Ordinary Scheme programs do not `read` incomplete input. The rare caller that does (a REPL-style reader) may rely on the current behavior to signal "more input needed" — any fix should either preserve that via a different signaling channel (e.g., a specific error class the REPL can catch) or provide both strict and lenient modes.
-
-**Estimated implementation effort:** 1–2 hours across `parser.go` (readList/readVector/readByteVector), `prim_read_write.go` (PrimRead, PrimReadSyntax, PrimReadToken), plus read-error tests.
 
 ---
 

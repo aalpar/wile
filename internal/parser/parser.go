@@ -207,7 +207,7 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 	// Skip the opening paren/bracket
 	p.cur, p.err = p.toks.Next()
 	if p.err != nil {
-		return nil, p.err
+		return nil, wrapMidParseEOF(p.err, p.cur, "labeled list")
 	}
 
 	// Handle empty list: () or []
@@ -218,20 +218,20 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 	// Check for bracket mismatch on close
 	err := p.checkDelimiterMatch(opener)
 	if err != nil {
-		return nil, err
+		return nil, wrapMidParseEOF(err, p.cur, "labeled list")
 	}
 
 	// Read the first element
 	first, _, err := p.readSyntax()
 	if err != nil {
-		return nil, err
+		return nil, wrapMidParseEOF(err, p.cur, "labeled list")
 	}
 	placeholder.SetCar(first)
 
 	// Advance to next token
 	p.cur, p.err = p.toks.Next()
 	if p.err != nil {
-		return nil, p.err
+		return nil, wrapMidParseEOF(p.err, p.cur, "labeled list")
 	}
 
 	// Check for improper list: (a . b) or [a . b]
@@ -239,23 +239,23 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 		// Skip the dot
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
-			return nil, p.err
+			return nil, wrapMidParseEOF(p.err, p.cur, "labeled list")
 		}
 		// Read the cdr
 		cdr, _, err := p.readSyntax()
 		if err != nil {
-			return nil, err
+			return nil, wrapMidParseEOF(err, p.cur, "labeled list")
 		}
 		placeholder.SetCdr(cdr)
 		// Advance past the cdr and expect matching close delimiter
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
-			return nil, p.err
+			return nil, wrapMidParseEOF(p.err, p.cur, "labeled list")
 		}
 		if p.cur.Type() != expectedClose {
 			err := p.checkDelimiterMatch(opener)
 			if err != nil {
-				return nil, err
+				return nil, wrapMidParseEOF(err, p.cur, "labeled list")
 			}
 			return nil, NewParserErrorf(p.cur, "expected %s after improper list cdr",
 				p.delimiterString(expectedClose))
@@ -272,7 +272,7 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 	// Check for bracket mismatch
 	err = p.checkDelimiterMatch(opener)
 	if err != nil {
-		return nil, err
+		return nil, wrapMidParseEOF(err, p.cur, "labeled list")
 	}
 
 	// Continue reading remaining elements
@@ -284,7 +284,7 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 		// Read the element
 		elem, _, err := p.readSyntax()
 		if err != nil {
-			return nil, err
+			return nil, wrapMidParseEOF(err, p.cur, "labeled list")
 		}
 		nextPair.SetCar(elem)
 
@@ -295,7 +295,7 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 		// Advance to next token
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
-			return nil, p.err
+			return nil, wrapMidParseEOF(p.err, p.cur, "labeled list")
 		}
 	}
 
@@ -305,23 +305,23 @@ func (p *Parser) readLabeledList(placeholder *syntax.SyntaxPair, opener tokenize
 		// Skip the dot
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
-			return nil, p.err
+			return nil, wrapMidParseEOF(p.err, p.cur, "labeled list")
 		}
 		// Read the final cdr
 		cdr, _, err := p.readSyntax()
 		if err != nil {
-			return nil, err
+			return nil, wrapMidParseEOF(err, p.cur, "labeled list")
 		}
 		current.SetCdr(cdr)
 		// Advance past the cdr and expect matching close delimiter
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
-			return nil, p.err
+			return nil, wrapMidParseEOF(p.err, p.cur, "labeled list")
 		}
 		if p.cur.Type() != expectedClose {
 			err := p.checkDelimiterMatch(opener)
 			if err != nil {
-				return nil, err
+				return nil, wrapMidParseEOF(err, p.cur, "labeled list")
 			}
 			return nil, NewParserErrorf(p.cur, "expected %s after improper list cdr",
 				p.delimiterString(expectedClose))
@@ -469,6 +469,28 @@ func (p *Parser) readDatumComment() (syntax.SyntaxValue, tokenizer.Token, error)
 	return q, p.cur, nil
 }
 
+// wrapMidParseEOF converts io.EOF (returned by the tokenizer at end of
+// input, or propagated by nested readSyntax) into a ParserError wrapping
+// io.ErrUnexpectedEOF. Callers inside compound readers (readList,
+// readLabeledList, readVector, readByteVector) use this to distinguish
+// mid-parse EOF ("source ended inside an unclosed form") from clean EOF
+// at a token boundary. R7RS §6.13.2 requires mid-parse EOF to raise a
+// read-error, not return the EOF object — PrimRead wraps the returned
+// io.ErrUnexpectedEOF via WrapForeignReadErrorf. Non-EOF errors pass
+// through unchanged.
+//
+// Free function, not a method: the subject of the operation is err (and
+// the location tok at which it occurred), not the Parser itself. Taking
+// both as explicit parameters makes the call-site synchronization
+// contract visible; a receiver-held token would hide it.
+func wrapMidParseEOF(err error, tok tokenizer.Token, form string) error {
+	if errors.Is(err, io.EOF) {
+		return NewParserErrorWithWrapf(io.ErrUnexpectedEOF, tok,
+			"unterminated %s: unexpected end of input", form)
+	}
+	return err
+}
+
 // readList reads a list form opened by ( or [.
 // Handles proper lists (a b c), improper lists (a b . c), and bracket matching.
 func (p *Parser) readList(opener tokenizer.TokenizerState) (syntax.SyntaxValue, tokenizer.Token, error) {
@@ -477,7 +499,7 @@ func (p *Parser) readList(opener tokenizer.TokenizerState) (syntax.SyntaxValue, 
 	pr = p.wrapSyntaxPair(nil, nil, p.cur)
 	p.cur, p.err = p.toks.Next()
 	if p.err != nil {
-		return nil, p.cur, p.err
+		return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "list")
 	}
 	q0 := pr
 	pr0 := p.wrapSyntaxPair(nil, nil, p.cur)
@@ -485,7 +507,7 @@ func (p *Parser) readList(opener tokenizer.TokenizerState) (syntax.SyntaxValue, 
 		var v syntax.SyntaxValue
 		v, _, p.err = p.readSyntax()
 		if p.err != nil {
-			return nil, p.cur, p.err
+			return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "list")
 		}
 		// After skipping comments, we may have landed on a delimiter (close paren/bracket or cons)
 		// In that case, readSyntax returns nil and we should exit the loop
@@ -498,7 +520,7 @@ func (p *Parser) readList(opener tokenizer.TokenizerState) (syntax.SyntaxValue, 
 		pr = pr0.Cdr().(*syntax.SyntaxPair)
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
-			return nil, p.cur, p.err
+			return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "list")
 		}
 	}
 	switch {
@@ -506,18 +528,18 @@ func (p *Parser) readList(opener tokenizer.TokenizerState) (syntax.SyntaxValue, 
 		// skip the '.' token
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
-			return nil, p.cur, p.err
+			return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "list")
 		}
 		// read cdr value in improper list
 		var v syntax.SyntaxValue
 		v, _, p.err = p.readSyntax()
 		if p.err != nil {
-			return nil, p.cur, p.err
+			return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "list")
 		}
 		pr = v
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
-			return nil, p.cur, p.err
+			return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "list")
 		}
 		// Check for bracket mismatch
 		if p.cur.Type() != expectedClose {
@@ -546,7 +568,7 @@ func (p *Parser) readVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 	// Advance past #( token
 	p.cur, p.err = p.toks.Next()
 	if p.err != nil {
-		return nil, p.cur, p.err
+		return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "vector")
 	}
 	// Read vector elements - match the list parsing pattern:
 	// check token type BEFORE reading, advance AFTER reading
@@ -554,13 +576,13 @@ func (p *Parser) readVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 		var v syntax.SyntaxValue
 		v, _, p.err = p.readSyntax()
 		if p.err != nil {
-			return nil, p.cur, p.err
+			return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "vector")
 		}
 		q.Values = append(q.Values, v)
 		// Advance to next element (or close paren)
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
-			return nil, p.cur, p.err
+			return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "vector")
 		}
 	}
 	return q, p.cur, nil
@@ -571,12 +593,12 @@ func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 	q0 := values.NewByteVector()
 	p.cur, p.err = p.toks.Next()
 	if p.err != nil {
-		return nil, p.cur, p.err
+		return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "bytevector")
 	}
 	var stx syntax.SyntaxValue
 	stx, _, p.err = p.readSyntax()
 	if p.err != nil {
-		return nil, p.cur, p.err
+		return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "bytevector")
 	}
 	if p.curr().Type() == tokenizer.TokenizerStateCloseParen {
 		// Empty bytevector case: #u8()
@@ -593,11 +615,11 @@ func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 		*q0 = append(*q0, values.NewByte(uint8(i.Value)))
 		p.cur, p.err = p.toks.Next()
 		if p.err != nil {
-			return nil, p.cur, p.err
+			return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "bytevector")
 		}
 		stx, _, p.err = p.readSyntax()
 		if p.err != nil {
-			return nil, p.cur, p.err
+			return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "bytevector")
 		}
 		if p.curr().Type() == tokenizer.TokenizerStateCloseParen {
 			break
@@ -605,7 +627,7 @@ func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 		i, ok = stx.Unwrap().(*values.Integer)
 	}
 	if p.err != nil {
-		return nil, p.cur, p.err
+		return nil, p.cur, wrapMidParseEOF(p.err, p.cur, "bytevector")
 	}
 	return p.wrapSyntax(q0, p.cur), p.cur, nil
 }
