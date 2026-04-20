@@ -76,7 +76,13 @@ func ParseOptionalStartEnd(rest values.Value, defaultEnd int64, name string) (in
 			return 0, 0, werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: end must be an integer but got %T", name, tuple2.Car())
 		}
 		end = endVal.Value
-		if !values.IsEmptyList(tuple2.Cdr()) {
+		tail := tuple2.Cdr()
+		if !values.IsEmptyList(tail) {
+			_, ok := tail.(values.Tuple)
+			if !ok {
+				return 0, 0, werr.WrapForeignErrorf(werr.ErrNotAList,
+					"%s: improper argument list", name)
+			}
 			return 0, 0, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
 				"%s: too many arguments after end", name)
 		}
@@ -153,7 +159,13 @@ func ParseOptionalArg(rest values.Value, name string) (values.Value, bool, error
 		return nil, false, werr.WrapForeignErrorf(werr.ErrNotAList,
 			"%s: improper argument list", name)
 	}
-	if !values.IsEmptyList(tuple.Cdr()) {
+	tail := tuple.Cdr()
+	if !values.IsEmptyList(tail) {
+		_, ok := tail.(values.Tuple)
+		if !ok {
+			return nil, false, werr.WrapForeignErrorf(werr.ErrNotAList,
+				"%s: improper argument list", name)
+		}
 		return nil, false, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
 			"%s: too many arguments", name)
 	}

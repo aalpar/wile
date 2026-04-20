@@ -15,11 +15,13 @@
 package core_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/aalpar/wile/registry/testhelpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -92,7 +94,11 @@ func TestSubstring_IntegerSentinel(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
-			testhelpers.RunSchemeCodeExpectError(t, tc.Code)
+			err := testhelpers.RunSchemeCodeExpectError(t, tc.Code)
+			qt.Assert(t, errors.Is(err, werr.ErrNotAnInteger), qt.IsTrue,
+				qt.Commentf("expected ErrNotAnInteger, got: %v", err))
+			qt.Assert(t, errors.Is(err, werr.ErrNotANumber), qt.IsFalse,
+				qt.Commentf("should not be ErrNotANumber (F2 drift), got: %v", err))
 		})
 	}
 }
@@ -119,7 +125,9 @@ func TestStrings_ExcessArgRejection(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
-			testhelpers.RunSchemeCodeExpectError(t, tc.Code)
+			err := testhelpers.RunSchemeCodeExpectError(t, tc.Code)
+			qt.Assert(t, errors.Is(err, werr.ErrWrongNumberOfArguments), qt.IsTrue,
+				qt.Commentf("expected ErrWrongNumberOfArguments, got: %v", err))
 		})
 	}
 }

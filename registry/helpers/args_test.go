@@ -157,6 +157,35 @@ func TestParseOptionalStartEnd_ExtraArgsRejected(t *testing.T) {
 	c.Assert(errors.Is(err, werr.ErrWrongNumberOfArguments), qt.IsTrue)
 }
 
+func TestParseOptionalStartEnd_ImproperTailRejected(t *testing.T) {
+	c := qt.New(t)
+	// (start end . improper) — dotted pair after end is not a proper list.
+	rest := &values.Pair{
+		values.NewInteger(1),
+		&values.Pair{
+			values.NewInteger(2),
+			values.NewInteger(99), // non-Tuple, non-empty tail
+		},
+	}
+	_, _, err := ParseOptionalStartEnd(rest, 10, "test")
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, werr.ErrNotAList), qt.IsTrue,
+		qt.Commentf("improper-list tail should produce ErrNotAList, not ErrWrongNumberOfArguments"))
+}
+
+func TestParseOptionalArg_ImproperTailRejected(t *testing.T) {
+	c := qt.New(t)
+	// (arg . improper) — dotted pair tail.
+	rest := &values.Pair{
+		values.NewInteger(1),
+		values.NewInteger(2), // non-Tuple, non-empty tail
+	}
+	_, _, err := ParseOptionalArg(rest, "test")
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(errors.Is(err, werr.ErrNotAList), qt.IsTrue,
+		qt.Commentf("improper-list tail should produce ErrNotAList, not ErrWrongNumberOfArguments"))
+}
+
 func TestRequireType_Failure_SentinelPreserved(t *testing.T) {
 	c := qt.New(t)
 	sentinels := []error{
