@@ -77,14 +77,17 @@ Each primitive lands in exactly one bucket. The bucket is determined by the shap
 
 ### 6.1 Where it lives
 
-- **Manifest generator**: wile repo. Reuses the runtime enumeration Phase 1 already performs.
-- **SSA analyzer**: wile-goast repo, as a script at `cmd/wile-goast/scripts/wile-axis-b.scm` (the `go:embed`-ed script directory alongside existing `unify-detect.scm` and `goast-query.scm`). Invoked as `wile-goast --run wile-axis-b`. Infrastructure (SSA build, callgraph, Go type queries) lives in wile-goast. Note: because scripts are embedded into the binary, the B PR (analyzer) must land and wile-goast must be rebuilt locally before the C PR (inventory landing) can be generated.
+- **Manifest generator**: wile repo, `audit_manifest_test.go` at repo root.
+- **SSA analyzer script**: wile repo, `audit/wile-axis-b.scm`. The script is wile-specific (knows about wile's `CallContext` sinks, value types, and `TypeConstraint` vocabulary) so it lives with the code it analyzes.
+- **Generic SSA primitives**: wile-goast repo — `go-ssa-build`, `go-ssa-narrow`, and the supporting infrastructure. Invoked from the wile-side script via `wile-goast -f audit/wile-axis-b.scm` from the wile repo root.
 - **Inventory output**: wile repo, under `plans/`.
+
+The split keeps wile-goast a generic Go-static-analysis tool that wile (and other consumers) can drive with domain-specific scripts. Nothing in wile-goast knows about wile's internals.
 
 ### 6.2 Two-pass discovery
 
 1. **Runtime pass (wile repo)**: walk `Registry.Primitives()` under `AllExtensions()`. For each primitive, record `(name, declared-ReturnType, go-function-name, go-source-location)`. The Go function name is resolved via `runtime.FuncForPC(reflect.ValueOf(spec.Impl).Pointer())` and source location via `Func.FileLine(pc)` — standard Go reflection technique. Output: `plans/axis-b-manifest.scm`, an S-expression list.
-2. **SSA pass (wile-goast repo)**: load the wile module via `go-ssa-build`. For each Go function in the manifest, walk the SSA to determine its narrowed return-type set.
+2. **SSA pass (`wile/audit/wile-axis-b.scm`)**: load the wile module via `go-ssa-build`. For each Go function in the manifest, walk the SSA to determine its narrowed return-type set. Run from wile repo root: `wile-goast -f audit/wile-axis-b.scm`.
 
 The manifest file is the contract between the two passes. It is committed so diffs across PRs reveal new / removed / renamed primitives as review signal.
 
