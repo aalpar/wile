@@ -175,7 +175,7 @@ func addPrimitives(r *registry.Registry) error {
 		{Name: "make-polar", ParamCount: 2, Impl: PrimMakePolar,
 			Doc: "Creates a complex number from MAGNITUDE and ANGLE (in radians).", ParamNames: []string{"magnitude", "angle"}, Category: "math",
 			ParamTypes: []values.TypeConstraint{values.TypeReal, values.TypeReal},
-			ReturnType: values.TypeNumber},
+			ReturnType: values.TypeComplex},
 		{Name: "real-part", ParamCount: 1, Impl: PrimRealPart,
 			Doc: "Returns the real part of Z. For real numbers, returns Z itself.", ParamNames: []string{"z"}, Category: "math",
 			ParamTypes: []values.TypeConstraint{values.TypeNumber},
@@ -191,7 +191,7 @@ func addPrimitives(r *registry.Registry) error {
 		{Name: "angle", ParamCount: 1, Impl: PrimAngle,
 			Doc: "Returns the angle (argument) of Z in radians. For positive reals, returns 0; for negative reals, returns pi.", ParamNames: []string{"z"}, Category: "math",
 			ParamTypes: []values.TypeConstraint{values.TypeNumber},
-			ReturnType: values.TypeReal},
+			ReturnType: values.TypeFlonum},
 	}, registry.PhaseRuntime)
 
 	// Number/string conversion
