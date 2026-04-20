@@ -181,6 +181,27 @@ func TestStringToUtf8EdgeCases(t *testing.T) {
 	}
 }
 
+// TestUtf8ToStringInvalid tests that utf8->string raises an error when
+// the bytevector is not well-formed UTF-8 (R7RS §6.9).
+func TestUtf8ToStringInvalid(t *testing.T) {
+	tcs := []testhelpers.SchemeCodeErrorTestCase{
+		{Name: "lone continuation byte", Code: `(utf8->string #u8(#x80))`},
+		{Name: "two lone continuation bytes", Code: `(utf8->string #u8(255 254 253))`},
+		{Name: "truncated two-byte sequence", Code: `(utf8->string #u8(#xc3))`},
+		{Name: "truncated three-byte sequence", Code: `(utf8->string #u8(#xe4 #xbd))`},
+		{Name: "truncated four-byte sequence", Code: `(utf8->string #u8(#xf0 #x9f #x98))`},
+		{Name: "overlong encoding", Code: `(utf8->string #u8(#xc0 #x80))`},
+		{Name: "surrogate half (U+D800)", Code: `(utf8->string #u8(#xed #xa0 #x80))`},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.Code)
+			qt.Assert(t, err, qt.IsNotNil)
+		})
+	}
+}
+
 // TestStringToUtf8RoundTrip verifies round-trip consistency.
 func TestStringToUtf8RoundTrip(t *testing.T) {
 	c := qt.New(t)

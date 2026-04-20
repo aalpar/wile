@@ -565,8 +565,83 @@ Go function not found in loaded SSA packages (binding-only primitive or missing 
 
 ## Type-system recommendations
 
-TODO — distill from the bucket counts above. Typical questions:
+Axis-B output (wile-goast) ran against 500 primitives. Reconciling against Phase 1/2 axis-A findings (`2026-04-19-audit-findings-phase1.md` — 0 live findings after resolution) and spot-checks on every declared-vs-narrowed mismatch in Single/Helper-widened: **zero real annotation lies surfaced by axis-B.** The buckets measure vocabulary gaps and analyzer reach, not annotation correctness.
 
-- Does `Maybe` have enough entries to justify a `TypeMaybe(T)` constructor?
-- Is `Narrow-union` dominated by 2-3 recurring pairs that could be named?
-- What's the Helper-widened reason-tag distribution pointing to for PR-2'?
+Per audit plan §6 Option A (2026-04-19), union narrowing is out of audit scope — findings here feed a **separate** downstream plan on `TypeConstraint` extensions. The text below is that plan's input.
+
+### Bucket-by-bucket synthesis
+
+**Single (162)** — cleanly narrowed to exactly one type. All declared-vs-narrowed mismatches in this bucket reduce to one of two noise patterns:
+
+1. **`TypeExactInteger` vs `integer`** (~15 entries, e.g. `length`, `string-length`, `char->integer`, `hashtable-size`): cosmetic. `TypeExactInteger` is literally `checks[TypeInteger]` (`values/value_type.go:201`). No fix; the vocabulary is a single type with two names.
+2. **`CallContext.SetValue(v)` idiom** (~20 entries, e.g. `once-do!` declared `boolean` narrowed `*MachineContext`, `continuation-prompt-available?` same, `%parameter-raw-set!` declared `void` narrowed `*Parameter`): the primitive sets its result via side-effect on the CallContext rather than Go return, so SSA narrowing latches onto whatever the last local was (loaded arg, sub-context, etc.). Verified on 4 suspects; all had correct declarations matching the actual `mc.SetValue(...)` call. **Strongest candidates for compile-time type checking** in Extension Contracts Phase 2 — these 162 annotations are now verified by two independent checks (axis-A example-based + axis-B SSA).
+
+**Maybe (12)** — uniform `T | #f` pattern. Every entry fits `TypeMaybe(T)`:
+
+| T | Primitives |
+|---|---|
+| string | `procedure-name`, `procedure-documentation`, `library-description`, `syntax-source`, `error-context-source`, `error-object-source`, `current-load-path`, `current-load-directory`, `namespace-name`, `get-environment-variable` |
+| integer | `digit-value` |
+| `ContinuationMarkSet` | `error-context-marks` |
+
+**Recommendation:** `TypeMaybe(T)` is the highest-value vocabulary extension — 12 entries, uniform shape, drop-in check (`v == FalseValue || checks[T](v)`). If exactly one `TypeConstraint` constructor ships, this is it.
+
+**Narrow-union (7)** — two shape families:
+
+| Shape | Primitives | Source |
+|---|---|---|
+| `complex \| flonum` | `log`, `atan` | transcendental, branch on negative real |
+| `integer \| rational \| flonum` | `numerator`, `denominator`, `rationalize`, `magnitude` | `Simplify()` output of real ops |
+| `symbol \| *Thread` | `mutex-state` | R7RS mutex states + owner |
+
+**Recommendation:** do NOT introduce a general `TypeUnion`. The 6 numeric entries are already soundly declared `real` / `number`; `mutex-state` is soundly declared `any`. A `TypeUnion` constructor would need to cover arity 2–4 and handle disjoint unions (the `symbol | thread` case crosses type families). Cost exceeds benefit given only 7 entries and zero demonstrated consumer pressure.
+
+**Broad-union (2)** — `sqrt`, `make-rectangular`. Declared `number` (sound). No action.
+
+**Helper-widened (125)** — analyzer reach limitation, not a type-system gap. Reason-tag distribution (informal count from inventory):
+
+| Reason-tag | Count (approx) | Pattern |
+|---|---|---|
+| `global-load` | ~80 | result built from global helper returning interface |
+| `interface-method-dispatch` | ~25 | result from `Tuple.Car()`, `Number.Add()`, etc. |
+| `field-deref-load` | ~15 | result from struct field (e.g. `mc.template.name`) |
+| `nil-constant` | ~10 | early return with nil as placeholder |
+| `cycle` | ~8 | SSA hit a back-edge and stopped |
+| `slice-deref-load` | ~4 | result from slice element |
+
+**Recommendation:** the single analyzer improvement with the highest ROI is **follow `CallContext.SetValue(v)` back to `v`'s SSA type**. That one pattern would convert ~20 Helper-widened entries into Single. Beyond that, narrowing through `Tuple` / `Number` interface methods is a much larger undertaking with diminishing returns. Defer.
+
+**Side-effecting (52)** — no result-writing sink reached. Three sub-patterns:
+
+1. **Comparison/predicate primitives** (`=`, `<`, `>`, `odd?`, `even?`, `memq`, `assq`, ...): analyzer sees the panic-terminated error path without seeing the success path's `SetValue`. Same `CallContext` idiom as above.
+2. **Control-flow primitives** (`raise`, `error`, `abort-current-continuation`, `exit`, `emergency-exit`, `call-with-composable-continuation`, `call-with-exit`): genuinely never return normally. `any` declaration is the right floor; `never` / bottom type would be more honest but adds a constraint for zero real benefit.
+3. **File open primitives** (`open-input-file`, `open-output-file`, ...): analyzer loses the port through interface construction. Not a type-system gap.
+
+No action.
+
+**Unresolved (140)** — Go function not found in loaded SSA packages. Mix:
+
+1. **Type predicates via `helpers.MakeTypePredicate`** (~100 entries, e.g. `boolean?`, `number?`, `symbol?`, all `char-*?`, `string-ci*?`): registered as `var` assignments from a factory function. SSA analyzer doesn't follow the factory. All declared `boolean`, all sound by construction of the factory.
+2. **Scheme-level stdlib procedures** (~40 entries, e.g. `filter`, `take`, `drop`, `map`, `sort`, `caar`, `cadar`, `vector-for-each`, `for-each`, `string-map`, `string-for-each`, `ast-splice`, `ast-transform`): not Go functions at all. Out of axis-B's scope by construction.
+
+**Recommendation:** axis-B's Phase 3 follow-up could special-case `helpers.MakeTypePredicate` returns (analyzer knows they produce `boolean`). Stdlib-procedure return-type analysis is a separate tool — a Scheme-level successor to axis-B, gated on a real consumer ask.
+
+### Actionable output for Extension Contracts Phase 2
+
+`plans/2026-03-26-extension-contracts-phase2-impl.md` can now proceed on an evidence-backed subset:
+
+1. **Ship compile-time checking first on the 162 Single primitives.** Their `ReturnType` annotations are verified by two independent checks; the risk of wrongly-rejecting-valid-programs is minimal.
+2. **Defer the 125 Helper-widened + 52 Side-effecting primitives** until axis-B grows `CallContext.SetValue(v)` following. That one improvement handles the bulk.
+3. **Skip the 140 Unresolved primitives** until a Scheme-level analyzer exists.
+
+### Actionable output for TypeConstraint vocabulary
+
+If and only if compile-time checking on the Single-bucket 162 creates demonstrated pressure for more precision:
+
+1. **Ship `TypeMaybe(T)`** first — 12 drop-in customers, uniform shape, one-line `Check` implementation. `values.Maybe(values.TypeString)` reads naturally.
+2. **Do not ship `TypeUnion`** without at least 15–20 distinct customers. Current inventory has 7 narrow-union entries across 3 disjoint shape families; not enough.
+3. **Do not ship a bottom / `TypeNever` type** without a demonstrated type-checker consumer. 6 control-flow primitives would be its customers, none of whom lose expressiveness by staying `any`.
+
+### What was *not* an action item
+
+No code changes to primitive annotations. Axis-A (Phase 1/2) already drove them to zero findings on re-run. Axis-B's value is strategic, not tactical.

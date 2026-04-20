@@ -16,6 +16,7 @@ package core
 
 import (
 	"context"
+	"unicode/utf8"
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
@@ -223,10 +224,15 @@ func PrimUtf8ToString(mc machine.CallContext) error {
 		return err
 	}
 
-	// Convert bytes to string
 	bytes := make([]byte, end-start)
 	for i := start; i < end; i++ {
 		bytes[i-start] = (*bv)[i].Value
+	}
+	// R7RS §6.9: "It is an error if bytevector between start and end is not
+	// a well-formed UTF-8 string."
+	if !utf8.Valid(bytes) {
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"utf8->string: bytevector is not well-formed UTF-8")
 	}
 	mc.SetValue(values.NewString(string(bytes)))
 	return nil

@@ -49,44 +49,21 @@ func getCaseFolded(s string) string {
 // PrimStringCopyTo implements the string-copy! primitive.
 // R7RS §6.7: (string-copy! to at from [start [end]])
 func PrimStringCopyTo(mc machine.CallContext) error {
-	toArg := mc.Arg(0)
-	rest := mc.Arg(1)
-
-	to, err := helpers.RequireType[*values.String](toArg, werr.ErrNotAString, "string-copy!")
+	to, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string-copy!")
 	if err != nil {
 		return err
 	}
-
-	// Extract required arguments: at from
-	tuple, ok := rest.(values.Tuple)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "string-copy!: improper argument list")
-	}
-	if tuple.IsEmptyList() {
-		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "string-copy!: expected at least 3 arguments")
-	}
-
-	atVal, err := helpers.RequireType[*values.Integer](tuple.Car(), werr.ErrNotANumber, "string-copy!")
+	atVal, err := helpers.RequireArg[*values.Integer](mc, 1, werr.ErrNotAnInteger, "string-copy!")
 	if err != nil {
 		return err
 	}
 	at := int(atVal.Value)
-
-	tuple2, ok := tuple.Cdr().(values.Tuple)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "string-copy!: improper argument list")
-	}
-	if tuple2.IsEmptyList() {
-		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "string-copy!: expected at least 3 arguments")
-	}
-
-	from, err := helpers.RequireType[*values.String](tuple2.Car(), werr.ErrNotAString, "string-copy!")
+	from, err := helpers.RequireArg[*values.String](mc, 2, werr.ErrNotAString, "string-copy!")
 	if err != nil {
 		return err
 	}
 
-	// Extract optional [start [end]] from remaining arguments
-	start, end, err := helpers.ParseSubrange(tuple2.Cdr(), from.Len(), "string-copy!")
+	start, end, err := helpers.ParseSubrange(mc.Arg(3), from.Len(), "string-copy!")
 	if err != nil {
 		return err
 	}
@@ -119,24 +96,12 @@ func PrimStringFill(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	rest := mc.Arg(1)
-
-	// Extract required argument: fill
-	tuple, ok := rest.(values.Tuple)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAList, "string-fill!: improper argument list")
-	}
-	if tuple.IsEmptyList() {
-		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "string-fill!: expected at least 2 arguments")
-	}
-
-	char, err := helpers.RequireType[*values.Character](tuple.Car(), werr.ErrNotACharacter, "string-fill!")
+	char, err := helpers.RequireArg[*values.Character](mc, 1, werr.ErrNotACharacter, "string-fill!")
 	if err != nil {
 		return err
 	}
 
-	// Extract optional [start [end]] from remaining arguments
-	start, end, err := helpers.ParseSubrange(tuple.Cdr(), s.Len(), "string-fill!")
+	start, end, err := helpers.ParseSubrange(mc.Arg(2), s.Len(), "string-fill!")
 	if err != nil {
 		return err
 	}
