@@ -183,34 +183,38 @@ Optional final stage. For each R7RS-small category, compare impl accepted-domain
 
 ## 7. Open decisions
 
-### 7.1 Rest-type annotation format
+### 7.1 Rest-type annotation format — DECIDED (2026-04-20)
 
-`PrimitiveSpec.ParamTypes` array terminates at `ParamCount`. There is no dedicated field for the variadic rest element type. Today, the convention is:
+`PrimitiveSpec.ParamTypes` array terminates at `ParamCount`. There is no dedicated field for the variadic rest element type. The convention is:
 
 ```go
 {ParamCount: 2, IsVariadic: true, ParamTypes: []TypeConstraint{TypeAny, TypeAny}}
 //              ^^^^^^^^^^^^^^^^                                 ^^^^^^^^
-// "2 params, last is variadic rest"                             "rest slot type"
+// "2 params, last is variadic rest"                             "rest-element type
+//                                                                (not rest-list type)"
 ```
 
-So the last `ParamTypes` slot is the rest-element type when `IsVariadic: true`. This is an undocumented convention. **Decision needed**: formalize this (add a comment in `registry/registry.go` or `values/value_type.go`) before Phase 5 builds tooling on it, or invent a more explicit representation.
+**Decision**: formalize the existing convention with a doc comment on `PrimitiveSpec.ParamTypes`. No structural code change. Parallel to how `PrimitiveSpec.ReturnType: nil` means "unspecified" (also a convention, also previously undocumented in the type itself).
 
-Recommended: formalize the existing convention with a doc comment — no code change. Parallel to how `PrimitiveSpec.ReturnType: nil` means "unspecified" (also a convention, also undocumented in the type itself).
+Applied in this design PR — see `registry/registry.go:31–38`. Phase 5 tooling relies on this as canonical going forward.
 
-### 7.2 Scope of the cleanup PR
+### 7.2 Scope of the cleanup PR — DECIDED (2026-04-20)
 
-Same tension as Phase 3.D. Options:
+**Decision**: unified PR. One commit per coercion family (integer, real, complex, …) so the diff remains reviewable by category, but all changes land together. Larger than Phase 3.D; scope mismatch is acceptable given the load-bearing nature of declared-too-narrow fixes under Extension Contracts Phase 2.
 
-- **Narrow**: only fix declared-too-narrow (Phase-2-unsound) cases.
-- **Wide**: fix all declared-too-wide and declared-too-narrow — the full mechanical sweep.
+### 7.3 Relationship to `TypeConstraint` vocabulary extension — DEFERRED (2026-04-20)
 
-Phase 3.D chose narrow-ish (5 clean tightenings). Phase 5 is larger in absolute count. A staged approach — declared-too-narrow first (one PR), declared-too-wide second (one PR) — preserves bisectability.
+Phase 3 Category C (28 singleton gaps — `TypeThread`, `TypePromise`, `TypeBox`, …) and Phase 5's union bucket (primitives accepting `{T1, T2, …}` unions via type switches) both feed future `TypeConstraint` extension work — but with **different cost profiles**:
 
-### 7.3 Relationship to `TypeConstraint` vocabulary extension
+- **Category C**: scalar extensions (add new enum constants + `makeCheck[*T]` closures). Low per-entry cost, low evidence bar.
+- **Phase 5 unions**: parametric extensions (introduce `TypeUnion(T1, T2, …)` or `TypeMaybe(T)`). Every `TypeConstraint` consumer must handle compound types. High per-extension cost, high evidence bar.
 
-Phase 5's union buckets will produce more evidence than Phase 3's did, because type-switches over multiple input types are a common impl pattern (especially in the numeric tower). If the union count is high enough, it may be worth merging the Phase 3 Category C gap list with Phase 5's union bucket to form a single consolidated input for a future `TypeUnion` design plan — rather than leaving them as two separate artifacts.
+**Decision**: keep the two artifacts separate until Phase 5.C produces concrete cluster shapes. Cross-reference between them:
 
-**Deferred decision**: judge after Phase 5.C produces concrete numbers.
+- Phase 5 inventory's union-bucket section cites Phase 3 Category C for scalar-gap context.
+- `plans/2026-04-20-axis-b-annotation-bugs.md` §4 (Category C) already lists the 28 scalar gaps.
+
+Revisit consolidation after Phase 5.C. Administrative merging before the data justifies it risks papering over the cost-and-evidence distinction that will actually drive the downstream extension decisions.
 
 ---
 

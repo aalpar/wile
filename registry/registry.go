@@ -28,12 +28,17 @@ type PrimitiveSpec struct {
 	ParamCount int
 	IsVariadic bool
 	Impl       machine.ForeignFunction
-	Doc        string                  // optional: brief description
-	ParamNames []string                // optional: parameter names
-	Category   string                  // optional: grouping category
-	ParamTypes []values.TypeConstraint // optional: type contract per parameter
-	ReturnType values.TypeConstraint   // optional: return type (nil = unspecified)
-	Keywords   []string                // optional: searchable tags
+	Doc        string   // optional: brief description
+	ParamNames []string // optional: parameter names
+	Category   string   // optional: grouping category
+	// ParamTypes is an optional type contract per parameter. When IsVariadic
+	// is true, the last slot annotates the per-element type of the rest list
+	// (the Tuple at mc.Arg(ParamCount-1)), not the type of the rest list
+	// itself. So `+` declares ParamCount:1, IsVariadic:true, ParamTypes:[TypeNumber],
+	// meaning "every element of the variadic tail must be a Number."
+	ParamTypes []values.TypeConstraint
+	ReturnType values.TypeConstraint // optional: return type (nil = unspecified)
+	Keywords   []string              // optional: searchable tags
 }
 
 // PrimitiveRegistration holds a primitive and its phases.
