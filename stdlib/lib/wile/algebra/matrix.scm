@@ -598,6 +598,32 @@
 (register-matrix-op! '(mul! dense  sparse dense)  matrix-mul!/dense/sparse/dense)
 (register-matrix-op! '(mul! sparse sparse sparse) matrix-mul!/sparse/sparse/sparse)
 
+;; ─── Capability predicate (Path D P6, OQ3) ───
+
+;; Pure-form registrations: data-driven marker entries so matrix-op-supported?
+;; answers with one table lookup regardless of pure vs bang. Value is the
+;; dispatcher function itself, for introspection tools that might want to
+;; find the entry point. The allocator-and-dispatch logic lives in
+;; matrix-add / matrix-mul; these entries just record "supported".
+(register-matrix-op! '(add dense  dense)  matrix-add)
+(register-matrix-op! '(add dense  sparse) matrix-add)
+(register-matrix-op! '(add sparse dense)  matrix-add)
+(register-matrix-op! '(add sparse sparse) matrix-add)
+(register-matrix-op! '(mul dense  dense)  matrix-mul)
+(register-matrix-op! '(mul dense  sparse) matrix-mul)
+(register-matrix-op! '(mul sparse dense)  matrix-mul)
+(register-matrix-op! '(mul sparse sparse) matrix-mul)
+
+(define (matrix-op-supported? op . args)
+  "Return #t iff OP is supported on matrices with the given ARGS' reps, #f\notherwise. Symbol-based (OP is a Scheme symbol like 'add, 'add!, 'mul, etc.).\nFor pure binary ops 'add and 'mul, every rep combination is supported.\nFor bang forms, the destination rep must match the expected result rep per\nOQ4. Unary ops currently supported: none for sparse (power / closure /\npermanent land as dense-only in P7).\n\nThis is the programmatic capability query OQ3 promised — callers can branch\non support rather than catching errors:\n\n  (if (matrix-op-supported? 'permanent M)\n      (matrix-permanent M)\n      (matrix-permanent (sparse->semiring-matrix M)))\n\nReturns #f (rather than raising) when an ARG is not a matrix — the predicate\nis safe to call on any value.\n\nExamples:\n  (matrix-op-supported? 'add A B)           ; => #t for valid matrices A, B\n  (matrix-op-supported? 'add! C A B)        ; => #t if C's rep matches\n  (matrix-op-supported? 'mul  A 42)         ; => #f (non-matrix)\n\nParameters:\n  op : symbol\n  args : matrices\nReturns: boolean\nCategory: algebra\nKeywords: matrix capability, support query, dispatch, introspection\n\nSee also: `matrix-rep-tag', `matrix-add', `matrix-mul'."
+  (define (all-matrices? xs)
+    (cond ((null? xs) #t)
+          ((not (matrix? (car xs))) #f)
+          (else (all-matrices? (cdr xs)))))
+  (and (all-matrices? args)
+       (matrix-op-lookup (cons op (map matrix-rep-tag args)))
+       #t))
+
 ;; ─── Internal utilities ──────────────────────
 
 ;; Validate that X is a non-negative exact integer; raise an error
