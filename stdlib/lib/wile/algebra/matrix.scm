@@ -64,9 +64,6 @@
   (cols     smat-cols)
   (data     smat-data))
 
-(define (smat-flat-index M r c)
-  (+ (* r (smat-cols M)) c))
-
 ;; ─── Accessors ───────────────────────────────
 
 (define (semiring-matrix-rows M)
@@ -92,7 +89,7 @@
   (when (or (>= r (smat-rows M)) (>= c (smat-cols M)))
     (error "semiring-matrix-ref: index out of bounds" r c
            (semiring-matrix-shape M)))
-  (vector-ref (smat-data M) (smat-flat-index M r c)))
+  (vector-ref (smat-data M) (+ (* r (smat-cols M)) c)))
 
 ;; ─── Constructors ────────────────────────────
 
