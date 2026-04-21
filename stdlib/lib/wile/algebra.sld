@@ -145,7 +145,7 @@
     ;; Graph algorithms
     make-graph-analysis graph-analysis?
     graph-query graph-query-all
-    ;; Semiring matrix algebra
+    ;; Matrices
     make-semiring-matrix semiring-matrix?
     semiring-matrix-from-rows semiring-matrix->rows
     semiring-matrix-identity
