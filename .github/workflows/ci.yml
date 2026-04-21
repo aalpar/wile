@@ -31,13 +31,21 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: build/coverage.out
 
+      # Gabriel benchmarks produce a trend-analysis CSV artifact and have no
+      # pass/fail signal that should gate a merge. Running them on every PR
+      # adds ~95s of wall-clock with no gating value, so they're restricted
+      # to master-push runs — same pattern as the Codecov upload above.
       - name: Benchmark (Gabriel suite)
+        if: github.event_name == 'push'
         run: |
           cd examples/benchmarks
           SCHEME=../../dist/linux/amd64/wile RUNS=3 ./run-canonical.sh
 
+      # `always()` preserves the original intent of uploading partial results
+      # even if the benchmark step crashed; combined with the push gate so
+      # the step is skipped entirely on PR runs (where no CSVs exist).
       - name: Upload benchmark results
-        if: always()
+        if: always() && github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results-${{ github.sha }}
