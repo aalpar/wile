@@ -323,6 +323,26 @@
     (test 0 (sparse-semiring-matrix-ref SM 0 1))
     (test 0 (sparse-semiring-matrix-ref SM 2 2))))
 
+(test-group "make-sparse-semiring-matrix rejects out-of-range coords"
+  (let ((S (counting-semiring)))
+    ;; Row overflow, col overflow, and the mixed case where row is in
+    ;; range but col overflows — the latter would silently land in a
+    ;; wrong cell in the flat vector if left unchecked.
+    (test-error (make-sparse-semiring-matrix S 2 2 '(((2 . 0) . 1))))
+    (test-error (make-sparse-semiring-matrix S 2 2 '(((0 . 2) . 1))))
+    (test-error (make-sparse-semiring-matrix S 2 2 '(((-1 . 0) . 1))))
+    ;; 2x3 matrix: (1 . 3) flat-index = 1*3 + 3 = 6, but 6 is out of
+    ;; the 6-element vector; a milder (1 . 4) = 1*3+4 = 7 would still
+    ;; silently corrupt.
+    (test-error (make-sparse-semiring-matrix S 2 3 '(((1 . 3) . 1))))))
+
+(test-group "make-sparse-semiring-matrix rejects malformed entries"
+  (let ((S (counting-semiring)))
+    (test-error (make-sparse-semiring-matrix S 2 2 '(5)))
+    (test-error (make-sparse-semiring-matrix S 2 2 '((0 . 5))))
+    (test-error (make-sparse-semiring-matrix S 2 2 '((("x" . 0) . 1))))
+    (test-error (make-sparse-semiring-matrix S 2 2 '(((0.0 . 0) . 1))))))
+
 (test-group "sparse ref bounds"
   (let ((SM (make-sparse-semiring-matrix (counting-semiring) 2 2 '())))
     (test-error (sparse-semiring-matrix-ref SM -1 0))

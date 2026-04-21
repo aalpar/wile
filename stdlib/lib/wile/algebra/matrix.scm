@@ -352,11 +352,36 @@
   (smat-check-nat "make-sparse-semiring-matrix" "cols" cols)
   (let ((z (semiring-zero S)))
     (make-sparse-semiring-matrix* S rows cols
+      ;; Validate each entry structurally ((row . col) . value) and
+      ;; check that coordinates land in [0, rows) x [0, cols). Without
+      ;; this, out-of-range entries would either be silently stored
+      ;; and become unreachable via ref (making inserts appear to
+      ;; vanish) or blow up deep inside sparse->semiring-matrix with
+      ;; an opaque vector-set! range error. A row that is in-range
+      ;; but a column that overflows is particularly dangerous —
+      ;; (* r m) + c can still land inside the flat vector, silently
+      ;; corrupting an unrelated cell.
       (let loop ((es entries) (acc '()))
         (cond
           ((null? es) (reverse acc))
-          ((equal? (cdar es) z) (loop (cdr es) acc))
-          (else (loop (cdr es) (cons (car es) acc))))))))
+          ((not (pair? es))
+           (error "make-sparse-semiring-matrix: entries must be a proper list"
+                  entries))
+          (else
+           (let ((entry (car es)))
+             (unless (and (pair? entry) (pair? (car entry)))
+               (error "make-sparse-semiring-matrix: malformed entry, expected ((row . col) . value)"
+                      entry))
+             (let ((r (caar entry)) (c (cdar entry)))
+               (unless (and (integer? r) (exact? r) (<= 0 r) (< r rows))
+                 (error "make-sparse-semiring-matrix: row out of range"
+                        r (cons rows cols)))
+               (unless (and (integer? c) (exact? c) (<= 0 c) (< c cols))
+                 (error "make-sparse-semiring-matrix: col out of range"
+                        c (cons rows cols))))
+             (if (equal? (cdr entry) z)
+                 (loop (cdr es) acc)
+                 (loop (cdr es) (cons entry acc))))))))))
 
 (define (sparse-semiring-matrix-rows SM)
   "Return the number of rows in sparse matrix SM.\n\nParameters:\n  SM : sparse-semiring-matrix\nReturns: integer\nCategory: algebra\nKeywords: sparse matrix, shape, rows"
