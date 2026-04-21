@@ -386,6 +386,19 @@
          (M (sparse->semiring-matrix SM)))
     (test '((5 0) (0 0)) (semiring-matrix->rows M))))
 
+(test-group "sparse duplicate coordinates: first entry wins"
+  ;; Documented invariant: duplicate coordinates in the alist retain
+  ;; the first-match-wins semantics of assoc. This must hold both for
+  ;; direct ref and when materialized via sparse->semiring-matrix
+  ;; (which writes entries in reverse so the first wins under
+  ;; vector-set!). Without the reverse trick the two reads would
+  ;; disagree — the test pins both sides.
+  (let* ((S (counting-semiring))
+         (SM (make-sparse-semiring-matrix S 2 2
+               '(((0 . 0) . 5) ((0 . 0) . 9)))))
+    (test 5 (sparse-semiring-matrix-ref SM 0 0))
+    (test 5 (semiring-matrix-ref (sparse->semiring-matrix SM) 0 0))))
+
 (test-group "sparse round-trip preserves non-zero entries"
   (let* ((S (counting-semiring))
          (M (semiring-matrix-from-rows S '((1 0 2) (0 3 0) (4 0 5))))
