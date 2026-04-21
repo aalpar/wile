@@ -543,6 +543,29 @@
 (test-group "matrix-rep-tag rejects non-matrix input"
   (test-error (matrix-rep-tag 42)))
 
+(test-group "matrix? and matrix-rep-tag agree on the registered rep set"
+  ;; Structural invariant: both functions derive from the shared
+  ;; *matrix-reps* registry, so for every known rep they must agree
+  ;; (matrix? accepts it; matrix-rep-tag returns a usable dispatch
+  ;; symbol). For a non-matrix, matrix? is #f and matrix-rep-tag
+  ;; raises. If a future rep registers only one side, this group
+  ;; catches the drift.
+  (let* ((S  (counting-semiring))
+         (D  (make-semiring-matrix S 1 1))
+         (SM (make-sparse-semiring-matrix S 1 1 '())))
+    ;; Each registered rep: matrix? is #t, matrix-rep-tag returns the
+    ;; expected symbol, and the scaffold dispatches through it.
+    (for-each (lambda (M expected-tag)
+                (test #t (matrix? M))
+                (test expected-tag (matrix-rep-tag M))
+                (test (semiring-zero S) (matrix-ref M 0 0)))
+              (list D SM)
+              '(dense sparse))
+    ;; Non-matrix: matrix? is #f, matrix-rep-tag raises.
+    (test #f (matrix? 42))
+    (test #f (matrix? 'not-a-matrix))
+    (test-error (matrix-rep-tag 42))))
+
 ;; ─── Iterator API (P3) ───────────────────────
 
 (test-group "matrix-for-each-entry visits every cell of a dense matrix in row-major order"
