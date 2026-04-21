@@ -14,6 +14,16 @@
 
 ;; ─── Internal utilities ──────────────────────
 
+;; Validate that X is a non-negative exact integer; raise an error
+;; tagged with WHERE (the caller's name) and WHAT (the parameter role)
+;; otherwise. Centralizes a rule that was previously expressed two
+;; different ways across construction/power/closure.
+(define (smat-check-nat where what x)
+  (unless (and (integer? x) (exact? x) (>= x 0))
+    (error (string-append where ": " what
+                          " must be a non-negative exact integer")
+           x)))
+
 (define (smat-iota n)
   (let loop ((i 0) (acc '()))
     (if (= i n) (reverse acc) (loop (+ i 1) (cons i acc)))))
@@ -77,7 +87,9 @@
 
 (define (semiring-matrix-ref M r c)
   "Return element (R, C) of matrix M.\nRaises an error if the indices are out of bounds.\n\nExamples:\n  (let ((M (semiring-matrix-from-rows (counting-semiring)\n             '((1 2 3) (4 5 6)))))\n    (semiring-matrix-ref M 1 2))  => 6\n\nParameters:\n  M : semiring-matrix\n  r : integer\n  c : integer\nReturns: any\nCategory: algebra\nKeywords: matrix element, indexing, subscript, lookup\n\nSee also: `semiring-matrix-shape', `semiring-matrix->rows'."
-  (when (or (< r 0) (>= r (smat-rows M)) (< c 0) (>= c (smat-cols M)))
+  (smat-check-nat "semiring-matrix-ref" "row" r)
+  (smat-check-nat "semiring-matrix-ref" "col" c)
+  (when (or (>= r (smat-rows M)) (>= c (smat-cols M)))
     (error "semiring-matrix-ref: index out of bounds" r c
            (semiring-matrix-shape M)))
   (vector-ref (smat-data M) (smat-flat-index M r c)))
@@ -86,10 +98,8 @@
 
 (define (make-semiring-matrix S rows cols . rest)
   "Construct a ROWS×COLS matrix over semiring S filled with FILL.\nFILL is the optional fourth argument; when omitted, every cell is\ninitialized to (semiring-zero S).\n\nExamples:\n  (semiring-matrix->rows\n    (make-semiring-matrix (counting-semiring) 2 3))\n  => ((0 0 0) (0 0 0))\n  (semiring-matrix->rows\n    (make-semiring-matrix (counting-semiring) 2 2 7))\n  => ((7 7) (7 7))\n\nParameters:\n  S : semiring\n  rows : integer\n  cols : integer\n  [fill] : any\nReturns: semiring-matrix\nCategory: algebra\nKeywords: matrix constructor, allocate, fill, zero matrix\n\nSee also: `semiring-matrix-from-rows', `semiring-matrix-identity'."
-  (when (or (not (integer? rows)) (not (integer? cols))
-            (< rows 0) (< cols 0))
-    (error "make-semiring-matrix: dimensions must be non-negative integers"
-           rows cols))
+  (smat-check-nat "make-semiring-matrix" "rows" rows)
+  (smat-check-nat "make-semiring-matrix" "cols" cols)
   (let ((fill (if (null? rest) (semiring-zero S) (car rest))))
     (make-semiring-matrix* S rows cols (make-vector (* rows cols) fill))))
 
@@ -126,8 +136,7 @@
 
 (define (semiring-matrix-identity S n)
   "Construct the N×N identity matrix over semiring S.\nDiagonal is (semiring-one S); off-diagonal is (semiring-zero S).\nSatisfies I·M = M and M·I = M under `semiring-matrix-mul'.\n\nExamples:\n  (semiring-matrix->rows\n    (semiring-matrix-identity (counting-semiring) 3))\n  => ((1 0 0) (0 1 0) (0 0 1))\n\nParameters:\n  S : semiring\n  n : integer\nReturns: semiring-matrix\nCategory: algebra\nKeywords: identity matrix, unit matrix, I, diagonal, multiplicative identity\n\nSee also: `make-semiring-matrix', `semiring-matrix-mul'."
-  (when (or (not (integer? n)) (< n 0))
-    (error "semiring-matrix-identity: n must be a non-negative integer" n))
+  (smat-check-nat "semiring-matrix-identity" "n" n)
   (let* ((z (semiring-zero S))
          (o (semiring-one S))
          (d (make-vector (* n n) z)))
@@ -213,9 +222,7 @@
   (unless (= (smat-rows M) (smat-cols M))
     (error "semiring-matrix-power: non-square matrix"
            (semiring-matrix-shape M)))
-  (unless (and (integer? k) (exact? k) (>= k 0))
-    (error "semiring-matrix-power: K must be a non-negative exact integer"
-           k))
+  (smat-check-nat "semiring-matrix-power" "k" k)
   (let ((S (smat-semiring M))
         (n (smat-rows M)))
     (cond
@@ -261,9 +268,7 @@
          (n        (smat-rows M))
          (max-iter (if (null? rest) n (car rest)))
          (I        (semiring-matrix-identity S n)))
-    (unless (and (integer? max-iter) (exact? max-iter) (>= max-iter 0))
-      (error "semiring-matrix-closure: max-iterations must be a non-negative exact integer"
-             max-iter))
+    (smat-check-nat "semiring-matrix-closure" "max-iterations" max-iter)
     ;; Attempt at most max-iter update steps. iter counts completed
     ;; updates, so the guard is (>= iter max-iter) rather than >.
     (let loop ((T I) (iter 0))
@@ -330,10 +335,8 @@
 
 (define (make-sparse-semiring-matrix S rows cols entries)
   "Construct a sparse ROWS x COLS matrix over semiring S from ENTRIES.\nENTRIES is an alist ((ROW . COL) . VALUE). Positions not listed read\nas (semiring-zero S). Entries whose value is (semiring-zero S) are\nstripped from the stored representation (matching the invariant that\nthe sparse form lists only non-zero cells); duplicate coordinates are\nkept as provided, with the first matching entry winning under assoc.\n\nExamples:\n  (let ((S (counting-semiring)))\n    (sparse-semiring-matrix-ref\n      (make-sparse-semiring-matrix S 3 3 '(((0 . 0) . 5) ((1 . 2) . 7)))\n      1 2))\n  => 7\n\nParameters:\n  S : semiring\n  rows : integer\n  cols : integer\n  entries : list\nReturns: sparse-semiring-matrix\nCategory: algebra\nKeywords: sparse matrix, coordinate list, COO, non-zero entries\n\nSee also: `semiring-matrix->sparse', `sparse->semiring-matrix'."
-  (when (or (not (integer? rows)) (not (integer? cols))
-            (< rows 0) (< cols 0))
-    (error "make-sparse-semiring-matrix: dimensions must be non-negative"
-           rows cols))
+  (smat-check-nat "make-sparse-semiring-matrix" "rows" rows)
+  (smat-check-nat "make-sparse-semiring-matrix" "cols" cols)
   (let ((z (semiring-zero S)))
     (make-sparse-semiring-matrix* S rows cols
       (let loop ((es entries) (acc '()))
@@ -360,8 +363,11 @@
 
 (define (sparse-semiring-matrix-ref SM r c)
   "Return element (R, C) of sparse matrix SM, or (semiring-zero S) if absent.\n\nExamples:\n  (let ((S (counting-semiring)))\n    (sparse-semiring-matrix-ref\n      (make-sparse-semiring-matrix S 2 2 '(((0 . 1) . 9)))\n      0 1))  => 9\n\nParameters:\n  SM : sparse-semiring-matrix\n  r : integer\n  c : integer\nReturns: any\nCategory: algebra\nKeywords: sparse matrix, element, indexing, lookup\n\nSee also: `make-sparse-semiring-matrix'."
-  (when (or (< r 0) (>= r (ssmat-rows SM)) (< c 0) (>= c (ssmat-cols SM)))
-    (error "sparse-semiring-matrix-ref: index out of bounds" r c))
+  (smat-check-nat "sparse-semiring-matrix-ref" "row" r)
+  (smat-check-nat "sparse-semiring-matrix-ref" "col" c)
+  (when (or (>= r (ssmat-rows SM)) (>= c (ssmat-cols SM)))
+    (error "sparse-semiring-matrix-ref: index out of bounds" r c
+           (cons (ssmat-rows SM) (ssmat-cols SM))))
   (let ((found (assoc (cons r c) (ssmat-entries SM))))
     (if found (cdr found) (semiring-zero (ssmat-semiring SM)))))
 

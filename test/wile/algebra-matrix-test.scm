@@ -34,6 +34,14 @@
   (test-error (make-semiring-matrix (counting-semiring) -1 3))
   (test-error (make-semiring-matrix (counting-semiring) 3 -1)))
 
+(test-group "make-semiring-matrix rejects inexact or non-integer dims"
+  ;; 2.0 is integer-valued but inexact; uniform rule is "exact integer".
+  (test-error (make-semiring-matrix (counting-semiring) 2.0 3))
+  (test-error (make-semiring-matrix (counting-semiring) 2 3.0))
+  (test-error (make-semiring-matrix (counting-semiring) 'x 3))
+  (test-error (make-sparse-semiring-matrix (counting-semiring) 2.0 2 '()))
+  (test-error (semiring-matrix-identity (counting-semiring) 2.0)))
+
 (test-group "semiring-matrix-from-rows round-trip"
   (let* ((S (counting-semiring))
          (rows '((1 2 3) (4 5 6)))
