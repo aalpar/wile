@@ -796,14 +796,24 @@ Under Path D all three are decided together (2a + 3a-subset + 1c).
       ops (`add!`, `sub!`, `scale!`, `fill!`, element-wise) allow any
       aliasing; incremental-write ops (`mul!`, `power!`, `closure!`)
       forbid `eq?` overlap between dest and operands (2026-04-20)
-- [ ] OQ6 resolved: views deferred; dispatch shape designed to accept
-      `<matrix-view>` additively
+- [x] OQ6 resolved: views deferred; dispatch shape designed to accept
+      `<matrix-view>` additively. Every polymorphic op uses a uniform
+      cond-on-predicate dispatch; the rep enumeration appears at nine
+      named sites (`matrix-rep-tag` plus each polymorphic function),
+      so adding a third record type is mechanical. A load-order
+      invariant comment at the top of `matrix.scm` records the
+      single-file constraint that protects additivity.
 - [x] Follow-up implementation plan file created for Path D
       (`2026-04-21-matrix-path-d-impl.md`, 2026-04-21)
-- [ ] Test at `test/wile/algebra-matrix-test.scm:317` migrated from
-      `-entries` to iterator API
-- [ ] `sparse-semiring-matrix-entries` deprecation or removal decision
-      recorded in `matrix.sld` comments
+- [x] Test-site migration from `sparse-semiring-matrix-entries` to the
+      iterator API complete (three sites in `algebra-matrix-test.scm`,
+      migrated in PR #685 using a local `matrix-stored-count` helper
+      over `matrix-fold-entries`).
+- [x] `sparse-semiring-matrix-entries` removal shipped in PR #685:
+      definition deleted from `matrix.scm`, export removed from
+      `matrix.sld` and the umbrella `algebra.sld`, docstring example
+      in `semiring-matrix->sparse` rewritten to use
+      `matrix-fold-entries`.
 
 ---
 

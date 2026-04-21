@@ -654,8 +654,63 @@
 ;; level forms execute in source order; referencing a not-yet-bound
 ;; identifier as an IMPL value would fail at load time).
 
+;; ─── matrix-copy / matrix-copy! (Path D P8) ──
+
+;; Kernels — private. Same-rep only; matrix-copy! enforces this.
+(define (matrix-copy!/dense/dense C M)
+  (let* ((size (* (smat-rows M) (smat-cols M)))
+         (dc (smat-data C))
+         (dm (smat-data M)))
+    (let loop ((k 0))
+      (when (< k size)
+        (vector-set! dc k (vector-ref dm k))
+        (loop (+ k 1)))))
+  C)
+
+(define (matrix-copy!/sparse/sparse C M)
+  ;; Replace C's entries with a shallow copy of M's; values share references.
+  (ssmat-entries-set! C (map (lambda (e) (cons (car e) (cdr e)))
+                             (ssmat-entries M)))
+  C)
+
+(define (matrix-copy! C M)
+  "Copy matrix M into C in place. C and M must share rep, shape, and semiring\n(eq?). Returns C. OQ5 aliasing: trivially safe when (eq? C M) because every\ncell is read then written with the same value, but matrix-copy! rejects\n(eq? C M) as a no-op the user almost certainly didn't mean.\n\nExamples:\n  (let* ((S (counting-semiring))\n         (M (semiring-matrix-from-rows S '((1 2) (3 4))))\n         (C (make-semiring-matrix S 2 2)))\n    (matrix-copy! C M)\n    (semiring-matrix->rows C))\n  => ((1 2) (3 4))\n\nParameters:\n  C : matrix (destination)\n  M : matrix\nReturns: C\nCategory: algebra\nKeywords: matrix copy, clone, duplicate, in-place, destructive\n\nSee also: `matrix-copy', `matrix-add!'."
+  (unless (matrix? C)
+    (error "matrix-copy!: destination is not a matrix" C))
+  (unless (matrix? M)
+    (error "matrix-copy!: source is not a matrix" M))
+  (when (eq? C M)
+    (error "matrix-copy!: source and destination alias; this is a no-op and probably a bug"))
+  (unless (equal? (matrix-shape C) (matrix-shape M))
+    (error "matrix-copy!: shape mismatch" (matrix-shape C) (matrix-shape M)))
+  (unless (eq? (matrix-semiring C) (matrix-semiring M))
+    (error "matrix-copy!: semirings differ"))
+  (let ((c-tag (matrix-rep-tag C))
+        (m-tag (matrix-rep-tag M)))
+    (unless (eq? c-tag m-tag)
+      (error "matrix-copy!: rep mismatch" c-tag m-tag))
+    (let ((impl (matrix-op-lookup (list 'copy! c-tag m-tag))))
+      (unless impl
+        (error "matrix-copy!: unsupported rep" c-tag))
+      (impl C M))))
+
+(define (matrix-copy M)
+  "Return a fresh matrix with the same rep, shape, semiring, and contents as M.\n\nExamples:\n  (let* ((S (counting-semiring))\n         (M (semiring-matrix-from-rows S '((1 2) (3 4))))\n         (C (matrix-copy M)))\n    (eq? M C))\n  => #f\n\nParameters:\n  M : matrix\nReturns: matrix\nCategory: algebra\nKeywords: matrix copy, clone, duplicate, allocate\n\nSee also: `matrix-copy!'."
+  (unless (matrix? M)
+    (error "matrix-copy: not a matrix" M))
+  (let* ((rep (matrix-rep-tag M))
+         (C (matrix-allocate rep (matrix-semiring M)
+                             (matrix-rows M) (matrix-cols M))))
+    (matrix-copy! C M)
+    C))
+
+(register-matrix-op! '(copy! dense  dense)  matrix-copy!/dense/dense)
+(register-matrix-op! '(copy! sparse sparse) matrix-copy!/sparse/sparse)
+(register-matrix-op! '(copy  dense)  matrix-copy)
+(register-matrix-op! '(copy  sparse) matrix-copy)
+
 (define (matrix-op-supported? op . args)
-  "Return #t iff every ARG is a matrix and the dispatch table has a kernel\nregistered under (OP . ARGS' rep-tags); #f otherwise. Symbol-based (OP is a\nScheme symbol like 'add, 'add!, 'mul, etc.). For pure binary ops 'add and\n'mul, every rep combination is registered. For bang forms, the destination\nrep must match the expected result rep per OQ4. Unary ops currently\nregistered: none for sparse (power / closure / permanent land as dense-only\nin P7).\n\nThis is a representation-level capability query, not a call-validity check.\n#t means a kernel exists for those reps; it does NOT promise the operation\nwill succeed. Shape compatibility, semiring-identity, and per-op runtime\nconstraints (e.g. `matrix-mul!` forbidding destination/operand aliasing per\nOQ5) are still checked by the operation itself and may raise on invocation.\n\nThis is the programmatic capability query OQ3 promised — callers can branch\non kernel availability rather than catching errors for missing reps:\n\n  (if (matrix-op-supported? 'permanent M)\n      (matrix-permanent M)\n      (matrix-permanent (sparse->semiring-matrix M)))\n\nReturns #f (rather than raising) when an ARG is not a matrix — the predicate\nis safe to call on any value.\n\nExamples:\n  (matrix-op-supported? 'add A B)           ; => #t for valid matrices A, B\n  (matrix-op-supported? 'add! C A B)        ; => #t if C's rep matches\n  (matrix-op-supported? 'mul  A 42)         ; => #f (non-matrix)\n\nParameters:\n  op : symbol\n  args : matrices\nReturns: boolean\nCategory: algebra\nKeywords: matrix capability, support query, dispatch, introspection\n\nSee also: `matrix-rep-tag', `matrix-add', `matrix-mul'."
+  "Return #t iff every ARG is a matrix and the dispatch table has a kernel\nregistered under (OP . ARGS' rep-tags); #f otherwise. Symbol-based (OP is a\nScheme symbol like 'add, 'add!, 'mul, etc.). For pure binary ops 'add and\n'mul, every rep combination is registered. For bang forms, the destination\nrep must match the expected result rep per OQ4. Unary ops registered on\nboth reps: 'copy (P8). Unary ops currently dense-only: 'power, 'closure,\n'permanent (P7). 'copy! requires destination and source to share rep.\n\nThis is a representation-level capability query, not a call-validity check.\n#t means a kernel exists for those reps; it does NOT promise the operation\nwill succeed. Shape compatibility, semiring-identity, and per-op runtime\nconstraints (e.g. `matrix-mul!` forbidding destination/operand aliasing per\nOQ5) are still checked by the operation itself and may raise on invocation.\n\nThis is the programmatic capability query OQ3 promised — callers can branch\non kernel availability rather than catching errors for missing reps:\n\n  (if (matrix-op-supported? 'permanent M)\n      (matrix-permanent M)\n      (matrix-permanent (sparse->semiring-matrix M)))\n\nReturns #f (rather than raising) when an ARG is not a matrix — the predicate\nis safe to call on any value.\n\nExamples:\n  (matrix-op-supported? 'add A B)           ; => #t for valid matrices A, B\n  (matrix-op-supported? 'add! C A B)        ; => #t if C's rep matches\n  (matrix-op-supported? 'mul  A 42)         ; => #f (non-matrix)\n\nParameters:\n  op : symbol\n  args : matrices\nReturns: boolean\nCategory: algebra\nKeywords: matrix capability, support query, dispatch, introspection\n\nSee also: `matrix-rep-tag', `matrix-add', `matrix-mul'."
   (define (all-matrices? xs)
     (cond ((null? xs) #t)
           ((not (matrix? (car xs))) #f)

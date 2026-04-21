@@ -29,7 +29,9 @@
           ;; Path D capability predicate (P6).
           matrix-op-supported?
           ;; Path D dense-only polymorphic ops (P7).
-          matrix-power matrix-closure matrix-permanent)
+          matrix-power matrix-closure matrix-permanent
+          ;; Path D copy (P8). Closes OQ5's matrix-copy! reference.
+          matrix-copy matrix-copy!)
   (import (scheme base)
           (wile algebra semiring))
   (include "matrix.scm"))
