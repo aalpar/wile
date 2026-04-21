@@ -1,5 +1,5 @@
 (define-library (wile algebra matrix)
-  (description "Semiring-parameterized matrix algebra. Dense row-major representation with operations (add, multiply, power via repeated squaring, Kleene closure via fixpoint, permanent via permutation enumeration) that work over any semiring — Boolean for reachability, tropical for shortest paths, counting for path counting, max-product for Viterbi. Sparse variant with alist storage and round-trip conversions.")
+  (description "Semiring-parameterized matrix algebra with dense and sparse representations. Operations (add, multiply, power, Kleene closure, permanent) work over any semiring — Boolean for reachability, tropical for shortest paths, counting for path counting, max-plus for Viterbi.")
   (export make-semiring-matrix semiring-matrix?
           semiring-matrix-from-rows semiring-matrix->rows
           semiring-matrix-identity
