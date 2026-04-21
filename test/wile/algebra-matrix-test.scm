@@ -386,6 +386,22 @@
          (M (sparse->semiring-matrix SM)))
     (test '((5 0) (0 0)) (semiring-matrix->rows M))))
 
+(test-group "make-sparse-semiring-matrix strips zero-valued entries"
+  ;; Documented invariant: entries whose value equals (semiring-zero
+  ;; S) are filtered out of the stored representation so the sparse
+  ;; form lists only non-zero cells. The dense->sparse direction was
+  ;; tested; the constructor's own filter was not.
+  (let ((S (counting-semiring)))
+    (test 1 (length (sparse-semiring-matrix-entries
+                      (make-sparse-semiring-matrix S 3 3
+                        '(((0 . 0) . 0) ((1 . 1) . 7) ((2 . 2) . 0)))))))
+  ;; Under the boolean semiring zero is #f (not the integer 0); a
+  ;; regression that hardcoded = 0 would break this case.
+  (let ((B (boolean-semiring)))
+    (test 1 (length (sparse-semiring-matrix-entries
+                      (make-sparse-semiring-matrix B 2 2
+                        '(((0 . 0) . #f) ((1 . 1) . #t))))))))
+
 (test-group "sparse duplicate coordinates: first entry wins"
   ;; Documented invariant: duplicate coordinates in the alist retain
   ;; the first-match-wins semantics of assoc. This must hold both for
