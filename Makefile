@@ -375,8 +375,10 @@ coverhtml:
 # Run tests with coverage and enforce per-package threshold (80%).
 # Excluded packages: cmd, repl, forms, extensions/*, internal/testutil,
 # registry/testhelpers, examples/embedding, integration.
-# Also runs the Scheme-side coverage sweep (cover-scm) so embedded
-# stdlib tests surface in the profile alongside Go coverage.
+# cover-scm runs as a prerequisite so the Scheme-side sweep happens
+# alongside the Go suite; the two profiles are produced separately
+# (build/scheme-coverage.out vs build/coverage.out) and are not
+# merged — the 80% threshold is enforced against the Go profile only.
 #   make covercheck
 .PHONY: covercheck
 covercheck: cover-scm
