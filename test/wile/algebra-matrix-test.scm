@@ -25,6 +25,18 @@
          (M (make-semiring-matrix S 2 2)))
     (test '((0 0) (0 0)) (semiring-matrix->rows M))))
 
+(test-group "default fill uses the actual semiring-zero, not literal 0"
+  ;; Regression guard: a bug that filled with literal 0 instead of
+  ;; (semiring-zero S) would pass every counting test and silently
+  ;; break Boolean (where zero is #f) and tropical (zero is the
+  ;; tropical-inf symbol).
+  (let ((B (boolean-semiring)))
+    (test '((#f #f) (#f #f))
+          (semiring-matrix->rows (make-semiring-matrix B 2 2))))
+  (let ((Tr (tropical-semiring)) (T tropical-inf))
+    (test `((,T ,T) (,T ,T))
+          (semiring-matrix->rows (make-semiring-matrix Tr 2 2)))))
+
 (test-group "make-semiring-matrix custom fill"
   (let* ((S (counting-semiring))
          (M (make-semiring-matrix S 2 2 9)))
@@ -303,6 +315,15 @@
     ;; perm(∅) = 1 by convention: the empty product over the empty
     ;; permutation of {}.
     (test 1 (semiring-matrix-permanent (make-semiring-matrix S 0 0)))))
+
+(test-group "permanent 1x1 is the single element"
+  ;; The minimum non-empty case — exercises smat-fold-permutations'
+  ;; single-element path where off-by-ones would most plausibly show.
+  (let ((S (counting-semiring)))
+    (test 7 (semiring-matrix-permanent
+              (semiring-matrix-from-rows S '((7)))))
+    (test 0 (semiring-matrix-permanent
+              (semiring-matrix-from-rows S '((0)))))))
 
 (test-group "permanent under tropical = minimum-cost assignment"
   (let ((Tr (tropical-semiring)))
