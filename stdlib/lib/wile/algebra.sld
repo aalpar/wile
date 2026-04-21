@@ -168,7 +168,8 @@
     matrix-add matrix-add!
     matrix-mul matrix-mul!
     matrix-op-supported?
-    matrix-power matrix-closure matrix-permanent)
+    matrix-power matrix-closure matrix-permanent
+    matrix-copy matrix-copy!)
   (import (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice)

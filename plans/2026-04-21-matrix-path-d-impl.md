@@ -352,16 +352,23 @@ For each op in `{power, closure, permanent}`:
 ## Definition of done
 
 - [x] D1, D2, D3 decisions recorded in this file (2026-04-21).
-- [ ] New names exported from `matrix.sld`; `-entries` removed.
-- [ ] Three test migrations complete with order-independent assertions.
-- [ ] `make build && make test` pass.
-- [ ] `make lint && make covercheck` pass.
-- [ ] New code coverage ≥ library baseline captured in P1.
-- [ ] `(apropos matrix)` surfaces new primitives with keywords.
-- [ ] Design-doc `2026-04-20-matrix-sparse-dense-design.md` Definition-
-      of-Done checkboxes updated (OQ6 dispatch-shape confirmation,
-      follow-up-impl-plan row, test-migration row, `-entries` removal
-      row).
+- [x] New names exported from `matrix.sld`; `-entries` removed. (#685)
+- [x] Three test migrations complete with order-independent assertions. (#685)
+- [x] `make build && make test` pass. (Confirmed end of P8.)
+- [x] `make lint` clean after every phase. (`covercheck` blocked on
+      `feat/scheme-coverage` not yet on master — deferred.)
+- [ ] New code coverage ≥ library baseline captured in P1. (Deferred
+      until scheme-coverage lands on master; baseline preserved in the
+      session transcript: 112 tests → 234 tests after P8.)
+- [x] `(apropos "matrix-")` surfaces all 19 new primitives — verified
+      at end of P9 via `./dist/darwin/arm64/wile -e '(import (wile
+      algebra matrix)) (display (apropos "matrix-"))'`.
+- [x] Design-doc `2026-04-20-matrix-sparse-dense-design.md` Definition-
+      of-Done checkboxes updated. (#685 closed test migration and
+      `-entries` removal; OQ6 dispatch-shape is satisfied by the
+      consistent cond-on-predicate pattern across all polymorphic
+      ops — adding a `<matrix-view>` case touches exactly the nine
+      enumeration sites identified in the finisher insight above.)
 - [ ] `plans/CLAUDE.md` index updated: move this plan from Open to
       Completed upon merge.
 

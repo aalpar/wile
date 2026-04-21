@@ -991,5 +991,61 @@
     (test #f (matrix-op-supported? 'closure SM))
     (test #f (matrix-op-supported? 'permanent SM))))
 
+;; ─── Copy (P8) ───────────────────────────────
+
+(test-group "matrix-copy returns a distinct dense copy"
+  (let* ((S (counting-semiring))
+         (M (semiring-matrix-from-rows S '((1 2) (3 4))))
+         (C (matrix-copy M)))
+    (test #f (eq? M C))
+    (test 'dense (matrix-rep-tag C))
+    (test '((1 2) (3 4)) (semiring-matrix->rows C))))
+
+(test-group "matrix-copy returns a distinct sparse copy"
+  (let* ((S (counting-semiring))
+         (M (make-sparse-semiring-matrix S 3 3 '(((0 . 0) . 5) ((1 . 1) . 7))))
+         (C (matrix-copy M)))
+    (test #f (eq? M C))
+    (test 'sparse (matrix-rep-tag C))
+    (test 5 (matrix-ref C 0 0))
+    (test 7 (matrix-ref C 1 1))
+    (test 0 (matrix-ref C 2 2))))
+
+(test-group "matrix-copy! overwrites destination"
+  (let* ((S (counting-semiring))
+         (M (semiring-matrix-from-rows S '((1 2) (3 4))))
+         (C (make-semiring-matrix S 2 2)))
+    (matrix-copy! C M)
+    (test '((1 2) (3 4)) (semiring-matrix->rows C))))
+
+(test-group "matrix-copy! rejects same-reference aliasing"
+  (let* ((S (counting-semiring))
+         (M (semiring-matrix-from-rows S '((1 2) (3 4)))))
+    (test-error (matrix-copy! M M))))
+
+(test-group "matrix-copy! rejects rep / shape / semiring mismatch"
+  (let* ((S (counting-semiring))
+         (D (make-semiring-matrix S 2 2))
+         (SM (make-sparse-semiring-matrix S 2 2 '())))
+    ;; dense ← sparse: rep mismatch.
+    (test-error (matrix-copy! D SM))
+    ;; shape mismatch:
+    (let ((small (make-semiring-matrix S 1 1)))
+      (test-error (matrix-copy! D small)))
+    ;; semiring mismatch:
+    (let ((D-bool (make-semiring-matrix (boolean-semiring) 2 2)))
+      (test-error (matrix-copy! D D-bool)))))
+
+(test-group "matrix-op-supported? includes copy"
+  (let* ((S (counting-semiring))
+         (D (make-semiring-matrix S 2 2))
+         (SM (make-sparse-semiring-matrix S 2 2 '())))
+    (test #t (matrix-op-supported? 'copy  D))
+    (test #t (matrix-op-supported? 'copy  SM))
+    (test #t (matrix-op-supported? 'copy! D  D))
+    (test #t (matrix-op-supported? 'copy! SM SM))
+    ;; copy! across different reps not registered.
+    (test #f (matrix-op-supported? 'copy! D SM))))
+
 (test-end)
 (test-exit)

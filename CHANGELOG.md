@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `(wile algebra matrix)` Path D polymorphic API — 19 new primitives that dispatch across dense and sparse representations: `matrix?`, `matrix-ref`, `matrix-rows`, `matrix-cols`, `matrix-shape`, `matrix-semiring`, `matrix-rep-tag`, `matrix-for-each-entry`, `matrix-fold-entries`, `matrix-add`, `matrix-add!`, `matrix-mul`, `matrix-mul!`, `matrix-op-supported?`, `matrix-power`, `matrix-closure`, `matrix-permanent`, `matrix-copy`, `matrix-copy!`. `add` and `mul` are implemented for every rep-pair combination; `power`, `closure`, `permanent` remain dense-only and raise a typed error on sparse input with conversion advice (#684–#691).
+- Bang-form semantics follow OQ4 (strict destination-rep) and OQ5 (no-hazard aliasing for `add!`; incremental-write aliasing rejection for `mul!`).
+- `matrix-op-supported?` gives callers a programmatic capability query so they can branch on support rather than catching errors.
+- `<sparse-semiring-matrix>` records gain an `ssmat-entries-set!` mutator so bang forms can replace the entries alist in place (additive; getter preserved).
+
+### Removed
+
+- `sparse-semiring-matrix-entries` — the alist shape is no longer part of the public API. Iterate via `matrix-for-each-entry` or `matrix-fold-entries` instead. No deprecation period (zero consumers) (#685).
+
 ## [1.14.14] - 2026-04-15
 
 ### Added
