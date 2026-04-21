@@ -51,6 +51,74 @@
         ((sparse-semiring-matrix? M) 'sparse)
         (else (error "matrix-rep-tag: not a matrix" M))))
 
+;; ─── Polymorphic iterator API (Path D Q1c) ───
+
+;; Per-representation iterator implementations. Registered into *matrix-ops*
+;; immediately below so the public dispatchers reach them through the Path D
+;; scaffold rather than re-enumerating reps at the call site. Forward references
+;; to record accessors (semiring-matrix-rows, ssmat-entries, ...) resolve at
+;; call time, not at define/register time, so load order is not a concern.
+
+(define (matrix-for-each-entry/dense M proc)
+  (let ((n (semiring-matrix-rows M))
+        (m (semiring-matrix-cols M)))
+    (let row-loop ((r 0))
+      (when (< r n)
+        (let col-loop ((c 0))
+          (when (< c m)
+            (proc r c (semiring-matrix-ref M r c))
+            (col-loop (+ c 1))))
+        (row-loop (+ r 1))))))
+
+(define (matrix-for-each-entry/sparse M proc)
+  (for-each (lambda (entry)
+              (let ((rc (car entry))
+                    (v  (cdr entry)))
+                (proc (car rc) (cdr rc) v)))
+            (ssmat-entries M)))
+
+(define (matrix-fold-entries/dense M init proc)
+  (let ((n (semiring-matrix-rows M))
+        (m (semiring-matrix-cols M)))
+    (let row-loop ((r 0) (acc init))
+      (if (= r n)
+          acc
+          (let col-loop ((c 0) (acc acc))
+            (if (= c m)
+                (row-loop (+ r 1) acc)
+                (col-loop (+ c 1)
+                          (proc r c (semiring-matrix-ref M r c) acc))))))))
+
+(define (matrix-fold-entries/sparse M init proc)
+  (let loop ((es (ssmat-entries M)) (acc init))
+    (if (null? es)
+        acc
+        (let* ((entry (car es))
+               (rc (car entry))
+               (v  (cdr entry)))
+          (loop (cdr es) (proc (car rc) (cdr rc) v acc))))))
+
+(register-matrix-op! '(for-each dense)  matrix-for-each-entry/dense)
+(register-matrix-op! '(for-each sparse) matrix-for-each-entry/sparse)
+(register-matrix-op! '(fold     dense)  matrix-fold-entries/dense)
+(register-matrix-op! '(fold     sparse) matrix-fold-entries/sparse)
+
+(define (matrix-for-each-entry M proc)
+  "Call (PROC ROW COL VALUE) for each entry of matrix M. Returns unspecified.\nDense matrices visit every cell in row-major order. Sparse matrices visit\nonly stored non-zero cells; the enumeration order is representation-dependent\nand not guaranteed stable across reps or releases. Callers that need a\ncanonical order must fold into a structure they sort themselves.\n\nExamples:\n  (let* ((S (counting-semiring))\n         (SM (make-sparse-semiring-matrix S 2 2\n                '(((0 . 0) . 5) ((1 . 1) . 7)))))\n    (matrix-for-each-entry SM\n      (lambda (r c v) (display (list r c v)) (display \" \"))))\n\nParameters:\n  M : matrix\n  proc : procedure of three arguments (row col value)\nReturns: unspecified\nCategory: algebra\nKeywords: matrix iteration, for-each, traversal, entries, visit, scan\n\nSee also: `matrix-fold-entries'."
+  (let* ((rep  (matrix-rep-tag M))
+         (impl (matrix-op-lookup (list 'for-each rep))))
+    (if impl
+        (impl M proc)
+        (error "matrix-for-each-entry: no iterator for representation" rep))))
+
+(define (matrix-fold-entries M init proc)
+  "Left fold over the entries of matrix M. PROC is called with\n(ROW COL VALUE ACC) and returns the new ACC. INIT seeds the fold.\nReturns the final accumulator.\n\nDense matrices visit every cell in row-major order; sparse matrices visit\nonly stored non-zero cells in representation-dependent order (see\n`matrix-for-each-entry').\n\nExamples:\n  (let* ((S (counting-semiring))\n         (SM (make-sparse-semiring-matrix S 3 3\n                '(((0 . 0) . 5) ((1 . 2) . 7)))))\n    (matrix-fold-entries SM 0 (lambda (r c v acc) (+ acc 1))))\n  => 2\n\nParameters:\n  M : matrix\n  init : any\n  proc : procedure of four arguments (row col value acc)\nReturns: any\nCategory: algebra\nKeywords: matrix iteration, fold, reduce, accumulate, entries, traverse\n\nSee also: `matrix-for-each-entry'."
+  (let* ((rep  (matrix-rep-tag M))
+         (impl (matrix-op-lookup (list 'fold rep))))
+    (if impl
+        (impl M init proc)
+        (error "matrix-fold-entries: no iterator for representation" rep))))
+
 ;; ─── Internal utilities ──────────────────────
 
 ;; Validate that X is a non-negative exact integer; raise an error
@@ -459,10 +527,6 @@
   "Return the semiring parameter of sparse matrix SM.\n\nParameters:\n  SM : sparse-semiring-matrix\nReturns: semiring\nCategory: algebra\nKeywords: sparse matrix, semiring"
   (ssmat-semiring SM))
 
-(define (sparse-semiring-matrix-entries SM)
-  "Return the alist of non-zero entries of sparse matrix SM.\nEach entry is ((ROW . COL) . VALUE).\n\nParameters:\n  SM : sparse-semiring-matrix\nReturns: list\nCategory: algebra\nKeywords: sparse matrix, entries, non-zero, coordinate list"
-  (ssmat-entries SM))
-
 (define (sparse-semiring-matrix-ref SM r c)
   "Return element (R, C) of sparse matrix SM, or (semiring-zero S) if absent.\n\nExamples:\n  (let ((S (counting-semiring)))\n    (sparse-semiring-matrix-ref\n      (make-sparse-semiring-matrix S 2 2 '(((0 . 1) . 9)))\n      0 1))  => 9\n\nParameters:\n  SM : sparse-semiring-matrix\n  r : integer\n  c : integer\nReturns: any\nCategory: algebra\nKeywords: sparse matrix, element, indexing, lookup\n\nSee also: `make-sparse-semiring-matrix'."
   (smat-check-nat "sparse-semiring-matrix-ref" "row" r)
@@ -474,7 +538,7 @@
     (if found (cdr found) (semiring-zero (ssmat-semiring SM)))))
 
 (define (semiring-matrix->sparse M)
-  "Convert dense matrix M to its sparse representation.\nEntries equal to (semiring-zero S) are omitted. Round-trips via\n`sparse->semiring-matrix' preserve all non-zero values.\n\nExamples:\n  (let* ((S (counting-semiring))\n         (M (semiring-matrix-from-rows S '((1 0) (0 2))))\n         (SM (semiring-matrix->sparse M)))\n    (sparse-semiring-matrix-entries SM))\n  => (((0 . 0) . 1) ((1 . 1) . 2))\n\nParameters:\n  M : semiring-matrix\nReturns: sparse-semiring-matrix\nCategory: algebra\nKeywords: dense to sparse, conversion, compression, non-zero filter\n\nSee also: `sparse->semiring-matrix'."
+  "Convert dense matrix M to its sparse representation.\nEntries equal to (semiring-zero S) are omitted. Round-trips via\n`sparse->semiring-matrix' preserve all non-zero values.\n\nExamples:\n  (let* ((S (counting-semiring))\n         (M (semiring-matrix-from-rows S '((1 0) (0 2))))\n         (SM (semiring-matrix->sparse M)))\n    (matrix-fold-entries SM 0 (lambda (r c v acc) (+ acc 1))))\n  => 2\n\nParameters:\n  M : semiring-matrix\nReturns: sparse-semiring-matrix\nCategory: algebra\nKeywords: dense to sparse, conversion, compression, non-zero filter\n\nSee also: `sparse->semiring-matrix', `matrix-fold-entries'."
   (let* ((S (smat-semiring M))
          (z (semiring-zero S))
          (n (smat-rows M))

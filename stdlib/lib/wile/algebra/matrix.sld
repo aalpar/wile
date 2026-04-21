@@ -12,11 +12,14 @@
           make-sparse-semiring-matrix sparse-semiring-matrix?
           sparse-semiring-matrix-ref
           sparse-semiring-matrix-rows sparse-semiring-matrix-cols
-          sparse-semiring-matrix-semiring sparse-semiring-matrix-entries
+          sparse-semiring-matrix-semiring
           semiring-matrix->sparse sparse->semiring-matrix
           with-semiring-matrix
           ;; Path D scaffold (P2). New reps extend matrix-rep-tag.
-          matrix-rep-tag)
+          matrix-rep-tag
+          ;; Path D iterator API (P3). Replaces alist exposure via
+          ;; sparse-semiring-matrix-entries (removed).
+          matrix-for-each-entry matrix-fold-entries)
   (import (scheme base)
           (wile algebra semiring))
   (include "matrix.scm"))

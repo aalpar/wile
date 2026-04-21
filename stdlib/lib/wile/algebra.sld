@@ -158,9 +158,11 @@
     make-sparse-semiring-matrix sparse-semiring-matrix?
     sparse-semiring-matrix-ref
     sparse-semiring-matrix-rows sparse-semiring-matrix-cols
-    sparse-semiring-matrix-semiring sparse-semiring-matrix-entries
+    sparse-semiring-matrix-semiring
     semiring-matrix->sparse sparse->semiring-matrix
-    with-semiring-matrix)
+    with-semiring-matrix
+    ;; Path D polymorphic API
+    matrix-rep-tag matrix-for-each-entry matrix-fold-entries)
   (import (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice)
