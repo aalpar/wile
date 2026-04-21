@@ -421,6 +421,28 @@
          (M* (sparse->semiring-matrix (semiring-matrix->sparse M))))
     (test (semiring-matrix->rows M) (semiring-matrix->rows M*))))
 
+(test-group "sparse round-trip under boolean semiring"
+  ;; Exercises the zero-detection path where (semiring-zero B) is #f,
+  ;; not the integer 0. A regression that used zero? or = 0 would
+  ;; pass the counting case and silently break here.
+  (let* ((B (boolean-semiring))
+         (M (semiring-matrix-from-rows B
+              '((#t #f #t) (#f #t #f) (#f #f #t))))
+         (M* (sparse->semiring-matrix (semiring-matrix->sparse M))))
+    (test (semiring-matrix->rows M) (semiring-matrix->rows M*))))
+
+(test-group "sparse round-trip under tropical semiring"
+  ;; Exercises the path where (semiring-zero Tr) is tropical-inf, a
+  ;; symbol sentinel rather than a number.
+  (let* ((Tr (tropical-semiring))
+         (T tropical-inf)
+         (M (semiring-matrix-from-rows Tr
+              `((0  1  ,T)
+                (,T 0  2 )
+                (,T ,T 0 ))))
+         (M* (sparse->semiring-matrix (semiring-matrix->sparse M))))
+    (test (semiring-matrix->rows M) (semiring-matrix->rows M*))))
+
 ;; -- Macro --
 
 (test-group "with-semiring-matrix rebinds operation names"
