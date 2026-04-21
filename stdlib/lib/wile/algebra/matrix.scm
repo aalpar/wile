@@ -98,6 +98,8 @@
 
 (define (make-semiring-matrix S rows cols . rest)
   "Construct a ROWS×COLS matrix over semiring S filled with FILL.\nFILL is the optional fourth argument; when omitted, every cell is\ninitialized to (semiring-zero S).\n\nExamples:\n  (semiring-matrix->rows\n    (make-semiring-matrix (counting-semiring) 2 3))\n  => ((0 0 0) (0 0 0))\n  (semiring-matrix->rows\n    (make-semiring-matrix (counting-semiring) 2 2 7))\n  => ((7 7) (7 7))\n\nParameters:\n  S : semiring\n  rows : integer\n  cols : integer\n  [fill] : any\nReturns: semiring-matrix\nCategory: algebra\nKeywords: matrix constructor, allocate, fill, zero matrix\n\nSee also: `semiring-matrix-from-rows', `semiring-matrix-identity'."
+  (unless (semiring? S)
+    (error "make-semiring-matrix: expected semiring" S))
   (smat-check-nat "make-semiring-matrix" "rows" rows)
   (smat-check-nat "make-semiring-matrix" "cols" cols)
   (let ((fill (if (null? rest) (semiring-zero S) (car rest))))
@@ -105,6 +107,8 @@
 
 (define (semiring-matrix-from-rows S rows-list)
   "Construct a matrix over semiring S from a list of equal-length rows.\nROWS-LIST must be non-empty; all rows must have the same length.\n\nExamples:\n  (semiring-matrix->rows\n    (semiring-matrix-from-rows (counting-semiring)\n      '((1 2) (3 4) (5 6))))\n  => ((1 2) (3 4) (5 6))\n\nParameters:\n  S : semiring\n  rows-list : list of list\nReturns: semiring-matrix\nCategory: algebra\nKeywords: matrix literal, build matrix, rows, from-list\n\nSee also: `make-semiring-matrix', `semiring-matrix->rows'."
+  (unless (semiring? S)
+    (error "semiring-matrix-from-rows: expected semiring" S))
   (when (null? rows-list)
     (error "semiring-matrix-from-rows: need at least one row"))
   (let* ((n    (length rows-list))
@@ -136,6 +140,8 @@
 
 (define (semiring-matrix-identity S n)
   "Construct the N×N identity matrix over semiring S.\nDiagonal is (semiring-one S); off-diagonal is (semiring-zero S).\nSatisfies I·M = M and M·I = M under `semiring-matrix-mul'.\n\nExamples:\n  (semiring-matrix->rows\n    (semiring-matrix-identity (counting-semiring) 3))\n  => ((1 0 0) (0 1 0) (0 0 1))\n\nParameters:\n  S : semiring\n  n : integer\nReturns: semiring-matrix\nCategory: algebra\nKeywords: identity matrix, unit matrix, I, diagonal, multiplicative identity\n\nSee also: `make-semiring-matrix', `semiring-matrix-mul'."
+  (unless (semiring? S)
+    (error "semiring-matrix-identity: expected semiring" S))
   (smat-check-nat "semiring-matrix-identity" "n" n)
   (let* ((z (semiring-zero S))
          (o (semiring-one S))
@@ -335,6 +341,8 @@
 
 (define (make-sparse-semiring-matrix S rows cols entries)
   "Construct a sparse ROWS x COLS matrix over semiring S from ENTRIES.\nENTRIES is an alist ((ROW . COL) . VALUE). Positions not listed read\nas (semiring-zero S). Entries whose value is (semiring-zero S) are\nstripped from the stored representation (matching the invariant that\nthe sparse form lists only non-zero cells); duplicate coordinates are\nkept as provided, with the first matching entry winning under assoc.\n\nExamples:\n  (let ((S (counting-semiring)))\n    (sparse-semiring-matrix-ref\n      (make-sparse-semiring-matrix S 3 3 '(((0 . 0) . 5) ((1 . 2) . 7)))\n      1 2))\n  => 7\n\nParameters:\n  S : semiring\n  rows : integer\n  cols : integer\n  entries : list\nReturns: sparse-semiring-matrix\nCategory: algebra\nKeywords: sparse matrix, coordinate list, COO, non-zero entries\n\nSee also: `semiring-matrix->sparse', `sparse->semiring-matrix'."
+  (unless (semiring? S)
+    (error "make-sparse-semiring-matrix: expected semiring" S))
   (smat-check-nat "make-sparse-semiring-matrix" "rows" rows)
   (smat-check-nat "make-sparse-semiring-matrix" "cols" cols)
   (let ((z (semiring-zero S)))

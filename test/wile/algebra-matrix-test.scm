@@ -34,6 +34,13 @@
   (test-error (make-semiring-matrix (counting-semiring) -1 3))
   (test-error (make-semiring-matrix (counting-semiring) 3 -1)))
 
+(test-group "constructors reject non-semiring first argument"
+  (test-error (make-semiring-matrix 42 2 2))
+  (test-error (make-semiring-matrix 'x 2 2))
+  (test-error (semiring-matrix-from-rows 42 '((1 2) (3 4))))
+  (test-error (semiring-matrix-identity 42 2))
+  (test-error (make-sparse-semiring-matrix 42 2 2 '())))
+
 (test-group "make-semiring-matrix rejects inexact or non-integer dims"
   ;; 2.0 is integer-valued but inexact; uniform rule is "exact integer".
   (test-error (make-semiring-matrix (counting-semiring) 2.0 3))
