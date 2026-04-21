@@ -330,17 +330,18 @@
     ;; min(4+5, 1+2) = 3
     (test 3 (semiring-matrix-permanent
               (semiring-matrix-from-rows Tr '((4 1) (2 5)))))
-    ;; 3x3: one of 6 permutations is the minimum cost.
-    ;; perms of (0 1 2): costs are
-    ;;   (0 1 2): 1+5+9 = 15
-    ;;   (0 2 1): 1+6+8 = 15
-    ;;   (1 0 2): 2+4+9 = 15
-    ;;   (1 2 0): 2+6+7 = 15
-    ;;   (2 0 1): 3+4+8 = 15
-    ;;   (2 1 0): 3+5+7 = 15
-    (test 15 (semiring-matrix-permanent
-               (semiring-matrix-from-rows Tr
-                 '((1 2 3) (4 5 6) (7 8 9)))))))
+    ;; 3x3 with a uniquely-minimal diagonal assignment: only the
+    ;; identity permutation (0 1 2) yields 1+1+1 = 3; every other
+    ;; permutation hits at least one 100-weight cell and sums to at
+    ;; least 102. A buggy implementation that returned the wrong
+    ;; permutation's cost would fail loudly instead of coincidentally
+    ;; matching (which happens on symmetric matrices like the old
+    ;; 1..9 case where every permutation sums to 15).
+    (test 3 (semiring-matrix-permanent
+              (semiring-matrix-from-rows Tr
+                '((1   100 100)
+                  (100 1   100)
+                  (100 100 1  )))))))
 
 (test-group "permanent under boolean = perfect-matching existence"
   (let ((B (boolean-semiring)))
