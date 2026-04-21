@@ -2756,11 +2756,11 @@
   (status resolved)
   (slots
     (slot 0
-      (declared "output-port")
+      (declared "binary-output-port")
       (variadic-rest #f)
       (gate-source requirearg)
       (gate-types ("binary-output-port"))
-      (bucket Declared-too-wide))
+      (bucket Single-strict))
   ))
 (primitive
   (name "get-output-string")

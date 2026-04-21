@@ -235,7 +235,7 @@ func addPorts(r *registry.Registry) error {
 			ReturnType: values.TypeBinaryOutputPort},
 		{Name: "get-output-bytevector", ParamCount: 1, Impl: PrimGetOutputBytevector,
 			Doc: "Returns the accumulated bytes from an output bytevector port as a bytevector.\n\nExamples:\n  (let ((p (open-output-bytevector))) (write-u8 10 p) (write-u8 20 p) (get-output-bytevector p))  => #u8(10 20)", ParamNames: []string{"port"}, Category: "ports",
-			ParamTypes: []values.TypeConstraint{values.TypeOutputPort},
+			ParamTypes: []values.TypeConstraint{values.TypeBinaryOutputPort},
 			ReturnType: values.TypeByteVector},
 	}, registry.PhaseRuntime)
 
