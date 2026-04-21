@@ -275,6 +275,17 @@
 ;; semirings on an n×n matrix the series saturates at k = n−1. For
 ;; counting semirings with cycles the series does not converge; the
 ;; implementation raises an error when MAX-ITERATIONS is exhausted.
+;;
+;; Convergence is detected via `equal?` on the underlying vectors.
+;; This imposes a constraint the record type cannot express: the
+;; semiring's carrier must be meaningfully comparable under `equal?`.
+;; Cases to watch for:
+;;   - IEEE floats: `(equal? +nan.0 +nan.0)` is #f, so a NaN that
+;;     propagates through the sum will spin until MAX-ITERATIONS and
+;;     look like a legitimate non-convergence.
+;;   - Fresh records, procedures, ports: two "equivalent" values may
+;;     not be `equal?`; such carriers will never converge even if the
+;;     series mathematically saturates.
 
 (define (semiring-matrix-closure M . rest)
   "Return the Kleene closure M* = I + M + M^2 + ...\nM must be square. Computed by iterating T_{k+1} <- I + M * T_k until\n(equal? T_k T_{k+1}). Raises an error if convergence is not reached\nwithin MAX-ITERATIONS (optional; defaults to (semiring-matrix-rows M)).\n\nIntended consumers: Boolean semiring (reachability), tropical\nsemiring with non-negative weights (all-pairs shortest paths), and\nany idempotent semiring where the series saturates.\n\nExamples:\n  (let* ((B (boolean-semiring))\n         (G (semiring-matrix-from-rows B\n              '((#f #t #f) (#f #f #t) (#f #f #f)))))\n    (semiring-matrix->rows (semiring-matrix-closure G)))\n  => ((#t #t #t) (#f #t #t) (#f #f #t))\n\nParameters:\n  M : semiring-matrix\n  [max-iterations] : integer\nReturns: semiring-matrix\nCategory: algebra\nKeywords: Kleene closure, transitive closure, reflexive closure, fixpoint, reachability, all-pairs shortest path, star\n\nSee also: `semiring-matrix-power', `semiring-matrix-mul'."
