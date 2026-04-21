@@ -144,7 +144,23 @@
     inf<= inf-min inf-max inf+ inf- inf*
     ;; Graph algorithms
     make-graph-analysis graph-analysis?
-    graph-query graph-query-all)
+    graph-query graph-query-all
+    ;; Matrices
+    make-semiring-matrix semiring-matrix?
+    semiring-matrix-from-rows semiring-matrix->rows
+    semiring-matrix-identity
+    semiring-matrix-ref semiring-matrix-shape
+    semiring-matrix-rows semiring-matrix-cols
+    semiring-matrix-semiring
+    semiring-matrix-add semiring-matrix-mul
+    semiring-matrix-power semiring-matrix-closure
+    semiring-matrix-permanent
+    make-sparse-semiring-matrix sparse-semiring-matrix?
+    sparse-semiring-matrix-ref
+    sparse-semiring-matrix-rows sparse-semiring-matrix-cols
+    sparse-semiring-matrix-semiring sparse-semiring-matrix-entries
+    semiring-matrix->sparse sparse->semiring-matrix
+    with-semiring-matrix)
   (import (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice)
@@ -164,4 +180,5 @@
           (wile algebra fca)
           (wile algebra pareto)
           (wile algebra interval)
-          (wile algebra graph)))
+          (wile algebra graph)
+          (wile algebra matrix)))

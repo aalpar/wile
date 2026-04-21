@@ -4,7 +4,6 @@ private/
 # Build outputs
 dist/
 build/
-wile
 
 # IDE and editor directories
 .idea/
@@ -28,6 +27,7 @@ Thumbs.db
 *.bak
 *.txt
 *#
+/wile
 
 # Anthropic files
 .claude/
