@@ -417,3 +417,15 @@ For each op in `{power, closure, permanent}`:
   keywords that surface on searches like "matrix add" without
   crowding the existing rep-specific hits. Coordinate with
   `keywords-motivation.md`.
+
+---
+
+## Follow-ups (deferred from P5a)
+
+- **Sparse-sparse add complexity.** The P5a `matrix-add!/sparse/sparse/
+  sparse` kernel uses repeated `(assoc k ea)` / `(assoc k eb)` inside
+  its merge loops, giving O(|ea|·|eb|) worst-case. Acceptable for v1.x
+  with zero consumers; the right place to fix this is alongside P5b's
+  mul kernel, where scatter-accumulate infrastructure (coordinate-
+  keyed hashtable or pre-sorted alist + linear merge) will already be
+  in place. Copilot review on PR #687 raised this; deferred by design.
