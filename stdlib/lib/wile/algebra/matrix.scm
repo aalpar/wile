@@ -401,7 +401,7 @@
       'dense))
 
 ;; Validate A and B are mul-compatible: shape (A.cols == B.rows) and shared
-;; semiring (eq?). Returns the result shape (A.rows . B.cols).
+;; semiring (eq?). Raises on mismatch; return value is unspecified.
 (define (matrix-mul-check-operands A B)
   (unless (eq? (matrix-semiring A) (matrix-semiring B))
     (error "matrix-mul: semirings differ"))
@@ -512,15 +512,19 @@
          (zero (semiring-zero S))
          (ea (ssmat-entries A))
          (eb (ssmat-entries B)))
-    ;; Build result alist by iterating A and cross-checking B.
+    ;; Build result alist by iterating A and cross-checking B. When the
+    ;; (i,j) coord is already present, mutate the existing pair's cdr in
+    ;; place — assoc returns the actual pair from acc, so set-cdr! is
+    ;; O(1) per update vs. O(nnz_acc) for a list rebuild via map. Safe
+    ;; here because acc is freshly allocated inside this function and
+    ;; never escapes (ssmat-entries-set! receives the stripped result,
+    ;; not the accumulator itself).
     (define (accum-into acc i j v)
       (let ((existing (assoc (cons i j) acc)))
         (if existing
-            (map (lambda (pair)
-                   (if (equal? (car pair) (cons i j))
-                       (cons (cons i j) (plus (cdr pair) v))
-                       pair))
-                 acc)
+            (begin
+              (set-cdr! existing (plus (cdr existing) v))
+              acc)
             (cons (cons (cons i j) v) acc))))
     (let a-loop ((ra ea) (acc '()))
       (if (null? ra)
@@ -565,7 +569,7 @@
     (error "matrix-mul!: destination semiring differs from operands"))
   ;; OQ5 incremental-write: forbid eq? overlap between dest and any operand.
   (when (or (eq? C A) (eq? C B))
-    (error "matrix-mul!: destination cannot alias operand; use (matrix-copy! C (matrix-mul A B)) or a scratch matrix"))
+    (error "matrix-mul!: destination cannot alias operand; use a scratch matrix or rebind to (matrix-mul A B)"))
   (let* ((a-tag (matrix-rep-tag A))
          (b-tag (matrix-rep-tag B))
          (c-tag (matrix-rep-tag C))

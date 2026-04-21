@@ -809,6 +809,41 @@
     (matrix-mul! C A B)
     (test '((19 22) (43 50)) (semiring-matrix->rows C))))
 
+(test-group "matrix-mul! in place: dense × sparse → dense"
+  (let* ((S (counting-semiring))
+         (A (semiring-matrix-from-rows S '((1 2) (3 4))))
+         ;; B = [[0 5] [7 0]]
+         (B (make-sparse-semiring-matrix S 2 2
+              '(((0 . 1) . 5) ((1 . 0) . 7))))
+         (C (make-semiring-matrix S 2 2)))
+    (matrix-mul! C A B)
+    (test '((14 5) (28 15)) (semiring-matrix->rows C))))
+
+(test-group "matrix-mul! in place: sparse × dense → dense"
+  (let* ((S (counting-semiring))
+         (A (make-sparse-semiring-matrix S 2 2
+              '(((0 . 1) . 5) ((1 . 0) . 7))))
+         (B (semiring-matrix-from-rows S '((1 2) (3 4))))
+         (C (make-semiring-matrix S 2 2)))
+    (matrix-mul! C A B)
+    (test '((15 20) (7 14)) (semiring-matrix->rows C))))
+
+(test-group "matrix-mul! in place: sparse × sparse → sparse"
+  (let* ((S (counting-semiring))
+         ;; A = [[1 0] [0 2]], B = [[0 3] [4 0]]
+         (A (make-sparse-semiring-matrix S 2 2
+              '(((0 . 0) . 1) ((1 . 1) . 2))))
+         (B (make-sparse-semiring-matrix S 2 2
+              '(((0 . 1) . 3) ((1 . 0) . 4))))
+         (C (make-sparse-semiring-matrix S 2 2 '())))
+    (matrix-mul! C A B)
+    ;; A×B = [[0 3] [8 0]]
+    (test 0 (matrix-ref C 0 0))
+    (test 3 (matrix-ref C 0 1))
+    (test 8 (matrix-ref C 1 0))
+    (test 0 (matrix-ref C 1 1))
+    (test 2 (matrix-fold-entries C 0 (lambda (r c v acc) (+ acc 1))))))
+
 (test-group "matrix-mul! in place: non-square inner dim"
   (let* ((S (counting-semiring))
          ;; A is 2x3, B is 3x2, C must be 2x2
