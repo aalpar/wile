@@ -65,6 +65,12 @@
   (test-error
     (semiring-matrix-from-rows (counting-semiring) '())))
 
+(test-group "semiring-matrix-from-rows rejects non-list first row"
+  ;; Catches the forgot-the-outer-parens mistake at the API boundary
+  ;; instead of surfacing an opaque (length 5) type error.
+  (test-error
+    (semiring-matrix-from-rows (counting-semiring) '(5 (1 2)))))
+
 ;; -- Identity --
 
 (test-group "semiring-matrix-identity shape and content"

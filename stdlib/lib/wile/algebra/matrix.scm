@@ -111,6 +111,14 @@
     (error "semiring-matrix-from-rows: expected semiring" S))
   (when (null? rows-list)
     (error "semiring-matrix-from-rows: need at least one row"))
+  ;; The first row's length determines the column count; if it isn't
+  ;; a list the subsequent (length (car rows-list)) blows up with
+  ;; "length: contract violation" far from the real mistake. Common
+  ;; mistake this catches: forgetting the outer parens around the
+  ;; first row, e.g. (from-rows S '(5 (1 2))).
+  (unless (list? (car rows-list))
+    (error "semiring-matrix-from-rows: each row must be a list"
+           (car rows-list)))
   (let* ((n    (length rows-list))
          (m    (length (car rows-list)))
          (data (make-vector (* n m) (semiring-zero S))))
