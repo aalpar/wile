@@ -14,7 +14,9 @@
           sparse-semiring-matrix-rows sparse-semiring-matrix-cols
           sparse-semiring-matrix-semiring sparse-semiring-matrix-entries
           semiring-matrix->sparse sparse->semiring-matrix
-          with-semiring-matrix)
+          with-semiring-matrix
+          ;; Path D scaffold (P2). New reps extend matrix-rep-tag.
+          matrix-rep-tag)
   (import (scheme base)
           (wile algebra semiring))
   (include "matrix.scm"))

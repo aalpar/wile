@@ -161,6 +161,21 @@ wrappers (1 per polymorphic op, 5 lines each), `matrix-op-supported?`
 (3 lines), bootstrap-sanity test (15 lines), library-preamble
 invariant note (3 lines).
 
+#### Implementation note: alist backing, not hashtable
+
+Discovered during P2 (2026-04-21): Wile's `make-hashtable` rejects
+list keys with `"key is not hashable"` — the hasher requires atomic
+types only. The dispatch table is therefore implemented as a
+top-level association list (`*matrix-ops*`) rather than a hashtable,
+with `register-matrix-op!` prepending entries and `matrix-op-lookup`
+scanning via `assoc`. At the expected table size (≤20 entries for
+Path D's 4 ops × 4 rep-pairs, minus dense-only gaps), the O(n)
+linear scan is negligible next to any realistic matrix operation.
+Keys stay readable as lists (`(list 'add 'dense 'sparse)`).
+Semantics match the design: one table, one registration path, one
+lookup path, `matrix-op-supported?` is still a single-line
+`assoc`-based check.
+
 ### D2 — Error surfacing convention **[Resolved 2026-04-21: option (a)]**
 
 Existing `matrix.scm` raises errors via R5RS `(error msg . irritants)`

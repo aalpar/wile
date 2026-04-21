@@ -521,5 +521,20 @@
             (semiring-matrix->rows (closure G)))
       (test 4                      (ref A 1 1)))))
 
+;; ─── Path D scaffold sanity (P2) ─────────────
+
+(test-group "matrix-rep-tag returns 'dense for a dense matrix"
+  (let* ((S (counting-semiring))
+         (M (semiring-matrix-from-rows S '((1 2) (3 4)))))
+    (test 'dense (matrix-rep-tag M))))
+
+(test-group "matrix-rep-tag returns 'sparse for a sparse matrix"
+  (let* ((S (counting-semiring))
+         (SM (make-sparse-semiring-matrix S 2 2 '(((0 . 0) . 5)))))
+    (test 'sparse (matrix-rep-tag SM))))
+
+(test-group "matrix-rep-tag rejects non-matrix input"
+  (test-error (matrix-rep-tag 42)))
+
 (test-end)
 (test-exit)
