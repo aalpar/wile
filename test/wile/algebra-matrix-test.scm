@@ -237,6 +237,13 @@
             (,T ,T 0 ))
           (semiring-matrix->rows (semiring-matrix-closure M)))))
 
+(test-group "closure on empty matrix = empty matrix"
+  ;; M* of a 0x0 matrix is trivially the 0x0 identity; the default
+  ;; max-iter = n = 0 must not error here.
+  (let ((S (counting-semiring)))
+    (test '() (semiring-matrix->rows
+                (semiring-matrix-closure (make-semiring-matrix S 0 0))))))
+
 (test-group "semiring-matrix-closure rejects non-square"
   (test-error
     (semiring-matrix-closure

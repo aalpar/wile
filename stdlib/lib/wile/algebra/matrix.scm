@@ -272,18 +272,23 @@
            rest))
   (let* ((S        (smat-semiring M))
          (n        (smat-rows M))
-         (max-iter (if (null? rest) n (car rest)))
-         (I        (semiring-matrix-identity S n)))
+         (max-iter (if (null? rest) n (car rest))))
     (smat-check-nat "semiring-matrix-closure" "max-iterations" max-iter)
-    ;; Attempt at most max-iter update steps. iter counts completed
-    ;; updates, so the guard is (>= iter max-iter) rather than >.
-    (let loop ((T I) (iter 0))
-      (if (>= iter max-iter)
-          (error "semiring-matrix-closure: did not converge" max-iter)
-          (let ((T* (semiring-matrix-add I (semiring-matrix-mul M T))))
-            (if (equal? (smat-data T) (smat-data T*))
-                T
-                (loop T* (+ iter 1))))))))
+    ;; Short-circuit the 0x0 case: M* = I = the 0x0 matrix itself.
+    ;; Without this the default max-iter (= n = 0) would trip the
+    ;; guard on the very first iteration and error "did not converge".
+    (if (= n 0)
+        (semiring-matrix-identity S 0)
+        (let ((I (semiring-matrix-identity S n)))
+          ;; Attempt at most max-iter update steps. iter counts completed
+          ;; updates, so the guard is (>= iter max-iter) rather than >.
+          (let loop ((T I) (iter 0))
+            (if (>= iter max-iter)
+                (error "semiring-matrix-closure: did not converge" max-iter)
+                (let ((T* (semiring-matrix-add I (semiring-matrix-mul M T))))
+                  (if (equal? (smat-data T) (smat-data T*))
+                      T
+                      (loop T* (+ iter 1))))))))))
 
 ;; ─── Permanent ───────────────────────────────
 ;;
