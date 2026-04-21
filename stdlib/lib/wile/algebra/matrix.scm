@@ -29,6 +29,13 @@
     (if (= i n) (reverse acc) (loop (+ i 1) (cons i acc)))))
 
 ;; Remove the first occurrence of X from LST (equal?-based).
+;; Used only by smat-fold-permutations — which passes lists of
+;; distinct integers produced by smat-iota. If LST contains
+;; duplicates the permutation walker will overcount: e.g.
+;; (smat-iota 3) yields (0 1 2) and 3! = 6 permutations, but
+;; '(0 0 1) would yield 6 orderings where only 3 are distinct.
+;; Callers that want set-of-permutations semantics over a multiset
+;; must deduplicate before calling.
 (define (smat-remove-first x lst)
   (cond
     ((null? lst) '())
@@ -40,6 +47,8 @@
 ;; depth and one cons per prefix step — we do NOT materialize the
 ;; O(n!) permutation list, so consumers such as `semiring-matrix-permanent'
 ;; run in O(n) working memory rather than O(n! * n).
+;; Precondition (see smat-remove-first): LST must have distinct
+;; elements for the fold to visit each permutation exactly once.
 (define (smat-fold-permutations f init lst)
   (if (null? lst)
       (f '() init)
