@@ -580,5 +580,51 @@
   (test-error (matrix-for-each-entry 42 (lambda (r c v) #f)))
   (test-error (matrix-fold-entries 42 0 (lambda (r c v acc) acc))))
 
+;; ─── Polymorphic accessors (P4) ──────────────
+
+(test-group "matrix? recognizes both reps"
+  (let* ((S (counting-semiring))
+         (D (make-semiring-matrix S 2 2))
+         (SM (make-sparse-semiring-matrix S 2 2 '())))
+    (test #t (matrix? D))
+    (test #t (matrix? SM))
+    (test #f (matrix? 42))
+    (test #f (matrix? 'not-a-matrix))
+    (test #f (matrix? '()))))
+
+(test-group "matrix-ref dispatches on rep"
+  (let* ((S (counting-semiring))
+         (D (semiring-matrix-from-rows S '((1 2) (3 4))))
+         (SM (make-sparse-semiring-matrix S 2 2 '(((0 . 1) . 9)))))
+    ;; Dense path agrees with semiring-matrix-ref.
+    (test 3 (matrix-ref D 1 0))
+    ;; Sparse path: present entry.
+    (test 9 (matrix-ref SM 0 1))
+    ;; Sparse path: absent entry returns semiring zero.
+    (test 0 (matrix-ref SM 1 1))
+    (test-error (matrix-ref 42 0 0))))
+
+(test-group "matrix-rows / matrix-cols / matrix-shape on both reps"
+  (let* ((S (counting-semiring))
+         (D (make-semiring-matrix S 3 5))
+         (SM (make-sparse-semiring-matrix S 4 7 '())))
+    (test 3 (matrix-rows D))
+    (test 5 (matrix-cols D))
+    (test '(3 . 5) (matrix-shape D))
+    (test 4 (matrix-rows SM))
+    (test 7 (matrix-cols SM))
+    (test '(4 . 7) (matrix-shape SM))
+    (test-error (matrix-rows 42))
+    (test-error (matrix-cols 42))
+    (test-error (matrix-shape 42))))
+
+(test-group "matrix-semiring returns the parameter semiring"
+  (let* ((S (counting-semiring))
+         (D (make-semiring-matrix S 2 2))
+         (SM (make-sparse-semiring-matrix S 2 2 '())))
+    (test #t (eq? S (matrix-semiring D)))
+    (test #t (eq? S (matrix-semiring SM)))
+    (test-error (matrix-semiring 42))))
+
 (test-end)
 (test-exit)

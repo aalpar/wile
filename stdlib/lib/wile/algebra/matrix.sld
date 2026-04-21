@@ -19,7 +19,10 @@
           matrix-rep-tag
           ;; Path D iterator API (P3). Replaces alist exposure via
           ;; sparse-semiring-matrix-entries (removed).
-          matrix-for-each-entry matrix-fold-entries)
+          matrix-for-each-entry matrix-fold-entries
+          ;; Path D polymorphic accessors (P4).
+          matrix? matrix-ref matrix-rows matrix-cols
+          matrix-shape matrix-semiring)
   (import (scheme base)
           (wile algebra semiring))
   (include "matrix.scm"))
