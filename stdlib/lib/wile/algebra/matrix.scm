@@ -42,24 +42,49 @@
   (let ((pair (assoc key *matrix-ops*)))
     (if pair (cdr pair) #f)))
 
-;; matrix-rep-tag and matrix? below are the two — and only — places in
-;; this library that enumerate matrix representations. matrix-rep-tag
-;; produces the dispatch tag for the scaffold; matrix? answers type
-;; membership for site-tagged guards. Polymorphic operations route
-;; through these two; no other code should open-code
-;; (semiring-matrix? ...) or (sparse-semiring-matrix? ...). Adding a new
-;; rep (CSR, views, ...) extends both: one cond clause here plus one
-;; disjunct in matrix?.
-(define (matrix-rep-tag M)
-  "Return the representation tag for matrix M.\nRaises an error \"matrix-rep-tag: not a matrix\" if M is neither a dense\nnor a sparse semiring matrix.\n\nExamples:\n  (matrix-rep-tag\n    (make-semiring-matrix (counting-semiring) 2 2))  => dense\n  (matrix-rep-tag\n    (make-sparse-semiring-matrix\n      (counting-semiring) 2 2 '()))                  => sparse\n\nParameters:\n  M : matrix (dense or sparse semiring matrix)\nReturns: symbol ('dense or 'sparse)\nCategory: algebra\nKeywords: matrix representation, dispatch tag, polymorphic, dense, sparse\n\nSee also: `matrix?', `semiring-matrix?', `sparse-semiring-matrix?'."
-  (cond ((semiring-matrix? M)        'dense)
-        ((sparse-semiring-matrix? M) 'sparse)
-        (else (error "matrix-rep-tag: not a matrix" M))))
+;; *matrix-reps* is the single source of truth for rep enumeration.
+;; Adding a new rep (CSR, views, ...) is one (register-matrix-rep! ...)
+;; call after the record's define-record-type. matrix? and matrix-rep-tag
+;; both derive from this list via the private matrix-rep-of helper, so
+;; the two public functions can no longer drift out of sync.
+;;
+;; Registrations happen as record definitions flow past (same pattern
+;; as register-matrix-op! for *matrix-ops*). Top-level form order
+;; guarantees all reps are registered by the time any caller reaches a
+;; polymorphic dispatcher. No call-site in this library invokes matrix?
+;; or matrix-rep-tag at top level; all uses are inside procedure bodies
+;; that run after library load completes.
+;;
+;; register-matrix-rep! prepends, so the LAST registered pred is tested
+;; FIRST. Current reps (dense, sparse) have disjoint predicates so order
+;; is immaterial. A future rep whose predicate is a subtype of another
+;; rep's predicate must register AFTER the supertype to win precedence.
+
+(define *matrix-reps* '())
+
+;; Register PRED as the matrix-rep predicate tagged TAG.
+(define (register-matrix-rep! pred tag)
+  (set! *matrix-reps* (cons (cons pred tag) *matrix-reps*)))
+
+;; Return the (pred . tag) pair in *matrix-reps* whose pred accepts M,
+;; or #f if none matches. Private helper shared by matrix? and
+;; matrix-rep-tag so they cannot diverge.
+(define (matrix-rep-of M)
+  (let loop ((reps *matrix-reps*))
+    (cond ((null? reps) #f)
+          (((caar reps) M) (car reps))
+          (else (loop (cdr reps))))))
 
 (define (matrix? M)
-  "Return #t if M is a matrix of any representation (dense or sparse), #f\notherwise.\n\nExamples:\n  (matrix? (make-semiring-matrix (counting-semiring) 2 2))        => #t\n  (matrix? (make-sparse-semiring-matrix\n             (counting-semiring) 2 2 '()))                         => #t\n  (matrix? 42)                                                     => #f\n\nParameters:\n  M : any\nReturns: boolean\nCategory: algebra\nKeywords: matrix predicate, type check, polymorphic, dense, sparse\n\nSee also: `matrix-rep-tag', `semiring-matrix?', `sparse-semiring-matrix?'."
-  (or (semiring-matrix? M)
-      (sparse-semiring-matrix? M)))
+  "Return #t if M is a matrix of any registered representation, #f otherwise.\nDispatches through the shared *matrix-reps* registry with matrix-rep-tag.\n\nExamples:\n  (matrix? (make-semiring-matrix (counting-semiring) 2 2))        => #t\n  (matrix? (make-sparse-semiring-matrix\n             (counting-semiring) 2 2 '()))                         => #t\n  (matrix? 42)                                                     => #f\n\nParameters:\n  M : any\nReturns: boolean\nCategory: algebra\nKeywords: matrix predicate, type check, polymorphic, dense, sparse\n\nSee also: `matrix-rep-tag', `semiring-matrix?', `sparse-semiring-matrix?'."
+  (if (matrix-rep-of M) #t #f))
+
+(define (matrix-rep-tag M)
+  "Return the representation tag for matrix M.\nRaises an error \"matrix-rep-tag: not a matrix\" if M is not a registered\nmatrix representation. Dispatches through the shared *matrix-reps*\nregistry with matrix?.\n\nExamples:\n  (matrix-rep-tag\n    (make-semiring-matrix (counting-semiring) 2 2))  => dense\n  (matrix-rep-tag\n    (make-sparse-semiring-matrix\n      (counting-semiring) 2 2 '()))                  => sparse\n\nParameters:\n  M : matrix (dense or sparse semiring matrix)\nReturns: symbol ('dense or 'sparse)\nCategory: algebra\nKeywords: matrix representation, dispatch tag, polymorphic, dense, sparse\n\nSee also: `matrix?', `semiring-matrix?', `sparse-semiring-matrix?'."
+  (let ((pair (matrix-rep-of M)))
+    (if pair
+        (cdr pair)
+        (error "matrix-rep-tag: not a matrix" M))))
 
 ;; ─── Polymorphic iterator API (Path D Q1c) ───
 
@@ -425,6 +450,8 @@
   (cols     smat-cols)
   (data     smat-data))
 
+(register-matrix-rep! semiring-matrix? 'dense)
+
 ;; ─── Accessors ───────────────────────────────
 
 (define (semiring-matrix-rows M)
@@ -723,6 +750,8 @@
   ;; Callers must hold the sparse record reference; mutating entries through
   ;; an external alist binding does nothing (the setter replaces the field).
   (entries  ssmat-entries ssmat-entries-set!))
+
+(register-matrix-rep! sparse-semiring-matrix? 'sparse)
 
 (define (make-sparse-semiring-matrix S rows cols entries)
   "Construct a sparse ROWS x COLS matrix over semiring S from ENTRIES.\nENTRIES is an alist ((ROW . COL) . VALUE). Positions not listed read\nas (semiring-zero S). Entries whose value is (semiring-zero S) are\nstripped from the stored representation (matching the invariant that\nthe sparse form lists only non-zero cells); duplicate coordinates are\nkept as provided, with the first matching entry winning under assoc.\n\nExamples:\n  (let ((S (counting-semiring)))\n    (sparse-semiring-matrix-ref\n      (make-sparse-semiring-matrix S 3 3 '(((0 . 0) . 5) ((1 . 2) . 7)))\n      1 2))\n  => 7\n\nParameters:\n  S : semiring\n  rows : integer\n  cols : integer\n  entries : list\nReturns: sparse-semiring-matrix\nCategory: algebra\nKeywords: sparse matrix, coordinate list, COO, non-zero entries\n\nSee also: `semiring-matrix->sparse', `sparse->semiring-matrix'."
