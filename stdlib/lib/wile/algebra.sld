@@ -162,7 +162,9 @@
     semiring-matrix->sparse sparse->semiring-matrix
     with-semiring-matrix
     ;; Path D polymorphic API
-    matrix-rep-tag matrix-for-each-entry matrix-fold-entries)
+    matrix-rep-tag matrix-for-each-entry matrix-fold-entries
+    matrix? matrix-ref matrix-rows matrix-cols
+    matrix-shape matrix-semiring)
   (import (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice)

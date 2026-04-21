@@ -42,14 +42,24 @@
   (let ((pair (assoc key *matrix-ops*)))
     (if pair (cdr pair) #f)))
 
-;; Sole enumeration point for matrix representations. New reps (CSR, views,
-;; ...) extend this function with one additional cond clause; no other code
-;; in this library enumerates reps.
+;; matrix-rep-tag and matrix? below are the two — and only — places in
+;; this library that enumerate matrix representations. matrix-rep-tag
+;; produces the dispatch tag for the scaffold; matrix? answers type
+;; membership for site-tagged guards. Polymorphic operations route
+;; through these two; no other code should open-code
+;; (semiring-matrix? ...) or (sparse-semiring-matrix? ...). Adding a new
+;; rep (CSR, views, ...) extends both: one cond clause here plus one
+;; disjunct in matrix?.
 (define (matrix-rep-tag M)
-  "Return the representation tag for matrix M.\nRaises an error \"matrix-rep-tag: not a matrix\" if M is neither a dense\nnor a sparse semiring matrix.\n\nExamples:\n  (matrix-rep-tag\n    (make-semiring-matrix (counting-semiring) 2 2))  => dense\n  (matrix-rep-tag\n    (make-sparse-semiring-matrix\n      (counting-semiring) 2 2 '()))                  => sparse\n\nParameters:\n  M : matrix (dense or sparse semiring matrix)\nReturns: symbol ('dense or 'sparse)\nCategory: algebra\nKeywords: matrix representation, dispatch tag, polymorphic, dense, sparse\n\nSee also: `semiring-matrix?', `sparse-semiring-matrix?'."
+  "Return the representation tag for matrix M.\nRaises an error \"matrix-rep-tag: not a matrix\" if M is neither a dense\nnor a sparse semiring matrix.\n\nExamples:\n  (matrix-rep-tag\n    (make-semiring-matrix (counting-semiring) 2 2))  => dense\n  (matrix-rep-tag\n    (make-sparse-semiring-matrix\n      (counting-semiring) 2 2 '()))                  => sparse\n\nParameters:\n  M : matrix (dense or sparse semiring matrix)\nReturns: symbol ('dense or 'sparse)\nCategory: algebra\nKeywords: matrix representation, dispatch tag, polymorphic, dense, sparse\n\nSee also: `matrix?', `semiring-matrix?', `sparse-semiring-matrix?'."
   (cond ((semiring-matrix? M)        'dense)
         ((sparse-semiring-matrix? M) 'sparse)
         (else (error "matrix-rep-tag: not a matrix" M))))
+
+(define (matrix? M)
+  "Return #t if M is a matrix of any representation (dense or sparse), #f\notherwise.\n\nExamples:\n  (matrix? (make-semiring-matrix (counting-semiring) 2 2))        => #t\n  (matrix? (make-sparse-semiring-matrix\n             (counting-semiring) 2 2 '()))                         => #t\n  (matrix? 42)                                                     => #f\n\nParameters:\n  M : any\nReturns: boolean\nCategory: algebra\nKeywords: matrix predicate, type check, polymorphic, dense, sparse\n\nSee also: `matrix-rep-tag', `semiring-matrix?', `sparse-semiring-matrix?'."
+  (or (semiring-matrix? M)
+      (sparse-semiring-matrix? M)))
 
 ;; ─── Polymorphic iterator API (Path D Q1c) ───
 
@@ -103,18 +113,9 @@
 (register-matrix-op! '(fold     dense)  matrix-fold-entries/dense)
 (register-matrix-op! '(fold     sparse) matrix-fold-entries/sparse)
 
-;; The guard below forces non-matrix input to raise a site-tagged
-;; "matrix-<op>: not a matrix" error. Without it the error would surface
-;; from matrix-rep-tag and lose the caller's name — breaking the <op>:
-;; not a matrix convention used by the other polymorphic entry points
-;; in this library. The inline (or ...) mirrors the matrix? predicate
-;; that lands with Path D P4; once P4 is merged this should be swept
-;; to (unless (matrix? M) ...) for a single enumeration site.
-
 (define (matrix-for-each-entry M proc)
   "Call (PROC ROW COL VALUE) for each entry of matrix M. Returns unspecified.\nDense matrices visit every cell in row-major order. Sparse matrices visit\nonly stored non-zero cells; the enumeration order is representation-dependent\nand not guaranteed stable across reps or releases. Callers that need a\ncanonical order must fold into a structure they sort themselves.\n\nExamples:\n  (let* ((S (counting-semiring))\n         (SM (make-sparse-semiring-matrix S 2 2\n                '(((0 . 0) . 5) ((1 . 1) . 7)))))\n    (matrix-for-each-entry SM\n      (lambda (r c v) (display (list r c v)) (display \" \"))))\n\nParameters:\n  M : matrix\n  proc : procedure of three arguments (row col value)\nReturns: unspecified\nCategory: algebra\nKeywords: matrix iteration, for-each, traversal, entries, visit, scan\n\nSee also: `matrix-fold-entries'."
-  (unless (or (semiring-matrix? M) (sparse-semiring-matrix? M))
-    (error "matrix-for-each-entry: not a matrix" M))
+  (unless (matrix? M) (error "matrix-for-each-entry: not a matrix" M))
   (let* ((rep  (matrix-rep-tag M))
          (impl (matrix-op-lookup (list 'for-each rep))))
     (if impl
@@ -123,13 +124,89 @@
 
 (define (matrix-fold-entries M init proc)
   "Left fold over the entries of matrix M. PROC is called with\n(ROW COL VALUE ACC) and returns the new ACC. INIT seeds the fold.\nReturns the final accumulator.\n\nDense matrices visit every cell in row-major order; sparse matrices visit\nonly stored non-zero cells in representation-dependent order (see\n`matrix-for-each-entry').\n\nExamples:\n  (let* ((S (counting-semiring))\n         (SM (make-sparse-semiring-matrix S 3 3\n                '(((0 . 0) . 5) ((1 . 2) . 7)))))\n    (matrix-fold-entries SM 0 (lambda (r c v acc) (+ acc 1))))\n  => 2\n\nParameters:\n  M : matrix\n  init : any\n  proc : procedure of four arguments (row col value acc)\nReturns: any\nCategory: algebra\nKeywords: matrix iteration, fold, reduce, accumulate, entries, traverse\n\nSee also: `matrix-for-each-entry'."
-  (unless (or (semiring-matrix? M) (sparse-semiring-matrix? M))
-    (error "matrix-fold-entries: not a matrix" M))
+  (unless (matrix? M) (error "matrix-fold-entries: not a matrix" M))
   (let* ((rep  (matrix-rep-tag M))
          (impl (matrix-op-lookup (list 'fold rep))))
     (if impl
         (impl M init proc)
         (error "matrix-fold-entries: no iterator for representation" rep))))
+
+;; ─── Polymorphic accessors (Path D Q2a, P4) ──
+
+;; Per-rep accessor wrappers. These exist so the (register-matrix-op! ...)
+;; calls below can name define-bound identifiers; the wrappers' free
+;; references to per-rep primitives like sparse-semiring-matrix-ref
+;; resolve at call time, after the sparse record section defines them.
+;; Same pattern as the P3 iterator impls.
+
+(define (matrix-ref/dense M r c)  (semiring-matrix-ref M r c))
+(define (matrix-ref/sparse M r c) (sparse-semiring-matrix-ref M r c))
+
+(define (matrix-rows/dense M)  (semiring-matrix-rows M))
+(define (matrix-rows/sparse M) (sparse-semiring-matrix-rows M))
+
+(define (matrix-cols/dense M)  (semiring-matrix-cols M))
+(define (matrix-cols/sparse M) (sparse-semiring-matrix-cols M))
+
+(define (matrix-semiring/dense M)  (semiring-matrix-semiring M))
+(define (matrix-semiring/sparse M) (sparse-semiring-matrix-semiring M))
+
+(register-matrix-op! '(ref      dense)  matrix-ref/dense)
+(register-matrix-op! '(ref      sparse) matrix-ref/sparse)
+(register-matrix-op! '(rows     dense)  matrix-rows/dense)
+(register-matrix-op! '(rows     sparse) matrix-rows/sparse)
+(register-matrix-op! '(cols     dense)  matrix-cols/dense)
+(register-matrix-op! '(cols     sparse) matrix-cols/sparse)
+(register-matrix-op! '(semiring dense)  matrix-semiring/dense)
+(register-matrix-op! '(semiring sparse) matrix-semiring/sparse)
+
+;; Each dispatcher guards its own entry with matrix? so non-matrix input
+;; produces a site-tagged "matrix-<op>: not a matrix" error per the D2=(a)
+;; convention. Without the guard the error would leak through as
+;; "matrix-rep-tag: not a matrix" and lose the caller's site. The "no impl
+;; for representation" error path remains for the rare case that
+;; matrix-rep-tag gains a new tag ahead of its registrations.
+
+(define (matrix-ref M r c)
+  "Return the (R, C) element of matrix M. Dispatches on representation:\ndense reads the stored cell; sparse returns the value if present, else\n(semiring-zero (matrix-semiring M)).\n\nExamples:\n  (matrix-ref (semiring-matrix-from-rows (counting-semiring)\n                '((1 2) (3 4))) 1 0)                              => 3\n\nParameters:\n  M : matrix\n  r : integer\n  c : integer\nReturns: any\nCategory: algebra\nKeywords: matrix element, indexing, polymorphic, subscript, lookup\n\nSee also: `matrix-shape', `matrix-rows', `matrix-cols'."
+  (unless (matrix? M) (error "matrix-ref: not a matrix" M))
+  (let* ((rep  (matrix-rep-tag M))
+         (impl (matrix-op-lookup (list 'ref rep))))
+    (if impl
+        (impl M r c)
+        (error "matrix-ref: no impl for representation" rep))))
+
+(define (matrix-rows M)
+  "Return the number of rows in matrix M. Polymorphic over dense and sparse.\n\nParameters:\n  M : matrix\nReturns: integer\nCategory: algebra\nKeywords: matrix shape, dimensions, rows, height, polymorphic\n\nSee also: `matrix-cols', `matrix-shape'."
+  (unless (matrix? M) (error "matrix-rows: not a matrix" M))
+  (let* ((rep  (matrix-rep-tag M))
+         (impl (matrix-op-lookup (list 'rows rep))))
+    (if impl
+        (impl M)
+        (error "matrix-rows: no impl for representation" rep))))
+
+(define (matrix-cols M)
+  "Return the number of columns in matrix M. Polymorphic over dense and sparse.\n\nParameters:\n  M : matrix\nReturns: integer\nCategory: algebra\nKeywords: matrix shape, dimensions, columns, width, polymorphic\n\nSee also: `matrix-rows', `matrix-shape'."
+  (unless (matrix? M) (error "matrix-cols: not a matrix" M))
+  (let* ((rep  (matrix-rep-tag M))
+         (impl (matrix-op-lookup (list 'cols rep))))
+    (if impl
+        (impl M)
+        (error "matrix-cols: no impl for representation" rep))))
+
+(define (matrix-shape M)
+  "Return the shape of matrix M as a pair (ROWS . COLS). Polymorphic over\ndense and sparse.\n\nExamples:\n  (matrix-shape (make-sparse-semiring-matrix\n                  (counting-semiring) 3 4 '()))                    => (3 . 4)\n\nParameters:\n  M : matrix\nReturns: pair\nCategory: algebra\nKeywords: matrix shape, dimensions, size, polymorphic\n\nSee also: `matrix-rows', `matrix-cols'."
+  (unless (matrix? M) (error "matrix-shape: not a matrix" M))
+  (cons (matrix-rows M) (matrix-cols M)))
+
+(define (matrix-semiring M)
+  "Return the semiring parameter of matrix M. Polymorphic over dense and sparse.\nOperations on M interpret + and × under this semiring.\n\nParameters:\n  M : matrix\nReturns: semiring\nCategory: algebra\nKeywords: matrix parameter, semiring, underlying structure, polymorphic\n\nSee also: `matrix?'."
+  (unless (matrix? M) (error "matrix-semiring: not a matrix" M))
+  (let* ((rep  (matrix-rep-tag M))
+         (impl (matrix-op-lookup (list 'semiring rep))))
+    (if impl
+        (impl M)
+        (error "matrix-semiring: no impl for representation" rep))))
 
 ;; ─── Internal utilities ──────────────────────
 
