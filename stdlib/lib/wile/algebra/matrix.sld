@@ -23,8 +23,9 @@
           ;; Path D polymorphic accessors (P4).
           matrix? matrix-ref matrix-rows matrix-cols
           matrix-shape matrix-semiring
-          ;; Path D polymorphic arithmetic (P5a — add).
-          matrix-add matrix-add!)
+          ;; Path D polymorphic arithmetic (P5a — add, P5b — mul).
+          matrix-add matrix-add!
+          matrix-mul matrix-mul!)
   (import (scheme base)
           (wile algebra semiring))
   (include "matrix.scm"))
