@@ -460,6 +460,12 @@
     (make-semiring-matrix* S n m d)))
 
 ;; ─── Destructuring macro ─────────────────────
+;;
+;; Binding is POSITIONAL, not by name. The five identifiers map to
+;; `semiring-matrix-{add, mul, power, closure, ref}` in that fixed
+;; order, so `(with-semiring-matrix (mul add ...) ...)` would bind
+;; `mul` to `semiring-matrix-add` — a typo, not a feature. Callers
+;; that want shorter names should use this exact order.
 
 (define-syntax with-semiring-matrix
   (syntax-rules ()
