@@ -103,8 +103,18 @@
 (register-matrix-op! '(fold     dense)  matrix-fold-entries/dense)
 (register-matrix-op! '(fold     sparse) matrix-fold-entries/sparse)
 
+;; The guard below forces non-matrix input to raise a site-tagged
+;; "matrix-<op>: not a matrix" error. Without it the error would surface
+;; from matrix-rep-tag and lose the caller's name — breaking the <op>:
+;; not a matrix convention used by the other polymorphic entry points
+;; in this library. The inline (or ...) mirrors the matrix? predicate
+;; that lands with Path D P4; once P4 is merged this should be swept
+;; to (unless (matrix? M) ...) for a single enumeration site.
+
 (define (matrix-for-each-entry M proc)
   "Call (PROC ROW COL VALUE) for each entry of matrix M. Returns unspecified.\nDense matrices visit every cell in row-major order. Sparse matrices visit\nonly stored non-zero cells; the enumeration order is representation-dependent\nand not guaranteed stable across reps or releases. Callers that need a\ncanonical order must fold into a structure they sort themselves.\n\nExamples:\n  (let* ((S (counting-semiring))\n         (SM (make-sparse-semiring-matrix S 2 2\n                '(((0 . 0) . 5) ((1 . 1) . 7)))))\n    (matrix-for-each-entry SM\n      (lambda (r c v) (display (list r c v)) (display \" \"))))\n\nParameters:\n  M : matrix\n  proc : procedure of three arguments (row col value)\nReturns: unspecified\nCategory: algebra\nKeywords: matrix iteration, for-each, traversal, entries, visit, scan\n\nSee also: `matrix-fold-entries'."
+  (unless (or (semiring-matrix? M) (sparse-semiring-matrix? M))
+    (error "matrix-for-each-entry: not a matrix" M))
   (let* ((rep  (matrix-rep-tag M))
          (impl (matrix-op-lookup (list 'for-each rep))))
     (if impl
@@ -113,6 +123,8 @@
 
 (define (matrix-fold-entries M init proc)
   "Left fold over the entries of matrix M. PROC is called with\n(ROW COL VALUE ACC) and returns the new ACC. INIT seeds the fold.\nReturns the final accumulator.\n\nDense matrices visit every cell in row-major order; sparse matrices visit\nonly stored non-zero cells in representation-dependent order (see\n`matrix-for-each-entry').\n\nExamples:\n  (let* ((S (counting-semiring))\n         (SM (make-sparse-semiring-matrix S 3 3\n                '(((0 . 0) . 5) ((1 . 2) . 7)))))\n    (matrix-fold-entries SM 0 (lambda (r c v acc) (+ acc 1))))\n  => 2\n\nParameters:\n  M : matrix\n  init : any\n  proc : procedure of four arguments (row col value acc)\nReturns: any\nCategory: algebra\nKeywords: matrix iteration, fold, reduce, accumulate, entries, traverse\n\nSee also: `matrix-for-each-entry'."
+  (unless (or (semiring-matrix? M) (sparse-semiring-matrix? M))
+    (error "matrix-fold-entries: not a matrix" M))
   (let* ((rep  (matrix-rep-tag M))
          (impl (matrix-op-lookup (list 'fold rep))))
     (if impl
