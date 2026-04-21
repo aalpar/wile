@@ -900,6 +900,27 @@
     ;; Only one non-zero stored entry.
     (test 1 (matrix-fold-entries C 0 (lambda (r c v acc) (+ acc 1))))))
 
+(test-group "matrix-mul attributes non-matrix errors to the caller"
+  ;; Regression for the op-name threading fix in matrix-mul-check-operands.
+  ;; Previously matrix-mul!(non-matrix, ...) surfaced as "matrix-semiring:
+  ;; not a matrix" (wrong layer — leaked an internal accessor name), and
+  ;; shape errors originating in matrix-mul! said "matrix-mul:" (missing !).
+  ;; Match full message so any attribution drift fails loudly, not silently.
+  (define (caught-message thunk)
+    (guard (exn ((error-object? exn) (error-object-message exn)))
+      (thunk)
+      #f))
+  (let* ((S (counting-semiring))
+         (M (make-semiring-matrix S 2 2)))
+    (test "matrix-mul: A is not a matrix"
+          (caught-message (lambda () (matrix-mul 42 M))))
+    (test "matrix-mul: B is not a matrix"
+          (caught-message (lambda () (matrix-mul M 42))))
+    (test "matrix-mul!: A is not a matrix"
+          (caught-message (lambda () (matrix-mul! M 42 M))))
+    (test "matrix-mul!: B is not a matrix"
+          (caught-message (lambda () (matrix-mul! M M 42))))))
+
 ;; ─── Capability predicate (P6) ───────────────
 
 (test-group "matrix-op-supported? returns #t for all pure add/mul rep-pair combinations"
@@ -979,6 +1000,34 @@
   (test-error (matrix-power 42 2))
   (test-error (matrix-closure 'not-a-matrix))
   (test-error (matrix-permanent '())))
+
+(test-group "dense-only ops attribute errors to the public caller"
+  ;; Regression for op-name threading in matrix-dense-only-op. Previously
+  ;; errors used the raw dispatch symbol ("power: ...", "closure: ...")
+  ;; instead of the public function name ("matrix-power: ..."). Also pins
+  ;; that the unsupported-rep error uses the actual tag (not a hardcoded
+  ;; "sparse") so a future rep won't mis-attribute as sparse.
+  (define (caught-message thunk)
+    (guard (exn ((error-object? exn) (error-object-message exn)))
+      (thunk)
+      #f))
+  (let* ((S (counting-semiring))
+         (SM (make-sparse-semiring-matrix S 2 2 '())))
+    ;; Non-matrix attribution uses the public name, not the dispatch symbol.
+    (test "matrix-power: not a matrix"
+          (caught-message (lambda () (matrix-power 42 2))))
+    (test "matrix-closure: not a matrix"
+          (caught-message (lambda () (matrix-closure 'not-a-matrix))))
+    (test "matrix-permanent: not a matrix"
+          (caught-message (lambda () (matrix-permanent '()))))
+    ;; Unsupported-rep attribution also uses the public name and the
+    ;; actual tag (not hardcoded "sparse").
+    (test "matrix-power: sparse operand not supported; check (matrix-op-supported? 'power M)"
+          (caught-message (lambda () (matrix-power SM 2))))
+    (test "matrix-closure: sparse operand not supported; check (matrix-op-supported? 'closure M)"
+          (caught-message (lambda () (matrix-closure SM))))
+    (test "matrix-permanent: sparse operand not supported; check (matrix-op-supported? 'permanent M)"
+          (caught-message (lambda () (matrix-permanent SM))))))
 
 (test-group "matrix-op-supported? reflects P7 registrations"
   (let* ((S (counting-semiring))
