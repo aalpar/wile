@@ -309,23 +309,67 @@ In Phase 1 the analyzer stays as-is since the Go-side lattice is flat (Any-paren
 
 ## 5. Roadmap
 
-### 5.1 Phase 1 — Opaque types + `Subtype` mechanism (this design's first implementation)
+**Gating principle (added 2026-04-21):** The specification mechanism lands *independently* of primitive declaration updates, and further type-system development is gated on the primitive re-audit completing. This forces the mechanism to stand on its own design merits — uncoupled from migration-convenience pressure — and ensures the re-audit produces clean input to any subsequent lattice work.
+
+```
+Phase 1a — Specification only  (mechanism, no primitive changes)
+    ↓  (gate: mechanism exists, singletons exist, tests pass)
+Phase 1b — Primitive re-audit  (apply new vocabulary to registry)
+    ↓  (gate: primitives correctly annotated under new vocabulary)
+Phase 2+ — Further development (hierarchy, enforcement, closure-based storage, …)
+```
+
+No Phase 2 work begins until Phase 1b closes.
+
+### 5.1 Phase 1a — Specification mechanism (no primitive changes)
+
+**Scope**: introduce the new type-system vocabulary as inert specification. Nothing consumes it yet — not Phase-2 runtime validation, not the compiler, not primitive declarations. The mechanism exists, is testable in isolation, and is ready for the audit pass to begin using.
 
 - Add `Supertype()` to `TypeConstraint` interface.
-- Implement `Subtype(a, b)` free function.
-- Implement `OpaqueTypeConstraint` with `reflect.Type` storage.
+- Implement `Subtype(a, b)` free function with unit tests.
 - Declare `AnyType` singleton.
-- Declare ~24 opaque singletons in `values/`, `environment/`, `machine/`, `syntax/` as appropriate.
+- Implement `OpaqueTypeConstraint` with `reflect.Type` storage; unit tests for `Check` and `Supertype`.
+- Declare ~24 opaque singletons in their owning packages (`values/`, `machine/`, `syntax/`, `environment/`).
 - Retrofit `RecordTypeConstraint` with `Supertype()` returning `RecordType_`.
-- Wire existing `ValueType` entries with `Supertype()` returning `AnyType` (flat — no hierarchy yet).
-- Add `ReturnNullable bool` field to `PrimitiveSpec` advisory cluster.
-- Update ~85 primitive declarations to use opaque singletons.
-- Update ~15 nullable-returning primitives' `ReturnNullable: true`.
-- Regenerate manifest + inventory, verify buckets shift appropriately.
+- Wire every existing `ValueType` entry with `Supertype()` returning `AnyType` (flat lattice — no hierarchy yet).
+- Add `ReturnNullable bool` field to `PrimitiveSpec` advisory cluster (declared but unused in 1a).
+- **No primitive declarations are changed in 1a.** Registry remains exactly as it is today.
 
-**Expected inventory delta**: ~85 entries move from `Declared-too-wide` to `Single-strict`. Declared-too-wide drops to ~21 remaining (analyzer artifacts, predicate domains, list-vs-pair).
+**Exit criteria**:
+- `Subtype(BoxType, AnyType) == true`, `Subtype(AnyType, BoxType) == false`, all singleton pairs round-trip correctly.
+- `RecordTypeConstraint(specific-rtd).Supertype() == RecordType_`.
+- All existing primitive-level tests pass unchanged (no declaration mutations).
+- Manifest/inventory regeneration produces byte-identical output (nothing's been re-declared).
 
-### 5.2 Phase 2 — Hierarchy formalization
+**Deliverable**: a separate implementation plan file (e.g., `plans/2026-04-22-type-system-phase-1a-impl.md`) to be drafted when work begins. Estimated ~300–500 LOC of pure Go additions in `values/`, `machine/`, `syntax/`, `environment/`, plus tests.
+
+### 5.2 Phase 1b — Primitive re-audit under the new vocabulary
+
+**Scope**: apply the new vocabulary to the registry. This is a **fresh audit pass**, not a mechanical find-replace of `TypeAny → OpaqueSingleton`. Each primitive gets reconsidered under the richer vocabulary:
+
+- Does the existing declaration still reflect intent, or does the new vocabulary make a better annotation available?
+- Are there primitives whose declared type should now be tightened beyond the obvious opaque singleton (e.g., to a `RecordTypeConstraint` for a specific record type)?
+- Does `ReturnNullable: true` apply to this primitive's return contract?
+- Are there declarations the old 28-entry vocabulary forced into `TypeAny` that the audit never surfaced because the enum couldn't express the right thing?
+
+**Working from the audit artifacts**:
+- `plans/2026-04-20-paramtypes-annotation-bugs.md` §2.A (~85 param-side opaque-type gaps) — candidate list for opaque-singleton migration.
+- `plans/2026-04-20-axis-b-annotation-bugs.md` §4 (~28 return-side gaps) — candidate list for return-type tightening.
+- `plans/2026-04-20-paramtypes-axis-c-findings.md` §3 — nullable-return R7RS patterns feeding `ReturnNullable` assignments.
+
+**Expected shape of work**:
+- Commit-by-cluster migration (box/promise, concurrency, syntax, error/prompt/mark, …) per `plans/2026-04-20-paramtypes-annotation-bugs.md` §6 Tier 1 structure.
+- Each cluster: audit the primitives → write the PR → regenerate manifest + inventory → verify bucket shift → commit.
+- The audit is expected to produce **some edits that aren't in the candidate list** (primitives whose current `TypeAny` turns out to have a better declaration once opaque singletons exist) and **some declined migrations** (primitives where the mechanical mapping is wrong and `TypeAny` was correct).
+
+**Exit criteria**:
+- All affected primitives in the candidate lists have been reconsidered; each has either (a) been migrated with justification or (b) been marked `keep-as-is` with rationale in a follow-up sidecar.
+- Inventory regenerated: Declared-too-wide bucket drops substantially (exact target depends on audit outcomes).
+- Bucket counts published in a 1b-completion sidecar (analogous to `2026-04-20-paramtypes-annotation-bugs.md`).
+
+**Deliverable**: a separate implementation plan (`plans/2026-04-23-type-system-phase-1b-audit.md`) plus per-cluster PRs.
+
+### 5.3 Phase 2 — Hierarchy formalization (gated on 1b)
 
 Wire explicit supertype edges for the existing `ValueType` enum:
 
@@ -335,7 +379,9 @@ Wire explicit supertype edges for the existing `ValueType` enum:
 
 Consequence: analyzer's hardcoded `subtype-edges` deleted. `Subtype(TypeInteger, TypeNumber)` returns `true`. 5.C §2.D list-vs-pair analyzer artifact class resolves.
 
-### 5.3 Phase 3 — Closure-based `OpaqueTypeConstraint` storage
+**Gate**: 1b complete. Rationale — the re-audit may surface hierarchy edges the current design didn't anticipate; decoupling Phase 2 lets that influence the edge list without blocking 1b progress.
+
+### 5.4 Phase 3 — Closure-based `OpaqueTypeConstraint` storage (gated on 1b)
 
 For extension authors whose custom types don't fit `reflect.Type` (rare, but worth supporting):
 
@@ -350,9 +396,9 @@ type ClosureOpaqueType struct {
 
 Same `TypeConstraint` interface. Orthogonal to reflect-based singletons. Enables extension packages to declare their own opaque types without importing `reflect`.
 
-### 5.4 Phase 4 — Enforcement wiring (open; see §6.1)
+### 5.5 Phase 4 — Enforcement wiring (gated on 2 or later; see §6.1)
 
-Once the lattice is in place, Phase-2 runtime validation consumes `ParamTypes` at call sites. The compiler consults `Subtype(expr-inferred, param-declared)` for static validation. `ReturnNullable` stays advisory.
+Once the lattice is in place and the re-audit has produced a correct set of declarations, Phase-2 runtime validation consumes `ParamTypes` at call sites. The compiler consults `Subtype(expr-inferred, param-declared)` for static validation. `ReturnNullable` stays advisory.
 
 ---
 
@@ -382,20 +428,45 @@ Possible concern: discoverability. If `machine.PromptTagType` lives in `machine/
 
 ---
 
-## 7. Implementation sequencing (Phase 1 only)
+## 7. Implementation sequencing
+
+Phase 1a and 1b are separate PRs (separate branches, separate reviews). Phase 1a **must ship** before 1b begins.
+
+### 7.1 Phase 1a — Specification mechanism (no primitive changes)
 
 Suggested commit structure, one commit per logical group:
 
-1. **Infrastructure**: `Supertype()` on interface, `Subtype` free function, `AnyType` singleton, stub `Supertype()` returning `AnyType` on existing `ValueType` and `NamedTypeConstraint`.
-2. **OpaqueTypeConstraint**: new type, tests.
-3. **Singletons (values package)**: ~20 entries in `values/opaque_types.go`.
-4. **Singletons (other packages)**: `machine.PromptTagType` etc., `environment.NamespaceType`, `syntax.SyntaxSymbolType` etc.
-5. **RecordTypeConstraint retrofit**: one `Supertype()` method.
-6. **PrimitiveSpec advisory field**: add `ReturnNullable`.
-7. **Primitive declaration migration**: one commit per cluster (box, promise, concurrency, syntax, error, prompt, etc.) — mirrors 5.D's (scrapped) per-family structure.
-8. **Inventory/manifest regeneration**: mechanical.
+1. **Interface extension**: `Supertype()` on `TypeConstraint` interface; stub returning `AnyType` on existing `ValueType`, `NamedTypeConstraint`.
+2. **`Subtype` free function**: implementation + unit tests covering identity, chain-walk, root-termination.
+3. **`AnyType` singleton**: new file or addition to `values/value_type.go`; tests.
+4. **`OpaqueTypeConstraint`**: new type + `NewOpaqueType` constructor; tests for `Check`, `Supertype`, `Name`, `Description`.
+5. **Singletons (values package)**: ~20 entries in `values/opaque_types.go` (Box, Promise, Record, RecordType, OpaqueValue, NativeError, CompileTimeValue, SchemeEnvironment, Thread, Mutex, Channel, CondVar, RWMutex, WaitGroup, Once, AtomicBox, AtomicInt64, Time, Process).
+6. **Singletons (other packages)**: `machine.PromptTagType`, `machine.ErrorContextType`, `machine.ContinuationMarkSetType`; `syntax.SyntaxSymbolType`, `syntax.SyntaxValueType`; `environment.NamespaceType`. Import layering check (see §6.3).
+7. **`RecordTypeConstraint` retrofit**: one `Supertype()` method returning `RecordType_`; verify existing record-subtype tests still pass.
+8. **`PrimitiveSpec.ReturnNullable`**: field addition with explicit advisory comment; no primitive sets it yet.
 
-Expected total size: ~400–600 LOC of Go changes (mostly declarations) + ~85 primitive spec updates + regenerated artifacts.
+Expected Phase 1a size: ~300–500 LOC of pure additions. **No changes to any primitive registration, no manifest regeneration, no inventory update** — that's Phase 1b.
+
+**Exit test**: build + test the full tree. All existing tests pass unchanged. Manifest regeneration produces byte-identical output.
+
+### 7.2 Phase 1b — Primitive re-audit (gated on 1a)
+
+Structure per design §5.2. Work begins only after 1a ships. Each cluster is its own PR:
+
+1. Box + opaque + promise family
+2. Record + record-type family
+3. Error-object + error-context + native-error family
+4. Continuation / prompt / mark family (PromptTag, ErrorContext, ContinuationMarkSet)
+5. Syntax family (SyntaxSymbol, SyntaxValue, CompileTimeValue)
+6. Concurrency cluster 1: Mutex + CondVar + Thread + Time
+7. Concurrency cluster 2: Channel + WaitGroup + Once + RWMutex + AtomicBox + AtomicInt64
+8. Process + Namespace + SchemeEnvironment
+9. ReturnNullable pass across ~15 nullable-returning primitives
+10. Inventory regeneration + 1b-completion sidecar
+
+Per-cluster deliverable: audit notes (any primitives declined migration, with rationale) + updated declarations + regenerated manifest segment.
+
+**Exit test**: manifest matches expected bucket shifts. Sidecar published summarizing final audit state.
 
 ---
 
