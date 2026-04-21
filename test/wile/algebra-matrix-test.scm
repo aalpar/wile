@@ -333,6 +333,36 @@
     (semiring-matrix-permanent
       (semiring-matrix-from-rows (counting-semiring) '((1 2 3))))))
 
+;; -- User-defined semiring --
+
+(test-group "operations thread a user-defined semiring (max-plus)"
+  ;; The parameterization over an arbitrary semiring is the product.
+  ;; Exercise it explicitly by building a max-plus semiring ad-hoc via
+  ;; make-semiring so a regression that hardcoded + / * / 0 / 1 in
+  ;; any matrix operation would fail here without triggering any of
+  ;; the built-in semiring tests.
+  (let* ((neg-inf 'neg-inf)
+         (mp-add (lambda (a b)
+                   (cond ((eq? a neg-inf) b)
+                         ((eq? b neg-inf) a)
+                         (else (max a b)))))
+         (mp-times (lambda (a b)
+                     (cond ((eq? a neg-inf) neg-inf)
+                           ((eq? b neg-inf) neg-inf)
+                           (else (+ a b)))))
+         (S (make-semiring mp-add mp-times neg-inf 0))
+         (M (semiring-matrix-from-rows S '((4 1) (2 5)))))
+    ;; permanent = max(4+5, 1+2) = 9 — distinct from the tropical
+    ;; answer (min = 3) and the counting answer (sum = 22).
+    (test 9 (semiring-matrix-permanent M))
+    ;; mul [[4 1][2 5]] [[4 1][2 5]] under max-plus:
+    ;;   C[0,0] = max(4+4, 1+2) = 8
+    ;;   C[0,1] = max(4+1, 1+5) = 6
+    ;;   C[1,0] = max(2+4, 5+2) = 7
+    ;;   C[1,1] = max(2+1, 5+5) = 10
+    (test '((8 6) (7 10))
+          (semiring-matrix->rows (semiring-matrix-mul M M)))))
+
 ;; -- Sparse representation --
 
 (test-group "sparse construction and ref"
