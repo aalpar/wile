@@ -424,13 +424,21 @@
 ;; -- Macro --
 
 (test-group "with-semiring-matrix rebinds operation names"
+  ;; Positional binding order is (add mul power closure ref). Every
+  ;; identifier must be exercised — leaving any out lets a template
+  ;; typo that swapped two bindings ship undetected.
   (let* ((S (counting-semiring))
+         (B (boolean-semiring))
          (A (semiring-matrix-from-rows S '((1 2) (3 4))))
-         (B (semiring-matrix-from-rows S '((5 6) (7 8)))))
+         (A2 (semiring-matrix-from-rows S '((5 6) (7 8))))
+         (G (semiring-matrix-from-rows B
+              '((#f #t #f) (#f #f #t) (#f #f #f)))))
     (with-semiring-matrix (add mul power closure ref)
-      (test '((6 8) (10 12))       (semiring-matrix->rows (add A B)))
-      (test '((19 22) (43 50))     (semiring-matrix->rows (mul A B)))
+      (test '((6 8) (10 12))       (semiring-matrix->rows (add A A2)))
+      (test '((19 22) (43 50))     (semiring-matrix->rows (mul A A2)))
       (test '((7 10) (15 22))      (semiring-matrix->rows (power A 2)))
+      (test '((#t #t #t) (#f #t #t) (#f #f #t))
+            (semiring-matrix->rows (closure G)))
       (test 4                      (ref A 1 1)))))
 
 (test-end)
