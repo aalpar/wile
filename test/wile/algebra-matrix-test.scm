@@ -902,7 +902,7 @@
 
 ;; ─── Capability predicate (P6) ───────────────
 
-(test-group "matrix-op-supported? returns #t for all add rep-pair combinations"
+(test-group "matrix-op-supported? returns #t for all pure add/mul rep-pair combinations"
   (let* ((S (counting-semiring))
          (D (make-semiring-matrix S 2 2))
          (SM (make-sparse-semiring-matrix S 2 2 '())))
@@ -919,14 +919,22 @@
   (let* ((S (counting-semiring))
          (D (make-semiring-matrix S 2 2))
          (SM (make-sparse-semiring-matrix S 2 2 '())))
-    ;; Dense dest, dense operands → add! registered.
+    ;; add! — dense dest, dense operands → registered.
     (test #t (matrix-op-supported? 'add! D D D))
-    ;; Sparse dest, sparse operands → sparse add! registered.
+    ;; add! — sparse dest, sparse operands → registered.
     (test #t (matrix-op-supported? 'add! SM SM SM))
-    ;; Sparse dest with mixed operands → NOT registered (result would be dense).
+    ;; add! — sparse dest with mixed operands → NOT registered (result would be dense).
     (test #f (matrix-op-supported? 'add! SM D SM))
-    ;; Dense dest with sparse operands → NOT registered (result would be sparse).
-    (test #f (matrix-op-supported? 'add! D SM SM))))
+    ;; add! — dense dest with sparse operands → NOT registered (result would be sparse).
+    (test #f (matrix-op-supported? 'add! D SM SM))
+    ;; mul! — dense dest, dense operands → registered.
+    (test #t (matrix-op-supported? 'mul! D D D))
+    ;; mul! — sparse dest, sparse operands → registered.
+    (test #t (matrix-op-supported? 'mul! SM SM SM))
+    ;; mul! — sparse dest with dense operands → NOT registered (result would be dense).
+    (test #f (matrix-op-supported? 'mul! SM D D))
+    ;; mul! — dense dest with sparse operands → NOT registered (S×S → sparse).
+    (test #f (matrix-op-supported? 'mul! D SM SM))))
 
 (test-group "matrix-op-supported? returns #f for non-matrix arguments"
   (let* ((S (counting-semiring))
