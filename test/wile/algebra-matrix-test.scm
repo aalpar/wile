@@ -544,16 +544,17 @@
 
 ;; ─── Iterator API (P3) ───────────────────────
 
-(test-group "matrix-for-each-entry visits every cell of a dense matrix"
+(test-group "matrix-for-each-entry visits every cell of a dense matrix in row-major order"
   (let* ((S (counting-semiring))
          (M (semiring-matrix-from-rows S '((1 2) (3 4))))
          (seen '()))
     (matrix-for-each-entry M
       (lambda (r c v) (set! seen (cons (list r c v) seen))))
-    ;; Dense visits all 4 cells, regardless of value.
-    (test 4 (length seen))
-    ;; Row-major order for dense; check the values are all present.
-    (test '(1 2 3 4) (sort < (map caddr seen)))))
+    ;; `seen' is built with cons, so reversing recovers visitation order.
+    ;; This single assertion pins count, per-cell (r c v), and row-major
+    ;; traversal — a sorted check would hide any ordering regression.
+    (test '((0 0 1) (0 1 2) (1 0 3) (1 1 4))
+          (reverse seen))))
 
 (test-group "matrix-for-each-entry visits only stored cells of a sparse matrix"
   (let* ((S (counting-semiring))

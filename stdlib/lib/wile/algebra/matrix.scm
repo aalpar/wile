@@ -53,50 +53,71 @@
 
 ;; ─── Polymorphic iterator API (Path D Q1c) ───
 
+;; Per-representation iterator implementations. Registered into *matrix-ops*
+;; immediately below so the public dispatchers reach them through the Path D
+;; scaffold rather than re-enumerating reps at the call site. Forward references
+;; to record accessors (semiring-matrix-rows, ssmat-entries, ...) resolve at
+;; call time, not at define/register time, so load order is not a concern.
+
+(define (matrix-for-each-entry/dense M proc)
+  (let ((n (semiring-matrix-rows M))
+        (m (semiring-matrix-cols M)))
+    (let row-loop ((r 0))
+      (when (< r n)
+        (let col-loop ((c 0))
+          (when (< c m)
+            (proc r c (semiring-matrix-ref M r c))
+            (col-loop (+ c 1))))
+        (row-loop (+ r 1))))))
+
+(define (matrix-for-each-entry/sparse M proc)
+  (for-each (lambda (entry)
+              (let ((rc (car entry))
+                    (v  (cdr entry)))
+                (proc (car rc) (cdr rc) v)))
+            (ssmat-entries M)))
+
+(define (matrix-fold-entries/dense M init proc)
+  (let ((n (semiring-matrix-rows M))
+        (m (semiring-matrix-cols M)))
+    (let row-loop ((r 0) (acc init))
+      (if (= r n)
+          acc
+          (let col-loop ((c 0) (acc acc))
+            (if (= c m)
+                (row-loop (+ r 1) acc)
+                (col-loop (+ c 1)
+                          (proc r c (semiring-matrix-ref M r c) acc))))))))
+
+(define (matrix-fold-entries/sparse M init proc)
+  (let loop ((es (ssmat-entries M)) (acc init))
+    (if (null? es)
+        acc
+        (let* ((entry (car es))
+               (rc (car entry))
+               (v  (cdr entry)))
+          (loop (cdr es) (proc (car rc) (cdr rc) v acc))))))
+
+(register-matrix-op! '(for-each dense)  matrix-for-each-entry/dense)
+(register-matrix-op! '(for-each sparse) matrix-for-each-entry/sparse)
+(register-matrix-op! '(fold     dense)  matrix-fold-entries/dense)
+(register-matrix-op! '(fold     sparse) matrix-fold-entries/sparse)
+
 (define (matrix-for-each-entry M proc)
   "Call (PROC ROW COL VALUE) for each entry of matrix M. Returns unspecified.\nDense matrices visit every cell in row-major order. Sparse matrices visit\nonly stored non-zero cells; the enumeration order is representation-dependent\nand not guaranteed stable across reps or releases. Callers that need a\ncanonical order must fold into a structure they sort themselves.\n\nExamples:\n  (let* ((S (counting-semiring))\n         (SM (make-sparse-semiring-matrix S 2 2\n                '(((0 . 0) . 5) ((1 . 1) . 7)))))\n    (matrix-for-each-entry SM\n      (lambda (r c v) (display (list r c v)) (display \" \"))))\n\nParameters:\n  M : matrix\n  proc : procedure of three arguments (row col value)\nReturns: unspecified\nCategory: algebra\nKeywords: matrix iteration, for-each, traversal, entries, visit, scan\n\nSee also: `matrix-fold-entries'."
-  (cond
-    ((semiring-matrix? M)
-     (let ((n (semiring-matrix-rows M))
-           (m (semiring-matrix-cols M)))
-       (let row-loop ((r 0))
-         (when (< r n)
-           (let col-loop ((c 0))
-             (when (< c m)
-               (proc r c (semiring-matrix-ref M r c))
-               (col-loop (+ c 1))))
-           (row-loop (+ r 1))))))
-    ((sparse-semiring-matrix? M)
-     (for-each (lambda (entry)
-                 (let ((rc (car entry))
-                       (v  (cdr entry)))
-                   (proc (car rc) (cdr rc) v)))
-               (ssmat-entries M)))
-    (else (error "matrix-for-each-entry: not a matrix" M))))
+  (let* ((rep  (matrix-rep-tag M))
+         (impl (matrix-op-lookup (list 'for-each rep))))
+    (if impl
+        (impl M proc)
+        (error "matrix-for-each-entry: no iterator for representation" rep))))
 
 (define (matrix-fold-entries M init proc)
   "Left fold over the entries of matrix M. PROC is called with\n(ROW COL VALUE ACC) and returns the new ACC. INIT seeds the fold.\nReturns the final accumulator.\n\nDense matrices visit every cell in row-major order; sparse matrices visit\nonly stored non-zero cells in representation-dependent order (see\n`matrix-for-each-entry').\n\nExamples:\n  (let* ((S (counting-semiring))\n         (SM (make-sparse-semiring-matrix S 3 3\n                '(((0 . 0) . 5) ((1 . 2) . 7)))))\n    (matrix-fold-entries SM 0 (lambda (r c v acc) (+ acc 1))))\n  => 2\n\nParameters:\n  M : matrix\n  init : any\n  proc : procedure of four arguments (row col value acc)\nReturns: any\nCategory: algebra\nKeywords: matrix iteration, fold, reduce, accumulate, entries, traverse\n\nSee also: `matrix-for-each-entry'."
-  (cond
-    ((semiring-matrix? M)
-     (let ((n (semiring-matrix-rows M))
-           (m (semiring-matrix-cols M)))
-       (let row-loop ((r 0) (acc init))
-         (if (= r n)
-             acc
-             (let col-loop ((c 0) (acc acc))
-               (if (= c m)
-                   (row-loop (+ r 1) acc)
-                   (col-loop (+ c 1)
-                             (proc r c (semiring-matrix-ref M r c) acc))))))))
-    ((sparse-semiring-matrix? M)
-     (let loop ((es (ssmat-entries M)) (acc init))
-       (if (null? es)
-           acc
-           (let* ((entry (car es))
-                  (rc (car entry))
-                  (v  (cdr entry)))
-             (loop (cdr es) (proc (car rc) (cdr rc) v acc))))))
-    (else (error "matrix-fold-entries: not a matrix" M))))
+  (let* ((rep  (matrix-rep-tag M))
+         (impl (matrix-op-lookup (list 'fold rep))))
+    (if impl
+        (impl M init proc)
+        (error "matrix-fold-entries: no iterator for representation" rep))))
 
 ;; ─── Internal utilities ──────────────────────
 
