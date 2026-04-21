@@ -27,6 +27,7 @@ Thumbs.db
 *.bak
 *.txt
 *#
+/wile
 
 # Anthropic files
 .claude/
