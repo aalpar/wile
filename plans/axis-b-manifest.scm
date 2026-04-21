@@ -207,7 +207,7 @@
  ("generate-temporaries" "list" ("any") "github.com/aalpar/wile/registry/core.PrimGenerateTemporaries" "registry/core/prim_syntax.go:127")
  ("get-environment-variable" "any" ("string") "github.com/aalpar/wile/internal/extensions/envvars.PrimGetEnvironmentVariable" "internal/extensions/envvars/prim_envvars.go:47")
  ("get-environment-variables" "list" () "github.com/aalpar/wile/internal/extensions/envvars.PrimGetEnvironmentVariables" "internal/extensions/envvars/prim_envvars.go:85")
- ("get-output-bytevector" "bytevector" ("output-port") "github.com/aalpar/wile/internal/extensions/io.PrimGetOutputBytevector" "internal/extensions/io/prim_ports.go:192")
+ ("get-output-bytevector" "bytevector" ("binary-output-port") "github.com/aalpar/wile/internal/extensions/io.PrimGetOutputBytevector" "internal/extensions/io/prim_ports.go:192")
  ("get-output-string" "string" ("textual-output-port") "github.com/aalpar/wile/internal/extensions/io.PrimGetOutputString" "internal/extensions/io/prim_ports.go:157")
  ("hashtable-clear!" "void" ("hashtable") "github.com/aalpar/wile/registry/core.PrimHashtableClear" "registry/core/prim_hashtables.go:147")
  ("hashtable-copy" "hashtable" ("hashtable") "github.com/aalpar/wile/registry/core.PrimHashtableCopy" "registry/core/prim_hashtables.go:136")

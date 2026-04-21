@@ -8,15 +8,15 @@ Total parameter slots: 476
 
 | Bucket | Count | % |
 |---|---|---|
-| Single-strict | 71 | 14% |
+| Single-strict | 72 | 15% |
 | Single-coercing | 110 | 23% |
 | Declared-too-narrow | 3 | <1% |
-| Declared-too-wide | 107 | 22% |
+| Declared-too-wide | 106 | 22% |
 | Union | 13 | 2% |
 | Variadic-rest | 93 | 19% |
 | Unguarded | 79 | 16% |
 
-## Single-strict (71)
+## Single-strict (72)
 
 Single strict gate (RequireArg[*T]), declared matches scanned. Clean.
 
@@ -41,6 +41,7 @@ Single strict gate (RequireArg[*T]), declared matches scanned. Clean.
 | `exact->inexact` | 0 | number | number | requirearg | `registry/core/prim_arithmetic.go:358` |
 | `file-exists?` | 0 | string | string | requirearg | `extensions/files/prim_files.go:88` |
 | `get-environment-variable` | 0 | string | string | requirearg | `internal/extensions/envvars/prim_envvars.go:47` |
+| `get-output-bytevector` | 0 | binary-output-port | binary-output-port | requirearg | `internal/extensions/io/prim_ports.go:192` |
 | `get-output-string` | 0 | textual-output-port | textual-output-port | requirearg | `internal/extensions/io/prim_ports.go:157` |
 | `hashtable-clear!` | 0 | hashtable | hashtable | requirearg | `registry/core/prim_hashtables.go:147` |
 | `hashtable-copy` | 0 | hashtable | hashtable | requirearg | `registry/core/prim_hashtables.go:136` |
@@ -221,7 +222,7 @@ Declared ValueType is strictly narrower than scanned accepted domain. **Potentia
 | `make-polar` | 0 | real | number | typeassert | `extensions/math/prim_complex.go:142` |
 | `make-polar` | 1 | real | number | typeassert | `extensions/math/prim_complex.go:142` |
 
-## Declared-too-wide (107)
+## Declared-too-wide (106)
 
 Declared is wider than scanned (e.g., TypeAny where impl strictly requires TypeString). Imprecise but sound. Lower-priority tightening.
 
@@ -270,7 +271,6 @@ Declared is wider than scanned (e.g., TypeAny where impl strictly requires TypeS
 | `free-identifier=?` | 0 | any | *github.com/aalpar/wile/internal/syntax.SyntaxSymbol | typeassert | `registry/core/prim_syntax.go:185` |
 | `free-identifier=?` | 1 | any | *github.com/aalpar/wile/internal/syntax.SyntaxSymbol | typeassert | `registry/core/prim_syntax.go:185` |
 | `generate-temporaries` | 0 | any | pair | typeassert | `registry/core/prim_syntax.go:127` |
-| `get-output-bytevector` | 0 | output-port | binary-output-port | requirearg | `internal/extensions/io/prim_ports.go:192` |
 | `identifier?` | 0 | any | *github.com/aalpar/wile/internal/syntax.SyntaxSymbol | typeassert | `registry/core/prim_syntax.go:32` |
 | `integer->char` | 0 | exact-integer | integer | requirearg | `registry/core/prim_characters.go:40` |
 | `integer?` | 0 | any | number | typeassert | `registry/core/prim_predicates.go:119` |

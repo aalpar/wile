@@ -95,6 +95,13 @@ These are the strategic signal: they tell the future `TypeConstraint` extension 
 
 **Concentration:** 18 of 28 entries map to five gap categories — prompt/mark plumbing (3), namespace (6), concurrency primitives (7), records (3), promises (2). That's the evidence for which `TypeConstraint` extensions to ship first if/when a future plan opens.
 
+**Cross-reference (added 2026-04-20, Phase 5.C):** The param-side audit reaches the same vocabulary deficit from the opposite end. `plans/2026-04-20-paramtypes-annotation-bugs.md` §2.A catalogs ~85 primitives that declare `TypeAny` on parameter slots because the required type lacks a `ValueType` enum entry. Combining the two:
+
+- Return-side (this §4): 28 primitives affected, mostly constructors/accessors that *produce* an opaque value.
+- Param-side (5.C §2.A): ~85 primitives affected, mostly operations that *consume* an opaque value.
+
+Same vocabulary deficit, opposite ends. A future TypeConstraint extension plan should weigh both counts — the param-side pressure is larger because each opaque type has many operations but few constructors.
+
 **Disposition:** No annotation change. Preserve as input to future Extension Contracts work (see TODO.md "Extension API contracts Phase 2+").
 
 ---
