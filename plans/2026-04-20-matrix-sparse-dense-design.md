@@ -798,7 +798,8 @@ Under Path D all three are decided together (2a + 3a-subset + 1c).
       forbid `eq?` overlap between dest and operands (2026-04-20)
 - [ ] OQ6 resolved: views deferred; dispatch shape designed to accept
       `<matrix-view>` additively
-- [ ] Follow-up implementation plan file created for Path D
+- [x] Follow-up implementation plan file created for Path D
+      (`2026-04-21-matrix-path-d-impl.md`, 2026-04-21)
 - [ ] Test at `test/wile/algebra-matrix-test.scm:317` migrated from
       `-entries` to iterator API
 - [ ] `sparse-semiring-matrix-entries` deprecation or removal decision
