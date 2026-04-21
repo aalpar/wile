@@ -167,7 +167,8 @@
     matrix-shape matrix-semiring
     matrix-add matrix-add!
     matrix-mul matrix-mul!
-    matrix-op-supported?)
+    matrix-op-supported?
+    matrix-power matrix-closure matrix-permanent)
   (import (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice)

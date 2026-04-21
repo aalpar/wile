@@ -614,6 +614,46 @@
 (register-matrix-op! '(mul sparse dense)  matrix-mul)
 (register-matrix-op! '(mul sparse sparse) matrix-mul)
 
+;; ─── Dense-only polymorphic ops (Path D P7) ─
+
+;; Dispatcher for ops that currently admit only a dense implementation.
+;; Looks up (op rep-tag M); if missing, raises with OQ3's typed-error
+;; message advising conversion and the matrix-op-supported? capability
+;; query. The register-matrix-op! entries keyed on (op dense) route to
+;; the existing semiring-matrix-* implementations; sparse operands hit
+;; the not-registered branch and raise.
+(define (matrix-dense-only-op op . args)
+  (let ((M (car args)))
+    (unless (matrix? M)
+      (error (string-append (symbol->string op) ": not a matrix") M))
+    (let* ((tag (matrix-rep-tag M))
+           (impl (matrix-op-lookup (cons op (list tag)))))
+      (if impl
+          (apply impl args)
+          (error (string-append
+                   (symbol->string op)
+                   ": sparse operand not supported; convert via "
+                   "(sparse->semiring-matrix M) or check "
+                   "(matrix-op-supported? '" (symbol->string op) " M)")
+                 tag)))))
+
+(define (matrix-power M k)
+  "Return M^K. Dispatches on M's representation.\nM must be square. K is a non-negative exact integer; M^0 is the identity\nmatrix; M^1 is M. Computed by repeated squaring in O(log K) multiplications.\n\nExamples:\n  (let* ((S (counting-semiring))\n         (M (semiring-matrix-from-rows S '((1 1) (0 1)))))\n    (semiring-matrix->rows (matrix-power M 3)))\n  => ((1 3) (0 1))\n\nUnsupported: sparse matrices — convert via (sparse->semiring-matrix M)\nfirst, or check (matrix-op-supported? 'power M) before calling.\n\nParameters:\n  M : matrix (dense)\n  k : integer\nReturns: matrix\nCategory: algebra\nKeywords: matrix power, exponentiation, repeated squaring, polymorphic\n\nSee also: `matrix-mul', `matrix-closure', `matrix-op-supported?'."
+  (matrix-dense-only-op 'power M k))
+
+(define (matrix-closure M . opt)
+  "Return the Kleene closure M* = I + M + M^2 + ... of matrix M.\nDispatches on M's representation. M must be square. Optional argument\nMAX-ITERATIONS bounds the fixpoint search (defaults to (matrix-rows M)).\n\nExamples:\n  (let* ((B (boolean-semiring))\n         (G (semiring-matrix-from-rows B\n              '((#f #t #f) (#f #f #t) (#f #f #f)))))\n    (semiring-matrix->rows (matrix-closure G)))\n  => ((#t #t #t) (#f #t #t) (#f #f #t))\n\nUnsupported: sparse matrices — convert via (sparse->semiring-matrix M)\nfirst, or check (matrix-op-supported? 'closure M) before calling.\n\nParameters:\n  M : matrix (dense)\n  [max-iterations] : integer\nReturns: matrix\nCategory: algebra\nKeywords: Kleene closure, transitive closure, reflexive closure, fixpoint, polymorphic\n\nSee also: `matrix-power', `matrix-op-supported?'."
+  (apply matrix-dense-only-op 'closure M opt))
+
+(define (matrix-permanent M)
+  "Return the permanent of square matrix M under its semiring.\nDispatches on M's representation. Direct O(n!) permutation enumeration;\nRyser's formula is impossible over a general semiring (no subtraction).\n\nExamples:\n  (matrix-permanent (semiring-matrix-from-rows (counting-semiring)\n                     '((1 2) (3 4))))\n  => 10  ; 1*4 + 2*3\n\nUnsupported: sparse matrices — convert via (sparse->semiring-matrix M)\nfirst, or check (matrix-op-supported? 'permanent M) before calling.\n\nParameters:\n  M : matrix (dense)\nReturns: any\nCategory: algebra\nKeywords: matrix permanent, combinatorial, permutation sum, polymorphic\n\nSee also: `matrix-power', `matrix-op-supported?'."
+  (matrix-dense-only-op 'permanent M))
+
+;; Registrations for the dense-only ops live at the bottom of the file,
+;; where the semiring-matrix-* implementations are already defined (top-
+;; level forms execute in source order; referencing a not-yet-bound
+;; identifier as an IMPL value would fail at load time).
+
 (define (matrix-op-supported? op . args)
   "Return #t iff every ARG is a matrix and the dispatch table has a kernel\nregistered under (OP . ARGS' rep-tags); #f otherwise. Symbol-based (OP is a\nScheme symbol like 'add, 'add!, 'mul, etc.). For pure binary ops 'add and\n'mul, every rep combination is registered. For bang forms, the destination\nrep must match the expected result rep per OQ4. Unary ops currently\nregistered: none for sparse (power / closure / permanent land as dense-only\nin P7).\n\nThis is a representation-level capability query, not a call-validity check.\n#t means a kernel exists for those reps; it does NOT promise the operation\nwill succeed. Shape compatibility, semiring-identity, and per-op runtime\nconstraints (e.g. `matrix-mul!` forbidding destination/operand aliasing per\nOQ5) are still checked by the operation itself and may raise on invocation.\n\nThis is the programmatic capability query OQ3 promised — callers can branch\non kernel availability rather than catching errors for missing reps:\n\n  (if (matrix-op-supported? 'permanent M)\n      (matrix-permanent M)\n      (matrix-permanent (sparse->semiring-matrix M)))\n\nReturns #f (rather than raising) when an ARG is not a matrix — the predicate\nis safe to call on any value.\n\nExamples:\n  (matrix-op-supported? 'add A B)           ; => #t for valid matrices A, B\n  (matrix-op-supported? 'add! C A B)        ; => #t if C's rep matches\n  (matrix-op-supported? 'mul  A 42)         ; => #f (non-matrix)\n\nParameters:\n  op : symbol\n  args : matrices\nReturns: boolean\nCategory: algebra\nKeywords: matrix capability, support query, dispatch, introspection\n\nSee also: `matrix-rep-tag', `matrix-add', `matrix-mul'."
   (define (all-matrices? xs)
@@ -1102,3 +1142,11 @@
            (closure semiring-matrix-closure)
            (ref     semiring-matrix-ref))
        body ...))))
+
+;; ─── Registrations for dense-only ops (Path D P7) ───
+;; Must appear after the semiring-matrix-* definitions so their values
+;; are bound when register-matrix-op! evaluates its IMPL argument.
+
+(register-matrix-op! '(power     dense) semiring-matrix-power)
+(register-matrix-op! '(closure   dense) semiring-matrix-closure)
+(register-matrix-op! '(permanent dense) semiring-matrix-permanent)
