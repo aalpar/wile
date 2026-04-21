@@ -25,7 +25,9 @@
           matrix-shape matrix-semiring
           ;; Path D polymorphic arithmetic (P5a — add, P5b — mul).
           matrix-add matrix-add!
-          matrix-mul matrix-mul!)
+          matrix-mul matrix-mul!
+          ;; Path D capability predicate (P6).
+          matrix-op-supported?)
   (import (scheme base)
           (wile algebra semiring))
   (include "matrix.scm"))

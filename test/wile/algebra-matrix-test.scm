@@ -900,5 +900,56 @@
     ;; Only one non-zero stored entry.
     (test 1 (matrix-fold-entries C 0 (lambda (r c v acc) (+ acc 1))))))
 
+;; ─── Capability predicate (P6) ───────────────
+
+(test-group "matrix-op-supported? returns #t for all pure add/mul rep-pair combinations"
+  (let* ((S (counting-semiring))
+         (D (make-semiring-matrix S 2 2))
+         (SM (make-sparse-semiring-matrix S 2 2 '())))
+    (test #t (matrix-op-supported? 'add D D))
+    (test #t (matrix-op-supported? 'add D SM))
+    (test #t (matrix-op-supported? 'add SM D))
+    (test #t (matrix-op-supported? 'add SM SM))
+    (test #t (matrix-op-supported? 'mul D D))
+    (test #t (matrix-op-supported? 'mul D SM))
+    (test #t (matrix-op-supported? 'mul SM D))
+    (test #t (matrix-op-supported? 'mul SM SM))))
+
+(test-group "matrix-op-supported? for bang forms requires correct dest rep"
+  (let* ((S (counting-semiring))
+         (D (make-semiring-matrix S 2 2))
+         (SM (make-sparse-semiring-matrix S 2 2 '())))
+    ;; add! — dense dest, dense operands → registered.
+    (test #t (matrix-op-supported? 'add! D D D))
+    ;; add! — sparse dest, sparse operands → registered.
+    (test #t (matrix-op-supported? 'add! SM SM SM))
+    ;; add! — sparse dest with mixed operands → NOT registered (result would be dense).
+    (test #f (matrix-op-supported? 'add! SM D SM))
+    ;; add! — dense dest with sparse operands → NOT registered (result would be sparse).
+    (test #f (matrix-op-supported? 'add! D SM SM))
+    ;; mul! — dense dest, dense operands → registered.
+    (test #t (matrix-op-supported? 'mul! D D D))
+    ;; mul! — sparse dest, sparse operands → registered.
+    (test #t (matrix-op-supported? 'mul! SM SM SM))
+    ;; mul! — sparse dest with dense operands → NOT registered (result would be dense).
+    (test #f (matrix-op-supported? 'mul! SM D D))
+    ;; mul! — dense dest with sparse operands → NOT registered (S×S → sparse).
+    (test #f (matrix-op-supported? 'mul! D SM SM))))
+
+(test-group "matrix-op-supported? returns #f for non-matrix arguments"
+  (let* ((S (counting-semiring))
+         (D (make-semiring-matrix S 2 2)))
+    (test #f (matrix-op-supported? 'add D 42))
+    (test #f (matrix-op-supported? 'add 'not-a-matrix D))
+    (test #f (matrix-op-supported? 'mul '() D))))
+
+(test-group "matrix-op-supported? returns #f for unknown ops"
+  (let* ((S (counting-semiring))
+         (D (make-semiring-matrix S 2 2)))
+    (test #f (matrix-op-supported? 'bogus-op D D))
+    ;; permanent / power / closure not registered (P7 wires sparse errors);
+    ;; currently the dispatch table has no entry, so #f for all.
+    (test #f (matrix-op-supported? 'permanent D))))
+
 (test-end)
 (test-exit)

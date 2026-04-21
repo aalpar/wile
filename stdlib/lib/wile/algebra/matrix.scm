@@ -598,6 +598,32 @@
 (register-matrix-op! '(mul! dense  sparse dense)  matrix-mul!/dense/sparse/dense)
 (register-matrix-op! '(mul! sparse sparse sparse) matrix-mul!/sparse/sparse/sparse)
 
+;; ─── Capability predicate (Path D P6, OQ3) ───
+
+;; Pure-form registrations: data-driven marker entries so matrix-op-supported?
+;; answers with one table lookup regardless of pure vs bang. Value is the
+;; dispatcher function itself, for introspection tools that might want to
+;; find the entry point. The allocator-and-dispatch logic lives in
+;; matrix-add / matrix-mul; these entries just record "supported".
+(register-matrix-op! '(add dense  dense)  matrix-add)
+(register-matrix-op! '(add dense  sparse) matrix-add)
+(register-matrix-op! '(add sparse dense)  matrix-add)
+(register-matrix-op! '(add sparse sparse) matrix-add)
+(register-matrix-op! '(mul dense  dense)  matrix-mul)
+(register-matrix-op! '(mul dense  sparse) matrix-mul)
+(register-matrix-op! '(mul sparse dense)  matrix-mul)
+(register-matrix-op! '(mul sparse sparse) matrix-mul)
+
+(define (matrix-op-supported? op . args)
+  "Return #t iff every ARG is a matrix and the dispatch table has a kernel\nregistered under (OP . ARGS' rep-tags); #f otherwise. Symbol-based (OP is a\nScheme symbol like 'add, 'add!, 'mul, etc.). For pure binary ops 'add and\n'mul, every rep combination is registered. For bang forms, the destination\nrep must match the expected result rep per OQ4. Unary ops currently\nregistered: none for sparse (power / closure / permanent land as dense-only\nin P7).\n\nThis is a representation-level capability query, not a call-validity check.\n#t means a kernel exists for those reps; it does NOT promise the operation\nwill succeed. Shape compatibility, semiring-identity, and per-op runtime\nconstraints (e.g. `matrix-mul!` forbidding destination/operand aliasing per\nOQ5) are still checked by the operation itself and may raise on invocation.\n\nThis is the programmatic capability query OQ3 promised — callers can branch\non kernel availability rather than catching errors for missing reps:\n\n  (if (matrix-op-supported? 'permanent M)\n      (matrix-permanent M)\n      (matrix-permanent (sparse->semiring-matrix M)))\n\nReturns #f (rather than raising) when an ARG is not a matrix — the predicate\nis safe to call on any value.\n\nExamples:\n  (matrix-op-supported? 'add A B)           ; => #t for valid matrices A, B\n  (matrix-op-supported? 'add! C A B)        ; => #t if C's rep matches\n  (matrix-op-supported? 'mul  A 42)         ; => #f (non-matrix)\n\nParameters:\n  op : symbol\n  args : matrices\nReturns: boolean\nCategory: algebra\nKeywords: matrix capability, support query, dispatch, introspection\n\nSee also: `matrix-rep-tag', `matrix-add', `matrix-mul'."
+  (define (all-matrices? xs)
+    (cond ((null? xs) #t)
+          ((not (matrix? (car xs))) #f)
+          (else (all-matrices? (cdr xs)))))
+  (and (all-matrices? args)
+       (matrix-op-lookup (cons op (map matrix-rep-tag args)))
+       #t))
+
 ;; ─── Internal utilities ──────────────────────
 
 ;; Validate that X is a non-negative exact integer; raise an error
