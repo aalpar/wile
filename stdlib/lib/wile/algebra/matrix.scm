@@ -12,6 +12,44 @@
 ;;; iterating T ← I + M·T to fixpoint; the caller specifies a bound to
 ;;; guard against non-convergent semirings (e.g., counting with cycles).
 
+;; ─── Path D dispatch scaffold ────────────────
+;;
+;; Single-file load-order invariant: all polymorphic matrix operations
+;; dispatch through *matrix-ops*, an association list populated by
+;; register-matrix-op! calls at library load time. Top-level forms in this
+;; file execute in source order, so any external caller reaching a
+;; dispatcher sees a fully-populated registry. If this library is ever
+;; split across files, the split boundary must preserve this ordering or
+;; introduce an explicit ensure-registered! guard in each dispatcher.
+;;
+;; Rationale for an alist rather than a hashtable: Wile's make-hashtable
+;; rejects list keys ("key is not hashable"), but dispatch keys are
+;; naturally lists like (add dense sparse). At ≤20 entries for Path D's
+;; scope, assoc's linear scan is negligible next to any realistic matrix
+;; operation. Keys stay readable; semantics stay as designed.
+
+(define *matrix-ops* '())
+
+;; Register IMPL as the dispatcher for KEY. KEY is a list whose first
+;; element is the op-symbol (e.g. 'add) and whose remaining elements are
+;; rep-tags (e.g. 'dense 'sparse) in argument order.
+(define (register-matrix-op! key impl)
+  (set! *matrix-ops* (cons (cons key impl) *matrix-ops*)))
+
+;; Return the IMPL registered under KEY, or #f if no entry exists.
+;; Dispatchers translate #f into a typed error via their own error path.
+(define (matrix-op-lookup key)
+  (let ((pair (assoc key *matrix-ops*)))
+    (if pair (cdr pair) #f)))
+
+;; Sole enumeration point for matrix representations. New reps (CSR, views,
+;; ...) extend this function with one additional cond clause; no other code
+;; in this library enumerates reps.
+(define (matrix-rep-tag M)
+  (cond ((semiring-matrix? M)        'dense)
+        ((sparse-semiring-matrix? M) 'sparse)
+        (else (error "matrix-rep-tag: not a matrix" M))))
+
 ;; ─── Internal utilities ──────────────────────
 
 ;; Validate that X is a non-negative exact integer; raise an error
