@@ -237,6 +237,22 @@
             (,T ,T 0 ))
           (semiring-matrix->rows (semiring-matrix-closure M)))))
 
+(test-group "closure errors on non-convergent semiring when max-iter exhausted"
+  ;; Counting semiring on a cyclic graph diverges: every additional
+  ;; M^k contributes strictly more paths, so the fixpoint test never
+  ;; succeeds and the guard must fire.
+  (let* ((S (counting-semiring))
+         (M (semiring-matrix-from-rows S '((1 1) (1 1)))))
+    (test-error (semiring-matrix-closure M 5))))
+
+(test-group "closure respects a tight user-supplied max-iter"
+  ;; Boolean matrix that would naturally converge at k = n-1 = 2,
+  ;; but we cap iteration at 1 to force the error path.
+  (let* ((B (boolean-semiring))
+         (M (semiring-matrix-from-rows B
+              '((#f #t #f) (#f #f #t) (#f #f #f)))))
+    (test-error (semiring-matrix-closure M 1))))
+
 (test-group "closure on empty matrix = empty matrix"
   ;; M* of a 0x0 matrix is trivially the 0x0 identity; the default
   ;; max-iter = n = 0 must not error here.
