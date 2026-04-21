@@ -89,6 +89,7 @@ Moved to **Completed Plans** below.
 |------|----------|--------|
 | `2026-04-17-algebra-foundations-directions.md` | 6 prioritized directions extending `(wile algebra ...)`: §5.1 matrix (semiring-parameterized), §5.2 Möbius/incidence, §5.3 AC-matching, etc. | **Directions** -- funding-gated roadmap |
 | `2026-04-18-gonum-integration-directions.md` | Generic graph analytics via gonum (SCC, Louvain, centrality) + benchmark statistics. Two independent tracks: `goastgraph/` and `bench-stats/` | **Directions** -- funding-gated roadmap |
+| `2026-04-20-matrix-sparse-dense-design.md` | Matrix library open design questions: (1) freeze vs iterator-replace `sparse-semiring-matrix-entries` alist shape, (2) polymorphic `matrix?` / `matrix-ref` protocol across dense + sparse, (3) mixed-operand sparse/dense ops | **Design draft** -- three decisions gated on each other; Q2 drives Q3 |
 
 ### Tech Debt
 
