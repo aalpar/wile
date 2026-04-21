@@ -219,12 +219,20 @@
       'sparse
       'dense))
 
-;; Validate that A and B are add-compatible: same shape, same semiring (eq?).
-(define (matrix-add-check-operands A B)
+;; Validate that A and B are add-compatible: both are matrices, same shape,
+;; same semiring (eq?). OP-NAME prefixes each error so attribution reflects
+;; the public caller (matrix-add vs. matrix-add!) rather than this helper
+;; or the first polymorphic accessor it happens to call.
+(define (matrix-add-check-operands op-name A B)
+  (unless (matrix? A)
+    (error (string-append op-name ": A is not a matrix") A))
+  (unless (matrix? B)
+    (error (string-append op-name ": B is not a matrix") B))
   (unless (eq? (matrix-semiring A) (matrix-semiring B))
-    (error "matrix-add: semirings differ"))
+    (error (string-append op-name ": semirings differ")))
   (unless (equal? (matrix-shape A) (matrix-shape B))
-    (error "matrix-add: shape mismatch" (matrix-shape A) (matrix-shape B))))
+    (error (string-append op-name ": shape mismatch")
+           (matrix-shape A) (matrix-shape B))))
 
 ;; Allocate an empty matrix of given REP. Dense is zero-initialized;
 ;; sparse starts with no stored entries.
@@ -306,14 +314,19 @@
                       (if (equal? (cdr entry) zero)
                           (loop (cdr es) acc)
                           (loop (cdr es) (cons entry acc)))))))))
-    (ssmat-entries-set! C (append merged-a b-only)))
+    ;; Reverse both accumulators so the output preserves each input's
+    ;; traversal order. This matters when callers pass inputs with
+    ;; duplicate coordinates (documented edge case at make-sparse-
+    ;; semiring-matrix): assoc first-match on the result then reflects
+    ;; A's first-matching entry, not the last-processed one.
+    (ssmat-entries-set! C (append (reverse merged-a) (reverse b-only))))
   C)
 
 ;; ── Public dispatchers ──
 
 (define (matrix-add! C A B)
-  "Matrix addition in place. Writes C[i,j] = A[i,j] + B[i,j] under the shared\nsemiring. Dispatches on (C-rep, A-rep, B-rep). C must have the rep expected\nfrom A+B per the result-rep rule (OQ4 strict): D+D/D+S/S+D yield dense; S+S\nyields sparse. Any aliasing is legal (no-hazard class per OQ5), so\n(matrix-add! A A B) is the idiomatic A += B.\n\nExamples:\n  (let* ((S (counting-semiring))\n         (A (semiring-matrix-from-rows S '((1 2) (3 4))))\n         (B (semiring-matrix-from-rows S '((5 6) (7 8))))\n         (C (make-semiring-matrix S 2 2)))\n    (matrix-add! C A B)\n    (semiring-matrix->rows C))\n  => ((6 8) (10 12))\n\nParameters:\n  C : matrix (destination)\n  A : matrix\n  B : matrix\nReturns: C\nCategory: algebra\nKeywords: matrix addition, elementwise, add, plus, in-place, destructive\n\nSee also: `matrix-add', `matrix-mul!'."
-  (matrix-add-check-operands A B)
+  "Matrix addition in place. Writes C[i,j] = A[i,j] + B[i,j] under the shared\nsemiring. Dispatches on (C-rep, A-rep, B-rep). C must have the rep expected\nfrom A+B per the result-rep rule (OQ4 strict): D+D/D+S/S+D yield dense; S+S\nyields sparse. Any aliasing is legal (no-hazard class per OQ5), so\n(matrix-add! A A B) is the idiomatic A += B.\n\nExamples:\n  (let* ((S (counting-semiring))\n         (A (semiring-matrix-from-rows S '((1 2) (3 4))))\n         (B (semiring-matrix-from-rows S '((5 6) (7 8))))\n         (C (make-semiring-matrix S 2 2)))\n    (matrix-add! C A B)\n    (semiring-matrix->rows C))\n  => ((6 8) (10 12))\n\nParameters:\n  C : matrix (destination)\n  A : matrix\n  B : matrix\nReturns: C\nCategory: algebra\nKeywords: matrix addition, elementwise, add, plus, in-place, destructive\n\nSee also: `matrix-add'."
+  (matrix-add-check-operands "matrix-add!" A B)
   (unless (matrix? C)
     (error "matrix-add!: destination is not a matrix" C))
   (unless (equal? (matrix-shape C) (matrix-shape A))
@@ -335,8 +348,8 @@
       (impl C A B))))
 
 (define (matrix-add A B)
-  "Matrix addition. Returns a new matrix where C[i,j] = A[i,j] + B[i,j].\nResult rep: D+D / D+S / S+D → dense; S+S → sparse.\n\nExamples:\n  (let* ((S (counting-semiring))\n         (A (semiring-matrix-from-rows S '((1 2) (3 4))))\n         (B (semiring-matrix-from-rows S '((5 6) (7 8)))))\n    (semiring-matrix->rows (matrix-add A B)))\n  => ((6 8) (10 12))\n\nParameters:\n  A : matrix\n  B : matrix\nReturns: matrix\nCategory: algebra\nKeywords: matrix addition, elementwise, add, plus, sum, oplus\n\nSee also: `matrix-add!', `matrix-mul'."
-  (matrix-add-check-operands A B)
+  "Matrix addition. Returns a new matrix where C[i,j] = A[i,j] + B[i,j].\nResult rep: D+D / D+S / S+D → dense; S+S → sparse.\n\nExamples:\n  (let* ((S (counting-semiring))\n         (A (semiring-matrix-from-rows S '((1 2) (3 4))))\n         (B (semiring-matrix-from-rows S '((5 6) (7 8)))))\n    (semiring-matrix->rows (matrix-add A B)))\n  => ((6 8) (10 12))\n\nParameters:\n  A : matrix\n  B : matrix\nReturns: matrix\nCategory: algebra\nKeywords: matrix addition, elementwise, add, plus, sum, oplus\n\nSee also: `matrix-add!'."
+  (matrix-add-check-operands "matrix-add" A B)
   (let* ((result-rep (matrix-add-result-rep (matrix-rep-tag A)
                                             (matrix-rep-tag B)))
          (C (matrix-allocate result-rep (matrix-semiring A)

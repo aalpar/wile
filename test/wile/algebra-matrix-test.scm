@@ -707,5 +707,30 @@
     ;; 3 + (-3) = 0, stripped from sparse invariant.
     (test 0 (matrix-fold-entries C 0 (lambda (r c v acc) (+ acc 1))))))
 
+(test-group "matrix-add sparse+sparse preserves first-match on duplicate coords"
+  ;; Regression for the merged-acc reverse fix. make-sparse-semiring-matrix
+  ;; permits duplicate coordinates with "first entry wins under assoc"; the
+  ;; add kernel must preserve that invariant so callers can reason about
+  ;; matrix-ref on the result the same way they reason about the inputs.
+  (let* ((S (counting-semiring))
+         (A (make-sparse-semiring-matrix S 2 2 '(((0 . 0) . 3) ((0 . 0) . 99))))
+         (B (make-sparse-semiring-matrix S 2 2 '(((0 . 0) . 1))))
+         (C (matrix-add A B)))
+    ;; First-match of A at (0,0) is 3; 3 + 1 = 4. Without the reverse fix
+    ;; the result list would be ordered so that (0,0 . 100) wins assoc.
+    (test 4 (sparse-semiring-matrix-ref C 0 0))))
+
+(test-group "matrix-add attributes non-matrix errors to the caller"
+  ;; Regression for the op-name threading fix in matrix-add-check-operands.
+  ;; Previously matrix-add!(not-a-matrix, ...) would surface as either
+  ;; "matrix-add: ..." (wrong caller) or "matrix-semiring: not a matrix"
+  ;; (wrong layer) depending on the failure path.
+  (let* ((S (counting-semiring))
+         (M (make-semiring-matrix S 2 2)))
+    (test-error (matrix-add 42 M))
+    (test-error (matrix-add M 42))
+    (test-error (matrix-add! M 42 M))
+    (test-error (matrix-add! M M 42))))
+
 (test-end)
 (test-exit)
