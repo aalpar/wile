@@ -429,11 +429,17 @@
     (test-error (sparse-semiring-matrix-ref SM -1 0))
     (test-error (sparse-semiring-matrix-ref SM 2 0))))
 
+;; Count stored entries via the polymorphic iterator API (Path D P3).
+;; Replaces (length (sparse-semiring-matrix-entries SM)); order-
+;; independent since it only accumulates a counter.
+(define (matrix-stored-count M)
+  (matrix-fold-entries M 0 (lambda (r c v acc) (+ acc 1))))
+
 (test-group "dense -> sparse omits zeros"
   (let* ((S (counting-semiring))
          (M (semiring-matrix-from-rows S '((1 0) (0 2))))
          (SM (semiring-matrix->sparse M)))
-    (test 2 (length (sparse-semiring-matrix-entries SM)))
+    (test 2 (matrix-stored-count SM))
     (test 1 (sparse-semiring-matrix-ref SM 0 0))
     (test 2 (sparse-semiring-matrix-ref SM 1 1))
     (test 0 (sparse-semiring-matrix-ref SM 0 1))))
@@ -450,15 +456,15 @@
   ;; form lists only non-zero cells. The dense->sparse direction was
   ;; tested; the constructor's own filter was not.
   (let ((S (counting-semiring)))
-    (test 1 (length (sparse-semiring-matrix-entries
-                      (make-sparse-semiring-matrix S 3 3
-                        '(((0 . 0) . 0) ((1 . 1) . 7) ((2 . 2) . 0)))))))
+    (test 1 (matrix-stored-count
+              (make-sparse-semiring-matrix S 3 3
+                '(((0 . 0) . 0) ((1 . 1) . 7) ((2 . 2) . 0))))))
   ;; Under the boolean semiring zero is #f (not the integer 0); a
   ;; regression that hardcoded = 0 would break this case.
   (let ((B (boolean-semiring)))
-    (test 1 (length (sparse-semiring-matrix-entries
-                      (make-sparse-semiring-matrix B 2 2
-                        '(((0 . 0) . #f) ((1 . 1) . #t))))))))
+    (test 1 (matrix-stored-count
+              (make-sparse-semiring-matrix B 2 2
+                '(((0 . 0) . #f) ((1 . 1) . #t)))))))
 
 (test-group "sparse duplicate coordinates: first entry wins"
   ;; Documented invariant: duplicate coordinates in the alist retain
@@ -535,6 +541,43 @@
 
 (test-group "matrix-rep-tag rejects non-matrix input"
   (test-error (matrix-rep-tag 42)))
+
+;; ─── Iterator API (P3) ───────────────────────
+
+(test-group "matrix-for-each-entry visits every cell of a dense matrix"
+  (let* ((S (counting-semiring))
+         (M (semiring-matrix-from-rows S '((1 2) (3 4))))
+         (seen '()))
+    (matrix-for-each-entry M
+      (lambda (r c v) (set! seen (cons (list r c v) seen))))
+    ;; Dense visits all 4 cells, regardless of value.
+    (test 4 (length seen))
+    ;; Row-major order for dense; check the values are all present.
+    (test '(1 2 3 4) (sort < (map caddr seen)))))
+
+(test-group "matrix-for-each-entry visits only stored cells of a sparse matrix"
+  (let* ((S (counting-semiring))
+         (SM (make-sparse-semiring-matrix S 3 3
+               '(((0 . 0) . 5) ((1 . 2) . 7))))
+         (count 0))
+    (matrix-for-each-entry SM
+      (lambda (r c v) (set! count (+ count 1))))
+    (test 2 count)))
+
+(test-group "matrix-fold-entries sums values over a dense matrix"
+  (let* ((S (counting-semiring))
+         (M (semiring-matrix-from-rows S '((1 2) (3 4)))))
+    (test 10 (matrix-fold-entries M 0 (lambda (r c v acc) (+ acc v))))))
+
+(test-group "matrix-fold-entries sums only stored values on sparse"
+  (let* ((S (counting-semiring))
+         (SM (make-sparse-semiring-matrix S 4 4
+               '(((0 . 0) . 5) ((3 . 3) . 7)))))
+    (test 12 (matrix-fold-entries SM 0 (lambda (r c v acc) (+ acc v))))))
+
+(test-group "iterator API rejects non-matrix input"
+  (test-error (matrix-for-each-entry 42 (lambda (r c v) #f)))
+  (test-error (matrix-fold-entries 42 0 (lambda (r c v acc) acc))))
 
 (test-end)
 (test-exit)
