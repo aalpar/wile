@@ -46,6 +46,7 @@
 ;; ...) extend this function with one additional cond clause; no other code
 ;; in this library enumerates reps.
 (define (matrix-rep-tag M)
+  "Return the representation tag for matrix M.\nRaises an error \"matrix-rep-tag: not a matrix\" if M is neither a dense\nnor a sparse semiring matrix.\n\nExamples:\n  (matrix-rep-tag\n    (make-semiring-matrix (counting-semiring) 2 2))  => dense\n  (matrix-rep-tag\n    (make-sparse-semiring-matrix\n      (counting-semiring) 2 2 '()))                  => sparse\n\nParameters:\n  M : matrix (dense or sparse semiring matrix)\nReturns: symbol ('dense or 'sparse)\nCategory: algebra\nKeywords: matrix representation, dispatch tag, polymorphic, dense, sparse\n\nSee also: `semiring-matrix?', `sparse-semiring-matrix?'."
   (cond ((semiring-matrix? M)        'dense)
         ((sparse-semiring-matrix? M) 'sparse)
         (else (error "matrix-rep-tag: not a matrix" M))))
