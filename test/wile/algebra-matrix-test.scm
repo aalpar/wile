@@ -755,5 +755,150 @@
     (test-error (matrix-add! M 42 M))
     (test-error (matrix-add! M M 42))))
 
+;; ─── Polymorphic mul (P5b) ───────────────────
+
+(test-group "matrix-mul pure form: dense × dense"
+  (let* ((S (counting-semiring))
+         (A (semiring-matrix-from-rows S '((1 2) (3 4))))
+         (B (semiring-matrix-from-rows S '((5 6) (7 8))))
+         (C (matrix-mul A B)))
+    (test 'dense (matrix-rep-tag C))
+    (test '((19 22) (43 50)) (semiring-matrix->rows C))))
+
+(test-group "matrix-mul pure form: dense × sparse → dense"
+  (let* ((S (counting-semiring))
+         (A (semiring-matrix-from-rows S '((1 2) (3 4))))
+         ;; B = [[0 5] [7 0]]
+         (B (make-sparse-semiring-matrix S 2 2
+              '(((0 . 1) . 5) ((1 . 0) . 7))))
+         (C (matrix-mul A B)))
+    (test 'dense (matrix-rep-tag C))
+    (test '((14 5) (28 15)) (semiring-matrix->rows C))))
+
+(test-group "matrix-mul pure form: sparse × dense → dense"
+  (let* ((S (counting-semiring))
+         (A (make-sparse-semiring-matrix S 2 2
+              '(((0 . 1) . 5) ((1 . 0) . 7))))
+         (B (semiring-matrix-from-rows S '((1 2) (3 4))))
+         (C (matrix-mul A B)))
+    (test 'dense (matrix-rep-tag C))
+    (test '((15 20) (7 14)) (semiring-matrix->rows C))))
+
+(test-group "matrix-mul pure form: sparse × sparse → sparse"
+  (let* ((S (counting-semiring))
+         ;; A = [[1 0] [0 2]], B = [[0 3] [4 0]]
+         (A (make-sparse-semiring-matrix S 2 2
+              '(((0 . 0) . 1) ((1 . 1) . 2))))
+         (B (make-sparse-semiring-matrix S 2 2
+              '(((0 . 1) . 3) ((1 . 0) . 4))))
+         (C (matrix-mul A B)))
+    (test 'sparse (matrix-rep-tag C))
+    ;; A×B = [[0 3] [8 0]]
+    (test 0 (matrix-ref C 0 0))
+    (test 3 (matrix-ref C 0 1))
+    (test 8 (matrix-ref C 1 0))
+    (test 0 (matrix-ref C 1 1))
+    ;; Exactly 2 stored non-zero entries.
+    (test 2 (matrix-fold-entries C 0 (lambda (r c v acc) (+ acc 1))))))
+
+(test-group "matrix-mul! in place: dense × dense"
+  (let* ((S (counting-semiring))
+         (A (semiring-matrix-from-rows S '((1 2) (3 4))))
+         (B (semiring-matrix-from-rows S '((5 6) (7 8))))
+         (C (make-semiring-matrix S 2 2)))
+    (matrix-mul! C A B)
+    (test '((19 22) (43 50)) (semiring-matrix->rows C))))
+
+(test-group "matrix-mul! in place: dense × sparse → dense"
+  (let* ((S (counting-semiring))
+         (A (semiring-matrix-from-rows S '((1 2) (3 4))))
+         ;; B = [[0 5] [7 0]]
+         (B (make-sparse-semiring-matrix S 2 2
+              '(((0 . 1) . 5) ((1 . 0) . 7))))
+         (C (make-semiring-matrix S 2 2)))
+    (matrix-mul! C A B)
+    (test '((14 5) (28 15)) (semiring-matrix->rows C))))
+
+(test-group "matrix-mul! in place: sparse × dense → dense"
+  (let* ((S (counting-semiring))
+         (A (make-sparse-semiring-matrix S 2 2
+              '(((0 . 1) . 5) ((1 . 0) . 7))))
+         (B (semiring-matrix-from-rows S '((1 2) (3 4))))
+         (C (make-semiring-matrix S 2 2)))
+    (matrix-mul! C A B)
+    (test '((15 20) (7 14)) (semiring-matrix->rows C))))
+
+(test-group "matrix-mul! in place: sparse × sparse → sparse"
+  (let* ((S (counting-semiring))
+         ;; A = [[1 0] [0 2]], B = [[0 3] [4 0]]
+         (A (make-sparse-semiring-matrix S 2 2
+              '(((0 . 0) . 1) ((1 . 1) . 2))))
+         (B (make-sparse-semiring-matrix S 2 2
+              '(((0 . 1) . 3) ((1 . 0) . 4))))
+         (C (make-sparse-semiring-matrix S 2 2 '())))
+    (matrix-mul! C A B)
+    ;; A×B = [[0 3] [8 0]]
+    (test 0 (matrix-ref C 0 0))
+    (test 3 (matrix-ref C 0 1))
+    (test 8 (matrix-ref C 1 0))
+    (test 0 (matrix-ref C 1 1))
+    (test 2 (matrix-fold-entries C 0 (lambda (r c v acc) (+ acc 1))))))
+
+(test-group "matrix-mul! in place: non-square inner dim"
+  (let* ((S (counting-semiring))
+         ;; A is 2x3, B is 3x2, C must be 2x2
+         (A (semiring-matrix-from-rows S '((1 2 3) (4 5 6))))
+         (B (semiring-matrix-from-rows S '((7 8) (9 10) (11 12))))
+         (C (make-semiring-matrix S 2 2)))
+    (matrix-mul! C A B)
+    (test '((58 64) (139 154)) (semiring-matrix->rows C))))
+
+(test-group "matrix-mul! rejects dest aliasing an operand (OQ5 incremental)"
+  (let* ((S (counting-semiring))
+         (A (semiring-matrix-from-rows S '((1 2) (3 4))))
+         (B (semiring-matrix-from-rows S '((5 6) (7 8)))))
+    ;; (matrix-mul! A A B) is the self-aliased case; must error.
+    (test-error (matrix-mul! A A B))
+    (test-error (matrix-mul! B A B))))
+
+(test-group "matrix-mul! rejects inner-dim mismatch"
+  (let* ((S (counting-semiring))
+         (A (make-semiring-matrix S 2 3))
+         (B (make-semiring-matrix S 2 2))
+         (C (make-semiring-matrix S 2 2)))
+    (test-error (matrix-mul! C A B))))
+
+(test-group "matrix-mul! rejects wrong destination rep (OQ4 strict)"
+  (let* ((S (counting-semiring))
+         (A (make-sparse-semiring-matrix S 2 2 '()))
+         (B (make-sparse-semiring-matrix S 2 2 '()))
+         ;; S × S expects sparse dest; dense C is wrong.
+         (C-wrong (make-semiring-matrix S 2 2)))
+    (test-error (matrix-mul! C-wrong A B))))
+
+(test-group "matrix-mul! rejects wrong destination shape"
+  (let* ((S (counting-semiring))
+         (A (make-semiring-matrix S 2 3))
+         (B (make-semiring-matrix S 3 4))
+         ;; A × B is 2x4; C with wrong shape must reject.
+         (C-wrong (make-semiring-matrix S 3 3)))
+    (test-error (matrix-mul! C-wrong A B))))
+
+(test-group "matrix-mul on sparse × sparse preserves sparsity via zero-strip"
+  (let* ((R (ring->semiring (integer-ring)))
+         ;; A × B produces some zero intermediate cells that must be stripped.
+         (A (make-sparse-semiring-matrix R 2 2
+              '(((0 . 0) . 2) ((0 . 1) . 3))))
+         (B (make-sparse-semiring-matrix R 2 2
+              '(((0 . 0) . 1) ((1 . 0) . -2))))
+         (C (matrix-mul A B)))
+    ;; Row 0: 2·1 + 3·(-2) = 2 - 6 = -4, col 0. Col 1 entirely zero.
+    ;; Row 1: zero (no A entries in row 1).
+    (test -4 (matrix-ref C 0 0))
+    (test 0 (matrix-ref C 0 1))
+    (test 0 (matrix-ref C 1 0))
+    ;; Only one non-zero stored entry.
+    (test 1 (matrix-fold-entries C 0 (lambda (r c v acc) (+ acc 1))))))
+
 (test-end)
 (test-exit)

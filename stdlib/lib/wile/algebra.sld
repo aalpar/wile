@@ -165,7 +165,8 @@
     matrix-rep-tag matrix-for-each-entry matrix-fold-entries
     matrix? matrix-ref matrix-rows matrix-cols
     matrix-shape matrix-semiring
-    matrix-add matrix-add!)
+    matrix-add matrix-add!
+    matrix-mul matrix-mul!)
   (import (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice)

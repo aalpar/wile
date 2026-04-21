@@ -389,6 +389,215 @@
 (register-matrix-op! '(add! dense  sparse dense)  matrix-add!/dense/sparse/dense)
 (register-matrix-op! '(add! sparse sparse sparse) matrix-add!/sparse/sparse/sparse)
 
+;; ─── Polymorphic arithmetic — mul (Path D P5b) ───
+
+;; Result-rep rule for mul: S×S → S; all other combinations → D. Rationale
+;; follows the sparse-BLAS algorithm family: sparse-dense multiply uses a
+;; scatter-into-dense kernel, which naturally produces a dense result. Only
+;; S×S preserves sparsity through the operation (via by-entry accumulation).
+(define (matrix-mul-result-rep a-tag b-tag)
+  (if (and (eq? a-tag 'sparse) (eq? b-tag 'sparse))
+      'sparse
+      'dense))
+
+;; Validate A and B are mul-compatible: shape (A.cols == B.rows) and shared
+;; semiring (eq?). Raises on mismatch; return value is unspecified.
+(define (matrix-mul-check-operands A B)
+  (unless (eq? (matrix-semiring A) (matrix-semiring B))
+    (error "matrix-mul: semirings differ"))
+  (unless (= (matrix-cols A) (matrix-rows B))
+    (error "matrix-mul: inner dimensions disagree"
+           (matrix-shape A) (matrix-shape B))))
+
+;; ── Private mul! kernels ──
+
+;; Dense ← Dense × Dense. Schoolbook O(n·m·p); accumulates into a local per
+;; cell then writes once to C — C may not alias A or B (incremental-write
+;; hazard, enforced by the dispatcher).
+(define (matrix-mul!/dense/dense/dense C A B)
+  (let* ((S (smat-semiring A))
+         (plus (lambda (a b) (semiring-plus S a b)))
+         (times (lambda (a b) (semiring-times S a b)))
+         (zero (semiring-zero S))
+         (n (smat-rows A))
+         (p (smat-cols A))
+         (m (smat-cols B))
+         (da (smat-data A))
+         (db (smat-data B))
+         (dc (smat-data C)))
+    (let i-loop ((i 0))
+      (when (< i n)
+        (let j-loop ((j 0))
+          (when (< j m)
+            (let k-loop ((k 0) (acc zero))
+              (if (= k p)
+                  (vector-set! dc (+ (* i m) j) acc)
+                  (k-loop (+ k 1)
+                          (plus acc (times (vector-ref da (+ (* i p) k))
+                                           (vector-ref db (+ (* k m) j)))))))
+            (j-loop (+ j 1))))
+        (i-loop (+ i 1)))))
+  C)
+
+;; Dense ← Sparse × Dense. Scatter: C starts at zero; for each A entry
+;; (i,k,v), accumulate v·B[k,j] into C[i,j] for all j.
+(define (matrix-mul!/dense/sparse/dense C A B)
+  (let* ((S (ssmat-semiring A))
+         (plus (lambda (a b) (semiring-plus S a b)))
+         (times (lambda (a b) (semiring-times S a b)))
+         (zero (semiring-zero S))
+         (m (smat-cols B))
+         (n (ssmat-rows A))
+         (dc (smat-data C))
+         (db (smat-data B))
+         (size (* n m)))
+    ;; Zero-init C's data.
+    (let loop ((k 0))
+      (when (< k size)
+        (vector-set! dc k zero)
+        (loop (+ k 1))))
+    ;; For each stored entry of A, scatter across B's row.
+    (for-each (lambda (entry)
+                (let* ((rc (car entry))
+                       (i (car rc))
+                       (k (cdr rc))
+                       (v (cdr entry)))
+                  (let j-loop ((j 0))
+                    (when (< j m)
+                      (let* ((dc-idx (+ (* i m) j))
+                             (prod (times v (vector-ref db (+ (* k m) j)))))
+                        (vector-set! dc dc-idx (plus (vector-ref dc dc-idx) prod)))
+                      (j-loop (+ j 1))))))
+              (ssmat-entries A)))
+  C)
+
+;; Dense ← Dense × Sparse. Transpose-scatter: for each B entry (k,j,v),
+;; accumulate A[i,k]·v into C[i,j] for all i.
+(define (matrix-mul!/dense/dense/sparse C A B)
+  (let* ((S (smat-semiring A))
+         (plus (lambda (a b) (semiring-plus S a b)))
+         (times (lambda (a b) (semiring-times S a b)))
+         (zero (semiring-zero S))
+         (n (smat-rows A))
+         (p (smat-cols A))
+         (m (ssmat-cols B))
+         (da (smat-data A))
+         (dc (smat-data C))
+         (size (* n m)))
+    (let loop ((k 0))
+      (when (< k size)
+        (vector-set! dc k zero)
+        (loop (+ k 1))))
+    (for-each (lambda (entry)
+                (let* ((rc (car entry))
+                       (k (car rc))
+                       (j (cdr rc))
+                       (v (cdr entry)))
+                  (let i-loop ((i 0))
+                    (when (< i n)
+                      (let* ((dc-idx (+ (* i m) j))
+                             (prod (times (vector-ref da (+ (* i p) k)) v)))
+                        (vector-set! dc dc-idx (plus (vector-ref dc dc-idx) prod)))
+                      (i-loop (+ i 1))))))
+              (ssmat-entries B)))
+  C)
+
+;; Sparse ← Sparse × Sparse. For each A entry (i,k,va), iterate B entries and
+;; accumulate products where B's row-index equals k. Accumulator is a local
+;; alist keyed on (i,j); once built, strip zero-valued results and assign.
+(define (matrix-mul!/sparse/sparse/sparse C A B)
+  (let* ((S (ssmat-semiring A))
+         (plus (lambda (a b) (semiring-plus S a b)))
+         (times (lambda (a b) (semiring-times S a b)))
+         (zero (semiring-zero S))
+         (ea (ssmat-entries A))
+         (eb (ssmat-entries B)))
+    ;; Build result alist by iterating A and cross-checking B. When the
+    ;; (i,j) coord is already present, mutate the existing pair's cdr in
+    ;; place — assoc returns the actual pair from acc, so set-cdr! is
+    ;; O(1) per update vs. O(nnz_acc) for a list rebuild via map. Safe
+    ;; here because acc is freshly allocated inside this function and
+    ;; never escapes (ssmat-entries-set! receives the stripped result,
+    ;; not the accumulator itself).
+    (define (accum-into acc i j v)
+      (let ((existing (assoc (cons i j) acc)))
+        (if existing
+            (begin
+              (set-cdr! existing (plus (cdr existing) v))
+              acc)
+            (cons (cons (cons i j) v) acc))))
+    (let a-loop ((ra ea) (acc '()))
+      (if (null? ra)
+          (ssmat-entries-set! C
+            ;; Strip zeros to preserve the sparse invariant.
+            (let strip ((es acc) (out '()))
+              (cond
+                ((null? es) (reverse out))
+                ((equal? (cdar es) zero) (strip (cdr es) out))
+                (else (strip (cdr es) (cons (car es) out))))))
+          (let* ((a-entry (car ra))
+                 (a-rc (car a-entry))
+                 (i (car a-rc))
+                 (k (cdr a-rc))
+                 (va (cdr a-entry)))
+            (let b-loop ((rb eb) (acc acc))
+              (if (null? rb)
+                  (a-loop (cdr ra) acc)
+                  (let* ((b-entry (car rb))
+                         (b-rc (car b-entry))
+                         (bk (car b-rc))
+                         (j (cdr b-rc))
+                         (vb (cdr b-entry)))
+                    (if (= k bk)
+                        (b-loop (cdr rb) (accum-into acc i j (times va vb)))
+                        (b-loop (cdr rb) acc)))))))))
+  C)
+
+;; ── Public dispatchers ──
+
+(define (matrix-mul! C A B)
+  "Matrix multiplication in place. Writes C[i,j] = Σ_k A[i,k] ⊗ B[k,j] under\nthe shared semiring. Dispatches on (C-rep, A-rep, B-rep). C must have the\nrep expected from A×B per the result-rep rule (OQ4 strict): D×D, D×S, S×D\nyield dense; S×S yields sparse. C must NOT alias A or B (incremental-write\nhazard class per OQ5 — every destination cell depends on A/B cells that\nhave not yet been overwritten; self-aliasing would corrupt).\n\nExamples:\n  (let* ((S (counting-semiring))\n         (A (semiring-matrix-from-rows S '((1 2) (3 4))))\n         (B (semiring-matrix-from-rows S '((5 6) (7 8))))\n         (C (make-semiring-matrix S 2 2)))\n    (matrix-mul! C A B)\n    (semiring-matrix->rows C))\n  => ((19 22) (43 50))\n\nParameters:\n  C : matrix (destination, must not eq? alias A or B)\n  A : matrix\n  B : matrix\nReturns: C\nCategory: algebra\nKeywords: matrix multiplication, matmul, in-place, destructive, schoolbook\n\nSee also: `matrix-mul', `matrix-add!'."
+  (matrix-mul-check-operands A B)
+  (unless (matrix? C)
+    (error "matrix-mul!: destination is not a matrix" C))
+  (unless (and (= (matrix-rows C) (matrix-rows A))
+               (= (matrix-cols C) (matrix-cols B)))
+    (error "matrix-mul!: destination shape mismatch; expected"
+           (cons (matrix-rows A) (matrix-cols B))
+           "got" (matrix-shape C)))
+  (unless (eq? (matrix-semiring C) (matrix-semiring A))
+    (error "matrix-mul!: destination semiring differs from operands"))
+  ;; OQ5 incremental-write: forbid eq? overlap between dest and any operand.
+  (when (or (eq? C A) (eq? C B))
+    (error "matrix-mul!: destination cannot alias operand; use a scratch matrix or rebind to (matrix-mul A B)"))
+  (let* ((a-tag (matrix-rep-tag A))
+         (b-tag (matrix-rep-tag B))
+         (c-tag (matrix-rep-tag C))
+         (expected (matrix-mul-result-rep a-tag b-tag)))
+    (unless (eq? c-tag expected)
+      (error "matrix-mul!: destination rep does not match expected result rep"
+             c-tag expected))
+    (let ((impl (matrix-op-lookup (list 'mul! c-tag a-tag b-tag))))
+      (unless impl
+        (error "matrix-mul!: unsupported rep combination"
+               c-tag a-tag b-tag))
+      (impl C A B))))
+
+(define (matrix-mul A B)
+  "Matrix multiplication. Returns a new matrix C where C[i,j] = Σ_k A[i,k] ⊗\nB[k,j] under the shared semiring. Result rep: D×D / D×S / S×D → dense;\nS×S → sparse.\n\nExamples:\n  (let* ((S (counting-semiring))\n         (A (semiring-matrix-from-rows S '((1 2) (3 4))))\n         (B (semiring-matrix-from-rows S '((5 6) (7 8)))))\n    (semiring-matrix->rows (matrix-mul A B)))\n  => ((19 22) (43 50))\n\nParameters:\n  A : matrix\n  B : matrix\nReturns: matrix\nCategory: algebra\nKeywords: matrix multiplication, matmul, tensor, product, otimes, schoolbook\n\nSee also: `matrix-mul!', `matrix-add'."
+  (matrix-mul-check-operands A B)
+  (let* ((result-rep (matrix-mul-result-rep (matrix-rep-tag A)
+                                            (matrix-rep-tag B)))
+         (C (matrix-allocate result-rep (matrix-semiring A)
+                             (matrix-rows A) (matrix-cols B))))
+    (matrix-mul! C A B)
+    C))
+
+(register-matrix-op! '(mul! dense  dense  dense)  matrix-mul!/dense/dense/dense)
+(register-matrix-op! '(mul! dense  dense  sparse) matrix-mul!/dense/dense/sparse)
+(register-matrix-op! '(mul! dense  sparse dense)  matrix-mul!/dense/sparse/dense)
+(register-matrix-op! '(mul! sparse sparse sparse) matrix-mul!/sparse/sparse/sparse)
+
 ;; ─── Internal utilities ──────────────────────
 
 ;; Validate that X is a non-negative exact integer; raise an error
