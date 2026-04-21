@@ -208,6 +208,149 @@
         (impl M)
         (error "matrix-semiring: no impl for representation" rep))))
 
+;; ─── Polymorphic arithmetic — add (Path D P5a) ───
+
+;; Result-rep rule for add: the densest operand wins. D+D, D+S, S+D → D;
+;; S+S → S. Explicit-conversion principle: add doesn't magically sparsify a
+;; dense operand, and mixing a dense operand with a sparse one preserves
+;; the dense rep (user-visible cell count unchanged).
+(define (matrix-add-result-rep a-tag b-tag)
+  (if (and (eq? a-tag 'sparse) (eq? b-tag 'sparse))
+      'sparse
+      'dense))
+
+;; Validate that A and B are add-compatible: same shape, same semiring (eq?).
+(define (matrix-add-check-operands A B)
+  (unless (eq? (matrix-semiring A) (matrix-semiring B))
+    (error "matrix-add: semirings differ"))
+  (unless (equal? (matrix-shape A) (matrix-shape B))
+    (error "matrix-add: shape mismatch" (matrix-shape A) (matrix-shape B))))
+
+;; Allocate an empty matrix of given REP. Dense is zero-initialized;
+;; sparse starts with no stored entries.
+(define (matrix-allocate rep S rows cols)
+  (case rep
+    ((dense)  (make-semiring-matrix S rows cols))
+    ((sparse) (make-sparse-semiring-matrix S rows cols '()))
+    (else (error "matrix-allocate: unknown rep" rep))))
+
+;; ── Private add! kernels ──
+
+;; Dense ← Dense + Dense. In-place write to C's data vector.
+(define (matrix-add!/dense/dense/dense C A B)
+  (let* ((S (smat-semiring A))
+         (plus (lambda (a b) (semiring-plus S a b)))
+         (size (* (smat-rows A) (smat-cols A)))
+         (dc (smat-data C))
+         (da (smat-data A))
+         (db (smat-data B)))
+    (let loop ((k 0))
+      (when (< k size)
+        (vector-set! dc k (plus (vector-ref da k) (vector-ref db k)))
+        (loop (+ k 1)))))
+  C)
+
+;; Dense ← Dense + Sparse. Copy A into C, then add each stored B entry.
+(define (matrix-add!/dense/dense/sparse C A B)
+  (let* ((S (smat-semiring A))
+         (plus (lambda (a b) (semiring-plus S a b)))
+         (m (smat-cols A))
+         (size (* (smat-rows A) m))
+         (dc (smat-data C))
+         (da (smat-data A)))
+    (let loop ((k 0))
+      (when (< k size)
+        (vector-set! dc k (vector-ref da k))
+        (loop (+ k 1))))
+    (for-each (lambda (entry)
+                (let* ((rc (car entry))
+                       (k  (+ (* (car rc) m) (cdr rc))))
+                  (vector-set! dc k (plus (vector-ref dc k) (cdr entry)))))
+              (ssmat-entries B)))
+  C)
+
+;; Dense ← Sparse + Dense. Commutativity: delegate with A/B swapped.
+(define (matrix-add!/dense/sparse/dense C A B)
+  (matrix-add!/dense/dense/sparse C B A))
+
+;; Sparse ← Sparse + Sparse. Merge the two alists; strip zero-valued results.
+(define (matrix-add!/sparse/sparse/sparse C A B)
+  (let* ((S (ssmat-semiring A))
+         (plus (lambda (a b) (semiring-plus S a b)))
+         (zero (semiring-zero S))
+         (ea (ssmat-entries A))
+         (eb (ssmat-entries B))
+         ;; For each entry in A, combine with B's matching entry (or zero).
+         (merged-a
+          (let loop ((es ea) (acc '()))
+            (if (null? es)
+                acc
+                (let* ((entry (car es))
+                       (k (car entry))
+                       (va (cdr entry))
+                       (b-pair (assoc k eb))
+                       (vb (if b-pair (cdr b-pair) zero))
+                       (sum (plus va vb)))
+                  (if (equal? sum zero)
+                      (loop (cdr es) acc)
+                      (loop (cdr es) (cons (cons k sum) acc)))))))
+         ;; Add B entries whose keys aren't in A.
+         (b-only
+          (let loop ((es eb) (acc '()))
+            (if (null? es)
+                acc
+                (let* ((entry (car es))
+                       (k (car entry)))
+                  (if (assoc k ea)
+                      (loop (cdr es) acc)
+                      (if (equal? (cdr entry) zero)
+                          (loop (cdr es) acc)
+                          (loop (cdr es) (cons entry acc)))))))))
+    (ssmat-entries-set! C (append merged-a b-only)))
+  C)
+
+;; ── Public dispatchers ──
+
+(define (matrix-add! C A B)
+  "Matrix addition in place. Writes C[i,j] = A[i,j] + B[i,j] under the shared\nsemiring. Dispatches on (C-rep, A-rep, B-rep). C must have the rep expected\nfrom A+B per the result-rep rule (OQ4 strict): D+D/D+S/S+D yield dense; S+S\nyields sparse. Any aliasing is legal (no-hazard class per OQ5), so\n(matrix-add! A A B) is the idiomatic A += B.\n\nExamples:\n  (let* ((S (counting-semiring))\n         (A (semiring-matrix-from-rows S '((1 2) (3 4))))\n         (B (semiring-matrix-from-rows S '((5 6) (7 8))))\n         (C (make-semiring-matrix S 2 2)))\n    (matrix-add! C A B)\n    (semiring-matrix->rows C))\n  => ((6 8) (10 12))\n\nParameters:\n  C : matrix (destination)\n  A : matrix\n  B : matrix\nReturns: C\nCategory: algebra\nKeywords: matrix addition, elementwise, add, plus, in-place, destructive\n\nSee also: `matrix-add', `matrix-mul!'."
+  (matrix-add-check-operands A B)
+  (unless (matrix? C)
+    (error "matrix-add!: destination is not a matrix" C))
+  (unless (equal? (matrix-shape C) (matrix-shape A))
+    (error "matrix-add!: destination shape mismatch"
+           (matrix-shape C) (matrix-shape A)))
+  (unless (eq? (matrix-semiring C) (matrix-semiring A))
+    (error "matrix-add!: destination semiring differs from operands"))
+  (let* ((a-tag (matrix-rep-tag A))
+         (b-tag (matrix-rep-tag B))
+         (c-tag (matrix-rep-tag C))
+         (expected (matrix-add-result-rep a-tag b-tag)))
+    (unless (eq? c-tag expected)
+      (error "matrix-add!: destination rep does not match expected result rep"
+             c-tag expected))
+    (let ((impl (matrix-op-lookup (list 'add! c-tag a-tag b-tag))))
+      (unless impl
+        (error "matrix-add!: unsupported rep combination"
+               c-tag a-tag b-tag))
+      (impl C A B))))
+
+(define (matrix-add A B)
+  "Matrix addition. Returns a new matrix where C[i,j] = A[i,j] + B[i,j].\nResult rep: D+D / D+S / S+D → dense; S+S → sparse.\n\nExamples:\n  (let* ((S (counting-semiring))\n         (A (semiring-matrix-from-rows S '((1 2) (3 4))))\n         (B (semiring-matrix-from-rows S '((5 6) (7 8)))))\n    (semiring-matrix->rows (matrix-add A B)))\n  => ((6 8) (10 12))\n\nParameters:\n  A : matrix\n  B : matrix\nReturns: matrix\nCategory: algebra\nKeywords: matrix addition, elementwise, add, plus, sum, oplus\n\nSee also: `matrix-add!', `matrix-mul'."
+  (matrix-add-check-operands A B)
+  (let* ((result-rep (matrix-add-result-rep (matrix-rep-tag A)
+                                            (matrix-rep-tag B)))
+         (C (matrix-allocate result-rep (matrix-semiring A)
+                             (matrix-rows A) (matrix-cols A))))
+    (matrix-add! C A B)
+    C))
+
+;; ── Registrations ──
+
+(register-matrix-op! '(add! dense  dense  dense)  matrix-add!/dense/dense/dense)
+(register-matrix-op! '(add! dense  dense  sparse) matrix-add!/dense/dense/sparse)
+(register-matrix-op! '(add! dense  sparse dense)  matrix-add!/dense/sparse/dense)
+(register-matrix-op! '(add! sparse sparse sparse) matrix-add!/sparse/sparse/sparse)
+
 ;; ─── Internal utilities ──────────────────────
 
 ;; Validate that X is a non-negative exact integer; raise an error
@@ -563,7 +706,10 @@
   (semiring ssmat-semiring)
   (rows     ssmat-rows)
   (cols     ssmat-cols)
-  (entries  ssmat-entries))
+  ;; entries is mutable so Path D bang forms can replace the alist in place.
+  ;; Callers must hold the sparse record reference; mutating entries through
+  ;; an external alist binding does nothing (the setter replaces the field).
+  (entries  ssmat-entries ssmat-entries-set!))
 
 (define (make-sparse-semiring-matrix S rows cols entries)
   "Construct a sparse ROWS x COLS matrix over semiring S from ENTRIES.\nENTRIES is an alist ((ROW . COL) . VALUE). Positions not listed read\nas (semiring-zero S). Entries whose value is (semiring-zero S) are\nstripped from the stored representation (matching the invariant that\nthe sparse form lists only non-zero cells); duplicate coordinates are\nkept as provided, with the first matching entry winning under assoc.\n\nExamples:\n  (let ((S (counting-semiring)))\n    (sparse-semiring-matrix-ref\n      (make-sparse-semiring-matrix S 3 3 '(((0 . 0) . 5) ((1 . 2) . 7)))\n      1 2))\n  => 7\n\nParameters:\n  S : semiring\n  rows : integer\n  cols : integer\n  entries : list\nReturns: sparse-semiring-matrix\nCategory: algebra\nKeywords: sparse matrix, coordinate list, COO, non-zero entries\n\nSee also: `semiring-matrix->sparse', `sparse->semiring-matrix'."

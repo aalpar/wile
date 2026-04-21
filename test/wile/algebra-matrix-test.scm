@@ -3,6 +3,7 @@
 (import (scheme base)
         (chibi test)
         (wile algebra semiring)
+        (wile algebra ring)
         (wile algebra matrix))
 
 (test-begin "semiring-matrix")
@@ -625,6 +626,86 @@
     (test #t (eq? S (matrix-semiring D)))
     (test #t (eq? S (matrix-semiring SM)))
     (test-error (matrix-semiring 42))))
+
+;; ─── Polymorphic add (P5a) ───────────────────
+
+(test-group "matrix-add pure form: dense + dense"
+  (let* ((S (counting-semiring))
+         (A (semiring-matrix-from-rows S '((1 2) (3 4))))
+         (B (semiring-matrix-from-rows S '((5 6) (7 8))))
+         (C (matrix-add A B)))
+    (test 'dense (matrix-rep-tag C))
+    (test '((6 8) (10 12)) (semiring-matrix->rows C))))
+
+(test-group "matrix-add pure form: sparse + sparse yields sparse"
+  (let* ((S (counting-semiring))
+         (A (make-sparse-semiring-matrix S 3 3 '(((0 . 0) . 1) ((1 . 1) . 2))))
+         (B (make-sparse-semiring-matrix S 3 3 '(((0 . 0) . 3) ((2 . 2) . 5))))
+         (C (matrix-add A B)))
+    (test 'sparse (matrix-rep-tag C))
+    ;; Merged: (0,0)=4 (summed), (1,1)=2 (A-only), (2,2)=5 (B-only).
+    (test 3 (matrix-fold-entries C 0 (lambda (r c v acc) (+ acc 1))))
+    (test 4 (matrix-ref C 0 0))
+    (test 2 (matrix-ref C 1 1))
+    (test 5 (matrix-ref C 2 2))))
+
+(test-group "matrix-add pure form: mixed yields dense"
+  (let* ((S (counting-semiring))
+         (D (semiring-matrix-from-rows S '((1 0) (0 2))))
+         (SM (make-sparse-semiring-matrix S 2 2 '(((0 . 1) . 7))))
+         (C1 (matrix-add D SM))
+         (C2 (matrix-add SM D)))
+    (test 'dense (matrix-rep-tag C1))
+    (test 'dense (matrix-rep-tag C2))
+    (test '((1 7) (0 2)) (semiring-matrix->rows C1))
+    (test '((1 7) (0 2)) (semiring-matrix->rows C2))))
+
+(test-group "matrix-add! in place: dense += dense"
+  (let* ((S (counting-semiring))
+         (A (semiring-matrix-from-rows S '((1 2) (3 4))))
+         (B (semiring-matrix-from-rows S '((5 6) (7 8)))))
+    ;; A += B via (matrix-add! A A B) — idiomatic bang aliasing.
+    (matrix-add! A A B)
+    (test '((6 8) (10 12)) (semiring-matrix->rows A))))
+
+(test-group "matrix-add! in place: sparse sparse → sparse destination"
+  (let* ((S (counting-semiring))
+         (A (make-sparse-semiring-matrix S 2 2 '(((0 . 0) . 1))))
+         (B (make-sparse-semiring-matrix S 2 2 '(((1 . 1) . 2))))
+         (C (make-sparse-semiring-matrix S 2 2 '())))
+    (matrix-add! C A B)
+    (test 2 (matrix-fold-entries C 0 (lambda (r c v acc) (+ acc 1))))
+    (test 1 (matrix-ref C 0 0))
+    (test 2 (matrix-ref C 1 1))))
+
+(test-group "matrix-add! rejects wrong destination rep (OQ4 strict)"
+  (let* ((S (counting-semiring))
+         (A (make-sparse-semiring-matrix S 2 2 '()))
+         (B (make-sparse-semiring-matrix S 2 2 '()))
+         ;; S+S expects sparse destination; dense C is wrong.
+         (C-wrong (make-semiring-matrix S 2 2)))
+    (test-error (matrix-add! C-wrong A B))))
+
+(test-group "matrix-add! rejects shape mismatch"
+  (let* ((S (counting-semiring))
+         (A (make-semiring-matrix S 2 2))
+         (B (make-semiring-matrix S 3 3))
+         (C (make-semiring-matrix S 2 2)))
+    (test-error (matrix-add! C A B))))
+
+(test-group "matrix-add! rejects semiring mismatch"
+  (let* ((A (make-semiring-matrix (counting-semiring) 2 2))
+         (B (make-semiring-matrix (boolean-semiring) 2 2))
+         (C (make-semiring-matrix (counting-semiring) 2 2)))
+    (test-error (matrix-add! C A B))))
+
+(test-group "matrix-add zero-sum under sparse-sparse strips the entry"
+  (let* ((R (ring->semiring (integer-ring)))
+         (A (make-sparse-semiring-matrix R 2 2 '(((0 . 0) . 3))))
+         (B (make-sparse-semiring-matrix R 2 2 '(((0 . 0) . -3))))
+         (C (matrix-add A B)))
+    ;; 3 + (-3) = 0, stripped from sparse invariant.
+    (test 0 (matrix-fold-entries C 0 (lambda (r c v acc) (+ acc 1))))))
 
 (test-end)
 (test-exit)
