@@ -150,6 +150,13 @@
     (test (semiring-matrix->rows M)
           (semiring-matrix->rows (semiring-matrix-mul M I3)))))
 
+(test-group "semiring-matrix-mul rejects distinct semirings"
+  ;; Symmetric with the semiring-matrix-add test above; both guards
+  ;; exist at the same site and should be covered in tandem.
+  (let ((A (make-semiring-matrix (counting-semiring) 2 2))
+        (B (make-semiring-matrix (counting-semiring) 2 2)))
+    (test-error (semiring-matrix-mul A B))))
+
 (test-group "semiring-matrix-mul rejects incompatible inner dim"
   (let* ((S (counting-semiring))
          (A (semiring-matrix-from-rows S '((1 2) (3 4))))        ; 2x2
