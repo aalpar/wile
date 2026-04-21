@@ -25,21 +25,24 @@
     ((equal? (car lst) x) (cdr lst))
     (else (cons (car lst) (smat-remove-first x (cdr lst))))))
 
-;; All permutations of LST. Cost is O(n! * n) conses — matches the
-;; asymptotic cost of the permanent that consumes them, so not worth
-;; optimizing independently.
-(define (smat-permutations lst)
+;; Fold F over all permutations of LST, threading an accumulator.
+;; F has signature (lambda (perm acc) -> new-acc). At most O(n) stack
+;; depth and one cons per prefix step — we do NOT materialize the
+;; O(n!) permutation list, so consumers such as `semiring-matrix-permanent'
+;; run in O(n) working memory rather than O(n! * n).
+(define (smat-fold-permutations f init lst)
   (if (null? lst)
-      '(())
-      (let loop ((xs lst) (acc '()))
-        (if (null? xs)
-            (reverse acc)
-            (let* ((x    (car xs))
-                   (rest (smat-remove-first x lst))
-                   (subs (smat-permutations rest)))
-              (loop (cdr xs)
-                    (append (reverse (map (lambda (p) (cons x p)) subs))
-                            acc)))))))
+      (f '() init)
+      (let walk ((remaining lst) (prefix '()) (acc init))
+        (if (null? remaining)
+            (f (reverse prefix) acc)
+            (let loop ((xs remaining) (acc acc))
+              (if (null? xs)
+                  acc
+                  (loop (cdr xs)
+                        (walk (smat-remove-first (car xs) remaining)
+                              (cons (car xs) prefix)
+                              acc))))))))
 
 ;; ─── Dense matrix record ─────────────────────
 
@@ -219,11 +222,14 @@
       ((= k 0) (semiring-matrix-identity S n))
       ((= k 1) M)
       (else
+        ;; Terminate when exp=1 by folding the final base into acc,
+        ;; avoiding one wasted (mul base base) at the top of the last
+        ;; iteration that the old (= exp 0) termination performed.
         (let loop ((base M)
                    (exp  k)
                    (acc  (semiring-matrix-identity S n)))
           (cond
-            ((= exp 0) acc)
+            ((= exp 1) (semiring-matrix-mul acc base))
             ((odd? exp)
               (loop (semiring-matrix-mul base base)
                     (quotient exp 2)
@@ -248,12 +254,20 @@
   (unless (= (smat-rows M) (smat-cols M))
     (error "semiring-matrix-closure: non-square matrix"
            (semiring-matrix-shape M)))
+  (unless (or (null? rest) (null? (cdr rest)))
+    (error "semiring-matrix-closure: expected at most one optional argument"
+           rest))
   (let* ((S        (smat-semiring M))
          (n        (smat-rows M))
          (max-iter (if (null? rest) n (car rest)))
          (I        (semiring-matrix-identity S n)))
+    (unless (and (integer? max-iter) (exact? max-iter) (>= max-iter 0))
+      (error "semiring-matrix-closure: max-iterations must be a non-negative exact integer"
+             max-iter))
+    ;; Attempt at most max-iter update steps. iter counts completed
+    ;; updates, so the guard is (>= iter max-iter) rather than >.
     (let loop ((T I) (iter 0))
-      (if (> iter max-iter)
+      (if (>= iter max-iter)
           (error "semiring-matrix-closure: did not converge" max-iter)
           (let ((T* (semiring-matrix-add I (semiring-matrix-mul M T))))
             (if (equal? (smat-data T) (smat-data T*))
@@ -284,21 +298,21 @@
          (z (semiring-zero S))
          (o (semiring-one S))
          (d (smat-data M)))
-    (if (= n 0)
-        o  ; perm of the empty matrix = 1 by convention
-        (let sum-loop ((perms (smat-permutations (smat-iota n)))
-                       (acc   z))
-          (if (null? perms)
-              acc
-              (let prod-loop ((i     0)
-                              (sigma (car perms))
-                              (p     o))
-                (if (= i n)
-                    (sum-loop (cdr perms) (semiring-plus S acc p))
-                    (prod-loop (+ i 1)
-                               (cdr sigma)
-                               (semiring-times S p
-                                 (vector-ref d (+ (* i n) (car sigma))))))))))))
+    ;; For each permutation sigma, fold the product M[i, sigma(i)]
+    ;; into ACC via semiring-plus. The fold visits permutations in
+    ;; O(n) working memory; for n=0 the helper invokes f with the
+    ;; empty permutation, yielding the conventional perm = 1.
+    (smat-fold-permutations
+      (lambda (sigma acc)
+        (let prod-loop ((i 0) (sig sigma) (p o))
+          (if (= i n)
+              (semiring-plus S acc p)
+              (prod-loop (+ i 1)
+                         (cdr sig)
+                         (semiring-times S p
+                           (vector-ref d (+ (* i n) (car sig))))))))
+      z
+      (smat-iota n))))
 
 ;; ─── Sparse matrix ───────────────────────────
 ;;
@@ -315,12 +329,18 @@
   (entries  ssmat-entries))
 
 (define (make-sparse-semiring-matrix S rows cols entries)
-  "Construct a sparse ROWS x COLS matrix over semiring S from ENTRIES.\nENTRIES is an alist ((ROW . COL) . VALUE). Positions not listed read\nas (semiring-zero S). No deduplication is performed; the first matching\nentry wins under assoc.\n\nExamples:\n  (let ((S (counting-semiring)))\n    (sparse-semiring-matrix-ref\n      (make-sparse-semiring-matrix S 3 3 '(((0 . 0) . 5) ((1 . 2) . 7)))\n      1 2))\n  => 7\n\nParameters:\n  S : semiring\n  rows : integer\n  cols : integer\n  entries : list\nReturns: sparse-semiring-matrix\nCategory: algebra\nKeywords: sparse matrix, coordinate list, COO, non-zero entries\n\nSee also: `semiring-matrix->sparse', `sparse->semiring-matrix'."
+  "Construct a sparse ROWS x COLS matrix over semiring S from ENTRIES.\nENTRIES is an alist ((ROW . COL) . VALUE). Positions not listed read\nas (semiring-zero S). Entries whose value is (semiring-zero S) are\nstripped from the stored representation (matching the invariant that\nthe sparse form lists only non-zero cells); duplicate coordinates are\nkept as provided, with the first matching entry winning under assoc.\n\nExamples:\n  (let ((S (counting-semiring)))\n    (sparse-semiring-matrix-ref\n      (make-sparse-semiring-matrix S 3 3 '(((0 . 0) . 5) ((1 . 2) . 7)))\n      1 2))\n  => 7\n\nParameters:\n  S : semiring\n  rows : integer\n  cols : integer\n  entries : list\nReturns: sparse-semiring-matrix\nCategory: algebra\nKeywords: sparse matrix, coordinate list, COO, non-zero entries\n\nSee also: `semiring-matrix->sparse', `sparse->semiring-matrix'."
   (when (or (not (integer? rows)) (not (integer? cols))
             (< rows 0) (< cols 0))
     (error "make-sparse-semiring-matrix: dimensions must be non-negative"
            rows cols))
-  (make-sparse-semiring-matrix* S rows cols entries))
+  (let ((z (semiring-zero S)))
+    (make-sparse-semiring-matrix* S rows cols
+      (let loop ((es entries) (acc '()))
+        (cond
+          ((null? es) (reverse acc))
+          ((equal? (cdar es) z) (loop (cdr es) acc))
+          (else (loop (cdr es) (cons (car es) acc))))))))
 
 (define (sparse-semiring-matrix-rows SM)
   "Return the number of rows in sparse matrix SM.\n\nParameters:\n  SM : sparse-semiring-matrix\nReturns: integer\nCategory: algebra\nKeywords: sparse matrix, shape, rows"
@@ -365,17 +385,20 @@
                               (cons (cons (cons i j) v) acc))))))))))
 
 (define (sparse->semiring-matrix SM)
-  "Convert sparse matrix SM to its dense representation.\nMissing entries are filled with (semiring-zero S). Inverse of\n`semiring-matrix->sparse' up to equality on non-zero positions.\n\nExamples:\n  (let* ((S (counting-semiring))\n         (SM (make-sparse-semiring-matrix S 2 2 '(((0 . 0) . 5)))))\n    (semiring-matrix->rows (sparse->semiring-matrix SM)))\n  => ((5 0) (0 0))\n\nParameters:\n  SM : sparse-semiring-matrix\nReturns: semiring-matrix\nCategory: algebra\nKeywords: sparse to dense, conversion, expansion, materialize\n\nSee also: `semiring-matrix->sparse'."
+  "Convert sparse matrix SM to its dense representation.\nMissing entries are filled with (semiring-zero S). When duplicate\ncoordinates appear in the sparse entries the first one wins, matching\nthe assoc-based semantics of `sparse-semiring-matrix-ref'. Inverse of\n`semiring-matrix->sparse' up to equality on non-zero positions.\n\nExamples:\n  (let* ((S (counting-semiring))\n         (SM (make-sparse-semiring-matrix S 2 2 '(((0 . 0) . 5)))))\n    (semiring-matrix->rows (sparse->semiring-matrix SM)))\n  => ((5 0) (0 0))\n\nParameters:\n  SM : sparse-semiring-matrix\nReturns: semiring-matrix\nCategory: algebra\nKeywords: sparse to dense, conversion, expansion, materialize\n\nSee also: `semiring-matrix->sparse'."
   (let* ((S (ssmat-semiring SM))
          (n (ssmat-rows SM))
          (m (ssmat-cols SM))
          (z (semiring-zero S))
          (d (make-vector (* n m) z)))
+    ;; Iterate in reverse so the first entry in the alist writes last
+    ;; and therefore wins — matching assoc's first-match semantics in
+    ;; sparse-semiring-matrix-ref.
     (for-each
       (lambda (entry)
         (let ((rc (car entry)) (v (cdr entry)))
           (vector-set! d (+ (* (car rc) m) (cdr rc)) v)))
-      (ssmat-entries SM))
+      (reverse (ssmat-entries SM)))
     (make-semiring-matrix* S n m d)))
 
 ;; ─── Destructuring macro ─────────────────────
