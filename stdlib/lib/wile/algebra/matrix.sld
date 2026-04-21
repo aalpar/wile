@@ -27,7 +27,9 @@
           matrix-add matrix-add!
           matrix-mul matrix-mul!
           ;; Path D capability predicate (P6).
-          matrix-op-supported?)
+          matrix-op-supported?
+          ;; Path D dense-only polymorphic ops (P7).
+          matrix-power matrix-closure matrix-permanent)
   (import (scheme base)
           (wile algebra semiring))
   (include "matrix.scm"))

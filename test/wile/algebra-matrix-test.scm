@@ -946,10 +946,50 @@
 (test-group "matrix-op-supported? returns #f for unknown ops"
   (let* ((S (counting-semiring))
          (D (make-semiring-matrix S 2 2)))
-    (test #f (matrix-op-supported? 'bogus-op D D))
-    ;; permanent / power / closure not registered (P7 wires sparse errors);
-    ;; currently the dispatch table has no entry, so #f for all.
-    (test #f (matrix-op-supported? 'permanent D))))
+    (test #f (matrix-op-supported? 'bogus-op D D))))
+
+;; ─── Dense-only polymorphic ops (P7) ─────────
+
+(test-group "matrix-power on dense matrix matches dense-specific impl"
+  (let* ((S (counting-semiring))
+         (M (semiring-matrix-from-rows S '((1 1) (0 1)))))
+    (test '((1 3) (0 1)) (semiring-matrix->rows (matrix-power M 3)))))
+
+(test-group "matrix-closure on dense matrix matches dense-specific impl"
+  (let* ((B (boolean-semiring))
+         (G (semiring-matrix-from-rows B
+              '((#f #t #f) (#f #f #t) (#f #f #f)))))
+    (test '((#t #t #t) (#f #t #t) (#f #f #t))
+          (semiring-matrix->rows (matrix-closure G)))))
+
+(test-group "matrix-permanent on dense matrix"
+  (let* ((S (counting-semiring))
+         (M (semiring-matrix-from-rows S '((1 2) (3 4)))))
+    ;; Permanent of [[a b][c d]] = ad + bc = 1*4 + 2*3 = 10
+    (test 10 (matrix-permanent M))))
+
+(test-group "dense-only ops raise typed error on sparse operand (OQ3)"
+  (let* ((S (counting-semiring))
+         (SM (make-sparse-semiring-matrix S 2 2 '())))
+    (test-error (matrix-power SM 2))
+    (test-error (matrix-closure SM))
+    (test-error (matrix-permanent SM))))
+
+(test-group "dense-only ops reject non-matrix input"
+  (test-error (matrix-power 42 2))
+  (test-error (matrix-closure 'not-a-matrix))
+  (test-error (matrix-permanent '())))
+
+(test-group "matrix-op-supported? reflects P7 registrations"
+  (let* ((S (counting-semiring))
+         (D (make-semiring-matrix S 2 2))
+         (SM (make-sparse-semiring-matrix S 2 2 '())))
+    (test #t (matrix-op-supported? 'power D))
+    (test #t (matrix-op-supported? 'closure D))
+    (test #t (matrix-op-supported? 'permanent D))
+    (test #f (matrix-op-supported? 'power SM))
+    (test #f (matrix-op-supported? 'closure SM))
+    (test #f (matrix-op-supported? 'permanent SM))))
 
 (test-end)
 (test-exit)
