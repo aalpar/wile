@@ -141,6 +141,36 @@
     (cons 'elements (iota n))
     (cons 'generators '(1))))
 
+(define (symmetric-group n)
+  "Return the symmetric group S_n on {0, 1, ..., n-1}.\nElements are permutations represented as vectors of length N where v[i]\ngives the image of i. Composition is (p∘q)[i] = p[q[i]].\n\nFor n ≤ 1 the group is trivial; for n = 2 the single generator is the\ntransposition (0 1); for n ≥ 3 the generators are the transposition\n(0 1) together with the n-cycle (0 1 2 ... n-1).\n\nExamples:\n  (group-order (symmetric-group 3))      => 6\n  (group-identity (symmetric-group 3))   => #(0 1 2)\n\nParameters:\n  n : non-negative integer\nReturns: any\nCategory: algebra\nKeywords: symmetric group, permutation group, S_n, permutations\n\nSee also: `cyclic-group', `trivial-group'."
+  (unless (and (integer? n) (>= n 0))
+    (error "symmetric-group: n must be a non-negative integer" n))
+  (let* ((id      (list->vector (iota n)))
+         (trans01 (and (>= n 2)
+                       (let ((v (list->vector (iota n))))
+                         (vector-set! v 0 1)
+                         (vector-set! v 1 0)
+                         v)))
+         (n-cycle (and (>= n 2)
+                       (list->vector (append (cdr (iota n)) (list 0)))))
+         (all     (%all-permutations n))
+         (valid?  (lambda (v) (and (vector? v)
+                                    (= (vector-length v) n)
+                                    (%permutation-vector? v))))
+         (gens    (cond
+                    ((<= n 1) '())
+                    ((= n 2)  (list trans01))
+                    (else     (list trans01 n-cycle)))))
+    (make-group
+      %vector-permutation-op
+      id
+      %vector-permutation-inverse
+      (cons 'element? valid?)
+      (cons 'setoid (default-setoid))
+      (cons 'order (%factorial n))
+      (cons 'elements all)
+      (cons 'generators gens))))
+
 (define (group-op G a b)
   "Apply group G's binary operation to A and B.\n\nExamples:\n  (let ((G (make-group + 0 -))) (group-op G 2 3))  => 5\n\nParameters:\n  G : any\n  a : any\n  b : any\nReturns: any\nCategory: algebra\nKeywords: binary operation, group operation, combine, oplus, composition"
   ((group-op-fn G) a b))

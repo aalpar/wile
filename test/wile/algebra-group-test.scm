@@ -1,6 +1,7 @@
 ;;; algebra-group-test.scm — Group tests
 
 (import (scheme base)
+        (srfi 1)
         (chibi test)
         (wile algebra setoid)
         (wile algebra monoid)
@@ -82,6 +83,26 @@
   (test-error (cyclic-group 0))
   (test-error (cyclic-group -1))
   (test-error (cyclic-group 'not-an-integer)))
+
+(test-group "symmetric-group"
+  (let ((S3 (symmetric-group 3)))
+    (test 6 (group-order S3))
+    (test #t (equal? #(0 1 2) (group-identity S3)))
+    (test #t (not (equal? (group-op S3 #(1 0 2) #(0 2 1))
+                          (group-op S3 #(0 2 1) #(1 0 2)))))
+    (test #t (every (group-element? S3) (group-elements S3)))
+    (test 6 (length (delete-duplicates (group-elements S3) equal?)))
+    (let ((p #(2 0 1)))
+      (test #t (equal? (group-identity S3)
+                       (group-op S3 p (group-inverse S3 p)))))))
+
+(test-group "symmetric-group/edge-cases"
+  (test 1 (group-order (symmetric-group 0)))
+  (test 1 (group-order (symmetric-group 1)))
+  (test 2 (group-order (symmetric-group 2)))
+  (test '() (group-generators (symmetric-group 1)))
+  (test 1 (length (group-generators (symmetric-group 2))))
+  (test 2 (length (group-generators (symmetric-group 3)))))
 
 (test-group "backward compatibility — 3-arg make-group"
   (let ((Z (make-group + 0 -)))
