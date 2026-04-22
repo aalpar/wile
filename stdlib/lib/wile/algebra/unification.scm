@@ -244,42 +244,6 @@ Keywords: AC matching, pattern matching, associative, commutative, unification"
     (else
      (if (zero? (term-compare proto p s)) (list sub) '()))))
 
-;; Conservative structural compatibility predicate for one pattern-position
-;; against one subject-position. Returns #t when a direct (position-level)
-;; match is at all possible; #f when structurally incompatible. Used as the
-;; bipartite feasibility oracle for the matrix-permanent prune.
-(define (can-position-match? p s proto)
-  (cond
-    ((pattern-var? p) #t)
-    ((term-compound? proto p)
-     (and (term-compound? proto s)
-          (eq? (term-get-operator proto p) (term-get-operator proto s))))
-    (else (zero? (term-compare proto p s)))))
-
-;; Build an m×n boolean compatibility matrix over (wile algebra matrix)'s
-;; boolean semiring. M[i,j] = #t iff pat-positions[i] could match subj-ops[j]
-;; at this position. The permanent of this matrix is #t iff some bijection
-;; (perfect matching) is structurally possible — a necessary condition for
-;; ac-match to find any solution when |pat| = |subj|.
-(define (build-compat-matrix pat-positions subj-ops proto)
-  (let ((pat-vec (list->vector pat-positions))
-        (subj-vec (list->vector subj-ops))
-        (S (boolean-semiring)))
-    (let loop ((i 0) (rows '()))
-      (cond
-        ((= i (vector-length pat-vec))
-         (semiring-matrix-from-rows S (reverse rows)))
-        (else
-         (let ((p (vector-ref pat-vec i)))
-           (let col-loop ((j 0) (row '()))
-             (cond
-               ((= j (vector-length subj-vec))
-                (loop (+ i 1) (cons (reverse row) rows)))
-               (else
-                (col-loop (+ j 1)
-                          (cons (can-position-match? p (vector-ref subj-vec j) proto)
-                                row)))))))))))
-
 ;; AC-case: direct backtracking over assignments of pattern operands to
 ;; subject operands. Correct (enumerates all CSU elements) but exponential;
 ;; Phase 4 will add a matrix-permanent feasibility prune.
