@@ -1,5 +1,5 @@
 (define-library (wile algebra)
-  (description "Algebraic structures, equational rewriting, and symbolic normalization. Structures: setoids, orders, lattices, closure operators, Heyting/Boolean algebras, monoids, categories, semirings, groups, rings, differential rings, fields. Rewriting: axiom-driven term normalization. Symbolic: theory projections, recursive normalization, transformation tracing.")
+  (description "Algebraic structures, equational rewriting, and symbolic normalization. Structures: setoids, orders, lattices, closure operators, Heyting/Boolean algebras, monoids, categories, semirings, groups, rings, differential rings, fields, incidence algebras. Rewriting: axiom-driven term normalization. Symbolic: theory projections, recursive normalization, transformation tracing.")
   (export
     ;; Setoids
     make-setoid setoid?
@@ -169,7 +169,17 @@
     matrix-mul matrix-mul!
     matrix-op-supported?
     matrix-power matrix-closure matrix-permanent
-    matrix-copy matrix-copy!)
+    matrix-copy matrix-copy!
+    ;; Incidence algebra (Möbius on locally-finite posets)
+    make-locally-finite-poset locally-finite-poset?
+    lf-poset-leq? lf-poset-interval
+    finite-set->locally-finite-poset
+    make-incidence-algebra incidence-algebra?
+    incidence-algebra-poset incidence-algebra-ring
+    incidence-algebra-mu-cache
+    zeta-function mobius-function
+    incidence-convolve
+    mobius-inversion)
   (import (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice)
@@ -190,4 +200,5 @@
           (wile algebra pareto)
           (wile algebra interval)
           (wile algebra graph)
-          (wile algebra matrix)))
+          (wile algebra matrix)
+          (wile algebra incidence)))
