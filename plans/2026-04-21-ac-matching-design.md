@@ -263,3 +263,60 @@ Total ~860 LOC. Larger than directions-doc estimate (~400–600) because this pl
 - Full E-matching — separate library if a consumer emerges; not currently visible
 - E-graph / equality saturation — different algorithmic track
 - Library split (`ac-match → rewrite.sld`) — revisit once AC-match has real wile-goast callers and usage patterns are known
+
+---
+
+## Post-Ship Notes
+
+**Shipped via PR #698** (2026-04-22), merged to master as commit `2cb37576`. Branch `feat/algebra-unification` produced 29 commits across 6 phases plus one precursor commit (`039d7932` — exporting axiom-op accessors from `rewrite.sld`). All CI green at merge: `make lint`, `make covercheck` (36 packages ≥80%), Scheme test suite 46/0 pass/fail.
+
+### What actually shipped vs. what was planned
+
+| Plan expectation | Reality | Why |
+|---|---|---|
+| ~860 LOC total | ~790 LOC total | Phase 4 rejected (net zero); some helpers sized down in practice |
+| ~47 test groups | 29 test groups | Plan target was aspirational based on per-layer counts; realized coverage converged lower. Subagent refused to synthesize tests to pad the number — correct call |
+| 29 task-level commits | 30 commits on branch | Extra is the precursor `feat(algebra/rewrite): export axiom-op accessors` needed for AC-detection |
+| Matrix-permanent feasibility prune | Rejected on benchmark | Phase 4 wired the prune, measured 10.6× regression (712 ms vs. 67 ms on 8-element pathological case), reverted in same commit `dba5539b` with rationale |
+| Stickel reduction via `diophantine-basis` | Direct bipartite permutation enumeration | Plan's literal Stickel predicate only fired when BOTH sides were pure-variable (`null? t1-terms` AND `null? t2-terms`) — would have returned `'()` on the canonical `x+y =AC a+b` test because `[a, b]` is non-empty. Subagent replaced with permutation enumeration + `substitution-compose` conflict detection, semantically equivalent for 0/1 multiplicities. `diophantine-basis` remains exported as an independent primitive per goal #1, but is **not actually used** by `ac-unify` internally. |
+| `flatten-ac` internal only | Exported as "Internal helpers (exposed for testing)" | Task 3.3's tests call `flatten-ac` directly at the test file's top level; internal definitions aren't visible. Marker comment documents the intent; proper fix is either a black-box rewrite of the tests or a committed promotion to public with a contract. |
+
+### Plan defects surfaced during implementation
+
+1. **`(test #t (member ...))` pattern** (Phase 2). `member` returns the matching tail or `#f`, not `#t`. chibi-test's `test` compares with `equal?` and rejects truthy-but-not-`#t` values. Every subagent after Phase 2 was briefed on the pattern; they used `(test-assert (member ...))` instead. Recurrence risk in future plans — worth documenting in a project-level "plan authoring checklist".
+2. **`symbol-append` not in Wile stdlib** (Phase 3). Plan's `make-ac-theory` helper used it. Subagent worked around with a local `sym-append` via `string-append` + `string->symbol`.
+3. **Aggregator test's placeholder comparator** (Phase 6). Plan template used `(lambda (a b) 0)` as the `sexp-term-protocol` comparator. This collapsed distinct unifiers into duplicates, breaking `test 1 (length ...)`. Subagent substituted a real symbol-aware comparator and relaxed the assertion to `> 0` (visibility check, not unifier-count check).
+
+### Open Questions
+
+Each of these was surfaced during implementation but deferred. Call these out before the next revision of this library.
+
+1. **Full Stickel with non-unit multiplicities.** Current `ac-unify` handles only 0/1 basis multiplicities (bipartite matching). Non-unit cases cover equations like `x + y =AC a + a + b + b` where `x` binds to `(+ a b)` — multiplicity 2 in the Diophantine basis. No workspace consumer currently needs this; the follow-up plan captures it as gated on benchmark evidence from wile-goast's actual Go AST inputs.
+
+2. **Matrix-permanent prune — rework or abandon?** The 10.6× regression had two concrete causes: (a) `(wile algebra matrix)`'s `matrix-permanent` enumerates all n! permutations without short-circuiting on boolean semiring; (b) `match-ac` recurses, paying O(mn) matrix-construction cost per call. A specialized short-circuiting permanent in the matrix library would address (a). For (b), the prune would need to run only at top-level entry. Open: is the engineering effort justified when typical wile-goast AC patterns are small (2–5 operands)?
+
+3. **`flatten-ac` exposed "for testing"** — code smell. Options: (i) rewrite the test as black-box over `ac-match` (preferable but tests specific algorithmic behavior); (ii) commit to `flatten-ac` as a public export with a contract ("collapse nested (op …) — proto-agnostic semantics"). Both have merit. Decide on next pass.
+
+4. **`deduplicate-substitutions` as a public export?** Added during Phase 5 Task 5.3 to collapse duplicate unifiers that arise from permutation enumeration over nonlinear patterns (`x+x =AC a+a` yields `{x↦a}` from both permutations). Consumers building their own CSUs from multiple sources might want it. Currently internal.
+
+5. **Substitution representation — alist vs. hashtable crossover.** Alist works at all tested sizes. When does a real consumer's `substitution-lookup` profile justify swapping to a hashtable-backed representation? Phase 2 subagent flagged `substitution-compose` as O(n²) over the accumulator; acceptable for v1 but a latent concern.
+
+6. **Sort/type constraints on `<pattern-var>`.** Design deferred sort as a field because check semantics weren't specified. Maude/OBJ precedent uses a symbol sort lattice with a compatibility check via subtype. Open: symbol sort, predicate, or term-protocol extension (`term-sort`)? Which is the minimum surface that supports wile-goast's typed Go AST patterns?
+
+7. **`diophantine-basis` performance.** Contejean–Devie BFS with `append`-extended frontier and `O(|emitted| × (m+n))` domination check. Fine at Phase 2 test sizes. No consumer is currently driving it hard; open whether a faster frontier (deque/priority queue) is worth the complexity before a consumer emerges.
+
+8. **Test coverage gaps at 29 groups.** Plan aimed at ~47; shipped 29. Honest cumulative coverage is good on the happy path but thin in two areas: (a) AC+AC nested operators (only one test covers `+` AND `*` both AC); (b) very large operand counts (>8) — not a correctness concern but performance regressions could slip past. Add a benchmark suite separate from unit tests if a performance-critical consumer lands.
+
+### Design Tradeoffs (as realized)
+
+1. **Matrix-library dependency, rejected in practice.** The design argued that `(wile algebra matrix)` would "cash out §5.1's investment" via boolean-permanent feasibility pruning. The argument was aesthetically clean but empirically wrong — the matrix library's `matrix-permanent` isn't short-circuiting over booleans, and the recursion structure of `match-ac` makes per-call matrix construction a pessimization. Goal #4 (performance via proven shape) was correctly applied: the speculative optimization was withdrawn when benchmarks refuted it. Net result: library has no runtime dependency on `(wile algebra matrix)`.
+
+2. **0/1 Stickel vs. full basis-multiplicity enumeration.** Chose simplicity. Covers every tested CSU case. Full multiplicity handling would add ~50 LOC and significant case analysis complexity with no current consumer. Goal #2 (robust) favored shipping honest capability over overclaiming completeness — the Future-extensions entry explicitly documents the gap.
+
+3. **Bipartite permutation enumeration vs. literal Diophantine-basis reconstruction inside `ac-unify`.** Chose mechanically simpler equivalent. The 0/1 Stickel case *is* a bipartite matching; enumerating permutations and using `substitution-compose`'s conflict detection is isomorphic to reconstructing from the Diophantine basis but avoids the intermediate-data-structure round trip. Consequence: `diophantine-basis` is exported for external consumers (Petri nets, integer programming) but not used by `ac-unify` itself. Goal #1 (broadest application) validates the independent publication.
+
+4. **Direct permutation enumeration inside `match-ac` vs. pure Eker decomposition.** Kept Eker's greedy ground/bound-peeling (correctness + efficiency on common cases) but used full permutation enumeration at the combinatorial heart rather than bipartite matrix feasibility. Tradeoff: simpler code, correctness-verifiable by inspection, no runtime dependency on matrix library. Performance on high-arity patterns would benefit from proper bipartite pruning — which we've documented as open question #2.
+
+5. **Plan specs as design intent, not implementation truth.** Two bugs in the plan (`test #t (member ...)`, literal Stickel predicate) would have blocked faithful implementation. Subagents correctly treated the plan as design intent and deviated to make the stated behavior work — documenting each deviation. Principle surfaced: an implementation plan's *test expectations* are the source of truth; the *code sketches* are hints.
+
+6. **Test-count target as aspirational.** Plan's ~47 was derived from per-layer task counts. Actual coverage at 29 groups is lower but honest — every group tests distinct behavior. Padding with near-duplicate cases would have violated goal #5 (brevity). The gap is documented as a real coverage-gap question for future passes.
