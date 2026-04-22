@@ -33,6 +33,34 @@ Keywords: substitution, lookup, unification"
        (cdar xs))
       (else (loop (cdr xs))))))
 
+(define (substitution-compose s1 s2)
+  "Merge two substitutions. Returns a new <substitution> if bindings are
+compatible, #f on conflict (same var bound to term-unequal values).
+Does NOT perform occurs-check on binding targets; that is the caller's
+responsibility via substitution-apply.
+
+Parameters:
+  s1 : <substitution>
+  s2 : <substitution>
+Returns: <substitution> | #f
+Category: algebra
+Keywords: substitution, compose, merge, unification"
+  (let loop ((xs (substitution-bindings s2))
+             (acc (substitution-bindings s1)))
+    (cond
+      ((null? xs) (make-substitution acc))
+      (else
+       (let* ((pair (car xs))
+              (var (car pair))
+              (val (cdr pair))
+              (existing (substitution-lookup (make-substitution acc) var)))
+         (cond
+           ((not existing)
+            (loop (cdr xs) (cons pair acc)))
+           ((equal? existing val)
+            (loop (cdr xs) acc))
+           (else #f)))))))
+
 (define (parse-pattern expr)
   "Convert EXPR from sexpr with ?-prefix convention to a pattern using
 <pattern-var> records. Symbols starting with #\\? become pattern variables;

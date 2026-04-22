@@ -8,6 +8,7 @@
     ;; Substitutions
     make-substitution substitution? substitution-bindings
     empty-substitution
-    substitution-lookup)
+    substitution-lookup
+    substitution-compose)
   (import (scheme base))
   (include "unification.scm"))

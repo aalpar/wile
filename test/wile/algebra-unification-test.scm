@@ -48,4 +48,20 @@
     (test #f (substitution-lookup s (make-pattern-var 'z)))
     (test #f (substitution-lookup empty-substitution vx))))
 
+(test-group "substitution-compose: non-conflicting and conflicting"
+  (let* ((vx (make-pattern-var 'x))
+         (vy (make-pattern-var 'y))
+         (s1 (make-substitution (list (cons vx 1))))
+         (s2 (make-substitution (list (cons vy 2))))
+         (s3 (make-substitution (list (cons vx 99)))))
+    ;; Non-conflicting compose: union of bindings
+    (let ((merged (substitution-compose s1 s2)))
+      (test 1 (substitution-lookup merged vx))
+      (test 2 (substitution-lookup merged vy)))
+    ;; Conflicting compose: x↦1 vs x↦99 → #f
+    (test #f (substitution-compose s1 s3))
+    ;; Empty cases
+    (test s1 (substitution-compose s1 empty-substitution))
+    (test s1 (substitution-compose empty-substitution s1))))
+
 (test-end "unification")
