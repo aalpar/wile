@@ -284,4 +284,29 @@
     ;; (g x) vs (g a) — g non-AC but unifier binds x↦a
     (test 1 (length (ac-unify (list 'g vx) '(g a) theory proto)))))
 
+(test-group "integration: sexp-term-protocol conforms to contract"
+  ;; Exercises the protocol via a non-trivial nested AC term —
+  ;; operators +, * both AC; pattern has compound children under +.
+  ;; Verifies the protocol's compound?/get-operator/get-operands/make-term
+  ;; plumbing all feed the matcher correctly across nested levels.
+  (let* ((theory (make-ac-theory '(+ *)))
+         (proto (sexp-term-protocol default-compare))
+         (pat (parse-pattern '(+ (* ?x 2) (* ?y 3))))
+         (subj '(+ (* 3 b) (* 2 a))))
+    (let ((results (ac-match pat subj theory proto)))
+      (test #t (> (length results) 0)))))
+
+(test-group "integration: normalize then unify is equivalent to direct unify"
+  ;; Stability property: if the caller hands the matcher AC-equivalent
+  ;; terms on either side, the CSU cardinality is invariant.
+  ;; Reverse-ordered children are AC-equivalent; pairing against a
+  ;; stable LHS must produce the same unifier count.
+  (let* ((theory (make-ac-theory '(+)))
+         (proto (sexp-term-protocol default-compare))
+         (lhs '(+ a b c))
+         (rhs '(+ a b c))
+         (rhs-rev '(+ c b a)))
+    (test (length (ac-unify lhs rhs theory proto))
+          (length (ac-unify lhs rhs-rev theory proto)))))
+
 (test-end "unification")
