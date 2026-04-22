@@ -59,6 +59,15 @@
     (test #t (finite-group? Z3))
     (test #t (finitely-generated-group? Z3))))
 
+(test-group "trivial-group"
+  (let ((T (trivial-group)))
+    (test 1 (group-order T))
+    (test #t (finite-group? T))
+    (test (group-identity T)
+          (group-op T (group-identity T) (group-identity T)))
+    (test '() (group-generators T))
+    (test '(e) (group-elements T))))
+
 (test-group "backward compatibility — 3-arg make-group"
   (let ((Z (make-group + 0 -)))
     (test #t (group? Z))

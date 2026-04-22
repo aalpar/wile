@@ -48,6 +48,23 @@
   "Return #t if group G carries a generating set.\n\nParameters:\n  G : any\nReturns: boolean\nCategory: algebra\nKeywords: finitely generated, generators"
   (and (group-generators G) #t))
 
+;;; -- §5.4 preset groups ---------------------------------------------------
+
+(define %the-trivial-group
+  (make-group
+    (lambda (a b) 'e)
+    'e
+    (lambda (g) 'e)
+    (cons 'element? (lambda (x) (eq? x 'e)))
+    (cons 'setoid (eqv-setoid))
+    (cons 'order 1)
+    (cons 'elements '(e))
+    (cons 'generators '())))
+
+(define (trivial-group)
+  "Return the trivial group — the one-element group with element 'e.\nThe returned record is cached: (eq? (trivial-group) (trivial-group)) is #t.\n\nExamples:\n  (group-order (trivial-group))  => 1\n\nReturns: any\nCategory: algebra\nKeywords: trivial, unit group, one-element group\n\nSee also: `cyclic-group', `symmetric-group'."
+  %the-trivial-group)
+
 (define (group-op G a b)
   "Apply group G's binary operation to A and B.\n\nExamples:\n  (let ((G (make-group + 0 -))) (group-op G 2 3))  => 5\n\nParameters:\n  G : any\n  a : any\n  b : any\nReturns: any\nCategory: algebra\nKeywords: binary operation, group operation, combine, oplus, composition"
   ((group-op-fn G) a b))

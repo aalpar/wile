@@ -7,8 +7,11 @@
           ;; §5.4 — extended introspection
           group-element? group-setoid group-equal?
           group-order group-elements group-generators
-          finite-group? finitely-generated-group?)
+          finite-group? finitely-generated-group?
+          ;; §5.4 — presets
+          trivial-group)
   (import (scheme base)
+          (srfi 1)
           (wile algebra monoid)
           (wile algebra setoid))
   (include "group.scm"))
