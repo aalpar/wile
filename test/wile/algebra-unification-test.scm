@@ -210,4 +210,9 @@
            (pat (parse-pattern '(+ (* ?x 2) ?y))))
       (test #t (> (length (ac-match pat '(+ (* 2 a) b) theory-both proto)) 0)))))
 
+(test-group "ac-match: argument errors"
+  (let ((proto (sexp-term-protocol default-compare)))
+    (test-error (ac-match '(+ a b) '(+ a b) 'not-a-theory proto))
+    (test-error (ac-match '(+ a b) '(+ a b) (make-theory '() '()) 'not-a-proto))))
+
 (test-end "unification")
