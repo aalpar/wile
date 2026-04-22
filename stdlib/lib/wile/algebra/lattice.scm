@@ -481,6 +481,172 @@
            'fix "pass (cons 'elements LIST) to make-lattice"))
   (filter (lambda (x) (meet-irreducible? L x)) (lattice-elements L)))
 
+;; ─── §5.5 Distributivity / modularity ────────
+;;
+;; `distributive?` tests ∀ a,b,c: a ⋀ (b ⋁ c) = (a ⋀ b) ⋁ (a ⋀ c)
+;; `modular?`      tests ∀ a,b,c with a ≤ c: a ⋁ (b ⋀ c) = (a ⋁ b) ⋀ c
+;;
+;; Both do exhaustive axiom check on (lattice-elements L) using the
+;; lattice's setoid for equality, O(|L|³). Early exit on first
+;; violating triple. Matches GAP / Sage convention (axiom check, not
+;; forbidden-sublattice structural check — same correctness, ~|L|²
+;; faster, no subset enumeration).
+;;
+;; `distributive?` implies `modular?`; the converse is false
+;; (M3 is modular, not distributive — (diamond-lattice 3) witnesses
+;; this). Independent checks keep diagnostics honest: a #f from one
+;; does not short-circuit the other.
+
+(define (%distributive-triple-axiom? L a b c)
+  (let ((eq  (lattice-setoid L))
+        (lhs (lattice-meet L a (lattice-join L b c)))
+        (rhs (lattice-join L (lattice-meet L a b)
+                              (lattice-meet L a c))))
+    (setoid-equiv? eq lhs rhs)))
+
+(define (%modular-triple-axiom? L a b c)
+  ;; Precondition: a ≤ c. Returns #t when the modular law holds on
+  ;; (a, b, c).
+  (let ((eq  (lattice-setoid L))
+        (lhs (lattice-join L a (lattice-meet L b c)))
+        (rhs (lattice-meet L (lattice-join L a b) c)))
+    (setoid-equiv? eq lhs rhs)))
+
+(define (distributive? L)
+  "Return #t if finite lattice L satisfies the distributive law\na ⋀ (b ⋁ c) = (a ⋀ b) ⋁ (a ⋀ c) for all triples.\n\nExhaustive axiom check over (lattice-elements L), using\n(lattice-setoid L) for equality. Cost: O(|L|³). Returns #t on\nsuccess or #f on the first violating triple (early exit).\n\nRequires a finite lattice. distributive? implies modular?; the\nconverse is false — see M3 = (diamond-lattice 3) for a modular\nbut not distributive lattice.\n\nExamples:\n  (distributive? (chain-lattice 5))     => #t\n  (distributive? (boolean-lattice 3))   => #t\n  (distributive? (diamond-lattice 3))   => #f  (M3)\n  (distributive? (pentagon-lattice))    => #f  (N5)\n\nParameters:\n  L : lattice\nReturns: boolean\nCategory: algebra\nKeywords: distributive, lattice axiom, Birkhoff, distributivity, canonical lattice\n\nSee also: `modular?', `validate-distributive-lattice'."
+  (unless (finite-lattice? L)
+    (error "distributive?: requires finite lattice (elements enumerated)"
+           'fix "pass (cons 'elements LIST) to make-lattice"))
+  (let ((elts (lattice-elements L)))
+    (let outer ((as elts))
+      (cond
+        ((null? as) #t)
+        (else
+         (let middle ((bs elts))
+           (cond
+             ((null? bs) (outer (cdr as)))
+             (else
+              (let inner ((cs elts))
+                (cond
+                  ((null? cs) (middle (cdr bs)))
+                  ((%distributive-triple-axiom? L (car as) (car bs) (car cs))
+                   (inner (cdr cs)))
+                  (else #f)))))))))))
+
+(define (modular? L)
+  "Return #t if finite lattice L satisfies the modular law\na ⋁ (b ⋀ c) = (a ⋁ b) ⋀ c for every triple with a ≤ c.\n\nExhaustive axiom check on qualifying triples, O(|L|³) worst case\n(filter reduces the constant factor). Requires a finite lattice.\n\nEvery distributive lattice is modular; the pentagon (N_5) is the\ncanonical non-modular lattice (join/meet of a with b,c depends on\norder of operations). M_3 is modular but not distributive.\n\nExamples:\n  (modular? (chain-lattice 5))      => #t\n  (modular? (diamond-lattice 3))    => #t  (M3)\n  (modular? (pentagon-lattice))     => #f  (N5)\n\nParameters:\n  L : lattice\nReturns: boolean\nCategory: algebra\nKeywords: modular, lattice axiom, Dedekind, modularity, canonical lattice\n\nSee also: `distributive?', `validate-modular-lattice'."
+  (unless (finite-lattice? L)
+    (error "modular?: requires finite lattice (elements enumerated)"
+           'fix "pass (cons 'elements LIST) to make-lattice"))
+  (let ((elts (lattice-elements L)))
+    (let outer ((as elts))
+      (cond
+        ((null? as) #t)
+        (else
+         (let middle ((bs elts))
+           (cond
+             ((null? bs) (outer (cdr as)))
+             (else
+              (let inner ((cs elts))
+                (cond
+                  ((null? cs) (middle (cdr bs)))
+                  ((not (lattice-leq? L (car as) (car cs)))
+                   (inner (cdr cs)))
+                  ((%modular-triple-axiom? L (car as) (car bs) (car cs))
+                   (inner (cdr cs)))
+                  (else #f)))))))))))
+
+;; Sample-based validators — same-shape return as validate-group:
+;;   #t if no violations; list of (violation-type args...) entries
+;;   otherwise. Each entry shape: (not-distributive a b c lhs rhs) or
+;;   (not-modular a b c lhs rhs). Useful for:
+;;     - spot-checking tier-3 lattices (where distributive? is not
+;;       applicable because no element enumeration exists),
+;;     - regression-guarding expensive lattices,
+;;     - teaching / debugging.
+
+(define (%validate-law-lattice setoid L samples triple-predicate violation-tag)
+  (let ((violations '()))
+    (define (fail! a b c)
+      (set! violations
+            (cons (list violation-tag a b c
+                        ;; record lhs and rhs for diagnostics
+                        (lattice-meet L a (lattice-join L b c))
+                        (lattice-join L (lattice-meet L a b)
+                                        (lattice-meet L a c)))
+                  violations)))
+    (for-each
+      (lambda (a)
+        (for-each
+          (lambda (b)
+            (for-each
+              (lambda (c)
+                (unless (triple-predicate setoid L a b c)
+                  (fail! a b c)))
+              samples))
+          samples))
+      samples)
+    (if (null? violations) #t (reverse violations))))
+
+(define (%distributive-triple-axiom-with-setoid? setoid L a b c)
+  (let ((lhs (lattice-meet L a (lattice-join L b c)))
+        (rhs (lattice-join L (lattice-meet L a b)
+                              (lattice-meet L a c))))
+    (setoid-equiv? setoid lhs rhs)))
+
+(define (%modular-triple-axiom-with-setoid? setoid L a b c)
+  ;; Unlike `modular?`, validators do NOT filter on a ≤ c — they
+  ;; report every a,b,c where the modular law fails, preserving the
+  ;; same triple-cardinality as the distributive validator. When
+  ;; ¬(a ≤ c), the law is vacuous (true) and contributes no
+  ;; violation, by the filter below.
+  (cond
+    ((not (lattice-leq? L a c)) #t)
+    (else
+     (let ((lhs (lattice-join L a (lattice-meet L b c)))
+           (rhs (lattice-meet L (lattice-join L a b) c)))
+       (setoid-equiv? setoid lhs rhs)))))
+
+(define (validate-distributive-lattice L samples)
+  "Spot-check lattice L's distributive axiom over every triple in SAMPLES.\nUses L's setoid for equality. Returns #t on success or a list of\n(not-distributive a b c lhs rhs) entries naming the first violations.\nSampling cost: O(|samples|³).\n\nExamples:\n  (validate-distributive-lattice (pentagon-lattice) '(bot a b c top))\n    => ((not-distributive a b c lhs rhs) ...)\n\nParameters:\n  L : lattice\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: distributive, validation, axiom, spot check, samples\n\nSee also: `distributive?', `validate-distributive-lattice/setoid'."
+  (%validate-law-lattice (lattice-setoid L) L samples
+                         %distributive-triple-axiom-with-setoid?
+                         'not-distributive))
+
+(define (validate-distributive-lattice/setoid L S samples)
+  "Spot-check L's distributive axiom using SETOID S for equality.\nOtherwise identical to `validate-distributive-lattice'. Useful when\nthe lattice's carrier equality is non-default (e.g. numeric, string,\nor a custom quotient).\n\nExamples:\n  (validate-distributive-lattice/setoid\n    (chain-lattice 4) (numeric-setoid) '(0 1 2 3))  => #t\n\nParameters:\n  L : lattice\n  setoid : setoid\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: distributive, validation, setoid, axiom, spot check\n\nSee also: `validate-distributive-lattice'."
+  (%validate-law-lattice S L samples
+                         %distributive-triple-axiom-with-setoid?
+                         'not-distributive))
+
+(define (%validate-modular-impl setoid L samples)
+  (let ((violations '()))
+    (for-each
+      (lambda (a)
+        (for-each
+          (lambda (b)
+            (for-each
+              (lambda (c)
+                (when (lattice-leq? L a c)
+                  (unless (%modular-triple-axiom-with-setoid? setoid L a b c)
+                    (let ((lhs (lattice-join L a (lattice-meet L b c)))
+                          (rhs (lattice-meet L (lattice-join L a b) c)))
+                      (set! violations
+                            (cons (list 'not-modular a b c lhs rhs)
+                                  violations))))))
+              samples))
+          samples))
+      samples)
+    (if (null? violations) #t (reverse violations))))
+
+(define (validate-modular-lattice L samples)
+  "Spot-check lattice L's modular axiom over triples (a,b,c) with a ≤ c.\nUses L's setoid. Returns #t on success or a list of\n(not-modular a b c lhs rhs) entries.\n\nExamples:\n  (validate-modular-lattice (pentagon-lattice) '(bot a b c top))\n    => ((not-modular ...) ...)\n\nParameters:\n  L : lattice\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: modular, validation, axiom, spot check, Dedekind\n\nSee also: `modular?', `validate-modular-lattice/setoid'."
+  (%validate-modular-impl (lattice-setoid L) L samples))
+
+(define (validate-modular-lattice/setoid L S samples)
+  "Spot-check L's modular axiom using SETOID S for equality.\nOtherwise identical to `validate-modular-lattice'.\n\nParameters:\n  L : lattice\n  setoid : setoid\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: modular, validation, setoid, Dedekind, axiom\n\nSee also: `validate-modular-lattice'."
+  (%validate-modular-impl S L samples))
+
 ;; ─── Validation ──────────────────────────────
 
 (define (validate-lattice L samples)

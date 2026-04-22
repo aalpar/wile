@@ -16,7 +16,11 @@
           diamond-lattice pentagon-lattice
           ;; §5.5 — irreducibles
           join-irreducibles meet-irreducibles
-          join-irreducible? meet-irreducible?)
+          join-irreducible? meet-irreducible?
+          ;; §5.5 — distributivity and modularity
+          distributive? modular?
+          validate-distributive-lattice validate-distributive-lattice/setoid
+          validate-modular-lattice     validate-modular-lattice/setoid)
   (import (scheme base)
           (srfi 1)
           (wile algebra order)

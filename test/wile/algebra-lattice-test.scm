@@ -288,5 +288,55 @@
   (test-error (join-irreducibles (make-lattice max min 0 10 <=)))
   (test-error (meet-irreducibles (make-lattice max min 0 10 <=))))
 
+;; ─── §5.5 Phase 5: distributive? / modular? / validators ─────────
+
+(test-group "distributive?"
+  (test #t (distributive? (chain-lattice 5)))
+  (test #t (distributive? (boolean-lattice 3)))
+  (test #f (distributive? (diamond-lattice 3)))
+  (test #f (distributive? (pentagon-lattice))))
+
+(test-group "distributive? preconditions"
+  (test-error (distributive? (make-lattice max min 0 10 <=))))
+
+(test-group "modular?"
+  (test #t (modular? (chain-lattice 5)))
+  (test #t (modular? (boolean-lattice 3)))
+  (test #t (modular? (diamond-lattice 3)))   ;; M3 is modular
+  (test #f (modular? (pentagon-lattice))))   ;; N5 is not
+
+(test-group "modular? preconditions"
+  (test-error (modular? (make-lattice max min 0 10 <=))))
+
+(test-group "validate-distributive-lattice on pentagon — finds violation"
+  (let ((violations (validate-distributive-lattice
+                     (pentagon-lattice)
+                     '(bot a b c top))))
+    (test #f (eq? #t violations))
+    (test #t (and (list? violations) (positive? (length violations))))
+    (test #t (every (lambda (v) (eq? (car v) 'not-distributive)) violations))))
+
+(test-group "validate-distributive-lattice on chain — #t"
+  (test #t (validate-distributive-lattice (chain-lattice 4) '(0 1 2 3))))
+
+(test-group "validate-modular-lattice on pentagon — finds violation"
+  (let ((violations (validate-modular-lattice
+                     (pentagon-lattice)
+                     '(bot a b c top))))
+    (test #f (eq? #t violations))
+    (test #t (every (lambda (v) (eq? (car v) 'not-modular)) violations))))
+
+(test-group "validate-modular-lattice on M3 — #t"
+  (let ((elts (lattice-elements (diamond-lattice 3))))
+    (test #t (validate-modular-lattice (diamond-lattice 3) elts))))
+
+(test-group "validate-*/setoid variant uses supplied setoid"
+  ;; When lattice-setoid is default equal? but elements are numbers,
+  ;; the /setoid variant with numeric-setoid gives the same answer.
+  (test #t (validate-distributive-lattice/setoid
+             (chain-lattice 4) (numeric-setoid) '(0 1 2 3)))
+  (test #t (validate-modular-lattice/setoid
+             (chain-lattice 4) (numeric-setoid) '(0 1 2 3))))
+
 (test-end)
 (test-exit)
