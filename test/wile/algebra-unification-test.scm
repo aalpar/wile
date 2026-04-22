@@ -111,4 +111,10 @@
     (test 1 (length basis))
     (test '((3) . (2)) (car basis))))
 
+(test-group "diophantine-basis: errors on bad input"
+  (test-error (diophantine-basis '(-1) '(1)))     ; negative
+  (test-error (diophantine-basis '(1) '(2.5)))    ; non-integer
+  (test-error (diophantine-basis '() '(1)))       ; empty a
+  (test-error (diophantine-basis '(1) '())))      ; empty b
+
 (test-end "unification")
