@@ -104,6 +104,26 @@
   (test 1 (length (group-generators (symmetric-group 2))))
   (test 2 (length (group-generators (symmetric-group 3)))))
 
+(test-group "product-group"
+  (let ((Z2xZ3 (product-group (cyclic-group 2) (cyclic-group 3))))
+    (test 6 (group-order Z2xZ3))
+    (test #t (equal? '(0 0) (group-identity Z2xZ3)))
+    (test '(1 0) (group-op Z2xZ3 '(1 2) '(0 1)))
+    (test #t (every (lambda (e) (and (list? e) (= (length e) 2)))
+                    (group-elements Z2xZ3)))
+    (test 6 (length (group-elements Z2xZ3)))))
+
+(test-group "product-group/edge-cases"
+  (test #t (eq? (trivial-group) (product-group)))
+  (let ((Z3 (cyclic-group 3)))
+    (test #t (eq? Z3 (product-group Z3))))
+  (let ((triple (product-group (cyclic-group 2)
+                               (cyclic-group 3)
+                               (cyclic-group 5))))
+    (test 30 (group-order triple))
+    (test #t (equal? '(0 0 0) (group-identity triple)))
+    (test 3 (length (group-generators triple)))))
+
 (test-group "backward compatibility — 3-arg make-group"
   (let ((Z (make-group + 0 -)))
     (test #t (group? Z))

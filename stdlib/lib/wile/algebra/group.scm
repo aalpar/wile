@@ -141,6 +141,28 @@
     (cons 'elements (iota n))
     (cons 'generators '(1))))
 
+;; Internal — product-group helpers.
+
+(define (%inject-at-index g i identities)
+  ;; Return a list of length (length identities) with g at position i and
+  ;; (list-ref identities j) at every other position j.
+  (let loop ((j 0) (ids identities) (acc '()))
+    (cond
+      ((null? ids) (reverse acc))
+      ((= j i)     (loop (+ j 1) (cdr ids) (cons g acc)))
+      (else        (loop (+ j 1) (cdr ids) (cons (car ids) acc))))))
+
+(define (%cartesian-product lists)
+  ;; Cartesian product of a list of lists, preserving lex order of the
+  ;; input. Result is a list of proper lists of length (length lists).
+  (cond
+    ((null? lists) '(()))
+    (else
+     (let ((tails (%cartesian-product (cdr lists))))
+       (apply append
+              (map (lambda (x) (map (lambda (t) (cons x t)) tails))
+                   (car lists)))))))
+
 (define (symmetric-group n)
   "Return the symmetric group S_n on {0, 1, ..., n-1}.\nElements are permutations represented as vectors of length N where v[i]\ngives the image of i. Composition is (p∘q)[i] = p[q[i]].\n\nFor n ≤ 1 the group is trivial; for n = 2 the single generator is the\ntransposition (0 1); for n ≥ 3 the generators are the transposition\n(0 1) together with the n-cycle (0 1 2 ... n-1).\n\nExamples:\n  (group-order (symmetric-group 3))      => 6\n  (group-identity (symmetric-group 3))   => #(0 1 2)\n\nParameters:\n  n : non-negative integer\nReturns: any\nCategory: algebra\nKeywords: symmetric group, permutation group, S_n, permutations\n\nSee also: `cyclic-group', `trivial-group'."
   (unless (and (integer? n) (>= n 0))
@@ -170,6 +192,51 @@
       (cons 'order (%factorial n))
       (cons 'elements all)
       (cons 'generators gens))))
+
+(define (product-group . groups)
+  "Return the direct product of GROUPS. Variadic: accepts 0 or more groups.\nElements are proper lists of length n where the i-th component is drawn\nfrom the i-th input group. Order, elements, and generators are derived\ncomponentwise when every input group carries them; otherwise the\ncorresponding field on the product is #f.\n\nSpecial cases:\n  (product-group)        => trivial-group\n  (product-group G)      => G unchanged (eq?)\n\nExamples:\n  (group-order (product-group (cyclic-group 2) (cyclic-group 3)))  => 6\n  (group-op (product-group (cyclic-group 2) (cyclic-group 3))\n            '(1 2) '(0 1))                                          => (1 0)\n\nParameters:\n  groups : list of groups (variadic)\nReturns: any\nCategory: algebra\nKeywords: direct product, cartesian product, componentwise group\n\nSee also: `trivial-group', `cyclic-group'."
+  (cond
+    ((null? groups) (trivial-group))
+    ((null? (cdr groups)) (car groups))
+    (else
+     (let* ((n          (length groups))
+            (identities (map group-identity groups))
+            (elts-pred?   (lambda (elt)
+                            (and (list? elt)
+                                 (= (length elt) n)
+                                 (every (lambda (G e)
+                                          (let ((p (group-element? G)))
+                                            (or (not p) (p e))))
+                                        groups elt))))
+            (inv-fn     (lambda (elt)
+                          (map (lambda (G e) ((group-inverse-fn G) e))
+                               groups elt)))
+            (op-fn      (lambda (a b)
+                          (map (lambda (G e1 e2) ((group-op-fn G) e1 e2))
+                               groups a b)))
+            (orders     (map group-order groups))
+            (all-elts   (map group-elements groups))
+            (all-gens   (map group-generators groups))
+            (order      (and (every (lambda (o) o) orders)
+                             (apply * orders)))
+            (elements   (and (every (lambda (e) e) all-elts)
+                             (%cartesian-product all-elts)))
+            (generators (and (every (lambda (g) g) all-gens)
+                             (apply append
+                                    (map (lambda (i gens-i)
+                                           (map (lambda (g)
+                                                  (%inject-at-index g i identities))
+                                                gens-i))
+                                         (iota n)
+                                         all-gens)))))
+       (make-group op-fn
+                   identities
+                   inv-fn
+                   (cons 'element? elts-pred?)
+                   (cons 'setoid (default-setoid))
+                   (cons 'order order)
+                   (cons 'elements elements)
+                   (cons 'generators generators))))))
 
 (define (group-op G a b)
   "Apply group G's binary operation to A and B.\n\nExamples:\n  (let ((G (make-group + 0 -))) (group-op G 2 3))  => 5\n\nParameters:\n  G : any\n  a : any\n  b : any\nReturns: any\nCategory: algebra\nKeywords: binary operation, group operation, combine, oplus, composition"
