@@ -4,6 +4,9 @@
     ;; Pattern variables
     make-pattern-var pattern-var? pattern-var-name
     ;; Pattern parsing (?-convention sugar)
-    parse-pattern)
+    parse-pattern
+    ;; Substitutions
+    make-substitution substitution? substitution-bindings
+    empty-substitution)
   (import (scheme base))
   (include "unification.scm"))

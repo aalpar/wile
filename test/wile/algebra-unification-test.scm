@@ -29,4 +29,14 @@
   (let ((p (parse-pattern '(+ ?x ?x))))
     (test #t (eq? (cadr p) (caddr p)))))
 
+(test-group "substitution: construction and accessors"
+  (test #t (substitution? empty-substitution))
+  (test '() (substitution-bindings empty-substitution))
+  (let* ((vx (make-pattern-var 'x))
+         (s (make-substitution (list (cons vx 42)))))
+    (test #t (substitution? s))
+    (test '((x . 42))
+          (map (lambda (b) (cons (pattern-var-name (car b)) (cdr b)))
+               (substitution-bindings s)))))
+
 (test-end "unification")

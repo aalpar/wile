@@ -8,6 +8,13 @@
   pattern-var?
   (name pattern-var-name))
 
+(define-record-type <substitution>
+  (make-substitution bindings)
+  substitution?
+  (bindings substitution-bindings))
+
+(define empty-substitution (make-substitution '()))
+
 (define (parse-pattern expr)
   "Convert EXPR from sexpr with ?-prefix convention to a pattern using
 <pattern-var> records. Symbols starting with #\\? become pattern variables;
