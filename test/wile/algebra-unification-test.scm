@@ -148,4 +148,20 @@
     (test 1 (length (ac-match '(f a b) '(f a b) theory proto)))
     (test 0 (length (ac-match '(f a b) '(f b a) theory proto)))))
 
+(test-group "ac-match: single variable"
+  (let* ((theory (make-theory '() '()))
+         (proto (sexp-term-protocol default-compare))
+         (pat (parse-pattern '(f ?x ?y))))
+    (let ((results (ac-match pat '(f a b) theory proto)))
+      (test 1 (length results))
+      (let ((bs (substitution-bindings (car results))))
+        (test 2 (length bs))))))
+
+(test-group "ac-match: nonlinear ?x ?x"
+  (let* ((theory (make-theory '() '()))
+         (proto (sexp-term-protocol default-compare))
+         (pat (parse-pattern '(f ?x ?x))))
+    (test 1 (length (ac-match pat '(f a a) theory proto)))   ; match
+    (test 0 (length (ac-match pat '(f a b) theory proto))))) ; fail
+
 (test-end "unification")
