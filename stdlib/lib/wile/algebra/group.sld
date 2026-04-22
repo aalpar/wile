@@ -9,7 +9,7 @@
           group-order group-elements group-generators
           finite-group? finitely-generated-group?
           ;; §5.4 — presets
-          trivial-group)
+          trivial-group cyclic-group)
   (import (scheme base)
           (srfi 1)
           (wile algebra monoid)

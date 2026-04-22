@@ -65,6 +65,20 @@
   "Return the trivial group — the one-element group with element 'e.\nThe returned record is cached: (eq? (trivial-group) (trivial-group)) is #t.\n\nExamples:\n  (group-order (trivial-group))  => 1\n\nReturns: any\nCategory: algebra\nKeywords: trivial, unit group, one-element group\n\nSee also: `cyclic-group', `symmetric-group'."
   %the-trivial-group)
 
+(define (cyclic-group n)
+  "Return the cyclic group Z/nZ of order N — integers 0..n-1 under addition mod N.\nN must be a positive integer.\n\nExamples:\n  (group-op (cyclic-group 5) 2 4)       => 1\n  (group-inverse (cyclic-group 5) 2)    => 3\n  (group-generators (cyclic-group 5))   => (1)\n\nParameters:\n  n : integer\nReturns: any\nCategory: algebra\nKeywords: cyclic, Z mod n, modular arithmetic, rotation group\n\nSee also: `trivial-group', `symmetric-group'."
+  (unless (and (integer? n) (positive? n))
+    (error "cyclic-group: n must be a positive integer" n))
+  (make-group
+    (lambda (a b) (modulo (+ a b) n))
+    0
+    (lambda (k) (modulo (- n k) n))
+    (cons 'element? (lambda (k) (and (integer? k) (<= 0 k) (< k n))))
+    (cons 'setoid (numeric-setoid))
+    (cons 'order n)
+    (cons 'elements (iota n))
+    (cons 'generators '(1))))
+
 (define (group-op G a b)
   "Apply group G's binary operation to A and B.\n\nExamples:\n  (let ((G (make-group + 0 -))) (group-op G 2 3))  => 5\n\nParameters:\n  G : any\n  a : any\n  b : any\nReturns: any\nCategory: algebra\nKeywords: binary operation, group operation, combine, oplus, composition"
   ((group-op-fn G) a b))

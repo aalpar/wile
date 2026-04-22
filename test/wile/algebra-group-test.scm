@@ -68,6 +68,21 @@
     (test '() (group-generators T))
     (test '(e) (group-elements T))))
 
+(test-group "cyclic-group"
+  (let ((Z5 (cyclic-group 5)))
+    (test 5 (group-order Z5))
+    (test 1 (group-op Z5 2 4))
+    (test 3 (group-inverse Z5 2))
+    (test '(1) (group-generators Z5))
+    (test #t (finitely-generated-group? Z5))
+    (test #t (finite-group? Z5))
+    (test '(0 1 2 3 4) (group-elements Z5))))
+
+(test-group "cyclic-group/validation"
+  (test-error (cyclic-group 0))
+  (test-error (cyclic-group -1))
+  (test-error (cyclic-group 'not-an-integer)))
+
 (test-group "backward compatibility — 3-arg make-group"
   (let ((Z (make-group + 0 -)))
     (test #t (group? Z))
