@@ -179,7 +179,19 @@
     incidence-algebra-mu-cache
     zeta-function mobius-function
     incidence-convolve
-    mobius-inversion)
+    mobius-inversion
+    ;; AC-matching / AC-unification
+    make-pattern-var pattern-var? pattern-var-name
+    parse-pattern
+    make-substitution substitution? substitution-bindings
+    empty-substitution
+    substitution-lookup
+    substitution-compose
+    substitution-apply
+    diophantine-basis
+    ac-match
+    ac-unify
+    flatten-ac)
   (import (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice)
@@ -201,4 +213,5 @@
           (wile algebra interval)
           (wile algebra graph)
           (wile algebra matrix)
-          (wile algebra incidence)))
+          (wile algebra incidence)
+          (wile algebra unification)))
