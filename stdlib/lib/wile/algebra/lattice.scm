@@ -799,6 +799,20 @@
   ;; Shares logic with %validate-opts-keys but scoped for Birkhoff.
   (%validate-opts-keys site opts known))
 
+(define (free-distributive-lattice n)
+  "Construct the free bounded distributive lattice on N generators.\nIsomorphic to the lattice of monotone Boolean functions on {0,1}^N,\nequivalently to Downsets(B(n)) where B(n) is the Boolean lattice\n2^[n] viewed as a poset. Cardinality is the Dedekind number D(n):\n  D(0) = 2, D(1) = 3, D(2) = 6, D(3) = 20, D(4) = 168, D(5) = 7581.\n\nRaises for n ≥ 6; D(6) ≈ 7.8M elements is infeasible for in-process\nconstruction. Direct callers of `birkhoff-reconstruction' on a\nuser-supplied poset can opt into that cost.\n\nExamples:\n  (lattice-cardinality (free-distributive-lattice 2))  => 6\n  (lattice-cardinality (free-distributive-lattice 3))  => 20\n\nParameters:\n  n : exact non-negative integer, n ≤ 5\nReturns: lattice\nCategory: algebra\nKeywords: free distributive lattice, Dedekind number, Birkhoff, monotone boolean, FDL\n\nSee also: `birkhoff-reconstruction', `boolean-lattice'."
+  (unless (and (integer? n) (not (negative? n)))
+    (error "free-distributive-lattice: n must be a non-negative integer" n))
+  (when (>= n 6)
+    (error "free-distributive-lattice: n ≥ 6 infeasible (Dedekind number explodes)"
+           'n n '|D(6)| 7828354))
+  ;; FDL(n) = Downsets(B(n)), taking the WHOLE Boolean poset as the
+  ;; reconstruction domain. Do NOT take
+  ;; (birkhoff-representation (boolean-lattice n)) — that gives the
+  ;; n-element antichain J(B(n)) whose downsets reconstruct B(n)
+  ;; (cardinality 2^n), not FDL(n) (cardinality D(n)).
+  (birkhoff-reconstruction (lattice->locally-finite-poset (boolean-lattice n))))
+
 ;; ─── Validation ──────────────────────────────
 
 (define (validate-lattice L samples)

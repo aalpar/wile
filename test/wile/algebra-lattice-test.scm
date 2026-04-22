@@ -386,5 +386,25 @@
   (let ((P (make-locally-finite-poset <= (lambda (x y) '()))))
     (test-error (birkhoff-reconstruction P))))
 
+;; ─── §5.5 Phase 7: free-distributive-lattice ─────────────────────
+
+(test-group "free-distributive-lattice cardinality = Dedekind(n)"
+  ;; Dedekind numbers D(0..5): 2, 3, 6, 20, 168, 7581.
+  ;; D(5) is enabled; takes ~1.5s on reference hardware.
+  (test 2    (lattice-cardinality (free-distributive-lattice 0)))
+  (test 3    (lattice-cardinality (free-distributive-lattice 1)))
+  (test 6    (lattice-cardinality (free-distributive-lattice 2)))
+  (test 20   (lattice-cardinality (free-distributive-lattice 3)))
+  (test 168  (lattice-cardinality (free-distributive-lattice 4)))
+  (test 7581 (lattice-cardinality (free-distributive-lattice 5))))
+
+(test-group "free-distributive-lattice is distributive"
+  (test #t (distributive? (free-distributive-lattice 2)))
+  (test #t (distributive? (free-distributive-lattice 3))))
+
+(test-group "free-distributive-lattice preconditions"
+  (test-error (free-distributive-lattice -1))
+  (test-error (free-distributive-lattice 6)))
+
 (test-end)
 (test-exit)
