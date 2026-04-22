@@ -1,9 +1,11 @@
 # Matrix library: sparse/dense open design questions
 
-**Status:** Design draft — not implemented. Surfaced by crosscheck review of
-PR #681 (`feat/algebra-matrix`) on 2026-04-20. Library investigation (gonum,
-SciPy, Julia, BLAS) added 2026-04-20; **Path D** in the Synthesis section
-below is the current proposed design.
+**Status:** **Implemented via Path D** (PRs #684–#691, follow-ups #695 + #696).
+Surfaced by crosscheck review of PR #681 (`feat/algebra-matrix`) on 2026-04-20.
+Library investigation (gonum, SciPy, Julia, BLAS) added 2026-04-20; the
+synthesis section below captures the chosen design. See `2026-04-21-matrix-
+path-d-impl.md` for the phase-by-phase record and post-implementation notes
+(N1–N9 crosscheck resolution).
 
 **Background:** `stdlib/lib/wile/algebra/matrix.scm` ships two matrix records —
 `<semiring-matrix>` (dense, row-major vector) and `<sparse-semiring-matrix>`

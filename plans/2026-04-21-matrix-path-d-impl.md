@@ -1,7 +1,7 @@
 +++
 title = "Implementation plan — Matrix Path D"
 date   = "2026-04-21"
-status = "Draft — all decisions resolved 2026-04-21; ready for implementation"
+status = "Shipped — P2–P10 merged via PRs #684–#691; follow-up fixes PRs #695 (attribution) and #696 (notables)"
 parent = "2026-04-20-matrix-sparse-dense-design.md"
 +++
 
@@ -436,3 +436,63 @@ For each op in `{power, closure, permanent}`:
   mul kernel, where scatter-accumulate infrastructure (coordinate-
   keyed hashtable or pre-sorted alist + linear merge) will already be
   in place. Copilot review on PR #687 raised this; deferred by design.
+
+---
+
+## Post-implementation notes (2026-04-21, crosscheck on `9e43e884..HEAD`)
+
+A five-lens crosscheck (code / errors / types / tests / consistency)
+surfaced two Critical and nine Notable findings. Resolution:
+
+### Critical — fixed in PR #695
+
+1. **`matrix-mul-check-operands` missing `op-name` and `(matrix? A/B)`
+   guards.** The helper diverged from `matrix-add-check-operands`;
+   `matrix-mul!(42, M)` surfaced as `"matrix-semiring: not a matrix"`
+   (wrong layer) and shape errors said `matrix-mul:` from the bang
+   form. Mirrored the add helper. Regression tests use
+   `guard + error-object-message` to pin exact attribution — `test-error`
+   would not have caught the attribution drift.
+
+2. **`matrix-dense-only-op` used raw dispatch symbol and hardcoded
+   "sparse" in error text.** Errors read `"power: ..."` instead of
+   `"matrix-power: ..."`; future non-dense reps would mis-attribute.
+   Now takes explicit `op-name`; unsupported-rep message uses
+   `(symbol->string tag)`. Conversion hint `(sparse->semiring-matrix M)`
+   was dropped from the error text (docstrings retain it as richer
+   user guidance).
+
+### Notables — addressed in PR #696
+
+- **N1 — property test closing `matrix-op-supported?` iff-loop.** New
+  test group asserts `predicate ↔ dispatch-success` for every
+  `(op, rep-combination)` pair. Catches drift between the result-rep
+  rule and kernel registrations.
+- **N2 — degenerate shape coverage.** New tests for 0×0, 1×1, 1×3×3×1
+  (rank-1 dot product), 2×1×1×2 (outer product) across polymorphic
+  add / mul / copy.
+- **N3 — sparse×sparse self-aliasing for `matrix-mul!`.** New tests
+  complement the dense OQ5 aliasing test.
+- **N4 — `*matrix-ops*` dual protocol eliminated.** Pure-form marker
+  registrations removed (8 add/mul entries + 2 copy entries).
+  `matrix-op-supported?` now derives capability from bang-form kernel
+  availability via the result-rep rule. One table, one value protocol.
+  This also dissolved N5 (the "rule in three places" concern);
+  residual duplication between the result-rep function and the bang
+  registrations is structurally irreducible without macro machinery.
+- **N6 — `matrix-allocate` kept as `case`.** N=2 reps doesn't pay for
+  registry indirection. TODO comment marks the rewrite trigger.
+- **N7 — `eq?`-only aliasing documented.** Comment at the `matrix-mul!`
+  aliasing guard names this a future-rep gate; when view-based /
+  shared-buffer reps land, introduce polymorphic `matrix-aliases?`.
+- **N8 — sparse `entries` invariant obligation documented.** Comment
+  at the record definition names the four invariants internal writers
+  must preserve; no validated setter wrapper (O(nnz) cost outweighs
+  discipline-enforcement value at 3 bang kernels).
+- **N9 — `.github/CLAUDE.md` updated.** Lived practice (PR numbers in
+  CHANGELOG entries) is now documented as acceptable; subject-lines
+  may be noun-led when scoping to a package/subsystem.
+
+### Deferred (no PR)
+
+None. All Notables resolved.

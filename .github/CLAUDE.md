@@ -187,8 +187,9 @@ Omit empty sections — only include categories that have entries for a given re
 
 - **Write for users, not developers.** "Fixed crash when reading empty port" not "Changed io.EOF handling in prim_read_write.go."
 - **One bullet per user-visible change.** Internal refactors don't get entries unless they change observable behavior.
-- **Start with a verb.** "Add", "Fix", "Remove", "Change" — not "Added support for..." (the section header already provides tense).
-- **No commit hashes or PR numbers in entries.** The version link at the bottom points to the full diff.
+- **Start with a verb when the subject is the change.** "Add", "Fix", "Remove", "Change". Noun-led subject lines are acceptable when scoping to a package or subsystem — e.g., starting with `` `(wile algebra matrix)` — new primitives ... `` reads more naturally than forcing a leading verb.
+- **No commit hashes in entries.** Commit hashes rot and add no navigation value (the version diff already covers them).
+- **PR numbers are optional but welcome.** `(#NNN)` or `(#NNN–#MMM)` trailing a bullet provides useful navigation for a small-team workflow; consistent across recent releases. Leave them off for trivial entries or when grouping many PRs would produce noise.
 - **Group related changes into a single entry** when they form a coherent feature (e.g., one entry for "Full numeric tower with exact/inexact distinction" rather than separate entries for Integer, Float, Rational, Complex).
 
 ### When to Update
