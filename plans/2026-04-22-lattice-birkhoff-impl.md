@@ -175,7 +175,7 @@ Convenience predicates `(join-irreducible? L x)` and `(meet-irreducible? L x)` r
 
 **How the poset's elements are obtained for enumeration:** v1 requires the input poset to expose elements via either (a) being constructed through `finite-set->locally-finite-poset` (which keeps the element list internally — but the shipped record does *not* currently expose this list) or (b) being supplied through a new optional `poset-elements` field on `<locally-finite-poset>`.
 
-**This is an open issue** — see Q13 below.
+**Resolved (Q13 = option (a)):** add an optional `elements` field to `<locally-finite-poset>`; `birkhoff-reconstruction P` reads it via `(lf-poset-elements P)` and raises if `#f`. See Q13 below for the full rationale.
 
 ### Q9: `validate-distributive-lattice` / `validate-modular-lattice` — **sample-based; `/setoid` variants**
 
@@ -218,25 +218,26 @@ This is its own implementation — stable matching itself is non-trivial (Gale-S
 
 ---
 
-## Open design questions (user-review requested before Phase 1)
+## Resolved follow-up questions (Q13–Q15, confirmed 2026-04-22)
 
-### Q13: How does `birkhoff-reconstruction` get the poset's element list?
+All three resolved as option (a). User confirmation 2026-04-22 (post-PR-700 review).
 
-The shipped `<locally-finite-poset>` record at `incidence.scm:17-21` has two fields: `leq?` and `interval`. It does **not** expose an element list directly. `birkhoff-reconstruction` needs to enumerate downsets, which requires knowing all poset elements.
+### Q13: `<locally-finite-poset>` element exposure — **option (a) resolved**
 
-Three options:
+Add an optional `elements` field to `<locally-finite-poset>` in `(wile algebra incidence)`. `finite-set->locally-finite-poset` populates the field automatically; hand-rolled constructors opt in via `(cons 'elements LIST)` in an options alist on `make-locally-finite-poset`. New accessor `lf-poset-elements` exported from `(wile algebra incidence)`.
 
-- **(a) Add an optional `elements` field to `<locally-finite-poset>`.** Record type extension in `(wile algebra incidence)`. Cleanest long-term. Backward-compatible (existing 2-field `make-locally-finite-poset` keeps working with `elements = #f`). Adds `lf-poset-elements` accessor.
-- **(b) Require caller to supply the element list as a second argument: `(birkhoff-reconstruction P elements)`.** Keeps `<locally-finite-poset>` untouched but asymmetric with `birkhoff-representation` which takes a single argument.
-- **(c) Synthesize the element list from `(interval P bottom top)` if `bottom`, `top` are known.** Requires caller to supply bottom/top — same problem deferred.
+**Alternatives rejected:**
 
-**Recommendation: option (a).** Edits one field into an existing record, gives Birkhoff a clean single-argument signature, makes `<locally-finite-poset>` more usable for other consumers (counting chains, antichain enumeration). The change is additive, not a break.
+- **(b) Asymmetric `(birkhoff-reconstruction P elements)`** — forces every caller to re-supply the element list; grows `birkhoff-reconstruction`'s arity for a concern that belongs on the poset record.
+- **(c) Derive via `(interval bottom top)`** — requires caller to supply bottom/top, same problem one level down.
 
-Cross-section: §5.5 touches `(wile algebra incidence)` under option (a), which means this plan also updates `incidence.sld`/`incidence.scm`. Scope expansion is minor (one optional field).
+**Consequences for this plan:**
 
-**Needs user decision before Phase 1.**
+- `(wile algebra incidence)` gains one optional field + one accessor. Scoped as Phase 2.
+- `birkhoff-reconstruction` has the clean single-argument signature `(birkhoff-reconstruction P)`.
+- Other consumers (antichain enumeration, chain counting, Möbius-over-all-pairs) gain the same access for free.
 
-### Q14: `lattice-cardinality` vs `lattice-size` naming
+### Q14: Cardinality naming — **option (a) `lattice-cardinality` resolved**
 
 §5.4's `group-order` meant `|G|`. For lattices, "order" is ambiguous — it can mean the poset ordering OR the cardinality. Standard usage:
 
@@ -244,23 +245,37 @@ Cross-section: §5.5 touches `(wile algebra incidence)` under option (a), which 
 - GAP: `Size(L)`
 - Grätzer/Davey-Priestley: "size of the lattice"
 
-**Recommendation: `lattice-cardinality`.** Unambiguous, matches Sage, avoids the `partial-order` word collision. Adds ~6 characters over `lattice-size`; acceptable for clarity.
+Use `lattice-cardinality` as the field name and accessor. Unambiguous; matches Sage; avoids the `partial-order` word collision. Adds ~6 characters vs `lattice-size`; acceptable for clarity.
 
-Accept "good-enough-different" from §5.4's `group-order` because the math literatures themselves differ — consistency with lattice-specific literature is more valuable than consistency with the sibling group library.
+**Deliberate asymmetry with §5.4:** the `group-order` / `lattice-cardinality` inconsistency is accepted because the math literatures themselves differ — consistency with lattice-specific literature is more valuable here than cross-family field-name symmetry. Document the choice in the `<lattice>` record's docstring.
 
-**Needs user decision before Phase 1.**
+### Q15: `free-distributive-lattice` feasibility cap — **option (a) n ≤ 5, smart downset enumerator resolved**
 
-### Q15: `free-distributive-lattice` n upper bound
+Dedekind numbers grow super-exponentially: `D(5) = 7581`, `D(6) ≈ 7.8M`, `D(7) ≈ 2.4 × 10¹²`. `free-distributive-lattice n` caps at n = 5; raises for n ≥ 6 with a diagnostic citing `dedekind(6) = 7828354`.
 
-Dedekind numbers grow super-exponentially: `D(5) = 7581`, `D(6) ≈ 7.8M`, `D(7) ≈ 2.4 × 10¹²`. Materializing `free-distributive-lattice 6` as an in-memory list of elements is ~60 MB (7.8M downset-tuples at ~8 bytes each). Practical v1 cap:
+**Implementation consequence:** the naive downset enumerator (for each subset of `P`, check downward-closure) is O(2^\|P\|) — infeasible for n = 5 because `B(5)` has 32 elements and 2^32 ≈ 4.3 billion subset candidates. The smart recursive enumerator is O(\|downsets(P)\|) = O(D(n)), feasible at n = 5:
 
-- **n ≤ 5** (7581 elements, ~60 KB) — comfortable
-- **n = 6** (7.8M elements, ~60 MB) — technically possible but slow; consumer would hit `fixpoint` or `distributive?` O(\|L\|³) costs long before the construction itself
-- **n ≥ 7** — infeasible
+    downsets(P) =
+      if P is empty: [empty-downset]
+      else:
+        let x = any maximal element of P
+        let P' = P minus x
+        let S = downsets(P')
+        S ∪ { D ∪ {x} : D ∈ S, predecessors(x) ⊆ D }
 
-**Recommendation:** `(free-distributive-lattice n)` raises for `n ≥ 6` in v1. Docstring cites Dedekind-number growth as the reason. If a consumer needs n=6, the escape hatch is explicit construction via `birkhoff-reconstruction` on a user-supplied poset.
+Phase 6 Task 6.1 ships this algorithm, not the naive one. Risk section #3 updated accordingly.
 
-**Needs user decision before Phase 1.**
+**Alternatives rejected:**
+
+- **(b) Cap at n ≤ 4** — forecloses the `free-distributive-lattice 5` case that serves as the canonical large-distributive test fixture; 168 vs 7581 elements is the difference between "trivial smoke test" and "exercises non-trivial Birkhoff paths".
+- **(c) No cap** — trusts caller to know they're asking for 7.8M elements; surprises downstream consumers.
+- **(d) Cap + timeout option** — adds a keyword argument for a case no known v1 consumer needs.
+
+If a future consumer needs n ≥ 6, the escape hatch is direct construction via `birkhoff-reconstruction` on a user-supplied poset — no library change required.
+
+---
+
+**All design questions (Q1–Q15) resolved.** Plan is ready to execute.
 
 ---
 
@@ -667,7 +682,7 @@ element list via (lf-poset-elements P)."
 (define (subset? a b) ...)
 ```
 
-Cost: O(2^\|P\|) for downset enumeration (every subset is a candidate), O(\|D\|) per set-op where D is a typical downset. Practical for \|P\| ≤ ~15 (32768 subsets); beyond that the lattice itself may not fit in memory. `free-distributive-lattice n` via `(birkhoff-reconstruction (antichain-poset n))` has \|L\| = Dedekind(n) which grows faster than 2ⁿ; the construction caps at n=5 per Q15.
+Cost: O(\|downsets(P)\|) per the smart recursive enumerator committed in Q15 — not the O(2^\|P\|) naive subset-filter. For the `free-distributive-lattice n` case where `P = B(n)` (the Boolean poset on n atoms), this is O(Dedekind(n)), feasible up to n = 5 (D(5) = 7581). At n = 6 the cost is D(6) ≈ 7.8M recursions — `free-distributive-lattice` explicitly raises; direct-construction callers accept the cost consciously.
 
 ### Presets
 
@@ -1082,9 +1097,9 @@ Mark §5.5 shipped in `TODO.md`. Move plan entry in `plans/CLAUDE.md` from Open 
 
 2. **Caller-obligation on setoid ⟺ `lattice-equal?`.** If a caller constructs a lattice where `setoid` disagrees with antisymmetric-`leq?`, `distributive?` and Birkhoff silently misbehave. Mitigation: document as a precondition in Representation section; offer `validate-lattice/setoid` in a future pass that spot-checks the invariant.
 
-3. **`free-distributive-lattice 5` performance.** D(5) = 7581 elements; downset enumeration is 2^\|Irr(P)\| where \|Irr(P)\| = 5 (antichain) → 32 downsets candidate subsets filtered to 7581 downsets. Actually: antichain of 5 elements has 2^5 = 32 subsets, all of which are downsets (antichain has trivial order). So FDL(5) = 32 elements? No — free distributive lattice on 5 generators is Downsets(2^[5]) where 2^[5] is the Boolean poset on 5 atoms, which has 32 elements in a non-trivial order. Downsets of that is Dedekind(5) = 7581. Enumeration is O(2^32) ≈ 4 billion subset candidates — infeasible. Need smarter downset enumeration (BFS through the poset, not subset-filter). Document this during Phase 7; may need to cap at n=4 (D(4)=168) if the O(2^\|P\|) approach dominates.
+3. **`free-distributive-lattice 5` performance.** D(5) = 7581 elements. The naive subset-filter downset enumerator is O(2^\|B(5)\|) = O(2^32) ≈ 4 billion subset candidates — infeasible. **Q15 resolved** this by committing to the smart recursive enumerator: `downsets(P) = downsets(P \ {x}) ∪ {D ∪ {x} : D ∈ downsets(P \ {x}), predecessors(x) ⊆ D}` for any maximal `x`, giving O(\|downsets(P)\|) = O(D(n)) total work. Feasible for n = 5 in well under 1 s; n = 6 (D(6) ≈ 7.8M) is explicitly raised by `free-distributive-lattice`.
 
-   **Mitigation:** Phase 7 includes a performance benchmark; if `free-distributive-lattice 5` exceeds 30 s, cap v1 at n=4 with the docstring noting the tighter bound. Smarter downset enumeration (recursive: downsets(P) = downsets(P minus maximal element x) ∪ {D ∪ {x} : D ∈ downsets(P minus x), x's predecessors ⊆ D}) reduces to O(D(n)) iterations, feasible up to n=5.
+   **Mitigation:** Phase 6 Task 6.1 must ship the smart enumerator (not the naive one). Phase 7 includes a smoke benchmark confirming `free-distributive-lattice 5` completes in under 5 s on reference hardware. If it regresses, docstring is revised to cap at n = 4 — the smart enumerator is the primary defense.
 
 4. **Interaction with `lattice-equal?` = antisymmetric-`leq?` in `fixpoint`.** If D3's setoid is used somewhere and diverges from antisymmetric-`leq?`, `fixpoint` would loop. Mitigation: `fixpoint` is *not modified* in this plan; it continues to use `lattice-equal?`. The setoid is a parallel notion, used only by the new Birkhoff/distributive machinery. Document this boundary in the record-extension docstring.
 
@@ -1094,7 +1109,7 @@ Mark §5.5 shipped in `TODO.md`. Move plan entry in `plans/CLAUDE.md` from Open 
 
 ## Self-review checklist
 
-- [ ] All 15 design questions (Q1–Q15) resolved or explicitly flagged as needing user decision before Phase 1.
+- [x] All 15 design questions (Q1–Q15) resolved (2026-04-22).
 - [ ] Every new export documented in the Exports section.
 - [ ] Backward compatibility verified: shipped 5-arg `make-lattice`, `lattice-equal?`, and every preset/validator from `lattice.sld` continue to work unchanged.
 - [ ] `<locally-finite-poset>` extension preserves shipped 2-arg `make-locally-finite-poset`.
