@@ -275,4 +275,13 @@
     ;; x + x =AC a + b → no unifier
     (test 0 (length (ac-unify (list '+ vx vx) '(+ a b) theory proto)))))
 
+(test-group "ac-unify: mixed AC and non-AC operators"
+  (let* ((theory (make-ac-theory '(+)))
+         (proto (sexp-term-protocol default-compare))
+         (vx (make-pattern-var 'x)))
+    ;; (f (+ a b)) vs (f (+ b a)) — f is non-AC, + is AC
+    (test 1 (length (ac-unify '(f (+ a b)) '(f (+ b a)) theory proto)))
+    ;; (g x) vs (g a) — g non-AC but unifier binds x↦a
+    (test 1 (length (ac-unify (list 'g vx) '(g a) theory proto)))))
+
 (test-end "unification")
