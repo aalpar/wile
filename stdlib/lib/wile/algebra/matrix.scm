@@ -27,6 +27,23 @@
 ;; naturally lists like (add dense sparse). At ≤20 entries for Path D's
 ;; scope, assoc's linear scan is negligible next to any realistic matrix
 ;; operation. Keys stay readable; semantics stay as designed.
+;;
+;; Divergence from sibling algebra libraries: `semiring.scm` etc. handle
+;; polymorphism by closing operation procedures inside the record itself
+;; (`make-semiring* plus-fn times-fn zero one` — each semiring carries
+;; its own ops). That idiom works cleanly for single-dispatch polymorphism
+;; where every call dispatches on exactly one argument. The matrix layer
+;; is multi-dispatch — `matrix-add` and `matrix-mul` select kernels on
+;; BOTH operand reps plus the destination rep (four kernels each for the
+;; 2x2 rep-pair space, strict on the bang forms per OQ4). Encoding that
+;; by closure over records would require either (a) embedding an NxN
+;; kernel table inside every matrix value, or (b) a double-dispatch
+;; visitor pattern with growth N² per op per rep pair — worse locality,
+;; worse debuggability, no win in readability. A top-level keyed-by-tag
+;; table expresses the relation (op, reps) -> kernel once, in data, and
+;; stays open to additive rep extension. This is a deliberate design
+;; choice, not stylistic drift; documented here so future readers
+;; diffing matrix.scm against semiring.scm know why they look unalike.
 
 (define *matrix-ops* '())
 
@@ -62,8 +79,16 @@
 
 (define *matrix-reps* '())
 
-;; Register PRED as the matrix-rep predicate tagged TAG.
+;; Register PRED as the matrix-rep predicate tagged TAG. Rejects a
+;; duplicate TAG at registration: silently prepending would shadow the
+;; earlier entry by lookup order and the resulting bug would surface far
+;; from the site (a matrix value still matches the shadowed predicate
+;; via matrix-rep-of, but the dispatch key now holds the stale tag).
+;; Catching it here makes the "two preds claiming 'dense" typo blow up
+;; at load time.
 (define (register-matrix-rep! pred tag)
+  (when (memq tag (map cdr *matrix-reps*))
+    (error "register-matrix-rep!: duplicate rep tag" tag))
   (set! *matrix-reps* (cons (cons pred tag) *matrix-reps*)))
 
 ;; Return the (pred . tag) pair in *matrix-reps* whose pred accepts M,
@@ -532,6 +557,13 @@
     ;; here because acc is freshly allocated inside this function and
     ;; never escapes (ssmat-entries-set! receives the stripped result,
     ;; not the accumulator itself).
+    ;;
+    ;; HAZARD (future maintainers): if this helper is ever promoted to a
+    ;; shared utility or called with an alist supplied by the caller,
+    ;; the set-cdr! will silently mutate that caller's data. The guard
+    ;; is scope discipline — do not let `acc` be anything other than a
+    ;; freshly-consed list local to this kernel. Move to a pure rebuild
+    ;; (cons-new-pair) variant if the scope ever widens.
     (define (accum-into acc i j v)
       (let ((existing (assoc (cons i j) acc)))
         (if existing
@@ -1254,3 +1286,17 @@
 (register-matrix-op! '(power     dense) semiring-matrix-power)
 (register-matrix-op! '(closure   dense) semiring-matrix-closure)
 (register-matrix-op! '(permanent dense) semiring-matrix-permanent)
+
+;; ─── Bootstrap sanity check ──────────────────
+;;
+;; Assert the expected rep set is registered at load time. Catches a
+;; deleted (register-matrix-rep! ...) call — the symptom otherwise is
+;; a real matrix-like record reading as matrix? => #f at first use,
+;; far from the cause. Keeping this here (bottom of the single file)
+;; means it fires after all top-level forms have executed.
+(for-each
+  (lambda (tag)
+    (unless (memq tag (map cdr *matrix-reps*))
+      (error "matrix.scm: required rep missing from *matrix-reps* at load"
+             tag)))
+  '(dense sparse))
