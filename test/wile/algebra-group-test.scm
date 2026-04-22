@@ -243,6 +243,69 @@
                        (cons 'setoid (numeric-setoid)))))
     (test-error (orbit (make-group-action G integer? (lambda (g x) (+ x g))) 0))))
 
+(test-group "orbit-representative"
+  ;; S_2 swapping pair components — canonical form is the sorted pair.
+  (let* ((S2 (symmetric-group 2))
+         (A  (make-group-action
+               S2
+               (lambda (p) (and (pair? p) (not (pair? (cdr p))) (not (null? (cdr p)))))
+               (lambda (perm pr)
+                 (if (= (vector-ref perm 0) 0)
+                     pr
+                     (cons (cdr pr) (car pr))))))
+         (pair<? (lambda (p q)
+                   (or (< (car p) (car q))
+                       (and (= (car p) (car q)) (< (cdr p) (cdr q)))))))
+    (test '(1 . 3) (orbit-representative A '(3 . 1) pair<?))
+    (test '(1 . 3) (orbit-representative A '(1 . 3) pair<?))))
+
+(test-group "orbit-representative/tie-breaker determinism"
+  ;; less? that compares only by car — all elements with car=0 tie.
+  (let* ((Z4 (cyclic-group 4))
+         (A  (make-group-action
+               Z4
+               pair?
+               (lambda (k p) (cons (car p) (modulo (+ (cdr p) k) 4)))))
+         (car<? (lambda (a b) (< (car a) (car b)))))
+    (let ((r1 (orbit-representative A '(0 . 0) car<?))
+          (r2 (orbit-representative A '(0 . 0) car<?)))
+      (test #t (equal? r1 r2)))))
+
+(test-group "burnside-count — 2-colourings of a 4-cycle modulo Z_4"
+  (let* ((Z4 (cyclic-group 4))
+         ;; Build all 2^4 = 16 binary strings of length 4 as lists.
+         (colourings
+           (let build ((n 4) (acc '(())))
+             (if (= n 0)
+                 acc
+                 (build (- n 1)
+                        (append (map (lambda (c) (cons 0 c)) acc)
+                                (map (lambda (c) (cons 1 c)) acc))))))
+         (rotate-by
+           (lambda (k c)
+             (let loop ((i 0) (c c))
+               (if (= i k) c
+                   (loop (+ i 1) (append (cdr c) (list (car c))))))))
+         (A (make-group-action Z4 list? rotate-by)))
+    (test 16 (length colourings))
+    ;; Classic necklace count: 0000, 0001, 0011, 0101, 0111, 1111
+    (test 6 (burnside-count A colourings))))
+
+(test-group "burnside-count detects malformed actions"
+  ;; Not a valid action: g=1 maps 3 → 2 (idempotent-ish, not involutive).
+  ;; Fixed points: |X^0| = 4, |X^1| = 3 (fixes 0,1,2 but not 3). Sum = 7.
+  ;; |G| = 2, so 7/2 is not integer — divisibility check fires.
+  (let* ((Z2 (cyclic-group 2))
+         (A-bad (make-group-action
+                  Z2
+                  integer?
+                  (lambda (g x)
+                    (cond
+                      ((= g 0) x)
+                      ((< x 3) x)
+                      (else (- x 1)))))))
+    (test-error (burnside-count A-bad '(0 1 2 3)))))
+
 (test-group "backward compatibility — 3-arg make-group"
   (let ((Z (make-group + 0 -)))
     (test #t (group? Z))

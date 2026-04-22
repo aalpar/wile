@@ -464,7 +464,33 @@
     (filter (lambda (g) (equal? (act g x) x))
             (group-elements G))))
 
+(define (orbit-representative action x less?)
+  "Return the LESS?-minimum element of the orbit of X under ACTION.\n\nWhen LESS? is not strictly total on the orbit (i.e., neither (less? y best)\nnor (less? best y) holds for some pair), ties are broken by discovery\norder in (orbit action x): the earlier-discovered element is kept. This\nis deterministic within a given Wile binary but implementation-dependent\nacross versions. Callers needing cross-implementation stability must\nsupply a strictly total <?.\n\nExamples:\n  (let* ((S2 (symmetric-group 2))\n         (A (make-group-action S2 pair?\n              (lambda (p pr)\n                (if (= (vector-ref p 0) 0) pr (cons (cdr pr) (car pr)))))))\n    (orbit-representative A '(3 . 1)\n                          (lambda (a b) (< (car a) (car b)))))\n    => (1 . 3)\n\nParameters:\n  action : group-action\n  x : any\n  less? : procedure\nReturns: any\nCategory: algebra\nKeywords: canonical form, representative, orbit minimum, normalization\n\nSee also: `orbit', `burnside-count'."
+  (let ((o (orbit action x)))
+    (fold (lambda (y best) (if (less? y best) y best))
+          (car o) (cdr o))))
+
 (define (fixed-points action g X-elements)
   "Return all elements of X-ELEMENTS fixed by the group element G under\nACTION, as a list. Caller supplies X-ELEMENTS explicitly to support sets\nlarger or differently-structured than the group.\n\nSet elements are compared with equal?.\n\nExamples:\n  (let* ((S3 (symmetric-group 3))\n         (A  (make-group-action S3 integer?\n                                (lambda (p i) (vector-ref p i)))))\n    (length (fixed-points A #(0 1 2) '(0 1 2))))  => 3\n\nParameters:\n  action : group-action\n  g : any\n  X-elements : list\nReturns: list\nCategory: algebra\nKeywords: fixed points, fixed set, invariant elements\n\nSee also: `stabilizer', `burnside-count'."
   (let ((act (group-action-apply action)))
     (filter (lambda (x) (equal? (act g x) x)) X-elements)))
+
+(define (burnside-count action X-elements)
+  "Count orbits of ACTION on X-ELEMENTS via Burnside's lemma:\n  |X/G| = (1/|G|) Σ_{g ∈ G} |X^g|\nwhere X^g is the set of points fixed by g. The group G must be finite\n(carry an elements enumeration).\n\nRaises if the sum is not divisible by |G| — that condition proves\nthe provided act is not a group action (violates unit or compatibility\naxioms).\n\nExamples:\n  ;; 2-colourings of a 4-bead cycle modulo rotation = 6 necklaces\n  (let* ((Z4 (cyclic-group 4))\n         (colourings ...)\n         (rotate-by (lambda (k c) ...))\n         (A (make-group-action Z4 list? rotate-by)))\n    (burnside-count A colourings))  => 6\n\nParameters:\n  action : group-action\n  X-elements : list\nReturns: integer\nCategory: algebra\nKeywords: Burnside, orbit counting, Cauchy-Frobenius, Pólya enumeration\n\nSee also: `orbit', `fixed-points', `enumerate-finite-group'."
+  (let* ((G (group-action-group action))
+         (n (group-order G)))
+    (unless (finite-group? G)
+      (error (string-append
+               "burnside-count: group is not finite (no elements enumeration). "
+               "If the group is finitely generated and you believe it is finite, "
+               "use (enumerate-finite-group G) to promote it first.")
+             G))
+    (let* ((sum (fold (lambda (g acc)
+                        (+ acc (length (fixed-points action g X-elements))))
+                      0
+                      (group-elements G)))
+           (q (quotient sum n)))
+      (unless (= (* q n) sum)
+        (error "burnside-count: sum not divisible by |G| — act is not a group action"
+               'sum sum '|G| n))
+      q)))
