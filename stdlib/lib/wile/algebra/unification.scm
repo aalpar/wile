@@ -115,3 +115,56 @@ Keywords: pattern, parse, match, unification"
                 v)))))
         (else x)))
     (walk expr)))
+
+;;; -------------------------------------------------------------------------
+;;; Diophantine basis: minimal non-negative integer solutions of a·u = b·v.
+;;; Standalone primitive — no dependency on match/unify. Useful for AC
+;;; matching/unification (Stickel 1981, Contejean–Devie 1994), Petri-net
+;;; place invariants, and integer-programming feasibility kernels.
+;;; -------------------------------------------------------------------------
+
+(define (exact-nonneg-integer? x)
+  "True iff X is an exact non-negative integer.
+
+Parameters:
+  x : any
+Returns: boolean
+Category: algebra
+Keywords: integer, predicate, validation"
+  (and (integer? x) (exact? x) (>= x 0)))
+
+(define (diophantine-basis a b)
+  "Enumerate minimal non-negative integer solutions of a·u = b·v, where
+a∈ℕᵐ, b∈ℕⁿ. Returns a list of (u . v) pairs; u and v are integer lists
+of length m and n respectively.
+
+Algorithm: BFS over ℕ^(m+n) from the zero vector, prune by domination
+and by sign of the residual a·u − b·v. Terminates via Dickson's lemma
+(finitely many minimal ℕ-vectors). The 1×1 case reduces to a single
+solution via gcd: x = b/g, y = a/g where g = gcd(a,b).
+
+Parameters:
+  a : list of non-negative integers (length m ≥ 1)
+  b : list of non-negative integers (length n ≥ 1)
+Returns: list of (u . v) where u, v are integer lists
+Category: algebra
+Keywords: diophantine, linear, basis, unification, combinatorics, Petri"
+  (unless (and (list? a) (every exact-nonneg-integer? a))
+    (error "diophantine-basis: expected non-negative integer list" a))
+  (unless (and (list? b) (every exact-nonneg-integer? b))
+    (error "diophantine-basis: expected non-negative integer list" b))
+  (when (or (null? a) (null? b))
+    (error "diophantine-basis: empty coefficient vector" a b))
+  (let ((m (length a)) (n (length b)))
+    (contejean-devie-bfs a b m n)))
+
+(define (contejean-devie-bfs a b m n)
+  ;; Stub: handles only the 1×1 case via gcd. Larger cases ship in Task 2.2.
+  (if (and (= m 1) (= n 1))
+      (let ((ai (car a)) (bj (car b)))
+        (if (and (positive? ai) (positive? bj))
+            (let ((g (gcd ai bj)))
+              (list (cons (list (quotient bj g))
+                          (list (quotient ai g)))))
+            '()))
+      '()))

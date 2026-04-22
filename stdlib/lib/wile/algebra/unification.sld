@@ -10,7 +10,10 @@
     empty-substitution
     substitution-lookup
     substitution-compose
-    substitution-apply)
+    substitution-apply
+    ;; Diophantine basis (standalone primitive)
+    diophantine-basis)
   (import (scheme base)
+          (srfi 1)
           (wile algebra rewrite))
   (include "unification.scm"))

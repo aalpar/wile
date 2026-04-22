@@ -91,4 +91,11 @@
     ;; No vars: identity
     (test '(+ 1 2) (substitution-apply s proto '(+ 1 2)))))
 
+(test-group "diophantine-basis: x = y trivial"
+  ;; System: 1·x = 1·y (m=n=1, a=[1], b=[1])
+  ;; Minimal solution: x=1, y=1. That's it.
+  (let ((basis (diophantine-basis '(1) '(1))))
+    (test 1 (length basis))
+    (test '((1) . (1)) (car basis))))
+
 (test-end "unification")
