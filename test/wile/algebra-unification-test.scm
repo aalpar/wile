@@ -196,4 +196,18 @@
     (let ((results (ac-match pat '(+ a b c) theory proto)))
       (test #t (> (length results) 0)))))
 
+(test-group "ac-match: mismatches and edge cases"
+  (let* ((theory (make-ac-theory '(+)))
+         (proto (sexp-term-protocol default-compare)))
+    ;; Operator mismatch
+    (test 0 (length (ac-match '(+ a b) '(* a b) theory proto)))
+    ;; Non-AC operator with mismatched arity
+    (let ((theory-nac (make-theory '() '())))
+      (test 0 (length (ac-match '(f a b) '(f a b c) theory-nac proto))))
+    ;; Nested AC: (+ (* ?x 2) ?y) matches (+ ?y (* 2 a))?
+    ;; (Requires * to also be AC; ?y can bind to any element.)
+    (let* ((theory-both (make-ac-theory '(+ *)))
+           (pat (parse-pattern '(+ (* ?x 2) ?y))))
+      (test #t (> (length (ac-match pat '(+ (* 2 a) b) theory-both proto)) 0)))))
+
 (test-end "unification")
