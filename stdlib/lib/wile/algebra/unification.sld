@@ -16,9 +16,13 @@
     ;; AC matching
     ac-match
     ;; Internal helpers (exposed for testing)
-    flatten-ac)
+    flatten-ac
+    build-compat-matrix
+    can-position-match?)
   (import (scheme base)
           (srfi 1)
           (wile algebra rewrite)
-          (wile algebra symbolic))
+          (wile algebra symbolic)
+          (wile algebra matrix)
+          (wile algebra semiring))
   (include "unification.scm"))

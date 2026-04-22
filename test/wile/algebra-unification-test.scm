@@ -4,7 +4,8 @@
         (chibi test)
         (wile algebra unification)
         (wile algebra rewrite)
-        (wile algebra symbolic))
+        (wile algebra symbolic)
+        (wile algebra matrix))
 
 (test-begin "unification")
 
@@ -214,5 +215,63 @@
   (let ((proto (sexp-term-protocol default-compare)))
     (test-error (ac-match '(+ a b) '(+ a b) 'not-a-theory proto))
     (test-error (ac-match '(+ a b) '(+ a b) (make-theory '() '()) 'not-a-proto))))
+
+(test-group "build-compat-matrix: smoke test"
+  (let* ((proto (sexp-term-protocol default-compare))
+         (vx (make-pattern-var 'x))
+         (M (build-compat-matrix (list vx 'a) '(a b) proto)))
+    (test #t (matrix? M))
+    (test 2 (matrix-rows M))
+    (test 2 (matrix-cols M))
+    ;; pattern-var row: all #t
+    (test #t (matrix-ref M 0 0))
+    (test #t (matrix-ref M 0 1))
+    ;; ground 'a row: #t only at column 0 (subject 'a)
+    (test #t (matrix-ref M 1 0))
+    (test #f (matrix-ref M 1 1))))
+
+(test-group "can-position-match?: structural compatibility"
+  (let* ((proto (sexp-term-protocol default-compare))
+         (vx (make-pattern-var 'x)))
+    ;; pattern-var compatible with anything
+    (test #t (can-position-match? vx 'a proto))
+    (test #t (can-position-match? vx '(+ 1 2) proto))
+    ;; ground atom: only compatible with equal atom
+    (test #t (can-position-match? 'a 'a proto))
+    (test #f (can-position-match? 'a 'b proto))
+    ;; compound: operator must match; ground-atom subject is not compatible
+    (test #t (can-position-match? '(+ 1 2) '(+ 3 4) proto))
+    (test #f (can-position-match? '(+ 1 2) '(* 3 4) proto))
+    (test #f (can-position-match? '(+ 1 2) 'a proto))))
+
+;;; Benchmark — recorded (not asserted). Compares pathological 8-element
+;;; ac-match wall-clock time across Phase-4 iterations. Output lines begin
+;;; with "[BENCH 4.x]" for easy grepping.
+(test-group "ac-match: pathological 8-element bench"
+  (let* ((theory (make-ac-theory '(+)))
+         (proto (sexp-term-protocol default-compare)))
+    ;; Compatible case: 4 vars + 4 grounds, subject contains all grounds.
+    (let* ((pat (parse-pattern '(+ ?v ?w ?x ?y a b c d)))
+           (subj '(+ a b c d e f g h))
+           (start (current-jiffy))
+           (results (ac-match pat subj theory proto))
+           (end (current-jiffy)))
+      (test #t (> (length results) 0))
+      (display "[BENCH 4.x] ac-match 8-elem compatible: ")
+      (display (exact->inexact (/ (- end start) (jiffies-per-second))))
+      (display "s, ") (display (length results)) (display " matches")
+      (newline))
+    ;; Infeasible case: 4 grounds not in subject — all-zero rows in compat
+    ;; matrix, permanent is #f, prune should reject early.
+    (let* ((pat (parse-pattern '(+ ?v ?w ?x ?y p q r s)))
+           (subj '(+ a b c d e f g h))
+           (start (current-jiffy))
+           (results (ac-match pat subj theory proto))
+           (end (current-jiffy)))
+      (test 0 (length results))
+      (display "[BENCH 4.x] ac-match 8-elem infeasible: ")
+      (display (exact->inexact (/ (- end start) (jiffies-per-second))))
+      (display "s, ") (display (length results)) (display " matches")
+      (newline))))
 
 (test-end "unification")
