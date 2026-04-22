@@ -13,12 +13,37 @@
 ;;;     μ(x,y) = 0                          when ¬(x ≤ y).
 
 ;; ─── Locally-finite poset ────────────────────────────────────────
+;;
+;; The <locally-finite-poset> record carries the two mandatory fields
+;; (leq?, interval) and one optional metadata field (elements) used by
+;; §5.5's Birkhoff reconstruction. Consumers built through
+;; finite-set->locally-finite-poset automatically gain the element list;
+;; hand-rolled callers opt in by passing (cons 'elements LIST) in the
+;; options alist. Absent elements defaults to #f.
 
 (define-record-type <locally-finite-poset>
-  (make-locally-finite-poset leq? interval)
+  (%make-locally-finite-poset leq? interval elements)
   locally-finite-poset?
   (leq?     lf-poset-leq?-fn)
-  (interval lf-poset-interval-fn))
+  (interval lf-poset-interval-fn)
+  (elements lf-poset-elements))
+
+(define (%lf-assv-or opts key fallback)
+  (let ((p (assv key opts)))
+    (if p (cdr p) fallback)))
+
+(define (%lf-validate-opts-keys site opts known-keys)
+  (for-each
+    (lambda (pair)
+      (unless (and (pair? pair) (memv (car pair) known-keys))
+        (error (string-append site ": unknown option key") pair known-keys)))
+    opts))
+
+(define (make-locally-finite-poset leq? interval . opts)
+  "Construct a locally-finite poset from LEQ? predicate and INTERVAL procedure.\nINTERVAL takes two elements X, Y and returns the list of Z with X <= Z <= Y,\nthe empty list when ¬(X <= Y), and the singleton (X) when X = Y.\n\nOptional trailing alist entries:\n  (elements . LIST) — full enumeration of the poset (required by\n                      birkhoff-reconstruction; populated automatically\n                      by finite-set->locally-finite-poset).\n\nExamples:\n  (make-locally-finite-poset\n    (lambda (a b) (<= a b))\n    (lambda (x y) (iota (+ 1 (- y x)) x)))\n\nParameters:\n  leq? : procedure\n  interval : procedure\n  opts : alist\nReturns: locally-finite-poset\nCategory: algebra\nKeywords: poset, locally finite, interval, construction\n\nSee also: `finite-set->locally-finite-poset', `lf-poset-elements'."
+  (%lf-validate-opts-keys "make-locally-finite-poset" opts '(elements))
+  (%make-locally-finite-poset leq? interval
+                              (%lf-assv-or opts 'elements #f)))
 
 (define (lf-poset-leq? P)
   "Return the partial-order predicate of locally-finite poset P.\nThe returned procedure takes two elements and returns #t iff the\nfirst precedes or equals the second.\n\nParameters:\n  p : any\nReturns: procedure\nCategory: algebra\nKeywords: poset, partial order, leq, locally finite"
@@ -29,7 +54,7 @@
   (lf-poset-interval-fn P))
 
 (define (finite-set->locally-finite-poset leq? elements)
-  "Build a locally-finite poset from a predicate LEQ? and an explicit\nelement list ELEMENTS. The interval-enumeration procedure scans\nthe full element set by the two-sided bound. Use this when the\nunderlying poset is bounded and enumerable; prefer a direct\ninterval procedure when the universe is infinite.\n\nExamples:\n  (define P\n    (finite-set->locally-finite-poset\n      (lambda (a b) (zero? (modulo b a)))\n      '(1 2 3 4 5 6)))\n  ((lf-poset-interval P) 1 6)  => (1 2 3 6)\n\nParameters:\n  leq? : procedure\n  elements : list\nReturns: locally-finite-poset\nCategory: algebra\nKeywords: poset, finite, interval, enumeration, construction"
+  "Build a locally-finite poset from a predicate LEQ? and an explicit\nelement list ELEMENTS. The interval-enumeration procedure scans\nthe full element set by the two-sided bound. Use this when the\nunderlying poset is bounded and enumerable; prefer a direct\ninterval procedure when the universe is infinite.\n\nThe resulting poset carries ELEMENTS in its elements field; access\nvia `lf-poset-elements'. This is the canonical way to construct a\nposet consumable by `birkhoff-reconstruction'.\n\nExamples:\n  (define P\n    (finite-set->locally-finite-poset\n      (lambda (a b) (zero? (modulo b a)))\n      '(1 2 3 4 5 6)))\n  ((lf-poset-interval P) 1 6)  => (1 2 3 6)\n  (lf-poset-elements P)        => (1 2 3 4 5 6)\n\nParameters:\n  leq? : procedure\n  elements : list\nReturns: locally-finite-poset\nCategory: algebra\nKeywords: poset, finite, interval, enumeration, construction"
   (make-locally-finite-poset
     leq?
     (lambda (x y)
@@ -41,7 +66,8 @@
               ((and (leq? x (car es)) (leq? (car es) y))
                (loop (cdr es) (cons (car es) acc)))
               (else
-               (loop (cdr es) acc))))))))
+               (loop (cdr es) acc))))))
+    (cons 'elements elements)))
 
 ;; ─── Incidence algebra ───────────────────────────────────────────
 

@@ -2,6 +2,7 @@
 
 (import (scheme base)
         (chibi test)
+        (srfi 1)
         (wile algebra ring)
         (wile algebra incidence))
 
@@ -251,6 +252,28 @@
     (test  1 (mu 1 6))    ; 2·3 — two distinct primes → (-1)²
     (test -1 (mu 1 30))   ; 2·3·5 — three distinct primes → (-1)³
     (test  0 (mu 1 12)))) ; 2²·3 — squared factor
+
+;; ─── §5.5 Phase 2: <locally-finite-poset> elements exposure ──────
+
+(test-group "<locally-finite-poset> exposes elements via finite-set->"
+  (let ((P (finite-set->locally-finite-poset
+             (lambda (a b) (<= a b))
+             '(1 2 3 4))))
+    (test '(1 2 3 4) (lf-poset-elements P))))
+
+(test-group "<locally-finite-poset> backward compat — 2-arg make"
+  (let ((P (make-locally-finite-poset
+             (lambda (a b) (<= a b))
+             (lambda (x y) (iota (+ 1 (- y x)) x)))))
+    (test #t (locally-finite-poset? P))
+    (test #f (lf-poset-elements P))))
+
+(test-group "<locally-finite-poset> elements via opts"
+  (let ((P (make-locally-finite-poset
+             (lambda (a b) (<= a b))
+             (lambda (x y) (iota (+ 1 (- y x)) x))
+             (cons 'elements '(10 20 30)))))
+    (test '(10 20 30) (lf-poset-elements P))))
 
 (test-end)
 (test-exit)

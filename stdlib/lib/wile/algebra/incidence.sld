@@ -3,7 +3,7 @@
   (export
     ;; Locally-finite poset — richer than <partial-order>, carries interval enumeration
     make-locally-finite-poset locally-finite-poset?
-    lf-poset-leq? lf-poset-interval
+    lf-poset-leq? lf-poset-interval lf-poset-elements
     finite-set->locally-finite-poset
     ;; Incidence algebra over a ring
     make-incidence-algebra incidence-algebra?
