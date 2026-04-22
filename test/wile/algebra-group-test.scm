@@ -183,6 +183,16 @@
     (test 2 (group-order H))
     (test #t (subgroup? H S3))))
 
+(test-group "group-action — record and trivial action"
+  (let* ((Z3 (cyclic-group 3))
+         (A  (trivial-action Z3 integer?)))
+    (test #t (group-action? A))
+    (test #t (eq? Z3 (group-action-group A)))
+    (test 42 ((group-action-apply A) 1 42))
+    (test #t ((group-action-set-element? A) 7)))
+  ;; make-group-action rejects non-groups
+  (test-error (make-group-action 'not-a-group integer? (lambda (g x) x))))
+
 (test-group "backward compatibility — 3-arg make-group"
   (let ((Z (make-group + 0 -)))
     (test #t (group? Z))

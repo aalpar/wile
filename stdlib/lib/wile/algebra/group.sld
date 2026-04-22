@@ -9,8 +9,12 @@
           group-order group-elements group-generators
           finite-group? finitely-generated-group?
           subgroup-generated subgroup? enumerate-finite-group
+          ;; §5.4 — actions
+          make-group-action group-action? group-action-group
+          group-action-apply group-action-set-element?
           ;; §5.4 — presets
-          trivial-group cyclic-group symmetric-group product-group)
+          trivial-group cyclic-group symmetric-group product-group
+          trivial-action)
   (import (scheme base)
           (srfi 1)
           (wile algebra monoid)

@@ -378,3 +378,28 @@
           samples))
       samples)
     (if (null? violations) #t (reverse violations))))
+
+;;; -- §5.4 group actions ---------------------------------------------------
+;;;
+;;; A group action is a triple (G, X, ·) where G acts on a set X such that
+;;;   (identity(G) · x) = x                                 (unit)
+;;;   ((g · h) · x) = (g · (h · x))                         (compatibility)
+;;; We represent X implicitly by a membership predicate set-element? and
+;;; the action by a 2-argument procedure act : G × X → X.
+
+(define-record-type <group-action>
+  (%make-group-action group set-element? act)
+  group-action?
+  (group        group-action-group)
+  (set-element? group-action-set-element?)
+  (act          group-action-apply))
+
+(define (make-group-action G set-element? act)
+  "Construct a group action — a group G acting on a set (identified by\nSET-ELEMENT? membership predicate) via ACT : G × X → X. ACT takes a\ngroup element and a set element, returning a set element.\n\nExamples:\n  (let* ((Z3 (cyclic-group 3))\n         (A (make-group-action Z3 integer?\n                               (lambda (k x) (modulo (+ x k) 3)))))\n    ((group-action-apply A) 1 2))  => 0\n\nParameters:\n  G : group\n  set-element? : procedure\n  act : procedure\nReturns: any\nCategory: algebra\nKeywords: group action, G-set, action, permutation representation\n\nSee also: `trivial-action', `orbit', `stabilizer'."
+  (unless (group? G)
+    (error "make-group-action: expected <group>" G))
+  (%make-group-action G set-element? act))
+
+(define (trivial-action G set-element?)
+  "Return the trivial action of G on the set (SET-ELEMENT?): every group\nelement fixes every set element.\n\nExamples:\n  (let ((A (trivial-action (cyclic-group 3) integer?)))\n    ((group-action-apply A) 2 42))  => 42\n\nParameters:\n  G : group\n  set-element? : procedure\nReturns: any\nCategory: algebra\nKeywords: trivial action, fixed action, identity action\n\nSee also: `make-group-action'."
+  (make-group-action G set-element? (lambda (g x) x)))
