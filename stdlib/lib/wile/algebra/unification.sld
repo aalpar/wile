@@ -7,6 +7,7 @@
     parse-pattern
     ;; Substitutions
     make-substitution substitution? substitution-bindings
-    empty-substitution)
+    empty-substitution
+    substitution-lookup)
   (import (scheme base))
   (include "unification.scm"))

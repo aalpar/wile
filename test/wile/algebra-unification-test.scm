@@ -39,4 +39,13 @@
           (map (lambda (b) (cons (pattern-var-name (car b)) (cdr b)))
                (substitution-bindings s)))))
 
+(test-group "substitution-lookup"
+  (let* ((vx (make-pattern-var 'x))
+         (vy (make-pattern-var 'y))
+         (s (make-substitution (list (cons vx 1) (cons vy 2)))))
+    (test 1 (substitution-lookup s vx))
+    (test 2 (substitution-lookup s vy))
+    (test #f (substitution-lookup s (make-pattern-var 'z)))
+    (test #f (substitution-lookup empty-substitution vx))))
+
 (test-end "unification")

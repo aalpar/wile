@@ -15,6 +15,24 @@
 
 (define empty-substitution (make-substitution '()))
 
+(define (substitution-lookup sub var)
+  "Return the term bound to VAR in SUB, or #f if unbound. Var identity is
+by pattern-var-name (symbols compared with eq?).
+
+Parameters:
+  sub : <substitution>
+  var : <pattern-var>
+Returns: term | #f
+Category: algebra
+Keywords: substitution, lookup, unification"
+  (let loop ((xs (substitution-bindings sub)))
+    (cond
+      ((null? xs) #f)
+      ((eq? (pattern-var-name (caar xs))
+            (pattern-var-name var))
+       (cdar xs))
+      (else (loop (cdr xs))))))
+
 (define (parse-pattern expr)
   "Convert EXPR from sexpr with ?-prefix convention to a pattern using
 <pattern-var> records. Symbols starting with #\\? become pattern variables;
