@@ -187,4 +187,13 @@
     ;; ?x can bind to b (from (+ b a)) — 1 match, ?x↦b
     (test 1 (length (ac-match pat '(+ a b) theory proto)))))
 
+(test-group "ac-match: free var binds to (op …) submultiset"
+  (let* ((theory (make-ac-theory '(+)))
+         (proto (sexp-term-protocol default-compare))
+         (pat (parse-pattern '(+ ?x a))))
+    ;; (+ a b c): ?x↦b, remaining a; OR ?x↦c, remaining a; OR ?x↦(+ b c)
+    ;; Plus any further subset combinations — CSU may have several entries.
+    (let ((results (ac-match pat '(+ a b c) theory proto)))
+      (test #t (> (length results) 0)))))
+
 (test-end "unification")

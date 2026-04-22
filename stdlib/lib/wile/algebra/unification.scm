@@ -247,26 +247,107 @@ Keywords: AC matching, pattern matching, associative, commutative, unification"
 ;; AC-case: direct backtracking over assignments of pattern operands to
 ;; subject operands. Correct (enumerates all CSU elements) but exponential;
 ;; Phase 4 will add a matrix-permanent feasibility prune.
+;;
+;; Two binding strategies for a pattern-var head:
+;;   Case A: bind head to a single subject element.
+;;   Case B: bind head (if currently free) to a sub-multiset of the subject
+;;           operands, re-wrapped as (op …). Only fires when there's enough
+;;           subject-arity slack for the remaining pattern operands.
 (define (match-ac op pat-ops subj-ops sub ac-ops proto)
   (cond
     ((null? pat-ops) (if (null? subj-ops) (list sub) '()))
     (else
      (let ((head (car pat-ops)) (rest (cdr pat-ops)))
-       (apply append
-         (map (lambda (i)
-                (let* ((chosen (list-ref subj-ops i))
-                       (remaining (remove-at subj-ops i))
-                       (partial (match-rec head chosen sub ac-ops proto)))
-                  (apply append
-                    (map (lambda (s1)
-                           (match-ac op rest remaining s1 ac-ops proto))
-                         partial))))
-              (iota (length subj-ops))))))))
+       (cond
+         ;; Non-var head with mismatched arity can't consume multiple
+         ;; subject elements — bail when sizes don't match rest's budget.
+         ((and (not (pattern-var? head))
+               (not (= (length subj-ops) (length pat-ops))))
+          '())
+         ((pattern-var? head)
+          (append
+            ;; Case A: single-element binding for head.
+            (apply append
+              (map (lambda (i)
+                     (let* ((chosen (list-ref subj-ops i))
+                            (rem (remove-at subj-ops i))
+                            (partial (bind-or-check head chosen sub)))
+                       (apply append
+                         (map (lambda (s1)
+                                (match-ac op rest rem s1 ac-ops proto))
+                              partial))))
+                   (iota (length subj-ops))))
+            ;; Case B: multi-element binding — head currently free, and
+            ;; the subject has enough operands that a 2+-element binding
+            ;; still leaves |rest| operands for the remaining pattern.
+            (if (and (not (substitution-lookup sub head))
+                     (>= (length subj-ops) 2)
+                     (>= (length subj-ops) (+ (length rest) 2)))
+                (apply append
+                  (map (lambda (subset)
+                         (let* ((binding (term-make-term-variadic
+                                           proto op subset))
+                                (rem (list-difference subj-ops subset))
+                                (partial (bind-or-check head binding sub)))
+                           (apply append
+                             (map (lambda (s1)
+                                    (match-ac op rest rem s1 ac-ops proto))
+                                  partial))))
+                       (proper-subsets-size>=2 subj-ops)))
+                '())))
+         (else
+          ;; Non-var head: recurse match-rec against each subject element.
+          (apply append
+            (map (lambda (i)
+                   (let* ((chosen (list-ref subj-ops i))
+                          (rem (remove-at subj-ops i))
+                          (partial (match-rec head chosen sub ac-ops proto)))
+                     (apply append
+                       (map (lambda (s1)
+                              (match-ac op rest rem s1 ac-ops proto))
+                            partial))))
+                 (iota (length subj-ops))))))))))
 
 ;; Remove the element at index I from XS.
 (define (remove-at xs i)
   (cond ((zero? i) (cdr xs))
         (else (cons (car xs) (remove-at (cdr xs) (- i 1))))))
+
+;; All subsets of XS with size in [2, |xs|-1] (proper, non-trivial).
+(define (proper-subsets-size>=2 xs)
+  (let ((n (length xs)))
+    (filter (lambda (s)
+              (and (>= (length s) 2) (< (length s) n)))
+            (all-subsets xs))))
+
+;; Enumerate all subsets of XS (power set) as a list of lists.
+(define (all-subsets xs)
+  (cond ((null? xs) '(()))
+        (else (let ((rest-subs (all-subsets (cdr xs))))
+                (append rest-subs
+                        (map (lambda (s) (cons (car xs) s)) rest-subs))))))
+
+;; Multiset difference: XS minus YS element-by-element (using equal?).
+(define (list-difference xs ys)
+  (let loop ((xs xs) (acc '()) (ys ys))
+    (cond
+      ((null? xs) (reverse acc))
+      ((member (car xs) ys)
+       (loop (cdr xs) acc (remove-first (car xs) ys)))
+      (else (loop (cdr xs) (cons (car xs) acc) ys)))))
+
+;; Remove the first occurrence of X from XS (using equal?).
+(define (remove-first x xs)
+  (cond ((null? xs) '())
+        ((equal? x (car xs)) (cdr xs))
+        (else (cons (car xs) (remove-first x (cdr xs))))))
+
+;; Build a compound term (op . args) in protocol PROTO. The protocol's
+;; make-term needs an existing term as a template to preserve metadata;
+;; we synthesize one via (cons op args) which is compatible with the
+;; sexp-term-protocol's default (lambda (term new-args) (cons (car term) new-args)).
+(define (term-make-term-variadic proto op args)
+  (term-make-term proto (cons op args) args))
 
 ;; Variable binding: bind VAR↦SUBJECT if unbound, else check consistency.
 (define (bind-or-check var subject sub)
