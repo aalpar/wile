@@ -205,5 +205,29 @@
     (test 13 (car result))     ;; f(3) = 9 + 3 + 1 = 13
     (test 7 (cdr result))))    ;; f'(3) = 6 + 1 = 7
 
+;; -- Aggregator re-exports unification --
+
+(test-group "aggregator-reexports-unification"
+  ;; Access AC-matching bindings through the umbrella (wile algebra).
+  ;; The aggregator must import and re-export (wile algebra unification).
+  (let* ((theory (make-theory
+                   (list (make-named-axiom 'ass-+ #f
+                           (make-associativity-axiom '+))
+                         (make-named-axiom 'com-+ #f
+                           (make-commutativity-axiom '+)))
+                   '(+)))
+         (cmp (lambda (a b)
+                (cond
+                  ((and (symbol? a) (symbol? b))
+                   (let ((sa (symbol->string a))
+                         (sb (symbol->string b)))
+                     (cond ((string<? sa sb) -1)
+                           ((string>? sa sb) 1)
+                           (else 0))))
+                  ((equal? a b) 0)
+                  (else 1))))
+         (proto (sexp-term-protocol cmp)))
+    (test #t (> (length (ac-match '(+ a b) '(+ b a) theory proto)) 0))))
+
 (test-end)
 (test-exit)
