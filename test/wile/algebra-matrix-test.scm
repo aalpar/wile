@@ -1170,20 +1170,44 @@
 
 (test-group "polymorphic mul handles 1xN x Nx1 and NxM x MxP rank-1 shapes"
   ;; Inner-dim kernel at the rank-1 boundary. 1x3 x 3x1 -> 1x1 dot product;
-  ;; 2x1 x 1x2 -> 2x2 outer product. Both reps.
+  ;; 2x1 x 1x2 -> 2x2 outer product. Exercise all four rep pairs for each
+  ;; shape so sparse kernels are pinned at the boundary, not just dense.
   (let* ((S (counting-semiring))
          (D-1x3 (semiring-matrix-from-rows S '((1 2 3))))
          (D-3x1 (semiring-matrix-from-rows S '((4) (5) (6))))
          (D-2x1 (semiring-matrix-from-rows S '((1) (2))))
-         (D-1x2 (semiring-matrix-from-rows S '((3 4)))))
-    ;; 1*4 + 2*5 + 3*6 = 32
-    (let ((C (matrix-mul D-1x3 D-3x1)))
-      (test '(1 . 1) (matrix-shape C))
-      (test 32 (matrix-ref C 0 0)))
-    ;; outer product: ((1*3 1*4) (2*3 2*4)) = ((3 4) (6 8))
-    (let ((C (matrix-mul D-2x1 D-1x2)))
-      (test '(2 . 2) (matrix-shape C))
-      (test '((3 4) (6 8)) (semiring-matrix->rows C)))))
+         (D-1x2 (semiring-matrix-from-rows S '((3 4))))
+         (S-1x3 (make-sparse-semiring-matrix S 1 3
+                  '(((0 . 0) . 1) ((0 . 1) . 2) ((0 . 2) . 3))))
+         (S-3x1 (make-sparse-semiring-matrix S 3 1
+                  '(((0 . 0) . 4) ((1 . 0) . 5) ((2 . 0) . 6))))
+         (S-2x1 (make-sparse-semiring-matrix S 2 1
+                  '(((0 . 0) . 1) ((1 . 0) . 2))))
+         (S-1x2 (make-sparse-semiring-matrix S 1 2
+                  '(((0 . 0) . 3) ((0 . 1) . 4)))))
+    ;; 1*4 + 2*5 + 3*6 = 32; verified across all four rep pairs.
+    (for-each
+      (lambda (pair)
+        (let* ((A (car pair))
+               (B (cdr pair))
+               (C (matrix-mul A B)))
+          (test '(1 . 1) (matrix-shape C))
+          (test 32 (matrix-ref C 0 0))))
+      (list (cons D-1x3 D-3x1) (cons D-1x3 S-3x1)
+            (cons S-1x3 D-3x1) (cons S-1x3 S-3x1)))
+    ;; outer product: ((1*3 1*4) (2*3 2*4)) = ((3 4) (6 8)); all four pairs.
+    (for-each
+      (lambda (pair)
+        (let* ((A (car pair))
+               (B (cdr pair))
+               (C (matrix-mul A B)))
+          (test '(2 . 2) (matrix-shape C))
+          (test 3 (matrix-ref C 0 0))
+          (test 4 (matrix-ref C 0 1))
+          (test 6 (matrix-ref C 1 0))
+          (test 8 (matrix-ref C 1 1))))
+      (list (cons D-2x1 D-1x2) (cons D-2x1 S-1x2)
+            (cons S-2x1 D-1x2) (cons S-2x1 S-1x2)))))
 
 (test-group "matrix-mul! rejects self-aliasing for sparse operands (OQ5)"
   ;; Complement to the dense aliasing test (line ~856). The eq? guard runs

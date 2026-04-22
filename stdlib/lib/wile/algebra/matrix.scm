@@ -1117,9 +1117,12 @@
   ;;      0 <= col < cols.
   ;;   2. No entry has `(equal? value (semiring-zero S))` — zero-valued
   ;;      entries are stripped so `matrix-fold-entries` reports nnz.
-  ;;   3. Proper list (not dotted, not circular).
+  ;;   3. Proper (non-dotted) list under the constructor's linear traversal;
+  ;;      circular lists are outside the accepted input contract and are
+  ;;      not detected here.
   ;;   4. Duplicate coordinates: first-match wins under `assoc`.
-  ;; The public constructor enforces these; every internal bang kernel
+  ;; The public constructor enforces the structural/value checks it can
+  ;; validate during that traversal; every internal bang kernel
   ;; (matrix-add!/sparse/sparse/sparse, matrix-mul!/sparse/sparse/sparse,
   ;; matrix-copy!/sparse/sparse) must preserve them. No validated setter
   ;; wrapper today — the O(nnz) cost on the hot path outweighs the current
