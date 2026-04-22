@@ -518,9 +518,50 @@ Keywords: AC unification, unify, associative, commutative, Stickel, Robinson"
                 (unify-positional (cdr t1s) (cdr t2s) s1 ac-ops proto))
               partial))))))
 
-;; Stub AC-unifier — Task 5.2 replaces with ground multiset equality,
-;; Task 5.3 replaces with full Stickel reduction for variable cases.
+;; AC-unifier: ground case uses multiset equality; variable case delegates
+;; to Stickel reduction via unify-ac-stickel.
 (define (unify-ac op t1-ops t2-ops sub ac-ops proto)
-  (if (= (length t1-ops) (length t2-ops))
-      (unify-positional t1-ops t2-ops sub ac-ops proto)
-      '()))
+  (cond
+    ((and (all-ground? t1-ops proto) (all-ground? t2-ops proto))
+     (if (multiset-equal? t1-ops t2-ops proto)
+         (list sub)
+         '()))
+    (else
+     (unify-ac-stickel op t1-ops t2-ops sub ac-ops proto))))
+
+;; True iff no element of TS contains a <pattern-var>.
+(define (all-ground? ts proto)
+  (every (lambda (t) (not (has-var? t proto))) ts))
+
+;; True iff T contains a <pattern-var> anywhere.
+(define (has-var? t proto)
+  (cond
+    ((pattern-var? t) #t)
+    ((term-compound? proto t)
+     (any (lambda (a) (has-var? a proto)) (term-get-operands proto t)))
+    (else #f)))
+
+;; True iff XS and YS are equal as multisets under term-compare.
+(define (multiset-equal? xs ys proto)
+  (cond
+    ((and (null? xs) (null? ys)) #t)
+    ((or (null? xs) (null? ys)) #f)
+    (else
+     (let ((match-idx (find-index
+                        (lambda (y)
+                          (zero? (term-compare proto (car xs) y)))
+                        ys)))
+       (and match-idx
+            (multiset-equal? (cdr xs) (remove-at ys match-idx) proto))))))
+
+;; Return the index of the first element of XS matching PRED, or #f.
+(define (find-index pred xs)
+  (let loop ((xs xs) (i 0))
+    (cond
+      ((null? xs) #f)
+      ((pred (car xs)) i)
+      (else (loop (cdr xs) (+ i 1))))))
+
+;; Stub for Task 5.3 — full Stickel reduction for variable-containing AC.
+(define (unify-ac-stickel op t1-ops t2-ops sub ac-ops proto)
+  '())

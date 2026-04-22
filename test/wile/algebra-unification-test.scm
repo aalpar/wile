@@ -238,4 +238,13 @@
     ;; x = (f x) → no unifier
     (test 0 (length (ac-unify vx (list 'f vx) theory proto)))))
 
+(test-group "ac-unify: AC ground equality"
+  (let* ((theory (make-ac-theory '(+)))
+         (proto (sexp-term-protocol default-compare)))
+    ;; (+ a b) vs (+ b a) — equal modulo AC → one unifier (empty sub)
+    (test 1 (length (ac-unify '(+ a b) '(+ b a) theory proto)))
+    (test 1 (length (ac-unify '(+ a b c) '(+ c b a) theory proto)))
+    ;; Mismatch at multiset level
+    (test 0 (length (ac-unify '(+ a b) '(+ a c) theory proto)))))
+
 (test-end "unification")
