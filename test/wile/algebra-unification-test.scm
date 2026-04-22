@@ -264,4 +264,15 @@
                              (and (eq? x-val 'b) (eq? y-val 'a))))))
         results))))
 
+(test-group "ac-unify: nonlinear x+x = a+a"
+  (let* ((theory (make-ac-theory '(+)))
+         (proto (sexp-term-protocol default-compare))
+         (vx (make-pattern-var 'x)))
+    ;; x + x =AC a + a → {x↦a}
+    (let ((results (ac-unify (list '+ vx vx) '(+ a a) theory proto)))
+      (test 1 (length results))
+      (test 'a (substitution-lookup (car results) vx)))
+    ;; x + x =AC a + b → no unifier
+    (test 0 (length (ac-unify (list '+ vx vx) '(+ a b) theory proto)))))
+
 (test-end "unification")
