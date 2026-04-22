@@ -65,6 +65,68 @@
   "Return the trivial group — the one-element group with element 'e.\nThe returned record is cached: (eq? (trivial-group) (trivial-group)) is #t.\n\nExamples:\n  (group-order (trivial-group))  => 1\n\nReturns: any\nCategory: algebra\nKeywords: trivial, unit group, one-element group\n\nSee also: `cyclic-group', `symmetric-group'."
   %the-trivial-group)
 
+;; Internal — vector-permutation helpers used by symmetric-group.
+;; Permutations are vectors of length n where perm[i] = image of i.
+
+(define (%factorial n)
+  (if (<= n 1) 1 (* n (%factorial (- n 1)))))
+
+(define (%permutation-vector? v)
+  (and (vector? v)
+       (let* ((n    (vector-length v))
+              (seen (make-vector n #f)))
+         (let check ((i 0))
+           (cond
+             ((= i n) #t)
+             (else
+              (let ((x (vector-ref v i)))
+                (cond
+                  ((not (integer? x)) #f)
+                  ((or (< x 0) (>= x n)) #f)
+                  ((vector-ref seen x) #f)
+                  (else
+                   (vector-set! seen x #t)
+                   (check (+ i 1)))))))))))
+
+(define (%vector-permutation-op p q)
+  ;; (p∘q)[i] = p[q[i]]
+  (let* ((n (vector-length p))
+         (r (make-vector n)))
+    (let loop ((i 0))
+      (cond
+        ((= i n) r)
+        (else
+         (vector-set! r i (vector-ref p (vector-ref q i)))
+         (loop (+ i 1)))))))
+
+(define (%vector-permutation-inverse p)
+  ;; r[p[i]] = i
+  (let* ((n (vector-length p))
+         (r (make-vector n)))
+    (let loop ((i 0))
+      (cond
+        ((= i n) r)
+        (else
+         (vector-set! r (vector-ref p i) i)
+         (loop (+ i 1)))))))
+
+(define (%all-permutations n)
+  ;; Lexicographic enumeration of all n! permutations of (0 .. n-1) as vectors.
+  (cond
+    ((= n 0) '(#()))
+    (else
+     (let permute-from ((prefix '()) (remaining (iota n)))
+       (cond
+         ((null? remaining)
+          (list (list->vector (reverse prefix))))
+         (else
+          (apply append
+                 (map (lambda (x)
+                        (permute-from
+                          (cons x prefix)
+                          (remove (lambda (y) (= x y)) remaining)))
+                      remaining))))))))
+
 (define (cyclic-group n)
   "Return the cyclic group Z/nZ of order N — integers 0..n-1 under addition mod N.\nN must be a positive integer.\n\nExamples:\n  (group-op (cyclic-group 5) 2 4)       => 1\n  (group-inverse (cyclic-group 5) 2)    => 3\n  (group-generators (cyclic-group 5))   => (1)\n\nParameters:\n  n : integer\nReturns: any\nCategory: algebra\nKeywords: cyclic, Z mod n, modular arithmetic, rotation group\n\nSee also: `trivial-group', `symmetric-group'."
   (unless (and (integer? n) (positive? n))
