@@ -2,7 +2,9 @@
 
 (import (scheme base)
         (chibi test)
-        (wile algebra unification))
+        (wile algebra unification)
+        (wile algebra rewrite)
+        (wile algebra symbolic))
 
 (test-begin "unification")
 
@@ -63,5 +65,30 @@
     ;; Empty cases
     (test s1 (substitution-compose s1 empty-substitution))
     (test s1 (substitution-compose empty-substitution s1))))
+
+(test-group "substitution-apply: rewrites pattern with bindings"
+  (let* ((vx (make-pattern-var 'x))
+         (vy (make-pattern-var 'y))
+         (s (make-substitution (list (cons vx 10) (cons vy 'hello))))
+         (proto (sexp-term-protocol (lambda (a b)
+                                      (cond
+                                        ((and (number? a) (number? b))
+                                         (cond ((< a b) -1) ((> a b) 1) (else 0)))
+                                        ((and (symbol? a) (symbol? b))
+                                         (let ((sa (symbol->string a))
+                                               (sb (symbol->string b)))
+                                           (cond ((string<? sa sb) -1)
+                                                 ((string>? sa sb) 1)
+                                                 (else 0))))
+                                        (else 0)))))) ; dummy: OK for this test
+    ;; Atom var
+    (test 10 (substitution-apply s proto vx))
+    ;; Compound with vars
+    (test '(+ 10 hello) (substitution-apply s proto (list '+ vx vy)))
+    ;; Unbound var stays unchanged
+    (let ((vz (make-pattern-var 'z)))
+      (test vz (substitution-apply s proto vz)))
+    ;; No vars: identity
+    (test '(+ 1 2) (substitution-apply s proto '(+ 1 2)))))
 
 (test-end "unification")

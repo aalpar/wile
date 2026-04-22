@@ -9,6 +9,8 @@
     make-substitution substitution? substitution-bindings
     empty-substitution
     substitution-lookup
-    substitution-compose)
-  (import (scheme base))
+    substitution-compose
+    substitution-apply)
+  (import (scheme base)
+          (wile algebra rewrite))
   (include "unification.scm"))

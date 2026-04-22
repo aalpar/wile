@@ -61,6 +61,27 @@ Keywords: substitution, compose, merge, unification"
             (loop (cdr xs) acc))
            (else #f)))))))
 
+(define (substitution-apply sub proto term)
+  "Return TERM with each <pattern-var> leaf replaced by its binding in SUB,
+rebuilding compound terms via the protocol's term-make-term. Unbound vars
+are returned unchanged.
+
+Parameters:
+  sub : <substitution>
+  proto : <term-protocol>
+  term : any
+Returns: term
+Category: algebra
+Keywords: substitution, apply, rewrite, unification"
+  (cond
+    ((pattern-var? term)
+     (or (substitution-lookup sub term) term))
+    ((term-compound? proto term)
+     (term-make-term proto term
+       (map (lambda (a) (substitution-apply sub proto a))
+            (term-get-operands proto term))))
+    (else term)))
+
 (define (parse-pattern expr)
   "Convert EXPR from sexpr with ?-prefix convention to a pattern using
 <pattern-var> records. Symbols starting with #\\? become pattern variables;
