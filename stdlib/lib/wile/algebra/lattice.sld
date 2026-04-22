@@ -13,8 +13,12 @@
           finite-lattice?
           ;; §5.5 — canonical presets
           chain-lattice boolean-lattice
-          diamond-lattice pentagon-lattice)
+          diamond-lattice pentagon-lattice
+          ;; §5.5 — irreducibles
+          join-irreducibles meet-irreducibles
+          join-irreducible? meet-irreducible?)
   (import (scheme base)
+          (srfi 1)
           (wile algebra order)
           (wile algebra setoid))
   (include "lattice.scm"))

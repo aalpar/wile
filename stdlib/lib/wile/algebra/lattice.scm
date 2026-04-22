@@ -402,6 +402,85 @@
     (cons 'cardinality 5)
     (cons 'elements '(bot a b c top))))
 
+;; ─── §5.5 Irreducibles ───────────────────────
+;;
+;; An element j ∈ L is join-irreducible iff j ≠ ⊥ and j = a ⋁ b implies
+;; j = a or j = b. Equivalently, j has exactly one lower cover in the
+;; Hasse diagram. Dual: m is meet-irreducible iff m ≠ ⊤ and m has
+;; exactly one upper cover.
+;;
+;; Algorithm (O(|L|²) per element): compute lower-covers(L, x) by
+;; filtering { y : y < x, no z with y < z < x }; the cardinality-1 case
+;; is the irreducibility witness.
+
+(define (%lower-covers L x)
+  ;; Elements y with y < x (strictly less, using lattice's setoid for
+  ;; equality) and no z with y < z < x. Internal.
+  (let* ((elts   (lattice-elements L))
+         (eq     (lattice-setoid L))
+         (below  (filter
+                   (lambda (y) (and (lattice-leq? L y x)
+                                    (not (setoid-equiv? eq y x))))
+                   elts)))
+    (filter
+      (lambda (y)
+        (not (any
+               (lambda (z)
+                 (and (not (setoid-equiv? eq z y))
+                      (not (setoid-equiv? eq z x))
+                      (lattice-leq? L y z)
+                      (lattice-leq? L z x)))
+               below)))
+      below)))
+
+(define (%upper-covers L x)
+  (let* ((elts   (lattice-elements L))
+         (eq     (lattice-setoid L))
+         (above  (filter
+                   (lambda (y) (and (lattice-leq? L x y)
+                                    (not (setoid-equiv? eq y x))))
+                   elts)))
+    (filter
+      (lambda (y)
+        (not (any
+               (lambda (z)
+                 (and (not (setoid-equiv? eq z y))
+                      (not (setoid-equiv? eq z x))
+                      (lattice-leq? L x z)
+                      (lattice-leq? L z y)))
+               above)))
+      above)))
+
+(define (join-irreducible? L x)
+  "Return #t if X is join-irreducible in lattice L.\nAn element j is join-irreducible iff j ≠ ⊥ and j has exactly one\nlower cover (i.e. exactly one element immediately below it in the\nHasse diagram). Requires a finite lattice.\n\nExamples:\n  (join-irreducible? (chain-lattice 4) 2)  => #t\n  (join-irreducible? (chain-lattice 4) 0)  => #f\n\nParameters:\n  L : lattice\n  x : any\nReturns: boolean\nCategory: algebra\nKeywords: join irreducible, atom, Hasse cover, Birkhoff, irreducibility\n\nSee also: `join-irreducibles', `meet-irreducible?'."
+  (unless (finite-lattice? L)
+    (error "join-irreducible?: requires finite lattice"
+           'fix "pass (cons 'elements LIST) to make-lattice"))
+  (and (not (setoid-equiv? (lattice-setoid L) x (lattice-bottom L)))
+       (= 1 (length (%lower-covers L x)))))
+
+(define (meet-irreducible? L x)
+  "Return #t if X is meet-irreducible in lattice L.\nAn element m is meet-irreducible iff m ≠ ⊤ and m has exactly one\nupper cover. Dual of `join-irreducible?'. Requires a finite lattice.\n\nExamples:\n  (meet-irreducible? (chain-lattice 4) 2)  => #t\n  (meet-irreducible? (chain-lattice 4) 3)  => #f\n\nParameters:\n  L : lattice\n  x : any\nReturns: boolean\nCategory: algebra\nKeywords: meet irreducible, coatom, Hasse cover, irreducibility\n\nSee also: `meet-irreducibles', `join-irreducible?'."
+  (unless (finite-lattice? L)
+    (error "meet-irreducible?: requires finite lattice"
+           'fix "pass (cons 'elements LIST) to make-lattice"))
+  (and (not (setoid-equiv? (lattice-setoid L) x (lattice-top L)))
+       (= 1 (length (%upper-covers L x)))))
+
+(define (join-irreducibles L)
+  "Return the list of join-irreducibles of finite lattice L, in\n(lattice-elements L) order.\n\nRequires a finite lattice. These are the elements that cannot be\nexpressed as a non-trivial join; equivalently, each has exactly one\nlower cover. Birkhoff's fundamental theorem of finite distributive\nlattices uses this set as the domain of the poset dual to L.\n\nExamples:\n  (join-irreducibles (chain-lattice 4))  => (1 2 3)\n  (length (join-irreducibles (boolean-lattice 3)))  => 3\n\nParameters:\n  L : lattice\nReturns: list\nCategory: algebra\nKeywords: join irreducibles, Birkhoff, atoms, irreducibility, distributive lattice\n\nSee also: `meet-irreducibles', `birkhoff-representation'."
+  (unless (finite-lattice? L)
+    (error "join-irreducibles: requires finite lattice"
+           'fix "pass (cons 'elements LIST) to make-lattice"))
+  (filter (lambda (x) (join-irreducible? L x)) (lattice-elements L)))
+
+(define (meet-irreducibles L)
+  "Return the list of meet-irreducibles of finite lattice L, in\n(lattice-elements L) order. Dual of `join-irreducibles'.\n\nExamples:\n  (length (meet-irreducibles (boolean-lattice 3)))  => 3\n\nParameters:\n  L : lattice\nReturns: list\nCategory: algebra\nKeywords: meet irreducibles, coatoms, irreducibility\n\nSee also: `join-irreducibles'."
+  (unless (finite-lattice? L)
+    (error "meet-irreducibles: requires finite lattice"
+           'fix "pass (cons 'elements LIST) to make-lattice"))
+  (filter (lambda (x) (meet-irreducible? L x)) (lattice-elements L)))
+
 ;; ─── Validation ──────────────────────────────
 
 (define (validate-lattice L samples)

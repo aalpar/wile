@@ -2,6 +2,7 @@
 
 (import (scheme base)
         (chibi test)
+        (srfi 1)
         (wile algebra order)
         (wile algebra setoid)
         (wile algebra lattice))
@@ -241,6 +242,51 @@
     (test 'bot (lattice-meet N5 'a 'b))
     (test 'bot (lattice-meet N5 'a 'c))
     (test 'b   (lattice-meet N5 'b 'c))))
+
+;; ─── §5.5 Phase 4: irreducibles ──────────────────────────────────
+
+(test-group "join-irreducibles on chain"
+  ;; Chain(n): elements 0..n-1; join-irreducibles = all except bot (0)
+  (test '(1 2 3) (join-irreducibles (chain-lattice 4)))
+  (test #t (join-irreducible? (chain-lattice 4) 1))
+  (test #f (join-irreducible? (chain-lattice 4) 0)))
+
+(test-group "join-irreducibles on boolean"
+  ;; B(3): join-irreducibles are the singletons (atoms) — 3 of them
+  (let* ((B3 (boolean-lattice 3))
+         (ji (join-irreducibles B3)))
+    (test 3 (length ji))
+    ;; Each element is a singleton list
+    (test #t (every (lambda (s) (= (length s) 1)) ji))))
+
+(test-group "meet-irreducibles on boolean"
+  ;; B(3): meet-irreducibles are the coatoms — 3 of them (2-element
+  ;; subsets)
+  (let* ((B3 (boolean-lattice 3))
+         (mi (meet-irreducibles B3)))
+    (test 3 (length mi))
+    (test #t (every (lambda (s) (= (length s) 2)) mi))))
+
+(test-group "join-irreducibles on diamond(3) — M3"
+  ;; M3: join-irreducibles are the three atoms
+  (let* ((M3 (diamond-lattice 3))
+         (ji (join-irreducibles M3)))
+    (test 3 (length ji))
+    (test #t (every (lambda (x) (and (pair? x) (eq? (car x) 'atom))) ji))))
+
+(test-group "join-irreducibles on pentagon"
+  ;; N5: bot, a, b, c, top
+  ;;   a: one lower cover (bot) → join-irreducible
+  ;;   b: one lower cover (bot) → join-irreducible
+  ;;   c: one lower cover (b) → join-irreducible
+  ;;   top: two lower covers (a, c) → NOT join-irreducible
+  (let* ((N5 (pentagon-lattice))
+         (ji (join-irreducibles N5)))
+    (test '(a b c) ji)))
+
+(test-group "irreducibles preconditions"
+  (test-error (join-irreducibles (make-lattice max min 0 10 <=)))
+  (test-error (meet-irreducibles (make-lattice max min 0 10 <=))))
 
 (test-end)
 (test-exit)
