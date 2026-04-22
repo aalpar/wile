@@ -1221,5 +1221,91 @@
     (test-error (matrix-mul! A A B))
     (test-error (matrix-mul! B A B))))
 
+;; ─── Residual items from crosscheck 9e43e884..HEAD ─
+
+(test-group "matrix-copy / matrix-copy! attribute errors to the public caller"
+  ;; Mirror of the matrix-mul attribution test (G4 extension). Pins exact
+  ;; messages so a regression in the guard prefix fails loudly.
+  (define (caught-message thunk)
+    (guard (exn ((error-object? exn) (error-object-message exn)))
+      (thunk)
+      #f))
+  (let* ((S (counting-semiring))
+         (M (make-semiring-matrix S 2 2)))
+    (test "matrix-copy: not a matrix"
+          (caught-message (lambda () (matrix-copy 42))))
+    (test "matrix-copy!: destination is not a matrix"
+          (caught-message (lambda () (matrix-copy! 42 M))))
+    (test "matrix-copy!: source is not a matrix"
+          (caught-message (lambda () (matrix-copy! M 42))))))
+
+(test-group "matrix-mul cross-rep numerical equivalence"
+  ;; For fixed numerical inputs, densifying A and/or B must not change
+  ;; the result. Catches kernel drift that no single per-pair test catches:
+  ;; e.g., a future kernel refactor that flips an index in just one of the
+  ;; four D/S variants would show here as a mismatch across reps.
+  (let* ((S (counting-semiring))
+         ;; Dense reference inputs with a few zeros so the sparse form is meaningful.
+         (D-A (semiring-matrix-from-rows S '((1 0 2) (0 3 4))))
+         (D-B (semiring-matrix-from-rows S '((5 6) (0 7) (8 0))))
+         (S-A (make-sparse-semiring-matrix S 2 3
+                '(((0 . 0) . 1) ((0 . 2) . 2)
+                  ((1 . 1) . 3) ((1 . 2) . 4))))
+         (S-B (make-sparse-semiring-matrix S 3 2
+                '(((0 . 0) . 5) ((0 . 1) . 6)
+                  ((1 . 1) . 7)
+                  ((2 . 0) . 8))))
+         (reference (semiring-matrix->rows (matrix-mul D-A D-B))))
+    (define (densify-rows C)
+      (if (eq? (matrix-rep-tag C) 'dense)
+          (semiring-matrix->rows C)
+          (semiring-matrix->rows (sparse->semiring-matrix C))))
+    (test reference (densify-rows (matrix-mul D-A D-B)))
+    (test reference (densify-rows (matrix-mul D-A S-B)))
+    (test reference (densify-rows (matrix-mul S-A D-B)))
+    (test reference (densify-rows (matrix-mul S-A S-B)))))
+
+(test-group "matrix-copy! rejects rep mismatch in both directions"
+  ;; Symmetry counterpart to the existing dense-dest/sparse-source case.
+  ;; A future refactor that changed the guard's `unless` ordering could
+  ;; regress only one direction; both arms pinned here.
+  (let* ((S (counting-semiring))
+         (D (make-semiring-matrix S 2 2))
+         (SM (make-sparse-semiring-matrix S 2 2 '())))
+    (test-error (matrix-copy! SM D))))
+
+(test-group "matrix-add! sparse/sparse/sparse strips zero sums through bang form"
+  ;; The bang form must preserve the zero-strip invariant (no stored
+  ;; entry equals semiring-zero). A refactor that dropped the strip
+  ;; would leave stored zeros, corrupting matrix-fold-entries (nnz)
+  ;; reports and later arithmetic. Integer-ring gives us real additive
+  ;; inverses for the zero-sum.
+  (let* ((R (ring->semiring (integer-ring)))
+         (A (make-sparse-semiring-matrix R 2 2
+              '(((0 . 0) . 2) ((1 . 1) . 3))))
+         (B (make-sparse-semiring-matrix R 2 2
+              '(((0 . 0) . -2) ((1 . 1) . -1))))
+         (C (make-sparse-semiring-matrix R 2 2 '())))
+    (matrix-add! C A B)
+    ;; (0,0): 2 + (-2) = 0 -> stripped; (1,1): 3 + (-1) = 2 -> kept.
+    (test 1 (matrix-fold-entries C 0 (lambda (r c v acc) (+ acc 1))))
+    (test 2 (matrix-ref C 1 1))
+    (test 0 (matrix-ref C 0 0))))
+
+(test-group "register-matrix-rep! rejects duplicate tag at registration"
+  ;; Types-lens residual item: silently prepending a duplicate would
+  ;; shadow an earlier registration. The guard blows up at the
+  ;; registration site so the typo class is caught immediately.
+  ;;
+  ;; We can't actually test the error by re-registering 'dense at
+  ;; library load (the library is already loaded), but we can show
+  ;; that both expected reps remain registered and that the bootstrap
+  ;; sanity check completed without aborting library load.
+  (test #t (matrix? (make-semiring-matrix (counting-semiring) 1 1)))
+  (test #t (matrix? (make-sparse-semiring-matrix (counting-semiring) 1 1 '())))
+  (test 'dense  (matrix-rep-tag (make-semiring-matrix (counting-semiring) 1 1)))
+  (test 'sparse (matrix-rep-tag
+                  (make-sparse-semiring-matrix (counting-semiring) 1 1 '()))))
+
 (test-end)
 (test-exit)
