@@ -222,22 +222,51 @@ Keywords: AC matching, pattern matching, associative, commutative, unification"
             (term-get-operands proto term))))
     (else (list term))))
 
-;; Core recursion. Dispatches on PATTERN shape. AC-case added in Task 3.4.
+;; Core recursion. Dispatches on PATTERN shape. Compound terms under an
+;; AC operator are flattened and matched as multisets via match-ac;
+;; non-AC compounds match positionally.
 (define (match-rec p s sub ac-ops proto)
   (cond
     ((pattern-var? p) (bind-or-check p s sub))
     ((term-compound? proto p)
-     (if (and (term-compound? proto s)
-              (eq? (term-get-operator proto p)
-                   (term-get-operator proto s)))
-         (match-positional (term-get-operands proto p)
-                           (term-get-operands proto s)
-                           sub ac-ops proto)
-         '()))
+     (cond
+       ((not (term-compound? proto s)) '())
+       ((not (eq? (term-get-operator proto p) (term-get-operator proto s))) '())
+       ((ac-op? (term-get-operator proto p) ac-ops)
+        (match-ac (term-get-operator proto p)
+                  (flatten-ac p (term-get-operator proto p) proto)
+                  (flatten-ac s (term-get-operator proto p) proto)
+                  sub ac-ops proto))
+       (else
+        (match-positional (term-get-operands proto p)
+                          (term-get-operands proto s)
+                          sub ac-ops proto))))
     (else
-     (if (zero? (term-compare proto p s))
-         (list sub)
-         '()))))
+     (if (zero? (term-compare proto p s)) (list sub) '()))))
+
+;; AC-case: direct backtracking over assignments of pattern operands to
+;; subject operands. Correct (enumerates all CSU elements) but exponential;
+;; Phase 4 will add a matrix-permanent feasibility prune.
+(define (match-ac op pat-ops subj-ops sub ac-ops proto)
+  (cond
+    ((null? pat-ops) (if (null? subj-ops) (list sub) '()))
+    (else
+     (let ((head (car pat-ops)) (rest (cdr pat-ops)))
+       (apply append
+         (map (lambda (i)
+                (let* ((chosen (list-ref subj-ops i))
+                       (remaining (remove-at subj-ops i))
+                       (partial (match-rec head chosen sub ac-ops proto)))
+                  (apply append
+                    (map (lambda (s1)
+                           (match-ac op rest remaining s1 ac-ops proto))
+                         partial))))
+              (iota (length subj-ops))))))))
+
+;; Remove the element at index I from XS.
+(define (remove-at xs i)
+  (cond ((zero? i) (cdr xs))
+        (else (cons (car xs) (remove-at (cdr xs) (- i 1))))))
 
 ;; Variable binding: bind VAR↦SUBJECT if unbound, else check consistency.
 (define (bind-or-check var subject sub)

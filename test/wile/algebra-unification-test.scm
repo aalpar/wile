@@ -173,4 +173,18 @@
     ;; Leaf
     (test '(a) (flatten-ac 'a '+ proto))))
 
+(test-group "ac-match: AC ground equality"
+  (let* ((theory (make-ac-theory '(+)))
+         (proto (sexp-term-protocol default-compare)))
+    (test 1 (length (ac-match '(+ a b) '(+ b a) theory proto)))
+    (test 1 (length (ac-match '(+ a b c) '(+ c a b) theory proto)))
+    (test 0 (length (ac-match '(+ a b) '(+ a c) theory proto)))))
+
+(test-group "ac-match: variable in AC op — enumerates assignments"
+  (let* ((theory (make-ac-theory '(+)))
+         (proto (sexp-term-protocol default-compare))
+         (pat (parse-pattern '(+ ?x a))))
+    ;; ?x can bind to b (from (+ b a)) — 1 match, ?x↦b
+    (test 1 (length (ac-match pat '(+ a b) theory proto)))))
+
 (test-end "unification")
