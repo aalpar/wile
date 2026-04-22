@@ -2,17 +2,51 @@
 ;;;
 ;;; A group (G, ⊕, e, ⁻¹) is a monoid with inverses:
 ;;; a ⊕ a⁻¹ = a⁻¹ ⊕ a = e.
+;;;
+;;; The <group> record carries the three mandatory fields (op, identity,
+;;; inverse) and five optional metadata fields (element?, setoid, order,
+;;; elements, generators) used by later §5.4 machinery (subgroup closure,
+;;; orbit enumeration, Burnside counting). Absent optional fields default
+;;; to #f except setoid, which defaults to (default-setoid) wrapping
+;;; R7RS equal?.
 
 (define-record-type <group>
-  (make-group* op-fn identity inverse-fn)
+  (%make-group op-fn identity inverse-fn
+               element? setoid order elements generators)
   group?
-  (op-fn      group-op-fn)
-  (identity   group-identity)
-  (inverse-fn group-inverse-fn))
+  (op-fn       group-op-fn)
+  (identity    group-identity)
+  (inverse-fn  group-inverse-fn)
+  (element?    group-element?)
+  (setoid      group-setoid)
+  (order       group-order)
+  (elements    group-elements)
+  (generators  group-generators))
 
-(define (make-group op identity inverse)
-  "Construct a group from binary operation OP, IDENTITY element, and INVERSE function.\nOP must be associative, IDENTITY must be neutral for OP, and\nINVERSE must return an element such that OP of any element\nwith its inverse yields IDENTITY.\n\nExamples:\n  (let ((G (make-group + 0 -))) (group-identity G))  => 0\n  (let ((G (make-group * 1 (lambda (x) (/ 1 x)))))\n    (group-op G 3 4))  => 12\n\nParameters:\n  op : procedure\n  identity : any\n  inverse : procedure\nReturns: any\nCategory: algebra\nKeywords: group, inverse, abelian, symmetry, algebraic structure\n\nSee also: `group->monoid', `validate-group'."
-  (make-group* op identity inverse))
+(define (%assv-or opts key fallback)
+  (let ((p (assv key opts)))
+    (if p (cdr p) fallback)))
+
+(define (make-group op identity inverse . opts)
+  "Construct a group from binary operation OP, IDENTITY element, and INVERSE function.\nOP must be associative, IDENTITY must be neutral for OP, and\nINVERSE must return an element such that OP of any element\nwith its inverse yields IDENTITY.\n\nOptional trailing alist entries specify extended metadata:\n  (element? . P) — membership predicate\n  (setoid . S) — equivalence relation (defaults to default-setoid)\n  (order . N) — group order (cardinality)\n  (elements . LIST) — full enumeration for finite groups\n  (generators . LIST) — generating set\n\nExamples:\n  (let ((G (make-group + 0 -))) (group-identity G))  => 0\n  (let ((G (make-group * 1 (lambda (x) (/ 1 x)))))\n    (group-op G 3 4))  => 12\n\nParameters:\n  op : procedure\n  identity : any\n  inverse : procedure\n  opts : alist\nReturns: any\nCategory: algebra\nKeywords: group, inverse, abelian, symmetry, algebraic structure\n\nSee also: `group->monoid', `validate-group'."
+  (%make-group op identity inverse
+               (%assv-or opts 'element?   #f)
+               (%assv-or opts 'setoid     (default-setoid))
+               (%assv-or opts 'order      #f)
+               (%assv-or opts 'elements   #f)
+               (%assv-or opts 'generators #f)))
+
+(define (group-equal? G a b)
+  "Test A and B for equivalence under group G's setoid.\n\nExamples:\n  (group-equal? (make-group + 0 -) 3 3)  => #t\n\nParameters:\n  G : any\n  a : any\n  b : any\nReturns: boolean\nCategory: algebra\nKeywords: equality, setoid, equivalence"
+  (setoid-equiv? (group-setoid G) a b))
+
+(define (finite-group? G)
+  "Return #t if group G carries both an order and an elements enumeration.\n\nParameters:\n  G : any\nReturns: boolean\nCategory: algebra\nKeywords: finite, enumerate, cardinality"
+  (and (group-order G) (group-elements G) #t))
+
+(define (finitely-generated-group? G)
+  "Return #t if group G carries a generating set.\n\nParameters:\n  G : any\nReturns: boolean\nCategory: algebra\nKeywords: finitely generated, generators"
+  (and (group-generators G) #t))
 
 (define (group-op G a b)
   "Apply group G's binary operation to A and B.\n\nExamples:\n  (let ((G (make-group + 0 -))) (group-op G 2 3))  => 5\n\nParameters:\n  G : any\n  a : any\n  b : any\nReturns: any\nCategory: algebra\nKeywords: binary operation, group operation, combine, oplus, composition"
