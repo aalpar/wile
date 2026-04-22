@@ -12,8 +12,11 @@
     substitution-compose
     substitution-apply
     ;; Diophantine basis (standalone primitive)
-    diophantine-basis)
+    diophantine-basis
+    ;; AC matching
+    ac-match)
   (import (scheme base)
           (srfi 1)
-          (wile algebra rewrite))
+          (wile algebra rewrite)
+          (wile algebra symbolic))
   (include "unification.scm"))

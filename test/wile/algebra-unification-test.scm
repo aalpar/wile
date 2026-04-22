@@ -8,6 +8,31 @@
 
 (test-begin "unification")
 
+(define (default-compare a b)
+  (cond
+    ((and (number? a) (number? b))
+     (cond ((< a b) -1) ((> a b) 1) (else 0)))
+    ((and (symbol? a) (symbol? b))
+     (let ((sa (symbol->string a)) (sb (symbol->string b)))
+       (cond ((string<? sa sb) -1) ((string>? sa sb) 1) (else 0))))
+    ((equal? a b) 0)
+    (else 1)))
+
+(define (sym-append . syms)
+  (string->symbol
+    (apply string-append (map symbol->string syms))))
+
+(define (make-ac-theory ops)
+  (let ((axioms
+         (apply append
+                (map (lambda (op)
+                       (list (make-named-axiom (sym-append 'ass- op)
+                               #f (make-associativity-axiom op))
+                             (make-named-axiom (sym-append 'com- op)
+                               #f (make-commutativity-axiom op))))
+                     ops))))
+    (make-theory axioms ops)))
+
 (test-group "pattern-var construction and identity"
   (let ((vx (make-pattern-var 'x)))
     (test #t (pattern-var? vx))
@@ -116,5 +141,11 @@
   (test-error (diophantine-basis '(1) '(2.5)))    ; non-integer
   (test-error (diophantine-basis '() '(1)))       ; empty a
   (test-error (diophantine-basis '(1) '())))      ; empty b
+
+(test-group "ac-match: non-AC positional"
+  (let* ((theory (make-theory '() '()))
+         (proto (sexp-term-protocol default-compare)))
+    (test 1 (length (ac-match '(f a b) '(f a b) theory proto)))
+    (test 0 (length (ac-match '(f a b) '(f b a) theory proto)))))
 
 (test-end "unification")

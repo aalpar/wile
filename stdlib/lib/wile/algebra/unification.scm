@@ -158,6 +158,98 @@ Keywords: diophantine, linear, basis, unification, combinatorics, Petri"
   (let ((m (length a)) (n (length b)))
     (contejean-devie-bfs a b m n)))
 
+;;; -------------------------------------------------------------------------
+;;; AC matching (Phase 3): one-sided pattern-to-subject match modulo the
+;;; associative-commutative axioms of a theory. Returns list<substitution>
+;;; — one per solution in a CSU-like set (may be empty).
+;;; -------------------------------------------------------------------------
+
+;; Scan theory once, compute list of op symbols that are both commutative
+;; and associative (the AC-ops).
+(define (ac-ops-of theory)
+  (filter
+    (lambda (op)
+      (let ((is-comm? #f) (is-assoc? #f))
+        (for-each
+          (lambda (na)
+            (let ((ax (named-axiom-axiom na)))
+              (cond
+                ((and (commutativity-axiom? ax)
+                      (eq? op (commutativity-axiom-op ax)))
+                 (set! is-comm? #t))
+                ((and (associativity-axiom? ax)
+                      (eq? op (associativity-axiom-op ax)))
+                 (set! is-assoc? #t)))))
+          (theory-axioms theory))
+        (and is-comm? is-assoc?)))
+    (theory-associative-ops theory)))
+
+;; Membership test against the AC-ops list.
+(define (ac-op? op ac-ops) (and (memq op ac-ops) #t))
+
+(define (ac-match pattern subject theory proto)
+  "Match PATTERN against SUBJECT modulo the AC axioms of THEORY, using term
+protocol PROTO. Returns a list of <substitution> — one per solution in a
+CSU-like result set; empty list means no match. Pattern variables are
+<pattern-var> records (see parse-pattern); other terms are protocol-level
+terms. THEORY's associative-ops that also have a commutativity axiom are
+treated as AC operators; all other compound terms match positionally.
+
+Parameters:
+  pattern : term (may contain <pattern-var> records)
+  subject : term (ground under PROTO)
+  theory  : <theory>
+  proto   : <term-protocol>
+Returns: list of <substitution>
+Category: algebra
+Keywords: AC matching, pattern matching, associative, commutative, unification"
+  (unless (theory? theory)
+    (error "ac-match: expected theory" theory))
+  (unless (term-protocol? proto)
+    (error "ac-match: expected term-protocol" proto))
+  (let ((ac-ops (ac-ops-of theory)))
+    (match-rec pattern subject empty-substitution ac-ops proto)))
+
+;; Core recursion. Dispatches on PATTERN shape. AC-case added in Task 3.4.
+(define (match-rec p s sub ac-ops proto)
+  (cond
+    ((pattern-var? p) (bind-or-check p s sub))
+    ((term-compound? proto p)
+     (if (and (term-compound? proto s)
+              (eq? (term-get-operator proto p)
+                   (term-get-operator proto s)))
+         (match-positional (term-get-operands proto p)
+                           (term-get-operands proto s)
+                           sub ac-ops proto)
+         '()))
+    (else
+     (if (zero? (term-compare proto p s))
+         (list sub)
+         '()))))
+
+;; Variable binding: bind VAR↦SUBJECT if unbound, else check consistency.
+(define (bind-or-check var subject sub)
+  (let ((existing (substitution-lookup sub var)))
+    (cond
+      ((not existing)
+       (list (make-substitution
+               (cons (cons var subject) (substitution-bindings sub)))))
+      ((equal? existing subject) (list sub))
+      (else '()))))
+
+;; Positional match: fixed-arity zip between pattern and subject operand
+;; lists. Returns the (possibly many) substitutions that extend SUB.
+(define (match-positional ps ss sub ac-ops proto)
+  (cond
+    ((and (null? ps) (null? ss)) (list sub))
+    ((or (null? ps) (null? ss)) '())
+    (else
+     (let ((partial (match-rec (car ps) (car ss) sub ac-ops proto)))
+       (apply append
+         (map (lambda (s1)
+                (match-positional (cdr ps) (cdr ss) s1 ac-ops proto))
+              partial))))))
+
 (define (contejean-devie-bfs a b m n)
   ;; Vectors represented as lists of length m (u-side) or n (v-side).
   ;; Nodes are (u . v); residual r = a·u − b·v drives expansion direction.
