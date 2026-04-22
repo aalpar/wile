@@ -562,6 +562,72 @@ Keywords: AC unification, unify, associative, commutative, Stickel, Robinson"
       ((pred (car xs)) i)
       (else (loop (cdr xs) (+ i 1))))))
 
-;; Stub for Task 5.3 — full Stickel reduction for variable-containing AC.
+;; Stickel reduction (v1: 0/1 multiplicity only — bijective pairing).
+;; When |t1-ops| = |t2-ops|, each LHS slot is paired 1-to-1 with an RHS
+;; slot; enumerate all such bijections and unify pairwise via unify-rec.
+;; Conflicts (nonlinear bindings, e.g. x+x unifying with a+b) are pruned
+;; by unify-rec's bind-with-occurs-check / substitution-compose path.
+;; Non-unit multiplicities — which would bind a variable to an (op …)
+;; compound from the opposite side — are deferred per the design doc's
+;; Future extensions. Full Stickel with diophantine-basis over the
+;; abstracted system is the follow-up path.
 (define (unify-ac-stickel op t1-ops t2-ops sub ac-ops proto)
-  '())
+  (cond
+    ((not (= (length t1-ops) (length t2-ops))) '())
+    (else
+     (let ((results
+             (apply append
+               (map (lambda (rhs-perm)
+                      (unify-pairs t1-ops rhs-perm sub ac-ops proto))
+                    (permutations t2-ops)))))
+       (deduplicate-substitutions results)))))
+
+;; Unify a zipped list of (lhs . rhs) pairs, threading SUB through.
+;; Returns list<substitution> — empty on conflict at any pair.
+(define (unify-pairs lhs-list rhs-list sub ac-ops proto)
+  (cond
+    ((and (null? lhs-list) (null? rhs-list)) (list sub))
+    ((or (null? lhs-list) (null? rhs-list)) '())
+    (else
+     (let ((partial (unify-rec (car lhs-list) (car rhs-list) sub ac-ops proto)))
+       (apply append
+         (map (lambda (s1)
+                (unify-pairs (cdr lhs-list) (cdr rhs-list) s1 ac-ops proto))
+              partial))))))
+
+;; All permutations of XS as a list of lists. O(|xs|!); acceptable for
+;; the small operand counts typical in AC unification.
+(define (permutations xs)
+  (cond
+    ((null? xs) '(()))
+    (else
+     (apply append
+       (map (lambda (x)
+              (map (lambda (p) (cons x p))
+                   (permutations (remove-first x xs))))
+            xs)))))
+
+;; Deduplicate a list of substitutions by binding multiset. Keeps the
+;; first occurrence. Bindings are canonicalised via pattern-var name
+;; (mirrors substitution-compose's identity convention).
+(define (deduplicate-substitutions subs)
+  (let loop ((subs subs) (seen '()) (acc '()))
+    (cond
+      ((null? subs) (reverse acc))
+      (else
+       (let ((key (sub->canonical (car subs))))
+         (cond
+           ((member key seen)
+            (loop (cdr subs) seen acc))
+           (else
+            (loop (cdr subs) (cons key seen) (cons (car subs) acc)))))))))
+
+;; Canonical representation of a substitution as a sorted assoc list
+;; keyed by pattern-var-name; used for membership comparison.
+(define (sub->canonical sub)
+  (let ((bs (map (lambda (b) (cons (pattern-var-name (car b)) (cdr b)))
+                 (substitution-bindings sub))))
+    (sort
+      (lambda (x y)
+        (string<? (symbol->string (car x)) (symbol->string (car y))))
+      bs)))

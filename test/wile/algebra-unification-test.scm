@@ -247,4 +247,21 @@
     ;; Mismatch at multiset level
     (test 0 (length (ac-unify '(+ a b) '(+ a c) theory proto)))))
 
+(test-group "ac-unify: Stickel canonical x+y = a+b"
+  (let* ((theory (make-ac-theory '(+)))
+         (proto (sexp-term-protocol default-compare))
+         (vx (make-pattern-var 'x))
+         (vy (make-pattern-var 'y)))
+    ;; x+y =AC a+b → CSU has 2 unifiers: {x↦a, y↦b} and {x↦b, y↦a}
+    (let ((results (ac-unify (list '+ vx vy) '(+ a b) theory proto)))
+      (test 2 (length results))
+      ;; Every unifier binds x and y to {a, b}
+      (for-each
+        (lambda (u)
+          (let ((x-val (substitution-lookup u vx))
+                (y-val (substitution-lookup u vy)))
+            (test-assert (or (and (eq? x-val 'a) (eq? y-val 'b))
+                             (and (eq? x-val 'b) (eq? y-val 'a))))))
+        results))))
+
 (test-end "unification")
