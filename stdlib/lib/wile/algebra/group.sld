@@ -3,7 +3,7 @@
   (export make-group group?
           group-op group-identity group-inverse
           group->monoid
-          validate-group with-group
+          validate-group assert-group with-group
           ;; §5.4 — extended introspection
           group-element? group-setoid group-equal?
           group-order group-elements group-generators
@@ -11,7 +11,7 @@
           subgroup-generated subgroup? enumerate-finite-group
           ;; §5.4 — actions
           make-group-action group-action? group-action-group
-          group-action-apply group-action-set-element?
+          group-action-act group-action-act-fn group-action-set-element?
           orbit stabilizer fixed-points
           orbit-representative burnside-count
           ;; §5.4 — presets

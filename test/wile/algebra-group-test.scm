@@ -35,6 +35,13 @@
 (test-group "validate-group"
   (test #t (validate-group int-add-group '(-2 -1 0 1 2))))
 
+(test-group "assert-group"
+  ;; Valid group — returns (no error).
+  (assert-group int-add-group '(-2 -1 0 1 2))
+  ;; Broken group — inverse is identity, so a + inverse(a) ≠ 0. Must error.
+  (let ((fake (make-group + 0 (lambda (x) x))))
+    (test-error (assert-group fake '(1 2 3)))))
+
 ;; §5.4 — extended <group> record with optional metadata fields
 
 (test-group "extended <group> — Z/3Z with full metadata"
@@ -139,6 +146,22 @@
     ;; Z_5 is not a subgroup of Z_6 — different operation
     (test #f (subgroup? (cyclic-group 5) Z6))))
 
+(test-group "subgroup?/detects op disagreement"
+  ;; Construct fake-H with same elements and domain as Z_3 but a
+  ;; subtraction-mod-3 operation. Elements-containment passes (both ⊆ {0,1,2})
+  ;; but op-agreement fails: (H-op 1 2) = -1 mod 3 = 2, (G-op 1 2) = 0.
+  (let* ((Z3 (cyclic-group 3))
+         (fake-H (make-group
+                   (lambda (a b) (modulo (- a b) 3))
+                   0
+                   (lambda (k) (modulo (- 3 k) 3))
+                   (cons 'element? (lambda (k) (and (integer? k) (<= 0 k) (< k 3))))
+                   (cons 'setoid (numeric-setoid))
+                   (cons 'order 3)
+                   (cons 'elements '(0 1 2))
+                   (cons 'generators '(1)))))
+    (test #f (subgroup? fake-H Z3))))
+
 (test-group "enumerate-finite-group"
   (let ((Z6-gens (make-group
                    (lambda (a b) (modulo (+ a b) 6))
@@ -183,12 +206,37 @@
     (test 2 (group-order H))
     (test #t (subgroup? H S3))))
 
+(test-group "make-group/rejects unknown opt keys"
+  ;; 'elements? is a typo for 'element? — must error, not silently ignore.
+  (test-error (make-group + 0 - (cons 'elements? integer?)))
+  ;; 'ordre is a typo for 'order.
+  (test-error (make-group + 0 - (cons 'ordre 5)))
+  ;; Known keys still work.
+  (test #t (group? (make-group + 0 -
+                               (cons 'element? integer?)
+                               (cons 'order 0)
+                               (cons 'elements '())
+                               (cons 'generators '())))))
+
+(test-group "make-group/procedure? validation"
+  ;; Non-procedure op, inverse must error at construction, not at use site.
+  (test-error (make-group 'not-a-proc 0 -))
+  (test-error (make-group + 0 'not-a-proc))
+  ;; element? if supplied must be a procedure
+  (test-error (make-group + 0 - (cons 'element? 'not-a-proc))))
+
+(test-group "make-group-action/procedure? validation"
+  ;; Non-procedure set-element?, act must error at construction.
+  (let ((G (cyclic-group 3)))
+    (test-error (make-group-action G 'not-a-proc (lambda (g x) x)))
+    (test-error (make-group-action G integer? 'not-a-proc))))
+
 (test-group "group-action — record and trivial action"
   (let* ((Z3 (cyclic-group 3))
          (A  (trivial-action Z3 integer?)))
     (test #t (group-action? A))
     (test #t (eq? Z3 (group-action-group A)))
-    (test 42 ((group-action-apply A) 1 42))
+    (test 42 (group-action-act A 1 42))
     (test #t ((group-action-set-element? A) 7)))
   ;; make-group-action rejects non-groups
   (test-error (make-group-action 'not-a-group integer? (lambda (g x) x))))
@@ -243,6 +291,24 @@
                        (cons 'setoid (numeric-setoid)))))
     (test-error (orbit (make-group-action G integer? (lambda (g x) (+ x g))) 0))))
 
+(test-group "orbit on group with only elements enumeration (no generators)"
+  ;; Covers the elts-fallback branch of orbit: G carries elements but not generators.
+  (let* ((Z3-elts (make-group
+                    (lambda (a b) (modulo (+ a b) 3))
+                    0
+                    (lambda (k) (modulo (- 3 k) 3))
+                    (cons 'element? (lambda (k) (and (integer? k) (<= 0 k) (< k 3))))
+                    (cons 'setoid (numeric-setoid))
+                    (cons 'order 3)
+                    (cons 'elements '(0 1 2))))
+         (A (make-group-action Z3-elts integer?
+                               (lambda (k x) (modulo (+ x k) 3)))))
+    (test #f (group-generators Z3-elts))
+    (test #t (finite-group? Z3-elts))
+    (let ((o (orbit A 0)))
+      (test 3 (length o))
+      (test #t (every (lambda (k) (and (member k o) #t)) '(0 1 2))))))
+
 (test-group "orbit-representative"
   ;; S_2 swapping pair components — canonical form is the sorted pair.
   (let* ((S2 (symmetric-group 2))
@@ -291,6 +357,17 @@
     ;; Classic necklace count: 0000, 0001, 0011, 0101, 0111, 1111
     (test 6 (burnside-count A colourings))))
 
+(test-group "burnside-count errors on non-finite groups"
+  ;; G has generators but no elements enumeration — burnside-count needs
+  ;; finite G and must say so.
+  (let* ((Z (make-group + 0 -
+                        (cons 'element? integer?)
+                        (cons 'setoid (numeric-setoid))
+                        '(generators . (1))))
+         (A (make-group-action Z integer? (lambda (k x) (+ x k)))))
+    (test #f (finite-group? Z))
+    (test-error (burnside-count A '(0 1 2)))))
+
 (test-group "burnside-count detects malformed actions"
   ;; Not a valid action: g=1 maps 3 → 2 (idempotent-ish, not involutive).
   ;; Fixed points: |X^0| = 4, |X^1| = 3 (fixes 0,1,2 but not 3). Sum = 7.
@@ -308,16 +385,51 @@
 
 (test-group "permutation-action on S_3"
   (let ((A (permutation-action (symmetric-group 3) 3)))
-    (test 2 ((group-action-apply A) #(2 0 1) 0))
+    (test 2 (group-action-act A #(2 0 1) 0))
     (test 3 (length (orbit A 0)))))
 
 (test-group "regular-action on Z_4"
   (let ((A (regular-action (cyclic-group 4))))
-    (test 3 ((group-action-apply A) 1 2))
+    (test 3 (group-action-act A 1 2))
     ;; regular action is transitive: orbit of any element is all of G
     (test 4 (length (orbit A 0)))
     ;; stabilizer of any element is trivial (just identity)
     (test 1 (length (stabilizer A 0)))))
+
+(test-group "regular-action/requires element? or elements"
+  ;; Bare 3-arg group has neither — regular-action must not silently
+  ;; construct a liar predicate that accepts anything.
+  (let ((G (make-group + 0 -)))
+    (test-error (regular-action G))))
+
+(test-group "regular-action/derives predicate from elements"
+  ;; Group carries elements but not element? — derive membership from elements.
+  (let* ((Z3 (make-group
+               (lambda (a b) (modulo (+ a b) 3)) 0
+               (lambda (k) (modulo (- 3 k) 3))
+               (cons 'setoid (numeric-setoid))
+               (cons 'order 3)
+               (cons 'elements '(0 1 2))))
+         (A (regular-action Z3)))
+    (test #t ((group-action-set-element? A) 0))
+    (test #t ((group-action-set-element? A) 2))
+    (test #f ((group-action-set-element? A) 42))
+    (test #f ((group-action-set-element? A) 'bogus))))
+
+(test-group "conjugation-action/requires element? or elements"
+  (let ((G (make-group + 0 -)))
+    (test-error (conjugation-action G))))
+
+(test-group "conjugation-action/derives predicate from elements"
+  (let* ((Z3 (make-group
+               (lambda (a b) (modulo (+ a b) 3)) 0
+               (lambda (k) (modulo (- 3 k) 3))
+               (cons 'setoid (numeric-setoid))
+               (cons 'order 3)
+               (cons 'elements '(0 1 2))))
+         (A (conjugation-action Z3)))
+    (test #t ((group-action-set-element? A) 1))
+    (test #f ((group-action-set-element? A) 'bogus))))
 
 (test-group "conjugation-action on S_3"
   (let ((A (conjugation-action (symmetric-group 3))))
@@ -335,14 +447,80 @@
          (A  (product-action A2 A3)))
     (test #t (group-action? A))
     (test 12 (group-order (group-action-group A)))
-    (let ((result ((group-action-apply A) (list #(1 0) #(2 0 1)) '(0 0))))
+    (let ((result (group-action-act A (list #(1 0) #(2 0 1)) '(0 0))))
       (test #t (list? result))
       (test 2 (length result)))))
+
+(test-group "product-action/componentwise value"
+  ;; Verify the action actually composes componentwise: not just shape.
+  ;; S_2 on {0,1} with p = (0 1) sends 0 → 1.
+  ;; S_3 on {0,1,2} with q = (2 0 1) sends 1 → 0.
+  ;; Product acting on (0, 1): (group-action-act A (list p q) '(0 1)) = (1 0).
+  (let* ((A2 (permutation-action (symmetric-group 2) 2))
+         (A3 (permutation-action (symmetric-group 3) 3))
+         (A  (product-action A2 A3)))
+    (test '(1 0) (group-action-act A (list #(1 0) #(2 0 1)) '(0 1)))
+    (test '(0 1) (group-action-act A (list #(0 1) #(0 1 2)) '(0 1)))))
 
 (test-group "product-action edge cases"
   (let ((A (permutation-action (symmetric-group 3) 3)))
     (test #t (eq? A (product-action A)))
     (test #t (group-action? (product-action)))))
+
+(test-group "product-action/empty — predicate accepts trivial-group's element"
+  ;; (product-action) should act on trivial-group, whose sole element is 'e.
+  ;; The set-element? predicate must accept 'e, not a different sentinel.
+  (let ((A (product-action)))
+    (test #t (eq? (trivial-group) (group-action-group A)))
+    (test #t ((group-action-set-element? A) 'e))
+    (test 'e (group-action-act A 'e 'e))))
+
+;; Action axiom checker: verifies (unit) and (compatibility) directly.
+;;   unit:          (act identity x) = x  for all x ∈ samples
+;;   compatibility: (act (op g h) x) = (act g (act h x))  for all g,h ∈ G-elts, x ∈ samples
+;; Returns #t on success, or a descriptor list on first violation (lazy-ish).
+(define (%action-laws-hold? A G-elts samples)
+  (let* ((G   (group-action-group A))
+         (act (group-action-act-fn A))
+         (e   (group-identity G))
+         (op  (lambda (g h) (group-op G g h))))
+    (and (every (lambda (x) (equal? x (act e x))) samples)
+         (every (lambda (g)
+                  (every (lambda (h)
+                           (every (lambda (x)
+                                    (equal? (act (op g h) x)
+                                            (act g (act h x))))
+                                  samples))
+                         G-elts))
+                G-elts))))
+
+(test-group "action laws — trivial-action"
+  (let* ((G (cyclic-group 3))
+         (A (trivial-action G integer?)))
+    (test #t (%action-laws-hold? A (group-elements G) '(0 7 42)))))
+
+(test-group "action laws — permutation-action on S_3"
+  (let* ((S3 (symmetric-group 3))
+         (A  (permutation-action S3 3)))
+    (test #t (%action-laws-hold? A (group-elements S3) (iota 3)))))
+
+(test-group "action laws — regular-action on Z_4"
+  (let* ((Z4 (cyclic-group 4))
+         (A  (regular-action Z4)))
+    (test #t (%action-laws-hold? A (group-elements Z4) (group-elements Z4)))))
+
+(test-group "action laws — conjugation-action on S_3"
+  (let* ((S3 (symmetric-group 3))
+         (A  (conjugation-action S3)))
+    (test #t (%action-laws-hold? A (group-elements S3) (group-elements S3)))))
+
+(test-group "action laws — product-action on S_2 × S_3"
+  (let* ((A2 (permutation-action (symmetric-group 2) 2))
+         (A3 (permutation-action (symmetric-group 3) 3))
+         (A  (product-action A2 A3))
+         (G-elts (group-elements (group-action-group A)))
+         (samples (list '(0 0) '(0 1) '(0 2) '(1 0) '(1 1) '(1 2))))
+    (test #t (%action-laws-hold? A G-elts samples))))
 
 (test-group "backward compatibility — 3-arg make-group"
   (let ((Z (make-group + 0 -)))

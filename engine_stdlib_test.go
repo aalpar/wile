@@ -89,7 +89,7 @@ func TestEngine_EmbeddedStdlib_WileAlgebra(t *testing.T) {
 
 	result, err := eng.EvalMultiple(ctx, `
 		(import (wile algebra group))
-		(group? (make-group + - 0))
+		(group? (make-group + 0 -))
 	`)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Equals, "#t")

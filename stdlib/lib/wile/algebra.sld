@@ -59,14 +59,14 @@
     make-group group?
     group-op group-identity group-inverse
     group->monoid
-    validate-group with-group
+    validate-group assert-group with-group
     ;; Groups — §5.4 extended record, actions, orbits, Burnside
     group-element? group-setoid group-equal?
     group-order group-elements group-generators
     finite-group? finitely-generated-group?
     subgroup-generated subgroup? enumerate-finite-group
     make-group-action group-action? group-action-group
-    group-action-apply group-action-set-element?
+    group-action-act group-action-act-fn group-action-set-element?
     orbit stabilizer fixed-points
     orbit-representative burnside-count
     trivial-group cyclic-group symmetric-group product-group
