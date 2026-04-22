@@ -1096,5 +1096,106 @@
     ;; copy! across different reps not registered.
     (test #f (matrix-op-supported? 'copy! D SM))))
 
+;; ─── Notables from crosscheck 9e43e884..HEAD ─────
+
+(test-group "matrix-op-supported? agrees with dispatch success across rep-pair matrix"
+  ;; Closes the iff loop for the capability predicate. For every
+  ;; (op, args) combination, the predicate's answer must match whether
+  ;; dispatch actually succeeds on shape/semiring-matched inputs. Under
+  ;; N4 (kernel-derived capability) this also verifies that the result-
+  ;; rep rule stays in sync with bang-form kernel registrations — a
+  ;; drift between them would be caught here and only here.
+  (define (dispatch-succeeds? thunk)
+    (guard (exn (#t #f))
+      (thunk)
+      #t))
+  (let* ((S (counting-semiring))
+         (D  (make-semiring-matrix S 2 2))
+         (SM (make-sparse-semiring-matrix S 2 2 '())))
+    ;; Binary pure forms: add / mul across all four rep pairs.
+    (for-each
+      (lambda (pair)
+        (let ((A (car pair)) (B (cdr pair)))
+          (test (dispatch-succeeds? (lambda () (matrix-add A B)))
+                (matrix-op-supported? 'add A B))
+          (test (dispatch-succeeds? (lambda () (matrix-mul A B)))
+                (matrix-op-supported? 'mul A B))))
+      (list (cons D D) (cons D SM) (cons SM D) (cons SM SM)))
+    ;; Unary copy across both reps.
+    (for-each
+      (lambda (M)
+        (test (dispatch-succeeds? (lambda () (matrix-copy M)))
+              (matrix-op-supported? 'copy M)))
+      (list D SM))
+    ;; Dense-only unary ops: supported on dense, unsupported on sparse.
+    (for-each
+      (lambda (M)
+        (test (dispatch-succeeds? (lambda () (matrix-power M 2)))
+              (matrix-op-supported? 'power M))
+        (test (dispatch-succeeds? (lambda () (matrix-closure M)))
+              (matrix-op-supported? 'closure M))
+        (test (dispatch-succeeds? (lambda () (matrix-permanent M)))
+              (matrix-op-supported? 'permanent M)))
+      (list D SM))))
+
+(test-group "polymorphic ops handle 0x0 and 1x1 degenerate shapes"
+  ;; Coverage for degenerate shapes across the polymorphic entry points.
+  ;; Off-by-one loop guards bite at size=0 or rank-1; these pin them.
+  (let* ((S (counting-semiring))
+         (D-0x0 (make-semiring-matrix S 0 0))
+         (S-0x0 (make-sparse-semiring-matrix S 0 0 '()))
+         (D-1x1 (semiring-matrix-from-rows S '((7))))
+         (S-1x1 (make-sparse-semiring-matrix S 1 1 '(((0 . 0) . 7)))))
+    ;; 0x0 add / mul / copy on both reps.
+    (test '(0 . 0) (matrix-shape (matrix-add D-0x0 D-0x0)))
+    (test '(0 . 0) (matrix-shape (matrix-add S-0x0 S-0x0)))
+    (test '(0 . 0) (matrix-shape (matrix-mul D-0x0 D-0x0)))
+    (test '(0 . 0) (matrix-shape (matrix-mul S-0x0 S-0x0)))
+    (test '(0 . 0) (matrix-shape (matrix-copy D-0x0)))
+    (test '(0 . 0) (matrix-shape (matrix-copy S-0x0)))
+    ;; Sparse 0x0 has zero stored entries.
+    (test 0 (matrix-fold-entries
+              (matrix-add S-0x0 S-0x0)
+              0
+              (lambda (r c v acc) (+ acc 1))))
+    ;; 1x1 add / mul / copy.
+    (test 14 (matrix-ref (matrix-add D-1x1 D-1x1) 0 0))
+    (test 49 (matrix-ref (matrix-mul D-1x1 D-1x1) 0 0))
+    (let ((C (matrix-copy D-1x1)))
+      (test 7 (matrix-ref C 0 0))
+      (test #f (eq? C D-1x1)))
+    (let ((C (matrix-copy S-1x1)))
+      (test 7 (matrix-ref C 0 0))
+      (test #f (eq? C S-1x1)))))
+
+(test-group "polymorphic mul handles 1xN x Nx1 and NxM x MxP rank-1 shapes"
+  ;; Inner-dim kernel at the rank-1 boundary. 1x3 x 3x1 -> 1x1 dot product;
+  ;; 2x1 x 1x2 -> 2x2 outer product. Both reps.
+  (let* ((S (counting-semiring))
+         (D-1x3 (semiring-matrix-from-rows S '((1 2 3))))
+         (D-3x1 (semiring-matrix-from-rows S '((4) (5) (6))))
+         (D-2x1 (semiring-matrix-from-rows S '((1) (2))))
+         (D-1x2 (semiring-matrix-from-rows S '((3 4)))))
+    ;; 1*4 + 2*5 + 3*6 = 32
+    (let ((C (matrix-mul D-1x3 D-3x1)))
+      (test '(1 . 1) (matrix-shape C))
+      (test 32 (matrix-ref C 0 0)))
+    ;; outer product: ((1*3 1*4) (2*3 2*4)) = ((3 4) (6 8))
+    (let ((C (matrix-mul D-2x1 D-1x2)))
+      (test '(2 . 2) (matrix-shape C))
+      (test '((3 4) (6 8)) (semiring-matrix->rows C)))))
+
+(test-group "matrix-mul! rejects self-aliasing for sparse operands (OQ5)"
+  ;; Complement to the dense aliasing test (line ~856). The eq? guard runs
+  ;; before rep dispatch, so if a future kernel special-cases sparse self-
+  ;; aliasing, the outer guard must still catch it.
+  (let* ((S (counting-semiring))
+         (A (make-sparse-semiring-matrix S 2 2
+              '(((0 . 0) . 1) ((1 . 1) . 2))))
+         (B (make-sparse-semiring-matrix S 2 2
+              '(((0 . 0) . 3) ((1 . 1) . 4)))))
+    (test-error (matrix-mul! A A B))
+    (test-error (matrix-mul! B A B))))
+
 (test-end)
 (test-exit)

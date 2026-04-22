@@ -261,6 +261,12 @@
 
 ;; Allocate an empty matrix of given REP. Dense is zero-initialized;
 ;; sparse starts with no stored entries.
+;;
+;; TODO: when a third rep is added, convert to registry dispatch via
+;; (register-matrix-op! '(allocate <tag>) ...). At N=2 the inline `case`
+;; stays shorter and more readable than the polymorphic version, so the
+;; divergence from the "one register call per new rep" principle stated
+;; at the top of this file is deliberate and localized.
 (define (matrix-allocate rep S rows cols)
   (case rep
     ((dense)  (make-semiring-matrix S rows cols))
@@ -575,6 +581,11 @@
   (unless (eq? (matrix-semiring C) (matrix-semiring A))
     (error "matrix-mul!: destination semiring differs from operands"))
   ;; OQ5 incremental-write: forbid eq? overlap between dest and any operand.
+  ;; `eq?` identity suffices while every rep owns its underlying storage —
+  ;; distinct records cannot currently share a data vector or entries list.
+  ;; When view-based or shared-buffer reps land, this check will miss aliasing
+  ;; at the storage layer; introduce a polymorphic `matrix-aliases?` at that
+  ;; point. Keep this comment synced with matrix-copy! if the semantics evolve.
   (when (or (eq? C A) (eq? C B))
     (error "matrix-mul!: destination cannot alias operand; use a scratch matrix or rebind to (matrix-mul A B)"))
   (let* ((a-tag (matrix-rep-tag A))
@@ -604,22 +615,6 @@
 (register-matrix-op! '(mul! dense  dense  sparse) matrix-mul!/dense/dense/sparse)
 (register-matrix-op! '(mul! dense  sparse dense)  matrix-mul!/dense/sparse/dense)
 (register-matrix-op! '(mul! sparse sparse sparse) matrix-mul!/sparse/sparse/sparse)
-
-;; ─── Capability predicate (Path D P6, OQ3) ───
-
-;; Pure-form registrations: data-driven marker entries so matrix-op-supported?
-;; answers with one table lookup regardless of pure vs bang. Value is the
-;; dispatcher function itself, for introspection tools that might want to
-;; find the entry point. The allocator-and-dispatch logic lives in
-;; matrix-add / matrix-mul; these entries just record "supported".
-(register-matrix-op! '(add dense  dense)  matrix-add)
-(register-matrix-op! '(add dense  sparse) matrix-add)
-(register-matrix-op! '(add sparse dense)  matrix-add)
-(register-matrix-op! '(add sparse sparse) matrix-add)
-(register-matrix-op! '(mul dense  dense)  matrix-mul)
-(register-matrix-op! '(mul dense  sparse) matrix-mul)
-(register-matrix-op! '(mul sparse dense)  matrix-mul)
-(register-matrix-op! '(mul sparse sparse) matrix-mul)
 
 ;; ─── Dense-only polymorphic ops (Path D P7) ─
 
@@ -716,18 +711,45 @@
 
 (register-matrix-op! '(copy! dense  dense)  matrix-copy!/dense/dense)
 (register-matrix-op! '(copy! sparse sparse) matrix-copy!/sparse/sparse)
-(register-matrix-op! '(copy  dense)  matrix-copy)
-(register-matrix-op! '(copy  sparse) matrix-copy)
+
+;; ─── Capability predicate (Path D P6, OQ3) ───
+
+;; Derive capability from bang-form kernel availability rather than from
+;; separate marker entries. For pure binary ops (add, mul) the result-rep
+;; rule picks which bang kernel would dispatch; the predicate succeeds iff
+;; that kernel is registered. For pure 'copy (same-rep) the predicate
+;; checks the copy! kernel on the shared rep. This keeps the dispatch
+;; table single-purpose (kernels only) and removes the need to register
+;; marker entries that duplicate the pure-form dispatcher reference.
 
 (define (matrix-op-supported? op . args)
-  "Return #t iff every ARG is a matrix and the dispatch table has a kernel\nregistered under (OP . ARGS' rep-tags); #f otherwise. Symbol-based (OP is a\nScheme symbol like 'add, 'add!, 'mul, etc.). For pure binary ops 'add and\n'mul, every rep combination is registered. For bang forms, the destination\nrep must match the expected result rep per OQ4. Unary ops registered on\nboth reps: 'copy (P8). Unary ops currently dense-only: 'power, 'closure,\n'permanent (P7). 'copy! requires destination and source to share rep.\n\nThis is a representation-level capability query, not a call-validity check.\n#t means a kernel exists for those reps; it does NOT promise the operation\nwill succeed. Shape compatibility, semiring-identity, and per-op runtime\nconstraints (e.g. `matrix-mul!` forbidding destination/operand aliasing per\nOQ5) are still checked by the operation itself and may raise on invocation.\n\nThis is the programmatic capability query OQ3 promised — callers can branch\non kernel availability rather than catching errors for missing reps:\n\n  (if (matrix-op-supported? 'permanent M)\n      (matrix-permanent M)\n      (matrix-permanent (sparse->semiring-matrix M)))\n\nReturns #f (rather than raising) when an ARG is not a matrix — the predicate\nis safe to call on any value.\n\nExamples:\n  (matrix-op-supported? 'add A B)           ; => #t for valid matrices A, B\n  (matrix-op-supported? 'add! C A B)        ; => #t if C's rep matches\n  (matrix-op-supported? 'mul  A 42)         ; => #f (non-matrix)\n\nParameters:\n  op : symbol\n  args : matrices\nReturns: boolean\nCategory: algebra\nKeywords: matrix capability, support query, dispatch, introspection\n\nSee also: `matrix-rep-tag', `matrix-add', `matrix-mul'."
+  "Return #t iff every ARG is a matrix and the requested operation has a\nkernel that would be selected for dispatch; #f otherwise. For pure binary\nforms ('add, 'mul) this consults the result-rep rule to locate the bang-\nform kernel that would actually run. For pure unary 'copy it checks the\nsame-rep 'copy! kernel. Bang forms ('add!, 'mul!, 'copy!) and dense-only\nunary ops ('power, 'closure, 'permanent) look up directly; 'copy!\nrequires destination and source to share rep.\n\nThis is a representation-level capability query, not a call-validity check.\n#t means a kernel exists that would dispatch for those reps; it does NOT\npromise the operation will succeed. Shape compatibility, semiring-identity,\nand per-op runtime constraints (e.g. `matrix-mul!` forbidding destination/\noperand aliasing per OQ5) are still checked by the operation itself and\nmay raise on invocation.\n\nThis is the programmatic capability query OQ3 promised — callers can branch\non kernel availability rather than catching errors for missing reps:\n\n  (if (matrix-op-supported? 'permanent M)\n      (matrix-permanent M)\n      (matrix-permanent (sparse->semiring-matrix M)))\n\nReturns #f (rather than raising) when an ARG is not a matrix — the predicate\nis safe to call on any value.\n\nExamples:\n  (matrix-op-supported? 'add A B)           ; => #t for valid matrices A, B\n  (matrix-op-supported? 'add! C A B)        ; => #t if C's rep matches\n  (matrix-op-supported? 'mul  A 42)         ; => #f (non-matrix)\n\nParameters:\n  op : symbol\n  args : matrices\nReturns: boolean\nCategory: algebra\nKeywords: matrix capability, support query, dispatch, introspection\n\nSee also: `matrix-rep-tag', `matrix-add', `matrix-mul'."
   (define (all-matrices? xs)
     (cond ((null? xs) #t)
           ((not (matrix? (car xs))) #f)
           (else (all-matrices? (cdr xs)))))
   (and (all-matrices? args)
-       (matrix-op-lookup (cons op (map matrix-rep-tag args)))
-       #t))
+       (let* ((tags (map matrix-rep-tag args))
+              (found
+               (cond
+                 ;; Pure binary ops: the bang-form kernel selected by the
+                 ;; result-rep rule is the single source of truth.
+                 ((and (eq? op 'add) (= (length tags) 2))
+                  (matrix-op-lookup
+                   (list 'add! (matrix-add-result-rep (car tags) (cadr tags))
+                         (car tags) (cadr tags))))
+                 ((and (eq? op 'mul) (= (length tags) 2))
+                  (matrix-op-lookup
+                   (list 'mul! (matrix-mul-result-rep (car tags) (cadr tags))
+                         (car tags) (cadr tags))))
+                 ;; Pure unary copy: same-rep; derive from copy! kernel.
+                 ((and (eq? op 'copy) (= (length tags) 1))
+                  (matrix-op-lookup
+                   (list 'copy! (car tags) (car tags))))
+                 ;; All other forms (bang forms; unary dense-only ops):
+                 ;; direct table lookup on (op . rep-tags).
+                 (else (matrix-op-lookup (cons op tags))))))
+         (if found #t #f))))
 
 ;; ─── Internal utilities ──────────────────────
 
@@ -1086,9 +1108,23 @@
   (semiring ssmat-semiring)
   (rows     ssmat-rows)
   (cols     ssmat-cols)
-  ;; entries is mutable so Path D bang forms can replace the alist in place.
+  ;; `entries` is mutable so Path D bang forms can replace the alist in place.
   ;; Callers must hold the sparse record reference; mutating entries through
   ;; an external alist binding does nothing (the setter replaces the field).
+  ;;
+  ;; INVARIANT OBLIGATION for internal writers (ssmat-entries-set! callers):
+  ;;   1. Each pair is ((row . col) . value) with 0 <= row < rows,
+  ;;      0 <= col < cols.
+  ;;   2. No entry has `(equal? value (semiring-zero S))` — zero-valued
+  ;;      entries are stripped so `matrix-fold-entries` reports nnz.
+  ;;   3. Proper list (not dotted, not circular).
+  ;;   4. Duplicate coordinates: first-match wins under `assoc`.
+  ;; The public constructor enforces these; every internal bang kernel
+  ;; (matrix-add!/sparse/sparse/sparse, matrix-mul!/sparse/sparse/sparse,
+  ;; matrix-copy!/sparse/sparse) must preserve them. No validated setter
+  ;; wrapper today — the O(nnz) cost on the hot path outweighs the current
+  ;; discipline-enforcement value at 3 bang kernels. Revisit if sparse
+  ;; bang surface grows.
   (entries  ssmat-entries ssmat-entries-set!))
 
 (register-matrix-rep! sparse-semiring-matrix? 'sparse)

@@ -1,7 +1,7 @@
 +++
 title = "Implementation plan — (wile algebra matrix)"
 date  = "2026-04-20"
-status = "Active"
+status = "Shipped — initial library via PR #681; Path D polymorphic layer followed (see `2026-04-21-matrix-path-d-impl.md`)"
 parent = "2026-04-17-algebra-foundations-directions.md §5.1"
 +++
 
