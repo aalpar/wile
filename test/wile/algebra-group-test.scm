@@ -388,6 +388,24 @@
     (test 2 (group-action-act A #(2 0 1) 0))
     (test 3 (length (orbit A 0)))))
 
+(test-group "permutation-action/validates n"
+  (let ((S3 (symmetric-group 3)))
+    (test-error (permutation-action S3 'not-int))
+    (test-error (permutation-action S3 -1))
+    (test-error (permutation-action S3 0))))
+
+(test-group "symmetric-group/elements enumeration cap"
+  ;; For small n (≤ 8), elements is computed eagerly.
+  (test 6 (length (group-elements (symmetric-group 3))))
+  (test 24 (length (group-elements (symmetric-group 4))))
+  ;; Beyond n=8, elements is omitted (n! allocation cost prohibitive).
+  ;; Order and generators still present.
+  (test #f (group-elements (symmetric-group 9)))
+  (test 362880 (group-order (symmetric-group 9)))
+  (test 2 (length (group-generators (symmetric-group 9))))
+  (test #f (finite-group? (symmetric-group 9)))
+  (test #t (finitely-generated-group? (symmetric-group 9))))
+
 (test-group "regular-action on Z_4"
   (let ((A (regular-action (cyclic-group 4))))
     (test 3 (group-action-act A 1 2))

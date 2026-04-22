@@ -104,32 +104,35 @@
          (gens+    (%symmetrize-generators generators inverse S))
          (_        (%validate-opts-keys "subgroup-generated" opts '(max-size)))
          (max-size (%assv-or opts 'max-size #f)))
-    (let loop ((seen (list id)) (frontier (list id)))
+    ;; Track closure size as an integer accumulator so the max-size check
+    ;; and final order field are O(1) per step instead of O(n) (length seen).
+    (let loop ((seen (list id)) (frontier (list id)) (size 1))
       (cond
         ((null? frontier)
          (make-group op id inverse
                      (cons 'element?   (group-element? G))
                      (cons 'setoid     S)
-                     (cons 'order      (length seen))
+                     (cons 'order      size)
                      (cons 'elements   (reverse seen))
                      (cons 'generators generators)))
         (else
          (let ((current (car frontier)))
-           (let scan ((gs gens+) (seen seen) (frontier (cdr frontier)))
+           (let scan ((gs gens+) (seen seen) (frontier (cdr frontier)) (size size))
              (cond
-               ((null? gs) (loop seen frontier))
+               ((null? gs) (loop seen frontier size))
                (else
                 (let ((new-elt (op current (car gs))))
                   (cond
                     ((%setoid-member? S new-elt seen)
-                     (scan (cdr gs) seen frontier))
-                    ((and max-size (>= (length seen) max-size))
+                     (scan (cdr gs) seen frontier size))
+                    ((and max-size (>= size max-size))
                      (error "subgroup-generated: closure exceeded max-size"
                             max-size))
                     (else
                      (scan (cdr gs)
                            (cons new-elt seen)
-                           (cons new-elt frontier))))))))))))))
+                           (cons new-elt frontier)
+                           (+ size 1))))))))))))))
 
 (define (subgroup? H G)
   "Return #t if H is a subgroup of G: every element of H is in G, and H's\noperation agrees with G's on H's elements. Both must be finite.\n\nExamples:\n  (subgroup? (subgroup-generated (cyclic-group 6) '(2)) (cyclic-group 6))\n    => #t\n\nParameters:\n  H : group\n  G : group\nReturns: boolean\nCategory: algebra\nKeywords: subgroup, containment, algebraic substructure"
@@ -275,6 +278,10 @@
   "Return the symmetric group S_n on {0, 1, ..., n-1}.\nElements are permutations represented as vectors of length N where v[i]\ngives the image of i. Composition is (p∘q)[i] = p[q[i]].\n\nFor n ≤ 1 the group is trivial; for n = 2 the single generator is the\ntransposition (0 1); for n ≥ 3 the generators are the transposition\n(0 1) together with the n-cycle (0 1 2 ... n-1).\n\nExamples:\n  (group-order (symmetric-group 3))      => 6\n  (group-identity (symmetric-group 3))   => #(0 1 2)\n\nParameters:\n  n : non-negative integer\nReturns: any\nCategory: algebra\nKeywords: symmetric group, permutation group, S_n, permutations\n\nSee also: `cyclic-group', `trivial-group'."
   (unless (and (integer? n) (>= n 0))
     (error "symmetric-group: n must be a non-negative integer" n))
+  ;; Cap eager enumeration at n <= 8 (40320 elements). For n > 8, n!
+  ;; allocation is prohibitive; omit elements and let callers opt in via
+  ;; (enumerate-finite-group (symmetric-group n) '(max-size . K)) with
+  ;; generators BFS bounded at K.
   (let* ((id      (list->vector (iota n)))
          (trans01 (and (>= n 2)
                        (let ((v (list->vector (iota n))))
@@ -283,7 +290,7 @@
                          v)))
          (n-cycle (and (>= n 2)
                        (list->vector (append (cdr (iota n)) (list 0)))))
-         (all     (%all-permutations n))
+         (all     (and (<= n 8) (%all-permutations n)))
          (valid?  (lambda (v) (and (vector? v)
                                     (= (vector-length v) n)
                                     (%permutation-vector? v))))
@@ -516,9 +523,10 @@
          (n (group-order G)))
     (unless (finite-group? G)
       (error (string-append
-               "burnside-count: group is not finite (no elements enumeration). "
-               "If the group is finitely generated and you believe it is finite, "
-               "use (enumerate-finite-group G) to promote it first.")
+               "burnside-count: group is not finite (requires both order "
+               "and elements enumeration). If the group is finitely "
+               "generated and you believe it is finite, use "
+               "(enumerate-finite-group G) to promote it first.")
              G))
     (let* ((sum (fold (lambda (g acc)
                         (+ acc (length (fixed-points action g X-elements))))
@@ -552,6 +560,8 @@
 
 (define (permutation-action Sn n)
   "Natural action of the symmetric group S_n on {0, 1, ..., n-1}: a\npermutation vector P acts on an index i by returning P[i].\n\nExamples:\n  (let ((A (permutation-action (symmetric-group 3) 3)))\n    (group-action-act A #(2 0 1) 0))  => 2\n\nParameters:\n  Sn : symmetric group\n  n : positive integer\nReturns: any\nCategory: algebra\nKeywords: permutation action, natural action, S_n action\n\nSee also: `regular-action', `conjugation-action'."
+  (unless (and (integer? n) (positive? n))
+    (error "permutation-action: n must be a positive integer" n))
   (make-group-action
     Sn
     (lambda (x) (and (integer? x) (<= 0 x) (< x n)))
