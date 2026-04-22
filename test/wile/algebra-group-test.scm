@@ -124,6 +124,65 @@
     (test #t (equal? '(0 0 0) (group-identity triple)))
     (test 3 (length (group-generators triple)))))
 
+(test-group "subgroup-generated"
+  (let ((Z6 (cyclic-group 6)))
+    (let ((H (subgroup-generated Z6 '(2))))
+      (test 3 (group-order H))
+      (test #t (not (not (memv 0 (group-elements H)))))
+      (test #t (not (not (memv 2 (group-elements H)))))
+      (test #t (not (not (memv 4 (group-elements H))))))))
+
+(test-group "subgroup?"
+  (let* ((Z6 (cyclic-group 6))
+         (H  (subgroup-generated Z6 '(2))))
+    (test #t (subgroup? H Z6))
+    ;; Z_5 is not a subgroup of Z_6 — different operation
+    (test #f (subgroup? (cyclic-group 5) Z6))))
+
+(test-group "enumerate-finite-group"
+  (let ((Z6-gens (make-group
+                   (lambda (a b) (modulo (+ a b) 6))
+                   0
+                   (lambda (k) (modulo (- 6 k) 6))
+                   (cons 'element? (lambda (k) (and (integer? k) (<= 0 k) (< k 6))))
+                   (cons 'setoid (numeric-setoid))
+                   '(generators . (1)))))
+    (test #f (finite-group? Z6-gens))
+    (test #t (finitely-generated-group? Z6-gens))
+    (let ((Z6 (enumerate-finite-group Z6-gens)))
+      (test #t (finite-group? Z6))
+      (test 6 (group-order Z6))
+      (test #t (every (lambda (k) (not (not (memv k (group-elements Z6)))))
+                      (iota 6))))))
+
+(test-group "enumerate-finite-group/idempotent"
+  (let* ((Z5  (cyclic-group 5))
+         (Z5* (enumerate-finite-group Z5)))
+    (test #t (eq? Z5 Z5*))))
+
+(test-group "enumerate-finite-group/max-size-cap"
+  (let ((Z100-gens (make-group
+                     (lambda (a b) (modulo (+ a b) 100))
+                     0
+                     (lambda (k) (modulo (- 100 k) 100))
+                     (cons 'element? (lambda (k) (and (integer? k) (<= 0 k) (< k 100))))
+                     (cons 'setoid (numeric-setoid))
+                     '(generators . (1)))))
+    (test-error (enumerate-finite-group Z100-gens '(max-size . 10)))))
+
+(test-group "enumerate-finite-group/no-generators"
+  (let ((R (make-group + 0 -
+                       (cons 'element? real?)
+                       (cons 'setoid (numeric-setoid)))))
+    (test-error (enumerate-finite-group R))))
+
+(test-group "subgroup-generated on symmetric-group (vector elements)"
+  (let* ((S3 (symmetric-group 3))
+         (H  (subgroup-generated S3 (list #(1 0 2)))))
+    ;; ⟨(0 1)⟩ is a 2-element subgroup
+    (test 2 (group-order H))
+    (test #t (subgroup? H S3))))
+
 (test-group "backward compatibility — 3-arg make-group"
   (let ((Z (make-group + 0 -)))
     (test #t (group? Z))
