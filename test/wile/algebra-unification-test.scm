@@ -2,6 +2,7 @@
 
 (import (scheme base)
         (chibi test)
+        (srfi 1)
         (wile algebra unification)
         (wile algebra rewrite)
         (wile algebra symbolic))
@@ -21,6 +22,45 @@
 (define (sym-append . syms)
   (string->symbol
     (apply string-append (map symbol->string syms))))
+
+;; Deterministic LCG (Numerical Recipes parameters) — no srfi-27 in Wile.
+;; State is a single-cell box; seed is any integer. Generator is fine for
+;; test-input shaping; do not use for cryptographic purposes.
+(define (make-lcg seed)
+  (let ((state (list seed)))
+    (lambda ()
+      (let* ((s (car state))
+             (s* (modulo (+ (* s 1664525) 1013904223) 4294967296)))
+        (set-car! state s*)
+        s*))))
+
+(define (lcg-int lcg bound)
+  ;; Uniform-ish integer in [0, bound).
+  (modulo (lcg) bound))
+
+(define (random-ac-term op leaves depth seed)
+  ;; Build a depth-bounded AC term tree. Branching factor 2..4 at each
+  ;; internal node; leaves chosen uniformly from LEAVES.
+  (let ((lcg (make-lcg seed)))
+    (let build ((d depth))
+      (cond
+        ((zero? d) (list-ref leaves (lcg-int lcg (length leaves))))
+        (else
+         (let ((k (+ 2 (lcg-int lcg 3))))
+           (cons op
+                 (map (lambda (_) (build (- d 1)))
+                      (iota k)))))))))
+
+(define (shuffle-ac-term t op)
+  ;; Reverse-order children recursively under OP. Structural shuffle —
+  ;; preserves AC-equivalence without needing a PRNG.
+  (cond
+    ((pair? t)
+     (cond
+       ((eq? (car t) op)
+        (cons op (reverse (map (lambda (x) (shuffle-ac-term x op)) (cdr t)))))
+       (else t)))
+    (else t)))
 
 (define (make-ac-theory ops)
   (let ((axioms
@@ -295,6 +335,19 @@
          (subj '(+ (* 3 b) (* 2 a))))
     (let ((results (ac-match pat subj theory proto)))
       (test #t (> (length results) 0)))))
+
+(test-group "integration: random AC-equality stress"
+  ;; For several deterministic seeds, generate a random AC-term under + and
+  ;; pair it with its reverse-shuffle. Multiset equality must hold, so the
+  ;; CSU has exactly one (empty) unifier.
+  (let ((theory (make-ac-theory '(+)))
+        (proto (sexp-term-protocol default-compare)))
+    (for-each
+      (lambda (seed)
+        (let* ((t (random-ac-term '+ '(a b c d) 3 seed))
+               (shuffled (shuffle-ac-term t '+)))
+          (test 1 (length (ac-unify t shuffled theory proto)))))
+      '(1 2 3 4 5))))
 
 (test-group "integration: normalize then unify is equivalent to direct unify"
   ;; Stability property: if the caller hands the matcher AC-equivalent
