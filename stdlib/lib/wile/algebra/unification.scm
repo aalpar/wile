@@ -210,6 +210,18 @@ Keywords: AC matching, pattern matching, associative, commutative, unification"
   (let ((ac-ops (ac-ops-of theory)))
     (match-rec pattern subject empty-substitution ac-ops proto)))
 
+;; Collapse nested (op ...) applications under an AC operator into a flat
+;; list of operand terms. Non-compound terms return (list term); compound
+;; terms with non-matching operator are left as a single element.
+(define (flatten-ac term op proto)
+  (cond
+    ((not (term-compound? proto term)) (list term))
+    ((eq? (term-get-operator proto term) op)
+     (apply append
+       (map (lambda (a) (flatten-ac a op proto))
+            (term-get-operands proto term))))
+    (else (list term))))
+
 ;; Core recursion. Dispatches on PATTERN shape. AC-case added in Task 3.4.
 (define (match-rec p s sub ac-ops proto)
   (cond

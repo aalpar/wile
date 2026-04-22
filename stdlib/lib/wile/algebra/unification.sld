@@ -14,7 +14,9 @@
     ;; Diophantine basis (standalone primitive)
     diophantine-basis
     ;; AC matching
-    ac-match)
+    ac-match
+    ;; Internal helpers (exposed for testing)
+    flatten-ac)
   (import (scheme base)
           (srfi 1)
           (wile algebra rewrite)

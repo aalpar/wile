@@ -164,4 +164,13 @@
     (test 1 (length (ac-match pat '(f a a) theory proto)))   ; match
     (test 0 (length (ac-match pat '(f a b) theory proto))))) ; fail
 
+(test-group "flatten-ac: associativity collapse"
+  (let ((proto (sexp-term-protocol default-compare)))
+    (test '(a b c) (flatten-ac '(+ a (+ b c)) '+ proto))
+    (test '(a b c d) (flatten-ac '(+ (+ a b) (+ c d)) '+ proto))
+    ;; Non-AC op nested: don't flatten
+    (test '(a (g b c)) (flatten-ac '(+ a (g b c)) '+ proto))
+    ;; Leaf
+    (test '(a) (flatten-ac 'a '+ proto))))
+
 (test-end "unification")
