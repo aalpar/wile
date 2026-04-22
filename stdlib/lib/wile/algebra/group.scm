@@ -403,3 +403,68 @@
 (define (trivial-action G set-element?)
   "Return the trivial action of G on the set (SET-ELEMENT?): every group\nelement fixes every set element.\n\nExamples:\n  (let ((A (trivial-action (cyclic-group 3) integer?)))\n    ((group-action-apply A) 2 42))  => 42\n\nParameters:\n  G : group\n  set-element? : procedure\nReturns: any\nCategory: algebra\nKeywords: trivial action, fixed action, identity action\n\nSee also: `make-group-action'."
   (make-group-action G set-element? (lambda (g x) x)))
+
+;;; -- §5.4 orbits, stabilizers, fixed-points ------------------------------
+;;;
+;;; Strategy (per Q4 resolution): prefer BFS from (group-generators G)
+;;; symmetrized under inversion. Fall back to iterating (group-elements G)
+;;; when only an enumeration is available. This handles infinite groups
+;;; acting with finite orbits (e.g., Z on Z/12Z) correctly.
+;;;
+;;; Equality on the set X is Scheme equal? (v1 design). The group's setoid
+;;; governs comparison of group elements only.
+
+(define (orbit action x)
+  "Return the orbit of X under ACTION as a list — all set elements reachable\nfrom X by applying group elements. BFS from group generators when\navailable; iterate-all over group elements otherwise. Errors if the\ngroup has neither.\n\nSet elements are compared with equal?.\n\nExamples:\n  (let* ((S2 (symmetric-group 2))\n         (A (make-group-action S2 integer?\n                               (lambda (p i) (vector-ref p i)))))\n    (length (orbit A 0)))  => 2\n\nParameters:\n  action : group-action\n  x : any\nReturns: list\nCategory: algebra\nKeywords: orbit, G-orbit, transitive, reachable, orbit equation\n\nSee also: `stabilizer', `burnside-count', `orbit-representative'."
+  (let* ((G    (group-action-group action))
+         (act  (group-action-apply action))
+         (gens (group-generators G))
+         (elts (group-elements G)))
+    (cond
+      (gens
+       (let* ((inverse  (group-inverse-fn G))
+              (S        (group-setoid G))
+              (gens*    (%symmetrize-generators gens inverse S)))
+         (let bfs ((seen (list x)) (frontier (list x)))
+           (cond
+             ((null? frontier) (reverse seen))
+             (else
+              (let ((current (car frontier)))
+                (let scan ((gs gens*) (seen seen) (frontier (cdr frontier)))
+                  (cond
+                    ((null? gs) (bfs seen frontier))
+                    (else
+                     (let ((z (act (car gs) current)))
+                       (cond
+                         ((member z seen)
+                          (scan (cdr gs) seen frontier))
+                         (else
+                          (scan (cdr gs)
+                                (cons z seen)
+                                (cons z frontier))))))))))))))
+      (elts
+       (let iter ((gs elts) (seen '()))
+         (cond
+           ((null? gs) (reverse seen))
+           (else
+            (let ((z (act (car gs) x)))
+              (cond
+                ((member z seen) (iter (cdr gs) seen))
+                (else            (iter (cdr gs) (cons z seen)))))))))
+      (else
+       (error "orbit: group has neither generators nor element enumeration"
+              G)))))
+
+(define (stabilizer action x)
+  "Return the stabilizer of X under ACTION as a list — all group elements\nthat fix X. Requires G to carry an elements enumeration.\n\nSet elements are compared with equal?.\n\nExamples:\n  (let* ((S3 (symmetric-group 3))\n         (A  (make-group-action S3 integer?\n                                (lambda (p i) (vector-ref p i)))))\n    (length (stabilizer A 0)))  => 2\n\nParameters:\n  action : group-action\n  x : any\nReturns: list\nCategory: algebra\nKeywords: stabilizer, point stabilizer, fixing subgroup, isotropy group\n\nSee also: `orbit', `fixed-points'."
+  (let ((G   (group-action-group action))
+        (act (group-action-apply action)))
+    (unless (group-elements G)
+      (error "stabilizer: group must have an elements enumeration" G))
+    (filter (lambda (g) (equal? (act g x) x))
+            (group-elements G))))
+
+(define (fixed-points action g X-elements)
+  "Return all elements of X-ELEMENTS fixed by the group element G under\nACTION, as a list. Caller supplies X-ELEMENTS explicitly to support sets\nlarger or differently-structured than the group.\n\nSet elements are compared with equal?.\n\nExamples:\n  (let* ((S3 (symmetric-group 3))\n         (A  (make-group-action S3 integer?\n                                (lambda (p i) (vector-ref p i)))))\n    (length (fixed-points A #(0 1 2) '(0 1 2))))  => 3\n\nParameters:\n  action : group-action\n  g : any\n  X-elements : list\nReturns: list\nCategory: algebra\nKeywords: fixed points, fixed set, invariant elements\n\nSee also: `stabilizer', `burnside-count'."
+  (let ((act (group-action-apply action)))
+    (filter (lambda (x) (equal? (act g x) x)) X-elements)))

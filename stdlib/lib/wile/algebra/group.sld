@@ -12,6 +12,7 @@
           ;; §5.4 — actions
           make-group-action group-action? group-action-group
           group-action-apply group-action-set-element?
+          orbit stabilizer fixed-points
           ;; §5.4 — presets
           trivial-group cyclic-group symmetric-group product-group
           trivial-action)

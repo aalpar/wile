@@ -193,6 +193,56 @@
   ;; make-group-action rejects non-groups
   (test-error (make-group-action 'not-a-group integer? (lambda (g x) x))))
 
+;; Inline permutation action (permutation-action preset lands in Phase 7)
+(define (%perm-action G)
+  (make-group-action G integer? (lambda (p i) (vector-ref p i))))
+
+(test-group "orbit — S_2 on {0, 1}"
+  (let* ((S2 (symmetric-group 2))
+         (A  (%perm-action S2))
+         (o  (orbit A 0)))
+    (test 2 (length o))
+    (test #t (not (not (member 0 o))))
+    (test #t (not (not (member 1 o))))))
+
+(test-group "orbit-stabilizer theorem on S_3"
+  (let* ((S3 (symmetric-group 3))
+         (A  (%perm-action S3)))
+    (let ((o (orbit A 0))
+          (s (stabilizer A 0)))
+      ;; |orbit(0)| · |stab(0)| = |S_3| = 6
+      (test (group-order S3) (* (length o) (length s))))))
+
+(test-group "orbit on infinite group acting on finite set (Z on Z/12Z)"
+  (let* ((Z (make-group + 0 -
+                        (cons 'element? integer?)
+                        (cons 'setoid (numeric-setoid))
+                        '(generators . (1))))
+         (Z/12Z? (lambda (x) (and (integer? x) (<= 0 x) (< x 12))))
+         (A (make-group-action Z Z/12Z?
+                               (lambda (k x) (modulo (+ x k) 12)))))
+    (test #f (finite-group? Z))
+    (test #t (finitely-generated-group? Z))
+    (let ((o (orbit A 0)))
+      (test 12 (length o))
+      (test #t (every (lambda (k) (not (not (member k o)))) (iota 12))))))
+
+(test-group "fixed-points"
+  (let* ((S3 (symmetric-group 3))
+         (A  (%perm-action S3)))
+    ;; identity fixes all 3 points
+    (test 3 (length (fixed-points A #(0 1 2) '(0 1 2))))
+    ;; transposition (0 1) fixes only 2
+    (test 1 (length (fixed-points A #(1 0 2) '(0 1 2))))
+    (test '(2) (fixed-points A #(1 0 2) '(0 1 2)))))
+
+(test-group "orbit errors on unusable groups"
+  ;; No generators, no elements → orbit should error
+  (let ((G (make-group + 0 -
+                       (cons 'element? integer?)
+                       (cons 'setoid (numeric-setoid)))))
+    (test-error (orbit (make-group-action G integer? (lambda (g x) (+ x g))) 0))))
+
 (test-group "backward compatibility — 3-arg make-group"
   (let ((Z (make-group + 0 -)))
     (test #t (group? Z))
