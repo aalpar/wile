@@ -306,6 +306,44 @@
                       (else (- x 1)))))))
     (test-error (burnside-count A-bad '(0 1 2 3)))))
 
+(test-group "permutation-action on S_3"
+  (let ((A (permutation-action (symmetric-group 3) 3)))
+    (test 2 ((group-action-apply A) #(2 0 1) 0))
+    (test 3 (length (orbit A 0)))))
+
+(test-group "regular-action on Z_4"
+  (let ((A (regular-action (cyclic-group 4))))
+    (test 3 ((group-action-apply A) 1 2))
+    ;; regular action is transitive: orbit of any element is all of G
+    (test 4 (length (orbit A 0)))
+    ;; stabilizer of any element is trivial (just identity)
+    (test 1 (length (stabilizer A 0)))))
+
+(test-group "conjugation-action on S_3"
+  (let ((A (conjugation-action (symmetric-group 3))))
+    ;; S_3 has 3 conjugacy classes: {id}, 3 transpositions, 2 three-cycles.
+    ;; Orbit of id = {id}.
+    (test 1 (length (orbit A #(0 1 2))))
+    ;; Orbit of a transposition = all 3 transpositions.
+    (test 3 (length (orbit A #(1 0 2))))
+    ;; Burnside on conjugation = number of conjugacy classes.
+    (test 3 (burnside-count A (group-elements (symmetric-group 3))))))
+
+(test-group "product-action"
+  (let* ((A2 (permutation-action (symmetric-group 2) 2))
+         (A3 (permutation-action (symmetric-group 3) 3))
+         (A  (product-action A2 A3)))
+    (test #t (group-action? A))
+    (test 12 (group-order (group-action-group A)))
+    (let ((result ((group-action-apply A) (list #(1 0) #(2 0 1)) '(0 0))))
+      (test #t (list? result))
+      (test 2 (length result)))))
+
+(test-group "product-action edge cases"
+  (let ((A (permutation-action (symmetric-group 3) 3)))
+    (test #t (eq? A (product-action A)))
+    (test #t (group-action? (product-action)))))
+
 (test-group "backward compatibility — 3-arg make-group"
   (let ((Z (make-group + 0 -)))
     (test #t (group? Z))

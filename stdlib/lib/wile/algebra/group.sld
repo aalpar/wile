@@ -16,7 +16,8 @@
           orbit-representative burnside-count
           ;; §5.4 — presets
           trivial-group cyclic-group symmetric-group product-group
-          trivial-action)
+          trivial-action permutation-action regular-action
+          conjugation-action product-action)
   (import (scheme base)
           (srfi 1)
           (wile algebra monoid)

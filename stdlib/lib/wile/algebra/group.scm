@@ -494,3 +494,46 @@
         (error "burnside-count: sum not divisible by |G| — act is not a group action"
                'sum sum '|G| n))
       q)))
+
+;;; -- §5.4 preset actions --------------------------------------------------
+
+(define (permutation-action Sn n)
+  "Natural action of the symmetric group S_n on {0, 1, ..., n-1}: a\npermutation vector P acts on an index i by returning P[i].\n\nExamples:\n  (let ((A (permutation-action (symmetric-group 3) 3)))\n    ((group-action-apply A) #(2 0 1) 0))  => 2\n\nParameters:\n  Sn : symmetric group\n  n : positive integer\nReturns: any\nCategory: algebra\nKeywords: permutation action, natural action, S_n action\n\nSee also: `regular-action', `conjugation-action'."
+  (make-group-action
+    Sn
+    (lambda (x) (and (integer? x) (<= 0 x) (< x n)))
+    (lambda (perm x) (vector-ref perm x))))
+
+(define (regular-action G)
+  "Left regular action of G on itself: each group element G acts on X ∈ G\nby left multiplication (op g x). Transitive on G's elements; the\nstabilizer of any point is trivial.\n\nExamples:\n  (let ((A (regular-action (cyclic-group 4))))\n    ((group-action-apply A) 1 2))  => 3\n\nParameters:\n  G : group\nReturns: any\nCategory: algebra\nKeywords: regular action, left regular representation, Cayley action\n\nSee also: `permutation-action', `conjugation-action'."
+  (make-group-action G (or (group-element? G) (lambda (x) #t)) (group-op-fn G)))
+
+(define (conjugation-action G)
+  "Conjugation action of G on itself: g · x = g · x · g⁻¹.\nOrbits are the conjugacy classes of G.\n\nExamples:\n  (let ((A (conjugation-action (symmetric-group 3))))\n    (length (orbit A #(1 0 2))))  => 3   ; three transpositions in S_3\n\nParameters:\n  G : group\nReturns: any\nCategory: algebra\nKeywords: conjugation, inner automorphism, conjugacy class\n\nSee also: `regular-action', `orbit'."
+  (let ((op      (group-op-fn G))
+        (inverse (group-inverse-fn G)))
+    (make-group-action
+      G
+      (or (group-element? G) (lambda (x) #t))
+      (lambda (g x) (op (op g x) (inverse g))))))
+
+(define (product-action . actions)
+  "Return the direct product of ACTIONS. Variadic: accepts 0 or more actions.\nGroup elements and set elements are both proper lists of length n;\ncomponentwise application.\n\nSpecial cases:\n  (product-action)        => trivial action on the trivial group\n  (product-action A)      => A unchanged (eq?)\n\nExamples:\n  (let* ((A2 (permutation-action (symmetric-group 2) 2))\n         (A3 (permutation-action (symmetric-group 3) 3))\n         (A  (product-action A2 A3)))\n    (group-order (group-action-group A)))  => 12\n\nParameters:\n  actions : list of group-actions (variadic)\nReturns: any\nCategory: algebra\nKeywords: product action, direct product, componentwise action\n\nSee also: `product-group', `make-group-action'."
+  (cond
+    ((null? actions)
+     (trivial-action (trivial-group) (lambda (x) (eq? x 'unit))))
+    ((null? (cdr actions)) (car actions))
+    (else
+     (let* ((G        (apply product-group (map group-action-group actions)))
+            (acts     (map group-action-apply actions))
+            (set-elts (map group-action-set-element? actions))
+            (n        (length actions))
+            (set-elt? (lambda (elt)
+                        (and (list? elt)
+                             (= (length elt) n)
+                             (every (lambda (se e) (or (not se) (se e)))
+                                    set-elts elt))))
+            (act      (lambda (g-list elt-list)
+                        (map (lambda (a g e) (a g e))
+                             acts g-list elt-list))))
+       (make-group-action G set-elt? act)))))
