@@ -233,6 +233,177 @@
 
 ;; ─── Validation ──────────────────────────────
 
+;; ─── §5.5 presets ────────────────────────────
+;;
+;; Five canonical fixtures: chain, boolean, diamond (M3 at n=3),
+;; pentagon (N5), and free-distributive (shipped in Phase 7, depends
+;; on Birkhoff). These are the same fixtures used throughout lattice
+;; theory textbooks (Davey & Priestley, Grätzer) for discussing
+;; distributivity / modularity — M3 and N5 are the forbidden
+;; sublattices in Birkhoff's characterization theorem.
+
+(define (chain-lattice n)
+  "Construct the n-element chain 0 < 1 < ... < n-1.\nDistributive and modular (vacuously — every totally ordered set\nis distributive). Setoid is the numeric-setoid.\n\nExamples:\n  (lattice-elements (chain-lattice 4))  => (0 1 2 3)\n  (lattice-join (chain-lattice 5) 2 4)  => 4\n\nParameters:\n  n : exact positive integer\nReturns: lattice\nCategory: algebra\nKeywords: chain, total order, distributive, canonical lattice, teaching fixture\n\nSee also: `boolean-lattice', `diamond-lattice', `pentagon-lattice'."
+  (unless (and (integer? n) (positive? n))
+    (error "chain-lattice: n must be a positive integer" n))
+  (let ((elts (let loop ((i 0) (acc '()))
+                (if (>= i n) (reverse acc)
+                    (loop (+ i 1) (cons i acc))))))
+    (make-lattice
+      max min 0 (- n 1) <=
+      (cons 'setoid      (numeric-setoid))
+      (cons 'cardinality n)
+      (cons 'elements    elts))))
+
+(define (%sort-by-canonical-order xs canonical)
+  ;; Return xs reordered to match the appearance order of CANONICAL.
+  ;; Used to produce canonical representations of subsets so that
+  ;; equal? recognises them regardless of insertion order.
+  (let loop ((cs canonical) (acc '()))
+    (cond
+      ((null? cs) (reverse acc))
+      ((member (car cs) xs)
+       (loop (cdr cs) (cons (car cs) acc)))
+      (else
+       (loop (cdr cs) acc)))))
+
+(define (%all-subsets universe)
+  ;; Enumerate all subsets of UNIVERSE, each in UNIVERSE's order.
+  ;; Returns 2^|universe| subsets in the standard "binary counting"
+  ;; order: () first, then subsets containing the first element, etc.
+  (if (null? universe)
+      '(())
+      (let ((rest (%all-subsets (cdr universe)))
+            (x    (car universe)))
+        (append rest
+                (map (lambda (s) (cons x s)) rest)))))
+
+(define (boolean-lattice n)
+  "Construct the Boolean lattice B(n) = 2^[n] of subsets of an n-element\nuniverse, ordered by inclusion.\n\nElements are canonical-order sublists of (0 1 ... n-1) (carried in\nlattice-elements). Join is set union, meet is set intersection, bottom\nis the empty set, top is the full universe. Distributive and modular.\n\nExamples:\n  (lattice-cardinality (boolean-lattice 3))  => 8\n  (lattice-bottom    (boolean-lattice 3))   => ()\n\nParameters:\n  n : exact non-negative integer\nReturns: lattice\nCategory: algebra\nKeywords: boolean, powerset, subset, distributive, canonical lattice\n\nSee also: `powerset-lattice', `chain-lattice'."
+  (unless (and (integer? n) (not (negative? n)))
+    (error "boolean-lattice: n must be a non-negative integer" n))
+  (let* ((universe (let loop ((i 0) (acc '()))
+                     (if (>= i n) (reverse acc)
+                         (loop (+ i 1) (cons i acc)))))
+         (elts     (%all-subsets universe)))
+    (define (subset? a b)
+      (cond ((null? a) #t)
+            ((member (car a) b) (subset? (cdr a) b))
+            (else #f)))
+    (define (canon s) (%sort-by-canonical-order s universe))
+    (define (union a b)
+      (canon
+        (let loop ((xs b) (acc a))
+          (cond ((null? xs) acc)
+                ((member (car xs) acc) (loop (cdr xs) acc))
+                (else (loop (cdr xs) (cons (car xs) acc)))))))
+    (define (intersect a b)
+      (canon
+        (let loop ((xs a) (acc '()))
+          (cond ((null? xs) acc)
+                ((member (car xs) b) (loop (cdr xs) (cons (car xs) acc)))
+                (else (loop (cdr xs) acc))))))
+    (make-lattice union intersect '() universe subset?
+                  (cons 'cardinality (length elts))
+                  (cons 'elements    elts))))
+
+(define (%diamond-leq? n a b)
+  ;; Ordering on diamond(n): bot < atom_i < top for every i; atoms
+  ;; mutually incomparable. a == b is the reflexive case.
+  (cond
+    ((equal? a b) #t)
+    ((eq? a 'bot) #t)
+    ((eq? b 'top) #t)
+    ((eq? a 'top) #f)
+    ((eq? b 'bot) #f)
+    ;; both are atoms, distinct
+    (else #f)))
+
+(define (%diamond-join n a b)
+  (cond
+    ((equal? a b) a)
+    ((eq? a 'bot) b)
+    ((eq? b 'bot) a)
+    ((eq? a 'top) 'top)
+    ((eq? b 'top) 'top)
+    ;; two distinct atoms
+    (else 'top)))
+
+(define (%diamond-meet n a b)
+  (cond
+    ((equal? a b) a)
+    ((eq? a 'top) b)
+    ((eq? b 'top) a)
+    ((eq? a 'bot) 'bot)
+    ((eq? b 'bot) 'bot)
+    ;; two distinct atoms
+    (else 'bot)))
+
+(define (diamond-lattice n)
+  "Construct the rank-3 diamond lattice with N atoms: ⊥, atom_0, ...,\natom_{N-1}, ⊤, with no comparabilities among atoms.\n\nModular for every N ≥ 3; not distributive for N ≥ 3 (distinct atoms\na, b give a ⋀ (b ⋁ c) ≠ (a ⋀ b) ⋁ (a ⋀ c) for appropriate choices).\nM_3 = (diamond-lattice 3) is the canonical counterexample for\ndistributivity in Birkhoff's theorem.\n\nExamples:\n  (lattice-cardinality (diamond-lattice 3))  => 5\n  (lattice-join (diamond-lattice 3) '(atom 0) '(atom 1))  => top\n\nParameters:\n  n : exact integer ≥ 3\nReturns: lattice\nCategory: algebra\nKeywords: diamond, M3, modular, counterexample, forbidden sublattice, Birkhoff\n\nSee also: `pentagon-lattice', `chain-lattice'."
+  (unless (and (integer? n) (>= n 3))
+    (error "diamond-lattice: n must be an integer ≥ 3" n))
+  (let* ((atoms (let loop ((i 0) (acc '()))
+                  (if (>= i n) (reverse acc)
+                      (loop (+ i 1) (cons (list 'atom i) acc)))))
+         (elts  (cons 'bot (append atoms (list 'top)))))
+    (make-lattice
+      (lambda (a b) (%diamond-join n a b))
+      (lambda (a b) (%diamond-meet n a b))
+      'bot 'top
+      (lambda (a b) (%diamond-leq? n a b))
+      (cons 'cardinality (+ n 2))
+      (cons 'elements    elts))))
+
+(define (%pentagon-leq? a b)
+  ;; N5 Hasse: bot < a < top; bot < b < c < top; a ⟂ b, a ⟂ c
+  (cond
+    ((equal? a b) #t)
+    ((eq? a 'bot) #t)
+    ((eq? b 'top) #t)
+    ((and (eq? a 'b) (eq? b 'c)) #t)  ;; b ≤ c
+    (else #f)))
+
+(define (%pentagon-join a b)
+  (cond
+    ((equal? a b) a)
+    ((eq? a 'bot) b)
+    ((eq? b 'bot) a)
+    ((eq? a 'top) 'top)
+    ((eq? b 'top) 'top)
+    ;; three atoms: a, b, c; b < c; a incomparable with b and c
+    ((and (eq? a 'b) (eq? b 'c)) 'c)
+    ((and (eq? a 'c) (eq? b 'b)) 'c)
+    ;; any mix containing 'a with another non-bot/non-top → top
+    ((or (eq? a 'a) (eq? b 'a)) 'top)
+    (else 'top)))
+
+(define (%pentagon-meet a b)
+  (cond
+    ((equal? a b) a)
+    ((eq? a 'top) b)
+    ((eq? b 'top) a)
+    ((eq? a 'bot) 'bot)
+    ((eq? b 'bot) 'bot)
+    ;; b ⋀ c = b
+    ((and (eq? a 'b) (eq? b 'c)) 'b)
+    ((and (eq? a 'c) (eq? b 'b)) 'b)
+    ;; any mix with 'a and (b or c) → bot
+    ((or (eq? a 'a) (eq? b 'a)) 'bot)
+    (else 'bot)))
+
+(define (pentagon-lattice)
+  "Construct the pentagon lattice N_5: {⊥, a, b, c, ⊤} with ordering\n⊥ < a < ⊤ and ⊥ < b < c < ⊤, where a is incomparable to both b and c.\n\nNeither modular nor distributive: N_5 is the Birkhoff-theorem\nforbidden sublattice whose presence characterises non-modular lattices.\n\nExamples:\n  (lattice-join (pentagon-lattice) 'b 'c)   => c\n  (lattice-meet (pentagon-lattice) 'a 'c)   => bot\n\nReturns: lattice\nCategory: algebra\nKeywords: pentagon, N5, non-modular, counterexample, forbidden sublattice, Birkhoff\n\nSee also: `diamond-lattice', `chain-lattice'."
+  (make-lattice
+    %pentagon-join
+    %pentagon-meet
+    'bot 'top
+    %pentagon-leq?
+    (cons 'cardinality 5)
+    (cons 'elements '(bot a b c top))))
+
+;; ─── Validation ──────────────────────────────
+
 (define (validate-lattice L samples)
   "Spot-check that L satisfies the lattice laws on SAMPLES.\nTests join and meet commutativity, absorption, idempotence,\nand identity (bottom for join, top for meet) for all elements\nand pairs in SAMPLES. Returns #t if all laws hold, or a list\nof (violation-type element ...) entries describing failures.\n\nExamples:\n  (validate-lattice (flat-lattice '(a b c) eq?) '(a b c))  => #t\n\nParameters:\n  L : any\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: commutativity, absorption, idempotence, identity, law checking, validation\n\nSee also: `make-lattice', `lattice-join', `lattice-meet'."
   (let ((violations '()))

@@ -165,5 +165,82 @@
     (test #f (lattice-elements L))
     (test #f (finite-lattice? L))))
 
+;; ─── §5.5 Phase 3: canonical presets ─────────────────────────────
+
+(test-group "chain-lattice"
+  (let ((C5 (chain-lattice 5)))
+    (test 5 (lattice-cardinality C5))
+    (test '(0 1 2 3 4) (lattice-elements C5))
+    (test 4 (lattice-join C5 2 4))
+    (test 2 (lattice-meet C5 2 4))
+    (test 0 (lattice-bottom C5))
+    (test 4 (lattice-top C5))
+    (test #t (finite-lattice? C5))))
+
+(test-group "chain-lattice — preconditions"
+  (test-error (chain-lattice 0))
+  (test-error (chain-lattice -1))
+  (test-error (chain-lattice 'nope)))
+
+(test-group "boolean-lattice"
+  (let ((B0 (boolean-lattice 0))
+        (B3 (boolean-lattice 3)))
+    (test 1 (lattice-cardinality B0))
+    (test 8 (lattice-cardinality B3))
+    (test '() (lattice-bottom B3))
+    (test #t (lattice-leq? B3 '(1) '(1 2)))
+    (test #t (lattice-leq? B3 '() '(2)))
+    ;; Membership in elements list: every 3-bit subset accounted for
+    (test 8 (length (lattice-elements B3)))))
+
+(test-group "boolean-lattice — preconditions"
+  (test-error (boolean-lattice -1))
+  (test-error (boolean-lattice 'nope)))
+
+(test-group "diamond-lattice — M3 (n=3)"
+  (let ((M3 (diamond-lattice 3)))
+    (test 5 (lattice-cardinality M3))
+    (test 'bot (lattice-bottom M3))
+    (test 'top (lattice-top M3))
+    (test 5 (length (lattice-elements M3)))
+    ;; Atoms are incomparable to each other, top/bot comparable to all
+    (test #t (lattice-leq? M3 'bot (list 'atom 0)))
+    (test #t (lattice-leq? M3 (list 'atom 0) 'top))
+    (test #f (lattice-leq? M3 (list 'atom 0) (list 'atom 1)))
+    (test #f (lattice-leq? M3 (list 'atom 1) (list 'atom 0)))
+    ;; Join/meet of distinct atoms → top/bot
+    (test 'top (lattice-join M3 (list 'atom 0) (list 'atom 1)))
+    (test 'bot (lattice-meet M3 (list 'atom 0) (list 'atom 1)))
+    ;; Join of atom with itself = atom; meet atom ⋀ top = atom
+    (test '(atom 0) (lattice-join M3 (list 'atom 0) (list 'atom 0)))
+    (test '(atom 0) (lattice-meet M3 (list 'atom 0) 'top))))
+
+(test-group "diamond-lattice — preconditions"
+  (test-error (diamond-lattice 2))
+  (test-error (diamond-lattice 'nope)))
+
+(test-group "pentagon-lattice — N5"
+  (let ((N5 (pentagon-lattice)))
+    (test 5 (lattice-cardinality N5))
+    (test 'bot (lattice-bottom N5))
+    (test 'top (lattice-top N5))
+    (test '(bot a b c top) (lattice-elements N5))
+    ;; Ordering: bot < a < top; bot < b < c < top; a inc. with b, c.
+    (test #t (lattice-leq? N5 'bot 'a))
+    (test #t (lattice-leq? N5 'b 'c))
+    (test #t (lattice-leq? N5 'c 'top))
+    (test #f (lattice-leq? N5 'a 'b))
+    (test #f (lattice-leq? N5 'a 'c))
+    (test #f (lattice-leq? N5 'b 'a))
+    (test #f (lattice-leq? N5 'c 'a))
+    ;; Joins: a ⋁ b = a ⋁ c = top; b ⋁ c = c
+    (test 'top (lattice-join N5 'a 'b))
+    (test 'top (lattice-join N5 'a 'c))
+    (test 'c   (lattice-join N5 'b 'c))
+    ;; Meets: a ⋀ b = a ⋀ c = bot; b ⋀ c = b
+    (test 'bot (lattice-meet N5 'a 'b))
+    (test 'bot (lattice-meet N5 'a 'c))
+    (test 'b   (lattice-meet N5 'b 'c))))
+
 (test-end)
 (test-exit)

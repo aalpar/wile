@@ -10,7 +10,10 @@
           ;; §5.5 — extended introspection on <lattice>
           lattice-setoid lattice-equiv?
           lattice-cardinality lattice-elements
-          finite-lattice?)
+          finite-lattice?
+          ;; §5.5 — canonical presets
+          chain-lattice boolean-lattice
+          diamond-lattice pentagon-lattice)
   (import (scheme base)
           (wile algebra order)
           (wile algebra setoid))
