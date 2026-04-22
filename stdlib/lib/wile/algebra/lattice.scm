@@ -647,6 +647,158 @@
   "Spot-check L's modular axiom using SETOID S for equality.\nOtherwise identical to `validate-modular-lattice'.\n\nParameters:\n  L : lattice\n  setoid : setoid\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: modular, validation, setoid, Dedekind, axiom\n\nSee also: `validate-modular-lattice'."
   (%validate-modular-impl S L samples))
 
+;; ─── §5.5 Birkhoff roundtrip ─────────────────
+;;
+;; Birkhoff (1937): every finite distributive lattice L is isomorphic
+;; to the lattice of downsets of its poset of join-irreducibles
+;; (Irr(L)), ordered by subset inclusion. Dually, every finite poset P
+;; arises as Irr(L) of the lattice L = Downsets(P). We ship both
+;; directions:
+;;
+;;   birkhoff-representation  : finite distributive L → Irr(L)
+;;                              (as <locally-finite-poset>)
+;;   birkhoff-reconstruction  : P → Downsets(P) as <lattice>
+;;
+;; Roundtrip preserves the isomorphism class (distributive lattice ↔
+;; finite poset). Pre-shipped `lattice->locally-finite-poset` is a
+;; forgetful projection independent of Birkhoff: takes a finite lattice
+;; and returns its underlying <locally-finite-poset>, which lets
+;; consumers call incidence-algebra machinery on any finite lattice.
+
+(define (lattice->locally-finite-poset L)
+  "Project a finite lattice to its underlying <locally-finite-poset>.\nRequires a finite lattice (elements enumerated); the result carries\nthe same element list as L and uses (lattice-leq? L) as its order.\n\nEnables Möbius-function computation on finite lattices: compose\n(make-incidence-algebra ...) with this projection.\n\nExamples:\n  (lf-poset-elements (lattice->locally-finite-poset (chain-lattice 4)))\n    => (0 1 2 3)\n\nParameters:\n  L : lattice\nReturns: locally-finite-poset\nCategory: algebra\nKeywords: forgetful functor, projection, underlying poset, lattice to poset\n\nSee also: `lattice->partial-order', `birkhoff-representation'."
+  (unless (finite-lattice? L)
+    (error "lattice->locally-finite-poset: requires finite lattice"
+           'fix "pass (cons 'elements LIST) to make-lattice"))
+  (finite-set->locally-finite-poset
+    (lambda (a b) (lattice-leq? L a b))
+    (lattice-elements L)))
+
+(define (birkhoff-representation L)
+  "Return the <locally-finite-poset> of join-irreducibles of finite\ndistributive lattice L, ordered by the restriction of (lattice-leq? L).\n\nThis is the forward direction of Birkhoff's fundamental theorem:\nfinite distributive lattices are dual to finite posets via\nL ↦ J(L). The result carries the join-irreducibles element list\nso that `birkhoff-reconstruction' on the output returns a lattice\nisomorphic to L.\n\nRequires a finite lattice. Behavior on a non-distributive lattice is\nnot a contract — Birkhoff assumes distributivity for the bijection —\nbut the function returns a well-formed poset regardless (its\nreconstruction may not match L).\n\nExamples:\n  (lf-poset-elements (birkhoff-representation (chain-lattice 4)))\n    => (1 2 3)\n\nParameters:\n  L : lattice\nReturns: locally-finite-poset\nCategory: algebra\nKeywords: Birkhoff, representation, join irreducibles, distributive, duality\n\nSee also: `birkhoff-reconstruction', `join-irreducibles'."
+  (unless (finite-lattice? L)
+    (error "birkhoff-representation: requires finite lattice"
+           'fix "pass (cons 'elements LIST) to make-lattice"))
+  (let ((irr (join-irreducibles L)))
+    (make-locally-finite-poset
+      (lambda (a b) (lattice-leq? L a b))
+      (lambda (x y)
+        ;; Interval [x,y] restricted to irreducibles: empty if ¬(x≤y),
+        ;; else the irreducibles z with x ≤ z ≤ y.
+        (if (not (lattice-leq? L x y))
+            '()
+            (filter (lambda (z) (and (lattice-leq? L x z)
+                                     (lattice-leq? L z y)))
+                    irr)))
+      (cons 'elements irr))))
+
+;; ─── Internal downset enumeration ────────────
+;;
+;; Smart recursive enumerator per plan §5.5 Q15 / Risk #3. Picks any
+;; maximal element x of P, recursively enumerates downsets(P \ {x}),
+;; and extends each downset D by x when D already contains all
+;; strict-predecessors of x.
+;;
+;; Cost: O(|downsets(P)|), not O(2^|P|). Feasible for the
+;; free-distributive-lattice 5 case (D(5) = 7581 downsets of B(5)'s 32
+;; elements), which the naive subset-filter approach cannot handle.
+
+(define (%maximal-element elements leq?)
+  ;; Return any maximal element of ELEMENTS under LEQ?.
+  ;; Maximal x: for all y in elements, ¬(x < y). Strict-less uses
+  ;; (leq? x y) ∧ ¬(leq? y x); same as "x ≤ y and x ≠ y" under the
+  ;; assumption that LEQ? is antisymmetric.
+  (let loop ((xs elements) (best #f) (have-best? #f))
+    (cond
+      ((null? xs) best)
+      ((not have-best?) (loop (cdr xs) (car xs) #t))
+      ((and (leq? best (car xs)) (not (leq? (car xs) best)))
+       ;; Found something strictly above best; update.
+       (loop (cdr xs) (car xs) #t))
+      (else (loop (cdr xs) best #t)))))
+
+(define (%remove-element xs target)
+  (filter (lambda (x) (not (equal? x target))) xs))
+
+(define (%strict-predecessors elements x leq?)
+  ;; Return elements y with y < x (strictly; leq? antisymmetric).
+  (filter
+    (lambda (y)
+      (and (leq? y x) (not (leq? x y))))
+    elements))
+
+(define (%subset-of? xs ys)
+  ;; Every element of XS appears in YS (equal?-membership).
+  (let loop ((xs xs))
+    (cond
+      ((null? xs) #t)
+      ((member (car xs) ys) (loop (cdr xs)))
+      (else #f))))
+
+(define (%sort-by-appearance xs canonical)
+  ;; Return XS reordered to match CANONICAL's first-seen order.
+  (let loop ((cs canonical) (acc '()))
+    (cond
+      ((null? cs) (reverse acc))
+      ((member (car cs) xs)
+       (loop (cdr cs) (cons (car cs) acc)))
+      (else
+       (loop (cdr cs) acc)))))
+
+(define (%enumerate-downsets elements leq?)
+  ;; Recursive enumerator. Returns a list of downsets; each downset
+  ;; is a list of elements in ELEMENTS-first-seen order (canonical).
+  (cond
+    ((null? elements) '(()))
+    (else
+     (let* ((x    (%maximal-element elements leq?))
+            (rest (%remove-element elements x))
+            (sub  (%enumerate-downsets rest leq?))
+            (preds (%strict-predecessors rest x leq?)))
+       (append
+         sub
+         (map (lambda (D)
+                (%sort-by-appearance (cons x D) elements))
+              (filter (lambda (D) (%subset-of? preds D)) sub)))))))
+
+(define (%sorted-union a b canonical)
+  ;; Union as canonical-ordered list, using CANONICAL for sort order.
+  (%sort-by-appearance
+    (let loop ((xs b) (acc a))
+      (cond ((null? xs) acc)
+            ((member (car xs) acc) (loop (cdr xs) acc))
+            (else (loop (cdr xs) (cons (car xs) acc)))))
+    canonical))
+
+(define (%sorted-intersection a b canonical)
+  (%sort-by-appearance
+    (filter (lambda (x) (member x b)) a)
+    canonical))
+
+(define (birkhoff-reconstruction P . opts)
+  "Return the <lattice> whose elements are the downsets of\nlocally-finite poset P, ordered by inclusion.\n\nP must expose its element list via `lf-poset-elements' (constructed\nvia `finite-set->locally-finite-poset` or `make-locally-finite-poset`\nwith (cons 'elements LIST)).\n\nResult:\n  bottom:      '()   (empty downset)\n  top:         elements(P)\n  join:        sorted union of downsets\n  meet:        sorted intersection\n  leq?:        subset relation on downsets\n  setoid:      equal? by default (overridable via (cons 'setoid S))\n\nThis is the reverse direction of Birkhoff's theorem: every finite\ndistributive lattice L is isomorphic to\n(birkhoff-reconstruction (birkhoff-representation L)).\n\nExamples:\n  (lattice-cardinality\n    (birkhoff-reconstruction\n      (birkhoff-representation (chain-lattice 4))))  => 4\n\nParameters:\n  P : locally-finite-poset\n  opts : alist\nReturns: lattice\nCategory: algebra\nKeywords: Birkhoff, reconstruction, downsets, order ideals, distributive, duality\n\nSee also: `birkhoff-representation', `lattice->locally-finite-poset'."
+  (%lattice-validate-opts-keys "birkhoff-reconstruction" opts '(setoid))
+  (let ((elements (lf-poset-elements P)))
+    (unless elements
+      (error "birkhoff-reconstruction: poset must expose elements"
+             'fix "construct P via finite-set->locally-finite-poset or pass (cons 'elements LIST) to make-locally-finite-poset"))
+    (let* ((leq      (lf-poset-leq? P))
+           (downsets (%enumerate-downsets elements leq))
+           (setoid   (%assv-or opts 'setoid (default-setoid))))
+      (make-lattice
+        (lambda (a b) (%sorted-union a b elements))
+        (lambda (a b) (%sorted-intersection a b elements))
+        '()          ;; bottom
+        elements     ;; top
+        %subset-of?
+        (cons 'setoid      setoid)
+        (cons 'cardinality (length downsets))
+        (cons 'elements    downsets)))))
+
+(define (%lattice-validate-opts-keys site opts known)
+  ;; Shares logic with %validate-opts-keys but scoped for Birkhoff.
+  (%validate-opts-keys site opts known))
+
 ;; ─── Validation ──────────────────────────────
 
 (define (validate-lattice L samples)

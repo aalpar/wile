@@ -20,9 +20,13 @@
           ;; §5.5 — distributivity and modularity
           distributive? modular?
           validate-distributive-lattice validate-distributive-lattice/setoid
-          validate-modular-lattice     validate-modular-lattice/setoid)
+          validate-modular-lattice     validate-modular-lattice/setoid
+          ;; §5.5 — Birkhoff roundtrip and lattice-to-poset projection
+          lattice->locally-finite-poset
+          birkhoff-representation birkhoff-reconstruction)
   (import (scheme base)
           (srfi 1)
           (wile algebra order)
-          (wile algebra setoid))
+          (wile algebra setoid)
+          (wile algebra incidence))
   (include "lattice.scm"))

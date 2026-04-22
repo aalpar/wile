@@ -5,6 +5,7 @@
         (srfi 1)
         (wile algebra order)
         (wile algebra setoid)
+        (wile algebra incidence)
         (wile algebra lattice))
 
 (test-begin "lattices")
@@ -337,6 +338,53 @@
              (chain-lattice 4) (numeric-setoid) '(0 1 2 3)))
   (test #t (validate-modular-lattice/setoid
              (chain-lattice 4) (numeric-setoid) '(0 1 2 3))))
+
+;; ─── §5.5 Phase 6: Birkhoff roundtrip ────────────────────────────
+
+(test-group "lattice->locally-finite-poset"
+  (let* ((L (chain-lattice 4))
+         (P (lattice->locally-finite-poset L)))
+    (test #t (locally-finite-poset? P))
+    (test '(0 1 2 3) (lf-poset-elements P))
+    (test #t ((lf-poset-leq? P) 1 3))))
+
+(test-group "lattice->locally-finite-poset preconditions"
+  (test-error (lattice->locally-finite-poset (make-lattice max min 0 10 <=))))
+
+(test-group "birkhoff-representation / chain-lattice 4"
+  ;; Chain: every non-bottom element is join-irreducible.
+  (let* ((C4 (chain-lattice 4))
+         (P  (birkhoff-representation C4)))
+    (test #t (locally-finite-poset? P))
+    (test '(1 2 3) (lf-poset-elements P))
+    (test #t ((lf-poset-leq? P) 1 3))))
+
+(test-group "birkhoff-representation / boolean-lattice 3"
+  ;; B(3): join-irreducibles are the three 1-element subsets (atoms).
+  (let* ((B3 (boolean-lattice 3))
+         (P  (birkhoff-representation B3)))
+    (test #t (locally-finite-poset? P))
+    (test 3 (length (lf-poset-elements P)))))
+
+(test-group "birkhoff-reconstruction round-trip / chain-lattice 4"
+  (let* ((L      (chain-lattice 4))
+         (P      (birkhoff-representation L))
+         (L-back (birkhoff-reconstruction P)))
+    (test 4 (lattice-cardinality L-back))
+    (test #t (distributive? L-back))))
+
+(test-group "birkhoff-reconstruction round-trip / boolean-lattice 2"
+  (let* ((L      (boolean-lattice 2))
+         (P      (birkhoff-representation L))
+         (L-back (birkhoff-reconstruction P)))
+    ;; B(2) has 4 elements = Downsets(2-element antichain) = 4
+    (test 4 (lattice-cardinality L-back))
+    (test #t (distributive? L-back))))
+
+(test-group "birkhoff-reconstruction preconditions"
+  ;; Poset without elements → raises
+  (let ((P (make-locally-finite-poset <= (lambda (x y) '()))))
+    (test-error (birkhoff-reconstruction P))))
 
 (test-end)
 (test-exit)
