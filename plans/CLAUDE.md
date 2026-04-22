@@ -205,6 +205,7 @@ Historical reference. Work has shipped; plans preserved for design context.
 | `2026-04-14-algebra-documentation-design.md` | Algebra user-facing docs + examples design (moved to `memory/`) | Implemented |
 | `2026-04-14-algebra-documentation-impl.md` | Algebra documentation 10-task impl plan (moved to `memory/`) | Implemented |
 | `2026-04-18-polynomial-library.md` | `(wile algebra polynomial)` — ring-parameterized univariate polynomials: plus/negate/minus/times, Horner eval, formal derivative, divmod, GCD, polynomial-ring capstone, `with-polynomial` macro | 12/12 tasks, 60 tests passing (commits `69b98203`..`78bb7e2f` on `feat/scheme-coverage`) |
+| `2026-04-22-group-actions-burnside-impl.md` | §5.4 extension of `(wile algebra group)` — extended `<group>` record (9 fields incl. setoid/generators/elements), `<group-action>` record, BFS-from-generators orbit (handles infinite groups with finite orbits), stabilizer, fixed-points, orbit-representative (with documented tie-breaker), burnside-count (with divisibility check), presets (trivial/cyclic/symmetric/product groups; trivial/permutation/regular/conjugation/product actions). 124 tests. | **Shipped** — branch `feat/algebra-group-actions` |
 
 ### Documentation System
 
