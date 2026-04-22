@@ -2,11 +2,16 @@
   (description "Lattice types: flat, powerset, product, map lattices with join/meet.")
   (export make-lattice lattice?
           lattice-join lattice-meet lattice-bottom lattice-top
-          lattice-leq? lattice->partial-order
+          lattice-leq? lattice-equal? lattice->partial-order
           flat-lattice powerset-lattice product-lattice map-lattice
           fixpoint fixpoint/widen
           validate-lattice
-          with-lattice)
+          with-lattice
+          ;; §5.5 — extended introspection on <lattice>
+          lattice-setoid lattice-equiv?
+          lattice-cardinality lattice-elements
+          finite-lattice?)
   (import (scheme base)
-          (wile algebra order))
+          (wile algebra order)
+          (wile algebra setoid))
   (include "lattice.scm"))

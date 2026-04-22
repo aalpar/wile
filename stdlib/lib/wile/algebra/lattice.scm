@@ -5,19 +5,69 @@
 ;;; and top elements.
 
 ;; ─── Record type ─────────────────────────────
+;;
+;; The <lattice> record carries five mandatory fields (join-fn, meet-fn,
+;; bottom, top, leq-fn) and three optional metadata fields (setoid,
+;; cardinality, elements) used by §5.5 machinery (distributivity /
+;; modularity checks, join/meet irreducibles, Birkhoff roundtrip).
+;; Absent optional fields default to #f except setoid, which defaults to
+;; (default-setoid) wrapping R7RS equal?.
+;;
+;; Cardinality field naming: "lattice-cardinality" (not "lattice-order"
+;; or "lattice-size"). "Order" is ambiguous in lattice theory — it can
+;; mean the poset ordering OR the cardinality. Sage uses .cardinality();
+;; we match. Deliberate asymmetry with <group>'s group-order: the math
+;; literatures themselves differ, and consistency with lattice-specific
+;; literature outweighs cross-family symmetry.
+;;
+;; Semantic invariant (caller obligation): (setoid-equiv? setoid a b) ⟺
+;; (lattice-equal? L a b) on elements of L. Mismatch is undefined
+;; behavior; distributive? and birkhoff-representation use setoid
+;; equality internally. fixpoint continues to use lattice-equal? (the
+;; antisymmetric-leq?-derived notion), unchanged.
 
 (define-record-type <lattice>
-  (make-lattice* join-fn meet-fn bottom top leq-fn)
+  (%make-lattice join-fn meet-fn bottom top leq-fn
+                 setoid cardinality elements)
   lattice?
-  (join-fn lattice-join-fn)
-  (meet-fn lattice-meet-fn)
-  (bottom  lattice-bottom)
-  (top     lattice-top)
-  (leq-fn  lattice-leq-fn))
+  (join-fn     lattice-join-fn)
+  (meet-fn     lattice-meet-fn)
+  (bottom      lattice-bottom)
+  (top         lattice-top)
+  (leq-fn      lattice-leq-fn)
+  (setoid      lattice-setoid)
+  (cardinality lattice-cardinality)
+  (elements    lattice-elements))
 
-(define (make-lattice join meet bottom top leq?)
-  "Construct a lattice from JOIN, MEET, BOTTOM, TOP, and LEQ? predicate.\nJOIN computes the least upper bound of two elements, MEET computes\nthe greatest lower bound. BOTTOM is less than all elements, TOP is\ngreater than all elements. LEQ? tests the partial ordering.\n\nExamples:\n  (let ((L (make-lattice max min 0 100 <=)))\n    (lattice-join L 3 7))  => 7\n  (let ((L (make-lattice max min 0 100 <=)))\n    (lattice-meet L 3 7))  => 3\n\nParameters:\n  join : procedure\n  meet : procedure\n  bottom : any\n  top : any\n  leq? : procedure\nReturns: any\nCategory: algebra\nKeywords: lattice, bounded, complete, algebraic structure, order theory\n\nSee also: `flat-lattice', `powerset-lattice', `validate-lattice'."
-  (make-lattice* join meet bottom top leq?))
+(define (%assv-or opts key fallback)
+  (let ((p (assv key opts)))
+    (if p (cdr p) fallback)))
+
+(define (%validate-opts-keys site opts known-keys)
+  ;; Reject unrecognized opts keys so typos surface at construction
+  ;; instead of silently returning the fallback.
+  (for-each
+    (lambda (pair)
+      (unless (and (pair? pair) (memv (car pair) known-keys))
+        (error (string-append site ": unknown option key") pair known-keys)))
+    opts))
+
+(define (make-lattice join meet bottom top leq? . opts)
+  "Construct a lattice from JOIN, MEET, BOTTOM, TOP, and LEQ? predicate.\nJOIN computes the least upper bound of two elements, MEET computes\nthe greatest lower bound. BOTTOM is less than all elements, TOP is\ngreater than all elements. LEQ? tests the partial ordering.\n\nOptional trailing alist entries specify extended metadata:\n  (setoid . S)       — <setoid> carrying element equality (defaults to (default-setoid))\n  (cardinality . N)  — exact integer |L| if known; #f otherwise\n  (elements . LIST)  — enumeration of L's elements; required for distributive?/modular?\n\nExamples:\n  (let ((L (make-lattice max min 0 100 <=)))\n    (lattice-join L 3 7))  => 7\n  (let ((L (make-lattice max min 0 4 <=\n                         (cons 'elements '(0 1 2 3 4))\n                         (cons 'cardinality 5))))\n    (lattice-cardinality L))  => 5\n\nParameters:\n  join : procedure\n  meet : procedure\n  bottom : any\n  top : any\n  leq? : procedure\n  opts : alist\nReturns: any\nCategory: algebra\nKeywords: lattice, bounded, complete, algebraic structure, order theory\n\nSee also: `flat-lattice', `powerset-lattice', `validate-lattice'."
+  (%validate-opts-keys "make-lattice" opts
+                       '(setoid cardinality elements))
+  (%make-lattice join meet bottom top leq?
+                 (%assv-or opts 'setoid      (default-setoid))
+                 (%assv-or opts 'cardinality #f)
+                 (%assv-or opts 'elements    #f)))
+
+(define (lattice-equiv? L a b)
+  "Test A and B for equivalence under lattice L's setoid.\nApplies (lattice-setoid L)'s equivalence relation to A and B. This\ncomplements `lattice-equal?' (antisymmetric-leq?-derived) with the\nelement-level carrier equality used by §5.5's distributivity and\nBirkhoff machinery. Callers obligate (lattice-equal? L a b) ⟺\n(lattice-equiv? L a b) on elements of L.\n\nExamples:\n  (lattice-equiv? (make-lattice max min 0 100 <=) 5 5)  => #t\n\nParameters:\n  L : any\n  a : any\n  b : any\nReturns: boolean\nCategory: algebra\nKeywords: equivalence, setoid, carrier equality\n\nSee also: `lattice-equal?', `lattice-setoid'."
+  (setoid-equiv? (lattice-setoid L) a b))
+
+(define (finite-lattice? L)
+  "Return #t if lattice L carries both a cardinality and an elements\nenumeration. Required by `distributive?`, `modular?`,\n`join-irreducibles`, `meet-irreducibles`, and\n`birkhoff-representation`.\n\nExamples:\n  (finite-lattice? (make-lattice max min 0 100 <=))  => #f\n\nParameters:\n  L : any\nReturns: boolean\nCategory: algebra\nKeywords: finite, enumerate, cardinality\n\nSee also: `lattice-cardinality', `lattice-elements'."
+  (and (lattice-cardinality L) (lattice-elements L) #t))
 
 ;; ─── Core operations ─────────────────────────
 

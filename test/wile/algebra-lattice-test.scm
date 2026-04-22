@@ -3,6 +3,7 @@
 (import (scheme base)
         (chibi test)
         (wile algebra order)
+        (wile algebra setoid)
         (wile algebra lattice))
 
 (test-begin "lattices")
@@ -139,6 +140,30 @@
 
 (test-group "validate-lattice"
   (test #t (validate-lattice div-lat '(1 2 3 6))))
+
+;; ─── §5.5 — Phase 1: extended <lattice> metadata ─────────────────
+
+(test-group "extended <lattice> with optional metadata"
+  (let ((L (make-lattice
+             max min 0 4 <=
+             (cons 'cardinality 5)
+             (cons 'elements '(0 1 2 3 4))
+             (cons 'setoid (numeric-setoid)))))
+    (test #t (lattice? L))
+    (test 5 (lattice-cardinality L))
+    (test '(0 1 2 3 4) (lattice-elements L))
+    (test #t (finite-lattice? L))
+    (test #t (lattice-equiv? L 2 2))
+    (test #f (lattice-equiv? L 2 3))))
+
+(test-group "backward compatibility — 5-arg make-lattice"
+  (let ((L (make-lattice max min 0 100 <=)))
+    (test #t (lattice? L))
+    (test 50 (lattice-join L 20 50))
+    (test #t (and (lattice-setoid L) #t))
+    (test #f (lattice-cardinality L))
+    (test #f (lattice-elements L))
+    (test #f (finite-lattice? L))))
 
 (test-end)
 (test-exit)
