@@ -159,12 +159,53 @@ Keywords: diophantine, linear, basis, unification, combinatorics, Petri"
     (contejean-devie-bfs a b m n)))
 
 (define (contejean-devie-bfs a b m n)
-  ;; Stub: handles only the 1×1 case via gcd. Larger cases ship in Task 2.2.
-  (if (and (= m 1) (= n 1))
-      (let ((ai (car a)) (bj (car b)))
-        (if (and (positive? ai) (positive? bj))
-            (let ((g (gcd ai bj)))
-              (list (cons (list (quotient bj g))
-                          (list (quotient ai g)))))
-            '()))
-      '()))
+  ;; Vectors represented as lists of length m (u-side) or n (v-side).
+  ;; Nodes are (u . v); residual r = a·u − b·v drives expansion direction.
+  (define (zeros k) (make-list k 0))
+  (define (dot xs ys) (apply + (map * xs ys)))
+  (define (residual u v) (- (dot a u) (dot b v)))
+  (define (bump xs i)
+    ;; Return XS with the i-th element incremented by 1.
+    (let loop ((k 0) (xs xs) (acc '()))
+      (if (= k i)
+          (append (reverse acc) (cons (+ 1 (car xs)) (cdr xs)))
+          (loop (+ k 1) (cdr xs) (cons (car xs) acc)))))
+  (define (vec-le? u v) (every <= u v))
+  (define (dominated? u v emitted)
+    ;; True iff some emitted (u₀ . v₀) satisfies u₀ ≤ u and v₀ ≤ v
+    ;; componentwise — i.e., (u,v) is not minimal.
+    (any (lambda (e)
+           (and (vec-le? (car e) u) (vec-le? (cdr e) v)))
+         emitted))
+  (let loop ((frontier (list (cons (zeros m) (zeros n))))
+             (emitted '()))
+    (cond
+      ((null? frontier) (reverse emitted))
+      (else
+       (let* ((node (car frontier))
+              (u (car node))
+              (v (cdr node))
+              (r (residual u v)))
+         (cond
+           ;; Solution node (non-zero): emit and stop expanding
+           ((and (zero? r) (or (any positive? u) (any positive? v)))
+            (if (dominated? u v emitted)
+                (loop (cdr frontier) emitted)
+                (loop (cdr frontier) (cons (cons u v) emitted))))
+           ;; Dead-end (dominated by a known minimal solution): prune
+           ((dominated? u v emitted)
+            (loop (cdr frontier) emitted))
+           (else
+            ;; Expand: u-bumps if r ≤ 0; v-bumps if r ≥ 0.
+            (let* ((u-bumps
+                    (if (<= r 0)
+                        (map (lambda (i) (cons (bump u i) v))
+                             (iota m))
+                        '()))
+                   (v-bumps
+                    (if (>= r 0)
+                        (map (lambda (j) (cons u (bump v j)))
+                             (iota n))
+                        '())))
+              (loop (append (cdr frontier) u-bumps v-bumps)
+                    emitted)))))))))

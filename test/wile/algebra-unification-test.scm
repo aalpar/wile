@@ -98,4 +98,17 @@
     (test 1 (length basis))
     (test '((1) . (1)) (car basis))))
 
+(test-group "diophantine-basis: Stickel canonical x+y = z"
+  ;; 1·x₁ + 1·x₂ = 1·y₁  →  basis: ((1 0).(1)), ((0 1).(1))
+  (let ((basis (diophantine-basis '(1 1) '(1))))
+    (test 2 (length basis))
+    (test-assert (member '((1 0) . (1)) basis))
+    (test-assert (member '((0 1) . (1)) basis))))
+
+(test-group "diophantine-basis: asymmetric 2x = 3y"
+  ;; 2·x = 3·y → minimal (x=3, y=2)
+  (let ((basis (diophantine-basis '(2) '(3))))
+    (test 1 (length basis))
+    (test '((3) . (2)) (car basis))))
+
 (test-end "unification")
