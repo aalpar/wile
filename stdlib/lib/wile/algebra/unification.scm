@@ -423,3 +423,104 @@ Keywords: AC matching, pattern matching, associative, commutative, unification"
                         '())))
               (loop (append (cdr frontier) u-bumps v-bumps)
                     emitted)))))))))
+
+;;; -------------------------------------------------------------------------
+;;; AC-unification (Phase 5): two-sided unification modulo AC axioms.
+;;; Returns a CSU (complete set of unifiers) as list<substitution>; empty
+;;; means no unifier exists. Dispatches by operator AC-ness per unify-rec.
+;;; -------------------------------------------------------------------------
+
+(define (ac-unify t1 t2 theory proto)
+  "Unify T1 and T2 modulo the AC axioms of THEORY using term protocol PROTO.
+Returns a list of <substitution> — a CSU (complete set of unifiers);
+empty list means no unifier exists. Pattern variables are <pattern-var>
+records; other terms are protocol-level terms. Non-AC compound terms are
+unified positionally; compound terms whose operator is both associative
+and commutative (per THEORY) are unified modulo multiset equality.
+
+Parameters:
+  t1    : term (may contain <pattern-var> records)
+  t2    : term (may contain <pattern-var> records)
+  theory : <theory>
+  proto  : <term-protocol>
+Returns: list of <substitution>
+Category: algebra
+Keywords: AC unification, unify, associative, commutative, Stickel, Robinson"
+  (unless (theory? theory)
+    (error "ac-unify: expected theory" theory))
+  (unless (term-protocol? proto)
+    (error "ac-unify: expected term-protocol" proto))
+  (let ((ac-ops (ac-ops-of theory)))
+    (unify-rec t1 t2 empty-substitution ac-ops proto)))
+
+;; Core recursion for unification. Walks bindings via resolve, then
+;; dispatches on shape: var ↦ bind, compound/compound ↦ positional or AC,
+;; ground/ground ↦ term-compare equality.
+(define (unify-rec t1 t2 sub ac-ops proto)
+  (let ((t1* (resolve t1 sub))
+        (t2* (resolve t2 sub)))
+    (cond
+      ((and (pattern-var? t1*) (pattern-var? t2*)
+            (eq? (pattern-var-name t1*) (pattern-var-name t2*)))
+       (list sub))
+      ((pattern-var? t1*) (bind-with-occurs-check t1* t2* sub proto))
+      ((pattern-var? t2*) (bind-with-occurs-check t2* t1* sub proto))
+      ((and (term-compound? proto t1*) (term-compound? proto t2*))
+       (cond
+         ((not (eq? (term-get-operator proto t1*)
+                    (term-get-operator proto t2*))) '())
+         ((ac-op? (term-get-operator proto t1*) ac-ops)
+          (unify-ac (term-get-operator proto t1*)
+                    (flatten-ac t1* (term-get-operator proto t1*) proto)
+                    (flatten-ac t2* (term-get-operator proto t1*) proto)
+                    sub ac-ops proto))
+         (else
+          (unify-positional (term-get-operands proto t1*)
+                            (term-get-operands proto t2*)
+                            sub ac-ops proto))))
+      (else
+       (if (zero? (term-compare proto t1* t2*)) (list sub) '())))))
+
+;; Walk a chain of var↦var bindings to the final value (or original term).
+(define (resolve t sub)
+  (cond
+    ((and (pattern-var? t) (substitution-lookup sub t))
+     (resolve (substitution-lookup sub t) sub))
+    (else t)))
+
+;; Extend SUB with VAR↦TERM unless TERM mentions VAR (occurs-check).
+(define (bind-with-occurs-check var term sub proto)
+  (cond
+    ((occurs? var term sub proto) '())
+    (else (list (make-substitution
+                  (cons (cons var term) (substitution-bindings sub)))))))
+
+;; True iff VAR appears inside TERM (walking bindings via resolve).
+(define (occurs? var term sub proto)
+  (let ((t (resolve term sub)))
+    (cond
+      ((and (pattern-var? t) (eq? (pattern-var-name t) (pattern-var-name var)))
+       #t)
+      ((term-compound? proto t)
+       (any (lambda (a) (occurs? var a sub proto))
+            (term-get-operands proto t)))
+      (else #f))))
+
+;; Positional (fixed-arity) unify: zip unify-rec across two operand lists.
+(define (unify-positional t1s t2s sub ac-ops proto)
+  (cond
+    ((and (null? t1s) (null? t2s)) (list sub))
+    ((or (null? t1s) (null? t2s)) '())
+    (else
+     (let ((partial (unify-rec (car t1s) (car t2s) sub ac-ops proto)))
+       (apply append
+         (map (lambda (s1)
+                (unify-positional (cdr t1s) (cdr t2s) s1 ac-ops proto))
+              partial))))))
+
+;; Stub AC-unifier — Task 5.2 replaces with ground multiset equality,
+;; Task 5.3 replaces with full Stickel reduction for variable cases.
+(define (unify-ac op t1-ops t2-ops sub ac-ops proto)
+  (if (= (length t1-ops) (length t2-ops))
+      (unify-positional t1-ops t2-ops sub ac-ops proto)
+      '()))

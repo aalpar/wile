@@ -215,4 +215,27 @@
     (test-error (ac-match '(+ a b) '(+ a b) 'not-a-theory proto))
     (test-error (ac-match '(+ a b) '(+ a b) (make-theory '() '()) 'not-a-proto))))
 
+(test-group "ac-unify: ground equality"
+  (let* ((theory (make-theory '() '()))
+         (proto (sexp-term-protocol default-compare)))
+    ;; Ground identical terms: single empty unifier
+    (test 1 (length (ac-unify 'a 'a theory proto)))
+    (test 0 (length (ac-unify 'a 'b theory proto)))))
+
+(test-group "ac-unify: Robinson basic var"
+  (let* ((theory (make-theory '() '()))
+         (proto (sexp-term-protocol default-compare))
+         (vx (make-pattern-var 'x)))
+    ;; x = a → {x↦a}
+    (let ((results (ac-unify vx 'a theory proto)))
+      (test 1 (length results))
+      (test 'a (substitution-lookup (car results) vx)))))
+
+(test-group "ac-unify: occurs-check"
+  (let* ((theory (make-theory '() '()))
+         (proto (sexp-term-protocol default-compare))
+         (vx (make-pattern-var 'x)))
+    ;; x = (f x) → no unifier
+    (test 0 (length (ac-unify vx (list 'f vx) theory proto)))))
+
 (test-end "unification")

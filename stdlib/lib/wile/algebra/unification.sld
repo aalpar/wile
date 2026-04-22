@@ -15,6 +15,8 @@
     diophantine-basis
     ;; AC matching
     ac-match
+    ;; AC unification
+    ac-unify
     ;; Internal helpers (exposed for testing)
     flatten-ac)
   (import (scheme base)
