@@ -406,5 +406,96 @@
   (test-error (free-distributive-lattice -1))
   (test-error (free-distributive-lattice 6)))
 
+;; ─── §5.5 — crosscheck/Copilot follow-ups ────────────────────────
+
+(test-group "make-lattice — rejects non-procedure mandatory args"
+  (test-error (make-lattice 'not-a-proc min 0 10 <=))
+  (test-error (make-lattice max 'not-a-proc 0 10 <=))
+  (test-error (make-lattice max min 0 10 'not-a-proc)))
+
+(test-group "make-lattice — rejects cardinality/elements mismatch"
+  (test-error (make-lattice max min 0 4 <=
+                            (cons 'cardinality 5)
+                            (cons 'elements '(0 1 2)))))
+
+(test-group "make-lattice — rejects unknown opts keys"
+  (test-error (make-lattice max min 0 10 <= (cons 'nope 42))))
+
+(test-group "make-locally-finite-poset — rejects unknown opts keys"
+  (test-error (make-locally-finite-poset
+                (lambda (a b) (<= a b))
+                (lambda (x y) (iota (+ 1 (- y x)) x))
+                (cons 'nope 42))))
+
+(test-group "validate-distributive-lattice/setoid — setoid argument is load-bearing"
+  ;; A degenerate setoid that identifies everything should make even
+  ;; pentagon pass (no triples can fail when all values are "equal").
+  (let ((everything-equal (make-setoid (lambda (a b) #t))))
+    (test #t (validate-distributive-lattice/setoid
+               (pentagon-lattice) everything-equal '(bot a b c top))))
+  ;; A degenerate setoid that refuses equality should fail even on a
+  ;; distributive lattice.
+  (let ((nothing-equal (make-setoid (lambda (a b) #f))))
+    (let ((violations (validate-distributive-lattice/setoid
+                        (chain-lattice 3) nothing-equal '(0 1 2))))
+      (test #f (eq? #t violations))
+      (test #t (positive? (length violations))))))
+
+(test-group "validate-modular-lattice/setoid — setoid argument is load-bearing"
+  (let ((everything-equal (make-setoid (lambda (a b) #t))))
+    (test #t (validate-modular-lattice/setoid
+               (pentagon-lattice) everything-equal '(bot a b c top)))))
+
+(test-group "validate-lattice on §5.5 presets — laws hold"
+  (test #t (validate-lattice (chain-lattice 5) '(0 1 2 3 4)))
+  (test #t (validate-lattice (boolean-lattice 3)
+                              (lattice-elements (boolean-lattice 3))))
+  (test #t (validate-lattice (diamond-lattice 3)
+                              (lattice-elements (diamond-lattice 3))))
+  (test #t (validate-lattice (pentagon-lattice) '(bot a b c top))))
+
+(test-group "boolean-lattice — canonical-order subset representation"
+  (let ((B3 (boolean-lattice 3)))
+    ;; Join is order-insensitive on inputs AND produces canonical-order
+    ;; output regardless of input ordering.
+    (test (lattice-join B3 '(0 1) '())
+          (lattice-join B3 '(1 0) '()))
+    (test #t (and (member '(0 1) (lattice-elements B3)) #t))))
+
+(test-group "birkhoff-representation on non-distributive — well-formed poset"
+  ;; M3 and N5 are not distributive; Birkhoff's roundtrip will not
+  ;; reproduce them, but the representation itself must still be a
+  ;; well-formed locally-finite-poset. This pins the documented
+  ;; "caller obligation" behavior.
+  (let ((P-M3 (birkhoff-representation (diamond-lattice 3)))
+        (P-N5 (birkhoff-representation (pentagon-lattice))))
+    (test #t (locally-finite-poset? P-M3))
+    (test #t (locally-finite-poset? P-N5))
+    ;; M3's join-irreducibles are its 3 atoms
+    (test 3 (length (lf-poset-elements P-M3)))
+    ;; N5's join-irreducibles are the 3 non-bot non-top elements
+    (test 3 (length (lf-poset-elements P-N5)))))
+
+(test-group "trivial lattices — 1-element edge cases"
+  ;; chain-lattice 1 is a single-element lattice where bot = top.
+  (let ((C1 (chain-lattice 1)))
+    (test 1 (lattice-cardinality C1))
+    (test '(0) (lattice-elements C1))
+    (test 0 (lattice-bottom C1))
+    (test 0 (lattice-top C1))
+    (test #t (distributive? C1))
+    (test #t (modular? C1))
+    (test '() (join-irreducibles C1))   ;; only element is bot; no irreducibles
+    (test '() (meet-irreducibles C1))))
+
+(test-group "trivial lattices — boolean-lattice 0"
+  ;; B(0) is the one-element lattice {()}.
+  (let ((B0 (boolean-lattice 0)))
+    (test 1 (lattice-cardinality B0))
+    (test '(()) (lattice-elements B0))
+    (test #t (distributive? B0))
+    (test #t (modular? B0))
+    (test '() (join-irreducibles B0))))
+
 (test-end)
 (test-exit)

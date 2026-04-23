@@ -54,12 +54,23 @@
 
 (define (make-lattice join meet bottom top leq? . opts)
   "Construct a lattice from JOIN, MEET, BOTTOM, TOP, and LEQ? predicate.\nJOIN computes the least upper bound of two elements, MEET computes\nthe greatest lower bound. BOTTOM is less than all elements, TOP is\ngreater than all elements. LEQ? tests the partial ordering.\n\nOptional trailing alist entries specify extended metadata:\n  (setoid . S)       — <setoid> carrying element equality (defaults to (default-setoid))\n  (cardinality . N)  — exact integer |L| if known; #f otherwise\n  (elements . LIST)  — enumeration of L's elements; required for distributive?/modular?\n\nExamples:\n  (let ((L (make-lattice max min 0 100 <=)))\n    (lattice-join L 3 7))  => 7\n  (let ((L (make-lattice max min 0 4 <=\n                         (cons 'elements '(0 1 2 3 4))\n                         (cons 'cardinality 5))))\n    (lattice-cardinality L))  => 5\n\nParameters:\n  join : procedure\n  meet : procedure\n  bottom : any\n  top : any\n  leq? : procedure\n  opts : alist\nReturns: any\nCategory: algebra\nKeywords: lattice, bounded, complete, algebraic structure, order theory\n\nSee also: `flat-lattice', `powerset-lattice', `validate-lattice'."
+  (unless (procedure? join)
+    (error "make-lattice: join must be a procedure" join))
+  (unless (procedure? meet)
+    (error "make-lattice: meet must be a procedure" meet))
+  (unless (procedure? leq?)
+    (error "make-lattice: leq? must be a procedure" leq?))
   (%validate-opts-keys "make-lattice" opts
                        '(setoid cardinality elements))
-  (%make-lattice join meet bottom top leq?
-                 (%assv-or opts 'setoid      (default-setoid))
-                 (%assv-or opts 'cardinality #f)
-                 (%assv-or opts 'elements    #f)))
+  (let ((card (%assv-or opts 'cardinality #f))
+        (elts (%assv-or opts 'elements    #f)))
+    (when (and card elts (not (= card (length elts))))
+      (error "make-lattice: cardinality does not match (length elements)"
+             'cardinality card 'length (length elts)))
+    (%make-lattice join meet bottom top leq?
+                   (%assv-or opts 'setoid (default-setoid))
+                   card
+                   elts)))
 
 (define (lattice-equiv? L a b)
   "Test A and B for equivalence under lattice L's setoid.\nApplies (lattice-setoid L)'s equivalence relation to A and B. This\ncomplements `lattice-equal?' (antisymmetric-leq?-derived) with the\nelement-level carrier equality used by §5.5's distributivity and\nBirkhoff machinery. Callers obligate (lattice-equal? L a b) ⟺\n(lattice-equiv? L a b) on elements of L.\n\nExamples:\n  (lattice-equiv? (make-lattice max min 0 100 <=) 5 5)  => #t\n\nParameters:\n  L : any\n  a : any\n  b : any\nReturns: boolean\nCategory: algebra\nKeywords: equivalence, setoid, carrier equality\n\nSee also: `lattice-equal?', `lattice-setoid'."
@@ -286,10 +297,6 @@
                      (if (>= i n) (reverse acc)
                          (loop (+ i 1) (cons i acc)))))
          (elts     (%all-subsets universe)))
-    (define (subset? a b)
-      (cond ((null? a) #t)
-            ((member (car a) b) (subset? (cdr a) b))
-            (else #f)))
     (define (canon s) (%sort-by-canonical-order s universe))
     (define (union a b)
       (canon
@@ -303,39 +310,40 @@
           (cond ((null? xs) acc)
                 ((member (car xs) b) (loop (cdr xs) (cons (car xs) acc)))
                 (else (loop (cdr xs) acc))))))
-    (make-lattice union intersect '() universe subset?
+    (make-lattice union intersect '() universe %subset-of?
+                  (cons 'setoid      (default-setoid))
                   (cons 'cardinality (length elts))
                   (cons 'elements    elts))))
 
-(define (%diamond-leq? n a b)
+(define (%diamond-leq? x y)
   ;; Ordering on diamond(n): bot < atom_i < top for every i; atoms
-  ;; mutually incomparable. a == b is the reflexive case.
+  ;; mutually incomparable. x == y is the reflexive case.
   (cond
-    ((equal? a b) #t)
-    ((eq? a 'bot) #t)
-    ((eq? b 'top) #t)
-    ((eq? a 'top) #f)
-    ((eq? b 'bot) #f)
+    ((equal? x y) #t)
+    ((eq? x 'bot) #t)
+    ((eq? y 'top) #t)
+    ((eq? x 'top) #f)
+    ((eq? y 'bot) #f)
     ;; both are atoms, distinct
     (else #f)))
 
-(define (%diamond-join n a b)
+(define (%diamond-join x y)
   (cond
-    ((equal? a b) a)
-    ((eq? a 'bot) b)
-    ((eq? b 'bot) a)
-    ((eq? a 'top) 'top)
-    ((eq? b 'top) 'top)
+    ((equal? x y) x)
+    ((eq? x 'bot) y)
+    ((eq? y 'bot) x)
+    ((eq? x 'top) 'top)
+    ((eq? y 'top) 'top)
     ;; two distinct atoms
     (else 'top)))
 
-(define (%diamond-meet n a b)
+(define (%diamond-meet x y)
   (cond
-    ((equal? a b) a)
-    ((eq? a 'top) b)
-    ((eq? b 'top) a)
-    ((eq? a 'bot) 'bot)
-    ((eq? b 'bot) 'bot)
+    ((equal? x y) x)
+    ((eq? x 'top) y)
+    ((eq? y 'top) x)
+    ((eq? x 'bot) 'bot)
+    ((eq? y 'bot) 'bot)
     ;; two distinct atoms
     (else 'bot)))
 
@@ -348,48 +356,49 @@
                       (loop (+ i 1) (cons (list 'atom i) acc)))))
          (elts  (cons 'bot (append atoms (list 'top)))))
     (make-lattice
-      (lambda (a b) (%diamond-join n a b))
-      (lambda (a b) (%diamond-meet n a b))
+      %diamond-join
+      %diamond-meet
       'bot 'top
-      (lambda (a b) (%diamond-leq? n a b))
+      %diamond-leq?
+      (cons 'setoid      (default-setoid))
       (cons 'cardinality (+ n 2))
       (cons 'elements    elts))))
 
-(define (%pentagon-leq? a b)
+;; Pentagon helpers — parameters are named x, y to avoid collision with
+;; the element symbols 'a, 'b, 'c that appear as literals below.
+(define (%pentagon-leq? x y)
   ;; N5 Hasse: bot < a < top; bot < b < c < top; a ⟂ b, a ⟂ c
   (cond
-    ((equal? a b) #t)
-    ((eq? a 'bot) #t)
-    ((eq? b 'top) #t)
-    ((and (eq? a 'b) (eq? b 'c)) #t)  ;; b ≤ c
+    ((equal? x y) #t)
+    ((eq? x 'bot) #t)
+    ((eq? y 'top) #t)
+    ((and (eq? x 'b) (eq? y 'c)) #t)  ;; b ≤ c
     (else #f)))
 
-(define (%pentagon-join a b)
+(define (%pentagon-join x y)
   (cond
-    ((equal? a b) a)
-    ((eq? a 'bot) b)
-    ((eq? b 'bot) a)
-    ((eq? a 'top) 'top)
-    ((eq? b 'top) 'top)
-    ;; three atoms: a, b, c; b < c; a incomparable with b and c
-    ((and (eq? a 'b) (eq? b 'c)) 'c)
-    ((and (eq? a 'c) (eq? b 'b)) 'c)
-    ;; any mix containing 'a with another non-bot/non-top → top
-    ((or (eq? a 'a) (eq? b 'a)) 'top)
+    ((equal? x y) x)
+    ((eq? x 'bot) y)
+    ((eq? y 'bot) x)
+    ((eq? x 'top) 'top)
+    ((eq? y 'top) 'top)
+    ;; three atoms: 'a, 'b, 'c; b < c; a incomparable with b and c
+    ((and (eq? x 'b) (eq? y 'c)) 'c)
+    ((and (eq? x 'c) (eq? y 'b)) 'c)
+    ;; any remaining mix (involves 'a and ('b or 'c)) → top
     (else 'top)))
 
-(define (%pentagon-meet a b)
+(define (%pentagon-meet x y)
   (cond
-    ((equal? a b) a)
-    ((eq? a 'top) b)
-    ((eq? b 'top) a)
-    ((eq? a 'bot) 'bot)
-    ((eq? b 'bot) 'bot)
+    ((equal? x y) x)
+    ((eq? x 'top) y)
+    ((eq? y 'top) x)
+    ((eq? x 'bot) 'bot)
+    ((eq? y 'bot) 'bot)
     ;; b ⋀ c = b
-    ((and (eq? a 'b) (eq? b 'c)) 'b)
-    ((and (eq? a 'c) (eq? b 'b)) 'b)
-    ;; any mix with 'a and (b or c) → bot
-    ((or (eq? a 'a) (eq? b 'a)) 'bot)
+    ((and (eq? x 'b) (eq? y 'c)) 'b)
+    ((and (eq? x 'c) (eq? y 'b)) 'b)
+    ;; any remaining mix (involves 'a and ('b or 'c)) → bot
     (else 'bot)))
 
 (define (pentagon-lattice)
@@ -399,6 +408,7 @@
     %pentagon-meet
     'bot 'top
     %pentagon-leq?
+    (cons 'setoid      (default-setoid))
     (cons 'cardinality 5)
     (cons 'elements '(bot a b c top))))
 
@@ -565,61 +575,33 @@
 ;;     - regression-guarding expensive lattices,
 ;;     - teaching / debugging.
 
-(define (%validate-law-lattice setoid L samples triple-predicate violation-tag)
+(define (%validate-distributive-impl setoid L samples)
+  ;; Check the distributive law a ⋀ (b ⋁ c) = (a ⋀ b) ⋁ (a ⋀ c) on
+  ;; every triple from SAMPLES. Collect (not-distributive a b c lhs rhs)
+  ;; entries; return #t on clean run.
   (let ((violations '()))
-    (define (fail! a b c)
-      (set! violations
-            (cons (list violation-tag a b c
-                        ;; record lhs and rhs for diagnostics
-                        (lattice-meet L a (lattice-join L b c))
-                        (lattice-join L (lattice-meet L a b)
-                                        (lattice-meet L a c)))
-                  violations)))
     (for-each
       (lambda (a)
         (for-each
           (lambda (b)
             (for-each
               (lambda (c)
-                (unless (triple-predicate setoid L a b c)
-                  (fail! a b c)))
+                (let ((lhs (lattice-meet L a (lattice-join L b c)))
+                      (rhs (lattice-join L (lattice-meet L a b)
+                                           (lattice-meet L a c))))
+                  (unless (setoid-equiv? setoid lhs rhs)
+                    (set! violations
+                          (cons (list 'not-distributive a b c lhs rhs)
+                                violations)))))
               samples))
           samples))
       samples)
     (if (null? violations) #t (reverse violations))))
 
-(define (%distributive-triple-axiom-with-setoid? setoid L a b c)
-  (let ((lhs (lattice-meet L a (lattice-join L b c)))
-        (rhs (lattice-join L (lattice-meet L a b)
-                              (lattice-meet L a c))))
-    (setoid-equiv? setoid lhs rhs)))
-
-(define (%modular-triple-axiom-with-setoid? setoid L a b c)
-  ;; Unlike `modular?`, validators do NOT filter on a ≤ c — they
-  ;; report every a,b,c where the modular law fails, preserving the
-  ;; same triple-cardinality as the distributive validator. When
-  ;; ¬(a ≤ c), the law is vacuous (true) and contributes no
-  ;; violation, by the filter below.
-  (cond
-    ((not (lattice-leq? L a c)) #t)
-    (else
-     (let ((lhs (lattice-join L a (lattice-meet L b c)))
-           (rhs (lattice-meet L (lattice-join L a b) c)))
-       (setoid-equiv? setoid lhs rhs)))))
-
-(define (validate-distributive-lattice L samples)
-  "Spot-check lattice L's distributive axiom over every triple in SAMPLES.\nUses L's setoid for equality. Returns #t on success or a list of\n(not-distributive a b c lhs rhs) entries naming the first violations.\nSampling cost: O(|samples|³).\n\nExamples:\n  (validate-distributive-lattice (pentagon-lattice) '(bot a b c top))\n    => ((not-distributive a b c lhs rhs) ...)\n\nParameters:\n  L : lattice\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: distributive, validation, axiom, spot check, samples\n\nSee also: `distributive?', `validate-distributive-lattice/setoid'."
-  (%validate-law-lattice (lattice-setoid L) L samples
-                         %distributive-triple-axiom-with-setoid?
-                         'not-distributive))
-
-(define (validate-distributive-lattice/setoid L S samples)
-  "Spot-check L's distributive axiom using SETOID S for equality.\nOtherwise identical to `validate-distributive-lattice'. Useful when\nthe lattice's carrier equality is non-default (e.g. numeric, string,\nor a custom quotient).\n\nExamples:\n  (validate-distributive-lattice/setoid\n    (chain-lattice 4) (numeric-setoid) '(0 1 2 3))  => #t\n\nParameters:\n  L : lattice\n  setoid : setoid\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: distributive, validation, setoid, axiom, spot check\n\nSee also: `validate-distributive-lattice'."
-  (%validate-law-lattice S L samples
-                         %distributive-triple-axiom-with-setoid?
-                         'not-distributive))
-
 (define (%validate-modular-impl setoid L samples)
+  ;; Check the modular law a ⋁ (b ⋀ c) = (a ⋁ b) ⋀ c on triples with
+  ;; a ≤ c (trivially true otherwise). Collect (not-modular a b c lhs rhs)
+  ;; entries; return #t on clean run.
   (let ((violations '()))
     (for-each
       (lambda (a)
@@ -628,9 +610,9 @@
             (for-each
               (lambda (c)
                 (when (lattice-leq? L a c)
-                  (unless (%modular-triple-axiom-with-setoid? setoid L a b c)
-                    (let ((lhs (lattice-join L a (lattice-meet L b c)))
-                          (rhs (lattice-meet L (lattice-join L a b) c)))
+                  (let ((lhs (lattice-join L a (lattice-meet L b c)))
+                        (rhs (lattice-meet L (lattice-join L a b) c)))
+                    (unless (setoid-equiv? setoid lhs rhs)
                       (set! violations
                             (cons (list 'not-modular a b c lhs rhs)
                                   violations))))))
@@ -638,6 +620,14 @@
           samples))
       samples)
     (if (null? violations) #t (reverse violations))))
+
+(define (validate-distributive-lattice L samples)
+  "Spot-check lattice L's distributive axiom over every triple in SAMPLES.\nUses L's setoid for equality. Returns #t on success or a list of\n(not-distributive a b c lhs rhs) entries naming the first violations.\nSampling cost: O(|samples|³).\n\nExamples:\n  (validate-distributive-lattice (pentagon-lattice) '(bot a b c top))\n    => ((not-distributive a b c lhs rhs) ...)\n\nParameters:\n  L : lattice\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: distributive, validation, axiom, spot check, samples\n\nSee also: `distributive?', `validate-distributive-lattice/setoid'."
+  (%validate-distributive-impl (lattice-setoid L) L samples))
+
+(define (validate-distributive-lattice/setoid L S samples)
+  "Spot-check L's distributive axiom using SETOID S for equality.\nOtherwise identical to `validate-distributive-lattice'. Useful when\nthe lattice's carrier equality is non-default (e.g. numeric, string,\nor a custom quotient).\n\nExamples:\n  (validate-distributive-lattice/setoid\n    (chain-lattice 4) (numeric-setoid) '(0 1 2 3))  => #t\n\nParameters:\n  L : lattice\n  setoid : setoid\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: distributive, validation, setoid, axiom, spot check\n\nSee also: `validate-distributive-lattice'."
+  (%validate-distributive-impl S L samples))
 
 (define (validate-modular-lattice L samples)
   "Spot-check lattice L's modular axiom over triples (a,b,c) with a ≤ c.\nUses L's setoid. Returns #t on success or a list of\n(not-modular a b c lhs rhs) entries.\n\nExamples:\n  (validate-modular-lattice (pentagon-lattice) '(bot a b c top))\n    => ((not-modular ...) ...)\n\nParameters:\n  L : lattice\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: modular, validation, axiom, spot check, Dedekind\n\nSee also: `modular?', `validate-modular-lattice/setoid'."
@@ -675,7 +665,7 @@
     (lattice-elements L)))
 
 (define (birkhoff-representation L)
-  "Return the <locally-finite-poset> of join-irreducibles of finite\ndistributive lattice L, ordered by the restriction of (lattice-leq? L).\n\nThis is the forward direction of Birkhoff's fundamental theorem:\nfinite distributive lattices are dual to finite posets via\nL ↦ J(L). The result carries the join-irreducibles element list\nso that `birkhoff-reconstruction' on the output returns a lattice\nisomorphic to L.\n\nRequires a finite lattice. Behavior on a non-distributive lattice is\nnot a contract — Birkhoff assumes distributivity for the bijection —\nbut the function returns a well-formed poset regardless (its\nreconstruction may not match L).\n\nExamples:\n  (lf-poset-elements (birkhoff-representation (chain-lattice 4)))\n    => (1 2 3)\n\nParameters:\n  L : lattice\nReturns: locally-finite-poset\nCategory: algebra\nKeywords: Birkhoff, representation, join irreducibles, distributive, duality\n\nSee also: `birkhoff-reconstruction', `join-irreducibles'."
+  "Return the <locally-finite-poset> of join-irreducibles of finite\nlattice L, ordered by the restriction of (lattice-leq? L).\n\nCaller obligation: L is distributive. The duality half of Birkhoff's\ntheorem — that (birkhoff-reconstruction (birkhoff-representation L))\nis isomorphic to L — holds only when L is distributive. Checking\ndistributivity costs O(|L|³), so this function does not gate on it;\ncallers who need the guarantee should run (distributive? L) first.\n\nOn a non-distributive L the returned poset is still well-formed (it\nis the poset of join-irreducibles under the restricted lattice order),\nbut the roundtrip will not reproduce L. This is a mathematical fact,\nnot a bug: Birkhoff's theorem is a statement about distributive\nlattices.\n\nRequires a finite lattice (elements enumerated).\n\nExamples:\n  (lf-poset-elements (birkhoff-representation (chain-lattice 4)))\n    => (1 2 3)\n\nParameters:\n  L : lattice\nReturns: locally-finite-poset\nCategory: algebra\nKeywords: Birkhoff, representation, join irreducibles, distributive, duality\n\nSee also: `birkhoff-reconstruction', `join-irreducibles', `distributive?'."
   (unless (finite-lattice? L)
     (error "birkhoff-representation: requires finite lattice"
            'fix "pass (cons 'elements LIST) to make-lattice"))
@@ -735,16 +725,6 @@
       ((member (car xs) ys) (loop (cdr xs)))
       (else #f))))
 
-(define (%sort-by-appearance xs canonical)
-  ;; Return XS reordered to match CANONICAL's first-seen order.
-  (let loop ((cs canonical) (acc '()))
-    (cond
-      ((null? cs) (reverse acc))
-      ((member (car cs) xs)
-       (loop (cdr cs) (cons (car cs) acc)))
-      (else
-       (loop (cdr cs) acc)))))
-
 (define (%enumerate-downsets elements leq?)
   ;; Recursive enumerator. Returns a list of downsets; each downset
   ;; is a list of elements in ELEMENTS-first-seen order (canonical).
@@ -758,12 +738,12 @@
        (append
          sub
          (map (lambda (D)
-                (%sort-by-appearance (cons x D) elements))
+                (%sort-by-canonical-order (cons x D) elements))
               (filter (lambda (D) (%subset-of? preds D)) sub)))))))
 
 (define (%sorted-union a b canonical)
   ;; Union as canonical-ordered list, using CANONICAL for sort order.
-  (%sort-by-appearance
+  (%sort-by-canonical-order
     (let loop ((xs b) (acc a))
       (cond ((null? xs) acc)
             ((member (car xs) acc) (loop (cdr xs) acc))
@@ -771,33 +751,27 @@
     canonical))
 
 (define (%sorted-intersection a b canonical)
-  (%sort-by-appearance
+  (%sort-by-canonical-order
     (filter (lambda (x) (member x b)) a)
     canonical))
 
-(define (birkhoff-reconstruction P . opts)
-  "Return the <lattice> whose elements are the downsets of\nlocally-finite poset P, ordered by inclusion.\n\nP must expose its element list via `lf-poset-elements' (constructed\nvia `finite-set->locally-finite-poset` or `make-locally-finite-poset`\nwith (cons 'elements LIST)).\n\nResult:\n  bottom:      '()   (empty downset)\n  top:         elements(P)\n  join:        sorted union of downsets\n  meet:        sorted intersection\n  leq?:        subset relation on downsets\n  setoid:      equal? by default (overridable via (cons 'setoid S))\n\nThis is the reverse direction of Birkhoff's theorem: every finite\ndistributive lattice L is isomorphic to\n(birkhoff-reconstruction (birkhoff-representation L)).\n\nExamples:\n  (lattice-cardinality\n    (birkhoff-reconstruction\n      (birkhoff-representation (chain-lattice 4))))  => 4\n\nParameters:\n  P : locally-finite-poset\n  opts : alist\nReturns: lattice\nCategory: algebra\nKeywords: Birkhoff, reconstruction, downsets, order ideals, distributive, duality\n\nSee also: `birkhoff-representation', `lattice->locally-finite-poset'."
-  (%lattice-validate-opts-keys "birkhoff-reconstruction" opts '(setoid))
+(define (birkhoff-reconstruction P)
+  "Return the <lattice> whose elements are the downsets of\nlocally-finite poset P, ordered by inclusion.\n\nP must expose its element list via `lf-poset-elements' (constructed\nvia `finite-set->locally-finite-poset` or `make-locally-finite-poset`\nwith (cons 'elements LIST)).\n\nResult:\n  bottom:      '()   (empty downset)\n  top:         elements(P)\n  join:        sorted union of downsets\n  meet:        sorted intersection\n  leq?:        subset relation on downsets\n  setoid:      (default-setoid) wrapping equal? — consistent with the\n               equal?-based list-union/intersection internals\n\nThis is the reverse direction of Birkhoff's theorem: every finite\ndistributive lattice L is isomorphic to\n(birkhoff-reconstruction (birkhoff-representation L)).\n\nExamples:\n  (lattice-cardinality\n    (birkhoff-reconstruction\n      (birkhoff-representation (chain-lattice 4))))  => 4\n\nParameters:\n  P : locally-finite-poset\nReturns: lattice\nCategory: algebra\nKeywords: Birkhoff, reconstruction, downsets, order ideals, distributive, duality\n\nSee also: `birkhoff-representation', `lattice->locally-finite-poset'."
   (let ((elements (lf-poset-elements P)))
     (unless elements
       (error "birkhoff-reconstruction: poset must expose elements"
              'fix "construct P via finite-set->locally-finite-poset or pass (cons 'elements LIST) to make-locally-finite-poset"))
     (let* ((leq      (lf-poset-leq? P))
-           (downsets (%enumerate-downsets elements leq))
-           (setoid   (%assv-or opts 'setoid (default-setoid))))
+           (downsets (%enumerate-downsets elements leq)))
       (make-lattice
         (lambda (a b) (%sorted-union a b elements))
         (lambda (a b) (%sorted-intersection a b elements))
         '()          ;; bottom
         elements     ;; top
         %subset-of?
-        (cons 'setoid      setoid)
+        (cons 'setoid      (default-setoid))
         (cons 'cardinality (length downsets))
         (cons 'elements    downsets)))))
-
-(define (%lattice-validate-opts-keys site opts known)
-  ;; Shares logic with %validate-opts-keys but scoped for Birkhoff.
-  (%validate-opts-keys site opts known))
 
 (define (free-distributive-lattice n)
   "Construct the free bounded distributive lattice on N generators.\nIsomorphic to the lattice of monotone Boolean functions on {0,1}^N,\nequivalently to Downsets(B(n)) where B(n) is the Boolean lattice\n2^[n] viewed as a poset. Cardinality is the Dedekind number D(n):\n  D(0) = 2, D(1) = 3, D(2) = 6, D(3) = 20, D(4) = 168, D(5) = 7581.\n\nRaises for n ≥ 6; D(6) ≈ 7.8M elements is infeasible for in-process\nconstruction. Direct callers of `birkhoff-reconstruction' on a\nuser-supplied poset can opt into that cost.\n\nExamples:\n  (lattice-cardinality (free-distributive-lattice 2))  => 6\n  (lattice-cardinality (free-distributive-lattice 3))  => 20\n\nParameters:\n  n : exact non-negative integer, n ≤ 5\nReturns: lattice\nCategory: algebra\nKeywords: free distributive lattice, Dedekind number, Birkhoff, monotone boolean, FDL\n\nSee also: `birkhoff-reconstruction', `boolean-lattice'."
