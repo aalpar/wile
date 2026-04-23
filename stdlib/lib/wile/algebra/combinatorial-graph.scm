@@ -981,32 +981,44 @@
     copy))
 
 (define (%nat-contract-edge adj-vec u v)
-  ;; G / e: merge v into u; redirect all neighbors-of-v (except v itself
-  ;; and u) to u; remove self-loops created by the edge being contracted
-  ;; (one occurrence of u↔v), but preserve other self-loops and
-  ;; parallel edges. Vertex v is retained in the adjacency vector as a
-  ;; singleton-with-no-edges to preserve indexing (subsequent recursions
-  ;; filter it; n decreases by one for graph-theoretic purposes).
+  ;; G / e: merge v into u on the undirected adjacency representation.
+  ;; Semantics: delete edge {u,v} once, then identify u and v. Parallel
+  ;; edges between u and v (if any) become self-loops on the merged
+  ;; vertex. Edges from v to w ≠ u redirect to the merged vertex.
+  ;;
+  ;; Double-counting hazard: an undirected edge u-v is stored as TWO
+  ;; half-edge entries ("v in u's list", "u in v's list"). When we merge
+  ;; v into u, both halves would collapse to self-loops if naively
+  ;; appended. We filter v's u-pointing entries before appending so only
+  ;; u's forward-halves (rewritten v → u below) contribute the self-loops.
+  ;;
+  ;; Vertex v is retained in the adjacency vector as a dead slot
+  ;; (empty neighbor list) to preserve indexing during recursion.
   (cond
-    ((= u v) adj-vec)             ;; self-loop: contraction is identity
+    ((= u v) adj-vec)               ;; self-loop: contraction is identity
     (else
-     (let* ((copy       (%nat-adj-copy adj-vec))
-            ;; Start by deleting the contracted edge (one occurrence).
-            (copy       (let ((a (%nat-adj-copy copy)))
-                          (vector-set! a u (%nat-remove-one (vector-ref a u) v))
-                          (vector-set! a v (%nat-remove-one (vector-ref a v) u))
-                          a))
-            (v-nbrs    (vector-ref copy v)))
-       ;; Move all of v's remaining neighbors onto u; rewrite their
-       ;; back-references from v → u.
-       (vector-set! copy u (append (vector-ref copy u) v-nbrs))
+     (let* ((copy (%nat-adj-copy adj-vec))
+            (_    (vector-set! copy u (%nat-remove-one (vector-ref copy u) v)))
+            (_    (vector-set! copy v (%nat-remove-one (vector-ref copy v) u)))
+            (v-nbrs    (vector-ref copy v))
+            ;; Filter v's u-pointing entries: each is the back-half of a
+            ;; parallel u-v edge whose forward-half is still in u's list
+            ;; and will become a self-loop under the v → u rewrite below.
+            (v-to-move (filter (lambda (x) (not (= x u))) v-nbrs)))
+       (vector-set! copy u (append (vector-ref copy u) v-to-move))
+       ;; Rewrite v → u in v-to-move's neighbors' adjacency lists (so the
+       ;; back-references point to the merged vertex).
        (for-each
          (lambda (n)
-           (when (not (= n v))   ;; skip v→v self-loops (can't happen here)
-             (let ((nbrs (vector-ref copy n)))
-               (vector-set! copy n
-                 (map (lambda (x) (if (= x v) u x)) nbrs)))))
-         v-nbrs)
+           (unless (= n v)
+             (vector-set! copy n
+               (map (lambda (x) (if (= x v) u x)) (vector-ref copy n)))))
+         v-to-move)
+       ;; Rewrite v → u in u's own list: u's former v-pointing entries
+       ;; become self-loops (one per surviving u-v edge after the initial
+       ;; delete above).
+       (vector-set! copy u
+         (map (lambda (x) (if (= x v) u x)) (vector-ref copy u)))
        (vector-set! copy v '())
        copy))))
 
@@ -1298,6 +1310,152 @@
          (lambda () (%relabel-to-naturals G))
          (lambda (N adj)
            (%nat-chromatic N N adj)))))))
+
+;;; -- Tutte polynomial --
+;;;
+;;; Tutte polynomial T(G; x, y) per Tutte 1954. Bivariate; represented
+;;; here as a list of rows, where row i is a list of y-coefficients for
+;;; the x^i term. Example: x^2 + x + y  =  ((0 1) (1) (1))
+;;;                                         ↑     ↑   ↑
+;;;                                         |     |   x^2-row = [1]
+;;;                                         |     x^1-row = [1]
+;;;                                         x^0-row = [y-coeff 0, y-coeff 1]
+;;;
+;;; Recursion (Tutte 1954):
+;;;   — loop e:       T(G) = y · T(G − e)
+;;;   — bridge e:     T(G) = x · T(G / e)
+;;;   — ordinary e:   T(G) = T(G − e) + T(G / e)
+;;;
+;;; Base: T(edgeless graph on any n) = 1.
+
+(define (%tutte-zero) '())
+
+(define (%tutte-one) '((1)))
+
+(define (%tutte-y) '((0 1)))     ;; x^0 y^1 coefficient = 1
+
+(define (%tutte-x) '((0) (1)))   ;; x^1 y^0 coefficient = 1
+
+(define (%tutte-row-add r1 r2)
+  ;; Add two row lists.
+  (let loop ((r1 r1) (r2 r2) (acc '()))
+    (cond
+      ((and (null? r1) (null? r2)) (reverse acc))
+      ((null? r1) (loop '() (cdr r2) (cons (car r2) acc)))
+      ((null? r2) (loop (cdr r1) '() (cons (car r1) acc)))
+      (else (loop (cdr r1) (cdr r2) (cons (+ (car r1) (car r2)) acc))))))
+
+(define (%tutte-add t1 t2)
+  (let loop ((t1 t1) (t2 t2) (acc '()))
+    (cond
+      ((and (null? t1) (null? t2)) (reverse acc))
+      ((null? t1) (loop '() (cdr t2) (cons (car t2) acc)))
+      ((null? t2) (loop (cdr t1) '() (cons (car t1) acc)))
+      (else (loop (cdr t1) (cdr t2)
+                  (cons (%tutte-row-add (car t1) (car t2)) acc))))))
+
+(define (%tutte-scale-x t)
+  ;; Multiply by x: prepend an empty row at degree 0.
+  (cond
+    ((null? t) t)
+    (else (cons '() t))))
+
+(define (%tutte-scale-y t)
+  ;; Multiply by y: in each row, prepend a 0 (shift y-coefficients up).
+  (map
+    (lambda (row)
+      (cond
+        ((null? row) '())
+        (else (cons 0 row))))
+    t))
+
+(define (%nat-is-bridge? n adj-vec u v)
+  ;; Edge {u,v} is a bridge iff removing it disconnects u from v.
+  ;; (Equivalent to: removal increases component count by 1.)
+  (let* ((after (%nat-delete-edge adj-vec u v)))
+    (not (%nat-reachable? n after u v))))
+
+(define (%nat-reachable? n adj-vec src dst)
+  ;; BFS from src; return #t if dst visited.
+  (let ((visited (make-vector n #f)))
+    (vector-set! visited src #t)
+    (let bfs ((frontier (list src)))
+      (cond
+        ((null? frontier) (vector-ref visited dst))
+        (else
+         (let* ((v (car frontier))
+                (rest (cdr frontier))
+                (new-nodes
+                  (filter
+                    (lambda (u) (not (vector-ref visited u)))
+                    (vector-ref adj-vec v))))
+           (for-each (lambda (u) (vector-set! visited u #t)) new-nodes)
+           (cond
+             ((vector-ref visited dst) #t)
+             (else (bfs (append rest new-nodes))))))))))
+
+(define (%nat-first-edge n adj-vec)
+  ;; Return the first edge (u v) found (may be a loop). Used by Tutte.
+  (let loop ((i 0))
+    (cond
+      ((= i n) #f)
+      (else
+       (let ((nbrs (vector-ref adj-vec i)))
+         (cond
+           ((null? nbrs) (loop (+ i 1)))
+           ((= (car nbrs) i) (list i i))       ;; self-loop (first occurrence)
+           ((>= (car nbrs) i) (list i (car nbrs)))
+           (else
+            ;; Edge (i, car) where car < i is the reverse-direction
+            ;; entry of an earlier edge we've already counted; keep scanning.
+            (let scan ((nbrs (cdr nbrs)))
+              (cond
+                ((null? nbrs) (loop (+ i 1)))
+                ((= (car nbrs) i) (list i i))
+                ((>= (car nbrs) i) (list i (car nbrs)))
+                (else (scan (cdr nbrs))))))))))))
+
+(define (%nat-tutte n adj-vec)
+  ;; Deletion-contraction Tutte recursion.
+  (cond
+    ((= 0 (%nat-size adj-vec))
+     (%tutte-one))                     ;; edgeless → T = 1
+    (else
+     (let ((e (%nat-first-edge n adj-vec)))
+       (cond
+         ((not e) (%tutte-one))
+         (else
+          (let ((u (car e)) (v (cadr e)))
+            (cond
+              ;; Loop: T(G) = y · T(G − e)
+              ((= u v)
+               (%tutte-scale-y
+                 (%nat-tutte n (%nat-delete-edge adj-vec u v))))
+              ;; Bridge: T(G) = x · T(G / e)
+              ((%nat-is-bridge? n adj-vec u v)
+               (%tutte-scale-x
+                 (%nat-tutte n (%nat-contract-edge adj-vec u v))))
+              ;; Ordinary: T(G) = T(G − e) + T(G / e)
+              (else
+               (%tutte-add
+                 (%nat-tutte n (%nat-delete-edge   adj-vec u v))
+                 (%nat-tutte n (%nat-contract-edge adj-vec u v))))))))))))
+
+(define (graph-tutte-polynomial G)
+  "Return the Tutte polynomial T(G; x, y) of G as a list of rows, where\nrow i is a list of y-coefficients for the x^i term (Tutte 1954).\n\nExample: T(K_3) = x^2 + x + y, represented as ((0 1) (1) (1)).\n\nAlgorithm: deletion-contraction with bridge/loop detection.\n  — loop e:       T(G) = y · T(G − e)\n  — bridge e:     T(G) = x · T(G / e)\n  — ordinary e:   T(G) = T(G − e) + T(G / e)\n\nSize-capped at |V|+|E| ≤ 20 for the general case.\n\nConsistency with chromatic polynomial:\n  χ(G, x) = (-1)^(V − c(G)) · x^c(G) · T(G; 1-x, 0)\n\nExamples:\n  (graph-tutte-polynomial (cycle-graph 3))  => ((0 1) (1) (1))\n\nParameters:\n  G : graph\nReturns: list of lists\nCategory: algebra\nKeywords: Tutte polynomial, bridge, loop, deletion-contraction"
+  (let ((n (graph-order G))
+        (m (graph-size G)))
+    (cond
+      ((= m 0) (%tutte-one))
+      (else
+       (when (> (+ n m) %dc-order-size-cap)
+         (error "graph-tutte-polynomial: general-case |V|+|E| exceeds cap"
+                (list 'graph-tutte-polynomial-too-large
+                      (+ n m) %dc-order-size-cap)))
+       (call-with-values
+         (lambda () (%relabel-to-naturals G))
+         (lambda (N adj)
+           (%nat-tutte N adj)))))))
 
 (define (graph-spanning-tree-count G)
   "Return the number of spanning trees of G (Kirchhoff 1847) as a\nnon-negative integer. Zero if G is disconnected (including the empty\ngraph on n ≥ 2 vertices).\n\nAlgorithm: closed-form fast paths for K_n (Cayley: n^(n-2)), C_n (n),\ntrees (1), empty (0 for n ≥ 2; 1 for n = 1). Otherwise deletion-\ncontraction recursion per Tutte 1954 — size-capped at |E| ≤ 20 for\nthe general fallback. The Kirchhoff-matrix-tree theorem (via Laplacian\nminor determinant) is a v2 opt-in that would lift the cap to\npolynomial in |V|.\n\nExamples:\n  (graph-spanning-tree-count (complete-graph 4))  => 16\n  (graph-spanning-tree-count (cycle-graph 5))     => 5\n  (graph-spanning-tree-count (petersen-graph))    => 2000\n\nParameters:\n  G : graph\nReturns: non-negative integer\nCategory: algebra\nKeywords: spanning tree, Cayley, Kirchhoff, matrix tree, deletion contraction"

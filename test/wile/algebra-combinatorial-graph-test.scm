@@ -596,4 +596,137 @@
     (test-error (graph-chromatic-polynomial G))))
 
 (test-end)
+
+(test-begin "combinatorial-graph-phase-6")
+
+(test-group "Tutte polynomial: base cases"
+  ;; T(edgeless graph) = 1 for any number of vertices.
+  (test '((1)) (graph-tutte-polynomial (empty-graph 0)))
+  (test '((1)) (graph-tutte-polynomial (empty-graph 1)))
+  (test '((1)) (graph-tutte-polynomial (empty-graph 5))))
+
+(test-group "Tutte polynomial: basic cases"
+  ;; T(bridge) = T(P_2) = x
+  (test '(() (1)) (graph-tutte-polynomial (path-graph 2)))
+  ;; T(P_3) = x^2 (both edges are bridges)
+  (test '(() () (1)) (graph-tutte-polynomial (path-graph 3)))
+  ;; T(P_4) = x^3
+  (test '(() () () (1)) (graph-tutte-polynomial (path-graph 4))))
+
+(test-group "Tutte polynomial: triangle"
+  ;; T(K_3) = x^2 + x + y
+  (test '((0 1) (1) (1)) (graph-tutte-polynomial (complete-graph 3))))
+
+(test-group "Tutte polynomial: cycles"
+  ;; T(C_n) = x^(n-1) + x^(n-2) + ... + x + y
+  (test '((0 1) (1) (1))         (graph-tutte-polynomial (cycle-graph 3)))
+  (test '((0 1) (1) (1) (1))     (graph-tutte-polynomial (cycle-graph 4)))
+  (test '((0 1) (1) (1) (1) (1)) (graph-tutte-polynomial (cycle-graph 5))))
+
+(test-group "Tutte polynomial: K_4 (Tutte 1954 reference)"
+  ;; T(K_4) = x^3 + 3x^2 + 2x + 4xy + 2y + 3y^2 + y^3
+  (test '((0 2 3 1) (2 4) (3) (1)) (graph-tutte-polynomial (complete-graph 4))))
+
+;; --- Chromatic-from-Tutte consistency (Tutte 1954 §9) ---
+;;
+;; χ(G, x) = (-1)^(V - c(G)) · x^c(G) · T(G; 1-x, 0)
+;;
+;; Helper: evaluate T(G; 1-x, 0) and derive χ, compare with direct
+;; chromatic computation.
+
+(define (tutte-at-1-minus-x-0 T)
+  ;; Set y = 0: pick only the first element of each row (y^0 coefficient).
+  ;; Result is a univariate polynomial in x:  T(x, 0) = Σ T[i][0] x^i
+  (let ((p-in-x
+          (map (lambda (row) (if (null? row) 0 (car row))) T)))
+    ;; Substitute x ← 1 - x.
+    (let loop ((coefs p-in-x) (i 0) (acc '(0)))
+      (cond
+        ((null? coefs) acc)
+        (else
+         ;; Expand (1 - x)^i using binomial coefficients; multiply by coefs[i]; add.
+         (loop (cdr coefs) (+ i 1)
+               (poly-add acc
+                         (poly-scale (%expand-1-minus-x^i i) (car coefs)))))))))
+
+(define (%expand-1-minus-x^i i)
+  ;; (1 - x)^i as coefficient list.
+  (let loop ((k 0) (acc '(1)))
+    (cond
+      ((= k i) acc)
+      (else
+       ;; acc * (1 - x) = acc shifted by x subtracted: acc_new = acc - (acc shifted by 1).
+       (loop (+ k 1)
+             (poly-sub acc (cons 0 acc)))))))
+
+(define (poly-add p q)
+  (let loop ((p p) (q q) (acc '()))
+    (cond
+      ((and (null? p) (null? q)) (reverse acc))
+      ((null? p) (loop '() (cdr q) (cons (car q) acc)))
+      ((null? q) (loop (cdr p) '() (cons (car p) acc)))
+      (else (loop (cdr p) (cdr q) (cons (+ (car p) (car q)) acc))))))
+
+(define (poly-sub p q)
+  (let loop ((p p) (q q) (acc '()))
+    (cond
+      ((and (null? p) (null? q)) (reverse acc))
+      ((null? p) (loop '() (cdr q) (cons (- (car q)) acc)))
+      ((null? q) (loop (cdr p) '() (cons (car p) acc)))
+      (else (loop (cdr p) (cdr q) (cons (- (car p) (car q)) acc))))))
+
+(define (poly-scale p c)
+  (map (lambda (a) (* a c)) p))
+
+(define (poly-trim p)
+  (reverse (let drop ((xs (reverse p)))
+             (cond
+               ((null? xs) '())
+               ((and (= (car xs) 0) (pair? (cdr xs))) (drop (cdr xs)))
+               (else xs)))))
+
+(define (poly-shift p k)
+  (append (make-list k 0) p))
+
+(define (chromatic-from-tutte G)
+  (let* ((T (graph-tutte-polynomial G))
+         (at (tutte-at-1-minus-x-0 T))
+         (c  (length (graph-connected-components G)))
+         (v  (graph-order G))
+         (sign (if (odd? (- v c)) -1 1)))
+    (poly-trim (poly-scale (poly-shift at c) sign))))
+
+(test-group "chromatic-from-Tutte consistency (K_3, K_4, C_4)"
+  (test (graph-chromatic-polynomial (complete-graph 3))
+        (chromatic-from-tutte (complete-graph 3)))
+  (test (graph-chromatic-polynomial (complete-graph 4))
+        (chromatic-from-tutte (complete-graph 4)))
+  (test (graph-chromatic-polynomial (cycle-graph 4))
+        (chromatic-from-tutte (cycle-graph 4)))
+  (test (graph-chromatic-polynomial (cycle-graph 5))
+        (chromatic-from-tutte (cycle-graph 5)))
+  (test (graph-chromatic-polynomial (path-graph 4))
+        (chromatic-from-tutte (path-graph 4))))
+
+(test-group "Tutte polynomial: size cap"
+  ;; Same 21-edge test as chromatic's size cap.
+  (let* ((n 8)
+         (edges (append
+                  (map (lambda (i) (list i (modulo (+ i 1) n))) (iota n))
+                  (list '(0 2) '(0 3) '(0 4) '(0 5) '(0 6))))
+         (adj (map
+                (lambda (v)
+                  (cons v
+                        (filter-map
+                          (lambda (e)
+                            (cond
+                              ((= (car e) v)  (cons (cadr e) #f))
+                              ((= (cadr e) v) (cons (car e) #f))
+                              (else           #f)))
+                          edges)))
+                (iota n)))
+         (G (make-graph adj)))
+    (test-error (graph-tutte-polynomial G))))
+
+(test-end)
 (test-exit)

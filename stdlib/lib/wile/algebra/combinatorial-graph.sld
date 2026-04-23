@@ -19,6 +19,7 @@
     ;; Invariants
     graph-spanning-tree-count
     graph-chromatic-polynomial
+    graph-tutte-polynomial
     ;; Presets
     complete-graph cycle-graph path-graph
     complete-bipartite-graph empty-graph petersen-graph)
