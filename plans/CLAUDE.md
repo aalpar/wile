@@ -100,6 +100,16 @@ Separate findings into four buckets:
 
 ---
 
+## Cross-project coordination
+
+Work that couples this repo with wile-goast (shared go.work module at
+`~/projects/wile-workspace/`) is tracked in **[`WORKSPACE-ROADMAP.md`](WORKSPACE-ROADMAP.md)**.
+Cite it in a plan's front-matter when that plan's status depends on
+cross-project sequencing (e.g. *"Queued — blocked by pending algebra
+Tier B per `plans/WORKSPACE-ROADMAP.md`"*).
+
+---
+
 ## Forward-Looking Plans
 
 Open designs and implementation work. These are the active items.
