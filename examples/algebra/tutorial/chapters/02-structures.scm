@@ -17,6 +17,7 @@
 ;; ================================================================
 
 (import (scheme base) (scheme write)
+        (srfi 132)                ; sort (not in scheme base)
         (wile algebra monoid)
         (wile algebra lattice)
         (wile algebra semiring)

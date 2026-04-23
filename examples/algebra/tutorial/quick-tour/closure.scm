@@ -6,7 +6,9 @@
 ;; you need the smallest X containing Y under some rule -- topological
 ;; closure, Galois closure, transitive closure, etc.
 
-(import (scheme base) (wile algebra closure) (wile algebra lattice)
+(import (scheme base)
+        (srfi 132)                ; sort (not in scheme base)
+        (wile algebra closure) (wile algebra lattice)
         (wile algebra order))
 (include "../lib/check.scm")
 

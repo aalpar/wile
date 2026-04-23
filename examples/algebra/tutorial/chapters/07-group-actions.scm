@@ -13,7 +13,9 @@
 ;; Sub-libraries used: (wile algebra group).
 ;; ================================================================
 
-(import (scheme base) (scheme write) (wile algebra group))
+(import (scheme base) (scheme write)
+        (srfi 132)                ; sort (not in scheme base)
+        (wile algebra group))
 (include "../lib/check.scm")
 
 ;; ----------------------------------------------------------------

@@ -915,7 +915,7 @@ Syntactic and AC-modulo unification. Pattern variables as records, substitutions
 ### Substitutions
 
 - `(make-substitution bindings)` -- substitution from an alist of `(var . term)` bindings
-- `(empty-substitution)` -- the empty substitution
+- `empty-substitution` -- the empty substitution (a constant, not a procedure)
 - `(substitution? x)` / `(substitution-bindings sub)` -- predicate and accessor
 - `(substitution-lookup sub var)` -- returns the bound term, or `#f`
 - `(substitution-compose s1 s2)` -- sequential composition (apply s2, then s1)

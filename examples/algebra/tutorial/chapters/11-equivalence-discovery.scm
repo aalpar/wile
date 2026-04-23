@@ -195,15 +195,15 @@
 (define short-fuel-norm (make-recursive-normalizer assoc-only proto 3))
 
 ;; A left-associated term that keeps reassociating right: (+ (+ (+ a b) c) d).
+;; With fuel = 3, the solver cannot reach the fully right-associated form
+;; in so few steps -- associativity only moves one pair of parens per step,
+;; and there are 3 nested compounds to unwind. The trace must include a
+;; fuel-exhausted step. This is the diagnostic pattern for non-termination.
 (define-values (_shrink fuel-trace)
   (short-fuel-norm '(+ (+ (+ a b) c) d)))
 
-;; Either the term fully reduced, or we see a fuel-exhausted step. This
-;; is the pattern you use to diagnose non-termination.
-(check-true (or (null? fuel-trace)
-                (any fuel-exhausted-step? fuel-trace)
-                (> (length fuel-trace) 0))
-            "trace has steps (possibly a fuel marker) even with low fuel")
+(check-true (any fuel-exhausted-step? fuel-trace)
+            "trace includes a fuel-exhausted marker at low fuel")
 
 ;; ----------------------------------------------------------------
 ;; Part 9: Which axiom set recognizes which equivalence?
