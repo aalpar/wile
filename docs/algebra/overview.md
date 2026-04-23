@@ -66,6 +66,8 @@ graph BT
     Bool["Boolean Algebra"] -->|"forgets complement"| Hey
     Bool -->|"char 2, sym. diff."| Ring
     Lat -.->|"induces"| CO["Closure Operator<br>(closed sublattice)"]
+    AD["Abstract Domain<br>(sign-lattice, interval)"] -->|"specializes"| Lat
+    Inc["Incidence Algebra"] -->|"on locally-finite posets"| PO
 ```
 
 **Algebra**
@@ -80,9 +82,11 @@ graph BT
     Field -->|"forgets reciprocal"| Ring
     DiffRing["Differential Ring"] -->|"forgets derivation"| Ring
     Cat[Category] -->|"endo. monoid at object"| Monoid
+    Poly["Polynomial Ring R[x]"] -->|"over coefficient ring"| Ring
+    Mat["Matrix(S)"] -->|"semiring-parameterized"| Semi
 ```
 
-**Rewriting**
+**Rewriting and symbolic**
 
 ```mermaid
 graph LR
@@ -91,6 +95,22 @@ graph LR
     NA["Named axiom"] --> Theory
     Theory --> RNorm["Recursive normalizer<br>(to fixed point, with trace)"]
     Structs["monoid, group, semiring, ring,<br>field, lattice, heyting, boolean"] -->|"→theory"| Theory
+    Unif["Unification<br>(ac-match, ac-unify,<br>diophantine-basis)"] -->|"uses"| TP
+    SBN["symbolic-boolean-normalize"] -->|"wraps"| RNorm
+```
+
+**Analysis (compositions of foundation + algebra)**
+
+```mermaid
+graph LR
+    Dom["Abstract Domain"] --> MFP["MFP dataflow solver"]
+    CFGP["CFG protocol"] --> MFP
+    Lat2["Lattice"] --> MFP
+    CG["Combinatorial Graph"] -->|"chromatic, Tutte"| Poly2["Polynomial"]
+    CG -->|"1-WL + I/R"| Iso["graph-isomorphic?"]
+    CG -->|"Hopcroft-Karp"| Match["bipartite matching"]
+    FCAgraph["Formal Concept Analysis"] -->|"derivation ops"| CL["Concept Lattice"]
+    PF["Pareto"] --> Front["Pareto frontier"]
 ```
 
 Each arrow discards exactly one capability. `field->ring` forgets the
@@ -135,45 +155,74 @@ returns the rewritten term when a rule fires and `#f` when no rule applies.
 This makes it easy to compose normalizers or loop until a fixed point: keep
 applying until the result is `#f`.
 
+**Preset structures.** Many libraries ship canonical examples as nullary
+or small-arity constructors: `integer-ring`, `rational-field`, `cyclic-group
+n`, `symmetric-group n`, `chain-lattice n`, `boolean-lattice n`,
+`diamond-lattice n`, `pentagon-lattice`, `free-distributive-lattice n`,
+`sign-lattice`, `complete-graph n`, `cycle-graph n`, `petersen-graph`.
+Reach for the preset when the classical case fits; build from scratch
+when the domain is custom. Presets short-circuit the "build, then check
+it's what you wanted" dance that plagues hand-written instances.
+
 ## Learning Path
 
-The examples build on each other. Work through them in order.
+The tutorial under [`examples/algebra/tutorial/`](../../examples/algebra/tutorial/)
+is the primary entry point. Each chapter is a runnable `.scm` file: read
+it, run it (`wile --file <chapter>`), and modify it. CI runs every chapter
+via `make tutorial-test`, so drift between tutorial and library is caught
+automatically. See the [tutorial README](../../examples/algebra/tutorial/README.md)
+for the full chapter list with prerequisites.
 
-1. **[`examples/algebra/getting-started.scm`](../../examples/algebra/getting-started.scm)** --
-   Monoids from scratch. Covers `make-monoid`, `monoid-fold`, `monoid-power`,
-   `validate-monoid`, and `with-monoid`. Demonstrates that monoids work on
-   strings, not just numbers.
+**Deep chapters** (thematic, build on each other):
 
-2. **[`examples/algebra/structures.scm`](../../examples/algebra/structures.scm)** --
-   Lattices, rings, fields, Boolean algebras, and forgetful projections.
-   Shows the two-step chain `boolean->heyting->lattice` and the cross-tower
-   projection `boolean->ring`.
+1. **[`01-getting-started.scm`](../../examples/algebra/tutorial/chapters/01-getting-started.scm)** --
+   Monoids from scratch. `make-monoid`, `monoid-fold`, `monoid-power`,
+   `validate-monoid`, `with-monoid`. Monoids on strings, lists, booleans.
+2. **[`02-structures.scm`](../../examples/algebra/tutorial/chapters/02-structures.scm)** --
+   The algebraic tower: lattice, semiring, group, ring, field, differential
+   ring, Boolean algebra. Forgetful projections in depth.
+3. **[`03-rewriting-basics.scm`](../../examples/algebra/tutorial/chapters/03-rewriting-basics.scm)** --
+   Term protocols, all seven axiom types, composed normalizers.
+4. **[`04-boolean-simplifier.scm`](../../examples/algebra/tutorial/chapters/04-boolean-simplifier.scm)** --
+   `boolean->theory`, recursive normalizer with traces, Heyting vs Boolean.
+5. **[`05-symbolic-differentiation.scm`](../../examples/algebra/tutorial/chapters/05-symbolic-differentiation.scm)** --
+   Polynomials + `poly-derivative` + `polynomial-derivation`; hand-written
+   symbolic differentiator cross-checked against `poly-derivative`.
+6. **[`06-graph-algorithms.scm`](../../examples/algebra/tutorial/chapters/06-graph-algorithms.scm)** --
+   BFS, isomorphism (C_6 vs 2·K_3 cospectral canary), τ(Petersen) = 2000,
+   chromatic polynomials, Hopcroft-Karp on K_{3,3} and K_{2,4}.
+7. **[`07-group-actions.scm`](../../examples/algebra/tutorial/chapters/07-group-actions.scm)** --
+   Preset groups and actions, orbit / stabilizer, Burnside on necklaces.
+8. **[`08-lattice-presets.scm`](../../examples/algebra/tutorial/chapters/08-lattice-presets.scm)** --
+   Canonical lattices, `distributive?` / `modular?`, Birkhoff roundtrip,
+   Dedekind numbers through D(4), Möbius on the divisor poset of 12.
+9. **[`09-dataflow-analysis.scm`](../../examples/algebra/tutorial/chapters/09-dataflow-analysis.scm)** --
+   MFP solver, CFG protocol, sign domain; straight-line and branching CFGs.
+10. **[`10-unification.scm`](../../examples/algebra/tutorial/chapters/10-unification.scm)** --
+    Pattern variables, substitutions, AC unification, `diophantine-basis`.
+11. **[`11-equivalence-discovery.scm`](../../examples/algebra/tutorial/chapters/11-equivalence-discovery.scm)** --
+    `discover-equivalences` across sub-theories, theory combinators,
+    `format-trace`, fuel exhaustion.
 
-3. **[`examples/algebra/rewriting.scm`](../../examples/algebra/rewriting.scm)** --
-   Term protocols and all seven axiom types: identity, commutativity,
-   absorbing, idempotence, involution, absorption, associativity. Builds
-   composed normalizers from multiple axioms.
+**Quick-tour files** (single-library demos, not ordered):
 
-4. **[`examples/algebra/symbolic.scm`](../../examples/algebra/symbolic.scm)** --
-   Named axioms, theories, theory combinators (`filter`, `exclude`,
-   `prioritize`, `merge`), the recursive normalizer, transformation traces
-   via `format-trace`, structure-to-theory projections, and fuel exhaustion.
-
-5. **[`examples/algebra/boolean-simplifier.scm`](../../examples/algebra/boolean-simplifier.scm)** --
-   End-to-end workflow: build a Boolean algebra, derive its theory, simplify
-   expressions, and compare what Boolean algebras can simplify versus what
-   Heyting algebras cannot (double negation elimination).
-
-6. **[`examples/algebra/equivalence-discovery.scm`](../../examples/algebra/equivalence-discovery.scm)** --
-   `discover-equivalences` explores distinct normal forms across sub-theories.
-   Shows how different axiom subsets produce different results, and what
-   "equivalence depends on which laws you assume" means concretely.
+- [`setoid.scm`](../../examples/algebra/tutorial/quick-tour/setoid.scm)
+- [`partial-order.scm`](../../examples/algebra/tutorial/quick-tour/partial-order.scm)
+- [`closure.scm`](../../examples/algebra/tutorial/quick-tour/closure.scm)
+- [`category.scm`](../../examples/algebra/tutorial/quick-tour/category.scm)
+- [`galois.scm`](../../examples/algebra/tutorial/quick-tour/galois.scm)
+- [`fca.scm`](../../examples/algebra/tutorial/quick-tour/fca.scm)
+- [`graph.scm`](../../examples/algebra/tutorial/quick-tour/graph.scm)
+- [`interval.scm`](../../examples/algebra/tutorial/quick-tour/interval.scm)
+- [`matrix.scm`](../../examples/algebra/tutorial/quick-tour/matrix.scm)
+- [`pareto.scm`](../../examples/algebra/tutorial/quick-tour/pareto.scm)
 
 ## See Also
 
+- [`tutorial.md`](tutorial.md) -- tutorial index with chapter prerequisites.
 - [`reference.md`](reference.md) -- Complete API reference for all structures,
   projections, rewriting, and symbolic operations.
 - `BIBLIOGRAPHY.md` -- Academic references (abstract algebra, lattice
   theory, term rewriting).
 - `test/wile/algebra-*.scm` -- Test files covering each sub-library.
-  These serve as additional usage examples beyond the guided examples above.
+  These serve as additional usage examples beyond the guided tutorial.

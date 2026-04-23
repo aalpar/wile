@@ -75,14 +75,27 @@ Bounded lattices with join, meet, and fixpoint computation.
 ### Constructors
 
 - `(make-lattice join meet bottom top leq?)` -- create a lattice from five components: join and meet are binary procedures, bottom and top are elements, leq? is a binary predicate
+- `(make-lattice join meet bottom top leq? . opts)` -- with optional trailing metadata: `(cons 'setoid S)`, `(cons 'cardinality N)`, `(cons 'elements LIST)`
 - `(flat-lattice elements equal?)` -- flat lattice where all elements are incomparable between bottom and top; uses `'flat-bottom` and `'flat-top` as sentinel values
 - `(powerset-lattice universe)` -- lattice of subsets of universe (lists); join is union, meet is intersection, leq? is subset
 - `(product-lattice L1 L2 ...)` -- pointwise product of lattices; elements are lists of the same length
 - `(map-lattice keys value-lattice)` -- lattice of alists mapping keys to elements of value-lattice; operations are pointwise
 
+### Presets
+
+- `(chain-lattice n)` -- the n-element total order 0 < 1 < ... < n-1; distributive, modular
+- `(boolean-lattice n)` -- 2^[n]: subsets of an n-element universe ordered by inclusion; distributive
+- `(diamond-lattice n)` -- M_n: bottom, n incomparable atoms, top; modular, not distributive
+- `(pentagon-lattice)` -- N_5: the standard witness of non-modularity; neither distributive nor modular
+- `(free-distributive-lattice n)` -- the free bounded distributive lattice on n generators; cardinality is the Dedekind number D(n); raises for n >= 6
+
 ### Predicates
 
 - `(lattice? x)` -- test whether x is a lattice
+- `(finite-lattice? L)` -- true iff L carries an elements enumeration
+- `(distributive? L)` -- exhaustive check: `a ∧ (b ∨ c) = (a ∧ b) ∨ (a ∧ c)` on all triples of elements
+- `(modular? L)` -- exhaustive check of the modular law
+- `(join-irreducible? L x)` / `(meet-irreducible? L x)` -- individual-element predicates
 
 ### Operations
 
@@ -91,12 +104,29 @@ Bounded lattices with join, meet, and fixpoint computation.
 - `(lattice-bottom L)` -- the bottom element
 - `(lattice-top L)` -- the top element
 - `(lattice-leq? L a b)` -- test whether a <= b in the lattice
+- `(lattice-equal? L a b)` -- lattice equality via setoid (metadata-carried)
+- `(lattice-cardinality L)` -- carried cardinality, or `#f` when unset
+- `(lattice-elements L)` -- carried element enumeration, or `#f`
+- `(lattice-setoid L)` -- the carrier's setoid, or `#f`
+- `(lattice-equiv? L)` -- the setoid's equivalence procedure, or `#f`
+
+### Irreducibles
+
+- `(join-irreducibles L)` -- the list of join-irreducible elements (not a join of strictly smaller elements)
+- `(meet-irreducibles L)` -- symmetric, for meet
 
 ### Fixpoint
 
 - `(fixpoint L f x)` -- Kleene iteration: compute least fixpoint of f starting from x; f must be monotone, L must have no infinite ascending chains
 - `(fixpoint L f x fuel)` -- same but limited to fuel steps; returns `#f` if fixpoint not reached
 - `(fixpoint/widen L f x widen)` -- fixpoint with widening operator for lattices with infinite ascending chains; widen takes (current, next) and must produce a finite ascending chain
+
+### Birkhoff duality
+
+- `(lattice->locally-finite-poset L)` -- project the lattice's leq? and element set to a `<locally-finite-poset>`
+- `(birkhoff-representation L)` -- the locally-finite poset of join-irreducibles; requires finite distributive L; raises otherwise
+- `(birkhoff-representation/unchecked L)` -- same without the distributivity gate; caller guarantees the precondition
+- `(birkhoff-reconstruction P)` -- the lattice of downsets of P; `lattice-cardinality` matches the downset count; roundtrip `birkhoff-reconstruction ∘ birkhoff-representation` is an isomorphism when L is distributive
 
 ### Projections
 
@@ -105,6 +135,8 @@ Bounded lattices with join, meet, and fixpoint computation.
 ### Validation
 
 - `(validate-lattice L samples)` -- spot-check commutativity, absorption, idempotence, and identity laws; returns `#t` or a list of violations
+- `(validate-distributive-lattice L samples)` / `(validate-distributive-lattice/setoid L samples)` -- sample-based distributivity check
+- `(validate-modular-lattice L samples)` / `(validate-modular-lattice/setoid L samples)` -- sample-based modularity check
 
 ### Destructuring
 
@@ -329,21 +361,50 @@ Two monoidal operations where times distributes over plus.
 
 ## Group -- `(wile algebra group)`
 
-Monoids with inverses.
+Monoids with inverses. The record type carries optional introspection metadata (setoid, order, elements, generators) so clients can distinguish finite from finitely-generated groups and enumerate elements when available.
 
 ### Constructors
 
 - `(make-group op identity inverse)` -- create from a binary operation, identity element, and unary inverse function
+- `(make-group op identity inverse . opts)` -- with optional trailing metadata: `(cons 'setoid S)`, `(cons 'element? PRED)`, `(cons 'order N)`, `(cons 'elements LIST)`, `(cons 'generators LIST)`
+
+### Presets
+
+- `(trivial-group)` -- the one-element group with element `'e`; cached (eq?-identical across calls)
+- `(cyclic-group n)` -- Z/nZ under addition mod n; elements `0..n-1`; generators `(1)`
+- `(symmetric-group n)` -- S_n under permutation composition; elements are length-n permutation vectors
+- `(product-group . groups)` -- direct product; element lists of length |groups|
+- `(subgroup-generated G generators)` / `(subgroup-generated G generators . opts)` -- smallest subgroup containing generators (BFS closure); `(cons 'max-size N)` caps the search
+- `(enumerate-finite-group G)` / `(enumerate-finite-group G . opts)` -- promote a finitely-generated group to a finite one by enumerating elements via BFS closure; idempotent when G already has elements
+
+### Group actions
+
+- `(make-group-action G set-element? act)` -- build an action record; `set-element?` tests membership in the set being acted on; `act` is `(lambda (g x) g·x)`
+- `(trivial-action G set-element?)` / `(permutation-action Sn n)` / `(regular-action G)` / `(conjugation-action G)` / `(product-action . actions)` -- preset actions
+- `(group-action? x)` / `(group-action-group A)` / `(group-action-act A g x)` / `(group-action-act-fn A)` / `(group-action-set-element? A)` -- accessors
+
+### Orbit, stabilizer, Burnside
+
+- `(orbit action x)` -- list of points reachable from x (BFS via generators, or enumerate-all if generators absent)
+- `(stabilizer action x)` -- list of group elements fixing x; requires G to carry `elements`
+- `(fixed-points action g X-elements)` -- points in `X-elements` fixed by g
+- `(orbit-representative action x less?)` -- LESS?-minimum element of orbit(x); ties broken by discovery order
+- `(burnside-count action X-elements)` -- `|X/G| = (1/|G|) Σ_{g} |X^g|`; requires finite G; raises if sum not divisible by |G|
 
 ### Predicates
 
 - `(group? x)` -- test whether x is a group
+- `(finite-group? G)` -- true when G carries both order and elements
+- `(finitely-generated-group? G)` -- true when G carries generators
+- `(subgroup? H G)` -- H is a sub-structure of G (closed under op, contains identity, closed under inverse)
+- `(group-element? G)` -- the carried element-membership predicate, or `#f`
 
 ### Operations
 
 - `(group-op G a b)` -- apply the binary operation
 - `(group-identity G)` -- access the identity element
 - `(group-inverse G a)` -- compute the inverse of a
+- `(group-order G)` / `(group-elements G)` / `(group-generators G)` / `(group-setoid G)` / `(group-equal? G a b)` -- metadata accessors (return `#f` when unset)
 
 ### Projections
 
@@ -352,6 +413,7 @@ Monoids with inverses.
 ### Validation
 
 - `(validate-group G samples)` -- spot-check identity, inverse, and associativity; returns `#t` or a list of violations
+- `(assert-group ...)` -- retained for backward compatibility; prefer `assert-validation` on `validate-group`
 
 ### Destructuring
 
@@ -620,6 +682,350 @@ Named axioms, theories, theory combinators, recursive normalization, and transfo
 
 - `(format-trace trace)` -- format a list of rewrite steps as human-readable strings; each string shows rule name, general form, before, and after; fuel-exhaustion steps are prefixed with `[fuel exhausted]`
 
+### Boolean normalization facade
+
+- `(symbolic-boolean-normalize term)` -- apply the standard Boolean theory (`boolean->theory` on a 1-atom Boolean algebra, operators `and` / `or` / `not`); returns `(values result trace)`; covers commutativity, associativity, identity, idempotence, absorption, and complement-involution but not De Morgan or complement laws
+- `(symbolic-boolean-equivalent? t1 t2)` -- true iff both terms normalize to the same form under the standard Boolean theory
+
+---
+
+## Matrix -- `(wile algebra matrix)`
+
+Semiring-parameterized dense and sparse matrices. Arithmetic follows the coefficient semiring; the same matrix type covers Boolean (reachability), tropical (shortest path), counting (ordinary arithmetic), and user-defined semirings. See `plans/2026-04-21-matrix-path-d-impl.md` for the polymorphism design.
+
+### Constructors
+
+- `(make-semiring-matrix S rows cols)` -- rows x cols matrix over semiring S filled with `(semiring-zero S)`
+- `(make-semiring-matrix S rows cols fill)` -- same with explicit fill value
+- `(semiring-matrix-from-rows S rows-list)` -- construct from a list of equal-length rows; non-empty list required
+- `(semiring-matrix-identity S n)` -- n x n identity matrix (diagonal = `semiring-one`; off-diagonal = `semiring-zero`)
+- `(make-sparse-semiring-matrix S rows cols entries)` -- sparse matrix from an entries iterator
+- `(semiring-matrix->sparse M)` -- convert dense to sparse representation
+- `(sparse->semiring-matrix M)` -- convert sparse to dense representation
+
+### Predicates
+
+- `(semiring-matrix? x)` -- dense matrix predicate
+- `(sparse-semiring-matrix? x)` -- sparse matrix predicate
+- `(matrix? x)` -- polymorphic predicate (dense or sparse)
+- `(matrix-rep-tag M)` -- representation tag symbol (`'dense` or `'sparse`; extensible)
+
+### Accessors
+
+- `(semiring-matrix-ref M r c)` / `(sparse-semiring-matrix-ref M r c)` / `(matrix-ref M r c)` -- element at (r, c)
+- `(semiring-matrix-rows M)` / `(semiring-matrix-cols M)` -- dimensions
+- `(matrix-rows M)` / `(matrix-cols M)` / `(matrix-shape M)` -- polymorphic dimensions
+- `(semiring-matrix-semiring M)` / `(matrix-semiring M)` -- the coefficient semiring
+- `(semiring-matrix->rows M)` -- convert to list-of-lists form
+- `(matrix-for-each-entry M proc)` / `(matrix-fold-entries M seed proc)` -- iterator API
+
+### Arithmetic
+
+- `(semiring-matrix-add A B)` / `(matrix-add A B)` / `(matrix-add! A B)` -- addition; `!` form is in-place
+- `(semiring-matrix-mul A B)` -- multiplication; inner dimensions must match
+- `(semiring-matrix-power M n)` -- repeated multiplication; `M^0 = I`, `M^n = M * M^(n-1)`
+- `(semiring-matrix-closure M)` -- Kleene-star closure (I + M + M^2 + ...) for Kleene-algebra semirings
+- `(semiring-matrix-permanent M)` -- permanent (over a commutative semiring with subtraction not required)
+
+### Destructuring
+
+- `(with-semiring-matrix (add mul power closure ref) body ...)` -- positionally bind the five operations to local names; order is fixed (`add`, `mul`, `power`, `closure`, `ref`), not by name
+
+---
+
+## Polynomial -- `(wile algebra polynomial)`
+
+Univariate polynomials over a coefficient ring. Ascending-order coefficient lists, normalized (no trailing zero). Arithmetic threads through the coefficient ring's ops, so the same polynomial type runs over Z, Q, Z/nZ, or any user-defined ring.
+
+### Constructors
+
+- `(make-poly R coeffs)` -- polynomial over ring R from coefficient list in ascending power order; trailing zeros stripped; empty list is the zero polynomial
+- `(poly-zero R)` / `(poly-one R)` -- additive and multiplicative identities
+- `(polynomial-ring R)` -- the ring of polynomials over R (elements are `<polynomial>` records)
+- `(integer-polynomials)` / `(rational-polynomials)` -- convenience presets for `Z[x]` and `Q[x]`
+
+### Predicates and accessors
+
+- `(polynomial? x)` -- test whether x is a polynomial record
+- `(poly-ring p)` -- coefficient ring
+- `(poly-coeffs p)` -- ascending-order coefficient list
+- `(poly-degree p)` -- degree (-1 for the zero polynomial, PARI/GP convention)
+- `(poly-leading-coeff p)` -- leading (highest-power) coefficient; ring-zero for the zero polynomial
+
+### Arithmetic
+
+- `(poly-plus p q)` -- sum; both polynomials must share the ring
+- `(poly-negate p)` -- additive inverse (negate each coefficient)
+- `(poly-minus p q)` -- difference: `poly-plus p (poly-negate q)`
+- `(poly-times p q)` -- product via schoolbook multiplication, O(n*m) coefficient operations
+- `(poly-eval p x)` -- Horner evaluation at `x` using the coefficient ring's plus and times
+
+### Calculus and division
+
+- `(poly-derivative p)` -- formal derivative: shifted, coefficient-scaled
+- `(poly-divmod p d F)` -- polynomial long division returning `(values q r)` such that `p = q*d + r` and `deg(r) < deg(d)`; requires F to be a field (for leading-coefficient inversion)
+- `(poly-gcd p q F)` -- Euclidean GCD; returns a monic polynomial; requires F to be a field
+
+### Destructuring
+
+- `(with-polynomial R (plus times zero one negate) body ...)` -- bind ring-level polynomial operators
+
+---
+
+## Incidence Algebra -- `(wile algebra incidence)`
+
+Locally-finite posets and their incidence algebras over a ring. Supports zeta and Möbius functions, convolution, and Möbius inversion (inclusion-exclusion). Classical setting for combinatorial identities on divisibility, subset, and subword posets.
+
+### Constructors
+
+- `(make-locally-finite-poset leq? interval)` -- construct a locally-finite poset from a `leq?` predicate and an `interval` procedure; `interval x y` returns the list of elements z with x ≤ z ≤ y
+- `(make-locally-finite-poset leq? interval (cons 'elements LIST))` -- with optional enumeration (required by `birkhoff-reconstruction`)
+- `(finite-set->locally-finite-poset leq? elements)` -- build a bounded poset from a predicate and an explicit element list; scans the list to derive intervals
+- `(make-incidence-algebra poset)` -- incidence algebra over the integer ring by default
+- `(make-incidence-algebra poset ring)` -- incidence algebra over an explicit ring
+
+### Predicates and accessors
+
+- `(locally-finite-poset? x)` / `(incidence-algebra? x)` -- predicates
+- `(lf-poset-leq? P)` -- the leq? procedure
+- `(lf-poset-interval P)` -- the interval-enumeration procedure
+- `(lf-poset-elements P)` -- optional element enumeration (or `#f`)
+- `(incidence-algebra-poset IA)` / `(incidence-algebra-ring IA)` -- underlying poset and ring
+
+### Zeta, Möbius, convolution
+
+- `(zeta-function IA)` -- returns a procedure `(zeta x y)` that is `ring-one` when x ≤ y and `ring-zero` otherwise
+- `(mobius-function IA)` -- returns a procedure `(mu x y)` computing the Möbius function μ(x, y), memoized in the incidence algebra
+- `(incidence-convolve IA f g)` -- convolution of two functions `f, g : P x P -> R`
+- `(mobius-inversion IA g x lower-set)` -- apply Möbius inversion to recover f from g = Σ_{y ≤ x} f(y) on a given lower-set
+
+---
+
+## Interval -- `(wile algebra interval)`
+
+Infinity-aware interval arithmetic. Intervals are `(lo . hi)` pairs where `lo` and `hi` may be numbers or the sentinels `'neg-inf` / `'pos-inf`. The interval lattice orders by containment. Useful as a concrete abstract domain for static analysis or as a conservative envelope for uncertain quantities.
+
+### Lattice and representation
+
+- `(interval-lattice)` -- the lattice over intervals represented as `(lo . hi)` pairs; bottom is the empty interval, top is `(neg-inf . pos-inf)`; order is reverse-inclusion (`(a . b) <= (c . d)` iff `c <= a` and `b <= d` under `inf<=`)
+
+Intervals are ordinary pairs: build with `cons lo hi`; access with `car` and `cdr`. Use the infinity-aware comparisons below for predicates over the endpoints.
+
+### Infinity-aware comparisons and arithmetic
+
+- `(inf<= a b)` -- infinity-aware `<=`: `neg-inf <= anything`, `anything <= pos-inf`
+- `(inf-min a b)` / `(inf-max a b)` -- infinity-aware min / max
+- `(inf+ a b)` -- infinity-aware addition; `pos-inf + neg-inf = pos-inf` (conservative widening)
+- `(inf- a b)` -- infinity-aware subtraction
+- `(inf* a b)` -- infinity-aware multiplication
+
+### Interval arithmetic
+
+- `(interval-add a b)` -- sum; componentwise `inf+`
+- `(interval-sub a b)` -- difference
+- `(interval-mul a b)` -- product via four-corner multiplication (min and max of the four endpoint products)
+
+---
+
+## Graph (abstract) -- `(wile algebra graph)`
+
+Semiring-parameterized single-source graph analysis. Lazy Bellman-Ford-style traversal on adjacency alists with the semiring determining what "distance" means. Distinct from `(wile algebra combinatorial-graph)`, which handles isomorphism and enumeration.
+
+### Constructors
+
+- `(make-graph-analysis semiring adjacency weight-fn)` -- build a graph-analysis from a semiring, an adjacency alist, and a weight function; `#f` weight-fn means unit weights (each edge contributes `semiring-one`)
+
+### Predicates and accessors
+
+- `(graph-analysis? x)` -- predicate
+
+### Queries
+
+- `(graph-query ga source target)` -- return the semiring-value between source and target; `semiring-zero` when unreachable; lazily computes and caches single-source distances per source
+- `(graph-query-all ga source)` -- return an alist `((node . value) ...)` for all reachable nodes
+
+---
+
+## Combinatorial Graph -- `(wile algebra combinatorial-graph)`
+
+Graphs as combinatorial objects. Isomorphism via 1-WL + individualization-refinement backtracking (McKay-Piperno 2014), deletion-contraction for chromatic/Tutte polynomials and spanning-tree count, Hopcroft-Karp bipartite matching. Distinct from `(wile algebra graph)`.
+
+### Constructors
+
+- `(make-graph adjacency)` -- adjacency given as `((v (w edge-data) ...) ...)`; see `plans/2026-04-22-combinatorial-graph-impl.md` for the record shape
+
+### Presets
+
+- `(complete-graph n)` -- K_n
+- `(cycle-graph n)` -- C_n
+- `(path-graph n)` -- P_n
+- `(complete-bipartite-graph m n)` -- K_{m,n}
+- `(empty-graph n)` -- n isolated vertices
+- `(petersen-graph)` -- Petersen graph (3-regular, 10 vertices, 15 edges)
+
+### Predicates and accessors
+
+- `(graph? x)` / `(finite-graph? x)` / `(finitely-generated-graph? x)` -- tier predicates
+- `(graph-order G)` -- vertex count
+- `(graph-size G)` -- edge count
+- `(graph-vertices G)` / `(graph-edges G)` / `(graph-neighbors G v)` / `(graph-degree G v)` -- structure accessors
+- `(graph-edge? G u v)` / `(graph-has-vertex? G v)` -- membership predicates
+- `(graph-vertex-equiv? G)` / `(graph-setoid G)` -- vertex-equality access
+- `(graph-directed? G)` / `(graph-multi? G)` / `(graph-self-loops? G)` -- shape predicates
+
+### Traversal and connectivity
+
+- `(graph-bfs G source)` -- breadth-first order from source; raises if source is not a vertex
+- `(graph-dfs G source)` -- depth-first preorder
+- `(graph-connected-components G)` -- list of components
+- `(graph-bipartite? G)` / `(graph-bipartition G)` -- bipartite test and 2-coloring
+
+### Isomorphism
+
+- `(graph-isomorphic? G H)` -- true iff G and H are isomorphic
+- `(graph-canonical-form G)` -- canonical representation
+
+### Invariants
+
+- `(graph-spanning-tree-count G)` -- non-negative integer; closed forms for K_n, C_n, trees; deletion-contraction otherwise
+- `(graph-chromatic-polynomial G)` -- coefficients in ascending order; closed forms for K_n, C_n, trees, empty graph
+- `(graph-tutte-polynomial G)` -- list of rows, each a y-coefficient list for one x power
+
+### Matching
+
+- `(graph-maximum-bipartite-matching G)` -- Hopcroft-Karp matching as an alist of pairs; raises if not bipartite
+
+### Validation
+
+- `(validate-graph G)` / `(assert-graph G)` / `(with-graph G ...)` -- standard validation pattern
+
+---
+
+## Unification -- `(wile algebra unification)`
+
+Syntactic and AC-modulo unification. Pattern variables as records, substitutions as alists. AC unification via Stickel's Diophantine reduction for pure-variable cases. The `diophantine-basis` primitive is exposed for Petri-net and integer-programming consumers.
+
+### Pattern variables
+
+- `(make-pattern-var name)` -- pattern-var record; identity is name-based
+- `(pattern-var? x)` -- predicate
+- `(pattern-var-name v)` -- name accessor
+- `(parse-pattern expr)` -- walk expr, replacing each `?name` symbol with a pattern-var; repeated names intern to one record
+
+### Substitutions
+
+- `(make-substitution bindings)` -- substitution from an alist of `(var . term)` bindings
+- `empty-substitution` -- the empty substitution (a constant, not a procedure)
+- `(substitution? x)` / `(substitution-bindings sub)` -- predicate and accessor
+- `(substitution-lookup sub var)` -- returns the bound term, or `#f`
+- `(substitution-compose s1 s2)` -- sequential composition (apply s2, then s1)
+- `(substitution-apply sub proto term)` -- walk term, replacing pattern-vars per sub
+
+### Diophantine basis
+
+- `(diophantine-basis a b)` -- minimal non-negative integer solutions of `a·u = b·v`; returns list of `(u . v)` pairs; finite by Dickson's lemma
+
+### Matching and unification
+
+- `(ac-match pattern subject theory proto)` -- match pattern against subject modulo AC operators in theory; returns list of substitutions (empty = no match)
+- `(ac-unify t1 t2 theory proto)` -- two-sided AC unification; returns a CSU (complete set of unifiers) as a list of substitutions
+
+### Internal helpers (exposed for tests)
+
+- `(flatten-ac term op proto)` -- flatten nested applications of op into a list of operands
+
+---
+
+## Formal Concept Analysis -- `(wile algebra fca)`
+
+Concept lattices via NextClosure (Ganter 1984). Extracts the maximal extent/intent pairs from a binary object-attribute relation. The resulting lattice has a natural algebra-level projection.
+
+### Constructors
+
+- `(make-context objects attributes incidence)` -- context from object list, attribute list, and an incidence predicate `(lambda (obj attr) boolean)`
+- `(context-from-alist entries)` -- convenience: each entry is `(object attr ...)`
+
+### Predicates and accessors
+
+- `(fca-context? x)` -- predicate
+- `(context-objects ctx)` / `(context-attributes ctx)` -- sorted string lists
+
+### Galois derivation
+
+- `(intent ctx object-set)` -- attributes common to every object in the set; empty set yields all attributes (vacuous)
+- `(extent ctx attribute-set)` -- objects possessing every attribute in the set; empty set yields all objects
+
+### Concepts and lattices
+
+- `(concept-lattice ctx)` -- list of `(extent . intent)` concepts via NextClosure
+- `(concept-extent c)` / `(concept-intent c)` -- accessors on a concept pair
+- `(concept-lattice->algebra-lattice ctx concepts)` -- project the concept list to a `<lattice>`
+- `(concept-relationship c1 c2)` -- ordering between two concepts
+
+### Sorted-string primitives
+
+- `(set-add elem sorted)` / `(set-intersect a b)` / `(set-union a b)` / `(set-member? elem sorted)` / `(set-subset? a b)` / `(set-before elem sorted)` / `(sort-strings lst)` -- canonical sorted-string-set operations
+
+---
+
+## Pareto -- `(wile algebra pareto)`
+
+Multi-objective Pareto dominance and frontier computation. Mixed factor types (boolean, numeric) via `factor-leq?` / `factor-less?`. Use it when you have candidates scored on multiple axes and want the non-dominated set.
+
+### Factor comparison
+
+- `(factor-leq? a b)` -- non-strict factor comparison: booleans `#f ≤ #t`, numbers `<=`
+- `(factor-less? a b)` -- strict version
+
+### Dominance and frontier
+
+- `(dominates? factors-x factors-y)` -- test Pareto dominance: X dominates Y iff X is factor-leq to Y on every key and factor-less on at least one
+- `(pareto-frontier candidates factor-names)` -- candidates is `((id alist) ...)`; factor-names is documentation only; returns `((frontier id ...) (dominated (dominator . dominated-ids) ...))`
+
+---
+
+## Abstract Domain -- `(wile algebra abstract-domain)`
+
+Pre-built abstract interpretation domains. Currently hosts the sign domain: a 5-element flat lattice with an abstraction function from integers and a sign arithmetic table for add/sub/mul.
+
+### Sign lattice
+
+- `(sign-lattice)` -- 5-element flat lattice `{flat-bottom, neg, zero, pos, flat-top}` with the three atoms incomparable
+- `(abstract-sign n)` -- abstract a concrete integer to its sign: `'neg`, `'zero`, or `'pos`
+- `(sign? s)` -- test whether s is a valid sign value
+- `(sign-binop op a b)` -- apply sign operator; `op` is `'add`, `'sub`, or `'mul`; `flat-bottom` is strict (any operand bottom yields bottom); `mul` annihilates at zero even with `flat-top`; otherwise `flat-top` propagates
+
+---
+
+## Dataflow -- `(wile algebra dataflow)`
+
+Monotone framework (MFP) worklist dataflow solver with CFG-protocol abstraction. Lattice-parameterized forward/backward fixpoint analysis; the protocol separates the algorithm from the CFG representation.
+
+### CFG protocol
+
+- `(make-cfg-protocol blocks-of index-of preds-of succs-of)` -- build a CFG protocol from four closures
+- `(cfg-protocol? x)` -- predicate
+- `(cfg-blocks-of proto fn)` / `(cfg-index-of proto block)` / `(cfg-preds-of proto block)` / `(cfg-succs-of proto block)` -- wrapper accessors; prefer these over the raw `cfg-protocol-*-fn` accessors
+
+### Initial-state wrapper
+
+- `(init-state value)` -- tagged record for passing an initial lattice value into `run-analysis` (prevents ambiguity with flag symbols)
+- `(init-state? x)` / `(init-state-value is)` -- predicate and accessor
+
+### Block ordering
+
+- `(reverse-postorder blocks protocol)` -- DFS-prepend-on-finish produces RPO directly; only blocks reachable from the first block appear
+
+### Solver
+
+- `(run-analysis direction lattice transfer fn protocol . args)` -- run MFP analysis; `direction` is `'forward` or `'backward`; `transfer` is `(lambda (block in-state) out-state)`; `args` may contain `(init-state x)` and/or `'check-monotone`; returns per-block result alist `((idx in out) ...)`
+
+### Result accessors
+
+- `(analysis-in result block-idx)` -- in-state for block, or `#f` if absent
+- `(analysis-out result block-idx)` -- out-state for block, or `#f` if absent
+- `(analysis-states result)` -- full per-block result alist
+
 ---
 
 ## Cross-Reference: Sub-library to Import Path
@@ -642,6 +1048,17 @@ Named axioms, theories, theory combinators, recursive normalization, and transfo
 | Galois Connection | `(wile algebra galois)` |
 | Rewrite | `(wile algebra rewrite)` |
 | Symbolic | `(wile algebra symbolic)` |
+| Matrix | `(wile algebra matrix)` |
+| Polynomial | `(wile algebra polynomial)` |
+| Incidence Algebra | `(wile algebra incidence)` |
+| Interval | `(wile algebra interval)` |
+| Graph (abstract) | `(wile algebra graph)` |
+| Combinatorial Graph | `(wile algebra combinatorial-graph)` |
+| Unification | `(wile algebra unification)` |
+| Formal Concept Analysis | `(wile algebra fca)` |
+| Pareto | `(wile algebra pareto)` |
+| Abstract Domain | `(wile algebra abstract-domain)` |
+| Dataflow | `(wile algebra dataflow)` |
 
 ## Symbols Not Re-exported by Umbrella
 

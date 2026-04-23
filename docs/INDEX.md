@@ -5,7 +5,7 @@ implementation notes, and educational articles for a single subsystem.
 
 | Topic | Description |
 |-------|-------------|
-| [algebra/](algebra/) | Algebraic structures library -- composable records, equational rewriting, symbolic normalization |
+| [algebra/](algebra/) | Algebraic structures library -- composable records, equational rewriting, symbolic normalization. Entry points: [overview.md](algebra/overview.md), [reference.md](algebra/reference.md), runnable [tutorial.md](algebra/tutorial.md) |
 | [compiler/](compiler/) | Compiler internals -- macro system, peephole optimizer, IR design (SSA, ANF/CPS, core-let, inlining) |
 | [continuations/](continuations/) | Continuation system -- concepts, marks, VM implementation, delimited continuations, prompt/abort |
 | [dev/](dev/) | Developer guides -- debug methodology, object pooling, foreign closures, project board |
