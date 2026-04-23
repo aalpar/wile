@@ -399,7 +399,7 @@ Total: ~8–12 working days if sequential. Independent phases can overlap.
 
 Per-phase findings records accumulate below as phases execute.
 
-### Phase 1 — `numeric/` — Completed (branch `feat/docs-sweep-numeric`)
+### Phase 1 — `numeric/` — Completed (PRs #707, #708)
 
 **Inventory** (2026-04-23):
 
@@ -414,8 +414,9 @@ Per-phase findings records accumulate below as phases execute.
   Evidence: `values/promotion.go:303` (`func Promote(n Number, target NumericKind) Number`).
 
 - **missing** `docs/numeric/tower.md` § "Current API"
-  Doc lists `Simplify` and `ExactnessOf` as the only utility functions, but the actual architecture uses dispatch tables indexed by `NumericKind` (41 tables, 294 closures) populated at `init()` by generators in `values/promotion.go` (`makeArithmeticDispatch`, `makeLessThanDispatch`, `makeCompareDispatch`). This is a real architectural fact the doc should mention — see `values/CLAUDE.md` "Dispatch Table Architecture" section.
-  Evidence: `values/CLAUDE.md` "Dispatch Table Architecture", `values/promotion.go` dispatch generators.
+  Doc lists `Simplify` and `ExactnessOf` as the only utility functions, but the actual architecture uses dispatch tables indexed by `NumericKind` (41 tables, 294 closures) populated at `init()` by generators in `values/promotion.go` (`makeArithmeticDispatch`, `makeLessThanDispatch`, `makeCompareDispatch`). This is a real architectural fact the doc should mention.
+  Evidence: `values/promotion.go` — `ensurePromotionInit` and the three `make*Dispatch` generators; `values/big_complex.go:148` ("BigComplex has 5 dispatch tables (no bigComplexLessThan)").
+  Revision (PR #708): evidence pointer corrected from `values/CLAUDE.md` (has no such section) to `values/promotion.go` + `big_complex.go:148`.
 
 - **drift** `docs/numeric/precision-guarantees.md:93`
   Claims `toExactPart` is at `values/big_complex.go:493`. Actual location is `values/big_complex.go:379`. Line 493 is now the `EqualTo` method.
@@ -434,8 +435,9 @@ Per-phase findings records accumulate below as phases execute.
   Evidence: `ffi.go` (no match for `convertArg`).
 
 - **drift** `docs/numeric/precision-guarantees.md:208` (Audit Checklist)
-  References `values/promotion.go:numberToFloat64`. No function with that name exists. `promotion.go` contains `toBigFloat` (helper used internally) but no `numberToFloat64`. The audit-checklist entry is unactionable as written.
-  Evidence: `values/promotion.go` (no match for `numberToFloat64`).
+  The exported `NumberToFloat64` (`values/promotion.go:327`) and `NumberToComplex128` (`values/promotion.go:352`) are the Tier 3 precision-dropping helpers that belong in the checklist. The previous entry used a lowercase symbol name and was not tracking them.
+  Evidence: `values/promotion.go:327` `NumberToFloat64`, `values/promotion.go:352` `NumberToComplex128`.
+  Revision (PR #708): an earlier revision of this finding (PR #707) stated no such function existed; that was a lowercase-grep miss. PR #708 replaces the unactionable entry with two real audit targets.
 
 - **clean** `docs/numeric/nan-boxing.md`
   Educational doc. Structural claims (Wile uses Go interfaces for `Value`; `unsafe` constraint rules out NaN-boxing) are still accurate per `values/CLAUDE.md`. Profiling numbers quoted are historical / illustrative; no code-verification action needed.
