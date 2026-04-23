@@ -26,6 +26,80 @@ When investigating R7RS conformance issues:
 
 ---
 
+## Implementation Completion Workflow
+
+When asked to "implement plan `plans/<name>-impl.md`" (or equivalent), follow this sequence end-to-end. Each step is required unless the user explicitly shortens it.
+
+### 1. Execute the plan
+
+- Branch from `master` before the first implementation commit: `feat/<library-or-feature-name>`.
+- Commit the plan file itself as commit 1 (records the starting design).
+- Implement the plan phase by phase. One commit per phase (progressive commits per `feedback_commit_cadence.md`), conventional-commit style: `feat(<area>): <phase summary>`. Phase-N commit messages should cite verified numeric fixtures, not just a narrative.
+- Build and test after each phase. The phase is not complete until its tests pass.
+- After the final phase: `make lint && make covercheck && make ci` all pass locally.
+
+### 2. Pre-PR self-review
+
+- Read the full diff as a reviewer (Copilot-hat review per `feedback-copilot-self-review.md`): look for comment/code drift, invariant violations, weak test assertions, naming precision.
+- Verify master's remote CI is green before opening the PR (`gh run list --branch master --limit 3`).
+
+### 3. Open PR + request reviews
+
+- `git push -u origin <branch>`.
+- `gh pr create` with a summary body citing published reference values (e.g. "τ(Petersen) = 2000 per Sedláček 1970") and a checked test-plan.
+- Request Copilot review: `gh pr edit <N> --add-reviewer copilot-pull-request-reviewer` (or use the `Copilot` bot login directly if the alias doesn't resolve).
+- Dispatch `/crosscheck:crosscheck all` locally on the diff. Five agents run in parallel with orthogonal mandates (code, errors, types, tests, consistency).
+
+### 4. Wait for both feedback streams
+
+- Copilot usually posts a top-level review + inline comments within minutes after the PR opens. Fetch via `gh api repos/<owner>/<repo>/pulls/<N>/comments`.
+- Crosscheck agents run locally; collect results via task notifications.
+
+### 5. Aggregate and classify
+
+Produce a single aggregated report listing findings by severity. Deduplicate: if multiple agents flag the same `file:line`, merge into one finding and tag every source lens in brackets. Three-lens-converging findings are the genuinely consequential ones.
+
+Separate findings into four buckets:
+
+- **Critical** — must-fix correctness bugs, silent-failure paths, API-shape breaks from established conventions.
+- **Notable, unambiguous** — clear fixes with no design trade-off (rename, delete dead code, add missing else-branch, fix docstring drift).
+- **Notable, ambiguous** — involve a design trade-off. Needs user input. Never decide these unilaterally.
+- **Clean** — areas each agent examined and found no findings worth reporting.
+
+### 6. Address findings
+
+- Apply every Copilot inline comment that is not wrong (push back in the PR comment thread if a finding is mistaken; see `feedback-copilot-self-review.md` for the discipline).
+- Fix all crosscheck Critical findings (no user confirmation needed — they are correctness bugs).
+- Fix all Notable Unambiguous findings.
+- For Notable Ambiguous findings: propose a default resolution with rationale, and explicitly ask the user to confirm. Group related questions (`Q-a`, `Q-b`, ...) so the user can answer in one message.
+
+### 7. Commit + push + reply
+
+- One `fix(<area>): address Copilot + crosscheck findings on PR #N` commit preferred (all findings in one review round are one logical unit). Split if commits exceed reasonable review granularity.
+- Commit body: itemize every finding resolved, tagging the source lens per item.
+- Push to the PR branch.
+- Post a single PR comment summarizing how each Copilot inline comment was resolved + the Q-a/Q-b/... resolutions. Close the review loop visibly.
+
+### 8. Verify + hand off
+
+- Rerun `make ci` locally post-fix.
+- Wait for remote CI to re-pass after the push.
+- Report final status to the user: PR URL, test count delta, lint/CI state. Do NOT merge without explicit user instruction (per `CLAUDE.md` "never commit changes without asking first").
+
+### Patterns to reuse
+
+- The Q-a/Q-b/... convention for ambiguous-notable resolutions (as used on PR #703).
+- The three-bucket severity classification (Critical / Notable-unambiguous / Notable-ambiguous / Clean) matches `/crosscheck:crosscheck`'s output format.
+- Diagnostic shape for user-actionable errors: flat keyword-arg list ending with `(list 'fix "<how to resolve>")`, matching `lattice.scm` precedent.
+
+### Shortcuts the user may authorize
+
+- **Skip crosscheck** — user says "fast-track" or similar. Then only Copilot review is requested.
+- **Skip Copilot** — user says "local-only review" or wants an unpublished change.
+- **Merge authorization** — user grants merge authority in-session. Re-verify the user's intent before `gh pr merge` on material changes.
+
+---
+
 ## Forward-Looking Plans
 
 Open designs and implementation work. These are the active items.
