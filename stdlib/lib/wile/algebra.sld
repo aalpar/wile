@@ -1,5 +1,5 @@
 (define-library (wile algebra)
-  (description "Algebraic structures, equational rewriting, and symbolic normalization. Structures: setoids, orders, lattices, closure operators, Heyting/Boolean algebras, monoids, categories, semirings, groups, rings, differential rings, fields, incidence algebras. Rewriting: axiom-driven term normalization. Symbolic: theory projections, recursive normalization, transformation tracing.")
+  (description "Algebraic structures, equational rewriting, and symbolic normalization. Structures: setoids, orders, lattices, closure operators, Heyting/Boolean algebras, monoids, categories, semirings, groups, rings, differential rings, fields, incidence algebras, combinatorial graphs. Rewriting: axiom-driven term normalization. Symbolic: theory projections, recursive normalization, transformation tracing.")
   (export
     ;; Setoids
     make-setoid setoid?
@@ -218,7 +218,30 @@
     diophantine-basis
     ac-match
     ac-unify
-    flatten-ac)
+    flatten-ac
+    ;; Combinatorial graphs — core (§5.6)
+    make-graph graph?
+    graph-vertices graph-edges graph-neighbors graph-degree
+    graph-edge? graph-vertex-equiv? graph-setoid
+    graph-order graph-size graph-directed? graph-multi? graph-self-loops?
+    ;; Combinatorial graphs — tier predicates
+    finite-graph? finitely-generated-graph?
+    enumerate-finite-graph
+    ;; Combinatorial graphs — validation
+    validate-graph assert-graph with-graph
+    ;; Combinatorial graphs — traversal + connectivity
+    graph-bfs graph-dfs graph-connected-components
+    graph-bipartite? graph-bipartition
+    ;; Combinatorial graphs — isomorphism
+    graph-isomorphic? graph-canonical-form
+    ;; Combinatorial graphs — invariants
+    graph-spanning-tree-count
+    graph-chromatic-polynomial graph-tutte-polynomial
+    ;; Combinatorial graphs — matching
+    graph-maximum-bipartite-matching
+    ;; Combinatorial graphs — presets
+    complete-graph cycle-graph path-graph
+    complete-bipartite-graph empty-graph petersen-graph)
   (import (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice)
@@ -241,4 +264,5 @@
           (wile algebra graph)
           (wile algebra matrix)
           (wile algebra incidence)
-          (wile algebra unification)))
+          (wile algebra unification)
+          (wile algebra combinatorial-graph)))
