@@ -729,7 +729,7 @@ Semiring-parameterized dense and sparse matrices. Arithmetic follows the coeffic
 
 ### Destructuring
 
-- `(with-semiring-matrix M (rows cols S) body ...)` -- bind dimensions and semiring to local names
+- `(with-semiring-matrix (add mul power closure ref) body ...)` -- positionally bind the five operations to local names; order is fixed (`add`, `mul`, `power`, `closure`, `ref`), not by name
 
 ---
 
@@ -803,29 +803,27 @@ Locally-finite posets and their incidence algebras over a ring. Supports zeta an
 
 ## Interval -- `(wile algebra interval)`
 
-Interval arithmetic over numeric domains. Useful as a concrete abstract domain for static analysis or as a conservative envelope for uncertain quantities.
+Infinity-aware interval arithmetic. Intervals are `(lo . hi)` pairs where `lo` and `hi` may be numbers or the sentinels `'neg-inf` / `'pos-inf`. The interval lattice orders by containment. Useful as a concrete abstract domain for static analysis or as a conservative envelope for uncertain quantities.
 
-### Constructors
+### Lattice and representation
 
-- `(make-interval lo hi)` -- closed interval `[lo, hi]`; raises if `lo > hi`
-- `(interval-point x)` -- singleton interval `[x, x]`
-- `(interval-bottom)` / `(interval-top)` -- the empty interval and the universal interval
+- `(interval-lattice)` -- the lattice over intervals represented as `(lo . hi)` pairs; bottom is the empty interval, top is `(neg-inf . pos-inf)`; order is reverse-inclusion (`(a . b) <= (c . d)` iff `c <= a` and `b <= d` under `inf<=`)
 
-### Predicates and accessors
+Intervals are ordinary pairs: build with `cons lo hi`; access with `car` and `cdr`. Use the infinity-aware comparisons below for predicates over the endpoints.
 
-- `(interval? x)` -- predicate
-- `(interval-lo I)` / `(interval-hi I)` -- endpoints
-- `(interval-empty? I)` -- test for the empty interval
-- `(interval-contains? I x)` -- test whether x lies inside I
-- `(interval-subset? I J)` -- interval inclusion
-- `(interval-width I)` -- width (hi - lo)
+### Infinity-aware comparisons and arithmetic
 
-### Arithmetic
+- `(inf<= a b)` -- infinity-aware `<=`: `neg-inf <= anything`, `anything <= pos-inf`
+- `(inf-min a b)` / `(inf-max a b)` -- infinity-aware min / max
+- `(inf+ a b)` -- infinity-aware addition; `pos-inf + neg-inf = pos-inf` (conservative widening)
+- `(inf- a b)` -- infinity-aware subtraction
+- `(inf* a b)` -- infinity-aware multiplication
 
-- `(interval-plus I J)` -- sum
-- `(interval-minus I J)` -- difference
-- `(interval-times I J)` -- product (all four corner products; take min and max)
-- `(interval-negate I)` -- additive inverse
+### Interval arithmetic
+
+- `(interval-add a b)` -- sum; componentwise `inf+`
+- `(interval-sub a b)` -- difference
+- `(interval-mul a b)` -- product via four-corner multiplication (min and max of the four endpoint products)
 
 ---
 
