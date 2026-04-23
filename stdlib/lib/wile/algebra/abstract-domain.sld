@@ -1,0 +1,6 @@
+(define-library (wile algebra abstract-domain)
+  (description "Pre-built abstract interpretation domains built on (wile algebra lattice). Sibling of (wile algebra interval).")
+  (export )
+  (import (scheme base)
+          (wile algebra lattice))
+  (include "abstract-domain.scm"))
