@@ -157,6 +157,24 @@ readme-check:
 test: build
 	$(GO_TEST) ./...
 	@$(MAKE) test-scheme
+	@$(MAKE) tutorial-test
+
+# Run every algebra tutorial file and verify each exits 0.
+# Files under examples/algebra/tutorial/{chapters,quick-tour}/ use the
+# check= helpers in lib/check.scm to assert expected values; any mismatch
+# raises and fails the target. CI catches drift between tutorial prose
+# and library behavior.
+#   make tutorial-test
+.PHONY: tutorial-test
+tutorial-test: build
+	@for f in examples/algebra/tutorial/chapters/*.scm \
+	          examples/algebra/tutorial/quick-tour/*.scm; do \
+	  [ -f "$$f" ] || continue; \
+	  echo "-- $$f"; \
+	  $(DIST_DIR)/$(HOST_OS)/$(HOST_ARCH)/$(MY_BIN) --quiet --file "$$f" \
+	    || { echo "FAIL: $$f"; exit 1; }; \
+	done
+	@echo "All tutorial files passed"
 
 .PHONY: test-race
 test-race: build
