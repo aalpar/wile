@@ -75,14 +75,27 @@ Bounded lattices with join, meet, and fixpoint computation.
 ### Constructors
 
 - `(make-lattice join meet bottom top leq?)` -- create a lattice from five components: join and meet are binary procedures, bottom and top are elements, leq? is a binary predicate
+- `(make-lattice join meet bottom top leq? . opts)` -- with optional trailing metadata: `(cons 'setoid S)`, `(cons 'cardinality N)`, `(cons 'elements LIST)`
 - `(flat-lattice elements equal?)` -- flat lattice where all elements are incomparable between bottom and top; uses `'flat-bottom` and `'flat-top` as sentinel values
 - `(powerset-lattice universe)` -- lattice of subsets of universe (lists); join is union, meet is intersection, leq? is subset
 - `(product-lattice L1 L2 ...)` -- pointwise product of lattices; elements are lists of the same length
 - `(map-lattice keys value-lattice)` -- lattice of alists mapping keys to elements of value-lattice; operations are pointwise
 
+### Presets
+
+- `(chain-lattice n)` -- the n-element total order 0 < 1 < ... < n-1; distributive, modular
+- `(boolean-lattice n)` -- 2^[n]: subsets of an n-element universe ordered by inclusion; distributive
+- `(diamond-lattice n)` -- M_n: bottom, n incomparable atoms, top; modular, not distributive
+- `(pentagon-lattice)` -- N_5: the standard witness of non-modularity; neither distributive nor modular
+- `(free-distributive-lattice n)` -- the free bounded distributive lattice on n generators; cardinality is the Dedekind number D(n); raises for n >= 6
+
 ### Predicates
 
 - `(lattice? x)` -- test whether x is a lattice
+- `(finite-lattice? L)` -- true iff L carries an elements enumeration
+- `(distributive? L)` -- exhaustive check: `a ∧ (b ∨ c) = (a ∧ b) ∨ (a ∧ c)` on all triples of elements
+- `(modular? L)` -- exhaustive check of the modular law
+- `(join-irreducible? L x)` / `(meet-irreducible? L x)` -- individual-element predicates
 
 ### Operations
 
@@ -91,12 +104,29 @@ Bounded lattices with join, meet, and fixpoint computation.
 - `(lattice-bottom L)` -- the bottom element
 - `(lattice-top L)` -- the top element
 - `(lattice-leq? L a b)` -- test whether a <= b in the lattice
+- `(lattice-equal? L a b)` -- lattice equality via setoid (metadata-carried)
+- `(lattice-cardinality L)` -- carried cardinality, or `#f` when unset
+- `(lattice-elements L)` -- carried element enumeration, or `#f`
+- `(lattice-setoid L)` -- the carrier's setoid, or `#f`
+- `(lattice-equiv? L)` -- the setoid's equivalence procedure, or `#f`
+
+### Irreducibles
+
+- `(join-irreducibles L)` -- the list of join-irreducible elements (not a join of strictly smaller elements)
+- `(meet-irreducibles L)` -- symmetric, for meet
 
 ### Fixpoint
 
 - `(fixpoint L f x)` -- Kleene iteration: compute least fixpoint of f starting from x; f must be monotone, L must have no infinite ascending chains
 - `(fixpoint L f x fuel)` -- same but limited to fuel steps; returns `#f` if fixpoint not reached
 - `(fixpoint/widen L f x widen)` -- fixpoint with widening operator for lattices with infinite ascending chains; widen takes (current, next) and must produce a finite ascending chain
+
+### Birkhoff duality
+
+- `(lattice->locally-finite-poset L)` -- project the lattice's leq? and element set to a `<locally-finite-poset>`
+- `(birkhoff-representation L)` -- the locally-finite poset of join-irreducibles; requires finite distributive L; raises otherwise
+- `(birkhoff-representation/unchecked L)` -- same without the distributivity gate; caller guarantees the precondition
+- `(birkhoff-reconstruction P)` -- the lattice of downsets of P; `lattice-cardinality` matches the downset count; roundtrip `birkhoff-reconstruction ∘ birkhoff-representation` is an isomorphism when L is distributive
 
 ### Projections
 
@@ -105,6 +135,8 @@ Bounded lattices with join, meet, and fixpoint computation.
 ### Validation
 
 - `(validate-lattice L samples)` -- spot-check commutativity, absorption, idempotence, and identity laws; returns `#t` or a list of violations
+- `(validate-distributive-lattice L samples)` / `(validate-distributive-lattice/setoid L samples)` -- sample-based distributivity check
+- `(validate-modular-lattice L samples)` / `(validate-modular-lattice/setoid L samples)` -- sample-based modularity check
 
 ### Destructuring
 
@@ -329,21 +361,50 @@ Two monoidal operations where times distributes over plus.
 
 ## Group -- `(wile algebra group)`
 
-Monoids with inverses.
+Monoids with inverses. The record type carries optional introspection metadata (setoid, order, elements, generators) so clients can distinguish finite from finitely-generated groups and enumerate elements when available.
 
 ### Constructors
 
 - `(make-group op identity inverse)` -- create from a binary operation, identity element, and unary inverse function
+- `(make-group op identity inverse . opts)` -- with optional trailing metadata: `(cons 'setoid S)`, `(cons 'element? PRED)`, `(cons 'order N)`, `(cons 'elements LIST)`, `(cons 'generators LIST)`
+
+### Presets
+
+- `(trivial-group)` -- the one-element group with element `'e`; cached (eq?-identical across calls)
+- `(cyclic-group n)` -- Z/nZ under addition mod n; elements `0..n-1`; generators `(1)`
+- `(symmetric-group n)` -- S_n under permutation composition; elements are length-n permutation vectors
+- `(product-group . groups)` -- direct product; element lists of length |groups|
+- `(subgroup-generated G generators)` / `(subgroup-generated G generators . opts)` -- smallest subgroup containing generators (BFS closure); `(cons 'max-size N)` caps the search
+- `(enumerate-finite-group G)` / `(enumerate-finite-group G . opts)` -- promote a finitely-generated group to a finite one by enumerating elements via BFS closure; idempotent when G already has elements
+
+### Group actions
+
+- `(make-group-action G set-element? act)` -- build an action record; `set-element?` tests membership in the set being acted on; `act` is `(lambda (g x) g·x)`
+- `(trivial-action G set-element?)` / `(permutation-action Sn n)` / `(regular-action G)` / `(conjugation-action G)` / `(product-action . actions)` -- preset actions
+- `(group-action? x)` / `(group-action-group A)` / `(group-action-act A g x)` / `(group-action-act-fn A)` / `(group-action-set-element? A)` -- accessors
+
+### Orbit, stabilizer, Burnside
+
+- `(orbit action x)` -- list of points reachable from x (BFS via generators, or enumerate-all if generators absent)
+- `(stabilizer action x)` -- list of group elements fixing x; requires G to carry `elements`
+- `(fixed-points action g X-elements)` -- points in `X-elements` fixed by g
+- `(orbit-representative action x less?)` -- LESS?-minimum element of orbit(x); ties broken by discovery order
+- `(burnside-count action X-elements)` -- `|X/G| = (1/|G|) Σ_{g} |X^g|`; requires finite G; raises if sum not divisible by |G|
 
 ### Predicates
 
 - `(group? x)` -- test whether x is a group
+- `(finite-group? G)` -- true when G carries both order and elements
+- `(finitely-generated-group? G)` -- true when G carries generators
+- `(subgroup? H G)` -- H is a sub-structure of G (closed under op, contains identity, closed under inverse)
+- `(group-element? G)` -- the carried element-membership predicate, or `#f`
 
 ### Operations
 
 - `(group-op G a b)` -- apply the binary operation
 - `(group-identity G)` -- access the identity element
 - `(group-inverse G a)` -- compute the inverse of a
+- `(group-order G)` / `(group-elements G)` / `(group-generators G)` / `(group-setoid G)` / `(group-equal? G a b)` -- metadata accessors (return `#f` when unset)
 
 ### Projections
 
@@ -352,6 +413,7 @@ Monoids with inverses.
 ### Validation
 
 - `(validate-group G samples)` -- spot-check identity, inverse, and associativity; returns `#t` or a list of violations
+- `(assert-group ...)` -- retained for backward compatibility; prefer `assert-validation` on `validate-group`
 
 ### Destructuring
 
@@ -619,6 +681,11 @@ Named axioms, theories, theory combinators, recursive normalization, and transfo
 ### Formatting
 
 - `(format-trace trace)` -- format a list of rewrite steps as human-readable strings; each string shows rule name, general form, before, and after; fuel-exhaustion steps are prefixed with `[fuel exhausted]`
+
+### Boolean normalization facade
+
+- `(symbolic-boolean-normalize term)` -- apply the standard Boolean theory (`boolean->theory` on a 1-atom Boolean algebra, operators `and` / `or` / `not`); returns `(values result trace)`; covers commutativity, associativity, identity, idempotence, absorption, and complement-involution but not De Morgan or complement laws
+- `(symbolic-boolean-equivalent? t1 t2)` -- true iff both terms normalize to the same form under the standard Boolean theory
 
 ---
 
