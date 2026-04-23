@@ -23,7 +23,8 @@
           validate-modular-lattice     validate-modular-lattice/setoid
           ;; §5.5 — Birkhoff roundtrip and lattice-to-poset projection
           lattice->locally-finite-poset
-          birkhoff-representation birkhoff-reconstruction
+          birkhoff-representation birkhoff-representation/unchecked
+          birkhoff-reconstruction
           ;; §5.5 — free-distributive-lattice (depends on Birkhoff)
           free-distributive-lattice)
   (import (scheme base)

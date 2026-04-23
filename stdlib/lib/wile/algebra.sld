@@ -28,7 +28,8 @@
     join-irreducibles meet-irreducibles
     join-irreducible? meet-irreducible?
     lattice->locally-finite-poset
-    birkhoff-representation birkhoff-reconstruction
+    birkhoff-representation birkhoff-representation/unchecked
+    birkhoff-reconstruction
     chain-lattice boolean-lattice
     diamond-lattice pentagon-lattice
     free-distributive-lattice

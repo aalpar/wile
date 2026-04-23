@@ -664,11 +664,9 @@
     (lambda (a b) (lattice-leq? L a b))
     (lattice-elements L)))
 
-(define (birkhoff-representation L)
-  "Return the <locally-finite-poset> of join-irreducibles of finite\nlattice L, ordered by the restriction of (lattice-leq? L).\n\nCaller obligation: L is distributive. The duality half of Birkhoff's\ntheorem — that (birkhoff-reconstruction (birkhoff-representation L))\nis isomorphic to L — holds only when L is distributive. Checking\ndistributivity costs O(|L|³), so this function does not gate on it;\ncallers who need the guarantee should run (distributive? L) first.\n\nOn a non-distributive L the returned poset is still well-formed (it\nis the poset of join-irreducibles under the restricted lattice order),\nbut the roundtrip will not reproduce L. This is a mathematical fact,\nnot a bug: Birkhoff's theorem is a statement about distributive\nlattices.\n\nRequires a finite lattice (elements enumerated).\n\nExamples:\n  (lf-poset-elements (birkhoff-representation (chain-lattice 4)))\n    => (1 2 3)\n\nParameters:\n  L : lattice\nReturns: locally-finite-poset\nCategory: algebra\nKeywords: Birkhoff, representation, join irreducibles, distributive, duality\n\nSee also: `birkhoff-reconstruction', `join-irreducibles', `distributive?'."
-  (unless (finite-lattice? L)
-    (error "birkhoff-representation: requires finite lattice"
-           'fix "pass (cons 'elements LIST) to make-lattice"))
+(define (%build-birkhoff-irr-poset L)
+  ;; Core body shared by birkhoff-representation and its /unchecked
+  ;; sibling. Assumes caller has already validated finite-lattice?.
   (let ((irr (join-irreducibles L)))
     (make-locally-finite-poset
       (lambda (a b) (lattice-leq? L a b))
@@ -681,6 +679,23 @@
                                      (lattice-leq? L z y)))
                     irr)))
       (cons 'elements irr))))
+
+(define (birkhoff-representation L)
+  "Return the <locally-finite-poset> of join-irreducibles of finite\ndistributive lattice L, ordered by the restriction of (lattice-leq? L).\n\nBirkhoff's fundamental theorem: every finite distributive lattice L\nis isomorphic to (birkhoff-reconstruction (birkhoff-representation L)).\n\nRequires a finite, distributive lattice. Raises a precondition error\notherwise. The distributivity check is O(|L|³) — negligible for the\ntypical consumer sizes (|L| ≤ ~100 for abstract domains / concept\nlattices / dataflow) but noticeable at FDL(4) (~2 s) and infeasible at\nFDL(5) (~days). Callers who have already validated distributivity can\nuse `birkhoff-representation/unchecked' to skip the gate.\n\nExamples:\n  (lf-poset-elements (birkhoff-representation (chain-lattice 4)))\n    => (1 2 3)\n  (birkhoff-representation (diamond-lattice 3))  ;; raises — M3 not distributive\n\nParameters:\n  L : lattice\nReturns: locally-finite-poset\nCategory: algebra\nKeywords: Birkhoff, representation, join irreducibles, distributive, duality\n\nSee also: `birkhoff-reconstruction', `birkhoff-representation/unchecked', `distributive?'."
+  (unless (finite-lattice? L)
+    (error "birkhoff-representation: requires finite lattice"
+           'fix "pass (cons 'elements LIST) to make-lattice"))
+  (unless (distributive? L)
+    (error "birkhoff-representation: requires distributive lattice"
+           'fix "check (distributive? L) first, or use birkhoff-representation/unchecked for pre-validated input"))
+  (%build-birkhoff-irr-poset L))
+
+(define (birkhoff-representation/unchecked L)
+  "Return the <locally-finite-poset> of join-irreducibles of finite\nlattice L, without checking distributivity.\n\nBehaves identically to `birkhoff-representation' when L is\ndistributive. On non-distributive L the result is still a\nwell-formed <locally-finite-poset> (the poset of join-irreducibles\nunder the restricted lattice order), but the Birkhoff roundtrip\n(`birkhoff-reconstruction' of this result) will not reproduce L —\nthat is a consequence of Birkhoff's theorem applying only to\ndistributive lattices, not a bug.\n\nUse this when the caller has already validated distributivity, or\nwhen the cost of `distributive?' (O(|L|³)) is prohibitive for the\nlattice size. Prefer `birkhoff-representation' by default.\n\nRequires a finite lattice (elements enumerated).\n\nExamples:\n  ;; M3 is not distributive; /unchecked returns the poset of its 3 atoms.\n  (length (lf-poset-elements\n            (birkhoff-representation/unchecked (diamond-lattice 3))))  => 3\n\nParameters:\n  L : lattice\nReturns: locally-finite-poset\nCategory: algebra\nKeywords: Birkhoff, representation, unchecked, join irreducibles, escape hatch\n\nSee also: `birkhoff-representation', `distributive?'."
+  (unless (finite-lattice? L)
+    (error "birkhoff-representation/unchecked: requires finite lattice"
+           'fix "pass (cons 'elements LIST) to make-lattice"))
+  (%build-birkhoff-irr-poset L))
 
 ;; ─── Internal downset enumeration ────────────
 ;;

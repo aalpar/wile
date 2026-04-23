@@ -462,19 +462,33 @@
           (lattice-join B3 '(1 0) '()))
     (test #t (and (member '(0 1) (lattice-elements B3)) #t))))
 
-(test-group "birkhoff-representation on non-distributive — well-formed poset"
-  ;; M3 and N5 are not distributive; Birkhoff's roundtrip will not
-  ;; reproduce them, but the representation itself must still be a
-  ;; well-formed locally-finite-poset. This pins the documented
-  ;; "caller obligation" behavior.
-  (let ((P-M3 (birkhoff-representation (diamond-lattice 3)))
-        (P-N5 (birkhoff-representation (pentagon-lattice))))
+(test-group "birkhoff-representation on non-distributive — raises"
+  ;; M3 and N5 are not distributive; the default form gates on
+  ;; distributive? and refuses them.
+  (test-error (birkhoff-representation (diamond-lattice 3)))
+  (test-error (birkhoff-representation (pentagon-lattice))))
+
+(test-group "birkhoff-representation/unchecked on non-distributive — well-formed poset"
+  ;; The /unchecked escape hatch skips the distributivity gate. The
+  ;; result is still a well-formed <locally-finite-poset> (the poset
+  ;; of join-irreducibles), but Birkhoff's roundtrip won't reproduce
+  ;; the input — that's a mathematical property of Birkhoff's theorem,
+  ;; not a bug. Pin this documented behavior.
+  (let ((P-M3 (birkhoff-representation/unchecked (diamond-lattice 3)))
+        (P-N5 (birkhoff-representation/unchecked (pentagon-lattice))))
     (test #t (locally-finite-poset? P-M3))
     (test #t (locally-finite-poset? P-N5))
-    ;; M3's join-irreducibles are its 3 atoms
     (test 3 (length (lf-poset-elements P-M3)))
-    ;; N5's join-irreducibles are the 3 non-bot non-top elements
     (test 3 (length (lf-poset-elements P-N5)))))
+
+(test-group "birkhoff-representation/unchecked agrees with gated form on distributive input"
+  (let* ((L        (chain-lattice 4))
+         (gated    (birkhoff-representation           L))
+         (unchecked (birkhoff-representation/unchecked L)))
+    (test (lf-poset-elements gated) (lf-poset-elements unchecked))))
+
+(test-group "birkhoff-representation/unchecked preconditions"
+  (test-error (birkhoff-representation/unchecked (make-lattice max min 0 10 <=))))
 
 (test-group "trivial lattices — 1-element edge cases"
   ;; chain-lattice 1 is a single-element lattice where bot = top.
