@@ -58,15 +58,23 @@ These are valid future directions but require significant design work beyond the
 
 ## Overview
 
-The numeric tower uses **direct dispatch** — each numeric type's `Add`, `Subtract`, `Multiply`, `Divide`, and `Compare` methods handle all 7 incoming types via type switches. This is the intentional architecture.
+The numeric tower uses **pre-built dispatch tables** indexed by `NumericKind`. Each numeric type's `Add`, `Subtract`, `Multiply`, `Divide`, and `Compare` methods look up the incoming operand's `Kind()` in a per-op table and invoke the matching closure. 41 tables total, 294 closures. This is the intentional architecture.
 
-### Why Direct Dispatch (Not Unified Tower)
+### Dispatch Table Architecture
+
+Tables are populated at `init()` time by generators in `values/promotion.go` — `makeArithmeticDispatch`, `makeLessThanDispatch`, `makeCompareDispatch`. Each numeric type carries six tables (`Add`, `Subtract`, `Multiply`, `Divide`, `LessThan`, `Compare`), pre-indexed by `NumericKind`, so the fast-path call is `integerAdd[o.Kind()](p, o)` rather than a cascading type switch.
+
+**Call path:** `Integer.Add(o)` → fast path for same type (`*Integer`), otherwise `integerAdd[o.Kind()](p, o)`.
+
+**IEEE 754 guard:** When a `Float` holds Inf or NaN and the lattice LUB is `BigFloat`/`BigComplex`, the dispatch closures short-circuit to `float64`/`complex128` arithmetic. This logic is centralized in `makeArithmeticDispatch` (see `values/promotion.go` → `isSpecialFloat`), not replicated per type.
+
+### Why This Instead of a Unified Tower
 
 A unified tower dispatch (`TowerAdd`, etc.) was prototyped but **abandoned** because:
 
 1. **Exact complex bug**: Linear promotion (Integer → BigInteger → Rational → Float → Complex) loses exactness when combining exact reals with complex numbers
-2. **Battle-tested code**: Direct dispatch has been tested across all 49 type combinations
-3. **Explicit cases**: Each type switch case is explicit and debuggable
+2. **Battle-tested code**: The dispatch-table approach has been tested across all 49 type combinations
+3. **Explicit cases**: Each promotion path is an explicit, generator-populated table entry — debuggable by reading `values/promotion.go`
 
 ---
 
@@ -93,7 +101,7 @@ const (
 )
 ```
 
-**Deleted (2026-02-05):** `NumericRank`, `Rank`, `Promote`, `PromoteBoth`, `CommonRank`, `BinaryOp`, `TowerAdd`, `TowerSubtract`, `TowerMultiply`, `TowerDivide`, `TowerCompare`.
+**Deleted (2026-02-05):** `NumericRank`, `Rank`, `PromoteBoth`, `CommonRank`, `BinaryOp`, `TowerAdd`, `TowerSubtract`, `TowerMultiply`, `TowerDivide`, `TowerCompare`. `Promote` was retained (`values/promotion.go:303`) for use by the dispatch-table generators.
 
 ---
 

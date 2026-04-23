@@ -393,9 +393,55 @@ Total: ~8–12 working days if sequential. Independent phases can overlap.
 
 Per-phase findings records accumulate below as phases execute.
 
-### Phase 1 — `numeric/` — Pending
+### Phase 1 — `numeric/` — Completed (branch `feat/docs-sweep-numeric`)
 
-*Inventory, findings, and fixes will be recorded here as Phase 1 runs.*
+**Inventory** (2026-04-23):
+
+- Last doc touch of `docs/numeric/`: `bf83fa43` (2026-04-15) — reorganize by topic with INDEX.md and TOC.md.
+- Code changes to `values/` since that date: one commit `852926fa feat: add error diagnostics via continuation marks and NativeError enrichment`. Not numeric-related.
+- However, the precision-guarantees.md doc has file/line claims that pre-date the scope of this Phase 1 window. The parser refactor that moved `numberToInexact`/`makeInexact` out of `parser.go` happened before 2026-04-15 as well — the doc's line references were never updated to the new locations.
+
+**Findings**:
+
+- **drift** `docs/numeric/tower.md:96`
+  Claims `Promote` was "Deleted (2026-02-05)". `Promote` still exists at `values/promotion.go:303`, exported.
+  Evidence: `values/promotion.go:303` (`func Promote(n Number, target NumericKind) Number`).
+
+- **missing** `docs/numeric/tower.md` § "Current API"
+  Doc lists `Simplify` and `ExactnessOf` as the only utility functions, but the actual architecture uses dispatch tables indexed by `NumericKind` (41 tables, 294 closures) populated at `init()` by generators in `values/promotion.go` (`makeArithmeticDispatch`, `makeLessThanDispatch`, `makeCompareDispatch`). This is a real architectural fact the doc should mention — see `values/CLAUDE.md` "Dispatch Table Architecture" section.
+  Evidence: `values/CLAUDE.md` "Dispatch Table Architecture", `values/promotion.go` dispatch generators.
+
+- **drift** `docs/numeric/precision-guarantees.md:93`
+  Claims `toExactPart` is at `values/big_complex.go:493`. Actual location is `values/big_complex.go:379`. Line 493 is now the `EqualTo` method.
+  Evidence: `values/big_complex.go:379` (`func toExactPart(n Number) (Number, error)`).
+
+- **drift** `docs/numeric/precision-guarantees.md:99`
+  Claims `numberToInexact` is at `internal/parser/parser.go:1722-1727`. Actual location is `internal/parser/parser_number.go:627-644`. The numeric parsing functions were moved out of `parser.go` (now 877 lines total) into a dedicated `parser_number.go` during a prior refactor.
+  Evidence: `internal/parser/parser_number.go:627`.
+
+- **drift** `docs/numeric/precision-guarantees.md:99`
+  Claims `makeInexact` is at `internal/parser/parser.go:1758-1761`. Actual location is `internal/parser/parser_number.go:649-682`.
+  Evidence: `internal/parser/parser_number.go:649`.
+
+- **drift** `docs/numeric/precision-guarantees.md:215` (Audit Checklist)
+  References `ffi.go:convertArg`. No function named `convertArg` exists in `ffi.go`. The FFI entry points are now `RegisterFunc`, `RegisterFuncs`, `buildFFISpec`, etc. Per-argument conversion is distributed across those functions; no single `convertArg` exists to audit.
+  Evidence: `ffi.go` (no match for `convertArg`).
+
+- **drift** `docs/numeric/precision-guarantees.md:208` (Audit Checklist)
+  References `values/promotion.go:numberToFloat64`. No function with that name exists. `promotion.go` contains `toBigFloat` (helper used internally) but no `numberToFloat64`. The audit-checklist entry is unactionable as written.
+  Evidence: `values/promotion.go` (no match for `numberToFloat64`).
+
+- **clean** `docs/numeric/nan-boxing.md`
+  Educational doc. Structural claims (Wile uses Go interfaces for `Value`; `unsafe` constraint rules out NaN-boxing) are still accurate per `values/CLAUDE.md`. Profiling numbers quoted are historical / illustrative; no code-verification action needed.
+
+**Fixes** (to be committed):
+
+- Update the three file:line references in precision-guarantees.md to match current code.
+- Remove `Promote` from the "Deleted (2026-02-05)" list in tower.md.
+- Add a short "Dispatch Table Architecture" subsection to tower.md mentioning the `NumericKind`-indexed table layout (per `values/CLAUDE.md`).
+- Revise the two unactionable audit-checklist entries (`ffi.go:convertArg`, `values/promotion.go:numberToFloat64`): either remove them or replace with the current symbols they were intended to track.
+
+Style findings deferred per plan scope controls (no architectural reorganization, no adding missing docs). The "Status: Stable (2026-02-05)" date stamp is old but fine as-is until something substantive changes.
 
 ### Phase 2 — `reference/` — Pending
 

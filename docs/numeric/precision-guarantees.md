@@ -89,14 +89,14 @@ Issues where precision is lost unnecessarily — these are P1 conformance bugs.
 
 ### `toExactPart`: Unnecessary float64 roundtrip
 
-**File**: `values/big_complex.go:493`
+**File**: `values/big_complex.go:379`
 **Bug**: Converts `BigFloat → float64 → big.Rat` instead of `BigFloat → big.Rat` directly.
 **Impact**: 256-bit precision truncated to 53 bits before conversion to exact rational.
 **Fix**: Use `v.value.Rat(nil)` directly instead of going through `.Float64()`.
 
 ### `makeInexact` / `numberToInexact`: Truncates to Float instead of BigFloat
 
-**File**: `internal/parser/parser.go:1722-1727` (numberToInexact), `parser.go:1758-1761` (makeInexact)
+**File**: `internal/parser/parser_number.go:627` (`numberToInexact`), `internal/parser/parser_number.go:649` (`makeInexact`)
 **Bug**: BigInteger and Rational are converted to `Float` (float64) instead of `BigFloat` (256-bit).
 **Impact**: Values larger than 2^53 or rationals with large denominators lose precision unnecessarily. The conversion IS intentional (exact→inexact), but the target precision is lower than necessary.
 **Fix**: Convert BigInteger/Rational → BigFloat instead of Float. Both are inexact, but BigFloat preserves ~77 decimal digits vs Float's ~15.
@@ -204,15 +204,15 @@ Sites to verify conform to the tier model:
 
 - [ ] `values/big_float.go` — Tier 4: BigFloat must support Inf and NaN (IEEE 754 uniformity)
 - [ ] `values/big_complex.go` — Tier 4: BigComplex must support Inf/NaN parts via BigFloat
-- [ ] `values/promotion.go:isSpecialFloat` guard — **REMOVE** after BigFloat Inf/NaN support (#362)
-- [ ] `values/promotion.go:numberToFloat64` — Tier 3 (FFI boundary only, not used in dispatch after #362)
-- [ ] `values/big_complex.go:toExactPart` — **BUG** (unnecessary float64 roundtrip)
-- [ ] `internal/parser/parser.go:numberToInexact` — **BUG** (Float instead of BigFloat)
-- [ ] `internal/parser/parser.go:makeInexact` — **BUG** (Float instead of BigFloat)
-- [ ] `registry/helpers/value_conv.go:ExtractReal` — Tier 3, verify callers use exactness bool correctly
-- [ ] `registry/helpers/value_conv.go:ToFloat64` — Tier 3
-- [ ] `registry/helpers/value_conv.go:ToComplex128` — Tier 3
-- [ ] `ffi.go:convertArg` — Tier 3
+- [ ] `values/promotion.go:isSpecialFloat` guard (line 318) — **REMOVE** after BigFloat Inf/NaN support (#362)
+- [ ] `values/big_complex.go:toBigFloat` (line 99) — Tier 3 helper used by BigComplex for `.Float64()` conversions at the FFI boundary; verify no dispatch-path uses remain after #362
+- [ ] `values/big_complex.go:toExactPart` (line 379) — **BUG** (unnecessary float64 roundtrip)
+- [ ] `internal/parser/parser_number.go:numberToInexact` (line 627) — **BUG** (Float instead of BigFloat)
+- [ ] `internal/parser/parser_number.go:makeInexact` (line 649) — **BUG** (Float instead of BigFloat)
+- [ ] `registry/helpers/value_conv.go:ExtractReal` (line 96) — Tier 3, verify callers use exactness bool correctly
+- [ ] `registry/helpers/value_conv.go:ToFloat64` (line 72) — Tier 3
+- [ ] `registry/helpers/value_conv.go:ToComplex128` (line 28) — Tier 3
+- [ ] `ffi.go` argument conversion (no single `convertArg` function; per-argument conversion is distributed across `buildFFISpec` and the call path it constructs) — Tier 3
 - [ ] `extensions/math/prim_math.go` (transcendentals) — Tier 2, justified
 - [ ] `values/big_complex.go:Phase` — Tier 2, justified (atan2)
 - [ ] `values/big_complex.go:EqualTo` (BigComplex vs Complex) — Tier 3, justified (Complex is already float64)
