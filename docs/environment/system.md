@@ -276,7 +276,7 @@ A load stack enables relative path resolution for `load`, `include`, and `import
 │                                                                        │
 │  Concrete impl: *LoadStack                                             │
 │    (machine/compilation/sourceload/load_stack.go)                      │
-│    paths []string    ← LIFO stack of absolute file paths               │
+│    paths []string    ← LIFO stack of resolver-supplied paths           │
 │    mu    sync.RWMutex ← thread-safe access                             │
 └────────────────────────────────────────────────────────────────────────┘
 ```
@@ -285,7 +285,7 @@ The engine wires in the concrete implementation via `ns.SetLoadPathStack(sourcel
 
 ### Resolution Strategy
 
-Filename resolution goes through the `FileResolver` interface (`environment/file_resolver.go`), with concrete implementations in `machine/compilation/sourceload/`. The load stack's current directory is consulted as the relative base:
+Filename resolution goes through the `FileResolver` interface (`environment/file_resolver.go`). Concrete implementations live in `machine/compilation/resolver/` (`os_file_resolver.go`, `fs_file_resolver.go`, `embed_file_resolver.go`, `chain_file_resolver.go`), backed by `sourceload.Finder` for file search. The load stack's current directory is consulted as the relative base:
 
 ```
 1. Absolute path     → use as-is (if exists)
@@ -345,7 +345,7 @@ The stack lives on `Namespace`, shared across all child environments via delegat
 
 - `Namespace.InternSyntax()` - Thread-safe (uses RWMutex)
 - `PhaseRegistry.GetOrCreate()` - Thread-safe (uses RWMutex)
-- `LoadPathStack` - Thread-safe for individual operations (uses Mutex); LIFO ordering only guaranteed single-threaded
+- `PathTracker` / concrete `LoadStack` - Thread-safe for individual operations (uses RWMutex); LIFO ordering only guaranteed single-threaded
 - Binding operations - Not thread-safe (single-threaded compilation assumed)
 
 ---

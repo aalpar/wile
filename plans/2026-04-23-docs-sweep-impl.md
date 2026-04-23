@@ -520,7 +520,7 @@ Style / layout findings deferred per plan scope controls.
 **Fixes** (to be committed):
 
 - `system.md` § "Load-Path Stack": correct the file reference from `environment/load_path_stack.go` to `machine/compilation/sourceload/load_stack.go`; rename `LoadPathStack` to `LoadStack` where it refers to the concrete type; note the interface split (`PathTracker` in `environment/file_resolver.go`, concrete `LoadStack` in `machine/compilation/sourceload/`).
-- `system.md` § "Resolution Strategy": drop the `environment/resolve.go` path; describe resolution as happening via the `FileResolver` interface and its concrete implementations without pinning to the stale single filename.
+- `system.md` § "Resolution Strategy": drop the `environment/resolve.go` path; describe resolution as happening via the `FileResolver` interface with concrete implementations in `machine/compilation/resolver/` (`os_file_resolver.go`, `fs_file_resolver.go`, `embed_file_resolver.go`, `chain_file_resolver.go`), backed by `sourceload.Finder` for file search. (Revision note: the first cut of this fix said implementations live in `sourceload/`; that was wrong — `sourceload/` holds `LoadStack`, `Finder`, `walk.go`, while the concrete `FileResolver` types live in the sibling `resolver/` package. Copilot + errors-lens flagged this convergently.)
 - `diagram.md`: update the ownership-hierarchy box to show `loadPathStack ─── PathTracker` instead of `*LoadPathStack`, matching the current field type.
 
 ### Phase 4 — `compiler/` — Pending
