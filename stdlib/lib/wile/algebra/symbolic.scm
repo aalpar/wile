@@ -636,7 +636,6 @@ Category: algebra"
 ;; selector normalization. The wile-goast projections that convert Go
 ;; AST nodes or belief selectors into symbolic terms stay in wile-goast.
 
-(define *symbolic-boolean-theory* #f)
 (define *symbolic-boolean-normalizer* #f)
 
 (define (sexp-atom-compare a b)
@@ -658,16 +657,14 @@ See also: `symbolic-boolean-normalize', `sexp-term-protocol'."
     (string<? sa sb)))
 
 (define (ensure-symbolic-boolean-normalizer!)
-  ;; Lazy singleton construction. Invariant: *symbolic-boolean-normalizer*
-  ;; is set LAST, so it acts as the guard. A partial failure during
-  ;; construction leaves the normalizer #f and the next call retries.
-  ;; Do not reorder the set!s without revisiting this invariant.
+  ;; Lazy singleton — built on first call, cached thereafter. Partial
+  ;; failure during construction leaves the normalizer #f so the next
+  ;; call retries.
   (unless *symbolic-boolean-normalizer*
     (let* ((B (powerset-boolean '(_)))
            (th (boolean->theory B 'or 'and 'not))
            (proto (sexp-term-protocol sexp-atom-compare))
            (norm (make-recursive-normalizer th proto)))
-      (set! *symbolic-boolean-theory* th)
       (set! *symbolic-boolean-normalizer* norm))))
 
 (define (symbolic-boolean-normalize term)

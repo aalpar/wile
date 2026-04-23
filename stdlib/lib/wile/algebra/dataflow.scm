@@ -72,8 +72,10 @@ See also: `run-analysis', `cfg-protocol?'."
 
 (define (reverse-postorder blocks protocol)
   "Compute reverse postorder of BLOCKS under CFG PROTOCOL.
-DFS from the first block's index, record block indices in postorder,
-then reverse. Used by `run-analysis` to seed worklist priority.
+DFS from the first block's index, prepending each node to the result
+after its successors are visited — this builds reverse postorder
+directly (no separate reverse step). Used by `run-analysis` to seed
+worklist priority.
 
 Only blocks reachable from `(car blocks)` via `succs-of` appear in
 the returned list. Callers relying on orphan-block handling should
@@ -234,7 +236,11 @@ See also: `make-cfg-protocol', `analysis-in', `analysis-out',
          (blocks (blocks-of fn))
          (forward? (eq? direction 'forward))
          (block-map (map (lambda (b) (cons (index-of b) b)) blocks))
-         (block-ref (lambda (idx) (cdr (assv idx block-map))))
+         (block-ref (lambda (idx)
+                      (let ((e (assv idx block-map)))
+                        (unless e
+                          (error "run-analysis: index referenced by preds/succs is not in blocks (malformed CFG)" idx))
+                        (cdr e))))
          (rpo (reverse-postorder blocks protocol))
          (order (if forward? rpo (reverse rpo)))
          (rank-map (let loop ((os order) (r 0) (m '()))
