@@ -609,3 +609,126 @@ Category: algebra"
                " → "
                (display-to-string (step-after step)))))
        trace))
+
+;; ─── Boolean normalization facade ─────────
+;;
+;; Named entry points for a recursive-normalizer instance wired to the
+;; lattice+complement fragment of Boolean algebra. Applies commutativity,
+;; associativity, identity, idempotence, and absorption of join/meet
+;; (from `lattice->theory`), plus complement-involution (from
+;; `boolean->theory`).
+;;
+;; NOT applied by the current theory: De Morgan, complement laws
+;; (x ∧ ¬x = ⊥), bound identities (x ∨ ⊤ = ⊤, x ∧ ⊥ = ⊥). A future
+;; extension to `boolean->theory` that wires those axioms would extend
+;; reach; this facade tracks whatever `boolean->theory` exposes.
+;;
+;; Note on the trivial 1-atom Boolean algebra used below: `boolean->theory`
+;; extracts only the *equational* laws from its Boolean-algebra argument;
+;; the carrier's cardinality is irrelevant because the normalizer operates
+;; purely syntactically (atoms are opaque S-expressions, never evaluated
+;; against the carrier). The minimal Boolean algebra (1 atom, 2 elements)
+;; and the free Boolean algebra on any number of atoms share the same
+;; equational theory — which is what drives normalization.
+;;
+;; Extracted from wile-goast's goast/boolean-simplify.scm L23-69, where
+;; this facade was originally built for Go AST condition and belief
+;; selector normalization. The wile-goast projections that convert Go
+;; AST nodes or belief selectors into symbolic terms stay in wile-goast.
+
+(define *symbolic-boolean-normalizer* #f)
+
+(define (sexp-atom-compare a b)
+  "Compare two S-expression atoms lexicographically by their printed form.
+Serializes via `write` so any atom type (symbol, number, string, pair,
+vector) orders consistently. Used as the commutativity tie-break for
+`sexp-term-protocol` in the Boolean normalizer.
+
+Parameters:
+  a : any
+  b : any
+Returns: boolean
+Category: algebra
+Keywords: compare, lexicographic, atom, canonical order
+
+See also: `symbolic-boolean-normalize', `sexp-term-protocol'."
+  (let ((sa (let ((p (open-output-string))) (write a p) (get-output-string p)))
+        (sb (let ((p (open-output-string))) (write b p) (get-output-string p))))
+    (string<? sa sb)))
+
+(define (ensure-symbolic-boolean-normalizer!)
+  ;; Lazy singleton — built on first call, cached thereafter. Partial
+  ;; failure during construction leaves the normalizer #f so the next
+  ;; call retries.
+  (unless *symbolic-boolean-normalizer*
+    (let* ((B (powerset-boolean '(_)))
+           (th (boolean->theory B 'or 'and 'not))
+           (proto (sexp-term-protocol sexp-atom-compare))
+           (norm (make-recursive-normalizer th proto)))
+      (set! *symbolic-boolean-normalizer* norm))))
+
+(define (symbolic-boolean-normalize term)
+  "Normalize an S-expression boolean term under the Boolean-algebra
+equational theory produced by `boolean->theory`. Treats `(and ...)`,
+`(or ...)`, `(not ...)` as Boolean operators; every other form (symbol,
+number, non-Boolean compound) is an opaque atom.
+
+Applies the axioms currently exposed by `boolean->theory`:
+commutativity, associativity, identity, idempotence, and absorption of
+`and`/`or` (from `lattice->theory`), plus complement-involution.
+
+Not applied under the current theory: De Morgan, complement laws
+(x ∧ ¬x ⇒ ⊥), bound identities (x ∨ ⊤ ⇒ ⊤, x ∧ ⊥ ⇒ ⊥). Terms
+requiring those laws to simplify will normalize partially or not at
+all. If consumers need those laws, extend `boolean->theory` rather
+than wrap this facade.
+
+Returns two values: the canonical normal form, and the rewrite trace
+(a list of `<rewrite-step>` records documenting each rewrite applied).
+
+Parameters:
+  term : any
+Returns: any
+Category: algebra
+Keywords: boolean, normalize, canonical form, simplify
+
+Examples:
+  (symbolic-boolean-normalize '(and x (or x y)))  ; absorption
+  ;  => x, (trace ...)
+  (symbolic-boolean-normalize '(not (not x)))     ; involution
+  ;  => x, (trace ...)
+  (symbolic-boolean-normalize '(or x x))          ; idempotence
+  ;  => x, (trace ...)
+
+See also: `symbolic-boolean-equivalent?', `boolean->theory',
+`make-recursive-normalizer'."
+  (ensure-symbolic-boolean-normalizer!)
+  (*symbolic-boolean-normalizer* term))
+
+(define (symbolic-boolean-equivalent? term1 term2)
+  "Test whether two S-expression boolean terms normalize to the same
+canonical form under `symbolic-boolean-normalize`. Both terms are
+normalized and compared with `equal?`.
+
+Because `symbolic-boolean-normalize` applies only the axioms currently
+exposed by `boolean->theory` (see that docstring), this predicate
+decides equivalence up to those axioms — not full Boolean-algebra
+equivalence. Notably, pairs differing only by De Morgan or complement
+laws will return `#f`.
+
+Parameters:
+  term1 : any
+  term2 : any
+Returns: boolean
+Category: algebra
+Keywords: boolean, equivalent, equational theory
+
+Examples:
+  (symbolic-boolean-equivalent? '(and a b) '(and b a))  => #t
+  (symbolic-boolean-equivalent? '(or x y) '(and x y))   => #f
+
+See also: `symbolic-boolean-normalize'."
+  (ensure-symbolic-boolean-normalizer!)
+  (let-values (((n1 _t1) (*symbolic-boolean-normalizer* term1))
+               ((n2 _t2) (*symbolic-boolean-normalizer* term2)))
+    (equal? n1 n2)))

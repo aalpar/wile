@@ -23,7 +23,10 @@
     ;; Equivalence discovery
     discover-equivalences
     ;; Reporter
-    format-trace)
+    format-trace
+    ;; Boolean normalization facade (§2.2 free Boolean algebra on atoms)
+    symbolic-boolean-normalize
+    symbolic-boolean-equivalent?)
   (import (scheme base)
           (wile algebra rewrite)
           (wile algebra monoid)
