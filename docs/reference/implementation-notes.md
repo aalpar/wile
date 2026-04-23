@@ -1,19 +1,16 @@
 # Implementation Notes
 
-This document describes implementation choices that differ from canonical R7RS reference implementations but remain semantically equivalent. These are not semantic differences—the behavior matches R7RS—but the internal implementation strategy differs.
+This document describes implementation choices that differ from canonical R7RS reference implementations but remain semantically equivalent. These are not semantic differences — the behavior matches R7RS — but the internal implementation strategy differs.
 
 ---
 
-## `letrec*` Implementation (§4.2.2)
+## `let` / `let*` / `letrec` / `letrec*` as Core Compiled Forms
 
-**File:** `registry/core/bootstrap_macros.scm`
+**Files:** `internal/forms/`, `machine/compile_validated.go`, `machine/expand_*.go`
 
-**R7RS Specification:**
-> The `<variable>`s are bound to fresh locations, each `<variable>` is assigned in left-to-right order to the result of evaluating the corresponding `<init>`, the `<body>` is evaluated in the resulting environment.
+**R7RS Specification (§4.2.2):**
 
-**Canonical R7RS Definition (§7.3):**
-
-The R7RS formal definition uses recursive nesting to enforce left-to-right evaluation:
+The R7RS canonical definitions are macro-level, each expanding to `lambda` or recursive `set!` chains. `letrec*` specifically uses a recursive nesting to enforce left-to-right evaluation:
 
 ```scheme
 (define-syntax letrec*
@@ -28,52 +25,44 @@ The R7RS formal definition uses recursive nesting to enforce left-to-right evalu
 
 **Wile Implementation:**
 
-```scheme
-(define-syntax letrec*
-  (syntax-rules ()
-    ((letrec* ((var init) ...) body ...)
-     (letrec ((var init) ...) body ...))))
-```
+All four binding forms are **core compiled**: the expander / validator / compiler pipeline handles them directly as recognized syntactic forms. They are not macros defined in `bootstrap_macros.scm`. See the comment at `registry/core/bootstrap_macros.scm:44-46`:
 
-Simply delegates to `letrec`.
+> Binding forms (let, let*, letrec, letrec*) are now core compiled forms,
+> handled directly by the expander/validator/compiler pipeline.
 
-**Why This Works:**
+**Why:**
 
-Wile's `letrec` expands to sequential `set!` statements:
+Treating them as core forms eliminates an entire layer of macro expansion and lets the compiler apply targeted optimizations: capture analysis, escape analysis, and procedure inlining all operate directly on the `let` AST. See `docs/compiler/core-let.md` for the full design and motivation.
 
-```scheme
-(define-syntax letrec
-  (syntax-rules ()
-    ((letrec ((var init) ...) body ...)
-     (let ((var #f) ...)
-       (set! var init) ...
-       body ...))))
-```
+**Semantics preserved:**
 
-This expands `(letrec ((a 1) (b (+ a 1))) body)` to:
+- `let` — parallel binding; inits evaluated in an outer scope, results bound in the body's scope.
+- `let*` — sequential binding; each init sees the prior vars.
+- `letrec` / `letrec*` — inits evaluate left-to-right with all vars in scope. Wile's compiler expands them to `set!` statements in definition order, matching R7RS §4.2.2 requirements for `letrec*` and satisfying the weaker R7RS guarantee for `letrec`.
 
-```scheme
-(let ((a #f) (b #f))
-  (set! a 1)
-  (set! b (+ a 1))  ;; 'a' is already set when this runs
-  body)
-```
+**Reference:** R7RS §4.2.2 (Binding constructs), `docs/compiler/core-let.md`.
 
-The `(set! var init) ...` pattern produces sequential `set!` statements, which Scheme evaluates left-to-right per R7RS §4.2.3 (sequencing). Therefore:
+---
 
-1. All variables are in scope for all inits (via `let ((var #f) ...)`)
-2. Inits are evaluated left-to-right (via sequential `set!` statements)
+## Derived Forms Still Implemented as Macros
 
-**Comparison:**
+Not every R7RS derived form is core-compiled. The following remain `define-syntax` entries in `registry/core/bootstrap_macros.scm`, faithful to the R7RS §7.3 reference implementations except where noted:
 
-| Aspect | R7RS Canonical | Wile |
-|--------|---------------|------|
-| Mechanism | Recursive macro nesting | Delegates to `letrec` |
-| Left-to-right guarantee | Explicit in macro structure | Implicit via `letrec`'s sequential `set!` |
-| Macro complexity | O(n) recursive expansions | O(1) single expansion |
+| Form | Notes |
+|------|-------|
+| `and` / `or` | Standard short-circuit expansion to `if`. |
+| `cond`, `case` | Standard expansion with `else` / `=>` auxiliary syntax. |
+| `when`, `unless` | One-armed conditionals. |
+| `delay`, `delay-force`, `force`, `make-promise` | Lazy promises via `%make-lazy-promise`. |
+| `parameterize` | Uses `with-continuation-mark` rather than `dynamic-wind` — see [`r7rs-differences.md`](r7rs-differences.md) § "Parameterize Implementation". |
+| `guard`, `guard-aux` | Uses `call-with-values` so the body can return multiple values — see [`r7rs-differences.md`](r7rs-differences.md) § "Guard Body Multiple Values". |
+| `define-record-type` | SRFI-9 records via `make-record-type` helpers. |
+| `define-opaque-record-type` | Wile extension: hidden from `record?`. |
+| `let-values`, `let*-values`, `define-values` | Multiple-value binding (proper / dotted / rest patterns). |
+| `do` | R7RS §4.2.4 iteration. |
 
-**Coupling:**
+**Why the split:**
 
-This implementation couples `letrec*` to the specific behavior of Wile's `letrec`. If `letrec` were changed to evaluate inits in parallel or unspecified order (which R7RS permits for `letrec`), the `letrec*` implementation would need to be updated to the canonical recursive form.
+Binding forms are hot paths with heavy optimization value; making them core saves expansion cost and enables the whole-program analyses in `docs/compiler/`. The derived forms in the table above are either rarely on a hot path (record definitions) or inherently tied to the continuation system (`parameterize`, `guard`) where the macro layer is exactly the right abstraction.
 
-**Reference:** R7RS §4.2.2 (Binding constructs), §7.3 (Derived expression types)
+**Reference:** R7RS §7.3 (Derived expression types), `docs/compiler/core-let.md`, `docs/continuations/marks.md`.
