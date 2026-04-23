@@ -267,22 +267,25 @@ These invariants must be maintained:
 
 ## Load-Path Stack
 
-The `LoadPathStack` enables relative path resolution for `load`, `include`, and `import` by tracking which files are currently being loaded. It is stored on `Namespace` (per-VM, not per-thread).
+A load stack enables relative path resolution for `load`, `include`, and `import` by tracking which files are currently being loaded. It is stored on `Namespace` (per-VM, not per-thread). The stack is behind the `PathTracker` interface so `environment/` does not depend on `machine/compilation/`:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  LoadPathStack (environment/load_path_stack.go)         │
-│                                                         │
-│  paths []string    ← LIFO stack of absolute file paths  │
-│  mu    sync.Mutex  ← thread-safe access                 │
-│                                                         │
-│  Push(absPath) → Pop() → Current() → CurrentDir()      │
-└─────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│  PathTracker interface (environment/file_resolver.go)                  │
+│    Push(absPath) / Pop() / Current() / CurrentDir() / Depth()          │
+│                                                                        │
+│  Concrete impl: *LoadStack                                             │
+│    (machine/compilation/sourceload/load_stack.go)                      │
+│    paths []string    ← LIFO stack of absolute file paths               │
+│    mu    sync.RWMutex ← thread-safe access                             │
+└────────────────────────────────────────────────────────────────────────┘
 ```
+
+The engine wires in the concrete implementation via `ns.SetLoadPathStack(sourceload.NewLoadStack())` at startup (see `engine.go`).
 
 ### Resolution Strategy
 
-`ResolveFile` (`environment/resolve.go`) resolves filenames using a 3-tier strategy:
+Filename resolution goes through the `FileResolver` interface (`environment/file_resolver.go`), with concrete implementations in `machine/compilation/sourceload/`. The load stack's current directory is consulted as the relative base:
 
 ```
 1. Absolute path     → use as-is (if exists)
