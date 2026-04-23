@@ -1138,6 +1138,167 @@
        (every (lambda (v) (= (graph-degree G v) 2)) (graph-vertices G))
        (= (length (graph-connected-components G)) 1)))
 
+;;; -- Inline polynomial arithmetic helpers --
+;;;
+;;; A polynomial is represented as a list of coefficients, indexed by
+;;; degree: (a_0 a_1 ... a_d) meaning a_0 + a_1 x + ... + a_d x^d.
+;;; The leading zeroes are trimmed on return from %poly-trim so
+;;; equal? comparison between polynomials is canonical.
+
+(define (%poly-trim p)
+  ;; Remove trailing zeros (highest-degree) so equal? is canonical.
+  (reverse (let drop ((xs (reverse p)))
+             (cond
+               ((null? xs) '())
+               ((and (= (car xs) 0) (pair? (cdr xs))) (drop (cdr xs)))
+               (else xs)))))
+
+(define (%poly-add p q)
+  (let loop ((p p) (q q) (acc '()))
+    (cond
+      ((and (null? p) (null? q)) (%poly-trim (reverse acc)))
+      ((null? p) (loop '() (cdr q) (cons (car q) acc)))
+      ((null? q) (loop (cdr p) '() (cons (car p) acc)))
+      (else      (loop (cdr p) (cdr q)
+                       (cons (+ (car p) (car q)) acc))))))
+
+(define (%poly-sub p q)
+  (let loop ((p p) (q q) (acc '()))
+    (cond
+      ((and (null? p) (null? q)) (%poly-trim (reverse acc)))
+      ((null? p) (loop '() (cdr q) (cons (- (car q)) acc)))
+      ((null? q) (loop (cdr p) '() (cons (car p) acc)))
+      (else      (loop (cdr p) (cdr q)
+                       (cons (- (car p) (car q)) acc))))))
+
+(define (%poly-mul p q)
+  (cond
+    ((or (null? p) (null? q)) '())
+    (else
+     (let ((result (make-vector (+ (length p) (length q) -1) 0)))
+       (let i-loop ((p p) (i 0))
+         (cond
+           ((null? p) (%poly-trim (vector->list result)))
+           (else
+            (let j-loop ((q q) (j 0))
+              (cond
+                ((null? q) (i-loop (cdr p) (+ i 1)))
+                (else
+                 (vector-set! result (+ i j)
+                   (+ (vector-ref result (+ i j))
+                      (* (car p) (car q))))
+                 (j-loop (cdr q) (+ j 1))))))))))))
+
+(define (%poly-scale p c)
+  (%poly-trim (map (lambda (a) (* a c)) p)))
+
+(define (%poly-shift p k)
+  ;; Multiply p by x^k: prepend k zeros.
+  (if (or (null? p) (= k 0))
+      (%poly-trim p)
+      (%poly-trim (append (make-list k 0) p))))
+
+(define (%poly-x-minus-k k)
+  ;; (x - k) as a polynomial.
+  (list (- k) 1))
+
+(define (%poly-x)
+  '(0 1))
+
+(define (%poly-one)
+  '(1))
+
+(define (%poly-const c)
+  (list c))
+
+;;; -- Chromatic-polynomial helpers --
+
+(define (%falling-factorial n)
+  ;; x(x-1)(x-2)...(x-n+1) as a coefficient list.
+  (let loop ((k 0) (acc (%poly-one)))
+    (cond
+      ((= k n) acc)
+      (else (loop (+ k 1) (%poly-mul acc (%poly-x-minus-k k)))))))
+
+(define (%tree-chromatic n)
+  ;; x(x-1)^(n-1)
+  (cond
+    ((= n 0) '())
+    ((= n 1) (%poly-x))
+    (else (%poly-mul (%poly-x) (%poly-pow (%poly-x-minus-k 1) (- n 1))))))
+
+(define (%poly-pow p n)
+  (cond
+    ((= n 0) (%poly-one))
+    ((= n 1) p)
+    (else (%poly-mul p (%poly-pow p (- n 1))))))
+
+(define (%cycle-chromatic n)
+  ;; χ(C_n, x) = (x-1)^n + (-1)^n (x-1)
+  (let* ((x-1 (%poly-x-minus-k 1))
+         (p1 (%poly-pow x-1 n))
+         (p2 (if (even? n) x-1 (%poly-scale x-1 -1))))
+    (%poly-add p1 p2)))
+
+(define (%empty-chromatic n)
+  ;; x^n
+  (cond
+    ((= n 0) (%poly-one))
+    (else (%poly-shift (%poly-one) n))))
+
+;;; -- Chromatic polynomial via deletion-contraction on the nat-adj vector --
+
+(define (%nat-chromatic eff-n n adj-vec)
+  ;; χ(G − e, x) − χ(G / e, x) for non-loop e; 0 if a loop exists.
+  ;; Base cases:
+  ;;   — A loop in the graph forces χ = 0 (can't color endpoints distinctly).
+  ;;   — No edges (size = 0): χ(empty-graph on eff-n vertices, x) = x^eff-n.
+  (cond
+    ((%nat-has-loop? n adj-vec) '())              ;; zero polynomial
+    ((= eff-n 0) (%poly-one))
+    ((= (%nat-size adj-vec) 0)
+     (%poly-shift (%poly-one) eff-n))
+    (else
+     (let ((e (%nat-first-nonloop-edge n adj-vec)))
+       (cond
+         ((not e) (%poly-shift (%poly-one) eff-n))
+         (else
+          (let ((u (car e)) (v (cadr e)))
+            (%poly-sub
+              (%nat-chromatic eff-n     n (%nat-delete-edge   adj-vec u v))
+              (%nat-chromatic (- eff-n 1) n (%nat-contract-edge adj-vec u v))))))))))
+
+(define (%nat-has-loop? n adj-vec)
+  (let loop ((i 0))
+    (cond
+      ((= i n) #f)
+      ((memv i (vector-ref adj-vec i)) #t)
+      (else (loop (+ i 1))))))
+
+(define (graph-chromatic-polynomial G)
+  "Return the chromatic polynomial χ(G, x) of G as a coefficient list\n(a_0 a_1 ... a_V) meaning χ(G, x) = a_0 + a_1·x + ... + a_V·x^V\n(Read 1968).\n\nAlgorithm: closed-form fast paths for K_n (x(x-1)...(x-n+1)), C_n\n((x-1)^n + (-1)^n (x-1)), trees (x(x-1)^(n-1)), empty graph (x^n).\nOtherwise deletion-contraction χ(G) = χ(G−e) − χ(G/e) per Read 1968 —\nsize-capped at |V|+|E| ≤ 20 for the general fallback.\n\nExamples:\n  (graph-chromatic-polynomial (complete-graph 3))  => (0 2 -3 1)\n  (graph-chromatic-polynomial (cycle-graph 4))     => (0 -3 6 -4 1)\n  (graph-chromatic-polynomial (empty-graph 3))     => (0 0 0 1)\n\nParameters:\n  G : graph\nReturns: list of integers (polynomial coefficients, ascending degree)\nCategory: algebra\nKeywords: chromatic polynomial, deletion-contraction, Read, coloring"
+  (let ((n (graph-order G))
+        (m (graph-size G)))
+    (cond
+      ;; K_n fast path.
+      ((%complete? G n) (%falling-factorial n))
+      ;; Empty-graph fast path.
+      ((= m 0) (%empty-chromatic n))
+      ;; Tree fast path (connected + |E| = |V|-1).
+      ((%tree? G) (%tree-chromatic n))
+      ;; Cycle fast path (connected, n ≥ 3, degrees all 2, |E| = n).
+      ((%cycle? G n) (%cycle-chromatic n))
+      ;; General case: deletion-contraction.
+      (else
+       (when (> (+ n m) %dc-order-size-cap)
+         (error "graph-chromatic-polynomial: general-case |V|+|E| exceeds cap"
+                (list 'graph-chromatic-polynomial-too-large
+                      (+ n m) %dc-order-size-cap)))
+       (call-with-values
+         (lambda () (%relabel-to-naturals G))
+         (lambda (N adj)
+           (%nat-chromatic N N adj)))))))
+
 (define (graph-spanning-tree-count G)
   "Return the number of spanning trees of G (Kirchhoff 1847) as a\nnon-negative integer. Zero if G is disconnected (including the empty\ngraph on n ≥ 2 vertices).\n\nAlgorithm: closed-form fast paths for K_n (Cayley: n^(n-2)), C_n (n),\ntrees (1), empty (0 for n ≥ 2; 1 for n = 1). Otherwise deletion-\ncontraction recursion per Tutte 1954 — size-capped at |E| ≤ 20 for\nthe general fallback. The Kirchhoff-matrix-tree theorem (via Laplacian\nminor determinant) is a v2 opt-in that would lift the cap to\npolynomial in |V|.\n\nExamples:\n  (graph-spanning-tree-count (complete-graph 4))  => 16\n  (graph-spanning-tree-count (cycle-graph 5))     => 5\n  (graph-spanning-tree-count (petersen-graph))    => 2000\n\nParameters:\n  G : graph\nReturns: non-negative integer\nCategory: algebra\nKeywords: spanning tree, Cayley, Kirchhoff, matrix tree, deletion contraction"
   (let ((n (graph-order G))

@@ -18,6 +18,7 @@
     graph-isomorphic? graph-canonical-form
     ;; Invariants
     graph-spanning-tree-count
+    graph-chromatic-polynomial
     ;; Presets
     complete-graph cycle-graph path-graph
     complete-bipartite-graph empty-graph petersen-graph)

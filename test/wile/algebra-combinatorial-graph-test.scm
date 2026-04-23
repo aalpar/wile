@@ -524,4 +524,76 @@
       (test-error (graph-spanning-tree-count G)))))
 
 (test-end)
+
+(test-begin "combinatorial-graph-phase-5")
+
+(test-group "chromatic: K_n via falling-factorial fast path (Read 1968)"
+  ;; χ(K_n, x) = x(x-1)(x-2)...(x-n+1)
+  (test '(0 1)                  (graph-chromatic-polynomial (complete-graph 1)))
+  (test '(0 -1 1)               (graph-chromatic-polynomial (complete-graph 2)))
+  (test '(0 2 -3 1)             (graph-chromatic-polynomial (complete-graph 3)))
+  (test '(0 -6 11 -6 1)         (graph-chromatic-polynomial (complete-graph 4)))
+  (test '(0 24 -50 35 -10 1)    (graph-chromatic-polynomial (complete-graph 5))))
+
+(test-group "chromatic: empty-graph fast path"
+  (test '(1)          (graph-chromatic-polynomial (empty-graph 0)))
+  (test '(0 1)        (graph-chromatic-polynomial (empty-graph 1)))
+  (test '(0 0 1)      (graph-chromatic-polynomial (empty-graph 2)))
+  (test '(0 0 0 0 1)  (graph-chromatic-polynomial (empty-graph 4))))
+
+(test-group "chromatic: tree fast path (x(x-1)^(n-1))"
+  (test '(0 1)          (graph-chromatic-polynomial (path-graph 1)))
+  (test '(0 -1 1)       (graph-chromatic-polynomial (path-graph 2)))
+  (test '(0 1 -2 1)     (graph-chromatic-polynomial (path-graph 3)))
+  (test '(0 -1 3 -3 1)  (graph-chromatic-polynomial (path-graph 4))))
+
+(test-group "chromatic: cycle fast path ((x-1)^n + (-1)^n (x-1))"
+  ;; χ(C_3) = (x-1)^3 - (x-1) = x^3 - 3x^2 + 2x  (= χ(K_3), both are triangles)
+  (test '(0 2 -3 1)         (graph-chromatic-polynomial (cycle-graph 3)))
+  ;; χ(C_4) = (x-1)^4 + (x-1) = x^4 - 4x^3 + 6x^2 - 3x
+  (test '(0 -3 6 -4 1)      (graph-chromatic-polynomial (cycle-graph 4)))
+  ;; χ(C_5) = (x-1)^5 - (x-1) = x^5 - 5x^4 + 10x^3 - 10x^2 + 4x
+  (test '(0 4 -10 10 -5 1)  (graph-chromatic-polynomial (cycle-graph 5)))
+  ;; χ(C_6) = (x-1)^6 + (x-1) = x^6 - 6x^5 + 15x^4 - 20x^3 + 15x^2 - 5x
+  (test '(0 -5 15 -20 15 -6 1)  (graph-chromatic-polynomial (cycle-graph 6))))
+
+(test-group "chromatic: general deletion-contraction"
+  ;; Triangle + pendant: χ = x(x-1)²(x-2) = x^4 - 4x^3 + 5x^2 - 2x
+  (let ((G (make-graph
+             '((a . ((b) (c)))
+               (b . ((a) (c)))
+               (c . ((a) (b) (d)))
+               (d . ((c)))))))
+    (test '(0 -2 5 -4 1) (graph-chromatic-polynomial G))))
+
+(test-group "chromatic: size cap diagnostic"
+  ;; K_7 has |V|+|E| = 7+21 = 28 > 20 but matches %complete? fast path.
+  ;; Add a self-loop to disable fast path; chromatic on any graph with
+  ;; a loop is the zero polynomial '() via the %nat-has-loop? check;
+  ;; to actually trigger the cap, build a non-complete non-tree non-cycle
+  ;; graph with |V|+|E| > 20 and no loops.
+  (let* ((n 8)
+         ;; A graph with 8 vertices and 13 edges (the 7-cycle plus the
+         ;; 6 diagonals from vertex 0 to 2..7). Not K_n, not tree, not
+         ;; cycle, no loop. |V|+|E| = 21 > 20 → cap triggers.
+         (edges (append
+                  ;; 8-cycle
+                  (map (lambda (i) (list i (modulo (+ i 1) n))) (iota n))
+                  ;; diagonals from 0
+                  (list '(0 2) '(0 3) '(0 4) '(0 5) '(0 6))))
+         (adj (map
+                (lambda (v)
+                  (cons v
+                        (filter-map
+                          (lambda (e)
+                            (cond
+                              ((= (car e) v)  (cons (cadr e) #f))
+                              ((= (cadr e) v) (cons (car e) #f))
+                              (else           #f)))
+                          edges)))
+                (iota n)))
+         (G (make-graph adj)))
+    (test-error (graph-chromatic-polynomial G))))
+
+(test-end)
 (test-exit)
