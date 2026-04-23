@@ -449,4 +449,79 @@
     (test #t (graph-isomorphic? a b))))
 
 (test-end)
+
+(test-begin "combinatorial-graph-phase-4")
+
+(test-group "spanning-tree-count: fast paths"
+  ;; K_n via Cayley: τ(K_n) = n^(n-2)
+  (test 1   (graph-spanning-tree-count (complete-graph 2)))   ;; 2^0
+  (test 3   (graph-spanning-tree-count (complete-graph 3)))   ;; 3^1
+  (test 16  (graph-spanning-tree-count (complete-graph 4)))   ;; 4^2
+  (test 125 (graph-spanning-tree-count (complete-graph 5)))   ;; 5^3
+  ;; Cycle: τ(C_n) = n
+  (test 3   (graph-spanning-tree-count (cycle-graph 3)))      ;; same as K_3
+  (test 5   (graph-spanning-tree-count (cycle-graph 5)))
+  (test 7   (graph-spanning-tree-count (cycle-graph 7)))
+  ;; Tree: τ = 1
+  (test 1   (graph-spanning-tree-count (path-graph 2)))
+  (test 1   (graph-spanning-tree-count (path-graph 5)))
+  (test 1   (graph-spanning-tree-count (path-graph 10))))
+
+(test-group "spanning-tree-count: edge cases"
+  (test 0 (graph-spanning-tree-count (empty-graph 0)))
+  (test 1 (graph-spanning-tree-count (empty-graph 1)))
+  (test 0 (graph-spanning-tree-count (empty-graph 2)))
+  (test 0 (graph-spanning-tree-count (empty-graph 5))))
+
+(test-group "spanning-tree-count: disconnected → 0"
+  (let ((G (make-graph
+             '((0 . ((1))) (1 . ((0)))
+               (2 . ((3))) (3 . ((2)))))))
+    (test 0 (graph-spanning-tree-count G))))
+
+(test-group "spanning-tree-count: Petersen = 2000 (Sedláček 1970)"
+  (test 2000 (graph-spanning-tree-count (petersen-graph))))
+
+(test-group "spanning-tree-count: general deletion-contraction"
+  ;; Triangle + pendant: 4 vertices, 4 edges. The pendant must be in
+  ;; every spanning tree (it's a bridge); the remaining 3 form K_3,
+  ;; which contributes 3 spanning trees.
+  (let ((G (make-graph
+             '((a . ((b) (c)))
+               (b . ((a) (c)))
+               (c . ((a) (b) (d)))
+               (d . ((c)))))))
+    (test 3 (graph-spanning-tree-count G))))
+
+(test-group "spanning-tree-count: K_4 minus one edge"
+  ;; Book B_2 (two triangles sharing edge b-c): τ = 8.
+  (let ((G (make-graph
+             '((a . ((b) (c)))
+               (b . ((a) (c) (d)))
+               (c . ((a) (b) (d)))
+               (d . ((b) (c)))))))
+    (test 8 (graph-spanning-tree-count G))))
+
+(test-group "spanning-tree-count: size cap diagnostic"
+  ;; Build a 21-edge non-fast-path graph (complete graph minus something
+  ;; that still exceeds |E| ≤ 20 after removing fast-path triggers).
+  ;; K_7 has 21 edges, which would hit the cap — but K_7 matches %complete?
+  ;; and uses the Cayley fast path instead. Add a self-loop to K_7 to
+  ;; block %complete? and force the general path:
+  (let ((adj
+          (map (lambda (v)
+                 (cons v
+                       (let ((nbrs (filter (lambda (u) (not (= u v))) (iota 7))))
+                         (map (lambda (u) (cons u #f)) nbrs))))
+               (iota 7))))
+    ;; Add a self-loop on vertex 0 to disable %complete? fast path.
+    (let* ((with-loop (map (lambda (entry)
+                             (if (= (car entry) 0)
+                                 (cons 0 (cons (cons 0 #f) (cdr entry)))
+                                 entry))
+                           adj))
+           (G (make-graph with-loop '(self-loops? . #t))))
+      (test-error (graph-spanning-tree-count G)))))
+
+(test-end)
 (test-exit)

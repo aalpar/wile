@@ -16,6 +16,8 @@
     graph-bipartite? graph-bipartition
     ;; Isomorphism
     graph-isomorphic? graph-canonical-form
+    ;; Invariants
+    graph-spanning-tree-count
     ;; Presets
     complete-graph cycle-graph path-graph
     complete-bipartite-graph empty-graph petersen-graph)

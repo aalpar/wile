@@ -892,8 +892,278 @@
              (graph-canonical-form H)))))
 
 ;;; ====================================================================
-;;; Preset constructors.
+;;;
+;;; Invariants: spanning-tree count, chromatic polynomial, Tutte polynomial.
+;;;
+;;; Deletion-contraction recursion (Tutte 1954):
+;;;   — delete edge:    G − e  (remove e; vertex set unchanged)
+;;;   — contract edge:  G / e  (identify e's endpoints into one vertex;
+;;;                             other incident edges follow the surviving
+;;;                             endpoint; self-loops created are preserved
+;;;                             as loops, parallel edges merged for chromatic
+;;;                             but preserved for Tutte/spanning)
+;;;
+;;; Size cap: v1 caps general-case deletion-contraction at |E| ≤ 20 for
+;;; spanning-tree count and |V|+|E| ≤ 20 for chromatic / Tutte. Fast paths
+;;; (K_n, C_n, P_n, trees, empty) bypass the cap.
+;;;
 ;;; ====================================================================
+
+(define %dc-edge-cap 20)          ;; for graph-spanning-tree-count
+(define %dc-order-size-cap 20)    ;; for chromatic / Tutte
+
+(define (%relabel-to-naturals G)
+  ;; Produce a vertex→index table and an adjacency where vertices are
+  ;; integers 0..n-1 (preserving graph-vertices order). Returns
+  ;; (index-of-vertex fn, naturalized adjacency vector).
+  (let* ((vs (graph-vertices G))
+         (n  (length vs))
+         (tbl (make-vector n '()))
+         (S   (graph-setoid G))
+         (idx-of
+           (lambda (v)
+             (let loop ((xs vs) (i 0))
+               (cond
+                 ((null? xs) #f)
+                 ((setoid-equiv? S v (car xs)) i)
+                 (else (loop (cdr xs) (+ i 1))))))))
+    (for-each
+      (lambda (v)
+        (let ((i (idx-of v)))
+          (vector-set! tbl i
+            (map (lambda (p) (idx-of (car p)))
+                 (graph-neighbors G v)))))
+      vs)
+    (values n tbl)))
+
+(define (%nat-edges-undirected-unique n adj-vec)
+  ;; From a natural-labeled adjacency vector, emit a deduplicated list of
+  ;; undirected edges (u v) with u < v. Self-loops emitted as (u u).
+  ;; Multi-edges preserved.
+  (let loop ((i 0) (acc '()))
+    (cond
+      ((= i n) (reverse acc))
+      (else
+       (loop (+ i 1)
+             (fold (lambda (j a)
+                     (cond
+                       ((< j i) a)                ;; already seen from j→i
+                       (else (cons (list i j) a))))
+                   acc
+                   (vector-ref adj-vec i)))))))
+
+(define (%nat-adj-copy adj-vec)
+  (let* ((n (vector-length adj-vec))
+         (copy (make-vector n '())))
+    (let loop ((i 0))
+      (cond
+        ((= i n) copy)
+        (else
+         (vector-set! copy i (vector-ref adj-vec i))
+         (loop (+ i 1)))))))
+
+(define (%nat-remove-one lst target)
+  ;; Remove the first occurrence of TARGET from LST. Preserves other
+  ;; occurrences (used for multi-edge preservation in deletion).
+  (let loop ((src lst) (acc '()))
+    (cond
+      ((null? src) (reverse acc))
+      ((= (car src) target) (append (reverse acc) (cdr src)))
+      (else (loop (cdr src) (cons (car src) acc))))))
+
+(define (%nat-delete-edge adj-vec u v)
+  ;; G − e: remove ONE occurrence of the edge {u,v} (both directions for
+  ;; undirected representation). Multi-edges beyond that are preserved.
+  (let ((copy (%nat-adj-copy adj-vec)))
+    (vector-set! copy u (%nat-remove-one (vector-ref copy u) v))
+    (unless (= u v)
+      (vector-set! copy v (%nat-remove-one (vector-ref copy v) u)))
+    copy))
+
+(define (%nat-contract-edge adj-vec u v)
+  ;; G / e: merge v into u; redirect all neighbors-of-v (except v itself
+  ;; and u) to u; remove self-loops created by the edge being contracted
+  ;; (one occurrence of u↔v), but preserve other self-loops and
+  ;; parallel edges. Vertex v is retained in the adjacency vector as a
+  ;; singleton-with-no-edges to preserve indexing (subsequent recursions
+  ;; filter it; n decreases by one for graph-theoretic purposes).
+  (cond
+    ((= u v) adj-vec)             ;; self-loop: contraction is identity
+    (else
+     (let* ((copy       (%nat-adj-copy adj-vec))
+            ;; Start by deleting the contracted edge (one occurrence).
+            (copy       (let ((a (%nat-adj-copy copy)))
+                          (vector-set! a u (%nat-remove-one (vector-ref a u) v))
+                          (vector-set! a v (%nat-remove-one (vector-ref a v) u))
+                          a))
+            (v-nbrs    (vector-ref copy v)))
+       ;; Move all of v's remaining neighbors onto u; rewrite their
+       ;; back-references from v → u.
+       (vector-set! copy u (append (vector-ref copy u) v-nbrs))
+       (for-each
+         (lambda (n)
+           (when (not (= n v))   ;; skip v→v self-loops (can't happen here)
+             (let ((nbrs (vector-ref copy n)))
+               (vector-set! copy n
+                 (map (lambda (x) (if (= x v) u x)) nbrs)))))
+         v-nbrs)
+       (vector-set! copy v '())
+       copy))))
+
+(define (%nat-size adj-vec)
+  ;; Count undirected edges. A loop contributes 1; a non-loop edge is
+  ;; double-counted in the adjacency vector so we halve after subtracting
+  ;; loops.
+  (let loop ((i 0) (loops 0) (total 0))
+    (cond
+      ((= i (vector-length adj-vec))
+       (+ loops (/ (- total loops) 2)))
+      (else
+       (let* ((nbrs (vector-ref adj-vec i))
+              (self (count (lambda (x) (= x i)) nbrs)))
+         (loop (+ i 1)
+               (+ loops self)
+               (+ total (length nbrs))))))))
+
+(define (%nat-active-vertices adj-vec)
+  ;; A vertex is "active" if it has at least one neighbor. Contracted
+  ;; vertices have an empty neighbor list (see %nat-contract-edge).
+  (let loop ((i 0) (acc 0))
+    (cond
+      ((= i (vector-length adj-vec)) acc)
+      ((null? (vector-ref adj-vec i)) (loop (+ i 1) acc))
+      (else (loop (+ i 1) (+ acc 1))))))
+
+(define (%nat-isolated-count n adj-vec)
+  ;; Count vertices with empty neighbor list AND that were never merged.
+  ;; In v1 we cannot distinguish "originally isolated" from "contracted
+  ;; away" — this is a conservative approximation used only as a
+  ;; short-circuit (spanning-tree count = 0 when the non-isolated
+  ;; vertices form more than one component).
+  (let loop ((i 0) (acc 0))
+    (cond
+      ((= i n) acc)
+      ((null? (vector-ref adj-vec i)) (loop (+ i 1) (+ acc 1)))
+      (else (loop (+ i 1) acc)))))
+
+(define (%nat-first-nonloop-edge n adj-vec)
+  ;; Return a (u v) edge with u < v and u ≠ v, or #f if none.
+  (let loop ((i 0))
+    (cond
+      ((= i n) #f)
+      (else
+       (let scan ((nbrs (vector-ref adj-vec i)))
+         (cond
+           ((null? nbrs) (loop (+ i 1)))
+           ((and (> (car nbrs) i)) (list i (car nbrs)))
+           (else (scan (cdr nbrs)))))))))
+
+(define (%nat-connected? n adj-vec)
+  ;; Check connectivity over active (non-empty-neighbor-list) vertices
+  ;; via BFS. Isolated vertices are counted as separate components.
+  (let* ((active (filter (lambda (i) (not (null? (vector-ref adj-vec i))))
+                          (iota n))))
+    (cond
+      ((null? active) #f)     ;; no edges: 0 spanning trees unless n=1
+      (else
+       (let* ((seed (car active))
+              (visited (make-vector n #f)))
+         (vector-set! visited seed #t)
+         (let bfs ((frontier (list seed)))
+           (cond
+             ((null? frontier) #t)
+             (else
+              (let* ((v (car frontier))
+                     (rest (cdr frontier))
+                     (new-nodes
+                       (filter
+                         (lambda (u) (not (vector-ref visited u)))
+                         (vector-ref adj-vec v))))
+                (for-each (lambda (u) (vector-set! visited u #t)) new-nodes)
+                (bfs (append rest new-nodes))))))
+         (every (lambda (i) (vector-ref visited i)) active))))))
+
+(define (%nat-spanning-tree-count eff-n n adj-vec)
+  ;; Deletion-contraction: τ(G) = τ(G − e) + τ(G / e) for non-loop e.
+  ;; Loops contribute nothing to τ (they're never in a spanning tree).
+  ;;
+  ;; EFF-N = current effective vertex count of the (possibly-contracted)
+  ;; graph. Initial call: eff-n = original graph-order. Each contraction
+  ;; decrements eff-n; deletion leaves eff-n unchanged.
+  ;; N = slot count of adj-vec (stays constant across recursion).
+  ;;
+  ;; Base cases:
+  ;;   — eff-n ≤ 1: τ = 1 (a single vertex is its own spanning tree,
+  ;;     regardless of any self-loops).
+  ;;   — eff-n > 1 and disconnected over active vertices: τ = 0.
+  ;;   — eff-n > 1 but no non-loop edges available: τ = 0
+  ;;     (disconnected — loops alone cannot span multiple vertices).
+  ;;
+  ;; Precondition: the caller has already handled the "no edges and
+  ;; multiple vertices" disconnected case (for empty-graph n>1 → 0).
+  (cond
+    ((<= eff-n 1) 1)
+    ((not (%nat-connected? n adj-vec)) 0)
+    (else
+     (let ((e (%nat-first-nonloop-edge n adj-vec)))
+       (cond
+         ((not e) 0)
+         (else
+          (let ((u (car e)) (v (cadr e)))
+            (+ (%nat-spanning-tree-count eff-n     n (%nat-delete-edge   adj-vec u v))
+               (%nat-spanning-tree-count (- eff-n 1) n (%nat-contract-edge adj-vec u v))))))))))
+
+(define (%tree? G)
+  ;; G is a tree iff it is connected AND |E| = |V| - 1.
+  (and (> (graph-order G) 0)
+       (= (graph-size G) (- (graph-order G) 1))
+       (= (length (graph-connected-components G)) 1)))
+
+(define (%complete? G n)
+  ;; G is K_n iff every pair of distinct vertices is adjacent and there
+  ;; are no self-loops or multi-edges and no extra edges.
+  (and (= (graph-size G) (/ (* n (- n 1)) 2))
+       (not (graph-multi? G))
+       (every
+         (lambda (v)
+           (= (graph-degree G v) (- n 1)))
+         (graph-vertices G))))
+
+(define (%cycle? G n)
+  ;; G is C_n iff every vertex has degree 2 and G is connected with
+  ;; exactly n edges. Requires n ≥ 3 for a true cycle; for n = 2 we
+  ;; treat it as not-a-cycle (P_2 fast path applies).
+  (and (>= n 3)
+       (= (graph-size G) n)
+       (every (lambda (v) (= (graph-degree G v) 2)) (graph-vertices G))
+       (= (length (graph-connected-components G)) 1)))
+
+(define (graph-spanning-tree-count G)
+  "Return the number of spanning trees of G (Kirchhoff 1847) as a\nnon-negative integer. Zero if G is disconnected (including the empty\ngraph on n ≥ 2 vertices).\n\nAlgorithm: closed-form fast paths for K_n (Cayley: n^(n-2)), C_n (n),\ntrees (1), empty (0 for n ≥ 2; 1 for n = 1). Otherwise deletion-\ncontraction recursion per Tutte 1954 — size-capped at |E| ≤ 20 for\nthe general fallback. The Kirchhoff-matrix-tree theorem (via Laplacian\nminor determinant) is a v2 opt-in that would lift the cap to\npolynomial in |V|.\n\nExamples:\n  (graph-spanning-tree-count (complete-graph 4))  => 16\n  (graph-spanning-tree-count (cycle-graph 5))     => 5\n  (graph-spanning-tree-count (petersen-graph))    => 2000\n\nParameters:\n  G : graph\nReturns: non-negative integer\nCategory: algebra\nKeywords: spanning tree, Cayley, Kirchhoff, matrix tree, deletion contraction"
+  (let ((n (graph-order G))
+        (m (graph-size G)))
+    (cond
+      ((= n 0) 0)
+      ((= n 1) 1)
+      ;; Any multi-vertex graph with no edges is disconnected: τ = 0.
+      ((= m 0) 0)
+      ;; Multi-vertex disconnected graph: τ = 0.
+      ((> (length (graph-connected-components G)) 1) 0)
+      ;; K_n fast path (Cayley): τ(K_n) = n^(n-2) for n ≥ 2.
+      ((%complete? G n) (expt n (- n 2)))
+      ;; Tree fast path.
+      ((%tree? G) 1)
+      ;; Cycle fast path.
+      ((%cycle? G n) n)
+      ;; General case: deletion-contraction.
+      (else
+       (when (> m %dc-edge-cap)
+         (error "graph-spanning-tree-count: general-case edge count exceeds cap"
+                (list 'graph-spanning-tree-count-too-large m %dc-edge-cap)))
+       (call-with-values
+         (lambda () (%relabel-to-naturals G))
+         (lambda (N adj)
+           (%nat-spanning-tree-count N N adj)))))))
 
 (define (complete-graph n)
   "Return K_n, the complete graph on n vertices 0..n-1 (every pair adjacent).\nChromatic = x(x-1)...(x-n+1); spanning-tree count = n^(n-2) (Cayley).\n\nExamples:\n  (graph-order (complete-graph 4))  => 4\n  (graph-size  (complete-graph 4))  => 6\n\nParameters:\n  n : non-negative integer\nReturns: graph\nCategory: algebra\nKeywords: K_n, complete graph, clique"
