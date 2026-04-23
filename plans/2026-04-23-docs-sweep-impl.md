@@ -466,16 +466,16 @@ Style findings deferred per plan scope controls (no architectural reorganization
   Evidence: `registry/core/bootstrap_macros.scm:44-46` ("Binding forms ... are now core compiled forms"); `plans/CORE-LET.md` (shipped PR #570).
 
 - **drift** `docs/reference/scheme.md:5`
-  `**Version**: v1.5.0` is 9 minor versions behind the implementation (currently `v1.14.x`). Either the version tag means "Scheme language reference revision" and should be interpreted independently, or it should track implementation. Since the doc has no other language-revision versioning, this reads as a frozen/forgotten stamp. Fix by either removing the version line or clarifying what it tags.
-  Evidence: `VERSION` file (currently `v1.14.270+`), `scheme.md:5`.
+  `**Version**: v1.5.0` is many minor versions behind the implementation. Either the version tag means "Scheme language reference revision" and should be interpreted independently, or it should track implementation. Since the doc has no other language-revision versioning, this reads as a frozen/forgotten stamp. Fix by either removing the version line or clarifying what it tags.
+  Evidence: `VERSION` file (current implementation version), `scheme.md:5`.
 
 - **missing** `docs/reference/scheme.md:1584-1590` ("Wile Scheme Libraries")
   Table lists `(wile control)`, `(wile kanren)`, `(wile microkanren)` only. Missing: the entire `(wile algebra)` library tree — umbrella `(wile algebra)` plus 26 sub-libraries shipped during 2026-03..2026-04 (setoid, monoid, group, ring, lattice, polynomial, matrix, incidence, symbolic, rewrite, combinatorial-graph, etc.). Given algebra is one of Wile's signature features and was the subject of PR #706's entire tutorial, omitting it from the reference libraries section is a substantial gap.
   Evidence: `stdlib/lib/wile/algebra.sld` (umbrella); 26 `.sld` files under `stdlib/lib/wile/algebra/`; `docs/algebra/reference.md` (separate, comprehensive).
 
 - **drift** `docs/reference/scheme.md:1354` ("Reflection" table)
-  Claims `procedure-type` returns "Type tag string". Actual returns are symbols (`foreign`, `closure`), not strings.
-  Evidence: `(procedure-type car)` => `foreign` (symbol); `(procedure-type (lambda (x) x))` => `closure` (symbol).
+  Claims `procedure-type` returns "Type tag string". Actual returns are symbols, and the full set is wider than two values: `closure` (Scheme lambda), `foreign` (Go primitive), `case-lambda` (case-lambda closure), `parameter` (parameter object), `continuation` (composable continuation), with `unknown` as a fallback for any other callable.
+  Evidence: `registry/core/prim_reflection.go:246-259`; docstring at `registry/core/reflection.go` for `procedure-type` enumerates all five named cases; `registry/core/prim_reflection_test.go:311-354` (`TestProcedureType`) asserts all five return symbols.
 
 - **clean** `docs/reference/r7rs-differences.md`
   All four documented semantic differences verify against current code:

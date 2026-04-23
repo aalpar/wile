@@ -6,7 +6,7 @@ This document describes implementation choices that differ from canonical R7RS r
 
 ## `let` / `let*` / `letrec` / `letrec*` as Core Compiled Forms
 
-**Files:** `internal/forms/`, `machine/compile_validated.go`, `machine/expand_*.go`
+**Files:** `internal/validate/register.go` (validator registration), `machine/compilation/compile_let.go`, `machine/compilation/expander_let.go`, `machine/compilation/compile_validated.go`.
 
 **R7RS Specification (§4.2.2):**
 
@@ -30,15 +30,17 @@ All four binding forms are **core compiled**: the expander / validator / compile
 > Binding forms (let, let*, letrec, letrec*) are now core compiled forms,
 > handled directly by the expander/validator/compiler pipeline.
 
+(The comment also references `plans/CORE-LET.md` for "the design". That plan file has been retired; the design now lives in `docs/compiler/core-let.md`.)
+
 **Why:**
 
 Treating them as core forms eliminates an entire layer of macro expansion and lets the compiler apply targeted optimizations: capture analysis, escape analysis, and procedure inlining all operate directly on the `let` AST. See `docs/compiler/core-let.md` for the full design and motivation.
 
 **Semantics preserved:**
 
-- `let` — parallel binding; inits evaluated in an outer scope, results bound in the body's scope.
-- `let*` — sequential binding; each init sees the prior vars.
-- `letrec` / `letrec*` — inits evaluate left-to-right with all vars in scope. Wile's compiler expands them to `set!` statements in definition order, matching R7RS §4.2.2 requirements for `letrec*` and satisfying the weaker R7RS guarantee for `letrec`.
+- `let` — parallel binding; inits evaluated in an outer scope, then `OpPushEnv` allocates the frame and `StoreLocal` stores each value into the body scope.
+- `let*` — sequential binding; `OpPushEnv` first, then each init is compiled followed by its `StoreLocal`, so each later init sees the prior vars.
+- `letrec` / `letrec*` — `OpPushEnv` first so all slots exist before any init is evaluated; inits are then compiled in definition order, each followed by a `StoreLocal` into its slot. The ordered stores satisfy R7RS §4.2.2 for `letrec*` (strict left-to-right) and the weaker R7RS guarantee for `letrec`. See the comment summary at `machine/compilation/compile_let.go:33-37` for the opcode sequence per form.
 
 **Reference:** R7RS §4.2.2 (Binding constructs), `docs/compiler/core-let.md`.
 
