@@ -13,7 +13,12 @@
     validate-graph assert-graph with-graph
     ;; Traversal + connectivity
     graph-bfs graph-dfs graph-connected-components
-    graph-bipartite? graph-bipartition)
+    graph-bipartite? graph-bipartition
+    ;; Isomorphism
+    graph-isomorphic? graph-canonical-form
+    ;; Presets
+    complete-graph cycle-graph path-graph
+    complete-bipartite-graph empty-graph petersen-graph)
   (import (scheme base)
           (srfi 1)
           (wile algebra setoid))

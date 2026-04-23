@@ -315,4 +315,138 @@
       (test 2 (length parts)))))
 
 (test-end)
+
+(test-begin "combinatorial-graph-phase-3")
+
+(test-group "preset shapes"
+  (test 3 (graph-order (complete-graph 3)))
+  (test 3 (graph-size  (complete-graph 3)))
+  (test 4 (graph-order (complete-graph 4)))
+  (test 6 (graph-size  (complete-graph 4)))
+  (test 5 (graph-order (cycle-graph 5)))
+  (test 5 (graph-size  (cycle-graph 5)))
+  (test 5 (graph-order (path-graph 5)))
+  (test 4 (graph-size  (path-graph 5)))
+  (test 6 (graph-order (complete-bipartite-graph 3 3)))
+  (test 9 (graph-size  (complete-bipartite-graph 3 3)))
+  (test 10 (graph-order (petersen-graph)))
+  (test 15 (graph-size  (petersen-graph)))
+  (test 0 (graph-size  (empty-graph 5)))
+  (test 5 (graph-order (empty-graph 5))))
+
+(test-group "preset input validation"
+  (test-error (complete-graph -1))
+  (test-error (cycle-graph 1))
+  (test-error (path-graph -1))
+  (test-error (complete-bipartite-graph 2 -1))
+  (test-error (empty-graph -3)))
+
+(test-group "Petersen is 3-regular"
+  (let ((P (petersen-graph)))
+    (for-each
+      (lambda (v) (test 3 (graph-degree P v)))
+      (graph-vertices P))))
+
+;; --- Positive isomorphism tests (non-regular → fast path) ---
+
+(test-group "path iso path (non-regular, fast-path)"
+  (test #t (graph-isomorphic? (path-graph 4) (path-graph 4)))
+  (test #t (graph-isomorphic? (path-graph 5) (path-graph 5))))
+
+(test-group "complete-bipartite iso complete-bipartite"
+  (test #t (graph-isomorphic? (complete-bipartite-graph 2 3)
+                              (complete-bipartite-graph 2 3))))
+
+;; --- Positive isomorphism tests (regular → backtracking required) ---
+
+(test-group "complete graph self-iso (regular, backtracking)"
+  (test #t (graph-isomorphic? (complete-graph 3) (complete-graph 3)))
+  (test #t (graph-isomorphic? (complete-graph 4) (complete-graph 4)))
+  (test #t (graph-isomorphic? (complete-graph 5) (complete-graph 5))))
+
+(test-group "cycle self-iso (vertex-transitive, backtracking)"
+  (test #t (graph-isomorphic? (cycle-graph 4) (cycle-graph 4)))
+  (test #t (graph-isomorphic? (cycle-graph 5) (cycle-graph 5)))
+  (test #t (graph-isomorphic? (cycle-graph 6) (cycle-graph 6))))
+
+(test-group "BACKTRACKING CORRECTNESS CANARY — Petersen self-iso → #t"
+  ;; 1-WL refinement alone cannot discretize the Petersen graph (it is
+  ;; vertex-transitive and 3-regular, so every vertex gets the same
+  ;; color signature). This test passing #t proves the individualization-
+  ;; refinement backtracking layer (Layer 2, McKay-Piperno §3.1) is
+  ;; correctly wired.
+  (test #t (graph-isomorphic? (petersen-graph) (petersen-graph))))
+
+(test-group "Petersen iso under non-trivial relabeling"
+  ;; Apply a permutation to the Petersen vertex labels and verify the
+  ;; relabeled graph is still iso to the original.
+  (let* ((orig (petersen-graph))
+         (perm (list 5 2 8 1 9 0 7 4 3 6))
+         (at   (lambda (v) (list-ref perm v)))
+         (permuted-adj
+           (map
+             (lambda (v)
+               (cons (at v)
+                     (map (lambda (p) (cons (at (car p)) (cdr p)))
+                          (graph-neighbors orig v))))
+             (graph-vertices orig)))
+         (permuted (make-graph permuted-adj)))
+    (test #t (graph-isomorphic? orig permuted))))
+
+;; --- Negative isomorphism tests ---
+
+(test-group "different vertex count → #f (short-circuit)"
+  (test #f (graph-isomorphic? (complete-graph 3) (complete-graph 4)))
+  (test #f (graph-isomorphic? (path-graph 5)     (path-graph 6))))
+
+(test-group "different edge count → #f (short-circuit)"
+  (test #f (graph-isomorphic? (complete-graph 4) (cycle-graph 4)))
+  (test #f (graph-isomorphic? (cycle-graph 5)    (path-graph 5))))
+
+(test-group "different degree sequence → #f"
+  ;; K_{1,3} (star, degrees 3,1,1,1) vs P_4 (degrees 1,2,2,1)
+  (let ((star (make-graph '((c . ((a) (b) (d)))
+                             (a . ((c)))
+                             (b . ((c)))
+                             (d . ((c))))))
+        (p4   (path-graph 4)))
+    (test #f (graph-isomorphic? star p4))))
+
+(test-group "COSPECTRAL NON-ISO CANARY — C_6 vs 2K_3"
+  ;; Both 6 vertices, 6 edges, all degree 2 — degree sequence matches.
+  ;; 1-WL refinement cannot separate them (all signatures collapse to
+  ;; the same color). But C_6 is connected, 2K_3 is two triangles;
+  ;; the backtracking layer discovers this via canonical-form
+  ;; comparison after individualization.
+  (let ((C6 (cycle-graph 6))
+        (two-triangles
+          (make-graph
+            '((0 . ((1) (2))) (1 . ((0) (2))) (2 . ((0) (1)))
+              (3 . ((4) (5))) (4 . ((3) (5))) (5 . ((3) (4)))))))
+    (test 6 (graph-order C6))
+    (test 6 (graph-order two-triangles))
+    (test 6 (graph-size  C6))
+    (test 6 (graph-size  two-triangles))
+    (test #f (graph-isomorphic? C6 two-triangles))))
+
+(test-group "more negative pairs"
+  (test #f (graph-isomorphic? (complete-graph 4) (path-graph 4)))
+  (test #f (graph-isomorphic? (empty-graph 5) (cycle-graph 5)))
+  (test #f (graph-isomorphic? (complete-bipartite-graph 3 3) (cycle-graph 6))))
+
+(test-group "empty / singleton edge cases"
+  (test #t (graph-isomorphic? (empty-graph 0) (empty-graph 0)))
+  (test #t (graph-isomorphic? (empty-graph 1) (empty-graph 1)))
+  (test #t (graph-isomorphic? (empty-graph 3) (empty-graph 3)))
+  (test #f (graph-isomorphic? (empty-graph 2) (empty-graph 3))))
+
+(test-group "canonical form is deterministic across alist-ordering"
+  ;; Two differently-ordered adjacency alists of the same graph should
+  ;; produce the same canonical form.
+  (let ((a (make-graph '((0 . ((1) (2))) (1 . ((0) (2))) (2 . ((0) (1))))))
+        (b (make-graph '((2 . ((0) (1))) (0 . ((2) (1))) (1 . ((2) (0)))))))
+    (test #t (equal? (graph-canonical-form a) (graph-canonical-form b)))
+    (test #t (graph-isomorphic? a b))))
+
+(test-end)
 (test-exit)

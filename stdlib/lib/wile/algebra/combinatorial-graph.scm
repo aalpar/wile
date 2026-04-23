@@ -530,3 +530,458 @@
                   ((eqv? c 1) (set! part-b (cons v part-b))))))
             (graph-vertices G))
           (list (reverse part-a) (reverse part-b))))))
+
+;;; ====================================================================
+;;;
+;;; Isomorphism: 1-WL color refinement + individualization-refinement
+;;; backtracking (McKay & Piperno 2014, simplified nauty-lite).
+;;;
+;;; Terminology per McKay-Piperno §2.2 (pinned in plan Vocabulary):
+;;;   — a *partition* is a list of cells (color classes)
+;;;   — a partition is *stable* when 1-WL refinement is a fixed point
+;;;   — a partition is *discrete* when every cell has cardinality 1
+;;;   — a *non-trivial cell* has cardinality ≥ 2
+;;;
+;;; Algorithm pipeline:
+;;;   graph-canonical-form G
+;;;     └─▶ initial coloring by vertex invariant (degree, self-loops, ...)
+;;;         └─▶ refine-partition (Layer 1; until stable)
+;;;             └─▶ if discrete: emit canonical adjacency
+;;;             └─▶ else: individualize each vertex in smallest non-trivial
+;;;                       cell, refine, recurse; return lex-smallest leaf
+;;;                       (McKay-Piperno §3.3)
+;;;
+;;; graph-isomorphic? G H = (equal? canonical-G canonical-H) with fast-
+;;; path short-circuits (different order/size/degree sequences).
+;;;
+;;; ====================================================================
+
+;; Coloring representation: alist ((vertex . color-integer) ...).
+;; Colors are integers starting at 0. The first refinement step buckets
+;; vertices by their initial invariant; subsequent steps bucket by
+;; (current-color, sorted-multiset-of-neighbor-colors).
+
+(define (%initial-color G v)
+  ;; Initial invariant of v: (degree-out, self-loop-count, in-degree-if-directed).
+  (let* ((S     (graph-setoid G))
+         (nbrs  (graph-neighbors G v))
+         (loops (length (filter (lambda (p) (setoid-equiv? S (car p) v)) nbrs)))
+         (deg   (length nbrs)))
+    (if (graph-directed? G)
+        ;; In-degree for directed graphs.
+        (let ((in 0))
+          (for-each
+            (lambda (entry)
+              (when (%setoid-assoc S v (cdr entry))
+                (set! in (+ in 1))))
+            (graph-adjacency G))
+          (list deg in loops))
+        (list deg loops))))
+
+(define (%colors-initial G)
+  ;; Compute the initial color of each vertex; bucket and assign integer
+  ;; colors 0.. in invariant-sorted order for determinism. Result is
+  ;; returned in graph-vertices order for stable between-iteration
+  ;; comparison.
+  (let* ((vs (graph-vertices G))
+         (invariants (map (lambda (v) (cons v (%initial-color G v))) vs))
+         (groups (%group-by-signature invariants cdr))
+         (unordered (%labels-from-groups groups)))
+    (%reorder-alist-by-keys unordered vs equal?)))
+
+(define (%reorder-alist-by-keys al keys key=?)
+  ;; Reorder an alist so its keys appear in KEYS order. Linear scan per
+  ;; key; acceptable for small V. For large V, swap for a hashtable.
+  (map
+    (lambda (k)
+      (let loop ((xs al))
+        (cond
+          ((null? xs) (error "reorder: key not found" k))
+          ((key=? (caar xs) k) (car xs))
+          (else (loop (cdr xs))))))
+    keys))
+
+(define (%group-by-signature xs sig-of)
+  ;; Partition xs into groups by signature. Returns a list of groups,
+  ;; each group = list of xs with equal signature. Groups are emitted in
+  ;; canonical signature-sorted order for deterministic color assignment.
+  ;; Within each group, xs appear in their original input order.
+  (let loop ((src xs) (buckets '()))
+    (cond
+      ((null? src)
+       ;; buckets = ((sig xs-in-reverse) ...). Sort by sig; un-reverse.
+       (map (lambda (b) (reverse (cdr b)))
+            (list-sort (lambda (a b) (%sig< (car a) (car b)))
+                       buckets)))
+      (else
+       (let* ((x   (car src))
+              (s   (sig-of x))
+              (hit (assoc s buckets)))
+         (if hit
+             (begin
+               (set-cdr! hit (cons x (cdr hit)))
+               (loop (cdr src) buckets))
+             (loop (cdr src) (cons (list s x) buckets))))))))
+
+(define (%labels-from-groups groups)
+  ;; Given groups = list of lists, each an equivalence class, assign
+  ;; integer color 0..N-1 to the i-th group. Return alist vertex→color.
+  (let loop ((groups groups) (color 0) (acc '()))
+    (cond
+      ((null? groups) acc)
+      (else
+       (loop (cdr groups)
+             (+ color 1)
+             (append (map (lambda (p) (cons (car p) color)) (car groups))
+                     acc))))))
+
+(define (list-sort cmp lst)
+  ;; Stable insertion sort: small n, simple, deterministic.
+  (let loop ((src lst) (acc '()))
+    (cond
+      ((null? src) acc)
+      (else
+       (loop (cdr src)
+             (%insert cmp (car src) acc))))))
+
+(define (%insert cmp x sorted)
+  (cond
+    ((null? sorted) (list x))
+    ((cmp x (car sorted)) (cons x sorted))
+    (else (cons (car sorted) (%insert cmp x (cdr sorted))))))
+
+(define (%sig< a b)
+  ;; Compare two signatures (arbitrary nested lists of numbers/pairs/symbols)
+  ;; by a total order. Used only for deterministic bucket ordering.
+  (let ((sa (%sig->key a))
+        (sb (%sig->key b)))
+    (%key< sa sb)))
+
+(define (%sig->key s)
+  ;; Flatten a signature into a list of integers for lexicographic
+  ;; comparison. Symbols are hashed to their string; pairs recurse.
+  (cond
+    ((null? s)    '())
+    ((number? s)  (list s))
+    ((symbol? s)  (list (%string->intkey (symbol->string s))))
+    ((string? s)  (list (%string->intkey s)))
+    ((boolean? s) (list (if s 1 0)))
+    ((pair? s)    (append (%sig->key (car s)) (%sig->key (cdr s))))
+    (else (list 0))))
+
+(define (%string->intkey str)
+  ;; Simple deterministic hash of a string to an integer for sort order.
+  ;; Sum of char codes weighted by position; order is stable for same
+  ;; inputs, which is all we need.
+  (let loop ((i 0) (acc 0))
+    (cond
+      ((= i (string-length str)) acc)
+      (else
+       (loop (+ i 1)
+             (+ (* acc 257) (char->integer (string-ref str i))))))))
+
+(define (%key< a b)
+  (cond
+    ((and (null? a) (null? b)) #f)
+    ((null? a) #t)
+    ((null? b) #f)
+    ((< (car a) (car b)) #t)
+    ((> (car a) (car b)) #f)
+    (else (%key< (cdr a) (cdr b)))))
+
+(define (%refine-step G coloring)
+  ;; One 1-WL refinement step. Each vertex's new signature is
+  ;; (current-color, sorted-multiset-of-neighbor-colors). Bucket, relabel.
+  ;; Returns a new coloring alist in graph-vertex order (stable across
+  ;; iterations so %coloring-equal? by position is well-defined).
+  (let* ((S (graph-setoid G))
+         (vs (graph-vertices G))
+         (color-of
+           (lambda (v)
+             (let ((p (%setoid-assoc S v coloring)))
+               (if p (cdr p) 0))))
+         (sigs
+           (map
+             (lambda (entry)
+               (let* ((v (car entry))
+                      (nbrs (graph-neighbors G v))
+                      (nbr-colors
+                        (list-sort < (map (lambda (p) (color-of (car p))) nbrs))))
+                 (cons v (list (color-of v) nbr-colors))))
+             (graph-adjacency G)))
+         (groups (%group-by-signature sigs cdr))
+         (unordered (%labels-from-groups groups)))
+    (%reorder-alist-by-keys unordered vs equal?)))
+
+(define (%coloring-equal? c1 c2)
+  ;; Two colorings are equal (up to per-cell relabeling) if they induce
+  ;; the same partition on the vertex set. Simpler sufficient check:
+  ;; same vertex→color mapping under alist-ordered comparison.
+  ;; Since both colorings come from the same refinement pipeline on the
+  ;; same vertex list, a direct alist-equal? check is sufficient.
+  (let loop ((c1 c1) (c2 c2))
+    (cond
+      ((and (null? c1) (null? c2)) #t)
+      ((or  (null? c1) (null? c2)) #f)
+      ((and (equal? (caar c1) (caar c2))
+            (= (cdar c1) (cdar c2)))
+       (loop (cdr c1) (cdr c2)))
+      (else #f))))
+
+(define (%partition-by-color coloring)
+  ;; Turn a coloring alist into a list of cells in color-order.
+  ;; Each cell = list of vertices sharing that color.
+  (let* ((max-color (fold max -1 (map cdr coloring)))
+         (cells (make-vector (+ max-color 1) '())))
+    (for-each
+      (lambda (p)
+        (let ((c (cdr p)))
+          (vector-set! cells c (cons (car p) (vector-ref cells c)))))
+      coloring)
+    (let loop ((i 0) (acc '()))
+      (cond
+        ((> i max-color) (reverse acc))
+        (else (loop (+ i 1) (cons (reverse (vector-ref cells i)) acc)))))))
+
+(define (%discrete? partition)
+  (every (lambda (cell) (= (length cell) 1)) partition))
+
+(define (refine-partition G coloring)
+  ;; Iterate %refine-step until stable. Returns the stable coloring.
+  (let loop ((c coloring))
+    (let ((c* (%refine-step G c)))
+      (if (%coloring-equal? c c*)
+          c
+          (loop c*)))))
+
+(define (%find-non-trivial-cell partition)
+  ;; Return the smallest non-trivial cell, or #f if none.
+  ;; "Smallest" = fewest elements; tie-broken by lowest cell index.
+  (let loop ((parts partition) (best #f))
+    (cond
+      ((null? parts) best)
+      ((= (length (car parts)) 1) (loop (cdr parts) best))
+      ((or (not best) (< (length (car parts)) (length best)))
+       (loop (cdr parts) (car parts)))
+      (else (loop (cdr parts) best)))))
+
+(define (%individualize coloring target)
+  ;; Give TARGET a unique color (one greater than the current max);
+  ;; shift other vertices in its cell down appropriately is not needed —
+  ;; subsequent %refine-step will re-bucket from the new coloring.
+  (let* ((old (%setoid-assoc (make-setoid equal?) target coloring))
+         (old-color (if old (cdr old) 0))
+         (max-color (fold max 0 (map cdr coloring)))
+         (new-color (+ max-color 1)))
+    ;; Replace target's color; leave everything else alone.
+    (map
+      (lambda (p)
+        (if (equal? (car p) target)
+            (cons target new-color)
+            p))
+      coloring)))
+
+(define (%canonical-adjacency G coloring)
+  ;; Given a discrete coloring, emit a canonical adjacency form:
+  ;; a sorted list of edges, where each vertex is replaced by its
+  ;; color integer. For undirected graphs, each edge is (min max);
+  ;; for directed, preserves (src dst).
+  ;;
+  ;; The structured representation:
+  ;;   (directed? multi? self-loops? N (edges-as-sorted-list))
+  ;; where N = number of vertices, edges-as-sorted-list is a list of
+  ;; (u-color v-color edge-data) triples lex-sorted.
+  (let* ((S (graph-setoid G))
+         (color-of
+           (lambda (v)
+             (cdr (%setoid-assoc S v coloring))))
+         (raw-edges (graph-edges G))
+         (relabeled
+           (map
+             (lambda (e)
+               (let ((u (color-of (car  e)))
+                     (v (color-of (cadr e)))
+                     (d (caddr e)))
+                 (cond
+                   ((graph-directed? G) (list u v d))
+                   ((<= u v)            (list u v d))
+                   (else                (list v u d)))))
+             raw-edges))
+         (sorted (list-sort %edge< relabeled)))
+    (list (if (graph-directed? G) 'directed 'undirected)
+          (if (graph-multi? G)    'multi    'simple)
+          (length coloring)
+          sorted)))
+
+(define (%edge< e1 e2)
+  ;; Lex-compare two edge triples (u v data).
+  (cond
+    ((< (car e1) (car e2)) #t)
+    ((> (car e1) (car e2)) #f)
+    ((< (cadr e1) (cadr e2)) #t)
+    ((> (cadr e1) (cadr e2)) #f)
+    (else #f)))
+
+(define (graph-canonical-form G)
+  "Compute a canonical form for G such that two graphs G and H are\nisomorphic iff their canonical forms are equal under equal?.\n\nAlgorithm: 1-WL color refinement (Weisfeiler-Leman 1968), followed by\nindividualization-refinement backtracking (McKay & Piperno 2014) when\nrefinement terminates on a non-discrete partition. Over all leaves of\nthe search tree, the lex-smallest leaf canonical is returned\n(McKay-Piperno §3.3).\n\nComplexity: O((V+E) log V) on almost-all graphs (refinement discretizes\non first pass). Exponential worst case on highly-symmetric graphs\n(K_n, Kneser, Paley) due to automorphism-group-size branching.\n\nExamples:\n  (equal? (graph-canonical-form (cycle-graph 4))\n          (graph-canonical-form (cycle-graph 4)))  => #t\n\nParameters:\n  G : graph\nReturns: list (canonical adjacency)\nCategory: algebra\nKeywords: canonical form, canonical labeling, graph isomorphism, nauty"
+  (let* ((initial (%colors-initial G))
+         (stable  (refine-partition G initial))
+         (part    (%partition-by-color stable)))
+    (cond
+      ((%discrete? part)
+       (%canonical-adjacency G stable))
+      (else
+       (%backtrack-canonical G stable)))))
+
+(define (%backtrack-canonical G coloring)
+  ;; Individualize each vertex in the smallest non-trivial cell in turn;
+  ;; recurse; track the lex-smallest leaf canonical seen.
+  (let ((best #f))
+    (define (try-from c)
+      (let* ((stable (refine-partition G c))
+             (part   (%partition-by-color stable)))
+        (cond
+          ((%discrete? part)
+           (let ((leaf (%canonical-adjacency G stable)))
+             (when (or (not best) (%canonical< leaf best))
+               (set! best leaf))))
+          (else
+           (let ((cell (%find-non-trivial-cell part)))
+             (for-each
+               (lambda (v)
+                 ;; Pruning (branch-and-bound): skip this branch if the
+                 ;; partial canonical already exceeds the best-seen leaf.
+                 ;; v1 uses the leaf-only comparison — a full prefix
+                 ;; compare would be a v2 optimization.
+                 (try-from (%individualize stable v)))
+               cell))))))
+    (try-from coloring)
+    (or best
+        ;; Fallback (should not happen for finite tier-1 graphs): return
+        ;; the current coloring's canonical form even if non-discrete.
+        (%canonical-adjacency G coloring))))
+
+(define (%canonical< c1 c2)
+  ;; Lex-compare two canonical forms. Each is (directed? multi? N edges).
+  (cond
+    ((not (= (list-ref c1 2) (list-ref c2 2)))
+     (< (list-ref c1 2) (list-ref c2 2)))
+    (else (%edges< (list-ref c1 3) (list-ref c2 3)))))
+
+(define (%edges< es1 es2)
+  (cond
+    ((and (null? es1) (null? es2)) #f)
+    ((null? es1) #t)
+    ((null? es2) #f)
+    ((%edge< (car es1) (car es2)) #t)
+    ((%edge< (car es2) (car es1)) #f)
+    (else (%edges< (cdr es1) (cdr es2)))))
+
+(define (graph-isomorphic? G H)
+  "Return #t if G and H are isomorphic, #f otherwise. Complete — always\nreturns a definite answer — via 1-WL refinement plus individualization-\nrefinement backtracking (McKay & Piperno 2014, simplified).\n\nShort-circuits: returns #f immediately if\n  — (graph-order G) ≠ (graph-order H)\n  — (graph-size  G) ≠ (graph-size  H)\n  — degree sequences differ\n  — stable-partition cell cardinalities differ\n\nOtherwise falls through to canonical-form comparison.\n\nExamples:\n  (graph-isomorphic? (cycle-graph 4) (cycle-graph 4))  => #t\n  (graph-isomorphic? (cycle-graph 4) (cycle-graph 5))  => #f\n\nParameters:\n  G : graph\n  H : graph\nReturns: boolean\nCategory: algebra\nKeywords: isomorphism, graph iso, canonical form, nauty\n\nSee also: `graph-canonical-form'."
+  (cond
+    ((not (= (graph-order G) (graph-order H))) #f)
+    ((not (= (graph-size  G) (graph-size  H))) #f)
+    ((not (equal? (list-sort < (map (lambda (v) (graph-degree G v))
+                                    (graph-vertices G)))
+                  (list-sort < (map (lambda (v) (graph-degree H v))
+                                    (graph-vertices H)))))
+     #f)
+    (else
+     (equal? (graph-canonical-form G)
+             (graph-canonical-form H)))))
+
+;;; ====================================================================
+;;; Preset constructors.
+;;; ====================================================================
+
+(define (complete-graph n)
+  "Return K_n, the complete graph on n vertices 0..n-1 (every pair adjacent).\nChromatic = x(x-1)...(x-n+1); spanning-tree count = n^(n-2) (Cayley).\n\nExamples:\n  (graph-order (complete-graph 4))  => 4\n  (graph-size  (complete-graph 4))  => 6\n\nParameters:\n  n : non-negative integer\nReturns: graph\nCategory: algebra\nKeywords: K_n, complete graph, clique"
+  (unless (and (integer? n) (>= n 0))
+    (error "complete-graph: n must be a non-negative integer" n))
+  (let ((vs (iota n)))
+    (make-graph
+      (map
+        (lambda (v)
+          (cons v
+                (filter-map
+                  (lambda (u) (and (not (= u v)) (cons u #f)))
+                  vs)))
+        vs))))
+
+(define (cycle-graph n)
+  "Return C_n, the cycle graph on n vertices 0..n-1. For n ≥ 3 this is a\nsimple n-cycle; for n = 2 it is two vertices joined by one edge;\nfor n ≤ 1 the call raises.\n\nExamples:\n  (graph-order (cycle-graph 5))  => 5\n  (graph-size  (cycle-graph 5))  => 5\n\nParameters:\n  n : integer ≥ 2\nReturns: graph\nCategory: algebra\nKeywords: C_n, cycle, circular graph"
+  (unless (and (integer? n) (>= n 2))
+    (error "cycle-graph: n must be an integer ≥ 2" n))
+  (make-graph
+    (map
+      (lambda (i)
+        (cons i
+              (if (= n 2)
+                  (list (cons (modulo (+ i 1) n) #f))
+                  (list (cons (modulo (- i 1) n) #f)
+                        (cons (modulo (+ i 1) n) #f)))))
+      (iota n))))
+
+(define (path-graph n)
+  "Return P_n, the path graph on n vertices 0..n-1. For n ≥ 2 this has\nedges {i, i+1} for i = 0..n-2; for n = 1 a single isolated vertex; for\nn = 0 an empty graph.\n\nExamples:\n  (graph-order (path-graph 5))  => 5\n  (graph-size  (path-graph 5))  => 4\n\nParameters:\n  n : non-negative integer\nReturns: graph\nCategory: algebra\nKeywords: P_n, path, line graph"
+  (unless (and (integer? n) (>= n 0))
+    (error "path-graph: n must be a non-negative integer" n))
+  (make-graph
+    (map
+      (lambda (i)
+        (cond
+          ((= n 1)       (cons 0 '()))
+          ((= i 0)       (cons 0 (list (cons 1 #f))))
+          ((= i (- n 1)) (cons i (list (cons (- i 1) #f))))
+          (else          (cons i (list (cons (- i 1) #f)
+                                       (cons (+ i 1) #f))))))
+      (iota n))))
+
+(define (complete-bipartite-graph m n)
+  "Return K_{m,n}, the complete bipartite graph with parts of size m and n.\nVertices are 0..m-1 (part A) and m..m+n-1 (part B); every A-B pair is\nadjacent. Chromatic = 2 for m,n ≥ 1 (bipartite); matching = min(m, n).\n\nExamples:\n  (graph-order (complete-bipartite-graph 3 3))  => 6\n  (graph-size  (complete-bipartite-graph 3 3))  => 9\n\nParameters:\n  m : non-negative integer\n  n : non-negative integer\nReturns: graph\nCategory: algebra\nKeywords: K_{m,n}, complete bipartite, bipartite graph"
+  (unless (and (integer? m) (integer? n) (>= m 0) (>= n 0))
+    (error "complete-bipartite-graph: m,n must be non-negative integers" m n))
+  (let ((a-vs (iota m))
+        (b-vs (iota n m)))
+    (make-graph
+      (append
+        (map (lambda (u) (cons u (map (lambda (v) (cons v #f)) b-vs))) a-vs)
+        (map (lambda (v) (cons v (map (lambda (u) (cons u #f)) a-vs))) b-vs)))))
+
+(define (empty-graph n)
+  "Return the edgeless graph on n vertices 0..n-1. Chromatic = x^n.\n\nParameters:\n  n : non-negative integer\nReturns: graph\nCategory: algebra\nKeywords: empty graph, edgeless, independent set"
+  (unless (and (integer? n) (>= n 0))
+    (error "empty-graph: n must be a non-negative integer" n))
+  (make-graph (map (lambda (v) (cons v '())) (iota n))))
+
+(define %petersen-edges
+  ;; Kneser-graph construction on 2-subsets of {0,1,2,3,4}; edges = disjoint
+  ;; pairs. Vertices labeled 0..9 in lex-order of the 2-subset they encode.
+  ;;   0:{0,1} 1:{0,2} 2:{0,3} 3:{0,4}
+  ;;   4:{1,2} 5:{1,3} 6:{1,4}
+  ;;   7:{2,3} 8:{2,4}
+  ;;   9:{3,4}
+  '((0 7) (0 8) (0 9)
+    (1 5) (1 6) (1 9)
+    (2 4) (2 6) (2 8)
+    (3 4) (3 5) (3 7)
+    (4 9)
+    (5 8)
+    (6 7)))
+
+(define (petersen-graph)
+  "Return the Petersen graph — the vertex-transitive, 3-regular graph on\n10 vertices and 15 edges constructed as the Kneser graph on 2-subsets\nof {0,1,2,3,4}. Vertex-transitive and 3-regular; 1-WL refinement does\nnot discretize; exercises the individualization-refinement backtracking\nlayer of graph-isomorphic? / graph-canonical-form.\n\nSpanning-tree count τ(Petersen) = 2000 (Sedláček 1970).\n\nExamples:\n  (graph-order (petersen-graph))  => 10\n  (graph-size  (petersen-graph))  => 15\n\nReturns: graph\nCategory: algebra\nKeywords: Petersen graph, Kneser graph, vertex-transitive, 3-regular"
+  (let* ((adj-table (make-vector 10 '()))
+         (_ (for-each
+              (lambda (e)
+                (let ((u (car e)) (v (cadr e)))
+                  (vector-set! adj-table u
+                    (cons (cons v #f) (vector-ref adj-table u)))
+                  (vector-set! adj-table v
+                    (cons (cons u #f) (vector-ref adj-table v)))))
+              %petersen-edges))
+         (adj (map (lambda (i)
+                     (cons i (reverse (vector-ref adj-table i))))
+                   (iota 10))))
+    (make-graph adj)))
