@@ -49,11 +49,16 @@
   (test #t (cfg-protocol? test-protocol))
   (test #f (cfg-protocol? '(not a protocol))))
 
-(test-group "cfg-protocol — accessors"
-  (test 0 ((cfg-protocol-index-of test-protocol) '(0 () (1 2))))
-  (test '() ((cfg-protocol-preds-of test-protocol) '(0 () (1 2))))
-  (test '(1 2) ((cfg-protocol-succs-of test-protocol) '(0 () (1 2))))
-  (test diamond-cfg ((cfg-protocol-blocks-of test-protocol) diamond-cfg)))
+(test-group "cfg-protocol — wrapper procs"
+  (test 0       (cfg-index-of test-protocol '(0 () (1 2))))
+  (test '()    (cfg-preds-of test-protocol '(0 () (1 2))))
+  (test '(1 2) (cfg-succs-of test-protocol '(0 () (1 2))))
+  (test diamond-cfg (cfg-blocks-of test-protocol diamond-cfg)))
+
+(test-group "cfg-protocol — raw -fn accessors"
+  ;; Raw closures are available too, for callers that need them.
+  (test 0 ((cfg-protocol-index-of-fn test-protocol) '(0 () (1 2))))
+  (test '(1 2) ((cfg-protocol-succs-of-fn test-protocol) '(0 () (1 2)))))
 
 ;;; --- reverse-postorder ---------------------------------------------------
 
@@ -91,7 +96,8 @@
   ;; With entry seeded #t, every block should reach #t.
   (let* ((L (truth-value-lattice))
          (xfer (lambda (blk in) #t))
-         (result (run-analysis 'forward L xfer diamond-cfg test-protocol #t)))
+         (result (run-analysis 'forward L xfer diamond-cfg test-protocol
+                                (init-state #t))))
     (test #t (analysis-out result 0))
     (test #t (analysis-out result 1))
     (test #t (analysis-out result 2))
@@ -157,7 +163,8 @@
   ;; Propagate #t from entry through a 4-block chain.
   (let* ((L (truth-value-lattice))
          (xfer (lambda (blk in) in))
-         (result (run-analysis 'forward L xfer linear-cfg test-protocol #t)))
+         (result (run-analysis 'forward L xfer linear-cfg test-protocol
+                                (init-state #t))))
     (test #t (analysis-in result 0))
     (test #t (analysis-out result 0))
     (test #t (analysis-in result 3))
@@ -168,7 +175,8 @@
 (test-group "run-analysis — single block"
   (let* ((L (truth-value-lattice))
          (xfer (lambda (blk in) in))
-         (result (run-analysis 'forward L xfer single-block-cfg test-protocol #t)))
+         (result (run-analysis 'forward L xfer single-block-cfg test-protocol
+                                (init-state #t))))
     (test 1 (length result))
     (test #t (analysis-in result 0))
     (test #t (analysis-out result 0))))
@@ -198,10 +206,50 @@
   (let* ((cyclic-cfg '((0 (1) (1)) (1 (0) (0))))
          (L (truth-value-lattice))
          (xfer (lambda (blk in) (or in #t)))
-         (result (run-analysis 'forward L xfer cyclic-cfg test-protocol #t)))
+         (result (run-analysis 'forward L xfer cyclic-cfg test-protocol
+                                (init-state #t))))
     (test 2 (length result))
     (test #t (analysis-out result 0))
     (test #t (analysis-out result 1))))
+
+;;; --- init-state wrapper validation -------------------------------------
+
+(test-group "run-analysis — bare initial state rejected (Q-b)"
+  ;; Raw #t (not wrapped with init-state) now raises.
+  (let* ((L (truth-value-lattice))
+         (xfer (lambda (blk in) in)))
+    (test-error (run-analysis 'forward L xfer linear-cfg test-protocol #t))
+    (test-error (run-analysis 'forward L xfer linear-cfg test-protocol 'not-a-flag))))
+
+(test-group "run-analysis — duplicate init-state rejected"
+  (let* ((L (truth-value-lattice))
+         (xfer (lambda (blk in) in)))
+    (test-error (run-analysis 'forward L xfer linear-cfg test-protocol
+                              (init-state #t) (init-state #f)))))
+
+(test-group "init-state — record"
+  (test #t (init-state? (init-state 'neg)))
+  (test #f (init-state? 'neg))
+  (test #f (init-state? #t))
+  (test 'neg (init-state-value (init-state 'neg)))
+  (test 42  (init-state-value (init-state 42))))
+
+;;; --- Q-a fix: backward initial-state now propagates --------------------
+
+(test-group "run-analysis — backward initial-state propagates (Q-a fix)"
+  ;; With identity transfer and initial-state=#t seeded at the exit,
+  ;; every block must finish at #t — the fix in seeding puts
+  ;; initial-state at `in` rather than `out` for backward seeds.
+  (let* ((L (truth-value-lattice))
+         (xfer (lambda (blk in) in))
+         (result (run-analysis 'backward L xfer diamond-cfg test-protocol
+                                (init-state #t))))
+    (test #t (analysis-in result 3))
+    (test #t (analysis-out result 3))
+    ;; Predecessors of the exit (blocks 1, 2) receive #t via join.
+    (test #t (analysis-out result 1))
+    (test #t (analysis-out result 2))
+    (test #t (analysis-out result 0))))
 
 (test-end)
 (test-exit)

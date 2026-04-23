@@ -247,8 +247,10 @@
     sign-lattice sign? abstract-sign sign-binop
     ;; MFP dataflow solver
     make-cfg-protocol cfg-protocol?
-    cfg-protocol-blocks-of cfg-protocol-index-of
-    cfg-protocol-preds-of cfg-protocol-succs-of
+    cfg-protocol-blocks-of-fn cfg-protocol-index-of-fn
+    cfg-protocol-preds-of-fn cfg-protocol-succs-of-fn
+    cfg-blocks-of cfg-index-of cfg-preds-of cfg-succs-of
+    init-state init-state? init-state-value
     reverse-postorder run-analysis
     analysis-in analysis-out analysis-states)
   (import (wile algebra setoid)
