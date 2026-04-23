@@ -1,0 +1,6 @@
+(define-library (wile algebra dataflow)
+  (description "Monotone framework (MFP) worklist dataflow solver with a CFG-protocol abstraction, lattice-parameterized. Pairs with (wile algebra lattice) for the algebra of states and (wile algebra abstract-domain) for pre-built domains.")
+  (export )
+  (import (scheme base)
+          (wile algebra lattice))
+  (include "dataflow.scm"))
