@@ -622,6 +622,347 @@ Named axioms, theories, theory combinators, recursive normalization, and transfo
 
 ---
 
+## Matrix -- `(wile algebra matrix)`
+
+Semiring-parameterized dense and sparse matrices. Arithmetic follows the coefficient semiring; the same matrix type covers Boolean (reachability), tropical (shortest path), counting (ordinary arithmetic), and user-defined semirings. See `plans/2026-04-21-matrix-path-d-impl.md` for the polymorphism design.
+
+### Constructors
+
+- `(make-semiring-matrix S rows cols)` -- rows x cols matrix over semiring S filled with `(semiring-zero S)`
+- `(make-semiring-matrix S rows cols fill)` -- same with explicit fill value
+- `(semiring-matrix-from-rows S rows-list)` -- construct from a list of equal-length rows; non-empty list required
+- `(semiring-matrix-identity S n)` -- n x n identity matrix (diagonal = `semiring-one`; off-diagonal = `semiring-zero`)
+- `(make-sparse-semiring-matrix S rows cols entries)` -- sparse matrix from an entries iterator
+- `(semiring-matrix->sparse M)` -- convert dense to sparse representation
+- `(sparse->semiring-matrix M)` -- convert sparse to dense representation
+
+### Predicates
+
+- `(semiring-matrix? x)` -- dense matrix predicate
+- `(sparse-semiring-matrix? x)` -- sparse matrix predicate
+- `(matrix? x)` -- polymorphic predicate (dense or sparse)
+- `(matrix-rep-tag M)` -- representation tag symbol (`'dense` or `'sparse`; extensible)
+
+### Accessors
+
+- `(semiring-matrix-ref M r c)` / `(sparse-semiring-matrix-ref M r c)` / `(matrix-ref M r c)` -- element at (r, c)
+- `(semiring-matrix-rows M)` / `(semiring-matrix-cols M)` -- dimensions
+- `(matrix-rows M)` / `(matrix-cols M)` / `(matrix-shape M)` -- polymorphic dimensions
+- `(semiring-matrix-semiring M)` / `(matrix-semiring M)` -- the coefficient semiring
+- `(semiring-matrix->rows M)` -- convert to list-of-lists form
+- `(matrix-for-each-entry M proc)` / `(matrix-fold-entries M seed proc)` -- iterator API
+
+### Arithmetic
+
+- `(semiring-matrix-add A B)` / `(matrix-add A B)` / `(matrix-add! A B)` -- addition; `!` form is in-place
+- `(semiring-matrix-mul A B)` -- multiplication; inner dimensions must match
+- `(semiring-matrix-power M n)` -- repeated multiplication; `M^0 = I`, `M^n = M * M^(n-1)`
+- `(semiring-matrix-closure M)` -- Kleene-star closure (I + M + M^2 + ...) for Kleene-algebra semirings
+- `(semiring-matrix-permanent M)` -- permanent (over a commutative semiring with subtraction not required)
+
+### Destructuring
+
+- `(with-semiring-matrix M (rows cols S) body ...)` -- bind dimensions and semiring to local names
+
+---
+
+## Polynomial -- `(wile algebra polynomial)`
+
+Univariate polynomials over a coefficient ring. Ascending-order coefficient lists, normalized (no trailing zero). Arithmetic threads through the coefficient ring's ops, so the same polynomial type runs over Z, Q, Z/nZ, or any user-defined ring.
+
+### Constructors
+
+- `(make-poly R coeffs)` -- polynomial over ring R from coefficient list in ascending power order; trailing zeros stripped; empty list is the zero polynomial
+- `(poly-zero R)` / `(poly-one R)` -- additive and multiplicative identities
+- `(polynomial-ring R)` -- the ring of polynomials over R (elements are `<polynomial>` records)
+- `(integer-polynomials)` / `(rational-polynomials)` -- convenience presets for `Z[x]` and `Q[x]`
+
+### Predicates and accessors
+
+- `(polynomial? x)` -- test whether x is a polynomial record
+- `(poly-ring p)` -- coefficient ring
+- `(poly-coeffs p)` -- ascending-order coefficient list
+- `(poly-degree p)` -- degree (-1 for the zero polynomial, PARI/GP convention)
+- `(poly-leading-coeff p)` -- leading (highest-power) coefficient; ring-zero for the zero polynomial
+
+### Arithmetic
+
+- `(poly-plus p q)` -- sum; both polynomials must share the ring
+- `(poly-negate p)` -- additive inverse (negate each coefficient)
+- `(poly-minus p q)` -- difference: `poly-plus p (poly-negate q)`
+- `(poly-times p q)` -- product via schoolbook multiplication, O(n*m) coefficient operations
+- `(poly-eval p x)` -- Horner evaluation at `x` using the coefficient ring's plus and times
+
+### Calculus and division
+
+- `(poly-derivative p)` -- formal derivative: shifted, coefficient-scaled
+- `(poly-divmod p d F)` -- polynomial long division returning `(values q r)` such that `p = q*d + r` and `deg(r) < deg(d)`; requires F to be a field (for leading-coefficient inversion)
+- `(poly-gcd p q F)` -- Euclidean GCD; returns a monic polynomial; requires F to be a field
+
+### Destructuring
+
+- `(with-polynomial R (plus times zero one negate) body ...)` -- bind ring-level polynomial operators
+
+---
+
+## Incidence Algebra -- `(wile algebra incidence)`
+
+Locally-finite posets and their incidence algebras over a ring. Supports zeta and Möbius functions, convolution, and Möbius inversion (inclusion-exclusion). Classical setting for combinatorial identities on divisibility, subset, and subword posets.
+
+### Constructors
+
+- `(make-locally-finite-poset leq? interval)` -- construct a locally-finite poset from a `leq?` predicate and an `interval` procedure; `interval x y` returns the list of elements z with x ≤ z ≤ y
+- `(make-locally-finite-poset leq? interval (cons 'elements LIST))` -- with optional enumeration (required by `birkhoff-reconstruction`)
+- `(finite-set->locally-finite-poset leq? elements)` -- build a bounded poset from a predicate and an explicit element list; scans the list to derive intervals
+- `(make-incidence-algebra poset)` -- incidence algebra over the integer ring by default
+- `(make-incidence-algebra poset ring)` -- incidence algebra over an explicit ring
+
+### Predicates and accessors
+
+- `(locally-finite-poset? x)` / `(incidence-algebra? x)` -- predicates
+- `(lf-poset-leq? P)` -- the leq? procedure
+- `(lf-poset-interval P)` -- the interval-enumeration procedure
+- `(lf-poset-elements P)` -- optional element enumeration (or `#f`)
+- `(incidence-algebra-poset IA)` / `(incidence-algebra-ring IA)` -- underlying poset and ring
+
+### Zeta, Möbius, convolution
+
+- `(zeta-function IA)` -- returns a procedure `(zeta x y)` that is `ring-one` when x ≤ y and `ring-zero` otherwise
+- `(mobius-function IA)` -- returns a procedure `(mu x y)` computing the Möbius function μ(x, y), memoized in the incidence algebra
+- `(incidence-convolve IA f g)` -- convolution of two functions `f, g : P x P -> R`
+- `(mobius-inversion IA g x lower-set)` -- apply Möbius inversion to recover f from g = Σ_{y ≤ x} f(y) on a given lower-set
+
+---
+
+## Interval -- `(wile algebra interval)`
+
+Interval arithmetic over numeric domains. Useful as a concrete abstract domain for static analysis or as a conservative envelope for uncertain quantities.
+
+### Constructors
+
+- `(make-interval lo hi)` -- closed interval `[lo, hi]`; raises if `lo > hi`
+- `(interval-point x)` -- singleton interval `[x, x]`
+- `(interval-bottom)` / `(interval-top)` -- the empty interval and the universal interval
+
+### Predicates and accessors
+
+- `(interval? x)` -- predicate
+- `(interval-lo I)` / `(interval-hi I)` -- endpoints
+- `(interval-empty? I)` -- test for the empty interval
+- `(interval-contains? I x)` -- test whether x lies inside I
+- `(interval-subset? I J)` -- interval inclusion
+- `(interval-width I)` -- width (hi - lo)
+
+### Arithmetic
+
+- `(interval-plus I J)` -- sum
+- `(interval-minus I J)` -- difference
+- `(interval-times I J)` -- product (all four corner products; take min and max)
+- `(interval-negate I)` -- additive inverse
+
+---
+
+## Graph (abstract) -- `(wile algebra graph)`
+
+Semiring-parameterized single-source graph analysis. Lazy Bellman-Ford-style traversal on adjacency alists with the semiring determining what "distance" means. Distinct from `(wile algebra combinatorial-graph)`, which handles isomorphism and enumeration.
+
+### Constructors
+
+- `(make-graph-analysis semiring adjacency weight-fn)` -- build a graph-analysis from a semiring, an adjacency alist, and a weight function; `#f` weight-fn means unit weights (each edge contributes `semiring-one`)
+
+### Predicates and accessors
+
+- `(graph-analysis? x)` -- predicate
+
+### Queries
+
+- `(graph-query ga source target)` -- return the semiring-value between source and target; `semiring-zero` when unreachable; lazily computes and caches single-source distances per source
+- `(graph-query-all ga source)` -- return an alist `((node . value) ...)` for all reachable nodes
+
+---
+
+## Combinatorial Graph -- `(wile algebra combinatorial-graph)`
+
+Graphs as combinatorial objects. Isomorphism via 1-WL + individualization-refinement backtracking (McKay-Piperno 2014), deletion-contraction for chromatic/Tutte polynomials and spanning-tree count, Hopcroft-Karp bipartite matching. Distinct from `(wile algebra graph)`.
+
+### Constructors
+
+- `(make-graph adjacency)` -- adjacency given as `((v (w edge-data) ...) ...)`; see `plans/2026-04-22-combinatorial-graph-impl.md` for the record shape
+
+### Presets
+
+- `(complete-graph n)` -- K_n
+- `(cycle-graph n)` -- C_n
+- `(path-graph n)` -- P_n
+- `(complete-bipartite-graph m n)` -- K_{m,n}
+- `(empty-graph n)` -- n isolated vertices
+- `(petersen-graph)` -- Petersen graph (3-regular, 10 vertices, 15 edges)
+
+### Predicates and accessors
+
+- `(graph? x)` / `(finite-graph? x)` / `(finitely-generated-graph? x)` -- tier predicates
+- `(graph-order G)` -- vertex count
+- `(graph-size G)` -- edge count
+- `(graph-vertices G)` / `(graph-edges G)` / `(graph-neighbors G v)` / `(graph-degree G v)` -- structure accessors
+- `(graph-edge? G u v)` / `(graph-has-vertex? G v)` -- membership predicates
+- `(graph-vertex-equiv? G)` / `(graph-setoid G)` -- vertex-equality access
+- `(graph-directed? G)` / `(graph-multi? G)` / `(graph-self-loops? G)` -- shape predicates
+
+### Traversal and connectivity
+
+- `(graph-bfs G source)` -- breadth-first order from source; raises if source is not a vertex
+- `(graph-dfs G source)` -- depth-first preorder
+- `(graph-connected-components G)` -- list of components
+- `(graph-bipartite? G)` / `(graph-bipartition G)` -- bipartite test and 2-coloring
+
+### Isomorphism
+
+- `(graph-isomorphic? G H)` -- true iff G and H are isomorphic
+- `(graph-canonical-form G)` -- canonical representation
+
+### Invariants
+
+- `(graph-spanning-tree-count G)` -- non-negative integer; closed forms for K_n, C_n, trees; deletion-contraction otherwise
+- `(graph-chromatic-polynomial G)` -- coefficients in ascending order; closed forms for K_n, C_n, trees, empty graph
+- `(graph-tutte-polynomial G)` -- list of rows, each a y-coefficient list for one x power
+
+### Matching
+
+- `(graph-maximum-bipartite-matching G)` -- Hopcroft-Karp matching as an alist of pairs; raises if not bipartite
+
+### Validation
+
+- `(validate-graph G)` / `(assert-graph G)` / `(with-graph G ...)` -- standard validation pattern
+
+---
+
+## Unification -- `(wile algebra unification)`
+
+Syntactic and AC-modulo unification. Pattern variables as records, substitutions as alists. AC unification via Stickel's Diophantine reduction for pure-variable cases. The `diophantine-basis` primitive is exposed for Petri-net and integer-programming consumers.
+
+### Pattern variables
+
+- `(make-pattern-var name)` -- pattern-var record; identity is name-based
+- `(pattern-var? x)` -- predicate
+- `(pattern-var-name v)` -- name accessor
+- `(parse-pattern expr)` -- walk expr, replacing each `?name` symbol with a pattern-var; repeated names intern to one record
+
+### Substitutions
+
+- `(make-substitution bindings)` -- substitution from an alist of `(var . term)` bindings
+- `(empty-substitution)` -- the empty substitution
+- `(substitution? x)` / `(substitution-bindings sub)` -- predicate and accessor
+- `(substitution-lookup sub var)` -- returns the bound term, or `#f`
+- `(substitution-compose s1 s2)` -- sequential composition (apply s2, then s1)
+- `(substitution-apply sub proto term)` -- walk term, replacing pattern-vars per sub
+
+### Diophantine basis
+
+- `(diophantine-basis a b)` -- minimal non-negative integer solutions of `a·u = b·v`; returns list of `(u . v)` pairs; finite by Dickson's lemma
+
+### Matching and unification
+
+- `(ac-match pattern subject theory proto)` -- match pattern against subject modulo AC operators in theory; returns list of substitutions (empty = no match)
+- `(ac-unify t1 t2 theory proto)` -- two-sided AC unification; returns a CSU (complete set of unifiers) as a list of substitutions
+
+### Internal helpers (exposed for tests)
+
+- `(flatten-ac term op proto)` -- flatten nested applications of op into a list of operands
+
+---
+
+## Formal Concept Analysis -- `(wile algebra fca)`
+
+Concept lattices via NextClosure (Ganter 1984). Extracts the maximal extent/intent pairs from a binary object-attribute relation. The resulting lattice has a natural algebra-level projection.
+
+### Constructors
+
+- `(make-context objects attributes incidence)` -- context from object list, attribute list, and an incidence predicate `(lambda (obj attr) boolean)`
+- `(context-from-alist entries)` -- convenience: each entry is `(object attr ...)`
+
+### Predicates and accessors
+
+- `(fca-context? x)` -- predicate
+- `(context-objects ctx)` / `(context-attributes ctx)` -- sorted string lists
+
+### Galois derivation
+
+- `(intent ctx object-set)` -- attributes common to every object in the set; empty set yields all attributes (vacuous)
+- `(extent ctx attribute-set)` -- objects possessing every attribute in the set; empty set yields all objects
+
+### Concepts and lattices
+
+- `(concept-lattice ctx)` -- list of `(extent . intent)` concepts via NextClosure
+- `(concept-extent c)` / `(concept-intent c)` -- accessors on a concept pair
+- `(concept-lattice->algebra-lattice ctx concepts)` -- project the concept list to a `<lattice>`
+- `(concept-relationship c1 c2)` -- ordering between two concepts
+
+### Sorted-string primitives
+
+- `(set-add elem sorted)` / `(set-intersect a b)` / `(set-union a b)` / `(set-member? elem sorted)` / `(set-subset? a b)` / `(set-before elem sorted)` / `(sort-strings lst)` -- canonical sorted-string-set operations
+
+---
+
+## Pareto -- `(wile algebra pareto)`
+
+Multi-objective Pareto dominance and frontier computation. Mixed factor types (boolean, numeric) via `factor-leq?` / `factor-less?`. Use it when you have candidates scored on multiple axes and want the non-dominated set.
+
+### Factor comparison
+
+- `(factor-leq? a b)` -- non-strict factor comparison: booleans `#f ≤ #t`, numbers `<=`
+- `(factor-less? a b)` -- strict version
+
+### Dominance and frontier
+
+- `(dominates? factors-x factors-y)` -- test Pareto dominance: X dominates Y iff X is factor-leq to Y on every key and factor-less on at least one
+- `(pareto-frontier candidates factor-names)` -- candidates is `((id alist) ...)`; factor-names is documentation only; returns `((frontier id ...) (dominated (dominator . dominated-ids) ...))`
+
+---
+
+## Abstract Domain -- `(wile algebra abstract-domain)`
+
+Pre-built abstract interpretation domains. Currently hosts the sign domain: a 5-element flat lattice with an abstraction function from integers and a sign arithmetic table for add/sub/mul.
+
+### Sign lattice
+
+- `(sign-lattice)` -- 5-element flat lattice `{flat-bottom, neg, zero, pos, flat-top}` with the three atoms incomparable
+- `(abstract-sign n)` -- abstract a concrete integer to its sign: `'neg`, `'zero`, or `'pos`
+- `(sign? s)` -- test whether s is a valid sign value
+- `(sign-binop op a b)` -- apply sign operator; `op` is `'add`, `'sub`, or `'mul`; `flat-bottom` is strict (any operand bottom yields bottom); `mul` annihilates at zero even with `flat-top`; otherwise `flat-top` propagates
+
+---
+
+## Dataflow -- `(wile algebra dataflow)`
+
+Monotone framework (MFP) worklist dataflow solver with CFG-protocol abstraction. Lattice-parameterized forward/backward fixpoint analysis; the protocol separates the algorithm from the CFG representation.
+
+### CFG protocol
+
+- `(make-cfg-protocol blocks-of index-of preds-of succs-of)` -- build a CFG protocol from four closures
+- `(cfg-protocol? x)` -- predicate
+- `(cfg-blocks-of proto fn)` / `(cfg-index-of proto block)` / `(cfg-preds-of proto block)` / `(cfg-succs-of proto block)` -- wrapper accessors; prefer these over the raw `cfg-protocol-*-fn` accessors
+
+### Initial-state wrapper
+
+- `(init-state value)` -- tagged record for passing an initial lattice value into `run-analysis` (prevents ambiguity with flag symbols)
+- `(init-state? x)` / `(init-state-value is)` -- predicate and accessor
+
+### Block ordering
+
+- `(reverse-postorder blocks protocol)` -- DFS-prepend-on-finish produces RPO directly; only blocks reachable from the first block appear
+
+### Solver
+
+- `(run-analysis direction lattice transfer fn protocol . args)` -- run MFP analysis; `direction` is `'forward` or `'backward`; `transfer` is `(lambda (block in-state) out-state)`; `args` may contain `(init-state x)` and/or `'check-monotone`; returns per-block result alist `((idx in out) ...)`
+
+### Result accessors
+
+- `(analysis-in result block-idx)` -- in-state for block, or `#f` if absent
+- `(analysis-out result block-idx)` -- out-state for block, or `#f` if absent
+- `(analysis-states result)` -- full per-block result alist
+
+---
+
 ## Cross-Reference: Sub-library to Import Path
 
 | Section | Import Path |
@@ -642,6 +983,17 @@ Named axioms, theories, theory combinators, recursive normalization, and transfo
 | Galois Connection | `(wile algebra galois)` |
 | Rewrite | `(wile algebra rewrite)` |
 | Symbolic | `(wile algebra symbolic)` |
+| Matrix | `(wile algebra matrix)` |
+| Polynomial | `(wile algebra polynomial)` |
+| Incidence Algebra | `(wile algebra incidence)` |
+| Interval | `(wile algebra interval)` |
+| Graph (abstract) | `(wile algebra graph)` |
+| Combinatorial Graph | `(wile algebra combinatorial-graph)` |
+| Unification | `(wile algebra unification)` |
+| Formal Concept Analysis | `(wile algebra fca)` |
+| Pareto | `(wile algebra pareto)` |
+| Abstract Domain | `(wile algebra abstract-domain)` |
+| Dataflow | `(wile algebra dataflow)` |
 
 ## Symbols Not Re-exported by Umbrella
 
