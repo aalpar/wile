@@ -729,4 +729,71 @@
     (test-error (graph-tutte-polynomial G))))
 
 (test-end)
+
+(test-begin "combinatorial-graph-phase-7")
+
+(test-group "matching size on complete bipartite graphs"
+  (test 0 (length (graph-maximum-bipartite-matching (complete-bipartite-graph 0 0))))
+  (test 0 (length (graph-maximum-bipartite-matching (complete-bipartite-graph 0 3))))
+  (test 0 (length (graph-maximum-bipartite-matching (complete-bipartite-graph 3 0))))
+  (test 1 (length (graph-maximum-bipartite-matching (complete-bipartite-graph 1 1))))
+  (test 2 (length (graph-maximum-bipartite-matching (complete-bipartite-graph 2 3))))
+  (test 2 (length (graph-maximum-bipartite-matching (complete-bipartite-graph 2 4))))
+  (test 3 (length (graph-maximum-bipartite-matching (complete-bipartite-graph 3 3))))
+  (test 3 (length (graph-maximum-bipartite-matching (complete-bipartite-graph 3 5))))
+  (test 4 (length (graph-maximum-bipartite-matching (complete-bipartite-graph 4 4)))))
+
+(test-group "matching on paths (bipartite)"
+  ;; P_n has matching size ⌊n/2⌋
+  (test 0 (length (graph-maximum-bipartite-matching (path-graph 1))))
+  (test 1 (length (graph-maximum-bipartite-matching (path-graph 2))))
+  (test 1 (length (graph-maximum-bipartite-matching (path-graph 3))))
+  (test 2 (length (graph-maximum-bipartite-matching (path-graph 4))))
+  (test 2 (length (graph-maximum-bipartite-matching (path-graph 5))))
+  (test 3 (length (graph-maximum-bipartite-matching (path-graph 6)))))
+
+(test-group "matching on even cycles"
+  ;; C_{2n} has matching size n
+  (test 2 (length (graph-maximum-bipartite-matching (cycle-graph 4))))
+  (test 3 (length (graph-maximum-bipartite-matching (cycle-graph 6)))))
+
+(test-group "matching raises on non-bipartite"
+  (test-error (graph-maximum-bipartite-matching (cycle-graph 5)))
+  (test-error (graph-maximum-bipartite-matching (cycle-graph 3)))
+  (test-error (graph-maximum-bipartite-matching (complete-graph 3))))
+
+(test-group "matching: no vertex used twice"
+  (let* ((K33 (complete-bipartite-graph 3 3))
+         (M   (graph-maximum-bipartite-matching K33))
+         (as  (map car M))
+         (bs  (map cdr M)))
+    ;; A-side vertices all distinct, B-side vertices all distinct.
+    (test (length as) (length (delete-duplicates as)))
+    (test (length bs) (length (delete-duplicates bs)))))
+
+(test-group "matching on an irregular bipartite graph"
+  ;; A = {a1, a2, a3}; B = {b1, b2, b3}
+  ;; Edges: a1-b1, a1-b2, a2-b2, a3-b3   — max matching size 3.
+  (let ((G (make-graph
+             '((a1 . ((b1) (b2)))
+               (a2 . ((b2)))
+               (a3 . ((b3)))
+               (b1 . ((a1)))
+               (b2 . ((a1) (a2)))
+               (b3 . ((a3)))))))
+    (test 3 (length (graph-maximum-bipartite-matching G)))))
+
+(test-group "matching on a bipartite graph where greedy would fail"
+  ;; König's classic: greedy matching from A-side may leave one side
+  ;; unmatched; Hopcroft-Karp finds the maximum via augmenting paths.
+  ;; A = {a1, a2}; B = {b1, b2}
+  ;; Edges: a1-b1, a1-b2, a2-b1  — max matching = 2 (a1-b2, a2-b1).
+  (let ((G (make-graph
+             '((a1 . ((b1) (b2)))
+               (a2 . ((b1)))
+               (b1 . ((a1) (a2)))
+               (b2 . ((a1)))))))
+    (test 2 (length (graph-maximum-bipartite-matching G)))))
+
+(test-end)
 (test-exit)

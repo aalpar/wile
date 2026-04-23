@@ -1484,6 +1484,149 @@
          (lambda (N adj)
            (%nat-spanning-tree-count N N adj)))))))
 
+;;; ====================================================================
+;;;
+;;; Maximum bipartite matching: Hopcroft-Karp algorithm (O(E·√V)).
+;;;
+;;; For a bipartite graph G = (A ∪ B, E), find a matching M ⊆ E of
+;;; maximum size such that no two edges in M share a vertex.
+;;;
+;;; Algorithm (Hopcroft & Karp 1973):
+;;;   repeat:
+;;;     BFS from unmatched A-vertices, building layers in the
+;;;     alternating-path sense (match/unmatched edges alternate).
+;;;     If no unmatched B-vertex is reached: done.
+;;;     DFS along layered edges to find vertex-disjoint augmenting paths;
+;;;     flip each path's match-edges.
+;;;
+;;; ====================================================================
+
+(define (graph-maximum-bipartite-matching G)
+  "Return a maximum matching of the bipartite graph G as an alist of\nmatched pairs ((u . v) ...). Each u appears at most once; each v\nappears at most once. Raises if G is not bipartite.\n\nAlgorithm: Hopcroft-Karp (1973), O(E·√V).\n\nExamples:\n  (length (graph-maximum-bipartite-matching (complete-bipartite-graph 3 3)))\n    => 3\n  (length (graph-maximum-bipartite-matching (complete-bipartite-graph 2 4)))\n    => 2\n\nParameters:\n  G : graph\nReturns: list of pairs\nCategory: algebra\nKeywords: matching, bipartite, Hopcroft-Karp, assignment"
+  (let ((parts (graph-bipartition G)))      ;; raises if non-bipartite
+    (let* ((A (car  parts))
+           (B (cadr parts))
+           (S (graph-setoid G)))
+      ;; State: two mutable alists holding match pointers.
+      (define matchA '())
+      (define matchB '())
+      (define (in-A? v)
+        (%setoid-member? S v A))
+      (define (match-of side k)
+        (let* ((al (if (eq? side 'A) matchA matchB))
+               (p (%setoid-assoc S k al)))
+          (if p (cdr p) #f)))
+      (define (set-match! side k v)
+        (cond
+          ((eq? side 'A)
+           (set! matchA
+             (cons (cons k v)
+                   (filter
+                     (lambda (p) (not (setoid-equiv? S (car p) k)))
+                     matchA))))
+          (else
+           (set! matchB
+             (cons (cons k v)
+                   (filter
+                     (lambda (p) (not (setoid-equiv? S (car p) k)))
+                     matchB))))))
+      (define (neighbors-in-B u)
+        ;; u is in A; return u's neighbors that are in B.
+        (filter-map
+          (lambda (p)
+            (and (in-A? u)
+                 (not (in-A? (car p)))
+                 (car p)))
+          (graph-neighbors G u)))
+      (define (neighbors-in-A v)
+        (filter-map
+          (lambda (p)
+            (and (not (in-A? v))
+                 (in-A? (car p))
+                 (car p)))
+          (graph-neighbors G v)))
+      ;; BFS: compute dist[u] = layer for u ∈ A. Returns (found? . dist-alist).
+      ;; `found?` = an unmatched B-vertex is reachable via tight alternating path.
+      (define (bfs!)
+        (let ((dist '())
+              (found? #f))
+          (define (dist-of u)
+            (let ((p (%setoid-assoc S u dist))) (if p (cdr p) #f)))
+          (define (set-dist! u d)
+            (set! dist
+              (cons (cons u d)
+                    (filter (lambda (p) (not (setoid-equiv? S (car p) u)))
+                            dist))))
+          (let* ((frontier0 (filter (lambda (u) (not (match-of 'A u))) A)))
+            (for-each (lambda (u) (set-dist! u 0)) frontier0)
+            (let layer-loop ((frontier frontier0))
+              (cond
+                ((null? frontier) #t)
+                (else
+                 (let ((next
+                         (fold
+                           (lambda (u acc)
+                             (let ((d (dist-of u)))
+                               (fold
+                                 (lambda (v acc2)
+                                   (let ((u* (match-of 'B v)))
+                                     (cond
+                                       ((not u*)
+                                        (set! found? #t)
+                                        acc2)
+                                       ((not (dist-of u*))
+                                        (set-dist! u* (+ d 1))
+                                        (cons u* acc2))
+                                       (else acc2))))
+                                 acc
+                                 (neighbors-in-B u))))
+                           '()
+                           frontier)))
+                   (layer-loop (reverse next))))))
+            (values found? dist-of))))
+      ;; DFS from u (in A) along tight alternating edges; return #t if
+      ;; an augmenting path was found (and match updated).
+      (define (dfs! u dist-of)
+        (let try-next ((nbrs (neighbors-in-B u)))
+          (cond
+            ((null? nbrs) #f)
+            (else
+             (let* ((v (car nbrs))
+                    (u* (match-of 'B v)))
+               (cond
+                 ((not u*)
+                  (set-match! 'A u v)
+                  (set-match! 'B v u)
+                  #t)
+                 ((let ((d-u (dist-of u))
+                        (d-u* (dist-of u*)))
+                    (and d-u d-u* (= d-u* (+ d-u 1))))
+                  (cond
+                    ((dfs! u* dist-of)
+                     (set-match! 'A u v)
+                     (set-match! 'B v u)
+                     #t)
+                    (else (try-next (cdr nbrs)))))
+                 (else (try-next (cdr nbrs)))))))))
+      ;; Main loop.
+      (let outer ()
+        (call-with-values bfs!
+          (lambda (found? dist-of)
+            (cond
+              ((not found?)
+               (filter-map
+                 (lambda (u)
+                   (let ((v (match-of 'A u)))
+                     (and v (cons u v))))
+                 A))
+              (else
+               (for-each
+                 (lambda (u)
+                   (when (not (match-of 'A u))
+                     (dfs! u dist-of)))
+                 A)
+               (outer)))))))))
+
 (define (complete-graph n)
   "Return K_n, the complete graph on n vertices 0..n-1 (every pair adjacent).\nChromatic = x(x-1)...(x-n+1); spanning-tree count = n^(n-2) (Cayley).\n\nExamples:\n  (graph-order (complete-graph 4))  => 4\n  (graph-size  (complete-graph 4))  => 6\n\nParameters:\n  n : non-negative integer\nReturns: graph\nCategory: algebra\nKeywords: K_n, complete graph, clique"
   (unless (and (integer? n) (>= n 0))
