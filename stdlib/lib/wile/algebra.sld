@@ -222,7 +222,7 @@
     ;; Combinatorial graphs — core (§5.6)
     make-graph graph?
     graph-vertices graph-edges graph-neighbors graph-degree
-    graph-edge? graph-vertex-equiv? graph-setoid
+    graph-edge? graph-has-vertex? graph-vertex-equiv? graph-setoid
     graph-order graph-size graph-directed? graph-multi? graph-self-loops?
     ;; Combinatorial graphs — tier predicates
     finite-graph? finitely-generated-graph?

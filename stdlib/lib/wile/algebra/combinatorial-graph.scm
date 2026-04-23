@@ -176,6 +176,36 @@
       (error "make-graph: adjacency must be a list" adj))
     (when (and nfn (not (procedure? nfn)))
       (error "make-graph: neighbor-fn must be a procedure" nfn))
+    ;; Tier-1 and tier-2 are mutually exclusive (Q-d).
+    (when (and (pair? adj) (or seed nfn))
+      (error "make-graph: non-empty adjacency conflicts with seed/neighbor-fn"
+             (list 'fix
+               "choose ONE: pass adjacency (tier-1) OR pass (seed . v) + (neighbor-fn . proc) (tier-2)")))
+    ;; symmetrize? collapses multi-edge multiplicity; reject the
+    ;; combination (reviewer Copilot / consistency). A multigraph that
+    ;; needs symmetrization should symmetrize its edges at the adjacency
+    ;; layer before calling make-graph.
+    (when (and symmetrize? multi?)
+      (error "make-graph: (symmetrize? . #t) is incompatible with (multi? . #t)"
+             (list 'fix
+               "symmetrize the adjacency manually before calling make-graph, or drop multi?")))
+    ;; Deeper adjacency shape validation: each entry must be
+    ;; (vertex . ((neighbor . edge-data) ...)). Catches typos at
+    ;; construction time.
+    (for-each
+      (lambda (entry)
+        (unless (pair? entry)
+          (error "make-graph: adjacency entry must be a pair" entry))
+        (unless (list? (cdr entry))
+          (error "make-graph: adjacency entry's cdr must be a list of (neighbor . data) pairs"
+                 entry))
+        (for-each
+          (lambda (p)
+            (unless (pair? p)
+              (error "make-graph: neighbor entry must be a (neighbor . edge-data) pair"
+                     (car entry) p)))
+          (cdr entry)))
+      adj)
     (let* ((vs    (%adj-vertices adj))
            (order (if (pair? adj) (length vs) 0))
            (edges (%adj-edges adj directed? setoid))
@@ -193,13 +223,24 @@
   "Return the list of edges of G as (u v edge-data) triples.\nFor undirected graphs each edge appears once; for directed, the\nnatural directed triples.\n\nExamples:\n  (length (graph-edges (complete-graph 3)))  => 3\n\nParameters:\n  G : graph\nReturns: list\nCategory: algebra\nKeywords: edges, edge list\n\nSee also: `graph-vertices', `graph-size'."
   (%adj-edges (graph-adjacency G) (graph-directed? G) (graph-setoid G)))
 
+(define (graph-has-vertex? G v)
+  "Return #t if V is a vertex of G (under G's setoid).\n\nParameters:\n  G : graph\n  v : vertex\nReturns: boolean\nCategory: algebra\nKeywords: vertex, membership, graph\n\nSee also: `graph-neighbors', `graph-vertex-equiv?'."
+  (and (%setoid-assoc (graph-setoid G) v (graph-adjacency G)) #t))
+
 (define (graph-neighbors G v)
-  "Return the neighbor alist for vertex V in G as ((neighbor . edge-data) ...).\nIf V is not a vertex of G, returns the empty list.\n\nParameters:\n  G : graph\n  v : vertex\nReturns: list\nCategory: algebra\nKeywords: neighbors, adjacency\n\nSee also: `graph-degree', `graph-edge?'."
+  "Return the neighbor alist for vertex V in G as ((neighbor . edge-data) ...).\nRaises if V is not a vertex of G (use `graph-has-vertex?' to test).\n\nParameters:\n  G : graph\n  v : vertex\nReturns: list\nCategory: algebra\nKeywords: neighbors, adjacency\n\nSee also: `graph-degree', `graph-edge?', `graph-has-vertex?'."
   (let ((entry (%setoid-assoc (graph-setoid G) v (graph-adjacency G))))
-    (if entry (cdr entry) '())))
+    (unless entry
+      (error "graph-neighbors: vertex is not a member of G"
+             (list 'fix "use graph-has-vertex? to test membership first")
+             v))
+    (cdr entry)))
 
 (define (graph-degree G v)
-  "Return the degree of V in G.\nFor undirected graphs, a loop at V contributes 2 to the degree (both\nendpoints incident); a non-loop contributes 1.\nFor directed graphs, this returns the out-degree. In-degree and\ntotal-degree are not exported in v1.\n\nExamples:\n  (graph-degree (cycle-graph 4) 0)  => 2\n\nParameters:\n  G : graph\n  v : vertex\nReturns: non-negative integer\nCategory: algebra\nKeywords: degree, valence, loop"
+  "Return the degree of V in G.\nFor undirected graphs, a loop at V contributes 2 to the degree (both\nendpoints incident); a non-loop contributes 1.\nFor directed graphs, this returns the out-degree. In-degree and\ntotal-degree are not exported in v1.\n\nRaises if V is not a vertex of G.\n\nExamples:\n  (graph-degree (cycle-graph 4) 0)  => 2\n\nParameters:\n  G : graph\n  v : vertex\nReturns: non-negative integer\nCategory: algebra\nKeywords: degree, valence, loop"
+  (unless (graph-has-vertex? G v)
+    (error "graph-degree: vertex is not a member of G"
+           (list 'fix "use graph-has-vertex? to test membership first") v))
   (let* ((S    (graph-setoid G))
          (nbrs (graph-neighbors G v)))
     (if (graph-directed? G)
@@ -224,11 +265,9 @@
 ;;; -- Tier predicates --
 
 (define (finite-graph? G)
-  "Return #t if G has enumerated vertices AND enumerated edges (tier-1).\nA graph constructed from an explicit adjacency alist is tier-1 by default.\n\nParameters:\n  G : graph\nReturns: boolean\nCategory: algebra\nKeywords: finite, tier-1, enumerated\n\nSee also: `finitely-generated-graph?', `enumerate-finite-graph'."
-  (and (pair? (graph-adjacency G))
-       (integer? (graph-order G))
-       (integer? (graph-size G))
-       #t))
+  "Return #t if G has an enumerated adjacency (tier-1).\n\nTier-1 means the adjacency alist is populated. At user-level\nconstruction, tier-1 and tier-2 are mutually exclusive (Q-d). Internally\n(`enumerate-finite-graph') may produce a graph that is both tier-1 and\ntier-2 — both predicates return #t in that case, reflecting that the\nadjacency and the generator are jointly available.\n\nAn empty adjacency '() counts as tier-1 only when no seed/neighbor-fn\nare present (otherwise it is a tier-2 stub awaiting enumeration).\n\nParameters:\n  G : graph\nReturns: boolean\nCategory: algebra\nKeywords: finite, tier-1, enumerated\n\nSee also: `finitely-generated-graph?', `enumerate-finite-graph'."
+  (or (pair? (graph-adjacency G))
+      (not (finitely-generated-graph? G))))
 
 (define (finitely-generated-graph? G)
   "Return #t if G has a seed vertex and neighbor function (tier-2).\n\nParameters:\n  G : graph\nReturns: boolean\nCategory: algebra\nKeywords: finitely generated, tier-2, BFS\n\nSee also: `finite-graph?', `enumerate-finite-graph'."
@@ -237,7 +276,7 @@
 ;;; -- BFS closure (tier-2 → tier-1) --
 
 (define (enumerate-finite-graph G . opts)
-  "Promote a finitely-generated graph to a finite graph by enumerating its\nvertices via BFS closure from the seed under the neighbor-fn.\nIdempotent: if G is already tier-1 (has an enumerated adjacency), G is\nreturned unchanged.\n\nOptional trailing alist entries:\n  (max-size . N) — abort with an error if closure exceeds N vertices\n\nParameters:\n  G : graph\n  opts : alist\nReturns: graph\nCategory: algebra\nKeywords: enumerate, BFS closure, tier promotion\n\nSee also: `finite-graph?', `finitely-generated-graph?'."
+  "Promote a finitely-generated graph to a finite graph by enumerating its\nvertices via BFS closure from the seed under the neighbor-fn.\nIdempotent: if G is already tier-1 (has an enumerated adjacency), G is\nreturned unchanged.\n\nThe enumerated result preserves G's directed?, multi?, self-loops?,\nsetoid AND the original seed/neighbor-fn (so the result stays a tier-2\ngraph with a precomputed adjacency — the adjacency and the generator\nare internally coherent, bypassing the Q-d rejection that applies to\nuser-constructed tier-1/tier-2 coexistence).\n\nOptional trailing alist entries:\n  (max-size . N) — abort with an error if closure exceeds N vertices\n\nParameters:\n  G : graph\n  opts : alist\nReturns: graph\nCategory: algebra\nKeywords: enumerate, BFS closure, tier promotion\n\nSee also: `finite-graph?', `finitely-generated-graph?'."
   (cond
     ((finite-graph? G) G)
     ((finitely-generated-graph? G)
@@ -252,11 +291,26 @@
                   (adj      '()))
          (cond
            ((null? frontier)
-            (make-graph (reverse adj)
-                        (cons 'directed?   (graph-directed?   G))
-                        (cons 'multi?      (graph-multi?      G))
-                        (cons 'self-loops? (graph-self-loops? G))
-                        (cons 'setoid      S)))
+            ;; Construct directly via %make-graph so the result can
+            ;; carry both the enumerated adjacency AND the source
+            ;; seed/neighbor-fn. The user-facing make-graph rejects
+            ;; this combination (Q-d); internally we know the adj
+            ;; and generator are coherent because the adj was just
+            ;; enumerated from the generator.
+            (let* ((final-adj (reverse adj))
+                   (vs        (%adj-vertices final-adj))
+                   (n         (length vs))
+                   (edges     (%adj-edges final-adj (graph-directed? G) S))
+                   (e-count   (length edges)))
+              (%make-graph final-adj
+                           (graph-directed?   G)
+                           (graph-multi?      G)
+                           (graph-self-loops? G)
+                           S
+                           n
+                           e-count
+                           seed
+                           nfn)))
            (else
             (let* ((v     (car frontier))
                    (rest  (cdr frontier))
@@ -276,12 +330,13 @@
                     (cons (cons v nbrs) adj))))))))
     (else
      (error "enumerate-finite-graph: graph has neither adjacency nor seed+neighbor-fn"
+            (list 'fix "pass (seed . v) and (neighbor-fn . proc) to make-graph, or supply an adjacency")
             G))))
 
 ;;; -- Validation --
 
-(define (validate-graph G . maybe-samples)
-  "Check structural invariants on G. Returns #t if all invariants hold,\nor a list of (violation-type arg ...) entries (group.scm convention).\n\nInvariants checked:\n  — vertex set equals keys of adjacency alist\n  — undirected adjacency is symmetric (unless symmetrize? was used)\n  — self-loops absent when (graph-self-loops? G) is #f\n  — parallel edges absent when (graph-multi? G) is #f\n  — vertices are distinguishable under the setoid\n\nOptional SAMPLES argument is accepted for parity with validate-group /\nvalidate-lattice; ignored in v1.\n\nParameters:\n  G : graph\n  maybe-samples : list (optional)\nReturns: #t or list\nCategory: algebra\nKeywords: validate, invariant check, structural\n\nSee also: `assert-graph', `make-graph'."
+(define (validate-graph G samples)
+  "Check structural invariants on G. Returns #t if all invariants hold,\nor a list of (violation-type arg ...) entries (group.scm convention).\n\nInvariants checked:\n  — vertex set equals keys of adjacency alist\n  — undirected adjacency is symmetric (unless symmetrize? was used)\n  — self-loops absent when (graph-self-loops? G) is #f\n  — parallel edges absent when (graph-multi? G) is #f\n  — vertices are distinguishable under the setoid\n\nSAMPLES is accepted for fixed-arity parity with validate-group /\nvalidate-lattice; ignored in v1. Pass '() for the default case.\n\nParameters:\n  G : graph\n  samples : list\nReturns: #t or list\nCategory: algebra\nKeywords: validate, invariant check, structural\n\nSee also: `assert-graph', `make-graph'."
   (let ((violations '())
         (S          (graph-setoid G))
         (adj        (graph-adjacency G))
@@ -346,9 +401,9 @@
         #t
         (reverse violations))))
 
-(define (assert-graph G . maybe-samples)
-  "Raise an error if G fails any structural invariant; return unspecified on\nsuccess. Thin raising variant of `validate-graph'.\n\nExamples:\n  (assert-graph (complete-graph 3))  ; no error\n\nParameters:\n  G : graph\n  maybe-samples : list (optional)\nReturns: unspecified\nCategory: algebra\nKeywords: assert, raise, validate\n\nSee also: `validate-graph'."
-  (let ((result (apply validate-graph G maybe-samples)))
+(define (assert-graph G samples)
+  "Raise an error if G fails any structural invariant; return unspecified on\nsuccess. Thin raising variant of `validate-graph'.\n\nExamples:\n  (assert-graph (complete-graph 3) '())  ; no error\n\nParameters:\n  G : graph\n  samples : list\nReturns: unspecified\nCategory: algebra\nKeywords: assert, raise, validate\n\nSee also: `validate-graph'."
+  (let ((result (validate-graph G samples)))
     (unless (eq? result #t)
       (error "assert-graph: graph invariant violations" result))))
 
@@ -367,7 +422,10 @@
 ;;; -- Traversal --
 
 (define (graph-bfs G source)
-  "Breadth-first traversal of G starting from SOURCE. Returns the list of\nvisited vertices in BFS order. Vertices unreachable from SOURCE are\nomitted.\n\nExamples:\n  (graph-bfs (cycle-graph 4) 0)  => (0 1 3 2)\n\nParameters:\n  G : graph\n  source : vertex\nReturns: list\nCategory: algebra\nKeywords: BFS, breadth-first, traversal\n\nSee also: `graph-dfs', `graph-connected-components'."
+  "Breadth-first traversal of G starting from SOURCE. Returns the list of\nvisited vertices in BFS order. Vertices unreachable from SOURCE are\nomitted.\n\nRaises if SOURCE is not a vertex of G.\n\nExamples:\n  (graph-bfs (cycle-graph 4) 0)  => (0 1 3 2)\n\nParameters:\n  G : graph\n  source : vertex\nReturns: list\nCategory: algebra\nKeywords: BFS, breadth-first, traversal\n\nSee also: `graph-dfs', `graph-connected-components'."
+  (unless (graph-has-vertex? G source)
+    (error "graph-bfs: source is not a vertex of G"
+           (list 'fix "use graph-has-vertex? to test membership first") source))
   (let ((S (graph-setoid G)))
     (let loop ((frontier (list source))
                (visited  (list source))
@@ -387,7 +445,10 @@
                  (append (reverse new-nbrs*) order))))))))
 
 (define (graph-dfs G source)
-  "Depth-first traversal of G starting from SOURCE. Returns the list of\nvisited vertices in DFS preorder. Vertices unreachable from SOURCE are\nomitted.\n\nParameters:\n  G : graph\n  source : vertex\nReturns: list\nCategory: algebra\nKeywords: DFS, depth-first, traversal\n\nSee also: `graph-bfs', `graph-connected-components'."
+  "Depth-first traversal of G starting from SOURCE. Returns the list of\nvisited vertices in DFS preorder. Vertices unreachable from SOURCE are\nomitted.\n\nRaises if SOURCE is not a vertex of G.\n\nParameters:\n  G : graph\n  source : vertex\nReturns: list\nCategory: algebra\nKeywords: DFS, depth-first, traversal\n\nSee also: `graph-bfs', `graph-connected-components'."
+  (unless (graph-has-vertex? G source)
+    (error "graph-dfs: source is not a vertex of G"
+           (list 'fix "use graph-has-vertex? to test membership first") source))
   (let ((S (graph-setoid G))
         (order '())
         (visited '()))
@@ -527,7 +588,11 @@
               (let ((c (color-of v)))
                 (cond
                   ((eqv? c 0) (set! part-a (cons v part-a)))
-                  ((eqv? c 1) (set! part-b (cons v part-b))))))
+                  ((eqv? c 1) (set! part-b (cons v part-b)))
+                  (else
+                   (error "%try-bipartition: vertex received no color"
+                          (list 'fix "report as a bug — BFS should color every vertex per-component")
+                          v)))))
             (graph-vertices G))
           (list (reverse part-a) (reverse part-b))))))
 
@@ -611,7 +676,7 @@
       ((null? src)
        ;; buckets = ((sig xs-in-reverse) ...). Sort by sig; un-reverse.
        (map (lambda (b) (reverse (cdr b)))
-            (list-sort (lambda (a b) (%sig< (car a) (car b)))
+            (%list-sort (lambda (a b) (%sig< (car a) (car b)))
                        buckets)))
       (else
        (let* ((x   (car src))
@@ -635,7 +700,7 @@
              (append (map (lambda (p) (cons (car p) color)) (car groups))
                      acc))))))
 
-(define (list-sort cmp lst)
+(define (%list-sort cmp lst)
   ;; Stable insertion sort: small n, simple, deterministic.
   (let loop ((src lst) (acc '()))
     (cond
@@ -706,7 +771,7 @@
                (let* ((v (car entry))
                       (nbrs (graph-neighbors G v))
                       (nbr-colors
-                        (list-sort < (map (lambda (p) (color-of (car p))) nbrs))))
+                        (%list-sort < (map (lambda (p) (color-of (car p))) nbrs))))
                  (cons v (list (color-of v) nbr-colors))))
              (graph-adjacency G)))
          (groups (%group-by-signature sigs cdr))
@@ -765,19 +830,19 @@
        (loop (cdr parts) (car parts)))
       (else (loop (cdr parts) best)))))
 
-(define (%individualize coloring target)
-  ;; Give TARGET a unique color (one greater than the current max);
-  ;; shift other vertices in its cell down appropriately is not needed —
-  ;; subsequent %refine-step will re-bucket from the new coloring.
-  (let* ((old (%setoid-assoc (make-setoid equal?) target coloring))
-         (old-color (if old (cdr old) 0))
+(define (%individualize G coloring target)
+  ;; Give TARGET a unique color (one greater than the current max); the
+  ;; subsequent %refine-step re-buckets from the new coloring. Setoid-
+  ;; aware: uses the graph's vertex setoid to match TARGET in the
+  ;; coloring alist, so graphs with non-equal? setoids (e.g. numeric-
+  ;; setoid, string-ci-setoid) individualize the intended vertex.
+  (let* ((S         (graph-setoid G))
          (max-color (fold max 0 (map cdr coloring)))
          (new-color (+ max-color 1)))
-    ;; Replace target's color; leave everything else alone.
     (map
       (lambda (p)
-        (if (equal? (car p) target)
-            (cons target new-color)
+        (if (setoid-equiv? S (car p) target)
+            (cons (car p) new-color)
             p))
       coloring)))
 
@@ -787,27 +852,33 @@
   ;; color integer. For undirected graphs, each edge is (min max);
   ;; for directed, preserves (src dst).
   ;;
+  ;; Unlabeled iso (Q-a resolved): edge-data does NOT participate in
+  ;; the canonical form. Two graphs with identical topology but
+  ;; different edge-data payloads produce equal canonical forms.
+  ;;
   ;; The structured representation:
-  ;;   (directed? multi? self-loops? N (edges-as-sorted-list))
-  ;; where N = number of vertices, edges-as-sorted-list is a list of
-  ;; (u-color v-color edge-data) triples lex-sorted.
+  ;;   (directed? multi? N (edges-as-sorted-list))
+  ;; where N = number of vertices; each edge is a (u-color v-color)
+  ;; pair lex-sorted.
   (let* ((S (graph-setoid G))
          (color-of
            (lambda (v)
-             (cdr (%setoid-assoc S v coloring))))
+             (let ((p (%setoid-assoc S v coloring)))
+               (unless p
+                 (error "%canonical-adjacency: vertex missing from coloring" v))
+               (cdr p))))
          (raw-edges (graph-edges G))
          (relabeled
            (map
              (lambda (e)
                (let ((u (color-of (car  e)))
-                     (v (color-of (cadr e)))
-                     (d (caddr e)))
+                     (v (color-of (cadr e))))
                  (cond
-                   ((graph-directed? G) (list u v d))
-                   ((<= u v)            (list u v d))
-                   (else                (list v u d)))))
+                   ((graph-directed? G) (list u v))
+                   ((<= u v)            (list u v))
+                   (else                (list v u)))))
              raw-edges))
-         (sorted (list-sort %edge< relabeled)))
+         (sorted (%list-sort %edge< relabeled)))
     (list (if (graph-directed? G) 'directed 'undirected)
           (if (graph-multi? G)    'multi    'simple)
           (length coloring)
@@ -853,13 +924,13 @@
                  ;; partial canonical already exceeds the best-seen leaf.
                  ;; v1 uses the leaf-only comparison — a full prefix
                  ;; compare would be a v2 optimization.
-                 (try-from (%individualize stable v)))
+                 (try-from (%individualize G stable v)))
                cell))))))
     (try-from coloring)
-    (or best
-        ;; Fallback (should not happen for finite tier-1 graphs): return
-        ;; the current coloring's canonical form even if non-discrete.
-        (%canonical-adjacency G coloring))))
+    (unless best
+      (error "graph-canonical-form: individualization-refinement failed to discretize"
+             (list 'fix "report as a bug — all finite tier-1 graphs should discretize under individualization-refinement")))
+    best))
 
 (define (%canonical< c1 c2)
   ;; Lex-compare two canonical forms. Each is (directed? multi? N edges).
@@ -878,13 +949,13 @@
     (else (%edges< (cdr es1) (cdr es2)))))
 
 (define (graph-isomorphic? G H)
-  "Return #t if G and H are isomorphic, #f otherwise. Complete — always\nreturns a definite answer — via 1-WL refinement plus individualization-\nrefinement backtracking (McKay & Piperno 2014, simplified).\n\nShort-circuits: returns #f immediately if\n  — (graph-order G) ≠ (graph-order H)\n  — (graph-size  G) ≠ (graph-size  H)\n  — degree sequences differ\n  — stable-partition cell cardinalities differ\n\nOtherwise falls through to canonical-form comparison.\n\nExamples:\n  (graph-isomorphic? (cycle-graph 4) (cycle-graph 4))  => #t\n  (graph-isomorphic? (cycle-graph 4) (cycle-graph 5))  => #f\n\nParameters:\n  G : graph\n  H : graph\nReturns: boolean\nCategory: algebra\nKeywords: isomorphism, graph iso, canonical form, nauty\n\nSee also: `graph-canonical-form'."
+  "Return #t if G and H are isomorphic, #f otherwise. Complete — always\nreturns a definite answer — via 1-WL refinement plus individualization-\nrefinement backtracking (McKay & Piperno 2014, simplified).\n\nShort-circuits: returns #f immediately if\n  — (graph-order G) ≠ (graph-order H)\n  — (graph-size  G) ≠ (graph-size  H)\n  — degree sequences differ\n\nOtherwise falls through to canonical-form comparison.\n\nIsomorphism is UNLABELED: edge-data payloads do not participate. Two\ngraphs with identical topology but different edge-data are considered\nisomorphic (see Q-a, plan `2026-04-22-combinatorial-graph-impl.md`).\n\nExamples:\n  (graph-isomorphic? (cycle-graph 4) (cycle-graph 4))  => #t\n  (graph-isomorphic? (cycle-graph 4) (cycle-graph 5))  => #f\n\nParameters:\n  G : graph\n  H : graph\nReturns: boolean\nCategory: algebra\nKeywords: isomorphism, graph iso, canonical form, nauty\n\nSee also: `graph-canonical-form'."
   (cond
     ((not (= (graph-order G) (graph-order H))) #f)
     ((not (= (graph-size  G) (graph-size  H))) #f)
-    ((not (equal? (list-sort < (map (lambda (v) (graph-degree G v))
+    ((not (equal? (%list-sort < (map (lambda (v) (graph-degree G v))
                                     (graph-vertices G)))
-                  (list-sort < (map (lambda (v) (graph-degree H v))
+                  (%list-sort < (map (lambda (v) (graph-degree H v))
                                     (graph-vertices H)))))
      #f)
     (else
@@ -1046,20 +1117,12 @@
       ((null? (vector-ref adj-vec i)) (loop (+ i 1) acc))
       (else (loop (+ i 1) (+ acc 1))))))
 
-(define (%nat-isolated-count n adj-vec)
-  ;; Count vertices with empty neighbor list AND that were never merged.
-  ;; In v1 we cannot distinguish "originally isolated" from "contracted
-  ;; away" — this is a conservative approximation used only as a
-  ;; short-circuit (spanning-tree count = 0 when the non-isolated
-  ;; vertices form more than one component).
-  (let loop ((i 0) (acc 0))
-    (cond
-      ((= i n) acc)
-      ((null? (vector-ref adj-vec i)) (loop (+ i 1) (+ acc 1)))
-      (else (loop (+ i 1) acc)))))
-
 (define (%nat-first-nonloop-edge n adj-vec)
   ;; Return a (u v) edge with u < v and u ≠ v, or #f if none.
+  ;; Scans adjacency slots in order; for each, finds the first neighbor
+  ;; strictly greater than the slot index (so the edge is reported once
+  ;; per pair, from its smaller-indexed endpoint, and self-loops are
+  ;; skipped).
   (let loop ((i 0))
     (cond
       ((= i n) #f)
@@ -1067,7 +1130,7 @@
        (let scan ((nbrs (vector-ref adj-vec i)))
          (cond
            ((null? nbrs) (loop (+ i 1)))
-           ((and (> (car nbrs) i)) (list i (car nbrs)))
+           ((> (car nbrs) i) (list i (car nbrs)))
            (else (scan (cdr nbrs)))))))))
 
 (define (%nat-connected? n adj-vec)
@@ -1288,7 +1351,10 @@
       (else (loop (+ i 1))))))
 
 (define (graph-chromatic-polynomial G)
-  "Return the chromatic polynomial χ(G, x) of G as a coefficient list\n(a_0 a_1 ... a_V) meaning χ(G, x) = a_0 + a_1·x + ... + a_V·x^V\n(Read 1968).\n\nAlgorithm: closed-form fast paths for K_n (x(x-1)...(x-n+1)), C_n\n((x-1)^n + (-1)^n (x-1)), trees (x(x-1)^(n-1)), empty graph (x^n).\nOtherwise deletion-contraction χ(G) = χ(G−e) − χ(G/e) per Read 1968 —\nsize-capped at |V|+|E| ≤ 20 for the general fallback.\n\nExamples:\n  (graph-chromatic-polynomial (complete-graph 3))  => (0 2 -3 1)\n  (graph-chromatic-polynomial (cycle-graph 4))     => (0 -3 6 -4 1)\n  (graph-chromatic-polynomial (empty-graph 3))     => (0 0 0 1)\n\nParameters:\n  G : graph\nReturns: list of integers (polynomial coefficients, ascending degree)\nCategory: algebra\nKeywords: chromatic polynomial, deletion-contraction, Read, coloring"
+  "Return the chromatic polynomial χ(G, x) of G as a coefficient list\n(a_0 a_1 ... a_V) meaning χ(G, x) = a_0 + a_1·x + ... + a_V·x^V\n(Read 1968).\n\nAlgorithm: closed-form fast paths for K_n (x(x-1)...(x-n+1)), C_n\n((x-1)^n + (-1)^n (x-1)), trees (x(x-1)^(n-1)), empty graph (x^n).\nOtherwise deletion-contraction χ(G) = χ(G−e) − χ(G/e) per Read 1968 —\nsize-capped at |V|+|E| ≤ 20 for the general fallback.\n\nDirected graphs are not supported in v1; raises.\n\nExamples:\n  (graph-chromatic-polynomial (complete-graph 3))  => (0 2 -3 1)\n  (graph-chromatic-polynomial (cycle-graph 4))     => (0 -3 6 -4 1)\n  (graph-chromatic-polynomial (empty-graph 3))     => (0 0 0 1)\n\nParameters:\n  G : graph\nReturns: list of integers (polynomial coefficients, ascending degree)\nCategory: algebra\nKeywords: chromatic polynomial, deletion-contraction, Read, coloring"
+  (when (graph-directed? G)
+    (error "graph-chromatic-polynomial: directed graphs not supported in v1"
+           (list 'fix "chromatic polynomial is defined on undirected graphs; model as undirected")))
   (let ((n (graph-order G))
         (m (graph-size G)))
     (cond
@@ -1304,8 +1370,8 @@
       (else
        (when (> (+ n m) %dc-order-size-cap)
          (error "graph-chromatic-polynomial: general-case |V|+|E| exceeds cap"
-                (list 'graph-chromatic-polynomial-too-large
-                      (+ n m) %dc-order-size-cap)))
+                'order+size (+ n m) 'cap %dc-order-size-cap
+                (list 'fix "deletion-contraction is O(1.618^(V+E)); reduce input or pre-decompose")))
        (call-with-values
          (lambda () (%relabel-to-naturals G))
          (lambda (N adj)
@@ -1442,7 +1508,10 @@
                  (%nat-tutte n (%nat-contract-edge adj-vec u v))))))))))))
 
 (define (graph-tutte-polynomial G)
-  "Return the Tutte polynomial T(G; x, y) of G as a list of rows, where\nrow i is a list of y-coefficients for the x^i term (Tutte 1954).\n\nExample: T(K_3) = x^2 + x + y, represented as ((0 1) (1) (1)).\n\nAlgorithm: deletion-contraction with bridge/loop detection.\n  — loop e:       T(G) = y · T(G − e)\n  — bridge e:     T(G) = x · T(G / e)\n  — ordinary e:   T(G) = T(G − e) + T(G / e)\n\nSize-capped at |V|+|E| ≤ 20 for the general case.\n\nConsistency with chromatic polynomial:\n  χ(G, x) = (-1)^(V − c(G)) · x^c(G) · T(G; 1-x, 0)\n\nExamples:\n  (graph-tutte-polynomial (cycle-graph 3))  => ((0 1) (1) (1))\n\nParameters:\n  G : graph\nReturns: list of lists\nCategory: algebra\nKeywords: Tutte polynomial, bridge, loop, deletion-contraction"
+  "Return the Tutte polynomial T(G; x, y) of G as a list of rows, where\nrow i is a list of y-coefficients for the x^i term (Tutte 1954).\n\nExample: T(K_3) = x^2 + x + y, represented as ((0 1) (1) (1)).\n\nAlgorithm: deletion-contraction with bridge/loop detection.\n  — loop e:       T(G) = y · T(G − e)\n  — bridge e:     T(G) = x · T(G / e)\n  — ordinary e:   T(G) = T(G − e) + T(G / e)\n\nSize-capped at |V|+|E| ≤ 20 for the general case. Directed graphs are\nnot supported in v1; raises.\n\nConsistency with chromatic polynomial:\n  χ(G, x) = (-1)^(V − c(G)) · x^c(G) · T(G; 1-x, 0)\n\nExamples:\n  (graph-tutte-polynomial (cycle-graph 3))  => ((0 1) (1) (1))\n\nParameters:\n  G : graph\nReturns: list of lists\nCategory: algebra\nKeywords: Tutte polynomial, bridge, loop, deletion-contraction"
+  (when (graph-directed? G)
+    (error "graph-tutte-polynomial: directed graphs not supported in v1"
+           (list 'fix "Tutte polynomial is defined on undirected graphs; model as undirected")))
   (let ((n (graph-order G))
         (m (graph-size G)))
     (cond
@@ -1450,15 +1519,18 @@
       (else
        (when (> (+ n m) %dc-order-size-cap)
          (error "graph-tutte-polynomial: general-case |V|+|E| exceeds cap"
-                (list 'graph-tutte-polynomial-too-large
-                      (+ n m) %dc-order-size-cap)))
+                'order+size (+ n m) 'cap %dc-order-size-cap
+                (list 'fix "deletion-contraction is O(1.618^(V+E)); reduce input or pre-decompose")))
        (call-with-values
          (lambda () (%relabel-to-naturals G))
          (lambda (N adj)
            (%nat-tutte N adj)))))))
 
 (define (graph-spanning-tree-count G)
-  "Return the number of spanning trees of G (Kirchhoff 1847) as a\nnon-negative integer. Zero if G is disconnected (including the empty\ngraph on n ≥ 2 vertices).\n\nAlgorithm: closed-form fast paths for K_n (Cayley: n^(n-2)), C_n (n),\ntrees (1), empty (0 for n ≥ 2; 1 for n = 1). Otherwise deletion-\ncontraction recursion per Tutte 1954 — size-capped at |E| ≤ 20 for\nthe general fallback. The Kirchhoff-matrix-tree theorem (via Laplacian\nminor determinant) is a v2 opt-in that would lift the cap to\npolynomial in |V|.\n\nExamples:\n  (graph-spanning-tree-count (complete-graph 4))  => 16\n  (graph-spanning-tree-count (cycle-graph 5))     => 5\n  (graph-spanning-tree-count (petersen-graph))    => 2000\n\nParameters:\n  G : graph\nReturns: non-negative integer\nCategory: algebra\nKeywords: spanning tree, Cayley, Kirchhoff, matrix tree, deletion contraction"
+  "Return the number of spanning trees of G (Kirchhoff 1847) as a\nnon-negative integer. Zero if G is disconnected (including the empty\ngraph on n ≥ 2 vertices).\n\nAlgorithm: closed-form fast paths for K_n (Cayley: n^(n-2)), C_n (n),\ntrees (1), empty (0 for n ≥ 2; 1 for n = 1). Otherwise deletion-\ncontraction recursion per Tutte 1954 — size-capped at |E| ≤ 20 for\nthe general fallback. The Kirchhoff-matrix-tree theorem (via Laplacian\nminor determinant) is a v2 opt-in that would lift the cap to\npolynomial in |V|.\n\nDirected graphs are not supported in v1; raises with a diagnostic\npointing at v2 for directed spanning trees (arborescences).\n\nExamples:\n  (graph-spanning-tree-count (complete-graph 4))  => 16\n  (graph-spanning-tree-count (cycle-graph 5))     => 5\n  (graph-spanning-tree-count (petersen-graph))    => 2000\n\nParameters:\n  G : graph\nReturns: non-negative integer\nCategory: algebra\nKeywords: spanning tree, Cayley, Kirchhoff, matrix tree, deletion contraction"
+  (when (graph-directed? G)
+    (error "graph-spanning-tree-count: directed graphs not supported in v1"
+           (list 'fix "v2 will add arborescence counting (directed spanning trees)")))
   (let ((n (graph-order G))
         (m (graph-size G)))
     (cond
@@ -1478,7 +1550,8 @@
       (else
        (when (> m %dc-edge-cap)
          (error "graph-spanning-tree-count: general-case edge count exceeds cap"
-                (list 'graph-spanning-tree-count-too-large m %dc-edge-cap)))
+                'edges m 'cap %dc-edge-cap
+                (list 'fix "v2 Kirchhoff-via-matrix would lift the cap; for now, pre-decompose or use smaller inputs")))
        (call-with-values
          (lambda () (%relabel-to-naturals G))
          (lambda (N adj)
@@ -1502,7 +1575,10 @@
 ;;; ====================================================================
 
 (define (graph-maximum-bipartite-matching G)
-  "Return a maximum matching of the bipartite graph G as an alist of\nmatched pairs ((u . v) ...). Each u appears at most once; each v\nappears at most once. Raises if G is not bipartite.\n\nAlgorithm: Hopcroft-Karp (1973), O(E·√V).\n\nExamples:\n  (length (graph-maximum-bipartite-matching (complete-bipartite-graph 3 3)))\n    => 3\n  (length (graph-maximum-bipartite-matching (complete-bipartite-graph 2 4)))\n    => 2\n\nParameters:\n  G : graph\nReturns: list of pairs\nCategory: algebra\nKeywords: matching, bipartite, Hopcroft-Karp, assignment"
+  "Return a maximum matching of the bipartite graph G as an alist of\nmatched pairs ((u . v) ...). Each u appears at most once; each v\nappears at most once. Raises if G is not bipartite.\n\nAlgorithm: Hopcroft-Karp (1973) shape (BFS phases + DFS augmenting).\nThe canonical complexity bound is O(E·√V), but the v1 implementation\nuses alist-backed match/coloring maps for setoid compatibility; this\nintroduces an O(V) factor at every membership test, so the realized\ncomplexity is closer to O(V·E·√V). Swapping in hashtable- or\nvector-backed maps (requires a relabel-to-naturals pass) is a v2\noptimization.\n\nDirected graphs are not supported in v1; raises.\n\nExamples:\n  (length (graph-maximum-bipartite-matching (complete-bipartite-graph 3 3)))\n    => 3\n  (length (graph-maximum-bipartite-matching (complete-bipartite-graph 2 4)))\n    => 2\n\nParameters:\n  G : graph\nReturns: list of pairs\nCategory: algebra\nKeywords: matching, bipartite, Hopcroft-Karp, assignment"
+  (when (graph-directed? G)
+    (error "graph-maximum-bipartite-matching: directed graphs not supported in v1"
+           (list 'fix "bipartite matching is defined on undirected graphs; model as undirected")))
   (let ((parts (graph-bipartition G)))      ;; raises if non-bipartite
     (let* ((A (car  parts))
            (B (cadr parts))
@@ -1534,17 +1610,9 @@
         ;; u is in A; return u's neighbors that are in B.
         (filter-map
           (lambda (p)
-            (and (in-A? u)
-                 (not (in-A? (car p)))
+            (and (not (in-A? (car p)))
                  (car p)))
           (graph-neighbors G u)))
-      (define (neighbors-in-A v)
-        (filter-map
-          (lambda (p)
-            (and (not (in-A? v))
-                 (in-A? (car p))
-                 (car p)))
-          (graph-neighbors G v)))
       ;; BFS: compute dist[u] = layer for u ∈ A. Returns (found? . dist-alist).
       ;; `found?` = an unmatched B-vertex is reachable via tight alternating path.
       (define (bfs!)
