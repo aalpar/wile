@@ -155,6 +155,7 @@
     field->theory lattice->theory heyting->theory boolean->theory
     discover-equivalences
     format-trace
+    symbolic-boolean-normalize symbolic-boolean-equivalent?
     ;; Formal Concept Analysis
     make-context context-from-alist fca-context?
     context-objects context-attributes
@@ -241,7 +242,15 @@
     graph-maximum-bipartite-matching
     ;; Combinatorial graphs — presets
     complete-graph cycle-graph path-graph
-    complete-bipartite-graph empty-graph petersen-graph)
+    complete-bipartite-graph empty-graph petersen-graph
+    ;; Abstract interpretation — pre-built domains
+    sign-lattice abstract-sign sign-binop
+    ;; MFP dataflow solver
+    make-cfg-protocol cfg-protocol?
+    cfg-protocol-blocks-of cfg-protocol-index-of
+    cfg-protocol-preds-of cfg-protocol-succs-of
+    reverse-postorder run-analysis
+    analysis-in analysis-out analysis-states)
   (import (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice)
@@ -265,4 +274,6 @@
           (wile algebra matrix)
           (wile algebra incidence)
           (wile algebra unification)
-          (wile algebra combinatorial-graph)))
+          (wile algebra combinatorial-graph)
+          (wile algebra abstract-domain)
+          (wile algebra dataflow)))

@@ -71,6 +71,8 @@ Organized by distance from existing code (Tier 1 = closest, Tier 3 = furthest).
 
 #### 2.2 Free structures
 
+**Status — partial:** Free Boolean algebra on atoms shipped via extraction from wile-goast's `boolean-simplify.scm` — see `plans/2026-04-22-wile-goast-algebra-extraction-design.md`. Entry points `symbolic-boolean-normalize` / `symbolic-boolean-equivalent?` in `(wile algebra symbolic)`. Free-distributive-lattice shipped via §5.5 (as the `free-distributive-lattice` preset in `(wile algebra lattice)`). Free-monoid and free-group remain unshipped; re-open as a follow-up TODO when a consumer surfaces.
+
 **Missing:** `free-monoid`, `free-group`, `free-lattice`, `free-distributive-lattice`.
 
 **Role:** Every universal-algebra construction has a free object — the "maximum possible" structure before quotienting by observed equations. Without free lattices, Dedekind's problem (counting elements of FD(n)) is unreachable. The FCA concept lattice is a quotient of a free structure; naming the free object clarifies what FCA is quotienting.
