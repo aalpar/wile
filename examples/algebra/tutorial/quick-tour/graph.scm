@@ -44,8 +44,10 @@
 ;; -- All distances from a source ----------------------------------
 
 (define all-from-A (graph-query-all ga-trop "A"))
-(check-true (assoc "A" all-from-A)                  "A included in result")
-(check-true (assoc "B" all-from-A)                  "B included")
-(check-true (assoc "C" all-from-A)                  "C included")
+;; Pin distances rather than only presence: A->A=0, A->B=1 (direct),
+;; A->C=3 (via B, not the 5 direct).
+(check= (cdr (assoc "A" all-from-A))  0   "distance to A from A is 0")
+(check= (cdr (assoc "B" all-from-A))  1   "distance to B is 1")
+(check= (cdr (assoc "C" all-from-A))  3   "distance to C is 3 (via B)")
 
 (display "graph (abstract) tour complete") (newline)

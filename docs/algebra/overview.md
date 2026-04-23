@@ -213,6 +213,7 @@ for the full chapter list with prerequisites.
 - [`galois.scm`](../../examples/algebra/tutorial/quick-tour/galois.scm)
 - [`fca.scm`](../../examples/algebra/tutorial/quick-tour/fca.scm)
 - [`graph.scm`](../../examples/algebra/tutorial/quick-tour/graph.scm)
+- [`interval.scm`](../../examples/algebra/tutorial/quick-tour/interval.scm)
 - [`matrix.scm`](../../examples/algebra/tutorial/quick-tour/matrix.scm)
 - [`pareto.scm`](../../examples/algebra/tutorial/quick-tour/pareto.scm)
 

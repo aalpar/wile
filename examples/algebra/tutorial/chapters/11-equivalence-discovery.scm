@@ -93,12 +93,15 @@
 ;; `theory-merge` combines axiom lists (merges associative-ops too).
 ;; ----------------------------------------------------------------
 
-;; Filter to just commutativity and idempotence.
+;; Filter to just commutativity and idempotence. Note the axioms coming
+;; out of boolean->theory use the lattice-internal names "join" and
+;; "meet", not the operator symbols we passed in (`or` and `and`). Pass
+;; the internal names to theory-filter.
 (define comm-idemp-only
-  (theory-filter bool-theory '("commutativity-or" "commutativity-and"
-                                "idempotence-or" "idempotence-and")))
-(check-true (<= (length (theory-axioms comm-idemp-only)) 4)
-            "filter keeps at most 4 named axioms (may be fewer if names don't match)")
+  (theory-filter bool-theory '("commutativity-join" "commutativity-meet"
+                                "idempotence-join" "idempotence-meet")))
+(check= (length (theory-axioms comm-idemp-only))  4
+        "filter keeps exactly the four named axioms")
 
 ;; Exclude complement-involution.
 (define no-involution

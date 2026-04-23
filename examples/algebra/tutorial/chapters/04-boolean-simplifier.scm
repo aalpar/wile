@@ -86,7 +86,8 @@
 ;; Involution: (not (not x)) collapses to x.
 (define-values (nf1 tr1) (normalize '(not (not x))))
 (check= nf1 'x  "double negation eliminated")
-(check-true (>= (length tr1) 1)  "trace records at least one step")
+;; Exactly one rewrite step for single (not (not x)) -- the involution rule.
+(check= (length tr1) 1  "trace records exactly one step")
 
 ;; Absorption: (and x (or x y)) collapses to x.
 (define-values (nf2 tr2) (normalize '(and x (or x y))))

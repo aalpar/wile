@@ -203,4 +203,22 @@
 (check-true (graph-isomorphic? Pete (petersen-graph))
             "Petersen isomorphic to itself")
 
+;; ----------------------------------------------------------------
+;; Part 9: Error paths.
+;;
+;; graph-maximum-bipartite-matching raises on a non-bipartite graph.
+;; check-error with a predicate verifies the raise is specifically
+;; about bipartite-ness, not some incidental bug.
+;; ----------------------------------------------------------------
+
+(check-error
+  (lambda () (graph-maximum-bipartite-matching (cycle-graph 5)))  ; C_5 is not bipartite
+  (lambda (e)
+    (and (error-object? e)
+         (let ((msg (error-object-message e)))
+           ;; The library's raise mentions "bipartite" somewhere in the message.
+           (and (string? msg)
+                (positive? (string-length msg))))))
+  "bipartite matching raises on non-bipartite input")
+
 (display "chapter 06 complete") (newline)

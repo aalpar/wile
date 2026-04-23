@@ -167,6 +167,13 @@ test: build
 #   make tutorial-test
 .PHONY: tutorial-test
 tutorial-test: build
+	@count=$$(ls examples/algebra/tutorial/chapters/*.scm \
+	             examples/algebra/tutorial/quick-tour/*.scm 2>/dev/null | wc -l | tr -d ' '); \
+	 if [ "$$count" = "0" ]; then \
+	   echo "tutorial-test: no tutorial files found under examples/algebra/tutorial/{chapters,quick-tour}/ -- refusing to silently pass"; \
+	   exit 1; \
+	 fi; \
+	 echo "tutorial-test: running $$count file(s)"
 	@for f in examples/algebra/tutorial/chapters/*.scm \
 	          examples/algebra/tutorial/quick-tour/*.scm; do \
 	  [ -f "$$f" ] || continue; \

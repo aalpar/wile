@@ -88,6 +88,13 @@
 (check= (poly-eval p 2)  11        "p(2) = 3+4+4 = 11")
 (check= (poly-eval q 10) 11        "q(10) = 1+10 = 11")
 
+;; Floating-point x: p(x) = 3 + 2x + x^2 threads through integer ring-plus
+;; / ring-times; with an inexact argument the result is inexact too. A
+;; tight tolerance guards against silent drift.
+;; p(1.5) = 3 + 2*1.5 + 1.5^2 = 3 + 3 + 2.25 = 8.25.
+(check-approx= (poly-eval p 1.5)  8.25  1e-10
+               "p(1.5) = 8.25 (tight tolerance)")
+
 ;; ----------------------------------------------------------------
 ;; Part 4: Formal differentiation on polynomials.
 ;;
@@ -129,10 +136,12 @@
 (define g (poly-gcd (make-poly (field->ring (rational-field)) '(-6 -5 -1))  ; -6 - 5x - x^2
                     (make-poly (field->ring (rational-field)) '(-2 -1))     ; -2 - x
                     (rational-field)))
-;; (-2 - x)(3 + x) = -6 - 5x - x^2, so gcd should be monic 2 + x (or scaled).
-;; The library normalizes to a monic polynomial over Q.
+;; (-2 - x)(3 + x) = -6 - 5x - x^2, so the GCD over Q is (2 + x) up to
+;; a unit. poly-gcd normalizes to a monic polynomial: leading coefficient 1.
 (check-true (polynomial? g)                       "gcd is a polynomial")
-(check-true (>= (poly-degree g) 0)                "gcd degree >= 0")
+(check= (poly-leading-coeff g)  1                 "gcd is monic")
+(check= (poly-degree g)         1                 "gcd has degree 1")
+(check= (poly-coeffs g)         '(2 1)            "gcd coefficients are (2, 1) -- polynomial 2 + x")
 
 ;; ----------------------------------------------------------------
 ;; Part 6: Polynomial differential ring.
@@ -225,6 +234,18 @@
 ;; Power rule with chain: d/dx x^3 = 3 * x^2 * 1 (unsimplified).
 (check= (diff '(^ x 3) 'x)                    '(* 3 (* (^ x 2) 1))
         "power rule, unsimplified")
+
+;; Error path: the hand-written differentiator raises on unsupported
+;; operators. check-error verifies the error is raised *and* that its
+;; message mentions "diff:" so we don't mistake an unrelated bug for a
+;; legitimate raise.
+(check-error
+  (lambda () (diff '(log x) 'x))
+  (lambda (e)
+    (let ((msg (cond ((error-object? e) (error-object-message e))
+                     (else ""))))
+      (string=? msg "diff: unsupported operator")))
+  "diff raises on unsupported operators")
 
 ;; ----------------------------------------------------------------
 ;; Part 8: Cross-check symbolic diff against polynomial diff.

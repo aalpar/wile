@@ -53,15 +53,21 @@
 ;; -- Boolean semiring gives reachability matrix -------------------
 
 (define Bsem (boolean-semiring))
-;; Adjacency: A->B, B->C, C->A triangle.
+;; Adjacency of the directed 3-cycle A -> B -> C -> A.
 (define adj
   (semiring-matrix-from-rows Bsem
     '((#f #t #f)
       (#f #f #t)
       (#t #f #f))))
 
-;; adj^3 tells which vertices are mutually reachable in exactly 3 steps.
+;; adj tells which vertices are reachable in exactly 1 step.
+;; adj^3 tells which vertices are reachable in exactly 3 steps -- since
+;; the 3-cycle has period 3, every vertex reaches itself in exactly 3
+;; steps, and no other vertex. So adj^3 = identity.
 (define reach3 (semiring-matrix-power adj 3))
 (check-true (semiring-matrix? reach3)                "reachability power computed")
+(check= (semiring-matrix->rows reach3)
+        '((#t #f #f) (#f #t #f) (#f #f #t))
+        "adj^3 on a 3-cycle is the identity matrix (period 3)")
 
 (display "matrix tour complete") (newline)

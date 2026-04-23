@@ -12,11 +12,18 @@
 ;;   (check-true    actual label)                    must be truthy (not #f)
 ;;   (check-false   actual label)                    must be strictly #f
 ;;   (check-error   thunk label)                     thunk must raise
+;;   (check-error   thunk pred? label)               same, plus pred? must
+;;                                                   accept the raised condition
 ;;
 ;; `check-true` treats any non-#f value as pass, matching Scheme's `if`
 ;; semantics -- so (memq x lst), (assq x lst), and other lookup procedures
 ;; that return non-#t truthy values are accepted. Use `check=` with an
 ;; explicit #t expected value when strict identity matters.
+;;
+;; `check-error` in its two-argument form accepts any raise, including ones
+;; from unrelated bugs in the thunk (unbound identifier, wrong arity, etc.).
+;; When the raised condition's identity matters, pass a predicate that
+;; inspects it; the check fails if the predicate rejects the condition.
 
 (define (check= actual expected label)
   (if (equal? actual expected)
@@ -57,13 +64,24 @@
         (display "    actual:   ") (write actual) (newline)
         (error "tutorial check failed" label))))
 
-(define (check-error thunk label)
-  (let ((raised #f))
-    (guard (e (#t (set! raised #t)))
-      (thunk))
-    (if raised
-        (begin (display "  ok  ") (display label) (newline))
-        (begin
+(define check-error
+  (case-lambda
+    ((thunk label) (check-error thunk (lambda (_e) #t) label))
+    ((thunk pred? label)
+     (let ((raised #f) (condition #f) (pred-ok #f))
+       (guard (e (#t (set! raised #t)
+                     (set! condition e)
+                     (set! pred-ok (pred? e))))
+         (thunk))
+       (cond
+         ((and raised pred-ok)
+          (display "  ok  ") (display label) (newline))
+         (raised
+          (display "  FAIL ") (display label) (newline)
+          (display "    condition raised but predicate rejected: ")
+          (write condition) (newline)
+          (error "tutorial check failed" label))
+         (else
           (display "  FAIL ") (display label) (newline)
           (display "    expected an error; none was raised") (newline)
-          (error "tutorial check failed" label)))))
+          (error "tutorial check failed" label)))))))

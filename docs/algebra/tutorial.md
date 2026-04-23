@@ -18,17 +18,26 @@ Everything (CI-enforced):
 make tutorial-test
 ```
 
-Each successful check prints `ok <label>`. A failed check prints the mismatch and exits non-zero. No special test harness -- just `wile --file <path>`.
+Each successful check prints `  ok  <label>` (two-space lead-in and gap, for cheap visual scanning). A failed check prints the mismatch and exits non-zero. No special test harness -- just `wile --file <path>`.
 
 ## Reading order and prerequisites
 
 Deep chapters build on each other; work through them top-to-bottom. Quick-tour files are standalone -- read the ones that match your interest.
 
+Dependency graph (one arrow = "builds on"). The table below is authoritative when the two disagree:
+
 ```
-01 ──► 02 ──► 03 ──► 04 ──► 05
-  ╲           ╲
-   ╲           ╲─► 11
-    ╲─► 06   07   08   09   10
+                ┌─► 05
+                │
+01 ──► 02 ──────┼─► 06
+                │
+                ├─► 07
+                │
+                ├─► 08 ──► 09
+                │
+                └─► 03 ──► 04 ──► 10
+                          │
+                          └─► 11
 ```
 
 | Chapter | Topic | Depends on |
@@ -55,7 +64,7 @@ Each chapter covers one problem that composes several sub-libraries.
 | [`chapters/02-structures.scm`](../../examples/algebra/tutorial/chapters/02-structures.scm) | `lattice`, `semiring`, `group`, `ring`, `field`, `differential`, `boolean`, `heyting` -- the forgetful projection tower with explicit substitution checks |
 | [`chapters/03-rewriting-basics.scm`](../../examples/algebra/tutorial/chapters/03-rewriting-basics.scm) | `rewrite` -- term protocols, all seven axiom types with firing and non-firing examples, composed normalizers, manual fixpoint loop |
 | [`chapters/04-boolean-simplifier.scm`](../../examples/algebra/tutorial/chapters/04-boolean-simplifier.scm) | `boolean`, `heyting`, `symbolic`, `rewrite` -- `boolean->theory` with 11 axioms, recursive normalizer + trace inspection, Heyting vs Boolean on `(not (not x))`, `symbolic-boolean-normalize` facade |
-| [`chapters/05-symbolic-differentiation.scm`](../../examples/algebra/tutorial/chapters/05-symbolic-differentiation.scm) | `polynomial`, `differential`, `ring` -- polynomials over Z, `poly-derivative`, `polynomial-derivation` differential ring, hand-written symbolic differentiator cross-checked at 8 concrete x values |
+| [`chapters/05-symbolic-differentiation.scm`](../../examples/algebra/tutorial/chapters/05-symbolic-differentiation.scm) | `polynomial`, `differential`, `ring` -- polynomials over Z, `poly-derivative`, `polynomial-derivation` differential ring, hand-written symbolic differentiator (plain S-expression walker, not library-based) cross-checked against `poly-derivative` at 8 concrete x values |
 | [`chapters/06-graph-algorithms.scm`](../../examples/algebra/tutorial/chapters/06-graph-algorithms.scm) | `combinatorial-graph` -- K_n, C_n, Petersen, K_{3,3}; BFS/DFS; Hopcroft-Karp; τ(K_n) = n^(n-2); τ(Petersen) = 2000; chromatic polynomials on K_n, C_n, empty; Tutte polynomial; C_6 vs 2·K_3 isomorphism canary |
 | [`chapters/07-group-actions.scm`](../../examples/algebra/tutorial/chapters/07-group-actions.scm) | `group` -- presets (trivial, cyclic, symmetric, product), preset actions (natural, regular, conjugation), orbit + stabilizer (verifying orbit-stabilizer identity), Burnside on necklaces (C_4 on 2^4 colorings = 6 necklaces, C_2 on 2^2 = 3) |
 | [`chapters/08-lattice-presets.scm`](../../examples/algebra/tutorial/chapters/08-lattice-presets.scm) | `lattice`, `incidence` -- five preset lattices; `distributive?` + `modular?` distinguishing M_3 and N_5; Birkhoff roundtrip; Dedekind D(0)..D(4); Möbius on the divisor poset of 12 |
@@ -76,6 +85,7 @@ One per sub-library not featured in a deep chapter. Each is ~50-100 lines: const
 | [`quick-tour/galois.scm`](../../examples/algebra/tutorial/quick-tour/galois.scm) | `galois` | Sign abstraction on `{-1, 0, 1}`; `gc-sound?` validation |
 | [`quick-tour/fca.scm`](../../examples/algebra/tutorial/quick-tour/fca.scm) | `fca` | Mammals/carnivores context; intent, extent, concept lattice |
 | [`quick-tour/graph.scm`](../../examples/algebra/tutorial/quick-tour/graph.scm) | `graph` (abstract; distinct from `combinatorial-graph`) | Boolean-semiring reachability, tropical-semiring shortest path |
+| [`quick-tour/interval.scm`](../../examples/algebra/tutorial/quick-tour/interval.scm) | `interval` | Infinity-aware arithmetic, four-corner multiplication, interval lattice with containment ordering |
 | [`quick-tour/matrix.scm`](../../examples/algebra/tutorial/quick-tour/matrix.scm) | `matrix` | 2x2 counting-semiring arithmetic, identity, powers, Boolean adjacency reachability |
 | [`quick-tour/pareto.scm`](../../examples/algebra/tutorial/quick-tour/pareto.scm) | `pareto` | Factor comparison over booleans and numbers, two-objective car dominance, frontier |
 

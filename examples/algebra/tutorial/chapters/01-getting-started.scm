@@ -138,7 +138,9 @@
 (define sub-violations (validate-monoid fake-sub '(1 2 3)))
 
 (check-false (eq? sub-violations #t)        "subtraction fails validation")
-(check-true  (list? sub-violations)         "violations are returned as a list")
+;; "not #t" alone could be an empty list, which would falsely mean "no
+;; violations found". Require at least one violation record.
+(check-true  (pair? sub-violations)         "at least one violation recorded")
 
 ;; Every violation entry starts with a tag symbol. Validation finds at
 ;; least left-identity failures (and likely associativity failures too).

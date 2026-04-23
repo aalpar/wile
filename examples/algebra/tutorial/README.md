@@ -27,11 +27,11 @@ The **deep chapters** build on each other. Work through them in order:
 | `chapters/02-structures.scm` | Lattice to ring to field tower | `lattice`, `semiring`, `group`, `ring`, `differential`, `boolean` |
 | `chapters/03-rewriting-basics.scm` | Axioms, normalizers, traces | `rewrite` |
 | `chapters/04-boolean-simplifier.scm` | Boolean vs Heyting simplification | `boolean`, `heyting`, `symbolic`, `rewrite` |
-| `chapters/05-symbolic-differentiation.scm` | Polynomial + symbolic calculus | `polynomial`, `differential`, `symbolic`, `ring` |
+| `chapters/05-symbolic-differentiation.scm` | Polynomial calculus + hand-written S-expression differentiator | `polynomial`, `differential`, `ring` |
 | `chapters/06-graph-algorithms.scm` | BFS, isomorphism, Tutte, Hopcroft-Karp | `combinatorial-graph` |
 | `chapters/07-group-actions.scm` | Orbits, stabilizers, Burnside | `group` |
 | `chapters/08-lattice-presets.scm` | Canonical lattices, Birkhoff | `lattice`, `incidence` |
-| `chapters/09-dataflow-analysis.scm` | MFP solver, sign domain, interval | `dataflow`, `abstract-domain`, `interval` |
+| `chapters/09-dataflow-analysis.scm` | MFP solver, sign domain | `dataflow`, `abstract-domain`, `lattice` |
 | `chapters/10-unification.scm` | Syntactic and AC unification | `unification` |
 | `chapters/11-equivalence-discovery.scm` | Sub-theory comparison | `rewrite`, `symbolic`, `boolean` |
 
@@ -47,6 +47,7 @@ featured in a deep chapter. Read them a la carte.
 | `quick-tour/galois.scm` | `galois` |
 | `quick-tour/fca.scm` | `fca` |
 | `quick-tour/graph.scm` | `graph` (abstract, distinct from `combinatorial-graph`) |
+| `quick-tour/interval.scm` | `interval` |
 | `quick-tour/matrix.scm` | `matrix` |
 | `quick-tour/pareto.scm` | `pareto` |
 
