@@ -15,6 +15,7 @@
           validate-field
           with-field)
   (import (scheme base)
+          (wile algebra setoid)
           (wile algebra monoid)
           (wile algebra semiring)
           (wile algebra group))

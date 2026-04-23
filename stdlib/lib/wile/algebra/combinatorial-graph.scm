@@ -38,48 +38,6 @@
   (seed        graph-seed)
   (neighbor-fn graph-neighbor-fn))
 
-;;; -- Options-alist helpers (mirror group.scm convention) --
-
-(define (%assv-or opts key fallback)
-  (let ((p (assv key opts)))
-    (if p (cdr p) fallback)))
-
-(define (%validate-opts-keys site opts known-keys)
-  (for-each
-    (lambda (pair)
-      (unless (and (pair? pair) (memv (car pair) known-keys))
-        (error (string-append site ": unknown option key") pair known-keys)))
-    opts))
-
-;;; -- Setoid-aware helpers --
-
-(define (%setoid-member? S x xs)
-  (let loop ((xs xs))
-    (cond
-      ((null? xs) #f)
-      ((setoid-equiv? S x (car xs)) #t)
-      (else (loop (cdr xs))))))
-
-(define (%setoid-assoc S key alist)
-  ;; Setoid-driven assoc. Returns the first (key . v) pair whose car is
-  ;; setoid-equivalent to KEY, or #f if none.
-  (let loop ((xs alist))
-    (cond
-      ((null? xs) #f)
-      ((and (pair? (car xs))
-            (setoid-equiv? S key (caar xs)))
-       (car xs))
-      (else (loop (cdr xs))))))
-
-(define (%setoid-dedup S xs)
-  ;; Return xs with later setoid-equivalent duplicates removed.
-  ;; Preserves first-seen order.
-  (let loop ((src xs) (seen '()))
-    (cond
-      ((null? src) (reverse seen))
-      ((%setoid-member? S (car src) seen) (loop (cdr src) seen))
-      (else (loop (cdr src) (cons (car src) seen))))))
-
 ;;; -- Symmetrization for undirected graphs --
 
 (define (%symmetrize-adjacency adj S)
@@ -109,9 +67,9 @@
                (to-add
                  (filter
                    (lambda (p)
-                     (not (%setoid-assoc S (car p) existing)))
+                     (not (setoid-assoc S (car p) existing)))
                    incoming))
-               (merged (append existing (%setoid-dedup S to-add))))
+               (merged (append existing (setoid-dedup S to-add))))
           (cons u merged)))
       adj)))
 
@@ -157,16 +115,16 @@
 
 (define (make-graph adjacency . opts)
   "Construct a graph from an ADJACENCY alist. Shape:\n  ((vertex . ((neighbor . edge-data) ...)) ...)\n\nOptional trailing alist entries:\n  (directed? . BOOL)    — default #f (undirected)\n  (multi? . BOOL)       — default #f (simple graph; no parallel edges)\n  (self-loops? . BOOL)  — default #t (loops permitted)\n  (setoid . S)          — vertex equivalence (defaults to default-setoid)\n  (symmetrize? . BOOL)  — undirected-only: auto-add reverse edges so the\n                          adjacency is symmetric. Default #f.\n  (seed . VERTEX)       — tier-2: starting vertex for BFS enumeration\n  (neighbor-fn . PROC)  — tier-2: v → ((neighbor . edge-data) ...)\n  (max-size . N)        — tier-2: bound for enumerate-finite-graph closure\n\nExamples:\n  (define K3\n    (make-graph '((a . ((b) (c))) (b . ((a) (c))) (c . ((a) (b))))))\n  (graph-order K3)  => 3\n  (graph-size K3)   => 3\n\nParameters:\n  adjacency : list\n  opts : alist\nReturns: graph\nCategory: algebra\nKeywords: graph, adjacency, combinatorial graph, graph theory\n\nSee also: `validate-graph', `complete-graph', `graph-isomorphic?'."
-  (%validate-opts-keys "make-graph" opts
+  (validate-opts-keys "make-graph" opts
     '(directed? multi? self-loops? setoid symmetrize?
       seed neighbor-fn max-size))
-  (let* ((directed?   (%assv-or opts 'directed?   #f))
-         (multi?      (%assv-or opts 'multi?      #f))
-         (self-loops? (%assv-or opts 'self-loops? #t))
-         (setoid      (%assv-or opts 'setoid      (default-setoid)))
-         (symmetrize? (%assv-or opts 'symmetrize? #f))
-         (seed        (%assv-or opts 'seed        #f))
-         (nfn         (%assv-or opts 'neighbor-fn #f))
+  (let* ((directed?   (assv-or opts 'directed?   #f))
+         (multi?      (assv-or opts 'multi?      #f))
+         (self-loops? (assv-or opts 'self-loops? #t))
+         (setoid      (assv-or opts 'setoid      (default-setoid)))
+         (symmetrize? (assv-or opts 'symmetrize? #f))
+         (seed        (assv-or opts 'seed        #f))
+         (nfn         (assv-or opts 'neighbor-fn #f))
          (adj
            (cond
              ((and (not directed?) symmetrize?)
@@ -225,11 +183,11 @@
 
 (define (graph-has-vertex? G v)
   "Return #t if V is a vertex of G (under G's setoid).\n\nParameters:\n  G : graph\n  v : vertex\nReturns: boolean\nCategory: algebra\nKeywords: vertex, membership, graph\n\nSee also: `graph-neighbors', `graph-vertex-equiv?'."
-  (and (%setoid-assoc (graph-setoid G) v (graph-adjacency G)) #t))
+  (and (setoid-assoc (graph-setoid G) v (graph-adjacency G)) #t))
 
 (define (graph-neighbors G v)
   "Return the neighbor alist for vertex V in G as ((neighbor . edge-data) ...).\nRaises if V is not a vertex of G (use `graph-has-vertex?' to test).\n\nParameters:\n  G : graph\n  v : vertex\nReturns: list\nCategory: algebra\nKeywords: neighbors, adjacency\n\nSee also: `graph-degree', `graph-edge?', `graph-has-vertex?'."
-  (let ((entry (%setoid-assoc (graph-setoid G) v (graph-adjacency G))))
+  (let ((entry (setoid-assoc (graph-setoid G) v (graph-adjacency G))))
     (unless entry
       (error "graph-neighbors: vertex is not a member of G"
              (list 'fix "use graph-has-vertex? to test membership first")
@@ -256,7 +214,7 @@
 (define (graph-edge? G u v)
   "Return #t if there is an edge from U to V in G.\nFor undirected graphs, symmetric: (graph-edge? G u v) ⟺ (graph-edge? G v u).\n\nExamples:\n  (graph-edge? (complete-graph 3) 0 1)  => #t\n  (graph-edge? (empty-graph 3) 0 1)     => #f\n\nParameters:\n  G : graph\n  u : vertex\n  v : vertex\nReturns: boolean\nCategory: algebra\nKeywords: edge, incidence, adjacency"
   (let ((S (graph-setoid G)))
-    (and (%setoid-assoc S v (graph-neighbors G u)) #t)))
+    (and (setoid-assoc S v (graph-neighbors G u)) #t)))
 
 (define (graph-vertex-equiv? G u v)
   "Return #t if U and V are equivalent under G's vertex setoid.\n\nParameters:\n  G : graph\n  u : vertex\n  v : vertex\nReturns: boolean\nCategory: algebra\nKeywords: setoid, vertex equality, equivalence"
@@ -280,11 +238,11 @@
   (cond
     ((finite-graph? G) G)
     ((finitely-generated-graph? G)
-     (%validate-opts-keys "enumerate-finite-graph" opts '(max-size))
+     (validate-opts-keys "enumerate-finite-graph" opts '(max-size))
      (let* ((S        (graph-setoid G))
             (seed     (graph-seed G))
             (nfn      (graph-neighbor-fn G))
-            (max-size (%assv-or opts 'max-size #f)))
+            (max-size (assv-or opts 'max-size #f)))
        (let loop ((frontier (list seed))
                   (seen     (list seed))
                   (size     1)
@@ -317,9 +275,9 @@
                    (nbrs  (nfn v))
                    (new-vs
                      (filter
-                       (lambda (n) (not (%setoid-member? S n seen)))
+                       (lambda (n) (not (setoid-member? S n seen)))
                        (map car nbrs)))
-                   (new-vs* (%setoid-dedup S new-vs))
+                   (new-vs* (setoid-dedup S new-vs))
                    (new-size (+ size (length new-vs*))))
               (when (and max-size (> new-size max-size))
                 (error "enumerate-finite-graph: closure exceeded max-size"
@@ -337,19 +295,17 @@
 
 (define (validate-graph G samples)
   "Check structural invariants on G. Returns #t if all invariants hold,\nor a list of (violation-type arg ...) entries (group.scm convention).\n\nInvariants checked:\n  — vertex set equals keys of adjacency alist\n  — undirected adjacency is symmetric (unless symmetrize? was used)\n  — self-loops absent when (graph-self-loops? G) is #f\n  — parallel edges absent when (graph-multi? G) is #f\n  — vertices are distinguishable under the setoid\n\nSAMPLES is accepted for fixed-arity parity with validate-group /\nvalidate-lattice; ignored in v1. Pass '() for the default case.\n\nParameters:\n  G : graph\n  samples : list\nReturns: #t or list\nCategory: algebra\nKeywords: validate, invariant check, structural\n\nSee also: `assert-graph', `make-graph'."
-  (let ((violations '())
+  (let ((fail! (make-violation-reporter))
         (S          (graph-setoid G))
         (adj        (graph-adjacency G))
         (directed?  (graph-directed? G))
         (multi?     (graph-multi?    G))
         (loops?     (graph-self-loops? G)))
-    (define (fail! type . args)
-      (set! violations (cons (cons type args) violations)))
     ;; 1. Vertex distinguishability.
     (let loop ((xs (%adj-vertices adj)))
       (cond
         ((null? xs) #f)
-        ((%setoid-member? S (car xs) (cdr xs))
+        ((setoid-member? S (car xs) (cdr xs))
          (fail! 'duplicate-vertex (car xs)))
         (else (loop (cdr xs)))))
     ;; 2. Every neighbor must be a known vertex.
@@ -358,7 +314,7 @@
         (lambda (entry)
           (for-each
             (lambda (p)
-              (unless (%setoid-member? S (car p) vs)
+              (unless (setoid-member? S (car p) vs)
                 (fail! 'unknown-neighbor (car entry) (car p))))
             (cdr entry)))
         adj))
@@ -366,7 +322,7 @@
     (unless loops?
       (for-each
         (lambda (entry)
-          (when (%setoid-assoc S (car entry) (cdr entry))
+          (when (setoid-assoc S (car entry) (cdr entry))
             (fail! 'unexpected-self-loop (car entry))))
         adj))
     ;; 4. Parallel edges when not permitted.
@@ -376,7 +332,7 @@
           (let scan ((nbrs (cdr entry)) (seen '()))
             (cond
               ((null? nbrs) #f)
-              ((%setoid-member? S (caar nbrs) seen)
+              ((setoid-member? S (caar nbrs) seen)
                (fail! 'parallel-edge (car entry) (caar nbrs))
                (scan (cdr nbrs) seen))
               (else (scan (cdr nbrs) (cons (caar nbrs) seen))))))
@@ -389,17 +345,15 @@
             (for-each
               (lambda (p)
                 (let* ((v       (car p))
-                       (v-entry (%setoid-assoc S v adj)))
+                       (v-entry (setoid-assoc S v adj)))
                   ;; A self-loop doesn't need a reverse.
                   (unless (or (setoid-equiv? S u v)
                               (and v-entry
-                                   (%setoid-assoc S u (cdr v-entry))))
+                                   (setoid-assoc S u (cdr v-entry))))
                     (fail! 'asymmetric-undirected u v))))
               (cdr entry))))
         adj))
-    (if (null? violations)
-        #t
-        (reverse violations))))
+    (fail!)))
 
 (define (assert-graph G samples)
   "Raise an error if G fails any structural invariant; return unspecified on\nsuccess. Thin raising variant of `validate-graph'.\n\nExamples:\n  (assert-graph (complete-graph 3) '())  ; no error\n\nParameters:\n  G : graph\n  samples : list\nReturns: unspecified\nCategory: algebra\nKeywords: assert, raise, validate\n\nSee also: `validate-graph'."
@@ -437,9 +391,9 @@
                 (rest (cdr frontier))
                 (new-nbrs
                   (filter
-                    (lambda (n) (not (%setoid-member? S n visited)))
+                    (lambda (n) (not (setoid-member? S n visited)))
                     (map car (graph-neighbors G v))))
-                (new-nbrs* (%setoid-dedup S new-nbrs)))
+                (new-nbrs* (setoid-dedup S new-nbrs)))
            (loop (append rest new-nbrs*)
                  (append visited new-nbrs*)
                  (append (reverse new-nbrs*) order))))))))
@@ -453,7 +407,7 @@
         (order '())
         (visited '()))
     (define (visit v)
-      (unless (%setoid-member? S v visited)
+      (unless (setoid-member? S v visited)
         (set! visited (cons v visited))
         (set! order   (cons v order))
         (for-each
@@ -481,7 +435,7 @@
                       (graph-bfs G seed)))
                 (rest
                   (filter
-                    (lambda (v) (not (%setoid-member? S v component)))
+                    (lambda (v) (not (setoid-member? S v component)))
                     remaining)))
            (loop rest (cons component acc))))))))
 
@@ -494,7 +448,7 @@
            (lambda (v)
              (filter-map
                (lambda (entry)
-                 (and (%setoid-assoc S v (cdr entry))
+                 (and (setoid-assoc S v (cdr entry))
                       (not (setoid-equiv? S (car entry) v))
                       (car entry)))
                adj))))
@@ -510,9 +464,9 @@
                 (ins   (in-neighbors v))
                 (new
                   (filter
-                    (lambda (n) (not (%setoid-member? S n visited)))
+                    (lambda (n) (not (setoid-member? S n visited)))
                     (append outs ins)))
-                (new* (%setoid-dedup S new)))
+                (new* (setoid-dedup S new)))
            (loop (append rest new*)
                  (append visited new*)
                  (append (reverse new*) order))))))))
@@ -539,7 +493,7 @@
         (colors '())          ;; alist vertex → 0 or 1
         (failed? #f))
     (define (color-of v)
-      (let ((p (%setoid-assoc S v colors)))
+      (let ((p (setoid-assoc S v colors)))
         (and p (cdr p))))
     (define (set-color! v c)
       (set! colors (cons (cons v c) colors)))
@@ -637,7 +591,7 @@
         (let ((in 0))
           (for-each
             (lambda (entry)
-              (when (%setoid-assoc S v (cdr entry))
+              (when (setoid-assoc S v (cdr entry))
                 (set! in (+ in 1))))
             (graph-adjacency G))
           (list deg in loops))
@@ -676,7 +630,7 @@
       ((null? src)
        ;; buckets = ((sig xs-in-reverse) ...). Sort by sig; un-reverse.
        (map (lambda (b) (reverse (cdr b)))
-            (%list-sort (lambda (a b) (%sig< (car a) (car b)))
+            (list-sort (lambda (a b) (%sig< (car a) (car b)))
                        buckets)))
       (else
        (let* ((x   (car src))
@@ -699,21 +653,6 @@
              (+ color 1)
              (append (map (lambda (p) (cons (car p) color)) (car groups))
                      acc))))))
-
-(define (%list-sort cmp lst)
-  ;; Stable insertion sort: small n, simple, deterministic.
-  (let loop ((src lst) (acc '()))
-    (cond
-      ((null? src) acc)
-      (else
-       (loop (cdr src)
-             (%insert cmp (car src) acc))))))
-
-(define (%insert cmp x sorted)
-  (cond
-    ((null? sorted) (list x))
-    ((cmp x (car sorted)) (cons x sorted))
-    (else (cons (car sorted) (%insert cmp x (cdr sorted))))))
 
 (define (%sig< a b)
   ;; Compare two signatures (arbitrary nested lists of numbers/pairs/symbols)
@@ -763,7 +702,7 @@
          (vs (graph-vertices G))
          (color-of
            (lambda (v)
-             (let ((p (%setoid-assoc S v coloring)))
+             (let ((p (setoid-assoc S v coloring)))
                (if p (cdr p) 0))))
          (sigs
            (map
@@ -771,7 +710,7 @@
                (let* ((v (car entry))
                       (nbrs (graph-neighbors G v))
                       (nbr-colors
-                        (%list-sort < (map (lambda (p) (color-of (car p))) nbrs))))
+                        (list-sort < (map (lambda (p) (color-of (car p))) nbrs))))
                  (cons v (list (color-of v) nbr-colors))))
              (graph-adjacency G)))
          (groups (%group-by-signature sigs cdr))
@@ -863,7 +802,7 @@
   (let* ((S (graph-setoid G))
          (color-of
            (lambda (v)
-             (let ((p (%setoid-assoc S v coloring)))
+             (let ((p (setoid-assoc S v coloring)))
                (unless p
                  (error "%canonical-adjacency: vertex missing from coloring" v))
                (cdr p))))
@@ -878,7 +817,7 @@
                    ((<= u v)            (list u v))
                    (else                (list v u)))))
              raw-edges))
-         (sorted (%list-sort %edge< relabeled)))
+         (sorted (list-sort %edge< relabeled)))
     (list (if (graph-directed? G) 'directed 'undirected)
           (if (graph-multi? G)    'multi    'simple)
           (length coloring)
@@ -953,9 +892,9 @@
   (cond
     ((not (= (graph-order G) (graph-order H))) #f)
     ((not (= (graph-size  G) (graph-size  H))) #f)
-    ((not (equal? (%list-sort < (map (lambda (v) (graph-degree G v))
+    ((not (equal? (list-sort < (map (lambda (v) (graph-degree G v))
                                     (graph-vertices G)))
-                  (%list-sort < (map (lambda (v) (graph-degree H v))
+                  (list-sort < (map (lambda (v) (graph-degree H v))
                                     (graph-vertices H)))))
      #f)
     (else
@@ -1587,10 +1526,10 @@
       (define matchA '())
       (define matchB '())
       (define (in-A? v)
-        (%setoid-member? S v A))
+        (setoid-member? S v A))
       (define (match-of side k)
         (let* ((al (if (eq? side 'A) matchA matchB))
-               (p (%setoid-assoc S k al)))
+               (p (setoid-assoc S k al)))
           (if p (cdr p) #f)))
       (define (set-match! side k v)
         (cond
@@ -1619,7 +1558,7 @@
         (let ((dist '())
               (found? #f))
           (define (dist-of u)
-            (let ((p (%setoid-assoc S u dist))) (if p (cdr p) #f)))
+            (let ((p (setoid-assoc S u dist))) (if p (cdr p) #f)))
           (define (set-dist! u d)
             (set! dist
               (cons (cons u d)

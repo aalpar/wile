@@ -27,5 +27,6 @@
     complete-bipartite-graph empty-graph petersen-graph)
   (import (scheme base)
           (srfi 1)
+          (srfi 132)
           (wile algebra setoid))
   (include "combinatorial-graph.scm"))

@@ -16,6 +16,9 @@
 
 (define (make-category compose identity equiv?)
   "Construct a category from COMPOSE, IDENTITY, and EQUIV? functions.\nCOMPOSE takes two morphisms f and g and returns f ∘ g (apply g\nfirst, then f — mathematical convention). IDENTITY takes an\nobject and returns its identity morphism. EQUIV? tests whether\ntwo morphisms are considered equal.\n\nExamples:\n  (category? (make-category\n    (lambda (f g) (lambda (x) (f (g x))))\n    (lambda (obj) (lambda (x) x))\n    equal?))  => #t\n\nParameters:\n  compose : procedure\n  identity : procedure\n  equiv? : procedure\nReturns: any\nCategory: algebra\nKeywords: category, morphism, composition, identity, functor, arrow\n\nSee also: `category-compose', `category-identity', `validate-category'."
+  (assert-procedure "make-category" compose)
+  (assert-procedure "make-category" identity)
+  (assert-procedure "make-category" equiv?)
   (make-category* compose identity equiv?))
 
 ;; ─── Core operations ─────────────────────────
@@ -67,9 +70,7 @@
 
 (define (validate-category C morphism-triples identity-morphisms)
   "Spot-check that C satisfies the category laws.\nMORPHISM-TRIPLES is a list of (f g h) triples for testing\nassociativity: (f ∘ g) ∘ h = f ∘ (g ∘ h). IDENTITY-MORPHISMS\nis a list of (obj f) pairs where f is an endomorphism on obj,\nfor testing identity laws: id ∘ f = f and f ∘ id = f.\nReturns #t if all laws hold, or a list of (violation-type ...)\nentries describing failures.\n\nExamples:\n  ;; Alist-based category on {0,1,2}:\n  ;; (validate-category alist-cat triples identities)  => #t\n\nParameters:\n  C : any\n  morphism-triples : list\n  identity-morphisms : list\nReturns: any\nCategory: algebra\nKeywords: associativity, identity, law checking, validation, morphism\n\nSee also: `make-category', `category-compose', `category-identity'."
-  (let ((violations '()))
-    (define (fail! type . args)
-      (set! violations (cons (cons type args) violations)))
+  (let ((fail! (make-violation-reporter)))
     ;; Associativity: (f ∘ g) ∘ h = f ∘ (g ∘ h)
     (for-each
       (lambda (triple)
@@ -92,4 +93,4 @@
             (unless (category-equiv? C (category-compose C f id) f)
               (fail! 'right-identity obj f)))))
       identity-morphisms)
-    (if (null? violations) #t (reverse violations))))
+    (fail!)))

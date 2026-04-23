@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-04-18
+**Last Updated**: 2026-04-23
 
 ### Current Project Status
 
@@ -131,6 +131,18 @@ Directions documents — identify prioritized capability extensions. Priority se
 - [ ] **Namespace registry typing** [Low, S]: Namespace's registry should have a type instead of `any`.
 - [ ] **ValueType refactoring** [Low]: ValueType doesn't have grounding in Scheme or Go — determine use and scope of type domains.
 - [ ] **Evaluate need for Primitive Annotation Enforcement** [Low]: Enforcement may not be needed.
+
+### Algebra library consistency (2026-04-23 staff-engineer audit)
+
+- [x] **Promote setoid collection helpers** [High, S, Done]: `setoid-member?`, `setoid-assoc`, `setoid-dedup` now public in `(wile algebra setoid)`; private `%`-copies deleted from `group.scm` and `combinatorial-graph.scm`. All call sites updated.
+- [x] **Promote options-alist helpers** [High, S, Done]: `assv-or` and `validate-opts-keys` folded into `(wile algebra setoid)` as public helpers (noted as "plumbing, not setoid ops" with a section comment; move to a dedicated module later if a third category accumulates). Scope was larger than audit showed: duplication existed in FOUR libraries (group, combinatorial-graph, **incidence, lattice**). All four call sites updated; `incidence.sld` gained a `(wile algebra setoid)` import.
+- [x] **Drift-check test for umbrella `algebra.sld`** [High, S, Done — option (c)]: `algebra_umbrella_drift_test.go` parses every leaf `.sld` export clause and asserts umbrella coverage. First run caught real drift (`rewrite.sld: associativity-axiom-op commutativity-axiom-op`; `semiring.sld: tropical-inf`) — added to umbrella. Deferred decisions (a) delete and (b) generate until test-driven drift frequency justifies either path.
+- [x] **Documented convention for structure API** [Medium, S, Done — supersedes "extract with-X macro skeleton"]: Reviewing the audit's own premise: a `define-with-binder` meta-macro would save ~10 lines across 15 libraries at the cost of indirection. Not worth it. Replaced with `stdlib/lib/wile/algebra/CLAUDE.md` documenting the five-part structure API (`make-X` / `X?` / accessors / `with-X` / `validate-X`), the shared plumbing in `(wile algebra setoid)`, options-alist discipline, validator body shape, and the `with-X` skeleton. New structures and reviewers have an anchor; duplication stays mechanical.
+- [x] **Extract `validate-X` violation-collector idiom** [Medium, S, Done]: `make-violation-reporter` added to `(wile algebra setoid)` — two-mode procedure (call with type + args to record, call with no args to finalize). Retrofitted every `validate-X` across 14 libraries (setoid, monoid, group, ring, field, semiring, lattice + /distributive + /modular, boolean, heyting, category, closure, differential, partial-order + /setoid, galois's gc-sound?, combinatorial-graph). Parent-validator delegation patterns (field→ring, boolean→lattice, heyting→lattice, partial-order/setoid→partial-order, differential→ring) now use `(for-each (lambda (v) (apply fail! v)) parent-result)` instead of `(set! violations (append ...))`.
+- [x] **Resolve `assert-X` asymmetry** [Medium, S, Done — dissolved via generic helper]: Rather than add 18 `assert-X` symbols, added `assert-validation` as a syntax-rules macro in `(wile algebra setoid)`. `(assert-validation (validate-group G s))` raises if the result isn't `#t`, with the source expression preserved in the error datum. Existing `assert-group`/`assert-graph` kept as thin conveniences; new structures should use the generic helper. Net API-surface cost: +1 symbol instead of +18.
+- [x] **Refactor `combinatorial-graph.scm` monolith — first cut** [Medium, M, Done (partial)]: Replaced `%list-sort`/`%insert` (custom insertion sort) with `list-sort` from `(srfi 132)` — 14 lines removed, new library import added. File is now 1,726 lines (down from 1,787 including the setoid/options helper promotion earlier this session). Remaining `%`-prefixed helpers (`%sig<`, `%key<`, `%refine-step`, `%nat-*`, `%backtrack-canonical`, etc.) are genuinely graph-specific or WL/isomorphism-specific — splitting into sub-files (`-isomorphism`, `-polynomials`, `-matching`) is deferred until that provides tangible review-scope benefit.
+- [x] **Normalize `make-X` constructor validation discipline** [Low, S, Done]: Added `assert-procedure` macro to `(wile algebra setoid)` — uses `syntax-rules` to capture the source identifier, so `(assert-procedure "make-ring" plus)` raises `"make-ring: plus must be a procedure"` on non-procedure input. Retrofitted 11 non-validating constructors: `make-setoid`, `make-monoid`, `make-partial-order`, `make-closure-operator` (split into `make-X*` record-type ctor + wrapper), `make-semiring`, `make-ring`, `make-field`, `make-boolean-algebra`, `make-heyting-algebra`, `make-category`, `make-differential-ring`, `make-galois-connection`. The audit noted `make-lattice` as non-validating — it was already validating. Convention documented in `stdlib/lib/wile/algebra/CLAUDE.md` "Procedural-argument discipline for `make-X`" section.
+- [ ] **Watch `matrix.scm` for split pressure** [Low, S, Deferred]: 1,302 lines with two record types (`<semiring-matrix>` at 839, `<sparse-semiring-matrix>` at 1137) in one file. Shared helpers justify co-location today. Revisit once a third representation (banded, symmetric, etc.) appears — no action needed now.
 
 ### Postponed
 

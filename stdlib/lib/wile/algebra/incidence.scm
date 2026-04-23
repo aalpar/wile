@@ -28,22 +28,11 @@
   (interval lf-poset-interval)
   (elements lf-poset-elements))
 
-(define (%assv-or opts key fallback)
-  (let ((p (assv key opts)))
-    (if p (cdr p) fallback)))
-
-(define (%validate-opts-keys site opts known-keys)
-  (for-each
-    (lambda (pair)
-      (unless (and (pair? pair) (memv (car pair) known-keys))
-        (error (string-append site ": unknown option key") pair known-keys)))
-    opts))
-
 (define (make-locally-finite-poset leq? interval . opts)
   "Construct a locally-finite poset from LEQ? predicate and INTERVAL procedure.\nINTERVAL takes two elements X, Y and returns the list of Z with X <= Z <= Y,\nthe empty list when ¬(X <= Y), and the singleton (X) when X = Y.\n\nOptional trailing alist entries:\n  (elements . LIST) — full enumeration of the poset (required by\n                      birkhoff-reconstruction; populated automatically\n                      by finite-set->locally-finite-poset).\n\nExamples:\n  (make-locally-finite-poset\n    (lambda (a b) (<= a b))\n    (lambda (x y) (iota (+ 1 (- y x)) x)))\n\nParameters:\n  leq? : procedure\n  interval : procedure\n  opts : alist\nReturns: locally-finite-poset\nCategory: algebra\nKeywords: poset, locally finite, interval, construction\n\nSee also: `finite-set->locally-finite-poset', `lf-poset-elements'."
-  (%validate-opts-keys "make-locally-finite-poset" opts '(elements))
+  (validate-opts-keys "make-locally-finite-poset" opts '(elements))
   (%make-locally-finite-poset leq? interval
-                              (%assv-or opts 'elements #f)))
+                              (assv-or opts 'elements #f)))
 
 (define (finite-set->locally-finite-poset leq? elements)
   "Build a locally-finite poset from a predicate LEQ? and an explicit\nelement list ELEMENTS. The interval-enumeration procedure scans\nthe full element set by the two-sided bound. Use this when the\nunderlying poset is bounded and enumerable; prefer a direct\ninterval procedure when the universe is infinite.\n\nThe resulting poset carries ELEMENTS in its elements field; access\nvia `lf-poset-elements'. This is the canonical way to construct a\nposet consumable by `birkhoff-reconstruction'.\n\nExamples:\n  (define P\n    (finite-set->locally-finite-poset\n      (lambda (a b) (zero? (modulo b a)))\n      '(1 2 3 4 5 6)))\n  ((lf-poset-interval P) 1 6)  => (1 2 3 6)\n  (lf-poset-elements P)        => (1 2 3 4 5 6)\n\nParameters:\n  leq? : procedure\n  elements : list\nReturns: locally-finite-poset\nCategory: algebra\nKeywords: poset, finite, interval, enumeration, construction"

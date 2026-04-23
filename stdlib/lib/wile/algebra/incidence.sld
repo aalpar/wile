@@ -16,5 +16,6 @@
     ;; Classical Möbius inversion
     mobius-inversion)
   (import (scheme base)
+          (wile algebra setoid)
           (wile algebra ring))
   (include "incidence.scm"))

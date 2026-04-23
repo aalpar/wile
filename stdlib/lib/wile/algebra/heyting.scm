@@ -18,6 +18,10 @@
 
 (define (make-heyting-algebra join meet bottom top leq? implies)
   "Construct a Heyting algebra from lattice operations and IMPLIES.\nA Heyting algebra is a bounded distributive lattice where every\npair (a, b) has a relative pseudo-complement: the largest c\nsuch that a ∧ c ≤ b. IMPLIES computes this c.\n\nExamples:\n  (heyting-algebra? (powerset-heyting '(x y z)))  => #t\n  (let ((H (powerset-heyting '(x y z))))\n    (heyting-leq? H '(x) '(x y)))  => #t\n\nParameters:\n  join : procedure\n  meet : procedure\n  bottom : any\n  top : any\n  leq? : procedure\n  implies : procedure\nReturns: any\nCategory: algebra\nKeywords: Heyting, implication, pseudo-complement, intuitionistic, distributive lattice\n\nSee also: `powerset-heyting', `validate-heyting-algebra'."
+  (assert-procedure "make-heyting-algebra" join)
+  (assert-procedure "make-heyting-algebra" meet)
+  (assert-procedure "make-heyting-algebra" leq?)
+  (assert-procedure "make-heyting-algebra" implies)
   (make-heyting-algebra* join meet bottom top leq? implies))
 
 ;; ─── Core operations ─────────────────────────
@@ -123,13 +127,11 @@
 
 (define (validate-heyting-algebra H samples)
   "Spot-check that H satisfies the Heyting algebra laws on SAMPLES.\nDelegates lattice law checks to validate-lattice, then tests\nmodus ponens (a ∧ (a → b) ≤ b) and the adjunction property\n(c ≤ (a → b) iff a ∧ c ≤ b) for all pairs and triples in\nSAMPLES. Returns #t if all laws hold, or a list of\n(violation-type element ...) entries describing failures.\n\nExamples:\n  (validate-heyting-algebra\n    (powerset-heyting '(x y z)) '((x) (y) (x y)))  => #t\n\nParameters:\n  H : any\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: modus ponens, adjunction, residuation, law checking, validation\n\nSee also: `make-heyting-algebra', `validate-lattice'."
-  (let ((violations '()))
-    (define (fail! type . args)
-      (set! violations (cons (cons type args) violations)))
+  (let ((fail! (make-violation-reporter)))
     ;; Delegate lattice laws
     (let ((lattice-result (validate-lattice (heyting->lattice H) samples)))
-      (when (not (eq? #t lattice-result))
-        (set! violations (append lattice-result violations))))
+      (unless (eq? #t lattice-result)
+        (for-each (lambda (v) (apply fail! v)) lattice-result)))
     ;; Modus ponens: a ∧ (a → b) ≤ b
     (for-each
       (lambda (a)
@@ -148,4 +150,4 @@
                 samples)))
           samples))
       samples)
-    (if (null? violations) #t (reverse violations))))
+    (fail!)))

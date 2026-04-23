@@ -8,6 +8,7 @@
           validate-boolean-algebra
           with-boolean)
   (import (scheme base)
+          (wile algebra setoid)
           (wile algebra lattice)
           (wile algebra heyting)
           (wile algebra ring))

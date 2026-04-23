@@ -5,5 +5,6 @@
           monoid-fold monoid-power
           validate-monoid
           with-monoid)
-  (import (scheme base))
+  (import (scheme base)
+          (wile algebra setoid))
   (include "monoid.scm"))

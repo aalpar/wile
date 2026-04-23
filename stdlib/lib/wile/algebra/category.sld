@@ -7,5 +7,6 @@
           validate-category
           with-category)
   (import (scheme base)
+          (wile algebra setoid)
           (wile algebra monoid))
   (include "category.scm"))

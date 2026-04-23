@@ -15,6 +15,8 @@
 
 (define (make-galois-connection alpha gamma concrete-po abstract-lattice)
   "Construct a Galois connection from ALPHA, GAMMA, CONCRETE-PO, and ABSTRACT-LATTICE.\nALPHA abstracts concrete values into the abstract lattice. GAMMA\nconcretizes abstract values back. The pair must satisfy: every\nconcrete value is below the concretization of its abstraction\n(soundness), and abstracting a concretization never exceeds the\noriginal abstract value (reductiveness).\n\nExamples:\n  ;; Sign abstraction: integers -> {neg, zero, pos}\n  (let* ((int-po (make-partial-order <=))\n         (sign-lat (flat-lattice '(neg zero pos) eq?))\n         (gc (make-galois-connection\n               (lambda (n) (cond ((< n 0) 'neg) ((= n 0) 'zero) (else 'pos)))\n               (lambda (s) (cond ((eq? s 'neg) -1) ((eq? s 'zero) 0) (else 1)))\n               int-po sign-lat)))\n    (gc-alpha gc 42))  => pos\n\nParameters:\n  alpha : procedure\n  gamma : procedure\n  concrete-po : any\n  abstract-lattice : any\nReturns: any\nCategory: algebra\nKeywords: Galois connection, abstract interpretation, abstraction, concretization, soundness\n\nSee also: `gc-alpha', `gc-gamma', `gc-sound?'."
+  (assert-procedure "make-galois-connection" alpha)
+  (assert-procedure "make-galois-connection" gamma)
   (make-galois-connection* alpha gamma concrete-po abstract-lattice))
 
 (define (gc-alpha GC concrete-val)
@@ -27,9 +29,7 @@
 
 (define (gc-sound? GC concrete-samples abstract-samples)
   "Spot-check that GC satisfies the Galois connection laws on sample elements.\nTests extensiveness (c <= gamma(alpha(c)) for each concrete sample)\nand reductiveness (alpha(gamma(a)) <= a for each abstract sample).\nReturns #t if all conditions hold, or a list of (violation-type ...)\nentries describing failures.\n\nExamples:\n  ;; With a sign-abstraction Galois connection over integers:\n  ;; (gc-sound? gc '(-3 0 5) '(neg zero pos))  => #t\n\nParameters:\n  GC : any\n  concrete-samples : list\n  abstract-samples : list\nReturns: any\nCategory: algebra\nKeywords: soundness, extensiveness, reductiveness, validation, abstract interpretation\n\nSee also: `make-galois-connection', `gc-alpha', `gc-gamma'."
-  (let ((violations '()))
-    (define (fail! type . args)
-      (set! violations (cons (cons type args) violations)))
+  (let ((fail! (make-violation-reporter)))
     ;; Extensive: ∀c. c ≤ γ(α(c))
     (for-each
       (lambda (c)
@@ -44,4 +44,4 @@
           (unless (lattice-leq? (gc-abstract-lattice GC) round-tripped a)
             (fail! 'reductive a round-tripped))))
       abstract-samples)
-    (if (null? violations) #t (reverse violations))))
+    (fail!)))

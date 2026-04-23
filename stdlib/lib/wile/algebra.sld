@@ -6,7 +6,11 @@
     setoid-equiv?
     default-setoid numeric-setoid string-setoid eqv-setoid
     setoid-equivalence-class
+    setoid-member? setoid-assoc setoid-dedup
+    assv-or validate-opts-keys
+    make-violation-reporter
     validate-setoid with-setoid
+    assert-validation assert-procedure
     ;; Partial orders
     make-partial-order partial-order?
     po-leq? po-comparable? po-monotone?
@@ -68,7 +72,7 @@
     make-semiring semiring?
     semiring-plus semiring-times semiring-zero semiring-one
     semiring->additive-monoid semiring->multiplicative-monoid
-    boolean-semiring tropical-semiring counting-semiring
+    boolean-semiring tropical-semiring tropical-inf counting-semiring
     validate-semiring with-semiring
     ;; Groups
     make-group group?
@@ -130,12 +134,12 @@
     make-term-protocol term-protocol?
     term-compound? term-get-operator term-get-operands term-make-term term-compare
     make-identity-axiom identity-axiom?
-    make-commutativity-axiom commutativity-axiom?
+    make-commutativity-axiom commutativity-axiom? commutativity-axiom-op
     make-absorbing-axiom absorbing-axiom?
     make-idempotence-axiom idempotence-axiom?
     make-involution-axiom involution-axiom?
     make-absorption-axiom absorption-axiom?
-    make-associativity-axiom associativity-axiom?
+    make-associativity-axiom associativity-axiom? associativity-axiom-op
     directional-axiom? axiom?
     axiom->rules
     no-match?

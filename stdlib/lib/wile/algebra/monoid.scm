@@ -4,10 +4,15 @@
 ;;; element: (S, ⊕, e) where a ⊕ (b ⊕ c) = (a ⊕ b) ⊕ c and e ⊕ a = a ⊕ e = a.
 
 (define-record-type <monoid>
-  (make-monoid op identity)
+  (make-monoid* op identity)
   monoid?
   (op       monoid-op-fn)
   (identity monoid-identity))
+
+(define (make-monoid op identity)
+  "Construct a monoid from binary OP and IDENTITY element.\nOP must be associative (OP a (OP b c) = OP (OP a b) c) and IDENTITY\nmust be neutral (OP IDENTITY a = a and OP a IDENTITY = a). These laws\nare spot-checkable via `validate-monoid'.\n\nExamples:\n  (monoid-op (make-monoid + 0) 3 4)                       => 7\n  (monoid-op (make-monoid string-append \"\") \"a\" \"b\")  => \"ab\"\n\nParameters:\n  op : procedure\n  identity : any\nReturns: monoid\nCategory: algebra\nKeywords: monoid, associative, identity, algebraic structure\n\nSee also: `monoid-op', `monoid-identity', `validate-monoid'."
+  (assert-procedure "make-monoid" op)
+  (make-monoid* op identity))
 
 (define (monoid-op M a b)
   "Apply monoid M's binary operation to A and B.\nA monoid operation is associative: combining A with the result\nof combining B and C gives the same result as combining the\nresult of A and B with C.\n\nExamples:\n  (monoid-op (make-monoid + 0) 3 4)          => 7\n  (monoid-op (make-monoid string-append \"\") \"a\" \"b\")  => \"ab\"\n\nParameters:\n  M : any\n  a : any\n  b : any\nReturns: any\nCategory: algebra\nKeywords: binary operation, combine, oplus, otimes, associative, append, concat\n\nSee also: `monoid-identity', `monoid-fold'."
@@ -35,10 +40,8 @@
 
 (define (validate-monoid M samples)
   "Spot-check that M satisfies the monoid laws on SAMPLES.\nTests left identity, right identity, and associativity for all\nelements and triples in SAMPLES. Returns #t if all laws hold,\nor a list of (violation-type element ...) entries describing failures.\n\nExamples:\n  (validate-monoid (make-monoid + 0) '(1 2 3))  => #t\n\nParameters:\n  M : any\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: associativity, identity element, neutral element, law checking, validation\n\nSee also: `make-monoid', `monoid-op', `monoid-identity'."
-  (let ((violations '())
+  (let ((fail! (make-violation-reporter))
         (e (monoid-identity M)))
-    (define (fail! type . args)
-      (set! violations (cons (cons type args) violations)))
     (for-each
       (lambda (a)
         ;; Left identity
@@ -58,4 +61,4 @@
               samples))
           samples))
       samples)
-    (if (null? violations) #t (reverse violations))))
+    (fail!)))

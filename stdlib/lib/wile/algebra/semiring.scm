@@ -16,6 +16,8 @@
 
 (define (make-semiring plus times zero one)
   "Construct a semiring from PLUS, TIMES, ZERO, and ONE.\nPLUS must be associative and commutative with ZERO as identity.\nTIMES must be associative with ONE as identity and must\ndistribute over PLUS. ZERO must annihilate TIMES from both sides.\n\nExamples:\n  (let ((S (make-semiring + * 0 1)))\n    (semiring-plus S 3 4))   => 7\n  (let ((S (make-semiring + * 0 1)))\n    (semiring-times S 3 4))  => 12\n\nParameters:\n  plus : procedure\n  times : procedure\n  zero : any\n  one : any\nReturns: any\nCategory: algebra\nKeywords: semiring, rig, algebraic structure, distributive\n\nSee also: `semiring->additive-monoid', `validate-semiring'."
+  (assert-procedure "make-semiring" plus)
+  (assert-procedure "make-semiring" times)
   (make-semiring* plus times zero one))
 
 (define (semiring-plus S a b)
@@ -81,11 +83,9 @@
 
 (define (validate-semiring S samples)
   "Spot-check that S satisfies the semiring laws on SAMPLES.\nTests additive and multiplicative identity, zero annihilation,\nadditive commutativity, and left and right distributivity for\nall elements and triples in SAMPLES. Returns #t if all laws\nhold, or a list of (violation-type element ...) entries\ndescribing failures.\n\nExamples:\n  (validate-semiring (counting-semiring) '(0 1 2 3))  => #t\n\nParameters:\n  S : any\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: distributivity, annihilation, commutativity, law checking, validation\n\nSee also: `make-semiring', `semiring-plus', `semiring-times'."
-  (let ((violations '())
+  (let ((fail! (make-violation-reporter))
         (z (semiring-zero S))
         (o (semiring-one S)))
-    (define (fail! type . args)
-      (set! violations (cons (cons type args) violations)))
     (for-each
       (lambda (a)
         ;; Additive identity
@@ -122,4 +122,4 @@
               samples))
           samples))
       samples)
-    (if (null? violations) #t (reverse violations))))
+    (fail!)))

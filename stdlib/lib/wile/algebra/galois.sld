@@ -5,6 +5,7 @@
           gc-concrete-po gc-abstract-lattice
           gc-sound?)
   (import (scheme base)
+          (wile algebra setoid)
           (wile algebra order)
           (wile algebra lattice))
   (include "galois.scm"))

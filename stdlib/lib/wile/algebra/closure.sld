@@ -8,6 +8,7 @@
           validate-closure-operator
           with-closure)
   (import (scheme base)
+          (wile algebra setoid)
           (wile algebra lattice)
           (wile algebra order))
   (include "closure.scm"))

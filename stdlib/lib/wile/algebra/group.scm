@@ -23,36 +23,23 @@
   (elements    group-elements)
   (generators  group-generators))
 
-(define (%assv-or opts key fallback)
-  (let ((p (assv key opts)))
-    (if p (cdr p) fallback)))
-
-(define (%validate-opts-keys site opts known-keys)
-  ;; Reject unrecognized opts keys so typos (e.g. 'elements? for 'element?)
-  ;; surface at construction instead of silently returning the fallback.
-  (for-each
-    (lambda (pair)
-      (unless (and (pair? pair) (memv (car pair) known-keys))
-        (error (string-append site ": unknown option key") pair known-keys)))
-    opts))
-
 (define (make-group op identity inverse . opts)
   "Construct a group from binary operation OP, IDENTITY element, and INVERSE function.\nOP must be associative, IDENTITY must be neutral for OP, and\nINVERSE must return an element such that OP of any element\nwith its inverse yields IDENTITY.\n\nOptional trailing alist entries specify extended metadata:\n  (element? . P) — membership predicate\n  (setoid . S) — equivalence relation (defaults to default-setoid)\n  (order . N) — group order (cardinality)\n  (elements . LIST) — full enumeration for finite groups\n  (generators . LIST) — generating set\n\nExamples:\n  (let ((G (make-group + 0 -))) (group-identity G))  => 0\n  (let ((G (make-group * 1 (lambda (x) (/ 1 x)))))\n    (group-op G 3 4))  => 12\n\nParameters:\n  op : procedure\n  identity : any\n  inverse : procedure\n  opts : alist\nReturns: any\nCategory: algebra\nKeywords: group, inverse, abelian, symmetry, algebraic structure\n\nSee also: `group->monoid', `validate-group'."
   (unless (procedure? op)
     (error "make-group: op must be a procedure" op))
   (unless (procedure? inverse)
     (error "make-group: inverse must be a procedure" inverse))
-  (%validate-opts-keys "make-group" opts
-                       '(element? setoid order elements generators))
-  (let ((element? (%assv-or opts 'element? #f)))
+  (validate-opts-keys "make-group" opts
+                      '(element? setoid order elements generators))
+  (let ((element? (assv-or opts 'element? #f)))
     (unless (or (not element?) (procedure? element?))
       (error "make-group: element? must be a procedure" element?))
     (%make-group op identity inverse
                  element?
-                 (%assv-or opts 'setoid     (default-setoid))
-                 (%assv-or opts 'order      #f)
-                 (%assv-or opts 'elements   #f)
-                 (%assv-or opts 'generators #f))))
+                 (assv-or opts 'setoid     (default-setoid))
+                 (assv-or opts 'order      #f)
+                 (assv-or opts 'elements   #f)
+                 (assv-or opts 'generators #f))))
 
 (define (group-equal? G a b)
   "Test A and B for equivalence under group G's setoid.\n\nExamples:\n  (group-equal? (make-group + 0 -) 3 3)  => #t\n\nParameters:\n  G : any\n  a : any\n  b : any\nReturns: boolean\nCategory: algebra\nKeywords: equality, setoid, equivalence"
@@ -75,13 +62,6 @@
 ;;; closure order; acceptable for the §5.4 v1 target of small orbits and
 ;;; subgroups.
 
-(define (%setoid-member? S x xs)
-  (let loop ((xs xs))
-    (cond
-      ((null? xs) #f)
-      ((setoid-equiv? S x (car xs)) #t)
-      (else (loop (cdr xs))))))
-
 (define (%symmetrize-generators gens inverse S)
   ;; Return gens ∪ {inverse(g) : g ∈ gens}, dedup'd under setoid S.
   ;; Shared by subgroup-generated and (in Phase 5) orbit.
@@ -91,8 +71,8 @@
       (else
        (let* ((g    (car src))
               (g-1  (inverse g))
-              (acc1 (if (%setoid-member? S g acc) acc (cons g acc)))
-              (acc2 (if (%setoid-member? S g-1 acc1) acc1 (cons g-1 acc1))))
+              (acc1 (if (setoid-member? S g acc) acc (cons g acc)))
+              (acc2 (if (setoid-member? S g-1 acc1) acc1 (cons g-1 acc1))))
          (accum (cdr src) acc2))))))
 
 (define (subgroup-generated G generators . opts)
@@ -102,8 +82,8 @@
          (S        (group-setoid G))
          (id       (group-identity G))
          (gens+    (%symmetrize-generators generators inverse S))
-         (_        (%validate-opts-keys "subgroup-generated" opts '(max-size)))
-         (max-size (%assv-or opts 'max-size #f)))
+         (_        (validate-opts-keys "subgroup-generated" opts '(max-size)))
+         (max-size (assv-or opts 'max-size #f)))
     ;; Track closure size as an integer accumulator so the max-size check
     ;; and final order field are O(1) per step instead of O(n) (length seen).
     (let loop ((seen (list id)) (frontier (list id)) (size 1))
@@ -123,7 +103,7 @@
                (else
                 (let ((new-elt (op current (car gs))))
                   (cond
-                    ((%setoid-member? S new-elt seen)
+                    ((setoid-member? S new-elt seen)
                      (scan (cdr gs) seen frontier size))
                     ((and max-size (>= size max-size))
                      (error "subgroup-generated: closure exceeded max-size"
@@ -142,7 +122,7 @@
              (op-G   (group-op-fn G))
              (H-elts (group-elements H))
              (G-elts (group-elements G)))
-         (and (every (lambda (h) (%setoid-member? S-G h G-elts)) H-elts)
+         (and (every (lambda (h) (setoid-member? S-G h G-elts)) H-elts)
               (every (lambda (a)
                        (every (lambda (b)
                                 (setoid-equiv? S-G (op-H a b) (op-G a b)))
@@ -376,10 +356,8 @@
 
 (define (validate-group G samples)
   "Spot-check that G satisfies the group laws on SAMPLES.\nTests left and right identity, left and right inverse, and\nassociativity for all elements and triples in SAMPLES. Returns\n#t if all laws hold, or a list of (violation-type element ...)\nentries describing failures.\n\nExamples:\n  (validate-group (make-group + 0 -) '(1 2 3))  => #t\n\nParameters:\n  G : any\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: identity, inverse, associativity, law checking, validation\n\nSee also: `make-group', `group-op', `group-inverse'."
-  (let ((violations '())
+  (let ((fail! (make-violation-reporter))
         (e (group-identity G)))
-    (define (fail! type . args)
-      (set! violations (cons (cons type args) violations)))
     ;; Monoid laws + inverse
     (for-each
       (lambda (a)
@@ -403,7 +381,7 @@
               samples))
           samples))
       samples)
-    (if (null? violations) #t (reverse violations))))
+    (fail!)))
 
 (define (assert-group G samples)
   "Raise an error if G fails any group law on SAMPLES; return unspecified on\nsuccess. Thin raising variant of `validate-group' for callers that prefer\nexceptions to return-value dispatch on a polymorphic #t/list result.\n\nExamples:\n  (assert-group (make-group + 0 -) '(-2 -1 0 1 2))  ; no error\n\nParameters:\n  G : group\n  samples : list\nReturns: unspecified\nCategory: algebra\nKeywords: assert, validate, group laws, raise\n\nSee also: `validate-group'."

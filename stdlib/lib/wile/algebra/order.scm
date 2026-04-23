@@ -4,9 +4,14 @@
 ;;; Represented as an R7RS record holding a single leq? predicate.
 
 (define-record-type <partial-order>
-  (make-partial-order leq?)
+  (make-partial-order* leq?)
   partial-order?
   (leq? po-leq-fn))
+
+(define (make-partial-order leq?)
+  "Construct a partial order from a LEQ? predicate.\nLEQ? takes two elements and returns a boolean. The relation must\nbe reflexive, antisymmetric, and transitive; `validate-partial-order'\nspot-checks reflexivity and transitivity.\n\nExamples:\n  (po-leq? (make-partial-order <=) 2 3)  => #t\n\nParameters:\n  leq? : procedure\nReturns: partial-order\nCategory: algebra\nKeywords: partial order, leq, order, poset, construction\n\nSee also: `po-leq?', `validate-partial-order'."
+  (assert-procedure "make-partial-order" leq?)
+  (make-partial-order* leq?))
 
 (define (po-leq? po a b)
   "Test whether A is less than or equal to B under partial order PO.\nReturns #t if A precedes or equals B in the ordering, #f otherwise.\n\nExamples:\n  (let ((po (make-partial-order <=)))\n    (po-leq? po 2 3))  => #t\n  (let ((po (make-partial-order <=)))\n    (po-leq? po 3 2))  => #f\n\nParameters:\n  po : any\n  a : any\n  b : any\nReturns: boolean\nCategory: algebra\nKeywords: partial order, less than, leq, ordering, poset, preorder"
@@ -25,9 +30,7 @@
 
 (define (validate-partial-order po samples)
   "Spot-check that PO satisfies partial order laws on SAMPLES.\nTests reflexivity (A <= A) and transitivity (A <= B and B <= C\nimplies A <= C) for all elements and triples in SAMPLES.\nAntisymmetry is not checked because no equality predicate is\navailable. Returns #t if all tested laws hold, or a list of\n(violation-type element ...) entries describing failures.\n\nExamples:\n  (validate-partial-order (make-partial-order <=) '(1 2 3))  => #t\n\nParameters:\n  po : any\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: reflexivity, transitivity, antisymmetry, validation, law checking\n\nSee also: `make-partial-order', `po-leq?'."
-  (let ((violations '()))
-    (define (fail! type . args)
-      (set! violations (cons (cons type args) violations)))
+  (let ((fail! (make-violation-reporter)))
     ;; Reflexivity: a ≤ a
     (for-each
       (lambda (a) (unless (po-leq? po a a) (fail! 'reflexivity a)))
@@ -48,17 +51,15 @@
                 samples)))
           samples))
       samples)
-    (if (null? violations) #t (reverse violations))))
+    (fail!)))
 
 (define (validate-partial-order/setoid po setoid samples)
   "Spot-check partial order PO laws on SAMPLES, including antisymmetry via SETOID.\nExtends validate-partial-order by also checking antisymmetry:\nif a <= b and b <= a, then a and b must be equivalent under SETOID.\nThis is the check that validate-partial-order cannot perform without\nan explicit equality predicate.\n\nExamples:\n  (validate-partial-order/setoid\n    (make-partial-order <=) (numeric-setoid) '(1 2 3))  => #t\n\nParameters:\n  po : any\n  setoid : any\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: antisymmetry, partial order, equivalence, validation, law checking\n\nSee also: `validate-partial-order', `make-setoid'."
-  (let ((violations '()))
-    (define (fail! type . args)
-      (set! violations (cons (cons type args) violations)))
+  (let ((fail! (make-violation-reporter)))
     ;; Delegate existing checks
     (let ((base-result (validate-partial-order po samples)))
-      (when (not (eq? #t base-result))
-        (set! violations (append base-result violations))))
+      (unless (eq? #t base-result)
+        (for-each (lambda (v) (apply fail! v)) base-result)))
     ;; Antisymmetry: a <= b /\ b <= a => equiv?(a, b)
     (for-each
       (lambda (a)
@@ -70,4 +71,4 @@
               (fail! 'antisymmetry a b)))
           samples))
       samples)
-    (if (null? violations) #t (reverse violations))))
+    (fail!)))

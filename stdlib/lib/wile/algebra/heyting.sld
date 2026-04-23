@@ -8,5 +8,6 @@
           validate-heyting-algebra
           with-heyting)
   (import (scheme base)
+          (wile algebra setoid)
           (wile algebra lattice))
   (include "heyting.scm"))

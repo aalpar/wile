@@ -39,19 +39,6 @@
   (cardinality lattice-cardinality)
   (elements    lattice-elements))
 
-(define (%assv-or opts key fallback)
-  (let ((p (assv key opts)))
-    (if p (cdr p) fallback)))
-
-(define (%validate-opts-keys site opts known-keys)
-  ;; Reject unrecognized opts keys so typos surface at construction
-  ;; instead of silently returning the fallback.
-  (for-each
-    (lambda (pair)
-      (unless (and (pair? pair) (memv (car pair) known-keys))
-        (error (string-append site ": unknown option key") pair known-keys)))
-    opts))
-
 (define (make-lattice join meet bottom top leq? . opts)
   "Construct a lattice from JOIN, MEET, BOTTOM, TOP, and LEQ? predicate.\nJOIN computes the least upper bound of two elements, MEET computes\nthe greatest lower bound. BOTTOM is less than all elements, TOP is\ngreater than all elements. LEQ? tests the partial ordering.\n\nOptional trailing alist entries specify extended metadata:\n  (setoid . S)       — <setoid> carrying element equality (defaults to (default-setoid))\n  (cardinality . N)  — exact integer |L| if known; #f otherwise\n  (elements . LIST)  — enumeration of L's elements; required for distributive?/modular?\n\nExamples:\n  (let ((L (make-lattice max min 0 100 <=)))\n    (lattice-join L 3 7))  => 7\n  (let ((L (make-lattice max min 0 4 <=\n                         (cons 'elements '(0 1 2 3 4))\n                         (cons 'cardinality 5))))\n    (lattice-cardinality L))  => 5\n\nParameters:\n  join : procedure\n  meet : procedure\n  bottom : any\n  top : any\n  leq? : procedure\n  opts : alist\nReturns: any\nCategory: algebra\nKeywords: lattice, bounded, complete, algebraic structure, order theory\n\nSee also: `flat-lattice', `powerset-lattice', `validate-lattice'."
   (unless (procedure? join)
@@ -60,15 +47,15 @@
     (error "make-lattice: meet must be a procedure" meet))
   (unless (procedure? leq?)
     (error "make-lattice: leq? must be a procedure" leq?))
-  (%validate-opts-keys "make-lattice" opts
+  (validate-opts-keys "make-lattice" opts
                        '(setoid cardinality elements))
-  (let ((card (%assv-or opts 'cardinality #f))
-        (elts (%assv-or opts 'elements    #f)))
+  (let ((card (assv-or opts 'cardinality #f))
+        (elts (assv-or opts 'elements    #f)))
     (when (and card elts (not (= card (length elts))))
       (error "make-lattice: cardinality does not match (length elements)"
              'cardinality card 'length (length elts)))
     (%make-lattice join meet bottom top leq?
-                   (%assv-or opts 'setoid (default-setoid))
+                   (assv-or opts 'setoid (default-setoid))
                    card
                    elts)))
 
@@ -579,7 +566,7 @@
   ;; Check the distributive law a ⋀ (b ⋁ c) = (a ⋀ b) ⋁ (a ⋀ c) on
   ;; every triple from SAMPLES. Collect (not-distributive a b c lhs rhs)
   ;; entries; return #t on clean run.
-  (let ((violations '()))
+  (let ((fail! (make-violation-reporter)))
     (for-each
       (lambda (a)
         (for-each
@@ -590,19 +577,17 @@
                       (rhs (lattice-join L (lattice-meet L a b)
                                            (lattice-meet L a c))))
                   (unless (setoid-equiv? setoid lhs rhs)
-                    (set! violations
-                          (cons (list 'not-distributive a b c lhs rhs)
-                                violations)))))
+                    (fail! 'not-distributive a b c lhs rhs))))
               samples))
           samples))
       samples)
-    (if (null? violations) #t (reverse violations))))
+    (fail!)))
 
 (define (%validate-modular-impl setoid L samples)
   ;; Check the modular law a ⋁ (b ⋀ c) = (a ⋁ b) ⋀ c on triples with
   ;; a ≤ c (trivially true otherwise). Collect (not-modular a b c lhs rhs)
   ;; entries; return #t on clean run.
-  (let ((violations '()))
+  (let ((fail! (make-violation-reporter)))
     (for-each
       (lambda (a)
         (for-each
@@ -613,13 +598,11 @@
                   (let ((lhs (lattice-join L a (lattice-meet L b c)))
                         (rhs (lattice-meet L (lattice-join L a b) c)))
                     (unless (setoid-equiv? setoid lhs rhs)
-                      (set! violations
-                            (cons (list 'not-modular a b c lhs rhs)
-                                  violations))))))
+                      (fail! 'not-modular a b c lhs rhs)))))
               samples))
           samples))
       samples)
-    (if (null? violations) #t (reverse violations))))
+    (fail!)))
 
 (define (validate-distributive-lattice L samples)
   "Spot-check lattice L's distributive axiom over every triple in SAMPLES.\nUses L's setoid for equality. Returns #t on success or a list of\n(not-distributive a b c lhs rhs) entries naming the first violations.\nSampling cost: O(|samples|³).\n\nExamples:\n  (validate-distributive-lattice (pentagon-lattice) '(bot a b c top))\n    => ((not-distributive a b c lhs rhs) ...)\n\nParameters:\n  L : lattice\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: distributive, validation, axiom, spot check, samples\n\nSee also: `distributive?', `validate-distributive-lattice/setoid'."
@@ -806,9 +789,7 @@
 
 (define (validate-lattice L samples)
   "Spot-check that L satisfies the lattice laws on SAMPLES.\nTests join and meet commutativity, absorption, idempotence,\nand identity (bottom for join, top for meet) for all elements\nand pairs in SAMPLES. Returns #t if all laws hold, or a list\nof (violation-type element ...) entries describing failures.\n\nExamples:\n  (validate-lattice (flat-lattice '(a b c) eq?) '(a b c))  => #t\n\nParameters:\n  L : any\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: commutativity, absorption, idempotence, identity, law checking, validation\n\nSee also: `make-lattice', `lattice-join', `lattice-meet'."
-  (let ((violations '()))
-    (define (fail! type . args)
-      (set! violations (cons (cons type args) violations)))
+  (let ((fail! (make-violation-reporter)))
     (for-each
       (lambda (a)
         (for-each
@@ -838,4 +819,4 @@
         (unless (lattice-equal? L (lattice-meet L (lattice-top L) a) a)
           (fail! 'meet-identity a)))
       samples)
-    (if (null? violations) #t (reverse violations))))
+    (fail!)))

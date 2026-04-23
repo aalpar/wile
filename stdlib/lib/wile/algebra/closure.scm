@@ -8,10 +8,15 @@
 ;; -- Record type -----------------------------------------
 
 (define-record-type <closure-operator>
-  (make-closure-operator close lattice)
+  (make-closure-operator* close lattice)
   closure-operator?
   (close   closure-close-fn)
   (lattice closure-lattice))
+
+(define (make-closure-operator close lattice)
+  "Construct a closure operator from a CLOSE procedure and its underlying LATTICE.\nCLOSE takes an element and returns its closure in LATTICE. The resulting\noperator must be extensive (a ≤ cl(a)), monotone (a ≤ b ⇒ cl(a) ≤ cl(b)),\nand idempotent (cl(cl(a)) = cl(a)); `validate-closure-operator' spot-checks\nthese laws.\n\nExamples:\n  (let ((L (powerset-lattice '(1 2 3))))\n    (closure-operator?\n      (make-closure-operator (lambda (s) (if (member 1 s) '(1 2 3) s)) L)))\n  => #t\n\nParameters:\n  close : procedure\n  lattice : lattice\nReturns: closure-operator\nCategory: algebra\nKeywords: closure, extensive, monotone, idempotent, construction\n\nSee also: `closure-close', `closure-lattice', `validate-closure-operator'."
+  (assert-procedure "make-closure-operator" close)
+  (make-closure-operator* close lattice))
 
 ;; -- Core operations -------------------------------------
 
@@ -84,10 +89,8 @@
 
 (define (validate-closure-operator C samples)
   "Spot-check that C satisfies the closure operator laws on SAMPLES.\nTests extensiveness (a <= cl(a)), monotonicity (a <= b => cl(a) <= cl(b)),\nand idempotence (cl(cl(a)) = cl(a)) for all elements and pairs\nin SAMPLES.  Returns #t if all laws hold, or a list of\n(violation-type element ...) entries describing failures.\n\nExamples:\n  ;; (validate-closure-operator C '(() (1) (2) (1 2 3)))  => #t\n\nParameters:\n  C : any\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: extensive, monotone, idempotent, law checking, validation\n\nSee also: `make-closure-operator', `closure-close'."
-  (let ((violations '())
+  (let ((fail! (make-violation-reporter))
         (L (closure-lattice C)))
-    (define (fail! type . args)
-      (set! violations (cons (cons type args) violations)))
     (for-each
       (lambda (a)
         (let ((cl-a (closure-close C a)))
@@ -105,7 +108,7 @@
                   (fail! 'monotone a b))))
             samples)))
       samples)
-    (if (null? violations) #t (reverse violations))))
+    (fail!)))
 
 ;; -- with-closure macro ----------------------------------
 

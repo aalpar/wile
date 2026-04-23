@@ -14,6 +14,7 @@
 
 (define (make-differential-ring R deriv)
   "Construct a differential ring from ring R and derivation DERIV.\nDERIV must be a unary procedure satisfying additivity\nD(a+b) = D(a)+D(b) and the Leibniz rule\nD(a*b) = D(a)*b + a*D(b).\n\nExamples:\n  (let ((D (make-differential-ring (integer-ring) (lambda (x) 0))))\n    (differential-deriv D 42))  => 0\n\nParameters:\n  R : any\n  deriv : procedure\nReturns: any\nCategory: algebra\nKeywords: differential ring, derivation, Leibniz rule, differential algebra\n\nSee also: `differential-deriv', `validate-differential-ring'."
+  (assert-procedure "make-differential-ring" deriv)
   (make-differential-ring* R deriv))
 
 (define (differential-deriv D a)
@@ -82,14 +83,12 @@
 
 (define (validate-differential-ring D samples)
   "Spot-check that D satisfies the differential ring laws on SAMPLES.\nFirst delegates to validate-ring on the underlying ring, then\nchecks additivity D(a+b) = D(a)+D(b) and the Leibniz rule\nD(a*b) = D(a)*b + a*D(b) for all pairs in SAMPLES.\nReturns #t if all laws hold, or a list of (violation-type ...)\nentries describing failures.\n\nExamples:\n  (validate-differential-ring\n    (dual-number-ring)\n    (list (cons 1 0) (cons 0 1) (cons 2 3)))  => #t\n\nParameters:\n  D : any\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: Leibniz rule, additivity, derivation, law checking, validation\n\nSee also: `make-differential-ring', `validate-ring'."
-  (let ((violations '())
+  (let ((fail! (make-violation-reporter))
         (R (differential-ring-ring D)))
-    (define (fail! type . args)
-      (set! violations (cons (cons type args) violations)))
     ;; Ring laws
     (let ((ring-result (validate-ring R samples)))
-      (when (not (eq? #t ring-result))
-        (set! violations (append ring-result violations))))
+      (unless (eq? #t ring-result)
+        (for-each (lambda (v) (apply fail! v)) ring-result)))
     ;; Derivation laws
     (for-each
       (lambda (a)
@@ -111,4 +110,4 @@
                 (fail! 'leibniz-rule a b))))
           samples))
       samples)
-    (if (null? violations) #t (reverse violations))))
+    (fail!)))

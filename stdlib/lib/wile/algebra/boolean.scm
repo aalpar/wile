@@ -18,6 +18,10 @@
 
 (define (make-boolean-algebra join meet bottom top leq? complement)
   "Construct a Boolean algebra from lattice operations and COMPLEMENT.\nA Boolean algebra is a complemented distributive lattice where\nevery element a has a complement satisfying a ∧ ¬a = ⊥ and\na ∨ ¬a = ⊤, and meet distributes over join.\n\nExamples:\n  (let ((B (powerset-boolean '(x y z))))\n    (boolean-complement B '(x)))  => (y z)\n\nParameters:\n  join : procedure\n  meet : procedure\n  bottom : any\n  top : any\n  leq? : procedure\n  complement : procedure\nReturns: any\nCategory: algebra\nKeywords: Boolean, complement, distributive lattice, classical logic\n\nSee also: `powerset-boolean', `validate-boolean-algebra'."
+  (assert-procedure "make-boolean-algebra" join)
+  (assert-procedure "make-boolean-algebra" meet)
+  (assert-procedure "make-boolean-algebra" leq?)
+  (assert-procedure "make-boolean-algebra" complement)
   (make-boolean-algebra* join meet bottom top leq? complement))
 
 ;; ─── Core operations ─────────────────────────
@@ -120,15 +124,13 @@
 
 (define (validate-boolean-algebra B samples)
   "Spot-check that B satisfies the Boolean algebra laws on SAMPLES.\nDelegates lattice law checks to validate-lattice, then tests\ncomplement laws (a ∧ ¬a = ⊥, a ∨ ¬a = ⊤) and distributivity\n(a ∧ (b ∨ c) = (a ∧ b) ∨ (a ∧ c)) for elements and triples\nin SAMPLES. Returns #t if all laws hold, or a list of\n(violation-type element ...) entries describing failures.\n\nExamples:\n  (validate-boolean-algebra\n    (powerset-boolean '(x y z)) '((x) (y) (x y)))  => #t\n\nParameters:\n  B : any\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: complement, distributivity, excluded middle, law checking, validation\n\nSee also: `make-boolean-algebra', `validate-lattice'."
-  (let ((violations '())
+  (let ((fail! (make-violation-reporter))
         (bot (boolean-bottom B))
         (top (boolean-top B)))
-    (define (fail! type . args)
-      (set! violations (cons (cons type args) violations)))
     ;; Delegate lattice laws
     (let ((lattice-result (validate-lattice (boolean->lattice B) samples)))
-      (when (not (eq? #t lattice-result))
-        (set! violations (append lattice-result violations))))
+      (unless (eq? #t lattice-result)
+        (for-each (lambda (v) (apply fail! v)) lattice-result)))
     (for-each
       (lambda (a)
         ;; Complement: a ∧ ¬a = ⊥
@@ -151,4 +153,4 @@
               samples))
           samples))
       samples)
-    (if (null? violations) #t (reverse violations))))
+    (fail!)))

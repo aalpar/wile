@@ -16,6 +16,9 @@
 
 (define (make-ring plus times zero one negate)
   "Construct a ring from PLUS, TIMES, ZERO, ONE, and NEGATE.\nThe additive structure (PLUS, ZERO, NEGATE) must form an abelian\ngroup, TIMES must be associative with ONE as identity, and TIMES\nmust distribute over PLUS from both sides.\n\nExamples:\n  (let ((R (make-ring + * 0 1 -)))\n    (ring-plus R 3 4))   => 7\n  (let ((R (make-ring + * 0 1 -)))\n    (ring-times R 3 4))  => 12\n\nParameters:\n  plus : procedure\n  times : procedure\n  zero : any\n  one : any\n  negate : procedure\nReturns: any\nCategory: algebra\nKeywords: ring, algebraic structure, additive group, distributive\n\nSee also: `ring->semiring', `ring->additive-group', `validate-ring'."
+  (assert-procedure "make-ring" plus)
+  (assert-procedure "make-ring" times)
+  (assert-procedure "make-ring" negate)
   (make-ring* plus times zero one negate))
 
 (define (ring-plus R a b)
@@ -72,11 +75,9 @@
 
 (define (validate-ring R samples)
   "Spot-check that R satisfies the ring laws on SAMPLES.\nTests additive identity, multiplicative identity, additive\ninverse, and left distributivity for all elements and triples\nin SAMPLES. Returns #t if all laws hold, or a list of\n(violation-type element ...) entries describing failures.\n\nExamples:\n  (validate-ring (integer-ring) '(0 1 2 3))  => #t\n\nParameters:\n  R : any\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: distributivity, inverse, identity, law checking, validation\n\nSee also: `make-ring', `validate-semiring', `validate-field'."
-  (let ((violations '())
+  (let ((fail! (make-violation-reporter))
         (z (ring-zero R))
         (o (ring-one R)))
-    (define (fail! type . args)
-      (set! violations (cons (cons type args) violations)))
     (for-each
       (lambda (a)
         ;; Additive identity
@@ -100,7 +101,7 @@
               samples))
           samples))
       samples)
-    (if (null? violations) #t (reverse violations))))
+    (fail!)))
 
 ;; ─── Fields ──────────────────────────────────
 
@@ -116,6 +117,10 @@
 
 (define (make-field plus times zero one negate reciprocal)
   "Construct a field from PLUS, TIMES, ZERO, ONE, NEGATE, and RECIPROCAL.\nA field is a ring where every nonzero element has a multiplicative\ninverse given by RECIPROCAL. RECIPROCAL need not be defined for ZERO.\n\nExamples:\n  (let ((F (make-field + * 0 1 - (lambda (x) (/ 1 x)))))\n    (field-times F 3 (field-reciprocal F 3)))  => 1\n\nParameters:\n  plus : procedure\n  times : procedure\n  zero : any\n  one : any\n  negate : procedure\n  reciprocal : procedure\nReturns: any\nCategory: algebra\nKeywords: field, division, algebraic structure, multiplicative inverse\n\nSee also: `field->ring', `validate-field'."
+  (assert-procedure "make-field" plus)
+  (assert-procedure "make-field" times)
+  (assert-procedure "make-field" negate)
+  (assert-procedure "make-field" reciprocal)
   (make-field* plus times zero one negate reciprocal))
 
 (define (field-plus F a b)
@@ -165,15 +170,13 @@
 
 (define (validate-field F samples)
   "Spot-check that F satisfies the field laws on SAMPLES.\nDelegates ring law checks to `validate-ring', then additionally\ntests that every nonzero element in SAMPLES has a multiplicative\ninverse. SAMPLES should exclude the zero element. Returns #t if\nall laws hold, or a list of (violation-type element ...) entries\ndescribing failures.\n\nExamples:\n  (validate-field (rational-field) '(1 2 1/2 3/4))  => #t\n\nParameters:\n  F : any\n  samples : list\nReturns: any\nCategory: algebra\nKeywords: multiplicative inverse, division, law checking, validation\n\nSee also: `make-field', `field->ring', `validate-ring'."
-  (let ((violations '())
+  (let ((fail! (make-violation-reporter))
         (z (field-zero F))
         (o (field-one F)))
-    (define (fail! type . args)
-      (set! violations (cons (cons type args) violations)))
     ;; Ring laws
     (let ((ring-result (validate-ring (field->ring F) samples)))
-      (when (not (eq? #t ring-result))
-        (set! violations (append ring-result violations))))
+      (unless (eq? #t ring-result)
+        (for-each (lambda (v) (apply fail! v)) ring-result)))
     ;; Multiplicative inverse for nonzero elements
     (for-each
       (lambda (a)
@@ -181,4 +184,4 @@
           (unless (equal? (field-times F a (field-reciprocal F a)) o)
             (fail! 'multiplicative-inverse a))))
       samples)
-    (if (null? violations) #t (reverse violations))))
+    (fail!)))

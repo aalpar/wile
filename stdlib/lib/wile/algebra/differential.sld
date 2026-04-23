@@ -8,6 +8,7 @@
           validate-differential-ring
           with-differential)
   (import (scheme base)
+          (wile algebra setoid)
           (wile algebra ring)
           (wile algebra polynomial))
   (include "differential.scm"))

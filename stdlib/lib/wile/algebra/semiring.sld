@@ -7,5 +7,6 @@
           validate-semiring
           with-semiring)
   (import (scheme base)
+          (wile algebra setoid)
           (wile algebra monoid))
   (include "semiring.scm"))
