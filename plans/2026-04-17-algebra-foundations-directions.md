@@ -71,7 +71,7 @@ Organized by distance from existing code (Tier 1 = closest, Tier 3 = furthest).
 
 #### 2.2 Free structures
 
-**Status — partial:** Free Boolean algebra on atoms shipped via extraction from wile-goast's `boolean-simplify.scm` — see `plans/2026-04-22-wile-goast-algebra-extraction-design.md`. Entry points `symbolic-boolean-normalize` / `symbolic-boolean-equivalent?` in `(wile algebra symbolic)`. Free-distributive-lattice shipped via §5.5 (as the `free-distributive-lattice` preset in `(wile algebra lattice)`). Free-monoid and free-group remain unshipped; re-open as a follow-up TODO when a consumer surfaces.
+**Status — partial:** A Boolean-theory normalizer shipped via extraction from wile-goast's `boolean-simplify.scm` — see `plans/2026-04-22-wile-goast-algebra-extraction-design.md`. Entry points `symbolic-boolean-normalize` / `symbolic-boolean-equivalent?` in `(wile algebra symbolic)` apply the axioms currently wired into `boolean->theory` (commutativity, associativity, identity, idempotence, absorption, complement-involution). Note: this is *not* yet full free-Boolean-algebra canonical form — De Morgan, complement-law, and bound identities are not applied; extending `boolean->theory` would fill the gap. Free-distributive-lattice shipped via §5.5 (as the `free-distributive-lattice` preset in `(wile algebra lattice)`). Free-monoid and free-group remain unshipped; re-open as a follow-up TODO when a consumer surfaces.
 
 **Missing:** `free-monoid`, `free-group`, `free-lattice`, `free-distributive-lattice`.
 

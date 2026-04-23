@@ -58,17 +58,34 @@ See also: `sign-lattice', `sign-binop'."
 ;; `(wile algebra interval)` pattern of pairing a lattice with its
 ;; transfer operations).
 
+(define (sign? s)
+  "Test whether S is a valid sign-lattice value.
+Valid signs are `neg`, `zero`, `pos`, `flat-bottom`, `flat-top`.
+
+Parameters:
+  s : any
+Returns: boolean
+Category: algebra
+Keywords: sign, predicate, abstract domain
+
+See also: `sign-lattice', `abstract-sign', `sign-binop'."
+  (and (symbol? s)
+       (memq s '(neg zero pos flat-bottom flat-top))
+       #t))
+
 (define (sign-binop op a b)
   "Apply sign operator OP to sign values A and B.
 OP is one of `add`, `sub`, `mul`. A and B are sign values drawn from
-`(sign-lattice)`: one of `neg`, `zero`, `pos`, `flat-bottom`, `flat-top`.
+`(sign-lattice)`: `neg`, `zero`, `pos`, `flat-bottom`, or `flat-top`.
 Returns the resulting sign.
 
 Strict on `flat-bottom`: any operand being `flat-bottom` yields
 `flat-bottom`. Multiplication by `zero` is `zero` even if the other
 operand is `flat-top` (annihilation). Otherwise `flat-top` propagates.
 
-Unknown operators return `flat-top` conservatively.
+Raises an error if OP is not one of `add`, `sub`, `mul`, or if A / B
+is not a valid sign. Callers wanting a conservative default must
+wrap `sign-binop` explicitly.
 
 Parameters:
   op : symbol
@@ -84,7 +101,13 @@ Examples:
   (sign-binop 'add 'neg 'pos)            => flat-top
   (sign-binop 'add 'flat-bottom 'pos)    => flat-bottom
 
-See also: `sign-lattice', `abstract-sign'."
+See also: `sign?', `sign-lattice', `abstract-sign'."
+  (unless (memq op '(add sub mul))
+    (error "sign-binop: unknown operator" op))
+  (unless (sign? a)
+    (error "sign-binop: invalid sign for a" a))
+  (unless (sign? b)
+    (error "sign-binop: invalid sign for b" b))
   (let ((bot 'flat-bottom)
         (top 'flat-top))
     (cond
@@ -107,5 +130,4 @@ See also: `sign-lattice', `abstract-sign'."
            (case a
              ((neg)  (case b ((neg) 'pos)  ((zero) 'zero) ((pos) 'neg)))
              ((zero) 'zero)
-             ((pos)  (case b ((neg) 'neg)  ((zero) 'zero) ((pos) 'pos)))))
-          (else top))))))
+             ((pos)  (case b ((neg) 'neg)  ((zero) 'zero) ((pos) 'pos))))))))))

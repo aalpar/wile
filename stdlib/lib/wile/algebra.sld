@@ -244,7 +244,7 @@
     complete-graph cycle-graph path-graph
     complete-bipartite-graph empty-graph petersen-graph
     ;; Abstract interpretation — pre-built domains
-    sign-lattice abstract-sign sign-binop
+    sign-lattice sign? abstract-sign sign-binop
     ;; MFP dataflow solver
     make-cfg-protocol cfg-protocol?
     cfg-protocol-blocks-of cfg-protocol-index-of

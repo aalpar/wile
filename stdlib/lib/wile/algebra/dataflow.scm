@@ -30,12 +30,43 @@
 ;; solver CFG-shape-agnostic.
 
 (define-record-type <cfg-protocol>
-  (make-cfg-protocol blocks-of index-of preds-of succs-of)
+  (%make-cfg-protocol blocks-of index-of preds-of succs-of)
   cfg-protocol?
   (blocks-of cfg-protocol-blocks-of)
   (index-of  cfg-protocol-index-of)
   (preds-of  cfg-protocol-preds-of)
   (succs-of  cfg-protocol-succs-of))
+
+(define (make-cfg-protocol blocks-of index-of preds-of succs-of)
+  "Construct a CFG protocol record from four closures:
+  BLOCKS-OF : fn   → list of blocks
+  INDEX-OF  : blk  → identifier (eqv?-comparable; typically integer or symbol)
+  PREDS-OF  : blk  → list of indices (or `#f`, treated as empty)
+  SUCCS-OF  : blk  → list of indices (or `#f`, treated as empty)
+
+All four arguments must be procedures. The record carries no data
+itself — only the accessor closures that let `run-analysis`
+traverse an arbitrary CFG representation.
+
+Parameters:
+  blocks-of : procedure
+  index-of : procedure
+  preds-of : procedure
+  succs-of : procedure
+Returns: cfg-protocol
+Category: algebra
+Keywords: CFG, control flow graph, protocol, dataflow
+
+See also: `run-analysis', `cfg-protocol?'."
+  (unless (procedure? blocks-of)
+    (error "make-cfg-protocol: blocks-of must be a procedure" blocks-of))
+  (unless (procedure? index-of)
+    (error "make-cfg-protocol: index-of must be a procedure" index-of))
+  (unless (procedure? preds-of)
+    (error "make-cfg-protocol: preds-of must be a procedure" preds-of))
+  (unless (procedure? succs-of)
+    (error "make-cfg-protocol: succs-of must be a procedure" succs-of))
+  (%make-cfg-protocol blocks-of index-of preds-of succs-of))
 
 ;; ─── Reverse postorder ────────────────────
 
@@ -43,6 +74,11 @@
   "Compute reverse postorder of BLOCKS under CFG PROTOCOL.
 DFS from the first block's index, record block indices in postorder,
 then reverse. Used by `run-analysis` to seed worklist priority.
+
+Only blocks reachable from `(car blocks)` via `succs-of` appear in
+the returned list. Callers relying on orphan-block handling should
+either ensure `(car blocks)` dominates the rest of the CFG or run
+their own reachability pass upstream.
 
 Parameters:
   blocks : list
@@ -52,12 +88,16 @@ Category: algebra
 Keywords: reverse postorder, DFS, worklist, dataflow
 
 See also: `run-analysis'."
+  (unless (cfg-protocol? protocol)
+    (error "reverse-postorder: expected cfg-protocol" protocol))
   (let ((index-of (cfg-protocol-index-of protocol))
         (succs-of (cfg-protocol-succs-of protocol)))
     (let ((block-map (map (lambda (b) (cons (index-of b) b)) blocks)))
       (define (succs-of-idx idx)
         (let ((entry (assv idx block-map)))
-          (if entry (or (succs-of (cdr entry)) '()) '())))
+          (if entry
+              (or (succs-of (cdr entry)) '())
+              (error "reverse-postorder: successor index not in blocks (malformed CFG)" idx))))
       (let ((visited '()) (result '()))
         (define (dfs idx)
           (unless (memv idx visited)
@@ -75,6 +115,11 @@ See also: `run-analysis'."
   "Query the in-state at BLOCK-IDX from a `run-analysis' result.
 Returns #f if the block is not present in RESULT.
 
+Note: if a lattice's bottom value is itself `#f` (e.g. a truth-value
+lattice), this accessor cannot distinguish `block missing` from
+`block present at bottom`. Use `(assv block-idx (analysis-states r))`
+for a presence check in that case.
+
 Parameters:
   result : list
   block-idx : any
@@ -89,6 +134,11 @@ See also: `analysis-out', `analysis-states', `run-analysis'."
 (define (analysis-out result block-idx)
   "Query the out-state at BLOCK-IDX from a `run-analysis' result.
 Returns #f if the block is not present in RESULT.
+
+Note: if a lattice's bottom value is itself `#f` (e.g. a truth-value
+lattice), this accessor cannot distinguish `block missing` from
+`block present at bottom`. Use `(assv block-idx (analysis-states r))`
+for a presence check in that case.
 
 Parameters:
   result : list
@@ -124,7 +174,20 @@ FN is the CFG-bearing function; PROTOCOL adapts FN to the solver.
 
 Optional args: an initial state value (defaults to `lattice-bottom`),
 and the symbol `check-monotone` to enable monotonicity-violation
-detection during iteration. These can appear in either order.
+detection during iteration. Both may appear in either order; an
+initial state must not be a symbol (it would be parsed as a flag).
+If the lattice's elements are symbols (e.g. `sign-lattice`), callers
+must not pass them as initial state via this varargs API — use
+`lattice-bottom` as the default or wrap in a tagged cell upstream.
+
+Known limitation: backward analyses do not propagate the supplied
+`initial-state` through exit blocks in all cases. The current seeding
+stores `initial-state` at the exit block's `out`-slot, but the main
+loop recomputes `in` from successors (empty for exits) and overwrites
+`out` via `transfer`. Transfer functions that unconditionally lift to
+a desired bottom are unaffected; identity or partial transfers with
+non-bottom initial states may surface the issue. Fix deferred pending
+downstream-consumer audit.
 
 Returns a per-block result alist shaped `((idx in out) ...)`. Use
 `analysis-in` / `analysis-out` / `analysis-states` to query.
@@ -149,6 +212,14 @@ Examples:
 
 See also: `make-cfg-protocol', `analysis-in', `analysis-out',
 `reverse-postorder'."
+  (unless (memq direction '(forward backward))
+    (error "run-analysis: direction must be 'forward or 'backward" direction))
+  (unless (lattice? lattice)
+    (error "run-analysis: expected lattice" lattice))
+  (unless (procedure? transfer)
+    (error "run-analysis: expected procedure for transfer" transfer))
+  (unless (cfg-protocol? protocol)
+    (error "run-analysis: expected cfg-protocol" protocol))
   (let* ((initial-state (if (and (pair? args) (not (symbol? (car args))))
                             (car args)
                             (lattice-bottom lattice)))
@@ -172,7 +243,9 @@ See also: `make-cfg-protocol', `analysis-in', `analysis-out',
                                (cons (cons (car os) r) m)))))
          (rank-of (lambda (idx)
                     (let ((e (assv idx rank-map)))
-                      (if e (cdr e) 999))))
+                      (unless e
+                        (error "run-analysis: index not in rank map (broken CFG protocol?)" idx))
+                      (cdr e))))
          (flow-preds (lambda (b)
                        (or (if forward? (preds-of b) (succs-of b)) '())))
          (flow-succs (lambda (b)
@@ -180,8 +253,8 @@ See also: `make-cfg-protocol', `analysis-in', `analysis-out',
          (entry-idx (if (null? blocks) #f (index-of (car blocks))))
          (exit-idxs (filter-map
                       (lambda (b)
-                        (let ((s (succs-of b)))
-                          (and (or (not s) (null? s)) (index-of b))))
+                        (let ((s (or (succs-of b) '())))
+                          (and (null? s) (index-of b))))
                       blocks))
          (seed-idxs (if forward?
                         (if entry-idx (list entry-idx) '())
@@ -200,7 +273,7 @@ See also: `make-cfg-protocol', `analysis-in', `analysis-out',
     (define (set-state! idx in-val out-val)
       (set! states
         (map (lambda (entry)
-               (if (equal? (car entry) idx)
+               (if (eqv? (car entry) idx)
                    (list idx in-val out-val)
                    entry))
              states)))
@@ -238,8 +311,9 @@ See also: `make-cfg-protocol', `analysis-in', `analysis-out',
                  (old-out (get-out idx)))
             (when (and check-mono
                        (not (lattice-leq? lattice old-out out-val)))
-              (error (string-append "run-analysis: monotonicity violation at block "
-                                    (number->string idx))))
+              (error "run-analysis: monotonicity violation"
+                     (list 'block idx 'in in-val
+                           'old-out old-out 'new-out out-val)))
             (set-state! idx in-val out-val)
             (if (lattice-leq? lattice out-val old-out)
                 (loop rest-wl)

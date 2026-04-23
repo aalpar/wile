@@ -173,5 +173,35 @@
     (test #t (analysis-in result 0))
     (test #t (analysis-out result 0))))
 
+;;; --- run-analysis + make-cfg-protocol validation ------------------------
+
+(test-group "make-cfg-protocol — procedure validation"
+  (test-error (make-cfg-protocol 42 car cadr caddr))
+  (test-error (make-cfg-protocol (lambda (fn) fn) #f cadr caddr))
+  (test-error (make-cfg-protocol (lambda (fn) fn) car 'not-a-proc caddr))
+  (test-error (make-cfg-protocol (lambda (fn) fn) car cadr "nope")))
+
+(test-group "run-analysis — argument validation"
+  (let ((L (truth-value-lattice))
+        (xfer (lambda (blk in) in)))
+    (test-error (run-analysis 'diagonal L xfer diamond-cfg test-protocol))
+    (test-error (run-analysis 'forward  "not a lattice" xfer diamond-cfg test-protocol))
+    (test-error (run-analysis 'forward  L 42 diamond-cfg test-protocol))
+    (test-error (run-analysis 'forward  L xfer diamond-cfg 'not-a-protocol))))
+
+;;; --- Positive fixpoint on a cyclic CFG ---------------------------------
+
+(test-group "run-analysis — cyclic CFG reaches fixpoint"
+  ;; 0 ↔ 1 mutually referential. Monotone "lift to #t on first visit"
+  ;; transfer: once any block sees #t it stays #t, so the fixpoint is
+  ;; all-#t; the solver must converge rather than spin.
+  (let* ((cyclic-cfg '((0 (1) (1)) (1 (0) (0))))
+         (L (truth-value-lattice))
+         (xfer (lambda (blk in) (or in #t)))
+         (result (run-analysis 'forward L xfer cyclic-cfg test-protocol #t)))
+    (test 2 (length result))
+    (test #t (analysis-out result 0))
+    (test #t (analysis-out result 1))))
+
 (test-end)
 (test-exit)

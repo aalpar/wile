@@ -50,8 +50,26 @@
   (test 'flat-bottom (sign-binop 'add 'neg 'flat-bottom))
   (test 'zero        (sign-binop 'mul 'zero 'flat-top))
   (test 'zero        (sign-binop 'mul 'flat-top 'zero))
-  (test 'flat-top    (sign-binop 'add 'flat-top 'pos))
-  (test 'flat-top    (sign-binop 'div 'pos 'pos)))
+  (test 'flat-top    (sign-binop 'add 'flat-top 'pos)))
+
+(test-group "sign-binop — validation"
+  ;; Unknown operators and invalid signs both raise; callers wanting
+  ;; a conservative default must wrap sign-binop explicitly.
+  (test-error (sign-binop 'div 'pos 'pos))
+  (test-error (sign-binop 'add 'not-a-sign 'pos))
+  (test-error (sign-binop 'add 'pos 'not-a-sign))
+  (test-error (sign-binop 'add 42 'pos)))
+
+(test-group "sign?"
+  (test #t (sign? 'neg))
+  (test #t (sign? 'zero))
+  (test #t (sign? 'pos))
+  (test #t (sign? 'flat-bottom))
+  (test #t (sign? 'flat-top))
+  (test #f (sign? 'not-a-sign))
+  (test #f (sign? 42))
+  (test #f (sign? "neg"))
+  (test #f (sign? '())))
 
 (test-group "sign-binop — add table"
   (test 'neg      (sign-binop 'add 'neg 'neg))
