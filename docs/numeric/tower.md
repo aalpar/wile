@@ -62,7 +62,7 @@ The numeric tower uses **pre-built dispatch tables** indexed by `NumericKind`. E
 
 ### Dispatch Table Architecture
 
-Tables are populated at `init()` time by generators in `values/promotion.go` — `makeArithmeticDispatch`, `makeLessThanDispatch`, `makeCompareDispatch`. Most numeric types carry six tables (`Add`, `Subtract`, `Multiply`, `Divide`, `LessThan`, `Compare`), all pre-indexed by `NumericKind`. `BigComplex` is the exception: it has five tables — no `LessThan` dispatch — because `LessThan` delegates to `Compare` (see the comment at `values/big_complex.go:148`). That asymmetry is why the total is **41 tables and 294 closures** across the seven types, not 42. The fast-path call is `integerAdd[o.Kind()](p, o)` rather than a cascading type switch.
+Tables are populated at `init()` time by generators in `values/promotion.go` — `makeArithmeticDispatch`, `makeLessThanDispatch`, `makeCompareDispatch`. Six of the seven numeric types carry six tables each (`Add`, `Subtract`, `Multiply`, `Divide`, `LessThan`, `Compare`), all pre-indexed by `NumericKind`. `BigComplex` carries five: it has no `LessThan` dispatch table because `LessThan` delegates to `Compare` (see `values/big_complex.go:148`). Total: **41 tables, 294 closures**. The fast-path call is `integerAdd[o.Kind()](p, o)` rather than a cascading type switch.
 
 **Call path:** `Integer.Add(o)` → fast path for same type (`*Integer`), otherwise `integerAdd[o.Kind()](p, o)`.
 

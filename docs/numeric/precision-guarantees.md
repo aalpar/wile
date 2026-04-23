@@ -200,7 +200,6 @@ Line numbers are pinned as `file:LINE`. When a symbol has no single line (e.g. d
 - [ ] `values/big_float.go` — Tier 4: BigFloat must support Inf and NaN (IEEE 754 uniformity)
 - [ ] `values/big_complex.go` — Tier 4: BigComplex must support Inf/NaN parts via BigFloat
 - [ ] `values/promotion.go:318` `isSpecialFloat` guard — **REMOVE** after BigFloat Inf/NaN support (#362)
-- [ ] `values/big_complex.go:99` `toBigFloat` — internal helper used across BigComplex operations (not only at the FFI boundary); returns a `*BigFloat` without precision loss. Included here for completeness; no audit action pending.
 - [ ] `values/promotion.go:327` `NumberToFloat64` — Tier 3 helper for lossy `float64` conversion at machine/FFI boundaries; verify all precision-dropping call paths are intentional
 - [ ] `values/promotion.go:352` `NumberToComplex128` — Tier 3 helper for lossy `complex128` conversion at machine/FFI boundaries; verify all precision-dropping call paths are intentional
 - [x] ~~`values/big_complex.go` `toExactPart`~~ — **FIXED**. `toExactPart` (now `big_complex.go:379`) delegates to `BigFloat.ToExact()` which calls `p.value.Rat(nil)` directly (`big_float.go:324`); no `.Float64()` roundtrip remains.
