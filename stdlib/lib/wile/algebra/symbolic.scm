@@ -609,3 +609,113 @@ Category: algebra"
                " → "
                (display-to-string (step-after step)))))
        trace))
+
+;; ─── Boolean normalization facade ─────────
+;;
+;; Named entry points for the most common recursive-normalizer instance:
+;; Boolean algebra equational theory over arbitrary S-expression atoms.
+;; This is the "free Boolean algebra on atoms" normalization of TODO §2.2.
+;;
+;; Mathematical framing: `symbolic-boolean-normalize` computes a canonical
+;; representative in the free Boolean algebra F_B(A) on a set of atoms A,
+;; modulo the Boolean equational laws (commutativity, absorption,
+;; idempotence, involution, De Morgan, bound identities, complement).
+;; Two terms are equivalent in F_B(A) iff they normalize to the same
+;; canonical form.
+;;
+;; Note on the trivial 1-atom Boolean algebra used below: `boolean->theory`
+;; extracts only the *equational* laws from its Boolean-algebra argument;
+;; the carrier's cardinality is irrelevant because the normalizer operates
+;; purely syntactically (atoms are opaque S-expressions, never evaluated
+;; against the carrier). The minimal Boolean algebra (1 atom, 2 elements)
+;; and the free Boolean algebra on any number of atoms share the same
+;; equational theory — which is what drives normalization.
+;;
+;; Extracted from wile-goast's goast/boolean-simplify.scm L23-69, where
+;; this facade was originally built for Go AST condition and belief
+;; selector normalization. The wile-goast projections that convert Go
+;; AST nodes or belief selectors into symbolic terms stay in wile-goast.
+
+(define *symbolic-boolean-theory* #f)
+(define *symbolic-boolean-normalizer* #f)
+
+(define (sexp-atom-compare a b)
+  "Compare two S-expression atoms lexicographically by their printed form.
+Serializes via `write` so any atom type (symbol, number, string, pair,
+vector) orders consistently. Used as the commutativity tie-break for
+`sexp-term-protocol` in the Boolean normalizer.
+
+Parameters:
+  a : any
+  b : any
+Returns: boolean
+Category: algebra
+Keywords: compare, lexicographic, atom, canonical order
+
+See also: `symbolic-boolean-normalize', `sexp-term-protocol'."
+  (let ((sa (let ((p (open-output-string))) (write a p) (get-output-string p)))
+        (sb (let ((p (open-output-string))) (write b p) (get-output-string p))))
+    (string<? sa sb)))
+
+(define (ensure-symbolic-boolean-normalizer!)
+  ;; Lazy singleton construction. Guard on *symbolic-boolean-normalizer*
+  ;; (the last thing set) so a partial failure leaves the guard open
+  ;; for retry on a subsequent call.
+  (unless *symbolic-boolean-normalizer*
+    (let* ((B (powerset-boolean '(_)))
+           (th (boolean->theory B 'or 'and 'not))
+           (proto (sexp-term-protocol sexp-atom-compare))
+           (norm (make-recursive-normalizer th proto)))
+      (set! *symbolic-boolean-normalizer* norm)
+      (set! *symbolic-boolean-theory* th))))
+
+(define (symbolic-boolean-normalize term)
+  "Normalize an S-expression boolean term in the free Boolean algebra on atoms.
+Treats `(and ...)`, `(or ...)`, `(not ...)` as Boolean operators; every
+other form (symbol, number, non-Boolean compound) is an opaque atom.
+Applies commutativity, absorption, idempotence, involution, De Morgan,
+bound identities, and complement laws.
+
+Returns two values: the canonical normal form, and the rewrite trace
+(a list of `<rewrite-step>` records documenting each rewrite applied).
+
+Parameters:
+  term : any
+Returns: any
+Category: algebra
+Keywords: boolean, normalize, canonical form, free boolean algebra, simplify
+
+Examples:
+  (symbolic-boolean-normalize '(and x (or x y)))  ; absorption
+  ;  => x, (trace ...)
+  (symbolic-boolean-normalize '(not (not x)))     ; involution
+  ;  => x, (trace ...)
+  (symbolic-boolean-normalize '(or x x))          ; idempotence
+  ;  => x, (trace ...)
+
+See also: `symbolic-boolean-equivalent?', `boolean->theory',
+`make-recursive-normalizer'."
+  (ensure-symbolic-boolean-normalizer!)
+  (*symbolic-boolean-normalizer* term))
+
+(define (symbolic-boolean-equivalent? term1 term2)
+  "Test whether two S-expression boolean terms are equivalent in the
+free Boolean algebra on atoms. Both terms are normalized and compared
+with `equal?`.
+
+Parameters:
+  term1 : any
+  term2 : any
+Returns: boolean
+Category: algebra
+Keywords: boolean, equivalent, equational theory, free boolean algebra
+
+Examples:
+  (symbolic-boolean-equivalent? '(and a b) '(and b a))  => #t
+  (symbolic-boolean-equivalent? '(or x y) '(and x y))   => #f
+
+See also: `symbolic-boolean-normalize'."
+  (ensure-symbolic-boolean-normalizer!)
+  (let-values (((n1 _t1) (*symbolic-boolean-normalizer* term1))
+               ((n2 _t2) (*symbolic-boolean-normalizer* term2)))
+    (equal? n1 n2)))

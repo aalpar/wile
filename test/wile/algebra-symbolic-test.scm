@@ -488,5 +488,57 @@
     (test #t (>= (length equivs) 1))
     (test 'x (caar equivs))))
 
+(test-group "symbolic-boolean-normalize — absorption"
+  (let-values (((nf _trace) (symbolic-boolean-normalize '(and x (or x y)))))
+    (test 'x nf))
+  (let-values (((nf _trace) (symbolic-boolean-normalize '(or x (and x y)))))
+    (test 'x nf)))
+
+(test-group "symbolic-boolean-normalize — idempotence"
+  (let-values (((nf _trace) (symbolic-boolean-normalize '(and x x))))
+    (test 'x nf))
+  (let-values (((nf _trace) (symbolic-boolean-normalize '(or x x))))
+    (test 'x nf)))
+
+(test-group "symbolic-boolean-normalize — involution"
+  (let-values (((nf _trace) (symbolic-boolean-normalize '(not (not x)))))
+    (test 'x nf)))
+
+(test-group "symbolic-boolean-normalize — atom"
+  (let-values (((nf _trace) (symbolic-boolean-normalize 'x)))
+    (test 'x nf))
+  (let-values (((nf _trace) (symbolic-boolean-normalize '(foo x y))))
+    ;; Opaque non-Boolean compound passes through unchanged.
+    (test '(foo x y) nf)))
+
+(test-group "symbolic-boolean-normalize — trace is well-formed"
+  (let-values (((_nf trace) (symbolic-boolean-normalize '(and x (or x y)))))
+    (test #t (list? trace))
+    (test #t (and (not (null? trace))
+                  (rewrite-step? (car trace))))))
+
+(test-group "symbolic-boolean-equivalent? — commutativity"
+  (test #t (symbolic-boolean-equivalent? '(and a b) '(and b a)))
+  (test #t (symbolic-boolean-equivalent? '(or x y) '(or y x))))
+
+(test-group "symbolic-boolean-equivalent? — absorption-congruent"
+  (test #t (symbolic-boolean-equivalent? '(and x (or x y)) 'x))
+  (test #t (symbolic-boolean-equivalent? '(or x (and x y)) 'x)))
+
+(test-group "symbolic-boolean-equivalent? — distinct terms"
+  (test #f (symbolic-boolean-equivalent? '(and a b) '(or a b)))
+  (test #f (symbolic-boolean-equivalent? '(and x y) '(and x z))))
+
+(test-group "symbolic-boolean-equivalent? — double negation"
+  (test #t (symbolic-boolean-equivalent? '(not (not x)) 'x)))
+
+(test-group "symbolic-boolean-equivalent? — opaque atoms"
+  ;; Non-(and/or/not) compounds are opaque — (calls "Lock") ≠ (calls "Unlock").
+  (test #t (symbolic-boolean-equivalent?
+             '(and (calls "Lock") (calls "Lock"))
+             '(calls "Lock")))
+  (test #f (symbolic-boolean-equivalent?
+             '(calls "Lock") '(calls "Unlock"))))
+
 (test-end)
 (test-exit)
