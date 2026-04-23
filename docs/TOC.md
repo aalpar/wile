@@ -6,6 +6,7 @@ Every document in `docs/`, organized by topic.
 
 - [overview.md](algebra/overview.md) -- Introduction, design philosophy, structure hierarchy, learning path
 - [reference.md](algebra/reference.md) -- Complete API reference for all structures, projections, rewriting, symbolic ops
+- [tutorial.md](algebra/tutorial.md) -- Runnable, self-verifying tutorial (11 deep chapters + 9 quick-tour files); integrated into `make tutorial-test`
 
 ## Compiler
 
