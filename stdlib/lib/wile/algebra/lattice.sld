@@ -2,11 +2,34 @@
   (description "Lattice types: flat, powerset, product, map lattices with join/meet.")
   (export make-lattice lattice?
           lattice-join lattice-meet lattice-bottom lattice-top
-          lattice-leq? lattice->partial-order
+          lattice-leq? lattice-equal? lattice->partial-order
           flat-lattice powerset-lattice product-lattice map-lattice
           fixpoint fixpoint/widen
           validate-lattice
-          with-lattice)
+          with-lattice
+          ;; §5.5 — extended introspection on <lattice>
+          lattice-setoid lattice-equiv?
+          lattice-cardinality lattice-elements
+          finite-lattice?
+          ;; §5.5 — canonical presets
+          chain-lattice boolean-lattice
+          diamond-lattice pentagon-lattice
+          ;; §5.5 — irreducibles
+          join-irreducibles meet-irreducibles
+          join-irreducible? meet-irreducible?
+          ;; §5.5 — distributivity and modularity
+          distributive? modular?
+          validate-distributive-lattice validate-distributive-lattice/setoid
+          validate-modular-lattice     validate-modular-lattice/setoid
+          ;; §5.5 — Birkhoff roundtrip and lattice-to-poset projection
+          lattice->locally-finite-poset
+          birkhoff-representation birkhoff-representation/unchecked
+          birkhoff-reconstruction
+          ;; §5.5 — free-distributive-lattice (depends on Birkhoff)
+          free-distributive-lattice)
   (import (scheme base)
-          (wile algebra order))
+          (srfi 1)
+          (wile algebra order)
+          (wile algebra setoid)
+          (wile algebra incidence))
   (include "lattice.scm"))

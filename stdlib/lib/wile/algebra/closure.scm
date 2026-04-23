@@ -5,12 +5,6 @@
 ;;; idempotent (cl(cl(a)) = cl(a)).  The fixed points form a sublattice
 ;;; of closed elements.
 
-;; -- Lattice equality helper (not exported from lattice) --
-
-(define (lattice-equal? L a b)
-  (and (lattice-leq? L a b)
-       (lattice-leq? L b a)))
-
 ;; -- Record type -----------------------------------------
 
 (define-record-type <closure-operator>

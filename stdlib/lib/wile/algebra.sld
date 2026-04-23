@@ -14,10 +14,25 @@
     ;; Lattices
     make-lattice lattice?
     lattice-join lattice-meet lattice-bottom lattice-top
-    lattice-leq? lattice->partial-order
+    lattice-leq? lattice-equal? lattice->partial-order
     flat-lattice powerset-lattice product-lattice map-lattice
     fixpoint fixpoint/widen
     validate-lattice with-lattice
+    ;; Lattices — §5.5 extended record, distributivity, Birkhoff
+    lattice-setoid lattice-equiv?
+    lattice-cardinality lattice-elements
+    finite-lattice?
+    distributive? modular?
+    validate-distributive-lattice validate-distributive-lattice/setoid
+    validate-modular-lattice     validate-modular-lattice/setoid
+    join-irreducibles meet-irreducibles
+    join-irreducible? meet-irreducible?
+    lattice->locally-finite-poset
+    birkhoff-representation birkhoff-representation/unchecked
+    birkhoff-reconstruction
+    chain-lattice boolean-lattice
+    diamond-lattice pentagon-lattice
+    free-distributive-lattice
     ;; Closure operators
     make-closure-operator closure-operator?
     closure-close closure-closed? closure-lattice
@@ -184,7 +199,7 @@
     matrix-copy matrix-copy!
     ;; Incidence algebra (Möbius on locally-finite posets)
     make-locally-finite-poset locally-finite-poset?
-    lf-poset-leq? lf-poset-interval
+    lf-poset-leq? lf-poset-interval lf-poset-elements
     finite-set->locally-finite-poset
     make-incidence-algebra incidence-algebra?
     incidence-algebra-poset incidence-algebra-ring
