@@ -53,11 +53,11 @@ Net: ~100 LOC move (Tiers 1+2), or ~240 LOC (Tier 1+2+3) if `run-analysis` inclu
 
 ## Tier 2 — Convenience lattice constructors
 
-**What moves.** Two small lattice constructors:
-- `boolean-lattice` from `dataflow.scm` L20-29 (~7 LOC): bounded lattice `{#f, #t}` with `or`/`and`/implication.
-- `sign-lattice` + `abstract-sign` + `sign-binop` from `domains.scm` L179-213 (~35 LOC): 5-element flat lattice `{⊥, neg, zero, pos, ⊤}` plus abstraction-from-integer and sign arithmetic table.
+**What moves.** `sign-lattice` + `abstract-sign` + `sign-binop` from `domains.scm` L179-213 (~35 LOC): 5-element flat lattice `{⊥, neg, zero, pos, ⊤}` plus abstraction-from-integer and sign arithmetic table.
 
-**Why these.** Both are pre-built abstract domains that generalize across consumers (the sign domain is a classical abstract-interpretation introductory example, not Go-specific). Both are currently callable as single-liners via `(wile algebra lattice)`'s `flat-lattice` / `make-lattice` — extracting them adds named entry points.
+**What does NOT move.** `boolean-lattice` from `dataflow.scm` L20-29 — **collision with `(wile algebra lattice)`'s parametric `boolean-lattice(n)`** shipped in §5.5. Wile's version constructs the powerset Boolean lattice B(n) = 2^[n]; wile-goast's is the fixed 2-element `{#f, #t}` truth-value lattice. Different semantics, same name. The 7 LOC is trivially a `make-lattice` call; wile-goast keeps it local as a convenience. No export.
+
+**Why the remaining items move.** The sign domain is a classical abstract-interpretation example (cf. Cousot & Cousot 1977), not Go-specific — belongs in wile's reusable-domain library alongside `(wile algebra interval)`.
 
 **Placement question (Q-b).** Two options:
 1. Extend `(wile algebra lattice)` with both constructors (+sign arithmetic). Simple, co-located with other lattice constructors. `sign-binop` is a 3-valued abstract-interpretation operator, not a lattice operation — it would sit awkwardly.

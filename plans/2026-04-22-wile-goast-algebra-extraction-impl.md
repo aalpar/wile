@@ -52,29 +52,29 @@ Commit: `feat(algebra/dataflow): scaffold library`.
 
 ## Phase 4 — `(wile algebra abstract-domain)` body
 
-**Port from** `../wile-goast/.../dataflow.scm` L20-29 and `.../domains.scm` L179-213.
+**Port from** `../wile-goast/.../domains.scm` L179-213 only.
 
 **Exports**:
 | Symbol | Signature | Notes |
 |---|---|---|
-| `boolean-lattice` | `() → <lattice>` | Bounded `{#f, #t}` with `or`/`and`/implication |
 | `sign-lattice` | `() → <lattice>` | 5-element flat `{⊥, neg, zero, pos, ⊤}`; uses `flat-lattice '(neg zero pos) eq?` |
 | `abstract-sign` | `integer → symbol` | Abstraction function `n ↦ sign(n) ∈ {neg, zero, pos}` |
 | `sign-binop` | `(op, sign-a, sign-b) → sign` | Sign arithmetic table for add/sub/mul with ⊥/⊤ strictness |
+
+**Excluded**: wile-goast's `boolean-lattice` does NOT move. It collides with the parametric `(boolean-lattice n)` shipped in `(wile algebra lattice)` (§5.5) — which constructs the powerset Boolean lattice B(n), semantically different from wile-goast's 2-element `{#f, #t}` truth-value lattice. wile-goast keeps its 7-LOC local definition; no export needed.
 
 **Design notes**:
 - `sign-binop` is the only function that's not strictly "lattice algebra" — it's a 3-valued abstract-interpretation transfer. Document this in a comment: "Not a lattice operation; sign arithmetic for abstract interpretation. Kept here as the natural complement to `sign-lattice` (cf. `(wile algebra interval)` pattern)."
 - Port `atom-compare` from `boolean-simplify.scm` here too? **No** — it belongs with the normalizer in symbolic. Decision: stays in Phase 5.
 
 **Tests** (`abstract-domain-test.scm`):
-- Boolean lattice: verify `(lattice-bottom) = #f`, `(lattice-top) = #t`, `(lattice-join #f #t) = #t`, `(lattice-meet #f #t) = #f`, `(lattice-leq? #f #t) = #t`, `(lattice-leq? #t #f) = #f`.
 - Sign lattice: verify 5-element membership, pairwise leq? (bottom < {neg, zero, pos} < top; neg/zero/pos mutually incomparable).
 - `abstract-sign`: -5 → neg, 0 → zero, 7 → pos.
-- `sign-binop`: representative cells from the arithmetic table — `(sign-binop 'add 'neg 'pos)` → top; `(sign-binop 'mul 'zero anything)` → zero; `(sign-binop 'add 'bot x)` → bot (strictness).
+- `sign-binop`: representative cells from the arithmetic table — `(sign-binop 'add 'neg 'pos)` → flat-top; `(sign-binop 'mul 'zero anything)` → zero; `(sign-binop 'add 'flat-bottom x)` → flat-bottom (strictness).
 
-Target: ~20 tests, all passing.
+Target: ~15 tests, all passing.
 
-Commit: `feat(algebra/abstract-domain): boolean + sign lattices with sign arithmetic`.
+Commit: `feat(algebra/abstract-domain): sign lattice with sign arithmetic`.
 
 ---
 
@@ -181,7 +181,7 @@ Commit: `feat(algebra/symbolic): symbolic-boolean-normalize formalizes TODO §2.
 
 Test cases:
 - `reverse-postorder`: returns `'(0 1 2 3)` or `'(0 2 1 3)` (both valid RPOs for the diamond).
-- `run-analysis` forward with `boolean-lattice` + identity transfer: all blocks reach fixpoint with `#f` in, `#f` out (trivial bottom).
+- `run-analysis` forward with a 2-element `{#f, #t}` truth-value lattice (locally defined in the test) + identity transfer: all blocks reach fixpoint with `#f` in, `#f` out (trivial bottom).
 - `run-analysis` forward with reachability transfer (in-state joined to `#t`): all blocks reach `#t` from entry.
 - `run-analysis` backward with liveness-shape transfer on powerset lattice: verify def-kill semantics.
 - `run-analysis` with initial state override: confirm argument parsing works.
@@ -255,10 +255,11 @@ Sequence:
    - Replace with thin aliases: `(define boolean-normalize symbolic-boolean-normalize)` etc.
 6. Edit `.../lib/wile/goast/dataflow.sld`:
    - Add `(import (wile algebra dataflow) (wile algebra abstract-domain))`.
-   - Remove `boolean-lattice`, `run-analysis`, `analysis-in/out/states`, `reverse-postorder` from exports (they're now from wile).
+   - Remove `run-analysis`, `analysis-in/out/states`, `reverse-postorder` from exports (they're now from wile). Keep `boolean-lattice` local — it stays in wile-goast.
    - Add new export `ssa-cfg-protocol`.
 7. Edit `.../lib/wile/goast/dataflow.scm`:
-   - Delete `boolean-lattice` (L20-29), `reverse-postorder` (L99-113), `analysis-*` accessors (L131-143), `run-analysis` (L145-239).
+   - Keep `boolean-lattice` local (stays — name-collision avoidance).
+   - Delete `reverse-postorder` (L99-113), `analysis-*` accessors (L131-143), `run-analysis` (L145-239).
    - Add `ssa-cfg-protocol` adapter constructor (~10 LOC).
    - Modify `defuse-reachable?` to pass `(ssa-cfg-protocol)` as the new protocol argument to `run-analysis`.
 8. Edit `.../lib/wile/goast/domains.sld`:
