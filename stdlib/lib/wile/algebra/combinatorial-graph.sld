@@ -10,7 +10,10 @@
     finite-graph? finitely-generated-graph?
     enumerate-finite-graph
     ;; Validation
-    validate-graph assert-graph with-graph)
+    validate-graph assert-graph with-graph
+    ;; Traversal + connectivity
+    graph-bfs graph-dfs graph-connected-components
+    graph-bipartite? graph-bipartition)
   (import (scheme base)
           (srfi 1)
           (wile algebra setoid))

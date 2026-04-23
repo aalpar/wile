@@ -363,3 +363,170 @@
              (degree    (lambda (v) (graph-degree tmp v)))
              (edge?     (lambda (u v) (graph-edge? tmp u v))))
          body ...)))))
+
+;;; -- Traversal --
+
+(define (graph-bfs G source)
+  "Breadth-first traversal of G starting from SOURCE. Returns the list of\nvisited vertices in BFS order. Vertices unreachable from SOURCE are\nomitted.\n\nExamples:\n  (graph-bfs (cycle-graph 4) 0)  => (0 1 3 2)\n\nParameters:\n  G : graph\n  source : vertex\nReturns: list\nCategory: algebra\nKeywords: BFS, breadth-first, traversal\n\nSee also: `graph-dfs', `graph-connected-components'."
+  (let ((S (graph-setoid G)))
+    (let loop ((frontier (list source))
+               (visited  (list source))
+               (order    (list source)))
+      (cond
+        ((null? frontier) (reverse order))
+        (else
+         (let* ((v    (car frontier))
+                (rest (cdr frontier))
+                (new-nbrs
+                  (filter
+                    (lambda (n) (not (%setoid-member? S n visited)))
+                    (map car (graph-neighbors G v))))
+                (new-nbrs* (%setoid-dedup S new-nbrs)))
+           (loop (append rest new-nbrs*)
+                 (append visited new-nbrs*)
+                 (append (reverse new-nbrs*) order))))))))
+
+(define (graph-dfs G source)
+  "Depth-first traversal of G starting from SOURCE. Returns the list of\nvisited vertices in DFS preorder. Vertices unreachable from SOURCE are\nomitted.\n\nParameters:\n  G : graph\n  source : vertex\nReturns: list\nCategory: algebra\nKeywords: DFS, depth-first, traversal\n\nSee also: `graph-bfs', `graph-connected-components'."
+  (let ((S (graph-setoid G))
+        (order '())
+        (visited '()))
+    (define (visit v)
+      (unless (%setoid-member? S v visited)
+        (set! visited (cons v visited))
+        (set! order   (cons v order))
+        (for-each
+          (lambda (p) (visit (car p)))
+          (graph-neighbors G v))))
+    (visit source)
+    (reverse order)))
+
+(define (graph-connected-components G)
+  "Return the list of connected components of G. Each component is a list\nof vertices. Vertex order within each component follows BFS-from-seed\norder where seed = first unvisited vertex in adjacency order.\n\nFor directed graphs, components are *weakly* connected (the underlying\nundirected graph's components); v2 can add separate strongly-connected\nif a consumer surfaces.\n\nExamples:\n  (length\n    (graph-connected-components\n      (make-graph '((a . ((b))) (b . ((a)))\n                    (c . ((d))) (d . ((c)))))))  => 2\n\nParameters:\n  G : graph\nReturns: list of lists\nCategory: algebra\nKeywords: connected components, connectivity, weak components"
+  (let ((S (graph-setoid G)))
+    (let loop ((remaining (graph-vertices G))
+               (acc '()))
+      (cond
+        ((null? remaining) (reverse acc))
+        (else
+         (let* ((seed (car remaining))
+                ;; For directed graphs, walk the underlying undirected
+                ;; graph by also following reverse edges. For undirected
+                ;; graphs, graph-neighbors already gives the full local
+                ;; neighborhood.
+                (component
+                  (if (graph-directed? G)
+                      (%weakly-connected-component G seed)
+                      (graph-bfs G seed)))
+                (rest
+                  (filter
+                    (lambda (v) (not (%setoid-member? S v component)))
+                    remaining)))
+           (loop rest (cons component acc))))))))
+
+(define (%weakly-connected-component G source)
+  ;; BFS over the underlying undirected graph (forward edges ∪ reverse
+  ;; edges). Used for connected-components on directed graphs.
+  (let* ((S    (graph-setoid G))
+         (adj  (graph-adjacency G))
+         (in-neighbors
+           (lambda (v)
+             (filter-map
+               (lambda (entry)
+                 (and (%setoid-assoc S v (cdr entry))
+                      (not (setoid-equiv? S (car entry) v))
+                      (car entry)))
+               adj))))
+    (let loop ((frontier (list source))
+               (visited  (list source))
+               (order    (list source)))
+      (cond
+        ((null? frontier) (reverse order))
+        (else
+         (let* ((v     (car frontier))
+                (rest  (cdr frontier))
+                (outs  (map car (graph-neighbors G v)))
+                (ins   (in-neighbors v))
+                (new
+                  (filter
+                    (lambda (n) (not (%setoid-member? S n visited)))
+                    (append outs ins)))
+                (new* (%setoid-dedup S new)))
+           (loop (append rest new*)
+                 (append visited new*)
+                 (append (reverse new*) order))))))))
+
+;;; -- Bipartiteness --
+
+(define (graph-bipartite? G)
+  "Return #t if G is bipartite (admits a 2-coloring with no monochromatic\nedge); #f otherwise. A graph with no edges is trivially bipartite.\n\nSelf-loops make a graph non-bipartite by definition (a loop forces both\nendpoints into the same color class).\n\nExamples:\n  (graph-bipartite? (cycle-graph 4))  => #t\n  (graph-bipartite? (cycle-graph 5))  => #f\n\nParameters:\n  G : graph\nReturns: boolean\nCategory: algebra\nKeywords: bipartite, 2-coloring, odd cycle"
+  (not (eq? (%try-bipartition G) 'not-bipartite)))
+
+(define (graph-bipartition G)
+  "Return a two-element list (part-A part-B) witnessing bipartiteness of G.\nPart-A is the vertex list colored 0 (starting with the first vertex of\neach component); part-B is colored 1. Raises if G is not bipartite.\n\nFor disconnected graphs, each component is 2-colored independently and\nthe parts are unioned.\n\nExamples:\n  (graph-bipartition (cycle-graph 4))  => ((0 2) (1 3))\n\nParameters:\n  G : graph\nReturns: list of two lists\nCategory: algebra\nKeywords: bipartite, 2-coloring, parts, partition"
+  (let ((result (%try-bipartition G)))
+    (if (eq? result 'not-bipartite)
+        (error "graph-bipartition: graph is not bipartite"
+               '(not-bipartite odd-cycle-or-self-loop))
+        result)))
+
+(define (%try-bipartition G)
+  ;; Two-color G via BFS. Returns (A B) lists or the symbol 'not-bipartite.
+  ;; Handles disconnected graphs by restarting BFS from each uncolored
+  ;; vertex in adjacency order.
+  (let ((S (graph-setoid G))
+        (colors '())          ;; alist vertex → 0 or 1
+        (failed? #f))
+    (define (color-of v)
+      (let ((p (%setoid-assoc S v colors)))
+        (and p (cdr p))))
+    (define (set-color! v c)
+      (set! colors (cons (cons v c) colors)))
+    (define (bfs root)
+      (set-color! root 0)
+      (let loop ((frontier (list root)))
+        (cond
+          (failed? #f)
+          ((null? frontier) #t)
+          (else
+           (let* ((v (car frontier))
+                  (c (color-of v))
+                  (other (if (zero? c) 1 0))
+                  (rest  (cdr frontier))
+                  (new-frontier
+                    (fold
+                      (lambda (p acc)
+                        (let ((n (car p)))
+                          (cond
+                            (failed? acc)
+                            ;; self-loop kills bipartiteness immediately
+                            ((setoid-equiv? S n v)
+                             (set! failed? #t) acc)
+                            (else
+                             (let ((nc (color-of n)))
+                               (cond
+                                 ((not nc)
+                                  (set-color! n other)
+                                  (cons n acc))
+                                 ((= nc c)
+                                  (set! failed? #t) acc)
+                                 (else acc)))))))
+                      '()
+                      (graph-neighbors G v))))
+             (loop (append rest (reverse new-frontier))))))))
+    (for-each
+      (lambda (v)
+        (unless (or failed? (color-of v))
+          (bfs v)))
+      (graph-vertices G))
+    (if failed?
+        'not-bipartite
+        (let ((part-a '()) (part-b '()))
+          (for-each
+            (lambda (v)
+              (let ((c (color-of v)))
+                (cond
+                  ((eqv? c 0) (set! part-a (cons v part-a)))
+                  ((eqv? c 1) (set! part-b (cons v part-b))))))
+            (graph-vertices G))
+          (list (reverse part-a) (reverse part-b))))))

@@ -204,4 +204,115 @@
     (test #t (graph-vertex-equiv? G "a" "a"))))
 
 (test-end)
+
+(test-begin "combinatorial-graph-phase-2")
+
+;;; Helper: build C_n (cycle on n vertices 0..n-1) and P_n (path on n).
+
+(define (inline-cycle-adj n)
+  (map
+    (lambda (i)
+      (cons i
+            (list (cons (modulo (- i 1) n) #f)
+                  (cons (modulo (+ i 1) n) #f))))
+    (iota n)))
+
+(define (inline-path-adj n)
+  (map
+    (lambda (i)
+      (cond
+        ((= i 0)       (cons 0 (list (cons 1 #f))))
+        ((= i (- n 1)) (cons (- n 1) (list (cons (- n 2) #f))))
+        (else          (cons i (list (cons (- i 1) #f) (cons (+ i 1) #f))))))
+    (iota n)))
+
+(test-group "graph-bfs on cycle"
+  (let ((C4 (make-graph (inline-cycle-adj 4))))
+    ;; From 0, BFS expands to {1, 3}, then {2}. Order is 0 then the
+    ;; neighbors in adjacency-list order.
+    (test 4 (length (graph-bfs C4 0)))
+    (test 0 (car (graph-bfs C4 0)))))
+
+(test-group "graph-dfs on cycle"
+  (let ((C4 (make-graph (inline-cycle-adj 4))))
+    (test 4 (length (graph-dfs C4 0)))
+    (test 0 (car (graph-dfs C4 0)))))
+
+(test-group "graph-bfs on path"
+  (let ((P5 (make-graph (inline-path-adj 5))))
+    (test '(0 1 2 3 4) (graph-bfs P5 0))
+    (test '(4 3 2 1 0) (graph-bfs P5 4))))
+
+(test-group "connected components: single component"
+  (let ((C4 (make-graph (inline-cycle-adj 4))))
+    (test 1 (length (graph-connected-components C4)))
+    (test 4 (length (car (graph-connected-components C4))))))
+
+(test-group "connected components: disjoint union"
+  ;; K_2 ⊔ P_2 (both are trivially connected each)
+  (let ((G (make-graph
+             '((a . ((b))) (b . ((a)))
+               (c . ((d))) (d . ((c)))))))
+    (test 2 (length (graph-connected-components G)))))
+
+(test-group "connected components on directed graph use weak components"
+  (let ((G (make-graph
+             '((a . ((b . 1)))
+               (b . ())
+               (c . ((d . 1)))
+               (d . ()))
+             '(directed? . #t))))
+    (test 2 (length (graph-connected-components G)))))
+
+(test-group "bipartiteness: even cycle yes, odd cycle no"
+  (test #t (graph-bipartite? (make-graph (inline-cycle-adj 4))))
+  (test #t (graph-bipartite? (make-graph (inline-cycle-adj 6))))
+  (test #f (graph-bipartite? (make-graph (inline-cycle-adj 3))))
+  (test #f (graph-bipartite? (make-graph (inline-cycle-adj 5)))))
+
+(test-group "bipartiteness: path yes, K_3 no"
+  (test #t (graph-bipartite? (make-graph (inline-path-adj 5))))
+  (test #f (graph-bipartite? (make-graph k3-adj))))
+
+(test-group "bipartiteness: empty / singleton trivially bipartite"
+  (test #t (graph-bipartite? (make-graph '())))
+  (test #t (graph-bipartite? (make-graph '((v . ()))))))
+
+(test-group "bipartiteness: self-loop kills bipartiteness"
+  (test #f (graph-bipartite? (make-graph '((v . ((v)))))))
+  (test-error (graph-bipartition (make-graph '((v . ((v))))))))
+
+(test-group "graph-bipartition returns two parts"
+  (let* ((C4   (make-graph (inline-cycle-adj 4)))
+         (parts (graph-bipartition C4)))
+    (test 2 (length parts))
+    ;; The two parts should partition the vertices.
+    (test 4 (+ (length (car parts)) (length (cadr parts))))
+    ;; Every edge crosses parts.
+    (test #t
+      (every
+        (lambda (edge)
+          (let ((u (car edge))
+                (v (cadr edge)))
+            (not (equal?
+                   (if (member u (car parts)) 'A 'B)
+                   (if (member v (car parts)) 'A 'B)))))
+        (graph-edges C4)))))
+
+(test-group "graph-bipartition raises on odd cycle"
+  (test-error (graph-bipartition (make-graph (inline-cycle-adj 5)))))
+
+(test-group "bipartiteness: K_{m,n} is bipartite"
+  ;; K_{2,3}: parts {a,b} and {x,y,z}, all cross edges.
+  (let ((K23 (make-graph
+               '((a . ((x) (y) (z)))
+                 (b . ((x) (y) (z)))
+                 (x . ((a) (b)))
+                 (y . ((a) (b)))
+                 (z . ((a) (b)))))))
+    (test #t (graph-bipartite? K23))
+    (let ((parts (graph-bipartition K23)))
+      (test 2 (length parts)))))
+
+(test-end)
 (test-exit)
