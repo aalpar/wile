@@ -2,8 +2,6 @@
 
 A complete reference for Wile's Scheme language, covering lexical syntax, data types, special forms, standard procedures, libraries, and extensions. Wile implements R7RS-small with hygienic macros (Flatt 2016), first-class continuations, a full numeric tower, and Go concurrency primitives.
 
-**Version**: v1.5.0
-
 ---
 
 ## Table of Contents
@@ -1351,7 +1349,7 @@ Requires the eval extension:
 | `(procedure-name proc)` | Name (or `#f`) |
 | `(procedure-source-location proc)` | Source location (or `#f`) |
 | `(procedure-bound-symbols proc)` | Closed-over symbols |
-| `(procedure-type proc)` | Type tag string |
+| `(procedure-type proc)` | Type tag symbol: `closure` (Scheme lambda), `foreign` (Go primitive), `case-lambda` (case-lambda closure), `parameter` (parameter object), `continuation` (composable continuation), or `unknown` (any other callable) |
 
 ### Records (Procedural API)
 
@@ -1588,6 +1586,7 @@ Import modifiers — `only`, `except`, `prefix`, `rename` — work on all librar
 | `(wile control)` | Delimited continuation operators — `shift`/`reset`, `prompt`/`control`, `shift0`/`reset0`, `prompt0`/`control0`, `spawn`, `set`/`cupto`, all with `-at` tagged variants; `call/ec`, `new-prompt` aliases; `continuation-mark-set->iterator`, `continuation-mark-set->context` |
 | `(wile kanren)` | miniKanren — `run`, `run*`, `fresh`, `conde` |
 | `(wile microkanren)` | microKanren core — `==`, `call/fresh`, `disj`, `conj` |
+| `(wile algebra)` | Algebraic structures umbrella over 26 sub-libraries (`setoid`, `order`, `lattice`, `closure`, `heyting`, `boolean`, `monoid`, `group`, `semiring`, `ring`, `differential`, `category`, `galois`, `rewrite`, `symbolic`, `polynomial`, `matrix`, `incidence`, `interval`, `graph`, `combinatorial-graph`, `fca`, `pareto`, `abstract-domain`, `dataflow`, `unification`). See [`docs/algebra/overview.md`](../algebra/overview.md). |
 
 ### Third-Party Libraries
 

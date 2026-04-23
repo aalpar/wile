@@ -451,7 +451,47 @@ Per-phase findings records accumulate below as phases execute.
 
 Style findings deferred per plan scope controls (no architectural reorganization, no adding missing docs). The "Status: Stable (2026-02-05)" date stamp is old but fine as-is until something substantive changes.
 
-### Phase 2 — `reference/` — Pending
+### Phase 2 — `reference/` — Completed (branch `feat/docs-sweep-reference`)
+
+**Inventory** (2026-04-23):
+
+- Last doc touch of `docs/reference/`: `c1000595` (2026-04-20) — R7RS §6.13.2 fix for mid-parse EOF. Subsequent doc-side changes: none.
+- Code changes since then touching areas the docs reference: several audit commits on primitives (H.1 numeric widening, F.1/F.2 chars, E.1 lists, etc.); no structural changes to the language surface.
+- The bigger concern is the gap *before* that date — the reference has accumulated drift across PR #570 (CORE-LET made let/letrec/letrec* core compiled forms), various primitive additions, and the entire `(wile algebra)` library tree that was added in 2026-04 and isn't mentioned.
+
+**Findings**:
+
+- **stale** `docs/reference/implementation-notes.md:9,29,42-51`
+  Entire document claims `letrec` and `letrec*` are macro-defined in `registry/core/bootstrap_macros.scm`. Since PR #570 (CORE-LET), `let`/`let*`/`letrec`/`letrec*` are core compiled forms handled directly by the expander/validator/compiler pipeline, not macros. The bootstrap_macros.scm file at lines 44-46 explicitly says so. The entire "letrec* Implementation" section is obsolete — the semantic claim (sequential evaluation) is still true, but the mechanism description is wrong.
+  Evidence: `registry/core/bootstrap_macros.scm:44-46` ("Binding forms ... are now core compiled forms"); `plans/CORE-LET.md` (shipped PR #570).
+
+- **drift** `docs/reference/scheme.md:5`
+  `**Version**: v1.5.0` is many minor versions behind the implementation. Either the version tag means "Scheme language reference revision" and should be interpreted independently, or it should track implementation. Since the doc has no other language-revision versioning, this reads as a frozen/forgotten stamp. Fix by either removing the version line or clarifying what it tags.
+  Evidence: `VERSION` file (current implementation version), `scheme.md:5`.
+
+- **missing** `docs/reference/scheme.md:1584-1590` ("Wile Scheme Libraries")
+  Table lists `(wile control)`, `(wile kanren)`, `(wile microkanren)` only. Missing: the entire `(wile algebra)` library tree — umbrella `(wile algebra)` plus 26 sub-libraries shipped during 2026-03..2026-04 (setoid, monoid, group, ring, lattice, polynomial, matrix, incidence, symbolic, rewrite, combinatorial-graph, etc.). Given algebra is one of Wile's signature features and was the subject of PR #706's entire tutorial, omitting it from the reference libraries section is a substantial gap.
+  Evidence: `stdlib/lib/wile/algebra.sld` (umbrella); 26 `.sld` files under `stdlib/lib/wile/algebra/`; `docs/algebra/reference.md` (separate, comprehensive).
+
+- **drift** `docs/reference/scheme.md:1354` ("Reflection" table)
+  Claims `procedure-type` returns "Type tag string". Actual returns are symbols, and the full set is wider than two values: `closure` (Scheme lambda), `foreign` (Go primitive), `case-lambda` (case-lambda closure), `parameter` (parameter object), `continuation` (composable continuation), with `unknown` as a fallback for any other callable.
+  Evidence: `registry/core/prim_reflection.go:246-259`; docstring at `registry/core/reflection.go` for `procedure-type` enumerates all five named cases; `registry/core/prim_reflection_test.go:311-354` (`TestProcedureType`) asserts all five return symbols.
+
+- **clean** `docs/reference/r7rs-differences.md`
+  All four documented semantic differences verify against current code:
+  - `char-ready?` / `u8-ready?` always #t — `internal/extensions/io/prim_read_write.go:346-354`.
+  - `parameterize` uses `with-continuation-mark` — `registry/core/bootstrap_macros.scm:121-137`.
+  - `set-current-directory!` uses `os.Chdir` — `extensions/files/prim_directory.go:146`.
+  - Pair/vector literals mutable — `values/pair.go` / `values/vector.go` have no immutability flag (per `values/CLAUDE.md`).
+
+**Fixes** (to be committed):
+
+- `implementation-notes.md`: rewrite to reflect current reality — `let`/`letrec`/`letrec*` are core compiled forms, not macros. Either remove the letrec* section entirely (the implementation note is historical) or restructure the document around current implementation choices worth documenting.
+- `scheme.md:5`: remove the v1.5.0 version line; the doc stands on its own without a stamp.
+- `scheme.md:1584-1590`: add a row for `(wile algebra)` (umbrella + pointer to sub-library tree) so the reference inventory matches what ships.
+- `scheme.md:1354`: fix `procedure-type` return type ("Type tag symbol (`foreign` or `closure`)" instead of "Type tag string").
+
+Style / layout findings deferred per plan scope controls.
 
 ### Phase 3 — `environment/` — Pending
 
