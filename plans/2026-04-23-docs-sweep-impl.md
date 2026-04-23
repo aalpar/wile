@@ -93,6 +93,12 @@ Categories:
 - `drift` — doc is right in spirit but wrong in specifics (renamed
   function, moved file, slightly different signature). Must fix.
 - `style` — formatting, heading ordering, wording. Deferred.
+- `clean` — a file was audited and no drift was found. Record it so the
+  audit trail shows the file was not simply skipped.
+
+Phase 1 established the per-phase section template: **Inventory**,
+**Findings**, **Fixes**. Later phases follow the same three-heading
+shape so the plan reads uniformly top-to-bottom.
 
 If findings for a single phase exceed ~30 entries, spin them off into
 `plans/2026-04-XX-<subsystem>-findings.md` and reference from this plan.

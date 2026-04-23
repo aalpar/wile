@@ -58,11 +58,11 @@ These are valid future directions but require significant design work beyond the
 
 ## Overview
 
-The numeric tower uses **pre-built dispatch tables** indexed by `NumericKind`. Each numeric type's `Add`, `Subtract`, `Multiply`, `Divide`, and `Compare` methods look up the incoming operand's `Kind()` in a per-op table and invoke the matching closure. 41 tables total, 294 closures. This is the intentional architecture.
+The numeric tower uses **pre-built dispatch tables** indexed by `NumericKind`. Each numeric type's `Add`, `Subtract`, `Multiply`, `Divide`, and `Compare` methods look up the incoming operand's `Kind()` in a per-op table and invoke the matching closure. See the next subsection for the table inventory and call path.
 
 ### Dispatch Table Architecture
 
-Tables are populated at `init()` time by generators in `values/promotion.go` — `makeArithmeticDispatch`, `makeLessThanDispatch`, `makeCompareDispatch`. Each numeric type carries six tables (`Add`, `Subtract`, `Multiply`, `Divide`, `LessThan`, `Compare`), pre-indexed by `NumericKind`, so the fast-path call is `integerAdd[o.Kind()](p, o)` rather than a cascading type switch.
+Tables are populated at `init()` time by generators in `values/promotion.go` — `makeArithmeticDispatch`, `makeLessThanDispatch`, `makeCompareDispatch`. Each numeric type carries six tables (`Add`, `Subtract`, `Multiply`, `Divide`, `LessThan`, `Compare`), pre-indexed by `NumericKind`. Inventory: 41 tables and 294 closures across the seven types. The fast-path call is `integerAdd[o.Kind()](p, o)` rather than a cascading type switch.
 
 **Call path:** `Integer.Add(o)` → fast path for same type (`*Integer`), otherwise `integerAdd[o.Kind()](p, o)`.
 
