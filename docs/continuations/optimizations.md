@@ -100,7 +100,7 @@ All binding access uses `&p.bindings[i]` rather than `p.bindings[i]`. This is de
 
 ## Optimization 3: EnvironmentFrame Struct Fusion
 
-**Files:** `environment/environment_frame.go`, `machine/machine_context.go`
+**Files:** `environment/environment_frame.go`, `machine/machine_context_apply.go`
 **Allocation saved:** 1.6 GB, 113.1M allocations (exactly matching `closures_applied`)
 
 ### Problem
@@ -186,7 +186,7 @@ The `copyForApplyInto(dst *LocalEnvironmentFrame)` method copies bindings into a
 
 ## Optimization 5: Shared-Flag Continuation Optimization
 
-**Files:** `machine/machine_continuation.go`, `machine/machine_context.go`, `machine/pool.go`
+**Files:** `machine/machine_continuation.go`, `machine/machine_context_continuation.go`, `machine/pool.go`
 **Allocation saved:** 3.8 GB, 52.8M allocations
 
 This is the most architecturally significant optimization and the one most likely to be misunderstood.
@@ -396,7 +396,7 @@ reads — one thread's type pointer with another's data pointer.
 ## References
 
 - `machine/pool.go` — Continuation and stack pooling
-- `machine/machine_context.go` — `RestoreAndRelease` with shared-flag branching
+- `machine/machine_context_continuation.go` — `RestoreAndRelease` with shared-flag branching
 - `machine/machine_context_apply.go` — Apply always-copy path (nil-parent exception)
 - `machine/machine_continuation.go` — `MarkChainShared` with early exit
 - `environment/environment_frame.go` — `NewApplyFrame` fused allocation

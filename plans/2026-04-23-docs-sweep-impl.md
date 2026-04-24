@@ -567,70 +567,67 @@ Style / layout findings deferred per plan scope controls.
 
 #### Phase 5a — `concepts.md` + `implementation.md` + `marks.md` — Completed (PR #712)
 
-#### Phase 5b — `delimited.md` + `prompt-abort.md` + `escape-design.md` — Completed (awaiting PR)
+#### Phase 5b — `delimited.md` + `prompt-abort.md` + `escape-design.md` — Completed (PR #713)
+
+#### Phase 5c — `optimizations.md` + `racket-primitives.md` — Completed (awaiting PR)
 
 **Inventory** (2026-04-24):
 
-- Last doc touch of `docs/continuations/`: same as Phase 5a (`2785298c` 2026-04-17).
-- Relevant code changes since: the `machine_context.go` split into `machine_context_continuation.go`, `machine_context_winding.go`, `machine_context_apply.go`, `machine_context_subcontext.go`; the `operation_*.go` consolidation into `operations_{stack,load_store,control,call,closure,winding}.go`. Both refactors moved many of the functions these three docs cite.
+- Last doc touch of `docs/continuations/`: same as Phase 5a/5b (`2785298c` 2026-04-17).
+- Relevant code changes since: the `machine_context.go` split (`RestoreAndRelease` moved to `machine_context_continuation.go:79`; `Apply` moved to `machine_context_apply.go:27`); the `internal/extensions/` → `extensions/` reorg (public extension packages live at `extensions/eval/`, `extensions/files/`, etc.); the `machine/compile_validated.go` → `machine/compilation/compile_validated.go` move from the compilation subpackage split.
 
 **Findings**:
 
-- **drift** `docs/continuations/prompt-abort.md:31-32`, `delimited.md:310`
-  Both docs reference `machine/operation_foreign_function_call.go`. File no longer exists. `OperationForeignFunctionCall` (type + methods + `ErrPromptAbort` passthrough logic) now lives in `machine/operations_call.go` starting at line 50 (consolidated per `machine/CLAUDE.md`'s "Operations (Bytecode Instructions)" table).
-  Evidence: `find machine -name 'operation_foreign*'` → empty; `machine/operations_call.go:50-87` contains the type and its `Apply` method.
+- **drift** `docs/continuations/optimizations.md:189`
+  Optimization 5 "Files:" header cites `machine/machine_context.go` for `RestoreAndRelease`. Function now at `machine/machine_context_continuation.go:79`.
+  Evidence: `grep -n "^func.*RestoreAndRelease" machine/*.go`.
 
-- **drift** `docs/continuations/prompt-abort.md:88,138,268,300-317`; `delimited.md:309`; `escape-design.md:92-94`
-  Seven file references cite `machine/machine_context.go` for functions that were moved during the `machine_context_*` split:
-    - `RunWithEscapeHandling` still in `machine_context.go` but at line 1278 (doc says 1228).
-    - `RestoreWithWindingFrom` moved to `machine/machine_context_winding.go:125` (doc says `machine_context.go:1080`).
-    - `FindPrompt` moved to `machine/machine_context_continuation.go:244` (doc says `machine_context.go:1114`).
-    - `SliceContinuationAt` moved to `machine/machine_context_continuation.go:260` (doc says `machine_context.go:1130`).
-    - `GraftContinuation` moved to `machine/machine_context_continuation.go:281` (doc says `machine_context.go:1151`).
-    - `applyComposableContinuation` moved to `machine/machine_context_apply.go:403` (doc says `machine_context.go:486`).
-    - `FindCommonWindingPrefix` line drift: `machine/dynamic_wind.go:100` (doc says `:78`).
-  Evidence: `grep -n "^func" machine/machine_context*.go machine/dynamic_wind.go`.
+- **drift** `docs/continuations/optimizations.md:103`
+  Optimization 3 "Files:" header cites `machine/machine_context.go` for the `Apply` consumer of `NewApplyFrame`. `Apply` is now at `machine/machine_context_apply.go:27`.
+  Evidence: `grep -n "^func (p \*MachineContext) Apply" machine/*.go`.
 
-- **drift** `docs/continuations/prompt-abort.md:164,242`
-  Two primitive line-number drifts:
-    - `PrimCallCC` at `registry/core/prim_control.go:140` (doc says `:116`).
-    - `PrimCallWithContinuationPrompt` at `registry/core/prim_prompt.go:70` (doc says `:71` — off-by-one).
-  Evidence: `grep -n "^func Prim" registry/core/prim_control.go registry/core/prim_prompt.go`.
+- **drift** `docs/continuations/optimizations.md:399` (References section)
+  Cites `machine/machine_context.go — RestoreAndRelease with shared-flag branching`. Same drift as #1; should be `machine_context_continuation.go`.
 
-**Fixes** (to be committed):
+- **drift** `docs/continuations/racket-primitives.md:220`
+  `with-continuation-mark` compilation cited at `machine/compile_validated.go`. File is now at `machine/compilation/compile_validated.go` after the compilation/ subpackage split.
 
-- `prompt-abort.md`: update 11 file/line references in the ASCII diagrams and the implementation inventory table. Also update the ASCII diagram's `OperationForeignFunctionCall` file box from `operation_foreign_function_call.go` to `operations_call.go`.
-- `delimited.md`: update 2 entries in the File Reference table at the bottom (`operation_foreign_function_call.go` → `operations_call.go`; `machine_context.go` entry that lists 6 symbols now split across three files — either split the row or add clarifying notes).
-- `escape-design.md`: update the Code Locations table — `RestoreWithWindingFrom` and `applyComposableContinuation` point at `machine_context.go` but now live in `machine_context_winding.go` and `machine_context_apply.go` respectively.
+- **drift** `docs/continuations/racket-primitives.md:334-335,452-453`
+  Four entries cite `registry/core/prim_eval.go` for `eval`, `environment`, `expand`, `expand-once`. File no longer exists. These primitives now live in `extensions/eval/prim_eval.go` + `extensions/eval/register.go` (the eval extension was moved from the internal layout to the public `extensions/` package).
+  Evidence: `ls registry/core/prim_eval.go` → missing; `grep -n "PrimEval\|PrimExpand\|PrimEnvironment" extensions/eval/*.go` locates them.
 
-**Inventory** (2026-04-24):
+- **drift** `docs/continuations/racket-primitives.md:343,637`
+  Two entries cite `internal/extensions/eval/prim_eval.go` for `syntax-local-value/immediate`. Path no longer exists; actual location is `extensions/eval/prim_eval.go:603` (PrimSyntaxLocalValueImmediate).
 
-- Last doc touch of `docs/continuations/`: `2785298c` (2026-04-17) — SafeExtensions/AllExtensions retirement. Prior: `bf83fa43` topic reorganization.
-- Continuation-relevant code changes since: timer interrupts with continuation capture (`0f766afd`), Copilot-fix on unforgeable mark key (`b85363eb`), error diagnostics via continuation marks (`852926fa`), marks-based parameterize for composable continuations (`1b560cbc`), CapturedContinuation type (`fc7d13c6`), continuation-marks Phase 3 primitives (`67069941`), and the **map→slice refactor for marks** (`419b94dd fix(machine): replace marks map with eq?-correct slice for continuation marks (#508)`).
+- **drift** `docs/continuations/racket-primitives.md:624`
+  "Go primitives are in `registry/core/` and `internal/extensions/eval/`" — `internal/extensions/` path is gone; public extensions live at `extensions/`.
 
-**Findings**:
+- **clean** `docs/continuations/optimizations.md:65`
+  Optimization 1 "Files:" cites `machine/machine_context.go` for the OpLoadLocal/OpStoreLocal callers of `GetLocalBindingBySlotDepth`/`SetLocalValueBySlotDepth`. Verified: those call sites remain in `machine/machine_context.go` at lines 519 and 1112.
 
-- **stale** `docs/continuations/marks.md:74-83, 236-240`
-  The doc describes marks as a **Go map** (`frame.marks = { key₁: val₁, key₂: val₂, ... }`, "The `marks` field is a Go map initialized to `nil`", "a map on each frame", "the cost of a map write"). The actual implementation is a **slice of `markEntry` records** (`marks []markEntry` at `machine/vm_state.go:223`). This changed in PR #508 (`419b94dd`, 2026-early) to get `eq?`-correct key comparison via `eqIdentity` (`machine/call_promoted.go:47`) — pointer equality for most values, name equality for symbols (Symbol `Key` string compare, since symbol interning was removed in PR #529). A Go map keyed by `values.Value` can't express this: hash equality on comparable types, panic on non-comparable types. The doc's description of "map write" / "map init" is factually incorrect.
-  Evidence: `machine/vm_state.go:223` (`marks []markEntry`); `machine/call_promoted.go:47` (`eqIdentity` definition); commit `419b94dd`.
-
-- **missing** `docs/continuations/implementation.md:26-38` (vmState struct snippet)
-  Snippet shows 10 fields but the actual struct has 12 — missing `marks []markEntry` (line 223) and `envPooled bool` (line 208). This is the same marks field that `marks.md` describes, so both docs need to be internally consistent.
-  Evidence: `machine/vm_state.go:94-224` (full struct).
-
-- **drift** `docs/continuations/marks.md:151`
-  Cites `CaptureStackTrace` at `machine/machine_context.go:827`. Actual location is `machine/machine_context.go:996`. Line-number drift from intervening changes.
-  Evidence: `machine/machine_context.go:996` (`func (p *MachineContext) CaptureStackTrace(maxDepth int) StackTrace`).
-
-- **clean** `docs/continuations/concepts.md`
-  Purely conceptual introduction to continuations. No Wile-specific code references to verify.
+- **clean** `docs/continuations/optimizations.md:265` (historical Opt 6)
+  Cites `machine/compile_validated.go` in "Files (historical):" for the REMOVED noCopyApply optimization. This is historically correct — at the time of PR #561, the file did live at that path. The compilation/ subpackage split came later. Annotation left as-is.
 
 **Fixes** (committed in this PR):
 
-- `implementation.md`: add `marks []markEntry` to the vmState snippet. Keep the field list as a doc-quality teaching snippet rather than an exact transcription, but note the full field set.
-- `marks.md`: rewrite "The Key Insight" and "The Subtle Parts" sections to describe the actual slice-of-entries representation and its rationale (eq?-correct key comparison). Remove "Go map" claims. Keep the user-level mental model ("attach key-value pairs to frames") accurate without over-specifying the data structure.
-- `marks.md`: fix the `CaptureStackTrace` line reference (827 → 995).
-- `marks.md`: add a pointer to the `SaveContinuation` mark-propagation semantics documented inline in `vm_state.go:220-223` (copy to continuation, nil `mc.marks`, callee starts clean).
+- `optimizations.md:103`: `machine/machine_context.go` → `machine/machine_context_apply.go` (Opt 3 Apply consumer)
+- `optimizations.md:189`: `machine/machine_context.go` → `machine/machine_context_continuation.go` (Opt 5 RestoreAndRelease)
+- `optimizations.md:399`: same fix in References section
+- `racket-primitives.md:220`: `machine/compile_validated.go` → `machine/compilation/compile_validated.go`
+- `racket-primitives.md:334-335,452-453`: `registry/core/prim_eval.go` → `extensions/eval/prim_eval.go` (4 entries)
+- `racket-primitives.md:343,637`: `internal/extensions/eval/prim_eval.go` → `extensions/eval/prim_eval.go`
+- `racket-primitives.md:624`: strip `internal/` prefix
+
+**Additional fixes from crosscheck code-lens review** (commit 2):
+
+- `racket-primitives.md:324-327`: four rows (`syntax-local-value`, `make-compile-time-value`, `syntax-local-introduce`, `syntax-local-identifier-as-binding`) were cited at `registry/core/syntax.go` but actually live in `extensions/eval/prim_eval.go`. The `registry/core/syntax.go` file only registers 6 primitives (`identifier?`, `syntax->datum`, `datum->syntax`, `generate-temporaries`, `bound-identifier=?`, `free-identifier=?`) — none of the `syntax-local-*` ones. Remaining 6 citations at that path verified correct.
+- `racket-primitives.md:534`: `syntax-local-introduce` second occurrence (Phase Introspection section) — same fix.
+
+**Crosscheck findings NOT actioned** (with rationale):
+
+- [code] `optimizations.md:265` "Files (historical):" still cites `machine/compile_validated.go`. Code-lens flagged as miss; consistency-lens explicitly concurred with leaving as-is. The section describes the REMOVED noCopyApply optimization as it existed pre-PR #561. At that time, the file DID live at `machine/compile_validated.go`; the compilation/ subpackage split happened later. Retargeting to `machine/compilation/compile_validated.go` would be factually wrong — the noCopyApply code never lived at that path. Historical annotation preserved.
+- [tests] precision gap: `machine_context_apply.go` is cited as the `NewApplyFrame` consumer, but `Apply` actually calls `InitApplyFrame` (the pooling-friendly counterpart). The "Files:" header is a coarse two-file index; both files contain relevant code (`NewApplyFrame` defined in `environment/environment_frame.go`; Apply consumer in `machine_context_apply.go`). Minor precision, not drift.
+- [tests] precision gap: primitive registrations live in `extensions/eval/register.go` while implementations live in `extensions/eval/prim_eval.go`. Tables cite only the impl file per existing doc convention (sibling rows in the same tables follow the same pattern).
 
 ### Phase 6 — `extensions/` — Pending
 

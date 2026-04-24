@@ -217,7 +217,7 @@ object pointer, the mark value is the pre-converted parameter value. The VM's
 
 | Primitive | Location |
 |-----------|----------|
-| `with-continuation-mark` | Special form; compiler in `machine/compile_validated.go` |
+| `with-continuation-mark` | Special form; compiler in `machine/compilation/compile_validated.go` |
 | `current-continuation-marks` | `registry/core/prim_cont_marks.go` |
 | `continuation-marks` (from captured cont) | `registry/core/prim_cont_marks.go` |
 | `continuation-mark-set->list` | `registry/core/prim_cont_marks.go` |
@@ -321,18 +321,18 @@ compile-time binding manipulation is where gaps remain.
 
 | Primitive | Category | Location |
 |-----------|----------|----------|
-| `syntax-local-value` | Compile-time lookup | `registry/core/syntax.go` |
-| `make-compile-time-value` | Compile-time values | `registry/core/syntax.go` |
-| `syntax-local-introduce` | Scope manipulation | `registry/core/syntax.go` |
-| `syntax-local-identifier-as-binding` | Binding preparation | `registry/core/syntax.go` |
+| `syntax-local-value` | Compile-time lookup | `extensions/eval/prim_eval.go` |
+| `make-compile-time-value` | Compile-time values | `extensions/eval/prim_eval.go` |
+| `syntax-local-introduce` | Scope manipulation | `extensions/eval/prim_eval.go` |
+| `syntax-local-identifier-as-binding` | Binding preparation | `extensions/eval/prim_eval.go` |
 | `bound-identifier=?` | Scope comparison | `registry/core/syntax.go` |
 | `free-identifier=?` | Binding comparison | `registry/core/syntax.go` |
 | `identifier?` | Predicate | `registry/core/syntax.go` |
 | `syntax->datum` | Unwrap | `registry/core/syntax.go` |
 | `datum->syntax` | Wrap | `registry/core/syntax.go` |
 | `generate-temporaries` | Fresh identifiers | `registry/core/syntax.go` |
-| `eval` | Runtime eval | `registry/core/prim_eval.go` |
-| `environment` | Create env from library specs | `registry/core/prim_eval.go` |
+| `eval` | Runtime eval | `extensions/eval/prim_eval.go` |
+| `environment` | Create env from library specs | `extensions/eval/prim_eval.go` |
 | `interaction-environment` | REPL env | Introspection extension |
 | `environment?` / `environment-bound-names` / `environment-ref` / `environment-bound?` | Env introspection | Introspection extension |
 
@@ -340,7 +340,7 @@ compile-time binding manipulation is where gaps remain.
 
 | Primitive | Location |
 |-----------|----------|
-| `syntax-local-value/immediate` | `internal/extensions/eval/prim_eval.go` — identical to `syntax-local-value` (no rename-transformers yet) |
+| `syntax-local-value/immediate` | `extensions/eval/prim_eval.go` — identical to `syntax-local-value` (no rename-transformers yet) |
 
 **Could add at zero cost (compile-time only):**
 
@@ -449,8 +449,8 @@ the quadratic blowup that naive nested `local-expand` calls would cause.
 
 | Primitive | Location |
 |-----------|----------|
-| `expand` | `registry/core/prim_eval.go` |
-| `expand-once` | `registry/core/prim_eval.go` |
+| `expand` | `extensions/eval/prim_eval.go` |
+| `expand-once` | `extensions/eval/prim_eval.go` |
 
 **Performance-negative (avoid):**
 
@@ -531,7 +531,7 @@ does it enforce strict phase separation — phase-1 code can reference phase-0 b
 
 | Primitive | Location |
 |-----------|----------|
-| `syntax-local-introduce` | `registry/core/syntax.go` |
+| `syntax-local-introduce` | `extensions/eval/prim_eval.go` |
 
 **Could add at zero cost (compile-time only):**
 
@@ -622,7 +622,7 @@ internals via FFI" approaches — the abstractions are designed to be *safe to c
 **Tier 1 — Free lunch** (alias/wrapper over existing infrastructure, zero cost):
 
 All Tier 1 items are now implemented. Go primitives are in `registry/core/`
-and `internal/extensions/eval/`. Derived Scheme forms are in `(wile control)`.
+and `extensions/eval/`. Derived Scheme forms are in `(wile control)`.
 
 | What | Status | Location |
 |------|--------|----------|
@@ -634,7 +634,7 @@ and `internal/extensions/eval/`. Derived Scheme forms are in `(wile control)`.
 | `continuation-mark-set->context` | ✅ Done | `(wile control)` — reads `'wile/source-location` key |
 | `syntax-source` / `syntax-line` / `syntax-column` / `syntax-position` / `syntax-span` | ✅ Done | `registry/core/prim_syntax_loc.go` |
 | `syntax->list` | ✅ Done | `registry/core/prim_syntax_loc.go` |
-| `syntax-local-value/immediate` | ✅ Done | `internal/extensions/eval/prim_eval.go` |
+| `syntax-local-value/immediate` | ✅ Done | `extensions/eval/prim_eval.go` |
 
 **Tier 2 — Compile-time only** (expander work, zero runtime cost):
 
