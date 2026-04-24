@@ -17,10 +17,12 @@ This restriction is **transitive**: when the library system is enabled (`WithLib
 | **Safe** | math | `extensions/math` | None. `sqrt`, `sin`, `cos`, transcendental functions. |
 | **Safe** | introspection | `extensions/introspection` | None. `environment?`, `interaction-environment`, `environment-bound-names`, `environment-ref`, `environment-bound?`. Read-only. |
 | **Safe** | all (safe subset) | `internal/extensions/all` | None. Records, promises, additional string/character ops. |
-| **Privileged** | files | `extensions/files` | Filesystem: `open-input-file`, `open-output-file`, `delete-file`, `file-exists?`. |
-| **Privileged** | eval | `internal/extensions/eval` | Code loading: `eval`, `load`, `environment`, `expand`, `compile`. |
-| **Privileged** | system | `extensions/system` | Process: `exit`, `emergency-exit`, `command-line`, `get-environment-variable`. |
+| **Privileged** | files | `extensions/files` | Filesystem: `open-input-file`, `open-output-file`, `delete-file`, `file-exists?`, directory ops. |
+| **Privileged** | eval | `extensions/eval` | Code loading: `eval`, `load`, `environment`, `expand`, `compile`, `syntax-local-*`. |
+| **Privileged** | envvars | `internal/extensions/envvars` | Environment variables: `get-environment-variable`, `get-environment-variables`. Sandboxed to virtual map by `Console`/`ConsoleWithLoad` profiles. |
+| **Privileged** | system | `extensions/system` | Process lifecycle: `exit`, `emergency-exit`, `command-line`, `current-second`, `current-jiffy`, `jiffies-per-second`. |
 | **Privileged** | process | `extensions/process` | Process execution: `system`, `process-spawn`, `process-wait`, `process-kill`. |
+| **Privileged** | namespace | `internal/extensions/namespace` | Namespace introspection: bindings, parent chain, library registry state. |
 | **Context-dependent** | gointerop | `extensions/gointerop` | Go concurrency primitives: channels, wait groups, rw-mutexes, atomics, once. Resource exhaustion via unbounded object creation. No ambient authority. Safe for trusted code. |
 | **Context-dependent** | threads | `extensions/threads` | SRFI-18 threads, mutexes, condition variables. Resource exhaustion via unbounded thread creation. Safe for trusted code. |
 
@@ -238,4 +240,3 @@ Isolation invariants are verified in `engine_sandbox_test.go`:
 
 - [`extensions/architecture.md`](../extensions/architecture.md) — Extension system architecture, engine options reference
 - [`embedding/api-design.md`](../embedding/api-design.md) — Public embedding API, sandboxing subsection
-- `plans/SECURITY.md` — Opcode resource limits (match steps, expand steps, continuation copy depth)
