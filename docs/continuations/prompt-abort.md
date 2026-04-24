@@ -28,8 +28,7 @@ propagation mechanism. The error carries a `*PromptTag` and a
                                      ▼
                      ┌─────────────────────────────────┐
                      │ OperationForeignFunctionCall     │
-                     │ (machine/operation_foreign_      │
-                     │  function_call.go)               │
+                     │ (machine/operations_call.go:54)  │
                      │                                 │
                      │ errors.As(err, &abortErr)?       │
                      │   YES → return nil, err          │
@@ -85,7 +84,7 @@ a single error type.
 
 ## RunWithEscapeHandling
 
-`machine/machine_context.go:1228`
+`machine/machine_context.go:1278`
 
 This is the top-level execution loop. It installs `DefaultPromptTag` on the
 context (so `call/cc` escapes have a target), then enters a `for` loop
@@ -135,7 +134,7 @@ setting the value.
 
 ## RestoreWithWindingFrom
 
-`machine/machine_context.go:1080`
+`machine/machine_context_winding.go:125`
 
 The central dynamic-wind transition function. Used by:
 - `applyComposableContinuation` (composable continuation application)
@@ -161,7 +160,7 @@ common prefix uniquely identifies the shared ancestor.
 
 ## PrimCallCC — composable-continuation-then-abort model
 
-`registry/core/prim_control.go:116`
+`registry/core/prim_control.go:140`
 
 `call/cc` is implemented using the Racket model where a call/cc escape
 is equivalent to:
@@ -224,7 +223,7 @@ This ensures call/cc works in contexts without `RunWithEscapeHandling`
 
 ## call/cc escape value
 
-`machine/captured_continuation.go` (`NewCapturedContinuation`)
+`machine/captured_continuation.go:39` (`NewCapturedContinuation`)
 
 The escape value is a `CapturedContinuation` that:
 1. Checks thread identity (captured vs invoking thread ID)
@@ -239,7 +238,7 @@ payload for someone else to handle.
 
 ## PrimCallWithContinuationPrompt
 
-`registry/core/prim_prompt.go:71`
+`registry/core/prim_prompt.go:70`
 
 ```
 PrimCallWithContinuationPrompt(thunk, tag, handler)
@@ -265,7 +264,7 @@ PrimCallWithContinuationPrompt(thunk, tag, handler)
 
 ## Composable continuation application
 
-`machine/machine_context.go:486`
+`machine/machine_context_apply.go:403`
 
 ```
 applyComposableContinuation(cc, [arg])
@@ -308,18 +307,18 @@ the composable continuation corrupts the shared frames.
 
 | Function | File | Purpose |
 |----------|------|---------|
-| `RunWithEscapeHandling` | `machine/machine_context.go:1228` | Top-level execution loop |
-| `FindPrompt` | `machine/machine_context.go:1114` | Walk continuation chain + check context tag |
-| `SliceContinuationAt` | `machine/machine_context.go:1130` | Deep-copy continuation segment to prompt |
-| `GraftContinuation` | `machine/machine_context.go:1151` | Splice segment onto target chain |
-| `RestoreWithWindingFrom` | `machine/machine_context.go:1080` | Unwind/rewind + restore continuation |
-| `FindCommonWindingPrefix` | `machine/dynamic_wind.go:78` | Common ancestor of two winding stacks |
-| `applyComposableContinuation` | `machine/machine_context.go:486` | Apply composable continuation value |
-| `PrimCallCC` | `registry/core/prim_control.go:116` | call/cc primitive (inline + sub-context) |
-| `NewCapturedContinuation` | `machine/captured_continuation.go` | Build call/cc escape value: apply cc then abort |
-| `PrimCallWithContinuationPrompt` | `registry/core/prim_prompt.go:71` | Install prompt, run thunk, handle abort |
-| `PrimAbortCurrentContinuation` | `registry/core/prim_prompt.go:161` | Return ErrPromptAbort |
-| `PrimCallWithComposableContinuation` | `registry/core/prim_prompt.go:197` | Capture composable continuation |
+| `RunWithEscapeHandling` | `machine/machine_context.go:1278` | Top-level execution loop |
+| `FindPrompt` | `machine/machine_context_continuation.go:244` | Walk continuation chain + check context tag |
+| `SliceContinuationAt` | `machine/machine_context_continuation.go:260` | Deep-copy continuation segment to prompt |
+| `GraftContinuation` | `machine/machine_context_continuation.go:281` | Splice segment onto target chain |
+| `RestoreWithWindingFrom` | `machine/machine_context_winding.go:125` | Unwind/rewind + restore continuation |
+| `FindCommonWindingPrefix` | `machine/dynamic_wind.go:100` | Common ancestor of two winding stacks |
+| `applyComposableContinuation` | `machine/machine_context_apply.go:403` | Apply composable continuation value |
+| `PrimCallCC` | `registry/core/prim_control.go:140` | call/cc primitive (inline + sub-context) |
+| `NewCapturedContinuation` | `machine/captured_continuation.go:39` | Build call/cc escape value: apply cc then abort |
+| `PrimCallWithContinuationPrompt` | `registry/core/prim_prompt.go:70` | Install prompt, run thunk, handle abort |
+| `PrimAbortCurrentContinuation` | `registry/core/prim_prompt.go:159` | Return ErrPromptAbort |
+| `PrimCallWithComposableContinuation` | `registry/core/prim_prompt.go:215` | Capture composable continuation |
 
 ## End-to-end example: call/cc escape through dynamic-wind
 
