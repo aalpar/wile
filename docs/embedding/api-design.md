@@ -54,9 +54,11 @@ Each `Engine` has its own `Namespace` and symbol table. This means:
 
 | Method | Input | Purpose |
 |--------|-------|---------|
-| `Parse(ctx, code)` | `string` | Parse first expression to `*Expression` |
+| `Parse(ctx, code)` | `string` | Parse exactly one expression to `*Expression`; errors if empty, malformed, or multi-expression |
 | `ParseWithSource(ctx, code, source)` | `string` + source name | Parse with source file attribution |
+| `ReadExpression(ctx, r)` | `io.Reader` | Read the first complete expression from a reader; ignores trailing input. Pairs with `IsIncompleteInput` for REPL input handling |
 | `MustParse(ctx, code)` | `string` | Parse or panic |
+| `MustParseWithSource(ctx, code, source)` | `string` + source name | MustParse with source attribution |
 | `Eval(ctx, expr)` | `*Expression` | Evaluate a single parsed expression |
 | `EvalMultiple(ctx, code)` | `string` | Parse and evaluate all expressions, return last result |
 | `EvalMultipleWithSource(ctx, code, source)` | `string` + source name | EvalMultiple with source attribution |
@@ -108,12 +110,18 @@ The interface includes an unexported method to prevent external implementations.
 
 | Constructor | Creates |
 |---|---|
-| `NewInteger(n int64)` | Exact integer |
-| `NewFloat(f float64)` | Inexact real |
+| `NewInteger(n int64)` | Exact integer (fixnum) |
+| `NewBigInteger(n *big.Int)`, `NewBigIntegerFromInt64`, `NewBigIntegerFromString` | Exact integer (bignum) |
+| `NewRational(num, denom int64)`, `NewRationalFromBigInt` | Exact rational |
+| `NewFloat(f float64)` | Inexact real (machine float) |
+| `NewBigFloat(f *big.Float)`, `NewBigFloatFromFloat64`, `NewBigFloatFromString` | Inexact real (arbitrary precision) |
+| `NewComplex(v complex128)`, `NewComplexFromParts(re, im float64)` | Complex number |
 | `NewString(s string)` | String |
 | `NewSymbol(s string)` | Symbol |
 | `NewBoolean(b bool)` | `#t` / `#f` |
+| `NewVector(vals ...Value)` | Vector |
 | `NewList(vals ...Value)` | Proper list |
+| `WrapValue(v values.Value)` | Escape hatch — wrap a pre-constructed internal value |
 
 ### Constants
 
@@ -140,10 +148,17 @@ type PrimitiveSpec struct {
     ParamCount int             // Fixed parameter count
     IsVariadic bool            // Accepts variable arguments
     Impl       ForeignFunction // Go implementation
+    // Optional fields:
+    Doc        string          // brief description
+    ParamNames []string        // parameter names (for documentation)
+    Category   string          // grouping category (for topic browsing)
+    ParamTypes []values.TypeConstraint // per-parameter type contract
+    ReturnType values.TypeConstraint   // return type
+    Keywords   []string        // searchable tags
 }
 ```
 
-The `ForeignFunction` receives a `MachineContext` and unwrapped arguments. It sets the return value via `mc.SetValue()`.
+The `ForeignFunction` receives a `CallContext` (interface implemented by `MachineContext`) and unwrapped arguments. It sets the return value via `mc.SetValue()`. Primitives that need full VM access (sub-contexts, continuations, exception handling) type-assert to `*MachineContext`.
 
 ### Calling Scheme from Go
 
@@ -163,12 +178,18 @@ Engine behavior can be customized via functional options:
 | `WithoutCore()` | Skip core primitives — bare engine with only explicit extensions |
 | `WithRegistry(r)` | Use a custom registry (skips automatic core registration) |
 | `WithAuthorizer(auth)` | Set fine-grained runtime authorization policy |
-| `WithSandbox()` | Compose the sandbox env-prefix wrapper with the current authorizer |
+| `WithSandbox(opts...)` | Layer a restrictive authorizer (read-allowed, write/delete denied, env-prefix filtered). Takes optional `SandboxEnvPrefix(prefix)`; default prefix is `"WILE_"`. Must appear after `WithProfile`/`WithAuthorizer` |
 | `WithEnv(k, v)`, `WithEnvMap(m)` | Install a virtual environment-variable map |
 | `WithSourceFS(fsys)` | Add a virtual `fs.FS` layer to the source resolver chain |
 | `WithSourceOS()` | Add OS filesystem to the source resolver chain |
 | `WithLibraryPaths(paths...)` | Set R7RS library search paths |
 | `WithNamespace(ns)` | Use a pre-built namespace |
+| `WithContractEnforcement()` | Enable runtime enforcement of `PrimitiveSpec.ParamTypes`/`ReturnType` contracts |
+| `WithMaxCallDepth(n)` | Cap the continuation chain depth (default `DefaultMaxCallDepth`) |
+| `WithMaxStackSize(n)` | Cap the eval stack size (default `DefaultMaxStackSize`) |
+| `WithInlineThreshold(n)` | Tune the procedure inliner's size budget |
+| `WithImportObserver(obs)` | Observe library imports (called on each `(import ...)`) |
+| `WithCoverage(c)` | Attach a `*coverage.Collector` to record per-line Scheme execution |
 
 Extensions implement `registry.Extension` and register primitives, macros, and compile-time definitions via `AddToRegistry`.
 
@@ -178,7 +199,7 @@ Wile provides two independent sandboxing layers.
 
 **Layer 1: Extension-based (compile-time).** Primitives not in the registry don't exist — there's no runtime check to bypass (Rees, "A Security Kernel Based on the Lambda Calculus", 1996; Miller, "Robust Composition", 2006). `WithProfile(Console)` selects a curated bundle (io with in-memory ports, files, math, the safe subset of `all`, and envvars) plus a matching `ConsoleAuthorizer` that restricts file ops to `/tmp` and denies code/process. `WithProfile(Tiny)` registers no extensions beyond core; `WithProfile(KitchenSink)` registers every extension and matches the CLI. `WithoutCore()` goes further — it produces an engine with zero primitives. Library environments inherit the engine's registry, so restrictions propagate transitively to loaded libraries.
 
-**Layer 2: Fine-grained authorization (runtime).** The `security.Authorizer` interface gates privileged operations at runtime using a K8s-style resource+action vocabulary (`file`, `code`, `env`, `process` x `read`, `write`, `delete`, `stat`, `load`, `exit`). Set via `WithAuthorizer(auth)`. Gate sites include file I/O, system calls, `eval`/`load`, `include`, and library loading. Without an authorizer, all operations are allowed (open by default). Built-in authorizers: `DenyAll()`, `ReadOnly()`, `FilesystemRoot(path)`, `All(authorizers...)`.
+**Layer 2: Fine-grained authorization (runtime).** The `security.Authorizer` interface gates privileged operations at runtime using a K8s-style resource+action vocabulary (resources: `file`, `code`, `env`, `process`; actions: `read`, `write`, `delete`, `stat`, `load`, `exit`, `exec`, `exec-shell`). Set via `WithAuthorizer(auth)`. Gate sites include file I/O, system calls, `eval`/`load`, `include`, and library loading. Without an authorizer, all operations are allowed (open by default). Built-in authorizers: `DenyAll()`, `ReadOnly()`, `FilesystemRoot(path)`, `ConsoleAuthorizer()`, `ConsoleWithLoadAuthorizer()`, `SandboxAuthorizer(envPrefix)`, `All(authorizers...)`. Profiles bundle a matching authorizer; `WithSandbox` adds `SandboxAuthorizer` on top via `All(...)`.
 
 The two layers complement each other: layer 1 removes entire categories of capability at zero runtime cost; layer 2 fine-tunes what remains. See [`security/sandboxing.md`](../security/sandboxing.md) for the full security model.
 
@@ -209,14 +230,19 @@ Internally, each `WithSourceFS` creates an `FSFileResolver` that resolves files 
 
 **Registry freezing**: Primitives must be registered before or during engine creation. This simplifies the runtime model — the set of available primitives is fixed once the engine is initialized.
 
-**No continuation escape handling**: The `Engine` uses plain `Run()` internally. The `repl` package uses `RunWithEscapeHandling` for full R7RS continuation escape support. This is a deliberate simplification for the embedding case.
+**Continuation escape handling enabled**: Both the compiled-code path (`Engine.Run` / `Engine.Eval`, via `runCompiled` in `engine.go`) and the foreign-call path (`Engine.Call`, via `callCallable`) use `MachineContext.RunWithEscapeHandling`. This catches top-level `call/cc` escapes to the default prompt tag and translates them into the returned error, so embedders see consistent R7RS escape semantics regardless of entry point.
 
 ## File Reference
 
 | File | Purpose |
 |------|---------|
 | `engine.go` | Engine type, evaluation methods, initialization |
-| `value.go` | Value interface, constructors, wrapping |
+| `expression.go` | `Expression` type, `Parse`, `ParseWithSource`, `MustParse`, `ReadExpression`, `IsIncompleteInput` |
+| `value.go` | `Value` interface, constructors, wrapping |
 | `options.go` | Functional options for engine configuration |
-| `compiled.go` | CompiledCode type |
+| `profile.go` | `Profile` type and `WithProfile` |
+| `sandbox.go` | `WithSandbox`, `SandboxOption`, `SandboxEnvPrefix` |
+| `debugger.go` | `Debugger` type (breakpoints, stepping) |
+| `compiled.go` | `CompiledCode` type |
+| `error.go` | `CompilationError`, `RuntimeError` |
 | `doc.go` | Package documentation |

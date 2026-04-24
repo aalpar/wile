@@ -125,6 +125,19 @@ List all bindings in a documentation category.
 
 List all Scheme libraries currently loaded in the session. No parameters.
 
+### `disassemble`
+
+Show bytecode disassembly for a Scheme procedure.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | yes | Procedure name (bound in the current session) |
+
+Returns a textual bytecode listing (opcodes, operands, literals pool, source
+spans) for the named procedure. Errors are returned as MCP tool errors if the
+name is unbound, does not resolve to a procedure, or the procedure has no
+disassembly available (e.g., a Go primitive).
+
 ### `reset`
 
 Discard all session state (definitions, imports) and reinitialize the engine on

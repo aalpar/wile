@@ -705,7 +705,111 @@ Style / layout findings deferred per plan scope controls.
 - `sandboxing.md:14-25`: added `envvars` and `namespace` rows (both Privileged).
 - `sandboxing.md:241`: removed `plans/SECURITY.md` reference.
 
-### Phase 8 — `embedding/` — Pending
+### Phase 8 — `embedding/` — Completed (awaiting PR)
+
+**Inventory** (2026-04-24):
+
+- Last touch of `docs/embedding/`: `2785298c` (post-PR-#662 migration of `SafeExtensions`/`AllExtensions` references to `WithProfile`).
+- Relevant code changes since: `99e82370` (replace `SafeExtensions`/`AllExtensions` with `WithProfile` — partially synced), `05da58f2` (`WithInstructions` in mcp-go library, not a Wile EngineOption), `61fb8a78` (MCP `libraries`/`reset` tools + prompts + session hardening — doc partially synced), plus the `disassemble` MCP tool added in the v1.8+ bytecode disassembler work and `ReadExpression` / `MustParseWithSource` added alongside the `Expression` type API (PR #555).
+
+**Findings**:
+
+- **stale** `docs/embedding/api-design.md:212`
+  Claim: "The `Engine` uses plain `Run()` internally. The `repl` package uses `RunWithEscapeHandling` for full R7RS continuation escape support. This is a deliberate simplification for the embedding case." Reality: Both entry paths use `RunWithEscapeHandling`. `runCompiled` (used by `Engine.Run` and `Engine.Eval`) calls it at `engine.go:732`; `callCallable` (used by `Engine.Call`) calls it at `engine.go:544`. The claimed "deliberate simplification" never existed.
+  Evidence: `engine.go:544`, `engine.go:732`.
+
+- **drift** `docs/embedding/api-design.md:146`
+  Claim: "The `ForeignFunction` receives a `MachineContext` and unwrapped arguments." Reality: `type ForeignFunction func(mc CallContext) error`. `CallContext` is the interface (`machine/call_context.go`), `MachineContext` is one concrete implementation. Primitives type-assert to `*MachineContext` only when they need VM-internal operations.
+  Evidence: `machine/foreign_closure.go:19`; CallContext interface has 7 methods (`Arg`, `SetValue`, `SetValues`, `Authorizer`, `Context`, `EnvironmentFrame`, `Thread`) per `machine/CLAUDE.md`.
+
+- **drift** `docs/embedding/api-design.md:57`
+  Claim: "Parse first expression to `*Expression`." Reality: `Parse` enforces *exactly one* expression — it errors if empty, malformed, OR contains more than one expression. "First expression" misleads into thinking it skips trailing input.
+  Evidence: `expression.go:50-53` docstring ("Parse returns a CompilationError if the input is empty, malformed, or contains more than one expression").
+
+- **missing** `docs/embedding/api-design.md:55-66` (Evaluation Methods table)
+  Missing entries: `MustParseWithSource`, `ReadExpression`. `ReadExpression` is the REPL-oriented reader variant that accepts `io.Reader` and (unlike `Parse`) allows trailing input; pairs with `IsIncompleteInput` for interactive input handling.
+  Evidence: `expression.go:83` (`ReadExpression`), `expression.go:102` (`MustParseWithSource`).
+
+- **missing** `docs/embedding/api-design.md:109-116` (Constructors table)
+  Table lists 6 constructors but the public API exposes 14+: `NewBigInteger`/`…FromInt64`/`…FromString`, `NewBigFloat`/`…FromFloat64`/`…FromString`, `NewRational`/`NewRationalFromBigInt`, `NewComplex`/`NewComplexFromParts`, `NewVector`, plus `WrapValue` as an escape hatch for pre-constructed internal values.
+  Evidence: `value.go:80-185`.
+
+- **missing** `docs/embedding/api-design.md:157-171` (Options table)
+  Missing: `WithContractEnforcement`, `WithMaxCallDepth`, `WithMaxStackSize`, `WithInlineThreshold`, `WithImportObserver`, `WithCoverage`. These are real engine-configuration knobs an embedder should know about.
+  Evidence: `options.go:103,113,124,134,169,285`.
+
+- **missing** `docs/embedding/api-design.md:181` (built-in authorizers)
+  Claim lists `DenyAll`, `ReadOnly`, `FilesystemRoot`, `All`. Missing: `ConsoleAuthorizer`, `ConsoleWithLoadAuthorizer`, `SandboxAuthorizer(envPrefix)` — which are the authorizers used by the profiles (`Console`, `ConsoleWithLoad`) and by `WithSandbox`.
+  Evidence: `security/console_authorizer.go:26`, `security/console_with_load_authorizer.go:28`, `security/sandbox_authorizer.go:26`.
+
+- **missing** `docs/embedding/api-design.md:181` (action vocabulary)
+  Claim lists actions `read`, `write`, `delete`, `stat`, `load`, `exit`. Missing: `exec` (structured process execution) and `exec-shell` (shell command execution).
+  Evidence: `security/access.go:45-54`.
+
+- **drift** `docs/embedding/api-design.md:166`
+  Claim: "`WithSandbox()` | Compose the sandbox env-prefix wrapper with the current authorizer." Reality: `WithSandbox(opts ...SandboxOption) EngineOption` is variadic; takes optional `SandboxEnvPrefix(prefix)` to customize the env var prefix (default `"WILE_"`). Doc should note the variadic option shape and ordering constraint (must appear after `WithProfile`/`WithAuthorizer`).
+  Evidence: `sandbox.go:46`.
+
+- **missing** `docs/embedding/api-design.md:138-143` (PrimitiveSpec struct)
+  Struct is shown with 4 fields. Actual has 10: also `Doc`, `ParamNames`, `Category`, `ParamTypes`, `ReturnType`, `Keywords`. Documentation should note that extra optional fields exist for documentation, type contracts, and discoverability.
+  Evidence: `registry/registry.go:26-42`.
+
+- **missing** `docs/embedding/api-design.md:217-222` (File Reference table)
+  Missing files: `expression.go` (Expression/Parse/MustParse/ReadExpression), `profile.go` (Profile + WithProfile), `sandbox.go` (WithSandbox + SandboxOption), `debugger.go` (Debugger type), `error.go` (CompilationError + RuntimeError).
+  Evidence: `ls wile root` — all five files present alongside engine.go/value.go/options.go/compiled.go/doc.go.
+
+- **drift** `docs/embedding/source-loading.md:54-65` (OSFileResolver resolution order)
+  Claim: order is 1. library registry, 2. SCHEME_INCLUDE_PATH, 3. CWD. Reality: `LoadPathStack.CurrentDir()` is searched FIRST, before library registry paths. Mirrors `FSFileResolver` behavior (which the doc documents correctly at lines 67-79) and is essential for relative `include` from an OS-loaded file. Absolute paths bypass the search list, open directly, still subject to authorization.
+  Evidence: `machine/compilation/resolver/os_file_resolver.go:66-68` ("Current load directory from the load path stack (stack-relative, highest priority)") and `os_file_resolver.go:114-128` (`osFSSearchDirs`).
+
+- **drift** `docs/embedding/source-loading.md:36-52` (ASCII diagram — Resolver Implementations overview)
+  Diagram's OSFileResolver column shows only 3 steps starting at "LibraryRegistry paths". Same drift as above — needs "LoadPath dir" as step 1 to mirror FSFileResolver.
+
+- **drift** `docs/embedding/source-loading.md:234-255` (ASCII diagram — Resolution Priority)
+  Same drift a third time: OSFileResolver subtree starts at "LibraryRegistry search paths"; should start at "LoadPathStack.CurrentDir() + path".
+
+- **missing** `docs/embedding/mcp.md:73-139` (Tools section)
+  Missing tool: `disassemble`. Registered at `cmd/wile/mcp.go:180-192`, takes a `name` string parameter (procedure name bound in the session), returns bytecode disassembly text. Part of the bytecode-disassembler work introduced alongside the REPL `,disasm` meta-command.
+  Evidence: `cmd/wile/mcp.go:180-192` (`AddTool(NewTool("disassemble"...))`), `handleDisassemble` at `cmd/wile/mcp.go:421-440`.
+
+- **clean** `docs/embedding/source-loading.md:14-31` (FileResolver interface + chain protocol)
+  Interface signature at `environment/file_resolver.go:31-34` matches. `ErrFileNotFound`/sourceload-`ErrNotFound` convention verified against `ChainFileResolver.ResolveAndOpen` at `machine/compilation/resolver/chain_file_resolver.go:46-59` (matches the code snippet in the doc nearly byte-for-byte).
+
+- **clean** `docs/embedding/source-loading.md:177-217` (Embedded Standard Library)
+  `fs.Sub(rawFS, "lib")` init pattern verified at `stdlib/stdlib.go:44-49`. `//go:embed lib` directive at `stdlib/stdlib.go:36-37`. `DefaultLibraryPaths = [".", "./stdlib/lib"]` verified at `machine/compilation/library_registry.go:153-156`.
+
+- **clean** `docs/embedding/source-loading.md:134-140` (Bootstrap Isolation)
+  `core.BootstrapFS` at `registry/core/bootstrap.go:25-31` with `//go:embed bootstrap.scm bootstrap_macros.scm bootstrap_procedures.scm`. Bootstrap resolver instantiated separately at `engine.go:685` (`compilation.NewEmbedFileResolver(core.BootstrapFS)`), not threaded into the user-visible chain.
+
+- **clean** `docs/embedding/source-loading.md:142-162` (Library Import Resolution)
+  `.sld`-then-`.scm` extension order verified at `machine/compilation/resolver/helpers.go:35` (`libraryExtensions = []string{".sld", ".scm"}`) consumed by `ResolveLibraryFile` in `machine/compilation/library_registry.go:309-323`. The doc's hand-written example illustrates the behavior without citing the actual function — acceptable as pedagogy.
+
+- **clean** `docs/embedding/source-loading.md:299-318` (Code Locations table)
+  All 15 file paths verified present at the cited locations.
+
+- **clean** `docs/embedding/mcp.md:141-186` (Resources section)
+  Three resources registered at `cmd/wile/mcp.go:574-601`: `wile://session`, `wile://libraries`, `wile://primitives`. JSON shapes (`sessionState`, `libraryInfo`, `primitiveInfo`) at `cmd/wile/mcp.go:551-571` match the documented examples.
+
+- **clean** `docs/embedding/mcp.md:188-194` (Prompts section)
+  Single prompt `wile-scheme` with required `task` argument, registered at `cmd/wile/mcp.go:488-500`.
+
+- **clean** `docs/embedding/mcp.md:14-20` (Flag table + mutual exclusion)
+  `--mcp` mutual exclusion with `-e`/`-f`/`-i` enforced at `cmd/wile/main.go:202-205`. `--mcp-timeout` non-negative check at `main.go:206-209`.
+
+**Fixes** (committed in this PR):
+
+- `api-design.md:55-66`: rewrite `Parse` row to clarify "exactly one expression" (not "first"); add `ReadExpression` and `MustParseWithSource` rows.
+- `api-design.md:109-116`: expand Constructors table to cover big numerics, rationals, complex numbers, vectors, and `WrapValue`.
+- `api-design.md:138-143`: expand `PrimitiveSpec` struct snippet with all 10 fields (4 required + 6 optional) and an inline comment.
+- `api-design.md:146`: `MachineContext` → `CallContext` with a sentence pointing at the type-assert escape for VM-internal access.
+- `api-design.md:157-171`: expand Options table with `WithContractEnforcement`, `WithMaxCallDepth`, `WithMaxStackSize`, `WithInlineThreshold`, `WithImportObserver`, `WithCoverage`; fix `WithSandbox` row to note variadic options and ordering constraint.
+- `api-design.md:181`: add `exec` and `exec-shell` to the action vocabulary; add `ConsoleAuthorizer`, `ConsoleWithLoadAuthorizer`, `SandboxAuthorizer` to the built-in authorizer list with a sentence on how profiles and `WithSandbox` compose them.
+- `api-design.md:212`: rewrite the "Design Decisions" entry — the engine *does* use `RunWithEscapeHandling` in both entry paths, with pointer references to the two call sites.
+- `api-design.md:217-222`: expand File Reference table with `expression.go`, `profile.go`, `sandbox.go`, `debugger.go`, `error.go`.
+- `source-loading.md:36-52`: correct the ASCII diagram — add "LoadPath dir" as step 1 of OSFileResolver, renumber subsequent steps to 4.
+- `source-loading.md:54-65`: rewrite OSFileResolver resolution order to list 4 steps with `LoadPathStack.CurrentDir()` first; note absolute-path bypass.
+- `source-loading.md:234-255`: correct the Resolution Priority ASCII summary — same fix as the diagram.
+- `mcp.md:124-131`: add `disassemble` tool section with parameter table and error semantics, placed between `libraries` and `reset` to mirror the registration order in `cmd/wile/mcp.go`.
 
 ### Phase 9 — `types/` — Pending
 
