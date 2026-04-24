@@ -268,5 +268,6 @@ definition* mechanism — they define not just shape, but behavior.
 - [Racket Reference: Structures](https://docs.racket-lang.org/reference/structures.html)
 - [Racket Reference: Struct Type Properties](https://docs.racket-lang.org/reference/structprops.html)
 - [scheme-types-records-mop.md](scheme-types-records-mop.md) — Scheme record standards staircase, SRFI landscape, and MOP question
-- [records-as-formal-types.md](records-as-formal-types.md) — Records as existential types and ADTs
+- [records-as-formal-types.md](records-as-formal-types.md) — Records as nominally-typed labeled product types (introduction/elimination rules)
+- [abstract-data-types.md](abstract-data-types.md) — Records as existential types and ADTs
 - [SRFI-136: Extensible record types](https://srfi.schemers.org/srfi-136/srfi-136.html) — Conservative R7RS inheritance extension

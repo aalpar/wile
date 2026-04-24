@@ -223,6 +223,21 @@ to recognize a stack is through its predicate — and if the predicate isn't
 exported, *there is no way.* This is the Scheme analog of sealing the
 existential: the representation type is truly hidden, not just unexported.
 
+> **Where Wile is:** Wile provides opaque record types via
+> `define-opaque-record-type` (and the procedural `make-opaque-record-type`)
+> using R7RS-compatible syntax, not R6RS's `(opaque #t)` clause:
+>
+> ```scheme
+> (define-opaque-record-type <stack>
+>   (raw-make items) stack? (items stack-items))
+> ```
+>
+> Instances of opaque record types return `#f` from `record?`, and
+> `record-type` signals an error on them — the type is sealed against
+> generic inspection. Type-specific predicates and accessors still work,
+> so the operations the implementor exports continue to function for
+> clients.
+
 ## Why This Matters
 
 The ADT / existential-type perspective reframes what "good API design" means
