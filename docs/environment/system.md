@@ -183,7 +183,7 @@ import (
     "context"
     "github.com/aalpar/wile/environment"
     "github.com/aalpar/wile/internal/bootstrap"
-    "github.com/aalpar/wile/machine"
+    "github.com/aalpar/wile/machine/compilation"
 )
 
 func setupRuntime(ctx context.Context) (*environment.EnvironmentFrame, error) {
@@ -194,7 +194,7 @@ func setupRuntime(ctx context.Context) (*environment.EnvironmentFrame, error) {
     }
 
     // Set up library loading
-    registry := machine.NewLibraryRegistry()
+    registry := compilation.NewLibraryRegistry()
     env.SetLibraryRegistry(registry)
 
     // Configure library environment factory (shares Namespace)
@@ -267,22 +267,25 @@ These invariants must be maintained:
 
 ## Load-Path Stack
 
-The `LoadPathStack` enables relative path resolution for `load`, `include`, and `import` by tracking which files are currently being loaded. It is stored on `Namespace` (per-VM, not per-thread).
+A load stack enables relative path resolution for `load`, `include`, and `import` by tracking which files are currently being loaded. It is stored on `Namespace` (per-VM, not per-thread). The stack is behind the `PathTracker` interface so `environment/` does not depend on `machine/compilation/`:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  LoadPathStack (environment/load_path_stack.go)         │
-│                                                         │
-│  paths []string    ← LIFO stack of absolute file paths  │
-│  mu    sync.Mutex  ← thread-safe access                 │
-│                                                         │
-│  Push(absPath) → Pop() → Current() → CurrentDir()      │
-└─────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│  PathTracker interface (environment/file_resolver.go)                  │
+│    Push(absPath) / Pop() / Current() / CurrentDir() / Depth()          │
+│                                                                        │
+│  Concrete impl: *LoadStack                                             │
+│    (machine/compilation/sourceload/load_stack.go)                      │
+│    paths []string    ← LIFO stack of resolver-supplied paths           │
+│    mu    sync.RWMutex ← thread-safe access                             │
+└────────────────────────────────────────────────────────────────────────┘
 ```
+
+The engine wires in the concrete implementation via `ns.SetLoadPathStack(sourceload.NewLoadStack())` at startup (see `engine.go`).
 
 ### Resolution Strategy
 
-`ResolveFile` (`environment/resolve.go`) resolves filenames using a 3-tier strategy:
+Filename resolution goes through the `FileResolver` interface (`environment/file_resolver.go`). Concrete implementations live in `machine/compilation/resolver/` (`os_file_resolver.go`, `fs_file_resolver.go`, `embed_file_resolver.go`, `chain_file_resolver.go`), backed by `sourceload.Finder` for file search. The load stack's current directory is consulted as the relative base:
 
 ```
 1. Absolute path     → use as-is (if exists)
@@ -342,7 +345,7 @@ The stack lives on `Namespace`, shared across all child environments via delegat
 
 - `Namespace.InternSyntax()` - Thread-safe (uses RWMutex)
 - `PhaseRegistry.GetOrCreate()` - Thread-safe (uses RWMutex)
-- `LoadPathStack` - Thread-safe for individual operations (uses Mutex); LIFO ordering only guaranteed single-threaded
+- `PathTracker` / concrete `LoadStack` - Thread-safe for individual operations (uses RWMutex); LIFO ordering only guaranteed single-threaded
 - Binding operations - Not thread-safe (single-threaded compilation assumed)
 
 ---

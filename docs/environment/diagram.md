@@ -22,7 +22,7 @@ See [system.md](system.md) for detailed API documentation.
 │              Namespace (root, one per VM)                           │
 │                                                                               │
 │  syntaxInterns ─── map[Value]SyntaxValue ← thread-safe, per-instance           │
-│  loadPathStack ─── *LoadPathStack        ← shared across all children         │
+│  loadPathStack ─── PathTracker           ← interface; impl *LoadStack         │
 │  libraryRegistry ─ any                   ← *machine.LibraryRegistry           │
 │  phases ────────── *PhaseRegistry        ← owns phase→env mapping             │
 │  runtime ──────── *EnvironmentFrame      ← the phase 0 env                    │

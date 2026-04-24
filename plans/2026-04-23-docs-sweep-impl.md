@@ -493,7 +493,35 @@ Style findings deferred per plan scope controls (no architectural reorganization
 
 Style / layout findings deferred per plan scope controls.
 
-### Phase 3 — `environment/` — Pending
+### Phase 3 — `environment/` — Completed (branch `feat/docs-sweep-environment`)
+
+**Inventory** (2026-04-23):
+
+- Last doc touch of `docs/environment/`: `bf83fa43` (2026-04-15) — topic reorganization.
+- Code changes to `environment/` since then: `envmap` additions (`WithEnv`, `WithEnvMap`), `envBindingChecker` Copilot fixes, `apropos` built-sentinel work, and the earlier refactor that moved `LoadPathStack` out of `environment/` to `machine/compilation/sourceload/`.
+
+**Findings**:
+
+- **drift** `docs/environment/system.md:272` (Load-Path Stack diagram)
+  Doc labels the stack file as `environment/load_path_stack.go`. File does not exist in `environment/`. The type now lives at `machine/compilation/sourceload/load_stack.go` (type name `LoadStack`, not `LoadPathStack`). The interface exposed in `environment/` is `PathTracker` in `environment/file_resolver.go:55`.
+  Evidence: `ls environment/*.go` (no `load_path_stack.go`); `machine/compilation/sourceload/load_stack.go:22` (`func NewLoadStack() *LoadStack`); `environment/file_resolver.go:55` (`type PathTracker interface`).
+
+- **drift** `docs/environment/system.md:285`
+  References `ResolveFile` in `environment/resolve.go`. Neither the function nor the file exists. Current architecture resolves files through the `FileResolver` interface in `environment/file_resolver.go` and concrete implementations in `machine/compilation/sourceload/` (`ResolveLibraryFile` at `machine/compilation/library_registry.go:309`, etc.).
+  Evidence: no `environment/resolve.go`; no top-level `ResolveFile` function (grep).
+
+- **drift** `docs/environment/diagram.md:25` (Ownership Hierarchy)
+  Diagram labels the Namespace's load-path field as `*LoadPathStack`. Actual field type is the `PathTracker` interface (`environment/namespace.go:64`); the concrete value is `*sourceload.LoadStack` set by `engine.go:125`.
+  Evidence: `environment/namespace.go:64` (`loadPathStack PathTracker`); `engine.go:125` (`ns.SetLoadPathStack(sourceload.NewLoadStack())`).
+
+- **clean** `docs/environment/racket-namespaces.md`
+  Conceptual/comparative document introducing Racket's namespace model. No Wile-specific code claims to verify. Reads correctly against current implementation.
+
+**Fixes** (to be committed):
+
+- `system.md` § "Load-Path Stack": correct the file reference from `environment/load_path_stack.go` to `machine/compilation/sourceload/load_stack.go`; rename `LoadPathStack` to `LoadStack` where it refers to the concrete type; note the interface split (`PathTracker` in `environment/file_resolver.go`, concrete `LoadStack` in `machine/compilation/sourceload/`).
+- `system.md` § "Resolution Strategy": drop the `environment/resolve.go` path; describe resolution as happening via the `FileResolver` interface with concrete implementations in `machine/compilation/resolver/` (`os_file_resolver.go`, `fs_file_resolver.go`, `embed_file_resolver.go`, `chain_file_resolver.go`), backed by `sourceload.Finder` for file search. (Revision note: the first cut of this fix said implementations live in `sourceload/`; that was wrong — `sourceload/` holds `LoadStack`, `Finder`, `walk.go`, while the concrete `FileResolver` types live in the sibling `resolver/` package. Copilot + errors-lens flagged this convergently.)
+- `diagram.md`: update the ownership-hierarchy box to show `loadPathStack ─── PathTracker` instead of `*LoadPathStack`, matching the current field type.
 
 ### Phase 4 — `compiler/` — Pending
 
