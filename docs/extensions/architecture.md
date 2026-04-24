@@ -467,13 +467,14 @@ These are importable by external Go code:
 
 | Package | Library Name | Primitives |
 |---------|-------------|------------|
-| `extensions/math` | `(wile math)` | `sqrt`, `exp`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `log`, `expt`, `square`, `floor`, `ceiling`, `truncate`, `round`, `floor/`, `floor-quotient`, `floor-remainder`, `truncate/`, `truncate-quotient`, `truncate-remainder`, `finite?`, `infinite?`, `nan?`, `numerator`, `denominator`, `rationalize`, `exact-integer-sqrt`, `make-rectangular`, `make-polar`, `real-part`, `imag-part`, `magnitude`, `angle`, `number->string`, `string->number` |
-| `extensions/system` | `(wile system)` | `command-line`, `exit`, `emergency-exit`, `get-environment-variable`, `get-environment-variables`, `current-second`, `current-jiffy`, `jiffies-per-second`, `features` |
-| `extensions/files` | `(wile files)` | `open-input-file`, `open-output-file`, `open-binary-input-file`, `open-binary-output-file`, `file-exists?`, `delete-file`, `call-with-input-file`, `call-with-output-file`, `with-input-from-file`, `with-output-to-file` |
-| `extensions/process` | `(wile process)` | `system`, `process-spawn`, `process-stdout`, `process-stderr`, `process-stdin`, `process-wait`, `process-kill`, `process?` |
+| `extensions/math` | `(wile math)` | `exp`, `log`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sqrt`, `expt`, `floor`, `ceiling`, `truncate`, `round`, `floor/`, `floor-quotient`, `floor-remainder`, `truncate/`, `truncate-quotient`, `truncate-remainder`, `finite?`, `infinite?`, `nan?`, `numerator`, `denominator`, `rationalize`, `exact-integer-sqrt`, `make-rectangular`, `make-polar`, `real-part`, `imag-part`, `magnitude`, `angle`, `number->string`, `string->number` (35 primitives) |
+| `extensions/system` | `(wile system)` | `command-line`, `exit`, `emergency-exit`, `current-second`, `current-jiffy`, `jiffies-per-second` (6 primitives) |
+| `extensions/files` | `(wile files)` | `open-input-file`, `open-output-file`, `open-binary-input-file`, `open-binary-output-file`, `file-exists?`, `delete-file`, `call-with-input-file`, `call-with-output-file`, `create-directory`, `delete-directory`, `directory-files`, `current-directory`, `set-current-directory!` (13 primitives) |
+| `extensions/process` | `(wile process)` | `system`, `process-spawn`, `process-stdout`, `process-stderr`, `process-stdin`, `process-wait`, `process-kill`, `process?` (8 primitives) |
 | `extensions/threads` | `(wile threads)` | SRFI-18 threading: `make-thread`, `thread-start!`, `thread-join!`, `thread-yield!`, `make-mutex`, `mutex-lock!`, `make-condition-variable`, `condition-variable-signal!`, etc. |
-| `extensions/gointerop` | `(wile gointerop)` | Go concurrency primitives: `make-channel`, `channel-send!`, `channel-receive`, `make-wait-group`, `make-rw-mutex`, `make-once`, `make-atomic`, `atomic-compare-and-swap!`, etc. |
-| `extensions/introspection` | `(wile introspection)` | `environment?`, `interaction-environment`, `environment-bound-names`, `environment-ref`, `environment-bound?` |
+| `extensions/gointerop` | `(wile gointerop)` | Go concurrency: `make-channel`, `channel-send!`, `channel-receive`, `make-wait-group`, `make-rw-mutex`, `make-once`, `make-atomic`, `atomic-compare-and-swap!`, etc. |
+| `extensions/introspection` | `(wile introspection)` | `environment?`, `interaction-environment`, `environment-bound-names`, `environment-ref`, `environment-bound?`, `features`, `available-libraries`, `disassemble` (8 primitives) |
+| `extensions/eval` | `(wile eval)` | `eval`, `load`, `current-load-path`, `current-load-directory`, `current-load-depth`, `scheme-report-environment`, `null-environment`, `environment`, `expand`, `expand-once`, `compile`, `syntax-local-value`, `syntax-local-value/immediate`, `make-compile-time-value`, `syntax-local-introduce`, `syntax-local-identifier-as-binding` |
 
 ### Internal Extensions (`internal/extensions/`)
 
@@ -482,7 +483,7 @@ Not importable by external code:
 | Package | Purpose |
 |---------|---------|
 | `internal/extensions/io` | R7RS I/O: `read`, `write`, `display`, port operations |
-| `internal/extensions/eval` | `eval`, `load`, library loading (couples to full compiler pipeline) |
+| `internal/extensions/envvars` | Environment-variable primitives: `get-environment-variable`, `get-environment-variables` (sandbox-aware) |
 | `internal/extensions/namespace` | Namespace introspection and management |
 | `internal/extensions/all` | Records, promises, exceptions, strings, characters, and other R7RS primitives |
 

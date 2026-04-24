@@ -60,13 +60,14 @@ registered as an R7RS library named `(wile <extension-name>)`:
 
 | Library name | Go package | Primitives |
 |-------------|------------|------------|
-| `(wile math)` | `extensions/math` | 30 math primitives |
-| `(wile system)` | `extensions/system` | 9 system primitives |
-| `(wile files)` | `extensions/files` | File I/O primitives |
+| `(wile math)` | `extensions/math` | 35 math primitives |
+| `(wile system)` | `extensions/system` | 6 system primitives |
+| `(wile files)` | `extensions/files` | 13 file/directory primitives |
 | `(wile process)` | `extensions/process` | 8 process execution primitives |
 | `(wile threads)` | `extensions/threads` | SRFI-18 threading primitives |
 | `(wile gointerop)` | `extensions/gointerop` | Go concurrency primitives |
-| `(wile introspection)` | `extensions/introspection` | Environment introspection |
+| `(wile introspection)` | `extensions/introspection` | Environment introspection, features, disassembler |
+| `(wile eval)` | `extensions/eval` | `eval`, `load`, expand, syntax-local-* |
 
 ## How It Works
 

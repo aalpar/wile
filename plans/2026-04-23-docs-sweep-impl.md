@@ -629,7 +629,44 @@ Style / layout findings deferred per plan scope controls.
 - [tests] precision gap: `machine_context_apply.go` is cited as the `NewApplyFrame` consumer, but `Apply` actually calls `InitApplyFrame` (the pooling-friendly counterpart). The "Files:" header is a coarse two-file index; both files contain relevant code (`NewApplyFrame` defined in `environment/environment_frame.go`; Apply consumer in `machine_context_apply.go`). Minor precision, not drift.
 - [tests] precision gap: primitive registrations live in `extensions/eval/register.go` while implementations live in `extensions/eval/prim_eval.go`. Tables cite only the impl file per existing doc convention (sibling rows in the same tables follow the same pattern).
 
-### Phase 6 — `extensions/` — Pending
+### Phase 6 — `extensions/` — Completed (awaiting PR)
+
+**Inventory** (2026-04-24):
+
+- Last touch of `docs/extensions/`: pre-dates the `internal/extensions/` → `extensions/` public-API reorg that moved `eval` to the public surface and added a new `envvars` package.
+- Relevant code structure changes since: `eval` moved from `internal/extensions/eval` to `extensions/eval` (part of public embedding API); `extensions/envvars` package added (hosts `get-environment-variable`/`get-environment-variables` with sandbox-awareness — moved out of `system`); several primitives migrated between extensions (`features` → `introspection`, env vars → `envvars`); various extensions grew primitives (math +5, files +5, introspection +3).
+
+**Findings**:
+
+- **drift** `docs/extensions/architecture.md:469-487` (Public + Internal Extensions tables)
+  - `extensions/eval` missing from Public Extensions table — it's now public (moved from `internal/extensions/eval`).
+  - `internal/extensions/envvars` missing from Internal Extensions table — this package exists and hosts `get-environment-variable`/`get-environment-variables`.
+  - `internal/extensions/eval` listed as internal — no longer exists at that path.
+  - `extensions/system` primitive list includes `get-environment-variable`, `get-environment-variables`, `features` — these moved: env vars to `internal/extensions/envvars`, `features` to `extensions/introspection`. Actual `system` list has 6 primitives.
+  - `extensions/files` list has 10 primitives — actual register.go has 13, missing `create-directory`, `delete-directory`, `directory-files`, `current-directory`, `set-current-directory!`.
+  - `extensions/introspection` list has 5 primitives — actual register.go has 8, missing `features`, `available-libraries`, `disassemble`.
+  - `extensions/math` list includes `square` — `square` is a core bootstrap procedure (`bootstrap_procedures.scm:321`), not a math extension primitive.
+  Evidence: `ls extensions/ internal/extensions/`; `grep -c "Name:" extensions/*/register.go`.
+
+- **drift** `docs/extensions/libraries.md:62-69` (Available Extension Libraries table)
+  - `(wile eval)` missing entirely.
+  - `(wile math)` claims "30 math primitives" — actual 35.
+  - `(wile system)` claims "9 system primitives" — actual 6 (3 moved as above).
+  - `(wile introspection)` description is narrow ("Environment introspection") — extension actually covers features and disassembler too.
+
+- **clean** `docs/extensions/libraries.md:239-248` (`LibraryEnvFactory` narrative)
+  `LibraryEnvFactory` type is at `environment/namespace.go:36`; `SetLibraryEnvFactory` on `Namespace` at line 250. Doc description of isolated library environment creation matches implementation.
+
+- **clean** `docs/extensions/architecture.md:152-160` (Optional Interfaces table)
+  `Describer`, `LibraryNamer`, `Closeable` all verified at `registry/extension.go:28-45`. `NewDescribedExtension` at `registry/extension.go:61`.
+
+- **clean** ASCII diagrams (architecture.md:21-37, libraries.md:80-96)
+  Primitive counts in diagrams (`~80`, `+30`, `80 → 110`) are pedagogical approximations, intentionally vague; not treating as drift.
+
+**Fixes** (committed in this PR):
+
+- `architecture.md:469-487`: add `extensions/eval` row to Public Extensions; remove `get-environment-variable`/`get-environment-variables`/`features` from `extensions/system` row (6 primitives now); expand `extensions/files` row to 13 primitives; expand `extensions/introspection` row to 8 primitives (add `features`, `available-libraries`, `disassemble`); remove `square` from `extensions/math` row; swap `internal/extensions/eval` entry for `internal/extensions/envvars` in Internal Extensions table.
+- `libraries.md:62-69`: add `(wile eval)` row; fix primitive counts for `(wile math)` (30 → 35), `(wile system)` (9 → 6), `(wile files)` ("File I/O primitives" → "13 file/directory primitives"), `(wile introspection)` description expanded.
 
 ### Phase 7 — `security/` — Pending
 
