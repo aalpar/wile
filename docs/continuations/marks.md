@@ -68,19 +68,28 @@ Each frame holds its own `env`, `template`, `pc`, `evals` — everything needed
 to resume execution when the callee returns. This is what makes `call/cc`
 possible: the entire chain is capturable data, not ephemeral stack memory.
 
-Continuation marks exploit this structure. Each frame gets an optional
-`marks` map:
+Continuation marks exploit this structure. Each frame carries an optional
+slice of key-value entries:
 
 ```
-frame.marks = { key₁: val₁, key₂: val₂, ... }
+frame.marks = [(key₁, val₁), (key₂, val₂), ...]
 ```
 
-Most frames carry no marks (the map stays `nil` — zero cost). When you write
-`(with-continuation-mark key val body)`, the runtime sets `marks[key] = val`
-on the *current* frame, evaluates `body`, and the mark naturally disappears
-when the frame is popped.
+Most frames carry no marks (the slice stays `nil` — zero cost). When you
+write `(with-continuation-mark key val body)`, the runtime records the
+entry on the *current* frame, evaluates `body`, and the mark naturally
+disappears when the frame is popped.
 
 No cleanup thunks. No global state. The mark's lifetime is the frame's lifetime.
+
+**Why a slice, not a map.** Keys are compared with `eq?` — pointer identity,
+not hash-equality. Scheme allows arbitrary values as keys (pairs, vectors,
+symbols, procedures), and two structurally-identical values may or may not
+be `eq?`. A Go map would compare by structural equality on primitive types
+and panic on non-comparable types (`[]T`, functions, maps). A slice of
+`(key, val)` entries with a linear scan is correct by construction and fast
+because mark sets are typically small (0-3 entries per frame). The switch
+from map to slice was PR #508 for exactly this reason.
 
 ## Tail Position: The Defining Behavior
 
@@ -148,15 +157,18 @@ leak that defeats the purpose of tail-call optimization.
 ## Collecting Marks: Walking the Chain
 
 To collect marks, you walk the continuation chain — the same linked list that
-`CaptureStackTrace` already walks in `machine/machine_context.go:827`:
+`CaptureStackTrace` already walks in `machine/machine_context.go:995`:
 
 ```go
 // CaptureStackTrace walks mc.cont chain for error reporting.
 // Mark collection follows the same pattern:
 cont := p.cont
 for cont != nil {
-    if val, ok := cont.marks[key]; ok {
-        result = append(result, val)
+    for _, entry := range cont.marks {
+        if eqIdentity(entry.key, key) {
+            result = append(result, entry.val)
+            break // one value per frame; inner shadows outer
+        }
     }
     cont = cont.parent
 }
@@ -217,7 +229,7 @@ Without marks, you're stuck choosing between:
 - **dynamic-wind** (correct but expensive)
 - **Thread-local storage** (doesn't compose with continuations at all)
 
-Marks give you the correctness of `dynamic-wind` at the cost of a map write.
+Marks give you the correctness of `dynamic-wind` at the cost of a slice append (O(1) amortized; typical sets are 0-3 entries per frame, so no reallocation churn).
 
 ## The Subtle Parts
 
@@ -234,10 +246,16 @@ copy avoids this but costs more. For composable continuations (which can be
 invoked multiple times), deep copy is required.
 
 **Lazy allocation.** Most frames never carry marks. The `marks` field is a
-Go map initialized to `nil`. Only `with-continuation-mark` allocates it, on
-first use. This means the common case (no marks) adds zero overhead to the
-continuation infrastructure — not even a pointer-sized field cost, since Go
-maps are already pointer-sized and `nil` is the zero value.
+slice initialized to `nil`. Only `with-continuation-mark` allocates it, on
+first use. The common case (no marks) adds zero overhead — a nil slice is
+the zero value and costs only the header (three pointer-sized words).
+
+**Save/restore semantics.** When `SaveContinuation` fires, it copies
+`mc.marks` into the new frame and nils out `mc.marks` — the callee starts
+with a clean mark set (see comments at `machine/vm_state.go:219-223`). On
+return, `Restore`/`PopContinuation` lifts the saved marks back. This is why
+a tail-recursive loop with a mark does not accumulate entries: tail calls
+skip `SaveContinuation` and just overwrite the current frame's entry.
 
 **Tail-position detection.** The compiler must know whether the body of
 `with-continuation-mark` is in tail position. If it is, no `SaveContinuation`

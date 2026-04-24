@@ -563,7 +563,38 @@ Style / layout findings deferred per plan scope controls.
 - `macro-system.md`: Syntax Adapter section now notes the concrete implementation lives in `internal/match/syntax_expand.go` (not the old `syntax_adapter.go`), with `capturedValueToSyntax` cited at `syntax_expand.go:332`.
 - `macro-system.md`: Bootstrap Macros table rewritten to match what's actually in `registry/core/bootstrap_macros.scm`. Removed `let`, `let*`, `letrec` (now core compiled), removed `do`'s old row with stale sketch, and added the forms the old table omitted (`delay`, `delay-force`, `parameterize`, `guard-aux`, `define-opaque-record-type`, `define-record-type-impl`, `let-values`, `let*-values`, `define-values`, `with-continuation-barrier`, `with-baffle`).
 
-### Phase 5 — `continuations/` — Pending
+### Phase 5 — `continuations/` — Split into 5a/5b/5c sub-phases (per plan's "too large to review in one PR" guidance)
+
+#### Phase 5a — `concepts.md` + `implementation.md` + `marks.md` — Completed (branch `feat/docs-sweep-continuations-core`)
+
+**Inventory** (2026-04-24):
+
+- Last doc touch of `docs/continuations/`: `2785298c` (2026-04-17) — SafeExtensions/AllExtensions retirement. Prior: `bf83fa43` topic reorganization.
+- Continuation-relevant code changes since: timer interrupts with continuation capture (`0f766afd`), Copilot-fix on unforgeable mark key (`b85363eb`), error diagnostics via continuation marks (`852926fa`), marks-based parameterize for composable continuations (`1b560cbc`), CapturedContinuation type (`fc7d13c6`), continuation-marks Phase 3 primitives (`67069941`), and the **map→slice refactor for marks** (`419b94dd fix(machine): replace marks map with eq?-correct slice for continuation marks (#508)`).
+
+**Findings**:
+
+- **stale** `docs/continuations/marks.md:74-83, 236-240`
+  The doc describes marks as a **Go map** (`frame.marks = { key₁: val₁, key₂: val₂, ... }`, "The `marks` field is a Go map initialized to `nil`", "a map on each frame", "the cost of a map write"). The actual implementation is a **slice of `markEntry` records** (`marks []markEntry` at `machine/vm_state.go:223`). This changed in PR #508 (`419b94dd`, 2026-early) specifically to get `eq?`-correct key comparison semantics that maps cannot provide (pointer-equality keys). The doc's description of "map write" / "map init" is factually incorrect.
+  Evidence: `machine/vm_state.go:223` (`marks []markEntry`); commit `419b94dd`.
+
+- **drift** `docs/continuations/implementation.md:26-38` (vmState struct snippet)
+  Snippet shows 10 fields but the actual struct has 11 — missing `marks []markEntry` at `machine/vm_state.go:223`. This is the same field that `marks.md` describes, so both docs need to be internally consistent.
+  Evidence: `machine/vm_state.go:94-224` (full struct).
+
+- **drift** `docs/continuations/marks.md:151`
+  Cites `CaptureStackTrace` at `machine/machine_context.go:827`. Actual location is `machine/machine_context.go:995`. Line-number drift from intervening changes.
+  Evidence: `machine/machine_context.go:995` (`func (p *MachineContext) CaptureStackTrace(maxDepth int) StackTrace`).
+
+- **clean** `docs/continuations/concepts.md`
+  Purely conceptual introduction to continuations. No Wile-specific code references to verify.
+
+**Fixes** (committed in this PR):
+
+- `implementation.md`: add `marks []markEntry` to the vmState snippet. Keep the field list as a doc-quality teaching snippet rather than an exact transcription, but note the full field set.
+- `marks.md`: rewrite "The Key Insight" and "The Subtle Parts" sections to describe the actual slice-of-entries representation and its rationale (eq?-correct key comparison). Remove "Go map" claims. Keep the user-level mental model ("attach key-value pairs to frames") accurate without over-specifying the data structure.
+- `marks.md`: fix the `CaptureStackTrace` line reference (827 → 995).
+- `marks.md`: add a pointer to the `SaveContinuation` mark-propagation semantics documented inline in `vm_state.go:220-223` (copy to continuation, nil `mc.marks`, callee starts clean).
 
 ### Phase 6 — `extensions/` — Pending
 

@@ -26,14 +26,15 @@ Every saveable VM state shares the same shape, defined as `vmState` in `machine/
 type vmState struct {
     env          *environment.EnvironmentFrame
     template     *NativeTemplate
-    singleValue  values.Value
-    multiValues  MultipleValues
+    singleValue  values.Value     // value register fast path
+    multiValues  MultipleValues   // R7RS (values ...)
     evals        *Stack
     pc           int
     windingStack WindingStack
     promptTag    *PromptTag
     threadID     uint64
     callDepth    int
+    marks        []markEntry      // continuation-mark key/value pairs
 }
 ```
 
