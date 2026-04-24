@@ -28,7 +28,7 @@ propagation mechanism. The error carries a `*PromptTag` and a
                                      ▼
                      ┌─────────────────────────────────┐
                      │ OperationForeignFunctionCall     │
-                     │ (machine/operations_call.go:50)  │
+                     │ (machine/operations_call.go:54)  │
                      │                                 │
                      │ errors.As(err, &abortErr)?       │
                      │   YES → return nil, err          │
@@ -223,7 +223,7 @@ This ensures call/cc works in contexts without `RunWithEscapeHandling`
 
 ## call/cc escape value
 
-`machine/captured_continuation.go` (`NewCapturedContinuation`)
+`machine/captured_continuation.go:39` (`NewCapturedContinuation`)
 
 The escape value is a `CapturedContinuation` that:
 1. Checks thread identity (captured vs invoking thread ID)
@@ -315,7 +315,7 @@ the composable continuation corrupts the shared frames.
 | `FindCommonWindingPrefix` | `machine/dynamic_wind.go:100` | Common ancestor of two winding stacks |
 | `applyComposableContinuation` | `machine/machine_context_apply.go:403` | Apply composable continuation value |
 | `PrimCallCC` | `registry/core/prim_control.go:140` | call/cc primitive (inline + sub-context) |
-| `NewCapturedContinuation` | `machine/captured_continuation.go` | Build call/cc escape value: apply cc then abort |
+| `NewCapturedContinuation` | `machine/captured_continuation.go:39` | Build call/cc escape value: apply cc then abort |
 | `PrimCallWithContinuationPrompt` | `registry/core/prim_prompt.go:70` | Install prompt, run thunk, handle abort |
 | `PrimAbortCurrentContinuation` | `registry/core/prim_prompt.go:159` | Return ErrPromptAbort |
 | `PrimCallWithComposableContinuation` | `registry/core/prim_prompt.go:215` | Capture composable continuation |
