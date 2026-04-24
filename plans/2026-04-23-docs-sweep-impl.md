@@ -668,7 +668,7 @@ Style / layout findings deferred per plan scope controls.
 - `architecture.md:469-487`: add `extensions/eval` row to Public Extensions; remove `get-environment-variable`/`get-environment-variables`/`features` from `extensions/system` row (6 primitives now); expand `extensions/files` row to 13 primitives; expand `extensions/introspection` row to 8 primitives (add `features`, `available-libraries`, `disassemble`); remove `square` from `extensions/math` row; swap `internal/extensions/eval` entry for `internal/extensions/envvars` in Internal Extensions table.
 - `libraries.md:62-69`: add `(wile eval)` row; fix primitive counts for `(wile math)` (30 → 35), `(wile system)` (9 → 6), `(wile files)` ("File I/O primitives" → "13 file/directory primitives"), `(wile introspection)` description expanded.
 
-### Phase 7 — `security/` — Completed (awaiting PR)
+### Phase 7 — `security/` — Completed (PR #716)
 
 **Inventory** (2026-04-24):
 
