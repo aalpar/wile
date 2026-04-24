@@ -811,6 +811,29 @@ Style / layout findings deferred per plan scope controls.
 - `source-loading.md:234-255`: correct the Resolution Priority ASCII summary — same fix as the diagram.
 - `mcp.md:124-131`: add `disassemble` tool section with parameter table and error semantics, placed between `libraries` and `reset` to mirror the registration order in `cmd/wile/mcp.go`.
 
+**Additional fixes from Copilot + crosscheck review** (commit 2):
+
+Three-lens-converging **Critical**:
+
+- **[types/code/Copilot]** `api-design.md:189` — Options table cited a nonexistent `DefaultMaxStackSize` constant. `WithMaxStackSize` has no default; it is opt-in and `0` also means unlimited. Rewrote the row to match the option's own docstring at `options.go:120-123`.
+- **[errors/tests/Copilot]** `mcp.md:136-139` — The added `disassemble` section claimed a Go primitive raises an MCP tool error for "no disassembly available", but `disassemble.go:83-95` explicitly returns a one-line text summary for `*machine.ForeignClosure`. Rewrote to describe the actual behavior (Scheme procs → full bytecode; foreign prims → one-line summary; errors reserved for unbound or non-procedure).
+- **[consistency/code]** `source-loading.md:49` — Pre-existing: the EmbedFileResolver row in the resolver-implementations diagram was 60 display columns while every other row was 59. Removed one trailing space per CLAUDE.md "Box-drawing alignment" rule.
+
+**Notable unambiguous**:
+
+- **[types/code]** `api-design.md:236` / `:243` — File Reference table listed `IsIncompleteInput` under `expression.go`; it actually lives at `error.go:134`. Moved to the `error.go` row; added `MustParseWithSource` to the `expression.go` row to match the evaluation-methods table.
+- **[Copilot]** `api-design.md:114` — Constructors row listed `NewBigIntegerFromString` without its `base int` parameter. Expanded to `NewBigIntegerFromString(s, base)` so embedders see the required second argument.
+- **[Copilot]** `api-design.md:161` — "receives a `CallContext` and unwrapped arguments" — arguments are not received as separate parameters; they are accessed positionally via `mc.Arg(i)`. Rewrote the sentence to describe the actual access pattern (including the variadic-rest convention).
+- **[Copilot]** `api-design.md:233` — The escape-handling claim "translates them into the returned error" overstates what `RunWithEscapeHandling` does. Per `machine_context.go:1278-1350`, it installs `DefaultPromptTag` as a top-level prompt, catches `ErrPromptAbort` for *that* tag, restores to the prompt frame, and resumes — the payload becomes the returned value, `err == nil`. Only aborts whose tag has no matching prompt escape as runtime errors. Rewrote accordingly.
+- **[errors]** `api-design.md:181` + new "Option ordering" paragraph — The original row said "Must appear after `WithProfile`/`WithAuthorizer`" without naming the consequence. Moved the ordering constraint out of the table into a dedicated paragraph below the Options table that names the silent-overwrite hazard explicitly: `WithAuthorizer` assigns, `WithSandbox` composes via `security.All(...)` only when an authorizer is already set, so a later `WithAuthorizer(...)` silently drops the sandbox with no diagnostic. Embedders reading this now have the failure mode spelled out.
+
+**Findings NOT actioned** (with rationale):
+
+- **[consistency]** Cross-doc authorizer inventory drift between `api-design.md` and `docs/security/sandboxing.md` — `sandboxing.md` doesn't enumerate `WithSandbox`, `SandboxAuthorizer`, or `SandboxEnvPrefix`. This is Phase 7 territory (shipped via PR #716) and would require a separate doc-sweep touch. Out of Phase 8 scope. Tracked for potential Phase 9+ revisit.
+- **[tests]** Test coverage gaps — (1) `sandbox_test.go` and `TestProfile_WithSandbox_Composition` are tautological (assert only that construction succeeds; would pass if `WithSandbox` were a no-op); (2) no test exercises the ordering-constraint foot-gun; (3) no test verifies a user-provided virtual FS with `bootstrap.scm` cannot shadow the embedded bootstrap; (4) no test for `--mcp` + `-e/-f/-i` mutual-exclusion error. These are genuine code-change follow-ups, not docs-sweep fixes. Out of Phase 8 scope (the sweep plan excludes Go source changes of any kind).
+- **[consistency]** `WithSandbox` row style (3-sentence cell vs 1-clause neighbors) — addressed by the "Option ordering" paragraph move above; the row is now 2 clauses like its neighbors.
+- **[consistency/tests]** `mc` receiver identifier ambiguity after changing the documented type to `CallContext` — the name `mc` is conventional in the codebase (`machine/CLAUDE.md`), so this is idiomatic rather than drift. Left as-is.
+
 ### Phase 9 — `types/` — Pending
 
 ### Phase 10 — `dev/` — Pending

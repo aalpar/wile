@@ -111,7 +111,7 @@ The interface includes an unexported method to prevent external implementations.
 | Constructor | Creates |
 |---|---|
 | `NewInteger(n int64)` | Exact integer (fixnum) |
-| `NewBigInteger(n *big.Int)`, `NewBigIntegerFromInt64`, `NewBigIntegerFromString` | Exact integer (bignum) |
+| `NewBigInteger(n *big.Int)`, `NewBigIntegerFromInt64`, `NewBigIntegerFromString(s, base)` | Exact integer (bignum) |
 | `NewRational(num, denom int64)`, `NewRationalFromBigInt` | Exact rational |
 | `NewFloat(f float64)` | Inexact real (machine float) |
 | `NewBigFloat(f *big.Float)`, `NewBigFloatFromFloat64`, `NewBigFloatFromString` | Inexact real (arbitrary precision) |
@@ -158,7 +158,7 @@ type PrimitiveSpec struct {
 }
 ```
 
-The `ForeignFunction` receives a `CallContext` (interface implemented by `MachineContext`) and unwrapped arguments. It sets the return value via `mc.SetValue()`. Primitives that need full VM access (sub-contexts, continuations, exception handling) type-assert to `*MachineContext`.
+The `ForeignFunction` receives a `CallContext` (interface implemented by `MachineContext`). Arguments are accessed positionally via `mc.Arg(i)` (and `mc.Arg(n-1)` for the variadic rest tail when `IsVariadic` is set). The return value is set via `mc.SetValue()`. Primitives that need full VM access (sub-contexts, continuations, exception handling) type-assert to `*MachineContext`.
 
 ### Calling Scheme from Go
 
@@ -178,7 +178,7 @@ Engine behavior can be customized via functional options:
 | `WithoutCore()` | Skip core primitives — bare engine with only explicit extensions |
 | `WithRegistry(r)` | Use a custom registry (skips automatic core registration) |
 | `WithAuthorizer(auth)` | Set fine-grained runtime authorization policy |
-| `WithSandbox(opts...)` | Layer a restrictive authorizer (read-allowed, write/delete denied, env-prefix filtered). Takes optional `SandboxEnvPrefix(prefix)`; default prefix is `"WILE_"`. Must appear after `WithProfile`/`WithAuthorizer` |
+| `WithSandbox(opts...)` | Layer a restrictive authorizer (read-allowed, write/delete denied, env-prefix filtered). Takes optional `SandboxEnvPrefix(prefix)`; default prefix is `"WILE_"`. See "Option ordering" below |
 | `WithEnv(k, v)`, `WithEnvMap(m)` | Install a virtual environment-variable map |
 | `WithSourceFS(fsys)` | Add a virtual `fs.FS` layer to the source resolver chain |
 | `WithSourceOS()` | Add OS filesystem to the source resolver chain |
@@ -186,10 +186,12 @@ Engine behavior can be customized via functional options:
 | `WithNamespace(ns)` | Use a pre-built namespace |
 | `WithContractEnforcement()` | Enable runtime enforcement of `PrimitiveSpec.ParamTypes`/`ReturnType` contracts |
 | `WithMaxCallDepth(n)` | Cap the continuation chain depth (default `DefaultMaxCallDepth`) |
-| `WithMaxStackSize(n)` | Cap the eval stack size (default `DefaultMaxStackSize`) |
+| `WithMaxStackSize(n)` | Cap the eval stack size. Opt-in: when not set (or set to `0`), the stack is unlimited |
 | `WithInlineThreshold(n)` | Tune the procedure inliner's size budget |
 | `WithImportObserver(obs)` | Observe library imports (called on each `(import ...)`) |
 | `WithCoverage(c)` | Attach a `*coverage.Collector` to record per-line Scheme execution |
+
+**Option ordering.** `WithAuthorizer` *assigns* the authorizer; `WithSandbox` *composes* via `security.All(...)` only if an authorizer is already set. Therefore `WithSandbox` must appear **after** `WithProfile`/`WithAuthorizer`. A later `WithAuthorizer(...)` silently overwrites any sandbox installed earlier — there is no diagnostic. Place authorizer-assigning options first and `WithSandbox` last.
 
 Extensions implement `registry.Extension` and register primitives, macros, and compile-time definitions via `AddToRegistry`.
 
@@ -230,19 +232,19 @@ Internally, each `WithSourceFS` creates an `FSFileResolver` that resolves files 
 
 **Registry freezing**: Primitives must be registered before or during engine creation. This simplifies the runtime model — the set of available primitives is fixed once the engine is initialized.
 
-**Continuation escape handling enabled**: Both the compiled-code path (`Engine.Run` / `Engine.Eval`, via `runCompiled` in `engine.go`) and the foreign-call path (`Engine.Call`, via `callCallable`) use `MachineContext.RunWithEscapeHandling`. This catches top-level `call/cc` escapes to the default prompt tag and translates them into the returned error, so embedders see consistent R7RS escape semantics regardless of entry point.
+**Continuation escape handling enabled**: Both the compiled-code path (`Engine.Run` / `Engine.Eval`, via `runCompiled` in `engine.go`) and the foreign-call path (`Engine.Call`, via `callCallable`) use `MachineContext.RunWithEscapeHandling`. It installs `DefaultPromptTag` as a top-level prompt and catches `ErrPromptAbort` aborts to that tag, restoring to the prompt frame and resuming execution so the abort payload becomes the returned value (normal return, `err == nil`). Only aborts for tags that have no matching prompt escape as runtime errors. Embedders get consistent R7RS escape semantics regardless of entry point.
 
 ## File Reference
 
 | File | Purpose |
 |------|---------|
 | `engine.go` | Engine type, evaluation methods, initialization |
-| `expression.go` | `Expression` type, `Parse`, `ParseWithSource`, `MustParse`, `ReadExpression`, `IsIncompleteInput` |
+| `expression.go` | `Expression` type, `Parse`, `ParseWithSource`, `MustParse`, `MustParseWithSource`, `ReadExpression` |
 | `value.go` | `Value` interface, constructors, wrapping |
 | `options.go` | Functional options for engine configuration |
 | `profile.go` | `Profile` type and `WithProfile` |
 | `sandbox.go` | `WithSandbox`, `SandboxOption`, `SandboxEnvPrefix` |
 | `debugger.go` | `Debugger` type (breakpoints, stepping) |
 | `compiled.go` | `CompiledCode` type |
-| `error.go` | `CompilationError`, `RuntimeError` |
+| `error.go` | `CompilationError`, `RuntimeError`, `IsIncompleteInput` |
 | `doc.go` | Package documentation |

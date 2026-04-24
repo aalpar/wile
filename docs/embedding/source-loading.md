@@ -46,7 +46,7 @@ swallowing real errors.
 │  3. FS root          │  3. SCHEME_INCLUDE_PATH          │
 │                      │  4. CWD                          │
 ├──────────────────────┴──────────────────────────────────┤
-│                  EmbedFileResolver                       │
+│                  EmbedFileResolver                      │
 │  Fixed bootstrap FS — not in the chain.                 │
 │  Loads core macros (and, or, let, cond, etc.)           │
 └─────────────────────────────────────────────────────────┘
