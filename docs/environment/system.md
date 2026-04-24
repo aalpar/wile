@@ -183,7 +183,7 @@ import (
     "context"
     "github.com/aalpar/wile/environment"
     "github.com/aalpar/wile/internal/bootstrap"
-    "github.com/aalpar/wile/machine"
+    "github.com/aalpar/wile/machine/compilation"
 )
 
 func setupRuntime(ctx context.Context) (*environment.EnvironmentFrame, error) {
@@ -194,7 +194,7 @@ func setupRuntime(ctx context.Context) (*environment.EnvironmentFrame, error) {
     }
 
     // Set up library loading
-    registry := machine.NewLibraryRegistry()
+    registry := compilation.NewLibraryRegistry()
     env.SetLibraryRegistry(registry)
 
     // Configure library environment factory (shares Namespace)
