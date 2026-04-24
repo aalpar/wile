@@ -11,7 +11,7 @@ times per second. One pool uses `Pool[T]` (`sync.Pool`-backed): sub-contexts,
 which have a longer lifecycle and lower churn.
 
 For performance motivation and benchmark data, see
-`CONTINUATION_WORKLOAD_OPTIMIZATIONS.md`.
+`docs/continuations/optimizations.md`.
 
 ---
 

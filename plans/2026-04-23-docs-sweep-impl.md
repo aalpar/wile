@@ -898,7 +898,68 @@ Style / conceptual prose deferred per plan scope controls.
 - **[tests]** Link-checker covers only `README.md`, not `docs/` — the very link broken in this PR's finding #1 would have been caught if the checker globbed `docs/**/*.md`. CI/tooling change out of docs-sweep scope. Logged for a follow-up.
 - **[errors]** `equal?` on opaque records does structural comparison (bypasses opacity in a certain sense) — not a doc-vs-code mismatch since no doc currently claims otherwise. Potential design-conversation item; not a docs-sweep fix.
 
-### Phase 10 — `dev/` — Pending
+### Phase 10 — `dev/` — Completed (awaiting PR)
+
+**Inventory.** Code-side surface that could have drifted (since 2026-01-01):
+`machine/foreign_closure.go` (last touched in PR #335, 2026-02-25); pooling
+plumbing in `machine/pool.go`/`machine/pool_generic.go`; `machine/closure.go`
+(post-#335 introduction of the `Closure` interface and `NamedCallable`
+embedding); the savedCont double-restore fix in PR #573 (touches
+`applyForeign` and `callForeignCached`); the migration of `match/` to
+`internal/match/`. No `values/freelist*.go`/`values/pool*.go` exist in the
+tree — the plan's "Code under verification" list at L321-324 names paths
+that never existed; pooling lives in `machine/pool*.go`. Noted; not a docs
+finding (the plan itself is ephemeral per its own scope at L49).
+
+**Findings.**
+
+1. `drift` `docs/dev/foreign-closure-design.md:33-38` — `Closure` interface
+   declaration is incomplete. Doc shows only `values.Callable` + `closureMarker()`.
+   Code (`machine/closure.go:17-21`) embeds `values.Callable`, `NamedCallable`,
+   and `closureMarker()`. The `NamedCallable` embedding (Name + Doc) is
+   load-bearing for stack traces and `(procedure-documentation)`.
+   Evidence: `machine/closure.go:17-21`, `machine/machine_closure.go:51`,
+   `machine/foreign_closure.go:79`.
+
+2. `stale` `docs/dev/foreign-closure-design.md:27-29` — Claim that
+   `applyForeign` does "panic recovery" is wrong. `applyForeign`
+   (`machine/machine_context_apply.go:89-181`) has no `defer recover()`.
+   Panic recovery exists only in `OperationForeignFunctionCall`
+   (`machine/operations_call.go:66-101`), which is the bytecode path used
+   by `NewVMForeignClosure` — itself documented at L150 of the same doc as
+   having "zero callers in production code." The fast-path callers
+   (`applyForeign`, `callForeignCached`) propagate panics through the Go
+   stack; primitives reachable via these paths must return errors, not
+   panic.
+   Evidence: `machine/machine_context_apply.go:89-181` (no recover);
+   `machine/operations_call.go:70-101` (recover present).
+
+3. `drift` `docs/dev/foreign-closure-design.md:67-98` (Edge Case 1) —
+   Section describes only the `savedTemplate` guard. Code
+   (`machine/machine_context_apply.go:123-179`) has both `savedTemplate`
+   AND `savedCont` guards. The savedCont guard handles a distinct case
+   (foreign closure invoking ApplyCallable on another *ForeignClosure via
+   PrimCallCC inline mode, where the nested applyForeign already consumed
+   the saved continuation). Per `MEMORY.md` "savedCont Double-Restore Fix
+   (PR #573)" and the matching guard in `machine/call_foreign_cached.go:83-126`.
+   Evidence: `machine/machine_context_apply.go:129-130, 165-179`.
+
+4. `drift` `docs/dev/pooling.md:14` — Cross-reference to
+   `CONTINUATION_WORKLOAD_OPTIMIZATIONS.md` is a stale path. The actual
+   document is `docs/continuations/optimizations.md` (verified content
+   matches: opens with "Continuation-Heavy Workload Optimizations").
+
+5. `drift` `docs/dev/debug-methodology.md:145` — File path
+   `match/syntax_adapter.go` is stale. The match package was moved into
+   `internal/`; current path is `internal/match/syntax_adapter.go`.
+
+6. `clean` `docs/dev/project-board-setup.md` — Operational guide for
+   GitHub Projects v2 UI workflow; no code-side claims to verify. The
+   plan's prep note flagged this as potentially stale-if-workflow-changed,
+   but the workflow described matches current GH Projects v2.
+
+**Fixes.** One commit, five doc edits across three files. project-board-setup.md
+not modified (clean).
 
 ### Phase 11 — `learn/` — Pending
 
