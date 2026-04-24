@@ -618,6 +618,17 @@ Style / layout findings deferred per plan scope controls.
 - `racket-primitives.md:343,637`: `internal/extensions/eval/prim_eval.go` → `extensions/eval/prim_eval.go`
 - `racket-primitives.md:624`: strip `internal/` prefix
 
+**Additional fixes from crosscheck code-lens review** (commit 2):
+
+- `racket-primitives.md:324-327`: four rows (`syntax-local-value`, `make-compile-time-value`, `syntax-local-introduce`, `syntax-local-identifier-as-binding`) were cited at `registry/core/syntax.go` but actually live in `extensions/eval/prim_eval.go`. The `registry/core/syntax.go` file only registers 6 primitives (`identifier?`, `syntax->datum`, `datum->syntax`, `generate-temporaries`, `bound-identifier=?`, `free-identifier=?`) — none of the `syntax-local-*` ones. Remaining 6 citations at that path verified correct.
+- `racket-primitives.md:534`: `syntax-local-introduce` second occurrence (Phase Introspection section) — same fix.
+
+**Crosscheck findings NOT actioned** (with rationale):
+
+- [code] `optimizations.md:265` "Files (historical):" still cites `machine/compile_validated.go`. Code-lens flagged as miss; consistency-lens explicitly concurred with leaving as-is. The section describes the REMOVED noCopyApply optimization as it existed pre-PR #561. At that time, the file DID live at `machine/compile_validated.go`; the compilation/ subpackage split happened later. Retargeting to `machine/compilation/compile_validated.go` would be factually wrong — the noCopyApply code never lived at that path. Historical annotation preserved.
+- [tests] precision gap: `machine_context_apply.go` is cited as the `NewApplyFrame` consumer, but `Apply` actually calls `InitApplyFrame` (the pooling-friendly counterpart). The "Files:" header is a coarse two-file index; both files contain relevant code (`NewApplyFrame` defined in `environment/environment_frame.go`; Apply consumer in `machine_context_apply.go`). Minor precision, not drift.
+- [tests] precision gap: primitive registrations live in `extensions/eval/register.go` while implementations live in `extensions/eval/prim_eval.go`. Tables cite only the impl file per existing doc convention (sibling rows in the same tables follow the same pattern).
+
 **Inventory** (2026-04-24):
 
 - Last doc touch of `docs/continuations/`: same as Phase 5a (`2785298c` 2026-04-17).

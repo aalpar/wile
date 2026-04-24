@@ -321,10 +321,10 @@ compile-time binding manipulation is where gaps remain.
 
 | Primitive | Category | Location |
 |-----------|----------|----------|
-| `syntax-local-value` | Compile-time lookup | `registry/core/syntax.go` |
-| `make-compile-time-value` | Compile-time values | `registry/core/syntax.go` |
-| `syntax-local-introduce` | Scope manipulation | `registry/core/syntax.go` |
-| `syntax-local-identifier-as-binding` | Binding preparation | `registry/core/syntax.go` |
+| `syntax-local-value` | Compile-time lookup | `extensions/eval/prim_eval.go` |
+| `make-compile-time-value` | Compile-time values | `extensions/eval/prim_eval.go` |
+| `syntax-local-introduce` | Scope manipulation | `extensions/eval/prim_eval.go` |
+| `syntax-local-identifier-as-binding` | Binding preparation | `extensions/eval/prim_eval.go` |
 | `bound-identifier=?` | Scope comparison | `registry/core/syntax.go` |
 | `free-identifier=?` | Binding comparison | `registry/core/syntax.go` |
 | `identifier?` | Predicate | `registry/core/syntax.go` |
@@ -531,7 +531,7 @@ does it enforce strict phase separation — phase-1 code can reference phase-0 b
 
 | Primitive | Location |
 |-----------|----------|
-| `syntax-local-introduce` | `registry/core/syntax.go` |
+| `syntax-local-introduce` | `extensions/eval/prim_eval.go` |
 
 **Could add at zero cost (compile-time only):**
 
