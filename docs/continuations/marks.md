@@ -154,7 +154,15 @@ To collect marks, you walk the continuation chain — the same linked list that
 
 ```go
 // CaptureStackTrace walks mc.cont chain for error reporting.
-// Mark collection follows the same pattern:
+// Mark collection follows the same pattern — but must scan the
+// current frame first (marks set on the live mc before the next
+// SaveContinuation live on p.marks, not in any cont frame yet):
+for _, entry := range p.marks {
+    if eqIdentity(entry.key, key) {
+        result = append(result, entry.val)
+        break
+    }
+}
 cont := p.cont
 for cont != nil {
     for _, entry := range cont.marks {
@@ -166,6 +174,8 @@ for cont != nil {
     cont = cont.parent
 }
 ```
+
+The real implementation (`CollectContinuationMarks` at `machine/continuation_mark_set.go:129`) does this in the opposite order — builds a `frames` slice with the current frame's marks appended first, then walks the chain — and returns a `ContinuationMarkSet` rather than a raw list. Same invariant either way: current frame first, innermost-to-outermost.
 
 The walk produces a list of values for a given key, ordered from innermost
 (current frame) to outermost (top-level). This is a `ContinuationMarkSet` —
@@ -239,10 +249,14 @@ copy avoids this but costs more. For composable continuations (which can be
 invoked multiple times), deep copy is required.
 
 **Slice, not map.** The `marks` field is a slice of `(key, val)` entries,
-not a Go map. Keys are compared with `eq?` (pointer identity), and Scheme
-allows arbitrary values as keys — including non-comparable types a Go map
-would panic on. A linear scan is cheap because mark sets are typically
-small (0-3 entries per frame).
+not a Go map. Keys are compared with `eq?` via `eqIdentity` (`machine/
+call_promoted.go:47`): pointer equality for most values, but *symbols
+compare by name* (`sa.Key == sb.Key`) — symbol interning was removed in
+PR #529, so two `'foo` symbol values may be distinct pointers that must
+still compare equal. A Go map keyed by `values.Value` can't express this
+(hash equality on comparable types, panic on non-comparable), which is
+why PR #508 switched to a slice with linear scan. Cheap in practice
+because mark sets are typically small (0-3 entries per frame).
 
 **Lazy allocation.** Most frames never carry marks. The `marks` field is a
 slice initialized to `nil`. Only `with-continuation-mark` allocates backing

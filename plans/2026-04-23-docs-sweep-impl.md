@@ -575,8 +575,8 @@ Style / layout findings deferred per plan scope controls.
 **Findings**:
 
 - **stale** `docs/continuations/marks.md:74-83, 236-240`
-  The doc describes marks as a **Go map** (`frame.marks = { key₁: val₁, key₂: val₂, ... }`, "The `marks` field is a Go map initialized to `nil`", "a map on each frame", "the cost of a map write"). The actual implementation is a **slice of `markEntry` records** (`marks []markEntry` at `machine/vm_state.go:223`). This changed in PR #508 (`419b94dd`, 2026-early) specifically to get `eq?`-correct key comparison semantics that maps cannot provide (pointer-equality keys). The doc's description of "map write" / "map init" is factually incorrect.
-  Evidence: `machine/vm_state.go:223` (`marks []markEntry`); commit `419b94dd`.
+  The doc describes marks as a **Go map** (`frame.marks = { key₁: val₁, key₂: val₂, ... }`, "The `marks` field is a Go map initialized to `nil`", "a map on each frame", "the cost of a map write"). The actual implementation is a **slice of `markEntry` records** (`marks []markEntry` at `machine/vm_state.go:223`). This changed in PR #508 (`419b94dd`, 2026-early) to get `eq?`-correct key comparison via `eqIdentity` (`machine/call_promoted.go:47`) — pointer equality for most values, name equality for symbols (Symbol `Key` string compare, since symbol interning was removed in PR #529). A Go map keyed by `values.Value` can't express this: hash equality on comparable types, panic on non-comparable types. The doc's description of "map write" / "map init" is factually incorrect.
+  Evidence: `machine/vm_state.go:223` (`marks []markEntry`); `machine/call_promoted.go:47` (`eqIdentity` definition); commit `419b94dd`.
 
 - **missing** `docs/continuations/implementation.md:26-38` (vmState struct snippet)
   Snippet shows 10 fields but the actual struct has 12 — missing `marks []markEntry` (line 223) and `envPooled bool` (line 208). This is the same marks field that `marks.md` describes, so both docs need to be internally consistent.
