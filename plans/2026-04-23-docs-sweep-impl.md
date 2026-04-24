@@ -906,10 +906,11 @@ plumbing in `machine/pool.go`/`machine/pool_generic.go`; `machine/closure.go`
 (post-#335 introduction of the `Closure` interface and `NamedCallable`
 embedding); the savedCont double-restore fix in PR #573 (touches
 `applyForeign` and `callForeignCached`); the migration of `match/` to
-`internal/match/`. No `values/freelist*.go`/`values/pool*.go` exist in the
-tree — the plan's "Code under verification" list at L321-324 names paths
-that never existed; pooling lives in `machine/pool*.go`. Noted; not a docs
-finding (the plan itself is ephemeral per its own scope at L49).
+`internal/match/`. No `values/freelist*.go`/`values/pool*.go` are present in
+the current tree — the plan's "Code under verification" list at L321-324
+names paths not found in the audited revision; pooling lives in
+`machine/pool*.go` (`FreeList[T]` is in `machine/pool_generic.go`). Noted;
+not a docs finding (the plan itself is ephemeral per its own scope at L49).
 
 **Findings.**
 
@@ -1019,9 +1020,10 @@ finding (the plan itself is ephemeral per its own scope at L49).
   contract; `TestApplyForeign_PanicRecovery` was removed at
   `machine/foreign_closure_apply_test.go:124-127` without a replacement.
 - **[plan]** "Code under verification" list at L321-324 names
-  `values/freelist*.go` and `values/pool*.go` — neither path exists; pooling
-  lives in `machine/pool*.go`. Plan files are ephemeral per the sweep's own
-  scope (L49); not a docs finding.
+  `values/freelist*.go` and `values/pool*.go` — neither path is present in
+  the audited revision; pooling lives in `machine/pool*.go` (`FreeList[T]`
+  is in `machine/pool_generic.go`). Plan files are ephemeral per the sweep's
+  own scope (L49); not a docs finding.
 
 ### Phase 11 — `learn/` — Pending
 
