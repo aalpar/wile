@@ -567,7 +567,56 @@ Style / layout findings deferred per plan scope controls.
 
 #### Phase 5a — `concepts.md` + `implementation.md` + `marks.md` — Completed (PR #712)
 
-#### Phase 5b — `delimited.md` + `prompt-abort.md` + `escape-design.md` — Completed (awaiting PR)
+#### Phase 5b — `delimited.md` + `prompt-abort.md` + `escape-design.md` — Completed (PR #713)
+
+#### Phase 5c — `optimizations.md` + `racket-primitives.md` — Completed (awaiting PR)
+
+**Inventory** (2026-04-24):
+
+- Last doc touch of `docs/continuations/`: same as Phase 5a/5b (`2785298c` 2026-04-17).
+- Relevant code changes since: the `machine_context.go` split (`RestoreAndRelease` moved to `machine_context_continuation.go:79`; `Apply` moved to `machine_context_apply.go:27`); the `internal/extensions/` → `extensions/` reorg (public extension packages live at `extensions/eval/`, `extensions/files/`, etc.); the `machine/compile_validated.go` → `machine/compilation/compile_validated.go` move from the compilation subpackage split.
+
+**Findings**:
+
+- **drift** `docs/continuations/optimizations.md:189`
+  Optimization 5 "Files:" header cites `machine/machine_context.go` for `RestoreAndRelease`. Function now at `machine/machine_context_continuation.go:79`.
+  Evidence: `grep -n "^func.*RestoreAndRelease" machine/*.go`.
+
+- **drift** `docs/continuations/optimizations.md:103`
+  Optimization 3 "Files:" header cites `machine/machine_context.go` for the `Apply` consumer of `NewApplyFrame`. `Apply` is now at `machine/machine_context_apply.go:27`.
+  Evidence: `grep -n "^func (p \*MachineContext) Apply" machine/*.go`.
+
+- **drift** `docs/continuations/optimizations.md:399` (References section)
+  Cites `machine/machine_context.go — RestoreAndRelease with shared-flag branching`. Same drift as #1; should be `machine_context_continuation.go`.
+
+- **drift** `docs/continuations/racket-primitives.md:220`
+  `with-continuation-mark` compilation cited at `machine/compile_validated.go`. File is now at `machine/compilation/compile_validated.go` after the compilation/ subpackage split.
+
+- **drift** `docs/continuations/racket-primitives.md:334-335,452-453`
+  Four entries cite `registry/core/prim_eval.go` for `eval`, `environment`, `expand`, `expand-once`. File no longer exists. These primitives now live in `extensions/eval/prim_eval.go` + `extensions/eval/register.go` (the eval extension was moved from the internal layout to the public `extensions/` package).
+  Evidence: `ls registry/core/prim_eval.go` → missing; `grep -n "PrimEval\|PrimExpand\|PrimEnvironment" extensions/eval/*.go` locates them.
+
+- **drift** `docs/continuations/racket-primitives.md:343,637`
+  Two entries cite `internal/extensions/eval/prim_eval.go` for `syntax-local-value/immediate`. Path no longer exists; actual location is `extensions/eval/prim_eval.go:603` (PrimSyntaxLocalValueImmediate).
+
+- **drift** `docs/continuations/racket-primitives.md:624`
+  "Go primitives are in `registry/core/` and `internal/extensions/eval/`" — `internal/extensions/` path is gone; public extensions live at `extensions/`.
+
+- **clean** `docs/continuations/optimizations.md:65`
+  Optimization 1 "Files:" cites `machine/machine_context.go` for the OpLoadLocal/OpStoreLocal callers of `GetLocalBindingBySlotDepth`/`SetLocalValueBySlotDepth`. Verified: those call sites remain in `machine/machine_context.go` at lines 519 and 1112.
+
+- **clean** `docs/continuations/optimizations.md:265` (historical Opt 6)
+  Cites `machine/compile_validated.go` in "Files (historical):" for the REMOVED noCopyApply optimization. This is historically correct — at the time of PR #561, the file did live at that path. The compilation/ subpackage split came later. Annotation left as-is.
+
+**Fixes** (committed in this PR):
+
+- `optimizations.md:103`: `machine/machine_context.go` → `machine/machine_context_apply.go` (Opt 3 Apply consumer)
+- `optimizations.md:189`: `machine/machine_context.go` → `machine/machine_context_continuation.go` (Opt 5 RestoreAndRelease)
+- `optimizations.md:399`: same fix in References section
+- `racket-primitives.md:220`: `machine/compile_validated.go` → `machine/compilation/compile_validated.go`
+- `racket-primitives.md:334-335,452-453`: `registry/core/prim_eval.go` → `extensions/eval/prim_eval.go` (4 entries)
+- `racket-primitives.md:343,637`: `internal/extensions/eval/prim_eval.go` → `extensions/eval/prim_eval.go`
+- `racket-primitives.md:624`: strip `internal/` prefix
 
 **Inventory** (2026-04-24):
 
