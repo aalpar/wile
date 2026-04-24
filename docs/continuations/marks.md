@@ -68,23 +68,25 @@ Each frame holds its own `env`, `template`, `pc`, `evals` — everything needed
 to resume execution when the callee returns. This is what makes `call/cc`
 possible: the entire chain is capturable data, not ephemeral stack memory.
 
-Continuation marks exploit this structure. Each frame gets an optional
-`marks` map:
+Continuation marks exploit this structure. Each frame carries an optional
+slice of key-value entries:
 
 ```
-frame.marks = { key₁: val₁, key₂: val₂, ... }
+frame.marks = [(key₁, val₁), (key₂, val₂), ...]
 ```
 
-Most frames carry no marks (the map stays `nil` — zero cost). When you write
-`(with-continuation-mark key val body)`, the runtime sets `marks[key] = val`
-on the *current* frame, evaluates `body`, and the mark naturally disappears
-when the frame is popped.
+Most frames carry no marks (the slice stays `nil` — zero cost). When you
+write `(with-continuation-mark key val body)`, the runtime records the
+entry on the *current* frame, evaluates `body`, and the mark naturally
+disappears when the frame is popped.
 
 No cleanup thunks. No global state. The mark's lifetime is the frame's lifetime.
 
 ## Tail Position: The Defining Behavior
 
-Here's where it gets interesting. Consider:
+Here's where it gets interesting. (In the examples below, `current-marks`
+is pedagogical shorthand for `(continuation-mark-set->list
+(current-continuation-marks) 'k)` — the real R7RS entry point.) Consider:
 
 ```scheme
 (with-continuation-mark 'k 1
@@ -148,19 +150,32 @@ leak that defeats the purpose of tail-call optimization.
 ## Collecting Marks: Walking the Chain
 
 To collect marks, you walk the continuation chain — the same linked list that
-`CaptureStackTrace` already walks in `machine/machine_context.go:827`:
+`CaptureStackTrace` already walks in `machine/machine_context.go:996`:
 
 ```go
 // CaptureStackTrace walks mc.cont chain for error reporting.
-// Mark collection follows the same pattern:
+// Mark collection follows the same pattern — but must scan the
+// current frame first (marks set on the live mc before the next
+// SaveContinuation live on p.marks, not in any cont frame yet):
+for _, entry := range p.marks {
+    if eqIdentity(entry.key, key) {
+        result = append(result, entry.val)
+        break
+    }
+}
 cont := p.cont
 for cont != nil {
-    if val, ok := cont.marks[key]; ok {
-        result = append(result, val)
+    for _, entry := range cont.marks {
+        if eqIdentity(entry.key, key) {
+            result = append(result, entry.val)
+            break // one value per frame; inner shadows outer
+        }
     }
     cont = cont.parent
 }
 ```
+
+The real implementation (`CollectContinuationMarks` at `machine/continuation_mark_set.go:129`) does this in the opposite order — builds a `frames` slice with the current frame's marks appended first, then walks the chain — and returns a `ContinuationMarkSet` rather than a raw list. Same invariant either way: current frame first, innermost-to-outermost.
 
 The walk produces a list of values for a given key, ordered from innermost
 (current frame) to outermost (top-level). This is a `ContinuationMarkSet` —
@@ -217,7 +232,7 @@ Without marks, you're stuck choosing between:
 - **dynamic-wind** (correct but expensive)
 - **Thread-local storage** (doesn't compose with continuations at all)
 
-Marks give you the correctness of `dynamic-wind` at the cost of a map write.
+Marks give you the correctness of `dynamic-wind` at the cost of an append to a small slice.
 
 ## The Subtle Parts
 
@@ -233,11 +248,36 @@ if the original frame's marks are later mutated (by another
 copy avoids this but costs more. For composable continuations (which can be
 invoked multiple times), deep copy is required.
 
+**Slice, not map.** The `marks` field is a slice of `(key, val)` entries,
+not a Go map. Keys are compared with `eq?` via `eqIdentity` (`machine/
+call_promoted.go:47`): pointer equality for most values, but *symbols
+compare by name* (`sa.Key == sb.Key`) — symbol interning was removed in
+PR #529, so two `'foo` symbol values may be distinct pointers that must
+still compare equal. A Go map keyed by `values.Value` can't express this
+(hash equality on comparable types, panic on non-comparable), which is
+why PR #508 switched to a slice with linear scan. Cheap in practice
+because mark sets are typically small (0-3 entries per frame).
+
 **Lazy allocation.** Most frames never carry marks. The `marks` field is a
-Go map initialized to `nil`. Only `with-continuation-mark` allocates it, on
-first use. This means the common case (no marks) adds zero overhead to the
-continuation infrastructure — not even a pointer-sized field cost, since Go
-maps are already pointer-sized and `nil` is the zero value.
+slice initialized to `nil`. Only `with-continuation-mark` allocates backing
+storage, on first use. The common case adds zero allocations.
+
+**Unordered semantics.** Marks on a frame are a *set* keyed by `eq?`, not
+an ordered list. `SetMark` overwrites in place when the key already exists;
+`DeleteMark` uses swap-with-last and does not preserve insertion order.
+Code should not depend on iteration order within a frame. (Ordering across
+frames is well-defined: the chain walk produces innermost-first values.)
+
+**Save/restore semantics.** When `SaveContinuation` fires, it **transfers**
+`mc.marks` to the new frame: the slice header moves over (`q.marks =
+mc.marks` at `machine_continuation.go:111`) and then `mc.marks` is nilled,
+so the callee starts clean (see comments at `machine/vm_state.go:219-223`).
+This is a move, not a deep copy — the backing array is shared until
+`cloneMarks` runs on a call/cc restore (`machine_continuation.go:177`),
+where shared-chain safety requires duplication. On normal return,
+`Restore`/`PopContinuation` lifts the saved marks back. This is why a
+tail-recursive loop with a mark does not accumulate entries: tail calls
+skip `SaveContinuation` and just overwrite the current frame's entry.
 
 **Tail-position detection.** The compiler must know whether the body of
 `with-continuation-mark` is in tail position. If it is, no `SaveContinuation`

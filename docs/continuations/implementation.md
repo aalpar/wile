@@ -20,7 +20,7 @@ Three types form the core of the system. Each one has a distinct role.
 
 ### vmState: The Frozen Moment
 
-Every saveable VM state shares the same shape, defined as `vmState` in `machine/vm_state.go`:
+Every saveable VM state shares the same shape, defined as `vmState` in `machine/vm_state.go`. The load-bearing fields:
 
 ```go
 type vmState struct {
@@ -34,8 +34,12 @@ type vmState struct {
     promptTag    *PromptTag
     threadID     uint64
     callDepth    int
+    envPooled    bool
+    marks        []markEntry
 }
 ```
+
+`singleValue` and `multiValues` form a split value register (single-value fast path plus R7RS `values` slow path); `envPooled` is a release flag for the environment-frame pool; `marks` carries continuation-mark entries (see [`marks.md`](marks.md)).
 
 This is everything the VM needs to resume execution from a given point: which function it's in (`template`), where in that function (`pc`), what variables are in scope (`env`), what intermediate values are on the eval stack (`evals`), and what dynamic-wind extent is active (`windingStack`).
 
