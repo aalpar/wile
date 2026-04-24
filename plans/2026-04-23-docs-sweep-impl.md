@@ -555,9 +555,13 @@ Style / layout findings deferred per plan scope controls.
 - **clean** `docs/compiler/ssa.md`
   Pure conceptual doc. No file references to verify.
 
-**Fixes** (to be committed):
+**Fixes** (committed):
 
-- `macro-system.md`: update the four file references (inline citations at lines 89, 246, 283 and the File Reference table at lines 301-315) to point at the current locations (`machine/compilation/...` and `internal/bootstrap/bootstrap.go`).
+- `macro-system.md`: updated the four moved-file references (inline citations and the File Reference table) to point at the current locations (`machine/compilation/...` and `internal/bootstrap/bootstrap.go`).
+- `macro-system.md`: added the `Label` field to the `Scope` struct snippet at line 83, matching `internal/syntax/syntax_value.go:30-47`.
+- `macro-system.md`: corrected inline file references at the Implementation in Code section (`machine/compilation/operation_syntax_rules_transform.go:193`, `internal/match/syntax_expand.go:293-294`, `internal/syntax/scope_utils.go:58`) — the initial fix updated section headers and the File Reference table but missed the inline code pointers.
+- `macro-system.md`: Syntax Adapter section now notes the concrete implementation lives in `internal/match/syntax_expand.go` (not the old `syntax_adapter.go`), with `capturedValueToSyntax` cited at `syntax_expand.go:332`.
+- `macro-system.md`: Bootstrap Macros table rewritten to match what's actually in `registry/core/bootstrap_macros.scm`. Removed `let`, `let*`, `letrec` (now core compiled), removed `do`'s old row with stale sketch, and added the forms the old table omitted (`delay`, `delay-force`, `parameterize`, `guard-aux`, `define-opaque-record-type`, `define-record-type-impl`, `let-values`, `let*-values`, `define-values`, `with-continuation-barrier`, `with-baffle`).
 
 ### Phase 5 — `continuations/` — Pending
 
