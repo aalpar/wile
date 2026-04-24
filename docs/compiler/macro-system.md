@@ -86,7 +86,7 @@ type Scope struct {
 }
 ```
 
-### Transformer Closure (`machine/compile_syntax_rules.go`)
+### Transformer Closure (`machine/compilation/compile_syntax_rules.go`)
 
 A `syntax-rules` form compiles to a `MachineClosure` containing:
 
@@ -243,7 +243,7 @@ When a pattern variable is captured, the adapter stores a mapping from the raw v
 
 ## Macro Expansion (Layer 3)
 
-### Expander Flow (`expander_time_continuation.go`)
+### Expander Flow (`machine/compilation/expander_time_continuation.go`)
 
 1. **Check for macro**: Is the head symbol bound to a `BindingTypeSyntax`?
 2. **Check for shadowing**: Does a local variable shadow the macro? (R7RS §4.2.2)
@@ -280,7 +280,7 @@ The expander checks for local variable bindings before macro lookup (`hasLocalVa
 
 ## Bootstrap Macros
 
-R7RS derived expressions are implemented as macros in `internal/bootstrap/environment_tiny.go`:
+R7RS derived expressions are implemented as macros loaded during bootstrap. Surface entry: `internal/bootstrap/bootstrap.go`. Macro definitions live in the embedded Scheme sources (`registry/core/bootstrap_macros.scm`). Binding forms (`let`, `let*`, `letrec`, `letrec*`) are core compiled forms and NOT macros — see [`core-let.md`](core-let.md).
 
 | Macro | Expands To |
 |-------|------------|
@@ -309,10 +309,10 @@ These are loaded during environment initialization and use the same macro system
 | `internal/syntax/scope_utils.go` | Scope set operations, `ScopesMatch` |
 | `internal/syntax/syntax_symbol.go` | Symbol with scopes |
 | `internal/syntax/syntax_pair.go` | Pair with recursive scope propagation |
-| `machine/compile_syntax_rules.go` | `syntax-rules` compilation |
-| `machine/operation_syntax_rules_transform.go` | Runtime macro expansion |
-| `machine/expander_time_continuation.go` | Expansion-phase walker |
-| `internal/bootstrap/environment_tiny.go` | Bootstrap macro definitions |
+| `machine/compilation/compile_syntax_rules.go` | `syntax-rules` compilation |
+| `machine/compilation/operation_syntax_rules_transform.go` | Runtime macro expansion |
+| `machine/compilation/expander_time_continuation.go` | Expansion-phase walker |
+| `internal/bootstrap/bootstrap.go` | Bootstrap surface (macro sources embedded from `registry/core/bootstrap_macros.scm`) |
 
 ## References
 

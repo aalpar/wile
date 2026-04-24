@@ -523,7 +523,41 @@ Style / layout findings deferred per plan scope controls.
 - `system.md` § "Resolution Strategy": drop the `environment/resolve.go` path; describe resolution as happening via the `FileResolver` interface with concrete implementations in `machine/compilation/resolver/` (`os_file_resolver.go`, `fs_file_resolver.go`, `embed_file_resolver.go`, `chain_file_resolver.go`), backed by `sourceload.Finder` for file search. (Revision note: the first cut of this fix said implementations live in `sourceload/`; that was wrong — `sourceload/` holds `LoadStack`, `Finder`, `walk.go`, while the concrete `FileResolver` types live in the sibling `resolver/` package. Copilot + errors-lens flagged this convergently.)
 - `diagram.md`: update the ownership-hierarchy box to show `loadPathStack ─── PathTracker` instead of `*LoadPathStack`, matching the current field type.
 
-### Phase 4 — `compiler/` — Pending
+### Phase 4 — `compiler/` — Completed (branch `feat/docs-sweep-compiler`)
+
+**Inventory** (2026-04-24):
+
+- Last doc touch of `docs/compiler/`: `bf83fa43` (2026-04-15) — topic reorganization.
+- Code changes to `machine/` since then: ~25 commits including the `machine/` → `machine/compilation/` refactor (`02dd8b39`, `75767751`, `33ae0c6a`), the `bootstrap.go` rename (`72faae34 refactor(bootstrap): rename environment_tiny to bootstrap`), coverage hooks (`396ea6b7`, `b4c8ac8e`), timer interrupts (`0f766afd`), error diagnostics (`852926fa`, `af94d2f2`, `b46dcb5e`), and sourceload extraction (`8838409b`, `318a0992`, `02dd8b39`).
+
+**Findings**:
+
+- **drift** `docs/compiler/macro-system.md:89,246,283,301-315` (File Reference + inline citations)
+  Four files moved during the `machine/compilation/` extraction refactor (late 2026-04). Doc still cites the old locations:
+  - `machine/compile_syntax_rules.go` → `machine/compilation/compile_syntax_rules.go`
+  - `machine/operation_syntax_rules_transform.go` → `machine/compilation/operation_syntax_rules_transform.go`
+  - `machine/expander_time_continuation.go` → `machine/compilation/expander_time_continuation.go`
+  - `internal/bootstrap/environment_tiny.go` → `internal/bootstrap/bootstrap.go` (per commit `72faae34`, the file was renamed; the package and type names stayed the same).
+  Evidence: `find machine -name compile_syntax_rules.go` yields only `machine/compilation/compile_syntax_rules.go`; `find internal/bootstrap` shows `bootstrap.go` (no `environment_tiny.go`).
+
+- **clean** `docs/compiler/core-let.md`
+  Conceptual doc about compiler design (not specific implementation). Opcode claims (`OpPushEnv`, `StoreLocal`, `OpPopEnv`) verify against `machine/opcode.go:44,57,61`.
+
+- **clean** `docs/compiler/peephole-optimizer.md`
+  File-reference table at the bottom (10+ entries) verifies — every cited file exists at its cited path (`machine/peephole.go`, `machine/edit_plan.go`, `machine/instruction.go`, `machine/opcode.go`, `machine/native_template.go`, `machine/call_promoted.go`, `machine/call_promoted_arithmetic.go`, `machine/call_foreign_cached.go`, `machine/machine_context_apply.go`, `machine/peephole_test.go`, top-level `opcode_fusion_test.go`, `callcc_engine_test.go`).
+
+- **clean** `docs/compiler/inlining.md`
+  Describes optimization opportunities, not concrete code locations. Opcode names and `BindingType*` values mentioned (`BindingTypeVariable`, `Syntax`, `Primitive`, `Unknown`) match `environment/binding_type.go`.
+
+- **clean** `docs/compiler/anf-and-cps.md`
+  Pure conceptual doc. No file references to verify.
+
+- **clean** `docs/compiler/ssa.md`
+  Pure conceptual doc. No file references to verify.
+
+**Fixes** (to be committed):
+
+- `macro-system.md`: update the four file references (inline citations at lines 89, 246, 283 and the File Reference table at lines 301-315) to point at the current locations (`machine/compilation/...` and `internal/bootstrap/bootstrap.go`).
 
 ### Phase 5 — `continuations/` — Pending
 
