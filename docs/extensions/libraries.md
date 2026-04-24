@@ -41,7 +41,7 @@ registered as an R7RS library named `(wile <extension-name>)`:
 (import (only (wile math) sqrt sin cos))
 
 ;; Exclude specific bindings
-(import (except (wile math) expt square))
+(import (except (wile math) expt rationalize))
 
 ;; Prefix all imported bindings
 (import (prefix (wile math) m:))
@@ -67,7 +67,7 @@ registered as an R7RS library named `(wile <extension-name>)`:
 | `(wile threads)` | `extensions/threads` | SRFI-18 threading primitives |
 | `(wile gointerop)` | `extensions/gointerop` | Go concurrency primitives |
 | `(wile introspection)` | `extensions/introspection` | Environment introspection, features, disassembler |
-| `(wile eval)` | `extensions/eval` | `eval`, `load`, expand, syntax-local-* |
+| `(wile eval)` | `extensions/eval` | 16 eval/load/expand/syntax-local primitives |
 
 ## How It Works
 

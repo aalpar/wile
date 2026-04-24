@@ -634,7 +634,7 @@ Style / layout findings deferred per plan scope controls.
 **Inventory** (2026-04-24):
 
 - Last touch of `docs/extensions/`: pre-dates the `internal/extensions/` → `extensions/` public-API reorg that moved `eval` to the public surface and added a new `envvars` package.
-- Relevant code structure changes since: `eval` moved from `internal/extensions/eval` to `extensions/eval` (part of public embedding API); `extensions/envvars` package added (hosts `get-environment-variable`/`get-environment-variables` with sandbox-awareness — moved out of `system`); several primitives migrated between extensions (`features` → `introspection`, env vars → `envvars`); various extensions grew primitives (math +5, files +5, introspection +3).
+- Relevant code structure changes since: `eval` moved from `internal/extensions/eval` to `extensions/eval` (part of public embedding API); `internal/extensions/envvars` package added (hosts `get-environment-variable`/`get-environment-variables` with sandbox-awareness — moved out of `system`); several primitives migrated between extensions (`features` → `introspection`, env vars → `envvars`); various extensions grew primitives (math +5, files +5, introspection +3).
 
 **Findings**:
 

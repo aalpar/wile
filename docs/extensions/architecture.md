@@ -214,12 +214,15 @@ r.AddPrimitives([]registry.PrimitiveSpec{
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `Name` | `string` | yes | Scheme-visible name (`"sqrt"`, `"string->number"`) |
-| `ParamCount` | `int` | yes | Minimum (or fixed) parameter count |
-| `IsVariadic` | `bool` | no | Accepts variable arguments beyond `ParamCount` |
+| `ParamCount` | `int` | yes | Fixed parameter count (for variadic, `Arg(ParamCount-1)` holds the rest list) |
+| `IsVariadic` | `bool` | no | Accepts variable arguments; last `Arg` slot is the rest list |
 | `Impl` | `machine.ForeignFunction` | yes | Go implementation function |
-| `Doc` | `string` | no | One-line description |
+| `Doc` | `string` | no | Brief description |
 | `ParamNames` | `[]string` | no | Parameter names for documentation |
 | `Category` | `string` | no | Grouping category |
+| `ParamTypes` | `[]values.TypeConstraint` | no | Per-parameter type contract. For variadic, last slot annotates rest-list element type |
+| `ReturnType` | `values.TypeConstraint` | no | Return-type declaration (nil = unspecified) |
+| `Keywords` | `[]string` | no | Searchable tags for `apropos` discovery |
 
 ### Registering Other Items
 
@@ -474,7 +477,7 @@ These are importable by external Go code:
 | `extensions/threads` | `(wile threads)` | SRFI-18 threading: `make-thread`, `thread-start!`, `thread-join!`, `thread-yield!`, `make-mutex`, `mutex-lock!`, `make-condition-variable`, `condition-variable-signal!`, etc. |
 | `extensions/gointerop` | `(wile gointerop)` | Go concurrency: `make-channel`, `channel-send!`, `channel-receive`, `make-wait-group`, `make-rw-mutex`, `make-once`, `make-atomic`, `atomic-compare-and-swap!`, etc. |
 | `extensions/introspection` | `(wile introspection)` | `environment?`, `interaction-environment`, `environment-bound-names`, `environment-ref`, `environment-bound?`, `features`, `available-libraries`, `disassemble` (8 primitives) |
-| `extensions/eval` | `(wile eval)` | `eval`, `load`, `current-load-path`, `current-load-directory`, `current-load-depth`, `scheme-report-environment`, `null-environment`, `environment`, `expand`, `expand-once`, `compile`, `syntax-local-value`, `syntax-local-value/immediate`, `make-compile-time-value`, `syntax-local-introduce`, `syntax-local-identifier-as-binding` |
+| `extensions/eval` | `(wile eval)` | `eval`, `load`, `current-load-path`, `current-load-directory`, `current-load-depth`, `scheme-report-environment`, `null-environment`, `environment`, `expand`, `expand-once`, `compile`, `syntax-local-value`, `syntax-local-value/immediate`, `make-compile-time-value`, `syntax-local-introduce`, `syntax-local-identifier-as-binding` (16 primitives) |
 
 ### Internal Extensions (`internal/extensions/`)
 
