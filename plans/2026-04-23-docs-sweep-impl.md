@@ -668,7 +668,42 @@ Style / layout findings deferred per plan scope controls.
 - `architecture.md:469-487`: add `extensions/eval` row to Public Extensions; remove `get-environment-variable`/`get-environment-variables`/`features` from `extensions/system` row (6 primitives now); expand `extensions/files` row to 13 primitives; expand `extensions/introspection` row to 8 primitives (add `features`, `available-libraries`, `disassemble`); remove `square` from `extensions/math` row; swap `internal/extensions/eval` entry for `internal/extensions/envvars` in Internal Extensions table.
 - `libraries.md:62-69`: add `(wile eval)` row; fix primitive counts for `(wile math)` (30 → 35), `(wile system)` (9 → 6), `(wile files)` ("File I/O primitives" → "13 file/directory primitives"), `(wile introspection)` description expanded.
 
-### Phase 7 — `security/` — Pending
+### Phase 7 — `security/` — Completed (PR #716)
+
+**Inventory** (2026-04-24):
+
+- Last touch of `docs/security/` predates the `internal/extensions/eval` → `extensions/eval` reorg and the `envvars` extension extraction.
+- Profile definitions in `profile.go` + `internal/bootstrap/bootstrap.go:ProfileExtensions` are the source of truth for profile composition.
+
+**Findings**:
+
+- **drift** `docs/security/sandboxing.md:21`
+  Extension security classification table lists `eval` at `internal/extensions/eval`. Actual path is `extensions/eval` (public, per the reorg documented in Phase 6).
+
+- **drift** `docs/security/sandboxing.md:22`
+  `system` row lists `get-environment-variable` as one of its primitives. That primitive moved to `internal/extensions/envvars` (sandbox-aware). Same drift as Phase 6.
+
+- **missing** `docs/security/sandboxing.md:14-25` (classification table)
+  Table lists 11 extensions but `allExtensions` in `bootstrap.go:70-83` has 12. Missing `envvars` and `namespace` rows. Both are privileged.
+
+- **stale** `docs/security/sandboxing.md:241`
+  References `plans/SECURITY.md`. File was rejected (per `memory/MEMORY.md` note — "existing limits sufficient") and doesn't exist in repo.
+
+- **clean** `docs/security/sandboxing.md:35-41` (profile composition table)
+  Verified each profile's extension list matches `ProfileExtensions` in `internal/bootstrap/bootstrap.go:93-134`: Tiny = none; Console = io, files, math, all.SafeExtension, envvars (+ core always); ConsoleWithLoad = Console + eval; Small = io, files, math, introspection, eval, all, system, envvars; KitchenSink = allExtensions (12).
+
+- **clean** `docs/security/sandboxing.md:107-119` (Enforcement mechanism)
+  Narrative matches `registry/apply.go` + `machine/compilation/compile_time_continuation.go:201` error path (`"no such local or global binding %q"` matches doc's fail-fast claim).
+
+- **clean** `docs/security/blog-sandboxing.md`
+  Blog post with narrative content about Scheme's design. Error message claim at line 70 (`expand/compile error: no such local or global binding "open-input-file"`) verified against `compile_time_continuation.go:201`. Other claims are editorial/historical; no Wile-specific drift.
+
+**Fixes** (committed in this PR):
+
+- `sandboxing.md:21`: `internal/extensions/eval` → `extensions/eval`; updated primitive list to include `syntax-local-*`.
+- `sandboxing.md:22`: removed `get-environment-variable` from `system` row; replaced with current system primitives (`current-second`, `current-jiffy`, `jiffies-per-second`). Kept `exit`, `emergency-exit`, `command-line`.
+- `sandboxing.md:14-25`: added `envvars` and `namespace` rows (both Privileged).
+- `sandboxing.md:241`: removed `plans/SECURITY.md` reference.
 
 ### Phase 8 — `embedding/` — Pending
 

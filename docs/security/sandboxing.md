@@ -17,11 +17,13 @@ This restriction is **transitive**: when the library system is enabled (`WithLib
 | **Safe** | math | `extensions/math` | None. `sqrt`, `sin`, `cos`, transcendental functions. |
 | **Safe** | introspection | `extensions/introspection` | None. `environment?`, `interaction-environment`, `environment-bound-names`, `environment-ref`, `environment-bound?`. Read-only. |
 | **Safe** | all (safe subset) | `internal/extensions/all` | None. Records, promises, additional string/character ops. |
-| **Privileged** | files | `extensions/files` | Filesystem: `open-input-file`, `open-output-file`, `delete-file`, `file-exists?`. |
-| **Privileged** | eval | `internal/extensions/eval` | Code loading: `eval`, `load`, `environment`, `expand`, `compile`. |
-| **Privileged** | system | `extensions/system` | Process: `exit`, `emergency-exit`, `command-line`, `get-environment-variable`. |
+| **Privileged** | files | `extensions/files` | Filesystem: `open-input-file`, `open-output-file`, `delete-file`, `file-exists?`, `create-directory`, `delete-directory`, `directory-files`, `current-directory`, `set-current-directory!`. |
+| **Privileged** | eval | `extensions/eval` | Evaluation / compilation: `eval`, `load`, `environment`, `expand`, `compile`, `syntax-local-value`, `syntax-local-introduce`, `syntax-local-identifier-as-binding`. |
+| **Privileged** | envvars | `internal/extensions/envvars` | Environment variables: `get-environment-variable`, `get-environment-variables`. `Console`/`ConsoleWithLoad` allocate an empty virtual map (no OS fallthrough); `Small`/`KitchenSink` fall through to `os.Getenv` when the envMap is unset. |
+| **Privileged** | system | `extensions/system` | Process lifecycle: `exit`, `emergency-exit`, `command-line`, `current-second`, `current-jiffy`, `jiffies-per-second`. |
 | **Privileged** | process | `extensions/process` | Process execution: `system`, `process-spawn`, `process-wait`, `process-kill`. |
-| **Context-dependent** | gointerop | `extensions/gointerop` | Go concurrency primitives: channels, wait groups, rw-mutexes, atomics, once. Resource exhaustion via unbounded object creation. No ambient authority. Safe for trusted code. |
+| **Privileged** | namespace | `internal/extensions/namespace` | Namespace introspection: `namespace?`, `make-namespace`, `namespace-derive`, `namespace-define!`, `namespace-ref`, `namespace-bound?`, `namespace-bound-names`, `namespace-require`. |
+| **Context-dependent** | gointerop | `extensions/gointerop` | Go concurrency primitives: channels, wait groups, rw-mutexes, atomics, once. Resource exhaustion via unbounded object creation (spawns goroutines). No ambient authority. Safe for trusted code. |
 | **Context-dependent** | threads | `extensions/threads` | SRFI-18 threads, mutexes, condition variables. Resource exhaustion via unbounded thread creation. Safe for trusted code. |
 
 **Safe** means no ambient authority (Dennis & Van Horn 1966; Miller, "Robust Composition", 2006) — no way to affect the host system. **Privileged** means the extension grants capabilities that untrusted code should not have. **Context-dependent** means the risk depends on the trust level of the code being executed.
@@ -198,13 +200,13 @@ The result is that Wile's sandboxing has zero runtime cost, fails at compile tim
 | CPU time | Not covered | Use `context.WithTimeout` on the `ctx` passed to `Eval`. |
 | Memory / allocation | Not covered | Use OS-level limits (cgroups, ulimits). |
 | Stack depth | Partially covered | `WithMaxCallDepth(n)` limits continuation stack depth. |
-| Goroutine exhaustion | Not covered (if threads extension loaded) | Don't load threads extension for untrusted code. |
+| Goroutine exhaustion | Not covered (if threads or gointerop extension loaded) | Don't load threads or gointerop extensions for untrusted code. |
 | Information flow | Not covered | A privileged library can pass capabilities (e.g., an open file handle) to unprivileged code via exported values. Preventing this requires an object-capability model. |
-| `include` / `include-ci` | Covered by authorizer | These are compile-time forms that read files. They are NOT gated by the files extension — they're part of the compiler. However, they are gated by `security.Check` (resource `code`, action `load`), so an authorizer can restrict them. Without an authorizer, they are unrestricted. |
+| `include` | Covered by authorizer | `include` is a compile-time form that reads files. It is NOT gated by the files extension — it's part of the compiler. However, it is gated by `security.CheckWithAuthorizer` (resource `code`, action `load`), so an authorizer can restrict it. Without an authorizer, it is unrestricted. `include-ci` currently raises `ErrInvalidSyntax` before any security decision (case-insensitive includes not yet supported). |
 
 ### The `include` note
 
-`(include "file.scm")` is a compile-time special form, not a runtime primitive. It reads a file during compilation, regardless of whether the files extension is loaded. However, `include` and library loading are gated by `security.Check` (resource `code`, action `load`), so a `WithAuthorizer` policy can restrict which files are loaded.
+`(include "file.scm")` is a compile-time special form, not a runtime primitive. It reads a file during compilation, regardless of whether the files extension is loaded. However, `include` and library loading are gated by `security.CheckWithAuthorizer` (resource `code`, action `load`), so a `WithAuthorizer` policy can restrict which files are loaded.
 
 `WithSourceFS(fsys)` adds a virtual filesystem layer to the source resolver chain. Multiple calls add layers searched in order. When only `WithSourceFS` is used (without `WithSourceOS()`), the OS filesystem is excluded — Scheme code can only access files in the configured virtual filesystems.
 
@@ -218,7 +220,7 @@ Without an authorizer or `WithSourceFS`, `include` is unrestricted on the OS fil
 
 Isolation invariants are verified in `engine_sandbox_test.go`:
 
-- Safe engine rejects privileged primitives at compile time
+- Safe engine rejects privileged primitives — at compile time for unregistered names (e.g., `eval`, `exit`, `make-channel`) and at runtime via the authorizer for registered-but-gated operations (e.g., `open-input-file` outside `/tmp`)
 - Safe engine allows safe primitives
 - `WithoutCore()` produces a bare engine
 - `WithoutCore()` + extension gives only that extension
@@ -238,4 +240,3 @@ Isolation invariants are verified in `engine_sandbox_test.go`:
 
 - [`extensions/architecture.md`](../extensions/architecture.md) — Extension system architecture, engine options reference
 - [`embedding/api-design.md`](../embedding/api-design.md) — Public embedding API, sandboxing subsection
-- `plans/SECURITY.md` — Opcode resource limits (match steps, expand steps, continuation copy depth)
