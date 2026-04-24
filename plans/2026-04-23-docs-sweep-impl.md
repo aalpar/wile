@@ -565,7 +565,43 @@ Style / layout findings deferred per plan scope controls.
 
 ### Phase 5 — `continuations/` — Split into 5a/5b/5c sub-phases (per plan's "too large to review in one PR" guidance)
 
-#### Phase 5a — `concepts.md` + `implementation.md` + `marks.md` — Completed (branch `feat/docs-sweep-continuations-core`)
+#### Phase 5a — `concepts.md` + `implementation.md` + `marks.md` — Completed (PR #712)
+
+#### Phase 5b — `delimited.md` + `prompt-abort.md` + `escape-design.md` — Completed (awaiting PR)
+
+**Inventory** (2026-04-24):
+
+- Last doc touch of `docs/continuations/`: same as Phase 5a (`2785298c` 2026-04-17).
+- Relevant code changes since: the `machine_context.go` split into `machine_context_continuation.go`, `machine_context_winding.go`, `machine_context_apply.go`, `machine_context_subcontext.go`; the `operation_*.go` consolidation into `operations_{stack,load_store,control,call,closure,winding}.go`. Both refactors moved many of the functions these three docs cite.
+
+**Findings**:
+
+- **drift** `docs/continuations/prompt-abort.md:31-32`, `delimited.md:310`
+  Both docs reference `machine/operation_foreign_function_call.go`. File no longer exists. `OperationForeignFunctionCall` (type + methods + `ErrPromptAbort` passthrough logic) now lives in `machine/operations_call.go` starting at line 50 (consolidated per `machine/CLAUDE.md`'s "Operations (Bytecode Instructions)" table).
+  Evidence: `find machine -name 'operation_foreign*'` → empty; `machine/operations_call.go:50-87` contains the type and its `Apply` method.
+
+- **drift** `docs/continuations/prompt-abort.md:88,138,268,300-317`; `delimited.md:309`; `escape-design.md:92-94`
+  Seven file references cite `machine/machine_context.go` for functions that were moved during the `machine_context_*` split:
+    - `RunWithEscapeHandling` still in `machine_context.go` but at line 1278 (doc says 1228).
+    - `RestoreWithWindingFrom` moved to `machine/machine_context_winding.go:125` (doc says `machine_context.go:1080`).
+    - `FindPrompt` moved to `machine/machine_context_continuation.go:244` (doc says `machine_context.go:1114`).
+    - `SliceContinuationAt` moved to `machine/machine_context_continuation.go:260` (doc says `machine_context.go:1130`).
+    - `GraftContinuation` moved to `machine/machine_context_continuation.go:281` (doc says `machine_context.go:1151`).
+    - `applyComposableContinuation` moved to `machine/machine_context_apply.go:403` (doc says `machine_context.go:486`).
+    - `FindCommonWindingPrefix` line drift: `machine/dynamic_wind.go:100` (doc says `:78`).
+  Evidence: `grep -n "^func" machine/machine_context*.go machine/dynamic_wind.go`.
+
+- **drift** `docs/continuations/prompt-abort.md:164,242`
+  Two primitive line-number drifts:
+    - `PrimCallCC` at `registry/core/prim_control.go:140` (doc says `:116`).
+    - `PrimCallWithContinuationPrompt` at `registry/core/prim_prompt.go:70` (doc says `:71` — off-by-one).
+  Evidence: `grep -n "^func Prim" registry/core/prim_control.go registry/core/prim_prompt.go`.
+
+**Fixes** (to be committed):
+
+- `prompt-abort.md`: update 11 file/line references in the ASCII diagrams and the implementation inventory table. Also update the ASCII diagram's `OperationForeignFunctionCall` file box from `operation_foreign_function_call.go` to `operations_call.go`.
+- `delimited.md`: update 2 entries in the File Reference table at the bottom (`operation_foreign_function_call.go` → `operations_call.go`; `machine_context.go` entry that lists 6 symbols now split across three files — either split the row or add clarifying notes).
+- `escape-design.md`: update the Code Locations table — `RestoreWithWindingFrom` and `applyComposableContinuation` point at `machine_context.go` but now live in `machine_context_winding.go` and `machine_context_apply.go` respectively.
 
 **Inventory** (2026-04-24):
 

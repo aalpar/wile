@@ -306,8 +306,11 @@ Creates an independent copy of an entire continuation chain. Every frame is `Cop
 | `machine/dynamic_wind.go` | `DynamicWindFrame`, `WindingStack`, `FindCommonWindingPrefix` |
 | `machine/machine_continuation.go` | `promptTag`/`promptHandler` fields, `DeepCopy()` |
 | `machine/barrier_token.go` | `BarrierToken` opaque barrier identity |
-| `machine/machine_context.go` | `FindPrompt`, `SliceContinuationAt`, `GraftContinuation`, `RestoreWithWindingFrom`, `RunWithEscapeHandling`, `applyComposableContinuation` |
-| `machine/operation_foreign_function_call.go` | `ErrPromptAbort` passthrough |
+| `machine/machine_context.go` | `RunWithEscapeHandling` |
+| `machine/machine_context_continuation.go` | `FindPrompt`, `SliceContinuationAt`, `GraftContinuation` |
+| `machine/machine_context_winding.go` | `RestoreWithWindingFrom` |
+| `machine/machine_context_apply.go` | `applyComposableContinuation` |
+| `machine/operations_call.go` | `OperationForeignFunctionCall` (`ErrPromptAbort` passthrough) |
 | `registry/core/prim_prompt.go` | Prompt primitive implementations |
 | `machine/captured_continuation.go` | `CapturedContinuation`: call/cc escape value wrapping `ComposableContinuation` |
 | `registry/core/prim_control.go` | `PrimCallCC`, `NewCapturedContinuation` |

@@ -89,9 +89,9 @@ without `RunWithEscapeHandling` (e.g., threads that call `Run()` directly).
 | `CapturedContinuation` | `machine/captured_continuation.go` |
 | `ComposableContinuation` | `machine/composable_continuation.go` |
 | `BarrierToken` | `machine/barrier_token.go` |
-| `applyComposableContinuation` | `machine/machine_context.go` |
+| `applyComposableContinuation` | `machine/machine_context_apply.go` |
 | `RunWithEscapeHandling` | `machine/machine_context.go` |
-| `RestoreWithWindingFrom` | `machine/machine_context.go` |
+| `RestoreWithWindingFrom` | `machine/machine_context_winding.go` |
 
 For operational details (error propagation paths, RunWithEscapeHandling
 pseudocode, end-to-end examples), see [`prompt-abort.md`](prompt-abort.md).
