@@ -28,16 +28,20 @@ Closure (interface)
 continuation restore — the same work the VM loop did, except panic recovery,
 which remains in the bytecode path's `OperationForeignFunctionCall`. Foreign
 functions reachable via the direct fast path must return errors rather than
-panic; arithmetic methods on `values.Number` (which can panic on
-`ErrDivisionByZero`, `ErrNotANumber`, etc.) should not be invoked from
-`*ForeignClosure` primitives without explicit recovery.
+panic; the type-coercion helpers in `values/promotion.go` and `values/numeric_tower.go`
+panic on `ErrNotANumber`/`ErrNotAPair` when handed unexpected types, and must
+not be invoked from `*ForeignClosure` primitives without an explicit type
+check or `defer recover()`. (R7RS-specified errors like division by zero
+already return `(Number, error)` — those flow through the normal error path.)
+This contract is currently enforced by code review only; there is no test
+or lint that catches a primitive that violates it.
 
 ### Closure Interface
 
 ```go
 type Closure interface {
     values.Callable
-    NamedCallable    // Name() + Doc() — for stack traces, (procedure-documentation)
+    NamedCallable    // Name() + Doc() — for (procedure-name) and (procedure-documentation)
     closureMarker()  // unexported, restricts to machine package
 }
 ```
@@ -47,11 +51,20 @@ Distinguished from other `Callable` types (`CaseLambdaClosure`, `Parameter`,
 Storage sites (`DynamicWindFrame.Before/After`, `MachineContinuation.promptHandler`,
 `Parameter.converter`) use the `Closure` interface.
 
-The `NamedCallable` embedding lets stack-trace builders and Scheme-level
-introspection (`(procedure-documentation)`, error messages) read `Name()`
-and `Doc()` without a type switch. `CaseLambdaClosure` also satisfies
-`NamedCallable` but is not a `Closure` because its application path is
-distinct (arity dispatch, not direct invocation).
+The `NamedCallable` embedding lets `(procedure-name)` and `(procedure-documentation)`
+read `Name()`/`Doc()` through one interface assertion instead of a six-way
+type switch. The two consumers live in `registry/core/prim_reflection.go:136,275`.
+Stack-trace builders use a different mechanism — they read `*NativeTemplate.Name()`
+off the saved continuation directly (`machine/machine_context.go:1002,1015`),
+not through `NamedCallable`. `CaseLambdaClosure` also satisfies `NamedCallable`
+but is not a `Closure`: it doesn't define `closureMarker()`, and its application
+path is arity dispatch (`ApplyCaseLambda` → `Apply` of the matched clause),
+not direct invocation.
+
+The unexported `closureMarker()` enforces *package locality* — only types
+defined inside `machine/` can satisfy `Closure`. The "direct invocation"
+semantic is convention, enforced at the `ApplyCallable` dispatch table, not
+by the type system.
 
 ### Dispatch
 
@@ -129,8 +142,10 @@ consumed frame (typically to its parent) before returning.
 
 The savedCont guard was added in PR #573 after a test failure exposed
 double-restore in the inline-Foreign-via-Foreign path. `callForeignCached`
-(`machine/call_foreign_cached.go:83-126`) carries the same dual-guard
-structure for the peephole-optimized fast path.
+(`machine/call_foreign_cached.go:83-126`) carries an analogous guard for
+the non-tail path; the tail-call branch calls `returnImmediate()`
+unconditionally because tail calls do not have a `SaveContinuation` frame
+to consume in the first place.
 
 **Why this matters.** Without these guards, `applyForeign` either
 overwrites VM state set up by `Apply` (Case A) or restores from a freed
@@ -138,6 +153,16 @@ continuation frame (Case B), and the VM resumes stale state in either
 case. Most primitives don't call `Apply` or `ApplyCallable` internally;
 only `PrimCallCC` inline mode (and any future primitives that themselves
 invoke user procedures) trigger these paths.
+
+**Generality.** The Case A/B framing is illustrative, not exhaustive.
+`ApplyCallable` dispatches to six callable types
+(`machine/machine_context_apply.go:224-246`), and four of them can mutate
+either pointer: `*MachineClosure` and `*CaseLambdaClosure` both reach
+`Apply` (template change → Case A); `*Parameter` and `*ComposableContinuation`
+consume `p.cont` via `returnImmediate`/`Restore` (Case B). The two
+pointer guards fire defensively for any callable in the dispatch table —
+the named cases are the only ones that occur today via `PrimCallCC`,
+but the guards do not depend on which case actually triggered.
 
 ## Edge Case 2: Go Stack Overflow (Recursive Foreign Closures)
 

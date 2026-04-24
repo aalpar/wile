@@ -898,7 +898,7 @@ Style / conceptual prose deferred per plan scope controls.
 - **[tests]** Link-checker covers only `README.md`, not `docs/` — the very link broken in this PR's finding #1 would have been caught if the checker globbed `docs/**/*.md`. CI/tooling change out of docs-sweep scope. Logged for a follow-up.
 - **[errors]** `equal?` on opaque records does structural comparison (bypasses opacity in a certain sense) — not a doc-vs-code mismatch since no doc currently claims otherwise. Potential design-conversation item; not a docs-sweep fix.
 
-### Phase 10 — `dev/` — Completed (awaiting PR)
+### Phase 10 — `dev/` — Completed (PR #719)
 
 **Inventory.** Code-side surface that could have drifted (since 2026-01-01):
 `machine/foreign_closure.go` (last touched in PR #335, 2026-02-25); pooling
@@ -913,53 +913,115 @@ finding (the plan itself is ephemeral per its own scope at L49).
 
 **Findings.**
 
-1. `drift` `docs/dev/foreign-closure-design.md:33-38` — `Closure` interface
-   declaration is incomplete. Doc shows only `values.Callable` + `closureMarker()`.
-   Code (`machine/closure.go:17-21`) embeds `values.Callable`, `NamedCallable`,
-   and `closureMarker()`. The `NamedCallable` embedding (Name + Doc) is
-   load-bearing for stack traces and `(procedure-documentation)`.
-   Evidence: `machine/closure.go:17-21`, `machine/machine_closure.go:51`,
-   `machine/foreign_closure.go:79`.
+- **drift** `docs/dev/foreign-closure-design.md:33-38` — `Closure` interface
+  declaration is incomplete. Doc shows only `values.Callable` + `closureMarker()`;
+  code (`machine/closure.go:17-21`) embeds `values.Callable`, `NamedCallable`,
+  and `closureMarker()`. The `NamedCallable` embedding (Name + Doc) is consumed
+  by `(procedure-name)` and `(procedure-documentation)` at
+  `registry/core/prim_reflection.go:136,275`.
+  Evidence: `machine/closure.go:17-21`, `machine/machine_closure.go:51`,
+  `machine/foreign_closure.go:79`.
+- **stale** `docs/dev/foreign-closure-design.md:27-29` — Claim that
+  `applyForeign` does "panic recovery" is wrong. `applyForeign`
+  (`machine/machine_context_apply.go:89-181`) has no `defer recover()`. Panic
+  recovery exists only in `OperationForeignFunctionCall`
+  (`machine/operations_call.go:66-101`), the bytecode path used by
+  `NewVMForeignClosure` — itself documented at L150 of the same doc as having
+  "zero callers in production code." The fast-path callers (`applyForeign`,
+  `callForeignCached`) propagate panics through the Go stack; primitives
+  reachable via these paths must return errors, not panic. Doc-only fix; the
+  underlying behavioral asymmetry (fast path lacks recovery for performance)
+  is acknowledged in the new doc text but not enforced by test/lint and is
+  logged below as a deferred follow-up.
+  Evidence: `machine/machine_context_apply.go:89-181` (no recover);
+  `machine/operations_call.go:70-101` (recover present).
+- **drift** `docs/dev/foreign-closure-design.md:67-98` (Edge Case 1) — Section
+  describes only the `savedTemplate` guard; code
+  (`machine/machine_context_apply.go:123-179`) has both `savedTemplate` AND
+  `savedCont` guards. The savedCont guard handles a distinct case (foreign
+  closure invoking `ApplyCallable` on another `*ForeignClosure` via
+  `PrimCallCC` inline mode, where the nested `applyForeign` already consumed
+  the saved continuation). Per `MEMORY.md` "savedCont Double-Restore Fix
+  (PR #573)" and the analogous (non-identical) guard in
+  `machine/call_foreign_cached.go:83-126`.
+  Evidence: `machine/machine_context_apply.go:129-130, 165-179`.
+- **drift** `docs/dev/pooling.md:14` — Cross-reference to
+  `CONTINUATION_WORKLOAD_OPTIMIZATIONS.md` is a stale path. The actual document
+  is `docs/continuations/optimizations.md` (verified content matches: opens
+  with "Continuation-Heavy Workload Optimizations").
+- **drift** `docs/dev/debug-methodology.md:145` — File path
+  `match/syntax_adapter.go` is stale. The match package was moved into
+  `internal/`; current path is `internal/match/syntax_adapter.go`.
+- **clean** `docs/dev/project-board-setup.md` — Operational guide for GitHub
+  Projects v2 UI workflow; no code-side claims to verify. The plan's prep note
+  flagged this as potentially stale-if-workflow-changed, but the workflow
+  described matches current GH Projects v2.
 
-2. `stale` `docs/dev/foreign-closure-design.md:27-29` — Claim that
-   `applyForeign` does "panic recovery" is wrong. `applyForeign`
-   (`machine/machine_context_apply.go:89-181`) has no `defer recover()`.
-   Panic recovery exists only in `OperationForeignFunctionCall`
-   (`machine/operations_call.go:66-101`), which is the bytecode path used
-   by `NewVMForeignClosure` — itself documented at L150 of the same doc as
-   having "zero callers in production code." The fast-path callers
-   (`applyForeign`, `callForeignCached`) propagate panics through the Go
-   stack; primitives reachable via these paths must return errors, not
-   panic.
-   Evidence: `machine/machine_context_apply.go:89-181` (no recover);
-   `machine/operations_call.go:70-101` (recover present).
+**Fixes.**
 
-3. `drift` `docs/dev/foreign-closure-design.md:67-98` (Edge Case 1) —
-   Section describes only the `savedTemplate` guard. Code
-   (`machine/machine_context_apply.go:123-179`) has both `savedTemplate`
-   AND `savedCont` guards. The savedCont guard handles a distinct case
-   (foreign closure invoking ApplyCallable on another *ForeignClosure via
-   PrimCallCC inline mode, where the nested applyForeign already consumed
-   the saved continuation). Per `MEMORY.md` "savedCont Double-Restore Fix
-   (PR #573)" and the matching guard in `machine/call_foreign_cached.go:83-126`.
-   Evidence: `machine/machine_context_apply.go:129-130, 165-179`.
+- `docs/dev/foreign-closure-design.md:27-33`: rewrote the `applyForeign`
+  capability sentence — replaced "panic recovery" with "error conversion",
+  added explicit note that recovery remains in `OperationForeignFunctionCall`
+  only, and named the genuine panic sources (`values/promotion.go`,
+  `values/numeric_tower.go` panicking on `ErrNotANumber`/`ErrNotAPair`).
+  Added "code-review-enforced contract; no test/lint backing" sentence to
+  acknowledge the behavioral hazard explicitly.
+- `docs/dev/foreign-closure-design.md:38-42`: added `NamedCallable` line to
+  the `Closure` interface code block with corrected gloss
+  (`(procedure-name)` and `(procedure-documentation)` only — not stack
+  traces, which use `*NativeTemplate.Name()` directly per
+  `machine/machine_context.go:1002,1015`).
+- `docs/dev/foreign-closure-design.md:50-66`: added two paragraphs explaining
+  the `NamedCallable` consumer surface (citing
+  `registry/core/prim_reflection.go:136,275`), distinguishing it from the
+  stack-trace mechanism, and noting that `closureMarker()` enforces package
+  locality while "direct invocation" is convention enforced at
+  `ApplyCallable`'s dispatch.
+- `docs/dev/foreign-closure-design.md:78-156`: rewrote Edge Case 1 from a
+  single template-pointer guard to a Case A (template change) + Case B
+  (continuation already consumed) treatment with the dual-guard code snippet
+  (`savedTemplate` + `savedCont`). Cited the matching but non-identical
+  guard structure in `machine/call_foreign_cached.go:83-126` (analogous, not
+  symmetric — tail path calls `returnImmediate()` unconditionally). Added a
+  closing **Generality** paragraph noting the guards fire defensively for any
+  callable in `ApplyCallable`'s dispatch table, not only the named cases.
+- `docs/dev/pooling.md:14`: retargeted cross-reference from
+  `CONTINUATION_WORKLOAD_OPTIMIZATIONS.md` to
+  `docs/continuations/optimizations.md`.
+- `docs/dev/debug-methodology.md:145`: corrected file path from
+  `match/syntax_adapter.go` to `internal/match/syntax_adapter.go`.
 
-4. `drift` `docs/dev/pooling.md:14` — Cross-reference to
-   `CONTINUATION_WORKLOAD_OPTIMIZATIONS.md` is a stale path. The actual
-   document is `docs/continuations/optimizations.md` (verified content
-   matches: opens with "Continuation-Heavy Workload Optimizations").
+**Findings NOT actioned (logged for follow-up).**
 
-5. `drift` `docs/dev/debug-methodology.md:145` — File path
-   `match/syntax_adapter.go` is stale. The match package was moved into
-   `internal/`; current path is `internal/match/syntax_adapter.go`.
-
-6. `clean` `docs/dev/project-board-setup.md` — Operational guide for
-   GitHub Projects v2 UI workflow; no code-side claims to verify. The
-   plan's prep note flagged this as potentially stale-if-workflow-changed,
-   but the workflow described matches current GH Projects v2.
-
-**Fixes.** One commit, five doc edits across three files. project-board-setup.md
-not modified (clean).
+- **[errors]** Behavioral asymmetry: `applyForeign` and `callForeignCached`
+  (the fast paths) lack `defer recover()`, while `OperationForeignFunctionCall`
+  (the dead bytecode path used by `NewVMForeignClosure`, which has zero
+  production callers) has it. The new doc text acknowledges this, but the
+  underlying contract — "primitives reachable via the fast path must not
+  panic" — is enforced only by code review. Options for a follow-up plan:
+  (a) reinstate `defer recover()` in the two fast-path entry points and
+  benchmark the cost; (b) add a `wile-goast` belief that flags primitives
+  transitively calling panic-prone helpers in `values/promotion.go` and
+  `values/numeric_tower.go`. Out of docs-sweep scope per plan L54
+  ("Go source changes of any kind").
+- **[errors]** `machine/CLAUDE.md` "Error priority in `OperationForeignFunctionCall`"
+  block describes a path no production primitive takes anymore (per
+  `NewVMForeignClosure` having zero callers, doc L150). Subsystem `CLAUDE.md`
+  files are out of docs-sweep scope per plan L46. Logged for a separate
+  `CLAUDE.md` audit.
+- **[tests]** No unit test in `machine/*_test.go` pins the savedCont guard in
+  either `applyForeign` or `callForeignCached`. The PR #573 fix is currently
+  protected only by `integration/testdata/r7rs-tests.scm:1650`
+  (`(call-with-current-continuation procedure?)`), which is coarse-grained.
+  Out of docs-sweep scope (Go test changes); logged for the same follow-up
+  plan as the panic-recovery audit above.
+- **[tests]** No affirmative negative test for the "panicking `*ForeignClosure`"
+  contract; `TestApplyForeign_PanicRecovery` was removed at
+  `machine/foreign_closure_apply_test.go:124-127` without a replacement.
+- **[plan]** "Code under verification" list at L321-324 names
+  `values/freelist*.go` and `values/pool*.go` — neither path exists; pooling
+  lives in `machine/pool*.go`. Plan files are ephemeral per the sweep's own
+  scope (L49); not a docs finding.
 
 ### Phase 11 — `learn/` — Pending
 
