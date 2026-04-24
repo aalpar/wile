@@ -82,18 +82,11 @@ disappears when the frame is popped.
 
 No cleanup thunks. No global state. The mark's lifetime is the frame's lifetime.
 
-**Why a slice, not a map.** Keys are compared with `eq?` — pointer identity,
-not hash-equality. Scheme allows arbitrary values as keys (pairs, vectors,
-symbols, procedures), and two structurally-identical values may or may not
-be `eq?`. A Go map would compare by structural equality on primitive types
-and panic on non-comparable types (`[]T`, functions, maps). A slice of
-`(key, val)` entries with a linear scan is correct by construction and fast
-because mark sets are typically small (0-3 entries per frame). The switch
-from map to slice was PR #508 for exactly this reason.
-
 ## Tail Position: The Defining Behavior
 
-Here's where it gets interesting. Consider:
+Here's where it gets interesting. (In the examples below, `current-marks`
+is pedagogical shorthand for `(continuation-mark-set->list
+(current-continuation-marks) 'k)` — the real R7RS entry point.) Consider:
 
 ```scheme
 (with-continuation-mark 'k 1
@@ -157,7 +150,7 @@ leak that defeats the purpose of tail-call optimization.
 ## Collecting Marks: Walking the Chain
 
 To collect marks, you walk the continuation chain — the same linked list that
-`CaptureStackTrace` already walks in `machine/machine_context.go:995`:
+`CaptureStackTrace` already walks in `machine/machine_context.go:996`:
 
 ```go
 // CaptureStackTrace walks mc.cont chain for error reporting.
@@ -229,7 +222,7 @@ Without marks, you're stuck choosing between:
 - **dynamic-wind** (correct but expensive)
 - **Thread-local storage** (doesn't compose with continuations at all)
 
-Marks give you the correctness of `dynamic-wind` at the cost of a slice append (O(1) amortized; typical sets are 0-3 entries per frame, so no reallocation churn).
+Marks give you the correctness of `dynamic-wind` at the cost of an append to a small slice.
 
 ## The Subtle Parts
 
@@ -245,16 +238,31 @@ if the original frame's marks are later mutated (by another
 copy avoids this but costs more. For composable continuations (which can be
 invoked multiple times), deep copy is required.
 
-**Lazy allocation.** Most frames never carry marks. The `marks` field is a
-slice initialized to `nil`. Only `with-continuation-mark` allocates it, on
-first use. The common case (no marks) adds zero overhead — a nil slice is
-the zero value and costs only the header (three pointer-sized words).
+**Slice, not map.** The `marks` field is a slice of `(key, val)` entries,
+not a Go map. Keys are compared with `eq?` (pointer identity), and Scheme
+allows arbitrary values as keys — including non-comparable types a Go map
+would panic on. A linear scan is cheap because mark sets are typically
+small (0-3 entries per frame).
 
-**Save/restore semantics.** When `SaveContinuation` fires, it copies
-`mc.marks` into the new frame and nils out `mc.marks` — the callee starts
-with a clean mark set (see comments at `machine/vm_state.go:219-223`). On
-return, `Restore`/`PopContinuation` lifts the saved marks back. This is why
-a tail-recursive loop with a mark does not accumulate entries: tail calls
+**Lazy allocation.** Most frames never carry marks. The `marks` field is a
+slice initialized to `nil`. Only `with-continuation-mark` allocates backing
+storage, on first use. The common case adds zero allocations.
+
+**Unordered semantics.** Marks on a frame are a *set* keyed by `eq?`, not
+an ordered list. `SetMark` overwrites in place when the key already exists;
+`DeleteMark` uses swap-with-last and does not preserve insertion order.
+Code should not depend on iteration order within a frame. (Ordering across
+frames is well-defined: the chain walk produces innermost-first values.)
+
+**Save/restore semantics.** When `SaveContinuation` fires, it **transfers**
+`mc.marks` to the new frame: the slice header moves over (`q.marks =
+mc.marks` at `machine_continuation.go:111`) and then `mc.marks` is nilled,
+so the callee starts clean (see comments at `machine/vm_state.go:219-223`).
+This is a move, not a deep copy — the backing array is shared until
+`cloneMarks` runs on a call/cc restore (`machine_continuation.go:177`),
+where shared-chain safety requires duplication. On normal return,
+`Restore`/`PopContinuation` lifts the saved marks back. This is why a
+tail-recursive loop with a mark does not accumulate entries: tail calls
 skip `SaveContinuation` and just overwrite the current frame's entry.
 
 **Tail-position detection.** The compiler must know whether the body of

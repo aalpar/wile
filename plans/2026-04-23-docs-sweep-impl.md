@@ -578,13 +578,13 @@ Style / layout findings deferred per plan scope controls.
   The doc describes marks as a **Go map** (`frame.marks = { key₁: val₁, key₂: val₂, ... }`, "The `marks` field is a Go map initialized to `nil`", "a map on each frame", "the cost of a map write"). The actual implementation is a **slice of `markEntry` records** (`marks []markEntry` at `machine/vm_state.go:223`). This changed in PR #508 (`419b94dd`, 2026-early) specifically to get `eq?`-correct key comparison semantics that maps cannot provide (pointer-equality keys). The doc's description of "map write" / "map init" is factually incorrect.
   Evidence: `machine/vm_state.go:223` (`marks []markEntry`); commit `419b94dd`.
 
-- **drift** `docs/continuations/implementation.md:26-38` (vmState struct snippet)
-  Snippet shows 10 fields but the actual struct has 11 — missing `marks []markEntry` at `machine/vm_state.go:223`. This is the same field that `marks.md` describes, so both docs need to be internally consistent.
+- **missing** `docs/continuations/implementation.md:26-38` (vmState struct snippet)
+  Snippet shows 10 fields but the actual struct has 12 — missing `marks []markEntry` (line 223) and `envPooled bool` (line 208). This is the same marks field that `marks.md` describes, so both docs need to be internally consistent.
   Evidence: `machine/vm_state.go:94-224` (full struct).
 
 - **drift** `docs/continuations/marks.md:151`
-  Cites `CaptureStackTrace` at `machine/machine_context.go:827`. Actual location is `machine/machine_context.go:995`. Line-number drift from intervening changes.
-  Evidence: `machine/machine_context.go:995` (`func (p *MachineContext) CaptureStackTrace(maxDepth int) StackTrace`).
+  Cites `CaptureStackTrace` at `machine/machine_context.go:827`. Actual location is `machine/machine_context.go:996`. Line-number drift from intervening changes.
+  Evidence: `machine/machine_context.go:996` (`func (p *MachineContext) CaptureStackTrace(maxDepth int) StackTrace`).
 
 - **clean** `docs/continuations/concepts.md`
   Purely conceptual introduction to continuations. No Wile-specific code references to verify.
