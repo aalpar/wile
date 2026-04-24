@@ -288,8 +288,9 @@ Here's where Wile sits today:
 | `define-record-type` (R7RS/SRFI-9) | Implemented |
 | Procedural layer (`make-record-type`, accessors, modifiers) | Implemented |
 | Inspection layer (`record?`, `record-type`, `record-type?`) | Implemented |
-| Record inheritance | Not implemented |
-| Sealed/opaque/nongenerative | Not implemented |
+| Opaque record types (`define-opaque-record-type`, `make-opaque-record-type`) | Implemented |
+| Record inheritance (Scheme-level API) | Not implemented (Go-level `values.NewDerivedRecordType` exists but is not wired to any Scheme primitive) |
+| Sealed/nongenerative | Not implemented |
 | Object system / MOP | Not implemented |
 
 For custom subtypes, you currently have these options in Wile:
@@ -380,9 +381,13 @@ Level 4: R6RS / SRFI-240        + sealed, opaque, nongenerative
 Level 5: Tiny CLOS / GOOPS      + generic functions, multiple dispatch, MOP
 ```
 
-Wile is at Level 1 with a procedural/inspection layer. The question for Wile is
-whether to climb to Level 2 (SRFI-99 inheritance) — which is a modest,
-well-understood extension — or leap further.
+Wile sits at Level 1 (SRFI-9) with the SRFI-99 procedural/inspection layer
+and has also adopted one Level-4 feature à la carte: opaque record types
+(`define-opaque-record-type` / `make-opaque-record-type`, R6RS-inspired).
+Missing Level-4 features are sealed and nongenerative. The question for
+Wile is whether to climb to Level 2 (SRFI-99 inheritance) — a modest,
+well-understood extension — or continue picking individual features from
+higher levels.
 
 Sources:
 - [SRFI-9: Defining Record Types](https://srfi.schemers.org/srfi-9/srfi-9.html)

@@ -194,7 +194,7 @@ but not field type constraints.
 
 **No sum types as first-class constructs.** You can't declare that a `Shape`
 is either a `Circle` or a `Rect`. You can simulate this with predicate
-dispatch (as shown in the companion document `scheme-types-records-and-mop.md`),
+dispatch (as shown in the companion document `scheme-types-records-mop.md`),
 but the type system doesn't know about the relationship.
 
 **No recursive types.** A record field can hold a value that happens to be

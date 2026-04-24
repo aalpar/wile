@@ -834,7 +834,69 @@ Three-lens-converging **Critical**:
 - **[consistency]** `WithSandbox` row style (3-sentence cell vs 1-clause neighbors) — addressed by the "Option ordering" paragraph move above; the row is now 2 clauses like its neighbors.
 - **[consistency/tests]** `mc` receiver identifier ambiguity after changing the documented type to `CallContext` — the name `mc` is conventional in the codebase (`machine/CLAUDE.md`), so this is idiomatic rather than drift. Left as-is.
 
-### Phase 9 — `types/` — Pending
+### Phase 9 — `types/` — Completed (awaiting PR)
+
+**Inventory** (2026-04-24):
+
+- Last doc touch of `docs/types/`: `bf83fa43` (2026-04-15) — topic reorganization with INDEX.md and TOC.md.
+- Relevant code changes since: `c717862f` (feat: add opaque record types for abstract data type support), `8b4f5627` (fix: harden opaque record types with validation and doc corrections), `fa600645` (fix: guard NewRecord against nil record type), `5b99df75` (extensible type constraints — TypeConstraint interface). All post-date the doc's last touch.
+- The `types/` directory is primarily conceptual: `records-as-formal-types.md` (type theory / product types), `abstract-data-types.md` (existential types / ADTs), `scheme-types-records-mop.md` (SRFI landscape + Wile's position), `racket-structs.md` (Racket comparison). The per-phase concern from the plan is "verify code snippets still compile against the current value type" — which mostly holds. The bigger gaps are *status* claims ("Wile is at Level 1", "Sealed/opaque/nongenerative | Not implemented") that pre-date the opaque-record work.
+
+**Findings**:
+
+- **drift** `docs/types/records-as-formal-types.md:197`
+  In-prose companion-doc reference points to `scheme-types-records-and-mop.md` (with "-and-"). Actual filename is `scheme-types-records-mop.md`. Line 310's footer reference uses the correct filename, but the inline mention at line 197 is broken. Cross-doc link drift.
+  Evidence: `ls docs/types/` and `grep -n "scheme-types-records" docs/types/`.
+
+- **stale** `docs/types/scheme-types-records-mop.md:292`
+  "The Practical Landscape for Wile" table row: `| Sealed/opaque/nongenerative | Not implemented |`. Opacity IS implemented — `NewOpaqueRecordType` at `values/record_type.go:48`, exposed to Scheme as `make-opaque-record-type` (`internal/extensions/all/register.go:84`) and the `define-opaque-record-type` macro (`registry/core/bootstrap_macros.scm:199-202`). Opaque record types return `#f` from `record?` and error on `record-type` per `record_type.go:74-76` + `record.go:131`. The row lumps three independent features together; need to split.
+  Evidence: commit `c717862f feat: add opaque record types for abstract data type support`.
+
+- **missing** `docs/types/scheme-types-records-mop.md:286-293` (table)
+  No row for `define-opaque-record-type` / `make-opaque-record-type` even though they exist and are user-facing. Should be added with Status: Implemented.
+
+- **stale** `docs/types/scheme-types-records-mop.md:383-385`
+  "Wile is at Level 1 with a procedural/inspection layer. The question for Wile is whether to climb to Level 2 (SRFI-99 inheritance) — which is a modest, well-understood extension — or leap further." With opacity shipped, Wile has adopted one Level-4 feature (opacity is R6RS territory per the same doc's "Standards Staircase" at lines 376-380). Calling Wile "Level 1" now understates its position.
+  Evidence: Standards Staircase cites "R6RS / SRFI-240" at Level 4 with "sealed, opaque, nongenerative". Opacity is one of three — Wile has it.
+
+- **missing** `docs/types/abstract-data-types.md:209-224` (R6RS Opaque Records section)
+  The section frames opacity as an R6RS feature with R6RS `(opaque #t)` syntax, implying R7RS readers lack it. Wile has native `define-opaque-record-type` with R7RS-compatible syntax. Without a "Where Wile is" note, an embedder reading this doc will conclude opacity is unavailable to them. Added a sidebar block with Wile's syntax and semantics.
+
+- **drift** `docs/types/racket-structs.md:271`
+  "See also" link caption: `records-as-formal-types.md — Records as existential types and ADTs`. But `records-as-formal-types.md` is about nominally-typed labeled product types (introduction/elimination rules). Existential types / ADTs are the subject of `abstract-data-types.md`. Reworded the `records-as-formal-types.md` caption and added a separate line for `abstract-data-types.md`.
+
+- **clean** `docs/types/records-as-formal-types.md:38-44` (define-record-type example)
+  Standard R7RS syntax `(define-record-type <name> (constructor field...) predicate (field accessor)...)` verified against `registry/core/bootstrap_macros.scm:194-197`. Disjointness and generativity claims match the codebase.
+
+- **clean** `docs/types/scheme-types-records-mop.md:87-100` (procedural layer example)
+  All six primitives cited (`make-record-type`, `record-constructor`, `record-predicate`, `record-accessor`, `record-modifier`, `record?`, `record-type`, `record-type?`) verified at `internal/extensions/all/register.go:81-110`.
+
+- **clean** `docs/types/racket-structs.md:63-67` ("Where Wile is" callout for opacity)
+  Claim that "Opaque records print as `#<point>` instead of `#<record:point>`, and they're invisible to `record?`" matches `values/record.go:124-134` (SchemeString) and `values/record_type.go:74-76` (IsOpaque) + `record_type.go:44-46` comment. Callout is current.
+
+- **clean** All four docs' cross-references to each other (excluding the two drifts above): `abstract-data-types.md:3` → `records-as-formal-types.md`; `abstract-data-types.md:266,268` → sibling docs; `records-as-formal-types.md:197,310` → `scheme-types-records-mop.md` (the inline mention at :197 is the drift above; :310 footer link is already correct); `racket-structs.md:270,272,273` → sibling docs. All resolve.
+
+**Fixes** (committed in this PR):
+
+- `records-as-formal-types.md:197`: fix broken companion-doc reference — `scheme-types-records-and-mop.md` → `scheme-types-records-mop.md`.
+- `scheme-types-records-mop.md:286-293`: split the Sealed/opaque/nongenerative row; add "Opaque record types" row as Implemented; clarify Record inheritance row (internal `NewDerivedRecordType` exists but is not exposed at Scheme level).
+- `scheme-types-records-mop.md:383-385`: rewrite the "Wile is at Level 1" paragraph to acknowledge opacity as a Level-4 feature already adopted, with sealed/nongenerative still missing.
+- `abstract-data-types.md:224` (end of R6RS Opaque Records section): add a "Where Wile is" callout noting that Wile supports opacity with R7RS-compatible syntax (`define-opaque-record-type`), not R6RS's `(opaque #t)` clause; describe the `record?` / `record-type` sealing semantics.
+- `racket-structs.md:271`: fix miscaptioned cross-reference. `records-as-formal-types.md` is about product types, not existential types. Added a separate line pointing to `abstract-data-types.md` for "Records as existential types and ADTs".
+
+Style / conceptual prose deferred per plan scope controls.
+
+**Additional fixes from crosscheck review** (commit 2):
+
+- **[tests]** `scheme-types-records-mop.md:292` — reworded "internal `NewDerivedRecordType` exists but is not exposed" to "Go-level `values.NewDerivedRecordType` exists but is not wired to any Scheme primitive". The original "internal" was imprecise because `NewDerivedRecordType` is Go-exported (capital N); the intended meaning was "not reachable from Scheme."
+- **[code]** `plans/2026-04-23-docs-sweep-impl.md` clean-cross-references bullet — self-reference typo: cited `scheme-types-records-mop.md:197` but the inline-mention drift is at `records-as-formal-types.md:197`. Fixed.
+
+**Findings NOT actioned** (with rationale):
+
+- **[types]** Optional "— opacity-aware" addendum on the Inspection-layer row of the landscape table. The adjacent "Opaque record types" row already signals opacity-awareness; adding the addendum would be redundant.
+- **[tests]** `evalExpectError` weak-assertion improvement — code change out of docs-sweep scope. Logged for a future test-hardening follow-up.
+- **[tests]** Link-checker covers only `README.md`, not `docs/` — the very link broken in this PR's finding #1 would have been caught if the checker globbed `docs/**/*.md`. CI/tooling change out of docs-sweep scope. Logged for a follow-up.
+- **[errors]** `equal?` on opaque records does structural comparison (bypasses opacity in a certain sense) — not a doc-vs-code mismatch since no doc currently claims otherwise. Potential design-conversation item; not a docs-sweep fix.
 
 ### Phase 10 — `dev/` — Pending
 
