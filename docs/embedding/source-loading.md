@@ -41,11 +41,12 @@ swallowing real errors.
 │   FSFileResolver     │       OSFileResolver             │
 │   (virtual fs.FS)    │       (OS filesystem)            │
 │                      │                                  │
-│  1. LoadPath dir     │  1. LibraryRegistry paths        │
-│  2. Registry paths   │  2. SCHEME_INCLUDE_PATH          │
-│  3. FS root          │  3. CWD                          │
+│  1. LoadPath dir     │  1. LoadPath dir                 │
+│  2. Registry paths   │  2. Registry paths               │
+│  3. FS root          │  3. SCHEME_INCLUDE_PATH          │
+│                      │  4. CWD                          │
 ├──────────────────────┴──────────────────────────────────┤
-│                  EmbedFileResolver                       │
+│                  EmbedFileResolver                      │
 │  Fixed bootstrap FS — not in the chain.                 │
 │  Loads core macros (and, or, let, cond, etc.)           │
 └─────────────────────────────────────────────────────────┘
@@ -55,14 +56,17 @@ swallowing real errors.
 
 Resolves files from the OS filesystem. Resolution order:
 
-1. Library registry search paths (`LibraryRegistry.GetSearchPaths()`)
-2. `SCHEME_INCLUDE_PATH` environment variable (colon-separated on Unix,
+1. `LoadPathStack.CurrentDir()` — the directory of the currently-loading
+   file, enabling relative `include` paths from OS-loaded sources.
+2. Library registry search paths (`LibraryRegistry.GetSearchPaths()`)
+3. `SCHEME_INCLUDE_PATH` environment variable (colon-separated on Unix,
    semicolon-separated on Windows)
-3. Current working directory
+4. Current working directory
 
-Before opening, runs a security authorization check via
-`security.CheckWithAuthorizer`. This gates file access in sandboxed
-engines.
+Absolute paths bypass the search list and are opened directly (still
+subject to authorization). Before returning, runs a security
+authorization check via `security.CheckWithAuthorizer`. This gates file
+access in sandboxed engines.
 
 ### FSFileResolver
 
@@ -244,9 +248,10 @@ ChainFileResolver (in WithSource* call order)
 │   3. FS root + path
 │
 └─ OSFileResolver (WithSourceOS)
-    1. LibraryRegistry search paths, each + path
-    2. SCHEME_INCLUDE_PATH dirs, each + path
-    3. CWD + path
+    1. LoadPathStack.CurrentDir() + path
+    2. LibraryRegistry search paths, each + path
+    3. SCHEME_INCLUDE_PATH dirs, each + path
+    4. CWD + path
 
 Bootstrap: always from core.BootstrapFS via EmbedFileResolver (separate)
 ```
