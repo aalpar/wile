@@ -874,7 +874,7 @@ Three-lens-converging **Critical**:
 - **clean** `docs/types/racket-structs.md:63-67` ("Where Wile is" callout for opacity)
   Claim that "Opaque records print as `#<point>` instead of `#<record:point>`, and they're invisible to `record?`" matches `values/record.go:124-134` (SchemeString) and `values/record_type.go:74-76` (IsOpaque) + `record_type.go:44-46` comment. Callout is current.
 
-- **clean** All four docs' cross-references to each other (excluding the two drifts above): `abstract-data-types.md:3` → `records-as-formal-types.md`; `abstract-data-types.md:266,268` → sibling docs; `scheme-types-records-mop.md:197` → implicit (the inline mention flagged above); `racket-structs.md:270,272,273` → sibling docs. All resolve.
+- **clean** All four docs' cross-references to each other (excluding the two drifts above): `abstract-data-types.md:3` → `records-as-formal-types.md`; `abstract-data-types.md:266,268` → sibling docs; `records-as-formal-types.md:197,310` → `scheme-types-records-mop.md` (the inline mention at :197 is the drift above; :310 footer link is already correct); `racket-structs.md:270,272,273` → sibling docs. All resolve.
 
 **Fixes** (committed in this PR):
 
@@ -885,6 +885,18 @@ Three-lens-converging **Critical**:
 - `racket-structs.md:271`: fix miscaptioned cross-reference. `records-as-formal-types.md` is about product types, not existential types. Added a separate line pointing to `abstract-data-types.md` for "Records as existential types and ADTs".
 
 Style / conceptual prose deferred per plan scope controls.
+
+**Additional fixes from crosscheck review** (commit 2):
+
+- **[tests]** `scheme-types-records-mop.md:292` — reworded "internal `NewDerivedRecordType` exists but is not exposed" to "Go-level `values.NewDerivedRecordType` exists but is not wired to any Scheme primitive". The original "internal" was imprecise because `NewDerivedRecordType` is Go-exported (capital N); the intended meaning was "not reachable from Scheme."
+- **[code]** `plans/2026-04-23-docs-sweep-impl.md` clean-cross-references bullet — self-reference typo: cited `scheme-types-records-mop.md:197` but the inline-mention drift is at `records-as-formal-types.md:197`. Fixed.
+
+**Findings NOT actioned** (with rationale):
+
+- **[types]** Optional "— opacity-aware" addendum on the Inspection-layer row of the landscape table. The adjacent "Opaque record types" row already signals opacity-awareness; adding the addendum would be redundant.
+- **[tests]** `evalExpectError` weak-assertion improvement — code change out of docs-sweep scope. Logged for a future test-hardening follow-up.
+- **[tests]** Link-checker covers only `README.md`, not `docs/` — the very link broken in this PR's finding #1 would have been caught if the checker globbed `docs/**/*.md`. CI/tooling change out of docs-sweep scope. Logged for a follow-up.
+- **[errors]** `equal?` on opaque records does structural comparison (bypasses opacity in a certain sense) — not a doc-vs-code mismatch since no doc currently claims otherwise. Potential design-conversation item; not a docs-sweep fix.
 
 ### Phase 10 — `dev/` — Pending
 

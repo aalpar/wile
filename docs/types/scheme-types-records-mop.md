@@ -289,7 +289,7 @@ Here's where Wile sits today:
 | Procedural layer (`make-record-type`, accessors, modifiers) | Implemented |
 | Inspection layer (`record?`, `record-type`, `record-type?`) | Implemented |
 | Opaque record types (`define-opaque-record-type`, `make-opaque-record-type`) | Implemented |
-| Record inheritance (Scheme-level API) | Not implemented (internal `NewDerivedRecordType` exists but is not exposed) |
+| Record inheritance (Scheme-level API) | Not implemented (Go-level `values.NewDerivedRecordType` exists but is not wired to any Scheme primitive) |
 | Sealed/nongenerative | Not implemented |
 | Object system / MOP | Not implemented |
 
