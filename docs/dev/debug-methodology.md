@@ -142,7 +142,7 @@ After fixing the bug:
 
 ## Example: Complete Debug Session
 
-The Go interface nil check bug in `match/syntax_adapter.go` (commit history) demonstrates this methodology:
+The Go interface nil check bug in `internal/match/syntax_adapter.go` (commit history) demonstrates this methodology:
 
 1. **Problem**: `(let ((x 8)) (or #f (or #f x)))` returned `#f` instead of `8`
 2. **Hypothesis**: Template symbols not getting intro scope

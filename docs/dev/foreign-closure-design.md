@@ -24,15 +24,24 @@ Closure (interface)
 ```
 
 `ForeignClosure` holds a `ForeignFunction` directly with no `NativeTemplate`.
-`applyForeign` does arity check, arg binding, panic recovery, and continuation
-restore — the same work the VM loop did, but without template indirection or
-opcode dispatch.
+`applyForeign` does arity check, arg binding, error conversion, and
+continuation restore — the same work the VM loop did, except panic recovery,
+which remains in the bytecode path's `OperationForeignFunctionCall`. Foreign
+functions reachable via the direct fast path must return errors rather than
+panic; the type-coercion helpers in `values/promotion.go` and `values/numeric_tower.go`
+panic on `ErrNotANumber`/`ErrNotAPair` when handed unexpected types, and must
+not be invoked from `*ForeignClosure` primitives without an explicit type
+check or `defer recover()`. (R7RS-specified errors like division by zero
+already return `(Number, error)` — those flow through the normal error path.)
+This contract is currently enforced by code review only; there is no test
+or lint that catches a primitive that violates it.
 
 ### Closure Interface
 
 ```go
 type Closure interface {
     values.Callable
+    NamedCallable    // Name() + Doc() — for (procedure-name) and (procedure-documentation)
     closureMarker()  // unexported, restricts to machine package
 }
 ```
@@ -41,6 +50,21 @@ Distinguished from other `Callable` types (`CaseLambdaClosure`, `Parameter`,
 `ComposableContinuation`) which have different application semantics.
 Storage sites (`DynamicWindFrame.Before/After`, `MachineContinuation.promptHandler`,
 `Parameter.converter`) use the `Closure` interface.
+
+The `NamedCallable` embedding lets `(procedure-name)` and `(procedure-documentation)`
+read `Name()`/`Doc()` through one interface assertion instead of a six-way
+type switch. The two consumers live in `registry/core/prim_reflection.go:136,275`.
+Stack-trace builders use a different mechanism — they read `*NativeTemplate.Name()`
+off the saved continuation directly (`machine/machine_context.go:1002,1015`),
+not through `NamedCallable`. `CaseLambdaClosure` also satisfies `NamedCallable`
+but is not a `Closure`: it doesn't define `closureMarker()`, and its application
+path is arity dispatch (`ApplyCaseLambda` → `Apply` of the matched clause),
+not direct invocation.
+
+The unexported `closureMarker()` enforces *package locality* — only types
+defined inside `machine/` can satisfy `Closure`. The "direct invocation"
+semantic is convention, enforced at the `ApplyCallable` dispatch table, not
+by the type system.
 
 ### Dispatch
 
@@ -64,38 +88,81 @@ func (p *MachineContext) ApplyCallable(callable values.Value, args ...values.Val
 - `computeNoCopyApply()` call in `NewForeignClosure`
 - `NativeTemplate.noCopyApply` — removed in PR #561 (SRFI-18 thread safety)
 
-## Edge Case 1: Template-Pointer Guard (PrimCallCC Inline Mode)
+## Edge Case 1: Template and Continuation Guards (PrimCallCC Inline Mode)
 
 `PrimCallCC` in inline mode calls `mc.ApplyCallable(mcls, contClosure)` to set
-up the VM for continued execution of a user lambda. `Apply` sets `mc.template`,
-`mc.env`, `mc.pc = 0`. After `Apply` returns, `Run()` continues executing the
-new template.
+up the VM for continued execution of the user-supplied procedure. After
+`fn(p)` returns, `applyForeign` must avoid two distinct double-actions
+depending on what type the user's procedure was.
 
-When `PrimCallCC` is a `*ForeignClosure`, `applyForeign` calls `fn(p)` which
-calls `ApplyCallable` which calls `Apply` — setting `p.template` to the
-lambda's template. After `fn(p)` returns, `applyForeign` must NOT call
-`returnImmediate()` because `Apply` already configured the VM state.
+**Case A — User procedure is a `*MachineClosure`.** `ApplyCallable` dispatches
+to `Apply`, which sets `p.template`, `p.env`, `p.pc = 0` so `Run()` continues
+in the new template. `applyForeign` must NOT call `returnImmediate()` — that
+would overwrite the VM state configured by `Apply`.
 
-**Detection:** Save `p.template` before calling `fn(p)`. After the call, if
-`p.template` changed, the function set up VM state — skip `returnImmediate()`.
+**Case B — User procedure is a `*ForeignClosure`.** `ApplyCallable` dispatches
+to a nested `applyForeign`, which already consumes the saved continuation via
+`RestoreAndRelease(p.cont)`. The outer `applyForeign` must NOT consume it
+again — that would restore from a frame that has already been freed and
+returned to the pool.
+
+**Detection.** Save both `p.template` and `p.cont` before calling `fn(p)`.
+After the call, the template guard skips the entire restore path if the
+template changed (Case A); the cont guard skips only the restore step if
+the continuation was already consumed (Case B).
 
 ```go
 savedTemplate := p.template
+savedCont := p.cont
+
 err := fcls.fn(p)
-// ...
+// ... error handling, immediate timeout check ...
+
+// Case A: VM state was reconfigured by the foreign function.
 if p.template != savedTemplate {
-    return p, nil  // VM state configured by fn, don't restore
+    return p, nil
 }
-// Normal path: restore continuation
+
+// Case B: continuation was consumed by a nested applyForeign.
+if p.cont == savedCont {
+    if p.cont != nil {
+        p.RestoreAndRelease(p.cont)
+    } else {
+        p.template = immediateReturnTemplate
+        p.pc = 0
+    }
+}
+return p, nil
 ```
 
-This is a pointer comparison — reliable because `Apply` always sets
-`p.template` to the callee's template (a different `*NativeTemplate` pointer).
+Both checks are pointer comparisons, reliable because each callable that
+manipulates VM state writes a distinct pointer: `Apply` sets `p.template`
+to the callee's template; nested `applyForeign` advances `p.cont` past the
+consumed frame (typically to its parent) before returning.
 
-**Why this matters:** Without this guard, `applyForeign` overwrites the
-lambda's template/env/pc with `returnImmediate()`, causing the VM to resume
-stale state. Tests pass because most primitives don't call `Apply` internally;
-only `PrimCallCC` inline mode does.
+The savedCont guard was added in PR #573 after a test failure exposed
+double-restore in the inline-Foreign-via-Foreign path. `callForeignCached`
+(`machine/call_foreign_cached.go:83-126`) carries an analogous guard for
+the non-tail path; the tail-call branch calls `returnImmediate()`
+unconditionally because tail calls do not have a `SaveContinuation` frame
+to consume in the first place.
+
+**Why this matters.** Without these guards, `applyForeign` either
+overwrites VM state set up by `Apply` (Case A) or restores from a freed
+continuation frame (Case B), and the VM resumes stale state in either
+case. Most primitives don't call `Apply` or `ApplyCallable` internally;
+only `PrimCallCC` inline mode (and any future primitives that themselves
+invoke user procedures) trigger these paths.
+
+**Generality.** The Case A/B framing is illustrative, not exhaustive.
+`ApplyCallable` dispatches to six callable types
+(`machine/machine_context_apply.go:224-246`), and four of them can mutate
+either pointer: `*MachineClosure` and `*CaseLambdaClosure` both reach
+`Apply` (template change → Case A); `*Parameter` and `*ComposableContinuation`
+consume `p.cont` via `returnImmediate`/`Restore` (Case B). The two
+pointer guards fire defensively for any callable in the dispatch table —
+the named cases are the only ones that occur today via `PrimCallCC`,
+but the guards do not depend on which case actually triggered.
 
 ## Edge Case 2: Go Stack Overflow (Recursive Foreign Closures)
 
