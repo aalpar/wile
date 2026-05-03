@@ -19,6 +19,11 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v7
         with:
+          # Pinned to v2.11.x — v2.12.1 introduced regressions in
+          # //nolint:gocritic suppression handling and ruleguard
+          # function-body matching that break TestRuleguardRules.
+          # Unpin once upstream fixes are released.
+          version: v2.11.1
           args: -v ./...
 
       - name: CI
