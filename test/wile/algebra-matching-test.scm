@@ -206,4 +206,16 @@
              (M (gale-shapley mp wp)))
         (test-assert (stable? M mp wp))))))
 
+(test-group "hospital-intern quota validation"
+  (test-error
+    (hospital-intern-match
+      (make-preference-profile '(i1) (lambda (x) '(h1)))
+      (make-preference-profile '(h1) (lambda (x) '(i1)))
+      '((h1 . 0))))    ; quota 0 invalid
+  (test-error
+    (hospital-intern-match
+      (make-preference-profile '(i1) (lambda (x) '(h1)))
+      (make-preference-profile '(h1) (lambda (x) '(i1)))
+      '())))           ; missing h1 quota
+
 (test-end "matching")

@@ -275,3 +275,20 @@
      (let ((tmp m))
        (let ((pairs (bipartite-matching-pairs tmp)))
          body ...)))))
+
+(define (validate-quotas! quotas hospitals)
+  (for-each
+    (lambda (h)
+      (let ((cell (assoc h quotas)))
+        (cond
+          ((not cell)
+           (error "hospital-intern-match: missing quota for hospital" h))
+          ((or (not (integer? (cdr cell)))
+               (not (positive? (cdr cell))))
+           (error "hospital-intern-match: quota must be a positive integer" h (cdr cell))))))
+    hospitals))
+
+(define (hospital-intern-match intern-prefs hospital-prefs hospital-quotas)
+  "Compute an intern-optimal stable many-to-one matching via Roth's reduction.\nReturns an alist ((hospital . (intern ...)) ...) of accepted interns per hospital.\nUnmatched interns are absent; caller can derive them via set difference.\n\nParameters:\n  intern-prefs : preference-profile — interns' preferences over hospitals\n  hospital-prefs : preference-profile — hospitals' preferences over interns\n  hospital-quotas : alist of (hospital . positive-integer)\nReturns: alist of (any . list)\nCategory: algebra\nKeywords: hospital-intern, college-admissions, many-to-one, Roth, quota"
+  (validate-quotas! hospital-quotas (preference-profile-agents hospital-prefs))
+  (error "hospital-intern-match: not yet implemented (Task 3.2 fills the body)"))

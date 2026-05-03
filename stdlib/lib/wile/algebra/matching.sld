@@ -21,6 +21,7 @@
     blocking-pairs stable?
     ;; Algorithms
     gale-shapley gale-shapley/receiver-optimal
+    hospital-intern-match
     ;; Field binders
     with-preference-profile with-bipartite-matching)
   (import (scheme base)
