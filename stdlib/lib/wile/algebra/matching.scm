@@ -171,6 +171,83 @@
                         (inner (cdr rs) (cons (cons p r) acc2))
                         (inner (cdr rs) acc2))))))))))))
 
+(define (gale-shapley prop-prefs recv-prefs)
+  "Run the Gale-Shapley deferred-acceptance algorithm, proposer-optimal.\nEach proposer proposes down its preference list; receivers tentatively accept\ntheir best offer so far, releasing previously held matches. Terminates in\nO(n²) steps. Returns the unique proposer-optimal stable matching.\n\nParameters:\n  prop-prefs : preference-profile — proposers and their ordered receiver preferences\n  recv-prefs : preference-profile — receivers and their ordered proposer preferences\nReturns: bipartite-matching\nCategory: algebra\nKeywords: Gale-Shapley, stable matching, deferred acceptance, proposer-optimal"
+  (let* ((PS (preference-profile-setoid prop-prefs))
+         (RS (preference-profile-setoid recv-prefs))
+         (proposers (preference-profile-agents prop-prefs))
+         ;; cursors: alist mapping each proposer to the tail of its pref list
+         ;; not yet proposed to (car = next candidate to propose to).
+         (cursors (map (lambda (p)
+                         (cons p ((preference-profile-ranks-of prop-prefs) p)))
+                       proposers))
+         ;; matches: alist mapping receiver → current proposer (or absent if unmatched)
+         (matches '()))
+    ;; Return the tail of p's cursor list (remaining proposals).
+    (define (cursor-of p)
+      (let loop ((cs cursors))
+        (cond ((null? cs) '())
+              ((setoid-equiv? PS p (car (car cs))) (cdr (car cs)))
+              (else (loop (cdr cs))))))
+    ;; Advance p's cursor by one position.
+    (define (advance-cursor! p)
+      (let loop ((cs cursors))
+        (cond ((null? cs) (error "gale-shapley: proposer not found" p))
+              ((setoid-equiv? PS p (car (car cs)))
+               (set-cdr! (car cs) (cdr (cdr (car cs)))))
+              (else (loop (cdr cs))))))
+    ;; Return current holder of receiver r, or #f if unmatched.
+    (define (holder-of r)
+      (let loop ((ms matches))
+        (cond ((null? ms) #f)
+              ((setoid-equiv? RS r (car (car ms))) (cdr (car ms)))
+              (else (loop (cdr ms))))))
+    ;; Update matches so r is matched to p (replacing any existing entry).
+    (define (set-match! r p)
+      (let loop ((ms matches))
+        (cond ((null? ms)
+               (set! matches (cons (cons r p) matches)))
+              ((setoid-equiv? RS r (car (car ms)))
+               (set-cdr! (car ms) p))
+              (else (loop (cdr ms))))))
+    ;; Find any free proposer with remaining proposals; returns #f if none.
+    (define (next-free-proposer)
+      (let loop ((ps proposers))
+        (cond ((null? ps) #f)
+              ((and (not (null? (cursor-of (car ps))))
+                    (not (holder-of* (car ps))))
+               (car ps))
+              (else (loop (cdr ps))))))
+    ;; Return #t if p currently holds some match (is not free).
+    (define (holder-of* p)
+      (let loop ((ms matches))
+        (cond ((null? ms) #f)
+              ((setoid-equiv? PS p (cdr (car ms))) #t)
+              (else (loop (cdr ms))))))
+    ;; Main loop: iterate until no free proposer with remaining proposals.
+    (let loop ()
+      (let ((p (next-free-proposer)))
+        (when p
+          (let* ((rem (cursor-of p))
+                 (r (car rem)))
+            (advance-cursor! p)
+            (let ((incumbent (holder-of r)))
+              (cond
+                ((not incumbent)
+                 ;; r is free — tentatively accept.
+                 (set-match! r p))
+                ((preference-profile-prefers-strictly? recv-prefs r p incumbent)
+                 ;; r prefers p over incumbent — swap.
+                 (set-match! r p))
+                ;; else r prefers incumbent; p is rejected (cursor already advanced).
+                ))
+            (loop)))))
+    ;; Build the result alist as (proposer . receiver) pairs.
+    (let ((pairs (map (lambda (cell) (cons (cdr cell) (car cell))) matches)))
+      (make-bipartite-matching pairs
+                               (cons 'prop-setoid PS)
+                               (cons 'recv-setoid RS)))))
+
 (define (stable? M prop-prefs recv-prefs)
   "Return #t iff matching M is stable under the given preferences (no blocking pair).\n\nParameters:\n  M : bipartite-matching\n  prop-prefs : preference-profile\n  recv-prefs : preference-profile\nReturns: boolean\nCategory: algebra\nKeywords: stability, Gale-Shapley, two-sided matching"
   (null? (blocking-pairs M prop-prefs recv-prefs)))

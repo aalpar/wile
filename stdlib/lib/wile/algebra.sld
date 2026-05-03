@@ -242,6 +242,8 @@
     validate-bipartite-matching
     ;; Stability
     blocking-pairs stable?
+    ;; Algorithms
+    gale-shapley
     ;; Field binders
     with-preference-profile with-bipartite-matching
     ;; Combinatorial graphs — core (§5.6)

@@ -19,6 +19,8 @@
     validate-bipartite-matching
     ;; Stability
     blocking-pairs stable?
+    ;; Algorithms
+    gale-shapley
     ;; Field binders
     with-preference-profile with-bipartite-matching)
   (import (scheme base)

@@ -97,4 +97,26 @@
     (with-bipartite-matching M (pairs)
       (test '((a . x)) pairs))))
 
+(test-group "gale-shapley proposer-optimal — textbook 4x4"
+  (let* ((mp (make-preference-profile
+               '(1 2 3 4)
+               (lambda (m)
+                 (case m
+                   ((1) '(a b c d))
+                   ((2) '(b a c d))
+                   ((3) '(a c b d))
+                   ((4) '(c a b d))))))
+         (wp (make-preference-profile
+               '(a b c d)
+               (lambda (w)
+                 (case w
+                   ((a) '(2 4 1 3))
+                   ((b) '(3 1 2 4))
+                   ((c) '(2 3 4 1))
+                   ((d) '(4 1 3 2))))))
+         (M (gale-shapley mp wp)))
+    (test #t (bipartite-matching? M))
+    (test #t (stable? M mp wp))
+    (test 4 (length (bipartite-matching-pairs M)))))
+
 (test-end "matching")
