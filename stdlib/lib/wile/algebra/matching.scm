@@ -291,4 +291,83 @@
 (define (hospital-intern-match intern-prefs hospital-prefs hospital-quotas)
   "Compute an intern-optimal stable many-to-one matching via Roth's reduction.\nReturns an alist ((hospital . (intern ...)) ...) of accepted interns per hospital.\nUnmatched interns are absent; caller can derive them via set difference.\n\nParameters:\n  intern-prefs : preference-profile — interns' preferences over hospitals\n  hospital-prefs : preference-profile — hospitals' preferences over interns\n  hospital-quotas : alist of (hospital . positive-integer)\nReturns: alist of (any . list)\nCategory: algebra\nKeywords: hospital-intern, college-admissions, many-to-one, Roth, quota"
   (validate-quotas! hospital-quotas (preference-profile-agents hospital-prefs))
-  (error "hospital-intern-match: not yet implemented (Task 3.2 fills the body)"))
+  (let* ((HS (preference-profile-setoid hospital-prefs))
+         (hospitals (preference-profile-agents hospital-prefs))
+         (interns (preference-profile-agents intern-prefs))
+         ;; Build all synthetic copies: list of (h . k) cons cells
+         ;; grouped per hospital.  copies-for returns the copies for h.
+         (all-copies
+           (let loop ((hs hospitals) (acc '()))
+             (if (null? hs)
+                 (reverse acc)
+                 (let* ((h (car hs))
+                        (q (cdr (assoc h hospital-quotas)))
+                        (copies
+                          (let inner ((k 1) (cacc '()))
+                            (if (> k q)
+                                (reverse cacc)
+                                (inner (+ k 1) (cons (cons h k) cacc))))))
+                   (loop (cdr hs) (cons (cons h copies) acc))))))
+         ;; Look up copies for a given hospital h (using HS for identity).
+         (copies-for
+           (lambda (h)
+             (let loop ((cs all-copies))
+               (cond
+                 ((null? cs) '())
+                 ((setoid-equiv? HS h (car (car cs))) (cdr (car cs)))
+                 (else (loop (cdr cs)))))))
+         ;; Flat list of all copies, in hospital-list order.
+         (flat-copies
+           (let loop ((cs all-copies) (acc '()))
+             (if (null? cs)
+                 (reverse acc)
+                 (loop (cdr cs)
+                       (let inner ((ks (cdr (car cs))) (a acc))
+                         (if (null? ks)
+                             a
+                             (inner (cdr ks) (cons (car ks) a))))))))
+         ;; Inflated intern preference profile.
+         ;; Each intern's pref list: for each hospital h in original list,
+         ;; append all copies of h in index order.
+         (inflated-intern-ranks
+           (lambda (intern)
+             (let loop ((hs ((preference-profile-ranks-of intern-prefs) intern))
+                        (acc '()))
+               (if (null? hs)
+                   (reverse acc)
+                   (loop (cdr hs)
+                         (let inner ((ks (copies-for (car hs))) (a acc))
+                           (if (null? ks)
+                               a
+                               (inner (cdr ks) (cons (car ks) a)))))))))
+         (inflated-iprefs
+           (make-preference-profile interns inflated-intern-ranks))
+         ;; Inflated copy preference profile.
+         ;; Each copy (h . k) has the same preference list as h.
+         (inflated-copy-ranks
+           (lambda (copy)
+             ((preference-profile-ranks-of hospital-prefs) (car copy))))
+         (inflated-hprefs
+           (make-preference-profile flat-copies inflated-copy-ranks))
+         ;; Run intern-proposing Gale-Shapley on the inflated instance.
+         (inflated-match (gale-shapley inflated-iprefs inflated-hprefs))
+         ;; Collapse: for each hospital h, collect interns matched to any copy of h.
+         (pairs (bipartite-matching-pairs inflated-match)))
+    ;; Build result alist: ((h . (matched-interns ...)) ...) for all hospitals.
+    (let loop ((hs hospitals) (acc '()))
+      (if (null? hs)
+          (reverse acc)
+          (let* ((h (car hs))
+                 ;; Gather interns whose matched copy has (car copy) ≡ h under HS.
+                 (matched-interns
+                   (let inner ((ps pairs) (ilist '()))
+                     (if (null? ps)
+                         (reverse ilist)
+                         (let* ((pr (car ps))
+                                (intern (car pr))
+                                (copy (cdr pr)))
+                           (if (setoid-equiv? HS (car copy) h)
+                               (inner (cdr ps) (cons intern ilist))
+                               (inner (cdr ps) ilist)))))))
+            (loop (cdr hs) (cons (cons h matched-interns) acc)))))))
+

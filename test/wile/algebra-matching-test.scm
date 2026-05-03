@@ -218,4 +218,26 @@
       (make-preference-profile '(h1) (lambda (x) '(i1)))
       '())))           ; missing h1 quota
 
+(test-group "hospital-intern textbook example (Roth-Sotomayor §5.5 simplified)"
+  (let* ((iprefs (make-preference-profile
+                   '(i1 i2 i3)
+                   (lambda (i)
+                     (case i
+                       ((i1) '(h1 h2))
+                       ((i2) '(h1 h2))
+                       ((i3) '(h2 h1))))))
+         (hprefs (make-preference-profile
+                   '(h1 h2)
+                   (lambda (h)
+                     (case h
+                       ((h1) '(i1 i2 i3))
+                       ((h2) '(i3 i1 i2))))))
+         (quotas '((h1 . 1) (h2 . 2)))
+         (M (hospital-intern-match iprefs hprefs quotas)))
+    ;; h1 wants i1 (top of quota=1) → i1 → h1
+    ;; h2 has quota 2: top is i3, then accepts the next free intern
+    (test-assert (member 'i1 (cdr (assoc 'h1 M))))
+    (test-assert (member 'i3 (cdr (assoc 'h2 M))))
+    (test 3 (apply + (map (lambda (cell) (length (cdr cell))) M)))))
+
 (test-end "matching")
