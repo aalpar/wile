@@ -75,3 +75,27 @@
   (let ((ps (assv-or opts 'prop-setoid (default-setoid)))
         (rs (assv-or opts 'recv-setoid (default-setoid))))
     (make-bipartite-matching* pairs ps rs)))
+
+(define (bipartite-matching-partner M agent)
+  "Return the partner of AGENT in matching M, or #f if AGENT is unmatched.\nLookup is symmetric — works whether AGENT is on the proposer or receiver side.\n\nParameters:\n  M : bipartite-matching\n  agent : any\nReturns: any or #f\nCategory: algebra\nKeywords: matching, partner, lookup"
+  (let ((PS (bipartite-matching-prop-setoid M))
+        (RS (bipartite-matching-recv-setoid M))
+        (pairs (bipartite-matching-pairs M)))
+    (let loop ((ps pairs))
+      (cond ((null? ps) #f)
+            ((setoid-equiv? PS agent (car (car ps))) (cdr (car ps)))
+            ((setoid-equiv? RS agent (cdr (car ps))) (car (car ps)))
+            (else (loop (cdr ps)))))))
+
+(define (bipartite-matching-unmatched M side agents)
+  "Return AGENTS not appearing on SIDE ('proposer or 'receiver) of matching M.\n\nParameters:\n  M : bipartite-matching\n  side : symbol — 'proposer or 'receiver\n  agents : list — agents on that side\nReturns: list — agents from AGENTS not appearing in M on the given side\nCategory: algebra\nKeywords: matching, unmatched, partial"
+  (let* ((S (case side
+              ((proposer) (bipartite-matching-prop-setoid M))
+              ((receiver) (bipartite-matching-recv-setoid M))
+              (else (error "bipartite-matching-unmatched: side must be 'proposer or 'receiver" side))))
+         (key (case side ((proposer) car) ((receiver) cdr)))
+         (matched (map key (bipartite-matching-pairs M))))
+    (let loop ((xs agents) (acc '()))
+      (cond ((null? xs) (reverse acc))
+            ((setoid-member? S (car xs) matched) (loop (cdr xs) acc))
+            (else (loop (cdr xs) (cons (car xs) acc)))))))

@@ -58,4 +58,12 @@
     (test #t (bipartite-matching? M))
     (test '((a . x) (b . y)) (bipartite-matching-pairs M))))
 
+(test-group "bipartite-matching partner and unmatched"
+  (let ((M (make-bipartite-matching '((a . x) (b . y)))))
+    (test 'x (bipartite-matching-partner M 'a))
+    (test 'a (bipartite-matching-partner M 'x))
+    (test #f (bipartite-matching-partner M 'c))
+    (test '(c) (bipartite-matching-unmatched M 'proposer '(a b c)))
+    (test '(z) (bipartite-matching-unmatched M 'receiver '(x y z)))))
+
 (test-end "matching")

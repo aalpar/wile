@@ -236,6 +236,8 @@
     bipartite-matching-pairs
     bipartite-matching-prop-setoid
     bipartite-matching-recv-setoid
+    bipartite-matching-partner
+    bipartite-matching-unmatched
     ;; Combinatorial graphs — core (§5.6)
     make-graph graph?
     graph-vertices graph-edges graph-neighbors graph-degree

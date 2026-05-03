@@ -12,7 +12,9 @@
     make-bipartite-matching bipartite-matching?
     bipartite-matching-pairs
     bipartite-matching-prop-setoid
-    bipartite-matching-recv-setoid)
+    bipartite-matching-recv-setoid
+    bipartite-matching-partner
+    bipartite-matching-unmatched)
   (import (scheme base)
           (wile algebra setoid))
   (include "matching.scm"))
