@@ -224,6 +224,10 @@
     ac-match
     ac-unify
     flatten-ac
+    ;; Preference profiles (two-sided matching)
+    make-preference-profile preference-profile?
+    preference-profile-agents preference-profile-ranks-of
+    preference-profile-setoid
     ;; Combinatorial graphs — core (§5.6)
     make-graph graph?
     graph-vertices graph-edges graph-neighbors graph-degree
@@ -279,6 +283,7 @@
           (wile algebra graph)
           (wile algebra matrix)
           (wile algebra incidence)
+          (wile algebra matching)
           (wile algebra unification)
           (wile algebra combinatorial-graph)
           (wile algebra abstract-domain)

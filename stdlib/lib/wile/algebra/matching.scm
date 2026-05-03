@@ -19,7 +19,15 @@
   (setoid preference-profile-setoid))
 
 (define (make-preference-profile agents ranks-of . opts)
-  "Construct a preference profile.\n\nParameters:\n  agents : list — the agents on this side of the market\n  ranks-of : procedure — agent → ordered list of preferred candidates (best first)\n  opts : trailing alist — supports (setoid . S)\nReturns: <preference-profile>\nCategory: algebra\nKeywords: stable matching, preferences, two-sided market"
+  "Construct a preference profile.
+
+Parameters:
+  agents : list — the agents on this side of the market
+  ranks-of : procedure — agent → ordered list of preferred candidates (best first)
+  opts : trailing alist — supports (setoid . S)
+Returns: <preference-profile>
+Category: algebra
+Keywords: stable matching, preferences, two-sided market"
   (assert-procedure "make-preference-profile" ranks-of)
   (validate-opts-keys "make-preference-profile" opts '(setoid))
   (let ((setoid (assv-or opts 'setoid (default-setoid))))
