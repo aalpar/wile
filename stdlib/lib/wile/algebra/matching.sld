@@ -20,7 +20,7 @@
     ;; Stability
     blocking-pairs stable?
     ;; Algorithms
-    gale-shapley
+    gale-shapley gale-shapley/receiver-optimal
     ;; Field binders
     with-preference-profile with-bipartite-matching)
   (import (scheme base)

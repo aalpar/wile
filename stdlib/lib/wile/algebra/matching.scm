@@ -248,6 +248,15 @@
                                (cons 'prop-setoid PS)
                                (cons 'recv-setoid RS)))))
 
+(define (gale-shapley/receiver-optimal prop-prefs recv-prefs)
+  "Compute the receiver-optimal stable matching by running Gale-Shapley with sides swapped.\nReturns a matching with proposer-shaped pairs (proposers as keys) for consistency with\nthe proposer-side variant.\n\nParameters:\n  prop-prefs : preference-profile\n  recv-prefs : preference-profile\nReturns: <bipartite-matching>\nCategory: algebra\nKeywords: Gale-Shapley, receiver-optimal, stable matching"
+  (let* ((swapped (gale-shapley recv-prefs prop-prefs))
+         (pairs (bipartite-matching-pairs swapped)))
+    (make-bipartite-matching
+      (map (lambda (pr) (cons (cdr pr) (car pr))) pairs)
+      (cons 'prop-setoid (preference-profile-setoid prop-prefs))
+      (cons 'recv-setoid (preference-profile-setoid recv-prefs)))))
+
 (define (stable? M prop-prefs recv-prefs)
   "Return #t iff matching M is stable under the given preferences (no blocking pair).\n\nParameters:\n  M : bipartite-matching\n  prop-prefs : preference-profile\n  recv-prefs : preference-profile\nReturns: boolean\nCategory: algebra\nKeywords: stability, Gale-Shapley, two-sided matching"
   (null? (blocking-pairs M prop-prefs recv-prefs)))

@@ -119,4 +119,17 @@
     (test #t (stable? M mp wp))
     (test 4 (length (bipartite-matching-pairs M)))))
 
+(test-group "gale-shapley/receiver-optimal asymmetry"
+  (let* ((mp (make-preference-profile
+               '(1 2)
+               (lambda (m) (case m ((1) '(a b)) ((2) '(b a))))))
+         (wp (make-preference-profile
+               '(a b)
+               (lambda (w) (case w ((a) '(2 1)) ((b) '(1 2))))))
+         (M-prop (gale-shapley mp wp))
+         (M-recv (gale-shapley/receiver-optimal mp wp)))
+    (test #t (stable? M-prop mp wp))
+    (test #t (stable? M-recv mp wp))
+    (test #f (bipartite-matching-equal? M-prop M-recv))))
+
 (test-end "matching")
