@@ -246,6 +246,9 @@
     gale-shapley gale-shapley/receiver-optimal
     hospital-intern-match
     tropical-assignment
+    ;; Rotations
+    make-rotation rotation? rotation-cycle
+    apply-rotation
     ;; Field binders
     with-preference-profile with-bipartite-matching
     ;; Combinatorial graphs — core (§5.6)

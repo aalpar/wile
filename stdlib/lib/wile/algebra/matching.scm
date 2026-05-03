@@ -371,6 +371,44 @@
                                (inner (cdr ps) ilist)))))))
             (loop (cdr hs) (cons (cons h matched-interns) acc)))))))
 
+;; ─── Phase 5: Rotations and Conway lattice ─────────────
+
+(define-record-type <rotation>
+  (make-rotation* cycle)
+  rotation?
+  (cycle rotation-cycle))
+
+(define (make-rotation cycle)
+  "Construct a rotation from a list of (proposer . receiver) pairs in cyclic order.\\nApplying the rotation to a stable matching M produces M' where each proposer pᵢ is\\nreassigned from its current partner rᵢ to r_{i+1 mod k}.\\n\\nParameters:\\n  cycle : list of (any . any), length ≥ 2\\nReturns: <rotation>\\nCategory: algebra\\nKeywords: rotation, Irving, Gusfield, stable matching"
+  (when (or (not (list? cycle)) (< (length cycle) 2))
+    (error "make-rotation: cycle must be a list of at least 2 (proposer . receiver) pairs" cycle))
+  (make-rotation* cycle))
+
+(define (apply-rotation M rho)
+  "Apply rotation RHO to matching M, returning a new matching where each rotation\\nproposer is reassigned to the next receiver in the cycle.\\n\\nParameters:\\n  M : bipartite-matching\\n  rho : rotation\\nReturns: <bipartite-matching>\\nCategory: algebra\\nKeywords: rotation, Gusfield-Irving, stable matching, lattice traversal"
+  (let* ((cycle (rotation-cycle rho))
+         (k (length cycle))
+         (PS (bipartite-matching-prop-setoid M))
+         ;; Build new-partner alist: pᵢ → r_{(i+1) mod k}
+         (rotmap
+           (let loop ((i 0) (acc '()))
+             (if (>= i k)
+                 (reverse acc)
+                 (loop (+ i 1)
+                       (cons (cons (car (list-ref cycle i))
+                                   (cdr (list-ref cycle (modulo (+ i 1) k))))
+                             acc)))))
+         (new-pairs
+           (map (lambda (pr)
+                  (let* ((p (car pr))
+                         (override (setoid-assoc PS p rotmap)))
+                    (if override (cons p (cdr override)) pr)))
+                (bipartite-matching-pairs M))))
+    (make-bipartite-matching
+      new-pairs
+      (cons 'prop-setoid (bipartite-matching-prop-setoid M))
+      (cons 'recv-setoid (bipartite-matching-recv-setoid M)))))
+
 ;; ─── Hungarian (Kuhn-Munkres) — Phase 4 ─────────────────
 
 (define (kuhn-munkres-square C n)

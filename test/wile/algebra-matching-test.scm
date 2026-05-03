@@ -325,4 +325,14 @@
          (r (tropical-assignment cost-fn '(1 2 3) '(a b))))
     (test 2 (length (bipartite-matching-pairs (car r))))))
 
+(test-group "rotation record and apply"
+  (let* ((rho (make-rotation '((1 . a) (2 . b))))
+         (M (make-bipartite-matching '((1 . a) (2 . b)))))
+    (test #t (rotation? rho))
+    (test '((1 . a) (2 . b)) (rotation-cycle rho))
+    ;; Apply: rotate each (pᵢ, rᵢ) → (pᵢ, r_{i+1})
+    (let ((Mp (apply-rotation M rho)))
+      (test 'b (bipartite-matching-partner Mp 1))
+      (test 'a (bipartite-matching-partner Mp 2)))))
+
 (test-end "matching")
