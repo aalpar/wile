@@ -278,4 +278,36 @@
     (test 'b (bipartite-matching-partner (car result) 1))
     (test 'a (bipartite-matching-partner (car result) 2))))
 
+;; Helper: assignment is "locally stable" iff swapping any two rows' columns
+;; doesn't reduce total cost. (Local-optimum sanity, not Gale-Shapley stability.)
+(define (stable-assignment? M cost-fn)
+  (let ((pairs (bipartite-matching-pairs M)))
+    (let outer ((xs pairs))
+      (cond
+        ((null? xs) #t)
+        (else
+          (let inner ((ys (cdr xs)))
+            (cond
+              ((null? ys) (outer (cdr xs)))
+              (else
+                (let* ((p1 (car xs)) (p2 (car ys))
+                       (orig (+ (cost-fn (car p1) (cdr p1))
+                                (cost-fn (car p2) (cdr p2))))
+                       (swap (+ (cost-fn (car p1) (cdr p2))
+                                (cost-fn (car p2) (cdr p1)))))
+                  (and (<= orig swap) (inner (cdr ys))))))))))))
+
+(test-group "tropical-assignment 4x4 cost agrees with reference"
+  (let* ((rows '((9 11 14 11)
+                 (6  3  9  9)
+                 (5  8  3  6)
+                 (5  8  6  3)))
+         (cost-fn (lambda (i j)
+                    (list-ref (list-ref rows (- i 1)) (- j 1)))))
+    (let ((r (tropical-assignment cost-fn '(1 2 3 4) '(1 2 3 4))))
+      ;; Reference optimum: 18 (verified via brute-force enumeration of all 24 perms)
+      ;; Assignment: 1→1, 2→2, 3→3, 4→4
+      (test 18 (cdr r))
+      (test #t (stable-assignment? (car r) cost-fn)))))
+
 (test-end "matching")
