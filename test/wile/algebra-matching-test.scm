@@ -240,4 +240,30 @@
     (test-assert (member 'i3 (cdr (assoc 'h2 M))))
     (test 3 (apply + (map (lambda (cell) (length (cdr cell))) M)))))
 
+(test-group "hospital-intern quota=1 reduces to gale-shapley"
+  (let* ((iprefs (make-preference-profile
+                   '(i1 i2)
+                   (lambda (i) (case i ((i1) '(h1 h2)) ((i2) '(h2 h1))))))
+         (hprefs (make-preference-profile
+                   '(h1 h2)
+                   (lambda (h) (case h ((h1) '(i2 i1)) ((h2) '(i1 i2))))))
+         (M-hi (hospital-intern-match iprefs hprefs '((h1 . 1) (h2 . 1))))
+         (M-gs (gale-shapley iprefs hprefs)))
+    ;; Convert hospital-intern alist to flat pair set for comparison.
+    ;; M-hi is ((h1 . (i...)) (h2 . (i...))); GS pairs are (intern . hospital).
+    (let ((flat-hi (let outer ((xs M-hi) (acc '()))
+                     (cond
+                       ((null? xs) (reverse acc))
+                       (else
+                         (let inner ((interns (cdr (car xs))) (h (car (car xs))) (acc2 acc))
+                           (cond
+                             ((null? interns) (outer (cdr xs) acc2))
+                             (else
+                               (inner (cdr interns) h
+                                      (cons (cons (car interns) h) acc2))))))))))
+      (test #t
+        (bipartite-matching-equal?
+          (make-bipartite-matching flat-hi)
+          M-gs)))))
+
 (test-end "matching")
