@@ -25,7 +25,7 @@
     tropical-assignment
     ;; Rotations
     make-rotation rotation? rotation-cycle
-    apply-rotation
+    apply-rotation rotations
     ;; Field binders
     with-preference-profile with-bipartite-matching)
   (import (scheme base)

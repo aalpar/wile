@@ -409,6 +409,87 @@
       (cons 'prop-setoid (bipartite-matching-prop-setoid M))
       (cons 'recv-setoid (bipartite-matching-recv-setoid M)))))
 
+;; ─── Rotation enumeration — Phase 5 ────────────────────
+
+;; proposer-succ: find the first receiver strictly worse than M(p) for p, who strictly
+;; prefers p over her current partner in M (or is unmatched).  Returns #f if none exists.
+(define (proposer-succ p M prop-prefs recv-prefs)
+  (let* ((cur-r (bipartite-matching-partner M p))
+         (lst ((preference-profile-ranks-of prop-prefs) p))
+         ;; Drop all receivers p prefers strictly over cur-r, then drop cur-r itself.
+         (rest (let drop ((xs lst))
+                 (cond
+                   ((null? xs) '())
+                   ((preference-profile-prefers-strictly? prop-prefs p (car xs) cur-r)
+                    (drop (cdr xs)))
+                   (else (cdr xs))))))  ; cdr skips cur-r itself
+    (let try ((xs rest))
+      (cond
+        ((null? xs) #f)
+        (else
+          (let* ((r (car xs))
+                 (cur-p (bipartite-matching-partner M r)))
+            (if (or (not cur-p)
+                    (preference-profile-prefers-strictly? recv-prefs r p cur-p))
+                r
+                (try (cdr xs)))))))))
+
+;; walk-for-cycle: starting from p, follow the successor graph p → M(succ(p)) → ...
+;; accumulating path newest-first.  When a proposer is revisited, extract the cycle
+;; as (proposer . M(proposer)) pairs in cycle order (oldest-first) and return a rotation.
+;; Returns #f if the walk terminates without a cycle.
+(define (walk-for-cycle start M prop-prefs recv-prefs PS)
+  (let walk ((p start) (path '()))
+    ;; Check whether p already appears in path (path entries = (proposer . succ-receiver)).
+    (let ((seen (let search ((xs path))
+                  (cond ((null? xs) #f)
+                        ((setoid-equiv? PS p (car (car xs))) (car xs))
+                        (else (search (cdr xs)))))))
+      (cond
+        (seen
+         ;; p is revisited.  The cycle is all path entries from the FRONT up to and
+         ;; including `seen`, then reversed to oldest-first order.
+         (let ((cycle-path
+                 (let collect ((xs path) (acc '()))
+                   (cond
+                     ((null? xs) (reverse acc))  ; safety — seen must be in path
+                     ((eq? (car xs) seen)
+                      (reverse (cons (car xs) acc)))
+                     (else
+                      (collect (cdr xs) (cons (car xs) acc)))))))
+           (make-rotation
+             (map (lambda (cell)
+                    (cons (car cell)
+                          (bipartite-matching-partner M (car cell))))
+                  cycle-path))))
+        (else
+         (let ((s (proposer-succ p M prop-prefs recv-prefs)))
+           (and s
+                (let ((p-next (bipartite-matching-partner M s)))
+                  (and p-next
+                       (walk p-next (cons (cons p s) path)))))))))))
+
+;; find-one-rotation: try each proposer as a walk start; return the first rotation
+;; found, or #f if M has no exposed rotation (M = M_bot).
+(define (find-one-rotation M prop-prefs recv-prefs)
+  (let ((proposers (preference-profile-agents prop-prefs))
+        (PS (preference-profile-setoid prop-prefs)))
+    (let try ((ps proposers))
+      (cond
+        ((null? ps) #f)
+        (else
+         (let ((rho (walk-for-cycle (car ps) M prop-prefs recv-prefs PS)))
+           (if rho rho (try (cdr ps)))))))))
+
+(define (rotations prop-prefs recv-prefs)
+  "Enumerate all rotations of the stable-matching system for the given preferences.\nEach rotation, when applied to M_top, produces another stable matching. The set of\nrotations is in bijection with the join-irreducibles of the Conway distributive lattice\n(Gusfield-Irving 1989, Theorem 3.3.1). Returns an empty list when M_top = M_bot.\n\nParameters:\n  prop-prefs : preference-profile\n  recv-prefs : preference-profile\nReturns: list of <rotation>\nCategory: algebra\nKeywords: rotation, Gusfield-Irving, Conway, stable matching, join-irreducibles"
+  (let walk ((M (gale-shapley prop-prefs recv-prefs))
+             (acc '()))
+    (let ((rho (find-one-rotation M prop-prefs recv-prefs)))
+      (cond
+        ((not rho) (reverse acc))
+        (else (walk (apply-rotation M rho) (cons rho acc)))))))
+
 ;; ─── Hungarian (Kuhn-Munkres) — Phase 4 ─────────────────
 
 (define (kuhn-munkres-square C n)

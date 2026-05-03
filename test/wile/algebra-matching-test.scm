@@ -335,4 +335,34 @@
       (test 'b (bipartite-matching-partner Mp 1))
       (test 'a (bipartite-matching-partner Mp 2)))))
 
+(test-group "rotations on Gusfield-Irving 4x4"
+  (let* ((mp (make-preference-profile
+               '(1 2 3 4)
+               (lambda (m)
+                 (case m
+                   ((1) '(a b c d))
+                   ((2) '(b a c d))
+                   ((3) '(a c b d))
+                   ((4) '(c a b d))))))
+         (wp (make-preference-profile
+               '(a b c d)
+               (lambda (w)
+                 (case w
+                   ((a) '(2 4 1 3))
+                   ((b) '(3 1 2 4))
+                   ((c) '(2 3 4 1))
+                   ((d) '(4 1 3 2))))))
+         (rhos (rotations mp wp)))
+    (test #t (list? rhos))
+    ;; Every element must be a <rotation>
+    (let loop ((xs rhos))
+      (cond ((null? xs) 'ok)
+            (else (test #t (rotation? (car xs))) (loop (cdr xs)))))
+    ;; Applying every rotation in M_top must yield a stable matching
+    (let ((M-top (gale-shapley mp wp)))
+      (let loop ((xs rhos))
+        (cond ((null? xs) 'ok)
+              (else (test #t (stable? (apply-rotation M-top (car xs)) mp wp))
+                    (loop (cdr xs))))))))
+
 (test-end "matching")
