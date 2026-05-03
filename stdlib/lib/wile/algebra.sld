@@ -230,6 +230,7 @@
     preference-profile-setoid
     preference-profile-rank-of
     preference-profile-prefers-strictly?
+    validate-preference-profile
     ;; Combinatorial graphs — core (§5.6)
     make-graph graph?
     graph-vertices graph-edges graph-neighbors graph-degree

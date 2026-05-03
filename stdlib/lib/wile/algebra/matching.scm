@@ -39,3 +39,23 @@
   (let ((rx (preference-profile-rank-of P agent x))
         (ry (preference-profile-rank-of P agent y)))
     (and rx ry (< rx ry))))
+
+(define (validate-preference-profile P candidate-set)
+  "Verify that every agent in P ranks only members of CANDIDATE-SET, with no ties.\nReturns #t on success or a reversed list of (violation-type agent ...) entries.\n\nParameters:\n  P : preference-profile\n  candidate-set : list — universe of valid candidates\nReturns: #t or list\nCategory: algebra\nKeywords: validation, preferences"
+  (let* ((fail! (make-violation-reporter))
+         (S (preference-profile-setoid P)))
+    (for-each
+      (lambda (agent)
+        (let ((lst ((preference-profile-ranks-of P) agent)))
+          (for-each
+            (lambda (c)
+              (unless (setoid-member? S c candidate-set)
+                (fail! 'preference-out-of-set agent c)))
+            lst)
+          (let loop ((xs lst))
+            (cond ((or (null? xs) (null? (cdr xs))) 'ok)
+                  ((setoid-member? S (car xs) (cdr xs))
+                   (fail! 'tied-preference agent (car xs)))
+                  (else (loop (cdr xs)))))))
+      (preference-profile-agents P))
+    (fail!)))

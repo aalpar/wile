@@ -37,4 +37,18 @@
     (test #f (preference-profile-prefers-strictly? P 'a 'x 'w))
     (test #f (preference-profile-prefers-strictly? P 'a 'w 'x))))
 
+(test-group "validate-preference-profile"
+  (let ((good (make-preference-profile
+                '(a b)
+                (lambda (x) (case x ((a) '(y x)) ((b) '(x y)))))))
+    (test #t (validate-preference-profile good '(x y))))
+  (let ((bad-out-of-set (make-preference-profile
+                          '(a)
+                          (lambda (x) '(z)))))
+    (test #f (eq? #t (validate-preference-profile bad-out-of-set '(x y)))))
+  (let ((bad-tied (make-preference-profile
+                    '(a)
+                    (lambda (x) '(x x)))))
+    (test #f (eq? #t (validate-preference-profile bad-tied '(x y))))))
+
 (test-end "matching")

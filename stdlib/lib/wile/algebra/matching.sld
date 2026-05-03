@@ -6,7 +6,8 @@
     preference-profile-agents preference-profile-ranks-of
     preference-profile-setoid
     preference-profile-rank-of
-    preference-profile-prefers-strictly?)
+    preference-profile-prefers-strictly?
+    validate-preference-profile)
   (import (scheme base)
           (wile algebra setoid))
   (include "matching.scm"))
