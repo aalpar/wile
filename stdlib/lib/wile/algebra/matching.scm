@@ -53,9 +53,11 @@
                 (fail! 'preference-out-of-set agent c)))
             lst)
           (let loop ((xs lst))
-            (cond ((or (null? xs) (null? (cdr xs))) 'ok)
-                  ((setoid-member? S (car xs) (cdr xs))
-                   (fail! 'tied-preference agent (car xs)))
-                  (else (loop (cdr xs)))))))
+            (cond
+              ((or (null? xs) (null? (cdr xs))) 'ok)
+              (else
+                (when (setoid-member? S (car xs) (cdr xs))
+                  (fail! 'tied-preference agent (car xs)))
+                (loop (cdr xs)))))))
       (preference-profile-agents P))
     (fail!)))

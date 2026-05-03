@@ -45,10 +45,12 @@
   (let ((bad-out-of-set (make-preference-profile
                           '(a)
                           (lambda (x) '(z)))))
-    (test #f (eq? #t (validate-preference-profile bad-out-of-set '(x y)))))
+    (test '((preference-out-of-set a z))
+          (validate-preference-profile bad-out-of-set '(x y))))
   (let ((bad-tied (make-preference-profile
                     '(a)
                     (lambda (x) '(x x)))))
-    (test #f (eq? #t (validate-preference-profile bad-tied '(x y))))))
+    (test '((tied-preference a x))
+          (validate-preference-profile bad-tied '(x y)))))
 
 (test-end "matching")
