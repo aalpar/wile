@@ -14,7 +14,9 @@
     bipartite-matching-prop-setoid
     bipartite-matching-recv-setoid
     bipartite-matching-partner
-    bipartite-matching-unmatched)
+    bipartite-matching-unmatched
+    bipartite-matching-equal?
+    validate-bipartite-matching)
   (import (scheme base)
           (wile algebra setoid))
   (include "matching.scm"))

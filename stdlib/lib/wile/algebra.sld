@@ -238,6 +238,8 @@
     bipartite-matching-recv-setoid
     bipartite-matching-partner
     bipartite-matching-unmatched
+    bipartite-matching-equal?
+    validate-bipartite-matching
     ;; Combinatorial graphs — core (§5.6)
     make-graph graph?
     graph-vertices graph-edges graph-neighbors graph-degree

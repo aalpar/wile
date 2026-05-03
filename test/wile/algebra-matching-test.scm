@@ -66,4 +66,13 @@
     (test '(c) (bipartite-matching-unmatched M 'proposer '(a b c)))
     (test '(z) (bipartite-matching-unmatched M 'receiver '(x y z)))))
 
+(test-group "bipartite-matching equality and validation"
+  (let ((M1 (make-bipartite-matching '((a . x) (b . y))))
+        (M2 (make-bipartite-matching '((b . y) (a . x))))
+        (M3 (make-bipartite-matching '((a . y) (b . x)))))
+    (test #t (bipartite-matching-equal? M1 M2))
+    (test #f (bipartite-matching-equal? M1 M3)))
+  (let ((M (make-bipartite-matching '((a . x) (b . x)))))
+    (test #f (eq? #t (validate-bipartite-matching M '(a b) '(x y))))))
+
 (test-end "matching")
