@@ -35,7 +35,7 @@
 - Create: `stdlib/lib/wile/algebra/matching.scm`
 - Create: `test/wile/algebra-matching-test.scm`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```scheme
 ;;; algebra-matching-test.scm — Two-sided matching tests
@@ -62,12 +62,12 @@
 (test-end "matching")
 ```
 
-- [ ] **Step 2: Run test — expect failure**
+- [x] **Step 2: Run test — expect failure**
 
 Run: `wile --file test/wile/algebra-matching-test.scm`
 Expected: Library not found error.
 
-- [ ] **Step 3: Implement library skeleton + record**
+- [x] **Step 3: Implement library skeleton + record**
 
 `stdlib/lib/wile/algebra/matching.sld`:
 
@@ -116,12 +116,12 @@ Expected: Library not found error.
     (make-preference-profile* agents ranks-of setoid)))
 ```
 
-- [ ] **Step 4: Run test — expect pass**
+- [x] **Step 4: Run test — expect pass**
 
 Run: `wile --file test/wile/algebra-matching-test.scm`
 Expected: `preference-profile construction` group passes.
 
-- [ ] **Step 5: Lint + commit**
+- [x] **Step 5: Lint + commit**
 
 ```bash
 make lint
@@ -138,7 +138,7 @@ git commit -m "feat(algebra/matching): scaffold library with <preference-profile
 - Modify: `stdlib/lib/wile/algebra/matching.scm` — add functions
 - Modify: `test/wile/algebra-matching-test.scm` — add test group
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 Add to test file before `(test-end "matching")`:
 
@@ -159,9 +159,9 @@ Add to test file before `(test-end "matching")`:
     (test #f (preference-profile-prefers-strictly? P 'a 'x 'x))))
 ```
 
-- [ ] **Step 2: Run test — expect failure** (`Error: undefined identifier preference-profile-rank-of`)
+- [x] **Step 2: Run test — expect failure** (`Error: undefined identifier preference-profile-rank-of`)
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add to `matching.sld` exports:
 
@@ -189,9 +189,9 @@ Add to `matching.scm`:
     (and rx ry (< rx ry))))
 ```
 
-- [ ] **Step 4: Run test — expect pass**
+- [x] **Step 4: Run test — expect pass**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 make lint
@@ -208,7 +208,7 @@ git commit -m "feat(algebra/matching): add rank-of and prefers-strictly? on pref
 - Modify: `stdlib/lib/wile/algebra/matching.scm` — add validator
 - Modify: `test/wile/algebra-matching-test.scm`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```scheme
 (test-group "validate-preference-profile"
@@ -226,9 +226,9 @@ git commit -m "feat(algebra/matching): add rank-of and prefers-strictly? on pref
     (test #f (eq? #t (validate-preference-profile bad-tied '(x y))))))
 ```
 
-- [ ] **Step 2: Run test — expect failure**
+- [x] **Step 2: Run test — expect failure**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```scheme
 (define (validate-preference-profile P candidate-set)
@@ -253,9 +253,9 @@ git commit -m "feat(algebra/matching): add rank-of and prefers-strictly? on pref
     (fail!)))
 ```
 
-- [ ] **Step 4: Run test — expect pass**
+- [x] **Step 4: Run test — expect pass**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 make lint
@@ -272,7 +272,7 @@ git commit -m "feat(algebra/matching): add validate-preference-profile (out-of-s
 - Modify: `matching.scm`
 - Modify: test file
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```scheme
 (test-group "bipartite-matching construction"
@@ -281,9 +281,9 @@ git commit -m "feat(algebra/matching): add validate-preference-profile (out-of-s
     (test '((a . x) (b . y)) (bipartite-matching-pairs M))))
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [x] **Step 2: Run — expect failure**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add to exports:
 
@@ -311,9 +311,9 @@ Add to `matching.scm`:
     (make-bipartite-matching* pairs ps rs)))
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [x] **Step 4: Run — expect pass**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 make lint
@@ -325,7 +325,7 @@ git commit -m "feat(algebra/matching): add <bipartite-matching> record"
 
 ### Task 1.5: `bipartite-matching-partner` and `bipartite-matching-unmatched`
 
-- [ ] **Step 1: Failing test**
+- [x] **Step 1: Failing test**
 
 ```scheme
 (test-group "bipartite-matching partner and unmatched"
@@ -337,9 +337,9 @@ git commit -m "feat(algebra/matching): add <bipartite-matching> record"
     (test '(z) (bipartite-matching-unmatched M 'receiver '(x y z)))))
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [x] **Step 2: Run — expect failure**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add to exports: `bipartite-matching-partner bipartite-matching-unmatched`.
 
@@ -367,9 +367,9 @@ Add to exports: `bipartite-matching-partner bipartite-matching-unmatched`.
     (filter (lambda (a) (not (setoid-member? a matched eq))) agents)))
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [x] **Step 4: Run — expect pass**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 make lint
@@ -381,7 +381,7 @@ git commit -m "feat(algebra/matching): add bipartite-matching-partner and -unmat
 
 ### Task 1.6: `bipartite-matching-equal?` + `validate-bipartite-matching`
 
-- [ ] **Step 1: Failing test**
+- [x] **Step 1: Failing test**
 
 ```scheme
 (test-group "bipartite-matching equality and validation"
@@ -394,9 +394,9 @@ git commit -m "feat(algebra/matching): add bipartite-matching-partner and -unmat
     (test #f (eq? #t (validate-bipartite-matching M '(a b) '(x y))))))
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [x] **Step 2: Run — expect failure**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add to exports: `bipartite-matching-equal? validate-bipartite-matching`.
 
@@ -439,9 +439,9 @@ Add to exports: `bipartite-matching-equal? validate-bipartite-matching`.
     (fail!)))
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [x] **Step 4: Run — expect pass**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 make lint
@@ -453,7 +453,7 @@ git commit -m "feat(algebra/matching): add equality and validation for bipartite
 
 ### Task 1.7: `blocking-pairs` and `stable?`
 
-- [ ] **Step 1: Failing test**
+- [x] **Step 1: Failing test**
 
 ```scheme
 (test-group "blocking-pairs and stable?"
@@ -470,9 +470,9 @@ git commit -m "feat(algebra/matching): add equality and validation for bipartite
     (test #f (stable? M-unstable prop-prefs recv-prefs))))
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [x] **Step 2: Run — expect failure**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add to exports: `blocking-pairs stable?`.
 
@@ -511,9 +511,9 @@ Add to exports: `blocking-pairs stable?`.
   (null? (blocking-pairs M prop-prefs recv-prefs)))
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [x] **Step 4: Run — expect pass**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 make lint
@@ -525,7 +525,7 @@ git commit -m "feat(algebra/matching): add blocking-pairs and stable? predicates
 
 ### Task 1.8: `with-preference-profile` and `with-bipartite-matching` macros + Phase 1 checkpoint
 
-- [ ] **Step 1: Failing test**
+- [x] **Step 1: Failing test**
 
 ```scheme
 (test-group "with-X macros"
@@ -538,9 +538,9 @@ git commit -m "feat(algebra/matching): add blocking-pairs and stable? predicates
       (test '((a . x)) pairs))))
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [x] **Step 2: Run — expect failure**
 
-- [ ] **Step 3: Implement** per `stdlib/lib/wile/algebra/CLAUDE.md` `with-X` skeleton
+- [x] **Step 3: Implement** per `stdlib/lib/wile/algebra/CLAUDE.md` `with-X` skeleton
 
 Add to exports: `with-preference-profile with-bipartite-matching`.
 
@@ -561,7 +561,7 @@ Add to exports: `with-preference-profile with-bipartite-matching`.
          body ...)))))
 ```
 
-- [ ] **Step 4: Run — expect pass; then run full Phase 1 checkpoint**
+- [x] **Step 4: Run — expect pass; then run full Phase 1 checkpoint**
 
 ```bash
 wile --file test/wile/algebra-matching-test.scm
@@ -571,7 +571,7 @@ make covercheck
 
 Expected: all groups pass; lint clean; coverage at or above project gate for new file.
 
-- [ ] **Step 5: Commit Phase 1 close**
+- [x] **Step 5: Commit Phase 1 close**
 
 ```bash
 git add -u
@@ -584,7 +584,7 @@ git commit -m "feat(algebra/matching): add with-X macros; Phase 1 scaffold compl
 
 ### Task 2.1: Gale-Shapley proposer-side (textbook 4×4)
 
-- [ ] **Step 1: Failing test** — Gusfield-Irving §1.2 textbook instance
+- [x] **Step 1: Failing test** — Gusfield-Irving §1.2 textbook instance
 
 ```scheme
 (test-group "gale-shapley proposer-optimal — textbook 4×4"
@@ -612,9 +612,9 @@ git commit -m "feat(algebra/matching): add with-X macros; Phase 1 scaffold compl
     (test 4 (length (bipartite-matching-pairs M)))))
 ```
 
-- [ ] **Step 2: Run — expect failure** (`Error: undefined identifier gale-shapley`)
+- [x] **Step 2: Run — expect failure** (`Error: undefined identifier gale-shapley`)
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add to exports: `gale-shapley`.
 
@@ -671,9 +671,9 @@ Add to exports: `gale-shapley`.
       `(recv-setoid . ,(preference-profile-setoid recv-prefs)))))
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [x] **Step 4: Run — expect pass**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 make lint
@@ -685,7 +685,7 @@ git commit -m "feat(algebra/matching): implement gale-shapley proposer-optimal"
 
 ### Task 2.2: Receiver-optimal variant
 
-- [ ] **Step 1: Failing test**
+- [x] **Step 1: Failing test**
 
 ```scheme
 (test-group "gale-shapley/receiver-optimal asymmetry"
@@ -704,9 +704,9 @@ git commit -m "feat(algebra/matching): implement gale-shapley proposer-optimal"
     (test #f (bipartite-matching-equal? M-prop M-recv))))
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [x] **Step 2: Run — expect failure**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add to exports: `gale-shapley/receiver-optimal`.
 
@@ -721,9 +721,9 @@ Add to exports: `gale-shapley/receiver-optimal`.
       `(recv-setoid . ,(preference-profile-setoid recv-prefs)))))
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [x] **Step 4: Run — expect pass**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 make lint
@@ -735,7 +735,7 @@ git commit -m "feat(algebra/matching): add gale-shapley/receiver-optimal"
 
 ### Task 2.3: Edge cases (unequal sides, exhausted preferences)
 
-- [ ] **Step 1: Failing test**
+- [x] **Step 1: Failing test**
 
 ```scheme
 (test-group "gale-shapley edge cases"
@@ -762,11 +762,11 @@ git commit -m "feat(algebra/matching): add gale-shapley/receiver-optimal"
     (test '(1) (bipartite-matching-unmatched M 'proposer '(1 2)))))
 ```
 
-- [ ] **Step 2: Run — expect pass** (existing implementation should already handle these)
+- [x] **Step 2: Run — expect pass** (existing implementation should already handle these)
 
 If failing: the `next-candidate` returning `#f` and `free-proposer`'s requirement that the proposer have a remaining candidate handle exhaustion. If a test fails, fix the boundary in `gale-shapley` rather than special-casing.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 make lint
@@ -778,7 +778,7 @@ git commit -m "test(algebra/matching): cover gale-shapley edge cases (unequal si
 
 ### Task 2.4: Property test — random profiles always produce a stable matching
 
-- [ ] **Step 1: Failing test**
+- [x] **Step 1: Failing test**
 
 ```scheme
 (test-group "gale-shapley property: 50 random profiles, all stable"
@@ -806,9 +806,9 @@ git commit -m "test(algebra/matching): cover gale-shapley edge cases (unequal si
 
 Note: deterministic pseudo-random (multiplicative congruential on `i`) — reproducible across runs. Replace with R7RS `random` if/when added.
 
-- [ ] **Step 2: Run — expect pass** (property holds by Gale-Shapley's correctness)
+- [x] **Step 2: Run — expect pass** (property holds by Gale-Shapley's correctness)
 
-- [ ] **Step 3: Phase 2 checkpoint**
+- [x] **Step 3: Phase 2 checkpoint**
 
 ```bash
 wile --file test/wile/algebra-matching-test.scm
@@ -817,7 +817,7 @@ make covercheck
 make ci
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add -u
@@ -830,7 +830,7 @@ git commit -m "test(algebra/matching): randomized stability property test for ga
 
 ### Task 3.1: Quota validation and `<hospital-quota>` accessor scaffolding
 
-- [ ] **Step 1: Failing test**
+- [x] **Step 1: Failing test**
 
 ```scheme
 (test-group "hospital-intern quota validation"
@@ -846,9 +846,9 @@ git commit -m "test(algebra/matching): randomized stability property test for ga
       '())))                                           ; missing h1 quota
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [x] **Step 2: Run — expect failure**
 
-- [ ] **Step 3: Implement skeleton**
+- [x] **Step 3: Implement skeleton**
 
 Add to exports: `hospital-intern-match`.
 
@@ -872,11 +872,11 @@ Add to exports: `hospital-intern-match`.
     hospitals))
 ```
 
-- [ ] **Step 4: Run — expect first two tests pass; third (full match) still fails as expected**
+- [x] **Step 4: Run — expect first two tests pass; third (full match) still fails as expected**
 
 For these tests we just want the validation to fire. Adjust if `test-error` only checks for any error.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 make lint
@@ -888,7 +888,7 @@ git commit -m "feat(algebra/matching): scaffold hospital-intern with quota valid
 
 ### Task 3.2: Roth reduction — inflate hospitals to copies, run Gale-Shapley, collapse
 
-- [ ] **Step 1: Failing test**
+- [x] **Step 1: Failing test**
 
 ```scheme
 (test-group "hospital-intern textbook example (Roth-Sotomayor §5.5 simplified)"
@@ -914,9 +914,9 @@ git commit -m "feat(algebra/matching): scaffold hospital-intern with quota valid
     (test 3 (apply + (map (lambda (cell) (length (cdr cell))) M)))))
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [x] **Step 2: Run — expect failure**
 
-- [ ] **Step 3: Implement Roth reduction**
+- [x] **Step 3: Implement Roth reduction**
 
 Replace the stub body with:
 
@@ -963,9 +963,9 @@ Replace the stub body with:
       hospitals)))
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [x] **Step 4: Run — expect pass**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 make lint
@@ -977,7 +977,7 @@ git commit -m "feat(algebra/matching): implement hospital-intern via Roth reduct
 
 ### Task 3.3: quota=1 reduces to Gale-Shapley + property test
 
-- [ ] **Step 1: Failing test**
+- [x] **Step 1: Failing test**
 
 ```scheme
 (test-group "hospital-intern quota=1 reduces to gale-shapley"
@@ -1000,11 +1000,11 @@ git commit -m "feat(algebra/matching): implement hospital-intern via Roth reduct
           M-gs)))))
 ```
 
-- [ ] **Step 2: Run — expect pass** (semantic equivalence by Roth's reduction).
+- [x] **Step 2: Run — expect pass** (semantic equivalence by Roth's reduction).
 
 If failing, the conversion of `M-hi` to flat pairs may need ordering adjustment — both alists represent unordered sets, but `bipartite-matching-equal?` already handles reordering.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add -u
@@ -1015,7 +1015,7 @@ git commit -m "test(algebra/matching): hospital-intern quota=1 reduces to gale-s
 
 ### Task 3.4: Phase 3 checkpoint
 
-- [ ] **Step 1: Run full test suite + CI**
+- [x] **Step 1: Run full test suite + CI**
 
 ```bash
 wile --file test/wile/algebra-matching-test.scm
@@ -1024,7 +1024,7 @@ make covercheck
 make ci
 ```
 
-- [ ] **Step 2: Commit Phase 3 closeout**
+- [x] **Step 2: Commit Phase 3 closeout**
 
 ```bash
 git add -u
@@ -1037,7 +1037,7 @@ git commit -m "chore(algebra/matching): Phase 3 hospital-intern complete"
 
 ### Task 4.1: 2×2 Hungarian by hand
 
-- [ ] **Step 1: Failing test**
+- [x] **Step 1: Failing test**
 
 ```scheme
 (test-group "tropical-assignment 2x2 by hand"
@@ -1053,9 +1053,9 @@ git commit -m "chore(algebra/matching): Phase 3 hospital-intern complete"
     (test 'a (bipartite-matching-partner (car result) 2))))
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [x] **Step 2: Run — expect failure**
 
-- [ ] **Step 3: Implement Hungarian (Kuhn-Munkres)**
+- [x] **Step 3: Implement Hungarian (Kuhn-Munkres)**
 
 Add to exports: `tropical-assignment`.
 
@@ -1140,9 +1140,9 @@ Add to exports: `tropical-assignment`.
       result)))
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [x] **Step 4: Run — expect pass**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 make lint
@@ -1154,7 +1154,7 @@ git commit -m "feat(algebra/matching): implement tropical-assignment via Kuhn-Mu
 
 ### Task 4.2: 4×4 vs `semiring-matrix-permanent` cost agreement
 
-- [ ] **Step 1: Failing test**
+- [x] **Step 1: Failing test**
 
 ```scheme
 (test-group "tropical-assignment 4x4 cost agrees with tropical-permanent"
@@ -1189,11 +1189,11 @@ git commit -m "feat(algebra/matching): implement tropical-assignment via Kuhn-Mu
                   (and (<= orig swap) (inner (cdr ys))))))))))))
 ```
 
-- [ ] **Step 2: Run — expect pass** (Hungarian is provably optimal; the test asserts the known optimum value)
+- [x] **Step 2: Run — expect pass** (Hungarian is provably optimal; the test asserts the known optimum value)
 
 If the assignment doesn't match, debug Kuhn-Munkres — do not weaken the test.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add -u
@@ -1204,7 +1204,7 @@ git commit -m "test(algebra/matching): tropical-assignment 4x4 with cost-agreeme
 
 ### Task 4.3: Forbidden pairs and unequal sides
 
-- [ ] **Step 1: Failing test**
+- [x] **Step 1: Failing test**
 
 ```scheme
 (test-group "tropical-assignment edge cases"
@@ -1223,9 +1223,9 @@ git commit -m "test(algebra/matching): tropical-assignment 4x4 with cost-agreeme
     (test 2 (length (bipartite-matching-pairs (car r))))))
 ```
 
-- [ ] **Step 2: Run — expect pass** (existing implementation handles both)
+- [x] **Step 2: Run — expect pass** (existing implementation handles both)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add -u
