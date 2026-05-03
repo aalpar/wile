@@ -266,4 +266,16 @@
           (make-bipartite-matching flat-hi)
           M-gs)))))
 
+(test-group "tropical-assignment 2x2 by hand"
+  (let* ((cost (lambda (p r)
+                 (case p
+                   ((1) (case r ((a) 4) ((b) 1)))
+                   ((2) (case r ((a) 2) ((b) 5))))))
+         (result (tropical-assignment cost '(1 2) '(a b))))
+    ;; Optimal: 1->b (cost 1), 2->a (cost 2), total 3
+    (test 3 (cdr result))
+    (test #t (bipartite-matching? (car result)))
+    (test 'b (bipartite-matching-partner (car result) 1))
+    (test 'a (bipartite-matching-partner (car result) 2))))
+
 (test-end "matching")

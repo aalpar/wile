@@ -245,6 +245,7 @@
     ;; Algorithms
     gale-shapley gale-shapley/receiver-optimal
     hospital-intern-match
+    tropical-assignment
     ;; Field binders
     with-preference-profile with-bipartite-matching
     ;; Combinatorial graphs — core (§5.6)
