@@ -19,4 +19,19 @@
     (test '(x y z) ((preference-profile-ranks-of P) 'a))
     (test '(z x y) ((preference-profile-ranks-of P) 'c))))
 
+(test-group "preference-profile-rank-of and prefers-strictly?"
+  (let ((P (make-preference-profile
+             '(a b c)
+             (lambda (agent)
+               (case agent
+                 ((a) '(x y z))
+                 ((b) '(y x z))
+                 ((c) '(z x y)))))))
+    (test 1 (preference-profile-rank-of P 'a 'x))
+    (test 2 (preference-profile-rank-of P 'a 'y))
+    (test 3 (preference-profile-rank-of P 'a 'z))
+    (test #t (preference-profile-prefers-strictly? P 'a 'x 'y))
+    (test #f (preference-profile-prefers-strictly? P 'a 'y 'x))
+    (test #f (preference-profile-prefers-strictly? P 'a 'x 'x))))
+
 (test-end "matching")

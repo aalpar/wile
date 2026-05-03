@@ -4,7 +4,9 @@
     ;; Preference profiles
     make-preference-profile preference-profile?
     preference-profile-agents preference-profile-ranks-of
-    preference-profile-setoid)
+    preference-profile-setoid
+    preference-profile-rank-of
+    preference-profile-prefers-strictly?)
   (import (scheme base)
           (wile algebra setoid))
   (include "matching.scm"))
