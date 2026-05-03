@@ -132,4 +132,27 @@
     (test #t (stable? M-recv mp wp))
     (test #f (bipartite-matching-equal? M-prop M-recv))))
 
+(test-group "gale-shapley edge cases"
+  ;; Three proposers, two receivers — one proposer ends unmatched
+  (let* ((mp (make-preference-profile
+               '(1 2 3)
+               (lambda (m) '(a b))))
+         (wp (make-preference-profile
+               '(a b)
+               (lambda (w) '(1 2 3))))
+         (M (gale-shapley mp wp)))
+    (test #t (stable? M mp wp))
+    (test 2 (length (bipartite-matching-pairs M)))
+    (test '(3) (bipartite-matching-unmatched M 'proposer '(1 2 3))))
+  ;; Empty preference list — proposer can never match
+  (let* ((mp (make-preference-profile
+               '(1 2)
+               (lambda (m) (case m ((1) '()) ((2) '(a))))))
+         (wp (make-preference-profile
+               '(a)
+               (lambda (w) '(2 1))))
+         (M (gale-shapley mp wp)))
+    (test 1 (length (bipartite-matching-pairs M)))
+    (test '(1) (bipartite-matching-unmatched M 'proposer '(1 2)))))
+
 (test-end "matching")
