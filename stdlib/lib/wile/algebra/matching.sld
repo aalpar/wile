@@ -14,6 +14,5 @@
     bipartite-matching-prop-setoid
     bipartite-matching-recv-setoid)
   (import (scheme base)
-          (srfi 1)
           (wile algebra setoid))
   (include "matching.scm"))
