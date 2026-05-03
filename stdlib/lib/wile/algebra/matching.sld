@@ -26,8 +26,11 @@
     ;; Rotations
     make-rotation rotation? rotation-cycle
     apply-rotation rotations
+    ;; Conway lattice
+    stable-matching-lattice
     ;; Field binders
     with-preference-profile with-bipartite-matching)
   (import (scheme base)
-          (wile algebra setoid))
+          (wile algebra setoid)
+          (wile algebra lattice))
   (include "matching.scm"))

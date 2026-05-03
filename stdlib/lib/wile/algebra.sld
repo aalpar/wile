@@ -249,6 +249,8 @@
     ;; Rotations
     make-rotation rotation? rotation-cycle
     apply-rotation rotations
+    ;; Conway lattice
+    stable-matching-lattice
     ;; Field binders
     with-preference-profile with-bipartite-matching
     ;; Combinatorial graphs — core (§5.6)

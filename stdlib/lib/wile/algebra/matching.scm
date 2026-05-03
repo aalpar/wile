@@ -490,6 +490,102 @@
         ((not rho) (reverse acc))
         (else (walk (apply-rotation M rho) (cons rho acc)))))))
 
+;; ─── Conway lattice — Phase 5 ──────────────────────────
+
+(define (stable-matching-lattice prop-prefs recv-prefs)
+  "Construct the Conway distributive lattice of stable matchings (Conway 1976) by\nbrute-force enumeration of all 2^|rotations| subsets applied to the proposer-optimal\nmatching, plus deduplication. Carrier is the set of stable matchings; partial order\nis proposer-utility (M ≤ M' iff every proposer is at least as well off in M').\n\nFor degenerate inputs (M_top = M_bot, no rotations), returns a one-element lattice.\nExponential in |rotations| — soft cap of ~10 agents per side.\n\nParameters:\n  prop-prefs : preference-profile\n  recv-prefs : preference-profile\nReturns: <lattice>\nCategory: algebra\nKeywords: Conway, Birkhoff, distributive lattice, stable matching, rotation"
+  (let* ((M-top (gale-shapley prop-prefs recv-prefs))
+         (rhos (rotations prop-prefs recv-prefs))
+         (all-matchings (enumerate-stable-matchings M-top rhos prop-prefs recv-prefs)))
+    (define (leq? M1 M2)
+      (let loop ((ps (preference-profile-agents prop-prefs)))
+        (cond
+          ((null? ps) #t)
+          (else
+            (let* ((p (car ps))
+                   (pa (bipartite-matching-partner M1 p))
+                   (pb (bipartite-matching-partner M2 p)))
+              (cond
+                ((and (not pa) (not pb)) (loop (cdr ps)))
+                ((not pa) (loop (cdr ps)))
+                ((not pb) #f)
+                ((let ((RS (preference-profile-setoid recv-prefs)))
+                   (setoid-equiv? RS pa pb))
+                 (loop (cdr ps)))
+                ((preference-profile-prefers-strictly? prop-prefs p pb pa)
+                 (loop (cdr ps)))
+                (else #f)))))))
+    (define (find-join a b)
+      (let outer ((xs all-matchings) (best #f))
+        (cond
+          ((null? xs) (or best a))
+          ((and (leq? a (car xs)) (leq? b (car xs))
+                (let inner ((ys all-matchings))
+                  (cond
+                    ((null? ys) #t)
+                    ((and (leq? a (car ys)) (leq? b (car ys))
+                          (not (leq? (car xs) (car ys))))
+                     #f)
+                    (else (inner (cdr ys))))))
+           (car xs))
+          (else (outer (cdr xs) best)))))
+    (define (find-meet a b)
+      (let outer ((xs all-matchings) (best #f))
+        (cond
+          ((null? xs) (or best a))
+          ((and (leq? (car xs) a) (leq? (car xs) b)
+                (let inner ((ys all-matchings))
+                  (cond
+                    ((null? ys) #t)
+                    ((and (leq? (car ys) a) (leq? (car ys) b)
+                          (not (leq? (car ys) (car xs))))
+                     #f)
+                    (else (inner (cdr ys))))))
+           (car xs))
+          (else (outer (cdr xs) best)))))
+    (let ((M-bot (gale-shapley/receiver-optimal prop-prefs recv-prefs)))
+      (make-lattice find-join find-meet
+                    M-bot
+                    M-top
+                    leq?
+                    (cons 'elements all-matchings)
+                    (cons 'cardinality (length all-matchings))))))
+
+(define (enumerate-stable-matchings M-top rhos prop-prefs recv-prefs)
+  (let* ((subsets (all-subsets rhos))
+         (candidates
+           (map (lambda (subset)
+                  (let apply-loop ((rs subset) (M M-top))
+                    (cond
+                      ((null? rs) M)
+                      (else (apply-loop (cdr rs) (apply-rotation M (car rs)))))))
+                subsets)))
+    (let outer ((xs candidates) (acc '()))
+      (cond
+        ((null? xs) (reverse acc))
+        (else
+          (let* ((M (car xs))
+                 (already-in?
+                   (let inner ((ys acc))
+                     (cond
+                       ((null? ys) #f)
+                       ((bipartite-matching-equal? M (car ys)) #t)
+                       (else (inner (cdr ys)))))))
+            (cond
+              (already-in? (outer (cdr xs) acc))
+              ((stable? M prop-prefs recv-prefs) (outer (cdr xs) (cons M acc)))
+              (else (outer (cdr xs) acc)))))))))
+
+(define (all-subsets xs)
+  (cond
+    ((null? xs) '(()))
+    (else
+      (let ((rest (all-subsets (cdr xs))))
+        (let combine ((rs rest) (acc rest))
+          (cond
+            ((null? rs) acc)
+            (else (combine (cdr rs) (cons (cons (car xs) (car rs)) acc)))))))))
+
 ;; ─── Hungarian (Kuhn-Munkres) — Phase 4 ─────────────────
 
 (define (kuhn-munkres-square C n)

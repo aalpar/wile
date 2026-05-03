@@ -2,7 +2,8 @@
 
 (import (scheme base)
         (chibi test)
-        (wile algebra matching))
+        (wile algebra matching)
+        (wile algebra lattice))
 
 (test-begin "matching")
 
@@ -364,5 +365,18 @@
         (cond ((null? xs) 'ok)
               (else (test #t (stable? (apply-rotation M-top (car xs)) mp wp))
                     (loop (cdr xs))))))))
+
+(test-group "stable-matching-lattice"
+  ;; Use a fixture where M_top ≠ M_bot (so the lattice has multiple elements).
+  ;; Symmetric 2×2 has exactly 2 stable matchings.
+  (let* ((mp (make-preference-profile
+               '(1 2)
+               (lambda (m) (case m ((1) '(a b)) ((2) '(b a))))))
+         (wp (make-preference-profile
+               '(a b)
+               (lambda (w) (case w ((a) '(2 1)) ((b) '(1 2))))))
+         (L (stable-matching-lattice mp wp)))
+    (test #t (lattice? L))
+    (test 2 (length (lattice-elements L)))))
 
 (test-end "matching")
