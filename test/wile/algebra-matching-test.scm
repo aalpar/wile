@@ -310,4 +310,19 @@
       (test 18 (cdr r))
       (test #t (stable-assignment? (car r) cost-fn)))))
 
+(test-group "tropical-assignment edge cases"
+  ;; Forbidden pair (+inf.0): assignment routes around it
+  (let* ((cost-fn (lambda (p r)
+                    (case p
+                      ((1) (case r ((a) 1) ((b) +inf.0)))
+                      ((2) (case r ((a) 5) ((b) 2))))))
+         (r (tropical-assignment cost-fn '(1 2) '(a b))))
+    (test 3 (cdr r))                          ; 1→a (1) + 2→b (2) = 3
+    (test 'a (bipartite-matching-partner (car r) 1)))
+  ;; Unequal sides: 3 proposers, 2 receivers — one proposer unmatched
+  (let* ((cost-fn (lambda (p r)
+                    (case p ((1) 1) ((2) 2) ((3) 3))))
+         (r (tropical-assignment cost-fn '(1 2 3) '(a b))))
+    (test 2 (length (bipartite-matching-pairs (car r))))))
+
 (test-end "matching")
