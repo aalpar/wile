@@ -379,4 +379,16 @@
     (test #t (lattice? L))
     (test 2 (length (lattice-elements L)))))
 
+(test-group "egalitarian and sex-equal selectors"
+  (let* ((mp (make-preference-profile
+               '(1 2)
+               (lambda (m) (case m ((1) '(a b)) ((2) '(b a))))))
+         (wp (make-preference-profile
+               '(a b)
+               (lambda (w) (case w ((a) '(2 1)) ((b) '(1 2))))))
+         (E (egalitarian-stable-matching mp wp))
+         (S (sex-equal-stable-matching mp wp)))
+    (test #t (stable? E mp wp))
+    (test #t (stable? S mp wp))))
+
 (test-end "matching")

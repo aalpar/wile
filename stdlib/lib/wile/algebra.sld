@@ -251,6 +251,8 @@
     apply-rotation rotations
     ;; Conway lattice
     stable-matching-lattice
+    ;; Stable-matching selectors
+    egalitarian-stable-matching sex-equal-stable-matching
     ;; Field binders
     with-preference-profile with-bipartite-matching
     ;; Combinatorial graphs — core (§5.6)

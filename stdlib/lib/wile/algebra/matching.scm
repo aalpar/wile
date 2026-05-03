@@ -659,6 +659,54 @@
           (result-loop (+ j 1))))
       result)))
 
+(define (egalitarian-stable-matching prop-prefs recv-prefs)
+  "Return the stable matching minimizing total-sum-of-ranks across both sides.\nNP-hard in general (Iwama-Manlove 1999); v1 brute-forces the enumerated stable set,\nso practical only for ~10 agents per side. See `stable-matching-lattice` for the\nunderlying enumeration.\n\nParameters:\n  prop-prefs : preference-profile\n  recv-prefs : preference-profile\nReturns: <bipartite-matching>\nCategory: algebra\nKeywords: egalitarian, stable matching, minimum sum rank, NP-hard"
+  (let* ((L (stable-matching-lattice prop-prefs recv-prefs))
+         (matchings (lattice-elements L)))
+    (define (sum-rank M)
+      (let outer ((ps (bipartite-matching-pairs M)) (total 0))
+        (cond
+          ((null? ps) total)
+          (else
+            (let* ((pr (car ps))
+                   (p (car pr))
+                   (r (cdr pr))
+                   (rp (preference-profile-rank-of prop-prefs p r))
+                   (rr (preference-profile-rank-of recv-prefs r p)))
+              (outer (cdr ps) (+ total (or rp 0) (or rr 0))))))))
+    (let loop ((xs matchings) (best #f) (best-score +inf.0))
+      (cond
+        ((null? xs) best)
+        (else
+          (let ((s (sum-rank (car xs))))
+            (cond
+              ((< s best-score) (loop (cdr xs) (car xs) s))
+              (else (loop (cdr xs) best best-score)))))))))
+
+(define (sex-equal-stable-matching prop-prefs recv-prefs)
+  "Return the stable matching minimizing |sum-rank-proposers − sum-rank-receivers|.\nNP-hard in general; same brute-force caveat as egalitarian-stable-matching.\n\nParameters:\n  prop-prefs : preference-profile\n  recv-prefs : preference-profile\nReturns: <bipartite-matching>\nCategory: algebra\nKeywords: sex-equal, stable matching, balanced, NP-hard"
+  (let* ((L (stable-matching-lattice prop-prefs recv-prefs))
+         (matchings (lattice-elements L)))
+    (define (imbalance M)
+      (let outer ((ps (bipartite-matching-pairs M)) (p-sum 0) (r-sum 0))
+        (cond
+          ((null? ps) (abs (- p-sum r-sum)))
+          (else
+            (let* ((pr (car ps))
+                   (p (car pr))
+                   (r (cdr pr))
+                   (rp (preference-profile-rank-of prop-prefs p r))
+                   (rr (preference-profile-rank-of recv-prefs r p)))
+              (outer (cdr ps) (+ p-sum (or rp 0)) (+ r-sum (or rr 0))))))))
+    (let loop ((xs matchings) (best #f) (best-score +inf.0))
+      (cond
+        ((null? xs) best)
+        (else
+          (let ((s (imbalance (car xs))))
+            (cond
+              ((< s best-score) (loop (cdr xs) (car xs) s))
+              (else (loop (cdr xs) best best-score)))))))))
+
 (define (tropical-assignment cost-fn proposers receivers)
   "Compute a minimum-cost perfect assignment via the Hungarian algorithm (Kuhn 1955; Munkres 1957).\nReturns (matching . total-cost) where matching is a <bipartite-matching>.\nUse +inf.0 in COST-FN to forbid a (proposer, receiver) pair.\n\nUnequal-size sides are padded internally with synthetic agents at +inf.0 cost; synthetic\npairs are excluded from the returned matching. The Shapley-Shubik core allocation\n(LP dual potentials) is computed internally but not returned in v1.\n\nParameters:\n  cost-fn : procedure — (proposer × receiver) → number ∪ +inf.0\n  proposers : list\n  receivers : list\nReturns: pair (<bipartite-matching> . number)\nCategory: algebra\nKeywords: Hungarian, assignment, Kuhn-Munkres, tropical, bipartite, Shapley-Shubik"
   (let* ((m (length proposers))
