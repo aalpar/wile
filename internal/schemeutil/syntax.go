@@ -16,6 +16,7 @@ package schemeutil
 
 import (
 	"context"
+	"slices"
 
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
@@ -62,7 +63,7 @@ func SyntaxValueToDatum(sv values.Value) values.Value {
 		} else {
 			result = values.EmptyList
 		}
-		for i := len(cars) - 1; i >= 0; i-- {
+		for i := range slices.Backward(cars) {
 			result = values.NewCons(cars[i], result)
 		}
 		return result

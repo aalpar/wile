@@ -49,6 +49,7 @@ package match
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/werr"
@@ -282,7 +283,7 @@ func compileVectorElement(vis *SyntaxCompiler, stack []syntaxCompilerStackEntry,
 // compilation for vector pattern contents.
 func vectorElementsToPairChain(vec *syntax.SyntaxVector) *syntax.SyntaxPair {
 	var chain syntax.SyntaxValue = syntax.SyntaxEmptyList
-	for i := len(vec.Values) - 1; i >= 0; i-- {
+	for i := range slices.Backward(vec.Values) {
 		chain = syntax.NewSyntaxCons(vec.Values[i], chain, vec.SourceContext())
 	}
 	return chain.(*syntax.SyntaxPair)

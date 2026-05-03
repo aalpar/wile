@@ -16,6 +16,7 @@ package core
 
 import (
 	"context"
+	"slices"
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
@@ -101,7 +102,7 @@ func PrimAppend(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "append: expected proper list of arguments")
 	}
 	var result values.Value = values.EmptyList
-	for i := len(lists) - 1; i >= 0; i-- {
+	for i := range slices.Backward(lists) {
 		lst := lists[i]
 		if i == len(lists)-1 {
 			result = lst
@@ -125,7 +126,7 @@ func PrimAppend(mc machine.CallContext) error {
 		if !values.IsEmptyList(v) {
 			return werr.WrapForeignErrorf(werr.ErrNotAList, "append: expected proper list but got improper list")
 		}
-		for j := len(elems) - 1; j >= 0; j-- {
+		for j := range slices.Backward(elems) {
 			result = values.NewCons(elems[j], result)
 		}
 	}

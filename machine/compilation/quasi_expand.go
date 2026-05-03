@@ -17,6 +17,7 @@ package compilation
 import (
 	"context"
 	"errors"
+	"slices"
 
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
@@ -53,7 +54,7 @@ var quasisyntaxKW = quasiKeywords{
 // buildQuasiSyntaxList creates a proper list from syntax elements.
 func (p *CompileTimeContinuation) buildQuasiSyntaxList(srcCtx *syntax.SourceContext, elems ...syntax.SyntaxValue) syntax.SyntaxValue {
 	var result syntax.SyntaxValue = syntax.SyntaxEmptyList
-	for i := len(elems) - 1; i >= 0; i-- {
+	for i := range slices.Backward(elems) {
 		result = syntax.NewSyntaxCons(elems[i], result, srcCtx)
 	}
 	return result

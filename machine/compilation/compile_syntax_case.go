@@ -16,6 +16,7 @@ package compilation
 
 import (
 	"context"
+	"slices"
 	"sort"
 
 	"github.com/aalpar/wile/machine"
@@ -305,8 +306,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 
 	// Patch fail jumps for this clause to point to the next clause
 	nextClauseStart := p.template.CodeLen()
-	for i := len(*failJumps) - 1; i >= 0; i-- {
-		patch := (*failJumps)[i]
+	for _, patch := range slices.Backward(*failJumps) {
 		if patch.clauseIndex == clauseIndex {
 			p.patchBranchTarget(patch.opIndex, nextClauseStart)
 		}
