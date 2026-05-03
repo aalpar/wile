@@ -88,4 +88,13 @@
     (test #f (null? (blocking-pairs M-unstable prop-prefs recv-prefs)))
     (test #f (stable? M-unstable prop-prefs recv-prefs))))
 
+(test-group "with-X macros"
+  (let ((P (make-preference-profile '(a) (lambda (x) '(y)))))
+    (with-preference-profile P (agents ranks-of)
+      (test '(a) agents)
+      (test '(y) (ranks-of 'a))))
+  (let ((M (make-bipartite-matching '((a . x)))))
+    (with-bipartite-matching M (pairs)
+      (test '((a . x)) pairs))))
+
 (test-end "matching")

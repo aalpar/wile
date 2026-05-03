@@ -242,6 +242,8 @@
     validate-bipartite-matching
     ;; Stability
     blocking-pairs stable?
+    ;; Field binders
+    with-preference-profile with-bipartite-matching
     ;; Combinatorial graphs — core (§5.6)
     make-graph graph?
     graph-vertices graph-edges graph-neighbors graph-degree

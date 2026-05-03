@@ -18,7 +18,9 @@
     bipartite-matching-equal?
     validate-bipartite-matching
     ;; Stability
-    blocking-pairs stable?)
+    blocking-pairs stable?
+    ;; Field binders
+    with-preference-profile with-bipartite-matching)
   (import (scheme base)
           (wile algebra setoid))
   (include "matching.scm"))

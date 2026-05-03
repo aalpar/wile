@@ -174,3 +174,18 @@
 (define (stable? M prop-prefs recv-prefs)
   "Return #t iff matching M is stable under the given preferences (no blocking pair).\n\nParameters:\n  M : bipartite-matching\n  prop-prefs : preference-profile\n  recv-prefs : preference-profile\nReturns: boolean\nCategory: algebra\nKeywords: stability, Gale-Shapley, two-sided matching"
   (null? (blocking-pairs M prop-prefs recv-prefs)))
+
+(define-syntax with-preference-profile
+  (syntax-rules ()
+    ((with-preference-profile p (agents ranks-of) body ...)
+     (let ((tmp p))
+       (let ((agents (preference-profile-agents tmp))
+             (ranks-of (preference-profile-ranks-of tmp)))
+         body ...)))))
+
+(define-syntax with-bipartite-matching
+  (syntax-rules ()
+    ((with-bipartite-matching m (pairs) body ...)
+     (let ((tmp m))
+       (let ((pairs (bipartite-matching-pairs tmp)))
+         body ...)))))
