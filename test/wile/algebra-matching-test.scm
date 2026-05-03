@@ -155,4 +155,55 @@
     (test 1 (length (bipartite-matching-pairs M)))
     (test '(1) (bipartite-matching-unmatched M 'proposer '(1 2)))))
 
+(test-group "gale-shapley property: 50 random profiles, all stable"
+  (define (random-perm n trial)
+    ;; Deterministic pseudo-random shuffle using Park-Miller-style MCG.
+    ;; Different `trial` values produce different permutations.
+    (let* ((vec (let loop ((i 0) (acc '()))
+                  (if (>= i n) (list->vector (reverse acc))
+                      (loop (+ i 1) (cons i acc))))))
+      (do ((i (- n 1) (- i 1)))
+          ((<= i 0))
+        (let* ((seed (modulo (+ (* (+ trial 1) 2654435761)
+                                (* (+ i 1) 1597334677))
+                             2147483647))
+               (j (modulo seed (+ i 1)))
+               (tmp (vector-ref vec i)))
+          (vector-set! vec i (vector-ref vec j))
+          (vector-set! vec j tmp)))
+      (vector->list vec)))
+  ;; Build symbol tables for proposer and receiver agents
+  (define p-agents (let loop ((i 0) (acc '()))
+                     (if (>= i 5) (reverse acc)
+                         (loop (+ i 1) (cons (string->symbol (string-append "p" (number->string i))) acc)))))
+  (define r-agents (let loop ((i 0) (acc '()))
+                     (if (>= i 5) (reverse acc)
+                         (loop (+ i 1) (cons (string->symbol (string-append "r" (number->string i))) acc)))))
+  (define (p-agent-index agent)
+    (let loop ((i 0) (agents p-agents))
+      (cond ((null? agents) #f)
+            ((eq? agent (car agents)) i)
+            (else (loop (+ i 1) (cdr agents))))))
+  (define (r-agent-index agent)
+    (let loop ((i 0) (agents r-agents))
+      (cond ((null? agents) #f)
+            ((eq? agent (car agents)) i)
+            (else (loop (+ i 1) (cdr agents))))))
+  (let ((n 5))
+    (do ((trial 0 (+ trial 1))) ((>= trial 50))
+      (let* ((mp (make-preference-profile
+                   p-agents
+                   (lambda (p)
+                     (let ((idx (p-agent-index p)))
+                       (map (lambda (i) (list-ref r-agents i))
+                            (random-perm n (+ trial (* idx 17))))))))
+             (wp (make-preference-profile
+                   r-agents
+                   (lambda (r)
+                     (let ((idx (r-agent-index r)))
+                       (map (lambda (i) (list-ref p-agents i))
+                            (random-perm n (+ trial (* idx 23) 7)))))))
+             (M (gale-shapley mp wp)))
+        (test-assert (stable? M mp wp))))))
+
 (test-end "matching")
