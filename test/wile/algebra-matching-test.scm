@@ -32,6 +32,9 @@
     (test 3 (preference-profile-rank-of P 'a 'z))
     (test #t (preference-profile-prefers-strictly? P 'a 'x 'y))
     (test #f (preference-profile-prefers-strictly? P 'a 'y 'x))
-    (test #f (preference-profile-prefers-strictly? P 'a 'x 'x))))
+    (test #f (preference-profile-prefers-strictly? P 'a 'x 'x))
+    (test #f (preference-profile-rank-of P 'a 'w))
+    (test #f (preference-profile-prefers-strictly? P 'a 'x 'w))
+    (test #f (preference-profile-prefers-strictly? P 'a 'w 'x))))
 
 (test-end "matching")
