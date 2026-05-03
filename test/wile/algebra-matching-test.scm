@@ -53,4 +53,9 @@
     (test '((tied-preference a x))
           (validate-preference-profile bad-tied '(x y)))))
 
+(test-group "bipartite-matching construction"
+  (let ((M (make-bipartite-matching '((a . x) (b . y)))))
+    (test #t (bipartite-matching? M))
+    (test '((a . x) (b . y)) (bipartite-matching-pairs M))))
+
 (test-end "matching")

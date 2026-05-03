@@ -61,3 +61,17 @@
                 (loop (cdr xs)))))))
       (preference-profile-agents P))
     (fail!)))
+
+(define-record-type <bipartite-matching>
+  (make-bipartite-matching* pairs prop-setoid recv-setoid)
+  bipartite-matching?
+  (pairs bipartite-matching-pairs)
+  (prop-setoid bipartite-matching-prop-setoid)
+  (recv-setoid bipartite-matching-recv-setoid))
+
+(define (make-bipartite-matching pairs . opts)
+  "Construct a bipartite matching from an alist of (proposer . receiver) pairs.\nOptional trailing alist supports (prop-setoid . S), (recv-setoid . S).\n\nParameters:\n  pairs : alist of (any . any)\nReturns: <bipartite-matching>\nCategory: algebra\nKeywords: bipartite matching, assignment, two-sided"
+  (validate-opts-keys "make-bipartite-matching" opts '(prop-setoid recv-setoid))
+  (let ((ps (assv-or opts 'prop-setoid (default-setoid)))
+        (rs (assv-or opts 'recv-setoid (default-setoid))))
+    (make-bipartite-matching* pairs ps rs)))

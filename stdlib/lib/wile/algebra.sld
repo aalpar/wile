@@ -231,6 +231,11 @@
     preference-profile-rank-of
     preference-profile-prefers-strictly?
     validate-preference-profile
+    ;; Bipartite matchings
+    make-bipartite-matching bipartite-matching?
+    bipartite-matching-pairs
+    bipartite-matching-prop-setoid
+    bipartite-matching-recv-setoid
     ;; Combinatorial graphs — core (§5.6)
     make-graph graph?
     graph-vertices graph-edges graph-neighbors graph-degree
