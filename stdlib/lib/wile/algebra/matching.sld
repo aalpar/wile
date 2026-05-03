@@ -16,7 +16,9 @@
     bipartite-matching-partner
     bipartite-matching-unmatched
     bipartite-matching-equal?
-    validate-bipartite-matching)
+    validate-bipartite-matching
+    ;; Stability
+    blocking-pairs stable?)
   (import (scheme base)
           (wile algebra setoid))
   (include "matching.scm"))

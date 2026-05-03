@@ -240,6 +240,8 @@
     bipartite-matching-unmatched
     bipartite-matching-equal?
     validate-bipartite-matching
+    ;; Stability
+    blocking-pairs stable?
     ;; Combinatorial graphs — core (§5.6)
     make-graph graph?
     graph-vertices graph-edges graph-neighbors graph-degree

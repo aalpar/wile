@@ -76,4 +76,16 @@
     (test '((receiver-matched-twice x))
           (validate-bipartite-matching M '(a b) '(x y)))))
 
+(test-group "blocking-pairs and stable?"
+  (let* ((prop-prefs (make-preference-profile
+                       '(a b) (lambda (x) (case x ((a) '(y x)) ((b) '(x y))))))
+         (recv-prefs (make-preference-profile
+                       '(x y) (lambda (x) (case x ((x) '(a b)) ((y) '(a b))))))
+         (M-stable (make-bipartite-matching '((a . y) (b . x))))
+         (M-unstable (make-bipartite-matching '((a . x) (b . y)))))
+    (test '() (blocking-pairs M-stable prop-prefs recv-prefs))
+    (test #t (stable? M-stable prop-prefs recv-prefs))
+    (test #f (null? (blocking-pairs M-unstable prop-prefs recv-prefs)))
+    (test #f (stable? M-unstable prop-prefs recv-prefs))))
+
 (test-end "matching")

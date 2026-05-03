@@ -142,3 +142,35 @@
               (fail! 'receiver-matched-twice r))
             (loop (cons p seen-p) (cons r seen-r) (cdr ps))))))
     (fail!)))
+
+(define (blocking-pairs M prop-prefs recv-prefs)
+  "Return the list of (proposer . receiver) blocking pairs in matching M.\nA blocking pair (p,r) satisfies: they are not currently matched together,\nyet p prefers r over its current partner (or is unmatched), AND\nr prefers p over its current partner (or is unmatched).\nM is stable iff this list is empty.\n\nParameters:\n  M : bipartite-matching\n  prop-prefs : preference-profile — proposers' preferences over receivers\n  recv-prefs : preference-profile — receivers' preferences over proposers\nReturns: list of (any . any)\nCategory: algebra\nKeywords: stability, blocking pair, Gale-Shapley"
+  (let* ((RS (preference-profile-setoid recv-prefs))
+         (proposers (preference-profile-agents prop-prefs))
+         (receivers (preference-profile-agents recv-prefs)))
+    (let outer ((ps proposers) (acc '()))
+      (cond
+        ((null? ps) (reverse acc))
+        (else
+          (let* ((p (car ps))
+                 (cur-r (bipartite-matching-partner M p)))
+            (let inner ((rs receivers) (acc2 acc))
+              (cond
+                ((null? rs) (outer (cdr ps) acc2))
+                (else
+                  (let* ((r (car rs))
+                         (cur-p (bipartite-matching-partner M r))
+                         (already-matched? (and cur-r (setoid-equiv? RS cur-r r)))
+                         (p-prefers-r (or (not cur-r)
+                                          (preference-profile-prefers-strictly?
+                                            prop-prefs p r cur-r)))
+                         (r-prefers-p (or (not cur-p)
+                                          (preference-profile-prefers-strictly?
+                                            recv-prefs r p cur-p))))
+                    (if (and (not already-matched?) p-prefers-r r-prefers-p)
+                        (inner (cdr rs) (cons (cons p r) acc2))
+                        (inner (cdr rs) acc2))))))))))))
+
+(define (stable? M prop-prefs recv-prefs)
+  "Return #t iff matching M is stable under the given preferences (no blocking pair).\n\nParameters:\n  M : bipartite-matching\n  prop-prefs : preference-profile\n  recv-prefs : preference-profile\nReturns: boolean\nCategory: algebra\nKeywords: stability, Gale-Shapley, two-sided matching"
+  (null? (blocking-pairs M prop-prefs recv-prefs)))
