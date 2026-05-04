@@ -1,6 +1,6 @@
 ;; SRFI-14 Character-Set Library
 ;;
-;; Status: Phase 1 — constructor, size, contains?, copy.
+;; Status: Phase 3 — iteration layer (fold, for-each).
 ;;
 ;; Cuts deferred from v1 (per plans/2026-05-04-srfi-14-design.md §11):
 ;;   char-set-hash             — spec is loose; no portable algorithm.
@@ -34,9 +34,12 @@
     char-set-adjoin! char-set-delete! char-set-complement!
     char-set-union! char-set-intersection! char-set-difference!
     char-set-xor! list->char-set! string->char-set!
-    ucs-range->char-set!)
+    ucs-range->char-set!
+    ;; Phase 3 Task 3.1: iteration
+    char-set-fold char-set-for-each)
 
-  (import (scheme base))
+  (import (scheme base)
+          (wile charsets))   ; for char-set-ranges, used by util.scm
 
   ;; FFI primitives (char-set?, char-set-contains?, char-set-size,
   ;; %char-set, %empty-char-set, char-set-copy) are bound at the namespace
@@ -44,4 +47,6 @@
   ;; Scheme-level (char-set ...) dispatcher that dispatches to those FFI
   ;; primitives.
   (include "14/dispatcher.scm")
-  (include "14/algebra.scm"))
+  (include "14/algebra.scm")
+  (include "14/util.scm")
+  (include "14/iteration.scm"))

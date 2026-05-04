@@ -324,6 +324,37 @@ func TestCharSetAlgebra(t *testing.T) {
 		valuestest.SchemeEquals, values.NewInteger(0x110000))
 }
 
+func TestCharSetFoldForEach(t *testing.T) {
+	c := qt.New(t)
+	engine := newLibraryEngine(t)
+	runScheme(t, engine, "(import (srfi 14))")
+
+	// char-set-fold sums codepoints via char->integer (+ doesn't accept chars)
+	c.Assert(runScheme(t, engine, `(char-set-fold (lambda (ch acc) (+ acc (char->integer ch))) 0 (char-set #\a #\b #\c))`),
+		valuestest.SchemeEquals, values.NewInteger(97+98+99))
+
+	// char-set-fold on empty returns init unchanged
+	c.Assert(runScheme(t, engine, `(char-set-fold (lambda (c acc) (cons c acc)) '() (char-set))`),
+		qt.Equals, values.EmptyList)
+
+	// char-set-for-each side effect: reverse-cons gives reversed-ascending order
+	// ascending order is #\a #\b #\c, so cons gives (#\c #\b #\a)
+	c.Assert(runScheme(t, engine, `
+      (let ((collected '()))
+        (char-set-for-each (lambda (c) (set! collected (cons c collected)))
+                           (char-set #\c #\a #\b))
+        collected)`),
+		valuestest.SchemeEquals,
+		values.List(values.NewCharacter('c'), values.NewCharacter('b'), values.NewCharacter('a')))
+
+	// char-set-for-each on empty: lambda not called
+	c.Assert(runScheme(t, engine, `
+      (let ((called #f))
+        (char-set-for-each (lambda (c) (set! called #t)) (char-set))
+        called)`),
+		qt.Equals, values.FalseValue)
+}
+
 func TestCharSetRanges(t *testing.T) {
 	c := qt.New(t)
 	engine := newLibraryEngine(t)
