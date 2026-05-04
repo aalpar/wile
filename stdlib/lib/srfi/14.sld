@@ -28,7 +28,13 @@
     char-set= char-set<=
     ;; Phase 2 Task 2.2: set-algebra
     char-set-union char-set-intersection char-set-difference
-    char-set-xor char-set-complement)
+    char-set-xor char-set-complement
+    ;; Phase 2 Task 2.4: derived + ! aliases
+    char-set-adjoin char-set-delete
+    char-set-adjoin! char-set-delete! char-set-complement!
+    char-set-union! char-set-intersection! char-set-difference!
+    char-set-xor! list->char-set! string->char-set!
+    ucs-range->char-set!)
 
   (import (scheme base))
 
@@ -37,4 +43,5 @@
   ;; level by the `charsets` extension. The include below defines the
   ;; Scheme-level (char-set ...) dispatcher that dispatches to those FFI
   ;; primitives.
-  (include "14/dispatcher.scm"))
+  (include "14/dispatcher.scm")
+  (include "14/algebra.scm"))

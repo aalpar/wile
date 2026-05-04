@@ -173,6 +173,11 @@ func TestSRFI14Constructors(t *testing.T) {
 	runSchemeTest(t, "srfi-14-tests-constructors.scm", 2*time.Minute, "SRFI-14 Phase 1 (constructors)")
 }
 
+// TestSRFI14Algebra runs the SRFI-14 Phase-2 (set algebra, !-aliases, derived ops) integration tests.
+func TestSRFI14Algebra(t *testing.T) {
+	runSchemeTest(t, "srfi-14-tests-algebra.scm", 2*time.Minute, "SRFI-14 Phase 2 (algebra)")
+}
+
 // TestWileStrings runs the (wile strings) extras integration tests.
 func TestWileStrings(t *testing.T) {
 	runSchemeTest(t, "wile-strings-tests.scm", 2*time.Minute, "(wile strings) extras")
