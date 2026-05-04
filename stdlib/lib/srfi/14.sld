@@ -25,7 +25,10 @@
     ;; Phase 1 Task 1.7: dispatching coercing constructor
     ->char-set
     ;; Phase 2 Task 2.1: equality and subset predicates
-    char-set= char-set<=)
+    char-set= char-set<=
+    ;; Phase 2 Task 2.2: set-algebra
+    char-set-union char-set-intersection char-set-difference
+    char-set-xor char-set-complement)
 
   (import (scheme base))
 

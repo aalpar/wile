@@ -280,6 +280,50 @@ func TestCharSetSubset(t *testing.T) {
 		qt.Equals, values.TrueValue)
 }
 
+func TestCharSetAlgebra(t *testing.T) {
+	c := qt.New(t)
+	engine := newLibraryEngine(t)
+	runScheme(t, engine, "(import (srfi 14))")
+
+	// Union: {a} ∪ {b} = {a, b}
+	c.Assert(runScheme(t, engine, `(char-set->string (char-set-union (char-set #\a) (char-set #\b)))`),
+		valuestest.SchemeEquals, values.NewString("ab"))
+
+	// Union: {a, c} ∪ {b} = {a, b, c} (sorted)
+	c.Assert(runScheme(t, engine, `(char-set->string (char-set-union (char-set #\a #\c) (char-set #\b)))`),
+		valuestest.SchemeEquals, values.NewString("abc"))
+
+	// Intersection: {a, b, c} ∩ {b, c, d} = {b, c}
+	c.Assert(runScheme(t, engine, `(char-set->string (char-set-intersection (char-set #\a #\b #\c) (char-set #\b #\c #\d)))`),
+		valuestest.SchemeEquals, values.NewString("bc"))
+
+	// Empty intersection: {a} ∩ {b} = ∅
+	c.Assert(runScheme(t, engine, `(char-set-size (char-set-intersection (char-set #\a) (char-set #\b)))`),
+		valuestest.SchemeEquals, values.NewInteger(0))
+
+	// Difference: {a, b, c} \ {b} = {a, c}
+	c.Assert(runScheme(t, engine, `(char-set->string (char-set-difference (char-set #\a #\b #\c) (char-set #\b)))`),
+		valuestest.SchemeEquals, values.NewString("ac"))
+
+	// Difference subtracts ALL rest from first: {a,b,c,d} \ {b} \ {d} = {a, c}
+	c.Assert(runScheme(t, engine, `(char-set->string (char-set-difference (char-set #\a #\b #\c #\d) (char-set #\b) (char-set #\d)))`),
+		valuestest.SchemeEquals, values.NewString("ac"))
+
+	// Xor: {a, b} △ {b, c} = {a, c}
+	c.Assert(runScheme(t, engine, `(char-set->string (char-set-xor (char-set #\a #\b) (char-set #\b #\c)))`),
+		valuestest.SchemeEquals, values.NewString("ac"))
+
+	// Complement excludes the given char
+	c.Assert(runScheme(t, engine, `(char-set-contains? (char-set-complement (char-set #\a)) #\a)`),
+		qt.Equals, values.FalseValue)
+	c.Assert(runScheme(t, engine, `(char-set-contains? (char-set-complement (char-set #\a)) #\b)`),
+		qt.Equals, values.TrueValue)
+
+	// complement(empty) = full: 0x110000 codepoints
+	c.Assert(runScheme(t, engine, `(char-set-size (char-set-complement (char-set)))`),
+		valuestest.SchemeEquals, values.NewInteger(0x110000))
+}
+
 func TestCharSetRanges(t *testing.T) {
 	c := qt.New(t)
 	engine := newLibraryEngine(t)

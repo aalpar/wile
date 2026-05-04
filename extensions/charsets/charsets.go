@@ -170,6 +170,67 @@ func addPrimitives(r *registry.Registry) error {
 			Category:   "char-sets",
 			Keywords:   []string{"char-set", "subset", "compare", "srfi-14"},
 		},
+		{
+			// ParamCount: 2, IsVariadic: true → Arg(0) = cs1 (fixed),
+			// Arg(1) = rest list (any additional char-sets). Per Wile variadic
+			// convention: Arg(N-2) is the last fixed param, Arg(N-1) is rest.
+			Name:       "char-set-union",
+			ParamCount: 2,
+			IsVariadic: true,
+			Impl:       primCharSetUnion,
+			Doc:        "Returns the union of all char-sets. (SRFI-14)",
+			ParamNames: []string{"cs1", "rest"},
+			Category:   "char-sets",
+			Keywords:   []string{"char-set", "union", "srfi-14"},
+		},
+		{
+			// ParamCount: 2, IsVariadic: true → Arg(0) = cs1 (fixed),
+			// Arg(1) = rest list (any additional char-sets). Per Wile variadic
+			// convention: Arg(N-2) is the last fixed param, Arg(N-1) is rest.
+			Name:       "char-set-intersection",
+			ParamCount: 2,
+			IsVariadic: true,
+			Impl:       primCharSetIntersection,
+			Doc:        "Returns the intersection of all char-sets. (SRFI-14)",
+			ParamNames: []string{"cs1", "rest"},
+			Category:   "char-sets",
+			Keywords:   []string{"char-set", "intersection", "srfi-14"},
+		},
+		{
+			// ParamCount: 2, IsVariadic: true → Arg(0) = cs1 (fixed),
+			// Arg(1) = rest list (any additional char-sets). Per Wile variadic
+			// convention: Arg(N-2) is the last fixed param, Arg(N-1) is rest.
+			Name:       "char-set-difference",
+			ParamCount: 2,
+			IsVariadic: true,
+			Impl:       primCharSetDifference,
+			Doc:        "Returns CS1 minus the union of all subsequent char-sets. (SRFI-14)",
+			ParamNames: []string{"cs1", "rest"},
+			Category:   "char-sets",
+			Keywords:   []string{"char-set", "difference", "srfi-14"},
+		},
+		{
+			// ParamCount: 2, IsVariadic: true → Arg(0) = cs1 (fixed),
+			// Arg(1) = rest list (any additional char-sets). Per Wile variadic
+			// convention: Arg(N-2) is the last fixed param, Arg(N-1) is rest.
+			Name:       "char-set-xor",
+			ParamCount: 2,
+			IsVariadic: true,
+			Impl:       primCharSetXor,
+			Doc:        "Returns the symmetric difference of all char-sets. (SRFI-14)",
+			ParamNames: []string{"cs1", "rest"},
+			Category:   "char-sets",
+			Keywords:   []string{"char-set", "xor", "symmetric-difference", "srfi-14"},
+		},
+		{
+			Name:       "char-set-complement",
+			ParamCount: 1,
+			Impl:       primCharSetComplement,
+			Doc:        "Returns the complement of CS within [0, 0x10FFFF]. (SRFI-14)",
+			ParamNames: []string{"cs"},
+			Category:   "char-sets",
+			Keywords:   []string{"char-set", "complement", "srfi-14"},
+		},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 	return nil
 }
@@ -400,8 +461,7 @@ func primUcsRangeToCharSet(mc machine.CallContext) error {
 		})
 	}
 	if base != nil {
-		merged := append(cs.Ranges(), base.Ranges()...)
-		cs = values.NewCharSetFromUnsortedRanges(merged)
+		cs = unionTwo(cs, base)
 	}
 	mc.SetValue(cs)
 	return nil
@@ -456,15 +516,10 @@ func primCharSetRanges(mc machine.CallContext) error {
 
 // setValueFromRunesAndBase builds a char-set from runes, optionally unioned
 // with a base char-set, and stores it on the machine context.
-//
-// Phase 1 inlines the base-merge via NewCharSetFromUnsortedRanges (which
-// canonicalizes). Phase 2 Task 2.2 will replace this body with unionTwo
-// once that helper exists in extensions/charsets/charsets.go.
 func setValueFromRunesAndBase(mc machine.CallContext, runes []rune, base *values.CharSet) error {
 	cs := values.NewCharSetFromRunes(runes)
 	if base != nil {
-		merged := append(cs.Ranges(), base.Ranges()...)
-		cs = values.NewCharSetFromUnsortedRanges(merged)
+		cs = unionTwo(cs, base)
 	}
 	mc.SetValue(cs)
 	return nil
@@ -529,6 +584,136 @@ func primCharSetSubset(mc machine.CallContext) error {
 	}
 	mc.SetValue(values.TrueValue)
 	return nil
+}
+
+func primCharSetUnion(mc machine.CallContext) error {
+	sets, err := charSetVariadicArgs("char-set-union", mc)
+	if err != nil {
+		return err
+	}
+	out := sets[0]
+	for i := 1; i < len(sets); i++ {
+		out = unionTwo(out, sets[i])
+	}
+	mc.SetValue(out)
+	return nil
+}
+
+func primCharSetIntersection(mc machine.CallContext) error {
+	sets, err := charSetVariadicArgs("char-set-intersection", mc)
+	if err != nil {
+		return err
+	}
+	out := sets[0]
+	for i := 1; i < len(sets); i++ {
+		out = intersectTwo(out, sets[i])
+	}
+	mc.SetValue(out)
+	return nil
+}
+
+func primCharSetDifference(mc machine.CallContext) error {
+	sets, err := charSetVariadicArgs("char-set-difference", mc)
+	if err != nil {
+		return err
+	}
+	out := sets[0]
+	for i := 1; i < len(sets); i++ {
+		out = differenceTwo(out, sets[i])
+	}
+	mc.SetValue(out)
+	return nil
+}
+
+func primCharSetXor(mc machine.CallContext) error {
+	sets, err := charSetVariadicArgs("char-set-xor", mc)
+	if err != nil {
+		return err
+	}
+	out := sets[0]
+	for i := 1; i < len(sets); i++ {
+		out = xorTwo(out, sets[i])
+	}
+	mc.SetValue(out)
+	return nil
+}
+
+func primCharSetComplement(mc machine.CallContext) error {
+	cs, ok := mc.Arg(0).(*values.CharSet)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotACharSet,
+			"char-set-complement: argument 1: expected char-set, got %T", mc.Arg(0))
+	}
+	mc.SetValue(complementOne(cs))
+	return nil
+}
+
+// unionTwo computes a ∪ b via NewCharSetFromUnsortedRanges, which canonicalizes
+// (sorts + merges adjacent + drops invalid). Correct because the result is
+// unconditionally re-canonicalized.
+func unionTwo(a, b *values.CharSet) *values.CharSet {
+	return values.NewCharSetFromUnsortedRanges(append(a.Ranges(), b.Ranges()...))
+}
+
+// intersectTwo computes a ∩ b via linear merge over sorted ranges.
+func intersectTwo(a, b *values.CharSet) *values.CharSet {
+	ar, br := a.Ranges(), b.Ranges()
+	var out []values.CharSetRange
+	i, j := 0, 0
+	for i < len(ar) && j < len(br) {
+		lo := max(ar[i].Lo, br[j].Lo)
+		hi := min(ar[i].Hi, br[j].Hi)
+		if lo <= hi {
+			out = append(out, values.CharSetRange{Lo: lo, Hi: hi})
+		}
+		if ar[i].Hi < br[j].Hi {
+			i++
+		} else {
+			j++
+		}
+	}
+	return values.NewCharSetFromRanges(out) // already canonical
+}
+
+// differenceTwo computes a \ b via linear merge over sorted ranges.
+func differenceTwo(a, b *values.CharSet) *values.CharSet {
+	ar, br := a.Ranges(), b.Ranges()
+	var out []values.CharSetRange
+	j := 0
+	for _, r := range ar {
+		cur := r
+		// Advance past b-ranges that end before cur starts.
+		for j < len(br) && br[j].Hi < cur.Lo {
+			j++
+		}
+		// Subtract each overlapping b-range from cur.
+		for j < len(br) && br[j].Lo <= cur.Hi {
+			if br[j].Lo > cur.Lo {
+				out = append(out, values.CharSetRange{Lo: cur.Lo, Hi: br[j].Lo - 1})
+			}
+			if br[j].Hi >= cur.Hi {
+				cur.Lo = cur.Hi + 1 // mark as fully consumed
+				break
+			}
+			cur.Lo = br[j].Hi + 1
+			j++
+		}
+		if cur.Lo <= cur.Hi {
+			out = append(out, cur)
+		}
+	}
+	return values.NewCharSetFromRanges(out)
+}
+
+// xorTwo computes a △ b = (a ∪ b) \ (a ∩ b).
+func xorTwo(a, b *values.CharSet) *values.CharSet {
+	return differenceTwo(unionTwo(a, b), intersectTwo(a, b))
+}
+
+// complementOne computes [0, MaxCodepoint] \ cs.
+func complementOne(cs *values.CharSet) *values.CharSet {
+	full := values.NewCharSetFromRanges([]values.CharSetRange{{Lo: 0, Hi: values.MaxCodepoint}})
+	return differenceTwo(full, cs)
 }
 
 // isSubset reports whether every codepoint of a is also in b. Linear merge
