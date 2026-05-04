@@ -272,6 +272,8 @@ Historical reference. Work has shipped; plans preserved for design context.
 | `MCP-EVAL-HARDENING.md` | MCP eval tool hardening: timeout, output limits | Implemented |
 | `2026-04-15-srfi-132-design.md` | SRFI-132 Sort Libraries design (moved to `memory/`) | Implemented |
 | `2026-04-15-srfi-132-impl.md` | SRFI-132 10-task impl plan (moved to `memory/`) | Implemented |
+| `2026-05-03-string-primitives-design.md` | SRFI-13 + `(wile strings)` design + phasing — 60 SRFI-13 procedures + alias + 5 (wile strings) extras (moved to `memory/`) | PR #721 |
+| `2026-05-03-string-primitives-impl.md` | SRFI-13 8-phase implementation plan, 309 tests, `string-map` shadowing resolution (moved to `memory/`) | PR #721 |
 
 ### Algebra Libraries
 
