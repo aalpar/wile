@@ -1,6 +1,7 @@
 ;; SRFI-14 Character-Set Library
 ;;
-;; Status: Phase 3 — iteration layer (fold, for-each).
+;; Status: Phase 3 complete — iteration / query layer (fold, for-each, map,
+;;          filter, count, every, any, unfold).
 ;;
 ;; Cuts deferred from v1 (per plans/2026-05-04-srfi-14-design.md §11):
 ;;   char-set-hash             — spec is loose; no portable algorithm.
@@ -40,7 +41,9 @@
     ;; Phase 3 Task 3.2: map + filter
     char-set-map char-set-filter char-set-filter!
     ;; Phase 3 Task 3.3: count + short-circuit predicates
-    char-set-count char-set-every char-set-any)
+    char-set-count char-set-every char-set-any
+    ;; Phase 3 Task 3.4: unfold
+    char-set-unfold char-set-unfold!)
 
   (import (scheme base)
           (wile charsets))   ; for char-set-ranges, used by util.scm

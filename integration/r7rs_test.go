@@ -178,6 +178,11 @@ func TestSRFI14Algebra(t *testing.T) {
 	runSchemeTest(t, "srfi-14-tests-algebra.scm", 2*time.Minute, "SRFI-14 Phase 2 (algebra)")
 }
 
+// TestSRFI14Iteration runs the SRFI-14 Phase-3 (iteration / query layer) integration tests.
+func TestSRFI14Iteration(t *testing.T) {
+	runSchemeTest(t, "srfi-14-tests-iteration.scm", 2*time.Minute, "SRFI-14 Phase 3 (iteration)")
+}
+
 // TestWileStrings runs the (wile strings) extras integration tests.
 func TestWileStrings(t *testing.T) {
 	runSchemeTest(t, "wile-strings-tests.scm", 2*time.Minute, "(wile strings) extras")
