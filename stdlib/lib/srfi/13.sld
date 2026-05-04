@@ -22,11 +22,16 @@
    string-count
    ;; Phase 4: trim and pad (string-trim-left is an alias for string-trim)
    string-trim string-trim-right string-trim-both string-trim-left
-   string-pad string-pad-right)
+   string-pad string-pad-right
+   ;; Phase 5: comparison (binary, with optional ranges)
+   string=  string<  string>  string<=  string>=  string<>
+   string-ci= string-ci< string-ci> string-ci<= string-ci>= string-ci<>
+   string-compare string-compare-ci)
   (include "13/util.scm"
            "13/predicates.scm"
            "13/selection.scm"
            "13/prefix-suffix.scm"
            "13/search.scm"
            "13/replace.scm"
-           "13/trim-pad.scm"))
+           "13/trim-pad.scm"
+           "13/comparison.scm"))
