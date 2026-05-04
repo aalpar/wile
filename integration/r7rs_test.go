@@ -168,6 +168,11 @@ func TestSRFI14Predicates(t *testing.T) {
 	runSchemeTest(t, "srfi-14-tests-predicates.scm", 2*time.Minute, "SRFI-14 Phase 0 (char-set? predicate)")
 }
 
+// TestSRFI14Constructors runs the SRFI-14 Phase-1 (constructors, membership, querying) integration tests.
+func TestSRFI14Constructors(t *testing.T) {
+	runSchemeTest(t, "srfi-14-tests-constructors.scm", 2*time.Minute, "SRFI-14 Phase 1 (constructors)")
+}
+
 // TestWileStrings runs the (wile strings) extras integration tests.
 func TestWileStrings(t *testing.T) {
 	runSchemeTest(t, "wile-strings-tests.scm", 2*time.Minute, "(wile strings) extras")

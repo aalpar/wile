@@ -21,7 +21,9 @@
     ;; Phase 1 Task 1.4: range constructor
     ucs-range->char-set
     ;; Phase 1 Task 1.5: char-set converters
-    char-set->list char-set->string)
+    char-set->list char-set->string
+    ;; Phase 1 Task 1.7: dispatching coercing constructor
+    ->char-set)
 
   (import (scheme base))
 
