@@ -26,7 +26,15 @@
    ;; Phase 5: comparison (binary, with optional ranges)
    string=  string<  string>  string<=  string>=  string<>
    string-ci= string-ci< string-ci> string-ci<= string-ci>= string-ci<>
-   string-compare string-compare-ci)
+   string-compare string-compare-ci
+   ;; Phase 6: reverse, replace/tokenize/filter/delete, concat, fold/map.
+   ;; Note: string-map shadows R7RS string-map (single-string + range vs variadic).
+   string-reverse string-reverse!
+   string-replace string-tokenize
+   string-filter string-delete
+   string-concatenate reverse-list->string
+   string-for-each-index string-map
+   string-fold string-fold-right)
   (include "13/util.scm"
            "13/predicates.scm"
            "13/selection.scm"
@@ -34,4 +42,7 @@
            "13/search.scm"
            "13/replace.scm"
            "13/trim-pad.scm"
-           "13/comparison.scm"))
+           "13/comparison.scm"
+           "13/reverse.scm"
+           "13/concat.scm"
+           "13/fold.scm"))

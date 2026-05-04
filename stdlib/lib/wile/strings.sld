@@ -1,6 +1,6 @@
 (define-library (wile strings)
-  (description "Wile string library: SRFI-13 surface plus Wile-specific extras (string-split, string-replace-all, etc.). Single-import convenience over (srfi 13). Re-exports the variadic R7RS comparison forms (string=?, string-ci=?, ...) alongside the SRFI-13 binary forms (string=, string-ci=, ...) so consumers can pick whichever shape fits.")
-  (import (scheme base)
+  (description "Wile string library: SRFI-13 surface plus Wile-specific extras (string-split, string-replace-all, etc.). Single-import convenience over (srfi 13). Re-exports the variadic R7RS comparison forms (string=?, string-ci=?, ...) alongside the SRFI-13 binary forms (string=, string-ci=, ...) so consumers can pick whichever shape fits. NOTE: SRFI-13 string-map shadows R7RS string-map; this library re-exports the SRFI-13 form. Programs needing R7RS multi-string string-map should import from (scheme base) directly.")
+  (import (except (scheme base) string-map)
           (scheme char)
           (srfi 13))
   (export
@@ -32,6 +32,14 @@
    string=  string<  string>  string<=  string>=  string<>
    string-ci= string-ci< string-ci> string-ci<= string-ci>= string-ci<>
    string-compare string-compare-ci
+   ;; -- Re-exported from (srfi 13) -- Phase 6 --
+   ;; (string-map is the SRFI-13 single-string form; R7RS variadic excluded above)
+   string-reverse string-reverse!
+   string-replace string-tokenize
+   string-filter string-delete
+   string-concatenate reverse-list->string
+   string-for-each-index string-map
+   string-fold string-fold-right
    ;; -- Wile extras -- Phase 1 --
    string-split)
   (include "strings/extras.scm"))

@@ -153,6 +153,11 @@ func TestSRFI13Phase5(t *testing.T) {
 	runSchemeTest(t, "srfi-13-tests-phase5.scm", 2*time.Minute, "SRFI-13 Phase 5 (comparison family)")
 }
 
+// TestSRFI13Phase6 runs the SRFI-13 Phase-6 (reverse, replace/tokenize, fold/map) tests.
+func TestSRFI13Phase6(t *testing.T) {
+	runSchemeTest(t, "srfi-13-tests-phase6.scm", 2*time.Minute, "SRFI-13 Phase 6 (reverse + replace + fold)")
+}
+
 // extractTestSummary extracts the test summary from chibi-test output.
 func extractTestSummary(output string) string {
 	// Look for "Test Summary:" section
