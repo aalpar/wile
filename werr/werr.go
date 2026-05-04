@@ -44,6 +44,7 @@ var (
 	ErrNotAPair                  = NewStaticError("not a pair")
 	ErrNotACons                  = NewStaticError("not a cons")
 	ErrNotACharacter             = NewStaticError("not a character")
+	ErrNotACharSet               = NewStaticError("not a char-set")
 	ErrStackUnderflow            = NewStaticError("stack underflow")
 	ErrStackOverflow             = NewStaticError("stack overflow")
 	ErrNotASyntaxValue           = NewStaticError("not a syntax value")

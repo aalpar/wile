@@ -1,6 +1,6 @@
 ;; SRFI-14 Character-Set Library
 ;;
-;; Status: Phase 0 — predicate-only stub; constructors and algebra in later phases.
+;; Status: Phase 1 — constructor, size, contains?, copy.
 ;;
 ;; Cuts deferred from v1 (per plans/2026-05-04-srfi-14-design.md §11):
 ;;   char-set-hash             — spec is loose; no portable algorithm.
@@ -12,14 +12,16 @@
 
 (define-library (srfi 14)
   (export
-    ;; Phase 0: predicates only
-    char-set?)
+    ;; Phase 0: predicates
+    char-set?
+    ;; Phase 1: constructor and basic accessors
+    char-set char-set-contains? char-set-size char-set-copy)
 
   (import (scheme base))
 
-  ;; FFI primitives are bound at the namespace level by the `charsets` extension;
-  ;; this library re-exports the SRFI-14-named subset.
-  ;;
-  ;; (No body forms in phase 0 — the export is satisfied directly by the
-  ;; primitive bound in the importing environment.)
-  )
+  ;; FFI primitives (char-set?, char-set-contains?, char-set-size,
+  ;; %char-set, %empty-char-set, char-set-copy) are bound at the namespace
+  ;; level by the `charsets` extension. The include below defines the
+  ;; Scheme-level (char-set ...) dispatcher that dispatches to those FFI
+  ;; primitives.
+  (include "14/dispatcher.scm"))

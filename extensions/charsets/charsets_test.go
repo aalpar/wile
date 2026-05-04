@@ -22,7 +22,9 @@ import (
 
 	"github.com/aalpar/wile"
 	extcharsets "github.com/aalpar/wile/extensions/charsets"
+	"github.com/aalpar/wile/stdlib"
 	"github.com/aalpar/wile/values"
+	"github.com/aalpar/wile/values/valuestest"
 )
 
 // newEngine builds a fresh Wile engine with only the charsets extension loaded.
@@ -31,6 +33,21 @@ func newEngine(t *testing.T) *wile.Engine {
 	t.Helper()
 	engine, err := wile.NewEngine(context.Background(),
 		wile.WithExtension(extcharsets.Extension),
+	)
+	qt.Assert(t, err, qt.IsNil)
+	return engine
+}
+
+// newLibraryEngine builds a Wile engine with the Small profile (full R7RS base,
+// charsets already included) and the stdlib FS so that (import (srfi 14))
+// resolves dispatcher.scm. The Small profile already registers charsets, so no
+// duplicate WithExtension call is needed.
+func newLibraryEngine(t *testing.T) *wile.Engine {
+	t.Helper()
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithProfile(wile.Small),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithLibraryPaths("."),
 	)
 	qt.Assert(t, err, qt.IsNil)
 	return engine
@@ -46,6 +63,13 @@ func runScheme(t *testing.T, engine *wile.Engine, code string) values.Value {
 	return result.Internal()
 }
 
+// runSchemeExpectError asserts that the given Scheme expression returns an error.
+func runSchemeExpectError(t *testing.T, engine *wile.Engine, code string) {
+	t.Helper()
+	_, err := engine.EvalMultiple(context.Background(), code)
+	qt.Assert(t, err, qt.IsNotNil)
+}
+
 func TestCharSetPredicate(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
@@ -53,4 +77,39 @@ func TestCharSetPredicate(t *testing.T) {
 	c.Assert(runScheme(t, engine, "(char-set? 'foo)"), qt.Equals, values.FalseValue)
 	c.Assert(runScheme(t, engine, `(char-set? "abc")`), qt.Equals, values.FalseValue)
 	c.Assert(runScheme(t, engine, `(char-set? #\a)`), qt.Equals, values.FalseValue)
+}
+
+func TestCharSetConstructorAndPrimitives(t *testing.T) {
+	c := qt.New(t)
+	engine := newLibraryEngine(t)
+	// Load the SRFI-14 library so the (char-set ...) Scheme wrapper is available.
+	runScheme(t, engine, "(import (srfi 14))")
+
+	// Empty: (char-set) => empty char-set
+	c.Assert(runScheme(t, engine, "(char-set-size (char-set))"),
+		valuestest.SchemeEquals, values.NewInteger(0))
+
+	// Variadic: (char-set #\a #\b #\c)
+	c.Assert(runScheme(t, engine, `(char-set-size (char-set #\a #\b #\c))`),
+		valuestest.SchemeEquals, values.NewInteger(3))
+
+	// Membership of constructed set
+	c.Assert(runScheme(t, engine, `(char-set-contains? (char-set #\a #\b) #\a)`),
+		qt.Equals, values.TrueValue)
+	c.Assert(runScheme(t, engine, `(char-set-contains? (char-set #\a #\b) #\c)`),
+		qt.Equals, values.FalseValue)
+
+	// char-set? returns #t for constructed char-set
+	c.Assert(runScheme(t, engine, `(char-set? (char-set #\a))`),
+		qt.Equals, values.TrueValue)
+
+	// char-set-copy is char-set= (Phase 2 for char-set=, but contains? works)
+	c.Assert(runScheme(t, engine, `(let ((cs (char-set #\a #\b))) (char-set-contains? (char-set-copy cs) #\a))`),
+		qt.Equals, values.TrueValue)
+
+	// Type errors
+	runSchemeExpectError(t, engine, `(char-set #\a 'not-a-char)`)
+	runSchemeExpectError(t, engine, `(char-set-contains? "not-cs" #\m)`)
+	runSchemeExpectError(t, engine, `(char-set-contains? (char-set #\a) "not-char")`)
+	runSchemeExpectError(t, engine, `(char-set-copy 42)`)
 }
