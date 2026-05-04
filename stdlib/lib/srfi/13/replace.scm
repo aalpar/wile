@@ -130,8 +130,7 @@ See also: `string-replace-all', `substring', `string-append'."
                       ;; Find first index >= token-start where criterion does not match.
                       (let ((token-end (or (%string-skip s criterion token-start b) b)))
                         (loop token-end
-                              (cons (substring s token-start token-end) acc))))))))
-      )))
+                              (cons (substring s token-start token-end) acc)))))))))))
 
 (define string-tokenize
   (case-lambda
