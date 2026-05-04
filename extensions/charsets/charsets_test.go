@@ -378,3 +378,39 @@ func TestCharSetRanges(t *testing.T) {
 			values.NewCons(values.NewInteger(97), values.NewInteger(97)),
 			values.NewCons(values.NewInteger(122), values.NewInteger(122))))
 }
+
+func TestCharSetMapFilter(t *testing.T) {
+	c := qt.New(t)
+	engine := newLibraryEngine(t)
+
+	runScheme(t, engine, "(import (srfi 14))")
+
+	// char-set-map: shift each codepoint by +1
+	c.Assert(runScheme(t, engine, `
+        (char-set= (char-set #\b #\c #\d)
+                   (char-set-map (lambda (c) (integer->char (+ 1 (char->integer c))))
+                                 (char-set #\a #\b #\c)))`),
+		qt.Equals, values.TrueValue)
+
+	// char-set-filter: keep only #\b
+	c.Assert(runScheme(t, engine, `
+        (char-set= (char-set #\b)
+                   (char-set-filter (lambda (c) (char=? c #\b))
+                                    (char-set #\a #\b #\c)))`),
+		qt.Equals, values.TrueValue)
+
+	// char-set-filter with base: union of base + filtered
+	c.Assert(runScheme(t, engine, `
+        (char-set= (char-set #\b #\x)
+                   (char-set-filter (lambda (c) (char=? c #\b))
+                                    (char-set #\a #\b #\c)
+                                    (char-set #\x)))`),
+		qt.Equals, values.TrueValue)
+
+	// char-set-filter!: same as char-set-filter (always allocate fresh)
+	c.Assert(runScheme(t, engine, `
+        (char-set= (char-set #\b)
+                   (char-set-filter! (lambda (c) (char=? c #\b))
+                                     (char-set #\a #\b #\c)))`),
+		qt.Equals, values.TrueValue)
+}
