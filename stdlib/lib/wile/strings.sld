@@ -14,6 +14,10 @@
    string-prefix-ci? string-suffix-ci?
    string-prefix-length string-suffix-length
    string-prefix-length-ci string-suffix-length-ci
+   ;; Re-exported from (srfi 13) -- Phase 3
+   string-index string-index-right
+   string-skip string-skip-right
+   string-count
    ;; Wile extras -- Phase 1
    string-split)
   (include "strings/extras.scm"))

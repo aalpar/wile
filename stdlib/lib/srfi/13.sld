@@ -15,7 +15,11 @@
    ;; Phase 2: full prefix/suffix family
    string-prefix-ci? string-suffix-ci?
    string-prefix-length string-suffix-length
-   string-prefix-length-ci string-suffix-length-ci)
+   string-prefix-length-ci string-suffix-length-ci
+   ;; Phase 3: search family
+   string-index string-index-right
+   string-skip string-skip-right
+   string-count)
   (include "13/util.scm"
            "13/predicates.scm"
            "13/selection.scm"

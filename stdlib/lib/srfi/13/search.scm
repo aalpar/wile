@@ -98,3 +98,189 @@ See also: `string-contains'."
      (string-contains (string-foldcase s1) (string-foldcase s2) start1 end1 start2))
     ((s1 s2 start1 end1 start2 end2)
      (string-contains (string-foldcase s1) (string-foldcase s2) start1 end1 start2 end2))))
+
+;; ============================================================
+;; Phase 3: index / skip / count family
+;;
+;; Argument order for the optional range arguments is [start end]
+;; uniformly for all five procedures, including the -right variants.
+;; Canonical SRFI-13 specifies [end start] for string-index-right and
+;; string-skip-right; Wile uses [start end] for consistency with the
+;; other SRFI-13 procedures and the R7RS-extras family. Document the
+;; range explicitly when calling the right variants if your code is
+;; intended to be portable to other SRFI-13 implementations.
+;; ============================================================
+
+(define (%string-index s criterion start end)
+  (let-values (((a b) (%string-range-check s start end)))
+    (let loop ((i a))
+      (cond ((>= i b) #f)
+            ((%match-char? criterion (string-ref s i)) i)
+            (else (loop (+ i 1)))))))
+
+(define (%string-index-right s criterion start end)
+  (let-values (((a b) (%string-range-check s start end)))
+    (let loop ((i (- b 1)))
+      (cond ((< i a) #f)
+            ((%match-char? criterion (string-ref s i)) i)
+            (else (loop (- i 1)))))))
+
+(define (%string-skip s criterion start end)
+  (let-values (((a b) (%string-range-check s start end)))
+    (let loop ((i a))
+      (cond ((>= i b) #f)
+            ((%match-char? criterion (string-ref s i)) (loop (+ i 1)))
+            (else i)))))
+
+(define (%string-skip-right s criterion start end)
+  (let-values (((a b) (%string-range-check s start end)))
+    (let loop ((i (- b 1)))
+      (cond ((< i a) #f)
+            ((%match-char? criterion (string-ref s i)) (loop (- i 1)))
+            (else i)))))
+
+(define (%string-count s criterion start end)
+  (let-values (((a b) (%string-range-check s start end)))
+    (let loop ((i a) (count 0))
+      (cond ((>= i b) count)
+            ((%match-char? criterion (string-ref s i))
+             (loop (+ i 1) (+ count 1)))
+            (else (loop (+ i 1) count))))))
+
+(define string-index
+  (case-lambda
+    ((s criterion)
+     "Return the index of the first char in S matching CRITERION,
+or #f if none match.
+
+CRITERION is either a char (compared via char=?) or a predicate procedure.
+char-set criteria are deferred until SRFI-14 lands.
+
+Examples:
+  (string-index \"hello world\" #\\space)         => 5
+  (string-index \"hello\" char-numeric?)          => #f
+  (string-index \"abc123\" char-numeric?)         => 3
+  (string-index \"hello\" #\\l 3)                 => 3
+
+Parameters:
+  s : string
+  criterion : char or procedure
+  start : integer (optional, default 0)
+  end : integer (optional, default (string-length s))
+Returns: integer or #f
+Category: srfi-13
+Keywords: index, find, search, locate, leftmost
+
+See also: `string-index-right', `string-skip', `string-contains'."
+     (%string-index s criterion 0 (string-length s)))
+    ((s criterion start)
+     (%string-index s criterion start (string-length s)))
+    ((s criterion start end)
+     (%string-index s criterion start end))))
+
+(define string-index-right
+  (case-lambda
+    ((s criterion)
+     "Return the index of the rightmost char in S matching CRITERION,
+or #f if none match. Wile uses [start end] argument order (rather than
+the canonical SRFI-13 [end start]) for consistency.
+
+Examples:
+  (string-index-right \"hello\" #\\l)             => 3
+  (string-index-right \"abc123\" char-numeric?)   => 5
+
+Parameters:
+  s : string
+  criterion : char or procedure
+  start : integer (optional, default 0)
+  end : integer (optional, default (string-length s))
+Returns: integer or #f
+Category: srfi-13
+Keywords: index, find, search, rightmost, last
+
+See also: `string-index', `string-skip-right'."
+     (%string-index-right s criterion 0 (string-length s)))
+    ((s criterion start)
+     (%string-index-right s criterion start (string-length s)))
+    ((s criterion start end)
+     (%string-index-right s criterion start end))))
+
+(define string-skip
+  (case-lambda
+    ((s criterion)
+     "Return the index of the first char in S that does NOT match
+CRITERION, or #f if every char matches.
+
+Examples:
+  (string-skip \"   hello\" char-whitespace?)  => 3
+  (string-skip \"   \" char-whitespace?)        => #f
+  (string-skip \"abc\" #\\a)                    => 1
+
+Parameters:
+  s : string
+  criterion : char or procedure
+  start : integer (optional, default 0)
+  end : integer (optional, default (string-length s))
+Returns: integer or #f
+Category: srfi-13
+Keywords: skip, find, search, non-match, first
+
+See also: `string-skip-right', `string-index'."
+     (%string-skip s criterion 0 (string-length s)))
+    ((s criterion start)
+     (%string-skip s criterion start (string-length s)))
+    ((s criterion start end)
+     (%string-skip s criterion start end))))
+
+(define string-skip-right
+  (case-lambda
+    ((s criterion)
+     "Return the index of the rightmost char in S that does NOT match
+CRITERION, or #f if every char matches. Wile uses [start end] argument
+order (rather than canonical SRFI-13 [end start]) for consistency.
+
+Examples:
+  (string-skip-right \"hello   \" char-whitespace?)  => 4
+  (string-skip-right \"   \" char-whitespace?)        => #f
+
+Parameters:
+  s : string
+  criterion : char or procedure
+  start : integer (optional, default 0)
+  end : integer (optional, default (string-length s))
+Returns: integer or #f
+Category: srfi-13
+Keywords: skip, find, rightmost, non-match, last
+
+See also: `string-skip', `string-index-right'."
+     (%string-skip-right s criterion 0 (string-length s)))
+    ((s criterion start)
+     (%string-skip-right s criterion start (string-length s)))
+    ((s criterion start end)
+     (%string-skip-right s criterion start end))))
+
+(define string-count
+  (case-lambda
+    ((s criterion)
+     "Return the number of chars in S that match CRITERION.
+
+Examples:
+  (string-count \"hello world\" #\\l)             => 3
+  (string-count \"abc123\" char-numeric?)         => 3
+  (string-count \"hello\" #\\z)                   => 0
+
+Parameters:
+  s : string
+  criterion : char or procedure
+  start : integer (optional, default 0)
+  end : integer (optional, default (string-length s))
+Returns: integer
+Category: srfi-13
+Keywords: count, tally, frequency, number, predicate
+
+See also: `string-index', `string-every'."
+     (%string-count s criterion 0 (string-length s)))
+    ((s criterion start)
+     (%string-count s criterion start (string-length s)))
+    ((s criterion start end)
+     (%string-count s criterion start end))))
