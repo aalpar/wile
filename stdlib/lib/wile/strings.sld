@@ -18,6 +18,9 @@
    string-index string-index-right
    string-skip string-skip-right
    string-count
+   ;; Re-exported from (srfi 13) -- Phase 4
+   string-trim string-trim-right string-trim-both string-trim-left
+   string-pad string-pad-right
    ;; Wile extras -- Phase 1
    string-split)
   (include "strings/extras.scm"))

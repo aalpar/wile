@@ -19,10 +19,14 @@
    ;; Phase 3: search family
    string-index string-index-right
    string-skip string-skip-right
-   string-count)
+   string-count
+   ;; Phase 4: trim and pad (string-trim-left is an alias for string-trim)
+   string-trim string-trim-right string-trim-both string-trim-left
+   string-pad string-pad-right)
   (include "13/util.scm"
            "13/predicates.scm"
            "13/selection.scm"
            "13/prefix-suffix.scm"
            "13/search.scm"
-           "13/replace.scm"))
+           "13/replace.scm"
+           "13/trim-pad.scm"))
