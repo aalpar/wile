@@ -317,8 +317,8 @@ func setupLibrarySystem(libraryPaths []string, importObserver func(LibraryImport
 
 	// Prepend user paths in reverse order so first path has highest priority.
 	// PrependSearchPath prepends, so reverse-iterating produces the correct order.
-	for i := len(libraryPaths) - 1; i >= 0; i-- {
-		libReg.PrependSearchPath(libraryPaths[i])
+	for _, p := range slices.Backward(libraryPaths) {
+		libReg.PrependSearchPath(p)
 	}
 
 	// Register docstrings from imported libraries so that `,topic` and

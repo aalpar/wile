@@ -26,6 +26,7 @@ package compilation
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/aalpar/wile/environment"
@@ -217,7 +218,7 @@ func (p *ExpanderTimeContinuation) expandBeginForm(sym *syntax.SyntaxSymbol, exp
 
 		// Rebuild the begin form with expanded contents
 		expandedArgs := syntax.SyntaxEmptyList
-		for i := len(expandedForms) - 1; i >= 0; i-- {
+		for i := range slices.Backward(expandedForms) {
 			expandedArgs = syntax.NewSyntaxCons(expandedForms[i], expandedArgs, sym.SourceContext())
 		}
 		return syntax.NewSyntaxCons(sym, expandedArgs, sym.SourceContext()), nil

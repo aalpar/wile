@@ -15,6 +15,8 @@
 package compilation
 
 import (
+	"slices"
+
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
@@ -49,7 +51,7 @@ func (p *OperationBuildSyntaxList) Apply(mc *machine.MachineContext) (*machine.M
 	// PopN returns elements in stack order (bottom to top)
 	// We iterate backwards to build the list in reverse
 	elements := mc.Evals().PopN(p.Count)
-	for i := len(elements) - 1; i >= 0; i-- {
+	for i := range slices.Backward(elements) {
 		elem := elements[i]
 		// Wrap non-syntax values
 		var stx syntax.SyntaxValue

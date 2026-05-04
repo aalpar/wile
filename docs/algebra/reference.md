@@ -1028,6 +1028,62 @@ Monotone framework (MFP) worklist dataflow solver with CFG-protocol abstraction.
 
 ---
 
+## Matching -- `(wile algebra matching)`
+
+Two-sided matching primitives -- Roth-Sotomayor (1990). Three-layer structure per directions doc §4.6: local optimization (Gale-Shapley, Hungarian) + stability constraint + global selection (Conway distributive lattice via Birkhoff §5.5).
+
+### Preference profiles
+
+- `(make-preference-profile <agents> <ranks-of> [opts ...])` -- construct a preference profile; `<ranks-of>` is `agent → ordered list of preferred candidates`; opts: `(setoid . S)`
+- `(preference-profile? <x>)` / `(preference-profile-agents <P>)` / `(preference-profile-ranks-of <P>)` / `(preference-profile-setoid <P>)` -- predicate and accessors
+- `(preference-profile-rank-of <P> <agent> <candidate>)` -- 1-based rank, or `#f` if absent
+- `(preference-profile-prefers-strictly? <P> <agent> <x> <y>)` -- strict preference predicate
+- `(validate-preference-profile <P> <candidate-set>)` -- catches out-of-set candidates and tied preferences; returns `#t` or violation list
+- `(with-preference-profile <P> (agents ranks-of) <body>...)` -- field binder
+
+### Bipartite matchings
+
+- `(make-bipartite-matching <pairs> [opts ...])` -- construct from alist of `(proposer . receiver)` pairs; opts: `(prop-setoid . S)`, `(recv-setoid . S)`
+- `(bipartite-matching? <x>)` / `(bipartite-matching-pairs <M>)` / `(bipartite-matching-prop-setoid <M>)` / `(bipartite-matching-recv-setoid <M>)` -- predicate and accessors
+- `(bipartite-matching-partner <M> <agent>)` -- symmetric partner lookup, or `#f` if unmatched
+- `(bipartite-matching-unmatched <M> <side> <agents>)` -- agents from `<agents>` not appearing on the given side (`'proposer` or `'receiver`)
+- `(bipartite-matching-equal? <M1> <M2>)` -- order-insensitive equality
+- `(validate-bipartite-matching <M> <proposers> <receivers>)` -- catches duplicates and out-of-set agents
+- `(with-bipartite-matching <M> (pairs) <body>...)` -- field binder
+
+### Stability
+
+- `(blocking-pairs <M> <prop-prefs> <recv-prefs>)` -- list of `(p . r)` pairs that violate stability (empty iff stable)
+- `(stable? <M> <prop-prefs> <recv-prefs>)` -- stability predicate
+
+### Algorithms
+
+- `(gale-shapley <prop-prefs> <recv-prefs>)` -- proposer-optimal stable matching, O(n²) (Gale-Shapley 1962)
+- `(gale-shapley/receiver-optimal <prop-prefs> <recv-prefs>)` -- receiver-optimal stable matching
+- `(hospital-intern-match <intern-prefs> <hospital-prefs> <hospital-quotas>)` -- intern-optimal stable many-to-one matching via Roth's reduction; returns alist `((hospital . (intern ...)) ...)`
+- `(tropical-assignment <cost-fn> <proposers> <receivers>)` → `(<bipartite-matching> . cost)` -- minimum-cost assignment via Kuhn-Munkres O(n³); use `+inf.0` to forbid pairs. On square instances returns a perfect assignment or raises on infeasibility; on unequal sides returns a partial matching of size `min(|proposers|, |receivers|)` with unmatched agents on the larger side derivable via set difference.
+
+### Conway lattice (selection layer)
+
+- `(make-rotation <cycle>)` / `(rotation? <x>)` / `(rotation-cycle <rho>)` -- rotation record (Gusfield-Irving 1989)
+- `(apply-rotation <M> <rho>)` -- apply rotation to matching; each proposer shifts to next receiver in cycle
+- `(rotations <prop-prefs> <recv-prefs>)` -- enumerate exposed rotations; these are the join-irreducibles of the Conway lattice
+- `(stable-matching-lattice <prop-prefs> <recv-prefs>)` -- Conway distributive lattice of all stable matchings under proposer-utility order; brute-force, exponential in `|rotations|`
+- `(egalitarian-stable-matching <prop-prefs> <recv-prefs>)` -- minimum sum-of-ranks across both sides; NP-hard in general (Iwama-Manlove 1999), brute force
+- `(sex-equal-stable-matching <prop-prefs> <recv-prefs>)` -- minimum |Δ-sum-rank|; same NP-hard caveat
+
+### References
+
+- Gale-Shapley (1962). "College Admissions and the Stability of Marriage." *American Mathematical Monthly* 69(1).
+- Conway (1976) via Knuth, *Mariages stables*. (Distributive-lattice theorem.)
+- Roth (1985). "The college admissions problem is not equivalent to the marriage problem." *J. Economic Theory* 36.
+- Roth & Sotomayor (1990). *Two-Sided Matching*. Cambridge.
+- Gusfield & Irving (1989). *The Stable Marriage Problem*. MIT Press.
+- Kuhn (1955) / Munkres (1957). Hungarian algorithm.
+- Iwama-Manlove et al. (1999). NP-hardness of sex-equal stable matching.
+
+---
+
 ## Cross-Reference: Sub-library to Import Path
 
 | Section | Import Path |
@@ -1059,6 +1115,7 @@ Monotone framework (MFP) worklist dataflow solver with CFG-protocol abstraction.
 | Pareto | `(wile algebra pareto)` |
 | Abstract Domain | `(wile algebra abstract-domain)` |
 | Dataflow | `(wile algebra dataflow)` |
+| Matching | `(wile algebra matching)` |
 
 ## Symbols Not Re-exported by Umbrella
 

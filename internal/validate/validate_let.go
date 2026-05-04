@@ -338,7 +338,7 @@ func validateLetStarNested(
 	// Each binding wraps the next as its body.
 	var innerBody []ValidatedExpr
 	innerBody = body
-	for i := len(validated) - 1; i >= 0; i-- {
+	for i := range slices.Backward(validated) {
 		vb := validated[i]
 		bindings := []ValidatedLetBinding{vb.binding}
 		markMutableBindings(vb.childEnv, bindings, result)

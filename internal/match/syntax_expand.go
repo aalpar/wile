@@ -28,6 +28,7 @@ package match
 
 import (
 	"maps"
+	"slices"
 
 	"github.com/aalpar/wile/internal/syntax"
 	"github.com/aalpar/wile/values"
@@ -566,7 +567,7 @@ func (p *SyntaxMatcher) combineEllipsisResults(
 		srcCtx = srcCtx.WithOrigin(opts.Origin)
 	}
 	result := expandedRest
-	for i := len(results) - 1; i >= 0; i-- {
+	for i := range slices.Backward(results) {
 		result = syntax.NewSyntaxCons(results[i], result, srcCtx)
 	}
 

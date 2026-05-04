@@ -16,6 +16,7 @@ package compilation
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/aalpar/wile/machine"
@@ -35,7 +36,7 @@ func makeTestSyntaxSymbol(name string) *syntax.SyntaxSymbol {
 
 func makeTestSyntaxList(elems ...syntax.SyntaxValue) *syntax.SyntaxPair {
 	var result syntax.SyntaxValue = syntax.SyntaxEmptyList
-	for i := len(elems) - 1; i >= 0; i-- {
+	for i := range slices.Backward(elems) {
 		result = syntax.NewSyntaxCons(elems[i], result, nil)
 	}
 	return result.(*syntax.SyntaxPair)

@@ -16,6 +16,7 @@ package envvars
 
 import (
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/aalpar/wile/machine"
@@ -104,7 +105,7 @@ func PrimGetEnvironmentVariables(mc machine.CallContext) error {
 	}
 	env := os.Environ()
 	list := values.EmptyList
-	for i := len(env) - 1; i >= 0; i-- {
+	for i := range slices.Backward(env) {
 		parts := strings.SplitN(env[i], "=", 2)
 		if len(parts) == 2 {
 			pair := values.NewCons(values.NewString(parts[0]), values.NewString(parts[1]))

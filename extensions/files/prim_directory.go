@@ -16,6 +16,7 @@ package files
 
 import (
 	"os"
+	"slices"
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry/helpers"
@@ -102,7 +103,7 @@ func PrimDirectoryFiles(mc machine.CallContext) error {
 		return werr.WrapForeignFileError(err, "directory-files", path.Value)
 	}
 	list := values.EmptyList
-	for i := len(entries) - 1; i >= 0; i-- {
+	for i := range slices.Backward(entries) {
 		name := entries[i].Name()
 		if name == "." || name == ".." {
 			continue

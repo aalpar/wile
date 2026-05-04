@@ -224,6 +224,37 @@
     ac-match
     ac-unify
     flatten-ac
+    ;; Preference profiles (two-sided matching)
+    make-preference-profile preference-profile?
+    preference-profile-agents preference-profile-ranks-of
+    preference-profile-setoid
+    preference-profile-rank-of
+    preference-profile-prefers-strictly?
+    validate-preference-profile
+    ;; Bipartite matchings
+    make-bipartite-matching bipartite-matching?
+    bipartite-matching-pairs
+    bipartite-matching-prop-setoid
+    bipartite-matching-recv-setoid
+    bipartite-matching-partner
+    bipartite-matching-unmatched
+    bipartite-matching-equal?
+    validate-bipartite-matching
+    ;; Stability
+    blocking-pairs stable?
+    ;; Algorithms
+    gale-shapley gale-shapley/receiver-optimal
+    hospital-intern-match
+    tropical-assignment
+    ;; Rotations
+    make-rotation rotation? rotation-cycle
+    apply-rotation rotations
+    ;; Conway lattice
+    stable-matching-lattice
+    ;; Stable-matching selectors
+    egalitarian-stable-matching sex-equal-stable-matching
+    ;; Field binders
+    with-preference-profile with-bipartite-matching
     ;; Combinatorial graphs — core (§5.6)
     make-graph graph?
     graph-vertices graph-edges graph-neighbors graph-degree
@@ -279,6 +310,7 @@
           (wile algebra graph)
           (wile algebra matrix)
           (wile algebra incidence)
+          (wile algebra matching)
           (wile algebra unification)
           (wile algebra combinatorial-graph)
           (wile algebra abstract-domain)
