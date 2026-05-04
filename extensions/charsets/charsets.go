@@ -117,6 +117,24 @@ func addPrimitives(r *registry.Registry) error {
 			Category:   "char-sets",
 			Keywords:   []string{"ucs", "codepoint", "range", "char-set", "srfi-14"},
 		},
+		{
+			Name:       "char-set->list",
+			ParamCount: 1,
+			Impl:       primCharSetToList,
+			Doc:        "Returns a list of all characters in CS, in codepoint-ascending order. (SRFI-14)",
+			ParamNames: []string{"cs"},
+			Category:   "char-sets",
+			Keywords:   []string{"char-set", "list", "convert", "srfi-14"},
+		},
+		{
+			Name:       "char-set->string",
+			ParamCount: 1,
+			Impl:       primCharSetToString,
+			Doc:        "Returns a string of all characters in CS, in codepoint-ascending order. (SRFI-14)",
+			ParamNames: []string{"cs"},
+			Category:   "char-sets",
+			Keywords:   []string{"char-set", "string", "convert", "srfi-14"},
+		},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 	return nil
 }
@@ -351,6 +369,38 @@ func primUcsRangeToCharSet(mc machine.CallContext) error {
 		cs = values.NewCharSetFromUnsortedRanges(merged)
 	}
 	mc.SetValue(cs)
+	return nil
+}
+
+func primCharSetToList(mc machine.CallContext) error {
+	cs, ok := mc.Arg(0).(*values.CharSet)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotACharSet,
+			"char-set->list: argument 1: expected char-set, got %T", mc.Arg(0))
+	}
+	chars := make([]values.Value, 0, cs.Size())
+	for _, r := range cs.Ranges() {
+		for c := r.Lo; c <= r.Hi; c++ {
+			chars = append(chars, values.NewCharacter(c))
+		}
+	}
+	mc.SetValue(values.List(chars...))
+	return nil
+}
+
+func primCharSetToString(mc machine.CallContext) error {
+	cs, ok := mc.Arg(0).(*values.CharSet)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotACharSet,
+			"char-set->string: argument 1: expected char-set, got %T", mc.Arg(0))
+	}
+	runes := make([]rune, 0, cs.Size())
+	for _, r := range cs.Ranges() {
+		for c := r.Lo; c <= r.Hi; c++ {
+			runes = append(runes, c)
+		}
+	}
+	mc.SetValue(values.NewString(string(runes)))
 	return nil
 }
 

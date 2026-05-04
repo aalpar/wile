@@ -160,6 +160,41 @@ func TestListToCharSet(t *testing.T) {
 	runSchemeExpectError(t, engine, `(list->char-set '(#\a 42))`)
 }
 
+func TestCharSetToList(t *testing.T) {
+	c := qt.New(t)
+	engine := newLibraryEngine(t)
+	runScheme(t, engine, "(import (srfi 14))")
+
+	// Empty
+	c.Assert(runScheme(t, engine, "(char-set->list (char-set))"),
+		qt.Equals, values.EmptyList)
+
+	// Codepoint-ascending order regardless of construction order
+	c.Assert(runScheme(t, engine, `(char-set->list (char-set #\c #\a #\b))`),
+		valuestest.SchemeEquals,
+		values.List(values.NewCharacter('a'), values.NewCharacter('b'), values.NewCharacter('c')))
+
+	// Type error
+	runSchemeExpectError(t, engine, "(char-set->list 42)")
+}
+
+func TestCharSetToString(t *testing.T) {
+	c := qt.New(t)
+	engine := newLibraryEngine(t)
+	runScheme(t, engine, "(import (srfi 14))")
+
+	// Empty
+	c.Assert(runScheme(t, engine, "(char-set->string (char-set))"),
+		valuestest.SchemeEquals, values.NewString(""))
+
+	// Codepoint-ascending order
+	c.Assert(runScheme(t, engine, `(char-set->string (char-set #\c #\a #\b))`),
+		valuestest.SchemeEquals, values.NewString("abc"))
+
+	// Type error
+	runSchemeExpectError(t, engine, "(char-set->string 42)")
+}
+
 func TestUcsRangeToCharSet(t *testing.T) {
 	c := qt.New(t)
 	engine := newLibraryEngine(t)
