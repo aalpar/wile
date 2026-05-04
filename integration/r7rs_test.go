@@ -133,6 +133,11 @@ func TestSRFI13Phase1(t *testing.T) {
 	runSchemeTest(t, "srfi-13-tests-phase1.scm", 2*time.Minute, "SRFI-13 Phase 1 (top-five)")
 }
 
+// TestSRFI13Phase2 runs the SRFI-13 Phase-2 (predicates, selection, prefix/suffix family) tests.
+func TestSRFI13Phase2(t *testing.T) {
+	runSchemeTest(t, "srfi-13-tests-phase2.scm", 2*time.Minute, "SRFI-13 Phase 2 (predicates + selection)")
+}
+
 // extractTestSummary extracts the test summary from chibi-test output.
 func extractTestSummary(output string) string {
 	// Look for "Test Summary:" section

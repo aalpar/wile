@@ -6,8 +6,19 @@
    ;; Phase 1: wile-goast top-five (SRFI-13 subset)
    string-prefix? string-suffix?
    string-contains string-contains-ci
-   string-join)
+   string-join
+   ;; Phase 2: predicates
+   string-null? string-every string-any
+   ;; Phase 2: selection
+   string-take string-drop string-take-right string-drop-right
+   substring/shared string-tabulate
+   ;; Phase 2: full prefix/suffix family
+   string-prefix-ci? string-suffix-ci?
+   string-prefix-length string-suffix-length
+   string-prefix-length-ci string-suffix-length-ci)
   (include "13/util.scm"
+           "13/predicates.scm"
+           "13/selection.scm"
            "13/prefix-suffix.scm"
            "13/search.scm"
            "13/replace.scm"))
