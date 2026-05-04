@@ -231,3 +231,27 @@ func TestUcsRangeToCharSet(t *testing.T) {
 	c.Assert(runScheme(t, engine, `(char-set-contains? (ucs-range->char-set 65 67 #t (char-set #\z)) #\z)`),
 		qt.Equals, values.TrueValue)
 }
+
+func TestCharSetRanges(t *testing.T) {
+	c := qt.New(t)
+	engine := newLibraryEngine(t)
+	// (srfi 14) for char-set constructor; (wile charsets) for char-set-ranges.
+	runScheme(t, engine, "(import (srfi 14))")
+	runScheme(t, engine, "(import (wile charsets))")
+
+	// Empty
+	c.Assert(runScheme(t, engine, "(char-set-ranges (char-set))"),
+		qt.Equals, values.EmptyList)
+
+	// Single range from adjacent codepoints: '((97 . 99)) for #\a #\b #\c
+	c.Assert(runScheme(t, engine, `(char-set-ranges (char-set #\a #\b #\c))`),
+		valuestest.SchemeEquals,
+		values.List(values.NewCons(values.NewInteger(97), values.NewInteger(99))))
+
+	// Multiple ranges: #\a (97) and #\z (122) are non-adjacent
+	c.Assert(runScheme(t, engine, `(char-set-ranges (char-set #\a #\z))`),
+		valuestest.SchemeEquals,
+		values.List(
+			values.NewCons(values.NewInteger(97), values.NewInteger(97)),
+			values.NewCons(values.NewInteger(122), values.NewInteger(122))))
+}

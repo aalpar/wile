@@ -135,6 +135,15 @@ func addPrimitives(r *registry.Registry) error {
 			Category:   "char-sets",
 			Keywords:   []string{"char-set", "string", "convert", "srfi-14"},
 		},
+		{
+			Name:       "char-set-ranges",
+			ParamCount: 1,
+			Impl:       primCharSetRanges,
+			Doc:        "Returns a list of (lo . hi) pairs (inclusive endpoints) for the canonical inversion-list representation of CS. Wile-specific extension to SRFI-14, used internally by iteration procedures.",
+			ParamNames: []string{"cs"},
+			Category:   "char-sets",
+			Keywords:   []string{"char-set", "ranges", "wile", "iteration"},
+		},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 	return nil
 }
@@ -401,6 +410,21 @@ func primCharSetToString(mc machine.CallContext) error {
 		}
 	}
 	mc.SetValue(values.NewString(string(runes)))
+	return nil
+}
+
+func primCharSetRanges(mc machine.CallContext) error {
+	cs, ok := mc.Arg(0).(*values.CharSet)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotACharSet,
+			"char-set-ranges: argument 1: expected char-set, got %T", mc.Arg(0))
+	}
+	rs := cs.Ranges()
+	pairs := make([]values.Value, len(rs))
+	for i, r := range rs {
+		pairs[i] = values.NewCons(values.NewInteger(int64(r.Lo)), values.NewInteger(int64(r.Hi)))
+	}
+	mc.SetValue(values.List(pairs...))
 	return nil
 }
 
