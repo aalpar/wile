@@ -113,3 +113,49 @@ func TestCharSetConstructorAndPrimitives(t *testing.T) {
 	runSchemeExpectError(t, engine, `(char-set-contains? (char-set #\a) "not-char")`)
 	runSchemeExpectError(t, engine, `(char-set-copy 42)`)
 }
+
+func TestStringToCharSet(t *testing.T) {
+	c := qt.New(t)
+	engine := newLibraryEngine(t)
+	runScheme(t, engine, "(import (srfi 14))")
+
+	// Basic: 3 distinct chars
+	c.Assert(runScheme(t, engine, `(char-set-size (string->char-set "abc"))`),
+		valuestest.SchemeEquals, values.NewInteger(3))
+
+	// Duplicates collapse
+	c.Assert(runScheme(t, engine, `(char-set-size (string->char-set "aabbcc"))`),
+		valuestest.SchemeEquals, values.NewInteger(3))
+
+	// With base char-set: "xy" (2) unioned with (char-set #\a) (1) = 3
+	c.Assert(runScheme(t, engine, `(char-set-size (string->char-set "xy" (char-set #\a)))`),
+		valuestest.SchemeEquals, values.NewInteger(3))
+
+	// Type errors
+	runSchemeExpectError(t, engine, `(string->char-set 42)`)
+	runSchemeExpectError(t, engine, `(string->char-set "abc" 42)`)
+}
+
+func TestListToCharSet(t *testing.T) {
+	c := qt.New(t)
+	engine := newLibraryEngine(t)
+	runScheme(t, engine, "(import (srfi 14))")
+
+	// Basic: 3 distinct chars
+	c.Assert(runScheme(t, engine, `(char-set-size (list->char-set '(#\a #\b #\c)))`),
+		valuestest.SchemeEquals, values.NewInteger(3))
+
+	// Duplicates collapse
+	c.Assert(runScheme(t, engine, `(char-set-size (list->char-set '(#\a #\a #\b)))`),
+		valuestest.SchemeEquals, values.NewInteger(2))
+
+	// With base: '(#\x #\y) (2) unioned with (char-set #\a) (1) = 3
+	c.Assert(runScheme(t, engine, `(char-set-size (list->char-set '(#\x #\y) (char-set #\a)))`),
+		valuestest.SchemeEquals, values.NewInteger(3))
+
+	// Non-list argument
+	runSchemeExpectError(t, engine, `(list->char-set 42)`)
+
+	// List with non-char element
+	runSchemeExpectError(t, engine, `(list->char-set '(#\a 42))`)
+}

@@ -80,6 +80,30 @@ func addPrimitives(r *registry.Registry) error {
 			Category:   "char-sets",
 			Keywords:   []string{"char-set", "copy", "srfi-14"},
 		},
+		{
+			// ParamCount: 2, IsVariadic: true → Arg(0) = str (fixed),
+			// Arg(1) = rest list (optional base char-set, or empty list).
+			Name:       "string->char-set",
+			ParamCount: 2,
+			IsVariadic: true,
+			Impl:       primStringToCharSet,
+			Doc:        "Returns a char-set containing each char in STR. Optional BASE-CS is unioned into the result. (SRFI-14)",
+			ParamNames: []string{"str", "base"},
+			Category:   "char-sets",
+			Keywords:   []string{"string", "char-set", "convert", "srfi-14"},
+		},
+		{
+			// ParamCount: 2, IsVariadic: true → Arg(0) = lst (fixed),
+			// Arg(1) = rest list (optional base char-set, or empty list).
+			Name:       "list->char-set",
+			ParamCount: 2,
+			IsVariadic: true,
+			Impl:       primListToCharSet,
+			Doc:        "Returns a char-set containing each char in LST. Optional BASE-CS is unioned into the result. (SRFI-14)",
+			ParamNames: []string{"lst", "base"},
+			Category:   "char-sets",
+			Keywords:   []string{"list", "char-set", "convert", "srfi-14"},
+		},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 	return nil
 }
@@ -163,6 +187,85 @@ func primCharSetCopy(mc machine.CallContext) error {
 	// CharSet is immutable; copy is identity at the Go level. Returning
 	// a fresh wrapper is unnecessary, but harmless if a future change adds
 	// hidden state. Identity is the cheapest correct answer.
+	mc.SetValue(cs)
+	return nil
+}
+
+func primStringToCharSet(mc machine.CallContext) error {
+	str, ok := mc.Arg(0).(*values.String)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAString,
+			"string->char-set: argument 1: expected string, got %T", mc.Arg(0))
+	}
+	runes := []rune(str.Value)
+	base, err := optionalBaseCharSet("string->char-set", mc.Arg(1))
+	if err != nil {
+		return err
+	}
+	return setValueFromRunesAndBase(mc, runes, base)
+}
+
+func primListToCharSet(mc machine.CallContext) error {
+	lst, ok := mc.Arg(0).(values.Tuple)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAList,
+			"list->char-set: argument 1: expected list, got %T", mc.Arg(0))
+	}
+	var runes []rune
+	var iterErr error
+	_, _ = lst.ForEach(mc.Context(), func(_ context.Context, i int, _ bool, v values.Value) error {
+		ch, isChar := v.(*values.Character)
+		if !isChar {
+			iterErr = werr.WrapForeignErrorf(werr.ErrNotACharacter,
+				"list->char-set: list element %d: expected char, got %T", i, v)
+			return iterErr
+		}
+		runes = append(runes, ch.Value)
+		return nil
+	})
+	if iterErr != nil {
+		return iterErr
+	}
+	base, err := optionalBaseCharSet("list->char-set", mc.Arg(1))
+	if err != nil {
+		return err
+	}
+	return setValueFromRunesAndBase(mc, runes, base)
+}
+
+// optionalBaseCharSet extracts an optional base char-set from a variadic-rest
+// argument. Returns (nil, nil) for no base; (cs, nil) for a valid base;
+// (nil, err) on type mismatch.
+func optionalBaseCharSet(site string, restArg values.Value) (*values.CharSet, error) {
+	rest, ok := restArg.(values.Tuple)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAList,
+			"%s: rest argument: expected list, got %T", site, restArg)
+	}
+	if rest.IsEmptyList() {
+		return nil, nil
+	}
+	first := rest.Car()
+	base, isCs := first.(*values.CharSet)
+	if !isCs {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotACharSet,
+			"%s: optional base argument: expected char-set, got %T", site, first)
+	}
+	return base, nil
+}
+
+// setValueFromRunesAndBase builds a char-set from runes, optionally unioned
+// with a base char-set, and stores it on the machine context.
+//
+// Phase 1 inlines the base-merge via NewCharSetFromUnsortedRanges (which
+// canonicalizes). Phase 2 Task 2.2 will replace this body with unionTwo
+// once that helper exists in extensions/charsets/charsets.go.
+func setValueFromRunesAndBase(mc machine.CallContext, runes []rune, base *values.CharSet) error {
+	cs := values.NewCharSetFromRunes(runes)
+	if base != nil {
+		merged := append(cs.Ranges(), base.Ranges()...)
+		cs = values.NewCharSetFromUnsortedRanges(merged)
+	}
 	mc.SetValue(cs)
 	return nil
 }
