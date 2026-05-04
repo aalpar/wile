@@ -128,6 +128,46 @@ func TestSRFI132(t *testing.T) {
 	runSchemeTest(t, "srfi-132-tests.scm", 2*time.Minute, "SRFI-132 sort library")
 }
 
+// TestSRFI13Phase1 runs the SRFI-13 Phase-1 (top-five) integration tests.
+func TestSRFI13Phase1(t *testing.T) {
+	runSchemeTest(t, "srfi-13-tests-phase1.scm", 2*time.Minute, "SRFI-13 Phase 1 (top-five)")
+}
+
+// TestSRFI13Phase2 runs the SRFI-13 Phase-2 (predicates, selection, prefix/suffix family) tests.
+func TestSRFI13Phase2(t *testing.T) {
+	runSchemeTest(t, "srfi-13-tests-phase2.scm", 2*time.Minute, "SRFI-13 Phase 2 (predicates + selection)")
+}
+
+// TestSRFI13Phase3 runs the SRFI-13 Phase-3 (search family) tests.
+func TestSRFI13Phase3(t *testing.T) {
+	runSchemeTest(t, "srfi-13-tests-phase3.scm", 2*time.Minute, "SRFI-13 Phase 3 (search family)")
+}
+
+// TestSRFI13Phase4 runs the SRFI-13 Phase-4 (trim and pad) tests.
+func TestSRFI13Phase4(t *testing.T) {
+	runSchemeTest(t, "srfi-13-tests-phase4.scm", 2*time.Minute, "SRFI-13 Phase 4 (trim + pad)")
+}
+
+// TestSRFI13Phase5 runs the SRFI-13 Phase-5 (binary comparison family) tests.
+func TestSRFI13Phase5(t *testing.T) {
+	runSchemeTest(t, "srfi-13-tests-phase5.scm", 2*time.Minute, "SRFI-13 Phase 5 (comparison family)")
+}
+
+// TestSRFI13Phase6 runs the SRFI-13 Phase-6 (reverse, replace/tokenize, fold/map) tests.
+func TestSRFI13Phase6(t *testing.T) {
+	runSchemeTest(t, "srfi-13-tests-phase6.scm", 2*time.Minute, "SRFI-13 Phase 6 (reverse + replace + fold)")
+}
+
+// TestSRFI13Phase7 runs the SRFI-13 Phase-7 (mutating case forms) tests.
+func TestSRFI13Phase7(t *testing.T) {
+	runSchemeTest(t, "srfi-13-tests-phase7.scm", 2*time.Minute, "SRFI-13 Phase 7 (mutating case)")
+}
+
+// TestWileStrings runs the (wile strings) extras integration tests.
+func TestWileStrings(t *testing.T) {
+	runSchemeTest(t, "wile-strings-tests.scm", 2*time.Minute, "(wile strings) extras")
+}
+
 // extractTestSummary extracts the test summary from chibi-test output.
 func extractTestSummary(output string) string {
 	// Look for "Test Summary:" section
