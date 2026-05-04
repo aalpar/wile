@@ -34,7 +34,9 @@
    string-filter string-delete
    string-concatenate reverse-list->string
    string-for-each-index string-map
-   string-fold string-fold-right)
+   string-fold string-fold-right
+   ;; Phase 7: mutating case (simple per-char mapping; see case.scm header)
+   string-upcase! string-downcase!)
   (include "13/util.scm"
            "13/predicates.scm"
            "13/selection.scm"
@@ -45,4 +47,5 @@
            "13/comparison.scm"
            "13/reverse.scm"
            "13/concat.scm"
-           "13/fold.scm"))
+           "13/fold.scm"
+           "13/case.scm"))

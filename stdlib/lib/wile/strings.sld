@@ -40,6 +40,8 @@
    string-concatenate reverse-list->string
    string-for-each-index string-map
    string-fold string-fold-right
+   ;; -- Re-exported from (srfi 13) -- Phase 7 --
+   string-upcase! string-downcase!
    ;; -- Wile extras -- Phase 1 --
    string-split)
   (include "strings/extras.scm"))
