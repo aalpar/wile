@@ -128,6 +128,11 @@ func TestSRFI132(t *testing.T) {
 	runSchemeTest(t, "srfi-132-tests.scm", 2*time.Minute, "SRFI-132 sort library")
 }
 
+// TestSRFI13Phase1 runs the SRFI-13 Phase-1 (top-five) integration tests.
+func TestSRFI13Phase1(t *testing.T) {
+	runSchemeTest(t, "srfi-13-tests-phase1.scm", 2*time.Minute, "SRFI-13 Phase 1 (top-five)")
+}
+
 // extractTestSummary extracts the test summary from chibi-test output.
 func extractTestSummary(output string) string {
 	// Look for "Test Summary:" section
