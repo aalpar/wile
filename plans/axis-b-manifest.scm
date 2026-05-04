@@ -105,6 +105,7 @@
  ("char-lower-case?" "boolean" ("character") "github.com/aalpar/wile/internal/extensions/all.init.MakeCharPredicate.func25" "registry/helpers/type.go:57")
  ("char-numeric?" "boolean" ("character") "github.com/aalpar/wile/internal/extensions/all.init.MakeCharPredicate.func22" "registry/helpers/type.go:57")
  ("char-ready?" "boolean" ("...textual-input-port") "github.com/aalpar/wile/internal/extensions/io.PrimCharReadyQ" "internal/extensions/io/prim_read_write.go:349")
+ ("char-set?" "" () "github.com/aalpar/wile/extensions/charsets.primCharSetQ" "extensions/charsets/charsets.go:38")
  ("char-upcase" "character" ("character") "github.com/aalpar/wile/internal/extensions/all.init.MakeCharTransform.func26" "registry/helpers/type.go:70")
  ("char-upper-case?" "boolean" ("character") "github.com/aalpar/wile/internal/extensions/all.init.MakeCharPredicate.func24" "registry/helpers/type.go:57")
  ("char-whitespace?" "boolean" ("character") "github.com/aalpar/wile/internal/extensions/all.init.MakeCharPredicate.func23" "registry/helpers/type.go:57")

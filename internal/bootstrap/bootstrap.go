@@ -34,6 +34,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/extensions/charsets"
 	"github.com/aalpar/wile/extensions/eval"
 	"github.com/aalpar/wile/extensions/files"
 	"github.com/aalpar/wile/extensions/gointerop"
@@ -79,6 +80,7 @@ var allExtensions = []registry.Extension{
 	all.Extension,
 	system.Extension,
 	process.Extension,
+	charsets.Extension,
 	envvars.Extension,
 }
 
@@ -100,6 +102,7 @@ func ProfileExtensions(name string) ([]registry.Extension, error) {
 			files.Extension,
 			math.Extension,
 			all.SafeExtension,
+			charsets.Extension,
 			envvars.Extension,
 		}, nil
 	case "console-with-load":
@@ -109,6 +112,7 @@ func ProfileExtensions(name string) ([]registry.Extension, error) {
 			math.Extension,
 			all.SafeExtension,
 			eval.Extension,
+			charsets.Extension,
 			envvars.Extension,
 		}, nil
 	case "small":
@@ -119,6 +123,7 @@ func ProfileExtensions(name string) ([]registry.Extension, error) {
 			introspection.Extension,
 			eval.Extension,
 			all.Extension,
+			charsets.Extension,
 			system.Extension,
 			envvars.Extension,
 		}, nil
