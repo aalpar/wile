@@ -276,10 +276,10 @@
        (let ((pairs (bipartite-matching-pairs tmp)))
          body ...)))))
 
-(define (validate-quotas! quotas hospitals)
+(define (validate-quotas! quotas hospitals HS)
   (for-each
     (lambda (h)
-      (let ((cell (assoc h quotas)))
+      (let ((cell (setoid-assoc HS h quotas)))
         (cond
           ((not cell)
            (error "hospital-intern-match: missing quota for hospital" h))
@@ -290,7 +290,8 @@
 
 (define (hospital-intern-match intern-prefs hospital-prefs hospital-quotas)
   "Compute an intern-optimal stable many-to-one matching via Roth's reduction.\nReturns an alist ((hospital . (intern ...)) ...) of accepted interns per hospital.\nUnmatched interns are absent; caller can derive them via set difference.\n\nParameters:\n  intern-prefs : preference-profile — interns' preferences over hospitals\n  hospital-prefs : preference-profile — hospitals' preferences over interns\n  hospital-quotas : alist of (hospital . positive-integer)\nReturns: alist of (any . list)\nCategory: algebra\nKeywords: hospital-intern, college-admissions, many-to-one, Roth, quota"
-  (validate-quotas! hospital-quotas (preference-profile-agents hospital-prefs))
+  (let ((HS (preference-profile-setoid hospital-prefs)))
+    (validate-quotas! hospital-quotas (preference-profile-agents hospital-prefs) HS))
   (let* ((HS (preference-profile-setoid hospital-prefs))
          (hospitals (preference-profile-agents hospital-prefs))
          (interns (preference-profile-agents intern-prefs))
@@ -301,7 +302,7 @@
              (if (null? hs)
                  (reverse acc)
                  (let* ((h (car hs))
-                        (q (cdr (assoc h hospital-quotas)))
+                        (q (cdr (setoid-assoc HS h hospital-quotas)))
                         (copies
                           (let inner ((k 1) (cacc '()))
                             (if (> k q)
@@ -379,13 +380,13 @@
   (cycle rotation-cycle))
 
 (define (make-rotation cycle)
-  "Construct a rotation from a list of (proposer . receiver) pairs in cyclic order.\\nApplying the rotation to a stable matching M produces M' where each proposer pᵢ is\\nreassigned from its current partner rᵢ to r_{i+1 mod k}.\\n\\nParameters:\\n  cycle : list of (any . any), length ≥ 2\\nReturns: <rotation>\\nCategory: algebra\\nKeywords: rotation, Irving, Gusfield, stable matching"
+  "Construct a rotation from a list of (proposer . receiver) pairs in cyclic order.\nApplying the rotation to a stable matching M produces M' where each proposer pᵢ is\nreassigned from its current partner rᵢ to r_{i+1 mod k}.\n\nParameters:\n  cycle : list of (any . any), length ≥ 2\nReturns: <rotation>\nCategory: algebra\nKeywords: rotation, Irving, Gusfield, stable matching"
   (when (or (not (list? cycle)) (< (length cycle) 2))
     (error "make-rotation: cycle must be a list of at least 2 (proposer . receiver) pairs" cycle))
   (make-rotation* cycle))
 
 (define (apply-rotation M rho)
-  "Apply rotation RHO to matching M, returning a new matching where each rotation\\nproposer is reassigned to the next receiver in the cycle.\\n\\nParameters:\\n  M : bipartite-matching\\n  rho : rotation\\nReturns: <bipartite-matching>\\nCategory: algebra\\nKeywords: rotation, Gusfield-Irving, stable matching, lattice traversal"
+  "Apply rotation RHO to matching M, returning a new matching where each rotation\nproposer is reassigned to the next receiver in the cycle.\n\nParameters:\n  M : bipartite-matching\n  rho : rotation\nReturns: <bipartite-matching>\nCategory: algebra\nKeywords: rotation, Gusfield-Irving, stable matching, lattice traversal"
   (let* ((cycle (rotation-cycle rho))
          (k (length cycle))
          (PS (bipartite-matching-prop-setoid M))
@@ -482,7 +483,7 @@
            (if rho rho (try (cdr ps)))))))))
 
 (define (rotations prop-prefs recv-prefs)
-  "Enumerate all rotations of the stable-matching system for the given preferences.\nEach rotation, when applied to M_top, produces another stable matching. The set of\nrotations is in bijection with the join-irreducibles of the Conway distributive lattice\n(Gusfield-Irving 1989, Theorem 3.3.1). Returns an empty list when M_top = M_bot.\n\nParameters:\n  prop-prefs : preference-profile\n  recv-prefs : preference-profile\nReturns: list of <rotation>\nCategory: algebra\nKeywords: rotation, Gusfield-Irving, Conway, stable matching, join-irreducibles"
+  "Enumerate the rotations of the stable-matching system for the given preferences,\nin elimination order from M_top down to M_bot. Only the FIRST rotation in the returned\nlist is exposed in M_top; each subsequent rotation is exposed in the matching produced\nby applying its predecessors in order. The set of rotations is in bijection with the\njoin-irreducibles of the Conway distributive lattice (Gusfield-Irving 1989, Theorem 3.3.1).\nReturns an empty list when M_top = M_bot.\n\nApplication contract: to traverse from M_top toward M_bot, fold apply-rotation over the\nreturned list in order. Applying a non-first rotation directly to M_top is undefined.\n\nParameters:\n  prop-prefs : preference-profile\n  recv-prefs : preference-profile\nReturns: list of <rotation>\nCategory: algebra\nKeywords: rotation, Gusfield-Irving, Conway, stable matching, join-irreducibles, elimination order"
   (let walk ((M (gale-shapley prop-prefs recv-prefs))
              (acc '()))
     (let ((rho (find-one-rotation M prop-prefs recv-prefs)))
@@ -708,7 +709,7 @@
               (else (loop (cdr xs) best best-score)))))))))
 
 (define (tropical-assignment cost-fn proposers receivers)
-  "Compute a minimum-cost perfect assignment via the Hungarian algorithm (Kuhn 1955; Munkres 1957).\nReturns (matching . total-cost) where matching is a <bipartite-matching>.\nUse +inf.0 in COST-FN to forbid a (proposer, receiver) pair.\n\nUnequal-size sides are padded internally with synthetic agents at +inf.0 cost; synthetic\npairs are excluded from the returned matching. The Shapley-Shubik core allocation\n(LP dual potentials) is computed internally but not returned in v1.\n\nParameters:\n  cost-fn : procedure — (proposer × receiver) → number ∪ +inf.0\n  proposers : list\n  receivers : list\nReturns: pair (<bipartite-matching> . number)\nCategory: algebra\nKeywords: Hungarian, assignment, Kuhn-Munkres, tropical, bipartite, Shapley-Shubik"
+  "Compute a minimum-cost assignment via the Hungarian algorithm (Kuhn 1955; Munkres 1957).\nReturns (matching . total-cost) where matching is a <bipartite-matching>.\nUse +inf.0 in COST-FN to forbid a (proposer, receiver) pair.\n\nReturn shape:\n  Square instance (|proposers| = |receivers|): returns a perfect assignment, or raises\n    if no perfect assignment with finite cost exists (i.e., every assignment requires\n    at least one +inf.0 edge).\n  Unequal sides: returns a partial matching of size min(|proposers|, |receivers|);\n    the larger side has unmatched agents that the caller can derive via set difference.\n    Real-real pairs assigned at +inf.0 (when no cheaper alternative is available within\n    the cardinality constraint) are dropped from the returned matching but contribute\n    nothing to total-cost.\n\nUnequal-size sides are padded internally with synthetic agents at +inf.0 cost; synthetic\npairs are excluded from the returned matching. The Shapley-Shubik core allocation\n(LP dual potentials) is computed internally but not returned in v1.\n\nParameters:\n  cost-fn : procedure — (proposer × receiver) → number ∪ +inf.0\n  proposers : list\n  receivers : list\nReturns: pair (<bipartite-matching> . number)\nCategory: algebra\nKeywords: Hungarian, assignment, Kuhn-Munkres, tropical, bipartite, Shapley-Shubik"
   (let* ((m (length proposers))
          (n (length receivers))
          (size (max m n))
@@ -740,6 +741,19 @@
           (vector-set! C i row)
           (row-loop (+ i 1)))))
     (let ((assignment (kuhn-munkres-square C size)))
+      ;; On a square instance (m == n), every real proposer must be assigned
+      ;; to a real receiver at finite cost; otherwise no perfect assignment
+      ;; exists and we raise rather than silently return a partial matching.
+      ;; On unequal sides we accept partial matchings — see the docstring.
+      (when (= m n)
+        (let check ((i 0))
+          (when (< i size)
+            (let ((j (vector-ref assignment i)))
+              (when (= (vector-ref (vector-ref C i) j) INF)
+                (error "tropical-assignment: no feasible perfect assignment"
+                       (vector-ref proposers-vec i)
+                       (vector-ref receivers-vec j))))
+            (check (+ i 1)))))
       (let loop ((i 0) (pairs '()) (total 0))
         (cond
           ((>= i size) (cons (make-bipartite-matching (reverse pairs)) total))

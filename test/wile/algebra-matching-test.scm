@@ -336,7 +336,9 @@
       (test 'b (bipartite-matching-partner Mp 1))
       (test 'a (bipartite-matching-partner Mp 2)))))
 
-(test-group "rotations on Gusfield-Irving 4x4"
+(test-group "rotations on Gusfield-Irving 4x4 (degenerate: M_top = M_bot)"
+  ;; This fixture has a unique stable matching, so rotations returns '().
+  ;; The non-trivial rotation enumeration test is below on the 3x3 fixture.
   (let* ((mp (make-preference-profile
                '(1 2 3 4)
                (lambda (m)
@@ -354,17 +356,47 @@
                    ((c) '(2 3 4 1))
                    ((d) '(4 1 3 2))))))
          (rhos (rotations mp wp)))
+    (test '() rhos)))
+
+(test-group "rotations on cyclic 3x3 (multiple stable matchings)"
+  ;; Cyclic preferences: men 1→abc, 2→bca, 3→cab; women a→231, b→312, c→123.
+  ;; Three stable matchings: M_top={1↔a,2↔b,3↔c}, M_1={1↔b,2↔c,3↔a}, M_bot={1↔c,2↔a,3↔b}.
+  ;; Rotation ρ_1 exposed in M_top; ρ_2 exposed in M_1.
+  (let* ((mp (make-preference-profile
+               '(1 2 3)
+               (lambda (m)
+                 (case m
+                   ((1) '(a b c))
+                   ((2) '(b c a))
+                   ((3) '(c a b))))))
+         (wp (make-preference-profile
+               '(a b c)
+               (lambda (w)
+                 (case w
+                   ((a) '(2 3 1))
+                   ((b) '(3 1 2))
+                   ((c) '(1 2 3))))))
+         (rhos (rotations mp wp)))
+    ;; Two rotations exist
     (test #t (list? rhos))
-    ;; Every element must be a <rotation>
+    (test 2 (length rhos))
     (let loop ((xs rhos))
       (cond ((null? xs) 'ok)
             (else (test #t (rotation? (car xs))) (loop (cdr xs)))))
-    ;; Applying every rotation in M_top must yield a stable matching
+    ;; Sequential application: fold apply-rotation over rhos in elimination
+    ;; order. Each intermediate matching (and the final result) must be stable.
+    ;; This is the correct invariant — rotations form a path from M_top to M_bot.
     (let ((M-top (gale-shapley mp wp)))
-      (let loop ((xs rhos))
-        (cond ((null? xs) 'ok)
-              (else (test #t (stable? (apply-rotation M-top (car xs)) mp wp))
-                    (loop (cdr xs))))))))
+      (let loop ((M M-top) (xs rhos))
+        (cond
+          ((null? xs)
+           ;; Final matching equals receiver-optimal M_bot
+           (test #t (bipartite-matching-equal?
+                      M (gale-shapley/receiver-optimal mp wp))))
+          (else
+            (let ((M-next (apply-rotation M (car xs))))
+              (test #t (stable? M-next mp wp))
+              (loop M-next (cdr xs)))))))))
 
 (test-group "stable-matching-lattice"
   ;; Use a fixture where M_top ≠ M_bot (so the lattice has multiple elements).
@@ -379,7 +411,43 @@
     (test #t (lattice? L))
     (test 2 (length (lattice-elements L)))))
 
-(test-group "egalitarian and sex-equal selectors"
+(test-group "egalitarian and sex-equal selectors — 3x3 with interior optimum"
+  ;; Use the cyclic 3x3 fixture with three stable matchings:
+  ;;   M_top={1↔a,2↔b,3↔c}: prop-sum-rank=3, recv-sum-rank=9, total=12, |Δ|=6
+  ;;   M_1  ={1↔b,2↔c,3↔a}: prop-sum-rank=6, recv-sum-rank=6, total=12, |Δ|=0
+  ;;   M_bot={1↔c,2↔a,3↔b}: prop-sum-rank=9, recv-sum-rank=3, total=12, |Δ|=6
+  ;; All three tie on egalitarian (sum-rank=12); only M_1 minimizes sex-equal (|Δ|=0).
+  ;; Sex-equal selector must therefore return M_1 — distinct from both extremes.
+  (let* ((mp (make-preference-profile
+               '(1 2 3)
+               (lambda (m)
+                 (case m
+                   ((1) '(a b c))
+                   ((2) '(b c a))
+                   ((3) '(c a b))))))
+         (wp (make-preference-profile
+               '(a b c)
+               (lambda (w)
+                 (case w
+                   ((a) '(2 3 1))
+                   ((b) '(3 1 2))
+                   ((c) '(1 2 3))))))
+         (M-top (gale-shapley mp wp))
+         (M-bot (gale-shapley/receiver-optimal mp wp))
+         (E (egalitarian-stable-matching mp wp))
+         (S (sex-equal-stable-matching mp wp))
+         (M-mid (make-bipartite-matching '((1 . b) (2 . c) (3 . a)))))
+    (test #t (stable? E mp wp))
+    (test #t (stable? S mp wp))
+    ;; Sex-equal must pick the interior matching M_1 (uniquely minimizes |Δ|).
+    ;; A selector that just returned M_top or M_bot would fail this assertion.
+    (test #t (bipartite-matching-equal? S M-mid))
+    (test #f (bipartite-matching-equal? S M-top))
+    (test #f (bipartite-matching-equal? S M-bot))))
+
+(test-group "egalitarian and sex-equal selectors — degenerate 2x2"
+  ;; The 2x2 symmetric fixture has only 2 stable matchings (M_top, M_bot);
+  ;; selectors must return a stable matching but no interior choice exists.
   (let* ((mp (make-preference-profile
                '(1 2)
                (lambda (m) (case m ((1) '(a b)) ((2) '(b a))))))

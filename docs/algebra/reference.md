@@ -1061,7 +1061,7 @@ Two-sided matching primitives -- Roth-Sotomayor (1990). Three-layer structure pe
 - `(gale-shapley <prop-prefs> <recv-prefs>)` -- proposer-optimal stable matching, O(n²) (Gale-Shapley 1962)
 - `(gale-shapley/receiver-optimal <prop-prefs> <recv-prefs>)` -- receiver-optimal stable matching
 - `(hospital-intern-match <intern-prefs> <hospital-prefs> <hospital-quotas>)` -- intern-optimal stable many-to-one matching via Roth's reduction; returns alist `((hospital . (intern ...)) ...)`
-- `(tropical-assignment <cost-fn> <proposers> <receivers>)` → `(<bipartite-matching> . cost)` -- minimum-cost perfect assignment via Kuhn-Munkres O(n³); use `+inf.0` to forbid pairs
+- `(tropical-assignment <cost-fn> <proposers> <receivers>)` → `(<bipartite-matching> . cost)` -- minimum-cost assignment via Kuhn-Munkres O(n³); use `+inf.0` to forbid pairs. On square instances returns a perfect assignment or raises on infeasibility; on unequal sides returns a partial matching of size `min(|proposers|, |receivers|)` with unmatched agents on the larger side derivable via set difference.
 
 ### Conway lattice (selection layer)
 
