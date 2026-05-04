@@ -38,7 +38,9 @@
     ;; Phase 3 Task 3.1: iteration
     char-set-fold char-set-for-each
     ;; Phase 3 Task 3.2: map + filter
-    char-set-map char-set-filter char-set-filter!)
+    char-set-map char-set-filter char-set-filter!
+    ;; Phase 3 Task 3.3: count + short-circuit predicates
+    char-set-count char-set-every char-set-any)
 
   (import (scheme base)
           (wile charsets))   ; for char-set-ranges, used by util.scm

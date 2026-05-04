@@ -379,6 +379,70 @@ func TestCharSetRanges(t *testing.T) {
 			values.NewCons(values.NewInteger(122), values.NewInteger(122))))
 }
 
+func TestCharSetCountEveryAny(t *testing.T) {
+	c := qt.New(t)
+	engine := newLibraryEngine(t)
+	runScheme(t, engine, "(import (srfi 14))")
+
+	// count: zero matches
+	c.Assert(runScheme(t, engine, `(char-set-count (lambda (c) (char=? c #\z)) (char-set #\a #\b #\c))`),
+		valuestest.SchemeEquals, values.NewInteger(0))
+
+	// count: one match
+	c.Assert(runScheme(t, engine, `(char-set-count (lambda (c) (char=? c #\b)) (char-set #\a #\b #\c))`),
+		valuestest.SchemeEquals, values.NewInteger(1))
+
+	// count: all match
+	c.Assert(runScheme(t, engine, `(char-set-count (lambda (c) #t) (char-set #\a #\b #\c))`),
+		valuestest.SchemeEquals, values.NewInteger(3))
+
+	// every: all true
+	c.Assert(runScheme(t, engine, `(char-set-every (lambda (c) #t) (char-set #\a #\b))`),
+		qt.Equals, values.TrueValue)
+
+	// every: one false
+	c.Assert(runScheme(t, engine, `(char-set-every (lambda (c) (char=? c #\a)) (char-set #\a #\b))`),
+		qt.Equals, values.FalseValue)
+
+	// every: vacuous on empty char-set
+	c.Assert(runScheme(t, engine, `(char-set-every (lambda (c) #f) (char-set))`),
+		qt.Equals, values.TrueValue)
+
+	// any: one true
+	c.Assert(runScheme(t, engine, `(char-set-any (lambda (c) (char=? c #\b)) (char-set #\a #\b #\c))`),
+		qt.Equals, values.TrueValue)
+
+	// any: all false
+	c.Assert(runScheme(t, engine, `(char-set-any (lambda (c) (char=? c #\z)) (char-set #\a #\b #\c))`),
+		qt.Equals, values.FalseValue)
+
+	// any: vacuous on empty char-set
+	c.Assert(runScheme(t, engine, `(char-set-any (lambda (c) #t) (char-set))`),
+		qt.Equals, values.FalseValue)
+
+	// every short-circuits — verify by side effect:
+	// calls #\a (true), #\b (false → exit); total = 2
+	c.Assert(runScheme(t, engine, `
+      (let ((calls 0))
+        (char-set-every (lambda (c)
+                          (set! calls (+ calls 1))
+                          (char=? c #\a))
+                        (char-set #\a #\b #\c #\d))
+        calls)`),
+		valuestest.SchemeEquals, values.NewInteger(2))
+
+	// any short-circuits — verify by side effect:
+	// calls #\a (false), #\b (true → exit); total = 2
+	c.Assert(runScheme(t, engine, `
+      (let ((calls 0))
+        (char-set-any (lambda (c)
+                        (set! calls (+ calls 1))
+                        (char=? c #\b))
+                      (char-set #\a #\b #\c #\d))
+        calls)`),
+		valuestest.SchemeEquals, values.NewInteger(2))
+}
+
 func TestCharSetMapFilter(t *testing.T) {
 	c := qt.New(t)
 	engine := newLibraryEngine(t)

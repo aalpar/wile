@@ -27,3 +27,27 @@
        base))))
 
 (define char-set-filter! char-set-filter)
+
+(define (char-set-count pred cs)
+  (%char-set-walk-ranges cs
+    (lambda (ch acc) (if (pred ch) (+ acc 1) acc))
+    0))
+
+;; char-set-every and char-set-any short-circuit on first failure/success.
+;; %char-set-walk-ranges doesn't natively support early exit, so we use
+;; call-with-current-continuation to bail out.
+(define (char-set-every pred cs)
+  (call-with-current-continuation
+    (lambda (return)
+      (%char-set-walk-ranges cs
+        (lambda (ch _)
+          (if (pred ch) #t (return #f)))
+        #t))))
+
+(define (char-set-any pred cs)
+  (call-with-current-continuation
+    (lambda (return)
+      (%char-set-walk-ranges cs
+        (lambda (ch _)
+          (if (pred ch) (return #t) #f))
+        #f))))
