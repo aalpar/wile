@@ -163,6 +163,11 @@ func TestSRFI13Phase7(t *testing.T) {
 	runSchemeTest(t, "srfi-13-tests-phase7.scm", 2*time.Minute, "SRFI-13 Phase 7 (mutating case)")
 }
 
+// TestWileStrings runs the (wile strings) extras integration tests.
+func TestWileStrings(t *testing.T) {
+	runSchemeTest(t, "wile-strings-tests.scm", 2*time.Minute, "(wile strings) extras")
+}
+
 // extractTestSummary extracts the test summary from chibi-test output.
 func extractTestSummary(output string) string {
 	// Look for "Test Summary:" section

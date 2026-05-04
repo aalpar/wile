@@ -43,5 +43,7 @@
    ;; -- Re-exported from (srfi 13) -- Phase 7 --
    string-upcase! string-downcase!
    ;; -- Wile extras -- Phase 1 --
-   string-split)
+   string-split
+   ;; -- Wile extras -- Phase 8 --
+   string-replace-all string-byte-length string-blank? string-repeat)
   (include "strings/extras.scm"))
