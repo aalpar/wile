@@ -23,7 +23,9 @@
     ;; Phase 1 Task 1.5: char-set converters
     char-set->list char-set->string
     ;; Phase 1 Task 1.7: dispatching coercing constructor
-    ->char-set)
+    ->char-set
+    ;; Phase 2 Task 2.1: equality and subset predicates
+    char-set= char-set<=)
 
   (import (scheme base))
 

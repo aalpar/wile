@@ -232,6 +232,54 @@ func TestUcsRangeToCharSet(t *testing.T) {
 		qt.Equals, values.TrueValue)
 }
 
+func TestCharSetEquality(t *testing.T) {
+	c := qt.New(t)
+	engine := newLibraryEngine(t)
+	runScheme(t, engine, "(import (srfi 14))")
+
+	// Vacuous: 1 arg → #t
+	c.Assert(runScheme(t, engine, `(char-set= (char-set #\a))`), qt.Equals, values.TrueValue)
+
+	// Equal sets built different ways
+	c.Assert(runScheme(t, engine, `(char-set= (char-set #\a #\b) (string->char-set "ab"))`),
+		qt.Equals, values.TrueValue)
+
+	// Unequal
+	c.Assert(runScheme(t, engine, `(char-set= (char-set #\a) (char-set #\b))`),
+		qt.Equals, values.FalseValue)
+
+	// Variadic chain (3 args)
+	c.Assert(runScheme(t, engine,
+		`(char-set= (char-set #\a #\b) (string->char-set "ab") (list->char-set '(#\a #\b)))`),
+		qt.Equals, values.TrueValue)
+}
+
+func TestCharSetSubset(t *testing.T) {
+	c := qt.New(t)
+	engine := newLibraryEngine(t)
+	runScheme(t, engine, "(import (srfi 14))")
+
+	// Vacuous: 1 arg → #t
+	c.Assert(runScheme(t, engine, `(char-set<= (char-set #\a))`), qt.Equals, values.TrueValue)
+
+	// Proper subset
+	c.Assert(runScheme(t, engine, `(char-set<= (char-set #\a) (char-set #\a #\b))`),
+		qt.Equals, values.TrueValue)
+
+	// Equal sets are subsets
+	c.Assert(runScheme(t, engine, `(char-set<= (char-set #\a #\b) (char-set #\a #\b))`),
+		qt.Equals, values.TrueValue)
+
+	// Not a subset
+	c.Assert(runScheme(t, engine, `(char-set<= (char-set #\a #\c) (char-set #\a #\b))`),
+		qt.Equals, values.FalseValue)
+
+	// Variadic chain: a ⊆ ab ⊆ abc
+	c.Assert(runScheme(t, engine,
+		`(char-set<= (char-set #\a) (char-set #\a #\b) (char-set #\a #\b #\c))`),
+		qt.Equals, values.TrueValue)
+}
+
 func TestCharSetRanges(t *testing.T) {
 	c := qt.New(t)
 	engine := newLibraryEngine(t)

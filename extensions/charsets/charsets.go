@@ -144,6 +144,32 @@ func addPrimitives(r *registry.Registry) error {
 			Category:   "char-sets",
 			Keywords:   []string{"char-set", "ranges", "wile", "iteration"},
 		},
+		{
+			// ParamCount: 2, IsVariadic: true → Arg(0) = cs1 (fixed),
+			// Arg(1) = rest list (any additional char-sets). Per Wile variadic
+			// convention: Arg(N-2) is the last fixed param, Arg(N-1) is rest.
+			Name:       "char-set=",
+			ParamCount: 2,
+			IsVariadic: true,
+			Impl:       primCharSetEqual,
+			Doc:        "Returns #t if all char-sets are equal, otherwise #f. Vacuously true for one argument. (SRFI-14)",
+			ParamNames: []string{"cs1", "rest"},
+			Category:   "char-sets",
+			Keywords:   []string{"char-set", "equal", "compare", "srfi-14"},
+		},
+		{
+			// ParamCount: 2, IsVariadic: true → Arg(0) = cs1 (fixed),
+			// Arg(1) = rest list (any additional char-sets). Per Wile variadic
+			// convention: Arg(N-2) is the last fixed param, Arg(N-1) is rest.
+			Name:       "char-set<=",
+			ParamCount: 2,
+			IsVariadic: true,
+			Impl:       primCharSetSubset,
+			Doc:        "Returns #t if cs1 ⊆ cs2 ⊆ ... pairwise. Vacuously true for one argument. (SRFI-14)",
+			ParamNames: []string{"cs1", "rest"},
+			Category:   "char-sets",
+			Keywords:   []string{"char-set", "subset", "compare", "srfi-14"},
+		},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 	return nil
 }
@@ -442,4 +468,83 @@ func setValueFromRunesAndBase(mc machine.CallContext, runes []rune, base *values
 	}
 	mc.SetValue(cs)
 	return nil
+}
+
+// charSetVariadicArgs collects the first arg + variadic rest into a single slice
+// of *CharSet, with type-error wrapping. Returns ([]cs, nil) on success.
+func charSetVariadicArgs(site string, mc machine.CallContext) ([]*values.CharSet, error) {
+	first, ok := mc.Arg(0).(*values.CharSet)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotACharSet,
+			"%s: argument 1: expected char-set, got %T", site, mc.Arg(0))
+	}
+	out := []*values.CharSet{first}
+	rest, ok := mc.Arg(1).(values.Tuple)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAList,
+			"%s: rest argument: expected list, got %T", site, mc.Arg(1))
+	}
+	var iterErr error
+	_, _ = rest.ForEach(mc.Context(), func(_ context.Context, i int, _ bool, v values.Value) error {
+		cs, isCs := v.(*values.CharSet)
+		if !isCs {
+			iterErr = werr.WrapForeignErrorf(werr.ErrNotACharSet,
+				"%s: argument %d: expected char-set, got %T", site, i+2, v)
+			return iterErr
+		}
+		out = append(out, cs)
+		return nil
+	})
+	if iterErr != nil {
+		return nil, iterErr
+	}
+	return out, nil
+}
+
+func primCharSetEqual(mc machine.CallContext) error {
+	sets, err := charSetVariadicArgs("char-set=", mc)
+	if err != nil {
+		return err
+	}
+	for i := 1; i < len(sets); i++ {
+		if !sets[0].EqualTo(sets[i]) {
+			mc.SetValue(values.FalseValue)
+			return nil
+		}
+	}
+	mc.SetValue(values.TrueValue)
+	return nil
+}
+
+func primCharSetSubset(mc machine.CallContext) error {
+	sets, err := charSetVariadicArgs("char-set<=", mc)
+	if err != nil {
+		return err
+	}
+	for i := 1; i < len(sets); i++ {
+		if !isSubset(sets[i-1], sets[i]) {
+			mc.SetValue(values.FalseValue)
+			return nil
+		}
+	}
+	mc.SetValue(values.TrueValue)
+	return nil
+}
+
+// isSubset reports whether every codepoint of a is also in b. Linear merge
+// over canonical inversion lists: O(n_a + n_b).
+func isSubset(a, b *values.CharSet) bool {
+	ar := a.Ranges()
+	br := b.Ranges()
+	j := 0
+	for _, ra := range ar {
+		// Advance past b-ranges that end before this a-range starts.
+		for j < len(br) && br[j].Hi < ra.Lo {
+			j++
+		}
+		if j >= len(br) || br[j].Lo > ra.Lo || br[j].Hi < ra.Hi {
+			return false
+		}
+	}
+	return true
 }
