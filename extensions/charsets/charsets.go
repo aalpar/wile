@@ -104,6 +104,19 @@ func addPrimitives(r *registry.Registry) error {
 			Category:   "char-sets",
 			Keywords:   []string{"list", "char-set", "convert", "srfi-14"},
 		},
+		{
+			// ParamCount: 3, IsVariadic: true → Arg(0) = lo (fixed),
+			// Arg(1) = hi (fixed), Arg(2) = rest list (optional error? and
+			// optional base char-set, in that order).
+			Name:       "ucs-range->char-set",
+			ParamCount: 3,
+			IsVariadic: true,
+			Impl:       primUcsRangeToCharSet,
+			Doc:        "Returns a char-set containing codepoints in the half-open range [LO, HI). Optional ERROR? (default #t) controls handling of codepoints exceeding 0x10FFFF: any non-#f value (Scheme-truthy) raises an error, #f silently clips. Optional BASE-CS is unioned into the result. (SRFI-14)",
+			ParamNames: []string{"lo", "hi", "rest"},
+			Category:   "char-sets",
+			Keywords:   []string{"ucs", "codepoint", "range", "char-set", "srfi-14"},
+		},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 	return nil
 }
@@ -252,6 +265,93 @@ func optionalBaseCharSet(site string, restArg values.Value) (*values.CharSet, er
 			"%s: optional base argument: expected char-set, got %T", site, first)
 	}
 	return base, nil
+}
+
+// exactInt64 extracts an int64 from any exact integer Number value.
+func exactInt64(v values.Value) (int64, bool) {
+	return values.ExactInteger(v)
+}
+
+func primUcsRangeToCharSet(mc machine.CallContext) error {
+	lo, ok := exactInt64(mc.Arg(0))
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAnInteger,
+			"ucs-range->char-set: argument 1: expected exact integer, got %T", mc.Arg(0))
+	}
+	hi, ok := exactInt64(mc.Arg(1))
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAnInteger,
+			"ucs-range->char-set: argument 2: expected exact integer, got %T", mc.Arg(1))
+	}
+	if lo > hi {
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"ucs-range->char-set: lo (%d) exceeds hi (%d)", lo, hi)
+	}
+
+	// Parse optional rest: (error? base-cs).
+	//
+	// Per CLAUDE.md "ParamCount: N, IsVariadic: true → Arg(N-1) = rest list"
+	// the rest is always a Tuple (Pair or EmptyList), never nil.
+	errorFlag := true
+	var base *values.CharSet
+	rest, ok := mc.Arg(2).(values.Tuple)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotAList,
+			"ucs-range->char-set: rest argument: expected list, got %T", mc.Arg(2))
+	}
+	if !rest.IsEmptyList() {
+		// Scheme truthiness: only #f is false; any other value (including
+		// symbols, integers, strings) is truthy. SRFI-14 spec calls error?
+		// a "boolean" but doesn't pin down rejection behavior for non-booleans;
+		// following Scheme convention here.
+		errorFlag = rest.Car() != values.FalseValue
+		cdr := rest.Cdr()
+		cdrTuple, isTuple := cdr.(values.Tuple)
+		if isTuple && !cdrTuple.IsEmptyList() {
+			cs, isCs := cdrTuple.Car().(*values.CharSet)
+			if !isCs {
+				return werr.WrapForeignErrorf(werr.ErrNotACharSet,
+					"ucs-range->char-set: optional base argument: expected char-set, got %T", cdrTuple.Car())
+			}
+			base = cs
+		}
+	}
+
+	// Validate or clip the lower bound.
+	lowerInclusive := lo
+	if lowerInclusive < 0 {
+		if errorFlag {
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+				"ucs-range->char-set: codepoint %d is negative", lo)
+		}
+		lowerInclusive = 0
+	}
+
+	// Validate or clip the upper bound.
+	upperExclusive := hi
+	if upperExclusive > int64(values.MaxCodepoint)+1 {
+		if errorFlag {
+			return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+				"ucs-range->char-set: codepoint %d exceeds 0x10FFFF", hi-1)
+		}
+		upperExclusive = int64(values.MaxCodepoint) + 1
+	}
+
+	// Half-open [lo, hi) → inclusive [lowerInclusive, upperExclusive-1].
+	var cs *values.CharSet
+	if lowerInclusive >= upperExclusive {
+		cs = values.NewCharSetFromRanges(nil)
+	} else {
+		cs = values.NewCharSetFromRanges([]values.CharSetRange{
+			{Lo: rune(lowerInclusive), Hi: rune(upperExclusive - 1)},
+		})
+	}
+	if base != nil {
+		merged := append(cs.Ranges(), base.Ranges()...)
+		cs = values.NewCharSetFromUnsortedRanges(merged)
+	}
+	mc.SetValue(cs)
+	return nil
 }
 
 // setValueFromRunesAndBase builds a char-set from runes, optionally unioned

@@ -159,3 +159,40 @@ func TestListToCharSet(t *testing.T) {
 	// List with non-char element
 	runSchemeExpectError(t, engine, `(list->char-set '(#\a 42))`)
 }
+
+func TestUcsRangeToCharSet(t *testing.T) {
+	c := qt.New(t)
+	engine := newLibraryEngine(t)
+	runScheme(t, engine, "(import (srfi 14))")
+
+	// Half-open: (ucs-range->char-set 65 90) => 25 chars (A..Y)
+	c.Assert(runScheme(t, engine, "(char-set-size (ucs-range->char-set 65 90))"),
+		valuestest.SchemeEquals, values.NewInteger(25))
+
+	// Membership respects half-open
+	c.Assert(runScheme(t, engine, `(char-set-contains? (ucs-range->char-set 65 90) #\A)`),
+		qt.Equals, values.TrueValue)
+	c.Assert(runScheme(t, engine, `(char-set-contains? (ucs-range->char-set 65 90) #\Z)`),
+		qt.Equals, values.FalseValue) // 90 is excluded
+
+	// Zero-width: (ucs-range->char-set 65 65) => empty
+	c.Assert(runScheme(t, engine, "(char-set-size (ucs-range->char-set 65 65))"),
+		valuestest.SchemeEquals, values.NewInteger(0))
+
+	// lo > hi error (with default error? = #t)
+	runSchemeExpectError(t, engine, "(ucs-range->char-set 90 65)")
+
+	// Out-of-range with error? = #t
+	runSchemeExpectError(t, engine, "(ucs-range->char-set 0 #x200000)")
+
+	// Out-of-range with error? = #f → silently clipped: 0x10FFFE..0x10FFFF inclusive (2 chars)
+	c.Assert(runScheme(t, engine, "(char-set-size (ucs-range->char-set #x10FFFE #x200000 #f))"),
+		valuestest.SchemeEquals, values.NewInteger(2))
+
+	// Scheme-truthy error? — non-Boolean truthy value treated as error-on
+	runSchemeExpectError(t, engine, "(ucs-range->char-set 0 #x200000 'truthy)")
+
+	// With base char-set
+	c.Assert(runScheme(t, engine, `(char-set-contains? (ucs-range->char-set 65 67 #t (char-set #\z)) #\z)`),
+		qt.Equals, values.TrueValue)
+}

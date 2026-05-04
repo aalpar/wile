@@ -17,7 +17,9 @@
     ;; Phase 1: constructor and basic accessors
     char-set char-set-contains? char-set-size char-set-copy
     ;; Phase 1 Task 1.3: bulk constructors
-    string->char-set list->char-set)
+    string->char-set list->char-set
+    ;; Phase 1 Task 1.4: range constructor
+    ucs-range->char-set)
 
   (import (scheme base))
 
