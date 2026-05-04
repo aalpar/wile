@@ -3,8 +3,11 @@
 
 (define (string-concatenate string-list)
   "Concatenate every string in STRING-LIST in left-to-right order.
-Equivalent to (apply string-append STRING-LIST), packaged as a single-
-argument procedure (some Schemes have argument-count limits on apply).
+SRFI-13 motivates this as a single-argument alternative to
+(apply string-append ...) for implementations with argument-count
+limits. Wile does not have such limits, so this implementation
+delegates to (apply string-append STRING-LIST) -- callers worried
+about very long lists should reduce in chunks themselves.
 
 Examples:
   (string-concatenate '(\"foo\" \"bar\" \"baz\"))  => \"foobarbaz\"

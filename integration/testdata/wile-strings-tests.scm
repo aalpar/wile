@@ -28,8 +28,10 @@
 (test "empty-from"   "aaa"         (string-replace-all "aaa" "" "X"))
 ;; Left-to-right non-overlapping: "aaa" matches "aa" at 0, jump to 2, then 'a' remains.
 (test "overlap"      "ba"          (string-replace-all "aaa" "aa" "b"))
-;; Replacement longer than match (clean input with separator).
-(test "longer-to"    "XXYXX"       (string-replace-all "abxYabx" "abx" "XX"))
+;; Replacement longer than match (FROM=2 chars, TO=3 chars).
+(test "longer-to"    "AAAYAAA"     (string-replace-all "abYab" "ab" "AAA"))
+;; Replacement shorter than match (FROM=3 chars, TO=2 chars).
+(test "shorter-to"   "XXYXX"       (string-replace-all "abxYabx" "abx" "XX"))
 (test "single-char"  "bbbbb"       (string-replace-all "aaaaa" "a" "b"))
 (test "to-empty"     "abd"         (string-replace-all "abcd" "c" ""))
 (test-end "string-replace-all")
@@ -43,7 +45,7 @@
 (test "empty"          0 (string-byte-length ""))
 ;; é is U+00E9, 2 bytes in UTF-8 (0xC3 0xA9).
 (test "two-byte-utf8"  2 (string-byte-length "é"))
-;; Three-byte UTF-8 sequence (Cyrillic '€'-style char).
+;; Three-byte UTF-8 sequence (Euro sign, U+20AC).
 (test "three-byte"     3 (string-byte-length "€"))
 (test-end "string-byte-length")
 

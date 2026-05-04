@@ -1,6 +1,11 @@
 ;; selection.scm -- SRFI-13 string selection (take/drop/tabulate)
 ;; Part of SRFI 13: String Library
 
+(define (%check-take-drop-n who s n)
+  (let ((len (string-length s)))
+    (cond ((or (< n 0) (> n len))
+           (error (string-append who ": n out of bounds") n len)))))
+
 (define (string-take s n)
   "Return the first N chars of S.
 
@@ -17,6 +22,7 @@ Category: srfi-13
 Keywords: take, prefix, head, leftmost
 
 See also: `string-drop', `string-take-right'."
+  (%check-take-drop-n "string-take" s n)
   (substring s 0 n))
 
 (define (string-drop s n)
@@ -35,6 +41,7 @@ Category: srfi-13
 Keywords: drop, skip, tail, rest
 
 See also: `string-take', `string-drop-right'."
+  (%check-take-drop-n "string-drop" s n)
   (substring s n (string-length s)))
 
 (define (string-take-right s n)
@@ -52,6 +59,7 @@ Category: srfi-13
 Keywords: take, suffix, end, rightmost
 
 See also: `string-take', `string-drop-right'."
+  (%check-take-drop-n "string-take-right" s n)
   (let ((len (string-length s)))
     (substring s (- len n) len)))
 
@@ -70,6 +78,7 @@ Category: srfi-13
 Keywords: drop, prefix, beginning, leftmost
 
 See also: `string-drop', `string-take-right'."
+  (%check-take-drop-n "string-drop-right" s n)
   (substring s 0 (- (string-length s) n)))
 
 (define substring/shared substring)

@@ -46,6 +46,8 @@
 (test "normal" "hel"   (string-take "hello" 3))
 (test "zero"   ""      (string-take "hello" 0))
 (test "all"    "hello" (string-take "hello" 5))
+(test-error                  (string-take "hello" 6))   ;; n > length
+(test-error                  (string-take "hello" -1))  ;; n negative
 (test-end "string-take")
 
 (test-begin "string-drop")
