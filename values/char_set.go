@@ -45,9 +45,25 @@ type CharSetRange struct {
 // slice. The caller asserts the slice is sorted, disjoint, non-adjacent, and
 // codepoint-valid. Used internally by primitives that produce canonical output
 // (set-algebra ops). External callers should prefer NewCharSetFromUnsortedRanges.
+//
+// Panics on invariant violation — this is an internal contract assertion.
 func NewCharSetFromRanges(rs []CharSetRange) *CharSet {
 	if len(rs) == 0 {
 		return &CharSet{}
+	}
+	for i, r := range rs {
+		if r.Lo < 0 {
+			panic(fmt.Sprintf("NewCharSetFromRanges: range[%d].Lo=%d < 0", i, r.Lo))
+		}
+		if r.Hi > MaxCodepoint {
+			panic(fmt.Sprintf("NewCharSetFromRanges: range[%d].Hi=%d > MaxCodepoint (%d)", i, r.Hi, MaxCodepoint))
+		}
+		if r.Lo > r.Hi {
+			panic(fmt.Sprintf("NewCharSetFromRanges: range[%d]: Lo=%d > Hi=%d", i, r.Lo, r.Hi))
+		}
+		if i > 0 && r.Lo <= rs[i-1].Hi+1 {
+			panic(fmt.Sprintf("NewCharSetFromRanges: range[%d] (Lo=%d) not strictly after range[%d] (Hi=%d): ranges overlap or are adjacent", i, r.Lo, i-1, rs[i-1].Hi))
+		}
 	}
 	out := make([]CharSetRange, len(rs))
 	copy(out, rs)
@@ -173,11 +189,14 @@ func (p *CharSet) EqualTo(v Value) bool {
 	if !ok {
 		return false
 	}
-	if p == other {
+	if p == nil && other == nil {
 		return true
 	}
 	if p == nil || other == nil {
 		return false
+	}
+	if p == other {
+		return true
 	}
 	return slices.Equal(p.ranges, other.ranges)
 }

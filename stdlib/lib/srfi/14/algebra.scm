@@ -1,19 +1,45 @@
-;; stdlib/lib/srfi/14/algebra.scm
+;; algebra.scm -- derived set algebra and ! aliases
+;; Part of SRFI 14: Character-Set Library
 ;;
-;; Set-algebra layer:
-;;   - Derived: char-set-adjoin, char-set-delete (built on union/difference + singleton)
-;;   - 10 ! aliases: per design Q2-A, all forms allocate fresh; ! suffix is permission
-;;     to mutate, which the spec allows but doesn't require. We exercise the always-
-;;     allocate option uniformly.
-;;
-;; The remaining 2 ! aliases (char-set-filter!, char-set-unfold!) ship in
-;; stdlib/lib/srfi/14/iteration.scm where their referents are defined.
+;; char-set-adjoin and char-set-delete are derived from union/difference + singleton.
+;; All ! aliases allocate fresh; the spec permits mutation but does not require it,
+;; so we exercise the always-allocate option uniformly.
+;; The remaining ! aliases (char-set-filter!, char-set-unfold!) live in iteration.scm
+;; where their referents are defined.
 
 ;; Derived set algebra
 (define (char-set-adjoin cs . chars)
+  "Return a new char-set containing all members of CS plus any additional CHARS.
+
+Examples:
+  (char-set-adjoin (char-set #\\a) #\\b #\\c)  =>  #<char-set: a-c>
+  (char-set-adjoin (char-set) #\\x)           =>  #<char-set: x>
+
+Parameters:
+  cs : char-set
+  chars : char ... (variadic)
+Returns: char-set
+Category: srfi-14
+Keywords: adjoin, add, insert, union, char-set
+
+See also: `char-set-delete', `char-set-union'."
   (char-set-union cs (apply char-set chars)))
 
 (define (char-set-delete cs . chars)
+  "Return a new char-set containing all members of CS except any of CHARS.
+
+Examples:
+  (char-set-delete (char-set #\\a #\\b #\\c) #\\b)  =>  #<char-set: a c>
+  (char-set-delete (char-set #\\x) #\\x)           =>  #<char-set: empty>
+
+Parameters:
+  cs : char-set
+  chars : char ... (variadic)
+Returns: char-set
+Category: srfi-14
+Keywords: delete, remove, exclude, difference, char-set
+
+See also: `char-set-adjoin', `char-set-difference'."
   (char-set-difference cs (apply char-set chars)))
 
 ;; ! aliases (set-algebra family + constructor family). All immutable/allocating.

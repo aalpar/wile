@@ -17,6 +17,7 @@ package charsets_test
 import (
 	"context"
 	"testing"
+	"unicode"
 
 	qt "github.com/frankban/quicktest"
 
@@ -471,6 +472,69 @@ func TestMakeNamedCharSet(t *testing.T) {
 
 	// Unknown symbol errors
 	runSchemeExpectError(t, engine, "(%make-named-charset 'unknown-set)")
+}
+
+func TestRangeTableToCharSet_StrideOverflow(t *testing.T) {
+	// Builds a synthetic RangeTable with stride 8 starting at 0xFF00 and
+	// asserts the resulting CharSet matches exactly the stride-expanded points.
+	// Regression guard: uint16 arithmetic on hi + stride wraps around to small
+	// values, contaminating the set with codepoints below 0xFF00.
+	c := qt.New(t)
+
+	rt := &unicode.RangeTable{
+		R16: []unicode.Range16{
+			{Lo: 0xFF00, Hi: 0xFFF0, Stride: 8},
+		},
+	}
+	cs := extcharsets.ExportedRangeTableToCharSet(rt)
+
+	// Build expected codepoints.
+	var want []rune
+	for cp := uint32(0xFF00); cp <= 0xFFF0; cp += 8 {
+		want = append(want, rune(cp))
+	}
+
+	c.Assert(cs.Size(), qt.Equals, len(want))
+
+	// Every expected point must be contained.
+	for _, r := range want {
+		c.Assert(cs.Contains(r), qt.IsTrue,
+			qt.Commentf("expected codepoint U+%04X to be in set", r))
+	}
+
+	// Points below the range must not appear (the overflow regression).
+	c.Assert(cs.Contains(0xFEF8), qt.IsFalse,
+		qt.Commentf("U+FEF8 must not appear (uint16 overflow regression)"))
+	for cp := range rune(0xFF00) {
+		if cs.Contains(cp) {
+			t.Errorf("unexpected codepoint U+%04X below 0xFF00 found in set (stride overflow)", cp)
+			break
+		}
+	}
+}
+
+func TestCharSetSubset_EmptyBoundaries(t *testing.T) {
+	engine := newLibraryEngine(t)
+	runScheme(t, engine, "(import (srfi 14))")
+
+	// Single empty arg → vacuously true.
+	qt.Assert(t, runScheme(t, engine, "(char-set<= (char-set))"), qt.Equals, values.TrueValue)
+
+	// Empty ⊆ non-empty → true.
+	qt.Assert(t, runScheme(t, engine, "(char-set<= (char-set) (char-set #\\a))"), qt.Equals, values.TrueValue)
+
+	// Non-empty ⊆ empty → false.
+	qt.Assert(t, runScheme(t, engine, "(char-set<= (char-set #\\a) (char-set))"), qt.Equals, values.FalseValue)
+}
+
+func TestCharSetFull_MaxCodepoint(t *testing.T) {
+	engine := newLibraryEngine(t)
+	runScheme(t, engine, "(import (srfi 14))")
+
+	// char-set:full must contain U+10FFFF.
+	qt.Assert(t,
+		runScheme(t, engine, "(char-set-contains? char-set:full (integer->char #x10FFFF))"),
+		qt.Equals, values.TrueValue)
 }
 
 func TestCharSetMapFilter(t *testing.T) {

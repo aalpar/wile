@@ -98,3 +98,71 @@ func TestPropertyDeMorgan(t *testing.T) {
 	}
 	c.Assert(quick.Check(prop, nil), qt.IsNil)
 }
+
+func TestPropertyIdempotency(t *testing.T) {
+	c := qt.New(t)
+
+	propUnion := func(rs runeSlice) bool {
+		cs := values.NewCharSetFromRunes(rs)
+		return charsets.ExportedUnionTwo(cs, cs).EqualTo(cs)
+	}
+	c.Assert(quick.Check(propUnion, nil), qt.IsNil)
+
+	propIntersect := func(rs runeSlice) bool {
+		cs := values.NewCharSetFromRunes(rs)
+		return charsets.ExportedIntersectTwo(cs, cs).EqualTo(cs)
+	}
+	c.Assert(quick.Check(propIntersect, nil), qt.IsNil)
+}
+
+func TestPropertyIdentityElement(t *testing.T) {
+	c := qt.New(t)
+	empty := values.NewCharSetFromRanges(nil)
+	full := values.NewCharSetFromRanges([]values.CharSetRange{{Lo: 0, Hi: values.MaxCodepoint}})
+
+	propUnionEmpty := func(rs runeSlice) bool {
+		cs := values.NewCharSetFromRunes(rs)
+		return charsets.ExportedUnionTwo(cs, empty).EqualTo(cs)
+	}
+	c.Assert(quick.Check(propUnionEmpty, nil), qt.IsNil)
+
+	propIntersectFull := func(rs runeSlice) bool {
+		cs := values.NewCharSetFromRunes(rs)
+		return charsets.ExportedIntersectTwo(cs, full).EqualTo(cs)
+	}
+	c.Assert(quick.Check(propIntersectFull, nil), qt.IsNil)
+}
+
+func TestPropertyAnnihilator(t *testing.T) {
+	c := qt.New(t)
+	empty := values.NewCharSetFromRanges(nil)
+
+	propIntersectEmpty := func(rs runeSlice) bool {
+		cs := values.NewCharSetFromRunes(rs)
+		return charsets.ExportedIntersectTwo(cs, empty).EqualTo(empty)
+	}
+	c.Assert(quick.Check(propIntersectEmpty, nil), qt.IsNil)
+
+	propDiffSelf := func(rs runeSlice) bool {
+		cs := values.NewCharSetFromRunes(rs)
+		diff := charsets.ExportedDifferenceTwo(cs, cs)
+		return diff.EqualTo(empty)
+	}
+	c.Assert(quick.Check(propDiffSelf, nil), qt.IsNil)
+}
+
+func TestPropertyDeMorganDual(t *testing.T) {
+	c := qt.New(t)
+	prop := func(a, b runeSlice) bool {
+		csA := values.NewCharSetFromRunes(a)
+		csB := values.NewCharSetFromRunes(b)
+		// ¬(A ∩ B) = ¬A ∪ ¬B
+		left := charsets.ExportedComplementOne(charsets.ExportedIntersectTwo(csA, csB))
+		right := charsets.ExportedUnionTwo(
+			charsets.ExportedComplementOne(csA),
+			charsets.ExportedComplementOne(csB),
+		)
+		return left.EqualTo(right)
+	}
+	c.Assert(quick.Check(prop, nil), qt.IsNil)
+}

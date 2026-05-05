@@ -1,34 +1,112 @@
-;; stdlib/lib/srfi/14/iteration.scm
+;; iteration.scm -- fold/for-each/map/filter/count/every/any/unfold
+;; Part of SRFI 14: Character-Set Library
 ;;
-;; Iteration / query layer built on %char-set-walk-ranges. Per design §6.C:
-;; this layer plus the helper avoids ~140k FFI round-trips for
-;; named-set walks (Phase 4).
+;; All iteration is built on %char-set-walk-ranges (util.scm). Concentrating
+;; iteration here avoids ~140k FFI round-trips when walking named char-sets.
 
 (define (char-set-fold proc init cs)
+  "Fold PROC over every character in CS, accumulating a result.
+PROC receives each character and the current accumulator and returns the new
+accumulator. Characters are visited in ascending codepoint order.
+
+Examples:
+  (char-set-fold (lambda (ch n) (+ n 1)) 0 (char-set #\\a #\\b #\\c))  =>  3
+  (char-set-fold cons '() (char-set #\\a #\\b))  =>  (#\\b #\\a)
+
+Parameters:
+  proc : char × any → any
+  init : any -- initial accumulator
+  cs : char-set
+Returns: any
+Category: srfi-14
+Keywords: fold, reduce, accumulate, iterate, traverse
+
+See also: `char-set-for-each', `char-set-map', `char-set-filter'."
   (%char-set-walk-ranges cs proc init))
 
 (define (char-set-for-each proc cs)
+  "Apply PROC to each character in CS for its side effects.
+Characters are visited in ascending codepoint order. Returns an unspecified value.
+
+Examples:
+  (char-set-for-each display (char-set #\\a #\\b #\\c))  ; prints: abc
+
+Parameters:
+  proc : char → any
+  cs : char-set
+Returns: unspecified
+Category: srfi-14
+Keywords: for-each, iterate, side-effect, traverse
+
+See also: `char-set-fold', `char-set-map'."
   (%char-set-walk-ranges cs (lambda (ch _) (proc ch) #f) #f)
   (if #f #f))
 
 (define (char-set-map proc cs)
-  ;; proc :: char → char. Result is a char-set of the mapped chars.
+  "Apply PROC to each character in CS and return a char-set of the results.
+PROC must return a char.
+
+Examples:
+  (char-set-map char-upcase (char-set #\\a #\\b #\\c))  =>  #<char-set: A-C>
+
+Parameters:
+  proc : char → char
+  cs : char-set
+Returns: char-set
+Category: srfi-14
+Keywords: map, transform, apply, char-set
+
+See also: `char-set-filter', `char-set-fold'."
   (list->char-set
     (%char-set-walk-ranges cs (lambda (ch acc) (cons (proc ch) acc)) '())))
 
+(define (%char-set-filter-impl pred cs base)
+  (list->char-set
+    (%char-set-walk-ranges cs
+      (lambda (ch acc) (if (pred ch) (cons ch acc) acc))
+      '())
+    base))
+
 (define char-set-filter
   (case-lambda
-    ((pred cs) (char-set-filter pred cs (char-set)))
+    ((pred cs)
+     "Return a char-set containing the characters of CS that satisfy PRED.
+An optional BASE char-set is unioned into the result (default: empty set).
+
+Examples:
+  (char-set-filter char-upper-case? char-set:letter)  =>  #<char-set: A-Z ...>
+  (char-set-filter char-numeric? (char-set #\\a #\\1 #\\2))  =>  #<char-set: 1-2>
+
+Parameters:
+  pred : char → boolean
+  cs : char-set
+  base : char-set (optional, default empty)
+Returns: char-set
+Category: srfi-14
+Keywords: filter, select, predicate, char-set
+
+See also: `char-set-map', `char-set-count', `char-set-fold'."
+     (%char-set-filter-impl pred cs (char-set)))
     ((pred cs base)
-     (list->char-set
-       (%char-set-walk-ranges cs
-         (lambda (ch acc) (if (pred ch) (cons ch acc) acc))
-         '())
-       base))))
+     (%char-set-filter-impl pred cs base))))
 
 (define char-set-filter! char-set-filter)
 
 (define (char-set-count pred cs)
+  "Return the number of characters in CS that satisfy PRED.
+
+Examples:
+  (char-set-count char-upper-case? char-set:letter)  =>  26 (ASCII upper)
+  (char-set-count char-numeric? (char-set #\\0 #\\1 #\\a))  =>  2
+
+Parameters:
+  pred : char → boolean
+  cs : char-set
+Returns: integer
+Category: srfi-14
+Keywords: count, tally, predicate, char-set
+
+See also: `char-set-filter', `char-set-every', `char-set-any'."
   (%char-set-walk-ranges cs
     (lambda (ch acc) (if (pred ch) (+ acc 1) acc))
     0))
@@ -37,6 +115,21 @@
 ;; %char-set-walk-ranges doesn't natively support early exit, so we use
 ;; call-with-current-continuation to bail out.
 (define (char-set-every pred cs)
+  "Return #t if every character in CS satisfies PRED, #f otherwise.
+Returns #t for the empty set.
+
+Examples:
+  (char-set-every char-alphabetic? char-set:letter)  =>  #t
+  (char-set-every char-upper-case? char-set:letter)  =>  #f
+
+Parameters:
+  pred : char → boolean
+  cs : char-set
+Returns: boolean
+Category: srfi-14
+Keywords: every, all, forall, predicate, char-set
+
+See also: `char-set-any', `char-set-count'."
   (call-with-current-continuation
     (lambda (return)
       (%char-set-walk-ranges cs
@@ -45,6 +138,21 @@
         #t))))
 
 (define (char-set-any pred cs)
+  "Return #t if any character in CS satisfies PRED, #f otherwise.
+Returns #f for the empty set.
+
+Examples:
+  (char-set-any char-upper-case? char-set:letter)  =>  #t
+  (char-set-any char-numeric? char-set:letter)     =>  #f
+
+Parameters:
+  pred : char → boolean
+  cs : char-set
+Returns: boolean
+Category: srfi-14
+Keywords: any, exists, predicate, char-set
+
+See also: `char-set-every', `char-set-count'."
   (call-with-current-continuation
     (lambda (return)
       (%char-set-walk-ranges cs
@@ -54,14 +162,39 @@
 
 ;; SRFI-14 char-set-unfold: build a char-set by repeatedly applying mapper
 ;; to seeds generated by successor, stopping when stop? returns true.
+(define (%char-set-unfold-impl stop? mapper successor seed base)
+  (let loop ((seed seed) (acc '()))
+    (if (stop? seed)
+        (list->char-set acc base)
+        (loop (successor seed) (cons (mapper seed) acc)))))
+
 (define char-set-unfold
   (case-lambda
     ((stop? mapper successor seed)
-     (char-set-unfold stop? mapper successor seed (char-set)))
+     "Build a char-set by unfolding: starting from SEED, apply MAPPER to produce
+a char, then SUCCESSOR to advance the seed, until STOP? returns true.
+An optional BASE char-set is unioned into the result (default: empty set).
+
+Examples:
+  (char-set-unfold (lambda (i) (> i 5))
+                   integer->char
+                   (lambda (i) (+ i 1))
+                   0)
+    =>  #<char-set: U+0000-U+0005>
+
+Parameters:
+  stop? : any → boolean -- termination predicate on seed
+  mapper : any → char -- produces a char from the current seed
+  successor : any → any -- advances the seed
+  seed : any -- initial seed value
+  base : char-set (optional, default empty)
+Returns: char-set
+Category: srfi-14
+Keywords: unfold, generate, build, construct, char-set
+
+See also: `list->char-set', `char-set-filter', `char-set-map'."
+     (%char-set-unfold-impl stop? mapper successor seed (char-set)))
     ((stop? mapper successor seed base)
-     (let loop ((seed seed) (acc '()))
-       (if (stop? seed)
-           (list->char-set acc base)
-           (loop (successor seed) (cons (mapper seed) acc)))))))
+     (%char-set-unfold-impl stop? mapper successor seed base))))
 
 (define char-set-unfold! char-set-unfold)

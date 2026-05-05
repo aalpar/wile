@@ -227,26 +227,46 @@ func TestProfileFactoryCallback(t *testing.T) {
 // TestCharsetsInProfileExtensions verifies that the charsets extension is included
 // in each profile that provides standard library coverage (small, console, kitchen-sink).
 func TestCharsetsInProfileExtensions(t *testing.T) {
-	c := qt.New(t)
-	for _, profile := range []string{"small", "console", "kitchen-sink"} {
-		exts, err := ProfileExtensions(profile)
-		c.Assert(err, qt.IsNil)
-		found := false
-		for _, ext := range exts {
-			if ext.Name() == "charsets" {
-				found = true
-				break
+	tests := []struct {
+		name    string
+		profile string
+	}{
+		{"small includes charsets", "small"},
+		{"console includes charsets", "console"},
+		{"kitchen-sink includes charsets", "kitchen-sink"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			exts, err := ProfileExtensions(tc.profile)
+			c.Assert(err, qt.IsNil)
+			found := false
+			for _, ext := range exts {
+				if ext.Name() == "charsets" {
+					found = true
+					break
+				}
 			}
-		}
-		c.Assert(found, qt.IsTrue, qt.Commentf("profile %s missing charsets extension", profile))
+			c.Assert(found, qt.IsTrue, qt.Commentf("profile %s missing charsets extension", tc.profile))
+		})
 	}
 }
 
 // TestCharsetsExcludedFromTiny verifies that the minimal "tiny" profile has no
 // extensions at all — charsets must not appear there.
 func TestCharsetsExcludedFromTiny(t *testing.T) {
-	c := qt.New(t)
-	exts, err := ProfileExtensions("tiny")
-	c.Assert(err, qt.IsNil)
-	c.Assert(exts, qt.IsNil) // tiny has no extensions
+	tests := []struct {
+		name    string
+		profile string
+	}{
+		{"tiny has no extensions", "tiny"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			exts, err := ProfileExtensions(tc.profile)
+			c.Assert(err, qt.IsNil)
+			c.Assert(exts, qt.IsNil) // tiny has no extensions
+		})
+	}
 }

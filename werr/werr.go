@@ -102,6 +102,7 @@ var (
 	ErrNotAContinuation        = NewStaticError("not a continuation")
 	ErrNotAnErrorContext       = NewStaticError("not an error context")
 	ErrTypeConversion          = NewStaticError("type conversion failed")
+	ErrCodepointOutOfRange     = NewStaticError("codepoint out of range")
 	ErrIndexOutOfRange         = NewStaticError("index out of range")
 	ErrImmutableString         = NewStaticError("cannot mutate immutable string")
 	ErrImmutableBinding        = NewStaticError("cannot mutate immutable binding")

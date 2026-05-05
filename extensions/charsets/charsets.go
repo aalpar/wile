@@ -20,230 +20,9 @@ import (
 	"unicode"
 
 	"github.com/aalpar/wile/machine"
-	"github.com/aalpar/wile/registry"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
-
-func addPrimitives(r *registry.Registry) error {
-	r.AddPrimitives([]registry.PrimitiveSpec{
-		{
-			Name:       "char-set?",
-			ParamCount: 1,
-			Impl:       primCharSetQ,
-			Doc:        "Returns #t if obj is a char-set, otherwise #f. (SRFI-14)",
-			ParamNames: []string{"obj"},
-			Category:   "char-sets",
-			Keywords:   []string{"char-set", "predicate", "type", "srfi-14"},
-		},
-		{
-			Name:       "char-set-contains?",
-			ParamCount: 2,
-			Impl:       primCharSetContains,
-			Doc:        "Returns #t if char CH is a member of char-set CS, otherwise #f. (SRFI-14)",
-			ParamNames: []string{"cs", "ch"},
-			Category:   "char-sets",
-			Keywords:   []string{"char-set", "membership", "contains", "srfi-14"},
-		},
-		{
-			Name:       "char-set-size",
-			ParamCount: 1,
-			Impl:       primCharSetSize,
-			Doc:        "Returns the number of elements in char-set CS as an exact integer. (SRFI-14)",
-			ParamNames: []string{"cs"},
-			Category:   "char-sets",
-			Keywords:   []string{"char-set", "size", "cardinality", "srfi-14"},
-		},
-		{
-			// ParamCount: 2, IsVariadic: true → Arg(0) = first (fixed char),
-			// Arg(1) = rest list (any additional chars). Per Wile variadic
-			// convention: Arg(N-2) is the last fixed param, Arg(N-1) is rest.
-			Name:       "%char-set",
-			ParamCount: 2,
-			IsVariadic: true,
-			Impl:       primCharSetCtor,
-			Doc:        "Internal helper for SRFI-14 (char-set ...). Use (char-set ...) instead.",
-			ParamNames: []string{"first", "rest"},
-			Category:   "char-sets",
-		},
-		{
-			Name:       "%empty-char-set",
-			ParamCount: 0,
-			Impl:       primEmptyCharSet,
-			Doc:        "Internal helper: returns the empty char-set. Use (char-set) instead.",
-			Category:   "char-sets",
-		},
-		{
-			Name:       "char-set-copy",
-			ParamCount: 1,
-			Impl:       primCharSetCopy,
-			Doc:        "Returns a copy of char-set CS. Wile char-sets are immutable, so the result is char-set= to CS. (SRFI-14)",
-			ParamNames: []string{"cs"},
-			Category:   "char-sets",
-			Keywords:   []string{"char-set", "copy", "srfi-14"},
-		},
-		{
-			// ParamCount: 2, IsVariadic: true → Arg(0) = str (fixed),
-			// Arg(1) = rest list (optional base char-set, or empty list).
-			Name:       "string->char-set",
-			ParamCount: 2,
-			IsVariadic: true,
-			Impl:       primStringToCharSet,
-			Doc:        "Returns a char-set containing each char in STR. Optional BASE-CS is unioned into the result. (SRFI-14)",
-			ParamNames: []string{"str", "base"},
-			Category:   "char-sets",
-			Keywords:   []string{"string", "char-set", "convert", "srfi-14"},
-		},
-		{
-			// ParamCount: 2, IsVariadic: true → Arg(0) = lst (fixed),
-			// Arg(1) = rest list (optional base char-set, or empty list).
-			Name:       "list->char-set",
-			ParamCount: 2,
-			IsVariadic: true,
-			Impl:       primListToCharSet,
-			Doc:        "Returns a char-set containing each char in LST. Optional BASE-CS is unioned into the result. (SRFI-14)",
-			ParamNames: []string{"lst", "base"},
-			Category:   "char-sets",
-			Keywords:   []string{"list", "char-set", "convert", "srfi-14"},
-		},
-		{
-			// ParamCount: 3, IsVariadic: true → Arg(0) = lo (fixed),
-			// Arg(1) = hi (fixed), Arg(2) = rest list (optional error? and
-			// optional base char-set, in that order).
-			Name:       "ucs-range->char-set",
-			ParamCount: 3,
-			IsVariadic: true,
-			Impl:       primUcsRangeToCharSet,
-			Doc:        "Returns a char-set containing codepoints in the half-open range [LO, HI). Optional ERROR? (default #t) controls handling of codepoints exceeding 0x10FFFF: any non-#f value (Scheme-truthy) raises an error, #f silently clips. Optional BASE-CS is unioned into the result. (SRFI-14)",
-			ParamNames: []string{"lo", "hi", "rest"},
-			Category:   "char-sets",
-			Keywords:   []string{"ucs", "codepoint", "range", "char-set", "srfi-14"},
-		},
-		{
-			Name:       "char-set->list",
-			ParamCount: 1,
-			Impl:       primCharSetToList,
-			Doc:        "Returns a list of all characters in CS, in codepoint-ascending order. (SRFI-14)",
-			ParamNames: []string{"cs"},
-			Category:   "char-sets",
-			Keywords:   []string{"char-set", "list", "convert", "srfi-14"},
-		},
-		{
-			Name:       "char-set->string",
-			ParamCount: 1,
-			Impl:       primCharSetToString,
-			Doc:        "Returns a string of all characters in CS, in codepoint-ascending order. (SRFI-14)",
-			ParamNames: []string{"cs"},
-			Category:   "char-sets",
-			Keywords:   []string{"char-set", "string", "convert", "srfi-14"},
-		},
-		{
-			Name:       "char-set-ranges",
-			ParamCount: 1,
-			Impl:       primCharSetRanges,
-			Doc:        "Returns a list of (lo . hi) pairs (inclusive endpoints) for the canonical inversion-list representation of CS. Wile-specific extension to SRFI-14, used internally by iteration procedures.",
-			ParamNames: []string{"cs"},
-			Category:   "char-sets",
-			Keywords:   []string{"char-set", "ranges", "wile", "iteration"},
-		},
-		{
-			// ParamCount: 2, IsVariadic: true → Arg(0) = cs1 (fixed),
-			// Arg(1) = rest list (any additional char-sets). Per Wile variadic
-			// convention: Arg(N-2) is the last fixed param, Arg(N-1) is rest.
-			Name:       "char-set=",
-			ParamCount: 2,
-			IsVariadic: true,
-			Impl:       primCharSetEqual,
-			Doc:        "Returns #t if all char-sets are equal, otherwise #f. Vacuously true for one argument. (SRFI-14)",
-			ParamNames: []string{"cs1", "rest"},
-			Category:   "char-sets",
-			Keywords:   []string{"char-set", "equal", "compare", "srfi-14"},
-		},
-		{
-			// ParamCount: 2, IsVariadic: true → Arg(0) = cs1 (fixed),
-			// Arg(1) = rest list (any additional char-sets). Per Wile variadic
-			// convention: Arg(N-2) is the last fixed param, Arg(N-1) is rest.
-			Name:       "char-set<=",
-			ParamCount: 2,
-			IsVariadic: true,
-			Impl:       primCharSetSubset,
-			Doc:        "Returns #t if cs1 ⊆ cs2 ⊆ ... pairwise. Vacuously true for one argument. (SRFI-14)",
-			ParamNames: []string{"cs1", "rest"},
-			Category:   "char-sets",
-			Keywords:   []string{"char-set", "subset", "compare", "srfi-14"},
-		},
-		{
-			// ParamCount: 2, IsVariadic: true → Arg(0) = cs1 (fixed),
-			// Arg(1) = rest list (any additional char-sets). Per Wile variadic
-			// convention: Arg(N-2) is the last fixed param, Arg(N-1) is rest.
-			Name:       "char-set-union",
-			ParamCount: 2,
-			IsVariadic: true,
-			Impl:       primCharSetUnion,
-			Doc:        "Returns the union of all char-sets. (SRFI-14)",
-			ParamNames: []string{"cs1", "rest"},
-			Category:   "char-sets",
-			Keywords:   []string{"char-set", "union", "srfi-14"},
-		},
-		{
-			// ParamCount: 2, IsVariadic: true → Arg(0) = cs1 (fixed),
-			// Arg(1) = rest list (any additional char-sets). Per Wile variadic
-			// convention: Arg(N-2) is the last fixed param, Arg(N-1) is rest.
-			Name:       "char-set-intersection",
-			ParamCount: 2,
-			IsVariadic: true,
-			Impl:       primCharSetIntersection,
-			Doc:        "Returns the intersection of all char-sets. (SRFI-14)",
-			ParamNames: []string{"cs1", "rest"},
-			Category:   "char-sets",
-			Keywords:   []string{"char-set", "intersection", "srfi-14"},
-		},
-		{
-			// ParamCount: 2, IsVariadic: true → Arg(0) = cs1 (fixed),
-			// Arg(1) = rest list (any additional char-sets). Per Wile variadic
-			// convention: Arg(N-2) is the last fixed param, Arg(N-1) is rest.
-			Name:       "char-set-difference",
-			ParamCount: 2,
-			IsVariadic: true,
-			Impl:       primCharSetDifference,
-			Doc:        "Returns CS1 minus the union of all subsequent char-sets. (SRFI-14)",
-			ParamNames: []string{"cs1", "rest"},
-			Category:   "char-sets",
-			Keywords:   []string{"char-set", "difference", "srfi-14"},
-		},
-		{
-			// ParamCount: 2, IsVariadic: true → Arg(0) = cs1 (fixed),
-			// Arg(1) = rest list (any additional char-sets). Per Wile variadic
-			// convention: Arg(N-2) is the last fixed param, Arg(N-1) is rest.
-			Name:       "char-set-xor",
-			ParamCount: 2,
-			IsVariadic: true,
-			Impl:       primCharSetXor,
-			Doc:        "Returns the symmetric difference of all char-sets. (SRFI-14)",
-			ParamNames: []string{"cs1", "rest"},
-			Category:   "char-sets",
-			Keywords:   []string{"char-set", "xor", "symmetric-difference", "srfi-14"},
-		},
-		{
-			Name:       "char-set-complement",
-			ParamCount: 1,
-			Impl:       primCharSetComplement,
-			Doc:        "Returns the complement of CS within [0, 0x10FFFF]. (SRFI-14)",
-			ParamNames: []string{"cs"},
-			Category:   "char-sets",
-			Keywords:   []string{"char-set", "complement", "srfi-14"},
-		},
-		{
-			Name:       "%make-named-charset",
-			ParamCount: 1,
-			Impl:       primMakeNamedCharSet,
-			Doc:        "Internal: returns the named char-set for the given symbol. Used by (srfi 14) to build char-set:letter etc.",
-			ParamNames: []string{"name"},
-			Category:   "char-sets",
-		},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
-	return nil
-}
 
 func primCharSetQ(mc machine.CallContext) error {
 	_, ok := mc.Arg(0).(*values.CharSet)
@@ -280,7 +59,7 @@ func primCharSetCtor(mc machine.CallContext) error {
 	first, ok := mc.Arg(0).(*values.Character)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotACharacter,
-			"char-set: argument 1: expected char, got %T", mc.Arg(0))
+			"%%char-set: argument 1: expected char, got %T", mc.Arg(0))
 	}
 	runes := []rune{first.Value}
 
@@ -289,21 +68,19 @@ func primCharSetCtor(mc machine.CallContext) error {
 	rest, ok := mc.Arg(1).(values.Tuple)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotAList,
-			"char-set: rest argument: expected list of chars, got %T", mc.Arg(1))
+			"%%char-set: rest argument: expected list of chars, got %T", mc.Arg(1))
 	}
-	var iterErr error
-	_, _ = rest.ForEach(mc.Context(), func(_ context.Context, i int, _ bool, v values.Value) error {
+	_, err := rest.ForEach(mc.Context(), func(_ context.Context, i int, _ bool, v values.Value) error {
 		ch, isChar := v.(*values.Character)
 		if !isChar {
-			iterErr = werr.WrapForeignErrorf(werr.ErrNotACharacter,
-				"char-set: argument %d: expected char, got %T", i+2, v)
-			return iterErr
+			return werr.WrapForeignErrorf(werr.ErrNotACharacter,
+				"%%char-set: argument %d: expected char, got %T", i+2, v)
 		}
 		runes = append(runes, ch.Value)
 		return nil
 	})
-	if iterErr != nil {
-		return iterErr
+	if err != nil {
+		return err
 	}
 
 	mc.SetValue(values.NewCharSetFromRunes(runes))
@@ -349,19 +126,17 @@ func primListToCharSet(mc machine.CallContext) error {
 			"list->char-set: argument 1: expected list, got %T", mc.Arg(0))
 	}
 	var runes []rune
-	var iterErr error
-	_, _ = lst.ForEach(mc.Context(), func(_ context.Context, i int, _ bool, v values.Value) error {
+	_, err := lst.ForEach(mc.Context(), func(_ context.Context, i int, _ bool, v values.Value) error {
 		ch, isChar := v.(*values.Character)
 		if !isChar {
-			iterErr = werr.WrapForeignErrorf(werr.ErrNotACharacter,
+			return werr.WrapForeignErrorf(werr.ErrNotACharacter,
 				"list->char-set: list element %d: expected char, got %T", i, v)
-			return iterErr
 		}
 		runes = append(runes, ch.Value)
 		return nil
 	})
-	if iterErr != nil {
-		return iterErr
+	if err != nil {
+		return err
 	}
 	base, err := optionalBaseCharSet("list->char-set", mc.Arg(1))
 	if err != nil {
@@ -372,7 +147,7 @@ func primListToCharSet(mc machine.CallContext) error {
 
 // optionalBaseCharSet extracts an optional base char-set from a variadic-rest
 // argument. Returns (nil, nil) for no base; (cs, nil) for a valid base;
-// (nil, err) on type mismatch.
+// (nil, err) on type mismatch or too many arguments.
 func optionalBaseCharSet(site string, restArg values.Value) (*values.CharSet, error) {
 	rest, ok := restArg.(values.Tuple)
 	if !ok {
@@ -388,28 +163,24 @@ func optionalBaseCharSet(site string, restArg values.Value) (*values.CharSet, er
 		return nil, werr.WrapForeignErrorf(werr.ErrNotACharSet,
 			"%s: optional base argument: expected char-set, got %T", site, first)
 	}
+	cdr, isTuple := rest.Cdr().(values.Tuple)
+	if isTuple && !cdr.IsEmptyList() {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"%s: too many optional arguments", site)
+	}
 	return base, nil
 }
 
-// exactInt64 extracts an int64 from any exact integer Number value.
-func exactInt64(v values.Value) (int64, bool) {
-	return values.ExactInteger(v)
-}
-
 func primUcsRangeToCharSet(mc machine.CallContext) error {
-	lo, ok := exactInt64(mc.Arg(0))
+	lo, ok := values.ExactInteger(mc.Arg(0))
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotAnInteger,
-			"ucs-range->char-set: argument 1: expected exact integer, got %T", mc.Arg(0))
+			"ucs-range->char-set: argument 1: expected exact integer (in int64 range), got %T", mc.Arg(0))
 	}
-	hi, ok := exactInt64(mc.Arg(1))
+	hi, ok := values.ExactInteger(mc.Arg(1))
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotAnInteger,
-			"ucs-range->char-set: argument 2: expected exact integer, got %T", mc.Arg(1))
-	}
-	if lo > hi {
-		return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-			"ucs-range->char-set: lo (%d) exceeds hi (%d)", lo, hi)
+			"ucs-range->char-set: argument 2: expected exact integer (in int64 range), got %T", mc.Arg(1))
 	}
 
 	// Parse optional rest: (error? base-cs).
@@ -438,14 +209,27 @@ func primUcsRangeToCharSet(mc machine.CallContext) error {
 					"ucs-range->char-set: optional base argument: expected char-set, got %T", cdrTuple.Car())
 			}
 			base = cs
+			// Check for any further arguments beyond base-cs.
+			tail, isTail := cdrTuple.Cdr().(values.Tuple)
+			if isTail && !tail.IsEmptyList() {
+				return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+					"ucs-range->char-set: too many optional arguments")
+			}
 		}
+	}
+
+	// lo > hi is always an error regardless of errorFlag (malformed range, not
+	// a codepoint overflow).
+	if lo > hi {
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"ucs-range->char-set: lo (%d) exceeds hi (%d)", lo, hi)
 	}
 
 	// Validate or clip the lower bound.
 	lowerInclusive := lo
 	if lowerInclusive < 0 {
 		if errorFlag {
-			return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			return werr.WrapForeignErrorf(werr.ErrCodepointOutOfRange,
 				"ucs-range->char-set: codepoint %d is negative", lo)
 		}
 		lowerInclusive = 0
@@ -455,7 +239,7 @@ func primUcsRangeToCharSet(mc machine.CallContext) error {
 	upperExclusive := hi
 	if upperExclusive > int64(values.MaxCodepoint)+1 {
 		if errorFlag {
-			return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			return werr.WrapForeignErrorf(werr.ErrCodepointOutOfRange,
 				"ucs-range->char-set: codepoint %d exceeds 0x10FFFF", hi-1)
 		}
 		upperExclusive = int64(values.MaxCodepoint) + 1
@@ -549,19 +333,17 @@ func charSetVariadicArgs(site string, mc machine.CallContext) ([]*values.CharSet
 		return nil, werr.WrapForeignErrorf(werr.ErrNotAList,
 			"%s: rest argument: expected list, got %T", site, mc.Arg(1))
 	}
-	var iterErr error
-	_, _ = rest.ForEach(mc.Context(), func(_ context.Context, i int, _ bool, v values.Value) error {
+	_, err := rest.ForEach(mc.Context(), func(_ context.Context, i int, _ bool, v values.Value) error {
 		cs, isCs := v.(*values.CharSet)
 		if !isCs {
-			iterErr = werr.WrapForeignErrorf(werr.ErrNotACharSet,
+			return werr.WrapForeignErrorf(werr.ErrNotACharSet,
 				"%s: argument %d: expected char-set, got %T", site, i+2, v)
-			return iterErr
 		}
 		out = append(out, cs)
 		return nil
 	})
-	if iterErr != nil {
-		return nil, iterErr
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }

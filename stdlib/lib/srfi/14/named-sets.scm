@@ -1,9 +1,9 @@
-;; stdlib/lib/srfi/14/named-sets.scm
+;; named-sets.scm -- standard char-set:* constants
+;; Part of SRFI 14: Character-Set Library
 ;;
-;; SRFI-14 named character sets, built once at library load time from
-;; Go's unicode.RangeTable values via %make-named-charset (FFI primitive
-;; in extensions/charsets/charsets.go). Caching at the Go layer means
-;; repeated lookups return the same eq? value.
+;; Built once at library load time from Go's unicode.RangeTable values via
+;; %make-named-charset (FFI primitive in extensions/charsets/charsets.go).
+;; Caching at the Go layer means repeated lookups return the same eq? value.
 
 (define char-set:letter        (%make-named-charset 'letter))
 (define char-set:lower-case    (%make-named-charset 'lower-case))

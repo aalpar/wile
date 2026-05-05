@@ -17,7 +17,9 @@ package charsets
 // Internal-package re-exports for property tests (extensions/charsets/properties_test.go
 // lives in the _test package and cannot otherwise see these unexported helpers).
 var (
-	ExportedComplementOne = complementOne
-	ExportedUnionTwo      = unionTwo
-	ExportedIntersectTwo  = intersectTwo
+	ExportedComplementOne       = complementOne
+	ExportedUnionTwo            = unionTwo
+	ExportedIntersectTwo        = intersectTwo
+	ExportedDifferenceTwo       = differenceTwo
+	ExportedRangeTableToCharSet = rangeTableToCharSet
 )
