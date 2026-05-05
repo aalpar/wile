@@ -141,7 +141,7 @@ func PrimCallCC(cc machine.CallContext) error {
 	mc := cc.(*machine.MachineContext)
 	proc := mc.Arg(0)
 
-	mcls, err := helpers.RequireType[machine.Closure](proc, werr.ErrNotAProcedure, "a procedure", "call/cc")
+	mcls, err := helpers.RequireType[machine.Closure](proc, werr.ErrNotAProcedure, "call/cc")
 	if err != nil {
 		return err
 	}
@@ -324,12 +324,12 @@ func PrimCallWithValues(cc machine.CallContext) error {
 	producer := mc.Arg(0)
 	consumer := mc.Arg(1)
 
-	producerCls, err := helpers.RequireType[machine.Closure](producer, werr.ErrNotAProcedure, "a procedure", "call-with-values")
+	producerCls, err := helpers.RequireType[machine.Closure](producer, werr.ErrNotAProcedure, "call-with-values")
 	if err != nil {
 		return err
 	}
 
-	consumerCls, err := helpers.RequireType[machine.Closure](consumer, werr.ErrNotAProcedure, "a procedure", "call-with-values")
+	consumerCls, err := helpers.RequireType[machine.Closure](consumer, werr.ErrNotAProcedure, "call-with-values")
 	if err != nil {
 		return err
 	}

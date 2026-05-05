@@ -15,37 +15,52 @@
 package helpers
 
 import (
+	"errors"
+
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
 
+// typeNameFromSentinel extracts the expected-type phrase from a type
+// sentinel (e.g., "a string" from werr.ErrNotAString). Returns "" for
+// non-type sentinels — the resulting error message will read
+// "expected  but got *Foo" which is degraded but unambiguous; the
+// TestTypeSentinelsCarryTypeName guard test catches missed sentinels
+// at the werr level.
+func typeNameFromSentinel(sentinel error) string {
+	var se *werr.StaticError
+	if errors.As(sentinel, &se) {
+		return se.TypeName()
+	}
+	return ""
+}
+
 // RequireArg extracts mc.Arg(index) and asserts it has concrete type T.
 // On failure it returns a wrapped error using the given sentinel and primitive name.
-// The error message format is "<name>: argument <index+1>: expected <typeName> but got <actual>".
-// typeName is the human-readable expected-type phrase (e.g., "a vector", "an integer");
-// callers supply it explicitly to avoid relying on sentinel-message trimming.
+// The error message format is "<name>: argument <index+1>: expected <typeName> but got <actual>",
+// where typeName is read from the sentinel via *werr.StaticError.TypeName().
 // The index is reported 1-indexed to match Scheme convention.
-func RequireArg[T any](mc machine.CallContext, index int, sentinel error, typeName, name string) (T, error) {
+func RequireArg[T any](mc machine.CallContext, index int, sentinel error, name string) (T, error) {
 	v := mc.Arg(index)
 	result, ok := v.(T)
 	if !ok {
 		var zero T
 		return zero, werr.WrapForeignErrorf(sentinel, "%s: argument %d: expected %s but got %T",
-			name, index+1, typeName, v)
+			name, index+1, typeNameFromSentinel(sentinel), v)
 	}
 	return result, nil
 }
 
 // RequireType asserts that v has concrete type T.
-// On failure it returns a wrapped error using the given sentinel, typeName, and primitive name.
-// typeName is the human-readable expected-type phrase (e.g., "a vector").
-func RequireType[T any](v values.Value, sentinel error, typeName, name string) (T, error) {
+// On failure it returns a wrapped error using the given sentinel and primitive name.
+// The expected-type phrase is read from the sentinel.
+func RequireType[T any](v values.Value, sentinel error, name string) (T, error) {
 	result, ok := v.(T)
 	if !ok {
 		var zero T
 		return zero, werr.WrapForeignErrorf(sentinel, "%s: expected %s but got %T",
-			name, typeName, v)
+			name, typeNameFromSentinel(sentinel), v)
 	}
 	return result, nil
 }
@@ -198,9 +213,10 @@ func ParseOptionalArg(rest values.Value, name string) (values.Value, bool, error
 
 // OptionalArg extracts an optional typed argument from variadic rest args.
 // If no argument is present, defaultVal is returned. If present but not of
-// type T, an error using sentinel, typeName, and name is returned. Extra arguments
-// in rest produce an ErrWrongNumberOfArguments error.
-func OptionalArg[T any](rest values.Value, defaultVal T, sentinel error, typeName, name string) (T, error) {
+// type T, an error using sentinel and name is returned (the expected-type
+// phrase is read from the sentinel via TypeName()). Extra arguments in
+// rest produce an ErrWrongNumberOfArguments error.
+func OptionalArg[T any](rest values.Value, defaultVal T, sentinel error, name string) (T, error) {
 	v, ok, err := ParseOptionalArg(rest, name)
 	if err != nil {
 		var zero T
@@ -209,5 +225,5 @@ func OptionalArg[T any](rest values.Value, defaultVal T, sentinel error, typeNam
 	if !ok {
 		return defaultVal, nil
 	}
-	return RequireType[T](v, sentinel, typeName, name)
+	return RequireType[T](v, sentinel, name)
 }

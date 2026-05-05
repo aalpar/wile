@@ -28,7 +28,7 @@ import (
 func TestRequireType_Success_ConcretePointer(t *testing.T) {
 	c := qt.New(t)
 	v := values.NewVector(values.NewInteger(1), values.NewInteger(2))
-	result, err := RequireType[*values.Vector](v, werr.ErrNotAVector, "a vector", "vector-length")
+	result, err := RequireType[*values.Vector](v, werr.ErrNotAVector, "vector-length")
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.Length(), qt.Equals, 2)
 }
@@ -36,7 +36,7 @@ func TestRequireType_Success_ConcretePointer(t *testing.T) {
 func TestRequireType_Success_String(t *testing.T) {
 	c := qt.New(t)
 	v := values.NewString("hello")
-	result, err := RequireType[*values.String](v, werr.ErrNotAString, "a string", "string-length")
+	result, err := RequireType[*values.String](v, werr.ErrNotAString, "string-length")
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.Value, qt.Equals, "hello")
 }
@@ -44,7 +44,7 @@ func TestRequireType_Success_String(t *testing.T) {
 func TestRequireType_Success_Integer(t *testing.T) {
 	c := qt.New(t)
 	v := values.NewInteger(42)
-	result, err := RequireType[*values.Integer](v, werr.ErrNotAnInteger, "an integer", "exact")
+	result, err := RequireType[*values.Integer](v, werr.ErrNotAnInteger, "exact")
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.Value, qt.Equals, int64(42))
 }
@@ -52,7 +52,7 @@ func TestRequireType_Success_Integer(t *testing.T) {
 func TestRequireType_Success_Interface(t *testing.T) {
 	c := qt.New(t)
 	v := values.NewInteger(42)
-	result, err := RequireType[values.Number](v, werr.ErrNotANumber, "a number", "add")
+	result, err := RequireType[values.Number](v, werr.ErrNotANumber, "add")
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.IsExact(), qt.IsTrue)
 }
@@ -60,7 +60,7 @@ func TestRequireType_Success_Interface(t *testing.T) {
 func TestRequireType_Failure_WrongType(t *testing.T) {
 	c := qt.New(t)
 	v := values.NewInteger(42)
-	_, err := RequireType[*values.Vector](v, werr.ErrNotAVector, "a vector", "vector-length")
+	_, err := RequireType[*values.Vector](v, werr.ErrNotAVector, "vector-length")
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, werr.ErrNotAVector), qt.IsTrue)
 }
@@ -68,7 +68,7 @@ func TestRequireType_Failure_WrongType(t *testing.T) {
 func TestRequireType_Failure_ErrorMessage_Vector(t *testing.T) {
 	c := qt.New(t)
 	v := values.NewInteger(42)
-	_, err := RequireType[*values.Vector](v, werr.ErrNotAVector, "a vector", "vector-length")
+	_, err := RequireType[*values.Vector](v, werr.ErrNotAVector, "vector-length")
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, werr.ErrNotAVector), qt.IsTrue)
 }
@@ -76,7 +76,7 @@ func TestRequireType_Failure_ErrorMessage_Vector(t *testing.T) {
 func TestRequireType_Failure_ErrorMessage_Integer(t *testing.T) {
 	c := qt.New(t)
 	v := values.NewString("hello")
-	_, err := RequireType[*values.Integer](v, werr.ErrNotAnInteger, "an integer", "exact")
+	_, err := RequireType[*values.Integer](v, werr.ErrNotAnInteger, "exact")
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, werr.ErrNotAnInteger), qt.IsTrue)
 }
@@ -84,14 +84,14 @@ func TestRequireType_Failure_ErrorMessage_Integer(t *testing.T) {
 func TestRequireType_Failure_ErrorMessage_ByteVector(t *testing.T) {
 	c := qt.New(t)
 	v := values.NewInteger(1)
-	_, err := RequireType[*values.ByteVector](v, werr.ErrNotAByteVector, "a bytevector", "bytevector-length")
+	_, err := RequireType[*values.ByteVector](v, werr.ErrNotAByteVector, "bytevector-length")
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, werr.ErrNotAByteVector), qt.IsTrue)
 }
 
 func TestRequireType_Failure_NilValue(t *testing.T) {
 	c := qt.New(t)
-	_, err := RequireType[*values.Vector](nil, werr.ErrNotAVector, "a vector", "vector-length")
+	_, err := RequireType[*values.Vector](nil, werr.ErrNotAVector, "vector-length")
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, werr.ErrNotAVector), qt.IsTrue)
 }
@@ -114,7 +114,7 @@ func TestRequireArg_PositionInError(t *testing.T) {
 			c := qt.New(t)
 			args := []values.Value{values.NewString("x"), values.NewString("y"), values.NewString("z")}
 			mc := &stubCallContext{args: args}
-			_, err := RequireArg[*values.Vector](mc, tc.index, werr.ErrNotAVector, "a vector", "test-prim")
+			_, err := RequireArg[*values.Vector](mc, tc.index, werr.ErrNotAVector, "test-prim")
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(strings.Contains(err.Error(), tc.wantMarker), qt.IsTrue,
 				qt.Commentf("expected %q in %q", tc.wantMarker, err.Error()))
@@ -158,7 +158,7 @@ func TestOptionalArg(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := OptionalArg[*values.Integer](tc.rest, defaultInt, werr.ErrNotAnInteger, "an integer", "test")
+			result, err := OptionalArg[*values.Integer](tc.rest, defaultInt, werr.ErrNotAnInteger, "test")
 			if tc.wantErr != nil {
 				c.Assert(errors.Is(err, tc.wantErr), qt.IsTrue)
 				return
@@ -229,7 +229,7 @@ func TestRequireType_Failure_SentinelPreserved(t *testing.T) {
 	}
 	v := values.TrueValue
 	for _, sentinel := range sentinels {
-		_, err := RequireType[*values.Vector](v, sentinel, "a vector", "test")
+		_, err := RequireType[*values.Vector](v, sentinel, "test")
 		c.Assert(err, qt.IsNotNil)
 		c.Assert(errors.Is(err, sentinel), qt.IsTrue, qt.Commentf("sentinel: %v", sentinel))
 	}

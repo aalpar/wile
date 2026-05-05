@@ -49,7 +49,7 @@ func PrimList(mc machine.CallContext) error {
 
 // PrimMakeList implements the Scheme make-list primitive.
 func PrimMakeList(mc machine.CallContext) error {
-	k, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotAnInteger, "an integer", "make-list")
+	k, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotAnInteger, "make-list")
 	if err != nil {
 		return err
 	}
@@ -225,7 +225,7 @@ func PrimListRef(mc machine.CallContext) error {
 // PrimListSet implements the Scheme list-set! primitive.
 // R7RS §6.4: The index must be an exact non-negative integer.
 func PrimListSet(mc machine.CallContext) error {
-	p, err := helpers.RequireArg[*values.Pair](mc, 0, werr.ErrNotAList, "a list", "list-set!")
+	p, err := helpers.RequireArg[*values.Pair](mc, 0, werr.ErrNotAList, "list-set!")
 	if err != nil {
 		return err
 	}

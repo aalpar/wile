@@ -125,7 +125,7 @@ func PrimWriteU8(mc machine.CallContext) error {
 // Reads the next k bytes from port into a newly allocated bytevector.
 // Returns eof-object if no bytes are available before end of file.
 func PrimReadBytevector(mc machine.CallContext) error {
-	k, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotANumber, "a number", "read-bytevector")
+	k, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotANumber, "read-bytevector")
 	if err != nil {
 		return err
 	}
@@ -179,7 +179,7 @@ func PrimReadBytevector(mc machine.CallContext) error {
 // Reads bytes from port into an existing bytevector.
 // Returns the number of bytes read, or eof-object if no bytes available.
 func PrimReadBytevectorBang(mc machine.CallContext) error {
-	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, werr.ErrNotAByteVector, "a bytevector", "read-bytevector!")
+	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, werr.ErrNotAByteVector, "read-bytevector!")
 	if err != nil {
 		return err
 	}
@@ -226,7 +226,7 @@ func PrimReadBytevectorBang(mc machine.CallContext) error {
 // R7RS §6.13.3: (write-bytevector bytevector [port [start [end]]])
 // Writes the bytes of bytevector to port.
 func PrimWriteBytevector(mc machine.CallContext) error {
-	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, werr.ErrNotAByteVector, "a bytevector", "write-bytevector")
+	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, werr.ErrNotAByteVector, "write-bytevector")
 	if err != nil {
 		return err
 	}

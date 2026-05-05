@@ -174,7 +174,7 @@ func PrimNumGe(mc machine.CallContext) error {
 // PrimAbs implements the abs primitive.
 // R7RS §6.2.6: abs is only defined for real numbers.
 func PrimAbs(mc machine.CallContext) error {
-	n, err := helpers.RequireArg[values.Number](mc, 0, werr.ErrNotANumber, "a number", "abs")
+	n, err := helpers.RequireArg[values.Number](mc, 0, werr.ErrNotANumber, "abs")
 	if err != nil {
 		return err
 	}
@@ -338,7 +338,7 @@ func PrimLcm(mc machine.CallContext) error {
 // R7RS §6.2.6: The exact procedure returns an exact representation
 // of z that is numerically closest to the argument.
 func PrimExact(mc machine.CallContext) error {
-	n, err := helpers.RequireArg[values.Number](mc, 0, werr.ErrNotANumber, "a number", "exact")
+	n, err := helpers.RequireArg[values.Number](mc, 0, werr.ErrNotANumber, "exact")
 	if err != nil {
 		return err
 	}
@@ -356,7 +356,7 @@ func PrimExact(mc machine.CallContext) error {
 // R7RS §6.2.6: The inexact procedure returns an inexact representation
 // of z that is numerically closest to the argument.
 func PrimInexact(mc machine.CallContext) error {
-	n, err := helpers.RequireArg[values.Number](mc, 0, werr.ErrNotANumber, "a number", "inexact")
+	n, err := helpers.RequireArg[values.Number](mc, 0, werr.ErrNotANumber, "inexact")
 	if err != nil {
 		return err
 	}

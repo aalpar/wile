@@ -43,8 +43,10 @@ func CharCompare(mc machine.CallContext, name string, cmp func(a, b rune) bool) 
 // CharCompareVariadic is a helper for variadic character comparison primitives.
 // It extracts characters from the variadic args and applies the comparator pairwise.
 func CharCompareVariadic(mc machine.CallContext, name string, cmp func(a, b rune) bool) error {
-	return CompareVariadic(mc, name, werr.ErrNotACharacter, "a character",
-		func(c *values.Character) rune { return c.Value }, cmp)
+	return CompareVariadic(mc, name, werr.ErrNotACharacter,
+		func(c *values.Character) rune {
+			return c.Value
+		}, cmp)
 }
 
 // CompareVariadic implements pairwise chain comparison over a homogeneous
@@ -59,16 +61,17 @@ func CharCompareVariadic(mc machine.CallContext, name string, cmp func(a, b rune
 // Used for comparison primitives like char<?, string<?, etc. where the call
 // shape is `(op a b c ...)` with all args of the same type. Short-circuit
 // on cmp failure uses werr.ErrCannotCompare as a non-error signal, matching
-// the NumericChainCompare pattern.
+// the NumericChainCompare pattern. The expected-type phrase is read from
+// the sentinel via TypeName().
 func CompareVariadic[T values.Value, V any](
 	mc machine.CallContext,
 	name string,
 	sentinel error,
-	typeName string,
 	extract func(T) V,
 	cmp func(V, V) bool,
 ) error {
-	first, err := RequireArg[T](mc, 0, sentinel, typeName, name)
+	typeName := typeNameFromSentinel(sentinel)
+	first, err := RequireArg[T](mc, 0, sentinel, name)
 	if err != nil {
 		return err
 	}

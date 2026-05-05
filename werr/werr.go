@@ -84,20 +84,20 @@ var (
 	ErrUnexportedIdentifier      = NewStaticError("identifier not exported")
 
 	// Threading errors
-	ErrNotAThread              = NewTypeSentinel("thread")
-	ErrNotAMutex               = NewTypeSentinel("mutex")
-	ErrNotAConditionVariable   = NewTypeSentinel("condition variable")
-	ErrNotATime                = NewTypeSentinel("time")
-	ErrNotAChannel             = NewTypeSentinel("channel")
-	ErrNotAWaitGroup           = NewTypeSentinel("wait-group")
-	ErrNotARWMutex             = NewTypeSentinel("rw-mutex")
+	ErrNotAThread            = NewTypeSentinel("thread")
+	ErrNotAMutex             = NewTypeSentinel("mutex")
+	ErrNotAConditionVariable = NewTypeSentinel("condition variable")
+	ErrNotATime              = NewTypeSentinel("time")
+	ErrNotAChannel           = NewTypeSentinel("channel")
+	ErrNotAWaitGroup         = NewTypeSentinel("wait-group")
+	ErrNotARWMutex           = NewTypeSentinel("rw-mutex")
 	// "once" is pronounced /wuns/ — letter rule would give "an once", but
 	// the consonant /w/ sound calls for "a". Pass-through preserves the
 	// correct article.
-	ErrNotAOnce      = NewTypeSentinel("a once")
-	ErrNotAnAtomic   = NewTypeSentinel("atomic")
-	ErrPortClosed    = NewStaticError("port is closed")
-	ErrNotAHashtable = NewTypeSentinel("hashtable")
+	ErrNotAOnce                = NewTypeSentinel("a once")
+	ErrNotAnAtomic             = NewTypeSentinel("atomic")
+	ErrPortClosed              = NewStaticError("port is closed")
+	ErrNotAHashtable           = NewTypeSentinel("hashtable")
 	ErrNoCaptureContext        = NewStaticError("no capture context for expansion")
 	ErrExactnessConversion     = NewStaticError("exactness conversion failed")
 	ErrInvalidFormat           = NewStaticError("invalid number format")

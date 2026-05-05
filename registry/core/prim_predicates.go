@@ -162,14 +162,14 @@ func PrimRationalQ(mc machine.CallContext) error {
 //
 // R7RS §6.2.6: Returns #t if the number is exact, #f otherwise.
 var PrimExactQ = helpers.MakeNumericPredicate[values.Number](
-	"exact?", werr.ErrNotANumber, "a number", values.Number.IsExact,
+	"exact?", werr.ErrNotANumber, values.Number.IsExact,
 )
 
 // PrimInexactQ implements the inexact? predicate.
 //
 // R7RS §6.2.6: Returns #t if the number is inexact, #f otherwise.
 var PrimInexactQ = helpers.MakeNumericPredicate[values.Number](
-	"inexact?", werr.ErrNotANumber, "a number", func(n values.Number) bool {
+	"inexact?", werr.ErrNotANumber, func(n values.Number) bool {
 		return !n.IsExact()
 	},
 )

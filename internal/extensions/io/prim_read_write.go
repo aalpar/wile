@@ -37,12 +37,12 @@ const (
 // Returns (port, tuple, true, nil) when a port is found in the list.
 // Returns (zero, tuple, false, nil) when the list is empty — the caller
 // resolves the default. Returns (zero, nil, false, error) on type mismatch
-// or malformed input.
+// or malformed input. The expected-type phrase is read from the sentinel
+// via errSentinel.TypeName().
 func extractPort[T any](
 	o values.Value,
 	name string,
 	errSentinel *werr.StaticError,
-	portDesc string,
 ) (T, values.Tuple, bool, error) {
 	var zero T
 	prefix := fmtPrefix(name)
@@ -61,7 +61,7 @@ func extractPort[T any](
 	p, ok := tuple.Car().(T)
 	if !ok {
 		return zero, nil, false, werr.WrapForeignErrorf(
-			errSentinel, "%sexpected %s but got %T", prefix, portDesc, tuple.Car())
+			errSentinel, "%sexpected %s but got %T", prefix, errSentinel.TypeName(), tuple.Car())
 	}
 	return p, tuple, true, nil
 }
@@ -78,8 +78,7 @@ func fmtPrefix(name string) string {
 // Otherwise, extracts and validates the port from the list's car.
 func getOptionalOutputPort(mc machine.CallContext, argIndex int) (values.OutputPort, error) {
 	p, _, found, err := extractPort[values.OutputPort](
-		mc.Arg(argIndex), "", werr.ErrNotAnOutputPort, "an output port",
-	)
+		mc.Arg(argIndex), "", werr.ErrNotAnOutputPort)
 	if err != nil {
 		return nil, err
 	}
@@ -110,8 +109,7 @@ func getOptionalTextualOutputPort(mc machine.CallContext, argIndex int) (values.
 // Otherwise, extracts and validates the port from the list's car.
 func getOptionalInputPort(mc machine.CallContext, argIndex int) (values.TextualReader, error) {
 	p, _, found, err := extractPort[values.TextualReader](
-		mc.Arg(argIndex), "", werr.ErrNotAnInputPort, "an input port",
-	)
+		mc.Arg(argIndex), "", werr.ErrNotAnInputPort)
 	if err != nil {
 		return nil, err
 	}
@@ -126,8 +124,7 @@ func getOptionalInputPort(mc machine.CallContext, argIndex int) (values.TextualR
 // Also returns the validated tuple for callers that need to extract further arguments.
 func getRequiredBinaryInputPort(o values.Value, name string) (values.BinaryReader, values.Tuple, error) {
 	p, tuple, found, err := extractPort[values.BinaryReader](
-		o, name, werr.ErrNotAByteInputPort, "a binary input port",
-	)
+		o, name, werr.ErrNotAByteInputPort)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -143,8 +140,7 @@ func getRequiredBinaryInputPort(o values.Value, name string) (values.BinaryReade
 // Also returns the validated tuple for callers that need to extract further arguments.
 func getRequiredBinaryOutputPort(o values.Value, name string) (values.BinaryWriter, values.Tuple, error) {
 	p, tuple, found, err := extractPort[values.BinaryWriter](
-		o, name, werr.ErrNotAByteOutputPort, "a binary output port",
-	)
+		o, name, werr.ErrNotAByteOutputPort)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -358,7 +354,7 @@ func PrimCharReadyQ(mc machine.CallContext) error {
 // R7RS §6.13.2: (read-string k [port])
 // Reads up to k characters from the input port and returns them as a string.
 func PrimReadString(mc machine.CallContext) error {
-	k, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotANumber, "a number", "read-string")
+	k, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotANumber, "read-string")
 	if err != nil {
 		return err
 	}

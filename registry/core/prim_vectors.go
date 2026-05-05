@@ -24,7 +24,7 @@ import (
 // PrimMakeVector implements the (make-vector) primitive.
 // Creates a vector of the given size, optionally filled with a specified value.
 func PrimMakeVector(mc machine.CallContext) error {
-	size, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotANumber, "a number", "make-vector")
+	size, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotANumber, "make-vector")
 	if err != nil {
 		return err
 	}
@@ -55,14 +55,14 @@ func PrimVector(mc machine.CallContext) error {
 // PrimVectorLength implements the vector-length primitive.
 // Returns the number of elements in a vector as an integer.
 func PrimVectorLength(mc machine.CallContext) error {
-	return helpers.SequenceLength[*values.Vector](mc, werr.ErrNotAVector, "a vector", "vector-length")
+	return helpers.SequenceLength[*values.Vector](mc, werr.ErrNotAVector, "vector-length")
 }
 
 // PrimVectorRef implements the vector-ref primitive.
 // Returns the element of a vector at the given index.
 // R7RS §6.8: The index must be an exact non-negative integer.
 func PrimVectorRef(mc machine.CallContext) error {
-	return helpers.SequenceRef(mc, werr.ErrNotAVector, "a vector", "vector-ref",
+	return helpers.SequenceRef(mc, werr.ErrNotAVector, "vector-ref",
 		(*values.Vector).Get,
 	)
 }
@@ -71,7 +71,7 @@ func PrimVectorRef(mc machine.CallContext) error {
 // Sets the element of a vector at the given index to a new value.
 // R7RS §6.8: The index must be an exact non-negative integer.
 func PrimVectorSet(mc machine.CallContext) error {
-	return helpers.SequenceSet(mc, werr.ErrNotAVector, "a vector", "vector-set!",
+	return helpers.SequenceSet(mc, werr.ErrNotAVector, "vector-set!",
 		func(v *values.Vector, idx int, mc machine.CallContext) error {
 			return v.Set(idx, mc.Arg(2))
 		},
@@ -82,7 +82,7 @@ func PrimVectorSet(mc machine.CallContext) error {
 // R7RS §6.8: (vector->list vector [start [end]])
 // Converts a vector (or subvector) to a list with the same elements in the same order.
 func PrimVectorToList(mc machine.CallContext) error {
-	v, err := helpers.RequireArg[*values.Vector](mc, 0, werr.ErrNotAVector, "a vector", "vector->list")
+	v, err := helpers.RequireArg[*values.Vector](mc, 0, werr.ErrNotAVector, "vector->list")
 	if err != nil {
 		return err
 	}
@@ -106,7 +106,7 @@ func PrimListToVector(mc machine.CallContext) error {
 // R7RS §6.8: (vector-copy vector [start [end]])
 // Returns a newly allocated copy of the elements of vector between start and end.
 func PrimVectorCopy(mc machine.CallContext) error {
-	v, err := helpers.RequireArg[*values.Vector](mc, 0, werr.ErrNotAVector, "a vector", "vector-copy")
+	v, err := helpers.RequireArg[*values.Vector](mc, 0, werr.ErrNotAVector, "vector-copy")
 	if err != nil {
 		return err
 	}
@@ -129,11 +129,11 @@ func PrimVectorCopy(mc machine.CallContext) error {
 // R7RS §6.8: (vector-copy! to at from [start [end]])
 // Copies elements from vector from to vector to, starting at index at in to.
 func PrimVectorCopyTo(mc machine.CallContext) error {
-	to, err := helpers.RequireArg[*values.Vector](mc, 0, werr.ErrNotAVector, "a vector", "vector-copy!")
+	to, err := helpers.RequireArg[*values.Vector](mc, 0, werr.ErrNotAVector, "vector-copy!")
 	if err != nil {
 		return err
 	}
-	at, err := helpers.RequireArg[*values.Integer](mc, 1, werr.ErrNotANumber, "a number", "vector-copy!")
+	at, err := helpers.RequireArg[*values.Integer](mc, 1, werr.ErrNotANumber, "vector-copy!")
 	if err != nil {
 		return err
 	}
@@ -149,7 +149,7 @@ func PrimVectorCopyTo(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAList, "vector-copy!: improper argument list")
 	}
 
-	from, err := helpers.RequireType[*values.Vector](tuple.Car(), werr.ErrNotAVector, "a vector", "vector-copy!")
+	from, err := helpers.RequireType[*values.Vector](tuple.Car(), werr.ErrNotAVector, "vector-copy!")
 	if err != nil {
 		return err
 	}
@@ -172,7 +172,7 @@ func PrimVectorCopyTo(mc machine.CallContext) error {
 // R7RS §6.8: (vector-fill! vector fill [start [end]])
 // Sets the elements of vector between start and end to fill.
 func PrimVectorFill(mc machine.CallContext) error {
-	v, err := helpers.RequireArg[*values.Vector](mc, 0, werr.ErrNotAVector, "a vector", "vector-fill!")
+	v, err := helpers.RequireArg[*values.Vector](mc, 0, werr.ErrNotAVector, "vector-fill!")
 	if err != nil {
 		return err
 	}
@@ -221,7 +221,7 @@ func PrimVectorAppend(mc machine.CallContext) error {
 // R7RS §6.8: (vector->string vector [start [end]])
 // Returns a string constructed from the characters in vector between start and end.
 func PrimVectorToString(mc machine.CallContext) error {
-	v, err := helpers.RequireArg[*values.Vector](mc, 0, werr.ErrNotAVector, "a vector", "vector->string")
+	v, err := helpers.RequireArg[*values.Vector](mc, 0, werr.ErrNotAVector, "vector->string")
 	if err != nil {
 		return err
 	}
@@ -235,7 +235,7 @@ func PrimVectorToString(mc machine.CallContext) error {
 	// Convert characters to string
 	runes := make([]rune, end-start)
 	for i := start; i < end; i++ {
-		ch, err := helpers.RequireType[*values.Character]((*v)[i], werr.ErrNotACharacter, "a character", "vector->string")
+		ch, err := helpers.RequireType[*values.Character]((*v)[i], werr.ErrNotACharacter, "vector->string")
 		if err != nil {
 			return err
 		}
@@ -250,7 +250,7 @@ func PrimVectorToString(mc machine.CallContext) error {
 // R7RS §6.8: (string->vector string [start [end]])
 // Returns a vector containing the characters of string between start and end.
 func PrimStringToVector(mc machine.CallContext) error {
-	str, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "string->vector")
+	str, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string->vector")
 	if err != nil {
 		return err
 	}

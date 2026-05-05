@@ -42,7 +42,7 @@ var PrimOutputPortQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 //
 // R7RS §6.13.1: Returns #t if port is still open and capable of performing input.
 func PrimInputPortOpenQ(mc machine.CallContext) error {
-	p, err := helpers.RequireArg[values.InputPort](mc, 0, werr.ErrNotAnInputPort, "an input port", "input-port-open?")
+	p, err := helpers.RequireArg[values.InputPort](mc, 0, werr.ErrNotAnInputPort, "input-port-open?")
 	if err != nil {
 		return err
 	}
@@ -55,7 +55,7 @@ func PrimInputPortOpenQ(mc machine.CallContext) error {
 //
 // R7RS §6.13.1: Returns #t if port is still open and capable of performing output.
 func PrimOutputPortOpenQ(mc machine.CallContext) error {
-	p, err := helpers.RequireArg[values.OutputPort](mc, 0, werr.ErrNotAnOutputPort, "an output port", "output-port-open?")
+	p, err := helpers.RequireArg[values.OutputPort](mc, 0, werr.ErrNotAnOutputPort, "output-port-open?")
 	if err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func PrimEofObjectQ(mc machine.CallContext) error {
 
 // PrimOpenInputString implements the Scheme open-input-string primitive.
 func PrimOpenInputString(mc machine.CallContext) error {
-	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "open-input-string")
+	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "open-input-string")
 	if err != nil {
 		return err
 	}
@@ -155,7 +155,7 @@ func PrimOpenOutputString(mc machine.CallContext) error {
 
 // PrimGetOutputString implements the Scheme get-output-string primitive.
 func PrimGetOutputString(mc machine.CallContext) error {
-	p, err := helpers.RequireArg[*values.StringOutputPort](mc, 0, werr.ErrNotAStringOutputPort, "a string output port", "get-output-string")
+	p, err := helpers.RequireArg[*values.StringOutputPort](mc, 0, werr.ErrNotAStringOutputPort, "get-output-string")
 	if err != nil {
 		return err
 	}
@@ -166,7 +166,7 @@ func PrimGetOutputString(mc machine.CallContext) error {
 
 // PrimOpenInputBytevector implements the Scheme open-input-bytevector primitive.
 func PrimOpenInputBytevector(mc machine.CallContext) error {
-	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, werr.ErrNotAByteVector, "a bytevector", "open-input-bytevector")
+	bv, err := helpers.RequireArg[*values.ByteVector](mc, 0, werr.ErrNotAByteVector, "open-input-bytevector")
 	if err != nil {
 		return err
 	}
@@ -190,7 +190,7 @@ func PrimOpenOutputBytevector(mc machine.CallContext) error {
 
 // PrimGetOutputBytevector implements the Scheme get-output-bytevector primitive.
 func PrimGetOutputBytevector(mc machine.CallContext) error {
-	e, err := helpers.RequireArg[values.ByteVectorExtractor](mc, 0, werr.ErrNotABytevectorOutputPort, "a bytevector output port", "get-output-bytevector")
+	e, err := helpers.RequireArg[values.ByteVectorExtractor](mc, 0, werr.ErrNotABytevectorOutputPort, "get-output-bytevector")
 	if err != nil {
 		return err
 	}

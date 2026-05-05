@@ -31,7 +31,7 @@ func PrimCurrentContinuationMarks(cc machine.CallContext) error {
 		return err
 	}
 	if ok {
-		tag, err = helpers.RequireType[*machine.PromptTag](v, werr.ErrNotAPromptTag, "a prompt tag", "current-continuation-marks")
+		tag, err = helpers.RequireType[*machine.PromptTag](v, werr.ErrNotAPromptTag, "current-continuation-marks")
 		if err != nil {
 			return err
 		}
@@ -43,7 +43,7 @@ func PrimCurrentContinuationMarks(cc machine.CallContext) error {
 // PrimContinuationMarkSetToList implements (continuation-mark-set->list mark-set key).
 // Extracts a list of values for key across all frames in the mark set.
 func PrimContinuationMarkSetToList(mc machine.CallContext) error {
-	cms, err := helpers.RequireType[*machine.ContinuationMarkSet](mc.Arg(0), werr.ErrNotAContinuationMarkSet, "a continuation mark set", "continuation-mark-set->list")
+	cms, err := helpers.RequireType[*machine.ContinuationMarkSet](mc.Arg(0), werr.ErrNotAContinuationMarkSet, "continuation-mark-set->list")
 	if err != nil {
 		return err
 	}
@@ -54,7 +54,7 @@ func PrimContinuationMarkSetToList(mc machine.CallContext) error {
 // PrimContinuationMarkSetFirst implements (continuation-mark-set-first mark-set key [default]).
 // Returns the value for key from the nearest frame, or default (#f if omitted).
 func PrimContinuationMarkSetFirst(mc machine.CallContext) error {
-	cms, err := helpers.RequireType[*machine.ContinuationMarkSet](mc.Arg(0), werr.ErrNotAContinuationMarkSet, "a continuation mark set", "continuation-mark-set-first")
+	cms, err := helpers.RequireType[*machine.ContinuationMarkSet](mc.Arg(0), werr.ErrNotAContinuationMarkSet, "continuation-mark-set-first")
 	if err != nil {
 		return err
 	}
@@ -79,7 +79,7 @@ func PrimContinuationMarkSetFirst(mc machine.CallContext) error {
 //
 // Racket §10.5: continuation-mark-set->list*
 func PrimContinuationMarkSetToListStar(mc machine.CallContext) error {
-	cms, err := helpers.RequireType[*machine.ContinuationMarkSet](mc.Arg(0), werr.ErrNotAContinuationMarkSet, "a continuation mark set", "continuation-mark-set->list*")
+	cms, err := helpers.RequireType[*machine.ContinuationMarkSet](mc.Arg(0), werr.ErrNotAContinuationMarkSet, "continuation-mark-set->list*")
 	if err != nil {
 		return err
 	}
@@ -124,7 +124,7 @@ var PrimContinuationMarkSetQ = helpers.MakeTypePredicate(func(o values.Value) bo
 // Extracts a ContinuationMarkSet from a captured continuation (the result of
 // call/cc), optionally stopping at prompt-tag.
 func PrimContinuationMarks(mc machine.CallContext) error {
-	capt, err := helpers.RequireType[*machine.CapturedContinuation](mc.Arg(0), werr.ErrNotAContinuation, "a continuation", "continuation-marks")
+	capt, err := helpers.RequireType[*machine.CapturedContinuation](mc.Arg(0), werr.ErrNotAContinuation, "continuation-marks")
 	if err != nil {
 		return err
 	}
@@ -134,7 +134,7 @@ func PrimContinuationMarks(mc machine.CallContext) error {
 		return err
 	}
 	if ok {
-		tag, err = helpers.RequireType[*machine.PromptTag](v, werr.ErrNotAPromptTag, "a prompt tag", "continuation-marks")
+		tag, err = helpers.RequireType[*machine.PromptTag](v, werr.ErrNotAPromptTag, "continuation-marks")
 		if err != nil {
 			return err
 		}

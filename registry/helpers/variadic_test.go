@@ -134,7 +134,7 @@ func TestVariadicArgs(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			mc := &stubCallContext{args: tc.args}
-			out, err := VariadicArgs[*values.Integer](mc, tc.fixedCount, werr.ErrNotAnInteger, "an integer", "test")
+			out, err := VariadicArgs[*values.Integer](mc, tc.fixedCount, werr.ErrNotAnInteger, "test")
 
 			if tc.wantErr != nil {
 				c.Assert(err, qt.IsNotNil)

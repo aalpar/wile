@@ -24,7 +24,7 @@ import (
 // PrimCharToInteger implements the (char->integer) primitive.
 // Returns the Unicode code point of the character as an integer.
 func PrimCharToInteger(mc machine.CallContext) error {
-	ch, err := helpers.RequireArg[*values.Character](mc, 0, werr.ErrNotACharacter, "a character", "char->integer")
+	ch, err := helpers.RequireArg[*values.Character](mc, 0, werr.ErrNotACharacter, "char->integer")
 	if err != nil {
 		return err
 	}
@@ -38,7 +38,7 @@ func PrimCharToInteger(mc machine.CallContext) error {
 // R7RS §6.6: The argument must be a valid Unicode scalar value,
 // i.e., an integer in [0, #xD7FF] ∪ [#xE000, #x10FFFF].
 func PrimIntegerToChar(mc machine.CallContext) error {
-	n, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotANumber, "a number", "integer->char")
+	n, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotANumber, "integer->char")
 	if err != nil {
 		return err
 	}

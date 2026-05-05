@@ -19,15 +19,22 @@ import (
 	"github.com/aalpar/wile/values"
 )
 
+// Lengthable is the constraint for SequenceLength/Ref/Set: any pointer type
+// that exposes a Length() int method. Satisfied by *values.Vector and
+// *values.ByteVector.
+type Lengthable interface {
+	Length() int
+}
+
 // SequenceLength extracts a sequence of type T from arg 0, and sets
 // the machine context value to its length as an exact integer.
-// T must be a pointer type satisfying interface{ Length() int }.
-func SequenceLength[T interface{ Length() int }](
+// T must be a pointer type satisfying Lengthable.
+func SequenceLength[T Lengthable](
 	mc machine.CallContext,
 	sentinel error,
-	typeName, name string,
+	name string,
 ) error {
-	seq, err := RequireArg[T](mc, 0, sentinel, typeName, name)
+	seq, err := RequireArg[T](mc, 0, sentinel, name)
 	if err != nil {
 		return err
 	}
@@ -39,13 +46,13 @@ func SequenceLength[T interface{ Length() int }](
 // exact integer index from arg 1, and sets the machine context value
 // to getElement(seq, idx). The getElement closure handles type-specific
 // element retrieval (e.g., Vector.Get vs ByteVector byte-to-integer conversion).
-func SequenceRef[T interface{ Length() int }](
+func SequenceRef[T Lengthable](
 	mc machine.CallContext,
 	sentinel error,
-	typeName, name string,
+	name string,
 	getElement func(T, int) values.Value,
 ) error {
-	seq, err := RequireArg[T](mc, 0, sentinel, typeName, name)
+	seq, err := RequireArg[T](mc, 0, sentinel, name)
 	if err != nil {
 		return err
 	}
@@ -60,13 +67,13 @@ func SequenceRef[T interface{ Length() int }](
 // SequenceSet extracts a sequence of type T from arg 0, validates an
 // exact integer index from arg 1, and delegates to setElement(seq, idx, mc)
 // for the type-specific mutation. Sets Void on success.
-func SequenceSet[T interface{ Length() int }](
+func SequenceSet[T Lengthable](
 	mc machine.CallContext,
 	sentinel error,
-	typeName, name string,
+	name string,
 	setElement func(T, int, machine.CallContext) error,
 ) error {
-	seq, err := RequireArg[T](mc, 0, sentinel, typeName, name)
+	seq, err := RequireArg[T](mc, 0, sentinel, name)
 	if err != nil {
 		return err
 	}

@@ -33,7 +33,7 @@ var PrimNamespaceQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 
 // PrimNamespaceName implements (namespace-name ns).
 func PrimNamespaceName(mc machine.CallContext) error {
-	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrInvalidArgument, "a namespace", "namespace-name")
+	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrNotANamespace, "namespace-name")
 	if err != nil {
 		return err
 	}
@@ -110,7 +110,7 @@ func PrimMakeNamespace(mc machine.CallContext) error {
 
 // PrimNamespaceDerive implements (namespace-derive ns).
 func PrimNamespaceDerive(mc machine.CallContext) error {
-	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrInvalidArgument, "a namespace", "namespace-derive")
+	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrNotANamespace, "namespace-derive")
 	if err != nil {
 		return err
 	}
@@ -120,11 +120,11 @@ func PrimNamespaceDerive(mc machine.CallContext) error {
 
 // PrimNamespaceDefine implements (namespace-define! ns sym val).
 func PrimNamespaceDefine(mc machine.CallContext) error {
-	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrInvalidArgument, "a namespace", "namespace-define!")
+	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrNotANamespace, "namespace-define!")
 	if err != nil {
 		return err
 	}
-	sym, err := helpers.RequireType[*values.Symbol](mc.Arg(1), werr.ErrNotASymbol, "a symbol", "namespace-define!")
+	sym, err := helpers.RequireType[*values.Symbol](mc.Arg(1), werr.ErrNotASymbol, "namespace-define!")
 	if err != nil {
 		return err
 	}
@@ -145,7 +145,7 @@ func PrimNamespaceDefine(mc machine.CallContext) error {
 //
 //	Arg(0) = ns, Arg(1) = rest list (sym [default])
 func PrimNamespaceRef(mc machine.CallContext) error {
-	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrInvalidArgument, "a namespace", "namespace-ref")
+	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrNotANamespace, "namespace-ref")
 	if err != nil {
 		return err
 	}
@@ -155,7 +155,7 @@ func PrimNamespaceRef(mc machine.CallContext) error {
 	if !ok || rest.IsEmptyList() {
 		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "namespace-ref: expected symbol argument")
 	}
-	sym, err := helpers.RequireType[*values.Symbol](rest.Car(), werr.ErrNotASymbol, "a symbol", "namespace-ref")
+	sym, err := helpers.RequireType[*values.Symbol](rest.Car(), werr.ErrNotASymbol, "namespace-ref")
 	if err != nil {
 		return err
 	}
@@ -190,11 +190,11 @@ func PrimNamespaceRef(mc machine.CallContext) error {
 
 // PrimNamespaceBound implements (namespace-bound? ns sym).
 func PrimNamespaceBound(mc machine.CallContext) error {
-	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrInvalidArgument, "a namespace", "namespace-bound?")
+	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrNotANamespace, "namespace-bound?")
 	if err != nil {
 		return err
 	}
-	sym, err := helpers.RequireType[*values.Symbol](mc.Arg(1), werr.ErrNotASymbol, "a symbol", "namespace-bound?")
+	sym, err := helpers.RequireType[*values.Symbol](mc.Arg(1), werr.ErrNotASymbol, "namespace-bound?")
 	if err != nil {
 		return err
 	}
@@ -207,11 +207,11 @@ func PrimNamespaceBound(mc machine.CallContext) error {
 
 // PrimNamespaceUndefine implements (namespace-undefine! ns sym).
 func PrimNamespaceUndefine(mc machine.CallContext) error {
-	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrInvalidArgument, "a namespace", "namespace-undefine!")
+	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrNotANamespace, "namespace-undefine!")
 	if err != nil {
 		return err
 	}
-	sym, err := helpers.RequireType[*values.Symbol](mc.Arg(1), werr.ErrNotASymbol, "a symbol", "namespace-undefine!")
+	sym, err := helpers.RequireType[*values.Symbol](mc.Arg(1), werr.ErrNotASymbol, "namespace-undefine!")
 	if err != nil {
 		return err
 	}
@@ -223,7 +223,7 @@ func PrimNamespaceUndefine(mc machine.CallContext) error {
 
 // PrimNamespaceBoundNames implements (namespace-bound-names ns).
 func PrimNamespaceBoundNames(mc machine.CallContext) error {
-	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrInvalidArgument, "a namespace", "namespace-bound-names")
+	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrNotANamespace, "namespace-bound-names")
 	if err != nil {
 		return err
 	}
@@ -242,7 +242,7 @@ func PrimNamespaceBoundNames(mc machine.CallContext) error {
 
 // PrimNamespaceRequire implements (namespace-require ns lib-spec).
 func PrimNamespaceRequire(mc machine.CallContext) error {
-	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrInvalidArgument, "a namespace", "namespace-require")
+	ns, err := helpers.RequireType[*environment.Namespace](mc.Arg(0), werr.ErrNotANamespace, "namespace-require")
 	if err != nil {
 		return err
 	}
