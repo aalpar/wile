@@ -30,12 +30,11 @@ Keywords: empty, null, blank, predicate, length"
     ((criterion s)
      "Return non-#f if every char in S satisfies CRITERION.
 
-CRITERION is either a char (compared via char=?) or a predicate procedure.
-For empty range returns #t. For non-empty range and procedure CRITERION,
-returns the value returned for the final char (any truthy value, not
-necessarily #t). Returns #f as soon as a char fails.
-
-char-set criteria are deferred until SRFI-14 lands.
+CRITERION is a char (compared via char=?), a char-set (SRFI-14), or a
+predicate procedure of one argument. For empty range returns #t. For
+non-empty range and procedure CRITERION, returns the value returned for
+the final char (any truthy value, not necessarily #t). Returns #f as
+soon as a char fails.
 
 Examples:
   (string-every char-alphabetic? \"abc\")    => #t
@@ -44,7 +43,7 @@ Examples:
   (string-every char-alphabetic? \"\")       => #t
 
 Parameters:
-  criterion : char or procedure
+  criterion : char, char-set (SRFI-14), or procedure
   s : string
   start : integer (optional, default 0)
   end : integer (optional, default (string-length s))
@@ -73,10 +72,9 @@ See also: `string-any', `string-count'."
      "Return the first non-#f value produced by applying CRITERION to
 chars of S in left-to-right order, or #f if no char satisfies it.
 
-For procedure CRITERIA, returns the actual procedure return value (not
-necessarily #t).
-
-char-set criteria are deferred until SRFI-14 lands.
+CRITERION is a char (compared via char=?), a char-set (SRFI-14), or a
+predicate procedure of one argument. For a procedure criterion, returns
+the actual procedure return value (not necessarily #t).
 
 Examples:
   (string-any char-numeric? \"abc1\")   => #t
@@ -84,7 +82,7 @@ Examples:
   (string-any #\\b \"abc\")              => #t
 
 Parameters:
-  criterion : char or procedure
+  criterion : char, char-set (SRFI-14), or procedure
   s : string
   start : integer (optional, default 0)
   end : integer (optional, default (string-length s))

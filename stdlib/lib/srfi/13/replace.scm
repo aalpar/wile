@@ -141,10 +141,10 @@ maximal run of characters satisfying the criterion. Empty fields between
 adjacent separators are NOT produced (this is the SRFI-13 sense, distinct
 from `string-split').
 
-Default CRITERION is (lambda (ch) (not (char-whitespace? ch))) -- i.e.
-non-whitespace runs. SRFI-14's char-set:graphic is the canonical default
-in conformant implementations; v1 uses the predicate equivalent until
-SRFI-14 lands.
+CRITERION is a char (compared via char=?), a char-set (SRFI-14), or a
+predicate procedure of one argument. Default is a predicate equivalent
+to char-set:graphic (non-whitespace runs); use char-set:graphic from
+SRFI-14 for conformant behaviour.
 
 Examples:
   (string-tokenize \"hello world\")              => (\"hello\" \"world\")
@@ -155,7 +155,7 @@ Examples:
 
 Parameters:
   s : string
-  criterion : char or procedure (optional, default non-whitespace predicate)
+  criterion : char, char-set (SRFI-14), or procedure (optional, default non-whitespace predicate)
   start : integer (optional, default 0)
   end : integer (optional, default (string-length s))
 Returns: list of strings
@@ -202,7 +202,7 @@ Examples:
   (string-filter #\\a \"banana\")                => \"aaa\"
 
 Parameters:
-  criterion : char or procedure
+  criterion : char, char-set (SRFI-14), or procedure
   s : string
   start : integer (optional, default 0)
   end : integer (optional, default (string-length s))
@@ -228,7 +228,7 @@ Examples:
   (string-delete #\\a \"banana\")                => \"bnn\"
 
 Parameters:
-  criterion : char or procedure
+  criterion : char, char-set (SRFI-14), or procedure
   s : string
   start : integer (optional, default 0)
   end : integer (optional, default (string-length s))
