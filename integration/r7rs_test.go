@@ -188,6 +188,12 @@ func TestSRFI14NamedSets(t *testing.T) {
 	runSchemeTest(t, "srfi-14-tests-named-sets.scm", 2*time.Minute, "SRFI-14 Phase 4 (named sets)")
 }
 
+// TestSRFI14SRFI13Unlock runs the SRFI-14 Phase-5 unlock tests: verifies that SRFI-13
+// procedures accepting a criterion now dispatch on char-set? via %match-char?.
+func TestSRFI14SRFI13Unlock(t *testing.T) {
+	runSchemeTest(t, "srfi-14-tests-srfi-13-unlock.scm", 2*time.Minute, "SRFI-14 Phase 5 (SRFI-13 unlock)")
+}
+
 // TestWileStrings runs the (wile strings) extras integration tests.
 func TestWileStrings(t *testing.T) {
 	runSchemeTest(t, "wile-strings-tests.scm", 2*time.Minute, "(wile strings) extras")

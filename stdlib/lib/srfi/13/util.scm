@@ -22,17 +22,17 @@ Keywords: validation, bounds, range, internal"
 
 (define (%match-char? criterion ch)
   "Internal: apply a SRFI-13 criterion to a single char.
-A criterion is either a char (compared with char=?) or a predicate
-procedure of one argument. char-set criteria are deferred until
-SRFI-14 lands.
+A criterion is a char (compared with char=?), a char-set (via
+char-set-contains?), or a predicate procedure of one argument.
 
 Parameters:
-  criterion : char or procedure
+  criterion : char or char-set or procedure
   ch : char
 Returns: boolean
 Category: srfi-13
-Keywords: criterion, predicate, char, internal"
-  (cond ((char? criterion) (char=? criterion ch))
+Keywords: criterion, predicate, char, char-set, internal"
+  (cond ((char? criterion)      (char=? criterion ch))
+        ((char-set? criterion)  (char-set-contains? criterion ch))
         ((procedure? criterion) (criterion ch))
-        (else (error "string-* criterion must be char or procedure (char-set support deferred to SRFI-14)"
+        (else (error "string-* criterion must be char, char-set, or procedure"
                      criterion))))
