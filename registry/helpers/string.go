@@ -40,15 +40,6 @@ func StringCompare(mc machine.CallContext, name string, cmp func(a, b string) bo
 // StringCompareVariadic is a helper for variadic string comparison primitives.
 // It extracts strings from the variadic args and applies the comparator pairwise.
 func StringCompareVariadic(mc machine.CallContext, name string, cmp func(a, b string) bool) error {
-	return variadicCompare(mc, name,
-		func(v values.Value) (*values.String, bool) {
-			s, ok := v.(*values.String)
-			return s, ok
-		},
-		func(s *values.String) string {
-			return s.Value
-		},
-		cmp,
-		werr.ErrNotAString,
-		"a string")
+	return CompareVariadic(mc, name, werr.ErrNotAString,
+		func(s *values.String) string { return s.Value }, cmp)
 }

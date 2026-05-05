@@ -20,48 +20,6 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-// variadicCompare is a generic helper for variadic comparison primitives.
-// It extracts values, compares them pairwise, and returns a boolean result.
-func variadicCompare[T any, V values.Value](
-	mc machine.CallContext,
-	name string,
-	extract func(values.Value) (V, bool),
-	getValue func(V) T,
-	cmp func(T, T) bool,
-	errType error,
-	typeName string,
-) error {
-	first := mc.Arg(0)
-	val1, ok := extract(first)
-	if !ok {
-		return werr.WrapForeignErrorf(errType, "%s: expected %s but got %T", name, typeName, first)
-	}
-
-	rest := mc.Arg(1)
-	prev := getValue(val1)
-
-	for !values.IsEmptyList(rest) {
-		pair, ok := rest.(values.Tuple)
-		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected a list", name)
-		}
-		val, ok := extract(pair.Car())
-		if !ok {
-			return werr.WrapForeignErrorf(errType, "%s: expected %s but got %T", name, typeName, pair.Car())
-		}
-		current := getValue(val)
-		if !cmp(prev, current) {
-			mc.SetValue(values.FalseValue)
-			return nil
-		}
-		prev = current
-		rest = pair.Cdr()
-	}
-
-	mc.SetValue(values.TrueValue)
-	return nil
-}
-
 // CharCompare is a helper for binary character comparison primitives.
 // It extracts two characters from the primitive's arguments and applies the comparator.
 func CharCompare(mc machine.CallContext, name string, cmp func(a, b rune) bool) error {
@@ -82,15 +40,34 @@ func CharCompare(mc machine.CallContext, name string, cmp func(a, b rune) bool) 
 // CharCompareVariadic is a helper for variadic character comparison primitives.
 // It extracts characters from the variadic args and applies the comparator pairwise.
 func CharCompareVariadic(mc machine.CallContext, name string, cmp func(a, b rune) bool) error {
-	return variadicCompare(mc, name,
-		func(v values.Value) (*values.Character, bool) {
-			c, ok := v.(*values.Character)
-			return c, ok
-		},
-		func(c *values.Character) rune {
-			return c.Value
-		},
-		cmp,
-		werr.ErrNotACharacter,
-		"a character")
+	return CompareVariadic(mc, name, werr.ErrNotACharacter,
+		func(c *values.Character) rune { return c.Value }, cmp)
+}
+
+// CompareVariadic implements pairwise chain comparison over a homogeneous
+// variadic list. It collects fixed+rest args of type T via VariadicArgs, then
+// applies cmp to every consecutive pair after extracting the underlying value
+// V from each. Sets #t if all pairs satisfy cmp, #f on the first failure.
+//
+// Used for comparison primitives like char<?, string<?, etc. where the call
+// shape is `(op a b c ...)` with all args of the same type.
+func CompareVariadic[T values.Value, V any](
+	mc machine.CallContext,
+	name string,
+	sentinel error,
+	extract func(T) V,
+	cmp func(V, V) bool,
+) error {
+	args, err := VariadicArgs[T](mc, 2, sentinel, name)
+	if err != nil {
+		return err
+	}
+	for i := 1; i < len(args); i++ {
+		if !cmp(extract(args[i-1]), extract(args[i])) {
+			mc.SetValue(values.FalseValue)
+			return nil
+		}
+	}
+	mc.SetValue(values.TrueValue)
+	return nil
 }

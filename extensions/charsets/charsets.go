@@ -285,37 +285,8 @@ func setValueFromRunesAndBase(mc machine.CallContext, runes []rune, base *values
 	return nil
 }
 
-// charSetVariadicArgs collects the first arg + variadic rest into a single slice
-// of *CharSet, with type-error wrapping. Returns ([]cs, nil) on success.
-func charSetVariadicArgs(site string, mc machine.CallContext) ([]*values.CharSet, error) {
-	first, ok := mc.Arg(0).(*values.CharSet)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotACharSet,
-			"%s: argument 1: expected char-set, got %T", site, mc.Arg(0))
-	}
-	out := []*values.CharSet{first}
-	rest, ok := mc.Arg(1).(values.Tuple)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAList,
-			"%s: rest argument: expected list, got %T", site, mc.Arg(1))
-	}
-	_, err := rest.ForEach(mc.Context(), func(_ context.Context, i int, _ bool, v values.Value) error {
-		cs, isCs := v.(*values.CharSet)
-		if !isCs {
-			return werr.WrapForeignErrorf(werr.ErrNotACharSet,
-				"%s: argument %d: expected char-set, got %T", site, i+2, v)
-		}
-		out = append(out, cs)
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func primCharSetEqual(mc machine.CallContext) error {
-	sets, err := charSetVariadicArgs("char-set=", mc)
+	sets, err := helpers.VariadicArgs[*values.CharSet](mc, 2, werr.ErrNotACharSet, "char-set=")
 	if err != nil {
 		return err
 	}
@@ -330,7 +301,7 @@ func primCharSetEqual(mc machine.CallContext) error {
 }
 
 func primCharSetSubset(mc machine.CallContext) error {
-	sets, err := charSetVariadicArgs("char-set<=", mc)
+	sets, err := helpers.VariadicArgs[*values.CharSet](mc, 2, werr.ErrNotACharSet, "char-set<=")
 	if err != nil {
 		return err
 	}
@@ -345,7 +316,7 @@ func primCharSetSubset(mc machine.CallContext) error {
 }
 
 func primCharSetUnion(mc machine.CallContext) error {
-	sets, err := charSetVariadicArgs("char-set-union", mc)
+	sets, err := helpers.VariadicArgs[*values.CharSet](mc, 2, werr.ErrNotACharSet, "char-set-union")
 	if err != nil {
 		return err
 	}
@@ -358,7 +329,7 @@ func primCharSetUnion(mc machine.CallContext) error {
 }
 
 func primCharSetIntersection(mc machine.CallContext) error {
-	sets, err := charSetVariadicArgs("char-set-intersection", mc)
+	sets, err := helpers.VariadicArgs[*values.CharSet](mc, 2, werr.ErrNotACharSet, "char-set-intersection")
 	if err != nil {
 		return err
 	}
@@ -371,7 +342,7 @@ func primCharSetIntersection(mc machine.CallContext) error {
 }
 
 func primCharSetDifference(mc machine.CallContext) error {
-	sets, err := charSetVariadicArgs("char-set-difference", mc)
+	sets, err := helpers.VariadicArgs[*values.CharSet](mc, 2, werr.ErrNotACharSet, "char-set-difference")
 	if err != nil {
 		return err
 	}
@@ -384,7 +355,7 @@ func primCharSetDifference(mc machine.CallContext) error {
 }
 
 func primCharSetXor(mc machine.CallContext) error {
-	sets, err := charSetVariadicArgs("char-set-xor", mc)
+	sets, err := helpers.VariadicArgs[*values.CharSet](mc, 2, werr.ErrNotACharSet, "char-set-xor")
 	if err != nil {
 		return err
 	}
