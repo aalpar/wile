@@ -177,6 +177,127 @@ func TestForeignProcessError(t *testing.T) {
 	})
 }
 
+// TestTypeSentinelsCarryTypeName pins the type-sentinel inventory: every
+// sentinel in this list must report a non-empty TypeName. If a sentinel is
+// constructed via NewStaticError instead of NewTypeSentinel, registry/helpers
+// argument-extraction errors would emit "expected  but got *Foo" — silent
+// degradation, not a compile error. This test catches that mechanically.
+//
+// When adding a new type sentinel, append it here. When changing an existing
+// non-type sentinel into a type sentinel, append it here too.
+func TestTypeSentinelsCarryTypeName(t *testing.T) {
+	typeSentinels := map[string]*werr.StaticError{
+		"ErrNotABoolean":             werr.ErrNotABoolean,
+		"ErrNotAnInputPort":          werr.ErrNotAnInputPort,
+		"ErrNotAnOutputPort":         werr.ErrNotAnOutputPort,
+		"ErrNotABox":                 werr.ErrNotABox,
+		"ErrNotAnOpaqueValue":        werr.ErrNotAnOpaqueValue,
+		"ErrNotAByte":                werr.ErrNotAByte,
+		"ErrNotAByteInputPort":       werr.ErrNotAByteInputPort,
+		"ErrNotAByteOutputPort":      werr.ErrNotAByteOutputPort,
+		"ErrNotATextualPort":         werr.ErrNotATextualPort,
+		"ErrNotAPrimitive":           werr.ErrNotAPrimitive,
+		"ErrNotANumber":              werr.ErrNotANumber,
+		"ErrNotAReal":                werr.ErrNotAReal,
+		"ErrNotAList":                werr.ErrNotAList,
+		"ErrNotAMachineContext":      werr.ErrNotAMachineContext,
+		"ErrNotAPair":                werr.ErrNotAPair,
+		"ErrNotACons":                werr.ErrNotACons,
+		"ErrNotACharacter":           werr.ErrNotACharacter,
+		"ErrNotACharSet":             werr.ErrNotACharSet,
+		"ErrNotASyntaxValue":         werr.ErrNotASyntaxValue,
+		"ErrNotASyntaxPair":          werr.ErrNotASyntaxPair,
+		"ErrNotASyntaxSymbol":        werr.ErrNotASyntaxSymbol,
+		"ErrNotASyntaxList":          werr.ErrNotASyntaxList,
+		"ErrNotASyntaxObject":        werr.ErrNotASyntaxObject,
+		"ErrNotASymbol":              werr.ErrNotASymbol,
+		"ErrNotAClosure":             werr.ErrNotAClosure,
+		"ErrNotAnInteger":            werr.ErrNotAnInteger,
+		"ErrNotALocalEnvironmentFrame": werr.ErrNotALocalEnvironmentFrame,
+		"ErrNotAMachineTemplate":     werr.ErrNotAMachineTemplate,
+		"ErrNotAString":              werr.ErrNotAString,
+		"ErrNotANamespace":           werr.ErrNotANamespace,
+		"ErrNotAVector":              werr.ErrNotAVector,
+		"ErrNotAByteVector":          werr.ErrNotAByteVector,
+		"ErrNotAProcedure":           werr.ErrNotAProcedure,
+		"ErrNotAParameter":           werr.ErrNotAParameter,
+		"ErrNotAStringOutputPort":    werr.ErrNotAStringOutputPort,
+		"ErrNotABytevectorOutputPort": werr.ErrNotABytevectorOutputPort,
+		"ErrNotANativeError":         werr.ErrNotANativeError,
+		"ErrNotARecord":              werr.ErrNotARecord,
+		"ErrNotARecordType":          werr.ErrNotARecordType,
+		"ErrNotAThread":              werr.ErrNotAThread,
+		"ErrNotAMutex":               werr.ErrNotAMutex,
+		"ErrNotAConditionVariable":   werr.ErrNotAConditionVariable,
+		"ErrNotATime":                werr.ErrNotATime,
+		"ErrNotAChannel":             werr.ErrNotAChannel,
+		"ErrNotAWaitGroup":           werr.ErrNotAWaitGroup,
+		"ErrNotARWMutex":             werr.ErrNotARWMutex,
+		"ErrNotAOnce":                werr.ErrNotAOnce,
+		"ErrNotAnAtomic":             werr.ErrNotAnAtomic,
+		"ErrNotAHashtable":           werr.ErrNotAHashtable,
+		"ErrNotAMatch":               werr.ErrNotAMatch,
+		"ErrNotAPromptTag":           werr.ErrNotAPromptTag,
+		"ErrNotAContinuationMarkSet": werr.ErrNotAContinuationMarkSet,
+		"ErrNotAContinuation":        werr.ErrNotAContinuation,
+		"ErrNotAnErrorContext":       werr.ErrNotAnErrorContext,
+		"ErrNotAProcess":             werr.ErrNotAProcess,
+	}
+	for name, s := range typeSentinels {
+		t.Run(name, func(t *testing.T) {
+			if s.TypeName() == "" {
+				t.Errorf("%s missing TypeName — was NewTypeSentinel skipped? Error()=%q",
+					name, s.Error())
+			}
+		})
+	}
+}
+
+// TestNewTypeSentinel_AutoArticle pins the article-selection rule:
+// "an" before vowel letters, "a" before everything else, with
+// pass-through for inputs already starting with "a "/"an ".
+func TestNewTypeSentinel_AutoArticle(t *testing.T) {
+	tcs := []struct {
+		name           string
+		noun           string
+		wantTypeName   string
+		wantErrMessage string
+	}{
+		{"consonant initial", "string", "a string", "not a string"},
+		{"vowel initial i", "integer", "an integer", "not an integer"},
+		{"vowel initial e", "error object", "an error object", "not an error object"},
+		{"vowel initial o", "output port", "an output port", "not an output port"},
+		{"vowel initial a", "atomic", "an atomic", "not an atomic"},
+		{"hyphenated consonant", "char-set", "a char-set", "not a char-set"},
+		{"capitalized vowel", "Integer", "an Integer", "not an Integer"},
+		{"capitalized consonant", "String", "a String", "not a String"},
+		{"pass-through a", "a once", "a once", "not a once"},
+		{"pass-through an", "an apple", "an apple", "not an apple"},
+		{"empty noun defaults to a", "", "a ", "not a "},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			s := werr.NewTypeSentinel(tc.noun)
+			if s.TypeName() != tc.wantTypeName {
+				t.Errorf("TypeName(): got %q want %q", s.TypeName(), tc.wantTypeName)
+			}
+			if s.Error() != tc.wantErrMessage {
+				t.Errorf("Error(): got %q want %q", s.Error(), tc.wantErrMessage)
+			}
+		})
+	}
+}
+
+// TestNewStaticError_NoTypeName pins the contract that NewStaticError
+// produces sentinels without a TypeName, distinguishing them from
+// NewTypeSentinel for purposes of the registry/helpers type-extraction logic.
+func TestNewStaticError_NoTypeName(t *testing.T) {
+	s := werr.NewStaticError("some condition")
+	if s.TypeName() != "" {
+		t.Errorf("NewStaticError sentinel should have empty TypeName, got %q", s.TypeName())
+	}
+}
+
 func TestWrapForeignErrorWithCause(t *testing.T) {
 	c := qt.New(t)
 	sentinel := werr.NewStaticError("test sentinel")

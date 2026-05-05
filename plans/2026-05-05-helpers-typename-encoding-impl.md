@@ -22,9 +22,17 @@ already documents the four-arg shape that doesn't yet exist.
 ## Design Decisions
 
 **Encoding (Option A)** — add an `expectedType` field to `werr.StaticError`,
-plus a `NewTypeSentinel(typeName)` constructor and `TypeName() string` method.
+plus a `NewTypeSentinel(noun)` constructor and `TypeName() string` method.
 Existing `NewStaticError` callers are unaffected; type sentinels opt in by
 switching to the new constructor.
+
+`NewTypeSentinel` takes a *bare* noun ("string", "integer", "char-set"); it
+auto-prefixes "a"/"an" via an `articleFor` helper using the conventional
+letter rule (vowel letter → "an", else → "a"). Inputs already starting
+with "a " or "an " pass through verbatim, providing an escape hatch for
+phonetic exceptions like "once" (pronounced /wuns/, takes "a"). This keeps
+the API to a single constructor while handling irregular cases without a
+separate function.
 
 **Namespace cases (Path 1)** — introduce `werr.ErrNotANamespace` as a real
 type sentinel and migrate the 11 `ErrInvalidArgument → "a namespace"` call
@@ -78,49 +86,68 @@ Total: 37 production files + helper tests.
 
 ### Sentinel migration in `werr/werr.go`
 
-The ~22 sentinels currently used as type sentinels:
+Sentinels constructed via `NewTypeSentinel` (bare noun; article auto-derived):
 
 ```
-ErrNotABoolean             "a boolean"
-ErrNotAnInputPort          "an input port"
-ErrNotAnOutputPort         "an output port"
-ErrNotABox                 "a box"
-ErrNotAnOpaqueValue        "an opaque value"
-ErrNotAByte                "a byte"
-ErrNotAByteInputPort       "a byte input port"
-ErrNotAByteOutputPort      "a byte output port"
-ErrNotATextualPort         "a textual port"
-ErrNotANumber              "a number"
-ErrNotAReal                "a real number"
-ErrNotAList                "a list"
-ErrNotAPair                "a pair"
-ErrNotACharacter           "a character"
-ErrNotACharSet             "a char-set"
-ErrNotASymbol              "a symbol"
-ErrNotAClosure             "a closure"
-ErrNotAnInteger            "an integer"
-ErrNotAString              "a string"
-ErrNotAVector              "a vector"
-ErrNotAByteVector          "a bytevector"
-ErrNotAProcedure           "a procedure"
-ErrNotAParameter           "a parameter"
-ErrNotARecord              "a record"
-ErrNotARecordType          "a record type"
-ErrNotAThread              "a thread"
-ErrNotAMutex               "a mutex"
-ErrNotAConditionVariable   "a condition variable"
-ErrNotATime                "a time"
-ErrNotAChannel             "a channel"
-ErrNotAOnce                "a once"
-ErrNotAnAtomic             "an atomic"
-ErrNotAHashtable           "a hashtable"
-ErrNotAPromptTag           "a prompt tag"
-ErrNotAContinuationMarkSet "a continuation mark set"
-ErrNotAContinuation        "a continuation"
-ErrNotAWaitGroup           "a wait-group"
+ErrNotABoolean              "boolean"          → "a boolean"
+ErrNotAnInputPort           "input port"       → "an input port"
+ErrNotAnOutputPort          "output port"      → "an output port"
+ErrNotABox                  "box"              → "a box"
+ErrNotAnOpaqueValue         "opaque value"     → "an opaque value"
+ErrNotAByte                 "byte"             → "a byte"
+ErrNotAByteInputPort        "byte input port"  → "a byte input port"
+ErrNotAByteOutputPort       "byte output port" → "a byte output port"
+ErrNotATextualPort          "textual port"     → "a textual port"
+ErrNotAPrimitive            "primitive"        → "a primitive"
+ErrNotANumber               "number"           → "a number"
+ErrNotAReal                 "real number"      → "a real number"
+ErrNotAList                 "list"             → "a list"
+ErrNotAMachineContext       "machine context"  → "a machine context"
+ErrNotAPair                 "pair"             → "a pair"
+ErrNotACons                 "cons"             → "a cons"
+ErrNotACharacter            "character"        → "a character"
+ErrNotACharSet              "char-set"         → "a char-set"
+ErrNotASyntaxValue          "syntax value"     → "a syntax value"
+ErrNotASyntaxPair           "syntax pair"      → "a syntax pair"
+ErrNotASyntaxSymbol         "syntax symbol"    → "a syntax symbol"
+ErrNotASyntaxList           "syntax list"      → "a syntax list"
+ErrNotASyntaxObject         "syntax object"    → "a syntax object"
+ErrNotASymbol               "symbol"           → "a symbol"
+ErrNotAClosure              "closure"          → "a closure"
+ErrNotAnInteger             "integer"          → "an integer"
+ErrNotALocalEnvironmentFrame "local environment frame" → "a local environment frame"
+ErrNotAMachineTemplate      "machine template" → "a machine template"
+ErrNotAString               "string"           → "a string"
+ErrNotANamespace            "namespace"        → "a namespace"   (NEW)
+ErrNotAVector               "vector"           → "a vector"
+ErrNotAByteVector           "bytevector"       → "a bytevector"
+ErrNotAProcedure            "procedure"        → "a procedure"
+ErrNotAParameter            "parameter"        → "a parameter"
+ErrNotAStringOutputPort     "string output port"     → "a string output port"
+ErrNotABytevectorOutputPort "bytevector output port" → "a bytevector output port"
+ErrNotANativeError          "error object"     → "an error object"
+ErrNotARecord               "record"           → "a record"
+ErrNotARecordType           "record type"      → "a record type"
+ErrNotAThread               "thread"           → "a thread"
+ErrNotAMutex                "mutex"            → "a mutex"
+ErrNotAConditionVariable    "condition variable" → "a condition variable"
+ErrNotATime                 "time"             → "a time"
+ErrNotAChannel              "channel"          → "a channel"
+ErrNotAWaitGroup            "wait-group"       → "a wait-group"
+ErrNotARWMutex              "rw-mutex"         → "a rw-mutex"
+ErrNotAOnce                 "a once"           → "a once"        (PASS-THROUGH: /wuns/)
+ErrNotAnAtomic              "atomic"           → "an atomic"
+ErrNotAHashtable            "hashtable"        → "a hashtable"
+ErrNotAMatch                "match"            → "a match"
+ErrNotAPromptTag            "prompt tag"       → "a prompt tag"
+ErrNotAContinuationMarkSet  "continuation mark set" → "a continuation mark set"
+ErrNotAContinuation         "continuation"     → "a continuation"
+ErrNotAnErrorContext        "error context"    → "an error context"
+ErrNotAProcess              "process"          → "a process"
 ```
 
-Plus new: `ErrNotANamespace = NewTypeSentinel("a namespace")`.
+`ErrNotAOnce` uses pass-through because the letter rule would emit "an once"
+but the word is pronounced with a /w/ consonant sound.
 
 Sentinels that stay as `NewStaticError` (not type sentinels): `ErrStopIteration`,
 `ErrNoSuchBinding`, `ErrCannotCompare`, `ErrDivisionByZero`, `ErrFileNotFound`,
@@ -138,11 +165,29 @@ type StaticError struct {
     expectedType string  // "" for non-type sentinels
 }
 
-func NewTypeSentinel(typeName string) *StaticError {
+func NewTypeSentinel(noun string) *StaticError {
+    var typeName string
+    switch {
+    case strings.HasPrefix(noun, "a "), strings.HasPrefix(noun, "an "):
+        typeName = noun // pass-through for irregulars
+    default:
+        typeName = articleFor(noun) + " " + noun
+    }
     return &StaticError{
         message:      "not " + typeName,
         expectedType: typeName,
     }
+}
+
+func articleFor(noun string) string {
+    if len(noun) == 0 {
+        return "a"
+    }
+    switch noun[0] {
+    case 'a', 'e', 'i', 'o', 'u', 'A', 'E', 'I', 'O', 'U':
+        return "an"
+    }
+    return "a"
 }
 
 func (p *StaticError) TypeName() string {
@@ -150,9 +195,10 @@ func (p *StaticError) TypeName() string {
 }
 ```
 
-Convert the ~22 `NewStaticError("not ...")` declarations listed above to
-`NewTypeSentinel("...")`. Verify message strings are byte-identical
-afterward (so `Error()` output is unchanged).
+Convert the ~50 `NewStaticError("not ...")` declarations listed above to
+`NewTypeSentinel("...")` with the bare noun (article stripped). Verify
+message strings are byte-identical afterward (so `Error()` output is
+unchanged).
 
 Add `ErrNotANamespace = NewTypeSentinel("a namespace")` in the existing block.
 
