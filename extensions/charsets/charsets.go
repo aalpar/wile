@@ -16,6 +16,8 @@ package charsets
 
 import (
 	"context"
+	"sync"
+	"unicode"
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/registry"
@@ -230,6 +232,14 @@ func addPrimitives(r *registry.Registry) error {
 			ParamNames: []string{"cs"},
 			Category:   "char-sets",
 			Keywords:   []string{"char-set", "complement", "srfi-14"},
+		},
+		{
+			Name:       "%make-named-charset",
+			ParamCount: 1,
+			Impl:       primMakeNamedCharSet,
+			Doc:        "Internal: returns the named char-set for the given symbol. Used by (srfi 14) to build char-set:letter etc.",
+			ParamNames: []string{"name"},
+			Category:   "char-sets",
 		},
 	}, registry.PhaseRuntime|registry.PhaseExpand)
 	return nil
@@ -732,4 +742,118 @@ func isSubset(a, b *values.CharSet) bool {
 		}
 	}
 	return true
+}
+
+// namedCharSets is a process-global cache. Built lazily on first request,
+// then returned by pointer (eq? from Scheme). Per design §7.
+var (
+	namedCharSetsMu sync.Mutex
+	namedCharSets   = map[string]*values.CharSet{}
+)
+
+// makeNamedCharSet returns the cached or freshly-built named char-set for the
+// given SRFI-14 name. Symbol-dispatched factory hitting Go's unicode.RangeTable.
+func makeNamedCharSet(name string) (*values.CharSet, error) {
+	namedCharSetsMu.Lock()
+	defer namedCharSetsMu.Unlock()
+
+	cs, ok := namedCharSets[name]
+	if ok {
+		return cs, nil
+	}
+
+	switch name {
+	case "letter":
+		cs = rangeTableToCharSet(unicode.L)
+	case "lower-case":
+		cs = rangeTableToCharSet(unicode.Ll)
+	case "upper-case":
+		cs = rangeTableToCharSet(unicode.Lu)
+	case "title-case":
+		cs = rangeTableToCharSet(unicode.Lt)
+	case "digit":
+		cs = rangeTableToCharSet(unicode.Nd)
+	case "letter+digit":
+		cs = unionTwo(rangeTableToCharSet(unicode.L), rangeTableToCharSet(unicode.Nd))
+	case "graphic":
+		cs = rangeListToCharSet(unicode.GraphicRanges)
+	case "printing":
+		cs = rangeListToCharSet(unicode.PrintRanges)
+	case "whitespace":
+		cs = rangeTableToCharSet(unicode.White_Space)
+	case "iso-control":
+		cs = rangeTableToCharSet(unicode.Cc)
+	case "punctuation":
+		cs = rangeTableToCharSet(unicode.P)
+	case "symbol":
+		cs = rangeTableToCharSet(unicode.S)
+	case "hex-digit":
+		// ASCII-only per SRFI-14: 0-9, A-F, a-f
+		cs = values.NewCharSetFromRanges([]values.CharSetRange{
+			{Lo: '0', Hi: '9'}, {Lo: 'A', Hi: 'F'}, {Lo: 'a', Hi: 'f'},
+		})
+	case "blank":
+		// Tab + space + Unicode Zs category
+		zs := rangeTableToCharSet(unicode.Zs)
+		cs = unionTwo(values.NewCharSetFromRanges([]values.CharSetRange{
+			{Lo: '\t', Hi: '\t'}, {Lo: ' ', Hi: ' '},
+		}), zs)
+	default:
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"%%make-named-charset: unknown named char-set: %s", name)
+	}
+	namedCharSets[name] = cs
+	return cs, nil
+}
+
+// rangeTableToCharSet converts a *unicode.RangeTable into a CharSet.
+// Handles both Range16 (BMP, codepoints ≤ 0xFFFF) and Range32 (supplementary
+// planes). Stride > 1 means the range covers every Stride-th codepoint;
+// expand into per-stride unit ranges.
+func rangeTableToCharSet(t *unicode.RangeTable) *values.CharSet {
+	var rs []values.CharSetRange
+	for _, r := range t.R16 {
+		if r.Stride == 1 {
+			rs = append(rs, values.CharSetRange{Lo: rune(r.Lo), Hi: rune(r.Hi)})
+			continue
+		}
+		for cp := r.Lo; cp <= r.Hi; cp += r.Stride {
+			rs = append(rs, values.CharSetRange{Lo: rune(cp), Hi: rune(cp)})
+		}
+	}
+	for _, r := range t.R32 {
+		if r.Stride == 1 {
+			rs = append(rs, values.CharSetRange{Lo: rune(r.Lo), Hi: rune(r.Hi)})
+			continue
+		}
+		for cp := r.Lo; cp <= r.Hi; cp += r.Stride {
+			rs = append(rs, values.CharSetRange{Lo: rune(cp), Hi: rune(cp)})
+		}
+	}
+	return values.NewCharSetFromUnsortedRanges(rs)
+}
+
+// rangeListToCharSet unions multiple RangeTables (for unicode.GraphicRanges,
+// PrintRanges which are []*RangeTable).
+func rangeListToCharSet(tables []*unicode.RangeTable) *values.CharSet {
+	out := values.NewCharSetFromRanges(nil)
+	for _, t := range tables {
+		out = unionTwo(out, rangeTableToCharSet(t))
+	}
+	return out
+}
+
+// primMakeNamedCharSet is the FFI dispatcher for %make-named-charset.
+func primMakeNamedCharSet(mc machine.CallContext) error {
+	sym, ok := mc.Arg(0).(*values.Symbol)
+	if !ok {
+		return werr.WrapForeignErrorf(werr.ErrNotASymbol,
+			"%%make-named-charset: argument 1: expected symbol, got %T", mc.Arg(0))
+	}
+	cs, err := makeNamedCharSet(sym.Key)
+	if err != nil {
+		return err
+	}
+	mc.SetValue(cs)
+	return nil
 }

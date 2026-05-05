@@ -443,6 +443,36 @@ func TestCharSetCountEveryAny(t *testing.T) {
 		valuestest.SchemeEquals, values.NewInteger(2))
 }
 
+func TestMakeNamedCharSet(t *testing.T) {
+	c := qt.New(t)
+	engine := newLibraryEngine(t)
+
+	// Letter set contains 'a' but not '1' or ' '
+	c.Assert(runScheme(t, engine, `(char-set-contains? (%make-named-charset 'letter) #\a)`),
+		qt.Equals, values.TrueValue)
+	c.Assert(runScheme(t, engine, `(char-set-contains? (%make-named-charset 'letter) #\1)`),
+		qt.Equals, values.FalseValue)
+	c.Assert(runScheme(t, engine, `(char-set-contains? (%make-named-charset 'letter) #\space)`),
+		qt.Equals, values.FalseValue)
+
+	// Digit set
+	c.Assert(runScheme(t, engine, `(char-set-contains? (%make-named-charset 'digit) #\5)`),
+		qt.Equals, values.TrueValue)
+
+	// Caching: two calls return eq? values
+	c.Assert(runScheme(t, engine,
+		`(eq? (%make-named-charset 'letter) (%make-named-charset 'letter))`),
+		qt.Equals, values.TrueValue)
+
+	// Distinct sets are not eq?
+	c.Assert(runScheme(t, engine,
+		`(eq? (%make-named-charset 'letter) (%make-named-charset 'digit))`),
+		qt.Equals, values.FalseValue)
+
+	// Unknown symbol errors
+	runSchemeExpectError(t, engine, "(%make-named-charset 'unknown-set)")
+}
+
 func TestCharSetMapFilter(t *testing.T) {
 	c := qt.New(t)
 	engine := newLibraryEngine(t)
