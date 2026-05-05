@@ -181,6 +181,7 @@ See `cmd/CLAUDE.md` for full build commands, dist/ structure, and REPL usage.
 - `docs/environment/system.md` — Environment system architecture
 - `docs/numeric/tower.md` — Numeric tower architecture
 - `docs/dev/debug-methodology.md` — Systematic debug logging methodology and Go gotchas
+- `docs/dev/iteration-idioms.md` — Four iteration shapes (`ForEach` / `iter.Seq` / mutex-snapshot / error-callback) and when to use each
 - `docs/extensions/architecture.md` — Extension system architecture and authoring guide
 - `docs/extensions/libraries.md` — R7RS library integration for extensions
 - `docs/embedding/source-loading.md` — FileResolver chain, embedded stdlib, library import resolution
