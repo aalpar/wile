@@ -16,6 +16,7 @@ package values
 
 import (
 	"fmt"
+	"iter"
 	"slices"
 )
 
@@ -123,6 +124,11 @@ func NewCharSetFromRunes(runes []rune) *CharSet {
 
 // Ranges returns a copy of the canonical range slice. Caller may mutate
 // the returned slice without affecting the CharSet.
+//
+// Most read-only iteration callers should prefer All (no allocation) or
+// Codepoints. Ranges is retained for callers that genuinely need a slice:
+// dual-cursor merge algorithms (intersect, difference) and the union builder
+// that uses append on the result.
 func (p *CharSet) Ranges() []CharSetRange {
 	if p == nil || len(p.ranges) == 0 {
 		return nil
@@ -130,6 +136,43 @@ func (p *CharSet) Ranges() []CharSetRange {
 	out := make([]CharSetRange, len(p.ranges))
 	copy(out, p.ranges)
 	return out
+}
+
+// All returns an iter.Seq that yields each canonical range in codepoint
+// ascending order. Caller breaks the loop with `break` to early-exit. No
+// allocation — yields directly from the internal slice. Safe because
+// *CharSet is immutable.
+//
+// Naming follows Go stdlib convention (slices.All, maps.All).
+func (p *CharSet) All() iter.Seq[CharSetRange] {
+	return func(yield func(CharSetRange) bool) {
+		if p == nil {
+			return
+		}
+		for _, r := range p.ranges {
+			if !yield(r) {
+				return
+			}
+		}
+	}
+}
+
+// Codepoints returns an iter.Seq that yields every codepoint in the set,
+// in codepoint ascending order. Caller breaks the loop with `break` to
+// early-exit.
+func (p *CharSet) Codepoints() iter.Seq[rune] {
+	return func(yield func(rune) bool) {
+		if p == nil {
+			return
+		}
+		for _, r := range p.ranges {
+			for c := r.Lo; c <= r.Hi; c++ {
+				if !yield(c) {
+					return
+				}
+			}
+		}
+	}
 }
 
 // Size returns the total number of codepoints in the set.

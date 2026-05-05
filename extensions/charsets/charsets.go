@@ -236,10 +236,8 @@ func primCharSetToList(mc machine.CallContext) error {
 		return err
 	}
 	chars := make([]values.Value, 0, cs.Size())
-	for _, r := range cs.Ranges() {
-		for c := r.Lo; c <= r.Hi; c++ {
-			chars = append(chars, values.NewCharacter(c))
-		}
+	for c := range cs.Codepoints() {
+		chars = append(chars, values.NewCharacter(c))
 	}
 	mc.SetValue(values.List(chars...))
 	return nil
@@ -251,10 +249,8 @@ func primCharSetToString(mc machine.CallContext) error {
 		return err
 	}
 	runes := make([]rune, 0, cs.Size())
-	for _, r := range cs.Ranges() {
-		for c := r.Lo; c <= r.Hi; c++ {
-			runes = append(runes, c)
-		}
+	for c := range cs.Codepoints() {
+		runes = append(runes, c)
 	}
 	mc.SetValue(values.NewString(string(runes)))
 	return nil
@@ -265,10 +261,9 @@ func primCharSetRanges(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	rs := cs.Ranges()
-	pairs := make([]values.Value, len(rs))
-	for i, r := range rs {
-		pairs[i] = values.NewCons(values.NewInteger(int64(r.Lo)), values.NewInteger(int64(r.Hi)))
+	var pairs []values.Value
+	for r := range cs.All() {
+		pairs = append(pairs, values.NewCons(values.NewInteger(int64(r.Lo)), values.NewInteger(int64(r.Hi))))
 	}
 	mc.SetValue(values.List(pairs...))
 	return nil

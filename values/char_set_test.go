@@ -96,3 +96,99 @@ func TestCharSet_SchemeStringFormat(t *testing.T) {
 	c.Assert(cs.SchemeString(), qt.Equals, "#<char-set: 2 ranges, 6 chars>")
 	_ = valuestest.SchemeEquals // keep import live for later tests
 }
+
+func TestCharSet_All_VisitOrder(t *testing.T) {
+	c := qt.New(t)
+	cs := values.NewCharSetFromRanges([]values.CharSetRange{
+		{Lo: 'a', Hi: 'c'}, {Lo: 'x', Hi: 'z'},
+	})
+	var got []values.CharSetRange
+	for r := range cs.All() {
+		got = append(got, r)
+	}
+	c.Assert(got, qt.DeepEquals, []values.CharSetRange{
+		{Lo: 'a', Hi: 'c'}, {Lo: 'x', Hi: 'z'},
+	})
+}
+
+func TestCharSet_All_EarlyExit(t *testing.T) {
+	c := qt.New(t)
+	cs := values.NewCharSetFromRanges([]values.CharSetRange{
+		{Lo: '0', Hi: '9'}, {Lo: 'a', Hi: 'c'}, {Lo: 'x', Hi: 'z'},
+	})
+	count := 0
+	for range cs.All() {
+		count++
+		if count == 1 {
+			break
+		}
+	}
+	c.Assert(count, qt.Equals, 1)
+}
+
+func TestCharSet_All_NilReceiver(t *testing.T) {
+	c := qt.New(t)
+	var cs *values.CharSet
+	count := 0
+	for range cs.All() {
+		count++
+	}
+	c.Assert(count, qt.Equals, 0)
+}
+
+func TestCharSet_All_EmptySet(t *testing.T) {
+	c := qt.New(t)
+	cs := values.NewCharSetFromRanges(nil)
+	count := 0
+	for range cs.All() {
+		count++
+	}
+	c.Assert(count, qt.Equals, 0)
+}
+
+func TestCharSet_Codepoints_VisitOrder(t *testing.T) {
+	c := qt.New(t)
+	cs := values.NewCharSetFromRanges([]values.CharSetRange{
+		{Lo: 'a', Hi: 'c'}, {Lo: 'x', Hi: 'z'},
+	})
+	var got []rune
+	for r := range cs.Codepoints() {
+		got = append(got, r)
+	}
+	c.Assert(got, qt.DeepEquals, []rune{'a', 'b', 'c', 'x', 'y', 'z'})
+}
+
+func TestCharSet_Codepoints_EarlyExit(t *testing.T) {
+	c := qt.New(t)
+	cs := values.NewCharSetFromRanges([]values.CharSetRange{
+		{Lo: 'a', Hi: 'z'},
+	})
+	var got []rune
+	for r := range cs.Codepoints() {
+		got = append(got, r)
+		if len(got) == 3 {
+			break
+		}
+	}
+	c.Assert(got, qt.DeepEquals, []rune{'a', 'b', 'c'})
+}
+
+func TestCharSet_Codepoints_NilReceiver(t *testing.T) {
+	c := qt.New(t)
+	var cs *values.CharSet
+	count := 0
+	for range cs.Codepoints() {
+		count++
+	}
+	c.Assert(count, qt.Equals, 0)
+}
+
+func TestCharSet_Codepoints_EmptySet(t *testing.T) {
+	c := qt.New(t)
+	cs := values.NewCharSetFromRanges(nil)
+	count := 0
+	for range cs.Codepoints() {
+		count++
+	}
+	c.Assert(count, qt.Equals, 0)
+}
