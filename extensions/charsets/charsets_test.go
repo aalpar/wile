@@ -16,6 +16,7 @@ package charsets_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"unicode"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/aalpar/wile/stdlib"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 )
 
 // newEngine builds a fresh Wile engine with only the charsets extension loaded.
@@ -571,4 +573,29 @@ func TestCharSetMapFilter(t *testing.T) {
                    (char-set-filter! (lambda (c) (char=? c #\b))
                                      (char-set #\a #\b #\c)))`),
 		qt.Equals, values.TrueValue)
+}
+
+// TestStringToCharSet_TooManyArgs pins Q-f: the sentinel for the
+// "too many optional arguments" error is werr.ErrWrongNumberOfArguments
+// (changed from ErrInvalidArgument when optionalBaseCharSet was deleted in
+// Phase 1 and replaced with helpers.OptionalArg).
+//
+// Uses the internal %empty-char-set primitive (always registered by the bare
+// extension) to build base char-sets without needing the (srfi 14) library.
+func TestStringToCharSet_TooManyArgs(t *testing.T) {
+	engine := newEngine(t)
+	_, err := engine.EvalMultiple(context.Background(),
+		`(string->char-set "ab" (%empty-char-set) (%empty-char-set))`)
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrWrongNumberOfArguments), qt.IsTrue,
+		qt.Commentf("expected ErrWrongNumberOfArguments, got %v", err))
+}
+
+func TestListToCharSet_TooManyArgs(t *testing.T) {
+	engine := newEngine(t)
+	_, err := engine.EvalMultiple(context.Background(),
+		`(list->char-set '(#\a) (%empty-char-set) (%empty-char-set))`)
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrWrongNumberOfArguments), qt.IsTrue,
+		qt.Commentf("expected ErrWrongNumberOfArguments, got %v", err))
 }

@@ -35,7 +35,7 @@ func PrimCons(mc machine.CallContext) error {
 //
 // R7RS §6.4: It is an error to take the car of the empty list.
 func PrimCar(mc machine.CallContext) error {
-	v, err := helpers.RequireArg[values.Tuple](mc, 0, werr.ErrNotAPair, "car")
+	v, err := helpers.RequireArg[values.Tuple](mc, 0, werr.ErrNotAPair, "a pair", "car")
 	if err != nil {
 		return err
 	}
@@ -51,7 +51,7 @@ func PrimCar(mc machine.CallContext) error {
 //
 // R7RS §6.4: It is an error to take the cdr of the empty list.
 func PrimCdr(mc machine.CallContext) error {
-	v, err := helpers.RequireArg[values.Tuple](mc, 0, werr.ErrNotAPair, "cdr")
+	v, err := helpers.RequireArg[values.Tuple](mc, 0, werr.ErrNotAPair, "a pair", "cdr")
 	if err != nil {
 		return err
 	}
@@ -64,7 +64,7 @@ func PrimCdr(mc machine.CallContext) error {
 
 // PrimSetCar implements the set-car! primitive.
 func PrimSetCar(mc machine.CallContext) error {
-	p, err := helpers.RequireArg[*values.Pair](mc, 0, werr.ErrNotAPair, "set-car!")
+	p, err := helpers.RequireArg[*values.Pair](mc, 0, werr.ErrNotAPair, "a pair", "set-car!")
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func PrimSetCar(mc machine.CallContext) error {
 
 // PrimSetCdr implements the set-cdr! primitive.
 func PrimSetCdr(mc machine.CallContext) error {
-	p, err := helpers.RequireArg[*values.Pair](mc, 0, werr.ErrNotAPair, "set-cdr!")
+	p, err := helpers.RequireArg[*values.Pair](mc, 0, werr.ErrNotAPair, "a pair", "set-cdr!")
 	if err != nil {
 		return err
 	}

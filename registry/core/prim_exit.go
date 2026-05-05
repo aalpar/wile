@@ -41,7 +41,7 @@ func PrimCallWithExit(cc machine.CallContext) error {
 	mc := cc.(*machine.MachineContext)
 	proc := mc.Arg(0)
 
-	procCls, err := helpers.RequireType[machine.Closure](proc, werr.ErrNotAProcedure, "call-with-exit")
+	procCls, err := helpers.RequireType[machine.Closure](proc, werr.ErrNotAProcedure, "a procedure", "call-with-exit")
 	if err != nil {
 		return err
 	}

@@ -20,6 +20,7 @@ import (
 	"unicode"
 
 	"github.com/aalpar/wile/machine"
+	"github.com/aalpar/wile/registry/helpers"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -31,35 +32,31 @@ func primCharSetQ(mc machine.CallContext) error {
 }
 
 func primCharSetContains(mc machine.CallContext) error {
-	cs, ok := mc.Arg(0).(*values.CharSet)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotACharSet,
-			"char-set-contains?: argument 1: expected char-set, got %T", mc.Arg(0))
+	cs, err := helpers.RequireArg[*values.CharSet](mc, 0, werr.ErrNotACharSet, "a char-set", "char-set-contains?")
+	if err != nil {
+		return err
 	}
-	ch, ok := mc.Arg(1).(*values.Character)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotACharacter,
-			"char-set-contains?: argument 2: expected char, got %T", mc.Arg(1))
+	ch, err := helpers.RequireArg[*values.Character](mc, 1, werr.ErrNotACharacter, "a character", "char-set-contains?")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.BoolToBoolean(cs.Contains(ch.Value)))
 	return nil
 }
 
 func primCharSetSize(mc machine.CallContext) error {
-	cs, ok := mc.Arg(0).(*values.CharSet)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotACharSet,
-			"char-set-size: argument 1: expected char-set, got %T", mc.Arg(0))
+	cs, err := helpers.RequireArg[*values.CharSet](mc, 0, werr.ErrNotACharSet, "a char-set", "char-set-size")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.NewInteger(int64(cs.Size())))
 	return nil
 }
 
 func primCharSetCtor(mc machine.CallContext) error {
-	first, ok := mc.Arg(0).(*values.Character)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotACharacter,
-			"%%char-set: argument 1: expected char, got %T", mc.Arg(0))
+	first, err := helpers.RequireArg[*values.Character](mc, 0, werr.ErrNotACharacter, "a character", "%char-set")
+	if err != nil {
+		return err
 	}
 	runes := []rune{first.Value}
 
@@ -70,7 +67,7 @@ func primCharSetCtor(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAList,
 			"%%char-set: rest argument: expected list of chars, got %T", mc.Arg(1))
 	}
-	_, err := rest.ForEach(mc.Context(), func(_ context.Context, i int, _ bool, v values.Value) error {
+	_, err = rest.ForEach(mc.Context(), func(_ context.Context, i int, _ bool, v values.Value) error {
 		ch, isChar := v.(*values.Character)
 		if !isChar {
 			return werr.WrapForeignErrorf(werr.ErrNotACharacter,
@@ -93,10 +90,9 @@ func primEmptyCharSet(mc machine.CallContext) error {
 }
 
 func primCharSetCopy(mc machine.CallContext) error {
-	cs, ok := mc.Arg(0).(*values.CharSet)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotACharSet,
-			"char-set-copy: argument 1: expected char-set, got %T", mc.Arg(0))
+	cs, err := helpers.RequireArg[*values.CharSet](mc, 0, werr.ErrNotACharSet, "a char-set", "char-set-copy")
+	if err != nil {
+		return err
 	}
 	// CharSet is immutable; copy is identity at the Go level. Returning
 	// a fresh wrapper is unnecessary, but harmless if a future change adds
@@ -106,13 +102,12 @@ func primCharSetCopy(mc machine.CallContext) error {
 }
 
 func primStringToCharSet(mc machine.CallContext) error {
-	str, ok := mc.Arg(0).(*values.String)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAString,
-			"string->char-set: argument 1: expected string, got %T", mc.Arg(0))
+	str, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "string->char-set")
+	if err != nil {
+		return err
 	}
 	runes := []rune(str.Value)
-	base, err := optionalBaseCharSet("string->char-set", mc.Arg(1))
+	base, err := helpers.OptionalArg[*values.CharSet](mc.Arg(1), nil, werr.ErrNotACharSet, "a char-set", "string->char-set")
 	if err != nil {
 		return err
 	}
@@ -138,37 +133,11 @@ func primListToCharSet(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	base, err := optionalBaseCharSet("list->char-set", mc.Arg(1))
+	base, err := helpers.OptionalArg[*values.CharSet](mc.Arg(1), nil, werr.ErrNotACharSet, "a char-set", "list->char-set")
 	if err != nil {
 		return err
 	}
 	return setValueFromRunesAndBase(mc, runes, base)
-}
-
-// optionalBaseCharSet extracts an optional base char-set from a variadic-rest
-// argument. Returns (nil, nil) for no base; (cs, nil) for a valid base;
-// (nil, err) on type mismatch or too many arguments.
-func optionalBaseCharSet(site string, restArg values.Value) (*values.CharSet, error) {
-	rest, ok := restArg.(values.Tuple)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAList,
-			"%s: rest argument: expected list, got %T", site, restArg)
-	}
-	if rest.IsEmptyList() {
-		return nil, nil
-	}
-	first := rest.Car()
-	base, isCs := first.(*values.CharSet)
-	if !isCs {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotACharSet,
-			"%s: optional base argument: expected char-set, got %T", site, first)
-	}
-	cdr, isTuple := rest.Cdr().(values.Tuple)
-	if isTuple && !cdr.IsEmptyList() {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-			"%s: too many optional arguments", site)
-	}
-	return base, nil
 }
 
 func primUcsRangeToCharSet(mc machine.CallContext) error {
@@ -262,47 +231,39 @@ func primUcsRangeToCharSet(mc machine.CallContext) error {
 }
 
 func primCharSetToList(mc machine.CallContext) error {
-	cs, ok := mc.Arg(0).(*values.CharSet)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotACharSet,
-			"char-set->list: argument 1: expected char-set, got %T", mc.Arg(0))
+	cs, err := helpers.RequireArg[*values.CharSet](mc, 0, werr.ErrNotACharSet, "a char-set", "char-set->list")
+	if err != nil {
+		return err
 	}
 	chars := make([]values.Value, 0, cs.Size())
-	for _, r := range cs.Ranges() {
-		for c := r.Lo; c <= r.Hi; c++ {
-			chars = append(chars, values.NewCharacter(c))
-		}
+	for c := range cs.Codepoints() {
+		chars = append(chars, values.NewCharacter(c))
 	}
 	mc.SetValue(values.List(chars...))
 	return nil
 }
 
 func primCharSetToString(mc machine.CallContext) error {
-	cs, ok := mc.Arg(0).(*values.CharSet)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotACharSet,
-			"char-set->string: argument 1: expected char-set, got %T", mc.Arg(0))
+	cs, err := helpers.RequireArg[*values.CharSet](mc, 0, werr.ErrNotACharSet, "a char-set", "char-set->string")
+	if err != nil {
+		return err
 	}
 	runes := make([]rune, 0, cs.Size())
-	for _, r := range cs.Ranges() {
-		for c := r.Lo; c <= r.Hi; c++ {
-			runes = append(runes, c)
-		}
+	for c := range cs.Codepoints() {
+		runes = append(runes, c)
 	}
 	mc.SetValue(values.NewString(string(runes)))
 	return nil
 }
 
 func primCharSetRanges(mc machine.CallContext) error {
-	cs, ok := mc.Arg(0).(*values.CharSet)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotACharSet,
-			"char-set-ranges: argument 1: expected char-set, got %T", mc.Arg(0))
+	cs, err := helpers.RequireArg[*values.CharSet](mc, 0, werr.ErrNotACharSet, "a char-set", "char-set-ranges")
+	if err != nil {
+		return err
 	}
-	rs := cs.Ranges()
-	pairs := make([]values.Value, len(rs))
-	for i, r := range rs {
-		pairs[i] = values.NewCons(values.NewInteger(int64(r.Lo)), values.NewInteger(int64(r.Hi)))
+	var pairs []values.Value
+	for r := range cs.All() {
+		pairs = append(pairs, values.NewCons(values.NewInteger(int64(r.Lo)), values.NewInteger(int64(r.Hi))))
 	}
 	mc.SetValue(values.List(pairs...))
 	return nil
@@ -319,37 +280,8 @@ func setValueFromRunesAndBase(mc machine.CallContext, runes []rune, base *values
 	return nil
 }
 
-// charSetVariadicArgs collects the first arg + variadic rest into a single slice
-// of *CharSet, with type-error wrapping. Returns ([]cs, nil) on success.
-func charSetVariadicArgs(site string, mc machine.CallContext) ([]*values.CharSet, error) {
-	first, ok := mc.Arg(0).(*values.CharSet)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotACharSet,
-			"%s: argument 1: expected char-set, got %T", site, mc.Arg(0))
-	}
-	out := []*values.CharSet{first}
-	rest, ok := mc.Arg(1).(values.Tuple)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAList,
-			"%s: rest argument: expected list, got %T", site, mc.Arg(1))
-	}
-	_, err := rest.ForEach(mc.Context(), func(_ context.Context, i int, _ bool, v values.Value) error {
-		cs, isCs := v.(*values.CharSet)
-		if !isCs {
-			return werr.WrapForeignErrorf(werr.ErrNotACharSet,
-				"%s: argument %d: expected char-set, got %T", site, i+2, v)
-		}
-		out = append(out, cs)
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func primCharSetEqual(mc machine.CallContext) error {
-	sets, err := charSetVariadicArgs("char-set=", mc)
+	sets, err := helpers.VariadicArgs[*values.CharSet](mc, 2, werr.ErrNotACharSet, "a char-set", "char-set=")
 	if err != nil {
 		return err
 	}
@@ -364,7 +296,7 @@ func primCharSetEqual(mc machine.CallContext) error {
 }
 
 func primCharSetSubset(mc machine.CallContext) error {
-	sets, err := charSetVariadicArgs("char-set<=", mc)
+	sets, err := helpers.VariadicArgs[*values.CharSet](mc, 2, werr.ErrNotACharSet, "a char-set", "char-set<=")
 	if err != nil {
 		return err
 	}
@@ -379,7 +311,7 @@ func primCharSetSubset(mc machine.CallContext) error {
 }
 
 func primCharSetUnion(mc machine.CallContext) error {
-	sets, err := charSetVariadicArgs("char-set-union", mc)
+	sets, err := helpers.VariadicArgs[*values.CharSet](mc, 2, werr.ErrNotACharSet, "a char-set", "char-set-union")
 	if err != nil {
 		return err
 	}
@@ -392,7 +324,7 @@ func primCharSetUnion(mc machine.CallContext) error {
 }
 
 func primCharSetIntersection(mc machine.CallContext) error {
-	sets, err := charSetVariadicArgs("char-set-intersection", mc)
+	sets, err := helpers.VariadicArgs[*values.CharSet](mc, 2, werr.ErrNotACharSet, "a char-set", "char-set-intersection")
 	if err != nil {
 		return err
 	}
@@ -405,7 +337,7 @@ func primCharSetIntersection(mc machine.CallContext) error {
 }
 
 func primCharSetDifference(mc machine.CallContext) error {
-	sets, err := charSetVariadicArgs("char-set-difference", mc)
+	sets, err := helpers.VariadicArgs[*values.CharSet](mc, 2, werr.ErrNotACharSet, "a char-set", "char-set-difference")
 	if err != nil {
 		return err
 	}
@@ -418,7 +350,7 @@ func primCharSetDifference(mc machine.CallContext) error {
 }
 
 func primCharSetXor(mc machine.CallContext) error {
-	sets, err := charSetVariadicArgs("char-set-xor", mc)
+	sets, err := helpers.VariadicArgs[*values.CharSet](mc, 2, werr.ErrNotACharSet, "a char-set", "char-set-xor")
 	if err != nil {
 		return err
 	}
@@ -431,10 +363,9 @@ func primCharSetXor(mc machine.CallContext) error {
 }
 
 func primCharSetComplement(mc machine.CallContext) error {
-	cs, ok := mc.Arg(0).(*values.CharSet)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotACharSet,
-			"char-set-complement: argument 1: expected char-set, got %T", mc.Arg(0))
+	cs, err := helpers.RequireArg[*values.CharSet](mc, 0, werr.ErrNotACharSet, "a char-set", "char-set-complement")
+	if err != nil {
+		return err
 	}
 	mc.SetValue(complementOne(cs))
 	return nil
@@ -526,8 +457,20 @@ func isSubset(a, b *values.CharSet) bool {
 	return true
 }
 
-// namedCharSets is a process-global cache. Built lazily on first request,
-// then returned by pointer (eq? from Scheme). Per design §7.
+// namedCharSets is a process-global cache, intentionally not per-Engine.
+//
+// Safety: the cache is referentially transparent. Inputs are immutable
+// unicode.RangeTable values from Go's stdlib (unicode.L, unicode.Ll,
+// unicode.White_Space, etc.); outputs are deterministic functions of those
+// inputs. Multiple Engines in the same process share the cache without
+// synchronization beyond the mutex, and identity (eq? at the Scheme level)
+// is consistent across Engines — which is the desired observable behavior
+// for SRFI-14 named char-sets like char-set:letter.
+//
+// Maintenance constraint: any future change must preserve compatibility
+// with Go's unicode package. The cache stores results derived from
+// unicode.* tables; do not mix in inputs from other sources, or per-Engine
+// caching will become necessary.
 var (
 	namedCharSetsMu sync.Mutex
 	namedCharSets   = map[string]*values.CharSet{}
@@ -632,10 +575,9 @@ func rangeListToCharSet(tables []*unicode.RangeTable) *values.CharSet {
 
 // primMakeNamedCharSet is the FFI dispatcher for %make-named-charset.
 func primMakeNamedCharSet(mc machine.CallContext) error {
-	sym, ok := mc.Arg(0).(*values.Symbol)
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotASymbol,
-			"%%make-named-charset: argument 1: expected symbol, got %T", mc.Arg(0))
+	sym, err := helpers.RequireArg[*values.Symbol](mc, 0, werr.ErrNotASymbol, "a symbol", "%make-named-charset")
+	if err != nil {
+		return err
 	}
 	cs, err := makeNamedCharSet(sym.Key)
 	if err != nil {

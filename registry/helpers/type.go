@@ -35,14 +35,16 @@ func MakeTypePredicate(check func(values.Value) bool) machine.ForeignFunction {
 // this returns an error if the argument doesn't satisfy the type constraint
 // (e.g., "exact? requires a number").
 //
-// T is typically values.Number or values.RealNumber.
+// T is typically values.Number or values.RealNumber. typeName is the
+// human-readable expected-type phrase (e.g., "a number").
 func MakeNumericPredicate[T any](
 	name string,
 	sentinel error,
+	typeName string,
 	test func(T) bool,
 ) machine.ForeignFunction {
 	return func(mc machine.CallContext) error {
-		n, err := RequireArg[T](mc, 0, sentinel, name)
+		n, err := RequireArg[T](mc, 0, sentinel, typeName, name)
 		if err != nil {
 			return err
 		}
@@ -55,7 +57,7 @@ func MakeNumericPredicate[T any](
 // arg 0 as a Character and applies a boolean test on the rune value.
 func MakeCharPredicate(name string, test func(rune) bool) machine.ForeignFunction {
 	return func(mc machine.CallContext) error {
-		ch, err := RequireArg[*values.Character](mc, 0, werr.ErrNotACharacter, name)
+		ch, err := RequireArg[*values.Character](mc, 0, werr.ErrNotACharacter, "a character", name)
 		if err != nil {
 			return err
 		}
@@ -68,7 +70,7 @@ func MakeCharPredicate(name string, test func(rune) bool) machine.ForeignFunctio
 // arg 0 as a Character, applies a rune transformation, and returns a new Character.
 func MakeCharTransform(name string, transform func(rune) rune) machine.ForeignFunction {
 	return func(mc machine.CallContext) error {
-		ch, err := RequireArg[*values.Character](mc, 0, werr.ErrNotACharacter, name)
+		ch, err := RequireArg[*values.Character](mc, 0, werr.ErrNotACharacter, "a character", name)
 		if err != nil {
 			return err
 		}

@@ -55,6 +55,7 @@ var (
 	ErrNotASymbol                = NewStaticError("not a symbol")
 	ErrInvalidSyntax             = NewStaticError("invalid syntax")
 	ErrInvalidArgument           = NewStaticError("invalid argument")
+	ErrInternal                  = NewStaticError("internal error")
 	ErrDuplicateBinding          = NewStaticError("duplicate binding")
 	ErrNotAClosure               = NewStaticError("not a closure")
 	ErrUnknownCharacterMnemonic  = NewStaticError("unknown character mnemonic")

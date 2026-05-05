@@ -53,14 +53,14 @@ func PrimString(mc machine.CallContext) error {
 // (make-string k) creates a string of k unspecified characters.
 // (make-string k char) creates a string of k copies of char.
 func PrimMakeString(mc machine.CallContext) error {
-	kInt, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotAnInteger, "make-string")
+	kInt, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotAnInteger, "an integer", "make-string")
 	if err != nil {
 		return err
 	}
 	if kInt.Value < 0 {
 		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "make-string: length must be non-negative")
 	}
-	ch, err := helpers.OptionalArg[*values.Character](mc.Arg(1), values.NewCharacter(0), werr.ErrNotACharacter, "make-string")
+	ch, err := helpers.OptionalArg[*values.Character](mc.Arg(1), values.NewCharacter(0), werr.ErrNotACharacter, "a character", "make-string")
 	if err != nil {
 		return err
 	}
@@ -74,7 +74,7 @@ func PrimMakeString(mc machine.CallContext) error {
 // PrimStringLength implements string-length.
 // Returns the number of characters (runes) in the string.
 func PrimStringLength(mc machine.CallContext) error {
-	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string-length")
+	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "string-length")
 	if err != nil {
 		return err
 	}
@@ -85,7 +85,7 @@ func PrimStringLength(mc machine.CallContext) error {
 // PrimStringRef implements the string-ref primitive.
 // Returns the character at the given index in the string.
 func PrimStringRef(mc machine.CallContext) error {
-	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string-ref")
+	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "string-ref")
 	if err != nil {
 		return err
 	}
@@ -102,11 +102,11 @@ func PrimStringRef(mc machine.CallContext) error {
 // Stores char in element k of string.
 // R7RS §6.7: (string-set! string k char)
 func PrimStringSet(mc machine.CallContext) error {
-	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string-set!")
+	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "string-set!")
 	if err != nil {
 		return err
 	}
-	char, err := helpers.RequireArg[*values.Character](mc, 2, werr.ErrNotACharacter, "string-set!")
+	char, err := helpers.RequireArg[*values.Character](mc, 2, werr.ErrNotACharacter, "a character", "string-set!")
 	if err != nil {
 		return err
 	}
@@ -129,7 +129,7 @@ func PrimStringSet(mc machine.CallContext) error {
 // R7RS §6.7: (string->list string [start [end]])
 // Converts a string (or substring) to a list of characters.
 func PrimStringToList(mc machine.CallContext) error {
-	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string->list")
+	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "string->list")
 	if err != nil {
 		return err
 	}
@@ -184,7 +184,7 @@ func PrimListToString(mc machine.CallContext) error {
 // Converts a symbol to an immutable string.
 // R7RS §6.5: The string returned by symbol->string is immutable.
 func PrimSymbolToString(mc machine.CallContext) error {
-	sym, err := helpers.RequireArg[*values.Symbol](mc, 0, werr.ErrNotASymbol, "symbol->string")
+	sym, err := helpers.RequireArg[*values.Symbol](mc, 0, werr.ErrNotASymbol, "a symbol", "symbol->string")
 	if err != nil {
 		return err
 	}
@@ -195,7 +195,7 @@ func PrimSymbolToString(mc machine.CallContext) error {
 // PrimStringToSymbol implements the string->symbol primitive.
 // Converts a string to a symbol.
 func PrimStringToSymbol(mc machine.CallContext) error {
-	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string->symbol")
+	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "string->symbol")
 	if err != nil {
 		return err
 	}
@@ -238,15 +238,15 @@ func PrimStringAppend(mc machine.CallContext) error {
 // PrimSubstring implements the substring primitive.
 // Returns a substring between the given start and end indices.
 func PrimSubstring(mc machine.CallContext) error {
-	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "substring")
+	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "substring")
 	if err != nil {
 		return err
 	}
-	startIdx, err := helpers.RequireArg[*values.Integer](mc, 1, werr.ErrNotAnInteger, "substring")
+	startIdx, err := helpers.RequireArg[*values.Integer](mc, 1, werr.ErrNotAnInteger, "an integer", "substring")
 	if err != nil {
 		return err
 	}
-	endIdx, err := helpers.RequireArg[*values.Integer](mc, 2, werr.ErrNotAnInteger, "substring")
+	endIdx, err := helpers.RequireArg[*values.Integer](mc, 2, werr.ErrNotAnInteger, "an integer", "substring")
 	if err != nil {
 		return err
 	}
@@ -265,7 +265,7 @@ func PrimSubstring(mc machine.CallContext) error {
 // Returns a newly allocated copy of the given string (or substring).
 // The returned string is mutable and distinct from the original.
 func PrimStringCopy(mc machine.CallContext) error {
-	str, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string-copy")
+	str, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "string-copy")
 	if err != nil {
 		return err
 	}

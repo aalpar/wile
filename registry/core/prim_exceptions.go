@@ -29,11 +29,11 @@ import (
 // Installs handler as exception handler during thunk execution.
 func PrimWithExceptionHandler(cc machine.CallContext) error {
 	mc := cc.(*machine.MachineContext)
-	handler, err := helpers.RequireArg[values.Callable](mc, 0, werr.ErrNotAProcedure, "with-exception-handler")
+	handler, err := helpers.RequireArg[values.Callable](mc, 0, werr.ErrNotAProcedure, "a procedure", "with-exception-handler")
 	if err != nil {
 		return err
 	}
-	thunk, err := helpers.RequireArg[values.Callable](mc, 1, werr.ErrNotAProcedure, "with-exception-handler")
+	thunk, err := helpers.RequireArg[values.Callable](mc, 1, werr.ErrNotAProcedure, "a procedure", "with-exception-handler")
 	if err != nil {
 		return err
 	}
@@ -315,7 +315,7 @@ func PrimErrorObjectQ(mc machine.CallContext) error {
 // PrimErrorObjectMessage implements the error-object-message accessor.
 // Returns the message string from an error object.
 func PrimErrorObjectMessage(mc machine.CallContext) error {
-	errObj, err := helpers.RequireArg[*values.NativeError](mc, 0, werr.ErrNotANativeError, "error-object-message")
+	errObj, err := helpers.RequireArg[*values.NativeError](mc, 0, werr.ErrNotANativeError, "an error object", "error-object-message")
 	if err != nil {
 		return err
 	}
@@ -326,7 +326,7 @@ func PrimErrorObjectMessage(mc machine.CallContext) error {
 // PrimErrorObjectIrritants implements the error-object-irritants accessor.
 // Returns the list of irritant objects from an error object.
 func PrimErrorObjectIrritants(mc machine.CallContext) error {
-	errObj, err := helpers.RequireArg[*values.NativeError](mc, 0, werr.ErrNotANativeError, "error-object-irritants")
+	errObj, err := helpers.RequireArg[*values.NativeError](mc, 0, werr.ErrNotANativeError, "an error object", "error-object-irritants")
 	if err != nil {
 		return err
 	}

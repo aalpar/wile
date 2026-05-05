@@ -73,12 +73,12 @@ func PrimCallWithContinuationPrompt(cc machine.CallContext) error {
 	tagVal := mc.Arg(1)
 	handlerVal := mc.Arg(2)
 
-	thunkCls, err := helpers.RequireType[machine.Closure](thunk, werr.ErrNotAProcedure, "call-with-continuation-prompt")
+	thunkCls, err := helpers.RequireType[machine.Closure](thunk, werr.ErrNotAProcedure, "a procedure", "call-with-continuation-prompt")
 	if err != nil {
 		return err
 	}
 
-	tag, err := helpers.RequireType[*machine.PromptTag](tagVal, werr.ErrNotAPromptTag, "call-with-continuation-prompt")
+	tag, err := helpers.RequireType[*machine.PromptTag](tagVal, werr.ErrNotAPromptTag, "a prompt tag", "call-with-continuation-prompt")
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func PrimCallWithContinuationPrompt(cc machine.CallContext) error {
 	var handlerCls machine.Closure
 	if handlerVal != values.FalseValue {
 		var handlerErr error
-		handlerCls, handlerErr = helpers.RequireType[machine.Closure](handlerVal, werr.ErrNotAProcedure, "call-with-continuation-prompt")
+		handlerCls, handlerErr = helpers.RequireType[machine.Closure](handlerVal, werr.ErrNotAProcedure, "a procedure", "call-with-continuation-prompt")
 		if handlerErr != nil {
 			return handlerErr
 		}
@@ -157,7 +157,7 @@ func PrimCallWithContinuationPrompt(cc machine.CallContext) error {
 // Returns an ErrPromptAbort that propagates up through Run() to the
 // enclosing call-with-continuation-prompt or RunWithEscapeHandling.
 func PrimAbortCurrentContinuation(mc machine.CallContext) error {
-	tag, err := helpers.RequireArg[*machine.PromptTag](mc, 0, werr.ErrNotAPromptTag, "abort-current-continuation")
+	tag, err := helpers.RequireArg[*machine.PromptTag](mc, 0, werr.ErrNotAPromptTag, "a prompt tag", "abort-current-continuation")
 	if err != nil {
 		return err
 	}
@@ -193,7 +193,7 @@ func PrimAbortCurrentContinuation(mc machine.CallContext) error {
 // Racket §10.4: continuation-prompt-available?
 func PrimContinuationPromptAvailableQ(cc machine.CallContext) error {
 	mc := cc.(*machine.MachineContext)
-	tag, err := helpers.RequireArg[*machine.PromptTag](mc, 0, werr.ErrNotAPromptTag, "continuation-prompt-available?")
+	tag, err := helpers.RequireArg[*machine.PromptTag](mc, 0, werr.ErrNotAPromptTag, "a prompt tag", "continuation-prompt-available?")
 	if err != nil {
 		return err
 	}
@@ -217,12 +217,12 @@ func PrimCallWithComposableContinuation(cc machine.CallContext) error {
 	proc := mc.Arg(0)
 	tagVal := mc.Arg(1)
 
-	procCls, err := helpers.RequireType[machine.Closure](proc, werr.ErrNotAProcedure, "call-with-composable-continuation")
+	procCls, err := helpers.RequireType[machine.Closure](proc, werr.ErrNotAProcedure, "a procedure", "call-with-composable-continuation")
 	if err != nil {
 		return err
 	}
 
-	tag, err := helpers.RequireType[*machine.PromptTag](tagVal, werr.ErrNotAPromptTag, "call-with-composable-continuation")
+	tag, err := helpers.RequireType[*machine.PromptTag](tagVal, werr.ErrNotAPromptTag, "a prompt tag", "call-with-composable-continuation")
 	if err != nil {
 		return err
 	}

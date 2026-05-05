@@ -49,16 +49,16 @@ func getCaseFolded(s string) string {
 // PrimStringCopyTo implements the string-copy! primitive.
 // R7RS §6.7: (string-copy! to at from [start [end]])
 func PrimStringCopyTo(mc machine.CallContext) error {
-	to, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string-copy!")
+	to, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "string-copy!")
 	if err != nil {
 		return err
 	}
-	atVal, err := helpers.RequireArg[*values.Integer](mc, 1, werr.ErrNotAnInteger, "string-copy!")
+	atVal, err := helpers.RequireArg[*values.Integer](mc, 1, werr.ErrNotAnInteger, "an integer", "string-copy!")
 	if err != nil {
 		return err
 	}
 	at := int(atVal.Value)
-	from, err := helpers.RequireArg[*values.String](mc, 2, werr.ErrNotAString, "string-copy!")
+	from, err := helpers.RequireArg[*values.String](mc, 2, werr.ErrNotAString, "a string", "string-copy!")
 	if err != nil {
 		return err
 	}
@@ -92,11 +92,11 @@ func PrimStringCopyTo(mc machine.CallContext) error {
 // PrimStringFill implements the string-fill! primitive.
 // R7RS §6.7: (string-fill! string fill [start [end]])
 func PrimStringFill(mc machine.CallContext) error {
-	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "string-fill!")
+	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "string-fill!")
 	if err != nil {
 		return err
 	}
-	char, err := helpers.RequireArg[*values.Character](mc, 1, werr.ErrNotACharacter, "string-fill!")
+	char, err := helpers.RequireArg[*values.Character](mc, 1, werr.ErrNotACharacter, "a character", "string-fill!")
 	if err != nil {
 		return err
 	}
@@ -143,7 +143,7 @@ func makeStringCiComparePrimitive(name string, cmp func(string, string) bool) ma
 // arg 0 as a String, applies a cases.Caser, and returns a new mutable string.
 func makeStringCaser(name string, makeCaser func() cases.Caser) machine.ForeignFunction {
 	return func(mc machine.CallContext) error {
-		str, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, name)
+		str, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", name)
 		if err != nil {
 			return err
 		}

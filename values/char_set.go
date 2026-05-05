@@ -16,7 +16,10 @@ package values
 
 import (
 	"fmt"
+	"iter"
 	"slices"
+
+	"github.com/aalpar/wile/werr"
 )
 
 var _ Value = (*CharSet)(nil)
@@ -33,6 +36,13 @@ const MaxCodepoint rune = 0x10FFFF
 //  3. Non-empty: Lo <= Hi
 //  4. Codepoint-valid: 0 <= Lo, Hi <= MaxCodepoint
 type CharSet struct {
+	// ranges holds canonical inversion-list form.
+	//
+	// INVARIANT: never mutated after construction. All() and Codepoints()
+	// yield directly from this slice without defensive copy; the
+	// process-global namedCharSets cache and eq? identity rely on this.
+	// If you find yourself adding a Mutate/AddRange/SetRanges method,
+	// stop — return a new *CharSet via NewCharSetFromUnsortedRanges instead.
 	ranges []CharSetRange
 }
 
@@ -46,23 +56,29 @@ type CharSetRange struct {
 // codepoint-valid. Used internally by primitives that produce canonical output
 // (set-algebra ops). External callers should prefer NewCharSetFromUnsortedRanges.
 //
-// Panics on invariant violation — this is an internal contract assertion.
+// Panics on invariant violation — this is an internal contract assertion,
+// wrapped per CLAUDE.md "NEVER panic with raw errors" imperative.
 func NewCharSetFromRanges(rs []CharSetRange) *CharSet {
 	if len(rs) == 0 {
 		return &CharSet{}
 	}
 	for i, r := range rs {
 		if r.Lo < 0 {
-			panic(fmt.Sprintf("NewCharSetFromRanges: range[%d].Lo=%d < 0", i, r.Lo))
+			panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+				"NewCharSetFromRanges: range[%d].Lo=%d < 0", i, r.Lo))
 		}
 		if r.Hi > MaxCodepoint {
-			panic(fmt.Sprintf("NewCharSetFromRanges: range[%d].Hi=%d > MaxCodepoint (%d)", i, r.Hi, MaxCodepoint))
+			panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+				"NewCharSetFromRanges: range[%d].Hi=%d > MaxCodepoint (%d)", i, r.Hi, MaxCodepoint))
 		}
 		if r.Lo > r.Hi {
-			panic(fmt.Sprintf("NewCharSetFromRanges: range[%d]: Lo=%d > Hi=%d", i, r.Lo, r.Hi))
+			panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+				"NewCharSetFromRanges: range[%d]: Lo=%d > Hi=%d", i, r.Lo, r.Hi))
 		}
 		if i > 0 && r.Lo <= rs[i-1].Hi+1 {
-			panic(fmt.Sprintf("NewCharSetFromRanges: range[%d] (Lo=%d) not strictly after range[%d] (Hi=%d): ranges overlap or are adjacent", i, r.Lo, i-1, rs[i-1].Hi))
+			panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+				"NewCharSetFromRanges: range[%d] (Lo=%d) not strictly after range[%d] (Hi=%d): ranges overlap or are adjacent",
+				i, r.Lo, i-1, rs[i-1].Hi))
 		}
 	}
 	out := make([]CharSetRange, len(rs))
@@ -123,6 +139,13 @@ func NewCharSetFromRunes(runes []rune) *CharSet {
 
 // Ranges returns a copy of the canonical range slice. Caller may mutate
 // the returned slice without affecting the CharSet.
+//
+// Most read-only iteration callers should prefer All or Codepoints —
+// those avoid the O(n) defensive slice copy this method performs (they
+// allocate a single iterator closure instead, which is cheaper for any
+// non-empty CharSet). Ranges is retained for callers that genuinely
+// need a slice: dual-cursor merge algorithms (intersect, difference)
+// and the union builder that uses append on the result.
 func (p *CharSet) Ranges() []CharSetRange {
 	if p == nil || len(p.ranges) == 0 {
 		return nil
@@ -130,6 +153,46 @@ func (p *CharSet) Ranges() []CharSetRange {
 	out := make([]CharSetRange, len(p.ranges))
 	copy(out, p.ranges)
 	return out
+}
+
+// All returns an iter.Seq that yields each canonical range in codepoint
+// ascending order. Caller breaks the loop with `break` to early-exit.
+//
+// Cost: one closure allocation per accessor call (the iterator captures
+// p). No O(n) slice copy — yields directly from the internal slice, which
+// is safe because *CharSet is immutable. Strictly cheaper than Ranges()
+// for any non-empty CharSet.
+//
+// Naming follows Go stdlib convention (slices.All, maps.All).
+func (p *CharSet) All() iter.Seq[CharSetRange] {
+	return func(yield func(CharSetRange) bool) {
+		if p == nil {
+			return
+		}
+		for _, r := range p.ranges {
+			if !yield(r) {
+				return
+			}
+		}
+	}
+}
+
+// Codepoints returns an iter.Seq that yields every codepoint in the set,
+// in codepoint ascending order. Caller breaks the loop with `break` to
+// early-exit.
+func (p *CharSet) Codepoints() iter.Seq[rune] {
+	return func(yield func(rune) bool) {
+		if p == nil {
+			return
+		}
+		for _, r := range p.ranges {
+			for c := r.Lo; c <= r.Hi; c++ {
+				if !yield(c) {
+					return
+				}
+			}
+		}
+	}
 }
 
 // Size returns the total number of codepoints in the set.
