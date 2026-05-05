@@ -24,11 +24,19 @@ import (
 
 // RequireArg extracts mc.Arg(index) and asserts it has concrete type T.
 // On failure it returns a wrapped error using the given sentinel and primitive name.
-// The error message format is "<name>: expected <type> but got <actual>", where
-// <type> is derived from the sentinel message by trimming the "not " prefix
-// (e.g., ErrNotAVector "not a vector" → "a vector").
+// The error message format is "<name>: argument <index+1>: expected <type> but got <actual>",
+// where <type> is derived from the sentinel message by trimming the "not " prefix
+// (e.g., ErrNotAVector "not a vector" → "a vector"). The index is reported
+// 1-indexed to match Scheme convention.
 func RequireArg[T any](mc machine.CallContext, index int, sentinel error, name string) (T, error) {
-	return RequireType[T](mc.Arg(index), sentinel, name)
+	v := mc.Arg(index)
+	result, ok := v.(T)
+	if !ok {
+		var zero T
+		return zero, werr.WrapForeignErrorf(sentinel, "%s: argument %d: expected %s but got %T",
+			name, index+1, strings.TrimPrefix(sentinel.Error(), "not "), v)
+	}
+	return result, nil
 }
 
 // RequireType asserts that v has concrete type T.
