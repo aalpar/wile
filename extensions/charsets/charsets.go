@@ -457,8 +457,20 @@ func isSubset(a, b *values.CharSet) bool {
 	return true
 }
 
-// namedCharSets is a process-global cache. Built lazily on first request,
-// then returned by pointer (eq? from Scheme). Per design §7.
+// namedCharSets is a process-global cache, intentionally not per-Engine.
+//
+// Safety: the cache is referentially transparent. Inputs are immutable
+// unicode.RangeTable values from Go's stdlib (unicode.L, unicode.Ll,
+// unicode.White_Space, etc.); outputs are deterministic functions of those
+// inputs. Multiple Engines in the same process share the cache without
+// synchronization beyond the mutex, and identity (eq? at the Scheme level)
+// is consistent across Engines — which is the desired observable behavior
+// for SRFI-14 named char-sets like char-set:letter.
+//
+// Maintenance constraint: any future change must preserve compatibility
+// with Go's unicode package. The cache stores results derived from
+// unicode.* tables; do not mix in inputs from other sources, or per-Engine
+// caching will become necessary.
 var (
 	namedCharSetsMu sync.Mutex
 	namedCharSets   = map[string]*values.CharSet{}
