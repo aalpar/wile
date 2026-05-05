@@ -1098,8 +1098,8 @@ func TestWithProfile_Console(t *testing.T) {
 
 func TestProfile_Console_Extensions(t *testing.T) {
 	c := qt.New(t)
-	// Console profile includes: io, files, math, all-safe, envvars.
-	c.Assert(len(Console.extensions()), qt.Equals, 5)
+	// Console profile includes: io, files, math, all-safe, charsets, envvars.
+	c.Assert(len(Console.extensions()), qt.Equals, 6)
 }
 
 func TestWithMaxCallDepth(t *testing.T) {

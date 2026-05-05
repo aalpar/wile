@@ -163,6 +163,37 @@ func TestSRFI13Phase7(t *testing.T) {
 	runSchemeTest(t, "srfi-13-tests-phase7.scm", 2*time.Minute, "SRFI-13 Phase 7 (mutating case)")
 }
 
+// TestSRFI14Predicates runs the SRFI-14 Phase-0 (char-set? predicate stub) smoke tests.
+func TestSRFI14Predicates(t *testing.T) {
+	runSchemeTest(t, "srfi-14-tests-predicates.scm", 2*time.Minute, "SRFI-14 Phase 0 (char-set? predicate)")
+}
+
+// TestSRFI14Constructors runs the SRFI-14 Phase-1 (constructors, membership, querying) integration tests.
+func TestSRFI14Constructors(t *testing.T) {
+	runSchemeTest(t, "srfi-14-tests-constructors.scm", 2*time.Minute, "SRFI-14 Phase 1 (constructors)")
+}
+
+// TestSRFI14Algebra runs the SRFI-14 Phase-2 (set algebra, !-aliases, derived ops) integration tests.
+func TestSRFI14Algebra(t *testing.T) {
+	runSchemeTest(t, "srfi-14-tests-algebra.scm", 2*time.Minute, "SRFI-14 Phase 2 (algebra)")
+}
+
+// TestSRFI14Iteration runs the SRFI-14 Phase-3 (iteration / query layer) integration tests.
+func TestSRFI14Iteration(t *testing.T) {
+	runSchemeTest(t, "srfi-14-tests-iteration.scm", 2*time.Minute, "SRFI-14 Phase 3 (iteration)")
+}
+
+// TestSRFI14NamedSets runs the SRFI-14 Phase-4 (17 named char-set constants) integration tests.
+func TestSRFI14NamedSets(t *testing.T) {
+	runSchemeTest(t, "srfi-14-tests-named-sets.scm", 2*time.Minute, "SRFI-14 Phase 4 (named sets)")
+}
+
+// TestSRFI14SRFI13Unlock runs the SRFI-14 Phase-5 unlock tests: verifies that SRFI-13
+// procedures accepting a criterion now dispatch on char-set? via %match-char?.
+func TestSRFI14SRFI13Unlock(t *testing.T) {
+	runSchemeTest(t, "srfi-14-tests-srfi-13-unlock.scm", 2*time.Minute, "SRFI-14 Phase 5 (SRFI-13 unlock)")
+}
+
 // TestWileStrings runs the (wile strings) extras integration tests.
 func TestWileStrings(t *testing.T) {
 	runSchemeTest(t, "wile-strings-tests.scm", 2*time.Minute, "(wile strings) extras")

@@ -89,10 +89,10 @@ func TestProfileExtensions(t *testing.T) {
 		wantMinSize int
 	}{
 		{"tiny returns nil", "tiny", false, 0},
-		{"console returns 5 extensions", "console", true, 5},
-		{"console-with-load returns 6 extensions", "console-with-load", true, 6},
-		{"small returns 8 extensions", "small", true, 8},
-		{"kitchen-sink returns full set", "kitchen-sink", true, 10},
+		{"console returns 6 extensions", "console", true, 6},
+		{"console-with-load returns 7 extensions", "console-with-load", true, 7},
+		{"small returns 9 extensions", "small", true, 9},
+		{"kitchen-sink returns full set", "kitchen-sink", true, 11},
 	}
 
 	for _, tc := range tests {
@@ -222,4 +222,51 @@ func TestProfileFactoryCallback(t *testing.T) {
 		c.Assert(err, qt.IsNotNil)
 		c.Assert(errors.Is(err, ErrUnknownProfile), qt.IsTrue)
 	})
+}
+
+// TestCharsetsInProfileExtensions verifies that the charsets extension is included
+// in each profile that provides standard library coverage (small, console, kitchen-sink).
+func TestCharsetsInProfileExtensions(t *testing.T) {
+	tests := []struct {
+		name    string
+		profile string
+	}{
+		{"small includes charsets", "small"},
+		{"console includes charsets", "console"},
+		{"kitchen-sink includes charsets", "kitchen-sink"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			exts, err := ProfileExtensions(tc.profile)
+			c.Assert(err, qt.IsNil)
+			found := false
+			for _, ext := range exts {
+				if ext.Name() == "charsets" {
+					found = true
+					break
+				}
+			}
+			c.Assert(found, qt.IsTrue, qt.Commentf("profile %s missing charsets extension", tc.profile))
+		})
+	}
+}
+
+// TestCharsetsExcludedFromTiny verifies that the minimal "tiny" profile has no
+// extensions at all — charsets must not appear there.
+func TestCharsetsExcludedFromTiny(t *testing.T) {
+	tests := []struct {
+		name    string
+		profile string
+	}{
+		{"tiny has no extensions", "tiny"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			exts, err := ProfileExtensions(tc.profile)
+			c.Assert(err, qt.IsNil)
+			c.Assert(exts, qt.IsNil) // tiny has no extensions
+		})
+	}
 }

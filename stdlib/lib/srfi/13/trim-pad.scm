@@ -26,9 +26,8 @@
     ((s)
      "Return S with leading chars matching CRITERION stripped.
 
-CRITERION is either a char (compared via char=?) or a predicate
-procedure. Default is `char-whitespace?'. char-set criteria are
-deferred until SRFI-14 lands.
+CRITERION is a char (compared via char=?), a char-set (SRFI-14), or a
+predicate procedure of one argument. Default is `char-whitespace?'.
 
 Examples:
   (string-trim \"   hello\")              => \"hello\"
@@ -38,7 +37,7 @@ Examples:
 
 Parameters:
   s : string
-  criterion : char or procedure (optional, default char-whitespace?)
+  criterion : char, char-set (SRFI-14), or procedure (optional, default char-whitespace?)
   start : integer (optional, default 0)
   end : integer (optional, default (string-length s))
 Returns: string
@@ -67,7 +66,7 @@ Examples:
 
 Parameters:
   s : string
-  criterion : char or procedure (optional, default char-whitespace?)
+  criterion : char, char-set (SRFI-14), or procedure (optional, default char-whitespace?)
   start : integer (optional, default 0)
   end : integer (optional, default (string-length s))
 Returns: string
@@ -98,7 +97,7 @@ Examples:
 
 Parameters:
   s : string
-  criterion : char or procedure (optional, default char-whitespace?)
+  criterion : char, char-set (SRFI-14), or procedure (optional, default char-whitespace?)
   start : integer (optional, default 0)
   end : integer (optional, default (string-length s))
 Returns: string

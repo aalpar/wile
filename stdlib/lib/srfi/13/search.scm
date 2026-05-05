@@ -153,8 +153,8 @@ See also: `string-contains'."
      "Return the index of the first char in S matching CRITERION,
 or #f if none match.
 
-CRITERION is either a char (compared via char=?) or a predicate procedure.
-char-set criteria are deferred until SRFI-14 lands.
+CRITERION is a char (compared via char=?), a char-set (SRFI-14), or a
+predicate procedure of one argument.
 
 Examples:
   (string-index \"hello world\" #\\space)         => 5
@@ -164,7 +164,7 @@ Examples:
 
 Parameters:
   s : string
-  criterion : char or procedure
+  criterion : char, char-set (SRFI-14), or procedure
   start : integer (optional, default 0)
   end : integer (optional, default (string-length s))
 Returns: integer or #f
@@ -191,7 +191,7 @@ Examples:
 
 Parameters:
   s : string
-  criterion : char or procedure
+  criterion : char, char-set (SRFI-14), or procedure
   start : integer (optional, default 0)
   end : integer (optional, default (string-length s))
 Returns: integer or #f
@@ -218,7 +218,7 @@ Examples:
 
 Parameters:
   s : string
-  criterion : char or procedure
+  criterion : char, char-set (SRFI-14), or procedure
   start : integer (optional, default 0)
   end : integer (optional, default (string-length s))
 Returns: integer or #f
@@ -245,7 +245,7 @@ Examples:
 
 Parameters:
   s : string
-  criterion : char or procedure
+  criterion : char, char-set (SRFI-14), or procedure
   start : integer (optional, default 0)
   end : integer (optional, default (string-length s))
 Returns: integer or #f
@@ -271,7 +271,7 @@ Examples:
 
 Parameters:
   s : string
-  criterion : char or procedure
+  criterion : char, char-set (SRFI-14), or procedure
   start : integer (optional, default 0)
   end : integer (optional, default (string-length s))
 Returns: integer

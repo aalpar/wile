@@ -547,6 +547,24 @@ Record type definitions, integrated into R7RS as `define-record-type`.
 
 - **URL**: https://srfi.schemers.org/srfi-9/srfi-9.html
 
+### SRFI-13: String Libraries
+
+String processing procedures (predicates, search, filter, fold, tokenize, etc.). Implemented in Wile as the `(srfi 13)` library.
+
+- **Author**: Olin Shivers
+- **URL**: https://srfi.schemers.org/srfi-13/srfi-13.html
+- **Status**: Final (2000-07-25)
+- **Wile reference**: `(srfi 13)` library; design `plans/2026-05-03-string-primitives-design.md`; impl `plans/2026-05-03-string-primitives-impl.md`
+
+### SRFI-14: Character-Set Library
+
+Character-set algebra (union, intersection, complement, difference, fold, filter, named sets) with Unicode coverage via Go's `unicode` tables. Implemented in Wile as the `(srfi 14)` library.
+
+- **Author**: Olin Shivers
+- **URL**: https://srfi.schemers.org/srfi-14/srfi-14.html
+- **Status**: Final (2000-07-25)
+- **Wile reference**: `(srfi 14)` library; design `plans/2026-05-04-srfi-14-design.md`; impl `plans/2026-05-04-srfi-14-impl.md`
+
 ### SRFI-18: Multithreading Support
 
 Threading primitives implemented in Wile: threads, mutexes, condition variables, and time objects. The model is shared-memory with mutual exclusion, following the monitor pattern (Hoare 1974): mutexes for mutual exclusion, condition variables for coordination.

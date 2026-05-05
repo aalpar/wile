@@ -50,7 +50,7 @@ func TestExtensionListConsistency(t *testing.T) {
 	// together.
 	expected := []string{
 		"io", "files", "math", "introspection", "eval",
-		"namespace", "threads", "gointerop", "all", "system", "process", "envvars",
+		"namespace", "threads", "gointerop", "all", "system", "process", "charsets", "envvars",
 	}
 	for _, name := range expected {
 		c.Assert(wileLibs[name], qt.IsTrue,
