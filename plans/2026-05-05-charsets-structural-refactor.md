@@ -44,7 +44,7 @@
 1. **Phase 1** depends only on the already-edited `RequireArg`. Lowest risk.
 2. **Phase 2** introduces the new `VariadicArgs[T]` helper that Phase 3 needs.
 3. **Phase 3** is the bulk migration of charsets to the new helper plus other internal helper migrations.
-4. **Phase 4** touches the value-type API (`CharSet.ForEachRange/ForEachCodepoint`) and is the only phase that changes external API surface. Goes last because it's the largest review burden and is independent of phases 1-3.
+4. **Phase 4** touches the value-type API (`CharSet.All/Codepoints` returning `iter.Seq[T]`, per Q-b resolution) and is the only phase that changes external API surface. Goes last because it's the largest review burden and is independent of phases 1-3.
 5. **Phase 5** addresses style/invariant issues (panic format, named-sets cache). Independent; could be split off.
 
 ---
@@ -272,7 +272,7 @@ This was an unanticipated extraction — but it shipped a *second* sort-package 
 
 Independent of all prior phases.
 
-- [x] **F7**: Replaced `panic(fmt.Sprintf(...))` in `values/char_set.go:NewCharSetFromRanges` (4 sites) with `panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument, "...", ...))` per CLAUDE.md imperative. No behavior change — still panics on internal contract violation; the panic value is now a project error type so a deferred `recover()` observes the convention.
+- [x] **F7**: Replaced `panic(fmt.Sprintf(...))` in `values/char_set.go:NewCharSetFromRanges` (4 sites) with `panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument, "...", ...))` per CLAUDE.md imperative. **Panic-shape change**: still panics on internal contract violation, but the panic value is now a project error type — observable to a deferred `recover()` which previously saw a `string` and now sees an `error` matchable via `errors.Is(_, werr.ErrInvalidArgument)`. Pinned by `TestNewCharSetFromRanges_PanicWrapsSentinel`.
 
 - [x] **F6**: Expanded the doc comment on `var namedCharSets` to spell out three things: (1) inputs are immutable `unicode.RangeTable` values, (2) outputs are deterministic functions of inputs, (3) maintenance constraint: keep inputs sourced from `unicode.*` only, or per-Engine caching becomes necessary. Per Q-c resolution.
 

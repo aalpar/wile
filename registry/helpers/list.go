@@ -102,7 +102,7 @@ func CollectStrings(rest values.Value, name string) ([]*values.String, [][]rune,
 		if !ok {
 			return nil, nil, 0, werr.WrapForeignErrorf(werr.ErrNotAList, "%s: improper argument list", name)
 		}
-		s, err := RequireType[*values.String](tuple.Car(), werr.ErrNotAString, name)
+		s, err := RequireType[*values.String](tuple.Car(), werr.ErrNotAString, "a string", name)
 		if err != nil {
 			return nil, nil, 0, err
 		}

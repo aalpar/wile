@@ -222,3 +222,48 @@ func TestCharCompareVariadic_Errors(t *testing.T) {
 		})
 	}
 }
+
+// TestCharCompareVariadic_TypeErrorAfterCmpFail pins CP1's behavioral
+// invariant: when a comparison fails before reaching an ill-typed element,
+// the helper short-circuits to #f without raising the type error. Going
+// through VariadicArgs (which type-checks all elements first) would
+// reverse this — we restored the streaming form to preserve the historical
+// behavior.
+//
+// (char<? #\b #\a not-a-char) — old: cmp(#\b, #\a)→false → #f
+//
+//	new: same #f
+func TestCharCompareVariadic_TypeErrorAfterCmpFail(t *testing.T) {
+	c := qt.New(t)
+	mc := makeMC(
+		values.NewCharacter('b'),
+		values.List(values.NewCharacter('a'), values.NewInteger(99)),
+	)
+	err := CharCompareVariadic(mc, "char<?", charLT)
+	c.Assert(err, qt.IsNil, qt.Commentf("first cmp failed; later type error must NOT be raised"))
+	c.Assert(mc.GetValue(), qt.Equals, values.Value(values.FalseValue))
+}
+
+// TestCharCompareVariadic_FirstPairFails pins the short-circuit-on-first-pair
+// path explicitly (existing tests cover only last-pair-failure).
+func TestCharCompareVariadic_FirstPairFails(t *testing.T) {
+	c := qt.New(t)
+	mc := makeMC(
+		values.NewCharacter('z'),
+		values.List(values.NewCharacter('a'), values.NewCharacter('b'), values.NewCharacter('c')),
+	)
+	err := CharCompareVariadic(mc, "char<?", charLT)
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), qt.Equals, values.Value(values.FalseValue))
+}
+
+// TestCharCompareVariadic_SingleArg covers the 1-arg case (no rest elements).
+// With CompareVariadic in streaming form, this is the path that walks zero
+// rest elements and returns #t.
+func TestCharCompareVariadic_SingleArg(t *testing.T) {
+	c := qt.New(t)
+	mc := makeMC(values.NewCharacter('a'), values.EmptyList)
+	err := CharCompareVariadic(mc, "char<?", charLT)
+	c.Assert(err, qt.IsNil)
+	c.Assert(mc.GetValue(), qt.Equals, values.Value(values.TrueValue))
+}

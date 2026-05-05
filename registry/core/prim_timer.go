@@ -39,21 +39,21 @@ func PrimWithTimeout(cc machine.CallContext) error {
 	mc := cc.(*machine.MachineContext)
 
 	msVal, err := helpers.RequireType[*values.Integer](
-		mc.Arg(0), werr.ErrNotAnInteger, "with-timeout",
+		mc.Arg(0), werr.ErrNotAnInteger, "an integer", "with-timeout",
 	)
 	if err != nil {
 		return err
 	}
 
 	handlerVal, err := helpers.RequireType[values.Callable](
-		mc.Arg(1), werr.ErrNotAProcedure, "with-timeout",
+		mc.Arg(1), werr.ErrNotAProcedure, "a procedure", "with-timeout",
 	)
 	if err != nil {
 		return err
 	}
 
 	thunkVal, err := helpers.RequireType[values.Callable](
-		mc.Arg(2), werr.ErrNotAProcedure, "with-timeout",
+		mc.Arg(2), werr.ErrNotAProcedure, "a procedure", "with-timeout",
 	)
 	if err != nil {
 		return err

@@ -65,6 +65,7 @@ func TestMakeNumericPredicate(t *testing.T) {
 	isExact := MakeNumericPredicate[values.Number](
 		"exact?",
 		werr.ErrNotANumber,
+		"a number",
 		func(n values.Number) bool {
 			return n.IsExact()
 		},
@@ -96,6 +97,7 @@ func TestMakeNumericPredicate_Errors(t *testing.T) {
 	isExact := MakeNumericPredicate[values.Number](
 		"exact?",
 		werr.ErrNotANumber,
+		"a number",
 		func(n values.Number) bool {
 			return n.IsExact()
 		},

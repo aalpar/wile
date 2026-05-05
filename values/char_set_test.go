@@ -15,12 +15,14 @@
 package values_test
 
 import (
+	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/values/valuestest"
+	"github.com/aalpar/wile/werr"
 )
 
 func TestCharSet_EmptySet(t *testing.T) {
@@ -191,4 +193,63 @@ func TestCharSet_Codepoints_EmptySet(t *testing.T) {
 		count++
 	}
 	c.Assert(count, qt.Equals, 0)
+}
+
+func TestCharSet_All_Reiterable(t *testing.T) {
+	c := qt.New(t)
+	cs := values.NewCharSetFromRanges([]values.CharSetRange{
+		{Lo: 'a', Hi: 'c'}, {Lo: 'x', Hi: 'z'},
+	})
+	var first, second []values.CharSetRange
+	for r := range cs.All() {
+		first = append(first, r)
+	}
+	for r := range cs.All() {
+		second = append(second, r)
+	}
+	c.Assert(first, qt.DeepEquals, second)
+	c.Assert(len(first), qt.Equals, 2)
+}
+
+func TestCharSet_Codepoints_Reiterable(t *testing.T) {
+	c := qt.New(t)
+	cs := values.NewCharSetFromRanges([]values.CharSetRange{{Lo: 'a', Hi: 'c'}})
+	var first, second []rune
+	for r := range cs.Codepoints() {
+		first = append(first, r)
+	}
+	for r := range cs.Codepoints() {
+		second = append(second, r)
+	}
+	c.Assert(first, qt.DeepEquals, second)
+	c.Assert(len(first), qt.Equals, 3)
+}
+
+// TestNewCharSetFromRanges_PanicWrapsSentinel pins F7's panic-shape change:
+// invariant violations panic with a project error type so a deferred
+// recover() can match via errors.Is.
+func TestNewCharSetFromRanges_PanicWrapsSentinel(t *testing.T) {
+	tcs := []struct {
+		name   string
+		ranges []values.CharSetRange
+	}{
+		{"Lo<0", []values.CharSetRange{{Lo: -1, Hi: 5}}},
+		{"Hi>MaxCodepoint", []values.CharSetRange{{Lo: 0, Hi: values.MaxCodepoint + 1}}},
+		{"Lo>Hi", []values.CharSetRange{{Lo: 'z', Hi: 'a'}}},
+		{"adjacent ranges", []values.CharSetRange{{Lo: 'a', Hi: 'c'}, {Lo: 'd', Hi: 'f'}}},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			defer func() {
+				r := recover()
+				c.Assert(r, qt.IsNotNil)
+				err, ok := r.(error)
+				c.Assert(ok, qt.IsTrue, qt.Commentf("panic value should be an error type, got %T", r))
+				c.Assert(errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue,
+					qt.Commentf("panic should wrap ErrInvalidArgument, got %v", err))
+			}()
+			values.NewCharSetFromRanges(tc.ranges)
+		})
+	}
 }

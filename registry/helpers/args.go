@@ -15,8 +15,6 @@
 package helpers
 
 import (
-	"strings"
-
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
@@ -24,31 +22,49 @@ import (
 
 // RequireArg extracts mc.Arg(index) and asserts it has concrete type T.
 // On failure it returns a wrapped error using the given sentinel and primitive name.
-// The error message format is "<name>: argument <index+1>: expected <type> but got <actual>",
-// where <type> is derived from the sentinel message by trimming the "not " prefix
-// (e.g., ErrNotAVector "not a vector" → "a vector"). The index is reported
-// 1-indexed to match Scheme convention.
-func RequireArg[T any](mc machine.CallContext, index int, sentinel error, name string) (T, error) {
+// The error message format is "<name>: argument <index+1>: expected <typeName> but got <actual>".
+// typeName is the human-readable expected-type phrase (e.g., "a vector", "an integer");
+// callers supply it explicitly to avoid relying on sentinel-message trimming.
+// The index is reported 1-indexed to match Scheme convention.
+func RequireArg[T any](mc machine.CallContext, index int, sentinel error, typeName, name string) (T, error) {
 	v := mc.Arg(index)
 	result, ok := v.(T)
 	if !ok {
 		var zero T
 		return zero, werr.WrapForeignErrorf(sentinel, "%s: argument %d: expected %s but got %T",
-			name, index+1, strings.TrimPrefix(sentinel.Error(), "not "), v)
+			name, index+1, typeName, v)
 	}
 	return result, nil
 }
 
 // RequireType asserts that v has concrete type T.
-// On failure it returns a wrapped error using the given sentinel and primitive name.
-func RequireType[T any](v values.Value, sentinel error, name string) (T, error) {
+// On failure it returns a wrapped error using the given sentinel, typeName, and primitive name.
+// typeName is the human-readable expected-type phrase (e.g., "a vector").
+func RequireType[T any](v values.Value, sentinel error, typeName, name string) (T, error) {
 	result, ok := v.(T)
 	if !ok {
 		var zero T
 		return zero, werr.WrapForeignErrorf(sentinel, "%s: expected %s but got %T",
-			name, strings.TrimPrefix(sentinel.Error(), "not "), v)
+			name, typeName, v)
 	}
 	return result, nil
+}
+
+// RequireTuple extracts mc.Arg(index) and asserts it is a values.Tuple
+// (proper list or empty list). On failure it returns a wrapped ErrNotAList
+// error in the canonical "<name>: argument <index+1>: expected a list but
+// got <actual>" format. The index is reported 1-indexed.
+//
+// Use this for any primitive argument that must be a list — Tuple is the
+// runtime read-only-list interface (see values/CLAUDE.md).
+func RequireTuple(mc machine.CallContext, index int, name string) (values.Tuple, error) {
+	v := mc.Arg(index)
+	t, ok := v.(values.Tuple)
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAList,
+			"%s: argument %d: expected a list but got %T", name, index+1, v)
+	}
+	return t, nil
 }
 
 // ParseOptionalStartEnd extracts optional [start [end]] integer arguments from a rest list.
@@ -182,9 +198,9 @@ func ParseOptionalArg(rest values.Value, name string) (values.Value, bool, error
 
 // OptionalArg extracts an optional typed argument from variadic rest args.
 // If no argument is present, defaultVal is returned. If present but not of
-// type T, an error using sentinel and name is returned. Extra arguments in
-// rest produce an ErrWrongNumberOfArguments error.
-func OptionalArg[T any](rest values.Value, defaultVal T, sentinel error, name string) (T, error) {
+// type T, an error using sentinel, typeName, and name is returned. Extra arguments
+// in rest produce an ErrWrongNumberOfArguments error.
+func OptionalArg[T any](rest values.Value, defaultVal T, sentinel error, typeName, name string) (T, error) {
 	v, ok, err := ParseOptionalArg(rest, name)
 	if err != nil {
 		var zero T
@@ -193,5 +209,5 @@ func OptionalArg[T any](rest values.Value, defaultVal T, sentinel error, name st
 	if !ok {
 		return defaultVal, nil
 	}
-	return RequireType[T](v, sentinel, name)
+	return RequireType[T](v, sentinel, typeName, name)
 }

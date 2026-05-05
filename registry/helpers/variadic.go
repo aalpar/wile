@@ -16,7 +16,6 @@ package helpers
 
 import (
 	"context"
-	"strings"
 
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
@@ -34,6 +33,7 @@ import (
 // the error names the offending argument's 1-indexed position in the full
 // argument vector (fixed positions, then rest positions), matching
 // RequireArg's "<name>: argument <N>: expected ... but got ..." format.
+// typeName is the human-readable expected-type phrase used in error messages.
 //
 // Per Wile's variadic convention, fixedCount must be >= 1: ParamCount=0 with
 // IsVariadic=true panics in the dispatch layer.
@@ -41,35 +41,33 @@ func VariadicArgs[T any](
 	mc machine.CallContext,
 	fixedCount int,
 	sentinel error,
-	name string,
+	typeName, name string,
 ) ([]T, error) {
 	if fixedCount < 1 {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+		return nil, werr.WrapForeignErrorf(werr.ErrInternal,
 			"%s: VariadicArgs requires fixedCount >= 1, got %d", name, fixedCount)
 	}
 	fixedArgs := fixedCount - 1
 	out := make([]T, 0, fixedArgs+1)
 
 	for i := range fixedArgs {
-		v, err := RequireArg[T](mc, i, sentinel, name)
+		v, err := RequireArg[T](mc, i, sentinel, typeName, name)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, v)
 	}
 
-	rest, ok := mc.Arg(fixedArgs).(values.Tuple)
-	if !ok {
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAList,
-			"%s: rest argument: expected a list but got %T", name, mc.Arg(fixedArgs))
+	rest, err := RequireTuple(mc, fixedArgs, name)
+	if err != nil {
+		return nil, err
 	}
-	expectedType := strings.TrimPrefix(sentinel.Error(), "not ")
-	err := ForEachList(mc.Context(), rest, name, func(_ context.Context, i int, _ bool, v values.Value) error {
+	err = ForEachList(mc.Context(), rest, name, func(_ context.Context, i int, _ bool, v values.Value) error {
 		elem, ok := v.(T)
 		if !ok {
 			return werr.WrapForeignErrorf(sentinel,
 				"%s: argument %d: expected %s but got %T",
-				name, fixedArgs+i+1, expectedType, v)
+				name, fixedArgs+i+1, typeName, v)
 		}
 		out = append(out, elem)
 		return nil

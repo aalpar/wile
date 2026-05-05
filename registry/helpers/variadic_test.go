@@ -17,6 +17,7 @@ package helpers
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -35,24 +36,27 @@ type stubCallContext struct {
 	args []values.Value
 }
 
-func (p *stubCallContext) Arg(i int) values.Value                          { return p.args[i] }
-func (p *stubCallContext) SetValue(values.Value)                           {}
-func (p *stubCallContext) SetValues(...values.Value)                       {}
-func (p *stubCallContext) Authorizer() security.Authorizer                 { return nil }
-func (p *stubCallContext) Context() context.Context                        { return context.Background() }
-func (p *stubCallContext) EnvironmentFrame() *environment.EnvironmentFrame { return nil }
-func (p *stubCallContext) Thread() *values.Thread                          { return nil }
+func (p *stubCallContext) Arg(i int) values.Value {
+	return p.args[i]
+}
+func (p *stubCallContext) SetValue(values.Value) {
+}
+func (p *stubCallContext) SetValues(...values.Value) {
+}
+func (p *stubCallContext) Authorizer() security.Authorizer {
+	return nil
+}
+func (p *stubCallContext) Context() context.Context {
+	return context.Background()
+}
+func (p *stubCallContext) EnvironmentFrame() *environment.EnvironmentFrame {
+	return nil
+}
+func (p *stubCallContext) Thread() *values.Thread {
+	return nil
+}
 
 var _ machine.CallContext = (*stubCallContext)(nil)
-
-// list builds a proper Scheme list from the given values.
-func list(vs ...values.Value) values.Value {
-	out := values.Value(values.EmptyList)
-	for i := len(vs) - 1; i >= 0; i-- {
-		out = &values.Pair{vs[i], out}
-	}
-	return out
-}
 
 func TestVariadicArgs(t *testing.T) {
 	int1 := values.NewInteger(1)
@@ -77,13 +81,13 @@ func TestVariadicArgs(t *testing.T) {
 		{
 			name:       "single fixed arg, two rest elements",
 			fixedCount: 2,
-			args:       []values.Value{int1, list(int2, int3)},
+			args:       []values.Value{int1, values.List(int2, int3)},
 			wantValues: []int64{1, 2, 3},
 		},
 		{
 			name:       "two fixed args, one rest element",
 			fixedCount: 3,
-			args:       []values.Value{int1, int2, list(int3)},
+			args:       []values.Value{int1, int2, values.List(int3)},
 			wantValues: []int64{1, 2, 3},
 		},
 		{
@@ -96,14 +100,14 @@ func TestVariadicArgs(t *testing.T) {
 		{
 			name:       "type mismatch on rest element 1 (overall position 2)",
 			fixedCount: 2,
-			args:       []values.Value{int1, list(str)},
+			args:       []values.Value{int1, values.List(str)},
 			wantErr:    werr.ErrNotAnInteger,
 			wantArgPos: 2,
 		},
 		{
 			name:       "type mismatch on rest element 2 (overall position 4) with 2 fixed args",
 			fixedCount: 3,
-			args:       []values.Value{int1, int2, list(int3, str)},
+			args:       []values.Value{int1, int2, values.List(int3, str)},
 			wantErr:    werr.ErrNotAnInteger,
 			wantArgPos: 4,
 		},
@@ -123,21 +127,21 @@ func TestVariadicArgs(t *testing.T) {
 			name:       "fixedCount=0 rejected",
 			fixedCount: 0,
 			args:       []values.Value{values.EmptyList},
-			wantErr:    werr.ErrInvalidArgument,
+			wantErr:    werr.ErrInternal,
 		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			mc := &stubCallContext{args: tc.args}
-			out, err := VariadicArgs[*values.Integer](mc, tc.fixedCount, werr.ErrNotAnInteger, "test")
+			out, err := VariadicArgs[*values.Integer](mc, tc.fixedCount, werr.ErrNotAnInteger, "an integer", "test")
 
 			if tc.wantErr != nil {
 				c.Assert(err, qt.IsNotNil)
 				c.Assert(errors.Is(err, tc.wantErr), qt.IsTrue,
 					qt.Commentf("expected error chain to include %v, got %v", tc.wantErr, err))
 				if tc.wantArgPos > 0 {
-					expected := "argument " + intToString(tc.wantArgPos) + ":"
+					expected := "argument " + strconv.Itoa(tc.wantArgPos) + ":"
 					c.Assert(strings.Contains(err.Error(), expected), qt.IsTrue,
 						qt.Commentf("expected error to mention %q, got %q", expected, err.Error()))
 				}
@@ -151,19 +155,4 @@ func TestVariadicArgs(t *testing.T) {
 			}
 		})
 	}
-}
-
-// intToString avoids depending on strconv just to format a small index.
-func intToString(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var digits [20]byte
-	i := len(digits)
-	for n > 0 {
-		i--
-		digits[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(digits[i:])
 }

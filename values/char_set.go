@@ -36,6 +36,13 @@ const MaxCodepoint rune = 0x10FFFF
 //  3. Non-empty: Lo <= Hi
 //  4. Codepoint-valid: 0 <= Lo, Hi <= MaxCodepoint
 type CharSet struct {
+	// ranges holds canonical inversion-list form.
+	//
+	// INVARIANT: never mutated after construction. All() and Codepoints()
+	// yield directly from this slice without defensive copy; the
+	// process-global namedCharSets cache and eq? identity rely on this.
+	// If you find yourself adding a Mutate/AddRange/SetRanges method,
+	// stop — return a new *CharSet via NewCharSetFromUnsortedRanges instead.
 	ranges []CharSetRange
 }
 
@@ -133,10 +140,12 @@ func NewCharSetFromRunes(runes []rune) *CharSet {
 // Ranges returns a copy of the canonical range slice. Caller may mutate
 // the returned slice without affecting the CharSet.
 //
-// Most read-only iteration callers should prefer All (no allocation) or
-// Codepoints. Ranges is retained for callers that genuinely need a slice:
-// dual-cursor merge algorithms (intersect, difference) and the union builder
-// that uses append on the result.
+// Most read-only iteration callers should prefer All or Codepoints —
+// those avoid the O(n) defensive slice copy this method performs (they
+// allocate a single iterator closure instead, which is cheaper for any
+// non-empty CharSet). Ranges is retained for callers that genuinely
+// need a slice: dual-cursor merge algorithms (intersect, difference)
+// and the union builder that uses append on the result.
 func (p *CharSet) Ranges() []CharSetRange {
 	if p == nil || len(p.ranges) == 0 {
 		return nil
@@ -147,9 +156,12 @@ func (p *CharSet) Ranges() []CharSetRange {
 }
 
 // All returns an iter.Seq that yields each canonical range in codepoint
-// ascending order. Caller breaks the loop with `break` to early-exit. No
-// allocation — yields directly from the internal slice. Safe because
-// *CharSet is immutable.
+// ascending order. Caller breaks the loop with `break` to early-exit.
+//
+// Cost: one closure allocation per accessor call (the iterator captures
+// p). No O(n) slice copy — yields directly from the internal slice, which
+// is safe because *CharSet is immutable. Strictly cheaper than Ranges()
+// for any non-empty CharSet.
 //
 // Naming follows Go stdlib convention (slices.All, maps.All).
 func (p *CharSet) All() iter.Seq[CharSetRange] {

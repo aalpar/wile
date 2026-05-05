@@ -25,9 +25,9 @@ import (
 func SequenceLength[T interface{ Length() int }](
 	mc machine.CallContext,
 	sentinel error,
-	name string,
+	typeName, name string,
 ) error {
-	seq, err := RequireArg[T](mc, 0, sentinel, name)
+	seq, err := RequireArg[T](mc, 0, sentinel, typeName, name)
 	if err != nil {
 		return err
 	}
@@ -42,10 +42,10 @@ func SequenceLength[T interface{ Length() int }](
 func SequenceRef[T interface{ Length() int }](
 	mc machine.CallContext,
 	sentinel error,
-	name string,
+	typeName, name string,
 	getElement func(T, int) values.Value,
 ) error {
-	seq, err := RequireArg[T](mc, 0, sentinel, name)
+	seq, err := RequireArg[T](mc, 0, sentinel, typeName, name)
 	if err != nil {
 		return err
 	}
@@ -63,10 +63,10 @@ func SequenceRef[T interface{ Length() int }](
 func SequenceSet[T interface{ Length() int }](
 	mc machine.CallContext,
 	sentinel error,
-	name string,
+	typeName, name string,
 	setElement func(T, int, machine.CallContext) error,
 ) error {
-	seq, err := RequireArg[T](mc, 0, sentinel, name)
+	seq, err := RequireArg[T](mc, 0, sentinel, typeName, name)
 	if err != nil {
 		return err
 	}

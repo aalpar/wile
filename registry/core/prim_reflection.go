@@ -327,7 +327,7 @@ func PrimDocTopics(mc machine.CallContext) error {
 // PrimDocTopic implements (doc-topic category).
 // Returns a sorted list of symbols in the named category.
 func PrimDocTopic(mc machine.CallContext) error {
-	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "doc-topic")
+	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "doc-topic")
 	if err != nil {
 		return err
 	}
@@ -395,7 +395,7 @@ func PrimLibraryDescription(mc machine.CallContext) error {
 // sources: primitives, binding specs, doc entries, environment bindings,
 // loaded libraries, and unloaded library exports.
 func PrimApropos(mc machine.CallContext) error {
-	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "apropos")
+	s, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "apropos")
 	if err != nil {
 		return err
 	}

@@ -29,7 +29,7 @@ import (
 // Creates a single directory level. Errors if it already exists or
 // the parent is missing (no recursive mkdir -p behavior).
 func PrimCreateDirectory(mc machine.CallContext) error {
-	path, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "create-directory")
+	path, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "create-directory")
 	if err != nil {
 		return err
 	}
@@ -52,7 +52,7 @@ func PrimCreateDirectory(mc machine.CallContext) error {
 // PrimDeleteDirectory implements the (delete-directory) primitive.
 // Removes an empty directory. Errors if not empty, nonexistent, or not a directory.
 func PrimDeleteDirectory(mc machine.CallContext) error {
-	path, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "delete-directory")
+	path, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "delete-directory")
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func PrimDeleteDirectory(mc machine.CallContext) error {
 // Returns a list of filename strings in the directory, excluding "." and "..".
 // Names are filenames only (not full paths).
 func PrimDirectoryFiles(mc machine.CallContext) error {
-	path, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "directory-files")
+	path, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "directory-files")
 	if err != nil {
 		return err
 	}
@@ -132,7 +132,7 @@ func PrimCurrentDirectory(mc machine.CallContext) error {
 // goroutines race on the same OS state. This is inherent to POSIX — there
 // is no per-thread working directory.
 func PrimSetCurrentDirectory(mc machine.CallContext) error {
-	path, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "set-current-directory!")
+	path, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "set-current-directory!")
 	if err != nil {
 		return err
 	}

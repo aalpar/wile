@@ -36,7 +36,7 @@ func PrimMakeRecordType(mc machine.CallContext) error {
 	nameArg := mc.Arg(0)
 	fieldNamesArg := mc.Arg(1)
 
-	name, err := helpers.RequireType[*values.Symbol](nameArg, werr.ErrNotASymbol, "make-record-type")
+	name, err := helpers.RequireType[*values.Symbol](nameArg, werr.ErrNotASymbol, "a symbol", "make-record-type")
 	if err != nil {
 		return err
 	}
@@ -57,7 +57,7 @@ func PrimMakeOpaqueRecordType(mc machine.CallContext) error {
 	nameArg := mc.Arg(0)
 	fieldNamesArg := mc.Arg(1)
 
-	name, err := helpers.RequireType[*values.Symbol](nameArg, werr.ErrNotASymbol, "make-opaque-record-type")
+	name, err := helpers.RequireType[*values.Symbol](nameArg, werr.ErrNotASymbol, "a symbol", "make-opaque-record-type")
 	if err != nil {
 		return err
 	}
@@ -89,7 +89,7 @@ var PrimIsRecord = helpers.MakeTypePredicate(func(o values.Value) bool {
 // Returns the record type of a record instance.
 // Errors if the record's type is opaque.
 func PrimRecordType(mc machine.CallContext) error {
-	rec, err := helpers.RequireArg[*values.Record](mc, 0, werr.ErrNotARecord, "record-type")
+	rec, err := helpers.RequireArg[*values.Record](mc, 0, werr.ErrNotARecord, "a record", "record-type")
 	if err != nil {
 		return err
 	}
@@ -106,7 +106,7 @@ func PrimRecordConstructor(mc machine.CallContext) error {
 	rtArg := mc.Arg(0)
 	fieldTagsArg := mc.Arg(1)
 
-	rt, err := helpers.RequireType[*values.RecordType](rtArg, werr.ErrNotARecordType, "record-constructor")
+	rt, err := helpers.RequireType[*values.RecordType](rtArg, werr.ErrNotARecordType, "a record type", "record-constructor")
 	if err != nil {
 		return err
 	}
@@ -135,7 +135,7 @@ func PrimRecordConstructor(mc machine.CallContext) error {
 // PrimRecordPredicate implements the (record-predicate rt) primitive.
 // Returns a predicate procedure for the record type.
 func PrimRecordPredicate(mc machine.CallContext) error {
-	rt, err := helpers.RequireArg[*values.RecordType](mc, 0, werr.ErrNotARecordType, "record-predicate")
+	rt, err := helpers.RequireArg[*values.RecordType](mc, 0, werr.ErrNotARecordType, "a record type", "record-predicate")
 	if err != nil {
 		return err
 	}
@@ -151,12 +151,12 @@ func resolveRecordField(
 	mc machine.CallContext, name string,
 	makeClosure func(*environment.EnvironmentFrame, *values.RecordType, int) *machine.ForeignClosure,
 ) error {
-	rt, err := helpers.RequireArg[*values.RecordType](mc, 0, werr.ErrNotARecordType, name)
+	rt, err := helpers.RequireArg[*values.RecordType](mc, 0, werr.ErrNotARecordType, "a record type", name)
 	if err != nil {
 		return err
 	}
 
-	fieldTag, err := helpers.RequireType[*values.Symbol](mc.Arg(1), werr.ErrNotASymbol, name)
+	fieldTag, err := helpers.RequireType[*values.Symbol](mc.Arg(1), werr.ErrNotASymbol, "a symbol", name)
 	if err != nil {
 		return err
 	}

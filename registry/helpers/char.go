@@ -15,6 +15,9 @@
 package helpers
 
 import (
+	"context"
+	"errors"
+
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
@@ -40,33 +43,60 @@ func CharCompare(mc machine.CallContext, name string, cmp func(a, b rune) bool) 
 // CharCompareVariadic is a helper for variadic character comparison primitives.
 // It extracts characters from the variadic args and applies the comparator pairwise.
 func CharCompareVariadic(mc machine.CallContext, name string, cmp func(a, b rune) bool) error {
-	return CompareVariadic(mc, name, werr.ErrNotACharacter,
+	return CompareVariadic(mc, name, werr.ErrNotACharacter, "a character",
 		func(c *values.Character) rune { return c.Value }, cmp)
 }
 
 // CompareVariadic implements pairwise chain comparison over a homogeneous
-// variadic list. It collects fixed+rest args of type T via VariadicArgs, then
-// applies cmp to every consecutive pair after extracting the underlying value
-// V from each. Sets #t if all pairs satisfy cmp, #f on the first failure.
+// variadic list with short-circuit on first failed pair.
+//
+// Type-checks and compares each rest element as it walks the list — does
+// NOT pre-materialize all args. This preserves the historical behavior:
+// `(char<? #\b #\a not-a-char)` returns #f via cmp(#\b, #\a)→false without
+// ever inspecting the third (ill-typed) argument. Going through VariadicArgs
+// would type-check all elements first, raising a type error instead.
 //
 // Used for comparison primitives like char<?, string<?, etc. where the call
-// shape is `(op a b c ...)` with all args of the same type.
+// shape is `(op a b c ...)` with all args of the same type. Short-circuit
+// on cmp failure uses werr.ErrCannotCompare as a non-error signal, matching
+// the NumericChainCompare pattern.
 func CompareVariadic[T values.Value, V any](
 	mc machine.CallContext,
 	name string,
 	sentinel error,
+	typeName string,
 	extract func(T) V,
 	cmp func(V, V) bool,
 ) error {
-	args, err := VariadicArgs[T](mc, 2, sentinel, name)
+	first, err := RequireArg[T](mc, 0, sentinel, typeName, name)
 	if err != nil {
 		return err
 	}
-	for i := 1; i < len(args); i++ {
-		if !cmp(extract(args[i-1]), extract(args[i])) {
-			mc.SetValue(values.FalseValue)
-			return nil
+	prev := extract(first)
+	rest, err := RequireTuple(mc, 1, name)
+	if err != nil {
+		return err
+	}
+	err = ForEachList(mc.Context(), rest, name, func(_ context.Context, i int, _ bool, v values.Value) error {
+		elem, ok := v.(T)
+		if !ok {
+			return werr.WrapForeignErrorf(sentinel,
+				"%s: argument %d: expected %s but got %T",
+				name, i+2, typeName, v)
 		}
+		current := extract(elem)
+		if !cmp(prev, current) {
+			return werr.ErrCannotCompare
+		}
+		prev = current
+		return nil
+	})
+	if errors.Is(err, werr.ErrCannotCompare) {
+		mc.SetValue(values.FalseValue)
+		return nil
+	}
+	if err != nil {
+		return err
 	}
 	mc.SetValue(values.TrueValue)
 	return nil

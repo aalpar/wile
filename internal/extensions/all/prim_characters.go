@@ -96,7 +96,7 @@ func simpleCaseFold(r rune) rune {
 // R7RS §6.6: Returns the numeric value (0-9) of a character that is a decimal digit
 // according to Unicode, or #f if it is not a decimal digit.
 func PrimDigitValue(mc machine.CallContext) error {
-	ch, err := helpers.RequireArg[*values.Character](mc, 0, werr.ErrNotACharacter, "digit-value")
+	ch, err := helpers.RequireArg[*values.Character](mc, 0, werr.ErrNotACharacter, "a character", "digit-value")
 	if err != nil {
 		return err
 	}

@@ -46,7 +46,7 @@ func namespaceEnvMap(mc machine.CallContext) map[string]string {
 // When the Namespace has a non-nil EnvMap, reads from the virtual map;
 // otherwise falls through to os.LookupEnv gated by the authorizer.
 func PrimGetEnvironmentVariable(mc machine.CallContext) error {
-	name, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "get-environment-variable")
+	name, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "get-environment-variable")
 	if err != nil {
 		return err
 	}
