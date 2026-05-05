@@ -810,6 +810,10 @@ func makeNamedCharSet(name string) (*values.CharSet, error) {
 // Handles both Range16 (BMP, codepoints ≤ 0xFFFF) and Range32 (supplementary
 // planes). Stride > 1 means the range covers every Stride-th codepoint;
 // expand into per-stride unit ranges.
+//
+// NOTE: the loop variable must be promoted to uint32 for R16 ranges. Using
+// uint16 directly (the element type of Range16 fields) overflows when
+// hi + stride > 65535, producing wraparound values that contaminate the set.
 func rangeTableToCharSet(t *unicode.RangeTable) *values.CharSet {
 	var rs []values.CharSetRange
 	for _, r := range t.R16 {
@@ -817,7 +821,8 @@ func rangeTableToCharSet(t *unicode.RangeTable) *values.CharSet {
 			rs = append(rs, values.CharSetRange{Lo: rune(r.Lo), Hi: rune(r.Hi)})
 			continue
 		}
-		for cp := r.Lo; cp <= r.Hi; cp += r.Stride {
+		// Promote to uint32 to avoid uint16 wraparound when lo + stride > 65535.
+		for cp := uint32(r.Lo); cp <= uint32(r.Hi); cp += uint32(r.Stride) {
 			rs = append(rs, values.CharSetRange{Lo: rune(cp), Hi: rune(cp)})
 		}
 	}

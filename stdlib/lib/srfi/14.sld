@@ -1,6 +1,10 @@
 ;; SRFI-14 Character-Set Library
 ;;
-;; Status: Phase 3 complete — iteration / query layer (fold, for-each, map,
+;; Status: Phase 4 complete — 17 named char-set constants (letter, lower-case,
+;;          upper-case, title-case, digit, letter+digit, graphic, printing,
+;;          whitespace, iso-control, punctuation, symbol, hex-digit, blank,
+;;          ascii, empty, full).
+;;          Phase 3 complete — iteration / query layer (fold, for-each, map,
 ;;          filter, count, every, any, unfold).
 ;;
 ;; Cuts deferred from v1 (per plans/2026-05-04-srfi-14-design.md §11):
@@ -43,7 +47,13 @@
     ;; Phase 3 Task 3.3: count + short-circuit predicates
     char-set-count char-set-every char-set-any
     ;; Phase 3 Task 3.4: unfold
-    char-set-unfold char-set-unfold!)
+    char-set-unfold char-set-unfold!
+    ;; Phase 4 Task 4.2: named char-set constants
+    char-set:letter char-set:lower-case char-set:upper-case char-set:title-case
+    char-set:digit char-set:letter+digit char-set:graphic char-set:printing
+    char-set:whitespace char-set:iso-control char-set:punctuation char-set:symbol
+    char-set:hex-digit char-set:blank
+    char-set:ascii char-set:empty char-set:full)
 
   (import (scheme base)
           (wile charsets))   ; for char-set-ranges, used by util.scm
@@ -56,4 +66,5 @@
   (include "14/dispatcher.scm")
   (include "14/algebra.scm")
   (include "14/util.scm")
-  (include "14/iteration.scm"))
+  (include "14/iteration.scm")
+  (include "14/named-sets.scm"))

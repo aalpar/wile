@@ -183,6 +183,11 @@ func TestSRFI14Iteration(t *testing.T) {
 	runSchemeTest(t, "srfi-14-tests-iteration.scm", 2*time.Minute, "SRFI-14 Phase 3 (iteration)")
 }
 
+// TestSRFI14NamedSets runs the SRFI-14 Phase-4 (17 named char-set constants) integration tests.
+func TestSRFI14NamedSets(t *testing.T) {
+	runSchemeTest(t, "srfi-14-tests-named-sets.scm", 2*time.Minute, "SRFI-14 Phase 4 (named sets)")
+}
+
 // TestWileStrings runs the (wile strings) extras integration tests.
 func TestWileStrings(t *testing.T) {
 	runSchemeTest(t, "wile-strings-tests.scm", 2*time.Minute, "(wile strings) extras")
