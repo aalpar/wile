@@ -299,7 +299,7 @@ func PrimPeekChar(mc machine.CallContext) error {
 	// Unread the character so it can be read again
 	err = reader.UnreadRune()
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "peek-char: error unreading character")
+		return werr.WrapForeignReadErrorf(err, "peek-char: error unreading character")
 	}
 	mc.SetValue(values.NewCharacter(r))
 	return nil
@@ -330,11 +330,22 @@ func PrimReadLine(mc machine.CallContext) error {
 		if r == '\n' {
 			break
 		}
-		// Handle \r\n by discarding \r if followed by \n
+		// Handle \r\n by discarding \r if followed by \n.
+		// Treat io.EOF after \r as line-ends-with-bare-\r at EOF; propagate
+		// any other read error (the unconsumed character is lost otherwise).
+		// If the lookahead char is non-\n, push it back; an UnreadRune
+		// failure corrupts the read state and must be surfaced as a
+		// read-error per R7RS §6.11.
 		if r == '\r' {
 			nextR, _, err := reader.ReadRune()
+			if err != nil && !errors.Is(err, io.EOF) {
+				return werr.WrapForeignReadErrorf(err, "read-line: error reading after carriage return")
+			}
 			if err == nil && nextR != '\n' {
-				reader.UnreadRune() //nolint:errcheck
+				err = reader.UnreadRune()
+				if err != nil {
+					return werr.WrapForeignReadErrorf(err, "read-line: error unreading character after carriage return")
+				}
 			}
 			break
 		}
