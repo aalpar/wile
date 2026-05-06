@@ -279,6 +279,11 @@ func TestNewTypeSentinel_AutoArticle(t *testing.T) {
 		// form (e.g. NewTypeSentinel("an hour"), NewTypeSentinel("a user")).
 		{"phonetic exception hour (silent h, letter rule wrong)", "hour", "a hour", "not a hour"},
 		{"phonetic exception user (yu sound, letter rule wrong)", "user", "an user", "not an user"},
+		// Non-letter leading characters: the byte-indexed switch returns "a"
+		// for anything that isn't a vowel letter. These cases pin the
+		// behavior for digit and punctuation initials.
+		{"digit leading", "8-byte value", "a 8-byte value", "not a 8-byte value"},
+		{"hyphen leading", "-prefixed type", "a -prefixed type", "not a -prefixed type"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

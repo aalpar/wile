@@ -16,6 +16,7 @@ package helpers
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"unicode"
 
@@ -118,6 +119,26 @@ func TestMakeNumericPredicate_Errors(t *testing.T) {
 			c.Assert(errors.Is(err, werr.ErrNotANumber), qt.IsTrue)
 		})
 	}
+}
+
+// TestMakeNumericPredicate_ErrorMessageContainsTypeName pins that the
+// predicate-mismatch error surfaces the sentinel's TypeName via
+// RequireArg's plumbing. MakeNumericPredicate delegates to RequireArg
+// internally, so this is a delegation-seam guard.
+func TestMakeNumericPredicate_ErrorMessageContainsTypeName(t *testing.T) {
+	c := qt.New(t)
+	isExact := MakeNumericPredicate[values.Number](
+		"exact?",
+		werr.ErrNotANumber,
+		func(n values.Number) bool {
+			return n.IsExact()
+		},
+	)
+	mc := makeMC(values.NewString("not-a-number"))
+	err := isExact(mc)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(strings.Contains(err.Error(), "expected a number"), qt.IsTrue,
+		qt.Commentf("MakeNumericPredicate should surface TypeName: %q", err.Error()))
 }
 
 // ── MakeCharPredicate ────────────────────────────────────────────────

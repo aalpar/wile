@@ -166,15 +166,35 @@ func TestRequireArg_ErrorMessageContainsTypeName(t *testing.T) {
 // a double space. This is a misuse path; the test makes the contract
 // explicit so a future refactor that turns this into a louder failure
 // (e.g., a runtime guard) doesn't accidentally break callers.
+//
+// ErrInvalidArgument is the most representative misuse — it's the
+// catch-all that the new type-sentinel API is replacing across the
+// codebase, so a contributor reaching for it before noticing the
+// type-sentinel pattern is the realistic failure mode.
 func TestRequireType_NonTypeSentinel_DegradedMessage(t *testing.T) {
 	c := qt.New(t)
-	nonTypeSentinel := werr.ErrFileNotFound // NewStaticError, no TypeName
+	nonTypeSentinel := werr.ErrInvalidArgument // NewStaticError, no TypeName
 	v := values.NewInteger(42)
 	_, err := RequireType[*values.Vector](v, nonTypeSentinel, "test")
 	c.Assert(err, qt.IsNotNil)
 	// Double space between "expected" and "but" because TypeName is empty.
 	c.Assert(strings.Contains(err.Error(), "expected  but got"), qt.IsTrue,
 		qt.Commentf("non-type sentinel should produce empty type phrase: %q", err.Error()))
+}
+
+// TestTypeNameFromSentinel_WrappedSentinel pins that typeNameFromSentinel
+// uses errors.As, so a sentinel wrapped one or more layers deep still
+// surfaces its TypeName. Documents the contract that helpers tolerate
+// pre-wrapped error inputs.
+func TestTypeNameFromSentinel_WrappedSentinel(t *testing.T) {
+	c := qt.New(t)
+	// Wrap the sentinel one layer.
+	wrapped := werr.WrapForeignErrorf(werr.ErrNotAVector, "outer context")
+	v := values.NewInteger(42)
+	_, err := RequireType[*values.Vector](v, wrapped, "test")
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(strings.Contains(err.Error(), "expected a vector"), qt.IsTrue,
+		qt.Commentf("wrapped sentinel should still surface TypeName: %q", err.Error()))
 }
 
 // TestOptionalArg_ErrorMessageContainsTypeName pins the same plumbing for
