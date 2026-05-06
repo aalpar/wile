@@ -274,6 +274,12 @@ func TestNewTypeSentinel_AutoArticle(t *testing.T) {
 		{"pass-through a", "a once", "a once", "not a once"},
 		{"pass-through an", "an apple", "an apple", "not an apple"},
 		{"empty noun defaults to a", "", "a ", "not a "},
+		// Phonetic exceptions the letter rule does NOT handle.
+		// These cases produce grammatically wrong but unambiguous output;
+		// callers needing the correct article must use the pass-through
+		// form (e.g. NewTypeSentinel("an hour"), NewTypeSentinel("a user")).
+		{"phonetic exception hour (silent h, letter rule wrong)", "hour", "a hour", "not a hour"},
+		{"phonetic exception user (yu sound, letter rule wrong)", "user", "an user", "not an user"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

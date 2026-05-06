@@ -68,7 +68,7 @@ func PrimEval(cc machine.CallContext) error {
 		envSpec := restTuple.Car()
 		topLevelEnv, ok = envSpec.(*environment.Namespace)
 		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "eval: expected an environment specifier but got %T", envSpec)
+			return werr.WrapForeignErrorf(werr.ErrNotANamespace, "eval: expected an environment specifier but got %T", envSpec)
 		}
 		// Reject extra arguments beyond the environment
 		envRest, _ := restTuple.Cdr().(values.Tuple)

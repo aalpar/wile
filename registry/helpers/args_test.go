@@ -96,6 +96,84 @@ func TestRequireType_Failure_NilValue(t *testing.T) {
 	c.Assert(errors.Is(err, werr.ErrNotAVector), qt.IsTrue)
 }
 
+// TestRequireType_ErrorMessageContainsTypeName pins the end-to-end plumbing
+// from sentinel.TypeName() through typeNameFromSentinel into the formatted
+// error string. Without this test, a future refactor that breaks the
+// errors.As cast in typeNameFromSentinel (e.g., changing *werr.StaticError
+// to a value type, or switching the lookup mechanism) would silently
+// degrade every primitive's type-mismatch message to "expected  but got
+// *Foo" — with TestTypeSentinelsCarryTypeName still passing because the
+// sentinel itself carries TypeName; only the helpers' use of it would
+// have broken.
+func TestRequireType_ErrorMessageContainsTypeName(t *testing.T) {
+	tcs := []struct {
+		name       string
+		sentinel   *werr.StaticError
+		wantPhrase string
+	}{
+		{"vector", werr.ErrNotAVector, "expected a vector"},
+		{"integer", werr.ErrNotAnInteger, "expected an integer"},
+		{"char-set", werr.ErrNotACharSet, "expected a char-set"},
+		{"namespace", werr.ErrNotANamespace, "expected a namespace"},
+		{"once (pass-through article)", werr.ErrNotAOnce, "expected a once"},
+		{"opaque value (vowel)", werr.ErrNotAnOpaqueValue, "expected an opaque value"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			v := values.NewString("not-the-expected-type")
+			_, err := RequireType[*values.Vector](v, tc.sentinel, "test-prim")
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(strings.Contains(err.Error(), tc.wantPhrase), qt.IsTrue,
+				qt.Commentf("error %q missing phrase %q", err.Error(), tc.wantPhrase))
+		})
+	}
+}
+
+// TestRequireArg_ErrorMessageContainsTypeName covers the same plumbing for
+// RequireArg, which has its own format string. RequireArg and RequireType
+// share typeNameFromSentinel but produce subtly different messages
+// ("argument N: expected X" vs "expected X").
+func TestRequireArg_ErrorMessageContainsTypeName(t *testing.T) {
+	tcs := []struct {
+		name       string
+		sentinel   *werr.StaticError
+		wantPhrase string
+	}{
+		{"string", werr.ErrNotAString, "expected a string"},
+		{"integer", werr.ErrNotAnInteger, "expected an integer"},
+		{"input port (vowel)", werr.ErrNotAnInputPort, "expected an input port"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			args := []values.Value{values.NewInteger(42)}
+			mc := &stubCallContext{args: args}
+			_, err := RequireArg[*values.Vector](mc, 0, tc.sentinel, "test-prim")
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(strings.Contains(err.Error(), tc.wantPhrase), qt.IsTrue,
+				qt.Commentf("error %q missing phrase %q", err.Error(), tc.wantPhrase))
+		})
+	}
+}
+
+// TestRequireType_NonTypeSentinel_DegradedMessage pins the documented
+// silent-degradation behavior: passing a non-type sentinel (constructed
+// via NewStaticError, no TypeName) produces "expected  but got ..." with
+// a double space. This is a misuse path; the test makes the contract
+// explicit so a future refactor that turns this into a louder failure
+// (e.g., a runtime guard) doesn't accidentally break callers.
+func TestRequireType_NonTypeSentinel_DegradedMessage(t *testing.T) {
+	c := qt.New(t)
+	nonTypeSentinel := werr.ErrFileNotFound // NewStaticError, no TypeName
+	v := values.NewInteger(42)
+	_, err := RequireType[*values.Vector](v, nonTypeSentinel, "test")
+	c.Assert(err, qt.IsNotNil)
+	// Double space between "expected" and "but" because TypeName is empty.
+	c.Assert(strings.Contains(err.Error(), "expected  but got"), qt.IsTrue,
+		qt.Commentf("non-type sentinel should produce empty type phrase: %q", err.Error()))
+}
+
 // TestRequireArg_PositionInIndex pins the 1-indexed argument-position format
 // in RequireArg's wrapped error message. Future drift (e.g., re-collapsing
 // RequireArg into RequireType for DRY) would silently lose the position.

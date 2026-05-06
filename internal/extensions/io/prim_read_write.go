@@ -39,6 +39,12 @@ const (
 // resolves the default. Returns (zero, nil, false, error) on type mismatch
 // or malformed input. The expected-type phrase is read from the sentinel
 // via errSentinel.TypeName().
+//
+// errSentinel MUST be constructed via werr.NewTypeSentinel (not
+// werr.NewStaticError) — otherwise TypeName() returns "" and the type
+// mismatch message degrades to "expected  but got *Foo". All current
+// callers use type sentinels (ErrNotAnInputPort, ErrNotAnOutputPort,
+// ErrNotAByteInputPort, ErrNotAByteOutputPort).
 func extractPort[T any](
 	o values.Value,
 	name string,
