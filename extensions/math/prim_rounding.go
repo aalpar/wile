@@ -51,7 +51,7 @@ func makeRealNumberPrimitive(op realNumberOp) func(machine.CallContext) error {
 		case *values.Rational:
 			mc.SetValue(op.rationalOp(v))
 		default:
-			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a real number but got %T", op.name, o)
+			return werr.WrapForeignErrorf(werr.ErrNotAReal, "%s: expected a real number but got %T", op.name, o)
 		}
 		return nil
 	}

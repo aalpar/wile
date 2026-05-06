@@ -104,7 +104,7 @@ func PrimWriteU8(mc machine.CallContext) error {
 		}
 		b = byte(v.Value)
 	default:
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "write-u8: expected an exact integer but got %T", byteVal)
+		return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "write-u8: expected an exact integer but got %T", byteVal)
 	}
 
 	p, _, err := getRequiredBinaryOutputPort(mc.Arg(1), "write-u8")

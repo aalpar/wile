@@ -323,7 +323,7 @@ func TestToFloat64_Errors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := ToFloat64(tc.input)
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, werr.ErrNotANumber), qt.IsTrue)
+			c.Assert(errors.Is(err, werr.ErrNotAReal), qt.IsTrue)
 		})
 	}
 }
@@ -409,7 +409,7 @@ func TestExtractReal_Errors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, _, err := ExtractReal(tc.input, "test-op")
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, werr.ErrNotANumber), qt.IsTrue)
+			c.Assert(errors.Is(err, werr.ErrNotAReal), qt.IsTrue)
 		})
 	}
 }

@@ -234,7 +234,7 @@ func TestExtractInteger(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				_, _, _, err := ExtractInteger(tc.input, "test")
 				c.Assert(err, qt.IsNotNil)
-				c.Assert(errors.Is(err, werr.ErrNotANumber), qt.IsTrue)
+				c.Assert(errors.Is(err, werr.ErrNotAnInteger), qt.IsTrue)
 			})
 		}
 	})
@@ -534,43 +534,43 @@ func TestIntegerFold_Errors(t *testing.T) {
 			"gcd non-integer argument string",
 			FoldOpGCD, 0,
 			values.List(values.NewString("hello")),
-			werr.ErrNotANumber,
+			werr.ErrNotAnInteger,
 		},
 		{
 			"lcm non-integer argument boolean",
 			FoldOpLCM, 1,
 			values.List(values.TrueValue),
-			werr.ErrNotANumber,
+			werr.ErrNotAnInteger,
 		},
 		{
 			"gcd non-integer float NaN",
 			FoldOpGCD, 0,
 			values.List(values.NewFloat(math.NaN())),
-			werr.ErrNotANumber,
+			werr.ErrNotAnInteger,
 		},
 		{
 			"gcd non-integer float +Inf",
 			FoldOpGCD, 0,
 			values.List(values.NewFloat(math.Inf(1))),
-			werr.ErrNotANumber,
+			werr.ErrNotAnInteger,
 		},
 		{
 			"gcd non-integer float -Inf",
 			FoldOpGCD, 0,
 			values.List(values.NewFloat(math.Inf(-1))),
-			werr.ErrNotANumber,
+			werr.ErrNotAnInteger,
 		},
 		{
 			"gcd non-integer float 3.5",
 			FoldOpGCD, 0,
 			values.List(values.NewFloat(3.5)),
-			werr.ErrNotANumber,
+			werr.ErrNotAnInteger,
 		},
 		{
 			"lcm non-integer float 2.7",
 			FoldOpLCM, 1,
 			values.List(values.NewFloat(2.7)),
-			werr.ErrNotANumber,
+			werr.ErrNotAnInteger,
 		},
 		{
 			"gcd non-list argument",
@@ -588,13 +588,13 @@ func TestIntegerFold_Errors(t *testing.T) {
 			"gcd mixed valid and invalid",
 			FoldOpGCD, 0,
 			values.List(values.NewInteger(12), values.NewString("bad")),
-			werr.ErrNotANumber,
+			werr.ErrNotAnInteger,
 		},
 		{
 			"lcm NaN after valid integer",
 			FoldOpLCM, 1,
 			values.List(values.NewInteger(4), values.NewFloat(math.NaN())),
-			werr.ErrNotANumber,
+			werr.ErrNotAnInteger,
 		},
 	}
 

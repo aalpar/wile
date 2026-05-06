@@ -254,7 +254,7 @@ func NumericChainCompareReal(
 						return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a number but got %T", name, val)
 					}
 					if isNonRealComplex(prev) || isNonRealComplex(curr) {
-						return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: requires real arguments", name)
+						return werr.WrapForeignErrorf(werr.ErrNotAReal, "%s: requires real arguments", name)
 					}
 					mc.SetValue(values.BoolToBoolean(!fails(prev, curr)))
 					return nil
@@ -267,7 +267,7 @@ func NumericChainCompareReal(
 	err := NumericChainCompare(mc, name, func(prev, curr values.Number) bool {
 		if isNonRealComplex(prev) || isNonRealComplex(curr) {
 			complexErr = werr.WrapForeignErrorf(
-				werr.ErrNotANumber, "%s: requires real arguments", name,
+				werr.ErrNotAReal, "%s: requires real arguments", name,
 			)
 			return true
 		}

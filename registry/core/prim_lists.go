@@ -196,7 +196,7 @@ func PrimListRef(mc machine.CallContext) error {
 	k := mc.Arg(1)
 	idx, ok := values.ExactInteger(k)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "list-ref: expected an exact integer index but got %T", k)
+		return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "list-ref: expected an exact integer index but got %T", k)
 	}
 	if idx < 0 {
 		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "list-ref: index must be non-negative")
@@ -234,7 +234,7 @@ func PrimListSet(mc machine.CallContext) error {
 
 	idx, ok := values.ExactInteger(idxVal)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "list-set!: expected an exact integer index but got %T", idxVal)
+		return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "list-set!: expected an exact integer index but got %T", idxVal)
 	}
 	k := int(idx)
 	if k < 0 {
@@ -263,7 +263,7 @@ func PrimListTail(mc machine.CallContext) error {
 	k := mc.Arg(1)
 	idx, ok := values.ExactInteger(k)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "list-tail: expected an exact integer index but got %T", k)
+		return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "list-tail: expected an exact integer index but got %T", k)
 	}
 	if idx < 0 {
 		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "list-tail: index must be non-negative")

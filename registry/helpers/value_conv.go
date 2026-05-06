@@ -85,7 +85,7 @@ func ToFloat64(v values.Value) (float64, error) {
 		f, _ := n.Rat().Float64()
 		return f, nil
 	default:
-		return 0, werr.WrapForeignErrorf(werr.ErrNotANumber, "expected a real number but got %T", v)
+		return 0, werr.WrapForeignErrorf(werr.ErrNotAReal, "expected a real number but got %T", v)
 	}
 }
 
@@ -109,6 +109,6 @@ func ExtractReal(v values.Value, name string) (float64, bool, error) {
 		f, _ := n.BigFloatValue().Float64()
 		return f, false, nil
 	default:
-		return 0, false, werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a real number but got %T", name, v)
+		return 0, false, werr.WrapForeignErrorf(werr.ErrNotAReal, "%s: expected a real number but got %T", name, v)
 	}
 }

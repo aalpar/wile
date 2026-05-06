@@ -119,7 +119,7 @@ func PrimRationalize(mc machine.CallContext) error {
 		}
 		xExact = false
 	default:
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "rationalize: expected a real number for x but got %T", xArg)
+		return werr.WrapForeignErrorf(werr.ErrNotAReal, "rationalize: expected a real number for x but got %T", xArg)
 	}
 
 	switch v := yArg.(type) {
@@ -136,7 +136,7 @@ func PrimRationalize(mc machine.CallContext) error {
 		}
 		yExact = false
 	default:
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "rationalize: expected a real number for y but got %T", yArg)
+		return werr.WrapForeignErrorf(werr.ErrNotAReal, "rationalize: expected a real number for y but got %T", yArg)
 	}
 
 	if y.Sign() < 0 {
@@ -255,6 +255,6 @@ func PrimExactIntegerSqrt(mc machine.CallContext) error {
 		return nil
 
 	default:
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "exact-integer-sqrt: expected an exact integer but got %T", o)
+		return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "exact-integer-sqrt: expected an exact integer but got %T", o)
 	}
 }

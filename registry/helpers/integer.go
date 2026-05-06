@@ -65,14 +65,14 @@ func extractIntegerArg(v values.Value, name string) (int64, bool, error) {
 	case *values.Float:
 		// Check if the float represents an integer
 		if math.IsNaN(n.Value) || math.IsInf(n.Value, 0) {
-			return 0, false, werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %v", name, n.Value)
+			return 0, false, werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %v", name, n.Value)
 		}
 		if n.Value != math.Trunc(n.Value) {
-			return 0, false, werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %v", name, n.Value)
+			return 0, false, werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %v", name, n.Value)
 		}
 		return int64(n.Value), true, nil
 	default:
-		return 0, false, werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %T", name, v)
+		return 0, false, werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %T", name, v)
 	}
 }
 
@@ -126,14 +126,14 @@ func IntegerFold(
 		case *values.Float:
 			// Check if it represents an integer
 			if math.IsNaN(v.Value) || math.IsInf(v.Value, 0) {
-				return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %v", name, v.Value)
+				return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %v", name, v.Value)
 			}
 			if v.Value != math.Trunc(v.Value) {
-				return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %v", name, v.Value)
+				return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %v", name, v.Value)
 			}
 			hasInexact = true
 		default:
-			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %T", name, current.Car())
+			return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %T", name, current.Car())
 		}
 		cdr := current.Cdr()
 		if values.IsEmptyList(cdr) {
@@ -220,7 +220,7 @@ func integerFoldBig(
 		// Float should have been validated as integer in caller
 		result = big.NewInt(int64(v.Value))
 	default:
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %T", name, pr.Car())
+		return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %T", name, pr.Car())
 	}
 	result.Abs(result)
 
@@ -246,7 +246,7 @@ func integerFoldBig(
 			// Float should have been validated as integer in caller
 			val = big.NewInt(int64(n.Value))
 		default:
-			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %T", name, next)
+			return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %T", name, next)
 		}
 		val.Abs(val)
 
@@ -293,10 +293,10 @@ func ExtractInteger(v values.Value, name string) (int64, *big.Int, bool, error) 
 	case *values.Float:
 		// Check if it's an integer value
 		if math.IsInf(n.Value, 0) || math.IsNaN(n.Value) {
-			return 0, nil, false, werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %v", name, n.Value)
+			return 0, nil, false, werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %v", name, n.Value)
 		}
 		if math.Floor(n.Value) != n.Value {
-			return 0, nil, false, werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %v", name, n.Value)
+			return 0, nil, false, werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %v", name, n.Value)
 		}
 		// Check if it fits in int64
 		if n.Value >= -9223372036854775808 && n.Value <= 9223372036854775807 {
@@ -307,7 +307,7 @@ func ExtractInteger(v values.Value, name string) (int64, *big.Int, bool, error) 
 		bi, _ := bf.Int(nil)
 		return 0, bi, true, nil
 	default:
-		return 0, nil, false, werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %T", name, v)
+		return 0, nil, false, werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %T", name, v)
 	}
 }
 

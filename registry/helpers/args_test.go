@@ -113,8 +113,11 @@ func TestRequireType_ErrorMessageContainsTypeName(t *testing.T) {
 	}{
 		{"vector", werr.ErrNotAVector, "expected a vector"},
 		{"integer", werr.ErrNotAnInteger, "expected an integer"},
+		{"real number", werr.ErrNotAReal, "expected a real number"},
 		{"char-set", werr.ErrNotACharSet, "expected a char-set"},
 		{"namespace", werr.ErrNotANamespace, "expected a namespace"},
+		{"list", werr.ErrNotAList, "expected a list"},
+		{"symbol", werr.ErrNotASymbol, "expected a symbol"},
 		{"once (pass-through article)", werr.ErrNotAOnce, "expected a once"},
 		{"opaque value (vowel)", werr.ErrNotAnOpaqueValue, "expected an opaque value"},
 	}
@@ -172,6 +175,71 @@ func TestRequireType_NonTypeSentinel_DegradedMessage(t *testing.T) {
 	// Double space between "expected" and "but" because TypeName is empty.
 	c.Assert(strings.Contains(err.Error(), "expected  but got"), qt.IsTrue,
 		qt.Commentf("non-type sentinel should produce empty type phrase: %q", err.Error()))
+}
+
+// TestOptionalArg_ErrorMessageContainsTypeName pins the same plumbing for
+// OptionalArg's "wrong type" path. OptionalArg delegates to RequireType
+// internally; this test guards against a future refactor that breaks the
+// delegation seam.
+func TestOptionalArg_ErrorMessageContainsTypeName(t *testing.T) {
+	c := qt.New(t)
+	rest := &values.Pair{values.NewString("not-an-int"), values.EmptyList}
+	defaultInt := values.NewInteger(0)
+	_, err := OptionalArg[*values.Integer](rest, defaultInt, werr.ErrNotAnInteger, "test")
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(strings.Contains(err.Error(), "expected an integer"), qt.IsTrue,
+		qt.Commentf("error %q missing phrase 'expected an integer'", err.Error()))
+}
+
+// TestVariadicArgs_ErrorMessageContainsTypeName pins the rest-loop error
+// format in VariadicArgs. VariadicArgs has its own format string for the
+// rest-loop type-mismatch (separate from RequireArg's path); both must
+// independently produce the right phrase.
+func TestVariadicArgs_ErrorMessageContainsTypeName(t *testing.T) {
+	c := qt.New(t)
+	// fixed=2: arg(0) is fixed (integer), arg(1) is rest (list of integers).
+	// Put a string in the rest list to trigger the rest-loop error path.
+	args := []values.Value{
+		values.NewInteger(1),
+		&values.Pair{values.NewString("bad"), values.EmptyList},
+	}
+	mc := &stubCallContext{args: args}
+	_, err := VariadicArgs[*values.Integer](mc, 2, werr.ErrNotAnInteger, "test-prim")
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(strings.Contains(err.Error(), "expected an integer"), qt.IsTrue,
+		qt.Commentf("error %q missing phrase 'expected an integer'", err.Error()))
+}
+
+// TestVariadicArgs_NonTypeSentinel_DegradedMessage pins the silent-degradation
+// contract for VariadicArgs (same as RequireType's, but for VariadicArgs's
+// independent format string). A future refactor that breaks
+// typeNameFromSentinel for VariadicArgs would surface here.
+func TestVariadicArgs_NonTypeSentinel_DegradedMessage(t *testing.T) {
+	c := qt.New(t)
+	args := []values.Value{
+		values.NewInteger(1),
+		&values.Pair{values.NewString("bad"), values.EmptyList},
+	}
+	mc := &stubCallContext{args: args}
+	// werr.ErrFileNotFound is a NewStaticError sentinel, no TypeName.
+	_, err := VariadicArgs[*values.Integer](mc, 2, werr.ErrFileNotFound, "test-prim")
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(strings.Contains(err.Error(), "expected  but got"), qt.IsTrue,
+		qt.Commentf("non-type sentinel should produce empty type phrase: %q", err.Error()))
+}
+
+// TestRequireTuple_ErrorMessageContainsTypeName pins that RequireTuple's
+// error message reads the type phrase from werr.ErrNotAList rather than
+// hardcoding "a list". If ErrNotAList's TypeName changes (e.g., to
+// "proper list"), the message updates automatically.
+func TestRequireTuple_ErrorMessageContainsTypeName(t *testing.T) {
+	c := qt.New(t)
+	args := []values.Value{values.NewInteger(42)}
+	mc := &stubCallContext{args: args}
+	_, err := RequireTuple(mc, 0, "test-prim")
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(strings.Contains(err.Error(), "expected a list"), qt.IsTrue,
+		qt.Commentf("error %q missing phrase 'expected a list'", err.Error()))
 }
 
 // TestRequireArg_PositionInIndex pins the 1-indexed argument-position format

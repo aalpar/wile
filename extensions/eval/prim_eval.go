@@ -316,11 +316,11 @@ func tryWileProfile(mc machine.CallContext, argsVal values.Value) (*environment.
 	}
 	nameSym, ok := rest.Car().(*values.Symbol)
 	if !ok {
-		return nil, true, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+		return nil, true, werr.WrapForeignErrorf(werr.ErrNotASymbol,
 			"environment: expected profile name after 'wile, got %T", rest.Car())
 	}
 	if !values.IsEmptyList(rest.Cdr()) {
-		return nil, true, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+		return nil, true, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
 			"environment: (wile %s ...) takes exactly one profile name", nameSym.Key)
 	}
 
@@ -373,7 +373,7 @@ func PrimEnvironment(mc machine.CallContext) error {
 
 	args, ok := argsVal.(values.Tuple)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "environment: expected list of import specs, got %T", argsVal)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "environment: expected list of import specs, got %T", argsVal)
 	}
 
 	// Process each import spec

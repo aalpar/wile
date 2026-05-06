@@ -68,7 +68,8 @@ func RequireType[T any](v values.Value, sentinel error, name string) (T, error) 
 // RequireTuple extracts mc.Arg(index) and asserts it is a values.Tuple
 // (proper list or empty list). On failure it returns a wrapped ErrNotAList
 // error in the canonical "<name>: argument <index+1>: expected a list but
-// got <actual>" format. The index is reported 1-indexed.
+// got <actual>" format. The expected-type phrase is read from
+// werr.ErrNotAList via TypeName(). The index is reported 1-indexed.
 //
 // Use this for any primitive argument that must be a list — Tuple is the
 // runtime read-only-list interface (see values/CLAUDE.md).
@@ -77,7 +78,8 @@ func RequireTuple(mc machine.CallContext, index int, name string) (values.Tuple,
 	t, ok := v.(values.Tuple)
 	if !ok {
 		return nil, werr.WrapForeignErrorf(werr.ErrNotAList,
-			"%s: argument %d: expected a list but got %T", name, index+1, v)
+			"%s: argument %d: expected %s but got %T",
+			name, index+1, typeNameFromSentinel(werr.ErrNotAList), v)
 	}
 	return t, nil
 }

@@ -68,7 +68,7 @@ func PrimMakeNamespace(mc machine.CallContext) error {
 
 	args, ok := argsVal.(values.Tuple)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "make-namespace: expected list of import specs, got %T", argsVal)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "make-namespace: expected list of import specs, got %T", argsVal)
 	}
 
 	v, err := args.ForEach(mc.Context(), func(_ context.Context, _ int, _ bool, specVal values.Value) error {

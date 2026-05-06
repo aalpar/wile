@@ -191,10 +191,10 @@ func parityCheck(
 	case *values.Float:
 		// Must be an integer value (no fractional part)
 		if math.IsInf(v.Value, 0) || math.IsNaN(v.Value) {
-			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %v", name, v.Value)
+			return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %v", name, v.Value)
 		}
 		if math.Floor(v.Value) != v.Value {
-			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %v", name, v.Value)
+			return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %v", name, v.Value)
 		}
 		// Convert to big.Int for reliable parity check on large floats
 		bf := new(big.Float).SetFloat64(v.Value)
@@ -203,12 +203,12 @@ func parityCheck(
 	case *values.BigFloat:
 		// Must be an integer value
 		if !v.BigFloatValue().IsInt() {
-			return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %v", name, v.BigFloatValue())
+			return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %v", name, v.BigFloatValue())
 		}
 		bi, _ := v.BigFloatValue().Int(nil)
 		mc.SetValue(values.BoolToBoolean(bigTest(bi)))
 	default:
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected an integer but got %T", name, o)
+		return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "%s: expected an integer but got %T", name, o)
 	}
 	return nil
 }
