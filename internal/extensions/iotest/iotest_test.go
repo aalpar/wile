@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile"
+	extio "github.com/aalpar/wile/internal/extensions/io"
 	"github.com/aalpar/wile/internal/extensions/iotest"
 	"github.com/aalpar/wile/values"
 
@@ -170,12 +171,13 @@ func TestExtensionPrimitives_RejectInvalidArgs(t *testing.T) {
 	}
 }
 
-// newEngineWithIO loads the io extension (for input-port?) plus the
-// iotest extension under test.
+// newEngineWithIO loads only the io extension (for input-port?) plus the
+// iotest extension under test. Matches the minimal-extension setup used
+// by io's own tests (see internal/extensions/io/prim_ports_test.go:29).
 func newEngineWithIO(t *testing.T) *wile.Engine {
 	t.Helper()
 	engine, err := wile.NewEngine(context.Background(),
-		wile.WithProfile(wile.KitchenSink),
+		wile.WithExtension(extio.Extension),
 		wile.WithExtension(iotest.Extension),
 	)
 	qt.New(t).Assert(err, qt.IsNil)

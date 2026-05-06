@@ -41,16 +41,6 @@ func newEngineWithIOTest(t *testing.T) *wile.Engine {
 	return engine
 }
 
-// runScheme evaluates code through engine.EvalMultiple and asserts no
-// Go-level error. Distinct name from the package-level test helper to
-// keep call sites here self-documenting.
-func runScheme(t *testing.T, engine *wile.Engine, code string) wile.Value {
-	t.Helper()
-	q, err := engine.EvalMultiple(context.Background(), code)
-	qt.New(t).Assert(err, qt.IsNil)
-	return q
-}
-
 // TestReadErrorClassification verifies that I/O failures inside peek-char
 // and read-line surface as read errors per R7RS §6.11 — i.e.
 // (read-error? e) returns #t.
@@ -91,7 +81,7 @@ func TestReadErrorClassification(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			result := runScheme(t, engine, tc.code)
+			result := eval(t, engine, tc.code)
 			c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 		})
 	}
@@ -105,7 +95,7 @@ func TestReadLineBareCarriageReturnAtEOF(t *testing.T) {
 	engine := newEngineWithIOTest(t)
 	// Input "hi\r" — after \r, inner ReadRune sees io.EOF, which must be
 	// treated as line-ends-with-bare-\r, not propagated.
-	result := runScheme(t, engine,
+	result := eval(t, engine,
 		`(equal? (read-line (open-input-string "hi\r")) "hi")`)
 	c.Assert(result.Internal(), qt.Equals, values.TrueValue)
 }

@@ -73,6 +73,11 @@ func NewFailingTextualInputPort(inner *values.StringInputPort, failUnread bool, 
 
 // ReadRune returns ErrIOTestFault once the configured threshold is reached;
 // otherwise it delegates to the wrapped port and counts successful reads.
+//
+// Counts by `n > 0` rather than `err == nil`: io.RuneReader permits
+// (r, size>0, io.EOF) when the last rune is read at end of stream
+// (current bytes.Buffer backing doesn't, but bufio.Reader can — this
+// keeps the counter accurate if the backing changes).
 func (p *FailingTextualInputPort) ReadRune() (rune, int, error) {
 	if p.failReadAfter >= 0 && p.successfulReads >= p.failReadAfter {
 		return 0, 0, werr.WrapForeignErrorf(ErrIOTestFault,
@@ -80,7 +85,7 @@ func (p *FailingTextualInputPort) ReadRune() (rune, int, error) {
 			p.failReadAfter)
 	}
 	r, n, err := p.StringInputPort.ReadRune()
-	if err == nil {
+	if n > 0 {
 		p.successfulReads++
 	}
 	return r, n, err
@@ -100,9 +105,16 @@ func (p *FailingTextualInputPort) UnreadRune() error {
 // Compose with WithExtension in tests; do NOT load in production.
 var Extension = registry.NewDescribedExtension("iotest",
 	"TEST ONLY: fault-injecting input ports for read-error? regression tests.",
-	addToRegistry)
+	AddToRegistry)
 
-func addToRegistry(r *registry.Registry) error {
+// Builder aggregates iotest registration. Matches the Builder pattern
+// used by every other extension package (io, envvars, namespace, ...).
+var Builder = registry.NewRegistryBuilder(addPrimitives)
+
+// AddToRegistry registers all iotest primitives.
+var AddToRegistry = Builder.AddToRegistry
+
+func addPrimitives(r *registry.Registry) error {
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{
 			Name: "make-failing-unread-port", ParamCount: 1, Impl: PrimMakeFailingUnreadPort,
@@ -129,11 +141,9 @@ func PrimMakeFailingUnreadPort(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	q := &FailingTextualInputPort{
-		StringInputPort: values.NewStringInputPortWithBuffer(bytes.NewBufferString(s.Value)),
-		failUnread:      true,
-		failReadAfter:   -1,
-	}
+	q := NewFailingTextualInputPort(
+		values.NewStringInputPortWithBuffer(bytes.NewBufferString(s.Value)),
+		true, -1)
 	mc.SetValue(q)
 	return nil
 }
@@ -153,11 +163,9 @@ func PrimMakeFailingReadAfterPort(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 			"make-failing-read-after-port: n must be non-negative, got %d", n.Value)
 	}
-	q := &FailingTextualInputPort{
-		StringInputPort: values.NewStringInputPortWithBuffer(bytes.NewBufferString(s.Value)),
-		failUnread:      false,
-		failReadAfter:   int(n.Value),
-	}
+	q := NewFailingTextualInputPort(
+		values.NewStringInputPortWithBuffer(bytes.NewBufferString(s.Value)),
+		false, int(n.Value))
 	mc.SetValue(q)
 	return nil
 }
