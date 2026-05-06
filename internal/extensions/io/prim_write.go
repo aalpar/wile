@@ -48,7 +48,7 @@ func PrimWrite(mc machine.CallContext) error {
 // PrimWriteChar implements the write-char primitive.
 // Writes a character to the current output port or to the specified output port.
 func PrimWriteChar(mc machine.CallContext) error {
-	ch, err := helpers.RequireArg[*values.Character](mc, 0, werr.ErrNotACharacter, "a character", "write-char")
+	ch, err := helpers.RequireArg[*values.Character](mc, 0, werr.ErrNotACharacter, "write-char")
 	if err != nil {
 		return err
 	}
@@ -161,7 +161,7 @@ func PrimWriteShared(mc machine.CallContext) error {
 // R7RS §6.13.3: (write-string string [port [start [end]]])
 // Writes the characters of string (optionally between start and end) to port.
 func PrimWriteString(mc machine.CallContext) error {
-	str, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "write-string")
+	str, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "write-string")
 	if err != nil {
 		return err
 	}
@@ -172,8 +172,7 @@ func PrimWriteString(mc machine.CallContext) error {
 	end := length
 
 	writer, tuple, found, err := extractPort[values.OutputPort](
-		mc.Arg(1), "write-string", werr.ErrNotAnOutputPort, "an output port",
-	)
+		mc.Arg(1), "write-string", werr.ErrNotAnOutputPort)
 	if err != nil {
 		return err
 	}

@@ -49,7 +49,7 @@ func PrimList(mc machine.CallContext) error {
 
 // PrimMakeList implements the Scheme make-list primitive.
 func PrimMakeList(mc machine.CallContext) error {
-	k, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotAnInteger, "an integer", "make-list")
+	k, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotAnInteger, "make-list")
 	if err != nil {
 		return err
 	}
@@ -196,7 +196,7 @@ func PrimListRef(mc machine.CallContext) error {
 	k := mc.Arg(1)
 	idx, ok := values.ExactInteger(k)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "list-ref: expected an exact integer index but got %T", k)
+		return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "list-ref: expected an exact integer index but got %T", k)
 	}
 	if idx < 0 {
 		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "list-ref: index must be non-negative")
@@ -225,7 +225,7 @@ func PrimListRef(mc machine.CallContext) error {
 // PrimListSet implements the Scheme list-set! primitive.
 // R7RS §6.4: The index must be an exact non-negative integer.
 func PrimListSet(mc machine.CallContext) error {
-	p, err := helpers.RequireArg[*values.Pair](mc, 0, werr.ErrNotAList, "a list", "list-set!")
+	p, err := helpers.RequireArg[*values.Pair](mc, 0, werr.ErrNotAList, "list-set!")
 	if err != nil {
 		return err
 	}
@@ -234,7 +234,7 @@ func PrimListSet(mc machine.CallContext) error {
 
 	idx, ok := values.ExactInteger(idxVal)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "list-set!: expected an exact integer index but got %T", idxVal)
+		return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "list-set!: expected an exact integer index but got %T", idxVal)
 	}
 	k := int(idx)
 	if k < 0 {
@@ -263,7 +263,7 @@ func PrimListTail(mc machine.CallContext) error {
 	k := mc.Arg(1)
 	idx, ok := values.ExactInteger(k)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "list-tail: expected an exact integer index but got %T", k)
+		return werr.WrapForeignErrorf(werr.ErrNotAnInteger, "list-tail: expected an exact integer index but got %T", k)
 	}
 	if idx < 0 {
 		return werr.WrapForeignErrorf(werr.ErrIndexOutOfRange, "list-tail: index must be non-negative")

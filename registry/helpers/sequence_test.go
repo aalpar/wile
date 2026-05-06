@@ -56,7 +56,7 @@ func TestSequenceLength_Vector(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			mc := makeMC(tc.vec)
-			err := SequenceLength[*values.Vector](mc, werr.ErrNotAVector, "a vector", "vector-length")
+			err := SequenceLength[*values.Vector](mc, werr.ErrNotAVector, "vector-length")
 			c.Assert(err, qt.IsNil)
 			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
@@ -86,7 +86,7 @@ func TestSequenceLength_ByteVector(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			mc := makeMC(tc.bv)
-			err := SequenceLength[*values.ByteVector](mc, werr.ErrNotAByteVector, "a bytevector", "bytevector-length")
+			err := SequenceLength[*values.ByteVector](mc, werr.ErrNotAByteVector, "bytevector-length")
 			c.Assert(err, qt.IsNil)
 			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
@@ -116,7 +116,7 @@ func TestSequenceLength_Errors(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			mc := makeMC(tc.arg)
-			err := SequenceLength[*values.Vector](mc, werr.ErrNotAVector, "a vector", "vector-length")
+			err := SequenceLength[*values.Vector](mc, werr.ErrNotAVector, "vector-length")
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(errors.Is(err, tc.sentinel), qt.IsTrue)
 		})
@@ -147,7 +147,7 @@ func TestSequenceRef_Vector(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			mc := makeMC(vec, tc.idx)
-			err := SequenceRef[*values.Vector](mc, werr.ErrNotAVector, "a vector", "vector-ref", vectorGet)
+			err := SequenceRef[*values.Vector](mc, werr.ErrNotAVector, "vector-ref", vectorGet)
 			c.Assert(err, qt.IsNil)
 			c.Assert(mc.GetValue(), valuestest.SchemeEquals, tc.want)
 		})
@@ -194,7 +194,7 @@ func TestSequenceRef_Errors(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			mc := makeMC(tc.arg0, tc.arg1)
-			err := SequenceRef[*values.Vector](mc, werr.ErrNotAVector, "a vector", "vector-ref", vectorGet)
+			err := SequenceRef[*values.Vector](mc, werr.ErrNotAVector, "vector-ref", vectorGet)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(errors.Is(err, tc.sentinel), qt.IsTrue,
 				qt.Commentf("expected %v, got %v", tc.sentinel, err))
@@ -239,7 +239,7 @@ func TestSequenceSet_Vector(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			vec := values.NewVector(tc.initial...)
 			mc := makeMC(vec, values.NewInteger(tc.idx), tc.newVal)
-			err := SequenceSet[*values.Vector](mc, werr.ErrNotAVector, "a vector", "vector-set!", vectorSet)
+			err := SequenceSet[*values.Vector](mc, werr.ErrNotAVector, "vector-set!", vectorSet)
 			c.Assert(err, qt.IsNil)
 			c.Assert(mc.GetValue(), qt.Equals, values.Void)
 			c.Assert(vec.Get(int(tc.idx)), valuestest.SchemeEquals, tc.wantAt)
@@ -285,7 +285,7 @@ func TestSequenceSet_Errors(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			mc := makeMC(tc.arg0, tc.arg1, tc.arg2)
-			err := SequenceSet[*values.Vector](mc, werr.ErrNotAVector, "a vector", "vector-set!", vectorSet)
+			err := SequenceSet[*values.Vector](mc, werr.ErrNotAVector, "vector-set!", vectorSet)
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(errors.Is(err, tc.sentinel), qt.IsTrue,
 				qt.Commentf("expected %v, got %v", tc.sentinel, err))

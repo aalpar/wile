@@ -17,63 +17,68 @@ package werr
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // Standard error values for type checking and runtime errors.
 var (
-	ErrNotABoolean               = NewStaticError("not a boolean")
-	ErrNotAnInputPort            = NewStaticError("not an input port")
-	ErrNotAnOutputPort           = NewStaticError("not an output port")
-	ErrNotABox                   = NewStaticError("not a box")
-	ErrNotAnOpaqueValue          = NewStaticError("not an opaque value")
-	ErrNotAByte                  = NewStaticError("not a byte")
-	ErrNotAByteInputPort         = NewStaticError("not a byte input port")
-	ErrNotAByteOutputPort        = NewStaticError("not a byte output port")
-	ErrNotATextualPort           = NewStaticError("not a textual port")
+	ErrNotABoolean      = NewTypeSentinel("boolean")
+	ErrNotAnInputPort   = NewTypeSentinel("input port")
+	ErrNotAnOutputPort  = NewTypeSentinel("output port")
+	ErrNotABox          = NewTypeSentinel("box")
+	ErrNotAnOpaqueValue = NewTypeSentinel("opaque value")
+	ErrNotAByte         = NewTypeSentinel("byte")
+	// "binary" matches the user-facing terminology used in R7RS and
+	// values/value_type.go; the var name keeps "Byte" for historical
+	// reasons but the message phrase tracks the rest of the codebase.
+	ErrNotAByteInputPort         = NewTypeSentinel("binary input port")
+	ErrNotAByteOutputPort        = NewTypeSentinel("binary output port")
+	ErrNotATextualPort           = NewTypeSentinel("textual port")
 	ErrStopIteration             = NewStaticError("stop iteration")
-	ErrNotAPrimitive             = NewStaticError("not a primitive")
+	ErrNotAPrimitive             = NewTypeSentinel("primitive")
 	ErrNoSuchBinding             = NewStaticError("no such binding")
-	ErrNotANumber                = NewStaticError("not a number")
+	ErrNotANumber                = NewTypeSentinel("number")
 	ErrCannotCompare             = NewStaticError("cannot compare values")
-	ErrNotAReal                  = NewStaticError("not a real number")
+	ErrNotAReal                  = NewTypeSentinel("real number")
 	ErrDivisionByZero            = NewStaticError("division by zero")
-	ErrNotAList                  = NewStaticError("not a list")
+	ErrNotAList                  = NewTypeSentinel("list")
 	ErrNotACloseParen            = NewStaticError("not a close parenthesis")
 	ErrWrongNumberOfArguments    = NewStaticError("wrong number of arguments")
-	ErrNotAMachineContext        = NewStaticError("not a machine context")
-	ErrNotAPair                  = NewStaticError("not a pair")
-	ErrNotACons                  = NewStaticError("not a cons")
-	ErrNotACharacter             = NewStaticError("not a character")
-	ErrNotACharSet               = NewStaticError("not a char-set")
+	ErrNotAMachineContext        = NewTypeSentinel("machine context")
+	ErrNotAPair                  = NewTypeSentinel("pair")
+	ErrNotACons                  = NewTypeSentinel("cons")
+	ErrNotACharacter             = NewTypeSentinel("character")
+	ErrNotACharSet               = NewTypeSentinel("char-set")
 	ErrStackUnderflow            = NewStaticError("stack underflow")
 	ErrStackOverflow             = NewStaticError("stack overflow")
-	ErrNotASyntaxValue           = NewStaticError("not a syntax value")
-	ErrNotASyntaxPair            = NewStaticError("not a syntax pair")
-	ErrNotASyntaxSymbol          = NewStaticError("not a syntax symbol")
-	ErrNotASyntaxList            = NewStaticError("not a syntax list")
-	ErrNotASyntaxObject          = NewStaticError("not a syntax object")
-	ErrNotASymbol                = NewStaticError("not a symbol")
+	ErrNotASyntaxValue           = NewTypeSentinel("syntax value")
+	ErrNotASyntaxPair            = NewTypeSentinel("syntax pair")
+	ErrNotASyntaxSymbol          = NewTypeSentinel("syntax symbol")
+	ErrNotASyntaxList            = NewTypeSentinel("syntax list")
+	ErrNotASyntaxObject          = NewTypeSentinel("syntax object")
+	ErrNotASymbol                = NewTypeSentinel("symbol")
 	ErrInvalidSyntax             = NewStaticError("invalid syntax")
 	ErrInvalidArgument           = NewStaticError("invalid argument")
 	ErrInternal                  = NewStaticError("internal error")
 	ErrDuplicateBinding          = NewStaticError("duplicate binding")
-	ErrNotAClosure               = NewStaticError("not a closure")
+	ErrNotAClosure               = NewTypeSentinel("closure")
 	ErrUnknownCharacterMnemonic  = NewStaticError("unknown character mnemonic")
-	ErrNotAnInteger              = NewStaticError("not an integer")
-	ErrNotALocalEnvironmentFrame = NewStaticError("not a local environment frame")
-	ErrNotAMachineTemplate       = NewStaticError("not a machine template")
+	ErrNotAnInteger              = NewTypeSentinel("integer")
+	ErrNotALocalEnvironmentFrame = NewTypeSentinel("local environment frame")
+	ErrNotAMachineTemplate       = NewTypeSentinel("machine template")
 	ErrUnexpectedNil             = NewStaticError("unexpected nil value")
 	ErrUnexpectedTransformer     = NewStaticError("unexpected transformer")
-	ErrNotAString                = NewStaticError("not a string")
-	ErrNotAVector                = NewStaticError("not a vector")
-	ErrNotAByteVector            = NewStaticError("not a bytevector")
-	ErrNotAProcedure             = NewStaticError("not a procedure")
-	ErrNotAParameter             = NewStaticError("not a parameter")
-	ErrNotAStringOutputPort      = NewStaticError("not a string output port")
-	ErrNotABytevectorOutputPort  = NewStaticError("not a bytevector output port")
-	ErrNotANativeError           = NewStaticError("not an error object")
-	ErrNotARecord                = NewStaticError("not a record")
-	ErrNotARecordType            = NewStaticError("not a record type")
+	ErrNotAString                = NewTypeSentinel("string")
+	ErrNotANamespace             = NewTypeSentinel("namespace")
+	ErrNotAVector                = NewTypeSentinel("vector")
+	ErrNotAByteVector            = NewTypeSentinel("bytevector")
+	ErrNotAProcedure             = NewTypeSentinel("procedure")
+	ErrNotAParameter             = NewTypeSentinel("parameter")
+	ErrNotAStringOutputPort      = NewTypeSentinel("string output port")
+	ErrNotABytevectorOutputPort  = NewTypeSentinel("bytevector output port")
+	ErrNotANativeError           = NewTypeSentinel("error object")
+	ErrNotARecord                = NewTypeSentinel("record")
+	ErrNotARecordType            = NewTypeSentinel("record type")
 	ErrOpaqueRecord              = NewStaticError("record type is opaque")
 	ErrFileNotFound              = NewStaticError("file not found")
 	ErrFileOpen                  = NewStaticError("file open failed")
@@ -82,26 +87,29 @@ var (
 	ErrUnexportedIdentifier      = NewStaticError("identifier not exported")
 
 	// Threading errors
-	ErrNotAThread              = NewStaticError("not a thread")
-	ErrNotAMutex               = NewStaticError("not a mutex")
-	ErrNotAConditionVariable   = NewStaticError("not a condition variable")
-	ErrNotATime                = NewStaticError("not a time")
-	ErrNotAChannel             = NewStaticError("not a channel")
-	ErrNotAWaitGroup           = NewStaticError("not a wait-group")
-	ErrNotARWMutex             = NewStaticError("not a rw-mutex")
-	ErrNotAOnce                = NewStaticError("not a once")
-	ErrNotAnAtomic             = NewStaticError("not an atomic")
+	ErrNotAThread            = NewTypeSentinel("thread")
+	ErrNotAMutex             = NewTypeSentinel("mutex")
+	ErrNotAConditionVariable = NewTypeSentinel("condition variable")
+	ErrNotATime              = NewTypeSentinel("time")
+	ErrNotAChannel           = NewTypeSentinel("channel")
+	ErrNotAWaitGroup         = NewTypeSentinel("wait-group")
+	ErrNotARWMutex           = NewTypeSentinel("rw-mutex")
+	// "once" is pronounced /wuns/ — letter rule would give "an once", but
+	// the consonant /w/ sound calls for "a". Pass-through preserves the
+	// correct article.
+	ErrNotAOnce                = NewTypeSentinel("a once")
+	ErrNotAnAtomic             = NewTypeSentinel("atomic")
 	ErrPortClosed              = NewStaticError("port is closed")
-	ErrNotAHashtable           = NewStaticError("not a hashtable")
+	ErrNotAHashtable           = NewTypeSentinel("hashtable")
 	ErrNoCaptureContext        = NewStaticError("no capture context for expansion")
 	ErrExactnessConversion     = NewStaticError("exactness conversion failed")
 	ErrInvalidFormat           = NewStaticError("invalid number format")
 	ErrUnknownOpCode           = NewStaticError("unknown op code")
-	ErrNotAMatch               = NewStaticError("not a match")
-	ErrNotAPromptTag           = NewStaticError("not a prompt tag")
-	ErrNotAContinuationMarkSet = NewStaticError("not a continuation mark set")
-	ErrNotAContinuation        = NewStaticError("not a continuation")
-	ErrNotAnErrorContext       = NewStaticError("not an error context")
+	ErrNotAMatch               = NewTypeSentinel("match")
+	ErrNotAPromptTag           = NewTypeSentinel("prompt tag")
+	ErrNotAContinuationMarkSet = NewTypeSentinel("continuation mark set")
+	ErrNotAContinuation        = NewTypeSentinel("continuation")
+	ErrNotAnErrorContext       = NewTypeSentinel("error context")
 	ErrTypeConversion          = NewStaticError("type conversion failed")
 	ErrCodepointOutOfRange     = NewStaticError("codepoint out of range")
 	ErrIndexOutOfRange         = NewStaticError("index out of range")
@@ -157,7 +165,7 @@ var (
 	ErrChannelClosed = NewStaticError("channel is closed")
 
 	// Process errors
-	ErrNotAProcess = NewStaticError("not a process")
+	ErrNotAProcess = NewTypeSentinel("process")
 
 	// Thread errors
 	ErrJoinTimeout             = NewStaticError("thread-join!: timeout")
@@ -168,11 +176,20 @@ var (
 // StaticError is a sentinel error type for programmatic matching via errors.Is.
 // Each sentinel carries a fixed human-readable message and serves as a stable
 // identity that callers can match across error wrapping layers.
+//
+// Type-mismatch sentinels (declared via NewTypeSentinel) additionally carry
+// an expectedType phrase (e.g., "a string") used by argument-extraction
+// helpers in registry/helpers to format error messages without each call
+// site repeating the phrase.
 type StaticError struct {
-	message string
+	message      string
+	expectedType string
 }
 
 // NewStaticError creates a new static error with the given message.
+// The returned sentinel has no expectedType; callers using it with
+// type-checking helpers will get a degraded ("expected  but got ...")
+// error message. Use NewTypeSentinel for type-mismatch sentinels.
 func NewStaticError(msg string) *StaticError {
 	q := &StaticError{
 		message: msg,
@@ -180,8 +197,63 @@ func NewStaticError(msg string) *StaticError {
 	return q
 }
 
+// NewTypeSentinel creates a sentinel for a type-mismatch error. The
+// noun argument is the bare type-name ("string", "integer", "char-set",
+// …); NewTypeSentinel auto-prefixes "a"/"an" using articleFor. The
+// sentinel's Error() value is "not " + article + " " + noun, e.g.
+// "not a string" or "not an integer".
+//
+// For irregular cases where letter-based article selection produces the
+// wrong result (e.g., "once" pronounced /wuns/ wants "a", not "an"),
+// pass the already-articled phrase: NewTypeSentinel("a once"). Inputs
+// starting with "a " or "an " are used verbatim.
+//
+// Panics on empty noun — a type sentinel without a noun is a programmer
+// bug, since the resulting "expected " phrase would be useless. Use
+// NewStaticError for sentinels that aren't type-mismatch errors.
+func NewTypeSentinel(noun string) *StaticError {
+	if noun == "" {
+		panic("werr.NewTypeSentinel: empty noun (use NewStaticError for non-type sentinels)")
+	}
+	var typeName string
+	switch {
+	case strings.HasPrefix(noun, "a "), strings.HasPrefix(noun, "an "):
+		typeName = noun
+	default:
+		typeName = articleFor(noun) + " " + noun
+	}
+	q := &StaticError{
+		message:      "not " + typeName,
+		expectedType: typeName,
+	}
+	return q
+}
+
+// articleFor returns "a" or "an" by letter rule: "an" before a/e/i/o/u
+// (any case), "a" before everything else. This is the conventional
+// orthographic rule, not the phonetic one — words like "once" (/wuns/)
+// or "honor" (/onor/) violate the letter rule and require an explicit
+// article in the NewTypeSentinel call.
+func articleFor(noun string) string {
+	if len(noun) == 0 {
+		return "a"
+	}
+	switch noun[0] {
+	case 'a', 'e', 'i', 'o', 'u', 'A', 'E', 'I', 'O', 'U':
+		return "an"
+	}
+	return "a"
+}
+
 func (p *StaticError) Error() string {
 	return p.message
+}
+
+// TypeName returns the expected-type phrase for type-mismatch sentinels
+// (those constructed via NewTypeSentinel). Returns "" for sentinels
+// constructed via NewStaticError.
+func (p *StaticError) TypeName() string {
+	return p.expectedType
 }
 
 // ForeignError is an error type for Go primitive implementations (functions

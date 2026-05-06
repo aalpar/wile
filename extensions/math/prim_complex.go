@@ -34,18 +34,18 @@ func PrimMakeRectangular(mc machine.CallContext) error {
 	rNum, rOk := r.(values.Number)
 	iNum, iOk := i.(values.Number)
 	if !rOk {
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "make-rectangular: expected a real number but got %T", r)
+		return werr.WrapForeignErrorf(werr.ErrNotAReal, "make-rectangular: expected a real number but got %T", r)
 	}
 	if !iOk {
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "make-rectangular: expected a real number but got %T", i)
+		return werr.WrapForeignErrorf(werr.ErrNotAReal, "make-rectangular: expected a real number but got %T", i)
 	}
 
 	// Reject complex numbers - make-rectangular requires real number arguments
 	if !isRealNumber(r) {
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "make-rectangular: expected a real number but got complex %T", r)
+		return werr.WrapForeignErrorf(werr.ErrNotAReal, "make-rectangular: expected a real number but got complex %T", r)
 	}
 	if !isRealNumber(i) {
-		return werr.WrapForeignErrorf(werr.ErrNotANumber, "make-rectangular: expected a real number but got complex %T", i)
+		return werr.WrapForeignErrorf(werr.ErrNotAReal, "make-rectangular: expected a real number but got complex %T", i)
 	}
 
 	bothExact := values.ExactnessOf(rNum) == values.Exact && values.ExactnessOf(iNum) == values.Exact
@@ -134,7 +134,7 @@ func toBigComplexPart(v values.Value, name string) (values.Number, error) {
 	case *values.Rational:
 		return values.NewBigFloatFromString(n.Rat().FloatString(256)), nil
 	default:
-		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber, "%s: expected a real number but got %T", name, v)
+		return nil, werr.WrapForeignErrorf(werr.ErrNotAReal, "%s: expected a real number but got %T", name, v)
 	}
 }
 

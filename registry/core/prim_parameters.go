@@ -71,7 +71,7 @@ func PrimMakeParameter(cc machine.CallContext) error {
 //
 // This is an internal primitive — not part of the public API.
 func PrimParameterRawSet(mc machine.CallContext) error {
-	param, err := helpers.RequireArg[*machine.Parameter](mc, 0, werr.ErrNotAParameter, "a parameter", "%parameter-raw-set!")
+	param, err := helpers.RequireArg[*machine.Parameter](mc, 0, werr.ErrNotAParameter, "%parameter-raw-set!")
 	if err != nil {
 		return err
 	}
@@ -88,7 +88,7 @@ func PrimParameterRawSet(mc machine.CallContext) error {
 // it as a continuation mark. This is an internal primitive.
 func PrimParameterConvert(cc machine.CallContext) error {
 	mc := cc.(*machine.MachineContext)
-	param, err := helpers.RequireArg[*machine.Parameter](mc, 0, werr.ErrNotAParameter, "a parameter", "%parameter-convert")
+	param, err := helpers.RequireArg[*machine.Parameter](mc, 0, werr.ErrNotAParameter, "%parameter-convert")
 	if err != nil {
 		return err
 	}

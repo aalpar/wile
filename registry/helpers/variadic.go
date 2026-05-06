@@ -33,7 +33,7 @@ import (
 // the error names the offending argument's 1-indexed position in the full
 // argument vector (fixed positions, then rest positions), matching
 // RequireArg's "<name>: argument <N>: expected ... but got ..." format.
-// typeName is the human-readable expected-type phrase used in error messages.
+// The expected-type phrase is read from the sentinel via TypeName().
 //
 // Per Wile's variadic convention, fixedCount must be >= 1: ParamCount=0 with
 // IsVariadic=true panics in the dispatch layer.
@@ -41,7 +41,7 @@ func VariadicArgs[T any](
 	mc machine.CallContext,
 	fixedCount int,
 	sentinel error,
-	typeName, name string,
+	name string,
 ) ([]T, error) {
 	if fixedCount < 1 {
 		return nil, werr.WrapForeignErrorf(werr.ErrInternal,
@@ -49,9 +49,10 @@ func VariadicArgs[T any](
 	}
 	fixedArgs := fixedCount - 1
 	out := make([]T, 0, fixedArgs+1)
+	typeName := typeNameFromSentinel(sentinel)
 
 	for i := range fixedArgs {
-		v, err := RequireArg[T](mc, i, sentinel, typeName, name)
+		v, err := RequireArg[T](mc, i, sentinel, name)
 		if err != nil {
 			return nil, err
 		}

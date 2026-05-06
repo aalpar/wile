@@ -499,7 +499,7 @@ func TestNumericChainCompareReal_ComplexRejection(t *testing.T) {
 			mc := makeMC(tc.arg0, tc.arg1)
 			err := NumericChainCompareReal(mc, "test", lessThanFails)
 			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, werr.ErrNotANumber), qt.IsTrue)
+			c.Assert(errors.Is(err, werr.ErrNotAReal), qt.IsTrue)
 		})
 	}
 }

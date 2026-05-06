@@ -47,7 +47,7 @@ func PrimInteractionEnvironment(mc machine.CallContext) error {
 func PrimEnvironmentBoundNames(mc machine.CallContext) error {
 	envVal := mc.Arg(0)
 
-	topLevelEnv, err := helpers.RequireType[*environment.Namespace](envVal, werr.ErrInvalidArgument, "a namespace", "environment-bound-names")
+	topLevelEnv, err := helpers.RequireType[*environment.Namespace](envVal, werr.ErrNotANamespace, "environment-bound-names")
 	if err != nil {
 		return err
 	}
@@ -72,12 +72,12 @@ func PrimEnvironmentRef(mc machine.CallContext) error {
 	envVal := mc.Arg(0)
 	symVal := mc.Arg(1)
 
-	topLevelEnv, err := helpers.RequireType[*environment.Namespace](envVal, werr.ErrInvalidArgument, "a namespace", "environment-ref")
+	topLevelEnv, err := helpers.RequireType[*environment.Namespace](envVal, werr.ErrNotANamespace, "environment-ref")
 	if err != nil {
 		return err
 	}
 
-	sym, err := helpers.RequireType[*values.Symbol](symVal, werr.ErrNotASymbol, "a symbol", "environment-ref")
+	sym, err := helpers.RequireType[*values.Symbol](symVal, werr.ErrNotASymbol, "environment-ref")
 	if err != nil {
 		return err
 	}
@@ -99,12 +99,12 @@ func PrimEnvironmentBoundQ(mc machine.CallContext) error {
 	envVal := mc.Arg(0)
 	symVal := mc.Arg(1)
 
-	topLevelEnv, err := helpers.RequireType[*environment.Namespace](envVal, werr.ErrInvalidArgument, "a namespace", "environment-bound?")
+	topLevelEnv, err := helpers.RequireType[*environment.Namespace](envVal, werr.ErrNotANamespace, "environment-bound?")
 	if err != nil {
 		return err
 	}
 
-	sym, err := helpers.RequireType[*values.Symbol](symVal, werr.ErrNotASymbol, "a symbol", "environment-bound?")
+	sym, err := helpers.RequireType[*values.Symbol](symVal, werr.ErrNotASymbol, "environment-bound?")
 	if err != nil {
 		return err
 	}

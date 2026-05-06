@@ -86,7 +86,7 @@ func inlineNumLt(mc *MachineContext) error {
 	}
 	if isNonRealComplex(a) || isNonRealComplex(b) {
 		return applyCallableError(mc, werr.WrapForeignErrorf(
-			werr.ErrNotANumber, "<: requires real arguments"))
+			werr.ErrNotAReal, "<: requires real arguments"))
 	}
 	mc.SetValue(values.BoolToBoolean(a.LessThan(b)))
 	return nil
@@ -101,7 +101,7 @@ func inlineNumLe(mc *MachineContext) error {
 	}
 	if isNonRealComplex(a) || isNonRealComplex(b) {
 		return applyCallableError(mc, werr.WrapForeignErrorf(
-			werr.ErrNotANumber, "<=: requires real arguments"))
+			werr.ErrNotAReal, "<=: requires real arguments"))
 	}
 	if a.IsNaN() || b.IsNaN() {
 		mc.SetValue(values.FalseValue)
@@ -119,7 +119,7 @@ func inlineNumGt(mc *MachineContext) error {
 	}
 	if isNonRealComplex(a) || isNonRealComplex(b) {
 		return applyCallableError(mc, werr.WrapForeignErrorf(
-			werr.ErrNotANumber, ">: requires real arguments"))
+			werr.ErrNotAReal, ">: requires real arguments"))
 	}
 	mc.SetValue(values.BoolToBoolean(b.LessThan(a)))
 	return nil
@@ -134,7 +134,7 @@ func inlineNumGe(mc *MachineContext) error {
 	}
 	if isNonRealComplex(a) || isNonRealComplex(b) {
 		return applyCallableError(mc, werr.WrapForeignErrorf(
-			werr.ErrNotANumber, ">=: requires real arguments"))
+			werr.ErrNotAReal, ">=: requires real arguments"))
 	}
 	if a.IsNaN() || b.IsNaN() {
 		mc.SetValue(values.FalseValue)

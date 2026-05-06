@@ -40,7 +40,7 @@ func PrimCallWithContinuationBarrier(cc machine.CallContext) error {
 	mc := cc.(*machine.MachineContext)
 	thunk := mc.Arg(0)
 
-	thunkCls, err := helpers.RequireType[machine.Closure](thunk, werr.ErrNotAProcedure, "a procedure", "call-with-continuation-barrier")
+	thunkCls, err := helpers.RequireType[machine.Closure](thunk, werr.ErrNotAProcedure, "call-with-continuation-barrier")
 	if err != nil {
 		return err
 	}

@@ -42,7 +42,7 @@ var PrimErrorContextQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 // Returns the source location string from the error context, or #f if
 // no source location was captured.
 func PrimErrorContextSource(mc machine.CallContext) error {
-	ctx, err := helpers.RequireArg[*machine.ErrorContext](mc, 0, werr.ErrNotAnErrorContext, "an error context", "error-context-source")
+	ctx, err := helpers.RequireArg[*machine.ErrorContext](mc, 0, werr.ErrNotAnErrorContext, "error-context-source")
 	if err != nil {
 		return err
 	}
@@ -60,7 +60,7 @@ func PrimErrorContextSource(mc machine.CallContext) error {
 // name, file, line, and column. Returns the empty list if no stack trace
 // was captured.
 func PrimErrorContextStackTrace(mc machine.CallContext) error {
-	ctx, err := helpers.RequireArg[*machine.ErrorContext](mc, 0, werr.ErrNotAnErrorContext, "an error context", "error-context-stack-trace")
+	ctx, err := helpers.RequireArg[*machine.ErrorContext](mc, 0, werr.ErrNotAnErrorContext, "error-context-stack-trace")
 	if err != nil {
 		return err
 	}
@@ -72,7 +72,7 @@ func PrimErrorContextStackTrace(mc machine.CallContext) error {
 // Returns the continuation mark set snapshot from the raise site, or #f
 // if marks were not captured.
 func PrimErrorContextMarks(mc machine.CallContext) error {
-	ctx, err := helpers.RequireArg[*machine.ErrorContext](mc, 0, werr.ErrNotAnErrorContext, "an error context", "error-context-marks")
+	ctx, err := helpers.RequireArg[*machine.ErrorContext](mc, 0, werr.ErrNotAnErrorContext, "error-context-marks")
 	if err != nil {
 		return err
 	}
@@ -88,7 +88,7 @@ func PrimErrorContextMarks(mc machine.CallContext) error {
 // PrimErrorObjectSource implements (error-object-source err).
 // Returns the source location string from a NativeError, or #f if empty.
 func PrimErrorObjectSource(mc machine.CallContext) error {
-	errObj, err := helpers.RequireArg[*values.NativeError](mc, 0, werr.ErrNotANativeError, "an error object", "error-object-source")
+	errObj, err := helpers.RequireArg[*values.NativeError](mc, 0, werr.ErrNotANativeError, "error-object-source")
 	if err != nil {
 		return err
 	}
@@ -105,7 +105,7 @@ func PrimErrorObjectSource(mc machine.CallContext) error {
 // Returns the stack trace from a NativeError as a list of alists, or ()
 // if no stack trace has been captured.
 func PrimErrorObjectStackTrace(mc machine.CallContext) error {
-	errObj, err := helpers.RequireArg[*values.NativeError](mc, 0, werr.ErrNotANativeError, "an error object", "error-object-stack-trace")
+	errObj, err := helpers.RequireArg[*values.NativeError](mc, 0, werr.ErrNotANativeError, "error-object-stack-trace")
 	if err != nil {
 		return err
 	}

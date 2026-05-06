@@ -31,7 +31,7 @@ func openFilePort(
 	mc machine.CallContext, name string, action string,
 	opener func(string) (*os.File, error), makePort func(*os.File) values.Value,
 ) error {
-	filename, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", name)
+	filename, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, name)
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func PrimOpenBinaryOutputFile(mc machine.CallContext) error {
 // PrimFileExistsQ implements the (file-exists?) primitive.
 // Returns #t if file exists.
 func PrimFileExistsQ(mc machine.CallContext) error {
-	filename, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "file-exists?")
+	filename, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "file-exists?")
 	if err != nil {
 		return err
 	}
@@ -106,7 +106,7 @@ func PrimFileExistsQ(mc machine.CallContext) error {
 // PrimDeleteFile implements the (delete-file) primitive.
 // Deletes a file from the filesystem.
 func PrimDeleteFile(mc machine.CallContext) error {
-	filename, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "a string", "delete-file")
+	filename, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, "delete-file")
 	if err != nil {
 		return err
 	}
@@ -138,12 +138,12 @@ func callWithFile(
 	opener func(string) (*os.File, error),
 	portCreator func(*os.File) values.Value,
 ) error {
-	filename, err := helpers.RequireType[*values.String](mc.Arg(0), werr.ErrNotAString, "a string", name)
+	filename, err := helpers.RequireType[*values.String](mc.Arg(0), werr.ErrNotAString, name)
 	if err != nil {
 		return err
 	}
 
-	proc, err := helpers.RequireType[machine.Closure](mc.Arg(1), werr.ErrNotAProcedure, "a procedure", name)
+	proc, err := helpers.RequireType[machine.Closure](mc.Arg(1), werr.ErrNotAProcedure, name)
 	if err != nil {
 		return err
 	}

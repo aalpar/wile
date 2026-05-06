@@ -68,7 +68,7 @@ func PrimEval(cc machine.CallContext) error {
 		envSpec := restTuple.Car()
 		topLevelEnv, ok = envSpec.(*environment.Namespace)
 		if !ok {
-			return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "eval: expected an environment specifier but got %T", envSpec)
+			return werr.WrapForeignErrorf(werr.ErrNotANamespace, "eval: expected a namespace but got %T", envSpec)
 		}
 		// Reject extra arguments beyond the environment
 		envRest, _ := restTuple.Cdr().(values.Tuple)
@@ -118,7 +118,7 @@ func PrimLoad(cc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotAMachineContext, "load: expected MachineContext, got %T", cc)
 	}
 	filenameVal := mc.Arg(0)
-	filename, err := helpers.RequireType[*values.String](filenameVal, werr.ErrNotAString, "a string", "load")
+	filename, err := helpers.RequireType[*values.String](filenameVal, werr.ErrNotAString, "load")
 	if err != nil {
 		return err
 	}
@@ -229,7 +229,7 @@ func PrimCurrentLoadDepth(mc machine.CallContext) error {
 // Returns R5RS env.
 func PrimSchemeReportEnvironment(mc machine.CallContext) error {
 	version := mc.Arg(0)
-	versionInt, err := helpers.RequireType[*values.Integer](version, werr.ErrNotAnInteger, "an integer", "scheme-report-environment")
+	versionInt, err := helpers.RequireType[*values.Integer](version, werr.ErrNotAnInteger, "scheme-report-environment")
 	if err != nil {
 		return err
 	}
@@ -255,7 +255,7 @@ func PrimSchemeReportEnvironment(mc machine.CallContext) error {
 // Returns an empty R5RS environment with no bindings.
 func PrimNullEnvironment(mc machine.CallContext) error {
 	version := mc.Arg(0)
-	versionInt, err := helpers.RequireType[*values.Integer](version, werr.ErrNotAnInteger, "an integer", "null-environment")
+	versionInt, err := helpers.RequireType[*values.Integer](version, werr.ErrNotAnInteger, "null-environment")
 	if err != nil {
 		return err
 	}
@@ -316,11 +316,11 @@ func tryWileProfile(mc machine.CallContext, argsVal values.Value) (*environment.
 	}
 	nameSym, ok := rest.Car().(*values.Symbol)
 	if !ok {
-		return nil, true, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+		return nil, true, werr.WrapForeignErrorf(werr.ErrNotASymbol,
 			"environment: expected profile name after 'wile, got %T", rest.Car())
 	}
 	if !values.IsEmptyList(rest.Cdr()) {
-		return nil, true, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+		return nil, true, werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
 			"environment: (wile %s ...) takes exactly one profile name", nameSym.Key)
 	}
 
@@ -373,7 +373,7 @@ func PrimEnvironment(mc machine.CallContext) error {
 
 	args, ok := argsVal.(values.Tuple)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "environment: expected list of import specs, got %T", argsVal)
+		return werr.WrapForeignErrorf(werr.ErrNotAList, "environment: expected list of import specs, got %T", argsVal)
 	}
 
 	// Process each import spec

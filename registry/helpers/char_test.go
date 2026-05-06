@@ -223,6 +223,28 @@ func TestCharCompareVariadic_Errors(t *testing.T) {
 	}
 }
 
+// TestCompareVariadic_ErrorMessageContainsTypeName pins the rest-loop
+// error format in CompareVariadic. The helper has its own format string
+// independent of RequireArg/RequireType; the type phrase must surface
+// from the sentinel correctly.
+func TestCompareVariadic_ErrorMessageContainsTypeName(t *testing.T) {
+	c := qt.New(t)
+	// Two chars then an integer — the integer is the type-mismatch.
+	mc := makeMC(
+		values.NewCharacter('a'),
+		values.List(values.NewCharacter('b'), values.NewInteger(99)),
+	)
+	err := CharCompareVariadic(mc, "test-prim", charLT)
+	c.Assert(err, qt.IsNotNil)
+	msg := err.Error()
+	c.Assert(
+		msg,
+		qt.Matches,
+		`.*expected a character but got.*`,
+		qt.Commentf("CompareVariadic should surface TypeName phrase: %q", msg),
+	)
+}
+
 // TestCharCompareVariadic_TypeErrorAfterCmpFail pins CP1's behavioral
 // invariant: when a comparison fails before reaching an ill-typed element,
 // the helper short-circuits to #f without raising the type error. Going
