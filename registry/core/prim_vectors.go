@@ -24,7 +24,7 @@ import (
 // PrimMakeVector implements the (make-vector) primitive.
 // Creates a vector of the given size, optionally filled with a specified value.
 func PrimMakeVector(mc machine.CallContext) error {
-	size, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotANumber, "make-vector")
+	size, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotAnInteger, "make-vector")
 	if err != nil {
 		return err
 	}
@@ -133,7 +133,7 @@ func PrimVectorCopyTo(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	at, err := helpers.RequireArg[*values.Integer](mc, 1, werr.ErrNotANumber, "vector-copy!")
+	at, err := helpers.RequireArg[*values.Integer](mc, 1, werr.ErrNotAnInteger, "vector-copy!")
 	if err != nil {
 		return err
 	}

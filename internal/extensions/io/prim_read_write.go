@@ -360,7 +360,7 @@ func PrimCharReadyQ(mc machine.CallContext) error {
 // R7RS §6.13.2: (read-string k [port])
 // Reads up to k characters from the input port and returns them as a string.
 func PrimReadString(mc machine.CallContext) error {
-	k, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotANumber, "read-string")
+	k, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotAnInteger, "read-string")
 	if err != nil {
 		return err
 	}

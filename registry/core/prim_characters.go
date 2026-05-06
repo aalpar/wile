@@ -38,7 +38,7 @@ func PrimCharToInteger(mc machine.CallContext) error {
 // R7RS §6.6: The argument must be a valid Unicode scalar value,
 // i.e., an integer in [0, #xD7FF] ∪ [#xE000, #x10FFFF].
 func PrimIntegerToChar(mc machine.CallContext) error {
-	n, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotANumber, "integer->char")
+	n, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotAnInteger, "integer->char")
 	if err != nil {
 		return err
 	}

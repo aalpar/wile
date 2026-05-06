@@ -125,7 +125,7 @@ func PrimWriteU8(mc machine.CallContext) error {
 // Reads the next k bytes from port into a newly allocated bytevector.
 // Returns eof-object if no bytes are available before end of file.
 func PrimReadBytevector(mc machine.CallContext) error {
-	k, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotANumber, "read-bytevector")
+	k, err := helpers.RequireArg[*values.Integer](mc, 0, werr.ErrNotAnInteger, "read-bytevector")
 	if err != nil {
 		return err
 	}
