@@ -22,14 +22,17 @@ import (
 
 // Standard error values for type checking and runtime errors.
 var (
-	ErrNotABoolean               = NewTypeSentinel("boolean")
-	ErrNotAnInputPort            = NewTypeSentinel("input port")
-	ErrNotAnOutputPort           = NewTypeSentinel("output port")
-	ErrNotABox                   = NewTypeSentinel("box")
-	ErrNotAnOpaqueValue          = NewTypeSentinel("opaque value")
-	ErrNotAByte                  = NewTypeSentinel("byte")
-	ErrNotAByteInputPort         = NewTypeSentinel("byte input port")
-	ErrNotAByteOutputPort        = NewTypeSentinel("byte output port")
+	ErrNotABoolean      = NewTypeSentinel("boolean")
+	ErrNotAnInputPort   = NewTypeSentinel("input port")
+	ErrNotAnOutputPort  = NewTypeSentinel("output port")
+	ErrNotABox          = NewTypeSentinel("box")
+	ErrNotAnOpaqueValue = NewTypeSentinel("opaque value")
+	ErrNotAByte         = NewTypeSentinel("byte")
+	// "binary" matches the user-facing terminology used in R7RS and
+	// values/value_type.go; the var name keeps "Byte" for historical
+	// reasons but the message phrase tracks the rest of the codebase.
+	ErrNotAByteInputPort         = NewTypeSentinel("binary input port")
+	ErrNotAByteOutputPort        = NewTypeSentinel("binary output port")
 	ErrNotATextualPort           = NewTypeSentinel("textual port")
 	ErrStopIteration             = NewStaticError("stop iteration")
 	ErrNotAPrimitive             = NewTypeSentinel("primitive")
@@ -204,7 +207,14 @@ func NewStaticError(msg string) *StaticError {
 // wrong result (e.g., "once" pronounced /wuns/ wants "a", not "an"),
 // pass the already-articled phrase: NewTypeSentinel("a once"). Inputs
 // starting with "a " or "an " are used verbatim.
+//
+// Panics on empty noun — a type sentinel without a noun is a programmer
+// bug, since the resulting "expected " phrase would be useless. Use
+// NewStaticError for sentinels that aren't type-mismatch errors.
 func NewTypeSentinel(noun string) *StaticError {
+	if noun == "" {
+		panic("werr.NewTypeSentinel: empty noun (use NewStaticError for non-type sentinels)")
+	}
 	var typeName string
 	switch {
 	case strings.HasPrefix(noun, "a "), strings.HasPrefix(noun, "an "):

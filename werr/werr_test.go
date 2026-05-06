@@ -273,7 +273,6 @@ func TestNewTypeSentinel_AutoArticle(t *testing.T) {
 		{"capitalized consonant", "String", "a String", "not a String"},
 		{"pass-through a", "a once", "a once", "not a once"},
 		{"pass-through an", "an apple", "an apple", "not an apple"},
-		{"empty noun defaults to a", "", "a ", "not a "},
 		// Phonetic exceptions the letter rule does NOT handle.
 		// These cases produce grammatically wrong but unambiguous output;
 		// callers needing the correct article must use the pass-through
@@ -292,6 +291,21 @@ func TestNewTypeSentinel_AutoArticle(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestNewTypeSentinel_EmptyNounPanics pins that NewTypeSentinel rejects
+// empty nouns at construction time. A type sentinel with empty noun
+// would produce "expected " in error messages — the same shape as the
+// documented silent-degradation path for non-type sentinels — but with
+// a different cause. Panicking surfaces the misuse loudly at init time.
+func TestNewTypeSentinel_EmptyNounPanics(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Errorf("NewTypeSentinel(\"\") should panic, but did not")
+		}
+	}()
+	werr.NewTypeSentinel("")
 }
 
 // TestNewStaticError_NoTypeName pins the contract that NewStaticError
