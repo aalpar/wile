@@ -17,6 +17,8 @@ package syntax
 import (
 	"context"
 	"reflect"
+
+	"github.com/aalpar/wile/values"
 )
 
 // SyntaxList constructs a syntax list from the given elements.
@@ -130,7 +132,13 @@ func IsSyntaxVoid(v SyntaxValue) bool {
 	return v == nil || v.IsVoid()
 }
 
-// IsSyntaxEmptyList returns true if the value is the syntax empty list singleton.
+// IsSyntaxEmptyList returns true if the value is the syntax empty list.
+//
+// Delegates to values.IsEmptyList — after the empty-list duality merge,
+// the syntax empty list is the same singleton as values.EmptyList, and
+// values.IsEmptyList works on any Tuple. This restores symmetric
+// equality (previously the strict pointer-type assertion produced
+// #f for `(equal? (syntax ()) '())`, contrary to Chez).
 func IsSyntaxEmptyList(v SyntaxValue) bool {
-	return v == SyntaxEmptyList
+	return values.IsEmptyList(v)
 }

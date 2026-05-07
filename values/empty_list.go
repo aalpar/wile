@@ -26,11 +26,18 @@ import (
 //
 // R7RS 6.4: "The empty list is a special object of its own type.
 // It is not a pair."
+//
+// It also implements SyntaxValue and SyntaxTuple. The empty list carries
+// no symbols, no scopes, and no source-attachable hygiene content, so
+// the value-level singleton serves double duty as the syntax-level
+// singleton (matching Chez's `(equal? (syntax ()) '()) → #t`).
 type emptyListType struct{}
 
 var (
-	_ Value = emptyListType{}
-	_ Tuple = emptyListType{}
+	_ Value       = emptyListType{}
+	_ Tuple       = emptyListType{}
+	_ SyntaxValue = emptyListType{}
+	_ SyntaxTuple = emptyListType{}
 )
 
 // SchemeString returns "()" for the empty list.
@@ -86,4 +93,45 @@ func (emptyListType) Car() Value {
 // Cdr panics with werr.ErrNotAPair. R7RS: (cdr '()) is an error.
 func (emptyListType) Cdr() Value {
 	panic(werr.WrapForeignErrorf(werr.ErrNotAPair, "emptyList.Cdr: empty list has no cdr"))
+}
+
+// SourceContext returns nil. The empty list carries no source-attachable
+// hygiene content, so it is the same singleton at value and syntax phases.
+func (emptyListType) SourceContext() *SourceContext {
+	return nil
+}
+
+// Unwrap returns the empty list itself.
+func (p emptyListType) Unwrap() Value {
+	return p
+}
+
+// UnwrapAll returns the empty list itself.
+func (p emptyListType) UnwrapAll() Value {
+	return p
+}
+
+// SyntaxCar panics with werr.ErrNotAPair. R7RS: (syntax-car '()) is an error.
+func (emptyListType) SyntaxCar() SyntaxValue {
+	panic(werr.WrapForeignErrorf(werr.ErrNotAPair, "emptyList.SyntaxCar: empty list has no car"))
+}
+
+// SyntaxCdr panics with werr.ErrNotAPair. R7RS: (syntax-cdr '()) is an error.
+func (emptyListType) SyntaxCdr() SyntaxValue {
+	panic(werr.WrapForeignErrorf(werr.ErrNotAPair, "emptyList.SyntaxCdr: empty list has no cdr"))
+}
+
+// SyntaxForEach is a no-op on the empty list; returns the empty list and nil error.
+func (p emptyListType) SyntaxForEach(_ context.Context, _ SyntaxForEachFunc) (SyntaxValue, error) {
+	return p, nil
+}
+
+// SyntaxAppend returns vs unchanged, since appending to the empty list yields vs.
+func (emptyListType) SyntaxAppend(vs SyntaxValue) SyntaxValue {
+	return vs
+}
+
+// AsSyntaxVector returns a new empty syntax vector.
+func (emptyListType) AsSyntaxVector() *SyntaxVector {
+	return NewSyntaxVector(nil)
 }

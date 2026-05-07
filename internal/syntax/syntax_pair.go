@@ -27,10 +27,12 @@ var (
 	_ values.Tuple = (*SyntaxPair)(nil)
 	_ SyntaxTuple  = (*SyntaxPair)(nil)
 
-	// SyntaxEmptyList is the empty list singleton.
-	// It implements SyntaxTuple but is not *SyntaxPair, enforcing type safety
-	// parallel to values.EmptyList. Pointer identity enables O(1) equality checks.
-	SyntaxEmptyList SyntaxTuple = &syntaxEmptyListType{}
+	// SyntaxEmptyList is the empty list singleton at the syntax phase.
+	// It is the same singleton as values.EmptyList — the empty list has no
+	// symbols, scopes, or source-attachable hygiene content, so the
+	// value-level singleton serves both phases (matching Chez's
+	// `(equal? (syntax ()) '()) → #t`).
+	SyntaxEmptyList SyntaxTuple = values.SyntaxEmptyList
 )
 
 // SyntaxPair wraps a Scheme pair (cons cell) with source context.

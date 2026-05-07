@@ -43,11 +43,7 @@ func (syntaxVoidType) UnwrapAll() values.Value {
 // SyntaxVoid is the singleton syntax void value.
 var SyntaxVoid SyntaxValue = syntaxVoidType{}
 
-// SyntaxValue is the interface for all syntax objects.
-// It provides access to source context and unwrapping capabilities.
-type SyntaxValue interface {
-	values.Value
-	SourceContext() *SourceContext
-	Unwrap() values.Value
-	UnwrapAll() values.Value
-}
+// SyntaxValue is the interface for all syntax objects. Defined in
+// package values so that values.emptyListType can satisfy it directly
+// (the empty-list duality merge — see values/syntax_value.go).
+type SyntaxValue = values.SyntaxValue
