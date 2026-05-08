@@ -36,7 +36,7 @@ func addSyntax(r *registry.Registry) error {
 		{Name: "generate-temporaries", ParamCount: 1, Impl: PrimGenerateTemporaries,
 			Doc: "Returns a list of unique temporary identifiers, one per element in STX-LIST. Used in syntax-case macros.\n\nExamples:\n  ;; (length (generate-temporaries '(a b c)))  => 3", ParamNames: []string{"stx-list"}, Category: "syntax",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeList},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	// Identifier comparison
 	r.AddPrimitives([]registry.PrimitiveSpec{
@@ -46,7 +46,7 @@ func addSyntax(r *registry.Registry) error {
 		{Name: "free-identifier=?", ParamCount: 2, Impl: PrimFreeIdentifierEqualQ,
 			Doc: "Returns #t if ID1 and ID2 refer to the same binding when used as free references. Used for literal matching in syntax-rules.\n\nExamples:\n  ;; Used in syntax-rules to match literals like `else' and `=>'.", ParamNames: []string{"id1", "id2"}, Category: "syntax",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}, ReturnType: values.TypeBoolean},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	return nil
 }

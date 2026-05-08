@@ -46,7 +46,7 @@ func addPrompts(r *registry.Registry) error {
 		{Name: "continuation-prompt-available?", ParamCount: 1, Impl: PrimContinuationPromptAvailableQ,
 			Doc: "Returns #t if a prompt matching TAG exists on the current continuation chain.\n\nExamples:\n  (continuation-prompt-available? (default-continuation-prompt-tag))  => #t", ParamNames: []string{"tag"}, Category: "continuations",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	return nil
 }

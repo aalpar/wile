@@ -40,6 +40,6 @@ func addPrimitives(r *registry.Registry) error {
 			Doc: "Returns all environment variables as an association list of (name . value) pairs.", Category: "envvars",
 			Keywords:   []string{"environ", "env vars", "all environment"},
 			ReturnType: values.TypeList},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }

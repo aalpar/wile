@@ -85,7 +85,7 @@ func addPrimitives(r *registry.Registry) error {
             ParamNames: []string{"n"},
             Category:   "myext",
         },
-    }, registry.PhaseRuntime)
+    }, registry.PhaseSetRuntime)
     return nil
 }
 
@@ -144,7 +144,7 @@ For simple extensions, `registry.NewDescribedExtension` wraps a function:
 var Extension = registry.NewDescribedExtension("myext",
     "Brief description of this extension.",
     func(r *registry.Registry) error {
-        r.AddPrimitive(spec, registry.PhaseRuntime)
+        r.AddPrimitive(spec, registry.PhaseSetRuntime)
         return nil
     })
 ```
@@ -200,13 +200,13 @@ r.AddPrimitive(registry.PrimitiveSpec{
     Doc:        "Returns the square root of z.",
     ParamNames: []string{"z"},
     Category:   "math",
-}, registry.PhaseRuntime)
+}, registry.PhaseSetRuntime)
 
 // Batch registration
 r.AddPrimitives([]registry.PrimitiveSpec{
     {Name: "sin", ParamCount: 1, Impl: primSin},
     {Name: "cos", ParamCount: 1, Impl: primCos},
-}, registry.PhaseRuntime)
+}, registry.PhaseSetRuntime)
 ```
 
 ### PrimitiveSpec Fields
@@ -283,10 +283,10 @@ bindings (auxiliary syntax keywords) use `PhaseCompile` or `AddBinding`.
 
 ```go
 // Available at runtime only
-r.AddPrimitive(spec, registry.PhaseRuntime)
+r.AddPrimitive(spec, registry.PhaseSetRuntime)
 
 // Available at both runtime and during macro expansion
-r.AddPrimitive(spec, registry.PhaseRuntime|registry.PhaseExpand)
+r.AddPrimitive(spec, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 // Compile-time binding only (e.g., auxiliary syntax)
 r.AddBinding("else")

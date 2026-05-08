@@ -184,6 +184,10 @@ Moved to **Completed Plans** below.
 
 | File | Contents | Status |
 |------|----------|--------|
+| `2026-05-07-structural-reduction-roadmap.md` | **Top priority, planning-only.** Cross-package coupling/LOC inventory; recommends Tier A targets (`values/`, `environment/`, `registry/`) for `/structural-reduction` before implementing the `machine/` and `internal/` plans. Tier B/C with appropriate lenses. | **Open — gating** |
+| `2026-05-08-dispatch-axis-as-data.md` | **Cross-package finding.** Synthesis of three structural defects sharing the "dispatch axis hand-unrolled instead of treated as data" pattern: `values/` numeric dispatch tables (41 vars, 7 files), `registry/` two `Phase` types with conflicting values, `registry/` four phase loops in `Apply`. Names the pattern (defunctionalization / functor materialization, Reynolds 1972 / Bird & de Moor 1997), recommends implementation order (Phase unification first, then `Apply` collapse, numeric dispatch independent), predicts further instances in `environment/` and `internal/validate/`. | **Findings — feeds per-package plans** |
+| `2026-05-06-machine-structural-reduction.md` | `machine/` structural reduction: 7 findings + 3 opportunities. Awaiting implementation. | **Open — gated by roadmap** |
+| `2026-05-07-internal-structural-reduction.md` | `internal/` structural reduction: 7 findings + 4 opportunities. Awaiting implementation. | **Open — gated by roadmap** |
 | `TECH-DEBT-2026-04.md` | Tech debt assessment: 8 phases, 27 tasks | 24/27 complete; 6.2, 6.4 **open**; 8.2, 8.4 opportunistic |
 | `TECH-DEBT-2026-04-IMPL.md` | Tech debt implementation tracker | 24/27 complete; 6.2 (context.TODO), 6.4 (typeswitchlint guide) **open** |
 

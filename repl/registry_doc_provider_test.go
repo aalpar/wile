@@ -49,7 +49,7 @@ func buildTestRegistry() *registry.Registry {
 			Category:   "lists",
 			Keywords:   []string{"sort", "ordering", "comparison"},
 		},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return reg
 }
 
@@ -65,7 +65,7 @@ func buildTestRegistryWithDocs() *registry.Registry {
 		IsVariadic: true,
 		Doc:        "Apply PROC to ARGS.",
 		Category:   "control",
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	// Binding specs (compile-time forms with embedded metadata)
 	reg.AddBindingSpecs([]registry.BindingSpec{
@@ -102,7 +102,7 @@ func TestRegistryDocProvider_Found(t *testing.T) {
 		Doc:        "A test primitive.",
 		ParamNames: []string{"a", "b"},
 		Category:   "test",
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	provider := NewRegistryDocProvider(reg, nil)
 	info, found := provider.LookupDoc("test-prim")
@@ -123,7 +123,7 @@ func TestRegistryDocProvider_ContractFields(t *testing.T) {
 		Category:   "test",
 		ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeInteger},
 		ReturnType: values.TypeCharacter,
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	prov := NewRegistryDocProvider(reg, nil)
 	info, found := prov.LookupDoc("test-contracted")
 	c.Assert(found, qt.IsTrue)
@@ -212,7 +212,7 @@ func TestRegistryDocProvider_Categories_ExcludesEmpty(t *testing.T) {
 		Name:       "no-category",
 		ParamCount: 0,
 		Doc:        "Has no category.",
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	provider := NewRegistryDocProvider(reg, nil)
 	cats := provider.Categories()
 	c.Assert(cats, qt.HasLen, 0)
@@ -453,7 +453,7 @@ func TestRegistryDocProvider_KeywordsInLookup(t *testing.T) {
 		Doc:        "Sort a list.",
 		Category:   "lists",
 		Keywords:   []string{"sort", "ordering"},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	prov := NewRegistryDocProvider(reg, nil)
 	info, found := prov.LookupDoc("list-sort")
 	c.Assert(found, qt.IsTrue)

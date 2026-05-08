@@ -15,7 +15,7 @@
 package environment
 
 import (
-	"sort"
+	"slices"
 	"sync"
 	"testing"
 
@@ -82,12 +82,12 @@ func TestPhaseRegistry_Phases(t *testing.T) {
 	// Create more phases
 	topLevel.phases.GetOrCreate(PhaseExpand)
 	topLevel.phases.GetOrCreate(PhaseCompile)
-	topLevel.phases.GetOrCreate(-1)
+	topLevel.phases.GetOrCreate(PhaseTemplate)
 
 	phases = topLevel.phases.Phases()
-	sort.Ints(phases)
+	slices.SortFunc(phases, Phase.Compare)
 	qt.Assert(t, len(phases), qt.Equals, 4)
-	qt.Assert(t, phases, qt.DeepEquals, []int{-1, 0, 1, 2})
+	qt.Assert(t, phases, qt.DeepEquals, []Phase{PhaseTemplate, PhaseRuntime, PhaseExpand, PhaseCompile})
 }
 
 func TestPhaseRegistry_PhaseEnvParentsToTopLevel(t *testing.T) {
@@ -131,7 +131,7 @@ func TestPhaseRegistry_Concurrent(t *testing.T) {
 		go func(goroutineID int) {
 			defer wg.Done()
 			for phase := range numPhases {
-				results[goroutineID][phase] = topLevel.phases.GetOrCreate(phase)
+				results[goroutineID][phase] = topLevel.phases.GetOrCreate(Phase(phase))
 			}
 		}(i)
 	}
@@ -149,8 +149,26 @@ func TestPhaseRegistry_Concurrent(t *testing.T) {
 }
 
 func TestPhaseConstants(t *testing.T) {
-	qt.Assert(t, PhaseTemplate, qt.Equals, -1)
-	qt.Assert(t, PhaseRuntime, qt.Equals, 0)
-	qt.Assert(t, PhaseExpand, qt.Equals, 1)
-	qt.Assert(t, PhaseCompile, qt.Equals, 2)
+	qt.Assert(t, PhaseTemplate, qt.Equals, Phase(-1))
+	qt.Assert(t, PhaseRuntime, qt.Equals, Phase(0))
+	qt.Assert(t, PhaseExpand, qt.Equals, Phase(1))
+	qt.Assert(t, PhaseCompile, qt.Equals, Phase(2))
+}
+
+func TestPhaseString(t *testing.T) {
+	tcs := []struct {
+		phase Phase
+		want  string
+	}{
+		{PhaseTemplate, "template"},
+		{PhaseRuntime, "runtime"},
+		{PhaseExpand, "expand"},
+		{PhaseCompile, "compile"},
+		{Phase(7), "phase(7)"},
+		{Phase(-2), "phase(-2)"},
+	}
+	for _, tc := range tcs {
+		qt.Assert(t, tc.phase.String(), qt.Equals, tc.want,
+			qt.Commentf("phase %d", int8(tc.phase)))
+	}
 }

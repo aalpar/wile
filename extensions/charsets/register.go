@@ -245,6 +245,6 @@ func addPrimitives(r *registry.Registry) error {
 			ParamNames: []string{"name"},
 			Category:   "char-sets",
 		},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }

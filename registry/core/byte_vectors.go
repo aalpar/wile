@@ -45,7 +45,7 @@ func addBytevectors(r *registry.Registry) error {
 		{Name: "bytevector-append", ParamCount: 1, IsVariadic: true, Impl: PrimBytevectorAppend,
 			Doc: "Returns a newly allocated bytevector whose bytes are the concatenation of the argument bytevectors.\n\nExamples:\n  (bytevector-append #u8(1 2) #u8(3 4))  => #u8(1 2 3 4)", ParamNames: []string{"bytevector"}, Category: "bytevectors",
 			ParamTypes: []values.TypeConstraint{values.TypeByteVector}, ReturnType: values.TypeByteVector},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	// UTF-8 conversion
 	r.AddPrimitives([]registry.PrimitiveSpec{
@@ -57,7 +57,7 @@ func addBytevectors(r *registry.Registry) error {
 			Doc: "Encodes the characters of STRING from START to end as a UTF-8 bytevector.\n\nExamples:\n  (string->utf8 \"hi\")  => #u8(104 105)", ParamNames: []string{"string", "start"}, Category: "bytevectors",
 			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeExactInteger}, ReturnType: values.TypeByteVector,
 			Keywords: []string{"encode", "text to bytes", "UTF-8 encode"}},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	return nil
 }

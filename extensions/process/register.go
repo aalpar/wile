@@ -68,6 +68,6 @@ func addPrimitives(r *registry.Registry) error {
 			Doc: "Returns #t if OBJ is a spawned process object.", ParamNames: []string{"obj"}, Category: "process",
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
 			ReturnType: values.TypeBoolean},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }

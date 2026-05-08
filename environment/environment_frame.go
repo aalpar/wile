@@ -45,7 +45,7 @@ import (
 //	│  parent ─────────── *EnvironmentFrame (lexical parent, nil at top)      │
 //	│  local ──────────── LocalEnvironmentFrame (value; keys==nil → none)     │
 //	│  global ─────────── *GlobalEnvironmentFrame (define bindings)           │
-//	│  phaseLevel ─────── int (0=runtime, 1=expand, 2=compile)                │
+//	│  phaseLevel ─────── Phase (-1=template, 0=runtime, 1=expand, 2=compile) │
 //	│  phases ─────────── *PhaseRegistry (shared reference)                   │
 //	│  namespace ───────── *Namespace (back-reference)                        │
 //	└─────────────────────────────────────────────────────────────────────────┘
@@ -99,8 +99,9 @@ type EnvironmentFrame struct {
 	local LocalEnvironmentFrame
 	// global holds global bindings for this phase
 	global *GlobalEnvironmentFrame
-	// phaseLevel indicates which phase this frame represents (0=runtime, 1=expand, etc.)
-	phaseLevel int
+	// phaseLevel indicates which phase this frame represents
+	// (PhaseTemplate=-1, PhaseRuntime=0, PhaseExpand=1, PhaseCompile=2)
+	phaseLevel Phase
 	// phases is the shared phase registry, owned by Namespace
 	phases *PhaseRegistry
 	// namespace is the owning Namespace
@@ -256,7 +257,7 @@ func (p *EnvironmentFrame) TopLevel() *EnvironmentFrame {
 //
 // This is the primary method for cross-phase access with O(1) lookup time.
 // The environment must have been created via NewNamespace().
-func (p *EnvironmentFrame) AtPhase(phase int) *EnvironmentFrame {
+func (p *EnvironmentFrame) AtPhase(phase Phase) *EnvironmentFrame {
 	topLevel := p.TopLevel()
 	if topLevel.phases == nil {
 		panic(werr.WrapForeignErrorf(
@@ -268,7 +269,7 @@ func (p *EnvironmentFrame) AtPhase(phase int) *EnvironmentFrame {
 }
 
 // PhaseLevel returns the phase level of this environment frame.
-func (p *EnvironmentFrame) PhaseLevel() int {
+func (p *EnvironmentFrame) PhaseLevel() Phase {
 	return p.phaseLevel
 }
 
@@ -719,7 +720,7 @@ func (p *EnvironmentFrame) GetGlobalIndexAcrossPhases(key *values.Symbol) *Globa
 	}
 
 	// Search runtime (phase 0) first, then expand (1), then compile (2)
-	for _, phase := range [3]int{PhaseRuntime, PhaseExpand, PhaseCompile} {
+	for _, phase := range [3]Phase{PhaseRuntime, PhaseExpand, PhaseCompile} {
 		phaseEnv := phases.Get(phase)
 		if phaseEnv == nil {
 			continue

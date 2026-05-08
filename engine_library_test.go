@@ -136,7 +136,7 @@ func (m *mockLibraryNamerExtension) AddToRegistry(r *registry.Registry) error {
 			mc.SetValue(nil)
 			return nil
 		}),
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }
 

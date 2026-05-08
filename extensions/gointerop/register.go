@@ -77,7 +77,7 @@ func addChannels(r *registry.Registry) error {
 			Doc: "Returns the total buffer capacity of CHANNEL. 0 for unbuffered channels.", ParamNames: []string{"channel"}, Category: "channels",
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
 			ReturnType: values.TypeExactInteger},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }
 
@@ -102,7 +102,7 @@ func addWaitGroup(r *registry.Registry) error {
 			Doc: "Blocks until the wait group counter reaches zero.", ParamNames: []string{"wg"}, Category: "waitgroups",
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
 			ReturnType: values.TypeVoid},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }
 
@@ -139,7 +139,7 @@ func addRWMutex(r *registry.Registry) error {
 			Doc: "Attempts a non-blocking write lock. Returns #t if acquired, #f otherwise.", ParamNames: []string{"rwm"}, Category: "rwmutex",
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
 			ReturnType: values.TypeBoolean},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }
 
@@ -160,7 +160,7 @@ func addOnce(r *registry.Registry) error {
 			Doc: "Returns #t if ONCE's thunk has already been executed.", ParamNames: []string{"once"}, Category: "once",
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
 			ReturnType: values.TypeBoolean},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }
 
@@ -188,6 +188,6 @@ func addAtomic(r *registry.Registry) error {
 			Doc: "Atomically compares the stored value to OLD (by identity) and, if equal, replaces it with NEW. Returns #t on success.", ParamNames: []string{"atomic", "old", "new"}, Category: "atomic",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny, values.TypeAny},
 			ReturnType: values.TypeBoolean},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }

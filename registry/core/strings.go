@@ -28,7 +28,7 @@ func addStrings(r *registry.Registry) error {
 		{Name: "make-string", ParamCount: 2, IsVariadic: true, Impl: PrimMakeString,
 			Doc: "Returns a string of length K. If CHAR is given, each position is filled with CHAR; otherwise unspecified.\n\nExamples:\n  (make-string 3 #\\a)    => \"aaa\"", ParamNames: []string{"k", "char"}, Category: "strings",
 			ParamTypes: []values.TypeConstraint{values.TypeExactInteger, values.TypeCharacter}, ReturnType: values.TypeString},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	// String access
 	r.AddPrimitives([]registry.PrimitiveSpec{
@@ -41,7 +41,7 @@ func addStrings(r *registry.Registry) error {
 		{Name: "string-set!", ParamCount: 3, Impl: PrimStringSet,
 			Doc: "Stores CHAR at 0-based index K in STRING. STRING must be mutable.\n\nExamples:\n  (let ((s (string-copy \"hello\"))) (string-set! s 0 #\\H) s)  => \"Hello\"", ParamNames: []string{"string", "k", "char"}, Category: "strings",
 			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeExactInteger, values.TypeCharacter}, ReturnType: values.TypeVoid},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	// String conversion
 	r.AddPrimitives([]registry.PrimitiveSpec{
@@ -61,7 +61,7 @@ func addStrings(r *registry.Registry) error {
 			Doc: "Returns the symbol whose name is STRING. Symbols with the same name are always eq?.\n\nExamples:\n  (string->symbol \"hello\")  => hello", ParamNames: []string{"string"}, Category: "strings",
 			ParamTypes: []values.TypeConstraint{values.TypeString}, ReturnType: values.TypeSymbol,
 			Keywords: []string{"intern", "make symbol"}},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	// String operations
 	r.AddPrimitives([]registry.PrimitiveSpec{
@@ -77,7 +77,7 @@ func addStrings(r *registry.Registry) error {
 			Doc: "Returns a mutable copy of STRING from START to end. START defaults to 0, end to string length.\n\nExamples:\n  (string-copy \"hello\")      => \"hello\"\n  (string-copy \"hello\" 1 3)  => \"el\"", ParamNames: []string{"string", "start"}, Category: "strings",
 			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeExactInteger}, ReturnType: values.TypeString,
 			Keywords: []string{"clone", "duplicate"}},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	// String comparison (generated from stringCompareSpecs table)
 	stringCmpPrims := make([]registry.PrimitiveSpec, len(stringCompareSpecs))
@@ -90,7 +90,7 @@ func addStrings(r *registry.Registry) error {
 			ReturnType: values.TypeBoolean,
 		}
 	}
-	r.AddPrimitives(stringCmpPrims, registry.PhaseRuntime|registry.PhaseExpand)
+	r.AddPrimitives(stringCmpPrims, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	return nil
 }

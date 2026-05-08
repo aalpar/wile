@@ -99,7 +99,7 @@ func addReflection(r *registry.Registry) error {
 			Doc:        "Returns the primitive's Category as a string (e.g., \"reflection\", \"arithmetic\"), or the empty string if unset.\n\nExamples:\n  (primitive-spec-category SPEC)  ; => \"reflection\"",
 			ParamNames: []string{"spec"}, Category: "reflection",
 			ReturnType: values.TypeString},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	return nil
 }

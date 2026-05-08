@@ -102,7 +102,7 @@ func addPrimitives(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeString},
 			ReturnType: values.TypeVoid},
 		// with-input-from-file and with-output-to-file are now macros (see addMacros)
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }
 

@@ -63,9 +63,11 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame,
 		}
 	}
 
-	// Register compile-time primitives (bindings only, no values)
+	// Register compile-only primitives (binding-only, no runtime value).
+	// Skipped for primitives that also have PhaseRuntime — the runtime path
+	// installs the binding via SetOwnGlobalValue.
 	for _, reg := range p.primitives {
-		if reg.Phases.HasCompile() && !reg.Phases.HasRuntime() {
+		if reg.Phases.Has(environment.PhaseCompile) && !reg.Phases.Has(environment.PhaseRuntime) {
 			err := registerCompileTimeBinding(env, BindingSpec{Name: reg.Spec.Name})
 			if err != nil {
 				return err
@@ -73,20 +75,22 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame,
 		}
 	}
 
-	// Register runtime primitives
-	for _, reg := range p.primitives {
-		if reg.Phases.HasRuntime() {
-			err := registerRuntimePrimitive(env, reg.Spec, cfg.contractEnforcement)
-			if err != nil {
-				return err
-			}
-		}
+	// Register runtime and expand primitives. Both create a ForeignClosure
+	// in a phase-specific environment frame; only the frame differs. Iterate
+	// the phase axis as data instead of replicating the loop body.
+	phaseTargets := []struct {
+		phase environment.Phase
+		env   *environment.EnvironmentFrame
+	}{
+		{environment.PhaseRuntime, env},
+		{environment.PhaseExpand, env.Expand()},
 	}
-
-	// Register expand-time primitives
-	for _, reg := range p.primitives {
-		if reg.Phases.HasExpand() {
-			err := registerExpandTimePrimitive(env, reg.Spec, cfg.contractEnforcement)
+	for _, pt := range phaseTargets {
+		for _, reg := range p.primitives {
+			if !reg.Phases.Has(pt.phase) {
+				continue
+			}
+			err := registerPhasePrimitive(pt.env, pt.phase, reg.Spec, cfg.contractEnforcement)
 			if err != nil {
 				return err
 			}
@@ -120,12 +124,19 @@ func registerCompileTimeBinding(env *environment.EnvironmentFrame, spec BindingS
 	return nil
 }
 
-func registerRuntimePrimitive(env *environment.EnvironmentFrame, spec PrimitiveSpec, contractEnforcement bool) error {
+// registerPhasePrimitive installs a ForeignClosure for spec in phaseEnv.
+// The phase parameter is used only for error message context; the actual
+// target frame is phaseEnv (chosen by the caller). This is the single
+// registration helper shared by Runtime and Expand phases — earlier
+// versions had two near-identical helpers differing only in target env
+// and error message; collapsed per Instance C of the dispatch-axis-as-data
+// finding (plans/2026-05-08-dispatch-axis-as-data.md).
+func registerPhasePrimitive(phaseEnv *environment.EnvironmentFrame, phase environment.Phase, spec PrimitiveSpec, contractEnforcement bool) error {
 	sym := values.NewSymbol(spec.Name)
-	env.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
+	phaseEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
 
 	closure := machine.NewForeignClosure(
-		env,
+		phaseEnv,
 		spec.ParamCount,
 		spec.IsVariadic,
 		spec.Impl,
@@ -136,9 +147,9 @@ func registerRuntimePrimitive(env *environment.EnvironmentFrame, spec PrimitiveS
 		closure.SetValidator(BuildValidator(spec))
 	}
 
-	err := env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
+	err := phaseEnv.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
 	if err != nil {
-		return werr.WrapForeignErrorf(err, "error registering %s", spec.Name)
+		return werr.WrapForeignErrorf(err, "error registering %s at phase %s", spec.Name, phase)
 	}
 	return nil
 }
@@ -150,30 +161,6 @@ func registerGlobalValue(env *environment.EnvironmentFrame, name string, value v
 	err := env.SetOwnGlobalValue(environment.NewGlobalIndex(sym), value)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "error registering global value %s", name)
-	}
-	return nil
-}
-
-func registerExpandTimePrimitive(env *environment.EnvironmentFrame, spec PrimitiveSpec, contractEnforcement bool) error {
-	expandEnv := env.Expand()
-	sym := values.NewSymbol(spec.Name)
-	expandEnv.MaybeCreateOwnGlobalBinding(sym, environment.BindingTypeVariable)
-
-	closure := machine.NewForeignClosure(
-		expandEnv,
-		spec.ParamCount,
-		spec.IsVariadic,
-		spec.Impl,
-	)
-	closure.SetName(spec.Name)
-	closure.SetDoc(spec.Doc)
-	if contractEnforcement {
-		closure.SetValidator(BuildValidator(spec))
-	}
-
-	err := expandEnv.SetOwnGlobalValue(environment.NewGlobalIndex(sym), closure)
-	if err != nil {
-		return werr.WrapForeignErrorf(err, "error registering expand-time primitive %s", spec.Name)
 	}
 	return nil
 }

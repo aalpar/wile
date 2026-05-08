@@ -38,7 +38,7 @@ func addArithmetic(r *registry.Registry) error {
 			Doc: "With one argument, returns its reciprocal. With two or more, divides the first by each subsequent argument. Raises an error on division by zero.\n\nExamples:\n  (/ 2)        => 1/2\n  (/ 6 3)      => 2\n  (/ 12 3 2)   => 2", ParamNames: []string{"z1", "z2"}, Category: "arithmetic",
 			ParamTypes: []values.TypeConstraint{values.TypeNumber, values.TypeNumber}, ReturnType: values.TypeNumber,
 			Keywords: []string{"divide", "division", "reciprocal"}},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	// Comparisons
 	r.AddPrimitives([]registry.PrimitiveSpec{
@@ -57,7 +57,7 @@ func addArithmetic(r *registry.Registry) error {
 		{Name: ">=", ParamCount: 2, IsVariadic: true, Impl: PrimNumGe,
 			Doc: "Returns #t if each argument is greater than or equal to the next. Arguments must be real numbers.\n\nExamples:\n  (>= 3 2)       => #t\n  (>= 3 3)       => #t\n  (>= 2 3)       => #f", ParamNames: []string{"x1", "x2", "xs"}, Category: "arithmetic",
 			ParamTypes: []values.TypeConstraint{values.TypeReal, values.TypeReal}, ReturnType: values.TypeBoolean},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	// Basic numeric operations
 	r.AddPrimitives([]registry.PrimitiveSpec{
@@ -100,7 +100,7 @@ func addArithmetic(r *registry.Registry) error {
 			Doc: "Returns the least common multiple of its arguments. With no arguments, returns 1.\n\nExamples:\n  (lcm)            => 1\n  (lcm 4 6)        => 12\n  (lcm 4 6 10)     => 60", ParamNames: []string{"n"}, Category: "arithmetic",
 			ParamTypes: []values.TypeConstraint{values.TypeReal}, ReturnType: values.TypeReal,
 			Keywords: []string{"least common multiple"}},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	// Exactness conversion
 	r.AddPrimitives([]registry.PrimitiveSpec{
@@ -120,7 +120,7 @@ func addArithmetic(r *registry.Registry) error {
 			Doc: "R5RS alias for exact. Converts Z to exact representation.\n\nExamples:\n  (inexact->exact 1.5)  => 3/2", ParamNames: []string{"z"}, Category: "arithmetic",
 			ParamTypes: []values.TypeConstraint{values.TypeNumber}, ReturnType: values.TypeNumber,
 			Keywords: []string{"rational", "fraction", "convert"}},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	return nil
 }

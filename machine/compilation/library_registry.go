@@ -129,12 +129,12 @@ func (p *CompiledLibrary) GetInternalName(externalName string) string {
 
 // LibraryImportEvent records what happened when a library was imported.
 type LibraryImportEvent struct {
-	Library    LibraryName // imported library name, e.g., (scheme base)
-	SourceFile string      // path to .sld file (empty for synthetic libraries)
-	Exports    []string    // all names exported by the library
-	Imported   []string    // names that actually landed in the importer (after only/except/prefix/rename)
-	Importer   LibraryName // importing library name (zero value for top-level import)
-	Phase      int         // pipeline phase: environment.PhaseExpand or environment.PhaseCompile
+	Library    LibraryName       // imported library name, e.g., (scheme base)
+	SourceFile string            // path to .sld file (empty for synthetic libraries)
+	Exports    []string          // all names exported by the library
+	Imported   []string          // names that actually landed in the importer (after only/except/prefix/rename)
+	Importer   LibraryName       // importing library name (zero value for top-level import)
+	Phase      environment.Phase // pipeline phase: environment.PhaseExpand or environment.PhaseCompile
 }
 
 // LibraryImportObserver is called when a library is imported.
@@ -195,7 +195,7 @@ func (p *LibraryRegistry) ImportObserver() LibraryImportObserver {
 // registry stored in env. bindings maps local name -> external name
 // (as returned by ApplyToExports). importer is the importing library's
 // name, or zero value for top-level imports.
-func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary, bindings map[string]string, importer LibraryName, phase int) {
+func fireImportObserver(env *environment.EnvironmentFrame, lib *CompiledLibrary, bindings map[string]string, importer LibraryName, phase environment.Phase) {
 	regAny := env.LibraryRegistry()
 	if regAny == nil {
 		return

@@ -77,6 +77,6 @@ func addExceptions(r *registry.Registry) error {
 			Doc: "Returns the stack trace from ERROR-OBJ as a list of alists, or () if unavailable.\nEach alist always has key name; keys file, line, column are present only when source information is available.\n\nExamples:\n  (guard (e (#t (error-object-stack-trace e))) (error \"oops\"))  => (((name . \"...\") ...))", ParamNames: []string{"error-obj"}, Category: "exceptions",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeList,
 			Keywords: []string{"error stack trace", "error diagnostics", "backtrace"}},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }

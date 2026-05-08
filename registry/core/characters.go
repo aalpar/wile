@@ -30,7 +30,7 @@ func addCharacters(r *registry.Registry) error {
 			Doc: "Returns the character whose Unicode scalar value is N. Raises an error if N is not a valid Unicode scalar value.\n\nExamples:\n  (integer->char 97)     => #\\a\n  (integer->char 65)     => #\\A", ParamNames: []string{"n"}, Category: "characters",
 			ParamTypes: []values.TypeConstraint{values.TypeExactInteger}, ReturnType: values.TypeCharacter,
 			Keywords: []string{"chr", "from code point", "Unicode scalar"}},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	// Character comparison (generated from charCompareSpecs table)
 	charCmpPrims := make([]registry.PrimitiveSpec, len(charCompareSpecs))
@@ -43,7 +43,7 @@ func addCharacters(r *registry.Registry) error {
 			ReturnType: values.TypeBoolean,
 		}
 	}
-	r.AddPrimitives(charCmpPrims, registry.PhaseRuntime|registry.PhaseExpand)
+	r.AddPrimitives(charCmpPrims, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	return nil
 }

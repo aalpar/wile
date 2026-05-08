@@ -293,11 +293,11 @@ func TestCompiledLibrary_Methods(t *testing.T) {
 		bindings := map[string]string{"x": "x"}
 		importer := NewLibraryName("my", "app")
 
-		fireImportObserver(env, lib, bindings, importer, 0)
+		fireImportObserver(env, lib, bindings, importer, environment.PhaseRuntime)
 
 		qt.Assert(t, received.Library.Key(), qt.Equals, "test/fire")
 		qt.Assert(t, received.Importer.Key(), qt.Equals, "my/app")
-		qt.Assert(t, received.Phase, qt.Equals, 0)
+		qt.Assert(t, received.Phase, qt.Equals, environment.PhaseRuntime)
 		qt.Assert(t, received.Exports, qt.HasLen, 2)
 		qt.Assert(t, received.Imported, qt.HasLen, 1)
 		qt.Assert(t, received.Imported[0], qt.Equals, "x")

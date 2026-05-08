@@ -39,7 +39,7 @@ func TestApply_RuntimePrimitive(t *testing.T) {
 		Name:       "test-prim",
 		ParamCount: 0,
 		Impl:       noopImpl,
-	}, PhaseRuntime)
+	}, PhaseSetRuntime)
 
 	topLevel := environment.NewNamespace()
 	env := topLevel.Runtime()
@@ -62,7 +62,7 @@ func TestApply_ExpandTimePrimitive(t *testing.T) {
 		Name:       "expand-prim",
 		ParamCount: 1,
 		Impl:       noopImpl,
-	}, PhaseExpand)
+	}, PhaseSetExpand)
 
 	topLevel := environment.NewNamespace()
 	env := topLevel.Runtime()
@@ -96,7 +96,7 @@ func TestApply_CompileTimeBinding(t *testing.T) {
 	c.Assert(binding, qt.IsNotNil)
 }
 
-// Apply with compile-only primitives (PhaseCompile without PhaseRuntime)
+// Apply with compile-only primitives (PhaseSetCompile without PhaseSetRuntime)
 
 func TestApply_CompileOnlyPrimitive(t *testing.T) {
 	c := qt.New(t)
@@ -105,7 +105,7 @@ func TestApply_CompileOnlyPrimitive(t *testing.T) {
 		Name:       "compile-only",
 		ParamCount: 0,
 		Impl:       noopImpl,
-	}, PhaseCompile)
+	}, PhaseSetCompile)
 
 	topLevel := environment.NewNamespace()
 	env := topLevel.Runtime()
@@ -147,7 +147,7 @@ func TestApply_MultiPhasePrimitive(t *testing.T) {
 		Name:       "multi-phase",
 		ParamCount: 0,
 		Impl:       noopImpl,
-	}, PhaseRuntime|PhaseExpand)
+	}, PhaseSetRuntime|PhaseSetExpand)
 
 	topLevel := environment.NewNamespace()
 	env := topLevel.Runtime()
@@ -227,7 +227,7 @@ func TestApplyDocs_MultiPhase(t *testing.T) {
 		Name:       "multi",
 		ParamCount: 0,
 		Impl:       noopImpl,
-	}, PhaseRuntime|PhaseExpand)
+	}, PhaseSetRuntime|PhaseSetExpand)
 	reg.AddDocumentation("multi", "Documented across phases.")
 
 	topLevel := environment.NewNamespace()
@@ -288,7 +288,7 @@ func TestApply_ContractEnforcement(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			reg := NewRegistry()
-			reg.AddPrimitive(spec, PhaseRuntime)
+			reg.AddPrimitive(spec, PhaseSetRuntime)
 
 			topLevel := environment.NewNamespace()
 			env := topLevel.Runtime()

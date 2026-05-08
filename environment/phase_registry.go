@@ -14,21 +14,65 @@
 
 package environment
 
-import "sync"
+import (
+	"fmt"
+	"sync"
+)
 
 // Phase-dependent binding: the same symbol can bind to different values at
 // different phases (runtime, expand, compile). This follows Racket's phase
 // model. See Flatt 2002, "Composable and Compilable Macros".
 // See BIBLIOGRAPHY.md "Composable and Compilable Macros (Flatt 2002)".
 
-// Phase level constants for standard Scheme phases.
-// These match Racket's phase numbering convention.
+// Phase identifies a stage of compilation/evaluation. Values match
+// Racket's phase numbering convention.
+//
+// Phase indexes PhaseRegistry.envs and serves as the typed value for
+// EnvironmentFrame.phaseLevel. The companion type registry.PhaseSet
+// is a bitset over non-negative Phase values used for primitive
+// registration.
+//
+// ADDING A NEW PHASE requires updates in these locations:
+//
+//  1. environment/phase_registry.go (this file) — add a Phase constant
+//     and a String() case.
+//  2. registry/phase.go — add the matching PhaseSet<Name> bit constant
+//     if the new phase is representable in a PhaseSet (i.e. phase ≥ 0
+//     and phase < phaseSetBits). The init() assertion verifies the
+//     bit position matches the Phase index.
+//  3. registry/apply.go — extend phaseTargets if primitives may
+//     register at the new phase.
+//  4. wile/options.go — re-export so embedders can name the constant.
+type Phase int8
+
 const (
-	PhaseTemplate = -1 // for-template (template instantiation)
-	PhaseRuntime  = 0  // Runtime execution (phase 0)
-	PhaseExpand   = 1  // Macro expansion (for-syntax, phase 1)
-	PhaseCompile  = 2  // Compile-time (for-meta 2, phase 2)
+	PhaseTemplate Phase = -1 // for-template (template instantiation)
+	PhaseRuntime  Phase = 0  // Runtime execution (phase 0)
+	PhaseExpand   Phase = 1  // Macro expansion (for-syntax, phase 1)
+	PhaseCompile  Phase = 2  // Compile-time (for-meta 2, phase 2)
 )
+
+// String returns a human-readable name for the phase.
+func (p Phase) String() string {
+	switch p {
+	case PhaseTemplate:
+		return "template"
+	case PhaseRuntime:
+		return "runtime"
+	case PhaseExpand:
+		return "expand"
+	case PhaseCompile:
+		return "compile"
+	default:
+		return fmt.Sprintf("phase(%d)", int8(p))
+	}
+}
+
+// Compare orders two phases numerically (Template < Runtime < Expand < Compile).
+// Suitable for slices.SortFunc.
+func (p Phase) Compare(other Phase) int {
+	return int(p) - int(other)
+}
 
 // PhaseRegistry manages phase-indexed environment frames.
 // It provides O(1) access to any phase environment and supports
@@ -42,13 +86,13 @@ const (
 // to support concurrent macro expansion.
 type PhaseRegistry struct {
 	mu   sync.RWMutex
-	envs map[int]*EnvironmentFrame
+	envs map[Phase]*EnvironmentFrame
 	// owner is the owning Namespace
 	owner *Namespace
 }
 
 // Get returns the environment for the given phase, or nil if not yet created.
-func (p *PhaseRegistry) Get(phase int) *EnvironmentFrame {
+func (p *PhaseRegistry) Get(phase Phase) *EnvironmentFrame {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.envs[phase]
@@ -57,7 +101,7 @@ func (p *PhaseRegistry) Get(phase int) *EnvironmentFrame {
 // GetOrCreate returns the environment for the given phase, creating it if needed.
 // Phase 0 always returns the runtime environment.
 // Other phases are lazily created with their own GlobalEnvironmentFrame.
-func (p *PhaseRegistry) GetOrCreate(phase int) *EnvironmentFrame {
+func (p *PhaseRegistry) GetOrCreate(phase Phase) *EnvironmentFrame {
 	// Fast path: check with read lock
 	p.mu.RLock()
 	env := p.envs[phase]
@@ -84,7 +128,7 @@ func (p *PhaseRegistry) GetOrCreate(phase int) *EnvironmentFrame {
 
 // createPhaseEnv creates a new environment frame for the given phase.
 // Must be called with write lock held.
-func (p *PhaseRegistry) createPhaseEnv(phase int) *EnvironmentFrame {
+func (p *PhaseRegistry) createPhaseEnv(phase Phase) *EnvironmentFrame {
 	// Create a new GlobalEnvironmentFrame for this phase.
 	global := NewGlobalEnvironmentFrame()
 	global.namespace = p.owner
@@ -101,11 +145,11 @@ func (p *PhaseRegistry) createPhaseEnv(phase int) *EnvironmentFrame {
 
 // Phases returns all currently instantiated phase levels.
 // Useful for debugging and introspection.
-func (p *PhaseRegistry) Phases() []int {
+func (p *PhaseRegistry) Phases() []Phase {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	result := make([]int, 0, len(p.envs))
+	result := make([]Phase, 0, len(p.envs))
 	for phase := range p.envs {
 		result = append(result, phase)
 	}

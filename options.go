@@ -30,11 +30,18 @@ import (
 // See compilation.LibraryImportEvent for field documentation.
 type LibraryImportEvent = compilation.LibraryImportEvent
 
-// Phase constants for LibraryImportEvent.Phase.
+// Phase is a typed enum identifying a stage of compilation/evaluation.
+// Re-exported from environment for embedder convenience; use the
+// PhaseRuntime/PhaseExpand/PhaseCompile/PhaseTemplate constants below.
+type Phase = environment.Phase
+
+// Phase constants for LibraryImportEvent.Phase and other phase-keyed APIs.
 // Re-exported from environment for embedder convenience.
 const (
-	PhaseExpand  = environment.PhaseExpand
-	PhaseCompile = environment.PhaseCompile
+	PhaseTemplate = environment.PhaseTemplate
+	PhaseRuntime  = environment.PhaseRuntime
+	PhaseExpand   = environment.PhaseExpand
+	PhaseCompile  = environment.PhaseCompile
 )
 
 type engineConfig struct {

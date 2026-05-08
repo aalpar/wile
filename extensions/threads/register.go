@@ -78,7 +78,7 @@ func addThreads(r *registry.Registry) error {
 		{Name: "thread-join!", ParamCount: 2, IsVariadic: true, Impl: PrimThreadJoin,
 			Doc: "Waits for THREAD to complete and returns its result. Optional TIMEOUT and default value.", ParamNames: []string{"thread", "timeout"}, Category: "threads",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}, ReturnType: values.TypeAny},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }
 
@@ -113,7 +113,7 @@ func addMutexes(r *registry.Registry) error {
 			Doc: "Unlocks MUTEX. Optional condition variable to wait on after unlocking, with optional timeout.", ParamNames: []string{"mutex", "condvar"}, Category: "mutexes",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny},
 			ReturnType: values.TypeBoolean},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }
 
@@ -144,7 +144,7 @@ func addConditionVariables(r *registry.Registry) error {
 			Doc: "Wakes all threads waiting on the condition variable.", ParamNames: []string{"condvar"}, Category: "condvars",
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
 			ReturnType: values.TypeVoid},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }
 
@@ -164,6 +164,6 @@ func addTime(r *registry.Registry) error {
 		{Name: "seconds->time", ParamCount: 1, Impl: PrimSecondsToTime,
 			Doc: "Converts SECONDS (integer or float) to a time object.", ParamNames: []string{"seconds"}, Category: "time",
 			ParamTypes: []values.TypeConstraint{values.TypeNumber}, ReturnType: values.TypeAny},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }

@@ -27,7 +27,7 @@ func addOpaque(r *registry.Registry) error {
 		{Name: "opaque-tag", ParamCount: 1, Impl: PrimOpaqueTag,
 			Doc: "Returns the symbolic tag identifying the type of an opaque value. Raises an error if OBJ is not opaque.\n\nExamples:\n  ;; (opaque-tag my-opaque)  => my-type  ; if tagged 'my-type", ParamNames: []string{"obj"}, Category: "opaque",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeSymbol},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	return nil
 }

@@ -111,7 +111,7 @@ func addRecords(r *registry.Registry) error {
 			Doc: "Returns a modifier procedure that sets FIELD-TAG on instances of RTD.\n\nExamples:\n  ; (let ((set-x! (record-modifier rt 'x))) (set-x! my-point 10))", ParamNames: []string{"rtd", "field-tag"}, Category: "records",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeSymbol},
 			ReturnType: values.TypeProcedure},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }
 
@@ -132,7 +132,7 @@ func addPromises(r *registry.Registry) error {
 		{Name: "%make-lazy-promise", ParamCount: 1, Impl: PrimMakeLazyPromise,
 			Doc: "Internal: creates a lazy promise from THUNK. Used by the delay macro.\n\nExamples:\n  ; (%make-lazy-promise (lambda () 42))  ; used internally by (delay 42)", ParamNames: []string{"thunk"}, Category: "promises",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure}, ReturnType: values.TypeAny},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }
 
@@ -158,7 +158,7 @@ func addMoreStrings(r *registry.Registry) error {
 			Doc: "Returns a new string with full Unicode case folding applied. Useful for case-insensitive comparison.\n\nExamples:\n  (string-foldcase \"HELLO\")  => \"hello\"\n  (string-foldcase \"Straße\") => \"strasse\"", ParamNames: []string{"string"}, Category: "strings",
 			ParamTypes: []values.TypeConstraint{values.TypeString},
 			ReturnType: values.TypeString},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	// Case-insensitive string comparisons (generated from stringCiCompareSpecs table)
 	stringCiPrims := make([]registry.PrimitiveSpec, len(stringCiCompareSpecs))
@@ -172,7 +172,7 @@ func addMoreStrings(r *registry.Registry) error {
 			ReturnType: values.TypeBoolean,
 		}
 	}
-	r.AddPrimitives(stringCiPrims, registry.PhaseRuntime)
+	r.AddPrimitives(stringCiPrims, registry.PhaseSetRuntime)
 	return nil
 }
 
@@ -189,7 +189,7 @@ func addMoreChars(r *registry.Registry) error {
 			ReturnType: values.TypeBoolean,
 		}
 	}
-	r.AddPrimitives(charCiPrims, registry.PhaseRuntime)
+	r.AddPrimitives(charCiPrims, registry.PhaseSetRuntime)
 
 	r.AddPrimitives([]registry.PrimitiveSpec{
 		{Name: "char-alphabetic?", ParamCount: 1, Impl: PrimCharAlphabeticQ,
@@ -233,6 +233,6 @@ func addMoreChars(r *registry.Registry) error {
 		{Name: "digit-value", ParamCount: 1, Impl: PrimDigitValue,
 			Doc: "Returns the numeric value (0-9) of a Unicode decimal digit character, or #f if not a digit.\n\nExamples:\n  (digit-value #\\3)  => 3\n  (digit-value #\\a)  => #f", ParamNames: []string{"char"}, Category: "characters",
 			ParamTypes: []values.TypeConstraint{values.TypeCharacter}, ReturnType: values.TypeAny},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }
