@@ -48,10 +48,8 @@ func (p *SyntaxDatumLabel) UnwrapAll() values.Value {
 // NewSyntaxDatumLabel creates a new datum label reference with the given number.
 func NewSyntaxDatumLabel(label int, sctx *SourceContext) *SyntaxDatumLabel {
 	return &SyntaxDatumLabel{
-		Label: label,
-		syntaxBase: syntaxBase{
-			sourceContext: sctx,
-		},
+		Label:      label,
+		syntaxBase: values.NewSyntaxBase(sctx),
 	}
 }
 

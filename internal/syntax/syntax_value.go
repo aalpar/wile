@@ -31,34 +31,34 @@ var (
 type Scope = values.Scope
 
 // NewScope creates a new scope with unique identity for hygiene tracking.
-var NewScope = values.NewScope
+func NewScope() *Scope {
+	return values.NewScope()
+}
 
 // NewScopeWithLabel creates a new scope with a human-readable label for debugging.
-var NewScopeWithLabel = values.NewScopeWithLabel
+func NewScopeWithLabel(label string) *Scope {
+	return values.NewScopeWithLabel(label)
+}
 
 // NewRebindingScope creates a new scope that can potentially rebind auxiliary syntax.
-var NewRebindingScope = values.NewRebindingScope
+func NewRebindingScope() *Scope {
+	return values.NewRebindingScope()
+}
 
 // NewRebindingScopeWithLabel creates a new rebinding scope with a label.
-var NewRebindingScopeWithLabel = values.NewRebindingScopeWithLabel
+func NewRebindingScopeWithLabel(label string) *Scope {
+	return values.NewRebindingScopeWithLabel(label)
+}
 
 // (Scope.ID and Scope.String are defined on values.Scope — see values/scope.go.)
-var _ = fmt.Sprintf // keep fmt import for SchemeString below
 
-// syntaxBase provides common SourceContext() implementation for syntax types.
-// This embedded struct eliminates boilerplate SourceContext() methods across 9 syntax types.
+// syntaxBase is the common SourceContext-carrying base for concrete syntax
+// types. Defined in package values (the empty-list duality merge); the
+// alias keeps existing struct-embedding sites and field names working.
 //
-// Note: IsVoid() and UnwrapAll() cannot be provided here:
-//   - IsVoid() requires nil receiver checks, which don't work with embedding
-//   - UnwrapAll() needs access to the outer type (self), not the embedded struct
-type syntaxBase struct {
-	sourceContext *SourceContext
-}
-
-// SourceContext returns the source context.
-func (p *syntaxBase) SourceContext() *SourceContext {
-	return p.sourceContext
-}
+// Construct via values.NewSyntaxBase(sc) — the underlying field is
+// unexported in values.
+type syntaxBase = values.SyntaxBase
 
 // SyntaxObject wraps a non-compound Scheme value with source context.
 type SyntaxObject struct {
@@ -84,10 +84,8 @@ func NewSyntaxObject(v values.Value, sctx *SourceContext) *SyntaxObject {
 		))
 	}
 	q := &SyntaxObject{
-		datum: v,
-		syntaxBase: syntaxBase{
-			sourceContext: sctx,
-		},
+		datum:      v,
+		syntaxBase: values.NewSyntaxBase(sctx),
 	}
 	return q
 }

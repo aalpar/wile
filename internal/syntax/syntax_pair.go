@@ -71,10 +71,8 @@ func (p *SyntaxPair) AddScope(scope *Scope) SyntaxValue {
 // NewSyntaxCons creates a new syntax pair (cons cell).
 func NewSyntaxCons(v0, v1 SyntaxValue, sctx *SourceContext) *SyntaxPair {
 	q := &SyntaxPair{
-		Values: [2]SyntaxValue{v0, v1},
-		syntaxBase: syntaxBase{
-			sourceContext: sctx,
-		},
+		Values:     [2]SyntaxValue{v0, v1},
+		syntaxBase: values.NewSyntaxBase(sctx),
 	}
 	return q
 }
@@ -348,7 +346,7 @@ func (p *SyntaxPair) AsSyntaxVector() *SyntaxVector {
 		return nil
 	}
 	if p.IsEmptyList() {
-		return NewSyntaxVector(p.sourceContext)
+		return NewSyntaxVector(p.SourceContext())
 	}
 	vs := []SyntaxValue{}
 	cdr, _ := p.SyntaxForEach(context.Background(), func(_ context.Context, _ int, _ bool, v SyntaxValue) error {
@@ -358,5 +356,5 @@ func (p *SyntaxPair) AsSyntaxVector() *SyntaxVector {
 	if !IsSyntaxEmptyList(cdr) {
 		panic(werr.WrapForeignErrorf(werr.ErrNotASyntaxList, "SyntaxPair.AsSyntaxVector: improper list"))
 	}
-	return NewSyntaxVector(p.sourceContext, vs...)
+	return NewSyntaxVector(p.SourceContext(), vs...)
 }

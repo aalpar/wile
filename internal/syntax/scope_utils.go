@@ -14,116 +14,44 @@
 
 package syntax
 
-import "slices"
+import "github.com/aalpar/wile/values"
+
+// Scope-set primitives are defined in package values (the empty-list
+// duality merge — see values/scope.go). Wrapper functions keep the
+// internal/syntax import surface unchanged for existing callers; the
+// implementations live with the Scope type they operate on.
 
 // ScopesMatch checks if two sets of scopes are compatible for binding resolution.
-// This implements the core hygiene check using Flatt's "sets of scopes" model:
-// A reference matches a binding if the binding's scope set is a SUBSET of the
-// reference's scope set.
-//
-// Powerset lattice P(S) (Flatt 2016, §3.2). Binding resolution is a
-// subset test on finite scope sets.
-//
-//	match(ref, bind) ⟺ bind.scopes ⊆ ref.scopes
-//	resolve(ref) = argmax { |s| : s ⊆ ref.scopes } over all bindings
-//
-//	where ref = useScopes, bind = bindingScopes,
-//	s = a candidate binding's scope set, |s| = scope count.
-//
-//	Operations on P(S):
-//	  AddScopeToSet    = join (union)
-//	  RemoveScopeFromSet = relative complement
-//	  FlipScopeInSet   = symmetric difference (XOR in Z/2Z^S)
-//
-//	Invariant: {} ⊆ X for all X — top-level bindings (empty scope set)
-//	  match every reference. The argmax selects the most specific binding.
-//	Constrains: GetLocalIndex (implements resolve/argmax),
-//	  GetBinding (maximal resolution for scoped lookups),
-//	  CompileSymbol (dispatches scoped vs unscoped lookup),
-//	  scopesCompatibleForSubstitution (bidirectional subset = set equality).
-//	Constrained by: NewScope (each macro invocation creates a fresh scope),
-//	  FlipScopeInSet (syntax-local-introduce toggles scope membership).
-//
-// See BIBLIOGRAPHY.md "Binding as Sets of Scopes".
-//
-// This ensures:
-// - Top-level bindings (empty scope set) match any reference: {} ⊆ X for all X
-// - A macro-introduced binding only matches references with that macro's intro scope
-// - User bindings don't capture macro-introduced identifiers (different scope sets)
-//
-// Implementation note: Linear scan with pointer equality is intentionally used here.
-// Scope sets are typically 0-4 elements (one per lexical form: macro invocation, lambda,
-// let-syntax, with-binding-scope). For sets this small, linear scan is faster than
-// hash-based or bitmap approaches due to cache locality and zero allocation overhead.
+// See values.ScopesMatch for the full hygiene-model documentation.
 func ScopesMatch(useScopes, bindingScopes []*Scope) bool {
-	// A binding matches a use if all of the binding's scopes are present in the use's scopes.
-	// This is the subset relationship: bindingScopes ⊆ useScopes
-	//
-	// Empty binding scopes (top-level) match everything since {} ⊆ X for all X.
-
-	// A larger set cannot be a subset of a smaller one.
-	if len(bindingScopes) > len(useScopes) {
-		return false
-	}
-	for _, bindScope := range bindingScopes {
-		if !slices.Contains(useScopes, bindScope) {
-			return false
-		}
-	}
-	return true
+	return values.ScopesMatch(useScopes, bindingScopes)
 }
 
-// ScopesCompatible checks whether a binding with bindingScopes can match a
-// reference with useScopes. A binding with no scopes (top-level / pre-hygiene)
-// matches any reference.
-//
-// Both the environment's resolveLocal and the validator's duplicate-binding
-// detection use this single function so scope resolution cannot diverge.
-//
-// Note: nil useScopes does NOT mean "match any" here. A nil reference scope
-// set means "this reference has no scopes" and behaves like an empty set —
-// only bindings with no scopes match. Callers that want "match any"
-// (replacing the old checkScopes=false pattern) guard with an explicit
-// nil check before calling this function.
+// ScopesCompatible checks whether a binding's scopes can match a reference's.
+// A binding with no scopes matches any reference.
 func ScopesCompatible(bindingScopes, useScopes []*Scope) bool {
-	if len(bindingScopes) == 0 {
-		return true
-	}
-	return ScopesMatch(useScopes, bindingScopes)
+	return values.ScopesCompatible(bindingScopes, useScopes)
 }
 
-// HasScope checks if a scope set contains a specific scope
+// HasScope checks if a scope set contains a specific scope.
 func HasScope(scopes []*Scope, target *Scope) bool {
-	return slices.Contains(scopes, target)
+	return values.HasScope(scopes, target)
 }
 
-// AddScopeToSet adds a scope to a set if not already present
+// AddScopeToSet adds a scope to a set if not already present.
 func AddScopeToSet(scopes []*Scope, newScope *Scope) []*Scope {
-	if slices.Contains(scopes, newScope) {
-		return scopes
-	}
-	return append(scopes, newScope)
+	return values.AddScopeToSet(scopes, newScope)
 }
 
-// RemoveScopeFromSet removes a scope from a set
+// RemoveScopeFromSet removes a scope from a set.
 func RemoveScopeFromSet(scopes []*Scope, target *Scope) []*Scope {
-	result := make([]*Scope, 0, len(scopes))
-	for _, s := range scopes {
-		if s != target {
-			result = append(result, s)
-		}
-	}
-	return result
+	return values.RemoveScopeFromSet(scopes, target)
 }
 
 // FlipScopeInSet toggles the presence of a scope in a set.
-// If the scope is present, it is removed; if absent, it is added.
 // This is the core operation for syntax-local-introduce.
 func FlipScopeInSet(scopes []*Scope, target *Scope) []*Scope {
-	if HasScope(scopes, target) {
-		return RemoveScopeFromSet(scopes, target)
-	}
-	return AddScopeToSet(scopes, target)
+	return values.FlipScopeInSet(scopes, target)
 }
 
 // mapSyntaxTree recursively transforms a syntax tree.
@@ -237,10 +165,8 @@ func flipScopeOnSymbol(sym *SyntaxSymbol, scope *Scope) *SyntaxSymbol {
 	newSctx := sctx.Clone()
 	newSctx.Scopes = newScopes
 	return &SyntaxSymbol{
-		Sym: sym.Sym,
-		syntaxBase: syntaxBase{
-			sourceContext: newSctx,
-		},
+		Sym:             sym.Sym,
+		syntaxBase:      values.NewSyntaxBase(newSctx),
 		ResolvedBinding: sym.ResolvedBinding,
 	}
 }

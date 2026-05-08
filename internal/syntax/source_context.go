@@ -27,10 +27,17 @@ type SourceContext = values.SourceContext
 type OriginInfo = values.OriginInfo
 
 // NewSourceContext constructs a SourceContext.
-var NewSourceContext = values.NewSourceContext
+func NewSourceContext(text, file string, start, end SourceIndexes) *SourceContext {
+	return values.NewSourceContext(text, file, start, end)
+}
 
 // NewZeroValueSourceContext constructs an empty SourceContext.
-var NewZeroValueSourceContext = values.NewZeroValueSourceContext
+func NewZeroValueSourceContext() *SourceContext {
+	return values.NewZeroValueSourceContext()
+}
 
 // FormatOriginChain renders a macro expansion chain as a string.
-var FormatOriginChain = values.FormatOriginChain
+// maxDepth limits how many expansions to show (0 = unlimited).
+func FormatOriginChain(origin *OriginInfo, maxDepth int) string {
+	return values.FormatOriginChain(origin, maxDepth)
+}

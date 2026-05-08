@@ -94,7 +94,7 @@ func (p *SourceContext) Location() string {
 
 // SchemeString returns the Scheme representation of the source context.
 func (p *SourceContext) SchemeString() string {
-	return fmt.Sprintf("<source-context %s:%d-%d>", p.File, p.Start, p.End)
+	return fmt.Sprintf("<source-context %s:%s-%s>", p.File, p.Start.SchemeString(), p.End.SchemeString())
 }
 
 // IsVoid returns true if the source context is nil.

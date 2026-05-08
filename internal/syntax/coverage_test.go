@@ -536,7 +536,7 @@ func TestSyntaxPair_AddScope(t *testing.T) {
 	newPair := pair.AddScope(scope)
 
 	// Pair itself should NOT have the scope (scopes only matter on symbols)
-	qt.Assert(t, len(newPair.(*SyntaxPair).sourceContext.Scopes), qt.Equals, 0)
+	qt.Assert(t, len(newPair.(*SyntaxPair).SourceContext().Scopes), qt.Equals, 0)
 
 	// But the nested symbol SHOULD have the scope
 	newSym := newPair.(*SyntaxPair).Car().(*SyntaxSymbol)
@@ -625,9 +625,9 @@ func TestSyntaxSymbol_AddScope(t *testing.T) {
 	scope := NewScope()
 	newSym := sym.AddScope(scope)
 
-	qt.Assert(t, len(sym.sourceContext.Scopes), qt.Equals, 0)
-	qt.Assert(t, len(newSym.(*SyntaxSymbol).sourceContext.Scopes), qt.Equals, 1)
-	qt.Assert(t, newSym.(*SyntaxSymbol).sourceContext.Scopes[0], qt.Equals, scope)
+	qt.Assert(t, len(sym.SourceContext().Scopes), qt.Equals, 0)
+	qt.Assert(t, len(newSym.(*SyntaxSymbol).SourceContext().Scopes), qt.Equals, 1)
+	qt.Assert(t, newSym.(*SyntaxSymbol).SourceContext().Scopes[0], qt.Equals, scope)
 }
 
 func TestSyntaxSymbol_Scopes(t *testing.T) {

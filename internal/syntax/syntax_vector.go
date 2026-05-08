@@ -23,8 +23,11 @@ import "github.com/aalpar/wile/values"
 // via hooks registered at init time below.
 type SyntaxVector = values.SyntaxVector
 
-// NewSyntaxVector creates a new syntax vector with the given source context and elements.
-var NewSyntaxVector = values.NewSyntaxVector
+// NewSyntaxVector creates a new syntax vector with the given source context
+// and elements.
+func NewSyntaxVector(sc *SourceContext, vs ...SyntaxValue) *SyntaxVector {
+	return values.NewSyntaxVector(sc, vs...)
+}
 
 func init() {
 	// Recursive scope propagation across nested syntax types lives here in
@@ -45,10 +48,10 @@ func init() {
 	// Cycle-aware recursive unwrap. The implementation below dispatches on
 	// concrete syntax types defined in this package and is registered into
 	// values so that values.SyntaxVector.UnwrapAll can call it.
-	values.UnwrapAllSharedFunc = UnwrapAllShared
+	values.SyntaxValueUnwrapAllFunc = UnwrapAllShared
 
 	// Register the syntax-level void singleton so values.SyntaxVector with
 	// a nil receiver returns it from SyntaxForEach (preserves the original
 	// "syntax void tail" behavior).
-	values.SyntaxVoidSingleton = SyntaxVoid
+	values.SyntaxVectorVoidValue = SyntaxVoid
 }

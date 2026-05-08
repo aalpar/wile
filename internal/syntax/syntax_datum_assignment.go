@@ -40,11 +40,9 @@ func (p *SyntaxDatumLabelAssignment) AddScope(_ *Scope) SyntaxValue {
 // NewSyntaxDatumLabelAssignment creates a new datum label assignment.
 func NewSyntaxDatumLabelAssignment(label int, value values.Value, sctx *SourceContext) *SyntaxDatumLabelAssignment {
 	return &SyntaxDatumLabelAssignment{
-		Label: label,
-		Value: value,
-		syntaxBase: syntaxBase{
-			sourceContext: sctx,
-		},
+		Label:      label,
+		Value:      value,
+		syntaxBase: values.NewSyntaxBase(sctx),
 	}
 }
 

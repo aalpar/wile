@@ -22,4 +22,6 @@ import "github.com/aalpar/wile/values"
 type SourceIndexes = values.SourceIndexes
 
 // NewSourceIndexes constructs a SourceIndexes at the given position.
-var NewSourceIndexes = values.NewSourceIndexes
+func NewSourceIndexes(index, column, line int) SourceIndexes {
+	return values.NewSourceIndexes(index, column, line)
+}

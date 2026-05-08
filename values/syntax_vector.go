@@ -17,6 +17,8 @@ package values
 import (
 	"context"
 	"strings"
+
+	"github.com/aalpar/wile/werr"
 )
 
 var (
@@ -32,53 +34,47 @@ var (
 // (which references *SyntaxVector via AsSyntaxVector) can also live in
 // values.
 type SyntaxVector struct {
-	Values        []SyntaxValue
-	sourceContext *SourceContext
+	Values []SyntaxValue
+	SyntaxBase
 }
 
 // NewSyntaxVector creates a new syntax vector with the given source context and elements.
 func NewSyntaxVector(sc *SourceContext, vs ...SyntaxValue) *SyntaxVector {
 	q := &SyntaxVector{
-		Values:        vs,
-		sourceContext: sc,
+		Values:     vs,
+		SyntaxBase: NewSyntaxBase(sc),
 	}
 	return q
 }
 
-// SourceContext returns the source context.
-func (p *SyntaxVector) SourceContext() *SourceContext {
-	if p == nil {
-		return nil
-	}
-	return p.sourceContext
-}
-
-// UnwrapAllSharedFunc is the cycle-aware recursive unwrapper.
+// SyntaxValueUnwrapAllFunc is the cycle-aware recursive unwrapper.
 //
 // The full recursive unwrap traverses concrete syntax types (SyntaxPair,
 // SyntaxObject, SyntaxSymbol, etc.) defined in internal/syntax. Since
 // values cannot import internal/syntax (layering), the syntax package
 // registers its UnwrapAllShared implementation here at init time.
 //
-// If the hook is unset (e.g., when code in values constructs a
-// SyntaxVector without ever importing internal/syntax), UnwrapAll falls
-// back to a shallow per-element walk that lacks cross-type cycle
-// detection. This is acceptable for the limited paths where it occurs.
-var UnwrapAllSharedFunc func(SyntaxValue, map[SyntaxValue]Value) Value
+// MUST be non-nil before any SyntaxVector method that depends on it is
+// called. internal/syntax/syntax_vector.go init() sets this. A nil hook
+// at call time indicates an init-order or import-graph violation; the
+// methods that depend on it panic rather than silently degrade — silent
+// degradation would corrupt hygiene or stack-overflow on cyclic data.
+var SyntaxValueUnwrapAllFunc func(SyntaxValue, map[SyntaxValue]Value) Value
 
-// SyntaxVoidSingleton is the syntax-level void value, set by
+// SyntaxVectorVoidValue is the syntax-level void value, set by
 // internal/syntax at init time. SyntaxVector.SyntaxForEach with a nil
 // receiver returns this value to preserve the original "syntax void
-// tail" behavior. If unset, it falls back to SyntaxEmptyList — which is
-// only reachable in tests that import values/ without internal/syntax/.
-var SyntaxVoidSingleton SyntaxValue
+// tail" semantics (distinguishable from the empty-list tail).
+//
+// MUST be non-nil. See SyntaxValueUnwrapAllFunc for the rationale.
+var SyntaxVectorVoidValue SyntaxValue
 
 // SyntaxVectorAddScopeFunc implements recursive scope propagation across
-// nested syntax types. Like UnwrapAllSharedFunc, the implementation lives
-// in internal/syntax (where the concrete syntax types are) and is
-// registered here at init time. The fallback (shallow no-op) is wrong
-// for hygiene but is never reached in production where internal/syntax
-// is always imported transitively before macro expansion runs.
+// nested syntax types. The implementation lives in internal/syntax
+// (where the concrete syntax types are) and is registered here at init
+// time.
+//
+// MUST be non-nil. See SyntaxValueUnwrapAllFunc for the rationale.
 var SyntaxVectorAddScopeFunc func(*SyntaxVector, *Scope) SyntaxValue
 
 // AddScope recursively propagates a scope to all nested syntax values.
@@ -86,32 +82,32 @@ var SyntaxVectorAddScopeFunc func(*SyntaxVector, *Scope) SyntaxValue
 // Implements scope propagation for Flatt's "sets of scopes" hygiene.
 // When a macro expands, the intro scope must be added to all identifiers
 // (symbols) in the expansion. Empty vectors return self unchanged.
+//
+// Panics if SyntaxVectorAddScopeFunc is nil — see the var declaration
+// for why a silent fallback would be unsafe.
 func (p *SyntaxVector) AddScope(scope *Scope) SyntaxValue {
 	if p == nil || len(p.Values) == 0 {
 		return p
 	}
-	if SyntaxVectorAddScopeFunc != nil {
-		return SyntaxVectorAddScopeFunc(p, scope)
+	if SyntaxVectorAddScopeFunc == nil {
+		panic(werr.WrapForeignErrorf(werr.ErrInternal,
+			"SyntaxVector.AddScope: SyntaxVectorAddScopeFunc not registered (internal/syntax must be imported before macro expansion)"))
 	}
-	return p
+	return SyntaxVectorAddScopeFunc(p, scope)
 }
 
-// UnwrapAll recursively unwraps all elements to produce a plain values.Vector.
-// Uses the syntax package's cycle-aware recursive unwrap when registered.
+// UnwrapAll recursively unwraps all elements to produce a plain values.Vector,
+// using the syntax package's cycle-aware recursive unwrap.
+//
+// Panics if SyntaxValueUnwrapAllFunc is nil — see the var declaration
+// for why a silent fallback would be unsafe (cyclic syntax structures
+// would stack-overflow on a non-cycle-aware fallback walk).
 func (p *SyntaxVector) UnwrapAll() Value {
-	if UnwrapAllSharedFunc != nil {
-		return UnwrapAllSharedFunc(p, make(map[SyntaxValue]Value))
+	if SyntaxValueUnwrapAllFunc == nil {
+		panic(werr.WrapForeignErrorf(werr.ErrInternal,
+			"SyntaxVector.UnwrapAll: SyntaxValueUnwrapAllFunc not registered (internal/syntax must be imported before unwrapping syntax values)"))
 	}
-	if p.IsVoid() {
-		return Void
-	}
-	vec := NewVectorWithLength(len(p.Values))
-	for i, elem := range p.Values {
-		if elem != nil {
-			_ = vec.Set(i, elem.UnwrapAll())
-		}
-	}
-	return vec
+	return SyntaxValueUnwrapAllFunc(p, make(map[SyntaxValue]Value))
 }
 
 func (p *SyntaxVector) Unwrap() Value {
@@ -176,19 +172,24 @@ func (p *SyntaxVector) ForEach(ctx context.Context, fn ForEachFunc) (Value, erro
 }
 
 // SyntaxForEach iterates over the syntax elements of the vector.
-// A nil receiver returns the empty-list singleton (which is also the
-// SyntaxEmptyList) and performs no iteration.
+// A nil receiver returns the syntax-void singleton (semantically
+// distinct from the empty-list tail returned for an iterated vector).
 //
 // The callback is invoked for each element with its index and a boolean
 // indicating whether there is another element after the current one.
 // If the callback returns an error, iteration stops immediately and the
 // error is returned.
+//
+// Panics if SyntaxVectorVoidValue is nil — see the var declaration
+// for why a silent fallback would be unsafe (returning the empty list
+// instead of void changes the semantics callers branch on).
 func (p *SyntaxVector) SyntaxForEach(ctx context.Context, fn SyntaxForEachFunc) (SyntaxValue, error) {
 	if p.IsVoid() {
-		if SyntaxVoidSingleton != nil {
-			return SyntaxVoidSingleton, nil
+		if SyntaxVectorVoidValue == nil {
+			panic(werr.WrapForeignErrorf(werr.ErrInternal,
+				"SyntaxVector.SyntaxForEach: SyntaxVectorVoidValue not registered (internal/syntax must be imported)"))
 		}
-		return SyntaxEmptyList, nil
+		return SyntaxVectorVoidValue, nil
 	}
 	for i, v := range p.Values {
 		hasNext := i+1 < len(p.Values)
