@@ -59,7 +59,7 @@ type ImportSet struct {
 	Except      map[string]struct{} // If non-nil, import all except these
 	Prefix      string              // If non-empty, add this prefix to all names
 	Renames     map[string]string   // old-name -> new-name
-	PhaseShift  int                 // Phase offset: 0=runtime, 1=for-syntax, -1=for-template
+	PhaseShift  environment.Phase   // Phase offset: 0=runtime, 1=for-syntax, -1=for-template
 }
 
 // NewImportSet creates a new import set for a library.
@@ -204,7 +204,7 @@ func resolveImportSet(ctx context.Context, datum values.Value, env *environment.
 // env at the appropriate phase. Used for top-level imports (both expander and
 // compiler). Library-internal imports share the resolution step (resolveImportSet)
 // but use copyLibraryBindingsDirect for installation.
-func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *environment.EnvironmentFrame, phase int, evaluator machine.MacroEvaluator) error {
+func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *environment.EnvironmentFrame, phase environment.Phase, evaluator machine.MacroEvaluator) error {
 	res, err := resolveImportSet(ctx, datum, env, evaluator)
 	if err != nil {
 		return err
@@ -223,12 +223,12 @@ func ResolveAndInstallImportSet(ctx context.Context, datum values.Value, env *en
 
 // findLibraryBinding searches the library's runtime, expand, and compile
 // environments for a binding with the given internal name. Returns the
-// binding and the phase it was found in. Returns (nil, 0) if no binding
-// is found in any phase environment.
-func findLibraryBinding(lib *CompiledLibrary, internalName string) (*environment.Binding, int) {
+// binding and the phase it was found in. Returns (nil, PhaseRuntime) if no
+// binding is found in any phase environment.
+func findLibraryBinding(lib *CompiledLibrary, internalName string) (*environment.Binding, environment.Phase) {
 	sourceEnvs := []struct {
 		env   *environment.EnvironmentFrame
-		phase int
+		phase environment.Phase
 	}{
 		{lib.Env, environment.PhaseRuntime},
 		{lib.Env.Expand(), environment.PhaseExpand},
@@ -245,10 +245,10 @@ func findLibraryBinding(lib *CompiledLibrary, internalName string) (*environment
 			return binding, src.phase
 		}
 	}
-	return nil, 0
+	return nil, environment.PhaseRuntime
 }
 
-func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]string, targetEnv *environment.EnvironmentFrame, targetPhase int) error {
+func CopyLibraryBindingsToEnvAtPhase(lib *CompiledLibrary, bindings map[string]string, targetEnv *environment.EnvironmentFrame, targetPhase environment.Phase) error {
 	for localName, externalName := range bindings {
 		internalName := lib.GetInternalName(externalName)
 		if internalName == "" {

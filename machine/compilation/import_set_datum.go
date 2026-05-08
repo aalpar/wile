@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -246,7 +247,7 @@ func parseImportSetRenameFromDatum(ctx context.Context, tuple values.Tuple) (*Im
 // parseImportSetPhaseShiftFromDatum parses (<keyword> <import-set>) and adds
 // delta to the nested import set's phase shift. Handles for-syntax (+1) and
 // for-template (-1).
-func parseImportSetPhaseShiftFromDatum(ctx context.Context, keyword string, tuple values.Tuple, delta int) (*ImportSet, error) {
+func parseImportSetPhaseShiftFromDatum(ctx context.Context, keyword string, tuple values.Tuple, delta environment.Phase) (*ImportSet, error) {
 	cdr := tuple.Cdr()
 	if values.IsEmptyList(cdr) {
 		return nil, werr.WrapForeignErrorf(werr.ErrNotAList, "%s: expected import-set", keyword)
@@ -305,7 +306,7 @@ func parseImportSetForMetaFromDatum(ctx context.Context, tuple values.Tuple) (*I
 	}
 
 	// Add n to phase shift (composable)
-	importSet.PhaseShift += int(phaseInt.Value)
+	importSet.PhaseShift += environment.Phase(phaseInt.Value)
 	return importSet, nil
 }
 

@@ -17,6 +17,7 @@ package repl
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -97,7 +98,7 @@ func (p *Completer) collectBindingNames() []string {
 
 	phases := topLevel.Phases()
 	phaseIndices := phases.Phases()
-	sort.Ints(phaseIndices)
+	slices.SortFunc(phaseIndices, comparePhase)
 
 	for _, phase := range phaseIndices {
 		phaseEnv := phases.Get(phase)

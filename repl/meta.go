@@ -22,7 +22,6 @@ import (
 	"os"
 	"os/exec"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/aalpar/wile"
@@ -289,7 +288,7 @@ func (p *MetaCommandHandler) cmdDoc(args []string, out io.Writer) {
 		if topLevel != nil {
 			phases := topLevel.Phases()
 			phaseIndices := phases.Phases()
-			sort.Ints(phaseIndices)
+			slices.SortFunc(phaseIndices, comparePhase)
 
 			sym := values.NewSymbol(name)
 			for _, phase := range phaseIndices {
@@ -484,7 +483,7 @@ func tryStructuredBindingDoc(w *strings.Builder, name, doc, typeLabel string, sh
 	return true
 }
 
-func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding, phase int, eng *wile.Engine, showExamples bool) {
+func formatBindingDoc(w *strings.Builder, name string, bnd *environment.Binding, phase environment.Phase, eng *wile.Engine, showExamples bool) {
 	phaseName := phaseLabel(phase)
 
 	switch bnd.BindingType() {
@@ -560,13 +559,18 @@ func callableDoc(v values.Value) string {
 	return ""
 }
 
-func phaseLabel(phase int) string {
+// comparePhase orders Phase values numerically (Template=-1 first).
+func comparePhase(a, b environment.Phase) int {
+	return int(a) - int(b)
+}
+
+func phaseLabel(phase environment.Phase) string {
 	switch phase {
-	case 0:
+	case environment.PhaseRuntime:
 		return "runtime"
-	case 1:
+	case environment.PhaseExpand:
 		return "expand"
-	case 2:
+	case environment.PhaseCompile:
 		return "compile"
 	default:
 		return fmt.Sprintf("phase %d", phase)
@@ -777,7 +781,7 @@ func (p *MetaCommandHandler) DisassembleBinding(name string) (string, error) {
 		if topLevel != nil {
 			phases := topLevel.Phases()
 			phaseIndices := phases.Phases()
-			sort.Ints(phaseIndices)
+			slices.SortFunc(phaseIndices, comparePhase)
 			for _, phase := range phaseIndices {
 				phaseEnv := phases.Get(phase)
 				if phaseEnv == nil {

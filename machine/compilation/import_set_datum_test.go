@@ -21,6 +21,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
 )
@@ -428,7 +429,7 @@ func TestParseImportSetFromDatum_ForSyntax(t *testing.T) {
 	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
-	qt.Assert(t, result.PhaseShift, qt.Equals, 1)
+	qt.Assert(t, result.PhaseShift, qt.Equals, environment.Phase(1))
 }
 
 func TestParseImportSetFromDatum_ForTemplate(t *testing.T) {
@@ -447,7 +448,7 @@ func TestParseImportSetFromDatum_ForTemplate(t *testing.T) {
 	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
-	qt.Assert(t, result.PhaseShift, qt.Equals, -1)
+	qt.Assert(t, result.PhaseShift, qt.Equals, environment.Phase(-1))
 }
 
 func TestParseImportSetFromDatum_ForMeta(t *testing.T) {
@@ -469,7 +470,7 @@ func TestParseImportSetFromDatum_ForMeta(t *testing.T) {
 	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
-	qt.Assert(t, result.PhaseShift, qt.Equals, 2)
+	qt.Assert(t, result.PhaseShift, qt.Equals, environment.Phase(2))
 }
 
 func TestParseImportSetFromDatum_ForMetaNegative(t *testing.T) {
@@ -491,7 +492,7 @@ func TestParseImportSetFromDatum_ForMetaNegative(t *testing.T) {
 	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
-	qt.Assert(t, result.PhaseShift, qt.Equals, -1)
+	qt.Assert(t, result.PhaseShift, qt.Equals, environment.Phase(-1))
 }
 
 func TestParseImportSetFromDatum_NestedForSyntax(t *testing.T) {
@@ -516,7 +517,7 @@ func TestParseImportSetFromDatum_NestedForSyntax(t *testing.T) {
 	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
-	qt.Assert(t, result.PhaseShift, qt.Equals, 2)
+	qt.Assert(t, result.PhaseShift, qt.Equals, environment.Phase(2))
 }
 
 func TestParseImportSetFromDatum_ForSyntaxWithOnly(t *testing.T) {
@@ -544,7 +545,7 @@ func TestParseImportSetFromDatum_ForSyntaxWithOnly(t *testing.T) {
 	result, err := ParseImportSetFromDatum(context.Background(), importSet)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.LibraryName.Key(), qt.Equals, "scheme/base")
-	qt.Assert(t, result.PhaseShift, qt.Equals, 1)
+	qt.Assert(t, result.PhaseShift, qt.Equals, environment.Phase(1))
 	qt.Assert(t, result.Only, qt.DeepEquals, map[string]struct{}{"car": {}, "cdr": {}})
 }
 

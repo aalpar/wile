@@ -298,13 +298,13 @@ func TestEnvironmentFrame_PhaseHierarchy(t *testing.T) {
 	// Arbitrary phases can be created
 	phase3 := topLevel.AtPhase(3)
 	qt.Assert(t, phase3, qt.IsNotNil)
-	qt.Assert(t, phase3.PhaseLevel(), qt.Equals, 3)
+	qt.Assert(t, phase3.PhaseLevel(), qt.Equals, Phase(3))
 	qt.Assert(t, topLevel.AtPhase(3), qt.Equals, phase3) // Same instance
 
 	// Negative phases (for future for-template support)
 	phaseMinus1 := topLevel.AtPhase(-1)
 	qt.Assert(t, phaseMinus1, qt.IsNotNil)
-	qt.Assert(t, phaseMinus1.PhaseLevel(), qt.Equals, -1)
+	qt.Assert(t, phaseMinus1.PhaseLevel(), qt.Equals, Phase(-1))
 }
 
 func TestEnvironmentFrame_SymbolEqualityAcrossPhases(t *testing.T) {

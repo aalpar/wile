@@ -186,7 +186,7 @@ func (p *Namespace) Runtime() *EnvironmentFrame {
 // AtPhase returns the environment for the given phase level, creating it if needed.
 // Phase 0 is runtime, phase 1 is expansion (for-syntax), phase 2 is compile-time, etc.
 // Negative phases (e.g., -1 for for-template) are also supported.
-func (p *Namespace) AtPhase(phase int) *EnvironmentFrame {
+func (p *Namespace) AtPhase(phase Phase) *EnvironmentFrame {
 	return p.phases.GetOrCreate(phase)
 }
 
@@ -684,7 +684,7 @@ func newGlobalEnvironmentFrameForNamespace(ns *Namespace) *GlobalEnvironmentFram
 // newPhaseRegistryForNamespace creates a new PhaseRegistry owned by the given Namespace.
 func newPhaseRegistryForNamespace(ns *Namespace) *PhaseRegistry {
 	q := &PhaseRegistry{
-		envs:  make(map[int]*EnvironmentFrame),
+		envs:  make(map[Phase]*EnvironmentFrame),
 		owner: ns,
 	}
 	q.envs[PhaseRuntime] = ns.runtime
@@ -710,7 +710,7 @@ func initRuntimeFrame(ns *Namespace, global *GlobalEnvironmentFrame) {
 // it does NOT read ns.runtime (which belongs to the parent).
 func newPhaseRegistryForChild(ns *Namespace, runtime *EnvironmentFrame) *PhaseRegistry {
 	q := &PhaseRegistry{
-		envs:  make(map[int]*EnvironmentFrame),
+		envs:  make(map[Phase]*EnvironmentFrame),
 		owner: ns,
 	}
 	q.envs[PhaseRuntime] = runtime
