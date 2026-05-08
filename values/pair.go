@@ -28,7 +28,26 @@ var (
 	// EmptyList is the singleton empty list ().
 	// It implements Tuple but is not *Pair, enforcing (pair? '()) -> #f
 	// at the type level per R7RS 6.4.
+	//
+	// It also satisfies SyntaxValue and SyntaxTuple — the empty list has
+	// no symbols, scopes, or source-attachable hygiene content, so the
+	// value-level singleton serves as the syntax-level singleton too
+	// (matching Chez's `(equal? (syntax ()) '()) → #t`). For callers that
+	// need the SyntaxTuple-typed view (e.g. so a SyntaxValue-returning
+	// function can return the empty list directly), use SyntaxEmptyList
+	// below — it refers to the same singleton.
+	//
+	// EmptyList is statically typed as Tuple (not SyntaxTuple) because the
+	// common pattern `list := EmptyList; list = NewCons(...)` builds a
+	// value-level list via type inference, and *Pair only implements
+	// Tuple. Promoting EmptyList to SyntaxTuple would break that pattern.
 	EmptyList Tuple = emptyListType{}
+
+	// SyntaxEmptyList is the empty-list singleton typed as SyntaxTuple,
+	// for use in contexts that build syntax-level lists or return
+	// SyntaxValue. It is the same struct value as EmptyList; the package
+	// `internal/syntax` re-exports this name for backward compatibility.
+	SyntaxEmptyList SyntaxTuple = emptyListType{}
 )
 
 // Pair represents a Scheme cons cell.

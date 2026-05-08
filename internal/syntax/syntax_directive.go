@@ -46,10 +46,8 @@ func (p *SyntaxDirective) UnwrapAll() values.Value {
 // NewSyntaxDirective creates a new reader directive with the given name.
 func NewSyntaxDirective(name string, sctx *SourceContext) *SyntaxDirective {
 	return &SyntaxDirective{
-		Name: name,
-		syntaxBase: syntaxBase{
-			sourceContext: sctx,
-		},
+		Name:       name,
+		syntaxBase: values.NewSyntaxBase(sctx),
 	}
 }
 

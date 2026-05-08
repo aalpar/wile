@@ -12,16 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package syntax
+package values
 
-import "github.com/aalpar/wile/values"
+import "context"
 
-// SourceIndexes is the source-position type. It is defined in package
-// values so that values.emptyListType can implement values.SyntaxValue
-// directly (the empty-list duality merge — see values/syntax_value.go).
-type SourceIndexes = values.SourceIndexes
+// SyntaxForEachFunc is the callback type for iterating over syntax tuples.
+type SyntaxForEachFunc func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error
 
-// NewSourceIndexes constructs a SourceIndexes at the given position.
-func NewSourceIndexes(index, column, line int) SourceIndexes {
-	return values.NewSourceIndexes(index, column, line)
+// SyntaxTuple is the interface for syntax lists (pairs and vectors).
+type SyntaxTuple interface {
+	Tuple
+	SyntaxValue
+	SyntaxCar() SyntaxValue
+	SyntaxCdr() SyntaxValue
+	AsSyntaxVector() *SyntaxVector
+	SyntaxAppend(value SyntaxValue) SyntaxValue
+	SyntaxForEach(ctx context.Context, fn SyntaxForEachFunc) (SyntaxValue, error)
 }

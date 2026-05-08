@@ -16,7 +16,6 @@ package syntax
 
 import (
 	"fmt"
-	"sync/atomic"
 
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
@@ -27,89 +26,39 @@ var (
 	_ SyntaxValue  = (*SyntaxObject)(nil)
 )
 
-// Scope is an identity marker for macro hygiene.
-// Each macro invocation creates a fresh Scope. Hygiene checking uses pointer
-// equality to determine if a binding's scopes are a subset of a reference's scopes.
-// This implements Flatt's "sets of scopes" model where scopes are just unique tags,
-// not environment hierarchies.
-type Scope struct {
-	id uint64 // ensures unique pointer identity (empty structs can share addresses in Go)
-	// IsRebinding indicates whether this scope can potentially rebind auxiliary syntax.
-	// True for let-syntax/letrec-syntax scopes which create local macro bindings.
-	// False for with-binding-scope which only adds scopes for binding hygiene.
-	// This distinction is used in literalScopesMatch to correctly handle auxiliary
-	// syntax like => and else in cond/case.
-	IsRebinding bool
-	// Label is an optional human-readable description for debugging.
-	// Examples: "lambda", "let-syntax", "intro:my-macro", "library:(wile kanren)".
-	Label string
-}
-
-// nextScopeID is a counter for generating unique scope identities
-var nextScopeID atomic.Uint64
+// Scope is the macro-hygiene identity marker. Defined in package values
+// alongside SourceContext (the empty-list duality merge).
+type Scope = values.Scope
 
 // NewScope creates a new scope with unique identity for hygiene tracking.
-// By default, scopes are not rebinding scopes.
 func NewScope() *Scope {
-	id := nextScopeID.Add(1)
-	return &Scope{id: id}
+	return values.NewScope()
 }
 
 // NewScopeWithLabel creates a new scope with a human-readable label for debugging.
-// The label has no semantic effect — it is purely for diagnostics.
 func NewScopeWithLabel(label string) *Scope {
-	id := nextScopeID.Add(1)
-	return &Scope{id: id, Label: label}
+	return values.NewScopeWithLabel(label)
 }
 
 // NewRebindingScope creates a new scope that can potentially rebind auxiliary syntax.
-// Used by let-syntax and letrec-syntax to mark scopes that could shadow literals.
 func NewRebindingScope() *Scope {
-	id := nextScopeID.Add(1)
-	return &Scope{id: id, IsRebinding: true}
+	return values.NewRebindingScope()
 }
 
 // NewRebindingScopeWithLabel creates a new rebinding scope with a label.
 func NewRebindingScopeWithLabel(label string) *Scope {
-	id := nextScopeID.Add(1)
-	return &Scope{id: id, IsRebinding: true, Label: label}
+	return values.NewRebindingScopeWithLabel(label)
 }
 
-// ID returns the unique identifier for this scope.
-// This can be used as a macro application ID for tracing.
-func (p *Scope) ID() uint64 {
-	if p == nil {
-		return 0
-	}
-	return p.id
-}
+// (Scope.ID and Scope.String are defined on values.Scope — see values/scope.go.)
 
-// String returns a human-readable representation of the scope.
-// If a label is set, returns "scope:ID(label)"; otherwise "scope:ID".
-func (p *Scope) String() string {
-	if p == nil {
-		return "scope:nil"
-	}
-	if p.Label != "" {
-		return fmt.Sprintf("scope:%d(%s)", p.id, p.Label)
-	}
-	return fmt.Sprintf("scope:%d", p.id)
-}
-
-// syntaxBase provides common SourceContext() implementation for syntax types.
-// This embedded struct eliminates boilerplate SourceContext() methods across 9 syntax types.
+// syntaxBase is the common SourceContext-carrying base for concrete syntax
+// types. Defined in package values (the empty-list duality merge); the
+// alias keeps existing struct-embedding sites and field names working.
 //
-// Note: IsVoid() and UnwrapAll() cannot be provided here:
-//   - IsVoid() requires nil receiver checks, which don't work with embedding
-//   - UnwrapAll() needs access to the outer type (self), not the embedded struct
-type syntaxBase struct {
-	sourceContext *SourceContext
-}
-
-// SourceContext returns the source context.
-func (p *syntaxBase) SourceContext() *SourceContext {
-	return p.sourceContext
-}
+// Construct via values.NewSyntaxBase(sc) — the underlying field is
+// unexported in values.
+type syntaxBase = values.SyntaxBase
 
 // SyntaxObject wraps a non-compound Scheme value with source context.
 type SyntaxObject struct {
@@ -135,10 +84,8 @@ func NewSyntaxObject(v values.Value, sctx *SourceContext) *SyntaxObject {
 		))
 	}
 	q := &SyntaxObject{
-		datum: v,
-		syntaxBase: syntaxBase{
-			sourceContext: sctx,
-		},
+		datum:      v,
+		syntaxBase: values.NewSyntaxBase(sctx),
 	}
 	return q
 }

@@ -53,10 +53,8 @@ func NewSyntaxSymbol(key string, sctx *SourceContext) *SyntaxSymbol {
 // NewSyntaxSymbolForSymbol creates a new syntax symbol from an existing symbol.
 func NewSyntaxSymbolForSymbol(sym *values.Symbol, sctx *SourceContext) *SyntaxSymbol {
 	q := &SyntaxSymbol{
-		Sym: sym,
-		syntaxBase: syntaxBase{
-			sourceContext: sctx,
-		},
+		Sym:        sym,
+		syntaxBase: values.NewSyntaxBase(sctx),
 	}
 	return q
 }
@@ -64,10 +62,8 @@ func NewSyntaxSymbolForSymbol(sym *values.Symbol, sctx *SourceContext) *SyntaxSy
 // NewSyntaxSymbolForSyntaxSymbol creates a new syntax symbol with a different source context.
 func NewSyntaxSymbolForSyntaxSymbol(sym *SyntaxSymbol, sctx *SourceContext) *SyntaxSymbol {
 	q := &SyntaxSymbol{
-		Sym: sym.Sym,
-		syntaxBase: syntaxBase{
-			sourceContext: sctx,
-		},
+		Sym:        sym.Sym,
+		syntaxBase: values.NewSyntaxBase(sctx),
 	}
 	return q
 }
@@ -86,15 +82,13 @@ func NewSyntaxSymbolForSyntaxSymbol(sym *SyntaxSymbol, sctx *SourceContext) *Syn
 // scope. A user's "tmp" at the call site doesn't have this scope, so they're
 // distinguished during variable resolution (see ScopesMatch in scope_utils.go).
 func (p *SyntaxSymbol) AddScope(scope *Scope) SyntaxValue {
-	newCtx := p.sourceContext.WithScope(scope)
-	if newCtx == p.sourceContext {
+	newCtx := p.SourceContext().WithScope(scope)
+	if newCtx == p.SourceContext() {
 		return p
 	}
 	return &SyntaxSymbol{
-		Sym: p.Sym,
-		syntaxBase: syntaxBase{
-			sourceContext: newCtx,
-		},
+		Sym:             p.Sym,
+		syntaxBase:      values.NewSyntaxBase(newCtx),
 		ResolvedBinding: p.ResolvedBinding,
 	}
 }
@@ -104,10 +98,8 @@ func (p *SyntaxSymbol) AddScope(scope *Scope) SyntaxValue {
 // definition-site bindings, enabling proper resolution across library boundaries.
 func (p *SyntaxSymbol) WithResolvedBinding(binding ResolvedRef) *SyntaxSymbol {
 	return &SyntaxSymbol{
-		Sym: p.Sym,
-		syntaxBase: syntaxBase{
-			sourceContext: p.sourceContext,
-		},
+		Sym:             p.Sym,
+		syntaxBase:      values.NewSyntaxBase(p.SourceContext()),
 		ResolvedBinding: binding,
 	}
 }
@@ -117,13 +109,13 @@ func (p *SyntaxSymbol) WithResolvedBinding(binding ResolvedRef) *SyntaxSymbol {
 // This guarantees that callers passing Scopes() to environment.GetBinding
 // trigger scope checking rather than the "match any" nil-scopes path.
 func (p *SyntaxSymbol) Scopes() []*Scope {
-	if p.sourceContext == nil {
+	if p.SourceContext() == nil {
 		return []*Scope{}
 	}
-	if p.sourceContext.Scopes == nil {
+	if p.SourceContext().Scopes == nil {
 		return []*Scope{}
 	}
-	return p.sourceContext.Scopes
+	return p.SourceContext().Scopes
 }
 
 // Datum returns the underlying symbol.

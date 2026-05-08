@@ -35,11 +35,9 @@ type SyntaxDatumComment struct {
 // NewSyntaxDatumComment creates a new datum comment.
 func NewSyntaxDatumComment(label string, value SyntaxValue, sctx *SourceContext) *SyntaxDatumComment {
 	return &SyntaxDatumComment{
-		Label: label,
-		Value: value,
-		syntaxBase: syntaxBase{
-			sourceContext: sctx,
-		},
+		Label:      label,
+		Value:      value,
+		syntaxBase: values.NewSyntaxBase(sctx),
 	}
 }
 

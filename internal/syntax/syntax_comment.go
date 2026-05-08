@@ -32,10 +32,8 @@ type SyntaxComment struct {
 // NewSyntaxComment creates a new syntax comment with the given text and source context.
 func NewSyntaxComment(text string, sctx *SourceContext) *SyntaxComment {
 	return &SyntaxComment{
-		Text: text,
-		syntaxBase: syntaxBase{
-			sourceContext: sctx,
-		},
+		Text:       text,
+		syntaxBase: values.NewSyntaxBase(sctx),
 	}
 }
 

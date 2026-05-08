@@ -17,6 +17,8 @@ package syntax
 import (
 	"context"
 	"reflect"
+
+	"github.com/aalpar/wile/values"
 )
 
 // SyntaxList constructs a syntax list from the given elements.
@@ -38,10 +40,8 @@ func SyntaxList(sc *SourceContext, os ...SyntaxValue) SyntaxValue {
 			}
 		}
 		return &SyntaxPair{
-			Values: [2]SyntaxValue{os[0], SyntaxEmptyList},
-			syntaxBase: syntaxBase{
-				sourceContext: elemSc,
-			},
+			Values:     [2]SyntaxValue{os[0], SyntaxEmptyList},
+			syntaxBase: values.NewSyntaxBase(elemSc),
 		}
 	}
 	// Use first element's source context for the head pair
@@ -53,10 +53,8 @@ func SyntaxList(sc *SourceContext, os ...SyntaxValue) SyntaxValue {
 		}
 	}
 	q := &SyntaxPair{
-		Values: [2]SyntaxValue{os[0], &SyntaxPair{}},
-		syntaxBase: syntaxBase{
-			sourceContext: headSc,
-		},
+		Values:     [2]SyntaxValue{os[0], &SyntaxPair{}},
+		syntaxBase: values.NewSyntaxBase(headSc),
 	}
 	curr := q
 	for _, v := range os[1:] {
@@ -67,7 +65,7 @@ func SyntaxList(sc *SourceContext, os ...SyntaxValue) SyntaxValue {
 		if v != nil {
 			esc := v.SourceContext()
 			if esc != nil {
-				curr.sourceContext = esc
+				curr.SetSourceContext(esc)
 			}
 		}
 	}
@@ -130,7 +128,13 @@ func IsSyntaxVoid(v SyntaxValue) bool {
 	return v == nil || v.IsVoid()
 }
 
-// IsSyntaxEmptyList returns true if the value is the syntax empty list singleton.
+// IsSyntaxEmptyList returns true if the value is the syntax empty list.
+//
+// Delegates to values.IsEmptyList — after the empty-list duality merge,
+// the syntax empty list is the same singleton as values.EmptyList, and
+// values.IsEmptyList works on any Tuple. This restores symmetric
+// equality (previously the strict pointer-type assertion produced
+// #f for `(equal? (syntax ()) '())`, contrary to Chez).
 func IsSyntaxEmptyList(v SyntaxValue) bool {
-	return v == SyntaxEmptyList
+	return values.IsEmptyList(v)
 }

@@ -14,22 +14,11 @@
 
 package syntax
 
-import (
-	"context"
-
-	"github.com/aalpar/wile/values"
-)
+import "github.com/aalpar/wile/values"
 
 // SyntaxForEachFunc is the callback type for iterating over syntax tuples.
-type SyntaxForEachFunc func(ctx context.Context, i int, hasNext bool, v SyntaxValue) error
+type SyntaxForEachFunc = values.SyntaxForEachFunc
 
 // SyntaxTuple is the interface for syntax lists (pairs and vectors).
-type SyntaxTuple interface {
-	values.Tuple
-	SyntaxValue
-	SyntaxCar() SyntaxValue
-	SyntaxCdr() SyntaxValue
-	AsSyntaxVector() *SyntaxVector
-	SyntaxAppend(value SyntaxValue) SyntaxValue
-	SyntaxForEach(ctx context.Context, fn SyntaxForEachFunc) (SyntaxValue, error)
-}
+// Defined in package values so that values.emptyListType can satisfy it.
+type SyntaxTuple = values.SyntaxTuple
