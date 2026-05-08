@@ -129,11 +129,11 @@ func (p *CompiledLibrary) GetInternalName(externalName string) string {
 
 // LibraryImportEvent records what happened when a library was imported.
 type LibraryImportEvent struct {
-	Library    LibraryName // imported library name, e.g., (scheme base)
-	SourceFile string      // path to .sld file (empty for synthetic libraries)
-	Exports    []string    // all names exported by the library
-	Imported   []string    // names that actually landed in the importer (after only/except/prefix/rename)
-	Importer   LibraryName // importing library name (zero value for top-level import)
+	Library    LibraryName       // imported library name, e.g., (scheme base)
+	SourceFile string            // path to .sld file (empty for synthetic libraries)
+	Exports    []string          // all names exported by the library
+	Imported   []string          // names that actually landed in the importer (after only/except/prefix/rename)
+	Importer   LibraryName       // importing library name (zero value for top-level import)
 	Phase      environment.Phase // pipeline phase: environment.PhaseExpand or environment.PhaseCompile
 }
 
