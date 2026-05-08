@@ -299,7 +299,7 @@ Touches: `options.go` (root), `engine_sandbox_test.go` (uses `wile.PhaseExpand`)
 
 1. `make lint && make covercheck && make ci` — all green.
 2. Walk the diff with `crosscheck:crosscheck all` and address findings
-   (per `feedback-implementation-completion-workflow.md`).
+   (per `plans/CLAUDE.md` § "Implementation Completion Workflow").
 3. Address any findings from `crosscheck`. Push fixup commit if needed.
 
 **Commit (if needed)**: `fix: address crosscheck findings on phase-unification PR`

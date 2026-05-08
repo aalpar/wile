@@ -88,9 +88,10 @@ than the next.
 - **Port hierarchy collapsibility**: 8 port types (`*InputPort`,
   `*OutputPort`, byte/character variants, in-memory vs. file-backed). Sum
   type vs. interface-method-set trade-off worth examining.
-- **Registration mechanism guides**: per `memory/MEMORY.md`, the package
-  has multiple "ADDING A NEW X" guide comments (7 items + 12 items at the
-  numeric guide). When a guide says "edit these 7 places," that's a missing
+- **Registration mechanism guides**: the package has multiple "ADDING A
+  NEW X" guide comments in source (7 items in `values/values.go` for the
+  Value-type guide, 12 items in `values/numeric_kind.go` for the numeric
+  guide). When a guide says "edit these 7 places," that's a missing
   abstraction — every guide is a candidate.
 - **Tuple/Pair migration completeness**: similar to the
   `*SyntaxPair`/`SyntaxEmptyList` finding in `internal/`, the `values/`
@@ -146,10 +147,11 @@ every consumer benefits.
 - **`Phase` enum vs. `Registry` separation**: `PhaseRuntime`, `PhaseExpand`,
   `PhaseCompile` — does the registry treat these uniformly, or is there
   asymmetry?
-- **Variadic convention**: per `memory/MEMORY.md`,
-  `ParamCount: 0 + IsVariadic: true` *panics*. That's a runtime invariant
-  that the type system doesn't enforce — exactly the kind of thing
-  structural-reduction is supposed to surface.
+- **Variadic convention**: `ParamCount: 0 + IsVariadic: true` *panics*
+  at registration (verified in `registry/registry.go`'s
+  `validateParamTypes`). That's a runtime invariant that the type system
+  doesn't enforce — exactly the kind of thing structural-reduction is
+  supposed to surface.
 - **`Contract`** (`registry/contract.go`): how does it relate to
   `PrimitiveSpec.ParamTypes`? Two ways to express constraints suggests
   consolidation opportunity.
@@ -178,8 +180,9 @@ files closely).
 - **`WithX` option proliferation**: option-functions are good, but if there
   are 20+ of them, are some redundant? Are some really configurations of
   others?
-- **`profile.go` + `sandbox.go` coupling**: per `memory/MEMORY.md`,
-  `WithProfile(p)` + `WithSandbox()` are orthogonal modifiers. Confirm the
+- **`profile.go` + `sandbox.go` coupling**: `WithProfile(p)` and
+  `WithSandbox()` are documented as orthogonal modifiers (see
+  `plans/2026-03-26-environment-profiles-impl.md`). Confirm the
   orthogonality is real and not an accident of evolution.
 - **FFI surface**: 4 files (`ffi.go`, `ffi_arg_converters.go`,
   `ffi_ret_converters.go`, `ffi_wrapper.go`) — likely has hand-unrolled
@@ -278,9 +281,12 @@ the two existing plans absorb context they don't currently have.
   Tier A.1 `values/` before starting Phase 7).
 - `plans/2026-05-05-charsets-structural-refactor.md` — prior point-fix on
   one extension package; a related but narrower precedent.
-- `memory/MEMORY.md` — references the "ADDING A NEW X" guide comments
-  that flag known multi-site update obligations (5 in total: value type,
-  numeric type, extension, special form, core primitive). Each guide is a
-  candidate "missing abstraction" for the corresponding package's analysis.
+- The "ADDING A NEW X" guide comments in source flag known multi-site
+  update obligations (5 in total: value type at `values/values.go`,
+  numeric type at `values/numeric_kind.go`, extension at
+  `internal/bootstrap/bootstrap.go`, special form at
+  `internal/validate/register.go`, core primitive at
+  `registry/core/register.go`). Each guide is a candidate "missing
+  abstraction" for the corresponding package's analysis.
 - `TODO.md` Tier 5 "FCA-Derived" — the `vmCore sub-struct extraction` item
   is a peer to `machine/` Finding 7 and should be sequenced together.

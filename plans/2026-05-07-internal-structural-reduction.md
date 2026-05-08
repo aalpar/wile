@@ -683,7 +683,7 @@ constructor; delete defensive guards in lockstep).
   `internal/parser/CLAUDE.local.md`, `internal/tokenizer/CLAUDE.local.md`
    — architectural references used to validate findings against existing
   invariants and migration history.
-- `plans/2026-04-05-walk-sub-exprs-design.md` — original design of the
+- `memory/2026-04-05-walk-sub-exprs-design.md` — original design of the
   `WalkSubExprs` primitive. Finding 5 / Opportunity 1 builds on it.
 - TODO.md Tier 5 "FCA-Derived" — the analogous `vmCore sub-struct
   extraction` for `machine/` is a peer cleanup; sequencing is independent.

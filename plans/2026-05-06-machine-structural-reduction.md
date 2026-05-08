@@ -506,7 +506,7 @@ sub-structure.
   this plan's implementation. Phase 7 (named sub-records for
   `MachineContext`) interacts with how `EnvironmentFrame` is held on
   `MachineContext`; sequence after `environment/` analysis.
-- `plans/2026-04-05-structural-reduction.md` — earlier promoted-ops
+- `memory/2026-04-05-structural-reduction.md` — earlier promoted-ops
   experiment that rejected table-driven dispatch (~1.5% regression).
   Finding 2 proposes a *different* encoding (sign-bit on operand) not tested
   there.
