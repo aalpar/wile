@@ -30,7 +30,7 @@
 //	reg := registry.NewRegistry()
 //	reg.AddPrimitives([]registry.PrimitiveSpec{
 //	    {Name: "my-func", ParamCount: 1, Impl: myFuncImpl},
-//	}, registry.PhaseRuntime|registry.PhaseExpand)
+//	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 //
 // # Application
 //

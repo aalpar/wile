@@ -72,6 +72,6 @@ func addPrimitives(r *registry.Registry) error {
 			Doc: "Dynamically imports a library specified by LIB-SPEC into NS.\n\nExamples:\n  (let ((ns (make-namespace))) (namespace-require ns '(scheme base)))", ParamNames: []string{"ns", "lib-spec"}, Category: "namespace",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeList},
 			ReturnType: values.TypeVoid},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }

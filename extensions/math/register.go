@@ -77,7 +77,7 @@ func addPrimitives(r *registry.Registry) error {
 			Keywords:   []string{"power", "exponentiation", "raise", "pow"},
 			ParamTypes: []values.TypeConstraint{values.TypeNumber, values.TypeNumber},
 			ReturnType: values.TypeNumber},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	// Rounding and division — real arguments (complex rejected by impl).
 	r.AddPrimitives([]registry.PrimitiveSpec{
@@ -128,7 +128,7 @@ func addPrimitives(r *registry.Registry) error {
 			Keywords:   []string{"remainder"},
 			ParamTypes: []values.TypeConstraint{values.TypeReal, values.TypeReal},
 			ReturnType: values.TypeReal},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	// Numeric predicates
 	r.AddPrimitives([]registry.PrimitiveSpec{
@@ -144,7 +144,7 @@ func addPrimitives(r *registry.Registry) error {
 			Doc: "Returns #t if Z is NaN (not a number). Returns #f for all exact numbers.", ParamNames: []string{"z"}, Category: "math",
 			ParamTypes: []values.TypeConstraint{values.TypeNumber},
 			ReturnType: values.TypeBoolean},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	// Rationals and exact
 	r.AddPrimitives([]registry.PrimitiveSpec{
@@ -164,7 +164,7 @@ func addPrimitives(r *registry.Registry) error {
 		{Name: "exact-integer-sqrt", ParamCount: 1, Impl: PrimExactIntegerSqrt,
 			Doc: "Returns two values s and r such that N = s*s + r and s*s <= N < (s+1)*(s+1). N must be a non-negative exact integer.", ParamNames: []string{"n"}, Category: "math",
 			ParamTypes: []values.TypeConstraint{values.TypeExactInteger}},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	// Complex
 	r.AddPrimitives([]registry.PrimitiveSpec{
@@ -192,7 +192,7 @@ func addPrimitives(r *registry.Registry) error {
 			Doc: "Returns the angle (argument) of Z in radians. For positive reals, returns 0; for negative reals, returns pi.", ParamNames: []string{"z"}, Category: "math",
 			ParamTypes: []values.TypeConstraint{values.TypeNumber},
 			ReturnType: values.TypeFlonum},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	// Number/string conversion
 	r.AddPrimitives([]registry.PrimitiveSpec{
@@ -209,7 +209,7 @@ func addPrimitives(r *registry.Registry) error {
 			Keywords:   []string{"parse number", "deserialize", "from string", "atoi"},
 			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeInteger},
 			ReturnType: values.TypeAny},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	return nil
 }

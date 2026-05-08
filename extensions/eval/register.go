@@ -99,6 +99,6 @@ func addPrimitives(r *registry.Registry) error {
 		{Name: "syntax-local-identifier-as-binding", ParamCount: 1, Impl: PrimSyntaxLocalIdentifierAsBinding,
 			Doc: "Adds the current use-site scope to an identifier, making it suitable for creating bindings.\n\nExamples:\n  ; inside a macro transformer:\n  ; (syntax-local-identifier-as-binding #'x)  => x with use-site scope", ParamNames: []string{"id"}, Category: "eval",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }

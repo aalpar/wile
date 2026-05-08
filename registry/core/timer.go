@@ -36,7 +36,7 @@ func addTimer(r *registry.Registry) error { //nolint:govet
 			ParamTypes: []values.TypeConstraint{values.TypeInteger, values.TypeProcedure, values.TypeProcedure},
 			ReturnType: values.TypeAny,
 			Category:   "control", Keywords: []string{"timeout", "timer", "engine", "fuel", "bounded-eval", "preemption"}},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	return nil
 }

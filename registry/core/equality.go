@@ -33,7 +33,7 @@ func addEquality(r *registry.Registry) error {
 			Doc: "Returns #t if OBJ1 and OBJ2 have the same structure and contents. Recursively compares pairs, vectors, strings, and bytevectors.\n\nExamples:\n  (equal? '(1 2 3) '(1 2 3))  => #t\n  (equal? \"abc\" \"abc\")         => #t\n  (equal? '(1 2) '(1 3))      => #f", ParamNames: []string{"obj1", "obj2"}, Category: "equality",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}, ReturnType: values.TypeBoolean,
 			Keywords: []string{"structural equality", "deep equality", "recursive compare"}},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	return nil
 }

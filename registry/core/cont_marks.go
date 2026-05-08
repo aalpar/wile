@@ -48,7 +48,7 @@ func addContMarks(r *registry.Registry) error {
 		{Name: "continuation-mark-set->list*", ParamCount: 3, IsVariadic: true, Impl: PrimContinuationMarkSetToListStar,
 			Doc: "Like continuation-mark-set->list but for multiple keys. Returns a list of vectors from MARK-SET, one per frame containing any key in KEY-LIST.\n\nExamples:\n  ;; See `continuation-mark-set->iterator' in (wile control) for usage.", ParamNames: []string{"mark-set", "key-list", "none-v"}, Category: "continuations",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeList, values.TypeAny}, ReturnType: values.TypeList},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	return nil
 }

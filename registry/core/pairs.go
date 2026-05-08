@@ -40,7 +40,7 @@ func addPairs(r *registry.Registry) error {
 		{Name: "set-cdr!", ParamCount: 2, Impl: PrimSetCdr,
 			Doc: "Mutates the cdr field of PAIR to OBJ. PAIR must be mutable.\n\nExamples:\n  (let ((p (cons 1 2))) (set-cdr! p 3) p)  => (1 . 3)", ParamNames: []string{"pair", "obj"}, Category: "pairs",
 			ParamTypes: []values.TypeConstraint{values.TypePair, values.TypeAny}, ReturnType: values.TypeVoid},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	return nil
 }

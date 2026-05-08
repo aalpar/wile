@@ -74,7 +74,7 @@ func addPredicates(r *registry.Registry) error {
 			Doc: "Returns #t if OBJ is a procedure. Includes lambdas, primitives, continuations, and parameters.\n\nExamples:\n  (procedure? car)       => #t\n  (procedure? 42)        => #f", ParamNames: []string{"obj"}, Category: "predicates",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeBoolean,
 			Keywords: []string{"callable", "function", "lambda"}},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	// Numeric predicates
 	r.AddPrimitives([]registry.PrimitiveSpec{
@@ -84,7 +84,7 @@ func addPredicates(r *registry.Registry) error {
 		{Name: "even?", ParamCount: 1, Impl: PrimEvenQ,
 			Doc: "Returns #t if N is even. The argument must be an integer.\n\nExamples:\n  (even? 4)             => #t\n  (even? 3)             => #f", ParamNames: []string{"n"}, Category: "predicates",
 			ParamTypes: []values.TypeConstraint{values.TypeInteger}, ReturnType: values.TypeBoolean},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	return nil
 }

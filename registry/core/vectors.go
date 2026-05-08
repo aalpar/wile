@@ -62,7 +62,7 @@ func addVectors(r *registry.Registry) error {
 		{Name: "string->vector", ParamCount: 2, IsVariadic: true, Impl: PrimStringToVector,
 			Doc: "Returns a vector of the characters in STRING from START to end.\n\nExamples:\n  (string->vector \"abc\")  => #(#\\a #\\b #\\c)", ParamNames: []string{"string", "start"}, Category: "vectors",
 			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeExactInteger}, ReturnType: values.TypeVector},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	return nil
 }

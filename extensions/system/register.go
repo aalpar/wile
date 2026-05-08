@@ -56,6 +56,6 @@ func addPrimitives(r *registry.Registry) error {
 		{Name: "jiffies-per-second", Impl: PrimJiffiesPerSecond,
 			Doc: "Returns 1000000000, the number of jiffies (nanoseconds) per second.", Category: "system",
 			ReturnType: values.TypeExactInteger},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }

@@ -130,7 +130,7 @@ func addPrimitives(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeString, values.TypeInteger},
 			ReturnType: values.TypeTextualInputPort,
 		},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }
 

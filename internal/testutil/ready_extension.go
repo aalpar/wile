@@ -43,7 +43,7 @@ func ReadyExtension() (registry.Extension, <-chan struct{}) {
 				mc.SetValue(values.Void)
 				return nil
 			},
-		}, registry.PhaseRuntime)
+		}, registry.PhaseSetRuntime)
 		return nil
 	})
 	return ext, ready

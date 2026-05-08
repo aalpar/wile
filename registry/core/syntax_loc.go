@@ -42,7 +42,7 @@ func addSyntaxLoc(r *registry.Registry) error {
 		{Name: "syntax->list", ParamCount: 1, Impl: PrimSyntaxToList,
 			Doc: "Converts STX from a syntax pair chain to a list of individual syntax objects. Returns #f if not a proper syntax list.\n\nExamples:\n  ;; (length (syntax->list #'(a b c)))  => 3", ParamNames: []string{"stx"}, Category: "syntax",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	return nil
 }

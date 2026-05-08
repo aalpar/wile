@@ -55,7 +55,7 @@ func addHashtables(r *registry.Registry) error {
 		{Name: "hashtable-clear!", ParamCount: 1, Impl: PrimHashtableClear,
 			Doc: "Removes all entries from HT, leaving it empty.\n\nExamples:\n  (let ((ht (make-hashtable))) (hashtable-set! ht 'a 1) (hashtable-clear! ht) (hashtable-size ht))  => 0", ParamNames: []string{"ht"}, Category: "hashtables",
 			ParamTypes: []values.TypeConstraint{values.TypeHashtable}, ReturnType: values.TypeVoid},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	return nil
 }

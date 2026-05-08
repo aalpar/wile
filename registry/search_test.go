@@ -54,7 +54,7 @@ func buildSearchTestRegistry() *registry.Registry {
 			Category:   "lists",
 			Keywords:   []string{"sort", "ordering", "comparison"},
 		},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	reg.AddBindingSpecs([]registry.BindingSpec{
 		{Name: "if", Doc: "Conditional.\nSyntax: (if TEST THEN ELSE)\nCategory: conditionals"},
@@ -142,7 +142,7 @@ func TestSearchDoc_PrimitivePrecedence(t *testing.T) {
 	reg.AddPrimitive(registry.PrimitiveSpec{
 		Name: "apply", ParamCount: 2, IsVariadic: true,
 		Doc: "Apply PROC.", Category: "control",
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	reg.AddBindingSpecs([]registry.BindingSpec{
 		{Name: "apply", Doc: "Binding-level apply.\nCategory: control"},
 	})
@@ -163,7 +163,7 @@ func TestSearchDoc_NilEnvAndLibReg(t *testing.T) {
 	reg := registry.NewRegistry()
 	reg.AddPrimitive(registry.PrimitiveSpec{
 		Name: "car", ParamCount: 1, Doc: "First of pair.", Category: "pairs",
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	results := registry.SearchDoc(reg, nil, nil, nil, "car")
 	c.Assert(len(results), qt.Equals, 1)
 	c.Assert(results[0].Name, qt.Equals, "car")
@@ -427,7 +427,7 @@ func TestSearchDoc_LoadedTakesPrecedenceOverUnloaded(t *testing.T) {
 		ParamCount: 3,
 		Doc:        "Fold over a list.",
 		Category:   "lists",
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	// Also put "fold" in the unloaded export index.
 	idx := compilation.NewLibraryExportIndexFromEntries(map[string]*compilation.LibrarySummary{

@@ -19,6 +19,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/registry"
 )
 
@@ -335,6 +336,6 @@ func TestPrimitivePhases(t *testing.T) {
 	}
 
 	c.Assert(carPrim, qt.IsNotNil, qt.Commentf("expected car primitive"))
-	c.Assert(carPrim.Phases.HasRuntime(), qt.IsTrue, qt.Commentf("car should be available at runtime"))
-	c.Assert(carPrim.Phases.HasExpand(), qt.IsTrue, qt.Commentf("car should be available at expand time"))
+	c.Assert(carPrim.Phases.Has(environment.PhaseRuntime), qt.IsTrue, qt.Commentf("car should be available at runtime"))
+	c.Assert(carPrim.Phases.Has(environment.PhaseExpand), qt.IsTrue, qt.Commentf("car should be available at expand time"))
 }

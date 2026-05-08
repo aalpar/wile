@@ -65,7 +65,7 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame,
 
 	// Register compile-time primitives (bindings only, no values)
 	for _, reg := range p.primitives {
-		if reg.Phases.HasCompile() && !reg.Phases.HasRuntime() {
+		if reg.Phases.Has(environment.PhaseCompile) && !reg.Phases.Has(environment.PhaseRuntime) {
 			err := registerCompileTimeBinding(env, BindingSpec{Name: reg.Spec.Name})
 			if err != nil {
 				return err
@@ -75,7 +75,7 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame,
 
 	// Register runtime primitives
 	for _, reg := range p.primitives {
-		if reg.Phases.HasRuntime() {
+		if reg.Phases.Has(environment.PhaseRuntime) {
 			err := registerRuntimePrimitive(env, reg.Spec, cfg.contractEnforcement)
 			if err != nil {
 				return err
@@ -85,7 +85,7 @@ func (p *Registry) Apply(ctx context.Context, env *environment.EnvironmentFrame,
 
 	// Register expand-time primitives
 	for _, reg := range p.primitives {
-		if reg.Phases.HasExpand() {
+		if reg.Phases.Has(environment.PhaseExpand) {
 			err := registerExpandTimePrimitive(env, reg.Spec, cfg.contractEnforcement)
 			if err != nil {
 				return err

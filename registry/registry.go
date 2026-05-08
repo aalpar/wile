@@ -44,7 +44,7 @@ type PrimitiveSpec struct {
 // PrimitiveRegistration holds a primitive and its phases.
 type PrimitiveRegistration struct {
 	Spec   PrimitiveSpec
-	Phases Phase
+	Phases PhaseSet
 }
 
 // InitFunc is called after all primitives and global values are registered.
@@ -93,7 +93,7 @@ func NewRegistry() *Registry {
 }
 
 // AddPrimitive registers a primitive with the given phases.
-func (p *Registry) AddPrimitive(spec PrimitiveSpec, phases Phase) {
+func (p *Registry) AddPrimitive(spec PrimitiveSpec, phases PhaseSet) {
 	validateParamTypes(spec)
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -104,7 +104,7 @@ func (p *Registry) AddPrimitive(spec PrimitiveSpec, phases Phase) {
 }
 
 // AddPrimitives registers multiple primitives with the given phases.
-func (p *Registry) AddPrimitives(specs []PrimitiveSpec, phases Phase) {
+func (p *Registry) AddPrimitives(specs []PrimitiveSpec, phases PhaseSet) {
 	for _, spec := range specs {
 		validateParamTypes(spec)
 	}
@@ -228,7 +228,7 @@ func (p *Registry) PrimitiveCount() int {
 // FindPrimitive returns the first registered primitive with the given name.
 // If phase is non-zero, only primitives active in that phase are considered.
 // If phase is zero, any phase matches.
-func (p *Registry) FindPrimitive(name string, phase Phase) (PrimitiveRegistration, bool) {
+func (p *Registry) FindPrimitive(name string, phase PhaseSet) (PrimitiveRegistration, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	for _, reg := range p.primitives {
@@ -246,7 +246,7 @@ func (p *Registry) FindPrimitive(name string, phase Phase) (PrimitiveRegistratio
 // HasPrimitive reports whether a primitive with the given name is registered.
 // If phase is non-zero, only primitives active in that phase are considered.
 // If phase is zero, any phase matches.
-func (p *Registry) HasPrimitive(name string, phase Phase) bool {
+func (p *Registry) HasPrimitive(name string, phase PhaseSet) bool {
 	_, ok := p.FindPrimitive(name, phase)
 	return ok
 }
@@ -346,7 +346,7 @@ func (p *Registry) Clone() *Registry {
 }
 
 // RuntimePrimitiveNamesSince returns the names of primitives registered
-// at index >= startIndex that have PhaseRuntime. If startIndex is negative
+// at index >= startIndex that have PhaseSetRuntime. If startIndex is negative
 // it is treated as 0. If startIndex exceeds the primitive count, nil is returned.
 func (p *Registry) RuntimePrimitiveNamesSince(startIndex int) []string {
 	return p.RuntimePrimitiveNamesRange(startIndex, -1)
@@ -373,7 +373,7 @@ func (p *Registry) RuntimePrimitiveNamesRange(startIndex, endIndex int) []string
 
 	var names []string
 	for i := startIndex; i < upper; i++ {
-		if p.primitives[i].Phases&PhaseRuntime != 0 {
+		if p.primitives[i].Phases&PhaseSetRuntime != 0 {
 			names = append(names, p.primitives[i].Spec.Name)
 		}
 	}

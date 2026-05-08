@@ -35,7 +35,7 @@ func addBoxes(r *registry.Registry) error {
 		{Name: "set-box!", ParamCount: 2, Impl: PrimSetBox,
 			Doc: "Replaces the contents of BOX with OBJ.\n\nExamples:\n  (let ((b (box 1))) (set-box! b 2) (unbox b))  => 2", ParamNames: []string{"box", "obj"}, Category: "boxes",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}, ReturnType: values.TypeVoid},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	return nil
 }

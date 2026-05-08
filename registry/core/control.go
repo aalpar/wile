@@ -33,7 +33,7 @@ func addControl(r *registry.Registry) error {
 			Doc: "Calls PROC with the elements of the final list argument as individual arguments. Intermediate arguments are prepended.\n\nExamples:\n  (apply + '(1 2 3))      => 6\n  (apply + 1 '(2 3))      => 6\n  (apply list 'a 'b '(c))  => (a b c)", ParamNames: []string{"proc", "arg1", "args"}, Category: "control",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure, values.TypeAny}, ReturnType: values.TypeAny,
 			Keywords: []string{"invoke", "call with list", "spread", "splat"}},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	// Continuations
 	r.AddPrimitives([]registry.PrimitiveSpec{
@@ -52,7 +52,7 @@ func addControl(r *registry.Registry) error {
 		{Name: "call-with-continuation-barrier", ParamCount: 1, Impl: PrimCallWithContinuationBarrier,
 			Doc: "Calls THUNK with a continuation barrier. Continuations cannot cross the barrier boundary in either direction.\n\nExamples:\n  (call-with-continuation-barrier (lambda () 42))  => 42", ParamNames: []string{"thunk"}, Category: "control",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure}, ReturnType: values.TypeAny},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	// Multiple values
 	r.AddPrimitives([]registry.PrimitiveSpec{
@@ -67,7 +67,7 @@ func addControl(r *registry.Registry) error {
 			Doc: "Calls PRODUCER with no arguments, then passes its return values as arguments to CONSUMER.\n\nExamples:\n  (call-with-values (lambda () (values 1 2)) +)  => 3\n  (call-with-values (lambda () (values 'a 'b)) cons)  => (a . b)", ParamNames: []string{"producer", "consumer"}, Category: "control",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure, values.TypeProcedure}, ReturnType: values.TypeAny,
 			Keywords: []string{"multiple value dispatch", "receive values"}},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	return nil
 }

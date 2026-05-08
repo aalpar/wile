@@ -28,7 +28,7 @@ func addLists(r *registry.Registry) error {
 		{Name: "make-list", ParamCount: 2, IsVariadic: true, Impl: PrimMakeList,
 			Doc: "Returns a list of length K. If FILL is given, each element is FILL; otherwise elements are unspecified.\n\nExamples:\n  (make-list 3 0)    => (0 0 0)\n  (make-list 3 'a)   => (a a a)", ParamNames: []string{"k", "fill"}, Category: "lists",
 			ParamTypes: []values.TypeConstraint{values.TypeExactInteger, values.TypeAny}, ReturnType: values.TypeList},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	// List operations
 	r.AddPrimitives([]registry.PrimitiveSpec{
@@ -61,7 +61,7 @@ func addLists(r *registry.Registry) error {
 		{Name: "list-copy", ParamCount: 1, Impl: PrimListCopy,
 			Doc: "Returns a shallow copy of LIST. The spine is copied but elements are shared with the original.\n\nExamples:\n  (list-copy '(1 2 3))  => (1 2 3)", ParamNames: []string{"list"}, Category: "lists",
 			ParamTypes: []values.TypeConstraint{values.TypeList}, ReturnType: values.TypeList},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	// List search
 	r.AddPrimitives([]registry.PrimitiveSpec{
@@ -81,7 +81,7 @@ func addLists(r *registry.Registry) error {
 			Doc: "Returns the first association in ALIST whose car is eqv? to OBJ, or #f if not found.\n\nExamples:\n  (assv 2 '((1 a) (2 b) (3 c)))  => (2 b)\n  (assv 4 '((1 a) (2 b)))        => #f", ParamNames: []string{"obj", "alist"}, Category: "lists",
 			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeList}, ReturnType: values.TypeAny,
 			Keywords: []string{"lookup", "dictionary", "association list", "key-value"}},
-	}, registry.PhaseRuntime|registry.PhaseExpand)
+	}, registry.PhaseSetRuntime|registry.PhaseSetExpand)
 
 	return nil
 }

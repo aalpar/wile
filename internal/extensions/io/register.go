@@ -148,7 +148,7 @@ func addReadWrite(r *registry.Registry) error {
 			Keywords:   []string{"put-bytevector"},
 			ParamTypes: []values.TypeConstraint{values.TypeByteVector, values.TypeBinaryOutputPort},
 			ReturnType: values.TypeVoid},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }
 
@@ -202,7 +202,7 @@ func addPorts(r *registry.Registry) error {
 			ParamTypes: []values.TypeConstraint{values.TypeAny},
 			ReturnType: values.TypeBoolean},
 		// call-with-port is defined in port_procs.scm (addPortProcs)
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	// String ports
 	r.AddPrimitives([]registry.PrimitiveSpec{
@@ -220,7 +220,7 @@ func addPorts(r *registry.Registry) error {
 			Keywords:   []string{"extract string", "string builder result"},
 			ParamTypes: []values.TypeConstraint{values.TypeTextualOutputPort},
 			ReturnType: values.TypeString},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	// Bytevector ports
 	r.AddPrimitives([]registry.PrimitiveSpec{
@@ -237,7 +237,7 @@ func addPorts(r *registry.Registry) error {
 			Doc: "Returns the accumulated bytes from an output bytevector port as a bytevector.\n\nExamples:\n  (let ((p (open-output-bytevector))) (write-u8 10 p) (write-u8 20 p) (get-output-bytevector p))  => #u8(10 20)", ParamNames: []string{"port"}, Category: "ports",
 			ParamTypes: []values.TypeConstraint{values.TypeBinaryOutputPort},
 			ReturnType: values.TypeByteVector},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 
 	return nil
 }

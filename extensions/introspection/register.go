@@ -72,6 +72,6 @@ func addPrimitives(r *registry.Registry) error {
 			ParamNames: []string{"proc"}, Category: "introspection",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure},
 			ReturnType: values.TypeList},
-	}, registry.PhaseRuntime)
+	}, registry.PhaseSetRuntime)
 	return nil
 }

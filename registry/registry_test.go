@@ -19,6 +19,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 )
@@ -48,13 +49,13 @@ func TestRegistry_AddPrimitive(t *testing.T) {
 		Impl:       func(_ machine.CallContext) error { return nil },
 	}
 
-	r.AddPrimitive(spec, PhaseRuntime)
+	r.AddPrimitive(spec, PhaseSetRuntime)
 	c.Assert(r.PrimitiveCount(), qt.Equals, 1)
 
 	prims := r.Primitives()
 	c.Assert(len(prims), qt.Equals, 1)
 	c.Assert(prims[0].Spec.Name, qt.Equals, "test-prim")
-	c.Assert(prims[0].Phases, qt.Equals, PhaseRuntime)
+	c.Assert(prims[0].Phases, qt.Equals, PhaseSetRuntime)
 }
 
 func TestRegistry_AddPrimitives(t *testing.T) {
@@ -66,36 +67,36 @@ func TestRegistry_AddPrimitives(t *testing.T) {
 		{Name: "prim2", ParamCount: 2, IsVariadic: true, Impl: nil},
 	}
 
-	r.AddPrimitives(specs, PhaseRuntime|PhaseExpand)
+	r.AddPrimitives(specs, PhaseSetRuntime|PhaseSetExpand)
 	c.Assert(r.PrimitiveCount(), qt.Equals, 2)
 
 	prims := r.Primitives()
 	c.Assert(prims[0].Spec.Name, qt.Equals, "prim1")
 	c.Assert(prims[1].Spec.Name, qt.Equals, "prim2")
-	c.Assert(prims[0].Phases, qt.Equals, PhaseRuntime|PhaseExpand)
+	c.Assert(prims[0].Phases, qt.Equals, PhaseSetRuntime|PhaseSetExpand)
 }
 
 func TestRegistry_FindPrimitive(t *testing.T) {
 	c := qt.New(t)
 
 	r := NewRegistry()
-	r.AddPrimitive(PrimitiveSpec{Name: "runtime-only", ParamCount: 1}, PhaseRuntime)
-	r.AddPrimitive(PrimitiveSpec{Name: "expand-only", ParamCount: 0}, PhaseExpand)
-	r.AddPrimitive(PrimitiveSpec{Name: "both", ParamCount: 2}, PhaseRuntime|PhaseExpand)
+	r.AddPrimitive(PrimitiveSpec{Name: "runtime-only", ParamCount: 1}, PhaseSetRuntime)
+	r.AddPrimitive(PrimitiveSpec{Name: "expand-only", ParamCount: 0}, PhaseSetExpand)
+	r.AddPrimitive(PrimitiveSpec{Name: "both", ParamCount: 2}, PhaseSetRuntime|PhaseSetExpand)
 
 	tcs := []struct {
 		name  string
 		prim  string
-		phase Phase
+		phase PhaseSet
 		found bool
 	}{
 		{"runtime by name zero phase", "runtime-only", 0, true},
-		{"runtime in runtime phase", "runtime-only", PhaseRuntime, true},
-		{"runtime not in expand phase", "runtime-only", PhaseExpand, false},
-		{"expand in expand phase", "expand-only", PhaseExpand, true},
-		{"expand not in runtime phase", "expand-only", PhaseRuntime, false},
-		{"both in runtime phase", "both", PhaseRuntime, true},
-		{"both in expand phase", "both", PhaseExpand, true},
+		{"runtime in runtime phase", "runtime-only", PhaseSetRuntime, true},
+		{"runtime not in expand phase", "runtime-only", PhaseSetExpand, false},
+		{"expand in expand phase", "expand-only", PhaseSetExpand, true},
+		{"expand not in runtime phase", "expand-only", PhaseSetRuntime, false},
+		{"both in runtime phase", "both", PhaseSetRuntime, true},
+		{"both in expand phase", "both", PhaseSetExpand, true},
 		{"nonexistent", "no-such-prim", 0, false},
 	}
 	for _, tc := range tcs {
@@ -113,11 +114,11 @@ func TestRegistry_HasPrimitive(t *testing.T) {
 	c := qt.New(t)
 
 	r := NewRegistry()
-	r.AddPrimitive(PrimitiveSpec{Name: "test-prim"}, PhaseRuntime)
+	r.AddPrimitive(PrimitiveSpec{Name: "test-prim"}, PhaseSetRuntime)
 
 	c.Assert(r.HasPrimitive("test-prim", 0), qt.IsTrue)
-	c.Assert(r.HasPrimitive("test-prim", PhaseRuntime), qt.IsTrue)
-	c.Assert(r.HasPrimitive("test-prim", PhaseExpand), qt.IsFalse)
+	c.Assert(r.HasPrimitive("test-prim", PhaseSetRuntime), qt.IsTrue)
+	c.Assert(r.HasPrimitive("test-prim", PhaseSetExpand), qt.IsFalse)
 	c.Assert(r.HasPrimitive("no-such", 0), qt.IsFalse)
 }
 
@@ -172,7 +173,7 @@ func TestRegistry_Clone(t *testing.T) {
 	c := qt.New(t)
 
 	r := NewRegistry()
-	r.AddPrimitive(PrimitiveSpec{Name: "test", ParamCount: 1}, PhaseRuntime)
+	r.AddPrimitive(PrimitiveSpec{Name: "test", ParamCount: 1}, PhaseSetRuntime)
 	r.AddBinding("if")
 	r.AddMacroSource("source")
 
@@ -189,14 +190,14 @@ func TestRegistry_Clone(t *testing.T) {
 
 func TestPhase_String(t *testing.T) {
 	tests := []struct {
-		phase Phase
+		phase PhaseSet
 		want  string
 	}{
-		{PhaseRuntime, "runtime"},
-		{PhaseExpand, "expand"},
-		{PhaseCompile, "compile"},
-		{PhaseRuntime | PhaseExpand, "runtime|expand"},
-		{PhaseRuntime | PhaseExpand | PhaseCompile, "runtime|expand|compile"},
+		{PhaseSetRuntime, "runtime"},
+		{PhaseSetExpand, "expand"},
+		{PhaseSetCompile, "compile"},
+		{PhaseSetRuntime | PhaseSetExpand, "runtime|expand"},
+		{PhaseSetRuntime | PhaseSetExpand | PhaseSetCompile, "runtime|expand|compile"},
 		{0, "none"},
 	}
 
@@ -208,13 +209,32 @@ func TestPhase_String(t *testing.T) {
 	}
 }
 
-func TestPhase_Has(t *testing.T) {
+func TestPhaseSet_Has(t *testing.T) {
 	c := qt.New(t)
 
-	phase := PhaseRuntime | PhaseExpand
-	c.Assert(phase.HasRuntime(), qt.IsTrue)
-	c.Assert(phase.HasExpand(), qt.IsTrue)
-	c.Assert(phase.HasCompile(), qt.IsFalse)
+	phase := PhaseSetRuntime | PhaseSetExpand
+	c.Assert(phase.Has(environment.PhaseRuntime), qt.IsTrue)
+	c.Assert(phase.Has(environment.PhaseExpand), qt.IsTrue)
+	c.Assert(phase.Has(environment.PhaseCompile), qt.IsFalse)
+	c.Assert(phase.Has(environment.PhaseTemplate), qt.IsFalse)
+}
+
+func TestPhaseSet_With(t *testing.T) {
+	c := qt.New(t)
+
+	s := PhaseSet(0)
+	s = s.With(environment.PhaseRuntime)
+	s = s.With(environment.PhaseExpand)
+	c.Assert(s, qt.Equals, PhaseSetRuntime|PhaseSetExpand)
+
+	// With is idempotent.
+	s = s.With(environment.PhaseRuntime)
+	c.Assert(s, qt.Equals, PhaseSetRuntime|PhaseSetExpand)
+
+	// PhaseTemplate cannot be added.
+	c.Assert(func() {
+		_ = s.With(environment.PhaseTemplate)
+	}, qt.PanicMatches, ".*phase -1 not representable.*")
 }
 
 func TestRegistryBuilder_AddToRegistry(t *testing.T) {
@@ -222,11 +242,11 @@ func TestRegistryBuilder_AddToRegistry(t *testing.T) {
 
 	builder := NewRegistryBuilder(
 		func(r *Registry) error {
-			r.AddPrimitive(PrimitiveSpec{Name: "prim1"}, PhaseRuntime)
+			r.AddPrimitive(PrimitiveSpec{Name: "prim1"}, PhaseSetRuntime)
 			return nil
 		},
 		func(r *Registry) error {
-			r.AddPrimitive(PrimitiveSpec{Name: "prim2"}, PhaseExpand)
+			r.AddPrimitive(PrimitiveSpec{Name: "prim2"}, PhaseSetExpand)
 			return nil
 		},
 	)
@@ -260,7 +280,7 @@ func TestRegistry_PrimitiveByName(t *testing.T) {
 		{Name: "car", ParamCount: 1, Impl: nil, Doc: "Returns the car.", ParamNames: []string{"pair"}, Category: "pairs"},
 		{Name: "cdr", ParamCount: 1, Impl: nil, Doc: "Returns the cdr.", ParamNames: []string{"pair"}, Category: "pairs"},
 		{Name: "+", ParamCount: 0, IsVariadic: true, Impl: nil, Doc: "Returns the sum.", ParamNames: []string{"z"}, Category: "arithmetic"},
-	}, PhaseRuntime)
+	}, PhaseSetRuntime)
 
 	tcs := []struct {
 		name  string
@@ -293,7 +313,7 @@ func TestRegistry_PrimitiveNames(t *testing.T) {
 		{Name: "alpha", Impl: nil},
 		{Name: "beta", ParamCount: 1, Impl: nil},
 		{Name: "gamma", ParamCount: 2, Impl: nil},
-	}, PhaseRuntime)
+	}, PhaseSetRuntime)
 
 	names := r.PrimitiveNames()
 	c.Assert(names, qt.DeepEquals, []string{"alpha", "beta", "gamma"})
@@ -308,7 +328,7 @@ func TestRegistry_PrimitivesByCategory(t *testing.T) {
 		{Name: "cdr", ParamCount: 1, Impl: nil, Category: "pairs"},
 		{Name: "+", Impl: nil, Category: "arithmetic"},
 		{Name: "display", ParamCount: 1, Impl: nil},
-	}, PhaseRuntime)
+	}, PhaseSetRuntime)
 
 	byCategory := r.PrimitivesByCategory()
 
@@ -333,7 +353,7 @@ func TestRegistry_ClonePreservesMetadata(t *testing.T) {
 	r.AddPrimitive(PrimitiveSpec{
 		Name: "test", ParamCount: 1, Impl: nil,
 		Doc: "A test prim.", ParamNames: []string{"x"}, Category: "testing",
-	}, PhaseRuntime)
+	}, PhaseSetRuntime)
 
 	clone := r.Clone()
 	reg, ok := clone.PrimitiveByName("test")
@@ -397,7 +417,7 @@ func TestRegistry_Without(t *testing.T) {
 		{Name: "set-car!", Category: "pairs"},
 		{Name: "+", Category: "arithmetic"},
 		{Name: "vector-set!", Category: "vectors"},
-	}, PhaseRuntime)
+	}, PhaseSetRuntime)
 	r.AddBinding("if")
 	r.AddMacroSource("(define-syntax and ...)")
 	r.AddGlobalValue("gv", testValue("x"))
@@ -438,7 +458,7 @@ func TestRegistry_WithoutCategory(t *testing.T) {
 		{Name: "+", Category: "arithmetic"},
 		{Name: "display", Category: "io"},
 		{Name: "uncategorized"},
-	}, PhaseRuntime)
+	}, PhaseSetRuntime)
 	r.AddBinding("lambda")
 
 	tcs := []struct {
@@ -470,7 +490,7 @@ func TestRegistry_WithoutBindings(t *testing.T) {
 	r.AddPrimitives([]PrimitiveSpec{
 		{Name: "set!", Category: "special"},
 		{Name: "+", Category: "arithmetic"},
-	}, PhaseRuntime)
+	}, PhaseSetRuntime)
 	r.AddBindings([]string{"if", "set!", "lambda", "define"})
 
 	tcs := []struct {
@@ -507,7 +527,7 @@ func TestRegistry_PrimitiveSpecWithContract(t *testing.T) {
 		ParamNames: []string{"s", "k"},
 		Category:   "test",
 	}
-	r.AddPrimitive(spec, PhaseRuntime)
+	r.AddPrimitive(spec, PhaseSetRuntime)
 	prims := r.Primitives()
 	c.Assert(len(prims), qt.Equals, 1)
 	c.Assert(prims[0].Spec.ParamTypes, qt.HasLen, 2)
@@ -575,7 +595,7 @@ func TestRegistry_AddDocOnlyPrimitive(t *testing.T) {
 		setup      func(r *Registry)
 		query      string
 		found      bool
-		wantPhases Phase
+		wantPhases PhaseSet
 		wantDoc    string
 	}{
 		{
@@ -599,7 +619,7 @@ func TestRegistry_AddDocOnlyPrimitive(t *testing.T) {
 					Name: "car",
 					Doc:  "Go car.",
 					Impl: func(_ machine.CallContext) error { return nil },
-				}, PhaseRuntime)
+				}, PhaseSetRuntime)
 				r.AddDocOnlyPrimitive(PrimitiveSpec{
 					Name: "car",
 					Doc:  "Scheme car.",
@@ -607,7 +627,7 @@ func TestRegistry_AddDocOnlyPrimitive(t *testing.T) {
 			},
 			query:      "car",
 			found:      true,
-			wantPhases: PhaseRuntime,
+			wantPhases: PhaseSetRuntime,
 			wantDoc:    "Go car.",
 		},
 		{
@@ -643,7 +663,7 @@ func TestExtension(t *testing.T) {
 	c := qt.New(t)
 
 	ext := NewExtension("test-ext", func(r *Registry) error {
-		r.AddPrimitive(PrimitiveSpec{Name: "ext-prim"}, PhaseRuntime)
+		r.AddPrimitive(PrimitiveSpec{Name: "ext-prim"}, PhaseSetRuntime)
 		return nil
 	})
 
