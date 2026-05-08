@@ -787,7 +787,7 @@ func TestCopyLibraryBindingsToEnv_CompilePhase(t *testing.T) {
 	c.Assert(runtimeBinding.Value(), valuestest.SchemeEquals, mockValue)
 
 	// Verify binding is also present in compile phase (phase 2)
-	targetCompileEnv := targetEnv.AtPhase(2)
+	targetCompileEnv := targetEnv.AtPhase(environment.PhaseCompile)
 	elseCompileSym := values.NewSymbol("else")
 	compileBinding := targetCompileEnv.GetBinding(elseCompileSym, nil)
 	c.Assert(compileBinding, qt.IsNotNil, qt.Commentf("else should be propagated to compile phase"))

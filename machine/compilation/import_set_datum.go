@@ -17,6 +17,7 @@ package compilation
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
@@ -305,8 +306,17 @@ func parseImportSetForMetaFromDatum(ctx context.Context, tuple values.Tuple) (*I
 		return nil, err
 	}
 
-	// Add n to phase shift (composable)
-	importSet.PhaseShift += environment.Phase(phaseInt.Value)
+	// Add n to phase shift (composable). environment.Phase is int8; reject
+	// values that would silently truncate. Composition with importSet's
+	// existing PhaseShift could still overflow int8 — guard the operand
+	// here; the composition guard belongs in callers that compose chains.
+	n := phaseInt.Value
+	if n < math.MinInt8 || n > math.MaxInt8 {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"for-meta: phase %d out of range [%d, %d]",
+			n, int64(math.MinInt8), int64(math.MaxInt8))
+	}
+	importSet.PhaseShift += environment.Phase(n)
 	return importSet, nil
 }
 

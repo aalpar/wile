@@ -291,9 +291,9 @@ func TestEnvironmentFrame_PhaseHierarchy(t *testing.T) {
 	qt.Assert(t, topLevel.Compile(), qt.Equals, compile)
 
 	// AtPhase provides direct indexed access
-	qt.Assert(t, topLevel.AtPhase(0), qt.Equals, topLevel)
-	qt.Assert(t, topLevel.AtPhase(1), qt.Equals, expand)
-	qt.Assert(t, topLevel.AtPhase(2), qt.Equals, compile)
+	qt.Assert(t, topLevel.AtPhase(PhaseRuntime), qt.Equals, topLevel)
+	qt.Assert(t, topLevel.AtPhase(PhaseExpand), qt.Equals, expand)
+	qt.Assert(t, topLevel.AtPhase(PhaseCompile), qt.Equals, compile)
 
 	// Arbitrary phases can be created
 	phase3 := topLevel.AtPhase(3)

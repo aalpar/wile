@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/aalpar/wile"
+	"github.com/aalpar/wile/environment"
 )
 
 // Completer implements readline.AutoCompleter for a Wile REPL.
@@ -98,7 +99,7 @@ func (p *Completer) collectBindingNames() []string {
 
 	phases := topLevel.Phases()
 	phaseIndices := phases.Phases()
-	slices.SortFunc(phaseIndices, comparePhase)
+	slices.SortFunc(phaseIndices, environment.Phase.Compare)
 
 	for _, phase := range phaseIndices {
 		phaseEnv := phases.Get(phase)

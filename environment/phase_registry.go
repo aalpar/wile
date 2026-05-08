@@ -31,6 +31,18 @@ import (
 // EnvironmentFrame.phaseLevel. The companion type registry.PhaseSet
 // is a bitset over non-negative Phase values used for primitive
 // registration.
+//
+// ADDING A NEW PHASE requires updates in these locations:
+//
+//  1. environment/phase_registry.go (this file) — add a Phase constant
+//     and a String() case.
+//  2. registry/phase.go — add the matching PhaseSet<Name> bit constant
+//     if the new phase is representable in a PhaseSet (i.e. phase ≥ 0
+//     and phase < phaseSetBits). The init() assertion verifies the
+//     bit position matches the Phase index.
+//  3. registry/apply.go — extend phaseTargets if primitives may
+//     register at the new phase.
+//  4. wile/options.go — re-export so embedders can name the constant.
 type Phase int8
 
 const (
@@ -54,6 +66,12 @@ func (p Phase) String() string {
 	default:
 		return fmt.Sprintf("phase(%d)", int8(p))
 	}
+}
+
+// Compare orders two phases numerically (Template < Runtime < Expand < Compile).
+// Suitable for slices.SortFunc.
+func (p Phase) Compare(other Phase) int {
+	return int(p) - int(other)
 }
 
 // PhaseRegistry manages phase-indexed environment frames.

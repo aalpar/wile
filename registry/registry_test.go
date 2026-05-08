@@ -188,7 +188,7 @@ func TestRegistry_Clone(t *testing.T) {
 	c.Assert(clone.BindingCount(), qt.Equals, 1)
 }
 
-func TestPhase_String(t *testing.T) {
+func TestPhaseSet_String(t *testing.T) {
 	tests := []struct {
 		phase PhaseSet
 		want  string

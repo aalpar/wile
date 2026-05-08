@@ -17,6 +17,7 @@ package registry
 import (
 	"sync"
 
+	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/machine"
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
@@ -226,8 +227,8 @@ func (p *Registry) PrimitiveCount() int {
 }
 
 // FindPrimitive returns the first registered primitive with the given name.
-// If phase is non-zero, only primitives active in that phase are considered.
-// If phase is zero, any phase matches.
+// If phase is the empty PhaseSet (zero), any phase matches; otherwise only
+// primitives whose Phases overlap with phase are considered.
 func (p *Registry) FindPrimitive(name string, phase PhaseSet) (PrimitiveRegistration, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -244,8 +245,8 @@ func (p *Registry) FindPrimitive(name string, phase PhaseSet) (PrimitiveRegistra
 }
 
 // HasPrimitive reports whether a primitive with the given name is registered.
-// If phase is non-zero, only primitives active in that phase are considered.
-// If phase is zero, any phase matches.
+// If phase is the empty PhaseSet (zero), any phase matches; otherwise only
+// primitives whose Phases overlap with phase are considered.
 func (p *Registry) HasPrimitive(name string, phase PhaseSet) bool {
 	_, ok := p.FindPrimitive(name, phase)
 	return ok
@@ -373,7 +374,7 @@ func (p *Registry) RuntimePrimitiveNamesRange(startIndex, endIndex int) []string
 
 	var names []string
 	for i := startIndex; i < upper; i++ {
-		if p.primitives[i].Phases&PhaseSetRuntime != 0 {
+		if p.primitives[i].Phases.Has(environment.PhaseRuntime) {
 			names = append(names, p.primitives[i].Spec.Name)
 		}
 	}

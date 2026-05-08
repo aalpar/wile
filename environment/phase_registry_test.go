@@ -85,9 +85,7 @@ func TestPhaseRegistry_Phases(t *testing.T) {
 	topLevel.phases.GetOrCreate(PhaseTemplate)
 
 	phases = topLevel.phases.Phases()
-	slices.SortFunc(phases, func(a, b Phase) int {
-		return int(a) - int(b)
-	})
+	slices.SortFunc(phases, Phase.Compare)
 	qt.Assert(t, len(phases), qt.Equals, 4)
 	qt.Assert(t, phases, qt.DeepEquals, []Phase{PhaseTemplate, PhaseRuntime, PhaseExpand, PhaseCompile})
 }

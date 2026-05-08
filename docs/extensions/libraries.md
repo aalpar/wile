@@ -145,7 +145,7 @@ func (e *myExtension) LibraryName() []string     { return []string{"myorg", "uti
 func (e *myExtension) AddToRegistry(r *registry.Registry) error {
     r.AddPrimitive(registry.PrimitiveSpec{
         Name: "helper", ParamCount: 0, Impl: primHelper,
-    }, registry.PhaseRuntime)
+    }, registry.PhaseSetRuntime)
     return nil
 }
 ```

@@ -99,7 +99,8 @@ type EnvironmentFrame struct {
 	local LocalEnvironmentFrame
 	// global holds global bindings for this phase
 	global *GlobalEnvironmentFrame
-	// phaseLevel indicates which phase this frame represents (0=runtime, 1=expand, etc.)
+	// phaseLevel indicates which phase this frame represents
+	// (PhaseTemplate=-1, PhaseRuntime=0, PhaseExpand=1, PhaseCompile=2)
 	phaseLevel Phase
 	// phases is the shared phase registry, owned by Namespace
 	phases *PhaseRegistry
