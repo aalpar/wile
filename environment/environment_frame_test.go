@@ -697,6 +697,22 @@ func TestEnvironmentFrame_PanicSentinels(t *testing.T) {
 			},
 			werr.ErrMissingPhaseRegistry,
 		},
+		{
+			"SetFileResolver on un-namespaced frame panics",
+			func() {
+				env := newEnvironmentFrame(nil, NewGlobalEnvironmentFrame())
+				env.SetFileResolver(nil)
+			},
+			werr.ErrUnexpectedNil,
+		},
+		{
+			"SetLibraryRegistry on un-namespaced frame panics",
+			func() {
+				env := newEnvironmentFrame(nil, NewGlobalEnvironmentFrame())
+				env.SetLibraryRegistry(nil)
+			},
+			werr.ErrUnexpectedNil,
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

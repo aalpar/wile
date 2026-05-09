@@ -311,9 +311,16 @@ func (p *EnvironmentFrame) GlobalEnvironment() *GlobalEnvironmentFrame {
 //
 //	frame.Namespace().FileResolver()
 //
-// dance. They guard against a nil namespace pointer for safety on
-// frames built outside the standard constructors (e.g.
-// newEnvironmentFrame test fixtures).
+// dance.
+//
+// Nil-namespace handling: getters return zero values on a nil-namespace
+// frame because reads on un-namespaced frames are benign and have a
+// well-defined "no value here" answer. Setters PANIC: an
+// un-namespaced frame has no configuration storage, so a setter call
+// would silently disappear and that is a programmer error worth
+// surfacing immediately rather than at the next failed read. Frames
+// built outside the standard constructors (e.g. newEnvironmentFrame
+// test fixtures) must not be configured through these shortcuts.
 //
 // When adding a new Namespace-owned capability that callers reach via
 // EnvironmentFrame, follow the same pattern: thin pass-through here,
@@ -330,9 +337,12 @@ func (p *EnvironmentFrame) FileResolver() FileResolver {
 
 // SetFileResolver sets the file resolver. Shortcut for
 // p.Namespace().SetFileResolver(); see the comment block above.
+// Panics if the frame has no namespace (configuration on an
+// un-namespaced frame would be silently dropped — a programmer error).
 func (p *EnvironmentFrame) SetFileResolver(resolver FileResolver) {
 	if p.namespace == nil {
-		return
+		panic(werr.WrapForeignErrorf(werr.ErrUnexpectedNil,
+			"EnvironmentFrame.SetFileResolver: frame has no namespace"))
 	}
 	p.namespace.SetFileResolver(resolver)
 }
@@ -349,9 +359,11 @@ func (p *EnvironmentFrame) LibraryRegistry() LibrarySearcher {
 
 // SetLibraryRegistry sets the library registry. Shortcut for
 // p.Namespace().SetLibraryRegistry(); see the comment block above.
+// Panics if the frame has no namespace (see SetFileResolver).
 func (p *EnvironmentFrame) SetLibraryRegistry(registry LibrarySearcher) {
 	if p.namespace == nil {
-		return
+		panic(werr.WrapForeignErrorf(werr.ErrUnexpectedNil,
+			"EnvironmentFrame.SetLibraryRegistry: frame has no namespace"))
 	}
 	p.namespace.SetLibraryRegistry(registry)
 }
@@ -485,8 +497,9 @@ func (p *EnvironmentFrame) GetBinding(key *values.Symbol, scopes []*syntax.Scope
 			return nil
 		})
 
-		if best.has {
-			return best.item
+		item, ok := best.Result()
+		if ok {
+			return item
 		}
 	}
 
@@ -574,7 +587,8 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, scopes []*syntax.Sc
 		return nil
 	})
 
-	return best.item
+	item, _ := best.Result()
+	return item
 }
 
 // HasLocalVariableBinding reports whether sym has a local variable binding

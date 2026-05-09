@@ -109,10 +109,11 @@ func TestBestOf_ShouldRecord(t *testing.T) {
 					break
 				}
 			}
-			qt.Assert(t, best.has, qt.Equals, tc.wantHas)
+			item, has := best.Result()
+			qt.Assert(t, has, qt.Equals, tc.wantHas)
 			if tc.wantHas {
-				qt.Assert(t, best.item, qt.Equals, tc.wantItem)
-				qt.Assert(t, best.scopeCount, qt.Equals, tc.wantWeight)
+				qt.Assert(t, item, qt.Equals, tc.wantItem)
+				qt.Assert(t, best.weight, qt.Equals, tc.wantWeight)
 			}
 			qt.Assert(t, stopAt, qt.Equals, tc.wantStopAt)
 		})

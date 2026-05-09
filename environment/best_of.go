@@ -14,52 +14,54 @@
 
 package environment
 
-// bestOf accumulates the best candidate seen so far during a Flatt-style
-// maximal-resolution walk over scope-tagged bindings. "Best" is the
-// candidate with the largest scopeCount; ties are kept on the *first*
-// candidate seen (because the parent walk is innermost-first, the
-// first-seen candidate is the innermost match — which is what Flatt's
-// model selects when scope counts tie).
+// bestOf accumulates the highest-weight candidate seen so far during a
+// monotone walk. "Best" is the candidate with the largest weight; ties
+// are kept on the *first* candidate seen.
 //
-// This generalises the candidate-tracking loop that appears verbatim in
-// EnvironmentFrame.GetBinding and EnvironmentFrame.GetLocalIndex (see
-// plans/2026-05-09-environment-structural-reduction.md, Finding 6 +
-// Opportunity 1).
+// The first use case is Flatt-style maximal-resolution over scope-tagged
+// bindings (EnvironmentFrame.GetBinding and EnvironmentFrame.GetLocalIndex —
+// see plans/2026-05-09-environment-structural-reduction.md, Finding 6 +
+// Opportunity 1). In that setting the weight is the size of a binding's
+// scope set: the parent-chain walk is innermost-first, so first-seen-on-tie
+// corresponds to "innermost wins" — which is exactly Flatt's tie-breaking
+// rule. The helper itself stays domain-neutral; callers attach whatever
+// "weight" semantics they want.
 //
-// API shape: callers split each step into (1) shouldRecord, which is a
-// pure predicate, and (2) record, which actually stores the candidate.
-// This split lets the caller allocate the candidate value lazily —
-// important for callers whose item construction is non-trivial (e.g.
+// API shape: callers split each step into (1) shouldRecord, a pure
+// predicate, and (2) record, which actually stores the candidate. This
+// split lets the caller allocate the candidate value lazily — important
+// for callers whose item construction is non-trivial (e.g.
 // GetLocalIndex's NewLocalIndex(slot, depth)). A combined
-// "consider(item, scopeCount, target)" API would force the caller to
+// "consider(item, weight, target)" API would force the caller to
 // allocate the candidate on every visit, even when the candidate is
 // not the new best.
 type bestOf[T any] struct {
-	item       T
-	scopeCount int
-	has        bool
+	item   T
+	weight int
+	has    bool
 }
 
-// shouldRecord reports whether scopeCount beats (or matches) the current
+// shouldRecord reports whether weight beats (or matches) the current
 // best, and whether the walk should stop because of a perfect match.
 //
-// A perfect match — non-empty scope set whose size equals target — wins
+// A perfect match — strictly positive weight that equals target — wins
 // immediately and returns done = true. Otherwise the new candidate
-// becomes the best iff scopeCount is strictly greater than the current
+// becomes the best iff weight is strictly greater than the current
 // best's; ties keep the existing first-seen candidate.
 //
-// target is the scope count of the reference identifier (typically
-// len(scopes) at the call site). target == 0 means the caller has no
-// specific size to match against, and no perfect-match shortcut fires.
+// target is the weight the caller is matching against (typically
+// len(scopes) at the binding-resolution call sites). target == 0
+// means the caller has no specific size to match against, and no
+// perfect-match shortcut fires.
 //
 // shouldRecord does not allocate; the caller MUST call record(item,
-// scopeCount) to commit the candidate when shouldRecord returns
+// weight) to commit the candidate when shouldRecord returns
 // record = true.
-func (p *bestOf[T]) shouldRecord(scopeCount, target int) (record, done bool) {
-	if scopeCount > 0 && scopeCount == target {
+func (p *bestOf[T]) shouldRecord(weight, target int) (record, done bool) {
+	if weight > 0 && weight == target {
 		return true, true
 	}
-	if !p.has || scopeCount > p.scopeCount {
+	if !p.has || weight > p.weight {
 		return true, false
 	}
 	return false, false
@@ -68,8 +70,17 @@ func (p *bestOf[T]) shouldRecord(scopeCount, target int) (record, done bool) {
 // record commits the given candidate as the current best. Callers MUST
 // call shouldRecord first and only invoke record when it returned
 // record = true.
-func (p *bestOf[T]) record(item T, scopeCount int) {
+func (p *bestOf[T]) record(item T, weight int) {
 	p.item = item
-	p.scopeCount = scopeCount
+	p.weight = weight
 	p.has = true
+}
+
+// Result returns the recorded candidate and whether any candidate was
+// recorded. This is the safe accessor for callers that cannot rely on
+// the zero value of T being a meaningful "absent" sentinel: if has is
+// false, item is T's zero value, which is fine for pointers (nil) but
+// could lie for value types or string-like Ts.
+func (p *bestOf[T]) Result() (T, bool) {
+	return p.item, p.has
 }
