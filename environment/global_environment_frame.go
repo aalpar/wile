@@ -72,8 +72,10 @@ func (p *GlobalIndex) EqualTo(value values.Value) bool {
 // hierarchy is managed by EnvironmentFrame via its parent field. Each phase
 // (runtime, expand, compile) has its own GlobalEnvironmentFrame.
 //
-// Note: Symbol and syntax interning are delegated to Namespace,
-// ensuring R7RS symbol identity works correctly across all phases.
+// Note: Symbol and syntax interning are delegated to Namespace via the
+// owning EnvironmentFrame, ensuring R7RS symbol identity works correctly
+// across all phases. GlobalEnvironmentFrame itself does not hold a back
+// reference to its Namespace; ownership flows through EnvironmentFrame.
 //
 // Thread safety: All access to keys and bindings is protected by mu.
 // Fixes T2 from architectural review.
@@ -84,8 +86,6 @@ type GlobalEnvironmentFrame struct {
 	// symbol to binding index lookup map
 	keys     map[values.Symbol]int
 	bindings []*Binding
-	// namespace is the owning Namespace
-	namespace *Namespace
 }
 
 // NewGlobalEnvironmentFrame creates a new global environment frame.
@@ -98,7 +98,6 @@ func NewGlobalEnvironmentFrame() *GlobalEnvironmentFrame {
 }
 
 // Copy creates a deep copy of the global environment frame.
-// Note that namespace is shared (not copied) between original and copy.
 // Bindings are batch-allocated (contiguous array) for cache locality
 // and reduced GC pressure.
 // Thread-safe: uses RLock for read-only access.
@@ -110,9 +109,7 @@ func (p *GlobalEnvironmentFrame) Copy() *GlobalEnvironmentFrame {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	q := &GlobalEnvironmentFrame{
-		namespace: p.namespace, // Shared, not copied
-	}
+	q := &GlobalEnvironmentFrame{}
 
 	// Batch allocation: allocate all Bindings contiguously (1 allocation)
 	// instead of N separate heap objects.

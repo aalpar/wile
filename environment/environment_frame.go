@@ -58,14 +58,14 @@ import (
 //	│                           │    │                                        │
 //	│  keys ── map[Symbol][]int │    │  keys ──────── map[Symbol]int          │
 //	│  bindings ── []*Binding   │    │  bindings ──── []*Binding              │
-//	└───────────────────────────┘    │  namespace ──── *Namespace             │
-//	                                 └────────────────────────────────────────┘
+//	└───────────────────────────┘    └────────────────────────────────────────┘
 //
 // # Ownership and Sharing
 //
 //   - Namespace: Root owner. One per Wile VM instance.
 //   - EnvironmentFrame: Many per VM. Share namespace and phases references.
-//   - GlobalEnvironmentFrame: One per phase. Shares namespace reference.
+//   - GlobalEnvironmentFrame: One per phase. Owned by EnvironmentFrame; no
+//     direct Namespace back-reference (reach Namespace via the owning frame).
 //   - LocalEnvironmentFrame: One per lexical scope. No external references.
 //
 // # Lexical Hierarchy (parent chain)

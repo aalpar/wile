@@ -417,7 +417,7 @@ func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 //   - GlobalEnvironmentFrame — isolated global bindings (define, set!, etc.)
 //   - PhaseRegistry — isolated phase hierarchy (expand, compile created on demand)
 //
-// The child's GlobalEnvironmentFrame.namespace points to the child (not the
+// The child's runtime EnvironmentFrame.namespace points to the child (not the
 // parent), so new global bindings created in the child are keyed against the
 // child's GlobalEnvironmentFrame. This is what provides binding isolation:
 // definitions in the child do not appear in the parent, and vice versa.
@@ -443,7 +443,6 @@ func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 //	                                  +-------------------------+
 //	                                  | keys: {x:0, y:1, ...}   |
 //	                                  | bindings: [...]         |
-//	                                  | namespace: ──► parent NS|
 //	                                  +-------------------------+
 //
 //	Child Namespace (returned by this method)
@@ -466,7 +465,6 @@ func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 //	                                  +-------------------------+
 //	                                  | keys: {}  (empty)       |
 //	                                  | bindings: []            |
-//	                                  | namespace: ──► child NS |
 //	                                  +-------------------------+
 //
 // # Interning delegation
@@ -514,9 +512,9 @@ func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 //	     ▼         ▼                           EnvironmentFrame (envC)
 //	   envP      envC ◄── new child            +----------------------+
 //	   (parent   (has own Global-              | namespace: child NS  |
-//	    frame)    EnvFrame, but                +----------------------+
-//	              namespace points
-//	              to shared NS)
+//	    frame)    EnvFrame; reaches            +----------------------+
+//	              shared NS via the
+//	              owning EnvFrame)
 //
 //	envC.Namespace() == parent    envC.Namespace() == child
 //	TLE.Runtime() returns envP     child.Runtime() returns envC  ✓
@@ -565,10 +563,11 @@ func (p *Namespace) NewSchemeReportNamespace() *Namespace {
 		parent:            p,
 	}
 
-	// Copy the parent's global bindings and repoint namespace to the child,
-	// so that syntax interning delegates through q → p (parent chain).
+	// Copy the parent's global bindings into the child's runtime frame.
+	// Syntax interning delegates through q → p via the Namespace.parent
+	// chain; the GlobalEnvironmentFrame itself does not carry a Namespace
+	// back-pointer.
 	copiedGlobal := p.runtime.global.Copy()
-	copiedGlobal.namespace = q
 	initRuntimeFrame(q, copiedGlobal)
 	return q
 }
@@ -671,12 +670,14 @@ func (p *Namespace) SchemeString() string {
 }
 
 // newGlobalEnvironmentFrameForNamespace creates a new GlobalEnvironmentFrame
-// that references the given Namespace.
-func newGlobalEnvironmentFrameForNamespace(ns *Namespace) *GlobalEnvironmentFrame {
+// for use within the given Namespace. The Namespace argument is retained
+// for symmetry with the other Namespace-scoped helpers; the
+// GlobalEnvironmentFrame itself does not store a back-reference (ownership
+// flows through EnvironmentFrame).
+func newGlobalEnvironmentFrameForNamespace(_ *Namespace) *GlobalEnvironmentFrame {
 	q := &GlobalEnvironmentFrame{
-		bindings:  []*Binding{},
-		keys:      map[values.Symbol]int{},
-		namespace: ns,
+		bindings: []*Binding{},
+		keys:     map[values.Symbol]int{},
 	}
 	return q
 }
