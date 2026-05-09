@@ -54,14 +54,6 @@ func TestBinding_SetValue(t *testing.T) {
 	qt.Assert(t, b.Value(), valuestest.SchemeEquals, newVal)
 }
 
-func TestBinding_SetBindingType(t *testing.T) {
-	b := NewBinding(values.Void, BindingTypeVariable)
-	qt.Assert(t, b.BindingType(), qt.Equals, BindingTypeVariable)
-
-	b.SetBindingType(BindingTypePrimitive)
-	qt.Assert(t, b.BindingType(), qt.Equals, BindingTypePrimitive)
-}
-
 func TestBinding_Scopes(t *testing.T) {
 	// Test binding without scopes
 	b1 := NewBinding(values.Void, BindingTypeVariable)

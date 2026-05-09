@@ -86,11 +86,6 @@ func (p *Binding) SetValue(value values.Value) {
 	p.value = value
 }
 
-// SetBindingType updates the type of this binding.
-func (p *Binding) SetBindingType(value BindingType) {
-	p.bindingType = value
-}
-
 // Scopes returns the hygiene scopes associated with this binding.
 // Returns nil for bindings without hygiene information.
 func (p *Binding) Scopes() []*syntax.Scope {
