@@ -301,8 +301,26 @@ func (p *EnvironmentFrame) GlobalEnvironment() *GlobalEnvironmentFrame {
 	return p.global
 }
 
-// FileResolver returns the file resolver from the Namespace.
-// Returns nil if no resolver has been set or if namespace is nil.
+// The five methods below — FileResolver, SetFileResolver, LibraryRegistry,
+// SetLibraryRegistry, LoadPathStack — are ergonomic shortcuts for
+// p.Namespace().X(). The state itself is owned by the Namespace (and,
+// for FileResolver / LoadPathStack, ultimately delegated to the root
+// namespace per the field-inheritance policy documented on the
+// Namespace type). EnvironmentFrame does not store these values; the
+// methods exist only to spare common call sites the
+//
+//	frame.Namespace().FileResolver()
+//
+// dance. They guard against a nil namespace pointer for safety on
+// frames built outside the standard constructors (e.g.
+// newEnvironmentFrame test fixtures).
+//
+// When adding a new Namespace-owned capability that callers reach via
+// EnvironmentFrame, follow the same pattern: thin pass-through here,
+// authoritative storage on Namespace.
+
+// FileResolver returns the file resolver. Shortcut for
+// p.Namespace().FileResolver(); see the comment block above.
 func (p *EnvironmentFrame) FileResolver() FileResolver {
 	if p.namespace == nil {
 		return nil
@@ -310,8 +328,8 @@ func (p *EnvironmentFrame) FileResolver() FileResolver {
 	return p.namespace.FileResolver()
 }
 
-// SetFileResolver sets the file resolver on the Namespace.
-// No-op if namespace is nil.
+// SetFileResolver sets the file resolver. Shortcut for
+// p.Namespace().SetFileResolver(); see the comment block above.
 func (p *EnvironmentFrame) SetFileResolver(resolver FileResolver) {
 	if p.namespace == nil {
 		return
@@ -319,8 +337,8 @@ func (p *EnvironmentFrame) SetFileResolver(resolver FileResolver) {
 	p.namespace.SetFileResolver(resolver)
 }
 
-// LibraryRegistry returns the library registry from the Namespace.
-// Returns nil if no registry has been set or if namespace is nil.
+// LibraryRegistry returns the library registry. Shortcut for
+// p.Namespace().LibraryRegistry(); see the comment block above.
 // Callers needing the full *compilation.LibraryRegistry can type-assert.
 func (p *EnvironmentFrame) LibraryRegistry() LibrarySearcher {
 	if p.namespace == nil {
@@ -329,8 +347,8 @@ func (p *EnvironmentFrame) LibraryRegistry() LibrarySearcher {
 	return p.namespace.LibraryRegistry()
 }
 
-// SetLibraryRegistry sets the library registry on the Namespace.
-// No-op if namespace is nil.
+// SetLibraryRegistry sets the library registry. Shortcut for
+// p.Namespace().SetLibraryRegistry(); see the comment block above.
 func (p *EnvironmentFrame) SetLibraryRegistry(registry LibrarySearcher) {
 	if p.namespace == nil {
 		return
@@ -338,8 +356,8 @@ func (p *EnvironmentFrame) SetLibraryRegistry(registry LibrarySearcher) {
 	p.namespace.SetLibraryRegistry(registry)
 }
 
-// LoadPathStack returns the load path tracker for tracking files currently
-// being loaded, or nil if this frame has no Namespace.
+// LoadPathStack returns the load path tracker. Shortcut for
+// p.Namespace().LoadPathStack(); see the comment block above.
 func (p *EnvironmentFrame) LoadPathStack() PathTracker {
 	if p.namespace == nil {
 		return nil
