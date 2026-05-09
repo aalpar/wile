@@ -299,7 +299,7 @@ func TestNamespace_Derive_SharesRegistryAndAuthorizer(t *testing.T) {
 	auth := &testAuthorizer{name: "parent-authorizer"}
 	parent.SetAuthorizer(auth)
 
-	child := parent.Derive()
+	child := parent.NewChildNamespace()
 
 	// Same pointer — immutable registry and authorizer are shared
 	c.Assert(child.Registry(), qt.Equals, parent.Registry())
@@ -307,7 +307,7 @@ func TestNamespace_Derive_SharesRegistryAndAuthorizer(t *testing.T) {
 	c.Assert(child, qt.Not(qt.Equals), parent)
 }
 
-func TestNamespace_DeriveWith_OverrideRegistry(t *testing.T) {
+func TestNamespace_NewChildNamespace_OverrideRegistry(t *testing.T) {
 	c := qt.New(t)
 
 	parent := NewNamespace()
@@ -315,16 +315,14 @@ func TestNamespace_DeriveWith_OverrideRegistry(t *testing.T) {
 	auth := &testAuthorizer{name: "parent-authorizer"}
 	parent.SetAuthorizer(auth)
 
-	child := parent.DeriveWith(func(cfg *NamespaceDeriveConfig) {
-		cfg.Registry = "restricted-registry"
-	})
+	child := parent.NewChildNamespace(WithRegistry("restricted-registry"))
 
 	c.Assert(child.Registry(), qt.Equals, "restricted-registry")
 	// Authorizer inherited when not overridden
 	c.Assert(child.Authorizer(), qt.Equals, parent.Authorizer())
 }
 
-func TestNamespace_DeriveWith_OverrideAuthorizer(t *testing.T) {
+func TestNamespace_NewChildNamespace_OverrideAuthorizer(t *testing.T) {
 	c := qt.New(t)
 
 	parent := NewNamespace()
@@ -333,9 +331,7 @@ func TestNamespace_DeriveWith_OverrideAuthorizer(t *testing.T) {
 	parent.SetAuthorizer(parentAuth)
 
 	childAuth := &testAuthorizer{name: "child-authorizer"}
-	child := parent.DeriveWith(func(cfg *NamespaceDeriveConfig) {
-		cfg.Authorizer = childAuth
-	})
+	child := parent.NewChildNamespace(WithAuthorizer(childAuth))
 
 	// Registry inherited when not overridden
 	c.Assert(child.Registry(), qt.Equals, parent.Registry())
@@ -362,13 +358,13 @@ func TestNamespace_ModuleInstances(t *testing.T) {
 	c.Assert(got, qt.Equals, inst)
 }
 
-func TestNamespace_Derive_IsolatesModuleInstances(t *testing.T) {
+func TestNamespace_NewChildNamespace_IsolatesModuleInstances(t *testing.T) {
 	c := qt.New(t)
 
 	parent := NewNamespace()
 	parent.SetModuleInstance("(scheme base)", &ModuleInstance{})
 
-	child := parent.Derive()
+	child := parent.NewChildNamespace()
 
 	// Derived namespace should not inherit module instances
 	_, ok := child.ModuleInstance("(scheme base)")

@@ -428,6 +428,41 @@ func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 	return r.scopeRegistry[scope]
 }
 
+// NamespaceOption configures a derived namespace at construction time.
+// Use it with NewChildNamespace to override fields that would otherwise
+// be inherited from the parent (e.g. a restricted registry or a
+// different authorizer).
+type NamespaceOption func(*namespaceConfig)
+
+// namespaceConfig collects override values supplied via NamespaceOption.
+// A nil field means "inherit from parent unchanged."
+type namespaceConfig struct {
+	registry        any
+	registrySet     bool
+	authorizer      security.Authorizer
+	authorizerSet   bool
+}
+
+// WithRegistry overrides the parent's primitive registry on a derived
+// namespace. Use this to install a restricted or alternative registry
+// in a child without mutating the parent.
+func WithRegistry(r any) NamespaceOption {
+	return func(c *namespaceConfig) {
+		c.registry = r
+		c.registrySet = true
+	}
+}
+
+// WithAuthorizer overrides the parent's security authorizer on a derived
+// namespace. Use this to give a child a stricter (or different)
+// capability profile.
+func WithAuthorizer(a security.Authorizer) NamespaceOption {
+	return func(c *namespaceConfig) {
+		c.authorizer = a
+		c.authorizerSet = true
+	}
+}
+
 // NewChildNamespace creates a new Namespace whose syntax
 // interning is delegated to the receiver (the parent).
 //
@@ -550,11 +585,21 @@ func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 // # Usage
 //
 // Used by PrimEnvironment and PrimNullEnvironment (R7RS §6.12) to create
-// environments that are identity-compatible with the caller's symbol table
-// while providing isolated bindings.
-// TODO: review whether libraryRegistry should be copied here
-// TODO: review for optimization/refactoring opportunities
-func (p *Namespace) NewChildNamespace() *Namespace {
+// environments that are identity-compatible with the caller's symbol
+// table while providing isolated bindings. Optional NamespaceOption
+// arguments override fields that would otherwise be inherited from the
+// parent (currently registry and authorizer); see WithRegistry and
+// WithAuthorizer.
+//
+// All captured fields (libraryRegistry, libraryEnvFactory, registry,
+// authorizer, envMap) are copied from the parent in one place — adding
+// a new captured field requires a single edit here, not a sweep of
+// multiple constructors.
+func (p *Namespace) NewChildNamespace(opts ...NamespaceOption) *Namespace {
+	cfg := &namespaceConfig{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
 	q := &Namespace{
 		libraryRegistry:   p.libraryRegistry,
 		libraryEnvFactory: p.libraryEnvFactory,
@@ -562,6 +607,12 @@ func (p *Namespace) NewChildNamespace() *Namespace {
 		authorizer:        p.authorizer,
 		envMap:            p.envMap,
 		parent:            p,
+	}
+	if cfg.registrySet {
+		q.registry = cfg.registry
+	}
+	if cfg.authorizerSet {
+		q.authorizer = cfg.authorizer
 	}
 	initRuntimeFrame(q, newGlobalEnvironmentFrameForNamespace(q))
 	return q
@@ -612,53 +663,6 @@ func (p *Namespace) NewChildRuntime() *EnvironmentFrame {
 	}
 	runtime.phases = newPhaseRegistryForChild(p, runtime)
 	return runtime
-}
-
-// NamespaceDeriveOption configures a derived namespace.
-type NamespaceDeriveOption func(*NamespaceDeriveConfig)
-
-// NamespaceDeriveConfig holds options for DeriveWith.
-// Zero value means "inherit everything from parent."
-type NamespaceDeriveConfig struct {
-	Registry   any                 // if non-nil, overrides parent's registry
-	Authorizer security.Authorizer // if non-nil, overrides parent's authorizer
-}
-
-// Derive creates a child namespace that shares syntax interning with
-// the parent but has isolated bindings. The parent's registry and
-// authorizer are shared by pointer — safe because registries are
-// immutable after construction and authorizers are stateless interfaces.
-func (p *Namespace) Derive() *Namespace {
-	child := p.NewChildNamespace()
-	child.registry = p.registry
-	child.authorizer = p.authorizer
-	return child
-}
-
-// DeriveWith creates a child namespace with option overrides.
-// Use this when the child needs a restricted registry or different
-// authorizer.
-func (p *Namespace) DeriveWith(opts ...NamespaceDeriveOption) *Namespace {
-	cfg := &NamespaceDeriveConfig{}
-	for _, opt := range opts {
-		opt(cfg)
-	}
-
-	child := p.NewChildNamespace()
-
-	if cfg.Registry != nil {
-		child.registry = cfg.Registry
-	} else {
-		child.registry = p.registry
-	}
-
-	if cfg.Authorizer != nil {
-		child.authorizer = cfg.Authorizer
-	} else {
-		child.authorizer = p.authorizer
-	}
-
-	return child
 }
 
 // SyntaxInternCount returns the number of interned syntax objects.

@@ -114,7 +114,7 @@ func PrimNamespaceDerive(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	mc.SetValue(ns.Derive())
+	mc.SetValue(ns.NewChildNamespace())
 	return nil
 }
 
