@@ -45,6 +45,42 @@ var _ values.Value = (*Namespace)(nil)
 // Design: Namespace is the root of the environment hierarchy.
 // Each EnvironmentFrame holds a reference back to its Namespace
 // to access shared resources (syntax interning, phases, libraries).
+//
+// # Field inheritance policy
+//
+// Child namespaces (NewChildNamespace, NewSchemeReportNamespace, Derive,
+// DeriveWith) inherit fields from their parent in one of three ways. New
+// fields MUST pick a policy explicitly — the existing per-field decisions
+// are encoded here, not in the constructors.
+//
+//	Per-instance (each namespace has its own; no inheritance):
+//	  Name, parent, phases, runtime, moduleInstances, syntaxInterns
+//	    Note: syntaxInterns is nil in children; InternSyntax delegates
+//	    to parent so symbol identity remains globally consistent.
+//
+//	Captured at construction (snapshot copy of the parent's pointer or
+//	map at child-creation time; later mutations on the parent do not
+//	flow to existing children):
+//	  libraryRegistry, libraryEnvFactory, registry, authorizer, envMap
+//	    Rationale: these are capability state. Children must not silently
+//	    widen capability by inheriting later mutations to the parent.
+//	    See CLAUDE.local.md "envMap is capability state".
+//
+//	Delegated to the root (children read/write through to the topmost
+//	parent; the field itself only ever lives on the root namespace):
+//	  fileResolver, loadPathStack, scopeRegistry, exportIndex/exportIndexBuilt
+//	    Rationale: these are per-VM resources whose identity must be
+//	    shared across the entire namespace tree (file resolution must
+//	    use the same paths in any child; library scopes registered by
+//	    one child must be visible to all). The root() helper walks the
+//	    parent chain in O(depth); per-method delegation prologues are
+//	    not used.
+//
+// Adding a new field: choose a policy above, document it in this block,
+// and either copy it into the constructors (captured) or access it via
+// p.root() in its accessors (delegated). Do NOT mix the two for one
+// field — the asymmetry is the bug source the policy table exists to
+// prevent.
 type Namespace struct {
 	// Name is an optional descriptive name (e.g., "interaction-environment").
 	Name string
@@ -207,25 +243,27 @@ func (p *Namespace) Phases() *PhaseRegistry {
 	return p.phases
 }
 
-// FileResolver returns the file resolver for include/load operations.
-// Delegates to parent when non-nil, so child environments share the
-// root resolver. Returns nil if no resolver has been set.
-func (p *Namespace) FileResolver() FileResolver {
-	if p.parent != nil {
-		return p.parent.FileResolver()
+// root walks the parent chain and returns the topmost Namespace.
+// Used by accessors for fields whose inheritance policy is "delegated to
+// root" (see the field inheritance policy comment on Namespace). For a
+// root namespace, p.root() == p in O(1).
+func (p *Namespace) root() *Namespace {
+	for p.parent != nil {
+		p = p.parent
 	}
-	return p.fileResolver
+	return p
+}
+
+// FileResolver returns the file resolver for include/load operations.
+// Returns nil if no resolver has been set. Delegated to root.
+func (p *Namespace) FileResolver() FileResolver {
+	return p.root().fileResolver
 }
 
 // SetFileResolver sets the file resolver for include/load operations.
-// Delegates to parent when non-nil, matching the getter's delegation,
-// so the resolver is always stored on the root Namespace.
+// Delegated to root: the resolver always lives on the root Namespace.
 func (p *Namespace) SetFileResolver(resolver FileResolver) {
-	if p.parent != nil {
-		p.parent.SetFileResolver(resolver)
-		return
-	}
-	p.fileResolver = resolver
+	p.root().fileResolver = resolver
 }
 
 // LibraryRegistry returns the library registry for R7RS library loading.
@@ -252,19 +290,16 @@ func (p *Namespace) SetLibraryEnvFactory(f LibraryEnvFactory) {
 }
 
 // SetLoadPathStack sets the load path tracker for this namespace.
+// Delegated to root: the tracker always lives on the root Namespace.
 // Must be called before any file loading operations.
 func (p *Namespace) SetLoadPathStack(s PathTracker) {
-	p.loadPathStack = s
+	p.root().loadPathStack = s
 }
 
 // LoadPathStack returns the load path tracker for tracking files currently
-// being loaded. Delegates to parent when non-nil, ensuring child environments
-// share the same stack as the root Namespace.
+// being loaded. Delegated to root.
 func (p *Namespace) LoadPathStack() PathTracker {
-	if p.parent != nil {
-		return p.parent.LoadPathStack()
-	}
-	return p.loadPathStack
+	return p.root().loadPathStack
 }
 
 // Registry returns the primitive registry.
@@ -317,30 +352,22 @@ func (p *Namespace) SetAuthorizer(auth security.Authorizer) {
 
 // ExportIndex returns the cached library export index and whether a
 // build has been attempted. Returns (nil, false) if no build has run.
-// Delegates to parent when non-nil, so child namespaces share the
-// root's index. The concrete type is *compilation.LibraryExportIndex.
+// Delegated to root. The concrete type is *compilation.LibraryExportIndex.
 func (p *Namespace) ExportIndex() (any, bool) {
-	if p.parent != nil {
-		return p.parent.ExportIndex()
-	}
-	p.exportIndexMu.RLock()
-	defer p.exportIndexMu.RUnlock()
-	return p.exportIndex, p.exportIndexBuilt
+	r := p.root()
+	r.exportIndexMu.RLock()
+	defer r.exportIndexMu.RUnlock()
+	return r.exportIndex, r.exportIndexBuilt
 }
 
-// SetExportIndex stores the library export index on this namespace
-// and marks it as built, preventing subsequent build attempts.
-// Delegates to parent when non-nil, matching the getter's delegation,
-// so the index is always stored on the root Namespace.
+// SetExportIndex stores the library export index and marks it as built,
+// preventing subsequent build attempts. Delegated to root.
 func (p *Namespace) SetExportIndex(idx any) {
-	if p.parent != nil {
-		p.parent.SetExportIndex(idx)
-		return
-	}
-	p.exportIndexMu.Lock()
-	defer p.exportIndexMu.Unlock()
-	p.exportIndex = idx
-	p.exportIndexBuilt = true
+	r := p.root()
+	r.exportIndexMu.Lock()
+	defer r.exportIndexMu.Unlock()
+	r.exportIndex = idx
+	r.exportIndexBuilt = true
 }
 
 // ModuleInstance returns the cached module instance for the given path,
@@ -375,35 +402,30 @@ func (p *Namespace) AttachModule(path string, target *Namespace) error {
 // RegisterLibraryScope associates a library scope with its defining environment.
 // This enables cross-library macro hygiene: when a symbol carries a library
 // scope, the compiler can redirect binding lookup to the library's env.
+// Delegated to root: the registry always lives on the root Namespace.
 //
 // This function is thread-safe.
 func (p *Namespace) RegisterLibraryScope(scope *syntax.Scope, env *EnvironmentFrame) {
 	if scope == nil || env == nil {
 		return
 	}
-	// Delegate to root if this is a child environment
-	if p.parent != nil {
-		p.parent.RegisterLibraryScope(scope, env)
-		return
-	}
-	p.scopeRegistryMu.Lock()
-	defer p.scopeRegistryMu.Unlock()
-	p.scopeRegistry[scope] = env
+	r := p.root()
+	r.scopeRegistryMu.Lock()
+	defer r.scopeRegistryMu.Unlock()
+	r.scopeRegistry[scope] = env
 }
 
 // LookupLibraryEnv returns the environment associated with the given library
-// scope, or nil if not registered. This function is thread-safe.
+// scope, or nil if not registered. Delegated to root.
+// This function is thread-safe.
 func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 	if scope == nil {
 		return nil
 	}
-	// Delegate to root if this is a child environment
-	if p.parent != nil {
-		return p.parent.LookupLibraryEnv(scope)
-	}
-	p.scopeRegistryMu.RLock()
-	defer p.scopeRegistryMu.RUnlock()
-	return p.scopeRegistry[scope]
+	r := p.root()
+	r.scopeRegistryMu.RLock()
+	defer r.scopeRegistryMu.RUnlock()
+	return r.scopeRegistry[scope]
 }
 
 // NewChildNamespace creates a new Namespace whose syntax
