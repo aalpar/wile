@@ -449,30 +449,19 @@ func (p *EnvironmentFrame) GetBinding(key *values.Symbol, scopes []*syntax.Scope
 			return result.(*Binding)
 		}
 	} else {
-		// Scoped path: maximal binding resolution (Flatt model)
-		type candidate struct {
-			binding    *Binding
-			scopeCount int
-		}
-		var best candidate
-
+		// Scoped path: maximal binding resolution (Flatt model).
+		// See bestOf in best_of.go.
+		var best bestOf[*Binding]
+		target := len(scopes)
 		p.resolveLocal(key, scopes, func(binding *Binding, _ int, _ int) any {
-			scopeCount := len(binding.Scopes())
-
-			// Perfect match — stop walking
-			if scopeCount > 0 && scopeCount == len(scopes) {
-				best = candidate{binding, scopeCount}
+			if best.consider(binding, len(binding.Scopes()), target) {
 				return true
-			}
-
-			if best.binding == nil || scopeCount > best.scopeCount {
-				best = candidate{binding, scopeCount}
 			}
 			return nil
 		})
 
-		if best.binding != nil {
-			return best.binding
+		if best.has {
+			return best.item
 		}
 	}
 
@@ -541,30 +530,18 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, scopes []*syntax.Sc
 		return nil
 	}
 
-	// Scoped path: maximal binding resolution
-	type candidate struct {
-		index      *LocalIndex
-		scopeCount int
-	}
-	var best candidate
-
+	// Scoped path: maximal binding resolution.
+	// See bestOf in best_of.go.
+	var best bestOf[*LocalIndex]
+	target := len(scopes)
 	p.resolveLocal(key, scopes, func(binding *Binding, slot int, depth int) any {
-		scopeCount := len(binding.Scopes())
-
-		// Perfect match — stop walking
-		if scopeCount > 0 && scopeCount == len(scopes) {
-			best = candidate{NewLocalIndex(slot, depth), scopeCount}
+		if best.consider(NewLocalIndex(slot, depth), len(binding.Scopes()), target) {
 			return true
-		}
-
-		// Better candidate than current best?
-		if best.index == nil || scopeCount > best.scopeCount {
-			best = candidate{NewLocalIndex(slot, depth), scopeCount}
 		}
 		return nil
 	})
 
-	return best.index
+	return best.item
 }
 
 // HasLocalVariableBinding reports whether sym has a local variable binding
