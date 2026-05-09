@@ -116,15 +116,6 @@ func TestNamespace_NewChildRuntime_Coverage(t *testing.T) {
 	c.Assert(sym1.EqualTo(sym2), qt.IsTrue)
 }
 
-// GlobalEnvironmentFrame.SchemeString — different name
-
-func TestGlobalEnvironmentFrame_SchemeString_Coverage(t *testing.T) {
-	c := qt.New(t)
-	topLevel := NewNamespace()
-	env := topLevel.Runtime()
-	c.Assert(env.global.SchemeString(), qt.Equals, "#<global-environment>")
-}
-
 // PhaseRegistry.Namespace
 
 func TestPhaseRegistry_Namespace_Coverage(t *testing.T) {

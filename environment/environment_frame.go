@@ -786,37 +786,32 @@ func (p *EnvironmentFrame) Copy() *EnvironmentFrame {
 	return q
 }
 
-// SchemeString returns a string representation of the environment frame.
+// SchemeString returns a Scheme-level string for this environment frame.
+// EnvironmentFrame reaches the value plumbing because closures capture
+// environments and store them as template literals (see
+// machine.NativeTemplate.MaybeAppendLiteral); this method exists to satisfy
+// values.Value, not because environment frames are ever printed by Scheme
+// programs.
 func (p *EnvironmentFrame) SchemeString() string {
 	return "#<environment>"
 }
 
-// IsVoid returns true if the environment frame is nil.
+// IsVoid reports whether this environment frame pointer is nil.
+// Required by values.Value (see SchemeString comment).
 func (p *EnvironmentFrame) IsVoid() bool {
 	return p == nil
 }
 
-// EqualTo returns true if the environment frame is equal to the given value.
-// Two environment frames are equal if their local and global environments are equal,
-// and their parent environments are either both nil or equal.
+// EqualTo implements values.Value. R7RS §6.12 specifies that environments
+// compare by eq? (pointer identity), not by structural equality of their
+// bindings — the prior structural implementation was a latent correctness
+// trap that no caller actually exercised. Use pointer identity here.
 func (p *EnvironmentFrame) EqualTo(value values.Value) bool {
 	v, ok := value.(*EnvironmentFrame)
 	if !ok {
 		return false
 	}
-	if p == nil || v == nil {
-		return p == v
-	}
-	if !p.local.EqualTo(&v.local) {
-		return false
-	}
-	if !p.global.EqualTo(v.global) {
-		return false
-	}
-	if p.IsTopLevel() || v.IsTopLevel() {
-		return p.parent == v.parent
-	}
-	return p.parent.EqualTo(v.parent)
+	return p == v
 }
 
 // Namespace returns the Namespace for this frame.

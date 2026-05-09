@@ -163,7 +163,7 @@ func BenchmarkLocalFrameCopyShared(b *testing.B) {
 		b.Run(fmt.Sprintf("bindings=%d", n), func(b *testing.B) {
 			env, _ := setupLocalEnv(n)
 			// First copy: produces a frame with keysShared=true
-			shared := env.LocalEnvironment().Copy().(*LocalEnvironmentFrame)
+			shared := env.LocalEnvironment().Copy()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				_ = shared.Copy()
@@ -183,7 +183,7 @@ func BenchmarkFrameCopyAndCreate(b *testing.B) {
 			parent := env.Parent()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				copied := local.Copy().(*LocalEnvironmentFrame)
+				copied := local.Copy()
 				_ = NewEnvironmentFrameWithParent(copied, parent)
 			}
 		})

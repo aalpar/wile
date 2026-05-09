@@ -19,7 +19,6 @@ import (
 	"maps"
 	"slices"
 	"sync"
-	"unsafe"
 
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
@@ -263,54 +262,3 @@ func (p *GlobalEnvironmentFrame) DeleteBinding(sym *values.Symbol) bool {
 	return true
 }
 
-// IsVoid returns true if this global environment frame is nil.
-func (p *GlobalEnvironmentFrame) IsVoid() bool {
-	return p == nil
-}
-
-// SchemeString returns a string representation of this global environment.
-func (p *GlobalEnvironmentFrame) SchemeString() string {
-	return "#<global-environment>"
-}
-
-// EqualTo returns true if this global environment equals the given value.
-// Two global environments are equal if they have the same bindings.
-// Thread-safe: uses RLock for read-only access on both frames.
-func (p *GlobalEnvironmentFrame) EqualTo(o values.Value) bool {
-	if p == nil || o == nil {
-		return p == nil && o == nil
-	}
-	v, ok := o.(*GlobalEnvironmentFrame)
-	if !ok {
-		return false
-	}
-	if p == v {
-		return true
-	}
-
-	// Lock both frames in a consistent order to prevent deadlock
-	// (lower pointer address first)
-	first, second := p, v
-	if uintptr(unsafe.Pointer(p)) > uintptr(unsafe.Pointer(v)) {
-		first, second = v, p
-	}
-
-	first.mu.RLock()
-	defer first.mu.RUnlock()
-	second.mu.RLock()
-	defer second.mu.RUnlock()
-
-	if len(p.bindings) != len(v.bindings) {
-		return false
-	}
-	for k, i := range p.keys {
-		j, ok := v.keys[k]
-		if !ok || i != j {
-			return false
-		}
-		if !p.bindings[i].EqualTo(v.bindings[j]) {
-			return false
-		}
-	}
-	return true
-}

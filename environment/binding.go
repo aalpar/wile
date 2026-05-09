@@ -169,36 +169,10 @@ func (p *Binding) SetConstant(v bool) {
 	p.meta.Constant = v
 }
 
-// SchemeString returns a string representation of this binding.
-func (p *Binding) SchemeString() string {
-	return "#<binding>"
-}
-
-// IsVoid returns true if this binding is nil.
-func (p *Binding) IsVoid() bool {
-	return p == nil
-}
-
-// EqualTo returns true if this binding is equal to the given value.
-// Two bindings are equal if they have the same value and binding type.
-func (p *Binding) EqualTo(o values.Value) bool {
-	if p == nil || o == nil {
-		return p == o
-	}
-	v, ok := o.(*Binding)
-	if !ok {
-		return false
-	}
-	if p.value == nil || v.value == nil {
-		return p.value == v.value
-	}
-	return p.value.EqualTo(v.value) && p.bindingType == v.bindingType
-}
-
 // Copy creates a deep copy of this binding. The meta struct is copied so
 // that SetScopes on the original does not affect the copy. This method is
 // only used during compilation/expansion, never on the runtime hot path.
-func (p *Binding) Copy() values.Value {
+func (p *Binding) Copy() *Binding {
 	b := &Binding{
 		value:       p.value,
 		bindingType: p.bindingType,

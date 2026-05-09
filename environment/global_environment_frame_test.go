@@ -100,39 +100,6 @@ func TestGlobalEnvironmentFrame_Copy(t *testing.T) {
 	qt.Assert(t, len(copied.Bindings()), qt.Equals, len(env.Bindings()))
 }
 
-func TestGlobalEnvironmentFrame_IsVoid(t *testing.T) {
-	var env *GlobalEnvironmentFrame
-	qt.Assert(t, env.IsVoid(), qt.IsTrue)
-
-	env2 := newTestGlobalEnvFrame()
-	qt.Assert(t, env2.IsVoid(), qt.IsFalse)
-}
-
-func TestGlobalEnvironmentFrame_SchemeString(t *testing.T) {
-	env := newTestGlobalEnvFrame()
-	str := env.SchemeString()
-	qt.Assert(t, str, qt.Equals, "#<global-environment>")
-}
-
-func TestGlobalEnvironmentFrame_EqualTo(t *testing.T) {
-	env1 := newTestGlobalEnvFrame()
-	env2 := newTestGlobalEnvFrame()
-
-	// Two fresh global environments are equal (same structure)
-	qt.Assert(t, env1.EqualTo(env2), qt.IsTrue)
-
-	// Same environment is equal to itself
-	qt.Assert(t, env1.EqualTo(env1), qt.IsTrue)
-
-	// After adding different bindings, they should not be equal
-	sym := values.NewSymbol("test")
-	env1.CreateGlobalBinding(sym, BindingTypeVariable)
-	qt.Assert(t, env1.EqualTo(env2), qt.IsFalse)
-
-	// Non-GlobalEnvironmentFrame comparison
-	qt.Assert(t, env1.EqualTo(values.NewInteger(42)), qt.IsFalse)
-}
-
 func TestGlobalEnvironmentFrame_GetGlobalIndex_NotFound(t *testing.T) {
 	env := newTestGlobalEnvFrame()
 
@@ -140,19 +107,6 @@ func TestGlobalEnvironmentFrame_GetGlobalIndex_NotFound(t *testing.T) {
 	sym := values.NewSymbol("nonexistent")
 	gi := env.GetGlobalIndex(sym)
 	qt.Assert(t, gi, qt.IsNil)
-}
-
-func TestGlobalEnvironmentFrame_EqualTo_NilCases(t *testing.T) {
-	env2 := newTestGlobalEnvFrame()
-
-	// Non-nil equals nil literal returns false
-	qt.Assert(t, env2.EqualTo(nil), qt.IsFalse)
-
-	// Different binding counts
-	sym := values.NewSymbol("test")
-	env3 := newTestGlobalEnvFrame()
-	env3.CreateGlobalBinding(sym, BindingTypeVariable)
-	qt.Assert(t, env2.EqualTo(env3), qt.IsFalse)
 }
 
 func TestGlobalEnvironmentFrame_DeleteBinding(t *testing.T) {

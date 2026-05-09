@@ -550,18 +550,15 @@ func TestEnvironmentFrame_EqualTo(t *testing.T) {
 	env1 := NewNamespaceFrame()
 	env2 := NewNamespaceFrame()
 
-	// Two fresh top-level environments are equal (same structure)
-	qt.Assert(t, env1.EqualTo(env2), qt.IsTrue)
+	// EnvironmentFrame.EqualTo is pointer identity per R7RS §6.12.
 
-	// Same environment is equal to itself
+	// Same pointer compares equal.
 	qt.Assert(t, env1.EqualTo(env1), qt.IsTrue)
 
-	// After adding different bindings, they should not be equal
-	sym := values.NewSymbol("test")
-	env1.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
+	// Two distinct frames — even with identical structure — are not eq?.
 	qt.Assert(t, env1.EqualTo(env2), qt.IsFalse)
 
-	// Non-EnvironmentFrame comparison
+	// Non-EnvironmentFrame comparison.
 	qt.Assert(t, env1.EqualTo(values.NewInteger(42)), qt.IsFalse)
 }
 
