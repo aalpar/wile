@@ -261,4 +261,3 @@ func (p *GlobalEnvironmentFrame) DeleteBinding(sym *values.Symbol) bool {
 	}
 	return true
 }
-

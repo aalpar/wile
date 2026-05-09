@@ -48,10 +48,10 @@ var _ values.Value = (*Namespace)(nil)
 //
 // # Field inheritance policy
 //
-// Child namespaces (NewChildNamespace, NewSchemeReportNamespace, Derive,
-// DeriveWith) inherit fields from their parent in one of three ways. New
-// fields MUST pick a policy explicitly — the existing per-field decisions
-// are encoded here, not in the constructors.
+// Child namespaces (NewChildNamespace and NewSchemeReportNamespace)
+// inherit fields from their parent in one of three ways. New fields
+// MUST pick a policy explicitly — the existing per-field decisions are
+// encoded here, not in the constructors.
 //
 //	Per-instance (each namespace has its own; no inheritance):
 //	  Name, parent, phases, runtime, moduleInstances, syntaxInterns
@@ -437,10 +437,10 @@ type NamespaceOption func(*namespaceConfig)
 // namespaceConfig collects override values supplied via NamespaceOption.
 // A nil field means "inherit from parent unchanged."
 type namespaceConfig struct {
-	registry        any
-	registrySet     bool
-	authorizer      security.Authorizer
-	authorizerSet   bool
+	registry      any
+	registrySet   bool
+	authorizer    security.Authorizer
+	authorizerSet bool
 }
 
 // WithRegistry overrides the parent's primitive registry on a derived
