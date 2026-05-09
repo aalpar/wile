@@ -15,10 +15,27 @@
 package environment
 
 // BindingType represents the type of a binding in the environment.
+//
+// Three of the four constants are observable:
+//
+//   - BindingTypeVariable — regular runtime variables.
+//   - BindingTypeSyntax — syntax transformers.
+//   - BindingTypePrimitive — compile-time bindings (special forms, etc).
+//
+// BindingTypeUnknown (the zero value) is internal scaffolding only. It is
+// the type of pre-allocated slots in NewLocalEnvironment before they are
+// assigned a real binding type, and is never observed by GetBinding or any
+// external consumer. It exists solely to be a meaningful zero value for
+// the [BindingType] field of a freshly constructed [Binding] in a
+// pre-allocated frame slot. Removing it would require a sentinel layer
+// (e.g. nil-binding markers in LocalEnvironmentFrame.bindings) and is
+// not justified by the current call-site set.
 type BindingType int
 
 const (
-	// BindingTypeUnknown indicates a binding with unknown or uninitialized type.
+	// BindingTypeUnknown is the zero value used for pre-allocated, not-yet-
+	// bound slots in LocalEnvironmentFrame. It must not be observed by
+	// callers outside the environment package.
 	BindingTypeUnknown = BindingType(iota)
 	// BindingTypeVariable indicates a regular variable binding (from define, let, lambda parameters).
 	BindingTypeVariable
