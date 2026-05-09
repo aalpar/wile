@@ -795,7 +795,7 @@ func TestGlobalBinding_SetSource(t *testing.T) {
 	c.Assert(binding, qt.IsNotNil)
 	c.Assert(binding.Source(), qt.IsNil)
 
-	binding.SetSource(src)
+	binding.EnsureMeta().Source = src
 	c.Assert(binding.Source(), qt.IsNotNil)
 	c.Assert(binding.Source().File, qt.Equals, "global.scm")
 }

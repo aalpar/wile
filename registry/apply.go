@@ -198,7 +198,7 @@ func (p *Registry) ApplyDocs(env *environment.EnvironmentFrame) {
 			}
 			bnd := phaseEnv.GetBinding(sym, nil)
 			if bnd != nil {
-				bnd.SetDoc(doc.Doc)
+				bnd.EnsureMeta().Doc = doc.Doc
 			}
 		}
 	}

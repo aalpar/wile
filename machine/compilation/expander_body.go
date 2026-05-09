@@ -173,11 +173,11 @@ func compileDefineSyntaxFromSyntax(ctx context.Context, env *environment.Environ
 	binding := expandEnv.GetGlobalBinding(globalIndex)
 	if binding != nil {
 		if symbolScopes != nil {
-			binding.SetScopes(symbolScopes)
+			binding.EnsureMeta().Scopes = symbolScopes
 		}
 		symbolSource := keywordSym.SourceContext()
 		if symbolSource != nil {
-			binding.SetSource(symbolSource)
+			binding.EnsureMeta().Source = symbolSource
 		}
 	}
 	return expandEnv.SetOwnGlobalValue(globalIndex, closure)
