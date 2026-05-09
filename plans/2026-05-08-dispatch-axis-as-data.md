@@ -78,25 +78,77 @@ vars (with the BigComplex/LessThan asymmetry) × ~7 closures each = 287
 entries materialized as code. Methods on each numeric type do
 `<type><Op>[o.Kind()](p, o)`.
 
-**Materialized-once form**: A single per-Op 2D table or a single 3D table:
+**Caveat — prior reverted optimizations on this surface**:
 
-```go
-var addDispatch [numKinds][numKinds]func(Number, Number) Number
-// ... 5 more, populated centrally in promotion.go ...
+Numeric arithmetic is the hottest path in Wile (Gabriel benchmarks dominate
+here). Past attempts to consolidate dispatch around it have been measured
+and reverted. The relevant memory:
 
-func (p *Integer) Add(o Number) Number {
-    return addDispatch[KindInteger][o.Kind()](p, o)
-}
-```
+- `memory/2026-04-05-structural-reduction.md` — Phase 2 (promoted-ops table)
+  rejected on a 1.5% geo-mean regression across 16 Gabriel benchmarks.
+  Different surface (bytecode dispatch, not numeric tables), but same
+  shape of reshape.
+- `~/.claude/.../memory/promoted-ops-table-revert.md` — *"For hot-path
+  dispatch loops, Go's native switch-to-jumptable optimization is hard
+  to beat with manual table indirection."*
+- `~/.claude/.../memory/flat-closures-revert.md` — +7.4% geo-mean
+  regression across 31 benchmarks; reverted.
+- `~/.claude/.../memory/inline-bindings-revert.md` — reverted despite
+  positive micro-benchmarks.
+- `~/.claude/.../memory/callstack-optimization-attempt.md` — net negative
+  on Gabriel; lesson: *"Always profile the end-to-end path, not just the
+  targeted operation."*
 
-The receiver type `*Integer` becomes an implementation detail of the
-closure, not a fact encoded in N parallel symbol names.
+The pattern across all five reverts: micro-benchmarks suggested wins;
+end-to-end Gabriel showed losses, often from second-order effects (new
+allocations, lost compiler optimizations, hot/cold-path representation
+conflicts). **Any reshape of the numeric dispatch must be benchmark-gated
+end-to-end before commit.**
 
-**Symptoms**:
+**Two distinct sub-problems** (separable scope):
+
+1. **Ergonomic consolidation (low-risk, high-payoff)**:
+   The 6 vars per type (`<type>Add/Sub/Mul/Div/LessThan/Compare`) could
+   become a single struct per type:
+
+   ```go
+   type numericOps struct {
+       add, sub, mul *[numKinds]func(*<Type>, Number) Number
+       div          *[numKinds]func(*<Type>, Number) (Number, error)
+       lt           *[numKinds]func(*<Type>, Number) bool
+       cmp          *[numKinds]func(*<Type>, Number) int
+   }
+   var integerOps numericOps  // 1 var instead of 6
+   ```
+
+   The dispatch path is unchanged: `integerOps.add[o.Kind()](p, o)` is the
+   same closure call as `integerAdd[o.Kind()](p, o)`. The 41-vars count
+   drops to ~7 (one struct per type). The 12-point ADDING A NEW NUMERIC
+   TYPE guide loses several items. **No hot-path change; benchmark
+   regression risk near zero.**
+
+2. **Dispatch-level reshape (high-risk, requires benchmark gate)**:
+   Externalizing dispatch — `Add(a, b Number) Number` switching on
+   `(a.Kind(), b.Kind())`, with no per-type method — would lose the
+   receiver-method fast path Go's compiler currently inlines. This is
+   the shape that prior reverts warn against. **Do not propose without
+   a Gabriel benchmark run showing parity or improvement.** Likely
+   regression: 1-3% based on the prior table-vs-switch result.
+
+**Symptoms** (all addressable by sub-problem 1 alone):
 - 12-point "ADDING A NEW NUMERIC TYPE" guide in `numeric_kind.go:8-25`
   (one item references an EXTERNAL repo, `wile-goast`).
-- `LessThan` is fully derivable from `Compare` but each type implements both,
-  with parallel dispatch tables (~7 tables of pure redundancy).
+- `LessThan` is fully derivable from `Compare` — but removing it
+  changes the dispatch surface and is benchmark-gated. Sub-problem 2.
+- 41 package-level vars (6 ops × ~7 types) — sub-problem 1 fully
+  addresses this without dispatch changes.
+
+**Status**: deferred to last among the three Instances. Prior reverts
+make a naive reshape unsafe; a careful reshape needs benchmarking
+infrastructure that is itself a prerequisite (see TODO.md "Benchmark
+coverage gaps" — no current benchmarks for compiler/expander; Gabriel
+covers VM dispatch and arithmetic so the existing harness suffices for
+this surface).
 
 ### Instance B — `registry/`: two `Phase` types with conflicting values
 
@@ -209,21 +261,22 @@ These do not have to ship together, but they have a partial dependency:
 
 ```
             ┌────────────────────────────────────────┐
-            │ Instance B: unify Phase types          │
-            │ (registry.Phase ↔ environment.Phase)   │
+            │ Instance B: unify Phase types          │  ✓ SHIPPED
+            │ (registry.Phase ↔ environment.Phase)   │  PR #728
             └─────────────────┬──────────────────────┘
                               │ once Phase is one type with one set of
                               │ values, the apply-loops collapse cleanly
                               ▼
             ┌────────────────────────────────────────┐
-            │ Instance C: phase-keyed dispatch       │
-            │ table for `Apply`                      │
+            │ Instance C: phase-keyed dispatch       │  ✓ SHIPPED
+            │ table for `Apply`                      │  PR #728
             └────────────────────────────────────────┘
 
             Independent ──────────────────────────────
             ┌────────────────────────────────────────┐
-            │ Instance A: numeric dispatch registry  │
-            │ (no shared types with B/C)             │
+            │ Instance A: numeric dispatch reshape   │  DEFERRED
+            │ (sub-problem 1: ergonomic — safe;      │  see Caveat
+            │  sub-problem 2: dispatch — bench-gated)│  above
             └────────────────────────────────────────┘
 ```
 
@@ -231,22 +284,34 @@ These do not have to ship together, but they have a partial dependency:
 
 1. **Instance B first** (`Phase` unification). Highest blast radius
    (touches embedder API), but mechanically smallest. Should land on its
-   own PR.
+   own PR. **Shipped — PR #728 (2026-05-08).**
 2. **Instance C second**, on top of B. Becomes a much smaller change once
    `Phase` is one type — the apply-loops collapse into a literal slice of
-   actions.
-3. **Instance A independently**. Larger refactor, no shared types with
-   B/C. Can run in parallel with B/C, or after, depending on reviewer
-   bandwidth.
+   actions. **Shipped — PR #728 (2026-05-08).**
+3. **Instance A last** (deferred). Two sub-problems:
+   - **Sub-problem 1 (ergonomic)**: Collapse 6 vars/type → 1
+     `numericOps` struct/type. ~85% of the symptom (var count from
+     41 to ~7) at near-zero benchmark risk. Independently schedulable.
+   - **Sub-problem 2 (dispatch reshape)**: Externalize dispatch into
+     a single function. Prior reverts (see Caveat above) make this
+     unsafe without a Gabriel benchmark gate. Defer until either:
+     (a) a measured benefit appears (unlikely given the prior data),
+     or (b) a downstream constraint forces the reshape.
 
 The Tier-5 TODO entries `plans/2026-05-06-machine-structural-reduction.md`
-and `plans/2026-05-07-internal-structural-reduction.md` should consume
-the Phase-unified API once Instance B lands. Neither plan currently
-depends on Instance A or Instance C; the gating roadmap
+and `plans/2026-05-07-internal-structural-reduction.md` consume the
+Phase-unified API now that Instance B+C have landed. Neither plan
+depends on Instance A; the gating roadmap
 (`plans/2026-05-07-structural-reduction-roadmap.md`) sequences `values/`
 (this Instance A) before `internal/` Phase 7 because the
 `SyntaxPair`/`SyntaxEmptyList` migration cites `values/` precedent — that
 precedent is closed (per analysis).
+
+Instance A is therefore safe to defer indefinitely without blocking the
+existing structural-reduction plans. When it is taken on, sub-problem
+1 (ergonomic) should be the default scope; sub-problem 2 (dispatch
+reshape) requires a benchmark plan with explicit Gabriel-pass criteria
+before any code change.
 
 ## Predicted further instances
 
