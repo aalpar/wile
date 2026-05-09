@@ -53,18 +53,22 @@ var _ values.Value = (*Namespace)(nil)
 // MUST pick a policy explicitly — the existing per-field decisions are
 // encoded here, not in the constructors.
 //
-//	Per-instance (each namespace has its own; no inheritance):
+//	Per-VM (each namespace has its own; no inheritance):
 //	  Name, parent, phases, runtime, moduleInstances, syntaxInterns
 //	    Note: syntaxInterns is nil in children; InternSyntax delegates
 //	    to parent so symbol identity remains globally consistent.
 //
-//	Captured at construction (snapshot copy of the parent's pointer or
-//	map at child-creation time; later mutations on the parent do not
-//	flow to existing children):
+//	Captured at construction (the child stores its own copy of the
+//	parent's pointer or map header at fork time; later *reassignments*
+//	on the parent — e.g. parent.SetRegistry(other) — do not flow to
+//	existing children. Mutations *through* the captured pointer — e.g.
+//	parent.Registry().AddPrimitive(...) — ARE visible to children
+//	because the pointer they hold is the same Go object):
 //	  libraryRegistry, libraryEnvFactory, registry, authorizer, envMap
-//	    Rationale: these are capability state. Children must not silently
-//	    widen capability by inheriting later mutations to the parent.
-//	    See CLAUDE.local.md "envMap is capability state".
+//	    Rationale: these are capability state. Reassignments on the
+//	    parent must not silently widen capability on existing children
+//	    (envMap is the load-bearing example — see the SetEnvMap doc
+//	    comment in this file for the discussion).
 //
 //	Delegated to the root (children read/write through to the topmost
 //	parent; the field itself only ever lives on the root namespace):
@@ -77,10 +81,16 @@ var _ values.Value = (*Namespace)(nil)
 //	    not used.
 //
 // Adding a new field: choose a policy above, document it in this block,
-// and either copy it into the constructors (captured) or access it via
-// p.root() in its accessors (delegated). Do NOT mix the two for one
-// field — the asymmetry is the bug source the policy table exists to
-// prevent.
+// then:
+//   - Captured: copy it from the parent in *both* NewChildNamespace and
+//     NewSchemeReportNamespace (these are the two constructors that
+//     populate child state from a parent; they share the same captured
+//     set).
+//   - Delegated: define accessors that go through p.root() to read or
+//     write the field; do not store it on child namespaces.
+//
+// Do NOT mix the two for one field — the asymmetry is the bug source
+// the policy table exists to prevent.
 type Namespace struct {
 	// Name is an optional descriptive name (e.g., "interaction-environment").
 	Name string
@@ -247,6 +257,16 @@ func (p *Namespace) Phases() *PhaseRegistry {
 // Used by accessors for fields whose inheritance policy is "delegated to
 // root" (see the field inheritance policy comment on Namespace). For a
 // root namespace, p.root() == p in O(1).
+//
+// Precondition: p must be non-nil. Like every other accessor on
+// *Namespace (e.g. LibraryRegistry, Authorizer), root deliberately
+// does not guard against a nil receiver — Namespace is a value type
+// whose nil-state is meaningless, and silently returning nil here would
+// only push the inevitable panic deeper into the dependent accessor
+// (which would then read .fileResolver / .loadPathStack / etc. off
+// nil). EnvironmentFrame's nil-namespace shortcut guards exist because
+// EnvironmentFrame can legitimately be constructed without a Namespace
+// (newEnvironmentFrame test fixtures); Namespace itself cannot.
 func (p *Namespace) root() *Namespace {
 	for p.parent != nil {
 		p = p.parent
@@ -432,10 +452,14 @@ func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 // Use it with NewChildNamespace to override fields that would otherwise
 // be inherited from the parent (e.g. a restricted registry or a
 // different authorizer).
+//
+// The "*Set" booleans on namespaceConfig let WithChildRegistry(nil) and
+// WithChildAuthorizer(nil) mean "explicitly set the field to nil" —
+// distinct from "no override supplied" which means "inherit from
+// parent."
 type NamespaceOption func(*namespaceConfig)
 
 // namespaceConfig collects override values supplied via NamespaceOption.
-// A nil field means "inherit from parent unchanged."
 type namespaceConfig struct {
 	registry      any
 	registrySet   bool
@@ -443,23 +467,30 @@ type namespaceConfig struct {
 	authorizerSet bool
 }
 
-// WithRegistry overrides the parent's primitive registry on a derived
-// namespace. Use this to install a restricted or alternative registry
-// in a child without mutating the parent.
-func WithRegistry(r any) NamespaceOption {
-	return func(c *namespaceConfig) {
-		c.registry = r
-		c.registrySet = true
+// WithChildRegistry overrides the parent's primitive registry on a
+// derived namespace. Use this to install a restricted or alternative
+// registry in a child without mutating the parent.
+//
+// Distinct from wile.WithRegistry, which configures an EngineOption at
+// the top level — the wile.* and environment.* option families operate
+// on different config types and have different semantics.
+func WithChildRegistry(r any) NamespaceOption {
+	return func(cfg *namespaceConfig) {
+		cfg.registry = r
+		cfg.registrySet = true
 	}
 }
 
-// WithAuthorizer overrides the parent's security authorizer on a derived
-// namespace. Use this to give a child a stricter (or different)
+// WithChildAuthorizer overrides the parent's security authorizer on a
+// derived namespace. Use this to give a child a stricter (or different)
 // capability profile.
-func WithAuthorizer(a security.Authorizer) NamespaceOption {
-	return func(c *namespaceConfig) {
-		c.authorizer = a
-		c.authorizerSet = true
+//
+// Distinct from wile.WithAuthorizer, which configures an EngineOption
+// at the top level.
+func WithChildAuthorizer(a security.Authorizer) NamespaceOption {
+	return func(cfg *namespaceConfig) {
+		cfg.authorizer = a
+		cfg.authorizerSet = true
 	}
 }
 

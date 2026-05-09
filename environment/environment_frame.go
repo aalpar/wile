@@ -468,11 +468,18 @@ func (p *EnvironmentFrame) GetBinding(key *values.Symbol, scopes []*syntax.Scope
 		}
 	} else {
 		// Scoped path: maximal binding resolution (Flatt model).
-		// See bestOf in best_of.go.
+		// See bestOf in best_of.go. Allocation here is trivial — the
+		// candidate is just the existing *Binding pointer — so we record
+		// unconditionally on shouldRecord = true.
 		var best bestOf[*Binding]
 		target := len(scopes)
 		p.resolveLocal(key, scopes, func(binding *Binding, _ int, _ int) any {
-			if best.consider(binding, len(binding.Scopes()), target) {
+			sc := len(binding.Scopes())
+			rec, done := best.shouldRecord(sc, target)
+			if rec {
+				best.record(binding, sc)
+			}
+			if done {
 				return true
 			}
 			return nil
@@ -549,11 +556,19 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, scopes []*syntax.Sc
 	}
 
 	// Scoped path: maximal binding resolution.
-	// See bestOf in best_of.go.
+	// See bestOf in best_of.go. Splitting shouldRecord/record lets us
+	// defer NewLocalIndex(slot, depth) — an allocation — to the cases
+	// where the candidate actually becomes the new best, instead of
+	// allocating on every parent-chain visit.
 	var best bestOf[*LocalIndex]
 	target := len(scopes)
 	p.resolveLocal(key, scopes, func(binding *Binding, slot int, depth int) any {
-		if best.consider(NewLocalIndex(slot, depth), len(binding.Scopes()), target) {
+		sc := len(binding.Scopes())
+		rec, done := best.shouldRecord(sc, target)
+		if rec {
+			best.record(NewLocalIndex(slot, depth), sc)
+		}
+		if done {
 			return true
 		}
 		return nil

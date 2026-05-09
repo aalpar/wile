@@ -3,7 +3,9 @@
 **Date**: 2026-05-09
 **Source**: `/structural-reduction ./environment` analysis (Tier A.2 of the
 roadmap)
-**Status**: Findings recorded; not yet scheduled for implementation
+**Status**: Phases 1–9 implemented in PR #730 (branch
+`feat/env-structural-reduction`). Phase 10 (LocalIndex allocation audit)
+deferred — benchmark-gated per the recommended phasing.
 **Priority**: Medium-High (Tier 5 tech debt; closes Tier A of the
 `/structural-reduction` roadmap together with `values/` and `registry/`)
 
