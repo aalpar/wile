@@ -64,6 +64,24 @@ func ensureSyntaxCaseState(mc *machine.MachineContext) *syntaxCaseState {
 	return sc
 }
 
+// loadSyntaxCaseState fetches the *syntaxCaseState payload from
+// MachineContext.syntaxCase. Discriminates the two failure modes:
+// nil field (no syntax-case expansion in flight) and wrong concrete
+// type (contract violation — the field is any-typed and the encapsulation
+// argument relies on no other code storing alternatives).
+func loadSyntaxCaseState(mc *machine.MachineContext) (*syntaxCaseState, error) {
+	raw := mc.SyntaxCaseState()
+	if raw == nil {
+		return nil, mc.Error("syntax-case: no state on MachineContext (no expansion in flight)")
+	}
+	sc, ok := raw.(*syntaxCaseState)
+	if !ok {
+		return nil, mc.Error(fmt.Sprintf(
+			"syntax-case: unexpected state type %T on MachineContext.syntaxCase", raw))
+	}
+	return sc, nil
+}
+
 func NewOperationSyntaxCaseMatch() *OperationSyntaxCaseMatch {
 	return &OperationSyntaxCaseMatch{
 		OperationBase: machine.NewOperationBaseWithGoName("operation:syntax-case-match", "SyntaxCaseMatch"),
@@ -78,10 +96,15 @@ func (p *OperationSyntaxCaseMatch) Apply(mc *machine.MachineContext) (*machine.M
 		return nil, mc.Error(fmt.Sprintf("syntax-case: expected clause in value register, got %T", clauseVal))
 	}
 
-	// Get input from per-context state (set by OperationStoreSyntaxCaseInput)
-	sc, _ := mc.SyntaxCaseState().(*syntaxCaseState)
-	if sc == nil || sc.input == nil {
-		return nil, mc.Error("syntax-case: no input available")
+	// Get input from per-context state (set by OperationStoreSyntaxCaseInput).
+	// The state field is any-typed (see machine_context.go); discriminate
+	// nil-vs-mismatch so the diagnostic identifies which contract was broken.
+	sc, err := loadSyntaxCaseState(mc)
+	if err != nil {
+		return nil, err
+	}
+	if sc.input == nil {
+		return nil, mc.Error("syntax-case: state has no input (OperationStoreSyntaxCaseInput not run?)")
 	}
 	input := sc.input
 
@@ -95,7 +118,7 @@ func (p *OperationSyntaxCaseMatch) Apply(mc *machine.MachineContext) (*machine.M
 	// (this clause didn't match — try the next one); any other error
 	// (context cancellation, malformed input, ellipsis-depth invariant
 	// violation, internal matcher bug) is a real failure and must surface.
-	err := matcher.Match(mc.Context(), input)
+	err = matcher.Match(mc.Context(), input)
 	if errors.Is(err, match.ErrNotAMatch) {
 		mc.SetValue(values.FalseValue)
 		mc.IncrPC()
@@ -143,9 +166,12 @@ func NewOperationBindPatternVars(patternVars map[string]struct{}) *OperationBind
 }
 
 func (p *OperationBindPatternVars) Apply(mc *machine.MachineContext) (*machine.MachineContext, error) {
-	sc, _ := mc.SyntaxCaseState().(*syntaxCaseState)
-	if sc == nil || sc.bindings == nil {
-		return nil, mc.Error("syntax-case: no pattern bindings available")
+	sc, err := loadSyntaxCaseState(mc)
+	if err != nil {
+		return nil, err
+	}
+	if sc.bindings == nil {
+		return nil, mc.Error("syntax-case: state has no bindings (OperationSyntaxCaseMatch did not succeed?)")
 	}
 
 	// Create a new local environment frame with slots for pattern variables
@@ -221,9 +247,12 @@ func NewOperationSyntaxTemplateExpand() *OperationSyntaxTemplateExpand {
 }
 
 func (p *OperationSyntaxTemplateExpand) Apply(mc *machine.MachineContext) (*machine.MachineContext, error) {
-	sc, _ := mc.SyntaxCaseState().(*syntaxCaseState)
-	if sc == nil || sc.matcher == nil {
-		return nil, mc.Error("syntax: no pattern matcher available for template expansion")
+	sc, err := loadSyntaxCaseState(mc)
+	if err != nil {
+		return nil, err
+	}
+	if sc.matcher == nil {
+		return nil, mc.Error("syntax: state has no matcher (OperationSyntaxCaseMatch did not succeed?)")
 	}
 
 	// Get the template from value register
