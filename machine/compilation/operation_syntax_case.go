@@ -48,6 +48,11 @@ type syntaxCaseState struct {
 	input    syntax.SyntaxValue            // input syntax object being matched
 }
 
+// IsSyntaxCaseState attests that *syntaxCaseState is the back-channel payload
+// stored on MachineContext.syntaxCase. The method body is empty by design —
+// see machine.SyntaxCaseState for the marker-interface rationale.
+func (*syntaxCaseState) IsSyntaxCaseState() {}
+
 // ensureSyntaxCaseState lazily initializes the syntaxCaseState on the context.
 func ensureSyntaxCaseState(mc *machine.MachineContext) *syntaxCaseState {
 	sc, ok := mc.SyntaxCaseState().(*syntaxCaseState)

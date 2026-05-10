@@ -80,7 +80,7 @@ type MachineContext struct {
 	// continuations. See the comment on vmState.threadID for the full
 	// design and invariant.
 	thread        *values.Thread
-	syntaxCase    any              // *compilation.syntaxCaseState; nil when not in syntax-case
+	syntaxCase    SyntaxCaseState  // sealed marker interface; nil when not in syntax-case. See syntax_case_state.go.
 	maxCallDepth  uint64           // 0 = unlimited (default), otherwise max continuation depth
 	maxStackSize  uint64           // 0 = unlimited (default), otherwise max eval stack entries
 	restArgBuf    values.PairBlock // reusable buffer for variadic rest-arg list construction (ForeignClosure calls)
@@ -920,14 +920,18 @@ func (p *MachineContext) ExpanderContext() ExpanderCtx {
 	return p.expanderCtx
 }
 
-// SyntaxCaseState returns the opaque syntax-case expansion state.
-// Returns nil when not in a syntax-case expansion.
-func (p *MachineContext) SyntaxCaseState() any {
+// SyntaxCaseState returns the syntax-case expansion state, or nil when not in
+// a syntax-case expansion. The concrete type is owned by machine/compilation/;
+// callers within that subpackage type-assert to *syntaxCaseState.
+func (p *MachineContext) SyntaxCaseState() SyntaxCaseState {
 	return p.syntaxCase
 }
 
-// SetSyntaxCaseState sets the opaque syntax-case expansion state.
-func (p *MachineContext) SetSyntaxCaseState(v any) {
+// SetSyntaxCaseState installs the syntax-case expansion state on the context.
+// Pass nil to clear it. The argument's concrete type must implement the
+// SyntaxCaseState marker interface (see syntax_case_state.go) — this is what
+// distinguishes the typed back-channel from a raw any-typed payload.
+func (p *MachineContext) SetSyntaxCaseState(v SyntaxCaseState) {
 	p.syntaxCase = v
 }
 
