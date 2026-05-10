@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `syntax-case` now propagates non-`ErrNotAMatch` matcher errors instead of silently translating them to "no matching clause". Context cancellations and malformed-input errors during pattern matching surface with the actual diagnostic instead of the misleading no-match message. (#732)
+- `syntax-case` no-match diagnostic now includes the input form being expanded (`syntax-case: no matching clause for input <form>`), where previously the message was the generic `no matching clause`. Macro authors can identify which input fell through without trial-and-error. (#732)
+- `MachineContext.syntaxCase` field readers now distinguish "field unset" from "wrong concrete type" with field-specific diagnostics naming which operation should have populated each piece of state, where previously both produced the same misleading `no input available` message. (#732)
+
 ## [1.15.0] - 2026-05-04
 
 ### Added

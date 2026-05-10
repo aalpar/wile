@@ -180,24 +180,31 @@ func (p *OperationBindPatternVars) Apply(mc *machine.MachineContext) (*machine.M
 
 	// Bind each pattern variable. MaybeCreateLocalBinding returns
 	// (*LocalIndex, created bool); the bool is unused here. The protocol
-	// has four (li, ok) states, each with a distinct outcome:
+	// has four (li, ok) states:
 	//
 	//   li != nil, ok == true   — matched non-ellipsis var: write stxVal
+	//                              (the captured syntax value).
 	//   li == nil, ok == true   — outer scope binds the name: skip the
 	//                              local set; the variable resolves via
-	//                              the environment chain
-	//   li != nil, ok == false  — ELLIPSIS-CAPTURED var: write nil. This
-	//                              is intentional and is *not* silent
-	//                              corruption (despite what it looks
-	//                              like). Per internal/match/CLAUDE.local.md,
+	//                              the environment chain.
+	//   li != nil, ok == false  — ELLIPSIS-CAPTURED var. matcher.GetBindings()
+	//                              returns only the ROOT capture context;
 	//                              ellipsis-captured pattern variables
-	//                              live in the matcher's captureContext
-	//                              children, not in the root bindings
-	//                              map that GetBindings() returns. The
-	//                              nil at the local slot signals
-	//                              "captured elsewhere — consult the
-	//                              matcher during template expansion."
-	//                              Patterns like (_ x ...) take this path.
+	//                              (e.g. `x` in `(_ x ...)`) live in the
+	//                              capture context's `children` field,
+	//                              walked at template-expansion time —
+	//                              see internal/match/match.go's
+	//                              "Capture Context" comment block and
+	//                              `findMatchingEllipsisID`. We
+	//                              explicitly write nil to the local
+	//                              slot to override the slot's default
+	//                              `values.Void` initialization (set by
+	//                              NewLocalEnvironment) — the nil
+	//                              signals "captured elsewhere; consult
+	//                              the matcher's children at expand
+	//                              time" and is the long-standing
+	//                              behavior this code path preserved
+	//                              before the structural rewrite.
 	//   li == nil, ok == false  — outer scope binds the name AND the var
 	//                              is ellipsis-captured: nothing to do
 	//                              locally; matcher tracks the captures.
@@ -208,18 +215,15 @@ func (p *OperationBindPatternVars) Apply(mc *machine.MachineContext) (*machine.M
 	for _, varName := range p.PatternVars {
 		sym := values.NewSymbol(varName)
 		li, _ := childEnv.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable, nil, nil)
-		stxVal, ok := sc.bindings[varName]
 		if li == nil {
-			// Either an outer-scope binding wins (ok=true case) or no
-			// local frame to write to (ok=false ellipsis case): skip.
+			// Outer-scope binding wins (var resolves through env chain),
+			// or no local frame to write to: skip.
 			continue
 		}
-		if !ok {
-			// Ellipsis-captured var: leave the local slot as the
-			// zero value (nil). Template expansion reads from the
-			// matcher's children, not this slot.
-			continue
-		}
+		// stxVal is nil when varName is absent from sc.bindings (the
+		// ellipsis case). Writing nil here is the protocol signal —
+		// see the comment block above.
+		stxVal := sc.bindings[varName]
 		err := childEnv.SetLocalValue(li, stxVal)
 		if err != nil {
 			return nil, mc.WrapError(err, fmt.Sprintf("syntax-case: failed to bind pattern variable %s", varName))
