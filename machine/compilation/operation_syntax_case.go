@@ -15,6 +15,7 @@
 package compilation
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 
@@ -90,15 +91,18 @@ func (p *OperationSyntaxCaseMatch) Apply(mc *machine.MachineContext) (*machine.M
 		EllipsisDepths: clause.EllipsisDepths,
 	})
 
-	// Try to match
+	// Try to match. ErrNotAMatch is normal control flow for syntax-case
+	// (this clause didn't match — try the next one); any other error
+	// (context cancellation, malformed input, ellipsis-depth invariant
+	// violation, internal matcher bug) is a real failure and must surface.
 	err := matcher.Match(mc.Context(), input)
-	if err != nil {
-		// Match failed
+	if errors.Is(err, match.ErrNotAMatch) {
 		mc.SetValue(values.FalseValue)
 		mc.IncrPC()
-		// Intentionally clear the matcher error: a failed match is normal control flow for syntax-case,
-		// so we record #f in the value register and return no runtime error.
-		return mc, nil // nolint:errcheck, nilerr
+		return mc, nil
+	}
+	if err != nil {
+		return nil, mc.WrapError(err, "syntax-case: matcher error")
 	}
 
 	// Match succeeded - store bindings and matcher in per-context state
