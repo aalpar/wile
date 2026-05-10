@@ -65,49 +65,75 @@ Companion `machine/compilation/` treated as a peer for dependency direction only
 
 ### Finding 1 — `syntaxCase any` field: dependency inversion implemented as universe type
 
+**Status**: **Considered and declined** (PR #731 review cycle, 2026-05-10).
+A marker-interface prototype was implemented and then reverted after
+multi-lens crosscheck review. The diff was retained as a documentation
+update; the type narrowing was not.
+
 **Principle**: Dependency / State Tightness
-**Where**: `machine/machine_context.go:83`, `machine/machine_context.go:925-932`;
+**Where**: `machine/machine_context.go:83`, `machine/machine_context.go:920-935`;
 consumers in `machine/compilation/operation_syntax_case.go:51-289`
 **Theory**: Universe types as dependency-inversion shims; **boolean blindness**
 generalized to **type blindness** (Harper, *PFPL* §11). The `any` type has 2^∞
 representable values; only one concrete type (`*compilation.syntaxCaseState`)
-is semantically valid here, so type precision = 1/∞ ≈ 0%.
-**Current state**:
-```go
-syntaxCase    any              // *compilation.syntaxCaseState; nil when not in syntax-case
+is semantically valid here, so the *type-system* precision = 1/∞.
 
-func (p *MachineContext) SyntaxCaseState() any { return p.syntaxCase }
-func (p *MachineContext) SetSyntaxCaseState(v any) { p.syntaxCase = v }
-```
-Every consumer in `compilation/operation_syntax_case.go` re-runs a type
-assertion: `sc, ok := mc.SyntaxCaseState().(*syntaxCaseState)`.
-**Problem**: `any` is the **universe type** — every value of every type is a
-valid inhabitant. The comment names the *one* type that is actually allowed,
-but the type system enforces nothing. Worse, the price of preserving this
-typing is paid on every read (a runtime type assertion). The **Curry-Howard**
-view: the proposition this type asserts is "something exists" rather than
-"this specific contract exists." Compilers verify the former trivially; only
-the latter prevents bugs.
+**Why declined — practical precision is already 1/1 by encapsulation**:
+- The field is **unexported** (`syntaxCase`), so the only way to write to it
+  is through `SetSyntaxCaseState`.
+- `SetSyntaxCaseState` has **exactly two production callers**, both in
+  `machine/compilation/operation_syntax_case.go` (`ensureSyntaxCaseState`
+  setting `&syntaxCaseState{}`, `OperationClearSyntaxCaseInput` clearing
+  to nil).
+- `SyntaxCaseState()` has **exactly four production callers**, all in the
+  same file, all type-asserting to `*syntaxCaseState`.
+- The "unauthorized type stored" failure mode the marker would prevent
+  has zero call sites that could trigger it; the bug class is bounded
+  to zero by package boundaries.
 
-This shape is a familiar dependency-inversion shim: `machine/` wants to avoid
-importing `compilation/`, so it accepts an opaque pointer it cannot speak
-about. But the *better* shim is a 0-method tag interface in `machine/`:
+**Cross-package sealing limitation in Go**: An `interface{ isFoo() }`
+sealed-by-unexported-method pattern only works when the implementer
+lives in the **same package** as the interface. Here `machine/` cannot
+import `machine/compilation/` (one-direction dependency). The marker
+method must therefore be **exported** (`IsSyntaxCaseState()`), defeating
+the strict "sealed" property and introducing a project-novel pattern
+(no other `IsX()` empty-marker interfaces existed in the codebase).
+The doc would have to honestly admit "marker interface, not literally
+sealed" — adding clarity overhead without delivering the original
+type-system promise.
 
-```go
-// machine/syntax_case.go
-type SyntaxCaseState interface { isSyntaxCaseState() }  // sealed marker
-```
+**Crosscheck convergence on declining**:
+- **Type-design lens**: rated marker 5/10 for "Invariant Usefulness" —
+  the protected bug class has no observed instances; readers still
+  type-assert at every call site; the marker narrows writes only.
+- **Consistency lens**: flagged the `IsX()` empty-marker pattern as
+  having no prior art in the workspace — the only such hit in
+  `machine/`. Introducing a new convention for one type, especially
+  with documented partial-seal semantics, increases cognitive overhead
+  for future maintainers.
+- **Code review lens**: the empty-body marker method violated the
+  project's "NEVER write single-line function definitions" imperative;
+  multi-line empty-body methods are syntactically awkward and provide
+  no behavioral signal.
 
-**Proposed direction**: Define a sealed marker interface in `machine/` (one
-file, ~5 lines). Have `compilation.syntaxCaseState` implement it via an
-unexported method. The field becomes `syntaxCase SyntaxCaseState`, the
-accessor returns the interface, and consumers still type-assert to the
-concrete type — but unauthorized types are now compile-time prohibited from
-being stored. This is the **existential type** pattern (Pierce, *TAPL* §24).
-**Impact**: Type precision goes from 1/∞ to 1/1 for the field's own
-assertions; unauthorized stores become impossible; readers' type assertions
-become specifications rather than runtime risks.
-**Estimated size**: S.
+**Conclusion**: The `any`-typed field with strengthened doc comment is
+the right shape for this code. The structural-reduction lens correctly
+identified that *type-system precision* is suboptimal; the cost-benefit
+analysis (one writer × one consumer-package × encapsulation already
+enforces) does not justify a project-novel pattern that future
+maintainers will copy without understanding the cross-package
+limitation.
+
+**Reopen criterion**: If the call-site count grows beyond `compilation/`
+— e.g., a new package needs to write or read this field — revisit. The
+encapsulation-as-defense argument depends on the single-consumer
+property; if that property erodes, the type-system check becomes
+load-bearing.
+
+**Estimated size when reopened**: M — would require either (a) moving
+`syntaxCaseState` to `machine/` (drags `internal/match` into machine's
+import graph) or (b) defining a real interface with typed methods
+matching the `ExpanderCtx` precedent.
 
 ### Finding 2 — Tail/non-tail opcode duplication: 28 cases that differ in one bit
 
@@ -244,10 +270,29 @@ instances of `if mc.maxStackSize > 0 { check }` in `Run()` (lines 368, 433,
 `callDepth` — `int` is fine since continuation chain length is bounded by
 stack space anyway. The comparison becomes
 `if mc.maxCallDepth != nil && callDepth > int(*mc.maxCallDepth)`.
+
+**⚠ Historical context.** The `0 = unlimited` sentinel on `maxStackSize`
+was chosen **deliberately** in PR #636 over a `(uint64, bool)` set/unset
+pair: *"unlike `maxCallDepth` there is no default value, so zero-value =
+not called = unlimited"* (`memory/2026-04-11-eval-stack-limit-design.md`).
+A `*uint64` nullable replaces that `bool` flag with a pointer indirection
+plus a heap allocation per setter. The "removes signed/unsigned juggling"
+claim must be weighed against re-introducing exactly the kind of
+indirection the original design avoided. **The win is local
+(check-site readability); the cost is global (heap allocation +
+deref on every check).**
+
+**Bench-gating recommended**: Same criterion as Finding 5 — no Gabriel
+regression > 0.3% per benchmark, geo-mean delta within ±0.5%. The check
+sits in the same hot-path dispatch loop. If a measurable regression
+appears, alternatives include keeping the sentinel and addressing only
+the type mismatch (`callDepth int` ↔ `maxCallDepth uint64`) by
+unifying both as `uint64` or both as `int`.
 **Impact**: Removes the implicit `0 == off` convention; removes signed/unsigned
 juggling at every check site; makes the "is this limit even on?" question a
 property of the type rather than a runtime convention.
-**Estimated size**: S.
+**Estimated size**: S (with bench-gate); type-only fix without sentinel
+change is XS.
 
 ### Finding 5 — Repeated stack-size guard across opcode cases (hand-unrolled loop body)
 
@@ -269,22 +314,66 @@ morphism** on each opcode case, copied verbatim.
 **Current state**: Each opcode that *grows* the eval stack (`OpPush`,
 `OpUnpackListToStack`, `OpPushLiteral`, `OpPushGlobal`, `OpPushLocal`,
 `OpPushCachedBinding`) inlines this block.
-**Problem**: There are six call sites; over time, "the opcodes that grow the
-stack" will drift from "the opcodes that include this guard." Already,
-`OpPullApply` and the 14 promoted ops grow the stack via `mc.evals.Push(...)`
-indirectly through `execPromoted`/inline functions and *don't* run the guard.
-Whether that's intentional depends on whether the inline functions are
-bounded — and that's invisible from the call-site reader's perspective.
-**Proposed direction (least invasive)**: Push the guard into the eval stack
-itself. `Stack.Push` already exists — give it a single internal max-size
-constraint via a small `Stack` struct field, set once in `NewStack(maxSize)`.
-Every `Push` either succeeds, fails with the same error, or is unconditional.
-The opcode dispatch loses the six guard blocks; the guard logic moves to one
-place where it cannot drift.
-**Impact**: 30 lines deleted from `Run()`; one line added to `Stack.Push`;
-**closure** ensures every `Push` everywhere is guarded uniformly; new opcodes
-opt-in by pushing or not pushing, not by remembering the guard.
-**Estimated size**: S.
+
+**⚠ Historical context (must read before implementing).** The duplication is
+**deliberate perf scaffolding**, not accidental drift. Three pieces of
+evidence converge:
+
+1. **PR #636 commit 3 (`perf: guard checkStackSize calls with maxStackSize > 0`)**
+   states: *"`checkStackSize` is not inlined by the Go compiler (cost 110,
+   budget 80) and its format args escape to heap. Guard all 6 call sites so
+   the default (unlimited) path has zero overhead in the VM hot loop."*
+   The `if mc.maxStackSize > 0 { … }` guard exists **specifically** to keep
+   the no-limit common case at one predicted-not-taken branch.
+2. **Design doc `memory/2026-04-11-eval-stack-limit-design.md`** explicitly
+   selected this shape over a Stack-internal alternative: *"No structural
+   changes to `Stack`. Follows the `maxCallDepth` pattern exactly."*
+   ("Approach B from brainstorming" — the Stack-internal alternative was
+   weighed and rejected.)
+3. **The "What Is NOT Checked" section of the same design doc** documents
+   that pushes from foreign functions and complex operations are
+   **deliberately unguarded**: *"these pushes are bounded by bytecode
+   structure, not user input, and the next VM-loop push will catch any
+   accumulated growth."* The 6-site coverage is the *intended* coverage,
+   not a coverage gap waiting to be closed. The design treats `maxStackSize`
+   as a **coarse-grained DoS cap for sandboxed embedders**, not a precise
+   per-push correctness invariant. The "PushAll Multi-Value Behavior"
+   section also documents accepted transient overshoots — cap-precision is
+   not the goal.
+
+**Reframed problem**: The *structural* observation (duplication) is
+correct. But the *direction* the original analysis proposed —
+"every `Push` everywhere is guarded uniformly" — inverts the design: it
+**re-introduces the cost** the perf guard was added to eliminate, and
+**extends coverage** to push sites the design intentionally exempted.
+
+**Three options**:
+
+| Option | Shape | Perf risk | Coverage change |
+|---|---|---|---|
+| A | `Stack.Push` returns `error`; bounds-check inside | Re-introduces the `checkStackSize` no-inline + heap-escape cost on every push regardless of limit; signature break across all push sites | Extends to all push sites (changes design intent) |
+| B | `Stack.Push` panics on overflow (matches existing `Pull`/`Pop`/`PeekK` panic-on-underflow idiom) | Removes signature break; same per-push branch cost as A; needs panic recovery in `Run()` | Same as A |
+| C | `Stack` owns `maxSize` field; `Run()` outer loop calls `s.CheckOverflow()` once per dispatch iteration when `s.maxSize != 0` | Single fast-path skip in the no-limit case; **same coverage as today** | Unchanged — preserves the design's intentional scope |
+| D (status quo with extracted helper) | Replace 6 inline blocks with one call to `mc.checkStackSizeFast()` (an inlinable wrapper that does the `> 0` test and tail-calls `checkStackSize`); same coverage as today | Risk that the wrapper itself doesn't inline (cost budget); needs measurement | Unchanged |
+
+**Recommended direction (revised)**: **Option C** — Stack owns its limit;
+the dispatch loop checks once per opcode boundary when the limit is set.
+Closes the duplication finding (`Run()` no longer has 6 inline guards) and
+preserves the design's coverage scope and zero-overhead-when-unlimited
+property.
+
+**⚠ Bench-gating (mandatory)**: Any version of this phase must be
+benchmark-gated against PR #636's status quo. **Acceptance criterion**:
+no Gabriel-benchmark with `maxStackSize == 0` regresses by more than 0.3%,
+and the geo-mean delta is within ±0.5%. Methodology mirrors
+`memory/2026-04-05-structural-reduction.md` Phase 2: 6 runs of
+`make bench-gabriel` averaged, against the immediate-prior commit on the
+same machine. **Precedent**: that prior structural change was
+**rejected** at 1.5% geo-mean regression — well within the perf-cliff
+regime an unoptimized restructure of this code path could trigger.
+**Impact**: 30 lines deleted from `Run()`; the duplication closes;
+the optimization remains.
+**Estimated size**: S (Option C); M with bench measurement.
 
 ### Finding 6 — `Operation` interface is the empty contract
 
@@ -486,18 +575,26 @@ Sequence from highest impact-per-effort to lowest:
 
 | Phase | Finding | Size | Gating                      |
 |-------|---------|------|-----------------------------|
-| 1     | 1       | S    | None                        |
-| 2     | 5       | S    | None                        |
-| 3     | 4       | S    | None                        |
-| 4     | 6       | S    | None                        |
+| ~~1~~ | 1       | —    | **Declined** — encapsulation already enforces the constraint; cross-package sealing limitation in Go undermines the marker-interface pattern. See Finding 1 status block above. PR #731 retained the doc work and reverted the type narrowing. |
+| 2     | 5       | M    | **Bench-gate**: no Gabriel regression > 0.3%/bench, geo-mean ±0.5%. Per PR #636 commit 3 (`memory/2026-04-11-eval-stack-limit-design.md`), the duplication is a **deliberate perf workaround** (`checkStackSize` non-inlinable, escapes args). Recommended Option C (Stack owns limit, outer-loop check) over Options A/B which extend coverage and re-introduce the cost the perf guard exists to avoid. |
+| 3     | 4       | S    | **Bench-gate** (same criterion as Phase 2). The `0 = unlimited` sentinel was chosen deliberately in PR #636 over a `bool` flag; `*uint64` re-introduces an equivalent indirection. Type-only fix (unify `int`/`uint64` mismatch without nullable change) is XS with no perf risk and may be the right narrow scope. |
+| 4     | 6       | S    | None — **next phase to ship** |
 | 5     | 3       | S    | Decide on lint vs. discipline |
-| 6     | 2       | M    | Re-run bench against the previous experiment baseline |
-| 7     | 7       | L    | After Findings 1, 4 — they shape sub-record boundaries |
+| 6     | 2       | M    | **Bench-gate** against `memory/2026-04-05-structural-reduction.md` Phase 2 baseline (which rejected a similar restructure at 1.5% geo-mean regression). |
+| 7     | 7       | L    | After Findings 1, 4 — they shape sub-record boundaries (Finding 1 declined; Finding 4 still ahead) |
 
-Phases 1–5 are independent and can be picked off in any order. Phase 6 needs
-benchmark validation before commit. Phase 7 is the largest and should land
-last; it absorbs the small wins from prior phases into a coherent
-sub-structure.
+**Bench-gate methodology** (mirroring `memory/2026-04-05-structural-reduction.md`):
+6 runs of `make bench-gabriel` averaged, against the immediate-prior commit
+on the same machine, with `maxStackSize == 0` (the no-limit common-case
+hot path). Acceptance: no individual benchmark regresses > 0.3%; geo-mean
+delta within ±0.5%. **Precedent for rejection**: prior structural-reduction
+Phase 2 rejected at 1.5% geo-mean regression, 15/16 benchmarks slower —
+this regime is real and recurring for VM hot-path restructures.
+
+Phases 1, 4, and 5 are independent and can be picked off in any order
+without measurement risk. Phases 2, 3, and 6 are bench-gated. Phase 7 is
+the largest and should land last; it absorbs the small wins from prior
+phases into a coherent sub-structure.
 
 ## Cross-references
 
@@ -506,10 +603,29 @@ sub-structure.
   this plan's implementation. Phase 7 (named sub-records for
   `MachineContext`) interacts with how `EnvironmentFrame` is held on
   `MachineContext`; sequence after `environment/` analysis.
-- `memory/2026-04-05-structural-reduction.md` — earlier promoted-ops
-  experiment that rejected table-driven dispatch (~1.5% regression).
-  Finding 2 proposes a *different* encoding (sign-bit on operand) not tested
-  there.
+- **`memory/2026-04-05-structural-reduction.md`** — earlier promoted-ops
+  experiment that rejected table-driven dispatch at **~1.5% geo-mean
+  regression, 15/16 benchmarks slower** (Apple M4 Max, 6-run average,
+  `make bench-gabriel`). Concrete numerical baseline for the bench-gate
+  threshold on Phases 2, 3, and 6. Finding 2 proposes a *different*
+  encoding (sign-bit on operand) not tested there.
+- **`memory/2026-04-11-eval-stack-limit-design.md`** — design doc for
+  PR #636 (`maxStackSize` introduction). Documents (1) the deliberate
+  choice to keep `Stack` unmodified ("Approach B from brainstorming",
+  no structural changes to `Stack`), (2) the intentional coverage scope
+  ("What Is NOT Checked" — foreign / complex-op pushes are
+  bytecode-bounded, not user-input-bounded), (3) the deliberate
+  approximate-cap behavior ("PushAll Multi-Value Behavior"), and (4) the
+  rationale for `0 = unlimited` sentinel over a `bool` flag. **Findings 4
+  and 5 must be reconciled with this prior art before implementation.**
+- **PR #636 commit 3 message** (`perf: guard checkStackSize calls with
+  maxStackSize > 0`) — explicitly states *"`checkStackSize` is not
+  inlined by the Go compiler (cost 110, budget 80) and its format args
+  escape to heap. Guard all 6 call sites so the default (unlimited) path
+  has zero overhead in the VM hot loop."* This is the load-bearing
+  rationale for the duplication Finding 5 surfaces.
+- `memory/2026-04-11-eval-stack-limit-impl.md` — implementation tracker
+  for PR #636.
 - `machine/CLAUDE.md`, `machine/CLAUDE.local.md` — architectural reference
   used to validate findings against existing invariants.
 - TODO.md Tier 5 "FCA-Derived" — `vmCore sub-struct extraction` is a

@@ -40,8 +40,12 @@ type OperationSyntaxCaseMatch struct {
 }
 
 // syntaxCaseState holds per-context state for syntax-case expansion.
-// It is stored on MachineContext (not as package globals) so that
-// syntax-case is reentrant and safe for concurrent macro expansion.
+// It is stored on MachineContext.syntaxCase (an any-typed back-channel field)
+// so that syntax-case is reentrant and safe for concurrent macro expansion.
+// machine/ cannot import this package (one-direction dependency), so the
+// machine-side field is any-typed; the constraint that only this concrete
+// type is ever stored there is enforced by the field's encapsulation rather
+// than by the type system.
 type syntaxCaseState struct {
 	bindings map[string]syntax.SyntaxValue // pattern variable bindings from last match
 	matcher  *match.SyntaxMatcher          // matcher from last match (needed for ellipsis expansion)

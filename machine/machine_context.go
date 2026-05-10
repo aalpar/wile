@@ -79,8 +79,16 @@ type MachineContext struct {
 	// The numeric half (threadID) lives in vmState and propagates into
 	// continuations. See the comment on vmState.threadID for the full
 	// design and invariant.
-	thread        *values.Thread
-	syntaxCase    any              // *compilation.syntaxCaseState; nil when not in syntax-case
+	thread *values.Thread
+	// syntaxCase holds per-context syntax-case expansion state, owned by
+	// machine/compilation/. Typed as any because machine/ cannot import
+	// compilation/ (one-direction dependency rule). The constraint —
+	// "always *compilation.syntaxCaseState or nil" — is enforced by
+	// encapsulation: the field is unexported and the accessors are the
+	// only entry points; in practice exactly one production package
+	// (compilation/) calls them, so type-system gating would only restate
+	// what package boundaries already guarantee.
+	syntaxCase    any
 	maxCallDepth  uint64           // 0 = unlimited (default), otherwise max continuation depth
 	maxStackSize  uint64           // 0 = unlimited (default), otherwise max eval stack entries
 	restArgBuf    values.PairBlock // reusable buffer for variadic rest-arg list construction (ForeignClosure calls)
@@ -920,13 +928,19 @@ func (p *MachineContext) ExpanderContext() ExpanderCtx {
 	return p.expanderCtx
 }
 
-// SyntaxCaseState returns the opaque syntax-case expansion state.
-// Returns nil when not in a syntax-case expansion.
+// SyntaxCaseState returns the per-context syntax-case expansion state, or nil
+// when not in a syntax-case expansion. The concrete type is owned by
+// machine/compilation/; callers within that subpackage type-assert to
+// *syntaxCaseState. See the comment on the syntaxCase field for why this is
+// any-typed.
 func (p *MachineContext) SyntaxCaseState() any {
 	return p.syntaxCase
 }
 
-// SetSyntaxCaseState sets the opaque syntax-case expansion state.
+// SetSyntaxCaseState installs the syntax-case expansion state on the context,
+// or nil to clear it. In production, the only legitimate concrete type is
+// *compilation.syntaxCaseState; the constraint is enforced by encapsulation
+// (unexported field, single-package consumer) rather than the type system.
 func (p *MachineContext) SetSyntaxCaseState(v any) {
 	p.syntaxCase = v
 }
