@@ -65,49 +65,75 @@ Companion `machine/compilation/` treated as a peer for dependency direction only
 
 ### Finding 1 — `syntaxCase any` field: dependency inversion implemented as universe type
 
+**Status**: **Considered and declined** (PR #731 review cycle, 2026-05-10).
+A marker-interface prototype was implemented and then reverted after
+multi-lens crosscheck review. The diff was retained as a documentation
+update; the type narrowing was not.
+
 **Principle**: Dependency / State Tightness
-**Where**: `machine/machine_context.go:83`, `machine/machine_context.go:925-932`;
+**Where**: `machine/machine_context.go:83`, `machine/machine_context.go:920-935`;
 consumers in `machine/compilation/operation_syntax_case.go:51-289`
 **Theory**: Universe types as dependency-inversion shims; **boolean blindness**
 generalized to **type blindness** (Harper, *PFPL* §11). The `any` type has 2^∞
 representable values; only one concrete type (`*compilation.syntaxCaseState`)
-is semantically valid here, so type precision = 1/∞ ≈ 0%.
-**Current state**:
-```go
-syntaxCase    any              // *compilation.syntaxCaseState; nil when not in syntax-case
+is semantically valid here, so the *type-system* precision = 1/∞.
 
-func (p *MachineContext) SyntaxCaseState() any { return p.syntaxCase }
-func (p *MachineContext) SetSyntaxCaseState(v any) { p.syntaxCase = v }
-```
-Every consumer in `compilation/operation_syntax_case.go` re-runs a type
-assertion: `sc, ok := mc.SyntaxCaseState().(*syntaxCaseState)`.
-**Problem**: `any` is the **universe type** — every value of every type is a
-valid inhabitant. The comment names the *one* type that is actually allowed,
-but the type system enforces nothing. Worse, the price of preserving this
-typing is paid on every read (a runtime type assertion). The **Curry-Howard**
-view: the proposition this type asserts is "something exists" rather than
-"this specific contract exists." Compilers verify the former trivially; only
-the latter prevents bugs.
+**Why declined — practical precision is already 1/1 by encapsulation**:
+- The field is **unexported** (`syntaxCase`), so the only way to write to it
+  is through `SetSyntaxCaseState`.
+- `SetSyntaxCaseState` has **exactly two production callers**, both in
+  `machine/compilation/operation_syntax_case.go` (`ensureSyntaxCaseState`
+  setting `&syntaxCaseState{}`, `OperationClearSyntaxCaseInput` clearing
+  to nil).
+- `SyntaxCaseState()` has **exactly four production callers**, all in the
+  same file, all type-asserting to `*syntaxCaseState`.
+- The "unauthorized type stored" failure mode the marker would prevent
+  has zero call sites that could trigger it; the bug class is bounded
+  to zero by package boundaries.
 
-This shape is a familiar dependency-inversion shim: `machine/` wants to avoid
-importing `compilation/`, so it accepts an opaque pointer it cannot speak
-about. But the *better* shim is a 0-method tag interface in `machine/`:
+**Cross-package sealing limitation in Go**: An `interface{ isFoo() }`
+sealed-by-unexported-method pattern only works when the implementer
+lives in the **same package** as the interface. Here `machine/` cannot
+import `machine/compilation/` (one-direction dependency). The marker
+method must therefore be **exported** (`IsSyntaxCaseState()`), defeating
+the strict "sealed" property and introducing a project-novel pattern
+(no other `IsX()` empty-marker interfaces existed in the codebase).
+The doc would have to honestly admit "marker interface, not literally
+sealed" — adding clarity overhead without delivering the original
+type-system promise.
 
-```go
-// machine/syntax_case.go
-type SyntaxCaseState interface { isSyntaxCaseState() }  // sealed marker
-```
+**Crosscheck convergence on declining**:
+- **Type-design lens**: rated marker 5/10 for "Invariant Usefulness" —
+  the protected bug class has no observed instances; readers still
+  type-assert at every call site; the marker narrows writes only.
+- **Consistency lens**: flagged the `IsX()` empty-marker pattern as
+  having no prior art in the workspace — the only such hit in
+  `machine/`. Introducing a new convention for one type, especially
+  with documented partial-seal semantics, increases cognitive overhead
+  for future maintainers.
+- **Code review lens**: the empty-body marker method violated the
+  project's "NEVER write single-line function definitions" imperative;
+  multi-line empty-body methods are syntactically awkward and provide
+  no behavioral signal.
 
-**Proposed direction**: Define a sealed marker interface in `machine/` (one
-file, ~5 lines). Have `compilation.syntaxCaseState` implement it via an
-unexported method. The field becomes `syntaxCase SyntaxCaseState`, the
-accessor returns the interface, and consumers still type-assert to the
-concrete type — but unauthorized types are now compile-time prohibited from
-being stored. This is the **existential type** pattern (Pierce, *TAPL* §24).
-**Impact**: Type precision goes from 1/∞ to 1/1 for the field's own
-assertions; unauthorized stores become impossible; readers' type assertions
-become specifications rather than runtime risks.
-**Estimated size**: S.
+**Conclusion**: The `any`-typed field with strengthened doc comment is
+the right shape for this code. The structural-reduction lens correctly
+identified that *type-system precision* is suboptimal; the cost-benefit
+analysis (one writer × one consumer-package × encapsulation already
+enforces) does not justify a project-novel pattern that future
+maintainers will copy without understanding the cross-package
+limitation.
+
+**Reopen criterion**: If the call-site count grows beyond `compilation/`
+— e.g., a new package needs to write or read this field — revisit. The
+encapsulation-as-defense argument depends on the single-consumer
+property; if that property erodes, the type-system check becomes
+load-bearing.
+
+**Estimated size when reopened**: M — would require either (a) moving
+`syntaxCaseState` to `machine/` (drags `internal/match` into machine's
+import graph) or (b) defining a real interface with typed methods
+matching the `ExpanderCtx` precedent.
 
 ### Finding 2 — Tail/non-tail opcode duplication: 28 cases that differ in one bit
 
@@ -549,13 +575,13 @@ Sequence from highest impact-per-effort to lowest:
 
 | Phase | Finding | Size | Gating                      |
 |-------|---------|------|-----------------------------|
-| 1     | 1       | S    | None                        |
+| ~~1~~ | 1       | —    | **Declined** — encapsulation already enforces the constraint; cross-package sealing limitation in Go undermines the marker-interface pattern. See Finding 1 status block above. PR #731 retained the doc work and reverted the type narrowing. |
 | 2     | 5       | M    | **Bench-gate**: no Gabriel regression > 0.3%/bench, geo-mean ±0.5%. Per PR #636 commit 3 (`memory/2026-04-11-eval-stack-limit-design.md`), the duplication is a **deliberate perf workaround** (`checkStackSize` non-inlinable, escapes args). Recommended Option C (Stack owns limit, outer-loop check) over Options A/B which extend coverage and re-introduce the cost the perf guard exists to avoid. |
 | 3     | 4       | S    | **Bench-gate** (same criterion as Phase 2). The `0 = unlimited` sentinel was chosen deliberately in PR #636 over a `bool` flag; `*uint64` re-introduces an equivalent indirection. Type-only fix (unify `int`/`uint64` mismatch without nullable change) is XS with no perf risk and may be the right narrow scope. |
-| 4     | 6       | S    | None                        |
+| 4     | 6       | S    | None — **next phase to ship** |
 | 5     | 3       | S    | Decide on lint vs. discipline |
 | 6     | 2       | M    | **Bench-gate** against `memory/2026-04-05-structural-reduction.md` Phase 2 baseline (which rejected a similar restructure at 1.5% geo-mean regression). |
-| 7     | 7       | L    | After Findings 1, 4 — they shape sub-record boundaries |
+| 7     | 7       | L    | After Findings 1, 4 — they shape sub-record boundaries (Finding 1 declined; Finding 4 still ahead) |
 
 **Bench-gate methodology** (mirroring `memory/2026-04-05-structural-reduction.md`):
 6 runs of `make bench-gabriel` averaged, against the immediate-prior commit

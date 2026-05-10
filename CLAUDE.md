@@ -129,7 +129,7 @@ After any Go code changes, run `make lint` (or at minimum `goimports -w` on chan
 
 | Name | Role | Rationale |
 |------|------|-----------|
-| `p` | Method receiver (always) | Type is in the signature; role is clear from being a receiver. No need to name it after the type. Exception: compiler uses `c`. |
+| `p` | Method receiver (when the body uses it) | Type is in the signature; role is clear from being a receiver. No need to name it after the type. Exception: compiler uses `c`. **When the receiver is unused** (e.g., empty marker methods, dispatch methods that consult only parameters), omit the name entirely: `func (*T) Method(...)`. Go's "unused receiver" idiom takes precedence over the `p` convention — naming a receiver you never reference is noise. |
 | `q` | Primary return value | Assign `q` as early as possible so the reader can track "this is what gets returned" through the code flow. |
 | `err` | Error return value | Standard Go convention. |
 

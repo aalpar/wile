@@ -40,18 +40,17 @@ type OperationSyntaxCaseMatch struct {
 }
 
 // syntaxCaseState holds per-context state for syntax-case expansion.
-// It is stored on MachineContext (not as package globals) so that
-// syntax-case is reentrant and safe for concurrent macro expansion.
+// It is stored on MachineContext.syntaxCase (an any-typed back-channel field)
+// so that syntax-case is reentrant and safe for concurrent macro expansion.
+// machine/ cannot import this package (one-direction dependency), so the
+// machine-side field is any-typed; the constraint that only this concrete
+// type is ever stored there is enforced by the field's encapsulation rather
+// than by the type system.
 type syntaxCaseState struct {
 	bindings map[string]syntax.SyntaxValue // pattern variable bindings from last match
 	matcher  *match.SyntaxMatcher          // matcher from last match (needed for ellipsis expansion)
 	input    syntax.SyntaxValue            // input syntax object being matched
 }
-
-// IsSyntaxCaseState attests that *syntaxCaseState is the back-channel payload
-// stored on MachineContext.syntaxCase. The method body is empty by design —
-// see machine.SyntaxCaseState for the marker-interface rationale.
-func (*syntaxCaseState) IsSyntaxCaseState() {}
 
 // ensureSyntaxCaseState lazily initializes the syntaxCaseState on the context.
 func ensureSyntaxCaseState(mc *machine.MachineContext) *syntaxCaseState {
