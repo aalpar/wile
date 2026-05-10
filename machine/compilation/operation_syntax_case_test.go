@@ -200,6 +200,28 @@ func TestOperationSyntaxCaseNoMatch_Apply(t *testing.T) {
 
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "syntax-case: no matching clause")
+	c.Assert(err.Error(), qt.Contains, "input unavailable")
+}
+
+func TestOperationSyntaxCaseNoMatch_Apply_IncludesInput(t *testing.T) {
+	c := qt.New(t)
+
+	env := environment.NewNamespace().Runtime()
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+
+	// Stage state with a recognizable input so the no-match error
+	// includes the form being expanded.
+	mc.SetSyntaxCaseState(&syntaxCaseState{
+		input: syntax.NewSyntaxSymbol("frobnicate", nil),
+	})
+
+	op := NewOperationSyntaxCaseNoMatch()
+	_, err := op.Apply(mc)
+
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "no matching clause for input")
+	c.Assert(err.Error(), qt.Contains, "frobnicate")
 }
 
 // =============================================================================
@@ -325,6 +347,72 @@ func TestOperationStoreSyntaxCaseInput_Apply_NonSyntaxValue(t *testing.T) {
 	c.Assert(mc.SyntaxCaseState(), qt.IsNotNil)
 	sc := mc.SyntaxCaseState().(*syntaxCaseState)
 	c.Assert(sc.input, qt.IsNotNil)
+}
+
+// =============================================================================
+// loadSyntaxCaseState Tests
+// =============================================================================
+
+// fakeSyntaxCaseState is a stand-in payload used to verify that
+// loadSyntaxCaseState rejects values of the wrong concrete type rather than
+// silently degrading to the same diagnostic as a nil field.
+type fakeSyntaxCaseState struct{}
+
+func (fakeSyntaxCaseState) SchemeString() string {
+	return "#<fake>"
+}
+
+func (fakeSyntaxCaseState) IsVoid() bool {
+	return false
+}
+
+func (fakeSyntaxCaseState) EqualTo(_ values.Value) bool {
+	return false
+}
+
+func TestLoadSyntaxCaseState_NilField(t *testing.T) {
+	c := qt.New(t)
+
+	env := environment.NewNamespace().Runtime()
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+
+	sc, err := loadSyntaxCaseState(mc)
+	c.Assert(sc, qt.IsNil)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "no state on MachineContext")
+}
+
+func TestLoadSyntaxCaseState_WrongType(t *testing.T) {
+	c := qt.New(t)
+
+	env := environment.NewNamespace().Runtime()
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+
+	mc.SetSyntaxCaseState(fakeSyntaxCaseState{})
+
+	sc, err := loadSyntaxCaseState(mc)
+	c.Assert(sc, qt.IsNil)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "unexpected state type")
+	c.Assert(err.Error(), qt.Contains, "fakeSyntaxCaseState")
+}
+
+func TestLoadSyntaxCaseState_HappyPath(t *testing.T) {
+	c := qt.New(t)
+
+	env := environment.NewNamespace().Runtime()
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+
+	stx := syntax.NewSyntaxSymbol("test", nil)
+	expected := &syntaxCaseState{input: stx}
+	mc.SetSyntaxCaseState(expected)
+
+	sc, err := loadSyntaxCaseState(mc)
+	c.Assert(err, qt.IsNil)
+	c.Assert(sc, qt.Equals, expected)
 }
 
 // =============================================================================

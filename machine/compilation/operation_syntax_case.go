@@ -15,6 +15,7 @@
 package compilation
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 
@@ -63,6 +64,24 @@ func ensureSyntaxCaseState(mc *machine.MachineContext) *syntaxCaseState {
 	return sc
 }
 
+// loadSyntaxCaseState fetches the *syntaxCaseState payload from
+// MachineContext.syntaxCase. Discriminates the two failure modes:
+// nil field (no syntax-case expansion in flight) and wrong concrete
+// type (contract violation — the field is any-typed and the encapsulation
+// argument relies on no other code storing alternatives).
+func loadSyntaxCaseState(mc *machine.MachineContext) (*syntaxCaseState, error) {
+	raw := mc.SyntaxCaseState()
+	if raw == nil {
+		return nil, mc.Error("syntax-case: no state on MachineContext (no expansion in flight)")
+	}
+	sc, ok := raw.(*syntaxCaseState)
+	if !ok {
+		return nil, mc.Error(fmt.Sprintf(
+			"syntax-case: unexpected state type %T on MachineContext.syntaxCase", raw))
+	}
+	return sc, nil
+}
+
 func NewOperationSyntaxCaseMatch() *OperationSyntaxCaseMatch {
 	return &OperationSyntaxCaseMatch{
 		OperationBase: machine.NewOperationBaseWithGoName("operation:syntax-case-match", "SyntaxCaseMatch"),
@@ -77,10 +96,15 @@ func (p *OperationSyntaxCaseMatch) Apply(mc *machine.MachineContext) (*machine.M
 		return nil, mc.Error(fmt.Sprintf("syntax-case: expected clause in value register, got %T", clauseVal))
 	}
 
-	// Get input from per-context state (set by OperationStoreSyntaxCaseInput)
-	sc, _ := mc.SyntaxCaseState().(*syntaxCaseState)
-	if sc == nil || sc.input == nil {
-		return nil, mc.Error("syntax-case: no input available")
+	// Get input from per-context state (set by OperationStoreSyntaxCaseInput).
+	// The state field is any-typed (see machine_context.go); discriminate
+	// nil-vs-mismatch so the diagnostic identifies which contract was broken.
+	sc, err := loadSyntaxCaseState(mc)
+	if err != nil {
+		return nil, err
+	}
+	if sc.input == nil {
+		return nil, mc.Error("syntax-case: state has no input (OperationStoreSyntaxCaseInput not run?)")
 	}
 	input := sc.input
 
@@ -90,15 +114,18 @@ func (p *OperationSyntaxCaseMatch) Apply(mc *machine.MachineContext) (*machine.M
 		EllipsisDepths: clause.EllipsisDepths,
 	})
 
-	// Try to match
-	err := matcher.Match(mc.Context(), input)
-	if err != nil {
-		// Match failed
+	// Try to match. ErrNotAMatch is normal control flow for syntax-case
+	// (this clause didn't match — try the next one); any other error
+	// (context cancellation, malformed input, ellipsis-depth invariant
+	// violation, internal matcher bug) is a real failure and must surface.
+	err = matcher.Match(mc.Context(), input)
+	if errors.Is(err, match.ErrNotAMatch) {
 		mc.SetValue(values.FalseValue)
 		mc.IncrPC()
-		// Intentionally clear the matcher error: a failed match is normal control flow for syntax-case,
-		// so we record #f in the value register and return no runtime error.
-		return mc, nil // nolint:errcheck, nilerr
+		return mc, nil
+	}
+	if err != nil {
+		return nil, mc.WrapError(err, "syntax-case: matcher error")
 	}
 
 	// Match succeeded - store bindings and matcher in per-context state
@@ -139,24 +166,64 @@ func NewOperationBindPatternVars(patternVars map[string]struct{}) *OperationBind
 }
 
 func (p *OperationBindPatternVars) Apply(mc *machine.MachineContext) (*machine.MachineContext, error) {
-	sc, _ := mc.SyntaxCaseState().(*syntaxCaseState)
-	if sc == nil || sc.bindings == nil {
-		return nil, mc.Error("syntax-case: no pattern bindings available")
+	sc, err := loadSyntaxCaseState(mc)
+	if err != nil {
+		return nil, err
+	}
+	if sc.bindings == nil {
+		return nil, mc.Error("syntax-case: state has no bindings (OperationSyntaxCaseMatch did not succeed?)")
 	}
 
 	// Create a new local environment frame with slots for pattern variables
 	localEnv := environment.NewLocalEnvironment(len(p.PatternVars))
 	childEnv := environment.NewEnvironmentFrameWithParent(localEnv, mc.EnvironmentFrame())
 
-	// Bind each pattern variable - use MaybeCreateLocalBinding to get the actual slot
-	// which matches what the compiler does at compile time
+	// Bind each pattern variable. MaybeCreateLocalBinding returns
+	// (*LocalIndex, created bool); the bool is unused here. The protocol
+	// has four (li, ok) states:
+	//
+	//   li != nil, ok == true   — matched non-ellipsis var: write stxVal
+	//                              (the captured syntax value).
+	//   li == nil, ok == true   — outer scope binds the name: skip the
+	//                              local set; the variable resolves via
+	//                              the environment chain.
+	//   li != nil, ok == false  — ELLIPSIS-CAPTURED var. matcher.GetBindings()
+	//                              returns only the ROOT capture context;
+	//                              ellipsis-captured pattern variables
+	//                              (e.g. `x` in `(_ x ...)`) live in the
+	//                              capture context's `children` field,
+	//                              walked at template-expansion time —
+	//                              see internal/match/match.go's
+	//                              "Capture Context" comment block and
+	//                              `findMatchingEllipsisID`. We
+	//                              explicitly write nil to the local
+	//                              slot to override the slot's default
+	//                              `values.Void` initialization (set by
+	//                              NewLocalEnvironment) — the nil
+	//                              signals "captured elsewhere; consult
+	//                              the matcher's children at expand
+	//                              time" and is the long-standing
+	//                              behavior this code path preserved
+	//                              before the structural rewrite.
+	//   li == nil, ok == false  — outer scope binds the name AND the var
+	//                              is ellipsis-captured: nothing to do
+	//                              locally; matcher tracks the captures.
+	//
+	// The two ok=false cases have no top-level binding by design; the
+	// downstream OperationSyntaxTemplateExpand consults sc.matcher's
+	// child contexts when expanding `(syntax (... x ...))` templates.
 	for _, varName := range p.PatternVars {
 		sym := values.NewSymbol(varName)
 		li, _ := childEnv.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable, nil, nil)
-		stxVal, ok := sc.bindings[varName]
-		if ok && li == nil {
+		if li == nil {
+			// Outer-scope binding wins (var resolves through env chain),
+			// or no local frame to write to: skip.
 			continue
 		}
+		// stxVal is nil when varName is absent from sc.bindings (the
+		// ellipsis case). Writing nil here is the protocol signal —
+		// see the comment block above.
+		stxVal := sc.bindings[varName]
 		err := childEnv.SetLocalValue(li, stxVal)
 		if err != nil {
 			return nil, mc.WrapError(err, fmt.Sprintf("syntax-case: failed to bind pattern variable %s", varName))
@@ -192,7 +259,18 @@ func NewOperationSyntaxCaseNoMatch() *OperationSyntaxCaseNoMatch {
 }
 
 func (p *OperationSyntaxCaseNoMatch) Apply(mc *machine.MachineContext) (*machine.MachineContext, error) {
-	return nil, mc.Error("syntax-case: no matching clause")
+	// Include the input form in the diagnostic when it's still available.
+	// Macro debugging is hard precisely because the output is "syntax";
+	// stripping the actual input forces users into trial-and-error.
+	raw := mc.SyntaxCaseState()
+	if raw != nil {
+		sc, ok := raw.(*syntaxCaseState)
+		if ok && sc.input != nil {
+			return nil, mc.Error(fmt.Sprintf(
+				"syntax-case: no matching clause for input %s", sc.input.SchemeString()))
+		}
+	}
+	return nil, mc.Error("syntax-case: no matching clause (input unavailable)")
 }
 
 func (p *OperationSyntaxCaseNoMatch) EqualTo(other values.Value) bool {
@@ -217,9 +295,12 @@ func NewOperationSyntaxTemplateExpand() *OperationSyntaxTemplateExpand {
 }
 
 func (p *OperationSyntaxTemplateExpand) Apply(mc *machine.MachineContext) (*machine.MachineContext, error) {
-	sc, _ := mc.SyntaxCaseState().(*syntaxCaseState)
-	if sc == nil || sc.matcher == nil {
-		return nil, mc.Error("syntax: no pattern matcher available for template expansion")
+	sc, err := loadSyntaxCaseState(mc)
+	if err != nil {
+		return nil, err
+	}
+	if sc.matcher == nil {
+		return nil, mc.Error("syntax: state has no matcher (OperationSyntaxCaseMatch did not succeed?)")
 	}
 
 	// Get the template from value register
