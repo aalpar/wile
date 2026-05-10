@@ -50,7 +50,7 @@ func setScopesOnLastBinding(scopes []*syntax.Scope, lenv *environment.LocalEnvir
 	if len(bindings) == 0 {
 		return
 	}
-	bindings[len(bindings)-1].SetScopes(scopes)
+	bindings[len(bindings)-1].EnsureMeta().Scopes = scopes
 }
 
 // compileClosureBody binds parameters, compiles the body, optimizes, and registers

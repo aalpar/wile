@@ -222,7 +222,7 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 		}
 
 		// Check if it's a macro binding
-		if bnd != nil && !values.IsVoid(bnd) && bnd.BindingType() == environment.BindingTypeSyntax {
+		if bnd != nil && bnd.BindingType() == environment.BindingTypeSyntax {
 			// This is a macro - invoke the transformer
 			return p.expandMacroInvocation(sym, expr, bnd)
 		}
@@ -239,7 +239,7 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 				}
 				libExpandEnv := libEnv.Expand()
 				libBnd := libExpandEnv.GetBinding(sym0, nil)
-				if libBnd != nil && !values.IsVoid(libBnd) && libBnd.BindingType() == environment.BindingTypeSyntax {
+				if libBnd != nil && libBnd.BindingType() == environment.BindingTypeSyntax {
 					return p.expandMacroInvocation(sym, expr, libBnd)
 				}
 			}
@@ -429,7 +429,7 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 	}
 
 	// Check if it's a macro binding
-	if values.IsVoid(bnd) || bnd.BindingType() != environment.BindingTypeSyntax {
+	if bnd == nil || bnd.BindingType() != environment.BindingTypeSyntax {
 		// Not a macro - no expansion
 		return expr, false, nil
 	}

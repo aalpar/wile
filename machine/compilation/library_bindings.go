@@ -36,9 +36,10 @@ func markBindingImported(b *environment.Binding) {
 	if b == nil {
 		return
 	}
-	b.SetImported(true)
+	m := b.EnsureMeta()
+	m.Imported = true
 	if b.Value() != nil {
-		b.SetConstant(true)
+		m.Constant = true
 	}
 }
 

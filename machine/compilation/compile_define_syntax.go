@@ -101,7 +101,7 @@ func (p *CompileTimeContinuation) CompileDefineSyntax(ctctx CompileTimeCallConte
 	symbolScopes := keywordSym.Scopes()
 	binding := expandEnv.GetGlobalBinding(globalIndex)
 	if binding != nil && symbolScopes != nil {
-		binding.SetScopes(symbolScopes)
+		binding.EnsureMeta().Scopes = symbolScopes
 	}
 
 	err = expandEnv.SetOwnGlobalValue(globalIndex, closure)

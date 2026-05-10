@@ -126,48 +126,13 @@ func TestLocalEnvironmentFrame_Keys_DefensiveCopy(t *testing.T) {
 	qt.Assert(t, le.GetLocalIndex(bogus), qt.IsNil)
 }
 
-func TestLocalEnvironmentFrame_SchemeString(t *testing.T) {
-	le := NewLocalEnvironment(0)
-	str := le.SchemeString()
-	qt.Assert(t, str, qt.Equals, "#<Local-environment>")
-}
-
-func TestLocalEnvironmentFrame_IsVoid(t *testing.T) {
-	var le *LocalEnvironmentFrame
-	qt.Assert(t, le.IsVoid(), qt.IsTrue)
-
-	le2 := NewLocalEnvironment(0)
-	qt.Assert(t, le2.IsVoid(), qt.IsFalse)
-}
-
-func TestLocalEnvironmentFrame_EqualTo(t *testing.T) {
-	le1 := NewLocalEnvironment(0)
-	le2 := NewLocalEnvironment(0)
-
-	// Two fresh local environments are equal (same structure)
-	qt.Assert(t, le1.EqualTo(le2), qt.IsTrue)
-
-	// Same environment is equal to itself
-	qt.Assert(t, le1.EqualTo(le1), qt.IsTrue)
-
-	// After adding different bindings, they should not be equal
-	sym := values.NewSymbol("test")
-	le1.EnsureLocalBinding(sym, BindingTypeVariable)
-	qt.Assert(t, le1.EqualTo(le2), qt.IsFalse)
-
-	// Non-LocalEnvironmentFrame comparison
-	qt.Assert(t, le1.EqualTo(values.NewInteger(42)), qt.IsFalse)
-}
-
 func TestLocalEnvironmentFrame_Copy(t *testing.T) {
 	le := NewLocalEnvironment(0)
 
 	sym := values.NewSymbol("test")
 	le.EnsureLocalBinding(sym, BindingTypeVariable)
 
-	copied := le.Copy()
-	leCopy, ok := copied.(*LocalEnvironmentFrame)
-	qt.Assert(t, ok, qt.IsTrue)
+	leCopy := le.Copy()
 	qt.Assert(t, leCopy, qt.Not(qt.IsNil))
 
 	// Verify bindings were copied

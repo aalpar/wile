@@ -19,7 +19,6 @@ import (
 	"maps"
 	"slices"
 	"sync"
-	"unsafe"
 
 	"github.com/aalpar/wile/values"
 	"github.com/aalpar/wile/werr"
@@ -72,8 +71,10 @@ func (p *GlobalIndex) EqualTo(value values.Value) bool {
 // hierarchy is managed by EnvironmentFrame via its parent field. Each phase
 // (runtime, expand, compile) has its own GlobalEnvironmentFrame.
 //
-// Note: Symbol and syntax interning are delegated to Namespace,
-// ensuring R7RS symbol identity works correctly across all phases.
+// Note: Symbol and syntax interning are delegated to Namespace via the
+// owning EnvironmentFrame, ensuring R7RS symbol identity works correctly
+// across all phases. GlobalEnvironmentFrame itself does not hold a back
+// reference to its Namespace; ownership flows through EnvironmentFrame.
 //
 // Thread safety: All access to keys and bindings is protected by mu.
 // Fixes T2 from architectural review.
@@ -84,8 +85,6 @@ type GlobalEnvironmentFrame struct {
 	// symbol to binding index lookup map
 	keys     map[values.Symbol]int
 	bindings []*Binding
-	// namespace is the owning Namespace
-	namespace *Namespace
 }
 
 // NewGlobalEnvironmentFrame creates a new global environment frame.
@@ -98,7 +97,6 @@ func NewGlobalEnvironmentFrame() *GlobalEnvironmentFrame {
 }
 
 // Copy creates a deep copy of the global environment frame.
-// Note that namespace is shared (not copied) between original and copy.
 // Bindings are batch-allocated (contiguous array) for cache locality
 // and reduced GC pressure.
 // Thread-safe: uses RLock for read-only access.
@@ -110,9 +108,7 @@ func (p *GlobalEnvironmentFrame) Copy() *GlobalEnvironmentFrame {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	q := &GlobalEnvironmentFrame{
-		namespace: p.namespace, // Shared, not copied
-	}
+	q := &GlobalEnvironmentFrame{}
 
 	// Batch allocation: allocate all Bindings contiguously (1 allocation)
 	// instead of N separate heap objects.
@@ -262,58 +258,6 @@ func (p *GlobalEnvironmentFrame) DeleteBinding(sym *values.Symbol) bool {
 	// silently returning the old value.
 	if i < len(p.bindings) {
 		p.bindings[i] = nil
-	}
-	return true
-}
-
-// IsVoid returns true if this global environment frame is nil.
-func (p *GlobalEnvironmentFrame) IsVoid() bool {
-	return p == nil
-}
-
-// SchemeString returns a string representation of this global environment.
-func (p *GlobalEnvironmentFrame) SchemeString() string {
-	return "#<global-environment>"
-}
-
-// EqualTo returns true if this global environment equals the given value.
-// Two global environments are equal if they have the same bindings.
-// Thread-safe: uses RLock for read-only access on both frames.
-func (p *GlobalEnvironmentFrame) EqualTo(o values.Value) bool {
-	if p == nil || o == nil {
-		return p == nil && o == nil
-	}
-	v, ok := o.(*GlobalEnvironmentFrame)
-	if !ok {
-		return false
-	}
-	if p == v {
-		return true
-	}
-
-	// Lock both frames in a consistent order to prevent deadlock
-	// (lower pointer address first)
-	first, second := p, v
-	if uintptr(unsafe.Pointer(p)) > uintptr(unsafe.Pointer(v)) {
-		first, second = v, p
-	}
-
-	first.mu.RLock()
-	defer first.mu.RUnlock()
-	second.mu.RLock()
-	defer second.mu.RUnlock()
-
-	if len(p.bindings) != len(v.bindings) {
-		return false
-	}
-	for k, i := range p.keys {
-		j, ok := v.keys[k]
-		if !ok || i != j {
-			return false
-		}
-		if !p.bindings[i].EqualTo(v.bindings[j]) {
-			return false
-		}
 	}
 	return true
 }

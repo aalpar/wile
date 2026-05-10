@@ -270,12 +270,14 @@ func (p *CompileTimeContinuation) declareDefineBinding(v *validate.ValidatedDefi
 	// The define overwrites the value in the same slot; clear the import
 	// flags so that subsequent set! on this binding is permitted.
 	if binding.IsImported() {
-		binding.SetImported(false)
-		binding.SetConstant(false)
+		m := binding.EnsureMeta()
+		m.Imported = false
+		m.Constant = false
 	}
-	binding.SetScopes(symbolScopes)
+	m := binding.EnsureMeta()
+	m.Scopes = symbolScopes
 	if symbolSource != nil {
-		binding.SetSource(symbolSource)
+		m.Source = symbolSource
 	}
 	return sym
 }

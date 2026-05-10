@@ -176,6 +176,29 @@ func TestNamespace_ChildSharesLoadPathStack(t *testing.T) {
 	c.Assert(child.LoadPathStack().CurrentDir(), qt.Equals, "/parent")
 }
 
+// TestNamespace_ChildSetLoadPathStackPropagatesToRoot is a regression
+// test for the Phase 5 fix: pre-fix, SetLoadPathStack(s) on a child
+// silently set the child's local field while LoadPathStack() delegated
+// to the root, so the write was effectively dropped (a future read
+// from the root or any sibling would not see it). Both sides now go
+// through root() and a write on any namespace must be observable from
+// every other namespace in the same tree.
+func TestNamespace_ChildSetLoadPathStackPropagatesToRoot(t *testing.T) {
+	c := qt.New(t)
+
+	parent := NewNamespace()
+	child := parent.NewChildNamespace()
+	grandchild := child.NewChildNamespace()
+
+	// Setting on the deepest namespace must be observable everywhere.
+	tracker := &testPathTracker{}
+	grandchild.SetLoadPathStack(tracker)
+
+	c.Assert(parent.LoadPathStack(), qt.Equals, tracker)
+	c.Assert(child.LoadPathStack(), qt.Equals, tracker)
+	c.Assert(grandchild.LoadPathStack(), qt.Equals, tracker)
+}
+
 func TestNamespace_NestedChildSharesLoadPathStack(t *testing.T) {
 	c := qt.New(t)
 
@@ -291,7 +314,7 @@ func TestNamespace_ExportIndex_NilStopsRetry(t *testing.T) {
 	c.Assert(built, qt.IsTrue)
 }
 
-func TestNamespace_Derive_SharesRegistryAndAuthorizer(t *testing.T) {
+func TestNamespace_NewChildNamespace_SharesRegistryAndAuthorizer(t *testing.T) {
 	c := qt.New(t)
 
 	parent := NewNamespace()
@@ -299,7 +322,7 @@ func TestNamespace_Derive_SharesRegistryAndAuthorizer(t *testing.T) {
 	auth := &testAuthorizer{name: "parent-authorizer"}
 	parent.SetAuthorizer(auth)
 
-	child := parent.Derive()
+	child := parent.NewChildNamespace()
 
 	// Same pointer — immutable registry and authorizer are shared
 	c.Assert(child.Registry(), qt.Equals, parent.Registry())
@@ -307,7 +330,7 @@ func TestNamespace_Derive_SharesRegistryAndAuthorizer(t *testing.T) {
 	c.Assert(child, qt.Not(qt.Equals), parent)
 }
 
-func TestNamespace_DeriveWith_OverrideRegistry(t *testing.T) {
+func TestNamespace_NewChildNamespace_OverrideRegistry(t *testing.T) {
 	c := qt.New(t)
 
 	parent := NewNamespace()
@@ -315,16 +338,14 @@ func TestNamespace_DeriveWith_OverrideRegistry(t *testing.T) {
 	auth := &testAuthorizer{name: "parent-authorizer"}
 	parent.SetAuthorizer(auth)
 
-	child := parent.DeriveWith(func(cfg *NamespaceDeriveConfig) {
-		cfg.Registry = "restricted-registry"
-	})
+	child := parent.NewChildNamespace(WithChildRegistry("restricted-registry"))
 
 	c.Assert(child.Registry(), qt.Equals, "restricted-registry")
 	// Authorizer inherited when not overridden
 	c.Assert(child.Authorizer(), qt.Equals, parent.Authorizer())
 }
 
-func TestNamespace_DeriveWith_OverrideAuthorizer(t *testing.T) {
+func TestNamespace_NewChildNamespace_OverrideAuthorizer(t *testing.T) {
 	c := qt.New(t)
 
 	parent := NewNamespace()
@@ -333,9 +354,7 @@ func TestNamespace_DeriveWith_OverrideAuthorizer(t *testing.T) {
 	parent.SetAuthorizer(parentAuth)
 
 	childAuth := &testAuthorizer{name: "child-authorizer"}
-	child := parent.DeriveWith(func(cfg *NamespaceDeriveConfig) {
-		cfg.Authorizer = childAuth
-	})
+	child := parent.NewChildNamespace(WithChildAuthorizer(childAuth))
 
 	// Registry inherited when not overridden
 	c.Assert(child.Registry(), qt.Equals, parent.Registry())
@@ -362,13 +381,13 @@ func TestNamespace_ModuleInstances(t *testing.T) {
 	c.Assert(got, qt.Equals, inst)
 }
 
-func TestNamespace_Derive_IsolatesModuleInstances(t *testing.T) {
+func TestNamespace_NewChildNamespace_IsolatesModuleInstances(t *testing.T) {
 	c := qt.New(t)
 
 	parent := NewNamespace()
 	parent.SetModuleInstance("(scheme base)", &ModuleInstance{})
 
-	child := parent.Derive()
+	child := parent.NewChildNamespace()
 
 	// Derived namespace should not inherit module instances
 	_, ok := child.ModuleInstance("(scheme base)")

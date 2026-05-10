@@ -113,10 +113,10 @@ func (p *LocalEnvironmentFrame) MaybeCreateLocalBinding(
 	for _, i := range slots {
 		if matchAny || syntax.ScopesCompatible(p.bindings[i].Scopes(), scopes) {
 			if p.bindings[i].Scopes() == nil && scopes != nil {
-				p.bindings[i].SetScopes(scopes)
+				p.bindings[i].EnsureMeta().Scopes = scopes
 			}
 			if p.bindings[i].Source() == nil && source != nil {
-				p.bindings[i].SetSource(source)
+				p.bindings[i].EnsureMeta().Source = source
 			}
 			return NewLocalIndex(i, 0), false
 		}
@@ -156,37 +156,6 @@ func (p *LocalEnvironmentFrame) SetLocalValue(li *LocalIndex, v values.Value) er
 	return nil
 }
 
-// SchemeString returns a string representation of this local environment.
-func (p *LocalEnvironmentFrame) SchemeString() string {
-	return "#<Local-environment>"
-}
-
-// IsVoid returns true if this local environment frame is nil.
-func (p *LocalEnvironmentFrame) IsVoid() bool {
-	return p == nil
-}
-
-// EqualTo returns true if this local environment is equal to the given value.
-// Two local environments are equal if they have the same bindings.
-func (p *LocalEnvironmentFrame) EqualTo(o values.Value) bool {
-	v, ok := o.(*LocalEnvironmentFrame)
-	if !ok {
-		return false
-	}
-	if p == nil || v == nil {
-		return p == v
-	}
-	if len(p.bindings) != len(v.bindings) {
-		return false
-	}
-	for i := range p.bindings {
-		if !p.bindings[i].EqualTo(&v.bindings[i]) {
-			return false
-		}
-	}
-	return true
-}
-
 // Copy creates a copy of this local environment frame. The keys map is shared
 // by reference (copy-on-write) since it is only mutated during compilation.
 // Copy-on-write (CoW): shares the keys map between original and copy until
@@ -194,9 +163,9 @@ func (p *LocalEnvironmentFrame) EqualTo(o values.Value) bool {
 // cost is avoided entirely. See BIBLIOGRAPHY.md "Copy-on-Write".
 // Bindings are allocated as a single contiguous block to reduce GC pressure,
 // and each binding's scopes slice is shared (immutable at runtime).
-func (p *LocalEnvironmentFrame) Copy() values.Value {
+func (p *LocalEnvironmentFrame) Copy() *LocalEnvironmentFrame {
 	if p == nil {
-		return (*LocalEnvironmentFrame)(nil)
+		return nil
 	}
 	bindings := make([]Binding, len(p.bindings))
 	copy(bindings, p.bindings)

@@ -45,6 +45,52 @@ var _ values.Value = (*Namespace)(nil)
 // Design: Namespace is the root of the environment hierarchy.
 // Each EnvironmentFrame holds a reference back to its Namespace
 // to access shared resources (syntax interning, phases, libraries).
+//
+// # Field inheritance policy
+//
+// Child namespaces (NewChildNamespace and NewSchemeReportNamespace)
+// inherit fields from their parent in one of three ways. New fields
+// MUST pick a policy explicitly — the existing per-field decisions are
+// encoded here, not in the constructors.
+//
+//	Per-VM (each namespace has its own; no inheritance):
+//	  Name, parent, phases, runtime, moduleInstances, syntaxInterns
+//	    Note: syntaxInterns is nil in children; InternSyntax delegates
+//	    to parent so symbol identity remains globally consistent.
+//
+//	Captured at construction (the child stores its own copy of the
+//	parent's pointer or map header at fork time; later *reassignments*
+//	on the parent — e.g. parent.SetRegistry(other) — do not flow to
+//	existing children. Mutations *through* the captured pointer — e.g.
+//	parent.Registry().AddPrimitive(...) — ARE visible to children
+//	because the pointer they hold is the same Go object):
+//	  libraryRegistry, libraryEnvFactory, registry, authorizer, envMap
+//	    Rationale: these are capability state. Reassignments on the
+//	    parent must not silently widen capability on existing children
+//	    (envMap is the load-bearing example — see the SetEnvMap doc
+//	    comment in this file for the discussion).
+//
+//	Delegated to the root (children read/write through to the topmost
+//	parent; the field itself only ever lives on the root namespace):
+//	  fileResolver, loadPathStack, scopeRegistry, exportIndex/exportIndexBuilt
+//	    Rationale: these are per-VM resources whose identity must be
+//	    shared across the entire namespace tree (file resolution must
+//	    use the same paths in any child; library scopes registered by
+//	    one child must be visible to all). The root() helper walks the
+//	    parent chain in O(depth); per-method delegation prologues are
+//	    not used.
+//
+// Adding a new field: choose a policy above, document it in this block,
+// then:
+//   - Captured: copy it from the parent in *both* NewChildNamespace and
+//     NewSchemeReportNamespace (these are the two constructors that
+//     populate child state from a parent; they share the same captured
+//     set).
+//   - Delegated: define accessors that go through p.root() to read or
+//     write the field; do not store it on child namespaces.
+//
+// Do NOT mix the two for one field — the asymmetry is the bug source
+// the policy table exists to prevent.
 type Namespace struct {
 	// Name is an optional descriptive name (e.g., "interaction-environment").
 	Name string
@@ -207,25 +253,37 @@ func (p *Namespace) Phases() *PhaseRegistry {
 	return p.phases
 }
 
-// FileResolver returns the file resolver for include/load operations.
-// Delegates to parent when non-nil, so child environments share the
-// root resolver. Returns nil if no resolver has been set.
-func (p *Namespace) FileResolver() FileResolver {
-	if p.parent != nil {
-		return p.parent.FileResolver()
+// root walks the parent chain and returns the topmost Namespace.
+// Used by accessors for fields whose inheritance policy is "delegated to
+// root" (see the field inheritance policy comment on Namespace). For a
+// root namespace, p.root() == p in O(1).
+//
+// Precondition: p must be non-nil. Like every other accessor on
+// *Namespace (e.g. LibraryRegistry, Authorizer), root deliberately
+// does not guard against a nil receiver — Namespace is a value type
+// whose nil-state is meaningless, and silently returning nil here would
+// only push the inevitable panic deeper into the dependent accessor
+// (which would then read .fileResolver / .loadPathStack / etc. off
+// nil). EnvironmentFrame's nil-namespace shortcut guards exist because
+// EnvironmentFrame can legitimately be constructed without a Namespace
+// (newEnvironmentFrame test fixtures); Namespace itself cannot.
+func (p *Namespace) root() *Namespace {
+	for p.parent != nil {
+		p = p.parent
 	}
-	return p.fileResolver
+	return p
+}
+
+// FileResolver returns the file resolver for include/load operations.
+// Returns nil if no resolver has been set. Delegated to root.
+func (p *Namespace) FileResolver() FileResolver {
+	return p.root().fileResolver
 }
 
 // SetFileResolver sets the file resolver for include/load operations.
-// Delegates to parent when non-nil, matching the getter's delegation,
-// so the resolver is always stored on the root Namespace.
+// Delegated to root: the resolver always lives on the root Namespace.
 func (p *Namespace) SetFileResolver(resolver FileResolver) {
-	if p.parent != nil {
-		p.parent.SetFileResolver(resolver)
-		return
-	}
-	p.fileResolver = resolver
+	p.root().fileResolver = resolver
 }
 
 // LibraryRegistry returns the library registry for R7RS library loading.
@@ -252,19 +310,16 @@ func (p *Namespace) SetLibraryEnvFactory(f LibraryEnvFactory) {
 }
 
 // SetLoadPathStack sets the load path tracker for this namespace.
+// Delegated to root: the tracker always lives on the root Namespace.
 // Must be called before any file loading operations.
 func (p *Namespace) SetLoadPathStack(s PathTracker) {
-	p.loadPathStack = s
+	p.root().loadPathStack = s
 }
 
 // LoadPathStack returns the load path tracker for tracking files currently
-// being loaded. Delegates to parent when non-nil, ensuring child environments
-// share the same stack as the root Namespace.
+// being loaded. Delegated to root.
 func (p *Namespace) LoadPathStack() PathTracker {
-	if p.parent != nil {
-		return p.parent.LoadPathStack()
-	}
-	return p.loadPathStack
+	return p.root().loadPathStack
 }
 
 // Registry returns the primitive registry.
@@ -317,30 +372,22 @@ func (p *Namespace) SetAuthorizer(auth security.Authorizer) {
 
 // ExportIndex returns the cached library export index and whether a
 // build has been attempted. Returns (nil, false) if no build has run.
-// Delegates to parent when non-nil, so child namespaces share the
-// root's index. The concrete type is *compilation.LibraryExportIndex.
+// Delegated to root. The concrete type is *compilation.LibraryExportIndex.
 func (p *Namespace) ExportIndex() (any, bool) {
-	if p.parent != nil {
-		return p.parent.ExportIndex()
-	}
-	p.exportIndexMu.RLock()
-	defer p.exportIndexMu.RUnlock()
-	return p.exportIndex, p.exportIndexBuilt
+	r := p.root()
+	r.exportIndexMu.RLock()
+	defer r.exportIndexMu.RUnlock()
+	return r.exportIndex, r.exportIndexBuilt
 }
 
-// SetExportIndex stores the library export index on this namespace
-// and marks it as built, preventing subsequent build attempts.
-// Delegates to parent when non-nil, matching the getter's delegation,
-// so the index is always stored on the root Namespace.
+// SetExportIndex stores the library export index and marks it as built,
+// preventing subsequent build attempts. Delegated to root.
 func (p *Namespace) SetExportIndex(idx any) {
-	if p.parent != nil {
-		p.parent.SetExportIndex(idx)
-		return
-	}
-	p.exportIndexMu.Lock()
-	defer p.exportIndexMu.Unlock()
-	p.exportIndex = idx
-	p.exportIndexBuilt = true
+	r := p.root()
+	r.exportIndexMu.Lock()
+	defer r.exportIndexMu.Unlock()
+	r.exportIndex = idx
+	r.exportIndexBuilt = true
 }
 
 // ModuleInstance returns the cached module instance for the given path,
@@ -375,35 +422,76 @@ func (p *Namespace) AttachModule(path string, target *Namespace) error {
 // RegisterLibraryScope associates a library scope with its defining environment.
 // This enables cross-library macro hygiene: when a symbol carries a library
 // scope, the compiler can redirect binding lookup to the library's env.
+// Delegated to root: the registry always lives on the root Namespace.
 //
 // This function is thread-safe.
 func (p *Namespace) RegisterLibraryScope(scope *syntax.Scope, env *EnvironmentFrame) {
 	if scope == nil || env == nil {
 		return
 	}
-	// Delegate to root if this is a child environment
-	if p.parent != nil {
-		p.parent.RegisterLibraryScope(scope, env)
-		return
-	}
-	p.scopeRegistryMu.Lock()
-	defer p.scopeRegistryMu.Unlock()
-	p.scopeRegistry[scope] = env
+	r := p.root()
+	r.scopeRegistryMu.Lock()
+	defer r.scopeRegistryMu.Unlock()
+	r.scopeRegistry[scope] = env
 }
 
 // LookupLibraryEnv returns the environment associated with the given library
-// scope, or nil if not registered. This function is thread-safe.
+// scope, or nil if not registered. Delegated to root.
+// This function is thread-safe.
 func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 	if scope == nil {
 		return nil
 	}
-	// Delegate to root if this is a child environment
-	if p.parent != nil {
-		return p.parent.LookupLibraryEnv(scope)
+	r := p.root()
+	r.scopeRegistryMu.RLock()
+	defer r.scopeRegistryMu.RUnlock()
+	return r.scopeRegistry[scope]
+}
+
+// NamespaceOption configures a derived namespace at construction time.
+// Use it with NewChildNamespace to override fields that would otherwise
+// be inherited from the parent (e.g. a restricted registry or a
+// different authorizer).
+//
+// The "*Set" booleans on namespaceConfig let WithChildRegistry(nil) and
+// WithChildAuthorizer(nil) mean "explicitly set the field to nil" —
+// distinct from "no override supplied" which means "inherit from
+// parent."
+type NamespaceOption func(*namespaceConfig)
+
+// namespaceConfig collects override values supplied via NamespaceOption.
+type namespaceConfig struct {
+	registry      any
+	registrySet   bool
+	authorizer    security.Authorizer
+	authorizerSet bool
+}
+
+// WithChildRegistry overrides the parent's primitive registry on a
+// derived namespace. Use this to install a restricted or alternative
+// registry in a child without mutating the parent.
+//
+// Distinct from wile.WithRegistry, which configures an EngineOption at
+// the top level — the wile.* and environment.* option families operate
+// on different config types and have different semantics.
+func WithChildRegistry(r any) NamespaceOption {
+	return func(cfg *namespaceConfig) {
+		cfg.registry = r
+		cfg.registrySet = true
 	}
-	p.scopeRegistryMu.RLock()
-	defer p.scopeRegistryMu.RUnlock()
-	return p.scopeRegistry[scope]
+}
+
+// WithChildAuthorizer overrides the parent's security authorizer on a
+// derived namespace. Use this to give a child a stricter (or different)
+// capability profile.
+//
+// Distinct from wile.WithAuthorizer, which configures an EngineOption
+// at the top level.
+func WithChildAuthorizer(a security.Authorizer) NamespaceOption {
+	return func(cfg *namespaceConfig) {
+		cfg.authorizer = a
+		cfg.authorizerSet = true
+	}
 }
 
 // NewChildNamespace creates a new Namespace whose syntax
@@ -417,7 +505,7 @@ func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 //   - GlobalEnvironmentFrame — isolated global bindings (define, set!, etc.)
 //   - PhaseRegistry — isolated phase hierarchy (expand, compile created on demand)
 //
-// The child's GlobalEnvironmentFrame.namespace points to the child (not the
+// The child's runtime EnvironmentFrame.namespace points to the child (not the
 // parent), so new global bindings created in the child are keyed against the
 // child's GlobalEnvironmentFrame. This is what provides binding isolation:
 // definitions in the child do not appear in the parent, and vice versa.
@@ -443,7 +531,6 @@ func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 //	                                  +-------------------------+
 //	                                  | keys: {x:0, y:1, ...}   |
 //	                                  | bindings: [...]         |
-//	                                  | namespace: ──► parent NS|
 //	                                  +-------------------------+
 //
 //	Child Namespace (returned by this method)
@@ -466,7 +553,6 @@ func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 //	                                  +-------------------------+
 //	                                  | keys: {}  (empty)       |
 //	                                  | bindings: []            |
-//	                                  | namespace: ──► child NS |
 //	                                  +-------------------------+
 //
 // # Interning delegation
@@ -514,9 +600,9 @@ func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 //	     ▼         ▼                           EnvironmentFrame (envC)
 //	   envP      envC ◄── new child            +----------------------+
 //	   (parent   (has own Global-              | namespace: child NS  |
-//	    frame)    EnvFrame, but                +----------------------+
-//	              namespace points
-//	              to shared NS)
+//	    frame)    EnvFrame; reaches            +----------------------+
+//	              shared NS via the
+//	              owning EnvFrame)
 //
 //	envC.Namespace() == parent    envC.Namespace() == child
 //	TLE.Runtime() returns envP     child.Runtime() returns envC  ✓
@@ -530,11 +616,21 @@ func (p *Namespace) LookupLibraryEnv(scope *syntax.Scope) *EnvironmentFrame {
 // # Usage
 //
 // Used by PrimEnvironment and PrimNullEnvironment (R7RS §6.12) to create
-// environments that are identity-compatible with the caller's symbol table
-// while providing isolated bindings.
-// TODO: review whether libraryRegistry should be copied here
-// TODO: review for optimization/refactoring opportunities
-func (p *Namespace) NewChildNamespace() *Namespace {
+// environments that are identity-compatible with the caller's symbol
+// table while providing isolated bindings. Optional NamespaceOption
+// arguments override fields that would otherwise be inherited from the
+// parent (currently registry and authorizer); see WithRegistry and
+// WithAuthorizer.
+//
+// All captured fields (libraryRegistry, libraryEnvFactory, registry,
+// authorizer, envMap) are copied from the parent in one place — adding
+// a new captured field requires a single edit here, not a sweep of
+// multiple constructors.
+func (p *Namespace) NewChildNamespace(opts ...NamespaceOption) *Namespace {
+	cfg := &namespaceConfig{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
 	q := &Namespace{
 		libraryRegistry:   p.libraryRegistry,
 		libraryEnvFactory: p.libraryEnvFactory,
@@ -542,6 +638,12 @@ func (p *Namespace) NewChildNamespace() *Namespace {
 		authorizer:        p.authorizer,
 		envMap:            p.envMap,
 		parent:            p,
+	}
+	if cfg.registrySet {
+		q.registry = cfg.registry
+	}
+	if cfg.authorizerSet {
+		q.authorizer = cfg.authorizer
 	}
 	initRuntimeFrame(q, newGlobalEnvironmentFrameForNamespace(q))
 	return q
@@ -565,10 +667,11 @@ func (p *Namespace) NewSchemeReportNamespace() *Namespace {
 		parent:            p,
 	}
 
-	// Copy the parent's global bindings and repoint namespace to the child,
-	// so that syntax interning delegates through q → p (parent chain).
+	// Copy the parent's global bindings into the child's runtime frame.
+	// Syntax interning delegates through q → p via the Namespace.parent
+	// chain; the GlobalEnvironmentFrame itself does not carry a Namespace
+	// back-pointer.
 	copiedGlobal := p.runtime.global.Copy()
-	copiedGlobal.namespace = q
 	initRuntimeFrame(q, copiedGlobal)
 	return q
 }
@@ -591,53 +694,6 @@ func (p *Namespace) NewChildRuntime() *EnvironmentFrame {
 	}
 	runtime.phases = newPhaseRegistryForChild(p, runtime)
 	return runtime
-}
-
-// NamespaceDeriveOption configures a derived namespace.
-type NamespaceDeriveOption func(*NamespaceDeriveConfig)
-
-// NamespaceDeriveConfig holds options for DeriveWith.
-// Zero value means "inherit everything from parent."
-type NamespaceDeriveConfig struct {
-	Registry   any                 // if non-nil, overrides parent's registry
-	Authorizer security.Authorizer // if non-nil, overrides parent's authorizer
-}
-
-// Derive creates a child namespace that shares syntax interning with
-// the parent but has isolated bindings. The parent's registry and
-// authorizer are shared by pointer — safe because registries are
-// immutable after construction and authorizers are stateless interfaces.
-func (p *Namespace) Derive() *Namespace {
-	child := p.NewChildNamespace()
-	child.registry = p.registry
-	child.authorizer = p.authorizer
-	return child
-}
-
-// DeriveWith creates a child namespace with option overrides.
-// Use this when the child needs a restricted registry or different
-// authorizer.
-func (p *Namespace) DeriveWith(opts ...NamespaceDeriveOption) *Namespace {
-	cfg := &NamespaceDeriveConfig{}
-	for _, opt := range opts {
-		opt(cfg)
-	}
-
-	child := p.NewChildNamespace()
-
-	if cfg.Registry != nil {
-		child.registry = cfg.Registry
-	} else {
-		child.registry = p.registry
-	}
-
-	if cfg.Authorizer != nil {
-		child.authorizer = cfg.Authorizer
-	} else {
-		child.authorizer = p.authorizer
-	}
-
-	return child
 }
 
 // SyntaxInternCount returns the number of interned syntax objects.
@@ -671,12 +727,14 @@ func (p *Namespace) SchemeString() string {
 }
 
 // newGlobalEnvironmentFrameForNamespace creates a new GlobalEnvironmentFrame
-// that references the given Namespace.
-func newGlobalEnvironmentFrameForNamespace(ns *Namespace) *GlobalEnvironmentFrame {
+// for use within the given Namespace. The Namespace argument is retained
+// for symmetry with the other Namespace-scoped helpers; the
+// GlobalEnvironmentFrame itself does not store a back-reference (ownership
+// flows through EnvironmentFrame).
+func newGlobalEnvironmentFrameForNamespace(_ *Namespace) *GlobalEnvironmentFrame {
 	q := &GlobalEnvironmentFrame{
-		bindings:  []*Binding{},
-		keys:      map[values.Symbol]int{},
-		namespace: ns,
+		bindings: []*Binding{},
+		keys:     map[values.Symbol]int{},
 	}
 	return q
 }

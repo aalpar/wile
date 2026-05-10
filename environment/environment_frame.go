@@ -58,14 +58,14 @@ import (
 //	│                           │    │                                        │
 //	│  keys ── map[Symbol][]int │    │  keys ──────── map[Symbol]int          │
 //	│  bindings ── []*Binding   │    │  bindings ──── []*Binding              │
-//	└───────────────────────────┘    │  namespace ──── *Namespace             │
-//	                                 └────────────────────────────────────────┘
+//	└───────────────────────────┘    └────────────────────────────────────────┘
 //
 // # Ownership and Sharing
 //
 //   - Namespace: Root owner. One per Wile VM instance.
 //   - EnvironmentFrame: Many per VM. Share namespace and phases references.
-//   - GlobalEnvironmentFrame: One per phase. Shares namespace reference.
+//   - GlobalEnvironmentFrame: One per phase. Owned by EnvironmentFrame; no
+//     direct Namespace back-reference (reach Namespace via the owning frame).
 //   - LocalEnvironmentFrame: One per lexical scope. No external references.
 //
 // # Lexical Hierarchy (parent chain)
@@ -301,8 +301,33 @@ func (p *EnvironmentFrame) GlobalEnvironment() *GlobalEnvironmentFrame {
 	return p.global
 }
 
-// FileResolver returns the file resolver from the Namespace.
-// Returns nil if no resolver has been set or if namespace is nil.
+// The five methods below — FileResolver, SetFileResolver, LibraryRegistry,
+// SetLibraryRegistry, LoadPathStack — are ergonomic shortcuts for
+// p.Namespace().X(). The state itself is owned by the Namespace (and,
+// for FileResolver / LoadPathStack, ultimately delegated to the root
+// namespace per the field-inheritance policy documented on the
+// Namespace type). EnvironmentFrame does not store these values; the
+// methods exist only to spare common call sites the
+//
+//	frame.Namespace().FileResolver()
+//
+// dance.
+//
+// Nil-namespace handling: getters return zero values on a nil-namespace
+// frame because reads on un-namespaced frames are benign and have a
+// well-defined "no value here" answer. Setters PANIC: an
+// un-namespaced frame has no configuration storage, so a setter call
+// would silently disappear and that is a programmer error worth
+// surfacing immediately rather than at the next failed read. Frames
+// built outside the standard constructors (e.g. newEnvironmentFrame
+// test fixtures) must not be configured through these shortcuts.
+//
+// When adding a new Namespace-owned capability that callers reach via
+// EnvironmentFrame, follow the same pattern: thin pass-through here,
+// authoritative storage on Namespace.
+
+// FileResolver returns the file resolver. Shortcut for
+// p.Namespace().FileResolver(); see the comment block above.
 func (p *EnvironmentFrame) FileResolver() FileResolver {
 	if p.namespace == nil {
 		return nil
@@ -310,17 +335,20 @@ func (p *EnvironmentFrame) FileResolver() FileResolver {
 	return p.namespace.FileResolver()
 }
 
-// SetFileResolver sets the file resolver on the Namespace.
-// No-op if namespace is nil.
+// SetFileResolver sets the file resolver. Shortcut for
+// p.Namespace().SetFileResolver(); see the comment block above.
+// Panics if the frame has no namespace (configuration on an
+// un-namespaced frame would be silently dropped — a programmer error).
 func (p *EnvironmentFrame) SetFileResolver(resolver FileResolver) {
 	if p.namespace == nil {
-		return
+		panic(werr.WrapForeignErrorf(werr.ErrUnexpectedNil,
+			"EnvironmentFrame.SetFileResolver: frame has no namespace"))
 	}
 	p.namespace.SetFileResolver(resolver)
 }
 
-// LibraryRegistry returns the library registry from the Namespace.
-// Returns nil if no registry has been set or if namespace is nil.
+// LibraryRegistry returns the library registry. Shortcut for
+// p.Namespace().LibraryRegistry(); see the comment block above.
 // Callers needing the full *compilation.LibraryRegistry can type-assert.
 func (p *EnvironmentFrame) LibraryRegistry() LibrarySearcher {
 	if p.namespace == nil {
@@ -329,17 +357,19 @@ func (p *EnvironmentFrame) LibraryRegistry() LibrarySearcher {
 	return p.namespace.LibraryRegistry()
 }
 
-// SetLibraryRegistry sets the library registry on the Namespace.
-// No-op if namespace is nil.
+// SetLibraryRegistry sets the library registry. Shortcut for
+// p.Namespace().SetLibraryRegistry(); see the comment block above.
+// Panics if the frame has no namespace (see SetFileResolver).
 func (p *EnvironmentFrame) SetLibraryRegistry(registry LibrarySearcher) {
 	if p.namespace == nil {
-		return
+		panic(werr.WrapForeignErrorf(werr.ErrUnexpectedNil,
+			"EnvironmentFrame.SetLibraryRegistry: frame has no namespace"))
 	}
 	p.namespace.SetLibraryRegistry(registry)
 }
 
-// LoadPathStack returns the load path tracker for tracking files currently
-// being loaded, or nil if this frame has no Namespace.
+// LoadPathStack returns the load path tracker. Shortcut for
+// p.Namespace().LoadPathStack(); see the comment block above.
 func (p *EnvironmentFrame) LoadPathStack() PathTracker {
 	if p.namespace == nil {
 		return nil
@@ -449,30 +479,27 @@ func (p *EnvironmentFrame) GetBinding(key *values.Symbol, scopes []*syntax.Scope
 			return result.(*Binding)
 		}
 	} else {
-		// Scoped path: maximal binding resolution (Flatt model)
-		type candidate struct {
-			binding    *Binding
-			scopeCount int
-		}
-		var best candidate
-
+		// Scoped path: maximal binding resolution (Flatt model).
+		// See bestOf in best_of.go. Allocation here is trivial — the
+		// candidate is just the existing *Binding pointer — so we record
+		// unconditionally on shouldRecord = true.
+		var best bestOf[*Binding]
+		target := len(scopes)
 		p.resolveLocal(key, scopes, func(binding *Binding, _ int, _ int) any {
-			scopeCount := len(binding.Scopes())
-
-			// Perfect match — stop walking
-			if scopeCount > 0 && scopeCount == len(scopes) {
-				best = candidate{binding, scopeCount}
-				return true
+			sc := len(binding.Scopes())
+			rec, done := best.shouldRecord(sc, target)
+			if rec {
+				best.record(binding, sc)
 			}
-
-			if best.binding == nil || scopeCount > best.scopeCount {
-				best = candidate{binding, scopeCount}
+			if done {
+				return true
 			}
 			return nil
 		})
 
-		if best.binding != nil {
-			return best.binding
+		item, ok := best.Result()
+		if ok {
+			return item
 		}
 	}
 
@@ -541,30 +568,27 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, scopes []*syntax.Sc
 		return nil
 	}
 
-	// Scoped path: maximal binding resolution
-	type candidate struct {
-		index      *LocalIndex
-		scopeCount int
-	}
-	var best candidate
-
+	// Scoped path: maximal binding resolution.
+	// See bestOf in best_of.go. Splitting shouldRecord/record lets us
+	// defer NewLocalIndex(slot, depth) — an allocation — to the cases
+	// where the candidate actually becomes the new best, instead of
+	// allocating on every parent-chain visit.
+	var best bestOf[*LocalIndex]
+	target := len(scopes)
 	p.resolveLocal(key, scopes, func(binding *Binding, slot int, depth int) any {
-		scopeCount := len(binding.Scopes())
-
-		// Perfect match — stop walking
-		if scopeCount > 0 && scopeCount == len(scopes) {
-			best = candidate{NewLocalIndex(slot, depth), scopeCount}
-			return true
+		sc := len(binding.Scopes())
+		rec, done := best.shouldRecord(sc, target)
+		if rec {
+			best.record(NewLocalIndex(slot, depth), sc)
 		}
-
-		// Better candidate than current best?
-		if best.index == nil || scopeCount > best.scopeCount {
-			best = candidate{NewLocalIndex(slot, depth), scopeCount}
+		if done {
+			return true
 		}
 		return nil
 	})
 
-	return best.index
+	item, _ := best.Result()
+	return item
 }
 
 // HasLocalVariableBinding reports whether sym has a local variable binding
@@ -786,37 +810,32 @@ func (p *EnvironmentFrame) Copy() *EnvironmentFrame {
 	return q
 }
 
-// SchemeString returns a string representation of the environment frame.
+// SchemeString returns a Scheme-level string for this environment frame.
+// EnvironmentFrame reaches the value plumbing because closures capture
+// environments and store them as template literals (see
+// machine.NativeTemplate.MaybeAppendLiteral); this method exists to satisfy
+// values.Value, not because environment frames are ever printed by Scheme
+// programs.
 func (p *EnvironmentFrame) SchemeString() string {
 	return "#<environment>"
 }
 
-// IsVoid returns true if the environment frame is nil.
+// IsVoid reports whether this environment frame pointer is nil.
+// Required by values.Value (see SchemeString comment).
 func (p *EnvironmentFrame) IsVoid() bool {
 	return p == nil
 }
 
-// EqualTo returns true if the environment frame is equal to the given value.
-// Two environment frames are equal if their local and global environments are equal,
-// and their parent environments are either both nil or equal.
+// EqualTo implements values.Value. R7RS §6.12 specifies that environments
+// compare by eq? (pointer identity), not by structural equality of their
+// bindings — the prior structural implementation was a latent correctness
+// trap that no caller actually exercised. Use pointer identity here.
 func (p *EnvironmentFrame) EqualTo(value values.Value) bool {
 	v, ok := value.(*EnvironmentFrame)
 	if !ok {
 		return false
 	}
-	if p == nil || v == nil {
-		return p == v
-	}
-	if !p.local.EqualTo(&v.local) {
-		return false
-	}
-	if !p.global.EqualTo(v.global) {
-		return false
-	}
-	if p.IsTopLevel() || v.IsTopLevel() {
-		return p.parent == v.parent
-	}
-	return p.parent.EqualTo(v.parent)
+	return p == v
 }
 
 // Namespace returns the Namespace for this frame.

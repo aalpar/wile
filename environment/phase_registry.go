@@ -131,7 +131,6 @@ func (p *PhaseRegistry) GetOrCreate(phase Phase) *EnvironmentFrame {
 func (p *PhaseRegistry) createPhaseEnv(phase Phase) *EnvironmentFrame {
 	// Create a new GlobalEnvironmentFrame for this phase.
 	global := NewGlobalEnvironmentFrame()
-	global.namespace = p.owner
 
 	q := &EnvironmentFrame{
 		parent:     p.envs[PhaseRuntime], // Phase envs parent to runtime frame

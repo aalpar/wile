@@ -179,32 +179,10 @@ func TestConcurrentGlobalAccess_T2(t *testing.T) {
 		wg.Wait()
 	})
 
-	// Test 6: Concurrent EqualTo operations
-	t.Run("concurrent EqualTo", func(t *testing.T) {
-		topLevel := NewNamespace()
-		env1 := topLevel.Runtime()
-		env2 := topLevel.NewChildRuntime()
-
-		// Pre-populate both with same bindings
-		for i := range 10 {
-			sym := values.NewSymbol("var" + string(rune('A'+i)))
-			gi1, _ := env1.global.CreateGlobalBinding(sym, BindingTypeVariable)
-			gi2, _ := env2.global.CreateGlobalBinding(sym, BindingTypeVariable)
-			_ = env1.global.SetOwnGlobalValue(gi1, values.NewInteger(int64(i)))
-			_ = env2.global.SetOwnGlobalValue(gi2, values.NewInteger(int64(i)))
-		}
-
-		for range numGoroutines {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				// Note: they won't be equal because they're different instances,
-				// but we're testing that EqualTo doesn't race
-				_ = env1.global.EqualTo(env2.global)
-			}()
-		}
-		wg.Wait()
-	})
+	// (Concurrent EqualTo test removed: GlobalEnvironmentFrame is no longer
+	// a values.Value and its EqualTo method has been deleted. The
+	// concurrent-Copy and concurrent-resolveGlobal tests below cover the
+	// remaining read-side mutex behaviour.)
 
 	// Test 7: Concurrent EnvironmentFrame.resolveGlobal (variable lookup pattern)
 	t.Run("concurrent resolveGlobal", func(t *testing.T) {

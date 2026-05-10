@@ -550,18 +550,15 @@ func TestEnvironmentFrame_EqualTo(t *testing.T) {
 	env1 := NewNamespaceFrame()
 	env2 := NewNamespaceFrame()
 
-	// Two fresh top-level environments are equal (same structure)
-	qt.Assert(t, env1.EqualTo(env2), qt.IsTrue)
+	// EnvironmentFrame.EqualTo is pointer identity per R7RS §6.12.
 
-	// Same environment is equal to itself
+	// Same pointer compares equal.
 	qt.Assert(t, env1.EqualTo(env1), qt.IsTrue)
 
-	// After adding different bindings, they should not be equal
-	sym := values.NewSymbol("test")
-	env1.MaybeCreateOwnGlobalBinding(sym, BindingTypeVariable)
+	// Two distinct frames — even with identical structure — are not eq?.
 	qt.Assert(t, env1.EqualTo(env2), qt.IsFalse)
 
-	// Non-EnvironmentFrame comparison
+	// Non-EnvironmentFrame comparison.
 	qt.Assert(t, env1.EqualTo(values.NewInteger(42)), qt.IsFalse)
 }
 
@@ -700,6 +697,22 @@ func TestEnvironmentFrame_PanicSentinels(t *testing.T) {
 			},
 			werr.ErrMissingPhaseRegistry,
 		},
+		{
+			"SetFileResolver on un-namespaced frame panics",
+			func() {
+				env := newEnvironmentFrame(nil, NewGlobalEnvironmentFrame())
+				env.SetFileResolver(nil)
+			},
+			werr.ErrUnexpectedNil,
+		},
+		{
+			"SetLibraryRegistry on un-namespaced frame panics",
+			func() {
+				env := newEnvironmentFrame(nil, NewGlobalEnvironmentFrame())
+				env.SetLibraryRegistry(nil)
+			},
+			werr.ErrUnexpectedNil,
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -798,7 +811,7 @@ func TestGlobalBinding_SetSource(t *testing.T) {
 	c.Assert(binding, qt.IsNotNil)
 	c.Assert(binding.Source(), qt.IsNil)
 
-	binding.SetSource(src)
+	binding.EnsureMeta().Source = src
 	c.Assert(binding.Source(), qt.IsNotNil)
 	c.Assert(binding.Source().File, qt.Equals, "global.scm")
 }

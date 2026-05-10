@@ -86,9 +86,27 @@ func (p *Binding) SetValue(value values.Value) {
 	p.value = value
 }
 
-// SetBindingType updates the type of this binding.
-func (p *Binding) SetBindingType(value BindingType) {
-	p.bindingType = value
+// Meta returns the BindingMeta pointer, or nil if no metadata has been
+// attached. Callers that read metadata fields should nil-check the
+// returned pointer; the convenience getters (Scopes, Source, Doc,
+// IsImported, IsConstant) wrap this pattern.
+func (p *Binding) Meta() *BindingMeta {
+	return p.meta
+}
+
+// EnsureMeta returns the BindingMeta pointer, lazily allocating an empty
+// BindingMeta on first call. This is the only mutator API for metadata
+// fields: callers assign directly, e.g.
+//
+//	b.EnsureMeta().Imported = true
+//
+// Adding a new metadata field thus requires editing only the BindingMeta
+// struct itself; no parallel getter/setter accessor pair is needed.
+func (p *Binding) EnsureMeta() *BindingMeta {
+	if p.meta == nil {
+		p.meta = &BindingMeta{}
+	}
+	return p.meta
 }
 
 // Scopes returns the hygiene scopes associated with this binding.
@@ -100,14 +118,6 @@ func (p *Binding) Scopes() []*syntax.Scope {
 	return p.meta.Scopes
 }
 
-// SetScopes updates the hygiene scopes associated with this binding.
-func (p *Binding) SetScopes(scopes []*syntax.Scope) {
-	if p.meta == nil {
-		p.meta = &BindingMeta{}
-	}
-	p.meta.Scopes = scopes
-}
-
 // Source returns the source location where this binding was defined.
 // Returns nil for bindings without source information.
 func (p *Binding) Source() *syntax.SourceContext {
@@ -115,14 +125,6 @@ func (p *Binding) Source() *syntax.SourceContext {
 		return nil
 	}
 	return p.meta.Source
-}
-
-// SetSource updates the source location for this binding.
-func (p *Binding) SetSource(source *syntax.SourceContext) {
-	if p.meta == nil {
-		p.meta = &BindingMeta{}
-	}
-	p.meta.Source = source
 }
 
 // Doc returns the documentation string for this binding.
@@ -134,28 +136,12 @@ func (p *Binding) Doc() string {
 	return p.meta.Doc
 }
 
-// SetDoc updates the documentation string for this binding.
-func (p *Binding) SetDoc(doc string) {
-	if p.meta == nil {
-		p.meta = &BindingMeta{}
-	}
-	p.meta.Doc = doc
-}
-
 // IsImported returns whether this binding was imported from a library.
 func (p *Binding) IsImported() bool {
 	if p.meta == nil {
 		return false
 	}
 	return p.meta.Imported
-}
-
-// SetImported marks this binding as imported from a library.
-func (p *Binding) SetImported(v bool) {
-	if p.meta == nil {
-		p.meta = &BindingMeta{}
-	}
-	p.meta.Imported = v
 }
 
 // IsConstant returns whether this binding's value is known at compile time.
@@ -166,44 +152,11 @@ func (p *Binding) IsConstant() bool {
 	return p.meta.Constant
 }
 
-// SetConstant marks this binding's value as known at compile time.
-func (p *Binding) SetConstant(v bool) {
-	if p.meta == nil {
-		p.meta = &BindingMeta{}
-	}
-	p.meta.Constant = v
-}
-
-// SchemeString returns a string representation of this binding.
-func (p *Binding) SchemeString() string {
-	return "#<binding>"
-}
-
-// IsVoid returns true if this binding is nil.
-func (p *Binding) IsVoid() bool {
-	return p == nil
-}
-
-// EqualTo returns true if this binding is equal to the given value.
-// Two bindings are equal if they have the same value and binding type.
-func (p *Binding) EqualTo(o values.Value) bool {
-	if p == nil || o == nil {
-		return p == o
-	}
-	v, ok := o.(*Binding)
-	if !ok {
-		return false
-	}
-	if p.value == nil || v.value == nil {
-		return p.value == v.value
-	}
-	return p.value.EqualTo(v.value) && p.bindingType == v.bindingType
-}
-
 // Copy creates a deep copy of this binding. The meta struct is copied so
-// that SetScopes on the original does not affect the copy. This method is
-// only used during compilation/expansion, never on the runtime hot path.
-func (p *Binding) Copy() values.Value {
+// that mutations through EnsureMeta on the original do not affect the
+// copy. This method is only used during compilation/expansion, never on
+// the runtime hot path.
+func (p *Binding) Copy() *Binding {
 	b := &Binding{
 		value:       p.value,
 		bindingType: p.bindingType,

@@ -81,9 +81,9 @@ func predeclareBinding(env *environment.EnvironmentFrame, name *values.Symbol, s
 		return
 	}
 	if scopes != nil {
-		binding.SetScopes(scopes)
+		binding.EnsureMeta().Scopes = scopes
 	}
 	if source != nil {
-		binding.SetSource(source)
+		binding.EnsureMeta().Source = source
 	}
 }
