@@ -178,13 +178,46 @@ func (p *OperationBindPatternVars) Apply(mc *machine.MachineContext) (*machine.M
 	localEnv := environment.NewLocalEnvironment(len(p.PatternVars))
 	childEnv := environment.NewEnvironmentFrameWithParent(localEnv, mc.EnvironmentFrame())
 
-	// Bind each pattern variable - use MaybeCreateLocalBinding to get the actual slot
-	// which matches what the compiler does at compile time
+	// Bind each pattern variable. MaybeCreateLocalBinding returns
+	// (*LocalIndex, created bool); the bool is unused here. The protocol
+	// has four (li, ok) states, each with a distinct outcome:
+	//
+	//   li != nil, ok == true   — matched non-ellipsis var: write stxVal
+	//   li == nil, ok == true   — outer scope binds the name: skip the
+	//                              local set; the variable resolves via
+	//                              the environment chain
+	//   li != nil, ok == false  — ELLIPSIS-CAPTURED var: write nil. This
+	//                              is intentional and is *not* silent
+	//                              corruption (despite what it looks
+	//                              like). Per internal/match/CLAUDE.local.md,
+	//                              ellipsis-captured pattern variables
+	//                              live in the matcher's captureContext
+	//                              children, not in the root bindings
+	//                              map that GetBindings() returns. The
+	//                              nil at the local slot signals
+	//                              "captured elsewhere — consult the
+	//                              matcher during template expansion."
+	//                              Patterns like (_ x ...) take this path.
+	//   li == nil, ok == false  — outer scope binds the name AND the var
+	//                              is ellipsis-captured: nothing to do
+	//                              locally; matcher tracks the captures.
+	//
+	// The two ok=false cases have no top-level binding by design; the
+	// downstream OperationSyntaxTemplateExpand consults sc.matcher's
+	// child contexts when expanding `(syntax (... x ...))` templates.
 	for _, varName := range p.PatternVars {
 		sym := values.NewSymbol(varName)
 		li, _ := childEnv.MaybeCreateLocalBinding(sym, environment.BindingTypeVariable, nil, nil)
 		stxVal, ok := sc.bindings[varName]
-		if ok && li == nil {
+		if li == nil {
+			// Either an outer-scope binding wins (ok=true case) or no
+			// local frame to write to (ok=false ellipsis case): skip.
+			continue
+		}
+		if !ok {
+			// Ellipsis-captured var: leave the local slot as the
+			// zero value (nil). Template expansion reads from the
+			// matcher's children, not this slot.
 			continue
 		}
 		err := childEnv.SetLocalValue(li, stxVal)
