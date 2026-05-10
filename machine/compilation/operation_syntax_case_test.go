@@ -200,6 +200,28 @@ func TestOperationSyntaxCaseNoMatch_Apply(t *testing.T) {
 
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(err.Error(), qt.Contains, "syntax-case: no matching clause")
+	c.Assert(err.Error(), qt.Contains, "input unavailable")
+}
+
+func TestOperationSyntaxCaseNoMatch_Apply_IncludesInput(t *testing.T) {
+	c := qt.New(t)
+
+	env := environment.NewNamespace().Runtime()
+	tpl := machine.NewNativeTemplate(0, 0, false)
+	mc := machine.NewMachineContext(context.Background(), machine.NewMachineContinuation(nil, tpl, env))
+
+	// Stage state with a recognizable input so the no-match error
+	// includes the form being expanded.
+	mc.SetSyntaxCaseState(&syntaxCaseState{
+		input: syntax.NewSyntaxSymbol("frobnicate", nil),
+	})
+
+	op := NewOperationSyntaxCaseNoMatch()
+	_, err := op.Apply(mc)
+
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "no matching clause for input")
+	c.Assert(err.Error(), qt.Contains, "frobnicate")
 }
 
 // =============================================================================

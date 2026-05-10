@@ -255,7 +255,18 @@ func NewOperationSyntaxCaseNoMatch() *OperationSyntaxCaseNoMatch {
 }
 
 func (p *OperationSyntaxCaseNoMatch) Apply(mc *machine.MachineContext) (*machine.MachineContext, error) {
-	return nil, mc.Error("syntax-case: no matching clause")
+	// Include the input form in the diagnostic when it's still available.
+	// Macro debugging is hard precisely because the output is "syntax";
+	// stripping the actual input forces users into trial-and-error.
+	raw := mc.SyntaxCaseState()
+	if raw != nil {
+		sc, ok := raw.(*syntaxCaseState)
+		if ok && sc.input != nil {
+			return nil, mc.Error(fmt.Sprintf(
+				"syntax-case: no matching clause for input %s", sc.input.SchemeString()))
+		}
+	}
+	return nil, mc.Error("syntax-case: no matching clause (input unavailable)")
 }
 
 func (p *OperationSyntaxCaseNoMatch) EqualTo(other values.Value) bool {
