@@ -1146,7 +1146,7 @@ func TestNewThreadSubContext_InheritsExceptionHandler(t *testing.T) {
 func TestSaveContinuation_CallDepthTracking(t *testing.T) {
 	tests := []struct {
 		name         string
-		maxCallDepth uint64
+		maxCallDepth int
 		saveCalls    int
 		wantErr      bool
 	}{
@@ -1337,7 +1337,7 @@ func TestNewSubContextWithTemplate(t *testing.T) {
 
 	// All NewSubContext fields propagate from parent
 	c.Assert(sub.parentMC, qt.Equals, parent)
-	c.Assert(sub.maxCallDepth, qt.Equals, uint64(100))
+	c.Assert(sub.maxCallDepth, qt.Equals, int(100))
 	c.Assert(sub.maxStackSize, qt.Equals, uint64(200))
 	c.Assert(sub.ExceptionHandler(), qt.Not(qt.IsNil))
 	c.Assert(len(sub.windingStack), qt.Equals, 1)

@@ -193,7 +193,7 @@ func (p *MachineContext) PopContinuation() (*MachineContinuation, error) {
 // See the comment on NewMachineContinuationFromMachineContext for why this matters.
 func (p *MachineContext) SaveContinuation(off int) error {
 	p.callDepth++
-	if p.maxCallDepth > 0 && uint64(p.callDepth) > p.maxCallDepth {
+	if p.maxCallDepth > 0 && p.callDepth > p.maxCallDepth {
 		p.callDepth--
 		return werr.WrapForeignErrorf(werr.ErrCallDepthExceeded,
 			"call depth %d exceeds limit %d", p.callDepth+1, p.maxCallDepth)

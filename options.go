@@ -47,7 +47,7 @@ const (
 type engineConfig struct {
 	registry           *registry.Registry
 	extensions         []registry.Extension
-	maxCallDepth       uint64
+	maxCallDepth       int
 	callDepthSet       bool // true if WithMaxCallDepth was explicitly called
 	maxStackSize       uint64
 	inlineThreshold    int
@@ -117,7 +117,7 @@ func WithContractEnforcement() EngineOption {
 // When the continuation stack exceeds this depth, ErrCallDepthExceeded is returned.
 // A value of 0 means unlimited (no depth check). When not called, the engine
 // uses DefaultMaxCallDepth (10000).
-func WithMaxCallDepth(n uint64) EngineOption {
+func WithMaxCallDepth(n int) EngineOption {
 	return func(cfg *engineConfig) {
 		cfg.maxCallDepth = n
 		cfg.callDepthSet = true

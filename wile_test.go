@@ -1106,7 +1106,7 @@ func TestWithMaxCallDepth(t *testing.T) {
 	tests := []struct {
 		name        string
 		code        string
-		depth       uint64
+		depth       int
 		wantErr     bool
 		errSentinel error
 	}{
