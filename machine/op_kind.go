@@ -14,14 +14,17 @@
 
 package machine
 
-// This file centralizes the Operation -> OpCode mapping. Every Operation
-// implementation declares its dispatch identity here. Operations that have
-// a dedicated opcode in the Run() switch return that opcode; operations
-// dispatched through the side table return OpComplex.
+// This file centralizes the Operation -> OpCode mapping for the machine/
+// package. Compilation-time operations defined in machine/compilation/
+// declare their own OpKind in machine/compilation/op_kind.go (all return
+// OpComplex). Operations that have a dedicated opcode in the Run() switch
+// return that opcode; operations dispatched through the side table return
+// OpComplex.
 //
 // Mirrors the operand-extraction switch in operationToInstruction
 // (native_template.go). When adding a new operation:
-//   1. Add OpKind here.
+//   1. Add OpKind here (or in machine/compilation/op_kind.go if defined
+//      in that package).
 //   2. Add the operand-extraction case in operationToInstruction (if it has
 //      operands; zero-operand ops fall through the default branch).
 

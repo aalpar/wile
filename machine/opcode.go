@@ -24,9 +24,10 @@ package machine
 //  2. machine_context.go Run() — add dispatch case in the main switch
 //  3. native_template.go — add cases in both operationToInstruction() and instructionToOperation()
 //  4. operation_xxx.go — create new operation type (or add to existing file)
-//  5. compile_*.go — add compiler method to emit the new opcode
-//  6. Relevant _test.go files
-//  7. peephole.go — if the new op participates in fusion/chaining (e.g. loadToFusedPush)
+//  5. op_kind.go — add OpKind() returning the new OpCode (or compilation/op_kind.go for compilation/ types)
+//  6. compile_*.go — add compiler method to emit the new opcode
+//  7. Relevant _test.go files
+//  8. peephole.go — if the new op participates in fusion/chaining (e.g. loadToFusedPush)
 //
 // For promoted primitive ops specifically, see the guide comment at the top
 // of call_promoted.go — promoted ops have a different (smaller) set of edit sites.
