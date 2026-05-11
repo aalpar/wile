@@ -233,10 +233,19 @@ type vmState struct {
 // Enforced at lint time by noDirectValueRegisterAccess in
 // ruleguard/rules.go. See plans/2026-05-11-machine-sr-finding3-impl.md.
 
-// SetValues sets the value register. For a single value this uses the
-// zero-allocation fast path (singleValue); for multiple values it falls
-// back to the multiValues slice.
+// SetValues sets the value register. Three paths:
+//   - len == 0: canonical empty state, both fields nil. Distinguishes
+//     the (nil, nil) empty register from (nil, []) which a naive
+//     'multiValues = vs' would produce when vs is an empty-but-non-nil
+//     spread (e.g. SetValues(emptySlice...)).
+//   - len == 1: zero-allocation fast path via singleValue.
+//   - len  > 1: fall back to the multiValues slice.
 func (p *vmState) SetValues(vs ...values.Value) {
+	if len(vs) == 0 {
+		p.singleValue = nil
+		p.multiValues = nil
+		return
+	}
 	if len(vs) == 1 {
 		p.singleValue = vs[0]
 		p.multiValues = nil
@@ -298,6 +307,13 @@ func (p *vmState) PushValues(v ...values.Value) {
 	}
 	p.multiValues = append(p.multiValues, v...)
 }
+
+// The three helpers below (pushValueRegisterTo, copyValueRegisterFrom,
+// cloneValueRegisterFrom) are unexported deliberately. They serve
+// machine-internal save/restore/dispatch flows and have no use outside
+// this package. Exporting them would extend method promotion to
+// *MachineContext / *MachineContinuation and grow the public API surface
+// for no benefit.
 
 // pushValueRegisterTo pushes the live half of the value register onto s.
 // Used by OpPush. Preserves the single-value fast path: no MultipleValues
