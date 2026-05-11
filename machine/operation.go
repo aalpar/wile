@@ -23,8 +23,17 @@ import (
 // Operations that are inlined into the Run() switch loop only need this base
 // interface. Operations dispatched through the side table (OpComplex) must
 // additionally implement InlinedOperation.
+//
+// OpKind reports the OpCode the operation encodes to. For operations that
+// have a dedicated opcode in the main Run() switch, OpKind returns that
+// opcode. For operations dispatched via the side table, OpKind returns
+// OpComplex. This is the discriminator the compiler consults in
+// operationToInstruction; placing it on the interface lets each type carry
+// its dispatch identity rather than re-deriving it via a central type
+// switch.
 type Operation interface {
 	values.Value
+	OpKind() OpCode
 }
 
 // InlinedOperation is the interface for operations dispatched through the

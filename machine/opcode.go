@@ -20,13 +20,18 @@ package machine
 // values use OpComplex with a side table index.
 //
 // Adding a new opcode requires changes in:
-//  1. opcode.go — add OpXxx constant and entry in opcodeTable (name + metadata flags)
+//  1. opcode.go — add OpXxx constant and entry in opcodeTable (name + metadata flags;
+//     operandKind must match step 3's extraction logic)
 //  2. machine_context.go Run() — add dispatch case in the main switch
-//  3. native_template.go — add cases in both operationToInstruction() and instructionToOperation()
+//  3. native_template.go — add a case in instructionToOperation() (always required) and in
+//     operationToInstruction() (required for operand-bearing ops; zero-operand ops fall
+//     through the default branch, which cross-checks opcodeTable[kind].operandKind == OperandNone)
 //  4. operation_xxx.go — create new operation type (or add to existing file)
-//  5. compile_*.go — add compiler method to emit the new opcode
-//  6. Relevant _test.go files
-//  7. peephole.go — if the new op participates in fusion/chaining (e.g. loadToFusedPush)
+//  5. op_kind.go — add OpKind() returning the new OpCode (or compilation/op_kind.go for compilation/ types);
+//     for OpComplex types, also add a var _ InlinedOperation assertion
+//  6. compile_*.go — add compiler method to emit the new opcode
+//  7. Relevant _test.go files
+//  8. peephole.go — if the new op participates in fusion/chaining (e.g. loadToFusedPush)
 //
 // For promoted primitive ops specifically, see the guide comment at the top
 // of call_promoted.go — promoted ops have a different (smaller) set of edit sites.
