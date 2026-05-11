@@ -41,7 +41,8 @@ var ErrEngineClosed = werr.NewStaticError("engine is closed")
 
 // DefaultMaxCallDepth is the default call depth limit for new engines.
 // At ~500 bytes per frame, 10000 frames ≈ 5MB. Use WithMaxCallDepth(0)
-// to opt out of the limit explicitly.
+// to opt out of the limit explicitly; WithMaxCallDepth(n) with n < 0 is
+// clamped to 0 (also unlimited).
 const DefaultMaxCallDepth int = 10000
 
 // Engine is the main entry point for embedding Wile.

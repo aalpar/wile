@@ -1129,6 +1129,12 @@ func TestWithMaxCallDepth(t *testing.T) {
 			depth:   0,
 			wantErr: false,
 		},
+		{
+			name:    "negative clamped to zero (unlimited)",
+			code:    "(let loop ((n 5000)) (if (= n 0) 0 (+ 1 (loop (- n 1)))))",
+			depth:   -1,
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {

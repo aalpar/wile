@@ -1174,6 +1174,12 @@ func TestSaveContinuation_CallDepthTracking(t *testing.T) {
 			saveCalls:    100,
 			wantErr:      false,
 		},
+		{
+			name:         "negative clamped to zero (unlimited)",
+			maxCallDepth: -1,
+			saveCalls:    100,
+			wantErr:      false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1337,7 +1343,7 @@ func TestNewSubContextWithTemplate(t *testing.T) {
 
 	// All NewSubContext fields propagate from parent
 	c.Assert(sub.parentMC, qt.Equals, parent)
-	c.Assert(sub.maxCallDepth, qt.Equals, int(100))
+	c.Assert(sub.maxCallDepth, qt.Equals, 100)
 	c.Assert(sub.maxStackSize, qt.Equals, uint64(200))
 	c.Assert(sub.ExceptionHandler(), qt.Not(qt.IsNil))
 	c.Assert(len(sub.windingStack), qt.Equals, 1)
