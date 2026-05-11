@@ -244,6 +244,21 @@ trade-off.
 
 ### Finding 4 — `maxCallDepth` / `callDepth` type mismatch and sentinel-encoded boolean
 
+**Status**: **Partially shipped, partially declined** (2026-05-10).
+- (a) Type-mismatch half: **shipped** as commit `7dc2511c` —
+  `maxCallDepth` unified to `int`, hot-path `uint64(callDepth)` cast
+  deleted. Public API broke: `WithMaxCallDepth(n int)` and
+  `DefaultMaxCallDepth int` (Wile v1.x zero-consumers policy).
+- (b) Sentinel-removal half: **considered and declined**. `maxCallDepth
+  int → *int` plus `WithMaxCallDepthUnlimited()` was prototyped and
+  bench-tested against the Gabriel suite. Gate criterion failed
+  decisively: geo-mean +2.76% (gate ±0.5%, 5.5× over), worst case
+  +7.87% on `sum` (gate 0.3%, 26× over); all 16 benchmarks
+  regressed. PR #636's "cost is global (deref on every check)"
+  prediction was confirmed line-for-line. Full bench data and
+  cost-model analysis in
+  `memory/maxcalldepth-nullable-revert.md`.
+
 **Principle**: State Tightness
 **Where**: `machine_context.go:84` (`maxCallDepth uint64`),
 `vm_state.go:181` (`callDepth int`), check at `machine_context.go:1176`
