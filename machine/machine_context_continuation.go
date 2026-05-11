@@ -168,8 +168,7 @@ func (p *MachineContext) PopContinuation() (*MachineContinuation, error) {
 	p.env = q.env
 	p.cont = q.parent
 	p.pc = q.pc
-	p.singleValue = q.singleValue
-	p.multiValues = q.multiValues
+	p.copyValueRegisterFrom(&q.vmState)
 	// envPooled: restore caller's ownership state. Caller (releaseContinuation
 	// in Run loop) handles release of the old env via the popped frame.
 	p.envPooled = q.envPooled

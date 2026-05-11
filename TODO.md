@@ -173,6 +173,14 @@ typeName encoding refactor). Deferred per scope or design choice.
 - [ ] **`peek-char` error classification** [Bug, S, Deferred — pre-existing]: Same file uses `WrapForeignErrorf` rather than `WrapForeignReadErrorf`, so the resulting error doesn't satisfy `(read-error? e)` per R7RS §6.11. Pre-existing.
 - [ ] **Library-binding installation swallows errors silently** [Bug, S, Deferred — pre-existing]: `machine/compilation/library_bindings.go:281-289` (the propagation branch in `CopyLibraryBindingsToEnvAtPhase`) and `library_bindings.go:328-336` (the syntax-binding branch in `copyLibraryBindingsDirect`) discard return values from `MaybeCreateOwnGlobalBinding` and `SetOwnGlobalValue` via `_, _ =` / `_ =`. A failed `SetOwnGlobalValue` in the syntax-binding branch means a macro is silently not installed in the expand environment; subsequent macro expansion mysteriously fails. The non-propagation branch (lines 270-273) wraps and returns errors correctly — the asymmetry is "evolved separately." Pre-existing; surfaced by but not introduced by PR #728. Fix: wrap and return per the existing convention; while there, validate `targetPhase + sourcePhase` against int8 overflow.
 
+### Machine value-register follow-ups (PR #736 deferred items)
+
+Items surfaced by /crosscheck on PR #736 (consolidate value-register
+accessors on *vmState — Finding 3 of `plans/2026-05-06-machine-structural-reduction.md`).
+Deferred per scope or design choice.
+
+- [ ] **`SetValues(sub.GetValues()...)` nil-vs-empty ambiguity** [Tech debt, M, Deferred — pre-existing]: Silent-failure-hunter flagged 13 call sites that propagate a sub-context's value register into the parent via `mc.SetValues(sub.GetValues()...)`. `GetValues()` returns `nil` for an empty register (both fields nil); spreading `nil...` calls `SetValues()` with zero args, which now canonicalizes to (nil, nil) post-Q-e. Sub-contexts that exited abnormally without writing a value, sub-contexts that returned `(values)` (R7RS zero-value return), and sub-contexts that returned a real value all collapse into indistinguishable parent-side state. Call sites: `extensions/eval/prim_eval.go:104`, `extensions/files/prim_files.go:179`, `registry/core/prim_timer.go:127`, `registry/core/prim_barrier.go:72`, `registry/core/prim_cont_marks.go:187`, `registry/core/prim_prompt.go:135,149`, `registry/core/prim_control.go:87,200,365`, `registry/core/prim_exit.go:105`. Pre-existing; surfaced by but not introduced by PR #736. Fix shape: distinguish "no value produced" from "(values) zero-return" at each call site, or document the collapse as intentional R7RS behavior.
+
 ### Postponed
 
 Items deferred for stated reasons. Re-evaluate when preconditions change.

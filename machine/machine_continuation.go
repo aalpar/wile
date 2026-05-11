@@ -16,7 +16,6 @@ package machine
 
 import (
 	"fmt"
-	"slices"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
@@ -101,8 +100,7 @@ func NewMachineContinuationFromMachineContext(mc *MachineContext, off int) *Mach
 	q := acquireContinuation()
 	q.env = mc.env
 	q.template = mc.template
-	q.singleValue = mc.singleValue
-	q.multiValues = mc.multiValues
+	q.copyValueRegisterFrom(&mc.vmState)
 	q.evals = mc.evals
 	q.pc = mc.pc + off
 	q.threadID = mc.threadID
@@ -133,17 +131,8 @@ func (p *MachineContinuation) SetPC(v int) {
 	p.pc = v
 }
 
-// PushValues appends values to the continuation's value register. If the
-// register currently holds a single value, it is promoted to the multi-value
-// representation before appending. This promote-then-append pattern avoids
-// losing the existing single value when transitioning to the multi-value path.
-func (p *MachineContinuation) PushValues(v ...values.Value) {
-	if p.multiValues == nil && p.singleValue != nil {
-		p.multiValues = MultipleValues{p.singleValue}
-		p.singleValue = nil
-	}
-	p.multiValues = append(p.multiValues, v...)
-}
+// PushValues lives on *vmState in vm_state.go; method promotion makes it
+// callable on *MachineContinuation.
 
 // CallDepth returns the depth of the continuation stack.
 // The depth is cached in each frame at creation time, so this is O(1).
@@ -158,8 +147,7 @@ func (p *MachineContinuation) Copy() *MachineContinuation {
 	q := acquireContinuation()
 	q.env = p.env
 	q.template = p.template
-	q.singleValue = p.singleValue
-	q.multiValues = slices.Clone(p.multiValues)
+	q.cloneValueRegisterFrom(&p.vmState)
 	if p.evals != nil {
 		q.evals = p.evals.Copy()
 	}

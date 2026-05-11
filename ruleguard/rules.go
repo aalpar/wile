@@ -69,3 +69,40 @@ func noBareSentinelPanic(m dsl.Matcher) { //nolint:unused // loaded by gocritic 
 		Where(m["err"].Text.Matches(`^Err[A-Z]`) && !m.File().Name.Matches(`_test\.go$`)).
 		Report(`panic with bare sentinel: wrap with werr.WrapForeignErrorf(werr.$err, "site: context")`)
 }
+
+// noDirectValueRegisterAccess flags direct reads or writes of the
+// machine/vmState value-register fields (singleValue, multiValues) outside
+// machine/vm_state.go. The fields form a split-representation register
+// with a documented mutual-exclusion invariant ("at most one field is
+// active at any time"; see machine/vm_state.go) that is unenforced by the
+// type system. All access must go through one of the vmState accessor
+// methods: SetValue, SetValues, GetValue, GetValues, PushValues,
+// pushValueRegisterTo, copyValueRegisterFrom, cloneValueRegisterFrom.
+//
+// Skips test files for two distinct reasons:
+//   - machine_continuation_test.go, pool_test.go, vm_state_test.go:
+//     these legitimately exercise the vmState fields directly to assert
+//     invariant transitions and pool-reset behaviour.
+//   - operation_test.go: its test-case struct has local fields named
+//     'singleValue' and 'multiValues' that coincidentally match the rule
+//     pattern via 'tc.singleValue' / 'tc.multiValues' selector
+//     expressions — those are not vmState accesses, just name collision.
+//
+// See plans/2026-05-06-machine-structural-reduction.md (Finding 3) and
+// plans/2026-05-11-machine-sr-finding3-impl.md.
+//
+//	// Wrong:
+//	mc.singleValue = v
+//	mc.multiValues = nil
+//
+//	// Right:
+//	mc.SetValue(v)
+func noDirectValueRegisterAccess(m dsl.Matcher) { //nolint:unused // loaded by gocritic ruleguard checker at lint time
+	m.Match(
+		`$x.singleValue`,
+		`$x.multiValues`,
+	).
+		Where(!m.File().Name.Matches(`vm_state\.go$`) &&
+			!m.File().Name.Matches(`_test\.go$`)).
+		Report(`direct value-register access: use SetValue, SetValues, GetValue, GetValues, PushValues, pushValueRegisterTo, copyValueRegisterFrom, or cloneValueRegisterFrom on *vmState (Finding 3)`)
+}

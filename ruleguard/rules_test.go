@@ -176,6 +176,49 @@ func nonSentinelPanicGood() {
 }
 `)
 
+	// ── Production fixture: value-register accesses ──────────────────
+	//
+	// Targets noDirectValueRegisterAccess. The machineContext type and the
+	// vm_state.go fixture (filename-exempted) both reach into the fields
+	// directly; production accesses elsewhere should fire.
+
+	writeFile("value_register.go", `package main
+
+type machineContext struct {
+	singleValue any
+	multiValues []any
+}
+
+// noDirectValueRegisterAccess — positive (singleValue write)
+func directWriteSingleBad(m *machineContext) {
+	m.singleValue = "x"
+}
+
+// noDirectValueRegisterAccess — positive (multiValues write)
+func directWriteMultiBad(m *machineContext) {
+	m.multiValues = nil
+}
+
+// noDirectValueRegisterAccess — positive (singleValue read)
+func directReadBad(m *machineContext) any {
+	return m.singleValue
+}
+`)
+
+	// ── Filename-exempted fixture: vm_state.go ───────────────────────
+	//
+	// noDirectValueRegisterAccess exempts vm_state.go by filename.
+
+	writeFile("vm_state.go", `package main
+
+// noDirectValueRegisterAccess — negative: vm_state.go is filename-exempted
+func vmStateAllowedAccess(m *machineContext) {
+	m.singleValue = "x"
+	m.multiValues = nil
+	_ = m.singleValue
+}
+`)
+
 	// ── Test file fixture: errors.New, fmt.Errorf, bare panic allowed ─
 	// noCompoundIf has no test-file exclusion, so it fires here too.
 
@@ -212,6 +255,13 @@ func TestCompoundIfFlagged(t *testing.T) {
 	if f, err := os.Open("x"); err != nil {
 		_ = f
 	}
+}
+
+// noDirectValueRegisterAccess — skipped in test files
+func TestRegisterDirectAccessAllowed(t *testing.T) {
+	m := &machineContext{}
+	m.singleValue = "x"
+	m.multiValues = nil
 }
 `)
 
@@ -318,6 +368,38 @@ func TestCompoundIfFlagged(t *testing.T) {
 		{
 			name:    "noBareSentinelPanic/negative_test_file_panic",
 			substr:  `fixture_test.go:26`,
+			present: false,
+		},
+
+		// ── noDirectValueRegisterAccess ──────────────────────────
+		{
+			name:    "noDirectValueRegisterAccess/positive_singleValue_write",
+			substr:  `value_register.go:10:2: ruleguard: direct value-register access`,
+			present: true,
+		},
+		{
+			name:    "noDirectValueRegisterAccess/positive_multiValues_write",
+			substr:  `value_register.go:15:2: ruleguard: direct value-register access`,
+			present: true,
+		},
+		{
+			name:    "noDirectValueRegisterAccess/positive_singleValue_read",
+			substr:  `value_register.go:20:9: ruleguard: direct value-register access`,
+			present: true,
+		},
+		{
+			// Negative substrings omit the :col: and :ruleguard: suffix —
+			// golangci-lint emits "file:line:col: ruleguard: msg", so the
+			// presence test must match a prefix (file:line:) that the linter
+			// would emit IF the rule fired. Matches the shape used by
+			// noErrorsNew/negative_test_file above.
+			name:    "noDirectValueRegisterAccess/negative_vm_state_file_exempt",
+			substr:  `vm_state.go:5:`,
+			present: false,
+		},
+		{
+			name:    "noDirectValueRegisterAccess/negative_test_file_exempt",
+			substr:  `fixture_test.go:39:`,
 			present: false,
 		},
 	}
