@@ -15,6 +15,8 @@
 package machine
 
 import (
+	"slices"
+
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/values"
 )
@@ -221,4 +223,106 @@ type vmState struct {
 	// (callee starts clean). Restore/PopContinuation restores from continuation.
 	// cloneMarks does a shallow copy for call/cc re-invocation safety.
 	marks []markEntry
+}
+
+// Value-register accessors.
+//
+// All reads and writes of singleValue / multiValues must go through these
+// methods, so the documented mutual-exclusion invariant (at most one field
+// is active at a time) is enforceable by inspection of this file alone.
+// Enforced at lint time by noDirectValueRegisterAccess in
+// ruleguard/rules.go. See plans/2026-05-11-machine-sr-finding3-impl.md.
+
+// SetValues sets the value register. For a single value this uses the
+// zero-allocation fast path (singleValue); for multiple values it falls
+// back to the multiValues slice.
+func (p *vmState) SetValues(vs ...values.Value) {
+	if len(vs) == 1 {
+		p.singleValue = vs[0]
+		p.multiValues = nil
+		return
+	}
+	p.multiValues = vs
+	p.singleValue = nil
+}
+
+// SetValue stores a single value in the value register without allocating.
+// This is the hot path: every LoadLocal, LoadGlobal, LoadLiteral, Pull, Pop,
+// MakeClosure, etc. goes through here.
+func (p *vmState) SetValue(v values.Value) {
+	p.singleValue = v
+	p.multiValues = nil
+}
+
+// GetValue returns the first (or only) value from the value register.
+// Returns Void if the register is empty.
+func (p *vmState) GetValue() values.Value {
+	if p.multiValues != nil {
+		if len(p.multiValues) == 0 {
+			return values.Void
+		}
+		return p.multiValues[0]
+	}
+	if p.singleValue == nil {
+		return values.Void
+	}
+	return p.singleValue
+}
+
+// GetValues returns all values from the value register as a MultipleValues
+// slice. For the single-value case this allocates a one-element slice; callers
+// on the hot path should use GetValue instead.
+func (p *vmState) GetValues() MultipleValues {
+	if p.multiValues != nil {
+		return p.multiValues
+	}
+	if p.singleValue == nil {
+		return nil
+	}
+	return MultipleValues{p.singleValue}
+}
+
+// PushValues appends values to the value register. If the register currently
+// holds a single value, it is promoted to the multi-value representation
+// before appending. This promote-then-append pattern avoids losing the
+// existing single value when transitioning to the multi-value path.
+func (p *vmState) PushValues(v ...values.Value) {
+	if p.multiValues == nil && p.singleValue != nil {
+		p.multiValues = MultipleValues{p.singleValue}
+		p.singleValue = nil
+	}
+	p.multiValues = append(p.multiValues, v...)
+}
+
+// pushValueRegisterTo pushes the live half of the value register onto s.
+// Used by OpPush. Preserves the single-value fast path: no MultipleValues
+// wrap, no allocation when only singleValue is live.
+func (p *vmState) pushValueRegisterTo(s *Stack) {
+	if p.multiValues != nil {
+		s.PushAll(p.multiValues)
+		return
+	}
+	if p.singleValue != nil {
+		s.Push(p.singleValue)
+	}
+}
+
+// copyValueRegisterFrom copies both halves of the value register from src.
+// Shallow: multiValues is shared (slice header copy). Used by
+// SaveContinuation, PopContinuation, and NewMachineContext initialization
+// — sites where the source and destination represent the same logical
+// register state across a save/restore boundary.
+func (p *vmState) copyValueRegisterFrom(src *vmState) {
+	p.singleValue = src.singleValue
+	p.multiValues = src.multiValues
+}
+
+// cloneValueRegisterFrom copies the value register from src with the
+// multiValues slice deep-copied via slices.Clone. Used by
+// MachineContinuation.Copy() to support re-invocable continuations (call/cc):
+// each invocation must see an independent slice so PushValues append does not
+// corrupt the original.
+func (p *vmState) cloneValueRegisterFrom(src *vmState) {
+	p.singleValue = src.singleValue
+	p.multiValues = slices.Clone(src.multiValues)
 }

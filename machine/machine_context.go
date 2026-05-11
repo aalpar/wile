@@ -115,16 +115,16 @@ func NewMachineContext(ctx context.Context, cont *MachineContinuation) *MachineC
 	q := &MachineContext{
 		ctx: ctx,
 		vmState: vmState{
-			env:         cont.env,         // cannot copy environment here, it will be copied when pushed onto the stack
-			template:    cont.template,    // not needed to copy, templates are immutable
-			singleValue: cont.singleValue, // must not copy the values, they are passed between contexts
-			multiValues: cont.multiValues,
-			evals:       evals,
-			pc:          cont.pc,
+			env:      cont.env,      // cannot copy environment here, it will be copied when pushed onto the stack
+			template: cont.template, // not needed to copy, templates are immutable
+			evals:    evals,
+			pc:       cont.pc,
 		},
 		cont:     cont.parent,
 		counters: VMCounters{opcodeHits: newOpcodeHits(), callCounts: newCallCounts()},
 	}
+	// Value register is passed between contexts, not copied — shallow.
+	q.copyValueRegisterFrom(&cont.vmState)
 	return q
 }
 
@@ -193,54 +193,8 @@ func (p *MachineContext) IncrPC() {
 	p.pc++
 }
 
-// SetValues sets the value register. For a single value this uses the
-// zero-allocation fast path (singleValue); for multiple values it falls
-// back to the multiValues slice.
-func (p *MachineContext) SetValues(vs ...values.Value) {
-	if len(vs) == 1 {
-		p.singleValue = vs[0]
-		p.multiValues = nil
-		return
-	}
-	p.multiValues = vs
-	p.singleValue = nil
-}
-
-// SetValue stores a single value in the value register without allocating.
-// This is the hot path: every LoadLocal, LoadGlobal, LoadLiteral, Pull, Pop,
-// MakeClosure, etc. goes through here.
-func (p *MachineContext) SetValue(v values.Value) {
-	p.singleValue = v
-	p.multiValues = nil
-}
-
-// GetValue returns the first (or only) value from the value register.
-// Returns Void if the register is empty.
-func (p *MachineContext) GetValue() values.Value {
-	if p.multiValues != nil {
-		if len(p.multiValues) == 0 {
-			return values.Void
-		}
-		return p.multiValues[0]
-	}
-	if p.singleValue == nil {
-		return values.Void
-	}
-	return p.singleValue
-}
-
-// GetValues returns all values from the value register as a MultipleValues
-// slice. For the single-value case this allocates a one-element slice; callers
-// on the hot path should use GetValue instead.
-func (p *MachineContext) GetValues() MultipleValues {
-	if p.multiValues != nil {
-		return p.multiValues
-	}
-	if p.singleValue == nil {
-		return nil
-	}
-	return MultipleValues{p.singleValue}
-}
+// Value-register accessors (SetValue, SetValues, GetValue, GetValues) live
+// on *vmState in vm_state.go; method promotion makes them callable here.
 
 func (p *MachineContext) EnvironmentFrame() *environment.EnvironmentFrame {
 	return p.env
@@ -368,11 +322,7 @@ func (p *MachineContext) Run() error {
 		// --- Wave 1: zero-operand operations ---
 
 		case OpPush:
-			if mc.multiValues != nil {
-				mc.evals.PushAll(mc.multiValues)
-			} else if mc.singleValue != nil {
-				mc.evals.Push(mc.singleValue)
-			}
+			mc.pushValueRegisterTo(mc.evals)
 			err := mc.checkStackSize()
 			if err != nil {
 				return err
