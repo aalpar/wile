@@ -75,14 +75,18 @@ func noBareSentinelPanic(m dsl.Matcher) { //nolint:unused // loaded by gocritic 
 // machine/vm_state.go. The fields form a split-representation register
 // with a documented mutual-exclusion invariant ("at most one field is
 // active at any time"; see machine/vm_state.go) that is unenforced by the
-// type system. All access must go through SetValue / SetValues / GetValue /
-// GetValues / PushValues / pushValueRegisterTo / copyValueRegisterFrom /
-// cloneValueRegisterFrom on *vmState.
+// type system. All access must go through one of the vmState accessor
+// methods: SetValue, SetValues, GetValue, GetValues, PushValues,
+// pushValueRegisterTo, copyValueRegisterFrom, cloneValueRegisterFrom.
 //
-// Skips test files — fixtures in machine_continuation_test.go,
-// pool_test.go, vm_state_test.go, and operation_test.go intentionally
-// exercise the fields directly to assert invariant transitions or
-// pool-reset behaviour.
+// Skips test files for two distinct reasons:
+//   - machine_continuation_test.go, pool_test.go, vm_state_test.go:
+//     these legitimately exercise the vmState fields directly to assert
+//     invariant transitions and pool-reset behaviour.
+//   - operation_test.go: its test-case struct has local fields named
+//     'singleValue' and 'multiValues' that coincidentally match the rule
+//     pattern via 'tc.singleValue' / 'tc.multiValues' selector
+//     expressions — those are not vmState accesses, just name collision.
 //
 // See plans/2026-05-06-machine-structural-reduction.md (Finding 3) and
 // plans/2026-05-11-machine-sr-finding3-impl.md.
@@ -100,5 +104,5 @@ func noDirectValueRegisterAccess(m dsl.Matcher) { //nolint:unused // loaded by g
 	).
 		Where(!m.File().Name.Matches(`vm_state\.go$`) &&
 			!m.File().Name.Matches(`_test\.go$`)).
-		Report(`direct value-register access: use SetValue/SetValues/GetValue/GetValues or the *ValueRegisterFrom helpers on *vmState (Finding 3)`)
+		Report(`direct value-register access: use SetValue, SetValues, GetValue, GetValues, PushValues, pushValueRegisterTo, copyValueRegisterFrom, or cloneValueRegisterFrom on *vmState (Finding 3)`)
 }
