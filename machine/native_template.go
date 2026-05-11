@@ -263,62 +263,48 @@ func (p *NativeTemplate) AppendOperationsWithSource(src *syntax.SourceContext, o
 // operationToInstruction converts Wave 1, Wave 2, and Wave 3 operations to direct Instructions.
 // Returns (instruction, true) if the operation has a dedicated opcode,
 // or (Instruction{}, false) if it should go through the sideTable.
+//
+// Dispatch identity (which opcode to emit) comes from op.OpKind(); the type
+// switch below only handles operand extraction for the ~11 operand-bearing
+// ops. Zero-operand ops fall through to the default branch.
 func operationToInstruction(op Operation) (Instruction, bool) {
+	kind := op.OpKind()
+	if kind == OpComplex {
+		return Instruction{}, false
+	}
 	switch v := op.(type) {
-	// --- Wave 1: zero-operand operations ---
-	case *OperationPush:
-		return Instruction{Op: OpPush}, true
-	case *OperationPop:
-		return Instruction{Op: OpPop}, true
-	case *OperationPull:
-		return Instruction{Op: OpPull}, true
-	case *OperationLoadVoid:
-		return Instruction{Op: OpLoadVoid}, true
-	case *OperationDrop:
-		return Instruction{Op: OpDrop}, true
-	case *OperationPopEnv:
-		return Instruction{Op: OpPopEnv}, true
-	case *OperationApply:
-		return Instruction{Op: OpApply}, true
-	case *OperationUnpackListToStack:
-		return Instruction{Op: OpUnpackListToStack}, true
-	case *OperationRestoreContinuation:
-		return Instruction{Op: OpRestoreContinuation}, true
-
 	// --- Wave 2: single-operand operations ---
 	case *OperationBranchOnFalseValueOffsetImmediate:
-		return Instruction{Op: OpBranchOnFalseValue, Arg: int32(v.Offset)}, true
+		return Instruction{Op: kind, Arg: int32(v.Offset)}, true
 	case *OperationBranchOffsetImmediate:
-		return Instruction{Op: OpBranch, Arg: int32(v.Offset)}, true
+		return Instruction{Op: kind, Arg: int32(v.Offset)}, true
 	case *OperationSaveContinuationOffsetImmediate:
-		return Instruction{Op: OpSaveContinuation, Arg: int32(v.Offset)}, true
+		return Instruction{Op: kind, Arg: int32(v.Offset)}, true
 	case *OperationLoadLiteralByLiteralIndexImmediate:
-		return Instruction{Op: OpLoadLiteral, Arg: int32(v.LiteralIndex)}, true
+		return Instruction{Op: kind, Arg: int32(v.LiteralIndex)}, true
 	case *OperationLoadGlobalByGlobalIndexLiteralIndexImmediate:
-		return Instruction{Op: OpLoadGlobal, Arg: int32(v.LiteralIndex)}, true
+		return Instruction{Op: kind, Arg: int32(v.LiteralIndex)}, true
 	case *OperationStoreGlobalByGlobalIndexLiteralIndexImmediate:
-		return Instruction{Op: OpStoreGlobal, Arg: int32(v.LiteralIndex)}, true
+		return Instruction{Op: kind, Arg: int32(v.LiteralIndex)}, true
 	case *OperationPeekK:
-		return Instruction{Op: OpPeekK, Arg: int32(v.Depth)}, true
+		return Instruction{Op: kind, Arg: int32(v.Depth)}, true
 	case *OperationPushEnv:
-		return Instruction{Op: OpPushEnv, Arg: int32(v.SlotCount)}, true
+		return Instruction{Op: kind, Arg: int32(v.SlotCount)}, true
 
 	// --- Wave 3: two-operand operations (bit-packed LocalIndex) ---
 	case *OperationLoadLocalByLocalIndexImmediate:
-		return Instruction{Op: OpLoadLocal, Arg: EncodeLocalIndex(v.LocalIndex)}, true
+		return Instruction{Op: kind, Arg: EncodeLocalIndex(v.LocalIndex)}, true
 	case *OperationStoreLocalByLocalIndexImmediate:
-		return Instruction{Op: OpStoreLocal, Arg: EncodeLocalIndex(v.LocalIndex)}, true
-
-	// --- Wave 5: promoted complex operations ---
-	case *OperationMakeClosure:
-		return Instruction{Op: OpMakeClosure}, true
+		return Instruction{Op: kind, Arg: EncodeLocalIndex(v.LocalIndex)}, true
 
 	// --- Wave 6: cached binding operations ---
 	case *OperationLoadCachedBinding:
-		return Instruction{Op: OpLoadCachedBinding, Arg: v.BindingIndex}, true
+		return Instruction{Op: kind, Arg: v.BindingIndex}, true
 
 	default:
-		return Instruction{}, false
+		// Zero-operand operations (Wave 1, Wave 5 OperationMakeClosure):
+		// the opcode alone fully specifies the instruction.
+		return Instruction{Op: kind}, true
 	}
 }
 
