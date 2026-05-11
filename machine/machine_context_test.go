@@ -1387,6 +1387,10 @@ func (p *testInlinedOp) Apply(mc *MachineContext) (*MachineContext, error) {
 	return p.fn(mc)
 }
 
+func (*testInlinedOp) OpKind() OpCode {
+	return OpComplex
+}
+
 func (p *testInlinedOp) EqualTo(o values.Value) bool {
 	_, ok := o.(*testInlinedOp)
 	return ok && p == o
