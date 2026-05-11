@@ -1106,7 +1106,7 @@ func TestWithMaxCallDepth(t *testing.T) {
 	tests := []struct {
 		name        string
 		code        string
-		depth       uint64
+		depth       int
 		wantErr     bool
 		errSentinel error
 	}{
@@ -1127,6 +1127,12 @@ func TestWithMaxCallDepth(t *testing.T) {
 			name:    "zero means unlimited",
 			code:    "(let loop ((n 5000)) (if (= n 0) 0 (+ 1 (loop (- n 1)))))",
 			depth:   0,
+			wantErr: false,
+		},
+		{
+			name:    "negative clamped to zero (unlimited)",
+			code:    "(let loop ((n 5000)) (if (= n 0) 0 (+ 1 (loop (- n 1)))))",
+			depth:   -1,
 			wantErr: false,
 		},
 	}

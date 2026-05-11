@@ -47,7 +47,7 @@ const (
 type engineConfig struct {
 	registry           *registry.Registry
 	extensions         []registry.Extension
-	maxCallDepth       uint64
+	maxCallDepth       int
 	callDepthSet       bool // true if WithMaxCallDepth was explicitly called
 	maxStackSize       uint64
 	inlineThreshold    int
@@ -115,10 +115,14 @@ func WithContractEnforcement() EngineOption {
 
 // WithMaxCallDepth sets the maximum recursion depth for the VM.
 // When the continuation stack exceeds this depth, ErrCallDepthExceeded is returned.
-// A value of 0 means unlimited (no depth check). When not called, the engine
-// uses DefaultMaxCallDepth (10000).
-func WithMaxCallDepth(n uint64) EngineOption {
+// A value of 0 means unlimited (no depth check). Negative values are clamped
+// to 0 and therefore also mean unlimited (matches WithInlineThreshold). When
+// not called, the engine uses DefaultMaxCallDepth (10000).
+func WithMaxCallDepth(n int) EngineOption {
 	return func(cfg *engineConfig) {
+		if n < 0 {
+			n = 0
+		}
 		cfg.maxCallDepth = n
 		cfg.callDepthSet = true
 	}

@@ -89,7 +89,7 @@ type MachineContext struct {
 	// (compilation/) calls them, so type-system gating would only restate
 	// what package boundaries already guarantee.
 	syntaxCase    any
-	maxCallDepth  uint64           // 0 = unlimited (default), otherwise max continuation depth
+	maxCallDepth  int              // 0 = unlimited (default); negatives are clamped to 0 by SetMaxCallDepth
 	maxStackSize  uint64           // 0 = unlimited (default), otherwise max eval stack entries
 	restArgBuf    values.PairBlock // reusable buffer for variadic rest-arg list construction (ForeignClosure calls)
 	isolatedMarks bool             // when true, findParameterInMarks does not walk parentMC; set by applyCapturedContinuation
@@ -1165,12 +1165,17 @@ func (p *MachineContext) Thread() *values.Thread {
 }
 
 // MaxCallDepth returns the maximum call depth limit. 0 means unlimited.
-func (p *MachineContext) MaxCallDepth() uint64 {
+// The stored value is always non-negative; SetMaxCallDepth clamps negatives.
+func (p *MachineContext) MaxCallDepth() int {
 	return p.maxCallDepth
 }
 
 // SetMaxCallDepth sets the maximum call depth limit. 0 means unlimited.
-func (p *MachineContext) SetMaxCallDepth(n uint64) {
+// Negative values are clamped to 0 (also unlimited).
+func (p *MachineContext) SetMaxCallDepth(n int) {
+	if n < 0 {
+		n = 0
+	}
 	p.maxCallDepth = n
 }
 

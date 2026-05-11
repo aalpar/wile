@@ -41,3 +41,8 @@ REVIEW.md
 
 # Git worktrees
 .worktrees/
+
+# Generated benchmark results (timestamped, regen-able via `make bench-gabriel`)
+examples/benchmarks/canonical-results-*.csv
+examples/benchmarks/extended-results-*.csv
+examples/benchmarks/comparison-*.csv

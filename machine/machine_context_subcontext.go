@@ -96,7 +96,7 @@ type SubContextParams struct {
 	ParentMC         *MachineContext
 	EscapeCont       *MachineContinuation
 	ExceptionHandler *ExceptionHandler
-	MaxCallDepth     uint64
+	MaxCallDepth     int
 	MaxStackSize     uint64
 	WindingStack     WindingStack
 }
