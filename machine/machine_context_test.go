@@ -37,14 +37,14 @@ func TestNewMachineContext(t *testing.T) {
 	// Create a continuation with specific state
 	cont := &MachineContinuation{
 		vmState: vmState{
-			env:         env,
-			template:    tpl,
-			singleValue: values.NewInteger(42),
-			evals:       NewStack(),
-			pc:          5,
+			env:      env,
+			template: tpl,
+			evals:    NewStack(),
+			pc:       5,
 		},
 		parent: parentCont,
 	}
+	cont.SetValue(values.NewInteger(42))
 	cont.evals.Push(values.NewInteger(1))
 	cont.evals.Push(values.NewInteger(2))
 

@@ -244,8 +244,12 @@ func TestOperation(t *testing.T) {
 			tpl := NewNativeTemplate(0, 0, false, tc.op)
 			mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, tpl, env))
 			mc.evals = tc.evals
-			mc.multiValues = tc.multiValues
-			mc.singleValue = tc.singleValue
+			switch {
+			case tc.multiValues != nil:
+				mc.SetValues(tc.multiValues...)
+			case tc.singleValue != nil:
+				mc.SetValue(tc.singleValue)
+			}
 			if tc.setupFn != nil {
 				tc.setupFn(t, mc)
 			}
