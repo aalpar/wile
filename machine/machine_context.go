@@ -373,11 +373,9 @@ func (p *MachineContext) Run() error {
 			} else if mc.singleValue != nil {
 				mc.evals.Push(mc.singleValue)
 			}
-			if mc.maxStackSize > 0 {
-				err := mc.checkStackSize()
-				if err != nil {
-					return err
-				}
+			err := mc.checkStackSize()
+			if err != nil {
+				return err
 			}
 			mc.pc++
 
@@ -438,11 +436,9 @@ func (p *MachineContext) Run() error {
 				return applyCallableError(mc, werr.WrapForeignErrorf(werr.ErrNotAList,
 					"apply: final argument is an improper list"))
 			}
-			if mc.maxStackSize > 0 {
-				errStack := mc.checkStackSize()
-				if errStack != nil {
-					return errStack
-				}
+			err = mc.checkStackSize()
+			if err != nil {
+				return err
 			}
 			mc.pc++
 
@@ -534,11 +530,9 @@ func (p *MachineContext) Run() error {
 
 		case OpPushLiteral:
 			mc.evals.Push(mc.template.literals[instr.Arg])
-			if mc.maxStackSize > 0 {
-				err := mc.checkStackSize()
-				if err != nil {
-					return err
-				}
+			err := mc.checkStackSize()
+			if err != nil {
+				return err
 			}
 			mc.pc++
 
@@ -548,11 +542,9 @@ func (p *MachineContext) Run() error {
 				return err
 			}
 			mc.evals.Push(bd.Value())
-			if mc.maxStackSize > 0 {
-				errStack := mc.checkStackSize()
-				if errStack != nil {
-					return errStack
-				}
+			err = mc.checkStackSize()
+			if err != nil {
+				return err
 			}
 			mc.pc++
 
@@ -562,11 +554,9 @@ func (p *MachineContext) Run() error {
 				return err
 			}
 			mc.evals.Push(bd.Value())
-			if mc.maxStackSize > 0 {
-				errStack := mc.checkStackSize()
-				if errStack != nil {
-					return errStack
-				}
+			err = mc.checkStackSize()
+			if err != nil {
+				return err
 			}
 			mc.pc++
 
@@ -612,11 +602,9 @@ func (p *MachineContext) Run() error {
 
 		case OpPushCachedBinding:
 			mc.evals.Push(mc.template.cachedBindings[instr.Arg].Value())
-			if mc.maxStackSize > 0 {
-				err := mc.checkStackSize()
-				if err != nil {
-					return err
-				}
+			err := mc.checkStackSize()
+			if err != nil {
+				return err
 			}
 			mc.pc++
 
@@ -1189,10 +1177,24 @@ func (p *MachineContext) SetMaxStackSize(n uint64) {
 	p.maxStackSize = n
 }
 
-// checkStackSize returns ErrStackOverflow if the eval stack has exceeded
-// the configured maximum. Called after opcodes that push to the eval stack.
+// checkStackSize is the entry point called at every push-opcode site.
+// Returns nil immediately in the unlimited-stack default (maxStackSize == 0);
+// otherwise delegates to reportStackOverflow. The split keeps this wrapper
+// under Go's inline budget — see PR #636 and Finding 5 of
+// plans/2026-05-06-machine-structural-reduction.md.
 func (p *MachineContext) checkStackSize() error {
-	if p.maxStackSize > 0 && uint64(p.evals.Len()) > p.maxStackSize {
+	if p.maxStackSize == 0 {
+		return nil
+	}
+	return p.reportStackOverflow()
+}
+
+// reportStackOverflow returns ErrStackOverflow when the eval stack exceeds
+// the configured maximum. Precondition: maxStackSize > 0. checkStackSize is
+// the only legitimate caller; calling directly when maxStackSize == 0 silently
+// returns nil and bypasses the intended fast path.
+func (p *MachineContext) reportStackOverflow() error {
+	if uint64(p.evals.Len()) > p.maxStackSize {
 		return werr.WrapForeignErrorf(werr.ErrStackOverflow,
 			"eval stack size %d exceeds limit %d", p.evals.Len(), p.maxStackSize)
 	}
