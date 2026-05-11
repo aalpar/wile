@@ -123,7 +123,8 @@ func NewMachineContext(ctx context.Context, cont *MachineContinuation) *MachineC
 		cont:     cont.parent,
 		counters: VMCounters{opcodeHits: newOpcodeHits(), callCounts: newCallCounts()},
 	}
-	// Value register is passed between contexts, not copied — shallow.
+	// Shallow copy: the singleValue / multiValues fields are transferred
+	// by reference, not deep-cloned — they're passed between contexts.
 	q.copyValueRegisterFrom(&cont.vmState)
 	return q
 }

@@ -286,10 +286,15 @@ func (p *vmState) GetValues() MultipleValues {
 // holds a single value, it is promoted to the multi-value representation
 // before appending. This promote-then-append pattern avoids losing the
 // existing single value when transitioning to the multi-value path.
+//
+// Order matters: we nil singleValue *before* installing the promoted
+// MultipleValues so the mutual-exclusion invariant is never violated, even
+// in the intra-method transient window.
 func (p *vmState) PushValues(v ...values.Value) {
 	if p.multiValues == nil && p.singleValue != nil {
-		p.multiValues = MultipleValues{p.singleValue}
+		promoted := MultipleValues{p.singleValue}
 		p.singleValue = nil
+		p.multiValues = promoted
 	}
 	p.multiValues = append(p.multiValues, v...)
 }

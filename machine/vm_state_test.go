@@ -85,6 +85,41 @@ func TestVmState(t *testing.T) {
 			},
 		},
 		{
+			// pushValueRegisterTo is a silent no-op when the register is
+			// empty (both fields nil). This corresponds to R7RS (values) —
+			// the zero-value return — and is the OpPush behavior when the
+			// previous instruction did not produce a value.
+			name: "pushValueRegisterTo on empty register pushes nothing",
+			checkFn: func(t *testing.T) {
+				var s vmState
+				stack := NewStack()
+				s.pushValueRegisterTo(stack)
+				qt.Assert(t, stack.Len(), qt.Equals, 0)
+			},
+		},
+		{
+			// Sanity-check the single-value fast path: no MultipleValues
+			// wrap, no allocation; one element lands on the stack.
+			name: "pushValueRegisterTo with single value pushes one",
+			checkFn: func(t *testing.T) {
+				var s vmState
+				s.SetValue(values.NewInteger(42))
+				stack := NewStack()
+				s.pushValueRegisterTo(stack)
+				qt.Assert(t, stack.Len(), qt.Equals, 1)
+			},
+		},
+		{
+			name: "pushValueRegisterTo with multi-values pushes all",
+			checkFn: func(t *testing.T) {
+				var s vmState
+				s.SetValues(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
+				stack := NewStack()
+				s.pushValueRegisterTo(stack)
+				qt.Assert(t, stack.Len(), qt.Equals, 3)
+			},
+		},
+		{
 			name: "field coverage: every vmState field documented in every operation",
 			checkFn: func(t *testing.T) {
 				testVmStateFieldCoverage(t)

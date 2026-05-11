@@ -129,6 +129,34 @@ func TestMachineContinuation_Copy(t *testing.T) {
 	qt.Assert(t, cpy.evals != cont.evals, qt.IsTrue)
 }
 
+// TestMachineContinuation_Copy_MultiValuesIndependent locks in the
+// slice-independence invariant that cloneValueRegisterFrom exists for:
+// after Copy(), PushValues on either continuation must not affect the
+// other. This is the property that makes call/cc re-invocation of
+// multi-value continuations safe.
+func TestMachineContinuation_Copy_MultiValuesIndependent(t *testing.T) {
+	env := environment.NewNamespace().Runtime()
+	cont := NewMachineContinuation(nil, nil, env)
+	cont.SetValues(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
+
+	cpy := cont.Copy()
+
+	// Both sides see the initial three values.
+	qt.Assert(t, len(cpy.multiValues), qt.Equals, 3)
+	qt.Assert(t, len(cont.multiValues), qt.Equals, 3)
+
+	// Mutating cpy must not affect cont — slices.Clone in
+	// cloneValueRegisterFrom should have allocated a fresh backing array.
+	cpy.PushValues(values.NewInteger(4))
+	qt.Assert(t, len(cpy.multiValues), qt.Equals, 4)
+	qt.Assert(t, len(cont.multiValues), qt.Equals, 3)
+
+	// And symmetrically: mutating cont must not affect cpy.
+	cont.PushValues(values.NewInteger(99))
+	qt.Assert(t, len(cont.multiValues), qt.Equals, 4)
+	qt.Assert(t, cpy.multiValues[3], valuestest.SchemeEquals, values.NewInteger(4))
+}
+
 func TestMachineContinuation_SchemeString(t *testing.T) {
 	env := environment.NewNamespace().Runtime()
 

@@ -388,13 +388,18 @@ func TestRegisterDirectAccessAllowed(t *testing.T) {
 			present: true,
 		},
 		{
+			// Negative substrings omit the :col: and :ruleguard: suffix —
+			// golangci-lint emits "file:line:col: ruleguard: msg", so the
+			// presence test must match a prefix (file:line:) that the linter
+			// would emit IF the rule fired. Matches the shape used by
+			// noErrorsNew/negative_test_file above.
 			name:    "noDirectValueRegisterAccess/negative_vm_state_file_exempt",
-			substr:  `vm_state.go:5: ruleguard: direct value-register access`,
+			substr:  `vm_state.go:5:`,
 			present: false,
 		},
 		{
 			name:    "noDirectValueRegisterAccess/negative_test_file_exempt",
-			substr:  `fixture_test.go:39: ruleguard: direct value-register access`,
+			substr:  `fixture_test.go:39:`,
 			present: false,
 		},
 	}
