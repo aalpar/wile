@@ -373,7 +373,7 @@ func (p *MachineContext) Run() error {
 			} else if mc.singleValue != nil {
 				mc.evals.Push(mc.singleValue)
 			}
-			err := mc.checkStackSizeFast()
+			err := mc.checkStackSize()
 			if err != nil {
 				return err
 			}
@@ -436,9 +436,9 @@ func (p *MachineContext) Run() error {
 				return applyCallableError(mc, werr.WrapForeignErrorf(werr.ErrNotAList,
 					"apply: final argument is an improper list"))
 			}
-			errStack := mc.checkStackSizeFast()
-			if errStack != nil {
-				return errStack
+			err = mc.checkStackSize()
+			if err != nil {
+				return err
 			}
 			mc.pc++
 
@@ -530,7 +530,7 @@ func (p *MachineContext) Run() error {
 
 		case OpPushLiteral:
 			mc.evals.Push(mc.template.literals[instr.Arg])
-			err := mc.checkStackSizeFast()
+			err := mc.checkStackSize()
 			if err != nil {
 				return err
 			}
@@ -542,9 +542,9 @@ func (p *MachineContext) Run() error {
 				return err
 			}
 			mc.evals.Push(bd.Value())
-			errStack := mc.checkStackSizeFast()
-			if errStack != nil {
-				return errStack
+			err = mc.checkStackSize()
+			if err != nil {
+				return err
 			}
 			mc.pc++
 
@@ -554,9 +554,9 @@ func (p *MachineContext) Run() error {
 				return err
 			}
 			mc.evals.Push(bd.Value())
-			errStack := mc.checkStackSizeFast()
-			if errStack != nil {
-				return errStack
+			err = mc.checkStackSize()
+			if err != nil {
+				return err
 			}
 			mc.pc++
 
@@ -602,7 +602,7 @@ func (p *MachineContext) Run() error {
 
 		case OpPushCachedBinding:
 			mc.evals.Push(mc.template.cachedBindings[instr.Arg].Value())
-			err := mc.checkStackSizeFast()
+			err := mc.checkStackSize()
 			if err != nil {
 				return err
 			}
@@ -1177,27 +1177,23 @@ func (p *MachineContext) SetMaxStackSize(n uint64) {
 	p.maxStackSize = n
 }
 
-// checkStackSizeFast is the inlinable wrapper used at every push-opcode call
-// site. The unlimited-stack default (maxStackSize == 0) takes a single
-// predicted-not-taken branch with no further work; the limited path tail-calls
-// checkStackSizeSlow. Splitting the cold side keeps this function under Go's
-// inline budget (PR #636 documented that the unsplit check, at cost 110, was
-// over the 80-cost budget and its format args escaped to heap — that was the
-// original reason the if-guard was hand-inlined at 6 sites). Finding 5
-// (plans/2026-05-06-machine-structural-reduction.md) replaced the 6 hand
-// inlined guards with this two-line wrapper call: same coverage, same
-// hot path, source-level deduplication.
-func (p *MachineContext) checkStackSizeFast() error {
+// checkStackSize is the entry point called at every push-opcode site.
+// Returns nil immediately in the unlimited-stack default (maxStackSize == 0);
+// otherwise delegates to reportStackOverflow. The split keeps this wrapper
+// under Go's inline budget — see PR #636 and Finding 5 of
+// plans/2026-05-06-machine-structural-reduction.md.
+func (p *MachineContext) checkStackSize() error {
 	if p.maxStackSize == 0 {
 		return nil
 	}
-	return p.checkStackSizeSlow()
+	return p.reportStackOverflow()
 }
 
-// checkStackSizeSlow returns ErrStackOverflow when the eval stack exceeds
-// the configured maximum. The caller (checkStackSizeFast) guarantees
-// maxStackSize > 0, so the redundant zero-test is intentionally absent.
-func (p *MachineContext) checkStackSizeSlow() error {
+// reportStackOverflow returns ErrStackOverflow when the eval stack exceeds
+// the configured maximum. Precondition: maxStackSize > 0. checkStackSize is
+// the only legitimate caller; calling directly when maxStackSize == 0 silently
+// returns nil and bypasses the intended fast path.
+func (p *MachineContext) reportStackOverflow() error {
 	if uint64(p.evals.Len()) > p.maxStackSize {
 		return werr.WrapForeignErrorf(werr.ErrStackOverflow,
 			"eval stack size %d exceeds limit %d", p.evals.Len(), p.maxStackSize)

@@ -311,44 +311,26 @@ change is XS.
 
 ### Finding 5 — Repeated stack-size guard across opcode cases (hand-unrolled loop body)
 
-**Status**: **Shipped via Option D** (2026-05-11). Branch `feat/machine-sr-finding5`.
-
-**Option C-light tried first and rejected.** Lifting the check to the `Run()`
-loop head produced +4.17% geo-mean regression — all 16 Gabriel benchmarks
-slower, worst +6.6%. The cause: shifting two field loads (`mc.maxStackSize`,
-`mc.evals.Len()`) plus a branch from "only on push opcodes" to "every
-iteration" costs ~4% on this hardware because non-push opcodes (`Apply`,
-`LoadLocal`, `Branch`, `RestoreContinuation`, …) now pay a cost they
-previously avoided entirely.
-
-**Option D shipped.** Extracted inlinable `checkStackSizeFast` helper called
-at each of the 6 push sites; the helper fast-paths `maxStackSize == 0` and
-tail-calls `checkStackSizeSlow` only when limited. Source-level dedup (-34
-LOC at the call sites), hot-path code generation unchanged from status quo.
-The Go inliner confirms `checkStackSizeFast` inlines at cost 67/budget 80;
-`checkStackSizeSlow` stays a real call (cost 105) but only fires when
-`maxStackSize > 0`.
-
-**Bench evidence (pinned CPU, interleaved 3×3-block measurement, warmup
-discarded):**
-
-| Metric | Value | Gate | Result |
-|---|---|---|---|
-| Geo-mean delta | **+0.003%** | ±0.5% | **PASS** |
-| Direction | 8 faster / 8 slower | balanced | neutral |
-| Per-bench (worst regress) | deriv +0.99%, nqueens +0.65%, sieve +0.81% | ≤0.3% | partial (offset by tak −1.37%, cpstak −1.05%, peval −0.63%) |
-
-**Methodology note.** On darwin/arm64 laptops, sequential benchmark runs
-drift by ~5.8% over 40 min from thermal throttling unless the CPU is pinned
-at max frequency. Even with pinning, per-bench stdevs remain in the
-0.001–0.087s range (1–6% of mean), so the 0.3% per-benchmark gate is still
-inside the per-block noise floor for individual benchmarks. The 0.5%
-geo-mean gate, which integrates across all 16 benchmarks, is the meaningful
-criterion on this hardware. Interleaved measurement (alternating
-master/branch blocks within a stable thermal envelope) is required to
-extract signal. Future findings on this code path should treat the per-bench
-gate as advisory and rely on the geo-mean gate plus sign-distribution
-analysis (a systematic regression would skew all signs in one direction).
+**Status**: **Shipped via Option D** (2026-05-11, PR #734).
+- (a) Option C-light (lift check to `Run()` loop head): **considered and
+  declined**. Bench-tested against the Gabriel suite; gate failed
+  decisively at +4.17% geo-mean regression (gate ±0.5%, 8× over). All 16
+  benchmarks regressed; worst +6.6%. The cost is structural: shifting
+  two field loads plus a branch from "only on push opcodes" to "every
+  iteration" charges non-push opcodes (`Apply`, `LoadLocal`, `Branch`,
+  `RestoreContinuation`, …) for a check they previously avoided.
+- (b) Option D (extracted inlinable wrapper at the 6 push sites):
+  **shipped**. New `checkStackSize` entry point delegates to
+  `reportStackOverflow` only when `maxStackSize > 0`; the unlimited
+  default returns immediately. Go inliner confirms `checkStackSize`
+  inlines at cost 67/budget 80; the cold delegate stays a real call
+  (cost 105) but only fires when bounded. Source-level dedup at the
+  call sites; hot-path code generation unchanged from the hand-inlined
+  status quo. Bench (pinned CPU, interleaved 3×3-block measurement):
+  geo-mean +0.003%, 8 faster / 8 slower (balanced), worst per-bench
+  regress deriv +0.99% offset by tak −1.37%. Full bench data and the
+  measurement-methodology note are in
+  `memory/finding5-bench-methodology.md`.
 
 **Principle**: Composability
 **Where**: `machine/machine_context.go:368-373, 433-438, 529-534, 543-548, 557-562, 607-612`
