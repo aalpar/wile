@@ -21,12 +21,22 @@ package machine
 // return that opcode; operations dispatched through the side table return
 // OpComplex.
 //
-// Mirrors the operand-extraction switch in operationToInstruction
-// (native_template.go). When adding a new operation:
+// Covers every Op* type in package machine. Operand-bearing ops also
+// appear in operationToInstruction's type switch (native_template.go) for
+// operand extraction; zero-operand ops are encoded purely from OpKind via
+// that function's default branch.
+//
+// Per-type method centralization here is a deliberate deviation from the
+// usual co-location convention (EqualTo, SchemeString, Apply all live with
+// their type definitions). The choice optimizes for "one place to scan the
+// Op -> OpCode map" over per-type discoverability.
+//
+// When adding a new operation:
 //   1. Add OpKind here (or in machine/compilation/op_kind.go if defined
 //      in that package).
 //   2. Add the operand-extraction case in operationToInstruction (if it has
 //      operands; zero-operand ops fall through the default branch).
+//   3. For OpComplex types, also add var _ InlinedOperation = ... below.
 
 // --- Direct-dispatch (own opcode in Run() switch) ---
 
@@ -112,14 +122,39 @@ func (*OperationPushEnv) OpKind() OpCode {
 
 // OperationMakeClosure is the only Op type that both has a dedicated
 // opcode (OpMakeClosure) and implements Apply. The Apply method is
-// vestigial in production -- the compiler emits OpMakeClosure directly
-// rather than routing through the side table -- but is preserved to
-// retain the InlinedOperation contract for the test side-table path.
+// vestigial in production -- the compiler emits OpMakeClosure directly,
+// routing through the Run() switch case rather than the side table.
+//
+// Apply is preserved so OperationMakeClosure satisfies InlinedOperation,
+// allowing TestEditPlan_SideTableGC (edit_plan_test.go:320) to use it as
+// a no-arg placeholder when populating tpl.sideTable. That test asserts
+// only GC remapping of indices and never invokes Apply itself, so the
+// production and test code paths are decoupled. If Apply's body is ever
+// changed, the matching OpMakeClosure inline case in machine_context.go's
+// Run() must be updated to keep production and test behavior consistent
+// (or Apply should be removed and the test migrated to use testInlinedOp
+// from machine_context_test.go:1374).
 func (*OperationMakeClosure) OpKind() OpCode {
 	return OpMakeClosure
 }
 
 // --- Side-table dispatch (OpComplex in Run() switch) ---
+//
+// Each type below must also implement InlinedOperation (the Apply method)
+// because OpComplex dispatch routes through sideTable[i].Apply(mc). The
+// var _ InlinedOperation declarations enforce this invariant at compile
+// time -- any new OpComplex type that forgets Apply will fail to build
+// rather than panic at runtime in AppendOperationsWithSource.
+
+var (
+	_ InlinedOperation = (*OperationForeignFunctionCall)(nil)
+	_ InlinedOperation = (*OperationMakeCaseLambdaClosure)(nil)
+	_ InlinedOperation = (*OperationPushWind)(nil)
+	_ InlinedOperation = (*OperationPopWind)(nil)
+	_ InlinedOperation = (*OperationSetContMark)(nil)
+	_ InlinedOperation = (*OperationSaveContMark)(nil)
+	_ InlinedOperation = (*OperationRestoreContMark)(nil)
+)
 
 func (*OperationForeignFunctionCall) OpKind() OpCode {
 	return OpComplex

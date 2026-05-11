@@ -18,6 +18,22 @@ import "github.com/aalpar/wile/machine"
 
 // Compilation-time operations are all side-table dispatched via OpComplex.
 // See machine/op_kind.go for the package-level Op type to OpCode map.
+//
+// OpComplex dispatch routes through sideTable[i].Apply(mc), so every type
+// below must also implement machine.InlinedOperation. The var declarations
+// enforce this at compile time -- any new compilation-time op that forgets
+// Apply will fail to build rather than panic at runtime.
+
+var (
+	_ machine.InlinedOperation = (*OperationBuildSyntaxList)(nil)
+	_ machine.InlinedOperation = (*OperationSyntaxRulesTransform)(nil)
+	_ machine.InlinedOperation = (*OperationSyntaxCaseMatch)(nil)
+	_ machine.InlinedOperation = (*OperationBindPatternVars)(nil)
+	_ machine.InlinedOperation = (*OperationSyntaxCaseNoMatch)(nil)
+	_ machine.InlinedOperation = (*OperationSyntaxTemplateExpand)(nil)
+	_ machine.InlinedOperation = (*OperationStoreSyntaxCaseInput)(nil)
+	_ machine.InlinedOperation = (*OperationClearSyntaxCaseInput)(nil)
+)
 
 func (*OperationBuildSyntaxList) OpKind() machine.OpCode {
 	return machine.OpComplex

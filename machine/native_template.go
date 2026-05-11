@@ -304,6 +304,16 @@ func operationToInstruction(op Operation) (Instruction, bool) {
 	default:
 		// Zero-operand operations (Wave 1, Wave 5 OperationMakeClosure):
 		// the opcode alone fully specifies the instruction.
+		//
+		// Guard against silent miscompile: if a future operand-bearing op
+		// is added with an OpKind() but no operand-extraction case above,
+		// it would fall through here and lose its operand. Cross-check
+		// against opcodeTable's operandKind classification.
+		if opcodeTable[kind].operandKind != OperandNone {
+			panic(werr.WrapForeignErrorf(
+				werr.ErrInvalidArgument,
+				"operationToInstruction: %T has OpKind=%s with operand but no extraction case", op, kind))
+		}
 		return Instruction{Op: kind}, true
 	}
 }
