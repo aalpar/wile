@@ -167,14 +167,21 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 	// Post-parse duplicate detection over required + rest. Allocate a fresh
 	// slice (don't alias params.Required) so the append for Rest cannot
 	// mutate the params field.
+	//
+	// Per validate/CLAUDE.md's error-accumulation convention, emit one error
+	// per duplicate rather than stopping at the first — matches the peer
+	// paths in validate_let.go (letrec dup loop, checkDuplicateBindingNames).
 	allSyms := append([]*syntax.SyntaxSymbol{}, params.Required...)
 	if params.Rest != nil {
 		allSyms = append(allSyms, params.Rest)
 	}
-	dups := detectDuplicateSymbols(allSyms)
-	if len(dups) > 0 {
-		result.addErrorf(getSourceContext(dups[0]), params.formName,
-			"duplicate parameter name: %s", dups[0].Sym.Key)
+	allOk := true
+	for _, dup := range detectDuplicateSymbols(allSyms) {
+		result.addErrorf(getSourceContext(dup), params.formName,
+			"duplicate parameter name: %s", dup.Sym.Key)
+		allOk = false
+	}
+	if !allOk {
 		return nil
 	}
 	return params

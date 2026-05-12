@@ -105,11 +105,17 @@ func (p *SyntaxObject) Unwrap() values.Value {
 }
 
 // IsPair and IsEmptyList are deliberately not implemented on SyntaxObject.
-// NewSyntaxObject rejects *values.Pair / *values.Vector / *values.Symbol at
-// construction (see syntax_value.go:122-136), so a legitimately-constructed
-// SyntaxObject can never wrap a pair or the empty list. Callers that need
-// pair/empty detection should switch on the syntax-level type
-// (*SyntaxPair, SyntaxEmptyList) — that is the correct dispatch site.
+//
+// NewSyntaxObject's type switch rejects *values.Pair, *values.Vector, and
+// *values.Symbol at construction — pairs flow through *SyntaxPair, vectors
+// through *SyntaxVector, symbols through *SyntaxSymbol. The empty list is
+// not in NewSyntaxObject's rejection list, but by convention the empty list
+// at the syntax phase is constructed as SyntaxEmptyList (which aliases
+// values.EmptyList), not wrapped in a SyntaxObject; a grep of the production
+// code confirms no SyntaxObject ever wraps the empty list.
+//
+// Callers that need pair/empty detection should switch on the syntax-level
+// type (*SyntaxPair, SyntaxEmptyList) — that is the correct dispatch site.
 
 // IsVoid returns true if the syntax object is nil.
 func (p *SyntaxObject) IsVoid() bool {

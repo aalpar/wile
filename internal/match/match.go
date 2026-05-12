@@ -115,24 +115,24 @@ func WithEllipsisID(id string) MatcherOption {
 // nil. When ellipsisVars is supplied but ellipsisDepths is not, depths are
 // inferred from the ID values.
 func NewMatcher(variables map[string]struct{}, codes []SyntaxCommand, opts ...MatcherOption) *Matcher {
-	m := &Matcher{
+	q := &Matcher{
 		variables:  variables,
 		codes:      codes,
 		ellipsisID: DefaultEllipsis,
 	}
 	for _, opt := range opts {
-		opt(m)
+		opt(q)
 	}
 	// When explicit depths are not provided, infer from ID ordering: the
 	// compiler assigns IDs sequentially, so inner ellipsis always gets a
 	// lower ID than outer ellipsis. Use the ID value as a depth proxy.
-	if m.ellipsisDepths == nil && len(m.ellipsisVars) > 0 {
-		m.ellipsisDepths = make(map[int]int, len(m.ellipsisVars))
-		for id := range m.ellipsisVars {
-			m.ellipsisDepths[id] = id
+	if q.ellipsisDepths == nil && len(q.ellipsisVars) > 0 {
+		q.ellipsisDepths = make(map[int]int, len(q.ellipsisVars))
+		for id := range q.ellipsisVars {
+			q.ellipsisDepths[id] = id
 		}
 	}
-	return m
+	return q
 }
 
 // handleByteCodeDone processes the ByteCodeDone instruction, which marks
