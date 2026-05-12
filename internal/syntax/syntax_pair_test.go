@@ -145,9 +145,37 @@ func TestSyntaxPair_Length(t *testing.T) {
 }
 
 func TestSyntaxPair_IsVoid(t *testing.T) {
-	qt.Assert(t, (*values.Pair)(nil).IsVoid(), qt.IsTrue)
-	qt.Assert(t, values.NewCons(values.NewInteger(1), values.EmptyList).IsVoid(), qt.IsFalse)
-	qt.Assert(t, values.EmptyList.IsVoid(), qt.IsFalse)
+	// Test *SyntaxPair (the type this test file is for), not *values.Pair.
+	// The earlier shape mistakenly tested *values.Pair — parallel
+	// copy-paste defect to the one fixed in TestSyntaxPair_IsEmptyList.
+	qt.Assert(t, (*SyntaxPair)(nil).IsVoid(), qt.IsTrue,
+		qt.Commentf("nil receiver is void"))
+	qt.Assert(t, NewSyntaxCons(
+		NewSyntaxObject(values.NewInteger(1), nil),
+		SyntaxEmptyList,
+		nil,
+	).IsVoid(), qt.IsFalse,
+		qt.Commentf("a properly-constructed pair is not void"))
+}
+
+// TestSyntaxPair_UnwrapAll_NilNilPair pins the post-migration behavior on
+// a nil-nil pair. Pre-migration, *SyntaxPair.IsEmptyList()'s short-circuit
+// inside UnwrapAllShared returned values.EmptyList. Post-migration the
+// short-circuit is gone, so UnwrapAll walks the pair and returns a
+// *values.Pair with the singleton EmptyList substituted for the nil cdr.
+//
+// This is a documented behavior change with no production consumers (the
+// nil-nil construction appears only in tests). The test fences the change
+// so a future regression (e.g. someone resurrecting the
+// IsEmptyList-on-nil-nil semantic in UnwrapAllShared) is loud.
+func TestSyntaxPair_UnwrapAll_NilNilPair(t *testing.T) {
+	pair := NewSyntaxCons(nil, nil, nil)
+	result := pair.UnwrapAll()
+	_, isPair := result.(*values.Pair)
+	qt.Assert(t, isPair, qt.IsTrue,
+		qt.Commentf("nil-nil SyntaxPair unwraps to *values.Pair, not EmptyList"))
+	qt.Assert(t, values.IsEmptyList(result), qt.IsFalse,
+		qt.Commentf("the unwrapped result is not the empty list"))
 }
 
 func TestSyntaxPair_IsEmptyList(t *testing.T) {

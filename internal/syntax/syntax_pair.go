@@ -201,10 +201,8 @@ func (p *SyntaxPair) Length() int {
 }
 
 // IsEmptyList returns false. A *SyntaxPair is never the empty list;
-// SyntaxEmptyList (an alias for the values.EmptyList singleton, lifted
-// into the syntax phase) is the only representation of the empty list
-// at the syntax level. Mirrors the values.Pair migration; see Finding
-// 1 of plans/2026-05-07-internal-structural-reduction.md.
+// SyntaxEmptyList (an alias for the values.EmptyList singleton) is
+// the only representation of the empty list at the syntax phase.
 func (*SyntaxPair) IsEmptyList() bool {
 	return false
 }
