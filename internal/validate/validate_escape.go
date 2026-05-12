@@ -14,12 +14,18 @@
 
 package validate
 
-import "github.com/aalpar/wile/environment"
+import (
+	"github.com/aalpar/wile/environment"
+	"github.com/aalpar/wile/internal/syntax"
+)
 
 // markEscapedBindings walks the validated body (and optionally init
 // expressions) to determine which let bindings are referenced in non-call
 // positions (argument, return value, init expression). A reference is in
 // call position only when it is the Proc of a ValidatedCall or ValidatedApply.
+//
+// Escape predicate: reference with role == RefInBody (i.e., not the
+// operator position of a call, not the target of a set!).
 //
 // set! targets are NOT marked as escaped — mutation is tracked by Mutable.
 // The three fields (Mutable, Captured, Escapes) form an implicational base:
@@ -40,75 +46,32 @@ func markEscapedBindings(
 	if childEnv == nil || len(bindings) == 0 {
 		return
 	}
-
-	// Build BindingID → index map for the let bindings.
-	idToIdx := make(map[environment.BindingID]int, len(bindings))
-	for i, b := range bindings {
-		bid, ok := childEnv.ResolveBindingID(b.Name.Sym, b.Name.Scopes())
-		if ok {
-			idToIdx[bid] = i
-		}
-	}
+	idToIdx := buildBindingIdxMap(childEnv, bindings)
 	if len(idToIdx) == 0 {
 		return
 	}
 
-	w := escapeWalker{
-		env:      childEnv,
-		bindings: bindings,
-		idToIdx:  idToIdx,
+	visit := func(sym *syntax.SyntaxSymbol, role RefRole, _ int) {
+		if role != RefInBody {
+			return
+		}
+		bid, ok := childEnv.ResolveBindingID(sym.Sym, sym.Scopes())
+		if !ok {
+			return
+		}
+		idx, found := idToIdx[bid]
+		if !found {
+			return
+		}
+		bindings[idx].Escapes = true
 	}
 
 	if walkInits {
 		for _, b := range bindings {
-			w.walkExpr(b.Init)
+			WalkBindingRefs(b.Init, visit)
 		}
 	}
 	for _, expr := range body {
-		w.walkExpr(expr)
+		WalkBindingRefs(expr, visit)
 	}
-}
-
-// escapeWalker walks a ValidatedExpr tree detecting non-call-position
-// references to tracked let bindings. Uses WalkSubExprs for structural
-// recursion — only the symbol check and call-position logic are here.
-type escapeWalker struct {
-	env      *environment.EnvironmentFrame
-	bindings []ValidatedLetBinding
-	idToIdx  map[environment.BindingID]int
-}
-
-func (p *escapeWalker) walkExpr(expr ValidatedExpr) {
-	if expr == nil {
-		return
-	}
-	// Symbols are leaf nodes — check for non-call-position reference.
-	sym, ok := expr.(*ValidatedSymbol)
-	if ok {
-		bid, resolved := p.env.ResolveBindingID(sym.Symbol.Sym, sym.Symbol.Scopes())
-		if resolved {
-			idx, found := p.idToIdx[bid]
-			if found {
-				p.bindings[idx].Escapes = true
-			}
-		}
-		return
-	}
-	// Structural recursion via WalkSubExprs.
-	WalkSubExprs(expr, func(child ValidatedExpr, role ChildRole) {
-		if role == RoleCallProc {
-			sym, ok := child.(*ValidatedSymbol)
-			if ok {
-				bid, resolved := p.env.ResolveBindingID(sym.Symbol.Sym, sym.Symbol.Scopes())
-				if resolved {
-					_, tracked := p.idToIdx[bid]
-					if tracked {
-						// Call position — do NOT mark Escapes.
-						return
-					}
-				}
-			}
-		}
-		p.walkExpr(child)
-	})
 }
