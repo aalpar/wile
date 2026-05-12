@@ -130,11 +130,7 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 	// Walk the list, collecting required params and optional rest.
 	// Duplicate detection runs post-parse via detectDuplicateSymbols below.
 	var current values.Value = pair
-	for {
-		if values.IsEmptyList(current) {
-			break
-		}
-
+	for !values.IsEmptyList(current) {
 		p, ok := current.(*syntax.SyntaxPair)
 		if !ok {
 			// Not a pair - check if it's a rest parameter (improper list)

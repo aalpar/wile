@@ -136,7 +136,11 @@ func NewSyntaxMatcher(
 		literalSyntax = opts.LiteralSyntax
 	}
 	return &SyntaxMatcher{
-		matcher:       NewMatcherFullWithDepths(variables, codes, ellipsisVars, ellipsisDepths, ellipsisID),
+		matcher: NewMatcher(variables, codes,
+			WithEllipsisVars(ellipsisVars),
+			WithEllipsisDepths(ellipsisDepths),
+			WithEllipsisID(ellipsisID),
+		),
 		ellipsisID:    ellipsisID,
 		literalSyntax: literalSyntax,
 	}

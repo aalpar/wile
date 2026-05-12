@@ -74,57 +74,65 @@ type Matcher struct {
 	tailCountPC    int // bytecode index where the cache was set
 }
 
-// NewMatcher creates a new pattern matcher with the default ellipsis ("...").
-func NewMatcher(variables map[string]struct{}, codes []SyntaxCommand) *Matcher {
-	return NewMatcherWithEllipsisVars(variables, codes, nil)
-}
+// MatcherOption configures a Matcher at construction time. Pass options to
+// NewMatcher; later options override earlier ones if they touch the same field.
+type MatcherOption func(*Matcher)
 
-// NewMatcherWithEllipsisVars creates a matcher with ellipsis variable mapping.
-// The ellipsisVars parameter maps each ellipsis ID to its captured pattern variables.
-// Uses the default ellipsis identifier ("...").
-func NewMatcherWithEllipsisVars(variables map[string]struct{}, codes []SyntaxCommand, ellipsisVars map[int]map[string]struct{}) *Matcher {
-	return NewMatcherFull(variables, codes, ellipsisVars, DefaultEllipsis)
-}
-
-// NewMatcherFull creates a matcher with all parameters including custom ellipsis.
-// The ellipsisID parameter specifies the identifier used for ellipsis patterns
-// (default is "..." per R7RS, but can be customized per R7RS §4.3.2).
-func NewMatcherFull(variables map[string]struct{}, codes []SyntaxCommand, ellipsisVars map[int]map[string]struct{}, ellipsisID string) *Matcher {
-	return NewMatcherFullWithDepths(variables, codes, ellipsisVars, nil, ellipsisID)
-}
-
-// NewMatcherFullWithDepths creates a matcher with all parameters including custom
-// ellipsis and compilation-order metadata. The ellipsisDepths parameter maps each
-// ellipsis ID to its compilation order (lower = inner, higher = outer). When nil,
-// order is inferred from the ID values (the compiler assigns IDs sequentially,
-// inner-first).
-func NewMatcherFullWithDepths(
-	variables map[string]struct{},
-	codes []SyntaxCommand,
-	ellipsisVars map[int]map[string]struct{},
-	ellipsisDepths map[int]int,
-	ellipsisID string,
-) *Matcher {
-	if ellipsisID == "" {
-		ellipsisID = DefaultEllipsis
+// WithEllipsisVars supplies the ellipsis-id → captured-variables map. When
+// absent, the matcher operates with no ellipsis-bound variables.
+func WithEllipsisVars(v map[int]map[string]struct{}) MatcherOption {
+	return func(m *Matcher) {
+		m.ellipsisVars = v
 	}
-	// When explicit depths are not provided, infer from ID ordering:
-	// the compiler assigns IDs sequentially, so inner ellipsis always gets
-	// a lower ID than outer ellipsis. Use the ID value as a depth proxy.
-	if ellipsisDepths == nil && len(ellipsisVars) > 0 {
-		ellipsisDepths = make(map[int]int, len(ellipsisVars))
-		for id := range ellipsisVars {
-			ellipsisDepths[id] = id
+}
+
+// WithEllipsisDepths supplies the ellipsis-id → compilation-order map
+// (lower = inner, higher = outer). When absent and ellipsisVars is non-empty,
+// depth is inferred from the ID values: the compiler assigns IDs sequentially
+// inner-first, so the ID itself is a valid depth proxy.
+func WithEllipsisDepths(d map[int]int) MatcherOption {
+	return func(m *Matcher) {
+		m.ellipsisDepths = d
+	}
+}
+
+// WithEllipsisID overrides the ellipsis identifier (default "..." per R7RS).
+// R7RS §4.3.2 allows custom ellipsis identifiers; this option supplies that.
+// Empty string is treated as "no override" and the default is used.
+func WithEllipsisID(id string) MatcherOption {
+	return func(m *Matcher) {
+		if id != "" {
+			m.ellipsisID = id
 		}
 	}
-	q := &Matcher{
-		variables:      variables,
-		codes:          codes,
-		ellipsisVars:   ellipsisVars,
-		ellipsisDepths: ellipsisDepths,
-		ellipsisID:     ellipsisID,
+}
+
+// NewMatcher creates a pattern matcher. Required: the pattern variables set
+// and the compiled bytecode. Options supply ellipsis-related metadata (see
+// WithEllipsisVars, WithEllipsisDepths, WithEllipsisID).
+//
+// Defaults: ellipsisID = DefaultEllipsis ("..."); ellipsisVars / ellipsisDepths
+// nil. When ellipsisVars is supplied but ellipsisDepths is not, depths are
+// inferred from the ID values.
+func NewMatcher(variables map[string]struct{}, codes []SyntaxCommand, opts ...MatcherOption) *Matcher {
+	m := &Matcher{
+		variables:  variables,
+		codes:      codes,
+		ellipsisID: DefaultEllipsis,
 	}
-	return q
+	for _, opt := range opts {
+		opt(m)
+	}
+	// When explicit depths are not provided, infer from ID ordering: the
+	// compiler assigns IDs sequentially, so inner ellipsis always gets a
+	// lower ID than outer ellipsis. Use the ID value as a depth proxy.
+	if m.ellipsisDepths == nil && len(m.ellipsisVars) > 0 {
+		m.ellipsisDepths = make(map[int]int, len(m.ellipsisVars))
+		for id := range m.ellipsisVars {
+			m.ellipsisDepths[id] = id
+		}
+	}
+	return m
 }
 
 // handleByteCodeDone processes the ByteCodeDone instruction, which marks
