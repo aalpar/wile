@@ -137,6 +137,24 @@ matching the `ExpanderCtx` precedent.
 
 ### Finding 2 — Tail/non-tail opcode duplication: 28 cases that differ in one bit
 
+**Status**: **Considered and declined** (2026-05-11, post-PR #737). The
+encoding-driven collapse was prototyped on `feat/machine-sr-finding2`
+(see closed PR #737) and bench-tested against `master` via the
+project's pinned interleaved methodology
+(`memory/finding5-bench-methodology.md`). All 16 Gabriel benchmarks
+regressed; geomean **+2.5%**, 5× the parent-plan gate of ±0.5%. The
+hypothesis that "encoding-driven dispatch retains the jump-table
+compilation, costing only a predictable per-call-site branch on
+`instr.Arg`'s sign bit" was wrong in practice — the dominant cost was
+loss of compiler specialization: pre-collapse, the literal `false` /
+`true` arguments at each `execPromoted` call site let the compiler
+constant-fold the tail branch into separate code paths; post-collapse
+the tail flag is decoded from `instr.Arg` at runtime, defeating that
+specialization. The original author's hand-unroll was load-bearing for
+performance. Full bench data and cost-model analysis in
+`memory/finding2-collapse-revert.md`. This finding now joins Finding 1
+and Finding 4(b) as a closed "considered and declined" item.
+
 **Principle**: Composability
 **Where**: `machine/opcode.go:93-126` (constants); `machine/machine_context.go:652-890`
 (28 dispatch cases); `machine/call_promoted.go:184-207` (`execPromoted`);
