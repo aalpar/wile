@@ -104,16 +104,12 @@ func (p *SyntaxObject) Unwrap() values.Value {
 	return p.datum
 }
 
-// IsPair returns true if the wrapped datum is a pair.
-func (p *SyntaxObject) IsPair() bool {
-	_, ok := p.Datum().(*values.Pair)
-	return ok
-}
-
-// IsEmptyList returns true if the wrapped datum is the empty list.
-func (p *SyntaxObject) IsEmptyList() bool {
-	return values.IsEmptyList(p.Datum())
-}
+// IsPair and IsEmptyList are deliberately not implemented on SyntaxObject.
+// NewSyntaxObject rejects *values.Pair / *values.Vector / *values.Symbol at
+// construction (see syntax_value.go:122-136), so a legitimately-constructed
+// SyntaxObject can never wrap a pair or the empty list. Callers that need
+// pair/empty detection should switch on the syntax-level type
+// (*SyntaxPair, SyntaxEmptyList) — that is the correct dispatch site.
 
 // IsVoid returns true if the syntax object is nil.
 func (p *SyntaxObject) IsVoid() bool {
