@@ -238,7 +238,7 @@ func validateLetStarBindingsAndBody(
 	for i, r := range raw {
 		syms[i] = r.name
 	}
-	hasDups := len(detectDuplicateSymbols(syms)) > 0
+	hasDups := len(findDuplicateSymbols(syms)) > 0
 
 	if !hasDups {
 		return validateLetStarFlat(ctx, env, formName, source, raw, elements, result)
@@ -386,22 +386,21 @@ func validateLetrecBindingsAndBody(
 		return nil
 	}
 
-	// Split raw into parallel name + init slices, then build a child env
-	// with ALL bindings visible (letrec semantics: all names available in
-	// every init).
+	// Split raw into parallel name + init slices.
 	nameSyms := make([]*syntax.SyntaxSymbol, len(raw))
 	initExprs := make([]syntax.SyntaxValue, len(raw))
 	for i, r := range raw {
 		nameSyms[i] = r.name
 		initExprs[i] = r.initStx
 	}
-	childEnv := extendEnvWithSymbols(env, nameSyms)
 
-	// Check for duplicate binding names (R7RS §4.2.2)
-	// Uses scope-aware identity so that identifiers with the same name but
-	// different scope sets (introduced by hygienic macro expansion) are distinct.
+	// Check for duplicate binding names BEFORE building the child env (R7RS
+	// §4.2.2). Doing dup-check first avoids the wasted work of binding a
+	// duplicate name into the frame just to reject it. Uses scope-aware
+	// identity so identifiers with the same name but different scope sets
+	// (introduced by hygienic macro expansion) are distinct.
 	allOk := true
-	for _, dup := range detectDuplicateSymbols(nameSyms) {
+	for _, dup := range findDuplicateSymbols(nameSyms) {
 		result.addErrorf(getSourceContext(dup), formName,
 			"duplicate binding name %q", dup.Sym.Key)
 		allOk = false
@@ -409,6 +408,10 @@ func validateLetrecBindingsAndBody(
 	if !allOk {
 		return nil
 	}
+
+	// Build a child env with ALL bindings visible (letrec semantics: all
+	// names available in every init).
+	childEnv := extendEnvWithSymbols(env, nameSyms)
 
 	// Second pass: validate init expressions in child env
 	var bindings []ValidatedLetBinding
@@ -555,7 +558,7 @@ func checkDuplicateBindingNames(
 		syms[i] = b.Name
 	}
 	allOk := true
-	for _, dup := range detectDuplicateSymbols(syms) {
+	for _, dup := range findDuplicateSymbols(syms) {
 		result.addErrorf(getSourceContext(dup), formName,
 			"duplicate binding name %q", dup.Sym.Key)
 		allOk = false

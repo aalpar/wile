@@ -116,6 +116,11 @@ func TestLetrecValidation(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "recursive", Code: `(letrec ((f (lambda (n) (if (= n 0) 1 (* n (f (- n 1))))))) (f 5))`, Expected: values.NewInteger(120)},
 		{Name: "mutual recursion", Code: `(letrec ((even? (lambda (n) (if (= n 0) #t (odd? (- n 1))))) (odd? (lambda (n) (if (= n 0) #f (even? (- n 1)))))) (even? 10))`, Expected: values.TrueValue},
+		// Zero-binding letrec / letrec* — exercises the extendEnvWithSymbols
+		// empty-input short-circuit; body validates and runs in the outer
+		// env. R7RS §4.2.2 explicitly permits empty bindings.
+		{Name: "empty bindings", Code: `(letrec () 42)`, Expected: values.NewInteger(42)},
+		{Name: "empty bindings letrec*", Code: `(letrec* () 42)`, Expected: values.NewInteger(42)},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {

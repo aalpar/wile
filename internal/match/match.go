@@ -98,12 +98,16 @@ func WithEllipsisDepths(d map[int]int) MatcherOption {
 
 // WithEllipsisID overrides the ellipsis identifier (default "..." per R7RS).
 // R7RS §4.3.2 allows custom ellipsis identifiers; this option supplies that.
-// Empty string is treated as "no override" and the default is used.
+// Empty string is treated as an explicit reset to DefaultEllipsis (rather
+// than a silent no-op), so the option behaves correctly even if a future
+// refactor drops NewMatcher's default-initialization.
 func WithEllipsisID(id string) MatcherOption {
 	return func(m *Matcher) {
-		if id != "" {
-			m.ellipsisID = id
+		if id == "" {
+			m.ellipsisID = DefaultEllipsis
+			return
 		}
+		m.ellipsisID = id
 	}
 }
 
@@ -126,7 +130,10 @@ func NewMatcher(variables map[string]struct{}, codes []SyntaxCommand, opts ...Ma
 	// When explicit depths are not provided, infer from ID ordering: the
 	// compiler assigns IDs sequentially, so inner ellipsis always gets a
 	// lower ID than outer ellipsis. Use the ID value as a depth proxy.
-	if q.ellipsisDepths == nil && len(q.ellipsisVars) > 0 {
+	// 'len == 0' (rather than '== nil') covers both nil and empty-non-nil
+	// maps so a caller passing WithEllipsisDepths(emptyMap) does not silently
+	// suppress inference (per CLAUDE.md's prefer-broad-predicates rule).
+	if len(q.ellipsisDepths) == 0 && len(q.ellipsisVars) > 0 {
 		q.ellipsisDepths = make(map[int]int, len(q.ellipsisVars))
 		for id := range q.ellipsisVars {
 			q.ellipsisDepths[id] = id

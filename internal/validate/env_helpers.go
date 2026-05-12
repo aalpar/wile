@@ -33,14 +33,11 @@ func bindLocalSymbol(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol
 	)
 }
 
-// extendEnvWithSymbols creates a child frame and binds all symbols as
-// variables. Returns env unchanged if syms is empty. This is the batch
-// primitive used by lambda parameter binding and let (parallel binding) where
-// all symbols enter scope at once.
-func extendEnvWithSymbols(env *environment.EnvironmentFrame, syms []*syntax.SyntaxSymbol) *environment.EnvironmentFrame {
-	if len(syms) == 0 {
-		return env
-	}
+// createChildEnvWithSymbols ALWAYS creates a fresh child frame and binds the
+// given symbols as variables, even when syms is empty. This is the primitive
+// used by lambda parameter binding, which requires a per-lambda frame
+// boundary independent of how many parameters were declared.
+func createChildEnvWithSymbols(env *environment.EnvironmentFrame, syms []*syntax.SyntaxSymbol) *environment.EnvironmentFrame {
 	lenv := environment.NewLocalEnvironment(0)
 	childEnv := environment.NewEnvironmentFrameWithParent(lenv, env)
 	for _, sym := range syms {
@@ -49,12 +46,24 @@ func extendEnvWithSymbols(env *environment.EnvironmentFrame, syms []*syntax.Synt
 	return childEnv
 }
 
-// detectDuplicateSymbols returns the duplicates in syms in order of second
+// extendEnvWithSymbols is the let-family-flavored wrapper around
+// createChildEnvWithSymbols: it short-circuits and returns env unchanged when
+// syms is empty (since let/let*/letrec with zero bindings have no need to
+// open a fresh scope). Use createChildEnvWithSymbols directly when an
+// always-fresh frame is required (lambda).
+func extendEnvWithSymbols(env *environment.EnvironmentFrame, syms []*syntax.SyntaxSymbol) *environment.EnvironmentFrame {
+	if len(syms) == 0 {
+		return env
+	}
+	return createChildEnvWithSymbols(env, syms)
+}
+
+// findDuplicateSymbols returns the duplicates in syms in order of second
 // (and later) appearance. Equality is by (key, scope-fingerprint) tuple so
 // hygienic bindings with the same name but different scope sets (introduced
 // by macro expansion) are not falsely treated as duplicates. Empty result
 // means no duplicates; callers decide how to report.
-func detectDuplicateSymbols(syms []*syntax.SyntaxSymbol) []*syntax.SyntaxSymbol {
+func findDuplicateSymbols(syms []*syntax.SyntaxSymbol) []*syntax.SyntaxSymbol {
 	if len(syms) < 2 {
 		return nil
 	}

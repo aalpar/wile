@@ -131,6 +131,22 @@ func TestDefine_Errors(t *testing.T) {
 			Code: `(define (f x x) x)`,
 		},
 		{
+			// Pins the multi-dup error-accumulation behavior. After
+			// the validate_define refactor to post-parse detection +
+			// full-slice iteration, all three duplicate pairs should
+			// be reported in a single validation pass rather than
+			// stopping at the first.
+			Name: "multiple duplicate parameter names",
+			Code: `(define (f x x y y z z) x)`,
+		},
+		{
+			// Rest-vs-required collision exercises the post-parse
+			// detection path that runs after both Required and Rest
+			// have been collected.
+			Name: "rest parameter shadows required parameter",
+			Code: `(define (f x . x) x)`,
+		},
+		{
 			Name: "function missing body",
 			Code: `(define (f x))`,
 		},

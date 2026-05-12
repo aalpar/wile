@@ -128,7 +128,7 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 	}
 
 	// Walk the list, collecting required params and optional rest.
-	// Duplicate detection runs post-parse via detectDuplicateSymbols below.
+	// Duplicate detection runs post-parse via findDuplicateSymbols below.
 	var current values.Value = pair
 	for !values.IsEmptyList(current) {
 		p, ok := current.(*syntax.SyntaxPair)
@@ -176,7 +176,7 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 		allSyms = append(allSyms, params.Rest)
 	}
 	allOk := true
-	for _, dup := range detectDuplicateSymbols(allSyms) {
+	for _, dup := range findDuplicateSymbols(allSyms) {
 		result.addErrorf(getSourceContext(dup), params.formName,
 			"duplicate parameter name: %s", dup.Sym.Key)
 		allOk = false
