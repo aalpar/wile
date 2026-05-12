@@ -58,6 +58,27 @@ func extendEnvWithSymbols(env *environment.EnvironmentFrame, syms []*syntax.Synt
 	return createChildEnvWithSymbols(env, syms)
 }
 
+// buildBindingIdxMap resolves each binding's name (under childEnv) to
+// its BindingID, returning a BindingID → bindings-slice-index map.
+// Bindings whose names fail to resolve under childEnv are silently
+// dropped — best-effort, matching the prior walker behavior. Used by
+// markCapturedBindings / markEscapedBindings (consumers of
+// WalkBindingRefs); a candidate for any future analysis that needs to
+// map BindingID → index across a let-binding slice.
+func buildBindingIdxMap(
+	childEnv *environment.EnvironmentFrame,
+	bindings []ValidatedLetBinding,
+) map[environment.BindingID]int {
+	idToIdx := make(map[environment.BindingID]int, len(bindings))
+	for i, b := range bindings {
+		bid, ok := childEnv.ResolveBindingID(b.Name.Sym, b.Name.Scopes())
+		if ok {
+			idToIdx[bid] = i
+		}
+	}
+	return idToIdx
+}
+
 // findDuplicateSymbols returns the duplicates in syms in order of second
 // (and later) appearance. Equality is by (key, scope-fingerprint) tuple so
 // hygienic bindings with the same name but different scope sets (introduced
