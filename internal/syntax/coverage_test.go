@@ -660,19 +660,6 @@ func TestSyntaxSymbol_SchemeString(t *testing.T) {
 	qt.Assert(t, sym.SchemeString(), qt.Contains, "foo")
 }
 
-// TestSyntaxObject_IsPair tests the IsPair method
-func TestSyntaxObject_IsPair(t *testing.T) {
-	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
-	obj := NewSyntaxObject(values.NewInteger(42), sctx)
-	qt.Assert(t, obj.IsPair(), qt.IsFalse)
-}
-
-func TestSyntaxObject_IsEmptyList(t *testing.T) {
-	sctx := NewSourceContext("", "", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
-	obj := NewSyntaxObject(values.NewInteger(42), sctx)
-	qt.Assert(t, obj.IsEmptyList(), qt.IsFalse)
-}
-
 func TestSyntaxObject_SourceContext(t *testing.T) {
 	sctx := NewSourceContext("test", "file.scm", NewSourceIndexes(0, 0, 0), NewSourceIndexes(0, 0, 0))
 	obj := NewSyntaxObject(values.NewInteger(42), sctx)

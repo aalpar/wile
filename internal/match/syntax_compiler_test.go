@@ -633,7 +633,7 @@ func TestExecuteVectorPattern(t *testing.T) {
 			testSyntaxVec(testSyntaxInt(1), testSyntaxInt(2)),
 			testSyntaxVec(testSyntaxInt(3), testSyntaxInt(4)),
 		)
-		matcher := NewMatcherWithEllipsisVars(variables, compiler.codes, compiler.ellipsisVars)
+		matcher := NewMatcher(variables, compiler.codes, WithEllipsisVars(compiler.ellipsisVars))
 		err := matcher.MatchSyntax(context.Background(), target)
 		c.Assert(err, qt.IsNil)
 
@@ -662,7 +662,7 @@ func TestExecuteVectorPattern(t *testing.T) {
 		compiler.Compile(context.TODO(), pattern) //nolint:errcheck
 
 		target := testSyntaxList(testSyntaxSym("foo"))
-		matcher := NewMatcherWithEllipsisVars(variables, compiler.codes, compiler.ellipsisVars)
+		matcher := NewMatcher(variables, compiler.codes, WithEllipsisVars(compiler.ellipsisVars))
 		err := matcher.MatchSyntax(context.Background(), target)
 		c.Assert(err, qt.IsNil)
 

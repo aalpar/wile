@@ -152,10 +152,53 @@ func validateLetBindingsAndBody(
 	}
 }
 
-// letStarRawBinding holds a parsed but not-yet-validated let* binding pair.
-type letStarRawBinding struct {
+// rawLetBinding holds a parsed but not-yet-validated (name init) pair.
+// Shared by let, let*, letrec, and named-let parse paths.
+type rawLetBinding struct {
 	name    *syntax.SyntaxSymbol
 	initStx syntax.SyntaxValue
+}
+
+// parseLetBindingPairs parses a ((name init) ...) list into raw bindings.
+// Does NOT validate init — callers validate init in the appropriate
+// environment (let in outer env, let* in evolving env, letrec in fully-
+// populated child env). Returns nil, false on any malformed entry, after
+// accumulating all error messages into result.
+func parseLetBindingPairs(
+	bindingsListRaw []syntax.SyntaxValue,
+	formName string,
+	result *ValidationResult,
+) ([]rawLetBinding, bool) {
+	raw := make([]rawLetBinding, 0, len(bindingsListRaw))
+	allOk := true
+	for _, bindingExpr := range bindingsListRaw {
+		bPair, bOk := bindingExpr.(*syntax.SyntaxPair)
+		if !bOk || syntax.IsSyntaxEmptyList(bPair) {
+			result.addError(getSourceContext(bindingExpr), formName,
+				formName+" binding must be (name init)")
+			allOk = false
+			continue
+		}
+		elems, imp := collectList(bPair)
+		if imp || len(elems) != 2 {
+			result.addError(getSourceContext(bindingExpr), formName,
+				formName+" binding must be (name init)")
+			allOk = false
+			continue
+		}
+		nameSym, symOk := asSyntaxSymbol(elems[0])
+		if !symOk {
+			result.addError(getSourceContext(elems[0]), formName,
+				formName+" binding name must be a symbol")
+			allOk = false
+			continue
+		}
+		raw = append(raw, rawLetBinding{name: nameSym, initStx: elems[1]})
+	}
+	if !allOk {
+		return nil, false
+	}
+	return raw, true
 }
 
 // validateLetStarBindingsAndBody handles let*: inits validated incrementally.
@@ -180,58 +223,22 @@ func validateLetStarBindingsAndBody(
 		return nil
 	}
 
-	// First pass: parse all binding pairs (names + init syntax), validate structure.
-	var raw []letStarRawBinding
-	allOk := true
-	for _, bindingExpr := range bindingsListRaw {
-		bPair, bOk := bindingExpr.(*syntax.SyntaxPair)
-		if !bOk || syntax.IsSyntaxEmptyList(bPair) {
-			result.addError(getSourceContext(bindingExpr), formName,
-				formName+" binding must be (name init)")
-			allOk = false
-			continue
-		}
-
-		elems, imp := collectList(bPair)
-		if imp || len(elems) != 2 {
-			result.addError(getSourceContext(bindingExpr), formName,
-				formName+" binding must be (name init)")
-			allOk = false
-			continue
-		}
-
-		nameSym, symOk := asSyntaxSymbol(elems[0])
-		if !symOk {
-			result.addError(getSourceContext(elems[0]), formName,
-				formName+" binding name must be a symbol")
-			allOk = false
-			continue
-		}
-
-		raw = append(raw, letStarRawBinding{name: nameSym, initStx: elems[1]})
-	}
-	if !allOk {
+	// Parse all binding pairs (names + init syntax). Init is NOT validated
+	// here — let* validates incrementally in the evolving env, so we defer
+	// it to the flat/nested helpers below.
+	raw, ok := parseLetBindingPairs(bindingsListRaw, formName, result)
+	if !ok {
 		return nil
 	}
 
 	// Check for duplicate names — determines which code path to use.
 	// Uses scope-aware identity so hygienic bindings with the same name
 	// but different scopes are not falsely treated as duplicates.
-	hasDups := false
-	if len(raw) >= 2 {
-		seen := make(map[bindingIdentity]bool, len(raw))
-		for _, r := range raw {
-			id := bindingIdentity{
-				key:      r.name.Sym.Key,
-				scopeKey: scopeFingerprint(r.name.Scopes()),
-			}
-			if seen[id] {
-				hasDups = true
-				break
-			}
-			seen[id] = true
-		}
+	syms := make([]*syntax.SyntaxSymbol, len(raw))
+	for i, r := range raw {
+		syms[i] = r.name
 	}
+	hasDups := len(findDuplicateSymbols(syms)) > 0
 
 	if !hasDups {
 		return validateLetStarFlat(ctx, env, formName, source, raw, elements, result)
@@ -246,7 +253,7 @@ func validateLetStarFlat(
 	env *environment.EnvironmentFrame,
 	formName string,
 	source *syntax.SourceContext,
-	raw []letStarRawBinding,
+	raw []rawLetBinding,
 	elements []syntax.SyntaxValue,
 	result *ValidationResult,
 ) ValidatedExpr {
@@ -295,7 +302,7 @@ func validateLetStarNested(
 	env *environment.EnvironmentFrame,
 	formName string,
 	source *syntax.SourceContext,
-	raw []letStarRawBinding,
+	raw []rawLetBinding,
 	elements []syntax.SyntaxValue,
 	result *ValidationResult,
 ) ValidatedExpr {
@@ -312,14 +319,10 @@ func validateLetStarNested(
 			return nil
 		}
 
-		lenv := environment.NewLocalEnvironment(0)
-		childEnv := environment.NewEnvironmentFrameWithParent(lenv, currentEnv)
-		childEnv.MaybeCreateLocalBinding(
-			r.name.Sym,
-			environment.BindingTypeVariable,
-			r.name.Scopes(),
-			r.name.SourceContext(),
-		)
+		// let* binds each name in a fresh child frame; subsequent inits see
+		// the evolving env. Use extendEnvWithSymbols with a single-symbol
+		// slice so the per-name child-frame creation lives in one helper.
+		childEnv := extendEnvWithSymbols(currentEnv, []*syntax.SyntaxSymbol{r.name})
 
 		validated = append(validated, validatedBinding{
 			binding:  ValidatedLetBinding{Name: r.name, Init: init},
@@ -376,75 +379,39 @@ func validateLetrecBindingsAndBody(
 		return nil
 	}
 
-	// First pass: collect names, create child env with ALL bindings visible
-	lenv := environment.NewLocalEnvironment(0)
-	childEnv := environment.NewEnvironmentFrameWithParent(lenv, env)
-
-	var nameSyms []*syntax.SyntaxSymbol
-	var initExprs []syntax.SyntaxValue
-	allOk := true
-	for _, bindingExpr := range bindingsListRaw {
-		bPair, bOk := bindingExpr.(*syntax.SyntaxPair)
-		if !bOk || syntax.IsSyntaxEmptyList(bPair) {
-			result.addError(getSourceContext(bindingExpr), formName,
-				formName+" binding must be (name init)")
-			allOk = false
-			continue
-		}
-
-		elems, imp := collectList(bPair)
-		if imp || len(elems) != 2 {
-			result.addError(getSourceContext(bindingExpr), formName,
-				formName+" binding must be (name init)")
-			allOk = false
-			continue
-		}
-
-		nameSym, symOk := asSyntaxSymbol(elems[0])
-		if !symOk {
-			result.addError(getSourceContext(elems[0]), formName,
-				formName+" binding name must be a symbol")
-			allOk = false
-			continue
-		}
-
-		nameSyms = append(nameSyms, nameSym)
-		initExprs = append(initExprs, elems[1])
-
-		childEnv.MaybeCreateLocalBinding(
-			nameSym.Sym,
-			environment.BindingTypeVariable,
-			nameSym.Scopes(),
-			nameSym.SourceContext(),
-		)
+	// Parse all binding pairs (names + init syntax). Init is NOT validated
+	// here — letrec validates inits in the fully-populated child env below.
+	raw, ok := parseLetBindingPairs(bindingsListRaw, formName, result)
+	if !ok {
+		return nil
 	}
 
+	// Split raw into parallel name + init slices.
+	nameSyms := make([]*syntax.SyntaxSymbol, len(raw))
+	initExprs := make([]syntax.SyntaxValue, len(raw))
+	for i, r := range raw {
+		nameSyms[i] = r.name
+		initExprs[i] = r.initStx
+	}
+
+	// Check for duplicate binding names BEFORE building the child env (R7RS
+	// §4.2.2). Doing dup-check first avoids the wasted work of binding a
+	// duplicate name into the frame just to reject it. Uses scope-aware
+	// identity so identifiers with the same name but different scope sets
+	// (introduced by hygienic macro expansion) are distinct.
+	allOk := true
+	for _, dup := range findDuplicateSymbols(nameSyms) {
+		result.addErrorf(getSourceContext(dup), formName,
+			"duplicate binding name %q", dup.Sym.Key)
+		allOk = false
+	}
 	if !allOk {
 		return nil
 	}
 
-	// Check for duplicate binding names (R7RS §4.2.2)
-	// Uses scope-aware identity so that identifiers with the same name but
-	// different scope sets (introduced by hygienic macro expansion) are distinct.
-	if len(nameSyms) >= 2 {
-		seen := make(map[bindingIdentity]bool, len(nameSyms))
-		for _, ns := range nameSyms {
-			id := bindingIdentity{
-				key:      ns.Sym.Key,
-				scopeKey: scopeFingerprint(ns.Scopes()),
-			}
-			if seen[id] {
-				result.addErrorf(getSourceContext(ns), formName,
-					"duplicate binding name %q", ns.Sym.Key)
-				allOk = false
-				continue
-			}
-			seen[id] = true
-		}
-		if !allOk {
-			return nil
-		}
-	}
+	// Build a child env with ALL bindings visible (letrec semantics: all
+	// names available in every init).
+	childEnv := extendEnvWithSymbols(env, nameSyms)
 
 	// Second pass: validate init expressions in child env
 	var bindings []ValidatedLetBinding
@@ -511,14 +478,7 @@ func validateNamedLet(
 	}
 
 	// Create env with tag visible (for recursive calls in body)
-	lenv := environment.NewLocalEnvironment(0)
-	tagEnv := environment.NewEnvironmentFrameWithParent(lenv, env)
-	tagEnv.MaybeCreateLocalBinding(
-		tag.Sym,
-		environment.BindingTypeVariable,
-		tag.Scopes(),
-		tag.SourceContext(),
-	)
+	tagEnv := extendEnvWithSymbols(env, []*syntax.SyntaxSymbol{tag})
 
 	bodyEnv := createLetValidationEnv(tagEnv, bindings)
 
@@ -593,25 +553,22 @@ func checkDuplicateBindingNames(
 	if len(bindings) < 2 {
 		return true
 	}
-	seen := make(map[bindingIdentity]bool, len(bindings))
+	syms := make([]*syntax.SyntaxSymbol, len(bindings))
+	for i, b := range bindings {
+		syms[i] = b.Name
+	}
 	allOk := true
-	for _, b := range bindings {
-		id := bindingIdentity{
-			key:      b.Name.Sym.Key,
-			scopeKey: scopeFingerprint(b.Name.Scopes()),
-		}
-		if seen[id] {
-			result.addErrorf(getSourceContext(b.Name), formName,
-				"duplicate binding name %q", b.Name.Sym.Key)
-			allOk = false
-			continue
-		}
-		seen[id] = true
+	for _, dup := range findDuplicateSymbols(syms) {
+		result.addErrorf(getSourceContext(dup), formName,
+			"duplicate binding name %q", dup.Sym.Key)
+		allOk = false
 	}
 	return allOk
 }
 
 // validateLetBindingPairs parses and validates a ((name val) ...) binding list.
+// For plain let: inits are validated in the OUTER env (env), so this is the
+// only binding form where parse + init-validation can be fused.
 func validateLetBindingPairs(
 	ctx context.Context,
 	env *environment.EnvironmentFrame,
@@ -626,42 +583,21 @@ func validateLetBindingPairs(
 		return nil, false
 	}
 
-	var bindings []ValidatedLetBinding
+	raw, ok := parseLetBindingPairs(bindingsList, formName, result)
+	if !ok {
+		return nil, false
+	}
+
+	bindings := make([]ValidatedLetBinding, 0, len(raw))
 	allOk := true
-	for _, bindingExpr := range bindingsList {
-		pair, ok := bindingExpr.(*syntax.SyntaxPair)
-		if !ok || syntax.IsSyntaxEmptyList(pair) {
-			result.addError(getSourceContext(bindingExpr), formName,
-				formName+" binding must be (name init)")
-			allOk = false
-			continue
-		}
-
-		elems, imp := collectList(pair)
-		if imp || len(elems) != 2 {
-			result.addError(getSourceContext(bindingExpr), formName,
-				formName+" binding must be (name init)")
-			allOk = false
-			continue
-		}
-
-		nameSym, symOk := asSyntaxSymbol(elems[0])
-		if !symOk {
-			result.addError(getSourceContext(elems[0]), formName,
-				formName+" binding name must be a symbol")
-			allOk = false
-			continue
-		}
-
-		init := validateExpr(ctx, env, elems[1], result)
+	for _, r := range raw {
+		init := validateExpr(ctx, env, r.initStx, result)
 		if init == nil {
 			allOk = false
 			continue
 		}
-
-		bindings = append(bindings, ValidatedLetBinding{Name: nameSym, Init: init})
+		bindings = append(bindings, ValidatedLetBinding{Name: r.name, Init: init})
 	}
-
 	if !allOk {
 		return nil, false
 	}
@@ -676,17 +612,11 @@ func createLetValidationEnv(
 	if len(bindings) == 0 {
 		return env
 	}
-	lenv := environment.NewLocalEnvironment(0)
-	childEnv := environment.NewEnvironmentFrameWithParent(lenv, env)
-	for _, b := range bindings {
-		childEnv.MaybeCreateLocalBinding(
-			b.Name.Sym,
-			environment.BindingTypeVariable,
-			b.Name.Scopes(),
-			b.Name.SourceContext(),
-		)
+	syms := make([]*syntax.SyntaxSymbol, len(bindings))
+	for i, b := range bindings {
+		syms[i] = b.Name
 	}
-	return childEnv
+	return extendEnvWithSymbols(env, syms)
 }
 
 // parseBindingsList extracts the bindings pair from a syntax value.

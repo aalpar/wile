@@ -16,6 +16,7 @@ package validate
 
 import (
 	"context"
+	"slices"
 
 	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
@@ -53,37 +54,20 @@ func validateLambda(ctx context.Context, env *environment.EnvironmentFrame, pair
 // createLambdaValidationEnv creates a child environment with lambda parameters
 // bound as local variables. This mirrors what the expander and compiler do,
 // enabling validation to correctly detect when parameters shadow special forms.
+//
+// Always creates a fresh child frame, even when params has zero required and
+// no rest. Uses createChildEnvWithSymbols (the always-frame primitive) rather
+// than extendEnvWithSymbols (which short-circuits on empty input — wrong for
+// lambda).
 func createLambdaValidationEnv(env *environment.EnvironmentFrame, params *ValidatedParams) *environment.EnvironmentFrame {
 	if env == nil || params == nil {
 		return env
 	}
-
-	// Create child environment with local bindings for parameters
-	lenv := environment.NewLocalEnvironment(0)
-	childEnv := environment.NewEnvironmentFrameWithParent(lenv, env)
-
-	// Bind required parameters
-	for _, paramSym := range params.Required {
-		// paramSym is already a *syntax.SyntaxSymbol
-		childEnv.MaybeCreateLocalBinding(
-			paramSym.Sym,
-			environment.BindingTypeVariable,
-			paramSym.Scopes(),
-			paramSym.SourceContext(),
-		)
-	}
-
-	// Bind rest parameter if present
+	syms := params.Required
 	if params.Rest != nil {
-		childEnv.MaybeCreateLocalBinding(
-			params.Rest.Sym,
-			environment.BindingTypeVariable,
-			params.Rest.Scopes(),
-			params.Rest.SourceContext(),
-		)
+		syms = append(slices.Clone(syms), params.Rest)
 	}
-
-	return childEnv
+	return createChildEnvWithSymbols(env, syms)
 }
 
 // extractDocstring checks whether the first body expression is a string

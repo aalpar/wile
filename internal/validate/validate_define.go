@@ -127,15 +127,10 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 		return nil
 	}
 
-	// Walk the list
-	seen := make(map[bindingIdentity]bool)
+	// Walk the list, collecting required params and optional rest.
+	// Duplicate detection runs post-parse via findDuplicateSymbols below.
 	var current values.Value = pair
-
-	for {
-		if values.IsEmptyList(current) {
-			return params
-		}
-
+	for !values.IsEmptyList(current) {
 		p, ok := current.(*syntax.SyntaxPair)
 		if !ok {
 			// Not a pair - check if it's a rest parameter (improper list)
@@ -146,18 +141,9 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 					result.addErrorf(getSourceContext(sv), params.formName, "expected symbol as rest parameter, got %T", current)
 					return nil
 				}
-
-				// Check for duplicate with rest param
-				symKey := sym.Unwrap().(*values.Symbol).Key
-				id := bindingIdentity{key: symKey, scopeKey: scopeFingerprint(sym.Scopes())}
-				if seen[id] {
-					result.addErrorf(getSourceContext(sv), params.formName, "duplicate parameter name: %s", symKey)
-					return nil
-				}
-
 				params.Rest = sym
 			}
-			return params
+			break
 		}
 
 		// Get the parameter
@@ -174,16 +160,29 @@ func validateParams(paramExpr syntax.SyntaxValue, result *ValidationResult) *Val
 			return nil
 		}
 
-		// Check for duplicates
-		symKey := sym.Unwrap().(*values.Symbol).Key
-		id := bindingIdentity{key: symKey, scopeKey: scopeFingerprint(sym.Scopes())}
-		if seen[id] {
-			result.addErrorf(getSourceContext(paramVal), params.formName, "duplicate parameter name: %s", symKey)
-			return nil
-		}
-		seen[id] = true
-
 		params.Required = append(params.Required, sym)
 		current = p.Cdr()
 	}
+
+	// Post-parse duplicate detection over required + rest. Allocate a fresh
+	// slice (don't alias params.Required) so the append for Rest cannot
+	// mutate the params field.
+	//
+	// Per validate/CLAUDE.md's error-accumulation convention, emit one error
+	// per duplicate rather than stopping at the first — matches the peer
+	// paths in validate_let.go (letrec dup loop, checkDuplicateBindingNames).
+	allSyms := append([]*syntax.SyntaxSymbol{}, params.Required...)
+	if params.Rest != nil {
+		allSyms = append(allSyms, params.Rest)
+	}
+	allOk := true
+	for _, dup := range findDuplicateSymbols(allSyms) {
+		result.addErrorf(getSourceContext(dup), params.formName,
+			"duplicate parameter name: %s", dup.Sym.Key)
+		allOk = false
+	}
+	if !allOk {
+		return nil
+	}
+	return params
 }

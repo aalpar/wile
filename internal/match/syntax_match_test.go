@@ -423,7 +423,7 @@ func TestMatchSyntaxVectorPatterns(t *testing.T) {
 		vec := syntax.NewSyntaxVector(nil, testSyntaxInt(1), testSyntaxInt(2), testSyntaxInt(3))
 		target := testSyntaxList(testSyntaxSym("foo"), vec)
 		variables := map[string]struct{}{"x": {}, "rest": {}}
-		matcher := NewMatcherWithEllipsisVars(variables, codes, ellipsisVars)
+		matcher := NewMatcher(variables, codes, WithEllipsisVars(ellipsisVars))
 
 		err := matcher.MatchSyntax(context.Background(), target)
 		c.Assert(err, qt.IsNil)
