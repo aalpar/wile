@@ -178,6 +178,42 @@ func TestSyntaxPair_UnwrapAll_NilNilPair(t *testing.T) {
 		qt.Commentf("the unwrapped result is not the empty list"))
 }
 
+// TestSyntaxPair_Unwrap_NilNilPair pins the shallow-unwrap behavior.
+// Unlike UnwrapAll which recurses, Unwrap just wraps Car and Cdr in a
+// new *values.Pair — so a nil-nil SyntaxPair yields *values.Pair{nil, nil}.
+// Not the empty list. Documents the cliff post-migration.
+func TestSyntaxPair_Unwrap_NilNilPair(t *testing.T) {
+	pair := NewSyntaxCons(nil, nil, nil)
+	result := pair.Unwrap()
+	_, isPair := result.(*values.Pair)
+	qt.Assert(t, isPair, qt.IsTrue,
+		qt.Commentf("Unwrap returns *values.Pair, not EmptyList"))
+	qt.Assert(t, values.IsEmptyList(result), qt.IsFalse,
+		qt.Commentf("the shallow-unwrapped result is not the empty list"))
+}
+
+// TestSyntaxPair_SchemeString_NilNilPair pins the post-migration panic
+// behavior. Pre-migration the IsEmptyList short-circuit produced "#'()".
+// Post-migration SyntaxForEach panics on the nil-cdr type assertion at
+// pr.Cdr().(SyntaxValue). The audit confirms zero production callers
+// construct nil-nil pairs; this test documents the failure shape so
+// future contributors who accidentally construct one see the panic and
+// trace it back to construction rather than wondering why a method
+// quietly mis-rendered.
+func TestSyntaxPair_SchemeString_NilNilPair(t *testing.T) {
+	pair := NewSyntaxCons(nil, nil, nil)
+	qt.Assert(t, func() { _ = pair.SchemeString() }, qt.PanicMatches,
+		`interface conversion: interface is nil, not values\.SyntaxValue`)
+}
+
+// TestSyntaxPair_AsVector_NilNilPair pins the parallel panic behavior
+// on AsVector. Same rationale as TestSyntaxPair_SchemeString_NilNilPair.
+func TestSyntaxPair_AsVector_NilNilPair(t *testing.T) {
+	pair := NewSyntaxCons(nil, nil, nil)
+	qt.Assert(t, func() { _ = pair.AsVector() }, qt.PanicMatches,
+		`interface conversion: interface is nil, not values\.SyntaxValue`)
+}
+
 func TestSyntaxPair_IsEmptyList(t *testing.T) {
 	// *SyntaxPair.IsEmptyList() always returns false — the empty list
 	// at the syntax phase is SyntaxEmptyList (an alias for
