@@ -54,6 +54,14 @@ const (
 //
 // Symbols are NEVER yielded with RefInClosureBody; "is this inside a
 // closure?" is the depth > 0 predicate.
+//
+// Role tagging is shallow: RefInCallProc and RefSetBangTarget are
+// reported only on direct symbol children of the surrounding form. A
+// symbol nested inside a non-leaf call-proc child — for example, the
+// inner `f` and `g` in `((if c f g) x)`, or the inner symbols of
+// `((f x) y)` — is reported as RefInBody, not RefInCallProc. The role
+// describes the slot the symbol IS, not the slot of any enclosing
+// non-symbol expression.
 func WalkBindingRefs(
 	expr ValidatedExpr,
 	visit func(sym *syntax.SyntaxSymbol, role RefRole, depth int),

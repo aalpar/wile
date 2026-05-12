@@ -118,8 +118,23 @@ func WalkSubExprs(expr ValidatedExpr, fn func(child ValidatedExpr, role ChildRol
 		// No sub-expressions
 
 	default:
-		// Unknown form: no sub-expressions walked. If a new ValidatedExpr
-		// type has children, add a case here. Analysis passes that use
-		// WalkSubExprs will be incomplete until then.
+		// ADDING A NEW ValidatedExpr TYPE
+		//
+		// This switch is the SINGLE registration point for tree-walking
+		// analysis in the validate package. Both markCapturedBindings
+		// and markEscapedBindings traverse through WalkBindingRefs,
+		// which in turn dispatches through this switch via WalkSubExprs.
+		// A new ValidatedExpr type without a case here will silently
+		// skip both analyses — bindings referenced inside the new form
+		// will not be marked Captured or Escapes, and the compiler will
+		// receive valid-but-under-marked bytecode (closures missing
+		// capture slots, stack allocation where heap is needed).
+		//
+		// When adding a new ValidatedExpr type with child expressions:
+		//   1. Add a case above with the correct ChildRole for each
+		//      sub-expression (RoleNormal / RoleCallProc / RoleClosureBody).
+		//   2. Update WalkBindingRefs's switch (walk_binding_refs.go)
+		//      if the new form needs role-tagging beyond the default.
+		//   3. Add the form to walk_sub_exprs_test.go's shape table.
 	}
 }

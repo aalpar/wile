@@ -148,3 +148,43 @@ func TestWalkBindingRefs_NilExprIsNoop(t *testing.T) {
 	})
 	qt.Assert(t, calls, qt.Equals, 0)
 }
+
+// TestWalkBindingRefs_NestedCallProcRoleShallow pins the shallow-role
+// invariant documented on WalkBindingRefs: RefInCallProc is reported
+// only for direct symbol children of Call/Apply. When the call's Proc
+// is itself a Call, the INNER operator is yielded as RefInCallProc
+// (because it IS the proc of its own immediate call), but the inner
+// arguments are RefInBody. The outer Proc — being a non-symbol Call
+// node — never produces a RefInCallProc event itself.
+func TestWalkBindingRefs_NestedCallProcRoleShallow(t *testing.T) {
+	// ((f x) y) — outer proc is itself a call (f x); outer arg is y.
+	expr := call(call(symRef("f"), symRef("x")), symRef("y"))
+	got := recordVisits(expr)
+	qt.Assert(t, got, qt.DeepEquals, []visitRecord{
+		{Name: "f", Role: RefInCallProc, Depth: 0},
+		{Name: "x", Role: RefInBody, Depth: 0},
+		{Name: "y", Role: RefInBody, Depth: 0},
+	})
+}
+
+// TestBuildBindingIdxMap_SilentlyDropsUnresolvable pins the documented
+// best-effort contract: any binding whose Name fails ResolveBindingID
+// under childEnv is silently dropped from the returned map. The
+// markCapturedBindings / markEscapedBindings helpers rely on this
+// behavior — if a future refactor changed it (e.g. to panic or return
+// an error), the consumers' "best-effort: stays non-captured" promise
+// would silently break.
+func TestBuildBindingIdxMap_SilentlyDropsUnresolvable(t *testing.T) {
+	env, bindings := makeTestEnvAndBindings("x") // x is registered in env
+	// Append a binding whose Name was NEVER registered with env.
+	unregistered := syntax.NewSyntaxSymbol("y", nil)
+	bindings = append(bindings, ValidatedLetBinding{
+		Name: unregistered,
+		Init: lit(),
+	})
+
+	idx := buildBindingIdxMap(env, bindings)
+
+	qt.Assert(t, len(idx), qt.Equals, 1,
+		qt.Commentf("unregistered binding 'y' must be silently dropped; only 'x' resolves"))
+}
