@@ -217,21 +217,11 @@ func validateLetStarBindingsAndBody(
 	// Check for duplicate names — determines which code path to use.
 	// Uses scope-aware identity so hygienic bindings with the same name
 	// but different scopes are not falsely treated as duplicates.
-	hasDups := false
-	if len(raw) >= 2 {
-		seen := make(map[bindingIdentity]bool, len(raw))
-		for _, r := range raw {
-			id := bindingIdentity{
-				key:      r.name.Sym.Key,
-				scopeKey: scopeFingerprint(r.name.Scopes()),
-			}
-			if seen[id] {
-				hasDups = true
-				break
-			}
-			seen[id] = true
-		}
+	syms := make([]*syntax.SyntaxSymbol, len(raw))
+	for i, r := range raw {
+		syms[i] = r.name
 	}
+	hasDups := len(detectDuplicateSymbols(syms)) > 0
 
 	if !hasDups {
 		return validateLetStarFlat(ctx, env, formName, source, raw, elements, result)
@@ -417,24 +407,13 @@ func validateLetrecBindingsAndBody(
 	// Check for duplicate binding names (R7RS §4.2.2)
 	// Uses scope-aware identity so that identifiers with the same name but
 	// different scope sets (introduced by hygienic macro expansion) are distinct.
-	if len(nameSyms) >= 2 {
-		seen := make(map[bindingIdentity]bool, len(nameSyms))
-		for _, ns := range nameSyms {
-			id := bindingIdentity{
-				key:      ns.Sym.Key,
-				scopeKey: scopeFingerprint(ns.Scopes()),
-			}
-			if seen[id] {
-				result.addErrorf(getSourceContext(ns), formName,
-					"duplicate binding name %q", ns.Sym.Key)
-				allOk = false
-				continue
-			}
-			seen[id] = true
-		}
-		if !allOk {
-			return nil
-		}
+	for _, dup := range detectDuplicateSymbols(nameSyms) {
+		result.addErrorf(getSourceContext(dup), formName,
+			"duplicate binding name %q", dup.Sym.Key)
+		allOk = false
+	}
+	if !allOk {
+		return nil
 	}
 
 	// Second pass: validate init expressions in child env
@@ -577,20 +556,15 @@ func checkDuplicateBindingNames(
 	if len(bindings) < 2 {
 		return true
 	}
-	seen := make(map[bindingIdentity]bool, len(bindings))
+	syms := make([]*syntax.SyntaxSymbol, len(bindings))
+	for i, b := range bindings {
+		syms[i] = b.Name
+	}
 	allOk := true
-	for _, b := range bindings {
-		id := bindingIdentity{
-			key:      b.Name.Sym.Key,
-			scopeKey: scopeFingerprint(b.Name.Scopes()),
-		}
-		if seen[id] {
-			result.addErrorf(getSourceContext(b.Name), formName,
-				"duplicate binding name %q", b.Name.Sym.Key)
-			allOk = false
-			continue
-		}
-		seen[id] = true
+	for _, dup := range detectDuplicateSymbols(syms) {
+		result.addErrorf(getSourceContext(dup), formName,
+			"duplicate binding name %q", dup.Sym.Key)
+		allOk = false
 	}
 	return allOk
 }

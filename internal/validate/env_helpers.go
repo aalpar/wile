@@ -48,3 +48,28 @@ func extendEnvWithSymbols(env *environment.EnvironmentFrame, syms []*syntax.Synt
 	}
 	return childEnv
 }
+
+// detectDuplicateSymbols returns the duplicates in syms in order of second
+// (and later) appearance. Equality is by (key, scope-fingerprint) tuple so
+// hygienic bindings with the same name but different scope sets (introduced
+// by macro expansion) are not falsely treated as duplicates. Empty result
+// means no duplicates; callers decide how to report.
+func detectDuplicateSymbols(syms []*syntax.SyntaxSymbol) []*syntax.SyntaxSymbol {
+	if len(syms) < 2 {
+		return nil
+	}
+	seen := make(map[bindingIdentity]bool, len(syms))
+	var dups []*syntax.SyntaxSymbol
+	for _, sym := range syms {
+		id := bindingIdentity{
+			key:      sym.Sym.Key,
+			scopeKey: scopeFingerprint(sym.Scopes()),
+		}
+		if seen[id] {
+			dups = append(dups, sym)
+			continue
+		}
+		seen[id] = true
+	}
+	return dups
+}
