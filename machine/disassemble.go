@@ -118,6 +118,19 @@ func Disassemble(tpl *NativeTemplate) DisassembledTemplate {
 				di.Binding = fmt.Sprintf("<invalid-binding-index:%d>", idx)
 			}
 
+		case OperandPromotedCachedBinding:
+			bindingIdx, tail := decodePromotedArg(instr.Arg)
+			idx := int(bindingIdx)
+			tailSuffix := ""
+			if tail {
+				tailSuffix = " [tail]"
+			}
+			if idx >= 0 && idx < len(bindings) {
+				di.Binding = bindingName(bindings[idx]) + tailSuffix
+			} else {
+				di.Binding = fmt.Sprintf("<invalid-binding-index:%d>%s", idx, tailSuffix)
+			}
+
 		case OperandSideTable:
 			idx := int(instr.Arg)
 			if idx >= 0 && idx < len(sideTable) {

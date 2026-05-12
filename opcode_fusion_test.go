@@ -136,9 +136,14 @@ func TestOpcodeFusion(t *testing.T) {
 			wantResult: "#t",
 		},
 		{
+			// Post-Finding-2 collapse: tail and non-tail share the OpEqQ
+			// opcode; tail-ness is encoded in the high bit of instr.Arg.
+			// Verification of the tail-flag encoding is at peephole_test.go;
+			// this case continues to exercise the integration path
+			// (lambda body fused to OpEqQ with tail flag set).
 			name:       "promoted eq? tail",
 			code:       "((lambda () (eq? 'a 'a)))",
-			wantOps:    []machine.OpCode{machine.OpEqQTail},
+			wantOps:    []machine.OpCode{machine.OpEqQ},
 			wantResult: "#t",
 		},
 		{

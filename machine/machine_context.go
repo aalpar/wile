@@ -595,101 +595,56 @@ func (p *MachineContext) Run() error {
 			}
 
 		// --- Wave 9: promoted primitive operations ---
+		//
+		// Each case handles BOTH tail and non-tail positions; execPromoted
+		// decodes the tail flag from instr.Arg's high bit. See
+		// plans/2026-05-11-machine-sr-finding2-impl.md.
 
 		case OpEqQ:
 			var err error
-			mc, err = execPromoted(mc, instr, "eq?", 2, false, inlineEq)
-			if err != nil {
-				return err
-			}
-
-		case OpEqQTail:
-			var err error
-			mc, err = execPromoted(mc, instr, "eq?", 2, true, inlineEq)
+			mc, err = execPromoted(mc, instr, "eq?", 2, inlineEq)
 			if err != nil {
 				return err
 			}
 
 		case OpVectorQ:
 			var err error
-			mc, err = execPromoted(mc, instr, "vector?", 1, false, inlineVectorQ)
-			if err != nil {
-				return err
-			}
-
-		case OpVectorQTail:
-			var err error
-			mc, err = execPromoted(mc, instr, "vector?", 1, true, inlineVectorQ)
+			mc, err = execPromoted(mc, instr, "vector?", 1, inlineVectorQ)
 			if err != nil {
 				return err
 			}
 
 		case OpVectorRef:
 			var err error
-			mc, err = execPromoted(mc, instr, "vector-ref", 2, false, inlineVectorRef)
-			if err != nil {
-				return err
-			}
-
-		case OpVectorRefTail:
-			var err error
-			mc, err = execPromoted(mc, instr, "vector-ref", 2, true, inlineVectorRef)
+			mc, err = execPromoted(mc, instr, "vector-ref", 2, inlineVectorRef)
 			if err != nil {
 				return err
 			}
 
 		case OpNullQ:
 			var err error
-			mc, err = execPromoted(mc, instr, "null?", 1, false, inlineNullQ)
-			if err != nil {
-				return err
-			}
-
-		case OpNullQTail:
-			var err error
-			mc, err = execPromoted(mc, instr, "null?", 1, true, inlineNullQ)
+			mc, err = execPromoted(mc, instr, "null?", 1, inlineNullQ)
 			if err != nil {
 				return err
 			}
 
 		case OpPairQ:
 			var err error
-			mc, err = execPromoted(mc, instr, "pair?", 1, false, inlinePairQ)
-			if err != nil {
-				return err
-			}
-
-		case OpPairQTail:
-			var err error
-			mc, err = execPromoted(mc, instr, "pair?", 1, true, inlinePairQ)
+			mc, err = execPromoted(mc, instr, "pair?", 1, inlinePairQ)
 			if err != nil {
 				return err
 			}
 
 		case OpCar:
 			var err error
-			mc, err = execPromoted(mc, instr, "car", 1, false, inlineCar)
-			if err != nil {
-				return err
-			}
-
-		case OpCarTail:
-			var err error
-			mc, err = execPromoted(mc, instr, "car", 1, true, inlineCar)
+			mc, err = execPromoted(mc, instr, "car", 1, inlineCar)
 			if err != nil {
 				return err
 			}
 
 		case OpCdr:
 			var err error
-			mc, err = execPromoted(mc, instr, "cdr", 1, false, inlineCdr)
-			if err != nil {
-				return err
-			}
-
-		case OpCdrTail:
-			var err error
-			mc, err = execPromoted(mc, instr, "cdr", 1, true, inlineCdr)
+			mc, err = execPromoted(mc, instr, "cdr", 1, inlineCdr)
 			if err != nil {
 				return err
 			}
@@ -698,140 +653,70 @@ func (p *MachineContext) Run() error {
 
 		case OpAdd:
 			var err error
-			mc, err = execPromoted(mc, instr, "+", 2, false, inlineAdd)
-			if err != nil {
-				return err
-			}
-
-		case OpAddTail:
-			var err error
-			mc, err = execPromoted(mc, instr, "+", 2, true, inlineAdd)
+			mc, err = execPromoted(mc, instr, "+", 2, inlineAdd)
 			if err != nil {
 				return err
 			}
 
 		case OpSub:
 			var err error
-			mc, err = execPromoted(mc, instr, "-", 2, false, inlineSub)
-			if err != nil {
-				return err
-			}
-
-		case OpSubTail:
-			var err error
-			mc, err = execPromoted(mc, instr, "-", 2, true, inlineSub)
+			mc, err = execPromoted(mc, instr, "-", 2, inlineSub)
 			if err != nil {
 				return err
 			}
 
 		case OpNumLt:
 			var err error
-			mc, err = execPromoted(mc, instr, "<", 2, false, inlineNumLt)
-			if err != nil {
-				return err
-			}
-
-		case OpNumLtTail:
-			var err error
-			mc, err = execPromoted(mc, instr, "<", 2, true, inlineNumLt)
+			mc, err = execPromoted(mc, instr, "<", 2, inlineNumLt)
 			if err != nil {
 				return err
 			}
 
 		case OpNumLe:
 			var err error
-			mc, err = execPromoted(mc, instr, "<=", 2, false, inlineNumLe)
-			if err != nil {
-				return err
-			}
-
-		case OpNumLeTail:
-			var err error
-			mc, err = execPromoted(mc, instr, "<=", 2, true, inlineNumLe)
+			mc, err = execPromoted(mc, instr, "<=", 2, inlineNumLe)
 			if err != nil {
 				return err
 			}
 
 		case OpNumGt:
 			var err error
-			mc, err = execPromoted(mc, instr, ">", 2, false, inlineNumGt)
-			if err != nil {
-				return err
-			}
-
-		case OpNumGtTail:
-			var err error
-			mc, err = execPromoted(mc, instr, ">", 2, true, inlineNumGt)
+			mc, err = execPromoted(mc, instr, ">", 2, inlineNumGt)
 			if err != nil {
 				return err
 			}
 
 		case OpNumGe:
 			var err error
-			mc, err = execPromoted(mc, instr, ">=", 2, false, inlineNumGe)
-			if err != nil {
-				return err
-			}
-
-		case OpNumGeTail:
-			var err error
-			mc, err = execPromoted(mc, instr, ">=", 2, true, inlineNumGe)
+			mc, err = execPromoted(mc, instr, ">=", 2, inlineNumGe)
 			if err != nil {
 				return err
 			}
 
 		case OpNumEq:
 			var err error
-			mc, err = execPromoted(mc, instr, "=", 2, false, inlineNumEq)
-			if err != nil {
-				return err
-			}
-
-		case OpNumEqTail:
-			var err error
-			mc, err = execPromoted(mc, instr, "=", 2, true, inlineNumEq)
+			mc, err = execPromoted(mc, instr, "=", 2, inlineNumEq)
 			if err != nil {
 				return err
 			}
 
 		case OpCons:
 			var err error
-			mc, err = execPromoted(mc, instr, "cons", 2, false, inlineCons)
-			if err != nil {
-				return err
-			}
-
-		case OpConsTail:
-			var err error
-			mc, err = execPromoted(mc, instr, "cons", 2, true, inlineCons)
+			mc, err = execPromoted(mc, instr, "cons", 2, inlineCons)
 			if err != nil {
 				return err
 			}
 
 		case OpMul:
 			var err error
-			mc, err = execPromoted(mc, instr, "*", 2, false, inlineMul)
-			if err != nil {
-				return err
-			}
-
-		case OpMulTail:
-			var err error
-			mc, err = execPromoted(mc, instr, "*", 2, true, inlineMul)
+			mc, err = execPromoted(mc, instr, "*", 2, inlineMul)
 			if err != nil {
 				return err
 			}
 
 		case OpDiv:
 			var err error
-			mc, err = execPromoted(mc, instr, "/", 2, false, inlineDiv)
-			if err != nil {
-				return err
-			}
-
-		case OpDivTail:
-			var err error
-			mc, err = execPromoted(mc, instr, "/", 2, true, inlineDiv)
+			mc, err = execPromoted(mc, instr, "/", 2, inlineDiv)
 			if err != nil {
 				return err
 			}

@@ -16,24 +16,34 @@
 //
 // Promoted ops inline hot primitives directly in the VM dispatch loop,
 // bypassing arity check, arg binding, and indirect function call.
-// Each promoted op has a non-tail and tail variant.
+// Each promoted op has a single opcode that handles both tail and
+// non-tail positions; tail-ness is encoded in the high bit of
+// Instruction.Arg via encodePromotedArg (see opcode.go).
 //
-// The 34 switch cases in Run() are deliberately hand-unrolled: Go compiles
-// them to a jump table. A table-driven approach was benchmarked and rejected
-// (~1.5% geo mean regression). See plans/2026-04-05-structural-reduction.md.
+// The 17 promoted-op switch cases in Run() are deliberately hand-unrolled:
+// Go compiles them to a jump table. A table-driven approach was
+// benchmarked and rejected (~1.5% geo mean regression). See
+// plans/2026-04-05-structural-reduction.md. The tail/non-tail collapse
+// (Finding 2 of plans/2026-05-06-machine-structural-reduction.md) was
+// implemented in plans/2026-05-11-machine-sr-finding2-impl.md; it
+// reduced the case count from 34 to 17 without table dispatch.
 //
-// Edit sites (3 files):
-//  1. opcode.go           — add OpXxx + OpXxxTail constants; add two opcodeTable entries
-//     with operandKind: OperandCachedBinding
-//  2. machine_context.go  — add two case branches in Run() (non-tail + tail),
-//     each calling execPromoted(mc, instr, name, arity, tail, inlineFn)
-//  3. call_promoted.go    — implement inlineXxx function; add case in promotedOpForName()
-//     (or call_promoted_arithmetic.go for numeric ops)
+// Edit sites (2 files):
+//  1. opcode.go           — add OpXxx constant and one opcodeTable entry
+//     with operandKind: OperandPromotedCachedBinding
+//  2. machine_context.go  — add one case branch in Run() calling
+//     execPromoted(mc, instr, name, arity, inlineFn)
+//  3. call_promoted.go    — implement inlineXxx function; add case in
+//     promotedOpForName() (or call_promoted_arithmetic.go for numeric)
+//
+// Step 3 is mechanical bookkeeping in this same file; the structural
+// edit cost is files 1 + 2.
 //
 // No changes needed in native_template.go or disassemble.go — both use
-// opcodeTable[op].operandKind metadata to handle OperandCachedBinding generically.
-// The peephole optimizer (peephole.go) also needs no changes — it uses
-// promotedOpForName() to discover promoted ops generically.
+// opcodeTable[op].operandKind metadata to handle
+// OperandPromotedCachedBinding generically. The peephole optimizer
+// (peephole.go) also needs no changes — it uses promotedOpForName() to
+// discover promoted ops generically.
 package machine
 
 import (
@@ -177,19 +187,23 @@ func inlineCons(mc *MachineContext) error {
 	return nil
 }
 
-// execPromoted runs the common promoted-op dispatch pattern: resolve the
-// cached binding, verify it is still the expected ForeignClosure, fall back
-// to generic call if not, otherwise execute the inline function and handle
-// the tail/non-tail epilogue.
+// execPromoted runs the common promoted-op dispatch pattern: decode the
+// tail flag and binding index from instr.Arg, resolve the cached binding,
+// verify it is still the expected ForeignClosure, fall back to generic
+// call if not, otherwise execute the inline function and handle the
+// tail/non-tail epilogue.
+//
+// Tail position is encoded in the high bit of instr.Arg by the peephole
+// optimizer; see encodePromotedArg in opcode.go.
 func execPromoted(
 	mc *MachineContext,
 	instr Instruction,
 	name string,
 	arity int,
-	tail bool,
 	fn func(*MachineContext) error,
 ) (*MachineContext, error) {
-	callable := mc.template.cachedBindings[instr.Arg].Value()
+	bindingIdx, tail := decodePromotedArg(instr.Arg)
+	callable := mc.template.cachedBindings[bindingIdx].Value()
 	fcls, ok := callable.(*ForeignClosure)
 	if !ok || fcls.name != name {
 		return callPromotedFallback(mc, callable, tail, arity)
@@ -232,46 +246,48 @@ func callPromotedFallback(mc *MachineContext, callable values.Value, tail bool, 
 	return result, nil
 }
 
-// promotedOpForName returns the non-tail and tail opcodes for a promoted
-// primitive, or (OpInvalid, OpInvalid) if the primitive is not promoted.
-// Also returns the expected argument count for arity validation.
-func promotedOpForName(name string) (nonTail, tail OpCode, arity int) {
+// PromotedOpForName returns the opcode for a promoted primitive plus its
+// arity, or (OpInvalid, 0) if the primitive is not promoted. The opcode
+// handles both tail and non-tail positions; the peephole optimizer
+// encodes tail-ness in the high bit of Instruction.Arg via
+// encodePromotedArg.
+func promotedOpForName(name string) (op OpCode, arity int) {
 	switch name {
 	case "eq?":
-		return OpEqQ, OpEqQTail, 2
+		return OpEqQ, 2
 	case "vector?":
-		return OpVectorQ, OpVectorQTail, 1
+		return OpVectorQ, 1
 	case "vector-ref":
-		return OpVectorRef, OpVectorRefTail, 2
+		return OpVectorRef, 2
 	case "null?":
-		return OpNullQ, OpNullQTail, 1
+		return OpNullQ, 1
 	case "pair?":
-		return OpPairQ, OpPairQTail, 1
+		return OpPairQ, 1
 	case "car":
-		return OpCar, OpCarTail, 1
+		return OpCar, 1
 	case "cdr":
-		return OpCdr, OpCdrTail, 1
+		return OpCdr, 1
 	case "+":
-		return OpAdd, OpAddTail, 2
+		return OpAdd, 2
 	case "-":
-		return OpSub, OpSubTail, 2
+		return OpSub, 2
 	case "<":
-		return OpNumLt, OpNumLtTail, 2
+		return OpNumLt, 2
 	case "<=":
-		return OpNumLe, OpNumLeTail, 2
+		return OpNumLe, 2
 	case ">":
-		return OpNumGt, OpNumGtTail, 2
+		return OpNumGt, 2
 	case ">=":
-		return OpNumGe, OpNumGeTail, 2
+		return OpNumGe, 2
 	case "=":
-		return OpNumEq, OpNumEqTail, 2
+		return OpNumEq, 2
 	case "cons":
-		return OpCons, OpConsTail, 2
+		return OpCons, 2
 	case "*":
-		return OpMul, OpMulTail, 2
+		return OpMul, 2
 	case "/":
-		return OpDiv, OpDivTail, 2
+		return OpDiv, 2
 	default:
-		return OpInvalid, OpInvalid, 0
+		return OpInvalid, 0
 	}
 }

@@ -188,11 +188,18 @@ func instructionToOperation(instr Instruction) Operation {
 	default:
 		// Metadata-driven decomposition for peephole-emitted opcodes.
 		// All OperandCachedBinding ops decompose to LoadCachedBinding.
+		// Promoted-cached-binding ops decompose the same way, but the
+		// tail flag in Arg's high bit must be stripped first — the
+		// decomposed form represents pre-peephole shape, which carries
+		// no tail-ness.
 		// All OperandLocalIdx ops (except StoreLocal, handled above)
 		// decompose to LoadLocal.
 		switch opcodeTable[instr.Op].operandKind {
 		case OperandCachedBinding:
 			return NewOperationLoadCachedBinding(instr.Arg)
+		case OperandPromotedCachedBinding:
+			bindingIdx, _ := decodePromotedArg(instr.Arg)
+			return NewOperationLoadCachedBinding(bindingIdx)
 		case OperandLocalIdx:
 			slot, depth := DecodeLocalIndex(instr.Arg)
 			li := environment.NewLocalIndex(slot, depth)

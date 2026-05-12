@@ -91,44 +91,34 @@ const (
 	OpCallLocal         // Resolve local binding, drain args, ApplyCallable
 	OpCallCachedBinding // Resolve cached binding, drain args, ApplyCallable
 
-	// Wave 9: promoted primitive operations (Arg = index into cachedBindings)
-	// Inline the hot primitive logic directly, bypassing arity check, arg
-	// binding, and indirect function call. Emitted by peephole only when
-	// the cached binding holds a known promoted ForeignClosure.
-	OpEqQ           // Non-tail inlined eq?
-	OpEqQTail       // Tail inlined eq?
-	OpVectorQ       // Non-tail inlined vector?
-	OpVectorQTail   // Tail inlined vector?
-	OpVectorRef     // Non-tail inlined vector-ref
-	OpVectorRefTail // Tail inlined vector-ref
-	OpNullQ         // Non-tail inlined null?
-	OpNullQTail     // Tail inlined null?
-	OpPairQ         // Non-tail inlined pair?
-	OpPairQTail     // Tail inlined pair?
-	OpCar           // Non-tail inlined car
-	OpCarTail       // Tail inlined car
-	OpCdr           // Non-tail inlined cdr
-	OpCdrTail       // Tail inlined cdr
-	OpAdd           // Non-tail inlined 2-arg +
-	OpAddTail       // Tail inlined 2-arg +
-	OpSub           // Non-tail inlined 2-arg -
-	OpSubTail       // Tail inlined 2-arg -
-	OpNumLt         // Non-tail inlined 2-arg <
-	OpNumLtTail     // Tail inlined 2-arg <
-	OpNumLe         // Non-tail inlined 2-arg <=
-	OpNumLeTail     // Tail inlined 2-arg <=
-	OpNumGt         // Non-tail inlined 2-arg >
-	OpNumGtTail     // Tail inlined 2-arg >
-	OpNumGe         // Non-tail inlined 2-arg >=
-	OpNumGeTail     // Tail inlined 2-arg >=
-	OpNumEq         // Non-tail inlined 2-arg =
-	OpNumEqTail     // Tail inlined 2-arg =
-	OpCons          // Non-tail inlined cons
-	OpConsTail      // Tail inlined cons
-	OpMul           // Non-tail inlined 2-arg *
-	OpMulTail       // Tail inlined 2-arg *
-	OpDiv           // Non-tail inlined 2-arg /
-	OpDivTail       // Tail inlined 2-arg /
+	// Wave 9: promoted primitive operations
+	// (Arg = encodePromotedArg(bindingIdx, tail); high bit = tail flag,
+	// low 31 bits = index into cachedBindings).
+	//
+	// Inline the hot primitive logic directly, bypassing arity check,
+	// arg binding, and indirect function call. Emitted by peephole only
+	// when the cached binding holds a known promoted ForeignClosure.
+	//
+	// Each opcode handles BOTH tail and non-tail positions; execPromoted
+	// decodes the tail flag from Arg. See
+	// plans/2026-05-11-machine-sr-finding2-impl.md (Finding 2).
+	OpEqQ       // inlined eq?
+	OpVectorQ   // inlined vector?
+	OpVectorRef // inlined vector-ref
+	OpNullQ     // inlined null?
+	OpPairQ     // inlined pair?
+	OpCar       // inlined car
+	OpCdr       // inlined cdr
+	OpAdd       // inlined 2-arg +
+	OpSub       // inlined 2-arg -
+	OpNumLt     // inlined 2-arg <
+	OpNumLe     // inlined 2-arg <=
+	OpNumGt     // inlined 2-arg >
+	OpNumGe     // inlined 2-arg >=
+	OpNumEq     // inlined 2-arg =
+	OpCons      // inlined cons
+	OpMul       // inlined 2-arg *
+	OpDiv       // inlined 2-arg /
 
 	// Fallback: dispatch to sideTable[Arg]
 	OpComplex
@@ -157,9 +147,41 @@ const (
 	OperandBranchOffset
 	// OperandCachedBinding means Arg indexes into cachedBindings.
 	OperandCachedBinding
+	// OperandPromotedCachedBinding means Arg encodes a promoted-op operand:
+	// the high bit signals tail position, the low 31 bits index into
+	// cachedBindings. Distinct from OperandCachedBinding because the
+	// disassembler and any future tooling must decode the tail flag.
+	// See encodePromotedArg / decodePromotedArg below.
+	OperandPromotedCachedBinding
 	// OperandSideTable means Arg indexes into the side table.
 	OperandSideTable
 )
+
+// promotedTailBit is the high bit of instr.Arg, used by promoted opcodes
+// to encode tail-call position. Non-promoted opcodes with operand kind
+// OperandCachedBinding (e.g. OpCallForeignCached) do not use this bit;
+// they carry tail-ness in the opcode itself.
+//
+// Binding indexes are non-negative integers assigned by the peephole
+// optimizer, so the sign bit is free. The post-collapse maximum binding
+// index is 2^31 - 1, well above any realistic template.
+//
+// See plans/2026-05-11-machine-sr-finding2-impl.md.
+const promotedTailBit int32 = -1 << 31 // = math.MinInt32
+
+// encodePromotedArg packs a binding index and tail flag into a single
+// int32 suitable for storage in Instruction.Arg.
+func encodePromotedArg(bindingIdx int32, tail bool) int32 {
+	if tail {
+		return bindingIdx | promotedTailBit
+	}
+	return bindingIdx
+}
+
+// decodePromotedArg unpacks a promoted-op Arg into (binding index, tail).
+func decodePromotedArg(arg int32) (bindingIdx int32, tail bool) {
+	return arg &^ promotedTailBit, arg < 0
+}
 
 // opcodeInfo holds metadata for a single opcode. All opcode properties are
 // centralized here so that adding a new opcode requires updating exactly one
@@ -211,40 +233,23 @@ var opcodeTable = [opCount]opcodeInfo{
 	OpCallForeignCachedTail: {name: "CallForeignCachedTail", operandKind: OperandCachedBinding},
 	OpCallLocal:             {name: "CallLocal", operandKind: OperandLocalIdx},
 	OpCallCachedBinding:     {name: "CallCachedBinding", operandKind: OperandCachedBinding},
-	OpEqQ:                   {name: "EqQ", operandKind: OperandCachedBinding},
-	OpEqQTail:               {name: "EqQTail", operandKind: OperandCachedBinding},
-	OpVectorQ:               {name: "VectorQ", operandKind: OperandCachedBinding},
-	OpVectorQTail:           {name: "VectorQTail", operandKind: OperandCachedBinding},
-	OpVectorRef:             {name: "VectorRef", operandKind: OperandCachedBinding},
-	OpVectorRefTail:         {name: "VectorRefTail", operandKind: OperandCachedBinding},
-	OpNullQ:                 {name: "NullQ", operandKind: OperandCachedBinding},
-	OpNullQTail:             {name: "NullQTail", operandKind: OperandCachedBinding},
-	OpPairQ:                 {name: "PairQ", operandKind: OperandCachedBinding},
-	OpPairQTail:             {name: "PairQTail", operandKind: OperandCachedBinding},
-	OpCar:                   {name: "Car", operandKind: OperandCachedBinding},
-	OpCarTail:               {name: "CarTail", operandKind: OperandCachedBinding},
-	OpCdr:                   {name: "Cdr", operandKind: OperandCachedBinding},
-	OpCdrTail:               {name: "CdrTail", operandKind: OperandCachedBinding},
-	OpAdd:                   {name: "Add", operandKind: OperandCachedBinding},
-	OpAddTail:               {name: "AddTail", operandKind: OperandCachedBinding},
-	OpSub:                   {name: "Sub", operandKind: OperandCachedBinding},
-	OpSubTail:               {name: "SubTail", operandKind: OperandCachedBinding},
-	OpNumLt:                 {name: "NumLt", operandKind: OperandCachedBinding},
-	OpNumLtTail:             {name: "NumLtTail", operandKind: OperandCachedBinding},
-	OpNumLe:                 {name: "NumLe", operandKind: OperandCachedBinding},
-	OpNumLeTail:             {name: "NumLeTail", operandKind: OperandCachedBinding},
-	OpNumGt:                 {name: "NumGt", operandKind: OperandCachedBinding},
-	OpNumGtTail:             {name: "NumGtTail", operandKind: OperandCachedBinding},
-	OpNumGe:                 {name: "NumGe", operandKind: OperandCachedBinding},
-	OpNumGeTail:             {name: "NumGeTail", operandKind: OperandCachedBinding},
-	OpNumEq:                 {name: "NumEq", operandKind: OperandCachedBinding},
-	OpNumEqTail:             {name: "NumEqTail", operandKind: OperandCachedBinding},
-	OpCons:                  {name: "Cons", operandKind: OperandCachedBinding},
-	OpConsTail:              {name: "ConsTail", operandKind: OperandCachedBinding},
-	OpMul:                   {name: "Mul", operandKind: OperandCachedBinding},
-	OpMulTail:               {name: "MulTail", operandKind: OperandCachedBinding},
-	OpDiv:                   {name: "Div", operandKind: OperandCachedBinding},
-	OpDivTail:               {name: "DivTail", operandKind: OperandCachedBinding},
+	OpEqQ:                   {name: "EqQ", operandKind: OperandPromotedCachedBinding},
+	OpVectorQ:               {name: "VectorQ", operandKind: OperandPromotedCachedBinding},
+	OpVectorRef:             {name: "VectorRef", operandKind: OperandPromotedCachedBinding},
+	OpNullQ:                 {name: "NullQ", operandKind: OperandPromotedCachedBinding},
+	OpPairQ:                 {name: "PairQ", operandKind: OperandPromotedCachedBinding},
+	OpCar:                   {name: "Car", operandKind: OperandPromotedCachedBinding},
+	OpCdr:                   {name: "Cdr", operandKind: OperandPromotedCachedBinding},
+	OpAdd:                   {name: "Add", operandKind: OperandPromotedCachedBinding},
+	OpSub:                   {name: "Sub", operandKind: OperandPromotedCachedBinding},
+	OpNumLt:                 {name: "NumLt", operandKind: OperandPromotedCachedBinding},
+	OpNumLe:                 {name: "NumLe", operandKind: OperandPromotedCachedBinding},
+	OpNumGt:                 {name: "NumGt", operandKind: OperandPromotedCachedBinding},
+	OpNumGe:                 {name: "NumGe", operandKind: OperandPromotedCachedBinding},
+	OpNumEq:                 {name: "NumEq", operandKind: OperandPromotedCachedBinding},
+	OpCons:                  {name: "Cons", operandKind: OperandPromotedCachedBinding},
+	OpMul:                   {name: "Mul", operandKind: OperandPromotedCachedBinding},
+	OpDiv:                   {name: "Div", operandKind: OperandPromotedCachedBinding},
 	OpComplex:               {name: "Complex", operandKind: OperandSideTable},
 }
 
