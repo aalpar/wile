@@ -30,7 +30,13 @@ func TestSyntaxPair_SchemeString(t *testing.T) {
 		out string
 	}{
 		{nil, "#<syntax-void>"},
-		{NewSyntaxCons(nil, nil, nil), "#'()"},
+		// Note: the pre-migration test case
+		//   {NewSyntaxCons(nil, nil, nil), "#'()"}
+		// has been removed. *SyntaxPair.IsEmptyList() now returns false
+		// unconditionally (matching *values.Pair), so the nil-nil pair
+		// no longer renders as "#'()". The empty list at the syntax phase
+		// is exclusively SyntaxEmptyList (= values.EmptyList), which
+		// renders as "()" — its own SchemeString.
 		{NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(2), nil), SyntaxEmptyList, nil), nil), "#'(#'1 #'2)"},
 		{NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(2), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(3), nil), SyntaxEmptyList, nil), nil), nil), "#'(#'1 #'2 #'3)"},
 		{NewSyntaxCons(NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), NewSyntaxObject(values.NewInteger(2), nil), nil), SyntaxEmptyList, nil), "#'(#'(#'1 . #'2))"},
@@ -145,11 +151,21 @@ func TestSyntaxPair_IsVoid(t *testing.T) {
 }
 
 func TestSyntaxPair_IsEmptyList(t *testing.T) {
-	// *Pair.IsEmptyList() always returns false now that EmptyList is a separate type
-	qt.Assert(t, (*values.Pair)(nil).IsEmptyList(), qt.IsFalse)
-	qt.Assert(t, values.NewCons(values.NewInteger(1), values.EmptyList).IsEmptyList(), qt.IsFalse)
-	// EmptyList itself is no longer *Pair, test via interface
-	qt.Assert(t, values.EmptyList.IsEmptyList(), qt.IsTrue)
+	// *SyntaxPair.IsEmptyList() always returns false — the empty list
+	// at the syntax phase is SyntaxEmptyList (an alias for
+	// values.EmptyList), not a *SyntaxPair. Mirrors the *values.Pair
+	// migration.
+	qt.Assert(t, (*SyntaxPair)(nil).IsEmptyList(), qt.IsFalse)
+	qt.Assert(t, NewSyntaxCons(nil, nil, nil).IsEmptyList(), qt.IsFalse,
+		qt.Commentf("nil-nil pair is no longer treated as the empty list"))
+	qt.Assert(t, NewSyntaxCons(
+		NewSyntaxObject(values.NewInteger(1), nil),
+		SyntaxEmptyList,
+		nil,
+	).IsEmptyList(), qt.IsFalse)
+	// SyntaxEmptyList itself reports as empty (via the values.EmptyList
+	// singleton's own IsEmptyList method).
+	qt.Assert(t, SyntaxEmptyList.IsEmptyList(), qt.IsTrue)
 }
 
 func TestSyntaxPair_AsVector(t *testing.T) {

@@ -158,9 +158,6 @@ func UnwrapAllShared(sv SyntaxValue, cache map[SyntaxValue]values.Value) values.
 		if v.IsVoid() {
 			return values.Void
 		}
-		if v.IsEmptyList() {
-			return values.EmptyList
-		}
 		// Pre-register a placeholder pair to handle circular references
 		placeholder := values.NewCons(nil, nil)
 		cache[sv] = placeholder
