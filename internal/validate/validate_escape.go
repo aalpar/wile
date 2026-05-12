@@ -51,9 +51,18 @@ func markEscapedBindings(
 		return
 	}
 
+	// Exhaustive switch on role so adding a 4th RefRole forces an
+	// explicit handling decision here rather than silently being
+	// classified as "not escaping".
 	visit := func(sym *syntax.SyntaxSymbol, role RefRole, _ int) {
-		if role != RefInBody {
+		switch role {
+		case RefInBody:
+			// fall through to mark logic below
+		case RefInCallProc, RefSetBangTarget:
 			return
+		default:
+			panic("validate.markEscapedBindings: unhandled RefRole " +
+				"— add a case after introducing the new role")
 		}
 		bid, ok := childEnv.ResolveBindingID(sym.Sym, sym.Scopes())
 		if !ok {

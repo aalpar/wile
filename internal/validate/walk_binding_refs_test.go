@@ -167,6 +167,44 @@ func TestWalkBindingRefs_NestedCallProcRoleShallow(t *testing.T) {
 	})
 }
 
+// TestWalkBindingRefs_DefineFunctionDepth verifies that ValidatedDefine
+// in function form treats its body as crossing a closure boundary —
+// references inside the body are reported at depth+1. Required by the
+// capture analysis: '(define (f) g)' captures g if f is invoked.
+func TestWalkBindingRefs_DefineFunctionDepth(t *testing.T) {
+	expr := defineFn("f", symRef("x"))
+	got := recordVisits(expr)
+	qt.Assert(t, got, qt.DeepEquals, []visitRecord{
+		{Name: "x", Role: RefInBody, Depth: 1},
+	})
+}
+
+// TestWalkBindingRefs_DefineValueSameDepth verifies that ValidatedDefine
+// in value form (define x expr) treats expr as a normal body
+// expression — symbol references appear at the current depth, not
+// depth+1. The value form does NOT introduce a closure.
+func TestWalkBindingRefs_DefineValueSameDepth(t *testing.T) {
+	expr := defineVal("y", symRef("x"))
+	got := recordVisits(expr)
+	qt.Assert(t, got, qt.DeepEquals, []visitRecord{
+		{Name: "x", Role: RefInBody, Depth: 0},
+	})
+}
+
+// TestWalkBindingRefs_CallProcInsideClosureBody pins the composition
+// of two contracts: call-proc tagging composes with depth increment,
+// and visit order inside the closure body is operator-before-arg.
+// '(lambda () (g x))' must yield g as RefInCallProc at depth=1, then
+// x as RefInBody at depth=1.
+func TestWalkBindingRefs_CallProcInsideClosureBody(t *testing.T) {
+	expr := lam(call(symRef("g"), symRef("x")))
+	got := recordVisits(expr)
+	qt.Assert(t, got, qt.DeepEquals, []visitRecord{
+		{Name: "g", Role: RefInCallProc, Depth: 1},
+		{Name: "x", Role: RefInBody, Depth: 1},
+	})
+}
+
 // TestBuildBindingIdxMap_SilentlyDropsUnresolvable pins the documented
 // best-effort contract: any binding whose Name fails ResolveBindingID
 // under childEnv is silently dropped from the returned map. The

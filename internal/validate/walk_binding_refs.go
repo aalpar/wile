@@ -15,7 +15,6 @@
 package validate
 
 import (
-	"github.com/aalpar/wile/environment"
 	"github.com/aalpar/wile/internal/syntax"
 )
 
@@ -128,20 +127,5 @@ func walkBindingRefsAt(
 	})
 }
 
-// buildBindingIdxMap resolves each binding's name (under childEnv) to
-// its BindingID, returning a BindingID → bindings-slice-index map.
-// Bindings whose names fail to resolve under childEnv are silently
-// dropped — best-effort, matching the prior walker behavior.
-func buildBindingIdxMap(
-	childEnv *environment.EnvironmentFrame,
-	bindings []ValidatedLetBinding,
-) map[environment.BindingID]int {
-	idToIdx := make(map[environment.BindingID]int, len(bindings))
-	for i, b := range bindings {
-		bid, ok := childEnv.ResolveBindingID(b.Name.Sym, b.Name.Scopes())
-		if ok {
-			idToIdx[bid] = i
-		}
-	}
-	return idToIdx
-}
+// buildBindingIdxMap is defined in env_helpers.go alongside the other
+// env-resolution helpers (bindLocalSymbol, extendEnvWithSymbols, etc.).
