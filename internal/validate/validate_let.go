@@ -312,14 +312,10 @@ func validateLetStarNested(
 			return nil
 		}
 
-		lenv := environment.NewLocalEnvironment(0)
-		childEnv := environment.NewEnvironmentFrameWithParent(lenv, currentEnv)
-		childEnv.MaybeCreateLocalBinding(
-			r.name.Sym,
-			environment.BindingTypeVariable,
-			r.name.Scopes(),
-			r.name.SourceContext(),
-		)
+		// let* binds each name in a fresh child frame; subsequent inits see
+		// the evolving env. Use extendEnvWithSymbols with a single-symbol
+		// slice so the per-name child-frame creation lives in one helper.
+		childEnv := extendEnvWithSymbols(currentEnv, []*syntax.SyntaxSymbol{r.name})
 
 		validated = append(validated, validatedBinding{
 			binding:  ValidatedLetBinding{Name: r.name, Init: init},
@@ -411,12 +407,7 @@ func validateLetrecBindingsAndBody(
 		nameSyms = append(nameSyms, nameSym)
 		initExprs = append(initExprs, elems[1])
 
-		childEnv.MaybeCreateLocalBinding(
-			nameSym.Sym,
-			environment.BindingTypeVariable,
-			nameSym.Scopes(),
-			nameSym.SourceContext(),
-		)
+		bindLocalSymbol(childEnv, nameSym)
 	}
 
 	if !allOk {
@@ -511,14 +502,7 @@ func validateNamedLet(
 	}
 
 	// Create env with tag visible (for recursive calls in body)
-	lenv := environment.NewLocalEnvironment(0)
-	tagEnv := environment.NewEnvironmentFrameWithParent(lenv, env)
-	tagEnv.MaybeCreateLocalBinding(
-		tag.Sym,
-		environment.BindingTypeVariable,
-		tag.Scopes(),
-		tag.SourceContext(),
-	)
+	tagEnv := extendEnvWithSymbols(env, []*syntax.SyntaxSymbol{tag})
 
 	bodyEnv := createLetValidationEnv(tagEnv, bindings)
 
@@ -676,17 +660,11 @@ func createLetValidationEnv(
 	if len(bindings) == 0 {
 		return env
 	}
-	lenv := environment.NewLocalEnvironment(0)
-	childEnv := environment.NewEnvironmentFrameWithParent(lenv, env)
-	for _, b := range bindings {
-		childEnv.MaybeCreateLocalBinding(
-			b.Name.Sym,
-			environment.BindingTypeVariable,
-			b.Name.Scopes(),
-			b.Name.SourceContext(),
-		)
+	syms := make([]*syntax.SyntaxSymbol, len(bindings))
+	for i, b := range bindings {
+		syms[i] = b.Name
 	}
-	return childEnv
+	return extendEnvWithSymbols(env, syms)
 }
 
 // parseBindingsList extracts the bindings pair from a syntax value.

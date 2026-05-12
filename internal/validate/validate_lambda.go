@@ -53,36 +53,23 @@ func validateLambda(ctx context.Context, env *environment.EnvironmentFrame, pair
 // createLambdaValidationEnv creates a child environment with lambda parameters
 // bound as local variables. This mirrors what the expander and compiler do,
 // enabling validation to correctly detect when parameters shadow special forms.
+//
+// Note: always creates a fresh child frame, even when params has zero required
+// and no rest. This matches the expander/compiler's per-lambda frame discipline.
+// (extendEnvWithSymbols cannot be used directly because it returns env
+// unchanged on empty input — correct for let, wrong for lambda.)
 func createLambdaValidationEnv(env *environment.EnvironmentFrame, params *ValidatedParams) *environment.EnvironmentFrame {
 	if env == nil || params == nil {
 		return env
 	}
-
-	// Create child environment with local bindings for parameters
 	lenv := environment.NewLocalEnvironment(0)
 	childEnv := environment.NewEnvironmentFrameWithParent(lenv, env)
-
-	// Bind required parameters
 	for _, paramSym := range params.Required {
-		// paramSym is already a *syntax.SyntaxSymbol
-		childEnv.MaybeCreateLocalBinding(
-			paramSym.Sym,
-			environment.BindingTypeVariable,
-			paramSym.Scopes(),
-			paramSym.SourceContext(),
-		)
+		bindLocalSymbol(childEnv, paramSym)
 	}
-
-	// Bind rest parameter if present
 	if params.Rest != nil {
-		childEnv.MaybeCreateLocalBinding(
-			params.Rest.Sym,
-			environment.BindingTypeVariable,
-			params.Rest.Scopes(),
-			params.Rest.SourceContext(),
-		)
+		bindLocalSymbol(childEnv, params.Rest)
 	}
-
 	return childEnv
 }
 
