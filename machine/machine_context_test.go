@@ -333,30 +333,26 @@ func TestMachineContext_TimerState(t *testing.T) {
 
 	// Default: no timer active.
 	qt.Assert(t, mc.TimerHandler(), qt.IsNil)
-	qt.Assert(t, mc.TimerCancel(), qt.IsNil)
 
-	// Set handler — uses ForeignClosure as a concrete values.Callable.
+	// SetTimer installs handler and cancel as a unit.
 	handler := NewForeignClosure(env, 0, false, func(_ CallContext) error {
 		return nil
 	})
-	mc.SetTimerHandler(handler)
+	cancelCalled := false
+	cancel := func() {
+		cancelCalled = true
+	}
+	mc.SetTimer(handler, cancel)
 	qt.Assert(t, mc.TimerHandler(), qt.Equals, handler)
 
-	// Set cancel and verify it is callable.
-	called := false
-	cancel := func() {
-		called = true
-	}
-	mc.SetTimerCancel(cancel)
-	qt.Assert(t, mc.TimerCancel(), qt.IsNotNil)
-	mc.TimerCancel()()
-	qt.Assert(t, called, qt.IsTrue)
-
-	// Clear both fields.
-	mc.SetTimerHandler(nil)
-	mc.SetTimerCancel(nil)
+	// ClearTimer calls cancel and removes the handler atomically.
+	mc.ClearTimer()
+	qt.Assert(t, cancelCalled, qt.IsTrue)
 	qt.Assert(t, mc.TimerHandler(), qt.IsNil)
-	qt.Assert(t, mc.TimerCancel(), qt.IsNil)
+
+	// ClearTimer when no timer is active is a no-op.
+	mc.ClearTimer()
+	qt.Assert(t, mc.TimerHandler(), qt.IsNil)
 }
 
 func TestMachineContext_Apply_VariadicTooFewArgs(t *testing.T) {
@@ -2389,7 +2385,7 @@ func TestRun_TimerInterruptFromBytecodeLoop(t *testing.T) {
 	mc.SetContext(ctx)
 
 	handler := NewClosureWithTemplate(NewEmptyNativeTemplate(), env)
-	mc.SetTimerHandler(handler)
+	mc.SetTimer(handler, func() {})
 
 	tpl := NewNativeTemplate(0, 0, false, NewOperationLoadVoid())
 	mc.template = tpl
@@ -2457,8 +2453,7 @@ func TestRunWithEscapeHandling_TimerInterrupt(t *testing.T) {
 
 	// Install a cancel func to verify it gets called during cleanup.
 	cancelCalled := false
-	mc.SetTimerHandler(handler)
-	mc.SetTimerCancel(func() {
+	mc.SetTimer(handler, func() {
 		cancelCalled = true
 	})
 
@@ -2477,7 +2472,6 @@ func TestRunWithEscapeHandling_TimerInterrupt(t *testing.T) {
 
 	// Timer state was cleared.
 	c.Assert(mc.TimerHandler(), qt.IsNil)
-	c.Assert(mc.TimerCancel(), qt.IsNil)
 
 	// The old cancel func was called.
 	c.Assert(cancelCalled, qt.IsTrue)

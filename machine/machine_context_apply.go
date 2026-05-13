@@ -150,11 +150,11 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	// Immediate timeout check after foreign call returns successfully.
 	// Closes the latency gap: a foreign function that blocks for seconds
 	// triggers the handler immediately, not after 1024 more bytecode ops.
-	if p.timerHandler != nil {
+	if p.timer != nil {
 		select {
 		case <-p.ctx.Done():
 			if errors.Is(context.Cause(p.ctx), ErrTimerExpired) {
-				return nil, &ErrTimerInterrupt{Handler: p.timerHandler}
+				return nil, &ErrTimerInterrupt{Handler: p.timer.handler}
 			}
 		default:
 		}

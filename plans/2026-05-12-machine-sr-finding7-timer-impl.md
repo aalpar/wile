@@ -105,12 +105,28 @@ analysis above predicts ≤0.1% noise; Stage 1 cleared the gate with
 | `machine/call_foreign_cached.go:91-95` | Same: read `mc.timer`; access handler via `mc.timer.handler`. |
 | `registry/core/prim_timer.go:90-91` | Replace two-line setter with `sub.SetTimer(handlerVal, timerCancel)`. |
 
-Tests touch only comments (`machine_context_test.go:2379, 2406`),
-no direct field reads. Pool reset zeroes `*mc = MachineContext{}`
-which sets `timer = nil` — equivalent to current behavior.
+Test sites also need migration to the new API:
+
+- `machine/machine_context_test.go:TestMachineContext_TimerState`
+  — full round-trip; rewritten to exercise `SetTimer` / `ClearTimer` /
+  `TimerHandler` and verify the cancel-fires-on-clear invariant.
+- `machine/machine_context_test.go:2392` (`TestRun_TimerInterruptOnContextExpiry`)
+  — single `SetTimerHandler(h)` call; migrated to `SetTimer(h, func() {})`.
+- `machine/machine_context_test.go:2456-2459`
+  (`TestRunWithEscapeHandling_TimerInterrupt`) — paired setters;
+  collapsed into a single `SetTimer(h, cancel)` call. The
+  follow-up assertion on `TimerCancel()` is removed (cancel is
+  now an internal detail of the sub-record; the `cancelCalled`
+  flag suffices to verify the cancel function fired).
+- `machine/call_foreign_cached_test.go:144` — single
+  `SetTimerHandler(h)` call; migrated to `SetTimer(h, func() {})`.
+
+Pool reset zeroes `*mc = MachineContext{}` which sets `timer = nil`
+— equivalent to current behavior.
 
 Net: ~15 LOC added (struct + 3 accessors + composite update),
-~10 LOC removed (4 old accessors), behavior preserved.
+~10 LOC removed (4 old accessors), ~10 LOC of test churn (callsite
+migration + dropped `TimerCancel` assertions), behavior preserved.
 
 ## Phases
 
