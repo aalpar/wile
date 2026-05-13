@@ -91,13 +91,14 @@ func PrimWithTimeout(cc machine.CallContext) error {
 
 	_, err = sub.ApplyCallable(thunkVal)
 	if err != nil {
-		timerCancel()
+		sub.ClearTimer()
 		return err
 	}
 	err = sub.Run()
 
-	// Always cancel the timer to release resources.
-	timerCancel()
+	// Always cancel the timer to release resources. ClearTimer encapsulates
+	// the cancel-then-nil discipline so the sub-record cannot drift.
+	sub.ClearTimer()
 
 	if err != nil {
 		var timerErr *machine.ErrTimerInterrupt
