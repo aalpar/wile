@@ -355,6 +355,56 @@ func TestMachineContext_TimerState(t *testing.T) {
 	qt.Assert(t, mc.TimerHandler(), qt.IsNil)
 }
 
+func TestMachineContext_SetTimer_PanicsOnContractViolation(t *testing.T) {
+	env := environment.NewNamespace().Runtime()
+	mc := NewMachineContext(context.Background(), NewMachineContinuation(nil, nil, env))
+
+	handler := NewForeignClosure(env, 0, false, func(_ CallContext) error {
+		return nil
+	})
+	noop := func() {}
+
+	tcs := []struct {
+		name string
+		call func()
+	}{
+		{
+			name: "nil handler",
+			call: func() {
+				mc.SetTimer(nil, noop)
+			},
+		},
+		{
+			name: "nil cancel",
+			call: func() {
+				mc.SetTimer(handler, nil)
+			},
+		},
+		{
+			name: "both nil",
+			call: func() {
+				mc.SetTimer(nil, nil)
+			},
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, func() {
+				tc.call()
+			}, qt.PanicMatches, `.*SetTimer: handler and cancel must be non-nil.*`)
+		})
+	}
+
+	// Double-install: re-installing without ClearTimer first must panic, to
+	// surface the contract violation at the install site rather than later
+	// when the prior cancel function is silently dropped.
+	mc.SetTimer(handler, noop)
+	qt.Assert(t, func() {
+		mc.SetTimer(handler, noop)
+	}, qt.PanicMatches, `.*SetTimer: timer already installed.*`)
+	mc.ClearTimer() // cleanup
+}
+
 func TestMachineContext_Apply_VariadicTooFewArgs(t *testing.T) {
 	topEnv := environment.NewNamespace().Runtime()
 	lenv := environment.NewLocalEnvironment(3)

@@ -113,14 +113,14 @@ type timerState struct {
 // Finding 7 of plans/2026-05-06-machine-structural-reduction.md
 // (stage 1 of 3); see plans/2026-05-12-machine-sr-finding7-expansion-impl.md.
 //
-// The 'ctx' field is typed ExpanderCtx (an interface defined in
+// The 'expanderCtx' field is typed ExpanderCtx (an interface defined in
 // machine/) so the dependency direction (compilation → machine) holds.
 // The 'syntaxCase' field is 'any' for the same reason the old field was:
 // machine/ cannot import machine/compilation/, so the concrete type
 // (*compilation.syntaxCaseState) lives only at the consumer.
 type expansionState struct {
-	ctx        ExpanderCtx
-	syntaxCase any
+	expanderCtx ExpanderCtx
+	syntaxCase  any
 }
 
 // NewMachineContext creates a new machine context with the given context and continuation.
@@ -273,9 +273,22 @@ func (p *MachineContext) TimerHandler() values.Callable {
 }
 
 // SetTimer installs the timer interrupt handler and cancel function as a
-// single atomic unit. Both arguments must be non-nil; use ClearTimer to
-// remove. Allocates the timer sub-record on installation.
+// single atomic unit. Both arguments must be non-nil, and no timer may
+// already be installed — call ClearTimer first to replace an active
+// timer. Panics on contract violation: a nil cancel would later panic in
+// ClearTimer with no context, and silently overwriting an active timer
+// would leak the prior cancel function. Allocates the timer sub-record
+// on installation.
 func (p *MachineContext) SetTimer(h values.Callable, cancel context.CancelFunc) {
+	if h == nil || cancel == nil {
+		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"SetTimer: handler and cancel must be non-nil (got handler=%v, cancel=%v)",
+			h != nil, cancel != nil))
+	}
+	if p.timer != nil {
+		panic(werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"SetTimer: timer already installed; call ClearTimer first"))
+	}
 	p.timer = &timerState{handler: h, cancel: cancel}
 }
 
@@ -896,7 +909,7 @@ func (p *MachineContext) SetExpanderContext(ctx ExpanderCtx) {
 		}
 		p.expansion = &expansionState{}
 	}
-	p.expansion.ctx = ctx
+	p.expansion.expanderCtx = ctx
 }
 
 // ExpanderContext returns the expander context, or nil if not in expansion context.
@@ -904,7 +917,7 @@ func (p *MachineContext) ExpanderContext() ExpanderCtx {
 	if p.expansion == nil {
 		return nil
 	}
-	return p.expansion.ctx
+	return p.expansion.expanderCtx
 }
 
 // SyntaxCaseState returns the per-context syntax-case expansion state, or nil
