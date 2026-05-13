@@ -469,6 +469,26 @@ distinguishes the dispatch tier and gives the type a real contract.
 
 ### Finding 7 — `MachineContext`: 18 direct fields + 13 embedded; per-field getter/setter pairs
 
+**Status (2026-05-12)**: Closed at 2/3 stages shipped, −40 bytes per
+`MachineContext`. Stages executed bench-gated per the recommended
+phasing below.
+
+| Stage | Cluster | Outcome | Net |
+|-------|---------|---------|-----|
+| 1 | `ExpansionState{expanderCtx, syntaxCase}` | ✅ Shipped (PR #742) | −24 B; geomean +0.47% within ±0.5% gate |
+| 2 | `TimerState{timerHandler, timerCancel}` | ✅ Shipped (PR #743) | −16 B; geomean −0.316% (branch faster) |
+| 3 | `SubContextState{parentMC, escapeCont, barrierValid, isolatedMarks}` | ❌ Declined | Field-independence analysis showed no load-bearing co-variance |
+
+Stage 3 was inspected and declined: the four fields don't co-vary,
+they have independent writers, and `isolatedMarks` is a bare bool
+that today reads in a single op — clustering would add a double
+check (`mc.subCtx != nil && mc.subCtx.isolatedMarks`) and a pointer
+deref for a −24 B struct shrink with no invariant payoff. The
+parent plan's grouping was thematic ("all sub-context related")
+rather than semantic; honest closure beats shipping a non-load-bearing
+cluster. Detailed rationale recorded in
+`memory/finding7-cluster-outcomes.md`.
+
 **Principle**: State Tightness / Composability
 **Where**: `machine/machine_context.go:66-91`; methods at lines 127-298,
 912-967, 1148-1170
