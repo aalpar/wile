@@ -67,7 +67,7 @@ type MachineContext struct {
 	ctx context.Context
 	vmState
 	cont             *MachineContinuation // current continuation
-	expanderCtx      ExpanderCtx          // set during macro transformer execution for syntax-local-* access
+	expansion        *expansionState      // macro-expansion-time state, nil at runtime; see expansionState
 	exceptionHandler *ExceptionHandler    // current exception handler chain for R7RS exceptions
 	debugger         *Debugger            // optional debugger for breakpoints and stepping
 	parentMC         *MachineContext      // parent context for sub-contexts, enables call/cc escape tracking
@@ -79,16 +79,7 @@ type MachineContext struct {
 	// The numeric half (threadID) lives in vmState and propagates into
 	// continuations. See the comment on vmState.threadID for the full
 	// design and invariant.
-	thread *values.Thread
-	// syntaxCase holds per-context syntax-case expansion state, owned by
-	// machine/compilation/. Typed as any because machine/ cannot import
-	// compilation/ (one-direction dependency rule). The constraint —
-	// "always *compilation.syntaxCaseState or nil" — is enforced by
-	// encapsulation: the field is unexported and the accessors are the
-	// only entry points; in practice exactly one production package
-	// (compilation/) calls them, so type-system gating would only restate
-	// what package boundaries already guarantee.
-	syntaxCase    any
+	thread        *values.Thread
 	maxCallDepth  int              // 0 = unlimited (default); negatives are clamped to 0 by SetMaxCallDepth
 	maxStackSize  uint64           // 0 = unlimited (default), otherwise max eval stack entries
 	restArgBuf    values.PairBlock // reusable buffer for variadic rest-arg list construction (ForeignClosure calls)
@@ -96,6 +87,26 @@ type MachineContext struct {
 
 	timerHandler values.Callable    // nil = no timer active
 	timerCancel  context.CancelFunc // cancels the child timeout context; nil when no timer
+}
+
+// expansionState clusters the two MachineContext fields that are nil at
+// runtime and only become non-nil during macro expansion: the expander
+// context (for syntax-local-* primitive access) and the syntax-case
+// state (per-context bindings + matcher). Lazy-allocated on first write
+// via SetExpanderContext or SetSyntaxCaseState; nil reads return the
+// zero value through the accessors below.
+//
+// Finding 7 of plans/2026-05-06-machine-structural-reduction.md
+// (stage 1 of 3); see plans/2026-05-12-machine-sr-finding7-expansion-impl.md.
+//
+// The 'ctx' field is typed ExpanderCtx (an interface defined in
+// machine/) so the dependency direction (compilation → machine) holds.
+// The 'syntaxCase' field is 'any' for the same reason the old field was:
+// machine/ cannot import machine/compilation/, so the concrete type
+// (*compilation.syntaxCaseState) lives only at the consumer.
+type expansionState struct {
+	ctx        ExpanderCtx
+	syntaxCase any
 }
 
 // NewMachineContext creates a new machine context with the given context and continuation.
@@ -857,31 +868,51 @@ func (p *MachineContext) Run() error {
 }
 
 // SetExpanderContext sets the expander context for this machine context.
-// This is called when invoking macro transformers to enable syntax-local-* primitives.
+// This is called when invoking macro transformers to enable syntax-local-*
+// primitives. Lazy-allocates the expansion sub-record on first write.
 func (p *MachineContext) SetExpanderContext(ctx ExpanderCtx) {
-	p.expanderCtx = ctx
+	if p.expansion == nil {
+		if ctx == nil {
+			return // common case: clearing a never-set expander; no allocation
+		}
+		p.expansion = &expansionState{}
+	}
+	p.expansion.ctx = ctx
 }
 
 // ExpanderContext returns the expander context, or nil if not in expansion context.
 func (p *MachineContext) ExpanderContext() ExpanderCtx {
-	return p.expanderCtx
+	if p.expansion == nil {
+		return nil
+	}
+	return p.expansion.ctx
 }
 
 // SyntaxCaseState returns the per-context syntax-case expansion state, or nil
 // when not in a syntax-case expansion. The concrete type is owned by
 // machine/compilation/; callers within that subpackage type-assert to
-// *syntaxCaseState. See the comment on the syntaxCase field for why this is
+// *syntaxCaseState. See the comment on expansionState for why this is
 // any-typed.
 func (p *MachineContext) SyntaxCaseState() any {
-	return p.syntaxCase
+	if p.expansion == nil {
+		return nil
+	}
+	return p.expansion.syntaxCase
 }
 
 // SetSyntaxCaseState installs the syntax-case expansion state on the context,
 // or nil to clear it. In production, the only legitimate concrete type is
 // *compilation.syntaxCaseState; the constraint is enforced by encapsulation
 // (unexported field, single-package consumer) rather than the type system.
+// Lazy-allocates the expansion sub-record on first write.
 func (p *MachineContext) SetSyntaxCaseState(v any) {
-	p.syntaxCase = v
+	if p.expansion == nil {
+		if v == nil {
+			return // common case: clearing a never-set state; no allocation
+		}
+		p.expansion = &expansionState{}
+	}
+	p.expansion.syntaxCase = v
 }
 
 // ExceptionHandler returns the current exception handler chain.

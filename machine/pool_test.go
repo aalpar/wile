@@ -245,7 +245,7 @@ func TestAcquireMacroContext_InitializesFields(t *testing.T) {
 	// Fields NOT set must be zero.
 	qt.Assert(t, mc.cont, qt.IsNil)
 	qt.Assert(t, mc.parentMC, qt.IsNil)
-	qt.Assert(t, mc.expanderCtx, qt.IsNil)
+	qt.Assert(t, mc.ExpanderContext(), qt.IsNil)
 	qt.Assert(t, mc.exceptionHandler, qt.IsNil)
 	qt.Assert(t, mc.singleValue, qt.IsNil)
 	qt.Assert(t, mc.multiValues, qt.IsNil)
@@ -263,8 +263,8 @@ func TestAcquireMacroContext_Roundtrip(t *testing.T) {
 	ctx := context.Background()
 	mc := acquireMacroContext(ctx, cls)
 
-	// Simulate what a macro expansion does: set expanderCtx, run, get value.
-	mc.expanderCtx = &stubExpanderCtx{}
+	// Simulate what a macro expansion does: SetExpanderContext, run, get value.
+	mc.SetExpanderContext(&stubExpanderCtx{})
 	mc.singleValue = values.NewInteger(42)
 
 	ReleaseSubContext(mc)
@@ -281,7 +281,7 @@ func TestAcquireMacroContext_Roundtrip(t *testing.T) {
 
 	qt.Assert(t, mc2.env, qt.Equals, env2)
 	qt.Assert(t, mc2.template, qt.Equals, tpl2)
-	qt.Assert(t, mc2.expanderCtx, qt.IsNil)
+	qt.Assert(t, mc2.ExpanderContext(), qt.IsNil)
 	qt.Assert(t, mc2.singleValue, qt.IsNil)
 	qt.Assert(t, mc2.evals, qt.IsNotNil)
 	qt.Assert(t, mc2.evals.Len(), qt.Equals, 0)
