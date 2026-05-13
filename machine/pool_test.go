@@ -263,7 +263,7 @@ func TestAcquireMacroContext_Roundtrip(t *testing.T) {
 	ctx := context.Background()
 	mc := acquireMacroContext(ctx, cls)
 
-	// Simulate what a macro expansion does: set expanderCtx, run, get value.
+	// Simulate what a macro expansion does: SetExpanderContext, run, get value.
 	mc.SetExpanderContext(&stubExpanderCtx{})
 	mc.singleValue = values.NewInteger(42)
 

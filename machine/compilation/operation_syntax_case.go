@@ -41,12 +41,13 @@ type OperationSyntaxCaseMatch struct {
 }
 
 // syntaxCaseState holds per-context state for syntax-case expansion.
-// It is stored on MachineContext.syntaxCase (an any-typed back-channel field)
-// so that syntax-case is reentrant and safe for concurrent macro expansion.
-// machine/ cannot import this package (one-direction dependency), so the
-// machine-side field is any-typed; the constraint that only this concrete
-// type is ever stored there is enforced by the field's encapsulation rather
-// than by the type system.
+// It is stored via MachineContext.SyntaxCaseState (an any-typed back-channel
+// slot on the clustered expansion sub-record) so that syntax-case is
+// reentrant and safe for concurrent macro expansion. machine/ cannot import
+// this package (one-direction dependency), so the machine-side slot is
+// any-typed; the constraint that only this concrete type is ever stored
+// there is enforced by the slot's encapsulation rather than by the type
+// system.
 type syntaxCaseState struct {
 	bindings map[string]syntax.SyntaxValue // pattern variable bindings from last match
 	matcher  *match.SyntaxMatcher          // matcher from last match (needed for ellipsis expansion)
@@ -65,9 +66,9 @@ func ensureSyntaxCaseState(mc *machine.MachineContext) *syntaxCaseState {
 }
 
 // loadSyntaxCaseState fetches the *syntaxCaseState payload from
-// MachineContext.syntaxCase. Discriminates the two failure modes:
-// nil field (no syntax-case expansion in flight) and wrong concrete
-// type (contract violation — the field is any-typed and the encapsulation
+// MachineContext.SyntaxCaseState(). Discriminates the two failure modes:
+// nil (no syntax-case expansion in flight) and wrong concrete type
+// (contract violation — the slot is any-typed and the encapsulation
 // argument relies on no other code storing alternatives).
 func loadSyntaxCaseState(mc *machine.MachineContext) (*syntaxCaseState, error) {
 	raw := mc.SyntaxCaseState()
@@ -77,7 +78,7 @@ func loadSyntaxCaseState(mc *machine.MachineContext) (*syntaxCaseState, error) {
 	sc, ok := raw.(*syntaxCaseState)
 	if !ok {
 		return nil, mc.Error(fmt.Sprintf(
-			"syntax-case: unexpected state type %T on MachineContext.syntaxCase", raw))
+			"syntax-case: unexpected state type %T from MachineContext.SyntaxCaseState()", raw))
 	}
 	return sc, nil
 }

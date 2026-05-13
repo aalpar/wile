@@ -11,9 +11,19 @@ cluster per PR, bench-gated**.
 Cluster the `expanderCtx` + `syntaxCase` fields on `MachineContext`
 into a single `*expansionState` sub-record. Both fields are nil
 during VM execution (the hot path); both are set during macro
-expansion (cold path). The invariant
-`(expanderCtx == nil) ⇒ (syntaxCase == nil)` becomes structural: the
-sub-record is allocated lazily on first write, freed on pool reset.
+expansion (cold path). The sub-record is allocated lazily on the
+first non-nil write of either field, and freed on pool reset.
+
+**What this refactor does not enforce.** The parent plan
+(`plans/2026-05-06-machine-structural-reduction.md:499`) listed
+`(expanderCtx == nil) ⇒ (syntaxCase == nil)` as a representation
+invariant. The clustered layout does **not** structurally enforce
+that implication — the two sub-record fields can be set
+independently via separate accessors, and `syntax-case` tests
+exercise `SetSyntaxCaseState` without an expander context. The
+genuine invariant this refactor establishes is weaker: both fields
+share a single allocation lifecycle, so the common VM-execution
+case carries one nil pointer rather than two nil interfaces.
 
 **Why Expansion first** (of the three Finding 7 clusters):
 
