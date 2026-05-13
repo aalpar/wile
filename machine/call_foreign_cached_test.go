@@ -141,7 +141,7 @@ func TestCallForeignCached_TimerInterruptAfterSuccess(t *testing.T) {
 	defer ReleaseTopLevelContext(mc)
 
 	handler := NewClosureWithTemplate(NewEmptyNativeTemplate(), env)
-	mc.SetTimerHandler(handler)
+	mc.SetTimer(handler, func() {})
 
 	err := mc.Run()
 

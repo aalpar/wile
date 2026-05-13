@@ -88,11 +88,11 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 	}
 
 	// Immediate timeout check after foreign call returns successfully.
-	if mc.timerHandler != nil {
+	if mc.timer != nil {
 		select {
 		case <-mc.ctx.Done():
 			if errors.Is(context.Cause(mc.ctx), ErrTimerExpired) {
-				return nil, &ErrTimerInterrupt{Handler: mc.timerHandler}
+				return nil, &ErrTimerInterrupt{Handler: mc.timer.handler}
 			}
 		default:
 		}

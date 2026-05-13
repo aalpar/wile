@@ -87,8 +87,7 @@ func PrimWithTimeout(cc machine.CallContext) error {
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
 	sub.SetContext(timerCtx)
-	sub.SetTimerHandler(handlerVal)
-	sub.SetTimerCancel(timerCancel)
+	sub.SetTimer(handlerVal, timerCancel)
 
 	_, err = sub.ApplyCallable(thunkVal)
 	if err != nil {
