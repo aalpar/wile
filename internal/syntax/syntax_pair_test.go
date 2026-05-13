@@ -30,7 +30,13 @@ func TestSyntaxPair_SchemeString(t *testing.T) {
 		out string
 	}{
 		{nil, "#<syntax-void>"},
-		{NewSyntaxCons(nil, nil, nil), "#'()"},
+		// Note: the pre-migration test case
+		//   {NewSyntaxCons(nil, nil, nil), "#'()"}
+		// has been removed. *SyntaxPair.IsEmptyList() now returns false
+		// unconditionally (matching *values.Pair), so the nil-nil pair
+		// no longer renders as "#'()". The empty list at the syntax phase
+		// is exclusively SyntaxEmptyList (= values.EmptyList), which
+		// renders as "()" — its own SchemeString.
 		{NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(2), nil), SyntaxEmptyList, nil), nil), "#'(#'1 #'2)"},
 		{NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(2), nil), NewSyntaxCons(NewSyntaxObject(values.NewInteger(3), nil), SyntaxEmptyList, nil), nil), nil), "#'(#'1 #'2 #'3)"},
 		{NewSyntaxCons(NewSyntaxCons(NewSyntaxObject(values.NewInteger(1), nil), NewSyntaxObject(values.NewInteger(2), nil), nil), SyntaxEmptyList, nil), "#'(#'(#'1 . #'2))"},
@@ -139,17 +145,91 @@ func TestSyntaxPair_Length(t *testing.T) {
 }
 
 func TestSyntaxPair_IsVoid(t *testing.T) {
-	qt.Assert(t, (*values.Pair)(nil).IsVoid(), qt.IsTrue)
-	qt.Assert(t, values.NewCons(values.NewInteger(1), values.EmptyList).IsVoid(), qt.IsFalse)
-	qt.Assert(t, values.EmptyList.IsVoid(), qt.IsFalse)
+	// Test *SyntaxPair (the type this test file is for), not *values.Pair.
+	// The earlier shape mistakenly tested *values.Pair — parallel
+	// copy-paste defect to the one fixed in TestSyntaxPair_IsEmptyList.
+	qt.Assert(t, (*SyntaxPair)(nil).IsVoid(), qt.IsTrue,
+		qt.Commentf("nil receiver is void"))
+	qt.Assert(t, NewSyntaxCons(
+		NewSyntaxObject(values.NewInteger(1), nil),
+		SyntaxEmptyList,
+		nil,
+	).IsVoid(), qt.IsFalse,
+		qt.Commentf("a properly-constructed pair is not void"))
+}
+
+// TestSyntaxPair_UnwrapAll_NilNilPair pins the post-migration behavior on
+// a nil-nil pair. Pre-migration, *SyntaxPair.IsEmptyList()'s short-circuit
+// inside UnwrapAllShared returned values.EmptyList. Post-migration the
+// short-circuit is gone, so UnwrapAll walks the pair and returns a
+// *values.Pair with the singleton EmptyList substituted for the nil cdr.
+//
+// This is a documented behavior change with no production consumers (the
+// nil-nil construction appears only in tests). The test fences the change
+// so a future regression (e.g. someone resurrecting the
+// IsEmptyList-on-nil-nil semantic in UnwrapAllShared) is loud.
+func TestSyntaxPair_UnwrapAll_NilNilPair(t *testing.T) {
+	pair := NewSyntaxCons(nil, nil, nil)
+	result := pair.UnwrapAll()
+	_, isPair := result.(*values.Pair)
+	qt.Assert(t, isPair, qt.IsTrue,
+		qt.Commentf("nil-nil SyntaxPair unwraps to *values.Pair, not EmptyList"))
+	qt.Assert(t, values.IsEmptyList(result), qt.IsFalse,
+		qt.Commentf("the unwrapped result is not the empty list"))
+}
+
+// TestSyntaxPair_Unwrap_NilNilPair pins the shallow-unwrap behavior.
+// Unlike UnwrapAll which recurses, Unwrap just wraps Car and Cdr in a
+// new *values.Pair — so a nil-nil SyntaxPair yields *values.Pair{nil, nil}.
+// Not the empty list. Documents the cliff post-migration.
+func TestSyntaxPair_Unwrap_NilNilPair(t *testing.T) {
+	pair := NewSyntaxCons(nil, nil, nil)
+	result := pair.Unwrap()
+	_, isPair := result.(*values.Pair)
+	qt.Assert(t, isPair, qt.IsTrue,
+		qt.Commentf("Unwrap returns *values.Pair, not EmptyList"))
+	qt.Assert(t, values.IsEmptyList(result), qt.IsFalse,
+		qt.Commentf("the shallow-unwrapped result is not the empty list"))
+}
+
+// TestSyntaxPair_SchemeString_NilNilPair pins the post-migration panic
+// behavior. Pre-migration the IsEmptyList short-circuit produced "#'()".
+// Post-migration SyntaxForEach panics on the nil-cdr type assertion at
+// pr.Cdr().(SyntaxValue). The audit confirms zero production callers
+// construct nil-nil pairs; this test documents the failure shape so
+// future contributors who accidentally construct one see the panic and
+// trace it back to construction rather than wondering why a method
+// quietly mis-rendered.
+func TestSyntaxPair_SchemeString_NilNilPair(t *testing.T) {
+	pair := NewSyntaxCons(nil, nil, nil)
+	qt.Assert(t, func() { _ = pair.SchemeString() }, qt.PanicMatches,
+		`interface conversion: interface is nil, not values\.SyntaxValue`)
+}
+
+// TestSyntaxPair_AsVector_NilNilPair pins the parallel panic behavior
+// on AsVector. Same rationale as TestSyntaxPair_SchemeString_NilNilPair.
+func TestSyntaxPair_AsVector_NilNilPair(t *testing.T) {
+	pair := NewSyntaxCons(nil, nil, nil)
+	qt.Assert(t, func() { _ = pair.AsVector() }, qt.PanicMatches,
+		`interface conversion: interface is nil, not values\.SyntaxValue`)
 }
 
 func TestSyntaxPair_IsEmptyList(t *testing.T) {
-	// *Pair.IsEmptyList() always returns false now that EmptyList is a separate type
-	qt.Assert(t, (*values.Pair)(nil).IsEmptyList(), qt.IsFalse)
-	qt.Assert(t, values.NewCons(values.NewInteger(1), values.EmptyList).IsEmptyList(), qt.IsFalse)
-	// EmptyList itself is no longer *Pair, test via interface
-	qt.Assert(t, values.EmptyList.IsEmptyList(), qt.IsTrue)
+	// *SyntaxPair.IsEmptyList() always returns false — the empty list
+	// at the syntax phase is SyntaxEmptyList (an alias for
+	// values.EmptyList), not a *SyntaxPair. Mirrors the *values.Pair
+	// migration.
+	qt.Assert(t, (*SyntaxPair)(nil).IsEmptyList(), qt.IsFalse)
+	qt.Assert(t, NewSyntaxCons(nil, nil, nil).IsEmptyList(), qt.IsFalse,
+		qt.Commentf("nil-nil pair is no longer treated as the empty list"))
+	qt.Assert(t, NewSyntaxCons(
+		NewSyntaxObject(values.NewInteger(1), nil),
+		SyntaxEmptyList,
+		nil,
+	).IsEmptyList(), qt.IsFalse)
+	// SyntaxEmptyList itself reports as empty (via the values.EmptyList
+	// singleton's own IsEmptyList method).
+	qt.Assert(t, SyntaxEmptyList.IsEmptyList(), qt.IsTrue)
 }
 
 func TestSyntaxPair_AsVector(t *testing.T) {

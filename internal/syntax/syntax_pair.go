@@ -50,11 +50,6 @@ type SyntaxPair struct {
 //
 // Only symbols store scopes for hygiene resolution. Pairs just propagate.
 func (p *SyntaxPair) AddScope(scope *Scope) SyntaxValue {
-	// Empty list has no symbols to propagate to
-	if p.IsEmptyList() {
-		return p
-	}
-
 	// Use the generic mapSyntaxTree traversal to add scope to all nested nodes.
 	// mapSyntaxTree handles pair recursion internally and calls the function only on leaf nodes (symbols, etc.).
 	return mapSyntaxTree(p, func(node SyntaxValue) SyntaxValue {
@@ -127,9 +122,6 @@ func (p *SyntaxPair) Unwrap() values.Value {
 	if p.IsVoid() {
 		return values.Void
 	}
-	if p.IsEmptyList() {
-		return values.EmptyList
-	}
 	return values.NewCons(p.Car(), p.Cdr())
 }
 
@@ -152,9 +144,6 @@ func (p *SyntaxPair) Append(vs values.Value) values.Value {
 	}
 	if values.IsEmptyList(vs) {
 		return p
-	}
-	if p.IsEmptyList() {
-		return vs
 	}
 	q := p
 	for !values.IsVoid(q) && !values.IsEmptyList(q.Cdr()) {
@@ -182,9 +171,6 @@ func (p *SyntaxPair) SyntaxAppend(vs SyntaxValue) SyntaxValue {
 	}
 	if values.IsEmptyList(vs) {
 		return p
-	}
-	if values.IsEmptyList(p) {
-		return vs
 	}
 	q := p
 	for !values.IsVoid(q) && !values.IsEmptyList(q.Cdr()) {
@@ -214,12 +200,11 @@ func (p *SyntaxPair) Length() int {
 	return q
 }
 
-// IsEmptyList returns true if the pair represents an empty list.
-func (p *SyntaxPair) IsEmptyList() bool {
-	if p == nil {
-		return false
-	}
-	return p.Values[0] == nil && p.Values[1] == nil
+// IsEmptyList returns false. A *SyntaxPair is never the empty list;
+// SyntaxEmptyList (an alias for the values.EmptyList singleton) is
+// the only representation of the empty list at the syntax phase.
+func (*SyntaxPair) IsEmptyList() bool {
+	return false
 }
 
 // IsVoid returns true if the pair is nil.
@@ -234,7 +219,7 @@ func (p *SyntaxPair) ForEach(ctx context.Context, fn values.ForEachFunc) (values
 	}
 	pr := p
 	i := 0
-	for pr != nil && !pr.IsEmptyList() {
+	for pr != nil {
 		hasNext := !values.IsEmptyList(pr.Cdr())
 		err := fn(ctx, i, hasNext, pr.Car())
 		if err != nil {
@@ -257,7 +242,7 @@ func (p *SyntaxPair) SyntaxForEach(ctx context.Context, fn SyntaxForEachFunc) (S
 	}
 	pr := p
 	i := 0
-	for pr != nil && !pr.IsEmptyList() {
+	for pr != nil {
 		hasNext := !IsSyntaxEmptyList(pr.Cdr().(SyntaxValue))
 		err := fn(ctx, i, hasNext, pr.Car().(SyntaxValue))
 		if err != nil {
@@ -282,12 +267,6 @@ func (p *SyntaxPair) IsPair() bool {
 func (p *SyntaxPair) SchemeString() string {
 	if p == nil {
 		return "#<syntax-void>"
-	}
-	if p.IsVoid() {
-		return "#'<void>"
-	}
-	if p.IsEmptyList() {
-		return "#'()"
 	}
 	q := &strings.Builder{}
 	q.WriteString("#'(")
@@ -322,9 +301,6 @@ func (p *SyntaxPair) AsVector() *values.Vector {
 	if p.IsVoid() {
 		return nil
 	}
-	if p.IsEmptyList() {
-		return values.NewVector()
-	}
 	vs := []values.Value{}
 	cdr, err := p.SyntaxForEach(context.Background(), func(_ context.Context, _ int, _ bool, v SyntaxValue) error {
 		v1 := v
@@ -344,9 +320,6 @@ func (p *SyntaxPair) AsVector() *values.Vector {
 func (p *SyntaxPair) AsSyntaxVector() *SyntaxVector {
 	if p.IsVoid() {
 		return nil
-	}
-	if p.IsEmptyList() {
-		return NewSyntaxVector(p.SourceContext())
 	}
 	vs := []SyntaxValue{}
 	cdr, _ := p.SyntaxForEach(context.Background(), func(_ context.Context, _ int, _ bool, v SyntaxValue) error {
