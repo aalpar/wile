@@ -268,9 +268,6 @@ func (p *SyntaxPair) SchemeString() string {
 	if p == nil {
 		return "#<syntax-void>"
 	}
-	if p.IsVoid() {
-		return "#'<void>"
-	}
 	q := &strings.Builder{}
 	q.WriteString("#'(")
 	cdr, _ := p.SyntaxForEach(context.Background(), func(_ context.Context, i int, _ bool, v SyntaxValue) error {
