@@ -50,9 +50,8 @@ func TestMutexState_String(t *testing.T) {
 		state values.MutexState
 		str   string
 	}{
-		{values.MutexUnlocked, "not-owned"},
-		{values.MutexLockedOwned, "owned"},
-		{values.MutexLockedNotOwned, "not-owned"},
+		{values.MutexUnlocked, "unlocked"},
+		{values.MutexLocked, "locked"},
 		{values.MutexAbandoned, "abandoned"},
 		{values.MutexState(99), "unknown"},
 	}
@@ -69,7 +68,7 @@ func TestMutex_LockUnlock_NoOwner(t *testing.T) {
 	ok, err := m.Lock(nil, nil)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, m.State(), qt.Equals, values.MutexLockedNotOwned)
+	qt.Assert(t, m.State(), qt.Equals, values.MutexLocked)
 	qt.Assert(t, m.Owner() == nil, qt.IsTrue)
 
 	ok = m.Unlock(nil, nil)
@@ -84,7 +83,7 @@ func TestMutex_LockUnlock_WithOwner(t *testing.T) {
 	ok, err := m.Lock(nil, th)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, m.State(), qt.Equals, values.MutexLockedOwned)
+	qt.Assert(t, m.State(), qt.Equals, values.MutexLocked)
 	qt.Assert(t, m.Owner(), qt.Equals, th)
 
 	m.Unlock(nil, nil)
