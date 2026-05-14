@@ -1,10 +1,13 @@
 package values
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 	"reflect"
 	"testing"
+
+	"github.com/aalpar/wile/werr"
 )
 
 // TestAllDispatchEntriesPopulated verifies that every dispatch table
@@ -88,37 +91,73 @@ func TestTypeSwitchFunctionsHandleAllTypes(t *testing.T) {
 		NewFloat(1.0),
 		NewBigFloat(big.NewFloat(1.0)),
 		NewRational(1, 1),
-		NewComplex(complex(1, 1)),
-		NewBigComplex(NewBigFloat(big.NewFloat(1.0)), NewBigFloat(big.NewFloat(1.0))),
+		// Complex/BigComplex inputs to NumberToFloat64 must have imag==0; a
+		// nonzero imag is the documented panic path tested below.
+		NewComplex(complex(1, 0)),
+		NewBigComplex(NewBigFloat(big.NewFloat(1.0)), NewBigFloat(big.NewFloat(0))),
 	}
 
-	// NumberToFloat64 panics intentionally for Complex/BigComplex — those have
-	// no real-only float64 representation per Q-i=C3 in the numeric registry design.
-	realTypes := allTypes[:5]
-
 	funcs := []struct {
-		name  string
-		types []Number
-		call  func(Number)
+		name string
+		call func(Number)
 	}{
-		{"NumberToFloat64", realTypes, func(n Number) { NumberToFloat64(n) }},
-		{"NumberToComplex128", allTypes, func(n Number) { NumberToComplex128(n) }},
-		{"Simplify", allTypes, func(n Number) { Simplify(n) }},
-		{"ExactnessOf", allTypes, func(n Number) { ExactnessOf(n) }},
+		{"NumberToFloat64", func(n Number) { NumberToFloat64(n) }},
+		{"NumberToComplex128", func(n Number) { NumberToComplex128(n) }},
+		{"Simplify", func(n Number) { Simplify(n) }},
+		{"ExactnessOf", func(n Number) { ExactnessOf(n) }},
 	}
 
 	for _, fn := range funcs {
-		for _, n := range fn.types {
+		for _, n := range allTypes {
 			name := fmt.Sprintf("%s/%T", fn.name, n)
 			t.Run(name, func(t *testing.T) {
 				defer func() {
 					r := recover()
-					if r != nil {
-						t.Errorf("panicked: %v", r)
+					if r == nil {
+						return
 					}
+					// Surface unexpected panics as typed test failures, not
+					// silent recovers. Any panic in this no-arg roster is a
+					// regression.
+					err, ok := r.(error)
+					if ok {
+						t.Errorf("unexpected panic with error: %v", err)
+						return
+					}
+					t.Errorf("unexpected non-error panic: %v", r)
 				}()
 				fn.call(n)
 			})
 		}
+	}
+}
+
+// TestNumberToFloat64PanicsOnNonzeroImag locks in the contract that
+// NumberToFloat64 panics with an ErrNotAReal-rooted error when given a
+// complex value with a nonzero imaginary component. The cause-preserving
+// wrap (werr.WrapForeignErrorWithCause) means errors.Is(panicVal, ErrNotAReal)
+// must succeed.
+func TestNumberToFloat64PanicsOnNonzeroImag(t *testing.T) {
+	cases := []Number{
+		NewComplex(complex(3, 4)),
+		NewBigComplex(NewBigFloat(big.NewFloat(3)), NewBigFloat(big.NewFloat(4))),
+	}
+	for _, n := range cases {
+		t.Run(fmt.Sprintf("%T", n), func(t *testing.T) {
+			defer func() {
+				r := recover()
+				if r == nil {
+					t.Fatal("expected panic, got none")
+				}
+				err, ok := r.(error)
+				if !ok {
+					t.Fatalf("expected error panic, got %T: %v", r, r)
+				}
+				if !errors.Is(err, werr.ErrNotAReal) {
+					t.Errorf("panic chain does not contain ErrNotAReal: %v", err)
+				}
+			}()
+			NumberToFloat64(n)
+		})
 	}
 }

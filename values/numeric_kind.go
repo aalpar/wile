@@ -7,24 +7,31 @@ package values
 //
 // ADDING A NEW NUMERIC TYPE requires updates in these locations:
 //
-//  1. values/numeric_kind.go         — add KindXxx constant (this file)
+//  1. values/numeric_kind.go         — add KindXxx constant (this file); bump numKinds implicitly
 //  2. values/xxx.go                  — new type file: implement Number interface,
 //     declare [numKinds] dispatch tables, register
 //     via init() calling makeXxxDispatch helpers
-//  3. values/promotion.go            — add row/column in promotionTable and promoter,
-//     update NumberToFloat64, NumberToComplex128
-//  4. values/numeric_tower.go        — update Simplify, ExactnessOf
+//  3. values/xxx.go                  — register a NumericTypeSpec in the same init() via
+//     registerNumericSpec(KindXxx, NumericTypeSpec{...}). Provide the three
+//     per-kind helper functions (xxxSimplifyDown, xxxToFloat64, xxxToComplex128)
+//     and the schemeName + isAlwaysExact metadata. The registry-driven
+//     cold-path functions (Simplify, ExactnessOf, NumberToFloat64,
+//     NumberToComplex128) pick up the new kind automatically.
+//  4. values/promotion.go            — add row/column in promotionTable and promoter
 //  5. values/numeric_dispatch_test.go — add new dispatch tables to TestAllDispatchEntriesPopulated
-//  6. registry/helpers/value_conv.go  — update ToComplex128, ToFloat64
-//  7. extensions/math/prim_conversion.go — update exact->inexact, number->string, etc.
-//  8. extensions/math/prim_complex.go — update make-rectangular, make-polar, etc.
-//  9. wile-goast/goast/mapper.go      — (EXTERNAL REPO) update numberToAST if the type maps to a Go literal
-//  10. ffi.go                         — update schemeToReflectValue (line ~300)
-//  11. internal/parser/parser_number.go — if the type can be parsed from source
-//  12. registry/helpers/equality.go    — update Eqv if the type has special eqv? semantics
+//  6. values/numeric_registry_test.go — add the new kind to equivalenceExemplars()
+//  7. registry/helpers/value_conv.go  — update ToComplex128, ToFloat64
+//  8. extensions/math/prim_conversion.go — update exact->inexact, number->string, etc.
+//  9. extensions/math/prim_complex.go — update make-rectangular, make-polar, etc.
+//  10. wile-goast/goast/mapper.go     — (EXTERNAL REPO) update numberToAST if the type maps to a Go literal
+//  11. ffi.go                        — update schemeToReflectValue (line ~300)
+//  12. internal/parser/parser_number.go — if the type can be parsed from source
+//  13. registry/helpers/equality.go   — update Eqv if the type has special eqv? semantics
 //
 // The dispatch tables (item 2) are tested by TestAllDispatchEntriesPopulated.
-// The type-switch functions (items 3-4, 6) are tested by TestTypeSwitchFunctionsHandleAllTypes.
+// The NumericTypeSpec registration (item 3) is enforced eagerly at package
+// init: a missing or incomplete registration panics with ErrNumericRegistry
+// at process startup.
 type NumericKind uint8
 
 const (

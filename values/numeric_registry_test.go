@@ -1,9 +1,24 @@
+// Copyright 2026 Aaron Alpar
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package values
 
 import (
 	"errors"
 	"math"
 	"math/big"
+	"reflect"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -12,15 +27,23 @@ import (
 )
 
 // TestNumericRegistryAllKindsRegistered verifies that every NumericKind has a
-// complete, non-zero spec entry after package initialization.
+// complete spec entry after package initialization: non-empty schemeName and
+// non-nil function fields. The reflection-based field walk mirrors the
+// completeness check in TestAllDispatchEntriesPopulated.
 func TestNumericRegistryAllKindsRegistered(t *testing.T) {
 	c := qt.New(t)
+	funcFieldNames := []string{"simplifyDown", "toFloat64", "toComplex128"}
 	for k := range numKinds {
-		spec := Lookup(k)
+		spec := LookupNumericSpec(k)
 		c.Assert(spec.SchemeName(), qt.Not(qt.Equals), "",
 			qt.Commentf("kind %d has empty schemeName", k))
-		// Indirectly verify non-nil fields by calling them on a representative value
-		// (the smoke test does the full call; here we just confirm registration exists).
+		sv := reflect.ValueOf(*spec)
+		for _, name := range funcFieldNames {
+			f := sv.FieldByName(name)
+			c.Assert(f.IsValid(), qt.IsTrue, qt.Commentf("kind %d: field %s missing", k, name))
+			c.Assert(f.IsNil(), qt.IsFalse,
+				qt.Commentf("kind %d (%s): function field %s is nil", k, spec.SchemeName(), name))
+		}
 	}
 }
 
@@ -72,19 +95,35 @@ func TestNumericRegistrySmoke(t *testing.T) {
 			wantComplex:  complex(3, 4),
 		},
 		{
+			name:        "Complex(3+0i)",
+			value:       NewComplex(complex(3, 0)),
+			wantFloat64: 3,
+			wantComplex: complex(3, 0),
+		},
+		{
 			name:         "BigComplex(3,4)",
 			value:        NewBigComplex(NewBigIntegerFromInt64(3), NewBigIntegerFromInt64(4)),
 			expectF64Err: true,
 			wantComplex:  complex(3, 4),
 		},
+		{
+			name:        "BigComplex(3,0)",
+			value:       NewBigComplex(NewBigIntegerFromInt64(3), NewBigIntegerFromInt64(0)),
+			wantFloat64: 3,
+			wantComplex: complex(3, 0),
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			spec := Lookup(tc.value.Kind())
+			spec := LookupNumericSpec(tc.value.Kind())
 
-			// SimplifyDown must not panic.
-			_ = spec.SimplifyDown(tc.value)
+			// SimplifyDown must return a non-nil Number of the same or
+			// simpler kind. Returning the input unchanged is allowed
+			// (identity step for bottom-of-chain kinds).
+			simplified := spec.SimplifyDown(tc.value)
+			c.Assert(simplified, qt.Not(qt.IsNil),
+				qt.Commentf("SimplifyDown(%s) returned nil", tc.name))
 
 			// ToFloat64
 			f, err := spec.ToFloat64(tc.value)
@@ -151,7 +190,7 @@ func TestRegisterNumericSpecDuplicateRejected(t *testing.T) {
 	}
 
 	for _, kind := range []NumericKind{KindInteger, KindBigComplex} {
-		t.Run(Lookup(kind).SchemeName(), func(t *testing.T) {
+		t.Run(LookupNumericSpec(kind).SchemeName(), func(t *testing.T) {
 			c := qt.New(t)
 			// The kind is already registered from package init() — a second call must panic.
 			c.Assert(func() { registerNumericSpec(kind, spec) }, qt.PanicMatches, ".*numeric registry violation.*")
@@ -258,24 +297,41 @@ func numberToComplex128Golden(n Number) complex128 {
 	panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "numberToComplex128Golden: unsupported type %T", n))
 }
 
-// exemplars covers all 7 kinds, including boundary cases from the plan.
+// equivalenceExemplars covers all 7 kinds with boundary cases that exercise
+// the corners of each per-kind helper (overflow, magnitude limits, IEEE 754
+// specials, complex with zero imag).
 func equivalenceExemplars() []Number {
+	bigBeyondInt64 := new(big.Int).Lsh(big.NewInt(1), 100) // 2^100, beyond int64 and beyond float64 mantissa
 	return []Number{
+		// Integer corners
 		NewInteger(3),
 		NewInteger(0),
+		NewInteger(math.MinInt64),
+		NewInteger(math.MaxInt64),
+		// BigInteger corners
 		NewBigIntegerFromInt64(3),
 		NewBigIntegerFromInt64(math.MaxInt64),
-		NewFloat(3.0),               // whole — simplifies to Integer
-		NewFloat(3.5),               // non-whole — stays Float
+		NewBigInteger(bigBeyondInt64),                   // does not fit int64
+		NewBigInteger(new(big.Int).Neg(bigBeyondInt64)), // negative, does not fit
+		// Float corners
+		NewFloat(3.0),                  // whole — simplifies to Integer
+		NewFloat(3.5),                  // non-whole — stays Float
+		NewFloat(math.Copysign(0, -1)), // negative zero (literal -0.0 is folded to 0.0 by Go)
+		// BigFloat corners
 		NewBigFloatFromFloat64(2.0), // whole — simplifies to Integer
 		NewBigFloatFromFloat64(2.5), // non-whole — stays BigFloat
-		NewRational(6, 2),           // IsInteger → demotes
-		NewRational(7, 2),           // non-integer — stays Rational
+		// Rational corners
+		NewRational(6, 2), // IsInteger → demotes
+		NewRational(7, 2), // non-integer — stays Rational
+		NewRational(1, 3), // not exactly representable in float64
+		// Complex corners
 		NewComplex(complex(3+0i, 0)),
 		NewComplex(complex(3.5+0i, 0)),
 		NewComplex(complex(3, 4)),
+		// BigComplex corners — exact and inexact mixes
 		NewBigComplex(NewBigIntegerFromInt64(3), NewBigIntegerFromInt64(0)),
 		NewBigComplex(NewBigIntegerFromInt64(3), NewBigIntegerFromInt64(4)),
+		NewBigComplex(NewBigFloatFromFloat64(3.5), NewBigIntegerFromInt64(0)), // inexact real + exact zero imag
 	}
 }
 
@@ -305,12 +361,21 @@ func TestNumberToFloat64Equivalence(t *testing.T) {
 	c := qt.New(t)
 	for _, n := range equivalenceExemplars() {
 		kind := n.Kind()
-		spec := Lookup(kind)
+		spec := LookupNumericSpec(kind)
 		f, err := spec.ToFloat64(n)
+		// Complex/BigComplex error only when imag != 0; with imag == 0 the
+		// real part is returned losslessly (aligns with loss-signals design).
 		if kind == KindComplex || kind == KindBigComplex {
-			c.Assert(err, qt.IsNotNil,
-				qt.Commentf("ToFloat64(%s) expected error for complex kind", n.SchemeString()))
-			c.Assert(errors.Is(err, werr.ErrNotAReal), qt.IsTrue)
+			if hasNonzeroImag(n) {
+				c.Assert(err, qt.IsNotNil,
+					qt.Commentf("ToFloat64(%s) expected error for complex with nonzero imag", n.SchemeString()))
+				c.Assert(errors.Is(err, werr.ErrNotAReal), qt.IsTrue)
+				continue
+			}
+			c.Assert(err, qt.IsNil,
+				qt.Commentf("ToFloat64(%s) unexpected error for complex with zero imag", n.SchemeString()))
+			c.Assert(f, qt.Equals, realPartOfComplex(n),
+				qt.Commentf("ToFloat64(%s): real-part extraction wrong", n.SchemeString()))
 			continue
 		}
 		// For real kinds, registry must match golden switch.
@@ -326,11 +391,35 @@ func TestNumberToFloat64Equivalence(t *testing.T) {
 	}
 }
 
+// hasNonzeroImag reports whether a complex-kind Number carries a non-zero
+// imaginary component. Used by ToFloat64 equivalence assertions.
+func hasNonzeroImag(n Number) bool {
+	switch v := n.(type) {
+	case *Complex:
+		return imag(v.Value) != 0
+	case *BigComplex:
+		return !v.Imag().IsZero()
+	}
+	return false
+}
+
+// realPartOfComplex returns the real component of a Complex/BigComplex as
+// float64. Caller must ensure the value is one of those types.
+func realPartOfComplex(n Number) float64 {
+	switch v := n.(type) {
+	case *Complex:
+		return real(v.Value)
+	case *BigComplex:
+		return toBigFloat(v.Real()).Float64()
+	}
+	return 0
+}
+
 func TestNumberToComplex128Equivalence(t *testing.T) {
 	c := qt.New(t)
 	for _, n := range equivalenceExemplars() {
 		golden := numberToComplex128Golden(n)
-		spec := Lookup(n.Kind())
+		spec := LookupNumericSpec(n.Kind())
 		got := spec.ToComplex128(n)
 		c.Assert(real(got), qt.Equals, real(golden),
 			qt.Commentf("ToComplex128(%s) real: registry != golden", n.SchemeString()))

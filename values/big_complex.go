@@ -149,25 +149,39 @@ func (p *BigComplex) Kind() NumericKind {
 // Complex ordering is undefined in R7RS §6.2.6 — LessThan delegates to Compare,
 // which uses magnitude comparison as a total order for internal use (sorting, etc.)
 // but is NOT mathematical ordering. Compare is initialized below like all other types.
-func bigComplexSimplifyDown(n Number) Number {
-	return n
-}
-
-func bigComplexToFloat64(_ Number) (float64, error) {
-	return 0, werr.WrapForeignErrorf(werr.ErrNotAReal,
-		"bigComplexToFloat64: complex number has no real-only float64 representation")
-}
-
-func bigComplexToComplex128(n Number) complex128 {
-	v := n.(*BigComplex)
-	return complex(toBigFloat(v.real).Float64(), toBigFloat(v.imag).Float64())
-}
-
 var bigComplexAdd [numKinds]func(*BigComplex, Number) Number
 var bigComplexSubtract [numKinds]func(*BigComplex, Number) Number
 var bigComplexCompare [numKinds]func(*BigComplex, Number) int
 var bigComplexMultiply [numKinds]func(*BigComplex, Number) Number
 var bigComplexDivide [numKinds]func(*BigComplex, Number) (Number, error)
+
+// bigComplexSimplifyDown is an identity: BigComplex's cross-kind reduction
+// to its real part (when imag.IsZero()) lives in numeric_tower.go's
+// Simplify(), so the per-kind step is a no-op.
+func bigComplexSimplifyDown(n Number) Number {
+	return n
+}
+
+// bigComplexToFloat64 returns the real component when the imaginary part is
+// zero (lossless on the imaginary axis), and ErrNotAReal otherwise. BigFloat
+// → float64 precision loss is currently silent; the loss-signals follow-up
+// will add big.Accuracy plumbing.
+func bigComplexToFloat64(n Number) (float64, error) {
+	v := n.(*BigComplex)
+	if !v.imag.IsZero() {
+		return 0, werr.WrapForeignErrorf(werr.ErrNotAReal,
+			"bigComplexToFloat64: nonzero imaginary part cannot be carried in float64")
+	}
+	return toBigFloat(v.real).Float64(), nil
+}
+
+// bigComplexToComplex128 reduces the two arbitrary-precision parts to a
+// float64 pair. Currently silent on precision loss; the loss-signals
+// follow-up will add per-component big.Accuracy plumbing.
+func bigComplexToComplex128(n Number) complex128 {
+	v := n.(*BigComplex)
+	return complex(toBigFloat(v.real).Float64(), toBigFloat(v.imag).Float64())
+}
 
 func init() {
 	bigComplexAdd = makeAddDispatch(KindBigComplex, func(p *BigComplex, o Number) Number {

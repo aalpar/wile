@@ -127,6 +127,12 @@ func (p *BigFloat) Kind() NumericKind {
 	return KindBigFloat
 }
 
+// bigFloatSimplifyDown descends BigFloat → BigInteger → Integer in a single
+// call when the value is integer-valued and fits each smaller representation.
+//
+// The discarded big.Accuracy on Int(nil) is Exact by construction: IsInt()
+// returned true, so the value has no fractional part and the integer cast
+// is mathematically lossless.
 func bigFloatSimplifyDown(n Number) Number {
 	v := n.(*BigFloat)
 	if v.value.IsInt() {
@@ -140,10 +146,15 @@ func bigFloatSimplifyDown(n Number) Number {
 	return n
 }
 
+// bigFloatToFloat64 reduces arbitrary-precision big.Float to float64.
+// Silently lossy when the BigFloat carries more precision than float64; the
+// loss-signals follow-up will surface big.Accuracy here.
 func bigFloatToFloat64(n Number) (float64, error) {
 	return n.(*BigFloat).Float64(), nil
 }
 
+// bigFloatToComplex128 lifts a BigFloat to complex128 with zero imag.
+// Same precision-loss caveat as bigFloatToFloat64.
 func bigFloatToComplex128(n Number) complex128 {
 	return complex(n.(*BigFloat).Float64(), 0)
 }

@@ -89,7 +89,12 @@ func floatToExact(f float64) (Number, error) {
 //   - Complex with zero imaginary → Float → possibly Integer (cross-kind; handled here)
 //   - All other per-kind descents are delegated to the NumericTypeSpec.SimplifyDown
 //     function registered for each kind (see values/numeric_registry.go).
+//
+// Returns nil unchanged (callers may pass nil from generic Value paths).
 func Simplify(n Number) Number {
+	if n == nil {
+		return nil
+	}
 	bc, ok := n.(*BigComplex)
 	if ok && bc.Imag().IsZero() {
 		return Simplify(bc.Real())
@@ -98,7 +103,7 @@ func Simplify(n Number) Number {
 	if ok && imag(c.Value) == 0 {
 		return Simplify(NewFloat(real(c.Value)))
 	}
-	return Lookup(n.Kind()).SimplifyDown(n)
+	return LookupNumericSpec(n.Kind()).SimplifyDown(n)
 }
 
 // Exactness represents whether a number is exact or inexact.
@@ -120,7 +125,13 @@ const (
 // - Integer, BigInteger, Rational are always exact (IsAlwaysExact in spec)
 // - Float, BigFloat, Complex are always inexact (IsAlwaysExact == false)
 // - BigComplex depends on its components (per-instance check via IsExact)
+//
+// Panics on nil; nil cannot meaningfully classify as Exact or Inexact and
+// indicates a caller bug.
 func ExactnessOf(n Number) Exactness {
+	if n == nil {
+		panic(werr.WrapForeignErrorf(werr.ErrNotANumber, "ExactnessOf: nil Number"))
+	}
 	bc, ok := n.(*BigComplex)
 	if ok {
 		if bc.IsExact() {
@@ -128,7 +139,7 @@ func ExactnessOf(n Number) Exactness {
 		}
 		return Inexact
 	}
-	if Lookup(n.Kind()).IsAlwaysExact() {
+	if LookupNumericSpec(n.Kind()).IsAlwaysExact() {
 		return Exact
 	}
 	return Inexact

@@ -15,8 +15,6 @@
 package values
 
 import (
-	"sync"
-
 	"github.com/aalpar/wile/werr"
 )
 
@@ -38,33 +36,37 @@ type NumericTypeSpec struct {
 }
 
 // SchemeName returns the Scheme type name for this numeric kind (e.g. "integer").
-func (s *NumericTypeSpec) SchemeName() string {
-	return s.schemeName
+func (p *NumericTypeSpec) SchemeName() string {
+	return p.schemeName
 }
 
-// SimplifyDown reduces n one step toward a simpler type. Returns n unchanged
-// if no simpler representation exists. The cross-kind BigComplex/Complex
-// shortcuts live in Simplify() itself, not here.
-func (s *NumericTypeSpec) SimplifyDown(n Number) Number {
-	return s.simplifyDown(n)
+// SimplifyDown reduces n to the simplest in-kind representation in a single
+// call (multi-step descents are inlined per-kind: e.g. BigFloat→BigInteger→Integer).
+// Returns n unchanged if no simpler representation exists. The cross-kind
+// BigComplex/Complex shortcuts live in Simplify() itself, not here.
+func (p *NumericTypeSpec) SimplifyDown(n Number) Number {
+	return p.simplifyDown(n)
 }
 
-// ToFloat64 converts n to float64. Returns ErrNotAReal for Complex and
-// BigComplex (per Q-i=C3; FFI float64 handling is a separate concern).
-func (s *NumericTypeSpec) ToFloat64(n Number) (float64, error) {
-	return s.toFloat64(n)
+// ToFloat64 converts n to float64. Returns ErrNotAReal when the value carries
+// a non-zero imaginary component (Complex/BigComplex with imag != 0); a complex
+// with imag == 0 succeeds and returns the real part. BigFloat/BigInteger/Rational
+// truncation is currently silent — see plans/2026-05-14-numeric-loss-signals-design.md
+// for the follow-up that adds big.Accuracy plumbing.
+func (p *NumericTypeSpec) ToFloat64(n Number) (float64, error) {
+	return p.toFloat64(n)
 }
 
 // ToComplex128 converts n to complex128. Universal across all 7 kinds.
-func (s *NumericTypeSpec) ToComplex128(n Number) complex128 {
-	return s.toComplex128(n)
+func (p *NumericTypeSpec) ToComplex128(n Number) complex128 {
+	return p.toComplex128(n)
 }
 
 // IsAlwaysExact reports whether every value of this kind is exact.
 // BigComplex returns false; per-instance exactness is determined by
 // BigComplex.IsExact() (called by ExactnessOf).
-func (s *NumericTypeSpec) IsAlwaysExact() bool {
-	return s.isAlwaysExact
+func (p *NumericTypeSpec) IsAlwaysExact() bool {
+	return p.isAlwaysExact
 }
 
 // numericRegistry holds one spec per NumericKind, indexed by kind.
@@ -73,15 +75,14 @@ var numericRegistry [numKinds]NumericTypeSpec
 // registryFilled tracks which kinds have been registered.
 var registryFilled [numKinds]bool
 
-var registryMu sync.Mutex
-var registryOnce sync.Once
-
 // registerNumericSpec registers the spec for the given kind. Called from
 // each numeric type's init() function. Panics if the same kind is registered
 // twice (catches accidental duplicate init registrations).
 //
 // kind is passed positionally — there is no Kind field on the spec — so
 // mismatches between the caller's intent and the spec are impossible.
+//
+// Go init phase is single-goroutine (Go spec §init), so no mutex is required.
 func registerNumericSpec(kind NumericKind, spec NumericTypeSpec) {
 	if spec.schemeName == "" {
 		panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,
@@ -89,21 +90,20 @@ func registerNumericSpec(kind NumericKind, spec NumericTypeSpec) {
 	}
 	if spec.simplifyDown == nil {
 		panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,
-			"registerNumericSpec: simplifyDown must not be nil for kind %d", kind))
+			"registerNumericSpec: simplifyDown must not be nil for kind %d (%s)", kind, spec.schemeName))
 	}
 	if spec.toFloat64 == nil {
 		panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,
-			"registerNumericSpec: toFloat64 must not be nil for kind %d", kind))
+			"registerNumericSpec: toFloat64 must not be nil for kind %d (%s)", kind, spec.schemeName))
 	}
 	if spec.toComplex128 == nil {
 		panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,
-			"registerNumericSpec: toComplex128 must not be nil for kind %d", kind))
+			"registerNumericSpec: toComplex128 must not be nil for kind %d (%s)", kind, spec.schemeName))
 	}
-	registryMu.Lock()
-	defer registryMu.Unlock()
 	if registryFilled[kind] {
 		panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,
-			"registerNumericSpec: duplicate registration for kind %d", kind))
+			"registerNumericSpec: duplicate registration for kind %d (existing=%q, new=%q)",
+			kind, numericRegistry[kind].schemeName, spec.schemeName))
 	}
 	numericRegistry[kind] = spec
 	registryFilled[kind] = true
@@ -111,8 +111,8 @@ func registerNumericSpec(kind NumericKind, spec NumericTypeSpec) {
 
 // validateNumericSpecs checks that all entries in the provided arrays are
 // complete. Exposed as a package-internal function so tests can call it with
-// crafted bad state (the live sync.Once is already consumed by the time
-// tests run, so testing completeness validation requires a separate entry point).
+// crafted bad state; the live registry is validated eagerly by the init()
+// at the bottom of this file.
 func validateNumericSpecs(specs [numKinds]NumericTypeSpec, filled [numKinds]bool) {
 	for k := range numKinds {
 		if !filled[k] {
@@ -125,23 +125,28 @@ func validateNumericSpecs(specs [numKinds]NumericTypeSpec, filled [numKinds]bool
 		}
 		if specs[k].simplifyDown == nil || specs[k].toFloat64 == nil || specs[k].toComplex128 == nil {
 			panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,
-				"validateNumericSpecs: nil function field for kind %d", k))
+				"validateNumericSpecs: nil function field for kind %d (%s)", k, specs[k].schemeName))
 		}
 	}
 }
 
-// ensureNumericRegistryInit validates that all numKinds have been registered.
-// Uses sync.Once so the validation scan runs at most once per process.
-// Panics with ErrNumericRegistry if any kind is missing.
-func ensureNumericRegistryInit() {
-	registryOnce.Do(func() {
-		validateNumericSpecs(numericRegistry, registryFilled)
-	})
-}
+// The eager package-init validation lives in validate_numeric_registry.go,
+// which sorts after all per-type files (integer.go, big_integer.go,
+// big_float.go, big_complex.go, complex.go, float.go, rational.go). Go init
+// order is lexical by filename; placing the validation in a 'v'-prefixed
+// file is the only way to guarantee it runs after rational.go's init.
 
-// Lookup returns the NumericTypeSpec for the given kind.
-// Calls ensureNumericRegistryInit on every access (cold path only).
-func Lookup(kind NumericKind) *NumericTypeSpec {
-	ensureNumericRegistryInit()
+// LookupNumericSpec returns the NumericTypeSpec for the given kind.
+// Bounds-checked: an out-of-range kind panics with ErrNumericRegistry rather
+// than producing a Go runtime "index out of range" panic. Consulted by the
+// cold-path helpers (Simplify, ExactnessOf, NumberToFloat64, NumberToComplex128).
+// NumberToFloat64/NumberToComplex128 are also reached from the IEEE 754
+// special-value guard inside the arithmetic dispatch closures; those fire
+// only when a Float operand is Inf/NaN, not on every arithmetic op.
+func LookupNumericSpec(kind NumericKind) *NumericTypeSpec {
+	if int(kind) >= int(numKinds) {
+		panic(werr.WrapForeignErrorf(werr.ErrNumericRegistry,
+			"LookupNumericSpec: kind %d out of range [0,%d)", kind, numKinds))
+	}
 	return &numericRegistry[kind]
 }

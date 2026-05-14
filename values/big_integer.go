@@ -121,6 +121,8 @@ func (p *BigInteger) Kind() NumericKind {
 	return KindBigInteger
 }
 
+// bigIntegerSimplifyDown demotes a BigInteger to Integer when its value fits
+// in int64; otherwise returns it unchanged.
 func bigIntegerSimplifyDown(n Number) Number {
 	v := n.(*BigInteger)
 	if v.value.IsInt64() {
@@ -129,10 +131,15 @@ func bigIntegerSimplifyDown(n Number) Number {
 	return n
 }
 
+// bigIntegerToFloat64 converts an arbitrary-precision integer to float64.
+// Silently lossy when the magnitude exceeds 2^53 (BigInteger's defining
+// reason for existing); the loss-signals follow-up will surface big.Accuracy.
 func bigIntegerToFloat64(n Number) (float64, error) {
 	return float64FromBigInt(n.(*BigInteger).value), nil
 }
 
+// bigIntegerToComplex128 lifts a BigInteger to complex128 with zero imag.
+// Same precision-loss caveat as bigIntegerToFloat64.
 func bigIntegerToComplex128(n Number) complex128 {
 	return complex(float64FromBigInt(n.(*BigInteger).value), 0)
 }
