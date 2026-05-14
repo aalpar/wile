@@ -1,5 +1,7 @@
 # Phase 4 / Finding 6 — `Operation` interface gets `OpKind() OpCode`
 
+**Status**: ✅ **SHIPPED** — PR #735 (`feat/machine-sr-finding6`), merge commit `ed8763c3`.
+
 Implementation plan for Phase 4 of `plans/2026-05-06-machine-structural-reduction.md`.
 Parent finding: **Finding 6 — `Operation` interface is the empty contract**.
 

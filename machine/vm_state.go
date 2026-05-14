@@ -231,7 +231,7 @@ type vmState struct {
 // methods, so the documented mutual-exclusion invariant (at most one field
 // is active at a time) is enforceable by inspection of this file alone.
 // Enforced at lint time by noDirectValueRegisterAccess in
-// ruleguard/rules.go. See plans/2026-05-11-machine-sr-finding3-impl.md.
+// ruleguard/rules.go. See memory/2026-05-11-machine-sr-finding3-impl.md.
 
 // SetValues sets the value register. Three paths:
 //   - len == 0: canonical empty state, both fields nil. Distinguishes

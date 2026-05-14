@@ -2,8 +2,12 @@
 
 **Date**: 2026-05-06
 **Source**: `/structural-reduction ./machine` analysis
-**Status**: Findings recorded; not yet scheduled for implementation
-**Priority**: High (Tier 5 tech debt)
+**Status**: ✅ **All 7 findings resolved** (2026-05-12). Shipped: F3 (PR #736),
+F4 partial (PR #733), F5 (PR #734), F6 (PR #735), F7 stages 1+2 (PRs #742, #743,
+#744, #745). Declined: F1 (PR #731 review cycle), F2 (post-PR #737),
+F4 sentinel-removal (bench-gate failure, see plan), F7 stage 3 (field-independence
+analysis). See individual finding status blocks below for detail.
+**Priority**: High (Tier 5 tech debt) — completed.
 
 ## Scope analyzed
 
@@ -210,6 +214,10 @@ reduces edit-cost when adding a new promoted primitive (already documented in
 previous experiment baseline).
 
 ### Finding 3 — Split value register: documented invariant, unenforced by types
+
+**Status**: ✅ **SHIPPED** — PR #736 (`feat/machine-sr-finding3`).
+Accessor consolidation on `*vmState`, test fixtures migrated to accessors,
+`noDirectValueRegisterAccess` ruleguard rule added to prevent regression.
 
 **Principle**: State Tightness
 **Where**: `machine/vm_state.go:97-113`; reads at `machine_context.go:209-235`;
@@ -430,6 +438,10 @@ the optimization remains.
 **Estimated size**: S (Option C); M with bench measurement.
 
 ### Finding 6 — `Operation` interface is the empty contract
+
+**Status**: ✅ **SHIPPED** via Option (b) — PR #735 (`feat/machine-sr-finding6`).
+Added `OpKind() OpCode` discriminator to the `Operation` interface; wired into
+`operationToInstruction`.
 
 **Principle**: Composability / Interface Segregation
 **Where**: `machine/operation.go:26-36`

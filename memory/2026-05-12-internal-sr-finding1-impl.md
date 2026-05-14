@@ -1,5 +1,7 @@
 # `internal/` structural reduction — Finding 1: `*SyntaxPair` empty-list duality
 
+**Status**: ✅ **SHIPPED** — PR #741 (`feat/internal-sr-finding1`), merge commit `6b51d64b`.
+
 Implementation plan for **Finding 1** of
 `plans/2026-05-07-internal-structural-reduction.md`, the last open item
 on the internal/ plan after PRs #739 and #740.

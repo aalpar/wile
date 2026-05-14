@@ -1,5 +1,7 @@
 # `internal/` structural reduction — Finding 5: `WalkBindingRefs`
 
+**Status**: ✅ **SHIPPED** — PR #740 (`feat/internal-sr-finding5`), merge commit `04d12140`.
+
 Implementation plan for **Finding 5** of
 `plans/2026-05-07-internal-structural-reduction.md`, deferred from PR #739's
 Phases 1-5 batch.

@@ -1,5 +1,7 @@
 # `internal/` structural reduction — Phases 1-5 (Findings 7, 4, 3, 2, 6)
 
+**Status**: ✅ **SHIPPED** — PR #739 (`feat/internal-sr-phases-1-5`), merge commit `dd3e187d`.
+
 Implementation plan for the first five phases of
 `plans/2026-05-07-internal-structural-reduction.md`.
 
