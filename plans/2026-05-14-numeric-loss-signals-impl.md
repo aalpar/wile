@@ -1,16 +1,30 @@
 # Numeric loss signals — implementation plan
 
 **Date**: 2026-05-14 (initial); refined for impl detail 2026-05-14.
-**Status**: Plan ready to start — PR #750 (numeric-registry Phase 3)
-  merged at `51b1176a`. Pre-Phase-3 hedging removed.
+**Status**: Plan **awaiting numeric-registry impl** — PR #750
+  (`51b1176a`) merged the registry **design** documents only.
+  `values/numeric_registry.go`, `Lookup(NumericKind) *NumericTypeSpec`,
+  and `registerNumericSpec` do NOT exist in Go code yet. See
+  `plans/2026-05-14-numeric-registry-impl.md` — its PR 1 ships
+  the prerequisite Go infrastructure (struct + Lookup + 7
+  per-type init blocks). This plan's PR 1 cannot begin until
+  registry-impl PR 1 has merged.
+**Cross-plan dependency check**: every `registerNumericSpec(KindXxx, ...)`
+  and `Lookup(n.Kind())` in this plan's stubs depends on
+  registry-impl PR 1. The two impl streams CANNOT proceed in
+  parallel without coordination.
 **Design source**: `plans/2026-05-14-numeric-loss-signals-design.md`
   (refined 2026-05-14; resolutions: Q-1 saturate ±Inf, Q-2
   real-triple + per-component complex, Q-3 `extensions/math/`,
   Q-4 engine-level opt-in, Q-5 yes-tighten-helpers).
-**Branches**:
-  - PR 1: `feat/numeric-loss-signals-go` (branch from master).
-  - PRs 2 and 3 branch from master after each preceding PR
-    merges.
+**Branches** (matches established `feat/values-sr-phase<N>-<topic>`
+convention — see PR #747 phase0, #748 phase1-mutex, #749
+phase2-port-unification, #750 phase3-numeric-registry-design):
+  - PR 1: `feat/values-sr-phase4-loss-signals-go`
+  - PR 2: `feat/values-sr-phase4-loss-signals-ffi`
+  - PR 3: `feat/values-sr-phase4-loss-signals-scheme`
+
+All three branch from master after each preceding PR merges.
 **Prior-art templates (cite these when writing code)**:
   - **Multi-value-return primitive**: `floor/`, `truncate/`,
     `exact-integer-sqrt` — all in `extensions/math/`. Each uses
@@ -50,16 +64,41 @@ consume what this PR exports.
 
 ### Concrete API contract (commit to before writing code)
 
-**Four** exported functions in `values/` (the cross-package surface).
-The earlier `ToFloat64Lossy` variant was dropped during refinement
-— see "API surface decisions" below.
+**Four** exported functions + **two named result types** in
+`values/` (the cross-package surface). The earlier
+`ToFloat64Lossy` variant was dropped during refinement; the named
+struct returns replace the original 4-tuple/4-tuple positional
+returns to eliminate position-encoded semantics (the bool meant
+"isReal" by position only; the two `big.Accuracy` values for
+complex were ordered by convention only).
+
+```go
+// Float64Result is the result of ToFloat64WithAccuracy.
+// Named struct preferred over a multi-return tuple so the
+// (acc, isReal) semantics are field-named, not position-encoded.
+type Float64Result struct {
+    Value    float64       // the float64 representation; ±Inf on overflow
+    Accuracy big.Accuracy  // Below / Exact / Above per Go big.Accuracy
+    IsReal   bool          // false iff input was *Complex/*BigComplex
+                           // with non-zero imaginary part (dropped)
+}
+
+// Complex128Result is the result of ToComplex128WithAccuracy.
+// Per-component accuracy preserves Go-stdlib information for the
+// two-component case — collapsing into one signal is itself loss.
+type Complex128Result struct {
+    Value   complex128
+    RealAcc big.Accuracy
+    ImagAcc big.Accuracy
+}
+```
 
 | Function | Signature | Behavior |
 |----------|-----------|----------|
-| `ToFloat64WithAccuracy` | `func(n Number) (f float64, acc big.Accuracy, isReal bool, err error)` | Primary. Returns the float64, the `big.Accuracy` (Below/Exact/Above), and an `isReal` flag (false iff input was Complex/BigComplex with non-zero imaginary). Returns `ErrNotANumber` (wrapped) for non-Number. Non-nil for every `Number` input. Callers who want lossy-allowed semantics use this directly and discard the accuracy/isReal slots. |
-| `ToFloat64Lossless` | `func(n Number) (float64, error)` | Wraps `WithAccuracy`. Returns `ErrLossyConversion` (wrapped, message names direction) if `acc != big.Exact OR !isReal`. Returns `ErrNotANumber` for non-Number. **FFI strict-path consumer.** |
-| `ToComplex128WithAccuracy` | `func(n Number) (c complex128, realAcc, imagAcc big.Accuracy, err error)` | Primary for complex domain. Per-component accuracy. `ErrNotANumber` for non-Number. For real-only inputs, `imagAcc == big.Exact`. |
-| `ToComplex128Lossless` | `func(n Number) (complex128, error)` | Wraps `WithAccuracy`. Returns `ErrLossyConversion` if either component's accuracy is non-Exact. |
+| `ToFloat64WithAccuracy` | `func(n Number) (Float64Result, error)` | Primary. Returns `Float64Result` with named fields. Returns `ErrNotANumber` (wrapped) for non-Number. Lossy-allowed callers (FFI under the engine flag) consume this and discard accuracy/isReal. |
+| `ToFloat64Lossless` | `func(n Number) (float64, error)` | Wraps `WithAccuracy`. Returns `ErrLossyConversion` (wrapped, message names direction) if `res.Accuracy != big.Exact OR !res.IsReal`. **FFI strict-path consumer.** Returns the raw float64 since callers in strict mode don't need the struct. |
+| `ToComplex128WithAccuracy` | `func(n Number) (Complex128Result, error)` | Primary for complex domain. Per-component accuracy. `ErrNotANumber` for non-Number. For real-only inputs, `res.ImagAcc == big.Exact`. |
+| `ToComplex128Lossless` | `func(n Number) (complex128, error)` | Wraps `WithAccuracy`. Returns `ErrLossyConversion` if either component's accuracy is non-Exact. Returns raw `complex128` in strict mode. |
 
 **API surface decisions**:
 
@@ -124,7 +163,7 @@ Every exported function in the table:
 | `values/float.go`                 | Same shape; identity → `big.Exact`; `(complex(p.Value, 0), Exact, Exact)` for complex helper.                        |
 | `values/big_float.go`             | Same shape; consults `p.IsNaN()` first (returns `math.NaN(), big.Exact, true`); else `p.value.Float64()`.            |
 | `values/rational.go`              | Same shape; direction-recovery via `new(big.Rat).SetFloat64(f).Cmp(p.value)`.                                        |
-| `values/complex.go`               | Same shape; real part is identity (Float component) → `Exact`; real flag = `imag(p.Value) == 0`.                     |
+| `values/complex.go`               | Same shape; real part is identity (Float component) → `Exact`; isReal flag = `imag(p.Value) == 0`.                     |
 | `values/big_complex.go`           | Same shape; per-component accuracy for complex helper.                                                                |
 | `values/numeric_kind.go`          | Update the ADDING-A-NEW-NUMERIC-TYPE guide comment to include the two new required spec fields.                       |
 
@@ -188,9 +227,13 @@ type NumericTypeSpec struct {
     // simplifyDown, toFloat64, toComplex128 ...
 
     // toFloat64WithAccuracy is the primary loss-signal API for
-    // float64 conversion. Returns the float64 result, the
-    // big.Accuracy (Below/Exact/Above), and a real flag (false iff
-    // input was Complex/BigComplex with non-zero imaginary).
+    // float64 conversion. Per-kind dispatch returns the float64
+    // result, the big.Accuracy (Below/Exact/Above), and an isReal
+    // flag (false iff input was Complex/BigComplex with non-zero
+    // imaginary part — the imaginary information is dropped).
+    // The dispatch tuple stays positional at this internal level
+    // (cold path; no struct allocation). The values/ public API
+    // wraps this into the named-field Float64Result struct.
     // Always non-nil — populated for every kind.
     toFloat64WithAccuracy func(Number) (float64, big.Accuracy, bool)
 
@@ -387,86 +430,115 @@ import (
     "github.com/aalpar/wile/werr"
 )
 
+// Float64Result captures the float64 conversion result with
+// named-field accuracy and real-component-preserved bool.
+type Float64Result struct {
+    Value    float64
+    Accuracy big.Accuracy
+    IsReal   bool
+}
+
+// Complex128Result captures per-component accuracy for a
+// complex-domain conversion.
+type Complex128Result struct {
+    Value   complex128
+    RealAcc big.Accuracy
+    ImagAcc big.Accuracy
+}
+
 // ToFloat64WithAccuracy is the primary loss-signal-aware conversion
 // helper. ToFloat64Lossless wraps it.
 //
-// Returns:
-//   - f:      the float64 representation, saturated to ±Inf for
-//             overflow per Go (*big.Float).Float64() semantics
-//   - acc:    Below/Exact/Above per Go big.Accuracy semantics:
-//               Below: f < true value
-//               Exact: f == true value
-//               Above: f > true value
-//   - isReal: false iff n was Complex/BigComplex with non-zero
-//             imaginary part (the imaginary information is dropped
-//             — caller should consult ToComplex128WithAccuracy
-//             for full complex semantics)
-//   - err:    ErrNotANumber (wrapped) iff n is not a Number
+// Returns Float64Result fields:
+//   - Value:    the float64 representation, saturated to ±Inf for
+//               overflow per Go (*big.Float).Float64() semantics
+//   - Accuracy: Below/Exact/Above per Go big.Accuracy semantics:
+//                 Below: Value < true value
+//                 Exact: Value == true value
+//                 Above: Value > true value
+//   - IsReal:   false iff n was Complex/BigComplex with non-zero
+//               imaginary part (the imaginary information is dropped
+//               — caller should consult ToComplex128WithAccuracy
+//               for full complex semantics)
+//
+// Returns ErrNotANumber (wrapped) iff n is not a Number.
 //
 // No information loss from the Go big package is introduced by
 // this helper — every signal Go's stdlib surfaces is exposed
-// through the (acc, isReal, err) tuple.
+// through the named fields.
+//
+// **NaN/Inf contract** (per design Q-6 resolution): NaN inputs
+// return (NaN, Exact, true) — NaN→NaN is bit-pattern identity in
+// IEEE 754, so accuracy is Exact mechanically. Callers checking
+// "is this a meaningful real number?" must screen finiteness
+// independently via math.IsNaN(res.Value) and math.IsInf.
+// A *true* infinite input (*Float(math.Inf(1))) returns
+// (+Inf, Exact, true) — same identity logic. Finite values that
+// overflow during conversion return (±Inf, Above|Below, true).
 //
 // FFI lossy-allowed callers use this directly and discard the
-// accuracy/isReal slots; FFI strict callers use ToFloat64Lossless.
-func ToFloat64WithAccuracy(n Number) (float64, big.Accuracy, bool, error) {
+// accuracy/IsReal slots; FFI strict callers use ToFloat64Lossless.
+func ToFloat64WithAccuracy(n Number) (Float64Result, error) {
     if n == nil {
-        return 0, big.Exact, false, werr.WrapForeignErrorf(
+        return Float64Result{}, werr.WrapForeignErrorf(
             werr.ErrNotANumber, "ToFloat64WithAccuracy: nil input")
     }
     spec := Lookup(n.Kind())
     f, acc, isReal := spec.ToFloat64WithAccuracy(n)
-    return f, acc, isReal, nil
+    return Float64Result{Value: f, Accuracy: acc, IsReal: isReal}, nil
 }
 
 // ToFloat64Lossless is the FFI-strict convenience wrapper.
-// Returns ErrLossyConversion (wrapped, with direction info) if
-// the conversion would lose precision OR drop the imaginary part.
+// Returns the raw float64 (callers in strict mode don't need the
+// struct — they just want the value or an error). Returns
+// ErrLossyConversion (wrapped, with direction info) if the
+// conversion would lose precision OR drop the imaginary part.
 func ToFloat64Lossless(n Number) (float64, error) {
-    f, acc, isReal, err := ToFloat64WithAccuracy(n)
+    res, err := ToFloat64WithAccuracy(n)
     if err != nil {
         return 0, err
     }
-    if acc != big.Exact {
-        return f, werr.WrapForeignErrorf(werr.ErrLossyConversion,
-            "ToFloat64Lossless: %T rounded %s (lost precision)", n, acc)
+    if res.Accuracy != big.Exact {
+        return res.Value, werr.WrapForeignErrorf(werr.ErrLossyConversion,
+            "ToFloat64Lossless: %T rounded %s (lost precision)", n, res.Accuracy)
     }
-    if !isReal {
-        return f, werr.WrapForeignErrorf(werr.ErrLossyConversion,
+    if !res.IsReal {
+        return res.Value, werr.WrapForeignErrorf(werr.ErrLossyConversion,
             "ToFloat64Lossless: %T has non-zero imaginary part dropped", n)
     }
-    return f, nil
+    return res.Value, nil
 }
 
 // ToComplex128WithAccuracy is the primary complex-domain helper.
-// Returns per-component accuracy — collapsing into one signal
-// would be information loss for two-component values.
-func ToComplex128WithAccuracy(n Number) (complex128, big.Accuracy, big.Accuracy, error) {
+// Returns per-component accuracy in named struct fields —
+// collapsing into one signal would be information loss for
+// two-component values.
+func ToComplex128WithAccuracy(n Number) (Complex128Result, error) {
     if n == nil {
-        return 0, big.Exact, big.Exact, werr.WrapForeignErrorf(
+        return Complex128Result{}, werr.WrapForeignErrorf(
             werr.ErrNotANumber, "ToComplex128WithAccuracy: nil input")
     }
     spec := Lookup(n.Kind())
     c, realAcc, imagAcc := spec.ToComplex128WithAccuracy(n)
-    return c, realAcc, imagAcc, nil
+    return Complex128Result{Value: c, RealAcc: realAcc, ImagAcc: imagAcc}, nil
 }
 
-// ToComplex128Lossless returns ErrLossyConversion if either
-// component's accuracy is non-Exact.
+// ToComplex128Lossless returns the raw complex128, or
+// ErrLossyConversion if either component's accuracy is non-Exact.
 func ToComplex128Lossless(n Number) (complex128, error) {
-    c, realAcc, imagAcc, err := ToComplex128WithAccuracy(n)
+    res, err := ToComplex128WithAccuracy(n)
     if err != nil {
         return 0, err
     }
-    if realAcc != big.Exact {
-        return c, werr.WrapForeignErrorf(werr.ErrLossyConversion,
-            "ToComplex128Lossless: %T real part lost precision (%s)", n, realAcc.String())
+    if res.RealAcc != big.Exact {
+        return res.Value, werr.WrapForeignErrorf(werr.ErrLossyConversion,
+            "ToComplex128Lossless: %T real part rounded %s (lost precision)", n, res.RealAcc)
     }
-    if imagAcc != big.Exact {
-        return c, werr.WrapForeignErrorf(werr.ErrLossyConversion,
-            "ToComplex128Lossless: %T imaginary part lost precision (%s)", n, imagAcc.String())
+    if res.ImagAcc != big.Exact {
+        return res.Value, werr.WrapForeignErrorf(werr.ErrLossyConversion,
+            "ToComplex128Lossless: %T imaginary part rounded %s (lost precision)", n, res.ImagAcc)
     }
-    return c, nil
+    return res.Value, nil
 }
 ```
 
@@ -487,40 +559,81 @@ import (
 
 func TestToFloat64WithAccuracy(t *testing.T) {
     cases := []struct {
-        name      string
-        input     Number
-        wantF     float64
-        wantAcc   big.Accuracy
-        wantReal  bool
+        name       string
+        input      Number
+        wantValue  float64
+        wantAcc    big.Accuracy
+        wantIsReal bool
     }{
-        // Real-domain — every kind × every accuracy outcome
-        {"integer-exact",      NewInteger(7),                                       7.0,              big.Exact, true},
-        {"integer-overflow-positive", NewInteger(int64(1)<<53 + 1),                  float64(int64(1)<<53), big.Below, true},
-        {"big-integer-exact",  NewBigIntegerFromInt64(1234),                        1234.0,           big.Exact, true},
-        {"big-integer-overflow", NewBigInteger(new(big.Int).Exp(big.NewInt(10), big.NewInt(100), nil)), math.Inf(1), big.Above, true},
-        {"float-identity",     NewFloat(3.5),                                       3.5,              big.Exact, true},
-        {"float-nan",          NewFloat(math.NaN()),                                math.NaN(),       big.Exact, true},
-        {"big-float-nan",      NewBigFloatNaN(),                                    math.NaN(),       big.Exact, true},
-        {"rational-onethird",  NewRationalFromInts(1, 3),                           0.333333333333333, big.Below, true},
-        {"rational-twothirds", NewRationalFromInts(2, 3),                           0.666666666666666, big.Above, true},
-        {"rational-half",      NewRationalFromInts(1, 2),                           0.5,              big.Exact, true},
-        {"complex-real-only",  NewComplex(complex(3.0, 0)),                         3.0,              big.Exact, true},
-        {"complex-with-imag",  NewComplex(complex(3.0, 4.0)),                       3.0,              big.Exact, false}, // imag dropped
-        {"bigcomplex-exact-real", NewBigComplex(NewBigIntegerFromInt64(3), NewBigIntegerFromInt64(0)), 3.0, big.Exact, true},
-        {"bigcomplex-with-imag", NewBigComplex(NewBigIntegerFromInt64(3), NewBigIntegerFromInt64(4)), 3.0, big.Exact, false},
+        // Real-domain — every kind × every accuracy outcome.
+        // Float64 literals computed via Go expressions to avoid
+        // hand-transcribed-ULP errors (e.g. `1.0/3.0` not `0.333...`).
+        // ---- Integer ----
+        {"integer-exact-zero",          NewInteger(0),                                        0.0,                    big.Exact, true},
+        {"integer-exact-small",         NewInteger(7),                                        7.0,                    big.Exact, true},
+        {"integer-exact-negative",      NewInteger(-42),                                      -42.0,                  big.Exact, true},
+        {"integer-overflow-positive",   NewInteger(int64(1)<<53 + 1),                         float64(int64(1)<<53),  big.Below, true},
+        {"integer-overflow-negative",   NewInteger(-(int64(1)<<53 + 1)),                      -float64(int64(1)<<53), big.Above, true},
+        {"integer-minint64",            NewInteger(math.MinInt64),                            float64(math.MinInt64), big.Exact, true},
+
+        // ---- BigInteger ----
+        {"big-integer-exact",           NewBigIntegerFromInt64(1234),                          1234.0,                big.Exact, true},
+        {"big-integer-overflow-pos",    NewBigInteger(new(big.Int).Exp(big.NewInt(10), big.NewInt(100), nil)),
+                                                                                                math.Inf(1),          big.Above, true},
+        {"big-integer-overflow-neg",    NewBigInteger(new(big.Int).Neg(new(big.Int).Exp(big.NewInt(10), big.NewInt(100), nil))),
+                                                                                                math.Inf(-1),         big.Below, true},
+        {"big-integer-near-mantissa-boundary", NewBigInteger(new(big.Int).Lsh(big.NewInt(1), 54)),
+                                                                                                math.Ldexp(1, 54),    big.Exact, true},
+
+        // ---- Float ----
+        {"float-identity",              NewFloat(3.5),                                         3.5,                   big.Exact, true},
+        {"float-zero",                  NewFloat(0.0),                                         0.0,                   big.Exact, true},
+        {"float-negative-zero",         NewFloat(math.Copysign(0, -1)),                        math.Copysign(0, -1),  big.Exact, true},
+        {"float-positive-inf",          NewFloat(math.Inf(1)),                                 math.Inf(1),           big.Exact, true},
+        {"float-negative-inf",          NewFloat(math.Inf(-1)),                                math.Inf(-1),          big.Exact, true},
+        {"float-nan",                   NewFloat(math.NaN()),                                  math.NaN(),            big.Exact, true},
+        {"float-maxfloat64",            NewFloat(math.MaxFloat64),                             math.MaxFloat64,       big.Exact, true},
+        {"float-smallest-subnormal",    NewFloat(math.SmallestNonzeroFloat64),                 math.SmallestNonzeroFloat64, big.Exact, true},
+
+        // ---- BigFloat ----
+        {"big-float-finite-exact",      NewBigFloatFromFloat64(2.5),                           2.5,                   big.Exact, true},
+        {"big-float-overflow-positive", bigFloatFromString(t, "1e500"),                        math.Inf(1),           big.Above, true},
+        {"big-float-overflow-negative", bigFloatFromString(t, "-1e500"),                       math.Inf(-1),          big.Below, true},
+        {"big-float-underflow",         bigFloatFromString(t, "1e-400"),                       0.0,                   big.Below, true},
+        {"big-float-nan",               NewBigFloatNaN(),                                      math.NaN(),            big.Exact, true},
+        {"big-float-irrational-pi",     bigFloatFromString(t, "3.14159265358979323846"),       math.Pi,               big.Below, true}, // depends on rounding direction; verify
+
+        // ---- Rational ----
+        {"rational-exact-half",         NewRationalFromInts(1, 2),                             0.5,                   big.Exact, true},
+        {"rational-exact-quarter",      NewRationalFromInts(1, 4),                             0.25,                  big.Exact, true},
+        {"rational-onethird",           NewRationalFromInts(1, 3),                             1.0/3.0,               big.Below, true},
+        {"rational-twothirds",          NewRationalFromInts(2, 3),                             2.0/3.0,               big.Above, true},
+
+        // ---- Complex ----
+        {"complex-real-zero-imag",      NewComplex(complex(3.0, 0)),                           3.0,                   big.Exact, true},
+        {"complex-with-imag",           NewComplex(complex(3.0, 4.0)),                         3.0,                   big.Exact, false}, // imag dropped
+        {"complex-nan-real",            NewComplex(complex(math.NaN(), 0)),                    math.NaN(),            big.Exact, true},
+
+        // ---- BigComplex ----
+        {"bigcomplex-exact-zero-imag",  NewBigComplex(NewBigIntegerFromInt64(3), NewBigIntegerFromInt64(0)), 3.0,    big.Exact, true},
+        {"bigcomplex-with-imag",        NewBigComplex(NewBigIntegerFromInt64(3), NewBigIntegerFromInt64(4)), 3.0,    big.Exact, false},
+        {"bigcomplex-real-overflow",    NewBigComplex(NewBigIntegerFromString("1e500", 10), NewBigIntegerFromInt64(0)),
+                                                                                                math.Inf(1),          big.Above, true},
+        {"bigcomplex-real-below-overflow", NewBigComplex(NewBigIntegerFromString("-1e500", 10), NewBigIntegerFromInt64(0)),
+                                                                                                math.Inf(-1),         big.Below, true},
     }
     for _, tc := range cases {
         t.Run(tc.name, func(t *testing.T) {
             c := qt.New(t)
-            f, acc, real, err := ToFloat64WithAccuracy(tc.input)
+            res, err := ToFloat64WithAccuracy(tc.input)
             c.Assert(err, qt.IsNil)
-            if math.IsNaN(tc.wantF) {
-                c.Assert(math.IsNaN(f), qt.IsTrue)
+            if math.IsNaN(tc.wantValue) {
+                c.Assert(math.IsNaN(res.Value), qt.IsTrue)
             } else {
-                c.Assert(f, qt.Equals, tc.wantF)
+                c.Assert(res.Value, qt.Equals, tc.wantValue)
             }
-            c.Assert(acc, qt.Equals, tc.wantAcc)
-            c.Assert(real, qt.Equals, tc.wantReal)
+            c.Assert(res.Accuracy, qt.Equals, tc.wantAcc)
+            c.Assert(res.IsReal, qt.Equals, tc.wantIsReal)
         })
     }
 }
@@ -633,9 +746,9 @@ func bigFloatFromString(t *testing.T, s string) *BigFloat {
    - **Rational**: `f, exact := p.value.Float64()`; if `!exact`,
      direction-recover via `new(big.Rat).SetFloat64(f).Cmp(p.value)`.
    - **Complex**: real part is `real(p.Value)` (identity → Exact);
-     real flag is `imag(p.Value) == 0`.
+     isReal flag is `imag(p.Value) == 0`.
    - **BigComplex**: real part via `toBigFloat(p.real).Float64()`;
-     real flag is `p.imag.IsZero()`. For the complex helper:
+     isReal flag is `p.imag.IsZero()`. For the complex helper:
      per-component accuracy from both `real` and `imag`.
 
 5. **Implement the public helpers** in `values/conversion.go`
@@ -656,12 +769,13 @@ func bigFloatFromString(t *testing.T, s string) *BigFloat {
 
 6. **Validation tests** (`values/conversion_test.go`):
    - Table-driven tests over the design's acceptance table.
-     Each row asserts `(f, acc, real, err)` matches expected.
+     Each row asserts `Float64Result{Value, Accuracy, IsReal}` and
+     the error matches expected.
    - Boundary cases: `math.MaxFloat64`, `math.SmallestNonzeroFloat64`,
-     `math.MinInt64`, `(*big.Int).SetInt64(math.MaxInt64).Mul(...,
-     big.NewInt(2))` (overflows int64; check direction).
+     `math.MinInt64`, `(*big.Int).Exp(big.NewInt(10), big.NewInt(100), nil)`
+     (overflows int64 / float64; check direction).
    - NaN propagation: `*Float(NaN)` round-trips as
-     `(NaN, big.Exact, true, nil)`.
+     `Float64Result{Value: NaN, Accuracy: big.Exact, IsReal: true}, nil`.
    - Rational direction: `1/3` → `'below`; `2/3` → `'above`
      (verified against actual stdlib behavior at test time).
    - Complex direction: `(make-rectangular 1/3 1/7)` returns
@@ -956,7 +1070,7 @@ by name.)
 | `ffi_arg_converters.go`                    | `reflect.Float64` case migrates: strict mode calls `ToFloat64Lossless`; lossy-allowed mode calls `ToFloat64WithAccuracy` and discards `acc`/`isReal`. New `reflect.Complex128` case added analogously. |
 | `registry/helpers/value_conv.go`           | `ToFloat64` migrates to `values.ToFloat64Lossless`. **Tightening**: BigFloat/BigInteger/Rational that today silently truncate now error with `ErrLossyConversion` on loss. Same-precision inputs continue to succeed. |
 | `ffi_test.go`                              | New tests cover (a) FFI Float64 strict-mode loss → error; (b) FFI Float64 lossy-allowed mode → silent truncation; (c) new Complex128 path; (d) `helpers.ToFloat64` tightening. |
-| `CHANGELOG.md`                             | Document **three** behavior changes: FFI float64 precision-aware (previously rejected BigFloat unconditionally → now accepts when lossless); FFI complex128 newly supported; `helpers.ToFloat64` tightened (previously silently truncated → now errors). Plus two additions: `WithLossyConversionsAllowed` option, `ErrLossyConversion` sentinel. |
+| `CHANGELOG.md`                             | Document **three** behavior changes: FFI float64 precision-aware (previously rejected BigFloat with `ErrTypeConversion` via `fmtArgError` → now accepts when lossless, errors with `ErrLossyConversion` when not); FFI complex128 newly supported (no converter existed); `helpers.ToFloat64` tightened (previously silently truncated → now errors with `ErrLossyConversion`). Plus two additions: `WithLossyConversionsAllowed` option, `ErrLossyConversion` sentinel. |
 
 ### Steps
 
@@ -1045,8 +1159,12 @@ by name.)
      succeed; one that overflows or rounds now errors with
      `ErrLossyConversion` (new sentinel). The error message names
      the direction of loss (`Above` / `Below`). Previously the
-     FFI rejected `*BigFloat` unconditionally with
-     `ErrTypeConversion`.
+     FFI rejected `*BigFloat` (and other big-precision numerics
+     passed to a `float64` parameter) via `fmtArgError`, which
+     wraps `werr.ErrTypeConversion`. The new path wraps
+     `werr.ErrLossyConversion` instead, distinguishing
+     "precision loss" from "wrong reflect.Kind" — callers can
+     `errors.Is` against the precise sentinel.
 
      *Net effect*: FFI now accepts strictly more inputs (any
      BigFloat fitting in float64), and reports precise errors on
@@ -1080,7 +1198,7 @@ by name.)
      Opt-in flag suppressing `ErrLossyConversion` returns from
      the FFI converters; the converter calls
      `values.ToFloat64WithAccuracy` and discards the accuracy/
-     real flags. Per-engine; captured at `RegisterFunc` time.
+     isReal flags. Per-engine; captured at `RegisterFunc` time.
 
    - **New error sentinel `werr.ErrLossyConversion`.** Distinct
      from `ErrNotAReal` (real-vs-complex domain) and
@@ -1224,11 +1342,11 @@ func PrimInexactLosslessQ(mc machine.CallContext) error {
         return werr.WrapForeignErrorf(werr.ErrNotANumber,
             "inexact-lossless?: expected a number but got %T", mc.Arg(0))
     }
-    _, realAcc, imagAcc, err := values.ToComplex128WithAccuracy(n)
+    res, err := values.ToComplex128WithAccuracy(n)
     if err != nil {
         return err
     }
-    lossless := realAcc == big.Exact && imagAcc == big.Exact
+    lossless := res.RealAcc == big.Exact && res.ImagAcc == big.Exact
     mc.SetValue(values.BoolToBoolean(lossless))
     return nil
 }
@@ -1243,27 +1361,27 @@ func PrimInexactAccuracy(mc machine.CallContext) error {
         return werr.WrapForeignErrorf(werr.ErrNotANumber,
             "inexact-accuracy: expected a number but got %T", mc.Arg(0))
     }
-    // Distinguish real-domain from complex-domain by checking the
-    // type — Complex/BigComplex always use the 2-value path.
-    switch n.(type) {
-    case *values.Complex, *values.BigComplex:
-        _, realAcc, imagAcc, err := values.ToComplex128WithAccuracy(n)
+    // Domain dispatch via ComplexNumber interface — matches
+    // Hashable/Tuple/Indexable precedent in values/. Avoids
+    // enumerating *Complex and *BigComplex by name (would need
+    // updating each time a new complex kind is added).
+    if _, isComplex := n.(values.ComplexNumber); isComplex {
+        res, err := values.ToComplex128WithAccuracy(n)
         if err != nil {
             return err
         }
         mc.SetValues(
-            values.BigAccuracyToSymbol(realAcc),
-            values.BigAccuracyToSymbol(imagAcc),
+            values.BigAccuracyToSymbol(res.RealAcc),
+            values.BigAccuracyToSymbol(res.ImagAcc),
         )
         return nil
-    default:
-        _, acc, _, err := values.ToFloat64WithAccuracy(n)
-        if err != nil {
-            return err
-        }
-        mc.SetValue(values.BigAccuracyToSymbol(acc))
-        return nil
     }
+    res, err := values.ToFloat64WithAccuracy(n)
+    if err != nil {
+        return err
+    }
+    mc.SetValue(values.BigAccuracyToSymbol(res.Accuracy))
+    return nil
 }
 
 // PrimInexactWithAccuracy implements (inexact-with-accuracy n).
@@ -1275,29 +1393,27 @@ func PrimInexactWithAccuracy(mc machine.CallContext) error {
         return werr.WrapForeignErrorf(werr.ErrNotANumber,
             "inexact-with-accuracy: expected a number but got %T", mc.Arg(0))
     }
-    switch n.(type) {
-    case *values.Complex, *values.BigComplex:
-        c, realAcc, imagAcc, err := values.ToComplex128WithAccuracy(n)
+    if _, isComplex := n.(values.ComplexNumber); isComplex {
+        res, err := values.ToComplex128WithAccuracy(n)
         if err != nil {
             return err
         }
         mc.SetValues(
-            values.NewComplex(c),
-            values.BigAccuracyToSymbol(realAcc),
-            values.BigAccuracyToSymbol(imagAcc),
-        )
-        return nil
-    default:
-        f, acc, _, err := values.ToFloat64WithAccuracy(n)
-        if err != nil {
-            return err
-        }
-        mc.SetValues(
-            values.NewFloat(f),
-            values.BigAccuracyToSymbol(acc),
+            values.NewComplex(res.Value),
+            values.BigAccuracyToSymbol(res.RealAcc),
+            values.BigAccuracyToSymbol(res.ImagAcc),
         )
         return nil
     }
+    res, err := values.ToFloat64WithAccuracy(n)
+    if err != nil {
+        return err
+    }
+    mc.SetValues(
+        values.NewFloat(res.Value),
+        values.BigAccuracyToSymbol(res.Accuracy),
+    )
+    return nil
 }
 
 // PrimComplexInexactWithAccuracy implements
@@ -1309,14 +1425,14 @@ func PrimComplexInexactWithAccuracy(mc machine.CallContext) error {
         return werr.WrapForeignErrorf(werr.ErrNotANumber,
             "complex-inexact-with-accuracy: expected a number but got %T", mc.Arg(0))
     }
-    c, realAcc, imagAcc, err := values.ToComplex128WithAccuracy(n)
+    res, err := values.ToComplex128WithAccuracy(n)
     if err != nil {
         return err
     }
     mc.SetValues(
-        values.NewComplex(c),
-        values.BigAccuracyToSymbol(realAcc),
-        values.BigAccuracyToSymbol(imagAcc),
+        values.NewComplex(res.Value),
+        values.BigAccuracyToSymbol(res.RealAcc),
+        values.BigAccuracyToSymbol(res.ImagAcc),
     )
     return nil
 }
@@ -1378,22 +1494,89 @@ func TestInexactAccuracy(t *testing.T) {
     // ... iterate complexCases analogously.
 }
 
-// Analogous tests for inexact-with-accuracy (real returns 2-value
-// list, complex returns 3-value list) and complex-inexact-with-accuracy
-// (always 3-value).
+// TestInexactWithAccuracy — covers real (2-value return) and
+// complex (3-value return) cases. Uses (call-with-values ... list)
+// to collect.
 func TestInexactWithAccuracy(t *testing.T) {
     realCases := []testhelpers.SchemeCodeTestCase{
         {Name: "integer-7",
             Code:     `(call-with-values (lambda () (inexact-with-accuracy 7)) list)`,
             Expected: values.List(values.NewFloat(7.0), values.NewSymbol("exact"))},
         {Name: "rational-onethird",
-            // Match the float64 value emitted by 1/3 conversion explicitly
-            // — the exact float64 differs from 0.333... in the last bits.
+            // Use Go-computed literal 1.0/3.0 rather than hand-written
+            // 0.333... to avoid ULP-off transcription error.
             Code:     `(call-with-values (lambda () (inexact-with-accuracy 1/3)) list)`,
             Expected: values.List(values.NewFloat(1.0/3.0), values.NewSymbol("below"))},
-        // ... boundary cases per design's acceptance table ...
+        {Name: "rational-twothirds",
+            Code:     `(call-with-values (lambda () (inexact-with-accuracy 2/3)) list)`,
+            Expected: values.List(values.NewFloat(2.0/3.0), values.NewSymbol("above"))},
+        {Name: "bigint-overflow",
+            Code:     `(call-with-values (lambda () (inexact-with-accuracy (expt 10 100))) list)`,
+            Expected: values.List(values.NewFloat(math.Inf(1)), values.NewSymbol("above"))},
     }
-    // ... iterate ...
+    complexCases := []testhelpers.SchemeCodeTestCase{
+        {Name: "complex-exact-exact",
+            Code:     `(call-with-values (lambda () (inexact-with-accuracy 3+4i)) list)`,
+            Expected: values.List(values.NewComplex(complex(3, 4)), values.NewSymbol("exact"), values.NewSymbol("exact"))},
+        {Name: "complex-onethird-oneseventh",
+            Code:     `(call-with-values (lambda () (inexact-with-accuracy (make-rectangular 1/3 1/7))) list)`,
+            Expected: values.List(values.NewComplex(complex(1.0/3.0, 1.0/7.0)), values.NewSymbol("below"), values.NewSymbol("below"))},
+    }
+    runRealOrComplexTable(t, realCases, complexCases)
+}
+
+// TestPolymorphicReturnArity — explicit value-count assertion.
+// The (call-with-values ... list) pattern above passes only when
+// the list length AND contents match. A bug where the primitive
+// always emits 2 values for complex input (the default-arm
+// behavior) is caught by the list-content mismatch, but the
+// failure mode is subtle. This separate test asserts arity
+// directly via (call-with-values ... (lambda args (length args))).
+//
+// This is the regression-test class the crosscheck flagged
+// explicitly: polymorphic return shape is the whole point of
+// these primitives; arity must be asserted directly.
+func TestPolymorphicReturnArity(t *testing.T) {
+    arityCases := []testhelpers.SchemeCodeTestCase{
+        // inexact-accuracy: 1 value for real, 2 for complex.
+        {Name: "inexact-accuracy-real-1value",
+            Code:     `(call-with-values (lambda () (inexact-accuracy 7))      (lambda args (length args)))`,
+            Expected: values.NewInteger(1)},
+        {Name: "inexact-accuracy-complex-2values",
+            Code:     `(call-with-values (lambda () (inexact-accuracy 3+4i))   (lambda args (length args)))`,
+            Expected: values.NewInteger(2)},
+
+        // inexact-with-accuracy: 2 values for real, 3 for complex.
+        {Name: "inexact-with-accuracy-real-2values",
+            Code:     `(call-with-values (lambda () (inexact-with-accuracy 7)) (lambda args (length args)))`,
+            Expected: values.NewInteger(2)},
+        {Name: "inexact-with-accuracy-complex-3values",
+            Code:     `(call-with-values (lambda () (inexact-with-accuracy 3+4i)) (lambda args (length args)))`,
+            Expected: values.NewInteger(3)},
+
+        // complex-inexact-with-accuracy: ALWAYS 3 values.
+        {Name: "complex-inexact-with-accuracy-real-3values",
+            Code:     `(call-with-values (lambda () (complex-inexact-with-accuracy 7))   (lambda args (length args)))`,
+            Expected: values.NewInteger(3)},
+        {Name: "complex-inexact-with-accuracy-complex-3values",
+            Code:     `(call-with-values (lambda () (complex-inexact-with-accuracy 3+4i)) (lambda args (length args)))`,
+            Expected: values.NewInteger(3)},
+
+        // inexact-lossless?: always exactly 1 value (no polymorphism).
+        {Name: "inexact-lossless-real-1value",
+            Code:     `(call-with-values (lambda () (inexact-lossless? 7))       (lambda args (length args)))`,
+            Expected: values.NewInteger(1)},
+        {Name: "inexact-lossless-complex-1value",
+            Code:     `(call-with-values (lambda () (inexact-lossless? 3+4i))   (lambda args (length args)))`,
+            Expected: values.NewInteger(1)},
+    }
+    for _, tc := range arityCases {
+        t.Run(tc.Name, func(t *testing.T) {
+            result, err := testhelpers.RunSchemeCode(t, tc.Code)
+            qt.Assert(t, err, qt.IsNil)
+            qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+        })
+    }
 }
 ```
 
@@ -1433,52 +1616,40 @@ field.
 
 | File                                              | Change                                                                                                                                       |
 |---------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
-| `extensions/math/prim_conversion.go`              | Add four primitives: `PrimInexactLosslessP`, `PrimInexactAccuracy`, `PrimInexactWithAccuracy`, `PrimComplexInexactWithAccuracy`. Wire in the extension's primitive registration. |
+| `extensions/math/prim_conversion.go`              | Add four primitives: `PrimInexactLosslessQ`, `PrimInexactAccuracy`, `PrimInexactWithAccuracy`, `PrimComplexInexactWithAccuracy`. Q-suffix convention verified against `extensions/math/prim_rounding.go:198,208,218` (`PrimFiniteQ`, `PrimInfiniteQ`, `PrimNanQ`). Wire in the extension's primitive registration. |
 | `extensions/math/prim_conversion_test.go`         | Table-driven tests covering the design's acceptance table.                                                                                   |
 | `stdlib/lib/wile/math.sld` (or similar)           | Export the new primitives so `(import (wile math))` makes them available.                                                                    |
 | `docs/extensions/architecture.md` (optional)      | Note the four primitives under the math extension entry, if the doc enumerates by primitive.                                                 |
 
 ### Steps
 
-1. **Implement `PrimInexactLosslessP`** (predicate `inexact-lossless?`):
-   ```go
-   func PrimInexactLosslessP(mc *machine.MachineContext) error {
-       n, ok := mc.Arg(0).(values.Number)
-       if !ok {
-           return werr.WrapForeignErrorf(werr.ErrNotANumber,
-               "inexact-lossless?: argument is not a number")
-       }
-       // For real n, lossless iff accuracy is Exact.
-       // For complex n with non-zero imag, lossless iff BOTH
-       // per-component accuracies are Exact (using complex128
-       // semantics).
-       _, realAcc, imagAcc, err := values.ToComplex128WithAccuracy(n)
-       if err != nil {
-           return err
-       }
-       lossless := realAcc == big.Exact && imagAcc == big.Exact
-       mc.SetValue(values.BoolToBoolean(lossless))
-       return nil
-   }
-   ```
+The canonical Go implementations are above in the "Code stub:
+primitive implementations" section — full bodies for all four
+Prim*. Steps 1–4 of this section deliberately point at the
+canonical stub rather than re-stubbing here (a previous draft
+re-stubbed with P-suffix names and wrong `*MachineContext`
+pointer type — internal drift).
 
-2. **Implement `PrimInexactAccuracy`** (`inexact-accuracy`):
-   - Real input: returns single symbol via `mc.SetValue(symbol)`.
-   - Complex input: returns two values via the multiple-value
-     mechanism (`mc.SetValues(...)` or whatever the codebase
-     pattern is — consult `prim_misc_test.go` for the existing
-     multi-value primitive precedent).
+1. **Implement `PrimInexactLosslessQ`** per the canonical stub
+   above. Uses `values.ToComplex128WithAccuracy` + tests both
+   `realAcc == big.Exact && imagAcc == big.Exact`. Sets result
+   via `mc.SetValue(values.BoolToBoolean(lossless))`.
 
-3. **Implement `PrimInexactWithAccuracy`**:
-   - Real: `(values f acc-sym)` — two values.
-   - Complex: `(values c real-acc-sym imag-acc-sym)` — three values.
-   - Wrap the float64/complex128 result back into a Scheme
-     `*Float` / `*Complex` via existing constructors.
+2. **Implement `PrimInexactAccuracy`** per the canonical stub
+   above. Type-switch on `values.ComplexNumber` (NOT
+   `case *values.Complex, *values.BigComplex:`) — interface
+   dispatch matches the `Hashable`/`Tuple`/`Indexable` precedent
+   in `values/`. Real input: `mc.SetValue(symbol)`. Complex
+   input: `mc.SetValues(realSym, imagSym)`.
 
-4. **Implement `PrimComplexInexactWithAccuracy`** (uniform
-   3-value):
-   - Always returns `(values c real-acc-sym imag-acc-sym)`.
-   - Real inputs get `imag-acc = 'exact` trivially.
+3. **Implement `PrimInexactWithAccuracy`** per the canonical stub
+   above. Real: `mc.SetValues(NewFloat(f), accSym)`. Complex:
+   `mc.SetValues(NewComplex(c), realSym, imagSym)`.
+
+4. **Implement `PrimComplexInexactWithAccuracy`** per the
+   canonical stub above. Uniform 3-value via
+   `mc.SetValues(NewComplex(c), realSym, imagSym)` regardless of
+   input domain.
 
 5. **Docstrings**: each primitive gets a structured docstring with:
    ```
@@ -1502,6 +1673,112 @@ field.
 
 9. **Lint + CI**.
 
+### Three-layer integration test (PR 3 deliverable)
+
+The three layers — Go helper, FFI converter, Scheme primitive —
+all consume the same per-kind dispatch through the registry.
+A bug at any layer that diverges from the others is the genuinely
+consequential failure mode for this feature. PR 3 adds one
+integration test (in `integration/` or wherever the project's
+cross-layer tests live) that fixes the contract.
+
+```go
+// integration/loss_signals_three_layer_test.go (new file)
+
+// TestLossSignalsThreeLayerAgreement asserts that the Go helper,
+// the FFI converter, and the Scheme primitive all report the
+// same accuracy outcome for the same numeric input. A bug at any
+// single layer manifests as inter-layer disagreement that
+// per-layer unit tests cannot catch.
+//
+// For each (input, expected) row:
+//   Layer 1: values.ToFloat64WithAccuracy(input) → res.Accuracy
+//   Layer 2: FFI converter strict mode → succeeds iff res.Accuracy
+//              == Exact && res.IsReal; otherwise ErrLossyConversion
+//   Layer 3: (inexact-accuracy input) → same accuracy symbol
+//
+// All three must agree, on every row.
+func TestLossSignalsThreeLayerAgreement(t *testing.T) {
+    cases := []struct {
+        name        string
+        schemeInput string                 // Scheme expression producing the input
+        goInput     func() values.Number   // equivalent Go construction
+        wantAcc     big.Accuracy
+        wantIsReal  bool
+    }{
+        {"integer-exact",     "7",            func() values.Number { return values.NewInteger(7) },             big.Exact, true},
+        {"rational-onethird", "1/3",          func() values.Number { return values.NewRationalFromInts(1, 3) }, big.Below, true},
+        {"bigint-overflow",   "(expt 10 100)", /* construct equivalent BigInteger */                            big.Above, true},
+        {"complex-with-imag", "3+4i",         func() values.Number { return values.NewComplex(complex(3, 4)) }, big.Exact, false},
+    }
+
+    eng, _ := wile.NewEngine(context.Background(), wile.WithAllExtensions())
+    defer eng.Close()
+
+    // Register a Go function that takes a float64; we'll use it to
+    // probe the FFI converter behavior.
+    var fnCalled bool
+    _ = eng.RegisterFunc("test-float64-callback", func(x float64) {
+        fnCalled = true
+    })
+
+    for _, tc := range cases {
+        t.Run(tc.name, func(t *testing.T) {
+            c := qt.New(t)
+
+            // Layer 1: Go helper directly.
+            res, err := values.ToFloat64WithAccuracy(tc.goInput())
+            c.Assert(err, qt.IsNil)
+            c.Assert(res.Accuracy, qt.Equals, tc.wantAcc)
+            c.Assert(res.IsReal, qt.Equals, tc.wantIsReal)
+
+            // Layer 2: FFI converter (strict mode — no
+            // WithLossyConversionsAllowed). Should error iff
+            // Layer 1 reported loss.
+            fnCalled = false
+            _, ffiErr := eng.EvalMultiple(fmt.Sprintf(
+                "(test-float64-callback %s)", tc.schemeInput))
+            if tc.wantAcc == big.Exact && tc.wantIsReal {
+                c.Assert(ffiErr, qt.IsNil)
+                c.Assert(fnCalled, qt.IsTrue)
+            } else {
+                c.Assert(errors.Is(ffiErr, werr.ErrLossyConversion), qt.IsTrue)
+                c.Assert(fnCalled, qt.IsFalse)
+            }
+
+            // Layer 3: Scheme primitive. For real input,
+            // (inexact-accuracy x) returns 1 value matching Layer 1.
+            // For complex with non-zero imag, it returns 2 values;
+            // first should match the real-part accuracy.
+            accCode := fmt.Sprintf("(inexact-accuracy %s)", tc.schemeInput)
+            // Use Layer 1's IsReal flag to decide whether to expect
+            // 1 vs 2 return values from the primitive.
+            if tc.wantIsReal {
+                accResult, err := testhelpers.RunSchemeCode(t, accCode)
+                c.Assert(err, qt.IsNil)
+                c.Assert(accResult, valuestest.SchemeEquals,
+                    values.BigAccuracyToSymbol(tc.wantAcc))
+            } else {
+                // Complex: collect 2 values via call-with-values
+                listCode := fmt.Sprintf(
+                    "(call-with-values (lambda () %s) list)", accCode)
+                accList, err := testhelpers.RunSchemeCode(t, listCode)
+                c.Assert(err, qt.IsNil)
+                // first element of list is the real-part accuracy
+                firstSym, _ := accList.(values.Tuple).Car().(*values.Symbol)
+                c.Assert(firstSym, valuestest.SchemeEquals,
+                    values.BigAccuracyToSymbol(tc.wantAcc))
+            }
+        })
+    }
+}
+```
+
+This test is the *only* test that catches the bug class "three
+layers disagree on the same input." Unit tests on each layer
+can pass independently while the layers disagree — this test
+fails the entire CI run on divergence.
+
 ### Acceptance for PR 3
 
 - All four primitives implemented, registered, exported.
@@ -1509,7 +1786,12 @@ field.
   test case.
 - Docstrings render correctly via `(doc inexact-lossless?)` etc.
 - `apropos` discovers all four under "Numbers — Conversion".
-- Integration test passes.
+- **`TestPolymorphicReturnArity` passes** — asserts the value-
+  count of each primitive matches the input domain (real vs
+  complex).
+- **`TestLossSignalsThreeLayerAgreement` passes** — verifies
+  Go helper / FFI / Scheme primitive consistency for the same
+  set of inputs.
 
 ## Risk register (impl-specific)
 

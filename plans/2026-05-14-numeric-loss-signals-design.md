@@ -701,6 +701,7 @@ the no-information-loss mandate added these resolutions:
 | Q-3 | `extensions/math/` (alongside `exact->inexact`) | Primitives ship in the math extension; loaded by default in most profiles; discoverable via apropos. |
 | Q-4 | Engine-level `wile.WithLossyConversionsAllowed()` | One option applies globally. Per-function and per-parameter granularity deferred. |
 | Q-5 | Yes — `helpers.ToFloat64` tightens to match FFI | `*BigFloat` accepted when fits losslessly; rejects with `ErrLossyConversion` when not. Consistent FFI / helpers behavior. |
+| Q-6 (added post-crosscheck) | **NaN/Inf as `big.Exact` — documented, not changed** | Three-lens crosscheck (errors F6 + types C8 + tests T9) converged on the ambiguity that `(inexact-lossless? +nan.0)` returns `#t`. Mechanically correct — NaN→NaN is bit-pattern identity, `+Inf→+Inf` is identity, both return `big.Exact`. Semantically surprising — a caller reading `acc == Exact` may trust the value as if finite. **Resolution**: keep the mechanical contract (preserves Go stdlib semantics and avoids inventing a fourth accuracy value); document the contract prominently in every helper doc comment and in the Scheme primitive docstrings. Callers requiring finite-screening do so independently via `math.IsNaN(f)` / `math.IsInf` / R7RS `(finite? n)`. Trade-off explicit: simplicity preserved at the cost of one caveat. |
 
 ### Latent ambiguities resolved by the no-information-loss mandate
 
@@ -746,9 +747,13 @@ that surfaces the same information.
 | `1/3`                                       | `(*big.Rat)(1/3).Float64()` → `(0.333..., exact=false)`; round-trip yields `r2 < 1/3` → `Below` | `(values 0.333... 'below)`           |
 | `(expt 10 100)`                             | `(*big.Float)(10^100).Float64()` → `(+Inf, big.Above)`         | `(values +inf.0 'above)`             |
 | `(- (expt 10 100))`                         | `(*big.Float)(-10^100).Float64()` → `(-Inf, big.Below)`        | `(values -inf.0 'below)`             |
-| `+nan.0`                                    | Identity (NaN propagates)                                      | `(values +nan.0 'exact)`             |
+| `+nan.0`                                    | Identity (NaN propagates per Q-6 contract)                     | `(values +nan.0 'exact)`             |
+| `+inf.0`                                    | Identity (a finite-typed Float holding +Inf stays +Inf)        | `(values +inf.0 'exact)`             |
+| `-inf.0`                                    | Identity                                                       | `(values -inf.0 'exact)`             |
 | `1.5e308` (close to `math.MaxFloat64`)      | Round-trips exactly                                            | `(values 1.5e308 'exact)`            |
-| `(expt 2 1024)` (just over `math.MaxFloat64`) | Saturates to `+Inf`; accuracy `Above`                        | `(values +inf.0 'above)`             |
+| `(expt 2 1024)` (finite BigInteger just over `math.MaxFloat64`) | Saturates to `+Inf`; accuracy `Above` (distinct from `+inf.0` input — the *finite* input *overflowed*) | `(values +inf.0 'above)`             |
+| `(* 0 (expt 10 100))`                       | Exact zero; converts to `0.0`                                  | `(values 0.0 'exact)`                |
+| `+nan.0+1.0i` (NaN real, finite imag)       | Real part identity; complex with non-zero imag → `isReal=#f`   | `(values +nan.0 'exact)` (real-only) — N.B. `inexact-with-accuracy` real-domain primitive returns this 2-value form for the real-domain coercion; the complex-domain primitive `complex-inexact-with-accuracy` returns `(values +nan.0+1.0i 'exact 'exact)` |
 
 ### Complex domain — per-component accuracy
 
@@ -768,7 +773,9 @@ that surfaces the same information.
 | `(expt 10 100)`                             | `#f`                    |
 | `3+4i`                                      | `#t`                    |
 | `(make-rectangular 1/3 1)`                  | `#f`                    |
-| `+nan.0`                                    | `#t`                    |
+| `+nan.0`                                    | `#t` (per Q-6: NaN identity is mechanically "lossless"; semantically caller must screen with `nan?`) |
+| `+inf.0`                                    | `#t` (per Q-6: same logic; caller screens with `infinite?`) |
+| `+nan.0+1.0i`                               | `#t` (both components identity; the complex Real flag is `#t` since the imag is finite-and-zero-only-when-needed) — N.B. the predicate uses complex128 semantics, so `+nan.0+0.0i` is `#t` (no imag dropped) but `+nan.0+1.0i` is `#t` ONLY because both components are present in the complex128 (NaN real, 1.0 imag both representable). |
 
 ### FFI behavior
 
