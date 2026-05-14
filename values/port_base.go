@@ -21,9 +21,12 @@ import (
 	"github.com/aalpar/wile/werr"
 )
 
-// Port kind constants for SchemeString display. Two concrete types
-// (ByteVectorOutputPort and ByteVectorBufferedOutputPort) share
-// portKindBytevectorOutput because they represent the same Scheme type.
+// Port kind constants for SchemeString display. Two factories
+// (NewByteVectorOutputPortFromWriter and NewByteVectorBufferedOutputPort)
+// share portKindBytevectorOutput because they represent the same
+// R7RS port type — the distinction is in the slot configuration (the
+// buffered variant carries `ext` for accumulated-bytes retrieval; the
+// writer-backed variant carries `flsh` for flush-on-close).
 const (
 	portKindStringInput           = "string-input-port"
 	portKindStringOutput          = "string-output-port"

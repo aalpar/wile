@@ -334,6 +334,112 @@ func TestPortObject_OperationsAfterClose_ReturnPortClosed(t *testing.T) {
 	c.Assert(errors.Is(flsh.Flush(), werr.ErrPortClosed), qt.IsTrue)
 }
 
+// TestPortObject_OperationsAfterClose_TextualReadSide covers character
+// input + string input — the rune-read side of closed-port semantics.
+func TestPortObject_OperationsAfterClose_TextualReadSide(t *testing.T) {
+	c := qt.New(t)
+	type tc struct {
+		name string
+		port *values.PortObject
+	}
+	cases := []tc{
+		{"character-input", values.NewCharacterInputPortFromReader(strings.NewReader("abc"))},
+		{"string-input", values.NewStringInputPortWithBuffer(bytes.NewBufferString("abc"))},
+	}
+	for _, t := range cases {
+		rr, _ := t.port.AsRuneReader()
+		urr, _ := t.port.AsRuneUnreader()
+		c.Assert(t.port.Close(), qt.IsNil, qt.Commentf("kind=%s", t.name))
+		_, _, err := rr.ReadRune()
+		c.Assert(errors.Is(err, werr.ErrPortClosed), qt.IsTrue,
+			qt.Commentf("kind=%s ReadRune after close", t.name))
+		c.Assert(errors.Is(urr.UnreadRune(), werr.ErrPortClosed), qt.IsTrue,
+			qt.Commentf("kind=%s UnreadRune after close", t.name))
+	}
+}
+
+// TestPortObject_OperationsAfterClose_TextualWriteSide covers character
+// output + string output — the rune/string-write side of closed-port
+// semantics.
+func TestPortObject_OperationsAfterClose_TextualWriteSide(t *testing.T) {
+	c := qt.New(t)
+	type tc struct {
+		name string
+		port *values.PortObject
+	}
+	cases := []tc{
+		{"character-output", values.NewCharacterOutputPortFromWriter(&bytes.Buffer{})},
+		{"string-output", values.NewStringOutputPort()},
+	}
+	for _, t := range cases {
+		w, _ := t.port.AsWriter()
+		rw, _ := t.port.AsRuneWriter()
+		sw, _ := t.port.AsStringWriter()
+		c.Assert(t.port.Close(), qt.IsNil, qt.Commentf("kind=%s", t.name))
+		_, err := w.Write([]byte("x"))
+		c.Assert(errors.Is(err, werr.ErrPortClosed), qt.IsTrue,
+			qt.Commentf("kind=%s Write after close", t.name))
+		_, err = rw.WriteRune('x')
+		c.Assert(errors.Is(err, werr.ErrPortClosed), qt.IsTrue,
+			qt.Commentf("kind=%s WriteRune after close", t.name))
+		_, err = sw.WriteString("x")
+		c.Assert(errors.Is(err, werr.ErrPortClosed), qt.IsTrue,
+			qt.Commentf("kind=%s WriteString after close", t.name))
+	}
+}
+
+// TestPortObject_OperationsAfterClose_BytevectorPorts covers the
+// bytevector input/output families — they share guard wrappers with
+// the binary families but exercise distinct factories.
+func TestPortObject_OperationsAfterClose_BytevectorPorts(t *testing.T) {
+	c := qt.New(t)
+
+	pin := values.NewByteVectorInputPortFromReader(bytes.NewReader([]byte{1}))
+	br, _ := pin.AsByteReader()
+	c.Assert(pin.Close(), qt.IsNil)
+	_, err := br.ReadByte()
+	c.Assert(errors.Is(err, werr.ErrPortClosed), qt.IsTrue)
+
+	pout := values.NewByteVectorOutputPortFromWriter(&bytes.Buffer{})
+	bw, _ := pout.AsByteWriter()
+	c.Assert(pout.Close(), qt.IsNil)
+	c.Assert(errors.Is(bw.WriteByte(1), werr.ErrPortClosed), qt.IsTrue)
+
+	pio := values.NewByteVectorInputOutputPort()
+	bwio, _ := pio.AsByteWriter()
+	brio, _ := pio.AsByteReader()
+	c.Assert(pio.Close(), qt.IsNil)
+	c.Assert(errors.Is(bwio.WriteByte(1), werr.ErrPortClosed), qt.IsTrue)
+	_, err = brio.ReadByte()
+	c.Assert(errors.Is(err, werr.ErrPortClosed), qt.IsTrue)
+}
+
+// recordingCloser tracks whether Close was invoked. Used to verify
+// that the FromReader/FromWriter factories propagate Close calls to
+// the underlying io.Closer (setCloser path in portBase).
+type recordingCloser struct {
+	io.Reader
+	closed bool
+}
+
+func (r *recordingCloser) Close() error {
+	r.closed = true
+	return nil
+}
+
+// TestPortObject_CloseWithCloser verifies that closing a port whose
+// underlying source implements io.Closer propagates the Close call.
+// Subsumes the deleted TestBinaryInputPort_CloseWithCloser test.
+func TestPortObject_CloseWithCloser(t *testing.T) {
+	c := qt.New(t)
+	rc := &recordingCloser{Reader: bytes.NewReader([]byte{1})}
+	p := values.NewBinaryInputPortFromReader(rc)
+	c.Assert(p.Close(), qt.IsNil)
+	c.Assert(p.IsClosed(), qt.IsTrue)
+	c.Assert(rc.closed, qt.IsTrue,
+		qt.Commentf("NewBinaryInputPortFromReader should propagate Close to underlying io.Closer"))
+}
+
 // --- Helpers.
 
 // bufioReaderFromBytes wraps a byte slice in a *bufio.Reader for

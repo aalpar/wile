@@ -216,7 +216,7 @@
  ("floor-quotient" "real" ("real" "real") "github.com/aalpar/wile/extensions/math.PrimFloorQuotient" "extensions/math/prim_rounding.go:165")
  ("floor-remainder" "real" ("real" "real") "github.com/aalpar/wile/extensions/math.PrimFloorRemainder" "extensions/math/prim_rounding.go:172")
  ("floor/" "" ("real" "real") "github.com/aalpar/wile/extensions/math.PrimFloorDiv" "extensions/math/prim_rounding.go:158")
- ("flush-output-port" "void" ("...output-port") "github.com/aalpar/wile/internal/extensions/io.PrimFlushOutputPort" "internal/extensions/io/prim_write.go:200")
+ ("flush-output-port" "void" ("...output-port") "github.com/aalpar/wile/internal/extensions/io.PrimFlushOutputPort" "internal/extensions/io/prim_write.go:205")
  ("for-each" "" ("procedure" "list") "" "")
  ("force" "any" ("any") "github.com/aalpar/wile/internal/extensions/all.PrimForce" "internal/extensions/all/prim_all.go:350")
  ("free-identifier=?" "boolean" ("any" "any") "github.com/aalpar/wile/registry/core.PrimFreeIdentifierEqualQ" "registry/core/prim_syntax.go:185")

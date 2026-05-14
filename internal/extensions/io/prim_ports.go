@@ -93,7 +93,7 @@ func PrimClosePort(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	_, ok := o.(values.Port)
 	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrNotAnInputPort, "close-port: expected a port but got %T", o)
+		return werr.WrapForeignErrorf(werr.ErrNotAPort, "close-port: expected a port but got %T", o)
 	}
 	err := closePort(o)
 	if err != nil {

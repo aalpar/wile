@@ -62,7 +62,7 @@ func NewFailingTextualInputPort(s string, failUnread bool, failReadAfter int) *v
 	} else {
 		urr = underlying
 	}
-	return values.NewTextualInputPortWithReaders(underlying, rr, urr)
+	return values.NewStringInputPortWithReaders(underlying, rr, urr)
 }
 
 // countingRuneReader wraps an io.RuneReader and counts successful

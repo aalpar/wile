@@ -874,3 +874,72 @@ surprises). Aligns with the design's "1–2 focused-day" estimate.
 - Tier A.1 of SR roadmap: `plans/2026-05-07-structural-reduction-roadmap.md`.
 - Phase 0 precedent (PR #747), Phase 1 precedent (PR #748).
 - Workflow: `plans/CLAUDE.md` § Implementation Completion Workflow.
+
+## Deferred follow-ups
+
+Surfaced during the PR #749 review cycle (Copilot + 5-lens
+crosscheck), classified as notable-ambiguous and deliberately
+deferred to keep the unification PR focused on structural change.
+Each is a real opportunity, not a bug; tracking here so they don't
+get lost.
+
+1. **Extractor API symmetry** — `StringContent() (string, bool)`
+   returns the resolved string; `AsByteVectorExtractor() (BVE,
+   bool)` returns the interface. Converge to one shape — either both
+   resolved (`ByteVectorContent() (*ByteVector, bool)`) or both
+   interface (`AsStringExtractor() (StringExtractor, bool)`). Caller
+   churn: `PrimGetOutputString` and `PrimGetOutputBytevector`. Note
+   currently inline at `values/port.go` on `StringContent`.
+
+2. **PrimWriteString textual-port validation** — `write-string` is
+   R7RS textual but `PrimWriteString` (`prim_write.go`) uses
+   `extractPort` + bare `AsWriter`, accepting binary output ports.
+   All six sibling textual-write primitives use
+   `getOptionalTextualOutputPort` which rejects binary. The mismatch
+   is pre-existing (the old `extractPort[OutputPort]` had the same
+   gap), but the refactor was the right opportunity to close it.
+   Fix: add a `getOptionalTextualOutputPortWithRest` helper or a
+   post-extract `AsByteWriter` check.
+
+3. **Constructor naming `*WithBuffer` vs `*FromBuffer`** —
+   `NewStringInputPortWithBuffer` and `NewStringOutputPortWithBuffer`
+   use the `WithBuffer` suffix; the symmetric bytevector factories
+   use `FromBuffer` (`NewByteVectorBufferedOutputPortFromBuffer`,
+   `NewByteVectorInputOutputPortFromBuffer`). Both are pre-existing;
+   unification preserved each verbatim per design D2. Normalizing to
+   one form is breaking-API churn that should ride a separate PR
+   labeled as such.
+
+4. **`getOptionalTextualOutputPort` symmetry with input side** —
+   `getOptionalInputPort` returns `(*PortObject, io.RuneReader,
+   error)` and pre-extracts the rune-reader capability;
+   `getOptionalTextualOutputPort` returns only `(*PortObject,
+   error)` and each caller re-extracts via `AsWriter`/`AsRuneWriter`/
+   `AsStringWriter`. The asymmetry is principled (the input side has
+   exactly one capability to extract; the output side has 3+
+   depending on caller) but inconsistent. Either drop the input
+   pre-extraction (let `prim_read_write.go` callers do `AsRuneReader`
+   themselves) or extend output to pre-extract the textual writer.
+
+5. **I8 enforcement in `Validate`** — currently I8 (kind matches
+   capability profile) is "factory contract, not in Validate." A
+   9-entry `portKindSlots` map in `Validate` would self-enforce
+   future drift. Tradeoff: ~30 LOC + maintenance burden when adding
+   a new port kind. Reasonable to defer until a 10th port flavor is
+   actually proposed.
+
+6. **`PortObject` literal-construction guard** — the struct is
+   exported but slots are unexported; `&PortObject{}` literals pass
+   `Validate` vacuously (`kind == ""`, all slots nil). Either
+   unexport `PortObject` (callers use `Port` interface) or have
+   `Validate` reject `kind == ""`. The first option is a much
+   bigger API surface change; the second is a one-line addition.
+   Worth filing as a follow-up after the migration settles.
+
+7. **`port_behavior_test.go` table-driven migration** — per
+   `registry/CLAUDE.md` "Test Structure: Table-Driven Tests Are
+   Mandatory," the new file should consolidate its 15 per-factory
+   kind-assertion functions into one table loop. The current shape
+   matches the deleted `*_port_test.go` style (also non-table) so
+   no convention is broken by *this* PR, but the test file is a
+   future candidate for table-driven cleanup.

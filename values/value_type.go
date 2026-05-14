@@ -70,13 +70,13 @@ const (
 	TypeByteVector                         // *ByteVector
 	TypeHashtable                          // *Hashtable
 	TypeProcedure                          // Callable interface
-	TypePort                               // Port interface
-	TypeInputPort                          // InputPort interface
-	TypeOutputPort                         // OutputPort interface
-	TypeTextualInputPort                   // TextualReader interface
-	TypeTextualOutputPort                  // TextualWriter interface
-	TypeBinaryInputPort                    // BinaryReader interface
-	TypeBinaryOutputPort                   // BinaryWriter interface
+	TypePort                               // *PortObject (Port marker interface)
+	TypeInputPort                          // *PortObject with rdr slot non-nil
+	TypeOutputPort                         // *PortObject with wrt slot non-nil
+	TypeTextualInputPort                   // *PortObject with rr slot non-nil
+	TypeTextualOutputPort                  // *PortObject with wr slot non-nil
+	TypeBinaryInputPort                    // *PortObject with rb slot non-nil
+	TypeBinaryOutputPort                   // *PortObject with wb slot non-nil
 	TypeCount                              // sentinel — must be last
 )
 
@@ -354,14 +354,23 @@ func SchemeTypeName(v Value) string {
 // build the narrow port ValueType predicates (TypeInputPort,
 // TypeBinaryInputPort, etc.) that previously satisfied a Go interface
 // but now inspect the slot directly.
+//
+// When v IS a *PortObject but lacks the required capability, the
+// mismatch error reports v.PortKind() rather than SchemeTypeName(v) —
+// SchemeTypeName collapses all 9 port flavors to "port" since port
+// unification, which would lose the actionable detail.
 func makePortCapCheck(typeName string, hasCap func(*PortObject) bool) checkFunc {
 	return func(v Value) (any, bool, error) {
 		p, ok := v.(*PortObject)
 		if ok && hasCap(p) {
 			return p, true, nil
 		}
+		got := SchemeTypeName(v)
+		if ok {
+			got = p.PortKind()
+		}
 		return nil, false, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-			"expected %s, got %s", typeName, SchemeTypeName(v))
+			"expected %s, got %s", typeName, got)
 	}
 }
 

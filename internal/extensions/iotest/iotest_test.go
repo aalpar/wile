@@ -114,9 +114,9 @@ func TestFailingTextualInputPort_NoFault(t *testing.T) {
 }
 
 // TestExtensionPrimitives_Construct verifies that the Scheme-callable
-// constructors register correctly and produce ports that satisfy
-// values.TextualReader so the io extension's getOptionalInputPort accepts
-// them.
+// constructors register correctly and produce *PortObject values with
+// rune-read capability, so getOptionalInputPort (which checks
+// AsRuneReader) accepts them.
 func TestExtensionPrimitives_Construct(t *testing.T) {
 	c := qt.New(t)
 

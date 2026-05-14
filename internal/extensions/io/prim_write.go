@@ -194,13 +194,22 @@ func PrimWriteString(mc machine.CallContext) error {
 
 // PrimFlushOutputPort implements the flush-output-port primitive.
 // R7RS §6.13.3: (flush-output-port [port])
-// Flushes any buffered output to the underlying output device. Ports
-// without a real flusher slot (e.g., string output, bytevector
-// buffered output) are no-ops.
+// Flushes any buffered output to the underlying output device.
+//
+// Ports without a real flusher slot (string output, bytevector
+// buffered output) have nothing to flush — but flush-output-port
+// must still reject closed ports per the general R7RS port-closed
+// guard. Explicit IsClosed check covers that path; ports with a
+// flusher slot get the same guard via the wrapper in
+// values/port_helpers.go.
 func PrimFlushOutputPort(mc machine.CallContext) error {
 	port, err := getOptionalOutputPort(mc, 0)
 	if err != nil {
 		return err
+	}
+	if port.IsClosed() {
+		return werr.WrapForeignErrorf(werr.ErrPortClosed,
+			"flush-output-port: port is closed")
 	}
 
 	flsh, ok := port.AsFlusher()

@@ -380,6 +380,10 @@ func TestPortObject_Validate_RejectsInvariantViolations(t *testing.T) {
 		{"I2: rr without rdr", &PortObject{rr: rd}},
 		// I3a: urb without rb. urb requires rb (and transitively rdr).
 		{"I3a: urb without rb", &PortObject{rdr: rd, urb: rd}},
+		// I3b: rb without urb (symmetric pairing).
+		{"I3b: rb without urb", &PortObject{rdr: rd, rb: rd}},
+		// I3c: rr without urr (symmetric pairing).
+		{"I3c: rr without urr", &PortObject{rdr: rd, rr: rd}},
 		// I4: write capability without wrt
 		{"I4: wb without wrt", &PortObject{wb: wr}},
 		// I5: ext without wrt

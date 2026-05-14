@@ -152,21 +152,26 @@ func NewStringInputPortWithBuffer(buffer *bytes.Buffer) *PortObject {
 	return q
 }
 
-// NewTextualInputPortWithReaders constructs a textual input port whose
+// NewStringInputPortWithReaders constructs a string input port whose
 // rune reader and rune unreader are supplied externally. Used by
 // fault-injecting test infrastructure (e.g., internal/extensions/
 // iotest) that needs to override read/unread semantics while still
 // producing a *PortObject that production code's type assertions
-// accept.
+// accept. Kind is portKindStringInput — caller is responsible for
+// passing a reader whose semantics match a string-input port.
 //
-// The port's kind is set to portKindStringInput so it behaves as a
-// textual input port for all R7RS predicates. rdr is set from the
-// underlying io.Reader so the port also satisfies the read-byte side
-// when needed. validateOrPanic runs as for any factory.
-func NewTextualInputPortWithReaders(rdr io.Reader, rr io.RuneReader, urr RuneUnreader) *PortObject {
+// rdr provides the byte-level Read; rr and urr provide rune-level.
+// They are wrapped in separate guarded* wrappers, so callers must
+// pass consistent semantics (typically rdr and rr both wrap the same
+// underlying *bytes.Buffer-equivalent source).
+//
+// If rdr also implements io.Closer, Close is propagated.
+// validateOrPanic runs as for any factory.
+func NewStringInputPortWithReaders(rdr io.Reader, rr io.RuneReader, urr RuneUnreader) *PortObject {
 	q := &PortObject{}
 	q.kind = portKindStringInput
 	q.datum = rdr
+	q.setCloser(rdr)
 	q.rdr = guardedReader{base: &q.portBase, raw: rdr}
 	q.rr = guardedRuneReader{base: &q.portBase, raw: rr}
 	q.urr = guardedRuneUnreader{base: &q.portBase, raw: urr}

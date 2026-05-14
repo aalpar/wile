@@ -229,8 +229,15 @@ func (p *PortObject) AsByteVectorExtractor() (ByteVectorExtractor, bool) {
 
 // StringContent returns the accumulated string for string-output
 // ports. Returns ("", false) if the port is not string-extractable.
-// This is the symmetric accessor to AsByteVectorExtractor — it serves
-// the get-output-string primitive. Nil-safe.
+// Nil-safe.
+//
+// API asymmetry with AsByteVectorExtractor: this returns the resolved
+// string directly while AsByteVectorExtractor returns the extractor
+// interface for the caller to invoke. The asymmetry is a deliberate
+// deferral — converging the two extractor APIs (either both
+// returning the interface, or both returning the resolved value) is
+// tracked as a follow-up in plans/2026-05-14-port-unification-impl.md
+// under "Deferred follow-ups".
 func (p *PortObject) StringContent() (string, bool) {
 	if p == nil || p.sext == nil {
 		return "", false
@@ -245,7 +252,11 @@ func (p *PortObject) StringContent() (string, bool) {
 // Invariants:
 //   - I1: rb != nil requires rdr != nil
 //   - I2: rr != nil requires rdr != nil
-//   - I3: urb requires rb; urr requires rr
+//   - I3: bidirectional pairing — rb requires urb (and vice versa);
+//     rr requires urr (and vice versa). Every factory in
+//     port_constructors.go assigns these slots together; tightening
+//     Validate to enforce both directions turns the construction
+//     convention into a checked invariant.
 //   - I4: wb, wr, ws non-nil require wrt != nil
 //   - I5: ext != nil requires wrt != nil
 //   - I6: sext != nil requires wrt != nil
@@ -267,13 +278,22 @@ func (p *PortObject) Validate() error {
 		return werr.WrapForeignErrorf(werr.ErrInvariantViolation,
 			"PortObject.Validate: rr without rdr")
 	}
+	// I3 bidirectional pairing: rb<->urb and rr<->urr.
 	if p.urb != nil && p.rb == nil {
 		return werr.WrapForeignErrorf(werr.ErrInvariantViolation,
 			"PortObject.Validate: urb without rb")
 	}
+	if p.rb != nil && p.urb == nil {
+		return werr.WrapForeignErrorf(werr.ErrInvariantViolation,
+			"PortObject.Validate: rb without urb")
+	}
 	if p.urr != nil && p.rr == nil {
 		return werr.WrapForeignErrorf(werr.ErrInvariantViolation,
 			"PortObject.Validate: urr without rr")
+	}
+	if p.rr != nil && p.urr == nil {
+		return werr.WrapForeignErrorf(werr.ErrInvariantViolation,
+			"PortObject.Validate: rr without urr")
 	}
 	if (p.wb != nil || p.wr != nil || p.ws != nil) && p.wrt == nil {
 		return werr.WrapForeignErrorf(werr.ErrInvariantViolation,

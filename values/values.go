@@ -106,9 +106,9 @@ var EOFObject Value = eofType{}
 //
 // If the new type has capability-conditional operations (e.g.,
 // optional read/write/seek surfaces), expose them via
-// AsXxxAccessor() (T, bool) methods following the *PortObject
-// pattern (values/port.go). Document any new slot invariants in a
-// Validate() method that constructors call.
+// AsXxx() (T, bool) methods following the *PortObject pattern
+// (values/port.go — AsReader, AsByteWriter, etc.). Document any new
+// slot invariants in a Validate() method that constructors call.
 //
 // For numeric types, see the more detailed guide in values/numeric_kind.go (12 items).
 type Value interface {
