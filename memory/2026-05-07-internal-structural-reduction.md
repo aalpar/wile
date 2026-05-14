@@ -2,8 +2,13 @@
 
 **Date**: 2026-05-07
 **Source**: `/structural-reduction ./internal` analysis
-**Status**: Findings recorded; not yet scheduled for implementation
-**Priority**: Medium-High (Tier 5 tech debt)
+**Status**: ✅ **All 7 findings shipped** (2026-05-12). Findings 7, 4, 3, 2, 6
+batched in PR #739 (`feat/internal-sr-phases-1-5`); Finding 5 in PR #740
+(`feat/internal-sr-finding5`); Finding 1 in PR #741 (`feat/internal-sr-finding1`).
+See impl plans `plans/2026-05-12-internal-sr-phases-1-5-impl.md`,
+`plans/2026-05-12-internal-sr-finding5-impl.md`,
+`plans/2026-05-12-internal-sr-finding1-impl.md`.
+**Priority**: Medium-High (Tier 5 tech debt) — completed.
 
 ## Scope analyzed
 

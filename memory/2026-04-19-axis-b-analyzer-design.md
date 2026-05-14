@@ -1,6 +1,9 @@
 # Primitive Annotation Audit — Axis B Analyzer Design (Phase 3)
 
-**Status**: Design. Not yet implemented.
+**Status**: ✅ **COMPLETE** — analyzer + inventory shipped in PR #679;
+sidecar bug-fix work tracked in `plans/2026-04-20-axis-b-annotation-bugs.md`.
+Four-axis paramtypes audit framework closed (see
+`plans/2026-04-20-paramtypes-audit-design.md`).
 **Parent**: `plans/2026-04-19-primitive-annotation-audit.md` (Phase 3 of that plan).
 **Phase 1 harness**: `audit_annotations_test.go` (runs under `make test`, reports only).
 **Phase 1 findings**: `plans/2026-04-19-audit-findings-phase1.md` (harness reports zero findings after cleanup PRs #669, #670).

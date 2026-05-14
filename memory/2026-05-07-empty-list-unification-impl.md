@@ -2,7 +2,7 @@
 
 **Date**: 2026-05-07
 **Branch**: `feat/empty-list-unification`
-**Status**: In progress
+**Status**: ✅ **SHIPPED** — PR #727 (`feat/empty-list-unification`), merge commit `76e93098`.
 **Motivation**: Chez evidence (`memory/empty-list-duality-chez-evidence.md`)
 
 ## Problem

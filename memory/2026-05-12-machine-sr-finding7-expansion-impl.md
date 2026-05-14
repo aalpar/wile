@@ -1,5 +1,7 @@
 # Machine Finding 7 — Expansion-cluster sub-record (Stage 1 of 3)
 
+**Status**: ✅ **SHIPPED** — PR #742 (`feat/machine-sr-finding7-expansion`), merge commit `a388010e`.
+
 Implementation plan for the first cluster of **Finding 7** of
 `plans/2026-05-06-machine-structural-reduction.md`. Per the parent
 plan's recommended phasing ("research project, not a one-PR change")

@@ -14,7 +14,7 @@
 
 // Audit harness for PrimitiveSpec ReturnType annotations.
 //
-// See plans/2026-04-19-primitive-annotation-audit.md for scope and design.
+// See memory/2026-04-19-primitive-annotation-audit.md for scope and design.
 //
 // Phase 1 (axis A): docstring-example ↔ annotation.
 // Report-only — never fails the build. After the first run we triage

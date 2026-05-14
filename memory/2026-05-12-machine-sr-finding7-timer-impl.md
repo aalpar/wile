@@ -1,5 +1,7 @@
 # Machine Finding 7 — Timer-cluster sub-record (Stage 2 of 3)
 
+**Status**: ✅ **SHIPPED** — PR #743 (`feat/machine-sr-finding7-timer`), merge commit `12bba865`.
+
 Implementation plan for the second cluster of **Finding 7** of
 `plans/2026-05-06-machine-structural-reduction.md`. Stage 1
 (Expansion cluster) shipped in PR #742. This is Stage 2.

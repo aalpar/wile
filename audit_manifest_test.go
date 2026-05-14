@@ -14,8 +14,8 @@
 
 // Manifest generator for axis-b analyzer (Phase 3.A + Phase 5.A).
 //
-// See plans/2026-04-19-axis-b-analyzer-design.md §6.2, §8.A for the
-// return-type pass, and plans/2026-04-20-paramtypes-audit-design.md
+// See memory/2026-04-19-axis-b-analyzer-design.md §6.2, §8.A for the
+// return-type pass, and memory/2026-04-20-paramtypes-audit-design.md
 // §3.1 for the ParamTypes extension.
 //
 // Writes plans/axis-b-manifest.scm — an S-expression list of
@@ -26,7 +26,7 @@
 //   - One string per fixed parameter slot, containing the TypeConstraint.Name().
 //   - For variadic primitives, the last slot is prefixed "..." to mark it as
 //     the per-element type of the rest list (convention per registry.go:34 and
-//     plans/2026-04-20-paramtypes-audit-design.md §7.1).
+//     memory/2026-04-20-paramtypes-audit-design.md §7.1).
 //   - nil TypeConstraint emitted as "" (unspecified slot, analogous to the
 //     return-type convention).
 //   - Primitives with no ParamTypes (len==0) emit the empty list ().
@@ -140,7 +140,7 @@ func buildManifest(t *testing.T) []manifestEntry {
 //     TypeConstraint (unspecified slot).
 //   - When isVariadic is true, the last slot is prefixed "..." to mark it as
 //     the per-element type of the rest list (not the rest list itself).
-//     See registry/registry.go:34 and plans/2026-04-20-paramtypes-audit-design.md §7.1.
+//     See registry/registry.go:34 and memory/2026-04-20-paramtypes-audit-design.md §7.1.
 //   - An empty input returns nil; formatManifest renders it as "()".
 //
 // Survey (2026-04-20) of the 484-primitive registry found zero short variadic

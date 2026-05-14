@@ -2,7 +2,7 @@
 
 **Date**: 2026-05-10
 **Source**: `pr-review-toolkit:silent-failure-hunter` lens during PR #731 crosscheck (4 findings, all pre-existing — flagged because the file was in scope, not introduced by that PR)
-**Status**: Implementation in progress on `fix/operation-syntax-case-silent-failures`
+**Status**: ✅ **SHIPPED** — PR #732 (`fix/operation-syntax-case-silent-failures`), merge commit `c93b0506`.
 **Priority**: Medium-High — two HIGH findings (real silent corruption + error swallow), two MED (poor error messages)
 
 ## Why this plan exists

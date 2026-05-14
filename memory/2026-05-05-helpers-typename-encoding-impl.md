@@ -1,7 +1,7 @@
 # Helpers TypeName Encoding — Implementation Plan
 
 **Date**: 2026-05-05
-**Status**: Draft
+**Status**: ✅ **SHIPPED** — PR #725 (`feat/helpers-typename-encoding`), merge commit `79e7ce05`.
 **Scope**: Drop the redundant `typeName` parameter from `registry/helpers` argument-extraction helpers by encoding the type phrase on the type-mismatch sentinel itself.
 
 ## Motivation

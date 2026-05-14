@@ -1,6 +1,10 @@
 # Primitive Annotation Audit — Phase 5: ParamTypes Audit Design
 
-**Status**: Design. Not yet implemented.
+**Status**: ✅ **COMPLETE** — Phase 5.A (PR #678), 5.B (PR #679), 5.C (PR #680),
+5.D (one partial narrowing: `get-output-bytevector` → `TypeBinaryOutputPort`),
+5.E (`plans/2026-04-20-paramtypes-axis-c-findings.md` R7RS sweep) all shipped.
+See `plans/CLAUDE.md` "Extension Contracts (Phase 2+)" row for full status table.
+Vocabulary-extension follow-up at `plans/2026-04-21-type-constraint-extension-design.md`.
 **Parent**: `plans/2026-04-19-primitive-annotation-audit.md` — Phase 5 extends the four-axis framework to `ParamTypes`.
 **Prior phases**:
 - Phase 1 (axis A, docs ↔ `ReturnType`): complete — harness reports 0 findings.

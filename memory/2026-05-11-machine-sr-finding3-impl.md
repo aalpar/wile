@@ -1,5 +1,7 @@
 # Finding 3 — Consolidate value-register accessors on `vmState`
 
+**Status**: ✅ **SHIPPED** — PR #736 (`feat/machine-sr-finding3`), merge commit `1234baba`.
+
 Implementation plan for Finding 3 of
 `plans/2026-05-06-machine-structural-reduction.md`.
 

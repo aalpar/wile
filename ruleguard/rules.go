@@ -88,8 +88,8 @@ func noBareSentinelPanic(m dsl.Matcher) { //nolint:unused // loaded by gocritic 
 //     pattern via 'tc.singleValue' / 'tc.multiValues' selector
 //     expressions — those are not vmState accesses, just name collision.
 //
-// See plans/2026-05-06-machine-structural-reduction.md (Finding 3) and
-// plans/2026-05-11-machine-sr-finding3-impl.md.
+// See memory/2026-05-06-machine-structural-reduction.md (Finding 3) and
+// memory/2026-05-11-machine-sr-finding3-impl.md.
 //
 //	// Wrong:
 //	mc.singleValue = v

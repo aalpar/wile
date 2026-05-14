@@ -4,7 +4,7 @@
 **Type**: Implementation plan
 **Source**: `plans/2026-05-08-dispatch-axis-as-data.md` Instance B
 **Branch (proposed)**: `refactor/phase-unification`
-**Status**: Drafted; awaits approval to branch and start Phase 1.
+**Status**: ✅ **SHIPPED** — PR #728 (`refactor/phase-unification`), merge commit `2b271a41`.
 
 ## Why
 
